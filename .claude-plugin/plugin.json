@@ -1,0 +1,11 @@
+{
+  "name": "skillator",
+  "description": "Reusable Claude Code skills: session handoff docs and UI-to-functional planning",
+  "version": "1.0.0",
+  "author": {
+    "name": "bodish-coder"
+  },
+  "repository": "https://github.com/bodish-coder/skillator",
+  "license": "MIT",
+  "keywords": ["skills", "handoff", "ui", "planning", "workflow"]
+}

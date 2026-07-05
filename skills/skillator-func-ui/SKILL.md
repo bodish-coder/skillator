@@ -1,5 +1,5 @@
 ---
-name: ui-to-functional
+name: skillator-func-ui
 description: >-
   Turn an EXISTING UI-only / mockup / prototype frontend into a real, working
   system — when the screens are built but nothing behind them is. Use this
