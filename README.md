@@ -33,3 +33,7 @@ cd ~/.claude/skills && git add <skill-name> && git commit -m "add <skill-name>" 
 - **session-handoff** — generate an in-depth, *verified* session-handoff
   document so a different person or AI can continue the work with no loss of
   context, plan, or intent. Invoke with `/session-handoff [output-path|focus]`.
+- **ui-to-functional** — turn an existing UI-only mockup/prototype into a real,
+  working system: scan the code, interview the user, emit workflow specs to
+  confirm, then a dependency-ordered plan to wire the UI to a real backend
+  (stops at the confirmed plan). Invoke with `/ui-to-functional`.
