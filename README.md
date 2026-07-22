@@ -28,6 +28,10 @@ with `/plugin marketplace update skillator`.
   working system: scan the code, interview the user, emit workflow specs to
   confirm, then a dependency-ordered plan to wire the UI to a real backend
   (stops at the confirmed plan). Invoke with `/skillator-func-ui`.
+- **skillator-brainstorm-build** — develop a feature with two models: a Fable
+  subagent brainstorms and designs, then an Opus subagent implements it. Runs
+  autonomously (design hands straight to build). Invoke with
+  `/skillator-brainstorm-build`.
 
 ## Add a new skill
 
