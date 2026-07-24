@@ -32,6 +32,10 @@ with `/plugin marketplace update skillator`.
   subagent brainstorms and designs, then an Opus subagent implements it. Runs
   autonomously (design hands straight to build). Invoke with
   `/skillator-brainstorm-build`.
+- **skillator-design-arwen** — ultimate UI/UX design skill for native *and* web:
+  fuses production craft (contrast, type, layout, motion, a11y, iOS/Android/RN
+  conventions) with a committed aesthetic and a systematic method for forging one
+  unique, ownable *signature* element. Invoke with `/skillator-design-arwen`.
 
 ## Add a new skill
 
