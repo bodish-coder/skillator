@@ -28,10 +28,16 @@ with `/plugin marketplace update skillator`.
   working system: scan the code, interview the user, emit workflow specs to
   confirm, then a dependency-ordered plan to wire the UI to a real backend
   (stops at the confirmed plan). Invoke with `/skillator-func-ui`.
-- **skillator-brainstorm-build** — develop a feature with two models: a Fable
-  subagent brainstorms and designs, then an Opus subagent implements it. Runs
-  autonomously (design hands straight to build). Invoke with
-  `/skillator-brainstorm-build`.
+- **skillator-brainstorm-build** — develop a feature with three models by
+  strength: a Fable subagent does the design thinking, then implementation is
+  routed by complexity (Sonnet for simple tasks, Opus for complex) with Opus
+  verifying. Writes the design to a file, has a planned `/compact` checkpoint,
+  records a session `.md` (what/why/tests), reworks, then prompts `/clear`. Invoke
+  with `/skillator-brainstorm-build`.
+- **skillator-brainstorm-build-lite** — the lightweight variant of the above: a
+  Fable subagent designs, an Opus subagent implements, fully autonomous with no
+  tiering, compact, record, or clear. A quick brainstorm→build pass. Invoke with
+  `/skillator-brainstorm-build-lite`.
 - **skillator-merge-agent** — analyse GitHub branches with agents and merge them
   by risk: Haiku summarizes each branch + builds an overlap/conflict map, then
   merges on a throwaway integration branch (trivial conflicts auto-resolve via
