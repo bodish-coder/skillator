@@ -1,15 +1,16 @@
 ---
-name: skillator-brainstorm-build
+name: skillator-brainstorm-build-prime
 description: >-
-  Develop a feature or task using three models by strength — Fable
-  (claude-fable-5) does the design thinking / brainstorm, Opus (claude-opus-4-8)
-  implements the complex/core work, and Sonnet (claude-sonnet-5) handles the
-  simpler/mechanical tasks. Use when the user hands over a feature/task to build
-  and wants the "brainstorm with Fable, build with Opus/Sonnet" split, asks to
-  "use the right model per task", or "brainstorm then build" a feature. The design
-  is written to a file so it survives a planned /compact; after build + test it
-  records a session .md (what / why / tests), does any rework, then prompts /clear.
-  NOT for tiny one-line edits (just do them) or pure design/no-build work.
+  The top-tier "brainstorm then build" skill — develop a feature using three
+  models by strength: Fable (claude-fable-5) does the design thinking / brainstorm,
+  Opus (claude-opus-4-8) implements the complex/core work, and Sonnet
+  (claude-sonnet-5) handles the simpler/mechanical tasks. Use when the user hands
+  over a feature/task and wants the full "brainstorm with Fable, build with
+  Opus/Sonnet" flow with ceremony. The design is written to a file so it survives a
+  planned /compact; after build + test it records a session .md (what / why /
+  tests), does any rework, then prompts /clear. For a quicker pass with no ceremony
+  use skillator-brainstorm-build-mid (Fable→Opus) or skillator-brainstorm-build-lite
+  (Opus+Sonnet, no Fable). NOT for tiny one-line edits or pure design/no-build work.
 ---
 
 # Brainstorm (Fable) → Build (Opus + Sonnet) → Record → Clear

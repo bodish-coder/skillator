@@ -1,82 +1,62 @@
 ---
 name: skillator-brainstorm-build-lite
 description: >-
-  Lightweight two-model feature build — Fable (claude-fable-5) brainstorms and
-  designs, then Opus (claude-opus-4-8) implements, fully autonomously with no stop
-  in between. This is the LITE variant: no complexity-tiered routing, no /compact,
-  no session record, no /clear — just design → build. Use when the user wants a
-  quick "brainstorm with Fable, build with Opus" pass on a small/medium feature.
-  For the fuller flow (Sonnet for simple tasks + Opus for complex, a planned
-  /compact, a session .md record, rework, then /clear) use skillator-brainstorm-build
-  instead. NOT for tiny one-line edits, or pure design/no-build work.
+  The lightest "brainstorm then build" skill — no Fable, two models only: Opus
+  (claude-opus-4-8) does the design thinking and the complex/core implementation,
+  Sonnet (claude-sonnet-5) handles the simpler/mechanical tasks. Fully autonomous,
+  no ceremony (no /compact, no session record, no /clear). Use when the user wants
+  a quick, cost-aware build and doesn't need Fable's creative brainstorm — "just
+  design and build it, cheap where it can be". For a Fable-led design use
+  skillator-brainstorm-build-mid (Fable→Opus); for the full flow with Fable +
+  /compact + session record + /clear use skillator-brainstorm-build-prime. NOT for
+  tiny one-line edits (just do them) or pure design/no-build work.
 ---
 
-# Brainstorm (Fable) → Build (Opus)
+# Build (Opus design + build) + Sonnet (simple tasks)
 
-Two models, each on its strength: **Fable** is the creative/ideation model, so it
-does the brainstorming and design; **Opus** is the strongest coding model, so it
-does the implementation. A skill can't change the *main* session's model, so this
-works by dispatching **subagents** with explicit model overrides — that guarantees
-the split no matter what model the user's session is on.
+Two models, no Fable. **Opus** does the design thinking and the complex/core
+implementation; **Sonnet** offloads the simple, mechanical tasks so you don't pay
+Opus rates for boilerplate. A skill can't change the main session's model, so the
+split is done with **subagents** carrying explicit `model` overrides. You (the main
+session) orchestrate only — spawn the agents, route by complexity, relay the result.
 
-You (the main session) are the **orchestrator only**: you spawn the two agents,
-pass the design between them, and relay the result. You do not brainstorm or write
-the implementation yourself.
+## Phase 1 — Opus designs
 
-## Flow (autonomous — no stop between phases)
-
-### Phase 1 — Fable brainstorms & designs
-
-Dispatch one subagent with `model: "fable"`. Give it the user's task verbatim plus
-enough repo context to be concrete (paths, stack, relevant files you've seen). Ask
-it to **diverge then commit**: explore a few approaches, weigh tradeoffs, pick one,
-and return an *implementation-ready* design — not prose musing.
-
-Require it to return, as structured text:
+Dispatch one subagent, `model: "opus"`, `subagent_type: "general-purpose"`. Give it
+the task verbatim + repo context. Ask it to commit to an approach and return an
+implementation-ready design **with each task tagged by complexity**:
 
 ```
-APPROACHES:   <2-3 candidate approaches, one line each, with the tradeoff>
-CHOSEN:       <which one, and why it wins>
-DESIGN:
-  - Files to create/edit: <path → what changes>
-  - Data model / contracts: <entities, function/endpoint signatures, inputs→outputs>
-  - Edge cases & error handling: <the ones that matter>
-  - Out of scope: <what NOT to build>
-VERIFICATION: <the concrete check that proves it works end to end>
+CHOSEN:       <the approach, one line + why>
+DESIGN:       <data model / contracts, key edge cases, out of scope>
+TASKS:        <ordered list; tag each [SIMPLE] or [COMPLEX] + the files it touches>
+VERIFICATION: <the concrete end-to-end check that proves it works>
 ```
 
-Use the `Agent` tool with `subagent_type: "general-purpose"`, `model: "fable"`.
+## Phase 2 — Build (route by complexity)
 
-### Phase 2 — Opus implements
+Work the TASKS list, routing each:
+- **[COMPLEX] / core → `model: "opus"`** subagent.
+- **[SIMPLE] / mechanical → `model: "sonnet"`** subagent.
 
-Dispatch one subagent with `model: "opus"`. Feed it **the original task + Fable's
-full design verbatim**. Tell it to build exactly that design, run the verification
-step Fable named, and return a summary of what changed (files, and the verification
-result — pass/fail with evidence, not a claim).
+Each agent gets the design + its task(s), builds exactly that, and stays inside its
+declared files. Independent tasks can run in parallel (git worktree if they'd touch
+the same tree). If the design hits a real blocker only the user can resolve, stop
+and surface it — don't guess.
 
-Use the `Agent` tool with `subagent_type: "general-purpose"`, `model: "opus"`.
+## Phase 3 — Verify & relay
 
-If Fable's design has a genuine blocker (contradiction, missing decision only the
-user can make), the Opus agent should stop and report it rather than guess — pass
-that instruction through.
-
-### Phase 3 — Relay
-
-Subagent output is not shown to the user. Report back concisely:
-1. The approach Fable chose (one or two lines).
-2. What Opus built (files changed).
-3. The verification result — did it actually work, with evidence.
+Run the VERIFICATION step (Opus agent or main session) and capture the actual
+result — pass/fail with evidence, not a claim. On failure, fix it ([SIMPLE]→Sonnet,
+[COMPLEX]→Opus) and re-run. Then relay concisely: the approach, what was built
+(files), and the verification result.
 
 ## Rules
 
-- **Both phases are subagents.** Do not do the design or the code in the main
-  session — that would silently drop the model split the user asked for.
-- **Pass the design verbatim** from Fable to Opus. Don't summarize it away; the
-  contracts and edge cases are the point.
-- **Autonomous means no confirmation gate**, but it does not mean no honesty: if a
-  phase fails or a subagent returns nothing, say so plainly and stop — don't paper
-  over it.
-- **Scale to the task.** A small feature = one Fable agent, one Opus agent. Don't
-  fan out unless the task genuinely has independent parts.
-- If a subagent dies / returns null, report the failure rather than continuing on a
-  missing design.
+- **Route by tag, not vibe.** [SIMPLE]→Sonnet, [COMPLEX]→Opus, design→Opus. Don't
+  send boilerplate to Opus (waste) or core logic to Sonnet.
+- **Both build phases are subagents.** Don't design or code in the main session.
+- **Autonomous but honest.** No confirmation gate; but if a phase fails or an agent
+  returns nothing, say so and stop rather than continuing on a missing piece.
+- Need Fable's creative brainstorm, a /compact checkpoint, or a session record? Use
+  skillator-brainstorm-build-mid or -prime instead.
