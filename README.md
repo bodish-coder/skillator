@@ -32,6 +32,11 @@ with `/plugin marketplace update skillator`.
   subagent brainstorms and designs, then an Opus subagent implements it. Runs
   autonomously (design hands straight to build). Invoke with
   `/skillator-brainstorm-build`.
+- **skillator-merge-agent** — analyse GitHub branches with agents and merge them
+  by risk: Haiku summarizes each branch + builds an overlap/conflict map, then
+  merges on a throwaway integration branch (trivial conflicts auto-resolve via
+  Sonnet, semantic ones escalate to you with an Opus-proposed fix). Optional
+  test-verify and PR, both asked at run time. Invoke with `/skillator-merge-agent`.
 - **skillator-design-arwen** — ultimate UI/UX design skill for native *and* web:
   fuses production craft (contrast, type, layout, motion, a11y, iOS/Android/RN
   conventions) with a committed aesthetic and a systematic method for forging one
