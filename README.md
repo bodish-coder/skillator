@@ -24,6 +24,10 @@ with `/plugin marketplace update skillator`.
 - **skillator-handoff** — generate an in-depth, *verified* session-handoff
   document so a different person or AI can continue the work with no loss of
   context, plan, or intent. Invoke with `/skillator-handoff [output-path|focus]`.
+- **skillator-handoff-resume** — the execution counterpart: read handoff docs
+  (from `skillator-handoff`) and *do* the pending work, stamping a marker in each
+  so finished handoffs are skipped. Marker-aware and idempotent (safe to re-run /
+  `/loop`). Invoke with `/skillator-handoff-resume`.
 - **skillator-func-ui** — turn an existing UI-only mockup/prototype into a real,
   working system: scan the code, interview the user, emit workflow specs to
   confirm, then a dependency-ordered plan to wire the UI to a real backend
