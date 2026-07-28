@@ -58,5 +58,8 @@ result — pass/fail with evidence, not a claim. On failure, fix it ([SIMPLE]→
 - **Both build phases are subagents.** Don't design or code in the main session.
 - **Autonomous but honest.** No confirmation gate; but if a phase fails or an agent
   returns nothing, say so and stop rather than continuing on a missing piece.
+- **Handoff before any context loss.** This tier runs no `/compact` or `/clear` of
+  its own, but if you or the user are about to run either, **first run the
+  `skillator-handoff` skill** — never compact/clear without a verified handoff.
 - Need Fable's creative brainstorm, a /compact checkpoint, or a session record? Use
   skillator-brainstorm-build-mid or -prime instead.

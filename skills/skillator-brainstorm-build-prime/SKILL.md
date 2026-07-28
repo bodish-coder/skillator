@@ -8,7 +8,8 @@ description: >-
   over a feature/task and wants the full "brainstorm with Fable, build with
   Opus/Sonnet" flow with ceremony. The design is written to a file so it survives a
   planned /compact; after build + test it records a session .md (what / why /
-  tests), does any rework, then prompts /clear. For a quicker pass with no ceremony
+  tests), does any rework, then prompts /clear. Always runs the skillator-handoff
+  skill before each /compact and /clear. For a quicker pass with no ceremony
   use skillator-brainstorm-build-mid (Fable→Opus) or skillator-brainstorm-build-lite
   (Opus+Sonnet, no Fable). NOT for tiny one-line edits or pure design/no-build work.
 ---
@@ -52,9 +53,11 @@ context. Confirm the path.
 ## Checkpoint A — planned /compact
 
 The design is now safely on disk, so the main thread can shed the brainstorm
-tokens before the build. **Ask the user to run `/compact` now** (the skill can't
-run it). Say why: "design is saved to `<path>`; compacting keeps the build lean."
-Wait for them; then continue reading the design from the file.
+tokens before the build. **First run the `skillator-handoff` skill** (Skill tool)
+to capture a verified handoff of the session so far — never compact without one.
+Then **ask the user to run `/compact` now** (the skill can't run it). Say why:
+"design + handoff are saved; compacting keeps the build lean." Wait for them; then
+continue reading the design from the file.
 
 ## Phase 2 — Build (route by complexity)
 
@@ -95,10 +98,11 @@ verification, and **update the Outcome section** so the record stays true.
 
 ## Checkpoint B — /clear
 
-Once the build is green, the record is written, and rework is done: relay a short
-summary (approach, what shipped, test result, record path), then **ask the user to
-run `/clear`** to reset context for the next task. The session `.md` is the
-durable memory — nothing is lost by clearing.
+Once the build is green, the record is written, and rework is done: **first run the
+`skillator-handoff` skill** to write a verified handoff — never clear without one.
+Then relay a short summary (approach, what shipped, test result, record + handoff
+paths) and **ask the user to run `/clear`** to reset context for the next task. The
+session `.md` + handoff are the durable memory — nothing is lost by clearing.
 
 ## Rules
 
@@ -107,6 +111,9 @@ durable memory — nothing is lost by clearing.
 - **The design/record file is the source of truth** — it must survive compact/clear.
   Pass the file path to agents; don't rely on chat context outliving a compact.
 - **Both build phases are subagents.** Don't design or code in the main session.
+- **Handoff before any context loss.** Run the `skillator-handoff` skill *before*
+  either checkpoint prompts `/compact` or `/clear` — never compact/clear without a
+  verified handoff on disk.
 - **The two checkpoints are manual.** The skill prompts; the user runs `/compact`
   and `/clear`. Never claim you ran them.
 - **Autonomous within phases, honest across them.** No confirmation gate between

@@ -79,5 +79,8 @@ Subagent output is not shown to the user. Report back concisely:
   over it.
 - **Scale to the task.** A small feature = one Fable agent, one Opus agent. Don't
   fan out unless the task genuinely has independent parts.
+- **Handoff before any context loss.** This tier runs no `/compact` or `/clear` of
+  its own, but if you or the user are about to run either, **first run the
+  `skillator-handoff` skill** — never compact/clear without a verified handoff.
 - If a subagent dies / returns null, report the failure rather than continuing on a
   missing design.
