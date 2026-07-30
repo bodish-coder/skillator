@@ -44,6 +44,10 @@ Establish, then confirm back before touching anything:
 
 Never start merging on an unconfirmed branch list or base.
 
+> If a branch is stale or carries unrelated/no-op churn, run **`skillator-merge-prep`**
+> on it first — it produces a `<branch>-merge-ready` carrying only its intended
+> changes on top of current base, so this merge integrates nothing old or untouched.
+
 ## Phase 1 — Analyse the branches (Haiku, in parallel)
 
 One analysis subagent per branch (`model: "haiku"`), each returns structured:

@@ -41,6 +41,11 @@ with `/plugin marketplace update skillator`.
     autonomous, no ceremony.
   - **skillator-brainstorm-build-lite** — no Fable: Opus designs + builds complex,
     Sonnet does the simple tasks. Cheapest, autonomous, no ceremony.
+- **skillator-merge-prep** — prepare a branch for a clean merge: rebuild its
+  changes on top of the current base as a new `<branch>-merge-ready`, keeping only
+  the *intended* edits (auto-drops no-ops, escalates suspicious ones) so no stale
+  or untouched parts get merged. Never rewrites the original or force-pushes. Runs
+  before `skillator-merge-agent`. Invoke with `/skillator-merge-prep`.
 - **skillator-merge-agent** — analyse GitHub branches with agents and merge them
   by risk: Haiku summarizes each branch + builds an overlap/conflict map, then
   merges on a throwaway integration branch (trivial conflicts auto-resolve via
