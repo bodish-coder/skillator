@@ -34,9 +34,12 @@ with `/plugin marketplace update skillator`.
   (stops at the confirmed plan). Invoke with `/skillator-func-ui`.
 - **brainstorm-build family** — three tiers of the "brainstorm then build" flow;
   pick by how much model firepower and ceremony you want:
-  - **skillator-brainstorm-build-prime** — **Fable** plans · **Opus** builds · full
-    ceremony: planned `/compact` · session `.md` record · rework · `/clear`, with a
-    `skillator-handoff` run before each `/compact` and `/clear`.
+  - **skillator-brainstorm-build-prime** — **design tier** plans · **build tier**
+    implements · full ceremony: session `.md` on disk · handoff before context
+    checkpoints · rework · clean reset. Cross-platform via `references/platforms.md`:
+    Claude Code (Fable → Opus, auto `/compact`/`/clear`), Cursor (GPT-5.6-Sol → Claude
+    Opus, fresh-chat checkpoints), Codex (Sol high-reasoning design → Sol build,
+    auto-compaction aware).
   - **skillator-brainstorm-build-mid** — **Opus** plans · **Opus** builds. All-Opus,
     autonomous, no ceremony.
   - **skillator-brainstorm-build-lite** — **Opus** plans · **Opus + Sonnet** builds

@@ -1,31 +1,41 @@
 ---
 name: skillator-brainstorm-build-prime
 description: >-
-  The top-tier "brainstorm then build" skill — Fable (claude-fable-5) does the
-  design thinking / brainstorm, then Opus (the run's Opus) implements the whole
-  thing, with full ceremony: the design is written to a file so it survives a
-  planned /compact; after build + test it records a session .md (what / why /
-  tests), does any rework, then prompts /clear — and it runs the skillator-handoff
-  skill before each /compact and /clear. Use when the user wants Fable's creative
-  design, Opus-quality implementation, and a durable, resumable session. For
-  all-Opus with no ceremony use skillator-brainstorm-build-mid; to offload the
-  simple build tasks to Sonnet use skillator-brainstorm-build-lite. NOT for tiny
-  one-line edits or pure design/no-build work.
+  Top-tier "brainstorm then build" — a design-tier model does creative design
+  thinking, a build-tier model implements, with full ceremony: design written to
+  disk (survives context loss), handoff before checkpoints, session .md record,
+  rework, then clean session reset. Works across Claude Code, Cursor, and Codex
+  via role tiers and platform adapters (see references/platforms.md). On Claude
+  Code: Fable designs, Opus builds, auto /compact and /clear after handoff. On
+  Cursor: GPT-5.6-Sol designs, Claude Opus builds, fresh-chat checkpoints. On Codex:
+  GPT-5.6-Sol high-reasoning design pass then Sol build, auto-compaction aware.
+  For all-Opus without ceremony use skillator-brainstorm-build-mid; for Sonnet
+  offload use skillator-brainstorm-build-lite. NOT for tiny one-line edits or
+  pure design/no-build work.
 ---
 
-# Brainstorm (Fable) → Build (Opus) — with ceremony
+# Brainstorm (design tier) → Build (build tier) — with ceremony
 
-Fable is the creative model → it does the design thinking. Opus is the strongest
-coder → it does the whole implementation. A skill can't change the main session's
-model, so each phase runs as a **subagent** with an explicit `model` override:
-**design → Fable**, **build → Opus**. You (the main session) orchestrate only —
-spawn the agents, keep the record, and prompt the two manual checkpoints
-(`/compact`, `/clear`).
+**Design tier** does creative design thinking. **Build tier** is the strongest
+coder and implements the whole thing. A skill cannot change the main session's
+model, so each phase runs as a **subagent** (or platform-equivalent delegation)
+with an explicit model override. You (orchestrator) spawn agents, keep the
+record, and run context checkpoints automatically where the platform allows.
 
-## Phase 1 — Fable designs (design thinking)
+## Step 0 — Platform & models
 
-Dispatch one subagent, `model: "fable"`, `subagent_type: "general-purpose"`. Give it
-the task verbatim + repo context. Return an implementation-ready design:
+1. Read `references/platforms.md` in this skill's directory.
+2. Detect platform (claude-code · cursor · codex) using the signals there.
+3. Note the **design** and **build** model slugs / overrides for this run.
+4. If the user named models or a platform, those override the defaults — record
+   them in the session file header.
+
+---
+
+## Phase 1 — Design tier designs
+
+Dispatch one **design-tier** agent (see platforms.md). Give it the task verbatim
++ repo context. Return an implementation-ready design:
 
 ```
 GOAL:         <the task in one line>
@@ -37,66 +47,106 @@ VERIFICATION: <the concrete end-to-end check that proves it works>
 ```
 
 **Write this design to a file** — `docs/sessions/session-<YYYY-MM-DD>-<slug>.md`
-(or the scratchpad). This file is the session's spine: it survives `/compact` and
-`/clear`, and the build agent reads it instead of chat context. Confirm the path.
+(or the scratchpad). This file is the session's spine: it survives context loss,
+and the build agent reads it instead of chat context. Confirm the path.
 
-## Checkpoint A — planned /compact
+Include a short header in that file:
 
-The design is safely on disk. **First run the `skillator-handoff` skill** (Skill
-tool) to capture a verified handoff — never compact without one. Then **ask the user
-to run `/compact` now** (the skill can't run it). Wait for them; then continue from
-the design file.
+```
+PLATFORM: <detected platform>
+DESIGN_MODEL: <model used>
+BUILD_MODEL: <model planned for Phase 2>
+```
 
-## Phase 2 — Opus builds
+---
 
-Dispatch Opus subagent(s), `model: "opus"`, given the **design file path** + the
-TASKS. Build exactly the design, stay inside the declared files. Independent tasks can
-run in parallel (git worktree if they'd touch the same tree). If the design hits a
-real blocker only the user can resolve, stop and surface it — don't guess.
+## Checkpoint A — planned context trim
+
+The design is safely on disk.
+
+1. **Run the handoff skill** using the platform's method (platforms.md) —
+   `skillator-handoff` — to capture a verified handoff. Never trim context
+   without one.
+2. **Run Checkpoint A** (platforms.md):
+   - **Claude Code:** invoke `/compact` yourself, then continue from the design file
+   - **Cursor:** prompt the user for a fresh turn or context summarization, then
+     continue from the design file
+   - **Codex:** continue from the design file (auto-compaction may already occur)
+
+Continue from the design file, not chat memory.
+
+---
+
+## Phase 2 — Build tier builds
+
+Dispatch **build-tier** agent(s) (platforms.md), given the **design file path** +
+TASKS. Build exactly the design, stay inside the declared files. Independent
+tasks can run in parallel (git worktree if they'd touch the same tree). If the
+design hits a real blocker only the user can resolve, stop and surface it — don't
+guess.
+
+---
 
 ## Phase 3 — Test
 
-Run the VERIFICATION step (Opus agent or main session). Capture the **actual result**
-— pass/fail with evidence, never a claim. Failure feeds rework.
+Run the VERIFICATION step (build agent or orchestrator). Capture the **actual
+result** — pass/fail with evidence, never a claim. Failure feeds rework.
+
+---
 
 ## Phase 4 — Record the session
 
-Append an outcome section to the same session `.md` so it captures **what / why /
-tests** in one self-contained file:
+Append an outcome section to the same session `.md`:
 
 ```
 ## Outcome
 - Built:     <what shipped — files changed>
-- Why:       <key decisions and why (from Fable's design + any build deviations)>
-- Tests:     <the verification run + its actual result: pass/fail + evidence>
+- Why:       <key decisions and why (from design + any build deviations)>
+- Tests:     <verification run + actual result: pass/fail + evidence>
 - Deviations:<where the build differed from the design, and why>
 ```
 
+---
+
 ## Phase 5 — Rework
 
-Address anything Phase 3 surfaced (failing tests, gaps, deviations that shouldn't
-stand). Re-run the verification and **update the Outcome section** so the record stays true.
+Address anything Phase 3 surfaced. Re-run verification and **update the Outcome
+section** so the record stays true.
 
-## Checkpoint B — /clear
+---
 
-Once the build is green, the record is written, and rework is done: **first run the
-`skillator-handoff` skill** to write a verified handoff — never clear without one.
-Then relay a short summary (approach, what shipped, test result, record + handoff
-paths) and **ask the user to run `/clear`**. The session `.md` + handoff are the
-durable memory — nothing is lost by clearing.
+## Checkpoint B — clean session
+
+Once the build is green, the record is written, and rework is done:
+
+1. **Run `skillator-handoff`** again (platform method).
+2. Relay a short summary (approach, what shipped, test result, record + handoff
+   paths).
+3. **Run Checkpoint B** (platforms.md):
+   - **Claude Code:** invoke `/clear` yourself
+   - **Cursor:** prompt the user to start a **new chat**
+   - **Codex:** prompt the user to start a **new thread** when they want a clean slate
+
+The session `.md` + handoff are the durable memory — nothing is lost by clearing.
+
+---
 
 ## Rules
 
-- **Design → Fable subagent, build → Opus subagent(s).** Don't design or code in the
-  main session.
-- **The design/record file is the source of truth** — it must survive compact/clear.
-  Pass its path to the build agent; don't rely on chat context outliving a compact.
-- **Handoff before any context loss.** Run the `skillator-handoff` skill *before*
-  either checkpoint prompts `/compact` or `/clear` — never compact/clear without a
-  verified handoff on disk.
-- **The two checkpoints are manual.** The skill prompts; the user runs `/compact` and
-  `/clear`. Never claim you ran them.
-- **Autonomous within phases, honest across them.** No confirmation gate between design
-  and build, but if a phase fails or an agent returns nothing, say so and stop.
-- Want all-Opus with no ceremony? Use skillator-brainstorm-build-mid. Want to offload
-  the simple build tasks to Sonnet? Use skillator-brainstorm-build-lite.
+- **Design → design-tier agent, build → build-tier agent(s).** Don't design or
+  code in the orchestrator session (except writing the session record).
+- **The design/record file is the source of truth** — pass its path to build
+  agents; don't rely on chat context outliving a compact/trim.
+- **Handoff before any context loss.** Run `skillator-handoff` before either
+  checkpoint — never compact/clear/reset without a verified handoff on disk.
+- **Checkpoints: auto on Claude Code, manual elsewhere.** On Claude Code, you
+  invoke `/compact` and `/clear` yourself after handoff. On Cursor/Codex, follow
+  platforms.md (prompt the user when the platform cannot clear context for you).
+  If a slash command fails or is unavailable, say so and ask the user once.
+- **Use platform-native dispatch.** Agent tool (Claude Code), Task tool (Cursor),
+  or Codex subagent/delegation — never hardcode a tool that isn't available.
+- **Autonomous within phases, honest across them.** No confirmation gate between
+  design and build, but if a phase fails or an agent returns nothing, say so and
+  stop.
+- Want all-build-tier with no ceremony? Use skillator-brainstorm-build-mid. Want
+  to offload simple build tasks to a fast tier? Use skillator-brainstorm-build-lite.
