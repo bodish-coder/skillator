@@ -6,10 +6,11 @@ description: >-
   Sonnet (claude-sonnet-5) handles the simpler/mechanical tasks. Fully autonomous,
   no ceremony (no /compact, no session record, no /clear). Use when the user wants
   a quick, cost-aware build and doesn't need Fable's creative brainstorm — "just
-  design and build it, cheap where it can be". For a Fable-led design use
-  skillator-brainstorm-build-mid (Fable→Opus); for the full flow with Fable +
-  /compact + session record + /clear use skillator-brainstorm-build-prime. NOT for
-  tiny one-line edits (just do them) or pure design/no-build work.
+  design and build it, cheap where it can be". For a straight all-Opus plan→build
+  (no Sonnet offload) use skillator-brainstorm-build-mid; for a Fable-led creative
+  design plus the full ceremony (/compact + session record + /clear) use
+  skillator-brainstorm-build-prime. NOT for tiny one-line edits (just do them) or
+  pure design/no-build work.
 ---
 
 # Build (Opus design + build) + Sonnet (simple tasks)
@@ -62,4 +63,4 @@ result — pass/fail with evidence, not a claim. On failure, fix it ([SIMPLE]→
   its own, but if you or the user are about to run either, **first run the
   `skillator-handoff` skill** — never compact/clear without a verified handoff.
 - Need Fable's creative brainstorm, a /compact checkpoint, or a session record? Use
-  skillator-brainstorm-build-mid or -prime instead.
+  skillator-brainstorm-build-prime. Want all-Opus (no Sonnet offload)? Use -mid.

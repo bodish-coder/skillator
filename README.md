@@ -34,13 +34,13 @@ with `/plugin marketplace update skillator`.
   (stops at the confirmed plan). Invoke with `/skillator-func-ui`.
 - **brainstorm-build family** — three tiers of the "brainstorm then build" flow;
   pick by how much model firepower and ceremony you want:
-  - **skillator-brainstorm-build-prime** — Fable designs · Sonnet (simple) + Opus
-    (complex) build · Opus verifies · planned `/compact` · session `.md` record ·
-    rework · `/clear`. The full flow.
-  - **skillator-brainstorm-build-mid** — Fable designs → Opus builds. 2-model,
+  - **skillator-brainstorm-build-prime** — **Fable** plans · **Opus** builds · full
+    ceremony: planned `/compact` · session `.md` record · rework · `/clear`, with a
+    `skillator-handoff` run before each `/compact` and `/clear`.
+  - **skillator-brainstorm-build-mid** — **Opus** plans · **Opus** builds. All-Opus,
     autonomous, no ceremony.
-  - **skillator-brainstorm-build-lite** — no Fable: Opus designs + builds complex,
-    Sonnet does the simple tasks. Cheapest, autonomous, no ceremony.
+  - **skillator-brainstorm-build-lite** — **Opus** plans · **Opus + Sonnet** builds
+    (Opus core, Sonnet the simple tasks). Autonomous, no ceremony.
 - **skillator-merge-prep** — prepare a branch for a clean merge: rebuild its
   changes on top of the current base as a new `<branch>-merge-ready`, keeping only
   the *intended* edits (auto-drops no-ops, escalates suspicious ones) so no stale

@@ -1,81 +1,63 @@
 ---
 name: skillator-brainstorm-build-prime
 description: >-
-  The top-tier "brainstorm then build" skill — develop a feature using three
-  models by strength: Fable (claude-fable-5) does the design thinking / brainstorm,
-  Opus (claude-opus-4-8) implements the complex/core work, and Sonnet
-  (claude-sonnet-5) handles the simpler/mechanical tasks. Use when the user hands
-  over a feature/task and wants the full "brainstorm with Fable, build with
-  Opus/Sonnet" flow with ceremony. The design is written to a file so it survives a
+  The top-tier "brainstorm then build" skill — Fable (claude-fable-5) does the
+  design thinking / brainstorm, then Opus (the run's Opus) implements the whole
+  thing, with full ceremony: the design is written to a file so it survives a
   planned /compact; after build + test it records a session .md (what / why /
-  tests), does any rework, then prompts /clear. Always runs the skillator-handoff
-  skill before each /compact and /clear. For a quicker pass with no ceremony
-  use skillator-brainstorm-build-mid (Fable→Opus) or skillator-brainstorm-build-lite
-  (Opus+Sonnet, no Fable). NOT for tiny one-line edits or pure design/no-build work.
+  tests), does any rework, then prompts /clear — and it runs the skillator-handoff
+  skill before each /compact and /clear. Use when the user wants Fable's creative
+  design, Opus-quality implementation, and a durable, resumable session. For
+  all-Opus with no ceremony use skillator-brainstorm-build-mid; to offload the
+  simple build tasks to Sonnet use skillator-brainstorm-build-lite. NOT for tiny
+  one-line edits or pure design/no-build work.
 ---
 
-# Brainstorm (Fable) → Build (Opus + Sonnet) → Record → Clear
+# Brainstorm (Fable) → Build (Opus) — with ceremony
 
-Three models, each on its strength: **Fable** is the creative model → design
-thinking and brainstorming. **Opus** is the strongest coder → complex/core
-implementation and final verification. **Sonnet** is the cost-efficient mid tier
-→ the simpler, mechanical tasks. A skill can't change the *main* session's model,
-so the split is done with **subagents** carrying explicit model overrides.
-
-You (the main session) are the **orchestrator only** — you spawn the agents, route
-each task to the right model, keep the record, and prompt the two manual
-checkpoints (`/compact`, `/clear`). You do not design or write the code yourself.
+Fable is the creative model → it does the design thinking. Opus is the strongest
+coder → it does the whole implementation. A skill can't change the main session's
+model, so each phase runs as a **subagent** with an explicit `model` override:
+**design → Fable**, **build → Opus**. You (the main session) orchestrate only —
+spawn the agents, keep the record, and prompt the two manual checkpoints
+(`/compact`, `/clear`).
 
 ## Phase 1 — Fable designs (design thinking)
 
-Dispatch one subagent, `model: "fable"`, `subagent_type: "general-purpose"`. Give
-it the task verbatim + enough repo context (paths, stack, files you've seen). Ask
-it to **diverge then commit** and return an implementation-ready design **with each
-task tagged by complexity**, so routing is unambiguous:
+Dispatch one subagent, `model: "fable"`, `subagent_type: "general-purpose"`. Give it
+the task verbatim + repo context. Return an implementation-ready design:
 
 ```
 GOAL:         <the task in one line>
 APPROACHES:   <2-3 candidates, one line each + the tradeoff>
 CHOSEN:       <which, and why it wins>
-DESIGN:
-  - Data model / contracts: <entities, signatures, inputs→outputs>
-  - Edge cases & error handling: <the ones that matter>
-  - Out of scope: <what NOT to build>
-TASKS:        <ordered list; tag each [SIMPLE] or [COMPLEX] + the files it touches>
+DESIGN:       <data model / contracts, key edge cases, out of scope>
+TASKS:        <ordered build steps + the files each touches>
 VERIFICATION: <the concrete end-to-end check that proves it works>
 ```
 
 **Write this design to a file** — `docs/sessions/session-<YYYY-MM-DD>-<slug>.md`
-(or the scratchpad if no `docs/`). This file is the session's spine: it survives
-`/compact` and `/clear`, and the build agents read it instead of relying on chat
-context. Confirm the path.
+(or the scratchpad). This file is the session's spine: it survives `/compact` and
+`/clear`, and the build agent reads it instead of chat context. Confirm the path.
 
 ## Checkpoint A — planned /compact
 
-The design is now safely on disk, so the main thread can shed the brainstorm
-tokens before the build. **First run the `skillator-handoff` skill** (Skill tool)
-to capture a verified handoff of the session so far — never compact without one.
-Then **ask the user to run `/compact` now** (the skill can't run it). Say why:
-"design + handoff are saved; compacting keeps the build lean." Wait for them; then
-continue reading the design from the file.
+The design is safely on disk. **First run the `skillator-handoff` skill** (Skill
+tool) to capture a verified handoff — never compact without one. Then **ask the user
+to run `/compact` now** (the skill can't run it). Wait for them; then continue from
+the design file.
 
-## Phase 2 — Build (route by complexity)
+## Phase 2 — Opus builds
 
-Work the TASKS list. Route each task by its tag:
-- **[COMPLEX] / core → `model: "opus"`** subagent.
-- **[SIMPLE] / mechanical → `model: "sonnet"`** subagent.
-
-Each build agent gets the **design file path** + its specific task(s), builds
-exactly that, and stays inside its declared files. Independent tasks can run in
-parallel; give parallel agents a git worktree if they'd touch the same tree.
-If the design has a real blocker only the user can resolve, stop and surface it —
-don't guess.
+Dispatch Opus subagent(s), `model: "opus"`, given the **design file path** + the
+TASKS. Build exactly the design, stay inside the declared files. Independent tasks can
+run in parallel (git worktree if they'd touch the same tree). If the design hits a
+real blocker only the user can resolve, stop and surface it — don't guess.
 
 ## Phase 3 — Test
 
-Run the VERIFICATION step from the design (use an Opus agent, or the main session
-if it's a quick check). Capture the **actual result** — pass/fail with evidence
-(command output, a real render), never a claim. If it fails, that feeds rework.
+Run the VERIFICATION step (Opus agent or main session). Capture the **actual result**
+— pass/fail with evidence, never a claim. Failure feeds rework.
 
 ## Phase 4 — Record the session
 
@@ -84,8 +66,8 @@ tests** in one self-contained file:
 
 ```
 ## Outcome
-- Built:     <what shipped — files changed, per task>
-- Why:       <key decisions and why (pull from Fable's design + any build deviations)>
+- Built:     <what shipped — files changed>
+- Why:       <key decisions and why (from Fable's design + any build deviations)>
 - Tests:     <the verification run + its actual result: pass/fail + evidence>
 - Deviations:<where the build differed from the design, and why>
 ```
@@ -93,29 +75,28 @@ tests** in one self-contained file:
 ## Phase 5 — Rework
 
 Address anything Phase 3 surfaced (failing tests, gaps, deviations that shouldn't
-stand). Route rework the same way — [SIMPLE]→Sonnet, [COMPLEX]→Opus. Re-run the
-verification, and **update the Outcome section** so the record stays true.
+stand). Re-run the verification and **update the Outcome section** so the record stays true.
 
 ## Checkpoint B — /clear
 
 Once the build is green, the record is written, and rework is done: **first run the
 `skillator-handoff` skill** to write a verified handoff — never clear without one.
 Then relay a short summary (approach, what shipped, test result, record + handoff
-paths) and **ask the user to run `/clear`** to reset context for the next task. The
-session `.md` + handoff are the durable memory — nothing is lost by clearing.
+paths) and **ask the user to run `/clear`**. The session `.md` + handoff are the
+durable memory — nothing is lost by clearing.
 
 ## Rules
 
-- **Route by the design's tags, not by vibe.** [SIMPLE]→Sonnet, [COMPLEX]→Opus,
-  design→Fable. Don't send mechanical work to Opus (waste) or core logic to Sonnet.
+- **Design → Fable subagent, build → Opus subagent(s).** Don't design or code in the
+  main session.
 - **The design/record file is the source of truth** — it must survive compact/clear.
-  Pass the file path to agents; don't rely on chat context outliving a compact.
-- **Both build phases are subagents.** Don't design or code in the main session.
+  Pass its path to the build agent; don't rely on chat context outliving a compact.
 - **Handoff before any context loss.** Run the `skillator-handoff` skill *before*
   either checkpoint prompts `/compact` or `/clear` — never compact/clear without a
   verified handoff on disk.
-- **The two checkpoints are manual.** The skill prompts; the user runs `/compact`
-  and `/clear`. Never claim you ran them.
-- **Autonomous within phases, honest across them.** No confirmation gate between
-  design and build, but if a phase fails or an agent returns nothing, say so and stop.
-- If a subagent dies / returns null, report it rather than continuing on a missing piece.
+- **The two checkpoints are manual.** The skill prompts; the user runs `/compact` and
+  `/clear`. Never claim you ran them.
+- **Autonomous within phases, honest across them.** No confirmation gate between design
+  and build, but if a phase fails or an agent returns nothing, say so and stop.
+- Want all-Opus with no ceremony? Use skillator-brainstorm-build-mid. Want to offload
+  the simple build tasks to Sonnet? Use skillator-brainstorm-build-lite.
