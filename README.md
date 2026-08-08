@@ -44,6 +44,12 @@ with `/plugin marketplace update skillator`.
     autonomous, no ceremony.
   - **skillator-brainstorm-build-lite** — **Opus** plans · **Opus + Sonnet** builds
     (Opus core, Sonnet the simple tasks). Autonomous, no ceremony.
+- **skillator-deploy-wizard** — step-by-step wizard that preps a project for the
+  standard single-VPS deployment (Docker Compose + nginx + GitHub Actions): it
+  interviews you for the specifics (domain, IP, SSH user, app slug, repo, ports),
+  scaffolds the filled-in artifacts, and prints an ordered manual checklist for the
+  human-only steps (deploy keys, GitHub secrets, DNS, TLS). Never collects secret
+  values, never touches servers/DNS. Invoke with `/skillator-deploy-wizard`.
 - **skillator-merge-prep** — prepare a branch for a clean merge: rebuild its
   changes on top of the current base as a new `<branch>-merge-ready`, keeping only
   the *intended* edits (auto-drops no-ops, escalates suspicious ones) so no stale

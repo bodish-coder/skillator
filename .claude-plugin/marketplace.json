@@ -13,8 +13,8 @@
         "source": "github",
         "repo": "bodish-coder/skillator"
       },
-      "description": "Reusable Claude Code skills: handoff write/resume, UI-to-functional planning, tiered brainstorm→build, native+web UI/UX design, and agent-driven branch merge/prep",
-      "version": "1.1.0",
+      "description": "Reusable Claude Code skills: handoff write/resume, UI-to-functional planning, tiered brainstorm→build, native+web UI/UX design, agent-driven branch merge/prep, and a VPS deployment prep wizard",
+      "version": "1.2.0",
       "author": {
         "name": "bodish-coder"
       },
