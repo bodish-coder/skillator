@@ -132,3 +132,14 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
 - If `gh` is unavailable, do the whole merge with pure git and tell the user PR
   context/opening isn't available.
 - If a subagent dies / returns null, stop and report rather than merging blind.
+
+## Other hosts
+
+Haiku/Sonnet/Opus and the Agent tool above are the **Claude Code** defaults. On
+Cursor, Codex, Antigravity, Pi, or Prime Agent, map through `PLATFORMS.md` (beside the
+installed skills, or at the repo/plugin root): branch analysis → **cheap tier**,
+trivial conflicts → **cheap
+tier**, semantic conflicts + verification + rework → **build/deep tier**. Where
+the host can't run analysis agents in parallel, analyse branches sequentially and
+write each summary to the merge log as you go — slower, same result. The approval
+gates (verification, push/PR) do not relax on any host.

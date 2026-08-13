@@ -1,129 +1,73 @@
 # Platform adapters — brainstorm-build-prime
 
-This file maps the skill's **role tiers** to each host's tools and models.
-The main session reads this once at start (Step 0) and follows the row for
-the detected platform.
+Generic mechanics (host detection, skill paths, delegation, tier switching,
+frontmatter portability) live in **`PLATFORMS.md` at the repo/plugin root**
+(`../../../PLATFORMS.md` from this file). Read that first. This file adds only
+what's specific to *this* skill: which model plays which tier, and what the two
+context checkpoints mean on each host.
 
-## Role tiers (platform-agnostic)
+## Role tiers
 
 | Tier | Job | Must not |
 |------|-----|----------|
 | **design** | Creative design thinking — approaches, tradeoffs, contracts, task breakdown | Write production code or edit the repo |
 | **build** | Implement exactly the design — strongest coder available | Redesign or expand scope beyond the design file |
-| **orchestrator** | Main session — spawn agents, write session file, run handoff, run context checkpoints | Design or code directly (except tiny orchestration edits to the session record) |
+| **orchestrator** | Main session — dispatch, write the session file, run handoff and checkpoints | Design or code directly (bar tiny edits to the session record) |
 
-Use **different models** for design vs build when the platform allows it. Same
-model for both only as fallback (say so in the session record).
+Different models for design vs build wherever the host allows it. Same model for
+both is a fallback — record it in the session file.
 
----
+## Model picks per host
 
-## Detect platform
+| Host | design | build |
+|------|--------|-------|
+| **claude-code** | Agent tool, `model: "fable"` | Agent tool, `model: "opus"` |
+| **cursor** | Task tool, `gpt-5.6-sol-medium` | Task tool, `claude-opus-5-thinking-high` |
+| **codex** | subagent with a design-only prompt (no `apply_patch`), `gpt-5.6-sol` at `reasoning_effort: high` — `xhigh` for hard problems | subagent(s), `gpt-5.6-sol`; up to 8 in parallel |
+| **antigravity** | `/model` → Gemini 3.1 Pro (or Claude Opus if on plan), design-only prompt; background subagent if delegating | `/model` → strongest coder on plan (Claude Opus / Gemini 3.1 Pro) |
+| **pi** | `/model` → strongest reasoning provider configured, design-only prompt | `/model` → strongest coding provider configured |
+| **prime-agent** | `rlm(...)` child agent with a design-only prompt | `rlm(...)` child agent, or the main session after the design file exists |
 
-| Signal | Platform |
-|--------|----------|
-| `Skill` tool available; `/compact` and `/clear` invocable by the orchestrator | **claude-code** |
-| `Task` tool with `subagent_type` + `model` slug list in tool description | **cursor** |
-| `commentary` / `final` channels; skills read via filesystem or `skills.read`; auto context compaction | **codex** |
+Slug unavailable → nearest tier from the host's allowed list, substitution noted
+in the session file. Never invent slugs.
 
-If ambiguous, ask once. User may override with `platform: cursor` etc.
+**Where there's no delegation mechanism** (pi without a subagent extension, or
+antigravity if `/agents` is unavailable): run the design
+pass **in the main session with a design-only prompt and no repo edits**, write
+the design file, switch model, then build from that file. The file — not chat
+history — is what carries the design across the switch. Same discipline, one
+session.
 
----
+## The two checkpoints
 
-## claude-code
+Both run **after** `skillator-handoff` has written a verified handoff to disk.
+Never compact, clear, or reset without it.
 
-| Role | Dispatch | Model override |
-|------|----------|----------------|
-| design | Agent tool, `subagent_type: "general-purpose"` | `"fable"` |
-| build | Agent tool, `subagent_type: "general-purpose"` | `"opus"` |
+| Host | A — design is on disk | B — build green + record written |
+|------|----------------------|----------------------------------|
+| **claude-code** | invoke `/compact`, continue from the session file | invoke `/clear` |
+| **cursor** | fresh composer turn seeded with session file + handoff (or in-thread summarization if the user prefers) | new chat |
+| **codex** | optional pause — auto-compaction handles it; continue from the session file, not chat history | prompt the user to start a new thread |
+| **antigravity** | continue from the session file; suggest a new session if context is heavy | new session (`/agents` keeps background work alive) |
+| **pi** | new session seeded with the session file + handoff | new session |
+| **prime-agent** | `/refine`, then continue from the session file; daemon session can be resumed with `prime-agent --resume <id>` | new session or resume from the record |
 
-**Load another skill:** Skill tool (e.g. `skillator-handoff`).
+If a checkpoint mechanism is blocked or missing, say so and ask the user once —
+never skip the handoff.
 
-**Context checkpoints (automatic — orchestrator runs after handoff):**
+## Parallel builds
 
-| Checkpoint | Action |
-|------------|--------|
-| A (after design on disk) | Invoke `/compact`, then continue from the session file |
-| B (after green build + record) | Invoke `/clear` |
-
-Run handoff **before** each checkpoint. If `/compact` or `/clear` is blocked or
-unavailable, say so and ask the user once — do not skip the handoff.
-
-**Parallel builds:** git worktree when tasks would touch the same tree.
-
----
-
-## cursor
-
-| Role | Dispatch | Model slug |
-|------|----------|------------|
-| design | Task tool, `subagent_type: "generalPurpose"` | `gpt-5.6-sol-medium` — creative divergence, separate from build model |
-| build | Task tool, `subagent_type: "generalPurpose"` | `claude-opus-5-thinking-high` — strongest coder in the allowed list |
-
-**Model fallback:** If a slug is unavailable, use the closest tier from the Task
-tool's allowed list and note the substitution in the session file. Do not guess
-slugs outside that list.
-
-**Load another skill:** Read the skill's `SKILL.md` from disk (personal:
-`~/.cursor/skills/<name>/SKILL.md`, project: `.cursor/skills/<name>/SKILL.md`,
-or installed skillator path) and follow it. Do not use a Skill tool — it does
-not exist here.
-
-**Context checkpoints (manual — no `/compact` or `/clear`):**
-
-| Checkpoint | User action |
-|------------|-------------|
-| A (after design on disk) | Start a **fresh composer/agent turn** with only the session file + handoff as context, *or* use Cursor's context summarization if the user prefers staying in-thread. Prompt explicitly: "Design is in `<path>`. Please compact/summarize context or open a new chat, then say continue." |
-| B (after green build + record) | **New chat** (or new agent session). Session `.md` + handoff are the durable memory. |
-
-**Parallel builds:** Task tool in parallel; git worktree when tasks would touch the same tree.
-
----
-
-## codex
-
-| Role | Dispatch | Model + notes |
-|------|----------|---------------|
-| design | Subagent the platform provides for delegated work (when available); otherwise a focused design pass in the main session **before** any repo edits, then write the session file immediately | `gpt-5.6-sol` with `reasoning_effort: high` (or `xhigh` for hard design problems). Prompt: design thinking only — no `apply_patch`, no implementation. |
-| build | Same subagent/delegation mechanism when available | `gpt-5.6-sol` — frontier coding model |
-
-**Design/build split on Codex:** There is no Fable equivalent. Prefer **reasoning
-effort + prompt discipline** for design (explore approaches, write the session
-file), then **implementation** for build. If multi-agent spawn is available, still
-use separate agents with the design-only vs build-only prompts above.
-
-**Load another skill:** Read `SKILL.md` from the skill path listed in the session's
-Available skills catalog (expand short aliases per catalog rules). Main agent reads
-skill instructions itself — do not delegate skill interpretation to a subagent.
-
-**Context checkpoints:**
-
-| Checkpoint | Behavior |
-|------------|----------|
-| A (after design on disk) | **Optional pause.** Codex auto-compacts; still run `skillator-handoff` and tell the user the design path. Continue from the session file — do not rely on chat history after compaction. |
-| B (after green build + record) | Prompt user to start a **new thread** when they want a clean slate. Session `.md` + handoff remain on disk. |
-
-**Parallel builds:** parallel tool use / subagents when the platform supports it.
-
----
+Delegate in parallel where the host supports it (Agent/Task tools, antigravity
+background subagents, `rlm(...)`). Use a **git worktree** whenever parallel tasks
+would touch the same tree — on every host, including `prime-agent`, which is
+explicitly *not* a sandbox.
 
 ## User overrides
 
-If the user names models or a platform in the request, those win over the
-defaults above. Record overrides in the session file header:
+User-named platform or models win. Record in the session file header:
 
 ```
-PLATFORM: cursor
-DESIGN_MODEL: gpt-5.6-sol-medium
-BUILD_MODEL: claude-opus-5-thinking-high
+PLATFORM: pi
+DESIGN_MODEL: <slug>
+BUILD_MODEL: <slug>
 ```
-
----
-
-## Quick reference — equivalent models (approximate)
-
-| Role | claude-code | cursor | codex |
-|------|-------------|--------|-------|
-| Creative design | Fable | GPT-5.6-Sol (medium reasoning) | GPT-5.6-Sol (high reasoning, design-only prompt) |
-| Strong build | Opus | Claude Opus 5 (thinking-high) | GPT-5.6-Sol |
-| Handoff skill | Skill tool → skillator-handoff | Read skillator-handoff SKILL.md | Read skillator-handoff SKILL.md |
-| Session survives context loss | auto `/compact` + file | New turn + file | Auto-compact + file |

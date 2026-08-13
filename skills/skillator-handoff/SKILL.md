@@ -48,8 +48,9 @@ but not confirmed in repo)**, **IN-PROGRESS (partial / uncommitted)**, or
    re-litigating settled questions or repeating dead ends. Pull rationale out of
    the conversation — it is the most perishable, highest-value content.
 4. **Surface the constraints & gotchas.** Environment quirks, air-gap/offline
-   limits, credentials, flaky steps, "do not re-fix this" traps (check CLAUDE.md
-   and repo docs). These cost the next worker hours if lost.
+   limits, credentials, flaky steps, "do not re-fix this" traps (check the repo docs
+   and whichever instruction file this host loads — CLAUDE.md, AGENTS.md,
+   SYSTEM.md). These cost the next worker hours if lost.
 5. **Define the resume path.** The exact next 1–3 actions, the first commands to
    run to get oriented, and the branch/PR state. Be concrete enough that someone
    can start in under five minutes.

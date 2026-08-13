@@ -63,3 +63,11 @@ concisely: the approach, what was built (files), and the verification result.
 - Want Fable's creative brainstorm + the full ceremony? Use
   skillator-brainstorm-build-prime. Want to offload simple/mechanical tasks to Sonnet?
   Use skillator-brainstorm-build-lite.
+
+## Other hosts
+
+"Opus" and the Agent tool above are the **Claude Code** defaults. On Cursor,
+Codex, Antigravity, Pi, or Prime Agent, read `PLATFORMS.md` (beside the installed skills, or at the repo/plugin
+root) and use the host's **build tier** for both phases, with its own delegate
+mechanism. No delegation available → run plan then build **sequentially in one
+session**, writing the design to disk before building from it.

@@ -19,6 +19,47 @@ In Claude Code, add this repo as a marketplace and install the plugin:
 That's it — the skills below become available in every project. Update later
 with `/plugin marketplace update skillator`.
 
+## Install (other agents)
+
+The skills are plain `SKILL.md` folders, so any host that reads the Agent Skills
+format can run them. Clone the repo and run the installer — it detects which
+agent CLIs are present and copies every skill (plus `PLATFORMS.md`) into each
+one's **global** skills dir:
+
+```powershell
+.\install.ps1 -DryRun    # see what it would do
+.\install.ps1 -Link      # install as symlinks (recommended - stay live on git pull)
+.\install.ps1            # or plain copies
+```
+
+```sh
+./install.sh --dry-run
+./install.sh --link
+./install.sh
+```
+
+It installs only what's missing, so re-running is safe; `-Force` / `--force`
+refreshes copies that are already there. Anything already **symlinked** to this
+repo is left alone (it's always current), and **Claude Code is left to its plugin
+install** whenever one exists — no duplicate shadowing the plugin cache. Prime
+Agent has no markdown-skill loader, so point its `AGENTS.md` at the `SKILL.md`
+you want.
+
+Manual install paths, if you'd rather not run the script:
+
+| Host | Path |
+|------|------|
+| Cursor | `.cursor/skills/` or `.agents/skills/` (global: `~/.cursor/skills/`, `~/.agents/skills/`) — auto-discovered |
+| Codex | `~/.agents/skills/` — auto-loaded when the task matches |
+| Antigravity CLI | `.agents/skills/` (workspace) or `~/.gemini/config/skills/` |
+| Pi | `.pi/skills/` (force with `/skill:<name>`) |
+| Prime Agent | anywhere — skills there are Python packages, so read the `SKILL.md` or reference it from `AGENTS.md` |
+
+Model names and tool names inside the skills are **Claude Code defaults**;
+[`PLATFORMS.md`](PLATFORMS.md) maps them to each host's tiers, delegation
+mechanism, and context checkpoints. Keep `PLATFORMS.md` alongside `skills/` — the
+skills refer to it.
+
 ## Skills in this repo
 
 - **skillator-handoff** — generate an in-depth, *verified* session-handoff
@@ -64,6 +105,12 @@ with `/plugin marketplace update skillator`.
   fuses production craft (contrast, type, layout, motion, a11y, iOS/Android/RN
   conventions) with a committed aesthetic and a systematic method for forging one
   unique, ownable *signature* element. Invoke with `/skillator-design-arwen`.
+- **ticket-checker** — Jira-style serialised ticket IDs for AI coding chats: bugs
+  `B1, B2, B3…`, features `F1, F2, F3…`, sub-parts `B7a/B7b`, all in one committed
+  `TICKETS.md` at the repo root with `[ ]`/`[~]`/`[x]` status. IDs are never reused
+  or renumbered and new lines are appended, so teammates on the same branch and
+  future chats can fetch the open set and nothing gets forgotten. Invoke with
+  `/ticket-checker`.
 
 ## Add a new skill
 

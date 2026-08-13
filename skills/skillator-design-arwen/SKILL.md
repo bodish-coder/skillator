@@ -74,7 +74,9 @@ single route, is a decision.
    screens' code, tokens, plus the Phase 0 register/platform read. The panel
    critiques reality, not a description.
 2. **Convene 2–3 experts — distinct lenses, not clones.** Pick the ones the app
-   needs and dispatch each as a **subagent** (Agent tool) briefed with the evidence,
+   needs and dispatch each as a **subagent** (Agent tool on Claude Code; the
+   host's delegate mechanism per `PLATFORMS.md` (beside the installed skills or at the repo root) elsewhere; sequential
+   in-session passes where there is none) briefed with the evidence,
    arwen's doctrine, and *its lens only*:
    - **Visual / brand director** — aesthetic direction, signature, type & color, hierarchy.
    - **UX & interaction / a11y lead** — flows, the 8 states, focus/forms, cognitive load, empty/error.
@@ -288,7 +290,11 @@ subagents rather than one linear pass — especially for a multi-surface redesig
   signature and its rules, the tokens, and the arwen craft + ship-gate bar. Independently
   built surfaces drifting apart is *the* failure mode; the shared brief is what keeps them one product.
 - **Isolate parallel file edits.** Agents touching the same tree concurrently → give each a
-  git worktree (`isolation`) so they don't collide; otherwise sequence them.
+  git worktree (`isolation`) so they don't collide; otherwise sequence them. This holds on
+  every host — including ones that run agents in the working tree with no sandbox.
+- **No delegation on this host?** Build the surfaces **sequentially in one session** off the
+  same written brief. Slower, identical output — the shared brief on disk is what matters,
+  not the parallelism.
 - **Walking skeleton first.** One surface fully to spec (built, verified, signature present)
   proves the route before you pour breadth into it. Then widen.
 - **Each agent runs its own ship gate (§7) and returns evidence** (a real render / screenshot),

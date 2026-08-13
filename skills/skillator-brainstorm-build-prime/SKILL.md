@@ -4,7 +4,8 @@ description: >-
   Top-tier "brainstorm then build" — a design-tier model does creative design
   thinking, a build-tier model implements, with full ceremony: design written to
   disk (survives context loss), handoff before checkpoints, session .md record,
-  rework, then clean session reset. Works across Claude Code, Cursor, and Codex
+  rework, then clean session reset. Works across Claude Code, Cursor, Codex,
+  Antigravity, Pi, and Prime Agent
   via role tiers and platform adapters (see references/platforms.md). On Claude
   Code: Fable designs, Opus builds, auto /compact and /clear after handoff. On
   Cursor: GPT-5.6-Sol designs, Claude Opus builds, fresh-chat checkpoints. On Codex:
@@ -24,8 +25,10 @@ record, and run context checkpoints automatically where the platform allows.
 
 ## Step 0 — Platform & models
 
-1. Read `references/platforms.md` in this skill's directory.
-2. Detect platform (claude-code · cursor · codex) using the signals there.
+1. Read `references/platforms.md` in this skill's directory (and the root
+   `PLATFORMS.md` it points to for the generic mechanics).
+2. Detect platform — claude-code · cursor · codex · antigravity · pi ·
+   prime-agent — using the signals there.
 3. Note the **design** and **build** model slugs / overrides for this run.
 4. If the user named models or a platform, those override the defaults — record
    them in the session file header.
@@ -67,11 +70,9 @@ The design is safely on disk.
 1. **Run the handoff skill** using the platform's method (platforms.md) —
    `skillator-handoff` — to capture a verified handoff. Never trim context
    without one.
-2. **Run Checkpoint A** (platforms.md):
-   - **Claude Code:** invoke `/compact` yourself, then continue from the design file
-   - **Cursor:** prompt the user for a fresh turn or context summarization, then
-     continue from the design file
-   - **Codex:** continue from the design file (auto-compaction may already occur)
+2. **Run Checkpoint A** — the row for your host in `references/platforms.md`
+   (Claude Code compacts itself; every other host either auto-compacts or needs
+   the user to start a fresh turn/session).
 
 Continue from the design file, not chat memory.
 
@@ -122,10 +123,8 @@ Once the build is green, the record is written, and rework is done:
 1. **Run `skillator-handoff`** again (platform method).
 2. Relay a short summary (approach, what shipped, test result, record + handoff
    paths).
-3. **Run Checkpoint B** (platforms.md):
-   - **Claude Code:** invoke `/clear` yourself
-   - **Cursor:** prompt the user to start a **new chat**
-   - **Codex:** prompt the user to start a **new thread** when they want a clean slate
+3. **Run Checkpoint B** — the row for your host in `references/platforms.md`
+   (Claude Code clears itself; elsewhere prompt the user for a new chat/session).
 
 The session `.md` + handoff are the durable memory — nothing is lost by clearing.
 
@@ -140,11 +139,13 @@ The session `.md` + handoff are the durable memory — nothing is lost by cleari
 - **Handoff before any context loss.** Run `skillator-handoff` before either
   checkpoint — never compact/clear/reset without a verified handoff on disk.
 - **Checkpoints: auto on Claude Code, manual elsewhere.** On Claude Code, you
-  invoke `/compact` and `/clear` yourself after handoff. On Cursor/Codex, follow
-  platforms.md (prompt the user when the platform cannot clear context for you).
+  invoke `/compact` and `/clear` yourself after handoff. Everywhere else follow
+  platforms.md (prompt the user when the host cannot clear context for you).
   If a slash command fails or is unavailable, say so and ask the user once.
-- **Use platform-native dispatch.** Agent tool (Claude Code), Task tool (Cursor),
-  or Codex subagent/delegation — never hardcode a tool that isn't available.
+- **Use host-native dispatch.** Agent tool, Task tool, background subagents,
+  `rlm(...)` — per platforms.md, never a tool that isn't available. Where the
+  host has no delegation at all, run the phases sequentially in-session with the
+  design file as the handover, and say so.
 - **Autonomous within phases, honest across them.** No confirmation gate between
   design and build, but if a phase fails or an agent returns nothing, say so and
   stop.

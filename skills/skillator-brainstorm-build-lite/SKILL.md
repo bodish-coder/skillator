@@ -64,3 +64,14 @@ result — pass/fail with evidence, not a claim. On failure, fix it ([SIMPLE]→
   `skillator-handoff` skill** — never compact/clear without a verified handoff.
 - Need Fable's creative brainstorm, a /compact checkpoint, or a session record? Use
   skillator-brainstorm-build-prime. Want all-Opus (no Sonnet offload)? Use -mid.
+
+## Other hosts
+
+Opus/Sonnet and the Agent tool above are the **Claude Code** defaults. On Cursor,
+Codex, Antigravity, Pi, or Prime Agent, map them through `PLATFORMS.md` (beside the
+installed skills, or at the repo/plugin root): design + [COMPLEX] → **build
+tier**, [SIMPLE] → **cheap tier**,
+dispatched with that host's delegate mechanism. Where the host has no delegation,
+run the phases **sequentially in one session**, switching model between them and
+writing each phase's output to disk before the switch — the file is the handover,
+not chat history.
