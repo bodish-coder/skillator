@@ -111,6 +111,11 @@ skills refer to it.
   or renumbered and new lines are appended, so teammates on the same branch and
   future chats can fetch the open set and nothing gets forgotten. Invoke with
   `/ticket-checker`.
+- **screenshot-loop** — the user drops test screenshots in one folder; the agent
+  reads every one, acts on what they show, verifies, then deletes exactly the
+  files it consumed so the folder is clean for the next round. The directory is
+  asked once and remembered in `.screenshot-dir` at the repo root. Invoke with
+  `/screenshot-loop`.
 
 ## Add a new skill
 
