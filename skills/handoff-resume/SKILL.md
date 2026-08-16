@@ -1,17 +1,17 @@
 ---
-name: skillator-handoff-resume
+name: handoff-resume
 description: >-
-  Read session-handoff documents (the "handouts" produced by skillator-handoff,
+  Read session-handoff documents (the "handouts" produced by handoff,
   typically under docs/handoffs/) and DO the work: execute the next pending tasks
   they list, then stamp a marker in each file so already-finished handoffs are
   skipped on later runs. Use when the user says "execute the handoff", "run the
   handoff", "work through the handoffs", "pick up the pending tasks", "resume from
   the handoff doc(s)", "do the next tasks in the handout", "process docs/handoffs",
   or wants a repeatable pass that picks up where a handoff left off. It is the
-  execution counterpart to skillator-handoff (which writes the doc) — this one
+  execution counterpart to handoff (which writes the doc) — this one
   consumes it. Marker-aware and idempotent, so it is safe to re-run or /loop:
   completed handoffs are ignored, partially-done ones resume. NOT for writing a
-  handoff (use skillator-handoff), and not for arbitrary tasks that live outside a
+  handoff (use handoff), and not for arbitrary tasks that live outside a
   handoff document.
 ---
 
@@ -72,7 +72,7 @@ by hand also makes a file eligible again — that is the intended manual reset.
 ### 1. Discover the handouts
 
 Find candidate docs. Default search root is `docs/handoffs/*.md` (where
-skillator-handoff writes). If the user named a path (file or directory), use that.
+handoff writes). If the user named a path (file or directory), use that.
 Also honor an obvious conventions dir if the repo uses one (e.g.
 `docs/superpowers/`). Grep the marker in each and split into: **eligible**
 (no marker or `in-progress`), **blocked**, and **done** (`complete`).
@@ -94,7 +94,7 @@ Announce which file(s) you selected and why before doing work.
 Within the chosen handout, the pending work is whatever is **not** DONE:
 
 - The **state table** rows marked 🟡 IN-PROGRESS, 📝 CLAIMED, or ⬜ NOT STARTED
-  (skillator-handoff's legend). ✅ rows are done — leave them.
+  (handoff's legend). ✅ rows are done — leave them.
 - The **"How to resume" / next-actions** section — the concrete ordered steps.
 - Respect the doc's **constraints & "do not re-fix" traps** and **decisions &
   rationale** sections: do not re-litigate settled choices or retry documented

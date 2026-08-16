@@ -1,5 +1,5 @@
 ---
-name: skillator-merge-agent
+name: merge-agent
 description: >-
   Analyse GitHub branches with agents and merge them gracefully, handling
   conflicts by risk. Use when the user wants to combine/consolidate several
@@ -44,7 +44,7 @@ Establish, then confirm back before touching anything:
 
 Never start merging on an unconfirmed branch list or base.
 
-> If a branch is stale or carries unrelated/no-op churn, run **`skillator-merge-prep`**
+> If a branch is stale or carries unrelated/no-op churn, run **`merge-prep`**
 > on it first — it produces a `<branch>-merge-ready` carrying only its intended
 > changes on top of current base, so this merge integrates nothing old or untouched.
 

@@ -1,17 +1,17 @@
 ---
-name: skillator-merge-prep
+name: merge-prep
 description: >-
   Prepare a branch for a clean merge — produce a merge-ready branch whose diff
   against the base is ONLY the branch's intended changes, on top of the current
   base, with no stale/old versions and no accidental or no-op edits. Use when the
   user wants to "prep a branch for merge", "clean up a branch before merging",
   "make sure only the real changes get merged", "strip stale/old parts", "rebase
-  and clean before merge", or is about to run skillator-merge-agent and wants the
+  and clean before merge", or is about to run merge-agent and wants the
   branch normalized first. It creates a new <branch>-merge-ready branch off the
   current base and overlays only the intended changes (auto-dropping no-ops,
   escalating anything substantive-but-maybe-unintended) — it never rewrites the
   original branch, never force-pushes, and never touches the base. NOT for the
-  actual merge (use skillator-merge-agent) or for non-git tasks.
+  actual merge (use merge-agent) or for non-git tasks.
 ---
 
 # Merge Prep — a branch that carries only its real changes
@@ -81,9 +81,9 @@ it now sits on current base, this is where you'd catch integration breakage earl
 ## Phase 4 — Hand off
 
 Relay: the `<branch>-merge-ready` name, the kept-vs-dropped counts, and the verified
-diff. Then **ask at run time**: hand off locally (the user / `skillator-merge-agent`
+diff. Then **ask at run time**: hand off locally (the user / `merge-agent`
 targets it), or — only on an explicit yes — push it (normal push, never force).
-`skillator-merge-agent` can now integrate a branch that carries only its real changes.
+`merge-agent` can now integrate a branch that carries only its real changes.
 
 ## Rules
 
@@ -94,4 +94,4 @@ targets it), or — only on an explicit yes — push it (normal push, never forc
 - **Route the judgment:** NO-OP → auto-drop (reported), SUSPICIOUS → user decides,
   INTENDED → keep. Unsure = suspicious (escalate), never silently include.
 - **Everything is reversible** by deleting the prepped branch.
-- Pairs with `skillator-merge-agent`: prep first, then merge the clean branch.
+- Pairs with `merge-agent`: prep first, then merge the clean branch.

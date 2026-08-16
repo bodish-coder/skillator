@@ -1,5 +1,5 @@
 ---
-name: skillator-deploy-wizard
+name: deploy-wizard
 description: >-
   Step-by-step wizard that preps a project for the standard single-VPS deployment
   (Docker Compose + nginx + GitHub Actions, one-push deploy, maintenance gate, TLS

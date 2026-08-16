@@ -1,5 +1,5 @@
 ---
-name: skillator-brainstorm-build-lite
+name: brainstorm-build-lite
 description: >-
   The lightest "brainstorm then build" skill — no Fable, two models only: Opus
   (claude-opus-4-8) does the design thinking and the complex/core implementation,
@@ -7,9 +7,9 @@ description: >-
   no ceremony (no /compact, no session record, no /clear). Use when the user wants
   a quick, cost-aware build and doesn't need Fable's creative brainstorm — "just
   design and build it, cheap where it can be". For a straight all-Opus plan→build
-  (no Sonnet offload) use skillator-brainstorm-build-mid; for a Fable-led creative
+  (no Sonnet offload) use brainstorm-build-mid; for a Fable-led creative
   design plus the full ceremony (/compact + session record + /clear) use
-  skillator-brainstorm-build-prime. NOT for tiny one-line edits (just do them) or
+  brainstorm-build-prime. NOT for tiny one-line edits (just do them) or
   pure design/no-build work.
 ---
 
@@ -61,9 +61,9 @@ result — pass/fail with evidence, not a claim. On failure, fix it ([SIMPLE]→
   returns nothing, say so and stop rather than continuing on a missing piece.
 - **Handoff before any context loss.** This tier runs no `/compact` or `/clear` of
   its own, but if you or the user are about to run either, **first run the
-  `skillator-handoff` skill** — never compact/clear without a verified handoff.
+  `handoff` skill** — never compact/clear without a verified handoff.
 - Need Fable's creative brainstorm, a /compact checkpoint, or a session record? Use
-  skillator-brainstorm-build-prime. Want all-Opus (no Sonnet offload)? Use -mid.
+  brainstorm-build-prime. Want all-Opus (no Sonnet offload)? Use -mid.
 
 ## Other hosts
 

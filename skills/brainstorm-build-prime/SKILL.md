@@ -1,5 +1,5 @@
 ---
-name: skillator-brainstorm-build-prime
+name: brainstorm-build-prime
 description: >-
   Top-tier "brainstorm then build" — a design-tier model does creative design
   thinking, a build-tier model implements, with full ceremony: design written to
@@ -10,8 +10,8 @@ description: >-
   Code: Fable designs, Opus builds, auto /compact and /clear after handoff. On
   Cursor: GPT-5.6-Sol designs, Claude Opus builds, fresh-chat checkpoints. On Codex:
   GPT-5.6-Sol high-reasoning design pass then Sol build, auto-compaction aware.
-  For all-Opus without ceremony use skillator-brainstorm-build-mid; for Sonnet
-  offload use skillator-brainstorm-build-lite. NOT for tiny one-line edits or
+  For all-Opus without ceremony use brainstorm-build-mid; for Sonnet
+  offload use brainstorm-build-lite. NOT for tiny one-line edits or
   pure design/no-build work.
 ---
 
@@ -68,7 +68,7 @@ BUILD_MODEL: <model planned for Phase 2>
 The design is safely on disk.
 
 1. **Run the handoff skill** using the platform's method (platforms.md) —
-   `skillator-handoff` — to capture a verified handoff. Never trim context
+   `handoff` — to capture a verified handoff. Never trim context
    without one.
 2. **Run Checkpoint A** — the row for your host in `references/platforms.md`
    (Claude Code compacts itself; every other host either auto-compacts or needs
@@ -120,7 +120,7 @@ section** so the record stays true.
 
 Once the build is green, the record is written, and rework is done:
 
-1. **Run `skillator-handoff`** again (platform method).
+1. **Run `handoff`** again (platform method).
 2. Relay a short summary (approach, what shipped, test result, record + handoff
    paths).
 3. **Run Checkpoint B** — the row for your host in `references/platforms.md`
@@ -136,7 +136,7 @@ The session `.md` + handoff are the durable memory — nothing is lost by cleari
   code in the orchestrator session (except writing the session record).
 - **The design/record file is the source of truth** — pass its path to build
   agents; don't rely on chat context outliving a compact/trim.
-- **Handoff before any context loss.** Run `skillator-handoff` before either
+- **Handoff before any context loss.** Run `handoff` before either
   checkpoint — never compact/clear/reset without a verified handoff on disk.
 - **Checkpoints: auto on Claude Code, manual elsewhere.** On Claude Code, you
   invoke `/compact` and `/clear` yourself after handoff. Everywhere else follow
@@ -149,5 +149,5 @@ The session `.md` + handoff are the durable memory — nothing is lost by cleari
 - **Autonomous within phases, honest across them.** No confirmation gate between
   design and build, but if a phase fails or an agent returns nothing, say so and
   stop.
-- Want all-build-tier with no ceremony? Use skillator-brainstorm-build-mid. Want
-  to offload simple build tasks to a fast tier? Use skillator-brainstorm-build-lite.
+- Want all-build-tier with no ceremony? Use brainstorm-build-mid. Want
+  to offload simple build tasks to a fast tier? Use brainstorm-build-lite.

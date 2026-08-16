@@ -1,5 +1,5 @@
 ---
-name: skillator-design-arwen
+name: design-arwen
 description: >-
   Ultimate UI/UX design skill for native AND web apps — design, redesign, shape,
   critique, polish, or elevate an interface so it ships production-grade AND

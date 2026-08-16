@@ -1,5 +1,5 @@
 ---
-name: skillator-brainstorm-build-mid
+name: brainstorm-build-mid
 description: >-
   Mid-tier feature build on a single model tier end to end — Opus (the run's Opus)
   does BOTH the planning/design and the implementation, fully autonomously with no
@@ -7,8 +7,8 @@ description: >-
   session record, no /clear — just Opus plan → Opus build. Use when the user wants
   straight Opus quality for both the thinking and the code, without Fable's creative
   ideation and without offloading simple tasks. For a Fable-led creative design plus
-  the full ceremony use skillator-brainstorm-build-prime; to offload the simple /
-  mechanical parts to Sonnet use skillator-brainstorm-build-lite. NOT for tiny
+  the full ceremony use brainstorm-build-prime; to offload the simple /
+  mechanical parts to Sonnet use brainstorm-build-lite. NOT for tiny
   one-line edits (just do them) or pure design/no-build work.
 ---
 
@@ -59,10 +59,10 @@ concisely: the approach, what was built (files), and the verification result.
   returns nothing, say so plainly and stop rather than continuing on a missing piece.
 - **Handoff before any context loss.** This tier runs no `/compact` or `/clear` of its
   own, but if you or the user are about to run either, **first run the
-  `skillator-handoff` skill** — never compact/clear without a verified handoff.
+  `handoff` skill** — never compact/clear without a verified handoff.
 - Want Fable's creative brainstorm + the full ceremony? Use
-  skillator-brainstorm-build-prime. Want to offload simple/mechanical tasks to Sonnet?
-  Use skillator-brainstorm-build-lite.
+  brainstorm-build-prime. Want to offload simple/mechanical tasks to Sonnet?
+  Use brainstorm-build-lite.
 
 ## Other hosts
 

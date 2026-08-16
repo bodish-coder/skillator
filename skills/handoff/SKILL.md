@@ -1,5 +1,5 @@
 ---
-name: skillator-handoff
+name: handoff
 description: >
   Generate an in-depth, verified session-handoff document (a Markdown file) so a
   different person or AI can continue the work with zero loss of context, plan, or
@@ -81,7 +81,7 @@ folder if absent). If the repo has an obvious conventions dir (e.g.
 scratchpad, honor that. Confirm the location in your reply.
 
 Optional args: treat any argument as the output path or a focus hint
-(e.g. `/skillator-handoff docs/notes/handoff.md` or `/skillator-handoff mosaic tracks`).
+(e.g. `/handoff docs/notes/handoff.md` or `/handoff mosaic tracks`).
 
 ## Finish
 

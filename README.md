@@ -62,49 +62,49 @@ skills refer to it.
 
 ## Skills in this repo
 
-- **skillator-handoff** — generate an in-depth, *verified* session-handoff
+- **handoff** — generate an in-depth, *verified* session-handoff
   document so a different person or AI can continue the work with no loss of
-  context, plan, or intent. Invoke with `/skillator-handoff [output-path|focus]`.
-- **skillator-handoff-resume** — the execution counterpart: read handoff docs
-  (from `skillator-handoff`) and *do* the pending work, stamping a marker in each
+  context, plan, or intent. Invoke with `/handoff [output-path|focus]`.
+- **handoff-resume** — the execution counterpart: read handoff docs
+  (from `handoff`) and *do* the pending work, stamping a marker in each
   so finished handoffs are skipped. Marker-aware and idempotent (safe to re-run /
-  `/loop`). Invoke with `/skillator-handoff-resume`.
-- **skillator-func-ui** — turn an existing UI-only mockup/prototype into a real,
+  `/loop`). Invoke with `/handoff-resume`.
+- **func-ui** — turn an existing UI-only mockup/prototype into a real,
   working system: scan the code, interview the user, emit workflow specs to
   confirm, then a dependency-ordered plan to wire the UI to a real backend
-  (stops at the confirmed plan). Invoke with `/skillator-func-ui`.
+  (stops at the confirmed plan). Invoke with `/func-ui`.
 - **brainstorm-build family** — three tiers of the "brainstorm then build" flow;
   pick by how much model firepower and ceremony you want:
-  - **skillator-brainstorm-build-prime** — **design tier** plans · **build tier**
+  - **brainstorm-build-prime** — **design tier** plans · **build tier**
     implements · full ceremony: session `.md` on disk · handoff before context
     checkpoints · rework · clean reset. Cross-platform via `references/platforms.md`:
     Claude Code (Fable → Opus, auto `/compact`/`/clear`), Cursor (GPT-5.6-Sol → Claude
     Opus, fresh-chat checkpoints), Codex (Sol high-reasoning design → Sol build,
     auto-compaction aware).
-  - **skillator-brainstorm-build-mid** — **Opus** plans · **Opus** builds. All-Opus,
+  - **brainstorm-build-mid** — **Opus** plans · **Opus** builds. All-Opus,
     autonomous, no ceremony.
-  - **skillator-brainstorm-build-lite** — **Opus** plans · **Opus + Sonnet** builds
+  - **brainstorm-build-lite** — **Opus** plans · **Opus + Sonnet** builds
     (Opus core, Sonnet the simple tasks). Autonomous, no ceremony.
-- **skillator-deploy-wizard** — step-by-step wizard that preps a project for the
+- **deploy-wizard** — step-by-step wizard that preps a project for the
   standard single-VPS deployment (Docker Compose + nginx + GitHub Actions): it
   interviews you for the specifics (domain, IP, SSH user, app slug, repo, ports),
   scaffolds the filled-in artifacts, and prints an ordered manual checklist for the
   human-only steps (deploy keys, GitHub secrets, DNS, TLS). Never collects secret
-  values, never touches servers/DNS. Invoke with `/skillator-deploy-wizard`.
-- **skillator-merge-prep** — prepare a branch for a clean merge: rebuild its
+  values, never touches servers/DNS. Invoke with `/deploy-wizard`.
+- **merge-prep** — prepare a branch for a clean merge: rebuild its
   changes on top of the current base as a new `<branch>-merge-ready`, keeping only
   the *intended* edits (auto-drops no-ops, escalates suspicious ones) so no stale
   or untouched parts get merged. Never rewrites the original or force-pushes. Runs
-  before `skillator-merge-agent`. Invoke with `/skillator-merge-prep`.
-- **skillator-merge-agent** — analyse GitHub branches with agents and merge them
+  before `merge-agent`. Invoke with `/merge-prep`.
+- **merge-agent** — analyse GitHub branches with agents and merge them
   by risk: Haiku summarizes each branch + builds an overlap/conflict map, then
   merges on a throwaway integration branch (trivial conflicts auto-resolve via
   Sonnet, semantic ones escalate to you with an Opus-proposed fix). Optional
-  test-verify and PR, both asked at run time. Invoke with `/skillator-merge-agent`.
-- **skillator-design-arwen** — ultimate UI/UX design skill for native *and* web:
+  test-verify and PR, both asked at run time. Invoke with `/merge-agent`.
+- **design-arwen** — ultimate UI/UX design skill for native *and* web:
   fuses production craft (contrast, type, layout, motion, a11y, iOS/Android/RN
   conventions) with a committed aesthetic and a systematic method for forging one
-  unique, ownable *signature* element. Invoke with `/skillator-design-arwen`.
+  unique, ownable *signature* element. Invoke with `/design-arwen`.
 - **ticket-checker** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, sub-parts `B7a/B7b`, all in one committed
   `TICKETS.md` at the repo root with `[ ]`/`[~]`/`[x]` status. IDs are never reused

@@ -40,7 +40,7 @@ session.
 
 ## The two checkpoints
 
-Both run **after** `skillator-handoff` has written a verified handoff to disk.
+Both run **after** `handoff` has written a verified handoff to disk.
 Never compact, clear, or reset without it.
 
 | Host | A — design is on disk | B — build green + record written |
