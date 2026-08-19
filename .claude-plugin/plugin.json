@@ -1,6 +1,6 @@
-﻿{
+{
   "name": "skillator",
-  "description": "Reusable agent skills (Claude Code, Cursor, Codex, Antigravity, Pi): serialised bug/feature tickets, handoff write/resume, UI-to-functional planning, tiered brainstormâ†’build, native+web UI/UX design, agent-driven branch merge/prep, a VPS deployment prep wizard, and a test-screenshot read-act-delete loop",
+  "description": "Reusable agent skills (Claude Code, Cursor, Codex, Antigravity, Pi): serialised bug/feature tickets, handoff write/resume, UI-to-functional planning, tiered brainstorm→build, native+web UI/UX design, agent-driven branch merge/prep, a VPS deployment prep wizard, and a test-screenshot read-act-delete loop",
   "version": "2.0.2",
   "author": {
     "name": "bodish-coder"
