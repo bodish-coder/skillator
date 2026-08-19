@@ -50,6 +50,28 @@ off-purpose files, cheap and it's the whole judgment):
 
 Present the inventory (INTENDED / NO-OP / SUSPICIOUS) and get the suspicious calls.
 
+**Two different intents are in play and must never be blended:**
+- **Developer intent** — what the branch's commits/PR say it set out to do. It is the
+  default, and it owns *content*.
+- **Reviewer intent** — the calls made during this prep (drop this file, strip that
+  debug block, exclude the committed `.env`). It owns *inclusion*, not content.
+
+Open a **prep log** (`docs/merges/prep-<branch>-<date>.md`, or scratchpad) and record
+every path as one row, before building anything:
+
+```
+| path        | class      | decision                   | decided by | why                   |
+|-------------|------------|----------------------------|------------|-----------------------|
+| src/auth.ts | INTENDED   | keep                       | developer  | matches branch intent |
+| .env        | SUSPICIOUS | exclude                    | reviewer   | committed secret      |
+| src/api.ts  | SUSPICIOUS | keep, debug block stripped | reviewer   | leftover console.log  |
+| README.md   | NO-OP      | drop                       | auto       | whitespace only       |
+```
+
+`decided by: developer` means kept as written, no judgment applied. `reviewer` means a
+call this prep made that the developer never saw. Auto-dropped NO-OPs are logged too —
+silent drops are how "but I *did* change that file" happens at review.
+
 ## Phase 2 — Build the merge-ready branch
 
 Start from the **current base** so no stale/old content can survive, then overlay
@@ -62,7 +84,17 @@ git checkout -b <branch>-merge-ready <base>        # current base, clean slate
 #   deleted        → git rm <path>
 #   renamed        → apply the rename (old path removed, new path from branch)
 git commit -m "merge-prep: <branch> intended changes onto <base>"
+# then, ONLY if the reviewer altered content (not merely excluded paths):
+#   apply those edits and commit them separately
+git commit -m "merge-prep: reviewer decisions on <branch>"
 ```
+
+**Two commits, not one — that is the deconfliction.** Commit 1 is the developer's work
+byte-for-byte as they wrote it, minus excluded paths. Commit 2 is everything the
+reviewer changed. `git log -p` then carries the attribution natively, the developer can
+review or `git revert` the reviewer's commit alone, and nobody has to trust the log to
+know who wrote what. Reviewer-only exclusions produce no second commit — they live in
+the prep log, since an excluded path has nothing to show in a diff.
 
 Because the branch starts at current base and only kept paths are overlaid,
 untouched files keep base's latest version (no old parts) and dropped no-op/
@@ -80,8 +112,11 @@ it now sits on current base, this is where you'd catch integration breakage earl
 
 ## Phase 4 — Hand off
 
-Relay: the `<branch>-merge-ready` name, the kept-vs-dropped counts, and the verified
-diff. Then **ask at run time**: hand off locally (the user / `merge-agent`
+Relay: the `<branch>-merge-ready` name, the kept-vs-dropped counts, the verified
+diff, and the **prep log path**. If a reviewer-decisions commit exists, say so
+explicitly and list what it changed — the developer hasn't seen those edits and gets
+the last word on their own code; if they object, revert that commit rather than
+arguing it through here. Then **ask at run time**: hand off locally (the user / `merge-agent`
 targets it), or — only on an explicit yes — push it (normal push, never force).
 `merge-agent` can now integrate a branch that carries only its real changes.
 
@@ -93,5 +128,10 @@ targets it), or — only on an explicit yes — push it (normal push, never forc
   old/untouched parts" — don't merge the stale branch in and hope.
 - **Route the judgment:** NO-OP → auto-drop (reported), SUSPICIOUS → user decides,
   INTENDED → keep. Unsure = suspicious (escalate), never silently include.
+- **Developer intent owns content; reviewer intent owns inclusion.** A reviewer may
+  exclude a path freely, but changing what the code *says* is an edit — it goes in the
+  separate reviewer commit, named in the handoff, never folded into the developer's.
+- **Every path gets a logged decision and an owner** (developer / reviewer / auto).
+  A change nobody is recorded as having decided is a change nobody can defend at review.
 - **Everything is reversible** by deleting the prepped branch.
 - Pairs with `merge-agent`: prep first, then merge the clean branch.
