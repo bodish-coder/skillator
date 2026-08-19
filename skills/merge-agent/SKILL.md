@@ -112,17 +112,21 @@ verification result, integration branch name, merge-log path. Then **ask**:
 - **Swap-in (local only)** — rename the base aside and promote the merge into its
   name, so the working branch name keeps meaning what it meant:
   ```
-  git branch -m <base> <base>_old        # e.g. xyz -> xyz_old
-  git branch -m <integration> <base>     # merged result becomes xyz
+  git branch -m <base> <base>_old_before_<source>   # e.g. dev -> dev_old_before_ksk_aewag2
+  git branch -m <integration> <base>                # merged result becomes dev
   ```
-  End state: sources unchanged (`f1` is still `f1`), `xyz` = merged result,
-  `xyz_old` = previous base. Only after verification is green, and only if `<base>`
-  isn't currently checked out elsewhere and `<base>_old` doesn't already exist
-  (if it does, suffix `_old2`, `_old3` — never overwrite an existing `_old`).
+  Name the archived base `<base>_old_before_<source>`, not a bare `<base>_old`:
+  months later the only question anyone asks of that branch is *"old before what?"*
+  Strip any `-merge-ready`/`-prep` suffix from `<source>` first. If the name is
+  already taken, append `_2`, `_3` — never overwrite an existing archive.
+  End state: sources unchanged (`f1` is still `f1`), `dev` = merged result,
+  `dev_old_before_ksk_aewag2` = previous base. Only after verification is green, and
+  only if `<base>` isn't currently checked out elsewhere.
   **Local refs only.** Never rename on the remote: that means deleting and
   re-pushing a branch, which breaks open PRs, branch protection, CI, and every
   other clone. To publish afterwards, push the renamed branch under a *new* remote
-  name and PR it, or merge `xyz_old..xyz` normally — both need the explicit yes below.
+  name and PR it, or merge `<base>_old_before_<source>..<base>` normally — both need
+  the explicit yes below.
 - **Push + open a draft PR** — only on an explicit yes: push the integration branch
   and open a **draft** PR via `gh` (never merge it; never touch base; never
   force-push).
@@ -136,7 +140,7 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
 - **Base branch is sacred.** Only ever a merge *source*; never checked out for
   modification, never pushed to, never force-pushed. The one exception is the
   approved local **swap-in** rename in Phase 5 — which preserves the old base as
-  `<base>_old` and still touches nothing on the remote.
+  `<base>_old_before_<source>` and still touches nothing on the remote.
 - **Everything on the integration branch**, everything in the merge log — the run is
   auditable and 100% revertible by deleting the branch.
 - **Route conflicts by class, not by vibe.** Trivial→Sonnet, semantic→Opus+approval,
