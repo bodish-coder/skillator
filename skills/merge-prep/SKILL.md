@@ -79,15 +79,23 @@ Start from the **current base** so no stale/old content can survive, then overla
 
 ```
 git checkout -b <branch>-merge-ready <base>        # current base, clean slate
-# for each kept path, apply the branch's version:
-#   modified/added → git checkout <branch> -- <path>
+# for each kept path, apply the branch's CHANGE — never its whole file:
+#   modified/added → git diff <base>...<branch> -- <path> | git apply -3
 #   deleted        → git rm <path>
-#   renamed        → apply the rename (old path removed, new path from branch)
+#   renamed        → git diff -M <base>...<branch> -- <old> <new> | git apply -3
 git commit -m "merge-prep: <branch> intended changes onto <base>"
 # then, ONLY if the reviewer altered content (not merely excluded paths):
 #   apply those edits and commit them separately
 git commit -m "merge-prep: reviewer decisions on <branch>"
 ```
+
+**Apply the diff, not the file.** `git checkout <branch> -- <path>` copies the
+branch-era *whole file*, which silently discards anything base changed in that file
+since the merge base, and reverts any part of the file the branch didn't mean to touch.
+The three-dot diff is exactly what the branch did to that path; `git apply -3` lands it
+on base's current version three-way. If `-3` leaves conflict markers, that path is a
+real semantic collision — resolve it and log it as a **reviewer** decision, never
+paper over it with a `checkout`.
 
 **Two commits, not one — that is the deconfliction.** Commit 1 is the developer's work
 byte-for-byte as they wrote it, minus excluded paths. Commit 2 is everything the
@@ -106,7 +114,21 @@ deliberately doesn't do — say so and cherry-pick instead.)
 ## Phase 3 — Verify the diff is exactly the intended set
 
 `git diff --stat <base> <branch>-merge-ready` — confirm it equals the INTENDED
-(+approved) set and nothing else. Then **ask** whether to run the project's
+(+approved) set and nothing else.
+
+Then **reconcile against the source branch** — the check that catches silent loss:
+
+```
+git diff --name-only <branch> <branch>-merge-ready
+```
+
+Every path it prints must have a row in the prep log (dropped NO-OP, excluded
+SUSPICIOUS, reviewer edit, or a file base moved ahead on). **A path in that output and
+not in the log is a change that vanished** — stop and find it before handing off.
+Checking merge-ready against its own intended list is circular; this is the only check
+that can fail.
+
+Then **ask** whether to run the project's
 build/tests on the prepped branch (default yes if a test command exists) — since
 it now sits on current base, this is where you'd catch integration breakage early.
 
@@ -133,5 +155,11 @@ targets it), or — only on an explicit yes — push it (normal push, never forc
   separate reviewer commit, named in the handoff, never folded into the developer's.
 - **Every path gets a logged decision and an owner** (developer / reviewer / auto).
   A change nobody is recorded as having decided is a change nobody can defend at review.
+- **Apply diffs, not files.** Whole-file `checkout` from the branch loses base's newer
+  edits to that same file. `git diff <base>...<branch> -- <path> | git apply -3` is the
+  only overlay that keeps both sides.
+- **Reconcile against the source branch before handing off.** Every path where
+  merge-ready differs from `<branch>` must be explained by a prep-log row. Unexplained
+  difference = lost change, not a rounding error.
 - **Everything is reversible** by deleting the prepped branch.
 - Pairs with `merge-agent`: prep first, then merge the clean branch.

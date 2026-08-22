@@ -98,7 +98,21 @@ never leave the tree half-merged.
 
 ## Phase 4 — Verify (ask at run time)
 
-Detect the project's build/test command. **Ask whether to run verification**
+**First, reconcile against every source branch.** Tests prove the merge *works*; this
+proves it's *complete*. For each source branch merged:
+
+```
+git diff --name-only <integration> <source>
+```
+
+Every path listed must be explained by one of: a merge-log row (a semantic conflict
+resolved the other way), a prep-log row (a NO-OP/SUSPICIOUS path merge-prep dropped),
+or base/another branch having legitimately moved that file ahead of this source. **A path
+in that output with no row in either log is a change that silently vanished** — find it
+and re-apply it before going further. This is the only check that fails when a
+conflict resolution quietly drops a hunk; a green test suite will not.
+
+Then detect the project's build/test command. **Ask whether to run verification**
 (default **yes** if a test command is detected — a conflict-free merge is not a
 correct one). If yes, run it (Opus agent or main session); on failure, route the fix
 like a conflict ([trivial]→Sonnet, [semantic]→Opus), re-run, and update the log.
@@ -107,6 +121,7 @@ Gate "done" on green.
 ## Phase 5 — End state (ask at run time)
 
 Relay a summary: what merged, conflicts resolved (trivial vs escalated counts),
+**reconcile result (paths differing from each source, all accounted for)**,
 verification result, integration branch name, merge-log path. Then **ask**:
 - **Hand off locally** — leave the integration branch + log; the user pushes/PRs.
 - **Swap-in (local only)** — rename the base aside and promote the merge into its
@@ -141,6 +156,9 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
   modification, never pushed to, never force-pushed. The one exception is the
   approved local **swap-in** rename in Phase 5 — which preserves the old base as
   `<base>_old_before_<source>` and still touches nothing on the remote.
+- **Completeness is verified, not assumed.** Before calling a merge done, every path
+  where the integration branch differs from a source branch must be accounted for in
+  the merge log or the prep log. Unexplained difference = lost change.
 - **Everything on the integration branch**, everything in the merge log — the run is
   auditable and 100% revertible by deleting the branch.
 - **Route conflicts by class, not by vibe.** Trivial→Sonnet, semantic→Opus+approval,
