@@ -28,8 +28,17 @@ touches the base. Everything lands on a new throwaway branch — delete it = zer
 ## Phase 0 — Orient
 
 Establish and confirm: the **branch** to prep and its **base** (main/develop).
-`git fetch --all` so "current base" means the real latest. Note how far behind the
-branch is (`git rev-list --left-right --count <base>...<branch>`).
+
+```
+git fetch --all
+git fetch origin <base>:<base>     # fast-forward the LOCAL base ref; refuses if diverged
+```
+
+`git fetch --all` updates `origin/<base>` only — **the local `<base>` ref does not
+move.** Building off a stale local `<base>` silently defeats this entire skill: the
+result carries old content while every later check reports "clean". If the second fetch
+refuses, local `<base>` has diverged from origin — stop and ask which is the real base.
+Note how far behind the branch is (`git rev-list --left-right --count <base>...<branch>`).
 
 ## Phase 1 — Inventory the branch's true changes
 
@@ -79,34 +88,62 @@ Start from the **current base** so no stale/old content can survive, then overla
 
 ```
 git checkout -b <branch>-merge-ready <base>        # current base, clean slate
-# for each kept path, apply the branch's CHANGE — never its whole file:
-#   modified/added → git diff <base>...<branch> -- <path> | git apply -3
-#   deleted        → git rm <path>
-#   renamed        → git diff -M <base>...<branch> -- <old> <new> | git apply -3
-git commit -m "merge-prep: <branch> intended changes onto <base>"
+
+# EVERY kept path goes through ONE pipe — modified, added, deleted, renamed, binary:
+git diff --binary -M <base>...<branch> -- <path> | git apply -3
+#   renames: pass BOTH pathspecs -- <old> <new>, or the rename degrades to a bare
+#   add or delete and one side's content is lost.
+#   CHECK THE EXIT CODE EVERY TIME. Non-zero, or unmerged entries left behind, means
+#   base changed that path in a way the branch's change cannot be replayed over. That
+#   is a modify/delete or content collision — escalate it. Never route around it.
+
+git commit --author="$(git log -1 --format='%an <%ae>' <branch>)" \
+           -m "merge-prep: <branch> intended changes onto <base>"
 # then, ONLY if the reviewer altered content (not merely excluded paths):
 #   apply those edits and commit them separately
 git commit -m "merge-prep: reviewer decisions on <branch>"
 ```
 
-**Apply the diff, not the file.** `git checkout <branch> -- <path>` copies the
-branch-era *whole file*, which silently discards anything base changed in that file
-since the merge base, and reverts any part of the file the branch didn't mean to touch.
-The three-dot diff is exactly what the branch did to that path; `git apply -3` lands it
-on base's current version three-way. If `-3` leaves conflict markers, that path is a
-real semantic collision — resolve it and log it as a **reviewer** decision, never
-paper over it with a `checkout`.
+**Apply the diff, not the file — for every path class, with no shortcuts.**
+`git checkout <branch> -- <path>` copies the branch-era *whole file*, discarding
+anything base changed in it since the merge base. `git rm <path>` for a branch-deleted
+file is the same bug wearing a different hat: if base fixed that file since the merge
+base, `git rm` deletes the fix, exits 0, and leaves no trace in any diff or log. The
+same pipe refuses (exit 1) and surfaces the modify/delete conflict, which is the point.
+`--binary` matters too — without it `git diff` emits `Binary files … differ`, an
+unappliable stub.
 
-**Two commits, not one — that is the deconfliction.** Commit 1 is the developer's work
-byte-for-byte as they wrote it, minus excluded paths. Commit 2 is everything the
+Three-dot (`<base>...<branch>`) is deliberate: it is merge-base→branch, exactly what the
+branch did. Two-dot would smuggle in reversals of base's own progress.
+
+**Rename caveat:** before applying a rename patch, check
+`git diff --quiet $(git merge-base <base> <branch>) <base> -- <old>`. If base edited the
+old path, a real merge would carry that edit into the new path but this patch will not —
+escalate as a semantic conflict and merge base's edit in by hand.
+
+**Never `git add -A` in this phase.** A conflicted `apply -3` leaves unmerged index
+entries (which make `git commit` refuse — a useful accident); `git add -A` stages the
+conflict markers and commits them. Check exit codes per path, and `git diff --check`
+before either commit.
+
+**Two commits, not one — that is the deconfliction.** Commit 1 is the developer's
+*change*, three-way-applied onto current base, minus excluded paths — not their bytes,
+since any path base moved on is a genuine merge. Where `apply -3` conflicted, resolve
+commit 1 to the **developer's side verbatim** and put the integration fix in commit 2;
+resolving in place would bake a reviewer decision into the developer's commit, exactly
+where attribution matters most. `--author` keeps their name on it. Commit 2 is everything the
 reviewer changed. `git log -p` then carries the attribution natively, the developer can
 review or `git revert` the reviewer's commit alone, and nobody has to trust the log to
 know who wrote what. Reviewer-only exclusions produce no second commit — they live in
 the prep log, since an excluded path has nothing to show in a diff.
 
+If `<branch>-merge-ready` already exists, a prep has run before — **stop and ask**
+(delete and redo, or suffix `-2`). Never `checkout -B` over it: a previous prep may hold
+hand-resolved conflicts that exist nowhere else.
+
 Because the branch starts at current base and only kept paths are overlaid,
 untouched files keep base's latest version (no old parts) and dropped no-op/
-unintended paths never appear. The prep is a **single clean commit** — history is
+unintended paths never appear. The prep is **one or two clean commits** — history is
 intentionally flattened; the point is a minimal, correct diff, not commit archaeology.
 (Need per-commit history preserved? That's the rewrite-in-place mode this skill
 deliberately doesn't do — say so and cherry-pick instead.)
@@ -116,17 +153,25 @@ deliberately doesn't do — say so and cherry-pick instead.)
 `git diff --stat <base> <branch>-merge-ready` — confirm it equals the INTENDED
 (+approved) set and nothing else.
 
-Then **reconcile against the source branch** — the check that catches silent loss:
+Then **reconcile against the source branch.** A name-only tip-vs-tip diff is *not*
+enough: it works at path granularity, so on any file base also moved it lists the path
+either way, and the log row "base moved ahead" truthfully explains the file while
+absolving a hunk that vanished inside it. Check per hunk instead — if the intended
+change is present, removing it succeeds:
 
 ```
-git diff --name-only <branch> <branch>-merge-ready
+git checkout <branch>-merge-ready
+# for each KEPT path — must exit 0:
+git diff --binary -M <base>...<branch> -- <path> | git apply --reverse --check
+# for each DROPPED path — must print nothing:
+git diff --stat <base> <branch>-merge-ready -- <dropped paths>
 ```
 
-Every path it prints must have a row in the prep log (dropped NO-OP, excluded
-SUSPICIOUS, reviewer edit, or a file base moved ahead on). **A path in that output and
-not in the log is a change that vanished** — stop and find it before handing off.
-Checking merge-ready against its own intended list is circular; this is the only check
-that can fail.
+Exit 0 means every intended hunk for that path is present verbatim in the built tree.
+Non-zero means a hunk is missing or altered — legitimate only if a prep-log row names
+*that path and that hunk*; anything else is a change that vanished. Stop and find it.
+Comparing merge-ready to its own intended list is circular; this is the only check that
+can actually fail.
 
 Then **ask** whether to run the project's
 build/tests on the prepped branch (default yes if a test command exists) — since
@@ -155,11 +200,15 @@ targets it), or — only on an explicit yes — push it (normal push, never forc
   separate reviewer commit, named in the handoff, never folded into the developer's.
 - **Every path gets a logged decision and an owner** (developer / reviewer / auto).
   A change nobody is recorded as having decided is a change nobody can defend at review.
-- **Apply diffs, not files.** Whole-file `checkout` from the branch loses base's newer
-  edits to that same file. `git diff <base>...<branch> -- <path> | git apply -3` is the
-  only overlay that keeps both sides.
-- **Reconcile against the source branch before handing off.** Every path where
-  merge-ready differs from `<branch>` must be explained by a prep-log row. Unexplained
-  difference = lost change, not a rounding error.
+- **One pipe for every path class.** Modified, added, deleted, renamed, binary — all go
+  through `git diff --binary -M <base>...<branch> -- <path> | git apply -3`. Whole-file
+  `checkout` and `git rm` both destroy base's newer edits with exit 0 and no trace.
+- **A non-zero `git apply` is data, not an obstacle.** It means base and the branch
+  genuinely collide on that path. Escalate it; never reach for a command that succeeds.
+- **Reconcile per hunk, not per path,** via `git apply --reverse --check`. Name-only
+  diffs cannot see a hunk lost inside a file base also touched — which is where losses
+  actually hide.
+- **"Current base" is the local ref, and `git fetch` does not move it.** Fast-forward
+  `<base>` explicitly or the whole skill quietly operates on stale content.
 - **Everything is reversible** by deleting the prepped branch.
 - Pairs with `merge-agent`: prep first, then merge the clean branch.

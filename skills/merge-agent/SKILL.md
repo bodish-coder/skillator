@@ -39,8 +39,13 @@ Establish, then confirm back before touching anything:
   feature → base) · `reconcile` (branches that edited the same code differently —
   conflicts are the main event, prefer best-version selection over union).
   Detect from the request; if ambiguous, ask once.
-- `git fetch --all` and confirm the branches exist and their base. Note anything
-  already merged (skip it) or wildly stale.
+- `git fetch --all`, then `git fetch origin <base>:<base>` — **`fetch --all` moves
+  `origin/<base>`, not the local `<base>` ref.** The integration branch is cut from the
+  local ref, so without that second fetch the whole merge happens on a stale base and
+  every later check still reports clean. If it refuses, local `<base>` has diverged from
+  origin — stop and ask which is the real base.
+- Confirm the branches exist and their base. Note anything already merged (skip it) or
+  wildly stale.
 
 Never start merging on an unconfirmed branch list or base.
 
@@ -99,18 +104,23 @@ never leave the tree half-merged.
 ## Phase 4 — Verify (ask at run time)
 
 **First, reconcile against every source branch.** Tests prove the merge *works*; this
-proves it's *complete*. For each source branch merged:
+proves it is *complete*. Do it per hunk — a `--name-only` tip diff works at path
+granularity, so on any file that base or another branch also moved it lists the path
+either way, and "another branch moved it ahead" then truthfully explains the file while
+absolving a hunk that vanished inside it. That is precisely the failure mode this step
+exists to catch, so check the hunks:
 
 ```
-git diff --name-only <integration> <source>
+git checkout <integration>
+# for each source branch, for each path it changed — must exit 0:
+git diff --binary -M <base>...<source> -- <path> | git apply --reverse --check
 ```
 
-Every path listed must be explained by one of: a merge-log row (a semantic conflict
-resolved the other way), a prep-log row (a NO-OP/SUSPICIOUS path merge-prep dropped),
-or base/another branch having legitimately moved that file ahead of this source. **A path
-in that output with no row in either log is a change that silently vanished** — find it
-and re-apply it before going further. This is the only check that fails when a
-conflict resolution quietly drops a hunk; a green test suite will not.
+Exit 0 means every hunk that source intended is present verbatim in the integration
+tree. Non-zero is legitimate **only** when a merge-log row names that path *and that
+hunk* (a semantic conflict you resolved the other way) or a prep-log row shows the path
+was deliberately dropped. Anything else is a change that silently vanished — find it and
+re-apply it before going further. A green test suite will never catch this.
 
 Then detect the project's build/test command. **Ask whether to run verification**
 (default **yes** if a test command is detected — a conflict-free merge is not a
@@ -129,14 +139,23 @@ verification result, integration branch name, merge-log path. Then **ask**:
   ```
   git branch -m <base> <base>_old_before_<source>   # e.g. dev -> dev_old_before_ksk_aewag2
   git branch -m <integration> <base>                # merged result becomes dev
+  git branch --unset-upstream <base>_old_before_<source>
+  git branch -u origin/<base> <base>
   ```
+  Those last two lines are not optional: `git branch -m` carries `branch.<name>.*`
+  config with the rename, so without them the **archive** tracks `origin/<base>` (and
+  under `push.default=upstream` a habitual `git push` from it pushes the pre-merge state
+  over origin's base) while the promoted branch tracks nothing. Note also that the
+  promoted `<base>` has now diverged from `origin/<base>` — the next `pull` will merge
+  origin's base back into the merged result, which is expected but worth saying out loud.
   Name the archived base `<base>_old_before_<source>`, not a bare `<base>_old`:
   months later the only question anyone asks of that branch is *"old before what?"*
   Strip any `-merge-ready`/`-prep` suffix from `<source>` first. If the name is
   already taken, append `_2`, `_3` — never overwrite an existing archive.
   End state: sources unchanged (`f1` is still `f1`), `dev` = merged result,
   `dev_old_before_ksk_aewag2` = previous base. Only after verification is green, and
-  only if `<base>` isn't currently checked out elsewhere.
+  only if `<base>` isn't checked out in **another worktree** (renaming the branch you
+  are on is fine — HEAD follows it; a second worktree silently ends up on the archive).
   **Local refs only.** Never rename on the remote: that means deleting and
   re-pushing a branch, which breaks open PRs, branch protection, CI, and every
   other clone. To publish afterwards, push the renamed branch under a *new* remote
