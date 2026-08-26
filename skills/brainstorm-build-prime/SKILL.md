@@ -4,11 +4,11 @@ description: >-
   Top-tier "brainstorm then build" — a design-tier model does creative design
   thinking, a build-tier model implements, with full ceremony: design written to
   disk (survives context loss), handoff before checkpoints, session .md record,
-  rework, then clean session reset. Works across Claude Code, Cursor, Codex,
+  rework. Works across Claude Code, Cursor, Codex,
   Antigravity, Pi, and Prime Agent
   via role tiers and platform adapters (see references/platforms.md). On Claude
-  Code: Fable designs, Opus builds, auto /compact and /clear after handoff. On
-  Cursor: GPT-5.6-Sol designs, Claude Opus builds, fresh-chat checkpoints. On Codex:
+  Code: Fable designs, Opus builds. On
+  Cursor: GPT-5.6-Sol designs, Claude Opus builds. On Codex:
   GPT-5.6-Sol high-reasoning design pass then Sol build, auto-compaction aware.
   For all-Opus without ceremony use brainstorm-build-mid; for Sonnet
   offload use brainstorm-build-lite. NOT for tiny one-line edits or
@@ -63,16 +63,19 @@ BUILD_MODEL: <model planned for Phase 2>
 
 ---
 
-## Checkpoint A — planned context trim
+## Checkpoint A — hand off, then shed context
 
 The design is safely on disk.
 
 1. **Run the handoff skill** using the platform's method (platforms.md) —
-   `handoff` — to capture a verified handoff. Never trim context
-   without one.
-2. **Run Checkpoint A** — the row for your host in `references/platforms.md`
-   (Claude Code compacts itself; every other host either auto-compacts or needs
-   the user to start a fresh turn/session).
+   `handoff` — to capture a verified handoff. Never shed context without one.
+2. **Shed context by delegation, not by command.** A skill cannot invoke
+   `/compact` — don't try. Instead: keep the design *out* of the orchestrator's
+   working memory by passing build agents the **design file path** and letting
+   each subagent carry its own context. That is the compaction. Hosts that
+   auto-compact will do the rest on their own.
+3. Only if context is genuinely tight, say so once and let the user type
+   `/compact` themselves. Then continue from the design file.
 
 Continue from the design file, not chat memory.
 
@@ -116,17 +119,17 @@ section** so the record stays true.
 
 ---
 
-## Checkpoint B — clean session
+## Wrap up
 
 Once the build is green, the record is written, and rework is done:
 
 1. **Run `handoff`** again (platform method).
 2. Relay a short summary (approach, what shipped, test result, record + handoff
    paths).
-3. **Run Checkpoint B** — the row for your host in `references/platforms.md`
-   (Claude Code clears itself; elsewhere prompt the user for a new chat/session).
 
-The session `.md` + handoff are the durable memory — nothing is lost by clearing.
+The session `.md` + handoff are the durable memory. **Never clear or reset the
+session** — a skill can't do it, and the user may still want the thread. If they
+want a clean slate they will start one; the record makes that lossless.
 
 ---
 
@@ -142,8 +145,8 @@ Switch to it when the design yields **4+ independent tasks**, the work is a swee
 for 1-3 sequential tasks.
 
 The ceremony does not move into the script: write the design file **before** the
-workflow and pass its path in `args`; run `handoff` and both checkpoints in this
-session, around the call. A workflow can't compact or clear for you.
+workflow and pass its path in `args`; run `handoff` and Checkpoint A in this
+session, around the call.
 
 ## Rules
 
@@ -151,12 +154,12 @@ session, around the call. A workflow can't compact or clear for you.
   code in the orchestrator session (except writing the session record).
 - **The design/record file is the source of truth** — pass its path to build
   agents; don't rely on chat context outliving a compact/trim.
-- **Handoff before any context loss.** Run `handoff` before either
-  checkpoint — never compact/clear/reset without a verified handoff on disk.
-- **Checkpoints: auto on Claude Code, manual elsewhere.** On Claude Code, you
-  invoke `/compact` and `/clear` yourself after handoff. Everywhere else follow
-  platforms.md (prompt the user when the host cannot clear context for you).
-  If a slash command fails or is unavailable, say so and ask the user once.
+- **Handoff before any context loss.** Run `handoff` before Checkpoint A —
+  never shed context without a verified handoff on disk.
+- **Never invoke slash commands.** You cannot run `/compact` or `/clear`; don't
+  claim to. Context is shed by delegating with the design file path, and by the
+  host's own auto-compaction. Ask the user to `/compact` only if context is
+  genuinely tight, once. Never clear or reset the session at all.
 - **Use host-native dispatch.** Agent tool, Task tool, background subagents,
   `rlm(...)` — per platforms.md, never a tool that isn't available. Where the
   host has no delegation at all, run the phases sequentially in-session with the

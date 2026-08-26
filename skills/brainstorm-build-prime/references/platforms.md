@@ -38,22 +38,28 @@ the design file, switch model, then build from that file. The file — not chat
 history — is what carries the design across the switch. Same discipline, one
 session.
 
-## The two checkpoints
+## Checkpoint A — shedding context
 
-Both run **after** `handoff` has written a verified handoff to disk.
-Never compact, clear, or reset without it.
+Runs **after** `handoff` has written a verified handoff to disk. Never shed
+context without it.
 
-| Host | A — design is on disk | B — build green + record written |
-|------|----------------------|----------------------------------|
-| **claude-code** | invoke `/compact`, continue from the session file | invoke `/clear` |
-| **cursor** | fresh composer turn seeded with session file + handoff (or in-thread summarization if the user prefers) | new chat |
-| **codex** | optional pause — auto-compaction handles it; continue from the session file, not chat history | prompt the user to start a new thread |
-| **antigravity** | continue from the session file; suggest a new session if context is heavy | new session (`/agents` keeps background work alive) |
-| **pi** | new session seeded with the session file + handoff | new session |
-| **prime-agent** | `/refine`, then continue from the session file; daemon session can be resumed with `prime-agent --resume <id>` | new session or resume from the record |
+A skill cannot invoke a slash command, so Checkpoint A is never `/compact`. It is
+always the same move: **carry the design forward as a file path, not as chat
+history**, and let each subagent hold its own context. The host table below only
+says what else is available if the orchestrator's context is genuinely tight.
 
-If a checkpoint mechanism is blocked or missing, say so and ask the user once —
-never skip the handoff.
+| Host | If context is tight |
+|------|---------------------|
+| **claude-code** | auto-compaction handles it; tell the user once they may type `/compact`, continue from the session file |
+| **cursor** | offer a fresh composer turn seeded with session file + handoff (or in-thread summarization if the user prefers) |
+| **codex** | nothing to do — auto-compaction handles it; continue from the session file, not chat history |
+| **antigravity** | continue from the session file; suggest a new session if context is heavy |
+| **pi** | offer a new session seeded with the session file + handoff |
+| **prime-agent** | `/refine`, then continue from the session file; daemon session can be resumed with `prime-agent --resume <id>` |
+
+**There is no Checkpoint B.** Do not clear, reset, or start a new session at the
+end of a run — a skill can't, and the session `.md` + handoff already make a
+fresh start lossless whenever the *user* wants one.
 
 ## Parallel builds
 

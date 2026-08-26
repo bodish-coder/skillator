@@ -79,9 +79,9 @@ both alongside `skills/` — the skills refer to them.
   pick by how much model firepower and ceremony you want:
   - **brainstorm-build-prime** — **design tier** plans · **build tier**
     implements · full ceremony: session `.md` on disk · handoff before context
-    checkpoints · rework · clean reset. Cross-platform via `references/platforms.md`:
-    Claude Code (Fable → Opus, auto `/compact`/`/clear`), Cursor (GPT-5.6-Sol → Claude
-    Opus, fresh-chat checkpoints), Codex (Sol high-reasoning design → Sol build,
+    checkpoint · rework. Cross-platform via `references/platforms.md`:
+    Claude Code (Fable → Opus), Cursor (GPT-5.6-Sol → Claude
+    Opus), Codex (Sol high-reasoning design → Sol build,
     auto-compaction aware).
   - **brainstorm-build-mid** — **Opus** plans · **Opus** builds. All-Opus,
     autonomous, no ceremony.
