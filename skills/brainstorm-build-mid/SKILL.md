@@ -1,9 +1,10 @@
 ---
 name: brainstorm-build-mid
 description: >-
-  Mid-tier feature build on a single model tier end to end — Opus (the run's Opus)
-  does BOTH the planning/design and the implementation, fully autonomously with no
-  stop in between. No Fable brainstorm, no Sonnet cost-tiering, no /compact, no
+  Mid-tier feature build on the Opus tier end to end — Opus 5 plans/designs and
+  Opus 4.8 implements where the host exposes version slugs; on Claude Code, where
+  only the `opus` tier is selectable, the run's Opus does both. Fully autonomously
+  with no stop in between. No Fable brainstorm, no Sonnet cost-tiering, no /compact, no
   session record, no /clear — just Opus plan → Opus build. Use when the user wants
   straight Opus quality for both the thinking and the code, without Fable's creative
   ideation and without offloading simple tasks. For a Fable-led creative design plus
@@ -12,22 +13,31 @@ description: >-
   one-line edits (just do them) or pure design/no-build work.
 ---
 
-# Plan (Opus) → Build (Opus)
+# Plan (Opus 5) → Build (Opus 4.8)
 
-One model tier end to end: **Opus** does the design thinking, then **Opus** does the
-implementation. A skill can't change the main session's model, so each phase runs as
+The Opus tier end to end: **Opus 5** does the design thinking, then **Opus 4.8**
+does the implementation. A skill can't change the main session's model, so each phase runs as
 an **Opus subagent** (`model: "opus"`). You (the main session) orchestrate only —
 spawn the agents, pass the design between them, relay the result.
 
-> **Version note (honest limit):** the `opus` alias resolves to whatever Opus the run
-> uses — a specific version (Opus 5 vs Opus 4.8) **can't be pinned per-subagent**, so
-> both phases use the same Opus. To plan/build on a particular Opus (e.g. Opus 5), run
-> the whole session on that model; both phases follow it.
+**Intended split: Opus 5 plans, Opus 4.8 builds** — the newer model for the design
+thinking, the proven coder for the implementation.
+
+> **Version note (honest limit):** on **Claude Code** this split is currently
+> *not expressible*. The Agent tool's `model` field takes tiers (`opus`,
+> `sonnet`, `haiku`, `fable`), not version slugs, so `opus` resolves to whatever
+> Opus the run is on and **both phases get the same one**. Say so once, then run
+> both on the session's Opus. To plan and build on a specific Opus today, run the
+> whole session on it.
+>
+> On hosts that *do* expose version slugs (Cursor, and any host whose model list
+> in `PLATFORMS.md` names versions), take the split: design on the Opus 5 slug,
+> build on the Opus 4.8 slug. Record both in the run's summary.
 
 ## Phase 1 — Opus plans
 
-Dispatch one subagent, `model: "opus"`, `subagent_type: "general-purpose"`. Give it
-the task verbatim + repo context. Ask it to commit to an approach and return an
+Dispatch one subagent, `model: "opus"` (the Opus 5 slug where the host has one),
+`subagent_type: "general-purpose"`. Give it the task verbatim + repo context. Ask it to commit to an approach and return an
 implementation-ready design:
 
 ```
@@ -39,8 +49,8 @@ VERIFICATION: <the concrete end-to-end check that proves it works>
 
 ## Phase 2 — Opus builds
 
-Dispatch Opus subagent(s), `model: "opus"`, given the design **verbatim** + the
-task(s). Build exactly the design, stay inside the declared files. Independent tasks
+Dispatch Opus subagent(s), `model: "opus"` (the Opus 4.8 slug where the host has
+one), given the design **verbatim** + the task(s). Build exactly the design, stay inside the declared files. Independent tasks
 can run in parallel (git worktree if they'd touch the same tree). If the design hits
 a real blocker only the user can resolve, stop and surface it — don't guess.
 
@@ -49,6 +59,18 @@ a real blocker only the user can resolve, stop and surface it — don't guess.
 Run the VERIFICATION step (Opus agent or main session) and capture the actual result
 — pass/fail with evidence, not a claim. On failure, fix it and re-run. Then relay
 concisely: the approach, what was built (files), and the verification result.
+
+## Workflow mode — wide builds
+
+When the plan returns **4+ independent tasks**, or the work is a sweep
+(migration, audit, codemod), or the user asked for it, run Phases 1-3 as a
+**single deterministic workflow script** instead of hand-dispatched subagents:
+plan → one Opus build agent per task → verify each → loop the failures. Read
+**`WORKFLOW.md`** (beside the installed skills, or at the repo/plugin root) for
+the criteria, host table, and a ready script — use the same two model
+picks as Phases 1-2 in its design/build stages, and ignore its `complexity` tag.
+
+For 1-3 sequential tasks, stay with plain dispatch — a script buys nothing.
 
 ## Rules
 

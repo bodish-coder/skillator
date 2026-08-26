@@ -52,6 +52,21 @@ result — pass/fail with evidence, not a claim. On failure, fix it ([SIMPLE]→
 [COMPLEX]→Opus) and re-run. Then relay concisely: the approach, what was built
 (files), and the verification result.
 
+## Workflow mode — wide builds
+
+When the design returns **4+ independent tasks**, or the work is a sweep
+(migration, audit, codemod), or the user asked for it, run Phases 1-3 as a
+**single deterministic workflow script** instead of hand-dispatched subagents:
+design → one build agent per task → verify each → loop the failures. Read
+**`WORKFLOW.md`** (beside the installed skills, or at the repo/plugin root) for
+the criteria, host table, and a ready script.
+
+The [SIMPLE]/[COMPLEX] routing survives the switch — it becomes the schema's
+`complexity` field, and the build stage picks the model per task:
+`model: t.complexity === 'SIMPLE' ? 'sonnet' : 'opus'`. Same rule, one call.
+
+For 1-3 sequential tasks, stay with plain dispatch.
+
 ## Rules
 
 - **Route by tag, not vibe.** [SIMPLE]→Sonnet, [COMPLEX]→Opus, design→Opus. Don't

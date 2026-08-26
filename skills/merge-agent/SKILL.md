@@ -50,8 +50,10 @@ Establish, then confirm back before touching anything:
 Never start merging on an unconfirmed branch list or base.
 
 > If a branch is stale or carries unrelated/no-op churn, run **`merge-prep`**
-> on it first — it produces a `<branch>-merge-ready` carrying only its intended
-> changes on top of current base, so this merge integrates nothing old or untouched.
+> on it first — it preps the branch **in place** (onto current base, unintended paths
+> dropped) and commits a prep document to it, so this merge integrates nothing old or
+> untouched. Read that document (`docs/merges/prep-<branch>-*.md`) before merging: it
+> names every path deliberately dropped and every reviewer edit.
 
 ## Phase 1 — Analyse the branches (Haiku, in parallel)
 
@@ -118,7 +120,7 @@ git diff --binary -M <base>...<source> -- <path> | git apply --reverse --check
 
 Exit 0 means every hunk that source intended is present verbatim in the integration
 tree. Non-zero is legitimate **only** when a merge-log row names that path *and that
-hunk* (a semantic conflict you resolved the other way) or a prep-log row shows the path
+hunk* (a semantic conflict you resolved the other way) or a prep-document row shows the path
 was deliberately dropped. Anything else is a change that silently vanished — find it and
 re-apply it before going further. A green test suite will never catch this.
 
@@ -150,7 +152,9 @@ verification result, integration branch name, merge-log path. Then **ask**:
   origin's base back into the merged result, which is expected but worth saying out loud.
   Name the archived base `<base>_old_before_<source>`, not a bare `<base>_old`:
   months later the only question anyone asks of that branch is *"old before what?"*
-  Strip any `-merge-ready`/`-prep` suffix from `<source>` first. If the name is
+  Strip any `-merge-ready`/`-prep` suffix from `<source>` first (older preps made such
+  branches; current `merge-prep` preps in place, so usually there is nothing to strip).
+  If the name is
   already taken, append `_2`, `_3` — never overwrite an existing archive.
   End state: sources unchanged (`f1` is still `f1`), `dev` = merged result,
   `dev_old_before_ksk_aewag2` = previous base. Only after verification is green, and
@@ -177,7 +181,7 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
   `<base>_old_before_<source>` and still touches nothing on the remote.
 - **Completeness is verified, not assumed.** Before calling a merge done, every path
   where the integration branch differs from a source branch must be accounted for in
-  the merge log or the prep log. Unexplained difference = lost change.
+  the merge log or the branch's prep document. Unexplained difference = lost change.
 - **Everything on the integration branch**, everything in the merge log — the run is
   auditable and 100% revertible by deleting the branch.
 - **Route conflicts by class, not by vibe.** Trivial→Sonnet, semantic→Opus+approval,

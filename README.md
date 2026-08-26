@@ -57,8 +57,10 @@ Manual install paths, if you'd rather not run the script:
 
 Model names and tool names inside the skills are **Claude Code defaults**;
 [`PLATFORMS.md`](PLATFORMS.md) maps them to each host's tiers, delegation
-mechanism, and context checkpoints. Keep `PLATFORMS.md` alongside `skills/` — the
-skills refer to it.
+mechanism, and context checkpoints. [`WORKFLOW.md`](WORKFLOW.md) is the
+brainstorm-build skills' deterministic-orchestration path — one workflow script
+instead of hand-dispatched subagents, for builds wide enough to earn it. Keep
+both alongside `skills/` — the skills refer to them.
 
 ## Skills in this repo
 
@@ -91,11 +93,12 @@ skills refer to it.
   scaffolds the filled-in artifacts, and prints an ordered manual checklist for the
   human-only steps (deploy keys, GitHub secrets, DNS, TLS). Never collects secret
   values, never touches servers/DNS. Invoke with `/deploy-wizard`.
-- **merge-prep** — prepare a branch for a clean merge: rebuild its
-  changes on top of the current base as a new `<branch>-merge-ready`, keeping only
-  the *intended* edits (auto-drops no-ops, escalates suspicious ones) so no stale
-  or untouched parts get merged. Never rewrites the original or force-pushes. Runs
-  before `merge-agent`. Invoke with `/merge-prep`.
+- **merge-prep** — prepare a branch for a clean merge, **in place**: merge current
+  base in, drop the paths it never meant to carry (auto-drops no-ops, escalates
+  suspicious ones), and commit a handoff document recording every decision to the
+  same branch. No side branch, append-only commits behind a pre-prep tag, no history
+  rewrite, no force-push, base untouched. Runs before `merge-agent`. Invoke with
+  `/merge-prep`.
 - **merge-agent** — analyse GitHub branches with agents and merge them
   by risk: Haiku summarizes each branch + builds an overlap/conflict map, then
   merges on a throwaway integration branch (trivial conflicts auto-resolve via

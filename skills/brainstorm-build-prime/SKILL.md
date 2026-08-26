@@ -130,6 +130,21 @@ The session `.md` + handoff are the durable memory — nothing is lost by cleari
 
 ---
 
+## Workflow mode — wide builds
+
+Phases 1-3 and 5 can run as a **single deterministic workflow script** instead of
+hand-dispatched subagents: design → fan out one build agent per task → verify
+each → loop the failures. Read **`WORKFLOW.md`** (beside the installed skills, or
+at the repo/plugin root) for the criteria, the host table, and a ready script.
+
+Switch to it when the design yields **4+ independent tasks**, the work is a sweep
+(migration, audit, codemod), or the user asked for it. Stay with plain dispatch
+for 1-3 sequential tasks.
+
+The ceremony does not move into the script: write the design file **before** the
+workflow and pass its path in `args`; run `handoff` and both checkpoints in this
+session, around the call. A workflow can't compact or clear for you.
+
 ## Rules
 
 - **Design → design-tier agent, build → build-tier agent(s).** Don't design or

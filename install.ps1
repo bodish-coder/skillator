@@ -72,8 +72,11 @@ foreach ($cli in $targets.Keys) {
     Copy-Item $s.FullName $t -Recurse -Force
     Write-Host "        + $($s.Name)" -ForegroundColor Green
   }
-  # skills reference PLATFORMS.md beside the installed skills
-  if (-not $DryRun) { Copy-Item (Join-Path $PSScriptRoot 'PLATFORMS.md') $dest -Force }
+  # skills reference PLATFORMS.md / WORKFLOW.md beside the installed skills
+  if (-not $DryRun) {
+    Copy-Item (Join-Path $PSScriptRoot 'PLATFORMS.md') $dest -Force
+    Copy-Item (Join-Path $PSScriptRoot 'WORKFLOW.md') $dest -Force
+  }
 }
 
 Write-Host "`nPrime Agent: no markdown-skill loader - point its AGENTS.md at $src\<skill>\SKILL.md."
