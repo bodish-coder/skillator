@@ -109,11 +109,13 @@ both alongside `skills/` — the skills refer to them.
   conventions) with a committed aesthetic and a systematic method for forging one
   unique, ownable *signature* element. Invoke with `/design-arwen`.
 - **ticket-checker** — Jira-style serialised ticket IDs for AI coding chats: bugs
-  `B1, B2, B3…`, features `F1, F2, F3…`, sub-parts `B7a/B7b`, all in one committed
-  `TICKETS.md` at the repo root with `[ ]`/`[~]`/`[x]` status. IDs are never reused
-  or renumbered and new lines are appended, so teammates on the same branch and
-  future chats can fetch the open set and nothing gets forgotten. Invoke with
-  `/ticket-checker`.
+  `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
+  sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with
+  `[ ]` pending / `[~]` in-progress / `[!]` blocked / `[x]` done / `[-]` cancelled
+  status. IDs are never reused or renumbered and new lines are appended, so
+  teammates on the same branch and future chats can fetch the open set and nothing
+  gets forgotten. Starting a ticket dispatches its own agent — tickets are worked
+  in parallel, not in a line. Invoke with `/ticket-checker`.
 - **screenshot-loop** — the user drops test screenshots in one folder; the agent
   reads every one, acts on what they show, verifies, then deletes exactly the
   files it consumed so the folder is clean for the next round. The directory is
