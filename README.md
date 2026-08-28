@@ -122,6 +122,14 @@ both alongside `skills/` — the skills refer to them.
   coming back. The main session still owns `TICKETS.md` — agents only report.
   Use it over `ticket-checker` when 4+ tickets are open, the work is a sweep, or
   the user says "ultracode". Invoke with `/ticket-master`.
+- **sherlock-codes** — forensic audit of a whole application: parallel **Fable**
+  investigators sweep backend, frontend, boundaries, data, dependencies, error
+  paths, config, architecture, tests and dead code, reporting only findings with
+  `file:line` evidence and a concrete failure. Findings are deduped and
+  adversarially verified (discarded ones are counted), written to `CASEFILE.md`,
+  ranked into an implementation plan — then **Opus** codes the fixes. Structural
+  changes are proposed as options for you to pick, never applied unasked.
+  Invoke with `/sherlock-codes`.
 - **screenshot-loop** — the user drops test screenshots in one folder; the agent
   reads every one, acts on what they show, verifies, then deletes exactly the
   files it consumed so the folder is clean for the next round. The directory is
