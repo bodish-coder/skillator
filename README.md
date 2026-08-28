@@ -116,6 +116,12 @@ both alongside `skills/` — the skills refer to them.
   teammates on the same branch and future chats can fetch the open set and nothing
   gets forgotten. Starting a ticket dispatches its own agent — tickets are worked
   in parallel, not in a line. Invoke with `/ticket-checker`.
+- **ticket-master** — `ticket-checker`'s board worked as a **dynamic workflow**:
+  scout the open set inline, then hand it to one deterministic script that fixes
+  and adversarially verifies every ticket in parallel, with structured verdicts
+  coming back. The main session still owns `TICKETS.md` — agents only report.
+  Use it over `ticket-checker` when 4+ tickets are open, the work is a sweep, or
+  the user says "ultracode". Invoke with `/ticket-master`.
 - **screenshot-loop** — the user drops test screenshots in one folder; the agent
   reads every one, acts on what they show, verifies, then deletes exactly the
   files it consumed so the folder is clean for the next round. The directory is
