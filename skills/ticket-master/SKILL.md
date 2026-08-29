@@ -206,6 +206,41 @@ grep -nE '^\s*- \[[ ~!]\]' TICKETS.md
 When the user says a bare ID ("do B3", "what's F12"), grep for it and act on
 that line.
 
+## Showing the board
+
+**Any time the user asks to see tickets** — "list the tickets", "what's pending",
+"show the board", "what's open" — answer as checkbox lines, the same shape the
+file uses. Never a prose summary, never a markdown table, never a numbered list:
+
+```
+Bugs
+  [~] B2 — CSV export drops the last row
+    [ ] B2b — add regression test
+  [!] B3 — Avatar upload 500s over 5MB (blocked: needs S3 creds from ops)
+
+Features
+  [ ] F1 — Dark mode
+  [ ] F2 — Bulk delete in the table view
+
+Agent-found
+  [ ] A1 — Unhandled promise rejection in the upload worker
+```
+
+Rules for the listing:
+
+- **Copy the line, don't rewrite it.** ID and title exactly as they appear in
+  `TICKETS.md`, so the user can grep for what they just read.
+- **Open only, by default** (`[ ]`, `[~]`, `[!]`). Closed tickets on request
+  ("show everything", "what did we finish") — then `[x]` and `[-]` too.
+- **Sub-parts stay indented under their parent**, and a parent is shown whenever
+  any of its sub-parts is.
+- **Drop empty sections.** No "Features: none".
+- **Blocked shows its reason**; that is the whole point of `[!]`.
+- **One count line after the list** — `3 open · 1 blocked · 8 done` — and nothing
+  else. No commentary on the board's health, no suggested next ticket unless
+  asked.
+- Legend only if the user seems new to the board, and then one line.
+
 ## Rules
 
 - **One file, repo root, committed.** It travels with the branch; that is how

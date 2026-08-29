@@ -97,13 +97,19 @@ both alongside `skills/` — the skills refer to them.
   base in, drop the paths it never meant to carry (auto-drops no-ops, escalates
   suspicious ones), and commit a handoff document recording every decision to the
   same branch. No side branch, append-only commits behind a pre-prep tag, no history
-  rewrite, no force-push, base untouched. Runs before `merge-agent`. Invoke with
-  `/merge-prep`.
+  rewrite, no force-push, base untouched. Verifies both ways: every hunk the feature
+  intended arrived, **and** every hunk the destination gained is still there. Runs
+  before `merge-agent`. Invoke with `/merge-prep`.
 - **merge-agent** — analyse GitHub branches with agents and merge them
   by risk: Haiku summarizes each branch + builds an overlap/conflict map, then
-  merges on a throwaway integration branch (trivial conflicts auto-resolve via
-  Sonnet, semantic ones escalate to you with an Opus-proposed fix). Optional
-  test-verify and PR, both asked at run time. Invoke with `/merge-agent`.
+  merges on a throwaway integration branch. Direction (`source` INTO `destination`)
+  is confirmed before anything is touched. Conflicts resolve **per hunk, not per
+  file** — trivial ones auto-resolve via Sonnet, and on any hunk where the two sides
+  genuinely disagree it shows you both versions with diff3 base context and asks
+  which way it goes, so only the parts you choose are taken in. Completeness is
+  verified in both directions before it calls the merge done. Optional test-verify
+  and PR, both asked at run time. Kept in sync with `merge-prep`. Invoke with
+  `/merge-agent`.
 - **design-arwen** — ultimate UI/UX design skill for native *and* web:
   fuses production craft (contrast, type, layout, motion, a11y, iOS/Android/RN
   conventions) with a committed aesthetic and a systematic method for forging one
@@ -124,12 +130,17 @@ both alongside `skills/` — the skills refer to them.
   the user says "ultracode". Invoke with `/ticket-master`.
 - **sherlock-codes** — forensic audit of a whole application: parallel **Fable**
   investigators sweep backend, frontend, boundaries, data, dependencies, error
-  paths, config, architecture, tests and dead code, reporting only findings with
-  `file:line` evidence and a concrete failure. Findings are deduped and
-  adversarially verified (discarded ones are counted), written to `CASEFILE.md`,
+  paths, config, architecture, tests, dead code, project conventions
+  (`CLAUDE.md`, lint config) and git history, reporting only findings with
+  `file:line` evidence and a concrete failure. Findings are deduped, then
+  adversarially verified against a 0–100 confidence rubric — anything under 80 is
+  deleted and counted, not softened — written to `CASEFILE.md`,
   ranked into an implementation plan — then **Opus** codes the fixes. Structural
-  changes are proposed as options for you to pick, never applied unasked.
-  Invoke with `/sherlock-codes`.
+  changes are proposed as options for you to pick, never applied unasked. Point
+  it at a PR (`sherlock #482`) and it will scope the audit to that diff and, on
+  your yes, post the surviving findings back as inline `gh` comments with
+  sha-anchored permalinks. Merging is not its job — that hands off to
+  `merge-agent`. Invoke with `/sherlock-codes`.
 - **screenshot-loop** — the user drops test screenshots in one folder; the agent
   reads every one, acts on what they show, verifies, then deletes exactly the
   files it consumed so the folder is clean for the next round. The directory is

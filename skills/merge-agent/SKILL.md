@@ -9,7 +9,11 @@ description: >-
   each branch's intent, build an overlap/conflict map, pick a safe merge order,
   then merge on a throwaway integration branch: trivial conflicts (lockfiles,
   imports, formatting) auto-resolve, semantic/logic conflicts escalate to the user
-  with a proposed resolution. Optionally verifies with the project's tests and
+  per hunk — not per file — with both versions, a proposed resolution, and the
+  direction asked rather than assumed, so only the parts you choose are taken in.
+  The merge direction (`<source>` INTO `<destination>`) is confirmed before anything
+  is touched, and completeness is verified both ways: every hunk the source intended
+  arrives, and every hunk the destination gained is still there. Optionally verifies with the project's tests and
   optionally opens a PR — both asked at run time. Never touches the base branch
   directly and never pushes without explicit approval. NOT for a single trivial
   fast-forward, or non-git tasks.
@@ -25,6 +29,15 @@ never modified directly and nothing leaves the machine without an explicit yes.
 auto-resolve → Sonnet**, **semantic conflict proposal + verification + rework →
 Opus**. Dispatch via the Agent tool with the matching `model` override.
 
+**The aim:** the source's work arrives in the destination, and the destination
+is not disturbed on the way in. Both halves are *verified* in Phase 4 — a merge
+that lands the feature while silently reverting base's newer work is a failed
+merge that reports success.
+
+**Vocabulary, shared with `merge-prep`:** the **source** is the branch being
+merged, the **destination** (`<base>`) is what it merges into. Same words, same
+`apply --reverse --check` reconcile, same rule that a non-zero exit is evidence.
+
 **Mechanism:** local git for all merge/conflict work; `gh` for PR context (titles,
 descriptions, review/check state) and the optional final PR. If `gh` isn't
 authenticated, fall back to pure git and say so.
@@ -39,6 +52,13 @@ Establish, then confirm back before touching anything:
   feature → base) · `reconcile` (branches that edited the same code differently —
   conflicts are the main event, prefer best-version selection over union).
   Detect from the request; if ambiguous, ask once.
+- **Direction — always stated, never inferred.** Write it back as one line and get a
+  yes before anything else: `merging <source> INTO <destination>`. Branch names lie
+  (`develop` merged into a feature is a legitimate and completely different
+  operation), and the two directions produce different trees, different conflict
+  winners, and different blast radii. If the user's phrasing is reversible at all
+  ("merge dev and my branch"), ask — this is the one question that is never worth
+  guessing.
 - `git fetch --all`, then `git fetch origin <base>:<base>` — **`fetch --all` moves
   `origin/<base>`, not the local `<base>` ref.** The integration branch is cut from the
   local ref, so without that second fetch the whole merge happens on a stale base and
@@ -99,8 +119,48 @@ each conflicted file, then route**:
   approves or adjusts before it's applied.
 - **Unsure → treat as semantic.** Escalation is the safe default.
 
-Record each resolution in the merge log (file · trivial/semantic · what was chosen ·
-why). If a merge goes sideways, `git merge --abort`, note it, and re-plan that step —
+**Resolve per hunk, not per file.** A conflicted file is rarely wholly one side's;
+`--ours`/`--theirs` on a whole file is the single most common way a real change
+disappears with exit 0. Open the conflict with all three versions visible and decide
+each hunk on its own:
+
+```
+git checkout --conflict=diff3 -- <path>   # shows base|ours|theirs, not just two sides
+git checkout --ours   -- <path>   # ONLY legitimate for lockfiles and generated files
+```
+
+`diff3` markers matter: two-way markers show you what the sides *say* and hide what
+they *started from*, so "both changed this line" and "one side changed it, the other
+inherited it" look identical. With the base section visible, most hunks resolve
+themselves.
+
+For each conflicted hunk, decide and log one of:
+
+| Take | When |
+|---|---|
+| `source` | The hunk is the feature. The destination's version is the old world. |
+| `destination` | Base moved ahead here and the source is stale — its version predates base's change. |
+| `both` | Non-overlapping additions in the same region: keep both, order deliberately. |
+| `rewrite` | Neither side is right once combined — Opus proposes, user approves, and the log carries the proposed text. |
+
+**Ask the direction on any hunk where the two sides genuinely disagree about
+behaviour** — do not resolve it from the merge's overall direction. Merging a feature
+into base does *not* mean the feature wins every hunk: a hunk where base fixed a bug
+the source still carries must go to `destination`, or the merge reintroduces the bug.
+Present both versions, say which way you'd go and why, and let the user pick.
+
+Where a hunk was taken from one side wholesale, prefer applying it rather than editing
+markers by hand — same pipe as `merge-prep`, so both skills fail the same way and the
+failure is visible:
+
+```
+git diff --binary -M <merge-base>...<side> -- <path> | git apply --3way
+```
+
+Record each resolution in the merge log — **one row per hunk**, not per file
+(file · hunk/lines · trivial/semantic · take: source/destination/both/rewrite · who
+decided · why). Phase 4's reconcile checks hunks; a log written at file granularity
+cannot explain the failures it will find. If a merge goes sideways, `git merge --abort`, note it, and re-plan that step —
 never leave the tree half-merged.
 
 ## Phase 4 — Verify (ask at run time)
@@ -124,6 +184,22 @@ hunk* (a semantic conflict you resolved the other way) or a prep-document row sh
 was deliberately dropped. Anything else is a change that silently vanished — find it and
 re-apply it before going further. A green test suite will never catch this.
 
+**Then reconcile against the destination — it must be undisturbed.** The check above
+proves the sources arrived; it proves nothing about base's own work, and a merge that
+lands every feature while reverting base is the failure this whole skill is built to
+prevent. Same pipe, other side:
+
+```
+git checkout <integration>
+# for each path BASE changed since the merge base with each source — must exit 0:
+git diff --binary -M $(git merge-base <base> <source>)...<base> -- <path>   | git apply --reverse --check
+```
+
+Non-zero is legitimate **only** where a merge-log row names that path *and that hunk*
+as `take: source` — a deliberate, recorded overwrite of base. Anything else is base's
+work silently reverted. This is the check that would have caught it; `git status`,
+a name-only diff, and a green test suite will all report success.
+
 Then detect the project's build/test command. **Ask whether to run verification**
 (default **yes** if a test command is detected — a conflict-free merge is not a
 correct one). If yes, run it (Opus agent or main session); on failure, route the fix
@@ -133,7 +209,8 @@ Gate "done" on green.
 ## Phase 5 — End state (ask at run time)
 
 Relay a summary: what merged, conflicts resolved (trivial vs escalated counts),
-**reconcile result (paths differing from each source, all accounted for)**,
+**reconcile result — both directions: every source hunk present, every destination
+hunk present, each exception named in the log**,
 verification result, integration branch name, merge-log path. Then **ask**:
 - **Hand off locally** — leave the integration branch + log; the user pushes/PRs.
 - **Swap-in (local only)** — rename the base aside and promote the merge into its
@@ -179,9 +256,14 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
   modification, never pushed to, never force-pushed. The one exception is the
   approved local **swap-in** rename in Phase 5 — which preserves the old base as
   `<base>_old_before_<source>` and still touches nothing on the remote.
-- **Completeness is verified, not assumed.** Before calling a merge done, every path
-  where the integration branch differs from a source branch must be accounted for in
+- **Completeness is verified in both directions, not assumed.** Before calling a merge
+  done: every hunk each source intended is present, **and** every hunk the destination
+  gained since the merge base is present. Each exception is named — path and hunk — in
   the merge log or the branch's prep document. Unexplained difference = lost change.
+- **Direction is asked, not inferred.** `<source> INTO <destination>` is confirmed
+  before the first merge, and the overall direction never decides an individual hunk.
+- **Conflicts resolve per hunk.** Whole-file `--ours`/`--theirs` is for lockfiles and
+  generated files only; anywhere else it is a change discarded with exit 0.
 - **Everything on the integration branch**, everything in the merge log — the run is
   auditable and 100% revertible by deleting the branch.
 - **Route conflicts by class, not by vibe.** Trivial→Sonnet, semantic→Opus+approval,
@@ -193,6 +275,10 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
 - If `gh` is unavailable, do the whole merge with pure git and tell the user PR
   context/opening isn't available.
 - If a subagent dies / returns null, stop and report rather than merging blind.
+- **Kept in sync with `merge-prep`** — same source/destination vocabulary, same
+  `git diff --binary -M ... | git apply --reverse --check` reconcile in both
+  directions, same per-hunk granularity, same treatment of a non-zero exit as
+  evidence. A change to any of those in either skill belongs in both.
 
 ## Other hosts
 

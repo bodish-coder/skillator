@@ -14,6 +14,18 @@ description: >-
 
 # Merge Prep — the branch carries only its real changes, and says so
 
+**The aim, in one sentence:** a developer has finished a feature; that feature —
+and nothing else — arrives in the destination branch, and the destination branch
+is not disturbed on the way in. Two failure modes, equally bad: the branch drags
+in old or unrelated content (this skill's job), and the merge quietly reverts
+work the destination did while the branch was away (verified in Phase 3, and
+again by `merge-agent`).
+
+**Vocabulary, shared with `merge-agent`:** `<branch>` is the **source** (the
+feature), `<base>` is the **destination** (main/develop). The two skills use the
+same words, the same `apply --reverse --check` reconcile, and the same rule that
+a non-zero exit is evidence, not an obstacle.
+
 The problem this fixes: a branch that's behind base, or carries stale file
 versions, whitespace churn, reverted-to-zero edits, or files it never meant to
 touch — so merging it drags in "old or untouched parts". This skill brings the
@@ -178,6 +190,23 @@ Non-zero means a hunk is missing or altered — legitimate only if a prep-doc ro
 anything else is a change that vanished. Stop and find it. Comparing the branch to its
 own intended list is circular; this is the only check that can actually fail.
 
+**Then reconcile the other way — the destination must be undisturbed.** The check
+above proves the feature survived; it says nothing about what the step-1 merge did
+to base's own work. Same pipe, other side:
+
+```
+git checkout <branch>
+# for each path BASE changed since the merge base — must exit 0:
+git diff --binary -M $(git merge-base <base> <pre-prep tag>)...<base> -- <path>   | git apply --reverse --check
+```
+
+Exit 0 means every hunk the destination gained while the branch was away is still
+present verbatim. Non-zero is legitimate **only** where a prep-doc row names that
+path and that hunk as a merge conflict resolved toward the branch — a deliberate,
+recorded overwrite. Anything else is the branch reverting the destination's work,
+which is the failure this skill exists to prevent and which no test suite, no
+`git status`, and no name-only diff will ever show you.
+
 Record the verification result in the prep document (amend commit 4, or add a fifth).
 Then **ask** whether to run the project's build/tests on the prepped branch (default yes
 if a test command exists) — since it now sits on current base, this is where you'd catch
@@ -215,9 +244,17 @@ can now integrate a branch that carries only its real changes and documents why.
   exit 0 and no trace.
 - **A non-zero `git apply` is data, not an obstacle.** It means base and the branch
   genuinely collide on that path. Escalate it; never reach for a command that succeeds.
+- **The destination is not disturbed.** Every hunk base gained since the merge base
+  must still be present in the prepped branch. The only exception is a conflict the
+  prep document names, path *and* hunk, as resolved toward the branch. "The feature
+  arrived" is half the goal; "and nothing of base left" is the other half.
 - **Reconcile per hunk, not per path,** via `git apply --reverse --check` against the
   pre-prep tag. Name-only diffs cannot see a hunk lost inside a file base also touched —
   which is where losses actually hide.
 - **"Current base" is the local ref, and `git fetch` does not move it.** Fast-forward
   `<base>` explicitly or the whole skill quietly operates on stale content.
-- Pairs with `merge-agent`: prep first, then merge the clean branch.
+- Pairs with `merge-agent`: prep first, then merge the clean branch. The two are kept
+  in sync deliberately — same source/destination vocabulary, same `git diff --binary
+  -M ... | git apply --reverse --check` reconcile run in both directions, same
+  per-hunk granularity, same treatment of a non-zero exit as evidence. A change to
+  one of those in either skill belongs in both.
