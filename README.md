@@ -93,6 +93,15 @@ both alongside `skills/` — the skills refer to them.
   scaffolds the filled-in artifacts, and prints an ordered manual checklist for the
   human-only steps (deploy keys, GitHub secrets, DNS, TLS). Never collects secret
   values, never touches servers/DNS. Invoke with `/deploy-wizard`.
+- **deploy-niyoj** — the same single-VPS architecture with **CI removed**: deploys
+  are triggered manually from the NiYoj desktop app, which feeds an idempotent
+  `deploy/deploy.sh` to the server over one `BatchMode` SSH connection and streams
+  the log back. No runner, no CI minutes, no `deploy.yml`, deploy key stays on
+  your machine. Scaffolds the deploy script, nginx template with the maintenance
+  gate, maintenance page and health endpoint; converts a project off GitHub
+  Actions; and diagnoses failed or hung deploys (a stalled deploy is almost always
+  something prompting, which `BatchMode` can never answer). Sibling of
+  `deploy-wizard`. Invoke with `/deploy-niyoj`.
 - **merge-prep** — prepare a branch for a clean merge, **in place**: merge current
   base in, drop the paths it never meant to carry (auto-drops no-ops, escalates
   suspicious ones), and commit a handoff document recording every decision to the

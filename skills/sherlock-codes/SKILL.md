@@ -145,13 +145,34 @@ Scope: <what was read>  ·  Not read: <what wasn't>
   (b) one auth module, routes call it; (c) middleware.
 ```
 
-If `TICKETS.md` exists, also log each verified finding as an `A` ticket per
-`ticket-checker`, and put the ticket ID on the casefile line. One board, not two.
+### Then put the findings on the board
+
+A casefile is a document; a ticket is a thing someone works. **Every verified
+finding becomes an `A` ticket** — that is what stops the audit dying with the
+chat.
+
+- **`TICKETS.md` exists** → log each verified finding as an `A` ticket per
+  `ticket-master`, and put the ticket ID on its casefile line. One board, never
+  two.
+- **No `TICKETS.md`** → **ask, once**: "`<N>` verified findings. Shall I open a
+  ticket board (`TICKETS.md`) and log them as A-tickets?" On yes, create the file
+  from `ticket-master`'s template and log them. On no, the casefile stands alone
+  and say so plainly — the findings live only in that file.
+- Either way this happens **before** the Phase 3 report, so the summary can cite
+  ticket IDs (`A7`, `A8`) rather than casefile positions. An ID is what the user
+  says back to you in the next session.
+- The casefile line and the ticket line say the same thing in their own registers:
+  the ticket is a plain one-line title, the casefile carries the evidence.
+  Architectural proposals are **not** tickets — they are decisions, and they stay
+  in their own section until the user picks one.
+
+> "I have written it down twice: once as evidence, once as work. The first is for
+> the record; the second is for whoever has to do something about it."
 
 ## Phase 3 — solve it
 
-Report to the user first: counts by severity, the top three in one line each,
-and the architectural proposals as questions. **Then ask what to fix.** Do not
+Report to the user first: counts by severity **with their ticket IDs**, the top
+three in one line each, and the architectural proposals as questions. **Then ask what to fix.** Do not
 start a 40-finding repair unasked.
 
 Coding is **Opus**, working from the casefile:
@@ -293,6 +314,9 @@ Rules the voice obeys:
   here.
 - **No score, no grade, no "overall the codebase is healthy".** Findings or
   nothing.
+- **A verified finding ends up on the board.** If there is no board, ask to make
+  one; if the user declines, say out loud that the findings live only in
+  `CASEFILE.md`. A finding nobody can look up next week was half-found.
 - **Nothing is posted, pushed or merged unasked.** The casefile is written; the
   PR comment, the fix and the merge each need their own yes.
 - **The casefile is append-friendly.** Re-running adds a dated section; fixed
