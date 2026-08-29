@@ -100,8 +100,10 @@ both alongside `skills/` — the skills refer to them.
   your machine. Scaffolds the deploy script, nginx template with the maintenance
   gate, maintenance page and health endpoint; converts a project off GitHub
   Actions; and diagnoses failed or hung deploys (a stalled deploy is almost always
-  something prompting, which `BatchMode` can never answer). Sibling of
-  `deploy-wizard`. Invoke with `/deploy-niyoj`.
+  something prompting, which `BatchMode` can never answer). Removing CI here means
+  removing the deploy *trigger*, not build/test checks — it keeps or offers a
+  check-only workflow, which never touches the server and so cannot race. Sibling
+  of `deploy-wizard`. Invoke with `/deploy-niyoj`.
 - **merge-prep** — prepare a branch for a clean merge, **in place**: merge current
   base in, drop the paths it never meant to carry (auto-drops no-ops, escalates
   suspicious ones), and commit a handoff document recording every decision to the

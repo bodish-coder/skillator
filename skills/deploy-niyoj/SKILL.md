@@ -14,8 +14,10 @@ description: >-
   `deploy/nginx.conf.template`, `deploy/maintenance.html` and the health
   endpoint, and prints the human-only checklist (deploy key, sudoers, DNS, app
   entry). Never enters credentials, never edits files on the server, never
-  commits `apps.json`. NOT for CI-triggered deploys (use `deploy-wizard`) or
-  managed-PaaS targets.
+  commits `apps.json`. Removing CI means removing the deploy *trigger*, not
+  build/test checks — a check-only workflow never touches the server and is kept
+  or offered. NOT for CI-triggered deploys (use `deploy-wizard`) or managed-PaaS
+  targets.
 ---
 
 # deploy-niyoj — one button, one SSH connection, no CI
@@ -84,6 +86,38 @@ Never scaffold against a guessed subdomain.
 3. Everything else — `deploy.sh`, nginx template, maintenance page, backup
    functions, health endpoint — stays byte-identical. Say so rather than
    rewriting working files.
+
+### What "delete the workflow" does and does not mean
+
+**Delete the workflow that deploys. Keep — or add — a workflow that only checks.**
+
+CI bundles two things people assume are one: **verification** (build it clean and
+run the tests on a machine that isn't yours) and the **deployment trigger** (and
+if that passed, ship it). This skill replaces the second. It has no quarrel with
+the first.
+
+| Workflow | Verdict | Why |
+|---|---|---|
+| Deploys — SSHes to the box, runs `deploy.sh`, holds `DEPLOY_SSH_KEY` | **Delete** | Two triggers racing one `git reset --hard` is a corrupted checkout. This is the rule, and it is absolute |
+| Only builds, tests, lints, typechecks — never touches the server, holds no deploy secret | **Keep** | It cannot race: it never reaches the box. It gives you a red X *before* you press Deploy |
+
+The distinction is **server access, not the file's existence**. A workflow with no
+`ssh`, no `DEPLOY_SSH_KEY`, and no `appleboy/ssh-action` is inert as far as this
+playbook is concerned.
+
+Worth saying out loud to a solo developer, who is the usual audience here: the
+verification half of CI is the half that still pays when you work alone. Nothing
+about "you forgot to commit a file" or "that dep was only in your global install"
+depends on team size — and solo is arguably worse, since nobody else ever pulls
+your branch and hits the missing file. It is the *trigger* half that stops paying,
+because push-to-ship is a coordination mechanism and there is nobody to coordinate
+with. So when converting, **offer to keep or add a check-only workflow** rather
+than assuming the user wants no CI at all. If they'd rather have nothing, that is
+theirs to choose — say what they're giving up in one line and move on.
+
+If a check-only workflow exists, the release ritual gains a step between push and
+Deploy: **wait for the green check.** That is the whole benefit; skipping it means
+paying the CI minutes for nothing.
 
 ## Phase 2 — the artifacts
 
@@ -177,15 +211,18 @@ Print it; never attempt these steps yourself.
 
 ## The release ritual
 
-Manual deploy means the discipline CI used to enforce is now the human's. Four
+Manual deploy means the discipline CI used to enforce is now the human's. These
 steps, in this order, every time:
 
 1. **Merge and push to `main`.** NiYoj deploys `origin/<branch>`, not the working
    tree. Unpushed commits do not ship — this catches everyone out exactly once,
    and it is the single most common mistake in this model.
-2. **Check the app card**: right server, right branch, right directory.
-3. **Deploy.** Watch to `✓ Live`, or to the `✗` and its reason.
-4. **Smoke test the real URL** — load the app, hit one authed endpoint, confirm
+2. **If a check-only workflow exists, wait for its green check.** It is the only
+   thing left that reads the code on a machine that isn't yours; deploying past a
+   red X is deploying a build you know is broken.
+3. **Check the app card**: right server, right branch, right directory.
+4. **Deploy.** Watch to `✓ Live`, or to the `✗` and its reason.
+5. **Smoke test the real URL** — load the app, hit one authed endpoint, confirm
    the maintenance page is gone.
 
 Deploy one app at a time when they share a box: two simultaneous
@@ -236,7 +273,10 @@ a compensating migration with the next number up — never edit an applied one.
 - **Secrets never go in the custom-command field.** `apps.json` is plain local
   JSON. Environment values live in a `.env` on the server, referenced by compose.
 - **One deploy key per repo**, one host alias per key.
-- **Delete the CI workflow on adoption.** Two triggers, one `git reset --hard`.
+- **Delete the CI workflow that *deploys*; keep one that only checks.** The rule
+  is about server access, not about the file existing. A build-and-test workflow
+  never touches the box, so it cannot race — and it is the half of CI that still
+  pays when you work alone.
 - **Never run the deploy yourself.** Scaffold, verify, and hand the human the
   checklist. Pressing Deploy is theirs; so is anything touching DNS, keys, or the
   server.

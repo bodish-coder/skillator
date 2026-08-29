@@ -274,3 +274,60 @@ and it runs before the first container is touched.
 | Pre-deploy DB snapshot | yes — it replaces the pre-push hook | DB driver, container name |
 | `.githooks/pre-push` snapshot | drop it | n/a |
 | `.github/workflows/deploy.yml` | delete it | n/a |
+
+---
+
+## 9. Check-only workflow (optional, keep alongside NiYoj)
+
+The half of CI that still pays when you deploy manually: it builds and tests on a
+machine that isn't yours, and it **never touches the server** — no `ssh`, no
+`DEPLOY_SSH_KEY`, no deploy step — so it cannot race the NiYoj trigger.
+
+`.github/workflows/check.yml`:
+
+```yaml
+name: check
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `npm ci` fails if package-lock.json and package.json disagree —
+      # which is most of the value: it catches the dep you installed
+      # locally and never committed.
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: npm test --if-present
+        working-directory: frontend
+
+      # Backend, if there is one. Swap for your language's equivalent.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+```
+
+Two rules for keeping it harmless:
+
+- **No secrets, no server.** The moment it grows an `ssh` step or a deploy key it
+  becomes a second trigger, and the racing rule applies again. Delete it then.
+- **`npm ci`, never `npm install`.** `ci` installs exactly the lockfile and fails
+  on drift; `install` silently rewrites the lock and hides the very problem you
+  are running this to catch.
+
+The payoff arrives at one moment: the red X shows up *before* you press Deploy.
+Add "wait for the green check" between push and Deploy in the release ritual, or
+the minutes are spent for nothing.
