@@ -8,8 +8,8 @@ description: >-
   single shared TICKETS.md at the repo root so nothing is forgotten across chats,
   sessions, or teammates on the same branch. Use when the user reports a bug or
   asks for a feature, says "log this", "what's pending", "ticket", "B3", "F12",
-  "next ticket number", "mark it done", "A4", or when starting work and you need to know
-  what's already open. Also use before closing a session to sync statuses. It
+  "next ticket number", "mark it done", "A4", "list tickets", "list tickets
+  status", or when starting work and you need to know what's already open. Also use before closing a session to sync statuses. It
   allocates IDs by scanning the file (never reusing a number), keeps status as
   pending/in-progress/done, and appends rather than renumbering so parallel
   teammates don't conflict. NOT an issue tracker replacement and NOT for
@@ -208,9 +208,14 @@ that line.
 
 ## Showing the board
 
-**Any time the user asks to see tickets** — "list the tickets", "what's pending",
-"show the board", "what's open" — answer as checkbox lines, the same shape the
-file uses. Never a prose summary, never a markdown table, never a numbered list:
+Two views. **By type is the default** — `list tickets`, "what's pending", "show
+the board", "what's open". **By status** when the user says so — `list tickets
+status`, "status wise", "group by status", "what's in progress".
+
+Either way: checkbox lines, the same shape the file uses. Never a prose summary,
+never a markdown table, never a numbered list.
+
+### By type (default)
 
 ```
 Bugs
@@ -224,17 +229,42 @@ Features
 
 Agent-found
   [ ] A1 — Unhandled promise rejection in the upload worker
+
+3 open · 1 blocked · 8 done
 ```
 
-Rules for the listing:
+### By status (`list tickets status`)
+
+Same lines, regrouped. Sections in this order — **in-progress first**, because
+that is what someone asking for a status view wants to see:
+
+```
+In progress
+  [~] B2 — CSV export drops the last row
+
+Blocked
+  [!] B3 — Avatar upload 500s over 5MB (blocked: needs S3 creds from ops)
+
+Pending
+  [ ] B2b — add regression test (B2)
+  [ ] F1 — Dark mode
+  [ ] F2 — Bulk delete in the table view
+  [ ] A1 — Unhandled promise rejection in the upload worker
+
+3 open · 1 blocked · 8 done
+```
+
+A sub-part shown away from its parent carries the parent ID in trailing
+parentheses — `(B2)` — since the indentation that explained it is gone. Include
+`Done` and `Cancelled` sections only when closed tickets were asked for.
+
+### Rules for both views
 
 - **Copy the line, don't rewrite it.** ID and title exactly as they appear in
   `TICKETS.md`, so the user can grep for what they just read.
 - **Open only, by default** (`[ ]`, `[~]`, `[!]`). Closed tickets on request
   ("show everything", "what did we finish") — then `[x]` and `[-]` too.
-- **Sub-parts stay indented under their parent**, and a parent is shown whenever
-  any of its sub-parts is.
-- **Drop empty sections.** No "Features: none".
+- **Drop empty sections.** No "Features: none", no empty `Blocked`.
 - **Blocked shows its reason**; that is the whole point of `[!]`.
 - **One count line after the list** — `3 open · 1 blocked · 8 done` — and nothing
   else. No commentary on the board's health, no suggested next ticket unless
