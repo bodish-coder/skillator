@@ -230,7 +230,7 @@ Features
 Agent-found
   [ ] A1 — Unhandled promise rejection in the upload worker
 
-3 open · 1 blocked · 8 done
+6 open (4 pending · 1 in-progress · 1 blocked) · 9 closed (8 done · 1 cancelled) · 15 total
 ```
 
 ### By status (`list tickets status`)
@@ -251,7 +251,7 @@ Pending
   [ ] F2 — Bulk delete in the table view
   [ ] A1 — Unhandled promise rejection in the upload worker
 
-3 open · 1 blocked · 8 done
+6 open (4 pending · 1 in-progress · 1 blocked) · 9 closed (8 done · 1 cancelled) · 15 total
 ```
 
 A sub-part shown away from its parent carries the parent ID in trailing
@@ -266,9 +266,27 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
   ("show everything", "what did we finish") — then `[x]` and `[-]` too.
 - **Drop empty sections.** No "Features: none", no empty `Blocked`.
 - **Blocked shows its reason**; that is the whole point of `[!]`.
-- **One count line after the list** — `3 open · 1 blocked · 8 done` — and nothing
-  else. No commentary on the board's health, no suggested next ticket unless
-  asked.
+- **The counts must add up, and the line must show its work.** Five mutually
+  exclusive states, two buckets:
+  `open = pending + in-progress + blocked` (blocked is open, just stuck) ·
+  `closed = done + cancelled` · `total = open + closed`. Each bucket prints its
+  own subtotal with the breakdown in parentheses, so the arithmetic is checkable
+  on sight and blocked is never mistaken for a third bucket beside open.
+- **Always print all five states, zeros included.** Never drop a term because
+  it is `0`. `0 blocked` is information — it says nothing is stuck, which is
+  exactly what someone scanning the board wants to know — and a fixed-shape line
+  can be compared against last session's at a glance. An empty board still
+  prints the full line:
+
+  ```
+  0 open (0 pending · 0 in-progress · 0 blocked) · 0 closed (0 done · 0 cancelled) · 0 total
+  ```
+- **One count line after the list**, and nothing else. No commentary on the
+  board's health, no suggested next ticket unless asked:
+
+  ```
+  6 open (4 pending · 1 in-progress · 1 blocked) · 9 closed (8 done · 1 cancelled) · 15 total
+  ```
 - Legend only if the user seems new to the board, and then one line.
 
 ## Rules

@@ -122,9 +122,14 @@ both alongside `skills/` — the skills refer to them.
   and PR, both asked at run time. Kept in sync with `merge-prep`. Invoke with
   `/merge-agent`.
 - **design-arwen** — ultimate UI/UX design skill for native *and* web:
-  fuses production craft (contrast, type, layout, motion, a11y, iOS/Android/RN
-  conventions) with a committed aesthetic and a systematic method for forging one
-  unique, ownable *signature* element. Invoke with `/design-arwen`.
+  fuses production craft (contrast, type, layout, motion, a11y, UX copy,
+  iOS/Android/RN conventions) with a committed aesthetic and a systematic method
+  for forging one unique, ownable *signature* element. Four modes —
+  `build` · `redesign` · `improve` · `critique` — each with its own reference
+  file, so only the rules that mode needs are loaded. Orients on register plus
+  three tunable dials (variance / motion / density), plans then critiques the plan
+  before writing code, convenes a 2–3 expert panel for redesigns, and can publish
+  visual artboards you tweak before any code exists. Invoke with `/design-arwen`.
 - **ticket-checker** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with
