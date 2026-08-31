@@ -5,11 +5,13 @@ description: >-
   critique an interface so it ships production-grade AND carries a unique, ownable
   signature nobody would call "AI-made". Use whenever the user wants to build or improve
   a UI/UX: a web page/app/component, an iOS or Android screen, a React Native app, a
-  dashboard, landing page, form, onboarding, empty state, or design system; or asks to
+  dashboard, landing page, form, data table, settings screen, multi-step flow, onboarding,
+  empty state, or design system; or asks to
   make something "more unique / bolder / quieter / more polished / less generic / more
   memorable", pick fonts/colors/layout/motion, fix visual hierarchy, spacing, contrast,
   a11y or UI performance, write UX copy and error states, or make one design language
-  work across native and web. Fuses production craft, a committed distinctive aesthetic,
+  work across native and web. Fuses production craft, deep product-UI
+  patterns, an executed ship gate, a committed distinctive aesthetic,
   a method for forging one ownable signature, and an optional visual artboard gate so the
   user can tweak the layout before any code is written. For an existing app it convenes a
   2–3 expert (SME) design panel, reconciles their opinions into one route, then implements
@@ -54,9 +56,45 @@ elevate" → `redesign` · otherwise `build`. Two modes could fit → ask once.
 (color, type, layout, interaction, motion, native conventions, perf, UX copy).
 `critique` reads craft.md as its checklist.
 
+**Product register also reads [references/product-ui.md](references/product-ui.md)** —
+forms, data tables, settings, multi-step flows, permissions, notifications, dashboards,
+i18n/RTL. These are the surfaces real apps are made of and the ones generated UI most
+reliably gets subtly wrong. Non-optional when the work touches any of them.
+
+**Every mode that writes code ends in [references/verify.md](references/verify.md)** —
+the ship gate, executed with a real browser or simulator. Not a checklist you assert.
+
 **Signature is not a mode.** Forging one (Phase 2) is doctrine on every build and
 redesign. **Adapting across platforms is not a mode either** — Phase 3 applies whenever
 the thing ships more than once.
+
+---
+
+## Design memory — read it, then leave one behind
+
+**On entry, look for `DESIGN.md` at the repo root** (also `docs/DESIGN.md`, `.design/DESIGN.md`).
+If one exists — whoever wrote it, impeccable's included — **read it and obey it**. It
+records decisions already made: the theme, the type pairing, the token names, the
+signature. Those beat every reflex-reject list in this file. Say in one line that you
+found it and what you're inheriting.
+
+**On exit, after a `build` or `redesign`, write or update it.** Ten lines, no ceremony,
+no separate init flow — the Design Read, the dials, the direction, the signature
+sentence, the font pairing, the token names, and anything you deliberately broke a rule
+for and why. That last one is what stops the next session (or the next model) undoing
+your decision because it looked like slop.
+
+```markdown
+# DESIGN
+Read: dashboard · product · ops teams · dials 3/2/9 · direction terminal-dense · scene <…>
+Signature: the run-status ribbon — same shape in the table row, the detail header, the empty state
+Type: Söhne Kräftig / Söhne Mono. Color: OKLCH neutrals tinted +0.008 to hue 250, one accent.
+Tokens: --bg --surface --ink --muted --accent --ring, spacing 4/8/12/16/24/40
+Deliberate: mono for numeric columns everywhere (tabular alignment beats the pairing rule)
+```
+
+`improve` and `critique` read it and do not rewrite it. **Identity-preservation beats
+novelty** — a committed decision on disk outranks anything this skill would pick fresh.
 
 ---
 
@@ -216,6 +254,16 @@ fake logos, `$XX/mo`, invented metrics shipped as real. **Em-dashes in generated
 the mode deliberately (dark is not "because tools look cool dark", light is not "to be
 safe") and if both ship, **verify every surface in both** before calling it done.
 
+**Accessibility is arwen's, not someone else's.** No skill in the wider library owns it,
+so this one does. It is not a post-hoc audit and not a contrast number — it is a design
+constraint that changes the layout. The floor, enforced in craft.md and verified in
+verify.md: all eight states designed with **hover ≠ focus** · a visible `:focus-visible`
+ring ≥3:1 everywhere · every surface fully keyboard-drivable in a sensible order · real
+`<label>`s and `aria-describedby` errors · never colour as the only signal · reduced-motion
+paths · touch targets ≥44pt/48dp · text resizable to 200% without loss · `aria-live` for
+async results · gestures never the only route. A distinctive interface that a keyboard user
+cannot operate has failed *both* of this skill's tests, not one.
+
 **Ship gate — verify, don't assume:**
 1. Contrast checked on real text/bg pairs. 2. No overflow at any width or device.
 3. Reduced-motion path works. 4. Loading / empty / error / success all designed.
@@ -224,6 +272,10 @@ CLS < 0.1. 7. Both themes verified if both ship. 8. Every dependency and asset U
 actually resolves — no invented packages, no guessed image IDs. 9. **Drive it for real** —
 screenshot the browser / run the screen; not done until *seen* rendering.
 10. Signature present and systematic (Phase 2 test passes).
+
+**Run this gate, don't recite it** — [references/verify.md](references/verify.md) has the
+driver, the contrast and overflow snippets, the state-forcing procedure, and the report
+format. It also requires you to state what you *didn't* verify.
 
 ---
 
@@ -238,6 +290,13 @@ screenshot the browser / run the screen; not done until *seen* rendering.
   carries the design-time perf rules; web-perf runs the measured audit.
 - **Quick named theme for a static deck/report → `theme-factory`.** (Not for app design
   systems — arwen's token guidance is stronger.)
+- **Motion craft → `emil-design-eng` (interruptibility, springs, `@starting-style`,
+  clip-path, blur-masked transitions) and `apple-design` (gesture physics, velocity
+  handoff, momentum projection, rubber-banding).** craft.md carries arwen's motion *policy*
+  — when motion is allowed, how long, reduced-motion, the forbidden patterns. Those two own
+  the *execution*. Building anything gesture-driven or spring-based without reading them is
+  how motion ends up technically correct and lifeless. `animate` builds a single animation
+  end-to-end; `find-animation-opportunities` finds where motion is missing.
 - **Deep React/RN implementation → the Vercel skills:** `vercel-react-view-transitions`,
   `vercel-react-native-skills`, `vercel-composition-patterns`.
 
@@ -251,4 +310,6 @@ screenshot the browser / run the screen; not done until *seen* rendering.
 - **Read the room before you reach for a dial.** The audience picks the aesthetic, not your taste.
 - **Native and web are peers.** One identity, idiomatic expression.
 - **Diverse critique, single route.** A 2–3 expert panel sees what one lens misses; reconcile to one route, then build it — never ship a committee.
+- **Accessible or it isn't production-grade.** Not a gate at the end — a constraint that shapes the layout.
+- **Leave the decisions on disk.** A `DESIGN.md` is what makes the next session continue your design instead of restarting it.
 - **Commit, then prove it.** Timid middles read as AI; evidence (contrast, breakpoints, reduced-motion, a real render) beats claims.

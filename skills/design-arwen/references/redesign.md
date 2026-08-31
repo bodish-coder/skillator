@@ -1,6 +1,8 @@
 # `redesign` — an app that already exists
 
-Prereq: SKILL.md Phase 0–2, plus [craft.md](craft.md). The difference from `build` is
+Prereq: SKILL.md Phase 0–2, plus [craft.md](craft.md) — and `DESIGN.md` if the repo has
+one: it is the inherited identity the preservation rules below protect. Product register
+also reads [product-ui.md](product-ui.md); finish through [verify.md](verify.md). The difference from `build` is
 that something is already working and someone already recognizes it. **Identity
 preservation beats novelty.** A redesign that erases what users recognize is a rewrite
 sold as an improvement.

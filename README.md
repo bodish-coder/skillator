@@ -129,7 +129,14 @@ both alongside `skills/` — the skills refer to them.
   file, so only the rules that mode needs are loaded. Orients on register plus
   three tunable dials (variance / motion / density), plans then critiques the plan
   before writing code, convenes a 2–3 expert panel for redesigns, and can publish
-  visual artboards you tweak before any code exists. Invoke with `/design-arwen`.
+  visual artboards you tweak before any code exists. Carries the depth most design
+  skills skip: a **product-UI** reference (forms, data tables, settings, multi-step
+  flows, permissions, i18n/RTL) tested against four data volumes and three
+  conditions; an **executed** ship gate with a real browser or simulator, measured
+  contrast and overflow, and a required list of what went unverified; accessibility
+  as a first-class constraint; and a `DESIGN.md` design memory it reads on entry and
+  leaves behind on exit — interoperable with one another skill already wrote.
+  Invoke with `/design-arwen`.
 - **ticket-checker** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with

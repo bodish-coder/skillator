@@ -1,7 +1,9 @@
 # `critique` — diagnosis only, no code
 
 Prereq: SKILL.md Phase 0 (platform + register, so you judge against the right bar) and
-[craft.md](craft.md) as the checklist.
+[craft.md](craft.md) as the checklist — plus [product-ui.md](product-ui.md)'s twelve-cell
+scale test and slop test when the target is product UI. See it rendered first
+([verify.md](verify.md)); a critique written from source is a guess.
 
 **Write no code in this mode.** Not "here's a quick fix", not a patch at the end. The
 deliverable is a ranked, evidenced list the user can act on or hand to `improve` /

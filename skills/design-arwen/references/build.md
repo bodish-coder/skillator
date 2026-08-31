@@ -1,7 +1,9 @@
 # `build` — new UI, from nothing
 
 Prereq: SKILL.md Phase 0–2 done (platform, register, dials, scene sentence, Design Read,
-direction, signature). Also read [craft.md](craft.md). Nothing exists to preserve — if
+direction, signature). Also read [craft.md](craft.md); product register also reads
+[product-ui.md](product-ui.md). Finish through [verify.md](verify.md) and leave a
+`DESIGN.md` behind. Nothing exists to preserve — if
 something does, you want [redesign.md](redesign.md) instead.
 
 ---
