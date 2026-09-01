@@ -137,7 +137,7 @@ both alongside `skills/` — the skills refer to them.
   as a first-class constraint; and a `DESIGN.md` design memory it reads on entry and
   leaves behind on exit — interoperable with one another skill already wrote.
   Invoke with `/design-arwen`.
-- **dev-alfred** — one entry point that switches the whole skillator workflow on:
+- **grayskull-power** — one entry point that switches the whole skillator workflow on:
   arms the standing skills (reads `TICKETS.md`, checks `handoff-watch` is wired),
   prints the state in a single line, then routes each request to the one skill
   that fits — across skillator (`sherlock-codes` for rot, `brainstorm-build-*` for
@@ -148,7 +148,7 @@ both alongside `skills/` — the skills refer to them.
   `security-review`, `run`/`webapp-testing` to see it actually work, and
   `workflow-authoring`/`mem-search` for agent work. Stops good
   skills going unused because nobody remembered them, and refuses to chain them
-  all "to be safe". Invoke with `/dev-alfred`.
+  all "to be safe". Invoke with `/grayskull-power`.
 - **handoff-watch** — installs a statusline probe and a `Stop` hook that watch
   Claude Code's usage limits (5-hour, 7-day and context windows) and, the moment
   any of them crosses 97%, make the session preserve itself before it is cut off:

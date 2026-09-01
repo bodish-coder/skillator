@@ -1,20 +1,21 @@
 ---
-name: dev-alfred
+name: grayskull-power
 description: >-
   Single entry point that turns on the skillator programming workflow — arms the
   always-on skills (ticket board, usage watch) and routes each piece of work to
   the right skillator skill (sherlock-codes, ticket-master, brainstorm-build-*,
-  design-arwen, merge-prep, deploy-niyoj, handoff…) instead of the user having to
-  remember which one to call. Use when the user says "dev mode", "activate the
-  programming skills", "turn on the skillator workflow", "use our skills", "set up
-  for coding", or starts real development work in a repo and no skillator skill is
-  active yet. Routes across both the skillator skills and the wider installed
-  toolkit (superpowers process skills, code-review, ponytail, run, mem-search,
-  workflow-authoring). Routes; it does not do the work itself — the routed skill
-  does. NOT for enabling/disabling skills on disk.
+  design-arwen, merge-prep, deploy-niyoj, handoff…) instead of the user having
+  to remember which one to call. Use when the user says "dev mode", "activate
+  the programming skills", "turn on the skillator workflow", "use our skills",
+  "by the power of grayskull", "grayskull", "set up for coding", or starts real
+  development work in a repo and no skillator skill is active yet. Routes across
+  both the skillator skills and the wider installed toolkit (superpowers process
+  skills, code-review, ponytail, run, mem-search, workflow-authoring). Routes;
+  it does not do the work itself — the routed skill does. NOT for
+  enabling/disabling skills on disk.
 ---
 
-# Dev Alfred (activate the skillator workflow)
+# Grayskull Power (activate the skillator workflow)
 
 One call, three jobs: **arm** the standing skills, **announce** the state,
 **route** each request to the right skillator skill. You still do the work — this
@@ -34,7 +35,7 @@ just stops good skills sitting unused because nobody remembered them.
 Then state the active set in **one line** — not a feature tour:
 
 ```
-dev-alfred: board 3 open (B2, F7, A1) · ponytail full · handoff-watch armed at 97%
+grayskull-power: board 3 open (B2, F7, A1) · ponytail full · handoff-watch armed at 97%
 ```
 
 ## 2. Route
