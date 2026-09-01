@@ -91,6 +91,12 @@ the handoff should be written immediately.
 
 ## Troubleshooting
 
+- **Never fires in one profile but works in another** — the wiring lives in
+  *that config dir's* `settings.json`. A `CLAUDE_CONFIG_DIR` profile
+  (`~/.claude-work`, `~/.claude-bodish`, …) is a separate install: arming
+  `~/.claude` arms nothing else. Wire every profile you actually code in, and
+  point `-Then` at that profile's own statusline command — the flag files are
+  shared (`~/.claude/handoff-watch/`) but the hooks are not.
 - **Never fires** — the statusline is where the percentage comes from. If
   `~/.claude/handoff-watch/<session_id>` does not exist, the probe is not wired in
   as `statusLine`, or this Claude Code build predates the `rate_limits` statusline
