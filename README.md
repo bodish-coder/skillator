@@ -137,20 +137,36 @@ both alongside `skills/` — the skills refer to them.
   as a first-class constraint; and a `DESIGN.md` design memory it reads on entry and
   leaves behind on exit — interoperable with one another skill already wrote.
   Invoke with `/design-arwen`.
-- **ticket-checker** — Jira-style serialised ticket IDs for AI coding chats: bugs
+- **dev-alfred** — one entry point that switches the whole skillator workflow on:
+  arms the standing skills (reads `TICKETS.md`, checks `handoff-watch` is wired),
+  prints the state in a single line, then routes each request to the one skill
+  that fits — across skillator (`sherlock-codes` for rot, `brainstorm-build-*` for
+  features, `design-arwen` for UI, `merge-prep`/`deploy-niyoj` for shipping) *and*
+  the wider installed toolkit: superpowers process skills first (`brainstorming`
+  before building, `systematic-debugging` before fixing, TDD,
+  `verification-before-completion` before claiming done), then `code-review`,
+  `security-review`, `run`/`webapp-testing` to see it actually work, and
+  `workflow-authoring`/`mem-search` for agent work. Stops good
+  skills going unused because nobody remembered them, and refuses to chain them
+  all "to be safe". Invoke with `/dev-alfred`.
+- **handoff-watch** — installs a statusline probe and a `Stop` hook that watch
+  Claude Code's usage limits (5-hour, 7-day and context windows) and, the moment
+  any of them crosses 97%, make the session preserve itself before it is cut off:
+  drain in-flight agents, sync `TICKETS.md` via `ticket-master` (statuses only),
+  then write the handoff with a status table matching the board ticket-for-ticket.
+  Fires once per session, threshold via `CLAUDE_USAGE_HANDOFF_PCT`. Invoke with
+  `/handoff-watch`.
+- **ticket-master** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with
   `[ ]` pending / `[~]` in-progress / `[!]` blocked / `[x]` done / `[-]` cancelled
   status. IDs are never reused or renumbered and new lines are appended, so
   teammates on the same branch and future chats can fetch the open set and nothing
-  gets forgotten. Starting a ticket dispatches its own agent — tickets are worked
-  in parallel, not in a line. Invoke with `/ticket-checker`.
-- **ticket-master** — `ticket-checker`'s board worked as a **dynamic workflow**:
-  scout the open set inline, then hand it to one deterministic script that fixes
-  and adversarially verifies every ticket in parallel, with structured verdicts
-  coming back. The main session still owns `TICKETS.md` — agents only report.
-  Use it over `ticket-checker` when 4+ tickets are open, the work is a sweep, or
-  the user says "ultracode". Invoke with `/ticket-master`.
+  gets forgotten. 1–3 tickets are dispatched as plain parallel agents; at 4+, a
+  sweep, or on "ultracode" it switches to a **dynamic workflow** — one
+  deterministic script that fixes and adversarially verifies every ticket in
+  parallel, with structured verdicts coming back. The main session always owns
+  `TICKETS.md`; agents only report. Invoke with `/ticket-master`.
 - **sherlock-codes** — forensic audit of a whole application: parallel **Fable**
   investigators sweep backend, frontend, boundaries, data, dependencies, error
   paths, config, architecture, tests, dead code, project conventions

@@ -13,10 +13,9 @@ description: >-
   allocates IDs by scanning the file (never reusing a number), keeps status as
   pending/in-progress/done, and appends rather than renumbering so parallel
   teammates don't conflict. NOT an issue tracker replacement and NOT for
-  syncing to real Jira/GitHub Issues. Same board as ticket-checker, but the open
-  set is worked as a single deterministic Workflow script — one agent per ticket,
-  fanned out and verified in one call. Prefer this one when several tickets are
-  open at once or the user says "ultracode", "work the board", "use a workflow",
+  syncing to real Jira/GitHub Issues. The open set is worked as a single
+  deterministic Workflow script — one agent per ticket, fanned out and verified in
+  one call — whenever several tickets are open at once or the user says "ultracode", "work the board", "use a workflow",
   "fan out agents".
 ---
 
@@ -125,9 +124,8 @@ exists to break.
 ## Workflow mode — working the board in one call
 
 Dynamic workflows let you write a script that orchestrates many agents
-deterministically: real control flow, structured results, a resumable run. That
-is the difference between `ticket-master` and `ticket-checker` — same board,
-scripted dispatch.
+deterministically: real control flow, structured results, a resumable run. Same
+board as plain dispatch, scripted.
 
 **Switch to workflow mode when any of these hold:**
 
