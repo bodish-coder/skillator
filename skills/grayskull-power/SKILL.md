@@ -93,6 +93,17 @@ Getting that order backwards is how a session produces confident wrong work.
 | Who calls this / what breaks if I change it | `codegraph` (`callers`, `impact`, `explore`) |
 | A whole-repo knowledge graph, docs and code together | `graphify` |
 
+**Tricky analysis and review go to Fable.** Anything where the answer is a
+judgement rather than a lookup — root-cause analysis, a code or design review, an
+architecture critique, a subtle-correctness or concurrency read, "why is this
+actually happening" — is farmed to subagents on Fable:
+`Agent({subagent_type: "claude", model: "fable", prompt: ...})`, one per angle,
+in a single message so they run in parallel. Tricky means: cause unknown, the
+reasoning spans files, or being wrong is expensive. A grep, a file read, a
+one-file diff, a mechanical sweep is not tricky — do it yourself; spawning an
+agent for it costs more than the answer. You keep the verdict: read the reports,
+reconcile them, and re-check anything an agent asserts without evidence.
+
 ### Skillator — our own
 
 | The request is… | Skill |
@@ -195,6 +206,7 @@ it.
 - Flip statuses when reality changes, not at the end — `[~]` on start, `[x]` only
   once verified against the repo.
 - Process skill first, implementation skill second — never the reverse.
+- Tricky analysis or review → Fable subagents in parallel; you reconcile.
 - Reproduce → read → map → tag → fix. Skipping a step is how confident wrong work ships.
 - Blast radius named before the edit, swept after it, sherlock before the commit.
 - Scope contract holds: >2 unrelated files, or an out-of-contract file, stops and asks.

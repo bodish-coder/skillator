@@ -1,7 +1,7 @@
 {
   "name": "skillator",
   "description": "Reusable agent skills (Claude Code, Cursor, Codex, Antigravity, Pi): a grayskull-power router, serialised bug/feature tickets, usage-limit auto-handoff, handoff write/resume, UI-to-functional planning, tiered brainstorm→build, native+web UI/UX design, agent-driven branch merge/prep, a VPS deployment prep wizard, a full-app forensic code audit, and a test-screenshot read-act-delete loop",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "author": {
     "name": "bodish-coder"
   },
