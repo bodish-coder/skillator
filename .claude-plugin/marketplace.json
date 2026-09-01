@@ -14,7 +14,7 @@
         "repo": "bodish-coder/skillator"
       },
       "description": "Reusable agent skills (Claude Code, Cursor, Codex, Antigravity, Pi): serialised bug/feature tickets, handoff write/resume, UI-to-functional planning, tiered brainstorm→build, native+web UI/UX design, agent-driven branch merge/prep, a VPS deployment prep wizard, a full-app forensic code audit, and a test-screenshot read-act-delete loop",
-      "version": "3.1.0",
+      "version": "3.2.0",
       "author": {
         "name": "bodish-coder"
       },

@@ -34,7 +34,7 @@ Create it if missing, with exactly this shape:
 ```markdown
 # TICKETS
 
-Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[x]` done · `[-]` cancelled
+Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[>]` deferred · `[x]` done · `[-]` cancelled
 IDs are permanent — never reuse or renumber. Append new tickets at the end of
 their section.
 
@@ -54,7 +54,7 @@ their section.
 ## Agent-found
 
 - [ ] A1 — Unhandled promise rejection in the upload worker (runtime)
-- [ ] A2 — `parseDate` silently returns Invalid Date on empty string (review)
+- [>] A2 — `parseDate` silently returns Invalid Date on empty string (deferred: after the parser rewrite)
 ```
 
 Line format, kept greppable: `- [<status>] <ID> — <one-line title>`. Optional
@@ -99,6 +99,13 @@ doubt, log it — a pending line is cheap.
   **open**: report it at session end, and unblock back to `[ ]` or `[~]` the
   moment the dependency clears. Never leave an agent spinning on a blocked
   ticket — flip it and move to the next one.
+- Postponed by choice — not now, waiting on a condition that isn't a hard
+  dependency (a later milestone, a build that hasn't run, hardware not on the
+  bench) → `[>]`, with ` (deferred: <until what>)` on the line. Deferred is
+  **not open and not closed** — it is off the board until the condition
+  arrives: not pending (nobody is picking it up next), not blocked (nobody owes
+  you anything), not cancelled (it will be done). Report it at session end as
+  its own line, and flip it back to `[ ]` when the condition arrives.
 - Dropped — won't fix, obsolete, duplicate, or the user called it off → `[-]`,
   with a short ` — reason` on the line (`[-] B9 — Safari flicker (dup of B4)`).
   Cancelled is a closed state, not a deleted one: the line and its number stay.
@@ -227,8 +234,9 @@ Features
 
 Agent-found
   [ ] A1 — Unhandled promise rejection in the upload worker
+  [>] A2 — `parseDate` returns Invalid Date on empty string (deferred: after the parser rewrite)
 
-6 open (4 pending · 1 in-progress · 1 blocked) · 9 closed (8 done · 1 cancelled) · 15 total
+6 open (4 pending · 1 in-progress · 1 blocked) · 1 deferred · 9 closed (8 done · 1 cancelled) · 16 total
 ```
 
 ### By status (`list tickets status`)
@@ -243,13 +251,16 @@ In progress
 Blocked
   [!] B3 — Avatar upload 500s over 5MB (blocked: needs S3 creds from ops)
 
+Deferred
+  [>] A2 — `parseDate` returns Invalid Date on empty string (deferred: after the parser rewrite)
+
 Pending
   [ ] B2b — add regression test (B2)
   [ ] F1 — Dark mode
   [ ] F2 — Bulk delete in the table view
   [ ] A1 — Unhandled promise rejection in the upload worker
 
-6 open (4 pending · 1 in-progress · 1 blocked) · 9 closed (8 done · 1 cancelled) · 15 total
+6 open (4 pending · 1 in-progress · 1 blocked) · 1 deferred · 9 closed (8 done · 1 cancelled) · 16 total
 ```
 
 A sub-part shown away from its parent carries the parent ID in trailing
@@ -260,30 +271,34 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
 
 - **Copy the line, don't rewrite it.** ID and title exactly as they appear in
   `TICKETS.md`, so the user can grep for what they just read.
-- **Open only, by default** (`[ ]`, `[~]`, `[!]`). Closed tickets on request
+- **Open and deferred, by default** (`[ ]`, `[~]`, `[!]`, `[>]`) — every
+  deferred ticket is listed, just counted apart. Closed tickets on request
   ("show everything", "what did we finish") — then `[x]` and `[-]` too.
 - **Drop empty sections.** No "Features: none", no empty `Blocked`.
-- **Blocked shows its reason**; that is the whole point of `[!]`.
-- **The counts must add up, and the line must show its work.** Five mutually
-  exclusive states, two buckets:
+- **Blocked and deferred show their reason**; that is the whole point of
+  `[!]` and `[>]`.
+- **The counts must add up, and the line must show its work.** Six mutually
+  exclusive states, two buckets and a loner:
   `open = pending + in-progress + blocked` (blocked is open, just stuck) ·
-  `closed = done + cancelled` · `total = open + closed`. Each bucket prints its
-  own subtotal with the breakdown in parentheses, so the arithmetic is checkable
-  on sight and blocked is never mistaken for a third bucket beside open.
-- **Always print all five states, zeros included.** Never drop a term because
+  `closed = done + cancelled` · deferred is **neither** — it stands alone
+  between them, so it never inflates the open count someone is judging the
+  week by · `total = open + deferred + closed`. Each bucket prints its own
+  subtotal with the breakdown in parentheses, so the arithmetic is checkable on
+  sight and blocked is never mistaken for a bucket beside open.
+- **Always print all six states, zeros included.** Never drop a term because
   it is `0`. `0 blocked` is information — it says nothing is stuck, which is
   exactly what someone scanning the board wants to know — and a fixed-shape line
   can be compared against last session's at a glance. An empty board still
   prints the full line:
 
   ```
-  0 open (0 pending · 0 in-progress · 0 blocked) · 0 closed (0 done · 0 cancelled) · 0 total
+  0 open (0 pending · 0 in-progress · 0 blocked) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total
   ```
 - **One count line after the list**, and nothing else. No commentary on the
   board's health, no suggested next ticket unless asked:
 
   ```
-  6 open (4 pending · 1 in-progress · 1 blocked) · 9 closed (8 done · 1 cancelled) · 15 total
+  6 open (4 pending · 1 in-progress · 1 blocked) · 1 deferred · 9 closed (8 done · 1 cancelled) · 16 total
   ```
 - Legend only if the user seems new to the board, and then one line.
 
