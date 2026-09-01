@@ -7,8 +7,8 @@ description: >-
   design-arwen, merge-prep, deploy-niyoj, handoff…) instead of the user having
   to remember which one to call. Use when the user says "dev mode", "activate
   the programming skills", "turn on the skillator workflow", "use our skills",
-  "by the power of grayskull", "grayskull", "set up for coding", or starts real
-  development work in a repo and no skillator skill is active yet. Routes across
+  "by the power of grayskull", "grayskull", "check screenshot", "set up for
+  coding", or starts real development work in a repo and no skillator skill is active yet. Routes across
   both the skillator skills and the wider installed toolkit (superpowers process
   skills, code-review, ponytail, run, mem-search, workflow-authoring). Routes;
   it does not do the work itself — the routed skill does. NOT for
@@ -89,7 +89,7 @@ Getting that order backwards is how a session produces confident wrong work.
 | Build a real feature, design-then-implement | `brainstorm-build-prime` (ceremony, Fable design) · `-mid` (all-Opus, no ceremony) · `-lite` (Sonnet offload) |
 | Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`) |
 | A static/mock UI that needs to actually work | `func-ui` |
-| Verify a change in a running app from screenshots | `screenshot-loop` |
+| "check screenshot", or verify a change in a running app visually | `screenshot-loop` |
 | Ready to merge a branch | `merge-prep`, then `merge-agent` |
 | Ship to a VPS / set up deployment | `deploy-wizard`, then `deploy-niyoj` |
 | Session ending, context or usage running out | `handoff` |
@@ -98,7 +98,26 @@ Getting that order backwards is how a session produces confident wrong work.
 **Nothing matches?** Do the work directly. A one-line edit needs no skill, and
 routing it through one is the opposite of the point.
 
-## 3. Keep it honest
+## 3. Blocked? Ask properly
+
+Anything that stops for the user — a decision, a missing fact, an approval —
+uses `AskUserQuestion`, never a plain paragraph of prose. Every option carries:
+
+- **what it does** — the concrete change, in one line
+- **where it hurts** — the cost, risk, or thing it rules out
+- **(Recommended)** on the first option, which is the one you'd pick
+
+If the choice needs more than a chip's worth of context to judge — a layout, a
+diff, a table of trade-offs, a plan, competing designs — build it as an
+**artifact** first (load `artifact-design`), hand it over, then ask. Terminal
+scrollback is not where a decision gets made.
+
+**Keep artifacts local.** Write the HTML to a file in the repo or scratchpad and
+give the user the path — do not call the `Artifact` tool. Publishing puts the
+page on claude.ai; only do that when the user asks for a link or says to share
+it.
+
+## 4. Keep it honest
 
 - Ticket first, code second: anything worth more than one edit gets an ID before
   work starts, so a lost session loses nothing.
