@@ -14,8 +14,10 @@ description: >-
   the ground rules for the session: reproduce before fixing, map the code with
   codegraph (init it if the repo is unindexed) before suggesting a remedy, name
   the blast radius, and run sherlock-codes over the staged diff before every
-  commit. Routes; it does not do the work itself — the routed skill does. NOT for
-  enabling/disabling skills on disk.
+  commit. Routes; it does not do the work itself — the routed skill does. Runs on
+  Claude Code, Codex, Cursor, Antigravity/Gemini and Pi — the host-specific
+  mechanics (loading a skill, delegating, asking) come from PLATFORMS.md. NOT
+  for enabling/disabling skills on disk.
 ---
 
 # Grayskull Power (activate the skillator workflow)
@@ -24,6 +26,26 @@ One call: **arm** the standing skills, **announce** the state, **route** each
 request to the right skillator skill — under ground rules (§3, §4) that keep a
 remedy from becoming three new tickets. You still do the work — this
 just stops good skills sitting unused because nobody remembered them.
+
+## 0. Host
+
+Works on every host skillator supports. Detect it and read
+**`PLATFORMS.md` at the plugin root** (`../../PLATFORMS.md`) — that file owns
+skill paths, delegation, tier switching and context checkpoints. Only the
+routing below is this skill's own.
+
+What changes per host, and nothing else:
+
+| This skill says | Claude Code | Everywhere else |
+|---|---|---|
+| "invoke `<skill>`" | `Skill` tool | `/skill:<name>` or `/<name>` where it exists; otherwise read that skill's `SKILL.md` and follow it yourself — never hand skill *interpretation* to a subagent |
+| "Fable subagents" (§Agent work) | `Agent` + `model: "fable"` | the host's strongest **reasoning** tier: cursor `gpt-5.6-sol-medium` via `Task`, codex `gpt-5.6-sol` at `reasoning_effort: high`, antigravity/pi `/model` to the best reasoner. No delegation available → one analysis pass in-session, design-only prompt, and say so |
+| `AskUserQuestion` | the tool | a numbered list of the same options — what it does · where it hurts · which is recommended |
+| "keep artifacts local" | write the file, give the path | identical, and never publish |
+| `ponytail` badge, `handoff-watch` hooks | statusline + `Stop` hook | no statusline or hooks → state the laziness level in text, and run `handoff` manually when context gets tight |
+
+`codegraph`, `TICKETS.md`, git and the ground rules in §3–§4 are plain files and
+commands — they work the same everywhere, no adapter needed.
 
 ## 1. Arm (do this once, on invoke)
 
@@ -108,7 +130,8 @@ judgement rather than a lookup — root-cause analysis, a code or design review,
 architecture critique, a subtle-correctness or concurrency read, "why is this
 actually happening" — is farmed to subagents on Fable:
 `Agent({subagent_type: "claude", model: "fable", prompt: ...})`, one per angle,
-in a single message so they run in parallel. Tricky means: cause unknown, the
+in a single message so they run in parallel — on another host, its reasoning
+tier per §0. Tricky means: cause unknown, the
 reasoning spans files, or being wrong is expensive. A grep, a file read, a
 one-file diff, a mechanical sweep is not tricky — do it yourself; spawning an
 agent for it costs more than the answer. You keep the verdict: read the reports,
