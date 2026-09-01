@@ -148,7 +148,13 @@ both alongside `skills/` — the skills refer to them.
   `security-review`, `run`/`webapp-testing` to see it actually work, and
   `workflow-authoring`/`mem-search` for agent work. Stops good
   skills going unused because nobody remembered them, and refuses to chain them
-  all "to be safe". Invoke with `/grayskull-power`.
+  all "to be safe". It also sets the session's ground rules: reproduce before
+  fixing, read the real source rather than presuming, map the code with
+  `codegraph` (initialised on entry) before proposing a remedy, name the blast
+  radius — callers, impact, affected tests — before the edit, hold a per-ticket
+  scope contract with a two-file limit, tag every claim verified/inferred/guessed,
+  sweep the regressions after the fix, and run `sherlock-codes` over the staged
+  diff before every commit, capped at three passes. Invoke with `/grayskull-power`.
 - **handoff-watch** — installs a statusline probe and a `Stop` hook that watch
   Claude Code's usage limits (5-hour, 7-day and context windows) and, the moment
   any of them crosses 97%, make the session preserve itself before it is cut off:
