@@ -50,6 +50,16 @@ Then state the active set in **one line** — not a feature tour:
 grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · ponytail full · handoff-watch armed at 97%
 ```
 
+…and close the arming with the banner, on its own line, always last, always
+exactly this — a bold heading so it is unmissable in the scrollback:
+
+```markdown
+## ⚔️ I HAVE THE POWER!!
+```
+
+It fires **once**, when arming finishes — not on every routed request, and not
+if arming failed. It is the visual receipt that the workflow is on.
+
 ## 2. Route
 
 Match the request, invoke that skill, follow it. One skill at a time — chaining
