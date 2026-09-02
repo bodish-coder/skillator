@@ -46,7 +46,9 @@ Before dispatching anything, spend one pass yourself:
   audit that plus everything it touches, and say what you left out. If they named
   a PR (`sherlock #482`), the scene is that PR's diff plus everything it touches
   — `gh pr view` and `gh pr diff` for the change, and read the surrounding code
-  so a finding is about the change and not the file's whole history.
+  so a finding is about the change and not the file's whole history. Same for a
+  pre-commit sweep: `git diff --cached --name-only` is the scene — audit those
+  files and what they touch, and say what you left out.
 - Size check. If the tree is huge, split each dimension by directory rather than
   handing one agent 4000 files. An investigator with too much to read reports
   vagueness, and vague findings are worse than none.

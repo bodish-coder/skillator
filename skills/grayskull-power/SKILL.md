@@ -200,7 +200,10 @@ Every ticket names the files it may touch, before work starts. Then:
 it afterwards. Run the callers you named, plus `codegraph affected <changed
 files>` for the tests that cover them. Green, or the fix is not done.
 
-Then `sherlock-codes` over the staged diff, looping:
+Then `sherlock-codes` over the staged diff — **scoped to the files in this
+commit**, not the whole repo. Give it `git diff --cached --name-only` as the
+scene: the changed files plus what they touch, so a finding is about this change
+and not the file's whole history. Loop:
 
 1. Findings? Fix them, re-stage, run it again.
 2. Real but out of scope → `A` ticket via `ticket-master`, then commit.
