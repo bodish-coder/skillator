@@ -22,6 +22,15 @@ description: >-
 
 # Grayskull Power (activate the skillator workflow)
 
+**First line of your reply on invoke, before any tool call, verbatim and alone:**
+
+```markdown
+## ⚔️ I HAVE THE POWER!!
+```
+
+Unconditional. It is the receipt that the skill loaded, not a reward for a
+clean arming — print it, then arm.
+
 One call: **arm** the standing skills, **announce** the state, **route** each
 request to the right skillator skill — under ground rules (§3, §4) that keep a
 remedy from becoming three new tickets. You still do the work — this
@@ -72,15 +81,8 @@ Then state the active set in **one line** — not a feature tour:
 grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · ponytail full · handoff-watch armed at 97%
 ```
 
-…and close the arming with the banner, on its own line, always last, always
-exactly this — a bold heading so it is unmissable in the scrollback:
-
-```markdown
-## ⚔️ I HAVE THE POWER!!
-```
-
-It fires **once**, when arming finishes — not on every routed request, and not
-if arming failed. It is the visual receipt that the workflow is on.
+The banner was already printed at the top of the reply (see above). It fires
+**once per session**, on invoke — not on every routed request.
 
 ## 2. Route
 
