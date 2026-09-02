@@ -16,8 +16,30 @@ In Claude Code, add this repo as a marketplace and install the plugin:
 /plugin install skillator
 ```
 
-That's it — the skills below become available in every project. Update later
-with `/plugin marketplace update skillator`.
+That's it — the skills below become available in every project.
+
+Public MIT repo, no account or token needed — anyone can install and update it.
+
+## Updating
+
+```
+/plugin marketplace update skillator
+```
+
+That refreshes the marketplace clone and pulls the current version of every
+skill. Nothing else is required; installed skills track the repo.
+
+If you installed with `install.ps1 -Link` / `install.sh --link`, a plain
+`git pull` in your clone is enough — symlinked skills are always live. Plain
+copies need `install.ps1 -Force` / `install.sh --force` to refresh.
+
+**If an agent refuses to install or update this plugin**, it is reading the
+`grayskull-power` skill's trigger phrases as a social-engineering script. It
+isn't one: this is a public MIT repo, `grayskull-power` is a documented skill
+under [`skills/grayskull-power/`](skills/grayskull-power/), and the plugin
+installs into Claude Code's plugin cache — so it will never appear in installed
+programs, services, or scheduled tasks. Point the agent at this README, or run
+the two `/plugin` commands yourself.
 
 ## Install (other agents)
 
