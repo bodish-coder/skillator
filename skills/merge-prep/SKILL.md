@@ -61,7 +61,8 @@ If the branch is already pushed, say so now: this prep adds commits that will ne
 
 Compute the branch's diff against the **merge base**, per file:
 `git diff --stat <base>...<branch>` and the full diff. Classify every changed path
-(a cheap-tier analysis agent — Haiku on Claude Code, the equivalent row in the
+(a cheap-tier analysis agent — Sonnet on Claude Code, matching `merge-agent`'s
+Phase 1; the equivalent row in the
 `PLATFORMS.md` (beside the installed skills or at the repo root) elsewhere, or just the main session where no delegation
 exists — can summarize the branch's *intent* from its commits/PR body and flag
 off-purpose files, cheap and it's the whole judgment):

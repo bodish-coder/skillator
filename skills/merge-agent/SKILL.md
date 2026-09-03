@@ -25,9 +25,25 @@ Agents do the reading and the routing; **git does the merging on a throwaway
 integration branch**, so nothing is risked. The base branch (main/develop) is
 never modified directly and nothing leaves the machine without an explicit yes.
 
-**Model tiers (cost by job):** branch **analysis → Haiku**, **trivial conflict
-auto-resolve → Sonnet**, **semantic conflict proposal + verification + rework →
-Opus**. Dispatch via the Agent tool with the matching `model` override.
+**Model tiers (best model where being wrong is expensive, cheap everywhere
+else):** branch **analysis → Sonnet**, **trivial conflict auto-resolve →
+Sonnet**, **semantic conflict resolution proposed → Fable**, **that resolution
+applied, plus verification failures and rework → Opus**. Dispatch via the Agent
+tool with the matching `model` override.
+
+Same split the rest of skillator uses — **Fable decides, Opus builds.** A bad
+semantic merge is the worst failure this skill has: it exits 0, the tests pass,
+and a change quietly disappears until production. *Deciding* what the merged hunk
+should say is judgement, not lookup, so it goes to the strongest model
+(`model: "fable"`; on another host, its top reasoning tier per §Other hosts).
+*Writing it in*, and fixing whatever the verification then catches, is
+implementation — that is Opus's job, and handing it to the design tier is both
+worse and dearer.
+
+**Neither tier touches the mechanical majority.** Fable sees only the semantic
+conflict hunks — typically a handful, not the merge. Opus sees only those
+resolutions and a failing check. Enumerating branches, regenerating a lockfile
+and re-running a green suite stay on Sonnet.
 
 **The aim:** the source's work arrives in the destination, and the destination
 is not disturbed on the way in. Both halves are *verified* in Phase 4 — a merge
@@ -75,9 +91,9 @@ Never start merging on an unconfirmed branch list or base.
 > untouched. Read that document (`docs/merges/prep-<branch>-*.md`) before merging: it
 > names every path deliberately dropped and every reviewer edit.
 
-## Phase 1 — Analyse the branches (Haiku, in parallel)
+## Phase 1 — Analyse the branches (Sonnet, in parallel)
 
-One analysis subagent per branch (`model: "haiku"`), each returns structured:
+One analysis subagent per branch (`model: "sonnet"`), each returns structured:
 
 ```
 BRANCH:     <name>  (ahead <n> / behind <n> vs base)
@@ -112,7 +128,8 @@ each conflicted file, then route**:
   prefer regenerate over hand-merge), import ordering, formatting/whitespace-only,
   append-only files (changelogs), both-sides-added non-overlapping code, generated
   files.
-- **Semantic / logic → escalate (`model: "opus"` proposes, user approves):** the
+- **Semantic / logic → escalate (`model: "fable"` proposes, user approves,
+  `model: "opus"` applies):** the
   same function/body edited both sides, signature/API changes, one side deleted
   what the other modified, config/schema/migration conflicts, any overlapping logic.
   The agent explains **both sides + a proposed resolution + why**; the user
@@ -141,7 +158,7 @@ For each conflicted hunk, decide and log one of:
 | `source` | The hunk is the feature. The destination's version is the old world. |
 | `destination` | Base moved ahead here and the source is stale — its version predates base's change. |
 | `both` | Non-overlapping additions in the same region: keep both, order deliberately. |
-| `rewrite` | Neither side is right once combined — Opus proposes, user approves, and the log carries the proposed text. |
+| `rewrite` | Neither side is right once combined — Fable proposes, user approves, Opus applies, and the log carries the proposed text. |
 
 **Ask the direction on any hunk where the two sides genuinely disagree about
 behaviour** — do not resolve it from the merge's overall direction. Merging a feature
@@ -202,8 +219,11 @@ a name-only diff, and a green test suite will all report success.
 
 Then detect the project's build/test command. **Ask whether to run verification**
 (default **yes** if a test command is detected — a conflict-free merge is not a
-correct one). If yes, run it (Opus agent or main session); on failure, route the fix
-like a conflict ([trivial]→Sonnet, [semantic]→Opus), re-run, and update the log.
+correct one). If yes, run it (Sonnet agent or main session). A **failure is
+Opus's**, not the runner's: a broken test after a merge is a real defect in the
+merged code, and Opus fixes it. Escalate back to Fable only when the fix means
+re-deciding a semantic resolution rather than repairing one — re-run, and update
+the log.
 Gate "done" on green.
 
 ## Phase 5 — End state (ask at run time)
@@ -266,8 +286,9 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
   generated files only; anywhere else it is a change discarded with exit 0.
 - **Everything on the integration branch**, everything in the merge log — the run is
   auditable and 100% revertible by deleting the branch.
-- **Route conflicts by class, not by vibe.** Trivial→Sonnet, semantic→Opus+approval,
-  analysis→Haiku. Unsure = semantic.
+- **Route conflicts by class, not by vibe.** Trivial→Sonnet,
+  semantic→Fable proposes + approval + Opus applies, analysis→Sonnet, broken
+  verification→Opus. Unsure = semantic.
 - **Agents read and route; git merges.** Don't hand-edit conflict markers when a
   clean `git` resolution (regenerate lockfile, `--theirs`/`--ours` on a lockfile) is right.
 - **Two run-time gates: verification and push/PR.** Both ask; push/PR needs an
@@ -282,11 +303,15 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
 
 ## Other hosts
 
-Haiku/Sonnet/Opus and the Agent tool above are the **Claude Code** defaults. On
+Sonnet/Fable/Opus and the Agent tool above are the **Claude Code** defaults. On
 Cursor, Codex, Antigravity, Pi, or Prime Agent, map through `PLATFORMS.md` (beside the
 installed skills, or at the repo/plugin root): branch analysis → **cheap tier**,
-trivial conflicts → **cheap
-tier**, semantic conflicts + verification + rework → **build/deep tier**. Where
+trivial conflicts → **cheap tier**, semantic conflicts *decided* by **the host's
+strongest reasoning tier** (cursor `gpt-5.6-sol-medium`, codex `gpt-5.6-sol` at
+`reasoning_effort: high`, antigravity/pi the best reasoner), then *applied* —
+with verification failures and rework — by its **build tier**. Where the host has
+only one top tier, it does both. No delegation available → resolve semantic
+conflicts in-session and say so; never hand them to a cheaper agent. Where
 the host can't run analysis agents in parallel, analyse branches sequentially and
 write each summary to the merge log as you go — slower, same result. The approval
 gates (verification, push/PR) do not relax on any host.
