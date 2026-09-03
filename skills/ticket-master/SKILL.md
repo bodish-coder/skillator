@@ -271,6 +271,12 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
 
 - **Copy the line, don't rewrite it.** ID and title exactly as they appear in
   `TICKETS.md`, so the user can grep for what they just read.
+- **Never collapse a ticket to its ID.** `A295 A297 A299 A301` is not a board,
+  it is a receipt — the reader has to grep every number to learn anything, which
+  is the exact work the list was supposed to save. A ticket line is **ID + title,
+  always**, no matter how many there are. A long title truncates at ~80 chars
+  with `…`; it never disappears. If the board is too long to print, **page it —
+  never abbreviate it** (below).
 - **Open and deferred, by default** (`[ ]`, `[~]`, `[!]`, `[>]`) — every
   deferred ticket is listed, just counted apart. Closed tickets on request
   ("show everything", "what did we finish") — then `[x]` and `[-]` too.
@@ -301,6 +307,31 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
   6 open (4 pending · 1 in-progress · 1 blocked) · 1 deferred · 9 closed (8 done · 1 cancelled) · 16 total
   ```
 - Legend only if the user seems new to the board, and then one line.
+
+### Big boards (30+ open)
+
+Long boards are where the list is *most* needed and most often ruined. Do not
+compress by dropping titles. Compress by **showing less of the board, in full**:
+
+1. **In-progress and blocked print in full, always.** However big the board,
+   that is what the person asking is actually working on and stuck behind.
+2. **Pending prints in full up to 20 lines per section**, oldest first. Over
+   that, print 20 and add one line naming the rest and how to see it:
+
+   ```
+   … 24 more pending in Agent-found — `list tickets A` for all of them
+   ```
+3. **Group by ID prefix, not by the heading the line sits under.** Append-only
+   files drift: a `B68` logged during a burst of agent findings ends up under
+   `## Agent-found` and stays there forever. The ID is the classification; the
+   heading is just where the line happened to land. Sort within a group by status
+   (in-progress, blocked, deferred, pending) then by number.
+4. **`list tickets <prefix>`** (`list tickets A`, `list tickets B`) scopes to one
+   type and prints it whole, no cap. That is the escape hatch the truncation line
+   points at, so it must actually work.
+
+The count line stays exactly the same — it already covers the whole board, which
+is what makes truncating the list safe.
 
 ## Rules
 

@@ -4,7 +4,8 @@ description: >-
   Single entry point that turns on the skillator programming workflow — arms the
   always-on skills (ticket board, usage watch) and routes each piece of work to
   the right skillator skill (sherlock-codes, ticket-master, brainstorm-build-*,
-  design-arwen, merge-prep, deploy-niyoj, handoff…) instead of the user having
+  design-arwen, live-build, merge-prep, deploy-niyoj, handoff…) instead of the
+  user having
   to remember which one to call. Use when the user says "dev mode", "activate
   the programming skills", "turn on the skillator workflow", "use our skills",
   "by the power of grayskull", "grayskull", "check screenshot", "set up for
@@ -71,6 +72,12 @@ commands — they work the same everywhere, no adapter needed.
   means the repo has no indexable source — a docs/skills/config repo — so say
   `codegraph: no code to index` and never retry it this session. Already indexed
   → `codegraph sync` and move on.
+- **`live-build`** — if the repo has a runnable surface (a dev script, `Cargo.toml`,
+  `CMakeLists.txt`, a `Makefile`, `go.mod`, a Python entry point), it is armed:
+  the *first* change to that project starts the app or build in the background
+  and hands over the URL/command **before** the edits, so the user watches it run
+  instead of waiting on a reply. Nothing runnable → say `live-build: nothing to
+  launch` once and drop it. Never auto-launch simulators, migrations or deploys.
 - **`handoff-watch`** — confirm it is wired (`statusLine` runs `usage-watch … -Mode
   probe` and a `Stop` hook runs `-Mode gate`). Not wired → say so in one line and
   offer to wire it. Never wire it silently.
@@ -78,7 +85,7 @@ commands — they work the same everywhere, no adapter needed.
 Then state the active set in **one line** — not a feature tour:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · ponytail full · handoff-watch armed at 97%
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · ponytail full · live-build armed (npm run dev) · handoff-watch armed at 97%
 ```
 
 The banner was already printed at the top of the reply (see above). It fires
@@ -111,6 +118,7 @@ Getting that order backwards is how a session produces confident wrong work.
 
 | When | Skill |
 |---|---|
+| About to change anything runnable — start it first so the user can watch | `live-build` (armed by default, §1) |
 | "Does this run?" — launch the app and look | `run` |
 | Drive a real browser: click, fill, read console | `webapp-testing`, `browse` |
 | Any chart, graph, dashboard — before the first line | `dataviz` |
@@ -247,6 +255,7 @@ it.
 - Tricky analysis or review → Fable subagents in parallel; you reconcile.
 - Reproduce → read → map → tag → fix. Skipping a step is how confident wrong work ships.
 - Blast radius named before the edit, swept after it, sherlock before the commit.
+- Runnable project? The `live:` line goes in the *first* reply, not after the work.
 - Scope contract holds: >2 unrelated files, or an out-of-contract file, stops and asks.
 - Re-announce the one-line state only when it changes (board moved, watch fired),
   never every turn.

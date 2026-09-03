@@ -6,7 +6,7 @@ their section.
 
 ## Bugs
 
-_none yet_
+- [x] B1 — ticket-master collapses large boards to bare IDs (`A295 A297 A299…`) with no titles, making the list unreadable and un-actionable; the skill said "copy the line" but had no rule for 30+ open tickets
 
 ## Features
 

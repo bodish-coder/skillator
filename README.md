@@ -208,6 +208,14 @@ both alongside `skills/` — the skills refer to them.
   your yes, post the surviving findings back as inline `gh` comments with
   sha-anchored permalinks. Merging is not its job — that hands off to
   `merge-agent`. Invoke with `/sherlock-codes`.
+- **live-build** — starts the project's app or build in the background **before**
+  the first edit and hands over the URL, watch command, or `[n/total]` progress
+  stream in the opening reply, so you watch the thing run while the agent works
+  instead of waiting on a spinner. Knows JS/web dev servers (hot reload), Rust
+  (`cargo watch`), C++ (`ninja`/`cmake --build`), Go, Python, Electron; refuses to
+  auto-launch simulators, migrations or deploys. Honest about compiled builds —
+  progress and a still-runnable last-good binary, not a fake preview. Armed as
+  standard by `grayskull-power`. Invoke with `/live-build`.
 - **screenshot-loop** — the user drops test screenshots in one folder; the agent
   reads every one, acts on what they show, verifies, then deletes exactly the
   files it consumed so the folder is clean for the next round. The directory is
