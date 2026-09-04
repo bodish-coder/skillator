@@ -168,6 +168,21 @@ Because the branch now sits on current base, untouched files carry base's latest
 `git diff --stat <base> <branch>` — confirm it equals the INTENDED (+approved) set and
 nothing else, plus the prep document itself.
 
+**If `TICKETS.md` is in the diff, check it before anything else:**
+
+```
+sh practice/scripts/check-tickets.sh
+```
+
+The board is append-only so git can merge it, which means both branches append at the
+same point, conflict there, and get resolved by keeping both sides — the obvious move
+and the wrong one, because two branches may have allocated the same ID. A duplicate
+`A43` is not a merge artefact you can live with: an ID is permanent and referenced from
+commits and chat, so one meaning two things is unrecoverable by convention alone. The
+check fails on duplicates and on committed conflict markers. Fix per `ticket-master`'s
+collision rule — the **later** line takes a fresh number and keeps ` (was A43)`; the
+earlier one is never renumbered — then re-run it.
+
 Then **reconcile against the pre-prep tag.** A name-only tip-vs-tip diff is *not*
 enough: it works at path granularity, so on any file base also moved it lists the path
 either way, and the doc row "base moved ahead" truthfully explains the file while

@@ -67,6 +67,23 @@ Sub-parts are indented two spaces under their parent.
 renames its ticket to a fresh number and leaves ` (was B7)` on the line. Never
 renumber the earlier one.
 
+**Detect the collision; do not hope someone spots it.** The board is append-only
+precisely so git can merge it, and the cost of that is the one failure this file
+cannot tolerate: two branches allocate `A43`, the merge conflicts at the same
+append point, and whoever resolves it keeps both sides — which is the obvious
+resolution and the wrong one. Now `A43` means two things and "do A43" is
+ambiguous forever. **After any merge, rebase, or cherry-pick that touched
+`TICKETS.md`, and before committing one:**
+
+```sh
+sh practice/scripts/check-tickets.sh          # or a path to the board
+```
+
+It fails on duplicate IDs and on committed conflict markers, and prints the
+offending lines with their numbers. A clean board is a precondition for
+allocating the next ID, not a nicety: allocating from a board with a duplicate
+`A43` in it will hand out `A44` while two `A43`s remain.
+
 ## When to log
 
 - User reports a bug → log a `B` ticket before fixing.

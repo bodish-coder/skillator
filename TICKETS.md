@@ -7,6 +7,8 @@ their section.
 ## Bugs
 
 - [x] B1 — ticket-master collapses large boards to bare IDs (`A295 A297 A299…`) with no titles, making the list unreadable and un-actionable; the skill said "copy the line" but had no rule for 30+ open tickets
+- [x] B2 — merging two branches that both appended tickets produces duplicate IDs: the appends collide at the same point, git conflicts, and the natural resolution (keep both sides) leaves two `A43`s with nothing to detect it — `ticket-master`'s collision rule relied on a human noticing, and neither merge skill mentioned `TICKETS.md` at all. Reproduced end-to-end in a scratch repo. Fixed by `practice/scripts/check-tickets.sh` (duplicate IDs + committed conflict markers), wired into `ticket-master` (after any merge/rebase/cherry-pick, and as a precondition for allocating the next ID) and `merge-prep` Phase 3
+- [x] A50 — `practice/scripts/check-grayskull-sync.sh` was committed mode 100644: it postdates the A15 sweep that set +x on the four .sh files then shipped, so it was never covered. `sh <script>` works, `./<script>` does not, and a Linux clone or CI step invoking it directly gets Permission denied. Found while adding check-tickets.sh; both are now 100755
 
 ## Features
 
