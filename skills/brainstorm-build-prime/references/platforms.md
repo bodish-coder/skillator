@@ -1,79 +1,63 @@
 # Platform adapters — brainstorm-build-prime
 
-Generic mechanics (host detection, skill paths, delegation, tier switching,
-frontmatter portability) live in **`PLATFORMS.md` at the repo/plugin root**
-(`../../../PLATFORMS.md` from this file). Read that first. This file adds only
-what's specific to *this* skill: which model plays which tier, and what the two
-context checkpoints mean on each host.
+**Read the root `PLATFORMS.md` first — it is the authority and this file does not
+repeat it.** It owns host detection, skill paths, how you delegate and switch
+tier on each host, the tier vocabulary (`deep` / `build` / `cheap` /
+`orchestrator`), the per-host model slug for each tier, context-checkpoint
+mechanics, hooks, frontmatter portability, and the non-negotiables. Anything you
+need about *a host* is there; anything you need about *this skill's run* is here.
 
-## Role tiers
+Where it is: **the repo/plugin root**, two levels above this skill's directory
+once installed (`../../PLATFORMS.md` from this file — skills land at
+`<dest>/<name>/`, the docs at `<dest>/`), or `../../../PLATFORMS.md` inside the
+skillator repo, where skills live under `skills/`.
 
-| Tier | Job | Must not |
-|------|-----|----------|
-| **design** | Creative design thinking — approaches, tradeoffs, contracts, task breakdown | Write production code or edit the repo |
-| **build** | Implement exactly the design — strongest coder available | Redesign or expand scope beyond the design file |
-| **orchestrator** | Main session — dispatch, write the session file, run handoff and checkpoints | Design or code directly (bar tiny edits to the session record) |
+## This skill's three seats, in root tier terms
 
-Different models for design vs build wherever the host allows it. Same model for
-both is a fallback — record it in the session file.
+| Seat in this skill | Root tier | Job in this run | Must not |
+|---|---|---|---|
+| **Design pass** | `deep` | Approaches, tradeoffs, contracts, the task breakdown, written to the design file | Write production code or edit the repo |
+| **Build pass** | `build` | Implement exactly what the design file says | Redesign, or expand scope beyond the design file |
+| **You, the session** | `orchestrator` | Dispatch, write the session `.md`, run handoff and Checkpoint A | Design or code directly, bar tiny edits to the session record |
 
-## Model picks per host
-
-| Host | design | build |
-|------|--------|-------|
-| **claude-code** | Agent tool, `model: "fable"` | Agent tool, `model: "opus"` |
-| **cursor** | Task tool, `gpt-5.6-sol-medium` | Task tool, `claude-opus-5-thinking-high` |
-| **codex** | subagent with a design-only prompt (no `apply_patch`), `gpt-5.6-sol` at `reasoning_effort: high` — `xhigh` for hard problems | subagent(s), `gpt-5.6-sol`; up to 8 in parallel |
-| **antigravity** | `/model` → Gemini 3.1 Pro (or Claude Opus if on plan), design-only prompt; background subagent if delegating | `/model` → strongest coder on plan (Claude Opus / Gemini 3.1 Pro) |
-| **pi** | `/model` → strongest reasoning provider configured, design-only prompt | `/model` → strongest coding provider configured |
-| **prime-agent** | `rlm(...)` child agent with a design-only prompt | `rlm(...)` child agent, or the main session after the design file exists |
-
-Slug unavailable → nearest tier from the host's allowed list, substitution noted
-in the session file. Never invent slugs.
-
-**Where there's no delegation mechanism** (pi without a subagent extension, or
-antigravity if `/agents` is unavailable): run the design
-pass **in the main session with a design-only prompt and no repo edits**, write
-the design file, switch model, then build from that file. The file — not chat
-history — is what carries the design across the switch. Same discipline, one
-session.
+Take the slug for `deep` and for `build` off the root Role tiers table, on your
+host's column. Use two *different* models where the host has them; where the
+design pass and the build pass end up on the same model, record that in the
+session file.
 
 ## Checkpoint A — shedding context
 
-Runs **after** `handoff` has written a verified handoff to disk. Never shed
-context without it.
+The one checkpoint this skill has, and it is not a host feature — it is a rule
+about ordering:
 
-A skill cannot invoke a slash command, so Checkpoint A is never `/compact`. It is
-always the same move: **carry the design forward as a file path, not as chat
-history**, and let each subagent hold its own context. The host table below only
-says what else is available if the orchestrator's context is genuinely tight.
+1. It runs **only after `handoff` has written a verified handoff to disk.** Never
+   shed context without one.
+2. It is **never `/compact`** — a skill cannot invoke a slash command. The move is
+   always the same: carry the design forward **as a file path**, not as chat
+   history, and let each subagent hold its own context.
+3. Only if the orchestrator's context is still genuinely tight do you reach for
+   the host's own context checkpoint (root `PLATFORMS.md`, *Context checkpoint*
+   row) — and on hosts where that is something the *user* must type, say so once
+   and continue from the session file rather than waiting.
 
-| Host | If context is tight |
-|------|---------------------|
-| **claude-code** | auto-compaction handles it; tell the user once they may type `/compact`, continue from the session file |
-| **cursor** | offer a fresh composer turn seeded with session file + handoff (or in-thread summarization if the user prefers) |
-| **codex** | nothing to do — auto-compaction handles it; continue from the session file, not chat history |
-| **antigravity** | continue from the session file; suggest a new session if context is heavy |
-| **pi** | offer a new session seeded with the session file + handoff |
-| **prime-agent** | `/refine`, then continue from the session file; daemon session can be resumed with `prime-agent --resume <id>` |
-
-**There is no Checkpoint B.** Do not clear, reset, or start a new session at the
-end of a run — a skill can't, and the session `.md` + handoff already make a
-fresh start lossless whenever the *user* wants one.
+**There is no Checkpoint B.** Do not clear, reset or start a new session at the
+end of a run — a skill can't, and the session `.md` plus the handoff already make
+a fresh start lossless whenever the *user* wants one.
 
 ## Parallel builds
 
-Delegate in parallel where the host supports it (Agent/Task tools, antigravity
-background subagents, `rlm(...)`). Use a **git worktree** whenever parallel tasks
-would touch the same tree — on every host, including `prime-agent`, which is
-explicitly *not* a sandbox.
+Fan the build pass out wherever the host delegates in parallel. Two tasks of
+*this* design that would touch the same tree get a git worktree first
+(`PRACTICE.md` §8) — on every host, including the ones with no sandbox of their
+own.
 
 ## User overrides
 
-User-named platform or models win. Record in the session file header:
+A platform or model the user names wins over everything above. Record it in the
+session file header:
 
 ```
-PLATFORM: pi
+PLATFORM: <host>
 DESIGN_MODEL: <slug>
 BUILD_MODEL: <slug>
 ```

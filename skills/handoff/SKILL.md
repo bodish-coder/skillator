@@ -1,14 +1,11 @@
 ---
 name: handoff
-description: >
-  Generate an in-depth, verified session-handoff document (a Markdown file) so a
-  different person or AI can continue the work with zero loss of context, plan, or
-  intent. Use when the user asks to "hand off", "write a handoff", "create a
-  handoff doc", "document where we are", "prepare for the next session/person",
-  or wants a continuity/checkpoint summary of the current session. Reads the whole
-  conversation, VERIFIES done-vs-not-done against the actual repo (git, files,
-  tests) rather than trusting claims, and captures the reasoning behind decisions
-  so the thread of thought survives the handoff.
+description: >-
+  Use when the user asks to "hand off", "write a handoff", "create a handoff
+  doc", "document where we are", "prepare for the next session/person", or
+  wants a continuity/checkpoint summary of the current session — an in-depth,
+  verified session-handoff document (a Markdown file) so a different person or
+  AI can continue the work with zero loss of context, plan, or intent.
 ---
 
 # Session Handoff
@@ -28,8 +25,11 @@ abandoned ideas, and claims that may not match reality. **Ground every
   is uncommitted/dirty vs. only discussed.
 - Read/`ls`/`grep` the files a claim depends on — does the module/route/setting
   actually exist? (Absence of evidence ≠ done.)
-- Run or locate the tests that would prove a claim; note pass/fail. If you can't
-  run them, say so — never imply verification you didn't do.
+- Run the tests that would prove a claim; note pass/fail. A test file that
+  exists is not a test that passed — locating one earns **CLAIMED**, never
+  **DONE (verified)**, and a test that skips, or asserts nothing that could
+  fail, proves nothing however green it prints. If you can't run them, say so —
+  never imply verification you didn't do.
 
 Classify every item as one of: **DONE (verified)**, **CLAIMED (asserted in chat
 but not confirmed in repo)**, **IN-PROGRESS (partial / uncommitted)**, or

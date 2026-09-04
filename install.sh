@@ -21,11 +21,15 @@ for a in "$@"; do
   esac
 done
 
-# cli | marker (proves the CLI is installed) | global skills dir
+codex_home=${CODEX_HOME:-$HOME/.codex}
+
+# cli | marker (proves the CLI is installed) | global skills dir(s), '|'-separated
+# codex has two: the codex binary reads $CODEX_HOME/skills, while ~/.agents/skills
+# is the shared cross-agent dir other tools still read - so both are kept in sync.
 targets="
 claude-code|$HOME/.claude|$HOME/.claude/skills
 cursor|$HOME/.cursor|$HOME/.cursor/skills
-codex|$HOME/.codex|$HOME/.agents/skills
+codex|$codex_home|$codex_home/skills|$HOME/.agents/skills
 antigravity|$HOME/.gemini|$HOME/.gemini/config/skills
 pi|$HOME/.pi|$HOME/.pi/skills
 "
@@ -33,7 +37,45 @@ pi|$HOME/.pi|$HOME/.pi/skills
 # Claude Code can also have them via the plugin marketplace — that counts as installed.
 plugin=$(find "$HOME/.claude/plugins" -maxdepth 4 -type d -name skillator 2>/dev/null | head -1 || true)
 
-echo "$targets" | while IFS='|' read -r cli marker dest; do
+# install_into <cli> <dest>: sync the skills, then always refresh the shared docs.
+install_into() {
+  _cli=$1; _dest=$2
+  _n=0
+  for _s in "$src"/*/; do
+    _name=$(basename "$_s")
+    # a skill symlinked to this repo is live - never replace it with a stale copy
+    if [ -L "$_dest/$_name" ]; then continue; fi
+    if [ -f "$_dest/$_name/SKILL.md" ] && [ -z "$force" ]; then continue; fi
+    if [ "$_n" = 0 ]; then echo "$_cli -> $_dest"; fi
+    _n=$((_n + 1))
+    if [ -n "$dry" ]; then echo "        would install $_name"; continue; fi
+    mkdir -p "$_dest"
+    rm -rf "$_dest/$_name"
+    if [ -n "$link" ]; then
+      ln -s "${_s%/}" "$_dest/$_name"
+      echo "        > $_name (link)"
+    else
+      cp -R "$_s" "$_dest/$_name"
+      echo "        + $_name"
+    fi
+  done
+  if [ "$_n" = 0 ]; then
+    echo "ok    $_cli (all skills already installed) -> $_dest"
+  fi
+  # skills reference PLATFORMS.md / PRACTICE.md / WORKFLOW.md, practice/ and references/ beside the
+  # installed skills - refresh them every run, even when no skill needed installing,
+  # so the plain `git pull && ./install.sh` update path picks up doc changes.
+  if [ -n "$dry" ]; then
+    echo "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice/ references/ in $_dest"
+  else
+    mkdir -p "$_dest"
+    cp "$root/PLATFORMS.md" "$root/PRACTICE.md" "$root/WORKFLOW.md" "$_dest/"
+    rm -rf "$_dest/practice" && cp -R "$root/practice" "$_dest/"
+    rm -rf "$_dest/references" && cp -R "$root/references" "$_dest/"
+  fi
+}
+
+echo "$targets" | while IFS='|' read -r cli marker dests; do
   [ -n "$cli" ] || continue
   if [ ! -d "$marker" ] && ! command -v "$cli" >/dev/null 2>&1; then
     echo "skip  $cli (not installed)"
@@ -44,32 +86,14 @@ echo "$targets" | while IFS='|' read -r cli marker dest; do
     continue
   fi
 
-  n=0
-  for s in "$src"/*/; do
-    name=$(basename "$s")
-    # a skill symlinked to this repo is live - never replace it with a stale copy
-    if [ -L "$dest/$name" ]; then continue; fi
-    if [ -f "$dest/$name/SKILL.md" ] && [ -z "$force" ]; then continue; fi
-    if [ "$n" = 0 ]; then echo "$cli -> $dest"; fi
-    n=$((n + 1))
-    if [ -n "$dry" ]; then echo "        would install $name"; continue; fi
-    mkdir -p "$dest"
-    rm -rf "$dest/$name"
-    if [ -n "$link" ]; then
-      ln -s "${s%/}" "$dest/$name"
-      echo "        > $name (link)"
-    else
-      cp -R "$s" "$dest/$name"
-      echo "        + $name"
-    fi
+  oifs=$IFS
+  IFS='|'
+  for dest in $dests; do
+    IFS=$oifs
+    install_into "$cli" "$dest"
+    IFS='|'
   done
-  if [ "$n" = 0 ]; then
-    echo "ok    $cli (all skills already installed)"
-  elif [ -z "$dry" ]; then
-    # skills reference PLATFORMS.md / PRACTICE.md / WORKFLOW.md and practice/ beside the installed skills
-    cp "$root/PLATFORMS.md" "$root/PRACTICE.md" "$root/WORKFLOW.md" "$dest/"
-    rm -rf "$dest/practice" && cp -R "$root/practice" "$dest/"
-  fi
+  IFS=$oifs
 done
 
 echo

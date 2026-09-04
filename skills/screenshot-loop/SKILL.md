@@ -1,15 +1,12 @@
 ---
 name: screenshot-loop
 description: >-
-  Read the test screenshots a user drops in a project's screenshot folder, act on
-  what they show (fix the bug, apply the design change, confirm the behaviour),
-  then delete exactly the screenshots that were consumed so the folder is empty
-  and ready for the next round. Use when the user says "screenshots", "check the
-  screenshots", "I dropped new screenshots", "test screenshots", "look at the
-  latest run", or gives a screenshot directory path. On first use in a project it
-  asks for the directory once and remembers it in .screenshot-dir at the repo
-  root. NOT for taking screenshots (use a browser/app skill for that) and NOT for
-  permanent design assets — everything in that folder is treated as disposable.
+  Use when the user says "screenshots", "check the screenshots", "I dropped
+  new screenshots", "test screenshots", "look at the latest run", or gives a
+  screenshot directory path — test screenshots dropped in a project's
+  screenshot folder that need acting on and then clearing. NOT for taking
+  screenshots (use a browser/app skill for that) and NOT for permanent design
+  assets — everything in that folder is treated as disposable.
 ---
 
 # screenshot-loop — read, act, delete
@@ -21,10 +18,11 @@ ones you read. The folder is a mailbox, not an archive.
 
 Read `.screenshot-dir` at the repo root — one line, an absolute path.
 
-If it does not exist, ask the user for the path once, then write it:
+If it does not exist, ask the user for the path once, then write their answer
+to `.screenshot-dir` — not a placeholder, the path they actually gave you:
 
 ```
-C:\tools\Aewa-Airbender-aewag2\test_screenshots
+<absolute path the user gave you>
 ```
 
 If the user gives a path in their message, that wins for this cycle, and write

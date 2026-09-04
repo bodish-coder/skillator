@@ -1,15 +1,18 @@
-# The two artifacts practice/task-loop.md hands to subagents, as files so they
+# The artifacts practice/task-loop.md hands to subagents, as files so they
 # never enter the controller's context. Windows twin of taskwork.sh.
 #
 #   taskwork.ps1 brief  <DesignFile> <N>            -> path to task N's brief
+#   taskwork.ps1 report <DesignFile> <N>            -> path for task N's report
 #   taskwork.ps1 review <DesignFile> <Base> <Head>  -> path to the review package
 #
-# Both print the path and nothing else:
+# All print the path and nothing else:
 #   $brief = & taskwork.ps1 brief design.md 3
+# `report` only names the file — the implementer writes it, fix rounds append
+# to it — so implementer and reviewer get the same path by construction.
 param(
-  [Parameter(Mandatory)][ValidateSet('brief','review')][string]$Command,
+  [Parameter(Mandatory)][ValidateSet('brief','report','review')][string]$Command,
   [Parameter(Mandatory)][string]$DesignFile,
-  [string]$A,   # brief: task number   review: base ref
+  [string]$A,   # brief/report: task number   review: base ref
   [string]$B    # review: head ref
 )
 $ErrorActionPreference = 'Stop'
@@ -35,6 +38,10 @@ if ($Command -eq 'brief') {
   if (-not $in) { Write-Error "no '### Task $A`:' block in $DesignFile"; exit 1 }
   Set-Content $f ($block -join "`n") -Encoding utf8
   $f
+}
+elseif ($Command -eq 'report') {
+  if (-not $A) { Write-Error 'usage: taskwork.ps1 report <DesignFile> <N>'; exit 2 }
+  Join-Path $out "task-$A-report.md"
 }
 else {
   if (-not $A -or -not $B) { Write-Error 'usage: taskwork.ps1 review <DesignFile> <Base> <Head>'; exit 2 }

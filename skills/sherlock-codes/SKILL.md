@@ -1,25 +1,14 @@
 ---
 name: sherlock-codes
 description: >-
-  Full-application forensic audit — a fan-out of Fable investigators reads the
-  whole codebase (backend, frontend, data layer, dependencies and how they are
-  handled, build/config, error paths, tests, architecture) hunting for the
-  defects nobody filed: silent failures, dead branches, unhandled rejections,
-  leaked state, wrong-by-accident logic, boundaries that don't validate, deps
-  pinned nowhere, layers that grew into each other. Every finding must carry
-  evidence at `file:line`. Findings are deduped and adversarially verified,
-  written to `CASEFILE.md`, turned into a prioritised implementation plan, and
-  the fixes are then coded by Opus. Architectural changes are proposed to the
-  user as a decision, never applied unasked. Can also be pointed at a single
-  GitHub PR, posting verified findings back as inline comments with sha-anchored
-  permalinks via `gh`, on request. Reports in Sherlock's voice — observation then
-  deduction — without ever bending a fact for the flourish.
-  Use when the user says "sherlock",
-  "audit the app", "review everything", "find what's broken", "full code review",
-  "what's wrong with this codebase", "check the whole thing", "sherlock #482", or
-  before a release/handover. Merging and conflict resolution are handed to
-  `skillator:merge-agent`. NOT a security-only scan (use /security-review), and
-  for a quick pass over the working diff `/code-review` is cheaper.
+  Use when the user says "sherlock", "audit the app", "review everything",
+  "find what's broken", "full code review", "what's wrong with this codebase",
+  "check the whole thing", "sherlock #482", wants a full-application forensic
+  audit for the defects nobody filed, or is before a release/handover. Can
+  also be pointed at a single GitHub PR. Merging and conflict resolution are
+  handed to `skillator:merge-agent`. NOT a security-only scan (use
+  /security-review), and for a quick pass over the working diff `/code-review`
+  is cheaper.
 ---
 
 # sherlock-codes — the whole application, under a lens

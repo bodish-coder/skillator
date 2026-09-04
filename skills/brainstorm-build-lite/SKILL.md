@@ -1,16 +1,13 @@
 ---
 name: brainstorm-build-lite
 description: >-
-  The lightest "brainstorm then build" skill — no Fable, two models only: Opus
-  (claude-opus-4-8) does the design thinking and the complex/core implementation,
-  Sonnet (claude-sonnet-5) handles the simpler/mechanical tasks. Fully autonomous,
-  no ceremony (no /compact, no session record, no /clear). Use when the user wants
-  a quick, cost-aware build and doesn't need Fable's creative brainstorm — "just
-  design and build it, cheap where it can be". For a straight all-Opus plan→build
-  (no Sonnet offload) use brainstorm-build-mid; for a Fable-led creative
-  design plus the full ceremony (/compact + session record + /clear) use
-  brainstorm-build-prime. NOT for tiny one-line edits (just do them) or
-  pure design/no-build work. Absorbs the superpowers process skills (classification, plan-grade tasks, design self-review, test-first, fresh-evidence verification) via the root PRACTICE.md rather than chaining them.
+  The lightest "brainstorm then build". Use when the user wants a quick,
+  cost-aware build that offloads the simpler or mechanical parts to a cheaper
+  model and doesn't need Fable's creative brainstorm — "just design and build
+  it, cheap where it can be". For a straight all-Opus planâ†’build (no Sonnet
+  offload) use brainstorm-build-mid; for a Fable-led creative design plus the
+  full ceremony use brainstorm-build-prime. NOT for tiny one-line edits (just
+  do them) or pure design/no-build work.
 ---
 
 # Build (Opus design + build) + Sonnet (simple tasks)
@@ -34,17 +31,31 @@ branch lifecycle (§8). Everything below assumes it.
 ## Phase 1 — Opus designs
 
 Dispatch one subagent, `model: "opus"`, `subagent_type: "general-purpose"`. Give it
-the task verbatim + repo context. Ask it to commit to an approach and return an
-implementation-ready design **with each task tagged by complexity**:
+the user's task text and the repo context. Ask it to commit to an approach and
+**write** an implementation-ready design **with each task tagged by complexity**
+to a file, returning only that path plus a two-line summary:
 
 ```
 CHOSEN:       <the approach, one line + why>
 DESIGN:       <data model / contracts, key edge cases, out of scope>
+CONSTRAINTS:  <the binding requirements every task must respect — exact
+              values, names, formats, and the stated relationships
+              between components. Not per-task detail: this is what
+              stays true across all of them, copied verbatim into each
+              task reviewer's prompt as [GLOBAL_CONSTRAINTS].>
 TASKS:        <one block per task in PRACTICE.md §2 shape (Files,
               Interfaces, test-first steps), each tagged
               [SIMPLE] or [COMPLEX]>
 VERIFICATION: <the concrete end-to-end check that proves it works>
 ```
+
+**The design file — one file, no ceremony.** Write it to the scratchpad as
+`design-<YYYY-MM-DD>-<slug>.md`. It is not a session record and this tier keeps
+none; it exists because `practice/task-loop.md` and every template in
+`practice/prompts.md` take a `<DESIGN_FILE>` path
+(`taskwork.sh brief <DESIGN_FILE> <N>`), and because a Sonnet agent working one
+task needs the contracts on disk rather than re-summarised into its prompt.
+Confirm the path in your reply.
 
 ## Phase 2 — Build (route by complexity)
 
@@ -52,8 +63,10 @@ Work the TASKS list, routing each:
 - **[COMPLEX] / core → `model: "opus"`** subagent.
 - **[SIMPLE] / mechanical → `model: "sonnet"`** subagent.
 
-Each agent gets the design + its task(s), builds exactly that, and stays inside its
-declared files. Independent tasks can run in parallel (git worktree if they'd touch
+Each agent gets the **design file path** and its own task block — never the design
+pasted into the prompt, never this session's history (PRACTICE.md §4; procedure in
+`practice/task-loop.md`, prompt text in `practice/prompts.md`). It builds exactly
+that and stays inside its declared files. Independent tasks can run in parallel (git worktree if they'd touch
 the same tree). If the design hits a real blocker only the user can resolve, stop
 and surface it — don't guess.
 
@@ -72,7 +85,8 @@ When the design returns **4+ independent tasks**, or the work is a sweep
 **single deterministic workflow script** instead of hand-dispatched subagents:
 design → one build agent per task → verify each → loop the failures. Read
 **`WORKFLOW.md`** (beside the installed skills, or at the repo/plugin root) for
-the criteria, host table, and a ready script.
+the criteria, host table, and a ready script. Write the design file before the
+call and pass its path in `args`, exactly as Phase 2 would.
 
 The [SIMPLE]/[COMPLEX] routing survives the switch — it becomes the schema's
 `complexity` field, and the build stage picks the model per task:
@@ -90,8 +104,17 @@ For 1-3 sequential tasks, stay with plain dispatch.
 - **Handoff before any context loss.** This tier runs no `/compact` or `/clear` of
   its own, but if you or the user are about to run either, **first run the
   `handoff` skill** — never compact/clear without a verified handoff.
-- Need Fable's creative brainstorm, a /compact checkpoint, or a session record? Use
-  brainstorm-build-prime. Want all-Opus (no Sonnet offload)? Use -mid.
+- **Pass the design by path, never by paste.** Pasting it parks the whole design
+  in your context for the rest of the session (`practice/task-loop.md`, Context
+  hygiene), and the canon's templates take a `<DESIGN_FILE>` path anyway.
+- **Minimal ceremony, real canon.** The scratchpad design file is the only
+  artifact this tier writes — no session record, no Outcome section, no rework
+  loop, and no §6 whole-branch reviewer — that end-of-build `deep`-tier pass is
+  prime's ceremony, and this tier seats no `deep` model. It ships on §5 evidence
+  plus §4's per-task review. PRACTICE.md §§1-5, and §6's receiving-review
+  discipline, still apply.
+- Need Fable's creative brainstorm, a handoff checkpoint, or a kept session
+  record? Use brainstorm-build-prime. Want all-Opus (no Sonnet offload)? Use -mid.
 
 ## Other hosts
 

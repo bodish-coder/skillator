@@ -1,16 +1,13 @@
 ---
 name: brainstorm-build-mid
 description: >-
-  Mid-tier feature build on the Opus tier end to end — Opus 5 plans/designs and
-  Opus 4.8 implements where the host exposes version slugs; on Claude Code, where
-  only the `opus` tier is selectable, the run's Opus does both. Fully autonomously
-  with no stop in between. No Fable brainstorm, no Sonnet cost-tiering, no /compact, no
-  session record, no /clear — just Opus plan → Opus build. Use when the user wants
-  straight Opus quality for both the thinking and the code, without Fable's creative
-  ideation and without offloading simple tasks. For a Fable-led creative design plus
-  the full ceremony use brainstorm-build-prime; to offload the simple /
-  mechanical parts to Sonnet use brainstorm-build-lite. NOT for tiny
-  one-line edits (just do them) or pure design/no-build work. Absorbs the superpowers process skills (classification, plan-grade tasks, design self-review, test-first, fresh-evidence verification) via the root PRACTICE.md rather than chaining them.
+  Use when the user wants straight Opus quality for both the thinking and the
+  code — an all-Opus plan then build, run autonomously with no stop in
+  between, no Fable creative ideation, no Sonnet cost-tiering and no ceremony
+  (no session record, no handoff checkpoint). For a Fable-led creative design
+  plus the full ceremony use brainstorm-build-prime; to offload the simple /
+  mechanical parts to Sonnet use brainstorm-build-lite. NOT for tiny one-line
+  edits (just do them) or pure design/no-build work.
 ---
 
 # Plan (Opus 5) → Build (Opus 4.8)
@@ -47,22 +44,40 @@ branch lifecycle (§8). Everything below assumes it.
 ## Phase 1 — Opus plans
 
 Dispatch one subagent, `model: "opus"` (the Opus 5 slug where the host has one),
-`subagent_type: "general-purpose"`. Give it the task verbatim + repo context. Ask it to commit to an approach and return an
-implementation-ready design:
+`subagent_type: "general-purpose"`. Give it the user's task text and the repo
+context. Ask it to commit to an approach and **write** an implementation-ready
+design to a file, returning only that path plus a two-line summary:
 
 ```
 CHOSEN:       <the approach, one line + why>
 DESIGN:       <data model / contracts, key edge cases, out of scope>
+CONSTRAINTS:  <the binding requirements every task must respect — exact
+              values, names, formats, and the stated relationships
+              between components. Not per-task detail: this is what
+              stays true across all of them, copied verbatim into each
+              task reviewer's prompt as [GLOBAL_CONSTRAINTS].>
 TASKS:        <one block per task in PRACTICE.md §2 shape: Files
               create/modify/test, Interfaces consumes/produces,
               test-first steps with real code and real commands>
 VERIFICATION: <the concrete end-to-end check that proves it works>
 ```
 
+**The design file — minimal, not a session record.** Write it to the scratchpad
+(or `docs/sessions/` if the user wants it kept) as
+`design-<YYYY-MM-DD>-<slug>.md`. It exists for one reason: `practice/task-loop.md`
+and every template in `practice/prompts.md` take a `<DESIGN_FILE>` path
+(`taskwork.sh brief <DESIGN_FILE> <N>`), and a build agent that never saw this
+conversation reads the design from disk, not from a pasted prompt. That is the
+whole ceremony this tier keeps — no outcome section, no session narrative, no
+handoff-and-shed checkpoint. Confirm the path in your reply.
+
 ## Phase 2 — Opus builds
 
 Dispatch Opus subagent(s), `model: "opus"` (the Opus 4.8 slug where the host has
-one), given the design **verbatim** + the task(s). Build exactly the design, stay inside the declared files. Independent tasks
+one). Each gets the **design file path** and its own task block — never the
+design pasted into the prompt and never this session's history (PRACTICE.md §4;
+procedure in `practice/task-loop.md`, prompt text in `practice/prompts.md`).
+Build exactly the design, stay inside the declared files. Independent tasks
 can run in parallel (git worktree if they'd touch the same tree). If the design hits
 a real blocker only the user can resolve, stop and surface it — don't guess.
 
@@ -82,14 +97,25 @@ plan → one Opus build agent per task → verify each → loop the failures. Re
 **`WORKFLOW.md`** (beside the installed skills, or at the repo/plugin root) for
 the criteria, host table, and a ready script — use the same two model
 picks as Phases 1-2 in its design/build stages, and ignore its `complexity` tag.
+Write the design file before the call and pass its path in `args`, exactly as
+Phase 2 would.
 
 For 1-3 sequential tasks, stay with plain dispatch — a script buys nothing.
 
 ## Rules
 
 - **Both phases are Opus subagents.** Don't design or code in the main session.
-- **Pass the design verbatim** from plan to build — the contracts and edge cases are
-  the point.
+- **Pass the design by path, never by paste.** The design file carries the
+  contracts and edge cases; a build agent reads it. Pasting it into the prompt
+  parks the whole design in your context for the rest of the session
+  (`practice/task-loop.md`, Context hygiene) and is not what the canon's
+  templates take.
+- **Minimal ceremony, real canon.** This tier writes the design file and nothing
+  else: no session record, no Outcome section, no rework loop, and no §6
+  whole-branch reviewer — that end-of-build `deep`-tier pass is prime's ceremony,
+  and this tier seats no `deep` model. It ships on §5 evidence plus §4's per-task
+  review. PRACTICE.md §§1-5, and §6's receiving-review discipline, still apply —
+  that is what the design file makes possible.
 - **Autonomous but honest.** No confirmation gate; but if a phase fails or an agent
   returns nothing, say so plainly and stop rather than continuing on a missing piece.
 - **Handoff before any context loss.** This tier runs no `/compact` or `/clear` of its

@@ -48,7 +48,7 @@ The skills' phases map onto script stages one-for-one. Roles keep their tiers
 
 | Skill phase | Script |
 |-------------|--------|
-| Design / plan | one `agent()` at the **design tier**, with a `schema` so TASKS comes back as an array — not prose you have to parse |
+| Design / plan | one `agent()` at the **`deep` tier**, with a `schema` so TASKS comes back as an array — not prose you have to parse |
 | Build | `pipeline(design.tasks, buildStage, verifyStage)` at the **build tier** |
 | Verify | second pipeline stage, or a `parallel()` judge panel per task |
 | Rework | loop the failed items back through the build stage |
@@ -98,9 +98,9 @@ model per task: `t.complexity === 'SIMPLE' ? 'sonnet' : 'opus'`.
 ```js
 export const meta = {
   name: 'brainstorm-build',
-  description: 'Design at the design tier, then build + verify each task in parallel',
+  description: 'Design at the deep tier, then build + verify each task in parallel',
   phases: [
-    { title: 'Design', detail: 'one design-tier agent, structured output' },
+    { title: 'Design', detail: 'one deep-tier agent, structured output' },
     { title: 'Build', detail: 'one build-tier agent per task' },
     { title: 'Verify', detail: 'verification check per task' },
   ],

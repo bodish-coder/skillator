@@ -1,17 +1,12 @@
 ---
 name: handoff-watch
 description: >-
-  Watch usage limits and automatically write a session handoff the
-  moment usage crosses a threshold (97% by default), so a session that is about
-  to be cut off never loses its context. Use when the user asks to "monitor usage
-  limits", "auto handoff before I run out", "warn me at 97%", "save the session
-  before the limit", "hand off automatically", or wants to install/configure/debug
-  the usage watcher. This skill INSTALLS a statusline probe plus a Stop hook - the
-  monitoring itself is done by those hooks, not by the model. The handoff document
-  is written by the handoff skill, which the hook invokes. NOT for reporting
-  current usage (use /usage) and NOT for context-compaction tuning. Runs on
-  Claude Code (fully automatic), Codex (real usage %, agent-driven) and, with no
-  usage signal to read, degrades honestly on Cursor and Antigravity.
+  Use when the user asks to "monitor usage limits", "auto handoff before I run
+  out", "warn me at 92%", "save the session before the limit", "hand off
+  automatically", or wants to install, configure or debug the usage watcher.
+  Installs hooks — the monitoring is done by those hooks, not the model, and
+  the handoff document itself comes from the handoff skill. NOT for reporting
+  current usage (use /usage) and NOT for context-compaction tuning.
 ---
 
 # Handoff Watch (auto-handoff at the usage limit)
@@ -75,9 +70,10 @@ Add to `~/.claude/settings.json`:
 
 ## Other hosts (codex, cursor, antigravity)
 
-Claude Code is the only host with a hook that can **both** read the usage
-percentage **and** inject an instruction at turn end. The others get `-Mode
-check` / `check`: no stdin, reads whatever the host leaves on disk, prints
+Claude Code is the only host where a turn-end hook is **confirmed** to both read
+the usage percentage and inject an instruction back into the turn. Codex is the
+open question — it has a `Stop` event, but see the codex row below. The others
+get `-Mode check` / `check`: no stdin, reads whatever the host leaves on disk, prints
 either `handoff-watch: <host> <pct>% of <limit>% - ok` or `HANDOFF NOW` followed
 by the same three-step preserve order.
 
@@ -97,19 +93,43 @@ same as the Claude Code gate.
 | Host | Usage signal | Turn-end hook that can inject | Active fallback |
 |---|---|---|---|
 | claude-code | `statusLine` `rate_limits.*.used_percentage` | `Stop` → `{"decision":"block"}` | none needed — full auto |
-| codex | **yes** — `~/.codex/sessions/**/rollout-*.jsonl`, last `token_count`: `rate_limits.*.used_percent` and `last_token_usage.total_tokens / model_context_window` | **no** — hooks are `PreToolUse`/`PostToolUse`/`PermissionRequest`/`SessionEnd`; `notify` fires on `agent-turn-complete` but cannot inject | real percentage, agent-driven `check` |
+| codex | **yes** — `~/.codex/sessions/**/rollout-*.jsonl`, last `token_count`: `rate_limits.*.used_percent` and `last_token_usage.total_tokens / model_context_window` | **none reachable** — a `Stop` event that injects via exit 2 + stderr is compiled in, but the live test found no config that fires it; see below | real percentage, agent-driven `check` — replace with an automatic gate if a reachable `Stop` config is ever found |
 | cursor | **no** — chats are SQLite `store.db`, no usage anywhere on disk | `stop` hook exists (`~/.cursor/hooks.json`, `command`/`prompt` handlers) | **none** — `check` prints "no usage signal on this host"; handoff is manual |
 | antigravity | **no** | `AfterAgent` and `PreCompress` in `~/.gemini/settings.json` | `PreCompress` is the real trigger — context is about to be lost; wire `handoff` there |
 
 Codex uses `last_token_usage.total_tokens`, not `total_token_usage` — the latter
 is cumulative for the whole session and reads several hundred percent.
 
+**Codex's `Stop` hook — what is known.** Earlier versions of this file said Codex
+had no turn-end hook. That was wrong. Codex configures hooks in `hooks.json`, and
+the event enum read out of the shipped `codex.exe` (`codex-cli
+0.147.0-alpha.6.5`) is `PreToolUse`, `PermissionRequest`, `PostToolUse`,
+`PreCompact`, `PostCompact`, `SessionStart`, `SessionEnd`, `UserPromptSubmit`,
+`SubagentStart`, `SubagentStop`, **`Stop`**. Only `command` handlers run —
+`prompt` and `agent` handlers are in the schema but the binary reports them "not
+supported yet", as are async hooks. There is an `additionalContext` output field
+with an `additionalContextLimit`, and a warning that some events cannot emit it;
+the binary does not say which.
+
+**Still unverified:** whether a `Stop` handler's output re-enters the turn. The
+binary's error strings suggest it does — it complains about a `Stop` hook that
+"exited with code 2 but did not write a continuation prompt to stderr", one that
+"returned decision:block" with an empty reason, and one that "requested
+continuation without a prompt" — but the live test (2026-09-04, `codex-cli
+0.153.2`, via `codex exec`; see `PLATFORMS.md`) never got the handler to run at
+all, so the question is untouched rather than answered, and `Stop`'s eligibility
+for `additionalContext` is unknown. **If a live
+test confirms it, Codex should be moved to the same automatic gate as Claude
+Code** — a `Stop` handler running `usage-watch.* gate` — instead of the
+agent-driven `check`. Until then Codex stays on `check`. Do not remove `check`:
+it remains the only mechanism cursor and antigravity have.
+
 Don't claim cursor is armed. It isn't, and no amount of scripting makes it so
 until Cursor writes a usage number somewhere readable.
 
 ## Configure
 
-- **Threshold** — `CLAUDE_USAGE_HANDOFF_PCT` env var (default `97`). Set it in
+- **Threshold** — `CLAUDE_USAGE_HANDOFF_PCT` env var (default `92`). Set it in
   `settings.json` under `env` to make it stick.
 - **Where the handoff lands** — decided by the `handoff` skill (`docs/handoffs/`
   by default), not here.

@@ -99,7 +99,7 @@ both alongside `skills/` — the skills refer to them.
   (stops at the confirmed plan). Invoke with `/func-ui`.
 - **brainstorm-build family** — three tiers of the "brainstorm then build" flow;
   pick by how much model firepower and ceremony you want:
-  - **brainstorm-build-prime** — **design tier** plans · **build tier**
+  - **brainstorm-build-prime** — **`deep` tier** plans · **build tier**
     implements · full ceremony: session `.md` on disk · handoff before context
     checkpoint · rework. Cross-platform via `references/platforms.md`:
     Claude Code (Fable → Opus), Cursor (GPT-5.6-Sol → Claude
@@ -177,11 +177,13 @@ both alongside `skills/` — the skills refer to them.
   `codegraph` (initialised on entry) before proposing a remedy, name the blast
   radius — callers, impact, affected tests — before the edit, hold a per-ticket
   scope contract with a two-file limit, tag every claim verified/inferred/guessed,
-  sweep the regressions after the fix, and run `sherlock-codes` over the staged
-  diff before every commit, capped at three passes. Invoke with `/grayskull-power`.
+  sweep the regressions after the fix, and run `/code-review` over the staged
+  diff before every commit, capped at three passes. (`sherlock-codes` is the
+  whole-app sweep — pre-release or unknown-cause rot — never a per-commit gate.)
+  Invoke with `/grayskull-power`.
 - **handoff-watch** — installs a statusline probe and a `Stop` hook that watch
   Claude Code's usage limits (5-hour, 7-day and context windows) and, the moment
-  any of them crosses 97%, make the session preserve itself before it is cut off:
+  any of them crosses 92%, make the session preserve itself before it is cut off:
   drain in-flight agents, sync `TICKETS.md` via `ticket-master` (statuses only),
   then write the handoff with a status table matching the board ticket-for-ticket.
   Fires once per session, threshold via `CLAUDE_USAGE_HANDOFF_PCT`. Invoke with
@@ -232,6 +234,15 @@ both alongside `skills/` — the skills refer to them.
   actively backfires on a wrong-shaped output, which wants a positive recipe);
   and nothing ships until a fresh subagent has failed the scenario without it
   and passed with it. Invoke with `/skill-smith`.
+
+- **a11y-proof** — accessibility as a subject rather than a side-effect: an audit of
+  code nobody is redesigning, a filed a11y bug ("can't tab to it", "the toast never
+  announces", "the error is only red"), or wiring axe/pa11y/Lighthouse into CI. Every
+  claim carries run evidence — a Tab transcript, a measured rect, a computed contrast
+  ratio with alpha resolved — because the failures that ship are the ones invisible to
+  reading the source. Inside a design task accessibility stays `design-arwen`'s ship
+  gate; this owns it everywhere else, and the two hand work back and forth. Invoke with
+  `/a11y-proof`.
 
 ## Add a new skill
 

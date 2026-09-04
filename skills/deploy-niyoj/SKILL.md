@@ -1,23 +1,13 @@
 ---
 name: deploy-niyoj
 description: >-
-  Set up and run manual, no-CI deployment for a single-VPS app driven from the
-  NiYoj desktop app — press Deploy, one SSH connection feeds an idempotent
-  `deploy/deploy.sh` to the server over `bash -s`, and the log streams back.
-  Same single-VPS pattern as `deploy-wizard` (Docker Compose + nginx +
-  maintenance gate + Let's Encrypt) with GitHub Actions removed: no runner, no
-  CI minutes, no `deploy.yml`, and the deploy key stays on your machine. Use
-  when the user says "niyoj", "set up niyoj deploy", "deploy without CI",
+  Use when the user says "niyoj", "set up niyoj deploy", "deploy without CI",
   "manual deploy", "no github actions deploy", "one-button deploy from my
-  laptop", when converting a project off `.github/workflows/deploy.yml`, or when
-  a NiYoj deploy failed and needs diagnosing. Scaffolds `deploy/deploy.sh`,
-  `deploy/nginx.conf.template`, `deploy/maintenance.html` and the health
-  endpoint, and prints the human-only checklist (deploy key, sudoers, DNS, app
-  entry). Never enters credentials, never edits files on the server, never
-  commits `apps.json`. Removing CI means removing the deploy *trigger*, not
-  build/test checks — a check-only workflow never touches the server and is kept
-  or offered. NOT for CI-triggered deploys (use `deploy-wizard`) or managed-PaaS
-  targets.
+  laptop", when converting a project off `.github/workflows/deploy.yml`, or
+  when a NiYoj deploy failed and needs diagnosing. The target is a single-VPS
+  app (Docker Compose + nginx + maintenance gate + Let's Encrypt) deployed
+  over SSH from the NiYoj desktop app, with no CI runner. NOT for CI-triggered
+  deploys (use `deploy-wizard`) or managed-PaaS targets.
 ---
 
 # deploy-niyoj — one button, one SSH connection, no CI
@@ -132,6 +122,14 @@ Scaffold into the repo, filled in with the real values from Phase 0:
 | `useMaintenanceMode` + modal | Poll health, watch content-type, latch sticky |
 | localStorage persistence | In-progress UI state, saved on every change |
 
+**"Brand it" means the app's brand.** `maintenance.html` and the modal wear what the
+app already ships — its logo, palette and type; a maintenance page is not the moment
+to invent a look. Nothing to inherit and you must pick → the shared design floor
+governs the pick: read `references/anti-slop.md` beside the installed skills, trying
+`../references/anti-slop.md` first (the `install.sh` layout), then
+`../../references/anti-slop.md` (git checkout, plugin cache). Neither resolves → say
+so in one line and stay on the system font stack and the app's own colours.
+
 **Idempotency is the whole design.** Every phase is *detect → skip-if-done →
 otherwise-do*. A new app and the 200th redeploy take the identical path; the
 clone is the only conditional and everything after it is a hard reset. Re-running
@@ -214,9 +212,10 @@ Print it; never attempt these steps yourself.
 Manual deploy means the discipline CI used to enforce is now the human's. These
 steps, in this order, every time:
 
-1. **Merge and push to `main`.** NiYoj deploys `origin/<branch>`, not the working
-   tree. Unpushed commits do not ship — this catches everyone out exactly once,
-   and it is the single most common mistake in this model.
+1. **Merge and push to `main` — user-confirmed.** NiYoj deploys `origin/<branch>`,
+   not the working tree. **Do NOT** merge or `git push` unasked; confirm with the
+   user first, every time. Unpushed commits do not ship — this catches everyone
+   out exactly once, and it is the single most common mistake in this model.
 2. **If a check-only workflow exists, wait for its green check.** It is the only
    thing left that reads the code on a machine that isn't yours; deploying past a
    red X is deploying a build you know is broken.
@@ -234,8 +233,12 @@ Deploy one app at a time when they share a box: two simultaneous
 rollback is a git operation, not a NiYoj one:
 
 ```sh
-git revert <bad-sha> && git push      # then press Deploy
+git revert <bad-sha>      # then confirm with the user before: git push — then press Deploy
 ```
+
+**Do NOT** `git push` unasked, even mid-incident. This is invoked while a deploy
+is failing, which is exactly when an unconfirmed push does the most damage —
+prepare the revert, then get the user's go-ahead before it leaves your machine.
 
 `git revert`, not `reset --hard` + force-push: reverting keeps the history other
 checkouts already have, and the next deploy is an ordinary fast-forward.
@@ -262,6 +265,9 @@ a compensating migration with the next number up — never edit an applied one.
 
 ## Rules
 
+- **Merging and pushing are user-confirmed, always.** Push before Deploy is the
+  order of operations, not permission to push. Mid-incident is when this matters
+  most.
 - **Nothing in the deploy may prompt.** BatchMode is the constraint the whole
   design bends around.
 - **The repo is the only place changes live.** Editing files on the server is

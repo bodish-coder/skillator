@@ -1,19 +1,12 @@
 ---
 name: deploy-wizard
 description: >-
-  Step-by-step wizard that preps a project for the standard single-VPS deployment
-  (Docker Compose + nginx + GitHub Actions, one-push deploy, maintenance gate, TLS
-  via Let's Encrypt). Use when the user says "prep the deployment", "set up deploy",
-  "deployment wizard", "get this ready to ship to my server", "scaffold the deploy",
-  or is about to stand up a new app on a Linux VPS with this pattern. It interviews
-  the user for every deployment-specific value (domain, server IP, SSH user, app
-  slug, GitHub repo, ports, DB/storage names, certbot email), scaffolds the filled-in
-  artifacts (workflow, deploy.sh, nginx template, maintenance page, compose overlay,
-  health endpoint), and prints an ordered MANUAL checklist for the human-only steps
-  (deploy keys, GitHub secrets, DNS records, first bootstrap, TLS issuance, secrets
-  placement). It never collects secret VALUES into files, never touches DNS/servers,
-  and never enters credentials — those are handed to the user. NOT for non-VPS /
-  managed-PaaS deploys, or for the actual server administration.
+  Use when the user says "prep the deployment", "set up deploy", "deployment
+  wizard", "get this ready to ship to my server", "scaffold the deploy", or is
+  about to stand up a new app on a Linux VPS with the standard single-VPS
+  pattern (Docker Compose + nginx + GitHub Actions, one-push deploy,
+  maintenance gate, TLS via Let's Encrypt). NOT for non-VPS / managed-PaaS
+  deploys, or for the actual server administration.
 ---
 
 # Deploy Wizard — prep the standard VPS deployment
@@ -86,7 +79,12 @@ this structure:
   dump logs + fail on timeout), **gate OFF**, `envsubst` nginx template → reload.
 - `deploy/nginx.conf.template` — server for `SUBDOMAIN`: static root, `/api/` →
   `127.0.0.1:API_PORT`, maintenance-flag rewrite, `client_max_body_size MAX_BODY_SIZE`.
-- `deploy/maintenance.html` — static page, auto-refresh ~10s, served with 200.
+- `deploy/maintenance.html` — static page, auto-refresh ~10s, served with 200. Wears
+  the app's own brand where one exists; inventing a look falls under the shared design
+  floor `references/anti-slop.md` beside the installed skills — try
+  `../references/anti-slop.md` first (the `install.sh` layout), then
+  `../../references/anti-slop.md` (git checkout, plugin cache); neither resolves → say
+  so in one line and stay on the system font stack.
 - `docker-compose.yml` + `deploy/docker-compose.prod.yml` — base + prod overlay for
   the chosen `STACK_SERVICES`; secrets referenced from `.env`, never inlined.
 - Backend **health endpoint** (`HEALTH_PATH` → `{ok:true}`, no auth/DB) if missing.

@@ -1,15 +1,11 @@
 ---
 name: live-build
 description: >-
-  Start the project's app or build in the background FIRST and hand the user the
-  URL, command, or progress stream in the opening reply — so they watch the thing
-  run while the agent works, instead of staring at a spinner waiting for a reply.
-  Covers JS/web dev servers (hot reload), Rust (cargo watch / cargo run), C++
-  (ninja/make with [n/total] progress), Python, Go, Electron, mobile and plain
-  CLIs. Use when the user says "let me see it", "show me while you work", "don't
+  Use when the user says "let me see it", "show me while you work", "don't
   make me wait", "live preview", "run it while you build", "stream the build",
   or whenever a change is about to be made to a project that has a runnable
-  surface. Armed as standard by grayskull-power. NOT for taking screenshots
+  surface — JS/web dev server, Rust, C++, Python, Go, Electron, mobile or a
+  plain CLI. Armed as standard by grayskull-power. NOT for taking screenshots
   (screenshot-loop) and NOT a substitute for tests — it is exposure, not
   verification.
 ---

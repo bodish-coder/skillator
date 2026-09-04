@@ -9,6 +9,12 @@ on Cursor, a subagent on Codex, a background agent on Antigravity, `rlm(...)` on
 Prime Agent — see `PLATFORMS.md`. **Always name a model explicitly.** An omitted
 model silently inherits the session's, which is usually the most expensive one.
 
+Every `model:` line below names a tier — **cheap**, **build** or **deep**, the
+only three there are.
+[`task-loop.md` § Model selection](task-loop.md#model-selection) says which seat
+takes which; [`PLATFORMS.md` § Role tiers](../PLATFORMS.md#role-tiers) turns the
+tier into this host's slug. Write the slug into the prompt, not the tier name.
+
 Five templates, in the order they fire:
 
 | # | Template | Fires |
@@ -17,17 +23,62 @@ Five templates, in the order they fire:
 | 2 | [Task reviewer](#2-task-reviewer) | After each implementer reports |
 | 3 | [Scoped re-review](#3-scoped-re-review) | After each fix round |
 | 4 | [Final reviewer](#4-final-reviewer) | Once, after every task is done |
-| 5 | [Design reviewer](#5-design-reviewer) | Optional, on the design file before any build |
+| 5 | [Design reviewer](#5-design-reviewer) | Conditional, on the design file before any build — [PRACTICE.md §3](../PRACTICE.md#3-self-review-the-design-before-anyone-builds-it) states the three conditions; if they don't all hold, it doesn't fire |
 
 Everything you paste into a prompt, and everything a subagent prints back, stays
 in your context for the rest of the session and is re-read every turn. **Hand
-artifacts over as file paths, not as pasted content.** `scripts/taskwork.sh`
-(`.ps1` on Windows) generates the two paths these templates ask for:
+artifacts over as file paths, not as pasted content.** `taskwork.sh` (`.ps1` on
+Windows) generates the three paths these templates ask for.
 
+**Where the script is.** It sits in `scripts/` next to *this file* — the doc you
+are reading is `<practice>/prompts.md`, the script is
+`<practice>/scripts/taskwork.sh`. That holds in every layout:
+
+| Layout | `<practice>` |
+|---|---|
+| Installed by `install.sh` | `<skills-dir>/practice/` — e.g. `~/.claude/skills/practice/`, `~/.agents/skills/practice/`, `~/.codex/skills/practice/`, `~/.cursor/skills/practice/`, `~/.gemini/config/skills/practice/`, `~/.pi/skills/practice/` |
+| Claude Code plugin | `~/.claude/plugins/cache/skillator/skillator/<version>/practice/` |
+| A clone of the skillator repo | `<repo>/practice/` |
+
+It is **never** relative to your cwd — your cwd is the user's project, which does
+not contain this script. [`task-loop.md` § Where taskwork.sh
+lives](task-loop.md#where-taskworksh-lives) has the resolve-once recipe; do that
+first, then the three paths these templates ask for are:
+
+```sh
+# $TASKWORK resolved once, per task-loop.md; run from the project repo root
+BRIEF_FILE=$("$TASKWORK"  brief  <DESIGN_FILE> <N>)
+REPORT_FILE=$("$TASKWORK" report <DESIGN_FILE> <N>)
+DIFF_FILE=$("$TASKWORK"   review <DESIGN_FILE> <BASE> <HEAD>)
 ```
-[BRIEF_FILE] = $(scripts/taskwork.sh brief  <DESIGN_FILE> <N>)
-[DIFF_FILE]  = $(scripts/taskwork.sh review <DESIGN_FILE> <BASE> <HEAD>)
-```
+
+`report` names the file and writes nothing — the implementer writes it, fix
+rounds append to it. Call it once per task and paste the same
+`[REPORT_FILE]` into the implementer, the task reviewer and every scoped
+re-review of that task, so the reviewer reads the file the implementer wrote
+because the path was derived, not remembered.
+
+Three more slots are filled by hand, and none is optional:
+
+- `[DESIGN_FILE]` — the design file's path. `[BRIEF_FILE]` is *one* `### Task N`
+  block, cut out of the design; the design file itself is what carries the file
+  structure and the shape around that task.
+- `[GLOBAL_CONSTRAINTS]` — the design's `CONSTRAINTS:` block
+  ([PRACTICE.md §2](../PRACTICE.md#2-the-tasks-block-is-an-implementation-plan-superpowerswriting-plans)),
+  pasted **verbatim**, unedited, identical in every dispatch of every template
+  that has the slot. `CONSTRAINTS: none` is a real value — paste "none".
+- `[DIRECTORY]` — the absolute path of the project repo root (or the task's
+  worktree, PRACTICE.md §8): the cwd you ran `$TASKWORK` from. A subagent's
+  cwd is not guaranteed to be yours, so it is stated, never assumed.
+
+The rest come from the loop's own ledger, per [`task-loop.md` § Per
+task](task-loop.md#per-task): `[BASE_SHA]` is the `git rev-parse HEAD` you
+recorded before dispatching the implementer; `[HEAD_SHA]` is `git rev-parse
+HEAD` after it reports; `[FIX_BASE_SHA]` is the `[HEAD_SHA]` the previous
+review saw; `[FINDINGS]` is the previous review's Issues, copied verbatim;
+`[DESCRIPTION]` is one line per completed task — its `### Task N:` heading and
+the ledger's verdict for it; `[REQUEST]` is the user's original ask, verbatim. `[REQUIRED — …]` on every
+`model:` line is the host slug for the tier named, never left as the tier name.
 
 ---
 
@@ -35,14 +86,28 @@ artifacts over as file paths, not as pasted content.** `scripts/taskwork.sh`
 
 ```
 description: "Implement Task N: [task name]"
-model:       [REQUIRED — per PRACTICE.md §4 Model selection]
+model:       [REQUIRED — the host slug for the tier task-loop.md § Model
+              selection gives this seat; usually cheap or build]
 prompt: |
   You are implementing Task N: [task name].
 
   ## Your task
 
   Read your task brief first: [BRIEF_FILE]
-  It contains the full task text from the design.
+  It contains the full task text from the design, and only that task — the
+  other tasks are deliberately not in it.
+
+  ## The design this task came from
+
+  Design file: [DESIGN_FILE]
+
+  Read the sections that bear on your task — the file structure it defines,
+  the data model or contracts, and the shape around where your task sits.
+  Do not implement any other task you find there; another agent has it.
+  When the brief and the design disagree, the brief is the newer word on
+  your task — say so in your report rather than picking silently.
+
+  Binding constraints from the design, true for every task: [GLOBAL_CONSTRAINTS]
 
   ## Context
 
@@ -82,7 +147,8 @@ prompt: |
 
   ## Code organization
 
-  - Follow the file structure the design defines.
+  - Follow the file structure the design defines — it is in [DESIGN_FILE],
+    which is why you were given it.
   - One clear responsibility per file, with a well-defined interface.
   - A file growing past the design's intent → stop and report
     DONE_WITH_CONCERNS. Do not split files on your own initiative.
@@ -162,7 +228,7 @@ A task-scoped gate, not a merge review.
 
 ```
 description: "Review Task N (spec + quality)"
-model:       [REQUIRED — scale to the diff's size, complexity and risk]
+model:       [REQUIRED — build; deep where the diff carries real subtlety]
 prompt: |
   You are reviewing one task's implementation: first whether it matches its
   requirements, then whether it is well built. This is a task-scoped gate,
@@ -309,7 +375,7 @@ Not a fresh review — the full review already happened.
 
 ```
 description: "Re-review Task N fix round R"
-model:       [REQUIRED — cheap-to-mid for a small fix diff]
+model:       [REQUIRED — build]
 prompt: |
   You are re-reviewing one task's fix round. A previous review produced
   findings; an implementer has attempted to fix them. Verdict each finding
@@ -377,11 +443,11 @@ prompt: |
 ## 4. Final reviewer
 
 Once, over the whole branch, after every task is complete. Dispatch it on the
-**most capable model available**, not the session default.
+**deep** tier, not the session default.
 
 ```
 description: "Review the whole branch"
-model:       [REQUIRED — most capable available]
+model:       [REQUIRED — deep]
 prompt: |
   You are a senior code reviewer. Review completed work against its design
   and against code-quality standards, and identify issues before they
@@ -446,13 +512,19 @@ prompt: |
 
 ## 5. Design reviewer
 
-Optional, before any build. PRACTICE.md §3 is the self-review you run yourself;
-this is a second pair of eyes on an architectural design file when the build is
-expensive enough to be worth one.
+Conditional, before any build, and **after** PRACTICE.md §3's self-review has
+been run inline and its fixes applied. §3 stays yours: it is never a subagent and
+never a second pass. This template is a different thing — one independent read of
+an architectural design file, and it fires only when all three of §3's conditions
+hold ([PRACTICE.md §3](../PRACTICE.md#3-self-review-the-design-before-anyone-builds-it)):
+the path is architectural, the build is large enough that a wrong design costs
+more than the review, and the design defines an interface other components depend
+on. Any one missing → don't dispatch it. Its findings are advice on a document,
+not a gate, and it does not loop.
 
 ```
 description: "Review the design file"
-model:       [REQUIRED — a strong reasoning tier]
+model:       [REQUIRED — deep]
 prompt: |
   Review this design document for the problems that only show up when
   someone tries to build from it. You are not judging the idea — you are

@@ -27,9 +27,9 @@ mechanics sit in `practice/`, read on demand when a section sends you there:
 | File | Load when |
 |---|---|
 | [`practice/prompts.md`](practice/prompts.md) | Dispatching any subagent — the five templates, verbatim |
-| [`practice/task-loop.md`](practice/task-loop.md) | Driving a design's tasks to done — setup, model tiers, fix rounds, final review |
-| [`practice/scripts/taskwork.sh`](practice/scripts/taskwork.sh) (`.ps1`) | Generating a task brief or a review package as a file, so a diff never lands in the controller's context |
-| [`practice/tdd.md`](practice/tdd.md) | Writing or changing tests — the cycle, what makes a test honest, the excuse table |
+| [`practice/task-loop.md`](practice/task-loop.md) | Driving a design's tasks to done — setup, seat tiers, fix rounds, final review |
+| [`practice/scripts/taskwork.sh`](practice/scripts/taskwork.sh) (`.ps1`) | Generating a task brief or a review package as a file, so a diff never lands in the controller's context. It lives beside these docs — `<practice>/scripts/`, never in the user's project — so resolve its absolute path first: [`practice/task-loop.md` § Where taskwork.sh lives](practice/task-loop.md#where-taskworksh-lives) |
+| [`practice/tdd.md`](practice/tdd.md) | Writing or changing tests — the cycle, what makes a test honest, the canonical excuse table (§4 below carries nine of its eleven rows verbatim; go there for all of them) |
 | [`practice/debugging.md`](practice/debugging.md) | §7 says *trace it* — backward tracing, defense in depth, flaky tests, test pollution |
 
 `PLATFORMS.md` owns host mechanics and `WORKFLOW.md` owns fan-out scripts; this
@@ -130,6 +130,31 @@ sees **only its own task** — never the design conversation — so each task mu
 stand alone. Bounded and architectural paths both use this shape; a spike has no
 tasks.
 
+### CONSTRAINTS: — what stays true across every task
+
+The design contract carries a `CONSTRAINTS:` field alongside `TASKS:`, and it is
+not optional on the bounded or architectural path:
+
+```markdown
+CONSTRAINTS:
+- <exact value, name, format, or relationship every task must respect>
+- <…>
+```
+
+It holds the binding requirements that outlive any single task — exact values,
+names, formats, and the stated relationships between components. Not per-task
+detail: this is the part that is still true when task 6 is written by an agent
+that never read task 1. A constraint belongs here when violating it in one task
+silently breaks another.
+
+The controller reads it straight off the design file and copies it **verbatim**
+into every task reviewer's prompt as `[GLOBAL_CONSTRAINTS]`
+([`practice/prompts.md` §2](practice/prompts.md#2-task-reviewer)) and into the
+implementer's brief. It is the one thing every subagent sees regardless of which
+task it drew. A design with no cross-task invariants writes `CONSTRAINTS: none`
+— explicitly, so the controller knows the field was considered rather than
+forgotten.
+
 ```markdown
 ### Task N: <component>
 
@@ -179,6 +204,23 @@ Run this yourself, inline, on the design file. Not a subagent, not a second pass
 
 Fix inline and move on. No re-review loop.
 
+**A second pair of eyes — the one condition.** The five checks above are yours,
+inline, always. They are never delegated and never re-run as a second pass; that
+rule stands. Separately, and *after* they are done and their fixes applied, an
+**architectural** design may be worth one independent read before anyone builds
+from it. Dispatch [`practice/prompts.md` §5](practice/prompts.md#5-design-reviewer)
+on a deep-tier model when **all three** hold:
+
+1. The path is architectural — a spike or bounded design never earns it.
+2. The build is expensive enough that a wrong design costs more than the review:
+   roughly six or more tasks, or any task fanning out to parallel implementers.
+3. The design defines an interface other components will depend on, so a mistake
+   is not local to one task.
+
+Its output is findings on a document, not a gate: fix what it finds, ignore what
+you disagree with and say why, then go. It does not loop either, and it does not
+replace the approval gate in §1 — that is the user's, not a reviewer's.
+
 ---
 
 ## 4. Building (`test-driven-development`, `subagent-driven-development`)
@@ -199,38 +241,50 @@ rules that keep a test honest (name the break it catches; no mirror assertions;
 no change detectors; assert real behavior, never mock behavior), and the
 checklist.
 
-**Per task, not per build:** each build agent gets one task, fresh context and
-the design file path — never the session history. When a task comes back,
+**Per task, not per build:** each build agent gets one task, fresh context, the
+design file path and the design's `CONSTRAINTS:` — never the session history.
+When a task comes back,
 review it against its own spec before dispatching the next: spec compliance
 first, then code quality. A failed review goes back to a fix agent with the
 finding, not to the next task. Independent tasks fan out in parallel; tasks that
 touch the same files do not.
 
-Use the least powerful model that can fill each seat, and **always name it
+Use the least powerful tier that can fill each seat, and **always name the model
 explicitly** — an omitted model inherits the session's, usually the most
-expensive. Cheapest for transcription and single-file mechanical work; standard
-for multi-file integration; the most capable available for design judgement and
-for the final whole-branch review. Fix rounds four and five go a tier above the
-implementer that got stuck.
+expensive. The tiers are the four in `PLATFORMS.md`, and there are no others:
+**cheap** for transcription and single-file mechanical work, **build** for
+multi-file integration and for reading a task's diff, **deep** for design
+judgement and for the final whole-branch review. The escalated fix round goes a
+tier above the implementer that got stuck.
+[`practice/task-loop.md` §Model selection](practice/task-loop.md#model-selection)
+maps every seat in the loop to one of them; `PLATFORMS.md`'s Role tiers table
+turns the tier into the slug you type on this host.
 
 **The controller runs a bounded loop, not an open one:** dispatch → review → at
-most five fix rounds → adjudicate whatever is still open → one whole-branch
-review at the end. **[`practice/task-loop.md`](practice/task-loop.md)** is the
+most three fix rounds → adjudicate whatever is still open → one whole-branch
+review at the end. Three is the same count as §7's three-fix rule, and for the
+same reason. **[`practice/task-loop.md`](practice/task-loop.md)** is the
 procedure; **[`practice/prompts.md`](practice/prompts.md)** is the text you
 dispatch.
 
 ### Rationalizations
 
+Nine of the eleven rows in
+[`practice/tdd.md`](practice/tdd.md#common-rationalizations) — the canonical
+table — reproduced verbatim, because this file is read every session and tdd.md
+is not. The two not here ("I need to explore first", "Existing code here has no
+tests") are in tdd.md.
+
 | Excuse | Reality |
 |---|---|
 | "Too simple to test" | Simple code breaks. The test takes thirty seconds. |
-| "I'll test after" | Tests written after pass immediately, which proves nothing. You never watched it fail, so you never proved it can catch the bug. |
-| "Spirit not ritual — tests after are the same" | Tests-after answer "what does this do?". Tests-first answer "what should this do?" The first is biased by the code already in front of you. |
-| "I already tested it manually" | No record of what you covered, no way to re-run it, easy to forget cases under pressure. |
-| "Deleting hours of work is wasteful" | Sunk cost. Keeping code you cannot trust is the waste. |
+| "I'll test after" | Tests written after pass immediately, which proves nothing. They may test the wrong thing, test the implementation instead of the behavior, or miss the edge case you forgot. You never watched it fail, so you never proved it can catch the bug. |
+| "Spirit not ritual — tests after are the same" | Tests-after answer "what does this do?"; tests-first answer "what should this do?" Tests written after are biased by the code already in front of you: you verify the cases you remembered, not the ones you would have discovered. |
+| "I already tested it manually" | No record of what you covered, no way to re-run it when the code changes, easy to forget cases under pressure. "Worked when I tried it" is not comprehensive. |
+| "Deleting hours of work is wasteful" | Sunk cost. That time is spent either way. Keeping code you cannot trust is the waste. |
 | "Keep it as reference, tests first from now" | You will adapt it. That is testing after. Delete means delete. |
 | "This is hard to test" | Listen to the test. Hard to test is hard to use — it is telling you about the design. |
-| "TDD will slow me down" | Shortcuts here mean debugging in production. |
+| "TDD will slow me down" | TDD *is* the pragmatic path: bugs caught before commit, regressions prevented, refactoring without fear. "Pragmatic" shortcuts mean debugging in production. |
 | "Just this once" | No. |
 
 **Red flags — each means delete the code and start over:** code before test ·
@@ -288,7 +342,7 @@ run**.
 
 **Requesting it.** At the end of a build, before wrap-up: dispatch one reviewer
 over the whole diff with crafted context — the design file and the diff by path,
-never the session history — on the most capable model available.
+never the session history — on the **deep** tier, never the session default.
 [`practice/prompts.md` §4](practice/prompts.md#4-final-reviewer) is the template.
 `code-review:code-review` and `skillator:sherlock-codes` are the packaged
 alternatives on a large surface. Findings feed rework and the Outcome section
@@ -351,15 +405,23 @@ refactor. Verify through §5's gate: the test passes, nothing else broke, the
 issue is actually gone.
 
 **The three-fix rule.** Fix didn't work? Count the attempts. Under three: back to
-Phase 1 with the new information. **Three or more: stop and question the
+Phase 1 with the new information. **At three: stop and question the
 architecture** — each fix revealing a new problem somewhere else, or demanding
-"massive refactoring", is not a failed hypothesis, it is a wrong design. Raise it
-with the user before attempting a fourth.
+"massive refactoring", is not a failed hypothesis, it is a wrong design. There is
+no fourth attempt at the same defect.
+
+This is the **same rule and the same count** as the task loop's fix rounds. In a
+debugging session you raise it with the user; inside the task loop the controller
+adjudicates first and asks the user only when every path forward is a guess
+([`practice/task-loop.md` §4](practice/task-loop.md#4-the-fix-loop--three-rounds-then-a-breaker)
+is the procedure). Three attempts, then stop fixing and question the design —
+that part does not vary by context.
 
 **Red flags — every one of these means return to Phase 1:** "quick fix now,
 investigate later" · "just try X and see" · several changes at once, then run
 tests · "skip the test, I'll check by hand" · "it's probably X" · listing fixes
-before tracing data flow · "one more attempt" at attempt three.
+before tracing data flow · "one more attempt" at attempt three · "the loop allows
+me another round" — it does not, the count is three there too.
 
 ---
 

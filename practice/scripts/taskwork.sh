@@ -1,18 +1,22 @@
 #!/bin/sh
-# The two artifacts practice/task-loop.md hands to subagents, as files so they
+# The artifacts practice/task-loop.md hands to subagents, as files so they
 # never enter the controller's context.
 #
 #   taskwork.sh brief  <DESIGN_FILE> <N>            -> path to task N's brief
+#   taskwork.sh report <DESIGN_FILE> <N>            -> path for task N's report
 #   taskwork.sh review <DESIGN_FILE> <BASE> <HEAD>  -> path to the review package
 #
-# Both print the path and nothing else, so a caller can do:
+# All print the path and nothing else, so a caller can do:
 #   BRIEF=$(taskwork.sh brief design.md 3)
-# ponytail: one script, two subcommands, no config. Output lands in
+# `report` only names the file — the implementer writes it, fix rounds append
+# to it — so implementer and reviewer get the same path by construction.
+# ponytail: one script, three subcommands, no config. Output lands in
 # .taskwork/ beside the design file; delete the directory when the plan is done.
 set -e
 
 usage() {
   echo "usage: taskwork.sh brief  <DESIGN_FILE> <N>" >&2
+  echo "       taskwork.sh report <DESIGN_FILE> <N>" >&2
   echo "       taskwork.sh review <DESIGN_FILE> <BASE> <HEAD>" >&2
   exit 2
 }
@@ -43,6 +47,11 @@ brief)
   }
   [ -s "$f" ] || { rm -f "$f"; echo "task $n block is empty in $design" >&2; exit 1; }
   echo "$f"
+  ;;
+report)
+  n="${3:-}"
+  [ -n "$n" ] || usage
+  echo "$out/task-$n-report.md"
   ;;
 review)
   base="${3:-}"; head="${4:-}"

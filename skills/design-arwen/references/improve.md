@@ -47,7 +47,8 @@ that and ask.
 3. **Change only what the lane owns.** An adjacent bug you spot goes in the report, not
    in the diff, unless it's a contrast or a11y failure — those you fix on sight.
 4. **Preserve the identity.** Existing committed brand colors, fonts, and the existing
-   signature win over arwen's reflex-reject lists. You are tuning, not re-branding.
+   signature win over the shared floor's reflex-reject lists. You are tuning, not
+   re-branding.
 5. **Verify.** Re-render, re-screenshot, re-check contrast. The relevant subset of the
    SKILL.md ship gate, not the whole thing — but the parts your lane touched, in full.
 6. **Report the before/after** in one or two lines per change. Evidence, not adjectives.

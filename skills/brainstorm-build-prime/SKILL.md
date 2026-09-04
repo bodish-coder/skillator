@@ -1,30 +1,24 @@
 ---
 name: brainstorm-build-prime
 description: >-
-  Top-tier "brainstorm then build" — a design-tier model does creative design
-  thinking, a build-tier model implements, with full ceremony: design written to
-  disk (survives context loss), handoff before checkpoints, session .md record,
-  rework. Works across Claude Code, Cursor, Codex,
-  Antigravity, Pi, and Prime Agent
-  via role tiers and platform adapters (see references/platforms.md). On Claude
-  Code: Fable designs, Opus builds. On
-  Cursor: GPT-5.6-Sol designs, Claude Opus builds. On Codex:
-  GPT-5.6-Sol high-reasoning design pass then Sol build, auto-compaction aware.
-  For all-Opus without ceremony use brainstorm-build-mid; for Sonnet
-  offload use brainstorm-build-lite. NOT for tiny one-line edits or
-  pure design/no-build work. Absorbs the superpowers process skills — classify
-  spike/bounded/architectural, plan-grade tasks, design self-review, test-first,
-  fresh-evidence verification — via the root PRACTICE.md, so they are not chained
-  in front of it.
+  Use when the user wants top-tier "brainstorm then build" — a deep-tier
+  model doing creative design thinking, a build-tier model implementing, with
+  full ceremony (design written to disk, handoff before checkpoints, session
+  .md record, rework) so the work survives context loss. Runs on Claude Code,
+  Cursor, Codex, Antigravity, Pi and Prime Agent. For all-Opus without
+  ceremony use brainstorm-build-mid; for Sonnet offload use
+  brainstorm-build-lite. NOT for tiny one-line edits or pure design/no-build
+  work.
 ---
 
-# Brainstorm (design tier) → Build (build tier) — with ceremony
+# Brainstorm (deep tier) → Build (build tier) — with ceremony
 
-**Design tier** does creative design thinking. **Build tier** is the strongest
-coder and implements the whole thing. A skill cannot change the main session's
-model, so each phase runs as a **subagent** (or platform-equivalent delegation)
-with an explicit model override. You (orchestrator) spawn agents, keep the
-record, and run context checkpoints automatically where the platform allows.
+The design pass runs on the **`deep` tier** — creative design thinking. The
+**`build` tier** is the strongest coder and implements the whole thing. A skill
+cannot change the main session's model, so each phase runs as a **subagent** (or
+platform-equivalent delegation) with an explicit model override. You
+(orchestrator) spawn agents, keep the record, and run context checkpoints
+automatically where the platform allows.
 
 ## Step 0 — Platform & models
 
@@ -38,7 +32,8 @@ record, and run context checkpoints automatically where the platform allows.
    `PLATFORMS.md` it points to for the generic mechanics).
 2. Detect platform — claude-code · cursor · codex · antigravity · pi ·
    prime-agent — using the signals there.
-3. Note the **design** and **build** model slugs / overrides for this run.
+3. Note the **`deep`** (design pass) and **`build`** model slugs / overrides for
+   this run.
 4. If the user named models or a platform, those override the defaults — record
    them in the session file header.
 5. **Classify the request — spike / bounded / architectural (PRACTICE.md §1) — and
@@ -48,13 +43,13 @@ record, and run context checkpoints automatically where the platform allows.
 
 ---
 
-## Phase 1 — Design tier designs
+## Phase 1 — Deep tier designs
 
 A **spike** stops here: state the question and the probe in 2-3 sentences, get a
 nod, find out as cheaply as correctness allows, report a recommendation, label
 anything built throwaway. No design file, no Phase 2.
 
-Otherwise dispatch one **design-tier** agent (see platforms.md). Give it the task
+Otherwise dispatch one **`deep`-tier** agent (see platforms.md). Give it the task
 verbatim, the repo context, **and `PRACTICE.md`** — its questioning discipline and
 TASKS shape are what make the design buildable by an agent that never saw this
 conversation. Return an implementation-ready design:
@@ -64,6 +59,11 @@ GOAL:         <the task in one line>
 APPROACHES:   <2-3 candidates, one line each + the tradeoff>
 CHOSEN:       <which, and why it wins>
 DESIGN:       <data model / contracts, key edge cases, out of scope>
+CONSTRAINTS:  <the binding requirements every task must respect — exact
+              values, names, formats, and the stated relationships
+              between components. Not per-task detail: this is what
+              stays true across all of them, copied verbatim into each
+              task reviewer's prompt as [GLOBAL_CONSTRAINTS].>
 TASKS:        <one block per task in the PRACTICE.md §2 shape: Files
               create/modify/test, Interfaces consumes/produces, and
               bite-sized test-first steps carrying actual code and
@@ -147,8 +147,10 @@ NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
 ```
 
 Then, on anything bigger than a bounded change, dispatch **one reviewer over the
-whole diff** — the design file plus the diff, never the session history
-(`code-review:code-review`, or `skillator:sherlock-codes` on a large surface).
+whole diff** on the `deep` tier (PRACTICE.md §6) — the design file plus the diff,
+never the session history (`code-review:code-review`, or
+`skillator:sherlock-codes` on a large surface). This pass is prime's alone:
+-mid and -lite skip it by design.
 
 Failures and findings both feed rework.
 
@@ -206,7 +208,7 @@ session, around the call.
 
 ## Rules
 
-- **Design → design-tier agent, build → build-tier agent(s).** Don't design or
+- **Design → `deep`-tier agent, build → `build`-tier agent(s).** Don't design or
   code in the orchestrator session (except writing the session record).
 - **The design/record file is the source of truth** — pass its path to build
   agents; don't rely on chat context outliving a compact/trim.

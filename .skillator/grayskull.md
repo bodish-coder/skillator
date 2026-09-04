@@ -8,10 +8,13 @@ follow it yourself. Print its banner once per session, then route per its table.
 Standing rules, no reminder needed:
 - `TICKETS.md` at the repo root is the board — `skillator:ticket-master` owns it.
 - Reproduce before fixing. Map with `codegraph` before proposing a remedy.
-- `skillator:sherlock-codes` over the staged diff before every commit.
+- Before every commit: regression sweep, then `/code-review`
+  (`code-review:code-review`) over the staged diff. `skillator:sherlock-codes` is
+  the whole-app sweep — pre-release, handover, or unknown-cause rot — never a
+  per-commit gate, and never inside an implementer subagent.
 - Usage watch — before each non-trivial step run
-  `skills/handoff-watch/hooks/usage-watch.sh check`
+  `skills/grayskull-power/../handoff-watch/hooks/usage-watch.sh check`
   (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File
-  "skills/handoff-watch/hooks/usage-watch.ps1" -Mode check`).
+  "skills/grayskull-power/../handoff-watch/hooks/usage-watch.ps1" -Mode check`).
   It prints `HANDOFF NOW` plus an order — stop and follow it exactly.
   On Claude Code the `Stop` hook already does this; skip the manual call there.

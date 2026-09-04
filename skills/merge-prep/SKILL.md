@@ -1,15 +1,12 @@
 ---
 name: merge-prep
 description: >-
-  Prepare a branch for a clean merge — bring it onto the current base, strip the
-  parts it never meant to carry, and commit a handoff document recording every
-  decision, all ON THE BRANCH ITSELF. Use when the user wants to "prep a branch
-  for merge", "clean up a branch before merging", "make sure only the real
-  changes get merged", "strip stale/old parts", or is about to run merge-agent
-  and wants the branch normalized first. It never creates a side branch, never
-  rewrites history, never force-pushes, and never touches the base — it only
-  appends commits to the branch, behind a pre-prep tag that undoes the whole run.
-  NOT for the actual merge (use merge-agent) or for non-git tasks.
+  Use when the user wants to "prep a branch for merge", "clean up a branch
+  before merging", "make sure only the real changes get merged", "strip
+  stale/old parts", or is about to run merge-agent and wants the branch
+  normalized first. Everything happens ON THE BRANCH ITSELF — never a side
+  branch, never a history rewrite, never a force-push, never the base. NOT for
+  the actual merge (use merge-agent) or for non-git tasks.
 ---
 
 # Merge Prep — the branch carries only its real changes, and says so

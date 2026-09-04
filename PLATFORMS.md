@@ -10,15 +10,23 @@ default; translate through the row for your host.
 
 ## Role tiers
 
-| Tier | Job | Claude Code default |
-|------|-----|---------------------|
-| **deep** | Creative design, hard reasoning, semantic judgement calls | Fable / Opus |
-| **build** | Implement the design — strongest coder available | Opus |
-| **cheap** | Bulk summarizing, mechanical edits, trivial conflicts, analysis | Sonnet / Haiku |
-| **orchestrator** | Main session: dispatch, write files, checkpoints | the running session |
+These four names are the **only** tier vocabulary skillator uses. `PRACTICE.md`
+§4 and [`practice/task-loop.md`](practice/task-loop.md) name seats with them and
+nothing else; this table is where they become a slug you can actually type.
+
+| Tier | Job | claude-code | cursor | codex | antigravity | pi | prime-agent |
+|------|-----|---|---|---|---|---|---|
+| **deep** | Creative design, hard reasoning, semantic judgement, the final whole-branch review | Fable / Opus | the strongest reasoning slug the Task tool offers (GPT-5.6-Sol, Claude Opus) | `reasoning_effort: high` or `xhigh` | `/model` → Gemini 3.1 Pro or Claude Opus | `/model` → the account's strongest reasoning model | the child-agent config's strongest provider |
+| **build** | Implement the design; review a task's diff — strongest coder available | Opus | Claude Opus, or the strongest coding slug allowed | `reasoning_effort: medium` | `/model` → Claude Sonnet or Opus | `/model` → the account's strongest coding model | the login provider, default child config |
+| **cheap** | Transcription, single-file mechanical edits, bulk summarizing, trivial conflicts | Sonnet / Haiku | the cheapest slug in the Task tool's list | `reasoning_effort: low` | `/model` → Gemini 3.5 Flash or GPT-OSS 120B | `/model` → the cheapest configured provider | a child agent on the cheapest configured provider |
+| **orchestrator** | Main session: dispatch, rule, keep the ledger, write files, checkpoints | the running session | the running session | the running session | the running session | the running session | the running session |
 
 Use a *different* model for deep vs build when the host allows it. Same model
 for both is a valid fallback — say so in the run's record.
+
+A host whose slug list doesn't contain an obvious match for a tier gets the
+closest one **and a recorded substitution**. Never leave the model unnamed: an
+omitted model inherits the session's, which is usually the most expensive one.
 
 ## Detect the host
 
@@ -44,7 +52,7 @@ Ambiguous → ask once. The user can override with `platform: <host>`.
 | **Context checkpoint** | `/compact`, `/clear` | new composer/chat turn | auto-compacts; new thread for a clean slate | new session (`/agents` keeps background work) | new session | `/refine` + daemon sessions, `prime-agent --resume <id>` |
 | **Always-on project file** | `CLAUDE.md` (`@path` imports) | `AGENTS.md` | `AGENTS.md` | `GEMINI.md` (`@path` imports) | `AGENTS.md` | `AGENTS.md` |
 | **Usage % readable** | `statusLine` `rate_limits.*.used_percentage` | no | yes — `~/.codex/sessions/**/rollout-*.jsonl`, last `token_count` | no | no | no |
-| **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | **no** — hooks are `PreToolUse`/`PostToolUse`/`PermissionRequest`/`SessionEnd`; `notify` can't inject | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
+| **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | **no usable gate today** — `Stop` in `hooks.json` is compiled in and would inject via exit 2 + a continuation prompt on stderr, but the live test found no reachable config that fires it. See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
 | **Durable memory** | `CLAUDE.md` + files on disk | files on disk | `AGENTS.md` + files | `AGENTS.md` + files | `AGENTS.md` (`~/.pi/agent/`, parents, cwd) + files | Continual Harness + `AGENTS.md` + files |
 
 **Frontmatter:** only `name` + `description` are portable. Everything else
@@ -65,6 +73,51 @@ the substitution.
 layer. Subagents went GA in March 2026: up to 8 in parallel, each with its own
 context window and sandbox — so tiered phases here are real delegation, not a
 sequential fallback.
+
+**codex hooks — what is actually verified.** Codex has a hook system configured
+by `hooks.json`, and its event enum is wider than turn-start events. Read out of
+the shipped binary (`codex.exe`, `codex-cli 0.147.0-alpha.6.5`) with `grep -a`,
+the enum is `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`,
+`PostCompact`, `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `SubagentStart`,
+`SubagentStop`, **`Stop`**. Three handler types are in the config schema —
+`command`, `prompt`, `agent` — but only `command` runs: the binary carries
+`prompt hooks are not supported yet` and `agent hooks are not supported yet`
+(and `async hooks are not supported yet`). There is an `additionalContext`
+output field with a per-hook `additionalContextLimit`, and a warning string
+`ignoring additionalContextLimit for <event> hook in <file>: this event cannot
+emit additionalContext` — the binary does not spell out which events those are.
+
+**What is verified.** Two Codex builds are installed on this machine and they
+differ, so cite the one you actually run:
+
+| | on `PATH` (npm shim, `codex-cli 0.153.2`) | `~/AppData/Local/OpenAI/Codex/bin/<hash>/codex.exe` |
+|---|---|---|
+| `Stop` event | yes | yes |
+| exit 2 + stderr continuation prompt | yes | yes |
+| `decision:block` JSON payload | **no** | yes |
+
+Both carry `Stop hook exited with code 2 but did not write a continuation prompt
+to stderr` and `Stop hook requested continuation without a prompt` — strings that
+only exist because the code reads a continuation prompt off stderr after an exit
+2. That is the same convention Claude Code's `Stop` hook uses, and it is present
+in the build that actually runs. `Stop hook returned decision:block without a
+non-empty reason` appears **only** in the Local build, so the JSON form is not
+portable between them.
+
+**What the live test found: the hook does not fire.** Tested 2026-09-04 against
+`codex-cli 0.153.2` via `codex exec`. A `command` handler on `Stop` was tried at
+`~/.codex/hooks.json` and at `~/.codex/hooks/hooks.json`, in both the bare
+`{command}` shape and the `{enabled, matcher, hooks:[{type,command,timeoutMs}]}`
+shape, with `--dangerously-bypass-hook-trust`. The turn completed normally every
+time and the handler never ran — no stderr marker, and no filesystem side effect
+from a handler that wrote one.
+
+So: the `Stop` code path is compiled in, but no reachable configuration was found
+that invokes it from `codex exec`. Untried, and where the answer probably lives:
+an interactive `codex` session rather than `exec`, a per-repo `.codex/hooks.json`,
+whatever persists hook trust properly, or a build newer than this one. Treat
+Codex as having **no usable turn-end gate today** and keep the `check` fallback —
+which stays for cursor and antigravity regardless.
 
 **antigravity** — skills become slash commands automatically; `/skills` lists
 what it can see. Frontmatter beyond `name`/`description` is dropped, so any

@@ -3,16 +3,11 @@ name: skill-smith
 description: >-
   Use when writing a new agent skill, editing an existing one, or diagnosing a
   skill agents don't load or don't follow — a SKILL.md, a slash command, a
-  reference file beside one, or an always-on instruction file (CLAUDE.md,
-  AGENTS.md, GEMINI.md). Also use when the user says "write a skill", "make this
-  a skill", "skillify this", "my skill isn't triggering", "the agent ignored the
-  skill", "improve this skill", or asks why a rule keeps getting rationalized
-  away. Covers what earns a skill at all, the description field that decides
-  whether it is ever loaded, matching the form of the guidance to the kind of
-  failure it must prevent, bulletproofing a discipline rule against
-  rationalization, and testing a skill on fresh subagents before deploying it.
-  NOT for using a skill (just invoke it) and NOT for installing or enabling
-  skills on disk.
+  reference file, or an always-on file (CLAUDE.md, AGENTS.md, GEMINI.md). Also
+  when the user says "write a skill", "make this a skill", "skillify this", "my
+  skill isn't triggering", "the agent ignored the skill", "improve this skill",
+  or asks why a rule keeps getting rationalized away. NOT for using a skill
+  (just invoke it) or installing/enabling skills on disk.
 ---
 
 # Skill Smith
@@ -83,6 +78,38 @@ description: Use for TDD - write test first, watch it fail, write minimal code, 
 # ✅ triggering conditions only
 description: Use when executing implementation plans with independent tasks in the current session
 ```
+
+**Violating the letter of this is violating the spirit of it.** Enumerate the
+procedure in any register and the agent has a plan before it has the body.
+Three disguises, each produced by a real agent that had this section open:
+
+- **Steps in trigger costume.** "Use when you need to freeze the changelog, when
+  you need to tag a build, when you need to canary…" — six `Use when` clauses
+  that are the six steps. A trigger is a situation someone is *in*, never a step
+  they are *on*.
+- **The step list recast as nouns.** "— changelog freeze, migration dry-run,
+  tag, canary, error-budget watch, promote or roll back." Nouns instead of verbs
+  is the same ordered summary. So is a `Covers:` or `Steps:` tail.
+- **The summary plus a disclaimer.** "Thresholds and gates are in the body —
+  follow it, never this line." A summary you have to warn the reader about is
+  still a summary. Delete it; don't patch it.
+
+| Rationalization | Reality |
+|---|---|
+| "That is exactly what a description is for: match on the situation, disclose the contents." | Half of that is the job. The field is a retrieval key injected into every turn's system prompt, not a table of contents. |
+| "It never says what the skill *does* — a reader has no idea they are getting a freeze, a dry-run and a tag." | Correct, and intended. The reader who needs that opens the body. The description's only failure mode is not firing when it should. |
+| "My skill is a Reference, not a procedure. There is no workflow to short-circuit, so §2's mechanism can't apply to my shape." | Then list the parameter names as *keywords* and stop there. "Reference for X, Y and Z with units, defaults and safe ranges" is a contents summary, and an agent that reads it decides it already knows the shape of the answer. No shape is exempt. |
+| "Our harness loads the body eagerly, so 'the body becomes optional' cannot happen here." | The description sits in the system prompt; the body sits hundreds of lines down. The compressed ordered version wins on salience whether or not the long one is loaded. |
+| "I named the phases as nouns rather than as an ordered how-to — that is the most of the instruction I can honour." | A partial summary is a summary. There is no compliant fraction of this. |
+| "The three neighbouring skills all summarize their workflow; mine would be the odd one out." | Three bugs is not a convention. |
+| "The exclusions belong in the body under a scope heading, not crammed into a frontmatter line." | The `NOT for` clause is the cheapest thing in the field and the only part that stops the skill stealing its neighbours' traffic. It stays. |
+| "The description is also our catalog page / runbook widget, so it has to say what's inside." | Two readers, one field, and only one of them fails silently. Fix the generator or add a second field. Don't spend the retrieval key on the human. |
+
+**Red flags — rewrite the description if you catch yourself thinking:** "they
+should know what they're getting without opening the file" · "this shape doesn't
+have the failure §2 describes" · "just the phases, not the steps" · "I'll name
+them as nouns" · "our setup is different" · "one short `Covers:` tail is fine" ·
+"it's only a summary if it's ordered".
 
 Then make it *findable*:
 
@@ -187,6 +214,13 @@ can an agent find the answer in it?
 | "I'm confident it's good" | Overconfidence guarantees issues. |
 | "Reading it through is enough" | Reading is not using. |
 | "No time" | Deploying an untested skill costs more time than testing it. |
+| "There isn't time before the freeze — the retrieval test is a follow-up ticket" | A follow-up ticket is "I'll test if problems emerge" with a due date nobody enforces. The skill is deployed by then, which is the thing the law forbids. Ship nothing rather than ship untested. |
+| "It's a documentation fix, not a code change — don't put a 40-minute harness in front of a paragraph" | For a skill the paragraph *is* the code: it is the thing the agent executes. A README gets that exemption; a SKILL.md does not. |
+| "I'll keep the draft open as a reference and run one quick check that it reads clearly" | Legibility was never the question — the wording that failed also read clearly. A draft you keep becomes the answer you look to confirm. |
+
+**Red flags — you are skipping the test if you think:** "this one is small
+enough" · "I'll baseline it after it lands" · "the deadline is the constraint,
+not the process" · "a quick sanity read is enough this time".
 
 **Stop after each skill.** Do not batch — write one, test it, deploy it, then
 start the next. "Batching is more efficient" is how three untested skills ship
@@ -249,6 +283,14 @@ an absolute number.
 The split is: **SKILL.md is the laws, `references/` is the mechanics.**
 `PRACTICE.md` and its `practice/` directory are that pattern at repo scale.
 
+**A rule several skills enforce lives once**, at the repo-root `references/` beside
+`PRACTICE.md` and `PLATFORMS.md` — `references/anti-slop.md`, the shared design floor,
+is the model. A skill that produces or signs off UI *cites* it, with both install
+paths (`../references/anti-slop.md` first, the `install.sh` layout; then
+`../../references/anti-slop.md`, git checkout or plugin cache; one level deeper from
+the skill's own `references/*.md`; neither resolves → say so in one line) and adds only
+its own exemptions. A ban restated in a second skill is a ban that drifts.
+
 ---
 
 ## Checklist
@@ -256,6 +298,8 @@ The split is: **SKILL.md is the laws, `references/` is the mechanics.**
 - [ ] It earns existence (§1) — not a one-off, not a lint rule in prose
 - [ ] Baseline run done **without** the skill; rationalizations recorded verbatim
 - [ ] Description is triggers only, third person, keyword-rich, with a `NOT for` clause
+- [ ] No step list in the description in any register — no trigger costume, no
+      noun list, no `Covers:`/`Steps:` tail, no summary-plus-disclaimer
 - [ ] `name:` matches the folder name
 - [ ] Form matches the failure type (§3)
 - [ ] Discipline rules: loopholes named, spirit-vs-letter pre-empted, table built from the real run, red flags listed

@@ -1,0 +1,44 @@
+# Line endings. Everything in this repo is text that is read by POSIX tools as
+# often as by Windows ones, so the index AND the working tree are LF.
+#
+# Why eol=lf and not the default `text=auto` alone: `text=auto` normalises the
+# index to LF but still checks out CRLF on Windows. That is exactly how the
+# shipped hooks break - a Windows clone writes `#!/usr/bin/env sh\r\n`, the file
+# is copied/installed onto a Linux box (install.sh, a container, CI) and the
+# kernel reports `bad interpreter: /usr/bin/env sh^M`. Same class of breakage as
+# the missing +x bit, arriving by a different route. Forcing eol=lf also silences
+# the `LF will be replaced by CRLF` warning on every write from Windows.
+* text=auto eol=lf
+
+# Spelled out for the files where a CRLF is an actual bug, not a nuisance:
+*.sh   text eol=lf
+*.bash text eol=lf
+# .md: not executable, but these are skill payloads that get concatenated,
+# diffed and fed to models; mixed endings make diffs and hashes noisy for no
+# gain, and no Windows tool we use needs CRLF markdown.
+*.md   text eol=lf
+# .ps1: PowerShell (5.1 and 7) parses LF-only scripts fine, including
+# here-strings, so LF is safe. It is chosen for consistency, not necessity -
+# one rule for the whole tree beats a per-extension exception nobody remembers.
+*.ps1  text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# The one genuine exception: cmd.exe is unreliable with LF-only batch files
+# (labels and multi-line blocks can misparse). If we ever ship one, it is CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never touch these.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.woff  binary
+*.woff2 binary

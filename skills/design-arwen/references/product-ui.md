@@ -240,8 +240,8 @@ card layout reads better and survives mobile.
   30"). A number with no period is decoration.
 - **Charts and series colours belong to `dataviz`** — it owns the validated light+dark
   palette and the mark/axis/legend rules. Don't re-derive them here.
-- The hero-metric template is banned as a *reflex* (SKILL.md), not as a concept — a big
-  number is often right. What's banned is the four-tile gradient-accent scaffold applied
+- The hero-metric template is banned as a *reflex* (the shared floor, §2), not as a
+  concept — a big number is often right. What's banned is the four-tile scaffold applied
   because dashboards look like that.
 - Density is the point (DENSITY 8–10). Airy dashboards waste the screen people chose a
   dashboard to fill.

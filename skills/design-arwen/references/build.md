@@ -61,8 +61,23 @@ Before any code: work through a *similar* prompt in your head and see where you 
 any block of your plan is where you'd land anyway — that's the training-data default, not
 a choice for this brief. **Revise that block and say what you changed and why.**
 
-Run the SKILL.md category-reflex check (both altitudes) and the three-saturated-looks
-check here, not after the code exists.
+**Then get one lens that is not yours.** Self-critique in your own head produces the
+rationalisation you would predict — it did exactly that when this skill was run
+end-to-end. Dispatch **one** subagent, the UX & interaction / a11y seat from
+`redesign.md` §3, briefed with the plan and its lens only, and ask it for the top 3
+problems ranked plus its non-negotiables. One seat, not a panel: `build` is a fresh
+surface with no audit evidence to spread across three lenses, and a second visual seat
+would only agree with you.
+
+Where it conflicts with your plan, **decide** and say why in one line — the seat advises,
+you own the route. No delegate mechanism on this host, or no budget for it? Say
+`critique: self only` in the plan so the reader knows which kind of critique it survived.
+Never report a self-critique as if a second lens had passed it.
+
+Run the three-saturated-looks check here, not after the code exists — and, **in the brand
+register only**, the SKILL.md category-reflex check (both altitudes). In the product
+register that check is off (SKILL.md Phase 1): test the signature as one systematic UX
+device instead, and do not rework toward unguessability.
 
 Only once the plan survives its own critique do you write code — and then you follow it
 exactly, deriving every color and type value from it.
@@ -116,4 +131,6 @@ Only defaults — an existing project's stack always wins.
 
 ## 6. Finish
 
-Run the SKILL.md **ship gate** in full. Do not report done on an unrendered page.
+Run the SKILL.md **ship gate** — the single gate, tagged `static`/`browser`/`delegated`.
+No browser? Run every `static` item anyway and report in SKILL.md's terminal-state shape.
+Do not report done on an unrendered page.

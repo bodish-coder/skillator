@@ -25,6 +25,26 @@ Every run goes to a **fresh subagent** — no session history, no prior turn whe
 you already explained the rule. `PLATFORMS.md` maps the dispatch mechanism per
 host; `practice/prompts.md` is the general shape.
 
+**Fresh means fresh of the project file too, and this is the trap that ruins
+real runs.** A subagent inherits the dispatcher's cwd, and therefore that
+directory's `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` — including everything they
+`@import`. Testing a skill from inside the repo that *ships* that skill hands
+the RED agent the very rules it is supposed to lack, and RED then "passes" for
+the one reason you cannot detect from its transcript. This is reason 2 arriving
+through the environment instead of through your prompt, and it is easy to miss
+precisely because your prompt looks clean.
+
+Before trusting any RED result, check what the run actually inherited:
+
+```sh
+cd "$SCENARIO_DIR" && ls CLAUDE.md AGENTS.md GEMINI.md 2>/dev/null
+```
+
+Put the scenario somewhere with none of them — a scratch directory outside the
+repo — and say in the report which cwd RED ran in. A RED baseline whose cwd
+carried a project file stating the rule is **void**, not weak: discard it and
+re-run rather than reasoning about how much it was influenced.
+
 ---
 
 ## RED — the baseline
@@ -41,9 +61,18 @@ Record, word for word:
   wrong shape while trying to comply (a shaping failure — see SKILL.md §3, and
   do not reach for prohibitions)
 
-No violation in the baseline? Then either the scenario has no real pressure in
-it, or the skill has nothing to prevent. Both mean stop and reconsider before
-writing anything.
+No violation in the baseline? Then one of three things is true, and you have to
+say which before you write a line:
+
+1. The scenario has no real pressure in it.
+2. **The scenario quoted the rule to the agent.** Naming the law in the prompt —
+   "the repo's CONTRIBUTING.md says every change must be baselined first" —
+   turns the run into a test of whether an agent obeys a rule it was just handed.
+   It always does. State the *situation*, never the rule; the whole question is
+   whether the skill supplies it.
+3. The skill has nothing to prevent here. That is a real and reportable result.
+   Write it down as a pass. Inventing a failure to justify an edit is the
+   dishonesty this whole procedure exists to catch.
 
 ---
 
@@ -107,6 +136,22 @@ variants. For each new hole, apply all four:
 
 Then **re-verify the earlier scenarios**. A fix that closes hole three and
 reopens hole one is not a fix. This is the regression suite.
+
+### The three doors a compliant agent finds first
+
+Every loophole round on skillator's own skills has produced at least one of
+these. Write the variants that probe them before inventing your own:
+
+| Door | The variant that opens it |
+|---|---|
+| **Shape exemption** | Same rule, but the skill is a different shape (a Reference instead of a Technique). The agent reasons that the rule's *mechanism* can't apply to its shape and exempts itself. |
+| **Environment exemption** | Tell it the host behaves differently ("our harness loads bodies eagerly", "we don't use a router"). It will accept the premise and drop the rule. |
+| **Partial compliance** | Give it a demand it can half-satisfy. It ships the violation in a milder register and calls it "the most of the instruction I can honour". |
+
+A rule survives a door only if the rule *names* that door. Mechanism arguments
+in the body are what agents negotiate with — they reason from the mechanism to
+an exemption. State the mechanism, then state that no shape and no host is
+exempt from the rule it justifies.
 
 ---
 

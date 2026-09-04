@@ -162,7 +162,9 @@ safe areas, notches, keyboard insets.
 ## Push past limits (only when the brief earns it)
 
 **Propose 2–3 directions and get an explicit pick before building** — ambition misfires
-most. Context defines "extraordinary": a particle system dazzles on a portfolio and
+most. No user to pick (subagent, batch run)? Do not propose into the void and do not take
+the boldest by default: take the one the register argues for, name the two you rejected
+and why in one line each, and carry on.  Context defines "extraordinary": a particle system dazzles on a portfolio and
 embarrasses on a settings page. For functional UI the wow is how it *feels* — a dialog
 morphing from its trigger, a 100k-row table at 60fps.
 

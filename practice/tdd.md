@@ -96,18 +96,23 @@ can run does not belong on the production class.
 
 ## Common rationalizations
 
+**This table is canonical.** `PRACTICE.md` §4 reproduces nine of these eleven
+rows verbatim, because it is the file read every session; the wording is
+identical on purpose, so a row is edited here and copied there, never diverged.
+The two rows marked *tdd.md only* are the ones §4 leaves out.
+
 | Excuse | Reality |
 |---|---|
 | "Too simple to test" | Simple code breaks. The test takes thirty seconds. |
-| "I'll test after" | Tests written after pass immediately — which proves nothing. They may test the wrong thing, test the implementation instead of the behavior, or miss the edge case you forgot. You never watched it fail, so you never proved it can catch the bug. |
-| "Tests after achieve the same goal — spirit, not ritual" | Tests-after answer "what does this do?"; tests-first answer "what should this do?" Tests written after are biased by the code already in front of you: you verify the cases you remembered, not the ones you would have discovered. |
-| "I already tested it manually" | Ad-hoc: no record of what you covered, no way to re-run it when the code changes, easy to forget cases under pressure. "Worked when I tried it" is not comprehensive. |
-| "Deleting X hours of work is wasteful" | Sunk cost. That time is spent either way. The real choice is rewrite with TDD (high confidence) versus bolt tests on after (low confidence, likely bugs). Keeping code you cannot trust is the waste. |
-| "Keep it as reference, I'll write tests first" | You will adapt it. That is testing after. Delete means delete. |
-| "I need to explore first" | Fine. Throw the exploration away, then start with TDD. |
+| "I'll test after" | Tests written after pass immediately, which proves nothing. They may test the wrong thing, test the implementation instead of the behavior, or miss the edge case you forgot. You never watched it fail, so you never proved it can catch the bug. |
+| "Spirit not ritual — tests after are the same" | Tests-after answer "what does this do?"; tests-first answer "what should this do?" Tests written after are biased by the code already in front of you: you verify the cases you remembered, not the ones you would have discovered. |
+| "I already tested it manually" | No record of what you covered, no way to re-run it when the code changes, easy to forget cases under pressure. "Worked when I tried it" is not comprehensive. |
+| "Deleting hours of work is wasteful" | Sunk cost. That time is spent either way. Keeping code you cannot trust is the waste. |
+| "Keep it as reference, tests first from now" | You will adapt it. That is testing after. Delete means delete. |
+| "I need to explore first" *(tdd.md only)* | Fine. Throw the exploration away, then start with TDD. |
 | "This is hard to test" | Listen to the test. Hard to test is hard to use — it is telling you about the design. |
 | "TDD will slow me down" | TDD *is* the pragmatic path: bugs caught before commit, regressions prevented, refactoring without fear. "Pragmatic" shortcuts mean debugging in production. |
-| "Existing code here has no tests" | You are improving it. Add tests for what you touch. |
+| "Existing code here has no tests" *(tdd.md only)* | You are improving it. Add tests for what you touch. |
 | "Just this once" | No. |
 
 **Red flags — every one of these means delete the code and start over:** code

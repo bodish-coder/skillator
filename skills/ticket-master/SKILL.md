@@ -1,22 +1,13 @@
 ---
 name: ticket-master
 description: >-
-  Serialised, Jira-style ticket IDs for AI coding chats — every user-reported bug
-  is B1, B2, B3…, every feature F1, F2, F3…, and every issue the agent itself
-  finds (runtime errors, analysis, review) A1, A2, A3…, with sub-parts as B7a/B7b,
-  all recorded in a
-  single shared TICKETS.md at the repo root so nothing is forgotten across chats,
-  sessions, or teammates on the same branch. Use when the user reports a bug or
-  asks for a feature, says "log this", "what's pending", "ticket", "B3", "F12",
-  "next ticket number", "mark it done", "A4", "list tickets", "list tickets
-  status", or when starting work and you need to know what's already open. Also use before closing a session to sync statuses. It
-  allocates IDs by scanning the file (never reusing a number), keeps status as
-  pending/in-progress/done, and appends rather than renumbering so parallel
-  teammates don't conflict. NOT an issue tracker replacement and NOT for
-  syncing to real Jira/GitHub Issues. The open set is worked as a single
-  deterministic Workflow script — one agent per ticket, fanned out and verified in
-  one call — whenever several tickets are open at once or the user says "ultracode", "work the board", "use a workflow",
-  "fan out agents".
+  Use when the user reports a bug or asks for a feature, says "log this",
+  "what's pending", "ticket", "B3", "F12", "A4", "next ticket number", "mark it
+  done", "block it", "defer it", "cancel it", "list tickets", "list tickets
+  status", "ultracode", "work the board", "use a workflow", "fan out agents",
+  mentions TICKETS.md, or when starting work and you need to know what's
+  already open. Also before closing a session to sync statuses. NOT an issue
+  tracker replacement and NOT for syncing to real Jira/GitHub Issues.
 ---
 
 # ticket-master — serialised tickets, worked as a workflow
@@ -110,6 +101,13 @@ doubt, log it — a pending line is cheap.
   with a short ` — reason` on the line (`[-] B9 — Safari flicker (dup of B4)`).
   Cancelled is a closed state, not a deleted one: the line and its number stay.
 - Reference the ID in commit messages: `B3: reject uploads over 5MB`.
+- **A board edit is not done until you have read it back.** After every status
+  flip, `grep -n '<ID>' TICKETS.md` and report from *that output*, never from the
+  edit you believe you made. An edit whose hunk is missing from `git diff` is a
+  failed flip, not a done one — silent no-ops are routine here, because
+  `TICKETS.md` is UTF-8 and full of em dashes, so any tool that reads it as
+  cp1252 (a bare Python `open()` on Windows) matches nothing and changes
+  nothing while exiting 0. Read, write and compare it as UTF-8.
 - Cycle end / session end: re-read the file and correct any status that drifted,
   then report the open set (`[ ]` and `[~]`) to the user.
 
@@ -122,6 +120,9 @@ exists to break.
 
 - Give each agent its ticket ID, the one-line title, and the repo context it
   needs; tell it to report back what it changed and whether it verified.
+- **Name a model for every dispatch — never let it inherit the session's.**
+  See `PRACTICE.md`'s model-tier guidance for which tier fits which seat; a
+  mechanical fix and the agent judging it can warrant different tiers.
 - Only the main session edits `TICKETS.md` — agents report, you flip statuses.
   Two agents writing the same file is how you lose tickets.
 - Tickets touching the same files are the one exception: run those sequentially,
@@ -168,15 +169,19 @@ const VERDICT = { type: 'object', properties: {
   id: {type: 'string'}, passed: {type: 'boolean'}, why: {type: 'string'} },
   required: ['id', 'passed', 'why'] }
 
+// Name a model for every dispatch — never let it inherit the session's.
+// See PRACTICE.md's model-tier guidance; fix and verify are different seats
+// and often warrant different tiers. Slugs below are Claude Code's; on another
+// host substitute that host's equivalents from PLATFORMS.md.
 const results = await pipeline(
   args,                                    // [{id: 'B3', title: '…'}, …]
   t => agent(`Fix ticket ${t.id}: ${t.title}. Report what you changed and how ` +
              `you verified it. Note any unrelated problems you hit.`,
-             { label: `fix:${t.id}`, phase: 'Fix' }),
+             { label: `fix:${t.id}`, phase: 'Fix', model: 'sonnet' }),
   (fix, t) => agent(`Ticket ${t.id} — "${t.title}". An agent reports: ${fix}
 ` +
                     `Verify against the repo. Default to passed=false if unproven.`,
-             { label: `verify:${t.id}`, phase: 'Verify', schema: VERDICT })
+             { label: `verify:${t.id}`, phase: 'Verify', schema: VERDICT, model: 'opus' })
 )
 return results.filter(Boolean)
 ```

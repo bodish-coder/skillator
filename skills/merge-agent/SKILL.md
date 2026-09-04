@@ -1,22 +1,13 @@
 ---
 name: merge-agent
 description: >-
-  Analyse GitHub branches with agents and merge them gracefully, handling
-  conflicts by risk. Use when the user wants to combine/consolidate several
-  branches into one integration branch, merge a feature branch into a base
-  (main/develop), or reconcile divergent branches that touched the same code —
-  and wants conflicts handled intelligently rather than by hand. Agents summarize
-  each branch's intent, build an overlap/conflict map, pick a safe merge order,
-  then merge on a throwaway integration branch: trivial conflicts (lockfiles,
-  imports, formatting) auto-resolve, semantic/logic conflicts escalate to the user
-  per hunk — not per file — with both versions, a proposed resolution, and the
-  direction asked rather than assumed, so only the parts you choose are taken in.
-  The merge direction (`<source>` INTO `<destination>`) is confirmed before anything
-  is touched, and completeness is verified both ways: every hunk the source intended
-  arrives, and every hunk the destination gained is still there. Optionally verifies with the project's tests and
-  optionally opens a PR — both asked at run time. Never touches the base branch
-  directly and never pushes without explicit approval. NOT for a single trivial
-  fast-forward, or non-git tasks.
+  Use when the user wants to combine/consolidate several GitHub branches into
+  one integration branch, merge a feature branch into a base (main/develop),
+  or reconcile divergent branches that touched the same code — and wants
+  conflicts handled intelligently rather than by hand. The merge direction
+  (`<source>` INTO `<destination>`) is confirmed before anything is touched;
+  the base branch is never touched directly and nothing is pushed without
+  explicit approval. NOT for a single trivial fast-forward, or non-git tasks.
 ---
 
 # Merge Agent — analyse branches, merge by risk
@@ -37,7 +28,7 @@ and a change quietly disappears until production. *Deciding* what the merged hun
 should say is judgement, not lookup, so it goes to the strongest model
 (`model: "fable"`; on another host, its top reasoning tier per §Other hosts).
 *Writing it in*, and fixing whatever the verification then catches, is
-implementation — that is Opus's job, and handing it to the design tier is both
+implementation — that is Opus's job, and handing it to the deep tier is both
 worse and dearer.
 
 **Neither tier touches the mechanical majority.** Fable sees only the semantic

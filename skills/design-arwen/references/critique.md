@@ -47,8 +47,12 @@ In this order — the top of the list is where the real damage lives:
    action in two seconds? Is anything competing for the same rank?
 4. **Craft** — type scale, line length, spacing rhythm, alignment, component consistency,
    palette discipline.
-5. **Distinctiveness** — the absolute bans, the content/copy tells, the two-altitude
-   category-reflex check, and the signature test (cover the logo: is it still this product?).
+5. **Distinctiveness** — the shared anti-slop floor's bans (`anti-slop.md`, cited from
+   SKILL.md's ship gate) plus arwen's three, the content/copy tells, and the signature test
+   (cover the logo: is it still this product?). The two-altitude category-reflex check
+   applies **in the brand register only** — per §2 above, a conventional product surface is
+   not a finding, so in the product register judge whether one systematic UX device is
+   present and consistent, never whether the category is guessable.
 6. **Performance as perceived quality** — obvious LCP/CLS offenders. Measured numbers only
    if you actually measured.
 

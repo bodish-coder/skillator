@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TICKETS · skillator</title>
+<style>
+/* ─── tokens ──────────────────────────────────────────────────────────────
+   Restrained palette: tinted cool neutrals, one accent (hue 250) reserved for
+   in-progress / selection / focus, one danger (hue 25) for blocked. Nothing
+   else is chromatic. The state glyph, not colour, is the primary signal. */
+:root {
+  color-scheme: light;
+  --bg:      oklch(0.985 0.003 240);
+  --surface: oklch(1     0     240);
+  --sunk:    oklch(0.958 0.004 240);
+  --ink:     oklch(0.215 0.012 240);
+  --muted:   oklch(0.455 0.014 240);
+  --faint:   oklch(0.885 0.006 240);
+  --hair:    oklch(0.925 0.005 240);
+  --accent:  oklch(0.505 0.170 250);
+  --accent-soft: oklch(0.945 0.030 250);
+  --danger:  oklch(0.487 0.180 25);
+  --danger-soft: oklch(0.950 0.032 25);
+  --ring:    var(--accent);
+
+  --s1: 0.25rem; --s2: 0.5rem; --s3: 0.75rem; --s4: 1rem;
+  --s5: 1.5rem; --s6: 2.5rem;
+  --r: 5px;
+  --dur: 140ms;
+  --mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+          "DejaVu Sans Mono", "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+          Arial, sans-serif;
+}
+:root[data-theme="dark"], :root[data-theme="auto"] { color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root[data-theme="auto"] { color-scheme: dark; } }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+:root[data-theme="dark"],
+:root[data-theme="auto"]:where(.sysdark) {
+  --bg:      oklch(0.188 0.008 240);
+  --surface: oklch(0.228 0.009 240);
+  --sunk:    oklch(0.163 0.008 240);
+  --ink:     oklch(0.935 0.005 240);
+  --muted:   oklch(0.700 0.012 240);
+  --faint:   oklch(0.330 0.011 240);
+  --hair:    oklch(0.302 0.010 240);
+  --accent:  oklch(0.775 0.130 250);
+  --accent-soft: oklch(0.300 0.055 250);
+  --danger:  oklch(0.740 0.145 25);
+  --danger-soft: oklch(0.305 0.060 25);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 0.875rem/1.5 var(--sans);
+  font-synthesis-weight: none;
+}
+
+/* ─── utility ─────────────────────────────────────────────────────────── */
+.vh {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+.skip {
+  position: absolute; inset-block-start: -3rem; inset-inline-start: var(--s3);
+  z-index: 60; background: var(--surface); color: var(--ink);
+  padding: var(--s2) var(--s3); border: 1px solid var(--ink); border-radius: var(--r);
+  text-decoration: none;
+}
+.skip:focus { inset-block-start: var(--s2); }
+
+:where(a, button, summary, input, select):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--r);
+}
+/* The real control is a visually-hidden native input; the ring has to land on
+   the label a sighted keyboard user is actually looking at. */
+input.sw:focus-visible + .chip {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ─── shell ───────────────────────────────────────────────────────────── */
+.wrap { max-width: 74rem; margin-inline: auto; padding-inline: var(--s4); }
+
+header.top {
+  position: sticky; inset-block-start: 0; z-index: 30;
+  background: var(--bg);
+  border-block-end: 1px solid var(--hair);
+}
+.masthead {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: var(--s2) var(--s4);
+  padding-block: var(--s3) var(--s2);
+}
+h1 {
+  margin: 0; font: 600 1.0rem/1.2 var(--mono);
+  letter-spacing: 0.01em;
+}
+h1 .of { color: var(--muted); font-weight: 400; }
+.masthead .grow { flex: 1 1 6rem; }
+.tools { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+
+/* The count line. Fixed shape, whole board, never filtered. */
+.tally {
+  font: 400 0.8125rem/1.6 var(--mono);
+  color: var(--muted);
+  padding-block-end: var(--s3);
+  overflow-wrap: anywhere;
+}
+.tally b { color: var(--ink); font-weight: 600; }
+
+/* ─── controls ────────────────────────────────────────────────────────── */
+.controls {
+  display: flex; flex-wrap: wrap; gap: var(--s3) var(--s4);
+  align-items: center;
+  padding-block: var(--s2) var(--s3);
+}
+fieldset {
+  margin: 0; padding: 0; border: 0;
+  display: flex; align-items: center; gap: var(--s1); flex-wrap: wrap;
+}
+legend { float: left; margin: 0; padding: 0; }
+fieldset > legend + * { clear: both; }
+.leg {
+  font: 400 0.75rem/1 var(--sans); color: var(--muted);
+  margin-inline-end: var(--s2);
+}
+
+.search { position: relative; flex: 1 1 15rem; min-width: 9rem; }
+.search input {
+  width: 100%; font: 400 0.8125rem/1 var(--mono); color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--faint); border-radius: var(--r);
+  padding-block: 0.5rem;
+  padding-inline: 0.625rem 2.25rem;
+}
+.search input::placeholder { color: var(--muted); opacity: 1; }
+.search .kbd {
+  position: absolute; inset-inline-end: 0.4rem; inset-block-start: 50%;
+  transform: translateY(-50%); pointer-events: none;
+  font: 400 0.6875rem/1 var(--mono); color: var(--muted);
+  border: 1px solid var(--faint); border-radius: 3px; padding: 2px 4px;
+}
+
+/* Signature: the bracket. Filters are the same object as the rows. */
+.chip {
+  display: inline-flex; align-items: center; gap: 0.375rem;
+  min-height: 1.75rem; padding: 0.25rem 0.5rem;
+  border: 1px solid var(--faint); border-radius: var(--r);
+  background: var(--surface); color: var(--muted);
+  font: 400 0.8125rem/1 var(--mono);
+  cursor: pointer;
+  transition: background var(--dur) ease-out, color var(--dur) ease-out,
+              border-color var(--dur) ease-out;
+}
+.chip .n { font-variant-numeric: tabular-nums; }
+@media (hover: hover) { .chip:hover { border-color: var(--muted); color: var(--ink); } }
+input.sw:checked + .chip {
+  background: var(--accent-soft); border-color: var(--accent); color: var(--ink);
+}
+input.sw:disabled + .chip { opacity: 0.55; cursor: not-allowed; }
+
+select, .btn {
+  font: 400 0.8125rem/1 var(--sans); color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--faint); border-radius: var(--r);
+  min-height: 1.75rem; padding: 0.3125rem 0.5rem;
+  cursor: pointer;
+  transition: border-color var(--dur) ease-out, background var(--dur) ease-out;
+}
+@media (hover: hover) { .btn:hover, select:hover { border-color: var(--muted); } }
+.btn[aria-disabled="true"] { color: var(--muted); cursor: default; }
+
+/* ─── the ledger ──────────────────────────────────────────────────────── */
+main { padding-block: var(--s4) var(--s6); }
+
+section.group { margin-block-end: var(--s5); }
+.ghead {
+  display: flex; align-items: baseline; gap: var(--s3);
+  padding-block-end: var(--s2);
+  border-block-end: 1px solid var(--hair);
+  margin-block-end: var(--s2);
+}
+.ghead h2 {
+  margin: 0; font: 600 0.8125rem/1.3 var(--mono); color: var(--ink);
+}
+.ghead .n {
+  font: 400 0.75rem/1.3 var(--mono); color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+ul.rows { list-style: none; margin: 0; padding: 0; }
+
+li.row {
+  display: grid;
+  grid-template-columns: 3ch 4.5ch minmax(0, 1fr);
+  column-gap: var(--s3);
+  align-items: start;
+  padding: 0.28rem var(--s2);
+  border-radius: 4px;
+  /* No border on hover: the row must not resize. Background only. */
+  transition: background var(--dur) ease-out;
+}
+@media (hover: hover) { li.row:hover { background: var(--sunk); } }
+li.row.sub { padding-inline-start: 2ch; }
+
+.mark {
+  font: 400 0.8125rem/1.6 var(--mono);
+  color: var(--muted);
+  white-space: pre;
+}
+.tid {
+  font: 500 0.8125rem/1.6 var(--mono);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.ttl { min-width: 0; overflow-wrap: anywhere; }
+.ttl code {
+  font: 400 0.8125em/1.4 var(--mono);
+  background: var(--sunk); border: 1px solid var(--hair);
+  border-radius: 3px; padding: 0 0.25em;
+}
+.why {
+  grid-column: 3; display: block;
+  color: var(--muted); font-size: 0.8125rem;
+  padding-block-start: 0.1rem;
+}
+.why b { font-weight: 600; color: var(--ink); }
+.drift {
+  grid-column: 3; display: block;
+  color: var(--muted); font: 400 0.75rem/1.4 var(--mono);
+}
+
+/* state treatment: colour reinforces the glyph, never replaces it */
+li.row[data-st="~"] .mark, li.row[data-st="~"] .tid { color: var(--accent); }
+li.row[data-st="~"] { background: var(--accent-soft); }
+li.row[data-st="!"] .mark, li.row[data-st="!"] .tid { color: var(--danger); }
+li.row[data-st="!"] { background: var(--danger-soft); }
+li.row[data-st="x"] .ttl, li.row[data-st="-"] .ttl { color: var(--muted); }
+li.row[data-st="-"] .tid { text-decoration: line-through; }
+
+/* ─── empty / error ───────────────────────────────────────────────────── */
+.note {
+  border: 1px dashed var(--faint); border-radius: var(--r);
+  padding: var(--s5) var(--s4);
+  color: var(--muted);
+  display: grid; gap: var(--s2); justify-items: start;
+}
+.note .mark { font-size: 1.125rem; color: var(--faint); }
+.note p { margin: 0; max-width: 58ch; }
+.note strong { color: var(--ink); }
+.note.bad { border-style: solid; border-color: var(--danger); }
+.note.bad .mark { color: var(--danger); }
+
+/* ─── footer / source ─────────────────────────────────────────────────── */
+footer {
+  border-block-start: 1px solid var(--hair);
+  padding-block: var(--s4) var(--s6);
+  color: var(--muted); font-size: 0.8125rem;
+}
+footer h2 { font: 600 0.8125rem/1.4 var(--sans); color: var(--ink); margin: 0 0 var(--s2); }
+footer p { margin: 0 0 var(--s2); max-width: 70ch; }
+footer code, pre.cmd {
+  font: 400 0.8125rem/1.5 var(--mono);
+  background: var(--sunk); border: 1px solid var(--hair); border-radius: 3px;
+}
+footer code { padding: 0.05rem 0.3em; }
+pre.cmd { padding: var(--s2) var(--s3); overflow-x: auto; margin: 0 0 var(--s3); }
+.srcline { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s3); align-items: center; }
+input[type="file"] { font: 400 0.75rem/1.4 var(--sans); max-width: 100%; }
+input[type="file"]::file-selector-button {
+  font: 400 0.75rem/1 var(--sans); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--faint); border-radius: var(--r);
+  padding: 0.3125rem 0.5rem; margin-inline-end: var(--s2); cursor: pointer;
+}
+
+/* copy-out */
+details.copyout { margin-block-start: var(--s3); }
+details.copyout summary { cursor: pointer; color: var(--ink); }
+details.copyout pre {
+  font: 400 0.8125rem/1.55 var(--mono);
+  background: var(--sunk); border: 1px solid var(--hair); border-radius: var(--r);
+  padding: var(--s3); overflow-x: auto; margin-block-start: var(--s2);
+  color: var(--ink);
+}
+
+/* drag target */
+body.dragging::after {
+  content: ""; position: fixed; inset: 0; z-index: 50; pointer-events: none;
+  border: 2px solid var(--accent); background: var(--accent-soft); opacity: 0.35;
+}
+
+@media (max-width: 34rem) {
+  .masthead { padding-block: var(--s3) var(--s1); }
+  li.row { grid-template-columns: 3ch 4.5ch minmax(0, 1fr); column-gap: var(--s2); }
+  .wrap { padding-inline: var(--s3); }
+}
+
+/* Density 9 is a mouse-and-keyboard decision. On a touch screen the controls
+   grow to a real target; the rows stay dense because they are read, not tapped. */
+@media (pointer: coarse) {
+  .chip, .btn, select, .search input { min-height: 2.75rem; }
+  input[type="file"]::file-selector-button { min-height: 2.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; }
+}
+</style>
+</head>
+<body data-theme-host>
+
+<a class="skip" href="#board">Skip to the board</a>
+
+<header class="top">
+  <div class="wrap">
+    <div class="masthead">
+      <h1>TICKETS<span class="of"> · skillator</span></h1>
+      <span class="grow"></span>
+      <div class="tools">
+        <fieldset>
+          <legend class="vh">View</legend>
+          <input class="sw vh" type="radio" name="view" id="v-type" value="type" checked>
+          <label class="chip" for="v-type">by type</label>
+          <input class="sw vh" type="radio" name="view" id="v-status" value="status">
+          <label class="chip" for="v-status">by status</label>
+        </fieldset>
+        <label class="vh" for="theme">Colour theme</label>
+        <select id="theme">
+          <option value="auto">Theme: system</option>
+          <option value="light">Theme: light</option>
+          <option value="dark">Theme: dark</option>
+        </select>
+      </div>
+    </div>
+
+    <p class="tally" id="tally"></p>
+
+    <div class="controls">
+      <div class="search">
+        <label class="vh" for="q">Search tickets by ID or title</label>
+        <input id="q" type="search" autocomplete="off" spellcheck="false"
+               placeholder="filter by id or words">
+        <span class="kbd" aria-hidden="true">/</span>
+      </div>
+
+      <fieldset id="states">
+        <legend class="leg">State</legend>
+      </fieldset>
+
+      <fieldset id="types">
+        <legend class="leg">Series</legend>
+      </fieldset>
+    </div>
+  </div>
+</header>
+
+<main id="board" class="wrap" tabindex="-1">
+  <p class="vh" id="live" role="status" aria-live="polite"></p>
+  <div id="out"></div>
+</main>
+
+<footer class="wrap">
+  <h2>Where this board comes from</h2>
+  <p id="srcnote"></p>
+  <div class="srcline">
+    <label for="pick">Render a different <code>TICKETS.md</code>:</label>
+    <input id="pick" type="file" accept=".md,text/markdown,text/plain">
+  </div>
+  <p style="margin-block-start:.75rem">
+    Dropping a file anywhere on this page does the same thing. Nothing is uploaded and
+    nothing is stored: the file is read in the browser and the page forgets it on reload.
+  </p>
+  <h2 style="margin-block-start:1.5rem">Re-baking the built-in snapshot</h2>
+  <p>
+    A page opened from <code>file://</code> is not allowed to read a sibling file, so the
+    board ships with a snapshot of <code>TICKETS.md</code> baked in. One command refreshes
+    it, from the repo root:
+  </p>
+  <pre class="cmd">node board/refresh.mjs</pre>
+  <p>
+    Use the file picker above for a quick look at an edited board. Use the command when the
+    snapshot in this file should be current for everyone.
+  </p>
+  <details class="copyout">
+    <summary>Copy this board as ticket-master text</summary>
+    <p style="margin-block:.5rem 0">
+      The block below is the current view in the exact shape <code>ticket-master</code>
+      prints, count line included. Select it, or use the button.
+    </p>
+    <p><button class="btn" type="button" id="copy">Copy to clipboard</button>
+       <span id="copystate" role="status" aria-live="polite"></span></p>
+    <pre id="plain"></pre>
+  </details>
+</footer>
+
+<script id="board-data" type="text/plain">
+<!--TICKETS:BEGIN-->
+# TICKETS
+
+Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[x]` done · `[-]` cancelled
+IDs are permanent — never reuse or renumber. Append new tickets at the end of
+their section.
+
+## Bugs
+
+- [x] B1 — ticket-master collapses large boards to bare IDs (`A295 A297 A299…`) with no titles, making the list unreadable and un-actionable; the skill said "copy the line" but had no rule for 30+ open tickets
+
+## Features
+
+- [x] F1 — design-arwen: product-UI depth reference (forms, tables, settings, multi-step flows, permissions)
+- [x] F2 — design-arwen: delegate motion craft to emil-design-eng / apple-design / animate instead of restating it thin
+- [x] F3 — design-arwen: executable ship gate — a real render/screenshot/contrast procedure, not an assertion
+- [x] F4 — design-arwen: cross-session design memory (read + write DESIGN.md, interoperable with impeccable's)
+- [x] F5 — design-arwen: make the `improve` lanes real procedures, starting with `polish`
+- [x] F6 — design-arwen: own accessibility explicitly as a first-class gate, not scattered bullets
+- [x] F7 — design-arwen: i18n / RTL / long-string / pluralisation coverage
+- [x] F8 — Shared anti-slop ban list extracted to `references/anti-slop.md` and referenced from design-arwen, deploy-niyoj, deploy-wizard and skill-smith; installers now copy `references/` beside the installed skills so `../references/anti-slop.md` resolves post-install
+- [x] F9 — design-arwen: strengthen the canvas gate so the artboard→code round trip beats `/design` alone
+
+## Agent-found
+
+- [x] A1 — `func-ui` (skillator) and `ui-to-functional` duplicate skills: kept skillator's `func-ui`, deleted the installed `ui-to-functional` from `.claude`, `.claude-bodish` and `.claude-ikran` (it was already gone from `~/.agents/skills`)
+- [x] A2 — `design-taste-frontend-v1` deleted: the real dir at `~/.agents/skills/design-taste-frontend-v1` plus its symlinks in `.claude`, `.claude-bodish` and `.claude-ikran`; v2 `design-taste-frontend` kept and verified intact
+- [-] A3 — gstack design skills front-load ~600 lines of identical harness boilerplate (~3000 duplicated lines across the family) (cancelled: gstack is a third-party skill repo, not skillator source — nothing here can fix it; raise it upstream)
+- [x] A4 — Ban lists contradict across skills: `high-end-visual-design` recommends Plus Jakarta Sans while `design-arwen` bans it; whichever skill loads first silently wins
+- [x] A5 — design-arwen exercised end-to-end on a real settings-screen brief (evidence: 575-line self-contained artifact in scratchpad). Verdict: strong as a reference, not production-ready as a process — accessible markup by construction (58 ids, every aria ref resolves, 17 contrast pairs pass), but ~33% of its 1,572 lines applied, the ship gate is ~40% executable, and the signature came out "a slightly greener Vercel settings page". Findings split into A43-A46; the P0 frontmatter bug it found (`user-invocable: true` glued to the description scalar) is fixed
+- [x] A6 — design-arwen's description claims "ultimate" (implying a superset); it is the best entry point but impeccable still owns depth and gstack owns the feedback loop. Reword or earn it.
+- [x] A7 — No skill in the library owns accessibility as its subject; a11y appears only as contrast + reduced-motion bullets scattered across a dozen files
+- [x] A8 — `grayskull-power` is 3030 words and loads on every dev session; `skill-smith`'s own budget puts a session router under 800. Push depth into `references/` — it is the single most expensive always-on file in the repo
+- [!] A9 — (blocked: Fable subagents rate-limited until 2026-09-04 8:10pm IST; sherlock GREEN is the only remaining run) PARTIAL: RED-GREEN tested on fresh subagents: `a11y-proof`, `ticket-master` (PASS, real RED failure reproduced), `handoff` (PASS on testing.md reason 3 - baseline caught all 9 planted discrepancies unprompted), `grayskull-power` (PASS but vacuous, confounded per A47), `sherlock-codes` (INCOMPLETE - RED done and clean, GREEN never reported: the resumed run died on the hard session limit at 2026-09-04 ~8pm IST; resume prompt in docs/handoffs/2026-09-04-board-sweep.md). Untested: brainstorm-build-prime/mid/lite, design-arwen, deploy-wizard, deploy-niyoj, func-ui, handoff-resume, handoff-watch, live-build, merge-agent, merge-prep, screenshot-loop, skill-smith
+- [x] A10 — Codex has a `Stop` hook (verified in codex.exe 0.153.2: `SubagentStop`/`Stop`, handlers command/prompt/agent, `additionalContext`); PLATFORMS.md:47 and handoff-watch:100 assert it does not, which is the sole basis for Codex getting the manual `check` fallback instead of a real gate
+- [x] A11 — Installers write Codex skills to `~/.agents/skills/`; the installed Codex reads `${CODEX_HOME:-$HOME/.codex}/skills` and has no `.agents/skills` reference at all
+- [x] A12 — PS-written handoff-watch flag carries a UTF-8 BOM; the sh reader's awk string-compares it, so `HANDOFF NOW` fires at any usage and burns the one-shot `.done` (verified: BOM'd `12.0 >= 97` returns 1)
+- [x] A13 — `install.sh`/`install.ps1` skip the PLATFORMS/PRACTICE/WORKFLOW/practice copy whenever no skill needed installing, so a plain re-run after `git pull` never refreshes the docs (`~/.agents/skills` has no PRACTICE.md today)
+- [x] A14 — `grayskull-power:48,50` use `../../PRACTICE.md` and `../../PLATFORMS.md`; post-install the correct depth is `../`, so the router's first step dead-ends on every non-Claude host (same at brainstorm-build-prime/references/platforms.md:5)
+- [x] A15 — All four shipped `.sh` files are committed mode 100644; `./install.sh` fails with Permission denied on any Linux/macOS clone
+- [x] A16 — `handoff-watch/hooks/selftest.ps1` runs `check` against the user's live `~/.codex/sessions` and `~/.claude/handoff-watch`, and can consume a real session's one-shot `.done`; the test is also non-deterministic
+- [x] A17 — The implementer prompt gets `[BRIEF_FILE]` only (one task block) yet is told to follow the design's file structure and intent; `[DESIGN_FILE]` exists only in templates 4 and 5
+- [x] A18 — `[GLOBAL_CONSTRAINTS]` in the task-reviewer prompt has no source anywhere in the repo; no design contract defines a constraints field
+- [x] A19 — `task-loop.md:64` claims PLATFORMS.md maps its model tiers; PLATFORMS.md defines deep/build/cheap/orchestrator and none of cheapest/standard/most-capable/mid, while the same file demands the model always be named explicitly
+- [x] A20 — `brainstorm-build-mid:65,91` orders the design passed **verbatim**, which PRACTICE §4, task-loop and prompts.md all forbid; `-mid`/`-lite` also write no design file, so no prompt template or taskwork command can run under them
+- [x] A21 — `.skillator/grayskull.md:11` requires sherlock-codes (a subagent fan-out) before every commit, while the implementer prompt orders it to commit and never spawn a subagent; sherlock itself says `/code-review` is the right tool for a working diff
+- [x] A22 — `ticket-master` dispatches name no model, so "work the board" runs every agent on the session model — the exact cost failure PRACTICE §4 forbids
+- [x] A23 — Three-fix rule (PRACTICE:353, stop before a fourth) contradicts the five-round breaker (task-loop:150); both are law for the same moment
+- [x] A24 — TDD rationalization tables have drifted: PRACTICE.md carries 9 rows, practice/tdd.md 11, with different wording on shared rows
+- [x] A25 — `prompts.md:447` design-reviewer template is an orphan and contradicts PRACTICE §3, which says the design self-review is inline and not a subagent
+- [x] A26 — `deploy-niyoj:217` has "Merge and push to `main`" as an imperative step, against PRACTICE:401 and PLATFORMS:93 (push stays user-confirmed everywhere)
+- [x] A27 — `screenshot-loop:24-28` puts a real foreign absolute path (`C:\tools\Aewa-Airbender-aewag2\test_screenshots`) in the code block immediately after "then write it:"
+- [x] A28 — All 19 skill descriptions exceed skill-smith's ~80-word budget (93–233) and most summarize their workflow; `ticket-master`'s says three states while its body defines six
+- [x] A29 — `practice/prompts.md:24,28` and `task-loop.md:16` write script paths relative to `practice/` (`scripts/taskwork.sh`) or to the repo root, neither of which resolves from the reader's cwd or post-install; a subagent on A20 concluded the script did not exist
+- [x] A30 — no `.gitattributes`; `*.sh` has no `text eol=lf`, so a Windows clone can check the scripts out with CRLF and a Linux runner then hits `bad interpreter: /usr/bin/env sh^M` — same Linux-clone breakage class as A15
+- [x] A31 — the `.skillator/grayskull.md` template lives in `grayskull-power/references/arming.md` and a live copy lives at the repo root; they must stay in sync and nothing tests that they do (they already differ on how the usage-watch path is written)
+- [x] A32 — `usage-watch` twins diverge in `check`: the ps1 recurses `~/.codex/sessions` at any depth and ignores rollouts older than 3h, the sh globs exactly `*/*/*/` and applies no freshness window, so a week-old 98% rollout makes the sh twin fire on a machine now using Claude Code
+- [>] A33 — (deferred: needs an interactive Codex session or a newer codex-cli build than 0.153.2) Codex `Stop` remains unreachable: the 2026-09-04 live test (codex-cli 0.153.2, `codex exec`) tried both hooks.json locations and both handler shapes and the handler never ran, so the exit-2-on-stderr question is untouched, not answered; retry on an interactive session, a per-repo `.codex/hooks.json`, or a newer build, and only then drop the caveats in PLATFORMS.md and handoff-watch
+- [x] A34 — `brainstorm-build-prime/references/platforms.md` is a second, divergent copy of PLATFORMS.md with different tier columns; it did not receive the A10 or A19 corrections, so a reader landing there gets the old vocabulary and the false Codex claim
+- [-] A35 — `deploy-niyoj` grants the deploy user `NOPASSWD:ALL` (SKILL.md:193, references/templates.md:227) — passwordless sudo for every command on the box; scope it to the exact commands the deploy runs (the deploy script, docker compose, the systemctl restart) instead (cancelled: reviewed against SkillSpector, accepted as-is: NOPASSWD:ALL is the intended deploy-user model for a single-tenant box)
+- [-] A36 — `deploy-niyoj/references/templates.md:105` provisions Docker with `curl -fsSL https://get.docker.com | sh` as root: unpinned, unverified, executes whatever that endpoint serves at run time; use the distro package or pin and checksum the script (cancelled: reviewed against SkillSpector, accepted as-is: get.docker.com is the documented Docker install path)
+- [-] A37 — `install.sh:53,73` run `rm -rf "$_dest/$_name"` and `rm -rf "$_dest/practice"` with no guard that `$_dest` is non-empty and absolute; add the guard before the delete rather than relying on the targets table staying correct (cancelled: reviewed against SkillSpector, accepted as-is: $_dest comes from a hardcoded targets table, not user input)
+- [-] A38 — unpinned `npx` in CI snippets and tooling docs: `npx playwright test` and `npx eslint` in a11y-proof/references/checks.md:403-404, `npx shadcn@latest` in design-arwen/references/build.md:27 — pin the versions so a CI run can't pick up a changed package (cancelled: reviewed against SkillSpector, accepted as-is: unpinned npx is the intended snippet form)
+- [x] A39 — `practice/prompts.md:58` says only `[DESIGN_FILE]` and `[GLOBAL_CONSTRAINTS]` are filled by hand, but the implementer template writes `[REPORT_FILE]` (`:180`) and works from `[DIRECTORY]` (`:104`), and the reviewer/re-review templates read `[REPORT_FILE]` (`:227`, `:373`); `task-loop.md:164-170` fills neither and `taskwork.sh` emits only brief+review, so nothing guarantees the reviewer's report path matches the implementer's — same class as A17/A18
+- [x] A40 — "design tier" survives as a fifth tier name against `PLATFORMS.md:13` ("these four names are the only tier vocabulary skillator uses"): `brainstorm-build-prime/SKILL.md:4,14,16,44,50,207` and `merge-agent/SKILL.md:31`; prime's `references/platforms.md:16` maps the design pass to `deep` but SKILL.md never says so
+- [x] A41 — `brainstorm-build-mid/SKILL.md:111-115` and `-lite:112-113` say "everything else in PRACTICE.md §§1-6 still applies" while their Phase 3 runs only the §5 verification step; PRACTICE §6 (`:341-346`) requires one whole-branch reviewer on the deep tier at the end of a build, which neither dispatches
+- [x] A42 — `grayskull-power/references/hosts.md:14` tells antigravity users to "run `handoff` manually when context gets tight" while `handoff-watch/SKILL.md:101` says `PreCompress` is the real trigger and should be wired; hosts.md should point at the wired hook
+- [x] A43 — design-arwen ship gate unified: SKILL.md now carries the ONLY gate, 15 items each tagged `static` / `browser` / `delegated`, with WCAG 1.4.11 non-text contrast added as item 2 and a defined no-browser terminal state (`built · verified: … · not verified: … · delegated: …`); verify.md and build.md §6 now defer to it instead of carrying rival lists, and verify.md gained a runnable OKLCH→sRGB contrast script (verified: white/black = 21.0, and it flags a 1.34:1 border that every text-contrast check passes)
+- [x] A44 — design-arwen Phase 1-2 forked by register: the category-reflex "rework until unguessable" check is now brand-register only, with an explicit statement that a settings screen a Linear user recognises instantly is a CORRECT product-register outcome; the product signature bar is redefined as one systematic UX device rather than an aesthetic, and the system-sans exemption now waives the 4-step font procedure instead of looping it forever
+- [x] A45 — design-arwen no-user / subagent branch added: "decide, declare, continue" at the Design Read (assumptions prefixed `assumed:` and listed in the final report), plus explicit no-user paths in canvas.md (skip the gate first, before the offer conditions) and craft.md (take the register-argued direction, name the rejected two). The ban is on the silence, not on the deciding
+- [x] A46 — design-arwen `build` mode now dispatches one real critique seat (the UX/a11y lens from redesign.md §3) instead of "critique it in your head", with `critique: self only` required in the plan when no delegate mechanism exists; the trimmed description no longer promises a panel build mode never convened
+- [x] A47 — skill-smith/references/testing.md now warns that a subagent inherits the dispatcher cwd and its CLAUDE.md/AGENTS.md/GEMINI.md imports, so testing a skill from inside the repo that ships it hands RED the rules it is supposed to lack; a RED baseline whose cwd carried such a file is void and must be re-run, not discounted
+- [x] A48 — grayskull-power "no line, no edit" given a consequence in both SKILL.md and ground-rules.md: the blast-radius line must be in visible output, not in your head; at the edit with no line you either write it now or name the field you cannot fill without guessing and go back a step. A line written after the edit is a report, not a check, and must be labelled one
+- [x] A49 — handoff-watch threshold lowered 97 -> 92 in both twins, selftest, SKILL.md, README and the grayskull arming/routing/SKILL text: this session proved 97 too late, the gate fired at 99% and the hard session limit landed before the in-flight agent could report
+<!--TICKETS:END-->
+</script>
+
+<script>
+"use strict";
+
+/* ── state vocabulary, straight from ticket-master ─────────────────────── */
+const STATES = [
+  { k: " ", key: "pending",     label: "pending",     bucket: "open"   },
+  { k: "~", key: "inprogress",  label: "in-progress", bucket: "open"   },
+  { k: "!", key: "blocked",     label: "blocked",     bucket: "open"   },
+  { k: ">", key: "deferred",    label: "deferred",    bucket: "defer"  },
+  { k: "x", key: "done",        label: "done",        bucket: "closed" },
+  { k: "-", key: "cancelled",   label: "cancelled",   bucket: "closed" },
+];
+const BY_K = Object.fromEntries(STATES.map(s => [s.k, s]));
+/* Sort order inside a group: in-progress, blocked, deferred, pending, then closed. */
+const SORT = { "~": 0, "!": 1, ">": 2, " ": 3, "x": 4, "-": 5 };
+const SERIES = [
+  { p: "B", title: "Bugs" },
+  { p: "F", title: "Features" },
+  { p: "A", title: "Agent-found" },
+];
+const REASON = /^(blocked|deferred|cancelled)\s*:\s*/i;
+
+/* ── parser ────────────────────────────────────────────────────────────── */
+function parse(text) {
+  /* Hand-edited markdown picks up invisible junk. TICKETS.md currently carries a
+     literal U+0001 inside the A9 line. Normalise control characters, NBSP and
+     zero-width marks to plain spaces before anything tries to match on them. */
+  const lines = String(text)
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f\xa0\u2000-\u200d\u202f\ufeff]/g, " ")
+    .split("\n");
+  const out = [];
+  let heading = null;
+  const errs = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const h = raw.match(/^#{2,3}\s+(.+?)\s*$/);
+    if (h) { heading = h[1]; continue; }
+
+    const m = raw.match(/^(\s*)[-*]\s+\[([ x~!>\-])\]\s+(.*\S)\s*$/);
+    if (!m) continue;
+
+    const indent = m[1].replace(/\t/g, "  ").length;
+    const st = m[2];
+    let rest = m[3];
+
+    /* `ID — title`, tolerating em dash, en dash, or a spaced hyphen. */
+    const idm = rest.match(/^([A-Za-z]{1,3}\d+[a-z]?)\s*(?:[—–]|-)\s+(.*)$/);
+    if (!idm) { errs.push({ line: i + 1, raw }); continue; }
+
+    const id = idm[1].toUpperCase();
+    let title = idm[2].trim();
+
+    /* A trailing parenthetical is a reason only when it names one. Everything
+       else — (@owner), (branch: x), (was B7), (runtime) — is part of the title. */
+    let why = null;
+    const par = title.match(/\s*\(([^()]+)\)\s*$/);
+    if (par && REASON.test(par[1])) {
+      why = par[1].trim();
+      title = title.slice(0, par.index).trim();
+    }
+
+    const pm = id.match(/^([A-Za-z]+)(\d+)([a-z]?)$/);
+    out.push({
+      id, st, title, why,
+      prefix: pm ? pm[1] : "?",
+      num: pm ? parseInt(pm[2], 10) : 0,
+      part: pm ? pm[3] : "",
+      parent: pm && pm[3] ? pm[1] + pm[2] : null,
+      sub: indent >= 2 || Boolean(pm && pm[3]),
+      heading,
+      line: i + 1,
+    });
+  }
+  return { tickets: out, errs };
+}
+
+/* ── counting ──────────────────────────────────────────────────────────── */
+function tally(ts) {
+  const c = Object.fromEntries(STATES.map(s => [s.key, 0]));
+  for (const t of ts) { const s = BY_K[t.st]; if (s) c[s.key]++; }
+  const open = c.pending + c.inprogress + c.blocked;
+  const closed = c.done + c.cancelled;
+  return { ...c, open, closed, deferredTotal: c.deferred, total: open + c.deferred + closed };
+}
+/* Fixed shape, all six states, zeros included. Whole board, never the filter. */
+function tallyLine(c) {
+  return `${c.open} open (${c.pending} pending · ${c.inprogress} in-progress · ` +
+         `${c.blocked} blocked) · ${c.deferred} deferred · ` +
+         `${c.closed} closed (${c.done} done · ${c.cancelled} cancelled) · ${c.total} total`;
+}
+
+/* ── helpers ───────────────────────────────────────────────────────────── */
+const esc = s => String(s).replace(/[&<>"]/g, ch =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+/* Titles carry backticks; render them as code, escape everything else. */
+function rich(s) {
+  return esc(s).replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
+}
+const PR = new Intl.PluralRules(document.documentElement.lang || "en");
+const NF = new Intl.NumberFormat();
+function nTickets(n) {
+  return PR.select(n) === "one" ? `${NF.format(n)} ticket` : `${NF.format(n)} tickets`;
+}
+
+/* ── app state ─────────────────────────────────────────────────────────── */
+const app = {
+  tickets: [], errs: [], counts: null,
+  source: "built-in snapshot",
+  view: "type",
+  q: "",
+  states: new Set([" ", "~", "!", ">"]),   /* open + deferred by default */
+  types: new Set(["B", "F", "A"]),
+  fatal: null,
+};
+
+const $ = sel => document.querySelector(sel);
+const out = $("#out"), live = $("#live");
+
+/* ── controls, built from the vocabulary so they cannot drift ──────────── */
+function buildFilters() {
+  const sf = $("#states"), tf = $("#types");
+  sf.querySelectorAll("input,label").forEach(n => n.remove());
+  tf.querySelectorAll("input,label").forEach(n => n.remove());
+
+  for (const s of STATES) {
+    const n = app.counts[s.key];
+    const i = document.createElement("input");
+    i.type = "checkbox"; i.className = "sw vh"; i.id = "st-" + s.key;
+    i.checked = app.states.has(s.k);
+    i.disabled = n === 0 && !app.states.has(s.k);
+    i.addEventListener("change", () => {
+      i.checked ? app.states.add(s.k) : app.states.delete(s.k);
+      render();
+    });
+    const l = document.createElement("label");
+    l.className = "chip"; l.htmlFor = i.id;
+    l.innerHTML = `<span aria-hidden="true">[${esc(s.k === " " ? " " : s.k)}]</span>` +
+                  `<span>${s.label}</span><span class="n">${NF.format(n)}</span>`;
+    sf.append(i, l);
+  }
+
+  for (const s of SERIES) {
+    const n = app.tickets.filter(t => t.prefix === s.p).length;
+    const i = document.createElement("input");
+    i.type = "checkbox"; i.className = "sw vh"; i.id = "ty-" + s.p;
+    i.checked = app.types.has(s.p);
+    i.disabled = n === 0 && !app.types.has(s.p);
+    i.addEventListener("change", () => {
+      i.checked ? app.types.add(s.p) : app.types.delete(s.p);
+      render();
+    });
+    const l = document.createElement("label");
+    l.className = "chip"; l.htmlFor = i.id;
+    l.innerHTML = `<span>${s.p}</span><span>${s.title}</span>` +
+                  `<span class="n">${NF.format(n)}</span>`;
+    tf.append(i, l);
+  }
+}
+
+/* ── filtering & grouping ──────────────────────────────────────────────── */
+function visible() {
+  const q = app.q.trim().toLowerCase();
+  return app.tickets.filter(t => {
+    if (!app.states.has(t.st)) return false;
+    if (!app.types.has(t.prefix) && SERIES.some(s => s.p === t.prefix)) return false;
+    if (!q) return true;
+    return (t.id + " " + t.title + " " + (t.why || "")).toLowerCase().includes(q);
+  });
+}
+const byOrder = (a, b) =>
+  (SORT[a.st] - SORT[b.st]) || (a.num - b.num) || a.part.localeCompare(b.part);
+
+function grouped(ts) {
+  if (app.view === "type") {
+    /* Group by ID prefix, not by the heading the line happens to sit under. */
+    return SERIES
+      .map(s => ({ title: s.title, items: ts.filter(t => t.prefix === s.p).sort(byOrder) }))
+      .concat([{ title: "Unrecognised IDs",
+                 items: ts.filter(t => !SERIES.some(s => s.p === t.prefix)).sort(byOrder) }])
+      .filter(g => g.items.length);
+  }
+  return STATES
+    .map(s => ({ title: s.label[0].toUpperCase() + s.label.slice(1),
+                 items: ts.filter(t => t.st === s.k)
+                          .sort((a, b) => a.prefix.localeCompare(b.prefix) ||
+                                          (a.num - b.num) || a.part.localeCompare(b.part)) }))
+    .filter(g => g.items.length);
+}
+
+/* ── render ────────────────────────────────────────────────────────────── */
+function rowHTML(t) {
+  const s = BY_K[t.st];
+  const showParent = app.view === "status" && t.parent;
+  const drift = t.heading && !headingMatches(t)
+    ? `<span class="drift">filed under ${esc(t.heading)}</span>` : "";
+  return `<li class="row${t.sub && app.view === "type" ? " sub" : ""}" data-st="${esc(t.st)}">` +
+    `<span class="mark" aria-hidden="true">[${t.st === " " ? "&nbsp;" : esc(t.st)}]</span>` +
+    `<span class="tid">${esc(t.id)}</span>` +
+    `<span class="ttl"><span class="vh">${s.label}. </span>${rich(t.title)}` +
+      (showParent ? ` <span class="tid">(${esc(t.parent)})</span>` : "") + `</span>` +
+    (t.why ? `<span class="why"><b>${esc(t.why.split(":")[0])}:</b>` +
+             `${rich(t.why.slice(t.why.indexOf(":") + 1))}</span>` : "") +
+    drift + `</li>`;
+}
+function headingMatches(t) {
+  const want = SERIES.find(s => s.p === t.prefix);
+  return want ? want.title === t.heading : true;
+}
+
+function noteHTML(kind, glyph, title, body) {
+  return `<div class="note${kind}"><span class="mark" aria-hidden="true">[${glyph}]</span>` +
+         `<p><strong>${title}</strong></p><p>${body}</p></div>`;
+}
+
+function render() {
+  toHash();
+  $("#tally").innerHTML = app.counts
+    ? tallyLine(app.counts).replace(/^(\d+) open/, "<b>$1 open</b>")
+    : "";
+
+  const banner = app.fatal
+    ? noteHTML(" bad", "!", "That file could not be read as a ticket board.",
+        esc(app.fatal) + " The board below is the one that was already loaded. " +
+        "Pick a file with <code>- [ ] B1 &#8212; title</code> lines in it.")
+    : "";
+
+  if (!app.tickets.length) {
+    out.innerHTML = banner + noteHTML("", "&nbsp;", "This board has no tickets yet.",
+      "Add a line to <code>TICKETS.md</code> in the shape " +
+      "<code>- [ ] B1 &#8212; one line title</code> under <code>## Bugs</code>, " +
+      "<code>## Features</code>, or <code>## Agent-found</code>, then re-bake the " +
+      "snapshot or drop the file here.");
+    live.textContent = "No tickets in this file.";
+    return;
+  }
+
+  const vis = visible();
+  const groups = grouped(vis);
+
+  if (!groups.length) {
+    out.innerHTML = banner + noteHTML("", "&nbsp;", "No ticket matches these filters.",
+      `The board still holds ${nTickets(app.tickets.length)}. ` +
+      `<button class="btn" type="button" id="clear">Clear filters</button>`);
+    $("#clear").addEventListener("click", clearFilters);
+    live.textContent = "No tickets match. " + nTickets(app.tickets.length) + " on the board.";
+    setPlain(groups, vis);
+    return;
+  }
+
+  out.innerHTML = banner + groups.map(g =>
+    `<section class="group"><div class="ghead"><h2>${esc(g.title)}</h2>` +
+    `<span class="n">${NF.format(g.items.length)}</span></div>` +
+    `<ul class="rows">${g.items.map(rowHTML).join("")}</ul></section>`
+  ).join("") + (app.errs.length
+    ? `<div class="note"><span class="mark" aria-hidden="true">[!]</span>` +
+      `<p><strong>${esc(nTickets(app.errs.length))} skipped.</strong></p>` +
+      `<p>These lines have a checkbox but no <code>ID &#8212; title</code>: ` +
+      app.errs.map(e => `line ${e.line}`).join(", ") + `.</p></div>`
+    : "");
+
+  live.textContent = `Showing ${nTickets(vis.length)} of ` +
+                     `${NF.format(app.tickets.length)}, ${app.view === "type" ? "by type" : "by status"}.`;
+  setPlain(groups, vis);
+}
+
+function clearFilters() {
+  app.q = ""; $("#q").value = "";
+  app.states = new Set(STATES.map(s => s.k));
+  app.types = new Set(SERIES.map(s => s.p));
+  buildFilters();
+  render();
+  $("#q").focus();
+}
+
+/* ── the ticket-master text form, for pasting into a chat ──────────────── */
+function setPlain(groups, vis) {
+  const lines = [];
+  for (const g of groups) {
+    lines.push(g.title);
+    for (const t of g.items) {
+      const parent = app.view === "status" && t.parent ? ` (${t.parent})` : "";
+      const indent = app.view === "type" && t.sub ? "    " : "  ";
+      let title = t.title;
+      if (title.length > 80) title = title.slice(0, 79).trimEnd() + "…";
+      lines.push(`${indent}[${t.st}] ${t.id} — ${title}${t.why ? ` (${t.why})` : ""}${parent}`);
+    }
+    lines.push("");
+  }
+  lines.push(tallyLine(app.counts));
+  $("#plain").textContent = lines.join("\n");
+}
+
+/* ── load ──────────────────────────────────────────────────────────────── */
+function load(text, source) {
+  const { tickets, errs } = parse(text);
+  if (!tickets.length && /\S/.test(text) && !/^\s*#\s*TICKETS/mi.test(text)) {
+    app.fatal = "No ticket lines were found in it.";
+    render();
+    return false;
+  }
+  app.fatal = null;
+  app.tickets = tickets;
+  app.errs = errs;
+  app.counts = tally(tickets);
+  app.source = source;
+  $("#srcnote").innerHTML =
+    `Showing <strong>${esc(source)}</strong>, parsed in this page. ` +
+    `Nothing here talks to the network.`;
+  buildFilters();
+  render();
+  return true;
+}
+
+function readSnapshot() {
+  const el = document.getElementById("board-data");
+  const raw = (el ? el.textContent : "")
+    .replace(/^[\s\S]*?<!--TICKETS:BEGIN-->\n?/, "")
+    .replace(/\n?<!--TICKETS:END-->[\s\S]*$/, "");
+  // refresh.mjs escapes the one sequence that can close this data island.
+  return raw.replace(/<\\\/script/gi, "</script");
+}
+
+/* ── wiring ────────────────────────────────────────────────────────────── */
+let qt = 0;
+$("#q").addEventListener("input", e => {
+  clearTimeout(qt);
+  const v = e.target.value;
+  qt = setTimeout(() => { app.q = v; render(); }, 300);
+});
+$("#q").addEventListener("keydown", e => {
+  if (e.key === "Escape" && e.target.value) {
+    e.preventDefault(); e.target.value = ""; app.q = ""; render();
+  }
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.matches("input, textarea, select") || t.isContentEditable)) return;
+  e.preventDefault(); $("#q").focus(); $("#q").select();
+});
+document.querySelectorAll('input[name="view"]').forEach(r =>
+  r.addEventListener("change", () => { if (r.checked) { app.view = r.value; render(); } }));
+
+/* theme: system by default, explicit choice wins and persists */
+const root = document.documentElement;
+const mq = window.matchMedia("(prefers-color-scheme: dark)");
+function applyTheme(v) {
+  root.dataset.theme = v;
+  root.classList.toggle("sysdark", v === "auto" && mq.matches);
+}
+let saved = "auto";
+try { saved = localStorage.getItem("board-theme") || "auto"; } catch (_) {}
+$("#theme").value = saved;
+applyTheme(saved);
+mq.addEventListener("change", () => applyTheme(root.dataset.theme));
+$("#theme").addEventListener("change", e => {
+  applyTheme(e.target.value);
+  try { localStorage.setItem("board-theme", e.target.value); } catch (_) {}
+});
+
+/* file in: picker and drop, both landing in the same place */
+function ingest(file) {
+  if (!file) return;
+  const r = new FileReader();
+  r.onerror = () => { app.fatal = "The browser could not read that file."; render(); };
+  r.onload = () => load(r.result, file.name);
+  r.readAsText(file);
+}
+$("#pick").addEventListener("change", e => ingest(e.target.files && e.target.files[0]));
+let dragDepth = 0;
+addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("dragleave", () => { if (--dragDepth <= 0) document.body.classList.remove("dragging"); });
+addEventListener("drop", e => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging");
+  ingest(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
+});
+
+/* copy out */
+$("#copy").addEventListener("click", async () => {
+  const txt = $("#plain").textContent;
+  const say = m => { $("#copystate").textContent = m; setTimeout(() => { $("#copystate").textContent = ""; }, 4000); };
+  try {
+    await navigator.clipboard.writeText(txt);
+    say("Copied.");
+  } catch (_) {
+    const r = document.createRange();
+    r.selectNodeContents($("#plain"));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    say("The browser blocked the clipboard here. The text is selected: press Ctrl+C.");
+  }
+});
+
+/* filters, view and query survive a reload */
+function toHash() {
+  const p = new URLSearchParams();
+  if (app.view !== "type") p.set("v", app.view);
+  if (app.q) p.set("q", app.q);
+  const st = STATES.filter(s => app.states.has(s.k)).map(s => s.key).join(",");
+  if (st !== "pending,inprogress,blocked,deferred") p.set("s", st);
+  const ty = SERIES.filter(s => app.types.has(s.p)).map(s => s.p).join(",");
+  if (ty !== "B,F,A") p.set("t", ty);
+  const h = p.toString();
+  history.replaceState(null, "", h ? "#" + h : location.pathname);
+}
+function fromHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (p.get("v") === "status") { app.view = "status"; $("#v-status").checked = true; }
+  if (p.get("q")) { app.q = p.get("q"); $("#q").value = app.q; }
+  if (p.get("s") !== null) {
+    const keys = new Set(p.get("s").split(",").filter(Boolean));
+    app.states = new Set(STATES.filter(s => keys.has(s.key)).map(s => s.k));
+  }
+  if (p.get("t") !== null) {
+    app.types = new Set(p.get("t").split(",").filter(Boolean));
+  }
+}
+
+fromHash();
+load(readSnapshot(), "the built-in snapshot of TICKETS.md");
+</script>
+</body>
+</html>

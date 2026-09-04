@@ -1,21 +1,16 @@
 ---
 name: design-arwen
 description: >-
-  Ultimate UI/UX design skill for native AND web apps — build, redesign, improve, or
-  critique an interface so it ships production-grade AND carries a unique, ownable
-  signature nobody would call "AI-made". Use whenever the user wants to build or improve
-  a UI/UX: a web page/app/component, an iOS or Android screen, a React Native app, a
-  dashboard, landing page, form, data table, settings screen, multi-step flow, onboarding,
-  empty state, or design system; or asks to
-  make something "more unique / bolder / quieter / more polished / less generic / more
-  memorable", pick fonts/colors/layout/motion, fix visual hierarchy, spacing, contrast,
-  a11y or UI performance, write UX copy and error states, or make one design language
-  work across native and web. Fuses production craft, deep product-UI
-  patterns, an executed ship gate, a committed distinctive aesthetic,
-  a method for forging one ownable signature, and an optional visual artboard gate so the
-  user can tweak the layout before any code is written. For an existing app it convenes a
-  2–3 expert (SME) design panel, reconciles their opinions into one route, then implements
-  via subagents. NOT for backend-only or non-UI tasks.
+  Use whenever the user wants to build, redesign, improve or critique a UI/UX,
+  native or web: a web page/app/component, an iOS or Android screen, a React
+  Native app, a dashboard, landing page, form, data table, settings screen,
+  multi-step flow, onboarding, empty state, or design system; or asks to make
+  something "more unique / bolder / quieter / more polished / less generic /
+  more memorable / less AI-made", pick fonts/colors/layout/motion, fix visual
+  hierarchy, spacing, contrast, a11y or UI performance, write UX copy and
+  error states, or share one design language across native and web. NOT for
+  backend-only or non-UI tasks; `impeccable` covers craft with no aesthetic
+  direction to forge, gstack the headless-browser review of a finished page.
 user-invocable: true
 argument-hint: "[build|redesign|improve|critique] [target]"
 license: MIT
@@ -75,7 +70,7 @@ the thing ships more than once.
 **On entry, look for `DESIGN.md` at the repo root** (also `docs/DESIGN.md`, `.design/DESIGN.md`).
 If one exists — whoever wrote it, impeccable's included — **read it and obey it**. It
 records decisions already made: the theme, the type pairing, the token names, the
-signature. Those beat every reflex-reject list in this file. Say in one line that you
+signature. Those beat every reflex-reject list arwen applies. Say in one line that you
 found it and what you're inheriting.
 
 **On exit, after a `build` or `redesign`, write or update it.** Ten lines, no ceremony,
@@ -117,8 +112,8 @@ novelty** — a committed decision on disk outranks anything this skill would pi
      progressive disclosure first).
 3. **What already exists.** Read current tokens/theme/one screen. Reuse a working
    system; branch out only where UX wins. **Identity-preservation beats novelty** —
-   all the reflex-reject/ban lists below apply to *new* choices only; an existing
-   committed brand wins.
+   every reflex-reject/ban list — this file's and the shared floor's — applies to *new*
+   choices only; an existing committed brand wins.
 4. **Set the three dials** — the tunable part of every rule downstream, and the user can
    override any of them by asking ("make it calmer", "denser"):
 
@@ -146,6 +141,16 @@ novelty** — a committed decision on disk outranks anything this skill would pi
    ambiguous on an axis that changes the whole design, ask ONE question — never guess
    silently, and never ask three.**
 
+   **No user to ask?** You are a subagent, or a batch run, or nobody is at the keyboard —
+   `build.md` §4 dispatches this work to subagents, so this is a normal case, not an edge
+   one. Then: **decide, declare, continue.** Take the register default, put the choice in
+   the Design Read with a `assumed:` prefix on every field you picked rather than read,
+   and list those assumptions once at the top of your final report so whoever reads it can
+   overturn them cheaply. That is what "never guess silently" asks for — the ban is on the
+   *silence*, not on the deciding. Blocking a subagent on a question nobody will answer is
+   the one wrong move. The same rule applies to every "ask once" in this skill and its
+   references: no user → default, declare, proceed.
+
 ---
 
 ## Phase 1 — Commit to a direction (no timid middles)
@@ -171,15 +176,38 @@ reach for by reflex and **reject any on the ban list**; (3) pick the font-as-obj
 real catalog (museum caption, diner receipt); (4) if the final pick matches your reflex,
 start over. Pair on a *contrast* axis (serif+sans, geometric+humanist) or one family across
 weights — never two near-identical sans.
-**Reflex-reject font ban (new/brand choices):** Inter, Roboto, Arial, DM Sans, DM Serif,
-Outfit, Plus Jakarta, Instrument Sans/Serif, Space Grotesk, Space Mono, Syne, IBM Plex,
-Fraunces, Newsreader, Lora, Crimson, Playfair Display, Cormorant.
 
-**Category-reflex check (two altitudes):** *First-order* — could someone guess your
-theme+palette from the **category alone**? Rework. *Second-order* — could they guess it
-from **category + the obvious anti-reference** ("AI tool that's *not* SaaS-cream →
-editorial-typographic"; "fintech that's *not* navy-gold → terminal-dark")? Rework until
-neither is guessable.
+**The product register's system-sans exemption waives this whole procedure** — it does not
+send you round it again. Steps 1–4 have exactly one legal answer once the exemption
+applies, so step 4 would loop forever: take `system-ui` / Inter / SF Pro, say in one line
+that the product register chose it, and move on. Run the procedure only when you are
+picking a display or brand face on top.
+
+**The reflex-reject list is not in this file — read `references/anti-slop.md`**, the shared
+design floor beside the installed skills (`../references/anti-slop.md`, else
+`../../references/anti-slop.md`; see the *Shared floor* note below). §1 is the banned
+typefaces and the four exemptions, §3 the `†` contested markers and the conflict rule.
+One arwen-specific exemption to hold in mind: the **product register permits a familiar
+system sans** for body text (Phase 0.2) where the floor's list would otherwise bite.
+
+**Category-reflex check (two altitudes) — brand register only.** *First-order* — could
+someone guess your theme+palette from the **category alone**? Rework. *Second-order* —
+could they guess it from **category + the obvious anti-reference** ("AI tool that's *not*
+SaaS-cream → editorial-typographic"; "fintech that's *not* navy-gold → terminal-dark")?
+Rework until neither is guessable.
+
+**In the product register this check is off, and that is not a concession.** Phase 0.2
+says familiarity is a feature and `critique.md` forbids marking a conventional dashboard
+down for being conventional; "unguessable from the category" pulls the opposite way, and
+on a settings screen or a data table the two cancel and you ship generic-with-a-motif
+while believing you failed. You did not. **A settings screen that a Linear user would
+recognise instantly is a correct outcome** — the guessability test is measuring the wrong
+thing there. What replaces it: the signature must be **one systematic UX device**, not an
+aesthetic — a status grammar, a reimagined component, a consistent way of showing
+pending-vs-saved — applied everywhere that state occurs and defensible in a sentence. If
+you cannot name that one device, you have no signature; a new hue is not one. Judge it by
+"does this make the product easier to read at a glance", never by "would a competitor's
+screenshot pass for mine" (in this register it usually would, and should).
 
 **The three saturated AI looks — defaults, not choices.** Each is legitimate *when the
 brief asks for it*, and a tell when it appears anyway: (1) cream/sand body (OKLCH
@@ -209,8 +237,11 @@ decoration everywhere. Method:
 3. **Make it systematic.** Same logic on hero, empty state, error, loading — so it reads as
    *language*, not accident. It flexes to fit what it marks; appears once = gimmick, appears
    everywhere identically = wallpaper.
-4. **Test:** cover the logo — can someone still tell two screens are the same product? Would
-   a competitor's screenshot pass for yours? Iterate until the first is yes and the second no.
+4. **Test, by register.** Both: cover the logo — can someone still tell two screens are the
+   same product? Iterate until yes. **Brand only:** would a competitor's screenshot pass for
+   yours? Iterate until no. **Product:** skip that second question — there the answer usually
+   is yes and *should* be (Phase 1). Ask instead: is the one systematic device present on
+   every surface where its state occurs, and can you defend it in a sentence?
 
 **Spend your boldness in one place.** The signature is the memorable thing; everything
 around it stays quiet and disciplined. Before shipping, Chanel's rule: look again and
@@ -236,14 +267,20 @@ One identity, **idiomatic per platform** — never a web layout stuffed into a p
 
 ## Ship gate & slop test
 
-**Absolute bans (match-and-refuse — restructure instead):** side-stripe accent borders
-(`border-left/right` >1px on cards/alerts) · gradient text (`background-clip:text`) ·
-glassmorphism as a default · the hero-metric template (big number + small label +
-supporting stats + gradient accent) · identical card grids · tiny uppercase tracked
-eyebrow on every section · numbered section markers (01/02/03) as default scaffolding ·
-purple-gradient-on-white · text that overflows its container at any width · the same font
-every generation. One deliberate numbered sequence where the content *is* a sequence is
-voice; numbers above every section is AI grammar.
+**Shared floor — `references/anti-slop.md` is law here, and it is the only copy.** The
+banned typefaces (§1), the banned visual clichés (§2), and the scope-and-authority rule with
+its `†` contested markers (§3) all live there, shared with every skillator design skill —
+so they are not restated here and nothing on that list is enforced from memory. **Read the
+file before you run the gate.** It sits beside the installed skills: try
+`../references/anti-slop.md` first (the `install.sh` layout), then
+`../../references/anti-slop.md` (git checkout, plugin cache). Neither resolves → say so in
+one line and enforce what this file names.
+
+Arwen adopts that floor whole and adds three of its own, on the same match-and-refuse terms:
+**identical card grids** · **text that overflows its container at any width** · **the same
+font every generation**. Inside an arwen-run task — any of the four modes, Phase 0 to this
+gate — arwen owns the work, so the floor's conflict rule resolves in arwen's favour and you
+say in one line which skill you overrode. Never resolve it by load order.
 
 **Content & copy tells:** the "Jane Doe" effect — placeholder names, lorem, `example.com`,
 fake logos, `$XX/mo`, invented metrics shipped as real. **Em-dashes in generated UI copy**
@@ -254,9 +291,11 @@ fake logos, `$XX/mo`, invented metrics shipped as real. **Em-dashes in generated
 the mode deliberately (dark is not "because tools look cool dark", light is not "to be
 safe") and if both ship, **verify every surface in both** before calling it done.
 
-**Accessibility is arwen's, not someone else's.** No skill in the wider library owns it,
-so this one does. It is not a post-hoc audit and not a contrast number — it is a design
-constraint that changes the layout. The floor, enforced in craft.md and verified in
+**Accessibility is arwen's inside a design task.** Not a post-hoc audit and not a
+contrast number — a design constraint that changes the layout, on this design's terms.
+`skillator:a11y-proof` owns it as a *subject*: audits of code nobody is redesigning,
+filed a11y bugs, AT and CI wiring. Hand it the failing pairs when the damage is wider
+than the change you made; take its hand-backs when a fix needs a design decision. The floor, enforced in craft.md and verified in
 verify.md: all eight states designed with **hover ≠ focus** · a visible `:focus-visible`
 ring ≥3:1 everywhere · every surface fully keyboard-drivable in a sensible order · real
 `<label>`s and `aria-describedby` errors · never colour as the only signal · reduced-motion
@@ -264,18 +303,43 @@ paths · touch targets ≥44pt/48dp · text resizable to 200% without loss · `a
 async results · gestures never the only route. A distinctive interface that a keyboard user
 cannot operate has failed *both* of this skill's tests, not one.
 
-**Ship gate — verify, don't assume:**
-1. Contrast checked on real text/bg pairs. 2. No overflow at any width or device.
-3. Reduced-motion path works. 4. Loading / empty / error / success all designed.
-5. Native: conventions honored, safe areas + touch targets correct. 6. LCP < 2.5s,
-CLS < 0.1. 7. Both themes verified if both ship. 8. Every dependency and asset URL
-actually resolves — no invented packages, no guessed image IDs. 9. **Drive it for real** —
-screenshot the browser / run the screen; not done until *seen* rendering.
-10. Signature present and systematic (Phase 2 test passes).
+**Ship gate — this list is the only one.** `verify.md` is *how* to run it and
+`product-ui.md` is *what to build*; neither carries a competing gate. Each item is tagged
+by what it takes to prove: `static` (readable from the source, no browser),
+`browser` (needs a real render), `delegated` (another skill owns it).
+
+| # | Item | Kind |
+|---|---|---|
+| 1 | Text contrast on real pairs — 4.5:1 body, 3:1 large | `static` |
+| 2 | **Non-text contrast ≥3:1** — input borders, focus ring, icons, chart strokes, any control edge carrying meaning (WCAG 1.4.11) | `static` |
+| 3 | Every dependency and asset URL resolves — no invented packages, no guessed image IDs | `static` |
+| 4 | Labels, `aria-describedby` errors, `aria-live` regions, focus order in source order | `static` |
+| 5 | Loading / empty / error / success / no-permission all designed | `static` |
+| 6 | Signature present and systematic (Phase 2 test for the register) | `static` |
+| 7 | No overflow at 320 / 768 / 1280 / 1920 and at 200% text zoom | `browser` |
+| 8 | Keyboard: every surface drivable, visible ring, no traps | `browser` |
+| 9 | Reduced-motion path works | `browser` |
+| 10 | Touch targets ≥44pt/48dp — **measured, not assumed** | `browser` |
+| 11 | Both themes, if both ship | `browser` |
+| 12 | **Drive it for real** — screenshot the browser / run the screen | `browser` |
+| 13 | LCP < 2.5s, CLS < 0.1 | `delegated` → `web-perf` |
+| 14 | Native conventions, safe areas | `delegated` → `ios-design-review` / platform |
+| 15 | Wider a11y damage than your own change | `delegated` → `a11y-proof` |
+
+**No browser available? That is a terminal state, not a failure.** `static` items are
+still mandatory — they need no render and there is no excuse for skipping them. Report in
+exactly this shape:
+
+```
+built · verified: 1-6 (static) · not verified: 7-12 (no browser available) · delegated: 13-15 not run
+```
+
+Never write "done" or "verified" over an unrendered page, and never narrate a render you
+did not perform. `build.md` §6 and `verify.md`'s driver list defer to this paragraph.
 
 **Run this gate, don't recite it** — [references/verify.md](references/verify.md) has the
-driver, the contrast and overflow snippets, the state-forcing procedure, and the report
-format. It also requires you to state what you *didn't* verify.
+driver, the OKLCH contrast script, the overflow and state-forcing procedures, and the
+report format.
 
 ---
 
