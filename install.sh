@@ -66,8 +66,9 @@ echo "$targets" | while IFS='|' read -r cli marker dest; do
   if [ "$n" = 0 ]; then
     echo "ok    $cli (all skills already installed)"
   elif [ -z "$dry" ]; then
-    # skills reference PLATFORMS.md / WORKFLOW.md beside the installed skills
-    cp "$root/PLATFORMS.md" "$root/WORKFLOW.md" "$dest/"
+    # skills reference PLATFORMS.md / PRACTICE.md / WORKFLOW.md and practice/ beside the installed skills
+    cp "$root/PLATFORMS.md" "$root/PRACTICE.md" "$root/WORKFLOW.md" "$dest/"
+    rm -rf "$dest/practice" && cp -R "$root/practice" "$dest/"
   fi
 done
 

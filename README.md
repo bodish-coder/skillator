@@ -164,11 +164,13 @@ both alongside `skills/` — the skills refer to them.
   prints the state in a single line, then routes each request to the one skill
   that fits — across skillator (`sherlock-codes` for rot, `brainstorm-build-*` for
   features, `design-arwen` for UI, `merge-prep`/`deploy-niyoj` for shipping) *and*
-  the wider installed toolkit: superpowers process skills first (`brainstorming`
-  before building, `systematic-debugging` before fixing, TDD,
-  `verification-before-completion` before claiming done), then `code-review`,
-  `security-review`, `run`/`webapp-testing` to see it actually work, and
-  `workflow-authoring`/`mem-search` for agent work. Stops good
+  the wider installed toolkit: `code-review`, `security-review`,
+  `run`/`webapp-testing` to see it actually work, `workflow-authoring`/`mem-search`
+  for agent work. The process itself comes from **`PRACTICE.md`** at the repo root
+  — skillator's own canon, with the superpowers process skills merged into it
+  rather than chained in front: classify before designing, plan-grade tasks,
+  design self-review, test-first, root cause before any fix, fresh evidence
+  before any "done", and the branch-lifecycle rules. Stops good
   skills going unused because nobody remembered them, and refuses to chain them
   all "to be safe". It also sets the session's ground rules: reproduce before
   fixing, read the real source rather than presuming, map the code with
@@ -222,7 +224,19 @@ both alongside `skills/` — the skills refer to them.
   asked once and remembered in `.screenshot-dir` at the repo root. Invoke with
   `/screenshot-loop`.
 
+- **skill-smith** — writing a skill, fixing one that never triggers, or working
+  out why a rule keeps getting rationalized away. The description field decides
+  whether a skill is ever loaded, so it carries triggering conditions only and
+  never a workflow summary; the form of the guidance is matched to the kind of
+  failure it must prevent (a prohibition bulletproofs a discipline rule and
+  actively backfires on a wrong-shaped output, which wants a positive recipe);
+  and nothing ships until a fresh subagent has failed the scenario without it
+  and passed with it. Invoke with `/skill-smith`.
+
 ## Add a new skill
+
+`skillator:skill-smith` is the skill for this — read it before authoring.
+
 
 ```bash
 mkdir skills/<skill-name>        # a dir with a SKILL.md

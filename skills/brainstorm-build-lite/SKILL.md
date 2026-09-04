@@ -10,7 +10,7 @@ description: >-
   (no Sonnet offload) use brainstorm-build-mid; for a Fable-led creative
   design plus the full ceremony (/compact + session record + /clear) use
   brainstorm-build-prime. NOT for tiny one-line edits (just do them) or
-  pure design/no-build work.
+  pure design/no-build work. Absorbs the superpowers process skills (classification, plan-grade tasks, design self-review, test-first, fresh-evidence verification) via the root PRACTICE.md rather than chaining them.
 ---
 
 # Build (Opus design + build) + Sonnet (simple tasks)
@@ -21,6 +21,16 @@ Opus rates for boilerplate. A skill can't change the main session's model, so th
 split is done with **subagents** carrying explicit `model` overrides. You (the main
 session) orchestrate only — spawn the agents, route by complexity, relay the result.
 
+## Craft — read this first
+
+Read **`PRACTICE.md`** at the plugin root (beside `PLATFORMS.md`). It is
+skillator's process canon — the superpowers process skills merged in, in
+skillator's own words — so none of them is chained in front of this one: classify
+the request spike/bounded/architectural and say which out loud; one question at a
+time; the plan-grade TASKS shape a build agent can work from cold; design
+self-review; the test-first law; fresh-evidence verification; debugging (§7);
+branch lifecycle (§8). Everything below assumes it.
+
 ## Phase 1 — Opus designs
 
 Dispatch one subagent, `model: "opus"`, `subagent_type: "general-purpose"`. Give it
@@ -30,7 +40,9 @@ implementation-ready design **with each task tagged by complexity**:
 ```
 CHOSEN:       <the approach, one line + why>
 DESIGN:       <data model / contracts, key edge cases, out of scope>
-TASKS:        <ordered list; tag each [SIMPLE] or [COMPLEX] + the files it touches>
+TASKS:        <one block per task in PRACTICE.md §2 shape (Files,
+              Interfaces, test-first steps), each tagged
+              [SIMPLE] or [COMPLEX]>
 VERIFICATION: <the concrete end-to-end check that proves it works>
 ```
 
@@ -47,8 +59,9 @@ and surface it — don't guess.
 
 ## Phase 3 — Verify & relay
 
-Run the VERIFICATION step (Opus agent or main session) and capture the actual
-result — pass/fail with evidence, not a claim. On failure, fix it ([SIMPLE]→Sonnet,
+Run the VERIFICATION step (Opus agent or main session) through PRACTICE.md §5:
+identify the command, run it in full now, read the whole output and exit code,
+and only then claim — with the evidence attached. Never from an earlier run. On failure, fix it ([SIMPLE]→Sonnet,
 [COMPLEX]→Opus) and re-run. Then relay concisely: the approach, what was built
 (files), and the verification result.
 

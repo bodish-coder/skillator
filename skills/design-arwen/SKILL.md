@@ -283,6 +283,8 @@ format. It also requires you to state what you *didn't* verify.
 
 - **Visual artboards before code** → [references/canvas.md](references/canvas.md) (the
   optional `/design` canvas gate — the user tweaks the layout visually, then arwen builds it).
+  It is also skillator's visual companion for *any* design conversation: `PRACTICE.md` §1
+  routes here whenever a question is clearer shown than described, even from outside this skill.
 - **Charts / graphs / KPI tiles / series colors → `dataviz`.** It owns the validated
   light+dark chart palette and mark/axis/legend rules. Don't restate them here.
 - **Poster / cover / print / static art object (90% visual) → `canvas-design`.**

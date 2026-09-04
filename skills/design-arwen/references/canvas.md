@@ -3,6 +3,13 @@
 Optional. Used by [build.md](build.md) §2 and [redesign.md](redesign.md) §7 in place of the
 prose route gate, when the user would rather move boxes than read a plan.
 
+It is also skillator's **visual companion** generally: `PRACTICE.md` §1 routes any design
+conversation here the moment a question would be clearer shown than described, including
+conversations that never entered this skill through `build` or `redesign`. Coming in that
+way, you may not have run Phase 1 and 2 — draft the artboards in whatever palette, type
+scale and signature the conversation has settled so far, and say in the handover line which
+of those are still open.
+
 The premise: a written design plan is cheap to correct but hard to *see*. Artboards are
 cheap to correct **and** visible. The most expensive mistake in this skill is building six
 surfaces off a route the user would have redirected in ten seconds had they seen it.
@@ -19,6 +26,8 @@ surfaces off a route the user would have redirected in ten seconds had they seen
 
 **Skip it when:**
 - One component or one scoped `improve` pass. Building it is faster than drawing it.
+- The question isn't visual. A requirements, tradeoff or scope question belongs in the
+  terminal; a single architecture diagram belongs in a mermaid block, not a canvas.
 - The user said "just do it", or is clearly in a hurry.
 - The direction is already pinned by an existing design system or a Figma file.
 

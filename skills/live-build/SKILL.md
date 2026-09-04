@@ -105,8 +105,8 @@ than implying a preview exists.
 - **Leave it running** at the end of the turn unless the user says otherwise;
   tell them how to stop it. Killing the server they are looking at is rude.
 - **Exposure ≠ verification.** The app running proves it boots. It does not
-  prove the change is correct — tests and `superpowers:verification-before-completion`
-  still apply.
+  prove the change is correct — tests and `PRACTICE.md` §5 (fresh evidence, or no
+  claim) still apply.
 
 ## Related
 

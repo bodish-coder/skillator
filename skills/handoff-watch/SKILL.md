@@ -1,7 +1,7 @@
 ---
 name: handoff-watch
 description: >-
-  Watch Claude Code usage limits and automatically write a session handoff the
+  Watch usage limits and automatically write a session handoff the
   moment usage crosses a threshold (97% by default), so a session that is about
   to be cut off never loses its context. Use when the user asks to "monitor usage
   limits", "auto handoff before I run out", "warn me at 97%", "save the session
@@ -9,14 +9,17 @@ description: >-
   the usage watcher. This skill INSTALLS a statusline probe plus a Stop hook - the
   monitoring itself is done by those hooks, not by the model. The handoff document
   is written by the handoff skill, which the hook invokes. NOT for reporting
-  current usage (use /usage) and NOT for context-compaction tuning.
+  current usage (use /usage) and NOT for context-compaction tuning. Runs on
+  Claude Code (fully automatic), Codex (real usage %, agent-driven) and, with no
+  usage signal to read, degrades honestly on Cursor and Antigravity.
 ---
 
 # Handoff Watch (auto-handoff at the usage limit)
 
 A skill cannot monitor anything - it is only text loaded into a turn. The watching
 has to be done by the harness. This skill installs two small entry points into the
-same script, then gets out of the way:
+same script, then gets out of the way. Both are Claude Code hooks; for
+codex/cursor/antigravity see **Other hosts** below.
 
 | Piece | Event | Job |
 |---|---|---|
@@ -70,6 +73,40 @@ Add to `~/.claude/settings.json`:
   prints nothing and the statusline is empty.
 - POSIX: `"command": "<SKILL>/hooks/usage-watch.sh probe '<YOUR EXISTING STATUSLINE COMMAND>'"`.
 
+## Other hosts (codex, cursor, antigravity)
+
+Claude Code is the only host with a hook that can **both** read the usage
+percentage **and** inject an instruction at turn end. The others get `-Mode
+check` / `check`: no stdin, reads whatever the host leaves on disk, prints
+either `handoff-watch: <host> <pct>% of <limit>% - ok` or `HANDOFF NOW` followed
+by the same three-step preserve order.
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File <SKILL>/hooks/usage-watch.ps1 -Mode check
+<SKILL>/hooks/usage-watch.sh check
+```
+
+Nothing calls it on a timer. It is wired by the always-on project file that
+`skillator:grayskull-power` writes on activation (`.skillator/grayskull.md`,
+pointed at from `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`), which tells the agent
+to run it before each non-trivial step. Fires once per session (`.done` marker),
+same as the Claude Code gate.
+
+**The honest state per host** — this is what "armed" actually means:
+
+| Host | Usage signal | Turn-end hook that can inject | Active fallback |
+|---|---|---|---|
+| claude-code | `statusLine` `rate_limits.*.used_percentage` | `Stop` → `{"decision":"block"}` | none needed — full auto |
+| codex | **yes** — `~/.codex/sessions/**/rollout-*.jsonl`, last `token_count`: `rate_limits.*.used_percent` and `last_token_usage.total_tokens / model_context_window` | **no** — hooks are `PreToolUse`/`PostToolUse`/`PermissionRequest`/`SessionEnd`; `notify` fires on `agent-turn-complete` but cannot inject | real percentage, agent-driven `check` |
+| cursor | **no** — chats are SQLite `store.db`, no usage anywhere on disk | `stop` hook exists (`~/.cursor/hooks.json`, `command`/`prompt` handlers) | **none** — `check` prints "no usage signal on this host"; handoff is manual |
+| antigravity | **no** | `AfterAgent` and `PreCompress` in `~/.gemini/settings.json` | `PreCompress` is the real trigger — context is about to be lost; wire `handoff` there |
+
+Codex uses `last_token_usage.total_tokens`, not `total_token_usage` — the latter
+is cumulative for the whole session and reads several hundred percent.
+
+Don't claim cursor is armed. It isn't, and no amount of scripting makes it so
+until Cursor writes a usage number somewhere readable.
+
 ## Configure
 
 - **Threshold** — `CLAUDE_USAGE_HANDOFF_PCT` env var (default `97`). Set it in
@@ -82,9 +119,12 @@ Add to `~/.claude/settings.json`:
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -File <SKILL>/hooks/selftest.ps1
 ```
-Prints `ok`. It feeds fake statusline JSON through both modes and asserts: the
-max percentage wins, no fire below threshold, a block with the percentage above
-it, no second fire, and no fire when `stop_hook_active`.
+Prints `ok`. It feeds fake statusline JSON through `probe`/`gate` and asserts:
+the max percentage wins, no fire below threshold, a block with the percentage
+above it, no second fire, and no fire when `stop_hook_active`. It then runs
+`check` for real and asserts it exits 0, says one of its three allowed lines,
+and never reports over 100% (the guard against reading Codex's cumulative
+`total_token_usage` instead of `last_token_usage`).
 
 To check it live, temporarily set `CLAUDE_USAGE_HANDOFF_PCT=1` and end a turn -
 the handoff should be written immediately.

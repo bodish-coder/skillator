@@ -4,21 +4,24 @@ description: >-
   Single entry point that turns on the skillator programming workflow — arms the
   always-on skills (ticket board, usage watch) and routes each piece of work to
   the right skillator skill (sherlock-codes, ticket-master, brainstorm-build-*,
-  design-arwen, live-build, merge-prep, deploy-niyoj, handoff…) instead of the
+  design-arwen, live-build, merge-prep, deploy-niyoj, skill-smith, handoff…) instead of the
   user having
   to remember which one to call. Use when the user says "dev mode", "activate
   the programming skills", "turn on the skillator workflow", "use our skills",
   "by the power of grayskull", "grayskull", "check screenshot", "set up for
   coding", or starts real development work in a repo and no skillator skill is active yet. Routes across
-  both the skillator skills and the wider installed toolkit (superpowers process
-  skills, code-review, ponytail, run, mem-search, workflow-authoring). Also sets
+  both the skillator skills and the wider installed toolkit (code-review,
+  security-review, ponytail, run, mem-search, workflow-authoring), with the
+  superpowers process skills merged into PRACTICE.md rather than chained. Also sets
   the ground rules for the session: reproduce before fixing, map the code with
   codegraph (init it if the repo is unindexed) before suggesting a remedy, name
   the blast radius, and run sherlock-codes over the staged diff before every
   commit. Routes; it does not do the work itself — the routed skill does. Runs on
   Claude Code, Codex, Cursor, Antigravity/Gemini and Pi — the host-specific
   mechanics (loading a skill, delegating, asking) come from PLATFORMS.md. NOT
-  for enabling/disabling skills on disk.
+  for enabling/disabling skills on disk. On first activation in a repo it writes
+  .skillator/grayskull.md plus pointers in CLAUDE.md / AGENTS.md / GEMINI.md so
+  the workflow re-arms itself in every one of those CLIs for that project.
 ---
 
 # Grayskull Power (activate the skillator workflow)
@@ -39,10 +42,21 @@ just stops good skills sitting unused because nobody remembered them.
 
 ## 0. Host
 
-Works on every host skillator supports. Detect it and read
-**`PLATFORMS.md` at the plugin root** (`../../PLATFORMS.md`) — that file owns
-skill paths, delegation, tier switching and context checkpoints. Only the
-routing below is this skill's own.
+Works on every host skillator supports. Detect it and read **two files at the
+plugin root**:
+
+- **`PLATFORMS.md`** (`../../PLATFORMS.md`) — skill paths, delegation, tier
+  switching, context checkpoints. Host mechanics.
+- **`PRACTICE.md`** (`../../PRACTICE.md`) — skillator's process canon: the
+  superpowers process skills merged in, in skillator's own words. Classification,
+  questioning, plan-grade tasks, design self-review, test-first, fresh-evidence
+  verification, requesting and receiving review, debugging, branch lifecycle.
+  The routing table below points at its sections by number; **§7 and §5 are the
+  ground rules in §3-§4 of this skill, written out**. Its `practice/` directory
+  holds the mechanics — subagent prompt templates, the controller task loop, TDD
+  in full, debugging techniques — loaded on demand, not up front.
+
+Only the routing itself is this skill's own.
 
 What changes per host, and nothing else:
 
@@ -52,7 +66,7 @@ What changes per host, and nothing else:
 | "Fable subagents" (§Agent work) | `Agent` + `model: "fable"` | the host's strongest **reasoning** tier: cursor `gpt-5.6-sol-medium` via `Task`, codex `gpt-5.6-sol` at `reasoning_effort: high`, antigravity/pi `/model` to the best reasoner. No delegation available → one analysis pass in-session, design-only prompt, and say so |
 | `AskUserQuestion` | the tool | a numbered list of the same options — what it does · where it hurts · which is recommended |
 | "keep artifacts local" | write the file, give the path | identical, and never publish |
-| `ponytail` badge, `handoff-watch` hooks | statusline + `Stop` hook | no statusline or hooks → state the laziness level in text, and run `handoff` manually when context gets tight |
+| `ponytail` badge, `handoff-watch` hooks | statusline + `Stop` hook | no statusline → state the laziness level in text. No injecting turn-end hook either → run `usage-watch … check` (§1) yourself before each non-trivial step; on cursor/antigravity it has no percentage to read, so run `handoff` manually when context gets tight |
 
 `codegraph`, `TICKETS.md`, git and the ground rules in §3–§4 are plain files and
 commands — they work the same everywhere, no adapter needed.
@@ -78,9 +92,14 @@ commands — they work the same everywhere, no adapter needed.
   and hands over the URL/command **before** the edits, so the user watches it run
   instead of waiting on a reply. Nothing runnable → say `live-build: nothing to
   launch` once and drop it. Never auto-launch simulators, migrations or deploys.
-- **`handoff-watch`** — confirm it is wired (`statusLine` runs `usage-watch … -Mode
-  probe` and a `Stop` hook runs `-Mode gate`). Not wired → say so in one line and
-  offer to wire it. Never wire it silently.
+- **`handoff-watch`** — on **Claude Code**, confirm the hooks are wired
+  (`statusLine` runs `usage-watch … -Mode probe`, a `Stop` hook runs `-Mode
+  gate`). Not wired → say so in one line and offer to wire it; never wire it
+  silently. On **every other host** there is no such hook: run
+  `usage-watch.ps1 -Mode check` / `usage-watch.sh check` once here and report
+  exactly what it says. It reads a real percentage on codex and reports "no
+  usage signal on this host" on cursor and antigravity — repeat that verbatim
+  rather than calling it armed. See that skill's **Other hosts** table.
 
 Then state the active set in **one line** — not a feature tour:
 
@@ -91,28 +110,90 @@ grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · pon
 The banner was already printed at the top of the reply (see above). It fires
 **once per session**, on invoke — not on every routed request.
 
+## 1b. Persist it for this project (once, then never again)
+
+Activation should survive the session and the host. Every one of these CLIs
+already reads an always-on instruction file from the repo root — that is the
+carrier, no hook required.
+
+On the **first** invoke in a repo, write these four small files and say so in
+one line. If `.skillator/grayskull.md` already exists, activation is already
+persisted: skip this whole step silently.
+
+**`.skillator/grayskull.md`** — the single source of truth:
+
+```markdown
+# grayskull-power is ON for this project
+
+Load and follow `skillator:grayskull-power` for all work in this repo, before
+anything else. Claude Code: the `Skill` tool. Antigravity: `/grayskull-power`.
+Pi: `/skill:grayskull-power`. Codex / Cursor: read that skill's `SKILL.md` and
+follow it yourself. Print its banner once per session, then route per its table.
+
+Standing rules, no reminder needed:
+- `TICKETS.md` at the repo root is the board — `skillator:ticket-master` owns it.
+- Reproduce before fixing. Map with `codegraph` before proposing a remedy.
+- `skillator:sherlock-codes` over the staged diff before every commit.
+- Usage watch — before each non-trivial step run
+  `<SKILL_DIR>/../handoff-watch/hooks/usage-watch.sh check`
+  (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File
+  "<SKILL_DIR>/../handoff-watch/hooks/usage-watch.ps1" -Mode check`).
+  It prints `HANDOFF NOW` plus an order — stop and follow it exactly.
+  On Claude Code the `Stop` hook already does this; skip the manual call there.
+```
+
+Substitute the real absolute path for `<SKILL_DIR>` when you write it.
+
+Then the three host pointers, **appended** (never overwriting what is there):
+
+| File | Read by | Line to append |
+|---|---|---|
+| `CLAUDE.md` | Claude Code | `@.skillator/grayskull.md` |
+| `AGENTS.md` | Codex, Cursor | `Read and follow ./.skillator/grayskull.md before any work in this repo.` |
+| `GEMINI.md` | Antigravity | `@.skillator/grayskull.md` |
+
+Create a file only if it is missing; if it exists, append the line only when it
+isn't already present. Three near-identical pointers is deliberate — each host
+reads its own name, and a symlink is not portable to Windows.
+
+Deactivating is deleting `.skillator/grayskull.md`; the pointers then resolve to
+nothing and are harmless. Say that once, don't repeat it.
+
 ## 2. Route
 
 Match the request, invoke that skill, follow it. One skill at a time — chaining
 every skill "to be safe" is the failure this is meant to prevent.
 
-**Process before implementation.** A superpowers process skill sets the approach;
-the skillator skill then carries it out. "Build X" → `brainstorming`, *then*
-`brainstorm-build-*`. "Fix this bug" → `systematic-debugging`, *then* the code.
-Getting that order backwards is how a session produces confident wrong work.
+**Process before implementation** — but only where the process skill adds
+something the skillator skill doesn't already own.
+
+`brainstorm-build-*` **is** the process for a build: it runs `PRACTICE.md` §§1-6
+and adds tier routing, a session record and a rework loop on top. Chaining any of
+the merged process skills in front of it re-runs the same work and burns the
+budget the build needs.
+**"Build X" → `brainstorm-build-*` directly.** When the answer is a decision and
+no code will be written, run PRACTICE §1 here in the session instead — classify,
+ask one question at a time, present, stop.
+
+The order still holds for the process that isn't inside a build: **"fix this
+bug" → PRACTICE §7 first, then the code.** Root cause before any fix. Getting
+that backwards is how a session produces confident wrong work.
 
 ### Practice — always in play
 
 | When | Skill |
 |---|---|
-| Anything creative: a feature, a component, new behaviour | `superpowers:brainstorming` **first** |
-| A bug with an unknown cause | `superpowers:systematic-debugging` **first** |
-| A multi-step task with a spec already agreed | `superpowers:writing-plans` → `executing-plans` |
-| New logic worth trusting | `superpowers:test-driven-development` |
-| About to say "done" | `superpowers:verification-before-completion` |
-| A diff worth a second pair of eyes | `code-review:code-review` (`/simplify` for quality-only) |
+| Anything creative that ends in code | `brainstorm-build-*` — it runs PRACTICE §§1-6 for you |
+| A design/decision question with no build behind it | PRACTICE §1 — classify, question one at a time, present, stop |
+| A bug with an unknown cause | **PRACTICE §7 first** — root cause before any fix, and the three-fix rule |
+| A multi-step task with a spec already agreed, outside a build run | PRACTICE §2 — write the tasks in plan shape, then §3 self-review them |
+| New logic worth trusting | PRACTICE §4 — test first |
+| About to say "done" | PRACTICE §5 — fresh evidence or no claim |
+| A diff worth a second pair of eyes | PRACTICE §6, via `code-review:code-review` (`/simplify` for quality-only) |
+| Review findings landing on you | PRACTICE §6 — verify against this codebase before implementing |
 | Auth, secrets, input handling, anything user-facing | `security-review` |
-| Branch lifecycle | `superpowers:using-git-worktrees` → `finishing-a-development-branch` |
+| The deliverable is itself a skill, or a skill isn't triggering | `skill-smith` |
+| Branch lifecycle | PRACTICE §8 — isolation, then the finish menu |
 
 ### The loop — see it actually work
 
@@ -128,7 +209,7 @@ Getting that order backwards is how a session produces confident wrong work.
 
 | When | Skill |
 |---|---|
-| Farming a task out to subagents | `superpowers:subagent-driven-development`, `dispatching-parallel-agents` |
+| Farming a task out to subagents | PRACTICE §4 — one task per agent, fresh context, review before the next dispatch |
 | Writing a `Workflow` script (user opted in) | `workflow-authoring` **before** the script |
 | "Have we hit this before?" — recall past sessions | `claude-mem:mem-search` |
 | A codebase nobody here knows yet | `understand-anything:understand`, `claude-mem:learn-codebase` |

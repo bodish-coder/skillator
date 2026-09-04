@@ -20,4 +20,13 @@ if (Gate $stop) { throw 'gate: fired twice (done-marker ignored)' }
 if (Gate "{`"session_id`":`"$sid`",`"stop_hook_active`":true}") { throw 'gate: ignored stop_hook_active' }
 
 Remove-Item "$flag","$flag.done" -ErrorAction SilentlyContinue
+
+# check mode (the codex / any-host path): must not read stdin, must exit 0, and
+# must say exactly one of the three things it is allowed to say.
+$me = Join-Path $PSScriptRoot 'usage-watch.ps1'
+$c  = (& powershell -NoProfile -ExecutionPolicy Bypass -File $me -Mode check) -join "`n"
+if ($LASTEXITCODE -ne 0) { throw "check: exit $LASTEXITCODE" }
+if ($c -notmatch '^(handoff-watch: (no usage signal|\S+ [0-9.]+% of [0-9.]+% - ok))|^HANDOFF NOW \(') { throw "check: unexpected output '$c'" }
+if ($c -match '([0-9.]+)% of' -and [double]$Matches[1] -gt 100) { throw "check: percentage over 100 - wrong token field?" }
+
 'ok'

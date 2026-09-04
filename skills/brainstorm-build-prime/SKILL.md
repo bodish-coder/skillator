@@ -12,7 +12,10 @@ description: >-
   GPT-5.6-Sol high-reasoning design pass then Sol build, auto-compaction aware.
   For all-Opus without ceremony use brainstorm-build-mid; for Sonnet
   offload use brainstorm-build-lite. NOT for tiny one-line edits or
-  pure design/no-build work.
+  pure design/no-build work. Absorbs the superpowers process skills — classify
+  spike/bounded/architectural, plan-grade tasks, design self-review, test-first,
+  fresh-evidence verification — via the root PRACTICE.md, so they are not chained
+  in front of it.
 ---
 
 # Brainstorm (design tier) → Build (build tier) — with ceremony
@@ -25,6 +28,12 @@ record, and run context checkpoints automatically where the platform allows.
 
 ## Step 0 — Platform & models
 
+0. Read **`PRACTICE.md`** at the plugin root (beside `PLATFORMS.md`). It is
+   skillator's process canon — the superpowers process skills merged in, in
+   skillator's own words: classification, questioning, the plan-grade TASKS
+   shape, design self-review, the test-first and fresh-evidence laws, debugging,
+   branch lifecycle. Everything below assumes it, and it is why this skill
+   chains nothing in front of itself.
 1. Read `references/platforms.md` in this skill's directory (and the root
    `PLATFORMS.md` it points to for the generic mechanics).
 2. Detect platform — claude-code · cursor · codex · antigravity · pi ·
@@ -32,26 +41,52 @@ record, and run context checkpoints automatically where the platform allows.
 3. Note the **design** and **build** model slugs / overrides for this run.
 4. If the user named models or a platform, those override the defaults — record
    them in the session file header.
+5. **Classify the request — spike / bounded / architectural (PRACTICE.md §1) — and
+   say which, out loud, in your first reply.** It scales everything after it, and
+   saying it lets the user overrule it before any budget is spent. In doubt, take
+   the heavier path; hidden complexity found later upgrades it, never downgrades.
 
 ---
 
 ## Phase 1 — Design tier designs
 
-Dispatch one **design-tier** agent (see platforms.md). Give it the task verbatim
-+ repo context. Return an implementation-ready design:
+A **spike** stops here: state the question and the probe in 2-3 sentences, get a
+nod, find out as cheaply as correctness allows, report a recommendation, label
+anything built throwaway. No design file, no Phase 2.
+
+Otherwise dispatch one **design-tier** agent (see platforms.md). Give it the task
+verbatim, the repo context, **and `PRACTICE.md`** — its questioning discipline and
+TASKS shape are what make the design buildable by an agent that never saw this
+conversation. Return an implementation-ready design:
 
 ```
 GOAL:         <the task in one line>
 APPROACHES:   <2-3 candidates, one line each + the tradeoff>
 CHOSEN:       <which, and why it wins>
 DESIGN:       <data model / contracts, key edge cases, out of scope>
-TASKS:        <ordered build steps + the files each touches>
-VERIFICATION: <the concrete end-to-end check that proves it works>
+TASKS:        <one block per task in the PRACTICE.md §2 shape: Files
+              create/modify/test, Interfaces consumes/produces, and
+              bite-sized test-first steps carrying actual code and
+              actual commands. No placeholders.>
+VERIFICATION: <the concrete end-to-end check that proves it works —
+              the exact command and the expected output>
 ```
+
+`TASKS` is the whole implementation plan, not a list of intentions. A build agent
+sees only its own task and never this conversation, so a task that doesn't stand
+alone is a task that gets built wrong.
 
 **Write this design to a file** — `docs/sessions/session-<YYYY-MM-DD>-<slug>.md`
 (or the scratchpad). This file is the session's spine: it survives context loss,
 and the build agent reads it instead of chat context. Confirm the path.
+
+**Then self-review it (PRACTICE.md §3)** before anyone builds it — coverage,
+placeholders, type consistency across tasks, contradictions, scope. Fix inline.
+
+**Architectural path only: stop here and get a yes.** The design file is written
+and reviewed; present it and wait. Spike and bounded keep going without a gate —
+that is the deliberate difference from `superpowers:brainstorming`, and it is
+what the announced classification buys.
 
 Include a short header in that file:
 
@@ -83,18 +118,39 @@ Continue from the design file, not chat memory.
 
 ## Phase 2 — Build tier builds
 
-Dispatch **build-tier** agent(s) (platforms.md), given the **design file path** +
-TASKS. Build exactly the design, stay inside the declared files. Independent
-tasks can run in parallel (git worktree if they'd touch the same tree). If the
-design hits a real blocker only the user can resolve, stop and surface it — don't
-guess.
+**One agent per task, fresh context, never the session history** (PRACTICE.md §4;
+the procedure is `practice/task-loop.md`, the prompt text is
+`practice/prompts.md`). Each build-tier agent (platforms.md) gets the **design
+file path**, its own task block, and nothing else. Build exactly the design, stay inside the declared
+files. Test first — no production code without a failing test, for anything that
+carries behaviour.
+
+When a task comes back, **review it before dispatching the next**: spec
+compliance against its own task block first, then code quality. A failed review
+goes to a fix agent with the finding, not forward to the next task.
+
+Independent tasks run in parallel; tasks touching the same files do not
+(PRACTICE.md §8 if they must). If the design hits a real
+blocker only the user can resolve, stop and surface it — don't guess.
 
 ---
 
 ## Phase 3 — Test
 
-Run the VERIFICATION step (build agent or orchestrator). Capture the **actual
-result** — pass/fail with evidence, never a claim. Failure feeds rework.
+Run the VERIFICATION step (build agent or orchestrator) through the gate in
+PRACTICE.md §5: identify the command, run it in full **now**, read the whole output
+and exit code, check it actually confirms the claim, and only then say so — with
+the evidence attached. A suite that was green three edits ago is not evidence.
+
+```
+NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
+```
+
+Then, on anything bigger than a bounded change, dispatch **one reviewer over the
+whole diff** — the design file plus the diff, never the session history
+(`code-review:code-review`, or `skillator:sherlock-codes` on a large surface).
+
+Failures and findings both feed rework.
 
 ---
 
@@ -167,5 +223,13 @@ session, around the call.
 - **Autonomous within phases, honest across them.** No confirmation gate between
   design and build, but if a phase fails or an agent returns nothing, say so and
   stop.
+- **This skill is the process — don't stack another in front of it.**
+  Everything `superpowers` would contribute here is merged into `PRACTICE.md` —
+  brainstorming (§1), writing/executing-plans (§2-3), TDD and
+  subagent/parallel dispatch (§4), verification-before-completion (§5),
+  requesting- and receiving-code-review (§6), systematic-debugging (§7),
+  worktrees and finishing-a-branch (§8). Running the originals first re-runs the
+  same process and spends the budget the build needs. PRACTICE.md's closing
+  table lists what is deliberately *not* in it.
 - Want all-build-tier with no ceremony? Use brainstorm-build-mid. Want
   to offload simple build tasks to a fast tier? Use brainstorm-build-lite.
