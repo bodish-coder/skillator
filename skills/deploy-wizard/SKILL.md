@@ -63,6 +63,15 @@ can; confirm each batch. Collect these values (names only for secrets):
 State back the collected config (secrets shown as `<set on server>`) and get a
 confirm before scaffolding.
 
+**Nobody to interview?** A subagent, a batch run, or "just set it up, I'm out" —
+a deployment's specifics cannot be inferred, and a scaffold built on invented ones
+is worse than no scaffold: it looks configured and points at a host that isn't
+theirs. Don't scaffold. Write Step 1 out as an answer sheet, filled in where the
+repo actually tells you (`APP_SLUG`, ports, `STACK_SERVICES`, `HEALTH_PATH`) and
+blank where only the user can (`DEPLOY_HOST`, `SUBDOMAIN`, `CERTBOT_EMAIL`, secret
+names), print the Step 3 checklist beneath it, and stop there. The wizard prepares
+and the human executes — with no human in the loop, preparing is the whole job.
+
 ## Step 2 — Scaffold the artifacts (prep)
 
 Generate these into the project, substituting the answers (secrets stay as

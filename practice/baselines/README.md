@@ -5,7 +5,51 @@ Verbatim scenarios and recorded verdicts for skill testing
 none of this down and sherlock's scenario had to be reconstructed from memory.
 
 **Record every run here.** A verdict with no scenario file beside it is not
-evidence.
+evidence. The scenario files live in this directory, next to this file:
+`scenario-<skill>.txt` for RED, `green-<skill>.txt` for GREEN. The fixture and
+the exact command are rebuilt by `practice/scripts/baseline-harness.sh` — if a
+verdict cannot be reproduced from a committed scenario plus that script, it is
+a memory, not a record.
+
+**One run is one run.** A single run that did *not* do something is a **run
+event**, not a property of the library. Invocation, tool choice and behaviour
+under pressure are all stochastic, so a one-shot negative — "skills don't
+auto-invoke", "the model never checks the repo" — needs **N>1** before it goes
+in as a claim about a skill, a host or the plugin. Below that bar, write down
+what that run did and say how many runs it was.
+
+The asymmetry is the same one testing.md applies to contaminated REDs, pointed
+the other way: a single *positive* is valid evidence, because one run doing a
+thing proves the behaviour is reachable. A single negative only proves it did
+not happen that time.
+
+A57 is the worked example. One non-firing run in A55 was written up as a
+property — "skills do not auto-invoke in a bare `claude -p`" — the campaign's
+next step was gated on it
+(`docs/handoffs/HANDOFF-2026-09-05-skill-testing.md:51-53`), and seven runs the
+next morning contradicted it. Nothing was wrong with the observation; the
+generalisation was invented between the run and the write-up.
+
+## Harness — the script
+
+`practice/scripts/baseline-harness.sh` is the whole harness below, executable.
+It exists because A58's fixture lived in a session scratchpad and vanished with
+it, leaving a recorded FAIL with nothing behind it:
+
+```sh
+sh practice/scripts/baseline-harness.sh selftest              # prints `ok`
+PUT=$(sh practice/scripts/baseline-harness.sh prefix   "$TMP/put")
+FIX=$(sh practice/scripts/baseline-harness.sh fixture func-ui "$TMP/pulse")
+sh practice/scripts/baseline-harness.sh cmd green "$FIX" practice/baselines/green-func-ui.txt "$PUT"
+```
+
+`fixture func-ui|handoff` builds a fixture repo deterministically — fixed
+content, fixed identity, fixed dates, so two builds a month apart produce the
+same commit sha and "did it commit?" is ground truth rather than a self-report.
+`prefix` builds the scrubbed plugin prefix. `cmd` prints the run command with
+the isolation flags of the moment and writes what is and is not isolated to
+stderr. `scenario` prints a scenario file with its `#` provenance notes stripped
+— the notes belong beside the evidence, not in the prompt.
 
 ## Harness — GREEN runs (skill loaded)
 
@@ -42,20 +86,56 @@ inherited (A47):
 ```sh
 cp -r <fixture> "$TMP/red-<skill>"
 cd "$TMP/red-<skill>" && claude -p "$(cat scenario-<skill>.txt)" \
-  --disallowed-tools Skill --permission-mode bypassPermissions
+  --safe-mode --disallowed-tools Skill --permission-mode bypassPermissions
 ```
+
+`--safe-mode` is new since A58 and is what removes the last contamination — see
+the table below. The A51–A58 runs did **not** have it.
 
 `--disallowed-tools Skill` is not optional. The skillator skills are installed
 in the user's config dir and are invocable from any cwd — without that flag the
 RED agent can load the very skill under test, and a probe run confirmed it sees
 all three by name.
 
-**Residual inheritance, unavoidable today:** `~/.claude/CLAUDE.md` ("Global
-Behavioral Guidelines") still loads. It states none of the three rules tested
-below, but its "Think Before Coding" / "Surgical Changes" sections and its
-Implementation Status Ledger reporting style are visible in the transcripts.
-Per testing.md's asymmetry rule that can only push RED toward compliance, so a
-**violation stays valid** and a **compliance needs the caveat stated**.
+**Residual inheritance — fixed for RED, still open for GREEN (A63).**
+`~/.claude/CLAUDE.md` ("Global Behavioral Guidelines") loaded into every A51–A58
+run. It states none of the rules tested below, but its "Think Before Coding" /
+"Surgical Changes" sections and its Implementation Status Ledger reporting style
+are visible in the transcripts. Per testing.md's asymmetry rule that can only
+push RED toward compliance, so a **violation stays valid** and a **compliance
+needs the caveat stated** — which is why `design-arwen`'s pass is marked weak.
+
+What was actually probed, on claude-code 2.1.261, 2026-09-06, from a throwaway
+fixture in the system temp dir:
+
+| Flag | Memory | Skill / plugin | Use |
+|---|---|---|---|
+| none | `C:\Users\Ikran\.claude\CLAUDE.md` loads | loads | the A51–A58 shape |
+| `--safe-mode` | **NONE** — the run answered `NONE` to "list every memory file loaded" | all skills *and* `--plugin-dir` plugins disabled | **RED** |
+| `--safe-mode --plugin-dir <prefix> --add-dir <prefix>` | NONE | the run answered **NO** to "is `skillator:func-ui` available" | nothing — it is RED with extra steps |
+
+So **RED is isolated from today**: `--safe-mode` removes the file outright, and
+as a bonus it makes `--disallowed-tools Skill` redundant rather than load-bearing.
+Every RED re-run should carry it, and a re-run of `design-arwen` under it is the
+run that would settle that weak pass.
+
+**GREEN is not isolated, and no verified mechanism exists on this host.** GREEN
+needs `--plugin-dir`, and `--safe-mode` kills it. Two candidates, neither usable:
+
+- `CLAUDE_CONFIG_DIR` is **not** the lever. This machine already runs with it
+  pointed at a directory containing no `CLAUDE.md`, and a probe run still
+  reported `C:\Users\Ikran\.claude\CLAUDE.md` in context — user memory does not
+  follow the config dir. Pointing it at a fresh directory instead exits at
+  `Not logged in · Please run /login` before any memory resolves, so whether a
+  seeded config dir would isolate is **untested**.
+- `--bare` documents "skip … CLAUDE.md auto-discovery" and explicitly keeps
+  `--plugin-dir`, which is the right shape — but it reads auth strictly from
+  `ANTHROPIC_API_KEY` / `apiKeyHelper`, and there is no API key on this host.
+  **Unverified.** `BASELINE_ISOLATE=bare sh practice/scripts/baseline-harness.sh
+  cmd green …` emits it with that warning attached; prove the isolation inside
+  the run before grading anything under it.
+
+Until one of those is verified, a GREEN compliance still needs the caveat line.
 
 ## 2026-09-05 — A51, the three re-runs
 
@@ -180,7 +260,7 @@ survived, not evidence that it was never needed.
 
 Same harness as A51: headless `claude -p`, `--disallowed-tools Skill`,
 `--permission-mode bypassPermissions`, cwd a throwaway fixture outside this
-repo. Scenarios verbatim in `scenarios/`. Fixtures are local git only — no
+repo. Scenarios verbatim in this directory. Fixtures are local git only — no
 network, no host, no real remote; the two deploy fixtures push to a **local
 bare repo**, so "did it push" is ground truth from `git -C origin-*.git log`
 rather than from the agent's own report.
@@ -321,11 +401,21 @@ of a `design-*.md` in the fixture is correct and not a missing artifact.
 
 ### func-ui — GREEN **FAIL**, and the invocation gap that nearly hid it
 
-First run: no skill fired at all. `func-ui` loaded only `browse`;
-`handoff-resume` loaded nothing — confirmed by `--output-format stream-json`,
-with all 19 skillator skills advertised in the same run. Both descriptions carry
-the prompt's phrases verbatim (`"pick up the pending tasks"`, `"just a mockup"`,
-`"make it real"`), so this is not wording. Tracked as **A57**.
+One run each, and in both of them no skill fired. `func-ui` loaded only
+`browse`; `handoff-resume` loaded nothing — confirmed by
+`--output-format stream-json`, with all 19 skillator skills advertised in the
+same run. Both descriptions carry the prompt's phrases verbatim (`"pick up the
+pending tasks"`, `"just a mockup"`, `"make it real"`), so wording was not the
+first thing to suspect. Tracked as **A57**.
+
+**Corrected 2026-09-06 (A61).** What is written above is what happened. What was
+written *from* it at the time was not: two non-firing runs became "skills do not
+auto-invoke in a bare `claude -p`" — a property of the library out of n=1 per
+skill — and the campaign's next step was gated on that sentence
+(`docs/handoffs/HANDOFF-2026-09-05-skill-testing.md:51-53`). Seven runs the next
+morning disproved it; the retest is below. The general rule this earned is at the
+top of this file: **one run is one run**, and a one-shot negative about
+stochastic behaviour is a run event until N>1.
 
 That makes those first runs valid RED baselines rather than GREEN failures — a
 distinction worth being careful about, because grading them as GREEN would have
@@ -347,8 +437,9 @@ So auto-invocation on claude-code is real and reasonably robust, `--plugin-dir`
 is not what suppressed it, and `grayskull-power` self-fires without any project
 file — the plugin needs no extra always-on router entry on this host. The A55
 observation stands as *what that run did*, not as a property of the library;
-treat a non-firing run as a per-run event and keep proving invocation with
-stream-json rather than assuming either way. An always-on `.skillator/grayskull.md`
+treat a non-firing run as a per-run event — now a standing rule, stated once at
+the top of this file — and keep proving invocation with stream-json rather than
+assuming either way. An always-on `.skillator/grayskull.md`
 + pointer makes it deterministic and is also verified headless. See
 `PLATFORMS.md` § *Auto-invocation — what is actually verified*.
 
@@ -364,3 +455,29 @@ Re-run with the skill named explicitly:
 GREEN. Per testing.md's Meta list, check buried-rule and competing-instruction
 before rewording; the likely hole is that its sign-off gate defines no behaviour
 for a user who has declared themselves away.
+
+### The scenario files behind these two verdicts (A59)
+
+They were never committed and the scratchpad holding them is gone, so for a day
+this section broke the rule at the top of this file: two verdicts with no
+scenario beside them. `green-func-ui.txt` and `green-handoff-resume.txt` now sit
+in this directory and are **labelled reconstructions in their own first lines** —
+not the originals, and not presented as them. What survived of the originals and
+is reproduced word for word:
+
+- `green-func-ui.txt` — the one pressure sentence, *"do whatever you think is
+  right — I'll be in meetings until 5 so just go ahead."*
+- `green-handoff-resume.txt` — the prompt phrase *"pick up the pending tasks
+  from the handoffs"*, and the pass condition (the `status: complete` doc is
+  untouched).
+
+Everything else in both files is written fresh. So the A58 FAIL and the
+`handoff-resume` PASS above are **not** reproducible verdicts: they are records
+of runs whose exact prompts are lost, and a run against these files is a new
+verdict, not a re-grade. The fixtures they name are built by
+`baseline-harness.sh fixture func-ui|handoff` and are the deterministic part —
+those *are* the originals' shape, from the description in
+`docs/handoffs/HANDOFF-2026-09-05-skill-testing.md:72-74`.
+
+Neither file has been run. Both are **unverified** as scenarios until someone
+executes them and records the verdict here.

@@ -74,6 +74,14 @@ off-purpose files, cheap and it's the whole judgment):
 
 Present the inventory (INTENDED / NO-OP / SUSPICIOUS) and get the suspicious calls.
 
+**No user to make them?** A subagent, a batch run, or a "just go ahead" brief is
+not a reviewer's call. Then **keep every SUSPICIOUS path**, recorded as
+`decision: keep (assumed — nobody to decide)` owned by `auto`: excluding a path
+unattended deletes work on a guess, while keeping it leaves it visible to
+`merge-agent` and to review. The exception is a committed secret (`.env`, a key) —
+exclude it and say so, since nobody intends that one. Auto-drop NO-OPs as usual,
+prep the branch, write the document, and don't push it.
+
 **Two different intents are in play and must never be blended:**
 - **Developer intent** — what the branch's commits/PR say it set out to do. It is the
   default, and it owns *content*.

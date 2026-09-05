@@ -76,6 +76,16 @@ Establish, then confirm back before touching anything:
 
 Never start merging on an unconfirmed branch list or base.
 
+**No user to confirm?** A subagent, a batch run, or a "just go ahead" brief — that
+is not the direction and it is not push approval. Everything here happens on a
+throwaway integration branch, so continue locally rather than blocking: mark every
+unanswered call `assumed:` in the merge log — semantic conflicts applied as
+proposed, verification run, Phase 5 ending at **hand off locally** — and list those
+assumptions in the report. Two things still don't default. If the direction is
+genuinely reversible, stop before the first merge and say so; it is the one call
+with no safe guess. And push, PR and swap-in need a real yes — deleting an
+integration branch costs nothing, an unapproved push costs everyone.
+
 > If a branch is stale or carries unrelated/no-op churn, run **`merge-prep`**
 > on it first — it preps the branch **in place** (onto current base, unintended paths
 > dropped) and commits a prep document to it, so this merge integrates nothing old or
@@ -272,7 +282,8 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
   gained since the merge base is present. Each exception is named — path and hunk — in
   the merge log or the branch's prep document. Unexplained difference = lost change.
 - **Direction is asked, not inferred.** `<source> INTO <destination>` is confirmed
-  before the first merge, and the overall direction never decides an individual hunk.
+  before the first merge (nobody to ask → Phase 0's branch), and the overall
+  direction never decides an individual hunk.
 - **Conflicts resolve per hunk.** Whole-file `--ours`/`--theirs` is for lockfiles and
   generated files only; anywhere else it is a change discarded with exit 0.
 - **Everything on the integration branch**, everything in the merge log — the run is

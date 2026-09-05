@@ -91,3 +91,36 @@ them; they are ordinary GREEN task prompts with no pressure stacking.
 - Grading of prime/mid/lite used artifacts on disk plus each run's own
   who-did-what table. The per-subagent `model` field was not independently
   captured; those three runs did not use stream-json.
+
+## Addendum — 2026-09-06, A59 / A61 / A63
+
+Three things above are now wrong or superseded. Corrected here rather than
+edited in place, so the mistake stays legible.
+
+1. **"A57 first — it gates the rest" (line 51-53) was built on n=1.** Seven runs
+   the next morning had every skill fire unprompted, including under the
+   `--plugin-dir` GREEN shape. A57 is closed, premise disproved, and nothing was
+   ever gated on anything real. The rule this earned is now standing at the top
+   of `practice/baselines/README.md`: a single non-firing run is a **run event**,
+   not a library property, and a one-shot negative about stochastic behaviour
+   needs N>1 before it enters the record. (A61)
+
+2. **"Residual, unfixable today" (line 44-47) was only half true.** `--safe-mode`
+   drops `~/.claude/CLAUDE.md` outright — probed 2026-09-06 on claude-code
+   2.1.261, the run answered `NONE` to "list every memory file loaded" — so
+   **RED is isolated from now on** and `design-arwen`'s weak pass can be settled
+   by re-running under it. **GREEN is still not isolated**: `--safe-mode` also
+   suppresses `--plugin-dir`, `CLAUDE_CONFIG_DIR` turns out not to move user
+   memory at all, and `--bare` needs an `ANTHROPIC_API_KEY` this host does not
+   have. The evidence table is in `practice/baselines/README.md`, "Harness — RED
+   runs". (A63)
+
+3. **The fixtures are no longer session-scoped** (line 64-84 assumed they were
+   lost for good). `practice/scripts/baseline-harness.sh` rebuilds the func-ui
+   and handoff-resume fixtures deterministically, builds the scrubbed plugin
+   prefix, and prints the run command with its isolation state. Its `selftest`
+   subcommand passes. `green-func-ui.txt` and `green-handoff-resume.txt` are
+   committed — as **labelled reconstructions**, since only one sentence of the
+   func-ui original and one phrase of the handoff-resume original survive in the
+   record. Neither has been run; the A55/A58 verdicts remain records of runs
+   whose exact prompts are lost. (A59)

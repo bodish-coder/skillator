@@ -62,14 +62,16 @@ harmless, never load-bearing.
 ## Auto-invocation — what is actually verified
 
 The "Load another skill" row says how a skill *can* be loaded. Whether the host
-loads one **unprompted**, from the description alone, is a separate question and
-only one row of it has been tested.
+loads one **unprompted**, from the description alone, is a separate question.
+Two rows have now been tested; the rest are still the host's own claim.
 
 | Host | Fires on description alone? |
 |---|---|
 | claude-code | **yes, verified** — 2026-09-06, `claude -p` 2.1.261 / Opus 5, 7/7 |
-| cursor · codex · antigravity | claimed by the host; **unverified here** |
-| pi | **no** — read on demand, force with `/skill:<name>` |
+| codex | **yes, verified** — 2026-09-06, `codex exec` 0.153.2, 2/2 |
+| cursor | **attempted, never completed** — `cursor-agent` 2026.09.02, 1/3: named the right skill and reached for its `SKILL.md` once, blocked by a local hook; the other two probes ignored skills entirely |
+| antigravity | claimed by the host; **untestable here** — IDE only on this machine, no CLI |
+| pi | **no, per the host's own docs** — descriptions are in the prompt but "models don't always do this"; force with `/skill:<name>`. Untestable here (no working provider credential) |
 | prime-agent | **no** — no markdown-skill loader at all |
 
 The claude-code runs were headless, from a throwaway fixture outside any repo,
@@ -79,7 +81,60 @@ harness shape), `handoff-resume` from *"pick up the pending tasks from the
 handoffs"*, `grayskull-power` from *"set me up for coding"*. This supersedes the
 earlier A55 observation that no skill fired; see `practice/baselines/README.md`.
 
-**The deterministic route, for the three unverified hosts and for anyone who
+**codex (verified).** Same probe shape, 2026-09-06: `codex exec --json -s
+read-only --skip-git-repo-check` from a throwaway fixture in the system temp dir
+holding only `index.html` + `app.js` (hardcoded data, dead button), no
+`AGENTS.md` anywhere in the tree, and a `~/.codex/AGENTS.md` that never mentions
+skills. From *"just a mockup … the buttons don't do anything … make it real"* its
+first message was *"I'm using the func-ui skill for this conversion"*, followed by
+a read of `~/.agents/skills/func-ui/SKILL.md`. From *"set me up for coding on this
+project — activate the programming skills"* it opened with *"I'm using the
+grayskull-power skill"* and read that `SKILL.md`, then `PLATFORMS.md`. A third run
+of the same prompt in an **empty** directory loaded nothing and asked which
+project to use — a reasonable miss, not a contradiction. Note codex prints
+`Skill descriptions were shortened to fit the skills context budget` when many
+skills are installed, and that it loaded from `~/.agents/skills`, not
+`$CODEX_HOME/skills` (both are installed; see A11).
+
+**cursor (not verified — and the reason is local).** `cursor-agent`
+2026.09.02-c22c1a3, `-p --output-format stream-json --force`, same fixtures.
+Two `func-ui`-triggering prompts produced a full plan without ever naming or
+reading a skill. The *"activate the programming skills"* prompt did better: the
+agent's **first tool call**, before any search, was a read of
+`~/.codex/skills/grayskull-power/SKILL.md` — a name and path it was never given —
+so the skill inventory clearly reaches the model. That read was refused by a
+malformed user-level hook on this machine (`Hook blocked with message: --: eval:
+line 1: syntax error`), which blocks *every* `read` call, and the agent closed
+with *"a local skill-loading hook is malformed"*. So cursor stays unverified for a
+local reason, not a product one; re-run on a machine with no `~/.cursor/hooks.json`
+before believing either result. Cursor's docs do claim description-based
+auto-loading from `.agents/skills` · `.cursor/skills` (project and `~`).
+
+**antigravity (untestable here).** Only the IDE is installed
+(`%LOCALAPPDATA%/Programs/Antigravity IDE`, whose `bin/` holds just the editor
+launcher); there is no headless agent binary to drive. The docs claim skills are
+auto-selected — *"You don't need to explicitly tell the agent to use a skill — it
+decides based on context"* — and document a CLI with a headless mode elsewhere.
+**That is Google's claim, not a result.** Closing this row needs the Antigravity
+CLI installed and authenticated, then the same fixture probe.
+
+**pi (untestable here, and the row already matches its docs).** `pi` 0.74.2 is
+installed but the only configured provider is OpenAI and the key on this machine
+is rejected (`401 Incorrect API key`), so no probe could run without adding
+credentials. pi's own docs put skill descriptions in the system prompt and then
+say the model *"doesn't always"* read the `SKILL.md` — which is why the row stays
+**no** and `/skill:<name>` stays the instruction. Its discovery dirs are
+`~/.pi/agent/skills` · `~/.agents/skills` · `.pi/skills` · `.agents/skills`; the
+installers write `~/.pi/skills`, so on pi it is the shared `~/.agents/skills` copy
+that is actually discoverable.
+
+Transcripts for the 2026-09-06 codex and cursor runs are JSONL from each host's
+own stream, committed at `practice/baselines/transcripts/`
+(`a62-codex-funcui.jsonl`, `a62-codex-grayskull2.jsonl`,
+`a62-cursor-funcui.jsonl`, `a62-cursor-funcui2.jsonl`,
+`a62-cursor-grayskull.jsonl`). **Never promote a row here without one.**
+
+**The deterministic route, for the hosts that are not verified and for anyone who
 wants certainty:** the **Always-on project file** row above. `grayskull-power`
 writes `.skillator/grayskull.md` on first invoke and appends a pointer to
 `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, so the router is in context before the
@@ -87,6 +142,12 @@ first request. That path is verified on claude-code headless (the router loaded
 first, then routed). On cursor/codex/antigravity/pi it rests on the same
 always-on file each host already documents — **not** separately tested here.
 Failing both, name the skill.
+
+On **prime-agent** this is the *only* route: there is no markdown-skill loader, so
+`.skillator/grayskull.md` plus an `AGENTS.md` pointing at it is the activation
+mechanism, and `install.sh` cannot write it for you — it only prints the
+reminder. Nobody has run that path end-to-end on prime-agent; treat it as
+untested until someone does.
 
 Nothing in `install.sh` / `install.ps1` writes a user-level always-on line; they
 install skills and the shared docs only.

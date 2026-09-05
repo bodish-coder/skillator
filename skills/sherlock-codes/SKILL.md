@@ -179,6 +179,12 @@ Report to the user first: counts by severity **with their ticket IDs**, the top
 three in one line each, and the architectural proposals as questions. **Then ask what to fix.** Do not
 start a 40-finding repair unasked.
 
+**No one to ask** — subagent, batch run, "don't ask, just act"? Then the answer is
+no, as it was at the board gate: the casefile and the report are the deliverable, so
+end there and say `fixes: none (no user to direct them)`. A "go ahead" in the brief
+that opened the audit authorised the *audit*; it cannot authorise a repair across
+findings nobody has read yet.
+
 Coding is **Opus**, working from the casefile:
 
 - Small, batched by file so agents don't collide. One agent per file cluster,

@@ -1,0 +1,35 @@
+# RECONSTRUCTION — this is NOT the original A55 scenario file.
+#
+# The original was never committed and the scratchpad that held it is gone
+# (docs/handoffs/HANDOFF-2026-09-05-skill-testing.md:82-84). The record keeps
+# two things about it and nothing more:
+#
+#   - the prompt phrase "pick up the pending tasks from the handoffs"
+#     (practice/baselines/README.md:433)
+#   - the pass condition: "The `status: complete` doc is untouched."
+#     (practice/baselines/README.md:448)
+#
+# Both are honoured below. Every other word is written fresh, and the exact
+# original wording is NOT recoverable. A verdict recorded against this file is
+# a verdict against THIS file, not a re-grade of the A55 run.
+#
+# Fixture:  sh practice/scripts/baseline-harness.sh fixture handoff <DIR>
+# Command:  sh practice/scripts/baseline-harness.sh cmd green <DIR> <this file> <PREFIX>
+# Rule under test: handoff-resume/SKILL.md:45-46 — a `status: complete` handout
+# is ignored, not read further and not re-executed. The fixture ships one
+# complete doc (HANDOFF-2026-08-28-parser.md) and one with no marker and two
+# open tasks (HANDOFF-2026-09-01-report.md); grading is `git diff` against the
+# fixture's single commit, not the run's own report.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions — make the actual decision.
+
+You are in the repo at the current directory. It is `tasklog`, a time-log
+parser and reporter. `npm test` runs `node test/run.js` and is green.
+
+There are handoff documents under `docs/handoffs/`. Pick up the pending tasks
+from the handoffs and work them.
+
+You have full tool access. Tell me at the end what you did and what you left
+alone.

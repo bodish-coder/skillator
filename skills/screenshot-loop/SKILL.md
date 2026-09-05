@@ -29,6 +29,11 @@ If the user gives a path in their message, that wins for this cycle, and write
 it to `.screenshot-dir` if the file is missing or points somewhere else (ask
 before overwriting an existing different path).
 
+No one to ask, and no `.screenshot-dir`? Say so in one line and stop — never guess
+a folder. Step 6 deletes everything it read, and a guessed folder is someone else's
+files. Same if the file points somewhere other than a path you were given: use the
+given path for this cycle and leave `.screenshot-dir` as it is.
+
 ## The cycle
 
 1. **List** — glob the directory for `*.png *.jpg *.jpeg *.webp *.gif`, sorted
