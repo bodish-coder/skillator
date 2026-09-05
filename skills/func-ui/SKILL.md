@@ -26,6 +26,17 @@ agreement, not guesswork.
 Work the three phases in order. Don't skip to the plan: a plan written before
 the workflows are confirmed is a plan for the wrong system.
 
+**No user to answer?** They're in meetings, you're a subagent or a batch run, or
+the brief was "do whatever you think is right — just go ahead". None of that is
+sign-off, and on a skill that ends at a plan, "go ahead" means go ahead *to the
+plan*. Absence is never permission to build. Work the phases anyway: answer
+Phase 1b's questions yourself from the code, prefix every answer you picked
+rather than were told with `assumed:`, write the Phase 2 artifacts and the
+Phase 3 plan to a file in the repo (`docs/plans/ui-to-functional.md`), and stop
+there — assumptions listed at the top so the user can overturn them in one pass.
+A plan waiting on disk costs them one read; an implementation built on guessed
+intent costs them a review of every line.
+
 ## Phase 1 — Map the illusion, then interview
 
 Goal: a shared, honest picture of what's real, what's faked, and what the user
@@ -112,6 +123,8 @@ TO-BUILD / KEEP-AS-DEMO.
 
 Present these and ask the user to correct them. Do not proceed to the plan until
 they sign off — their corrections here are the most valuable input you'll get.
+No one there to sign off? Take the no-user branch above: mark the unconfirmed
+parts `assumed:` and carry on to the plan, which is still where you stop.
 
 ## Phase 3 — Implementation plan (then stop)
 
@@ -144,7 +157,9 @@ Cover:
   left masquerading as real.
 
 End by stating the plan stops here and offering the handoff: "Confirmed? I can
-hand this to `/do` / writing-plans, or start the walking-skeleton phase."
+hand this to `/do` / writing-plans, or start the walking-skeleton phase." The
+offer is a question, and an unanswered question is a no — building starts when
+someone answers it, never because no one did.
 
 ## Principles that carry the whole skill
 

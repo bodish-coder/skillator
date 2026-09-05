@@ -84,6 +84,30 @@ brainstorm-build skills' deterministic-orchestration path — one workflow scrip
 instead of hand-dispatched subagents, for builds wide enough to earn it. Keep
 both alongside `skills/` — the skills refer to them.
 
+## Making the skills actually fire
+
+Every host is supposed to match a request against each skill's `description` and
+load the winner without being asked. On **Claude Code** that works, including
+headless: seven `claude -p` runs on 2.1.261 / Opus 5, from a throwaway fixture with
+no project instruction file, each loaded the right skill unprompted —
+`func-ui` ×5 from *"just a mockup … make it real"*, `handoff-resume` from
+*"pick up the pending tasks from the handoffs"*, and `grayskull-power` from
+*"set me up for coding"*. On the other hosts the reflex is **unverified** from
+here; `PLATFORMS.md` says which.
+
+If you want activation to be deterministic rather than a reflex, either name the
+skill (`/func-ui`, or "use skillator's func-ui") or switch the router on for the
+repo — invoke `grayskull-power` once and it writes `.skillator/grayskull.md`
+plus a one-line pointer in `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`. Those files
+are read at session start by every host that has them, so from then on the
+router loads first and routes everything else. Verified headless: the same bare
+`claude -p` in a fixture carrying those two files loaded `grayskull-power`
+first, then `func-ui` from its routing table.
+
+Nothing is installed globally to force this — the installers only place skills
+and the shared docs, never a line in your user-level `CLAUDE.md`/`AGENTS.md`.
+Deactivating is deleting `.skillator/grayskull.md`.
+
 ## Skills in this repo
 
 - **handoff** — generate an in-depth, *verified* session-handoff

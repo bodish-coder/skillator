@@ -127,6 +127,8 @@ doubt, log it — a pending line is cheap.
   nothing while exiting 0. Read, write and compare it as UTF-8.
 - Cycle end / session end: re-read the file and correct any status that drifted,
   then report the open set (`[ ]` and `[~]`) to the user.
+- Once the turn's edits are read back, republish the artifact board — see
+  **The artifact board**. Board changed, artifact stale, is a bug.
 
 ## Work tickets in parallel, not in a line
 
@@ -233,6 +235,62 @@ grep -nE '^\s*- \[[ ~!]\]' TICKETS.md
 When the user says a bare ID ("do B3", "what's F12"), grep for it and act on
 that line.
 
+## The artifact board
+
+Every board change gets published as an artifact — a private page on claude.ai
+holding the whole board, so the user can open it from any device instead of
+scrolling back for the last list. The chat list is still the primary answer; the
+artifact is the durable copy.
+
+`skills/ticket-master/board/artifact.mjs` bakes `TICKETS.md` into an
+Artifact-shaped HTML file (no `<!doctype>`/`<html>`/`<body>` — the wrapper adds
+those). From the repo root:
+
+```sh
+node <skills>/ticket-master/board/artifact.mjs            # ./TICKETS.md -> ./.tickets-board.html
+node <skills>/ticket-master/board/artifact.mjs --selftest # parser + count-line check
+```
+
+`<skills>` is wherever ticket-master is installed (`~/.claude/skills`,
+`~/.agents/skills`, …); in the skillator repo itself it is `skills/`. Add
+`.tickets-board.html` to `.gitignore` — it is generated, never committed.
+
+### Publish and republish
+
+1. Regenerate: `node <skills>/ticket-master/board/artifact.mjs`
+2. Find the existing board — `Artifact` with `action: "list"`, look for the title
+   `TICKETS · <repo>`. **The first publish of a session must look**, because
+   publishing without a `url` from a conversation that did not publish it creates
+   a *second* board and the user's link goes stale.
+3. If `list` found one, `action: "read"` it at that `url` **before publishing**.
+   A publish to an artifact this conversation has neither read nor published is
+   refused, so skipping the read fails the first republish of every new session —
+   which is exactly the session where step 2 found something.
+4. Publish `.tickets-board.html` with that `url`. If `list` found nothing this is
+   the board's first publish, so it needs a `favicon` (one or two emoji) and no
+   `url` — that is the only publish that takes a favicon.
+5. Later publishes in the same session just reuse the same file path: no `url`,
+   no `favicon`, no re-read.
+6. Give the user the link the first time it is published or found in a session,
+   then stop repeating it — one line, after the ticket list.
+
+Off `claude-code`, or with no `Artifact` tool: generate the file, say where it
+is, and skip the publish. Never claim a publish that did not happen.
+
+### When to republish
+
+**After every board edit** — a new ticket, a status flip, a title correction, a
+workflow's batch of verdicts. The board and the artifact are never allowed to
+disagree.
+
+One publish per turn, not per line: make all the `TICKETS.md` edits for this
+turn, read them back, *then* regenerate and publish once. A workflow closing
+eight tickets is eight edits and one publish. Also republish on `list tickets`
+even when nothing changed, since that is when the user wants the link.
+
+If the publish fails, say so and carry on — a failed publish never blocks the
+ticket work, and the next edit will retry it.
+
 ## Showing the board
 
 Two views. **By type is the default** — `list tickets`, "what's pending", "show
@@ -241,6 +299,10 @@ status`, "status wise", "group by status", "what's in progress".
 
 Either way: checkbox lines, the same shape the file uses. Never a prose summary,
 never a markdown table, never a numbered list.
+
+Both views also republish the artifact board and give its link once per session
+(**The artifact board**). The chat list is the answer; the link is the copy the
+user can open elsewhere.
 
 ### By type (default)
 

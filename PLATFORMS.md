@@ -59,6 +59,38 @@ Ambiguous → ask once. The user can override with `platform: <host>`.
 (`user-invocable`, `argument-hint`, `license`) is ignored where unsupported —
 harmless, never load-bearing.
 
+## Auto-invocation — what is actually verified
+
+The "Load another skill" row says how a skill *can* be loaded. Whether the host
+loads one **unprompted**, from the description alone, is a separate question and
+only one row of it has been tested.
+
+| Host | Fires on description alone? |
+|---|---|
+| claude-code | **yes, verified** — 2026-09-06, `claude -p` 2.1.261 / Opus 5, 7/7 |
+| cursor · codex · antigravity | claimed by the host; **unverified here** |
+| pi | **no** — read on demand, force with `/skill:<name>` |
+| prime-agent | **no** — no markdown-skill loader at all |
+
+The claude-code runs were headless, from a throwaway fixture outside any repo,
+with no `CLAUDE.md`/`AGENTS.md` in the cwd: `func-ui` loaded 5/5 from *"just a
+mockup … make it real"* (once under `--plugin-dir` + `--add-dir`, the GREEN
+harness shape), `handoff-resume` from *"pick up the pending tasks from the
+handoffs"*, `grayskull-power` from *"set me up for coding"*. This supersedes the
+earlier A55 observation that no skill fired; see `practice/baselines/README.md`.
+
+**The deterministic route, for the three unverified hosts and for anyone who
+wants certainty:** the **Always-on project file** row above. `grayskull-power`
+writes `.skillator/grayskull.md` on first invoke and appends a pointer to
+`CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, so the router is in context before the
+first request. That path is verified on claude-code headless (the router loaded
+first, then routed). On cursor/codex/antigravity/pi it rests on the same
+always-on file each host already documents — **not** separately tested here.
+Failing both, name the skill.
+
+Nothing in `install.sh` / `install.ps1` writes a user-level always-on line; they
+install skills and the shared docs only.
+
 ## Host notes
 
 **cursor** — skills are auto-discovered from those four directories (nested repo

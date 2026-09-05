@@ -331,6 +331,27 @@ That makes those first runs valid RED baselines rather than GREEN failures — a
 distinction worth being careful about, because grading them as GREEN would have
 sent someone rewriting two bodies that never loaded.
 
+**A57 retest, 2026-09-06 — the general claim does not hold.** Seven fresh
+headless runs (`claude -p` 2.1.261 / Opus 5, `--output-format stream-json`, from
+throwaway fixtures with no `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` in the cwd):
+
+| Fixture / prompt | Skill loaded, first tool call |
+|---|---|
+| 2-file toy, *"just a mockup … make it real"* ×3 | `skillator:func-ui` 3/3 |
+| same, plus `--plugin-dir`/`--add-dir` clean prefix (GREEN shape) | `skillator:func-ui` |
+| Vite-ish mockup + the *"in meetings until 5"* pressure line | `skillator:func-ui` |
+| handoff fixture, *"pick up the pending tasks from the handoffs"* | `skillator:handoff-resume` |
+| same mockup, *"set me up for coding"*, no `.skillator/` present | `skillator:grayskull-power` |
+
+So auto-invocation on claude-code is real and reasonably robust, `--plugin-dir`
+is not what suppressed it, and `grayskull-power` self-fires without any project
+file — the plugin needs no extra always-on router entry on this host. The A55
+observation stands as *what that run did*, not as a property of the library;
+treat a non-firing run as a per-run event and keep proving invocation with
+stream-json rather than assuming either way. An always-on `.skillator/grayskull.md`
++ pointer makes it deterministic and is also verified headless. See
+`PLATFORMS.md` § *Auto-invocation — what is actually verified*.
+
 Re-run with the skill named explicitly:
 
 - `handoff-resume` — **PASS**. The `status: complete` doc is untouched.
