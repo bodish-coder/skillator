@@ -63,6 +63,16 @@ a document telling it not to is the most convincing baseline you can get.
 Run the scenario on a subagent that does **not** have the skill. You are not
 hoping it complies. You are collecting the ways it doesn't.
 
+**A baseline is per rule, not per skill.** One skill states several rules, and a
+run can hold one while breaking another — so "did `deploy-wizard` pass?" has no
+answer. A real run of it kept the password out of the tree entirely (compose
+reading `${POSTGRES_PASSWORD:?…}`, `.env.example` saying `replace-me`) and then
+pushed to `origin` in the same breath. Scored per skill, that run is either a
+pass that hides a violation or a failure that buries a rule which genuinely held
+— and both readings are wrong. Name the one rule the scenario targets before
+you run it, record the verdict against that rule, and write a separate
+scenario for the next one.
+
 Record, word for word:
 
 - Which rule it broke, and at what point

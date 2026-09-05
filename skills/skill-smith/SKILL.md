@@ -43,7 +43,7 @@ elsewhere · it's project-specific (that belongs in `CLAUDE.md` / `AGENTS.md`) �
 it's a mechanical constraint you could enforce with a lint rule or a regex —
 automate that and save the document for judgement calls.
 
-Three shapes, and they are tested differently (§5):
+Four shapes, and they are tested differently (§5):
 
 | Shape | Is | Example |
 |---|---|---|
