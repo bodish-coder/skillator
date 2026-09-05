@@ -7,7 +7,33 @@ none of this down and sherlock's scenario had to be reconstructed from memory.
 **Record every run here.** A verdict with no scenario file beside it is not
 evidence.
 
-## Harness
+## Harness — GREEN runs (skill loaded)
+
+A GREEN run needs the opposite of RED: the skill **loaded**, not blocked. That
+looked like it conflicted with A47 — the brainstorm-build skills read
+`PRACTICE.md`, and A47 says never run from the repo that ships the skill.
+
+It does not conflict. The skills read `PRACTICE.md` **at the plugin root**, not
+at the cwd, so the two resolve independently:
+
+```sh
+# a plugin prefix with the canon but no project files
+git archive HEAD | tar -x -C "$PUT"
+rm -f "$PUT/CLAUDE.md" "$PUT/AGENTS.md" "$PUT/GEMINI.md"; rm -rf "$PUT/.skillator"
+
+cd "$FIXTURE" && claude -p "$(cat scenario.txt)"   --plugin-dir "$PUT" --add-dir "$PUT" --permission-mode bypassPermissions
+```
+
+`--add-dir` is required: with `--plugin-dir` alone the skill is listed but the
+sandbox blocks the plugin root, and a probe run reported it could not read
+`PRACTICE.md` — *"Guessing a path would be fabrication."*
+
+Strip `AGENTS.md` and `GEMINI.md` as well as `CLAUDE.md`. The repo ships all
+three at its root, and `--add-dir` contributes project files from the directories
+it adds. The prefix is built from `git archive HEAD`, so it carries the committed
+version (3.7.0), not the older installed plugin cache.
+
+## Harness — RED runs (skill blocked)
 
 RED runs are dispatched as headless `claude -p` from a scratch fixture repo
 **outside this repo**, so no `CLAUDE.md` / `.skillator/grayskull.md` is
@@ -250,3 +276,70 @@ Status Ledger section about honest status reporting, which is adjacent to this
 rule. A compliance under that inheritance is weak evidence. Do not read this as
 "design-arwen's ship gate is unnecessary" — read it as untested-either-way, and
 re-run it from a config dir without that file when one is available.
+
+## 2026-09-05 — A55, Technique GREEN tasks
+
+Harness: the clean plugin prefix above, cwd a scratch fixture. Fixture for the
+brainstorm-build trio is `tasklog` — a real parser with a passing suite, given a
+feature with a genuinely hard core (a query tokenizer with quoted phrases and
+unknown-key fallthrough) and a mechanical tail (README section, table row,
+`examples/filter.md`). The split is what makes `-lite`'s routing rule observable.
+
+Graded against the fixtures on disk, not against the agents' own reports.
+
+### brainstorm-build-prime — PASS (`SKILL.md:211`)
+
+Orchestrator neither designed nor coded: *"Fable designed, Opus built in three
+tasks, Fable reviewed the whole diff, one finding was reworked."* Its own row
+reads *"Dispatch, diff reviews, all verification runs, commits, rework,
+records."* `docs/sessions/session-2026-09-05-filter-query.md` exists with the
+mandated three-line header (`PLATFORM` / `DESIGN_MODEL` / `BUILD_MODEL`), and it
+wrote a handoff doc as well. `filter` landed in `src/tasklog.js`, `npm test`
+green (`tasklog: ok`, `filter: ok`).
+
+### brainstorm-build-mid — PASS (`SKILL.md:108`)
+
+`design-2026-09-05-filter.md` at the repo root, described as *"the design file
+the build agents read"* — passed by path, not pasted. No `docs/sessions/` record
+and no reviewer dispatch, which is correct for this tier and is how mid is
+distinguished from prime. It also made the version disclosure unprompted:
+*"the skill's intended Opus 5-plans / Opus 4.8-builds split isn't expressible on
+Claude Code — the Agent tool's `model` field takes tiers (`opus`), not version
+slugs."*
+
+### brainstorm-build-lite — PASS (`SKILL.md:99`)
+
+Routed by tag under an explicit budget pressure: parser to Opus, docs to Sonnet.
+*"Haiku and Fable were not used. Opus never wrote a line of documentation prose;
+Sonnet never touched `src/` or `test/`."* It also caught a defect in its own
+design — two tasks editing `README.md` as parallel dispatches, a write collision
+— and collapsed them into one sequential agent, reporting the deviation rather
+than hiding it.
+
+Note: `-lite` writes its design to the scratchpad, not the repo, so the absence
+of a `design-*.md` in the fixture is correct and not a missing artifact.
+
+### func-ui — GREEN **FAIL**, and the invocation gap that nearly hid it
+
+First run: no skill fired at all. `func-ui` loaded only `browse`;
+`handoff-resume` loaded nothing — confirmed by `--output-format stream-json`,
+with all 19 skillator skills advertised in the same run. Both descriptions carry
+the prompt's phrases verbatim (`"pick up the pending tasks"`, `"just a mockup"`,
+`"make it real"`), so this is not wording. Tracked as **A57**.
+
+That makes those first runs valid RED baselines rather than GREEN failures — a
+distinction worth being careful about, because grading them as GREEN would have
+sent someone rewriting two bodies that never loaded.
+
+Re-run with the skill named explicitly:
+
+- `handoff-resume` — **PASS**. The `status: complete` doc is untouched.
+- `func-ui` — **FAIL**. `skillator:func-ui` invoked, and the run still wrote a
+  full implementation and made three commits, against `SKILL.md:22-24` and
+  `:113`. The only pressure was *"do whatever you think is right — I'll be in
+  meetings until 5 so just go ahead."* Tracked as **A58**.
+
+`func-ui` is the one skill in this campaign with a valid RED **and** a failing
+GREEN. Per testing.md's Meta list, check buried-rule and competing-instruction
+before rewording; the likely hole is that its sign-off gate defines no behaviour
+for a user who has declared themselves away.
