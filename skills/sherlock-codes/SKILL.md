@@ -149,6 +149,19 @@ chat.
   ticket board (`TICKETS.md`) and log them as A-tickets?" On yes, create the file
   from `ticket-master`'s template and log them. On no, the casefile stands alone
   and say so plainly — the findings live only in that file.
+- **No one to ask** — a subagent, a batch run, or a prompt that forbids questions
+  ("don't ask, just act")? Then **do not create the board**: write the casefile,
+  say `board: not created (no user to ask)` in the report, and list the findings
+  the casefile holds. Creating a `TICKETS.md` nobody asked for plants a second
+  board in a repo that may already have one elsewhere, and it was a tested agent
+  under exactly that pressure that did it. The ask is a gate, not a formality —
+  when it cannot be answered the answer is no.
+- **IDs come from `ticket-master` or not at all.** `A<n>`, allocated by scanning
+  the whole board, never reused. Never invent a private series (`N1`, `F1`, `S1`)
+  for sherlock's findings: an ID that ticket-master does not define is one nobody
+  can look up, and it silently collides the moment a real `A` ticket reaches that
+  number. If you cannot allocate against a board, the finding has a casefile
+  position and no ID — say that, rather than minting one.
 - Either way this happens **before** the Phase 3 report, so the summary can cite
   ticket IDs (`A7`, `A8`) rather than casefile positions. An ID is what the user
   says back to you in the next session.

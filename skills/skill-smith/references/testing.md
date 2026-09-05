@@ -45,6 +45,17 @@ repo — and say in the report which cwd RED ran in. A RED baseline whose cwd
 carried a project file stating the rule is **void**, not weak: discard it and
 re-run rather than reasoning about how much it was influenced.
 
+**One asymmetry saves half of these runs.** Inherited rules can only ever push
+RED *toward* compliance, never away from it. So:
+
+| Contaminated RED | Worth |
+|---|---|
+| **violated the rule anyway** | **valid** — and stronger than a clean run, since it failed with help |
+| **complied** | **void** — you cannot tell the model from the project file |
+
+Discard only the second kind. A run where the agent broke the rule while holding
+a document telling it not to is the most convincing baseline you can get.
+
 ---
 
 ## RED — the baseline
