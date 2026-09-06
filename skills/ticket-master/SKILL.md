@@ -88,14 +88,42 @@ allocating the next ID, not a nicety: allocating from a board with a duplicate
 
 - User reports a bug → log a `B` ticket before fixing.
 - User asks for a feature/change of any size → log an `F` ticket before building.
-- **Anything Claude/an agent finds itself → an `A` ticket.** A stack trace in a
-  test run, a crash while driving the app, a bug spotted during review or
-  analysis, an unrelated problem hit mid-task: log it as pending and keep going.
-  `A` means "nobody asked for this, we found it" — it is what keeps discoveries
-  from dying with the chat.
+- **Anything Claude/an agent finds itself → an `A` ticket, if it passes the gate
+  below.** A stack trace in a test run, a crash while driving the app, a bug
+  spotted during review: log it as pending and keep going. `A` means "nobody
+  asked for this, we found it" — it is what keeps discoveries from dying with
+  the chat.
 
-Trivial one-line edits the user asked for inline don't need a ticket. If in
-doubt, log it — a pending line is cheap.
+Trivial one-line edits the user asked for inline don't need a ticket.
+
+### The gate — a ticket names a change, not a finding
+
+A pending line is not cheap. It is a promise to whoever reads the board next,
+and a board that grows faster than it drains stops being read at all — at which
+point every row on it is worth nothing, including the real ones.
+
+Before logging, say the change out loud in one sentence: **"someone should edit
+X so that Y."** If you can't finish that sentence, it isn't a ticket:
+
+| What you have | Where it goes |
+|---|---|
+| A change you can name, that nobody has made | Ticket. |
+| Something true about the code that implies no edit | Say it in chat. Nothing to log. |
+| A risk with no reproduction and no fix to try | Say it in chat, with what would settle it. Not a ticket. |
+| Already fixed in the tree — you just found the fix | Nothing. |
+| The same defect as an open row, seen from elsewhere | Nothing; that row already covers it. |
+| Work you are about to do in this same turn | Do it. A ticket you close a minute later is noise. |
+
+An agent's report is **input, not a row.** Reports arrive one per agent, so
+converting each into a ticket inflates the board at exactly the rate you spawn
+agents. Read the report, apply the gate to every item in it, and log the ones
+that pass — normally fewer than were reported. Say in chat what you dropped and
+why; that is the audit trail, not a row.
+
+Two failure modes, both worse than a missing ticket: the same defect logged
+three times because three agents saw it, and a row so vague nobody can tell
+what "done" would mean. **If you can't write the closing condition, you can't
+write the ticket.**
 
 ## Working a ticket
 
@@ -129,6 +157,33 @@ doubt, log it — a pending line is cheap.
   then report the open set (`[ ]` and `[~]`) to the user.
 - Once the turn's edits are read back, republish the artifact board — see
   **The artifact board**. Board changed, artifact stale, is a bug.
+
+## Draining the board
+
+Pending rows are not immortal, and a rising pending count is a symptom to
+diagnose — not a backlog to admire. Run a drain **before any handover, release,
+or merge-prep**, and whenever a single session has added more pending rows than
+it closed. (Both are checkable on the spot; "has it grown since last time" is
+not — no prior count is stored anywhere.) A drain **re-verifies the pending rows
+against the tree, not against their own text**:
+
+- Fix is already in the tree → `[x]`, citing where. Reading the fix is not
+  verifying it: `[x]` still means what it means above — run the check. If you
+  can only see the code, leave it pending and say the fix looks present.
+- No change can be named for it (it was an observation) → `[-] — (not work: <why>)`.
+- Same defect as another row → `[-] — (dup of <ID>)`.
+- Still real → leave it, and make the line name the change.
+
+Sweep `[>]` rows in the same pass — that is where stale rows collect, since a
+deferred row is off the board until a condition arrives and nothing checks
+whether it already has. For each, ask only "has the condition arrived?": yes →
+`[ ]`, no → leave it, never going to → `[-]`.
+
+A row that states its defect confidently is still wrong if a later commit fixed
+it, so check the code, never the wording. Rows leave the board only through a
+status flip — never by deletion.
+
+Report the drain as a count: `pending 12 → 5 (3 already fixed, 3 not work, 1 dup)`.
 
 ## Work tickets in parallel, not in a line
 
@@ -215,8 +270,11 @@ return results.filter(Boolean)
   `why` goes on the line or becomes a new `A` ticket.
 - **Same-file tickets are one item**, not two — group them when you build `args`,
   or give them `isolation: 'worktree'` if they must run apart.
-- **Anything an agent finds along the way is an `A` ticket.** Ask for it in the
-  fix prompt, log the ones that come back.
+- **Anything an agent finds along the way goes through the gate**, same as
+  anywhere else. Ask for findings in the fix prompt, then log the ones that name
+  a change — not one row per report. Fan-out is where boards inflate: N agents
+  reporting the same neighbourhood produce N rows for one defect unless someone
+  reads them together.
 - **A `null` result means the agent died or was skipped.** `.filter(Boolean)`,
   then leave that ticket `[~]` and say so — never silently drop it to done.
 - **Say what you dropped.** Capping the cycle at N tickets is fine; reporting it
@@ -428,3 +486,6 @@ is what makes truncating the list safe.
 - **Status reflects reality.** `[x]` means verified, not "should work". `[-]`
   means deliberately closed without doing it — never use it to hide a ticket
   that is still real, and `[!]` is not a parking space: it names what it waits on.
+- **The board must drain.** A ticket is a named change, never a finding — see
+  the gate. If pending only ever grows, the bookkeeping has become the work:
+  stop logging and run the drain.

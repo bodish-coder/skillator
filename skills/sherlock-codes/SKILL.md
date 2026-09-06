@@ -139,11 +139,15 @@ Scope: <what was read>  ·  Not read: <what wasn't>
 ### Then put the findings on the board
 
 A casefile is a document; a ticket is a thing someone works. **Every verified
-finding becomes an `A` ticket** — that is what stops the audit dying with the
-chat.
+finding that names a change becomes an `A` ticket** — that is what stops the
+audit dying with the chat. A sweep this wide is the board's biggest single
+inflow, so it goes through `ticket-master`'s gate like everything else: a
+finding that implies no edit belongs in the casefile only, and two findings on
+one defect are one row.
 
-- **`TICKETS.md` exists** → log each verified finding as an `A` ticket per
-  `ticket-master`, and put the ticket ID on its casefile line. One board, never
+- **`TICKETS.md` exists** → log each verified finding that passes the gate as an
+  `A` ticket per `ticket-master`, and put the ticket ID on its casefile line
+  (findings that don't pass stay in the casefile, unnumbered). One board, never
   two.
 - **No `TICKETS.md`** → **ask, once**: "`<N>` verified findings. Shall I open a
   ticket board (`TICKETS.md`) and log them as A-tickets?" On yes, create the file

@@ -32,6 +32,14 @@
 #         `--plugin-dir`, but it reads auth strictly from ANTHROPIC_API_KEY.
 #         UNVERIFIED here (no API key on this host). Opt in with
 #         BASELINE_ISOLATE=bare and grade the result as untested isolation.
+#
+# Two friction points on Windows, both in how you run what `cmd` prints (A68):
+#   1. The emitted command carries MSYS-style paths (/c/tools/...), because that
+#      is what this script sees. Run it from Git Bash. Pasting it into PowerShell
+#      fails on the paths, not on the harness.
+#   2. Run it as one shell command, not through an agent's Bash tool: the tool's
+#      classifier sees `claude -p ... --permission-mode bypassPermissions` and
+#      prompts or refuses. A baseline run belongs in a terminal you drive.
 set -e
 
 usage() {
