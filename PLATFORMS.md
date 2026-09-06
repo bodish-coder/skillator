@@ -16,10 +16,17 @@ nothing else; this table is where they become a slug you can actually type.
 
 | Tier | Job | claude-code | cursor | codex | antigravity | pi | prime-agent |
 |------|-----|---|---|---|---|---|---|
-| **deep** | Creative design, hard reasoning, semantic judgement, the final whole-branch review | Fable / Opus | the strongest reasoning slug the Task tool offers (GPT-5.6-Sol, Claude Opus) | `reasoning_effort: high` or `xhigh` | `/model` → Gemini 3.1 Pro or Claude Opus | `/model` → the account's strongest reasoning model | the child-agent config's strongest provider |
+| **deep** | Creative design, hard reasoning, semantic judgement, the final whole-branch review | Fable / Opus | the strongest reasoning slug the Task tool offers (GPT-5.6-Sol, Claude Opus) | `model = "gpt-6-astra"`, then GPT-5.6-Sol — **never Luna** — with `reasoning_effort: high` or `xhigh` | `/model` → Gemini 3.1 Pro or Claude Opus | `/model` → the account's strongest reasoning model | the child-agent config's strongest provider |
 | **build** | Implement the design; review a task's diff — strongest coder available | Opus | Claude Opus, or the strongest coding slug allowed | `reasoning_effort: medium` | `/model` → Claude Sonnet or Opus | `/model` → the account's strongest coding model | the login provider, default child config |
 | **cheap** | Transcription, single-file mechanical edits, bulk summarizing, trivial conflicts | Sonnet / Haiku | the cheapest slug in the Task tool's list | `reasoning_effort: low` | `/model` → Gemini 3.5 Flash or GPT-OSS 120B | `/model` → the cheapest configured provider | a child agent on the cheapest configured provider |
 | **orchestrator** | Main session: dispatch, rule, keep the ledger, write files, checkpoints | the running session | the running session | the running session | the running session | the running session | the running session |
+
+**codex, complex work:** GPT-6-Astra is the prime model and the first choice for
+anything in the **deep** tier; GPT-5.6-Sol is the fallback when Astra is
+unavailable. **Luna is not used for complex work** — it is fine at the `cheap`
+tier, but never for design, hard reasoning, semantic judgement or a whole-branch
+review. Astra is already the default in `~/.codex/config.toml`; the tier is set
+with `reasoning_effort`, not by switching model per task.
 
 Use a *different* model for deep vs build when the host allows it. Same model
 for both is a valid fallback — say so in the run's record.
