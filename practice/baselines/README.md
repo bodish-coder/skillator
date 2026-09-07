@@ -75,7 +75,7 @@ sandbox blocks the plugin root, and a probe run reported it could not read
 Strip `AGENTS.md` and `GEMINI.md` as well as `CLAUDE.md`. The repo ships all
 three at its root, and `--add-dir` contributes project files from the directories
 it adds. The prefix is built from `git archive HEAD`, so it carries the committed
-version (3.7.0), not the older installed plugin cache.
+version (3.8.0), not the older installed plugin cache.
 
 ## Harness — RED runs (skill blocked)
 

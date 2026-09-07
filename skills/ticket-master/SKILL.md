@@ -194,9 +194,10 @@ exists to break.
 
 - Give each agent its ticket ID, the one-line title, and the repo context it
   needs; tell it to report back what it changed and whether it verified.
-- **Name a model for every dispatch — never let it inherit the session's.**
-  See `PRACTICE.md`'s model-tier guidance for which tier fits which seat; a
-  mechanical fix and the agent judging it can warrant different tiers.
+- **Name a model for every dispatch — never let it inherit the session's, and
+  grade the tier per ticket, not once for the batch.** Same table as workflow
+  mode's scout (below); a mechanical fix and the agent judging it warrant
+  different tiers, and so do two tickets in the same message.
 - Only the main session edits `TICKETS.md` — agents report, you flip statuses.
   Two agents writing the same file is how you lose tickets.
 - Tickets touching the same files are the one exception: run those sequentially,
@@ -229,9 +230,42 @@ of agents; if the board is big and they didn't ask, say what it would cost first
 ### The shape
 
 Scout inline first — read `TICKETS.md`, pick the tickets for this cycle, group
-same-file tickets into one item — then pass that list as `args` and let the
-script fan out. `pipeline()` is the default: ticket B is being verified while
-ticket C is still being fixed.
+same-file tickets into one item, **and tier each one** — then pass that list as
+`args` and let the script fan out. `pipeline()` is the default: ticket B is being
+verified while ticket C is still being fixed.
+
+#### Tier every ticket during the scout
+
+A flat `model:` across the fan-out is the expensive mistake this section exists
+to prevent: it pays deep-tier price for one-line fixes, or hands a contract
+change to a cheap model that burns 3× the turns and fails anyway. **The scout
+assigns a tier per ticket per seat** — you have already read the ticket, so
+grading it costs nothing extra — and the script reads that off the item.
+
+Grade the *fix* seat from the ticket's own text, using `PRACTICE.md` §4 and
+`practice/task-loop.md` — the same table, applied per ticket:
+
+| The ticket reads like | fix | verify |
+|---|---|---|
+| One file, mechanical, the change is named in the ticket | cheap | build |
+| 1-2 files, complete spec, nothing to decide | cheap | build |
+| Several files, integration or a shared contract | build | build |
+| Cause unknown, design judgement, or "sweep every X" | deep | deep |
+| Concurrency, auth, money, or a contract others depend on | build | **deep** |
+| Re-run + grade a result against a written contract | — | **deep** |
+
+Two rules that override the table:
+
+- **build is the floor for any verify seat**, and for any fix seat whose ticket
+  is prose rather than a named change. Turn count beats token price — a cheap
+  model on under-specified work costs more, not less.
+- **A `[!]`/`[>]` ticket is not tiered, it is not dispatched.** Tiering a ticket
+  nobody can work is the cheapest agent of all to skip.
+
+Say the tiering out loud before the call — one line per ticket, `id fix/verify` —
+so the user can overrule a grade before it costs anything. Slugs below are Claude
+Code's; on another host substitute that host's column from `PLATFORMS.md`
+§ Role tiers, and record the substitution.
 
 ```js
 export const meta = {
@@ -243,19 +277,23 @@ const VERDICT = { type: 'object', properties: {
   id: {type: 'string'}, passed: {type: 'boolean'}, why: {type: 'string'} },
   required: ['id', 'passed', 'why'] }
 
-// Name a model for every dispatch — never let it inherit the session's.
-// See PRACTICE.md's model-tier guidance; fix and verify are different seats
-// and often warrant different tiers. Slugs below are Claude Code's; on another
-// host substitute that host's equivalents from PLATFORMS.md.
+// Tier -> slug for this host. One place to change when the host changes.
+const M = { cheap: 'sonnet', build: 'opus', deep: 'opus' }
+
+// Never a literal model: the scout put a tier on every item, and an item
+// missing one is a scouting bug, not a reason to guess a default.
+const tier = (t, seat) => M[t[seat]] || (() => { throw Error(`${t.id}: no ${seat} tier`) })()
+
 const results = await pipeline(
-  args,                                    // [{id: 'B3', title: '…'}, …]
+  args,          // [{id: 'B3', title: '…', fix: 'cheap', verify: 'build'}, …]
   t => agent(`Fix ticket ${t.id}: ${t.title}. Report what you changed and how ` +
              `you verified it. Note any unrelated problems you hit.`,
-             { label: `fix:${t.id}`, phase: 'Fix', model: 'sonnet' }),
+             { label: `fix:${t.id}`, phase: 'Fix', model: tier(t, 'fix') }),
   (fix, t) => agent(`Ticket ${t.id} — "${t.title}". An agent reports: ${fix}
 ` +
                     `Verify against the repo. Default to passed=false if unproven.`,
-             { label: `verify:${t.id}`, phase: 'Verify', schema: VERDICT, model: 'opus' })
+             { label: `verify:${t.id}`, phase: 'Verify', schema: VERDICT,
+               model: tier(t, 'verify') })
 )
 return results.filter(Boolean)
 ```
