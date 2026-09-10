@@ -52,6 +52,30 @@ Line format, kept greppable: `- [<status>] <ID> — <one-line title>`. Optional
 trailing ` (@owner)` or ` (branch: x)` if the user wants it; nothing else.
 Sub-parts are indented two spaces under their parent.
 
+## Who touched it
+
+Several agent sessions edit one board, so every line says which one last moved
+it. Reuse the `@owner` slot — no new syntax: ` (@cc-a4f1c9)`.
+
+Your tag is `@<agent>-<id>`, lowest available rung wins:
+
+1. **Session id** — last 6 hex chars of your own session id, the one in your
+   session URL / transcript filename (`…/session_01NBCBMW9fDHDn7WJtAALBGT` →
+   `@cc-aalbgt`). Unique per session, free, no state to keep.
+2. No session id in your harness → the branch: ` (branch: fix/upload)`.
+3. Both the same across your sessions → ask the user once for a name
+   (`@cc-ui`, `@codex-api`) and use it for the rest of the session.
+
+Agent prefix: `cc` Claude Code, `cx` Codex, `ag` Antigravity, `pi` Pi, `cu` Cursor.
+
+Stamp it when you **create** a ticket and when you **flip its status** — replace
+the previous tag, don't accumulate them; the line says who moved it last, not
+its whole history. Leave a human `@owner` the user set alone.
+
+Two sessions want the same `[ ]` ticket: the one whose tag is already on a `[~]`
+row owns it. If a row you are working flips under you, stop and tell the user —
+that is two sessions on one ticket, not a merge to resolve.
+
 ## Allocating an ID
 
 1. Read `TICKETS.md` (create it from the template above if absent).
@@ -127,7 +151,7 @@ write the ticket.**
 
 ## Working a ticket
 
-- Starting → flip to `[~]`.
+- Starting → flip to `[~]` and stamp your session tag — see **Who touched it**.
 - Finished *and verified* (tests/build/manual check actually run) → `[x]`.
   Not verified, not done.
 - Can't proceed — waiting on someone, a credential, an upstream fix, or another
@@ -521,6 +545,8 @@ is what makes truncating the list safe.
   touch only the one line being changed. Keeps merge conflicts to single lines.
 - **IDs are permanent.** No reuse, no renumbering, no deleting done tickets —
   delete a ticket only if it was logged in error (say so to the user).
+- **Every edit is signed.** Create or flip a row, stamp your session tag on it,
+  replacing the old one. An unsigned flip on a shared board is unattributable.
 - **Status reflects reality.** `[x]` means verified, not "should work". `[-]`
   means deliberately closed without doing it — never use it to hide a ticket
   that is still real, and `[!]` is not a parking space: it names what it waits on.

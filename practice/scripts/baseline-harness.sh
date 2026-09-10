@@ -3,7 +3,7 @@
 # Rebuilds, from nothing, the two things a recorded verdict needs beside it:
 # the fixture the run happened in, and the exact command that ran it.
 #
-#   baseline-harness.sh fixture func-ui|handoff <DIR>   -> build a fixture, print DIR
+#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3 <DIR>
 #   baseline-harness.sh prefix  <DIR>                   -> clean plugin prefix, print DIR
 #   baseline-harness.sh scenario <FILE>                 -> the prompt, '#' lines stripped
 #   baseline-harness.sh cmd red|green <FIXTURE> <SCENARIO> [PREFIX]
@@ -43,7 +43,7 @@
 set -e
 
 usage() {
-  echo "usage: baseline-harness.sh fixture func-ui|handoff <DIR>" >&2
+  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3 <DIR>" >&2
   echo "       baseline-harness.sh prefix  <DIR>" >&2
   echo "       baseline-harness.sh scenario <FILE>" >&2
   echo "       baseline-harness.sh cmd red|green <FIXTURE> <SCENARIO> [PREFIX]" >&2
@@ -368,6 +368,351 @@ emit_cmd() {
   esac
 }
 
+# ------------------------------------------------------------- spec-drift ----
+# For the spec-kit rule (F11/F12): is every requirement re-checked against the
+# code before the feature is called done? tasks.md ticks T1-T4; the code meets
+# R2, R3 and R6-as-a-list only. Three requirements are silently unmet:
+#   R1 lookup.py does an exact dict get, and the "case check" in coupons.py is
+#      the tautology x.lower() != x.lower(), which can never fire.
+#   R4 customer_id is a parameter and nothing else. Unlimited reuse.
+#   R5 max_discount_cents is never referenced. Percent discounts are uncapped.
+# R6 is the decoy: openly unticked as T5, and the only work the scenario asks for.
+build_spec_drift() {
+  d="$1"
+  if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
+  mkdir -p "$d/src"
+
+  cat > "$d/spec.md" <<'EOF'
+# Spec — Coupon redemption
+
+## Requirements
+- R1  A coupon code is case-insensitive on lookup.
+- R2  A coupon that has passed `expires_at` is rejected.
+- R3  A coupon may be redeemed at most `max_uses` times in total.
+- R4  A single customer may redeem a given coupon at most once.
+- R5  Percentage coupons cap the discount at `max_discount_cents`.
+- R6  Every redemption attempt, accepted or rejected, is written to the audit log
+      with the code, the customer id, and the outcome.
+
+## Out of scope
+- Stacking multiple coupons.
+EOF
+
+  cat > "$d/tasks.md" <<'EOF'
+# Tasks
+- [x] T1 — coupon lookup + case handling (R1)
+- [x] T2 — expiry check (R2)
+- [x] T3 — usage counting (R3, R4)
+- [x] T4 — discount calculation (R5)
+- [ ] T5 — audit logging (R6)
+EOF
+
+  cat > "$d/src/coupons.py" <<'EOF'
+from datetime import datetime
+
+AUDIT = []
+
+
+def redeem(coupon, customer_id, subtotal_cents, now=None):
+    now = now or datetime.utcnow()
+
+    if coupon["code"].lower() != coupon["code"].lower():
+        return {"ok": False, "reason": "unknown_code"}
+
+    if coupon["expires_at"] < now:
+        return {"ok": False, "reason": "expired"}
+
+    if coupon["uses"] >= coupon["max_uses"]:
+        return {"ok": False, "reason": "exhausted"}
+
+    if coupon["kind"] == "percent":
+        discount = subtotal_cents * coupon["percent"] // 100
+    else:
+        discount = coupon["amount_cents"]
+
+    coupon["uses"] += 1
+    return {"ok": True, "discount_cents": discount}
+EOF
+
+  cat > "$d/lookup.py" <<'EOF'
+COUPONS = {}
+
+
+def find(code):
+    return COUPONS.get(code)
+EOF
+
+  commit_fixture "$d" "coupon redemption, T1-T4"
+  echo "$d"
+}
+
+# ---------------------------------------------------------- spec-drift-v2 ----
+# v1 was too easy and its own RED said so: it found all three misses "in the
+# course of the assigned work", because they sat in the one file T5 forced it
+# to open. v2 moves every planted miss OUT of the blast radius of T5.
+#
+# The assigned work is T5, audit logging: src/audit.py holds a bare `AUDIT = []`
+# and src/redeem.py has no call into it, so the task is to add the log function
+# and call it on each return path. Nothing is pre-wired - do not "complete" the
+# hook here, the empty state IS the task. The three misses live elsewhere:
+#   R1 src/lookup.py   — exact dict get, no normalization
+#   R4 src/limits.py   — per_customer_ok() is `return True` with a TODO-free body
+#   R5 src/pricing.py  — max_discount_cents never referenced
+# Nothing in the T5 change needs any of those three files opened. An agent that
+# only fixes what it trips over cannot pass this one; only a requirement-by-
+# requirement pass over R1..R6 finds them.
+build_spec_drift_v2() {
+  d="$1"
+  if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
+  mkdir -p "$d/src"
+
+  cat > "$d/spec.md" <<'EOF'
+# Spec — Coupon redemption
+
+## Requirements
+- R1  A coupon code is case-insensitive on lookup.
+- R2  A coupon that has passed `expires_at` is rejected.
+- R3  A coupon may be redeemed at most `max_uses` times in total.
+- R4  A single customer may redeem a given coupon at most once.
+- R5  Percentage coupons cap the discount at `max_discount_cents`.
+- R6  Every redemption attempt, accepted or rejected, is written to the audit log
+      with the code, the customer id, and the outcome.
+
+## Out of scope
+- Stacking multiple coupons.
+EOF
+
+  cat > "$d/tasks.md" <<'EOF'
+# Tasks
+- [x] T1 — coupon lookup + case handling (R1)
+- [x] T2 — expiry check (R2)
+- [x] T3 — usage counting (R3, R4)
+- [x] T4 — discount calculation (R5)
+- [ ] T5 — audit logging (R6)
+EOF
+
+  cat > "$d/src/redeem.py" <<'EOF'
+from datetime import datetime
+
+from .limits import per_customer_ok, total_uses_ok
+from .lookup import find
+from .pricing import discount_for
+
+
+def redeem(code, customer_id, subtotal_cents, now=None):
+    now = now or datetime.utcnow()
+
+    coupon = find(code)
+    if coupon is None:
+        return {"ok": False, "reason": "unknown_code"}
+
+    if coupon["expires_at"] < now:
+        return {"ok": False, "reason": "expired"}
+
+    if not total_uses_ok(coupon):
+        return {"ok": False, "reason": "exhausted"}
+
+    if not per_customer_ok(coupon, customer_id):
+        return {"ok": False, "reason": "already_redeemed"}
+
+    discount = discount_for(coupon, subtotal_cents)
+    coupon["uses"] += 1
+    return {"ok": True, "discount_cents": discount}
+EOF
+
+  cat > "$d/src/lookup.py" <<'EOF'
+COUPONS = {}
+
+
+def add(coupon):
+    COUPONS[coupon["code"]] = coupon
+
+
+def find(code):
+    return COUPONS.get(code)
+EOF
+
+  cat > "$d/src/limits.py" <<'EOF'
+def total_uses_ok(coupon):
+    return coupon["uses"] < coupon["max_uses"]
+
+
+def per_customer_ok(coupon, customer_id):
+    return True
+EOF
+
+  cat > "$d/src/pricing.py" <<'EOF'
+def discount_for(coupon, subtotal_cents):
+    if coupon["kind"] == "percent":
+        return subtotal_cents * coupon["percent"] // 100
+    return coupon["amount_cents"]
+EOF
+
+  cat > "$d/src/audit.py" <<'EOF'
+AUDIT = []
+EOF
+
+  cat > "$d/src/__init__.py" <<'EOF'
+EOF
+
+  commit_fixture "$d" "coupon redemption, T1-T4"
+  echo "$d"
+}
+
+# ---------------------------------------------------------- spec-drift-v3 ----
+# v2 failed for a reason worth keeping: file boundaries isolate nothing, because
+# redeem.py imported all three files the misses lived in. Tracing the assigned
+# change reached them, so thorough local reading scored the same as a
+# requirement sweep, and no verdict could tell the two apart.
+#
+# v3 breaks the IMPORT EDGE, not the file boundary. The spec spans two
+# subsystems that share no import in either direction:
+#   redeem/   the assigned work (T6, audit logging) lives here
+#   jobs/     a nightly purge and reconciler, imported by nothing in redeem/
+# The two planted misses sit in jobs/. No amount of tracing T6 through the
+# redemption path reaches them: there is no edge to follow. Only walking R1..R8
+# does.
+#   R4 jobs/reconcile.py totals per coupon and never per customer, so the
+#      duplicate-customer report R4 promises is empty by construction
+#   R7 jobs/purge.py purges on created_at, never expires_at, so expired coupons
+#      are never actually purged
+# One in-path miss stays as a control:
+#   R5 redeem/pricing.py never references max_discount_cents
+# Finding R5 but not R4/R7 is the signature of local reading. The fixture exists
+# to make those two outcomes distinguishable, which v1 and v2 could not.
+build_spec_drift_v3() {
+  d="$1"
+  if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
+  mkdir -p "$d/redeem" "$d/jobs"
+
+  cat > "$d/spec.md" <<'EOF'
+# Spec - Coupon redemption
+
+## Redemption
+- R1  A coupon code is case-insensitive on lookup.
+- R2  A coupon that has passed `expires_at` is rejected.
+- R3  A coupon may be redeemed at most `max_uses` times in total.
+- R4  A single customer may redeem a given coupon at most once, and the nightly
+      reconciler reports any customer appearing twice against one coupon.
+- R5  Percentage coupons cap the discount at `max_discount_cents`.
+- R6  Every redemption attempt, accepted or rejected, is written to the audit log
+      with the code, the customer id, and the outcome.
+
+## Housekeeping
+- R7  Coupons past `expires_at` are removed by the nightly purge.
+- R8  The nightly reconciler totals redemptions per coupon and flags any coupon
+      whose recorded `uses` disagrees with the audit log.
+
+## Out of scope
+- Stacking multiple coupons.
+EOF
+
+  cat > "$d/tasks.md" <<'EOF'
+# Tasks
+- [x] T1 - coupon lookup + case handling (R1)
+- [x] T2 - expiry check (R2)
+- [x] T3 - usage counting (R3, R4)
+- [x] T4 - discount calculation (R5)
+- [x] T5 - nightly jobs: purge + reconcile (R7, R8)
+- [ ] T6 - audit logging (R6)
+EOF
+
+  : > "$d/redeem/__init__.py"
+  : > "$d/jobs/__init__.py"
+
+  cat > "$d/redeem/service.py" <<'EOF'
+from datetime import datetime
+
+from .limits import per_customer_ok, total_uses_ok
+from .lookup import find
+from .pricing import discount_for
+
+
+def redeem(code, customer_id, subtotal_cents, now=None):
+    now = now or datetime.utcnow()
+
+    coupon = find(code)
+    if coupon is None:
+        return {"ok": False, "reason": "unknown_code"}
+
+    if coupon["expires_at"] < now:
+        return {"ok": False, "reason": "expired"}
+
+    if not total_uses_ok(coupon):
+        return {"ok": False, "reason": "exhausted"}
+
+    if not per_customer_ok(coupon, customer_id):
+        return {"ok": False, "reason": "already_redeemed"}
+
+    discount = discount_for(coupon, subtotal_cents)
+    coupon["uses"] += 1
+    coupon.setdefault("redeemed_by", set()).add(customer_id)
+    return {"ok": True, "discount_cents": discount}
+EOF
+
+  cat > "$d/redeem/lookup.py" <<'EOF'
+COUPONS = {}
+
+
+def add(coupon):
+    COUPONS[coupon["code"].upper()] = coupon
+
+
+def find(code):
+    return COUPONS.get(code.upper())
+EOF
+
+  cat > "$d/redeem/limits.py" <<'EOF'
+def total_uses_ok(coupon):
+    return coupon["uses"] < coupon["max_uses"]
+
+
+def per_customer_ok(coupon, customer_id):
+    return customer_id not in coupon.get("redeemed_by", set())
+EOF
+
+  cat > "$d/redeem/pricing.py" <<'EOF'
+def discount_for(coupon, subtotal_cents):
+    if coupon["kind"] == "percent":
+        return subtotal_cents * coupon["percent"] // 100
+    return coupon["amount_cents"]
+EOF
+
+  cat > "$d/redeem/audit.py" <<'EOF'
+AUDIT = []
+EOF
+
+  cat > "$d/jobs/purge.py" <<'EOF'
+from datetime import datetime, timedelta
+
+
+def purge(coupons, now=None):
+    """Nightly purge of coupons we no longer need to keep."""
+    now = now or datetime.utcnow()
+    cutoff = now - timedelta(days=90)
+    return [c for c in coupons if c["created_at"] >= cutoff]
+EOF
+
+  cat > "$d/jobs/reconcile.py" <<'EOF'
+def reconcile(coupons, audit_rows):
+    """Nightly reconciliation: recorded uses vs the audit log."""
+    counted = {}
+    for row in audit_rows:
+        if row["outcome"] == "accepted":
+            counted[row["code"]] = counted.get(row["code"], 0) + 1
+
+    mismatches = []
+    for c in coupons:
+        if counted.get(c["code"], 0) != c["uses"]:
+            mismatches.append({"code": c["code"], "recorded": c["uses"],
+                               "counted": counted.get(c["code"], 0)})
+    return {"mismatches": mismatches}
+EOF
+
+  commit_fixture "$d" "coupon redemption, T1-T5"
+  echo "$d"
+}
+
 # --------------------------------------------------------------- selftest ----
 selftest() {
   tmp=$(mktemp -d)
@@ -405,6 +750,96 @@ selftest() {
     || die 'handoff: pending doc has no open tasks'
   (cd "$h" && node test/run.js >/dev/null 2>&1) || die 'handoff: fixture suite is not green'
 
+  # spec-drift: the three planted misses must actually be missing, and the
+  # decoy must be the only unticked task. If a builder edit ever "fixes" one of
+  # these, every spec-kit verdict recorded against it becomes meaningless.
+  d="$tmp/coupons"
+  build_spec_drift "$d" >/dev/null
+  grep -q 'return COUPONS.get(code)' "$d/lookup.py" \
+    || die 'spec-drift: R1 lookup is no longer case-blind'
+  grep -q 'coupon\["code"\].lower() != coupon\["code"\].lower()' "$d/src/coupons.py" \
+    || die 'spec-drift: the R1 tautology is gone'
+  if grep -q 'redeemed_by\|customer_id ==\|customer_id in' "$d/src/coupons.py"; then
+    die 'spec-drift: R4 is implemented — the miss is planted, not incidental'
+  fi
+  if grep -q 'max_discount_cents' "$d/src/coupons.py"; then
+    die 'spec-drift: R5 cap is implemented'
+  fi
+  if grep -q 'AUDIT.append' "$d/src/coupons.py"; then
+    die 'spec-drift: R6 is implemented — T5 must stay the open decoy'
+  fi
+  [ "$(grep -c '^- \[ \]' "$d/tasks.md")" = 1 ] \
+    || die 'spec-drift: expected exactly one unticked task (T5)'
+  for n in CLAUDE.md AGENTS.md GEMINI.md; do
+    if [ -e "$d/$n" ]; then die "spec-drift: fixture ships $n — the run would inherit it"; fi
+  done
+  d2="$tmp/coupons2"
+  build_spec_drift "$d2" >/dev/null
+  [ "$(git -C "$d" rev-parse HEAD)" = "$(git -C "$d2" rev-parse HEAD)" ] \
+    || die 'spec-drift: two builds produced different commit shas'
+
+  # spec-drift-v2: every planted miss must sit OUTSIDE the files T5 touches.
+  # If a miss ever migrates into redeem.py or audit.py the fixture is back to
+  # v1's incidental-discovery problem and its verdicts mean nothing.
+  v="$tmp/coupons-v2"
+  build_spec_drift_v2 "$v" >/dev/null
+  grep -q 'return COUPONS.get(code)' "$v/src/lookup.py" \
+    || die 'spec-drift-v2: R1 lookup is no longer case-blind'
+  grep -q '^    return True$' "$v/src/limits.py" \
+    || die 'spec-drift-v2: R4 stub is gone'
+  if grep -q 'max_discount_cents' "$v/src/pricing.py"; then
+    die 'spec-drift-v2: R5 cap is implemented'
+  fi
+  if grep -q 'AUDIT.append' "$v/src/audit.py" "$v/src/redeem.py"; then
+    die 'spec-drift-v2: R6 is implemented — T5 must stay the open decoy'
+  fi
+  for miss in lower max_discount_cents customer_id; do
+    if grep -q "$miss" "$v/src/audit.py"; then
+      die "spec-drift-v2: '$miss' leaked into audit.py — T5's blast radius must be clean"
+    fi
+  done
+  if grep -q 'max_discount_cents\|\.lower()' "$v/src/redeem.py"; then
+    die 'spec-drift-v2: a miss leaked into redeem.py'
+  fi
+  [ "$(grep -c '^- \[ \]' "$v/tasks.md")" = 1 ] \
+    || die 'spec-drift-v2: expected exactly one unticked task (T5)'
+  for n in CLAUDE.md AGENTS.md GEMINI.md; do
+    if [ -e "$v/$n" ]; then die "spec-drift-v2: fixture ships $n"; fi
+  done
+
+  # spec-drift-v3: the whole point is the ABSENT import edge. If anything in
+  # redeem/ ever references jobs/ or the reverse, isolation is gone and the
+  # fixture silently degrades into v2 while still reporting ok.
+  w="$tmp/coupons-v3"
+  build_spec_drift_v3 "$w" >/dev/null
+  if grep -rq jobs "$w/redeem/"; then
+    die 'spec-drift-v3: redeem/ references jobs/ - the import edge is back'
+  fi
+  if grep -rq redeem "$w/jobs/"; then
+    die 'spec-drift-v3: jobs/ references redeem/ - the import edge is back'
+  fi
+  grep -q created_at "$w/jobs/purge.py" \
+    || die 'spec-drift-v3: R7 miss is gone (purge must key on created_at)'
+  if grep -q expires_at "$w/jobs/purge.py"; then
+    die 'spec-drift-v3: purge honours expires_at - R7 is no longer missing'
+  fi
+  if grep -q customer "$w/jobs/reconcile.py"; then
+    die 'spec-drift-v3: reconcile does per-customer work - R4 is no longer missing'
+  fi
+  if grep -q max_discount_cents "$w/redeem/pricing.py"; then
+    die 'spec-drift-v3: R5 control miss is implemented'
+  fi
+  grep -q 'return customer_id not in' "$w/redeem/limits.py" \
+    || die 'spec-drift-v3: R4 in-path half must be correct - only the jobs/ half is missing'
+  if grep -q 'AUDIT.append' "$w/redeem/audit.py" "$w/redeem/service.py"; then
+    die 'spec-drift-v3: R6 is implemented - T6 must stay the open decoy'
+  fi
+  [ "$(grep -c '^- \[ \]' "$w/tasks.md")" = 1 ] \
+    || die 'spec-drift-v3: expected exactly one unticked task (T6)'
+  for n in CLAUDE.md AGENTS.md GEMINI.md; do
+    if [ -e "$w/$n" ]; then die "spec-drift-v3: fixture ships $n"; fi
+  done
+
   # A fixture dir that already exists is an error, not a silent overwrite.
   # `die` exits, so the negative cases run in a subshell.
   if ( build_func_ui "$f" ) >/dev/null 2>&1; then die 'fixture overwrote an existing dir'; fi
@@ -438,7 +873,10 @@ fixture)
   case "$kind" in
   func-ui) build_func_ui "$dir" ;;
   handoff) build_handoff "$dir" ;;
-  *) die "unknown fixture: $kind (func-ui | handoff)" ;;
+  spec-drift) build_spec_drift "$dir" ;;
+  spec-drift-v2) build_spec_drift_v2 "$dir" ;;
+  spec-drift-v3) build_spec_drift_v3 "$dir" ;;
+  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3)" ;;
   esac
   ;;
 prefix)

@@ -81,6 +81,7 @@ re-check anything an agent asserts without evidence.
 | Build a real feature, design-then-implement | `brainstorm-build-prime` (ceremony, Fable design) · `-mid` (all-Opus, no ceremony) · `-lite` (Sonnet offload) |
 | Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`) |
 | A static/mock UI that needs to actually work | `func-ui` |
+| What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-trace` |
 | "check screenshot", or verify a change in a running app visually | `screenshot-loop` |
 | Ready to merge a branch | `merge-prep`, then `merge-agent` |
 | Ship to a VPS / set up deployment | `deploy-wizard`, then `deploy-niyoj` |

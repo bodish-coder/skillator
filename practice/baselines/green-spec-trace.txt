@@ -1,0 +1,48 @@
+# GREEN - spec-trace, traceability rule
+# Same scenario as practice/baselines/scenario-spec-kit-durability.txt, fresh
+# fixture, fresh subagent, skills/spec-trace/SKILL.md read and followed.
+#
+# NOT ISOLATED, and this is the standing caveat on every GREEN in this repo:
+# the run inherited ~/.claude/CLAUDE.md and skillator's own project file, and
+# the skill was handed over by path rather than matched from its description.
+# So this verifies the BODY works when loaded. It does not verify the skill is
+# FOUND - that is a separate test the harness cannot run here (--safe-mode
+# suppresses --plugin-dir, see baseline-harness.sh).
+#
+# VERDICT: PASS, checked against the tree rather than the report.
+#   specs/expense-ledger/spec.md written, containing:
+#     - Marta's brief verbatim as a block quote, with the source named
+#       (spoken, no ticket, unreachable two weeks)
+#     - 12 requirement ids, R1..R12
+#     - Out of scope + 6 numbered Assumptions, each tagged with the id it affects
+#     - a 12-row trace table
+#   25 tests, all passing (`python -m pytest -q` -> 25 passed).
+#   All 19 distinct Evidence paths resolve to a real `def` in a real file,
+#   verified by script, not by reading the report.
+#
+# The RED failure is gone. RED produced "28 tests, one per requirement below"
+# with no mapping; GREEN produced a table where every cell names path:symbol and
+# every one of them resolves.
+#
+# The splitting rule carried, unprompted and correctly. Marta's single clause
+# "we should at least flag it, not block it" became two ids:
+#     R10 same amount/staff/day is flagged
+#     R11 the flag never blocks filing
+# which is the failure mode the worked example exists to teach - an
+# implementation that flags AND blocks satisfies R10 and violates R11, and one
+# id could not have caught it. Same split on R4/R5 (over vs at-or-under
+# threshold), which the brief also ran together in one sentence.
+#
+# LOOPHOLE FOUND, and closed in the same pass. R8 ("nobody can edit an approved
+# entry") is satisfied by an edit function not existing, so its Satisfied-by
+# cell held prose - "(absence of an edit/update function; see Assumption 3)" -
+# rather than a path. The Evidence cell was sound
+# (`test_no_edit_function_exists_on_ledger`, which is exactly the right test),
+# so this is a real case the skill had no vocabulary for, not a violation.
+# Left open it becomes the general door: prose in Satisfied-by whenever a symbol
+# is inconvenient. SKILL.md now requires `ABSENT` plus a cross-reference to the
+# assumption plus a test that fails if the thing ever appears.
+#
+# NOT RE-RUN after that edit. The addition gives a name to what this run already
+# did correctly; it forbids nothing the run relied on. A re-run is owed before
+# the rule is claimed to hold under pressure, and is not claimed to here.

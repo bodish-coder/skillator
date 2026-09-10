@@ -67,6 +67,7 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | A working or staged diff | `code-review:code-review` (`/simplify` for quality-only) |
 | Any UI/UX or front-end craft | `design-arwen` (never `frontend-design`) |
 | A static/mock UI that must actually work | `func-ui` |
+| Requirements that live only in a conversation, and outlive the session | `spec-trace` |
 | "check screenshot" / verify visually | `screenshot-loop` |
 | Merge · deploy · ending · resuming | `merge-prep`→`merge-agent` · `deploy-wizard`→`deploy-niyoj` · `handoff` · `handoff-resume` |
 | Auth, secrets, input handling | `security-review` |

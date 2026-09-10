@@ -56,6 +56,12 @@ conversation. Return an implementation-ready design:
 
 ```
 GOAL:         <the task in one line>
+REQUIREMENTS: <R1, R2, … one line each, one requirement per id, stable and
+              never renumbered. If an id needs "and" to state it and the two
+              halves can fail independently, it is two ids — "flag it, don't
+              block it" is R<n> flagged and R<n+1> never blocked, because an
+              implementation that does both satisfies the first and violates
+              the second.>
 APPROACHES:   <2-3 candidates, one line each + the tradeoff>
 CHOSEN:       <which, and why it wins>
 DESIGN:       <data model / contracts, key edge cases, out of scope>
@@ -64,13 +70,25 @@ CONSTRAINTS:  <the binding requirements every task must respect — exact
               between components. Not per-task detail: this is what
               stays true across all of them, copied verbatim into each
               task reviewer's prompt as [GLOBAL_CONSTRAINTS].>
+TRACE:        <one row per id: | R<n> | short form | path:symbol |
+              path:test_name |. The last two columns hold PATHS, never a
+              claim — `covered`, `yes`, `see tests` and "one test per
+              requirement" are empty rows. Nothing built yet writes NONE;
+              satisfied-by-absence writes ABSENT and still names the test
+              that fails if the thing ever appears. Every id gets a row.>
 TASKS:        <one block per task in the PRACTICE.md §2 shape: Files
               create/modify/test, Interfaces consumes/produces, and
               bite-sized test-first steps carrying actual code and
-              actual commands. No placeholders.>
+              actual commands. No placeholders. Each block opens with
+              `SATISFIES: R2, R5` — the ids it implements.>
 VERIFICATION: <the concrete end-to-end check that proves it works —
               the exact command and the expected output>
 ```
+
+`REQUIREMENTS` and `TRACE` are the same two slots `skillator:spec-trace` exists
+for, inlined here because prime already writes a design file and a second
+artifact would only drift from it. Read that skill when the requirements arrive
+as conversation rather than as a written brief.
 
 `TASKS` is the whole implementation plan, not a list of intentions. A build agent
 sees only its own task and never this conversation, so a task that doesn't stand
@@ -165,6 +183,10 @@ Append an outcome section to the same session `.md`:
 - Built:     <what shipped — files changed>
 - Why:       <key decisions and why (from design + any build deviations)>
 - Tests:     <verification run + actual result: pass/fail + evidence>
+- Trace:     <the TRACE table, updated to what is now true — every id either
+             naming a real path:symbol and path:test, or NONE. An id still on
+             NONE here is unbuilt work, and goes to `ticket-master` before the
+             session closes rather than into this line as prose.>
 - Deviations:<where the build differed from the design, and why>
 ```
 

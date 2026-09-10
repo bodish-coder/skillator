@@ -250,6 +250,18 @@ Deactivating is deleting `.skillator/grayskull.md`.
   asked once and remembered in `.screenshot-dir` at the repo root. Invoke with
   `/screenshot-loop`.
 
+- **spec-trace** — for when what a feature must do exists only in a conversation
+  — a spoken brief, a chat thread, a ticket body, a handover — and the work will
+  outlive the session. Requirements get stable ids (`R1`, `R2`, … never reused,
+  never renumbered) alongside the original wording kept verbatim, and a trace
+  table whose Evidence column holds a **path, not a claim**: `covered`, `yes` and
+  "28 tests, one per requirement" are empty rows, and a requirement with nothing
+  behind it says `NONE` rather than dressing it up. That narrow scope is what
+  testing left: the baseline preserved a spoken brief perfectly under pressure
+  and still produced nothing anyone could mechanically check, while a re-check
+  discipline turned out to have no failure to prevent across three fixtures, so
+  none was written. Invoke with `/spec-trace`.
+
 - **skill-smith** — writing a skill, fixing one that never triggers, or working
   out why a rule keeps getting rationalized away. The description field decides
   whether a skill is ever loaded, so it carries triggering conditions only and
