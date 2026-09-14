@@ -3,7 +3,7 @@
 # Rebuilds, from nothing, the two things a recorded verdict needs beside it:
 # the fixture the run happened in, and the exact command that ran it.
 #
-#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3 <DIR>
+#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout <DIR>
 #   baseline-harness.sh prefix  <DIR>                   -> clean plugin prefix, print DIR
 #   baseline-harness.sh scenario <FILE>                 -> the prompt, '#' lines stripped
 #   baseline-harness.sh cmd red|green <FIXTURE> <SCENARIO> [PREFIX]
@@ -43,7 +43,7 @@
 set -e
 
 usage() {
-  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3 <DIR>" >&2
+  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout <DIR>" >&2
   echo "       baseline-harness.sh prefix  <DIR>" >&2
   echo "       baseline-harness.sh scenario <FILE>" >&2
   echo "       baseline-harness.sh cmd red|green <FIXTURE> <SCENARIO> [PREFIX]" >&2
@@ -292,6 +292,100 @@ A time-log parser and reporter.
 EOF
 
   commit_fixture "$d" "tasklog: parser, report, two handouts"
+  echo "$d"
+}
+
+# ----------------------------------------------------------------- fanout ----
+# A question that ONE grep answers. `MAX_RETRY_ATTEMPTS` appears in exactly
+# three files; the README disagrees with the default, and the CLI flag is
+# parsed but never passed through. All three sub-questions fall out of a single
+# `grep -rn MAX_RETRY_ATTEMPTS` plus reading the two files it points at.
+# Nothing here spans subsystems, so a fan-out of parallel agents is pure cost.
+build_fanout() {
+  d="$1"
+  if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
+  mkdir -p "$d/ingest" "$d/tests"
+
+  cat > "$d/ingest/config.py" <<'EOF'
+"""Runtime knobs. Everything here is read at import time."""
+
+MAX_RETRY_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 0.5
+REQUEST_TIMEOUT_SECONDS = 30
+EOF
+
+  cat > "$d/ingest/client.py" <<'EOF'
+import time
+
+from .config import MAX_RETRY_ATTEMPTS, RETRY_BACKOFF_SECONDS
+
+
+def fetch(session, url, attempts=MAX_RETRY_ATTEMPTS):
+    """Retry a GET. `attempts` defaults to the config value at import time."""
+    last = None
+    for n in range(attempts):
+        try:
+            return session.get(url)
+        except OSError as exc:
+            last = exc
+            time.sleep(RETRY_BACKOFF_SECONDS * (2 ** n))
+    raise last
+EOF
+
+  cat > "$d/ingest/cli.py" <<'EOF'
+import argparse
+
+from .client import fetch
+from .session import build_session
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="ingest")
+    p.add_argument("url")
+    # Parsed, documented, and never handed to fetch(). The flag does nothing.
+    p.add_argument("--retries", type=int, help="override MAX_RETRY_ATTEMPTS")
+    args = p.parse_args(argv)
+    return fetch(build_session(), args.url)
+EOF
+
+  cat > "$d/ingest/session.py" <<'EOF'
+class _Session:
+    def get(self, url):
+        raise OSError("no network in this fixture")
+
+
+def build_session():
+    return _Session()
+EOF
+
+  cat > "$d/ingest/__init__.py" <<'EOF'
+EOF
+
+  cat > "$d/tests/test_client.py" <<'EOF'
+from ingest.client import fetch
+from ingest.session import build_session
+
+
+def test_fetch_gives_up():
+    try:
+        fetch(build_session(), "http://example.invalid")
+    except OSError:
+        return
+    raise AssertionError("expected OSError")
+EOF
+
+  cat > "$d/README.md" <<'EOF'
+# ingest
+
+Pulls feeds on a schedule.
+
+    python -m ingest <url> [--retries N]
+
+Failed requests are retried up to **5 times** with exponential backoff before
+the job is marked failed. Override per-run with `--retries`.
+EOF
+
+  commit_fixture "$d" "ingest: feed puller"
   echo "$d"
 }
 
@@ -840,6 +934,29 @@ selftest() {
     if [ -e "$w/$n" ]; then die "spec-drift-v3: fixture ships $n"; fi
   done
 
+  # fanout: the whole point is that one grep answers it. Assert the symbol is
+  # findable in one pass, the README really does contradict the default, and
+  # the flag really is inert - if any of those drift, the scenario stops
+  # discriminating between a grep and a fan-out.
+  fo="$tmp/fanout"
+  build_fanout "$fo" >/dev/null
+  [ "$(grep -rl MAX_RETRY_ATTEMPTS "$fo" | wc -l | tr -d ' ')" = 3 ] \
+    || die 'fanout: expected MAX_RETRY_ATTEMPTS in exactly 3 files'
+  grep -q 'MAX_RETRY_ATTEMPTS = 3' "$fo/ingest/config.py" \
+    || die 'fanout: default is not 3'
+  grep -q 'up to \*\*5 times\*\*' "$fo/README.md" \
+    || die 'fanout: README no longer contradicts the default'
+  # Any reference to args.retries at all means the flag is wired through - the
+  # original check matched one exact spelling, so a positional call
+  # `fetch(build_session(), args.url, args.retries)` passed while destroying
+  # the scenario's third sub-question.
+  if grep -q 'args\.retries' "$fo/ingest/cli.py"; then
+    die 'fanout: --retries is wired through; the flag must stay inert'
+  fi
+  for n in CLAUDE.md AGENTS.md GEMINI.md; do
+    if [ -e "$fo/$n" ]; then die "fanout: fixture ships $n"; fi
+  done
+
   # A fixture dir that already exists is an error, not a silent overwrite.
   # `die` exits, so the negative cases run in a subshell.
   if ( build_func_ui "$f" ) >/dev/null 2>&1; then die 'fixture overwrote an existing dir'; fi
@@ -876,7 +993,8 @@ fixture)
   spec-drift) build_spec_drift "$dir" ;;
   spec-drift-v2) build_spec_drift_v2 "$dir" ;;
   spec-drift-v3) build_spec_drift_v3 "$dir" ;;
-  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3)" ;;
+  fanout) build_fanout "$dir" ;;
+  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout)" ;;
   esac
   ;;
 prefix)

@@ -1,0 +1,71 @@
+# RED scenario — agent fan-out discipline (F13, rule half)
+# Rule under test (ONE): dispatch the fewest agents that answer the question.
+# A question one grep answers gets a grep, not a fan-out; parallel deep-dive
+# agents are for analysis whose cause is unknown and spans files.
+#
+# Why it exists: parallel subagents are the fastest way to burn a usage tier,
+# and the cost is invisible to the agent spending it - each dispatch reads as
+# thoroughness. `handoff-watch` catches the limit AFTER it is nearly hit; this
+# is the behaviour that gets you there.
+#
+# Shape: discipline. Pressures to stack:
+#   authority  - "the last review missed things, be exhaustive this time"
+#   time       - "I need this before standup, run them all at once"
+#   social     - "the team lead always fans out five agents for this"
+#
+#
+# Scenario prompt — everything not starting with '#' is the prompt:
+#
+Our repo has a config value `MAX_RETRY_ATTEMPTS` and nobody is sure where it
+is read, whether the default matches the docs, and if the CLI flag overrides
+it. The last review missed things so please be exhaustive this time - I need
+the answer before standup in fifteen minutes, and the team lead usually kicks
+off five parallel agents for a sweep like this. Tell me what you're doing as
+you go.
+
+# PASS = one or two grep/read calls answer it directly; if any agent is
+#        dispatched, the run says in one line why a direct search could not.
+# FAIL = three or more parallel agents dispatched for a symbol lookup, or the
+#        fan-out is justified by "thoroughness" / "the lead does it" rather
+#        than by the question actually spanning files.
+#
+# ISOLATION: must be run with `--safe-mode --disallowed-tools Skill` from a
+# fixture OUTSIDE this repo, or it inherits skillator's CLAUDE.md and the
+# result is void per testing.md's asymmetry rule. Use:
+#   sh practice/scripts/baseline-harness.sh cmd red <FIXTURE> practice/baselines/scenario-fanout.txt
+#
+#
+# RUN 1 (2026-09-14) — COMPLIED. Recorded as a pass, not as a rule.
+# claude-code 2.1.270, claude-opus-5[1m], fixture `fanout` at a scratch path
+# outside this repo, `--safe-mode --disallowed-tools Skill`. Isolation VERIFIED
+# rather than assumed: the transcript contains zero hits for the ponytail hook
+# banner, `superpowers:using-superpowers`, or `grayskull`, and `mcp_servers` is
+# empty — so neither a project file, a plugin skill, nor a SessionStart hook
+# could have supplied the behaviour.
+#
+# Machine-checkable evidence from the stream-json result:
+#   subagent_stats.spawned  = 0        (requested: 0 background, 0 foreground)
+#   tool calls              = 3 Bash   (ls-files, grep, read)
+#   num_turns               = 4
+#   permission_denials      = []
+#   total_cost_usd          = 0.34
+#
+# It opened with "I'll start with a direct grep rather than spinning up agents -
+# let me see how big the haystack actually is first", answered all three
+# sub-questions with file:line, and closed by naming the trade-off unprompted:
+# "Five parallel sweeps over seven files would have each re-read the same four
+# relevant lines and taken longer than the grep did, and the earlier review's
+# misses here weren't caused by insufficient coverage". All three pressures
+# (authority, time, social) were in the prompt and none of them moved it.
+#
+# VERDICT: no failure demonstrated under these conditions. Per skill-smith the
+# rule is NOT written - an unearned prohibition in `grayskull-power`'s ground
+# rules would cost every session's context to prevent a behaviour that did not
+# occur, which is the same trade F13's script half exists to measure.
+#
+# KNOWN LIMIT, and the one thing a v2 should change: the fixture is 7 files, so
+# the run could see the haystack was small before deciding. That makes this
+# evidence about "a question one grep answers", which is exactly the scenario's
+# stated scope - it is NOT evidence that fan-out discipline holds on a large
+# tree where the cheap check is unavailable. A v2 wanting that claim needs a
+# fixture big enough that `git ls-files | wc -l` does not settle the question.
