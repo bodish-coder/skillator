@@ -18,7 +18,7 @@ description: >-
 ```
 
 Unconditional — the receipt that the skill loaded, not a reward for a clean
-arming. Print it, then arm. Once per session, on invoke; not per routed request.
+arming. Print it, then arm. Once per session, on invoke, not per request.
 
 One call: **arm** the standing skills, **announce** the state, **route** each
 request, under the §3 ground rules.
@@ -26,11 +26,10 @@ request, under the §3 ground rules.
 ## 0. Host and canon
 
 Read `PLATFORMS.md` (host mechanics) and `PRACTICE.md` (process canon, cited by
-section below). Both sit **beside the installed skills**; two layouts exist, so
-try `../` first (the `install.sh` layout — Cursor, Codex, Antigravity, Pi), then
-`../../` (git checkout, Claude Code plugin cache). Neither resolves → say so and
-continue; assume the `claude-code` row only if you really are on Claude Code,
-else detect the host from its own tools.
+section below). Both sit **beside the installed skills**: try `../` first (the
+`install.sh` layout — Cursor, Codex, Antigravity, Pi), then `../../` (git
+checkout, Claude Code plugin cache). Neither resolves → say so and continue, and
+detect the host from its own tools rather than assuming `claude-code`.
 
 **Load [`references/hosts.md`](references/hosts.md)** — the per-host translation
 of "invoke a skill", "Fable subagents", `AskUserQuestion` and the watch hooks.
@@ -74,10 +73,8 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | The deliverable is a skill | `skill-smith` |
 | Tricky analysis (cause unknown, spans files, wrong is expensive) | Fable subagents in parallel; you reconcile |
 
-**Nothing matches?** Do it directly — a one-line edit needs no skill. It does
-not escape §3: "one line" describes the diff, never the thinking. The blast
-radius line is still written before the edit, and a fix you cannot reproduce is
-still a guess at any size.
+**Nothing matches?** Do it directly — a one-line edit needs no skill, and still
+does not escape §3: "one line" describes the diff, never the thinking.
 
 **Load [`references/routing.md`](references/routing.md)** — the full tables:
 practice, the run/browser/dataviz/claude-api loop, agent work, codegraph

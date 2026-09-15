@@ -14,14 +14,28 @@ $src = Join-Path $PSScriptRoot 'skills'
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { "$HOME\.codex" }
 
 # host -> marker dir proving the CLI is installed + the global skills dir(s) to fill.
-# codex has two: the codex binary reads $CODEX_HOME\skills, while ~\.agents\skills is
-# the shared cross-agent dir other tools still read - so both are kept in sync.
+# See install.sh for the reasoning and the A73 residue. Probe dir OR CLI on PATH,
+# matching how row selection below decides a host is installed.
+# See install.sh: row selection re-validates the marker, so this must be a path that
+# EXISTS when a host was found (and an absolute one - a relative name would resolve
+# against the current location and could match something by accident).
+$sharedMarker = [System.IO.Path]::GetFullPath((Join-Path $HOME 'no-such-shared-host'))
+foreach ($c in @('codex','pi','gemini')) {
+  $d = if ($c -eq 'codex') { $codexHome } else { Join-Path $HOME ".$c" }
+  if ((Test-Path $d) -or (Get-Command $c -ErrorAction SilentlyContinue)) { $sharedMarker = $HOME; break }
+}
+
 $targets = [ordered]@{
+  # A65 - keep in sync with install.sh, which carries the reasoning for each path.
+  # See install.sh: marked by a host that reads the shared dir and has no
+  # guaranteed dir of its own, NOT by $HOME - Cursor reads it too and would
+  # otherwise register every skill twice.
+  'shared'      = @{ Marker = $sharedMarker;    Dests = @("$HOME\.agents\skills") }
   'claude-code' = @{ Marker = "$HOME\.claude"; Dests = @("$HOME\.claude\skills") }
   'cursor'      = @{ Marker = "$HOME\.cursor"; Dests = @("$HOME\.cursor\skills") }
-  'codex'       = @{ Marker = $codexHome;      Dests = @("$codexHome\skills", "$HOME\.agents\skills") }
-  'antigravity' = @{ Marker = "$HOME\.gemini"; Dests = @("$HOME\.gemini\config\skills") }
-  'pi'          = @{ Marker = "$HOME\.pi";     Dests = @("$HOME\.pi\skills") }
+  'codex'       = @{ Marker = $codexHome;       Dests = @("$codexHome\skills") }
+  'antigravity' = @{ Marker = "$HOME\.gemini"; Dests = @("$HOME\.gemini\config\skills", "$HOME\.gemini\skills") }
+  'pi'          = @{ Marker = "$HOME\.pi";     Dests = @("$HOME\.pi\agent\skills", "$HOME\.pi\skills") }
 }
 
 # Claude Code can also have them via the plugin marketplace — that counts as installed.

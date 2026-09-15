@@ -1,16 +1,13 @@
 ---
 name: func-ui
 description: >-
-  Use when an EXISTING UI-only / mockup / prototype frontend needs to become a
-  real, working system — the user says their app is "just a UI", "only a
-  mockup / shell", "not functional", "fake / hardcoded data", "no backend",
-  "the buttons don't do anything / just clear", or asks to "make it real /
-  functional", "wire it up", "connect the frontend to a backend / API /
-  database", "make the buttons actually save", "turn this prototype into a
-  working app". Ends at a confirmed plan; does not build. NOT for Figma-to-UI,
-  design / UX / a11y review, visual or styling bugs, debugging a feature that
-  already works, a brand-new app with no existing mockup, or backend-only
-  fixes.
+  Use when an EXISTING UI-only mockup must become real and
+  working - the user says their app is "just a UI", "not functional", "fake
+  / hardcoded data", "no backend", "the buttons don't do anything", or asks
+  to "make it real", "wire it up", "connect it to a backend/API/database".
+  Ends at a confirmed plan; does not build. NOT for Figma-to-UI,
+  design/UX/a11y review, styling bugs, debugging a feature that already
+  works, a brand-new app with no mockup, or backend-only fixes.
 ---
 
 # UI → Functional

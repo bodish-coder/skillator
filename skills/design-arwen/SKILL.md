@@ -1,16 +1,14 @@
 ---
 name: design-arwen
 description: >-
-  Use whenever the user wants to build, redesign, improve or critique a UI/UX,
-  native or web: a web page/app/component, an iOS or Android screen, a React
-  Native app, a dashboard, landing page, form, data table, settings screen,
-  multi-step flow, onboarding, empty state, or design system; or asks to make
-  something "more unique / bolder / quieter / more polished / less generic /
-  more memorable / less AI-made", pick fonts/colors/layout/motion, fix visual
-  hierarchy, spacing, contrast, a11y or UI performance, write UX copy and
-  error states, or share one design language across native and web. NOT for
-  backend-only or non-UI tasks; `impeccable` covers craft with no aesthetic
-  direction to forge, gstack the headless-browser review of a finished page.
+  Use whenever the user wants to build, redesign, improve or critique a
+  UI/UX, native or web - page, iOS/Android screen, dashboard,
+  form, onboarding or design system; or asks to make something less
+  generic, bolder, less AI-made; or to pick
+  fonts/colors/layout/motion, fix hierarchy, spacing, contrast, a11y or UI
+  performance, write UX copy and error states, or share one design language
+  across native and web. NOT for backend or non-UI work; `impeccable`
+  owns craft without aesthetic direction, gstack the finished page.
 user-invocable: true
 argument-hint: "[build|redesign|improve|critique] [target]"
 license: MIT

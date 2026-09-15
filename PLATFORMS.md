@@ -52,7 +52,7 @@ Ambiguous → ask once. The user can override with `platform: <host>`.
 
 | | claude-code | cursor | codex | antigravity | pi | prime-agent |
 |---|---|---|---|---|---|---|
-| **Skill install path** | `~/.claude/skills/<n>/` or plugin cache | `.cursor/skills/<n>/`, `.agents/skills/<n>/`, global `~/.cursor/skills/`, `~/.agents/skills/` (nested dirs too) | `~/.agents/skills/<n>/` | `<ws>/.agents/skills/<n>/`, global `~/.gemini/config/skills/<n>/` | `.pi/skills/<n>/SKILL.md` (+ `~/.pi/`) | no markdown-skill loader — see below |
+| **Skill install path** | `~/.claude/skills/<n>/` or plugin cache | `.cursor/skills/<n>/`, `.agents/skills/<n>/`, global `~/.cursor/skills/`, `~/.agents/skills/` (nested dirs too) | `$CODEX_HOME/skills/<n>/`, `~/.agents/skills/<n>/` | `<ws>/.agents/skills/<n>/`, global `~/.gemini/config/skills/<n>/` (Antigravity's own docs) and `~/.gemini/skills/<n>/` (what Gemini CLI 0.57 reports — probed) | `~/.pi/agent/skills/<n>/`, `~/.agents/skills/<n>/`, `.pi/skills/<n>/` | no markdown-skill loader — see below |
 | **Load another skill** | `Skill` tool | auto-discovered by description; else read its `SKILL.md` and follow it | auto-loaded when the task matches; else read its `SKILL.md` | auto-discovered; force with `/<skill-name>` | force with `/skill:<name>` | Read the `SKILL.md` and follow it |
 | **Delegate work** | `Agent` tool + `model` override | `Task` tool + model slug | subagents (GA Mar 2026) — up to 8 parallel, own context + sandbox | background subagents (`/agents`), nestable | no native delegation — `subagent` extension or a `pi` subprocess; else sequential in-session passes | `rlm(...)` spawns real child agents |
 | **Switch tier** | per-agent `model` | per-Task model slug | `reasoning_effort` low/medium/high/xhigh | `/model` mid-session (Gemini 3.5 Flash / 3.1 Pro / Claude Sonnet / Opus / GPT-OSS 120B, plan-dependent) | `/model` mid-session (15+ providers) | provider chosen at `/login`; tier by prompt + child-agent config |
@@ -131,9 +131,10 @@ is rejected (`401 Incorrect API key`), so no probe could run without adding
 credentials. pi's own docs put skill descriptions in the system prompt and then
 say the model *"doesn't always"* read the `SKILL.md` — which is why the row stays
 **no** and `/skill:<name>` stays the instruction. Its discovery dirs are
-`~/.pi/agent/skills` · `~/.agents/skills` · `.pi/skills` · `.agents/skills`; the
-installers write `~/.pi/skills`, so on pi it is the shared `~/.agents/skills` copy
-that is actually discoverable.
+`~/.pi/agent/skills` · `~/.agents/skills` · `.pi/skills` · `.agents/skills`. The
+installers used to write only `~/.pi/skills`, which is not on that list; since A65
+they write `~/.pi/agent/skills` too, and `~/.agents/skills` unconditionally rather
+than only when codex is installed. Still docs-only — unprobed on a live pi.
 
 Transcripts for the 2026-09-06 codex and cursor runs are JSONL from each host's
 own stream, committed at `practice/baselines/transcripts/`

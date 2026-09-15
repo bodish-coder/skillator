@@ -34,11 +34,37 @@ brief)
   n="${3:-}"
   [ -n "$n" ] || usage
   f="$out/task-$n-brief.md"
-  # A task block runs from '### Task <n>:' to the next '### Task ' or EOF.
+  # A task block runs from '### Task <n>:' to the next '### Task ', the next
+  # top-level design field, or EOF. TASKS is not the last field - VERIFICATION and
+  # TRACE follow it, and everything below TASKS used to land in the last task's
+  # brief (A71). The fields are a closed set, listed in the brainstorm-build-*
+  # templates; matching their SHAPE instead (/^[A-Z][A-Z ]*:/) silently ate any
+  # task body opening with 'IMPORTANT:' or a bare Windows path. SATISFIES: is a
+  # per-task field and deliberately absent. Fenced code is skipped, since task
+  # blocks carry actual code: fence tracking follows CommonMark, closing only on a
+  # run of backticks at least as long as the one that opened it, so a ```sh block
+  # nested inside a ````md block does not re-open the terminators.
   awk -v n="$n" '
+    BEGIN { split("GOAL REQUIREMENTS APPROACHES CHOSEN DESIGN CONSTRAINTS TRACE " \
+                  "TASKS VERIFICATION PLATFORM DESIGN_MODEL BUILD_MODEL", a, " ")
+            for (i in a) field[a[i]] = 1 }
     $0 ~ "^### Task " n "([:.[:space:]]|$)" { inblock=1; print; next }
-    inblock && /^### Task /                 { exit }
-    inblock                                  { print }
+    !inblock { next }
+    match($0, /^`+/) && RLENGTH >= 3 {
+      if (!fence)                  fence = RLENGTH
+      else if (RLENGTH >= fence && substr($0, RLENGTH + 1) ~ /^[ \t\r]*$/) fence = 0
+      print; next
+    }
+    # A task heading terminates even inside a fence. Same-length nested fences (a task
+    # step dictating SKILL.md content wraps ```sh in ```md) leave the run unbalanced,
+    # and a fence-guarded heading then ran the block to EOF - A71 a third time. A
+    # heading at column 0 inside a code block is far rarer than that leak.
+    /^### Task /                   { exit }
+    fence                          { print; next }
+    # $1 is whitespace-tokenised, so "VERIFICATION:run it" (no space after the
+    # colon) was not $1 and the block ran to EOF - A71 again. Match up to the colon.
+    match($0, /^[A-Z][A-Z_]*:/) && substr($0, 1, RLENGTH - 1) in field { exit }
+    { print }
     END { if (!inblock) exit 3 }
   ' "$design" > "$f" || {
     rm -f "$f"
@@ -46,6 +72,13 @@ brief)
     exit 1
   }
   [ -s "$f" ] || { rm -f "$f"; echo "task $n block is empty in $design" >&2; exit 1; }
+  # heading and nothing else: the block ended on its first body line, so the brief
+  # would hand a build agent a task with no steps. Fail loudly instead.
+  [ "$(awk 'END{print NR}' "$f")" -gt 1 ] || {
+    rm -f "$f"
+    echo "task $n block in $design has a heading but no body" >&2
+    exit 1
+  }
   echo "$f"
   ;;
 report)

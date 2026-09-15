@@ -2,12 +2,12 @@
 name: ticket-master
 description: >-
   Use when the user reports a bug or asks for a feature, says "log this",
-  "what's pending", "ticket", "B3", "F12", "A4", "next ticket number", "mark it
-  done", "block it", "defer it", "cancel it", "list tickets", "list tickets
-  status", "ultracode", "work the board", "use a workflow", "fan out agents",
-  mentions TICKETS.md, or when starting work and you need to know what's
-  already open. Also before closing a session to sync statuses. NOT an issue
-  tracker replacement and NOT for syncing to real Jira/GitHub Issues.
+  "what's pending", "ticket", "B3", "F12", "A4", "next ticket number", "mark
+  it done", "block it", "defer it", "cancel it", "list tickets", "list
+  tickets status", "ultracode", "work the board", "use a workflow", "fan out
+  agents", mentions TICKETS.md, or when starting work and you need the open
+  set. Also before closing a session, to sync statuses. NOT an issue tracker
+  replacement, NOT for syncing to Jira/GitHub Issues.
 ---
 
 # ticket-master — serialised tickets, worked as a workflow

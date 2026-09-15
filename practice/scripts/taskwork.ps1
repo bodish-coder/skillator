@@ -26,17 +26,48 @@ New-Item $out -ItemType Directory -Force | Out-Null
 if ($Command -eq 'brief') {
   if (-not $A) { Write-Error 'usage: taskwork.ps1 brief <DesignFile> <N>'; exit 2 }
   $f = Join-Path $out "task-$A-brief.md"
-  # A task block runs from '### Task <n>:' to the next '### Task ' or EOF.
+  # Keep in sync with taskwork.sh, which carries the full reasoning (A71).
+  # A task block runs to the next '### Task ', the next top-level design field
+  # (a closed set - matching their shape instead ate bodies opening 'IMPORTANT:'
+  # or a bare Windows path), or EOF. SATISFIES: is per-task and deliberately
+  # absent. Fenced code is skipped, closing only on a backtick run at least as
+  # long as the one that opened it so nested fences do not re-open terminators.
+  $fields = @('GOAL','REQUIREMENTS','APPROACHES','CHOSEN','DESIGN','CONSTRAINTS',
+              'TRACE','TASKS','VERIFICATION','PLATFORM','DESIGN_MODEL','BUILD_MODEL')
   $lines = Get-Content -LiteralPath $DesignFile
   $block = [System.Collections.Generic.List[string]]::new()
   $in = $false
+  $fence = 0
   foreach ($line in $lines) {
     if ($line -match "^### Task $([regex]::Escape($A))([:.\s]|$)") { $in = $true; $block.Add($line); continue }
-    if ($in -and $line -match '^### Task ') { break }
-    if ($in) { $block.Add($line) }
+    if (-not $in) { continue }
+    if ($line -match '^(`+)') {
+      $run = $Matches[1].Length
+      if ($run -ge 3) {
+        if ($fence -eq 0) { $fence = $run }
+        elseif ($run -ge $fence -and $line.Substring($run) -match '^\s*$') { $fence = 0 }
+        $block.Add($line); continue
+      }
+    }
+    # '### Task ' terminates even inside a fence - same-length nested fences leave the
+    # run unbalanced and a fence-guarded heading ran the block to EOF (A71, third time).
+    if ($line -match '^### Task ') { break }
+    if ($fence -ne 0) { $block.Add($line); continue }
+    # -cmatch: -match is case-insensitive and would fire on an in-block 'Files:'
+    # require the colon: a bare 'DESIGN' line split to 'DESIGN' and broke the block
+    if ($line -cmatch '^([A-Z][A-Z_]*):' -and $fields -ccontains $Matches[1]) { break }
+    $block.Add($line)
   }
+  # taskwork.sh rm -f's the brief on every error path; without this a caller that
+  # ignores the exit code reads a STALE brief on Windows and nothing on POSIX.
+  if (-not $in -or $block.Count -le 1) { Remove-Item -LiteralPath $f -ErrorAction SilentlyContinue }
   if (-not $in) { Write-Error "no '### Task $A`:' block in $DesignFile"; exit 1 }
-  Set-Content $f ($block -join "`n") -Encoding utf8
+  if ($block.Count -le 1) { Write-Error "task $A block in $DesignFile has a heading but no body"; exit 1 }
+  # awk writes each line plus a trailing LF and no BOM; Set-Content -Encoding utf8
+  # on Windows PowerShell 5.1 emits a BOM, which is the A12 defect class and made
+  # this twin disagree with taskwork.sh byte for byte. Write it explicitly.
+  [System.IO.File]::WriteAllText($f, ($block -join "`n") + "`n",
+    (New-Object System.Text.UTF8Encoding $false))
   $f
 }
 elseif ($Command -eq 'report') {

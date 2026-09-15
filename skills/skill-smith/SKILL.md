@@ -1,13 +1,13 @@
 ---
 name: skill-smith
 description: >-
-  Use when writing a new agent skill, editing an existing one, or diagnosing a
-  skill agents don't load or don't follow — a SKILL.md, a slash command, a
-  reference file, or an always-on file (CLAUDE.md, AGENTS.md, GEMINI.md). Also
-  when the user says "write a skill", "make this a skill", "skillify this", "my
-  skill isn't triggering", "the agent ignored the skill", "improve this skill",
-  or asks why a rule keeps getting rationalized away. NOT for using a skill
-  (just invoke it) or installing/enabling skills on disk.
+  Use when writing a new agent skill, editing an existing one, or diagnosing
+  a skill agents don't load or don't follow - a SKILL.md, slash command,
+  reference file, or always-on file (CLAUDE.md, AGENTS.md, GEMINI.md). Also
+  when the user says "write a skill", "make this a skill", "skillify this",
+  "my skill isn't triggering", "the agent ignored the skill", "improve this
+  skill", or asks why a rule keeps getting rationalized away. NOT for using
+  a skill or installing one.
 ---
 
 # Skill Smith
