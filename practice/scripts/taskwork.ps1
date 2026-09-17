@@ -34,12 +34,14 @@ if ($Command -eq 'brief') {
   # long as the one that opened it so nested fences do not re-open terminators.
   $fields = @('GOAL','REQUIREMENTS','APPROACHES','CHOSEN','DESIGN','CONSTRAINTS',
               'TRACE','TASKS','VERIFICATION','PLATFORM','DESIGN_MODEL','BUILD_MODEL')
-  $lines = Get-Content -LiteralPath $DesignFile
+  # -Encoding UTF8: Get-Content defaults to the system ANSI codepage on Windows
+  # PowerShell 5.1, so every em-dash in a design file reached the brief as mojibake.
+  $lines = Get-Content -LiteralPath $DesignFile -Encoding UTF8
   $block = [System.Collections.Generic.List[string]]::new()
   $in = $false
   $fence = 0
   foreach ($line in $lines) {
-    if ($line -match "^### Task $([regex]::Escape($A))([:.\s]|$)") { $in = $true; $block.Add($line); continue }
+    if ($line -cmatch "^### Task $([regex]::Escape($A))([:.\s]|$)") { $in = $true; $block.Add($line); continue }
     if (-not $in) { continue }
     if ($line -match '^(`+)') {
       $run = $Matches[1].Length
@@ -51,7 +53,7 @@ if ($Command -eq 'brief') {
     }
     # '### Task ' terminates even inside a fence - same-length nested fences leave the
     # run unbalanced and a fence-guarded heading ran the block to EOF (A71, third time).
-    if ($line -match '^### Task ') { break }
+    if ($line -cmatch '^### Task ') { break }
     if ($fence -ne 0) { $block.Add($line); continue }
     # -cmatch: -match is case-insensitive and would fire on an in-block 'Files:'
     # require the colon: a bare 'DESIGN' line split to 'DESIGN' and broke the block

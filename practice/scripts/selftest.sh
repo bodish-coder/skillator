@@ -17,6 +17,8 @@ body one
 - [ ] step
 
 ### Task 2: second
+An em-dash — an ellipsis … and café: the brief must carry these through.
+### task 2b: a lowercase heading is prose, not a task boundary
 - [ ] Step: create SKILL.md with:
 ```md
 # Skill
@@ -74,6 +76,12 @@ b2=$("$tw" brief "$tmp/design.md" 2)
 grep -q 'IMPORTANT'   "$b2" || die 'A71: IMPORTANT: body line was treated as a design field'
 grep -q 'Projects'    "$b2" || die 'A71: a Windows drive letter was treated as a design field'
 grep -q 'body two'    "$b2" || die 'brief 2 truncated'
+# PS 5.1 Get-Content defaults to the ANSI codepage; the twin diff only sees that
+# if the fixture has non-ASCII in it
+grep -q 'café'         "$b2" || die 'non-ASCII mangled in the brief'
+grep -q '—'            "$b2" || die 'em-dash mangled in the brief'
+# awk is case-sensitive; PowerShell -match is not
+grep -q 'lowercase heading' "$b2" || die 'a lowercase ### task heading terminated the block'
 # same-length nested fences leave the backtick run unbalanced; a fence-guarded
 # '### Task ' terminator then ran the block to EOF and handed the agent two tasks
 grep -q 'Task 10'     "$b2" && die 'A71: unbalanced same-length fences leaked the next task'

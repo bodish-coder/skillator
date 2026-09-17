@@ -28,18 +28,51 @@
 #         reported C:\Users\Ikran\.claude\CLAUDE.md loaded. Pointing it at a
 #         fresh directory instead dies at "Not logged in" before any memory
 #         resolves, so that path could not be tested further.
-#         `--bare` documents "skip CLAUDE.md auto-discovery" while keeping
-#         `--plugin-dir`, but it reads auth strictly from ANTHROPIC_API_KEY.
-#         UNVERIFIED here (no API key on this host). Opt in with
-#         BASELINE_ISOLATE=bare and grade the result as untested isolation.
+#         `--bare` is the closest thing to a mechanism and is NOT yet a solution.
+#         Its help text (2.1.272) reads: "skip hooks, LSP, plugin sync, attribution,
+#         auto-memory, background prefetches, keychain reads, and CLAUDE.md
+#         auto-discovery ... Anthropic auth is strictly ANTHROPIC_API_KEY or
+#         apiKeyHelper via --settings (OAuth and keychain are never read) ...
+#         Skills still resolve via /skill-name." Read all of that before trusting it:
+#         it does keep --plugin-dir, but it also skips PLUGIN SYNC, and "skills still
+#         resolve via /skill-name" reads as skills no longer being advertised for
+#         auto-invocation. A GREEN run under --bare could therefore reproduce the
+#         A58b run-1 VOID exactly - skill available, never loaded - while the record
+#         claims isolation was solved. So: mechanism identified, isolation UNVERIFIED.
+#         Nothing about it has been observed here, because a --bare run on this host
+#         dies at "Not logged in" before any memory resolves (auth is ANTHROPIC_API_KEY
+#         or an apiKeyHelper via --settings; this host has neither). Opt in with
+#         BASELINE_ISOLATE=bare, PROVE in the run that the skill loaded and that the
+#         canary is gone, and until both are shown, grade the result as untested
+#         isolation and keep the asymmetry caveat in the record.
+#         CANDIDATE, UNTESTED, and better than --bare if it holds: the settings key
+#         `claudeMdExcludes` takes "glob patterns or absolute paths of CLAUDE.md files
+#         to exclude from loading ... applies to User, Project and Local memory".
+#         Passed through `--settings <file>` it should drop ~/.claude/CLAUDE.md for one
+#         run while leaving OAuth, plugins, skills and plugin sync completely alone -
+#         which is what --bare cannot do. Nobody has run it: prove BOTH halves (canary
+#         gone AND the skill still loaded) before a record leans on it.
+#           {"claudeMdExcludes": ["**/.claude/CLAUDE.md"]}
+#         Overriding HOME is NOT an alternative, probed on 2.1.272 and closed:
+#         with HOME, USERPROFILE, HOMEDRIVE and HOMEPATH all pointed at an empty
+#         directory, a canary phrase from ~/.claude/CLAUDE.md was still reported
+#         present. Windows resolves the user profile through the OS, not the
+#         environment, so no env var hides that file. (Faking HOME while leaving
+#         CLAUDE_CONFIG_DIR real does keep credentials working - it is only the
+#         memory isolation that fails.)
 #
 # Two friction points on Windows, both in how you run what `cmd` prints (A68):
 #   1. The emitted command carries MSYS-style paths (/c/tools/...), because that
 #      is what this script sees. Run it from Git Bash. Pasting it into PowerShell
 #      fails on the paths, not on the harness.
-#   2. Run it as one shell command, not through an agent's Bash tool: the tool's
-#      classifier sees `claude -p ... --permission-mode bypassPermissions` and
-#      prompts or refuses. A baseline run belongs in a terminal you drive.
+#   2. Run it as one shell command in a terminal YOU drive - not through any agent
+#      tool. The auto-mode classifier refuses `claude -p ... --plugin-dir` outright
+#      as [Create Unsafe Agents]. Re-checked 2026-09-15 and the refusal has widened
+#      since A68 was written: it now fires under `--permission-mode acceptEdits` as
+#      well as `bypassPermissions`, and from the PowerShell tool as well as Bash, so
+#      the "PowerShell allows it" workaround A68 recorded no longer holds anywhere.
+#      A baseline cannot be launched from inside an agent turn; hand the command to
+#      a human, or grant an explicit permission rule first.
 set -e
 
 usage() {
