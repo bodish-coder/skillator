@@ -259,7 +259,11 @@ One identity, **idiomatic per platform** — never a web layout stuffed into a p
   *the same identity making different correct choices*.
 - **Tokens are the bridge.** Name the theme + pin the font pairing, then define
   color/space/type/radius/motion as platform-agnostic tokens mapped to: CSS variables (web),
-  Asset colors + Dynamic Type (iOS), theme resources (Android), a JS theme object (RN).
+  Asset colors + Dynamic Type (iOS), theme resources (Android), a JS theme object (RN),
+  a capability-tiered palette + glyph set (terminal).
+- **Terminal is a platform too — CLI, TUI, tmux status.** It takes a cell grid instead
+  of a canvas and no font of your own, so identity moves to glyph vocabulary, density and
+  alignment. Read [references/terminal.md](references/terminal.md) before designing one.
 
 ---
 
@@ -350,6 +354,9 @@ report format.
 - **Charts / graphs / KPI tiles / series colors → `dataviz`.** It owns the validated
   light+dark chart palette and mark/axis/legend rules. Don't restate them here.
 - **Poster / cover / print / static art object (90% visual) → `canvas-design`.**
+- **Terminal surfaces (CLI / TUI / tmux) → [references/terminal.md](references/terminal.md)
+  to design, `skillator:tui-proof` to prove.** Arwen owns what the screen should look like;
+  tui-proof owns the width matrix, the ASCII-fallback scan and driving a TUI with no pty.
 - **"Audit / profile my page's performance" → `web-perf`** (Chrome-DevTools workflow). Arwen
   carries the design-time perf rules; web-perf runs the measured audit.
 - **Quick named theme for a static deck/report → `theme-factory`.** (Not for app design
