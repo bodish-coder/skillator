@@ -78,6 +78,18 @@ then draws a constant-width table has not used the number it fetched. When there
 no terminal — a pipe — you are choosing a fixed default instead, and that default is
 still bounded by the floor.
 
+**The floor binds the longest line, on every surface.** Not the rule, not the
+border — the longest *rendered* line. A divider is the one element whose width you
+can see at a glance, so it is the element that gets clamped, and the data row that
+overruns it by two cells is the one that ships. A format string like
+`"%s  %-16s %-6s %-12s %s %s"` has a width: add it up and check it against the floor,
+because nothing else will.
+
+Measure each surface separately and list them so none is skipped — the one-shot
+report, the full-screen frame, the status line, `--help`, and the error paths. The
+surface you are thinking about while you fix the floor is the one that ends up
+correct; the others are where the overflow lives.
+
 **CLI — one-shot, line-oriented, someone else's input.** Its output is data:
 greppable, pipeable, pasteable. Stable column order, one record per line where
 that is plausible. **stdout is the data, stderr is the narration** — progress,
@@ -114,8 +126,8 @@ matrix "belongs to the other skill" is how an overflowing design passes a ship g
 Fitting the floor is yours. Proving it across the matrix, on every surface and at
 every cursor position, is theirs.
 
-Two failures from this skill's own baseline run, both from designing a terminal
-tool without these rules, both worth recognising:
+Three failures from this skill's own test runs, each from designing a terminal
+tool without these rules, each worth recognising on sight:
 
 - A single hardcoded glyph set with the encoding "fixed" by reconfiguring stdout.
   It works until the stream is a pipe or a legacy console, and then the tool's
@@ -123,6 +135,10 @@ tool without these rules, both worth recognising:
 - Width discipline applied to the full-screen surface only, while the one-shot
   CLI overflowed at 60 columns. **Every surface gets the matrix**, including the
   one that looks like plain text.
+- The floor applied to the dividers and not the rows: `min(width, 60)` on every
+  rule, while the row format summed to 62 and overran each one by two cells at
+  every width. The report surface was clean and the dashboard was not, because
+  only the report had been measured.
 
 ## Related
 
