@@ -64,7 +64,7 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | A bug/feature/"log this"/"what's pending" | `ticket-master` (workflow mode at 4+ open) |
 | Audit a whole app, unknown-cause rot, pre-release sweep | `sherlock-codes` |
 | A working or staged diff | `code-review:code-review` (`/simplify` for quality-only) |
-| Any UI/UX or front-end craft | `design-arwen` (never `frontend-design`) |
+| Any UI/UX or front-end craft | `design-arwen` (never `frontend-design`); a terminal UI's *rendering* → `tui-proof` |
 | A static/mock UI that must actually work | `func-ui` |
 | Requirements that live only in a conversation, and outlive the session | `spec-trace` |
 | "check screenshot" / verify visually | `screenshot-loop` |

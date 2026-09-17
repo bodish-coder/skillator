@@ -35,6 +35,7 @@ that backwards is how a session produces confident wrong work.
 | Review findings landing on you | PRACTICE §6 — verify against this codebase before implementing |
 | Auth, secrets, input handling, anything user-facing | `security-review` |
 | Accessibility as the subject — an a11y/WCAG audit, "can't tab to it", "screen reader reads nothing", contrast failures, AT or CI wiring | `a11y-proof` (inside a design task it stays arwen's gate) |
+| A terminal UI's rendering as the subject — a TUI/curses/Textual/Rich screen that must be proven to draw, "wrong in a narrow terminal", "the footer wraps", mojibake box characters, or no pty to drive it | `tui-proof` |
 | The deliverable is itself a skill, or a skill isn't triggering | `skill-smith` |
 | Branch lifecycle | PRACTICE §8 — isolation, then the finish menu |
 
@@ -44,6 +45,7 @@ that backwards is how a session produces confident wrong work.
 |---|---|
 | About to change anything runnable — start it first so the user can watch | `live-build` (armed by default) |
 | "Does this run?" — launch the app and look | `run` |
+| It launched and it is a TUI — now prove the frame fits the terminal | `tui-proof` (launch proves it starts, never that it draws) |
 | Drive a real browser: click, fill, read console | `webapp-testing`, `browse` |
 | Any chart, graph, dashboard — before the first line | `dataviz` |
 | Anything Claude/Anthropic/LLM-shaped — models, pricing, tools, agents | `claude-api` **before** opening the file |

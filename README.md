@@ -280,6 +280,15 @@ Deactivating is deleting `.skillator/grayskull.md`.
   gate; this owns it everywhere else, and the two hand work back and forth. Invoke with
   `/a11y-proof`.
 
+- **tui-proof** — the same law, one surface over: a terminal UI is proven by capturing
+  frames, not by reading the render function. Every screen goes through a width matrix
+  (60/80/100/120, ANSI stripped, no line over the window) because an agent builds a TUI
+  at whatever width its own harness reports and ships a frame that is corrupt in every
+  narrower terminal. Covers driving a TUI where there is no pty — tmux, and the
+  tty-shaped capture for hosts that have none — plus the ASCII twin every non-ASCII
+  glyph needs. The check lands in the project's own selftest, never a scratch file.
+  Invoke with `/tui-proof`.
+
 ## Add a new skill
 
 `skillator:skill-smith` is the skill for this — read it before authoring.
