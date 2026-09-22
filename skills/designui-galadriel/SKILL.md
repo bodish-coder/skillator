@@ -1,5 +1,5 @@
 ---
-name: func-ui
+name: designui-galadriel
 description: >-
   Use when an EXISTING UI-only mockup must become real and
   working - the user says their app is "just a UI", "not functional", "fake
@@ -10,7 +10,7 @@ description: >-
   works, a brand-new app with no mockup, or backend-only fixes.
 ---
 
-# UI → Functional
+# designui-galadriel — a mockup becomes a working app
 
 A mockup lies. Every hardcoded list, every button with no handler, every screen
 that reads from a fixture instead of a database — they all *imply* a working

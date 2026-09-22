@@ -11,7 +11,7 @@ description: >-
   single change.
 ---
 
-# Replicator Agent (one task, one fresh agent)
+# tasks-sentinels — one task, one fresh agent
 
 Ported from `superpowers:subagent-driven-development` so it exists on every host
 skillator installs to, not only the one with that plugin. Named for SG-1's
@@ -103,7 +103,7 @@ three land in one module is wrong, and a baseline run caught exactly that
 against the task's own spec first, then its quality — `practice/prompts.md` §2,
 and `code-review:code-review` over the staged diff before any commit. A failed
 review goes back to a **fix** agent with the finding, never forward to the next
-task. `sherlock-codes` is the whole-app sweep and never runs inside an
+task. `audit-sherlock` is the whole-app sweep and never runs inside an
 implementer.
 
 ## Rationalizations

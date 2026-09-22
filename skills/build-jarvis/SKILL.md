@@ -10,7 +10,7 @@ description: >-
   do them) or pure design/no-build work.
 ---
 
-# Build (Opus design + build) + Sonnet (simple tasks)
+# build-jarvis — deep-tier design, cheap-tier for the mechanical parts
 
 Two models, no Fable. **Opus** does the design thinking and the complex/core
 implementation; **Sonnet** offloads the simple, mechanical tasks so you don't pay

@@ -10,7 +10,7 @@ description: >-
   edits (just do them) or pure design/no-build work.
 ---
 
-# Plan (Opus 5) → Build (Opus 4.8)
+# build-ultron — all-Opus, plan then build, no stop in between
 
 The Opus tier end to end: **Opus 5** does the design thinking, then **Opus 4.8**
 does the implementation. A skill can't change the main session's model, so each phase runs as

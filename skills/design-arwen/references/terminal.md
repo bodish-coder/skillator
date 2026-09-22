@@ -59,7 +59,7 @@ columns. If the design dies there, it was decoration. State in particular is
 **glyph + colour + word, always all three** — that is one rule serving both the
 colour-blind reader and the monochrome pipe, and it is why it is not optional.
 
-**Every non-ASCII glyph is chosen with its ASCII twin at startup.** `skillator:tui-proof`
+**Every non-ASCII glyph is chosen with its ASCII twin at startup.** `skillator:tui-tron`
 §4 owns this rule and the assertion that proves it; do not restate it here. Two
 points belong to *design*: pick the twin when you pick the glyph, so the fallback
 is a considered mark rather than a substitution someone makes later in a hurry —
@@ -113,15 +113,15 @@ correct fallback. You get a tight, shared, unpredictable budget: design the
 truncate from the least important end. It is refreshed on tmux's interval, so it
 must be cheap and must never block.
 
-## 4. What you own, and what `tui-proof` owns
+## 4. What you own, and what `tui-tron` owns
 
-Arwen designs it; **`skillator:tui-proof` proves it renders** — the width matrix
+Arwen designs it; **`skillator:tui-tron` proves it renders** — the width matrix
 across every surface, the ASCII-fallback scan, and the capture rig for hosts with
 no pty. Hand over at the ship gate rather than eyeballing one terminal.
 
-**Delegating the proof does not delegate the constraint.** Naming tui-proof is not a
+**Delegating the proof does not delegate the constraint.** Naming tui-tron is not a
 substitute for choosing a width behaviour: a layout with no answer at its own declared
-floor is unfinished before tui-proof is ever invoked, and shipping it because the
+floor is unfinished before tui-tron is ever invoked, and shipping it because the
 matrix "belongs to the other skill" is how an overflowing design passes a ship gate.
 Fitting the floor is yours. Proving it across the matrix, on every surface and at
 every cursor position, is theirs.
@@ -144,4 +144,4 @@ tool without these rules, each worth recognising on sight:
 
 - `references/craft.md` — the production rules the terminal inherits (colour
   meaning, copy, motion policy); this file overrides only where the material differs
-- `skillator:tui-proof` — proves the frame fits, at every width, with no pty
+- `skillator:tui-tron` — proves the frame fits, at every width, with no pty

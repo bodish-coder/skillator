@@ -9,7 +9,7 @@ description: >-
   current usage (use /usage) and NOT for context-compaction tuning.
 ---
 
-# Handoff Watch (auto-handoff at the usage limit)
+# watch-cortana — auto-handoff at the usage limit
 
 A skill cannot monitor anything - it is only text loaded into a turn. The watching
 has to be done by the harness. This skill installs two small entry points into the
@@ -27,7 +27,7 @@ whole rather than just a narrative:
 1. **Drain the agents** — wait for or stop any running subagent, workflow or
    background task, and record what it had accomplished. In-flight agent work is
    never left undescribed.
-2. **Sync the board** — `skillator:ticket-master` over `TICKETS.md`, statuses only
+2. **Sync the board** — `skillator:tickets-zordon` over `TICKETS.md`, statuses only
    (it is told *not* to start working open tickets — there is no budget left): close what
    actually landed, downgrade half-done work to in-progress, file tickets for
    anything found this session that has none.
@@ -186,5 +186,5 @@ the handoff should be written immediately.
 ## Related
 
 - `skillator:handoff-cortana` — writes the document this skill triggers.
-- `skillator:ticket-master` — the `TICKETS.md` board the handoff is reconciled against.
+- `skillator:tickets-zordon` — the `TICKETS.md` board the handoff is reconciled against.
 - `skillator:resume-cortana` — executes it in the next session.

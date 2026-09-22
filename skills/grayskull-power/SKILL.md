@@ -37,7 +37,7 @@ Nothing else changes per host.
 
 ## 1. Arm (once, on invoke)
 
-`ticket-master` (read `TICKETS.md`, report the open set) · `ponytail` (laziness
+`tickets-zordon` (read `TICKETS.md`, report the open set) · `ponytail` (laziness
 level active) · `codegraph` (indexed, else init once) · `live-friday` (if the
 repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
 `usage-watch … check` elsewhere) · `relay-morpheus` (an unfinished `.skillator/run.md`
@@ -46,7 +46,7 @@ is the first thing you say).
 Then one line, not a feature tour:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files · ponytail full · live-build armed (npm run dev) · handoff-watch 92%/90wk · relay r7 stage 2 of 4
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files · ponytail full · live-friday armed (npm run dev) · watch-cortana 92%/90wk · relay r7 stage 2 of 4
 ```
 
 **Load [`references/arming.md`](references/arming.md)** — what each check does,
@@ -62,14 +62,14 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | Build a feature, design-then-implement | `build-vision` · `build-ultron` · `build-jarvis` — it *is* PRACTICE §§1-6; chain nothing in front |
 | A bug with an unknown cause | PRACTICE §7 **first** — root cause before any fix |
 | A decision, no code behind it | PRACTICE §1 in-session — classify, one question at a time, stop |
-| A bug/feature/"log this"/"what's pending" | `ticket-master` (workflow mode at 4+ open) |
-| Audit a whole app, unknown-cause rot, pre-release sweep | `sherlock-codes` |
+| A bug/feature/"log this"/"what's pending" | `tickets-zordon` (workflow mode at 4+ open) |
+| Audit a whole app, unknown-cause rot, pre-release sweep | `audit-sherlock` |
 | A working or staged diff | `code-review:code-review` (`/simplify` for quality-only) |
-| Any UI/UX or front-end craft | `design-arwen` (never `frontend-design`); a terminal UI's *rendering* → `tui-proof` |
-| A static/mock UI that must actually work | `func-ui` |
-| Requirements that live only in a conversation, and outlive the session | `spec-trace` |
-| "check screenshot" / verify visually | `screenshot-loop` |
-| Merge · deploy · ending · resuming | `mergeprep-oracle`→`merge-smith` · `deploy-wizard`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |
+| Any UI/UX or front-end craft | `design-arwen` (never `frontend-design`); a terminal UI's *rendering* → `tui-tron` |
+| A static/mock UI that must actually work | `designui-galadriel` |
+| Requirements that live only in a conversation, and outlive the session | `spec-watson` |
+| "check screenshot" / verify visually | `screenshot-argus` |
+| Merge · deploy · ending · resuming | `mergeprep-oracle`→`merge-smith` · `deploy-merlin`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |
 | A staged run the session may not outlive — fan-out, long build, flaky link | `relay-morpheus` (the ledger; the build skill still does the building) |
 | A plan whose tasks are written and now have to be built | `tasks-sentinels` — one task, one fresh agent, reviewed before the next |
 | Auth, secrets, input handling | `security-review` |
@@ -94,7 +94,7 @@ queries, and why the order holds.
 - **Scope contract:** >2 unrelated files, or one outside the ticket's contract,
   stops and asks. Smallest change that fixes the cause; no refactoring inside it.
 - **Before a commit:** regression sweep the callers you named, then
-  `code-review:code-review` over the staged diff. `sherlock-codes` is the
+  `code-review:code-review` over the staged diff. `audit-sherlock` is the
   whole-app / pre-release sweep, **not** a per-commit gate — a Fable fan-out an
   implementer subagent cannot run.
 - **Revert first.** Never stack a fix on a broken fix.

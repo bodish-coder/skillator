@@ -7,7 +7,7 @@ description: >-
   when a NiYoj deploy failed and needs diagnosing. The target is a single-VPS
   app (Docker Compose + nginx + maintenance gate + Let's Encrypt) deployed
   over SSH from the NiYoj desktop app, with no CI runner. NOT for CI-triggered
-  deploys (use `deploy-wizard`) or managed-PaaS targets.
+  deploys (use `deploy-merlin`) or managed-PaaS targets.
 ---
 
 # deploy-niyoj — one button, one SSH connection, no CI
@@ -32,7 +32,7 @@ deliberate acts, and that separation is the entire point of this variant.
  └─ TLS via certbot           └─ redis
 ```
 
-Everything downstream of the trigger is identical to `deploy-wizard`'s CI
+Everything downstream of the trigger is identical to `deploy-merlin`'s CI
 playbook. Adopting this one on a project that already follows that pattern means
 **deleting `.github/workflows/deploy.yml`** and adding the app to NiYoj —
 `deploy.sh`, nginx, the maintenance gate and the backups all stay as they are.
@@ -286,6 +286,6 @@ a compensating migration with the next number up — never edit an applied one.
 - **Never run the deploy yourself.** Scaffold, verify, and hand the human the
   checklist. Pressing Deploy is theirs; so is anything touching DNS, keys, or the
   server.
-- Sibling skill: `deploy-wizard` is this same architecture with GitHub Actions as
+- Sibling skill: `deploy-merlin` is this same architecture with GitHub Actions as
   the trigger. Changes to the shared parts (`deploy.sh` phases, nginx template,
   maintenance gate, backups) belong in both.

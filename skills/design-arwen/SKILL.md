@@ -14,7 +14,7 @@ argument-hint: "[build|redesign|improve|critique] [target]"
 license: MIT
 ---
 
-# Arwen — signature design for native & web
+# design-arwen — signature design for native & web
 
 Two failure modes kill interfaces. **Generic**: technically fine, instantly
 forgettable, unmistakably AI-made. **Broken**: distinctive but unshippable —
@@ -295,7 +295,7 @@ safe") and if both ship, **verify every surface in both** before calling it done
 
 **Accessibility is arwen's inside a design task.** Not a post-hoc audit and not a
 contrast number — a design constraint that changes the layout, on this design's terms.
-`skillator:a11y-proof` owns it as a *subject*: audits of code nobody is redesigning,
+`skillator:a11y-toph` owns it as a *subject*: audits of code nobody is redesigning,
 filed a11y bugs, AT and CI wiring. Hand it the failing pairs when the damage is wider
 than the change you made; take its hand-backs when a fix needs a design decision. The floor, enforced in craft.md and verified in
 verify.md: all eight states designed with **hover ≠ focus** · a visible `:focus-visible`
@@ -326,7 +326,7 @@ by what it takes to prove: `static` (readable from the source, no browser),
 | 12 | **Drive it for real** — screenshot the browser / run the screen | `browser` |
 | 13 | LCP < 2.5s, CLS < 0.1 | `delegated` → `web-perf` |
 | 14 | Native conventions, safe areas | `delegated` → `ios-design-review` / platform |
-| 15 | Wider a11y damage than your own change | `delegated` → `a11y-proof` |
+| 15 | Wider a11y damage than your own change | `delegated` → `a11y-toph` |
 
 **No browser available? That is a terminal state, not a failure.** `static` items are
 still mandatory — they need no render and there is no excuse for skipping them. Report in
@@ -355,8 +355,8 @@ report format.
   light+dark chart palette and mark/axis/legend rules. Don't restate them here.
 - **Poster / cover / print / static art object (90% visual) → `canvas-design`.**
 - **Terminal surfaces (CLI / TUI / tmux) → [references/terminal.md](references/terminal.md)
-  to design, `skillator:tui-proof` to prove.** Arwen owns what the screen should look like;
-  tui-proof owns the width matrix, the ASCII-fallback scan and driving a TUI with no pty.
+  to design, `skillator:tui-tron` to prove.** Arwen owns what the screen should look like;
+  tui-tron owns the width matrix, the ASCII-fallback scan and driving a TUI with no pty.
 - **"Audit / profile my page's performance" → `web-perf`** (Chrome-DevTools workflow). Arwen
   carries the design-time perf rules; web-perf runs the measured audit.
 - **Quick named theme for a static deck/report → `theme-factory`.** (Not for app design

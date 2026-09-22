@@ -10,7 +10,7 @@ description: >-
   explicit approval. NOT for a single trivial fast-forward, or non-git tasks.
 ---
 
-# Merge Agent — analyse branches, merge by risk
+# merge-smith — analyse branches, merge by risk
 
 Agents do the reading and the routing; **git does the merging on a throwaway
 integration branch**, so nothing is risked. The base branch (main/develop) is

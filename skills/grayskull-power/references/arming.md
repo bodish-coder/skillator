@@ -3,7 +3,7 @@
 Run once, on invoke. SKILL.md carries the one-line summary of each; this is what
 each one actually means.
 
-- **`ticket-master`** — read `TICKETS.md` at the repo root. Missing? Say so and
+- **`tickets-zordon`** — read `TICKETS.md` at the repo root. Missing? Say so and
   create it on the first ticket, not before. Report the open set: `B` bugs,
   `F` features, `A` agent-found.
 - **`ponytail`** — confirm the laziness level is active (the badge in the
@@ -21,7 +21,7 @@ each one actually means.
   it is armed: the *first* change to that project starts the app or build in the
   background and hands over the URL/command **before** the edits, so the user
   watches it run instead of waiting on a reply. Nothing runnable → say
-  `live-build: nothing to launch` once and drop it. Never auto-launch
+  `live-friday: nothing to launch` once and drop it. Never auto-launch
   simulators, migrations or deploys.
 - **`watch-cortana`** — on **Claude Code**, confirm the hooks are wired
   (`statusLine` runs `usage-watch … -Mode probe`, a `Stop` hook runs
@@ -37,7 +37,7 @@ percentage to give them — see `PLATFORMS.md`), so run
 Then state the active set in **one line** — not a feature tour:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · ponytail full · live-build armed (npm run dev) · handoff-watch armed at 92%
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · ponytail full · live-friday armed (npm run dev) · watch-cortana armed at 92%
 ```
 
 The banner is printed at the top of the reply, before any of this. It fires
@@ -66,10 +66,10 @@ Pi: `/skill:grayskull-power`. Codex / Cursor: read that skill's `SKILL.md` and
 follow it yourself. Print its banner once per session, then route per its table.
 
 Standing rules, no reminder needed:
-- `TICKETS.md` at the repo root is the board — `skillator:ticket-master` owns it.
+- `TICKETS.md` at the repo root is the board — `skillator:tickets-zordon` owns it.
 - Reproduce before fixing. Map with `codegraph` before proposing a remedy.
 - Before every commit: regression sweep, then `/code-review`
-  (`code-review:code-review`) over the staged diff. `skillator:sherlock-codes` is
+  (`code-review:code-review`) over the staged diff. `skillator:audit-sherlock` is
   the whole-app sweep — pre-release, handover, or unknown-cause rot — never a
   per-commit gate, and never inside an implementer subagent.
 - Staged work runs to the end. A plan with stages does not stop between them

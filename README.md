@@ -90,19 +90,19 @@ Every host is supposed to match a request against each skill's `description` and
 load the winner without being asked. On **Claude Code** that works, including
 headless: seven `claude -p` runs on 2.1.261 / Opus 5, from a throwaway fixture with
 no project instruction file, each loaded the right skill unprompted —
-`func-ui` ×5 from *"just a mockup … make it real"*, `resume-cortana` from
+`designui-galadriel` ×5 from *"just a mockup … make it real"*, `resume-cortana` from
 *"pick up the pending tasks from the handoffs"*, and `grayskull-power` from
 *"set me up for coding"*. On the other hosts the reflex is **unverified** from
 here; `PLATFORMS.md` says which.
 
 If you want activation to be deterministic rather than a reflex, either name the
-skill (`/func-ui`, or "use skillator's func-ui") or switch the router on for the
+skill (`/designui-galadriel`, or "use skillator's designui-galadriel") or switch the router on for the
 repo — invoke `grayskull-power` once and it writes `.skillator/grayskull.md`
 plus a one-line pointer in `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`. Those files
 are read at session start by every host that has them, so from then on the
 router loads first and routes everything else. Verified headless: the same bare
 `claude -p` in a fixture carrying those two files loaded `grayskull-power`
-first, then `func-ui` from its routing table.
+first, then `designui-galadriel` from its routing table.
 
 Nothing is installed globally to force this — the installers only place skills
 and the shared docs, never a line in your user-level `CLAUDE.md`/`AGENTS.md`.
@@ -117,10 +117,10 @@ Deactivating is deleting `.skillator/grayskull.md`.
   (from `handoff-cortana`) and *do* the pending work, stamping a marker in each
   so finished handoffs are skipped. Marker-aware and idempotent (safe to re-run /
   `/loop`). Invoke with `/resume-cortana`.
-- **func-ui** — turn an existing UI-only mockup/prototype into a real,
+- **designui-galadriel** — turn an existing UI-only mockup/prototype into a real,
   working system: scan the code, interview the user, emit workflow specs to
   confirm, then a dependency-ordered plan to wire the UI to a real backend
-  (stops at the confirmed plan). Invoke with `/func-ui`.
+  (stops at the confirmed plan). Invoke with `/designui-galadriel`.
 - **build family** (`build-vision` · `build-ultron` · `build-jarvis`) — three tiers of the "brainstorm then build" flow;
   pick by how much model firepower and ceremony you want:
   - **build-vision** — **`deep` tier** plans · **build tier**
@@ -133,12 +133,12 @@ Deactivating is deleting `.skillator/grayskull.md`.
     autonomous, no ceremony.
   - **build-jarvis** — **Opus** plans · **Opus + Sonnet** builds
     (Opus core, Sonnet the simple tasks). Autonomous, no ceremony.
-- **deploy-wizard** — step-by-step wizard that preps a project for the
+- **deploy-merlin** — step-by-step wizard that preps a project for the
   standard single-VPS deployment (Docker Compose + nginx + GitHub Actions): it
   interviews you for the specifics (domain, IP, SSH user, app slug, repo, ports),
   scaffolds the filled-in artifacts, and prints an ordered manual checklist for the
   human-only steps (deploy keys, GitHub secrets, DNS, TLS). Never collects secret
-  values, never touches servers/DNS. Invoke with `/deploy-wizard`.
+  values, never touches servers/DNS. Invoke with `/deploy-merlin`.
 - **deploy-niyoj** — the same single-VPS architecture with **CI removed**: deploys
   are triggered manually from the NiYoj desktop app, which feeds an idempotent
   `deploy/deploy.sh` to the server over one `BatchMode` SSH connection and streams
@@ -149,7 +149,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   something prompting, which `BatchMode` can never answer). Removing CI here means
   removing the deploy *trigger*, not build/test checks — it keeps or offers a
   check-only workflow, which never touches the server and so cannot race. Sibling
-  of `deploy-wizard`. Invoke with `/deploy-niyoj`.
+  of `deploy-merlin`. Invoke with `/deploy-niyoj`.
 - **mergeprep-oracle** — prepare a branch for a clean merge, **in place**: merge current
   base in, drop the paths it never meant to carry (auto-drops no-ops, escalates
   suspicious ones), and commit a handoff document recording every decision to the
@@ -186,7 +186,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
 - **grayskull-power** — one entry point that switches the whole skillator workflow on:
   arms the standing skills (reads `TICKETS.md`, checks `watch-cortana` is wired),
   prints the state in a single line, then routes each request to the one skill
-  that fits — across skillator (`sherlock-codes` for rot, `build-vision` for
+  that fits — across skillator (`audit-sherlock` for rot, `build-vision` for
   features, `design-arwen` for UI, `mergeprep-oracle`/`deploy-niyoj` for shipping) *and*
   the wider installed toolkit: `code-review`, `security-review`,
   `run`/`webapp-testing` to see it actually work, `workflow-authoring`/`mem-search`
@@ -202,13 +202,13 @@ Deactivating is deleting `.skillator/grayskull.md`.
   radius — callers, impact, affected tests — before the edit, hold a per-ticket
   scope contract with a two-file limit, tag every claim verified/inferred/guessed,
   sweep the regressions after the fix, and run `/code-review` over the staged
-  diff before every commit, capped at three passes. (`sherlock-codes` is the
+  diff before every commit, capped at three passes. (`audit-sherlock` is the
   whole-app sweep — pre-release or unknown-cause rot — never a per-commit gate.)
   Invoke with `/grayskull-power`.
 - **watch-cortana** — installs a statusline probe and a `Stop` hook that watch
   Claude Code's usage limits (5-hour, 7-day and context windows) and, the moment
   any of them crosses 92%, make the session preserve itself before it is cut off:
-  drain in-flight agents, sync `TICKETS.md` via `ticket-master` (statuses only),
+  drain in-flight agents, sync `TICKETS.md` via `tickets-zordon` (statuses only),
   then write the handoff with a status table matching the board ticket-for-ticket.
   The **7-day window is its own gate** — it refills in days, not hours, so it
   fires lower (90%) and adds a fourth step the others have no use for: put the
@@ -241,7 +241,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   do the bookkeeping — `init`, `stage`, `heartbeat`, `status`, `orphans`, where
   `orphans` is the only signal a dropped agent ever sends: silence. Invoke with
   `/relay-morpheus`.
-- **ticket-master** — Jira-style serialised ticket IDs for AI coding chats: bugs
+- **tickets-zordon** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with
   `[ ]` pending / `[~]` in-progress / `[!]` blocked / `[x]` done / `[-]` cancelled
@@ -251,8 +251,8 @@ Deactivating is deleting `.skillator/grayskull.md`.
   sweep, or on "ultracode" it switches to a **dynamic workflow** — one
   deterministic script that fixes and adversarially verifies every ticket in
   parallel, with structured verdicts coming back. The main session always owns
-  `TICKETS.md`; agents only report. Invoke with `/ticket-master`.
-- **sherlock-codes** — forensic audit of a whole application: parallel **Fable**
+  `TICKETS.md`; agents only report. Invoke with `/tickets-zordon`.
+- **audit-sherlock** — forensic audit of a whole application: parallel **Fable**
   investigators sweep backend, frontend, boundaries, data, dependencies, error
   paths, config, architecture, tests, dead code, project conventions
   (`CLAUDE.md`, lint config) and git history, reporting only findings with
@@ -264,7 +264,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   it at a PR (`sherlock #482`) and it will scope the audit to that diff and, on
   your yes, post the surviving findings back as inline `gh` comments with
   sha-anchored permalinks. Merging is not its job — that hands off to
-  `merge-smith`. Invoke with `/sherlock-codes`.
+  `merge-smith`. Invoke with `/audit-sherlock`.
 - **live-friday** — starts the project's app or build in the background **before**
   the first edit and hands over the URL, watch command, or `[n/total]` progress
   stream in the opening reply, so you watch the thing run while the agent works
@@ -273,13 +273,13 @@ Deactivating is deleting `.skillator/grayskull.md`.
   auto-launch simulators, migrations or deploys. Honest about compiled builds —
   progress and a still-runnable last-good binary, not a fake preview. Armed as
   standard by `grayskull-power`. Invoke with `/live-friday`.
-- **screenshot-loop** — the user drops test screenshots in one folder; the agent
+- **screenshot-argus** — the user drops test screenshots in one folder; the agent
   reads every one, acts on what they show, verifies, then deletes exactly the
   files it consumed so the folder is clean for the next round. The directory is
   asked once and remembered in `.screenshot-dir` at the repo root. Invoke with
-  `/screenshot-loop`.
+  `/screenshot-argus`.
 
-- **spec-trace** — for when what a feature must do exists only in a conversation
+- **spec-watson** — for when what a feature must do exists only in a conversation
   — a spoken brief, a chat thread, a ticket body, a handover — and the work will
   outlive the session. Requirements get stable ids (`R1`, `R2`, … never reused,
   never renumbered) alongside the original wording kept verbatim, and a trace
@@ -289,7 +289,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   testing left: the baseline preserved a spoken brief perfectly under pressure
   and still produced nothing anyone could mechanically check, while a re-check
   discipline turned out to have no failure to prevent across three fixtures, so
-  none was written. Invoke with `/spec-trace`.
+  none was written. Invoke with `/spec-watson`.
 
 - **skill-smith** — writing a skill, fixing one that never triggers, or working
   out why a rule keeps getting rationalized away. The description field decides
@@ -300,23 +300,23 @@ Deactivating is deleting `.skillator/grayskull.md`.
   and nothing ships until a fresh subagent has failed the scenario without it
   and passed with it. Invoke with `/skill-smith`.
 
-- **a11y-proof** — accessibility as a subject rather than a side-effect: an audit of
+- **a11y-toph** — accessibility as a subject rather than a side-effect: an audit of
   code nobody is redesigning, a filed a11y bug ("can't tab to it", "the toast never
   announces", "the error is only red"), or wiring axe/pa11y/Lighthouse into CI. Every
   claim carries run evidence — a Tab transcript, a measured rect, a computed contrast
   ratio with alpha resolved — because the failures that ship are the ones invisible to
   reading the source. Inside a design task accessibility stays `design-arwen`'s ship
   gate; this owns it everywhere else, and the two hand work back and forth. Invoke with
-  `/a11y-proof`.
+  `/a11y-toph`.
 
-- **tui-proof** — the same law, one surface over: a terminal UI is proven by capturing
+- **tui-tron** — the same law, one surface over: a terminal UI is proven by capturing
   frames, not by reading the render function. Every screen goes through a width matrix
   (60/80/100/120, ANSI stripped, no line over the window) because an agent builds a TUI
   at whatever width its own harness reports and ships a frame that is corrupt in every
   narrower terminal. Covers driving a TUI where there is no pty — tmux, and the
   tty-shaped capture for hosts that have none — plus the ASCII twin every non-ASCII
   glyph needs. The check lands in the project's own selftest, never a scratch file.
-  Invoke with `/tui-proof`.
+  Invoke with `/tui-tron`.
 
 ## Add a new skill
 

@@ -1,5 +1,5 @@
 ---
-name: deploy-wizard
+name: deploy-merlin
 description: >-
   Use when the user says "prep the deployment", "set up deploy", "deployment
   wizard", "get this ready to ship to my server", "scaffold the deploy", or is
@@ -9,7 +9,7 @@ description: >-
   deploys, or for the actual server administration.
 ---
 
-# Deploy Wizard — prep the standard VPS deployment
+# deploy-merlin — prep the standard VPS deployment
 
 Runs as a **wizard**: one step at a time, confirm before moving on. It gathers the
 deployment-specific values, scaffolds the filled-in config/scripts, and hands the

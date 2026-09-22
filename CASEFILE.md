@@ -134,8 +134,8 @@ on an investigator's word.
 - **H11** `.skillator/grayskull.md:11` vs `practice/prompts.md:63,75` —
   **The always-on layer orders every commit through a subagent fan-out that the
   committing agent is forbidden to spawn.** `CLAUDE.md` imports the activation
-  file, so every subagent in an activated repo reads "run `sherlock-codes` over
-  the staged diff before every commit". `sherlock-codes` is a Fable fan-out. The
+  file, so every subagent in an activated repo reads "run `audit-sherlock` over
+  the staged diff before every commit". `audit-sherlock` is a Fable fan-out. The
   implementer template says "4. Commit." and "Never spawn a subagent for part of
   it". Compounding: `sherlock-codes:21` itself says `/code-review` is the cheaper
   tool for a working diff, and `grayskull-power:192` routes diffs there.
@@ -144,7 +144,7 @@ on an investigator's word.
 
 ## Medium
 
-- **M1** `skills/ticket-master/SKILL.md:173-180` — dispatches carry
+- **M1** `skills/tickets-zordon/SKILL.md:173-180` — dispatches carry
   `label`/`phase`/`schema` and no `model`, against `PRACTICE.md:209` ("always
   name it explicitly — an omitted model inherits the session's, usually the most
   expensive"). "Work the board" runs every fix and verify agent on Opus.
@@ -163,7 +163,7 @@ on an investigator's word.
   an imperative step, against `PRACTICE.md:401` and `PLATFORMS.md:93` ("push and
   merge stay user-confirmed on every host"). Sibling `deploy-wizard:98` gets this
   right with an explicit "**Do NOT** `git push`".
-- **M6** `skills/screenshot-loop/SKILL.md:24-28` — "ask the user for the path
+- **M6** `skills/screenshot-argus/SKILL.md:24-28` — "ask the user for the path
   once, then write it:" is followed by a fenced block containing one real foreign
   absolute path, `C:\tools\Aewa-Airbender-aewag2\test_screenshots`. Read
   literally, that is the value to write.

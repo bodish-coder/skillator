@@ -34,8 +34,8 @@ that backwards is how a session produces confident wrong work.
 | A diff worth a second pair of eyes | PRACTICE §6, via `code-review:code-review` (`/simplify` for quality-only) |
 | Review findings landing on you | PRACTICE §6 — verify against this codebase before implementing |
 | Auth, secrets, input handling, anything user-facing | `security-review` |
-| Accessibility as the subject — an a11y/WCAG audit, "can't tab to it", "screen reader reads nothing", contrast failures, AT or CI wiring | `a11y-proof` (inside a design task it stays arwen's gate) |
-| A terminal UI's rendering as the subject — a TUI/curses/Textual/Rich screen that must be proven to draw, "wrong in a narrow terminal", "the footer wraps", mojibake box characters, or no pty to drive it | `tui-proof` |
+| Accessibility as the subject — an a11y/WCAG audit, "can't tab to it", "screen reader reads nothing", contrast failures, AT or CI wiring | `a11y-toph` (inside a design task it stays arwen's gate) |
+| A terminal UI's rendering as the subject — a TUI/curses/Textual/Rich screen that must be proven to draw, "wrong in a narrow terminal", "the footer wraps", mojibake box characters, or no pty to drive it | `tui-tron` |
 | The deliverable is itself a skill, or a skill isn't triggering | `skill-smith` |
 | Branch lifecycle | PRACTICE §8 — isolation, then the finish menu |
 
@@ -45,7 +45,7 @@ that backwards is how a session produces confident wrong work.
 |---|---|
 | About to change anything runnable — start it first so the user can watch | `live-friday` (armed by default) |
 | "Does this run?" — launch the app and look | `run` |
-| It launched and it is a TUI — now prove the frame fits the terminal | `tui-proof` (launch proves it starts, never that it draws) |
+| It launched and it is a TUI — now prove the frame fits the terminal | `tui-tron` (launch proves it starts, never that it draws) |
 | Drive a real browser: click, fill, read console | `webapp-testing`, `browse` |
 | Any chart, graph, dashboard — before the first line | `dataviz` |
 | Anything Claude/Anthropic/LLM-shaped — models, pricing, tools, agents | `claude-api` **before** opening the file |
@@ -77,16 +77,16 @@ re-check anything an agent asserts without evidence.
 
 | The request is… | Skill |
 |---|---|
-| A bug, a feature, "log this", "what's pending", "mark done" | `ticket-master` |
-| 4+ open tickets, a sweep, "ultracode", "work the board" | `ticket-master` (workflow mode) |
-| "why is this broken", audit a whole app, unknown-cause rot, pre-release sweep | `sherlock-codes` |
+| A bug, a feature, "log this", "what's pending", "mark done" | `tickets-zordon` |
+| 4+ open tickets, a sweep, "ultracode", "work the board" | `tickets-zordon` (workflow mode) |
+| "why is this broken", audit a whole app, unknown-cause rot, pre-release sweep | `audit-sherlock` |
 | Build a real feature, design-then-implement | `build-vision` (ceremony, Fable design) · `build-ultron` (all-Opus, no ceremony) · `build-jarvis` (Sonnet offload) |
 | Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`) |
-| A static/mock UI that needs to actually work | `func-ui` |
-| What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-trace` |
-| "check screenshot", or verify a change in a running app visually | `screenshot-loop` |
+| A static/mock UI that needs to actually work | `designui-galadriel` |
+| What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-watson` |
+| "check screenshot", or verify a change in a running app visually | `screenshot-argus` |
 | Ready to merge a branch | `mergeprep-oracle`, then `merge-smith` |
-| Ship to a VPS / set up deployment | `deploy-wizard`, then `deploy-niyoj` |
+| Ship to a VPS / set up deployment | `deploy-merlin`, then `deploy-niyoj` |
 | Session ending, context or usage running out | `handoff-cortana` |
 | Starting from someone else's handoff doc | `resume-cortana` |
 

@@ -35,7 +35,7 @@ sort "$tmp/ids" | uniq -d > "$tmp/dups"
 if [ -s "$tmp/dups" ]; then
   echo "FAIL: duplicate ticket IDs in $board" >&2
   echo "  An ID is permanent and means one thing. Two branches allocated the same" >&2
-  echo "  number and the merge kept both. Per ticket-master's collision rule, the" >&2
+  echo "  number and the merge kept both. Per tickets-zordon's collision rule, the" >&2
   echo "  LATER line takes a fresh number and keeps ' (was <ID>)' on it; the" >&2
   echo "  earlier one is never renumbered." >&2
   while read -r id; do

@@ -1,5 +1,5 @@
 ---
-name: a11y-proof
+name: a11y-toph
 description: >-
   Use when accessibility is the subject: an a11y or WCAG audit of existing
   code, a VPAT or compliance question, or a reported bug — "can't tab to it",
@@ -10,7 +10,7 @@ description: >-
   task is design-arwen's ship gate.
 ---
 
-# a11y-proof — accessibility as the subject, proven by running it
+# a11y-toph — accessibility as the subject, proven by running it
 
 ```
 NO ACCESSIBILITY CLAIM WITHOUT A RUN CHECK
@@ -32,7 +32,7 @@ record it before you touch a line) and §5 (the evidence gate, unchanged).
 Both skills care about the same floor. They are invoked at different moments and
 they own different halves, and neither restates the other's mechanics.
 
-| | `design-arwen` | `a11y-proof` |
+| | `design-arwen` | `a11y-toph` |
 |---|---|---|
 | **Owns a11y as** | a **gate inside a design task** — a constraint on what it is currently building | a **subject in its own right** — invoked against code nobody is redesigning |
 | **Trigger** | build / redesign / improve / critique an interface | audit, compliance question, filed a11y bug, screen-reader report, CI wiring |
@@ -52,7 +52,7 @@ fails contrast at the token level, a state is distinguished by colour alone with
 no room for a second signal, the fix costs a layout. Report the failing pairs
 and the constraint; do not repaint a product's brand inside an audit.
 
-Adjacent: `sherlock-codes` carries a11y as one lane of a whole-codebase sweep —
+Adjacent: `audit-sherlock` carries a11y as one lane of a whole-codebase sweep —
 it routes here for depth. `web-perf` owns measured vitals.
 
 ---
@@ -184,4 +184,4 @@ green report and a broken product coexist.
 - [references/checks.md](references/checks.md) — commands, snippets, keystrokes
 - [references/patterns.md](references/patterns.md) — the widget contracts
 - `skillator:design-arwen` — a11y as a gate inside a design task (§1)
-- `skillator:sherlock-codes` — whole-codebase audit; routes here for a11y depth
+- `skillator:audit-sherlock` — whole-codebase audit; routes here for a11y depth

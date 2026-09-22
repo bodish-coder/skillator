@@ -82,7 +82,7 @@ Two rows have now been tested; the rest are still the host's own claim.
 | prime-agent | **no** — no markdown-skill loader at all |
 
 The claude-code runs were headless, from a throwaway fixture outside any repo,
-with no `CLAUDE.md`/`AGENTS.md` in the cwd: `func-ui` loaded 5/5 from *"just a
+with no `CLAUDE.md`/`AGENTS.md` in the cwd: `designui-galadriel` loaded 5/5 from *"just a
 mockup … make it real"* (once under `--plugin-dir` + `--add-dir`, the GREEN
 harness shape), `resume-cortana` from *"pick up the pending tasks from the
 handoffs"*, `grayskull-power` from *"set me up for coding"*. This supersedes the
@@ -93,8 +93,8 @@ read-only --skip-git-repo-check` from a throwaway fixture in the system temp dir
 holding only `index.html` + `app.js` (hardcoded data, dead button), no
 `AGENTS.md` anywhere in the tree, and a `~/.codex/AGENTS.md` that never mentions
 skills. From *"just a mockup … the buttons don't do anything … make it real"* its
-first message was *"I'm using the func-ui skill for this conversion"*, followed by
-a read of `~/.agents/skills/func-ui/SKILL.md`. From *"set me up for coding on this
+first message was *"I'm using the designui-galadriel skill for this conversion"*, followed by
+a read of `~/.agents/skills/designui-galadriel/SKILL.md`. From *"set me up for coding on this
 project — activate the programming skills"* it opened with *"I'm using the
 grayskull-power skill"* and read that `SKILL.md`, then `PLATFORMS.md`. A third run
 of the same prompt in an **empty** directory loaded nothing and asked which
@@ -105,7 +105,7 @@ skills are installed, and that it loaded from `~/.agents/skills`, not
 
 **cursor (not verified — and the reason is local).** `cursor-agent`
 2026.09.02-c22c1a3, `-p --output-format stream-json --force`, same fixtures.
-Two `func-ui`-triggering prompts produced a full plan without ever naming or
+Two `designui-galadriel`-triggering prompts produced a full plan without ever naming or
 reading a skill. The *"activate the programming skills"* prompt did better: the
 agent's **first tool call**, before any search, was a read of
 `~/.codex/skills/grayskull-power/SKILL.md` — a name and path it was never given —

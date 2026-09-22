@@ -8,7 +8,7 @@ description: >-
   AI can continue the work with zero loss of context, plan, or intent.
 ---
 
-# Session Handoff
+# handoff-cortana — the session, written down
 
 Produce a single, self-contained Markdown handoff document that lets the next
 worker (human or AI) resume **exactly where this session left off** — with the

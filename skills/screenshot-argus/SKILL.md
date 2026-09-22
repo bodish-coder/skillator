@@ -1,5 +1,5 @@
 ---
-name: screenshot-loop
+name: screenshot-argus
 description: >-
   Use when the user says "screenshots", "check the screenshots", "I dropped
   new screenshots", "test screenshots", "look at the latest run", or gives a
@@ -9,7 +9,7 @@ description: >-
   assets — everything in that folder is treated as disposable.
 ---
 
-# screenshot-loop — read, act, delete
+# screenshot-argus — read, act, delete
 
 The user drops screenshots in one folder. You read them, act, then delete the
 ones you read. The folder is a mailbox, not an archive.

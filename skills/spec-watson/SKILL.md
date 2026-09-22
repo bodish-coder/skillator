@@ -1,5 +1,5 @@
 ---
-name: spec-trace
+name: spec-watson
 description: >-
   Use when what a feature must do exists only in conversation — a spoken brief,
   a chat thread, a ticket body, a handover — and the work outlives the session:
@@ -9,7 +9,7 @@ description: >-
   requirements already carrying stable identifiers, and not for a one-off edit.
 ---
 
-# Spec trace
+# spec-watson — a brief that outlives the conversation
 
 The requirement list is an artifact with identifiers, or it is not an artifact.
 
@@ -75,7 +75,7 @@ names. Three outcomes per row:
 - **Drifted.** The file exists, the behaviour does not match. Fix or file it.
 - **Gone.** The Evidence path no longer exists. The row is now `NONE`.
 
-Anything not `Holds` becomes a task or a ticket (`skillator:ticket-master`),
+Anything not `Holds` becomes a task or a ticket (`skillator:tickets-zordon`),
 never a note in a reply. The reply is the thing that does not survive.
 
 **Do not add a re-check discipline section to this skill or to any skill that
@@ -111,6 +111,6 @@ other kind of work, and restating them here is how they drift:
 | Reviewing the plan before anyone builds it | `PRACTICE.md` §3 |
 | Building, test-first, one agent per task | `PRACTICE.md` §4 |
 | Claiming it works | `PRACTICE.md` §5 |
-| Turning findings into tickets | `skillator:ticket-master` |
+| Turning findings into tickets | `skillator:tickets-zordon` |
 
 Templates and the worked example: [references/artifacts.md](references/artifacts.md).

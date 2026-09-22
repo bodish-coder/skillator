@@ -19,7 +19,7 @@ right". Seen.
 3. **`webapp-testing`** — when the check needs real interaction scripted and repeated.
 4. **Native:** the iOS Simulator / Android emulator, or `ios-design-review` when the app
    runs on real hardware.
-5. **`screenshot-loop`** — when the user is driving and dropping screenshots in for you.
+5. **`screenshot-argus`** — when the user is driving and dropping screenshots in for you.
    Read them, act, delete the consumed ones.
 
 If none is available, **say so explicitly and report in SKILL.md's terminal-state shape**

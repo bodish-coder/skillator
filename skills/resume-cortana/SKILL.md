@@ -10,7 +10,7 @@ description: >-
   that live outside a handoff document.
 ---
 
-# Handoff Resume (execute a handoff doc)
+# resume-cortana — execute a handoff doc
 
 A handoff doc is a plan someone already wrote down — a status table of what's
 done vs. not, and a "how to resume" list of concrete next steps. This skill is

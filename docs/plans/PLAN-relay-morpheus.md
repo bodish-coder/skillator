@@ -28,10 +28,10 @@ Six asks from the user, 2026-09-22:
 | Piece | Owns |
 |---|---|
 | `WORKFLOW.md` | workflow mode, phase→script mapping, host table. `resumeFromRunId` is **same-session only** — that is the hole. |
-| `skills/handoff-watch` | statusLine `probe` + `Stop` `gate`, threshold, 3-step preserve order. Takes the **max** of 5h/7d/context — user wants the 7-day window to be the hard stop. |
+| `skills/watch-cortana` | statusLine `probe` + `Stop` `gate`, threshold, 3-step preserve order. Takes the **max** of 5h/7d/context — user wants the 7-day window to be the hard stop. |
 | `skills/handoff` · `resume-cortana` | writing and executing a handoff doc. |
 | `skills/the build-* skills` | design→build phases, task blocks, `TRACE:`/`SATISFIES:`. |
-| `skills/ticket-master` | `TICKETS.md`, workflow mode at 4+ open. |
+| `skills/tickets-zordon` | `TICKETS.md`, workflow mode at 4+ open. |
 
 The gap is a **durable run file** that outlives the session, plus the rules that
 say to keep going and the monitoring that notices when an agent died.
@@ -88,7 +88,7 @@ surface; S1's resume scenario says agents already read a mid-run tree
 correctly, so relay says nothing about that.
 
 ### [x] S3 — monitoring + restart  (F16)
-`skills/relay-morpheus/hooks/relay-morpheus.sh` + `relay-morpheus.ps1` (mirror pair, like handoff-watch):
+`skills/relay-morpheus/hooks/relay-morpheus.sh` + `relay-morpheus.ps1` (mirror pair, like watch-cortana):
 `relay init|stage|heartbeat|status|orphans`. `orphans` lists stages `[~]` with a
 heartbeat older than N minutes — those are the network-loss casualties. The model
 reads `orphans`, redispatches from the stored prompt, and never double-commits
@@ -159,7 +159,7 @@ pressured to the point where obedience is the right answer stops discriminating
 — fine for a RED whose claim is "nothing gets written", fatal for a GREEN.
 
 Sweep: `check-tickets`, `check-grayskull-sync`, `baseline-harness selftest`,
-`relay-morpheus.sh selftest`, `relay-morpheus.ps1 selftest`, `handoff-watch selftest`, plus a
+`relay-morpheus.sh selftest`, `relay-morpheus.ps1 selftest`, `watch-cortana selftest`, plus a
 cross-mirror round trip. **A75** filed for the harness's `bypassPermissions`
 command, which this host's classifier refuses.
 

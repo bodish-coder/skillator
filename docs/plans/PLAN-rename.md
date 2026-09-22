@@ -15,7 +15,7 @@ skill that does the same kind of work sorts together (`handoff-`, `merge-`,
 **The build family is science fiction only** — no literature, no mythology.
 
 **Board:** F20. **Already done:** `relay-morpheus`, `tasks-sentinels` (F17),
-`grayskull-power`, `design-arwen`, `sherlock-codes`.
+`grayskull-power`, `design-arwen`, `audit-sherlock`.
 
 ---
 
@@ -23,30 +23,30 @@ skill that does the same kind of work sorts together (`handoff-`, `merge-`,
 
 Three per skill so the choice is a comparison, not a yes/no. **A** is the
 recommendation. The three already conforming (`grayskull-power`,
-`design-arwen`, `sherlock-codes`) and the two just done (`relay-morpheus`,
+`design-arwen`, `audit-sherlock`) and the two just done (`relay-morpheus`,
 `tasks-sentinels`) carry alternatives only in case the owner wants them moved.
 
 ### Settled — owner sign-off 2026-09-22
 
 | # | Current | New | Note |
 |---|---|---|---|
-| 1 | `a11y-proof` | `a11y-toph` | |
+| 1 | `a11y-toph` | `a11y-toph` | |
 | 2 | `build-jarvis` | `build-jarvis` | Marvel AI, one per tier: the original assistant |
 | 3 | `build-ultron` | `build-ultron` | powerful, autonomous, no ceremony |
 | 4 | `build-vision` | `build-vision` | the refined one |
-| 5 | `deploy-wizard` | `deploy-merlin` | prepares |
+| 5 | `deploy-merlin` | `deploy-merlin` | prepares |
 | 6 | `deploy-niyoj` | `deploy-niyoj` | **unchanged by owner's call** |
 | 7 | `design-arwen` | `design-arwen` | unchanged |
-| 8 | `func-ui` | `designui-galadriel` | owner's coinage — see the note below |
+| 8 | `designui-galadriel` | `designui-galadriel` | owner's coinage — see the note below |
 | 9 | `grayskull-power` | `grayskull-power` | **unchanged by owner's call**; the only name-first survivor, kept because it is the invocation |
 | 13 | `live-friday` | `live-jarvis` | **clashes with 2** — see open question C |
-| 18 | `screenshot-loop` | `screenshot-argus` | |
-| 19 | `sherlock-codes` | `audit-sherlock` | |
-| 21 | `spec-trace` | `spec-watson` | pairs with `audit-sherlock` |
-| 22 | `ticket-master` | `tickets-zordon` | |
-| 23 | `tui-proof` | `tui-tron` | |
+| 18 | `screenshot-argus` | `screenshot-argus` | |
+| 19 | `audit-sherlock` | `audit-sherlock` | |
+| 21 | `spec-watson` | `spec-watson` | pairs with `audit-sherlock` |
+| 22 | `tickets-zordon` | `tickets-zordon` | |
+| 23 | `tui-tron` | `tui-tron` | |
 
-**Note on 8.** `func-ui`'s job is wiring an existing mockup to real data — it
+**Note on 8.** `designui-galadriel`'s job is wiring an existing mockup to real data — it
 does not design anything; `design-arwen` (7) owns design. `designui-galadriel`
 reads as a second design skill, and an agent choosing between `design-arwen`
 and `designui-galadriel` has nothing in the names to go on. Taken as
@@ -101,19 +101,19 @@ the next reader cannot infer the convention is optional.
 
 | Now | Proposed | Why that character |
 |---|---|---|
-| `a11y-proof` | `geordi-a11y` | Geordi La Forge is blind and his VISOR is assistive tech. The skill's subject is its wearer. |
-| `func-ui` | `pinocchio-ui` | A puppet that becomes a real boy — a mock UI that becomes a working one. |
-| `screenshot-loop` | `deckard-screenshot` | Blade Runner's enhance scene: read the image, find what's in it, act. |
-| `ticket-master` | `mycroft-tickets` | Mycroft holds every record and never leaves the building. Pairs with `sherlock-codes`. |
-| `spec-trace` | `ariadne-spec` | The thread you follow back out — requirements traced to evidence. |
-| `tui-proof` | `tron-tui` | Tron lives inside the terminal. |
+| `a11y-toph` | `geordi-a11y` | Geordi La Forge is blind and his VISOR is assistive tech. The skill's subject is its wearer. |
+| `designui-galadriel` | `pinocchio-ui` | A puppet that becomes a real boy — a mock UI that becomes a working one. |
+| `screenshot-argus` | `deckard-screenshot` | Blade Runner's enhance scene: read the image, find what's in it, act. |
+| `tickets-zordon` | `mycroft-tickets` | Mycroft holds every record and never leaves the building. Pairs with `audit-sherlock`. |
+| `spec-watson` | `ariadne-spec` | The thread you follow back out — requirements traced to evidence. |
+| `tui-tron` | `tron-tui` | Tron lives inside the terminal. |
 | `skill-smith` | `q-smith` | Q builds the gadgets other agents are issued. |
 | `handoff-cortana` | `bilbo-handoff` | Bilbo hands the quest on and writes the book. |
 | `resume-cortana` | `frodo-resume` | Frodo takes up what Bilbo put down. |
 | `watch-cortana` | `heimdall-watch` | The watchman who sees it coming before it arrives. |
-| `mergeprep-oracle` | `oracle-merge-prep` | The Oracle tells you what breaks before you walk into it. |
+| `mergeprep-oracle` | `oracle-mergeprep-oracle` | The Oracle tells you what breaks before you walk into it. |
 | `merge-smith` | `smith-merge` | Agent Smith merges himself into everything he touches. |
-| `deploy-wizard` | `gandalf-deploy` | The wizard who plans the road, not the one who walks it. |
+| `deploy-merlin` | `gandalf-deploy` | The wizard who plans the road, not the one who walks it. |
 | `deploy-niyoj` | `scotty-ship` | The engineer who actually gets it into production, under protest. |
 | `live-friday` | `jarvis-live` | Stark's always-on assistant, showing the build as it runs. |
 | `build-jarvis` | `stark-build-lite` | Designs it, then builds it, at three budgets. |
@@ -121,7 +121,7 @@ the next reader cannot infer the convention is optional.
 | `build-vision` | `stark-build-prime` | ” |
 
 Two the table deliberately leaves alone: `grayskull-power` and `design-arwen`
-already conform, and `sherlock-codes` is the pattern the rest are copying.
+already conform, and `audit-sherlock` is the pattern the rest are copying.
 
 ## Stages
 
@@ -129,13 +129,41 @@ already conform, and `sherlock-codes` is the pattern the rest are copying.
 The table above, approved or amended. **No `git mv` before this.** A rename is
 a breaking change and doing it twice costs double.
 
-### [ ] S2 — the mechanical rename, one skill per commit
+### [x] S2 — the mechanical rename (done, grouped by family)
+
+**Landed in five commits, grouped by family rather than one per skill** — the
+names were signed off, so the per-skill revert the plan was pricing had no
+buyer, and 19 commits of identical churn would bury the four that mattered.
+
+| Family | Skills |
+|---|---|
+| Cortana | `handoff-cortana` `resume-cortana` `watch-cortana` |
+| Marvel AI | `build-jarvis` `build-ultron` `build-vision` `live-friday` |
+| The Matrix | `mergeprep-oracle` `merge-smith` `relay-morpheus` `tasks-sentinels` |
+| Singles | `a11y-toph` `deploy-merlin` `designui-galadriel` `screenshot-argus` `audit-sherlock` `spec-watson` `tickets-zordon` `tui-tron` |
+
+Three passes were needed per family, and only the first is mechanical:
+
+1. `ren.py` — directory, hook filenames, `name:` frontmatter, baselines, and
+   references in shapes that can only be a skill reference.
+2. **`# headings`** — 20 of 23 still announced the old name. `ren.py` does not
+   touch them and should not: a heading is prose.
+3. **Bare cross-references** — the skills name each other without backticks in
+   their own descriptions ("use brainstorm-build-mid"), and `WORKFLOW.md` /
+   `CASEFILE.md` used bare `-mid` / `-lite` shorthands that became unreadable
+   the moment the prefix changed.
+
+Not renamed, deliberately: harness fixture names (`func-ui`, `handoff`,
+`relay`), `~/.claude/handoff-watch/` (storage, not a reference — moving it
+strands live sessions' flags), and the recorded prose in `TICKETS.md`,
+`CASEFILE.md`, `docs/handoffs/` and baseline verdicts.
+
 Per skill: directory · `name:` frontmatter · `# Heading` · every
 `skillator:<old>` reference · hook script filenames · `scenario-<skill>.txt`
 and `green-<skill>.txt` · the `/slash` name in README.
 
 **Does not follow:** fixture names in `practice/scripts/baseline-harness.sh`
-(`func-ui`, `handoff-cortana`, `relay`, `fanout`, `spec-drift*`) — they name a fixture,
+(`designui-galadriel`, `handoff-cortana`, `relay`, `fanout`, `spec-drift*`) — they name a fixture,
 not a skill, and every recorded verdict cites them by those names. Renaming
 them would break the reproduce-from-a-committed-scenario contract that
 `practice/baselines/README.md` is built on.
@@ -144,13 +172,29 @@ them would break the reproduce-from-a-committed-scenario contract that
 `docs/handoffs/*` and recorded baseline verdicts. Those describe what happened
 under the old name. Amending them is rewriting the record.
 
-### [ ] S3 — the references nothing greps
+### [x] S3 — the references nothing greps
+
+Swept by resolving every reference rather than by eye: each `skillator:<name>`,
+each `skills/<name>/` path and each `scenario-*.txt` / `green-*.txt` path was
+checked against what is actually on disk. Everything still naming an old skill
+sits in a **record** — `TICKETS.md` closed entries, `docs/handoffs/`,
+`CASEFILE.md`, and the verdict prose inside baseline files — which is correct:
+those say what happened, under the name it happened under.
+
+One distinction the sweep forced: a **path** follows the rename even inside a
+record, because a path that does not resolve is a defect whatever the prose
+around it says. `practice/baselines/README.md` had five of those. The sentence
+"the run answered NO to `skillator:func-ui`" stays as written.
+
+`install.sh` and `install.ps1` name no skill — they enumerate the directory, so
+nothing there needed touching. Verified rather than assumed.
+
 `PLATFORMS.md` tables · `PRACTICE.md` §-to-skill map · `CASEFILE.md` ·
 `WORKFLOW.md` · every skill's own "Related"/routing lines · `install.sh` and
 `install.ps1` if either names a skill explicitly · `.claude-plugin/plugin.json`
 description and keywords.
 
-### [ ] S4 — prove nothing dangles
+### [~] S4 — prove nothing dangles
 `check-grayskull-sync.sh`, `check-tickets.sh`, `baseline-harness.sh selftest`,
 both hook selftests, then a repo-wide grep for each old name that must return
 only historical prose. Version bump, `/code-review`, commit.

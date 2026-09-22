@@ -1,15 +1,15 @@
 ---
-name: tui-proof
+name: tui-tron
 description: >-
   Use when a terminal UI's rendering is the subject: a TUI, curses, Textual,
   Rich, Ink or bare-ANSI screen that must be proven to draw — "wrong in a
   narrow terminal", "the footer wraps", "columns stop lining up at 80", "it
   redraws garbage", "the box characters are mojibake", "ΓöÇ" — or there is no
   pty to drive it: no tmux, stdin closed, winpty ASSERT_CONDITION. NOT for a
-  web or native GUI — that is `a11y-proof` and `design-arwen`.
+  web or native GUI — that is `a11y-toph` and `design-arwen`.
 ---
 
-# tui-proof — a terminal UI is proven by capturing frames, at every width
+# tui-tron — a terminal UI is proven by capturing frames, at every width
 
 ```
 NO RENDERING CLAIM WITHOUT A CAPTURED FRAME AT EVERY WIDTH IN THE MATRIX
@@ -31,14 +31,14 @@ decoration bans — do not restate them here.
 
 ---
 
-## 1. Scope — and the lines against `run`, `design-arwen`, `a11y-proof`
+## 1. Scope — and the lines against `run`, `design-arwen`, `a11y-toph`
 
 | | Owns | Hands here |
 |---|---|---|
 | `run` | launching the app so a human can see it | the moment a TUI is on screen — launch proves it starts, never that it draws |
 | `design-arwen` | what the screen should look like — hierarchy, colour, wayfinding | a layout that must survive a width it was not designed at |
-| `a11y-proof` | the same evidence law, for a browser | nothing. Different surface, no overlap |
-| **`tui-proof`** | **that the frame fits the terminal, in every terminal** | a fix needing a design decision → back to arwen |
+| `a11y-toph` | the same evidence law, for a browser | nothing. Different surface, no overlap |
+| **`tui-tron`** | **that the frame fits the terminal, in every terminal** | a fix needing a design decision → back to arwen |
 
 **Route here, not to `run`:** the ask is whether the screen is *correct*, not
 whether the process starts. `run` ends at "it launched"; this begins there.
@@ -307,4 +307,4 @@ anything.
 - [references/capture.md](references/capture.md) — tmux, winpty, and the tty-shaped capture
 - `run` — launches the app; hands here the moment a TUI is drawing
 - `skillator:design-arwen` — owns what the screen should look like (§1)
-- `skillator:a11y-proof` — the same law for a browser surface
+- `skillator:a11y-toph` — the same law for a browser surface

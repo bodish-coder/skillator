@@ -1,4 +1,4 @@
-# RUN-1 - r2d2-relay: staged runs that survive sessions
+# RUN-1 - relay-morpheus: staged runs that survive sessions
 plan: docs/plans/PLAN-relay-morpheus.md
 started: 2026-09-22T03:15Z   updated: 2026-09-22T04:37Z
 
@@ -7,15 +7,15 @@ started: 2026-09-22T03:15Z   updated: 2026-09-22T04:37Z
 |---|-------|-------|-------|-----------|--------|
 | 1 | S0 plan+tickets | x | model:opus-5 | 2026-09-22T03:15Z | 00c4854 |
 | 2 | S1 RED baselines | x | model:opus-5 | 2026-09-22T03:15Z | 00c4854 |
-| 3 | S2 r2d2-relay skill + run file | x | model:opus-5 | 2026-09-22T03:15Z | 0ef3e0f |
-| 4 | S3 r2d2-relay scripts + orphans | x | model:opus-5 | 2026-09-22T03:15Z | 0ef3e0f |
-| 5 | S4 replicator-agent (RED debt A76) | x | model:opus-5 | 2026-09-22T04:37Z | pending-commit |
-| 6 | S5 handoff-watch weekly gate | x | model:opus-5 | 2026-09-22T03:39Z | edbd432 |
+| 3 | S2 relay-morpheus skill + run file | x | model:opus-5 | 2026-09-22T03:15Z | 0ef3e0f |
+| 4 | S3 relay-morpheus scripts + orphans | x | model:opus-5 | 2026-09-22T03:15Z | 0ef3e0f |
+| 5 | S4 tasks-sentinels (RED debt A76) | x | model:opus-5 | 2026-09-22T04:37Z | pending-commit |
+| 6 | S5 watch-cortana weekly gate | x | model:opus-5 | 2026-09-22T03:39Z | edbd432 |
 | 7 | S6 grayskull rules | x | model:opus-5 | 2026-09-22T03:39Z | edbd432 |
 | 8 | S7 GREEN + ship | x | model:opus-5 | 2026-09-22T03:40Z | 538b975 |
 
 ## In flight
-### stage 5 - S4 replicator-agent  (SHIPPED; the RED debt is A76)
+### stage 5 - S4 tasks-sentinels  (SHIPPED; the RED debt is A76)
 Left `!` on purpose. No valid RED exists, so no skill was written; both
 scenarios are void and the reason is in each file. To finish it, the next
 session needs a fixture whose stages live in genuinely separate modules -

@@ -1,5 +1,5 @@
 ---
-name: ticket-master
+name: tickets-zordon
 description: >-
   Use when the user reports a bug or asks for a feature, says "log this",
   "what's pending", "ticket", "B3", "F12", "A4", "next ticket number", "mark
@@ -10,7 +10,7 @@ description: >-
   replacement, NOT for syncing to Jira/GitHub Issues.
 ---
 
-# ticket-master — serialised tickets, worked as a workflow
+# tickets-zordon — serialised tickets, worked as a workflow
 
 One file, `TICKETS.md`, at the repo root. It is the source of truth. Bugs are
 `B<n>`, features are `F<n>`, agent-found issues are `A<n>`, sub-parts are the
@@ -186,7 +186,7 @@ write the ticket.**
 
 Pending rows are not immortal, and a rising pending count is a symptom to
 diagnose — not a backlog to admire. Run a drain **before any handover, release,
-or merge-prep**, and whenever a single session has added more pending rows than
+or mergeprep-oracle**, and whenever a single session has added more pending rows than
 it closed. (Both are checkable on the spot; "has it grown since last time" is
 not — no prior count is stored anywhere.) A drain **re-verifies the pending rows
 against the tree, not against their own text**:
@@ -362,22 +362,22 @@ holding the whole board, so the user can open it from any device instead of
 scrolling back for the last list. The chat list is still the primary answer; the
 artifact is the durable copy.
 
-`skills/ticket-master/board/artifact.mjs` bakes `TICKETS.md` into an
+`skills/tickets-zordon/board/artifact.mjs` bakes `TICKETS.md` into an
 Artifact-shaped HTML file (no `<!doctype>`/`<html>`/`<body>` — the wrapper adds
 those). From the repo root:
 
 ```sh
-node <skills>/ticket-master/board/artifact.mjs            # ./TICKETS.md -> ./.tickets-board.html
-node <skills>/ticket-master/board/artifact.mjs --selftest # parser + count-line check
+node <skills>/tickets-zordon/board/artifact.mjs            # ./TICKETS.md -> ./.tickets-board.html
+node <skills>/tickets-zordon/board/artifact.mjs --selftest # parser + count-line check
 ```
 
-`<skills>` is wherever ticket-master is installed (`~/.claude/skills`,
+`<skills>` is wherever tickets-zordon is installed (`~/.claude/skills`,
 `~/.agents/skills`, …); in the skillator repo itself it is `skills/`. Add
 `.tickets-board.html` to `.gitignore` — it is generated, never committed.
 
 ### Publish and republish
 
-1. Regenerate: `node <skills>/ticket-master/board/artifact.mjs`
+1. Regenerate: `node <skills>/tickets-zordon/board/artifact.mjs`
 2. Find the existing board — `Artifact` with `action: "list"`, look for the title
    `TICKETS · <repo>`. **The first publish of a session must look**, because
    publishing without a `url` from a conversation that did not publish it creates

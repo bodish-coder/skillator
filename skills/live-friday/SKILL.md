@@ -6,11 +6,11 @@ description: >-
   or whenever a change is about to be made to a project that has a runnable
   surface — JS/web dev server, Rust, C++, Python, Go, Electron, mobile or a
   plain CLI. Armed as standard by grayskull-power. NOT for taking screenshots
-  (screenshot-loop) and NOT a substitute for tests — it is exposure, not
+  (screenshot-argus) and NOT a substitute for tests — it is exposure, not
   verification.
 ---
 
-# live-build — start it first, then work
+# live-friday — start it first, then work
 
 The default failure this fixes: the agent edits for five minutes, *then* runs the
 app, and the user has spent five minutes watching a spinner with nothing to look
@@ -109,7 +109,7 @@ than implying a preview exists.
 - `run` — the deeper "launch and drive this project's app" skill; use it when the
   point is to *verify* a change in the running app rather than to expose it early.
   `live-friday` starts things; `run` inspects them.
-- `screenshot-loop` — the return path: the user screenshots what they saw here
+- `screenshot-argus` — the return path: the user screenshots what they saw here
   and drops it in the folder.
 - `grayskull-power` — arms this as standard, so the first reply of any change to
   a runnable project carries a `live:` line.

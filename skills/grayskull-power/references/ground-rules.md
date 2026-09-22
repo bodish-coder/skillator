@@ -56,18 +56,18 @@ it afterwards. Run the callers you named, plus `codegraph affected <changed
 files>` for the tests that cover them. Green, or the fix is not done.
 
 Then **`code-review:code-review` over the staged diff** — the cheap, correct tool
-for a working diff, and the one `sherlock-codes` itself points at for this job.
+for a working diff, and the one `audit-sherlock` itself points at for this job.
 Scope it to the files in this commit (`git diff --cached --name-only`), so a
 finding is about this change and not the file's whole history. Loop:
 
 1. Findings? Fix them, re-stage, run it again.
-2. Real but out of scope → `A` ticket via `ticket-master`, then commit.
+2. Real but out of scope → `A` ticket via `tickets-zordon`, then commit.
 3. Clean → commit, then `codegraph sync` so the map matches the tree.
 
 Cap at 3 passes. Still surfacing new findings on the third → stop and
 `AskUserQuestion`. Never commit past a finding by declaring it unrelated.
 
-**`sherlock-codes` is the whole-app sweep, not a per-commit gate.** Run it
+**`audit-sherlock` is the whole-app sweep, not a per-commit gate.** Run it
 before a release or handover, on a repo with unknown-cause rot, or when the user
 asks for it by name. It is a Fable fan-out over the entire codebase; wiring it
 into every commit both burns the budget and is impossible for an implementer

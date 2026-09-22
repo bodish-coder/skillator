@@ -7,10 +7,10 @@ description: >-
   when the user says "staged workflow", "keep going across sessions", "resume
   the run", "what was in flight", or asks why a dispatched agent went quiet.
   NOT for writing a session handoff (`handoff-cortana`) and NOT for the board
-  (`ticket-master`).
+  (`tickets-zordon`).
 ---
 
-# Relay (staged runs that outlive the session)
+# relay-morpheus — staged runs that outlive the session
 
 A staged run has two records. The transcript, which dies with the session, and
 the tree, which does not. Everything that matters has to be in the second one

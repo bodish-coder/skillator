@@ -11,7 +11,7 @@ description: >-
   work.
 ---
 
-# Brainstorm (deep tier) → Build (build tier) — with ceremony
+# build-vision — creative design, build tier, full ceremony
 
 The design pass runs on the **`deep` tier** — creative design thinking. The
 **`build` tier** is the strongest coder and implements the whole thing. A skill
@@ -85,7 +85,7 @@ VERIFICATION: <the concrete end-to-end check that proves it works —
               the exact command and the expected output>
 ```
 
-`REQUIREMENTS` and `TRACE` are the same two slots `skillator:spec-trace` exists
+`REQUIREMENTS` and `TRACE` are the same two slots `skillator:spec-watson` exists
 for, inlined here because prime already writes a design file and a second
 artifact would only drift from it. Read that skill when the requirements arrive
 as conversation rather than as a written brief.
@@ -167,7 +167,7 @@ NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
 Then, on anything bigger than a bounded change, dispatch **one reviewer over the
 whole diff** on the `deep` tier (PRACTICE.md §6) — the design file plus the diff,
 never the session history (`code-review:code-review`, or
-`skillator:sherlock-codes` on a large surface). This pass is prime's alone:
+`skillator:audit-sherlock` on a large surface). This pass is prime's alone:
 -mid and -lite skip it by design.
 
 Failures and findings both feed rework.
@@ -185,7 +185,7 @@ Append an outcome section to the same session `.md`:
 - Tests:     <verification run + actual result: pass/fail + evidence>
 - Trace:     <the TRACE table, updated to what is now true — every id either
              naming a real path:symbol and path:test, or NONE. An id still on
-             NONE here is unbuilt work, and goes to `ticket-master` before the
+             NONE here is unbuilt work, and goes to `tickets-zordon` before the
              session closes rather than into this line as prose.>
 - Deviations:<where the build differed from the design, and why>
 ```

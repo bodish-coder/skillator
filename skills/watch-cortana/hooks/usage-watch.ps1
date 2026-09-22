@@ -11,7 +11,7 @@
 param([ValidateSet('probe','gate','check')][string]$Mode = 'probe', [string]$Then)
 
 # The state dir keeps its original name on purpose - see the sh twin.
-$dir      = Join-Path $HOME '.claude/handoff-watch'
+$dir      = Join-Path $HOME '.claude/watch-cortana'
 $pctLimit = if ($env:CLAUDE_USAGE_HANDOFF_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_PCT } else { 92 }
 # The 7-day window is watched separately and lower. The 5-hour window refills
 # in hours, so crossing it is a pause; the weekly one does not, so crossing it
@@ -55,7 +55,7 @@ function Get-WeeklyReason($pct, $limit) {
 }
 
 function Get-Reason($pct, $limit) {
-  "Usage has reached $pct% of the limit (threshold $limit%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it. Then tell the user where the file is and stop."
+  "Usage has reached $pct% of the limit (threshold $limit%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:tickets-zordon to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it. Then tell the user where the file is and stop."
 }
 
 if ($Mode -eq 'check') {

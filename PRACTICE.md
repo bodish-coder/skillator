@@ -344,7 +344,7 @@ run**.
 over the whole diff with crafted context — the design file and the diff by path,
 never the session history — on the **deep** tier, never the session default.
 [`practice/prompts.md` §4](practice/prompts.md#4-final-reviewer) is the template.
-`code-review:code-review` and `skillator:sherlock-codes` are the packaged
+`code-review:code-review` and `skillator:audit-sherlock` are the packaged
 alternatives on a large surface. Findings feed rework and the Outcome section
 gets updated, so the record stays true.
 
@@ -477,8 +477,8 @@ and `grayskull-power` still routes to those:
 |---|---|
 | `skillator:design-arwen` | The UI/UX design itself — run it **as** the design phase when the deliverable is an interface, and its `references/canvas.md` is §1's visual companion |
 | `skillator:live-friday` | The app running before the first edit |
-| `skillator:sherlock-codes` | A whole-codebase forensic audit |
-| `skillator:ticket-master` | `TICKETS.md`, the board |
+| `skillator:audit-sherlock` | A whole-codebase forensic audit |
+| `skillator:tickets-zordon` | `TICKETS.md`, the board |
 | `skillator:mergeprep-oracle` / `merge-smith` | Conflicts and merge execution |
 | `skillator:handoff-cortana` / `watch-cortana` | Continuity across context loss |
 | `skillator:skill-smith` | Authoring or fixing a skill — `writing-skills` merged in: the description rules, form-to-failure, bulletproofing, and subagent testing |

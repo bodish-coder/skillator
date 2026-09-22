@@ -1,5 +1,5 @@
 ---
-name: sherlock-codes
+name: audit-sherlock
 description: >-
   Use when the user says "sherlock", "audit the app", "review everything",
   "find what's broken", "full code review", "what's wrong with this codebase",
@@ -11,7 +11,7 @@ description: >-
   is cheaper.
 ---
 
-# sherlock-codes — the whole application, under a lens
+# audit-sherlock — the whole application, under a lens
 
 The naked eye reads a file and sees what it *meant*. This skill reads it for
 what it *does*. Investigators find; the detective verifies; Opus fixes.
@@ -141,17 +141,17 @@ Scope: <what was read>  ·  Not read: <what wasn't>
 A casefile is a document; a ticket is a thing someone works. **Every verified
 finding that names a change becomes an `A` ticket** — that is what stops the
 audit dying with the chat. A sweep this wide is the board's biggest single
-inflow, so it goes through `ticket-master`'s gate like everything else: a
+inflow, so it goes through `tickets-zordon`'s gate like everything else: a
 finding that implies no edit belongs in the casefile only, and two findings on
 one defect are one row.
 
 - **`TICKETS.md` exists** → log each verified finding that passes the gate as an
-  `A` ticket per `ticket-master`, and put the ticket ID on its casefile line
+  `A` ticket per `tickets-zordon`, and put the ticket ID on its casefile line
   (findings that don't pass stay in the casefile, unnumbered). One board, never
   two.
 - **No `TICKETS.md`** → **ask, once**: "`<N>` verified findings. Shall I open a
   ticket board (`TICKETS.md`) and log them as A-tickets?" On yes, create the file
-  from `ticket-master`'s template and log them. On no, the casefile stands alone
+  from `tickets-zordon`'s template and log them. On no, the casefile stands alone
   and say so plainly — the findings live only in that file.
 - **No one to ask** — a subagent, a batch run, or a prompt that forbids questions
   ("don't ask, just act")? Then **do not create the board**: write the casefile,
@@ -160,9 +160,9 @@ one defect are one row.
   board in a repo that may already have one elsewhere, and it was a tested agent
   under exactly that pressure that did it. The ask is a gate, not a formality —
   when it cannot be answered the answer is no.
-- **IDs come from `ticket-master` or not at all.** `A<n>`, allocated by scanning
+- **IDs come from `tickets-zordon` or not at all.** `A<n>`, allocated by scanning
   the whole board, never reused. Never invent a private series (`N1`, `F1`, `S1`)
-  for sherlock's findings: an ID that ticket-master does not define is one nobody
+  for sherlock's findings: an ID that tickets-zordon does not define is one nobody
   can look up, and it silently collides the moment a real `A` ticket reaches that
   number. If you cannot allocate against a board, the finding has a casefile
   position and no ID — say that, rather than minting one.
@@ -198,7 +198,7 @@ Coding is **Opus**, working from the casefile:
 - Fix the finding, not the neighbourhood. Anything an agent notices along the way
   is a new casefile entry, not scope creep.
 - 4+ findings to fix and the user opted into a workflow ("ultracode", "use a
-  workflow")? Use `ticket-master`'s scripted fan-out — fix and verify phases,
+  workflow")? Use `tickets-zordon`'s scripted fan-out — fix and verify phases,
   structured verdicts back. Otherwise plain parallel dispatch.
 
 **Architectural changes are only ever done on an explicit yes.** The user picks
@@ -280,7 +280,7 @@ the line isn't either.
 | Architecture | "This is not a bug to be swatted. The building has grown a door where a wall belonged, and you must decide whether to live with it." |
 | Handing to Opus | "The deduction is done; the repair is manual labour. I have written it out so precisely that the work requires no imagination at all." |
 | Posting to a PR | "I have said it plainly on the line itself, with a link that will still point at this code after you have changed it. Comments rot; shas do not." |
-| Handing to merge-agent | "The repair is finished. Getting it past your other branches is a different discipline, and I keep a specialist for it." |
+| Handing to merge-smith | "The repair is finished. Getting it past your other branches is a different discipline, and I keep a specialist for it." |
 | Nothing found in a dimension | "`<dimension>` gave me nothing. I record that as a fact, not a compliment." |
 | Closing | "`<N>` deductions, `<M>` discarded, `<K>` rooms unentered. The case is documented in `CASEFILE.md`; what you do with it is your affair." |
 

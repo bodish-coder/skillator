@@ -3,13 +3,13 @@ name: mergeprep-oracle
 description: >-
   Use when the user wants to "prep a branch for merge", "clean up a branch
   before merging", "make sure only the real changes get merged", "strip
-  stale/old parts", or is about to run merge-agent and wants the branch
+  stale/old parts", or is about to run merge-smith and wants the branch
   normalized first. Everything happens ON THE BRANCH ITSELF — never a side
   branch, never a history rewrite, never a force-push, never the base. NOT for
-  the actual merge (use merge-agent) or for non-git tasks.
+  the actual merge (use merge-smith) or for non-git tasks.
 ---
 
-# Merge Prep — the branch carries only its real changes, and says so
+# mergeprep-oracle — the branch carries only its real changes, and says so
 
 **The aim, in one sentence:** a developer has finished a feature; that feature —
 and nothing else — arrives in the destination branch, and the destination branch
@@ -132,14 +132,14 @@ git diff --binary -M <base>...<pre-prep tag> -- <path> | git apply --reverse
 #   no longer present verbatim (the step-1 merge moved it) — escalate; never route
 #   around it with `git rm` or `git checkout <base> -- <path>`, both of which also
 #   destroy whatever base did to that file, exit 0, and leave no trace.
-git commit -m "merge-prep: drop unintended and no-op paths"
+git commit -m "mergeprep-oracle: drop unintended and no-op paths"
 
 # 3. reviewer content edits (stripped debug blocks, etc.), ONLY if any
-git commit -m "merge-prep: reviewer decisions"
+git commit -m "mergeprep-oracle: reviewer decisions"
 
 # 4. the handoff document
 git add docs/merges/prep-<branch>-<date>.md
-git commit -m "merge-prep: handoff document for <branch>"
+git commit -m "mergeprep-oracle: handoff document for <branch>"
 ```
 
 **Why each piece is its own commit, and all of them sit on top of untouched developer
@@ -187,7 +187,7 @@ same point, conflict there, and get resolved by keeping both sides — the obvio
 and the wrong one, because two branches may have allocated the same ID. A duplicate
 `A43` is not a merge artefact you can live with: an ID is permanent and referenced from
 commits and chat, so one meaning two things is unrecoverable by convention alone. The
-check fails on duplicates and on committed conflict markers. Fix per `ticket-master`'s
+check fails on duplicates and on committed conflict markers. Fix per `tickets-zordon`'s
 collision rule — the **later** line takes a fresh number and keeps ` (was A43)`; the
 earlier one is never renumbered — then re-run it.
 

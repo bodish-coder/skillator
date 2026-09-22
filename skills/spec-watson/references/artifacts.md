@@ -76,7 +76,7 @@ belongs in Assumptions against R4, not silently in the code.
 | `R3 \| whole cents \| src/ \| tests/` | A directory is not evidence. Name the symbol and the test. |
 | `R3+R4 \| cents and approval \| … \| …` | Two requirements on one id. They fail independently; they cannot share a verdict. |
 
-## Ids and `ticket-master`
+## Ids and `tickets-zordon`
 
 Requirement ids (`R<n>`, per feature, in `specs/<slug>/spec.md`) and ticket ids
 (`B<n>`/`F<n>`/`A<n>`, repo-wide, in `TICKETS.md`) are different namespaces and

@@ -6,10 +6,10 @@ Pi: `/skill:grayskull-power`. Codex / Cursor: read that skill's `SKILL.md` and
 follow it yourself. Print its banner once per session, then route per its table.
 
 Standing rules, no reminder needed:
-- `TICKETS.md` at the repo root is the board — `skillator:ticket-master` owns it.
+- `TICKETS.md` at the repo root is the board — `skillator:tickets-zordon` owns it.
 - Reproduce before fixing. Map with `codegraph` before proposing a remedy.
 - Before every commit: regression sweep, then `/code-review`
-  (`code-review:code-review`) over the staged diff. `skillator:sherlock-codes` is
+  (`code-review:code-review`) over the staged diff. `skillator:audit-sherlock` is
   the whole-app sweep — pre-release, handover, or unknown-cause rot — never a
   per-commit gate, and never inside an implementer subagent.
 - Staged work runs to the end. A plan with stages does not stop between them
