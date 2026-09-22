@@ -30,7 +30,7 @@ Six asks from the user, 2026-09-22:
 | `WORKFLOW.md` | workflow mode, phase→script mapping, host table. `resumeFromRunId` is **same-session only** — that is the hole. |
 | `skills/handoff-watch` | statusLine `probe` + `Stop` `gate`, threshold, 3-step preserve order. Takes the **max** of 5h/7d/context — user wants the 7-day window to be the hard stop. |
 | `skills/handoff` · `resume-cortana` | writing and executing a handoff doc. |
-| `skills/brainstorm-build-*` | design→build phases, task blocks, `TRACE:`/`SATISFIES:`. |
+| `skills/the build-* skills` | design→build phases, task blocks, `TRACE:`/`SATISFIES:`. |
 | `skills/ticket-master` | `TICKETS.md`, workflow mode at 4+ open. |
 
 The gap is a **durable run file** that outlives the session, plus the rules that

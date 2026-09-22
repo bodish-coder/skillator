@@ -31,15 +31,15 @@ recommendation. The three already conforming (`grayskull-power`,
 | # | Current | New | Note |
 |---|---|---|---|
 | 1 | `a11y-proof` | `a11y-toph` | |
-| 2 | `brainstorm-build-lite` | `build-jarvis` | Marvel AI, one per tier: the original assistant |
-| 3 | `brainstorm-build-mid` | `build-ultron` | powerful, autonomous, no ceremony |
-| 4 | `brainstorm-build-prime` | `build-vision` | the refined one |
+| 2 | `build-jarvis` | `build-jarvis` | Marvel AI, one per tier: the original assistant |
+| 3 | `build-ultron` | `build-ultron` | powerful, autonomous, no ceremony |
+| 4 | `build-vision` | `build-vision` | the refined one |
 | 5 | `deploy-wizard` | `deploy-merlin` | prepares |
 | 6 | `deploy-niyoj` | `deploy-niyoj` | **unchanged by owner's call** |
 | 7 | `design-arwen` | `design-arwen` | unchanged |
 | 8 | `func-ui` | `designui-galadriel` | owner's coinage — see the note below |
 | 9 | `grayskull-power` | `grayskull-power` | **unchanged by owner's call**; the only name-first survivor, kept because it is the invocation |
-| 13 | `live-build` | `live-jarvis` | **clashes with 2** — see open question C |
+| 13 | `live-friday` | `live-jarvis` | **clashes with 2** — see open question C |
 | 18 | `screenshot-loop` | `screenshot-argus` | |
 | 19 | `sherlock-codes` | `audit-sherlock` | |
 | 21 | `spec-trace` | `spec-watson` | pairs with `audit-sherlock` |
@@ -80,7 +80,7 @@ he will not see is the handoff itself.
 | 15 | `merge-agent` | `merge-smith` | merges himself into everything he touches |
 | 16 | `r2d2-relay` | `relay-morpheus` | carries the message through — **second rename in a day**, see below |
 | 17 | `replicator-agent` | `tasks-sentinels` | many units, one job each |
-| 13 | `live-build` | `live-friday` | **C** — read as c1, the recommendation. Say `c3` if `live-holodeck` was meant. |
+| 13 | `live-friday` | `live-friday` | **C** — read as c1, the recommendation. Say `c3` if `live-holodeck` was meant. |
 | 20 | `skill-smith` | `skill-smith` | **D = f**, unchanged; already purpose-first and already says what it does |
 
 **16 is renamed twice in one day** — `relay` → `r2d2-relay` this morning, now
@@ -115,10 +115,10 @@ the next reader cannot infer the convention is optional.
 | `merge-agent` | `smith-merge` | Agent Smith merges himself into everything he touches. |
 | `deploy-wizard` | `gandalf-deploy` | The wizard who plans the road, not the one who walks it. |
 | `deploy-niyoj` | `scotty-ship` | The engineer who actually gets it into production, under protest. |
-| `live-build` | `jarvis-live` | Stark's always-on assistant, showing the build as it runs. |
-| `brainstorm-build-lite` | `stark-build-lite` | Designs it, then builds it, at three budgets. |
-| `brainstorm-build-mid` | `stark-build-mid` | ” |
-| `brainstorm-build-prime` | `stark-build-prime` | ” |
+| `live-friday` | `jarvis-live` | Stark's always-on assistant, showing the build as it runs. |
+| `build-jarvis` | `stark-build-lite` | Designs it, then builds it, at three budgets. |
+| `build-ultron` | `stark-build-mid` | ” |
+| `build-vision` | `stark-build-prime` | ” |
 
 Two the table deliberately leaves alone: `grayskull-power` and `design-arwen`
 already conform, and `sherlock-codes` is the pattern the rest are copying.

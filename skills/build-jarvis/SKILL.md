@@ -1,12 +1,12 @@
 ---
-name: brainstorm-build-lite
+name: build-jarvis
 description: >-
   The lightest "brainstorm then build". Use when the user wants a quick,
   cost-aware build that offloads the simpler or mechanical parts to a cheaper
   model and doesn't need Fable's creative brainstorm — "just design and build
   it, cheap where it can be". For a straight all-Opus planâ†’build (no Sonnet
-  offload) use brainstorm-build-mid; for a Fable-led creative design plus the
-  full ceremony use brainstorm-build-prime. NOT for tiny one-line edits (just
+  offload) use build-ultron; for a Fable-led creative design plus the
+  full ceremony use build-vision. NOT for tiny one-line edits (just
   do them) or pure design/no-build work.
 ---
 
@@ -114,7 +114,7 @@ For 1-3 sequential tasks, stay with plain dispatch.
   plus §4's per-task review. PRACTICE.md §§1-5, and §6's receiving-review
   discipline, still apply.
 - Need Fable's creative brainstorm, a handoff checkpoint, or a kept session
-  record? Use brainstorm-build-prime. Want all-Opus (no Sonnet offload)? Use -mid.
+  record? Use build-vision. Want all-Opus (no Sonnet offload)? Use build-ultron.
 
 ## Other hosts
 

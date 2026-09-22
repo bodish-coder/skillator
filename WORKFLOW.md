@@ -1,6 +1,6 @@
-# Workflow mode — deterministic orchestration for the brainstorm-build skills
+# Workflow mode — deterministic orchestration for the build-* skills
 
-The brainstorm-build skills normally dispatch phases as **individual subagents**
+The build-* skills normally dispatch phases as **individual subagents**
 you spawn one at a time. That is the default and stays the default.
 
 **Workflow mode** runs the same phases as a single deterministic script instead:
@@ -87,17 +87,18 @@ const DESIGN = {
 }
 ```
 
-`complexity` is what **-lite** routes on. `-mid` and **-prime** can ignore it.
+`complexity` is what **build-jarvis** routes on. `build-ultron` and
+**build-vision** can ignore it.
 
 ## Reference script
 
-Written for **-prime**. For `-mid`, use `model: 'opus'` in both stages and drop
-the session-file lines. For `-lite`, drop the design file too and pick the build
+Written for **build-vision**. For `build-ultron`, use `model: 'opus'` in both stages and drop
+the session-file lines. For `build-jarvis`, drop the design file too and pick the build
 model per task: `t.complexity === 'SIMPLE' ? 'sonnet' : 'opus'`.
 
 ```js
 export const meta = {
-  name: 'brainstorm-build',
+  name: 'build-*',
   description: 'Design at the deep tier, then build + verify each task in parallel',
   phases: [
     { title: 'Design', detail: 'one deep-tier agent, structured output' },

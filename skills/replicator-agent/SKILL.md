@@ -7,7 +7,7 @@ description: >-
   context would crowd out the coordination. Also when the user says "work the
   plan", "execute the plan", "one agent per task", "subagent-driven", "fan out
   the tasks", or asks why an implementer keeps wandering outside its task. NOT
-  for a plan that does not exist yet (`brainstorm-build-*`), and NOT for a
+  for a plan that does not exist yet (`the build-* skills`), and NOT for a
   single change.
 ---
 

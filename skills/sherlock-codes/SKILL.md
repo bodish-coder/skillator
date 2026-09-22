@@ -202,7 +202,7 @@ Coding is **Opus**, working from the casefile:
   structured verdicts back. Otherwise plain parallel dispatch.
 
 **Architectural changes are only ever done on an explicit yes.** The user picks
-an option; then design the change before writing it (`brainstorm-build-prime`
+an option; then design the change before writing it (`build-vision`
 if it's substantial) and say what it breaks.
 
 ## Phase 4 — the PR, if there is one

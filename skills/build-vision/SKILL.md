@@ -1,13 +1,13 @@
 ---
-name: brainstorm-build-prime
+name: build-vision
 description: >-
   Use when the user wants top-tier "brainstorm then build" — a deep-tier
   model doing creative design thinking, a build-tier model implementing, with
   full ceremony (design written to disk, handoff before checkpoints, session
   .md record, rework) so the work survives context loss. Runs on Claude Code,
   Cursor, Codex, Antigravity, Pi and Prime Agent. For all-Opus without
-  ceremony use brainstorm-build-mid; for Sonnet offload use
-  brainstorm-build-lite. NOT for tiny one-line edits or pure design/no-build
+  ceremony use build-ultron; for Sonnet offload use
+  build-jarvis. NOT for tiny one-line edits or pure design/no-build
   work.
 ---
 
@@ -255,5 +255,5 @@ session, around the call.
   worktrees and finishing-a-branch (§8). Running the originals first re-runs the
   same process and spends the budget the build needs. PRACTICE.md's closing
   table lists what is deliberately *not* in it.
-- Want all-build-tier with no ceremony? Use brainstorm-build-mid. Want
-  to offload simple build tasks to a fast tier? Use brainstorm-build-lite.
+- Want all-build-tier with no ceremony? Use build-ultron. Want
+  to offload simple build tasks to a fast tier? Use build-jarvis.

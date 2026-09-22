@@ -21,7 +21,7 @@ than here — it is a surface with its own workflow, not a rule the other skills
 obey.
 
 This file is the **laws** — read in full by `grayskull-power` (§0) and
-`brainstorm-build-prime` / `-mid` / `-lite` (Step 0), once per session. The
+`build-vision` / `build-ultron` / `build-jarvis` (Step 0), once per session. The
 mechanics sit in `practice/`, read on demand when a section sends you there:
 
 | File | Load when |
@@ -476,7 +476,7 @@ and `grayskull-power` still routes to those:
 | Skill | Owns |
 |---|---|
 | `skillator:design-arwen` | The UI/UX design itself — run it **as** the design phase when the deliverable is an interface, and its `references/canvas.md` is §1's visual companion |
-| `skillator:live-build` | The app running before the first edit |
+| `skillator:live-friday` | The app running before the first edit |
 | `skillator:sherlock-codes` | A whole-codebase forensic audit |
 | `skillator:ticket-master` | `TICKETS.md`, the board |
 | `skillator:merge-prep` / `merge-agent` | Conflicts and merge execution |

@@ -1,5 +1,5 @@
 ---
-name: live-build
+name: live-friday
 description: >-
   Use when the user says "let me see it", "show me while you work", "don't
   make me wait", "live preview", "run it while you build", "stream the build",
@@ -108,7 +108,7 @@ than implying a preview exists.
 
 - `run` — the deeper "launch and drive this project's app" skill; use it when the
   point is to *verify* a change in the running app rather than to expose it early.
-  `live-build` starts things; `run` inspects them.
+  `live-friday` starts things; `run` inspects them.
 - `screenshot-loop` — the return path: the user screenshots what they saw here
   and drops it in the folder.
 - `grayskull-power` — arms this as standard, so the first reply of any change to

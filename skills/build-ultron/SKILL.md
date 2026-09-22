@@ -1,12 +1,12 @@
 ---
-name: brainstorm-build-mid
+name: build-ultron
 description: >-
   Use when the user wants straight Opus quality for both the thinking and the
   code — an all-Opus plan then build, run autonomously with no stop in
   between, no Fable creative ideation, no Sonnet cost-tiering and no ceremony
   (no session record, no handoff checkpoint). For a Fable-led creative design
-  plus the full ceremony use brainstorm-build-prime; to offload the simple /
-  mechanical parts to Sonnet use brainstorm-build-lite. NOT for tiny one-line
+  plus the full ceremony use build-vision; to offload the simple /
+  mechanical parts to Sonnet use build-jarvis. NOT for tiny one-line
   edits (just do them) or pure design/no-build work.
 ---
 
@@ -122,8 +122,8 @@ For 1-3 sequential tasks, stay with plain dispatch — a script buys nothing.
   own, but if you or the user are about to run either, **first run the
   `handoff-cortana` skill** — never compact/clear without a verified handoff.
 - Want Fable's creative brainstorm + the full ceremony? Use
-  brainstorm-build-prime. Want to offload simple/mechanical tasks to Sonnet?
-  Use brainstorm-build-lite.
+  build-vision. Want to offload simple/mechanical tasks to Sonnet?
+  Use build-jarvis.
 
 ## Other hosts
 

@@ -75,7 +75,7 @@ on an investigator's word.
   the correct depth is `../`. `../../` resolves to `~/.cursor/`, `~/.agents/`,
   `~/.gemini/config/`, `~/.pi/`. `PLATFORMS.md:8` then instructs the agent to
   "assume the claude-code row" — on Codex. This is the router's very first step.
-  Same defect at `skills/brainstorm-build-prime/references/platforms.md:5`
+  Same defect at `skills/build-vision/references/platforms.md:5`
   (`../../../`, should be `../../`).
   *Fix:* correct the depths, or name the file without a path and let the agent
   search. One line each.
@@ -108,7 +108,7 @@ on an investigator's word.
   the repo, in the two places that consume it. No design contract defines a
   constraints field. The controller must invent it or leave it blank.
   *Fix:* add `CONSTRAINTS:` to the design contract in all three
-  `brainstorm-build-*`, or delete the slot.
+  `the build-* skills`, or delete the slot.
 
 - **H9** `practice/task-loop.md:64` — **"PLATFORMS.md maps these tiers to each
   host's actual slugs" is false.** task-loop uses `cheapest`, `cheap`,
@@ -120,15 +120,15 @@ on an investigator's word.
   *Fix:* one vocabulary. Add the missing rows to PLATFORMS.md, or restate
   task-loop's table in PLATFORMS' four tiers.
 
-- **H10** `skills/brainstorm-build-mid/SKILL.md:65,91` — **`-mid` orders the
+- **H10** `skills/build-ultron/SKILL.md:65,91` — **`build-ultron` orders the
   design pasted verbatim; the canon it declares it follows forbids exactly
   that.** "given the design **verbatim**" and "**Pass the design verbatim** from
   plan to build" against `PRACTICE.md:202` ("the design file path — never the
   session history"), `practice/task-loop.md:85` and `practice/prompts.md:24`.
-  `-mid` also writes no design file, so the task loop and every prompt template
+  `build-ultron` also writes no design file, so the task loop and every prompt template
   — all of which need a `<DESIGN_FILE>` — cannot run under it, while
-  `grayskull-power:170` claims `brainstorm-build-*` "runs PRACTICE §§1-6".
-  *Fix:* `-mid`/`-lite` write a design file and pass its path, or drop the claim
+  `grayskull-power:170` claims `the build-* skills` "runs PRACTICE §§1-6".
+  *Fix:* `build-ultron`/`build-jarvis` write a design file and pass its path, or drop the claim
   that they run the canon.
 
 - **H11** `.skillator/grayskull.md:11` vs `practice/prompts.md:63,75` —

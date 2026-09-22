@@ -80,7 +80,7 @@ Manual install paths, if you'd rather not run the script:
 Model names and tool names inside the skills are **Claude Code defaults**;
 [`PLATFORMS.md`](PLATFORMS.md) maps them to each host's tiers, delegation
 mechanism, and context checkpoints. [`WORKFLOW.md`](WORKFLOW.md) is the
-brainstorm-build skills' deterministic-orchestration path — one workflow script
+`build-*` skills' deterministic-orchestration path — one workflow script
 instead of hand-dispatched subagents, for builds wide enough to earn it. Keep
 both alongside `skills/` — the skills refer to them.
 
@@ -121,17 +121,17 @@ Deactivating is deleting `.skillator/grayskull.md`.
   working system: scan the code, interview the user, emit workflow specs to
   confirm, then a dependency-ordered plan to wire the UI to a real backend
   (stops at the confirmed plan). Invoke with `/func-ui`.
-- **brainstorm-build family** — three tiers of the "brainstorm then build" flow;
+- **build family** (`build-vision` · `build-ultron` · `build-jarvis`) — three tiers of the "brainstorm then build" flow;
   pick by how much model firepower and ceremony you want:
-  - **brainstorm-build-prime** — **`deep` tier** plans · **build tier**
+  - **build-vision** — **`deep` tier** plans · **build tier**
     implements · full ceremony: session `.md` on disk · handoff before context
     checkpoint · rework. Cross-platform via `references/platforms.md`:
     Claude Code (Fable → Opus), Cursor (GPT-5.6-Sol → Claude
     Opus), Codex (Sol high-reasoning design → Sol build,
     auto-compaction aware).
-  - **brainstorm-build-mid** — **Opus** plans · **Opus** builds. All-Opus,
+  - **build-ultron** — **Opus** plans · **Opus** builds. All-Opus,
     autonomous, no ceremony.
-  - **brainstorm-build-lite** — **Opus** plans · **Opus + Sonnet** builds
+  - **build-jarvis** — **Opus** plans · **Opus + Sonnet** builds
     (Opus core, Sonnet the simple tasks). Autonomous, no ceremony.
 - **deploy-wizard** — step-by-step wizard that preps a project for the
   standard single-VPS deployment (Docker Compose + nginx + GitHub Actions): it
@@ -186,7 +186,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
 - **grayskull-power** — one entry point that switches the whole skillator workflow on:
   arms the standing skills (reads `TICKETS.md`, checks `watch-cortana` is wired),
   prints the state in a single line, then routes each request to the one skill
-  that fits — across skillator (`sherlock-codes` for rot, `brainstorm-build-*` for
+  that fits — across skillator (`sherlock-codes` for rot, `build-vision` for
   features, `design-arwen` for UI, `merge-prep`/`deploy-niyoj` for shipping) *and*
   the wider installed toolkit: `code-review`, `security-review`,
   `run`/`webapp-testing` to see it actually work, `workflow-authoring`/`mem-search`
@@ -265,14 +265,14 @@ Deactivating is deleting `.skillator/grayskull.md`.
   your yes, post the surviving findings back as inline `gh` comments with
   sha-anchored permalinks. Merging is not its job — that hands off to
   `merge-agent`. Invoke with `/sherlock-codes`.
-- **live-build** — starts the project's app or build in the background **before**
+- **live-friday** — starts the project's app or build in the background **before**
   the first edit and hands over the URL, watch command, or `[n/total]` progress
   stream in the opening reply, so you watch the thing run while the agent works
   instead of waiting on a spinner. Knows JS/web dev servers (hot reload), Rust
   (`cargo watch`), C++ (`ninja`/`cmake --build`), Go, Python, Electron; refuses to
   auto-launch simulators, migrations or deploys. Honest about compiled builds —
   progress and a still-runnable last-good binary, not a fake preview. Armed as
-  standard by `grayskull-power`. Invoke with `/live-build`.
+  standard by `grayskull-power`. Invoke with `/live-friday`.
 - **screenshot-loop** — the user drops test screenshots in one folder; the agent
   reads every one, acts on what they show, verifies, then deletes exactly the
   files it consumed so the folder is clean for the next round. The directory is

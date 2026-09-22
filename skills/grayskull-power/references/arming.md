@@ -16,7 +16,7 @@ each one actually means.
   means the repo has no indexable source — a docs/skills/config repo — so say
   `codegraph: no code to index` and never retry it this session. Already indexed
   → `codegraph sync` and move on.
-- **`live-build`** — if the repo has a runnable surface (a dev script,
+- **`live-friday`** — if the repo has a runnable surface (a dev script,
   `Cargo.toml`, `CMakeLists.txt`, a `Makefile`, `go.mod`, a Python entry point),
   it is armed: the *first* change to that project starts the app or build in the
   background and hands over the URL/command **before** the edits, so the user

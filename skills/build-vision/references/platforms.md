@@ -1,4 +1,4 @@
-# Platform adapters — brainstorm-build-prime
+# Platform adapters — build-vision
 
 **Read the root `PLATFORMS.md` first — it is the authority and this file does not
 repeat it.** It owns host detection, skill paths, how you delegate and switch

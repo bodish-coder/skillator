@@ -38,7 +38,7 @@ Nothing else changes per host.
 ## 1. Arm (once, on invoke)
 
 `ticket-master` (read `TICKETS.md`, report the open set) · `ponytail` (laziness
-level active) · `codegraph` (indexed, else init once) · `live-build` (if the
+level active) · `codegraph` (indexed, else init once) · `live-friday` (if the
 repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
 `usage-watch … check` elsewhere) · `r2d2-relay` (an unfinished `.skillator/run.md`
 is the first thing you say).
@@ -59,7 +59,7 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 
 | The request is… | Go to |
 |---|---|
-| Build a feature, design-then-implement | `brainstorm-build-prime` / `-mid` / `-lite` — it *is* PRACTICE §§1-6; chain nothing in front |
+| Build a feature, design-then-implement | `build-vision` · `build-ultron` · `build-jarvis` — it *is* PRACTICE §§1-6; chain nothing in front |
 | A bug with an unknown cause | PRACTICE §7 **first** — root cause before any fix |
 | A decision, no code behind it | PRACTICE §1 in-session — classify, one question at a time, stop |
 | A bug/feature/"log this"/"what's pending" | `ticket-master` (workflow mode at 4+ open) |

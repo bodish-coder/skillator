@@ -8,12 +8,12 @@ every skill "to be safe" is the failure this is meant to prevent.
 
 ## Process before implementation — but only where it adds something
 
-`brainstorm-build-*` **is** the process for a build: it runs `PRACTICE.md` §§1-6
+`build-vision` / `build-ultron` / `build-jarvis` **are** the process for a build: it runs `PRACTICE.md` §§1-6
 and adds tier routing, a session record and a rework loop on top. Chaining any of
 the merged process skills in front of it re-runs the same work and burns the
 budget the build needs.
 
-**"Build X" → `brainstorm-build-*` directly.** When the answer is a decision and
+**"Build X" → a `build-*` skill directly.** When the answer is a decision and
 no code will be written, run PRACTICE §1 here in the session instead — classify,
 ask one question at a time, present, stop.
 
@@ -25,7 +25,7 @@ that backwards is how a session produces confident wrong work.
 
 | When | Skill |
 |---|---|
-| Anything creative that ends in code | `brainstorm-build-*` — it runs PRACTICE §§1-6 for you |
+| Anything creative that ends in code | `build-vision` · `build-ultron` · `build-jarvis` — they run PRACTICE §§1-6 for you |
 | A design/decision question with no build behind it | PRACTICE §1 — classify, question one at a time, present, stop |
 | A bug with an unknown cause | **PRACTICE §7 first** — root cause before any fix, and the three-fix rule |
 | A multi-step task with a spec already agreed, outside a build run | PRACTICE §2 — write the tasks in plan shape, then §3 self-review them |
@@ -43,7 +43,7 @@ that backwards is how a session produces confident wrong work.
 
 | When | Skill |
 |---|---|
-| About to change anything runnable — start it first so the user can watch | `live-build` (armed by default) |
+| About to change anything runnable — start it first so the user can watch | `live-friday` (armed by default) |
 | "Does this run?" — launch the app and look | `run` |
 | It launched and it is a TUI — now prove the frame fits the terminal | `tui-proof` (launch proves it starts, never that it draws) |
 | Drive a real browser: click, fill, read console | `webapp-testing`, `browse` |
@@ -80,7 +80,7 @@ re-check anything an agent asserts without evidence.
 | A bug, a feature, "log this", "what's pending", "mark done" | `ticket-master` |
 | 4+ open tickets, a sweep, "ultracode", "work the board" | `ticket-master` (workflow mode) |
 | "why is this broken", audit a whole app, unknown-cause rot, pre-release sweep | `sherlock-codes` |
-| Build a real feature, design-then-implement | `brainstorm-build-prime` (ceremony, Fable design) · `-mid` (all-Opus, no ceremony) · `-lite` (Sonnet offload) |
+| Build a real feature, design-then-implement | `build-vision` (ceremony, Fable design) · `build-ultron` (all-Opus, no ceremony) · `build-jarvis` (Sonnet offload) |
 | Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`) |
 | A static/mock UI that needs to actually work | `func-ui` |
 | What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-trace` |
