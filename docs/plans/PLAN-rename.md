@@ -14,7 +14,47 @@ alone says nothing about UI.
 
 ---
 
-## Proposed names — NEEDS SIGN-OFF BEFORE ANY `git mv`
+## Candidate names — NEEDS SIGN-OFF BEFORE ANY `git mv`
+
+Three per skill so the choice is a comparison, not a yes/no. **A** is the
+recommendation. The three already conforming (`grayskull-power`,
+`design-arwen`, `sherlock-codes`) and the two just done (`r2d2-relay`,
+`replicator-agent`) carry alternatives only in case the owner wants them moved.
+
+| Current | What it does | A — recommended | B | C |
+|---|---|---|---|---|
+| `a11y-proof` | Accessibility as the subject — WCAG audits, "can't tab to it", "screen reader reads nothing" | **`geordi-a11y`** — blind; the VISOR *is* assistive tech | `daredevil-a11y` | `toph-a11y` |
+| `brainstorm-build-lite` | Design→build at the cheap tier; offloads mechanical parts to a smaller model | **`stark-build-lite`** — designs it, then builds it | `daedalus-build-lite` | `hephaestus-build-lite` |
+| `brainstorm-build-mid` | Design→build, all-Opus, autonomous, no ceremony | **`stark-build-mid`** | `daedalus-build-mid` | `hephaestus-build-mid` |
+| `brainstorm-build-prime` | Design→build, top tier — creative design plus the ceremony that survives context loss | **`stark-build-prime`** | `daedalus-build-prime` | `hephaestus-build-prime` |
+| `deploy-wizard` | **Prepares** a deployment — scaffolds a single-VPS app before it ships | **`gandalf-deploy`** — plans the road, does not walk it | `merlin-deploy` | `yoda-deploy` |
+| `deploy-niyoj` | **Executes** it — one-button deploy from the laptop, no CI | **`scotty-ship`** — gets it into production, under protest | `wash-deploy` | `bifrost-deploy` |
+| `design-arwen` | Build, redesign or critique any UI/UX, native or web | **keep** | `galadriel-design` | `elrond-design` |
+| `func-ui` | Turns a UI-only mockup with fake data into a real, wired-up app | **`pinocchio-ui`** — a puppet that becomes real | `galatea-ui` | `data-ui` |
+| `grayskull-power` | The session router — arms the standing skills, routes every request | **keep** | `zordon-power` | `oz-power` |
+| `handoff` | Writes a verified session handoff so the next session loses nothing | **`bilbo-handoff`** — hands the quest on, writes the book | `leonard-handoff` | `hermes-handoff` |
+| `handoff-resume` | Executes a handoff doc — picks up the pending tasks | **`frodo-resume`** — takes up what Bilbo put down | `samwise-resume` | `lazarus-resume` |
+| `handoff-watch` | Hooks that watch the usage limits and force a handoff before cutoff | **`heimdall-watch`** — sees it coming before it arrives | `cassandra-watch` | `argus-watch` |
+| `live-build` | Runs the app while you work, so the user watches it change | **`jarvis-live`** — always-on, shows the build as it runs | `friday-live` | `hal-live` |
+| `merge-prep` | Normalises a branch before merge — strips stale parts so only real changes land | **`oracle-merge-prep`** — what breaks before you walk in | `palantir-merge-prep` | `tiresias-merge-prep` |
+| `merge-agent` | Consolidates branches and resolves the conflicts | **`smith-merge`** — merges himself into everything | `borg-merge` | `voltron-merge` |
+| `r2d2-relay` | Keeps a staged run recoverable across a dropped session | **keep** (done) | `samwise-relay` | `ariadne-relay` |
+| `replicator-agent` | Executes a written plan, one fresh agent per task, reviewed each time | **keep** (done) | `kamino-agent` | `clone-agent` |
+| `screenshot-loop` | Reads test screenshots dropped in a folder, acts on them, clears them | **`deckard-screenshot`** — the enhance scene | `rekall-screenshot` | `argus-screenshot` |
+| `sherlock-codes` | Full-application forensic audit — the defects nobody filed | **keep** | `poirot-codes` | `columbo-codes` |
+| `skill-smith` | Writes, edits and diagnoses agent skills | **`q-smith`** — builds the gadgets others are issued | `geppetto-skills` | `daedalus-skills` |
+| `spec-trace` | Turns a spoken or chat-only brief into stable requirement ids traced to evidence | **`ariadne-spec`** — the thread back out | `hansel-spec` | `watson-spec` |
+| `ticket-master` | The `TICKETS.md` board — serialised bug / feature / agent-found ids | **`mycroft-tickets`** — holds every record, never leaves the building | `zordon-tickets` | `fury-tickets` |
+| `tui-proof` | Proves a terminal UI actually renders, at every width | **`tron-tui`** — lives inside the terminal | `flynn-tui` | `neo-tui` |
+
+**Known clashes to resolve at sign-off:** `argus` appears twice (B in
+`handoff-watch`, C in `screenshot-loop`); `daedalus` and `hephaestus` appear in
+both the build family and `skill-smith`; `cassandra` and `tiresias` are the same
+joke in `handoff-watch` and `merge-prep`. One character, one skill.
+
+## Superseded first pass
+
+
 
 | Now | Proposed | Why that character |
 |---|---|---|
