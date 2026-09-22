@@ -1,6 +1,6 @@
 # RUN r2609220315 - relay: staged runs that survive sessions
 plan: docs/plans/PLAN-relay.md
-started: 2026-09-22T03:15Z   updated: 2026-09-22T03:39Z
+started: 2026-09-22T03:15Z   updated: 2026-09-22T03:40Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -12,7 +12,7 @@ started: 2026-09-22T03:15Z   updated: 2026-09-22T03:39Z
 | 5 | S4 subagent-drive (void RED) | ! | model:opus-5 | 2026-09-22T03:15Z | - |
 | 6 | S5 handoff-watch weekly gate | x | model:opus-5 | 2026-09-22T03:39Z | edbd432 |
 | 7 | S6 grayskull rules | x | model:opus-5 | 2026-09-22T03:39Z | edbd432 |
-| 8 | S7 GREEN + ship | x | model:opus-5 | 2026-09-22T03:39Z | dc4c902 |
+| 8 | S7 GREEN + ship | x | model:opus-5 | 2026-09-22T03:40Z | 538b975 |
 
 ## In flight
 ### stage 5 - S4 subagent-drive  (FAILED, not in flight)
