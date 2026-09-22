@@ -138,6 +138,39 @@ try {
   if ($r -notmatch 'AskUserQuestion') { throw 'gate sequence: the weekly order was eaten by the earlier .done' }
   Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
 
+  # F18 review: step 4 must come BEFORE "Then tell the user ... and stop.".
+  # Appending it after put the stop instruction ahead of the one step whose
+  # point is that the session must NOT stop on a summary. Asserting only that
+  # the string is present, as the first version did, misses the ordering.
+  Probe (& $sl 40 91 55)
+  $r = Gate $stop
+  $iAsk = $r.IndexOf('AskUserQuestion'); $iStop = $r.IndexOf('Then tell the user')
+  if ($iAsk -lt 0 -or $iStop -lt 0) { throw 'gate: weekly order is missing a piece' }
+  if ($iAsk -gt $iStop) { throw 'gate: step 4 comes after the stop instruction' }
+  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+
+  # F18 review: a weekly flag with NO main flag beside it is reachable - it is
+  # exactly what a probe that failed halfway leaves behind - and the gate used
+  # to return before ever reading it, making the 7-day hard stop unreachable in
+  # the one case it mattered most.
+  [IO.File]::WriteAllText((Join-Path (Convert-Path (Split-Path $flag -Parent)) "$sid.weekly"), '91')
+  $r = Gate $stop
+  if ($r -notmatch 'AskUserQuestion') { throw 'gate: weekly-only flag did not fire' }
+  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+
+  # A45/F18: `sort` is a name Windows steals. The sh probe used to pipe the
+  # percentages through `sort -g`, which from a PowerShell parent resolves to
+  # sort.exe, prints "The system cannot find the file specified", exits 0, and
+  # writes the weekly flag with NO main flag. This block is that regression:
+  # it drives the sh probe from here, which is a PowerShell process.
+  if ($shExe) {
+    $h = NewHome 'sh-probe-path'
+    RunSh 'probe' $h (& $sl 98.2 12 55) | Out-Null
+    $mf = Join-Path $h ".claude\handoff-watch\$sid"
+    if (-not (Test-Path $mf)) { throw 'sh probe: no main flag (a stolen Windows binary ate the pipeline)' }
+    if ((Get-Content $mf -Raw).Trim() -ne '98.2') { throw "sh probe: main flag is '$((Get-Content $mf -Raw).Trim())', wanted 98.2" }
+  }
+
   # The sh twin has to agree - PLATFORMS.md requires the pair to move together.
   if ($shExe) {
     $h = NewHome 'weekly-sh'

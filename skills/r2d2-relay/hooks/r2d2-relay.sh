@@ -5,12 +5,12 @@
 # judgement in this script: deciding a stage is done is the model's job, saying
 # so on disk is this script's. See ../SKILL.md for the rule it serves.
 #
-#   relay.sh init <plan> <title> <stage>...   create the run file
-#   relay.sh stage <n> <state> [owner] [landed]
-#   relay.sh heartbeat <n>
-#   relay.sh status
-#   relay.sh orphans [minutes]                default 20
-#   relay.sh selftest
+#   r2d2-relay.sh init <plan> <title> <stage>...   create the run file
+#   r2d2-relay.sh stage <n> <state> [owner] [landed]
+#   r2d2-relay.sh heartbeat <n>
+#   r2d2-relay.sh status
+#   r2d2-relay.sh orphans [minutes]                default 20
+#   r2d2-relay.sh selftest
 #
 # States:  (pending) | ~ in flight | x landed | ! failed
 set -e
@@ -37,7 +37,7 @@ age_min() {
   function mins(P){ return days(P[1]+0,P[2]+0,P[3]+0)*1440 + P[4]*60 + P[5]; }'
 }
 
-need_run() { [ -f "$RUN" ] || die "no run file at $RUN (relay.sh init ...)"; }
+need_run() { [ -f "$RUN" ] || die "no run file at $RUN (r2d2-relay.sh init ...)"; }
 
 # Every mutation is a read-modify-write of the whole file, and SKILL.md
 # sanctions concurrent in-flight stages - two `stage` calls landing at once
@@ -46,17 +46,33 @@ need_run() { [ -f "$RUN" ] || die "no run file at $RUN (relay.sh init ...)"; }
 # timeout, not a lock manager; if a run ever needs more than one writer per
 # second, the ledger is the wrong shape, not the lock.
 LOCK=""
+# The lock dir carries its holder's pid. Breaking a stale lock without checking
+# it let B delete a slow-but-alive A's lock, and A's release then deleted B's -
+# admitting C mid-write, which is the lost update the lock exists to prevent.
 lock() {
-  LOCK="$RUN.lock"; i=0
+  LOCK="$RUN.lock"
+  mkdir "$LOCK" 2>/dev/null && { echo $$ > "$LOCK/pid"; return; }   # the common case
+  held=$(cat "$LOCK/pid" 2>/dev/null)                               # who had it when we arrived
+  i=0
   while ! mkdir "$LOCK" 2>/dev/null; do
     i=$((i+1))
-    # 30s of someone else's turn means that process died holding it.
-    [ "$i" -gt 300 ] && { rm -rf "$LOCK"; continue; }
+    # 30s of one holder's turn means that process died holding it. Break it
+    # only if the pid has not changed since we arrived - otherwise the lock has
+    # already turned over and we would be stealing it from someone alive.
+    if [ "$i" -gt 300 ] && [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$held" ]; then
+      rm -rf "$LOCK"
+    fi
     sleep 0.1 2>/dev/null || sleep 1
   done
-  trap 'rm -rf "$LOCK"' EXIT INT TERM
+  echo $$ > "$LOCK/pid"
 }
-unlock() { [ -n "$LOCK" ] && rm -rf "$LOCK"; LOCK=""; trap - EXIT INT TERM; }
+# No EXIT trap: this file is sourced by cmd_selftest, whose own cleanup trap a
+# lock() installed here would silently replace - which leaked one mktemp dir
+# per selftest run. Release is explicit, on both the success and failure paths.
+unlock() {
+  if [ -n "$LOCK" ] && [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$$" ]; then rm -rf "$LOCK"; fi
+  LOCK=""
+}
 
 # Touch `updated:` on every mutation. A run file whose header is older than its
 # rows has been edited by hand, which is allowed but worth being able to see.
@@ -69,7 +85,7 @@ stamp_updated() {
 cmd_init() {
   plan="$1"; title="$2"; shift 2
   [ -n "$plan" ] && [ -n "$title" ] && [ "$#" -gt 0 ] \
-    || die "usage: relay.sh init <plan> <title> <stage>..."
+    || die "usage: r2d2-relay.sh init <plan> <title> <stage>..."
   [ -f "$RUN" ] && die "run file already exists: $RUN (a run file is never overwritten)"
   # A `|` in a stage name adds a column, and every later read is positional -
   # the state would be written into the name cell and the sha into heartbeat,
@@ -105,8 +121,14 @@ cmd_init() {
 # appending a second one - that is what makes a resume idempotent.
 cmd_stage() {
   n="$1"; state="$2"; owner="$3"; landed="$4"
-  [ -n "$n" ] || die "usage: relay.sh stage <n> <state> [owner] [landed]"
+  [ -n "$n" ] || die "usage: r2d2-relay.sh stage <n> <state> [owner] [landed]"
   case "$state" in ''|'~'|x|'!') ;; *) die "unknown state: $state (one of '' ~ x !)" ;; esac
+  # Same reason `init` refuses it in a stage name: a `|` adds a column, and the
+  # next positional read writes state into the wrong cell. `landed` takes a
+  # path, so this is reachable without an exotic owner string.
+  for v in "$owner" "$landed"; do
+    case "$v" in *'|'*) die "'|' in owner/landed would shift every column: $v" ;; esac
+  done
   [ "$state" = x ] && [ -z "$landed" ] \
     && die "stage $n marked landed with no sha or path - that is the lie the next session believes"
   need_run
@@ -134,7 +156,7 @@ cmd_stage() {
 }
 
 cmd_heartbeat() {
-  n="$1"; [ -n "$n" ] || die "usage: relay.sh heartbeat <n>"
+  n="$1"; [ -n "$n" ] || die "usage: r2d2-relay.sh heartbeat <n>"
   need_run
   # A heartbeat carries the row's existing `landed` back in. Without it the
   # "x with no sha" guard fires on a stage that already landed, turning a
@@ -205,6 +227,11 @@ cmd_selftest() {
 
   # The lock must be released on the way out, or the next call spins for 30s.
   if [ -e "$RUN.lock" ]; then die "stage: left the lock behind"; fi
+
+  # A `|` in owner or landed shifts every column, exactly as one in a stage
+  # name does - and `landed` takes a path, so it is reachable by accident.
+  if (cmd_stage 2 '~' 'model:opus|5' 2>/dev/null); then die "stage: accepted a pipe in owner"; fi
+  if (cmd_stage 2 x build:sonnet 'a|b' 2>/dev/null); then die "stage: accepted a pipe in landed"; fi
 
   # A heartbeat on a stage that already landed must not trip the sha guard.
   cmd_heartbeat 1

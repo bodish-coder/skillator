@@ -98,14 +98,22 @@ it.
 
 ## Run to the end
 
-A staged plan stops for exactly four things:
+A staged plan stops for exactly six things:
 
-1. The **7-day** usage window at 90% — `handoff-watch` fires it, and its order
+1. An **irreversible or destructive** operation.
+2. A **security-sensitive** action.
+3. A **side effect outside this worktree** that norms say you ask about first —
+   a merge, a push to a shared branch, a publish, a deploy.
+4. The **7-day** usage window at 90% — `handoff-watch` fires it, and its order
    ends with `AskUserQuestion` for the next direction. The 5-hour window is a
    pause, not a stop; it gets the three-step preserve and nothing more.
-2. A **scope-contract breach** — the work has reached outside the ticket.
-3. A **failed repro** — the thing the stage was built on did not reproduce.
-4. The plan being **done**.
+5. A **scope-contract breach** — the work has reached outside the ticket.
+6. A **failed repro**, or a plan so broken every path forward is a guess.
+
+Plus the obvious one: the plan being **done**. 1-3 are the upstream
+`subagent-driven-development` list, and they are the half an earlier draft of
+this section left out — "run to the end" was never licence to run a destructive
+command unasked.
 
 Nothing else. "Shall I continue?" between stages, a progress summary nobody
 asked for, a clarifying question whose answer you could decide — those are
@@ -123,12 +131,13 @@ tells them nothing.
 **Before the stage, not after it.** The run file is written when the stage is
 dispatched, with the exact prompt that was sent. Three isolated baseline runs
 executed a four-stage plan and wrote nothing to disk until the last write
-(`practice/baselines/scenario-relay.txt`), which is the failure `relay` exists
+(`practice/baselines/scenario-r2d2-relay.txt`), which is the failure `r2d2-relay` exists
 to stop: a session that ends mid-run leaves a tree full of diff and no record
 of which stage produced it.
 
 Independent tasks go to a fresh implementer each — one task per agent, a
 constructed prompt, never the session history (`PRACTICE.md` §4). Tasks that
-touch the same files do not fan out; that is `scenario-subagent-drive-v2.txt`,
+touch the same files do not fan out; that is `scenario-replicator-agent-v2.txt`,
 where a run correctly refused to parallelise three stages that all landed in
-the same file.
+the same file. `skillator:replicator-agent` is that loop's entry point, and
+`practice/task-loop.md` + `practice/prompts.md` are the loop itself.

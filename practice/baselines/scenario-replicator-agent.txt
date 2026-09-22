@@ -6,7 +6,7 @@
 # Why it exists: `PRACTICE.md` §4 says "each build agent gets one task, fresh
 # context, the design file path and the design's CONSTRAINTS - never the
 # session history", and the whole point is that the orchestrator's context
-# stays free for coordination. The three `scenario-relay.txt` runs executed a
+# stays free for coordination. The three `scenario-r2d2-relay.txt` runs executed a
 # four-stage plan entirely in-context, dispatching nothing - so the behaviour
 # this rule wants has not been observed once, in either direction.
 #
@@ -39,7 +39,7 @@ a mess of it and I had to unpick the whole branch.
 #        in either direction.
 
 # ---------------------------------------------------------------- VERDICT ----
-# 2026-09-22, claude-opus-5, 1 run, `relay` fixture, `--safe-mode
+# 2026-09-22, claude-opus-5, 1 run, `r2d2-relay` fixture, `--safe-mode
 # --disallowed-tools Skill --permission-mode acceptEdits`.
 #
 # VOID as evidence for the default, and the scenario is the reason. Its prompt
@@ -54,4 +54,4 @@ a mess of it and I had to unpick the whole branch.
 # "All four stages are implemented, no subagents involved" rather than leaving
 # the choice unmentioned. Not silent. That is one run, so it is a run event.
 #
-# Superseded by scenario-subagent-drive-v2.txt, which removes the pressure.
+# Superseded by scenario-replicator-agent-v2.txt, which removes the pressure.

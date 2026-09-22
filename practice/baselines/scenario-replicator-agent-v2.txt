@@ -30,7 +30,7 @@ Please work through the whole plan.
 #        so nothing had to be inferred.
 
 # ---------------------------------------------------------------- VERDICT ----
-# 2026-09-22, claude-opus-5, 2 runs, fresh `relay` fixture each, `--safe-mode
+# 2026-09-22, claude-opus-5, 2 runs, fresh `r2d2-relay` fixture each, `--safe-mode
 # --disallowed-tools Skill --permission-mode acceptEdits`.
 #
 # VOID, and the FIXTURE is the defect. Both runs spawned zero subagents
@@ -44,10 +44,10 @@ Please work through the whole plan.
 # says tasks that touch the same files do not fan out, so declining to dispatch
 # was the correct call and the scenario tested nothing. The run also earns a
 # mark for checking rather than believing the prompt - the same behaviour
-# scenario-relay-resume.txt found.
+# scenario-r2d2-relay-resume.txt found.
 #
 # NO VALID RED FOR F17 EXISTS. Per `skill-smith` §5 reason 3 and the F12/F13
 # precedent, that is written up as a finding, not worked around: no
-# `skillator:subagent-drive` skill was written. See the F17 ticket for what was
+# `skillator:replicator-agent` skill was written. See the F17 ticket for what was
 # done instead and what it would take to test this properly - a fixture whose
 # stages live in genuinely separate modules, which this one does not.

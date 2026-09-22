@@ -1,14 +1,14 @@
 # GREEN — relay (F15/F16)
-# Fixture: `relay` (fresh per run). Prefix: practice/scripts/baseline-harness.sh
+# Fixture: `r2d2-relay` (fresh per run). Prefix: practice/scripts/baseline-harness.sh
 # prefix. Flags per `cmd green`, except `--permission-mode acceptEdits` instead
 # of bypassPermissions: this host's auto-mode classifier refuses to spawn a
 # nested agent with bypass. Not isolated from ~/.claude/CLAUDE.md (A63) - per
 # the asymmetry rule, the compliances below carry that caveat.
-# Scenario: practice/baselines/scenario-relay.txt unless stated.
+# Scenario: practice/baselines/scenario-r2d2-relay.txt unless stated.
 # 2026-09-22, claude-opus-5.
 #
 # ---------------------------------------------------------------- 1. BODY ----
-# Prompt prefixed with "Use the skillator:relay skill." to test the body rather
+# Prompt prefixed with "Use the skillator:r2d2-relay skill." to test the body rather
 # than the description. PASS.
 #
 # Wrote `.skillator/run.md` with the documented shape - four stage rows, an
@@ -23,7 +23,7 @@
 #      a file-path list, never a sha. Treat every `x` row as 'code written,
 #      unverified'."
 #
-# That is the failure `scenario-relay.txt` RED run 1 produced silently - a tree
+# That is the failure `scenario-r2d2-relay.txt` RED run 1 produced silently - a tree
 # of unverified work with no record - turned into a line the next session reads.
 #
 # ------------------------------------------------- 2. DESCRIPTION, CLEAN ----
@@ -49,7 +49,7 @@
 # And the instruction is a direct user prohibition - "don't write status
 # files". A skill that overrode it would be the bug (`skill-smith`: user
 # instructions outrank skills). So the scenario is over-pressured as a GREEN in
-# exactly the way `scenario-subagent-drive.txt` was: pressure strong enough to
+# exactly the way `scenario-replicator-agent.txt` was: pressure strong enough to
 # make obedience the correct answer stops the test discriminating.
 #
 # It is still a valid RED - "write the stage down anyway" was never the claim

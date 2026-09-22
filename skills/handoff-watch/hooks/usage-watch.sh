@@ -35,8 +35,11 @@ stale_secs=10800   # 3 hours
 # `find` is Windows' find.exe and answers "File not found - rollout-*.jsonl"
 # while exiting 0 - a silent empty result, which is exactly the failure this
 # ticket is about. Plain shell recursion has no PATH to lose. (`sort` is the
-# other name Windows steals - `probe` does use it, but Windows wires the .ps1
-# probe, never this one, so that path is never taken there.)
+# other name Windows steals, and `probe` used to pipe through it. That was
+# wrong: the handoff-watch selftest drives this script from PowerShell, where
+# `sort.exe` eats `-g` and prints "The system cannot find the file specified"
+# while exiting 0 - so `probe` wrote the weekly flag and no main flag at all.
+# Every numeric compare in this file now goes through awk.)
 codex_walk() {
   for p in "$1"/*; do
     [ -e "$p" ] || continue          # unmatched glob comes back literal
@@ -132,10 +135,15 @@ if [ "$mode" = check ]; then
     # picking it here would report the 7-day number as the max and compare it
     # against the wrong threshold. It is read below, by name, not by mtime.
     f=$(ls -t "$dir" 2>/dev/null | grep -v '\.done$' | grep -v '\.weekly$' | head -1)
-    [ -n "$f" ] && pct=$(read_pct "$dir/$f")
-    [ -n "$pct" ] && { src=claude-code; key=$f; wk=$(read_pct "$dir/$f.weekly"); }
+    [ -n "$f" ] && { pct=$(read_pct "$dir/$f"); src=claude-code; key=$f; wk=$(read_pct "$dir/$f.weekly"); }
+    # A weekly flag with no main flag beside it is a real state (see the gate),
+    # so fall back to it rather than reporting no signal at all.
+    if [ -z "$f" ]; then
+      f=$(ls -t "$dir" 2>/dev/null | grep '\.weekly$' | head -1)
+      [ -n "$f" ] && { wk=$(read_pct "$dir/$f"); src=claude-code; key=${f%.weekly}; }
+    fi
   fi
-  if [ -z "$pct" ]; then
+  if [ -z "$pct" ] && [ -z "$wk" ]; then
     echo "handoff-watch: no usage signal on this host - run skillator:handoff manually before you run out"; exit 0
   fi
   # The weekly gate applies on every host, not just the one with a Stop hook.
@@ -146,13 +154,13 @@ if [ "$mode" = check ]; then
     echo "HANDOFF NOW ($src 7-day $wk%)"
     printf 'Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop.
 ' "$wk" "$wk_limit" "$wk_step4"
-  elif over_limit "$pct" "$limit" && [ ! -f "$dir/$key.done" ]; then
+  elif [ -n "$pct" ] && over_limit "$pct" "$limit" && [ ! -f "$dir/$key.done" ]; then
     mkdir -p "$dir"; : > "$dir/$key.done"
     echo "HANDOFF NOW ($src $pct%)"
     printf 'Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop.
 ' "$pct" "$limit" ""
   else
-    echo "handoff-watch: $src $pct% of $limit% - ok"
+    echo "handoff-watch: $src ${pct:-$wk}% of $limit% - ok"
   fi
   exit 0
 fi
@@ -166,7 +174,7 @@ if [ "$mode" = probe ]; then
   # ponytail: regex over the raw JSON instead of walking it - catches every
   # used_percentage (5h window, 7d window, context window) whatever the shape.
   max=$(printf '%s' "$raw" | grep -o '"used_percentage"[[:space:]]*:[[:space:]]*[0-9.]*' \
-        | grep -o '[0-9.]*$' | sort -g | tail -1)
+        | grep -o '[0-9.]*$' | awk 'BEGIN{m=""} {if(m==""||$1+0>m+0)m=$1} END{if(m!="")print m}')
   [ -n "$max" ] && { mkdir -p "$dir"; printf '%s' "$max" > "$flag"; }
   # The weekly number needs its own file: the main flag is read as bare bytes
   # with no line endings (A12), so a second value cannot share it.
@@ -178,8 +186,11 @@ if [ "$mode" = probe ]; then
 fi
 
 case "$raw" in *'"stop_hook_active":true'*|*'"stop_hook_active": true'*) exit 0 ;; esac
-[ -f "$flag" ] || exit 0
-pct=$(read_pct "$flag"); [ -n "$pct" ] || exit 0
+# No early return on a missing main flag: the two flags are written
+# independently, so "weekly recorded, max not" is a reachable state - and it is
+# the one a broken probe leaves behind. Returning here made the 7-day hard stop
+# unreachable in exactly the case it mattered most.
+pct=$(read_pct "$flag")
 # Weekly first, and with its OWN one-shot marker. Sharing `$flag.done` meant a
 # 5-hour fire at 10:00 silently ate the weekly order when the 7-day window
 # crossed at 14:00 - the one window whose crossing the user has to answer.
@@ -190,6 +201,7 @@ if [ -n "$wk" ] && over_limit "$wk" "$wk_limit" && [ ! -f "$flag.weekly.done" ];
   exit 0
 fi
 [ -f "$flag.done" ] && exit 0
+[ -n "$pct" ] || exit 0
 over_limit "$pct" "$limit" || exit 0
 : > "$flag.done"
 printf '{"decision":"block","reason":"Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it. Then tell the user where the file is and stop."}' "$pct" "$limit"

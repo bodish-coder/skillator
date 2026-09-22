@@ -43,8 +43,14 @@ function Read-Flag($path) {
   return $null
 }
 
+# Step 4 is spliced in BEFORE Get-Reason's closing "Then tell the user where
+# the file is and stop." - appending it after put the stop instruction ahead of
+# the one step whose whole point is that the session must not stop on a
+# summary. The sh twin has always spliced; this is the mirror catching up.
 function Get-WeeklyReason($pct, $limit) {
-  (Get-Reason $pct $limit) + " (4) This is the 7-DAY window, which does not refill for days - the work is over for now, not paused. So after the handoff, do not stop on a summary: use AskUserQuestion to put the next direction to the user as concrete options drawn from the open board and the handoff's own next-steps, say which one you recommend and why in one line, and make the recommendation the first option."
+  $tail = ' Then tell the user where the file is and stop.'
+  $step4 = ' (4) This is the 7-DAY window, which does not refill for days - the work is over for now, not paused. So after the handoff, do not stop on a summary: use AskUserQuestion to put the next direction to the user as concrete options drawn from the open board and the handoff''s own next-steps, say which one you recommend and why in one line, and make the recommendation the first option.'
+  (Get-Reason $pct $limit).Replace($tail, $step4 + $tail)
 }
 
 function Get-Reason($pct, $limit) {
@@ -112,8 +118,12 @@ if ($Mode -eq 'probe') {
   if ($pcts) { Write-Flag $flag (($pcts | Measure-Object -Maximum).Maximum) }
   # The weekly number needs its own file: the main flag is read by the sh twin
   # as bare bytes with no line endings (A12), so a second value cannot share it.
-  # Greedy `[^}]*` to match the sh twin exactly: if seven_day ever carries more
-  # than one used_percentage the two mirrors must still pick the same one.
+  # Greedy `[^}]*`, like the sh twin, so both pick the same used_percentage if
+  # seven_day ever carries more than one. NOT byte-identical behaviour: .NET's
+  # `\s*` and `[^}]*` cross newlines, while the sh twin strips spaces and tabs
+  # then greps line by line - so a pretty-printed payload yields a number here
+  # and none there. Claude Code sends one line; if that ever changes, the sh
+  # twin is the one that breaks.
   if ($raw -match '"seven_day"\s*:\s*\{[^}]*"used_percentage"\s*:\s*([0-9.]+)') {
     Write-Flag "$flag.weekly" $Matches[1]
   } else {
@@ -125,9 +135,10 @@ if ($Mode -eq 'probe') {
 
 # gate
 if ($raw -match '"stop_hook_active"\s*:\s*true') { exit 0 }   # never loop on ourselves
-if (-not (Test-Path $flag)) { exit 0 }
+# No early return on a missing main flag: the two flags are written
+# independently, so "weekly recorded, max not" is a reachable state, and it is
+# the one a broken probe leaves behind.
 $pct = Read-Flag $flag
-if ($null -eq $pct) { exit 0 }
 $done = "$flag.done"
 # Weekly first, and with its OWN one-shot marker. Sharing `$flag.done` meant a
 # 5-hour fire at 10:00 silently ate the weekly order when the 7-day window
@@ -139,6 +150,6 @@ if ($null -ne $wk -and $wk -ge $wkLimit -and -not (Test-Path "$flag.weekly.done"
   exit 0
 }
 if (Test-Path $done) { exit 0 }
-if ($pct -lt $pctLimit) { exit 0 }
+if ($null -eq $pct -or $pct -lt $pctLimit) { exit 0 }
 New-Item $done -ItemType File -Force | Out-Null
 @{ decision = 'block'; reason = (Get-Reason $pct $pctLimit) } | ConvertTo-Json -Compress

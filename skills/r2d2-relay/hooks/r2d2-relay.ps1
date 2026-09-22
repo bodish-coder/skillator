@@ -1,15 +1,15 @@
 # relay - bookkeeping for `.skillator/run.md`, the staged-run ledger.
 #
-# The PowerShell mirror of relay.sh. Same commands, same file format, same
+# The PowerShell mirror of r2d2-relay.sh. Same commands, same file format, same
 # refusals - `PLATFORMS.md` requires the pair to move together, and `selftest`
 # on each side is what proves they still agree.
 #
-#   relay.ps1 -Mode init -Plan <p> -Title <t> -Stages "alpha,beta,gamma"
-#   relay.ps1 -Mode stage -N 2 -State '~' [-Owner build:sonnet] [-Landed sha]
-#   relay.ps1 -Mode heartbeat -N 2
-#   relay.ps1 -Mode status
-#   relay.ps1 -Mode orphans [-Minutes 20]
-#   relay.ps1 -Mode selftest
+#   r2d2-relay.ps1 -Mode init -Plan <p> -Title <t> -Stages "alpha,beta,gamma"
+#   r2d2-relay.ps1 -Mode stage -N 2 -State '~' [-Owner build:sonnet] [-Landed sha]
+#   r2d2-relay.ps1 -Mode heartbeat -N 2
+#   r2d2-relay.ps1 -Mode status
+#   r2d2-relay.ps1 -Mode orphans [-Minutes 20]
+#   r2d2-relay.ps1 -Mode selftest
 #
 # States: pending | '~' in flight | 'x' landed | '!' failed
 #
@@ -38,14 +38,14 @@ if (-not $Run) { $Run = if ($env:RELAY_RUN) { $env:RELAY_RUN } else { '.skillato
 # Every timestamp is UTC and invariant-culture. Without this, a machine whose
 # default calendar is not Gregorian (th-TH Buddhist, ar-SA Hijri) writes 2569
 # for `yyyy`, and a run file touched by both mirrors mixes eras - which makes
-# relay.sh's age arithmetic return nonsense rather than fail.
+# r2d2-relay.sh's age arithmetic return nonsense rather than fail.
 $INV = [cultureinfo]::InvariantCulture
 $FMT = "yyyy-MM-ddTHH:mmZ"
 
 function Die($m) { throw "FAIL: $m" }
 function Now { (Get-Date).ToUniversalTime().ToString($FMT, $INV) }
 function AsUtc($s) { [datetime]::ParseExact($s, $FMT, $INV) }
-function NeedRun { if (-not (Test-Path $Run)) { Die "no run file at $Run (relay.ps1 -Mode init ...)" } }
+function NeedRun { if (-not (Test-Path $Run)) { Die "no run file at $Run (r2d2-relay.ps1 -Mode init ...)" } }
 
 # Every mutation is a read-modify-write of the whole file, and SKILL.md
 # sanctions concurrent in-flight stages - two `stage` calls landing at once
@@ -53,20 +53,30 @@ function NeedRun { if (-not (Test-Path $Run)) { Die "no run file at $Run (relay.
 # Creating a directory is the portable atomic test-and-set, same as the sh
 # twin. ponytail: a spin with a stale timeout, not a lock manager.
 $script:Lock = $null
+# The lock dir carries its holder's pid. Breaking a stale lock without checking
+# it let B delete a slow-but-alive A's lock, and A's release then deleted B's -
+# admitting C mid-write, which is the lost update the lock exists to prevent.
+function LockPid { try { (Get-Content (Join-Path $script:Lock 'pid') -Raw -ErrorAction Stop).Trim() } catch { '' } }
 function Lock {
   $script:Lock = "$Run.lock"
+  try { New-Item -ItemType Directory -Path $script:Lock -ErrorAction Stop | Out-Null
+        Set-Content (Join-Path $script:Lock 'pid') "$PID"; return } catch {}
+  $held = LockPid
   for ($i = 0; ; $i++) {
-    try { New-Item -ItemType Directory -Path $script:Lock -ErrorAction Stop | Out-Null; return } catch {}
-    # 30s of someone else's turn means that process died holding it.
-    if ($i -gt 300) { Remove-Item -Recurse -Force $script:Lock -ErrorAction SilentlyContinue; continue }
+    try { New-Item -ItemType Directory -Path $script:Lock -ErrorAction Stop | Out-Null
+          Set-Content (Join-Path $script:Lock 'pid') "$PID"; return } catch {}
+    # 30s of ONE holder's turn means that process died holding it. Break it
+    # only if the pid has not changed since we arrived.
+    if ($i -gt 300 -and (LockPid) -eq $held) { Remove-Item -Recurse -Force $script:Lock -ErrorAction SilentlyContinue }
     Start-Sleep -Milliseconds 100
   }
 }
 function Unlock {
-  if ($script:Lock) { Remove-Item -Recurse -Force $script:Lock -ErrorAction SilentlyContinue; $script:Lock = $null }
+  if ($script:Lock -and (LockPid) -eq "$PID") { Remove-Item -Recurse -Force $script:Lock -ErrorAction SilentlyContinue }
+  $script:Lock = $null
 }
 
-# LF, no BOM, written to a sibling temp then moved - matching relay.sh's
+# LF, no BOM, written to a sibling temp then moved - matching r2d2-relay.sh's
 # tmp+mv. Set-Content would truncate in place, so a Ctrl-C or a usage stop
 # between truncate and write leaves the ledger empty, destroying the only
 # record of what was in flight. `-Encoding utf8` on 5.1 also emits a BOM, which
@@ -120,6 +130,10 @@ function DoStage($n, $state, $owner, $landed) {
   if (-not $n) { Die "usage: -Mode stage -N <n> -State <s> [-Owner o] [-Landed l]" }
   if ($state -eq 'pending') { $state = '' }
   if ($state -notin @('', '~', 'x', '!')) { Die "unknown state: $state (one of pending ~ x !)" }
+  # Same reason `init` refuses it in a stage name: a `|` adds a column, and the
+  # next positional read writes state into the wrong cell. `landed` takes a
+  # path, so this is reachable without an exotic owner string.
+  foreach ($v in @($owner, $landed)) { if ($v -match '\|') { Die "'|' in owner/landed would shift every column: $v" } }
   if ($state -eq 'x' -and -not $landed) {
     Die "stage $n marked landed with no sha or path - that is the lie the next session believes"
   }
@@ -248,6 +262,11 @@ function DoSelftest {
     # The lock must be released on the way out, or the next call spins for 30s.
     if (Test-Path "$Run.lock") { Die "stage: left the lock behind" }
 
+    # A `|` in owner or landed shifts every column, exactly as one in a stage
+    # name does - and `landed` takes a path, so it is reachable by accident.
+    ShouldFail "would shift every column" { DoStage 2 '~' 'model:opus|5' '' }
+    ShouldFail "would shift every column" { DoStage 2 'x' 'build:sonnet' 'a|b' }
+
     # A heartbeat on a stage that already landed must not trip the sha guard.
     DoHeartbeat 1
     if (-not (Select-String -Path $Run -Pattern '3f1a2c9' -Quiet)) { Die "heartbeat: dropped the landed sha" }
@@ -263,7 +282,7 @@ function DoSelftest {
     if ((DoOrphans 9999) -match 'stage 2') { Die "orphans: flagged a fresh heartbeat" }
     if (-not (DoStatus | Select-String -Pattern '^\| 2 \|' -Quiet)) { Die "status: did not print the stage table" }
 
-    # The same rollovers relay.sh asserts on its own arithmetic. DoOrphans does
+    # The same rollovers r2d2-relay.sh asserts on its own arithmetic. DoOrphans does
     # its date maths independently, so the pair can disagree without this.
     foreach ($p in @(@('2026-09-22T09:00Z', '2026-09-22T09:25Z', 25),
                      @('2026-09-22T23:50Z', '2026-09-23T00:10Z', 20),

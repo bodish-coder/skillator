@@ -10,7 +10,7 @@ in front of itself.
 | §1 Classify · question · scope · show it | `superpowers:brainstorming` (its visual companion routed to `design-arwen`'s artboard gate) |
 | §2 Tasks are a plan | `superpowers:writing-plans`, `executing-plans` |
 | §3 Self-review the design | `writing-plans` + `brainstorming` spec review |
-| §4 Building | `test-driven-development`, `subagent-driven-development`, `dispatching-parallel-agents` |
+| §4 Building | `skillator:replicator-agent`, `test-driven-development`, `subagent-driven-development`, `dispatching-parallel-agents` |
 | §5 Claiming it works | `verification-before-completion` |
 | §6 Reviewing, and taking review | `requesting-code-review`, `receiving-code-review` |
 | §7 Debugging | `systematic-debugging` |
@@ -223,7 +223,7 @@ replace the approval gate in §1 — that is the user's, not a reviewer's.
 
 ---
 
-## 4. Building (`test-driven-development`, `subagent-driven-development`)
+## 4. Building (`skillator:replicator-agent`, `test-driven-development`)
 
 **The iron law:** no production code without a failing test first. Wrote code
 before the test? Delete it — don't keep it as reference, don't adapt it while

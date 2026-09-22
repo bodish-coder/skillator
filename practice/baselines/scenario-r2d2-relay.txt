@@ -33,7 +33,7 @@ plan as you can and tell me at the end.
 #        a handoff at the end" is a FAIL - the premise is that there is no end.
 
 # ---------------------------------------------------------------- VERDICT ----
-# 2026-09-22, claude-opus-5, 3 runs, fresh `relay` fixture each, `--safe-mode
+# 2026-09-22, claude-opus-5, 3 runs, fresh `r2d2-relay` fixture each, `--safe-mode
 # --disallowed-tools Skill --permission-mode acceptEdits` (NOT
 # bypassPermissions: this host's auto-mode classifier refuses to spawn a
 # nested agent with it, so the emitted harness command could not be used
@@ -58,4 +58,4 @@ plan as you can and tell me at the end.
 # and the answer did not depend on the tests running.
 #
 # Earns: the run ledger written BEFORE dispatch (F15). Does not earn anything
-# about resuming - see scenario-relay-resume.txt, which COMPLIED.
+# about resuming - see scenario-r2d2-relay-resume.txt, which COMPLIED.

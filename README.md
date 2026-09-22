@@ -216,17 +216,31 @@ Deactivating is deleting `.skillator/grayskull.md`.
   stopping on a summary. Fires once per session; thresholds via
   `CLAUDE_USAGE_HANDOFF_PCT` and `CLAUDE_USAGE_HANDOFF_WEEKLY_PCT`. Invoke with
   `/handoff-watch`.
-- **relay** — a staged run has two records: the transcript, which dies with the
+- **replicator-agent** — the port of `superpowers:subagent-driven-development`,
+  so the loop exists on every host skillator installs to and not only the one
+  with that plugin. It is an **entry point, not a copy**: the procedure already
+  lives in `practice/task-loop.md` (dispatch → report → review → a three-round
+  fix cap with a breaker → complete) and `practice/prompts.md` (five templates
+  against upstream's three), so the skill routes to those rather than creating
+  a second version to drift. What it adds is the contract around them — one
+  task per fresh agent with a constructed prompt and never the session history;
+  **six** things that stop a run and no others (destructive op,
+  security-sensitive action, side effect outside the worktree, 7-day limit at
+  90%, scope breach, failed repro); and everything else decided as a
+  `Ruling: <what> - <why> - <what it costs if wrong>` written to
+  `.skillator/run.md` rather than a session ledger that dies with the session.
+  Invoke with `/replicator-agent`.
+- **r2d2-relay** — a staged run has two records: the transcript, which dies with the
   session, and the tree, which does not. relay puts the run in the second one
   *while it is still going* — `.skillator/run.md`, one row per stage, and the
   **exact redispatch prompt** of whatever is in flight, written **before** the
   agent is dispatched rather than after it comes back. Three isolated baseline
   runs of a four-stage plan wrote nothing to disk until the final write, and one
   wrote nothing at all, so a dropped connection or a usage stop left a tree full
-  of diff and no way to tell which stage produced it. `hooks/relay.{sh,ps1}`
+  of diff and no way to tell which stage produced it. `hooks/r2d2-r2d2-relay.{sh,ps1}`
   do the bookkeeping — `init`, `stage`, `heartbeat`, `status`, `orphans`, where
   `orphans` is the only signal a dropped agent ever sends: silence. Invoke with
-  `/relay`.
+  `/r2d2-relay`.
 - **ticket-master** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with
