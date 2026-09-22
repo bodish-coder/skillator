@@ -1,4 +1,4 @@
-# RUN r2609220315 - r2d2-relay: staged runs that survive sessions
+# RUN-1 - r2d2-relay: staged runs that survive sessions
 plan: docs/plans/PLAN-r2d2-relay.md
 started: 2026-09-22T03:15Z   updated: 2026-09-22T04:37Z
 

@@ -40,14 +40,39 @@ there and says nothing about it.
 when the stage returns" is the failure, not a variation on it — the stages that
 need recording most are the ones that never return.
 
+## Handing a run to another session
+
+Every run gets a short number when it is created, and `init` prints the
+sentence that resumes it:
+
+```
+hand this to any session:  continue RUN-3
+```
+
+That sentence is the whole interface. A fresh session — another machine,
+another host, a colleague — needs nothing else: **"continue RUN-3"**. It has no
+transcript, so the ledger is what it reads, and the ledger is on disk because
+it was written before the work, not after.
+
+```sh
+r2d2-relay.sh list          # every run, what is open, and its resume sentence
+r2d2-relay.sh resume 3      # everything a session that has never seen it needs
+r2d2-relay.sh 3 status      # any command takes the id first
+```
+
+`RUN-3`, `run-3` and `3` all resolve to the same run, because whoever types it
+next is working from memory of a conversation rather than from a path. With one
+run open and no id given, that run is assumed; with two or more, the script
+refuses rather than guessing.
+
 ## The run file
 
-`.skillator/run.md`, one per run, in the repo. Markdown because a human and any
+`.skillator/run-<id>-<slug>.md`, one per run, in the repo. Markdown because a human and any
 host both have to read it with no tooling. Git-tracked by default; a repo that
 objects can `.gitignore` it and lose only the shared view, not the resume.
 
 ```markdown
-# RUN r7 — notekeep v2
+# RUN-7 — notekeep v2
 plan: docs/plans/PLAN-notekeep.md
 started: 2026-09-22T09:14Z   updated: 2026-09-22T10:02Z
 
@@ -108,7 +133,7 @@ Then carry on. A resume does not need permission to continue — see
 
 ## Scripts
 
-`hooks/r2d2-r2d2-relay.sh` · `hooks/r2d2-r2d2-relay.ps1` — the same commands, mirrored per
+`hooks/r2d2-relay.sh` · `hooks/r2d2-relay.ps1` — the same commands, mirrored per
 `PLATFORMS.md`: `init`, `stage`, `heartbeat`, `status`, `orphans`. They are
 bookkeeping, not judgement; every one reads or edits `.skillator/run.md` and
 nothing else. Run `selftest` on both after touching either.
@@ -140,20 +165,20 @@ Three constraints the pair has to keep, each learned the hard way:
 
 ### Seeing a run without being told about one
 
-`status` and `orphans` print nothing and exit 0 when there is no run file, so
-they are safe as a `SessionStart` hook. With one wired, a session that inherits
+`list` prints every run with its resume sentence, and prints nothing when there
+are none, so it is safe as a `SessionStart` hook. With one wired, a session that inherits
 a half-finished run sees it in its own context before the user has to remember
 to mention it — which is the difference between resuming and starting over.
 
 ```json
 { "hooks": { "SessionStart": [ { "hooks": [ {
   "type": "command",
-  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"<SKILL>/hooks/r2d2-r2d2-relay.ps1\" -Mode status",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"<SKILL>/hooks/r2d2-relay.ps1\" -Mode list",
   "timeout": 5
 } ] } ] } }
 ```
 
-macOS/Linux: `sh <SKILL>/hooks/r2d2-r2d2-relay.sh status`. Forward slashes throughout —
+macOS/Linux: `sh <SKILL>/hooks/r2d2-relay.sh list`. Forward slashes throughout —
 PowerShell accepts them and it removes all backslash-escaping from the JSON.
 Other hosts have no equivalent event; there, reading `.skillator/run.md` is the
 first thing `resume-cortana` does. `watch-cortana` already drains in-flight

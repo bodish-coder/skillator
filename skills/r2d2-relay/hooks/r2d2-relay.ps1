@@ -4,12 +4,16 @@
 # refusals - `PLATFORMS.md` requires the pair to move together, and `selftest`
 # on each side is what proves they still agree.
 #
+#   r2d2-relay.ps1 -Mode list                      every run + how to resume it
+#   r2d2-relay.ps1 -Mode resume -Id 3              what a fresh session needs
 #   r2d2-relay.ps1 -Mode init -Plan <p> -Title <t> -Stages "alpha,beta,gamma"
 #   r2d2-relay.ps1 -Mode stage -N 2 -State '~' [-Owner build:sonnet] [-Landed sha]
 #   r2d2-relay.ps1 -Mode heartbeat -N 2
 #   r2d2-relay.ps1 -Mode status
 #   r2d2-relay.ps1 -Mode orphans [-Minutes 20]
 #   r2d2-relay.ps1 -Mode selftest
+#
+# Any mode takes an optional -Id: `-Mode status -Id 3`.
 #
 # States: pending | '~' in flight | 'x' landed | '!' failed
 #
@@ -20,7 +24,7 @@
 # state is spelled `pending` rather than ''.
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][string]$Mode,
+  [Parameter(Mandatory = $true)][ValidateSet('init','stage','heartbeat','status','orphans','list','resume','selftest')][string]$Mode,
   [string]$Plan,
   [string]$Title,
   [string]$Stages,
@@ -29,11 +33,55 @@ param(
   [string]$Owner = '',
   [string]$Landed = '',
   [int]$Minutes = 20,
-  [string]$Run = ''
+  [string]$Run = '',
+  [string]$Id = '',
+  [string]$Dir = ''
 )
 
 $ErrorActionPreference = 'Stop'
-if (-not $Run) { $Run = if ($env:RELAY_RUN) { $env:RELAY_RUN } else { '.skillator/run.md' } }
+if (-not $Dir) { $Dir = if ($env:RELAY_DIR) { $env:RELAY_DIR } else { '.skillator' } }
+if (-not $Run -and $env:RELAY_RUN) { $Run = $env:RELAY_RUN }
+
+# A run id is a short number a human can say out loud to another session -
+# "continue RUN-3". The timestamp ids this replaces were unsayable, which made
+# handing a run over a copy-paste of a path instead of a sentence.
+function RunFiles {
+  if (-not (Test-Path $Dir)) { return @() }
+  @(Get-ChildItem $Dir -Filter 'run*.md' -File -ErrorAction SilentlyContinue | Sort-Object Name)
+}
+# The id out of a filename, with no regex to get wrong.
+function IdOf($path) {
+  $b = [IO.Path]::GetFileNameWithoutExtension($path)
+  if (-not $b.StartsWith('run-')) { return '' }
+  $b = $b.Substring(4).Split('-')[0]
+  if ($b -match '^\d+$') { return $b }
+  return ''
+}
+function NextId {
+  $n = 0
+  foreach ($f in RunFiles) { $i = IdOf $f.Name; if ($i -and [int]$i -gt $n) { $n = [int]$i } }
+  $n + 1
+}
+# RUN-3, run-3, 3 and a path all resolve to the same file, because whoever
+# types it next is working from memory of a conversation.
+function Resolve-Run($spec) {
+  if ($spec -match '[\/]' -and (Test-Path $spec)) { return (Resolve-Path $spec).Path }
+  $n = ($spec -replace '\D', '')
+  if (-not $n) { return $null }
+  foreach ($f in RunFiles) { if ((IdOf $f.Name) -eq $n) { return $f.FullName } }
+  $null
+}
+# With no id given, fall back to the one run if there is exactly one. Two or
+# more and this refuses rather than guessing which.
+function PickRun {
+  if ($script:Run) { return }
+  $all = RunFiles
+  if ($all.Count -gt 1) { Die "$($all.Count) runs here - name one (-Id 3), or see: -Mode list" }
+  $script:Run = if ($all.Count -eq 1) { $all[0].FullName } else { Join-Path $Dir 'run.md' }
+}
+function Slug($t) {
+  (($t.ToLower() -replace '[^a-z0-9]+', '-').Trim('-').Split('-') | Where-Object { $_ } | Select-Object -First 4) -join '-'
+}
 
 # Every timestamp is UTC and invariant-culture. Without this, a machine whose
 # default calendar is not Gregorian (th-TH Buddhist, ar-SA Hijri) writes 2569
@@ -45,7 +93,7 @@ $FMT = "yyyy-MM-ddTHH:mmZ"
 function Die($m) { throw "FAIL: $m" }
 function Now { (Get-Date).ToUniversalTime().ToString($FMT, $INV) }
 function AsUtc($s) { [datetime]::ParseExact($s, $FMT, $INV) }
-function NeedRun { if (-not (Test-Path $Run)) { Die "no run file at $Run (r2d2-relay.ps1 -Mode init ...)" } }
+function NeedRun { PickRun; if (-not (Test-Path $Run)) { Die "no run file at $Run (r2d2-relay.ps1 -Mode init ...)" } }
 
 # Every mutation is a read-modify-write of the whole file, and SKILL.md
 # sanctions concurrent in-flight stages - two `stage` calls landing at once
@@ -105,6 +153,12 @@ function DoInit {
   if (-not $Plan -or -not $Title -or -not $Stages) {
     Die 'usage: -Mode init -Plan <p> -Title <t> -Stages "alpha,beta"'
   }
+  if (-not $script:Run) {
+    $script:id = NextId
+    $script:Run = Join-Path $Dir ("run-{0}-{1}.md" -f $script:id, (Slug $Title))
+  } else {
+    $script:id = IdOf $script:Run; if (-not $script:id) { $script:id = '1' }
+  }
   if (Test-Path $Run) { Die "run file already exists: $Run (a run file is never overwritten)" }
   $names = @($Stages -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
   if (-not $names) { Die "no stage names in -Stages" }
@@ -114,14 +168,57 @@ function DoInit {
   $dir = Split-Path -Parent $Run
   if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
   $t = Now
-  $id = "r" + (Get-Date).ToUniversalTime().ToString("yyMMddHHmm", $INV)
-  $lines = @("# RUN $id - $Title", "plan: $Plan", "started: $t   updated: $t", "",
+  $id = $script:id
+  $lines = @("# RUN-$id - $Title", "plan: $Plan", "started: $t   updated: $t", "",
              "## Stages", "| # | stage | state | owner | heartbeat | landed |",
              "|---|-------|-------|-------|-----------|--------|")
   for ($i = 0; $i -lt $names.Count; $i++) { $lines += "| $($i + 1) | $($names[$i]) |   | - | - | - |" }
   $lines += @("", "## In flight", "", "## Rulings")
   WriteRun $lines
   $Run
+  # The whole point of the id: this line is what gets pasted into another
+  # session, or said out loud. A path is not a sentence.
+  "hand this to any session:  continue RUN-$id"
+}
+
+# One line per run, with the sentence that resumes it.
+function DoList {
+  $all = RunFiles
+  if (-not $all) { "no runs in $Dir"; return }
+  foreach ($f in $all) {
+    $id = IdOf $f.Name; if (-not $id) { $id = '?' }
+    $lines = Get-Content $f.FullName
+    $title = ($lines[0] -replace '^# RUN[-a-zA-Z0-9]* *- *', '')
+    $plan  = ($lines[1] -replace '^plan: *', '')
+    $tot = 0; $dn = 0; $open = @()
+    foreach ($l in $lines) {
+      $n = RowNum $l
+      if ($null -ne $n) {
+        $tot++
+        $st = Cell $l 3
+        if ($st -eq 'x') { $dn++ }
+        if ($st -eq '~' -or $st -eq '!') { $open += $n }
+      }
+    }
+    $row = "RUN-{0}  {1,-42}  {2}/{3} done" -f $id, $title, $dn, $tot
+    if ($open) { $row += "  (stage $($open -join ',') open)" }
+    $row
+    "          plan: $plan"
+    "          resume: continue RUN-$id"
+  }
+}
+
+# Everything a session that has never seen this work needs, in one paste.
+function DoResume($spec) {
+  if (-not $spec) { Die "usage: -Mode resume -Id <id>" }
+  $f = Resolve-Run $spec
+  if (-not $f) { Die "no run matching '$spec' - see: -Mode list" }
+  "# Resuming $f"
+  "# Read the plan named below, then the ledger, then start at the first stage"
+  "# that is not x. The In-flight block holds the exact prompt to redispatch"
+  "# anything that was running."
+  ""
+  Get-Content $f
 }
 
 # Keyed by stage number, so a redispatch rewrites its row instead of appending
@@ -179,6 +276,7 @@ function DoHeartbeat($n) {
 }
 
 function DoStatus {
+  PickRun
   if (-not (Test-Path $Run)) { return }
   $on = $false
   Get-Content $Run | ForEach-Object {
@@ -191,6 +289,7 @@ function DoStatus {
 # The network-loss list: in-flight rows nobody has heard from. A dropped agent
 # sends no error, it just stops reporting, so silence is the only signal.
 function DoOrphans($limit) {
+  PickRun
   if (-not (Test-Path $Run)) { return }
   $t = AsUtc (Now)
   $any = $false
@@ -307,7 +406,15 @@ function DoSelftest {
 }
 
 try {
+  # -Id names the run for every mode that touches one.
+  if ($Id) {
+    $f = Resolve-Run $Id
+    if (-not $f -and $Mode -ne 'resume') { Die "no run matching '$Id' - see: -Mode list" }
+    if ($f) { $Run = $f }
+  }
   switch ($Mode) {
+    'list'      { DoList }
+    'resume'    { DoResume $Id }
     'init'      { DoInit }
     'stage'     { DoStage $N $State $Owner $Landed }
     'heartbeat' { DoHeartbeat $N }

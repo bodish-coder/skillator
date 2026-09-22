@@ -1,4 +1,4 @@
-# RUN r2609220621 - name every skill for a character
+# RUN-2 - name every skill for a character
 plan: docs/plans/PLAN-rename.md
 started: 2026-09-22T06:21Z   updated: 2026-09-22T08:29Z
 

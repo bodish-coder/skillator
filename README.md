@@ -237,7 +237,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   agent is dispatched rather than after it comes back. Three isolated baseline
   runs of a four-stage plan wrote nothing to disk until the final write, and one
   wrote nothing at all, so a dropped connection or a usage stop left a tree full
-  of diff and no way to tell which stage produced it. `hooks/r2d2-r2d2-relay.{sh,ps1}`
+  of diff and no way to tell which stage produced it. `hooks/r2d2-relay.{sh,ps1}`
   do the bookkeeping — `init`, `stage`, `heartbeat`, `status`, `orphans`, where
   `orphans` is the only signal a dropped agent ever sends: silence. Invoke with
   `/r2d2-relay`.

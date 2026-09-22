@@ -88,7 +88,7 @@ surface; S1's resume scenario says agents already read a mid-run tree
 correctly, so relay says nothing about that.
 
 ### [x] S3 — monitoring + restart  (F16)
-`skills/r2d2-relay/hooks/r2d2-r2d2-relay.sh` + `r2d2-relay.ps1` (mirror pair, like handoff-watch):
+`skills/r2d2-relay/hooks/r2d2-relay.sh` + `r2d2-relay.ps1` (mirror pair, like handoff-watch):
 `relay init|stage|heartbeat|status|orphans`. `orphans` lists stages `[~]` with a
 heartbeat older than N minutes — those are the network-loss casualties. The model
 reads `orphans`, redispatches from the stored prompt, and never double-commits
