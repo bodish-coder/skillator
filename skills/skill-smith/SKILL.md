@@ -56,17 +56,23 @@ Four shapes, and they are tested differently (§5):
 
 ## 1b. Naming — a character, and the job
 
-Skillator skills are named **`name-purpose`** or **`purpose-name`**, where the
-name is a character from fantasy or science fiction and the purpose is the job
-in one or two plain words:
+Skillator skills are named **`purpose-name`**, purpose **always** first. The
+purpose is the job in one or two plain words; the name is a character, concept
+or artefact from fantasy or science fiction.
 
 | Skill | Reads as |
 |---|---|
-| `grayskull-power` | He-Man's invocation; the router that arms everything |
-| `design-arwen` | purpose first |
-| `sherlock-codes` | character first |
-| `r2d2-relay` | the droid that carries the plans between owners and survives being shot down |
-| `replicator-agent` | SG-1's replicators: units built to build more units |
+| `design-arwen` | the job, then who does it |
+| `audit-sherlock` | " |
+| `relay-r2d2` | the droid that carries the plans between owners and survives being shot down |
+| `tasks-replicator` | SG-1's replicators: units built to build more units |
+
+**Purpose first, without exception.** An agent scanning a list of twenty skills
+matches on the first token, so every skill doing the same kind of work has to
+sort together - `handoff-`, `merge-`, `build-`, `spec-`, `tui-`. A name-first
+spelling scatters them, and the character is the half carrying no information
+about when to load the skill. An earlier version of this section allowed either
+order; that was wrong for exactly this reason and is withdrawn.
 
 The character has to earn it — pick one whose *defining trait is the job*, not
 one that merely sounds good. R2-D2 is right for a ledger because the mission
@@ -74,8 +80,8 @@ state survives the carrier; it would be wrong for a linter. A name that needs
 a sentence of explanation before the joke lands is the wrong name.
 
 **The purpose half is not decoration.** The description does the triggering
-(§2), but an agent scanning a list of twenty skills reads names first, and
-`arwen` alone says nothing about UI. Both halves, always.
+(§2), but the name is read first, and `arwen` alone says nothing about UI.
+Both halves, always.
 
 Renaming an existing skill is a breaking change: the directory, the `name:`
 frontmatter, every `skillator:<name>` reference, the `scenario-<skill>.txt` and
