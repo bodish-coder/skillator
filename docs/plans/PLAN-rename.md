@@ -4,8 +4,10 @@
 `.skillator/run.md` for which stages landed, start at the first that has not.
 
 **Convention** (`skill-smith` §1b): **`purpose-name`, purpose always first.**
-The purpose is the job in one or two plain words; the name is a character,
-concept or artefact **whose defining trait is that job**. Purpose-first without
+The purpose is the job in one or two plain words; the name is a **character,
+artefact, concept, place or weapon** **whose defining trait is that job**. When
+no character fits the job cleanly, the artefact or the concept usually does —
+`watch-palantir`, `watch-rampancy`, `relay-raptor`. Purpose-first without
 exception — an agent scanning the list matches on the first token, so every
 skill that does the same kind of work sorts together (`handoff-`, `merge-`,
 `build-`, `spec-`). The `name-purpose` half of the earlier rule is withdrawn.
@@ -53,51 +55,45 @@ character and the distinction.
 
 ### Open — A: 10/11/12, one origin, three names
 
-Not Marvel (that is the build family). Each option is a matched trio.
+Marvel is the build family, The Matrix is B. Six origins; the last three use
+artefacts and concepts where no character fits the job.
 
 | | 10 `handoff` writes the doc | 11 `handoff-resume` executes it | 12 `handoff-watch` fires before cutoff |
 |---|---|---|---|
 | **a** Middle-earth | `handoff-bilbo` — hands the quest on, writes the book | `resume-frodo` — takes up what Bilbo put down | `watch-palantir` — the stone that shows what is coming |
 | **b** Star Trek | `handoff-picard` — the captain's log | `resume-riker` — "you have the bridge" | `watch-uhura` — monitors every channel |
 | **c** Harry Potter | `handoff-dumbledore` — leaves the instructions behind | `resume-harry` — carries them out | `watch-moody` — CONSTANT VIGILANCE |
+| **d** Foundation | `handoff-seldon` — records a message for a future he will not see | `resume-foundation` — the ones who carry it out | `watch-vault` — the Time Vault opens exactly at the crisis |
+| **e** Doctor Who | `handoff-doctor` — writes this self into the next | `resume-regeneration` — a new body, the same memories | `watch-tardis` — sees the fixed point coming |
+| **f** Halo | `handoff-cortana` — the AI who writes herself down | `resume-chief` — carries her and acts on it | `watch-rampancy` — an AI that knows it is running out of time |
 
-### Open — B: 14/15/16/17, one origin, four names
+**f is the recommendation**, on one word: *rampancy* is an AI counting down its
+own remaining life, which is `handoff-watch`'s entire job and is the closest fit
+anywhere in this table. **d** is the runner-up — Seldon recording for a future
+he will not see is the handoff itself.
 
-| | 14 `merge-prep` normalises the branch | 15 `merge-agent` merges, resolves conflicts | 16 `r2d2-relay` staged-run ledger | 17 `replicator-agent` one agent per task |
-|---|---|---|---|---|
-| **a** The Matrix | `mergeprep-oracle` — tells you what breaks | `merge-smith` — merges into everything he touches | `relay-morpheus` — carries the message through | `tasks-sentinels` — many units, one job each |
-| **b** Battlestar Galactica | `mergeprep-oracle` — BSG has its own | `merge-cylon` — resurrection, many into one | `relay-raptor` — the scout that carries word between ships | `tasks-centurion` — built to do one thing |
-| **c** Star Wars | `mergeprep-obiwan` — checks the ground first | `merge-vader` — two selves, one body | `relay-r2d2` — **already done, no rename cost** | `tasks-clones` — grown to order, one per post |
+### Settled — B, C, D
 
-`c` is the only option that leaves 16 alone; it was renamed to `r2d2-relay`
-an hour ago and `a`/`b` would rename it twice.
+| # | Current | New | Note |
+|---|---|---|---|
+| 14 | `merge-prep` | `mergeprep-oracle` | **B = The Matrix** |
+| 15 | `merge-agent` | `merge-smith` | merges himself into everything he touches |
+| 16 | `r2d2-relay` | `relay-morpheus` | carries the message through — **second rename in a day**, see below |
+| 17 | `replicator-agent` | `tasks-sentinels` | many units, one job each |
+| 13 | `live-build` | `live-friday` | **C** — read as c1, the recommendation. Say `c3` if `live-holodeck` was meant. |
+| 20 | `skill-smith` | `skill-smith` | **D = f**, unchanged; already purpose-first and already says what it does |
 
-### Open — C: the `jarvis` clash
+**16 is renamed twice in one day** — `relay` → `r2d2-relay` this morning, now
+→ `relay-morpheus`. That is the cost of settling the convention after starting
+the renames, not a mistake to hide. Git carries both moves; the baselines
+(`scenario-r2d2-relay.txt`, `green-r2d2-relay.txt`) follow it the second time
+as they did the first. `r2d2` leaves the library entirely.
 
-2 is `build-jarvis` and 13 is `live-jarvis`. One character, one skill.
-
-- **c1** — 13 becomes `live-friday`. Stark's *later* always-on assistant; stays
-  Marvel, keeps the build family intact, nothing else moves. **Recommended.**
-- **c2** — 2 becomes something else and 13 keeps `jarvis`. Costs a name in the
-  Marvel trio, which was chosen as a set.
-- **c3** — 13 becomes `live-holodeck`. Run it and watch it, no character.
-
-### Open — D: 20 `skill-smith`, more options
-
-| | Name | Why |
-|---|---|---|
-| **a** | `skills-q` | builds the gadgets other agents are issued |
-| **b** | `skills-forge` | X-Men's Forge — inventing devices *is* his power |
-| **c** | `skills-shuri` | designs the tech everyone else in the story uses |
-| **d** | `skills-geppetto` | makes the thing that then acts on its own |
-| **e** | `skills-daedalus` | the maker of makers |
-| **f** | `skill-smith` | unchanged — already purpose-first and already says it |
-
-**Two names stay name-first by owner's call:** `grayskull-power` (9) because it
-is the invocation, and `deploy-niyoj` (6). The convention still reads
-purpose-first without exception; these are recorded exceptions, not a softening
-of it, and `skill-smith` §1b should say so rather than let the next reader infer
-the rule is optional.
+**Three names stay as they are by the owner's call:** `grayskull-power` (9),
+because it is the invocation and reads name-first; `deploy-niyoj` (6); and
+`skill-smith` (20), which already leads with its purpose. Recorded as
+exceptions, not as the rule softening — `skill-smith` §1b says so outright, so
+the next reader cannot infer the convention is optional.
 
 ## Superseded first pass
 

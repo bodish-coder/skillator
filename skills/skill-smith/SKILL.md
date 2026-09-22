@@ -57,8 +57,13 @@ Four shapes, and they are tested differently (§5):
 ## 1b. Naming — a character, and the job
 
 Skillator skills are named **`purpose-name`**, purpose **always** first. The
-purpose is the job in one or two plain words; the name is a character, concept
-or artefact from fantasy or science fiction.
+purpose is the job in one or two plain words; the name is drawn from fantasy or
+science fiction and may be a **character, artefact, concept, place or weapon**.
+
+When no character fits the job cleanly, the artefact or the concept usually
+does, and is often sharper: `watch-rampancy` (an AI counting down its own
+remaining life) says more about a usage watcher than any character would, and
+`watch-palantir` beats naming whoever happened to look into it.
 
 | Skill | Reads as |
 |---|---|
@@ -73,6 +78,12 @@ sort together - `handoff-`, `merge-`, `build-`, `spec-`, `tui-`. A name-first
 spelling scatters them, and the character is the half carrying no information
 about when to load the skill. An earlier version of this section allowed either
 order; that was wrong for exactly this reason and is withdrawn.
+
+**Exceptions are recorded, never inferred.** Three names in this library do not
+follow the rule — `grayskull-power` (it is the invocation), `deploy-niyoj`, and
+`skill-smith` (already purpose-led). They are listed here so a reader meeting
+one of them cannot conclude the convention is optional. Adding a fourth needs
+the same kind of reason, written down.
 
 The character has to earn it — pick one whose *defining trait is the job*, not
 one that merely sounds good. R2-D2 is right for a ledger because the mission
