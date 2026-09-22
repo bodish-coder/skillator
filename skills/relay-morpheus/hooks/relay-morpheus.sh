@@ -5,16 +5,16 @@
 # judgement in this script: deciding a stage is done is the model's job, saying
 # so on disk is this script's. See ../SKILL.md for the rule it serves.
 #
-#   r2d2-relay.sh list                             every run + how to resume it
-#   r2d2-relay.sh resume <id>                      what a fresh session needs
-#   r2d2-relay.sh init <plan> <title> <stage>...   create the run file
-#   r2d2-relay.sh stage <n> <state> [owner] [landed]
-#   r2d2-relay.sh heartbeat <n>
-#   r2d2-relay.sh status
-#   r2d2-relay.sh orphans [minutes]                default 20
-#   r2d2-relay.sh selftest
+#   relay-morpheus.sh list                             every run + how to resume it
+#   relay-morpheus.sh resume <id>                      what a fresh session needs
+#   relay-morpheus.sh init <plan> <title> <stage>...   create the run file
+#   relay-morpheus.sh stage <n> <state> [owner] [landed]
+#   relay-morpheus.sh heartbeat <n>
+#   relay-morpheus.sh status
+#   relay-morpheus.sh orphans [minutes]                default 20
+#   relay-morpheus.sh selftest
 #
-# Any command takes an optional run id first: `r2d2-relay.sh 3 status`.
+# Any command takes an optional run id first: `relay-morpheus.sh 3 status`.
 #
 # States:  (pending) | ~ in flight | x landed | ! failed
 set -e
@@ -67,7 +67,7 @@ pick_run() {
     [ -f "$f" ] || continue
     c=$((c + 1)); RUN="$f"
   done
-  [ "$c" -gt 1 ] && die "$c runs here - name one (r2d2-relay.sh <id> <cmd>), or see: r2d2-relay.sh list"
+  [ "$c" -gt 1 ] && die "$c runs here - name one (relay-morpheus.sh <id> <cmd>), or see: relay-morpheus.sh list"
   [ "$c" = 0 ] && RUN="$DIR/run.md"
   return 0
 }
@@ -93,7 +93,7 @@ age_min() {
   function mins(P){ return days(P[1]+0,P[2]+0,P[3]+0)*1440 + P[4]*60 + P[5]; }'
 }
 
-need_run() { pick_run; [ -f "$RUN" ] || die "no run file at $RUN (r2d2-relay.sh init ...)"; }
+need_run() { pick_run; [ -f "$RUN" ] || die "no run file at $RUN (relay-morpheus.sh init ...)"; }
 
 # Every mutation is a read-modify-write of the whole file, and SKILL.md
 # sanctions concurrent in-flight stages - two `stage` calls landing at once
@@ -142,7 +142,7 @@ cmd_init() {
   plan="$1"; title="$2"; shift 2
   [ -n "$RUN" ] || RUN=""
   [ -n "$plan" ] && [ -n "$title" ] && [ "$#" -gt 0 ] \
-    || die "usage: r2d2-relay.sh init <plan> <title> <stage>..."
+    || die "usage: relay-morpheus.sh init <plan> <title> <stage>..."
   if [ -z "$RUN" ]; then
     id=$(next_id); RUN="$DIR/run-$id-$(slug "$title").md"
   else
@@ -186,7 +186,7 @@ cmd_init() {
 # appending a second one - that is what makes a resume idempotent.
 cmd_stage() {
   n="$1"; state="$2"; owner="$3"; landed="$4"
-  [ -n "$n" ] || die "usage: r2d2-relay.sh stage <n> <state> [owner] [landed]"
+  [ -n "$n" ] || die "usage: relay-morpheus.sh stage <n> <state> [owner] [landed]"
   case "$state" in ''|'~'|x|'!') ;; *) die "unknown state: $state (one of '' ~ x !)" ;; esac
   # Same reason `init` refuses it in a stage name: a `|` adds a column, and the
   # next positional read writes state into the wrong cell. `landed` takes a
@@ -221,7 +221,7 @@ cmd_stage() {
 }
 
 cmd_heartbeat() {
-  n="$1"; [ -n "$n" ] || die "usage: r2d2-relay.sh heartbeat <n>"
+  n="$1"; [ -n "$n" ] || die "usage: relay-morpheus.sh heartbeat <n>"
   need_run
   # A heartbeat carries the row's existing `landed` back in. Without it the
   # "x with no sha" guard fires on a stage that already landed, turning a
@@ -258,8 +258,8 @@ cmd_list() {
 
 # Everything a session that has never seen this work needs, in one paste.
 cmd_resume() {
-  [ -n "${1:-}" ] || die "usage: r2d2-relay.sh resume <id>"
-  f=$(resolve "$1") || die "no run matching '$1' - see: r2d2-relay.sh list"
+  [ -n "${1:-}" ] || die "usage: relay-morpheus.sh resume <id>"
+  f=$(resolve "$1") || die "no run matching '$1' - see: relay-morpheus.sh list"
   echo "# Resuming $f"
   echo "# Read the plan named below, then the ledger, then start at the first"
   echo "# stage that is not x. The In-flight block holds the exact prompt to"
@@ -395,7 +395,7 @@ cmd_selftest() {
 
 c="${1:-}"; [ "$#" -gt 0 ] && shift || true
 
-# An id may lead: `r2d2-relay.sh 3 status`. Checked before the command names so
+# An id may lead: `relay-morpheus.sh 3 status`. Checked before the command names so
 # a run can never be shadowed by one.
 case "$c" in
   RUN-*|run-*|[0-9]*)

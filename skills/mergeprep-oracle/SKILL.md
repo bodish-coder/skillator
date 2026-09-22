@@ -1,5 +1,5 @@
 ---
-name: merge-prep
+name: mergeprep-oracle
 description: >-
   Use when the user wants to "prep a branch for merge", "clean up a branch
   before merging", "make sure only the real changes get merged", "strip
@@ -16,9 +16,9 @@ and nothing else — arrives in the destination branch, and the destination bran
 is not disturbed on the way in. Two failure modes, equally bad: the branch drags
 in old or unrelated content (this skill's job), and the merge quietly reverts
 work the destination did while the branch was away (verified in Phase 3, and
-again by `merge-agent`).
+again by `merge-smith`).
 
-**Vocabulary, shared with `merge-agent`:** `<branch>` is the **source** (the
+**Vocabulary, shared with `merge-smith`:** `<branch>` is the **source** (the
 feature), `<base>` is the **destination** (main/develop). The two skills use the
 same words, the same `apply --reverse --check` reconcile, and the same rule that
 a non-zero exit is evidence, not an obstacle.
@@ -27,7 +27,7 @@ The problem this fixes: a branch that's behind base, or carries stale file
 versions, whitespace churn, reverted-to-zero edits, or files it never meant to
 touch — so merging it drags in "old or untouched parts". This skill brings the
 branch **onto the current base**, removes what it didn't mean to change, and
-commits a **prep document** to the branch so the next person (or `merge-agent`)
+commits a **prep document** to the branch so the next person (or `merge-smith`)
 inherits every decision.
 
 **Safety rails:** the branch is only ever **appended to** — no rebase, no history
@@ -58,7 +58,7 @@ If the branch is already pushed, say so now: this prep adds commits that will ne
 
 Compute the branch's diff against the **merge base**, per file:
 `git diff --stat <base>...<branch>` and the full diff. Classify every changed path
-(a cheap-tier analysis agent — Sonnet on Claude Code, matching `merge-agent`'s
+(a cheap-tier analysis agent — Sonnet on Claude Code, matching `merge-smith`'s
 Phase 1; the equivalent row in the
 `PLATFORMS.md` (beside the installed skills or at the repo root) elsewhere, or just the main session where no delegation
 exists — can summarize the branch's *intent* from its commits/PR body and flag
@@ -78,7 +78,7 @@ Present the inventory (INTENDED / NO-OP / SUSPICIOUS) and get the suspicious cal
 not a reviewer's call. Then **keep every SUSPICIOUS path**, recorded as
 `decision: keep (assumed — nobody to decide)` owned by `auto`: excluding a path
 unattended deletes work on a guess, while keeping it leaves it visible to
-`merge-agent` and to review. The exception is a committed secret (`.env`, a key) —
+`merge-smith` and to review. The exception is a committed secret (`.env`, a key) —
 exclude it and say so, since nobody intends that one. Auto-drop NO-OPs as usual,
 prep the branch, write the document, and don't push it.
 
@@ -107,7 +107,7 @@ silent drops are how "but I *did* change that file" happens at review.
 
 The document also carries: base and pre-prep tag, the merge conflicts resolved in
 Phase 2 and how, the Phase-3 verification result, and what a reader should revert if
-they disagree. It is the handoff — `merge-agent` and the next human both read it.
+they disagree. It is the handoff — `merge-smith` and the next human both read it.
 
 ## Phase 2 — Prep the branch in place
 
@@ -239,8 +239,8 @@ Relay: the branch name (unchanged), the pre-prep tag, the kept-vs-dropped counts
 verified diff, and the **path of the committed prep document**. If a reviewer-decisions
 commit exists, say so explicitly and list what it changed — the developer hasn't seen
 those edits and gets the last word on their own code; if they object, they revert that
-commit. Then **ask at run time**: hand off locally (the user / `merge-agent` targets the
-branch), or — only on an explicit yes — push it (normal push, never force). `merge-agent`
+commit. Then **ask at run time**: hand off locally (the user / `merge-smith` targets the
+branch), or — only on an explicit yes — push it (normal push, never force). `merge-smith`
 can now integrate a branch that carries only its real changes and documents why.
 
 ## Rules
@@ -274,7 +274,7 @@ can now integrate a branch that carries only its real changes and documents why.
   which is where losses actually hide.
 - **"Current base" is the local ref, and `git fetch` does not move it.** Fast-forward
   `<base>` explicitly or the whole skill quietly operates on stale content.
-- Pairs with `merge-agent`: prep first, then merge the clean branch. The two are kept
+- Pairs with `merge-smith`: prep first, then merge the clean branch. The two are kept
   in sync deliberately — same source/destination vocabulary, same `git diff --binary
   -M ... | git apply --reverse --check` reconcile run in both directions, same
   per-hunk granularity, same treatment of a non-zero exit as evidence. A change to

@@ -85,7 +85,7 @@ re-check anything an agent asserts without evidence.
 | A static/mock UI that needs to actually work | `func-ui` |
 | What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-trace` |
 | "check screenshot", or verify a change in a running app visually | `screenshot-loop` |
-| Ready to merge a branch | `merge-prep`, then `merge-agent` |
+| Ready to merge a branch | `mergeprep-oracle`, then `merge-smith` |
 | Ship to a VPS / set up deployment | `deploy-wizard`, then `deploy-niyoj` |
 | Session ending, context or usage running out | `handoff-cortana` |
 | Starting from someone else's handoff doc | `resume-cortana` |

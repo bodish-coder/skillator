@@ -14,7 +14,7 @@ skill that does the same kind of work sorts together (`handoff-`, `merge-`,
 
 **The build family is science fiction only** — no literature, no mythology.
 
-**Board:** F20. **Already done:** `r2d2-relay`, `replicator-agent` (F17),
+**Board:** F20. **Already done:** `relay-morpheus`, `tasks-sentinels` (F17),
 `grayskull-power`, `design-arwen`, `sherlock-codes`.
 
 ---
@@ -23,8 +23,8 @@ skill that does the same kind of work sorts together (`handoff-`, `merge-`,
 
 Three per skill so the choice is a comparison, not a yes/no. **A** is the
 recommendation. The three already conforming (`grayskull-power`,
-`design-arwen`, `sherlock-codes`) and the two just done (`r2d2-relay`,
-`replicator-agent`) carry alternatives only in case the owner wants them moved.
+`design-arwen`, `sherlock-codes`) and the two just done (`relay-morpheus`,
+`tasks-sentinels`) carry alternatives only in case the owner wants them moved.
 
 ### Settled — owner sign-off 2026-09-22
 
@@ -76,17 +76,17 @@ he will not see is the handoff itself.
 
 | # | Current | New | Note |
 |---|---|---|---|
-| 14 | `merge-prep` | `mergeprep-oracle` | **B = The Matrix** |
-| 15 | `merge-agent` | `merge-smith` | merges himself into everything he touches |
-| 16 | `r2d2-relay` | `relay-morpheus` | carries the message through — **second rename in a day**, see below |
-| 17 | `replicator-agent` | `tasks-sentinels` | many units, one job each |
+| 14 | `mergeprep-oracle` | `mergeprep-oracle` | **B = The Matrix** |
+| 15 | `merge-smith` | `merge-smith` | merges himself into everything he touches |
+| 16 | `relay-morpheus` | `relay-morpheus` | carries the message through — **second rename in a day**, see below |
+| 17 | `tasks-sentinels` | `tasks-sentinels` | many units, one job each |
 | 13 | `live-friday` | `live-friday` | **C** — read as c1, the recommendation. Say `c3` if `live-holodeck` was meant. |
 | 20 | `skill-smith` | `skill-smith` | **D = f**, unchanged; already purpose-first and already says what it does |
 
-**16 is renamed twice in one day** — `relay` → `r2d2-relay` this morning, now
+**16 is renamed twice in one day** — `relay` → `relay-morpheus` this morning, now
 → `relay-morpheus`. That is the cost of settling the convention after starting
 the renames, not a mistake to hide. Git carries both moves; the baselines
-(`scenario-r2d2-relay.txt`, `green-r2d2-relay.txt`) follow it the second time
+(`scenario-relay-morpheus.txt`, `green-relay-morpheus.txt`) follow it the second time
 as they did the first. `r2d2` leaves the library entirely.
 
 **Three names stay as they are by the owner's call:** `grayskull-power` (9),
@@ -111,8 +111,8 @@ the next reader cannot infer the convention is optional.
 | `handoff-cortana` | `bilbo-handoff` | Bilbo hands the quest on and writes the book. |
 | `resume-cortana` | `frodo-resume` | Frodo takes up what Bilbo put down. |
 | `watch-cortana` | `heimdall-watch` | The watchman who sees it coming before it arrives. |
-| `merge-prep` | `oracle-merge-prep` | The Oracle tells you what breaks before you walk into it. |
-| `merge-agent` | `smith-merge` | Agent Smith merges himself into everything he touches. |
+| `mergeprep-oracle` | `oracle-merge-prep` | The Oracle tells you what breaks before you walk into it. |
+| `merge-smith` | `smith-merge` | Agent Smith merges himself into everything he touches. |
 | `deploy-wizard` | `gandalf-deploy` | The wizard who plans the road, not the one who walks it. |
 | `deploy-niyoj` | `scotty-ship` | The engineer who actually gets it into production, under protest. |
 | `live-friday` | `jarvis-live` | Stark's always-on assistant, showing the build as it runs. |

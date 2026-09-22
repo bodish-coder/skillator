@@ -1,5 +1,5 @@
 ---
-name: merge-agent
+name: merge-smith
 description: >-
   Use when the user wants to combine/consolidate several GitHub branches into
   one integration branch, merge a feature branch into a base (main/develop),
@@ -41,7 +41,7 @@ is not disturbed on the way in. Both halves are *verified* in Phase 4 — a merg
 that lands the feature while silently reverting base's newer work is a failed
 merge that reports success.
 
-**Vocabulary, shared with `merge-prep`:** the **source** is the branch being
+**Vocabulary, shared with `mergeprep-oracle`:** the **source** is the branch being
 merged, the **destination** (`<base>`) is what it merges into. Same words, same
 `apply --reverse --check` reconcile, same rule that a non-zero exit is evidence.
 
@@ -86,7 +86,7 @@ genuinely reversible, stop before the first merge and say so; it is the one call
 with no safe guess. And push, PR and swap-in need a real yes — deleting an
 integration branch costs nothing, an unapproved push costs everyone.
 
-> If a branch is stale or carries unrelated/no-op churn, run **`merge-prep`**
+> If a branch is stale or carries unrelated/no-op churn, run **`mergeprep-oracle`**
 > on it first — it preps the branch **in place** (onto current base, unintended paths
 > dropped) and commits a prep document to it, so this merge integrates nothing old or
 > untouched. Read that document (`docs/merges/prep-<branch>-*.md`) before merging: it
@@ -168,7 +168,7 @@ the source still carries must go to `destination`, or the merge reintroduces the
 Present both versions, say which way you'd go and why, and let the user pick.
 
 Where a hunk was taken from one side wholesale, prefer applying it rather than editing
-markers by hand — same pipe as `merge-prep`, so both skills fail the same way and the
+markers by hand — same pipe as `mergeprep-oracle`, so both skills fail the same way and the
 failure is visible:
 
 ```
@@ -251,7 +251,7 @@ verification result, integration branch name, merge-log path. Then **ask**:
   Name the archived base `<base>_old_before_<source>`, not a bare `<base>_old`:
   months later the only question anyone asks of that branch is *"old before what?"*
   Strip any `-merge-ready`/`-prep` suffix from `<source>` first (older preps made such
-  branches; current `merge-prep` preps in place, so usually there is nothing to strip).
+  branches; current `mergeprep-oracle` preps in place, so usually there is nothing to strip).
   If the name is
   already taken, append `_2`, `_3` — never overwrite an existing archive.
   End state: sources unchanged (`f1` is still `f1`), `dev` = merged result,
@@ -298,7 +298,7 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
 - If `gh` is unavailable, do the whole merge with pure git and tell the user PR
   context/opening isn't available.
 - If a subagent dies / returns null, stop and report rather than merging blind.
-- **Kept in sync with `merge-prep`** — same source/destination vocabulary, same
+- **Kept in sync with `mergeprep-oracle`** — same source/destination vocabulary, same
   `git diff --binary -M ... | git apply --reverse --check` reconcile in both
   directions, same per-hunk granularity, same treatment of a non-zero exit as
   evidence. A change to any of those in either skill belongs in both.

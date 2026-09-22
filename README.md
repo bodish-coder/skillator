@@ -150,14 +150,14 @@ Deactivating is deleting `.skillator/grayskull.md`.
   removing the deploy *trigger*, not build/test checks — it keeps or offers a
   check-only workflow, which never touches the server and so cannot race. Sibling
   of `deploy-wizard`. Invoke with `/deploy-niyoj`.
-- **merge-prep** — prepare a branch for a clean merge, **in place**: merge current
+- **mergeprep-oracle** — prepare a branch for a clean merge, **in place**: merge current
   base in, drop the paths it never meant to carry (auto-drops no-ops, escalates
   suspicious ones), and commit a handoff document recording every decision to the
   same branch. No side branch, append-only commits behind a pre-prep tag, no history
   rewrite, no force-push, base untouched. Verifies both ways: every hunk the feature
   intended arrived, **and** every hunk the destination gained is still there. Runs
-  before `merge-agent`. Invoke with `/merge-prep`.
-- **merge-agent** — analyse GitHub branches with agents and merge them
+  before `merge-smith`. Invoke with `/mergeprep-oracle`.
+- **merge-smith** — analyse GitHub branches with agents and merge them
   by risk: Haiku summarizes each branch + builds an overlap/conflict map, then
   merges on a throwaway integration branch. Direction (`source` INTO `destination`)
   is confirmed before anything is touched. Conflicts resolve **per hunk, not per
@@ -165,8 +165,8 @@ Deactivating is deleting `.skillator/grayskull.md`.
   genuinely disagree it shows you both versions with diff3 base context and asks
   which way it goes, so only the parts you choose are taken in. Completeness is
   verified in both directions before it calls the merge done. Optional test-verify
-  and PR, both asked at run time. Kept in sync with `merge-prep`. Invoke with
-  `/merge-agent`.
+  and PR, both asked at run time. Kept in sync with `mergeprep-oracle`. Invoke with
+  `/merge-smith`.
 - **design-arwen** — ultimate UI/UX design skill for native *and* web:
   fuses production craft (contrast, type, layout, motion, a11y, UX copy,
   iOS/Android/RN conventions) with a committed aesthetic and a systematic method
@@ -187,7 +187,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   arms the standing skills (reads `TICKETS.md`, checks `watch-cortana` is wired),
   prints the state in a single line, then routes each request to the one skill
   that fits — across skillator (`sherlock-codes` for rot, `build-vision` for
-  features, `design-arwen` for UI, `merge-prep`/`deploy-niyoj` for shipping) *and*
+  features, `design-arwen` for UI, `mergeprep-oracle`/`deploy-niyoj` for shipping) *and*
   the wider installed toolkit: `code-review`, `security-review`,
   `run`/`webapp-testing` to see it actually work, `workflow-authoring`/`mem-search`
   for agent work. The process itself comes from **`PRACTICE.md`** at the repo root
@@ -216,7 +216,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   stopping on a summary. Fires once per session; thresholds via
   `CLAUDE_USAGE_HANDOFF_PCT` and `CLAUDE_USAGE_HANDOFF_WEEKLY_PCT`. Invoke with
   `/watch-cortana`.
-- **replicator-agent** — the port of `superpowers:subagent-driven-development`,
+- **tasks-sentinels** — the port of `superpowers:subagent-driven-development`,
   so the loop exists on every host skillator installs to and not only the one
   with that plugin. It is an **entry point, not a copy**: the procedure already
   lives in `practice/task-loop.md` (dispatch → report → review → a three-round
@@ -229,18 +229,18 @@ Deactivating is deleting `.skillator/grayskull.md`.
   90%, scope breach, failed repro); and everything else decided as a
   `Ruling: <what> - <why> - <what it costs if wrong>` written to
   `.skillator/run.md` rather than a session ledger that dies with the session.
-  Invoke with `/replicator-agent`.
-- **r2d2-relay** — a staged run has two records: the transcript, which dies with the
+  Invoke with `/tasks-sentinels`.
+- **relay-morpheus** — a staged run has two records: the transcript, which dies with the
   session, and the tree, which does not. relay puts the run in the second one
   *while it is still going* — `.skillator/run.md`, one row per stage, and the
   **exact redispatch prompt** of whatever is in flight, written **before** the
   agent is dispatched rather than after it comes back. Three isolated baseline
   runs of a four-stage plan wrote nothing to disk until the final write, and one
   wrote nothing at all, so a dropped connection or a usage stop left a tree full
-  of diff and no way to tell which stage produced it. `hooks/r2d2-relay.{sh,ps1}`
+  of diff and no way to tell which stage produced it. `hooks/relay-morpheus.{sh,ps1}`
   do the bookkeeping — `init`, `stage`, `heartbeat`, `status`, `orphans`, where
   `orphans` is the only signal a dropped agent ever sends: silence. Invoke with
-  `/r2d2-relay`.
+  `/relay-morpheus`.
 - **ticket-master** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with
@@ -264,7 +264,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   it at a PR (`sherlock #482`) and it will scope the audit to that diff and, on
   your yes, post the surviving findings back as inline `gh` comments with
   sha-anchored permalinks. Merging is not its job — that hands off to
-  `merge-agent`. Invoke with `/sherlock-codes`.
+  `merge-smith`. Invoke with `/sherlock-codes`.
 - **live-friday** — starts the project's app or build in the background **before**
   the first edit and hands over the URL, watch command, or `[n/total]` progress
   stream in the opening reply, so you watch the thing run while the agent works

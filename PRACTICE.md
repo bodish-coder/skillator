@@ -10,7 +10,7 @@ in front of itself.
 | §1 Classify · question · scope · show it | `superpowers:brainstorming` (its visual companion routed to `design-arwen`'s artboard gate) |
 | §2 Tasks are a plan | `superpowers:writing-plans`, `executing-plans` |
 | §3 Self-review the design | `writing-plans` + `brainstorming` spec review |
-| §4 Building | `skillator:replicator-agent`, `test-driven-development`, `subagent-driven-development`, `dispatching-parallel-agents` |
+| §4 Building | `skillator:tasks-sentinels`, `test-driven-development`, `subagent-driven-development`, `dispatching-parallel-agents` |
 | §5 Claiming it works | `verification-before-completion` |
 | §6 Reviewing, and taking review | `requesting-code-review`, `receiving-code-review` |
 | §7 Debugging | `systematic-debugging` |
@@ -223,7 +223,7 @@ replace the approval gate in §1 — that is the user's, not a reviewer's.
 
 ---
 
-## 4. Building (`skillator:replicator-agent`, `test-driven-development`)
+## 4. Building (`skillator:tasks-sentinels`, `test-driven-development`)
 
 **The iron law:** no production code without a failing test first. Wrote code
 before the test? Delete it — don't keep it as reference, don't adapt it while
@@ -461,7 +461,7 @@ forked from before merging anywhere, and present the choice rather than picking:
 
 Detached HEAD drops option 1 and the workspace stays put — it is externally
 managed. Clean up a worktree only if this session created it. Push and merge stay
-user-confirmed on every host; `skillator:merge-prep` and `skillator:merge-agent`
+user-confirmed on every host; `skillator:mergeprep-oracle` and `skillator:merge-smith`
 own the conflict work.
 
 ---
@@ -479,7 +479,7 @@ and `grayskull-power` still routes to those:
 | `skillator:live-friday` | The app running before the first edit |
 | `skillator:sherlock-codes` | A whole-codebase forensic audit |
 | `skillator:ticket-master` | `TICKETS.md`, the board |
-| `skillator:merge-prep` / `merge-agent` | Conflicts and merge execution |
+| `skillator:mergeprep-oracle` / `merge-smith` | Conflicts and merge execution |
 | `skillator:handoff-cortana` / `watch-cortana` | Continuity across context loss |
 | `skillator:skill-smith` | Authoring or fixing a skill — `writing-skills` merged in: the description rules, form-to-failure, bulletproofing, and subagent testing |
 

@@ -6,7 +6,7 @@ description: >-
   "check the whole thing", "sherlock #482", wants a full-application forensic
   audit for the defects nobody filed, or is before a release/handover. Can
   also be pointed at a single GitHub PR. Merging and conflict resolution are
-  handed to `skillator:merge-agent`. NOT a security-only scan (use
+  handed to `skillator:merge-smith`. NOT a security-only scan (use
   /security-review), and for a quick pass over the working diff `/code-review`
   is cheaper.
 ---
@@ -23,7 +23,7 @@ Phases in order. Never skip to phase 3.
 3. **Solve** — implementation plan, then Opus codes it.
 4. **Report to the PR** — only if the scene was a PR, only on a yes.
 
-Merging is out of scope throughout: that is `skillator:merge-agent`.
+Merging is out of scope throughout: that is `skillator:merge-smith`.
 
 ## Phase 0 — the scene
 
@@ -236,7 +236,7 @@ outward-facing and lands under the user's name.
 ### Merging is not this skill's job
 
 Sherlock finds and fixes; he does not integrate. Any merge, conflict resolution,
-branch consolidation, or "now land it" hands off to **`skillator:merge-agent`**,
+branch consolidation, or "now land it" hands off to **`skillator:merge-smith`**,
 which merges on a throwaway integration branch, routes conflicts by risk, and
 never touches the base branch or pushes unasked. Give it the branches and the
 casefile path; do not open `git merge` yourself.

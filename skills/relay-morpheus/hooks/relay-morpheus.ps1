@@ -1,17 +1,17 @@
 # relay - bookkeeping for `.skillator/run.md`, the staged-run ledger.
 #
-# The PowerShell mirror of r2d2-relay.sh. Same commands, same file format, same
+# The PowerShell mirror of relay-morpheus.sh. Same commands, same file format, same
 # refusals - `PLATFORMS.md` requires the pair to move together, and `selftest`
 # on each side is what proves they still agree.
 #
-#   r2d2-relay.ps1 -Mode list                      every run + how to resume it
-#   r2d2-relay.ps1 -Mode resume -Id 3              what a fresh session needs
-#   r2d2-relay.ps1 -Mode init -Plan <p> -Title <t> -Stages "alpha,beta,gamma"
-#   r2d2-relay.ps1 -Mode stage -N 2 -State '~' [-Owner build:sonnet] [-Landed sha]
-#   r2d2-relay.ps1 -Mode heartbeat -N 2
-#   r2d2-relay.ps1 -Mode status
-#   r2d2-relay.ps1 -Mode orphans [-Minutes 20]
-#   r2d2-relay.ps1 -Mode selftest
+#   relay-morpheus.ps1 -Mode list                      every run + how to resume it
+#   relay-morpheus.ps1 -Mode resume -Id 3              what a fresh session needs
+#   relay-morpheus.ps1 -Mode init -Plan <p> -Title <t> -Stages "alpha,beta,gamma"
+#   relay-morpheus.ps1 -Mode stage -N 2 -State '~' [-Owner build:sonnet] [-Landed sha]
+#   relay-morpheus.ps1 -Mode heartbeat -N 2
+#   relay-morpheus.ps1 -Mode status
+#   relay-morpheus.ps1 -Mode orphans [-Minutes 20]
+#   relay-morpheus.ps1 -Mode selftest
 #
 # Any mode takes an optional -Id: `-Mode status -Id 3`.
 #
@@ -86,14 +86,14 @@ function Slug($t) {
 # Every timestamp is UTC and invariant-culture. Without this, a machine whose
 # default calendar is not Gregorian (th-TH Buddhist, ar-SA Hijri) writes 2569
 # for `yyyy`, and a run file touched by both mirrors mixes eras - which makes
-# r2d2-relay.sh's age arithmetic return nonsense rather than fail.
+# relay-morpheus.sh's age arithmetic return nonsense rather than fail.
 $INV = [cultureinfo]::InvariantCulture
 $FMT = "yyyy-MM-ddTHH:mmZ"
 
 function Die($m) { throw "FAIL: $m" }
 function Now { (Get-Date).ToUniversalTime().ToString($FMT, $INV) }
 function AsUtc($s) { [datetime]::ParseExact($s, $FMT, $INV) }
-function NeedRun { PickRun; if (-not (Test-Path $Run)) { Die "no run file at $Run (r2d2-relay.ps1 -Mode init ...)" } }
+function NeedRun { PickRun; if (-not (Test-Path $Run)) { Die "no run file at $Run (relay-morpheus.ps1 -Mode init ...)" } }
 
 # Every mutation is a read-modify-write of the whole file, and SKILL.md
 # sanctions concurrent in-flight stages - two `stage` calls landing at once
@@ -124,7 +124,7 @@ function Unlock {
   $script:Lock = $null
 }
 
-# LF, no BOM, written to a sibling temp then moved - matching r2d2-relay.sh's
+# LF, no BOM, written to a sibling temp then moved - matching relay-morpheus.sh's
 # tmp+mv. Set-Content would truncate in place, so a Ctrl-C or a usage stop
 # between truncate and write leaves the ledger empty, destroying the only
 # record of what was in flight. `-Encoding utf8` on 5.1 also emits a BOM, which
@@ -381,7 +381,7 @@ function DoSelftest {
     if ((DoOrphans 9999) -match 'stage 2') { Die "orphans: flagged a fresh heartbeat" }
     if (-not (DoStatus | Select-String -Pattern '^\| 2 \|' -Quiet)) { Die "status: did not print the stage table" }
 
-    # The same rollovers r2d2-relay.sh asserts on its own arithmetic. DoOrphans does
+    # The same rollovers relay-morpheus.sh asserts on its own arithmetic. DoOrphans does
     # its date maths independently, so the pair can disagree without this.
     foreach ($p in @(@('2026-09-22T09:00Z', '2026-09-22T09:25Z', 25),
                      @('2026-09-22T23:50Z', '2026-09-23T00:10Z', 20),

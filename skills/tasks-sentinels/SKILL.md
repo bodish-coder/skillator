@@ -1,5 +1,5 @@
 ---
-name: replicator-agent
+name: tasks-sentinels
 description: >-
   Use when a plan's tasks are already written down and now have to be built — a
   design's TASKS list, a milestone's task blocks, a checklist of independent
@@ -84,9 +84,9 @@ Ruling: <what you decided> - <why> - <what it costs if wrong>
 **In `.skillator/run.md`, not in your head and not only in the transcript** —
 that is the one thing this port changes about upstream. Its ledger lives in the
 session, so a dropped connection or a usage stop takes every ruling with it.
-`r2d2-relay` owns that file; the stage row goes in **before** the agent is
+`relay-morpheus` owns that file; the stage row goes in **before** the agent is
 dispatched, with the exact prompt, so an agent that dies mid-task is still
-recoverable. See [`r2d2-relay`](../r2d2-relay/SKILL.md).
+recoverable. See [`relay-morpheus`](../relay-morpheus/SKILL.md).
 
 A wrong ruling costs rework the user can see and undo. A session parked on a
 question costs their whole day and buys nothing.
@@ -97,7 +97,7 @@ question costs their whole day and buys nothing.
 touch the same files do not (`PRACTICE.md` §4). Check the *files*, not the
 plan's claim about them — a plan saying "these three are independent" while all
 three land in one module is wrong, and a baseline run caught exactly that
-(`practice/baselines/scenario-replicator-agent-v2.txt`).
+(`practice/baselines/scenario-tasks-sentinels-v2.txt`).
 
 **Is the report true?** A returning agent reports on itself. Review the diff
 against the task's own spec first, then its quality — `practice/prompts.md` §2,

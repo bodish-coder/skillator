@@ -76,10 +76,10 @@ Standing rules, no reminder needed:
   for approval. Six things stop it: a destructive op, a security-sensitive
   action, a side effect outside this worktree (merge, push, publish), the
   7-day limit at 90%, a scope-contract breach, a failed repro. Everything else
-  is a `Ruling:` in the run file. `skillator:r2d2-relay` owns `.skillator/run.md` —
+  is a `Ruling:` in the run file. `skillator:relay-morpheus` owns `.skillator/run.md` —
   the stage goes in it **before** the agent is dispatched, never after.
 - Independent tasks go to a fresh implementer each, one task per agent, with a
-  constructed prompt and never the session history — `skillator:replicator-agent`
+  constructed prompt and never the session history — `skillator:tasks-sentinels`
   runs that loop. Tasks that touch the same files do not fan out.
 - Usage watch — before each non-trivial step run
   `<SKILL_DIR>/../watch-cortana/hooks/usage-watch.sh check`

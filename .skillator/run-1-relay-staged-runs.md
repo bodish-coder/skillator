@@ -1,5 +1,5 @@
 # RUN-1 - r2d2-relay: staged runs that survive sessions
-plan: docs/plans/PLAN-r2d2-relay.md
+plan: docs/plans/PLAN-relay-morpheus.md
 started: 2026-09-22T03:15Z   updated: 2026-09-22T04:37Z
 
 ## Stages
@@ -23,19 +23,19 @@ session needs a fixture whose stages live in genuinely separate modules -
 prompt: |
   Add a `relay-split` fixture to practice/scripts/baseline-harness.sh whose
   four plan stages touch four different modules with no shared file, then
-  re-run practice/baselines/scenario-replicator-agent-v2.txt against it, twice.
+  re-run practice/baselines/scenario-tasks-sentinels-v2.txt against it, twice.
   Record the verdict in that scenario file. Do not write a skill unless it
   VIOLATES.
 
 ### stage 8 - S7 GREEN + ship
-GREEN done (`practice/baselines/green-r2d2-relay.txt`); this row closes when the
+GREEN done (`practice/baselines/green-relay-morpheus.txt`); this row closes when the
 final commit lands.
 
 ## Rulings
 - 03:05Z - the resume half of relay is not written - the baseline COMPLIED,
   and skill-smith calls writing it anyway reason 3 - costs a rewrite if a
   later run does lose a mid-run tree.
-- 03:06Z - no `replicator-agent` skill - the RED fixture's stages share a file,
+- 03:06Z - no `tasks-sentinels` skill - the RED fixture's stages share a file,
   so both runs correctly declined to fan out - costs the port if a clean
   fixture later shows real under-dispatch.
 - 03:08Z - weekly gate is a separate flag file, not a second line in the

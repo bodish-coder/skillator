@@ -69,8 +69,9 @@ remaining life) says more about a usage watcher than any character would, and
 |---|---|
 | `design-arwen` | the job, then who does it |
 | `audit-sherlock` | " |
-| `relay-r2d2` | the droid that carries the plans between owners and survives being shot down |
-| `tasks-replicator` | SG-1's replicators: units built to build more units |
+| `relay-morpheus` | carries the message through, whatever happens to the carrier |
+| `tasks-sentinels` | many units, one job each |
+| `watch-cortana` | rampancy: an AI that knows it is running out of time |
 
 **Purpose first, without exception.** An agent scanning a list of twenty skills
 matches on the first token, so every skill doing the same kind of work has to
@@ -85,10 +86,17 @@ follow the rule — `grayskull-power` (it is the invocation), `deploy-niyoj`, an
 one of them cannot conclude the convention is optional. Adding a fourth needs
 the same kind of reason, written down.
 
-The character has to earn it — pick one whose *defining trait is the job*, not
-one that merely sounds good. R2-D2 is right for a ledger because the mission
-state survives the carrier; it would be wrong for a linter. A name that needs
-a sentence of explanation before the joke lands is the wrong name.
+The name has to earn it — pick one whose *defining trait is the job*, not one
+that merely sounds good. `watch-cortana` is right for a usage watcher because
+rampancy is an AI counting down its own remaining life; it would be wrong for a
+linter. A name that needs a sentence of explanation before the joke lands is
+the wrong name.
+
+**One origin per family.** Skills that are one job in several parts take their
+names from one story — `handoff-cortana` / `resume-cortana` / `watch-cortana`,
+or `mergeprep-oracle` / `merge-smith` / `relay-morpheus` / `tasks-sentinels`.
+That is worth more than one-character-one-skill: the shared origin says *these
+belong together* in the one place an agent looks first.
 
 **The purpose half is not decoration.** The description does the triggering
 (§2), but the name is read first, and `arwen` alone says nothing about UI.
@@ -286,7 +294,7 @@ together.
   they cost tokens for nothing.
 - **`@`-links to other skills.** `@skills/foo/SKILL.md` force-loads immediately
   and burns context before you need it. Reference by name:
-  `**REQUIRED:** use skillator:merge-prep`.
+  `**REQUIRED:** use skillator:mergeprep-oracle`.
 - **The body repeating the description.** Different jobs. The description is
   found; the body is followed.
 

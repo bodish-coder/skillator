@@ -40,7 +40,7 @@ Nothing else changes per host.
 `ticket-master` (read `TICKETS.md`, report the open set) · `ponytail` (laziness
 level active) · `codegraph` (indexed, else init once) · `live-friday` (if the
 repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
-`usage-watch … check` elsewhere) · `r2d2-relay` (an unfinished `.skillator/run.md`
+`usage-watch … check` elsewhere) · `relay-morpheus` (an unfinished `.skillator/run.md`
 is the first thing you say).
 
 Then one line, not a feature tour:
@@ -69,9 +69,9 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | A static/mock UI that must actually work | `func-ui` |
 | Requirements that live only in a conversation, and outlive the session | `spec-trace` |
 | "check screenshot" / verify visually | `screenshot-loop` |
-| Merge · deploy · ending · resuming | `merge-prep`→`merge-agent` · `deploy-wizard`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |
-| A staged run the session may not outlive — fan-out, long build, flaky link | `r2d2-relay` (the ledger; the build skill still does the building) |
-| A plan whose tasks are written and now have to be built | `replicator-agent` — one task, one fresh agent, reviewed before the next |
+| Merge · deploy · ending · resuming | `mergeprep-oracle`→`merge-smith` · `deploy-wizard`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |
+| A staged run the session may not outlive — fan-out, long build, flaky link | `relay-morpheus` (the ledger; the build skill still does the building) |
+| A plan whose tasks are written and now have to be built | `tasks-sentinels` — one task, one fresh agent, reviewed before the next |
 | Auth, secrets, input handling | `security-review` |
 | The deliverable is a skill | `skill-smith` |
 | Tricky analysis (cause unknown, spans files, wrong is expensive) | Fable subagents in parallel; you reconcile |
@@ -102,7 +102,7 @@ queries, and why the order holds.
   security-sensitive action · side effect outside this worktree · 7-day limit
   at 90% · scope breach · failed repro. Never approval between stages.
   Everything else is a `Ruling:` in `.skillator/run.md`, written **before**
-  dispatch (`r2d2-relay`, `replicator-agent`).
+  dispatch (`relay-morpheus`, `tasks-sentinels`).
 - **Ticket first, code second.** `[~]` on start, `[x]` only once verified.
 - **Blocked → `AskUserQuestion`**, never prose. Too big for a chip → build a
   local artifact, then ask.

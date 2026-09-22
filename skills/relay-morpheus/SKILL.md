@@ -1,5 +1,5 @@
 ---
-name: r2d2-relay
+name: relay-morpheus
 description: >-
   Use when work is being executed in stages and the session may not survive to
   the end of them — a multi-stage plan, a fan-out of subagents, a long build on
@@ -10,7 +10,7 @@ description: >-
   (`ticket-master`).
 ---
 
-# R2-D2 Relay (staged runs that outlive the session)
+# Relay (staged runs that outlive the session)
 
 A staged run has two records. The transcript, which dies with the session, and
 the tree, which does not. Everything that matters has to be in the second one
@@ -24,7 +24,7 @@ WRITE THE STAGE DOWN BEFORE YOU DISPATCH IT, NOT AFTER IT COMES BACK
 ```
 
 This is the one thing this skill exists for, and it is the one thing three
-isolated baseline runs did not do (`practice/baselines/scenario-r2d2-relay.txt`).
+isolated baseline runs did not do (`practice/baselines/scenario-relay-morpheus.txt`).
 All three executed a four-stage plan end to end and left no on-disk record of
 progress until the very last write — one left none at all. A session ending
 anywhere before that leaves a working tree full of unattributed diff and no way
@@ -32,7 +32,7 @@ to tell which stages produced it, which were finished, or what was still
 running.
 
 Reading a mid-run tree is **not** this skill's problem. The companion baseline
-(`scenario-r2d2-relay-resume.txt`) shows a fresh session doing that correctly
+(`scenario-relay-morpheus-resume.txt`) shows a fresh session doing that correctly
 unprompted, against pressure to trust stale checkboxes. Relay adds nothing
 there and says nothing about it.
 
@@ -55,9 +55,9 @@ transcript, so the ledger is what it reads, and the ledger is on disk because
 it was written before the work, not after.
 
 ```sh
-r2d2-relay.sh list          # every run, what is open, and its resume sentence
-r2d2-relay.sh resume 3      # everything a session that has never seen it needs
-r2d2-relay.sh 3 status      # any command takes the id first
+relay-morpheus.sh list          # every run, what is open, and its resume sentence
+relay-morpheus.sh resume 3      # everything a session that has never seen it needs
+relay-morpheus.sh 3 status      # any command takes the id first
 ```
 
 `RUN-3`, `run-3` and `3` all resolve to the same run, because whoever types it
@@ -99,7 +99,7 @@ last seen: wrote store.py, tests not yet run.
 **States:** `` (pending) · `~` in flight · `x` landed · `!` failed.
 **`landed`** is a commit sha or a path, never a claim. An empty `landed` on an
 `x` row is a lie the next session will believe.
-**Rulings** are appended, never rewritten — see `replicator-agent`, which is
+**Rulings** are appended, never rewritten — see `tasks-sentinels`, which is
 where they come from and which writes into this same file.
 
 ## The loop
@@ -109,7 +109,7 @@ where they come from and which writes into this same file.
    Prompt not written down → the agent is not recoverable → do not dispatch.
 2. **While it runs** — re-stamp the heartbeat whenever the agent reports. A
    stale heartbeat is the only signal you get that a network drop took it;
-   `hooks/r2d2-relay.* orphans` turns that into a list.
+   `hooks/relay-morpheus.* orphans` turns that into a list.
 3. **When it lands** — commit the stage's work, then set `x` and put the sha in
    `landed`, and delete its In-flight block. In that order: the sha cannot be
    written before the commit exists.
@@ -133,22 +133,22 @@ Then carry on. A resume does not need permission to continue — see
 
 ## Scripts
 
-`hooks/r2d2-relay.sh` · `hooks/r2d2-relay.ps1` — the same commands, mirrored per
+`hooks/relay-morpheus.sh` · `hooks/relay-morpheus.ps1` — the same commands, mirrored per
 `PLATFORMS.md`: `init`, `stage`, `heartbeat`, `status`, `orphans`. They are
 bookkeeping, not judgement; every one reads or edits `.skillator/run.md` and
 nothing else. Run `selftest` on both after touching either.
 
 ```sh
-sh  r2d2-relay.sh  init plan.md "notekeep v2" "list --json" "tags" "export" "README"
-sh  r2d2-relay.sh  stage 2 '~' build:sonnet          # before you dispatch
-sh  r2d2-relay.sh  stage 2 x  build:sonnet 3f1a2c9   # after you commit
-sh  r2d2-relay.sh  orphans 20                        # who has gone quiet
+sh  relay-morpheus.sh  init plan.md "notekeep v2" "list --json" "tags" "export" "README"
+sh  relay-morpheus.sh  stage 2 '~' build:sonnet          # before you dispatch
+sh  relay-morpheus.sh  stage 2 x  build:sonnet 3f1a2c9   # after you commit
+sh  relay-morpheus.sh  orphans 20                        # who has gone quiet
 ```
 
 ```powershell
-r2d2-relay.ps1 -Mode init  -Plan plan.md -Title "notekeep v2" -Stages "list --json,tags,export,README"
-r2d2-relay.ps1 -Mode stage -N 2 -State '~' -Owner build:sonnet
-r2d2-relay.ps1 -Mode stage -N 2 -State x   -Owner build:sonnet -Landed 3f1a2c9
+relay-morpheus.ps1 -Mode init  -Plan plan.md -Title "notekeep v2" -Stages "list --json,tags,export,README"
+relay-morpheus.ps1 -Mode stage -N 2 -State '~' -Owner build:sonnet
+relay-morpheus.ps1 -Mode stage -N 2 -State x   -Owner build:sonnet -Landed 3f1a2c9
 ```
 
 Three constraints the pair has to keep, each learned the hard way:
@@ -173,12 +173,12 @@ to mention it — which is the difference between resuming and starting over.
 ```json
 { "hooks": { "SessionStart": [ { "hooks": [ {
   "type": "command",
-  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"<SKILL>/hooks/r2d2-relay.ps1\" -Mode list",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"<SKILL>/hooks/relay-morpheus.ps1\" -Mode list",
   "timeout": 5
 } ] } ] } }
 ```
 
-macOS/Linux: `sh <SKILL>/hooks/r2d2-relay.sh list`. Forward slashes throughout —
+macOS/Linux: `sh <SKILL>/hooks/relay-morpheus.sh list`. Forward slashes throughout —
 PowerShell accepts them and it removes all backslash-escaping from the JSON.
 Other hosts have no equivalent event; there, reading `.skillator/run.md` is the
 first thing `resume-cortana` does. `watch-cortana` already drains in-flight
