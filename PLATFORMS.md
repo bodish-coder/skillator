@@ -93,8 +93,9 @@ read-only --skip-git-repo-check` from a throwaway fixture in the system temp dir
 holding only `index.html` + `app.js` (hardcoded data, dead button), no
 `AGENTS.md` anywhere in the tree, and a `~/.codex/AGENTS.md` that never mentions
 skills. From *"just a mockup … the buttons don't do anything … make it real"* its
-first message was *"I'm using the designui-galadriel skill for this conversion"*, followed by
-a read of `~/.agents/skills/designui-galadriel/SKILL.md`. From *"set me up for coding on this
+first message was *"I'm using the func-ui skill for this conversion"*, followed by
+a read of `~/.agents/skills/func-ui/SKILL.md` (the name and path at the time;
+the skill is now `designui-galadriel`). From *"set me up for coding on this
 project — activate the programming skills"* it opened with *"I'm using the
 grayskull-power skill"* and read that `SKILL.md`, then `PLATFORMS.md`. A third run
 of the same prompt in an **empty** directory loaded nothing and asked which

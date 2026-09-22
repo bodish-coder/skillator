@@ -10,7 +10,7 @@ mode="${1:-probe}"; then_cmd="$2"
 # session's flag and .done marker at the old path - a session that had
 # already fired would fire a second time. Skill renames must not migrate
 # a user's machine.
-dir="$HOME/.claude/watch-cortana"
+dir="$HOME/.claude/handoff-watch"
 limit="${CLAUDE_USAGE_HANDOFF_PCT:-92}"
 # The 7-day window is watched separately and lower. The 5-hour window refills in
 # hours, so crossing it is a pause; the weekly one does not, so crossing it ends

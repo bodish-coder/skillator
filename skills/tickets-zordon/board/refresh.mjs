@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Bake the repo's TICKETS.md into a standalone file:// board viewer — the rich
 // one, with search and filters. `artifact.mjs` is the publishable counterpart.
-// Run from the repo root:  node <skills>/ticket-master/board/refresh.mjs
+// Run from the repo root:  node <skills>/tickets-zordon/board/refresh.mjs
 // A page opened from file:// may not read a sibling file, so the board carries
 // its snapshot inline. This is the one command that refreshes it.
 //

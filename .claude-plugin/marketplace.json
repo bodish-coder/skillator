@@ -13,14 +13,24 @@
         "source": "github",
         "repo": "bodish-coder/skillator"
       },
-      "description": "Reusable agent skills (Claude Code, Cursor, Codex, Antigravity, Pi): a grayskull-power router, serialised bug/feature tickets, usage-limit auto-handoff, handoff write/resume, UI-to-functional planning, tiered brainstorm→build, native+web UI/UX design, traceable requirement ids for briefs that live only in a conversation, agent-driven branch merge/prep, a VPS deployment prep wizard, a full-app forensic code audit, a live build/preview exposure loop, and a test-screenshot read-act-delete loop",
-      "version": "3.10.0",
+      "description": "Reusable agent skills (Claude Code, Cursor, Codex, Antigravity, Pi), named purpose-first after fantasy and sci-fi: a grayskull-power router, tickets-zordon for serialised bug/feature tickets, watch-cortana for usage-limit auto-handoff, handoff-cortana/resume-cortana for writing and executing a handoff, relay-morpheus for staged runs that outlive the session, tasks-sentinels for one-fresh-agent-per-task plan execution, designui-galadriel for turning a mockup into a working app, build-vision/build-ultron/build-jarvis for tiered brainstorm-then-build, design-arwen for native+web UI/UX, a11y-toph for accessibility, tui-tron for terminal UIs, spec-watson for traceable requirement ids, mergeprep-oracle/merge-smith for branch merges, deploy-merlin/deploy-niyoj for VPS deployment, audit-sherlock for a full-app forensic audit, live-friday for a live build/preview loop, and screenshot-argus for a test-screenshot loop",
+      "version": "4.0.0",
       "author": {
         "name": "bodish-coder"
       },
       "repository": "https://github.com/bodish-coder/skillator",
       "license": "MIT",
-      "keywords": ["skills", "handoff", "ui", "planning", "workflow", "design", "brainstorm", "merge", "git"],
+      "keywords": [
+        "skills",
+        "handoff",
+        "ui",
+        "planning",
+        "workflow",
+        "design",
+        "brainstorm",
+        "merge",
+        "git"
+      ],
       "category": "productivity"
     }
   ]

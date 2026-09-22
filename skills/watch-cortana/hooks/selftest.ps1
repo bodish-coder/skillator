@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $ps  = Join-Path $PSScriptRoot 'usage-watch.ps1'
 $sh  = Join-Path $PSScriptRoot 'usage-watch.sh'
 $sid = "selftest-$PID"
-$flag = Join-Path $HOME ".claude\watch-cortana\$sid"
+$flag = Join-Path $HOME ".claude\handoff-watch\$sid"
 # check-mode fixtures live here, never in the user's real HOME: `check` writes a
 # genuine one-shot .done when it fires, so running it against the live
 # ~/.codex/sessions would burn a real session's handoff (and be non-deterministic).
@@ -45,7 +45,7 @@ function RunCheck($hm) {
 
 function NewHome($name) {
   $h = Join-Path $tmp $name
-  New-Item (Join-Path $h '.claude\watch-cortana') -ItemType Directory -Force | Out-Null
+  New-Item (Join-Path $h '.claude\handoff-watch') -ItemType Directory -Force | Out-Null
   $h
 }
 # $ageHours backdates the rollout's mtime (A32 freshness window); $sub varies the
@@ -63,16 +63,28 @@ function AddCodex($hm, $usedPercent, $ctxTokens, $ctxWindow, $ageHours = 0, $sub
   if ($ageHours) { (Get-Item $p).LastWriteTime = (Get-Date).AddHours(-$ageHours) }
 }
 function AddFlag($hm, $name, $value, [switch]$Bom) {
-  $p = Join-Path $hm ".claude\watch-cortana\$name"
+  $p = Join-Path $hm ".claude\handoff-watch\$name"
   if ($Bom) { Set-Content $p $value -Encoding utf8 }          # the pre-fix writer: BOM + CRLF
   else      { [IO.File]::WriteAllText((Join-Path (Convert-Path (Split-Path $p -Parent)) $name), $value) }
   $p
 }
 function NoDoneFiles($hm) {
-  -not (Get-ChildItem (Join-Path $hm '.claude\watch-cortana') -Filter '*.done' -ErrorAction SilentlyContinue)
+  -not (Get-ChildItem (Join-Path $hm '.claude\handoff-watch') -Filter '*.done' -ErrorAction SilentlyContinue)
 }
 
 Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+
+# The runtime state dir is storage, not a skill reference, and must survive a
+# skill rename: a session that already fired wrote its .done under the old path
+# and would fire a SECOND time if the dir moved. A rename sweep has already
+# moved it once, taking these selftest paths with it, so the test agreed with
+# the regression instead of catching it. Assert the literal path.
+foreach ($f in @($ps, $sh)) {
+  if (-not (Select-String -Path $f -Pattern 'handoff-watch' -Quiet)) {
+    throw "state dir moved in $(Split-Path $f -Leaf) - it must stay ~/.claude/handoff-watch"
+  }
+}
+
 try {
   # --- probe + gate against the real HOME (a scratch session id) -------------
   $sl = { param($a, $b, $c) "{`"session_id`":`"$sid`",`"rate_limits`":{`"five_hour`":{`"used_percentage`":$a},`"seven_day`":{`"used_percentage`":$b}},`"context_window`":{`"used_percentage`":$c}}" }
@@ -166,7 +178,7 @@ try {
   if ($shExe) {
     $h = NewHome 'sh-probe-path'
     RunSh 'probe' $h (& $sl 98.2 12 55) | Out-Null
-    $mf = Join-Path $h ".claude\watch-cortana\$sid"
+    $mf = Join-Path $h ".claude\handoff-watch\$sid"
     if (-not (Test-Path $mf)) { throw 'sh probe: no main flag (a stolen Windows binary ate the pipeline)' }
     if ((Get-Content $mf -Raw).Trim() -ne '98.2') { throw "sh probe: main flag is '$((Get-Content $mf -Raw).Trim())', wanted 98.2" }
   }
@@ -175,7 +187,7 @@ try {
   if ($shExe) {
     $h = NewHome 'weekly-sh'
     RunSh 'probe' $h (& $sl 40 91 55) | Out-Null
-    $wf = Join-Path $h ".claude\watch-cortana\$sid.weekly"
+    $wf = Join-Path $h ".claude\handoff-watch\$sid.weekly"
     if (-not (Test-Path $wf)) { throw 'sh probe: no weekly flag' }
     if ((Get-Content $wf -Raw).Trim() -ne '91') { throw 'sh probe: weekly value wrong' }
     $r = RunSh 'gate' $h $stop

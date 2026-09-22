@@ -1,6 +1,6 @@
 # RUN-2 - name every skill for a character
 plan: docs/plans/PLAN-rename.md
-started: 2026-09-22T06:21Z   updated: 2026-09-22T17:18Z
+started: 2026-09-22T06:21Z   updated: 2026-09-22T17:23Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -8,7 +8,7 @@ started: 2026-09-22T06:21Z   updated: 2026-09-22T17:18Z
 | 1 | S1 sign-off | x | model:opus-5 | 2026-09-22T08:29Z | 2f5ca11 |
 | 2 | S2 mechanical rename | x | model:opus-5 | 2026-09-22T17:15Z | pending |
 | 3 | S3 the references nothing greps | x | model:opus-5 | 2026-09-22T17:18Z | pending |
-| 4 | S4 prove nothing dangles | ~ | model:opus-5 | 2026-09-22T17:18Z | - |
+| 4 | S4 prove nothing dangles | x | model:opus-5 | 2026-09-22T17:23Z | pending |
 
 ## In flight
 ### stage 2 - the mechanical rename

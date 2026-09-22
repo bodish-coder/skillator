@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Bake TICKETS.md into a single self-contained HTML page for the Artifact tool.
 //
-//   node skills/ticket-master/board/artifact.mjs [TICKETS.md] [out.html]
+//   node skills/tickets-zordon/board/artifact.mjs [TICKETS.md] [out.html]
 //
 // Defaults: ./TICKETS.md -> ./.tickets-board.html (gitignored).
 // Output is Artifact-shaped: no <!doctype>/<html>/<head>/<body>, the wrapper

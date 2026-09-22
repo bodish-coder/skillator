@@ -11,7 +11,7 @@
 param([ValidateSet('probe','gate','check')][string]$Mode = 'probe', [string]$Then)
 
 # The state dir keeps its original name on purpose - see the sh twin.
-$dir      = Join-Path $HOME '.claude/watch-cortana'
+$dir      = Join-Path $HOME '.claude/handoff-watch'
 $pctLimit = if ($env:CLAUDE_USAGE_HANDOFF_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_PCT } else { 92 }
 # The 7-day window is watched separately and lower. The 5-hour window refills
 # in hours, so crossing it is a pause; the weekly one does not, so crossing it

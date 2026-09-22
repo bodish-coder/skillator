@@ -323,7 +323,7 @@ Anything else is dropped where unsupported, so it can never be load-bearing.
 
 A flat "under 500 words" figure travels around skill-writing advice and does not
 survive contact with a real repo: every skill in skillator is over it, and
-trimming a `audit-sherlock` down to 500 would delete the thing that makes it
+trimming an `audit-sherlock` down to 500 would delete the thing that makes it
 work. The real question is *how often does this get loaded when it isn't
 needed* — a description is read constantly, a body only when the router already
 decided it was relevant.

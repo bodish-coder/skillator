@@ -1,5 +1,12 @@
 # CASEFILE — 2026-09-04
 
+> **Skill names updated 2026-09-22.** Every skill in this repo was renamed
+> purpose-first (`docs/plans/PLAN-rename.md`). The findings below are unchanged
+> in substance; only the skill names and paths in them were rewritten, so their
+> `file:line` citations still resolve. Where a finding quotes a run verbatim,
+> the quote is left exactly as it was said. The old names are in the mapping
+> table in that plan.
+
 Scene: skillator at `6bea753` (v3.6.0), 31 changed files, 2,489 insertions.
 Read: `PRACTICE.md`, `practice/**`, `PLATFORMS.md`, `WORKFLOW.md`, `README.md`,
 `install.sh`, `install.ps1`, `.skillator/grayskull.md`, all 18 `skills/*/SKILL.md`,
@@ -137,7 +144,7 @@ on an investigator's word.
   file, so every subagent in an activated repo reads "run `audit-sherlock` over
   the staged diff before every commit". `audit-sherlock` is a Fable fan-out. The
   implementer template says "4. Commit." and "Never spawn a subagent for part of
-  it". Compounding: `sherlock-codes:21` itself says `/code-review` is the cheaper
+  it". Compounding: `audit-sherlock:21` itself says `/code-review` is the cheaper
   tool for a working diff, and `grayskull-power:192` routes diffs there.
   *Fix:* the standing rule should name `/code-review` for a staged diff and
   reserve sherlock for the pre-release sweep.
@@ -161,7 +168,7 @@ on an investigator's word.
   which says the design self-review is run inline, "not a subagent".
 - **M5** `skills/deploy-niyoj/SKILL.md:217` — "**Merge and push to `main`.**" as
   an imperative step, against `PRACTICE.md:401` and `PLATFORMS.md:93` ("push and
-  merge stay user-confirmed on every host"). Sibling `deploy-wizard:98` gets this
+  merge stay user-confirmed on every host"). Sibling `deploy-merlin:98` gets this
   right with an explicit "**Do NOT** `git push`".
 - **M6** `skills/screenshot-argus/SKILL.md:24-28` — "ask the user for the path
   once, then write it:" is followed by a fenced block containing one real foreign
@@ -169,9 +176,9 @@ on an investigator's word.
   literally, that is the value to write.
 - **M7** all 18 `skills/*/SKILL.md` — every description exceeds the ~80-word
   budget `skills/skill-smith/SKILL.md:231` sets (grayskull-power 233,
-  ticket-master 198, sherlock-codes 197 … handoff 93, the smallest), and most
+  tickets-zordon 198, audit-sherlock 197 … handoff 93, the smallest), and most
   summarize their workflow, which `:68` forbids as the shortcut agents take
-  instead of reading the body. `ticket-master:13` is the sharpest case: its
+  instead of reading the body. `tickets-zordon:13` is the sharpest case: its
   summary says "pending/in-progress/done" while the body defines six states, so
   an agent taking the shortcut runs a three-state board.
 
