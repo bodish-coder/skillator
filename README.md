@@ -212,6 +212,17 @@ Deactivating is deleting `.skillator/grayskull.md`.
   then write the handoff with a status table matching the board ticket-for-ticket.
   Fires once per session, threshold via `CLAUDE_USAGE_HANDOFF_PCT`. Invoke with
   `/handoff-watch`.
+- **relay** — a staged run has two records: the transcript, which dies with the
+  session, and the tree, which does not. relay puts the run in the second one
+  *while it is still going* — `.skillator/run.md`, one row per stage, and the
+  **exact redispatch prompt** of whatever is in flight, written **before** the
+  agent is dispatched rather than after it comes back. Three isolated baseline
+  runs of a four-stage plan wrote nothing to disk until the final write, and one
+  wrote nothing at all, so a dropped connection or a usage stop left a tree full
+  of diff and no way to tell which stage produced it. `hooks/relay.{sh,ps1}`
+  do the bookkeeping — `init`, `stage`, `heartbeat`, `status`, `orphans`, where
+  `orphans` is the only signal a dropped agent ever sends: silence. Invoke with
+  `/relay`.
 - **ticket-master** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with

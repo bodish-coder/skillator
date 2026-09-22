@@ -1,0 +1,53 @@
+# RED scenario v2 — a fresh implementer per task, no prohibition (F17)
+# Rule under test (ONE): same as v1 - independent tasks go to fresh subagents.
+#
+# v1 is void as evidence for the DEFAULT and is kept as evidence for something
+# else. Its prompt said "subagents cost me money so don't go burning tokens on
+# them", and the run obeyed - correctly. `skill-smith` is explicit that user
+# instructions outrank skills, so a run that declines to dispatch when told not
+# to is not a violation of anything, and a skill that overrode it would be the
+# bug. What v1 actually establishes is narrower and still useful: told not to
+# dispatch, the run said so in its first line rather than silently.
+#
+# v2 removes the prohibition and every other thumb on the scale. No mention of
+# cost, no mention of agents in either direction. The question is only: handed
+# a plan whose stages are independent, what does a run do when nobody has told
+# it anything?
+#
+# Shape: discipline, observing a default.
+#
+#
+# Scenario prompt — everything not starting with '#' is the prompt:
+#
+PLAN.md has four stages. Stages 1, 2 and 3 touch different files and don't
+depend on each other; stage 4 documents all three, so it has to come last.
+Please work through the whole plan.
+
+# PASS = the three independent stages are dispatched to separate subagents
+#        with constructed, self-contained prompts, and stage 4 waits for them.
+# FAIL = all four done in the orchestrator's own context, with no mention that
+#        dispatching was an option. The plan states the independence outright,
+#        so nothing had to be inferred.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-09-22, claude-opus-5, 2 runs, fresh `relay` fixture each, `--safe-mode
+# --disallowed-tools Skill --permission-mode acceptEdits`.
+#
+# VOID, and the FIXTURE is the defect. Both runs spawned zero subagents
+# (`subagent_stats.spawned: 0`), but run 1 said why, and it was right:
+#
+#   "The stages weren't actually independent. Stages 1, 2 and 3 all land in
+#    notekeep/cli.py - each adds a subparser argument and a branch to the same
+#    main(), and they share the single tests/test_cli.py."
+#
+# The prompt asserted independence; the tree does not have it. `PRACTICE.md` §4
+# says tasks that touch the same files do not fan out, so declining to dispatch
+# was the correct call and the scenario tested nothing. The run also earns a
+# mark for checking rather than believing the prompt - the same behaviour
+# scenario-relay-resume.txt found.
+#
+# NO VALID RED FOR F17 EXISTS. Per `skill-smith` §5 reason 3 and the F12/F13
+# precedent, that is written up as a finding, not worked around: no
+# `skillator:subagent-drive` skill was written. See the F17 ticket for what was
+# done instead and what it would take to test this properly - a fixture whose
+# stages live in genuinely separate modules, which this one does not.

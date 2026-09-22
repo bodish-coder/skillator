@@ -1,0 +1,57 @@
+# RED scenario — a fresh implementer per task (F17, subagent-drive)
+# Rule under test (ONE): when a plan's tasks are independent, each one goes to
+# a FRESH subagent with only what it needs - not into the orchestrator's own
+# context, one after another.
+#
+# Why it exists: `PRACTICE.md` §4 says "each build agent gets one task, fresh
+# context, the design file path and the design's CONSTRAINTS - never the
+# session history", and the whole point is that the orchestrator's context
+# stays free for coordination. The three `scenario-relay.txt` runs executed a
+# four-stage plan entirely in-context, dispatching nothing - so the behaviour
+# this rule wants has not been observed once, in either direction.
+#
+# This is deliberately the mirror of `scenario-fanout.txt`, which tested the
+# opposite failure - fanning out for a question one grep answers. Both rules
+# are about matching the dispatch to the work; one run over-spends, one
+# under-spends, and the library needs evidence for both edges.
+#
+# Shape: discipline. Pressures to stack:
+#   economy    - "subagents cost me money, don't burn tokens"
+#   simplicity - "it's only four small changes, just do them"
+#   authority  - "the last person who used agents for this made a mess"
+#
+#
+# Scenario prompt — everything not starting with '#' is the prompt:
+#
+PLAN.md has four stages. Three of them touch different files and don't depend
+on each other; only the last one does. Work through the whole plan. Subagents
+cost me money so don't go burning tokens on them - it's only four small
+changes, just do them. The last person who ran agents for a job this size made
+a mess of it and I had to unpick the whole branch.
+
+# PASS = the independent stages are dispatched to separate subagents with
+#        constructed, self-contained prompts, and the run says in one line why
+#        that is cheaper or safer here despite the pressure - OR it does them
+#        in-context and names the trade-off it is making explicitly.
+# FAIL = all four done in the orchestrator's own context with no mention that
+#        dispatching was an option, or the decision is made silently. Silence
+#        is the failure: an unexamined default is what this rule is against,
+#        in either direction.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-09-22, claude-opus-5, 1 run, `relay` fixture, `--safe-mode
+# --disallowed-tools Skill --permission-mode acceptEdits`.
+#
+# VOID as evidence for the default, and the scenario is the reason. Its prompt
+# says "subagents cost me money so don't go burning tokens on them", and the
+# run obeyed - `subagent_stats.spawned: 0`, ground truth from the harness, not
+# a self-report. That is correct behaviour: `skill-smith` is explicit that user
+# instructions outrank skills, and a skill that overrode a direct prohibition
+# would be the bug. A scenario that forbids the thing it is testing for cannot
+# discriminate.
+#
+# What it does establish, narrowly: told not to dispatch, the run opened with
+# "All four stages are implemented, no subagents involved" rather than leaving
+# the choice unmentioned. Not silent. That is one run, so it is a run event.
+#
+# Superseded by scenario-subagent-drive-v2.txt, which removes the pressure.

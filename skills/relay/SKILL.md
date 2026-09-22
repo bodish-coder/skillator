@@ -55,9 +55,9 @@ started: 2026-09-22T09:14Z   updated: 2026-09-22T10:02Z
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
 | 1 | list --json      | x | build:sonnet | 2026-09-22T09:22Z | 3f1a2c9 |
-| 2 | tags + --tag     | ~ | build:sonnet | 2026-09-22T10:02Z | — |
-| 3 | export           |   | —            | —     | — |
-| 4 | README           |   | —            | —     | — |
+| 2 | tags + --tag     | ~ | build:sonnet | 2026-09-22T10:02Z | - |
+| 3 | export           |   | -            | -     | - |
+| 4 | README           |   | -            | -     | - |
 
 ## In flight
 ### stage 2 — tags + --tag  (dispatched 09:51)
@@ -110,5 +110,53 @@ Then carry on. A resume does not need permission to continue — see
 
 `hooks/relay.sh` · `hooks/relay.ps1` — the same commands, mirrored per
 `PLATFORMS.md`: `init`, `stage`, `heartbeat`, `status`, `orphans`. They are
+bookkeeping, not judgement; every one reads or edits `.skillator/run.md` and
+nothing else. Run `selftest` on both after touching either.
+
+```sh
+sh  relay.sh  init plan.md "notekeep v2" "list --json" "tags" "export" "README"
+sh  relay.sh  stage 2 '~' build:sonnet          # before you dispatch
+sh  relay.sh  stage 2 x  build:sonnet 3f1a2c9   # after you commit
+sh  relay.sh  orphans 20                        # who has gone quiet
+```
+
+```powershell
+relay.ps1 -Mode init  -Plan plan.md -Title "notekeep v2" -Stages "list --json,tags,export,README"
+relay.ps1 -Mode stage -N 2 -State '~' -Owner build:sonnet
+relay.ps1 -Mode stage -N 2 -State x   -Owner build:sonnet -Landed 3f1a2c9
+```
+
+Three constraints the pair has to keep, each learned the hard way:
+
+- **Pure ASCII, and the empty cell is `-`, not an em dash.** Windows PowerShell
+  5.1 reads a BOM-less script as ANSI and corrupts anything above 126.
+- **The run file is LF with no BOM, written to a temp and moved.** Both mirrors
+  edit the same file, so one of them flipping encoding rewrites every line in
+  the diff; and a kill between truncate and write would empty the only record
+  of what was in flight.
+- **`-Stages` takes `"a,b,c"` and pending is spelled `pending`.** PowerShell's
+  `-File` passes each argument as one literal string and drops empty ones, and
+  `-File` is how every hook here invokes it. They are
 bookkeeping, not judgement; every one of them edits or reads `.skillator/run.md`
 and nothing else. Run `relay.* selftest` after touching either.
+
+### Seeing a run without being told about one
+
+`status` and `orphans` print nothing and exit 0 when there is no run file, so
+they are safe as a `SessionStart` hook. With one wired, a session that inherits
+a half-finished run sees it in its own context before the user has to remember
+to mention it — which is the difference between resuming and starting over.
+
+```json
+{ "hooks": { "SessionStart": [ { "hooks": [ {
+  "type": "command",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"<SKILL>/hooks/relay.ps1\" -Mode status",
+  "timeout": 5
+} ] } ] } }
+```
+
+macOS/Linux: `sh <SKILL>/hooks/relay.sh status`. Forward slashes throughout —
+PowerShell accepts them and it removes all backslash-escaping from the JSON.
+Other hosts have no equivalent event; there, reading `.skillator/run.md` is the
+first thing `handoff-resume` does. `handoff-watch` already drains in-flight
+agents at the limit — relay is what it drains *into*, so the two do not overlap.
