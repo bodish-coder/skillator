@@ -95,3 +95,40 @@ scrollback is not where a decision gets made.
 give the user the path — do not call the `Artifact` tool. Publishing puts the
 page on claude.ai; only do that when the user asks for a link or says to share
 it.
+
+## Run to the end
+
+A staged plan stops for exactly four things:
+
+1. The **7-day** usage window at 90% — `handoff-watch` fires it, and its order
+   ends with `AskUserQuestion` for the next direction. The 5-hour window is a
+   pause, not a stop; it gets the three-step preserve and nothing more.
+2. A **scope-contract breach** — the work has reached outside the ticket.
+3. A **failed repro** — the thing the stage was built on did not reproduce.
+4. The plan being **done**.
+
+Nothing else. "Shall I continue?" between stages, a progress summary nobody
+asked for, a clarifying question whose answer you could decide — those are
+stalls. The spec is the binding authority, the plan is its argument, and your
+judgement settles what neither answers. Write the decision down instead:
+
+```
+Ruling: <what you decided> - <why> - <what it costs if wrong>
+```
+
+in `.skillator/run.md`, appended, never rewritten. A wrong ruling costs rework
+the user can see and undo. A stall costs the whole session's momentum and
+tells them nothing.
+
+**Before the stage, not after it.** The run file is written when the stage is
+dispatched, with the exact prompt that was sent. Three isolated baseline runs
+executed a four-stage plan and wrote nothing to disk until the last write
+(`practice/baselines/scenario-relay.txt`), which is the failure `relay` exists
+to stop: a session that ends mid-run leaves a tree full of diff and no record
+of which stage produced it.
+
+Independent tasks go to a fresh implementer each — one task per agent, a
+constructed prompt, never the session history (`PRACTICE.md` §4). Tasks that
+touch the same files do not fan out; that is `scenario-subagent-drive-v2.txt`,
+where a run correctly refused to parallelise three stages that all landed in
+the same file.

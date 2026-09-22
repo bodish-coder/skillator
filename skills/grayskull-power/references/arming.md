@@ -72,6 +72,14 @@ Standing rules, no reminder needed:
   (`code-review:code-review`) over the staged diff. `skillator:sherlock-codes` is
   the whole-app sweep — pre-release, handover, or unknown-cause rot — never a
   per-commit gate, and never inside an implementer subagent.
+- Staged work runs to the end. A plan with stages does not stop between them
+  for approval; it stops for the 7-day limit at 90%, a scope-contract breach,
+  a failed repro, or the plan being done. Everything else is a `Ruling:` in
+  the run file. `skillator:relay` owns `.skillator/run.md` — the stage goes in
+  it **before** the agent is dispatched, never after it comes back.
+- Independent tasks go to a fresh implementer each, one task per agent, with a
+  constructed prompt and never the session history (`PRACTICE.md` §4). Tasks
+  that touch the same files do not fan out.
 - Usage watch — before each non-trivial step run
   `<SKILL_DIR>/../handoff-watch/hooks/usage-watch.sh check`
   (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File

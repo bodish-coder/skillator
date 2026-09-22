@@ -7,6 +7,12 @@
 mode="${1:-probe}"; then_cmd="$2"
 dir="$HOME/.claude/handoff-watch"
 limit="${CLAUDE_USAGE_HANDOFF_PCT:-92}"
+# The 7-day window is watched separately and lower. The 5-hour window refills in
+# hours, so crossing it is a pause; the weekly one does not, so crossing it ends
+# the week's work - which is why it gets its own threshold and its own fourth
+# step: ask where to go next rather than leave the user to guess.
+wk_limit="${CLAUDE_USAGE_HANDOFF_WEEKLY_PCT:-90}"
+wk_step4=' (4) This is the 7-DAY window, which does not refill for days - the work is over for now, not paused. So after the handoff, do not stop on a summary: use AskUserQuestion to put the next direction to the user as concrete options drawn from the open board and the handoff'"'"'s own next-steps, say which one you recommend and why in one line, and make the recommendation the first option.'
 
 # The flag file is shared with the PowerShell twin, which used to write it with
 # a UTF-8 BOM and CRLF. A BOM makes awk string-compare (0xEF > '9'), so "12.0"
@@ -122,18 +128,29 @@ if [ "$mode" = check ]; then
     fi
   fi
   if [ -z "$pct" ]; then
-    f=$(ls -t "$dir" 2>/dev/null | grep -v '\.done$' | head -1)
+    # `.weekly` is written after the main flag, so it is always the newest -
+    # picking it here would report the 7-day number as the max and compare it
+    # against the wrong threshold. It is read below, by name, not by mtime.
+    f=$(ls -t "$dir" 2>/dev/null | grep -v '\.done$' | grep -v '\.weekly$' | head -1)
     [ -n "$f" ] && pct=$(read_pct "$dir/$f")
-    [ -n "$pct" ] && { src=claude-code; key=$f; }
+    [ -n "$pct" ] && { src=claude-code; key=$f; wk=$(read_pct "$dir/$f.weekly"); }
   fi
   if [ -z "$pct" ]; then
     echo "handoff-watch: no usage signal on this host - run skillator:handoff manually before you run out"; exit 0
   fi
-  if over_limit "$pct" "$limit" && [ ! -f "$dir/$key.done" ]; then
+  # The weekly gate applies on every host, not just the one with a Stop hook.
+  # It has its own .done, so a 5-hour fire earlier in the session cannot eat
+  # the weekly order when the 7-day window crosses hours later.
+  if [ -n "$wk" ] && over_limit "$wk" "$wk_limit" && [ ! -f "$dir/$key.weekly.done" ]; then
+    mkdir -p "$dir"; : > "$dir/$key.weekly.done"
+    echo "HANDOFF NOW ($src 7-day $wk%)"
+    printf 'Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop.
+' "$wk" "$wk_limit" "$wk_step4"
+  elif over_limit "$pct" "$limit" && [ ! -f "$dir/$key.done" ]; then
     mkdir -p "$dir"; : > "$dir/$key.done"
     echo "HANDOFF NOW ($src $pct%)"
-    printf 'Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it. Then tell the user where the file is and stop.
-' "$pct" "$limit"
+    printf 'Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop.
+' "$pct" "$limit" ""
   else
     echo "handoff-watch: $src $pct% of $limit% - ok"
   fi
@@ -151,6 +168,11 @@ if [ "$mode" = probe ]; then
   max=$(printf '%s' "$raw" | grep -o '"used_percentage"[[:space:]]*:[[:space:]]*[0-9.]*' \
         | grep -o '[0-9.]*$' | sort -g | tail -1)
   [ -n "$max" ] && { mkdir -p "$dir"; printf '%s' "$max" > "$flag"; }
+  # The weekly number needs its own file: the main flag is read as bare bytes
+  # with no line endings (A12), so a second value cannot share it.
+  wk=$(printf '%s' "$raw" | tr -d ' 	' | grep -o '"seven_day":{[^}]*"used_percentage":[0-9.]*' | grep -o '[0-9.]*$' | head -1)
+  if [ -n "$wk" ]; then mkdir -p "$dir"; printf '%s' "$wk" > "$flag.weekly"
+  else rm -f "$flag.weekly"; fi   # never let a stale weekly number outlive its payload
   [ -n "$then_cmd" ] && printf '%s' "$raw" | sh -c "$then_cmd"
   exit 0
 fi
@@ -158,6 +180,15 @@ fi
 case "$raw" in *'"stop_hook_active":true'*|*'"stop_hook_active": true'*) exit 0 ;; esac
 [ -f "$flag" ] || exit 0
 pct=$(read_pct "$flag"); [ -n "$pct" ] || exit 0
+# Weekly first, and with its OWN one-shot marker. Sharing `$flag.done` meant a
+# 5-hour fire at 10:00 silently ate the weekly order when the 7-day window
+# crossed at 14:00 - the one window whose crossing the user has to answer.
+wk=$(read_pct "$flag.weekly")
+if [ -n "$wk" ] && over_limit "$wk" "$wk_limit" && [ ! -f "$flag.weekly.done" ]; then
+  : > "$flag.weekly.done"
+  printf '{"decision":"block","reason":"Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop."}' "$wk" "$wk_limit" "$wk_step4"
+  exit 0
+fi
 [ -f "$flag.done" ] && exit 0
 over_limit "$pct" "$limit" || exit 0
 : > "$flag.done"

@@ -210,7 +210,11 @@ Deactivating is deleting `.skillator/grayskull.md`.
   any of them crosses 92%, make the session preserve itself before it is cut off:
   drain in-flight agents, sync `TICKETS.md` via `ticket-master` (statuses only),
   then write the handoff with a status table matching the board ticket-for-ticket.
-  Fires once per session, threshold via `CLAUDE_USAGE_HANDOFF_PCT`. Invoke with
+  The **7-day window is its own gate** — it refills in days, not hours, so it
+  fires lower (90%) and adds a fourth step the others have no use for: put the
+  next direction to the user as options with a recommendation, rather than
+  stopping on a summary. Fires once per session; thresholds via
+  `CLAUDE_USAGE_HANDOFF_PCT` and `CLAUDE_USAGE_HANDOFF_WEEKLY_PCT`. Invoke with
   `/handoff-watch`.
 - **relay** — a staged run has two records: the transcript, which dies with the
   session, and the tree, which does not. relay puts the run in the second one

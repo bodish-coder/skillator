@@ -38,8 +38,25 @@ whole rather than just a narrative:
 Both `rate_limits` (5-hour and 7-day windows) and `context_window.used_percentage`
 are picked up; whichever is highest wins.
 
+**The 7-day window is its own gate, and it is different in kind.** The 5-hour
+window refills in hours, so crossing it is a pause and the three steps above
+are the whole job. The 7-day window does not refill for days, so crossing it
+ends the week's work — it fires **lower** (`CLAUDE_USAGE_HANDOFF_WEEKLY_PCT`,
+default 90, against 92 for everything else) and adds a **step 4** the other
+windows have no use for: after the handoff, put the next direction to the user
+with `AskUserQuestion` as concrete options drawn from the open board and the
+handoff's own next-steps, with the recommendation first and its reason in one
+line. Stopping on a summary is what step 4 exists to prevent — a week is long
+enough that "what now?" needs answering while the context is still loaded.
+
+The probe records the weekly percentage to `<flag>.weekly`, beside the main
+flag rather than inside it: the flag is read by both mirrors as bare bytes with
+no line endings (A12), so a second value cannot share the file. One `.done`
+covers both gates — the handoff is written once.
+
 Fires **once per session** (a `.done` marker next to the flag file), and never
-loops (`stop_hook_active` is honoured).
+loops (`stop_hook_active` is honoured). When both gates are over, the weekly
+order is the one that fires — it is the one the session needs.
 
 ## Install
 

@@ -72,7 +72,7 @@ function NoDoneFiles($hm) {
   -not (Get-ChildItem (Join-Path $hm '.claude\handoff-watch') -Filter '*.done' -ErrorAction SilentlyContinue)
 }
 
-Remove-Item "$flag", "$flag.done" -ErrorAction SilentlyContinue
+Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
 try {
   # --- probe + gate against the real HOME (a scratch session id) -------------
   $sl = { param($a, $b, $c) "{`"session_id`":`"$sid`",`"rate_limits`":{`"five_hour`":{`"used_percentage`":$a},`"seven_day`":{`"used_percentage`":$b}},`"context_window`":{`"used_percentage`":$c}}" }
@@ -93,12 +93,68 @@ try {
   if (Gate $stop) { throw 'gate: fired twice (done-marker ignored)' }
   if (Gate "{`"session_id`":`"$sid`",`"stop_hook_active`":true}") { throw 'gate: ignored stop_hook_active' }
 
+  # --- F18: the 7-day window is its own gate ---------------------------------
+  # The 5-hour window refills in hours, so crossing it is a pause. The 7-day
+  # window does not, so crossing it ends the week's work - which is why it
+  # fires at a lower threshold and adds a fourth step the other windows have no
+  # use for: ask the user where to go next, with recommendations.
+  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+
+  # A 5-hour spike must NOT fire the weekly order, even though it is the max.
+  Probe (& $sl 98.2 12 40)
+  if ((Get-Content "$flag.weekly" -Raw).Trim() -ne '12') { throw 'probe: weekly value not recorded' }
+  $r = Gate $stop
+  if ($r -notmatch '"decision":"block"') { throw 'gate: 5-hour spike did not fire at all' }
+  if ($r -match 'AskUserQuestion') { throw 'gate: 5-hour spike fired the weekly order' }
+  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+
+  # The weekly window alone, over 90 but under the 92 the other windows use.
+  Probe (& $sl 40 91 55)
+  if ((Get-Content "$flag.weekly" -Raw).Trim() -ne '91') { throw 'probe: weekly value not recorded' }
+  # Same bare-bytes contract as the main flag - the sh twin reads it too (A12).
+  $wb = [IO.File]::ReadAllBytes((Convert-Path "$flag.weekly"))
+  if ($wb[0] -eq 0xEF) { throw 'probe: weekly flag has a UTF-8 BOM' }
+  if ($wb -contains 0x0D -or $wb -contains 0x0A) { throw 'probe: weekly flag has a line ending' }
+  $r = Gate $stop
+  if ($r -notmatch '"decision":"block"') { throw 'gate: weekly 91% did not fire' }
+  if ($r -notmatch '91') { throw 'gate: weekly block does not name the percentage' }
+  if ($r -notmatch 'AskUserQuestion') { throw 'gate: weekly block has no step 4' }
+  if ($r -notmatch 'recommend') { throw 'gate: step 4 does not ask for a recommendation' }
+  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+
+  # Weekly under its own threshold and nothing else over: silence.
+  Probe (& $sl 40 89 55)
+  if (Gate $stop) { throw 'gate: weekly fired below 90' }
+  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+
+  # F18/finding 4: the two gates fire at different times in one session. A
+  # 5-hour spike at 10:00 must not eat the weekly order when the 7-day window
+  # crosses at 14:00 - that later crossing is the one the user has to answer.
+  Probe (& $sl 98.2 40 55)
+  $r = Gate $stop
+  if ($r -notmatch '"decision":"block"') { throw 'gate sequence: the 5-hour spike did not fire' }
+  Probe (& $sl 98.2 91 55)
+  $r = Gate $stop
+  if ($r -notmatch 'AskUserQuestion') { throw 'gate sequence: the weekly order was eaten by the earlier .done' }
+  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+
+  # The sh twin has to agree - PLATFORMS.md requires the pair to move together.
+  if ($shExe) {
+    $h = NewHome 'weekly-sh'
+    RunSh 'probe' $h (& $sl 40 91 55) | Out-Null
+    $wf = Join-Path $h ".claude\handoff-watch\$sid.weekly"
+    if (-not (Test-Path $wf)) { throw 'sh probe: no weekly flag' }
+    if ((Get-Content $wf -Raw).Trim() -ne '91') { throw 'sh probe: weekly value wrong' }
+    $r = RunSh 'gate' $h $stop
+    if ($r -notmatch 'AskUserQuestion') { throw 'sh gate: weekly block has no step 4' }
+  }
+
   # A12 regression, gate side: a BOM'd flag below threshold must not fire.
-  Remove-Item "$flag", "$flag.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
   Set-Content $flag '12.0' -Encoding utf8
   if (Gate $stop) { throw 'gate: BOM flag fired below threshold (A12)' }
   if (Test-Path "$flag.done") { throw 'gate: BOM flag burned the one-shot (A12)' }
-  Remove-Item "$flag", "$flag.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
 
   # --- check mode, against fixture HOMEs only --------------------------------
   # codex rollout below threshold: report, do not fire, leave no .done behind.
@@ -140,6 +196,24 @@ try {
   $c = RunCheck $h
   if ($c -notmatch '^handoff-watch: claude-code 91(\.0)?% of 92% - ok$') { throw "check cc-under: got '$c'" }
   if (-not (NoDoneFiles $h)) { throw 'check cc-under: wrote a .done just below threshold' }
+
+  # F18/finding 1: a `.weekly` file is written AFTER the main flag, so it is
+  # always the newest in the directory. Picking by mtime reported the 7-day
+  # number as the max and compared it against the wrong threshold - a session
+  # at 98.2% read "ok", on the hosts where `check` is the ONLY signal.
+  $h = NewHome 'cc-weekly-shadow'; AddFlag $h 'sess-a' '98.2' | Out-Null; AddFlag $h 'sess-a.weekly' '12' | Out-Null
+  $c = RunCheck $h
+  if ($c -notmatch '^HANDOFF NOW \(claude-code 98\.2%\)') { throw "check cc-weekly-shadow: the weekly flag shadowed the max, got '$c'" }
+
+  # F18/finding 2: the weekly gate has to exist on hosts with no Stop hook too.
+  $h = NewHome 'cc-weekly'; AddFlag $h 'sess-a' '40' | Out-Null; AddFlag $h 'sess-a.weekly' '91' | Out-Null
+  $c = RunCheck $h
+  if ($c -notmatch 'HANDOFF NOW \(claude-code 7-day 91%\)') { throw "check cc-weekly: no weekly order, got '$c'" }
+  if ($c -notmatch 'AskUserQuestion') { throw 'check cc-weekly: weekly order has no step 4' }
+
+  $h = NewHome 'cc-weekly-under'; AddFlag $h 'sess-a' '40' | Out-Null; AddFlag $h 'sess-a.weekly' '89' | Out-Null
+  $c = RunCheck $h
+  if ($c -match 'HANDOFF NOW') { throw "check cc-weekly-under: fired below 90, got '$c'" }
 
   # A12 regression, check side: same number, written the old BOM+CRLF way.
   $h = NewHome 'cc-bom'; AddFlag $h 'sess-a' '12.0' -Bom | Out-Null
@@ -222,6 +296,6 @@ try {
 }
 finally {
   # try/finally, not a trailing line: a failing assertion must still clean up.
-  Remove-Item "$flag", "$flag.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
   Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

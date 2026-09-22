@@ -47,13 +47,32 @@ function Now { (Get-Date).ToUniversalTime().ToString($FMT, $INV) }
 function AsUtc($s) { [datetime]::ParseExact($s, $FMT, $INV) }
 function NeedRun { if (-not (Test-Path $Run)) { Die "no run file at $Run (relay.ps1 -Mode init ...)" } }
 
+# Every mutation is a read-modify-write of the whole file, and SKILL.md
+# sanctions concurrent in-flight stages - two `stage` calls landing at once
+# would lose one row, which is the loss this whole skill exists to prevent.
+# Creating a directory is the portable atomic test-and-set, same as the sh
+# twin. ponytail: a spin with a stale timeout, not a lock manager.
+$script:Lock = $null
+function Lock {
+  $script:Lock = "$Run.lock"
+  for ($i = 0; ; $i++) {
+    try { New-Item -ItemType Directory -Path $script:Lock -ErrorAction Stop | Out-Null; return } catch {}
+    # 30s of someone else's turn means that process died holding it.
+    if ($i -gt 300) { Remove-Item -Recurse -Force $script:Lock -ErrorAction SilentlyContinue; continue }
+    Start-Sleep -Milliseconds 100
+  }
+}
+function Unlock {
+  if ($script:Lock) { Remove-Item -Recurse -Force $script:Lock -ErrorAction SilentlyContinue; $script:Lock = $null }
+}
+
 # LF, no BOM, written to a sibling temp then moved - matching relay.sh's
 # tmp+mv. Set-Content would truncate in place, so a Ctrl-C or a usage stop
 # between truncate and write leaves the ledger empty, destroying the only
 # record of what was in flight. `-Encoding utf8` on 5.1 also emits a BOM, which
 # would make every cross-mirror edit rewrite all lines in the diff.
 function WriteRun($lines) {
-  $tmp = "$Run.tmp"
+  $tmp = "$Run.tmp.$PID"
   [IO.File]::WriteAllText($tmp, (($lines -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
   Move-Item -Force -Path $tmp -Destination $Run
 }
@@ -79,6 +98,9 @@ function DoInit {
   if (Test-Path $Run) { Die "run file already exists: $Run (a run file is never overwritten)" }
   $names = @($Stages -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
   if (-not $names) { Die "no stage names in -Stages" }
+  # A `|` in a stage name adds a column, and every later read is positional -
+  # the state would land in the name cell and the sha in heartbeat, silently.
+  foreach ($nm in $names) { if ($nm -match '\|') { Die "stage name contains '|', which would shift every column: $nm" } }
   $dir = Split-Path -Parent $Run
   if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
   $t = Now
@@ -102,6 +124,8 @@ function DoStage($n, $state, $owner, $landed) {
     Die "stage $n marked landed with no sha or path - that is the lie the next session believes"
   }
   NeedRun
+  Lock
+  try {
   $t = Now
   $found = $false
   $out = Get-Content $Run | ForEach-Object {
@@ -118,6 +142,7 @@ function DoStage($n, $state, $owner, $landed) {
   if (-not $found) { Die "no stage $n in $Run" }
   WriteRun $out
   StampUpdated
+  } finally { Unlock }
 }
 
 # A heartbeat carries the row's existing `landed` back in. Without it the
@@ -214,6 +239,15 @@ function DoSelftest {
 
     ShouldFail 'no stage 9' { DoStage 9 '~' '' '' }
 
+    # A pipe in a stage name must be refused at init, not corrupt the ledger.
+    $saved = $script:Run; $script:Run = Join-Path $d "piped.md"
+    $script:Stages = "list | pretty"
+    ShouldFail "would shift every column" { DoInit }
+    $script:Run = $saved; $script:Stages = "alpha,beta"
+
+    # The lock must be released on the way out, or the next call spins for 30s.
+    if (Test-Path "$Run.lock") { Die "stage: left the lock behind" }
+
     # A heartbeat on a stage that already landed must not trip the sha guard.
     DoHeartbeat 1
     if (-not (Select-String -Path $Run -Pattern '3f1a2c9' -Quiet)) { Die "heartbeat: dropped the landed sha" }
@@ -264,6 +298,8 @@ try {
     default     { Die "unknown mode: $Mode (init|stage|heartbeat|status|orphans|selftest)" }
   }
 } catch {
-  Write-Error "$_"
+  # Write-Error would itself throw under $ErrorActionPreference = 'Stop', making
+  # the exit below unreachable and handing a -Command caller an exception.
+  [Console]::Error.WriteLine("$_")
   exit 1
 }

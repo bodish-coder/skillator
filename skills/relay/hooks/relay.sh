@@ -39,12 +39,31 @@ age_min() {
 
 need_run() { [ -f "$RUN" ] || die "no run file at $RUN (relay.sh init ...)"; }
 
+# Every mutation is a read-modify-write of the whole file, and SKILL.md
+# sanctions concurrent in-flight stages - two `stage` calls landing at once
+# would lose one row, which is the loss this whole skill exists to prevent.
+# `mkdir` is the portable atomic test-and-set. ponytail: a spin with a stale
+# timeout, not a lock manager; if a run ever needs more than one writer per
+# second, the ledger is the wrong shape, not the lock.
+LOCK=""
+lock() {
+  LOCK="$RUN.lock"; i=0
+  while ! mkdir "$LOCK" 2>/dev/null; do
+    i=$((i+1))
+    # 30s of someone else's turn means that process died holding it.
+    [ "$i" -gt 300 ] && { rm -rf "$LOCK"; continue; }
+    sleep 0.1 2>/dev/null || sleep 1
+  done
+  trap 'rm -rf "$LOCK"' EXIT INT TERM
+}
+unlock() { [ -n "$LOCK" ] && rm -rf "$LOCK"; LOCK=""; trap - EXIT INT TERM; }
+
 # Touch `updated:` on every mutation. A run file whose header is older than its
 # rows has been edited by hand, which is allowed but worth being able to see.
 stamp_updated() {
   t=$(now)
-  awk -v t="$t" '/^started: /{sub(/updated: .*/, "updated: " t)} {print}' "$RUN" > "$RUN.tmp"
-  mv "$RUN.tmp" "$RUN"
+  awk -v t="$t" '/^started: /{sub(/updated: .*/, "updated: " t)} {print}' "$RUN" > "$RUN.tmp.$$"
+  mv "$RUN.tmp.$$" "$RUN"
 }
 
 cmd_init() {
@@ -52,6 +71,12 @@ cmd_init() {
   [ -n "$plan" ] && [ -n "$title" ] && [ "$#" -gt 0 ] \
     || die "usage: relay.sh init <plan> <title> <stage>..."
   [ -f "$RUN" ] && die "run file already exists: $RUN (a run file is never overwritten)"
+  # A `|` in a stage name adds a column, and every later read is positional -
+  # the state would be written into the name cell and the sha into heartbeat,
+  # silently, with no error anywhere.
+  for s in "$@"; do
+    case "$s" in *'|'*) die "stage name contains '|', which would shift every column: $s" ;; esac
+  done
   mkdir -p "$(dirname "$RUN")"
   t=$(now)
   id="r$(date -u +%y%m%d%H%M)"
@@ -85,6 +110,7 @@ cmd_stage() {
   [ "$state" = x ] && [ -z "$landed" ] \
     && die "stage $n marked landed with no sha or path - that is the lie the next session believes"
   need_run
+  lock
   t=$(now)
   awk -v n="$n" -v st="$state" -v ow="$owner" -v la="$landed" -v t="$t" -v F=0 '
     BEGIN{FS="|"; OFS="|"}
@@ -100,10 +126,11 @@ cmd_stage() {
       }
     }
     {print}
-    END{ if(!found) exit 3 }' "$RUN" > "$RUN.tmp" \
-    || { rm -f "$RUN.tmp"; die "no stage $n in $RUN"; }
-  mv "$RUN.tmp" "$RUN"
+    END{ if(!found) exit 3 }' "$RUN" > "$RUN.tmp.$$" \
+    || { rm -f "$RUN.tmp.$$"; unlock; die "no stage $n in $RUN"; }
+  mv "$RUN.tmp.$$" "$RUN"
   stamp_updated
+  unlock
 }
 
 cmd_heartbeat() {
@@ -168,6 +195,16 @@ cmd_selftest() {
   [ "$(grep -c '^| 1 |' "$RUN")" = 1 ] || die "stage: duplicated row 1"
 
   if (cmd_stage 9 '~' 2>/dev/null); then die "stage: accepted a stage that does not exist"; fi
+
+  # A pipe in a stage name must be refused at init, not corrupt the ledger.
+  RUN_SAVE="$RUN"; RUN="$d/piped.md"
+  if (cmd_init plan.md "piped" 'list | pretty' >/dev/null 2>&1); then
+    die "init: accepted a stage name containing a pipe"
+  fi
+  RUN="$RUN_SAVE"
+
+  # The lock must be released on the way out, or the next call spins for 30s.
+  if [ -e "$RUN.lock" ]; then die "stage: left the lock behind"; fi
 
   # A heartbeat on a stage that already landed must not trip the sha guard.
   cmd_heartbeat 1

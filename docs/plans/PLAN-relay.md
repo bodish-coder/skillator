@@ -72,7 +72,7 @@ Host note: the auto-mode classifier here refuses a nested `claude` with
 denied inside every run; that limits the verification half of the scenarios,
 not the rule they tested. Both recorded in the scenario files.
 
-### [ ] S2 — `skillator:relay` skill + run file  (F15)
+### [x] S2 — `skillator:relay` skill + run file  (F15)
 `skills/relay/SKILL.md`. Defines `.skillator/run.md` — the durable, human-readable
 run ledger, committed or gitignored per repo:
 
@@ -87,7 +87,7 @@ dies before reporting is still recoverable. This one rule is the whole earned
 surface; S1's resume scenario says agents already read a mid-run tree
 correctly, so relay says nothing about that.
 
-### [ ] S3 — monitoring + restart  (F16)
+### [x] S3 — monitoring + restart  (F16)
 `skills/relay/hooks/relay.sh` + `relay.ps1` (mirror pair, like handoff-watch):
 `relay init|stage|heartbeat|status|orphans`. `orphans` lists stages `[~]` with a
 heartbeat older than N minutes — those are the network-loss casualties. The model
@@ -96,24 +96,36 @@ reads `orphans`, redispatches from the stored prompt, and never double-commits
 Also: a `SessionStart` hook line that prints open relay runs, so a fresh session
 sees the run without being told.
 
-### [ ] S4 — `skillator:subagent-drive`  (F17)
-Port of `superpowers:subagent-driven-development` (upstream at
-`~/.claude/plugins/cache/claude-plugins-official/superpowers/6.3.0/skills/subagent-driven-development/SKILL.md`,
-568 lines). Keep: fresh implementer per task, task review after each, broad final
-review, **continuous execution**, **rulings not stalls**, narration cap.
-Change for skillator: the ledger *is* `.skillator/run.md` (S1), reviews route to
-`code-review:code-review`, the whole-app sweep stays `sherlock-codes` and stays
-out of implementer subagents, tiers come from `PLATFORMS.md`.
-Do **not** retype 568 lines — port what earns its place, cite the rest.
+### [-] S4 — `skillator:subagent-drive`  (F17) — NOT WRITTEN, and that is the finding
+**No valid RED exists, so no skill was written** — `skill-smith` §5 reason 3,
+the F12/F13 precedent. Two scenarios, both void:
 
-### [ ] S5 — handoff-watch: weekly 90% hard stop  (F18)
+- `scenario-subagent-drive.txt` — the prompt forbade subagents ("don't go
+  burning tokens on them") and the run obeyed. Correct: user instructions
+  outrank skills. A scenario that forbids what it tests cannot discriminate.
+- `scenario-subagent-drive-v2.txt` — pressure removed; 2 runs, 0 spawned, and
+  run 1 was right to decline: the fixture's "independent" stages all land in
+  `notekeep/cli.py`, which `PRACTICE.md` §4 says is exactly when not to fan
+  out. **The fixture is the defect**, not the model.
+
+What was done instead: the discipline is a **project rule**, not a skill —
+`skill-smith` §1 puts project-specific rules in the always-on file, and this
+repo's is `.skillator/grayskull.md`, which S6 amends. The procedure it needs
+already exists here (`PRACTICE.md` §4, `practice/task-loop.md`,
+`practice/prompts.md`); a 568-line port would have duplicated it.
+
+**To test this properly**, a future session needs a fixture whose stages live
+in genuinely separate modules with no shared file. That is the whole remaining
+cost, and F17 stays open for it.
+
+### [x] S5 — handoff-watch: weekly 90% hard stop  (F18)
 - per-window thresholds instead of one max: 7-day ≥ 90% is the hard stop;
   5-hour and context keep their current advisory behaviour.
 - preserve order gains **step 4**: after the handoff doc, `AskUserQuestion`
   with concrete next-direction options and a recommendation, not prose.
 - update `hooks/usage-watch.{sh,ps1}` and `selftest.ps1` together — mirror pair.
 
-### [ ] S6 — grayskull-power rules  (F19)
+### [x] S6 — grayskull-power rules  (F19)
 `skills/grayskull-power/SKILL.md`:
 - §1 arming gains `relay` (open runs) beside `handoff-watch`.
 - §2 routing: "a multi-stage build that must survive sessions" → `relay`;

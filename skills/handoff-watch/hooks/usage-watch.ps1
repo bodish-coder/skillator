@@ -12,6 +12,11 @@ param([ValidateSet('probe','gate','check')][string]$Mode = 'probe', [string]$The
 
 $dir      = Join-Path $HOME '.claude/handoff-watch'
 $pctLimit = if ($env:CLAUDE_USAGE_HANDOFF_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_PCT } else { 92 }
+# The 7-day window is watched separately and lower. The 5-hour window refills
+# in hours, so crossing it is a pause; the weekly one does not, so crossing it
+# ends the week's work - which is why it gets its own threshold and its own
+# fourth step: ask where to go next rather than leave the user to guess.
+$wkLimit  = if ($env:CLAUDE_USAGE_HANDOFF_WEEKLY_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_WEEKLY_PCT } else { 90 }
 $inv      = [Globalization.CultureInfo]::InvariantCulture
 # A32: a rollout nobody has written to in this long is not this session's usage.
 # Must match $stale_secs in the sh twin (10800).
@@ -36,6 +41,10 @@ function Read-Flag($path) {
   try { $t = [IO.File]::ReadAllText((Convert-Path $path)) } catch { return $null }
   if ($t -match '[0-9]+(\.[0-9]+)?') { return [double]::Parse($Matches[0], $inv) }
   return $null
+}
+
+function Get-WeeklyReason($pct, $limit) {
+  (Get-Reason $pct $limit) + " (4) This is the 7-DAY window, which does not refill for days - the work is over for now, not paused. So after the handoff, do not stop on a summary: use AskUserQuestion to put the next direction to the user as concrete options drawn from the open board and the handoff's own next-steps, say which one you recommend and why in one line, and make the recommendation the first option."
 }
 
 function Get-Reason($pct, $limit) {
@@ -63,15 +72,26 @@ if ($Mode -eq 'check') {
   }
   # Claude Code: the statusline probe already wrote the number.
   if ($null -eq $pct) {
+    # `.weekly` is written after the main flag, so it is always the newest -
+    # picking it here would report the 7-day number as the max and compare it
+    # against the wrong threshold. It is read below, by name, not by mtime.
     $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
-         Where-Object { $_.Extension -ne '.done' } | Sort-Object LastWriteTime | Select-Object -Last 1
-    if ($f) { $pct = Read-Flag $f.FullName; if ($null -ne $pct) { $src = 'claude-code'; $key = $f.Name } }
+         Where-Object { $_.Extension -notin @('.done', '.weekly') } | Sort-Object LastWriteTime | Select-Object -Last 1
+    if ($f) { $pct = Read-Flag $f.FullName; if ($null -ne $pct) { $src = 'claude-code'; $key = $f.Name; $wk = Read-Flag "$($f.FullName).weekly" } }
   }
   # ponytail: cursor and antigravity expose no usage anywhere on disk - say so
   # rather than invent a number. Upgrade here if either ever writes one.
   if ($null -eq $pct) { "handoff-watch: no usage signal on this host - run skillator:handoff manually before you run out"; exit 0 }
-  $done = Join-Path $dir "$key.done"
-  if ($pct -ge $pctLimit -and -not (Test-Path $done)) {
+  $done   = Join-Path $dir "$key.done"
+  $wkDone = Join-Path $dir "$key.weekly.done"
+  # The weekly gate applies on every host, not just the one with a Stop hook,
+  # and has its own .done so a 5-hour fire earlier in the session cannot eat
+  # the weekly order when the 7-day window crosses hours later.
+  if ($null -ne $wk -and $wk -ge $wkLimit -and -not (Test-Path $wkDone)) {
+    New-Item $dir -ItemType Directory -Force | Out-Null
+    New-Item $wkDone -ItemType File -Force | Out-Null
+    "HANDOFF NOW ($src 7-day $wk%)"; Get-WeeklyReason $wk $wkLimit
+  } elseif ($pct -ge $pctLimit -and -not (Test-Path $done)) {
     New-Item $dir -ItemType Directory -Force | Out-Null
     New-Item $done -ItemType File -Force | Out-Null
     "HANDOFF NOW ($src $pct%)"; Get-Reason $pct $pctLimit
@@ -90,6 +110,15 @@ if ($Mode -eq 'probe') {
   # used_percentage (5h window, 7d window, context window) whatever the shape.
   $pcts = [regex]::Matches($raw, '"used_percentage"\s*:\s*([0-9.]+)') | ForEach-Object { [double]$_.Groups[1].Value }
   if ($pcts) { Write-Flag $flag (($pcts | Measure-Object -Maximum).Maximum) }
+  # The weekly number needs its own file: the main flag is read by the sh twin
+  # as bare bytes with no line endings (A12), so a second value cannot share it.
+  # Greedy `[^}]*` to match the sh twin exactly: if seven_day ever carries more
+  # than one used_percentage the two mirrors must still pick the same one.
+  if ($raw -match '"seven_day"\s*:\s*\{[^}]*"used_percentage"\s*:\s*([0-9.]+)') {
+    Write-Flag "$flag.weekly" $Matches[1]
+  } else {
+    Remove-Item "$flag.weekly" -ErrorAction SilentlyContinue   # never let a stale weekly number outlive its payload
+  }
   if ($Then) { $raw | & powershell -NoProfile -ExecutionPolicy Bypass -Command $Then }
   exit 0
 }
@@ -100,6 +129,16 @@ if (-not (Test-Path $flag)) { exit 0 }
 $pct = Read-Flag $flag
 if ($null -eq $pct) { exit 0 }
 $done = "$flag.done"
-if ($pct -lt $pctLimit -or (Test-Path $done)) { exit 0 }
+# Weekly first, and with its OWN one-shot marker. Sharing `$flag.done` meant a
+# 5-hour fire at 10:00 silently ate the weekly order when the 7-day window
+# crossed at 14:00 - the one window whose crossing the user has to answer.
+$wk = Read-Flag "$flag.weekly"
+if ($null -ne $wk -and $wk -ge $wkLimit -and -not (Test-Path "$flag.weekly.done")) {
+  New-Item "$flag.weekly.done" -ItemType File -Force | Out-Null
+  @{ decision = 'block'; reason = (Get-WeeklyReason $wk $wkLimit) } | ConvertTo-Json -Compress
+  exit 0
+}
+if (Test-Path $done) { exit 0 }
+if ($pct -lt $pctLimit) { exit 0 }
 New-Item $done -ItemType File -Force | Out-Null
 @{ decision = 'block'; reason = (Get-Reason $pct $pctLimit) } | ConvertTo-Json -Compress

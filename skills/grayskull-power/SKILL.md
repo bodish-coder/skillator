@@ -40,12 +40,13 @@ Nothing else changes per host.
 `ticket-master` (read `TICKETS.md`, report the open set) · `ponytail` (laziness
 level active) · `codegraph` (indexed, else init once) · `live-build` (if the
 repo has a runnable surface) · `handoff-watch` (hooks on Claude Code, a manual
-`usage-watch … check` elsewhere).
+`usage-watch … check` elsewhere) · `relay` (an unfinished `.skillator/run.md`
+is the first thing you say).
 
 Then one line, not a feature tour:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files · ponytail full · live-build armed (npm run dev) · handoff-watch 92%
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files · ponytail full · live-build armed (npm run dev) · handoff-watch 92%/90wk · relay r7 stage 2 of 4
 ```
 
 **Load [`references/arming.md`](references/arming.md)** — what each check does,
@@ -69,6 +70,7 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | Requirements that live only in a conversation, and outlive the session | `spec-trace` |
 | "check screenshot" / verify visually | `screenshot-loop` |
 | Merge · deploy · ending · resuming | `merge-prep`→`merge-agent` · `deploy-wizard`→`deploy-niyoj` · `handoff` · `handoff-resume` |
+| A staged run the session may not outlive — fan-out, long build, flaky link | `relay` (the ledger; the build skill still does the building) |
 | Auth, secrets, input handling | `security-review` |
 | The deliverable is a skill | `skill-smith` |
 | Tricky analysis (cause unknown, spans files, wrong is expensive) | Fable subagents in parallel; you reconcile |
@@ -95,6 +97,10 @@ queries, and why the order holds.
   whole-app / pre-release sweep, **not** a per-commit gate — a Fable fan-out an
   implementer subagent cannot run.
 - **Revert first.** Never stack a fix on a broken fix.
+- **Run to the end.** A staged plan stops for the 7-day limit at 90%, a scope
+  breach, a failed repro, or being done — never for approval between stages.
+  Everything else is a `Ruling:`, written to `.skillator/run.md` **before** the
+  stage is dispatched (`relay`).
 - **Ticket first, code second.** `[~]` on start, `[x]` only once verified.
 - **Blocked → `AskUserQuestion`**, never prose. Too big for a chip → build a
   local artifact, then ask.
