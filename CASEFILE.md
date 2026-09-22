@@ -3,7 +3,7 @@
 Scene: skillator at `6bea753` (v3.6.0), 31 changed files, 2,489 insertions.
 Read: `PRACTICE.md`, `practice/**`, `PLATFORMS.md`, `WORKFLOW.md`, `README.md`,
 `install.sh`, `install.ps1`, `.skillator/grayskull.md`, all 18 `skills/*/SKILL.md`,
-`skills/handoff-watch/hooks/**`, `skills/skill-smith/**`, and the installed
+`skills/watch-cortana/hooks/**`, `skills/skill-smith/**`, and the installed
 `codex.exe` (0.153.2) on this machine.
 
 Not read: most `skills/*/references/**` (design-arwen's seven, deploy-niyoj's
@@ -20,7 +20,7 @@ on an investigator's word.
 
 ## Critical
 
-- **C1** `PLATFORMS.md:47`, `skills/handoff-watch/SKILL.md:100` — **Codex has a
+- **C1** `PLATFORMS.md:47`, `skills/watch-cortana/SKILL.md:100` — **Codex has a
   `Stop` hook. This release is built on the claim that it does not.**
   The installed `codex.exe` 0.153.2 carries the packed hook enum
   `…UserPromptSubmit · SubagentStart · SubagentStop · Stop`, handler types
@@ -46,14 +46,14 @@ on an investigator's word.
   *Fix:* target `${CODEX_HOME:-$HOME/.codex}/skills`, keeping `~/.agents/skills`
   only if an older Codex is still supported — and say which.
 
-- **H2** `skills/handoff-watch/hooks/usage-watch.ps1:67` ↔ `usage-watch.sh:44` —
+- **H2** `skills/watch-cortana/hooks/usage-watch.ps1:67` ↔ `usage-watch.sh:44` —
   **A BOM makes the threshold comparison fire at any usage, and burns the
   one-shot marker.** PowerShell 5.1 `Set-Content -Encoding utf8` writes
   `EF BB BF 31 32 2E 30` (verified by byte dump). The sh reader does
   `awk -v a="$pct" -v b=97 'BEGIN{print (a>=b)}'`; with the BOM, `a` is
   non-numeric, awk string-compares, and `0xEF > '9'`. Verified: BOM'd `12.0`
   against `97` returns `1`; plain `12.0` returns `0`. On any machine where the
-  `.ps1` probe writes and Git Bash reads the shared `~/.claude/handoff-watch`,
+  `.ps1` probe writes and Git Bash reads the shared `~/.claude/watch-cortana`,
   the handoff fires at 12% and writes `.done` — so the real handoff at 97%
   never comes. The skill exists to prevent exactly that loss.
   *Fix:* write the flag with `[IO.File]::WriteAllText` (no BOM), and strip a
@@ -86,10 +86,10 @@ on an investigator's word.
   before doing anything.
   *Fix:* `git update-index --chmod=+x` on all four.
 
-- **H6** `skills/handoff-watch/hooks/selftest.ps1:27` — **The selftest runs
+- **H6** `skills/watch-cortana/hooks/selftest.ps1:27` — **The selftest runs
   against the user's live state and can consume a real session's handoff.**
   The `check` assertion invokes `usage-watch.ps1 -Mode check` for real, against
-  `~/.codex/sessions` and `~/.claude/handoff-watch`; `check` writes a genuine
+  `~/.codex/sessions` and `~/.claude/watch-cortana`; `check` writes a genuine
   `<key>.done` when it fires. Run the selftest while a live session is over
   threshold and that session's one-shot handoff is spent on a test. The test is
   also non-deterministic — its result depends on whatever is on disk.

@@ -480,7 +480,7 @@ and `grayskull-power` still routes to those:
 | `skillator:sherlock-codes` | A whole-codebase forensic audit |
 | `skillator:ticket-master` | `TICKETS.md`, the board |
 | `skillator:merge-prep` / `merge-agent` | Conflicts and merge execution |
-| `skillator:handoff` / `handoff-watch` | Continuity across context loss |
+| `skillator:handoff-cortana` / `watch-cortana` | Continuity across context loss |
 | `skillator:skill-smith` | Authoring or fixing a skill — `writing-skills` merged in: the description rules, form-to-failure, bulletproofing, and subagent testing |
 
 `dataviz` and `claude-api` are read-before-you-write references, not processes:

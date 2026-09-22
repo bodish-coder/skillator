@@ -58,7 +58,7 @@ character and the distinction.
 Marvel is the build family, The Matrix is B. Six origins; the last three use
 artefacts and concepts where no character fits the job.
 
-| | 10 `handoff` writes the doc | 11 `handoff-resume` executes it | 12 `handoff-watch` fires before cutoff |
+| | 10 `handoff-cortana` writes the doc | 11 `resume-cortana` executes it | 12 `watch-cortana` fires before cutoff |
 |---|---|---|---|
 | **a** Middle-earth | `handoff-bilbo` — hands the quest on, writes the book | `resume-frodo` — takes up what Bilbo put down | `watch-palantir` — the stone that shows what is coming |
 | **b** Star Trek | `handoff-picard` — the captain's log | `resume-riker` — "you have the bridge" | `watch-uhura` — monitors every channel |
@@ -68,7 +68,7 @@ artefacts and concepts where no character fits the job.
 | **f** Halo | `handoff-cortana` — the AI who writes herself down | `resume-chief` — carries her and acts on it | `watch-rampancy` — an AI that knows it is running out of time |
 
 **f is the recommendation**, on one word: *rampancy* is an AI counting down its
-own remaining life, which is `handoff-watch`'s entire job and is the closest fit
+own remaining life, which is `watch-cortana`'s entire job and is the closest fit
 anywhere in this table. **d** is the runner-up — Seldon recording for a future
 he will not see is the handoff itself.
 
@@ -108,9 +108,9 @@ the next reader cannot infer the convention is optional.
 | `spec-trace` | `ariadne-spec` | The thread you follow back out — requirements traced to evidence. |
 | `tui-proof` | `tron-tui` | Tron lives inside the terminal. |
 | `skill-smith` | `q-smith` | Q builds the gadgets other agents are issued. |
-| `handoff` | `bilbo-handoff` | Bilbo hands the quest on and writes the book. |
-| `handoff-resume` | `frodo-resume` | Frodo takes up what Bilbo put down. |
-| `handoff-watch` | `heimdall-watch` | The watchman who sees it coming before it arrives. |
+| `handoff-cortana` | `bilbo-handoff` | Bilbo hands the quest on and writes the book. |
+| `resume-cortana` | `frodo-resume` | Frodo takes up what Bilbo put down. |
+| `watch-cortana` | `heimdall-watch` | The watchman who sees it coming before it arrives. |
 | `merge-prep` | `oracle-merge-prep` | The Oracle tells you what breaks before you walk into it. |
 | `merge-agent` | `smith-merge` | Agent Smith merges himself into everything he touches. |
 | `deploy-wizard` | `gandalf-deploy` | The wizard who plans the road, not the one who walks it. |
@@ -135,7 +135,7 @@ Per skill: directory · `name:` frontmatter · `# Heading` · every
 and `green-<skill>.txt` · the `/slash` name in README.
 
 **Does not follow:** fixture names in `practice/scripts/baseline-harness.sh`
-(`func-ui`, `handoff`, `relay`, `fanout`, `spec-drift*`) — they name a fixture,
+(`func-ui`, `handoff-cortana`, `relay`, `fanout`, `spec-drift*`) — they name a fixture,
 not a skill, and every recorded verdict cites them by those names. Renaming
 them would break the reproduce-from-a-committed-scenario contract that
 `practice/baselines/README.md` is built on.

@@ -1,5 +1,5 @@
 ---
-name: handoff-watch
+name: watch-cortana
 description: >-
   Use when the user asks to "monitor usage limits", "auto handoff before I run
   out", "warn me at 92%", "save the session before the limit", "hand off
@@ -18,7 +18,7 @@ codex/cursor/antigravity see **Other hosts** below.
 
 | Piece | Event | Job |
 |---|---|---|
-| `hooks/usage-watch.* probe` | `statusLine` | The **only** place Claude Code exposes `rate_limits.*.used_percentage`. Records the highest percentage seen to `~/.claude/handoff-watch/<session_id>`, then delegates to whatever statusline was already configured. |
+| `hooks/usage-watch.* probe` | `statusLine` | The **only** place Claude Code exposes `rate_limits.*.used_percentage`. Records the highest percentage seen to `~/.claude/watch-cortana/<session_id>`, then delegates to whatever statusline was already configured. |
 | `hooks/usage-watch.* gate` | `Stop` | At the end of a turn, if the recorded percentage ≥ threshold, returns `{"decision":"block"}` with the three-step preserve order below. |
 
 When it fires, Claude is told to do three things in order, so the saved state is
@@ -31,7 +31,7 @@ whole rather than just a narrative:
    (it is told *not* to start working open tickets — there is no budget left): close what
    actually landed, downgrade half-done work to in-progress, file tickets for
    anything found this session that has none.
-3. **Write the doc** — `skillator:handoff`, with a status table that matches
+3. **Write the doc** — `skillator:handoff-cortana`, with a status table that matches
    `TICKETS.md` ticket-for-ticket and a section listing the in-flight agent work
    from step 1 plus the exact prompt to resume it.
 
@@ -91,7 +91,7 @@ Claude Code is the only host where a turn-end hook is **confirmed** to both read
 the usage percentage and inject an instruction back into the turn. Codex is the
 open question — it has a `Stop` event, but see the codex row below. The others
 get `-Mode check` / `check`: no stdin, reads whatever the host leaves on disk, prints
-either `handoff-watch: <host> <pct>% of <limit>% - ok` or `HANDOFF NOW` followed
+either `watch-cortana: <host> <pct>% of <limit>% - ok` or `HANDOFF NOW` followed
 by the same three-step preserve order.
 
 ```
@@ -112,7 +112,7 @@ same as the Claude Code gate.
 | claude-code | `statusLine` `rate_limits.*.used_percentage` | `Stop` → `{"decision":"block"}` | none needed — full auto |
 | codex | **yes** — `~/.codex/sessions/**/rollout-*.jsonl`, last `token_count`: `rate_limits.*.used_percent` and `last_token_usage.total_tokens / model_context_window` | **none reachable** — a `Stop` event that injects via exit 2 + stderr is compiled in, but the live test found no config that fires it; see below | real percentage, agent-driven `check` — replace with an automatic gate if a reachable `Stop` config is ever found |
 | cursor | **no** — chats are SQLite `store.db`, no usage anywhere on disk | `stop` hook exists (`~/.cursor/hooks.json`, `command`/`prompt` handlers) | **none** — `check` prints "no usage signal on this host"; handoff is manual |
-| antigravity | **no** | `AfterAgent` and `PreCompress` in `~/.gemini/settings.json` | `PreCompress` is the real trigger — context is about to be lost; wire `handoff` there |
+| antigravity | **no** | `AfterAgent` and `PreCompress` in `~/.gemini/settings.json` | `PreCompress` is the real trigger — context is about to be lost; wire `handoff-cortana` there |
 
 Codex uses `last_token_usage.total_tokens`, not `total_token_usage` — the latter
 is cumulative for the whole session and reads several hundred percent.
@@ -148,7 +148,7 @@ until Cursor writes a usage number somewhere readable.
 
 - **Threshold** — `CLAUDE_USAGE_HANDOFF_PCT` env var (default `92`). Set it in
   `settings.json` under `env` to make it stick.
-- **Where the handoff lands** — decided by the `handoff` skill (`docs/handoffs/`
+- **Where the handoff lands** — decided by the `handoff-cortana` skill (`docs/handoffs/`
   by default), not here.
 
 ## Verify
@@ -173,18 +173,18 @@ the handoff should be written immediately.
   (`~/.claude-work`, `~/.claude-bodish`, …) is a separate install: arming
   `~/.claude` arms nothing else. Wire every profile you actually code in, and
   point `-Then` at that profile's own statusline command — the flag files are
-  shared (`~/.claude/handoff-watch/`) but the hooks are not.
+  shared (`~/.claude/watch-cortana/`) but the hooks are not.
 - **Never fires** — the statusline is where the percentage comes from. If
-  `~/.claude/handoff-watch/<session_id>` does not exist, the probe is not wired in
+  `~/.claude/watch-cortana/<session_id>` does not exist, the probe is not wired in
   as `statusLine`, or this Claude Code build predates the `rate_limits` statusline
   field (2.0.44+).
 - **Statusline went blank** — the `-Then` command is wrong or missing.
-- **Fired once, want it again** — delete `~/.claude/handoff-watch/<session_id>.done`.
+- **Fired once, want it again** — delete `~/.claude/watch-cortana/<session_id>.done`.
 - **Stale flag files** — plain text, a few bytes each; delete
-  `~/.claude/handoff-watch/` whenever.
+  `~/.claude/watch-cortana/` whenever.
 
 ## Related
 
-- `skillator:handoff` — writes the document this skill triggers.
+- `skillator:handoff-cortana` — writes the document this skill triggers.
 - `skillator:ticket-master` — the `TICKETS.md` board the handoff is reconciled against.
-- `skillator:handoff-resume` — executes it in the next session.
+- `skillator:resume-cortana` — executes it in the next session.

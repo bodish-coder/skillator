@@ -6,7 +6,7 @@ description: >-
   a laptop that sleeps, a dropping connection, a usage limit closing in. Also
   when the user says "staged workflow", "keep going across sessions", "resume
   the run", "what was in flight", or asks why a dispatched agent went quiet.
-  NOT for writing a session handoff (`handoff`) and NOT for the board
+  NOT for writing a session handoff (`handoff-cortana`) and NOT for the board
   (`ticket-master`).
 ---
 
@@ -156,5 +156,5 @@ to mention it — which is the difference between resuming and starting over.
 macOS/Linux: `sh <SKILL>/hooks/r2d2-r2d2-relay.sh status`. Forward slashes throughout —
 PowerShell accepts them and it removes all backslash-escaping from the JSON.
 Other hosts have no equivalent event; there, reading `.skillator/run.md` is the
-first thing `handoff-resume` does. `handoff-watch` already drains in-flight
+first thing `resume-cortana` does. `watch-cortana` already drains in-flight
 agents at the limit — relay is what it drains *into*, so the two do not overlap.

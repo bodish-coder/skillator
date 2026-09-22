@@ -30,7 +30,7 @@ session file.
 The one checkpoint this skill has, and it is not a host feature — it is a rule
 about ordering:
 
-1. It runs **only after `handoff` has written a verified handoff to disk.** Never
+1. It runs **only after `handoff-cortana` has written a verified handoff to disk.** Never
    shed context without one.
 2. It is **never `/compact`** — a skill cannot invoke a slash command. The move is
    always the same: carry the design forward **as a file path**, not as chat

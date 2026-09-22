@@ -39,7 +39,7 @@ Nothing else changes per host.
 
 `ticket-master` (read `TICKETS.md`, report the open set) · `ponytail` (laziness
 level active) · `codegraph` (indexed, else init once) · `live-build` (if the
-repo has a runnable surface) · `handoff-watch` (hooks on Claude Code, a manual
+repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
 `usage-watch … check` elsewhere) · `r2d2-relay` (an unfinished `.skillator/run.md`
 is the first thing you say).
 
@@ -69,7 +69,7 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | A static/mock UI that must actually work | `func-ui` |
 | Requirements that live only in a conversation, and outlive the session | `spec-trace` |
 | "check screenshot" / verify visually | `screenshot-loop` |
-| Merge · deploy · ending · resuming | `merge-prep`→`merge-agent` · `deploy-wizard`→`deploy-niyoj` · `handoff` · `handoff-resume` |
+| Merge · deploy · ending · resuming | `merge-prep`→`merge-agent` · `deploy-wizard`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |
 | A staged run the session may not outlive — fan-out, long build, flaky link | `r2d2-relay` (the ledger; the build skill still does the building) |
 | A plan whose tasks are written and now have to be built | `replicator-agent` — one task, one fresh agent, reviewed before the next |
 | Auth, secrets, input handling | `security-review` |

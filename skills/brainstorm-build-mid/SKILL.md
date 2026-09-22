@@ -120,7 +120,7 @@ For 1-3 sequential tasks, stay with plain dispatch — a script buys nothing.
   returns nothing, say so plainly and stop rather than continuing on a missing piece.
 - **Handoff before any context loss.** This tier runs no `/compact` or `/clear` of its
   own, but if you or the user are about to run either, **first run the
-  `handoff` skill** — never compact/clear without a verified handoff.
+  `handoff-cortana` skill** — never compact/clear without a verified handoff.
 - Want Fable's creative brainstorm + the full ceremony? Use
   brainstorm-build-prime. Want to offload simple/mechanical tasks to Sonnet?
   Use brainstorm-build-lite.

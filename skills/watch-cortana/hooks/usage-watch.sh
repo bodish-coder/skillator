@@ -1,10 +1,15 @@
 #!/bin/sh
-# handoff-watch: record usage % from the statusline, act on it at the Stop hook.
+# watch-cortana: record usage % from the statusline, act on it at the Stop hook.
 #   usage-watch.sh probe ["<original statusline command>"]   (statusLine command)
 #   usage-watch.sh gate                                      (Stop hook)
 #   usage-watch.sh check                                     (any host, no stdin)
 # Threshold: $CLAUDE_USAGE_HANDOFF_PCT, default 92.
 mode="${1:-probe}"; then_cmd="$2"
+# The state dir keeps its original name on purpose: it is storage, not a
+# skill reference. Renaming it with the skill would strand every live
+# session's flag and .done marker at the old path - a session that had
+# already fired would fire a second time. Skill renames must not migrate
+# a user's machine.
 dir="$HOME/.claude/handoff-watch"
 limit="${CLAUDE_USAGE_HANDOFF_PCT:-92}"
 # The 7-day window is watched separately and lower. The 5-hour window refills in
@@ -36,7 +41,7 @@ stale_secs=10800   # 3 hours
 # while exiting 0 - a silent empty result, which is exactly the failure this
 # ticket is about. Plain shell recursion has no PATH to lose. (`sort` is the
 # other name Windows steals, and `probe` used to pipe through it. That was
-# wrong: the handoff-watch selftest drives this script from PowerShell, where
+# wrong: the watch-cortana selftest drives this script from PowerShell, where
 # `sort.exe` eats `-g` and prints "The system cannot find the file specified"
 # while exiting 0 - so `probe` wrote the weekly flag and no main flag at all.
 # Every numeric compare in this file now goes through awk.)
@@ -144,7 +149,7 @@ if [ "$mode" = check ]; then
     fi
   fi
   if [ -z "$pct" ] && [ -z "$wk" ]; then
-    echo "handoff-watch: no usage signal on this host - run skillator:handoff manually before you run out"; exit 0
+    echo "watch-cortana: no usage signal on this host - run skillator:handoff-cortana manually before you run out"; exit 0
   fi
   # The weekly gate applies on every host, not just the one with a Stop hook.
   # It has its own .done, so a 5-hour fire earlier in the session cannot eat
@@ -152,15 +157,15 @@ if [ "$mode" = check ]; then
   if [ -n "$wk" ] && over_limit "$wk" "$wk_limit" && [ ! -f "$dir/$key.weekly.done" ]; then
     mkdir -p "$dir"; : > "$dir/$key.weekly.done"
     echo "HANDOFF NOW ($src 7-day $wk%)"
-    printf 'Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop.
+    printf 'Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop.
 ' "$wk" "$wk_limit" "$wk_step4"
   elif [ -n "$pct" ] && over_limit "$pct" "$limit" && [ ! -f "$dir/$key.done" ]; then
     mkdir -p "$dir"; : > "$dir/$key.done"
     echo "HANDOFF NOW ($src $pct%)"
-    printf 'Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop.
+    printf 'Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop.
 ' "$pct" "$limit" ""
   else
-    echo "handoff-watch: $src ${pct:-$wk}% of $limit% - ok"
+    echo "watch-cortana: $src ${pct:-$wk}% of $limit% - ok"
   fi
   exit 0
 fi
@@ -197,11 +202,11 @@ pct=$(read_pct "$flag")
 wk=$(read_pct "$flag.weekly")
 if [ -n "$wk" ] && over_limit "$wk" "$wk_limit" && [ ! -f "$flag.weekly.done" ]; then
   : > "$flag.weekly.done"
-  printf '{"decision":"block","reason":"Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop."}' "$wk" "$wk_limit" "$wk_step4"
+  printf '{"decision":"block","reason":"Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop."}' "$wk" "$wk_limit" "$wk_step4"
   exit 0
 fi
 [ -f "$flag.done" ] && exit 0
 [ -n "$pct" ] || exit 0
 over_limit "$pct" "$limit" || exit 0
 : > "$flag.done"
-printf '{"decision":"block","reason":"Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it. Then tell the user where the file is and stop."}' "$pct" "$limit"
+printf '{"decision":"block","reason":"Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:ticket-master to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it. Then tell the user where the file is and stop."}' "$pct" "$limit"

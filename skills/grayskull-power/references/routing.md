@@ -87,8 +87,8 @@ re-check anything an agent asserts without evidence.
 | "check screenshot", or verify a change in a running app visually | `screenshot-loop` |
 | Ready to merge a branch | `merge-prep`, then `merge-agent` |
 | Ship to a VPS / set up deployment | `deploy-wizard`, then `deploy-niyoj` |
-| Session ending, context or usage running out | `handoff` |
-| Starting from someone else's handoff doc | `handoff-resume` |
+| Session ending, context or usage running out | `handoff-cortana` |
+| Starting from someone else's handoff doc | `resume-cortana` |
 
 **Nothing matches?** Do the work directly. A one-line edit needs no skill, and
 routing it through one is the opposite of the point. Skipping the *skill* is not
@@ -99,5 +99,5 @@ those rules exist for.
 
 ## Related
 
-`handoff-watch` fires the end-of-session sequence automatically at 92% usage;
+`watch-cortana` fires the end-of-session sequence automatically at 92% usage;
 that sequence is the same route this table's last two rows describe.

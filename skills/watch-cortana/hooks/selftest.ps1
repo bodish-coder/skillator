@@ -8,7 +8,7 @@ $flag = Join-Path $HOME ".claude\handoff-watch\$sid"
 # check-mode fixtures live here, never in the user's real HOME: `check` writes a
 # genuine one-shot .done when it fires, so running it against the live
 # ~/.codex/sessions would burn a real session's handoff (and be non-deterministic).
-$tmp = Join-Path ([IO.Path]::GetTempPath()) "handoff-watch-selftest-$PID"
+$tmp = Join-Path ([IO.Path]::GetTempPath()) "watch-cortana-selftest-$PID"
 $shExe = (Get-Command sh -ErrorAction SilentlyContinue)
 
 # --- helpers ----------------------------------------------------------------
@@ -193,14 +193,14 @@ try {
   # codex rollout below threshold: report, do not fire, leave no .done behind.
   $h = NewHome 'codex-low'; AddCodex $h 12.0 12000 200000
   $c = RunCheck $h
-  if ($c -notmatch '^handoff-watch: codex 12(\.0)?% of 92% - ok$') { throw "check codex-low: got '$c'" }
+  if ($c -notmatch '^watch-cortana: codex 12(\.0)?% of 92% - ok$') { throw "check codex-low: got '$c'" }
   if (-not (NoDoneFiles $h)) { throw 'check codex-low: wrote a .done below threshold' }
 
   # codex rollout over threshold: fire once, then be silent (one-shot .done).
   $h = NewHome 'codex-high'; AddCodex $h 98.4 12000 200000
   $c = RunCheck $h
   if ($c -notmatch '^HANDOFF NOW \(codex 98\.4%\)') { throw "check codex-high: got '$c'" }
-  if ($c -notmatch 'skillator:handoff') { throw 'check codex-high: no handoff order' }
+  if ($c -notmatch 'skillator:handoff-cortana') { throw 'check codex-high: no handoff order' }
   if (NoDoneFiles $h) { throw 'check codex-high: no one-shot .done written' }
   $c = RunCheck $h
   if ($c -match 'HANDOFF NOW') { throw 'check codex-high: fired twice' }
@@ -214,7 +214,7 @@ try {
   # claude-code flag, plain bytes, below threshold.
   $h = NewHome 'cc-plain'; AddFlag $h 'sess-a' '12.0' | Out-Null
   $c = RunCheck $h
-  if ($c -notmatch '^handoff-watch: claude-code 12(\.0)?% of 92% - ok$') { throw "check cc-plain: got '$c'" }
+  if ($c -notmatch '^watch-cortana: claude-code 12(\.0)?% of 92% - ok$') { throw "check cc-plain: got '$c'" }
   if (-not (NoDoneFiles $h)) { throw 'check cc-plain: wrote a .done below threshold' }
 
   # A49: the 92-97 band. These two pin the threshold retune itself - at the old
@@ -227,7 +227,7 @@ try {
 
   $h = NewHome 'cc-under'; AddFlag $h 'sess-a' '91.0' | Out-Null
   $c = RunCheck $h
-  if ($c -notmatch '^handoff-watch: claude-code 91(\.0)?% of 92% - ok$') { throw "check cc-under: got '$c'" }
+  if ($c -notmatch '^watch-cortana: claude-code 91(\.0)?% of 92% - ok$') { throw "check cc-under: got '$c'" }
   if (-not (NoDoneFiles $h)) { throw 'check cc-under: wrote a .done just below threshold' }
 
   # F18/finding 1: a `.weekly` file is written AFTER the main flag, so it is
@@ -257,7 +257,7 @@ try {
   # nothing on disk at all: say so, do not invent a number.
   $h = NewHome 'empty'
   $c = RunCheck $h
-  if ($c -notmatch '^handoff-watch: no usage signal') { throw "check empty: got '$c'" }
+  if ($c -notmatch '^watch-cortana: no usage signal') { throw "check empty: got '$c'" }
 
   # --- A32: the freshness window and the recursion, on BOTH twins ------------
   # These are written as a loop over the two runners on purpose: if either side
@@ -271,7 +271,7 @@ try {
     $h = NewHome "a32-stale-$($r.n)"; AddCodex $h 98.4 12000 200000 168
     $c = & $r.f $h
     if ($c -match 'HANDOFF NOW') { throw "$($r.n) check: fired on a 7-day-old rollout at 98% (A32), got '$c'" }
-    if ($c -notmatch '^handoff-watch: no usage signal') { throw "$($r.n) check a32-stale: got '$c'" }
+    if ($c -notmatch '^watch-cortana: no usage signal') { throw "$($r.n) check a32-stale: got '$c'" }
     if (-not (NoDoneFiles $h)) { throw "$($r.n) check: stale rollout burned the one-shot (A32)" }
 
     # Just outside the 3h window - the boundary, not just the obvious week.
@@ -288,7 +288,7 @@ try {
     $h = NewHome "a32-fallback-$($r.n)"; AddCodex $h 98.4 12000 200000 168
     AddFlag $h 'sess-a' '12.0' | Out-Null
     $c = & $r.f $h
-    if ($c -notmatch '^handoff-watch: claude-code 12(\.0)?% of 92% - ok$') { throw "$($r.n) check a32-fallback: got '$c'" }
+    if ($c -notmatch '^watch-cortana: claude-code 12(\.0)?% of 92% - ok$') { throw "$($r.n) check a32-fallback: got '$c'" }
 
     # Recursion: the rollout is one level deeper than the old */*/*/ glob.
     $h = NewHome "a32-deep-$($r.n)"
@@ -301,7 +301,7 @@ try {
   if ($shExe) {
     $h = NewHome 'sh-codex-low'; AddCodex $h 12.0 12000 200000
     $c = RunSh 'check' $h $null
-    if ($c -notmatch '^handoff-watch: codex 12\.0% of 92% - ok$') { throw "sh check codex-low: got '$c'" }
+    if ($c -notmatch '^watch-cortana: codex 12\.0% of 92% - ok$') { throw "sh check codex-low: got '$c'" }
     if (-not (NoDoneFiles $h)) { throw 'sh check codex-low: wrote a .done below threshold' }
 
     $h = NewHome 'sh-codex-high'; AddCodex $h 98.4 12000 200000

@@ -121,7 +121,7 @@ BUILD_MODEL: <model planned for Phase 2>
 The design is safely on disk.
 
 1. **Run the handoff skill** using the platform's method (platforms.md) —
-   `handoff` — to capture a verified handoff. Never shed context without one.
+   `handoff-cortana` — to capture a verified handoff. Never shed context without one.
 2. **Shed context by delegation, not by command.** A skill cannot invoke
    `/compact` — don't try. Instead: keep the design *out* of the orchestrator's
    working memory by passing build agents the **design file path** and letting
@@ -203,7 +203,7 @@ section** so the record stays true.
 
 Once the build is green, the record is written, and rework is done:
 
-1. **Run `handoff`** again (platform method).
+1. **Run `handoff-cortana`** again (platform method).
 2. Relay a short summary (approach, what shipped, test result, record + handoff
    paths).
 
@@ -225,7 +225,7 @@ Switch to it when the design yields **4+ independent tasks**, the work is a swee
 for 1-3 sequential tasks.
 
 The ceremony does not move into the script: write the design file **before** the
-workflow and pass its path in `args`; run `handoff` and Checkpoint A in this
+workflow and pass its path in `args`; run `handoff-cortana` and Checkpoint A in this
 session, around the call.
 
 ## Rules
@@ -234,7 +234,7 @@ session, around the call.
   code in the orchestrator session (except writing the session record).
 - **The design/record file is the source of truth** — pass its path to build
   agents; don't rely on chat context outliving a compact/trim.
-- **Handoff before any context loss.** Run `handoff` before Checkpoint A —
+- **Handoff before any context loss.** Run `handoff-cortana` before Checkpoint A —
   never shed context without a verified handoff on disk.
 - **Never invoke slash commands.** You cannot run `/compact` or `/clear`; don't
   claim to. Context is shed by delegating with the design file path, and by the

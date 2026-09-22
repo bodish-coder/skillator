@@ -1,5 +1,5 @@
 ---
-name: handoff-resume
+name: resume-cortana
 description: >-
   Use when the user says "execute the handoff", "run the handoff", "work
   through the handoffs", "pick up the pending tasks", "resume from the handoff

@@ -103,7 +103,7 @@ For 1-3 sequential tasks, stay with plain dispatch.
   returns nothing, say so and stop rather than continuing on a missing piece.
 - **Handoff before any context loss.** This tier runs no `/compact` or `/clear` of
   its own, but if you or the user are about to run either, **first run the
-  `handoff` skill** — never compact/clear without a verified handoff.
+  `handoff-cortana` skill** — never compact/clear without a verified handoff.
 - **Pass the design by path, never by paste.** Pasting it parks the whole design
   in your context for the rest of the session (`practice/task-loop.md`, Context
   hygiene), and the canon's templates take a `<DESIGN_FILE>` path anyway.

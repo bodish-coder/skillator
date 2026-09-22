@@ -90,7 +90,7 @@ Every host is supposed to match a request against each skill's `description` and
 load the winner without being asked. On **Claude Code** that works, including
 headless: seven `claude -p` runs on 2.1.261 / Opus 5, from a throwaway fixture with
 no project instruction file, each loaded the right skill unprompted —
-`func-ui` ×5 from *"just a mockup … make it real"*, `handoff-resume` from
+`func-ui` ×5 from *"just a mockup … make it real"*, `resume-cortana` from
 *"pick up the pending tasks from the handoffs"*, and `grayskull-power` from
 *"set me up for coding"*. On the other hosts the reflex is **unverified** from
 here; `PLATFORMS.md` says which.
@@ -110,13 +110,13 @@ Deactivating is deleting `.skillator/grayskull.md`.
 
 ## Skills in this repo
 
-- **handoff** — generate an in-depth, *verified* session-handoff
+- **handoff-cortana** — generate an in-depth, *verified* session-handoff
   document so a different person or AI can continue the work with no loss of
   context, plan, or intent. Invoke with `/handoff [output-path|focus]`.
-- **handoff-resume** — the execution counterpart: read handoff docs
-  (from `handoff`) and *do* the pending work, stamping a marker in each
+- **resume-cortana** — the execution counterpart: read handoff docs
+  (from `handoff-cortana`) and *do* the pending work, stamping a marker in each
   so finished handoffs are skipped. Marker-aware and idempotent (safe to re-run /
-  `/loop`). Invoke with `/handoff-resume`.
+  `/loop`). Invoke with `/resume-cortana`.
 - **func-ui** — turn an existing UI-only mockup/prototype into a real,
   working system: scan the code, interview the user, emit workflow specs to
   confirm, then a dependency-ordered plan to wire the UI to a real backend
@@ -184,7 +184,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   leaves behind on exit — interoperable with one another skill already wrote.
   Invoke with `/design-arwen`.
 - **grayskull-power** — one entry point that switches the whole skillator workflow on:
-  arms the standing skills (reads `TICKETS.md`, checks `handoff-watch` is wired),
+  arms the standing skills (reads `TICKETS.md`, checks `watch-cortana` is wired),
   prints the state in a single line, then routes each request to the one skill
   that fits — across skillator (`sherlock-codes` for rot, `brainstorm-build-*` for
   features, `design-arwen` for UI, `merge-prep`/`deploy-niyoj` for shipping) *and*
@@ -205,7 +205,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   diff before every commit, capped at three passes. (`sherlock-codes` is the
   whole-app sweep — pre-release or unknown-cause rot — never a per-commit gate.)
   Invoke with `/grayskull-power`.
-- **handoff-watch** — installs a statusline probe and a `Stop` hook that watch
+- **watch-cortana** — installs a statusline probe and a `Stop` hook that watch
   Claude Code's usage limits (5-hour, 7-day and context windows) and, the moment
   any of them crosses 92%, make the session preserve itself before it is cut off:
   drain in-flight agents, sync `TICKETS.md` via `ticket-master` (statuses only),
@@ -215,7 +215,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   next direction to the user as options with a recommendation, rather than
   stopping on a summary. Fires once per session; thresholds via
   `CLAUDE_USAGE_HANDOFF_PCT` and `CLAUDE_USAGE_HANDOFF_WEEKLY_PCT`. Invoke with
-  `/handoff-watch`.
+  `/watch-cortana`.
 - **replicator-agent** — the port of `superpowers:subagent-driven-development`,
   so the loop exists on every host skillator installs to and not only the one
   with that plugin. It is an **entry point, not a copy**: the procedure already

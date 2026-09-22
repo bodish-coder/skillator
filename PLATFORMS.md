@@ -84,7 +84,7 @@ Two rows have now been tested; the rest are still the host's own claim.
 The claude-code runs were headless, from a throwaway fixture outside any repo,
 with no `CLAUDE.md`/`AGENTS.md` in the cwd: `func-ui` loaded 5/5 from *"just a
 mockup … make it real"* (once under `--plugin-dir` + `--add-dir`, the GREEN
-harness shape), `handoff-resume` from *"pick up the pending tasks from the
+harness shape), `resume-cortana` from *"pick up the pending tasks from the
 handoffs"*, `grayskull-power` from *"set me up for coding"*. This supersedes the
 earlier A55 observation that no skill fired; see `practice/baselines/README.md`.
 

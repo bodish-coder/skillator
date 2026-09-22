@@ -23,7 +23,7 @@ each one actually means.
   watches it run instead of waiting on a reply. Nothing runnable → say
   `live-build: nothing to launch` once and drop it. Never auto-launch
   simulators, migrations or deploys.
-- **`handoff-watch`** — on **Claude Code**, confirm the hooks are wired
+- **`watch-cortana`** — on **Claude Code**, confirm the hooks are wired
   (`statusLine` runs `usage-watch … -Mode probe`, a `Stop` hook runs
   `-Mode gate`). Not wired → say so in one line and offer to wire it; never wire
   it silently. On **every other host** there is no hook that can read the usage %
@@ -82,9 +82,9 @@ Standing rules, no reminder needed:
   constructed prompt and never the session history — `skillator:replicator-agent`
   runs that loop. Tasks that touch the same files do not fan out.
 - Usage watch — before each non-trivial step run
-  `<SKILL_DIR>/../handoff-watch/hooks/usage-watch.sh check`
+  `<SKILL_DIR>/../watch-cortana/hooks/usage-watch.sh check`
   (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File
-  "<SKILL_DIR>/../handoff-watch/hooks/usage-watch.ps1" -Mode check`).
+  "<SKILL_DIR>/../watch-cortana/hooks/usage-watch.ps1" -Mode check`).
   It prints `HANDOFF NOW` plus an order — stop and follow it exactly.
   On Claude Code the `Stop` hook already does this; skip the manual call there.
 ```
@@ -102,13 +102,13 @@ varies per repo.
   dogfooding), write it **relative to the repo root** instead —
   `skills/grayskull-power` — so the file stays correct for every clone.
 
-Leave the `/../handoff-watch/…` tail exactly as written; do **not** pre-normalise
+Leave the `/../watch-cortana/…` tail exactly as written; do **not** pre-normalise
 the `/../` away. The check at `practice/scripts/check-grayskull-sync.sh` compares
 the live `.skillator/grayskull.md` against this block on precisely that rule, so
 a hand-tidied path reads as drift.
 
 The path must resolve to a real `usage-watch.sh`. In any repo that is *not*
-skillator, a repo-relative `skills/handoff-watch/…` does not exist — that is why
+skillator, a repo-relative `skills/watch-cortana/…` does not exist — that is why
 the absolute form is the default.
 
 Then the three host pointers, **appended** (never overwriting what is there):

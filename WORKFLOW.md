@@ -166,7 +166,7 @@ pass: { type: 'boolean' }, evidence: { type: 'string' } } }`.
 - **The design/session file still rules.** In `-prime`, write it *before* the
   workflow starts and pass its path in `args` — the workflow's own result is
   not durable memory. Append the Outcome section from the returned object.
-- **Checkpoints stay yours.** A workflow cannot run `handoff`, `/compact`, or
+- **Checkpoints stay yours.** A workflow cannot run `handoff-cortana`, `/compact`, or
   `/clear`. Run them in the orchestrator session, around the workflow call —
   never skip the handoff.
 - **Report what actually came back.** `agent()` returns `null` on a skipped or

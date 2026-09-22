@@ -22,7 +22,10 @@ grep -q 'grayskull-power is ON' "$tmp/tpl" ||
 
 # Licensed substitution: whatever stands in for <SKILL_DIR> is folded back to the
 # placeholder on both sides, so only real drift survives the diff.
-sub='s|[^ `"]*/\.\./handoff-watch/hooks/usage-watch|<SKILL_DIR>/../handoff-watch/hooks/usage-watch|g'
+# The watcher skill's directory name is matched, not hardcoded: this script
+# broke the moment `handoff-watch` was renamed, which is exactly when a
+# sync check is least useful. `[a-z0-9-]*` is the skill dir, whatever it is now.
+sub='s|[^ `"]*/\.\./\([a-z0-9-]*\)/hooks/usage-watch|<SKILL_DIR>/../\1/hooks/usage-watch|g'
 sed "$sub" "$tmp/tpl"  > "$tmp/a"
 sed "$sub" "$live"     > "$tmp/b"
 
@@ -37,7 +40,7 @@ fi
 
 # The substitution must actually have been made, and must point at a real file.
 grep -q '<SKILL_DIR>' "$live" && die "$live still contains the literal <SKILL_DIR>"
-p=$(sed -n 's|.*`\(.*/\.\./handoff-watch/hooks/usage-watch\.sh\) check`.*|\1|p' "$live")
+p=$(sed -n 's|.*`\(.*/\.\./[a-z0-9-]*/hooks/usage-watch\.sh\) check`.*|\1|p' "$live")
 [ -n "$p" ] || die "no usage-watch.sh path found in $live"
 case $p in /*|?:/*) ;; *) p="$root/$p" ;; esac
 [ -f "$p" ] || die "usage-watch path does not resolve to a file: $p"

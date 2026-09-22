@@ -1,6 +1,6 @@
 # PLAN — relay: staged workflows that survive sessions
 
-**Status:** stage 0 done · **Revive with:** `skillator:handoff-resume` or just
+**Status:** stage 0 done · **Revive with:** `skillator:resume-cortana` or just
 say *"continue the relay plan"* — read this file top to bottom, find the first
 stage not `[x]`, and start there. Nothing else is needed from a previous session.
 
@@ -29,7 +29,7 @@ Six asks from the user, 2026-09-22:
 |---|---|
 | `WORKFLOW.md` | workflow mode, phase→script mapping, host table. `resumeFromRunId` is **same-session only** — that is the hole. |
 | `skills/handoff-watch` | statusLine `probe` + `Stop` `gate`, threshold, 3-step preserve order. Takes the **max** of 5h/7d/context — user wants the 7-day window to be the hard stop. |
-| `skills/handoff` · `handoff-resume` | writing and executing a handoff doc. |
+| `skills/handoff` · `resume-cortana` | writing and executing a handoff doc. |
 | `skills/brainstorm-build-*` | design→build phases, task blocks, `TRACE:`/`SATISFIES:`. |
 | `skills/ticket-master` | `TICKETS.md`, workflow mode at 4+ open. |
 
@@ -121,7 +121,7 @@ Why it has to exist at all rather than deferring to the upstream skill:
 skillator installs to Cursor, Codex, Antigravity and Pi, where `superpowers`
 is not present. Evidence debt tracked as **A76**, not as a blocker.
 
-### [x] S5 — handoff-watch: weekly 90% hard stop  (F18)
+### [x] S5 — watch-cortana: weekly 90% hard stop  (F18)
 - per-window thresholds instead of one max: 7-day ≥ 90% is the hard stop;
   5-hour and context keep their current advisory behaviour.
 - preserve order gains **step 4**: after the handoff doc, `AskUserQuestion`
@@ -130,7 +130,7 @@ is not present. Evidence debt tracked as **A76**, not as a blocker.
 
 ### [x] S6 — grayskull-power rules  (F19)
 `skills/grayskull-power/SKILL.md`:
-- §1 arming gains `r2d2-relay` (open runs) beside `handoff-watch`.
+- §1 arming gains `r2d2-relay` (open runs) beside `watch-cortana`.
 - §2 routing: "a multi-stage build that must survive sessions" → `r2d2-relay`;
   "executing a plan with independent tasks" → `replicator-agent`.
 - §3 ground rules gain two lines:
@@ -168,7 +168,7 @@ command, which this host's classifier refuses.
 ## Standing decisions (do not relitigate)
 
 - One new skill (`r2d2-relay`) + one ported skill (`replicator-agent`) + edits to
-  `handoff-watch` and `grayskull-power`. No new top-level docs beyond this plan.
+  `watch-cortana` and `grayskull-power`. No new top-level docs beyond this plan.
 - Run state is **a markdown file in the repo**, not a database and not
   `resumeFromRunId` — it must be readable by a human and by any host.
 - Windows + POSIX script pair for anything executable, always both.

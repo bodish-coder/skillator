@@ -22,8 +22,8 @@ Standing rules, no reminder needed:
   constructed prompt and never the session history — `skillator:replicator-agent`
   runs that loop. Tasks that touch the same files do not fan out.
 - Usage watch — before each non-trivial step run
-  `skills/grayskull-power/../handoff-watch/hooks/usage-watch.sh check`
+  `skills/grayskull-power/../watch-cortana/hooks/usage-watch.sh check`
   (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File
-  "skills/grayskull-power/../handoff-watch/hooks/usage-watch.ps1" -Mode check`).
+  "skills/grayskull-power/../watch-cortana/hooks/usage-watch.ps1" -Mode check`).
   It prints `HANDOFF NOW` plus an order — stop and follow it exactly.
   On Claude Code the `Stop` hook already does this; skip the manual call there.

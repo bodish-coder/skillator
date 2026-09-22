@@ -1,5 +1,5 @@
 ---
-name: handoff
+name: handoff-cortana
 description: >-
   Use when the user asks to "hand off", "write a handoff", "create a handoff
   doc", "document where we are", "prepare for the next session/person", or

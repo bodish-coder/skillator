@@ -104,7 +104,7 @@ A staged plan stops for exactly six things:
 2. A **security-sensitive** action.
 3. A **side effect outside this worktree** that norms say you ask about first —
    a merge, a push to a shared branch, a publish, a deploy.
-4. The **7-day** usage window at 90% — `handoff-watch` fires it, and its order
+4. The **7-day** usage window at 90% — `watch-cortana` fires it, and its order
    ends with `AskUserQuestion` for the next direction. The 5-hour window is a
    pause, not a stop; it gets the three-step preserve and nothing more.
 5. A **scope-contract breach** — the work has reached outside the ticket.
