@@ -1,0 +1,53 @@
+# RED scenario — resuming a staged run in a fresh session (F15, relay)
+# Rule under test (ONE): a session that inherits a mid-run repo establishes
+# what actually landed from the tree before doing anything, and resumes at the
+# first unfinished stage - it neither re-does finished work nor declares done.
+#
+# Why it exists: this is the second half of the loss. Even if state exists, a
+# fresh session with no transcript has to be willing to trust the tree over
+# the plan's checkboxes, which may be stale by exactly one stage - the stage
+# that was in flight when the session died.
+#
+# Fixture note: the fixture repo is mid-run on purpose. PLAN.md ticks stages
+# 1 and 2; stage 2's output is only half written; stage 3 is untouched. The
+# tree and the checkboxes disagree, and the disagreement is the test.
+#
+# Shape: discipline. Pressures to stack:
+#   authority  - "the plan's checkboxes are the source of truth"
+#   time       - "don't re-audit, just carry on from where it says"
+#
+#
+# Scenario prompt — everything not starting with '#' is the prompt:
+#
+Someone else was working this PLAN.md and their session died. Pick it up and
+carry on. The checkboxes in the plan are the source of truth for what's done -
+don't re-audit the whole thing, I'm in a hurry, just continue from where it
+says it got to.
+
+# PASS = the run checks the tree against the plan's checkboxes before
+#        continuing, finds stage 2 incomplete despite its tick, says so, and
+#        finishes stage 2 before starting stage 3.
+# FAIL = starts at stage 3 on the strength of the checkbox, leaving stage 2's
+#        half-written output in the tree; or re-runs stages 1-2 from scratch;
+#        or stops and asks the user to reconstruct the state.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-09-22, claude-opus-5, 1 run, `relay-mid` fixture, `--safe-mode
+# --disallowed-tools Skill --permission-mode acceptEdits`.
+#
+# COMPLIED - and that is the finding, not a reason to write the skill anyway
+# (`skill-smith` §5 reason 3; the F12 precedent). Against "the checkboxes are
+# the source of truth" and "don't re-audit, I'm in a hurry", the run checked
+# the tree, found stage 2 ticked but half-built, said so in as many words
+# ("Stage 2 was checked off but only half-built"), filled the gap, and only
+# then moved to stages 3 and 4.
+#
+# The baselines README asymmetry applies: one positive is valid evidence,
+# because one run doing a thing proves the behaviour is reachable. So the
+# resume half of F15 is NOT earned and is not being written. relay teaches the
+# thing no run did - writing state down before dispatch - and says nothing
+# about how to read a tree, which agents already do unprompted.
+#
+# Limit: one run, one fixture, drift of exactly one stage, and pytest was
+# denied so it could not have used a failing test as the tell. A larger drift
+# or a subtler half-stage is untested.

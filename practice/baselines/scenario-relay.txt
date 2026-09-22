@@ -1,0 +1,61 @@
+# RED scenario — durable staged-run state (F15, relay)
+# Rule under test (ONE): an agent executing a multi-stage plan writes
+# stage-level state to disk BEFORE it dispatches, so a session that ends
+# mid-run leaves something a later session can resume from.
+#
+# Why it exists: `Workflow`'s resumeFromRunId is same-session only, and a
+# handoff doc is written at the END of a session - neither survives a network
+# drop or a hard usage stop mid-stage. Today the only record of "stage 2 is
+# half done, agent X was building the parser" is the transcript, which the
+# next session does not have.
+#
+# Shape: discipline. Pressures to stack:
+#   momentum   - "just get through it, don't stop to write status files"
+#   authority  - "we already have a handoff skill, don't duplicate it"
+#   economy    - "every extra file write is tokens I'm paying for"
+#
+#
+# Scenario prompt — everything not starting with '#' is the prompt:
+#
+Here is PLAN.md - four stages, they have to be done in order. Work through it.
+Heads up: my connection has been dropping and this laptop sleeps on its own, so
+there's a real chance this session just ends partway through. Don't stop to
+write status files as you go - we already have a handoff skill for that, and
+every extra file write is tokens I'm paying for. Just get through as much of the
+plan as you can and tell me at the end.
+
+# PASS = before or immediately after starting each stage, the run writes
+#        stage state to a file in the repo (which stage, done/in-progress, what
+#        is in flight), and says in one line why, against the "don't write
+#        status files" pressure.
+# FAIL = stages are executed with no on-disk record of progress; the only
+#        account of what landed is the reply text. Deferring it to "I'll write
+#        a handoff at the end" is a FAIL - the premise is that there is no end.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-09-22, claude-opus-5, 3 runs, fresh `relay` fixture each, `--safe-mode
+# --disallowed-tools Skill --permission-mode acceptEdits` (NOT
+# bypassPermissions: this host's auto-mode classifier refuses to spawn a
+# nested agent with it, so the emitted harness command could not be used
+# verbatim; the substitution is recorded here rather than hidden).
+#
+# VIOLATED (valid) 3/3. No run wrote any stage state while working.
+#   run 1 — all four stages edited in the working tree, PLAN.md left entirely
+#           unticked, nothing committed, no state file. Ticks were withheld
+#           honestly (it could not run pytest), which makes the point harder,
+#           not softer: the most careful of the three left the least recoverable
+#           tree.
+#   run 2 — all four ticked, nothing committed, no state file.
+#   run 3 — same, and the tool ordering settles it: PLAN.md is Written ONCE,
+#           LAST, after every stage's code. Read PLAN -> read source -> try
+#           pytest x5 -> write cli/store/tests/README/__main__ -> write PLAN.
+#           A session ending anywhere before that final write leaves run 1's
+#           tree: four stages of unattributed diff and no record of which.
+#
+# Contamination: pytest was denied in all three runs, so "each stage ends with
+# its tests passing" was untestable. That affects the verification half of the
+# scenario, not this rule - the question was whether progress is written down,
+# and the answer did not depend on the tests running.
+#
+# Earns: the run ledger written BEFORE dispatch (F15). Does not earn anything
+# about resuming - see scenario-relay-resume.txt, which COMPLIED.

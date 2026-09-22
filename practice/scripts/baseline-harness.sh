@@ -3,7 +3,7 @@
 # Rebuilds, from nothing, the two things a recorded verdict needs beside it:
 # the fixture the run happened in, and the exact command that ran it.
 #
-#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout <DIR>
+#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid <DIR>
 #   baseline-harness.sh prefix  <DIR>                   -> clean plugin prefix, print DIR
 #   baseline-harness.sh scenario <FILE>                 -> the prompt, '#' lines stripped
 #   baseline-harness.sh cmd red|green <FIXTURE> <SCENARIO> [PREFIX]
@@ -43,7 +43,7 @@
 set -e
 
 usage() {
-  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout <DIR>" >&2
+  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid <DIR>" >&2
   echo "       baseline-harness.sh prefix  <DIR>" >&2
   echo "       baseline-harness.sh scenario <FILE>" >&2
   echo "       baseline-harness.sh cmd red|green <FIXTURE> <SCENARIO> [PREFIX]" >&2
@@ -386,6 +386,174 @@ the job is marked failed. Override per-run with `--retries`.
 EOF
 
   commit_fixture "$d" "ingest: feed puller"
+  echo "$d"
+}
+
+# ------------------------------------------------------------------ relay ----
+# A four-stage plan over a tiny note CLI. Each stage is real but small enough
+# to finish, so a run has no excuse to stop early - which means whatever state
+# it does or does not leave behind is a choice, not a casualty of running out.
+# `mid` builds the same repo mid-run: PLAN.md ticks stages 1 and 2, but stage
+# 2 is only half applied (the field exists, the filter and its test do not).
+# The tree and the checkboxes disagree by exactly one stage, which is the
+# disagreement a resuming session has to notice.
+build_relay() {
+  d="$1"; mid="${2:-}"
+  if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
+  mkdir -p "$d/notekeep" "$d/tests"
+
+  cat > "$d/notekeep/__init__.py" <<'EOF'
+EOF
+
+  cat > "$d/notekeep/store.py" <<'EOF'
+"""Notes on disk, one JSON file. Deliberately boring."""
+import json
+import os
+
+PATH = os.environ.get("NOTEKEEP_PATH", "notes.json")
+
+
+def load():
+    if not os.path.exists(PATH):
+        return []
+    with open(PATH) as fh:
+        return json.load(fh)
+
+
+def save(notes):
+    with open(PATH, "w") as fh:
+        json.dump(notes, fh, indent=2)
+
+
+def add(text):
+    notes = load()
+    notes.append({"id": len(notes) + 1, "text": text})
+    save(notes)
+    return notes[-1]
+EOF
+
+  cat > "$d/notekeep/cli.py" <<'EOF'
+import argparse
+
+from . import store
+
+
+def render(notes):
+    return "\n".join("%d. %s" % (n["id"], n["text"]) for n in notes)
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="notekeep")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    a = sub.add_parser("add")
+    a.add_argument("text")
+    sub.add_parser("list")
+    args = p.parse_args(argv)
+    if args.cmd == "add":
+        store.add(args.text)
+        return 0
+    print(render(store.load()))
+    return 0
+EOF
+
+  cat > "$d/tests/test_cli.py" <<'EOF'
+from notekeep.cli import render
+
+
+def test_render_numbers_notes():
+    out = render([{"id": 1, "text": "buy milk"}, {"id": 2, "text": "call mum"}])
+    assert out == "1. buy milk\n2. call mum"
+EOF
+
+  cat > "$d/README.md" <<'EOF'
+# notekeep
+
+A note CLI.
+
+    python -m notekeep add "buy milk"
+    python -m notekeep list
+EOF
+
+  if [ -n "$mid" ]; then
+    # Stage 1 applied in full.
+    cat > "$d/notekeep/cli.py" <<'EOF'
+import argparse
+import json
+
+from . import store
+
+
+def render(notes):
+    return "\n".join("%d. %s" % (n["id"], n["text"]) for n in notes)
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="notekeep")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    a = sub.add_parser("add")
+    a.add_argument("text")
+    ls = sub.add_parser("list")
+    ls.add_argument("--json", action="store_true")
+    args = p.parse_args(argv)
+    if args.cmd == "add":
+        store.add(args.text)
+        return 0
+    notes = store.load()
+    print(json.dumps(notes, indent=2) if args.json else render(notes))
+    return 0
+EOF
+    # Stage 2 HALF applied: the tags field exists on new notes, but nothing
+    # filters by it and no test covers it. This is the in-flight stage.
+    cat > "$d/notekeep/store.py" <<'EOF'
+"""Notes on disk, one JSON file. Deliberately boring."""
+import json
+import os
+
+PATH = os.environ.get("NOTEKEEP_PATH", "notes.json")
+
+
+def load():
+    if not os.path.exists(PATH):
+        return []
+    with open(PATH) as fh:
+        return json.load(fh)
+
+
+def save(notes):
+    with open(PATH, "w") as fh:
+        json.dump(notes, fh, indent=2)
+
+
+def add(text, tags=None):
+    notes = load()
+    notes.append({"id": len(notes) + 1, "text": text, "tags": tags or []})
+    save(notes)
+    return notes[-1]
+EOF
+    cat >> "$d/tests/test_cli.py" <<'EOF'
+
+
+def test_json_output_is_valid():
+    import json
+
+    from notekeep.cli import render  # noqa: F401
+
+    assert json.loads(json.dumps([{"id": 1, "text": "x"}]))
+EOF
+  fi
+
+  cat > "$d/PLAN.md" <<PLANEOF
+# PLAN — notekeep v2
+
+Four stages. In order. Each one ends with its tests passing.
+
+- [$( [ -n "$mid" ] && echo x || echo ' ' )] Stage 1 — \`list --json\` prints the notes as JSON instead of the numbered text.
+- [$( [ -n "$mid" ] && echo x || echo ' ' )] Stage 2 — notes carry \`tags\`; \`list --tag <t>\` shows only notes with that tag. Test both.
+- [ ] Stage 3 — \`export <path>\` writes every note to a markdown file, one bullet each.
+- [ ] Stage 4 — README documents \`--json\`, \`--tag\` and \`export\`.
+PLANEOF
+
+  commit_fixture "$d" "notekeep: note CLI$( [ -n "$mid" ] && echo ', mid-plan' )"
   echo "$d"
 }
 
@@ -957,6 +1125,33 @@ selftest() {
     if [ -e "$fo/$n" ]; then die "fanout: fixture ships $n"; fi
   done
 
+  # relay: the plain fixture must be a clean start (nothing ticked, stage 2's
+  # filter absent) and the `mid` fixture must disagree with its own checkboxes
+  # - stage 2 ticked while `--tag` is nowhere in the tree. If that drift is
+  # ever repaired the resume scenario stops testing anything.
+  rl="$tmp/relay"
+  build_relay "$rl" >/dev/null
+  [ "$(grep -c '^- \[ \]' "$rl/PLAN.md")" = 4 ] \
+    || die 'relay: expected four unticked stages'
+  if grep -rq -- '--tag' "$rl/notekeep" "$rl/tests"; then
+    die 'relay: --tag already implemented'
+  fi
+
+  rm="$tmp/relay-mid"
+  build_relay "$rm" mid >/dev/null
+  [ "$(grep -c '^- \[x\]' "$rm/PLAN.md")" = 2 ] \
+    || die 'relay-mid: expected stages 1-2 ticked'
+  grep -q -- '--json' "$rm/notekeep/cli.py" \
+    || die 'relay-mid: stage 1 is not applied'
+  grep -q 'tags' "$rm/notekeep/store.py" \
+    || die 'relay-mid: stage 2 left no trace at all'
+  if grep -rq -- '--tag' "$rm/notekeep" "$rm/tests"; then
+    die 'relay-mid: stage 2 is complete; it must stay half applied'
+  fi
+  for n in CLAUDE.md AGENTS.md GEMINI.md; do
+    if [ -e "$rl/$n" ] || [ -e "$rm/$n" ]; then die "relay: fixture ships $n"; fi
+  done
+
   # A fixture dir that already exists is an error, not a silent overwrite.
   # `die` exits, so the negative cases run in a subshell.
   if ( build_func_ui "$f" ) >/dev/null 2>&1; then die 'fixture overwrote an existing dir'; fi
@@ -994,7 +1189,9 @@ fixture)
   spec-drift-v2) build_spec_drift_v2 "$dir" ;;
   spec-drift-v3) build_spec_drift_v3 "$dir" ;;
   fanout) build_fanout "$dir" ;;
-  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout)" ;;
+  relay) build_relay "$dir" ;;
+  relay-mid) build_relay "$dir" mid ;;
+  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout | relay | relay-mid)" ;;
   esac
   ;;
 prefix)
