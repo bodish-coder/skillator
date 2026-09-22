@@ -24,41 +24,80 @@ recommendation. The three already conforming (`grayskull-power`,
 `design-arwen`, `sherlock-codes`) and the two just done (`r2d2-relay`,
 `replicator-agent`) carry alternatives only in case the owner wants them moved.
 
-| # | Current | What it does | a — recommended | b | c |
-|---|---|---|---|---|---|
-| 1 | `a11y-proof` | Accessibility as the subject — WCAG audits, "can't tab to it", "screen reader reads nothing" | **`a11y-geordi`** — blind; the VISOR *is* assistive tech | `a11y-daredevil` | `a11y-toph` |
-| 2 | `brainstorm-build-lite` | Design→build, cheap tier; mechanical parts go to a smaller model | **`build-stark-lite`** — built it in a cave, with scraps | `build-genesis-lite` — a device that makes a world from a spec | `build-holodeck-lite` |
-| 3 | `brainstorm-build-mid` | Design→build, all-Opus, autonomous, no ceremony | **`build-stark-mid`** | `build-genesis-mid` | `build-holodeck-mid` |
-| 4 | `brainstorm-build-prime` | Design→build, top tier — creative design plus ceremony that survives context loss | **`build-stark-prime`** | `build-genesis-prime` | `build-holodeck-prime` |
-| 5 | `deploy-wizard` | **Prepares** a deployment — scaffolds a single-VPS app before it ships | **`deploy-gandalf`** — plans the road, does not walk it | `deployprep-merlin` | `scaffold-yoda` |
-| 6 | `deploy-niyoj` | **Executes** it — one-button deploy from the laptop, no CI | **`ship-scotty`** — gets it into production, under protest | `ship-wash` | `launch-bifrost` |
-| 7 | `design-arwen` | Build, redesign or critique any UI/UX, native or web | **`design-arwen`** — unchanged, already purpose-first | `design-galadriel` | `design-elrond` |
-| 8 | `func-ui` | Turns a UI-only mockup with fake data into a real, wired-up app | **`wire-pinocchio`** — a puppet that becomes real | `realize-galatea` | `func-data` |
-| 9 | `grayskull-power` | The session router — arms the standing skills, routes every request | **`power-grayskull`** — keeps the invocation, flips the halves | `route-grayskull` | `devmode-zordon` |
-| 10 | `handoff` | Writes a verified session handoff so the next session loses nothing | **`handoff-bilbo`** — hands the quest on, writes the book | `handoff-leonard` — Memento: notes for a self who will forget | `handoff-hermes` |
-| 11 | `handoff-resume` | Executes a handoff doc — picks up the pending tasks | **`resume-frodo`** — takes up what Bilbo put down | `resume-samwise` | `resume-lazarus` |
-| 12 | `handoff-watch` | Hooks that watch the usage limits and force a handoff before cutoff | **`watch-heimdall`** — sees it coming before it arrives | `watch-cassandra` | `watch-argus` |
-| 13 | `live-build` | Runs the app while you work, so the user watches it change | **`live-jarvis`** — always-on, shows the build as it runs | `live-friday` | `live-hal` |
-| 14 | `merge-prep` | Normalises a branch before merge — strips stale parts so only real changes land | **`mergeprep-oracle`** — what breaks before you walk in | `mergeprep-palantir` | `mergeprep-tiresias` |
-| 15 | `merge-agent` | Consolidates branches and resolves the conflicts | **`merge-smith`** — merges himself into everything | `merge-borg` | `merge-voltron` |
-| 16 | `r2d2-relay` | Keeps a staged run recoverable across a dropped session | **`relay-r2d2`** — flipped to purpose-first | `relay-samwise` | `relay-ariadne` |
-| 17 | `replicator-agent` | Executes a written plan, one fresh agent per task, reviewed each time | **`tasks-replicator`** — flipped to purpose-first | `dispatch-replicator` | `agents-kamino` |
-| 18 | `screenshot-loop` | Reads test screenshots dropped in a folder, acts on them, clears them | **`screenshot-deckard`** — the enhance scene | `screenshot-rekall` | `screenshot-argus` |
-| 19 | `sherlock-codes` | Full-application forensic audit — the defects nobody filed | **`audit-sherlock`** — flipped to purpose-first | `audit-poirot` | `audit-columbo` |
-| 20 | `skill-smith` | Writes, edits and diagnoses agent skills | **`skills-q`** — builds the gadgets others are issued | `skills-geppetto` | `skills-daedalus` |
-| 21 | `spec-trace` | Turns a spoken or chat-only brief into stable requirement ids traced to evidence | **`spec-ariadne`** — the thread back out | `spec-hansel` | `spec-watson` |
-| 22 | `ticket-master` | The `TICKETS.md` board — serialised bug / feature / agent-found ids | **`tickets-mycroft`** — holds every record, never leaves the building | `tickets-zordon` | `tickets-fury` |
-| 23 | `tui-proof` | Proves a terminal UI actually renders, at every width | **`tui-tron`** — lives inside the terminal | `tui-flynn` | `tui-neo` |
+### Settled — owner sign-off 2026-09-22
 
-Answer by number and letter — `1a 2b 5c` — and anything unstated takes **a**.
+| # | Current | New | Note |
+|---|---|---|---|
+| 1 | `a11y-proof` | `a11y-toph` | |
+| 2 | `brainstorm-build-lite` | `build-jarvis` | Marvel AI, one per tier: the original assistant |
+| 3 | `brainstorm-build-mid` | `build-ultron` | powerful, autonomous, no ceremony |
+| 4 | `brainstorm-build-prime` | `build-vision` | the refined one |
+| 5 | `deploy-wizard` | `deploy-merlin` | prepares |
+| 6 | `deploy-niyoj` | `deploy-niyoj` | **unchanged by owner's call** |
+| 7 | `design-arwen` | `design-arwen` | unchanged |
+| 8 | `func-ui` | `designui-galadriel` | owner's coinage — see the note below |
+| 9 | `grayskull-power` | `grayskull-power` | **unchanged by owner's call**; the only name-first survivor, kept because it is the invocation |
+| 13 | `live-build` | `live-jarvis` | **clashes with 2** — see open question C |
+| 18 | `screenshot-loop` | `screenshot-argus` | |
+| 19 | `sherlock-codes` | `audit-sherlock` | |
+| 21 | `spec-trace` | `spec-watson` | pairs with `audit-sherlock` |
+| 22 | `ticket-master` | `tickets-zordon` | |
+| 23 | `tui-proof` | `tui-tron` | |
 
-**Clashes, only if a `b`/`c` is picked:** `argus` is 12c and 18c; `daedalus` is
-20c, and left rows 2-4 when the build family went sci-only; `cassandra` (12b)
-and `tiresias` (14c) are the same joke. One character, one skill.
+**Note on 8.** `func-ui`'s job is wiring an existing mockup to real data — it
+does not design anything; `design-arwen` (7) owns design. `designui-galadriel`
+reads as a second design skill, and an agent choosing between `design-arwen`
+and `designui-galadriel` has nothing in the names to go on. Taken as
+instructed; flagged once. `wire-galadriel` or `realize-galadriel` keeps the
+character and the distinction.
 
-**Nothing is grandfathered.** `design-arwen`, `grayskull-power`,
-`sherlock-codes`, `r2d2-relay` and `replicator-agent` are all in the table —
-four of them only conformed under the withdrawn `name-purpose` half.
+### Open — A: 10/11/12, one origin, three names
+
+Not Marvel (that is the build family). Each option is a matched trio.
+
+| | 10 `handoff` writes the doc | 11 `handoff-resume` executes it | 12 `handoff-watch` fires before cutoff |
+|---|---|---|---|
+| **a** Middle-earth | `handoff-bilbo` — hands the quest on, writes the book | `resume-frodo` — takes up what Bilbo put down | `watch-palantir` — the stone that shows what is coming |
+| **b** Star Trek | `handoff-picard` — the captain's log | `resume-riker` — "you have the bridge" | `watch-uhura` — monitors every channel |
+| **c** Harry Potter | `handoff-dumbledore` — leaves the instructions behind | `resume-harry` — carries them out | `watch-moody` — CONSTANT VIGILANCE |
+
+### Open — B: 14/15/16/17, one origin, four names
+
+| | 14 `merge-prep` normalises the branch | 15 `merge-agent` merges, resolves conflicts | 16 `r2d2-relay` staged-run ledger | 17 `replicator-agent` one agent per task |
+|---|---|---|---|---|
+| **a** The Matrix | `mergeprep-oracle` — tells you what breaks | `merge-smith` — merges into everything he touches | `relay-morpheus` — carries the message through | `tasks-sentinels` — many units, one job each |
+| **b** Battlestar Galactica | `mergeprep-oracle` — BSG has its own | `merge-cylon` — resurrection, many into one | `relay-raptor` — the scout that carries word between ships | `tasks-centurion` — built to do one thing |
+| **c** Star Wars | `mergeprep-obiwan` — checks the ground first | `merge-vader` — two selves, one body | `relay-r2d2` — **already done, no rename cost** | `tasks-clones` — grown to order, one per post |
+
+`c` is the only option that leaves 16 alone; it was renamed to `r2d2-relay`
+an hour ago and `a`/`b` would rename it twice.
+
+### Open — C: the `jarvis` clash
+
+2 is `build-jarvis` and 13 is `live-jarvis`. One character, one skill.
+
+- **c1** — 13 becomes `live-friday`. Stark's *later* always-on assistant; stays
+  Marvel, keeps the build family intact, nothing else moves. **Recommended.**
+- **c2** — 2 becomes something else and 13 keeps `jarvis`. Costs a name in the
+  Marvel trio, which was chosen as a set.
+- **c3** — 13 becomes `live-holodeck`. Run it and watch it, no character.
+
+### Open — D: 20 `skill-smith`, more options
+
+| | Name | Why |
+|---|---|---|
+| **a** | `skills-q` | builds the gadgets other agents are issued |
+| **b** | `skills-forge` | X-Men's Forge — inventing devices *is* his power |
+| **c** | `skills-shuri` | designs the tech everyone else in the story uses |
+| **d** | `skills-geppetto` | makes the thing that then acts on its own |
+| **e** | `skills-daedalus` | the maker of makers |
+| **f** | `skill-smith` | unchanged — already purpose-first and already says it |
+
+**Two names stay name-first by owner's call:** `grayskull-power` (9) because it
+is the invocation, and `deploy-niyoj` (6). The convention still reads
+purpose-first without exception; these are recorded exceptions, not a softening
+of it, and `skill-smith` §1b should say so rather than let the next reader infer
+the rule is optional.
 
 ## Superseded first pass
 
