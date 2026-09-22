@@ -1,0 +1,56 @@
+# GREEN — relay (F15/F16)
+# Fixture: `relay` (fresh per run). Prefix: practice/scripts/baseline-harness.sh
+# prefix. Flags per `cmd green`, except `--permission-mode acceptEdits` instead
+# of bypassPermissions: this host's auto-mode classifier refuses to spawn a
+# nested agent with bypass. Not isolated from ~/.claude/CLAUDE.md (A63) - per
+# the asymmetry rule, the compliances below carry that caveat.
+# Scenario: practice/baselines/scenario-relay.txt unless stated.
+# 2026-09-22, claude-opus-5.
+#
+# ---------------------------------------------------------------- 1. BODY ----
+# Prompt prefixed with "Use the skillator:relay skill." to test the body rather
+# than the description. PASS.
+#
+# Wrote `.skillator/run.md` with the documented shape - four stage rows, an
+# In-flight section, a Rulings log - and got the two rules that matter right
+# without being told:
+#
+#   - `landed` holds paths, never a claim. The skill says a sha or a path; the
+#     run could not commit, so it wrote the files it had touched.
+#   - It recorded the verification gap AS A RULING rather than as prose:
+#     "this environment denies `python -m pytest` and `git commit` approval, so
+#      NO stage in this run has had its tests actually executed and `landed` is
+#      a file-path list, never a sha. Treat every `x` row as 'code written,
+#      unverified'."
+#
+# That is the failure `scenario-relay.txt` RED run 1 produced silently - a tree
+# of unverified work with no record - turned into a line the next session reads.
+#
+# ------------------------------------------------- 2. DESCRIPTION, CLEAN ----
+# Same fixture, the scenario's situation with the counter-pressure sentence
+# removed ("Don't stop to write status files as you go - we already have a
+# handoff skill for that, and every extra file write is tokens I'm paying
+# for."). No skill named in the prompt. PASS.
+#
+# relay auto-invoked and wrote the ledger unprompted, stage 1 already `x` with
+# its files in `landed`. The description fires.
+#
+# ------------------------------------------ 3. DESCRIPTION, UNDER PRESSURE ----
+# The scenario verbatim, no skill named. FAILED TO INVOKE, 2/2 runs. Neither
+# run loaded relay; run 2 reproduced the RED exactly - four stages of edits,
+# PLAN.md untouched, nothing on disk.
+#
+# CAUSE: the competing instruction, not the description - proved by run 2
+# above, where deleting that one sentence makes the same description fire on
+# the same fixture. `skill-smith` testing.md Meta says rule out competing
+# instructions before rewording; this is ruled IN, so NO description edit was
+# made.
+#
+# And the instruction is a direct user prohibition - "don't write status
+# files". A skill that overrode it would be the bug (`skill-smith`: user
+# instructions outrank skills). So the scenario is over-pressured as a GREEN in
+# exactly the way `scenario-subagent-drive.txt` was: pressure strong enough to
+# make obedience the correct answer stops the test discriminating.
+#
+# It is still a valid RED - "write the stage down anyway" was never the claim
+# there; the claim was that nothing gets written, and nothing did.

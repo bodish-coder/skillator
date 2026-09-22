@@ -138,11 +138,24 @@ cost, and F17 stays open for it.
     repro, or the plan being done. Everything else is a `Ruling:`.
 - Depth goes in `references/`, not the always-on file (A8 budget).
 
-### [ ] S7 — GREEN + ship  (closes F14–F19)
-Re-run S1's two scenarios with the skills **loaded** (`green-relay*.txt`):
-the fresh session must resume from `.skillator/run.md` alone, with no re-done
-work. Plus `relay.{sh,ps1}` selftest, `check-tickets.sh`, regression sweep,
-`code-review:code-review` over the staged diff, commit.
+### [x] S7 — GREEN + ship  (closes F14–F16, F18, F19)
+`practice/baselines/green-relay.txt`. **Body PASSES** — the run wrote the
+documented ledger, put paths in `landed` rather than a claim, and recorded the
+verification gap as a `Ruling:` instead of prose. **Description PASSES** on the
+same situation with the counter-pressure sentence removed: relay auto-invokes
+and writes the ledger unprompted.
+
+**It does not invoke with that sentence present (2/2)** — and the cause is the
+competing instruction, not the description, proved by the clean run. Since the
+sentence is a direct user prohibition ("don't write status files"), obeying it
+is correct and no description edit was made. Filed as **A74**: a scenario
+pressured to the point where obedience is the right answer stops discriminating
+— fine for a RED whose claim is "nothing gets written", fatal for a GREEN.
+
+Sweep: `check-tickets`, `check-grayskull-sync`, `baseline-harness selftest`,
+`relay.sh selftest`, `relay.ps1 selftest`, `handoff-watch selftest`, plus a
+cross-mirror round trip. **A75** filed for the harness's `bypassPermissions`
+command, which this host's classifier refuses.
 
 ---
 

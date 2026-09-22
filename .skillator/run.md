@@ -1,6 +1,6 @@
 # RUN r2609220315 - relay: staged runs that survive sessions
 plan: docs/plans/PLAN-relay.md
-started: 2026-09-22T03:15Z   updated: 2026-09-22T03:15Z
+started: 2026-09-22T03:15Z   updated: 2026-09-22T03:39Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -10,9 +10,9 @@ started: 2026-09-22T03:15Z   updated: 2026-09-22T03:15Z
 | 3 | S2 relay skill + run file | x | model:opus-5 | 2026-09-22T03:15Z | 0ef3e0f |
 | 4 | S3 relay.sh/.ps1 + orphans | x | model:opus-5 | 2026-09-22T03:15Z | 0ef3e0f |
 | 5 | S4 subagent-drive (void RED) | ! | model:opus-5 | 2026-09-22T03:15Z | - |
-| 6 | S5 handoff-watch weekly gate | ~ | model:opus-5 | 2026-09-22T03:15Z | - |
-| 7 | S6 grayskull rules | ~ | model:opus-5 | 2026-09-22T03:15Z | - |
-| 8 | S7 GREEN + ship |   | - | - | - |
+| 6 | S5 handoff-watch weekly gate | x | model:opus-5 | 2026-09-22T03:39Z | edbd432 |
+| 7 | S6 grayskull rules | x | model:opus-5 | 2026-09-22T03:39Z | edbd432 |
+| 8 | S7 GREEN + ship | x | model:opus-5 | 2026-09-22T03:39Z | dc4c902 |
 
 ## In flight
 ### stage 5 - S4 subagent-drive  (FAILED, not in flight)
@@ -27,14 +27,9 @@ prompt: |
   Record the verdict in that scenario file. Do not write a skill unless it
   VIOLATES.
 
-### stages 6-7 - S5 handoff-watch, S6 grayskull rules
-Staged, not committed, pending `/code-review medium` on the staged diff.
-prompt: |
-  The staged diff adds a 7-day usage gate to handoff-watch (weekly flag,
-  90% default, step 4 = AskUserQuestion with a recommendation) and wires
-  relay into grayskull-power's arming, routing and ground rules. Address the
-  review findings, then commit.
-last seen: both selftests green, both mutation-checked.
+### stage 8 - S7 GREEN + ship
+GREEN done (`practice/baselines/green-relay.txt`); this row closes when the
+final commit lands.
 
 ## Rulings
 - 03:05Z - the resume half of relay is not written - the baseline COMPLIED,
@@ -46,4 +41,9 @@ last seen: both selftests green, both mutation-checked.
 - 03:08Z - weekly gate is a separate flag file, not a second line in the
   existing one - A12 fixed that file to bare bytes with no line endings -
   costs one extra file per session.
+- 03:45Z - relay's description is NOT edited despite failing to invoke 2/2 on
+  the RED scenario - deleting one counter-pressure sentence makes the same
+  description fire, so the cause is a competing instruction, which testing.md
+  says to rule out before rewording - costs a reword if a clean prompt ever
+  fails to invoke too. Filed as A74.
 
