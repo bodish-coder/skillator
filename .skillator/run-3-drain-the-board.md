@@ -1,6 +1,6 @@
 # RUN-3 - drain the board
 plan: docs/plans/PLAN-board-drain.md
-started: 2026-09-23T01:59Z   updated: 2026-09-23T19:41Z
+started: 2026-09-23T01:59Z   updated: 2026-09-23T19:47Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -28,12 +28,12 @@ started: 2026-09-23T01:59Z   updated: 2026-09-23T19:41Z
 | 21 | A89 argus never-guess | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
 | 22 | A90 merge-smith direction | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
 | 23 | harness A87 A88 A91 A92 | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
-| 24 | F23a research frontend-design | x | build:opus | 2026-09-23T18:44Z | docs/plans/F23-upstream/frontend-design.md |
-| 25 | F23a research apple-design | x | build:opus | 2026-09-23T18:39Z | docs/plans/F23-upstream/apple-design.md |
-| 26 | F23a research impeccable | x | build:opus | 2026-09-23T18:53Z | docs/plans/F23-upstream/impeccable.md |
-| 27 | F23a research ui-ux-pro-max | x | build:opus | 2026-09-23T18:48Z | docs/plans/F23-upstream/ui-ux-pro-max.md |
-| 28 | F23b absorb into design-arwen | x | build:opus | 2026-09-23T19:41Z | pending |
-| 29 | F23c upstream mechanism | x | build:opus | 2026-09-23T19:16Z | pending |
+| 24 | F23a research frontend-design | x | build:opus | 2026-09-23T19:47Z | a887876 |
+| 25 | F23a research apple-design | x | build:opus | 2026-09-23T19:47Z | a887876 |
+| 26 | F23a research impeccable | x | build:opus | 2026-09-23T19:47Z | a887876 |
+| 27 | F23a research ui-ux-pro-max | x | build:opus | 2026-09-23T19:47Z | a887876 |
+| 28 | F23b absorb into design-arwen | x | build:opus | 2026-09-23T19:47Z | a887876 |
+| 29 | F23c upstream mechanism | x | build:opus | 2026-09-23T19:47Z | a887876 |
 
 ## In flight
 ### stage 28 - F23b absorb into design-arwen  (dispatched wave 6)
