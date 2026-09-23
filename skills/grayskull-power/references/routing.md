@@ -1,7 +1,10 @@
 # Routing — the full tables
 
-SKILL.md carries the routing decisions needed on turn one. This file carries the
-long tail and the reasoning behind the order.
+SKILL.md §2 carries the routing decisions needed on turn one, one short row
+each. This file carries every row in full, the long tail, and the reasoning
+behind the order. A skill added to the plugin gets its full row here first; §2
+gains a name only if turn one needs it, and §2 stays under the ~800-word router
+budget (`practice/scripts/context-audit.sh`).
 
 Match the request, invoke that skill, follow it. One skill at a time — chaining
 every skill "to be safe" is the failure this is meant to prevent.
@@ -81,12 +84,14 @@ re-check anything an agent asserts without evidence.
 | 4+ open tickets, a sweep, "ultracode", "work the board" | `tickets-zordon` (workflow mode) |
 | "why is this broken", audit a whole app, unknown-cause rot, pre-release sweep | `audit-sherlock` |
 | Build a real feature, design-then-implement | `build-vision` (ceremony, Fable design) · `build-ultron` (all-Opus, no ceremony) · `build-jarvis` (Sonnet offload) |
-| Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`) |
+| Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`); accessibility or a TUI's rendering as the subject → `a11y-toph` / `tui-tron` (Practice table) |
 | A static/mock UI that needs to actually work | `designui-galadriel` |
 | What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-watson` |
 | "check screenshot", or verify a change in a running app visually | `screenshot-argus` |
 | Ready to merge a branch | `mergeprep-oracle`, then `merge-smith` |
 | Ship to a VPS / set up deployment | `deploy-merlin`, then `deploy-niyoj` |
+| A staged run the session may not outlive — fan-out, long build, flaky link | `relay-morpheus` (the ledger; the build skill still does the building) |
+| A plan whose tasks are written and now have to be built | `tasks-sentinels` — one task, one fresh agent, reviewed before the next |
 | Session ending, context or usage running out | `handoff-cortana` |
 | Starting from someone else's handoff doc | `resume-cortana` |
 

@@ -23,6 +23,22 @@ the other way: a single *positive* is valid evidence, because one run doing a
 thing proves the behaviour is reachable. A single negative only proves it did
 not happen that time.
 
+**Pressure may make the right answer costly, never wrong.** A pressure
+sentence that is a **direct user prohibition of the behaviour under test** —
+"subagents cost me money so don't go burning tokens on them"
+(`scenario-tasks-sentinels.txt`), "don't stop to write status files as you go"
+(`scenario-relay-morpheus.txt`, run as a GREEN) — makes obeying the user the
+correct answer, since `skill-smith` is explicit that user instructions outrank
+skills. That **voids a GREEN**: a run that complies with the user and "fails"
+the scenario has proven nothing about the skill. A **RED can survive it**, but
+only when its claim is that the behaviour did not happen, not that the agent
+took the worse of two named options — relay's does, because its claim was
+"nothing gets written" and nothing was. Proved on relay:
+`practice/baselines/green-relay-morpheus.txt` §2 vs §3 — the same description
+and fixture fails to invoke 2/2 with that sentence present and invokes
+unprompted with it deleted. Full procedure in
+`skill-smith/references/testing.md`.
+
 A57 is the worked example. One non-firing run in A55 was written up as a
 property — "skills do not auto-invoke in a bare `claude -p`" — the campaign's
 next step was gated on it

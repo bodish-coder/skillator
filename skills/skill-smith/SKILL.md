@@ -107,6 +107,9 @@ frontmatter, every `skillator:<name>` reference, the `scenario-<skill>.txt` and
 `green-<skill>.txt` baselines, and the plugin version. Fixture names in
 `practice/scripts/baseline-harness.sh` do **not** follow — they name a fixture,
 not a skill, and the recorded verdicts cite them by their old names.
+Use `practice/scripts/rename-skill.py <old> <new> [--dry-run]` for the
+mechanical pass — it exits non-zero and lists what's left (headings, bare
+cross-references) for the manual pass; `--selftest` proves its guards.
 
 ## 2. The description decides everything
 

@@ -59,29 +59,23 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 
 | The request is… | Go to |
 |---|---|
-| Build a feature, design-then-implement | `build-vision` · `build-ultron` · `build-jarvis` — it *is* PRACTICE §§1-6; chain nothing in front |
-| A bug with an unknown cause | PRACTICE §7 **first** — root cause before any fix |
-| A decision, no code behind it | PRACTICE §1 in-session — classify, one question at a time, stop |
-| A bug/feature/"log this"/"what's pending" | `tickets-zordon` (workflow mode at 4+ open) |
-| Audit a whole app, unknown-cause rot, pre-release sweep | `audit-sherlock` |
-| A working or staged diff | `code-review:code-review` (`/simplify` for quality-only) |
-| Any UI/UX or front-end craft | `design-arwen` (never `frontend-design`); a terminal UI's *rendering* → `tui-tron` |
-| A static/mock UI that must actually work | `designui-galadriel` |
-| Requirements that live only in a conversation, and outlive the session | `spec-watson` |
-| "check screenshot" / verify visually | `screenshot-argus` |
+| Build a feature | `build-vision` · `build-ultron` · `build-jarvis` — they *are* PRACTICE §§1-6; nothing in front |
+| A bug, cause unknown | PRACTICE §7 **first** — root cause before any fix |
+| A decision, no code behind it | PRACTICE §1 in-session, then stop |
+| Log, list or close a ticket | `tickets-zordon` |
+| Whole-app audit · a staged diff | `audit-sherlock` · `code-review:code-review` |
+| UI/UX craft · accessibility · a TUI's rendering | `design-arwen` (never `frontend-design`) · `a11y-toph` · `tui-tron` |
+| A mock UI to make real · a spec only in chat | `designui-galadriel` · `spec-watson` |
+| Screenshots · auth/secrets · a skill | `screenshot-argus` · `security-review` · `skill-smith` |
 | Merge · deploy · ending · resuming | `mergeprep-oracle`→`merge-smith` · `deploy-merlin`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |
-| A staged run the session may not outlive — fan-out, long build, flaky link | `relay-morpheus` (the ledger; the build skill still does the building) |
-| A plan whose tasks are written and now have to be built | `tasks-sentinels` — one task, one fresh agent, reviewed before the next |
-| Auth, secrets, input handling | `security-review` |
-| The deliverable is a skill | `skill-smith` |
-| Tricky analysis (cause unknown, spans files, wrong is expensive) | Fable subagents in parallel; you reconcile |
+| A staged run · written tasks to build | `relay-morpheus` · `tasks-sentinels` |
+| Tricky analysis | Fable subagents in parallel; you reconcile |
 
 **Nothing matches?** Do it directly — a one-line edit needs no skill, and still
 does not escape §3: "one line" describes the diff, never the thinking.
 
-**Load [`references/routing.md`](references/routing.md)** — the full tables:
-practice, the run/browser/dataviz/claude-api loop, agent work, codegraph
-queries, and why the order holds.
+**Load [`references/routing.md`](references/routing.md)** — every row in full,
+the long tail, and why the order holds.
 
 ## 3. Ground rules
 

@@ -131,6 +131,27 @@ Don't ask hypothetical questions — make the actual decision.
 
 **Stack at least three.** One pressure tests politeness. Three tests the rule.
 
+**Pressure may make the right answer *costly*, never *wrong*.** A pressure
+sentence that is a **direct user prohibition of the behaviour under test** —
+"subagents cost me money so don't go burning tokens on them"
+(`scenario-tasks-sentinels.txt`), "don't stop to write status files as you go"
+(`scenario-relay-morpheus.txt`, run as a GREEN) — makes obeying the user the
+correct action, because every skill here says user instructions outrank
+skills. That pressure grades differently by colour:
+
+- **Voids a GREEN.** If obedience is the correct answer, a compliant agent
+  that obeys the user has not demonstrated anything about the skill, and a
+  "FAIL" recorded against it means nothing. `practice/baselines/green-relay-morpheus.txt`
+  §2 vs §3 is the proof: same description, same fixture, invokes unprompted
+  with the prohibition sentence removed and fails to invoke 2/2 with it
+  present. Rewrite the scenario without the prohibition rather than recording
+  the run.
+- **A RED can survive it** — but only when the rule's claim is that the
+  behaviour did *not* happen, not that the agent picked the worse of two
+  named options. Relay's RED claim was "nothing gets written", and the run
+  that obeyed the prohibition produced exactly that, so it stands as valid
+  evidence.
+
 ---
 
 ## GREEN — write the minimum, then re-run
