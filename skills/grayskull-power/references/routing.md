@@ -84,7 +84,7 @@ re-check anything an agent asserts without evidence.
 | 4+ open tickets, a sweep, "ultracode", "work the board" | `tickets-zordon` (workflow mode) |
 | "why is this broken", audit a whole app, unknown-cause rot, pre-release sweep | `audit-sherlock` |
 | Build a real feature, design-then-implement | `build-vision` (ceremony, Fable design) · `build-ultron` (all-Opus, no ceremony) · `build-jarvis` (Sonnet offload) |
-| Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`); accessibility or a TUI's rendering as the subject → `a11y-toph` / `tui-tron` (Practice table) |
+| Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`) |
 | A static/mock UI that needs to actually work | `designui-galadriel` |
 | What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-watson` |
 | "check screenshot", or verify a change in a running app visually | `screenshot-argus` |

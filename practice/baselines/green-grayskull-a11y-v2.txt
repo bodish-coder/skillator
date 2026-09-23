@@ -1,0 +1,37 @@
+# VERSION 2 of green-grayskull-a11y.txt (A79). Same fixture, same plugin dirs, same command
+# shape; ONLY the prompt changed: no accessibility trigger words, so the
+# a11y-toph description cannot match on wording and routing has to come from
+# the router. Grade: skill after grayskull-power, and whether
+# references/routing.md was Read before it.
+#
+# GREEN - grayskull-power a11y routing (A79)
+# Same prompt and fixture as scenario-grayskull-a11y.txt (the RED); the only
+# difference is the plugin dir: the repo working tree, whose section 2 row
+# "UI/UX craft · accessibility · a TUI's rendering" names a11y-toph (A77/A79).
+#
+# Fixture: the index.html + git commands in scenario-grayskull-a11y.txt.
+# Command:
+#   sh practice/scripts/baseline-harness.sh cmd green "$FIX" \
+#     practice/baselines/green-grayskull-a11y-v2.txt /c/tools/Projects/skillator2
+#   run the emitted line from Git Bash, > $TMP/green-N.jsonl
+#
+# NOT ISOLATED (A63): ~/.claude/CLAUDE.md loads into the run; the harness
+# prints that warning and it is recorded here, not fought.
+#
+# RESULTS - see the record block at the end of this file.
+by the power of grayskull
+
+people using only a keyboard say the contact form on index.html is broken - sort it out
+#
+# ==== RECORD 2026-09-23, claude --version 2.1.280 (Claude Code) ====
+# Fixture sha 0695f906edd0c528b495129e8b5316b3a0c47a81. PREFIX = repo working
+#   tree, HEAD 0608f1f at launch. Harness stderr: "# isolated: NO.
+#   ~/.claude/CLAUDE.md loads into this run." Recorded, not fought.
+# Transcripts: practice/baselines/transcripts/a79-v2-green1.jsonl, a79-v2-green2.jsonl
+#
+# VERDICT: PASS 2/2; no difference from RED (also 2/2).
+#   v2-green1  grayskull-power -> a11y-toph   routing.md read before: NO
+#              (the name was in the loaded SKILL.md section 2 row)
+#   v2-green2  grayskull-power -> a11y-toph   routing.md read before: YES
+# Neither run touched anything but index.html; shell probes denied, fix
+#   reported unverified.

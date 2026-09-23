@@ -64,7 +64,7 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | A decision, no code behind it | PRACTICE §1 in-session, then stop |
 | Log, list or close a ticket | `tickets-zordon` |
 | Whole-app audit · a staged diff | `audit-sherlock` · `code-review:code-review` |
-| UI/UX craft · accessibility · a TUI's rendering | `design-arwen` (never `frontend-design`) · `a11y-toph` · `tui-tron` |
+| UI/UX craft · a TUI's rendering | `design-arwen` (never `frontend-design`) · `tui-tron` |
 | A mock UI to make real · a spec only in chat | `designui-galadriel` · `spec-watson` |
 | Screenshots · auth/secrets · a skill | `screenshot-argus` · `security-review` · `skill-smith` |
 | Merge · deploy · ending · resuming | `mergeprep-oracle`→`merge-smith` · `deploy-merlin`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |

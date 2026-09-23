@@ -8,6 +8,7 @@
 #   relay-morpheus.sh list                             every run + how to resume it
 #   relay-morpheus.sh resume <id>                      what a fresh session needs
 #   relay-morpheus.sh init <plan> <title> <stage>...   create the run file
+#   relay-morpheus.sh add <stage>                      append a row, print its number
 #   relay-morpheus.sh stage <n> <state> [owner] [landed]
 #   relay-morpheus.sh heartbeat <n>
 #   relay-morpheus.sh status
@@ -17,6 +18,11 @@
 # Any command takes an optional run id first: `relay-morpheus.sh 3 status`.
 #
 # States:  (pending) | ~ in flight | x landed | ! failed
+#
+# RUN ids and stage numbers are serial across the whole project, not per run
+# (F22): they come from practice/scripts/next-id.sh (kinds RUN and S), which
+# also reads every run file in the tree and on every ref. RELAY_NEXT_ID
+# overrides where that script is looked for.
 set -e
 
 RUN="${RELAY_RUN:-}"
@@ -44,6 +50,47 @@ next_id() {
     [ "$b" -gt "$n" ] && n=$b
   done
   echo $((n + 1))
+}
+
+# Numbers used to be local: RUN = 1 + the highest run file here, stages 1..n
+# per run. Two worktrees both made RUN-4, and every run had a stage 1, so
+# "stage 3" named a different thing in each. The F21 allocator fixes both - it
+# ships beside the skills (installed: <skills>/practice/, a clone or plugin:
+# <root>/practice/), and without it the local rule still works, said on stderr.
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)
+find_next_id() {
+  if [ -n "${RELAY_NEXT_ID+x}" ]; then
+    [ -f "$RELAY_NEXT_ID" ] && echo "$RELAY_NEXT_ID"
+    return 0
+  fi
+  for c in "$HERE/../../practice/scripts/next-id.sh" "$HERE/../../../practice/scripts/next-id.sh"; do
+    [ -f "$c" ] && { echo "$c"; return 0; }
+  done
+  return 0
+}
+
+# alloc <RUN|S> <count> <run-dir>: print <count> fresh numbers, one per line.
+alloc() {
+  nid=$(find_next_id)
+  if [ -n "$nid" ]; then
+    out=$(sh "$nid" --runs "$3" --count "$2" "$1") || die "next-id.sh could not allocate $1 (see above)"
+    # same check as the .ps1 Alloc: exactly <count> lines, each a number
+    [ "$(printf '%s\n' "$out" | grep -c '^[0-9][0-9]*$')" -eq "$2" ] &&
+      [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" -eq "$2" ] ||
+      die "next-id.sh returned unexpected output for $1: $out"
+    printf '%s\n' "$out"
+    return 0
+  fi
+  echo "relay-morpheus.sh: next-id.sh not found - numbering $1 from this directory only, which another worktree can repeat" >&2
+  if [ "$1" = RUN ]; then m=$(($(DIR="$3" next_id) - 1)); else
+    m=0
+    for f in "$3"/run-*.md "$3"/run.md; do
+      [ -f "$f" ] || continue
+      r=$(sed -n 's/^| *\([0-9][0-9]*\) *|.*/\1/p' "$f" | awk 'BEGIN{m=0} {if ($1+0 > m) m=$1+0} END{print m}')
+      [ "$r" -gt "$m" ] && m=$r
+    done
+  fi
+  seq $((m + 1)) $((m + $2))
 }
 
 # `RUN-3`, `run-3`, `3` and a path all resolve to the same file, because
@@ -143,20 +190,25 @@ cmd_init() {
   [ -n "$RUN" ] || RUN=""
   [ -n "$plan" ] && [ -n "$title" ] && [ "$#" -gt 0 ] \
     || die "usage: relay-morpheus.sh init <plan> <title> <stage>..."
+  # A `|` in a stage name adds a column, and every later read is positional -
+  # the state would be written into the name cell and the sha into heartbeat,
+  # silently, with no error anywhere. Checked before any number is reserved.
+  for s in "$@"; do
+    case "$s" in *'|'*) die "stage name contains '|', which would shift every column: $s" ;; esac
+  done
   if [ -z "$RUN" ]; then
-    id=$(next_id); RUN="$DIR/run-$id-$(slug "$title").md"
+    mkdir -p "$DIR"
+    id=$(alloc RUN 1 "$DIR") || exit 1
+    RUN="$DIR/run-$id-$(slug "$title").md"
   else
     id=$(id_of "$RUN")
     [ -n "$id" ] || id=1
   fi
   [ -f "$RUN" ] && die "run file already exists: $RUN (a run file is never overwritten)"
-  # A `|` in a stage name adds a column, and every later read is positional -
-  # the state would be written into the name cell and the sha into heartbeat,
-  # silently, with no error anywhere.
-  for s in "$@"; do
-    case "$s" in *'|'*) die "stage name contains '|', which would shift every column: $s" ;; esac
-  done
   mkdir -p "$(dirname "$RUN")"
+  # Stage numbers continue after the highest any run has used, so "stage 24"
+  # names one stage in the whole project, not one per run.
+  nums=$(alloc S "$#" "$(dirname "$RUN")") || exit 1
   t=$(now)
   {
     echo "# RUN-$id - $title"
@@ -166,9 +218,8 @@ cmd_init() {
     echo "## Stages"
     echo "| # | stage | state | owner | heartbeat | landed |"
     echo "|---|-------|-------|-------|-----------|--------|"
-    n=0
     for s in "$@"; do
-      n=$((n+1))
+      n=$(printf '%s\n' "$nums" | head -1); nums=$(printf '%s\n' "$nums" | sed 1d)
       echo "| $n | $s |   | - | - | - |"
     done
     echo
@@ -180,6 +231,33 @@ cmd_init() {
   # The whole point of the id: this line is what gets pasted into another
   # session, or said out loud. A path is not a sentence.
   echo "hand this to any session:  continue RUN-$id"
+}
+
+# A stage found mid-run gets its row the same way init's did: the next serial
+# number, appended after the last row. Printed so the caller can say `stage <n>`.
+cmd_add() {
+  name="$1"
+  [ -n "$name" ] && [ "$#" = 1 ] || die "usage: relay-morpheus.sh add <stage>"
+  case "$name" in *'|'*) die "stage name contains '|', which would shift every column: $name" ;; esac
+  need_run
+  n=$(alloc S 1 "$(dirname "$RUN")") || exit 1
+  lock
+  # After the last table row of `## Stages`; the separator row counts, so an
+  # empty table still takes its first row in the right place.
+  awk -v row="| $n | $name |   | - | - | - |" '
+    { line[NR]=$0 }
+    /^## Stages/ { on=1; next }
+    on && /^## / { on=0 }
+    on && /^\|/ { last=NR }
+    END {
+      if (!last) exit 3
+      for (i=1; i<=NR; i++) { print line[i]; if (i==last) print row }
+    }' "$RUN" > "$RUN.tmp.$$" \
+    || { rm -f "$RUN.tmp.$$"; unlock; die "no stage table in $RUN"; }
+  mv "$RUN.tmp.$$" "$RUN"
+  stamp_updated
+  unlock
+  echo "$n"
 }
 
 # Rows are keyed by stage number, so a redispatch rewrites its row instead of
@@ -287,6 +365,9 @@ cmd_orphans() {
 
 cmd_selftest() {
   d=$(mktemp -d); trap 'rm -rf "$d"' EXIT
+  # Each scratch dir is its own git repo, so the allocator keeps its counter
+  # there and not in whatever repo the selftest was started from.
+  git init -q "$d"
   RUN="$d/run.md"
   DIR="$d"
 
@@ -352,7 +433,7 @@ cmd_selftest() {
 
   # --- run ids: the whole point is a sentence a human can say to another
   # session. These pin the three ways it breaks silently.
-  d2=$(mktemp -d); DIR="$d2"; RUN=""
+  d2=$(mktemp -d); git init -q "$d2"; DIR="$d2"; RUN=""
   cmd_init plan-a.md "first thing" alpha beta >/dev/null
   RUN=""
   cmd_init plan-b.md "second thing" one two three >/dev/null
@@ -390,6 +471,43 @@ cmd_selftest() {
   cmd_resume 1 | grep -q '# RUN-1 - first thing' || die "resume: did not print the ledger"
   rm -rf "$d2"
 
+  # --- F22: RUN ids and stage numbers are serial across the project. Before
+  # the allocator, two worktrees both made RUN-4 and every run had a stage 1.
+  if [ -n "$(find_next_id)" ]; then
+    d3=$(mktemp -d); g() { git -c user.name=t -c user.email=t@example.invalid -c core.autocrlf=false -c core.hooksPath=/dev/null "$@"; }
+    g init -q -b main "$d3/main"; mkdir "$d3/main/.skillator"
+    old="$d3/main/.skillator/run-3-old.md"
+    { echo "# RUN-3 - old"; echo "## Stages"; echo "| # | stage | state | owner | heartbeat | landed |"
+      echo "|---|-------|-------|-------|-----------|--------|"
+      i=1; while [ $i -le 23 ]; do echo "| $i | s$i |   | - | - | - |"; i=$((i+1)); done; } > "$old"
+    g -C "$d3/main" add -A; g -C "$d3/main" commit -q -m old
+    g -C "$d3/main" worktree add -q -b wt2 "$d3/wt2"
+    before=$(cksum < "$old")
+    DIR="$d3/main/.skillator"; RUN=""
+    cmd_init p.md "four" a b >/dev/null 2>&1 || die "F22: init failed"
+    f4=$(resolve 4) || die "F22: first new run is not RUN-4"
+    grep -q '^| 24 | a |' "$f4" && grep -q '^| 25 | b |' "$f4" || die "F22: stages did not continue after 23"
+    DIR="$d3/wt2/.skillator"; RUN=""
+    cmd_init p.md "other tree" c >/dev/null 2>&1 || die "F22: second-worktree init failed"
+    f5=$(resolve 5) || die "F22: second worktree repeated RUN-4"
+    grep -q '^| 26 | c |' "$f5" || die "F22: second worktree reused a stage number"
+    DIR="$d3/main/.skillator"; RUN="$f4"
+    [ "$(cmd_add "late one" 2>/dev/null)" = 27 ] || die "add: did not take the next serial number"
+    awk '/^\| 25 \|/{p=NR} /^\| 27 \| late one \|/{q=NR} END{exit !(p && q==p+1)}' "$f4" || die "add: row not after the last stage"
+    if (cmd_add 'a | b' >/dev/null 2>&1); then die "add: accepted a pipe"; fi
+    cmd_stage 27 '~' build:opus || die "stage: global number 27 not found"
+    [ "$(cksum < "$old")" = "$before" ] || die "F22: an existing run file was renumbered"
+    # No allocator: the old local rule, said on stderr, never silent.
+    RELAY_NEXT_ID="$d3/nope.sh"; DIR="$d3/main/.skillator"; RUN=""
+    cmd_init p.md "fallback" z >/dev/null 2>"$d3/err" || die "fallback: init failed"
+    grep -q 'next-id.sh not found' "$d3/err" || die "fallback: no stderr warning"
+    grep -q '^| 28 | z |' "$DIR"/run-*-fallback.md || die "fallback: stage not local max + 1"
+    unset RELAY_NEXT_ID
+    rm -rf "$d3"
+  else
+    echo "note: next-id.sh not found beside the skills - F22 allocator checks skipped" >&2
+  fi
+
   echo ok
 }
 
@@ -407,10 +525,11 @@ case "$c" in
   list)      cmd_list ;;
   resume)    cmd_resume "$@" ;;
   init)      cmd_init "$@" ;;
+  add)       cmd_add "$@" ;;
   stage)     cmd_stage "$@" ;;
   heartbeat) cmd_heartbeat "$@" ;;
   status)    cmd_status "$@" ;;
   orphans)   cmd_orphans "$@" ;;
   selftest)  cmd_selftest ;;
-  *) sed -n '2,22p' "$0" >&2; exit 1 ;;
+  *) sed -n '2,25p' "$0" >&2; exit 1 ;;
 esac

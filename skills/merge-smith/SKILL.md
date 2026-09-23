@@ -77,14 +77,22 @@ Establish, then confirm back before touching anything:
 Never start merging on an unconfirmed branch list or base.
 
 **No user to confirm?** A subagent, a batch run, or a "just go ahead" brief — that
-is not the direction and it is not push approval. Everything here happens on a
-throwaway integration branch, so continue locally rather than blocking: mark every
-unanswered call `assumed:` in the merge log — semantic conflicts applied as
-proposed, verification run, Phase 5 ending at **hand off locally** — and list those
-assumptions in the report. Two things still don't default. If the direction is
-genuinely reversible, stop before the first merge and say so; it is the one call
-with no safe guess. And push, PR and swap-in need a real yes — deleting an
-integration branch costs nothing, an unapproved push costs everyone.
+is not the direction and it is not push approval.
+
+1. **Direction first.** If the request does not say which branch goes INTO which
+   ("merge X and Y", "merge the A work and the B work"), stop before the first
+   merge — no `git merge` even on a throwaway branch — and report the two
+   directions that exist (`X INTO Y` / `Y INTO X`) and what each would change.
+   One side already being on `main` is not a direction. The
+   direction is never an `assumed:` call: both answers look sensible, they give
+   different trees, and "go ahead" answers neither.
+2. **Direction stated → continue locally** rather than blocking. Everything happens
+   on a throwaway integration branch, so mark every other unanswered call
+   `assumed:` in the merge log — semantic conflicts applied as proposed,
+   verification run, Phase 5 ending at **hand off locally** — and list those
+   assumptions in the report.
+3. **Push, PR and swap-in need a real yes** — deleting an integration branch costs
+   nothing, an unapproved push costs everyone.
 
 > If a branch is stale or carries unrelated/no-op churn, run **`mergeprep-oracle`**
 > on it first — it preps the branch **in place** (onto current base, unintended paths

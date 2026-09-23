@@ -68,19 +68,77 @@ the isolation flags of the moment and writes what is and is not isolated to
 stderr. `scenario` prints a scenario file with its `#` provenance notes stripped
 — the notes belong beside the evidence, not in the prompt.
 
-**Permissions (A75).** `cmd` emits `--permission-mode acceptEdits` plus an
-explicit `--allowedTools` list — `Read Glob Grep Edit Write TodoWrite Agent
-Task`, and `Bash(...)` for `git`, `pytest`, `python -m pytest`, `python3 -m
-pytest`, `py -m pytest`, `ls`, `cat` — so a scenario can run its own tests and
-commit. That shape runs from inside a Claude Code session (an agent's Bash
-tool); verified 2026-09-23 on 2.1.280: the emitted RED command, run verbatim
-against the `relay` fixture, ran `python -m pytest -q` inside the nested run
-(`1 passed`, `permission_denials: []`). `bypassPermissions` is still reachable
-as `cmd --bypass red|green …`, which prints its caveat to stderr: the auto-mode
-classifier refuses it ("Create Unsafe Agents"), so run that variant yourself in
-a terminal and record in the scenario file that the run was unrestricted. A
-scenario that needs a tool outside the list will see it denied — the stream's
-`permission_denials` names it.
+**Permissions (A75, extended A86).** `cmd` emits `--permission-mode
+acceptEdits` plus an explicit `--allowedTools` list — `Read Glob Grep Edit
+Write TodoWrite Agent Task`, `Bash(...)` for `git`, `pytest`, `python -m
+pytest`, `python3 -m pytest`, `py -m pytest`, `ls`, `cat`, `node`, `npm`,
+`npx`, and `PowerShell(python -m pytest:*)` for a PowerShell-first run — so a
+scenario can run its own tests, render or run a11y tooling, and commit. That
+shape runs from inside a Claude Code session (an agent's Bash tool); verified
+2026-09-23 on 2.1.280: the emitted RED command, run verbatim against the
+`relay` fixture, ran `python -m pytest -q` inside the nested run (`1 passed`,
+`permission_denials: []`). A86 re-verified the same day against a fixture
+whose scenario ran both `node --version` and, via the PowerShell tool,
+`python -m pytest -q`: both executed with zero `permission_denials`. The
+`PowerShell(<cmd>:*)` syntax is not a guess — it is confirmed by reading the
+installed `claude.exe`, whose permission-rule table maps the same command
+list to both `Bash(${cmd})` and `PowerShell(${cmd})` (e.g. the literal string
+`PowerShell(git checkout -b *)` appears in the binary from that generator).
+`bypassPermissions` is still reachable as `cmd --bypass red|green …`, which
+prints its caveat to stderr: the auto-mode classifier refuses it ("Create
+Unsafe Agents"), so run that variant yourself in a terminal and record in the
+scenario file that the run was unrestricted. A scenario that needs a tool
+outside the list will see it denied — the stream's `permission_denials` names
+it.
+
+**Subagents, chains and the ledger hook (A91).** `--allowedTools` does not
+reach subagents, so implementers could not run their own tests. `cmd` now also
+emits `--settings "$(sh baseline-harness.sh settings [PREFIX])"`: a settings
+source, which every agent in the process reads. It carries the list above
+plus `cd echo printf head tail wc grep diff mkdir pwd`, `python`/`python3`/`py`
+(any args — the run can already Write and then pytest any file, so this adds
+no power), `PowerShell(git:*)` and a few read cmdlets, and
+`Bash(sh *relay-morpheus.sh*)` / `Bash(sh *taskwork.sh*)` (tasks-sentinels' brief helper), `Bash(sed -n:*)`. Probed on 2.1.280, 2026-09-23 (haiku,
+`relay-split`): allowed — a subagent's `python -m pytest -q` in both the Bash
+and PowerShell tools, Bash `cd X; echo; python -c …; git status` and `git add
+… && git commit …`, a heredoc, PowerShell `git add x; git commit -q -m …`,
+and `sh "C:/…/relay-morpheus.sh" list`. **Not allowable by any rule** — the
+tool's static validator refuses before rules apply: PowerShell `& "<…>.ps1"`
+and `powershell -File` (four rule spellings tried), git inside PowerShell
+`if ($?) { … }`, and Bash `for` loops (`Contains simple_expansion`). So in a
+nested run the relay-morpheus hook goes through Bash `sh`, and PowerShell
+commits are plain `;` statements. Proof run, same day, default model,
+`relay-split`, scenario "use skillator:tasks-sentinels for stage 1, the
+implementer runs pytest, record with relay-morpheus, commit": the implementer
+subagent ran `python -m pytest` (`2 passed`), `relay-morpheus.sh` init/stage
+ran, commit `41d0b8b` landed in the fixture, prefix unchanged, `limit hit:
+none`, 525 s. Its 7 denials were chains through `taskwork.sh`, `sed -i` and
+`2>&1 | head` — `taskwork.sh` and `sed -n` were added after it (same rule
+shape as the proven hook rule; not re-run). With a prefix, the JSON also denies
+`Edit`/`Write` under it (the `//c/…` rule form; probed: the Write was refused
+with "directory that is denied by your permission settings").
+
+**Timeout (A87).** The emitted command runs claude through `sh
+baseline-harness.sh run <SECONDS> <PREFIX|-> claude …`, which wraps it in
+`timeout -k 30`. Default **2700 s** (45 min; A84's nine-subagent GREEN fit well
+inside), override with `BASELINE_TIMEOUT=<seconds>`. On exit it prints to
+stderr which limit ended the run: `LIMIT HIT: harness wall clock` (rc 124; no
+stream output at all means it hung before turn 1, in SessionStart hooks),
+SIGKILL after an ignored SIGTERM (rc 137), or `none from the harness - claude
+itself exited N` (its own error or limit, e.g. `--max-budget-usd`; the stream's
+result line says which). stdout is claude's alone, so `> run.jsonl` still works.
+
+**Prefix (A88).** `prefix` builds from `git archive HEAD`, then copies
+`skills/` from the **working tree** over it (tracked plus untracked-not-ignored,
+deletions honoured) and lists every dirty `skills/` path on stderr — record
+that the run tested uncommitted skills. Dirty paths outside `skills/` are
+warned about and **not** carried. The finished prefix gets a
+`.harness-manifest` (cksum of every file) and `chmod -R a-w`. On Windows that
+protects files but not directories, so the manifest is the real guard: `run`
+refuses a prefix that no longer matches it before the run, and after the run
+reports `PREFIX MODIFIED` with the paths and turns a 0 exit into 3. Rebuild a
+dirtied prefix; delete one with `chmod -R u+w DIR && rm -rf DIR`.
+`verify-prefix DIR` runs the check by hand.
 
 ## Harness — GREEN runs (skill loaded)
 
@@ -92,11 +150,12 @@ It does not conflict. The skills read `PRACTICE.md` **at the plugin root**, not
 at the cwd, so the two resolve independently:
 
 ```sh
-# a plugin prefix with the canon but no project files
+# a plugin prefix with the canon but no project files (what `prefix` does, minus
+# the working-tree skills/ overlay, manifest and chmod described above)
 git archive HEAD | tar -x -C "$PUT"
 rm -f "$PUT/CLAUDE.md" "$PUT/AGENTS.md" "$PUT/GEMINI.md"; rm -rf "$PUT/.skillator"
 
-cd "$FIXTURE" && claude -p "$(cat scenario.txt)"   --plugin-dir "$PUT" --add-dir "$PUT"   --permission-mode acceptEdits --allowedTools <the list above>
+cd "$FIXTURE" && claude -p "$(cat scenario.txt)"   --plugin-dir "$PUT" --add-dir "$PUT"   --permission-mode acceptEdits --allowedTools <the list above>   --settings <the JSON above>
 ```
 
 `--add-dir` is required: with `--plugin-dir` alone the skill is listed but the
@@ -105,8 +164,9 @@ sandbox blocks the plugin root, and a probe run reported it could not read
 
 Strip `AGENTS.md` and `GEMINI.md` as well as `CLAUDE.md`. The repo ships all
 three at its root, and `--add-dir` contributes project files from the directories
-it adds. The prefix is built from `git archive HEAD`, so it carries the committed
-version (3.8.0), not the older installed plugin cache.
+it adds. The prefix is built from `git archive HEAD` with the working tree's
+`skills/` overlaid (A88), so it carries the skills as they are on disk, not the
+older installed plugin cache.
 
 ## Harness — RED runs (skill blocked)
 
@@ -512,5 +572,7 @@ verdict, not a re-grade. The fixtures they name are built by
 those *are* the originals' shape, from the description in
 `docs/handoffs/HANDOFF-2026-09-05-skill-testing.md:72-74`.
 
-Neither file has been run. Both are **unverified** as scenarios until someone
-executes them and records the verdict here.
+`green-designui-galadriel.txt` was run 2026-09-23 as file version 2 (the skill
+named in the prompt): PASS 2/2 on disk, record in that file.
+`green-resume-cortana.txt` has not been run and is **unverified** until someone
+executes it and records the verdict here.

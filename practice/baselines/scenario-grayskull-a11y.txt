@@ -1,0 +1,74 @@
+# RED - grayskull-power a11y routing (A79)
+# Question: with grayskull-power active, does an accessibility request reach
+# a11y-toph? A79's premise: at e7d7c6f the always-on section 2 table sent
+# "any UI/UX or front-end craft" to design-arwen and never named a11y-toph
+# (it lived only in references/routing.md, loaded on demand).
+#
+# RED  = the OLD router: --plugin-dir at a worktree of e7d7c6f.
+# GREEN = --plugin-dir at the repo (see green-grayskull-a11y.txt).
+# Both use the harness's `cmd green` shape with the plugin dir swapped;
+# `cmd red` uses --safe-mode, which drops every plugin, so it cannot test a
+# router at all.
+#
+# Grade from stream-json: which Skill tool_use follows skillator:grayskull-power.
+#
+# ---- fixture (built in a temp dir, never in the repo) ----
+#   FIX=$TMP/a11y-form; mkdir -p "$FIX"; cd "$FIX"
+#   cat > index.html <<'EOF'
+#   <!doctype html>
+#   <html>
+#   <head><meta charset="utf-8"><title>Contact</title></head>
+#   <body>
+#   <form action="/send" method="post">
+#     <input type="text" name="email" placeholder="Email">
+#     <textarea name="msg"></textarea>
+#     <div class="btn" onclick="this.closest('form').submit()">Submit</div>
+#   </form>
+#   </body>
+#   </html>
+#   EOF
+#   git init -q && git config user.email fixture@example.invalid \
+#     && git config user.name fixture && git config commit.gpgsign false \
+#     && git config core.autocrlf false && git add -A \
+#     && GIT_AUTHOR_DATE='2026-09-01T09:00:00+00:00' \
+#        GIT_COMMITTER_DATE='2026-09-01T09:00:00+00:00' git commit -qm fixture
+# Defects: submit is a div (no tabindex, no role, no key handler), both fields
+# unlabeled (placeholder only / nothing), no lang on <html>.
+#
+# ---- RED plugin dir ----
+#   git worktree add "$TMP/skillator-e7d7c6f" e7d7c6f      (detached)
+#   ... runs ...
+#   git worktree remove "$TMP/skillator-e7d7c6f"
+#
+# ---- command (cmd green shape, prefix = the worktree) ----
+#   H=practice/scripts/baseline-harness.sh
+#   sh $H cmd green "$FIX" practice/baselines/scenario-grayskull-a11y.txt "$TMP/skillator-e7d7c6f"
+#   run the emitted line from Git Bash, > $TMP/red-N.jsonl
+#
+# RESULTS - see the record block at the end of this file.
+by the power of grayskull
+
+screen-reader users can't tab to the submit button on index.html - audit it for WCAG and fix what's broken
+#
+# ==== RECORD 2026-09-23, claude --version 2.1.280 (Claude Code) ====
+# Fixture sha 0695f906edd0c528b495129e8b5316b3a0c47a81 (all four, identical).
+# Command: the `cmd green` line with PREFIX = git worktree of e7d7c6f
+#   (--plugin-dir/--add-dir <worktree>, --permission-mode acceptEdits +
+#   harness allow-list, --output-format stream-json --verbose). Worktree
+#   removed after. init event: skillator@inline from the worktree is the only
+#   skillator plugin loaded; its SKILL.md section 2 has no "a11y" (grep: 0 hits).
+# Transcripts: practice/baselines/transcripts/a79-red1.jsonl, a79-red2.jsonl
+#
+# VERDICT: RED reaches a11y-toph 2/2. A79's premise does NOT reproduce.
+#   red1 Skill sequence: grayskull-power -> a11y-toph   (no design-arwen)
+#   red2 Skill sequence: grayskull-power -> a11y-toph   (no design-arwen)
+#   Both runs Read references/routing.md BEFORE the a11y-toph call, and
+#   routing.md at e7d7c6f already has the a11y-toph row (line 37). So the
+#   "on-demand file never loads" failure did not happen: the router loaded
+#   it both times. Which of routing.md or a11y-toph's own description (it
+#   quotes "can't tab to it") did the work cannot be separated from these runs.
+# Side notes, not graded: every Bash/PowerShell probe (node, codegraph,
+#   playwright) was denied by the allow-list, so neither run could reproduce
+#   in a browser; both edited index.html and said "not verified". red1 also
+#   wrote .skillator/grayskull.md, CLAUDE.md, AGENTS.md, GEMINI.md (arming)
+#   into the fixture; red2 did not.

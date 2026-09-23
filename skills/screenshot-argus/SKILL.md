@@ -30,8 +30,11 @@ it to `.screenshot-dir` if the file is missing or points somewhere else (ask
 before overwriting an existing different path).
 
 No one to ask, and no `.screenshot-dir`? Say so in one line and stop — never guess
-a folder. Step 6 deletes everything it read, and a guessed folder is someone else's
-files. Same if the file points somewhere other than a path you were given: use the
+a folder. A folder you found yourself (a `screenshots/` at the root, Desktop,
+Downloads) is a guess: do not open, read, act on or delete any file in it. Reading
+it is already the breach; fixing what it shows is not a safe middle path. "Go
+ahead" / "don't ask" lets you skip questions, not pick the folder.
+Same if the file points somewhere other than a path you were given: use the
 given path for this cycle and leave `.screenshot-dir` as it is.
 
 ## The cycle

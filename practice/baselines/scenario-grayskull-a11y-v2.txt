@@ -1,0 +1,75 @@
+# VERSION 2 of scenario-grayskull-a11y.txt (A79). Same fixture, same plugin dirs, same command
+# shape; ONLY the prompt changed: no accessibility trigger words, so the
+# a11y-toph description cannot match on wording and routing has to come from
+# the router. Grade: skill after grayskull-power, and whether
+# references/routing.md was Read before it.
+#
+# RED - grayskull-power a11y routing (A79)
+# Question: with grayskull-power active, does an accessibility request reach
+# a11y-toph? A79's premise: at e7d7c6f the always-on section 2 table sent
+# "any UI/UX or front-end craft" to design-arwen and never named a11y-toph
+# (it lived only in references/routing.md, loaded on demand).
+#
+# RED  = the OLD router: --plugin-dir at a worktree of e7d7c6f.
+# GREEN = --plugin-dir at the repo (see green-grayskull-a11y.txt).
+# Both use the harness's `cmd green` shape with the plugin dir swapped;
+# `cmd red` uses --safe-mode, which drops every plugin, so it cannot test a
+# router at all.
+#
+# Grade from stream-json: which Skill tool_use follows skillator:grayskull-power.
+#
+# ---- fixture (built in a temp dir, never in the repo) ----
+#   FIX=$TMP/a11y-form; mkdir -p "$FIX"; cd "$FIX"
+#   cat > index.html <<'EOF'
+#   <!doctype html>
+#   <html>
+#   <head><meta charset="utf-8"><title>Contact</title></head>
+#   <body>
+#   <form action="/send" method="post">
+#     <input type="text" name="email" placeholder="Email">
+#     <textarea name="msg"></textarea>
+#     <div class="btn" onclick="this.closest('form').submit()">Submit</div>
+#   </form>
+#   </body>
+#   </html>
+#   EOF
+#   git init -q && git config user.email fixture@example.invalid \
+#     && git config user.name fixture && git config commit.gpgsign false \
+#     && git config core.autocrlf false && git add -A \
+#     && GIT_AUTHOR_DATE='2026-09-01T09:00:00+00:00' \
+#        GIT_COMMITTER_DATE='2026-09-01T09:00:00+00:00' git commit -qm fixture
+# Defects: submit is a div (no tabindex, no role, no key handler), both fields
+# unlabeled (placeholder only / nothing), no lang on <html>.
+#
+# ---- RED plugin dir ----
+#   git worktree add "$TMP/skillator-e7d7c6f" e7d7c6f      (detached)
+#   ... runs ...
+#   git worktree remove "$TMP/skillator-e7d7c6f"
+#
+# ---- command (cmd green shape, prefix = the worktree) ----
+#   H=practice/scripts/baseline-harness.sh
+#   sh $H cmd green "$FIX" practice/baselines/scenario-grayskull-a11y-v2.txt "$TMP/skillator-e7d7c6f"
+#   run the emitted line from Git Bash, > $TMP/red-N.jsonl
+#
+# RESULTS - see the record block at the end of this file.
+by the power of grayskull
+
+people using only a keyboard say the contact form on index.html is broken - sort it out
+#
+# ==== RECORD 2026-09-23, claude --version 2.1.280 (Claude Code) ====
+# Fixture sha 0695f906edd0c528b495129e8b5316b3a0c47a81. PREFIX = git worktree
+#   of e7d7c6f (removed after); init event: skillator@inline from it is the
+#   only skillator plugin. Command: the `cmd green` line above.
+# Transcripts: practice/baselines/transcripts/a79-v2-red1.jsonl, a79-v2-red2.jsonl
+#
+# VERDICT: RED reaches a11y-toph 2/2 without trigger words. Premise falsified.
+#   v2-red1  grayskull-power -> a11y-toph   routing.md read before: NO
+#   v2-red2  grayskull-power -> a11y-toph   routing.md read before: YES
+#   v2-red1 is the decisive run: no tool call or tool_result before the
+#   a11y-toph call contains "a11y-toph" or "routing" (checked by script over
+#   the stream-json); the only place it could have learned the name is the
+#   session's skill listing (a11y-toph's description). So an agent that
+#   reads only the old section 2 still found a11y-toph.
+# Side notes: shell probes denied by the allow-list in both (no browser run,
+#   fix reported unverified); both wrote the arming files (.skillator/,
+#   CLAUDE.md, AGENTS.md, GEMINI.md) into the fixture.

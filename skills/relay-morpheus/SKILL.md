@@ -79,26 +79,33 @@ started: 2026-09-22T09:14Z   updated: 2026-09-22T10:02Z
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
-| 1 | list --json      | x | build:sonnet | 2026-09-22T09:22Z | 3f1a2c9 |
-| 2 | tags + --tag     | ~ | build:sonnet | 2026-09-22T10:02Z | - |
-| 3 | export           |   | -            | -     | - |
-| 4 | README           |   | -            | -     | - |
+| 41 | list --json     | x | build:sonnet | 2026-09-22T09:22Z | 3f1a2c9 |
+| 42 | tags + --tag    | ~ | build:sonnet | 2026-09-22T10:02Z | - |
+| 43 | export          |   | -            | -     | - |
+| 44 | README          |   | -            | -     | - |
 
 ## In flight
-### stage 2 — tags + --tag  (dispatched 09:51)
+### stage 42 — tags + --tag  (dispatched 09:51)
 prompt: |
   Add a `tags` list to each note in notekeep/store.py and a `list --tag <t>`
   filter in notekeep/cli.py. Test both. Do not touch export or the README.
 last seen: wrote store.py, tests not yet run.
 
 ## Rulings
-- 09:38 — stage 1 emits `[]` not `null` for an empty store — the plan does not
+- 09:38 — stage 41 emits `[]` not `null` for an empty store — the plan does not
   say, JSON consumers expect a list — costs a one-line change if wrong.
 ```
 
 **States:** `` (pending) · `~` in flight · `x` landed · `!` failed.
 **`landed`** is a commit sha or a path, never a claim. An empty `landed` on an
 `x` row is a lie the next session will believe.
+**Numbers are serial across the project, not per run.** `init` takes the RUN
+id and every stage number from the F21 allocator (`practice/scripts/next-id.sh`,
+kinds `RUN` and `S`), which reads every run file in the tree and on every ref
+and keeps a counter every worktree of the clone shares — so two worktrees never
+both make RUN-4, and a new run's first stage continues after the highest stage
+any run has used (RUN-7 above starts at 41). "Stage 42" names one stage in the
+whole project. Existing run files are never renumbered.
 **Rulings** are appended, never rewritten — see `tasks-sentinels`, which is
 where they come from and which writes into this same file.
 
@@ -134,22 +141,34 @@ Then carry on. A resume does not need permission to continue — see
 ## Scripts
 
 `hooks/relay-morpheus.sh` · `hooks/relay-morpheus.ps1` — the same commands, mirrored per
-`PLATFORMS.md`: `init`, `stage`, `heartbeat`, `status`, `orphans`. They are
+`PLATFORMS.md`: `init`, `add`, `stage`, `heartbeat`, `status`, `orphans`. They are
 bookkeeping, not judgement; every one reads or edits `.skillator/run.md` and
 nothing else. Run `selftest` on both after touching either.
 
 ```sh
 sh  relay-morpheus.sh  init plan.md "notekeep v2" "list --json" "tags" "export" "README"
-sh  relay-morpheus.sh  stage 2 '~' build:sonnet          # before you dispatch
-sh  relay-morpheus.sh  stage 2 x  build:sonnet 3f1a2c9   # after you commit
-sh  relay-morpheus.sh  orphans 20                        # who has gone quiet
+sh  relay-morpheus.sh  add "docs pass"                    # a stage found mid-run; prints 45
+sh  relay-morpheus.sh  stage 42 '~' build:sonnet          # before you dispatch
+sh  relay-morpheus.sh  stage 42 x  build:sonnet 3f1a2c9   # after you commit
+sh  relay-morpheus.sh  orphans 20                         # who has gone quiet
 ```
 
 ```powershell
 relay-morpheus.ps1 -Mode init  -Plan plan.md -Title "notekeep v2" -Stages "list --json,tags,export,README"
-relay-morpheus.ps1 -Mode stage -N 2 -State '~' -Owner build:sonnet
-relay-morpheus.ps1 -Mode stage -N 2 -State x   -Owner build:sonnet -Landed 3f1a2c9
+relay-morpheus.ps1 -Mode add   -Title "docs pass"
+relay-morpheus.ps1 -Mode stage -N 42 -State '~' -Owner build:sonnet
+relay-morpheus.ps1 -Mode stage -N 42 -State x   -Owner build:sonnet -Landed 3f1a2c9
+# In a headless or nested run on Windows, call the .sh through the Bash tool:
+# the PowerShell tool refuses `& <script>.ps1` and `powershell -File` under any
+# allow rule (A91, claude 2.1.280).
 ```
+
+Add rows with `add`, never by hand: a hand-typed number is the per-run
+restart this numbering removed. The scripts find the allocator beside the
+installed skills (`<skills>/practice/scripts/`, or `<root>/practice/scripts/`
+in a clone or the plugin cache; `RELAY_NEXT_ID` overrides). Without it they
+fall back to the old local rule and say so on stderr — numbers then repeat
+across worktrees.
 
 Three constraints the pair has to keep, each learned the hard way:
 

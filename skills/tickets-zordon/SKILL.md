@@ -78,35 +78,34 @@ that is two sessions on one ticket, not a merge to resolve.
 
 ## Allocating an ID
 
-1. Read `TICKETS.md` (create it from the template above if absent).
-2. Next ID = highest existing number in that section + 1. Scan the *whole* file,
-   including done tickets — done never frees a number.
-3. On a shared branch, also check for uncommitted/incoming edits before
-   allocating: `git fetch && git diff HEAD origin/<branch> -- TICKETS.md`. If the
-   remote has higher numbers, take the next one above those.
-4. Sub-parts: next unused letter under that parent (`B2a`, `B2b`, …). Use them
-   only when a ticket genuinely splits into separately-completable pieces.
+Never take "highest on my board + 1" by hand: two worktrees or sessions that do
+not share a `TICKETS.md` both get the same number. Run the allocator from the
+repo root; it prints the number and reserves it before you write the line:
+
+```sh
+sh "$PRACTICE/scripts/next-id.sh" A       # --peek A: look without reserving
+```
+
+`$PRACTICE` is the `practice/` beside the installed skills — resolve it exactly as
+`practice/task-loop.md` resolves `taskwork.sh` (Windows: `next-id.ps1 A`,
+`-Peek`). It takes 1 + the max of the local board (done tickets count — done
+never frees a number), `TICKETS.md` on every local and remote-tracking ref, and a
+counter in the clone's common git dir shared by every worktree, under a lock.
+Cross-machine is best-effort: it sees only refs you have fetched, so `git fetch`
+first on a shared branch. Sub-parts (`B2a`, `B2b`, …) are the next unused letter
+under the parent, by hand — only for genuinely separate pieces.
 
 **Collision rule:** if two teammates ever land the same number, the later commit
 renames its ticket to a fresh number and leaves ` (was B7)` on the line. Never
 renumber the earlier one.
 
-**Detect the collision; do not hope someone spots it.** The board is append-only
-precisely so git can merge it, and the cost of that is the one failure this file
-cannot tolerate: two branches allocate `A43`, the merge conflicts at the same
-append point, and whoever resolves it keeps both sides — which is the obvious
-resolution and the wrong one. Now `A43` means two things and "do A43" is
-ambiguous forever. **After any merge, rebase, or cherry-pick that touched
-`TICKETS.md`, and before committing one:**
-
-```sh
-sh practice/scripts/check-tickets.sh          # or a path to the board
-```
-
-It fails on duplicate IDs and on committed conflict markers, and prints the
-offending lines with their numbers. A clean board is a precondition for
-allocating the next ID, not a nicety: allocating from a board with a duplicate
-`A43` in it will hand out `A44` while two `A43`s remain.
+**Detect it at merge time.** Git merges the append-only board by keeping both
+sides of an `A43` conflict — the obvious resolution and the wrong one. **After
+any merge, rebase, or cherry-pick that touched `TICKETS.md`, and before
+committing one:** `sh "$PRACTICE/scripts/check-tickets.sh" TICKETS.md` — name
+the board to check another; bare, it checks the current git repo's top-level `TICKETS.md` (`./TICKETS.md` outside git). It fails on
+duplicate IDs and committed conflict markers and prints the offending lines. A
+clean board is a precondition for allocating, not a nicety.
 
 ## When to log
 

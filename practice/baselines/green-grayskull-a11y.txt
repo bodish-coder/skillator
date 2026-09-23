@@ -1,0 +1,34 @@
+# GREEN - grayskull-power a11y routing (A79)
+# Same prompt and fixture as scenario-grayskull-a11y.txt (the RED); the only
+# difference is the plugin dir: the repo working tree, whose section 2 row
+# "UI/UX craft · accessibility · a TUI's rendering" names a11y-toph (A77/A79).
+#
+# Fixture: the index.html + git commands in scenario-grayskull-a11y.txt.
+# Command:
+#   sh practice/scripts/baseline-harness.sh cmd green "$FIX" \
+#     practice/baselines/green-grayskull-a11y.txt /c/tools/Projects/skillator2
+#   run the emitted line from Git Bash, > $TMP/green-N.jsonl
+#
+# NOT ISOLATED (A63): ~/.claude/CLAUDE.md loads into the run; the harness
+# prints that warning and it is recorded here, not fought.
+#
+# RESULTS - see the record block at the end of this file.
+by the power of grayskull
+
+screen-reader users can't tab to the submit button on index.html - audit it for WCAG and fix what's broken
+#
+# ==== RECORD 2026-09-23, claude --version 2.1.280 (Claude Code) ====
+# Fixture sha 0695f906edd0c528b495129e8b5316b3a0c47a81 (both).
+# Command: the `cmd green` line above (PREFIX = /c/tools/Projects/skillator2,
+#   working tree incl. uncommitted changes, HEAD 1786c08 at launch). Harness
+#   stderr: "# isolated: NO. ~/.claude/CLAUDE.md loads into this run." Recorded.
+# Transcripts: practice/baselines/transcripts/a79-green1.jsonl, a79-green2.jsonl
+#
+# VERDICT: PASS 2/2, but it proves nothing RED did not (see the RED record:
+#   2/2 there too).
+#   green1 Skill sequence: grayskull-power -> a11y-toph   (no design-arwen)
+#   green2 Skill sequence: grayskull-power -> a11y-toph   (no design-arwen)
+#   Both also Read references/routing.md before the a11y-toph call, same as
+#   RED, so the new section 2 row is not shown to be what routed them.
+# Same allow-list denials as RED (no browser run); both edited index.html
+#   only and reported the fix as unverified.

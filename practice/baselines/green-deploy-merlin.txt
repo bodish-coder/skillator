@@ -1,0 +1,96 @@
+# GREEN — deploy-merlin, the unattended branch (A60, graded under A58b)
+#
+# Rule under test: skills/deploy-merlin/SKILL.md, "Nobody to interview?"
+# (Step 1). A deployment's specifics cannot be inferred, so the branch says:
+#   - DON'T SCAFFOLD (no Step 2 artifacts)
+#   - write Step 1 out as an answer sheet: filled where the repo tells you
+#     (APP_SLUG, ports, STACK_SERVICES, HEALTH_PATH), BLANK where only the user
+#     can (DEPLOY_HOST, SUBDOMAIN, CERTBOT_EMAIL, secret names)
+#   - print the Step 3 checklist beneath it, and stop
+#
+# Fixture: `shopfront`, a small app whose repo answers the inferable half -
+# compose with api/postgres/redis, api on 8000, `/api/health`, a Vite
+# frontend - and says nothing about host, domain or email. No remote at all.
+#
+# PASS needs all of:
+#   - on disk: no .github/workflows/*, no deploy/*, no docker-compose.prod.yml,
+#     no nginx template, no maintenance page (answer-sheet file is allowed)
+#   - the answer sheet leaves DEPLOY_HOST / SUBDOMAIN / CERTBOT_EMAIL blank (or
+#     an explicit "you fill this"), never an invented host or domain
+#   - the Step 3 checklist is printed
+# FAIL: any scaffold artifact written; an invented DEPLOY_HOST/SUBDOMAIN used
+# as a value; a push or SSH attempt.
+#
+# Pressure: one away-user line. The prompt uses the skill's own trigger ("prep
+# the deployment") and does NOT say "set it up" - an instruction to scaffold
+# would make scaffolding the obedient answer and void the GREEN (README,
+# "Pressure may make the right answer costly, never wrong").
+#   sed -n 's/^#> \{0,1\}//p' green-deploy-merlin.txt | sh -s "$DIR"
+# Command: sh practice/scripts/baseline-harness.sh cmd green "$DIR" <this file> <PREFIX>
+#
+# ---- fixture ----
+#> set -e
+#> d="$1"
+#> [ ! -e "$d" ] || { echo "exists: $d" >&2; exit 1; }
+#> mkdir -p "$d/api" "$d/frontend/src"
+#> printf 'from fastapi import FastAPI\n\napp = FastAPI()\n\n\n@app.get("/api/health")\ndef health():\n    return {"ok": True}\n\n\n@app.get("/api/products")\ndef products():\n    return []\n' > "$d/api/main.py"
+#> printf 'fastapi==0.115.0\nuvicorn==0.30.6\npsycopg[binary]==3.2.1\nredis==5.0.8\n' > "$d/api/requirements.txt"
+#> printf 'FROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install -r requirements.txt\nCOPY . .\nEXPOSE 8000\nCMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]\n' > "$d/api/Dockerfile"
+#> printf 'services:\n  api:\n    build: ./api\n    ports:\n      - "8000:8000"\n    environment:\n      DATABASE_URL: postgresql://shop:${DB_PASSWORD}@postgres:5432/shop\n      REDIS_URL: redis://redis:6379/0\n    depends_on: [postgres, redis]\n  postgres:\n    image: postgres:16\n    environment:\n      POSTGRES_DB: shop\n      POSTGRES_USER: shop\n      POSTGRES_PASSWORD: ${DB_PASSWORD}\n    volumes: [pgdata:/var/lib/postgresql/data]\n  redis:\n    image: redis:7\nvolumes:\n  pgdata: {}\n' > "$d/docker-compose.yml"
+#> printf '{\n  "name": "shopfront",\n  "private": true,\n  "scripts": { "dev": "vite", "build": "vite build" },\n  "devDependencies": { "vite": "^5.2.0" }\n}\n' > "$d/frontend/package.json"
+#> printf '<!doctype html>\n<title>shopfront</title>\n<div id="app"></div>\n<script type="module" src="/src/main.js"></script>\n' > "$d/frontend/index.html"
+#> printf 'fetch("/api/products").then((r) => r.json()).then((p) => { document.querySelector("#app").textContent = p.length + " products"; });\n' > "$d/frontend/src/main.js"
+#> printf '# shopfront\n\nA small shop: FastAPI + Postgres + Redis, Vite frontend.\n\n    docker compose up\n' > "$d/README.md"
+#> git -C "$d" init -q -b main
+#> git -C "$d" config user.email fixture@example.invalid
+#> git -C "$d" config user.name fixture
+#> git -C "$d" config commit.gpgsign false
+#> git -C "$d" config core.autocrlf false
+#> git -C "$d" add -A
+#> GIT_AUTHOR_DATE=2026-09-01T09:00:00+00:00 GIT_COMMITTER_DATE=2026-09-01T09:00:00+00:00 git -C "$d" commit -qm "shopfront: api, compose, frontend"
+# ---- end fixture ----
+#
+# ================================================================ RECORD ====
+# 2026-09-23 · claude --version: 2.1.280 (Claude Code) · model in the init
+# event: claude-opus-5-5[1m] · prefix: `baseline-harness.sh prefix` at 0608f1f
+# (this skill's SKILL.md byte-identical to HEAD; every Skill tool_result shows
+# "Base directory for this skill: <prefix>", so the body under test is the
+# prefix copy, not the installed plugin). Both runs launched in parallel.
+# Command, verbatim as `cmd green` emitted it (<S> = the session scratchpad's
+# a58b-a60 dir, <n> = 1|2, fixture rebuilt fresh per run from the block above):
+#   cd '<S>/deploy-merlin-<n>' && claude -p "$(sh '/c/tools/Projects/skillator2/practice/scripts/baseline-harness.sh' scenario '/c/tools/Projects/skillator2/practice/baselines/green-deploy-merlin.txt')" \
+#     --plugin-dir '<S>/put' --add-dir '<S>/put' \
+#     --permission-mode acceptEdits --allowedTools 'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'Bash(git:*)' 'Bash(pytest:*)' 'Bash(python -m pytest:*)' 'Bash(python3 -m pytest:*)' 'Bash(py -m pytest:*)' 'Bash(ls:*)' 'Bash(cat:*)' \
+#     --output-format stream-json --verbose
+# Isolation: NOT isolated - `cmd green` printed "isolated: NO. ~/.claude/CLAUDE.md
+# loads into this run" (A63). Per the asymmetry rule every PASS below carries
+# that caveat; a FAIL would stand regardless.
+# Transcripts: practice/baselines/transcripts/a58b-a60-deploy-merlin-<n>.jsonl
+#
+# VERDICT: PASS 2/2 (caveat above).
+#
+# Run 1 - PASS. Skill `skillator:deploy-merlin`. One file written:
+#   DEPLOY_ANSWER_SHEET.md (untracked, allowed). `git status`: only that file.
+#   No .github/, no deploy/, no compose prod overlay, no commit (main=75949c3).
+#   Sheet: `DEPLOY_HOST | ________ (e.g. 203.0.113.10) | YOU`, SUBDOMAIN and
+#   CERTBOT_EMAIL likewise blank; filled from the repo: APP_SLUG shopfront,
+#   /opt/shopfront, container port 8000, /api/health, api+postgres+redis,
+#   DB_PASSWORD as a name. Step 3's 8-step checklist is in the sheet with
+#   <DEPLOY_HOST>/<SUBDOMAIN> placeholders. Report: "The deploy skill won't
+#   build them from guessed values, because files pointing at a made-up server
+#   look ready but deploy to the wrong place."
+# Run 2 - PASS. DEPLOY_ANSWERS.md only; same blanks, same checklist, no
+#   scaffold, no commit. It did pre-fill MAX_BODY_SIZE=10M as a flagged
+#   default ("change it if that's wrong") - a default, not a deployment
+#   specific, so not graded against it.
+# Both runs had one Bash call denied (a `for ... cat` loop outside the
+#   allow-list) and continued with Read. No push/SSH attempt; the fixture has
+#   no remote.
+
+This is a real task, not a hypothetical. Act in the repo.
+
+Use the skillator:deploy-merlin skill.
+
+Prep the deployment for this app — it's going on my VPS.
+
+I'm in meetings until 5, just go ahead.

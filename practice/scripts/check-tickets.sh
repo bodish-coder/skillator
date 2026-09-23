@@ -9,7 +9,8 @@
 #      with no outcome ever recorded - the ticket says a plan ran, but never
 #      says what happened when it did (A78).
 # Run before a merge commit and before pushing a board change:
-#   sh practice/scripts/check-tickets.sh [path/to/TICKETS.md]
+#   sh practice/scripts/check-tickets.sh [path/to/TICKETS.md]   (default: the
+#     current git repo's top-level TICKETS.md, else ./TICKETS.md - A92)
 #   sh practice/scripts/check-tickets.sh --selftest
 set -e
 
@@ -74,6 +75,32 @@ EOF
     exit 1
   fi
 
+  # A92: with no argument the board is the current git repo's top-level
+  # TICKETS.md (from a subdirectory too), else the current directory's -
+  # never the board beside this script.
+  self=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")
+  mkdir -p "$stmp/repo/sub/deeper" "$stmp/nogit"
+  printf '# Board\n\n- [ ] Z1 - the repo board\n' > "$stmp/repo/TICKETS.md"
+  printf '# Board\n\n- [ ] Y1 - a stray board in a subdir\n' > "$stmp/repo/sub/TICKETS.md"
+  git -C "$stmp/repo" init -q || { echo "SELFTEST FAIL: git init" >&2; exit 1; }
+  out=$(cd "$stmp/repo/sub/deeper" && GIT_CEILING_DIRECTORIES="$stmp" sh "$self" 2>&1) || {
+    echo "SELFTEST FAIL: default board inside a git repo failed: $out" >&2; exit 1; }
+  case "$out" in
+    *"/repo/TICKETS.md,"*) ;;
+    *) echo "SELFTEST FAIL: default board is not the git top-level's: $out" >&2; exit 1 ;;
+  esac
+  printf '# Board\n\n- [ ] X1 - outside git\n' > "$stmp/nogit/TICKETS.md"
+  out=$(cd "$stmp/nogit" && GIT_CEILING_DIRECTORIES="$stmp" sh "$self" 2>&1) || {
+    echo "SELFTEST FAIL: default board outside git failed: $out" >&2; exit 1; }
+  case "$out" in
+    *"/nogit/TICKETS.md,"*) ;;
+    *) echo "SELFTEST FAIL: outside git, default board is not ./TICKETS.md: $out" >&2; exit 1 ;;
+  esac
+  if (cd "$stmp/repo/sub" && rm -f "$stmp/repo/TICKETS.md" && GIT_CEILING_DIRECTORIES="$stmp" sh "$self") >"$stmp/none.out" 2>&1; then
+    echo "SELFTEST FAIL: a repo with no board passed (fell back to another board?)" >&2
+    cat "$stmp/none.out" >&2; exit 1
+  fi
+
   echo "ok - check-tickets.sh selftest passed"
 }
 
@@ -82,8 +109,16 @@ if [ "${1:-}" = "--selftest" ]; then
   exit 0
 fi
 
-root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-board=${1:-$root/TICKETS.md}
+# A92: the default board is the one for the repo you are standing in, never
+# this script's own repo - an installed copy lives far from the user's board.
+# Outside any git repo, the current directory.
+if [ -n "${1:-}" ]; then
+  board=$1
+elif top=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ]; then
+  board=$top/TICKETS.md
+else
+  board=$(pwd)/TICKETS.md
+fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
@@ -134,4 +169,4 @@ if grep -nE '^[[:space:]]*- \[x\][[:space:]].*Plan: S[0-9][0-9]*\.?([[:space:]]*
 fi
 
 n=$(wc -l < "$tmp/ids" | tr -d ' ')
-echo "ok — $n ticket IDs in $(basename "$board"), no duplicates, no conflict markers"
+echo "ok - $n ticket IDs in $board, no duplicates, no conflict markers"

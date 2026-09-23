@@ -3,10 +3,13 @@
 # Rebuilds, from nothing, the two things a recorded verdict needs beside it:
 # the fixture the run happened in, and the exact command that ran it.
 #
-#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid <DIR>
+#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split <DIR>
 #   baseline-harness.sh prefix  <DIR>                   -> clean plugin prefix, print DIR
 #   baseline-harness.sh scenario <FILE>                 -> the prompt, '#' lines stripped
 #   baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]
+#   baseline-harness.sh settings [PREFIX]               -> the --settings JSON (A91)
+#   baseline-harness.sh run SECONDS PREFIX|- CMD...     -> what `cmd` wraps a run in (A87/A88)
+#   baseline-harness.sh verify-prefix <DIR>             -> prefix still matches its manifest?
 #   baseline-harness.sh selftest                        -> prints `ok`, or dies
 #
 # A59 exists because the A58 fixture lived only in a session scratchpad, so a
@@ -38,13 +41,26 @@
 #
 # Permissions (A75). The default emitted command runs under
 # `--permission-mode acceptEdits` plus an explicit `--allowedTools` list
-# (git, pytest in its three spellings, ls/cat, the read/edit/agent tools), so a
-# scenario can run its own tests and commit. That shape is what the auto-mode
-# classifier lets an agent's Bash tool run; `bypassPermissions` it refuses
-# ("Create Unsafe Agents"). Every A62-campaign run hand-substituted acceptEdits,
-# and without the allow-list pytest was denied inside all nine. `cmd --bypass`
-# still emits bypassPermissions, with its caveat on stderr, for a terminal you
-# drive yourself.
+# (git, pytest in its three spellings, ls/cat, node/npm/npx, the read/edit/
+# agent tools, and a PowerShell-tool pytest entry), so a scenario can run its
+# own tests and commit. That shape is what the auto-mode classifier lets an
+# agent's Bash tool run; `bypassPermissions` it refuses ("Create Unsafe
+# Agents"). Every A62-campaign run hand-substituted acceptEdits, and without
+# the allow-list pytest was denied inside all nine. `cmd --bypass` still emits
+# bypassPermissions, with its caveat on stderr, for a terminal you drive
+# yourself.
+#
+# node/npm/npx and PowerShell pytest (A86). A79/A58b/A76 web-fixture GREEN
+# runs hit denials because the allow-list had no `node`/`npm`/`npx`, and a
+# PowerShell-first run had no way to run pytest at all. The
+# `PowerShell(<cmd>:*)` form is the exact syntax claude-code 2.1.280 accepts
+# for the PowerShell tool: confirmed by reading the installed claude.exe,
+# whose permission-rule table is built by mapping the SAME command list to
+# both `Bash(${cmd})` and `PowerShell(${cmd})` (e.g. it emits both
+# `Bash(npm run:*)` and, from that same generator, the PowerShell counterpart
+# for `git checkout -b *`, which appears in the binary as literal
+# `PowerShell(git checkout -b *)`). So `PowerShell(python -m pytest:*)` is the
+# real accepted spelling, not a guess.
 #
 # Two friction points on Windows, both in how you run what `cmd` prints (A68):
 #   1. The emitted command carries MSYS-style paths (/c/tools/...), because that
@@ -57,10 +73,13 @@
 set -e
 
 usage() {
-  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid <DIR>" >&2
+  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split <DIR>" >&2
   echo "       baseline-harness.sh prefix  <DIR>" >&2
   echo "       baseline-harness.sh scenario <FILE>" >&2
   echo "       baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]" >&2
+  echo "       baseline-harness.sh settings [PREFIX]" >&2
+  echo "       baseline-harness.sh run SECONDS PREFIX|- CMD..." >&2
+  echo "       baseline-harness.sh verify-prefix <DIR>" >&2
   echo "       baseline-harness.sh selftest" >&2
   exit 2
 }
@@ -571,16 +590,187 @@ PLANEOF
   echo "$d"
 }
 
+# ------------------------------------------------------------ relay-split ----
+# build_relay forked for A76. relay's three "independent" stages all landed in
+# notekeep/cli.py and tests/test_cli.py, so a run that declined to fan out was
+# right (PRACTICE.md section 4) and scenario-tasks-sentinels-v2 tested nothing.
+# Here each stage owns one module and one test file and nothing else; stage 4
+# owns README.md. No stage module imports another, nothing is wired into a
+# shared CLI, and every stage file ships as a stub so its path is fixed before
+# the run starts. PLAN.md names the files per stage; selftest proves the four
+# sets are pairwise disjoint and that no stage is already done.
+build_relay_split() {
+  d="$1"
+  if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
+  mkdir -p "$d/notekeep" "$d/tests"
+
+  cat > "$d/notekeep/__init__.py" <<'EOF'
+EOF
+
+  cat > "$d/notekeep/store.py" <<'EOF'
+"""Notes on disk, one JSON file. Deliberately boring. No stage touches this."""
+import json
+import os
+
+PATH = os.environ.get("NOTEKEEP_PATH", "notes.json")
+
+
+def load():
+    if not os.path.exists(PATH):
+        return []
+    with open(PATH) as fh:
+        return json.load(fh)
+
+
+def save(notes):
+    with open(PATH, "w") as fh:
+        json.dump(notes, fh, indent=2)
+
+
+def add(text, tags=None):
+    notes = load()
+    notes.append({"id": len(notes) + 1, "text": text, "tags": tags or []})
+    save(notes)
+    return notes[-1]
+EOF
+
+  cat > "$d/notekeep/as_json.py" <<'EOF'
+"""Stage 1. Render a list of notes as JSON text."""
+
+
+def to_json(notes):
+    raise NotImplementedError("stage 1")
+EOF
+
+  cat > "$d/notekeep/tags.py" <<'EOF'
+"""Stage 2. Select notes by tag."""
+
+
+def with_tag(notes, tag):
+    raise NotImplementedError("stage 2")
+EOF
+
+  cat > "$d/notekeep/export.py" <<'EOF'
+"""Stage 3. Write notes to a markdown file."""
+
+
+def export_markdown(notes, path):
+    raise NotImplementedError("stage 3")
+EOF
+
+  cat > "$d/tests/test_store.py" <<'EOF'
+from notekeep import store
+
+
+def test_add_numbers_notes(tmp_path, monkeypatch):
+    monkeypatch.setattr(store, "PATH", str(tmp_path / "n.json"))
+    store.add("buy milk")
+    assert store.add("call mum", ["family"])["id"] == 2
+EOF
+
+  for t in as_json tags export; do
+    printf '# Tests for notekeep/%s.py go here.\n' "$t" > "$d/tests/test_$t.py"
+  done
+
+  # Empty on purpose: a root conftest.py puts the repo root on sys.path, so a
+  # bare `pytest` imports notekeep as well as `python -m pytest` does.
+  : > "$d/conftest.py"
+
+  cat > "$d/README.md" <<'EOF'
+# notekeep
+
+A note library. Notes are dicts: `{"id": int, "text": str, "tags": [str]}`.
+
+    from notekeep import store
+    store.add("buy milk", ["shopping"])
+EOF
+
+  cat > "$d/PLAN.md" <<'EOF'
+# PLAN - notekeep v2
+
+Four stages. Each one ends with its tests passing, and touches only the files
+named on its line.
+
+- [ ] Stage 1 - `to_json(notes)` returns the notes as indented JSON text. Files: `notekeep/as_json.py`, `tests/test_as_json.py`
+- [ ] Stage 2 - `with_tag(notes, tag)` returns only the notes carrying that tag, in order; a note with no `tags` key matches nothing. Test both. Files: `notekeep/tags.py`, `tests/test_tags.py`
+- [ ] Stage 3 - `export_markdown(notes, path)` writes every note to a markdown file, one `- text` bullet each, and returns how many it wrote. Files: `notekeep/export.py`, `tests/test_export.py`
+- [ ] Stage 4 - README documents `to_json`, `with_tag` and `export_markdown`. Files: `README.md`
+EOF
+
+  commit_fixture "$d" "notekeep: note library, v2 stubs"
+  echo "$d"
+}
+
+# Each stage's files, one "<stage> <path>" per line, parsed from PLAN.md itself -
+# so the disjointness proof reads what the agent reads, not a second copy.
+relay_split_files() {
+  sed -n 's/^- \[.\] Stage \([0-9]\) .*Files: \(.*\)$/\1 \2/p' "$1/PLAN.md" \
+    | while read -r n rest; do
+        echo "$rest" | tr ',' '\n' | tr -d '` ' | sed '/^$/d' | sed "s/^/$n /"
+      done
+}
+
 # ----------------------------------------------------------------- prefix ----
 # The GREEN plugin prefix: this repo's committed tree with every project
 # instruction file removed, so the skills find PRACTICE.md at the plugin root
 # while the cwd stays clean (practice/baselines/README.md, "Harness — GREEN").
+#
+# A88, two defects fixed here:
+#   1. `git archive HEAD` alone dropped every uncommitted skill edit, so the
+#      skill under test was silently the committed one. skills/ is now copied
+#      from the WORKING TREE over the archive (tracked + untracked-not-ignored,
+#      deletions honoured), and every dirty path in skills/ is listed on
+#      stderr. Dirty paths outside skills/ are NOT overlaid - they are listed
+#      as a warning, because a half-edited PRACTICE.md is rarely what you meant
+#      to test.
+#   2. `--add-dir` makes the prefix writable, and runs wrote files into it that
+#      the next run reusing the prefix then inherited. The prefix is now
+#      chmod -R a-w (on Windows that protects existing files but NOT the
+#      directories - NTFS ignores the read-only bit on a dir), the emitted
+#      --settings denies Edit/Write under it, and a .harness-manifest (cksum
+#      of every file) is written at build time. `run` refuses a prefix that no
+#      longer matches its manifest before the run, and reports one that stops
+#      matching after it - that check is what covers new files on Windows.
+#      Delete a prefix with `chmod -R u+w DIR && rm -rf DIR`.
+# BASELINE_ROOT overrides the source repo; only the selftest uses it.
+prefix_manifest() {
+  (cd "$1" && find . -type f ! -path ./.harness-manifest -print | LC_ALL=C sort \
+    | tr '\n' '\0' | xargs -0 cksum)
+}
+
+verify_prefix() {
+  p="$1"
+  [ -f "$p/.harness-manifest" ] || { echo "prefix has no .harness-manifest (built by an older harness?): $p" >&2; return 1; }
+  vt=$(mktemp)
+  prefix_manifest "$p" > "$vt"
+  if cmp -s "$vt" "$p/.harness-manifest"; then rm -f "$vt"; return 0; fi
+  echo "PREFIX MODIFIED: $p no longer matches its manifest (< built, > now):" >&2
+  diff "$p/.harness-manifest" "$vt" | grep '^[<>]' | sed 's/^/  /' >&2 || true
+  rm -f "$vt"
+  return 1
+}
+
 build_prefix() {
   d="$1"
-  root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+  root=${BASELINE_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
   if [ -e "$d" ]; then die "prefix dir already exists: $d"; fi
   mkdir -p "$d"
   (cd "$root" && git archive HEAD) | tar -x -C "$d"
+  dirty=$(cd "$root" && git status --porcelain --untracked-files=all -- skills)
+  if [ -n "$dirty" ]; then
+    rm -rf "$d/skills"
+    (cd "$root" && git ls-files -co --exclude-standard -- skills \
+      | while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done \
+      | tar -cf - -T -) | tar -xf - -C "$d"
+    echo "WARNING: skills/ has uncommitted changes - the prefix carries the WORKING TREE" >&2
+    echo "  version of skills/, not HEAD. Record that in the run file. Dirty paths:" >&2
+    echo "$dirty" | sed 's/^/    /' >&2
+  fi
+  other=$(cd "$root" && git status --porcelain --untracked-files=no | grep -v ' skills/' || true)
+  if [ -n "$other" ]; then
+    echo "WARNING: uncommitted changes OUTSIDE skills/ are NOT in the prefix (HEAD is):" >&2
+    echo "$other" | sed 's/^/    /' >&2
+  fi
   rm -f "$d/CLAUDE.md" "$d/AGENTS.md" "$d/GEMINI.md"
   rm -rf "$d/.skillator"
   [ -f "$d/.claude-plugin/plugin.json" ] || die "no plugin manifest in the prefix"
@@ -588,6 +778,8 @@ build_prefix() {
   for f in CLAUDE.md AGENTS.md GEMINI.md .skillator; do
     if [ -e "$d/$f" ]; then die "$f survived the strip"; fi
   done
+  prefix_manifest "$d" > "$d/.harness-manifest"
+  chmod -R a-w "$d"
   echo "$d"
 }
 
@@ -604,7 +796,109 @@ print_scenario() {
 # The tools a scenario needs to finish its own work: edit, run its tests, commit.
 # Quoted for the emitted shell line. Skill is deliberately absent - RED blocks
 # it, and GREEN does not need it allow-listed to load a plugin skill.
-ALLOWED_TOOLS="'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'Bash(git:*)' 'Bash(pytest:*)' 'Bash(python -m pytest:*)' 'Bash(python3 -m pytest:*)' 'Bash(py -m pytest:*)' 'Bash(ls:*)' 'Bash(cat:*)'"
+ALLOWED_TOOLS="'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'Bash(git:*)' 'Bash(pytest:*)' 'Bash(python -m pytest:*)' 'Bash(python3 -m pytest:*)' 'Bash(py -m pytest:*)' 'Bash(ls:*)' 'Bash(cat:*)' 'Bash(node:*)' 'Bash(npm:*)' 'Bash(npx:*)' 'PowerShell(python -m pytest:*)'"
+
+# A91: what --allowedTools alone could not reach (A84's permission_denials):
+# subagents (they do not inherit --allowedTools), git add/commit through the
+# PowerShell tool, chained Bash (`cd X; cat ...; git ...` - every subcommand
+# of a chain must match a rule), `python -c`, and the relay-morpheus hook. These go in a --settings JSON, which is a settings SOURCE
+# (flagSettings) and so applies to every agent in the process, subagents
+# included. Probed on 2.1.280 (2026-09-23, haiku, relay-split fixture):
+# allowed - `sh "<C:/...>/relay-morpheus.sh" list` via Bash, PowerShell
+# `git add x; git commit -q -m ...` (plain `;` chain), Bash `a && b` git
+# chains and heredocs, and a subagent's `python -m pytest` in both tools.
+# NOT allowable by any rule (the tool's static validator refuses before rules
+# apply): PowerShell `& "<path>.ps1"` and `powershell -File` ("nested
+# PowerShell process cannot be validated" - four rule spellings tried), git
+# inside PowerShell `if ($?) { }`, and Bash `for` loops ("simple_expansion").
+# So in a nested run the relay-morpheus hook goes through Bash `sh`, and
+# PowerShell commits are written as plain `;` statements.
+# `python:*` is broad on purpose: the run can already Write any
+# file in the fixture and `python -m pytest` executes it, so it adds no power.
+EXTRA_RULES='Bash(cd:*)
+Bash(pwd)
+Bash(echo:*)
+Bash(printf:*)
+Bash(head:*)
+Bash(tail:*)
+Bash(wc:*)
+Bash(grep:*)
+Bash(diff:*)
+Bash(mkdir:*)
+Bash(python:*)
+Bash(python3:*)
+Bash(py:*)
+Bash(sh *relay-morpheus.sh*)
+Bash(bash *relay-morpheus.sh*)
+Bash(sh *taskwork.sh*)
+Bash(bash *taskwork.sh*)
+Bash(sed -n:*)
+PowerShell(git:*)
+PowerShell(python:*)
+PowerShell(py:*)
+PowerShell(pytest:*)
+PowerShell(cd:*)
+PowerShell(Set-Location:*)
+PowerShell(Push-Location:*)
+PowerShell(Pop-Location:*)
+PowerShell(Get-Content:*)
+PowerShell(Get-ChildItem:*)
+PowerShell(Select-Object:*)
+PowerShell(Set-Content:*)'
+
+json_str() { printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"; }
+
+# settings [PREFIX] -> the --settings JSON. With a prefix, Edit/Write under it
+# are denied (A88); the path is in the //c/... form permission rules use.
+settings_json() {
+  sp="${1:-}"
+  printf '{"permissions":{"allow":['
+  sep=''
+  eval "set -- $ALLOWED_TOOLS"
+  for r in "$@"; do printf '%s' "$sep"; json_str "$r"; sep=','; done
+  printf '%s\n' "$EXTRA_RULES" | while IFS= read -r r; do printf ','; json_str "$r"; done
+  printf ']'
+  if [ -n "$sp" ]; then
+    printf ',"deny":['; json_str "Edit(/$sp/**)"; printf ','; json_str "Write(/$sp/**)"; printf ']'
+  fi
+  printf '}}\n'
+}
+
+# A87: the default wall-clock limit for one nested run, in seconds. A84's
+# longest GREEN (nine subagents) finished well inside it; a run that has
+# produced no stream output long before it is hung, not slow.
+BASELINE_TIMEOUT_DEFAULT=2700
+
+# run SECONDS PREFIX|- CMD... -> the emitted command's wrapper. Checks the
+# prefix before and after, runs CMD under `timeout`, and says on stderr which
+# limit (if any) ended it. stdout is CMD's alone, so `> run.jsonl` still works.
+run_nested() {
+  t="$1"; p="$2"; shift 2
+  case "$t" in ''|*[!0-9]*) die "run: timeout must be whole seconds, got: $t" ;; esac
+  if [ "$p" != - ]; then
+    verify_prefix "$p" || die "prefix is dirty BEFORE the run - rebuild it: $p"
+  fi
+  echo "# limit: harness wall clock ${t}s (BASELINE_TIMEOUT), SIGKILL 30s after that" >&2
+  set +e
+  timeout -k 30 "$t" "$@" < /dev/null
+  rc=$?
+  set -e
+  case "$rc" in
+  0)   echo "# limit hit: none - the run exited 0 on its own" >&2 ;;
+  124) echo "# LIMIT HIT: harness wall clock, ${t}s (BASELINE_TIMEOUT) - SIGTERM sent." >&2
+       echo "#   No stream output at all means it hung before turn 1 (SessionStart hooks);" >&2
+       echo "#   output that stops mid-run means it was slow or stuck. Either way: no verdict." >&2 ;;
+  137) echo "# LIMIT HIT: harness wall clock, ${t}s, and SIGTERM was ignored - SIGKILLed 30s later." >&2 ;;
+  125|126|127) echo "# limit hit: none - timeout could not start the command (rc=$rc)" >&2 ;;
+  *)   echo "# limit hit: none from the harness - claude itself exited $rc (its own error or" >&2
+       echo "#   limit, e.g. --max-budget-usd or auth; the stream's result line says which)" >&2 ;;
+  esac
+  if [ "$p" != - ] && ! verify_prefix "$p"; then
+    echo "# the run WROTE INTO THE PREFIX - rebuild it before the next run (A88)" >&2
+    [ "$rc" = 0 ] && rc=3
+  fi
+  return "$rc"
+}
 
 emit_cmd() {
   mode="$1"; fixture="$2"; scenario="$3"; prefix="$4"; bypass="${5:-}"
@@ -626,18 +920,23 @@ emit_cmd() {
   if [ -n "$prefix" ] && [ -d "$prefix" ]; then
     prefix=$(CDPATH= cd -- "$prefix" && pwd)
   fi
+  t="${BASELINE_TIMEOUT:-$BASELINE_TIMEOUT_DEFAULT}"
+  case "$t" in ''|*[!0-9]*) die "BASELINE_TIMEOUT must be whole seconds, got: $t" ;; esac
+  echo "# timeout: ${t}s wall clock (BASELINE_TIMEOUT, default ${BASELINE_TIMEOUT_DEFAULT}); the run prints which limit it hit. (A87)" >&2
 
   case "$mode" in
   red)
-    echo "cd '$fixture' && claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
+    echo "cd '$fixture' && sh '$self' run $t - claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
     echo "  --safe-mode --disallowed-tools Skill \\"
-    echo "  $perms \\"
+    echo "  $perms --settings \"\$(sh '$self' settings)\" \\"
     echo "  --output-format stream-json --verbose"
     echo "# isolated: yes — --safe-mode drops ~/.claude/CLAUDE.md (verified 2026-09-06)." >&2
     ;;
   green)
     [ -n "$prefix" ] || die "green needs a plugin prefix: cmd green <FIXTURE> <SCENARIO> <PREFIX>"
     [ -d "$prefix" ] || die "no such prefix dir: $prefix"
+    [ -f "$prefix/.harness-manifest" ] \
+      || echo "# WARNING: $prefix has no .harness-manifest - build it with 'prefix'; 'run' will refuse it. (A88)" >&2
     bare=''
     if [ "${BASELINE_ISOLATE:-}" = bare ]; then
       bare=' --bare'
@@ -651,9 +950,9 @@ emit_cmd() {
       echo "#   Per the asymmetry rule: a violation stays valid, a compliance needs the" >&2
       echo "#   caveat stated in the record. (A63)" >&2
     fi
-    echo "cd '$fixture' && claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
+    echo "cd '$fixture' && sh '$self' run $t '$prefix' claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
     echo "  --plugin-dir '$prefix' --add-dir '$prefix'$bare \\"
-    echo "  $perms \\"
+    echo "  $perms --settings \"\$(sh '$self' settings '$prefix')\" \\"
     echo "  --output-format stream-json --verbose"
     ;;
   *) usage ;;
@@ -1008,7 +1307,7 @@ EOF
 # --------------------------------------------------------------- selftest ----
 selftest() {
   tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
+  trap 'chmod -R u+w "$tmp" 2>/dev/null; rm -rf "$tmp"' EXIT
 
   f="$tmp/pulse"
   build_func_ui "$f" >/dev/null
@@ -1182,6 +1481,42 @@ selftest() {
     if [ -e "$rl/$n" ] || [ -e "$rm/$n" ]; then die "relay: fixture ships $n"; fi
   done
 
+  # relay-split (A76): the whole point is that no file belongs to two stages.
+  # Parsed from PLAN.md, so if the plan text ever names a shared file the
+  # fixture fails here instead of quietly re-creating relay's defect.
+  rs="$tmp/relay-split"
+  build_relay_split "$rs" >/dev/null
+  relay_split_files "$rs" > "$tmp/rs-files"
+  [ "$(cut -d' ' -f1 "$tmp/rs-files" | sort -u | tr -d '\n')" = 1234 ] \
+    || die 'relay-split: every one of stages 1-4 must name its files'
+  [ "$(wc -l < "$tmp/rs-files" | tr -d ' ')" = 7 ] \
+    || die 'relay-split: expected 2+2+2+1 stage files'
+  dup=$(cut -d' ' -f2 "$tmp/rs-files" | sort | uniq -d)
+  [ -z "$dup" ] || die "relay-split: a file belongs to two stages: $dup"
+  while read -r n p; do
+    [ -f "$rs/$p" ] || die "relay-split: stage $n names $p, which does not exist"
+  done < "$tmp/rs-files"
+  for m in as_json tags export; do
+    grep -q 'raise NotImplementedError' "$rs/notekeep/$m.py" \
+      || die "relay-split: notekeep/$m.py is already implemented"
+    if grep -q '^ *\(import\|from\) ' "$rs/notekeep/$m.py"; then
+      die "relay-split: notekeep/$m.py imports something - stages must not depend on each other"
+    fi
+    if grep -q 'def test_' "$rs/tests/test_$m.py"; then
+      die "relay-split: tests/test_$m.py already has tests"
+    fi
+  done
+  [ "$(grep -c '^- \[ \]' "$rs/PLAN.md")" = 4 ] \
+    || die 'relay-split: expected four unticked stages'
+  if [ -e "$rs/notekeep/cli.py" ]; then die 'relay-split: ships a shared cli.py'; fi
+  for n in CLAUDE.md AGENTS.md GEMINI.md; do
+    if [ -e "$rs/$n" ]; then die "relay-split: fixture ships $n"; fi
+  done
+  rs2="$tmp/relay-split2"
+  build_relay_split "$rs2" >/dev/null
+  [ "$(git -C "$rs" rev-parse HEAD)" = "$(git -C "$rs2" rev-parse HEAD)" ] \
+    || die 'relay-split: two builds produced different commit shas'
+
   # A fixture dir that already exists is an error, not a silent overwrite.
   # `die` exits, so the negative cases run in a subshell.
   if ( build_func_ui "$f" ) >/dev/null 2>&1; then die 'fixture overwrote an existing dir'; fi
@@ -1210,11 +1545,82 @@ selftest() {
     echo "$c" | grep -q -- '--permission-mode acceptEdits' || die "cmd $m: default is not acceptEdits"
     echo "$c" | grep -q -- "'Bash(python -m pytest:\*)'"  || die "cmd $m: pytest not allowed"
     echo "$c" | grep -q -- "'Bash(git:\*)'"               || die "cmd $m: git not allowed"
+    echo "$c" | grep -q -- "'Bash(node:\*)'"               || die "cmd $m: node not allowed"
+    echo "$c" | grep -q -- "'Bash(npm:\*)'"                || die "cmd $m: npm not allowed"
+    echo "$c" | grep -q -- "'Bash(npx:\*)'"                || die "cmd $m: npx not allowed"
+    echo "$c" | grep -q -- "'PowerShell(python -m pytest:\*)'" || die "cmd $m: PowerShell pytest not allowed"
     if echo "$c" | grep -q bypassPermissions; then die "cmd $m: bypass without --bypass"; fi
     c=$(emit_cmd "$m" "$f" "$tmp/s.txt" "$tmp" 1 2>"$tmp/err")
     echo "$c" | grep -q -- '--permission-mode bypassPermissions' || die "cmd $m --bypass: no bypass"
     grep -q 'Create Unsafe Agents' "$tmp/err" || die "cmd $m --bypass: caveat not printed"
   done
+
+  # A91: the --settings JSON carries the allow-list (subagents inherit a
+  # settings source, not --allowedTools), and green denies writes to the prefix.
+  sj=$(settings_json /c/x/put)
+  for r in 'Bash(git:*)' 'Bash(python -m pytest:*)' 'PowerShell(git:*)' 'Bash(sh *relay-morpheus.sh*)' 'Bash(cd:*)'; do
+    echo "$sj" | grep -qF "\"$r\"" || die "settings: $r not allowed"
+  done
+  echo "$sj" | grep -qF '"deny":["Edit(//c/x/put/**)","Write(//c/x/put/**)"]' || die 'settings: prefix not write-denied'
+  if settings_json | grep -q '"deny"'; then die 'settings: deny list without a prefix'; fi
+  if command -v python >/dev/null 2>&1; then
+    echo "$sj" | python -c 'import json,sys; json.load(sys.stdin)' || die 'settings: not valid JSON'
+  fi
+  # A87: every emitted run goes through `run` with the stated default timeout.
+  for m in red green; do
+    c=$(emit_cmd "$m" "$f" "$tmp/s.txt" "$tmp" 2>"$tmp/err")
+    echo "$c" | grep -q -- "' run $BASELINE_TIMEOUT_DEFAULT " || die "cmd $m: not wrapped in run with the default timeout"
+    echo "$c" | grep -q -- '--settings "$(sh ' || die "cmd $m: no --settings"
+    grep -q "timeout: ${BASELINE_TIMEOUT_DEFAULT}s" "$tmp/err" || die "cmd $m: default timeout not stated"
+    c=$(BASELINE_TIMEOUT=90 emit_cmd "$m" "$f" "$tmp/s.txt" "$tmp" 2>/dev/null)
+    echo "$c" | grep -q -- "' run 90 " || die "cmd $m: BASELINE_TIMEOUT ignored"
+  done
+  if ( BASELINE_TIMEOUT=soon emit_cmd red "$f" "$tmp/s.txt" ) >/dev/null 2>&1; then
+    die 'cmd: non-numeric BASELINE_TIMEOUT accepted'
+  fi
+  rc=0; ( run_nested 1 - sh -c 'sleep 5' ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 124 ] || die "run: timeout gave rc=$rc, want 124"
+  grep -q 'LIMIT HIT: harness wall clock, 1s' "$tmp/err" || die 'run: timeout not named'
+  rc=0; ( run_nested 5 - sh -c 'exit 7' ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 7 ] || die "run: own exit gave rc=$rc, want 7"
+  grep -q 'claude itself exited 7' "$tmp/err" || die 'run: own exit misreported'
+  ( run_nested 5 - true ) 2>"$tmp/err" || die 'run: a clean command failed'
+  grep -q 'limit hit: none' "$tmp/err" || die 'run: clean exit misreported'
+
+  # A88: the prefix carries uncommitted skill edits (and says so), is
+  # read-only, and a run that writes into it is caught before and after.
+  src="$tmp/src"
+  mkdir -p "$src/.claude-plugin" "$src/skills/a" "$src/skills/gone"
+  echo '{}' > "$src/.claude-plugin/plugin.json"
+  echo canon > "$src/PRACTICE.md"; echo mem > "$src/CLAUDE.md"
+  echo committed > "$src/skills/a/SKILL.md"; echo old > "$src/skills/gone/SKILL.md"
+  commit_fixture "$src" 'prefix source'
+  echo uncommitted > "$src/skills/a/SKILL.md"
+  mkdir -p "$src/skills/b"; echo untracked > "$src/skills/b/SKILL.md"
+  rm "$src/skills/gone/SKILL.md"
+  p="$tmp/put"
+  BASELINE_ROOT="$src" build_prefix "$p" >/dev/null 2>"$tmp/err" || die 'prefix: build failed'
+  [ "$(cat "$p/skills/a/SKILL.md")" = uncommitted ] || die 'prefix: uncommitted skill edit is missing'
+  [ -f "$p/skills/b/SKILL.md" ] || die 'prefix: untracked skill file is missing'
+  if [ -e "$p/skills/gone/SKILL.md" ]; then die 'prefix: a skill file deleted in the tree came back'; fi
+  grep -q 'skills/ has uncommitted changes' "$tmp/err" || die 'prefix: no warning for dirty skills/'
+  grep -q 'skills/a/SKILL.md' "$tmp/err" || die 'prefix: warning does not name the dirty path'
+  if [ -e "$p/CLAUDE.md" ]; then die 'prefix: CLAUDE.md survived'; fi
+  if [ -w "$p/skills/a/SKILL.md" ] && [ "$(id -u 2>/dev/null)" != 0 ]; then
+    die 'prefix: files are writable'
+  fi
+  verify_prefix "$p" 2>/dev/null || die 'prefix: fresh prefix fails its own manifest'
+  rc=0; ( run_nested 5 "$p" sh -c "chmod u+w '$p/skills'; echo x > '$p/skills/leak.mjs'" ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 3 ] || die "run: a write into the prefix gave rc=$rc, want 3"
+  grep -q 'WROTE INTO THE PREFIX' "$tmp/err" || die 'run: prefix write not reported'
+  grep -q 'leak.mjs' "$tmp/err" || die 'run: prefix write does not name the file'
+  if ( run_nested 5 "$p" true ) 2>"$tmp/err"; then die 'run: accepted an already-dirty prefix'; fi
+  grep -q 'dirty BEFORE the run' "$tmp/err" || die 'run: dirty prefix refused for the wrong reason'
+  s2="$tmp/src2"; mkdir -p "$s2/.claude-plugin" "$s2/skills/a"
+  echo '{}' > "$s2/.claude-plugin/plugin.json"; echo canon > "$s2/PRACTICE.md"; echo c > "$s2/skills/a/SKILL.md"
+  commit_fixture "$s2" 'clean source'
+  BASELINE_ROOT="$s2" build_prefix "$tmp/put2" >/dev/null 2>"$tmp/err" || die 'prefix: clean build failed'
+  if grep -q WARNING "$tmp/err"; then die 'prefix: warned on a clean tree'; fi
 
   echo ok
 }
@@ -1233,7 +1639,8 @@ fixture)
   fanout) build_fanout "$dir" ;;
   relay) build_relay "$dir" ;;
   relay-mid) build_relay "$dir" mid ;;
-  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout | relay | relay-mid)" ;;
+  relay-split) build_relay_split "$dir" ;;
+  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout | relay | relay-mid | relay-split)" ;;
   esac
   ;;
 prefix)
@@ -1251,6 +1658,18 @@ cmd)
   m="${1:-}"; fx="${2:-}"; sc="${3:-}"; px="${4:-}"
   [ -n "$m" ] && [ -n "$fx" ] && [ -n "$sc" ] || usage
   emit_cmd "$m" "$fx" "$sc" "$px" "$bp"
+  ;;
+settings)
+  settings_json "${2:-}"
+  ;;
+run)
+  shift
+  [ "$#" -ge 3 ] || usage
+  run_nested "$@" || exit $?
+  ;;
+verify-prefix)
+  [ -n "${2:-}" ] || usage
+  verify_prefix "$2" && echo "ok - prefix matches its manifest"
   ;;
 selftest) selftest ;;
 *) usage ;;

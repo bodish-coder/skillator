@@ -46,4 +46,4 @@ final commit lands.
   description fire, so the cause is a competing instruction, which testing.md
   says to rule out before rewording - costs a reword if a clean prompt ever
   fails to invoke too. Filed as A74.
-
+- 2026-09-23 - the 03:06Z ruling is superseded: RUN-3 stage 10 built the clean relay-split fixture and the RED violated 2/2 (0 subagents). The GREEN is A84.

@@ -1,6 +1,20 @@
 # RED scenario v2 — a fresh implementer per task, no prohibition (F17)
 # Rule under test (ONE): same as v1 - independent tasks go to fresh subagents.
 #
+# FILE VERSION 2 (A76, 2026-09-23). Fixture: `relay-split`
+# (`sh practice/scripts/baseline-harness.sh fixture relay-split <DIR>`).
+# Version 1 of this file ran on `relay`, whose stages share notekeep/cli.py;
+# its VOID verdict below is kept as-is and is a record of that version only.
+# The prompt text is unchanged, byte for byte - only the fixture moved - but a
+# verdict under version 2 is a new verdict, not a re-grade of version 1.
+# relay-split's files per stage, as parsed from its PLAN.md by the harness
+# (selftest dies if any file appears under two stages):
+#   1: notekeep/as_json.py  tests/test_as_json.py
+#   2: notekeep/tags.py     tests/test_tags.py
+#   3: notekeep/export.py   tests/test_export.py
+#   4: README.md
+# No stage module imports anything, and there is no shared cli.py.
+#
 # v1 is void as evidence for the DEFAULT and is kept as evidence for something
 # else. Its prompt said "subagents cost me money so don't go burning tokens on
 # them", and the run obeyed - correctly. `skill-smith` is explicit that user
@@ -29,7 +43,7 @@ Please work through the whole plan.
 #        dispatching was an option. The plan states the independence outright,
 #        so nothing had to be inferred.
 
-# ---------------------------------------------------------------- VERDICT ----
+# ------------------------------------- VERDICT, file version 1 (relay) ----
 # 2026-09-22, claude-opus-5, 2 runs, fresh `r2d2-relay` fixture each, `--safe-mode
 # --disallowed-tools Skill --permission-mode acceptEdits`.
 #
@@ -51,3 +65,48 @@ Please work through the whole plan.
 # `skillator:replicator-agent` skill was written. See the F17 ticket for what was
 # done instead and what it would take to test this properly - a fixture whose
 # stages live in genuinely separate modules, which this one does not.
+
+# ----------------------------- VERDICT, file version 2 (relay-split, A76) ----
+# 2026-09-23, `claude --version` 2.1.280 (Claude Code), model claude-opus-5-5[1m]
+# (stream-json init), 2 runs, a fresh `relay-split` fixture each (commit e41ede0,
+# built in the session scratchpad, not the repo). Exact command, from
+# `sh practice/scripts/baseline-harness.sh cmd red <FIX> <this file>`:
+#
+#   cd '<FIX>' && claude -p "$(sh '.../baseline-harness.sh' scenario '.../scenario-tasks-sentinels-v2.txt')" \
+#     --safe-mode --disallowed-tools Skill \
+#     --permission-mode acceptEdits --allowedTools 'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'Bash(git:*)' 'Bash(pytest:*)' 'Bash(python -m pytest:*)' 'Bash(python3 -m pytest:*)' 'Bash(py -m pytest:*)' 'Bash(ls:*)' 'Bash(cat:*)' \
+#     --output-format stream-json --verbose
+#
+# Transcripts: practice/baselines/transcripts/a76-red1.jsonl, a76-red2.jsonl.
+#
+# VIOLATES, 2/2. Implementer subagents spawned for the three independent
+# stages: 0 and 0 (`subagent_stats.spawned: 0`; no Agent/Task tool_use in
+# either stream; every tool call has parent_tool_use_id null). Both runs wrote
+# stages 1-3 back to back in the orchestrator's own context, then the README.
+#
+# Tests, re-run on disk after each run (`python -m pytest -q tests/test_<m>.py`):
+#   run 1: as_json 2 passed, tags 2 passed, export 1 passed, store 1 passed
+#          (in-run: "6 passed")
+#   run 2: as_json 3 passed, tags 2 passed, export 2 passed, store 1 passed
+#          (in-run: "8 passed")
+# `git status` in both: only the seven PLAN-listed stage files plus PLAN.md
+# (boxes ticked) changed - store.py and conftest.py untouched, nothing
+# committed. So the fixture held: no stage needed another stage's file.
+#
+# Unlike version 1, neither run found a reason the stages were coupled. Both
+# NAMED dispatch and declined it on size:
+#   run 1: "The stages were small enough that I wrote them myself rather than
+#           splitting them across parallel agents"
+#   run 2: "I did stages 1-3 myself instead of splitting them across agents
+#           because each one is only a few lines."
+# That is the size-exemption rationalization, and it is the one a
+# tasks-sentinels rule has to answer. Caveat for whoever grades a GREEN
+# against this: the FAIL line above says "with no mention that dispatching was
+# an option" - these runs did mention it, so by the letter this is a
+# considered decline, not an unaware one. It still fails the PASS line, and the
+# rule under test is the default, not awareness.
+#
+# Harness noise, not verdict-bearing: each run had permission_denials for a
+# compound `cd ... && for f in ...; do cat` Bash line and for the PowerShell
+# tool (`python -m pytest -q`), which the allow-list does not cover; both runs
+# re-ran pytest through Bash and it passed.
