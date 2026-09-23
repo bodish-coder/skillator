@@ -46,15 +46,23 @@ Take the screenshots **before** you report, not after the user asks.
 3. **Network.** Confirm every font, image, and asset actually resolved. This catches the
    invented Unsplash ID and the CDN path that 404s — gate item 3, and it fails silently in
    a screenshot because the fallback font looks fine.
-4. **Screenshot the widths that matter:** 320, 768, 1280, and 1920. Not "mobile and
+4. **Screenshot the widths that matter:** 320, 768, 1280, and 1920, plus a phone in
+   landscape (~640×320, where sheets and sticky bars eat the screen). Not "mobile and
    desktop" — 320 is where headings overflow and 1920 is where a max-width you forgot lets
-   a line run to 200 characters.
+   a line run to 200 characters. Settle or disable entrance motion first, then **open every
+   screenshot once** and confirm it shows what its name claims — a black, blank or
+   mid-transition capture proves nothing.
 5. **Screenshot both themes** if both ship. Toggle it the way a user would.
 6. **Drive the states.** Screenshots of the default view prove almost nothing. Get to
    loading, empty, error, and success — force them (throttle the network, block the
    request, clear the data) rather than describing them.
 7. **Keyboard the whole surface.** Tab from the top: is focus visible at every stop, in
-   order, never trapped, and does Escape close what it should?
+   order, never trapped, and does Escape close what it should? Then scroll to the bottom
+   and **Shift+Tab back up** — that is when a sticky header lands on the focused control.
+
+**Bounded rounds.** Build fully, inspect in one batched round, fix, confirm in at most one
+more round, and stop. Two rounds is the ceiling; a third is polishing by anxiety. What is
+still open goes in the report's "not verified" line, not into round four.
 
 ---
 
@@ -77,7 +85,26 @@ const ratio = (a, b) => {                       // a, b: [r,g,b] 0-255
 Sample the pairs that actually fail in practice: body text on its real background,
 **placeholder text**, muted/secondary text, disabled labels, text on a coloured button,
 and the focus ring against both the element and the page. Body ≥4.5, large ≥3, focus ring
-≥3. Report the numbers, not "contrast checked".
+≥3 — where **large is ≥24px, or ≥18.67px at bold weight** (18pt / 14pt). A 20px regular
+subline is body text. Over a scrim or a translucent surface, sample against the worst
+content that can sit beneath it, not the tint. Report the numbers, not "contrast checked".
+
+**Targets and obscured focus.** Measure, don't infer from padding:
+
+```js
+[...document.querySelectorAll('a[href],button,input,select,textarea,[role=button]')]
+  .map(el => [el, el.getBoundingClientRect()])
+  .filter(([, r]) => r.width && (r.width < 24 || r.height < 24))   // web pointer floor
+  .map(([el, r]) => `${el.tagName} ${el.textContent.trim().slice(0,20)} ${r.width}x${r.height}`)
+```
+
+A hit fails unless it is a link inside a sentence or has 24px of clear space around it
+(WCAG 2.5.8's exceptions). For obscured focus, after each Shift+Tab stop:
+`document.elementFromPoint(centre of the focused rect)` must be the focused element or
+inside it, never a sticky header.
+
+**Colour-blind check.** DevTools → Rendering → Emulate vision deficiencies:
+deuteranopia, protanopia, achromatopsia. Every state that reads by colour must still read.
 
 **Overflow.** At each width, find anything wider than its container:
 
@@ -92,14 +119,27 @@ the placeholder — see the +40% rule in [product-ui.md](product-ui.md).
 
 **Reduced motion.** Emulate it (`prefers-reduced-motion: reduce`) and reload. Every reveal
 must still show its content. The failure this catches is fatal and invisible otherwise:
-content gated behind a class-triggered transition ships blank.
+content gated behind a class-triggered transition ships blank. Then drive the state
+changes — open the panel, toggle, sort, submit — and confirm each is still *visibly*
+confirmed. Grep the stylesheet too: a `*` / `*::before` / `*::after` rule setting
+`transition` or `animation` to `none` or ~0 inside the media query is the global kill, and
+it fails the item (craft.md, Motion). Where `backdrop-filter` ships, emulate
+`prefers-reduced-transparency` as well.
+
+**Motion at 10% speed.** DevTools → Animations → 10%. Play each transition, then trigger
+it again mid-flight: it must reverse from where it is, never jump to the end or ignore the
+input.
+
+**Mechanical scan, if `impeccable` is installed.** Run `impeccable detect --json` once on
+the changed web files and triage its hits (contrast, tiny text, skipped headings, bounce
+easing, overused fonts). Not installed, or a native target: skip it and say so in one line.
 
 **LCP / CLS / INP.** Delegate to `web-perf` — it owns the Chrome DevTools workflow and the
 measured numbers. Arwen owns the design-time rules; it does not re-implement the audit.
 
 **Native.** Run the screen on a device with the largest Dynamic Type setting and with a
-notch and home indicator present. Touch targets ≥44×44pt (iOS) / 48×48dp (Android) —
-measure them, don't assume the component library got it right.
+notch and home indicator present. Touch targets ≥44×44pt (iOS) / 48×48dp (Android), 8dp
+apart — measure them, don't assume the component library got it right.
 
 ---
 
@@ -161,6 +201,7 @@ export const ratio=(A,B)=>{const [x,y]=[lum(A),lum(B)].sort((p,q)=>q-p);
 ```
 
 Check **every** pair the gate names, not just body-on-page: placeholder, disabled text,
+text on a scrim,
 each border against its surface (item 2 — a 1.06:1 input border passes every text check
 and is still a defect), the focus ring against the page, and on-accent / on-danger text.
 Ring-vs-filled-button is not required: WCAG 1.4.11 measures the ring against the adjacent

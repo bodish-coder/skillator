@@ -65,8 +65,9 @@ the thing ships more than once.
 
 ## Design memory — read it, then leave one behind
 
-**On entry, look for `DESIGN.md` at the repo root** (also `docs/DESIGN.md`, `.design/DESIGN.md`).
-If one exists — whoever wrote it, impeccable's included — **read it and obey it**. It
+**On entry, look for `DESIGN.md` at the repo root** (also `docs/DESIGN.md`, `.design/DESIGN.md`),
+plus `PRODUCT.md` (impeccable's platform and register) and `design-system/*/MASTER.md` with
+any matching `pages/<page>.md` override (ui-ux-pro-max's). Whoever wrote them — **read and obey**. It
 records decisions already made: the theme, the type pairing, the token names, the
 signature. Those beat every reflex-reject list arwen applies. Say in one line that you
 found it and what you're inheriting.
@@ -81,9 +82,9 @@ your decision because it looked like slop.
 # DESIGN
 Read: dashboard · product · ops teams · dials 3/2/9 · direction terminal-dense · scene <…>
 Signature: the run-status ribbon — same shape in the table row, the detail header, the empty state
-Type: Söhne Kräftig / Söhne Mono. Color: OKLCH neutrals tinted +0.008 to hue 250, one accent.
+Type: Söhne Kräftig / Söhne Buch. Color: OKLCH neutrals tinted +0.008 to hue 250, one accent.
 Tokens: --bg --surface --ink --muted --accent --ring, spacing 4/8/12/16/24/40
-Deliberate: mono for numeric columns everywhere (tabular alignment beats the pairing rule)
+Deliberate: mono for run IDs only (literal machine strings); numbers use tabular-nums
 ```
 
 `improve` and `critique` read it and do not rewrite it. **Identity-preservation beats
@@ -134,7 +135,7 @@ novelty** — a committed decision on disk outranks anything this skill would pi
    generic output.
 
 6. **Emit the Design Read — one line, before generating anything:**
-   `Read: <page kind> · <register> · <audience> · dials <V/M/D> · direction <lane> · scene <…>`
+   `Read: <page kind> · <register> · <audience> · job <primary job> · dials <V/M/D> · direction <lane> · scene <…>`
    It is a contract the user can correct in one word. **If the brief is genuinely
    ambiguous on an axis that changes the whole design, ask ONE question — never guess
    silently, and never ask three.**
@@ -164,7 +165,8 @@ monochrome", "1970s terminal manual". Unnamed ambition collapses into beige.
 **Color strategy** (choose *before* colors), on the commitment axis:
 Restrained (tinted neutrals + one accent ≤10%) · Committed (one saturated color 30–60%) ·
 Full palette (3–4 named roles) · Drenched (the surface *is* the color).
-Use **OKLCH**. Tint neutrals 0.005–0.015 toward the brand hue — never default-warm.
+Use **OKLCH**. Tint neutrals 0.005–0.015 toward the brand hue when it builds cohesion —
+plain grey is valid; default-warm never is.
 Keep the palette multi-dimensional — a UI drowned in one hue family reads uncommitted.
 Modular type scale **≥1.25 ratio** (flat ~1.1 reads timid) — except product UI (above).
 
@@ -197,10 +199,8 @@ Rework until neither is guessable.
 **In the product register this check is off, and that is not a concession.** Phase 0.2
 says familiarity is a feature and `critique.md` forbids marking a conventional dashboard
 down for being conventional; "unguessable from the category" pulls the opposite way, and
-on a settings screen or a data table the two cancel and you ship generic-with-a-motif
-while believing you failed. You did not. **A settings screen that a Linear user would
-recognise instantly is a correct outcome** — the guessability test is measuring the wrong
-thing there. What replaces it: the signature must be **one systematic UX device**, not an
+on a settings screen the two cancel and you ship generic-with-a-motif believing you
+failed. **A settings screen a Linear user would recognise instantly is a correct outcome.** What replaces it: the signature must be **one systematic UX device**, not an
 aesthetic — a status grammar, a reimagined component, a consistent way of showing
 pending-vs-saved — applied everywhere that state occurs and defensible in a sentence. If
 you cannot name that one device, you have no signature; a new hue is not one. Judge it by
@@ -210,8 +210,9 @@ screenshot pass for mine" (in this register it usually would, and should).
 **The three saturated AI looks — defaults, not choices.** Each is legitimate *when the
 brief asks for it*, and a tell when it appears anyway: (1) cream/sand body (OKLCH
 L 0.84–0.97, C<0.06, hue 40–100, regardless of the token name — `--paper`, `--linen`,
-`--bone` are tells in themselves) + high-contrast serif display + terracotta accent;
-(2) near-black + one acid-green or vermilion accent; (3) broadsheet — hairline rules,
+`--bone` are tells in themselves) + high-contrast serif display + terracotta accent (near
+#D97757 ≈ oklch 0.67 0.13 39); (2) near-black (an untinted #0B0B0B / #111 counts) + one
+acid-green or vermilion accent; (3) broadsheet — hairline rules,
 zero radius, dense newspaper columns. **The named reflex-reject lane is
 "editorial-typographic"** — italic display serif + small mono labels + ruled rules +
 monochrome, no imagery. Carry warmth via accent + type + imagery, not body bg.
@@ -301,7 +302,8 @@ than the change you made; take its hand-backs when a fix needs a design decision
 verify.md: all eight states designed with **hover ≠ focus** · a visible `:focus-visible`
 ring ≥3:1 everywhere · every surface fully keyboard-drivable in a sensible order · real
 `<label>`s and `aria-describedby` errors · never colour as the only signal · reduced-motion
-paths · touch targets ≥44pt/48dp · text resizable to 200% without loss · `aria-live` for
+paths that keep state feedback · targets ≥44pt/48dp on touch, ≥24 CSS px for web
+pointer · zoom never blocked · text resizable to 200% without loss · `aria-live` for
 async results · gestures never the only route. A distinctive interface that a keyboard user
 cannot operate has failed *both* of this skill's tests, not one.
 
@@ -312,28 +314,29 @@ by what it takes to prove: `static` (readable from the source, no browser),
 
 | # | Item | Kind |
 |---|---|---|
-| 1 | Text contrast on real pairs — 4.5:1 body, 3:1 large | `static` |
+| 1 | Text contrast on real pairs — 4.5:1 body, 3:1 large (≥24px, or ≥18.67px bold) | `static` |
 | 2 | **Non-text contrast ≥3:1** — input borders, focus ring, icons, chart strokes, any control edge carrying meaning (WCAG 1.4.11) | `static` |
 | 3 | Every dependency and asset URL resolves — no invented packages, no guessed image IDs | `static` |
-| 4 | Labels, `aria-describedby` errors, `aria-live` regions, focus order in source order | `static` |
+| 4 | Labels, `aria-describedby` errors, `aria-live` regions, focus order in source order, headings in sequence, zoom not blocked, sign-in allows paste + autocomplete | `static` |
 | 5 | Loading / empty / error / success / no-permission all designed | `static` |
 | 6 | Signature present and systematic (Phase 2 test for the register) | `static` |
 | 7 | No overflow at 320 / 768 / 1280 / 1920 and at 200% text zoom | `browser` |
-| 8 | Keyboard: every surface drivable, visible ring, no traps | `browser` |
-| 9 | Reduced-motion path works | `browser` |
-| 10 | Touch targets ≥44pt/48dp — **measured, not assumed** | `browser` |
+| 8 | Keyboard: every surface drivable, visible ring, no traps, never under sticky chrome | `browser` |
+| 9 | Reduced-motion path works and still shows state changes — no global kill | `browser` |
+| 10 | Targets ≥44pt/48dp touch, ≥24 CSS px web pointer — **measured, not assumed** | `browser` |
 | 11 | Both themes, if both ship | `browser` |
 | 12 | **Drive it for real** — screenshot the browser / run the screen | `browser` |
 | 13 | LCP < 2.5s, CLS < 0.1 | `delegated` → `web-perf` |
 | 14 | Native conventions, safe areas | `delegated` → `ios-design-review` / platform |
 | 15 | Wider a11y damage than your own change | `delegated` → `a11y-toph` |
+| 16 | Mechanical tell scan, web only, if installed | `delegated` → `impeccable detect` |
 
 **No browser available? That is a terminal state, not a failure.** `static` items are
 still mandatory — they need no render and there is no excuse for skipping them. Report in
 exactly this shape:
 
 ```
-built · verified: 1-6 (static) · not verified: 7-12 (no browser available) · delegated: 13-15 not run
+built · verified: 1-6 (static) · not verified: 7-12 (no browser available) · delegated: 13-16 not run
 ```
 
 Never write "done" or "verified" over an unrendered page, and never narrate a render you
@@ -376,11 +379,7 @@ report format.
 ## Principles that carry the whole skill
 
 - **Signature over decoration.** One ownable idea with discipline > effects everywhere.
-- **Production-grade AND distinctive — never trade one for the other.**
-- **Register rules everything.** Brand rewards boldness; product rewards trust. Same craft, different dial.
-- **Read the room before you reach for a dial.** The audience picks the aesthetic, not your taste.
-- **Native and web are peers.** One identity, idiomatic expression.
-- **Diverse critique, single route.** A 2–3 expert panel sees what one lens misses; reconcile to one route, then build it — never ship a committee.
-- **Accessible or it isn't production-grade.** Not a gate at the end — a constraint that shapes the layout.
-- **Leave the decisions on disk.** A `DESIGN.md` is what makes the next session continue your design instead of restarting it.
+- **Register rules everything.** Brand rewards boldness; product rewards trust. The audience picks the aesthetic, not your taste.
+- **Diverse critique, single route.** Reconcile the lenses to one route — never ship a committee.
 - **Commit, then prove it.** Timid middles read as AI; evidence (contrast, breakpoints, reduced-motion, a real render) beats claims.
+- **Accessible or it isn't production-grade.** Not a gate at the end — a constraint that shapes the layout.

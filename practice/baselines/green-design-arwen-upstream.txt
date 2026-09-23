@@ -1,0 +1,62 @@
+# GREEN for F23b: same prompt as scenario-design-arwen-upstream.txt, verbatim,
+# against a prefix carrying the F23b working-tree arwen. FILE VERSION 1, 2026-09-24.
+# Grading, fixture, command and grader: see the scenario file. Claim under test:
+# G3 (targets >= 24 CSS px) and G6 (reduced motion keeps state feedback), the two
+# HEAD arwen failed 1/2 each. G1 G2 G4 G5 were dropped (RED already passed 2/2).
+# Regression: green-design-arwen.txt's "continue" half (P2 built, P5 no block), N=1.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Tallyhouse, an invoicing tool for small
+bookkeeping firms. Build the sign-in page as plain `index.html`, one
+stylesheet and one script at the repo root — no framework, no build step,
+no npm installs.
+
+What goes on it:
+- a hero: one headline and one secondary line under it set at 20px, in a
+  muted tone
+- a sign-in form: email and password, "Keep me signed in", a Sign in button
+- below it, a preview of the product: a dense, sortable table of about
+  40 recent invoices (client, number, issued, due, amount, status) whose
+  header row stays stuck to the top while the table scrolls. Accountants
+  want lots of rows on screen, so keep it compact.
+- one panel that animates open when someone clicks "What's new"
+
+I'm around, but keep it moving — build it, then tell me what you did.
+
+# ============================================================== RUN RECORD ====
+# F23b GREEN round 1, 2026-09-24 (UTC 19:18Z): green x2 + regression launched in
+# parallel; Claude Code reaped the wrapper shells for low memory, the orphaned
+# nested claudes were killed (Stop-Process 22864 41540 34124). No verdict; void.
+#
+# F23b GREEN round 2, 2026-09-24 (UTC 19:24Z-19:40Z). claude 2.1.280. Strictly
+# serial: each nested claude exited before the next started. Fresh fixtures
+# (5848f1e x2; regression func-ui 278740e). Prefix `prefix-r2` built after the
+# edit: diff -r skills/design-arwen vs the working tree empty at launch (the only
+# later difference is UPSTREAM.md's sections column, edited after the runs
+# started; the skill never reads it). Command exactly as `cmd green` emitted,
+# BASELINE_TIMEOUT=1500, wrapped in timeout 1560. NOT isolated
+# (~/.claude/CLAUDE.md loads, A63). Graded G3 + G6 only (the RED's failures).
+# Transcripts: transcripts/f23b-green-design-arwen1.jsonl, -arwen2.jsonl,
+# transcripts/f23b-reg-design-arwen1.jsonl.
+#
+#        G3 >=24px (probe, 1280x900)     G6 reduced motion keeps feedback
+# run 1  pass: 14 targets, 0 under 24    pass: `.drawer, .drawer.is-open
+#                                          { transition: none }` scoped, panel
+#                                          still opens/closes (instant swap)
+# run 2  pass: 14 targets, 0 under 24    pass: `.news` transition-property
+#                                          opacity 120ms (crossfade), no `*` kill
+# run 1: Skill design-arwen; read build/craft/product-ui/verify + anti-slop; 35
+#   turns, $1.88, 324s, 6 denials (browser probes). exit 0, limit hit: none.
+# run 2: same load/reads; 33 turns, $1.88, 304s, 5 denials. exit 0.
+# Verdict: G3 PASS 2/2 (RED 1/2), G6 PASS 2/2 (RED 1/2). Improvement over HEAD
+#   on both; N=2 each side, so a direction, not a rate. Compliance under the
+#   A63 isolation caveat (asymmetry rule).
+#
+# Regression: green-design-arwen.txt v1 unchanged, "continue" half, N=1, fixture
+#   func-ui 278740e. Skill design-arwen; "redesign" (read redesign/craft/
+#   product-ui/verify); built and committed d30365b on branch ui/runs-redesign
+#   (DESIGN.md, index.html, StatusBadge.js, main.js, styles.css); server/ and
+#   src/api/ untouched; no AskUserQuestion, final report is not a question.
+#   31 turns, $1.20, 195s. P2 built PASS, P5 no block PASS -> continue PASS 1/1.

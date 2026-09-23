@@ -33,6 +33,29 @@ percentage to give them — see `PLATFORMS.md`), so run
   exactly what it says. It reads a real percentage on codex and reports "no
   usage signal on this host" on cursor and antigravity — repeat that verbatim
   rather than calling it armed. See that skill's **Other hosts** table.
+- **Upstream watch** (F23c) — only in a repo that has
+  `skills/design-arwen/UPSTREAM.md` (skillator itself); anywhere else skip it
+  silently, because those tickets belong on skillator's board, not the user's.
+  Run `sh practice/scripts/upstream-check.sh --daily` (Windows:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File
+  practice/scripts/upstream-check.ps1 -Daily`). `--daily` makes it a no-op after
+  the first finished run of the day; the stamp is
+  `$(git rev-parse --git-common-dir)/skillator/upstream-check.day`, shared by
+  every worktree. Act on the output:
+  - `skipped:` or exit 0: nothing to do.
+  - each `changed <name> <old>..<new> <url>` line (exit 1, and also exit 2,
+    because one failed row does not hide another's change): look for an open
+    (`[ ]` or `[~]`) ticket line in `TICKETS.md` that names both `<name>` and
+    `<new>`. If there is one, it is already logged. If not, take a number with
+    `sh practice/scripts/next-id.sh A` and add
+    `- [ ] A<n> — absorb <name> <old>..<new> into design-arwen (<url>)`. The
+    procedure is in `skills/design-arwen/UPSTREAM.md`.
+  - each `error` line (exit 2): report it in the active-set line as
+    `upstreams: check failed (<name>)`. Never call a failed check unchanged. No
+    stamp is written, so the next session retries it.
+
+  This is detection and a ticket, never an edit to arwen. Absorbing is a normal
+  ticket that someone takes on purpose.
 
 Then state the active set in **one line** — not a feature tour:
 

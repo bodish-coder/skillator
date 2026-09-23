@@ -63,7 +63,9 @@ generated code.
 - **Validate on blur, never per-keystroke.** Telling someone their email is invalid while
   they type the third character is hostile.
 - Re-validate on submit, and **move focus to the first error** with the count announced
-  (`aria-live`): "3 fields need attention".
+  (`aria-live`): "3 fields need attention". Past ~5 fields, or with more than one error,
+  put a focusable **error summary** at the top instead, each item a link to its field,
+  focus it, and keep the inline errors too (the GOV.UK pattern).
 - Errors sit **below the field**, wired with `aria-describedby`, in text — never colour
   alone, never a red border as the only signal.
 - **Never clear the form on error.** Never clear a password field on an unrelated error.
@@ -83,7 +85,14 @@ generated code.
 
 **Inputs**
 - Correct `type`, `inputmode`, `autocomplete` — this is free mobile UX and free autofill.
-  `autocomplete="one-time-code"` for OTP, `inputmode="decimal"` for money.
+  `autocomplete="one-time-code"` for OTP, `inputmode="decimal"` for money. Inputs,
+  selects and textareas render at ≥16px, or iOS Safari zooms the page on focus.
+- **Sign-in and sign-up let password managers work** (WCAG 3.3.8): `autocomplete=
+  "username"` (or `email`) and `"current-password"` / `"new-password"`, a real
+  `<form>` with a submit button, and **never block paste** — no `onpaste` handler that
+  cancels, on the password field or on split OTP boxes (which must accept a pasted code
+  whole). A show/hide toggle on the password field. No puzzle-only CAPTCHA: there is
+  always a path that asks no one to transcribe or solve anything.
 - Native `<select>` beats a custom dropdown until it genuinely can't do the job (search,
   multi-select, rich rows). A custom one owes you: keyboard nav, typeahead, `aria-expanded`,
   Escape, click-outside, and a portal so it isn't clipped.
@@ -117,7 +126,12 @@ card layout reads better and survives mobile.
   padding reads cleaner. Stripe only when rows are dense and wide.
 - Hover highlights the row; the whole row is clickable **only if there is exactly one
   obvious action**, and then a keyboard user needs the same affordance.
-- Sticky header, always, past one screen of rows.
+- Sticky header, always, past one screen of rows — and the scroll container that holds it
+  gets `scroll-padding-top` ≥ the header's height, so a keyboard user's focused row never
+  sits under it (craft.md, Interaction).
+- **Dense is not tiny.** Compact rows are fine; the sort buttons, row actions and links
+  inside them still meet 24×24 CSS px. Make the sort control a `<button>` filling the
+  header cell, not a 12px arrow glyph.
 
 **Sorting, filtering, search**
 - Sort state is visible on the column (direction arrow + `aria-sort`), and **survives a
@@ -125,7 +139,9 @@ card layout reads better and survives mobile.
   feature people notice.
 - Filters show what's applied as removable chips, with a "clear all". A filtered table that
   looks empty must say *why* it's empty: "No results for these filters. Clear filters."
-  This is a different empty state from "you have no data yet" — design both.
+  This is a different empty state from "you have no data yet" — design both. Too many
+  chips wrap to a new line before any label shrinks; a `+3` summary is a button that
+  opens the rest, never a way of hiding them.
 - Search debounced ~300ms, with a visible in-flight indicator that doesn't move the layout.
 
 **Scale**
@@ -173,7 +189,9 @@ card layout reads better and survives mobile.
   5", which beats nothing.
 - **Back must work** — the browser's back button included. A flow that breaks on back is
   broken.
-- **Persist between steps.** Going back and forward loses nothing, ever.
+- **Persist between steps.** Going back and forward loses nothing, ever. Never ask for
+  what the flow already has (billing = shipping, "confirm your email") unless re-entry is
+  the point (WCAG 3.3.7). Help and contact links sit in the same place on every step.
 - Validate per step, not all at the end. But never block forward motion on something that
   can be fixed later — let people skip and come back where the data genuinely allows it.
 - **Ask for the minimum that unblocks the next step.** Everything else belongs in settings
@@ -225,6 +243,9 @@ card layout reads better and survives mobile.
   for a genuine interruption that must be resolved · **full page** for anything with more
   than ~7 fields or its own sub-navigation.
 - **Never nest modals.** A modal that opens a modal means the flow needed a page.
+- **Scrim if and only if it blocks.** A modal task dims the page behind a scrim (and
+  `inert`s it); a parallel, non-blocking drawer or panel gets offset or translucency and
+  no scrim. Text on a scrim is a contrast pair like any other.
 - Native `<dialog>` or the Popover API — focus trap, Escape, light-dismiss, and correct
   stacking for free (craft.md).
 - A modal with unsaved changes confirms before closing — including on Escape and on the
@@ -289,6 +310,9 @@ It is **"subtly wrong in a way that erodes trust."** Ask:
    time?
 5. Is there exactly **one** save model, one selection model, one empty-state voice across
    the app?
+6. **Can the eye hold it?** One primary action and one or two secondary per view, the
+   rest grouped; at most ~5 top-level nav items. Eight competing choices is overload,
+   however tidy.
 
 Failing any of these ships a product that *works* and still feels untrustworthy. That is
 the specific way product UI fails, and no amount of aesthetic polish repairs it.

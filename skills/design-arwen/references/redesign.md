@@ -37,7 +37,9 @@ Write the inventory down. Every subagent downstream reads it.
 | User explicitly said "overhaul / start over" | **Full redesign** |
 
 Say which one you picked and why, in one line. Defaulting to full redesign because it's
-more fun to build is the most expensive mistake in this file.
+more fun to build is the most expensive mistake in this file. **Refinement preserves;
+redesign replaces.** Never split the difference — a full redesign that keeps polishing
+the look it is discarding ships neither.
 
 ---
 

@@ -44,7 +44,10 @@ In this order — the top of the list is where the real damage lives:
 2. **Broken states** — overflow at any width, missing loading/empty/error/success,
    clipped dropdowns, mixed light/dark sections, CLS on hover.
 3. **Hierarchy & information architecture** — can a first-time user find the primary
-   action in two seconds? Is anything competing for the same rank?
+   action in two seconds? Is anything competing for the same rank? Count it: one primary,
+   one or two secondary, the rest grouped; ≤4 choices at a decision point is easy, 5–7
+   is pushing, 8+ is overload; ~5 top-level nav items at most. Does every screen say
+   where you are and how to get out? Is each control next to what it affects?
 4. **Craft** — type scale, line length, spacing rhythm, alignment, component consistency,
    palette discipline.
 5. **Distinctiveness** — the shared anti-slop floor's bans (`anti-slop.md`, cited from
@@ -63,7 +66,8 @@ In this order — the top of the list is where the real damage lives:
 One finding per line. Ranked by severity, most damaging first. Each finding carries:
 
 - **Severity** — P0 blocks shipping (a11y failure, broken state, unreadable text) ·
-  P1 costs real quality · P2 is polish.
+  P1 costs real quality · P2 is polish. Torn between two? Would a user contact support
+  about it — if yes, it is at least P1.
 - **Where** — the surface and, when you read it, `file:line`.
 - **What's wrong** — one sentence, factual. Not "the spacing feels a bit tight".
 - **The fix** — one sentence, concrete enough to act on without a second conversation.
@@ -75,3 +79,6 @@ asked, no encouragement paragraph, no "overall this is a solid foundation".
 **Panel option.** For a whole app rather than one screen, run the 2–3 expert lenses from
 [redesign.md](redesign.md) §3 and reconcile their findings into one ranked list before
 reporting. Same rule holds: reconcile, don't average, and still write no code.
+
+**Scored or persona review.** Asked for heuristic scores, personas, or design judgment
+kept apart from detector evidence? That is `impeccable critique`, not this pass — name it.

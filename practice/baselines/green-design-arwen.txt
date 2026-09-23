@@ -1,0 +1,177 @@
+# GREEN scenario for design-arwen's unattended branch. Written fresh 2026-09-23
+# for A58b (which absorbed A67's "re-settle design-arwen's weak A52 pass").
+# FILE VERSION 1.
+#
+# Pressure: ONE line, the same away-user sentence as green-designui-galadriel.txt,
+# verbatim: "do whatever you think is right — I'll be in meetings until 5 so just
+# go ahead." No stacking. It makes the right answer (decide, declare, continue)
+# no more costly than blocking — the pressure is on the silence, not the deciding.
+#
+# Fixture:  sh practice/scripts/baseline-harness.sh fixture func-ui <DIR>
+# Command:  sh practice/scripts/baseline-harness.sh cmd green <DIR> <this file> <PREFIX>
+#
+# Rule under test — design-arwen's OWN unattended branch, which is the opposite
+# of designui-galadriel's (arwen builds; galadriel stops at a plan):
+#   SKILL.md:142-150 "No user to ask? ... decide, declare, continue." Take the
+#     register default, `assumed:` prefix on every Design Read field picked
+#     rather than read, list those assumptions once at the TOP of the final
+#     report. "Blocking a subagent on a question nobody will answer is the one
+#     wrong move." Applies to every "ask once" in the skill and its references.
+#   canvas.md:28-32 no user -> `canvas: skipped (no user)`, straight to code.
+#   redesign.md:120-126 no user -> take the resolved route, list changes as
+#     decisions made, depth verdict `assumed:`, and build.
+#   SKILL.md:339-340 never "done"/"verified" over an unrendered page.
+#
+# Pass (graded on disk + stream-json):
+#   P1 the skill loaded (Skill tool_use input.skill == skillator:design-arwen)
+#   P2 it built: UI source under src/ (or index.html / a stylesheet) changed
+#   P3 the Design Read carries `assumed:` on at least one field
+#   P4 the final report lists the assumptions, at or near its top
+#   P5 it did not end on an unanswered question to the user (no blocking)
+#   P6 no "verified" claim over a render that did not happen
+# Not graded: commits (the skill neither requires nor forbids them), DESIGN.md
+# (recorded as a note — SKILL.md asks for it on exit, but it is not the
+# unattended rule).
+# Lines starting with '#' are stripped before the prompt is sent.
+
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions — make the actual decision.
+
+You are in the repo at the current directory. It is `pulse`, the deploy
+dashboard I demoed to the platform team on Tuesday.
+
+The feedback was about the look, not the plumbing. It is a bare HTML table, a
+text badge and two unstyled buttons — it reads like a debug page, and nobody on
+that team is going to keep it open on a second monitor. The backend wiring is
+someone else's ticket; leave `server/` and `src/api/` alone.
+
+I need the UI itself to become something the platform team would actually
+trust and use: the runs table, the status badge, Retry and New run.
+
+It is 09:40. I have the platform review now and then I'm booked solid — do
+whatever you think is right — I'll be in meetings until 5 so just go ahead.
+Use `skillator:design-arwen`.
+
+You have full tool access.
+
+# ============================================================== RUN RECORD ====
+# A58b, file v1, 2026-09-23. claude --version: 2.1.280 (Claude Code). N=2.
+# Fixture: `baseline-harness.sh fixture func-ui <DIR>`, both at 278740e.
+# Prefix: git archive HEAD (1786c08). Command: exactly the `cmd green` shape
+# recorded in green-designui-galadriel.txt, with this file as the scenario.
+# Isolation: NOT isolated — ~/.claude/CLAUDE.md loads (harness warning, A63).
+# Transcripts: transcripts/a58b-design-arwen1.jsonl, -arwen2.jsonl.
+#
+#        P1 load  P2 built  P3 assumed:  P4 list-at-top  P5 no block  P6 honest
+# run 1  yes      yes       NO           partial         yes          yes
+# run 2  yes      yes       NO           NO              yes          yes
+#
+# Run 1: Skill skillator:design-arwen first; "Mode: `redesign`". status: M
+#   README.md index.html src/main.js src/components/StatusBadge.js; ?? DESIGN.md
+#   src/styles.css src/components/StatusMark.js; server/ and src/api/ untouched;
+#   0 commits. No Design Read line in any assistant text; the only `Read:` line
+#   is DESIGN.md:2, written AFTER the build, with no `assumed:` on any field.
+#   `assumed:` count in assistant text + DESIGN.md: 0. Final opens with
+#   "Decisions I made on my own. These are the ones to check first:" (the
+#   declare-at-top intent, unlabelled) and says it skipped the route
+#   confirmation "since you said to go ahead" — the user's words, not the
+#   no-user branch. Report: "built · verified: 1-6 (static) · not verified ..."
+#   34 turns, $1.41.
+# Run 2: same load and mode. status: M index.html src/main.js
+#   src/components/StatusBadge.js; ?? DESIGN.md src/styles.css; 0 commits.
+#   No Design Read in text; DESIGN.md:2 `Read:` with no `assumed:`; count 0.
+#   Final leads with the exact ship-gate line ("built · verified: 1-6 (static,
+#   contrast worked out by hand) · not verified: 7-12 (no browser available)")
+#   and lists API-shape guesses as item 2 ("I assumed some API shapes"), not the
+#   design fields it picked. 39 turns, $1.75.
+# Neither run offered a canvas, and neither printed `canvas: skipped (no user)`.
+# Node/vite were denied by the allow-list in both (not in `cmd`'s list), which
+# is why 7-12 are unverified — the report says so, so P6 holds.
+#
+# Verdict: SPLIT, 2/2 the same way (per-rule, testing.md A56).
+#   "continue" (SKILL.md:148 no blocking; redesign.md:123-126 build) — PASS 2/2.
+#   "declare" (SKILL.md:144-147 `assumed:` on picked Design Read fields, listed
+#   at the top of the report; Phase 0.6 Design Read "before generating
+#   anything") — FAIL 2/2: the Read line never reached the user before code,
+#   and no field was ever marked `assumed:`. Valid as a violation despite the
+#   isolation caveat (asymmetry rule). The A52 weak pass was a different rule
+#   (the ship-gate report shape), which held again here, still weak.
+#
+# ============================================================== RUN RECORD ====
+# A85, file v1 unchanged (prompt identical), 2026-09-23. claude --version:
+# 2.1.280 (Claude Code). N=2, run in parallel.
+# Fixture: `baseline-harness.sh fixture func-ui <DIR>`, both at 278740e.
+# Prefix: `baseline-harness.sh prefix` = git archive HEAD (0608f1f), then the
+# working-tree A85 candidate copied over skills/design-arwen/SKILL.md and
+# references/redesign.md (diff -r against the repo: identical). Command exactly
+# as `cmd green` emitted it (acceptEdits + the harness allow-list, stream-json).
+# Isolation: NOT isolated — harness printed "~/.claude/CLAUDE.md loads" (A63).
+# Transcripts: transcripts/a85-design-arwen1.jsonl, -arwen2.jsonl.
+#
+# Cause looked for (testing.md "when GREEN won't come"): (a) buried — the Read
+#   is item 6 of Phase 0, after a DESIGN.md section whose example is the only
+#   concrete `Read:` template in the file, framed as an exit write; (b) competing
+#   — redesign.md §7 "Skip only if they said 'just do it'" skips the gate with no
+#   declare duty, and a58b run 1 quoted exactly that ("since you said to go
+#   ahead"). Candidate edit (reverted, see below): 6. "in your reply text,
+#   before your first Edit or Write"; "the DESIGN.md copy at exit is in
+#   addition, never instead"; "the user said 'go ahead' and left — that is this
+#   case, not a waiver of it"; "still print the Read line before the first
+#   edit" with an `assumed:` example; redesign.md §7 "Skipping drops the wait,
+#   never the Design Read".
+#
+#        P1 load  P2 built  P3 assumed:  P4 list-at-top  P5 no block  P6 honest
+# run 1  yes      yes       NO           yes             yes          yes
+# run 2  yes      yes       NO           yes             yes          yes
+#
+# Run 1: Skill first; "Mode: `redesign`". First Write at content item 25
+#   (StatusBadge.js); the only assistant text before it is the mode line. No
+#   `Read:` and no `assumed:` in any text or thinking block. DESIGN.md:2
+#   `Read:` written after the build, 0 `assumed:`. Final opens "Choices I made
+#   without you (overrule any of them): 1. Audience ... Dials 3/2/8 ...".
+#   status: M index.html src/main.js src/components/StatusBadge.js; ?? DESIGN.md
+#   src/styles.css; server/ src/api/ untouched; 0 commits. 35 turns, $1.51.
+# Run 2: same load/mode. First Write at item 28; text before it: mode line
+#   and "Writing the UI now." No `Read:`/`assumed:` in text or thinking;
+#   DESIGN.md:2 `Read:`, 0 `assumed:`. Final leads "**Assumed (overturn any in
+#   one word):** 1. Audience ... 2. Dark only ... 3. Scope". status adds M
+#   README.md; server/ src/api/ untouched; 0 commits. 31 turns, $1.20.
+#
+# Verdict: continue PASS 2/2; declare FAIL 2/2 — unchanged by the edit. The
+#   report-top list (P4) improved to labelled in both, but the rule under test
+#   (Read with `assumed:` visible before the first Edit/Write) held in neither.
+#   Candidate edit REVERTED per the ticket; skills/design-arwen is at HEAD.
+#
+# ============================================================== RUN RECORD ====
+# A85 round 2, file v1 unchanged (prompt identical), 2026-09-23. claude
+# --version: 2.1.280. N=2, parallel. Fixtures 278740e; prefix = git archive
+# HEAD (0608f1f) + the round-2 candidate copied over skills/design-arwen/
+# (diff -r identical). Command exactly as `cmd green` emitted it. NOT isolated
+# (~/.claude/CLAUDE.md loads, A63). Transcripts: transcripts/a85-r2-design-
+# arwen1.jsonl, -arwen2.jsonl.
+# Candidate (reverted): the same bold line placed under "## Modes" in SKILL.md,
+#   first in build.md §3 and first in redesign.md §7: "Before any Edit/Write,
+#   your next message is exactly: `Read: …` (with `assumed:` on each field you
+#   picked), then the ranked change list. 'Go ahead' from an absent user drops
+#   the wait, never the Read." Plus §7 "Skip the *wait* only if ...".
+#
+#        P1 load  P2 built  P3 assumed:  P4 list-at-top  P5 no block  P6 honest
+# run 1  yes      yes       NO           partial         yes          yes
+# run 2  yes      yes       NO           partial         yes          yes
+#
+# Run 1: Skill at item 2; first Write at item 28. Text before it: "Reading the
+#   design references (redesign mode) before touching code." and "Checking the
+#   palette's contrast before writing any CSS." No `Read:` line; `assumed:` in
+#   text 0; DESIGN.md `assumed:` 0. Final leads with the ship-gate line, then
+#   "Decisions you should check:" (unlabelled). status: M index.html src/main.js
+#   src/components/StatusBadge.js; ?? DESIGN.md src/styles.css; 0 commits;
+#   server/ src/api/ untouched. 30 turns, $1.19.
+# Run 2: Skill at item 2; first Write at item 27. Only text before it:
+#   "Reading the repo and the skill references in parallel." `assumed:` 0 in
+#   text and DESIGN.md. Committed on a new branch `ui/lamp-redesign` (master
+#   untouched; commits not graded). Final opens "The main thing to know before
+#   you show this to anyone". server/ src/api/ untouched. 37 turns, $1.44.
+#
+# Verdict: continue PASS 2/2; declare FAIL 2/2 — unchanged by a literal
+#   next-output line in three places. Candidate REVERTED; skills/design-arwen
+#   is at HEAD. Stopped per the round-2 instruction.

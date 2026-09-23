@@ -1,6 +1,6 @@
 # RUN-3 - drain the board
 plan: docs/plans/PLAN-board-drain.md
-started: 2026-09-23T01:59Z   updated: 2026-09-23T19:03Z
+started: 2026-09-23T01:59Z   updated: 2026-09-23T19:41Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -14,26 +14,26 @@ started: 2026-09-23T01:59Z   updated: 2026-09-23T19:03Z
 | 7 | A73 double registration | x | build:opus | 2026-09-23T02:43Z | 0608f1f |
 | 8 | A75+A63b harness | x | build:opus | 2026-09-23T02:43Z | 0608f1f |
 | 9 | host docs apply | x | build:sonnet | 2026-09-23T02:43Z | 0608f1f |
-| 10 | A76 relay-split RED | x | build:opus | 2026-09-23T18:34Z | pending |
-| 11 | A58b GREEN reruns | x | build:opus | 2026-09-23T18:34Z | pending |
+| 10 | A76 relay-split RED | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
+| 11 | A58b GREEN reruns | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
 | 12 | A81+A82 budgets | x | build:sonnet | 2026-09-23T02:43Z | 0608f1f |
-| 13 | A58b A60-five GREENs | x | build:opus | 2026-09-23T03:06Z | pending |
-| 14 | A79 routing RED/GREEN | x | build:opus | 2026-09-23T03:02Z | pending |
-| 15 | A86 harness allow-list | x | build:sonnet | 2026-09-23T03:14Z | pending |
+| 13 | A58b A60-five GREENs | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
+| 14 | A79 routing RED/GREEN | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
+| 15 | A86 harness allow-list | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
 | 16 | A85 design-arwen declare | ! | build:opus | 2026-09-23T03:19Z | - |
-| 17 | A84 tasks-sentinels GREEN | x | build:opus | 2026-09-23T03:34Z | pending |
-| 18 | A58c argus v2 + merge direction | x | build:opus | 2026-09-23T03:16Z | pending |
-| 19 | F21 unique ticket ids | x | build:opus | 2026-09-23T03:37Z | pending |
-| 20 | F22 serial stage+run ids | x | build:opus | 2026-09-23T18:57Z | pending |
-| 21 | A89 argus never-guess | x | build:opus | 2026-09-23T03:30Z | pending |
-| 22 | A90 merge-smith direction | x | build:opus | 2026-09-23T03:34Z | pending |
-| 23 | harness A87 A88 A91 A92 | x | build:opus | 2026-09-23T19:03Z | pending |
+| 17 | A84 tasks-sentinels GREEN | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
+| 18 | A58c argus v2 + merge direction | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
+| 19 | F21 unique ticket ids | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
+| 20 | F22 serial stage+run ids | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
+| 21 | A89 argus never-guess | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
+| 22 | A90 merge-smith direction | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
+| 23 | harness A87 A88 A91 A92 | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
 | 24 | F23a research frontend-design | x | build:opus | 2026-09-23T18:44Z | docs/plans/F23-upstream/frontend-design.md |
 | 25 | F23a research apple-design | x | build:opus | 2026-09-23T18:39Z | docs/plans/F23-upstream/apple-design.md |
 | 26 | F23a research impeccable | x | build:opus | 2026-09-23T18:53Z | docs/plans/F23-upstream/impeccable.md |
 | 27 | F23a research ui-ux-pro-max | x | build:opus | 2026-09-23T18:48Z | docs/plans/F23-upstream/ui-ux-pro-max.md |
-| 28 | F23b absorb into design-arwen | ~ | build:opus | 2026-09-23T18:53Z | - |
-| 29 | F23c upstream mechanism | ~ | build:opus | 2026-09-23T18:53Z | - |
+| 28 | F23b absorb into design-arwen | x | build:opus | 2026-09-23T19:41Z | pending |
+| 29 | F23c upstream mechanism | x | build:opus | 2026-09-23T19:16Z | pending |
 
 ## In flight
 ### stage 28 - F23b absorb into design-arwen  (dispatched wave 6)
@@ -360,3 +360,4 @@ prompt: |
 - 07:10Z - A91 and A92 allocated through practice/scripts/next-id.sh (first real use; counter .git/skillator/ids/A now 92).
 - 07:40Z - stages 20 and 23 FAILED mid-edit: session usage limit (HTTP 429, resets 12:20 IST). Left in the tree: relay-morpheus.sh partly edited, .ps1 untouched (mirrors diverge); baseline-harness.sh / check-tickets.sh / README harness sections carry partial A87/A88/A91/A92 edits on top of the verified A76 + A86 work. relay status and harness selftest still pass. Resume: SendMessage the same two agents after the reset (their context holds what they changed) rather than reverting blind - costs nothing if they finish; if a resume fails, revert those files to 0608f1f + re-apply A76/A86 from their stage records.
 - 18:40Z - F23 (owner request) joins RUN-3 as stages 24-29: research fans out one agent per upstream (separate output files), then absorb (28) and mechanism (29) run in parallel - 29 owns UPSTREAM.md and the scripts, 28 owns arwen's body. Version: repo already 4.0.0 (unpushed, installed copy 3.10.0) - read as 'ship 4.0.0', no further bump, owner to overrule.
+- 05:10Z - stage 28 round 1: edits done, RED recorded (G3 target 1/2 FAIL, G6 reduced-motion kill 1/2 FAIL; G1 G2 G4 G5 dropped - RED passed them). GREEN x2 + regression x1 reaped for low memory: NO VERDICT. Round 2 to the same agent: 'Re-run GREEN N=2 and the regression N=1 strictly one at a time (wait for each nested claude to exit; kill any orphan from round 1 first), same prefix method, grade G3 and G6 only plus the regression's continue half; then replace UPSTREAM.md's provisional sections column with the real landings and drop provisional. No other edits.' anti-slop additions split to a new A ticket (no failing test yet).

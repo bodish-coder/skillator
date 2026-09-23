@@ -104,8 +104,8 @@ Don't silently obey and don't silently fix. Both produce a build the user didn't
   one round: *"the lighter label you set reads 3.1:1 on that surface; craft.md's floor is
   4.5:1 — nearest version is the same grey one step darker, or the same value on a
   half-tone panel. Which?"*
-- The floors that edits actually hit: body contrast 4.5:1 / large text & UI 3:1 · touch
-  target 44pt / 48dp · overflow at 320px · a focus ring that survives the new background ·
+- The floors that edits actually hit: body contrast 4.5:1 / large text (≥24px, bold
+  ≥18.67px) & UI 3:1 · target 44pt / 48dp on touch, 24 CSS px web pointer · overflow at 320px · a focus ring that survives the new background ·
   reduced-motion · a colour-only signal.
 - **Accessibility floors are not overridable**, by the user or by you. If no variant they
   like clears one, restructure the surface until one does — that is the design work, not a

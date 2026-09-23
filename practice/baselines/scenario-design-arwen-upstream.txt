@@ -1,0 +1,86 @@
+# Scenario for F23b: does design-arwen carry the upstream correctness rules that
+# F23a found missing or wrong? (docs/plans/F23-upstream/*.md). FILE VERSION 1,
+# written 2026-09-24.
+#
+# "RED" here is NOT the skill-blocked RED of README.md: it is HEAD's arwen
+# LOADED (a `cmd green` run against a prefix built before the F23b edit), so
+# the baseline is today's skill, not no skill. GREEN is the same command against
+# a prefix carrying the F23b working-tree arwen. The two prefixes differ only in
+# skills/design-arwen/ (checked with diff -r, recorded in the run record).
+#
+# Pressure: none by design. The user is present but brief — no away-user
+# sentence, no deadline, no prohibition. The prompt names the skill.
+#
+# Fixture (hand-built; the harness has no `fixture` kind for this):
+#   mkdir "$D" && cd "$D" && git init -q && printf '# Tallyhouse\n' > README.md
+#   git add README.md && GIT_AUTHOR_DATE=2026-09-24T09:00:00Z \
+#     GIT_COMMITTER_DATE=2026-09-24T09:00:00Z git -c user.name=fixture \
+#     -c user.email=fixture@example.invalid commit -q -m init
+# Command:  sh practice/scripts/baseline-harness.sh cmd green "$D" <this file> <PREFIX>
+#           wrapped in `timeout 1500` by the caller (BASELINE_TIMEOUT=1500).
+#
+# Rules under test, each graded on disk with a grep over index.html + *.css + *.js
+# (the upstream row that motivates it in brackets):
+#   G1 login/password inputs: autocomplete present (username/email and
+#      current-password), and nothing blocks paste (no onpaste / 'paste'
+#      listener that preventDefaults) [ui-ux-pro-max #1, WCAG 3.3.8]
+#   G2 viewport meta has no user-scalable=no and no maximum-scale=1 [uupm #5]
+#   G3 every interactive target >= 24 CSS px in both axes (sort buttons, links,
+#      buttons, inputs): declared height/min-height/padding+line-height, read
+#      from the CSS [uupm #4, WCAG 2.5.8]
+#   G4 the sticky table header / sticky page chrome cannot cover a focused
+#      control: scroll-padding-top (or scroll-margin-top on the focus targets)
+#      >= the sticky height [uupm #2, WCAG 2.4.11]
+#   G5 the 20px (non-bold) hero secondary line meets 4.5:1 against its
+#      background, computed from the declared colours [impeccable #1: 20px is
+#      NOT large text; large = 24px / 18.67px bold]
+#   G6 prefers-reduced-motion keeps state feedback: no global kill
+#      (`*` / `*::before` / `*::after` with transition/animation-duration ~0,
+#      or `transition: none` on everything) [impeccable #6]
+# A check the HEAD-arwen runs already pass is dropped from the F23b claim.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Tallyhouse, an invoicing tool for small
+bookkeeping firms. Build the sign-in page as plain `index.html`, one
+stylesheet and one script at the repo root — no framework, no build step,
+no npm installs.
+
+What goes on it:
+- a hero: one headline and one secondary line under it set at 20px, in a
+  muted tone
+- a sign-in form: email and password, "Keep me signed in", a Sign in button
+- below it, a preview of the product: a dense, sortable table of about
+  40 recent invoices (client, number, issued, due, amount, status) whose
+  header row stays stuck to the top while the table scrolls. Accountants
+  want lots of rows on screen, so keep it compact.
+- one panel that animates open when someone clicks "What's new"
+
+I'm around, but keep it moving — build it, then tell me what you did.
+
+# ============================================================== RUN RECORD ====
+# F23b RED, file v1, 2026-09-24 (UTC 2026-09-23T19:02Z). claude --version 2.1.280.
+# N=2 in parallel. Fixtures hand-built as above (both 5848f1e). Prefix: `prefix`
+# built BEFORE any F23b edit (skills/design-arwen == HEAD 0608f1f, checked with
+# git diff --quiet HEAD and diff -r). Command exactly as `cmd green` emitted,
+# BASELINE_TIMEOUT=1500, wrapped in timeout 1560. NOT isolated (~/.claude/CLAUDE.md).
+# Transcripts: transcripts/f23b-red-design-arwen1.jsonl, -arwen2.jsonl.
+# Grader: static greps + a probe injected into a copy, rendered in Playwright's
+# chrome-headless-shell 1243 at 1280x900 (--dump-dom): contrast from computed
+# colours, getBoundingClientRect targets, reverse-focus + elementFromPoint.
+#
+#        G1 auth  G2 zoom  G3 >=24px            G4 focus/sticky  G5 20px   G6 RM feedback
+# run 1  pass     pass     FAIL (Forgot         pass (vacuous)   6.80 pass pass (scoped)
+#                          password? 110x21)
+# run 2  pass     pass     pass                 pass (vacuous)   6.51 pass FAIL: `*, *::before,
+#                                                                          *::after { transition:
+#                                                                          none !important }`
+# run 1: Skill design-arwen, read build/craft/product-ui/verify + anti-slop; 28
+#   turns, $1.63, 387s, 5 denials (node --check, heredoc). Final: gate line
+#   "built · verified: 1-6 (static) · not verified: 7-12". No paste toggle.
+# run 2: same load/reads; 33 turns, $1.75, 357s, 8 denials (browse.exe, heredoc).
+# G4 is vacuous in both: tbody holds 0 focusables, so nothing can hide under the
+#   sticky thead; run 2 set scroll-padding-block-start 2rem on the scroller anyway.
+# Verdict (HEAD arwen): G1 G2 G4 G5 pass 2/2 -> DROPPED from the F23b claim.
+#   G3 fail 1/2, G6 fail 1/2 -> the claim F23b's GREEN must beat.

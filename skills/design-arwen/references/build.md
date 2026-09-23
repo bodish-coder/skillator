@@ -48,11 +48,17 @@ Four blocks, compact:
 
 - **Color** — 4–6 named values in OKLCH, each with its role (`bg`, `surface`, `ink`,
   `muted`, `accent`, and at most one more). Name the color strategy from Phase 1.
-- **Type** — 2–3 roles: a characterful display face used with restraint, a body face, and
-  a utility/mono face for captions or data if the content needs one. Name the scale ratio.
+- **Type** — one or two families: a characterful display face used with restraint and a
+  body face, or one family across weights. If two, make them clearly distinct. No default
+  third mono "for captions or data" — small mono labels are template chrome; numbers
+  align with `tabular-nums`. Mono only for literal code or IDs, logged as `Deliberate:`.
+  Name the scale ratio.
 - **Layout** — one-sentence prose per section, plus an **ASCII wireframe** for anything
   non-obvious. Wireframes are cheap; they expose a repetitive rhythm before you've written
-  400 lines of CSS.
+  400 lines of CSS. **Say the alignment per section** (left, centred, justified) — left
+  unstated it comes out centred everywhere. Brand register: name what the hero opens with,
+  the most characteristic thing in the subject's world (an object, a live demo, a moment),
+  not a metric row.
 - **Signature** — the one sentence from Phase 2, and where in the layout it lands.
 
 ### Pass 2 — critique the plan against the brief
@@ -134,3 +140,11 @@ Only defaults — an existing project's stack always wins.
 Run the SKILL.md **ship gate** — the single gate, tagged `static`/`browser`/`delegated`.
 No browser? Run every `static` item anyway and report in SKILL.md's terminal-state shape.
 Do not report done on an unrendered page.
+
+**The plan got a second lens; so does the render.** Self-review of your own screenshots
+rationalises exactly as self-critique of the plan does (§2). Where the host can dispatch,
+hand one *fresh* reviewer — no forked history, it would inherit your framing — the
+screenshots, the Design Read and the signature sentence, and ask for one disposition:
+`recapture` (the screenshots do not show what they claim), `fix` (a listed defect),
+`rebuild` (the direction failed) or `ship`. Then fix what it listed and stop — bounded
+rounds in [verify.md](verify.md). No delegate: `review: self only` in the report.
