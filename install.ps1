@@ -14,23 +14,11 @@ $src = Join-Path $PSScriptRoot 'skills'
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { "$HOME\.codex" }
 
 # host -> marker dir proving the CLI is installed + the global skills dir(s) to fill.
-# See install.sh for the reasoning and the A73 residue. Probe dir OR CLI on PATH,
-# matching how row selection below decides a host is installed.
-# See install.sh: row selection re-validates the marker, so this must be a path that
-# EXISTS when a host was found (and an absolute one - a relative name would resolve
-# against the current location and could match something by accident).
-$sharedMarker = [System.IO.Path]::GetFullPath((Join-Path $HOME 'no-such-shared-host'))
-foreach ($c in @('codex','pi','gemini')) {
-  $d = if ($c -eq 'codex') { $codexHome } else { Join-Path $HOME ".$c" }
-  if ((Test-Path $d) -or (Get-Command $c -ErrorAction SilentlyContinue)) { $sharedMarker = $HOME; break }
-}
-
+# A73: no row for the shared ~/.agents/skills dir - every host that reads it also
+# reads its own dir filled here, so it only registered each skill twice (codex does
+# not dedupe; Gemini CLI lets the shared copy win). See install.sh for the measurements.
 $targets = [ordered]@{
-  # A65 - keep in sync with install.sh, which carries the reasoning for each path.
-  # See install.sh: marked by a host that reads the shared dir and has no
-  # guaranteed dir of its own, NOT by $HOME - Cursor reads it too and would
-  # otherwise register every skill twice.
-  'shared'      = @{ Marker = $sharedMarker;    Dests = @("$HOME\.agents\skills") }
+  # keep in sync with install.sh, which carries the reasoning for each path.
   'claude-code' = @{ Marker = "$HOME\.claude"; Dests = @("$HOME\.claude\skills") }
   'cursor'      = @{ Marker = "$HOME\.cursor"; Dests = @("$HOME\.cursor\skills") }
   'codex'       = @{ Marker = $codexHome;       Dests = @("$codexHome\skills") }
@@ -38,7 +26,7 @@ $targets = [ordered]@{
   'pi'          = @{ Marker = "$HOME\.pi";     Dests = @("$HOME\.pi\agent\skills", "$HOME\.pi\skills") }
 }
 
-# Claude Code can also have them via the plugin marketplace — that counts as installed.
+# Claude Code can also have them via the plugin marketplace - that counts as installed.
 $pluginDirs = @(Get-ChildItem "$HOME\.claude\plugins" -Recurse -Depth 3 -Directory `
                   -Filter 'skillator' -ErrorAction SilentlyContinue)
 
@@ -51,7 +39,7 @@ foreach ($cli in $targets.Keys) {
     continue
   }
 
-  # Claude Code's plugin install already provides every skill — leave it alone.
+  # Claude Code's plugin install already provides every skill - leave it alone.
   if ($cli -eq 'claude-code' -and $pluginDirs.Count -gt 0) {
     Write-Host "ok    claude-code (installed via plugin: $($pluginDirs[0].FullName))" -ForegroundColor DarkGray
     continue
@@ -109,6 +97,47 @@ foreach ($cli in $targets.Keys) {
       Copy-Item (Join-Path $PSScriptRoot 'references') $dest -Recurse -Force
     }
   }
+}
+
+# A62a: codex builds before 0.155.0 read only ~\.agents\skills, not $codexHome\skills
+# (this installer's codex row). On such a build a fresh install here is silently
+# unreachable, so warn and give the one-line fix (or: upgrade codex).
+if (Get-Command codex -ErrorAction SilentlyContinue) {
+  $cxRaw = ""
+  try { $cxRaw = (& codex --version 2>&1 | Out-String).Trim() } catch { $cxRaw = "" }
+  $cxOld = $false
+  $cxMatch = [regex]::Match($cxRaw, '[0-9]+\.[0-9]+\.[0-9]+')
+  if (-not $cxMatch.Success) {
+    $cxOld = $true
+  } else {
+    $cxParts = $cxMatch.Value.Split('.')
+    if ([int]$cxParts[0] -eq 0 -and [int]$cxParts[1] -lt 155) { $cxOld = $true }
+  }
+  if ($cxOld) {
+    Write-Host ""
+    if (-not $cxMatch.Success) {
+      Write-Host "warn  codex --version did not report a version this script can parse: `"$cxRaw`"" -ForegroundColor Yellow
+    } else {
+      Write-Host "warn  codex $($cxMatch.Value) is older than 0.155.0" -ForegroundColor Yellow
+    }
+    Write-Host "      that build reads only $HOME\.agents\skills for skills, not $codexHome\skills,"
+    Write-Host "      so a fresh install here is invisible to it. Copy the installed skills there:"
+    Write-Host "        Copy-Item '$codexHome\skills\*' '$HOME\.agents\skills\' -Recurse -Force"
+    Write-Host "      or upgrade codex."
+  }
+}
+
+# A73: skillator skills left in the shared dir by an older install. Reported, never
+# removed - the dir is shared with other tools and deleting from it is the user's call.
+$old = @($skills | Where-Object { Test-Path (Join-Path "$HOME\.agents\skills" "$($_.Name)\SKILL.md") } |
+        ForEach-Object { $_.Name })
+if ($old.Count -gt 0) {
+  Write-Host "`nnote  $HOME\.agents\skills still holds skillator skills from an older install:" -ForegroundColor Yellow
+  Write-Host "       $($old -join ' ')"
+  Write-Host "      codex lists each of these twice, and Gemini CLI prefers them over the fresh"
+  Write-Host "      copy in ~\.gemini\skills. This installer no longer writes that dir; remove"
+  Write-Host "      those skill folders by hand (and PLATFORMS.md, PRACTICE.md, WORKFLOW.md,"
+  Write-Host "      practice\, references\ beside them if nothing else uses them)."
 }
 
 Write-Host "`nPrime Agent: no markdown-skill loader - point its AGENTS.md at $src\<skill>\SKILL.md."

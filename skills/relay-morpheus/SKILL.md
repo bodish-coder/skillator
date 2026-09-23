@@ -1,13 +1,13 @@
 ---
 name: relay-morpheus
 description: >-
-  Use when work is being executed in stages and the session may not survive to
-  the end of them — a multi-stage plan, a fan-out of subagents, a long build on
-  a laptop that sleeps, a dropping connection, a usage limit closing in. Also
-  when the user says "staged workflow", "keep going across sessions", "resume
-  the run", "what was in flight", or asks why a dispatched agent went quiet.
-  NOT for writing a session handoff (`handoff-cortana`) and NOT for the board
-  (`tickets-zordon`).
+  Use when work runs in stages and the session may not survive to the end of
+  them — a multi-stage plan, a fan-out of subagents, a laptop that sleeps, a
+  dropping connection, a usage limit closing in.
+  Also when the user says "staged workflow", "keep going across sessions",
+  "resume the run", "what was in flight", or asks why a dispatched agent went
+  quiet. NOT for writing a session handoff (`handoff-cortana`) and NOT for the
+  board (`tickets-zordon`).
 ---
 
 # relay-morpheus — staged runs that outlive the session

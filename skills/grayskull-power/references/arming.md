@@ -60,33 +60,32 @@ persisted: skip this whole step silently.
 ```markdown
 # grayskull-power is ON for this project
 
-Load and follow `skillator:grayskull-power` for all work in this repo, before
-anything else. Claude Code: the `Skill` tool. Antigravity: `/grayskull-power`.
-Pi: `/skill:grayskull-power`. Codex / Cursor: read that skill's `SKILL.md` and
-follow it yourself. Print its banner once per session, then route per its table.
+Load and follow `skillator:grayskull-power` for all work here, before
+anything else. Claude Code: `Skill` tool; Antigravity: `/grayskull-power`;
+Pi: `/skill:grayskull-power`; Codex/Cursor: read that skill's `SKILL.md`.
+Print its banner once per session, then route per table.
 
-Standing rules, no reminder needed:
-- `TICKETS.md` at the repo root is the board — `skillator:tickets-zordon` owns it.
-- Reproduce before fixing. Map with `codegraph` before proposing a remedy.
+Standing rules:
+- `TICKETS.md` is the board — `skillator:tickets-zordon` owns it.
+- Reproduce before fixing; map with `codegraph` first.
 - Before every commit: regression sweep, then `/code-review`
-  (`code-review:code-review`) over the staged diff. `skillator:audit-sherlock` is
-  the whole-app sweep — pre-release, handover, or unknown-cause rot — never a
-  per-commit gate, and never inside an implementer subagent.
-- Staged work runs to the end. A plan with stages does not stop between them
-  for approval. Six things stop it: a destructive op, a security-sensitive
-  action, a side effect outside this worktree (merge, push, publish), the
-  7-day limit at 90%, a scope-contract breach, a failed repro. Everything else
-  is a `Ruling:` in the run file. `skillator:relay-morpheus` owns `.skillator/run.md` —
-  the stage goes in it **before** the agent is dispatched, never after.
-- Independent tasks go to a fresh implementer each, one task per agent, with a
-  constructed prompt and never the session history — `skillator:tasks-sentinels`
-  runs that loop. Tasks that touch the same files do not fan out.
+  (`code-review:code-review`) on the staged diff. `skillator:audit-sherlock`
+  is the whole-app sweep — pre-release, handover, rot — never per-commit,
+  never inside an implementer.
+- Staged work runs to the end, no stop between stages. Six stops: a
+  destructive op, a security-sensitive action, a side effect outside this
+  worktree (merge, push, publish), the 7-day limit at 90%, a scope-contract
+  breach, a failed repro. Else log a `Ruling:` in the run file.
+  `skillator:relay-morpheus` owns `.skillator/run.md`, updated before
+  dispatch, never after.
+- One task per fresh implementer, own prompt, no session history —
+  `skillator:tasks-sentinels` runs that loop. Same-file tasks do not fan out.
 - Usage watch — before each non-trivial step run
   `<SKILL_DIR>/../watch-cortana/hooks/usage-watch.sh check`
   (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File
   "<SKILL_DIR>/../watch-cortana/hooks/usage-watch.ps1" -Mode check`).
-  It prints `HANDOFF NOW` plus an order — stop and follow it exactly.
-  On Claude Code the `Stop` hook already does this; skip the manual call there.
+  It prints `HANDOFF NOW` plus an order — follow it. Claude Code's `Stop`
+  hook does this already; skip it.
 ```
 
 Write that block **verbatim**, with exactly one substitution — `<SKILL_DIR>`,

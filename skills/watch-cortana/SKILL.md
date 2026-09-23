@@ -110,7 +110,7 @@ same as the Claude Code gate.
 | Host | Usage signal | Turn-end hook that can inject | Active fallback |
 |---|---|---|---|
 | claude-code | `statusLine` `rate_limits.*.used_percentage` | `Stop` → `{"decision":"block"}` | none needed — full auto |
-| codex | **yes** — `~/.codex/sessions/**/rollout-*.jsonl`, last `token_count`: `rate_limits.*.used_percent` and `last_token_usage.total_tokens / model_context_window` | **none reachable** — a `Stop` event that injects via exit 2 + stderr is compiled in, but the live test found no config that fires it; see below | real percentage, agent-driven `check` — replace with an automatic gate if a reachable `Stop` config is ever found |
+| codex | **yes** — `~/.codex/sessions/**/rollout-*.jsonl`, last `token_count`: `rate_limits.*.used_percent` and `last_token_usage.total_tokens / model_context_window` | `Stop` → `{"decision":"block"}` on stdout, verified 0.155.1 `codex exec`; hook must be trusted — see below | real percentage, agent-driven `check` until `usage-watch.* gate` is wired as the `Stop` handler and confirmed to read the Codex usage |
 | cursor | **no** — chats are SQLite `store.db`, no usage anywhere on disk | `stop` hook exists (`~/.cursor/hooks.json`, `command`/`prompt` handlers) | **none** — `check` prints "no usage signal on this host"; handoff is manual |
 | antigravity | **no** | `AfterAgent` and `PreCompress` in `~/.gemini/settings.json` | `PreCompress` is the real trigger — context is about to be lost; wire `handoff-cortana` there |
 
@@ -128,17 +128,19 @@ supported yet", as are async hooks. There is an `additionalContext` output field
 with an `additionalContextLimit`, and a warning that some events cannot emit it;
 the binary does not say which.
 
-**Still unverified:** whether a `Stop` handler's output re-enters the turn. The
-binary's error strings suggest it does — it complains about a `Stop` hook that
-"exited with code 2 but did not write a continuation prompt to stderr", one that
-"returned decision:block" with an empty reason, and one that "requested
-continuation without a prompt" — but the live test (2026-09-04, `codex-cli
-0.153.2`, via `codex exec`; see `PLATFORMS.md`) never got the handler to run at
-all, so the question is untouched rather than answered, and `Stop`'s eligibility
-for `additionalContext` is unknown. **If a live
-test confirms it, Codex should be moved to the same automatic gate as Claude
-Code** — a `Stop` handler running `usage-watch.* gate` — instead of the
-agent-driven `check`. Until then Codex stays on `check`. Do not remove `check`:
+**Live test, 2026-09-23, `codex-cli 0.155.1`, `codex exec`: the hook fires.** A
+`command` handler in
+`{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":…,"timeout":30}]}]}}`
+ran from both `$CODEX_HOME/hooks.json` and a per-repo `.codex/hooks.json`. The
+per-repo file needs a trusted project. Both need hook trust:
+`--dangerously-bypass-hook-trust`, or trust persisted by the interactive review.
+Untrusted hooks are skipped silently. Stdin carries `stop_hook_active` and
+`last_assistant_message`. **Exit 2 + stderr does not continue the turn**
+(reported `Stop Failed`). **stdout `{"decision":"block","reason":…}` does:** the
+reason re-enters as a `<hook_prompt>` and the model runs again with
+`stop_hook_active:true`. The 0.153.2 failure (see `PLATFORMS.md`) is superseded.
+**Next: wire `usage-watch.* gate` as a Codex `Stop` handler and verify that it
+reads the Codex rollout usage. Keep `check` until then.** Do not remove `check`:
 it remains the only mechanism cursor and antigravity have.
 
 Don't claim cursor is armed. It isn't, and no amount of scripting makes it so

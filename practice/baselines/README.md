@@ -57,6 +57,7 @@ sh practice/scripts/baseline-harness.sh selftest              # prints `ok`
 PUT=$(sh practice/scripts/baseline-harness.sh prefix   "$TMP/put")
 FIX=$(sh practice/scripts/baseline-harness.sh fixture func-ui "$TMP/pulse")
 sh practice/scripts/baseline-harness.sh cmd green "$FIX" practice/baselines/green-designui-galadriel.txt "$PUT"
+sh practice/scripts/baseline-harness.sh cmd --bypass red "$FIX" scenario.txt  # terminal only
 ```
 
 `fixture func-ui|handoff` builds a fixture repo deterministically — fixed
@@ -66,6 +67,20 @@ same commit sha and "did it commit?" is ground truth rather than a self-report.
 the isolation flags of the moment and writes what is and is not isolated to
 stderr. `scenario` prints a scenario file with its `#` provenance notes stripped
 — the notes belong beside the evidence, not in the prompt.
+
+**Permissions (A75).** `cmd` emits `--permission-mode acceptEdits` plus an
+explicit `--allowedTools` list — `Read Glob Grep Edit Write TodoWrite Agent
+Task`, and `Bash(...)` for `git`, `pytest`, `python -m pytest`, `python3 -m
+pytest`, `py -m pytest`, `ls`, `cat` — so a scenario can run its own tests and
+commit. That shape runs from inside a Claude Code session (an agent's Bash
+tool); verified 2026-09-23 on 2.1.280: the emitted RED command, run verbatim
+against the `relay` fixture, ran `python -m pytest -q` inside the nested run
+(`1 passed`, `permission_denials: []`). `bypassPermissions` is still reachable
+as `cmd --bypass red|green …`, which prints its caveat to stderr: the auto-mode
+classifier refuses it ("Create Unsafe Agents"), so run that variant yourself in
+a terminal and record in the scenario file that the run was unrestricted. A
+scenario that needs a tool outside the list will see it denied — the stream's
+`permission_denials` names it.
 
 ## Harness — GREEN runs (skill loaded)
 
@@ -81,7 +96,7 @@ at the cwd, so the two resolve independently:
 git archive HEAD | tar -x -C "$PUT"
 rm -f "$PUT/CLAUDE.md" "$PUT/AGENTS.md" "$PUT/GEMINI.md"; rm -rf "$PUT/.skillator"
 
-cd "$FIXTURE" && claude -p "$(cat scenario.txt)"   --plugin-dir "$PUT" --add-dir "$PUT" --permission-mode bypassPermissions
+cd "$FIXTURE" && claude -p "$(cat scenario.txt)"   --plugin-dir "$PUT" --add-dir "$PUT"   --permission-mode acceptEdits --allowedTools <the list above>
 ```
 
 `--add-dir` is required: with `--plugin-dir` alone the skill is listed but the
@@ -102,7 +117,7 @@ inherited (A47):
 ```sh
 cp -r <fixture> "$TMP/red-<skill>"
 cd "$TMP/red-<skill>" && claude -p "$(cat scenario-<skill>.txt)" \
-  --safe-mode --disallowed-tools Skill --permission-mode bypassPermissions
+  --safe-mode --disallowed-tools Skill   --permission-mode acceptEdits --allowedTools <the list above>
 ```
 
 `--safe-mode` is new since A58 and is what removes the last contamination — see
@@ -147,9 +162,11 @@ needs `--plugin-dir`, and `--safe-mode` kills it. Two candidates, neither usable
 - `--bare` documents "skip … CLAUDE.md auto-discovery" and explicitly keeps
   `--plugin-dir`, which is the right shape — but it reads auth strictly from
   `ANTHROPIC_API_KEY` / `apiKeyHelper`, and there is no API key on this host.
-  **Unverified.** `BASELINE_ISOLATE=bare sh practice/scripts/baseline-harness.sh
-  cmd green …` emits it with that warning attached; prove the isolation inside
-  the run before grading anything under it.
+  Re-checked on 2.1.280 (2026-09-23, A63b): `ANTHROPIC_API_KEY` is still unset,
+  so the probe was not run. **Unverified.** `BASELINE_ISOLATE=bare sh
+  practice/scripts/baseline-harness.sh cmd green …` emits it with that warning
+  attached (plus a second line when the key is unset); prove the isolation
+  inside the run before grading anything under it.
 
 Until one of those is verified, a GREEN compliance still needs the caveat line.
 

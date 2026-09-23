@@ -52,14 +52,14 @@ Ambiguous → ask once. The user can override with `platform: <host>`.
 
 | | claude-code | cursor | codex | antigravity | pi | prime-agent |
 |---|---|---|---|---|---|---|
-| **Skill install path** | `~/.claude/skills/<n>/` or plugin cache | `.cursor/skills/<n>/`, `.agents/skills/<n>/`, global `~/.cursor/skills/`, `~/.agents/skills/` (nested dirs too) | `$CODEX_HOME/skills/<n>/`, `~/.agents/skills/<n>/` | `<ws>/.agents/skills/<n>/`, global `~/.gemini/config/skills/<n>/` (Antigravity's own docs) and `~/.gemini/skills/<n>/` (what Gemini CLI 0.57 reports — probed) | `~/.pi/agent/skills/<n>/`, `~/.agents/skills/<n>/`, `.pi/skills/<n>/` | no markdown-skill loader — see below |
+| **Skill install path** | `~/.claude/skills/<n>/` or plugin cache | `.cursor/skills/<n>/`, `.agents/skills/<n>/`, global `~/.cursor/skills/`, `~/.agents/skills/` (nested dirs too) | `$CODEX_HOME/skills/<n>/`, `~/.agents/skills/<n>/` (both load with no dedupe on 0.155.1, probed 2026-09-23; 0.153.2 read only `~/.agents/skills` (A62a); the installer writes only `$CODEX_HOME/skills`) | `<ws>/.agents/skills/<n>/`, global `~/.gemini/skills/<n>/` (read by Gemini CLI 0.57; also reads `~/.agents/skills/`, where a same-named copy wins; `~/.gemini/config/skills/` is not read by the CLI, probed 2026-09-23); the installer also writes `~/.gemini/config/skills/<n>/` for Antigravity's own docs | `~/.pi/agent/skills/<n>/`, `~/.agents/skills/<n>/`, `.pi/skills/<n>/` (project-level only; the global `~/.pi/skills/` is not read, probed on pi 0.74) | no markdown-skill loader — see below |
 | **Load another skill** | `Skill` tool | auto-discovered by description; else read its `SKILL.md` and follow it | auto-loaded when the task matches; else read its `SKILL.md` | auto-discovered; force with `/<skill-name>` | force with `/skill:<name>` | Read the `SKILL.md` and follow it |
 | **Delegate work** | `Agent` tool + `model` override | `Task` tool + model slug | subagents (GA Mar 2026) — up to 8 parallel, own context + sandbox | background subagents (`/agents`), nestable | no native delegation — `subagent` extension or a `pi` subprocess; else sequential in-session passes | `rlm(...)` spawns real child agents |
 | **Switch tier** | per-agent `model` | per-Task model slug | `reasoning_effort` low/medium/high/xhigh | `/model` mid-session (Gemini 3.5 Flash / 3.1 Pro / Claude Sonnet / Opus / GPT-OSS 120B, plan-dependent) | `/model` mid-session (15+ providers) | provider chosen at `/login`; tier by prompt + child-agent config |
 | **Context checkpoint** | `/compact`, `/clear` | new composer/chat turn | auto-compacts; new thread for a clean slate | new session (`/agents` keeps background work) | new session | `/refine` + daemon sessions, `prime-agent --resume <id>` |
 | **Always-on project file** | `CLAUDE.md` (`@path` imports) | `AGENTS.md` | `AGENTS.md` | `GEMINI.md` (`@path` imports) | `AGENTS.md` | `AGENTS.md` |
 | **Usage % readable** | `statusLine` `rate_limits.*.used_percentage` | no | yes — `~/.codex/sessions/**/rollout-*.jsonl`, last `token_count` | no | no | no |
-| **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | **no usable gate today** — `Stop` in `hooks.json` is compiled in and would inject via exit 2 + a continuation prompt on stderr, but the live test found no reachable config that fires it. See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
+| **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | `Stop` in `hooks.json` → `{"decision":"block","reason":…}` on stdout (0.155.1, verified under `codex exec`; needs hook trust). Exit 2 + stderr does not inject. See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
 | **Durable memory** | `CLAUDE.md` + files on disk | files on disk | `AGENTS.md` + files | `AGENTS.md` + files | `AGENTS.md` (`~/.pi/agent/`, parents, cwd) + files | Continual Harness + `AGENTS.md` + files |
 
 **Frontmatter:** only `name` + `description` are portable. Everything else
@@ -76,9 +76,9 @@ Two rows have now been tested; the rest are still the host's own claim.
 |---|---|
 | claude-code | **yes, verified** — 2026-09-06, `claude -p` 2.1.261 / Opus 5, 7/7 |
 | codex | **yes, verified** — 2026-09-06, `codex exec` 0.153.2, 2/2 |
-| cursor | **attempted, never completed** — `cursor-agent` 2026.09.02, 1/3: named the right skill and reached for its `SKILL.md` once, blocked by a local hook; the other two probes ignored skills entirely |
+| cursor | **yes, verified** — 2026-09-23, `cursor-agent` 2026.09.18, 4/4 — but every load came from the user-level `~/.cursor/skills`; a fixture-local `.cursor/skills`/`.agents/skills` never appeared in its inventory (self-reported, unconfirmed) |
 | antigravity | claimed by the host; **untestable here** — IDE only on this machine, no CLI |
-| pi | **no, per the host's own docs** — descriptions are in the prompt but "models don't always do this"; force with `/skill:<name>`. Untestable here (no working provider credential) |
+| pi | **yes, verified** — 2026-09-23, `pi` 0.74.2 / openai gpt-5.5, 4/4, from project-local `.pi/skills` with `PI_CODING_AGENT_DIR` and `HOME` isolated |
 | prime-agent | **no** — no markdown-skill loader at all |
 
 The claude-code runs were headless, from a throwaway fixture outside any repo,
@@ -104,19 +104,21 @@ project to use — a reasonable miss, not a contradiction. Note codex prints
 skills are installed, and that it loaded from `~/.agents/skills`, not
 `$CODEX_HOME/skills` (both are installed; see A11).
 
-**cursor (not verified — and the reason is local).** `cursor-agent`
-2026.09.02-c22c1a3, `-p --output-format stream-json --force`, same fixtures.
-Two `designui-galadriel`-triggering prompts produced a full plan without ever naming or
-reading a skill. The *"activate the programming skills"* prompt did better: the
-agent's **first tool call**, before any search, was a read of
-`~/.codex/skills/grayskull-power/SKILL.md` — a name and path it was never given —
-so the skill inventory clearly reaches the model. That read was refused by a
-malformed user-level hook on this machine (`Hook blocked with message: --: eval:
-line 1: syntax error`), which blocks *every* `read` call, and the agent closed
-with *"a local skill-loading hook is malformed"*. So cursor stays unverified for a
-local reason, not a product one; re-run on a machine with no `~/.cursor/hooks.json`
-before believing either result. Cursor's docs do claim description-based
-auto-loading from `.agents/skills` · `.cursor/skills` (project and `~`).
+**cursor (verified).** Earlier probe, `cursor-agent` 2026.09.02-c22c1a3,
+`-p --output-format stream-json --force`: two `designui-galadriel`-triggering prompts
+produced a full plan without ever naming or reading a skill, and the *"activate
+the programming skills"* prompt's first tool call — before any search — was a
+read of `~/.codex/skills/grayskull-power/SKILL.md`, a name and path it was never
+given, but that read was refused by a malformed user-level hook on that machine
+(`Hook blocked with message: --: eval: line 1: syntax error`), blocking *every*
+`read` call. Re-run 2026-09-23, `cursor-agent` 2026.09.18, 4/4 fixture prompts
+loaded a skill unprompted — pointing `CLAUDE_CONFIG_DIR` at an empty temp dir
+avoided that claude-mem Read-hook block (0 "Hook blocked" this run). But every
+load came from the user-level `~/.cursor/skills` (a stale old-name install:
+`func-ui`, `grayskull-power`); a fixture-local `.cursor/skills` / `.agents/skills`
+never appeared in its inventory (self-reported, unconfirmed). Cursor's docs do
+claim description-based auto-loading from `.agents/skills` · `.cursor/skills`
+(project and `~`).
 
 **antigravity (untestable here).** Only the IDE is installed
 (`%LOCALAPPDATA%/Programs/Antigravity IDE`, whose `bin/` holds just the editor
@@ -126,22 +128,25 @@ decides based on context"* — and document a CLI with a headless mode elsewhere
 **That is Google's claim, not a result.** Closing this row needs the Antigravity
 CLI installed and authenticated, then the same fixture probe.
 
-**pi (untestable here, and the row already matches its docs).** `pi` 0.74.2 is
-installed but the only configured provider is OpenAI and the key on this machine
-is rejected (`401 Incorrect API key`), so no probe could run without adding
-credentials. pi's own docs put skill descriptions in the system prompt and then
-say the model *"doesn't always"* read the `SKILL.md` — which is why the row stays
-**no** and `/skill:<name>` stays the instruction. Its discovery dirs are
-`~/.pi/agent/skills` · `~/.agents/skills` · `.pi/skills` · `.agents/skills`. The
-installers used to write only `~/.pi/skills`, which is not on that list; since A65
-they write `~/.pi/agent/skills` too, and `~/.agents/skills` unconditionally rather
-than only when codex is installed. Still docs-only — unprobed on a live pi.
+**pi (verified).** Earlier probe found `pi` 0.74.2 installed but the only
+configured provider, OpenAI, rejected the key on that machine (`401 Incorrect
+API key`), so no probe could run. pi now has a working credential
+(`OPENAI_API_KEY`); re-run 2026-09-23, `pi` 0.74.2 / openai `gpt-5.5`, with
+`PI_CODING_AGENT_DIR` and `HOME` isolated to empty temp dirs: 4/4 fixture
+prompts loaded a skill unprompted from project-local `.pi/skills` (both
+`func-ui`-triggering runs stopped at the plan, matching that skill's contract).
+Its discovery dirs are `~/.pi/agent/skills` · `~/.agents/skills` · `.pi/skills` ·
+`.agents/skills`; only the project-level `.pi/skills` was exercised here.
 
-Transcripts for the 2026-09-06 codex and cursor runs are JSONL from each host's
-own stream, committed at `practice/baselines/transcripts/`
-(`a62-codex-funcui.jsonl`, `a62-codex-grayskull2.jsonl`,
-`a62-cursor-funcui.jsonl`, `a62-cursor-funcui2.jsonl`,
-`a62-cursor-grayskull.jsonl`). **Never promote a row here without one.**
+Transcripts for the 2026-09-06 codex/cursor runs and the 2026-09-23 cursor/pi
+re-runs are JSONL from each host's own stream, committed at
+`practice/baselines/transcripts/` (`a62-codex-funcui.jsonl`,
+`a62-codex-grayskull2.jsonl`, `a62-cursor-funcui.jsonl`,
+`a62-cursor-funcui2.jsonl`, `a62-cursor-grayskull.jsonl`,
+`a62b-cursor-funcui.jsonl`, `a62b-cursor-funcui2.jsonl`,
+`a62b-cursor-grayskull.jsonl`, `a62b-cursor-grayskull2.jsonl`,
+`a62b-pi-funcui.jsonl`, `a62b-pi-funcui2.jsonl`, `a62b-pi-grayskull.jsonl`,
+`a62b-pi-grayskull2.jsonl`). **Never promote a row here without one.**
 
 **The deterministic route, for the hosts that are not verified and for anyone who
 wants certainty:** the **Always-on project file** row above. `grayskull-power`
@@ -170,7 +175,8 @@ read its `SKILL.md` yourself — don't delegate skill *interpretation* to a
 subagent. Model slug not in the Task tool's allowed list → closest tier, record
 the substitution.
 
-**codex** — skills live in `~/.agents/skills/` and load when the task matches;
+**codex** — skills live in `$CODEX_HOME/skills/` (the installer's target; 0.155.1
+also reads `~/.agents/skills/`, with no dedupe) and load when the task matches;
 `AGENTS.md` (`~/.codex/AGENTS.md`, repo root, or a subdir) is the always-on
 layer. Subagents went GA in March 2026: up to 8 in parallel, each with its own
 context window and sandbox — so tiered phases here are real delegation, not a
@@ -192,11 +198,11 @@ emit additionalContext` — the binary does not spell out which events those are
 **What is verified.** Two Codex builds are installed on this machine and they
 differ, so cite the one you actually run:
 
-| | on `PATH` (npm shim, `codex-cli 0.153.2`) | `~/AppData/Local/OpenAI/Codex/bin/<hash>/codex.exe` |
-|---|---|---|
-| `Stop` event | yes | yes |
-| exit 2 + stderr continuation prompt | yes | yes |
-| `decision:block` JSON payload | **no** | yes |
+| | on `PATH` (npm shim, `codex-cli 0.153.2`) | `~/AppData/Local/OpenAI/Codex/bin/<hash>/codex.exe` | `codex-cli 0.155.1` (`codex exec`) |
+|---|---|---|---|
+| `Stop` event | yes | yes | yes |
+| exit 2 + stderr continuation prompt | yes | yes | compiled in, does not inject (0.155.1) |
+| `decision:block` JSON payload | **no** | yes | yes (0.155.1) |
 
 Both carry `Stop hook exited with code 2 but did not write a continuation prompt
 to stderr` and `Stop hook requested continuation without a prompt` — strings that
@@ -206,20 +212,18 @@ in the build that actually runs. `Stop hook returned decision:block without a
 non-empty reason` appears **only** in the Local build, so the JSON form is not
 portable between them.
 
-**What the live test found: the hook does not fire.** Tested 2026-09-04 against
-`codex-cli 0.153.2` via `codex exec`. A `command` handler on `Stop` was tried at
-`~/.codex/hooks.json` and at `~/.codex/hooks/hooks.json`, in both the bare
-`{command}` shape and the `{enabled, matcher, hooks:[{type,command,timeoutMs}]}`
-shape, with `--dangerously-bypass-hook-trust`. The turn completed normally every
-time and the handler never ran — no stderr marker, and no filesystem side effect
-from a handler that wrote one.
-
-So: the `Stop` code path is compiled in, but no reachable configuration was found
-that invokes it from `codex exec`. Untried, and where the answer probably lives:
-an interactive `codex` session rather than `exec`, a per-repo `.codex/hooks.json`,
-whatever persists hook trust properly, or a build newer than this one. Treat
-Codex as having **no usable turn-end gate today** and keep the `check` fallback —
-which stays for cursor and antigravity regardless.
+**Live test, 2026-09-23, `codex-cli 0.155.1`, `codex exec`: the hook fires.** A
+`command` handler in
+`{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":…,"timeout":30}]}]}}`
+ran from both `$CODEX_HOME/hooks.json` and a per-repo `.codex/hooks.json`. The
+per-repo file needs a trusted project. Both need hook trust:
+`--dangerously-bypass-hook-trust`, or trust persisted by the interactive review.
+Untrusted hooks are skipped silently. Stdin carries `stop_hook_active` and
+`last_assistant_message`. **Exit 2 + stderr does not continue the turn**
+(reported `Stop Failed`). **stdout `{"decision":"block","reason":…}` does:** the
+reason re-enters as a `<hook_prompt>` and the model runs again with
+`stop_hook_active:true`. The 0.153.2 failure is superseded. Keep `check` for
+cursor and antigravity.
 
 **antigravity** — skills become slash commands automatically; `/skills` lists
 what it can see. Frontmatter beyond `name`/`description` is dropped, so any

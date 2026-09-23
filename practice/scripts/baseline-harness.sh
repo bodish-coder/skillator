@@ -6,7 +6,7 @@
 #   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid <DIR>
 #   baseline-harness.sh prefix  <DIR>                   -> clean plugin prefix, print DIR
 #   baseline-harness.sh scenario <FILE>                 -> the prompt, '#' lines stripped
-#   baseline-harness.sh cmd red|green <FIXTURE> <SCENARIO> [PREFIX]
+#   baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]
 #   baseline-harness.sh selftest                        -> prints `ok`, or dies
 #
 # A59 exists because the A58 fixture lived only in a session scratchpad, so a
@@ -30,23 +30,37 @@
 #         resolves, so that path could not be tested further.
 #         `--bare` documents "skip CLAUDE.md auto-discovery" while keeping
 #         `--plugin-dir`, but it reads auth strictly from ANTHROPIC_API_KEY.
-#         UNVERIFIED here (no API key on this host). Opt in with
-#         BASELINE_ISOLATE=bare and grade the result as untested isolation.
+#         Re-checked on 2.1.280 (2026-09-23, A63b): still no ANTHROPIC_API_KEY
+#         on this host, so the probe was not run and `--bare` stays opt-in.
+#         It is not the default because an unauthenticated `--bare` run dies
+#         before doing anything, and the isolation it promises is unproven.
+#         Opt in with BASELINE_ISOLATE=bare and grade it as untested isolation.
+#
+# Permissions (A75). The default emitted command runs under
+# `--permission-mode acceptEdits` plus an explicit `--allowedTools` list
+# (git, pytest in its three spellings, ls/cat, the read/edit/agent tools), so a
+# scenario can run its own tests and commit. That shape is what the auto-mode
+# classifier lets an agent's Bash tool run; `bypassPermissions` it refuses
+# ("Create Unsafe Agents"). Every A62-campaign run hand-substituted acceptEdits,
+# and without the allow-list pytest was denied inside all nine. `cmd --bypass`
+# still emits bypassPermissions, with its caveat on stderr, for a terminal you
+# drive yourself.
 #
 # Two friction points on Windows, both in how you run what `cmd` prints (A68):
 #   1. The emitted command carries MSYS-style paths (/c/tools/...), because that
 #      is what this script sees. Run it from Git Bash. Pasting it into PowerShell
 #      fails on the paths, not on the harness.
-#   2. Run it as one shell command, not through an agent's Bash tool: the tool's
-#      classifier sees `claude -p ... --permission-mode bypassPermissions` and
-#      prompts or refuses. A baseline run belongs in a terminal you drive.
+#   2. The default (acceptEdits + allow-list) runs from an agent's Bash tool.
+#      Only `cmd --bypass` output is refused there: the classifier sees
+#      `claude -p ... --permission-mode bypassPermissions` and refuses. Run that
+#      variant as one command in a terminal you drive.
 set -e
 
 usage() {
   echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid <DIR>" >&2
   echo "       baseline-harness.sh prefix  <DIR>" >&2
   echo "       baseline-harness.sh scenario <FILE>" >&2
-  echo "       baseline-harness.sh cmd red|green <FIXTURE> <SCENARIO> [PREFIX]" >&2
+  echo "       baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]" >&2
   echo "       baseline-harness.sh selftest" >&2
   exit 2
 }
@@ -587,8 +601,21 @@ print_scenario() {
 }
 
 # -------------------------------------------------------------------- cmd ----
+# The tools a scenario needs to finish its own work: edit, run its tests, commit.
+# Quoted for the emitted shell line. Skill is deliberately absent - RED blocks
+# it, and GREEN does not need it allow-listed to load a plugin skill.
+ALLOWED_TOOLS="'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'Bash(git:*)' 'Bash(pytest:*)' 'Bash(python -m pytest:*)' 'Bash(python3 -m pytest:*)' 'Bash(py -m pytest:*)' 'Bash(ls:*)' 'Bash(cat:*)'"
+
 emit_cmd() {
-  mode="$1"; fixture="$2"; scenario="$3"; prefix="$4"
+  mode="$1"; fixture="$2"; scenario="$3"; prefix="$4"; bypass="${5:-}"
+  if [ -n "$bypass" ]; then
+    perms='--permission-mode bypassPermissions'
+    echo "# permissions: bypassPermissions (--bypass). An agent's Bash tool refuses this" >&2
+    echo "#   under auto mode (\"Create Unsafe Agents\"); run it yourself in a terminal," >&2
+    echo "#   and record in the scenario file that the run was unrestricted. (A75)" >&2
+  else
+    perms="--permission-mode acceptEdits --allowedTools $ALLOWED_TOOLS"
+  fi
   [ -d "$fixture" ]  || die "no such fixture dir: $fixture"
   [ -f "$scenario" ] || die "no such scenario file: $scenario"
   self=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")
@@ -604,7 +631,8 @@ emit_cmd() {
   red)
     echo "cd '$fixture' && claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
     echo "  --safe-mode --disallowed-tools Skill \\"
-    echo "  --permission-mode bypassPermissions --output-format stream-json --verbose"
+    echo "  $perms \\"
+    echo "  --output-format stream-json --verbose"
     echo "# isolated: yes — --safe-mode drops ~/.claude/CLAUDE.md (verified 2026-09-06)." >&2
     ;;
   green)
@@ -616,6 +644,7 @@ emit_cmd() {
       echo "# isolated: UNVERIFIED — --bare claims to skip CLAUDE.md discovery but was" >&2
       echo "#   never confirmed on this host, and it reads auth only from" >&2
       echo "#   ANTHROPIC_API_KEY. Prove the isolation in the run before trusting it." >&2
+      [ -n "${ANTHROPIC_API_KEY:-}" ] || echo "#   ANTHROPIC_API_KEY is not set: this --bare run will fail to authenticate." >&2
     else
       echo "# isolated: NO. ~/.claude/CLAUDE.md loads into this run. --safe-mode would" >&2
       echo "#   drop it but also suppresses --plugin-dir, so the skill would not load." >&2
@@ -624,7 +653,8 @@ emit_cmd() {
     fi
     echo "cd '$fixture' && claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
     echo "  --plugin-dir '$prefix' --add-dir '$prefix'$bare \\"
-    echo "  --permission-mode bypassPermissions --output-format stream-json --verbose"
+    echo "  $perms \\"
+    echo "  --output-format stream-json --verbose"
     ;;
   *) usage ;;
   esac
@@ -1173,6 +1203,18 @@ selftest() {
   if ( emit_cmd green "$f" "$tmp/s.txt" ) >/dev/null 2>&1; then
     die 'cmd green ran without a prefix'
   fi
+  # A75: default is acceptEdits + an allow-list that lets tests and git run;
+  # bypassPermissions only behind --bypass, with its caveat on stderr.
+  for m in red green; do
+    c=$(emit_cmd "$m" "$f" "$tmp/s.txt" "$tmp" 2>/dev/null)
+    echo "$c" | grep -q -- '--permission-mode acceptEdits' || die "cmd $m: default is not acceptEdits"
+    echo "$c" | grep -q -- "'Bash(python -m pytest:\*)'"  || die "cmd $m: pytest not allowed"
+    echo "$c" | grep -q -- "'Bash(git:\*)'"               || die "cmd $m: git not allowed"
+    if echo "$c" | grep -q bypassPermissions; then die "cmd $m: bypass without --bypass"; fi
+    c=$(emit_cmd "$m" "$f" "$tmp/s.txt" "$tmp" 1 2>"$tmp/err")
+    echo "$c" | grep -q -- '--permission-mode bypassPermissions' || die "cmd $m --bypass: no bypass"
+    grep -q 'Create Unsafe Agents' "$tmp/err" || die "cmd $m --bypass: caveat not printed"
+  done
 
   echo ok
 }
@@ -1203,9 +1245,12 @@ scenario)
   print_scenario "$f"
   ;;
 cmd)
-  m="${2:-}"; fx="${3:-}"; sc="${4:-}"; px="${5:-}"
+  shift
+  bp=''
+  if [ "${1:-}" = --bypass ]; then bp=1; shift; fi
+  m="${1:-}"; fx="${2:-}"; sc="${3:-}"; px="${4:-}"
   [ -n "$m" ] && [ -n "$fx" ] && [ -n "$sc" ] || usage
-  emit_cmd "$m" "$fx" "$sc" "$px"
+  emit_cmd "$m" "$fx" "$sc" "$px" "$bp"
   ;;
 selftest) selftest ;;
 *) usage ;;
