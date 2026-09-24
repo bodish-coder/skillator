@@ -11,8 +11,8 @@ started: 2026-09-24T00:52Z   updated: 2026-09-24T09:48Z
 | 33 | A95 prefix carries references | x | build:opus | 2026-09-24T04:22Z | 994309c |
 | 34 | A96 installer drops renamed skills | x | build:opus | 2026-09-24T04:22Z | 994309c |
 | 35 | A63b hide-CLAUDE.md isolation | x | build:opus | 2026-09-24T07:30Z | 445d689 |
-| 36 | A85 isolated GREEN + fixes | x | build:opus | 2026-09-24T09:48Z | pending |
-| 37 | A85 accept: rule matches behaviour | ~ | build:sonnet | 2026-09-24T09:42Z | - |
+| 36 | A85 isolated GREEN + fixes | x | build:opus | 2026-09-24T09:48Z | 9514fe3 |
+| 37 | A85 accept: rule matches behaviour | x | build:sonnet | 2026-09-24T09:48Z | 9514fe3 |
 
 ## In flight
 ### stage 35 - A63b hide-CLAUDE.md isolation  (dispatched)
