@@ -47,6 +47,7 @@ that backwards is how a session produces confident wrong work.
 | When | Skill |
 |---|---|
 | About to change anything runnable — start it first so the user can watch | `live-friday` (armed by default) |
+| The user asks to watch or preview the app while it is built or changed — "let me see it", "show me while you work", "live preview", "run it while you build" | invoke `live-friday` now, even with no build named yet |
 | "Does this run?" — launch the app and look | `run` |
 | It launched and it is a TUI — now prove the frame fits the terminal | `tui-tron` (launch proves it starts, never that it draws) |
 | Drive a real browser: click, fill, read console | `webapp-testing`, `browse` |

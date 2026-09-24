@@ -105,6 +105,52 @@ codex_newest_fresh() {
     END { if (p != "" && now - m < w) print p }'
 }
 
+# Last token_count line of a codex rollout, or nothing.
+codex_last_tc() { tail -400 "$1" | grep '"token_count"' | tail -1; }
+
+# Usage % from one codex rollout: the max of every rate_limits used_percent
+# whose window is NOT the 7-day one (A98: window_minutes 10080), plus the
+# live context (last_token_usage.total_tokens / model_context_window), on its
+# last token_count line. Prints nothing when there is no such line.
+codex_pct() {
+  line=$(codex_last_tc "$1")
+  [ -n "$line" ] || return 0
+  # last_token_usage is the live context; total_token_usage is cumulative
+  # for the session and would read well over 100%.
+  printf '%s' "$line" | awk '
+    match($0,/"last_token_usage":\{[^}]*"total_tokens":[0-9]+/){
+      t=substr($0,RSTART,RLENGTH); sub(/.*"total_tokens":/,"",t) }
+    match($0,/"model_context_window":[0-9]+/){
+      w=substr($0,RSTART,RLENGTH); sub(/.*:/,"",w) }
+    { m=0; s=$0
+      while (match(s,/\{[^{}]*"used_percent":[0-9.]+[^{}]*\}/)) {
+        block=substr(s,RSTART,RLENGTH)
+        if (block !~ /"window_minutes":10080/) {
+          v=block; sub(/.*"used_percent":/,"",v); sub(/[^0-9.].*/,"",v)
+          if (v+0>m) m=v+0 }
+        s=substr(s,RSTART+RLENGTH) } }
+    END { if (w+0>0 && t+0>0) { c=100*t/w; if (c>m) m=c }
+          if (m>0) printf "%.1f", m }'
+}
+
+# A98: the 10080-minute rate_limits window is codex's 7-day window, the
+# counterpart of the Claude path's seven_day.used_percentage - it gets the
+# weekly gate (90% hard stop, step-4 question) instead of the 92% one.
+# Prints nothing when the last token_count line has no such window.
+codex_wk_pct() {
+  line=$(codex_last_tc "$1")
+  [ -n "$line" ] || return 0
+  printf '%s' "$line" | awk '
+    { wk=""; s=$0
+      while (match(s,/\{[^{}]*"used_percent":[0-9.]+[^{}]*\}/)) {
+        block=substr(s,RSTART,RLENGTH)
+        if (block ~ /"window_minutes":10080/) {
+          v=block; sub(/.*"used_percent":/,"",v); sub(/[^0-9.].*/,"",v)
+          if (wk=="" || v+0>wk+0) wk=v }
+        s=substr(s,RSTART+RLENGTH) } }
+    END { if (wk!="") printf "%.1f", wk+0 }'
+}
+
 # check: any host, no stdin. Reads whatever usage the host leaves on disk.
 # ponytail: only Claude Code has a hook that can see the % AND inject at turn
 # end. Elsewhere this is called from the always-on project file grayskull-power
@@ -117,25 +163,11 @@ if [ "$mode" = check ]; then
   # CODEX_HOME, same as install.sh - a relocated codex home must still be watched.
   roll=$(codex_newest_fresh "${CODEX_HOME:-$HOME/.codex}/sessions")
   if [ -n "$roll" ]; then
-    line=$(tail -400 "$roll" | grep '"token_count"' | tail -1)
-    if [ -n "$line" ]; then
-      # last_token_usage is the live context; total_token_usage is cumulative
-      # for the session and would read well over 100%.
-      pct=$(printf '%s' "$line" | awk '
-        match($0,/"last_token_usage":\{[^}]*"total_tokens":[0-9]+/){
-          t=substr($0,RSTART,RLENGTH); sub(/.*"total_tokens":/,"",t) }
-        match($0,/"model_context_window":[0-9]+/){
-          w=substr($0,RSTART,RLENGTH); sub(/.*:/,"",w) }
-        { m=0; s=$0
-          while (match(s,/"used_percent":[0-9.]+/)) {
-            v=substr(s,RSTART,RLENGTH); sub(/.*:/,"",v); if (v+0>m) m=v+0
-            s=substr(s,RSTART+RLENGTH) } }
-        END { if (w+0>0 && t+0>0) { c=100*t/w; if (c>m) m=c }
-              if (m>0) printf "%.1f", m }')
-      [ -n "$pct" ] && { src=codex; key=$(basename "$roll" .jsonl); }
-    fi
+    pct=$(codex_pct "$roll")
+    wk=$(codex_wk_pct "$roll")
+    if [ -n "$pct" ] || [ -n "$wk" ]; then src=codex; key=$(basename "$roll" .jsonl); fi
   fi
-  if [ -z "$pct" ]; then
+  if [ -z "$pct" ] && [ -z "$wk" ]; then
     # `.weekly` is written after the main flag, so it is always the newest -
     # picking it here would report the 7-day number as the max and compare it
     # against the wrong threshold. It is read below, by name, not by mtime.
@@ -196,17 +228,32 @@ case "$raw" in *'"stop_hook_active":true'*|*'"stop_hook_active": true'*) exit 0 
 # the one a broken probe leaves behind. Returning here made the 7-day hard stop
 # unreachable in exactly the case it mattered most.
 pct=$(read_pct "$flag")
+wk=""
+# A83: codex has no statusline, so no probe ever wrote a flag. Its Stop stdin
+# carries transcript_path, which is this session's own rollout - read the usage
+# from there. Only a rollout-*.jsonl counts: Claude Code's Stop also sends a
+# transcript_path, and its flag is the probe's job, not this one's.
+# A98: window_minutes 10080 is the 7-day window - codex_wk_pct reads it
+# separately so it gets the same weekly gate as the Claude path below.
+if [ -z "$pct" ] && [ ! -f "$flag.weekly" ]; then
+  tp=$(printf '%s' "$raw" | grep -o '"transcript_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 \
+       | sed 's/.*"\([^"]*\)"$/\1/; s#\\\\#/#g')
+  case ${tp##*/} in
+    rollout-*.jsonl)
+      if [ -f "$tp" ]; then pct=$(codex_pct "$tp"); wk=$(codex_wk_pct "$tp"); fi ;;
+  esac
+fi
 # Weekly first, and with its OWN one-shot marker. Sharing `$flag.done` meant a
 # 5-hour fire at 10:00 silently ate the weekly order when the 7-day window
 # crossed at 14:00 - the one window whose crossing the user has to answer.
-wk=$(read_pct "$flag.weekly")
+[ -n "$wk" ] || wk=$(read_pct "$flag.weekly")
 if [ -n "$wk" ] && over_limit "$wk" "$wk_limit" && [ ! -f "$flag.weekly.done" ]; then
-  : > "$flag.weekly.done"
+  mkdir -p "$dir"; : > "$flag.weekly.done"
   printf '{"decision":"block","reason":"Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:tickets-zordon to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it.%s Then tell the user where the file is and stop."}' "$wk" "$wk_limit" "$wk_step4"
   exit 0
 fi
 [ -f "$flag.done" ] && exit 0
 [ -n "$pct" ] || exit 0
 over_limit "$pct" "$limit" || exit 0
-: > "$flag.done"
+mkdir -p "$dir"; : > "$flag.done"
 printf '{"decision":"block","reason":"Usage has reached %s%% of the limit (threshold %s%%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:tickets-zordon to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it. Then tell the user where the file is and stop."}' "$pct" "$limit"

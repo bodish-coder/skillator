@@ -1,0 +1,130 @@
+# GREEN - grayskull-power routing to skills whose descriptions the host drops
+# Question: does "by the power of grayskull" + a plain request that names no
+# skill end in a Skill call to the right skillator skill, for the 12 skills this
+# host lists without a description (tickets-zordon, relay-morpheus, build-ultron,
+# build-vision, build-jarvis, watch-cortana, spec-watson, tui-tron,
+# handoff-cortana, resume-cortana, live-friday, deploy-niyoj)?
+#
+# Setup: claude-code 2.1.281, repo HEAD 12e82c5, 2026-09-24. Per run: a fresh
+# `fixture relay <DIR>` and a fresh `prefix <DIR>`, both in a session scratchpad.
+# One run at a time. Command, per run, exactly what this prints:
+#   BASELINE_TIMEOUT=900 BASELINE_ISOLATE=hide sh practice/scripts/baseline-harness.sh \
+#     cmd green <FIX> <SCENARIO> <PREFIX>
+#   = cd <FIX> && BASELINE_ISOLATE=hide sh baseline-harness.sh run 900 <PREFIX> \
+#       claude -p "$(... scenario <SCENARIO>)" --plugin-dir <PREFIX> --add-dir <PREFIX> \
+#       --permission-mode acceptEdits --allowedTools ... --settings "$(... settings <PREFIX>)" \
+#       --output-format stream-json --verbose  > transcripts/routing-<target>-<n>.jsonl
+# ISOLATED: YES (BASELINE_ISOLATE=hide). After every run sha256 of
+# ~/.claude/CLAUDE.md = 9352652d...4f798a98 and no .skillator-hidden left: all 14 OK.
+#
+# Grade: Skill tool_use calls in order from the stream-json (jq over
+# assistant tool_use name=="Skill", .input.skill). Reached = skillator:<target>
+# invoked after grayskull-power. Prose naming the skill does NOT count.
+# N=1 per target; a miss gets a second run.
+#
+# Scenario prompt per target = these three lines:
+#   by the power of grayskull
+#   <request>
+#   Only route: invoke the skill you would use, read it, then stop without doing the work.
+#   build-jarvis     design and build the CSV export feature quickly and cheap where it can be - offload the simple mechanical parts to a cheaper model
+#   build-ultron     build the CSV export feature with straight Opus quality for the plan and the code - run it through without stopping between plan and build, no ceremony, no session records
+#   build-vision     brainstorm a creative design for the CSV export feature and then build it - top-tier, with the design written to disk and handoffs so the work survives context loss
+#   deploy-niyoj     deploy this to my server without CI, one button from my laptop
+#   handoff-cortana  write a handoff so someone else can continue this tomorrow
+#   live-friday      let me see it while you build it
+#   relay-morpheus   this is a four-stage build that has to survive my laptop sleeping and the wifi dropping - set it up so another session can pick it up
+#   resume-cortana   execute the handoff in docs/handoffs
+#   spec-watson      what the export must do exists only in this chat thread - pin it down so the next session builds the same thing
+#   tickets-zordon   log a bug: the CSV export drops the last row
+#   tui-tron         the TUI footer wraps at 80 columns and the box chars show as mojibake
+#   watch-cortana    watch my usage and hand off automatically before I hit the limit
+#
+# RESULTS (skills invoked, in order; gp = skillator:grayskull-power)
+# target          | run 1                  | run 2                  | reached?
+# tickets-zordon  | gp > tickets-zordon    | -                      | YES
+# relay-morpheus  | gp > relay-morpheus    | -                      | YES
+# build-ultron    | gp > build-ultron      | -                      | YES
+# build-vision    | gp > build-vision      | -                      | YES
+# build-jarvis    | gp only (miss)         | gp > build-jarvis      | YES (1/2)
+# watch-cortana   | gp > watch-cortana     | -                      | YES
+# spec-watson     | gp > spec-watson       | -                      | YES
+# tui-tron        | gp > tui-tron          | -                      | YES
+# handoff-cortana | gp > handoff-cortana   | -                      | YES
+# resume-cortana  | gp > resume-cortana    | -                      | YES
+# live-friday     | gp only (miss)         | gp only (miss)         | NO  (0/2)
+# deploy-niyoj    | gp > deploy-niyoj      | -                      | YES
+# All 14 runs rc 0, limit hit: none.
+#
+# Notes on the misses (from each run's result text, not graded):
+#   build-jarvis 1: prose said "Route: skillator:build-jarvis" with correct
+#     tier reasoning, but it read "stop" as stopping before the second Skill call.
+#   live-friday 1+2: both said the request "would arm live-friday" but treated it
+#     as an add-on grayskull arms beside a build skill, and with no build named
+#     routed to nothing. The router seems to treat live-friday as a companion
+#     to a build, not a destination on its own.
+#
+# Verdict: 11/12 reached. live-friday was missed in both runs. N<=2 per target.
+#
+# ==== FIX ROUND (A97), 2026-09-24, same command shape, N=2 ====
+# Edit: skills/grayskull-power/references/routing.md, "The loop" table, one new
+#   row after live-friday's armed row: a request to watch/preview the app while
+#   it is built or changed ("let me see it", "show me while you work", "live
+#   preview", "run it while you build") -> invoke `live-friday` now, even with
+#   no build named yet. SKILL.md untouched (router at 797/800; context-audit OK).
+# Prefix: fresh per run; `diff -r` of skills/grayskull-power repo vs prefix clean
+#   both runs (the uncommitted edit was in the prefix). Checksum OK after each.
+# target      | fix 1   | fix 2              | PASS (both)?
+# live-friday | gp only | gp > live-friday   | NO (1/2)
+# Transcripts: routing-live-friday-fix-1.jsonl, routing-live-friday-fix-2.jsonl
+# Neither run Read references/routing.md: the only tool calls were Skill. So
+#   the new row was never seen, and fix 2's hit is not evidence for it. Fix 1's
+#   text: "The routing table doesn't list it as a destination" (meaning SKILL.md
+#   §2). The route that decides is in SKILL.md §2, which has 3 words of headroom.
+# Verdict: FAIL. Not a 2/2 miss, so the edit was not reverted.
+#
+# ==== FIX ROUND 2 (A97), 2026-09-24, same command shape ====
+# Edit: skills/grayskull-power/SKILL.md §2. The UI/UX row gains "· watch it live"
+#   -> `live-friday`. Paid for by trimming "Fable subagents in parallel" ->
+#   "Parallel Fable subagents" and "every row in full, the long tail, and why"
+#   -> "every row, the long tail, why". Every §2 skill is still named;
+#   context-audit grayskull-power 797, OK. The routing.md row from round 1 stays.
+# Prefix: fresh per run, `diff -r` of skills/grayskull-power clean each run.
+#   CLAUDE.md checksum OK after each run.
+# target               | run 1              | run 2    | result
+# live-friday          | gp > live-friday   | gp only  | NO (1/2) - not PASS
+# tickets-zordon (reg) | gp > tickets-zordon| -        | YES (no regression)
+# Transcripts: routing-live-friday-fix2-1/-2.jsonl, routing-tickets-zordon-fix2-1.jsonl
+# Run 2's text now names the route correctly: "its routing table sends 'watch it
+#   live' to live-friday". It then stopped before invoking, the same way
+#   build-jarvis run 1 did (it read "then stop" as coming before the second Skill
+#   call). The table itself now routes; the miss is how the scenario's stop line
+#   is read. Not a 2/2 miss, so the §2 edit was not reverted.
+#
+# ==== ROUND 3 (A97) - PROMPT v3, 2026-09-24, same command shape ====
+# Only the scenario's last line changed (v1 -> v3):
+#   v1: Only route: invoke the skill you would use, read it, then stop without doing the work.
+#   v3: Route this: call the Skill tool for the skillator skill you would use, and after that tool call returns, stop - do not do the work.
+# Lines 1-2 unchanged. The §2 edit and the routing.md row are kept.
+# Fresh fixture and prefix per run, `diff -r` clean, CLAUDE.md checksum OK after each.
+# target       | run 1                    | run 2   | reached?
+# live-friday  | gp only                  | gp only | NO (0/2)
+# build-jarvis | build-jarvis (no gp)     | -       | reached, but grayskull-power skipped
+# Transcripts: routing-live-friday-v3-1/-2.jsonl, routing-build-jarvis-v3-1.jsonl
+# Read: v3 allows exactly ONE Skill call. On live-friday that one call was
+#   grayskull-power, and both runs then named live-friday in their text as the
+#   route. build-jarvis spent its one call on the target and went round the
+#   router. v3 is a worse confound than v1: it cannot measure a two-hop route.
+#   A prompt that allows two calls (router, then target) is still needed.
+#
+# ==== PROMPT v4 (A97 measurement), 2026-09-24, same command shape ====
+# Last line only changed:
+#   v4: Route this: invoke grayskull-power, then call the Skill tool for the skillator skill it routes you to; after that second call returns, stop - do not do the work.
+# The §2 edit and the routing.md row are kept. Fresh fixture and prefix per run,
+#   `diff -r` clean, CLAUDE.md checksum OK after each run.
+# target                  | run 1              | run 2              | result
+# live-friday             | gp > live-friday   | gp > live-friday   | PASS (2/2)
+# tickets-zordon (control)| gp > tickets-zordon| -                  | YES
+# Transcripts: routing-live-friday-v4-1/-2.jsonl, routing-tickets-zordon-v4-1.jsonl
+# Verdict: PASS. With a prompt that allows two calls (router, then target),
+#   grayskull-power routes the plain "let me see it while you build it" to
+#   live-friday. N=2.

@@ -1,6 +1,6 @@
 # RUN-4 - drain the board 2
 plan: docs/plans/PLAN-board-drain-2.md
-started: 2026-09-24T00:52Z   updated: 2026-09-24T09:48Z
+started: 2026-09-24T00:52Z   updated: 2026-09-24T12:45Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -13,6 +13,10 @@ started: 2026-09-24T00:52Z   updated: 2026-09-24T09:48Z
 | 35 | A63b hide-CLAUDE.md isolation | x | build:opus | 2026-09-24T07:30Z | 445d689 |
 | 36 | A85 isolated GREEN + fixes | x | build:opus | 2026-09-24T09:48Z | 9514fe3 |
 | 37 | A85 accept: rule matches behaviour | x | build:sonnet | 2026-09-24T09:48Z | 9514fe3 |
+| 38 | grayskull routing smoke test | x | build:opus | 2026-09-24T12:45Z | pending |
+| 39 | A83 codex Stop gate | x | build:opus | 2026-09-24T12:45Z | pending |
+| 40 | A58d codex host re-run | x | build:opus | 2026-09-24T12:45Z | pending |
+| 41 | A98 A99 codex weekly + selftests | x | build:opus | 2026-09-24T12:45Z | pending |
 
 ## In flight
 ### stage 35 - A63b hide-CLAUDE.md isolation  (dispatched)
@@ -124,3 +128,8 @@ prompt: |
 - Pushed main to origin (f786641..df77d18) on the owner's approval. Reinstall: dry run shown (124 hash-verified renamed-skill removals across 6 host dirs, plus 22 hash-verified skillator folders and 5 doc files/dirs in ~/.agents/skills); owner chose DON'T REINSTALL - nothing in the home dirs was changed. The installer (A96) is ready whenever the owner runs it: sh install.sh --dry-run, then sh install.sh.
 - Owner decisions (3rd round, with impacts shown): A85 ACCEPT current behaviour - rule text changes to build, then list the choices made without the user in the final report; REINSTALL A and B approved (installer for real, then the 22 hash-verified skillator folders + PLATFORMS.md PRACTICE.md WORKFLOW.md practice/ references/ from ~/.agents/skills, its 49 other folders untouched); owner will run codex login; owner will update the plugin via /plugin.
 - Reinstall done: installer removed 106 renamed-skill folders (dry run said 106; the chat's '124' was an arithmetic slip), all 6 host dirs verified 23/23 current + manifest + no old names; ~/.agents/skills: 22 hash-verified skillator folders + 3 docs + references/ + practice/ removed, 76 -> 49 folders, others untouched. Stage 37 prompt: 'A85 owner decision - accept current behaviour. Rewrite design-arwen's unattended-branch rule (SKILL.md, redesign.md s7, anywhere stating the before-Edit timing) to: with no user present, build, then the final report lists every choice made on the user's behalf (a Design Read line; assumed: markers encouraged, not required). Smallest edit, no budget growth. Verify against the existing a58b/a85 transcripts that the new wording is what most runs already did - count them. No new runs.'
+- Stage 38 (owner-approved plan C:/Users/Ikran/.claude-bodish/plans/when-i-activate-graykull-snoopy-melody.md): prove grayskull routes to the 11 skillator skills whose descriptions the host's skill-list budget drops (tickets-zordon relay-morpheus build-jarvis build-ultron build-vision watch-cortana spec-watson tui-tron handoff-cortana resume-cortana live-friday deploy-niyoj). Isolated nested GREENs (BASELINE_ISOLATE=hide), one at a time, 'by the power of grayskull' + a plain request naming no skill, N=1, a miss gets a 2nd run; grade the skill invoked after grayskull-power from stream-json. Misses 2/2 -> A ticket via next-id.sh.
+- stage 38: grayskull reached 11/12 description-less skills (build-jarvis on run 2); live-friday 0/2 - treated as armed-beside-a-build, never routed. Logged A97; fix round to the same agent: own routing row for live-friday (routing.md; SKILL.md only within the 800-word budget), GREEN N=2 on the same prompt.
+- A97 round 1: routing.md row only, 1/2 - neither run opened routing.md; the router decides from SKILL.md section 2. Ruling: name live-friday in section 2 and pay for it by trimming other section-2 words so context-audit stays under 800 - the router reads only section 2 on turn one - costs a few words of other rows' detail, which routing.md keeps. routing.md row stays.
+- Owner: codex logged in via profiles ~/.codex-ikran and ~/.codex-bodish (default ~/.codex has no login); use CODEX_HOME=~/.codex-bodish. Never edit that profile; A83 may copy its auth.json into a throwaway CODEX_HOME (owner-approved in the question), deleted after. Stage 39 A83: wire watch-cortana usage-watch gate as a codex Stop handler in a temp CODEX_HOME / fixture, prove it reads real codex rollout usage and blocks with decision:block at the threshold; update PLATFORMS.md + watch-cortana. Stage 40 A58d: re-run the unattended-branch GREENs on codex exec (CODEX_HOME=~/.codex-bodish, skills in the fixture's project dir), N=2 per skill, record verdicts.
+- Owner: 'push when done' - push origin/main after A83 + A58d land and the final review + commit pass.

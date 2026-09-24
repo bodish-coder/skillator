@@ -58,8 +58,8 @@ Ambiguous → ask once. The user can override with `platform: <host>`.
 | **Switch tier** | per-agent `model` | per-Task model slug | `reasoning_effort` low/medium/high/xhigh | `/model` mid-session (Gemini 3.5 Flash / 3.1 Pro / Claude Sonnet / Opus / GPT-OSS 120B, plan-dependent) | `/model` mid-session (15+ providers) | provider chosen at `/login`; tier by prompt + child-agent config |
 | **Context checkpoint** | `/compact`, `/clear` | new composer/chat turn | auto-compacts; new thread for a clean slate | new session (`/agents` keeps background work) | new session | `/refine` + daemon sessions, `prime-agent --resume <id>` |
 | **Always-on project file** | `CLAUDE.md` (`@path` imports) | `AGENTS.md` | `AGENTS.md` | `GEMINI.md` (`@path` imports) | `AGENTS.md` | `AGENTS.md` |
-| **Usage % readable** | `statusLine` `rate_limits.*.used_percentage` | no | yes — `~/.codex/sessions/**/rollout-*.jsonl`, last `token_count` | no | no | no |
-| **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | `Stop` in `hooks.json` → `{"decision":"block","reason":…}` on stdout (0.155.1, verified under `codex exec`; needs hook trust). Exit 2 + stderr does not inject. See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
+| **Usage % readable** | `statusLine` `rate_limits.*.used_percentage` | no | yes — `$CODEX_HOME/sessions/**/rollout-*.jsonl` (default `~/.codex`), last `token_count`; the `Stop` stdin's `transcript_path` names the session's own | no | no | no |
+| **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | `Stop` in `hooks.json` → `{"decision":"block","reason":…}` on stdout (0.155.1, verified under `codex exec`; needs hook trust). Exit 2 + stderr does not inject. `watch-cortana` `usage-watch.* gate` wired and verified here, 0.156.1 (A83). See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
 | **Durable memory** | `CLAUDE.md` + files on disk | files on disk | `AGENTS.md` + files | `AGENTS.md` + files | `AGENTS.md` (`~/.pi/agent/`, parents, cwd) + files | Continual Harness + `AGENTS.md` + files |
 
 **Frontmatter:** only `name` + `description` are portable. Everything else
@@ -244,6 +244,14 @@ Untrusted hooks are skipped silently. Stdin carries `stop_hook_active` and
 reason re-enters as a `<hook_prompt>` and the model runs again with
 `stop_hook_active:true`. The 0.153.2 failure is superseded. Keep `check` for
 cursor and antigravity.
+
+**A83, 2026-09-24, `codex-cli 0.156.1`, `codex exec`: the usage gate works.**
+`watch-cortana`'s `usage-watch.ps1 -Mode gate` as the `Stop` handler read the
+real rollout named by stdin `transcript_path` (19% = weekly `used_percent`;
+context 18907/258400 = 7.3%), stayed silent at 92%, and at a forced 5% emitted
+`decision:block`; codex ran a second turn on the reason and its `Stop` came
+with `stop_hook_active:true`, where the gate exits clean. Record:
+`practice/baselines/green-codex-stop-gate.txt`.
 
 **antigravity** — skills become slash commands automatically; `/skills` lists
 what it can see. Frontmatter beyond `name`/`description` is dropped, so any

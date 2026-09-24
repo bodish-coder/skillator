@@ -13,8 +13,8 @@ description: >-
 
 A skill cannot monitor anything - it is only text loaded into a turn. The watching
 has to be done by the harness. This skill installs two small entry points into the
-same script, then gets out of the way. Both are Claude Code hooks; for
-codex/cursor/antigravity see **Other hosts** below.
+same script, then gets out of the way. Both are Claude Code hooks; codex needs
+only the `gate` (see **Codex** below); for cursor/antigravity see **Other hosts**.
 
 | Piece | Event | Job |
 |---|---|---|
@@ -85,12 +85,42 @@ Add to `~/.claude/settings.json`:
   prints nothing and the statusline is empty.
 - POSIX: `"command": "<SKILL>/hooks/usage-watch.sh probe '<YOUR EXISTING STATUSLINE COMMAND>'"`.
 
-## Other hosts (codex, cursor, antigravity)
+## Codex
 
-Claude Code is the only host where a turn-end hook is **confirmed** to both read
-the usage percentage and inject an instruction back into the turn. Codex is the
-open question — it has a `Stop` event, but see the codex row below. The others
-get `-Mode check` / `check`: no stdin, reads whatever the host leaves on disk, prints
+Codex has no statusline, so there is no probe: `gate` reads the usage straight
+from the rollout named by the `transcript_path` its `Stop` stdin carries (last
+`token_count`: `rate_limits.*.used_percent` and
+`last_token_usage.total_tokens / model_context_window`, highest wins). Verified
+live on `codex-cli 0.156.1` `codex exec` (A83,
+`practice/baselines/green-codex-stop-gate.txt`).
+
+Put this in `$CODEX_HOME/hooks.json` (`~/.codex` unless `CODEX_HOME` is set;
+a per-repo `.codex/hooks.json` also works in a trusted project):
+
+```json
+{"hooks":{"Stop":[{"matcher":"","hooks":[
+  {"type":"command","command":"powershell -NoProfile -ExecutionPolicy Bypass -File \"<SKILL>/hooks/usage-watch.ps1\" -Mode gate","timeout":30}
+]}]}}
+```
+
+POSIX: `"command": "<SKILL>/hooks/usage-watch.sh gate"`. Then **trust the
+hook**: open an interactive `codex` once and approve it in the hook review.
+Untrusted hooks are skipped silently (`--dangerously-bypass-hook-trust` is for
+tests only). To check it, run one turn with `CLAUDE_USAGE_HANDOFF_PCT=1` in the
+environment: codex prints `hook: Stop Blocked` and runs a second turn on the
+preserve order, whose `Stop` arrives with `stop_hook_active:true` and ends it.
+Same one-shot `.done` as Claude Code, keyed by the codex session id.
+
+A `rate_limits` window with `window_minutes: 10080` is the 7-day one (A98): it
+gets the same weekly gate as the Claude path (90% hard stop, step-4 question),
+while every shorter window and the live context still compare against the 92%
+threshold.
+
+## Other hosts (cursor, antigravity)
+
+Claude Code and codex are the hosts where a turn-end hook is **confirmed** to
+both read the usage percentage and inject an instruction back into the turn.
+The others get `-Mode check` / `check`: no stdin, reads whatever the host leaves on disk, prints
 either `watch-cortana: <host> <pct>% of <limit>% - ok` or `HANDOFF NOW` followed
 by the same three-step preserve order.
 
@@ -110,7 +140,7 @@ same as the Claude Code gate.
 | Host | Usage signal | Turn-end hook that can inject | Active fallback |
 |---|---|---|---|
 | claude-code | `statusLine` `rate_limits.*.used_percentage` | `Stop` → `{"decision":"block"}` | none needed — full auto |
-| codex | **yes** — `~/.codex/sessions/**/rollout-*.jsonl`, last `token_count`: `rate_limits.*.used_percent` and `last_token_usage.total_tokens / model_context_window` | `Stop` → `{"decision":"block"}` on stdout, verified 0.155.1 `codex exec`; hook must be trusted — see below | real percentage, agent-driven `check` until `usage-watch.* gate` is wired as the `Stop` handler and confirmed to read the Codex usage |
+| codex | **yes** — `$CODEX_HOME/sessions/**/rollout-*.jsonl`, last `token_count`: `rate_limits.*.used_percent` and `last_token_usage.total_tokens / model_context_window` | `Stop` → `usage-watch.* gate`, reads the session's own rollout via `transcript_path`; verified 0.156.1 `codex exec` (A83); hook must be trusted | none needed once the hook is trusted — full auto; `check` still works |
 | cursor | **no** — chats are SQLite `store.db`, no usage anywhere on disk | `stop` hook exists (`~/.cursor/hooks.json`, `command`/`prompt` handlers) | **none** — `check` prints "no usage signal on this host"; handoff is manual |
 | antigravity | **no** | `AfterAgent` and `PreCompress` in `~/.gemini/settings.json` | `PreCompress` is the real trigger — context is about to be lost; wire `handoff-cortana` there |
 
@@ -139,9 +169,9 @@ Untrusted hooks are skipped silently. Stdin carries `stop_hook_active` and
 (reported `Stop Failed`). **stdout `{"decision":"block","reason":…}` does:** the
 reason re-enters as a `<hook_prompt>` and the model runs again with
 `stop_hook_active:true`. The 0.153.2 failure (see `PLATFORMS.md`) is superseded.
-**Next: wire `usage-watch.* gate` as a Codex `Stop` handler and verify that it
-reads the Codex rollout usage. Keep `check` until then.** Do not remove `check`:
-it remains the only mechanism cursor and antigravity have.
+`usage-watch.* gate` is now wired and verified as that handler — see **Codex**
+above. Do not remove `check`: it remains the only mechanism cursor and
+antigravity have.
 
 Don't claim cursor is armed. It isn't, and no amount of scripting makes it so
 until Cursor writes a usage number somewhere readable.

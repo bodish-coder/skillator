@@ -1,11 +1,11 @@
 # watch-cortana: record usage % and act on it before the session is cut off.
 #   -Mode probe [-Then "<original statusline command>"]   (Claude Code statusLine)
-#   -Mode gate                                            (Claude Code Stop hook)
+#   -Mode gate                                            (Claude Code / codex Stop hook)
 #   -Mode check                                           (any host, no stdin - see below)
 # Threshold: $env:CLAUDE_USAGE_HANDOFF_PCT, default 92.
 #
-# ponytail: only Claude Code has a hook that can both see the usage % and inject
-# an instruction at turn end. Codex/Cursor/Antigravity get `check`, which reads
+# Claude Code and codex (A83: gate reads the rollout named by transcript_path)
+# have a Stop hook that can inject. Cursor/Antigravity get `check`, which reads
 # whatever the host leaves on disk and prints the order for the agent to follow.
 # Wired by the always-on project file grayskull-power writes, not by a hook.
 param([ValidateSet('probe','gate','check')][string]$Mode = 'probe', [string]$Then)
@@ -58,27 +58,59 @@ function Get-Reason($pct, $limit) {
   "Usage has reached $pct% of the limit (threshold $limit%). Stop the current work and preserve the session now - it can be cut off at any moment. In order: (1) if any subagent, workflow or background task is still running, wait for it or stop it and record what it had done - never leave in-flight agent work undescribed; (2) invoke skillator:tickets-zordon to sync TICKETS.md - sync statuses only, do NOT start working open tickets, usage is nearly gone: close what actually landed, mark what is half-done as in-progress, and file a ticket for anything discovered this session that has no ticket; (3) invoke skillator:handoff-cortana and write the document, whose status table must match TICKETS.md ticket-for-ticket and must list the in-flight agent work from step 1 with the exact prompt needed to resume it. Then tell the user where the file is and stop."
 }
 
+# Last token_count line of a codex rollout, or $null.
+function Get-CodexLastTc($path) {
+  Get-Content -LiteralPath $path -Tail 400 | Where-Object { $_ -match '"token_count"' } | Select-Object -Last 1
+}
+
+# Usage % from one codex rollout: the max of every rate_limits used_percent
+# whose window is NOT the 7-day one (A98: window_minutes 10080), plus the
+# live context on its last token_count line; $null when there is none.
+function Get-CodexPct($path) {
+  $line = Get-CodexLastTc $path
+  if (-not $line) { return $null }
+  # @() because a lone used_percent comes back as a scalar, and `+=` on a
+  # scalar double ADDS the context % to it (19.0 + 7.3 = 26.3, A83).
+  $vals = @([regex]::Matches($line, '\{[^{}]*"used_percent"\s*:\s*[0-9.]+[^{}]*\}') |
+    Where-Object { $_.Value -notmatch '"window_minutes"\s*:\s*10080' } |
+    ForEach-Object { [double]([regex]::Match($_.Value, '"used_percent"\s*:\s*([0-9.]+)').Groups[1].Value) })
+  # last_token_usage is the size of the live context; total_token_usage is
+  # cumulative for the whole session and would read well over 100%.
+  if ($line -match '"last_token_usage"\s*:\s*\{[^}]*?"total_tokens"\s*:\s*([0-9]+)[^}]*\}[\s\S]*?"model_context_window"\s*:\s*([0-9]+)') {
+    $vals += [math]::Round(100 * [double]$Matches[1] / [double]$Matches[2], 1)
+  }
+  if ($vals.Count) { return ($vals | Measure-Object -Maximum).Maximum }
+  return $null
+}
+
+# A98: the 10080-minute rate_limits window is codex's 7-day window, the
+# counterpart of the Claude path's seven_day.used_percentage - it gets the
+# weekly gate (90% hard stop, step-4 question) instead of the 92% one.
+# $null when the last token_count line has no such window.
+function Get-CodexWeeklyPct($path) {
+  $line = Get-CodexLastTc $path
+  if (-not $line) { return $null }
+  $vals = @([regex]::Matches($line, '\{[^{}]*"used_percent"\s*:\s*[0-9.]+[^{}]*\}') |
+    Where-Object { $_.Value -match '"window_minutes"\s*:\s*10080' } |
+    ForEach-Object { [double]([regex]::Match($_.Value, '"used_percent"\s*:\s*([0-9.]+)').Groups[1].Value) })
+  if ($vals.Count) { return ($vals | Measure-Object -Maximum).Maximum }
+  return $null
+}
+
 if ($Mode -eq 'check') {
   # Codex: the rollout JSONL carries rate_limits.*.used_percent and the context total.
   # CODEX_HOME, same as install.ps1 - a relocated codex home must still be watched.
   $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
   $roll = Get-ChildItem (Join-Path $codexHome 'sessions') -Recurse -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
           Sort-Object LastWriteTime | Select-Object -Last 1
-  $pct = $null; $src = 'none'; $key = 'none'
+  $pct = $null; $wk = $null; $src = 'none'; $key = 'none'
   if ($roll -and $roll.LastWriteTime -gt (Get-Date).AddHours(-$staleHours)) {
-    $line = Get-Content $roll.FullName -Tail 400 | Where-Object { $_ -match '"token_count"' } | Select-Object -Last 1
-    if ($line) {
-      $vals = [regex]::Matches($line, '"used_percent"\s*:\s*([0-9.]+)') | ForEach-Object { [double]$_.Groups[1].Value }
-      # last_token_usage is the size of the live context; total_token_usage is
-      # cumulative for the whole session and would read well over 100%.
-      if ($line -match '"last_token_usage"\s*:\s*\{[^}]*?"total_tokens"\s*:\s*([0-9]+)[^}]*\}[\s\S]*?"model_context_window"\s*:\s*([0-9]+)') {
-        $vals += [math]::Round(100 * [double]$Matches[1] / [double]$Matches[2], 1)
-      }
-      if ($vals) { $pct = ($vals | Measure-Object -Maximum).Maximum; $src = 'codex'; $key = $roll.BaseName }
-    }
+    $pct = Get-CodexPct $roll.FullName
+    $wk  = Get-CodexWeeklyPct $roll.FullName
+    if ($null -ne $pct -or $null -ne $wk) { $src = 'codex'; $key = $roll.BaseName }
   }
   # Claude Code: the statusline probe already wrote the number.
-  if ($null -eq $pct) {
+  if ($null -eq $pct -and $null -eq $wk) {
     # `.weekly` is written after the main flag, so it is always the newest -
     # picking it here would report the 7-day number as the max and compare it
     # against the wrong threshold. It is read below, by name, not by mtime.
@@ -140,11 +172,25 @@ if ($raw -match '"stop_hook_active"\s*:\s*true') { exit 0 }   # never loop on ou
 # independently, so "weekly recorded, max not" is a reachable state, and it is
 # the one a broken probe leaves behind.
 $pct = Read-Flag $flag
+$wk = $null
 $done = "$flag.done"
+# A83: codex has no statusline, so no probe ever wrote a flag. Its Stop stdin
+# carries transcript_path, this session's own rollout - read the usage there.
+# Only a rollout-*.jsonl counts: Claude Code's Stop sends one too.
+# A98: window_minutes 10080 is the 7-day window - Get-CodexWeeklyPct reads it
+# separately so it gets the same weekly gate as the Claude path below.
+if ($null -eq $pct -and -not (Test-Path "$flag.weekly") -and
+    $raw -match '"transcript_path"\s*:\s*"([^"]+)"') {
+  $tp = $Matches[1] -replace '\\\\', '/'   # JSON's escaped backslash pair
+  if ((Split-Path $tp -Leaf) -like 'rollout-*.jsonl' -and (Test-Path -LiteralPath $tp)) {
+    $pct = Get-CodexPct $tp
+    $wk  = Get-CodexWeeklyPct $tp
+  }
+}
 # Weekly first, and with its OWN one-shot marker. Sharing `$flag.done` meant a
 # 5-hour fire at 10:00 silently ate the weekly order when the 7-day window
 # crossed at 14:00 - the one window whose crossing the user has to answer.
-$wk = Read-Flag "$flag.weekly"
+if ($null -eq $wk) { $wk = Read-Flag "$flag.weekly" }
 if ($null -ne $wk -and $wk -ge $wkLimit -and -not (Test-Path "$flag.weekly.done")) {
   New-Item "$flag.weekly.done" -ItemType File -Force | Out-Null
   @{ decision = 'block'; reason = (Get-WeeklyReason $wk $wkLimit) } | ConvertTo-Json -Compress

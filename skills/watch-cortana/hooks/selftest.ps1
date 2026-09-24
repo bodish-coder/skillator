@@ -50,17 +50,24 @@ function NewHome($name) {
 }
 # $ageHours backdates the rollout's mtime (A32 freshness window); $sub varies the
 # nesting depth (A32 recursion - the sh twin used to glob exactly */*/*/).
-function AddCodex($hm, $usedPercent, $ctxTokens, $ctxWindow, $ageHours = 0, $sub = '.codex\sessions\2026\09\04') {
+# A99: $windowMinutes tags the primary window (10080 = weekly); -NoSecondary
+# drops the secondary window entirely, leaving a single used_percent (the ps1
+# scalar `+=` bug, A83).
+function AddCodex($hm, $usedPercent, $ctxTokens, $ctxWindow, $ageHours = 0, $sub = '.codex\sessions\2026\09\04', $windowMinutes = $null, [switch]$NoSecondary) {
   $d = Join-Path $hm $sub
   New-Item $d -ItemType Directory -Force | Out-Null
+  $primary = if ($windowMinutes) { "`"primary`":{`"used_percent`":$usedPercent,`"window_minutes`":$windowMinutes}" }
+             else { "`"primary`":{`"used_percent`":$usedPercent}" }
+  $secondary = if ($NoSecondary) { '' } else { ',"secondary":{"used_percent":1.0}' }
   $line = '{"type":"event_msg","payload":{"type":"token_count","info":' +
           '{"total_token_usage":{"total_tokens":9999999},' +
           "`"last_token_usage`":{`"total_tokens`":$ctxTokens}," +
           "`"model_context_window`":$ctxWindow}," +
-          "`"rate_limits`":{`"primary`":{`"used_percent`":$usedPercent},`"secondary`":{`"used_percent`":1.0}}}}"
+          "`"rate_limits`":{$primary$secondary}}}"
   $p = [IO.Path]::Combine((Convert-Path $d), 'rollout-test.jsonl')
   [IO.File]::WriteAllText($p, "$line`n")
   if ($ageHours) { (Get-Item $p).LastWriteTime = (Get-Date).AddHours(-$ageHours) }
+  $p
 }
 function AddFlag($hm, $name, $value, [switch]$Bom) {
   $p = Join-Path $hm ".claude\handoff-watch\$name"
@@ -203,13 +210,13 @@ try {
 
   # --- check mode, against fixture HOMEs only --------------------------------
   # codex rollout below threshold: report, do not fire, leave no .done behind.
-  $h = NewHome 'codex-low'; AddCodex $h 12.0 12000 200000
+  $h = NewHome 'codex-low'; AddCodex $h 12.0 12000 200000 | Out-Null
   $c = RunCheck $h
   if ($c -notmatch '^watch-cortana: codex 12(\.0)?% of 92% - ok$') { throw "check codex-low: got '$c'" }
   if (-not (NoDoneFiles $h)) { throw 'check codex-low: wrote a .done below threshold' }
 
   # codex rollout over threshold: fire once, then be silent (one-shot .done).
-  $h = NewHome 'codex-high'; AddCodex $h 98.4 12000 200000
+  $h = NewHome 'codex-high'; AddCodex $h 98.4 12000 200000 | Out-Null
   $c = RunCheck $h
   if ($c -notmatch '^HANDOFF NOW \(codex 98\.4%\)') { throw "check codex-high: got '$c'" }
   if ($c -notmatch 'skillator:handoff-cortana') { throw 'check codex-high: no handoff order' }
@@ -218,7 +225,7 @@ try {
   if ($c -match 'HANDOFF NOW') { throw 'check codex-high: fired twice' }
 
   # context-window fallback: no used_percent worth reading, 170k/200k = 85%.
-  $h = NewHome 'codex-ctx'; AddCodex $h 1.0 170000 200000
+  $h = NewHome 'codex-ctx'; AddCodex $h 1.0 170000 200000 | Out-Null
   $c = RunCheck $h
   if ($c -notmatch '85% of 92% - ok') { throw "check codex-ctx: got '$c'" }
   if ($c -match '([0-9.]+)% of' -and [double]$Matches[1] -gt 100) { throw 'check: percentage over 100 - wrong token field?' }
@@ -280,43 +287,43 @@ try {
   foreach ($r in $runners) {
     # A week-old rollout at 98% is somebody else's session. Decline, and above
     # all do not burn the one-shot .done on it.
-    $h = NewHome "a32-stale-$($r.n)"; AddCodex $h 98.4 12000 200000 168
+    $h = NewHome "a32-stale-$($r.n)"; AddCodex $h 98.4 12000 200000 168 | Out-Null
     $c = & $r.f $h
     if ($c -match 'HANDOFF NOW') { throw "$($r.n) check: fired on a 7-day-old rollout at 98% (A32), got '$c'" }
     if ($c -notmatch '^watch-cortana: no usage signal') { throw "$($r.n) check a32-stale: got '$c'" }
     if (-not (NoDoneFiles $h)) { throw "$($r.n) check: stale rollout burned the one-shot (A32)" }
 
     # Just outside the 3h window - the boundary, not just the obvious week.
-    $h = NewHome "a32-edge-$($r.n)"; AddCodex $h 98.4 12000 200000 4
+    $h = NewHome "a32-edge-$($r.n)"; AddCodex $h 98.4 12000 200000 4 | Out-Null
     $c = & $r.f $h
     if ($c -match 'HANDOFF NOW') { throw "$($r.n) check: fired on a 4h-old rollout (A32), got '$c'" }
 
     # ...and inside it, so the window cannot be "fixed" by ignoring codex.
-    $h = NewHome "a32-fresh-$($r.n)"; AddCodex $h 98.4 12000 200000 1
+    $h = NewHome "a32-fresh-$($r.n)"; AddCodex $h 98.4 12000 200000 1 | Out-Null
     $c = & $r.f $h
     if ($c -notmatch '^HANDOFF NOW \(codex 98\.4%\)') { throw "$($r.n) check: 1h-old rollout did not fire (A32), got '$c'" }
 
     # A stale rollout must not mask a live claude-code flag either.
-    $h = NewHome "a32-fallback-$($r.n)"; AddCodex $h 98.4 12000 200000 168
+    $h = NewHome "a32-fallback-$($r.n)"; AddCodex $h 98.4 12000 200000 168 | Out-Null
     AddFlag $h 'sess-a' '12.0' | Out-Null
     $c = & $r.f $h
     if ($c -notmatch '^watch-cortana: claude-code 12(\.0)?% of 92% - ok$') { throw "$($r.n) check a32-fallback: got '$c'" }
 
     # Recursion: the rollout is one level deeper than the old */*/*/ glob.
     $h = NewHome "a32-deep-$($r.n)"
-    AddCodex $h 98.4 12000 200000 0 '.codex\sessions\2026\09\04\rollouts'
+    AddCodex $h 98.4 12000 200000 0 '.codex\sessions\2026\09\04\rollouts' | Out-Null
     $c = & $r.f $h
     if ($c -notmatch '^HANDOFF NOW \(codex 98\.4%\)') { throw "$($r.n) check: missed a nested rollout (A32), got '$c'" }
   }
 
   # --- the sh twin must agree, where sh exists -------------------------------
   if ($shExe) {
-    $h = NewHome 'sh-codex-low'; AddCodex $h 12.0 12000 200000
+    $h = NewHome 'sh-codex-low'; AddCodex $h 12.0 12000 200000 | Out-Null
     $c = RunSh 'check' $h $null
     if ($c -notmatch '^watch-cortana: codex 12\.0% of 92% - ok$') { throw "sh check codex-low: got '$c'" }
     if (-not (NoDoneFiles $h)) { throw 'sh check codex-low: wrote a .done below threshold' }
 
-    $h = NewHome 'sh-codex-high'; AddCodex $h 98.4 12000 200000
+    $h = NewHome 'sh-codex-high'; AddCodex $h 98.4 12000 200000 | Out-Null
     $c = RunSh 'check' $h $null
     if ($c -notmatch '^HANDOFF NOW \(codex 98\.4%\)') { throw "sh check codex-high: got '$c'" }
     if (NoDoneFiles $h) { throw 'sh check codex-high: no one-shot .done written' }
@@ -337,10 +344,87 @@ try {
     if ($g -notmatch '"decision":"block"' -or $g -notmatch '98\.2') { throw "sh gate: no block, got '$g'" }
   }
 
+  # --- A98/A99: codex Stop stdin, gate reads the rollout named by transcript_path
+  New-Item $tmp -ItemType Directory -Force | Out-Null
+  $sidCx  = "selftest-a99-$PID"
+  $flagCx = Join-Path $HOME ".claude\handoff-watch\$sidCx"
+  function CxStop($tp) {
+    if (-not $tp) { return "{`"session_id`":`"$sidCx`",`"stop_hook_active`":false}" }
+    $tpEsc = $tp.Replace('\', '\\')   # raw JSON bytes: one path separator -> two backslash chars
+    "{`"session_id`":`"$sidCx`",`"transcript_path`":`"$tpEsc`",`"stop_hook_active`":false}"
+  }
+  function ClearCx { Remove-Item "$flagCx*" -ErrorAction SilentlyContinue }
+
+  # 1. transcript_path is a rollout -> gate reads it (no window_minutes: the
+  #    ordinary 92% gate applies).
+  ClearCx
+  $rp1 = AddCodex $tmp 95.0 12000 200000 0 'a99-read'
+  $r = Gate (CxStop $rp1)
+  if ($r -notmatch '"decision":"block"' -or $r -notmatch '95') { throw "gate: did not read codex rollout via transcript_path, got '$r'" }
+  ClearCx
+
+  # 2. transcript_path NOT named rollout-*.jsonl -> ignored, even though the
+  #    file content alone would fire.
+  $notRollDir = Join-Path $tmp 'a99-notroll'
+  New-Item $notRollDir -ItemType Directory -Force | Out-Null
+  $notRoll = Join-Path $notRollDir 'session-notroll.jsonl'
+  Copy-Item $rp1 $notRoll -Force
+  $r = Gate (CxStop $notRoll)
+  if ($r) { throw "gate: fired on a transcript_path that is not rollout-*.jsonl, got '$r'" }
+  ClearCx
+
+  # 3. single used_percent value (the ps1 scalar `+=` bug, A83): only a primary
+  #    window, no secondary. max(50, 45) = 50, under 92 - the buggy scalar sum
+  #    (50+45=95) would fire.
+  $rp3 = AddCodex $tmp 50.0 90000 200000 0 'a99-scalar' $null -NoSecondary
+  $r = Gate (CxStop $rp3)
+  if ($r) { throw "gate: single used_percent scalar bug regressed (50+45 would fire), got '$r'" }
+  ClearCx
+
+  # 4. 10080-minute window at 91% -> the weekly gate fires (A98).
+  $rp4 = AddCodex $tmp 91.0 12000 200000 0 'a99-weekly' 10080
+  $r = Gate (CxStop $rp4)
+  if ($r -notmatch '"decision":"block"' -or $r -notmatch 'AskUserQuestion') { throw "gate: codex 10080-minute window at 91% did not fire the weekly order, got '$r'" }
+  ClearCx
+
+  # 5. 300-minute window at 91% -> silent (below the 92% ordinary threshold).
+  $rp5 = AddCodex $tmp 91.0 12000 200000 0 'a99-session' 300
+  $r = Gate (CxStop $rp5)
+  if ($r) { throw "gate: codex 300-minute window at 91% fired (should need 92%), got '$r'" }
+  ClearCx
+
+  # The sh twin must agree on all five.
+  if ($shExe) {
+    $hSh = NewHome 'a99-sh'
+    $flagCxSh = Join-Path $hSh ".claude\handoff-watch\$sidCx"
+    function ClearCxSh { Remove-Item "$flagCxSh*" -ErrorAction SilentlyContinue }
+
+    $g = RunSh 'gate' $hSh (CxStop $rp1)
+    if ($g -notmatch '"decision":"block"' -or $g -notmatch '95') { throw "sh gate: did not read codex rollout via transcript_path, got '$g'" }
+    ClearCxSh
+
+    $g = RunSh 'gate' $hSh (CxStop $notRoll)
+    if ($g) { throw "sh gate: fired on a transcript_path that is not rollout-*.jsonl, got '$g'" }
+    ClearCxSh
+
+    $g = RunSh 'gate' $hSh (CxStop $rp3)
+    if ($g) { throw "sh gate: single used_percent scalar bug regressed, got '$g'" }
+    ClearCxSh
+
+    $g = RunSh 'gate' $hSh (CxStop $rp4)
+    if ($g -notmatch '"decision":"block"' -or $g -notmatch 'AskUserQuestion') { throw "sh gate: codex 10080-minute window at 91% did not fire the weekly order, got '$g'" }
+    ClearCxSh
+
+    $g = RunSh 'gate' $hSh (CxStop $rp5)
+    if ($g) { throw "sh gate: codex 300-minute window at 91% fired (should need 92%), got '$g'" }
+    ClearCxSh
+  }
+
   'ok'
 }
 finally {
   # try/finally, not a trailing line: a failing assertion must still clean up.
   Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path $HOME ".claude\handoff-watch\selftest-a99-$PID*") -ErrorAction SilentlyContinue
   Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

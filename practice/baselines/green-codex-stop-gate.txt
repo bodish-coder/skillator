@@ -1,0 +1,77 @@
+A83 - watch-cortana usage-watch gate as a codex Stop hook. GREEN.
+Date: 2026-09-24. codex-cli 0.156.1, `codex exec`, model gpt-6-astra, Windows 11.
+Setup: throwaway CODEX_HOME (scratch dir) holding only a copy of the owner's
+auth.json and the hooks.json below; throwaway git fixture as cwd; -s read-only;
+--dangerously-bypass-hook-trust (test only). Temp CODEX_HOME deleted afterwards.
+~/.codex-bodish untouched.
+
+hooks.json (paths shortened):
+{"hooks":{"Stop":[{"matcher":"","hooks":[
+ {"type":"command","command":"powershell ... -File \"<scratch>/dump.ps1\"","timeout":30},
+ {"type":"command","command":"powershell ... -File \"<SKILL>/hooks/usage-watch.ps1\" -Mode gate","timeout":30}]}]}}
+(dump.ps1 appends the Stop stdin to a log, to see what codex sends.)
+
+1. Stop stdin (0.156.1), first Stop of the run in step 4:
+{"session_id":"01a0d300-6979-7913-87c4-de96759f5c29","turn_id":"01a0d300-6fb2-7843-944f-f0404c3a64eb","transcript_path":"<scratch>\\codexhome-a83\\sessions\\2026\\09\\24\\rollout-2026-09-24T16-10-14-01a0d300-6979-7913-87c4-de96759f5c29.jsonl","cwd":"<scratch>\\fixture","hook_event_name":"Stop","model":"gpt-6-astra","permission_mode":"bypassPermissions","stop_hook_active":false,"last_assistant_message":"pong"}
+   -> transcript_path is this session's own rollout. The gate reads it when no
+      probe flag exists (codex has no statusline) and its name is rollout-*.jsonl.
+
+2. Real usage in that rollout (last token_count):
+   "used_percent":19.0 (primary, "window_minutes":10080 = 7-day), secondary null
+   last_token_usage.total_tokens 18907 / model_context_window 258400 = 7.3%
+   gate reads max = 19%. `check` against the same CODEX_HOME: sh "codex 19.0%",
+   ps "codex 19%".
+   Bug found and fixed on the way: ps `check` said 26.3% - a lone used_percent
+   made $vals a scalar and `+=` added 7.3 to it. Now @() in Get-CodexPct.
+
+3. Default threshold (92), real codex exec "Reply with the single word: pong":
+   codex
+   pong
+   hook: Stop
+   hook: Stop
+   hook: Stop Completed
+   hook: Stop Completed
+   tokens used
+   6,491
+   pong
+   -> gate ran, silent, turn ended once.
+
+4. Forced block: CLAUDE_USAGE_HANDOFF_PCT=5 in codex's env (inherited by hooks):
+   codex
+   pong
+   hook: Stop
+   hook: Stop
+   hook: Stop Completed
+   hook: Stop Blocked
+   codex
+   I'll check for running work and the requested preservation skills. This session's filesystem is read-only, so saving documents may be blocked.
+   
+   codex
+   Stopped. No subagents or background work were started. The only completed task was replying `pong`; no files changed.
+   
+   Preservation is blocked: the requested skills aren't listed, the filesystem is read-only, and policy rejected the file search. `TICKETS.md` was not synced, and no handoff file was created.
+   hook: Stop
+   hook: Stop
+   hook: Stop Completed
+   hook: Stop Completed
+   tokens used
+   22,790
+   Stopped. No subagents or background work were started. The only completed task was replying `pong`; no files changed.
+   
+   Preservation is blocked: the requested skills aren't listed, the filesystem is read-only, and policy rejected the file search. `TICKETS.md` was not synced, and no handoff file was created.
+   Stop stdin session_id / stop_hook_active across the run:
+     "session_id":"01a0d300-6979-7913-87c4-de96759f5c29"	"stop_hook_active":false
+     "session_id":"01a0d300-6979-7913-87c4-de96759f5c29"	"stop_hook_active":true
+   rollout carries the reason as <hook_prompt>: "Usage has reached 19% of the
+   limit (threshold 5%). Stop the current work and preserve the session now ..."
+   -> Stop Blocked, codex continued the turn with the reason (it tried the
+      preserve order; read-only sandbox refused the writes, as expected), and
+      the second Stop arrived with stop_hook_active:true: gate exited 0, no loop.
+   (A separate ERROR line from codex's own shell-policy rejection is omitted.)
+
+5. sh twin, same real stdin (session log, scratch HOME): default -> silent;
+   PCT=5 -> {"decision":"block","reason":"Usage has reached 19.0% ..."};
+   second call -> silent (.done). Fixed: gate now mkdir -p's the state dir
+   before .done, which codex (no probe) never created.
+
+6. skills/watch-cortana/hooks/selftest.ps1 -> ok.
