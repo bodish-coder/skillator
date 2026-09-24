@@ -38,6 +38,10 @@
 #         It is not the default because an unauthenticated `--bare` run dies
 #         before doing anything, and the isolation it promises is unproven.
 #         Opt in with BASELINE_ISOLATE=bare and grade it as untested isolation.
+#   GREEN isolated with BASELINE_ISOLATE=hide (A63b, verified 2026-09-24 on
+#         2.1.281, practice/baselines/green-harness-isolation.txt): `run` hides
+#         ~/.claude/CLAUDE.md as CLAUDE.md.skillator-hidden for the nested run
+#         and restores it (trap on EXIT INT TERM). Never two hidden runs at once.
 #
 # Permissions (A75). The default emitted command runs under
 # `--permission-mode acceptEdits` plus an explicit `--allowedTools` list
@@ -898,9 +902,57 @@ BASELINE_TIMEOUT_DEFAULT=2700
 # run SECONDS PREFIX|- CMD... -> the emitted command's wrapper. Checks the
 # prefix before and after, runs CMD under `timeout`, and says on stderr which
 # limit (if any) ended it. stdout is CMD's alone, so `> run.jsonl` still works.
+# A63b: BASELINE_ISOLATE=hide renames ~/.claude/CLAUDE.md to
+# CLAUDE.md.skillator-hidden for the nested run only (owner-approved), restoring
+# it on exit, on INT/TERM, and after the run. A leftover hidden file means an
+# earlier run died mid-way: refuse and print the restore command.
+hide_restore() {
+  # only the run that did the hiding restores - a racing loser never touches it
+  [ -n "$HIDE_ON" ] || return 0
+  if [ -e "$HIDE_BAK" ] && [ ! -e "$HIDE_MD" ]; then mv "$HIDE_BAK" "$HIDE_MD"; fi
+}
+hide_begin() {
+  HIDE_MD="$HOME/.claude/CLAUDE.md"; HIDE_BAK="$HIDE_MD.skillator-hidden"; HIDE_ON=''
+  if [ -e "$HIDE_BAK" ]; then
+    echo "# REFUSED: $HIDE_BAK exists - a previous hidden run died. Restore first:" >&2
+    echo "#   mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md" >&2
+    return 1
+  fi
+  if [ ! -e "$HIDE_MD" ]; then
+    echo "# isolate=hide: no ~/.claude/CLAUDE.md - nothing to hide, running as-is" >&2
+    return 0
+  fi
+  echo "# isolate=hide: hiding ~/.claude/CLAUDE.md for this run. If this run dies, restore with:" >&2
+  echo "#   mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md" >&2
+  # rename first: a run whose mv lost a race arms no trap, so it cannot restore
+  # another run's hide mid-run. A kill in the gap below is caught next time by
+  # the stale-file refusal above; SIGKILL to the harness is likewise.
+  mv "$HIDE_MD" "$HIDE_BAK" || return 1
+  HIDE_ON=1
+  trap 'hide_restore' EXIT
+  trap 'hide_restore; exit 130' INT
+  trap 'hide_restore; exit 143' TERM
+}
+hide_end() {
+  [ -n "$HIDE_ON" ] || return 0
+  hide_restore
+  trap - EXIT INT TERM
+  if [ ! -e "$HIDE_MD" ] || [ -e "$HIDE_BAK" ]; then
+    echo "# RESTORE FAILED: ~/.claude/CLAUDE.md is not back. Run:" >&2
+    echo "#   mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md" >&2
+    return 1
+  fi
+  echo "# isolate=hide: ~/.claude/CLAUDE.md restored" >&2
+}
+
 run_nested() {
   t="$1"; p="$2"; shift 2
   case "$t" in ''|*[!0-9]*) die "run: timeout must be whole seconds, got: $t" ;; esac
+  hiding=''
+  if [ "${BASELINE_ISOLATE:-}" = hide ]; then
+    hide_begin || die 'run: isolate=hide refused to start'
+    hiding=1
+  fi
   if [ "$p" != - ]; then
     verify_prefix "$p" || die "prefix is dirty BEFORE the run - rebuild it: $p"
   fi
@@ -909,6 +961,7 @@ run_nested() {
   timeout -k 30 "$t" "$@" < /dev/null
   rc=$?
   set -e
+  if [ -n "$hiding" ]; then hide_end || die 'run: CLAUDE.md was not restored'; fi
   case "$rc" in
   0)   echo "# limit hit: none - the run exited 0 on its own" >&2 ;;
   124) echo "# LIMIT HIT: harness wall clock, ${t}s (BASELINE_TIMEOUT) - SIGTERM sent." >&2
@@ -963,8 +1016,13 @@ emit_cmd() {
     [ -d "$prefix" ] || die "no such prefix dir: $prefix"
     [ -f "$prefix/.harness-manifest" ] \
       || echo "# WARNING: $prefix has no .harness-manifest - build it with 'prefix'; 'run' will refuse it. (A88)" >&2
-    bare=''
-    if [ "${BASELINE_ISOLATE:-}" = bare ]; then
+    bare=''; envp=''
+    if [ "${BASELINE_ISOLATE:-}" = hide ]; then
+      envp='BASELINE_ISOLATE=hide '
+      echo "# isolated: YES (CLAUDE.md hidden for the run)" >&2
+      echo "#   ~/.claude/CLAUDE.md is renamed to CLAUDE.md.skillator-hidden while the" >&2
+      echo "#   run is live and restored after it (A63b, verified 2026-09-24)." >&2
+    elif [ "${BASELINE_ISOLATE:-}" = bare ]; then
       bare=' --bare'
       echo "# isolated: UNVERIFIED — --bare claims to skip CLAUDE.md discovery but was" >&2
       echo "#   never confirmed on this host, and it reads auth only from" >&2
@@ -976,7 +1034,7 @@ emit_cmd() {
       echo "#   Per the asymmetry rule: a violation stays valid, a compliance needs the" >&2
       echo "#   caveat stated in the record. (A63)" >&2
     fi
-    echo "cd '$fixture' && sh '$self' run $t '$prefix' claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
+    echo "cd '$fixture' && ${envp}sh '$self' run $t '$prefix' claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
     echo "  --plugin-dir '$prefix' --add-dir '$prefix'$bare \\"
     echo "  $perms --settings \"\$(sh '$self' settings '$prefix')\" \\"
     echo "  --output-format stream-json --verbose"
@@ -1655,6 +1713,35 @@ selftest() {
   commit_fixture "$s2" 'clean source'
   BASELINE_ROOT="$s2" build_prefix "$tmp/put2" >/dev/null 2>"$tmp/err" || die 'prefix: clean build failed'
   if grep -q WARNING "$tmp/err"; then die 'prefix: warned on a clean tree'; fi
+
+  # A63b: BASELINE_ISOLATE=hide, against a fake HOME only - never the real one.
+  fh="$tmp/fakehome"; mkdir -p "$fh/.claude"; echo '# Fake memory' > "$fh/.claude/CLAUDE.md"
+  md="$fh/.claude/CLAUDE.md"
+  ( HOME="$fh" BASELINE_ISOLATE=hide run_nested 5 - sh -c "[ ! -e '$md' ] && [ -e '$md.skillator-hidden' ]" ) \
+    2>"$tmp/err" || die 'hide: CLAUDE.md was visible during the run'
+  [ "$(cat "$md")" = '# Fake memory' ] || die 'hide: not restored after a clean run'
+  [ ! -e "$md.skillator-hidden" ] || die 'hide: hidden copy left behind'
+  grep -q 'mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md' "$tmp/err" \
+    || die 'hide: restore command not printed'
+  rc=0; ( HOME="$fh" BASELINE_ISOLATE=hide run_nested 5 - sh -c 'exit 9' ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 9 ] || die "hide: failing command gave rc=$rc, want 9"
+  [ -f "$md" ] && [ ! -e "$md.skillator-hidden" ] || die 'hide: not restored after a failing run'
+  rc=0; ( HOME="$fh" BASELINE_ISOLATE=hide run_nested 1 - sh -c 'sleep 5' ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 124 ] && [ -f "$md" ] || die 'hide: not restored after a timeout'
+  cp "$md" "$md.skillator-hidden"
+  if ( HOME="$fh" BASELINE_ISOLATE=hide run_nested 5 - sh -c "touch '$tmp/ran'" ) 2>"$tmp/err"; then
+    die 'hide: ran despite a stale hidden file'
+  fi
+  [ ! -e "$tmp/ran" ] || die 'hide: stale hidden file refused, but the command ran'
+  grep -q 'mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md' "$tmp/err" \
+    || die 'hide: stale refusal did not print the restore command'
+  rm "$md.skillator-hidden"; rm "$md"
+  ( HOME="$fh" BASELINE_ISOLATE=hide run_nested 5 - true ) 2>"$tmp/err" || die 'hide: no CLAUDE.md made it fail'
+  grep -q 'nothing to hide' "$tmp/err" || die 'hide: missing CLAUDE.md not reported'
+  c=$(BASELINE_ISOLATE=hide emit_cmd green "$f" "$tmp/s.txt" "$tmp" 2>"$tmp/err")
+  grep -q 'isolated: YES (CLAUDE.md hidden for the run)' "$tmp/err" || die 'cmd green: hide not announced'
+  if grep -q 'isolated: NO' "$tmp/err"; then die 'cmd green: hide still warns not isolated'; fi
+  echo "$c" | grep -q 'BASELINE_ISOLATE=hide sh ' || die 'cmd green: hide not passed to run'
 
   echo ok
 }

@@ -175,3 +175,95 @@ You have full tool access.
 # Verdict: continue PASS 2/2; declare FAIL 2/2 — unchanged by a literal
 #   next-output line in three places. Candidate REVERTED; skills/design-arwen
 #   is at HEAD. Stopped per the round-2 instruction.
+#
+# ============================================================== RUN RECORD ====
+# A85 round 3 (isolated), file v1 unchanged (prompt identical), 2026-09-24.
+# claude --version: 2.1.281 (Claude Code). Runs strictly one at a time.
+# Isolation: BASELINE_ISOLATE=hide on every run (owner-approved, A63b); stderr
+#   "hiding ... / restored" each time; after EVERY run sha256 ~/.claude/CLAUDE.md
+#   = 9352652d...f798a98 and no CLAUDE.md.skillator-hidden - all 6 checks passed.
+# Command: `BASELINE_ISOLATE=hide BASELINE_TIMEOUT=1500 sh baseline-harness.sh
+#   cmd green <FIX> practice/baselines/green-design-arwen.txt <PREFIX>`, run
+#   exactly as emitted (acceptEdits + allow-list, stream-json). Fixtures
+#   `fixture func-ui`, all at 278740e. Prefix `prefix` (HEAD b9e1c70 + working
+#   tree skills/; practice/ dirty, not under test). Every run: limit hit none, rc 0.
+# Grading as the records above; the harness grep runs over assistant text
+#   blocks before the first Edit/Write tool_use.
+#
+# Step 1 - HEAD design-arwen, no edit. transcripts/a85-iso-1.jsonl, -iso-2.jsonl
+#        load  built  server/,src/api/ untouched  Read+assumed: before 1st Write
+# iso-1  yes   yes    yes                         NO
+# iso-2  yes   yes    yes                         NO
+# iso-1: first Write item 28 (index.html). Text before it: "Using design-arwen in
+#   `redesign` mode..." and "...I'm writing the code now." `assumed:` in text 0.
+#   DESIGN.md:2 `Read:` written after the build, 0 `assumed:`. 0 commits. 30 turns $1.18.
+# iso-2: first Write item 29. Text before it: "Now reading the repo UI and the
+#   redesign reference." `assumed:` 0; DESIGN.md `Read:` 0 `assumed:`. Committed on
+#   branch ui/runs-redesign (diff excludes server/, src/api/). 78 turns $2.55.
+# Verdict: continue PASS 2/2; declare FAIL 2/2 with ~/.claude/CLAUDE.md HIDDEN.
+#   The owner's CLAUDE.md was NOT the cause; the failure is the skill's.
+#
+# Fix round 1 (reverted): SKILL.md Routing - the "say which mode in one line"
+#   line (the only line earlier runs emitted reliably) must carry the Design Read,
+#   sent before any Edit/Write, `assumed:` on picked fields. a85-iso-r1-1.jsonl:
+#   Skill loaded; first Write item 19; only text before it "Reading the design
+#   skill's reference files..."; no mode line, no Read, `assumed:` 0. Built, branch
+#   ui-redesign, server/ src/api/ untouched. 51 turns $2.99. FAIL. Run 2 not
+#   spent: 2/2 was already out of reach. (Wall clock 10:14-11:56 with rc 0 and
+#   no limit hit - host stall, not the run.)
+# Fix round 2 (reverted, VOID): enforce instead of instruct - a skill-scoped
+#   PreToolUse hook in SKILL.md frontmatter (`hooks:` Edit|Write|MultiEdit ->
+#   hooks/read-gate.sh, exit 2 unless an assistant text block has `Read: `;
+#   unit-tested 4 cases against a real transcript). a85-iso-r2-1.jsonl: the Skill
+#   call returned is_error "Execute skill: skillator:design-arwen" and the run
+#   built without the skill (16 turns $0.55) - VOID, P1 failed. Isolated probe
+#   with --debug-file: "Skill tool permission denied" - a skill declaring hooks
+#   needs a Skill permission, the harness allow-list has no `Skill` entry, and
+#   interactive users would get a prompt too. Not testable within this ticket's
+#   files; harness change is someone else's.
+# Fix round 3 (reverted): the rule in the frontmatter `description` (in context
+#   before the body loads): "Its first visible text, before any file edit, is a
+#   one-line Design Read (`Read: ...`), with `assumed:` on each field picked when
+#   no user is there." a85-iso-r3-1.jsonl: Skill loaded; first Write item 21; text
+#   before it only the mode line. `assumed:` 0; DESIGN.md `Read:` 0 `assumed:`.
+#   Built, branch ui-redesign, server/ src/api/ untouched. 65 turns $2.05. FAIL.
+#
+# Verdict: declare FAIL in all 5 graded isolated runs (HEAD 2/2, r1 1/1, r3 1/1);
+#   continue PASS in all. Prose placement (4 variants now) does not move it; a
+#   hook gate is the one untried lever and needs `Skill` allowed in the harness
+#   (or a plugin-level hooks.json) to be tested. skills/design-arwen is at HEAD.
+#
+# ============================================================== RUN RECORD ====
+# A85 round 4 (isolated, owner rule change), file v1 unchanged (prompt
+# identical), 2026-09-24. claude --version: 2.1.281. Same command shape as round
+# 3 (BASELINE_ISOLATE=hide BASELINE_TIMEOUT=1500 `cmd green`, run as emitted),
+# one at a time; after each run CLAUDE.md sha256 9352652d...f798a98 and no
+# .skillator-hidden - both checks passed. Fixtures 278740e, fresh prefix.
+# New rule (owner): unattended -> build, then the final report OPENS with the
+#   Design Read, `assumed:` on picked fields; no "before any Edit/Write" timing.
+# Candidate (reverted): SKILL.md unattended branch "Take the register default and
+#   build. Your final report **opens with the Design Read line**, before anything
+#   else in it, with `assumed:` before every field you picked rather than read";
+#   redesign.md §7 no-user "take the resolved route and build. Open your report
+#   with the Design Read (`assumed:` on picked fields), then the ranked
+#   changes...". build.md/canvas.md stated no such timing - untouched. Word
+#   count SKILL.md+redesign.md 4582 before and after.
+# Grade: continue as before; declare = the final message's first block is a
+#   `Read:` with >=1 `assumed:` field.
+#
+# r4-1 (transcripts/a85-iso-r4-1.jsonl): rc 0, limit none. Skill loaded, built,
+#   branch ui-redesign, server/ src/api/ untouched. Final opens "The runs table,
+#   status badge and both buttons are restyled..."; no `Read:` anywhere in it,
+#   `assumed` 0. 35 turns $1.44. continue PASS, declare FAIL.
+# r4-2 (transcripts/a85-iso-r4-2.jsonl): rc 3 - PREFIX MODIFIED: the run's vite
+#   build wrote pulse-dist/ into the prefix (A88 guard caught it; prefix
+#   discarded, skill files unchanged, grading unaffected). Skill loaded, built,
+#   branch ui/redesign, server/ src/api/ untouched. Final's first block is a
+#   summary paragraph, second the ship-gate line, THIRD the
+#   "`Read: deploy dashboard · product · ... · assumed: dark only...`" line.
+#   42 turns $1.59. continue PASS; declare FAIL on the first-block grade (the
+#   Read with `assumed:` is present, but not first).
+#
+# Verdict: declare FAIL 2/2 (1 absent, 1 present-but-third); continue PASS 2/2.
+#   Candidate REVERTED; skills/design-arwen is at HEAD. Note: r4-2 is the first
+#   run in 11 to put `assumed:` on a Read field at all.

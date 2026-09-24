@@ -233,7 +233,18 @@ needs `--plugin-dir`, and `--safe-mode` kills it. Two candidates, neither usable
   attached (plus a second line when the key is unset); prove the isolation
   inside the run before grading anything under it.
 
-Until one of those is verified, a GREEN compliance still needs the caveat line.
+**GREEN isolation, solved (A63b, 2026-09-24): `BASELINE_ISOLATE=hide`.**
+Owner-approved: `run` renames `~/.claude/CLAUDE.md` to
+`~/.claude/CLAUDE.md.skillator-hidden` for the nested run only, prints the
+restore command first, restores on exit / INT / TERM and after the run (failing
+loudly if the file is not back), and refuses to start if a hidden copy already
+exists. `BASELINE_ISOLATE=hide sh practice/scripts/baseline-harness.sh cmd green
+...` emits it and prints `isolated: YES (CLAUDE.md hidden for the run)`. Proven
+in `green-harness-isolation.txt`: without hide the run quoted
+`# Global Behavioral Guidelines`, with hide it answered `NONE` while the
+skillator plugin still loaded from `--plugin-dir`; the file's sha256 was
+unchanged afterwards. Do not run two hidden runs at once - the second refuses.
+A GREEN run without `hide` still needs the caveat line.
 
 ## 2026-09-05 — A51, the three re-runs
 

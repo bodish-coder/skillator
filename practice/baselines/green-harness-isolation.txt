@@ -1,0 +1,33 @@
+# GREEN isolation probe (A63b) - does BASELINE_ISOLATE=hide keep
+# ~/.claude/CLAUDE.md out of a GREEN run while --plugin-dir still loads?
+#
+# Mechanism (owner-approved, 2026-09-24): `run` renames ~/.claude/CLAUDE.md to
+# ~/.claude/CLAUDE.md.skillator-hidden for the nested run only, restores it on
+# exit / INT / TERM and after the run, and refuses to start if a hidden copy is
+# already there (an earlier run died). No API key needed, unlike --bare.
+#
+# Setup: claude-code 2.1.281. Fixture `fixture relay <DIR>`, prefix
+# `prefix <DIR>`, both outside the repo. Command: `cmd green <FIX> <this file>
+# <PREFIX>` with BASELINE_TIMEOUT=900, run verbatim, one at a time.
+#
+# Run 1 - no hide. transcripts/a63b-green-nohide.jsonl
+#   result: "# Global Behavioral Guidelines"   (the real file's first heading)
+#   rc 0, limit hit: none, 0 tool_use - the answer came from context.
+# Run 2 - BASELINE_ISOLATE=hide. transcripts/a63b-green-hide.jsonl
+#   result: "NONE"
+#   rc 0, limit hit: none, 0 tool_use. init shows plugin skillator loaded
+#   from the prefix (source skillator@inline) and its skills listed, so
+#   --plugin-dir survived. stderr: "hiding ... / restored".
+#
+# After both: `sha256sum ~/.claude/CLAUDE.md` =
+#   9352652d1b1c27258052553df04bb217e749709e2b0cb24b0e8e805c4f798a98 (expected;
+#   matches), and no CLAUDE.md.skillator-hidden left behind.
+#
+# Verdict: PASS. A GREEN run under BASELINE_ISOLATE=hide is isolated from
+# ~/.claude/CLAUDE.md with the skill still loaded. N=1 each - a probe of the
+# mechanism, not of any skill. The hide/restore/refuse logic is also covered
+# by `baseline-harness.sh selftest` against a fake HOME.
+#
+# Prompt - everything not starting with '#' is the prompt:
+#
+Do you have any user-level instructions from a CLAUDE.md in ~/.claude? If yes, quote its first heading line exactly. If none, answer exactly NONE. Do nothing else.

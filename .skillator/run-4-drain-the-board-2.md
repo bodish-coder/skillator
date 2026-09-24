@@ -1,6 +1,6 @@
 # RUN-4 - drain the board 2
 plan: docs/plans/PLAN-board-drain-2.md
-started: 2026-09-24T00:52Z   updated: 2026-09-24T04:22Z
+started: 2026-09-24T00:52Z   updated: 2026-09-24T07:26Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -10,8 +10,34 @@ started: 2026-09-24T00:52Z   updated: 2026-09-24T04:22Z
 | 32 | A94 verify F23b rulings | x | build:opus | 2026-09-24T04:22Z | 994309c |
 | 33 | A95 prefix carries references | x | build:opus | 2026-09-24T04:22Z | 994309c |
 | 34 | A96 installer drops renamed skills | x | build:opus | 2026-09-24T04:22Z | 994309c |
+| 35 | A63b hide-CLAUDE.md isolation | x | build:opus | 2026-09-24T04:29Z | pending |
+| 36 | A85 isolated GREEN + fixes | ! | build:opus | 2026-09-24T07:26Z | - |
 
 ## In flight
+### stage 35 - A63b hide-CLAUDE.md isolation  (dispatched)
+prompt: |
+  (RUN-4 preamble) Ticket A63b. Owner approved (no API key): isolate GREEN
+  runs by renaming ~/.claude/CLAUDE.md to ~/.claude/CLAUDE.md.skillator-hidden
+  for the duration of each nested run only. Add `BASELINE_ISOLATE=hide`
+  to baseline-harness.sh's `run`: refuse if the .skillator-hidden name already
+  exists (a previous run died - print the restore command and stop); rename;
+  trap EXIT/INT/TERM restore; after restore verify the file is back. Print the
+  restore command before renaming. Prove isolation: one nested GREEN whose
+  prompt asks the model to quote any user-level CLAUDE.md memory it was given
+  or answer NONE - with hide it must say NONE; without hide it quotes it.
+  Afterwards `sha256sum ~/.claude/CLAUDE.md` must equal
+  9352652d1b1c27258052553df04bb217e749709e2b0cb24b0e8e805c4f798a98.
+  Selftest the hide path against a fake HOME. Yours: baseline-harness.sh,
+  README harness section, green-harness-isolation.txt, transcripts a63b-*.
+
+### stage 36 - A85 isolated GREEN + fixes  (after 35)
+prompt: |
+  (RUN-4 preamble) Ticket A85. With BASELINE_ISOLATE=hide, re-run
+  practice/baselines/green-design-arwen.txt (unchanged prompt) N=2 on HEAD's
+  arwen. Declare half passes 2/2 -> the failure was the owner's CLAUDE.md;
+  record, no edit. Fails -> up to 3 fix rounds (owner-approved), each a
+  smallest edit to design-arwen + isolated GREEN N=2, reverted if it fails.
+  After every run verify the CLAUDE.md checksum above.
 ### stage 32 - A94 verify F23b rulings  (dispatched)
 prompt: |
   (RUN-4 preamble) Ticket A94. RED = arwen as it was before F23b: build the
@@ -92,3 +118,5 @@ prompt: |
 - stage 32 A94: kept error summary, no default mono, translucency fallbacks, job field; reverted paste/autocomplete, scrim, ambient motion, flat fill, fresh reviewer. Ruling: the large-text revert is overruled - 24px/18.67px is WCAG's definition (18pt/14pt), not a behaviour rule; the RED passed only because no text sat in the 18-23px band, i.e. the test never reached the condition; restoring a wrong number is a defect, and the stricter correct threshold costs nothing if the ruling is wrong. Sent back: re-apply only the large-text correction everywhere it was reverted, note the ruling in the record.
 - RUN-4 review: 3 doc fixes in-session (agy stall claim corrected to the transcripts' SUCCESS evidence; 'gradient mesh' dropped from craft.md's depth list - it contradicted anti-slop's mesh-gradient tell, a consistency fix not a new rule; A62c's prime-agent half split to A62d [>]). Installer fix round 1 to the A96 agent: ownership marker + legacy identity check (a user's lookalike func-ui would have been deleted), ordinal sort, whole-line manifest parse, pre-F20 legacy names. Reinstall held until it is verified.
 - A96 fix round 2 (re-review, reproduced): an owned folder later edited by the user is deleted on removal with no content check. Prompt: 'Record the SKILL.md sha256 (CR-stripped) inside .skillator-owned at install/adoption; manifest removal deletes only when the current SKILL.md still matches it and no extra files were added - otherwise keep it and print kept <name> (modified since install). Test: adopt, edit, drop from shipped -> kept, in both mirrors; unmodified -> removed.' Round 3 is the cap.
+- Owner's ~/.claude/CLAUDE.md sha256 before isolation: 9352652d1b1c27258052553df04bb217e749709e2b0cb24b0e8e805c4f798a98. Restore if a session dies mid-run: mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md
+- A85 isolated: declare half FAIL 2/2 with CLAUDE.md hidden - the skill, not the owner's file; 3 fix rounds failed (round 2 hook gate VOID: Skill permission). Owner decision: move the rule - with no user present, build, then OPEN the final report with the Design Read and every picked field marked assumed:; drop the 'before any Edit/Write' timing. Round 4 (owner-approved change of rule, not another wording of the old one): edit design-arwen's unattended branch accordingly, isolated GREEN N=2 grading the new wording (report opens with Read + assumed:), plus the continue half.
