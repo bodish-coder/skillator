@@ -1,6 +1,6 @@
 # RUN-4 - drain the board 2
 plan: docs/plans/PLAN-board-drain-2.md
-started: 2026-09-24T00:52Z   updated: 2026-09-24T07:26Z
+started: 2026-09-24T00:52Z   updated: 2026-09-24T07:30Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -10,7 +10,7 @@ started: 2026-09-24T00:52Z   updated: 2026-09-24T07:26Z
 | 32 | A94 verify F23b rulings | x | build:opus | 2026-09-24T04:22Z | 994309c |
 | 33 | A95 prefix carries references | x | build:opus | 2026-09-24T04:22Z | 994309c |
 | 34 | A96 installer drops renamed skills | x | build:opus | 2026-09-24T04:22Z | 994309c |
-| 35 | A63b hide-CLAUDE.md isolation | x | build:opus | 2026-09-24T04:29Z | pending |
+| 35 | A63b hide-CLAUDE.md isolation | x | build:opus | 2026-09-24T07:30Z | 445d689 |
 | 36 | A85 isolated GREEN + fixes | ! | build:opus | 2026-09-24T07:26Z | - |
 
 ## In flight
