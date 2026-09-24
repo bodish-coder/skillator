@@ -142,13 +142,13 @@ novelty** — a committed decision on disk outranks anything this skill would pi
 
    **No user to ask?** You are a subagent, or a batch run, or nobody is at the keyboard —
    `build.md` §4 dispatches this work to subagents, so this is a normal case, not an edge
-   one. Then: **decide, declare, continue.** Take the register default, put the choice in
-   the Design Read with a `assumed:` prefix on every field you picked rather than read,
-   and list those assumptions once at the top of your final report so whoever reads it can
-   overturn them cheaply. That is what "never guess silently" asks for — the ban is on the
-   *silence*, not on the deciding. Blocking a subagent on a question nobody will answer is
-   the one wrong move. The same rule applies to every "ask once" in this skill and its
-   references: no user → default, declare, proceed.
+   one. Then: **decide and build.** Take the register default, build straight through, and
+   list every choice made on the user's behalf — the Design Read fields you picked rather
+   than read — in your final report, so whoever reads it can overturn any of them cheaply.
+   That satisfies "never guess silently" regardless of where the list lands. `assumed:` on
+   a picked field is encouraged, not required. Blocking a subagent on a question nobody
+   will answer is the one wrong move. Same rule for every "ask once" here and in its
+   references: no user → default, build, report the choices.
 
 ---
 

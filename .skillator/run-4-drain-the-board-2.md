@@ -1,6 +1,6 @@
 # RUN-4 - drain the board 2
 plan: docs/plans/PLAN-board-drain-2.md
-started: 2026-09-24T00:52Z   updated: 2026-09-24T07:30Z
+started: 2026-09-24T00:52Z   updated: 2026-09-24T09:48Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -11,7 +11,8 @@ started: 2026-09-24T00:52Z   updated: 2026-09-24T07:30Z
 | 33 | A95 prefix carries references | x | build:opus | 2026-09-24T04:22Z | 994309c |
 | 34 | A96 installer drops renamed skills | x | build:opus | 2026-09-24T04:22Z | 994309c |
 | 35 | A63b hide-CLAUDE.md isolation | x | build:opus | 2026-09-24T07:30Z | 445d689 |
-| 36 | A85 isolated GREEN + fixes | ! | build:opus | 2026-09-24T07:26Z | - |
+| 36 | A85 isolated GREEN + fixes | x | build:opus | 2026-09-24T09:48Z | pending |
+| 37 | A85 accept: rule matches behaviour | ~ | build:sonnet | 2026-09-24T09:42Z | - |
 
 ## In flight
 ### stage 35 - A63b hide-CLAUDE.md isolation  (dispatched)
@@ -121,3 +122,5 @@ prompt: |
 - Owner's ~/.claude/CLAUDE.md sha256 before isolation: 9352652d1b1c27258052553df04bb217e749709e2b0cb24b0e8e805c4f798a98. Restore if a session dies mid-run: mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md
 - A85 isolated: declare half FAIL 2/2 with CLAUDE.md hidden - the skill, not the owner's file; 3 fix rounds failed (round 2 hook gate VOID: Skill permission). Owner decision: move the rule - with no user present, build, then OPEN the final report with the Design Read and every picked field marked assumed:; drop the 'before any Edit/Write' timing. Round 4 (owner-approved change of rule, not another wording of the old one): edit design-arwen's unattended branch accordingly, isolated GREEN N=2 grading the new wording (report opens with Read + assumed:), plus the continue half.
 - Pushed main to origin (f786641..df77d18) on the owner's approval. Reinstall: dry run shown (124 hash-verified renamed-skill removals across 6 host dirs, plus 22 hash-verified skillator folders and 5 doc files/dirs in ~/.agents/skills); owner chose DON'T REINSTALL - nothing in the home dirs was changed. The installer (A96) is ready whenever the owner runs it: sh install.sh --dry-run, then sh install.sh.
+- Owner decisions (3rd round, with impacts shown): A85 ACCEPT current behaviour - rule text changes to build, then list the choices made without the user in the final report; REINSTALL A and B approved (installer for real, then the 22 hash-verified skillator folders + PLATFORMS.md PRACTICE.md WORKFLOW.md practice/ references/ from ~/.agents/skills, its 49 other folders untouched); owner will run codex login; owner will update the plugin via /plugin.
+- Reinstall done: installer removed 106 renamed-skill folders (dry run said 106; the chat's '124' was an arithmetic slip), all 6 host dirs verified 23/23 current + manifest + no old names; ~/.agents/skills: 22 hash-verified skillator folders + 3 docs + references/ + practice/ removed, 76 -> 49 folders, others untouched. Stage 37 prompt: 'A85 owner decision - accept current behaviour. Rewrite design-arwen's unattended-branch rule (SKILL.md, redesign.md s7, anywhere stating the before-Edit timing) to: with no user present, build, then the final report lists every choice made on the user's behalf (a Design Read line; assumed: markers encouraged, not required). Smallest edit, no budget growth. Verify against the existing a58b/a85 transcripts that the new wording is what most runs already did - count them. No new runs.'

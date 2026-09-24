@@ -123,9 +123,10 @@ Present the resolution — direction, signature, ranked change list, depth verdi
 hitting a preservation rule — and let the user correct it **before any code**. This gate
 is cheap; a wrong route is expensive; their correction is the highest-value input you'll
 get. Skip only if they said "just do it" — or if there is **no user to present to** (a
-subagent, a batch run): then take the resolved route, list the ranked changes and any
-preservation-rule hits in your report as decisions already made, flag the depth verdict as
-`assumed:`, and build. Do not block on a confirmation nobody will give.
+subagent, a batch run): then take the resolved route and build; your report lists the
+ranked changes, any preservation-rule hits, and the depth verdict as decisions already
+made on the user's behalf (`assumed:` optional, not required). Do not block on a
+confirmation nobody will give.
 
 **Optional visual gate:** publish the route as before/after artboards instead of prose —
 see [canvas.md](canvas.md).

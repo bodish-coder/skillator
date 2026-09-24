@@ -267,3 +267,35 @@ You have full tool access.
 # Verdict: declare FAIL 2/2 (1 absent, 1 present-but-third); continue PASS 2/2.
 #   Candidate REVERTED; skills/design-arwen is at HEAD. Note: r4-2 is the first
 #   run in 11 to put `assumed:` on a Read field at all.
+
+# ============================================================== RUN RECORD ====
+# A85 owner decision, 2026-09-24. Owner accepted design-arwen's actual observed
+# behaviour instead of chasing the before-Edit/Write timing further. New rule:
+# no user present -> build, then the final report lists every choice made on
+# the user's behalf (the Design Read fields picked); `assumed:` markers
+# encouraged, not required; no timing requirement on when the Read/assumed
+# text appears relative to the first Edit/Write. Edited: SKILL.md Phase 0
+# item 6 "No user to ask?" paragraph (decide-and-build wording, replacing
+# decide/declare/continue); redesign.md §7 no-user clause (build, then report
+# lists ranked changes/preservation hits/depth verdict as decisions already
+# made, `assumed:` optional). build.md, canvas.md, craft.md, verify.md checked
+# by grep - their "no user" and report-shape lines are about canvas-skip,
+# palette choice and screenshot-before-report evidence, not Design Read timing;
+# untouched. Word count SKILL.md 3603 -> 3600 (did not grow); SKILL.md+
+# redesign.md 4582 -> 4583. `context-audit.sh`: OK, within budget.
+#
+# Verified against all 13 kept transcripts (a58b-design-arwen1/2, a85-design-
+# arwen1/2, a85-r2-design-arwen1/2, a85-iso-1/2, a85-iso-r1-1, a85-iso-r2-1,
+# a85-iso-r3-1, a85-iso-r4-1, a85-iso-r4-2) by re-reading each one's actual
+# final assistant message (not the old before-first-Edit/Write grep window):
+# every one already contains a "decision(s)/assumed/choices" block naming at
+# least one unilateral call the user can overturn (most commonly the badge-
+# honesty pivot; five of the thirteen also enumerate audience/dials/direction/
+# scope by name). a85-iso-r2-1 is VOID under P1 (the Skill call errored and the
+# run built without design-arwen loaded at all), so it is not a valid test of
+# this skill's wording either way.
+#
+# Count: 12 of 12 valid runs' final messages list the choices made on the
+# user's behalf (13 transcripts total; 1 VOID, excluded). Under the new rule
+# this closes A85's declare half without further wording changes - the
+# behaviour the runs already produce is what the rule now asks for.
