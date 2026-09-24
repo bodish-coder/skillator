@@ -13,10 +13,10 @@ started: 2026-09-24T00:52Z   updated: 2026-09-24T12:45Z
 | 35 | A63b hide-CLAUDE.md isolation | x | build:opus | 2026-09-24T07:30Z | 445d689 |
 | 36 | A85 isolated GREEN + fixes | x | build:opus | 2026-09-24T09:48Z | 9514fe3 |
 | 37 | A85 accept: rule matches behaviour | x | build:sonnet | 2026-09-24T09:48Z | 9514fe3 |
-| 38 | grayskull routing smoke test | x | build:opus | 2026-09-24T12:45Z | pending |
-| 39 | A83 codex Stop gate | x | build:opus | 2026-09-24T12:45Z | pending |
-| 40 | A58d codex host re-run | x | build:opus | 2026-09-24T12:45Z | pending |
-| 41 | A98 A99 codex weekly + selftests | x | build:opus | 2026-09-24T12:45Z | pending |
+| 38 | grayskull routing smoke test | x | build:opus | 2026-09-24T12:45Z | 2560264 |
+| 39 | A83 codex Stop gate | x | build:opus | 2026-09-24T12:45Z | 2560264 |
+| 40 | A58d codex host re-run | x | build:opus | 2026-09-24T12:45Z | 2560264 |
+| 41 | A98 A99 codex weekly + selftests | x | build:opus | 2026-09-24T12:45Z | 2560264 |
 
 ## In flight
 ### stage 35 - A63b hide-CLAUDE.md isolation  (dispatched)
