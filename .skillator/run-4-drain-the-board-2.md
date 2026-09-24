@@ -1,15 +1,15 @@
 # RUN-4 - drain the board 2
 plan: docs/plans/PLAN-board-drain-2.md
-started: 2026-09-24T00:52Z   updated: 2026-09-24T03:57Z
+started: 2026-09-24T00:52Z   updated: 2026-09-24T04:22Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
-| 30 | A62c antigravity probe | x | build:opus | 2026-09-24T02:38Z | pending |
-| 31 | A93 anti-slop tells | x | build:opus | 2026-09-24T02:38Z | pending |
-| 32 | A94 verify F23b rulings | x | build:opus | 2026-09-24T03:57Z | pending |
-| 33 | A95 prefix carries references | x | build:sonnet | 2026-09-24T02:47Z | pending |
-| 34 | A96 installer drops renamed skills | x | build:opus | 2026-09-24T02:47Z | pending |
+| 30 | A62c antigravity probe | x | build:opus | 2026-09-24T04:22Z | 994309c |
+| 31 | A93 anti-slop tells | x | build:opus | 2026-09-24T04:22Z | 994309c |
+| 32 | A94 verify F23b rulings | x | build:opus | 2026-09-24T04:22Z | 994309c |
+| 33 | A95 prefix carries references | x | build:opus | 2026-09-24T04:22Z | 994309c |
+| 34 | A96 installer drops renamed skills | x | build:opus | 2026-09-24T04:22Z | 994309c |
 
 ## In flight
 ### stage 32 - A94 verify F23b rulings  (dispatched)
