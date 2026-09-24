@@ -1,0 +1,51 @@
+# GREEN for A93: same prompt as scenario-arwen-antislop.txt v2, verbatim,
+# against a prefix whose references/anti-slop.md carries the two A93 lines
+# (T2 `→` appended to link/button text, T3 middle-dot meta strings). FILE
+# VERSION 1, 2026-09-24. Fixture, command and grading: see the scenario file.
+# The harness overlays only skills/, so the edited anti-slop.md was copied into
+# the prefix by hand and the manifest rebuilt (recorded below).
+# PASS = T2 and T3 absent. A tell that persists 2/2 -> its line is reverted.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Relaywise, a tool that routes customer
+support emails to the right person on a small team. Build its product
+page as plain `index.html` and one stylesheet at the repo root: no
+framework, no build step, no npm installs, no JavaScript unless you need it.
+
+What goes on it:
+- a hero with the headline and a call to action to start a free trial
+- a grid of six feature cards, each with a short title, one line of
+  description, a tag chip or two (like "Automation", "Beta") and a
+  "Learn more" link
+- three pricing tiers (Starter, Team, Business) with price, a few
+  features each and a button
+- a footer with the usual links
+
+I'm around, but keep it moving: build it, then tell me what you did.
+
+# ============================================================== RUN RECORD ====
+# A93 GREEN, 2026-09-24 (UTC 01:20Z-01:30Z). claude --version 2.1.281. Strictly
+# serial (one script, run 2 after run 1 exited). Fixtures 9f6156e x2 (as v2).
+# Prefix `prefix-green`: `baseline-harness.sh prefix` (skills/ == HEAD; harness
+# warned references/anti-slop.md dirty, NOT overlaid), then by hand: chmod u+w,
+# cp working-tree references/anti-slop.md in, manifest rebuilt with the harness's
+# own find|cksum, chmod a-w; verify-prefix ok before and after both runs.
+# diff -rq prefix-red prefix-green: only references/anti-slop.md (+ manifest).
+# Command exactly as `cmd green` emitted, BASELINE_TIMEOUT=1500, `timeout 1500`.
+# NOT isolated (~/.claude/CLAUDE.md, A63): compliance carries that caveat.
+# Transcripts: transcripts/a93-green-arwen1.jsonl, -arwen2.jsonl.
+#
+#        T2 →                         T3 · meta
+# run 1  absent ("Learn more" plain,  absent
+#        ::after only on .route-line)
+# run 2  absent                       absent
+# run 1: Skill design-arwen (+ `browse` skill, user-level, both runs), read
+#   anti-slop.md; 27 turns, $1.55, 261s, 1 denial. exit 0, limit hit: none.
+# run 2: same; 20 turns, $1.34, 236s, 1 denial. exit 0, limit hit: none.
+# Verdict: PASS 2/2 (RED 1/2 each). Direction, not a rate, at N=2. Nothing reverted.
+# Side note, not graded: run 2 produced T6 (text-transform: uppercase on
+#   .label "From"/"To", .slip-title, .stamp in the hero routing-slip). The REDs
+#   never did (0/4), so there is still no RED for T6 and it stays out.

@@ -86,7 +86,7 @@ Sample the pairs that actually fail in practice: body text on its real backgroun
 **placeholder text**, muted/secondary text, disabled labels, text on a coloured button,
 and the focus ring against both the element and the page. Body ≥4.5, large ≥3, focus ring
 ≥3 — where **large is ≥24px, or ≥18.67px at bold weight** (18pt / 14pt). A 20px regular
-subline is body text. Over a scrim or a translucent surface, sample against the worst
+subline is body text. Over a translucent surface, sample against the worst
 content that can sit beneath it, not the tint. Report the numbers, not "contrast checked".
 
 **Targets and obscured focus.** Measure, don't infer from padding:
@@ -201,7 +201,6 @@ export const ratio=(A,B)=>{const [x,y]=[lum(A),lum(B)].sort((p,q)=>q-p);
 ```
 
 Check **every** pair the gate names, not just body-on-page: placeholder, disabled text,
-text on a scrim,
 each border against its surface (item 2 — a 1.06:1 input border passes every text check
 and is still a defect), the focus ring against the page, and on-accent / on-danger text.
 Ring-vs-filled-button is not required: WCAG 1.4.11 measures the ring against the adjacent

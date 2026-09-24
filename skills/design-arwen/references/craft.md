@@ -112,10 +112,6 @@ you spend creativity on; none of this is where you get inventive.
 ## Motion
 
 - Intentional, designed in from the start — not a layer added at the end.
-- **Motion answers a person.** Motion that responds to an action (a press, an open, a
-  sort, a drag) is welcome; motion nobody triggered is used sparingly, and a page with
-  no ambient motion at all is a legitimate result. MOTION 8–10 is for briefs that ask
-  for orchestration, not a default.
 - One orchestrated entrance (staggered) beats scattered micro-interactions. **Brand
   register only** — product motion is state-only, 150–250ms, no page-load show.
 - **Durations** (the band `improve` step 10 checks against): press ≤100ms · state
@@ -147,7 +143,8 @@ you spend creativity on; none of this is where you get inventive.
   class-triggered transition: transitions pause on hidden tabs and headless renderers, so
   the reveal never fires and the section ships blank.
 - Staggering items *within one list* is legitimate. The tell is the uniform reflex — one
-  identical fade-and-slide-up applied to every section.
+  identical entrance applied to every section. Suppressing the reflex is never a reason to
+  ship a page with zero motion.
 - Nonessential loops stop when offscreen or the tab is hidden. Autoplay and auto-advance
   (carousels, tickers) get a pause control and stop on focus and under reduced motion
   (WCAG 2.2.2).
@@ -170,9 +167,8 @@ you spend creativity on; none of this is where you get inventive.
 
 ## Backgrounds & imagery
 
-- **A flat fill is correct unless the direction names a texture.** Gradient mesh,
-  grain/noise, geometric pattern, layered transparency and dramatic shadow are options a
-  lane can call for by name — a gradient wash added "for depth" is part of the SaaS kit.
+- Depth over flat fills: grain/noise, geometric pattern, layered
+  transparency, dramatic shadow — matched to the lane, never decorative-by-reflex.
 - **Translucent materials** (`backdrop-filter`, vibrancy) are a committed direction on any
   platform, never a default. When they ship: a `prefers-reduced-transparency: reduce`
   fallback that goes frostier or solid, and `prefers-contrast: more` near-solid with a

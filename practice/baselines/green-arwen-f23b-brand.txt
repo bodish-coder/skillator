@@ -1,0 +1,74 @@
+# GREEN for A94 group S2 (brand surface): the prompt of scenario-arwen-f23b-
+# brand.txt verbatim, against `baseline-harness.sh prefix` of the working tree
+# (skills/design-arwen == HEAD fc315d5, the F23b arwen; references/ carries the
+# uncommitted A93 anti-slop.md lines). FILE VERSION 1, 2026-09-24. Fixture,
+# command and grading B1-B5: see the scenario file. NOT isolated
+# (~/.claude/CLAUDE.md loads, A63): a compliance carries that caveat.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Northwake, a small studio that makes a
+sleep-tracking ring. Build its landing page as plain `index.html` and one
+stylesheet at the repo root: no framework, no build step, no npm
+installs, JavaScript only if you need it.
+
+What goes on it:
+- a frosted navigation bar that stays at the top as you scroll
+- a hero with the headline, a call to action to pre-order, and an
+  ambient background
+- a strip of three or four customer testimonials
+- a short footer
+
+I'm around, but keep it moving: build it, then tell me what you did.
+
+# ============================================================== RUN RECORD ====
+# A94 GREEN, 2026-09-24 (UTC 03:43Z-03:52Z). claude --version 2.1.281. Strictly
+# serial. Fixtures fedd7e0 x2. Prefix `prefix-green` as green-arwen-f23b-
+# product.txt (F23b arwen + uncommitted A93 anti-slop.md). Command exactly as
+# `cmd green` emitted, BASELINE_TIMEOUT=1500, `timeout 1500`. NOT isolated (A63).
+# Transcripts: transcripts/a94-green-brand1.jsonl, -brand2.jsonl.
+#
+#        B2 transparency          B4 job        B5 fresh reviewer        (side: B1 / B3)
+# run 1  pass: @media (prefers-   pass: "job    FAIL: no render; report   B1 radial glow + linear
+#        reduced-transparency:    pre-order"    states no review status  gradient on hero (not
+#        reduce), (prefers-                     (only the plan critique  flat) / B3 pass, no loop
+#        contrast: more) -> solid               Agent ran)
+# run 2  pass: both queries,      pass: "job    pass: report says "no    B1 SVG radialGradient
+#        each its own rule        pre-order"    one has reviewed the     dawn glow (not flat) /
+#                                               rendered page"           B3 pass, no loop
+# run 1: Skill design-arwen + `browse`, plan critique Agent; 34 turns, $1.52,
+#   250s, 8 denials. exit 0. No render: browse.exe needed a permission the run
+#   did not have. run 2: Skill design-arwen, plan critique Agent; 26 turns,
+#   $1.44, 237s, 5 denials. exit 0. No render either.
+# Verdict: B2 KEPT (RED 0/2, GREEN 2/2). B4 KEPT (RED 0/2, GREEN 2/2). B5
+#   GREEN 1/2 -> REVERTED. Confound: neither GREEN could render, so there were no
+#   screenshots to hand a reviewer; the rule's own fallback (`review: self only`
+#   in the report) was still missed in run 1.
+#
+# REVERTED, text removed from design-arwen:
+# B5 build.md section 6: "**The plan got a second lens; so does the render.**
+#   Self-review of your own screenshots rationalises exactly as self-critique of
+#   the plan does (§2). Where the host can dispatch, hand one *fresh* reviewer —
+#   no forked history, it would inherit your framing — the screenshots, the
+#   Design Read and the signature sentence, and ask for one disposition:
+#   `recapture` (the screenshots do not show what they claim), `fix` (a listed
+#   defect), `rebuild` (the direction failed) or `ship`. Then fix what it listed
+#   and stop — bounded rounds in [verify.md](verify.md). No delegate: `review:
+#   self only` in the report."
+# B1 craft.md Backgrounds, restored to 933a5c9: "- **A flat fill is correct
+#   unless the direction names a texture.** Gradient mesh, grain/noise, geometric
+#   pattern, layered transparency and dramatic shadow are options a lane can call
+#   for by name — a gradient wash added "for depth" is part of the SaaS kit." ->
+#   "- Depth over flat fills: gradient mesh, grain/noise, geometric pattern,
+#   layered transparency, dramatic shadow — matched to the lane, never
+#   decorative-by-reflex."
+# B3 craft.md Motion: "- **Motion answers a person.** Motion that responds to an
+#   action (a press, an open, a sort, a drag) is welcome; motion nobody triggered
+#   is used sparingly, and a page with no ambient motion at all is a legitimate
+#   result. MOTION 8–10 is for briefs that ask for orchestration, not a default."
+#   removed, and 933a5c9's "one identical entrance applied to every section.
+#   Suppressing the reflex is never a reason to ship a page with zero motion."
+#   restored in place of "one identical fade-and-slide-up applied to every section."
+# UPSTREAM.md sections column updated to match; upstream-check.sh still parses
+#   it (4x unchanged, rc 0).

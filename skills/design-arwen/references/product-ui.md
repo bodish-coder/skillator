@@ -87,12 +87,6 @@ generated code.
 - Correct `type`, `inputmode`, `autocomplete` — this is free mobile UX and free autofill.
   `autocomplete="one-time-code"` for OTP, `inputmode="decimal"` for money. Inputs,
   selects and textareas render at ≥16px, or iOS Safari zooms the page on focus.
-- **Sign-in and sign-up let password managers work** (WCAG 3.3.8): `autocomplete=
-  "username"` (or `email`) and `"current-password"` / `"new-password"`, a real
-  `<form>` with a submit button, and **never block paste** — no `onpaste` handler that
-  cancels, on the password field or on split OTP boxes (which must accept a pasted code
-  whole). A show/hide toggle on the password field. No puzzle-only CAPTCHA: there is
-  always a path that asks no one to transcribe or solve anything.
 - Native `<select>` beats a custom dropdown until it genuinely can't do the job (search,
   multi-select, rich rows). A custom one owes you: keyboard nav, typeahead, `aria-expanded`,
   Escape, click-outside, and a portal so it isn't clipped.
@@ -243,9 +237,6 @@ card layout reads better and survives mobile.
   for a genuine interruption that must be resolved · **full page** for anything with more
   than ~7 fields or its own sub-navigation.
 - **Never nest modals.** A modal that opens a modal means the flow needed a page.
-- **Scrim if and only if it blocks.** A modal task dims the page behind a scrim (and
-  `inert`s it); a parallel, non-blocking drawer or panel gets offset or translucency and
-  no scrim. Text on a scrim is a contrast pair like any other.
 - Native `<dialog>` or the Popover API — focus trap, Escape, light-dismiss, and correct
   stacking for free (craft.md).
 - A modal with unsaved changes confirms before closing — including on Escape and on the

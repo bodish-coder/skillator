@@ -140,11 +140,3 @@ Only defaults — an existing project's stack always wins.
 Run the SKILL.md **ship gate** — the single gate, tagged `static`/`browser`/`delegated`.
 No browser? Run every `static` item anyway and report in SKILL.md's terminal-state shape.
 Do not report done on an unrendered page.
-
-**The plan got a second lens; so does the render.** Self-review of your own screenshots
-rationalises exactly as self-critique of the plan does (§2). Where the host can dispatch,
-hand one *fresh* reviewer — no forked history, it would inherit your framing — the
-screenshots, the Design Read and the signature sentence, and ask for one disposition:
-`recapture` (the screenshots do not show what they claim), `fix` (a listed defect),
-`rebuild` (the direction failed) or `ship`. Then fix what it listed and stop — bounded
-rounds in [verify.md](verify.md). No delegate: `review: self only` in the report.

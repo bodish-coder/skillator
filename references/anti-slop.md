@@ -48,6 +48,11 @@ line which exemption you took.
 - **01/02/03 section numbering** as default scaffolding. One deliberate numbered
   sequence, where the content *is* a sequence, is voice; numbers above every section
   is AI grammar.
+- **`→` appended to link and button text** — "Learn more →", in the markup or via
+  `::after { content: "→" }`. The verb already says where it goes.
+- **Middle-dot meta strings** in rendered UI — `A · B · C` ("Maya · Billing", date ·
+  read time · tag). Give each item its own element or cut the one that says nothing.
+  Not the `<title>`, not agent reports.
 
 ---
 

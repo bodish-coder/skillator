@@ -1,0 +1,79 @@
+# GREEN for A94 group S1 (product flow): the prompt of scenario-arwen-f23b-
+# product.txt verbatim, against `baseline-harness.sh prefix` of the working tree
+# (skills/design-arwen == HEAD fc315d5, the F23b arwen; references/ carries the
+# uncommitted A93 anti-slop.md lines). FILE VERSION 1, 2026-09-24. Fixture,
+# command and grading P1-P5: see the scenario file. NOT isolated
+# (~/.claude/CLAUDE.md loads, A63): a compliance carries that caveat.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Tallyline, a usage-based billing API for
+developer teams. Build three pieces of its web app as plain HTML with one
+shared stylesheet at the repo root, and plain JavaScript only where the
+behaviour needs it: no framework, no build step, no npm installs.
+
+- `signin.html`: sign in with email and password, with a link to reset
+  the password.
+- `settings.html`: the workspace settings form. Fields: workspace name,
+  billing email, company legal name, VAT ID, address (line 1, line 2,
+  city, postcode, country), invoice currency, webhook URL, and
+  notification preferences. Saving with bad input has to be handled
+  properly: make it so I can see what happens when someone saves with
+  several fields wrong. A help panel on this page can be opened and stays
+  open beside the form while the person keeps editing.
+- a "Delete workspace" confirmation on the settings page, for an action
+  that cannot be undone.
+
+I'm around, but keep it moving: build it, then tell me what you did.
+
+# ============================================================== RUN RECORD ====
+# A94 GREEN, 2026-09-24 (UTC 03:21Z-03:43Z). claude --version 2.1.281. Strictly
+# serial (same loop as the REDs, after them). Fixtures 617b357 x2. Prefix
+# `prefix-green` = `baseline-harness.sh prefix` of the working tree before any
+# A94 edit: skills/design-arwen == HEAD fc315d5 (diff -r vs working tree empty);
+# the harness overlaid dirty references/anti-slop.md (A93), practice/,
+# PLATFORMS.md. So GREEN also differs from RED by the A93 anti-slop lines (T2
+# arrow, T3 middle-dot); neither touches P1-P5. verify-prefix ok before and
+# after. Command exactly as `cmd green` emitted, BASELINE_TIMEOUT=1500,
+# `timeout 1500`. NOT isolated (~/.claude/CLAUDE.md, A63). Transcripts:
+# transcripts/a94-green-product1.jsonl, -product2.jsonl (+ .cmd .err .exit .start).
+#
+#        P2 error summary                         P4 mono      (side: P1 P3 P5)
+# run 1  pass: .summary at top, tabindex=-1,      pass: no     pass pass pass
+#        focus(), a.href='#'+el.id per error      mono at all  (0 below 4.5:1)
+# run 2  pass: same shape, role=group, focus()    pass: none   pass pass pass
+# run 1: Skill design-arwen, plan critique Agent; 64 turns, $3.06, 600s, 5
+#   denials. exit 0. run 2: + `browse`; 53 turns, $3.26, 636s, 4 denials. exit 0.
+# Verdict: P2 KEPT (RED 1/2 fail, GREEN 2/2), P4 KEPT (RED 2/2 fail, GREEN 2/2).
+#   Direction, not a rate, at N=2; the compliance carries the A63 caveat.
+#
+# REVERTED (RED passed 2/2, no failing test), text removed from design-arwen:
+# P1 product-ui.md Inputs: "- **Sign-in and sign-up let password managers work**
+#   (WCAG 3.3.8): `autocomplete="username"` (or `email`) and `"current-password"`
+#   / `"new-password"`, a real `<form>` with a submit button, and **never block
+#   paste** — no `onpaste` handler that cancels, on the password field or on split
+#   OTP boxes (which must accept a pasted code whole). A show/hide toggle on the
+#   password field. No puzzle-only CAPTCHA: there is always a path that asks no one
+#   to transcribe or solve anything." and SKILL.md gate row 4 ", sign-in allows
+#   paste + autocomplete".
+# P3 product-ui.md Modals: "- **Scrim if and only if it blocks.** A modal task dims
+#   the page behind a scrim (and `inert`s it); a parallel, non-blocking drawer or
+#   panel gets offset or translucency and no scrim. Text on a scrim is a contrast
+#   pair like any other." verify.md: "text on a scrim," and "a scrim or " in the
+#   worst-content sentence.
+# P5 back to 933a5c9's wording. craft.md: "large text ≥3:1 — and **large means
+#   ≥24px, or ≥18.67px bold**. WCAG defines it as 18pt / 14pt bold and a CSS px is
+#   3/4 of a pt; "18px / 14px" is a unit slip that lets a 20px muted subline pass
+#   at 3:1 when it needs 4.5:1." -> "large text (≥18px / bold ≥14px) ≥3:1";
+#   verify.md "— where **large is ≥24px, or ≥18.67px at bold weight** (18pt /
+#   14pt). A 20px regular subline is body text."; SKILL.md gate row 1 "(≥24px, or
+#   ≥18.67px bold)"; canvas.md "(≥24px, bold ≥18.67px)". NOTE: the restored
+#   18px/14px wording is the unit error impeccable.md "contradicts" 1 found
+#   (WCAG is 18pt/14pt). Reverted per the A94 rule; flagged for the owner.
+# P5 RE-APPLIED 2026-09-24 on the coordinator's ruling: "it is WCAG's
+#   definition, not a behaviour rule; the RED passed only because no text fell in
+#   the 18-23px band, so the test never reached the condition - restoring a wrong
+#   number is a defect." craft.md, verify.md, canvas.md, SKILL.md gate row 1 and
+#   UPSTREAM.md are back to HEAD fc315d5's 24px / 18.67px wording (git diff of
+#   those lines vs HEAD: none). P5 therefore stands KEPT without a failing run.

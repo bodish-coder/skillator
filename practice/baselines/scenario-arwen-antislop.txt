@@ -1,0 +1,127 @@
+# Scenario for A93: does design-arwen, loaded, produce the six frontend-design
+# tells that the shared floor (references/anti-slop.md §2) does not ban?
+# FILE VERSION 2, 2026-09-24. v1 (a pottery-studio landing page) produced 0/6
+# tells 2/2, so v2 swaps in a prompt that invites them: SaaS product page,
+# feature-card grid, tag chips, three pricing tiers, "Learn more" links.
+# Fixture as below but README '# Relaywise'. v1 note: Source list: docs/plans/F23-upstream/
+# frontend-design.md rows 2-5, 9, 10 (upstream fd:26-43).
+#
+# "RED" here is HEAD's arwen LOADED (a `cmd green` run against a prefix built
+# before the A93 edit), not the skill-blocked RED of README.md. The baseline is
+# today's floor. GREEN (green-arwen-antislop.txt) is the same prompt against a
+# prefix whose references/anti-slop.md carries the A93 lines. NOTE: the harness
+# overlays only skills/ from the working tree; references/ is outside it, so the
+# GREEN prefix needs the edited anti-slop.md copied in by hand (record it).
+#
+# Pressure: none. Brand register on purpose (a landing page), so the all-caps
+# rule, which is brand-register only, is in scope.
+#
+# Fixture (hand-built, an empty static site):
+#   mkdir "$D" && cd "$D" && git init -q && printf '# Kilnworth\n' > README.md
+#   git add README.md && GIT_AUTHOR_DATE=2026-09-24T09:00:00Z \
+#     GIT_COMMITTER_DATE=2026-09-24T09:00:00Z git -c user.name=fixture \
+#     -c user.email=fixture@example.invalid commit -q -m init
+# Command:  sh practice/scripts/baseline-harness.sh cmd green "$D" <this file> <PREFIX>
+#           wrapped in `timeout 1500` by the caller.
+#
+# Tells graded on disk over index.html + *.css (grep, then read each hit):
+#   T1 accented headline word: an <em>/<i>/<b>/<strong>/<span> inside h1/h2 that
+#      carries its own colour or style (one word or phrase singled out)
+#   T2 `→` (or &rarr; / &#8594; / -> / ::after content "→") appended to link or
+#      button text
+#   T3 middle-dot meta strings in rendered text: ` · ` / &middot; / &#183;
+#      joining two or more items
+#   T4 one border-radius value on every rounded element AND one shared soft
+#      rgba(0,0,0,.1)-class shadow on every elevated element
+#   T5 box-shadow with zero x/y offset and a coloured spread/blur (halo), or a
+#      hard `Npx Npx 0` offset shadow (neobrutalism not asked for)
+#   T6 text-transform: uppercase (or literal all-caps) on labels/eyebrows
+# A tell counts as PRODUCED in a run when the grep hit is real rendered UI.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+# v1 PROMPT (retired, kept for the v1 record below):
+# Use `skillator:design-arwen` for this.
+# You are in an empty repo for Kilnworth, a small pottery studio in Leeds
+# that sells handmade stoneware and runs weekend wheel-throwing classes.
+# Build their landing page as plain `index.html` and one stylesheet at the
+# repo root: no framework, no build step, no npm installs, no JavaScript
+# unless you need it.
+#
+# What goes on it:
+# - a hero with the headline and a call to action to book a class
+# - a section on the three kinds of class (taster, 4-week course, private)
+#   with price and length for each
+# - a shop teaser with four pieces, each with name, glaze and price
+# - a short studio story, opening hours and address, and a footer
+#
+# I'm around, but keep it moving: build it, then tell me what you did.
+#
+# ============================================================== RUN RECORD ====
+# A93 RED, file v1, 2026-09-24 (UTC 00:54Z-01:07Z). claude --version 2.1.281.
+# Strictly serial (run 2 launched after run 1 exited). Fixtures hand-built as
+# above (both 34c160b). Prefix `prefix-red` built BEFORE any A93 edit:
+# skills/design-arwen and references/anti-slop.md == HEAD fc315d5 (git status
+# clean for both; diff -r vs working tree and vs `git show HEAD:` empty).
+# Command exactly as `cmd green` emitted, BASELINE_TIMEOUT=1500, wrapped in
+# `timeout 1500`. NOT isolated (~/.claude/CLAUDE.md loads, A63; checked: it has
+# no rule on any of T1-T6, only `→` in its own prose examples).
+# Transcripts: transcripts/a93-red-arwen1.jsonl, -arwen2.jsonl (+ .cmd .err
+# .exit .start beside each). The built index.html/styles.css are in the Write
+# calls inside each transcript. Grader: scratchpad grade.sh = the greps above,
+# then every hit read by hand.
+#
+#        T1 accent  T2 →    T3 · meta          T4 1 radius+1 shadow   T5 halo/hard  T6 caps
+# run 1  absent     absent  absent in UI (only 4 radii, 3 shadows,    absent (inset absent
+#                           <title> "Kilnworth all inset/oklch, none   1px rings    (letter-
+#                           · Pottery studio…")  rgba(0,0,0,.1)        only)        spacing ≤.01em)
+# run 2  absent     absent  same (<title> only)  5 radii, 1 inset ring absent       absent
+# run 1: Skill skillator:design-arwen loaded, read anti-slop.md; 23 turns,
+#   $1.58, 302s, 1 denial (curl). exit 0, limit hit: none.
+# run 2: same load + anti-slop read; 34 turns, $1.72, 316s, 1 denial. exit 0.
+# Verdict: HEAD arwen produced NONE of the six tells, 0/2 each. The `·` is a
+#   <title> separator (browser tab), not an A · B · C meta string in page UI,
+#   so T3 is scored absent. N=2 negative = a run event on this prompt, not a
+#   property of arwen (README "one run is one run"). No failing test exists,
+#   so A93 adds nothing to anti-slop.md on this evidence and no GREEN was run.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Relaywise, a tool that routes customer
+support emails to the right person on a small team. Build its product
+page as plain `index.html` and one stylesheet at the repo root: no
+framework, no build step, no npm installs, no JavaScript unless you need it.
+
+What goes on it:
+- a hero with the headline and a call to action to start a free trial
+- a grid of six feature cards, each with a short title, one line of
+  description, a tag chip or two (like "Automation", "Beta") and a
+  "Learn more" link
+- three pricing tiers (Starter, Team, Business) with price, a few
+  features each and a button
+- a footer with the usual links
+
+I'm around, but keep it moving: build it, then tell me what you did.
+
+# ============================================================ v2 RUN RECORD ===
+# A93 RED v2, 2026-09-24 (UTC 01:09Z-01:19Z). claude --version 2.1.281.
+# Strictly serial. Fixtures as above with README '# Relaywise' (both 9f6156e).
+# Prefix `prefix-red`, the same one as v1 (verify-prefix: matches manifest;
+# skills/ and references/ still == HEAD fc315d5 at launch). Command exactly as
+# `cmd green` emitted, BASELINE_TIMEOUT=1500, wrapped in `timeout 1500`. NOT
+# isolated (~/.claude/CLAUDE.md, A63). Transcripts: transcripts/a93-v2-red-
+# arwen1.jsonl, -arwen2.jsonl (+ .cmd .err .exit .start).
+#
+#        T1      T2 →                       T3 · meta                 T4      T5      T6
+# run 1  absent  PRESENT: `.more::after {   PRESENT: hero demo route  absent  absent  absent
+#                content: " →"; }` on all   rows "Maya · Billing",    (3 radius tiers, 1 shadow)
+#                six "Learn more" links     "Theo · Accounts" x4
+# run 2  absent  absent by grep; hand read: absent                    absent  absent  absent
+#                a CSS-drawn route line +                              (4 radii + pills, 2 shadows)
+#                arrowhead after "Learn more", the DESIGN.md signature
+#                ("stretches toward the target on every forward action"). A
+#                sourced device, not the `→` glyph: scored absent.
+# run 1: Skill skillator:design-arwen, read anti-slop.md; 21 turns, $1.20, 222s.
+# run 2: same; 25 turns, $1.67, 319s. Both exit 0, limit hit: none.
+# Verdict: T2 and T3 PRODUCED 1/2 each (a single positive is valid evidence,
+#   README). T1 T4 T5 T6 0/2 on v2 and 0/2 on v1: no failing test, NOT added.
+#   -> anti-slop.md §2 gets the T2 and T3 lines only; GREEN in green-arwen-antislop.txt.

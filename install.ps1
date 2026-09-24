@@ -30,7 +30,146 @@ $targets = [ordered]@{
 $pluginDirs = @(Get-ChildItem "$HOME\.claude\plugins" -Recurse -Depth 3 -Directory `
                   -Filter 'skillator' -ErrorAction SilentlyContinue)
 
-$skills = Get-ChildItem $src -Directory
+$skills = @(Get-ChildItem $src -Directory)
+# Ordinal sort, the order install.sh uses under any locale - so the manifest is the
+# same bytes and the output lines come in the same order.
+[string[]]$shipped = @($skills | ForEach-Object { $_.Name })
+[IO.DirectoryInfo[]]$skillArr = $skills
+[Array]::Sort($shipped, $skillArr, [StringComparer]::Ordinal)
+$skills = @($skillArr)
+
+# A96: a skill dir this script copies gets an ownership marker (.skillator-owned), and
+# each skills dir a manifest (.skillator-installed). The marker records the SKILL.md
+# hash and every file placed; the next run removes a folder the manifest lists that the
+# repo no longer ships only if it is still exactly that (or is a link into this repo). A dir with no manifest yet loses only a legacy name whose
+# SKILL.md is byte-for-byte a version this repo once shipped. See install.sh.
+$manifest = '.skillator-installed'
+$owned = '.skillator-owned'
+# Every name this repo shipped and has since dropped - keep in sync with install.sh.
+$legacy = @('a11y-proof','brainstorm-build-lite','brainstorm-build-mid','brainstorm-build-prime',
+  'deploy-wizard','func-ui','handoff','handoff-resume','handoff-watch','live-build','merge-prep',
+  'merge-agent','r2d2-relay','replicator-agent','screenshot-loop','sherlock-codes','spec-trace',
+  'ticket-master','tui-proof','relay','dev-alfred','ticket-checker','skillator-brainstorm-build',
+  'skillator-brainstorm-build-lite','skillator-brainstorm-build-mid',
+  'skillator-brainstorm-build-prime','skillator-deploy-wizard','skillator-design-arwen',
+  'skillator-func-ui','skillator-handoff','skillator-handoff-resume','skillator-merge-agent',
+  'skillator-merge-prep')
+# first 16 hex of sha256 (CRs stripped) of every committed version of every legacy SKILL.md
+$legacyHashes = @(
+  '0009e598c9887d2e','0327c5edb2681ae4','08b432f4c65c6135','0bedc2fa45a45931','0cb23bc0b96941a1','0ea43dea3c62ec7d',
+  '0ecac5c2a0a3e71f','1107311baf373879','112d37f54dd83705','12acc44be0dc0153','1319e84408b0646d','15f537bf3b456993',
+  '161d9927d9d69785','1b18effb2fa1982a','1e1c6b7b884a65e2','1e5762879ac88933','222687335a01c6fb','2244a525c048db19',
+  '230ceb1aef744128','264e7c4f9886f1b2','274a48ec314681c0','27f9be5222bd411e','2ceae32c8ea1b722','2fbf2ba065397b8d',
+  '32d5f13dc1c55ec5','33a478f1c4f6b52d','36fd905f1b402683','39abb1cb448388af','3bc0624a4c57c0c8','3df7c34ff7b73bf8',
+  '404be36ebda47aa9','425d42785f00a61c','450beb828bb84a77','476b7af1867c4e60','4b4b9ff6c1fc065f','4bf4cd2e965d2f04',
+  '4bfb87bf5b86e219','4c61e0beea88dd0e','4e3daf97f2a6c330','5121015b65df6266','51360864d1495842','55d01195aaf1c6f1',
+  '56c2917bdd05f9e9','5bbf46627d7308f6','5eb995c9e439d3ee','5f26973497a6c9fd','63fc7c050b438606','664e2a7b09e3b595',
+  '6cb4e69b30283b4d','6db8a2259debd055','73d0d25bc0fdd108','74a90d9a297ec3f1','7546ec23a742f29a','758895cbba45ca83',
+  '7659fd60c931526a','7cfdccc482c23ec9','7d0fbf4ae48dbf48','7d4b60230597a7a7','7d6078efea4dc7f8','7fc304fe9eeef0e3',
+  '8038cf3385d716f3','816b4541c180a7f0','81de147e3087fe07','83823ed9bbce1099','85ced780dba9643c','8d791d2ccfbb9e11',
+  '8ff21a3f735f5649','9156cbecb1032c26','936d877d3fe0d634','9422cc1dc8249f40','94ecf278cc72d236','95052b376e6a4460',
+  '992291008c94f856','9ad39ab2ab2b7c37','9c4f6512a12d6185','a3f7413e192cb280','a4888c3f30af760c','a51219fd635ed267',
+  'a52588b0eefe4872','a5e1ca39d7d55588','abab43aa09a7f598','acf32c583ee14a03','b179b693b7fb9128','b1cb6e4cff9eeba1',
+  'b32cfd9dddc102d0','b5e53acb7bec50b7','b8d2f949f0b1cccf','bd412ea1773d074a','bfb6709d377023a1','c010dd2ad2163947',
+  'c03665f75b0d0759','c067ed4b8faff5d6','c1876bd68c9106c9','c315c6e2a1de208c','c37ab0aa3810b954','c3b40352c0455072',
+  'c43de748ae562b31','c6b510920de93736','c911cef1308a9c1f','c99e7246d734db0e','d33cb54725fe5c5e','d6e9403a0c244878',
+  'd75dfe9daf8b0f37','d79da86d058b0304','d8e5dd8088aaa579','db48fe92027b7696','db9b91ab4d15c331','dbc42e117e0f9411',
+  'dcce5d2f9e54faac','e0143e6c0d4ff150','e332be80f98615a7','e39445137df99708','e534ae6ad21c50c9','e67fd852f783d5ff',
+  'e90178d77b6751bf','e9db28a7ede6168d','ef1dbe8fad5729a1','eff8d2ec867664a7','f020a67e985e48cb','f0332efbbdbec2b0',
+  'f055093d2a0c6688','f2a45373d278c81e','f41b28f2e0ecaf81','f53099f72cf63b00','f5c8c7960b962b8d','f6e533ee576149bc',
+  'f71241e6fc57e4a6','fe7d7760dfc144d0'
+)
+
+# first 16 hex of sha256 over the file with CRs stripped - same value as install.sh
+function Get-SkillHash([string]$file) {
+  $bytes = [IO.File]::ReadAllBytes($file)
+  $ms = New-Object IO.MemoryStream
+  foreach ($x in $bytes) { if ($x -ne 13) { $ms.WriteByte($x) } }
+  $h = [Security.Cryptography.SHA256]::Create().ComputeHash($ms.ToArray())
+  -join ($h[0..7] | ForEach-Object { $_.ToString('x2') })
+}
+
+# the name: value from SKILL.md frontmatter
+function Get-FmName([string]$file) {
+  foreach ($l in [IO.File]::ReadAllLines($file)) {
+    if ($l -match '^name:\s*(.*?)\s*$') { return $Matches[1] }
+  }
+  return ''
+}
+
+# files under $dir, relative, '/'-separated, ordinal order - as install.sh's find
+function Get-RelFiles([string]$dir) {
+  $full = (Get-Item -LiteralPath $dir -Force).FullName.TrimEnd('\')
+  [string[]]$r = @(Get-ChildItem -LiteralPath $dir -Recurse -Force |
+    Where-Object { -not $_.PSIsContainer } |
+    ForEach-Object { $_.FullName.Substring($full.Length + 1).Replace('\', '/') })
+  [Array]::Sort($r, [StringComparer]::Ordinal)
+  return ,$r
+}
+
+# the ownership marker - SKILL.md hash + files placed; LF, no BOM, same bytes as install.sh
+function Write-Owned([string]$dir, [string]$srcDir) {
+  $lines = @("sha256 $(Get-SkillHash (Join-Path $srcDir 'SKILL.md'))") +
+           @(Get-RelFiles $srcDir | ForEach-Object { "file $_" })
+  [IO.File]::WriteAllText((Join-Path $dir $owned), (($lines -join "`n") + "`n"))
+}
+
+# true only if SKILL.md still matches the marker's hash and no file exists that the
+# installer did not place. A marker with no hash never passes.
+function Test-OwnedIntact([string]$dir) {
+  $o = Join-Path $dir $owned
+  if (-not (Test-Path -LiteralPath $o -PathType Leaf)) { return $false }
+  $lines = @([IO.File]::ReadAllLines($o) | ForEach-Object { $_.TrimEnd("`r") })
+  if ($lines.Count -eq 0 -or $lines[0] -cne "sha256 $(Get-SkillHash (Join-Path $dir 'SKILL.md'))") { return $false }
+  foreach ($f in (Get-RelFiles $dir)) {
+    if ($f -ceq $owned) { continue }
+    if ($lines -cnotcontains "file $f") { return $false }
+  }
+  return $true
+}
+
+function Remove-Unshipped([string]$dest) {
+  if (-not (Test-Path -LiteralPath $dest -PathType Container)) { return }
+  $mf = Join-Path $dest $manifest
+  if (Test-Path -LiteralPath $mf -PathType Leaf) {
+    # one name per line, read whole and trimmed
+    $mode = 'manifest'; $why = 'not shipped any more'; $cands = @(Get-Content -LiteralPath $mf)
+  } elseif (Test-Path -LiteralPath (Join-Path $dest 'PLATFORMS.md') -PathType Leaf) {
+    $mode = 'legacy'; $why = 'renamed, pre-manifest install'; $cands = $legacy
+  } else { return }
+  foreach ($raw in $cands) {
+    $nm = "$raw".Trim()
+    if ($nm -eq '' -or $nm -eq '.' -or $nm -eq '..' -or $nm -match '[\\/*?\[]') { continue }
+    if ($shipped -ccontains $nm) { continue }
+    $p = Join-Path $dest $nm
+    $item = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+    if (-not $item) { continue }
+    $isLink = [bool]($item.Attributes -band [IO.FileAttributes]::ReparsePoint)
+    $md = Join-Path $p 'SKILL.md'
+    if ($isLink) {
+      # only a link into this repo's skills\ - never a link the user made elsewhere
+      if (-not ("$($item.Target)" -like "$src\*")) { continue }
+    } elseif (-not (Test-Path -LiteralPath $md -PathType Leaf)) {
+      continue
+    } elseif ($mode -eq 'manifest') {
+      if (-not (Test-Path -LiteralPath (Join-Path $p $owned) -PathType Leaf)) { continue }
+      if (-not (Test-OwnedIntact $p)) {
+        Write-Host "        kept $nm (modified since install) in $dest" -ForegroundColor Yellow
+        continue
+      }
+    } else {
+      if ((Get-FmName $md) -cne $nm) { continue }
+      if ($legacyHashes -notcontains (Get-SkillHash $md)) { continue }
+    }
+    if ($DryRun) {
+      Write-Host "        would remove $nm ($why) from $dest"
+    } else {
+      # a link is deleted as a link - never recurse through it into the repo
+      if ($isLink) { $item.Delete() } else { Remove-Item -LiteralPath $p -Recurse -Force }
+      Write-Host "        - removed $nm ($why) from $dest" -ForegroundColor Yellow
+    }
+  }
+}
 
 foreach ($cli in $targets.Keys) {
   $marker = $targets[$cli].Marker
@@ -46,6 +185,7 @@ foreach ($cli in $targets.Keys) {
   }
 
   foreach ($dest in $targets[$cli].Dests) {
+    Remove-Unshipped $dest
     # a skill symlinked to this repo is live - never replace it with a stale copy
     $linked = @(Get-ChildItem $dest -Directory -ErrorAction SilentlyContinue |
                 Where-Object { $_.LinkType -eq 'SymbolicLink' -and "$($_.Target)" -like "$src*" } |
@@ -54,6 +194,18 @@ foreach ($cli in $targets.Keys) {
       $_.Name -notin $linked -and
       ($Force -or -not (Test-Path (Join-Path $dest "$($_.Name)\SKILL.md")))
     })
+    # adopt an unmarked copy that is exactly this repo's current skill
+    if (-not $DryRun) {
+      foreach ($s in $skills) {
+        $t = Join-Path $dest $s.Name
+        if ($s.Name -in $linked -or $missing -contains $s) { continue }
+        if (-not (Test-Path -LiteralPath (Join-Path $t 'SKILL.md') -PathType Leaf)) { continue }
+        if (Test-Path -LiteralPath (Join-Path $t $owned)) { continue }
+        if ((Get-SkillHash (Join-Path $t 'SKILL.md')) -eq (Get-SkillHash (Join-Path $s.FullName 'SKILL.md'))) {
+          Write-Owned $t $s.FullName
+        }
+      }
+    }
 
     if ($missing.Count -eq 0) {
       $how = if ($linked.Count -eq $skills.Count) { "symlinked to this repo" } else { "already installed" }
@@ -75,6 +227,7 @@ foreach ($cli in $targets.Keys) {
           }
         }
         Copy-Item $s.FullName $t -Recurse -Force
+        Write-Owned $t $s.FullName
         Write-Host "        + $($s.Name)" -ForegroundColor Green
       }
     }
@@ -95,6 +248,8 @@ foreach ($cli in $targets.Keys) {
       $references = Join-Path $dest 'references'
       if (Test-Path $references) { Remove-Item $references -Recurse -Force }
       Copy-Item (Join-Path $PSScriptRoot 'references') $dest -Recurse -Force
+      # LF, no BOM - the same bytes install.sh writes, so either twin reads the other's
+      [IO.File]::WriteAllText((Join-Path $dest $manifest), (($shipped -join "`n") + "`n"))
     }
   }
 }

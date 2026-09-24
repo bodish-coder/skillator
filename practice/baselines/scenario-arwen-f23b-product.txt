@@ -1,0 +1,97 @@
+# Scenario for A94 group S1 (product flow): do F23b's product-side rulings in
+# design-arwen change what it builds? Rulings graded here: sign-in paste +
+# autocomplete (product-ui.md Inputs), linked error summary on a long form
+# (product-ui.md Forms), scrim iff blocking (product-ui.md Overlays), no default
+# mono face (build.md Type / craft.md Color & type), large text = 24px / 18.67px
+# bold (craft.md, verify.md, SKILL.md gate row 1). Sources: docs/plans/F23-upstream/
+# impeccable.md row 1 + "contradicts" 1; ui-ux-pro-max.md; frontend-design.md.
+# FILE VERSION 1, 2026-09-24.
+#
+# "RED" here is arwen as it was BEFORE F23b, LOADED (a `cmd green` run against a
+# prefix built by hand from `git archive 933a5c9`, CLAUDE.md AGENTS.md GEMINI.md
+# .skillator stripped as the harness does, manifest from the harness's own
+# find|cksum). Not the skill-blocked RED of README.md. GREEN
+# (green-arwen-f23b-product.txt) is the same prompt against `prefix` of the
+# working tree.
+#
+# Pressure: none beyond "keep it moving"; the user is present. A help panel that
+# stays open beside the form is in the prompt so "scrim iff blocking" has a
+# non-blocking surface to get wrong. A developer-tool product invites mono chrome.
+#
+# Fixture (hand-built, an empty static site):
+#   mkdir "$D" && cd "$D" && git init -q && printf '# Tallyline\n' > README.md
+#   git add README.md && GIT_AUTHOR_DATE=2026-09-24T09:00:00Z \
+#     GIT_COMMITTER_DATE=2026-09-24T09:00:00Z git -c user.name=fixture \
+#     -c user.email=fixture@example.invalid commit -q -m init
+# Command:  sh practice/scripts/baseline-harness.sh cmd green "$D" <this file> <PREFIX>
+#           BASELINE_TIMEOUT=1500, wrapped in `timeout 1500` by the caller.
+#
+# Graded on disk (final files in the fixture, grep then read each hit):
+#   P1 paste+autocomplete: sign-in email/username input has autocomplete=
+#      username|email, password input autocomplete=current-password, and no
+#      paste blocker (onpaste / 'paste' listener that preventDefaults).
+#   P2 error summary: the settings form, on a failed save, renders a summary at
+#      the top whose items are links (href="#<field-id>") to the fields.
+#   P3 scrim iff blocking: the delete confirm has a scrim (::backdrop or overlay
+#      element) AND the help panel has none.
+#   P4 no default mono: no monospace family applied to anything but literal
+#      code / IDs / URLs / keys (every font-family hit read by hand).
+#   P5 large text: headless-shell probe over every rendered text node; FAIL if
+#      any text < 24px regular (or < 18.67px bold) sits between 3:1 and 4.5:1
+#      contrast (the old 18px / 14px rule would have let it pass), or the run's
+#      own contrast claim uses 18px / 14px as "large".
+# Lines starting with '#' are stripped before the prompt is sent.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Tallyline, a usage-based billing API for
+developer teams. Build three pieces of its web app as plain HTML with one
+shared stylesheet at the repo root, and plain JavaScript only where the
+behaviour needs it: no framework, no build step, no npm installs.
+
+- `signin.html`: sign in with email and password, with a link to reset
+  the password.
+- `settings.html`: the workspace settings form. Fields: workspace name,
+  billing email, company legal name, VAT ID, address (line 1, line 2,
+  city, postcode, country), invoice currency, webhook URL, and
+  notification preferences. Saving with bad input has to be handled
+  properly: make it so I can see what happens when someone saves with
+  several fields wrong. A help panel on this page can be opened and stays
+  open beside the form while the person keeps editing.
+- a "Delete workspace" confirmation on the settings page, for an action
+  that cannot be undone.
+
+I'm around, but keep it moving: build it, then tell me what you did.
+
+# ============================================================== RUN RECORD ====
+# A94 RED, 2026-09-24 (UTC 02:50Z-03:10Z). claude --version 2.1.281 (Claude
+# Code). Strictly serial, one nested claude at a time (one loop, run 2 launched
+# after run 1 exited). Fixtures hand-built as above (both 617b357).
+# Prefix `prefix-red`: `git archive 933a5c9 | tar -x`, CLAUDE.md AGENTS.md
+# GEMINI.md .skillator removed, manifest = the harness's find|cksum, chmod a-w.
+# `diff -r` of its skills/design-arwen and references/ against `git show
+# 933a5c9:<path>` of every file: empty. verify-prefix ok before and after.
+# Command exactly as `cmd green "$D" <this file> prefix-red` emitted,
+# BASELINE_TIMEOUT=1500, run under `timeout 1500`. NOT isolated
+# (~/.claude/CLAUDE.md loads, A63). Transcripts: transcripts/a94-red-product1
+# .jsonl, -product2.jsonl (+ .cmd .err .exit .start). Grader: greps above over
+# the fixture's final files, every hit read by hand; P5 by a CDP probe on
+# chrome-headless-shell 1243 at 1280x900 (every visible text node: computed
+# size/weight, colour composited over its ancestors' backgrounds, contrast).
+#
+#        P1 paste+autocomp  P2 error summary          P3 scrim iff block  P4 mono              P5 large text
+# run 1  pass (username /   pass: .error-summary at   pass (dialog::      FAIL: --mono on the   pass: 0 text
+#        current-password,  top, tabindex=-1, focus,  backdrop; help is   .tally chips, the     nodes below
+#        no paste handler)  a.href='#'+id per error   a grid sibling)     error count, the      4.5:1 (57)
+#                                                                         save-bar status line
+# run 2  pass (same)        FAIL: the linked list     pass (same shape)   FAIL: mono wordmark,  pass: 0 below
+#                           renders in the sticky                         status line, "editing 4.5:1 (49)
+#                           save bar at the bottom,                       now" label
+#                           focus goes to the first
+#                           field, no top summary
+# run 1: Skill design-arwen (+ user-level `browse`), plan critique Agent; 47
+#   turns, $2.85, 539s, 10 denials. exit 0, limit hit: none.
+# run 2: Skill design-arwen; 61 turns, $2.48, 598s, 6 denials. exit 0.
+# Verdict: P1 P3 P5 pass 2/2 -> no failing test, those rulings REVERTED (the
+#   removed text is quoted in green-arwen-f23b-product.txt). P2 fails 1/2, P4
+#   fails 2/2 -> GREEN.

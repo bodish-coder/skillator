@@ -723,6 +723,16 @@ relay_split_files() {
 #      stderr. Dirty paths outside skills/ are NOT overlaid - they are listed
 #      as a warning, because a half-edited PRACTICE.md is rarely what you meant
 #      to test.
+#   1b. (A95) skills/ is not the only thing a skill reads at plugin-root runtime
+#      - design-arwen reads references/anti-slop.md, several skills read
+#      practice/*.md, and PRACTICE.md / PLATFORMS.md / WORKFLOW.md are read
+#      directly (grep -rn 'references\|practice\|PRACTICE.md\|PLATFORMS.md\|
+#      WORKFLOW.md' skills/*/SKILL.md). A93's GREEN run had to copy
+#      references/anti-slop.md into the prefix by hand because only skills/ was
+#      overlaid. OVERLAY_PATHS below lists every such root path; each one that
+#      is dirty is overlaid the same way skills/ is (working tree over the
+#      archive, deletions honoured, every dirty path named on stderr). A dirty
+#      path outside OVERLAY_PATHS is still just a warning, not an overlay.
 #   2. `--add-dir` makes the prefix writable, and runs wrote files into it that
 #      the next run reusing the prefix then inherited. The prefix is now
 #      chmod -R a-w (on Windows that protects existing files but NOT the
@@ -750,25 +760,41 @@ verify_prefix() {
   return 1
 }
 
+# Every root path a skill reads at plugin-root runtime (A95). Kept as one list
+# so build_prefix and its "everything else" warning agree on what is covered.
+OVERLAY_PATHS="skills references practice PRACTICE.md PLATFORMS.md WORKFLOW.md"
+
 build_prefix() {
   d="$1"
   root=${BASELINE_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
   if [ -e "$d" ]; then die "prefix dir already exists: $d"; fi
   mkdir -p "$d"
   (cd "$root" && git archive HEAD) | tar -x -C "$d"
-  dirty=$(cd "$root" && git status --porcelain --untracked-files=all -- skills)
-  if [ -n "$dirty" ]; then
-    rm -rf "$d/skills"
-    (cd "$root" && git ls-files -co --exclude-standard -- skills \
-      | while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done \
-      | tar -cf - -T -) | tar -xf - -C "$d"
-    echo "WARNING: skills/ has uncommitted changes - the prefix carries the WORKING TREE" >&2
-    echo "  version of skills/, not HEAD. Record that in the run file. Dirty paths:" >&2
-    echo "$dirty" | sed 's/^/    /' >&2
-  fi
-  other=$(cd "$root" && git status --porcelain --untracked-files=no | grep -v ' skills/' || true)
+  for ovp in $OVERLAY_PATHS; do
+    dirty=$(cd "$root" && git status --porcelain --untracked-files=all -- "$ovp")
+    if [ -n "$dirty" ]; then
+      pd="$ovp"; [ -d "$root/$ovp" ] && pd="$ovp/"
+      rm -rf "$d/$ovp"
+      (cd "$root" && git ls-files -co --exclude-standard -- "$ovp" \
+        | while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done \
+        | tar -cf - -T -) | tar -xf - -C "$d"
+      echo "WARNING: $pd has uncommitted changes - the prefix carries the WORKING TREE" >&2
+      echo "  version of $pd, not HEAD. Record that in the run file. Dirty paths:" >&2
+      echo "$dirty" | sed 's/^/    /' >&2
+    fi
+  done
+  # A line is "covered" when the path it names (porcelain's fixed 3-char
+  # status prefix stripped) IS an overlay path or sits under one of them.
+  other=$(cd "$root" && git status --porcelain --untracked-files=no | while IFS= read -r line; do
+    path=$(printf '%s' "$line" | cut -c4-)
+    covered=false
+    for ovp in $OVERLAY_PATHS; do
+      case "$path" in "$ovp"|"$ovp"/*) covered=true; break ;; esac
+    done
+    [ "$covered" = true ] || printf '%s\n' "$line"
+  done)
   if [ -n "$other" ]; then
-    echo "WARNING: uncommitted changes OUTSIDE skills/ are NOT in the prefix (HEAD is):" >&2
+    echo "WARNING: uncommitted changes OUTSIDE the overlaid paths are NOT in the prefix (HEAD is):" >&2
     echo "$other" | sed 's/^/    /' >&2
   fi
   rm -f "$d/CLAUDE.md" "$d/AGENTS.md" "$d/GEMINI.md"
@@ -1590,14 +1616,18 @@ selftest() {
   # A88: the prefix carries uncommitted skill edits (and says so), is
   # read-only, and a run that writes into it is caught before and after.
   src="$tmp/src"
-  mkdir -p "$src/.claude-plugin" "$src/skills/a" "$src/skills/gone"
+  mkdir -p "$src/.claude-plugin" "$src/skills/a" "$src/skills/gone" "$src/references"
   echo '{}' > "$src/.claude-plugin/plugin.json"
   echo canon > "$src/PRACTICE.md"; echo mem > "$src/CLAUDE.md"
   echo committed > "$src/skills/a/SKILL.md"; echo old > "$src/skills/gone/SKILL.md"
+  echo committed > "$src/references/anti-slop.md"
   commit_fixture "$src" 'prefix source'
   echo uncommitted > "$src/skills/a/SKILL.md"
   mkdir -p "$src/skills/b"; echo untracked > "$src/skills/b/SKILL.md"
   rm "$src/skills/gone/SKILL.md"
+  # A95: a dirty file OUTSIDE skills/ (references/, which design-arwen reads at
+  # the plugin root) must still reach the prefix and be named on stderr.
+  echo uncommitted-ref > "$src/references/anti-slop.md"
   p="$tmp/put"
   BASELINE_ROOT="$src" build_prefix "$p" >/dev/null 2>"$tmp/err" || die 'prefix: build failed'
   [ "$(cat "$p/skills/a/SKILL.md")" = uncommitted ] || die 'prefix: uncommitted skill edit is missing'
@@ -1605,6 +1635,10 @@ selftest() {
   if [ -e "$p/skills/gone/SKILL.md" ]; then die 'prefix: a skill file deleted in the tree came back'; fi
   grep -q 'skills/ has uncommitted changes' "$tmp/err" || die 'prefix: no warning for dirty skills/'
   grep -q 'skills/a/SKILL.md' "$tmp/err" || die 'prefix: warning does not name the dirty path'
+  [ "$(cat "$p/references/anti-slop.md")" = uncommitted-ref ] \
+    || die 'prefix: dirty references/ file did not reach the prefix'
+  grep -q 'references/ has uncommitted changes' "$tmp/err" || die 'prefix: no warning for dirty references/'
+  grep -q 'references/anti-slop.md' "$tmp/err" || die 'prefix: warning does not name the dirty references/ path'
   if [ -e "$p/CLAUDE.md" ]; then die 'prefix: CLAUDE.md survived'; fi
   if [ -w "$p/skills/a/SKILL.md" ] && [ "$(id -u 2>/dev/null)" != 0 ]; then
     die 'prefix: files are writable'

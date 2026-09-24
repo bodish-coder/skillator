@@ -128,17 +128,22 @@ SIGKILL after an ignored SIGTERM (rc 137), or `none from the harness - claude
 itself exited N` (its own error or limit, e.g. `--max-budget-usd`; the stream's
 result line says which). stdout is claude's alone, so `> run.jsonl` still works.
 
-**Prefix (A88).** `prefix` builds from `git archive HEAD`, then copies
-`skills/` from the **working tree** over it (tracked plus untracked-not-ignored,
-deletions honoured) and lists every dirty `skills/` path on stderr — record
-that the run tested uncommitted skills. Dirty paths outside `skills/` are
-warned about and **not** carried. The finished prefix gets a
-`.harness-manifest` (cksum of every file) and `chmod -R a-w`. On Windows that
-protects files but not directories, so the manifest is the real guard: `run`
-refuses a prefix that no longer matches it before the run, and after the run
-reports `PREFIX MODIFIED` with the paths and turns a 0 exit into 3. Rebuild a
-dirtied prefix; delete one with `chmod -R u+w DIR && rm -rf DIR`.
-`verify-prefix DIR` runs the check by hand.
+**Prefix (A88, extended A95).** `prefix` builds from `git archive HEAD`, then
+overlays every root path a skill actually reads at runtime — `skills/`,
+`references/`, `practice/`, `PRACTICE.md`, `PLATFORMS.md`, `WORKFLOW.md`
+(`OVERLAY_PATHS` in the script; found by grepping `skills/*/SKILL.md` for what
+they reference at the repo root) — from the **working tree** (tracked plus
+untracked-not-ignored, deletions honoured), one path at a time, naming every
+dirty path it copies on stderr — record that the run tested uncommitted
+content. A93's GREEN had to copy `references/anti-slop.md` into the prefix by
+hand because only `skills/` was overlaid; it no longer needs to. A dirty path
+outside `OVERLAY_PATHS` is still just warned about and **not** carried. The
+finished prefix gets a `.harness-manifest` (cksum of every file) and
+`chmod -R a-w`. On Windows that protects files but not directories, so the
+manifest is the real guard: `run` refuses a prefix that no longer matches it
+before the run, and after the run reports `PREFIX MODIFIED` with the paths and
+turns a 0 exit into 3. Rebuild a dirtied prefix; delete one with
+`chmod -R u+w DIR && rm -rf DIR`. `verify-prefix DIR` runs the check by hand.
 
 ## Harness — GREEN runs (skill loaded)
 

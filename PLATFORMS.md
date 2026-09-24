@@ -70,16 +70,16 @@ harmless, never load-bearing.
 
 The "Load another skill" row says how a skill *can* be loaded. Whether the host
 loads one **unprompted**, from the description alone, is a separate question.
-Two rows have now been tested; the rest are still the host's own claim.
+Five rows have now been tested; prime-agent has no loader to test.
 
 | Host | Fires on description alone? |
 |---|---|
 | claude-code | **yes, verified** — 2026-09-06, `claude -p` 2.1.261 / Opus 5, 7/7 |
 | codex | **yes, verified** — 2026-09-06, `codex exec` 0.153.2, 2/2 |
 | cursor | **yes, verified** — 2026-09-23, `cursor-agent` 2026.09.18, 4/4 — but every load came from the user-level `~/.cursor/skills`; a fixture-local `.cursor/skills`/`.agents/skills` never appeared in its inventory (self-reported, unconfirmed) |
-| antigravity | claimed by the host; **untestable here** — IDE only on this machine, no CLI |
+| antigravity | **yes, verified** — 2026-09-24, `agy` 1.2.9, 4/4 — `grayskull-power` 2/2 from the fixture's project-local `.agents/skills`; the `func-ui`-triggering prompt 2/2 loaded the stale user-level `~/.gemini/config/skills/func-ui` instead of the fixture's `designui-galadriel` |
 | pi | **yes, verified** — 2026-09-23, `pi` 0.74.2 / openai gpt-5.5, 4/4, from project-local `.pi/skills` with `PI_CODING_AGENT_DIR` and `HOME` isolated |
-| prime-agent | **no** — no markdown-skill loader at all |
+| prime-agent | **no** — no markdown-skill loader at all; not installed on this machine (2026-09-24), so its always-on-file route is still unrun |
 
 The claude-code runs were headless, from a throwaway fixture outside any repo,
 with no `CLAUDE.md`/`AGENTS.md` in the cwd: `designui-galadriel` loaded 5/5 from *"just a
@@ -120,13 +120,28 @@ never appeared in its inventory (self-reported, unconfirmed). Cursor's docs do
 claim description-based auto-loading from `.agents/skills` · `.cursor/skills`
 (project and `~`).
 
-**antigravity (untestable here).** Only the IDE is installed
-(`%LOCALAPPDATA%/Programs/Antigravity IDE`, whose `bin/` holds just the editor
-launcher); there is no headless agent binary to drive. The docs claim skills are
-auto-selected — *"You don't need to explicitly tell the agent to use a skill — it
-decides based on context"* — and document a CLI with a headless mode elsewhere.
-**That is Google's claim, not a result.** Closing this row needs the Antigravity
-CLI installed and authenticated, then the same fixture probe.
+**antigravity (verified).** Earlier only the IDE was installed, with no headless
+agent binary. The Antigravity CLI is now installed (`agy` 1.2.9, signed in) and
+was probed 2026-09-24 with `agy -p … --new-project --sandbox --output-format
+stream-json` from throwaway fixtures in the system temp dir, each holding
+`index.html` + `app.js` + `package.json` and the repo's skills copied into
+`.agents/skills/` (the project-local dir `agy` reads — a probe skill placed only
+there was listed from that path), with no `AGENTS.md`/`CLAUDE.md`/`GEMINI.md` in
+the tree and a `~/.gemini/GEMINI.md` that never mentions skills. 4/4 runs loaded a
+skill as their **first tool call**: *"set me up for coding … activate the
+programming skills"* read the fixture's `.agents/skills/grayskull-power/SKILL.md`
+2/2, although same-named copies sit in `~/.gemini/config/skills` and
+`~/.agents/skills`; *"just a mockup … make it real"* read
+`~/.gemini/config/skills/func-ui/SKILL.md` 2/2 — a stale old-name user-level
+install — and never the fixture's `designui-galadriel`. So `agy` reads
+`~/.gemini/config/skills/` (which Gemini CLI does not), and a leftover old-name
+install there can win over the project copy. The committed transcripts each end
+in a `SUCCESS` result after 9-22 s, having loaded the skill; they do not show the
+skill's later work, so only the load is evidenced. Do **not** probe without
+`--sandbox`/`--new-project`: an earlier unsandboxed round (`--mode plan` does not
+stop edits) resolved to other workspaces, searched the home directory, copied a
+fixture into `~/.gemini/antigravity-cli/scratch/` and built a backend there;
+those runs are discarded.
 
 **pi (verified).** Earlier probe found `pi` 0.74.2 installed but the only
 configured provider, OpenAI, rejected the key on that machine (`401 Incorrect
@@ -146,7 +161,10 @@ re-runs are JSONL from each host's own stream, committed at
 `a62b-cursor-funcui.jsonl`, `a62b-cursor-funcui2.jsonl`,
 `a62b-cursor-grayskull.jsonl`, `a62b-cursor-grayskull2.jsonl`,
 `a62b-pi-funcui.jsonl`, `a62b-pi-funcui2.jsonl`, `a62b-pi-grayskull.jsonl`,
-`a62b-pi-grayskull2.jsonl`). **Never promote a row here without one.**
+`a62b-pi-grayskull2.jsonl`) and the 2026-09-24 antigravity runs
+(`a62c-agy-funcui.jsonl`, `a62c-agy-funcui2.jsonl`,
+`a62c-agy-grayskull.jsonl`, `a62c-agy-grayskull2.jsonl`). **Never promote a row
+here without one.**
 
 **The deterministic route, for the hosts that are not verified and for anyone who
 wants certainty:** the **Always-on project file** row above. `grayskull-power`
@@ -161,7 +179,9 @@ On **prime-agent** this is the *only* route: there is no markdown-skill loader, 
 `.skillator/grayskull.md` plus an `AGENTS.md` pointing at it is the activation
 mechanism, and `install.sh` cannot write it for you — it only prints the
 reminder. Nobody has run that path end-to-end on prime-agent; treat it as
-untested until someone does.
+untested until someone does. prime-agent is not installed on this machine
+(checked 2026-09-24: no `prime-agent` on `PATH`, no pip package), so it stays
+deferred.
 
 Nothing in `install.sh` / `install.ps1` writes a user-level always-on line; they
 install skills and the shared docs only.

@@ -317,7 +317,7 @@ by what it takes to prove: `static` (readable from the source, no browser),
 | 1 | Text contrast on real pairs — 4.5:1 body, 3:1 large (≥24px, or ≥18.67px bold) | `static` |
 | 2 | **Non-text contrast ≥3:1** — input borders, focus ring, icons, chart strokes, any control edge carrying meaning (WCAG 1.4.11) | `static` |
 | 3 | Every dependency and asset URL resolves — no invented packages, no guessed image IDs | `static` |
-| 4 | Labels, `aria-describedby` errors, `aria-live` regions, focus order in source order, headings in sequence, zoom not blocked, sign-in allows paste + autocomplete | `static` |
+| 4 | Labels, `aria-describedby` errors, `aria-live` regions, focus order in source order, headings in sequence, zoom not blocked | `static` |
 | 5 | Loading / empty / error / success / no-permission all designed | `static` |
 | 6 | Signature present and systematic (Phase 2 test for the register) | `static` |
 | 7 | No overflow at 320 / 768 / 1280 / 1920 and at 200% text zoom | `browser` |

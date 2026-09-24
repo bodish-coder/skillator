@@ -1,0 +1,76 @@
+# Scenario for A94 group S2 (brand surface): do F23b's brand-side rulings in
+# design-arwen change what it builds? Rulings graded here: flat fill over
+# gradient mesh (craft.md Backgrounds), translucency as a direction with
+# reduced-transparency + contrast fallbacks (craft.md Backgrounds, verify.md),
+# ambient motion sparingly (craft.md Motion "Motion answers a person"), the
+# `job` field in the Design Read (SKILL.md Phase 0.6), the fresh-reviewer
+# disposition after the render (build.md Finish). Sources: docs/plans/
+# F23-upstream/apple-design.md, frontend-design.md, impeccable.md row 4,
+# ui-ux-pro-max.md. FILE VERSION 1, 2026-09-24.
+#
+# "RED" = arwen before F23b, loaded: `cmd green` against a prefix built by hand
+# from `git archive 933a5c9` (see scenario-arwen-f23b-product.txt). GREEN
+# (green-arwen-f23b-brand.txt) = same prompt against `prefix` of the working tree.
+#
+# Pressure: none beyond "keep it moving"; the user is present. The user asks
+# for a frosted nav (so translucency is in scope and its fallbacks are owed) and
+# an "ambient background" (which invites a gradient mesh and a looping blob; a
+# flat fill, an image, or motion that stops is still an answer to it).
+#
+# Fixture: as scenario-arwen-f23b-product.txt, README '# Northwake'.
+# Command:  sh practice/scripts/baseline-harness.sh cmd green "$D" <this file> <PREFIX>
+#           BASELINE_TIMEOUT=1500, wrapped in `timeout 1500` by the caller.
+#
+# Graded on disk / in the stream:
+#   B1 flat fill: FAIL if the hero/page background is a gradient mesh: two or
+#      more radial/conic-gradient layers, or blurred colour-blob elements.
+#   B2 translucency: the frosted nav (backdrop-filter) ships BOTH a
+#      `prefers-reduced-transparency` rule and a `prefers-contrast: more` rule.
+#   B3 ambient motion: FAIL if any `infinite` animation is not stopped or
+#      removed under `prefers-reduced-motion: reduce`.
+#   B4 job: the Design Read line in the run's assistant text carries `job`.
+#   B5 fresh reviewer: the run dispatches a fresh reviewer (Agent/Task call) of
+#      the render, or reports `review: self only` / the reviewer disposition.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Northwake, a small studio that makes a
+sleep-tracking ring. Build its landing page as plain `index.html` and one
+stylesheet at the repo root: no framework, no build step, no npm
+installs, JavaScript only if you need it.
+
+What goes on it:
+- a frosted navigation bar that stays at the top as you scroll
+- a hero with the headline, a call to action to pre-order, and an
+  ambient background
+- a strip of three or four customer testimonials
+- a short footer
+
+I'm around, but keep it moving: build it, then tell me what you did.
+
+# ============================================================== RUN RECORD ====
+# A94 RED, 2026-09-24 (UTC 03:10Z-03:21Z). claude --version 2.1.281. Strictly
+# serial. Fixtures as above, README '# Northwake' (both fedd7e0). Prefix
+# `prefix-red`, the same one as scenario-arwen-f23b-product.txt (933a5c9, diff
+# -r empty, verify-prefix ok). Command exactly as `cmd green` emitted,
+# BASELINE_TIMEOUT=1500, `timeout 1500`. NOT isolated (A63). Transcripts:
+# transcripts/a94-red-brand1.jsonl, -brand2.jsonl (+ .cmd .err .exit .start).
+#
+#        B1 no mesh          B2 transparency     B3 loop guarded     B4 job  B5 fresh reviewer
+# run 1  pass: one radial-   FAIL: backdrop-     pass: `drift ...    FAIL    FAIL: only a plan-critique
+#        gradient glow (not  filter + @supports  infinite` set to            Agent; no render reviewer, no
+#        a mesh), not flat   fallback only       `animation: none`           `review: self only`
+#                                                under reduce
+# run 2  pass: one radial    FAIL: same          pass: `breathe 9s   FAIL    FAIL: report says the plan
+#        glow, not flat                          infinite` only in           review was skipped; nothing
+#                                                no-preference               on the render
+# run 1: Skill design-arwen + `browse`, plan critique Agent; 43 turns, $1.86,
+#   411s, 4 denials. exit 0. Rendered with Playwright (.verify/*.png). It also
+#   wrote a scratch contrast.mjs into its own session temp dir, outside the
+#   fixture. run 2: Skill design-arwen; 26 turns, $1.13, 195s, 8 denials. exit 0.
+# Verdict: B1 B3 pass 2/2 -> no failing test, REVERTED. B2 B4 B5 fail 2/2 -> GREEN.
+# B1 note: the caller's grade was "flat fill rather than gradient mesh"; this
+#   file's written criterion (mesh = 2+ radial/conic layers) passes both REDs,
+#   while by "flat fill" both REDs fail (a radial glow). Both GREENs also shipped
+#   a radial glow (green file), so the ruling reverts under either reading.
