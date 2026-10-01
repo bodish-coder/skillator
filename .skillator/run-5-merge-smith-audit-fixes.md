@@ -1,120 +1,19 @@
 # RUN-5 - merge-smith audit fixes
 plan: TICKETS.md
-started: 2026-10-01T18:14Z   updated: 2026-10-01T19:02Z
+started: 2026-10-01T18:14Z   updated: 2026-10-01T19:15Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
-| 42 | A102 A105 A108 merge-smith git procedure | ~ | build:opus | 2026-10-01T18:15Z | - |
-| 43 | A103 A106 A107 merge-smith routing | ~ | build:opus | 2026-10-01T18:15Z | - |
-| 44 | A104 F24 clean-merge sweep resume renumber | ~ | build:opus | 2026-10-01T18:15Z | - |
-| 45 | A101 usage-watch ps1 weekly fallback | ~ | build:sonnet | 2026-10-01T18:16Z | - |
-| 46 | A100 codex design-arwen choices list | ~ | deep:fable | 2026-10-01T18:16Z | - |
-| 47 | verify review commit |   | - | - | - |
-| 48 | A103 GREEN re-run merge-smith N=2 | ~ | build:opus | 2026-10-01T19:02Z | - |
+| 42 | A102 A105 A108 merge-smith git procedure | x | build:opus | 2026-10-01T19:15Z | edf05be |
+| 43 | A103 A106 A107 merge-smith routing | x | build:opus | 2026-10-01T19:15Z | edf05be |
+| 44 | A104 F24 clean-merge sweep resume renumber | x | build:opus | 2026-10-01T19:15Z | edf05be |
+| 45 | A101 usage-watch ps1 weekly fallback | x | build:sonnet | 2026-10-01T19:15Z | edf05be |
+| 46 | A100 codex design-arwen choices list | x | deep:fable | 2026-10-01T19:15Z | edf05be |
+| 47 | verify review commit | x | main:opus | 2026-10-01T19:15Z | edf05be |
+| 48 | A103 GREEN re-run merge-smith N=2 | x | build:opus | 2026-10-01T19:15Z | edf05be |
 
 ## In flight
-preamble: |
-  (RUN-5 preamble) Repo C:\tools\Projects\skillator2, a plugin of agent
-  skills. You implement ONE stage. Read your tickets' full lines in TICKETS.md
-  (grep the IDs); they carry the evidence and the closing condition. Rules: do
-  NOT commit, push, or edit TICKETS.md or anything under .skillator/. Touch
-  only the files your stage names (plus a new references/ file or script where
-  it says so). Never run git commands that move refs or change the worktree of
-  this repo; prove behaviour in a throwaway git repo under your temp dir.
-  skills/merge-smith/SKILL.md is ~2850 words and loads whole: keep it tight,
-  move long command blocks and procedures into skills/merge-
-  smith/references/<topic>.md behind a one-line pointer, net SKILL.md growth
-  at most ~250 words for your stage. Match the file's existing voice. merge-
-  smith's Rules say it is kept in sync with skills/mergeprep-oracle/SKILL.md
-  (vocabulary, reconcile commands, per-hunk granularity): change a shared
-  reconcile command in both. Return plain text: files changed; per ticket ID
-  what changed and the evidence (repro command + output before and after);
-  anything not done and why.
-
-### stage 42 - A102 A105 A108  (dispatched, fix:opus)
-prompt: |
-  (RUN-5 preamble) Stage 42. Tickets A102a, A102b, A102c, A102d, A102e, A102f,
-  A105, A108a, A108b, A108c, A108d - all in skills/merge-smith/SKILL.md (git
-  procedure: Phase 0 pre-flight and base fetch, Phase 3 whole-side take, Phase
-  4 reconcile in both directions, Phase 2 branch naming, Phase 5 worktree
-  detection, merge drivers/rerere/LFS, lockfile regeneration). Also
-  skills/mergeprep-oracle/SKILL.md where the reconcile is shared. For every
-  HIGH item (A102a-d) and A105, build a scratch repo that reproduces the
-  failure with the current command first, then show the new command passes;
-  for A105 if the repro shows the current check is NOT vacuous, say so and
-  change nothing for it. Give exact commands, not prose (A102f): one
-  enumerate-and-check loop per direction, usable from sh.
-
-### stage 43 - A103 A106 A107  (dispatched, fix:opus)
-prompt: |
-  (RUN-5 preamble) Stage 43. Tickets A103a, A103b, A103c, A103d, A103e, A103f,
-  A106, A107. Files: skills/merge-smith/SKILL.md (model routing: who
-  classifies conflicts, per-hunk classification, second deep-tier review for
-  unattended runs and migrations/schema/auth/payments hunks, owner of
-  reconcile failures, RISK cross-check, dispatch payloads + return formats +
-  same-file-hunks-serialize + null/timeout rule, approved text applied in the
-  main session not a fresh Opus agent) and skills/grayskull-
-  power/references/hosts.md line 10 (stale codex/cursor slugs; point at
-  PLATFORMS.md's deep row instead of hardcoding). Ruling already made: A107
-  and A103d agree - approved resolutions are applied in the main session; the
-  build tier (Opus) owns verification failures and rework, the deep tier
-  diagnoses unexplained reconcile failures. If grayskull-power has a sync
-  check (practice/scripts/check-grayskull-sync.sh), run it after editing
-  hosts.md. Another stage edited merge-smith before you: build on the current
-  file, do not undo its changes.
-
-### stage 44 - A104 F24  (dispatched, fix:opus)
-prompt: |
-  (RUN-5 preamble) Stage 44. Tickets A104a, A104b, F24. Files: skills/merge-
-  smith/SKILL.md (+ a references/ file), and for F24 a renumber helper under
-  practice/scripts/ if a script is the smallest correct way (check whether
-  peers like check-tickets.sh / next-id.sh have a .ps1 mirror; mirror only if
-  they do). A104a: a clean-merge hazard check after each merge (duplicate
-  migration prefixes, check-tickets.sh when TICKETS.md changed, build before
-  next merge). A104b: resume via relay-morpheus (skills/relay-morpheus) -
-  record merge order and merged-through-step before each merge, detect
-  MERGE_HEAD on entry; state whether the merge log is committed and when the
-  integration branch is cleaned up. F24: when a source branch's TICKETS.md
-  uses IDs the destination already has or allocated since the merge base,
-  renumber the source's tickets to the next free IDs via
-  practice/scripts/next-id.sh, keep ` (was <old>)`, move sub-parts with the
-  parent, update references to old IDs in files the source added or changed,
-  never move destination IDs, never rewrite commit messages, log the old->new
-  map in the merge log, and make Phase 4 reconcile treat renumbered lines as
-  logged exceptions. Ruling already made: F24 lives in merge-smith (it may run
-  without mergeprep-oracle); mergeprep-oracle only gets a one-line pointer if
-  needed. Prove F24 with a fixture: two branches with colliding IDs, a sub-
-  part, and a cross-reference; after the procedure check-tickets.sh passes and
-  every reference resolves. Other stages edited merge-smith before you: build
-  on the current file.
-
-### stage 45 - A101  (dispatched, fix:sonnet)
-prompt: |
-  (RUN-5 preamble) Stage 45. Ticket A101. Files: skills/watch-
-  cortana/hooks/usage-watch.ps1 and its selftest (skills/watch-
-  cortana/hooks/selftest.ps1). Mirror usage-watch.sh's `check` branch for
-  'only a .weekly flag exists, no main flag' into the ps1, add a selftest case
-  that fails before your change and passes after, run the selftest (powershell
-  -NoProfile -ExecutionPolicy Bypass -File ... ; if the PowerShell tool
-  refuses, run it through bash with powershell.exe). The selftest must not
-  touch the user's real ~/.claude/handoff-watch state.
-
-### stage 46 - A100  (dispatched, fix:fable)
-prompt: |
-  (RUN-5 preamble) Stage 46. Ticket A100. On codex, design-arwen's unattended
-  final report omits the list of choices made on the user's behalf (0/2),
-  while Claude Code meets it. Read practice/baselines/green-design-arwen.txt
-  (CODEX HOST section), skills/design-arwen/SKILL.md (no-user branch and
-  report template), PLATFORMS.md and skills/grayskull-
-  power/references/hosts.md. Find the cause (tag verified/inferred), make the
-  smallest fix in design-arwen (or the host translation), then re-run the
-  codex scenario N=2 the way A58d did (codex-cli, profile codex-bodish,
-  --ephemeral, skills from the fixture's .agents/skills; see the CODEX HOST
-  section and practice/baselines/baseline-harness.sh). Append the result as a
-  new file version in green-design-arwen.txt. If codex is not logged in or the
-  run cannot be launched, do not fake it: make the fix, record that the re-run
-  is pending and why, and say so in your return.
 
 ## Rulings
 - 18:15 - F24 placement: merge-smith, not mergeprep-oracle - merge-smith can run without a prep, and the destination's free IDs are only known at merge time; costs a one-line pointer in mergeprep-oracle if wrong.
@@ -140,3 +39,4 @@ prompt: |
   file's existing style. Do not edit any skill, TICKETS.md or .skillator/.
   Do not commit. If nested claude -p is refused, record that and stop.
   Return: per-run PASS/FAIL with on-disk evidence, and any skill defect seen.
+- 2026-10-02 - all stages landed at edf05be. Code review: 2 findings at 75 (<80 cutoff), both fixed anyway (ASCII header in reconcile.sh, mergeprep-oracle sync rule names reconcile.sh). A103 GREEN 4/4; its run surfaced the merge-log direction-2 FAIL (fixed: listed exception) and the in-session classifier ambiguity (A109). Not pushed.
