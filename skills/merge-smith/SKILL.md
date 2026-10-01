@@ -17,23 +17,27 @@ integration branch**, so nothing is risked. The base branch (main/develop) is
 never modified directly and nothing leaves the machine without an explicit yes.
 
 **Model tiers (best model where being wrong is expensive, cheap everywhere
-else):** branch **analysis → Sonnet**, **trivial conflict auto-resolve →
-Sonnet**, **semantic conflict resolution proposed → Fable**, **that resolution
-applied, plus verification failures and rework → Opus**. Dispatch via the Agent
-tool with the matching `model` override.
+else):** branch **analysis → Sonnet**, **conflict classification, per hunk →
+Opus**, **trivial hunk auto-resolve → Sonnet**, **semantic resolution proposed →
+Fable** (plus a second Fable review where Phase 3 requires one), **approved text
+applied → the main session**, **verification failures and rework → Opus**,
+**an unexplained reconcile failure diagnosed → Fable**. Dispatch via the Agent
+tool with the matching `model` override; payloads, return formats and timeouts:
+[references/conflict-routing.md](references/conflict-routing.md).
 
 Same split the rest of skillator uses — **Fable decides, Opus builds.** A bad
 semantic merge is the worst failure this skill has: it exits 0, the tests pass,
 and a change quietly disappears until production. *Deciding* what the merged hunk
 should say is judgement, not lookup, so it goes to the strongest model
 (`model: "fable"`; on another host, its top reasoning tier per §Other hosts).
-*Writing it in*, and fixing whatever the verification then catches, is
-implementation — that is Opus's job, and handing it to the deep tier is both
-worse and dearer.
+*Pasting in* the approved text is not work for a fresh agent: the main session
+already holds the hunk, the proposal and the approval. *Fixing* whatever
+verification then catches is implementation — Opus's job, and handing it to the
+deep tier is both worse and dearer.
 
 **Neither tier touches the mechanical majority.** Fable sees only the semantic
-conflict hunks — typically a handful, not the merge. Opus sees only those
-resolutions and a failing check. Enumerating branches, regenerating a lockfile
+conflict hunks — typically a handful, not the merge. Opus sees only the
+classification and a failing check. Enumerating branches, regenerating a lockfile
 and re-running a green suite stay on Sonnet.
 
 **The aim:** the source's work arrives in the destination, and the destination
@@ -66,13 +70,21 @@ Establish, then confirm back before touching anything:
   winners, and different blast radii. If the user's phrasing is reversible at all
   ("merge dev and my branch"), ask — this is the one question that is never worth
   guessing.
-- `git fetch --all`, then `git fetch origin <base>:<base>` — **`fetch --all` moves
-  `origin/<base>`, not the local `<base>` ref.** The integration branch is cut from the
-  local ref, so without that second fetch the whole merge happens on a stale base and
-  every later check still reports clean. If it refuses, local `<base>` has diverged from
-  origin — stop and ask which is the real base.
+- **Pre-flight — run [references/git-procedure.md](references/git-procedure.md)
+  §Phase 0 and stop on any `STOP:` line.** It requires a clean tree (empty
+  `git status --porcelain`; never auto-stash — a dirty tree aborts `git merge` and
+  corrupts every reconcile), and fast-forwards local `<base>` to `origin/<base>`:
+  **`fetch --all` moves `origin/<base>`, not the local ref** the integration branch is
+  cut from. When `<base>` is checked out, `git fetch origin <base>:<base>` refuses with
+  exit 128 — that is not divergence; the procedure uses `git merge --ff-only` there.
+  Only `<base>` not being an ancestor of `origin/<base>` is divergence: stop and ask.
+  It also lists `.gitattributes` merge drivers (`union`/`ours` duplicate or drop lines
+  silently) and LFS paths — log each.
 - Confirm the branches exist and their base. Note anything already merged (skip it) or
   wildly stale.
+- **Resuming?** A `MERGE_HEAD`, or an open `merge` run in `relay-morpheus.sh list`,
+  means a session died mid-run: [references/between-merges.md](references/between-merges.md)
+  §Resume comes first, before the clean-tree check.
 
 Never start merging on an unconfirmed branch list or base.
 
@@ -113,6 +125,9 @@ RISK:       <low|med|high> + why (migrations, shared core, deletions, deps)
 
 Then build two things from the results (main session, cheap):
 - **Overlap matrix** — which branches touch the same files (the conflict predictor).
+- **RISK cross-check** — Sonnet's rating is a claim. A branch rated below high that
+  overlaps another in the matrix, or whose `git diff --name-only <base>...<branch>`
+  hits migrations, schema, auth, payments or lockfiles, is bumped to **high**; log it.
 - **Recommended merge order** — least-overlapping / lowest-risk first, dependencies
   respected, so early merges don't compound conflicts. In `reconcile` mode, order
   by which branch is the intended base of truth.
@@ -122,28 +137,51 @@ the branches" deliverable — a light confirm here is cheap; a wrong order is no
 
 ## Phase 2 — Set up the integration branch
 
-Create a throwaway branch from the base — `integration/<YYYY-MM-DD>-<slug>` — and
-open a **merge log** file (`docs/merges/merge-<date>-<slug>.md` or scratchpad):
-record base, branches, order, and (as you go) every conflict + how it was resolved.
+Create a throwaway branch from the base — `integration/<YYYY-MM-DD>-<slug>`, with
+`-2`, `-3` when a re-run already used the name (git-procedure.md §Phase 2; never reuse
+an existing one) — and open a **merge log** file (`docs/merges/merge-<date>-<slug>.md`,
+committed on the integration branch after every step, never only in a scratchpad):
+record base, the cut commit, branches, order, and (as you go) every conflict + how it
+was resolved.
 The log makes the whole run auditable and revertible (drop the branch = zero harm).
+Register the order with `relay-morpheus` — one stage per source — so a dead session
+resumes at the right step (between-merges.md §Progress on disk).
 
 ## Phase 3 — Merge by risk
 
-Merge each branch onto the integration branch in order. On a conflict, **classify
-each conflicted file, then route**:
+Merge each branch onto the integration branch in order, **one source per merge
+commit**: `git -c rerere.enabled=false merge --no-ff --no-commit <source>` — never
+squash, octopus or fast-forward (Phase 4 needs `HEAD^1` = the branch before this
+source), and no rerere replaying a resolution nobody decided this run. Its relay stage
+goes `~` before the merge. Between the merge and its commit: **renumber the source's
+colliding ticket IDs** (`renumber-tickets.sh`; destination IDs never move) and run the
+**hazard check** — duplicate migration numbers, `check-tickets.sh`, a build — because
+those break with no conflict at all (between-merges.md). Then commit, run Phase 4's
+reconcile, mark the stage `x`, and commit the log before merging the next.
+
+On a conflict, **classify each conflicted hunk, then route**. The classifier is Opus, reading the diff3 view
+below (base visible); it logs a `class:` + `why:` row per hunk **before any
+cheap-tier resolve** — a cheap model labelling its own work trivial is how a logic
+conflict skips Fable. One file can hold a trivial and a semantic hunk: two routes.
 
 - **Trivial / mechanical → auto-resolve (`model: "sonnet"`):** lockfiles
   (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, `go.sum` →
-  prefer regenerate over hand-merge), import ordering, formatting/whitespace-only,
-  append-only files (changelogs), both-sides-added non-overlapping code, generated
-  files.
+  regenerate per git-procedure.md §Lockfiles, offline fallback included), import
+  ordering, formatting/whitespace-only, append-only files (changelogs),
+  both-sides-added non-overlapping code, generated files.
 - **Semantic / logic → escalate (`model: "fable"` proposes, user approves,
-  `model: "opus"` applies):** the
+  the main session applies):** the
   same function/body edited both sides, signature/API changes, one side deleted
   what the other modified, config/schema/migration conflicts, any overlapping logic.
   The agent explains **both sides + a proposed resolution + why**; the user
   approves or adjusts before it's applied.
 - **Unsure → treat as semantic.** Escalation is the safe default.
+
+**Second review.** A **separate Fable agent** reviews the proposal for every semantic
+hunk of an **unattended** run (nobody else checks an `assumed:`), and for **any hunk
+in migrations, schema, auth or payments** on every run. Disagreement → the hunk takes
+`destination`, its row is marked `flagged:`, the report lists it. Hunks of one file
+run **in sequence**, different files **in parallel** (conflict-routing.md).
 
 **Resolve per hunk, not per file.** A conflicted file is rarely wholly one side's;
 `--ours`/`--theirs` on a whole file is the single most common way a real change
@@ -167,7 +205,7 @@ For each conflicted hunk, decide and log one of:
 | `source` | The hunk is the feature. The destination's version is the old world. |
 | `destination` | Base moved ahead here and the source is stale — its version predates base's change. |
 | `both` | Non-overlapping additions in the same region: keep both, order deliberately. |
-| `rewrite` | Neither side is right once combined — Fable proposes, user approves, Opus applies, and the log carries the proposed text. |
+| `rewrite` | Neither side is right once combined — Fable proposes, user approves, the main session applies, and the log carries the proposed text. |
 
 **Ask the direction on any hunk where the two sides genuinely disagree about
 behaviour** — do not resolve it from the merge's overall direction. Merging a feature
@@ -175,56 +213,54 @@ into base does *not* mean the feature wins every hunk: a hunk where base fixed a
 the source still carries must go to `destination`, or the merge reintroduces the bug.
 Present both versions, say which way you'd go and why, and let the user pick.
 
-Where a hunk was taken from one side wholesale, prefer applying it rather than editing
-markers by hand — same pipe as `mergeprep-oracle`, so both skills fail the same way and the
-failure is visible:
-
-```
-git diff --binary -M <merge-base>...<side> -- <path> | git apply --3way
-```
+Where every conflicted hunk of a file goes one way, let git write it rather than
+editing markers — `git merge-file` over the index stages (1 = merge base, 2 =
+destination, 3 = source) sends only the *conflicting* hunks to that side and keeps both
+sides' clean hunks. `git diff | git apply --3way` cannot do this: a conflicted path
+`does not exist in index`. Commands: git-procedure.md §Taking a side.
 
 Record each resolution in the merge log — **one row per hunk**, not per file
-(file · hunk/lines · trivial/semantic · take: source/destination/both/rewrite · who
-decided · why). Phase 4's reconcile checks hunks; a log written at file granularity
+(file · hunk/lines · class: trivial/semantic · why · take:
+source/destination/both/rewrite · who classified / who decided · `assumed:`/`flagged:`). Phase 4's reconcile checks hunks; a log written at file granularity
 cannot explain the failures it will find. If a merge goes sideways, `git merge --abort`, note it, and re-plan that step —
 never leave the tree half-merged.
 
 ## Phase 4 — Verify (ask at run time)
 
-**First, reconcile against every source branch.** Tests prove the merge *works*; this
-proves it is *complete*. Do it per hunk — a `--name-only` tip diff works at path
-granularity, so on any file that base or another branch also moved it lists the path
-either way, and "another branch moved it ahead" then truthfully explains the file while
-absolving a hunk that vanished inside it. That is precisely the failure mode this step
-exists to catch, so check the hunks:
+**Reconcile on every merge commit, in both directions, before the next merge.** Tests
+prove the merge *works*; this proves it is *complete*. It is per hunk — a `--name-only`
+diff lists a path base or another branch also moved either way, absolving a hunk that
+vanished inside it. And it is per merge — checked at the end of a `consolidate` run, a
+later branch legitimately editing what an earlier one added reads as a loss.
+[references/reconcile.sh](references/reconcile.sh) enumerates every path with
+`--raw -M` (renames under both paths, deletions, submodules compared by commit) and
+checks each; nothing is sampled:
 
 ```
-git checkout <integration>
-# for each source branch, for each path it changed — must exit 0:
-git diff --binary -M <base>...<source> -- <path> | git apply --reverse --check
+. <this skill>/references/reconcile.sh      # defines: reconcile FROM TO
+PRE=$(git rev-parse HEAD^1)                 # integration branch before this source
+# 1. the source arrived — every hunk it changed:
+reconcile "$(git merge-base "$PRE" <source>)" <source>
+# 2. the destination is undisturbed — every hunk it gained since <source> first forked:
+reconcile "$(git merge-base "$PRE" "$(git rev-list --first-parent <source> --not "$PRE" | tail -n 1)")" "$PRE"
 ```
 
-Exit 0 means every hunk that source intended is present verbatim in the integration
-tree. Non-zero is legitimate **only** when a merge-log row names that path *and that
-hunk* (a semantic conflict you resolved the other way) or a prep-document row shows the path
-was deliberately dropped. Anything else is a change that silently vanished — find it and
-re-apply it before going further. A green test suite will never catch this.
+Direction 2 follows the source's first parents to its *original* fork point: after a
+`mergeprep-oracle` prep, `merge-base <base> <source>` is the base tip, the diff is
+empty, and a base hunk the prep reverted passes unchecked. Because direction 2 also
+covers every earlier source, a later merge that drops one is caught at that merge.
 
-**Then reconcile against the destination — it must be undisturbed.** The check above
-proves the sources arrived; it proves nothing about base's own work, and a merge that
-lands every feature while reverting base is the failure this whole skill is built to
-prevent. Same pipe, other side:
-
-```
-git checkout <integration>
-# for each path BASE changed since the merge base with each source — must exit 0:
-git diff --binary -M $(git merge-base <base> <source>)...<base> -- <path>   | git apply --reverse --check
-```
-
-Non-zero is legitimate **only** where a merge-log row names that path *and that hunk*
-as `take: source` — a deliberate, recorded overwrite of base. Anything else is base's
-work silently reverted. This is the check that would have caught it; `git status`,
-a name-only diff, and a green test suite will all report success.
+Log each `FAIL` line and the count line. A `FAIL` is legitimate **only** when a
+merge-log row names that path *and that hunk* — direction 1: resolved toward the
+destination, or `take: renumbered` (the logged ticket-ID map); direction 2: `take:
+source`; either: `take: regenerated` lockfile, or `take: both` (a union keeps both
+sides, so neither side's patch reverse-applies verbatim — confirm by eye that both
+sides' lines are in the file, and say so in the row); and always, this run's own
+merge log (`docs/merges/merge-*.md` gains rows on every merge, so direction 2 FAILs
+it by construction — skip it, never "fix" it) — or a
+prep-document row shows it deliberately dropped or resolved toward the branch.
+Anything else is a change that silently vanished: **Fable diagnoses** what dropped it,
+**Opus re-applies** it and re-runs the reconcile, before going further. `git status`, a name-only diff and a green suite all report success here.
 
 Then detect the project's build/test command. **Ask whether to run verification**
 (default **yes** if a test command is detected — a conflict-free merge is not a
@@ -265,12 +301,17 @@ verification result, integration branch name, merge-log path. Then **ask**:
   End state: sources unchanged (`f1` is still `f1`), `dev` = merged result,
   `dev_old_before_ksk_aewag2` = previous base. Only after verification is green, and
   only if `<base>` isn't checked out in **another worktree** (renaming the branch you
-  are on is fine — HEAD follows it; a second worktree silently ends up on the archive).
+  are on is fine — HEAD follows it; a second worktree silently ends up on the archive):
+  run the `git worktree list --porcelain` check in git-procedure.md §Phase 5 and stop
+  on any output.
   **Local refs only.** Never rename on the remote: that means deleting and
   re-pushing a branch, which breaks open PRs, branch protection, CI, and every
   other clone. To publish afterwards, push the renamed branch under a *new* remote
   name and PR it, or merge `<base>_old_before_<source>..<base>` normally — both need
   the explicit yes below.
+- The integration branch is never deleted by this skill: after a hand-off it is the
+  user's to delete once the PR merges; a swap-in makes it `<base>`; a failed run keeps
+  it as the audit trail (between-merges.md §The integration branch afterwards).
 - **Push + open a draft PR** — only on an explicit yes: push the integration branch
   and open a **draft** PR via `gh` (never merge it; never touch base; never
   force-push).
@@ -282,7 +323,8 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
 ## Rules
 
 - **Base branch is sacred.** Only ever a merge *source*; never checked out for
-  modification, never pushed to, never force-pushed. The one exception is the
+  modification, never pushed to, never force-pushed. Phase 0's fast-forward to
+  `origin/<base>` adds nothing of ours; the one exception is the
   approved local **swap-in** rename in Phase 5 — which preserves the old base as
   `<base>_old_before_<source>` and still touches nothing on the remote.
 - **Completeness is verified in both directions, not assumed.** Before calling a merge
@@ -295,32 +337,37 @@ Pushing, opening a PR, or merging a PR are never done without that explicit appr
 - **Conflicts resolve per hunk.** Whole-file `--ours`/`--theirs` is for lockfiles and
   generated files only; anywhere else it is a change discarded with exit 0.
 - **Everything on the integration branch**, everything in the merge log — the run is
-  auditable and 100% revertible by deleting the branch.
-- **Route conflicts by class, not by vibe.** Trivial→Sonnet,
-  semantic→Fable proposes + approval + Opus applies, analysis→Sonnet, broken
-  verification→Opus. Unsure = semantic.
+  auditable and 100% revertible by deleting the branch. Progress is on disk *before*
+  each merge (relay stage `~`), so a dead session resumes rather than restarts.
+- **Route conflicts by class, not by vibe.** Opus classifies each hunk first;
+  trivial→Sonnet, semantic→Fable proposes (+ second Fable review when unattended or
+  sensitive) + approval + the main session applies, analysis→Sonnet, broken
+  verification→Opus, unexplained reconcile `FAIL`→Fable diagnoses, Opus re-applies.
+  Unsure = semantic.
 - **Agents read and route; git merges.** Don't hand-edit conflict markers when a
   clean `git` resolution (regenerate lockfile, `--theirs`/`--ours` on a lockfile) is right.
 - **Two run-time gates: verification and push/PR.** Both ask; push/PR needs an
   explicit yes. Never claim a push/PR/merge that wasn't approved.
 - If `gh` is unavailable, do the whole merge with pure git and tell the user PR
   context/opening isn't available.
-- If a subagent dies / returns null, stop and report rather than merging blind.
+- A subagent that dies, returns null or times out is retried once, then stops the
+  run rather than merging blind (conflict-routing.md §Null and timeout).
 - **Kept in sync with `mergeprep-oracle`** — same source/destination vocabulary, same
   `git diff --binary -M ... | git apply --reverse --check` reconcile in both
-  directions, same per-hunk granularity, same treatment of a non-zero exit as
-  evidence. A change to any of those in either skill belongs in both.
+  directions (one loop, `references/reconcile.sh`, sourced by both), same per-hunk
+  granularity, same treatment of a non-zero exit as evidence. A change to any of
+  those in either skill belongs in both.
 
 ## Other hosts
 
 Sonnet/Fable/Opus and the Agent tool above are the **Claude Code** defaults. On
 Cursor, Codex, Antigravity, Pi, or Prime Agent, map through `PLATFORMS.md` (beside the
 installed skills, or at the repo/plugin root): branch analysis → **cheap tier**,
-trivial conflicts → **cheap tier**, semantic conflicts *decided* by **the host's
-strongest reasoning tier** (cursor `gpt-5.6-sol-medium`, codex `gpt-5.6-sol` at
-`reasoning_effort: high`, antigravity/pi the best reasoner), then *applied* —
-with verification failures and rework — by its **build tier**. Where the host has
-only one top tier, it does both. No delegation available → resolve semantic
+conflict classification → **build tier**, trivial conflicts → **cheap tier**,
+semantic conflicts *decided* (and second-reviewed, and reconcile failures diagnosed)
+by **the deep tier** — the `deep` row of `PLATFORMS.md` §Role tiers, never a slug
+copied here — then *applied* in the main session, with verification failures and
+rework on the **build tier**. Where the host has only one top tier, it does both. No delegation available → resolve semantic
 conflicts in-session and say so; never hand them to a cheaper agent. Where
 the host can't run analysis agents in parallel, analyse branches sequentially and
 write each summary to the merge log as you go — slower, same result. The approval

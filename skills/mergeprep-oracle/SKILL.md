@@ -39,16 +39,17 @@ anything changes; `git reset --hard <tag>` undoes the entire run.
 Establish and confirm: the **branch** to prep and its **base** (main/develop).
 
 ```
-git fetch --all
-git fetch origin <base>:<base>     # fast-forward the LOCAL base ref; refuses if diverged
+git status --porcelain             # any output: stop - never auto-stash
+# fast-forward the LOCAL base ref: merge-smith's references/git-procedure.md §Phase 0,
+# step 2 (`git fetch origin <base>:<base>` exits 128 when <base> is checked out)
 git checkout <branch>
 git tag <branch>-preprep-<date>    # the undo button; cut it before touching anything
 ```
 
-`git fetch --all` updates `origin/<base>` only — **the local `<base>` ref does not
-move.** Working off a stale local `<base>` silently defeats this entire skill: the
-result carries old content while every later check reports "clean". If the second fetch
-refuses, local `<base>` has diverged from origin — stop and ask which is the real base.
+A plain fetch updates `origin/<base>` only — **the local `<base>` ref does not
+move**, which is why the step above fast-forwards it. Working off a stale local `<base>` silently defeats this entire skill: the
+result carries old content while every later check reports "clean". Only `<base>` not
+being an ancestor of `origin/<base>` is divergence — stop and ask which is the real base.
 Note how far behind the branch is (`git rev-list --left-right --count <base>...<branch>`).
 
 If the branch is already pushed, say so now: this prep adds commits that will need a
@@ -198,16 +199,19 @@ absolving a hunk that vanished inside it. Check per hunk instead — if the inte
 change is present, removing it succeeds:
 
 ```
-git checkout <branch>
-# for each KEPT path — must exit 0:
-git diff --binary -M <base>...<pre-prep tag> -- <path> | git apply --reverse --check
+git checkout <branch>        # clean tree: a dirty or untracked file corrupts apply --check
+. <merge-smith skill>/references/reconcile.sh    # the loop merge-smith uses: reconcile FROM TO
+MB=$(git merge-base <base> <pre-prep tag>)
+reconcile "$MB" <pre-prep tag>     # every path the branch changed, nothing sampled
 # for each DROPPED path — must print nothing:
 git diff --stat <base> <branch> -- <dropped paths>
 ```
 
-Exit 0 means every intended hunk for that path is present verbatim in the prepped tree.
-Non-zero means a hunk is missing or altered — legitimate only if a prep-doc row names
-*that path and that hunk* (an exclusion, or a merge conflict resolved the other way);
+`reconcile` enumerates with `--raw -M` (renames under both paths, deletions,
+submodules compared by commit) and prints `FAIL <status> <path>` where a hunk is
+missing or altered — legitimate only if a prep-doc row names
+*that path and that hunk* (a dropped path, an exclusion, or a merge conflict resolved
+the other way);
 anything else is a change that vanished. Stop and find it. Comparing the branch to its
 own intended list is circular; this is the only check that can actually fail.
 
@@ -216,13 +220,11 @@ above proves the feature survived; it says nothing about what the step-1 merge d
 to base's own work. Same pipe, other side:
 
 ```
-git checkout <branch>
-# for each path BASE changed since the merge base — must exit 0:
-git diff --binary -M $(git merge-base <base> <pre-prep tag>)...<base> -- <path>   | git apply --reverse --check
+reconcile "$MB" <base>             # every path BASE changed since the merge base
 ```
 
-Exit 0 means every hunk the destination gained while the branch was away is still
-present verbatim. Non-zero is legitimate **only** where a prep-doc row names that
+No `FAIL` means every hunk the destination gained while the branch was away is still
+present verbatim. A `FAIL` is legitimate **only** where a prep-doc row names that
 path and that hunk as a merge conflict resolved toward the branch — a deliberate,
 recorded overwrite. Anything else is the branch reverting the destination's work,
 which is the failure this skill exists to prevent and which no test suite, no
@@ -276,6 +278,7 @@ can now integrate a branch that carries only its real changes and documents why.
   `<base>` explicitly or the whole skill quietly operates on stale content.
 - Pairs with `merge-smith`: prep first, then merge the clean branch. The two are kept
   in sync deliberately — same source/destination vocabulary, same `git diff --binary
-  -M ... | git apply --reverse --check` reconcile run in both directions, same
+  -M ... | git apply --reverse --check` reconcile run in both directions (one loop,
+  merge-smith's `references/reconcile.sh`, sourced by both), same
   per-hunk granularity, same treatment of a non-zero exit as evidence. A change to
   one of those in either skill belongs in both.

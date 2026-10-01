@@ -169,10 +169,16 @@ Overflow: none at any width, incl. longest label ("Rechnungsempfänger")
 Reduced motion: content visible, reveals crossfade
 Console: clean · Network: all 24 assets 200
 Not verified: INP (no field data) — run web-perf for measured vitals
+Chose for you: audience platform engineers · dials 3/2/9 · dark only · route targeted evolution
 ```
 
 **Always state what you did not verify.** The list of unchecked items is the most useful
 line in the report, and omitting it is how "done" comes back at 3am.
+
+**`Chose for you:` is mandatory when nobody was there to ask** (SKILL.md Phase 0 item 6):
+every Design Read field and route decision you picked rather than read, in the final
+message itself. A Read printed while you worked does not count — the person who reads only
+the report must still be able to overturn each choice. Attended run: drop the line.
 
 ---
 

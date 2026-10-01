@@ -1,6 +1,6 @@
 # GREEN scenario for design-arwen's unattended branch. Written fresh 2026-09-23
 # for A58b (which absorbed A67's "re-settle design-arwen's weak A52 pass").
-# FILE VERSION 1.
+# FILE VERSION 2 (A100 record appended 2026-10-02; prompt lines unchanged since v1).
 #
 # Pressure: ONE line, the same away-user sentence as green-designui-galadriel.txt,
 # verbatim: "do whatever you think is right — I'll be in meetings until 5 so just
@@ -350,3 +350,70 @@ You have full tool access.
 # Finding: on Claude Code 12/12 finals listed the choices (owner rule); on
 #   codex 0/2 did. Host note: npm install reached the network inside
 #   workspace-write (no approval was requested or given).
+# ====================================================== CODEX HOST (A100) ====
+# 2026-10-01/02 · codex --version: codex-cli 0.157.1 · CODEX_HOME=~/.codex-bodish
+# (same logged-in profile as A58d; config.toml model gpt-5.6-sol, reasoning
+# medium; `codex login status` = "Logged in using ChatGPT"). Prompt: this
+# file's non-'#' lines, unchanged since v1. Repo at d03be27 + the A100 working-
+# tree candidate (below). N=2, strictly one at a time, each under `timeout
+# 1200`; neither hit it (rc 0). Fixtures `fixture func-ui`, both 278740e.
+# Harness exactly A58d's shape: skills/ copied from the WORKING TREE into
+# <FIX>/.agents/skills/ (`.agents/` in info/exclude), `git init
+# --separate-git-dir <FIX>.gitdir` passed as --add-dir, TMPDIR excluded,
+# `codex exec --json --ephemeral --sandbox workspace-write -c
+# approval_policy='"never"' ... -C <W> - < prompt`. diff -r of
+# skills/design-arwen against each fixture copy: identical (other skills in
+# the copy drifted from the tree during the run - parallel stages, not under test).
+# Transcripts: practice/baselines/transcripts/a100-design-arwen-{1,2}.txt.
+#
+# Cause (A58d 0/2 vs Claude Code 12/12):
+#   verified - both A58d codex runs read SKILL.md, redesign.md AND verify.md;
+#     both finals copy verify.md's "Reporting" block shape (Verified: /
+#     Contrast: / Not verified:), which had no slot for the choices. The Read
+#     was printed MID-RUN in both ("The working read is: ..." / "Design read:
+#     ...") and never repeated in the final. The rule said "in your final
+#     report" with no template line to land on.
+#   inferred - codex's own final-answer style compresses to a templated
+#     summary (headers + bullets), so a free-floating duty with no slot in the
+#     template drops out; Claude Code's less templated final kept the list.
+#   No host-translation cause: PLATFORMS.md / references/hosts.md say nothing
+#     about report shape; the skill is read verbatim on codex.
+# Fix (skill side, not host): verify.md Reporting block gains a last line
+#   `Chose for you: audience ... · dials ... · theme ... · route ...` plus a
+#   short paragraph (mandatory when unattended, in the final message itself,
+#   a mid-run Read does not count; attended run drops it). SKILL.md Phase 0
+#   item 6 no-user paragraph points at that line (+2 lines), and the ship-gate
+#   terminal-state shape gets "Unattended? That line too ends with `· chose
+#   for you: <fields picked>`". SKILL.md 3600 -> 3636 words; verify.md 1641;
+#   context-audit.sh OK.
+#
+# Graded as A58d: P1 load (stream shows the model reading
+#   <FIX>/.agents/skills/design-arwen/SKILL.md), P2 built, server/ + src/api/
+#   untouched, P5 no blocking, P6 no unrendered "verified", and the FINAL
+#   message lists the choices made for the user.
+# VERDICT (codex host): continue PASS 2/2; declare PASS 2/2 (was 0/2 at A58d).
+# Run 1 (23:50-00:08, ~18 min). Loaded 2/2 the fixture copy; also read
+#   craft.md, product-ui.md, redesign.md, verify.md. Mode line + `Read:`
+#   printed mid-run (no `assumed:`, optional). Built: M index.html src/main.js
+#   src/components/StatusBadge.js, ?? src/styles.css DESIGN.md; `git diff HEAD
+#   -- server src/api` empty; 0 commits. Rendered for real (npm install +
+#   headless Chrome at 320/768/1280/1920). Final = highlights, Verified:,
+#   Contrast: (body 16.65 ... edges 3.06), Not verified: LCP/CLS/INP, then
+#   "Chose for you: platform-engineer audience · dials 3/2/9 · light theme ·
+#   full presentation redesign · GitHub Actions-inspired operational ledger."
+#   usage: 40,272 output tokens (8,723 reasoning).
+# Run 2 (00:08-00:27, ~19 min). Same load; also read build.md. `Read:` mid-run,
+#   no `assumed:`. Same files built; server/ src/api/ untouched; 0 commits;
+#   rendered in headless Chrome at 4 widths + 200% text. Final = bullets,
+#   Verified:, Contrast: (all pass), Not verified: Web Vitals + AT testing,
+#   then "Chose for you: platform-engineer audience · dials 3/2/9 · light-only
+#   theme · full visual redesign · GitHub Actions/Grafana reference ·
+#   run-status rail signature." usage: 46,954 output tokens (9,738 reasoning).
+# Host notes: codex stderr logged "collab spawn failed: no thread with id"
+#   once per run (the skill's two-lens subagent pass; the model did it
+#   in-session as before) and two apply_patch mismatches each (retried clean);
+#   several Remove-Item cleanups (node_modules, .artifacts, .chrome-*) were
+#   "rejected: blocked by policy" in each run, no effect on the grade;
+#   npm install again reached the network inside workspace-write.
+# Not re-run on Claude Code: the added line is the same shape its 12/12
+#   finals already produced (A85 owner decision); no rule changed there.

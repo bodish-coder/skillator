@@ -144,8 +144,10 @@ novelty** — a committed decision on disk outranks anything this skill would pi
    `build.md` §4 dispatches this work to subagents, so this is a normal case, not an edge
    one. Then: **decide and build.** Take the register default, build straight through, and
    list every choice made on the user's behalf — the Design Read fields you picked rather
-   than read — in your final report, so whoever reads it can overturn any of them cheaply.
-   That satisfies "never guess silently" regardless of where the list lands. `assumed:` on
+   than read — in your final report, so whoever reads it can overturn any of them cheaply:
+   the `Chose for you:` line of `verify.md`'s Reporting block, in the final message itself
+   (a Read printed mid-run does not count). That satisfies "never guess silently"
+   regardless of where in the report the list lands. `assumed:` on
    a picked field is encouraged, not required. Blocking a subagent on a question nobody
    will answer is the one wrong move. Same rule for every "ask once" here and in its
    references: no user → default, build, report the choices.
@@ -339,7 +341,7 @@ exactly this shape:
 built · verified: 1-6 (static) · not verified: 7-12 (no browser available) · delegated: 13-16 not run
 ```
 
-Never write "done" or "verified" over an unrendered page, and never narrate a render you
+Unattended? That line too ends with `· chose for you: <fields picked>`. Never write "done" or "verified" over an unrendered page, and never narrate a render you
 did not perform. `build.md` §6 and `verify.md`'s driver list defer to this paragraph.
 
 **Run this gate, don't recite it** — [references/verify.md](references/verify.md) has the

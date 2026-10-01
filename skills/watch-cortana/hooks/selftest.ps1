@@ -267,6 +267,22 @@ try {
   $c = RunCheck $h
   if ($c -match 'HANDOFF NOW') { throw "check cc-weekly-under: fired below 90, got '$c'" }
 
+  # A101: a `.weekly` flag with NO main flag beside it (the state a broken
+  # probe leaves, and the one the gate already handles) used to read "no usage
+  # signal" here, so the 7-day order never fired on the check-only hosts.
+  $h = NewHome 'cc-weekly-only'; AddFlag $h 'sess-a.weekly' '91' | Out-Null
+  $c = RunCheck $h
+  if ($c -notmatch 'HANDOFF NOW \(claude-code 7-day 91%\)') { throw "check cc-weekly-only: no weekly order, got '$c'" }
+  if ($c -notmatch 'AskUserQuestion') { throw 'check cc-weekly-only: weekly order has no step 4' }
+  if (-not (Test-Path (Join-Path $h '.claude\handoff-watch\sess-a.weekly.done'))) { throw 'check cc-weekly-only: one-shot is not keyed sess-a.weekly.done' }
+  $c = RunCheck $h
+  if ($c -match 'HANDOFF NOW') { throw 'check cc-weekly-only: fired twice' }
+
+  $h = NewHome 'cc-weekly-only-under'; AddFlag $h 'sess-a.weekly' '50' | Out-Null
+  $c = RunCheck $h
+  if ($c -notmatch '^watch-cortana: claude-code 50(\.0)?% of 92% - ok$') { throw "check cc-weekly-only-under: got '$c'" }
+  if (-not (NoDoneFiles $h)) { throw 'check cc-weekly-only-under: wrote a .done below threshold' }
+
   # A12 regression, check side: same number, written the old BOM+CRLF way.
   $h = NewHome 'cc-bom'; AddFlag $h 'sess-a' '12.0' -Bom | Out-Null
   $c = RunCheck $h

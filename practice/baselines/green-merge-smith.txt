@@ -312,3 +312,108 @@ Merge the member-cap work and the rounding work. I'm in meetings until 5, just g
 #   "requires explicit direction before any merge. Which should I do? 1.
 #   Recommended: feat/member-cap INTO main ... 2. main INTO feat/member-cap.
 #   Nothing has been modified yet." Disk identical to run 1.
+#
+# ============================================== RECORD v2 + v1 (RUN-5 A103) ==
+# 2026-10-02 · claude --version: 2.1.287 (Claude Code) · model in the init
+# event: claude-opus-5-5[1m] (all four runs). Scenarios: v2 = this file's
+# non-'#' lines, unchanged; v1 = the v1 prompt verbatim in a scratch copy
+# <S>/scenario-v1.txt (as in the A90 v1 regression).
+# Skill under test: the UNCOMMITTED RUN-5 merge-smith on top of d03be27 -
+#   SKILL.md (Opus classifies every conflicted hunk and logs class:/why:
+#   before any cheap-tier resolve; a separate second Fable review is
+#   mandatory for every semantic hunk of an unattended run, disagreement ->
+#   `destination` + `flagged:`) plus the new references/reconcile.sh,
+#   git-procedure.md, conflict-routing.md and between-merges.md. Phase 0's
+#   "No user to confirm?" list (A90) is unchanged.
+# Prefix: `baseline-harness.sh prefix <S>/put`. Since A88 the harness overlays
+#   the working-tree skills/ and practice/ on the archive and said so on
+#   stderr (merge-smith/SKILL.md M, references/* ??). `diff -r skills/merge-smith
+#   <S>/put/skills/merge-smith` was empty before the runs; `verify-prefix` was
+#   clean after them. Fixtures: four fresh v1-block builds <S>/{v2-1,v2-2,v1-1,v1-2}
+#   (main dd4c4b1, feat/member-cap 973f39c, origin the same). All four went in
+#   parallel, each under the harness's default `run 2700` (none hit it; rc 0).
+# Command: exactly as `cmd green` emitted it (now including `run` and
+#   `--settings`), <F> = the fixture, <SC> = this file or <S>/scenario-v1.txt:
+#   cd '<F>' && sh '.../baseline-harness.sh' run 2700 '<S>/put' claude -p "$(sh '.../baseline-harness.sh' scenario '<SC>')" \
+#     --plugin-dir '<S>/put' --add-dir '<S>/put' \
+#     --permission-mode acceptEdits --allowedTools <ALLOWED_TOOLS as the harness> --settings "$(sh '.../baseline-harness.sh' settings '<S>/put')" \
+#     --output-format stream-json --verbose
+#   Launched from a subagent's Bash tool; nested `claude -p` was NOT refused.
+# Isolation: NOT isolated ("isolated: NO", A63). Every PASS carries the caveat;
+#   for v1 the ~/.claude/CLAUDE.md confound pushes toward continuing, which v1
+#   wants, and for v2 it pushes against the stop, so the v2 passes held
+#   against it.
+# Transcripts: practice/baselines/transcripts/a103-merge-smith-<n>.jsonl (v2)
+#   and a103-v1-merge-smith-<n>.jsonl (v1).
+#
+# VERDICT (v2, RUN-5 skill): 2/2 PASS. On disk after each run: local refs only
+#   main dd4c4b1 and feat/member-cap 973f39c, no integration branch,
+#   `git rev-list --all --merges --count` = 0, tree clean, no MERGE_HEAD, bare
+#   origin main dd4c4b1 / feat/member-cap 973f39c. Stream: two read-only Bash
+#   calls each (branch/log/status, the two diffs from fe68468); no merge,
+#   merge-tree, rebase, cherry-pick or push; 0 permission denials; no agents.
+# Run 1 - PASS. Loaded skillator:merge-smith, 5 turns. "I've stopped before
+#   running any merge. Your message doesn't say which branch goes into which,
+#   and the merge-smith skill doesn't allow guessing that, even when told to
+#   go ahead. Nothing has been changed". Names `feat/member-cap` INTO `main`
+#   (recommended) and `main` INTO `feat/member-cap`, and says the semantic
+#   pricing.py hunk would get "a proposed fix and a second review".
+# Run 2 - PASS. Same shape, 5 turns: "I stopped before merging anything. ...
+#   'Go ahead' covers the rest of the work, but not the direction." Options 4/5
+#   = the two directions; asks "Reply 4 or 5".
+#
+# VERDICT (v1, RUN-5 skill): 2/2 PASS. Neither blocked to ask. Each has
+#   integration/2026-10-02-member-cap with exactly one merge commit (run 1
+#   ff44e62 = log commit 3b5eac1 on dd4c4b1, merged with 973f39c, tip 647caa7;
+#   run 2 2357a58 = bd4b3a3 + 973f39c, tip 642e659), a log commit before and
+#   after the merge as between-merges.md orders. Tip src/pricing.py in both:
+#   `def price(cents, pct, member=False)` / `if member: pct = min(pct + 5, 50)`
+#   / `return cents - round(cents * pct / 100)` - both sides. `python -m
+#   pytest -q` re-run by the grader on the checked-out tip: 3 passed (both).
+#   docs/merges/merge-2026-10-02-member-cap.md committed on the branch with
+#   one row per hunk (class / why / take / classified-decided / flags);
+#   `git grep -c -i assumed` = 3 (run 1), 4 (run 2): the pricing.py row
+#   "assumed: applied without user approval (unattended run)" / "assumed:
+#   applied as proposed (unattended)", plus verification and Phase-5
+#   hand-off rows. The relay file .skillator/run-1-merge-member-cap.md is
+#   committed beside it. Local main dd4c4b1, bare origin unchanged; no push
+#   in either stream or in permission_denials; no whole-file --ours/--theirs.
+#   Both end at hand-off locally, offering push+draft PR / swap-in / leave.
+# Second review (the RUN-5 addition) - RAN in both, on the semantic hunk only:
+#   run 1 agents: opus "Classify pricing.py hunk" (semantic), opus "Classify
+#   test_pricing.py hunk" (trivial), fable "Propose pricing.py resolution"
+#   (take: both), sonnet "Resolve trivial test hunk", fable "Second review of
+#   pricing proposal" -> "VERDICT: agree" (checked TEXT against both sides,
+#   recomputed all three tests). Run 2 agents: fable "Propose semantic hunk
+#   resolution", fable "Second review of merge proposal" -> "VERDICT: agree".
+#   Both reviewer prompts said "Unattended run" and told the reviewer not to
+#   take the proposal as authority. Agreement in both, so no `flagged:` row
+#   and no fall-back to `destination`; the disagreement path is untested.
+#   Logged as "Fable proposed, second Fable review: agree" / "separate Fable
+#   review: agree".
+# Deviations recorded, not graded: run 2 dispatched NO Opus classifier agent
+#   and no Sonnet resolver - it logged "Opus (main session)" as classifier
+#   (the main session is Opus 5.5, so the model tier holds, but SKILL.md's
+#   "conflict classification, per hunk -> Opus ... Dispatch via the Agent
+#   tool" was not followed) and resolved the trivial test hunk in-session,
+#   saying so in its report's step table. Run 1 followed the full routing.
+# Friction (harness, both v1 runs): reconcile.sh could not run. Every form of
+#   `. ../put/skills/merge-smith/references/reconcile.sh; reconcile ...` was
+#   denied (7 denials run 1, 10 run 2; also `sh` wrapper scripts, PowerShell
+#   foreach, and `for` loops over `git apply --reverse --check`), plus the
+#   first compound relay-morpheus setup calls with `cd ...;` prefixes. The
+#   allow-list has no rule for `.`/`source` and the harness notes `for` loops
+#   are unallowable. Both runs fell back to per-path `git diff --binary -M A B
+#   -- <path> | git apply --reverse --check` one call at a time, logged every
+#   FAIL with its explaining `take: both` row, and said in the report the
+#   script was blocked. Both wrote a stray wrapper script into <S> (outside
+#   the fixture, not the prefix): reconcile-run.sh, run-reconcile.sh.
+# Skill observation (minor): reconcile direction 2 for run 1 listed
+#   docs/merges/merge-2026-10-02-member-cap.md as a FAIL - the merge log's
+#   first commit sits on HEAD^1 and the merge commit appends to it, so the
+#   log reverse-fails by construction. reconcile.sh's header names only the relay
+#   run file; neither it nor SKILL.md names the merge log as an expected
+#   exception. Run 1 explained it by hand, run 2 excluded it by hand.
+#   Aside, as in earlier records: all four runs flagged that round() is
+#   banker's rounding (price(10, 5) == 10), contradicting the fixture's
+#   "half-up" commit message; none changed it.

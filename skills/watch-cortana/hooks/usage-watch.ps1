@@ -117,10 +117,17 @@ if ($Mode -eq 'check') {
     $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
          Where-Object { $_.Extension -notin @('.done', '.weekly') } | Sort-Object LastWriteTime | Select-Object -Last 1
     if ($f) { $pct = Read-Flag $f.FullName; if ($null -ne $pct) { $src = 'claude-code'; $key = $f.Name; $wk = Read-Flag "$($f.FullName).weekly" } }
+    # A101: a weekly flag with no main flag beside it is a real state (see the
+    # gate), so fall back to it rather than reporting no signal at all.
+    if (-not $f) {
+      $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
+           Where-Object { $_.Extension -eq '.weekly' } | Sort-Object LastWriteTime | Select-Object -Last 1
+      if ($f) { $wk = Read-Flag $f.FullName; if ($null -ne $wk) { $src = 'claude-code'; $key = $f.BaseName } }
+    }
   }
   # ponytail: cursor and antigravity expose no usage anywhere on disk - say so
   # rather than invent a number. Upgrade here if either ever writes one.
-  if ($null -eq $pct) { "watch-cortana: no usage signal on this host - run skillator:handoff-cortana manually before you run out"; exit 0 }
+  if ($null -eq $pct -and $null -eq $wk) { "watch-cortana: no usage signal on this host - run skillator:handoff-cortana manually before you run out"; exit 0 }
   $done   = Join-Path $dir "$key.done"
   $wkDone = Join-Path $dir "$key.weekly.done"
   # The weekly gate applies on every host, not just the one with a Stop hook,
@@ -135,7 +142,8 @@ if ($Mode -eq 'check') {
     New-Item $done -ItemType File -Force | Out-Null
     "HANDOFF NOW ($src $pct%)"; Get-Reason $pct $pctLimit
   } else {
-    "watch-cortana: $src $pct% of $pctLimit% - ok"
+    $shown = if ($null -ne $pct) { $pct } else { $wk }
+    "watch-cortana: $src $shown% of $pctLimit% - ok"
   }
   exit 0
 }
