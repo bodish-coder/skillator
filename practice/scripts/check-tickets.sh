@@ -8,6 +8,9 @@
 #   3. A closed ([x]) row whose line still ends in a bare "Plan: S<n>" pointer
 #      with no outcome ever recorded - the ticket says a plan ran, but never
 #      says what happened when it did (A78).
+# The archive beside the board (<board without .md>-archive.md, written by
+# archive-tickets.sh - F27) is checked with it: an ID in both files, or twice
+# in the archive, is a duplicate too.
 # Run before a merge commit and before pushing a board change:
 #   sh practice/scripts/check-tickets.sh [path/to/TICKETS.md]   (default: the
 #     current git repo's top-level TICKETS.md, else ./TICKETS.md - A92)
@@ -101,6 +104,37 @@ EOF
     cat "$stmp/none.out" >&2; exit 1
   fi
 
+  # F27: an ID in both the board and its archive is a duplicate; distinct
+  # IDs across the two pass, and the archive's markers are caught.
+  printf '# Board\n\n- [ ] A5 - open\n' > "$stmp/arch.md"
+  printf '# Archive\n\n## Agent-found\n\n- [x] A4 - old\n' > "$stmp/arch-archive.md"
+  sh "$0" "$stmp/arch.md" >"$stmp/arch.out" 2>&1 || {
+    echo "SELFTEST FAIL: distinct IDs across board and archive failed" >&2; cat "$stmp/arch.out" >&2; exit 1; }
+  grep -q '(1 archived)' "$stmp/arch.out" || {
+    echo "SELFTEST FAIL: archive not counted" >&2; cat "$stmp/arch.out" >&2; exit 1; }
+  printf -- '- [x] A5 - same number, archived\n' >> "$stmp/arch-archive.md"
+  if sh "$0" "$stmp/arch.md" >"$stmp/arch.out" 2>&1; then
+    echo "SELFTEST FAIL: ID in both board and archive passed" >&2; exit 1
+  fi
+  grep -q 'arch-archive.md:6:' "$stmp/arch.out" || {
+    echo "SELFTEST FAIL: duplicate report does not point into the archive" >&2; cat "$stmp/arch.out" >&2; exit 1; }
+  printf '# Archive\n\n<<<<<<< HEAD\n- [x] A4 - old\n' > "$stmp/arch-archive.md"
+  if sh "$0" "$stmp/arch.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: conflict markers in the archive passed" >&2; exit 1
+  fi
+
+  # Every ticket archived: the empty board is still a valid board.
+  mkdir "$stmp/sp ace"
+  printf '# TICKETS\n\n## Bugs\n' > "$stmp/sp ace/T.md"
+  printf '# Archive\n\n- [x] B1 - old\n' > "$stmp/sp ace/T-archive.md"
+  sh "$0" "$stmp/sp ace/T.md" >/dev/null 2>&1 || {
+    echo "SELFTEST FAIL: board emptied by archiving rejected" >&2; exit 1; }
+  # A path with a space: conflict markers are still found, not skipped.
+  printf '<<<<<<< HEAD\n' >> "$stmp/sp ace/T-archive.md"
+  if sh "$0" "$stmp/sp ace/T.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: conflict markers missed under a path with a space" >&2; exit 1
+  fi
+
   echo "ok - check-tickets.sh selftest passed"
 }
 
@@ -123,31 +157,40 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 [ -f "$board" ] || die "no board at $board"
+# F27: closed tickets archived beside the board still own their numbers.
+# The files go in "$@" so a path with spaces stays one argument.
+archive=${board%.md}-archive.md
+set -- "$board"
+case $board in *.md) [ -f "$archive" ] && set -- "$board" "$archive" ;; esac
 
 # Conflict markers first - every other check is meaningless in a half-merged file.
-if grep -nE '^(<<<<<<<|=======|>>>>>>>) ?' "$board" > "$tmp/c"; then
-  echo "FAIL: unresolved merge conflict markers in $board" >&2
-  sed 's/^/  /' "$tmp/c" >&2
-  exit 1
-fi
+for f in "$@"; do
+  if grep -nE '^(<<<<<<<|=======|>>>>>>>) ?' "$f" > "$tmp/c"; then
+    echo "FAIL: unresolved merge conflict markers in $f" >&2
+    sed 's/^/  /' "$tmp/c" >&2
+    exit 1
+  fi
+done
 
 # One ID per ticket line: "- [x] A43 — title", sub-parts "B7a" included.
 # Sub-parts are indented under a parent, so leading space is allowed.
-sed -n 's/^[[:space:]]*- \[.\][[:space:]]*\([A-Z][A-Z]*[0-9][0-9]*[a-z]*\)[[:space:]].*/\1/p' \
-  "$board" > "$tmp/ids"
-
+idre='s/^[[:space:]]*- \[.\][[:space:]]*\([A-Z][A-Z]*[0-9][0-9]*[a-z]*\)[[:space:]].*/\1/p'
+sed -n "$idre" "$board" > "$tmp/ids"
+[ $# -eq 1 ] || sed -n "$idre" "$archive" >> "$tmp/ids"
+# A board emptied by archiving is still a board while its archive holds IDs.
 [ -s "$tmp/ids" ] || die "no ticket lines found in $board - is this a board?"
 
 sort "$tmp/ids" | uniq -d > "$tmp/dups"
 if [ -s "$tmp/dups" ]; then
-  echo "FAIL: duplicate ticket IDs in $board" >&2
+  echo "FAIL: duplicate ticket IDs in $*" >&2
   echo "  An ID is permanent and means one thing. Two branches allocated the same" >&2
   echo "  number and the merge kept both. Per tickets-zordon's collision rule, the" >&2
   echo "  LATER line takes a fresh number and keeps ' (was <ID>)' on it; the" >&2
   echo "  earlier one is never renumbered." >&2
   while read -r id; do
     echo "  --- $id ---" >&2
-    grep -nE "^[[:space:]]*- \[.\][[:space:]]*$id[[:space:]]" "$board" | sed 's/^/    /' >&2
+    # /dev/null makes grep print the file name even when there is only one.
+    grep -nE "^[[:space:]]*- \[.\][[:space:]]*$id[[:space:]]" "$@" /dev/null | sed 's/^/    /' >&2
   done < "$tmp/dups"
   exit 1
 fi
@@ -158,7 +201,7 @@ fi
 # outcome text (RED/GREEN, what shipped, what changed) is not - that's what
 # makes it "bare".
 if grep -nE '^[[:space:]]*- \[x\][[:space:]].*Plan: S[0-9][0-9]*\.?([[:space:]]*\([^()]*\))*[[:space:]]*$' \
-  "$board" > "$tmp/bareplan"; then
+  "$@" /dev/null > "$tmp/bareplan"; then
   echo "FAIL: [x] ticket(s) with a bare Plan pointer and no outcome recorded in $board" >&2
   echo "  Status is [x] (closed) but the line still ends in 'Plan: S<n>' with no" >&2
   echo "  outcome after it - only trailing attribution tags, if any. Record what" >&2
@@ -169,4 +212,9 @@ if grep -nE '^[[:space:]]*- \[x\][[:space:]].*Plan: S[0-9][0-9]*\.?([[:space:]]*
 fi
 
 n=$(wc -l < "$tmp/ids" | tr -d ' ')
-echo "ok - $n ticket IDs in $board, no duplicates, no conflict markers"
+if [ $# -eq 1 ]; then
+  echo "ok - $n ticket IDs in $board, no duplicates, no conflict markers"
+else
+  na=$(sed -n "$idre" "$archive" | wc -l | tr -d ' ')
+  echo "ok - $n ticket IDs in $board and $(basename -- "$archive") ($na archived), no duplicates, no conflict markers"
+fi

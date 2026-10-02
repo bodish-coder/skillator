@@ -252,6 +252,18 @@ Deactivating is deleting `.skillator/grayskull.md`.
   deterministic script that fixes and adversarially verifies every ticket in
   parallel, with structured verdicts coming back. The main session always owns
   `TICKETS.md`; agents only report. Invoke with `/tickets-zordon`.
+- **rules-orko** — how the user works, written down the moment they say it.
+  "From now on always run the tests before you commit" or "in this repo nobody
+  touches `store.py` without asking" dies with the chat otherwise: two isolated
+  baseline runs answered both with a promise and wrote nothing. Orko keeps two
+  files — `~/.skillator/rules.md` for the user's own rules (follows them into
+  every project on every host, never committed) and `.skillator/rules.md` for
+  the repo's (committed, so a teammate's `git pull` brings them) — decides the
+  scope from the wording or asks, reads both back at session start, and when a
+  personal rule contradicts a project rule asks on each clash rather than
+  settling it. A second git user gets the project rules plus their own file,
+  never the first user's. `scripts/rules-orko.{sh,ps1}` are the only writer.
+  Armed by `grayskull-power`. Invoke with `/rules-orko`.
 - **audit-sherlock** — forensic audit of a whole application: parallel **Fable**
   investigators sweep backend, frontend, boundaries, data, dependencies, error
   paths, config, architecture, tests, dead code, project conventions

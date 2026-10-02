@@ -11,7 +11,9 @@
 #
 # next = 1 + max of
 #   - KIND ids on ticket lines of the local board (default: <repo>/TICKETS.md)
-#   - the same board path on every ref in refs/heads and refs/remotes
+#     and of its archive beside it, <board without .md>-archive.md (F27:
+#     archive-tickets.sh moves old closed tickets there; they keep their number)
+#   - the same two paths on every ref in refs/heads and refs/remotes
 #   - the counter $(git rev-parse --git-common-dir)/skillator/ids/<KIND>,
 #     shared by every worktree and session of the clone
 # The counter is written back before the number is printed, under a mkdir
@@ -74,6 +76,11 @@ allocate() {
 
   m=0
   if [ -f "$board" ]; then m=$(max_ids "$kind" < "$board"); fi
+  archive=${board%.md}-archive.md
+  if [ "$archive" != "$board-archive.md" ] && [ -f "$archive" ]; then
+    r=$(max_ids "$kind" < "$archive")
+    if [ "$r" -gt "$m" ]; then m=$r; fi
+  fi
   if [ -n "$runs" ]; then
     for f in "$runs"/run-*.md "$runs"/run.md; do
       [ -f "$f" ] || continue
@@ -87,6 +94,10 @@ allocate() {
     for ref in $(git -C "$gdir" for-each-ref --format='%(refname)' refs/heads refs/remotes); do
       r=$(git -C "$gdir" show "$ref:$rel" 2>/dev/null | max_ids "$kind")
       if [ "$r" -gt "$m" ]; then m=$r; fi
+      case $rel in *.md)
+        r=$(git -C "$gdir" show "$ref:${rel%.md}-archive.md" 2>/dev/null | max_ids "$kind")
+        if [ "$r" -gt "$m" ]; then m=$r; fi ;;
+      esac
       if [ -n "$runs" ]; then
         if [ "$kind" = RUN ]; then
           r=$(git -C "$top" ls-tree -r --name-only "$ref" -- "${rrel:-.}" 2>/dev/null | run_names | max_num)
@@ -182,6 +193,18 @@ selftest() {
   q=$(sh "$me" --peek A) && [ "$q" = 23 ] || fail "missing board path reserved: got $q"
 
   e=$(sh "$me" B) && [ "$e" = 3 ] || fail "kind B: want 3, got $e"
+
+  # F27: ids archived beside the board are never reused - in the working
+  # tree, and on a ref where only the archive holds them.
+  printf -- '## Bugs
+
+- [x] B40 - archived
+' > TICKETS-archive.md
+  e=$(sh "$me" --peek B) && [ "$e" = 41 ] || fail "archive in tree ignored: want B41, got $e"
+  rm TICKETS-archive.md
+  (cd "$t/far" && printf -- '- [x] B60 - archived
+' > TICKETS-archive.md && g add TICKETS-archive.md && g commit -q -m arch)
+  e=$(sh "$me" --peek B) && [ "$e" = 61 ] || fail "archive on another ref ignored: want B61, got $e"
   f=$(sh "$me" RUN) && [ "$f" = 1 ] || fail "generic kind RUN: want 1, got $f"
 
   # --runs (F22): run files in the tree and on other refs raise RUN and S.
@@ -202,7 +225,7 @@ selftest() {
   [ "$h" = 8 ] || fail "outside git: want 8, got $h"
   grep -q 'not in a git repo' "$t/err2" || fail "outside git: no stderr note"
 
-  echo "ok - next-id.sh selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, RUN 1, runs RUN 6, runs S 13-15, no-git 8)"
+  echo "ok - next-id.sh selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, runs RUN 6, runs S 13-15, no-git 8)"
 }
 
 if [ "${1:-}" = --selftest ]; then

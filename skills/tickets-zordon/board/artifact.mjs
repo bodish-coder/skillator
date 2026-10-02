@@ -4,6 +4,9 @@
 //   node skills/tickets-zordon/board/artifact.mjs [TICKETS.md] [out.html]
 //
 // Defaults: ./TICKETS.md -> ./.tickets-board.html (gitignored).
+// The archive beside the board (TICKETS-archive.md, written by
+// practice/scripts/archive-tickets.sh) is read too when present: its tickets
+// count in the chips and sit in the closed list, marked archived (F27).
 // Output is Artifact-shaped: no <!doctype>/<html>/<head>/<body>, the wrapper
 // supplies those. Self-check: node artifact.mjs --selftest
 
@@ -64,7 +67,7 @@ const li = (t) =>
   `<span class="g" aria-hidden="true">${t.glyph}</span>` +
   `<span class="id">${esc(t.id)}</span>` +
   `<span class="t">${esc(t.title)}</span>` +
-  `<span class="st">${t.status}</span></li>`;
+  `<span class="st">${t.status}${t.archived ? " · archived" : ""}</span></li>`;
 
 function section(name, ts) {
   if (!ts.length) return "";
@@ -85,23 +88,29 @@ function chips(c) {
     `<div class="chip c-total"><span class="v">${c.total}</span><span class="k">total</span></div></div>`;
 }
 
-export function render(md, title) {
-  const ts = parse(md);
+export function render(md, title, archiveMd = "", archiveName = "TICKETS-archive.md") {
+  const board = parse(md);
+  // Archived tickets are closed by construction; anything else in that file
+  // is still shown, never dropped, so the chips never lie about it.
+  const archived = parse(archiveMd).map((t) => ({ ...t, archived: true }));
+  const ts = board.concat(archived);
   const c = tally(ts);
   const isClosed = (t) => t.status === "done" || t.status === "cancelled";
   const parentOf = (t) => t.id.replace(/[a-z]$/, "");
   // A done sub-part of a live parent stays with the parent — filing it under
   // "closed" strands it beside unrelated tickets with nothing to explain it.
-  const openParents = new Set(ts.filter((t) => !isClosed(t)).map((t) => t.id));
-  const isLive = (t) => !isClosed(t) || (t.sub && openParents.has(parentOf(t)));
+  const openParents = new Set(board.filter((t) => !isClosed(t)).map((t) => t.id));
+  const isLive = (t) => !t.archived && (!isClosed(t) || (t.sub && openParents.has(parentOf(t))));
   const live = ts.filter(isLive);
   const closed = ts.filter((t) => !isLive(t));
   const sections = GROUPS.map(([p, name]) =>
     section(name, live.filter((t) => t.id.startsWith(p)))).join("") +
     section("Other", live.filter((t) => !inGroups(t.id)));
   const body = sections || `<p class="empty">Nothing open. The whole board is closed.</p>`;
+  const narch = archived.length;
+  const archNote = narch ? ` (${narch} archived in ${esc(archiveName)})` : "";
   const rest = closed.length
-    ? `<details><summary>${closed.length} closed — done and cancelled</summary>` +
+    ? `<details><summary>${closed.length} closed — done and cancelled${archNote}</summary>` +
       `<ul>${closed.map(li).join("")}</ul></details>`
     : "";
   return `<title>TICKETS · ${esc(title)}</title>
@@ -201,6 +210,17 @@ not a ticket line
   ok(shown === 9, "every ticket rendered", shown);
   ok(html.indexOf(">B3a<") < html.indexOf("<details"), "done sub-part stays with its live parent");
   ok(html.includes(">Other<"), "unrecognised prefix gets a section");
+  // F27: archived tickets count, sit in the closed list, and say so.
+  const arch = `## Bugs
+- [x] B0 — archived long ago
+- [-] A0 — archived cancel
+`;
+  const h2 = render(md, "demo", arch);
+  ok(h2.includes("11 total"), "archived tickets counted", h2.match(/data-count-line="[^"]*"/)?.[0]);
+  ok(h2.includes("4 closed — done and cancelled (2 archived in TICKETS-archive.md)"), "closed summary names the archive");
+  ok(h2.indexOf(">B0<") > h2.indexOf("<details"), "archived ticket sits in the closed list");
+  ok(h2.includes("done · archived"), "archived ticket is marked");
+  ok(!render(md, "demo").includes("archived in"), "no archive, no archive note");
   if (!process.exitCode) console.log("selftest: ok");
 }
 
@@ -218,12 +238,19 @@ if (process.argv[2] === "--selftest") {
       `Run this from the repo root, or pass the board's path as the first argument.`);
     process.exit(1);
   }
-  const html = render(md, basename(resolve(mdPath, "..")));
+  const archPath = mdPath.replace(/\.md$/i, "-archive.md");
+  let archMd = "";
+  if (archPath !== mdPath) {
+    try { archMd = await readFile(archPath, "utf8"); } catch (e) { if (e.code !== "ENOENT") throw e; }
+  }
+  const html = render(md, basename(resolve(mdPath, "..")), archMd, basename(archPath));
   try {
     await writeFile(outPath, html, "utf8");
   } catch (e) {
     console.error(`artifact: cannot write ${outPath} (${e.code ?? e.message}).`);
     process.exit(1);
   }
-  console.log(`artifact: ${parse(md).length} tickets from ${mdPath} -> ${outPath}`);
+  const na = parse(archMd).length;
+  console.log(`artifact: ${parse(md).length} tickets from ${mdPath}` +
+    (na ? ` + ${na} archived from ${basename(archPath)}` : "") + ` -> ${outPath}`);
 }

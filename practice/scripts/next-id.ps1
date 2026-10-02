@@ -8,8 +8,9 @@
 #   next-id.ps1 -Count <n> <KIND>        reserve n in a row, one per line
 #   next-id.ps1 -Selftest
 #
-# next = 1 + max(KIND ids on ticket lines of the local board; the same board
-# path on every ref in refs/heads and refs/remotes; the counter
+# next = 1 + max(KIND ids on ticket lines of the local board and of its
+# archive <board without .md>-archive.md (F27); the same two paths on every
+# ref in refs/heads and refs/remotes; the counter
 # <git-common-dir>/skillator/ids/<KIND>). Counter written back before printing,
 # under a directory lock; a lock older than $env:NEXT_ID_STALE seconds
 # (default 30) is broken. Sub-parts (A58c) count as their parent.
@@ -103,6 +104,14 @@ function Allocate([string]$k, [string]$b, [bool]$peekOnly, [string]$runs, [strin
   if (Test-Path -LiteralPath $b -PathType Leaf) {
     $m = Get-MaxId $k ([IO.File]::ReadAllLines((Resolve-Path -LiteralPath $b).Path, [Text.Encoding]::UTF8))
   }
+  # F27: tickets archived beside the board keep their numbers.
+  if ($b -match '\.md$') {
+    $arch = $b -replace '\.md$', '-archive.md'
+    if (Test-Path -LiteralPath $arch -PathType Leaf) {
+      $x = Get-MaxId $k ([IO.File]::ReadAllLines((Resolve-Path -LiteralPath $arch).Path, [Text.Encoding]::UTF8))
+      if ($x -gt $m) { $m = $x }
+    }
+  }
   if ($runs) {
     foreach ($f in @(Get-ChildItem -LiteralPath $runs -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'run-*.md' -or $_.Name -eq 'run.md' })) {
       if ($k -ceq 'RUN') { $x = Get-RunMax @($f.Name) }
@@ -117,6 +126,10 @@ function Allocate([string]$k, [string]$b, [bool]$peekOnly, [string]$runs, [strin
       if (-not $ref) { continue }
       $s = Invoke-GitQuiet @('-C', $gdir, 'show', "${ref}:$rel")
       if ($s[0] -eq 0) { $x = Get-MaxId $k $s[1]; if ($x -gt $m) { $m = $x } }
+      if ($rel -match '\.md$') {
+        $s = Invoke-GitQuiet @('-C', $gdir, 'show', "${ref}:$($rel -replace '\.md$', '-archive.md')")
+        if ($s[0] -eq 0) { $x = Get-MaxId $k $s[1]; if ($x -gt $m) { $m = $x } }
+      }
       # Pathspecs resolve against -C, so these run from the top, not $gdir.
       if ($runs) {
         if ($k -ceq 'RUN') {
@@ -240,6 +253,16 @@ function Run-Selftest {
     $q = Alloc $main @('-Peek', 'A'); if ($q -ne '23') { Fail "missing board path reserved: got $q" }
 
     $e = Alloc $main @('B'); if ($e -ne '3') { Fail "kind B: want 3, got $e" }
+
+    # F27: ids archived beside the board are never reused - in the working
+    # tree, and on a ref where only the archive holds them.
+    $arch = Join-Path $main 'TICKETS-archive.md'
+    [IO.File]::WriteAllText($arch, "## Bugs`n`n- [x] B40 - archived`n")
+    $e = Alloc $main @('-Peek', 'B'); if ($e -ne '41') { Fail "archive in tree ignored: want B41, got $e" }
+    Remove-Item -LiteralPath $arch
+    [IO.File]::WriteAllText((Join-Path $far 'TICKETS-archive.md'), "- [x] B60 - archived`n")
+    G $far @('add', 'TICKETS-archive.md'); G $far @('commit', '-q', '-m', 'arch')
+    $e = Alloc $main @('-Peek', 'B'); if ($e -ne '61') { Fail "archive on another ref ignored: want B61, got $e" }
     $f = Alloc $main @('RUN'); if ($f -ne '1') { Fail "generic kind RUN: want 1, got $f" }
 
     # -Runs (F22): run files in the tree and on other refs raise RUN and S.
@@ -262,7 +285,7 @@ function Run-Selftest {
     if ($h -ne '8') { Fail "outside git: want 8, got $h" }
     if ($script:lastErr -notmatch 'not in a git repo') { Fail 'outside git: no stderr note' }
 
-    Write-Output 'ok - next-id.ps1 selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, RUN 1, runs RUN 6, runs S 13-15, no-git 8)'
+    Write-Output 'ok - next-id.ps1 selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, runs RUN 6, runs S 13-15, no-git 8)'
   } finally {
     Remove-Item -Recurse -Force -LiteralPath $t -ErrorAction SilentlyContinue
   }

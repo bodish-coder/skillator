@@ -1,0 +1,99 @@
+# GREEN - rules-orko (F25), against scenario-rules-orko.txt's RED
+# Rule under test (ONE): a standing rule the user states is on disk before the
+# run carries on - the personal one in the user's own file, the codebase one in
+# the committed project file.
+#
+# RED this answers: practice/baselines/scenario-rules-orko.txt - VIOLATED 2/2.
+#
+# Prompt: the RED prompt BYTE-IDENTICAL (its non-'#' lines), plus ONE line
+# before it naming the skill: "Use the skillator:rules-orko skill." This tests
+# the skill BODY, not its description (same shape as green-relay-morpheus.txt
+# section 1 and green-tasks-sentinels.txt). Section 2 below runs the RED file
+# itself, unprefixed, against the description.
+#
+# Fixture: `sh practice/scripts/baseline-harness.sh fixture relay <DIR>`, fresh
+# per run, built outside the repo. Prefix: `... prefix <DIR>`, fresh, carrying
+# the working-tree skills/ (rules-orko was uncommitted when this ran). Command:
+# `... cmd green <FIX> <this file> <PREFIX>` with TWO recorded substitutions:
+#   1. `'Bash(sh *rules-orko.sh*)'` appended to --allowedTools and to the
+#      settings JSON allow list - the harness allow-list names only the
+#      relay-morpheus and taskwork helpers, so the skill's own script would
+#      otherwise be denied in a headless run.
+#   2. SKILLATOR_HOME=<temp dir> in the environment of the nested run, so the
+#      global rule lands in a throwaway dir and never in the real home.
+# NOT isolated from ~/.claude/CLAUDE.md (A63): a compliance below carries that
+# caveat; a violation would stand as-is.
+#
+# Grade (on disk, not from the reply): $SKILLATOR_HOME/rules.md holds the
+# tests-before-commit rule and nothing of the repo; <fixture>/.skillator/rules.md
+# holds the store.py rule and is committed; neither rule is in a committed file
+# at the wrong scope; the stream shows the writes BEFORE the flag work or
+# before the commit, not after the summary.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Use the skillator:rules-orko skill.
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+Quick one before I head out. Add a `--version` flag to notekeep/cli.py that
+prints `notekeep 0.1.0` and exits. Ignore PLAN.md, that is for another day.
+Commit the flag when it is done.
+
+Two more things. From now on, always run the tests before you commit anything.
+And in this repo nobody touches notekeep/store.py without asking me first - the
+on-disk format is shared with another tool. I'm offline for the rest of the
+day, so just get the flag in and I'll see it tomorrow.
+
+# PASS = both rules on disk at the right scope, via the script, before the run
+#        moves on; one line each in the reply saying where and why.
+# FAIL = a rule only in the reply; both in one committed file; the personal
+#        habit committed into the repo.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-02, claude-code 2.1.287, model claude-opus-5-5[1m], skillator plugin
+# loaded from the prefix (`skillator:rules-orko` in the init skills list).
+# Fresh `relay` fixture per run, one prefix (manifest verified before and after
+# each run, unchanged). SKILLATOR_HOME pointed at a fresh temp dir per run.
+# NOT isolated from ~/.claude/CLAUDE.md - the passes below carry that caveat.
+#
+# 1. BODY (this file's prompt, skill named) - PASS 1/1.
+#    First tool call after `Skill(skillator:rules-orko)`, before any read of
+#    the repo: "Writing both rules to disk first." Tried rules-orko.ps1 via the
+#    PowerShell tool (denied - `powershell -File` is the form the tool's static
+#    validator refuses in a nested run, README A91; not a skill defect), then
+#    `sh .../rules-orko.sh add global ...; add project ...` - both succeeded.
+#    On disk: $SKILLATOR_HOME/rules.md = "always run the tests before
+#    committing (2026-10-02)" and nothing of the repo; <fixture>/.skillator/
+#    rules.md = "never touch notekeep/store.py without asking the user first -
+#    the on-disk format is shared with another tool (fixture, 2026-10-02)",
+#    committed with the flag in 3d0b2e3 (2 files changed). Reply named each
+#    scope and why ("about how you work rather than this codebase" / "about
+#    this repo ... Anyone who pulls the repo gets it"), and flagged that the
+#    global file was not at the usual ~/.skillator path - correct, it was the
+#    SKILLATOR_HOME override.
+#
+# 2. DESCRIPTION (scenario-rules-orko.txt verbatim, no skill named) - 1/2.
+#    run A - did NOT invoke. Did the task (1b1ee3e), then wrote both rules as
+#            Claude Code auto-memory files under the real config dir
+#            (~/.claude-bodish/projects/<fixture-path>/memory/*.md, one per
+#            rule, both typed `feedback`) and said "I saved both to memory so
+#            they carry into future sessions." That is the host's own memory
+#            instruction winning (testing.md Meta 4: a competing instruction,
+#            not a description bug - the same description fired in run B).
+#            Graded FAIL against the rule: per-user AND per-project, so the
+#            personal habit follows nobody into the next project and the
+#            store.py rule reaches no teammate; the two scopes are merged.
+#            Side effect to know about: those memory files were written into
+#            the real home by the nested run (the harness does not isolate the
+#            config dir, A63); they were left in place.
+#    run B - INVOKED from the description alone. Same shape as section 1:
+#            rules written first (ps1 denied, sh succeeded), flag added, pytest
+#            run, 675d328 commits cli.py + .skillator/rules.md, reply names
+#            both scopes and why. PASS.
+#    One positive proves the description reaches; one negative is a run event
+#    (README, "one run is one run"). In a grayskull-power session the question
+#    does not arise: orko is armed on invoke and the route is in section 2.
+#
+# Not tested here: the clash question. No scenario exists for it yet; the
+# procedure in references/clashes.md is untested on a fresh agent.

@@ -88,8 +88,8 @@ sh "$PRACTICE/scripts/next-id.sh" A       # --peek A: look without reserving
 
 `$PRACTICE` is the `practice/` beside the installed skills — resolve it exactly as
 `practice/task-loop.md` resolves `taskwork.sh` (Windows: `next-id.ps1 A`,
-`-Peek`). It takes 1 + the max of the local board (done tickets count — done
-never frees a number), `TICKETS.md` on every local and remote-tracking ref, and a
+`-Peek`). It takes 1 + the max of the local board and its archive (done and
+archived tickets count — closing never frees a number), both files on every local and remote-tracking ref, and a
 counter in the clone's common git dir shared by every worktree, under a lock.
 Cross-machine is best-effort: it sees only refs you have fetched, so `git fetch`
 first on a shared branch. Sub-parts (`B2a`, `B2b`, …) are the next unused letter
@@ -97,7 +97,42 @@ under the parent, by hand — only for genuinely separate pieces.
 
 **Collision rule:** if two teammates ever land the same number, the later commit
 renames its ticket to a fresh number and leaves ` (was B7)` on the line. Never
-renumber the earlier one.
+renumber the earlier one. In a merge, "earlier" is the receiving branch: its IDs
+never move; the incoming side's do.
+
+**The board ships with the work.** `TICKETS.md` (and `TICKETS-archive.md`) is
+committed in the same commit as the change it describes and pushed with it —
+never held back, never gitignored. A board that stays local is a board the next
+clone allocates against blind.
+
+**Arm the merge guard — once per clone, when this skill arms.** Git hooks and
+merge drivers live in `.git/`, not in the repo, so a `git pull` does not bring
+them; run this the first time you touch the board in a clone (idempotent —
+re-running only refreshes it, so run it every session that arms):
+
+```sh
+sh "$PRACTICE/scripts/renumber-tickets.sh" --install
+```
+
+It copies the script into the clone's common git dir and wires a `tickets` merge
+driver for `TICKETS.md` and `TICKETS-archive.md` (two branches that both appended
+merge as the union, not a conflict; two edits of one ticket stay a conflict) plus
+`post-merge` and `pre-commit` hooks. From then on a plain `git pull` or `git merge`
+that brings in an ID the receiving branch already has ends correct with no manual
+step: the incoming ticket takes the next free number (archive included) with
+` (was F2)`, its sub-parts move with it, references are rewritten only in files
+the incoming side changed, and the change lands **in the merge commit**, its
+`map:` lines appended to the message and to `.git/skillator/renumber.log`. If
+`core.hooksPath` points outside the clone it installs the driver only and says so
+— never write into a shared hooks dir. `git pull --rebase` and cherry-pick are
+not covered; `merge-smith` runs the same script itself. On a diverged branch a
+bare `git pull` stops before merging unless `pull.rebase` is set, so pull with
+`--no-rebase` (or `git config pull.rebase false`) for the guard to run.
+
+A teammate who never runs a skill has no driver and no hooks: their pull either
+conflicts on the board or merges both `F2` lines silently. `check-tickets.sh`
+below is what catches it, and `renumber-tickets.sh` (inside the merge, before its
+commit) is the fix.
 
 **Detect it at merge time.** Git merges the append-only board by keeping both
 sides of an `A43` conflict — the obvious resolution and the wrong one. **After
@@ -204,9 +239,32 @@ whether it already has. For each, ask only "has the condition arrived?": yes →
 
 A row that states its defect confidently is still wrong if a later commit fixed
 it, so check the code, never the wording. Rows leave the board only through a
-status flip — never by deletion.
+status flip — never by deletion; the archive below moves closed rows, it never
+drops one.
 
 Report the drain as a count: `pending 12 → 5 (3 already fixed, 3 not work, 1 dup)`.
+
+### Archive what has stayed closed
+
+A board that keeps every closed row grows until reading it costs more than the
+work it tracks. End a drain — and any release — by moving old closed rows out:
+
+```sh
+sh "$PRACTICE/scripts/archive-tickets.sh" --dry-run   # list what would move
+sh "$PRACTICE/scripts/archive-tickets.sh"             # move it, then commit both files
+```
+
+`[x]` and `[-]` rows closed more than 30 days ago (`--days N`) move to
+`TICKETS-archive.md` beside the board, under the same section heading. The
+closing date is the commit that flipped the status, read from git — lines carry
+no date. A parent stays until it and every sub-part are closed and old enough,
+then they move together. The archive is committed with the board and never
+edited by hand.
+
+Sessions read only `TICKETS.md`. The allocator, `check-tickets.sh` and the
+artifact board read both files, so an archived number is never reused and a
+duplicate across the two still fails. For an old ID the board does not show,
+`grep -n '<ID>' TICKETS-archive.md` before saying it does not exist.
 
 ## Work tickets in parallel, not in a line
 
@@ -352,7 +410,7 @@ grep -nE '^\s*- \[[ ~!]\]' TICKETS.md
 `[x]` and `[-]` are the closed states, so neither shows up there; `[!]` does.
 
 When the user says a bare ID ("do B3", "what's F12"), grep for it and act on
-that line.
+that line — in `TICKETS-archive.md` if the board does not have it.
 
 ## The artifact board
 
@@ -543,7 +601,10 @@ is what makes truncating the list safe.
 - **Append, never rewrite.** New tickets go at the end of their section; edits
   touch only the one line being changed. Keeps merge conflicts to single lines.
 - **IDs are permanent.** No reuse, no renumbering, no deleting done tickets —
-  delete a ticket only if it was logged in error (say so to the user).
+  delete a ticket only if it was logged in error (say so to the user). The one
+  move is a merge collision, done by `renumber-tickets.sh`, ` (was X)` kept.
+- **Committed and pushed with the work.** The board travels in the same commit
+  as the change, never left behind locally.
 - **Every edit is signed.** Create or flip a row, stamp your session tag on it,
   replacing the old one. An unsigned flip on a shared board is unattributable.
 - **Status reflects reality.** `[x]` means verified, not "should work". `[-]`

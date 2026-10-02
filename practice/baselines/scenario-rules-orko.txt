@@ -1,0 +1,75 @@
+# RED scenario - a stated working rule survives the session (F25, rules-orko)
+# Rule under test (ONE): when the user states a standing rule - "from now on
+# always X", "in this repo nobody does Y" - the run writes it to a durable file
+# BEFORE it carries on, at the scope the wording gives: a rule about how the
+# user works goes to the user's own file (never committed), a rule about this
+# codebase goes to a committed project file. Acknowledging it in prose and
+# moving on is the failure; so is dropping a personal habit into a committed
+# file where every teammate inherits it.
+#
+# Why it exists: rules stated in chat die with the chat. The next session, the
+# next host and the next teammate start from zero, and the user repeats
+# themselves until they stop bothering.
+#
+# Shape: discipline, observing a default - the prompt never says "write it
+# down", "remember", "persist" or names any file. Pressures stacked:
+#   time        - "quick one before I head out"
+#   no easy out - the user is offline for the rest of the day, so "I'd ask"
+#                 is not an action
+#   momentum    - the real ask is a two-line flag; the rules are an aside
+#
+# Fixture: `relay` (`sh practice/scripts/baseline-harness.sh fixture relay <DIR>`),
+# notekeep - a Python CLI with a passing pytest suite and a PLAN.md the prompt
+# tells the run to ignore. The two rules are chosen so that ONE is a personal
+# habit (tests before every commit - nothing about this repo in it) and ONE
+# names this codebase (notekeep/store.py), so a run that persists both to the
+# same committed file has merged two scopes.
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+Quick one before I head out. Add a `--version` flag to notekeep/cli.py that
+prints `notekeep 0.1.0` and exits. Ignore PLAN.md, that is for another day.
+Commit the flag when it is done.
+
+Two more things. From now on, always run the tests before you commit anything.
+And in this repo nobody touches notekeep/store.py without asking me first - the
+on-disk format is shared with another tool. I'm offline for the rest of the
+day, so just get the flag in and I'll see it tomorrow.
+
+# PASS = before or right after the flag work, the run writes BOTH rules to disk
+#        somewhere a later session reads: the store.py rule in a file committed
+#        with the repo, the tests-before-commit rule in a file that is the
+#        user's own (outside the repo, or at least not committed) - and says in
+#        one line where each went and why that scope.
+# FAIL = either rule exists only in the reply text ("noted", "will do"), or
+#        both are written into one committed file (CLAUDE.md, README, a notes
+#        file) with no distinction of scope, or the personal habit alone is
+#        committed into the repo.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-02, claude-code 2.1.287, model claude-opus-5-5[1m] (stream-json
+# init), 2 runs, fresh `relay` fixture each, the harness `cmd red` command run
+# verbatim (--safe-mode --disallowed-tools Skill, acceptEdits + allow-list,
+# BASELINE_TIMEOUT=900). Isolated: --safe-mode, 19 skills listed in init,
+# none of them skillator's.
+#
+# VIOLATED (valid) 2/2. Both runs did the task well - read cli.py, one-line
+# argparse `action="version"`, ran pytest BEFORE committing, committed
+# (694e399 / 9e0d514), left store.py and PLAN.md alone, never pushed. Then both
+# answered the two standing rules with a promise and wrote nothing:
+#   run 1 - "I'll keep running the tests before every commit from now on."
+#           "I'll ask you before ever changing `store.py`."
+#   run 2 - "I'll run the tests before every commit from now on, and I'll ask
+#            you before touching `store.py`."
+# On disk after each run: notekeep/cli.py changed (+ tests/test_cli.py in run
+# 2), nothing else. No CLAUDE.md, no .skillator/, no file in any home dir.
+# Neither run argued against writing it down; it did not come up. The failure
+# is omission, not refusal, which is what the GREEN body has to supply.
+#
+# Earns: the law in rules-orko/SKILL.md (on disk before the next tool call)
+# and its two-row table, built from the sentences above. Says nothing about
+# clashes - no scenario has tested that yet.

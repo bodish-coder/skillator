@@ -33,6 +33,19 @@ percentage to give them — see `PLATFORMS.md`), so run
   exactly what it says. It reads a real percentage on codex and reports "no
   usage signal on this host" on cursor and antigravity — repeat that verbatim
   rather than calling it armed. See that skill's **Other hosts** table.
+- **`rules-orko`** — run `sh <rules-orko>/scripts/rules-orko.sh show` (Windows:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File
+  "<rules-orko>/scripts/rules-orko.ps1" show`; `<rules-orko>` is that skill's
+  directory, a sibling of this one). It prints the repo's committed rules
+  (`.skillator/rules.md`) and this user's own (`~/.skillator/rules.md`),
+  scope-tagged. Read both lists before the first task; every line binds the
+  session as if the user had just typed it. A global rule contradicting a
+  project rule is **asked** - one `AskUserQuestion` per clash, before the work
+  it touches - never settled by you (`rules-orko/references/clashes.md`). Report
+  the counts in the active-set line: `rules-orko: 2 project · 1 global`; both
+  files absent → `rules-orko: none`. From here on, a standing rule the user
+  states ("from now on", "always", "never", "in this repo") routes to
+  `rules-orko` and is on disk before the next tool call.
 - **Upstream watch** (F23c) — only in a repo that has
   `skills/design-arwen/UPSTREAM.md` (skillator itself); anywhere else skip it
   silently, because those tickets belong on skillator's board, not the user's.
@@ -60,7 +73,7 @@ percentage to give them — see `PLATFORMS.md`), so run
 Then state the active set in **one line** — not a feature tour:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · ponytail full · live-friday armed (npm run dev) · watch-cortana armed at 92%
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · ponytail full · live-friday armed (npm run dev) · watch-cortana armed at 92% · rules-orko: 2 project · 1 global
 ```
 
 The banner is printed at the top of the reply, before any of this. It fires

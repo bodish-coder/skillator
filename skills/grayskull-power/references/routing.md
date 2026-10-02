@@ -82,6 +82,7 @@ re-check anything an agent asserts without evidence.
 | The request is… | Skill |
 |---|---|
 | A bug, a feature, "log this", "what's pending", "mark done" | `tickets-zordon` |
+| The user states how they work - "from now on", "always X", "never Y", "stop doing", "in this repo nobody", "I prefer" - or asks what rules apply here, or why a preference was forgotten between chats | `rules-orko` (armed at invoke; the rule is on disk before the next tool call, at global or project scope - asked when the wording does not settle it) |
 | 4+ open tickets, a sweep, "ultracode", "work the board" | `tickets-zordon` (workflow mode) |
 | "why is this broken", audit a whole app, unknown-cause rot, pre-release sweep | `audit-sherlock` |
 | Build a real feature, design-then-implement | `build-vision` (ceremony, Fable design) · `build-ultron` (all-Opus, no ceremony) · `build-jarvis` (Sonnet offload) |

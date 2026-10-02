@@ -17,8 +17,8 @@ description: >-
 ## ⚔️ I HAVE THE POWER!!
 ```
 
-Unconditional — the receipt that the skill loaded, not a reward for a clean
-arming. Print it, then arm. Once per session, on invoke, not per request.
+Unconditional — the receipt that the skill loaded, not a reward for clean
+arming. Print it, then arm. Once per session, not per request.
 
 One call: **arm** the standing skills, **announce** the state, **route** each
 request, under the §3 ground rules.
@@ -28,7 +28,7 @@ request, under the §3 ground rules.
 Read `PLATFORMS.md` (host mechanics) and `PRACTICE.md` (process canon, cited by
 section below). Both sit **beside the installed skills**: try `../` first (the
 `install.sh` layout — Cursor, Codex, Antigravity, Pi), then `../../` (git
-checkout, Claude Code plugin cache). Neither resolves → say so and continue, and
+checkout, Claude Code plugin cache). Neither resolves → say so, continue, and
 detect the host from its own tools rather than assuming `claude-code`.
 
 **Load [`references/hosts.md`](references/hosts.md)** — the per-host translation
@@ -41,7 +41,7 @@ Nothing else changes per host.
 level active) · `codegraph` (indexed, else init once) · `live-friday` (if the
 repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
 `usage-watch … check` elsewhere) · `relay-morpheus` (an unfinished `.skillator/run.md`
-is the first thing you say).
+is the first thing you say) · `rules-orko` (rules read, clashes asked).
 
 Then one line, not a feature tour:
 
@@ -51,7 +51,7 @@ grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files · ponytail fu
 
 **Load [`references/arming.md`](references/arming.md)** — what each check does,
 and the first-invoke persistence step writing `.skillator/grayskull.md` plus the
-CLAUDE.md / AGENTS.md / GEMINI.md pointers. Already exists → skip it silently.
+CLAUDE.md / AGENTS.md / GEMINI.md pointers (exists → skip silently).
 
 ## 2. Route
 
@@ -62,7 +62,7 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | Build a feature | `build-vision` · `build-ultron` · `build-jarvis` — they *are* PRACTICE §§1-6; nothing in front |
 | A bug, cause unknown | PRACTICE §7 **first** — root cause before any fix |
 | A decision, no code behind it | PRACTICE §1 in-session, then stop |
-| Log, list or close a ticket | `tickets-zordon` |
+| Log, list or close a ticket · a stated rule | `tickets-zordon` · `rules-orko` |
 | Whole-app audit · a staged diff | `audit-sherlock` · `code-review:code-review` |
 | UI/UX craft · a TUI's rendering · watch it live | `design-arwen` (never `frontend-design`) · `tui-tron` · `live-friday` |
 | A mock UI to make real · a spec only in chat | `designui-galadriel` · `spec-watson` |
@@ -71,20 +71,20 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | A staged run · written tasks to build | `relay-morpheus` · `tasks-sentinels` |
 | Tricky analysis | Parallel Fable subagents; you reconcile |
 
-**Nothing matches?** Do it directly — a one-line edit needs no skill, and still
-does not escape §3: "one line" describes the diff, never the thinking.
+**Nothing matches?** Do it directly — a one-line edit needs no skill, but still
+obeys §3: "one line" describes the diff, never the thinking.
 
 **Load [`references/routing.md`](references/routing.md)** — every row,
 the long tail, why the order holds.
 
 ## 3. Ground rules
 
-- **Reproduce → read → map → tag → fix.** No repro, no remedy. Read the actual
-  file, not memory of the library. Tag every claim `verified` / `inferred` /
+- **Reproduce → read → map → tag → fix.** No repro, no remedy. Read the file,
+  not memory of the library. Tag every claim `verified` / `inferred` /
   `guessed`; a `guessed` root cause never justifies an edit.
-- **Blast radius named in one line before the edit — no line, no edit.** Not in
-  your head: in your visible output. No line at the edit → write it now, or name
-  the field you cannot fill without guessing and go back a step.
+- **Blast radius named in one line before the edit — no line, no edit.** In
+  your visible output, not your head. No line → write it now, or name the
+  field you cannot fill without guessing and go back a step.
 - **Scope contract:** >2 unrelated files, or one outside the ticket's contract,
   stops and asks. Smallest change that fixes the cause; no refactoring inside it.
 - **Before a commit:** regression sweep the callers you named, then
