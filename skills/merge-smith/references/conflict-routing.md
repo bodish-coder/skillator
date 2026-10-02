@@ -7,7 +7,10 @@ match its format is treated as null (§Null and timeout).
 ## Order of work
 
 1. **Classify** every conflicted hunk (build tier). No hunk is resolved before it has
-   a `class:` + `why:` row in the merge log.
+   a `class:` + `why:` row in the merge log. The main session may fill the
+   classify or trivial-resolve seat itself when it runs on that seat's tier or
+   above (`who: main session (<model>)`); propose and second review are always
+   dispatched.
 2. **Resolve** — `trivial` hunks: cheap tier. `semantic` hunks: deep tier proposes,
    a second deep-tier agent reviews where required, the user approves (or `assumed:`
    when unattended), and the **main session** applies the approved text.

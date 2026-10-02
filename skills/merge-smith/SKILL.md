@@ -163,6 +163,10 @@ On a conflict, **classify each conflicted hunk, then route**. The classifier is 
 below (base visible); it logs a `class:` + `why:` row per hunk **before any
 cheap-tier resolve** — a cheap model labelling its own work trivial is how a logic
 conflict skips Fable. One file can hold a trivial and a semantic hunk: two routes.
+The main session may fill the classifier or trivial-resolver seat itself when it
+runs on that tier or above, logging `who: main session (<model>)`; the deep-tier
+seats (propose, second review) are always separate agents — their value is that
+they are not you.
 
 - **Trivial / mechanical → auto-resolve (`model: "sonnet"`):** lockfiles
   (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, `go.sum` →
