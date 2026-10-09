@@ -1,0 +1,82 @@
+# RED scenario - deliberate shortcuts get tracked before a release (F29, code-yoda debt mode)
+# Rule under test (ONE): asked whether anything knowingly deferred should be
+# tracked, the run harvests EVERY `ponytail:` marker in the code (the
+# convention is `# ponytail: <ceiling>, <upgrade trigger>`), lists each with
+# its ceiling and trigger, tags the markers that name NO upgrade trigger as
+# the rot risk - nothing will ever bring them back - and puts the untracked
+# ones on the board (TICKETS.md), which is where this repo tracks work.
+#
+# Why it exists: upstream ponytail-debt (ponytail 4.7.0, MIT) harvests the
+# markers into a ledger and tags `no-trigger` rows. A shortcut marked in a
+# comment and never ledgered becomes permanent; the trigger-less ones are the
+# first to rot because no event ever prompts a revisit.
+#
+# Shape: discipline, observing a default - the prompt never says "ponytail",
+# "marker", "grep", "TICKETS.md" or "no trigger". Pressures:
+#   time      - "we release tomorrow"
+#   vagueness - "anything we knowingly deferred" leaves the search to the run
+#
+# Fixture: `ponytail` (`sh practice/scripts/baseline-harness.sh fixture ponytail <DIR>`),
+# urlshort - a WSGI URL shortener, one commit, plus a staged diff (the review
+# scenario's material; this scenario ignores it). Markers, five in all:
+#   urlshort/store.py:5   in-memory dict store ... move to sqlite when links must survive a deploy   (trigger)
+#   urlshort/store.py:9   global dict cache                                                         (NO trigger)
+#   urlshort/store.py:14  sequential codes are guessable; switch ... if links ever become private   (trigger)
+#   urlshort/store.py:36  linear scan for reverse lookup; add a url->code index past ~10k links    (trigger)
+#   urlshort/app.py:10    no rate limit                                                             (NO trigger)
+# (store.py line numbers are the staged working tree's; at HEAD they are
+# :4, :8, :13, :30.)
+# TICKETS.md holds four closed tickets and nothing open.
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+We release tomorrow. Is there anything we knowingly deferred in this code that should be tracked?
+
+# PASS = all five markers found and listed with ceiling + trigger; the two
+#        with no trigger (`global dict cache`, `no rate limit`) singled out as
+#        the rot risk; and the deferrals land on TICKETS.md (or the run says
+#        it is putting them there and does).
+# FAIL = any marker missed, or the two trigger-less markers not distinguished
+#        from the three with a trigger, or nothing reaches the board.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-09, claude-code 2.1.295, model claude-opus-5-5[1m] (stream-json
+# init), 2 runs in parallel, fresh `ponytail` fixture each (HEAD 6e07841,
+# staged tree 635e7c2), the harness `cmd red` command run verbatim
+# (--safe-mode --disallowed-tools Skill, acceptEdits + allow-list,
+# BASELINE_TIMEOUT=900). Isolated: --safe-mode, 19 skills in init, none
+# skillator's or ponytail's; no Skill call. cwd: the fixture, in the session
+# scratchpad, outside any repo. Both exited 0, 5 turns, ~$0.14 each.
+# Transcripts: transcripts/f29-code-yoda-debt-{1,2}.jsonl.
+#
+# VIOLATED (valid) 2/2 on the rot-risk clause; the rest COMPLIED 2/2.
+#   Found all five markers   - 2/2 (both grepped `ponytail` on turn 2).
+#   Put them on TICKETS.md   - 2/2, unprompted, as `[>]` rows under
+#                              Agent-found (plus the expiry bug as `[ ]`).
+#   Flagged the two with no trigger as rot risk - 0/2. Both runs noticed the
+#   cache marker had no trigger and then INVENTED one, which hides the rot
+#   instead of naming it; neither noticed `no rate limit` has none:
+#     run 1 - "Its comment doesn't say when to revisit it, so I suggested
+#              switching to a multi-threaded WSGI server as the trigger."
+#             board: "A7 — `POST /shorten` has no rate limit and no
+#              request-size cap, so one client can fill memory" (no trigger)
+#     run 2 - "Its comment gave no condition for revisiting it, so I added
+#              "more than one worker."
+#             board: "A6 — `POST /shorten` has no rate limit (`app.py` ponytail)"
+# Earns: the `no-trigger` tag and the rule that a missing trigger is
+# reported, never filled in by the run (a guessed trigger is the run's, not
+# the author's). Does NOT earn harvesting or ticketing - the default already
+# does both.
+#
+# Superseded round (same day, same command, 2 runs): the fixture README then
+# said "stdlib only" - removed because review runs used it as the reason to
+# drop dateutil. Debt was unaffected by that line. Round 1 run 1 PASSED the
+# rot clause ("A4 and A5 say no point at which to revisit them, so someone
+# should set one"; board rows "no revisit trigger recorded"); round 1 run 2
+# invented triggers ("revisit under a multi-threaded server or heavy
+# traffic"). So across 4 runs the clause held 1/4: the behaviour is reachable
+# without a skill, just not the default.

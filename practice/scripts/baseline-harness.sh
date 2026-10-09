@@ -3,7 +3,7 @@
 # Rebuilds, from nothing, the two things a recorded verdict needs beside it:
 # the fixture the run happened in, and the exact command that ran it.
 #
-#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split <DIR>
+#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail <DIR>
 #   baseline-harness.sh prefix  <DIR>                   -> clean plugin prefix, print DIR
 #   baseline-harness.sh scenario <FILE>                 -> the prompt, '#' lines stripped
 #   baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]
@@ -77,7 +77,7 @@
 set -e
 
 usage() {
-  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split <DIR>" >&2
+  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail <DIR>" >&2
   echo "       baseline-harness.sh prefix  <DIR>" >&2
   echo "       baseline-harness.sh scenario <FILE>" >&2
   echo "       baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]" >&2
@@ -712,6 +712,247 @@ relay_split_files() {
     | while read -r n rest; do
         echo "$rest" | tr ',' '\n' | tr -d '` ' | sed '/^$/d' | sed "s/^/$n /"
       done
+}
+
+# --------------------------------------------------------------- ponytail ----
+# For code-yoda (F29, absorbing ponytail 4.7.0). One fixture, two scenarios.
+#   debt   - five `# ponytail: <ceiling>, <upgrade>` markers in the committed
+#            code. Three name an upgrade trigger; two name none (`global dict
+#            cache` in store.py, `no rate limit` in app.py) - those are the
+#            ones that rot. TICKETS.md is a skillator board with only closed
+#            tickets, so "did anything reach the board" is a diff.
+#   review - a STAGED (not committed) diff adding link expiry and a CSV export,
+#            carrying three over-engineering cases and one real bug:
+#              yagni  - `Exporter` ABC with exactly one subclass, CsvExporter
+#              stdlib - hand-rolled `_csv_field`/`_csv_row` quoting (csv.writer)
+#              native - python-dateutil added for one `isoparse` call
+#                       (datetime.fromisoformat)
+#              BUG    - `is_expired` compares `expires_at > now`, so a link
+#                       still in date is refused and an expired one resolves.
+# The staged diff adds no ponytail marker, so the count stays five.
+build_ponytail() {
+  d="$1"
+  if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
+  mkdir -p "$d/urlshort" "$d/tests"
+
+  cat > "$d/TICKETS.md" <<'EOF'
+# TICKETS
+
+Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[>]` deferred · `[x]` done · `[-]` cancelled
+IDs are permanent — never reuse or renumber. Append new tickets at the end of
+their section.
+
+## Bugs
+
+- [x] B1 — `/r/<code>` answered 500 for an unknown code; now 404
+
+## Features
+
+- [x] F1 — `POST /shorten` returns a short code for a URL, the same code for a URL seen before
+- [x] F2 — `GET /r/<code>` redirects to the stored URL and counts the hit
+- [x] F3 — `top(n)` lists the most-hit links for the dashboard
+
+## Agent-found
+EOF
+
+  cat > "$d/README.md" <<'EOF'
+# urlshort
+
+A one-process URL shortener, served over WSGI.
+
+Serve `urlshort.app:app` with any WSGI server. Board: TICKETS.md.
+Tests: `python -m pytest`.
+EOF
+
+  : > "$d/requirements.txt"
+  : > "$d/conftest.py"
+  : > "$d/urlshort/__init__.py"
+
+  cat > "$d/urlshort/app.py" <<'EOF'
+"""WSGI app: POST /shorten, GET /r/<code>."""
+from urlshort import store
+
+
+def app(environ, start_response):
+    path = environ.get("PATH_INFO", "")
+    method = environ.get("REQUEST_METHOD", "GET")
+
+    if method == "POST" and path == "/shorten":
+        # ponytail: no rate limit
+        size = int(environ.get("CONTENT_LENGTH") or 0)
+        url = environ["wsgi.input"].read(size).decode().strip()
+        code = store.find_code(url) or store.shorten(url)
+        start_response("201 Created", [("Content-Type", "text/plain")])
+        return [code.encode()]
+
+    if method == "GET" and path.startswith("/r/"):
+        url = store.resolve(path[3:])
+        if url is None:
+            start_response("404 Not Found", [("Content-Type", "text/plain")])
+            return [b"no such link"]
+        start_response("302 Found", [("Location", url)])
+        return [b""]
+
+    start_response("404 Not Found", [("Content-Type", "text/plain")])
+    return [b"not found"]
+EOF
+
+  cat > "$d/tests/test_store.py" <<'EOF'
+from urlshort import store
+
+
+def test_shorten_then_resolve_counts_the_hit():
+    code = store.shorten("https://example.com/a")
+    assert store.resolve(code) == "https://example.com/a"
+    assert store.all_links()[-1]["hits"] == 1
+
+
+def test_same_url_same_code():
+    code = store.shorten("https://example.com/b")
+    assert store.find_code("https://example.com/b") == code
+
+
+def test_unknown_code_is_none():
+    assert store.resolve("zzzz") is None
+EOF
+
+  ponytail_store "$d/urlshort/store.py"
+  commit_fixture "$d" "urlshort: shorten, redirect, hit counts, top links"
+
+  # The staged diff: written over the committed tree and added, never committed.
+  ponytail_store "$d/urlshort/store.py" staged
+  printf 'python-dateutil==2.9.0.post0\n' > "$d/requirements.txt"
+
+  cat > "$d/urlshort/export.py" <<'EOF'
+"""CSV export of links for the weekly report."""
+from abc import ABC, abstractmethod
+
+from dateutil import parser as dateparser
+
+
+class Exporter(ABC):
+    """Base class for link exporters."""
+
+    @abstractmethod
+    def header(self):
+        ...
+
+    @abstractmethod
+    def row(self, link):
+        ...
+
+    def export(self, links):
+        lines = [self.header()]
+        lines.extend(self.row(link) for link in links)
+        return "\n".join(lines) + "\n"
+
+
+def _csv_field(value):
+    s = str(value)
+    if "," in s or '"' in s or "\n" in s:
+        s = '"' + s.replace('"', '""') + '"'
+    return s
+
+
+def _csv_row(values):
+    out = []
+    for v in values:
+        out.append(_csv_field(v))
+    return ",".join(out)
+
+
+class CsvExporter(Exporter):
+    def header(self):
+        return _csv_row(["code", "url", "hits", "expires_at"])
+
+    def row(self, link):
+        exp = link.get("expires_at")
+        return _csv_row([link["code"], link["url"], link["hits"],
+                         exp.isoformat() if exp else ""])
+
+
+def export_csv(links, expiring_before=None):
+    """All links as CSV; with expiring_before (ISO 8601 text), only the
+    links that expire before it."""
+    if expiring_before:
+        cutoff = dateparser.isoparse(expiring_before)
+        links = [l for l in links
+                 if l.get("expires_at") and l["expires_at"] < cutoff]
+    return CsvExporter().export(links)
+EOF
+
+  git -C "$d" add -A
+  echo "$d"
+}
+
+# ponytail_store FILE [staged] -> urlshort/store.py as committed, or with the
+# staged expiry change (and its inverted comparison) applied.
+ponytail_store() {
+  if [ "${2:-}" = staged ]; then
+    imp='import itertools
+from datetime import datetime, timezone'
+    sig='def shorten(url, expires_at=None):'
+    rec='    _LINKS[code] = {"code": code, "url": url, "hits": 0, "expires_at": expires_at}'
+    exp='def is_expired(link, now=None):
+    now = now or datetime.now(timezone.utc)
+    return link["expires_at"] is not None and link["expires_at"] > now
+
+
+'
+    chk='    if link is None or is_expired(link):'
+  else
+    imp='import itertools'
+    sig='def shorten(url):'
+    rec='    _LINKS[code] = {"code": code, "url": url, "hits": 0}'
+    exp=''
+    chk='    if link is None:'
+  fi
+  cat > "$1" <<EOF
+"""Links in memory. Good enough for one process."""
+$imp
+
+# ponytail: in-memory dict store, lost on restart; move to sqlite when links must survive a deploy
+_LINKS = {}
+_ids = itertools.count(1)
+
+# ponytail: global dict cache
+_TOP_CACHE = {}
+
+
+$sig
+    # ponytail: sequential codes are guessable; switch to secrets.token_urlsafe if links ever become private
+    code = format(next(_ids), "x")
+$rec
+    _TOP_CACHE.clear()
+    return code
+
+
+${exp}def resolve(code):
+    link = _LINKS.get(code)
+$chk
+        return None
+    link["hits"] += 1
+    _TOP_CACHE.clear()
+    return link["url"]
+
+
+def find_code(url):
+    # ponytail: linear scan for reverse lookup; add a url->code index past ~10k links
+    for code, link in _LINKS.items():
+        if link["url"] == url:
+            return code
+    return None
+
+
+def top(n=10):
+    if n not in _TOP_CACHE:
+        _TOP_CACHE[n] = sorted(_LINKS.values(), key=lambda l: -l["hits"])[:n]
+    return _TOP_CACHE[n]
+
+
+def all_links():
+    return list(_LINKS.values())
+EOF
 }
 
 # ----------------------------------------------------------------- prefix ----
@@ -1601,6 +1842,46 @@ selftest() {
   [ "$(git -C "$rs" rev-parse HEAD)" = "$(git -C "$rs2" rev-parse HEAD)" ] \
     || die 'relay-split: two builds produced different commit shas'
 
+  # ponytail (F29): five markers, two of them with no trigger; a board with
+  # only closed tickets; a staged diff with the three over-engineering cases
+  # and the inverted expiry check, never committed.
+  pt="$tmp/urlshort"
+  build_ponytail "$pt" >/dev/null
+  [ "$(grep -rhE '(#|//) ?ponytail:' "$pt/urlshort" | wc -l | tr -d ' ')" = 5 ] \
+    || die 'ponytail: expected five ponytail: markers'
+  grep -q '^# ponytail: global dict cache$' "$pt/urlshort/store.py" \
+    || die 'ponytail: the no-trigger cache marker is gone'
+  grep -q '^        # ponytail: no rate limit$' "$pt/urlshort/app.py" \
+    || die 'ponytail: the no-trigger rate-limit marker is gone'
+  [ "$(grep -rhE '(#|//) ?ponytail:.*(when|if|past) ' "$pt/urlshort" | wc -l | tr -d ' ')" = 3 ] \
+    || die 'ponytail: expected three markers naming a trigger'
+  if grep -q '^- \[[^x]\]' "$pt/TICKETS.md"; then die 'ponytail: board has an open ticket'; fi
+  [ "$(grep -c '^- \[x\]' "$pt/TICKETS.md")" = 4 ] || die 'ponytail: expected four closed tickets'
+  [ "$(git -C "$pt" rev-list --count HEAD)" = 1 ] || die 'ponytail: expected one commit'
+  [ "$(git -C "$pt" diff --cached --name-only | tr '\n' ' ')" = 'requirements.txt urlshort/export.py urlshort/store.py ' ] \
+    || die 'ponytail: staged diff is not requirements.txt + export.py + store.py'
+  [ -z "$(git -C "$pt" status --porcelain | grep -v '^[MA] ')" ] \
+    || die 'ponytail: unstaged or untracked changes beside the staged diff'
+  sd=$(git -C "$pt" diff --cached)
+  echo "$sd" | grep -q '^+class Exporter(ABC):' || die 'ponytail: no one-implementation ABC'
+  [ "$(echo "$sd" | grep -c '^+class .*(Exporter):')" = 1 ] || die 'ponytail: Exporter must have exactly one subclass'
+  echo "$sd" | grep -q '^+def _csv_row' || die 'ponytail: no hand-rolled CSV'
+  if echo "$sd" | grep -q '^+import csv'; then die 'ponytail: export.py imports csv'; fi
+  echo "$sd" | grep -q '^+from dateutil' || die 'ponytail: no dateutil import'
+  [ "$(echo "$sd" | grep -c 'dateparser\.')" = 1 ] || die 'ponytail: dateutil must be used for exactly one call'
+  echo "$sd" | grep -qF '+    return link["expires_at"] is not None and link["expires_at"] > now' \
+    || die 'ponytail: the inverted expiry check is gone'
+  if echo "$sd" | grep -q '^+.*ponytail:'; then die 'ponytail: staged diff adds a marker'; fi
+  for n in CLAUDE.md AGENTS.md GEMINI.md; do
+    if [ -e "$pt/$n" ]; then die "ponytail: fixture ships $n"; fi
+  done
+  pt2="$tmp/urlshort2"
+  build_ponytail "$pt2" >/dev/null
+  [ "$(git -C "$pt" rev-parse HEAD)" = "$(git -C "$pt2" rev-parse HEAD)" ] \
+    || die 'ponytail: two builds produced different commit shas'
+  [ "$(git -C "$pt" write-tree)" = "$(git -C "$pt2" write-tree)" ] \
+    || die 'ponytail: two builds staged different trees'
+
   # A fixture dir that already exists is an error, not a silent overwrite.
   # `die` exits, so the negative cases run in a subshell.
   if ( build_func_ui "$f" ) >/dev/null 2>&1; then die 'fixture overwrote an existing dir'; fi
@@ -1761,7 +2042,8 @@ fixture)
   relay) build_relay "$dir" ;;
   relay-mid) build_relay "$dir" mid ;;
   relay-split) build_relay_split "$dir" ;;
-  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout | relay | relay-mid | relay-split)" ;;
+  ponytail) build_ponytail "$dir" ;;
+  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout | relay | relay-mid | relay-split | ponytail)" ;;
   esac
   ;;
 prefix)

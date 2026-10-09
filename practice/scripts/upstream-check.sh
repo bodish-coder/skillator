@@ -25,7 +25,8 @@
 #                                           ancestor of it, 1 if not, else 2
 #
 # --daily: skip (exit 0, says so) if a run already finished today; the stamp is
-# $(git rev-parse --git-common-dir)/skillator/upstream-check.day. The stamp is
+# $(git rev-parse --git-common-dir)/skillator/upstream-check.day (other manifests:
+# upstream-check-<skill dir>.day). The stamp is
 # written only on exit 0 or 1, so a failed run is retried next time.
 set -u
 prog=upstream-check.sh
@@ -182,6 +183,18 @@ main() {
     gdir=$(git rev-parse --git-common-dir 2>/dev/null) ||
       { echo "$prog: --daily needs a git repo for its stamp" >&2; exit 2; }
     stamp="$gdir/skillator/upstream-check.day"
+    # One stamp per manifest, so one skill's failed run is retried next session
+    # whatever the other's did. design-arwen keeps the original name. The dir
+    # is resolved first, so `UPSTREAM.md` and `./UPSTREAM.md` name the skill.
+    # Case-folded like the ps1 twin (Windows paths are case-insensitive).
+    # ponytail: keyed on the dir name only; two same-named skill dirs would share
+    # a stamp - key on the full path if that ever happens.
+    mdir=$(CDPATH= cd -- "$(dirname -- "$manifest")" 2>/dev/null && pwd) || mdir=$(dirname -- "$manifest")
+    skill=$(basename -- "$mdir" | tr 'A-Z' 'a-z')
+    case "$(basename -- "$manifest" | tr 'a-z' 'A-Z'):$skill" in
+      UPSTREAM.MD:design-arwen) ;;
+      UPSTREAM.MD:*) stamp="$gdir/skillator/upstream-check-$skill.day" ;;
+    esac
     if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$today" ]; then
       echo "skipped: upstreams already checked today ($stamp)"
       exit 0
@@ -276,6 +289,15 @@ STUB
   [ "$(cat "$st/repo/.git/skillator/upstream-check.day")" = "$(date +%Y-%m-%d)" ] || fail "daily: no stamp"
   out=$(cd "$st/repo" && sh "$me" --daily "$st/m1"); rc=$?
   [ $rc = 0 ] && echo "$out" | grep -q '^skipped:' || fail "daily second run not skipped: $rc $out"
+  # a skill's UPSTREAM.md gets its own stamp, found again from a bare relative path
+  mkdir -p "$st/repo/sk/code-yoda" && cp "$st/m1" "$st/repo/sk/code-yoda/UPSTREAM.md"
+  (cd "$st/repo" && sh "$me" --daily sk/code-yoda/UPSTREAM.md >/dev/null); rc=$?
+  [ $rc = 1 ] || fail "per-skill stamp: exit $rc, want 1 (shared stamp reused?)"
+  [ -f "$st/repo/.git/skillator/upstream-check-code-yoda.day" ] || fail "per-skill stamp not written"
+  out=$(cd "$st/repo/sk/code-yoda" && sh "$me" --daily UPSTREAM.md); rc=$?
+  [ $rc = 0 ] && echo "$out" | grep -q 'upstream-check-code-yoda.day' || fail "bare path missed its stamp: $rc $out"
+  out=$(cd "$st/repo" && sh "$me" --daily "$st/repo/sk/code-yoda/UPSTREAM.md"); rc=$?
+  [ $rc = 0 ] && echo "$out" | grep -q 'upstream-check-code-yoda.day' || fail "absolute path missed its stamp: $rc $out"
 
   echo "ok - upstream-check.sh selftest"
 }

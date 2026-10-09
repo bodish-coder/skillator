@@ -71,8 +71,8 @@ function createProject(name: string, workingDirectory: string) {
 }
 ```
 
-`ponytail` and this are not in conflict: four one-line guards on a path that has
-already produced one real bug is the lazy option. Four layers of abstraction
+`code-yoda` and this are not in conflict: four one-line guards on a path that has
+already produced one real bug is the restrained option. Four layers of abstraction
 around a hypothetical one is not.
 
 ---

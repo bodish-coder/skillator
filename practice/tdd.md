@@ -10,7 +10,7 @@ NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
 Wrote code before the test? **Delete it.** Not "keep it as reference", not
 "adapt it while writing the test", not "look at it once". Implement fresh from
 the test. The law binds behaviour, not one-liners — a config value, a doc line,
-a rename carries no test (`ponytail` governs which is which).
+a rename carries no test (`code-yoda` governs which is which).
 
 ---
 

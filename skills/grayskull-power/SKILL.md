@@ -18,7 +18,7 @@ description: >-
 ```
 
 Unconditional — the receipt that the skill loaded, not a reward for clean
-arming. Print it, then arm. Once per session, not per request.
+arming. Once per session, not per request.
 
 One call: **arm** the standing skills, **announce** the state, **route** each
 request, under the §3 ground rules.
@@ -28,29 +28,28 @@ request, under the §3 ground rules.
 Read `PLATFORMS.md` (host mechanics) and `PRACTICE.md` (process canon, cited by
 section below). Both sit **beside the installed skills**: try `../` first (the
 `install.sh` layout — Cursor, Codex, Antigravity, Pi), then `../../` (git
-checkout, Claude Code plugin cache). Neither resolves → say so, continue, and
-detect the host from its own tools rather than assuming `claude-code`.
+checkout, Claude Code plugin cache). Neither resolves → say so, continue, detect
+the host from its tools, never assume `claude-code`.
 
 **Load [`references/hosts.md`](references/hosts.md)** — the per-host translation
 of "invoke a skill", "Fable subagents", `AskUserQuestion` and the watch hooks.
-Nothing else changes per host.
 
 ## 1. Arm (once, on invoke)
 
-`tickets-zordon` (read `TICKETS.md`, report the open set) · `ponytail` (laziness
-level active) · `codegraph` (indexed, else init once) · `live-friday` (if the
+`tickets-zordon` (read `TICKETS.md`, report the open set) · `code-yoda` (restraint
+level; skips its core when `PONYTAIL MODE ACTIVE` is in context) · `codegraph` (indexed, else init once) · `live-friday` (if the
 repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
 `usage-watch … check` elsewhere) · `relay-morpheus` (an unfinished `.skillator/run.md`
 is the first thing you say) · `rules-orko` (rules read, clashes asked).
 
-Then one line, not a feature tour:
+Then one line:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files · ponytail full · live-friday armed (npm run dev) · watch-cortana 92%/90wk · relay r7 stage 2 of 4
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files · code-yoda full · live-friday armed (npm run dev) · watch-cortana 92%/90wk · relay r7 stage 2 of 4
 ```
 
 **Load [`references/arming.md`](references/arming.md)** — what each check does,
-and the first-invoke persistence step writing `.skillator/grayskull.md` plus the
+and the first-invoke persistence step: `.skillator/grayskull.md` plus the
 CLAUDE.md / AGENTS.md / GEMINI.md pointers (exists → skip silently).
 
 ## 2. Route
@@ -64,6 +63,7 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | A decision, no code behind it | PRACTICE §1 in-session, then stop |
 | Log, list or close a ticket · a stated rule | `tickets-zordon` · `rules-orko` |
 | Whole-app audit · a staged diff | `audit-sherlock` · `code-review:code-review` |
+| Over-engineering · repo bloat · the shortcut ledger | `code-yoda` (review · audit · debt) |
 | UI/UX craft · a TUI's rendering · watch it live | `design-arwen` (never `frontend-design`) · `tui-tron` · `live-friday` |
 | A mock UI to make real · a spec only in chat | `designui-galadriel` · `spec-watson` |
 | Screenshots · auth/secrets · a skill | `screenshot-argus` · `security-review` · `skill-smith` |
@@ -72,7 +72,7 @@ One skill at a time; chaining "to be safe" is the failure this prevents.
 | Tricky analysis | Parallel Fable subagents; you reconcile |
 
 **Nothing matches?** Do it directly — a one-line edit needs no skill, but still
-obeys §3: "one line" describes the diff, never the thinking.
+obeys §3: "one line" is the diff, never the thinking.
 
 **Load [`references/routing.md`](references/routing.md)** — every row,
 the long tail, why the order holds.
@@ -84,7 +84,7 @@ the long tail, why the order holds.
   `guessed`; a `guessed` root cause never justifies an edit.
 - **Blast radius named in one line before the edit — no line, no edit.** In
   your visible output, not your head. No line → write it now, or name the
-  field you cannot fill without guessing and go back a step.
+  field you cannot fill without guessing and step back.
 - **Scope contract:** >2 unrelated files, or one outside the ticket's contract,
   stops and asks. Smallest change that fixes the cause; no refactoring inside it.
 - **Before a commit:** regression sweep the callers you named, then

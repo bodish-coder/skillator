@@ -1,0 +1,94 @@
+# GREEN - code-yoda review mode (F29), against scenario-code-yoda-review.txt's RED
+# Rule under test (ONE, format): reviewing a staged diff with code-yoda, every
+# over-engineering finding is one line - a tag (delete/stdlib/native/yagni/
+# shrink), the location, the concrete replacement - ending in a
+# `net: -N lines` line, and the correctness bug is routed out in a line of its
+# own, never ranked among the cuts.
+#
+# RED this answers: practice/baselines/scenario-code-yoda-review.txt -
+# COMPLIED 2/2 on naming the three cuts with replacements; the default did NOT
+# produce the one-line/tag/net shape and mixed the bug in with the cuts.
+# review.md ships as an output-format recipe; this GREEN grades the format.
+#
+# Prompt: the RED prompt BYTE-IDENTICAL (its non-'#' lines), plus ONE line
+# before it naming the skill: "Use the skillator:code-yoda skill." This tests
+# the skill BODY. Section 2 runs the RED file itself against the description.
+#
+# Fixture / prefix / command: as green-code-yoda-debt.txt - fresh `ponytail`
+# fixture per run (HEAD 6e07841, staged tree 635e7c2), one working-tree
+# prefix (manifest unchanged before/after each run),
+# `BASELINE_ISOLATE=hide BASELINE_TIMEOUT=900 ... cmd green`, sequential,
+# with the ONE recorded substitution: --settings merged with
+# "enabledPlugins": {"ponytail@ponytail": false} (the installed external
+# ponytail plugin otherwise competes with code-yoda; see the debt GREEN §3).
+# Isolated from ~/.claude/CLAUDE.md: YES (hide; restored after every run).
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Use the skillator:code-yoda skill.
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+Review the staged diff before I commit.
+
+# PASS = the three cuts (Exporter ABC -> one function; hand-rolled CSV ->
+#        csv.writer; dateutil -> datetime.fromisoformat) each as one tagged
+#        line with its replacement; a `net: -N lines` line; the inverted
+#        is_expired bug reported apart from the findings and routed.
+# FAIL = prose findings, a finding without a replacement, no net line, or the
+#        bug listed among the cuts.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-09, claude-code 2.1.295, model claude-opus-5-5[1m] (stream-json
+# init), skillator 4.2.1 from the prefix (`skillator:code-yoda` in init; no
+# `ponytail:*` skills).
+#
+# 1. BODY (this file's prompt, skill named) - PASS 2/2.
+#    Both: `Skill(skillator:code-yoda)`, banner verbatim ("## 🟢 Code less,
+#    see more. Begun, the wisdom has."), Read references/review.md, then the
+#    diff. No files changed (git status: only the fixture's staged tree).
+#    run 1 (transcripts/f29-code-yoda-green-review-1.jsonl, 5 turns, $0.28):
+#      bug first, routed: "One correctness bug first. It's not part of the
+#      complexity review, so run `code-review:code-review` on it: at
+#      `urlshort/store.py:22`, `is_expired` uses `> now` ..."
+#      "export.py:L7-21,L38-45: yagni: Exporter ABC with a single CsvExporter
+#       subclass. Inline the header and row logic into export_csv."
+#      "export.py:L24-35: stdlib: hand-rolled CSV quoting in
+#       _csv_field/_csv_row. csv.writer(io.StringIO(), lineterminator="\n")
+#       does it."
+#      "requirements.txt:L1 + export.py:L4: stdlib: python-dateutil added for
+#       one isoparse call. datetime.fromisoformat (Python 3.11+ reads full ISO
+#       8601), no new dependency."
+#      "net: -40 lines possible."
+#      Then a shown rewrite of export.py (outside the report block) and a note
+#      that the logic has no check - §6's floor, not tagged.
+#    run 2 (transcripts/f29-code-yoda-green-review-2.jsonl, 6 turns, $0.29):
+#      "**Correctness, not in scope here, so send it to
+#       `code-review:code-review`:** `store.py:22` `is_expired` has its
+#       comparison backwards (`expires_at > now`)."
+#      "requirements.txt:L1: delete: python-dateutil pinned for one isoparse
+#       call. Nothing; on Python 3.13, datetime.fromisoformat parses ISO 8601"
+#      "export.py:L4: stdlib: dateutil.parser.isoparse.
+#       datetime.fromisoformat(expiring_before)."
+#      "export.py:L7-21: yagni: Exporter ABC with one implementation
+#       (CsvExporter). Inline it into export_csv until a second format exists."
+#      "export.py:L24-35: stdlib: hand-rolled CSV quoting (_csv_field,
+#       _csv_row). csv.writer(buf, lineterminator="\n"), which also quotes \r"
+#      "export.py:L38-45: yagni: CsvExporter class with one caller."
+#      "export.py:L48-55: shrink: whole module → one function:" (code shown)
+#      "net: -39 lines possible, -1 dependency."
+#    Nit, not a FAIL: the dependency was tagged `stdlib:`/`delete:` rather
+#    than `native:`; the replacement (datetime.fromisoformat) is the stdlib, so
+#    the tag is defensible. Run 2 split one cut over several lines.
+#
+# 2. DESCRIPTION (scenario-code-yoda-review.txt verbatim) - code-yoda loaded
+#    0/2. Expected, not a defect: "Review the staged diff" is a correctness
+#    review, which code-yoda's description excludes ("NOT for correctness or
+#    security review"); its review mode triggers on "what can be deleted from
+#    a diff" / over-engineering wording. Both runs gave the RED-shaped prose
+#    review (transcripts f29-code-yoda-green-desc-review-{1,2}.jsonl, $0.27 /
+#    $0.28); run 2 missed the Exporter ABC entirely, run 1 named all three
+#    under "Worth doing" with the bug mixed into the same list.
+#
+# Earns: review.md as an output-format recipe (body PASS 2/2).
+# Cost: section 1 $0.57, section 2 $0.55.

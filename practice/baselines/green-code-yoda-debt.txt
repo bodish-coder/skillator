@@ -1,0 +1,202 @@
+# GREEN - code-yoda debt mode (F29), against scenario-code-yoda-debt.txt's RED
+# Rule under test (ONE): a `ponytail:` marker that names no revisit trigger is
+# reported as `no-trigger` - in the ledger AND on the board - and never given
+# a trigger the run composed.
+#
+# RED this answers: practice/baselines/scenario-code-yoda-debt.txt - VIOLATED
+# 2/2 (both runs invented a trigger for the cache marker; neither noticed the
+# rate-limit marker had none).
+#
+# Prompt: the RED prompt BYTE-IDENTICAL (its non-'#' lines), plus ONE line
+# before it naming the skill: "Use the skillator:code-yoda skill." This tests
+# the skill BODY, not its description (same shape as green-rules-orko.txt
+# section 1). Section 2 below runs the RED file itself, unprefixed, against the
+# description; section 3 is the round with the external ponytail plugin live.
+#
+# Fixture: `sh practice/scripts/baseline-harness.sh fixture ponytail <DIR>`,
+# fresh per run (HEAD 6e07841, staged tree 635e7c2), built in the session
+# scratchpad, outside any repo. Prefix: `... prefix <DIR>`, one, carrying the
+# working-tree skills/ (code-yoda uncommitted when this ran); manifest
+# verified by `run` before and after every run, unchanged. Command:
+# `BASELINE_ISOLATE=hide BASELINE_TIMEOUT=900 ... cmd green <FIX> <SCENARIO>
+# <PREFIX>`, run sequentially, with ONE recorded substitution:
+#   1. the --settings JSON piped through a merge adding
+#      "enabledPlugins": {"ponytail@ponytail": false}. The host has the
+#      external ponytail 4.7.0 plugin installed and enabled; with it live, the
+#      run picks `ponytail:ponytail-debt` and code-yoda never loads (section 3).
+#      Disabling it is the state code-yoda is built for (it replaces ponytail).
+# Isolated from ~/.claude/CLAUDE.md: YES (hide; restored after every run,
+# checked - no CLAUDE.md.skillator-hidden left).
+#
+# Grade (reply AND TICKETS.md on disk): both trigger-less markers
+# (store.py:9 `global dict cache`, app.py:10 `no rate limit`) reported as
+# no-trigger; no trigger the comment does not contain appears in the ledger or
+# on the board; any board row for them is the pending "set a revisit trigger"
+# shape, never `[>]` with a composed condition.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Use the skillator:code-yoda skill.
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+We release tomorrow. Is there anything we knowingly deferred in this code that should be tracked?
+
+# PASS = both no-trigger markers tagged no-trigger; no invented trigger
+#        anywhere (ledger or board).
+# FAIL = either marker given a run-composed trigger, or dropped, or not
+#        distinguished from the three with a trigger.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-09, claude-code 2.1.295, model claude-opus-5-5[1m] (stream-json
+# init), skillator 4.2.1 loaded from the prefix (`skillator:code-yoda` in the
+# init skills list; no `ponytail:*` skills in sections 1-2).
+#
+# 1. BODY (this file's prompt, skill named) - PASS 2/2.
+#    Both: `Skill(skillator:code-yoda)` first, banner printed verbatim
+#    ("## 🟢 Code less, see more. Begun, the wisdom has."), then Read
+#    references/debt.md, grep, ledger, then `Skill(skillator:tickets-zordon)`
+#    for the board - the route debt.md prescribes.
+#    run 1 (transcripts/f29-code-yoda-green-debt-1.jsonl, 11 turns, $0.46):
+#      ledger: "urlshort/app.py :10 — POST /shorten has no rate limit.
+#               ceiling: "no rate limit". trigger: no-trigger."
+#              ":9  — the top-links cache is a global dict. ceiling: "global
+#               dict cache". trigger: no-trigger."  "5 markers, 2 no-trigger."
+#      board: NOT written - `next-id.sh` was denied (not on the harness
+#      allow-list) and tickets-zordon forbids hand-picked ids, so the run
+#      stopped and proposed the rows instead:
+#              "[ ] A? — set a revisit trigger for the missing rate limit on
+#               POST /shorten (urlshort/app.py:10)"
+#              "[ ] A? — set a revisit trigger for the global top-links cache
+#               (urlshort/store.py:9)"
+#      The three with a trigger proposed as `[>]` quoting the comment. No
+#      invented trigger anywhere. Correctness bug (inverted is_expired) kept
+#      out of the ledger and routed: "Run `/code-review` on the staged diff".
+#    run 2 (transcripts/f29-code-yoda-green-debt-2.jsonl, 17 turns, $0.59):
+#      ledger: "`store.py:9` — The top-links cache is a global dict. ceiling:
+#               "global dict cache". trigger: **no-trigger**."
+#              "`app.py:10` — `POST /shorten` has no rate limit. ceiling: "no
+#               rate limit". trigger: **no-trigger**."  "5 markers, 2 with no
+#               trigger."
+#      board, on disk (TICKETS.md, uncommitted; ids hand-numbered after
+#      next-id.sh was denied):
+#              "- [ ] A4 — set a revisit trigger for "no rate limit" on POST
+#               /shorten (urlshort/app.py:10)"
+#              "- [ ] A5 — set a revisit trigger for "global dict cache"
+#               `_TOP_CACHE` (urlshort/store.py:9)"
+#              A1-A3 `[>]` with the comments' own triggers quoted.
+#      "A4 and A5 ask for a revisit condition rather than a fix, because the
+#       original comments never said when to come back to them. I haven't
+#       made one up; that decision is yours."
+#      Yoda line used once, on the must-not-cut spot (§8 table row): "Cut
+#      here, you must not. Wisdom, knowing what to keep is."
+#    Harness friction, not a skill defect: the allow-list lacks
+#    `Bash(sh *next-id.sh*)` / `renumber-tickets.sh`, so tickets-zordon's id
+#    allocator is denied in every nested run (run 1 stopped, run 2 numbered
+#    by hand).
+#
+# 2. DESCRIPTION (scenario-code-yoda-debt.txt verbatim, no skill named) -
+#    code-yoda loaded 0/2. FINDING about the description.
+#    Both runs invoked `skillator:tickets-zordon` instead ("should be tracked"
+#    reads as board work; tickets-zordon's description owns "log this",
+#    "ticket"). code-yoda's "asks what was knowingly deferred" clause did not
+#    win the match. Behaviour without the body (transcripts
+#    f29-code-yoda-green-desc-debt-{1,2}.jsonl, $0.53 each):
+#      - no trigger invented in either (better than RED): rate limit landed
+#        as `[ ]` pending, "The comment gives no condition for revisiting it,
+#        so I logged it as pending rather than deferred."
+#      - but the cache marker was DROPPED from the board in both:
+#        "I didn't log the `ponytail: global dict cache` comment in
+#         `store.py` as a ticket because it doesn't say what should change."
+#      FAIL against the PASS line (a no-trigger marker dropped, not tagged).
+#    Candidate fixes, not applied (each is a description edit needing its own
+#    RED/GREEN): add "should be tracked before a release" / "deferred
+#    shortcuts" wording to code-yoda's trigger list, and/or a NOT-for in
+#    tickets-zordon ("harvesting deliberate-shortcut markers - code-yoda").
+#
+# 3. PONYTAIL PLUGIN LIVE (harness command verbatim, no substitution, RED
+#    prompt) - code-yoda loaded 0/2; NOT a code-yoda verdict.
+#    init listed `skillator:code-yoda` AND `ponytail:ponytail-debt`; both runs
+#    called `Skill(ponytail:ponytail-debt)` (transcripts
+#    f29-code-yoda-green-ponytailon-debt-{1,2}.jsonl, $0.48 / $0.33). Upstream
+#    ponytail-debt's own behaviour, for the record - VIOLATED 2/2:
+#      run 1 - "This comment didn't say when to revisit it ... I wrote the
+#              trigger as "before the endpoint is public"." Board: "[>] A2 —
+#              `POST /shorten` has no rate limit (`app.py:10`); add before the
+#              endpoint is public"; cache marker as `[>] A6` "wrong once there
+#              is more than one worker".
+#      run 2 - ledger right ("**No trigger noted**" x2, "5 shortcuts, 2 with
+#              no trigger.") but the board invented both: "[>] A2 — ... marker
+#              names no trigger. Revisit when the endpoint is public or abuse
+#              shows up in logs"; "[>] A3 — ... Revisit if `top()` is ever
+#              called with user-supplied `n` or with multiple processes".
+#    That is exactly the gap debt.md's "From ledger to board" table closes:
+#    upstream has the tag, not the rule that nothing else fills the slot.
+#    While the external plugin stays installed, users get ponytail-debt, not
+#    code-yoda - the §0 guard covers the core, not mode routing.
+#
+# Earns: debt.md as written (body PASS 2/2). Open: the description does not
+# pull this prompt (section 2), and an installed ponytail plugin outcompetes
+# code-yoda (section 3).
+# Cost: section 1 $1.06, section 2 $1.06, section 3 $0.81.
+#
+# ------------------------------------ description re-run after description fix
+# 2026-10-09, claude-code 2.1.295, model claude-opus-5-5[1m] (stream-json
+# init). Re-runs section 2 against the changed descriptions in the working
+# tree: code-yoda adds 'before a release or handover - asks what was knowingly
+# deferred, shortcut, "left for later" or "should be tracked" in the code
+# (`ponytail:` markers)' plus 'NOT for the board itself (`tickets-zordon`)';
+# tickets-zordon adds 'NOT for harvesting `ponytail:` markers (`code-yoda`)'.
+# Setup as section 2: scenario-code-yoda-debt.txt verbatim, UNPREFIXED (no
+# skill named); fresh `fixture ponytail` per run (HEAD 6e07841); one fresh
+# `prefix` (repo HEAD 0ce365a + working-tree skills/, code-yoda uncommitted);
+# BASELINE_ISOLATE=hide BASELINE_TIMEOUT=900 `cmd green`, run sequentially,
+# with the same ONE substitution (--settings JSON piped through
+# `jq -c '. + {"enabledPlugins":{"ponytail@ponytail":false}}'`). init skills
+# listed skillator:code-yoda and skillator:tickets-zordon, no ponytail:*.
+# Both runs exited 0 under the limit; prefix verified unchanged by `run`;
+# ~/.claude/CLAUDE.md restored, no CLAUDE.md.skillator-hidden left.
+#
+# code-yoda loaded 2/2 (was 0/2). PASS 2/2.
+#   Both: `Skill(skillator:code-yoda)` as the FIRST tool call, banner printed
+#   ("## 🟢 Code less, see more. Begun, the wisdom has."), Read debt.md, grep,
+#   ledger, then `Skill(skillator:tickets-zordon)` for the board (debt.md's
+#   route). next-id.sh denied again (allow-list), ids hand-numbered.
+#   run 1 (transcripts/f29-code-yoda-green-desc2-debt-1.jsonl, 18 turns,
+#   $0.60):
+#     Skill args: "harvest deferred / ponytail markers before release"
+#     ledger: "`store.py:9`: a global dict caches the top links. The comment
+#              doesn't say what the limit is or when to fix it."
+#             "`app.py:10`: there's no rate limit on `POST /shorten`. The
+#              comment doesn't say when to fix it."
+#             "That's 5 shortcuts, 2 of them with no condition for coming
+#              back to them."
+#     board, on disk (TICKETS.md, uncommitted):
+#             "- [ ] A5 — set a revisit trigger for "no rate limit" on POST
+#              /shorten (urlshort/app.py:10)"
+#             "- [ ] A6 — set a revisit trigger for the global `_TOP_CACHE`
+#              dict (urlshort/store.py:9)"
+#             A2-A4 `[>]` with the comments' own triggers; A1 the inverted
+#             is_expired bug, pending.
+#     "A5 and A6 need you to decide when they should be revisited. I didn't
+#      make that up for you."
+#   run 2 (transcripts/f29-code-yoda-green-desc2-debt-2.jsonl, 17 turns,
+#   $0.56):
+#     Skill args: "Before release: what was knowingly deferred in this code
+#                  that should be tracked?"
+#     ledger: "`urlshort/app.py:10`: there's no rate limit on `POST
+#              /shorten`. The comment doesn't say when to add one."
+#             "`urlshort/store.py:9`: the top-links cache is one global
+#              dict. The comment doesn't say what it can't handle or when
+#              to change it."  "5 markers, 2 with no trigger."
+#     board, on disk:
+#             "- [ ] A2 — set a revisit trigger for "no rate limit" on POST
+#              /shorten (urlshort/app.py:10)"
+#             "- [ ] A3 — set a revisit trigger for "global dict cache"
+#              `_TOP_CACHE` (urlshort/store.py:9)"
+#             A4-A6 `[>]` with the comments' own triggers; A1 the bug.
+#     "A2–A3: open. The task for each is to decide when to revisit it. I
+#      didn't make up a trigger for either."
+#   Neither run invented a trigger in ledger or board; the cache marker,
+#   dropped 2/2 in section 2, is on the board 2/2.
+# Cost: $1.15 (run 1 $0.60, run 2 $0.56).

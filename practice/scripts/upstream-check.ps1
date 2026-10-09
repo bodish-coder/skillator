@@ -19,7 +19,8 @@
 #   contains <owner/repo> <tip> <sha>   exit 0 if sha is tip or its ancestor,
 #                                       1 if not, else 2
 # -Daily: skip if a run already finished today; the stamp is
-# <git-common-dir>/skillator/upstream-check.day, written only on exit 0 or 1.
+# <git-common-dir>/skillator/upstream-check.day (another skill's UPSTREAM.md:
+# upstream-check-<skill dir>.day), written only on exit 0 or 1.
 $ErrorActionPreference = 'Continue'
 $prog = 'upstream-check.ps1'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -256,6 +257,18 @@ exit 2
       if (-not (Test-Path -LiteralPath $stamp) -or (Get-Content -LiteralPath $stamp).Trim() -ne ((Get-Date).ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture))) { Fail 'daily: no stamp' }
       $r = Run @('-Daily', $m1)
       if ($r.Rc -ne 0 -or $r.Out -notmatch '^skipped:') { Fail "daily second run not skipped: $($r.Rc) $($r.Out)" }
+      # a skill's UPSTREAM.md gets its own stamp, found again from a bare relative path
+      $sk = Join-Path $repo 'sk\code-yoda'
+      New-Item -ItemType Directory -Force -Path $sk | Out-Null
+      Copy-Item -LiteralPath $m1 -Destination (Join-Path $sk 'UPSTREAM.md')
+      $r = Run @('-Daily', 'sk\code-yoda\UPSTREAM.md')
+      if ($r.Rc -ne 1) { Fail "per-skill stamp: exit $($r.Rc), want 1 (shared stamp reused?)" }
+      if (-not (Test-Path -LiteralPath (Join-Path $repo '.git\skillator\upstream-check-code-yoda.day'))) { Fail 'per-skill stamp not written' }
+      Push-Location $sk
+      try { $r = Run @('-Daily', 'UPSTREAM.md') } finally { Pop-Location }
+      if ($r.Rc -ne 0 -or $r.Out -notmatch 'upstream-check-code-yoda\.day') { Fail "bare path missed its stamp: $($r.Rc) $($r.Out)" }
+      $r = Run @('-Daily', (Join-Path $sk 'UPSTREAM.md'))
+      if ($r.Rc -ne 0 -or $r.Out -notmatch 'upstream-check-code-yoda\.day') { Fail "absolute path missed its stamp: $($r.Rc) $($r.Out)" }
     } finally { Pop-Location }
     Write-Output 'ok - upstream-check.ps1 selftest'
     return 0
@@ -283,6 +296,11 @@ if ($Daily) {
   $g = "$g".Trim()
   if (-not [IO.Path]::IsPathRooted($g)) { $g = Join-Path (Get-Location).Path $g }
   $stamp = Join-Path $g 'skillator\upstream-check.day'
+  # One stamp per manifest (see the sh twin); design-arwen keeps the original name.
+  # Combine keeps a rooted $Manifest as is (Join-Path would prefix it).
+  $full = [IO.Path]::GetFullPath([IO.Path]::Combine((Get-Location).Path, $Manifest))
+  $skillDir = (Split-Path -Leaf (Split-Path -Parent $full)).ToLowerInvariant()
+  if ((Split-Path -Leaf $full) -eq 'UPSTREAM.md' -and $skillDir -ne 'design-arwen') { $stamp = Join-Path $g "skillator\upstream-check-$skillDir.day" }
   if ((Test-Path -LiteralPath $stamp) -and ((Get-Content -LiteralPath $stamp -TotalCount 1) -eq $today)) {
     Write-Output "skipped: upstreams already checked today ($stamp)"
     exit 0

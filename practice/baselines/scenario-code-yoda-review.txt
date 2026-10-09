@@ -1,0 +1,89 @@
+# RED scenario - a pre-commit review names what to delete (F29, code-yoda review mode)
+# Rule under test (ONE): reviewing a staged diff, the run names each piece of
+# over-engineering as one concrete line - where, what to cut, what replaces it
+# - not a hedge ("might be more complex than necessary", "consider whether").
+# Upstream ponytail-review's tags: yagni (abstraction with one
+# implementation), stdlib (hand-rolled thing the standard library ships, name
+# the function), native (dependency doing what the platform does, name the
+# feature). Finding the correctness bug is necessary but is NOT this rule.
+#
+# Why it exists: an ordinary review finds the bug and waves at the rest, so
+# the diff ships at its full length. Upstream ponytail-review (ponytail 4.7.0,
+# MIT) exists for the complexity a correctness review lets through.
+#
+# Shape: discipline, observing a default - the prompt never says "over-
+# engineering", "simplify", "lean" or "ponytail". Pressure: none beyond a
+# normal pre-commit request; the bug is the decoy that satisfies "a review
+# happened".
+#
+# Fixture: `ponytail` (`sh practice/scripts/baseline-harness.sh fixture ponytail <DIR>`),
+# urlshort. Staged, not committed: requirements.txt, urlshort/export.py (new),
+# urlshort/store.py. The four things in it:
+#   yagni  - export.py `class Exporter(ABC)` with one subclass, CsvExporter.
+#            Replacement: one function.
+#   stdlib - export.py `_csv_field`/`_csv_row` hand-roll CSV quoting.
+#            Replacement: csv.writer (io.StringIO).
+#   native - python-dateutil added to requirements.txt for one
+#            `dateparser.isoparse` call. Replacement: datetime.fromisoformat.
+#   BUG    - store.py `is_expired`: `link["expires_at"] > now` is inverted, so
+#            an in-date link 404s and an expired one still redirects.
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+Review the staged diff before I commit.
+
+# PASS = each of the three over-engineering cases named with its concrete
+#        replacement (one function / csv.writer / datetime.fromisoformat), as
+#        a recommendation, not a hedge.
+# FAIL = any of the three missing, or named only as "could be simpler" /
+#        "consider" with no replacement. Finding only the bug is a FAIL.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-09, claude-code 2.1.295, model claude-opus-5-5[1m] (stream-json
+# init), 2 runs in parallel, fresh `ponytail` fixture each (HEAD 6e07841,
+# staged tree 635e7c2), the harness `cmd red` command run verbatim
+# (--safe-mode --disallowed-tools Skill, acceptEdits + allow-list,
+# BASELINE_TIMEOUT=900). Isolated: --safe-mode, 19 skills in init, none
+# skillator's or ponytail's; no Skill call. cwd: the fixture, in the session
+# scratchpad, outside any repo. Both exited 0, 3-4 turns, ~$0.09-0.10 each.
+# Transcripts: transcripts/f29-code-yoda-review-{1,2}.jsonl.
+#
+# COMPLIED 2/2. Both found the bug first (ran it: "a link expiring tomorrow
+# returned `None` (404) and a link that expired yesterday still
+# redirected"), and both then named all three over-engineering cases, each
+# with its concrete replacement, under "Should fix" / "Should consider":
+#   run 1 - "`_csv_field` doesn't quote `\r`, and the stdlib `csv` module
+#            already handles all of this. Using `csv.writer` over an
+#            `io.StringIO` replaces `_csv_field` and `_csv_row`."
+#           "Probably unnecessary dependency. ... `datetime.fromisoformat`
+#            parses ISO 8601 ... `python-dateutil` and the `requirements.txt`
+#            change can go."
+#           "The `Exporter` base class has only one implementation. ... A
+#            plain `export_csv` function would be simpler until a second
+#            format actually exists."
+#   run 2 - "The `Exporter` base class only has one subclass. A plain
+#            function would do until a second format exists."
+#           "`csv.writer` with `io.StringIO` handles quoting correctly."
+#           "`python-dateutil` is only used for `isoparse`. On Python 3.11 or
+#            newer, `datetime.fromisoformat` handles the same input, so the
+#            new dependency could go."
+# Both even found a defect in the hand-rolled CSV (`\r` not quoted). Neither
+# hedged without a replacement. What the default does NOT do, and no PASS
+# clause asked for: one-line-per-finding format, a net-lines-removed count,
+# or keeping complexity apart from correctness - both mixed them in one list
+# and ranked the cuts as optional ("can be handled now or later").
+#
+# Superseded round (same day, 2 runs): the fixture README then said "stdlib
+# only", and both runs cited it for dateutil ("contradicts the README's
+# 'stdlib only'"), which made the native case a contract violation rather
+# than a leanness call. Removed; the round above has no such hint. Round 1
+# also complied 2/2 on all three. So 4/4 across both rounds.
+#
+# Earns: nothing for the review mode's core rule - per skill-smith §5 reason
+# 3 this is a pass, written down rather than a failure invented. If
+# code-yoda ships a review mode anyway, it is for the format (one line,
+# tag, replacement, `net: -N lines`), which this baseline did not test.

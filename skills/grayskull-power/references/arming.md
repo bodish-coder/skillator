@@ -7,8 +7,15 @@ each one actually means.
   create it on the first ticket, not before. Run its archive step first
   (`archive-tickets.sh`; moved rows → commit board + archive together), then
   report the open set: `B` bugs, `F` features, `A` agent-found.
-- **`ponytail`** — confirm the laziness level is active (the badge in the
-  statusline). It governs *what* gets built for the rest of the session.
+- **`code-yoda`** — load it (an arm, not a direct invoke: no code-yoda banner); its core is the session's restraint level
+  (`full` unless the user set another) and governs *what* gets built from here
+  on. If `PONYTAIL MODE ACTIVE` is already in context, the external ponytail
+  plugin has injected that same core and shows the level in its statusline
+  badge: code-yoda's own §0 guard then skips the core, and only its three modes
+  (review · audit · debt) are new. Report the level either way. A suggestion
+  to run one of its modes, whenever you make one, is a single line in Yoda's
+  voice, chosen from code-yoda §8 — "Heavy, this diff is. A review from
+  code-yoda, take you should."
 - **`codegraph`** — the code map the rest of the skill leans on. Check in order:
   `command -v codegraph` → missing? say so and offer
   `npm i -g @colbymchenry/codegraph` (never install silently). Present but
@@ -47,7 +54,7 @@ percentage to give them — see `PLATFORMS.md`), so run
   files absent → `rules-orko: none`. From here on, a standing rule the user
   states ("from now on", "always", "never", "in this repo") routes to
   `rules-orko` and is on disk before the next tool call.
-- **Upstream watch** (F23c) — only in a repo that has
+- **Upstream watch** (F23c, F29) — only in a repo that has
   `skills/design-arwen/UPSTREAM.md` (skillator itself); anywhere else skip it
   silently, because those tickets belong on skillator's board, not the user's.
   Run `sh practice/scripts/upstream-check.sh --daily` (Windows:
@@ -55,26 +62,29 @@ percentage to give them — see `PLATFORMS.md`), so run
   practice/scripts/upstream-check.ps1 -Daily`). `--daily` makes it a no-op after
   the first finished run of the day; the stamp is
   `$(git rev-parse --git-common-dir)/skillator/upstream-check.day`, shared by
-  every worktree. Act on the output:
+  every worktree. Also run `sh skills/code-yoda/upstream-check.sh --daily`
+  (Windows: the `.ps1` beside it, `-Daily`) — code-yoda's manifest, same
+  output shape, its own stamp. Act on the output of both:
   - `skipped:` or exit 0: nothing to do.
   - each `changed <name> <old>..<new> <url>` line (exit 1, and also exit 2,
     because one failed row does not hide another's change): look for an open
     (`[ ]` or `[~]`) ticket line in `TICKETS.md` that names both `<name>` and
     `<new>`. If there is one, it is already logged. If not, take a number with
     `sh practice/scripts/next-id.sh A` and add
-    `- [ ] A<n> — absorb <name> <old>..<new> into design-arwen (<url>)`. The
-    procedure is in `skills/design-arwen/UPSTREAM.md`.
+    `- [ ] A<n> — absorb <name> <old>..<new> into <skill> (<url>)`, `<skill>`
+    being the one whose manifest reported it (`design-arwen`, or `code-yoda` for
+    `ponytail`). The procedure is in that skill's `UPSTREAM.md`.
   - each `error` line (exit 2): report it in the active-set line as
     `upstreams: check failed (<name>)`. Never call a failed check unchanged. No
     stamp is written, so the next session retries it.
 
-  This is detection and a ticket, never an edit to arwen. Absorbing is a normal
-  ticket that someone takes on purpose.
+  This is detection and a ticket, never an edit to the skill. Absorbing is a
+  normal ticket that someone takes on purpose.
 
 Then state the active set in **one line** — not a feature tour:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · ponytail full · live-friday armed (npm run dev) · watch-cortana armed at 92% · rules-orko: 2 project · 1 global
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · code-yoda full · live-friday armed (npm run dev) · watch-cortana armed at 92% · rules-orko: 2 project · 1 global
 ```
 
 The banner is printed at the top of the reply, before any of this. It fires

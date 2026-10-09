@@ -77,7 +77,7 @@ than the rebuild.
 - Aim at purpose, constraints, success criteria — not implementation trivia.
 - Explore the repo first: files, docs, recent commits. Follow existing patterns.
 - **YAGNI ruthlessly.** Strip speculative features out of every approach before
-  presenting it (see `ponytail`).
+  presenting it (see `code-yoda`).
 - **Design for isolation.** Units with one clear purpose and a well-defined
   interface, understandable and testable without reading their internals. A file
   growing large is a signal it does too much.
@@ -230,7 +230,7 @@ before the test? Delete it — don't keep it as reference, don't adapt it while
 writing the test. Implement fresh from the test.
 
 The law binds behaviour, not one-liners: a config value, a doc line or a rename
-carries no test. `ponytail` governs which is which — non-trivial logic (a branch,
+carries no test. `code-yoda` governs which is which — non-trivial logic (a branch,
 a loop, a parser, a money or security path) leaves one runnable check behind.
 
 The cycle is RED (write the failing test) → verify RED (watch it fail, for the
