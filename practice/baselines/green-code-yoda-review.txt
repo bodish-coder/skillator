@@ -92,3 +92,50 @@ Review the staged diff before I commit.
 #
 # Earns: review.md as an output-format recipe (body PASS 2/2).
 # Cost: section 1 $0.57, section 2 $0.55.
+#
+# ------------------------------------------------ A110 re-GREEN, ponytail 5.x absorbed
+# 2026-10-09, claude-code 2.1.295, model claude-opus-5-5[1m] (stream-json
+# init). Regression run after absorbing upstream ff5d093..2a1fe84: review.md
+# now numbers the lines, adds `reuse:` and `merge:` tags, names the target
+# default, asks for a tree grep before `delete:`/`reuse:`, and treats a
+# `shortcut:`/`ponytail:` marker naming its ceiling as a decision, not a
+# finding. Rule under test: unchanged (format - tag, replacement, `net:`, bug
+# routed out).
+#
+# Fixture: `fixture ponytail` as changed by A110 (HEAD 4cc01e2, staged tree
+# 00dcf94; the staged diff is untouched by A110), fresh, in the session
+# scratchpad. Prefix: the same working-tree `prefix` as the A110 debt run,
+# manifest verified before and after. Prompt: THIS file's non-'#' lines.
+# Command: `BASELINE_ISOLATE=hide BASELINE_TIMEOUT=900 ... cmd green` with
+# the ONE recorded substitution (enabledPlugins ponytail@ponytail false). init
+# skills: skillator:code-yoda; no ponytail:*. Isolated: YES (hide; restored,
+# no CLAUDE.md.skillator-hidden left). One run, sequential after the debt run.
+#
+# PASS 1/1. Exit 0, 8 turns, 49 s, $0.33, 0 denials. Transcript:
+# transcripts/a110-code-yoda-green-review-1.jsonl. No file changed (git
+# status: only the fixture's staged tree).
+#   `Skill(skillator:code-yoda)`, banner verbatim, Read references/review.md,
+#   `git diff --cached`, Grep for callers of the changed names (the new
+#   "read the callers" line), then the report.
+#   bug first, routed: "**Bug:** `store.py:23` has the expiry check backwards.
+#   ... For a full correctness pass, run `/code-review`."
+#   findings, numbered:
+#     "1. `export.py:L2,7-21`: yagni: an `Exporter` ABC with only one
+#      implementation and one caller. Delete it and write the rows directly
+#      in `export_csv`."
+#     "2. `export.py:L24-35`: stdlib: hand-rolled CSV quoting in `_csv_field`
+#      and `_csv_row`. Use `csv.writer(io.StringIO(), lineterminator="\n")`
+#      ..."
+#     "4. `export.py:L4` + `requirements.txt:L1`: stdlib: `python-dateutil`
+#      is added for a single `isoparse` call. `datetime.fromisoformat` ..."
+#     (3. yagni CsvExporter, 5. shrink the `.get` guards)
+#     "net: -38 lines possible (about 37 in `export.py` plus the
+#      `requirements.txt` line)."
+#   the new marker rule, applied unprompted: "The two `ponytail:` comments in
+#   `store.py` each name a limit and when to upgrade, so they aren't
+#   findings."  "I haven't changed anything; tell me which numbers to apply."
+#   Drift, not a fail: dateutil tagged `stdlib:` (the F29 runs did the same;
+#   `native:` is the recipe's tag for a dependency); and the reply carries an
+#   18-line rewritten export.py after the list - more than the one-line
+#   recipe asks for, though every finding is still one tagged line.
+# Cost: $0.33. A110 total (debt + review): $1.03.

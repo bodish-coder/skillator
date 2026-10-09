@@ -721,6 +721,10 @@ relay_split_files() {
 #            cache` in store.py, `no rate limit` in app.py) - those are the
 #            ones that rot. TICKETS.md is a skillator board with only closed
 #            tickets, so "did anything reach the board" is a diff.
+#            A110 (ponytail 5.x renamed the marker `shortcut:`): app.py:18
+#            carries ONE `# shortcut:` marker, with a trigger, so a debt run
+#            must harvest both spellings - six markers, two no-trigger. The
+#            F29 records cite the five-marker fixture (HEAD 6e07841).
 #   review - a STAGED (not committed) diff adding link expiry and a CSV export,
 #            carrying three over-engineering cases and one real bug:
 #              yagni  - `Exporter` ABC with exactly one subclass, CsvExporter
@@ -729,7 +733,8 @@ relay_split_files() {
 #                       (datetime.fromisoformat)
 #              BUG    - `is_expired` compares `expires_at > now`, so a link
 #                       still in date is refused and an expired one resolves.
-# The staged diff adds no ponytail marker, so the count stays five.
+# The staged diff adds no marker in either spelling, so the count stays six
+# (five ponytail:, one shortcut:).
 build_ponytail() {
   d="$1"
   if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
@@ -786,6 +791,7 @@ def app(environ, start_response):
         return [code.encode()]
 
     if method == "GET" and path.startswith("/r/"):
+        # shortcut: 302 with no Cache-Control, add one if a CDN ever sits in front
         url = store.resolve(path[3:])
         if url is None:
             start_response("404 Not Found", [("Content-Type", "text/plain")])
@@ -1072,7 +1078,10 @@ ALLOWED_TOOLS="'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'B
 # A91: what --allowedTools alone could not reach (A84's permission_denials):
 # subagents (they do not inherit --allowedTools), git add/commit through the
 # PowerShell tool, chained Bash (`cd X; cat ...; git ...` - every subcommand
-# of a chain must match a rule), `python -c`, and the relay-morpheus hook. These go in a --settings JSON, which is a settings SOURCE
+# of a chain must match a rule), `python -c`, the relay-morpheus hook, and
+# (A111) tickets-zordon's next-id / check-tickets / renumber-tickets scripts
+# through `sh` only - their .ps1 twins sit behind the nested-PowerShell wall
+# below, so a nested run on Windows allocates through Git Bash `sh`. These go in a --settings JSON, which is a settings SOURCE
 # (flagSettings) and so applies to every agent in the process, subagents
 # included. Probed on 2.1.280 (2026-09-23, haiku, relay-split fixture):
 # allowed - `sh "<C:/...>/relay-morpheus.sh" list` via Bash, PowerShell
@@ -1103,6 +1112,12 @@ Bash(sh *relay-morpheus.sh*)
 Bash(bash *relay-morpheus.sh*)
 Bash(sh *taskwork.sh*)
 Bash(bash *taskwork.sh*)
+Bash(sh *next-id.sh*)
+Bash(bash *next-id.sh*)
+Bash(sh *check-tickets.sh*)
+Bash(bash *check-tickets.sh*)
+Bash(sh *renumber-tickets.sh*)
+Bash(bash *renumber-tickets.sh*)
 Bash(sed -n:*)
 PowerShell(git:*)
 PowerShell(python:*)
@@ -1855,6 +1870,13 @@ selftest() {
     || die 'ponytail: the no-trigger rate-limit marker is gone'
   [ "$(grep -rhE '(#|//) ?ponytail:.*(when|if|past) ' "$pt/urlshort" | wc -l | tr -d ' ')" = 3 ] \
     || die 'ponytail: expected three markers naming a trigger'
+  # A110: one marker in the current `shortcut:` spelling, six in all.
+  [ "$(grep -rhE '(#|//) ?shortcut:' "$pt/urlshort" | wc -l | tr -d ' ')" = 1 ] \
+    || die 'ponytail: expected one shortcut: marker'
+  grep -q '^        # shortcut: 302 with no Cache-Control, add one if a CDN ever sits in front$' "$pt/urlshort/app.py" \
+    || die 'ponytail: the shortcut: marker is gone or moved'
+  [ "$(grep -rhE '(#|//) ?(shortcut|ponytail):' "$pt/urlshort" | wc -l | tr -d ' ')" = 6 ] \
+    || die 'ponytail: expected six markers across both spellings'
   if grep -q '^- \[[^x]\]' "$pt/TICKETS.md"; then die 'ponytail: board has an open ticket'; fi
   [ "$(grep -c '^- \[x\]' "$pt/TICKETS.md")" = 4 ] || die 'ponytail: expected four closed tickets'
   [ "$(git -C "$pt" rev-list --count HEAD)" = 1 ] || die 'ponytail: expected one commit'
@@ -1871,7 +1893,7 @@ selftest() {
   [ "$(echo "$sd" | grep -c 'dateparser\.')" = 1 ] || die 'ponytail: dateutil must be used for exactly one call'
   echo "$sd" | grep -qF '+    return link["expires_at"] is not None and link["expires_at"] > now' \
     || die 'ponytail: the inverted expiry check is gone'
-  if echo "$sd" | grep -q '^+.*ponytail:'; then die 'ponytail: staged diff adds a marker'; fi
+  if echo "$sd" | grep -qE '^\+.*(shortcut|ponytail):'; then die 'ponytail: staged diff adds a marker'; fi
   for n in CLAUDE.md AGENTS.md GEMINI.md; do
     if [ -e "$pt/$n" ]; then die "ponytail: fixture ships $n"; fi
   done
@@ -1923,7 +1945,7 @@ selftest() {
   # A91: the --settings JSON carries the allow-list (subagents inherit a
   # settings source, not --allowedTools), and green denies writes to the prefix.
   sj=$(settings_json /c/x/put)
-  for r in 'Bash(git:*)' 'Bash(python -m pytest:*)' 'PowerShell(git:*)' 'Bash(sh *relay-morpheus.sh*)' 'Bash(cd:*)'; do
+  for r in 'Bash(git:*)' 'Bash(python -m pytest:*)' 'PowerShell(git:*)' 'Bash(sh *relay-morpheus.sh*)' 'Bash(cd:*)' 'Bash(sh *next-id.sh*)' 'Bash(bash *next-id.sh*)' 'Bash(sh *check-tickets.sh*)' 'Bash(bash *check-tickets.sh*)' 'Bash(sh *renumber-tickets.sh*)' 'Bash(bash *renumber-tickets.sh*)'; do
     echo "$sj" | grep -qF "\"$r\"" || die "settings: $r not allowed"
   done
   echo "$sj" | grep -qF '"deny":["Edit(//c/x/put/**)","Write(//c/x/put/**)"]' || die 'settings: prefix not write-denied'

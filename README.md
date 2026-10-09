@@ -333,11 +333,12 @@ Deactivating is deleting `.skillator/grayskull.md`.
 - **code-yoda** — restraint as a discipline, absorbed from the MIT-licensed
   ponytail plugin (`skills/code-yoda/UPSTREAM.md` records what came from where):
   a ladder that stops at the first rung that holds (does it need to exist, stdlib,
-  platform, installed dependency, one line), three levels, and a `ponytail:` comment
-  marker for every deliberate shortcut so the ceiling and the revisit trigger are
-  written down where the shortcut is. Knowing when *not* to cut is half of it —
-  validation at trust boundaries, data-loss handling, security, accessibility —
-  and non-trivial logic still leaves one runnable check behind. Three on-demand
+  platform, installed dependency, one line), three levels, and a `shortcut:` comment
+  marker (the older `ponytail:` spelling still counts) for every deliberate shortcut
+  so the ceiling and the revisit trigger are written down where the shortcut is.
+  Knowing when *not* to cut is half of it — validation at trust boundaries,
+  data-loss handling, security, accessibility — and non-trivial logic still
+  leaves one runnable check behind. Three on-demand
   modes: an over-engineering review of a diff, the same over a whole repo, and a
   debt ledger that harvests the markers and tags the trigger-less ones
   `no-trigger` rather than inventing one. Armed by `grayskull-power`; where the

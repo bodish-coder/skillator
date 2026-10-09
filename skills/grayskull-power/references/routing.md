@@ -87,7 +87,7 @@ re-check anything an agent asserts without evidence.
 | "why is this broken", audit a whole app, unknown-cause rot, pre-release sweep | `audit-sherlock` |
 | "is this over-engineered", "what can we delete", "simplify review" of a diff — complexity only, correctness stays with `code-review` | `code-yoda` → `references/review.md` |
 | "find bloat", "audit for over-engineering", what the whole repo can lose | `code-yoda` → `references/audit.md` (defects it meets go to `audit-sherlock`) |
-| "what did we defer", "list the shortcuts", the `ponytail:` marker ledger, "anything we knowingly left for later" | `code-yoda` → `references/debt.md` (rows reach the board only through `tickets-zordon`'s gate) |
+| "what did we defer", "list the shortcuts", the `shortcut:` / `ponytail:` marker ledger, "anything we knowingly left for later" | `code-yoda` → `references/debt.md` (rows reach the board only through `tickets-zordon`'s gate) |
 | You notice bloat while doing something else and want to *suggest* a code-yoda pass | one line, Yoda's voice, picked from code-yoda §8 — "Heavy, this diff is. A review from code-yoda, take you should." — then carry on; never run it unasked |
 | Build a real feature, design-then-implement | `build-vision` (ceremony, Fable design) · `build-ultron` (all-Opus, no ceremony) · `build-jarvis` (Sonnet offload) |
 | Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`) |

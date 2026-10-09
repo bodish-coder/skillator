@@ -200,3 +200,244 @@ We release tomorrow. Is there anything we knowingly deferred in this code that s
 #   Neither run invented a trigger in ledger or board; the cache marker,
 #   dropped 2/2 in section 2, is on the board 2/2.
 # Cost: $1.15 (run 1 $0.60, run 2 $0.56).
+#
+# ------------------------------------------------ A110 re-GREEN, ponytail 5.x absorbed
+# 2026-10-09, claude-code 2.1.295, model claude-opus-5-5[1m] (stream-json
+# init). Regression run after absorbing upstream ff5d093..2a1fe84 into
+# code-yoda (SKILL.md §1-§4/§6 rules, review.md/audit.md tags and numbering,
+# debt.md harvesting BOTH marker spellings). Rule under test: unchanged - a
+# marker with no trigger is reported no-trigger and never given a composed
+# one - PLUS the new spelling: a `shortcut:` marker is harvested beside the
+# `ponytail:` ones.
+#
+# Fixture: `fixture ponytail` as changed by A110 - app.py:18 gained
+# `# shortcut: 302 with no Cache-Control, add one if a CDN ever sits in front`
+# (six markers, two no-trigger); HEAD 4cc01e2, staged tree 00dcf94, built in
+# the session scratchpad, outside any repo. Prefix: one `prefix` carrying the
+# WORKING-TREE skills/ and practice/ (code-yoda A110 edits uncommitted;
+# baseline-harness.sh carries the A111 allow-list too), manifest verified by
+# `run` before and after. Prompt: THIS file's non-'#' lines (skill named).
+# Command: `BASELINE_ISOLATE=hide BASELINE_TIMEOUT=900 ... cmd green <FIX>
+# green-code-yoda-debt.txt <PREFIX>` with the same ONE recorded substitution
+# (--settings piped through jq adding "enabledPlugins":{"ponytail@ponytail":
+# false}). init skills: skillator:code-yoda, skillator:tickets-zordon; no
+# ponytail:* skill, no ponytail plugin. Isolated: YES (hide; CLAUDE.md
+# restored, no CLAUDE.md.skillator-hidden left). One run - the regression
+# minimum A110 asked for, not a 2/2 campaign.
+#
+# RULE HELD 1/1, FORMAT DRIFT 1/1 (reclassified 2026-10-09 by RUN-8 review
+# pass 1 - was "PASS 1/1"). Exit 0, 15 turns, 130 s, $0.70. Transcript:
+# transcripts/a110-code-yoda-green-debt-1.jsonl.
+#   `Skill(skillator:code-yoda)` first, banner verbatim ("## 🟢 Code less,
+#   see more. Begun, the wisdom has."), Read references/debt.md, one Grep
+#   `(shortcut|ponytail|TODO|FIXME|HACK|XXX)` then debt.md's `git grep
+#   --untracked` line, then `Skill(skillator:tickets-zordon)`; next-id.sh ran
+#   (A111 allow-list) - the only denial was a chained `grep && sh
+#   check-tickets.sh` read-back.
+#   ledger (all six, the shortcut: one included):
+#     "`:18` — Redirects are 302s with no `Cache-Control` header. Limit: "302
+#      with no Cache-Control". Trigger: "add one if a CDN ever sits in front"."
+#     "`:10` — No rate limit on `POST /shorten`. Limit: not stated. Trigger:
+#      **none given**."
+#     "`:9` — Global dict cache for top links. Limit: not stated. Trigger:
+#      **none given**."
+#     "That's 6 shortcuts, 2 of them with no trigger."
+#   board, on disk (TICKETS.md, uncommitted, ids from next-id.sh):
+#     "- [ ] A2 — set a revisit trigger for "no rate limit" on POST /shorten
+#      (urlshort/app.py:10)"
+#     "- [ ] A3 — set a revisit trigger for the global dict top-links cache
+#      (urlshort/store.py:9)"
+#     "- [>] A4 — redirect is a 302 with no Cache-Control (deferred: a CDN
+#      ever sits in front)"   (A5-A7 the three ponytail: triggers, quoted)
+#     A1 `[ ]` the inverted is_expired bug.
+#   "They have no condition that would bring them back, so choosing one is
+#    the work." No invented trigger in ledger or board. The bug kept out of
+#   the ledger and routed: "Running `/code-review` on the staged changes
+#   before you release would check it properly."
+#   Format drift, recorded as such: the ledger says "Limit: not stated" /
+#   "Trigger: **none given**" rather than the REQUIRED `ceiling: <quoted>` and
+#   `no-trigger` slots, and the cache marker's own words ("global dict cache")
+#   were not quoted as its ceiling. The board rows are the pending "set a
+#   revisit trigger" shape debt.md prescribes. Re-run x2 below.
+# Cost: $0.70.
+#
+# ------------------------------------- A110 re-GREEN x2 after review pass 1
+# 2026-10-09, claude-code 2.1.295, model claude-opus-5-5[1m], output_style
+# default (stream-json init). RUN-8 stage 59 re-check. Same setup as the
+# section above: `fixture ponytail` built twice in the session scratchpad
+# (fx1, fx2; HEAD 4cc01e2, staged tree 00dcf94 both - six markers, two
+# no-trigger, `shortcut:` at app.py:18), one fresh `prefix` carrying the
+# WORKING-TREE skills/ and practice/ (debt.md as edited by review pass 1,
+# uncommitted), manifest verified before, between and after. Prompt: THIS
+# file's non-'#' lines. Command: `BASELINE_ISOLATE=hide BASELINE_TIMEOUT=900
+# ... cmd green <FIX> green-code-yoda-debt.txt <PREFIX>` with the same ONE
+# substitution (--settings piped through jq adding
+# "enabledPlugins":{"ponytail@ponytail":false}). init skills:
+# skillator:code-yoda, skillator:tickets-zordon; no ponytail:* skill, no
+# ponytail plugin. Isolated: YES (hide; no CLAUDE.md.skillator-hidden before
+# either run; CLAUDE.md restored after each). Runs strictly sequential.
+# Graded on two axes: RULE (both trigger-less markers reported no-trigger,
+# no invented trigger in ledger or board, board rows in the "set a revisit
+# trigger" shape) and FORMAT (debt.md's REQUIRED slots literally -
+# `ceiling: <quoted>`, `trigger: <quoted | no-trigger>` - and the totals line
+# `<N> markers, <M> no-trigger.`; `shortcut:` at app.py:18 harvested).
+#
+# Run r1 - RULE HELD, FORMAT PARTIAL DRIFT. Exit 0, 6 turns, 104 s, $0.33.
+# Transcript: transcripts/a110-code-yoda-green-debt-r1.jsonl.
+#   Skill(skillator:code-yoda), banner verbatim, Read debt.md, one Grep, then
+#   debt.md's `git grep --untracked` line. tickets-zordon NOT invoked; no
+#   TICKETS.md change (fixture status unchanged).
+#   ledger, verbatim:
+#     "- `app.py:10`: no rate limit on `POST /shorten`. ceiling: not stated.
+#      trigger: **no-trigger**."
+#     "- `app.py:18`: the 302 redirect has no Cache-Control header. ceiling:
+#      "302 with no Cache-Control". trigger: "add one if a CDN ever sits in
+#      front"."
+#     "- `store.py:9`: `_TOP_CACHE` is a global dict cache. ceiling: not
+#      stated. trigger: **no-trigger**."
+#     "6 markers, 2 with no trigger."
+#   board, proposed in the reply only ("I haven't changed `TICKETS.md`,
+#   because only `tickets-zordon` writes to the board"):
+#     "`A1`: set a revisit trigger for "no rate limit"
+#      (`urlshort/app.py:10`)."
+#     "`A2`: set a revisit trigger for "global dict cache"
+#      (`urlshort/store.py:9`)."
+#     A3-A6 deferred with the comments' own triggers.
+#   "These two have no revisit trigger, and that missing trigger is the
+#    work". No invented trigger. Bug at store.py:23 kept out of the ledger.
+#   FORMAT: `ceiling:` / `trigger:` labels and the `no-trigger` tag are
+#   literal (bolded). Drift: the two trigger-less rows say "ceiling: not
+#   stated" instead of quoting the comment ("no rate limit", "global dict
+#   cache"); totals "6 markers, 2 with no trigger." not "6 markers, 2
+#   no-trigger."; the what-slot is paraphrased and the separator is ": "
+#   not " — ". shortcut: at app.py:18 harvested.
+#
+# Run r2 - RULE HELD (board leg untested), FORMAT DRIFT. Exit 0, 6 turns,
+# 37 s, $0.28. Transcript: transcripts/a110-code-yoda-green-debt-r2.jsonl.
+#   Same tool path as r1. tickets-zordon NOT invoked; no TICKETS.md change.
+#   ledger, verbatim:
+#     "- `urlshort/app.py:10`: No rate limit on `POST /shorten`. Limit: "no
+#      rate limit". When to revisit: none given."
+#     "- `urlshort/app.py:18`: Redirects are a 302 with no Cache-Control
+#      header. Limit: "302 with no Cache-Control". When to revisit: "add one
+#      if a CDN ever sits in front"."
+#     "- `urlshort/store.py:9`: Top links are cached in a global dict. Limit:
+#      "global dict cache". When to revisit: none given."
+#     "**Six markers; two have no revisit condition.**"
+#   "I haven't made up conditions for them because that's the author's
+#    call. If you tell me what should trigger a revisit, the comment gets
+#    updated first." No invented trigger.
+#   board: no rows printed or written - only "The four with conditions would
+#   become deferred tickets. The two without would become pending tickets to
+#   set one." Consistent with debt.md's table, but there is no row to check
+#   against the "set a revisit trigger" shape.
+#   FORMAT: neither slot label nor the tag is literal ("Limit:", "When to
+#   revisit: none given."), totals line reworded. Content is better than r1:
+#   both trigger-less ceilings quoted from the comment. shortcut: at
+#   app.py:18 harvested.
+#
+# Verdict x2: RULE held 2/2 (no invented trigger anywhere; both trigger-less
+# markers named as such 2/2; board shape seen 1/2, untested 1/2). FORMAT
+# drifted 2/2 - r1 partially (slots literal, ceiling fallback and totals
+# line not), r2 fully (prose labels). Neither run wrote the board; the
+# section above did.
+# Likely cause (debt.md § The ledger, not edited): the row template sits in
+# a code fence with "Every slot is REQUIRED", which a run can read as "the
+# information is required" rather than "print these labels"; nothing says
+# the labels and the totals line are printed character for character, and
+# the only word "literal" in the section is attached to the `no-trigger`
+# tag, which is exactly the part r1 kept. The slot bullets restate the slots
+# in prose ("**ceiling** — the limit the comment names"), which invites the
+# "Limit:" / "When to revisit:" relabelling r2 did. And the template has no
+# fallback for a ceiling the comment does not separate from the shortcut (a
+# bare `ponytail: global dict cache`), so r1 filled the gap with "not
+# stated" while r2 quoted the whole comment - the section never says the
+# comment's own words fill `ceiling` when nothing else does.
+# Cost: $0.61 (r1 $0.33, r2 $0.28).
+#
+# ---------------------------------------- A110 re-GREEN x2 after ledger recipe
+# 2026-10-10, claude-code 2.1.296, model claude-opus-5-5[1m], output_style
+# default (stream-json init). RUN-8 stage 59 re-check, round 2 (round 1 died
+# on a rate limit before recording anything; nothing from it is used here).
+# Under test: debt.md § The ledger as rewritten into a literal recipe (exact
+# row shape, two filled example rows, whole-comment-as-ceiling rule, literal
+# totals line), uncommitted. Same setup as the two sections above: `fixture
+# ponytail` built fresh per run in the session scratchpad (fx1, fx2; HEAD
+# 4cc01e2, staged tree 00dcf94 both - six markers, two no-trigger,
+# `shortcut:` at app.py:18), one fresh `prefix` carrying the WORKING-TREE
+# skills/ and practice/ (its debt.md § The ledger diffed identical to the
+# working tree's), manifest verified before, between and after. Prompt: THIS
+# file's non-'#' lines. Command: `BASELINE_ISOLATE=hide BASELINE_TIMEOUT=900
+# ... cmd green <FIX> green-code-yoda-debt.txt <PREFIX>` with the same ONE
+# substitution (--settings piped through jq adding
+# "enabledPlugins":{"ponytail@ponytail":false}). init skills:
+# skillator:code-yoda, skillator:tickets-zordon; no ponytail:* skill, no
+# ponytail plugin. Isolated: YES (hide; no CLAUDE.md.skillator-hidden before
+# either run; CLAUDE.md restored after each). Runs strictly sequential.
+# Graded on the same two axes as the section above. Caveat on FORMAT: the
+# recipe's two example rows ARE this fixture's app.py:18 and store.py:9
+# markers, so those two rows can be copied rather than produced; the four
+# other rows (app.py:10, store.py:5/14/36) are the independent evidence.
+#
+# Run s1 - RULE HELD, FORMAT PASS. Exit 0, 15 turns, 86 s, $0.56.
+# Transcript: transcripts/a110-code-yoda-green-debt-s1.jsonl.
+#   Skill(skillator:code-yoda), banner verbatim, Read debt.md, one Grep, then
+#   debt.md's `git grep --untracked` line, then Skill(skillator:tickets-zordon);
+#   next-id.sh x6. One denial: a `for` loop with a shell variable ("A variable
+#   in this command can't be checked"), retried unrolled.
+#   ledger, verbatim (in a code fence):
+#     urlshort/app.py:10 — no rate limit. ceiling: "no rate limit". trigger: no-trigger.
+#     urlshort/app.py:18 — 302 redirect with no Cache-Control. ceiling: "302 with no Cache-Control". trigger: "add one if a CDN ever sits in front".
+#     urlshort/store.py:5 — in-memory dict store. ceiling: "in-memory dict store, lost on restart". trigger: "move to sqlite when links must survive a deploy".
+#     urlshort/store.py:9 — global dict cache. ceiling: "global dict cache". trigger: no-trigger.
+#     urlshort/store.py:14 — sequential codes. ceiling: "sequential codes are guessable". trigger: "switch to secrets.token_urlsafe if links ever become private".
+#     urlshort/store.py:36 — linear scan for reverse lookup. ceiling: "linear scan for reverse lookup". trigger: "add a url->code index past ~10k links".
+#     6 markers, 2 no-trigger.
+#   board, on disk (fixture TICKETS.md, uncommitted, ids from next-id.sh):
+#     - [ ] A1 — set a revisit trigger for "no rate limit" (urlshort/app.py:10) (@cc-680768)
+#     - [ ] A4 — set a revisit trigger for "global dict cache" (urlshort/store.py:9) (@cc-680768)
+#     A2/A3/A5/A6 `[>]` with the comments' own triggers quoted.
+#   "Neither comment says when to come back to it. So each ticket is to
+#    decide that condition, not to build the fix. I didn't make one up."
+#   No invented trigger in ledger or board. Also wrote .tickets-board.html
+#   in the fixture (board artifact.mjs; not published, no artifact tool).
+#   FORMAT: every row in the recipe shape with literal labels, ` — `
+#   separator, both trigger-less ceilings quoted from the comment, totals
+#   line literal. shortcut: at app.py:18 harvested.
+#
+# Run s2 - RULE HELD, FORMAT PASS (one cosmetic deviation). Exit 0, 15
+# turns, 81 s, $0.57. Transcript: transcripts/a110-code-yoda-green-debt-s2.jsonl.
+#   Same tool path as s1 (plus a cat of store.py/app.py and the staged diff
+#   stat). Same denial shape (variable in a `for` loop), retried unrolled.
+#   ledger, verbatim (code fence, grouped under per-file headers
+#   "urlshort/app.py" / "urlshort/store.py"; totals line just below it):
+#     app.py:10 — no rate limit on POST /shorten. ceiling: "no rate limit". trigger: no-trigger.
+#     app.py:18 — 302 redirect with no Cache-Control. ceiling: "302 with no Cache-Control". trigger: "add one if a CDN ever sits in front".
+#     store.py:5  — links kept in an in-memory dict. ceiling: "in-memory dict store, lost on restart". trigger: "move to sqlite when links must survive a deploy".
+#     store.py:9  — top links cached in a global dict. ceiling: "global dict cache". trigger: no-trigger.
+#     store.py:14 — short codes are sequential. ceiling: "sequential codes are guessable". trigger: "switch to secrets.token_urlsafe if links ever become private".
+#     store.py:36 — reverse lookup scans every link. ceiling: "linear scan for reverse lookup". trigger: "add a url->code index past ~10k links".
+#     6 markers, 2 no-trigger.
+#   board, on disk (fixture TICKETS.md, uncommitted, ids from next-id.sh):
+#     - [ ] A1 — set a revisit trigger for the missing rate limit on POST /shorten (urlshort/app.py:10) (@cc-680768)
+#     - [ ] A4 — set a revisit trigger for the top-links global dict cache (urlshort/store.py:9) (@cc-680768)
+#     A2/A3/A5/A6 `[>]` with the comments' own triggers quoted.
+#   No invented trigger in ledger or board. The reply asks the user to pick
+#   one ("for example, "before public exposure" or "at the first abuse
+#   report"") - offered as the user's choice, not written anywhere. Bug at
+#   store.py:24 (inverted is_expired) kept out of the ledger and routed to
+#   `/code-review` on the staged diff.
+#   FORMAT: labels, separator, quoted ceilings and totals line literal;
+#   shortcut: at app.py:18 harvested. Deviation: store.py:5 and store.py:9
+#   are column-padded ("store.py:5  —", two spaces). File slot is the
+#   basename under a per-file header, which the recipe's own example rows do
+#   too. s2's store.py:9 row is the recipe example character for character.
+#
+# Verdict x2: RULE held 2/2 (both trigger-less markers no-trigger 2/2; no
+# invented trigger in ledger or board 2/2; board rows in the "set a revisit
+# trigger for ..." shape 2/2, both runs wrote the board). FORMAT passed 2/2
+# (s2 with column padding on two rows) - against 2/2 drift in the section
+# above. Both trigger-less ceilings quoted 2/2, totals line literal 2/2.
+# Caveat stands: two of six rows sit in debt.md as examples; the other
+# four matched the shape 2/2 on their own.
+# Cost: $1.13 (s1 $0.56, s2 $0.57).

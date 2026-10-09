@@ -1,39 +1,60 @@
 # code-yoda debt — the ledger of deliberate shortcuts
 
-Every deliberate shortcut carries a `ponytail:` comment naming its ceiling and
-the trigger that calls it back (SKILL.md §3). This mode collects them into one
+Every deliberate shortcut carries a `shortcut:` comment — or the older
+`ponytail:` spelling, still honoured — naming its ceiling and the trigger that
+calls it back (SKILL.md §3). This mode collects them into one
 ledger so a deferral cannot quietly become permanent — and so the ones with no
 trigger are named as such, because nothing else will ever call them back.
 
 ## Scan
 
-Comment markers in code only:
+Comment markers in code only, both spellings in one pass:
 
 ```
-git grep --untracked -nE '(#|//|--|;|%|<!--|/\*|^\s*\*) ?ponytail:' -- ':(icase,exclude)*.md' ':(icase,exclude)*.txt' ':(icase,exclude)*.rst' ':(icase,exclude)*.adoc' ':(icase,exclude)*.jsonl' ':(icase,exclude)*.log'
+git grep --untracked -nE '(#|//|--|;|%|<!--|/\*|^\s*\*).*\b(shortcut|ponytail):' -- ':(icase,exclude)*.md' ':(icase,exclude)*.txt' ':(icase,exclude)*.rst' ':(icase,exclude)*.adoc' ':(icase,exclude)*.jsonl' ':(icase,exclude)*.log'
 ```
 
 `git grep --untracked` searches tracked and new files but honours `.gitignore`,
 so `node_modules`, `.git` and build output stay out; outside a git repo use
 `grep -rnE` with `--exclude-dir` for each. Add the comment prefix of any other
-language in the tree. Docs are excluded by path (docs, transcripts, logs), not
-by prefix — a Markdown bullet `* ponytail:` is prose about the convention, never
-a marker, while ` * ponytail:` inside a `/* */` block is code. Every hit is one
-ledger row unless reading the line shows it is not a comment in code — a string
-literal, a test fixture's text, or a comment describing the convention itself;
-drop those and name them in one line under the ledger. A real marker skipped is
-a shortcut that just became permanent.
+language in the tree. In stylesheets and `<style>` blocks, `#shortcut:hover`
+and `--shortcut: 4px` are a selector and a property, not markers — drop them at
+the read-the-line step below; `/* shortcut: … */` there is a real marker. A plain `TODO` or
+`HACK` names no ceiling, so it is not this ledger's — list those on request,
+never as ledger rows or board tickets. Docs are excluded by path (docs,
+transcripts, logs), not by prefix — a Markdown bullet `* shortcut:` is prose
+about the convention, never a marker, while ` * shortcut:` inside a `/* */`
+block is code. Every hit is one ledger row unless reading the line shows it is
+not a deferral in code — a string literal, a test fixture's text, a comment
+describing the convention itself, or `shortcut:` meaning a keyboard shortcut
+(`// shortcut: Ctrl+K opens the palette`); drop those and name them in one line
+under the ledger. A real marker skipped is a shortcut that just became
+permanent.
 
 ## The ledger
 
-One row per marker, grouped by file. Every slot is REQUIRED:
+One row per marker, grouped by file, printed in exactly this shape — the
+labels `ceiling:` and `trigger:` and the separators are literal, never
+renamed ("Limit:", "When to revisit:") or reworded:
 
 ```
-<file>:<line> — <what was simplified>. ceiling: <quoted>. trigger: <quoted | no-trigger>.
+<file>:<line> — <what, in the comment's words>. ceiling: "<quoted>". trigger: "<quoted>".
+<file>:<line> — <what, in the comment's words>. ceiling: "<quoted>". trigger: no-trigger.
+```
+
+The first form when the comment names a trigger, the second when it does not.
+
+Two filled rows, one of each kind:
+
+```
+worker.js:42 — fixed 3 retries, no backoff. ceiling: "fixed 3 retries, no backoff". trigger: "add jittered backoff if the API starts rate-limiting".
+billing.py:7 — global lock. ceiling: "global lock". trigger: no-trigger.
 ```
 
 - **what** — the shortcut, in the comment's own words.
-- **ceiling** — the limit the comment names, quoted from it.
+- **ceiling** — the limit the comment names, quoted from it. A comment that
+  names only the shortcut (`shortcut: global lock`) is its own ceiling:
+  quote the whole comment; never write "not stated".
 - **trigger** — the revisit condition **quoted from the comment**, or the
   literal tag `no-trigger` when the comment names none. The slot holds the
   author's words or the tag; nothing else can fill it. A trigger composed by the
@@ -44,8 +65,8 @@ One row per marker, grouped by file. Every slot is REQUIRED:
 
 An owner per row, when asked: `git blame -L<line>,<line> <file>`.
 
-Last line: `<N> markers, <M> no-trigger.` Nothing found: `No ponytail: debt.
-Clean ledger.`
+Last line, literal: `<N> markers, <M> no-trigger.` (for the two rows above:
+`2 markers, 1 no-trigger.`). Nothing found: `No shortcut debt. Clean ledger.`
 
 ## From ledger to board
 

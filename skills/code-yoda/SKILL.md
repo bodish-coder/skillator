@@ -41,35 +41,48 @@ re-apply §§1-6; go straight to §7. Only the modes are new.
 ## 1. See before acting
 
 Read the code the change touches — not memory of the library, not what the
-file "usually" does. Name who calls it and what breaks if it changes
-(`codegraph callers`, `impact`). Then climb the ladder. A small diff in the
-wrong place is not restraint; it is a second bug.
+file "usually" does. List every place the change must reach — callers, tests,
+fixtures, config, exports (`codegraph callers`, `impact`) — and what it could
+destroy or expose. That is the scope; extra features are not. Then climb the
+ladder. A small diff in the wrong place is not restraint; it is a second bug.
 
 ## 2. The ladder
 
 Stop at the first rung that holds:
 
 1. **Does this need to exist?** Speculative need → leave it unwritten, say so
-   in one line.
-2. **Stdlib does it?** Use it.
-3. **The platform does it?** `<input type="date">` over a picker lib, CSS over
+   in one line. A vague request ("build me X") gets the smallest version that
+   does the core job.
+2. **The codebase already has it?** A helper, component, service or pattern →
+   use it the way the surrounding code does; a house component beats a native
+   widget. A house helper that hand-rolls what the stdlib ships is not that —
+   it is a `stdlib:` finding (review mode), so rung 3 wins.
+3. **Stdlib does it?** Use it.
+4. **The platform does it?** `<input type="date">` over a picker lib, CSS over
    JS, a DB constraint over app code.
-4. **An installed dependency does it?** Use it. Never add one for what a few
+5. **An installed dependency does it?** Use it. Never add one for what a few
    lines can do.
-5. **Can it be one line?** One line.
-6. **Only then:** the minimum code that works.
+6. **Can it be one line a reader gets at a glance?** One line.
+7. **Only then:** the minimum code that works.
 
 Two rungs hold → the higher one. The ladder is a reflex applied to a problem
 already understood (§1), never a substitute for understanding it.
 
 ## 3. Rules
 
+- Restraint is about the solution, never about the change: every caller, test
+  and fixture the change breaks is finished in the same diff.
 - No unrequested abstraction: no interface with one implementation, no factory
-  for one product, no config for a value that never changes.
+  for one product, no config for a value that never changes, no wrapper or
+  type conversion the platform's own form makes needless.
 - No scaffolding "for later". Later can scaffold for itself.
+- Keep the structure the codebase has — its layers, interfaces, conventions.
 - Deletion over addition. Boring over clever — clever is what someone decodes
-  at 3am.
-- Fewest files. Shortest working diff wins.
+  at 3am; a one-liner that needs decoding is not short.
+- Fewest files. Shortest working diff wins — once every place it must touch is
+  known.
+- A comment says only the why the code cannot show, in one line — markers
+  excepted (The marker, below).
 - Complex request → ship the restrained version and question the rest in the
   same reply: "Did X; Y covers it. Need full X? Say so."
 - Two stdlib options, same size → the one correct on edge cases. Less code,
@@ -78,23 +91,25 @@ already understood (§1), never a substitute for understanding it.
 ### The marker
 
 A deliberate shortcut with a known ceiling (a global lock, an O(n²) scan, a
-naive heuristic) carries a comment spelled **`ponytail:`** — kept so every
-marker already in this repo and in user repos still counts:
+naive heuristic) carries a comment spelled **`shortcut:`**. The older
+**`ponytail:`** still counts — in this repo and in user repos — and nothing
+rewrites it:
 
 ```
-# ponytail: <ceiling>, <upgrade trigger>
-# ponytail: global lock, per-account locks if throughput matters
+# shortcut: <ceiling>, <upgrade trigger>
+# shortcut: global lock, per-account locks if throughput matters
 ```
 
 Ceiling and trigger are the author's, written at the moment of the shortcut.
-The debt mode (§7) harvests them; a marker with no trigger is the one that
-rots, because no event ever calls it back.
+The debt mode (§7) harvests both spellings; a marker with no trigger is the one
+that rots, because no event ever calls it back.
 
 ## 4. Output — one line of teaching
 
-Code first. Then at most three short lines: what was left out, when to add it.
-`[code] → skipped: X, add when Y.` The *why* fits in one line; an essay
-defending a simplification is complexity smuggled back as prose. An
+Code first. Then at most three short lines: what was left out, when to add it,
+and any risk or unchecked part the user must know.
+`[code] → skipped: X, add when Y. unchecked: Z.` The *why* fits in one line; an
+essay defending a simplification is complexity smuggled back as prose. An
 explanation the user asked for is given in full.
 
 ## 5. Level
@@ -117,17 +132,19 @@ code-yoda" / "normal mode". Governs what gets built, not how you talk.
 Half the wisdom, not a footnote. Never remove or skip: validation at a trust
 boundary, error handling that prevents data loss, a security measure, an
 accessibility basic, anything explicitly requested. Their absence *is* the 3am
-page. The user insists on the full version → build it, no re-arguing.
+page. The user insists on the full version → build it, no re-arguing. Code
+moved or merged keeps its error handling and validation.
 
 Hardware is never the ideal on paper — clocks drift, sensors read off. Leave
 the calibration knob.
 
 **Restrained code without its check is unfinished.** Non-trivial logic (a
-branch, a loop, a parser, a money or security path) leaves **one runnable
-check** behind — the smallest thing that fails if the logic breaks: an
-`assert`-based `__main__` self-check or one small `test_*.py`. No frameworks,
-no fixtures, no per-function suites unless asked; a trivial one-liner needs
-none. `PRACTICE.md` §4's floor, not an exemption from it. Verify; never assume.
+branch, a loop, a parser, a money or security path, a whole new script or app)
+leaves **one runnable check** behind — the smallest thing that fails if the
+logic breaks: an `assert`-based `__main__` self-check or one small `test_*.py`.
+No frameworks, no fixtures, no per-function suites unless asked; a trivial
+one-liner needs none. `PRACTICE.md` §4's floor, not an exemption from it.
+Verify; never assume.
 
 ## 7. Modes — load one reference, on demand
 
@@ -135,7 +152,7 @@ none. `PRACTICE.md` §4's floor, not an exemption from it. Verify; never assume.
 |---|---|
 | Over-engineering review of a diff — "what can we delete", "is this over-engineered" | [references/review.md](references/review.md) |
 | The same, whole repo — "find bloat", "audit for over-engineering" | [references/audit.md](references/audit.md) |
-| "What did we defer", "list the shortcuts", the ledger of `ponytail:` markers | [references/debt.md](references/debt.md) |
+| "What did we defer", "list the shortcuts", the ledger of `shortcut:` / `ponytail:` markers | [references/debt.md](references/debt.md) |
 
 Each mode lists; none applies a fix. Correctness is out of scope in all three:
 a bug found on the way goes to `code-review:code-review` (a diff) or
@@ -160,7 +177,8 @@ Only the suggestion line; findings, code and ledgers stay plain.
 
 ## Related
 
-- `UPSTREAM.md` — absorbed from ponytail 4.7.0 (MIT, Dietrich Gebert): what
-  came from where, and the check that watches upstream
+- `UPSTREAM.md` — absorbed from ponytail (MIT, Dietrich Gebert), 4.7.0 then
+  5.x: what came from where, what was declined, and the check that watches
+  upstream
 - `skillator:tickets-zordon` — the only road from a ledger row to the board
 - `skillator:grayskull-power` — arms this at `full` on invoke

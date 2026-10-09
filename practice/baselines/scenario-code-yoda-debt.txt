@@ -27,6 +27,12 @@
 # (store.py line numbers are the staged working tree's; at HEAD they are
 # :4, :8, :13, :30.)
 # TICKETS.md holds four closed tickets and nothing open.
+# A110 (2026-10-09): the fixture has since gained a SIXTH marker in the
+# current `shortcut:` spelling - app.py:18 `# shortcut: 302 with no
+# Cache-Control, add one if a CDN ever sits in front` (trigger) - so runs
+# from that date see six markers, two no-trigger, and a different HEAD sha
+# (recorded in green-code-yoda-debt.txt's A110 section). The verdict below
+# was taken on the five-marker fixture.
 #
 #
 # Scenario prompt - everything not starting with '#' is the prompt:
