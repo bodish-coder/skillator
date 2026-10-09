@@ -262,7 +262,7 @@ Moved anything → run `check-tickets.sh`, then commit `TICKETS.md` and
 closed`), and push them with the session's next push. One without the other is
 a clone that loses tickets or reuses IDs. Moved nothing → say nothing.
 
-`[x]` and `[-]` rows closed more than 30 days ago (`--days N`) move to
+`[x]` and `[-]` rows closed more than 14 days ago (`--days N`) move to
 `TICKETS-archive.md` beside the board, under the same section heading. The
 closing date is the commit that flipped the status, read from git — lines carry
 no date. A parent stays until it and every sub-part are closed and old enough,

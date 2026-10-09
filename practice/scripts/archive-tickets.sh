@@ -1,6 +1,6 @@
 #!/bin/sh
 # Keep TICKETS.md small (F27): closed tickets ([x] done, [-] cancelled) that
-# have stayed closed for more than N days (default 30) move to
+# have stayed closed for more than N days (default 14) move to
 # TICKETS-archive.md beside the board, which is committed like the board.
 # Sessions read only TICKETS.md; next-id.sh/.ps1 and check-tickets.sh read
 # both, so an archived number is never reused and old IDs still grep.
@@ -141,7 +141,7 @@ merge_archive() {
         head[++nh] = "# TICKETS archive"
         head[++nh] = ""
         head[++nh] = "Closed tickets moved out of TICKETS.md by practice/scripts/archive-tickets.sh"
-        head[++nh] = "once they had stayed closed ([x] or [-]) for 30+ days. Sessions read only"
+        head[++nh] = "once they had stayed closed ([x] or [-]) for 14+ days. Sessions read only"
         head[++nh] = "TICKETS.md; grep here for an old ID. IDs are permanent: next-id and"
         head[++nh] = "check-tickets read this file too, so a number here is never reused."
         head[++nh] = ""
@@ -311,7 +311,7 @@ EOF
   echo "ok - archive-tickets.sh selftest passed (dry run writes nothing, flip date not last edit, parent waits for parts, continuation moves, uncommitted close stays, second run appends, --days, refuses a bad board)"
 }
 
-dry=0 days=30 board= want=
+dry=0 days=14 board= want=
 for a in "$@"; do
   if [ -n "$want" ]; then days=$a; want=; continue; fi
   case $a in
