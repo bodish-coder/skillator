@@ -1,13 +1,13 @@
 # RUN-8 - drain the board 3
 plan: TICKETS.md
-started: 2026-10-09T17:48Z   updated: 2026-10-09T20:54Z
+started: 2026-10-09T17:48Z   updated: 2026-10-09T21:14Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
-| 57 | A111 harness allow-list | x | main:opus | 2026-10-09T17:51Z | pending |
-| 58 | A110 absorb ponytail 5.x into code-yoda | x | deep:fable | 2026-10-09T18:13Z | pending |
-| 59 | verify review bump commit push | ~ | main:opus | 2026-10-09T20:54Z | - |
+| 57 | A111 harness allow-list | x | main:opus | 2026-10-09T21:14Z | f9b8e35 |
+| 58 | A110 absorb ponytail 5.x into code-yoda | x | deep:fable | 2026-10-09T21:14Z | f9b8e35 |
+| 59 | verify review bump commit push | x | main:opus | 2026-10-09T21:14Z | f9b8e35 |
 
 ## In flight
 ### A110 absorb ponytail 5.x into code-yoda  (dispatched, deep:fable)
