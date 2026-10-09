@@ -247,12 +247,20 @@ Report the drain as a count: `pending 12 → 5 (3 already fixed, 3 not work, 1 d
 ### Archive what has stayed closed
 
 A board that keeps every closed row grows until reading it costs more than the
-work it tracks. End a drain — and any release — by moving old closed rows out:
+work it tracks. **Archive every time this skill arms** — the first board read of
+a session, before reporting the open set — and again at the end of a drain or
+release. A step left to "the end of a drain" never runs; this board reached
+110 KB that way.
 
 ```sh
 sh "$PRACTICE/scripts/archive-tickets.sh" --dry-run   # list what would move
-sh "$PRACTICE/scripts/archive-tickets.sh"             # move it, then commit both files
+sh "$PRACTICE/scripts/archive-tickets.sh"             # move it
 ```
+
+Moved anything → run `check-tickets.sh`, then commit `TICKETS.md` and
+`TICKETS-archive.md` **together, in their own commit** (`tickets: archive N
+closed`), and push them with the session's next push. One without the other is
+a clone that loses tickets or reuses IDs. Moved nothing → say nothing.
 
 `[x]` and `[-]` rows closed more than 30 days ago (`--days N`) move to
 `TICKETS-archive.md` beside the board, under the same section heading. The

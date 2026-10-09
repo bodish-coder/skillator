@@ -4,8 +4,9 @@ Run once, on invoke. SKILL.md carries the one-line summary of each; this is what
 each one actually means.
 
 - **`tickets-zordon`** — read `TICKETS.md` at the repo root. Missing? Say so and
-  create it on the first ticket, not before. Report the open set: `B` bugs,
-  `F` features, `A` agent-found.
+  create it on the first ticket, not before. Run its archive step first
+  (`archive-tickets.sh`; moved rows → commit board + archive together), then
+  report the open set: `B` bugs, `F` features, `A` agent-found.
 - **`ponytail`** — confirm the laziness level is active (the badge in the
   statusline). It governs *what* gets built for the rest of the session.
 - **`codegraph`** — the code map the rest of the skill leans on. Check in order:
