@@ -1,14 +1,14 @@
 # RUN-7 - lean-yoda absorbs ponytail
 plan: TICKETS.md
-started: 2026-10-09T16:07Z   updated: 2026-10-09T17:44Z
+started: 2026-10-09T16:07Z   updated: 2026-10-09T17:47Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
-| 53 | F29 RED baselines | x | build:opus | 2026-10-09T16:19Z | pending |
-| 54 | F29 lean-yoda skill + wiring | x | deep:fable | 2026-10-09T16:34Z | pending |
-| 55 | F29 GREEN | x | build:opus | 2026-10-09T17:31Z | pending |
-| 56 | verify review bump commit push | ~ | main:opus | 2026-10-09T17:44Z | - |
+| 53 | F29 RED baselines | x | build:opus | 2026-10-09T17:47Z | 31159a9 |
+| 54 | F29 lean-yoda skill + wiring | x | deep:fable | 2026-10-09T17:47Z | 31159a9 |
+| 55 | F29 GREEN | x | build:opus | 2026-10-09T17:47Z | 31159a9 |
+| 56 | verify review bump commit push | x | main:opus | 2026-10-09T17:47Z | 31159a9 |
 
 ## In flight
 ### stage 53 - F29 RED baselines  (dispatched, build:opus)
