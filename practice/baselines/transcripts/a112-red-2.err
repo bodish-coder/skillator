@@ -1,0 +1,7 @@
+# timeout: 1500s wall clock (BASELINE_TIMEOUT, default 2700); the run prints which limit it hit. (A87)
+# isolated: NO. ~/.claude/CLAUDE.md loads into this run. --safe-mode would
+#   drop it but also suppresses --plugin-dir, so the skill would not load.
+#   Per the asymmetry rule: a violation stays valid, a compliance needs the
+#   caveat stated in the record. (A63)
+# limit: harness wall clock 1500s (BASELINE_TIMEOUT), SIGKILL 30s after that
+# limit hit: none - the run exited 0 on its own

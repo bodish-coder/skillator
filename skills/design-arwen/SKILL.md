@@ -171,6 +171,9 @@ glass, Glassmorphism, Brutalism, Minimalism and Skeuomorphism. Show all eight, m
 style the user picks, and build only the one they choose. Skip the menu when the
 direction is already pinned. Skip it too when nobody is there to answer, but still pick
 one of the eight yourself and name it on the `Chose for you:` line (`style <name>`).
+That line is the menu the user did not get to see, so write it as the offer: "Style:
+Minimalism, my pick from the eight. Name another (Spatial UI, Bento grid, …) and I'll
+mock it."
 
 **Color strategy** (choose *before* colors), on the commitment axis:
 Restrained (tinted neutrals + one accent ≤10%) · Committed (one saturated color 30–60%) ·

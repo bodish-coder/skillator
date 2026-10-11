@@ -1,0 +1,58 @@
+# RED record for A112 (code-yoda / tickets-zordon descriptions name `shortcut:`).
+# Prompt and grading: scenario-yoda-shortcut.txt.
+# FILE VERSION 1, 2026-10-11. claude --version 2.1.296, model claude-opus-5-5[1m]
+# (stream-json init). NOT isolated (A63): ~/.claude/CLAUDE.md loads into every
+# run, so a compliance carries that caveat.
+# Lines starting with '#' are stripped before the prompt is sent; this file has
+# no prompt of its own (see the scenario file).
+#
+# Candidate change (A112, attempt 1), description lines only:
+#   code-yoda       `(`ponytail:` markers)` -> `(`shortcut:`/`ponytail:` markers)`
+#   tickets-zordon  `NOT for harvesting `ponytail:` markers` ->
+#                   `NOT for harvesting `shortcut:`/`ponytail:` markers`
+#   Word count (context-audit.sh's description parser): 78 -> 78 for both
+#   (the slash-joined token adds none; budget 80).
+#
+# Prefixes (session scratchpad, `baseline-harness.sh prefix`, verify-prefix ok
+# before and after every run):
+#   prefix-red   = working tree (F31's tickets-zordon body hunk included) built
+#                  BEFORE the edit, so both descriptions are byte-identical to
+#                  HEAD 86a6574's frontmatter (checked with cmp). Built from the
+#                  working tree rather than `git archive HEAD` of the two dirs so
+#                  the description is the ONLY difference from GREEN - an archive
+#                  would also have dropped F31's tickets-zordon body hunk.
+#   prefix-green = working tree after the edit. `diff -r prefix-red/skills
+#                  prefix-green/skills` = the two description lines, nothing else.
+# Fixture: hand-built tinyq (scenario header has the builder), fresh per run,
+# HEAD 2eac549. Three `shortcut:` markers, zero `ponytail:`, no TICKETS.md.
+# Command: `cmd green <FIX> scenario-yoda-shortcut.txt <PREFIX>`,
+# BASELINE_TIMEOUT=1500, `timeout 1500`, two lanes in parallel, from Git Bash.
+# Transcripts: transcripts/a112-red-<n>.jsonl (+ .cmd .err .exit .start).
+#
+#        G1 code-yoda loaded unprompted         G2 all 3 shortcut: harvested
+# RED 1  pass: Skill(skillator:code-yoda) as    pass: 3/3 with ceiling + trigger,
+#        the first tool call                    worker.py:11 tagged no-trigger,
+#                                               "3 markers, 1 no-trigger."
+# RED 2  pass: Skill(skillator:code-yoda) as    pass: 3/3, same ledger, "I found
+#        the first tool call                    no `ponytail:` markers (the older
+#                                               spelling of the same thing)."
+# Both runs then read references/debt.md and grepped `(shortcut|ponytail):` -
+# debt.md already teaches both spellings (A110), and the description's existing
+# "knowingly deferred, shortcut, ..." wording plus "before a release or
+# handover" is enough to win the match.
+# GREEN: not run. The rule is "if RED already routes 2/2, the change is not
+# motivated", so no GREEN can beat RED here.
+#
+# Verdict: RED 2/2 on G1 and G2 -> the description change is NOT motivated.
+# REVERTED. Removed text, verbatim:
+#   skills/code-yoda/SKILL.md:9
+#     "  "should be tracked" in the code (`shortcut:`/`ponytail:` markers). NOT for"
+#   skills/tickets-zordon/SKILL.md:10
+#     "  NOT for harvesting `shortcut:`/`ponytail:` markers (`code-yoda`)."
+# Both files are back to their prior bytes (code-yoda = HEAD, tickets-zordon =
+# the index, F31 hunk untouched).
+# Caveat: N=2, one prompt shape, and that prompt says "shortcut" (also a word in
+# the existing description). A prompt using only `shortcut:` without "handover"
+# or "deferred" was not tested.
+#
+# Cost: 2 runs, $0.60 total (RED 1 = $0.30, 5 turns; RED 2 = $0.30, 5 turns).

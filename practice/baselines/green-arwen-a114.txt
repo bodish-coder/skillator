@@ -1,0 +1,58 @@
+# GREEN record for A114 (design-arwen unattended report omits the picked style).
+# Prompt and grading: scenario-arwen-f32-unattended.txt (U1, U2b).
+# FILE VERSION 1, 2026-10-11. claude --version 2.1.296. NOT isolated (A63):
+# ~/.claude/CLAUDE.md loads into every run, so a compliance carries that caveat.
+# Lines starting with '#' are stripped before the prompt is sent; this file has
+# no prompt of its own (see the scenario file).
+#
+# RED baseline: already recorded in green-arwen-f32.txt, S3 runs GRN2 3-4 and
+# GRN3 5-6 (f32-green-unattended-3..6): U2b 0/4 on the current text (0/6 counting
+# runs 1-2, which picked no style at all).
+#
+# Diagnosis. All four RED runs read SKILL.md, build.md, craft.md, verify.md and
+# styles.md, wrote `direction Minimalism|Skeuomorphism` on DESIGN.md's Read line,
+# and then wrote the final report as plain-language prose (numbered lists and a
+# status ledger, the shape ~/.claude/CLAUDE.md and the host's report guidance ask
+# for). None of them reproduced verify.md's literal `Chose for you:` line. Each
+# field was translated into words for a reader: dials became "about a 5/10
+# boldness", and `style Minimalism` became "Look: cobalt glaze ..." (runs 4, 5)
+# or "Colours: ..." (run 3) or "Design settings: ..." (run 6). A menu name
+# looks like an internal label, and translating labels into descriptions is
+# what the report-writing step does to labels. Hypothesis: the run keeps the
+# name only when the name is something the reader can act on. So the edit
+# frames the style line as the skipped menu offered back to the user, not as a
+# field to record. Placed in SKILL.md Phase 1 (always in context, next to the
+# existing "name it on the Chose for you line" sentence), not in verify.md,
+# whose "description does not count" rule was already tried and reverted.
+#
+# Edit (SKILL.md, after "... on the `Chose for you:` line (`style <name>`)."):
+#   That line is the menu the user did not get to see, so write it as the offer: "Style:
+#   Minimalism, my pick from the eight. Name another (Spatial UI, Bento grid, …) and I'll
+#   mock it."
+#
+# Prefix: scratchpad a114/prefix-green = working tree via `baseline-harness.sh
+# prefix` (verify-prefix ok). The prefix carries the working tree of skills/ and
+# practice/, which also holds F31's uncommitted relay-morpheus/watch-cortana
+# work; design-arwen differs from HEAD 86a6574 only by the edit above.
+# Fixtures hand-built per scenario-arwen-f32-menu.txt (README '# Kiln & Co').
+# Command: `cmd green` against the prefix, BASELINE_TIMEOUT=1500, `timeout 1500`,
+# two lanes in parallel. Transcripts: transcripts/a114-green-<n>.jsonl
+# (+ .cmd .err .exit .start). Both exit 0.
+#
+#        U1 no menu, page built        U2a style picked (DESIGN.md)    U2b style named in report
+# RED 3-6 (f32 transcripts)            pass x4                         FAIL x4 ("Look:" prose)
+# GRN 1  pass: no AskUserQuestion,     pass: Minimalism, committed     pass: "Look: I picked
+#        no mid-run question,          colour                          'Minimalism' ... from a menu
+#        index.html built                                              of eight styles ... Name
+#                                                                      another and I'll mock it up."
+# GRN 2  pass: no AskUserQuestion,     pass: Minimalism                pass: "Style: Minimalism, my
+#        no mid-run question,                                          pick from the eight ... Name
+#        index.html built                                              another (...) and I'll mock it."
+#
+# U1 note: both reports now list the other seven styles, but only after the
+# build, as an offer inside "Chose for you"; nothing was asked before or instead
+# of building, so it is not the menu stall U1 guards against.
+#
+# Verdict: U2b RED 0/4 -> GREEN 2/2. U1 2/2 (no regression). KEPT.
+#
+# Cost: 2 runs, $4.36 total (GRN 1 = $2.41, GRN 2 = $1.96). RED reused from F32.

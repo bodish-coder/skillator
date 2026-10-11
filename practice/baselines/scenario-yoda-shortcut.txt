@@ -1,0 +1,95 @@
+# Scenario - a `shortcut:` harvest routes to code-yoda from its description (A112)
+# Rule under test (ONE): a prompt asking for the `shortcut:` markers left in a
+# repo (ponytail 5.x's spelling, A110; skills/code-yoda/UPSTREAM.md,
+# references/debt.md) loads skillator:code-yoda from its DESCRIPTION alone -
+# no skill named - and the run harvests every `shortcut:` marker.
+#
+# Shape: description routing. The prompt never says "yoda", "lazy", "ponytail",
+# "deferred", "ticket" or "track"; it uses the new marker word only.
+# RED  = prefix whose code-yoda and tickets-zordon descriptions are HEAD's
+#        (name `ponytail:` markers only).
+# GREEN= prefix carrying the A112 descriptions (`shortcut:`/`ponytail:`).
+# Both run as `cmd green` (a plugin prefix is needed for any routing); the
+# prefix is the only difference.
+#
+# Fixture: hand-built, no harness fixture kind (the harness's `ponytail` kind
+# carries five ponytail: markers, which would let the old word route). tinyq,
+# one commit, fixed identity and dates -> HEAD 2eac549 on any machine. Rebuild
+# with the script below (strip the leading '# ' and run `sh build.sh <DIR>`):
+#
+# #!/bin/sh
+# # A112 fixture: tinyq, three `shortcut:` markers, no `ponytail:` ones.
+# set -e
+# d="$1"; [ -e "$d" ] && { echo "exists: $d" >&2; exit 1; }
+# mkdir -p "$d/tinyq"
+# cat > "$d/README.md" <<'X'
+# # tinyq
+# 
+# A tiny in-process job queue. `python -m tinyq.worker` drains it.
+# X
+# : > "$d/tinyq/__init__.py"
+# cat > "$d/tinyq/queue.py" <<'X'
+# """In-process FIFO job queue."""
+# import collections
+# 
+# # shortcut: jobs live in a deque, lost on restart; persist to sqlite when a job must survive a deploy
+# _JOBS = collections.deque()
+# 
+# 
+# def put(job):
+#     _JOBS.append(job)
+# 
+# 
+# def take():
+#     return _JOBS.popleft() if _JOBS else None
+# X
+# cat > "$d/tinyq/worker.py" <<'X'
+# """Drain the queue, one job at a time."""
+# import time
+# 
+# from tinyq import queue
+# 
+# 
+# def run_once(handler):
+#     job = queue.take()
+#     if job is None:
+#         return False
+#     # shortcut: no retry, a failed job is dropped
+#     try:
+#         handler(job)
+#     except Exception:
+#         pass
+#     return True
+# 
+# 
+# def main(handler, idle=0.5):
+#     while True:
+#         if not run_once(handler):
+#             # shortcut: fixed-interval poll; switch to a condition variable if idle CPU ever shows up in profiles
+#             time.sleep(idle)
+# X
+# git -C "$d" init -q
+# git -C "$d" config user.email fixture@example.invalid
+# git -C "$d" config user.name fixture
+# git -C "$d" config commit.gpgsign false
+# git -C "$d" config core.autocrlf false
+# git -C "$d" add -A
+# GIT_AUTHOR_DATE='2026-09-01T09:00:00+00:00' GIT_COMMITTER_DATE='2026-09-01T09:00:00+00:00' git -C "$d" commit -qm "tinyq: queue and worker"
+# echo "$d"
+#
+# Markers, three `shortcut:`, zero `ponytail:`, no TICKETS.md:
+#   tinyq/queue.py:4    jobs live in a deque, lost on restart; persist to sqlite when ...   (trigger)
+#   tinyq/worker.py:11  no retry, a failed job is dropped                                  (NO trigger)
+#   tinyq/worker.py:22  fixed-interval poll; switch to a condition variable if ...          (trigger)
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+Before the handover, list every shortcut: we left in this repo.
+
+# PASS = `Skill` tool_use with skill `skillator:code-yoda` in the stream,
+#        unprompted (G1), AND all three shortcut: markers listed (G2).
+# FAIL = code-yoda never loaded (another skill, or none), or a marker missed.
+# Record: green-yoda-shortcut.txt.

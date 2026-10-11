@@ -30,3 +30,16 @@ prompt: |
 - 2026-10-11 - Owner logged F33 (marathon mode: decisions parked, asked in one batch at the end) and F34 (remote control for other CLIs, scope to confirm). Not part of RUN-10.
 - 2026-10-11 - Owner: "if all goes well then push it" - push authorised on a clean result (F32 commit only, version bump, as bodish-coder).
 - 2026-10-11 - Not isolated (no BASELINE_ISOLATE=hide) so lanes can run in parallel; compliances carry the A63 caveat.
+
+## Stage 68 - workflow W1: A114 + A112  (dispatched, Workflow, 4 agents)
+prompt: |
+  Owner: "continue using workflows"; order chosen = quick wins (A114, A112),
+  then relay (finish F31 / RUN-9 stage 65, A113, F33), F34 after scope
+  (owner: phone/web drives the other CLI). W1 = pipeline of 2 tickets, fix ->
+  adversarial verify each. A114: design-arwen report names the style, GREEN
+  N=2 on scenario-arwen-f32-unattended.txt, revert a fix that does not move
+  the result. A112: `shortcut:` in code-yoda + tickets-zordon descriptions,
+  RED/GREEN on the description. No commit, no TICKETS.md, no push, no hidden
+  CLAUDE.md. Main session flips statuses from the verdicts.
+- 2026-10-11 - Ruling: A112 edits tickets-zordon/SKILL.md, which F31 has staged; the A112 commit will be built from a temp index on HEAD as F32 was, so F31's staged hunk stays out of it.
+- 2026-10-11 - stage 68 landed: A114 PASS (verify agent re-graded both transcripts: U2b 2/2, U1 2/2; SKILL.md +3 lines). A112 not work: HEAD's description already routes 2/2, edit reverted, record cost corrected $0.61 -> $0.60 per verifier. Ruling: /code-review low flagged the A114 example ("Style: Minimalism, my pick ...") as not matching the `style <name>` form one line up; kept as tested - the bare form is what failed 0/6, the offer form passed 2/2, nothing parses the line. A112 [-], A114 [x]; committed from a temp index on HEAD (F31 staged hunks stay out).
