@@ -169,7 +169,7 @@ Overflow: none at any width, incl. longest label ("Rechnungsempfänger")
 Reduced motion: content visible, reveals crossfade
 Console: clean · Network: all 24 assets 200
 Not verified: INP (no field data) — run web-perf for measured vitals
-Chose for you: audience platform engineers · dials 3/2/9 · dark only · route targeted evolution
+Chose for you: audience platform engineers · style Minimalism · dials 3/2/9 · dark only · route targeted evolution
 ```
 
 **Always state what you did not verify.** The list of unchecked items is the most useful

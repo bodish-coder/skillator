@@ -52,6 +52,10 @@ route-confirmation screen; it doesn't add a phase.
    values), the chosen typefaces, the real type scale, and the Phase 2 signature visibly
    present on at least two artboards. An artboard in generic greybox proves nothing — the
    whole point is that the user is reacting to *this* direction.
+   **Style mocks** ([styles.md](styles.md)): one artboard per picked style for the same
+   surface, side by side and labelled with the style name, so the user compares looks
+   rather than layouts. After a style is picked, round 2 puts one row per axis (placement,
+   sizing, iconography, other), with every artboard in that style.
 4. **Use real content**, not lorem. Placeholder copy makes a layout look fine that isn't.
 5. **Publish and hand over the link**, with one line on what you want feedback on
    ("the nav model and where the signature lands — the rest is settled").

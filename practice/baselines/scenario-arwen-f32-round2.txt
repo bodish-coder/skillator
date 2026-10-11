@@ -1,0 +1,30 @@
+# Scenario F32 S2 (round 2): the user names a style and asks for options.
+# Does design-arwen skip the eight-style menu (direction pinned) and mock
+# variants INSIDE that style, one axis at a time, labelled?
+# Rule under test: styles.md "When to offer it" (pinned -> no menu) and
+# "Round 2 - variations inside the chosen style"; improve.md `mock` lane;
+# canvas.md style-mock rows. FILE VERSION 1, 2026-10-11.
+#
+# RED / GREEN prefixes as scenario-arwen-f32-menu.txt.
+# Fixture: as scenario-arwen-f32-menu.txt, README '# Ledgerly'.
+# Command: as scenario-arwen-f32-menu.txt.
+#
+# Graded on disk and in the stream:
+#   R1 no menu: the run does not offer the eight-style menu (Bento is pinned).
+#   R2 in-style: every mock it produces is a Bento grid; no mock in another style.
+#   R3 axes: variants differ along named axes (placement / sizing /
+#      iconography / other), one axis changing per variant, labelled with style,
+#      axis and variant (e.g. "Bento · Placement · nav left"), or the run asks
+#      which axes to explore before mocking.
+#   R4 not built: no final dashboard is built before the user picks.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Ledgerly, a household budgeting web app. I
+want the home dashboard (balance, this month's spending by category,
+upcoming bills, savings goals) in a Bento grid style.
+
+Before you build anything real, show me some options so I can choose.
+Plain HTML and CSS files in the repo are fine for mocks. I'm here if you
+have questions.

@@ -164,6 +164,14 @@ be expressive. Never force a landing-page hero onto a tool.
 **Name a real reference before committing** — "Klim-style specimen", "Vercel pure-black
 monochrome", "1970s terminal manual". Unnamed ambition collapses into beige.
 
+**Let the user pick the look from mocks.** Before committing the lane on a `build` or
+`redesign`, or when `improve` is asked for a mock, offer the **style menu** in
+[references/styles.md](references/styles.md): Spatial UI, Bento grid, Maximalism, Liquid
+glass, Glassmorphism, Brutalism, Minimalism and Skeuomorphism. Show all eight, mock each
+style the user picks, and build only the one they choose. Skip the menu when the
+direction is already pinned. Skip it too when nobody is there to answer, but still pick
+one of the eight yourself and name it on the `Chose for you:` line (`style <name>`).
+
 **Color strategy** (choose *before* colors), on the commitment axis:
 Restrained (tinted neutrals + one accent ≤10%) · Committed (one saturated color 30–60%) ·
 Full palette (3–4 named roles) · Drenched (the surface *is* the color).

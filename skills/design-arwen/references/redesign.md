@@ -128,6 +128,10 @@ ranked changes, any preservation-rule hits, and the depth verdict as decisions a
 made on the user's behalf (`assumed:` optional, not required). Do not block on a
 confirmation nobody will give.
 
+**Style menu:** unless `DESIGN.md` or the existing brand pins the look, offer the eight
+styles in [styles.md](styles.md) here and mock the current main screen in each style the
+user picks. The chosen style becomes the direction. Preservation rules still apply.
+
 **Optional visual gate:** publish the route as before/after artboards instead of prose —
 see [canvas.md](canvas.md).
 

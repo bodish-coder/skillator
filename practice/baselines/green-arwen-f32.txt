@@ -1,0 +1,65 @@
+# RED + GREEN record for F32 (design-arwen style menu + round 2). Prompts and
+# grading: scenario-arwen-f32-menu.txt, -round2.txt, -unattended.txt.
+# FILE VERSION 1, 2026-10-11. claude --version 2.1.296. NOT isolated (A63):
+# ~/.claude/CLAUDE.md loads into every run, so a compliance carries that caveat.
+# Lines starting with '#' are stripped before the prompt is sent; this file has
+# no prompt of its own (see the three scenario files).
+#
+# Prefixes (session scratchpad, rebuilt by `baseline-harness.sh prefix`):
+#   prefix-red    = working-tree prefix with skills/design-arwen from `git archive
+#                   HEAD` (55f450c, pre-F32), manifest regenerated, verify-prefix ok.
+#   prefix-green  = working tree, F32 text as first written.
+#   prefix-green2 = + fix 1 (SKILL.md: with nobody to answer, still pick one of the
+#                   eight and name it on `Chose for you:`; verify.md example line
+#                   carries `style Minimalism`).
+#   prefix-green3 = + fix 2 (verify.md: the line names the style by its menu name,
+#                   a description does not count). Fix 2 REVERTED, see below.
+# Fixtures hand-built per the scenario files. Command: `cmd green` against the
+# prefix, BASELINE_TIMEOUT=1500, `timeout 1500`, three lanes in parallel.
+# Transcripts: transcripts/f32-<red|green>-<menu|round2|unattended>-<n>.jsonl
+# (+ .cmd .err .exit .start). AskUserQuestion is not offered in -p, so every
+# run asked in its final text; styles.md's numbered-list fallback is the path
+# exercised, the two 4-option AskUserQuestion shape (M2) is untested.
+#
+# S1 menu (user present, build, no style named)
+#        M1 all eight offered            M3 no page before the pick
+# RED 1  FAIL: own direction (slab      pass (asked for content first)
+#        serif, bisque), no styles
+# RED 2  FAIL: no styles                FAIL: built index.html + styles.css
+# GRN 1  pass: numbered 8, Bento +      pass: no Write
+#        Skeuomorphism recommended
+# GRN 2  pass: numbered 8, Minimalism + pass: no Write
+#        Skeuomorphism recommended
+# Verdict: M1 RED 0/2 -> GREEN 2/2. KEPT.
+#
+# S2 round 2 (Bento named, "show me options")
+#        R1 no menu  R2 all Bento  R3 one axis at a time, labelled   R4 not built
+# RED 1  pass        pass          FAIL: options A/B/C change theme,  pass
+#                                  colour, density and concept at once
+# RED 2  pass        pass          FAIL: A/B/C concepts, C dark only  pass
+# GRN 1  pass        pass          pass: one Bento control mock, asks pass
+#                                  which axes (placement + sizing rec.)
+# GRN 2  pass        pass          pass: mocks/bento/control.html,    pass
+#                                  asks axes (placement + sizing rec.)
+# Verdict: R3 RED 0/2 -> GREEN 2/2. KEPT. R1/R2/R4 pass both sides (no rule
+# needed; the pinned-style skip costs nothing).
+#
+# S3 unattended (GREEN only; guards the "no user" branch)
+#        U1 no menu, page built   U2a style picked (DESIGN.md)   U2b style named in report
+# GRN 1  pass                     FAIL: "porcelain-and-iron"     FAIL
+# GRN 2  pass                     FAIL: "cobalt glaze"           FAIL
+# GRN2 3 pass                     pass: Skeuomorphism            FAIL ("Look:" prose)
+# GRN2 4 pass                     pass: Minimalism               FAIL ("Look:" prose)
+# GRN3 5 pass                     pass: Skeuomorphism            FAIL
+# GRN3 6 pass                     pass: Minimalism               FAIL
+# Verdict: U1 6/6. Fix 1: U2a 0/2 -> 4/4, KEPT. Fix 2: U2b 0/2 on green3, no
+# change from green2 (0/2) -> REVERTED (verify.md text removed:
+#   "When the style menu was skipped because nobody was there, the line names
+#   the style by its menu name (`style Minimalism`, from styles.md). A
+#   description of the look ("cobalt and white") does not count, because the
+#   reader cannot pick another style from the menu without that name.").
+# U2b stays open as A114: every unattended run read styles.md and verify.md and
+# still described the look instead of naming the style; the style is only on
+# DESIGN.md's Read line.
+#
+# Cost: 14 runs, $22.71 total (RED 4 = $7.16, GREEN 10 = $15.55).

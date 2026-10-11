@@ -1,0 +1,29 @@
+# Scenario F32 S3 (guard): no user to answer. design-arwen must NOT stall on
+# the style menu; it picks a style and reports it on `Chose for you:`.
+# Rule under test: styles.md "Skip it when: There is no user". GREEN only
+# (pre-F32 arwen has no menu, so RED passes U1 trivially); this guards the
+# regression, it does not motivate a rule. FILE VERSION 1, 2026-10-11.
+#
+# Fixture: as scenario-arwen-f32-menu.txt, README '# Kiln & Co'.
+# Command: as scenario-arwen-f32-menu.txt.
+#
+# Graded:
+#   U1 no menu: no AskUserQuestion and no question listing the styles; the
+#      page is built (index.html exists).
+#   U2 report: the final text names the chosen style among the
+#      choices made on the user's behalf (`Chose for you:` or equivalent).
+# Lines starting with '#' are stripped before the prompt is sent.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Kiln & Co, a small pottery studio that sells
+weekend wheel-throwing workshops. Build its landing page as plain
+`index.html` and one stylesheet at the repo root: no framework, no build
+step, no npm installs.
+
+What goes on it: a nav, a hero with a "book a workshop" call to action,
+the three workshop types with prices, a few photos of the studio (use
+placeholders), and a footer with the address.
+
+I'm away all afternoon and can't answer questions. Build it end to end,
+then tell me what you did and what you chose for me.

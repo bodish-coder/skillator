@@ -1,0 +1,32 @@
+# RUN-10 - F32 style-menu baselines
+plan: TICKETS.md F32
+started: 2026-10-11T05:45Z   updated: 2026-10-11T05:45Z
+
+## Stages
+| # | stage | state | owner | heartbeat | landed |
+|---|-------|-------|-------|-----------|--------|
+| 66 | F32 RED + GREEN baselines (14 nested runs) | x | main:opus | 2026-10-11T07:10Z | this commit |
+| 67 | grade, record, review, commit 4.4.1, push | x | main:opus | 2026-10-11T07:10Z | this commit |
+
+## In flight
+### stage 66 - F32 RED + GREEN baselines  (dispatched, nested claude -p via harness)
+prompt: |
+  Scenarios practice/baselines/scenario-arwen-f32-{menu,round2,unattended}.txt.
+  Prefixes in session scratchpad f32/: prefix-green = harness `prefix` of the
+  working tree; prefix-red = same with skills/design-arwen from `git archive
+  HEAD` (55f450c), manifest regenerated, verify-prefix ok. Three lanes in
+  parallel (not hidden, so parallel is safe): RED menu x2 + round2 x2; GREEN
+  menu x2 + round2 x2; GREEN unattended x2. Transcripts
+  practice/baselines/transcripts/f32-<red|green>-<key>-<n>.jsonl. No commit.
+
+## Rulings
+- 2026-10-11 - RUN-9 stage 65 (review/bump/commit/push of F31) is still open; RUN-10 touches no RUN-9 file (design-arwen + new baseline files only), so it runs alongside. F32 commits separately from F31.
+- 2026-10-11 - Unattended scenario is GREEN-only: pre-F32 arwen has no menu, so RED passes it trivially; it guards the "no user -> skip" branch, it does not motivate a rule.
+- 2026-10-11 - Graded so far: menu RED 0/2 (no styles; run 2 built the page), GREEN 2/2 (all eight, numbered-list fallback - AskUserQuestion not in -p, no Write). round2 GREEN 2/2 (no menu, one Bento control mock, asks axes recommending placement+sizing, nothing built). unattended GREEN U1 2/2, U2 0/2: "Chose for you" lists content/fonts but never a style - SKILL.md said only "skip the menu when nobody is there", the pick-and-report half lived only in styles.md, which an unattended run never opens. Fix: SKILL.md style paragraph now says pick one of the eight and name it on `Chose for you:` (`style <name>`); verify.md example line carries `style Minimalism`. Re-run unattended GREEN x2 on prefix-green2 (working tree after the fix) as unattended-3/4.
+- 2026-10-11 - round2 RED run 1: three Bento options A/B/C each change theme, colour, density and concept at once - R3 FAIL (no single-axis variants, no axis labels); R1/R2/R4 pass.
+- 2026-10-11 - unattended-4 (prefix-green2): U2 still FAIL, but DESIGN.md `direction Minimalism` - it picked a menu style and described it in the report ("Look: cobalt...") instead of naming it, despite reading styles.md and verify.md. Fix 2: verify.md "Chose for you is mandatory" now says the line names the style by its menu name; a description does not count. unattended-3 (green2) left to finish as a data point; re-run as unattended-5/6 on prefix-green3.
+- 2026-10-11 - stage 66 done: round2 RED 2 also R3 FAIL. unattended-3 (green2) and 5/6 (green3) pick a style (DESIGN.md) but describe it in the report: fix 2 changed nothing -> REVERTED (revert first, no stacking); fix 1 KEPT (pick 0/2 -> 4/4). Report-naming split to A114. F32 [x]. Record practice/baselines/green-arwen-f32.txt ($22.71, 14 runs).
+- 2026-10-11 - stage 67: version 4.4.1 for F32, not 4.5.0 - RUN-9's F31 already holds 4.5.0 in the index and its rulings name "the 4.5.0 probe". F32 is committed from a temp index built on HEAD so F31's staged work stays staged and out of the commit; the real index is then restored for the shared files (TICKETS.md, plugin.json, marketplace.json).
+- 2026-10-11 - Owner logged F33 (marathon mode: decisions parked, asked in one batch at the end) and F34 (remote control for other CLIs, scope to confirm). Not part of RUN-10.
+- 2026-10-11 - Owner: "if all goes well then push it" - push authorised on a clean result (F32 commit only, version bump, as bodish-coder).
+- 2026-10-11 - Not isolated (no BASELINE_ISOLATE=hide) so lanes can run in parallel; compliances carry the A63 caveat.

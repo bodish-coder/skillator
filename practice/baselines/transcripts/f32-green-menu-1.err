@@ -1,0 +1,2 @@
+# limit: harness wall clock 1500s (BASELINE_TIMEOUT), SIGKILL 30s after that
+# limit hit: none - the run exited 0 on its own

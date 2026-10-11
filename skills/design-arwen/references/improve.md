@@ -33,6 +33,7 @@ Name the lane in one line before you start, so the user can redirect you cheaply
 | "it's boring", "add personality" | **delight** | The earn-it budget in craft.md. One moment, varied, skippable. |
 | "too complex", "strip it back" | **distill** | Remove, don't add. Cut every element that isn't doing a job. Chanel's rule, applied hard. |
 | "first-run", "empty state", "onboarding" | **onboard** | Activation path, empty states as invitations, progressive disclosure over a wall of setup. |
+| "mock", "mockup", "show me options", "what could it look like" | **mock** | Offer all eight styles in [styles.md](styles.md) and mock the real screen in each one picked, with the same content in each. After the pick, run round 2 in styles.md: variations in placement, sizing, iconography and the other axes, all in that one style. Nothing in the app changes until the user picks. Applying a style that replaces the committed identity is a `redesign`, so say so and confirm before you touch code. |
 
 Two lanes clearly apply → do both, say so. Five apply → the user wanted `redesign`; say
 that and ask.

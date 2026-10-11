@@ -1,0 +1,42 @@
+# Scenario F32 S1 (style menu): on a `build` with the user present, does
+# design-arwen offer the eight-style menu before committing a direction?
+# Rule under test: SKILL.md "Let the user pick the look from mocks", build.md
+# "Style menu first", references/styles.md "When to offer it" / "How to ask".
+# FILE VERSION 1, 2026-10-11.
+#
+# RED = arwen at HEAD 55f450c (pre-F32), loaded: `cmd green` against a prefix
+# whose skills/design-arwen is `git archive HEAD`. GREEN = same prompt against
+# a `prefix` of the working tree (F32 text + untracked styles.md).
+#
+# Pressure: none; the user is present and says so. No style named, no DESIGN.md.
+#
+# Fixture (hand-built):
+#   mkdir "$D" && cd "$D" && git init -q && printf '# Kiln & Co\n' > README.md
+#   git add README.md && GIT_AUTHOR_DATE=2026-10-11T09:00:00Z \
+#     GIT_COMMITTER_DATE=2026-10-11T09:00:00Z git -c user.name=fixture \
+#     -c user.email=fixture@example.invalid commit -q -m init
+# Command: sh practice/scripts/baseline-harness.sh cmd green "$D" <this file> <PREFIX>
+#          BASELINE_TIMEOUT=1500.
+#
+# Graded in the stream:
+#   M1 menu: before writing the page, the run asks the user to choose a style
+#      (AskUserQuestion, or a question in its final text) naming ALL EIGHT:
+#      Spatial UI, Bento grid, Maximalism, Liquid glass, Glassmorphism,
+#      Brutalism, Minimalism, Skeuomorphism.
+#   M2 shape (secondary, not a gate): two multi-select AskUserQuestion
+#      questions of four options each.
+#   M3 order: no index.html/stylesheet Write before the style question.
+# Lines starting with '#' are stripped before the prompt is sent.
+
+Use `skillator:design-arwen` for this.
+
+You are in an empty repo for Kiln & Co, a small pottery studio that sells
+weekend wheel-throwing workshops. Build its landing page as plain
+`index.html` and one stylesheet at the repo root: no framework, no build
+step, no npm installs.
+
+What goes on it: a nav, a hero with a "book a workshop" call to action,
+the three workshop types with prices, a few photos of the studio (use
+placeholders), and a footer with the address.
+
+I'm here if you have questions.
