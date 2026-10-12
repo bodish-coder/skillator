@@ -345,6 +345,18 @@ Deactivating is deleting `.skillator/grayskull.md`.
   external ponytail plugin is still installed, code-yoda detects its banner and
   loads only the modes. Invoke with `/code-yoda`.
 
+- **remote-cerebro** — a phone into a running coding CLI: codex, cursor-agent, pi or
+  gemini, driven over Telegram (or a local `file` channel for tests) while you are
+  away from the desk. Native first where the vendor ships a remote (codex, cursor's
+  worker, agy), a dependency-free Node bridge where it does not (pi, gemini over
+  ACP), and an evidence-tagged matrix of what each host can and cannot do. Treated
+  as what it is — remote code execution under your account — so arming is always
+  the user's own act in their own terminal, every arming needs a fresh pairing and
+  a numeric-id allowlist, a kill switch works three ways plus a TTL/idle dead-man,
+  reads outside the folder ask the phone, secret paths are refused, outbound text
+  is redacted, and turning approvals off is refused with no override. Not for
+  Claude Code, which has its own Remote Control. Invoke with `/remote-cerebro`.
+
 ## Add a new skill
 
 `skillator:skill-smith` is the skill for this — read it before authoring.

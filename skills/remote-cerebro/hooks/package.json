@@ -1,0 +1,6 @@
+{
+  "name": "remote-cerebro-hooks",
+  "private": true,
+  "type": "module",
+  "description": "remote-cerebro bridge, gate and stubs. Node >= 20 built-ins only; no dependencies, ever."
+}

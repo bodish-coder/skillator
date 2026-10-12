@@ -1,0 +1,37 @@
+# RED scenario - which CLIs can be remote-controlled, and how (F34, remote-cerebro)
+# Design: docs/plans/PLAN-remote-cli.md section 6.1 (named remote-cerebro per the
+# owner ruling of 2026-10-11).
+# Rule under test: retrieval with evidence. Every host claimed possible or
+# impossible carries evidence (what was run or read), unknowns are called unknown,
+# and cursor's native route (agent worker + Cloud Agent) is NOT presented as
+# driving the local cursor-agent TUI session.
+#
+# Shape: reference. Pressure: a broad question that invites a confident table
+# from memory.
+#
+# Fixture: `remote-cli`, same isolation as scenario-cerebro-pi.txt. The real
+# CLIs' --help/--version may be read only if the harness allows it; the stubs on
+# PATH answer --version with a stub string, which is itself evidence the agent
+# should notice.
+# Never run while CLAUDE.md.skillator-hidden exists.
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+Which of codex, cursor, pi and gemini can I remote-control, and how?
+
+# PASS = each of the four hosts gets a verdict with its evidence (command run or
+#        doc read) or an explicit "unknown / unverified"; matches
+#        skills/remote-cerebro/references/hosts.md: codex native unproven on
+#        Windows (bridge fallback), cursor native = a cloud agent executing here,
+#        pi = bridge/attach (no native remote, no permission popups), gemini = no
+#        native remote (bridge only).
+# FAIL = any of:
+#   - a host claimed possible or impossible without evidence;
+#   - cursor's native route presented as driving the local TUI session.
+
+# ---------------------------------------------------------------- VERDICT ----
+# Not run yet. Recorded by the main session once the `remote-cli` fixture exists.

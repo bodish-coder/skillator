@@ -12,6 +12,11 @@ translation layer it needs; the canonical, fuller mapping is `PLATFORMS.md`
 | "keep artifacts local" | write the file, give the path | identical, and never publish |
 | `code-yoda` level, `watch-cortana` hooks | the active-set line (plus ponytail's statusline badge where that plugin is still installed — code-yoda's §0 guard then skips its core) + `Stop` hook | no statusline → state the restraint level in text. No turn-end hook that can inject a usage number → run `usage-watch … check` yourself before each non-trivial step (cursor and antigravity do have turn-end hooks, per `PLATFORMS.md`; what they lack is a readable usage %). On cursor/antigravity `check` has no percentage to read: antigravity wires `handoff-cortana` to `PreCompress` in `~/.gemini/settings.json` — that is the real trigger, context is about to be lost (`watch-cortana` §Other hosts); cursor has nothing to wire, so run `handoff-cortana` manually when context gets tight |
 
+Driving codex, cursor-agent, pi or gemini *from a phone* is not a host
+adapter: that is `remote-cerebro`, and its per-host matrix is
+`skills/remote-cerebro/references/hosts.md` (the **Remote drive** row of
+`PLATFORMS.md` points there too).
+
 `codegraph`, `TICKETS.md`, git and the ground rules are plain files and commands
 — they work the same everywhere, no adapter needed.
 

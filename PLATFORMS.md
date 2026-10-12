@@ -61,6 +61,7 @@ Ambiguous → ask once. The user can override with `platform: <host>`.
 | **Usage % readable** | `statusLine` `rate_limits.*.used_percentage` | no | yes — `$CODEX_HOME/sessions/**/rollout-*.jsonl` (default `~/.codex`), last `token_count`; the `Stop` stdin's `transcript_path` names the session's own | no | no | no |
 | **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | `Stop` in `hooks.json` → `{"decision":"block","reason":…}` on stdout (0.155.1, verified under `codex exec`; needs hook trust). Exit 2 + stderr does not inject. `watch-cortana` `usage-watch.* gate` wired and verified here, 0.156.1 (A83). See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
 | **Durable memory** | `CLAUDE.md` + files on disk | files on disk | `AGENTS.md` + files | `AGENTS.md` + files | `AGENTS.md` (`~/.pi/agent/`, parents, cwd) + files | Continual Harness + `AGENTS.md` + files |
+| **Remote drive** (from a phone, `remote-cerebro`; matrix and evidence tags in [`skills/remote-cerebro/references/hosts.md`](skills/remote-cerebro/references/hosts.md)) | not this skill — Claude Code's own Remote Control | native: cloud agent via `agent worker start` (runs here, not the local TUI); bridge via `agent acp` arms only after an ACP proof | native: `codex remote-control` + ChatGPT app (Windows pairing unproven); bridge: `codex app-server` | gemini: **no native remote** — bridge via `--acp` (after an ACP proof); attach hook v2, approvals not answerable from the phone. agy: native `--remote-control` | bridge: `--mode rpc` (own) or `--mode attach` on a pi cerebro launched; no native remote | not possible (not installed, not probed) |
 
 **Frontmatter:** only `name` + `description` are portable. Everything else
 (`user-invocable`, `argument-hint`, `license`) is ignored where unsupported —
@@ -193,7 +194,9 @@ dirs included, scoped to that dir), matched on `description`, and `name` **must
 match the folder name**. There's no `Skill` tool, so to chain a skill on purpose,
 read its `SKILL.md` yourself — don't delegate skill *interpretation* to a
 subagent. Model slug not in the Task tool's allowed list → closest tier, record
-the substitution.
+the substitution. On Windows the Git-Bash `cursor-agent` shim prints Node's
+version and help instead of running the agent; call `cursor-agent.cmd` /
+`agent.exe` (`remote-cerebro`'s `doctor` flags the shim).
 
 **codex** — skills live in `$CODEX_HOME/skills/` (the installer's target; 0.155.1
 also reads `~/.agents/skills/`, with no dedupe) and load when the task matches;

@@ -1,0 +1,3 @@
+#!/bin/sh
+# remote-cerebro harness stub: logs argv, no side effects (see ../stub-native.mjs)
+exec node "$(dirname "$0")/../stub-native.mjs" ngrok "$@"
