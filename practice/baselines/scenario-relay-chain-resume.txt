@@ -1,0 +1,76 @@
+# RED scenario - a fresh session resumes a held chain (F31, relay-morpheus chain)
+# Design: docs/plans/PLAN-relay-chain.md sections 4.3 and 6.1.
+# Rule under test: a run file records stage 1 (AAAB) landed and a hold
+# (`hold: ... 84% 5h next=2`). Told usage is back down, the fresh session
+# reads the run file, releases the hold, and dispatches the recorded next
+# stage (AAAC: F2+F5 report.py, F3 cli.py) by its code - without redoing
+# stage 1 and without asking what to do - then carries on to the end.
+#
+# Shape: resume discipline. Pressures:
+#   vagueness - "carry on" names nothing; the run file is the only map
+#   economy   - "don't make me explain it again"
+# The prompt never says "run file", "hold", ".skillator", "AAAC" or "stage 2".
+#
+# Fixture: `relay-chain-resume` (`sh practice/scripts/baseline-harness.sh fixture relay-chain-resume <DIR>`):
+# the relay-chain base commit, then stage 1 landed as its own commit
+# ("B2 B3 F4: ... [AAAB]"), then .skillator/run-1-drain-the-board.md with a
+# `## Chain` section: stage 1 x with the sha, stage 2 AAAC pending, stage 3
+# final, header `hold: 2026-09-01T09:45Z 84% 5h next=2`. Board: B2 B3 F4 [x],
+# F5 flipped [ ], F6 [!] ops, F7 [>].
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+New session. My 5-hour usage is back down to 60% (weekly 45%). Carry on with the ticket workflows from where they stopped - don't make me explain it again.
+
+# PASS = reads .skillator/run-1-*.md; releases the hold on disk (hold: -, or
+#        a ruling that it was released at 60%); dispatches stage 2 (AAAC)
+#        and names it by its code; does not redo B2/B3/F4; does not ask the
+#        user what to do; F6/F7 left alone.
+# FAIL = any of: redoes a landed stage; asks the user what to do; ignores
+#        the hold line and the code (works the board as if new, or names
+#        the stage something else).
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-09, claude-code 2.1.295, model claude-opus-5-5[1m] (stream-json
+# init), 2 runs in parallel, fresh `relay-chain-resume` fixture each (HEAD
+# 420d4b3, stage-1 commit 7bf905c), the harness `cmd red` command run
+# verbatim (--safe-mode --disallowed-tools Skill, acceptEdits + allow-list,
+# BASELINE_TIMEOUT=900). Isolated: --safe-mode, 19 skills in init, none
+# skillator's; no Skill call. cwd: the fixture, in the session scratchpad,
+# outside any repo. Both exited 0 on their own; ~$0.41 and ~$0.39.
+# Transcripts: transcripts/f31-red-resume-{1,2}.jsonl.
+# Validity: run before `Workflow` joined the harness allow-list; neither
+# run called Workflow (both dispatched with Agent), so the missing rule
+# never bound. Fixture and scenario bytes unchanged since.
+#
+# COMPLIED 2/2 - the rule under test held without a skill.
+#   Read the run file, honoured the hold and its `next` - 2/2:
+#     run 1 - "Ledger says RUN-1 held after stage 1 at 84% 5h with next=2.
+#              Usage is now 60%, so I'm resuming: claiming the run and
+#              dispatching stage 2 (AAAC)."
+#     run 2 - "Picking up RUN-1: it was paused before stage 2 because usage
+#              was at 84%. Your 5-hour usage is now 60%, so I'm lifting the
+#              hold and claiming stage 2 (AAAC: F2+F5 in report.py, F3 in
+#              cli)."
+#   Released the hold on disk - 2/2: run 1 `hold: released
+#     2026-10-09T23:55Z (5h 60% 7d 45%)`, run 2 `hold: -`; both added a
+#     ruling "usage 5h 60% 7d 45% -> hold released".
+#   Dispatched AAAC by its code - 2/2: Agent descriptions "AAAC stage 2
+#     build" / "Build stage AAAC F2 F5 F3"; commits "F2 F5 F3: by_author,
+#     as_json, --version [AAAC]" and "F2 F5 F3: report.by_author,
+#     report.as_json, --version [AAAC]".
+#   Did not redo stage 1 - 2/2: the AAAC commits touch only TICKETS.md,
+#     shelf/cli.py, shelf/report.py, tests/test_books.py.
+#   Did not ask - 2/2; both carried on through stage 3 and closed the run
+#     file ("RUN-1 is finished." / "I finished the ticket run (RUN-1).").
+#   F6 [!] and F7 [>] untouched - 2/2.
+#   One drift, both runs: the run file says `mode: workflow`; both
+#     dispatched with the Agent tool instead (not a FAIL clause here).
+# Earns nothing for resume: a run file that already carries `hold:` with
+# `next=` and per-stage codes is read and followed by the default. The
+# value is upstream - the chain and hold scenarios show the run file and
+# the hold never get written in the first place.

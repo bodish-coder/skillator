@@ -18,8 +18,15 @@ only the `gate` (see **Codex** below); for cursor/antigravity see **Other hosts*
 
 | Piece | Event | Job |
 |---|---|---|
-| `hooks/usage-watch.* probe` | `statusLine` | The **only** place Claude Code exposes `rate_limits.*.used_percentage`. Records the highest percentage seen to `~/.claude/watch-cortana/<session_id>`, then delegates to whatever statusline was already configured. |
+| `hooks/usage-watch.* probe` | `statusLine` | The **only** place Claude Code exposes `rate_limits.*.used_percentage`. Records the highest percentage seen to `~/.claude/handoff-watch/<session_id>` (`CLAUDE_USAGE_WATCH_DIR` overrides), then delegates to whatever statusline was already configured. |
 | `hooks/usage-watch.* gate` | `Stop` | At the end of a turn, if the recorded percentage ≥ threshold, returns `{"decision":"block"}` with the three-step preserve order below. |
+| `hooks/usage-watch.* level` | none — called | Prints one line, `src=<claude-code\|codex\|none> 5h= 7d= ctx= max=`, from the same sources as `check`; no stdin, no `.done`, no threshold. `relay-morpheus` reads it between chain stages. |
+
+`level` is a reading, not a gate. The 80 % hold that `relay-morpheus` places on
+a chain of ticket workflows is relay's own wait (`chain hold` / `chain wait`,
+`references/chain.md` there) and is **not** a handoff: nothing here fires, no
+document is written, and the 92 %/90 % orders below are unchanged if a running
+stage reaches them.
 
 When it fires, Claude is told to do three things in order, so the saved state is
 whole rather than just a narrative:
@@ -205,15 +212,15 @@ the handoff should be written immediately.
   (`~/.claude-work`, `~/.claude-bodish`, …) is a separate install: arming
   `~/.claude` arms nothing else. Wire every profile you actually code in, and
   point `-Then` at that profile's own statusline command — the flag files are
-  shared (`~/.claude/watch-cortana/`) but the hooks are not.
+  shared (`~/.claude/handoff-watch/`) but the hooks are not.
 - **Never fires** — the statusline is where the percentage comes from. If
-  `~/.claude/watch-cortana/<session_id>` does not exist, the probe is not wired in
+  `~/.claude/handoff-watch/<session_id>` does not exist, the probe is not wired in
   as `statusLine`, or this Claude Code build predates the `rate_limits` statusline
   field (2.0.44+).
 - **Statusline went blank** — the `-Then` command is wrong or missing.
-- **Fired once, want it again** — delete `~/.claude/watch-cortana/<session_id>.done`.
+- **Fired once, want it again** — delete `~/.claude/handoff-watch/<session_id>.done`.
 - **Stale flag files** — plain text, a few bytes each; delete
-  `~/.claude/watch-cortana/` whenever.
+  `~/.claude/handoff-watch/` whenever.
 
 ## Related
 

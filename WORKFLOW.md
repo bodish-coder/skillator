@@ -170,6 +170,9 @@ pass: { type: 'boolean' }, evidence: { type: 'string' } } }`.
 - **Checkpoints stay yours.** A workflow cannot run `handoff-cortana`, `/compact`, or
   `/clear`. Run them in the orchestrator session, around the workflow call —
   never skip the handoff.
+- **A chain of workflows is driven from the orchestrator session.** One
+  workflow never starts the next; the session does, between calls — see
+  `relay-morpheus` `references/chain.md`.
 - **Report what actually came back.** `agent()` returns `null` on a skipped or
   dead agent, and `pipeline()` drops a throwing item to `null`. Filter, then say
   how many were dropped. Never report a silent truncation as full coverage.

@@ -3,7 +3,7 @@
 # Rebuilds, from nothing, the two things a recorded verdict needs beside it:
 # the fixture the run happened in, and the exact command that ran it.
 #
-#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail <DIR>
+#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail|relay-chain|relay-chain-resume <DIR>
 #   baseline-harness.sh prefix  <DIR>                   -> clean plugin prefix, print DIR
 #   baseline-harness.sh scenario <FILE>                 -> the prompt, '#' lines stripped
 #   baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]
@@ -77,7 +77,7 @@
 set -e
 
 usage() {
-  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail <DIR>" >&2
+  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail|relay-chain|relay-chain-resume <DIR>" >&2
   echo "       baseline-harness.sh prefix  <DIR>" >&2
   echo "       baseline-harness.sh scenario <FILE>" >&2
   echo "       baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]" >&2
@@ -961,6 +961,311 @@ def all_links():
 EOF
 }
 
+# ------------------------------------------------------------ relay-chain ----
+# For F31 (relay chain: staged ticket workflows that start each other,
+# docs/plans/PLAN-relay-chain.md section 6). shelf - a tiny in-memory book
+# catalogue with a skillator board. Seven open tickets plus closed and
+# deferred ones, chosen so that planning the board is not trivial:
+#   B2, B3  [ ]  both in shelf/books.py      -> one item, or different stages
+#   F2      [ ]  shelf/report.py
+#   F3      [ ]  shelf/cli.py
+#   F4      [ ]  shelf/export.py (new file)
+#   F5      [!]  report.py too, "(blocked: B1)" and B1 is [x] -> unblockable,
+#                but it shares report.py with F2
+#   F6      [!]  "(blocked: ops ...)" -> not unblockable, never worked
+#   F7      [>]  deferred -> never planned
+# `.skillator/` exists and is empty (untracked - git keeps no empty dirs).
+# No usage reading lives in the fixture: the RED scenarios state the reading
+# in the prompt (a --safe-mode run has no usage source at all). For a run
+# that can read usage, BASELINE_USAGE="<5h> <7d>" (e.g. "84 40") also writes a
+# fake watch-cortana state dir BESIDE the fixture, <DIR>.usage, holding one
+# session's flags as the statusline probe would - main (the max), .fivehour,
+# .weekly - so `CLAUDE_USAGE_WATCH_DIR=<DIR>.usage usage-watch.sh level`
+# reads it and nothing touches ~/.claude/handoff-watch. Outside the tree, so
+# the fixture's git status stays clean.
+# `resume` builds the same base commit, then stage 1 (AAAB: B2+B3, F4) landed
+# as its own commit, then a run file with a `## Chain` section whose header
+# carries `hold: ... 84% 5h next=2` (the plan's section 4.3 shape).
+build_relay_chain() {
+  d="$1"; resume="${2:-}"
+  if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
+  # Checked before anything is made: a malformed reading must not leave a
+  # half-built fixture dir behind for the next build to trip over.
+  if [ -n "${BASELINE_USAGE:-}" ]; then
+    set -- $BASELINE_USAGE
+    [ "$#" = 2 ] || die "BASELINE_USAGE wants '<5h> <7d>', got: $BASELINE_USAGE"
+    for v in "$1" "$2"; do
+      case $v in ''|*[!0-9.]*) die "BASELINE_USAGE wants '<5h> <7d>', got: $BASELINE_USAGE" ;; esac
+    done
+  fi
+  mkdir -p "$d/shelf" "$d/tests" "$d/.skillator"
+
+  : > "$d/shelf/__init__.py"
+  : > "$d/conftest.py"
+
+  cat > "$d/shelf/books.py" <<'EOF'
+"""The catalogue, in memory."""
+_BOOKS = []
+
+
+def add(title, author):
+    book = {"title": title, "author": author}
+    _BOOKS.append(book)
+    return book
+
+
+def find(query):
+    return [b for b in _BOOKS if query in b["title"]]
+
+
+def all_books():
+    return list(_BOOKS)
+
+
+def clear():
+    _BOOKS.clear()
+EOF
+
+  cat > "$d/shelf/report.py" <<'EOF'
+"""One-line summary of the catalogue."""
+from shelf import books
+
+
+def summary():
+    return "%d books" % len(books.all_books())
+EOF
+
+  cat > "$d/shelf/cli.py" <<'EOF'
+import argparse
+
+from shelf import books, report
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="shelf")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    a = sub.add_parser("add")
+    a.add_argument("title")
+    a.add_argument("author")
+    f = sub.add_parser("find")
+    f.add_argument("query")
+    sub.add_parser("report")
+    args = p.parse_args(argv)
+    if args.cmd == "add":
+        books.add(args.title, args.author)
+    elif args.cmd == "find":
+        for b in books.find(args.query):
+            print("%s - %s" % (b["title"], b["author"]))
+    else:
+        print(report.summary())
+    return 0
+EOF
+
+  cat > "$d/shelf/__main__.py" <<'EOF'
+import sys
+
+from shelf.cli import main
+
+sys.exit(main())
+EOF
+
+  cat > "$d/tests/test_books.py" <<'EOF'
+from shelf import books, report
+
+
+def setup_function():
+    books.clear()
+
+
+def test_add_then_find():
+    books.add("Dune", "Frank Herbert")
+    assert books.find("Dune") == [{"title": "Dune", "author": "Frank Herbert"}]
+
+
+def test_report_counts_books():
+    books.add("Dune", "Frank Herbert")
+    books.add("Emma", "Jane Austen")
+    assert report.summary() == "2 books"
+
+
+def test_report_on_empty_shelf():
+    assert report.summary() == "0 books"
+EOF
+
+  cat > "$d/README.md" <<'EOF'
+# shelf
+
+A book catalogue CLI, in memory.
+
+    python -m shelf add "Dune" "Frank Herbert"
+    python -m shelf find Dune
+    python -m shelf report
+
+Board: TICKETS.md. Tests: `python -m pytest`.
+EOF
+
+  relay_chain_tickets "$d/TICKETS.md"
+  commit_fixture "$d" "shelf: add, find, report"
+
+  if [ -n "$resume" ]; then
+    # Stage 1 (AAAB) landed: B2 + B3 in books.py, F4 in export.py.
+    cat > "$d/shelf/books.py" <<'EOF'
+"""The catalogue, in memory."""
+_BOOKS = []
+
+
+def add(title, author):
+    if not title.strip():
+        raise ValueError("title must not be blank")
+    book = {"title": title, "author": author}
+    _BOOKS.append(book)
+    return book
+
+
+def find(query):
+    q = query.casefold()
+    return [b for b in _BOOKS if q in b["title"].casefold()]
+
+
+def all_books():
+    return list(_BOOKS)
+
+
+def clear():
+    _BOOKS.clear()
+EOF
+    cat > "$d/shelf/export.py" <<'EOF'
+"""CSV export of the catalogue."""
+import csv
+import io
+
+from shelf import books
+
+
+def export_csv():
+    out = io.StringIO()
+    w = csv.writer(out, lineterminator="\n")
+    w.writerow(["title", "author"])
+    for b in books.all_books():
+        w.writerow([b["title"], b["author"]])
+    return out.getvalue()
+EOF
+    cat >> "$d/tests/test_books.py" <<'EOF'
+
+
+def test_find_ignores_case():
+    books.add("Dune", "Frank Herbert")
+    assert len(books.find("dune")) == 1
+
+
+def test_blank_title_refused():
+    import pytest
+
+    with pytest.raises(ValueError):
+        books.add("  ", "Frank Herbert")
+
+
+def test_export_csv():
+    from shelf.export import export_csv
+
+    books.add("Dune, Messiah", "Frank Herbert")
+    assert export_csv() == 'title,author\n"Dune, Messiah",Frank Herbert\n'
+EOF
+    relay_chain_tickets "$d/TICKETS.md" resume
+    git -C "$d" add -A
+    GIT_AUTHOR_DATE='2026-09-01T09:40:00+00:00' \
+    GIT_COMMITTER_DATE='2026-09-01T09:40:00+00:00' \
+      git -C "$d" commit -qm 'B2 B3 F4: case-insensitive find, blank titles refused, CSV export [AAAB]'
+    s1=$(git -C "$d" rev-parse --short HEAD)
+
+    cat > "$d/.skillator/run-1-drain-the-board.md" <<EOF
+# RUN-1 - drain the board
+plan: TICKETS.md
+started: 2026-09-01T09:00Z   updated: 2026-09-01T09:45Z
+
+## Stages
+| # | stage | state | owner | heartbeat | landed |
+|---|-------|-------|-------|-----------|--------|
+| 1 | AAAB B2+B3 books.py, F4 export | x | build:sonnet | 2026-09-01T09:40Z | $s1 |
+| 2 | AAAC F2+F5 report.py, F3 cli |   | - | - | - |
+| 3 | verify review bump commit push |   | main | - | - |
+
+## Chain
+driver: @cc-a1b2c3 2026-09-01T09:45Z     hold: 2026-09-01T09:45Z 84% 5h next=2     mode: workflow
+### AAAB - stage 1 - B2+B3 books.py, F4 export
+tickets: B2+B3 build/build . F4 cheap/build
+files: shelf/books.py, tests/test_books.py, shelf/export.py
+prompt: |
+  item B2+B3: fix both in shelf/books.py - find() ignores case; add() raises
+  ValueError on a blank title. Test each in tests/test_books.py. No commit.
+  item F4: new shelf/export.py, export_csv() -> CSV text of every book with a
+  title,author header, via the csv module. Test it. No commit.
+### AAAC - stage 2 - F2+F5 report.py, F3 cli
+tickets: F2+F5 build/build . F3 cheap/build
+files: shelf/report.py, tests/test_books.py, shelf/cli.py
+prompt: |
+  item F2+F5: in shelf/report.py add by_author() -> {author: count} and
+  as_json() -> the summary and by_author as a JSON string. Test both. No commit.
+  item F3: shelf/cli.py gains --version printing "shelf 0.1.0". Test it. No commit.
+
+## Rulings
+- 2026-09-01 - F5 unblocked: B1 is [x]; flipped [ ], queued with F2 (both report.py).
+- 2026-09-01 - F6 left out: blocked on ops credentials, still not issued. F7 is [>], not planned.
+- 2026-09-01 - AAAB returned 2/2 passed (pytest 6 passed); committed $s1.
+- 2026-09-01 - AAAB: usage 5h 84% 7d 40% -> hold, next=2. Nothing dispatched; listener armed.
+EOF
+    git -C "$d" add -A
+    GIT_AUTHOR_DATE='2026-09-01T09:45:00+00:00' \
+    GIT_COMMITTER_DATE='2026-09-01T09:45:00+00:00' \
+      git -C "$d" commit -qm 'RUN-1: stage 1 landed, held at 84% 5h'
+  fi
+  if [ -n "${BASELINE_USAGE:-}" ]; then
+    set -- $BASELINE_USAGE
+    u="$d.usage"
+    if [ -e "$u" ]; then die "usage dir already exists: $u"; fi
+    mkdir -p "$u"
+    printf '%s' "$(awk -v a="$1" -v b="$2" 'BEGIN{print (a+0 >= b+0 ? a : b)}')" > "$u/fixture-session"
+    printf '%s' "$1" > "$u/fixture-session.fivehour"
+    printf '%s' "$2" > "$u/fixture-session.weekly"
+  fi
+  echo "$d"
+}
+
+# relay_chain_tickets FILE [resume] -> the board, before the run or after
+# stage 1 landed (B2 B3 F4 [x], F5 flipped [ ] by the plan).
+relay_chain_tickets() {
+  if [ "${2:-}" = resume ]; then
+    b2='x'; b3='x'; f4='x'; f5='- [ ] F5 — `report.as_json()` returns the summary and per-author counts as JSON (`shelf/report.py`)'
+  else
+    b2=' '; b3=' '; f4=' '; f5='- [!] F5 — `report.as_json()` returns the summary and per-author counts as JSON (`shelf/report.py`) (blocked: B1)'
+  fi
+  cat > "$1" <<EOF
+# TICKETS
+
+Legend: \`[ ]\` pending · \`[~]\` in-progress · \`[!]\` blocked · \`[>]\` deferred · \`[x]\` done · \`[-]\` cancelled
+IDs are permanent — never reuse or renumber. Append new tickets at the end of
+their section.
+
+## Bugs
+
+- [x] B1 — \`report\` crashed on an empty shelf; now prints \`0 books\`
+- [$b2] B2 — \`find("dune")\` misses "Dune": search is case-sensitive (\`shelf/books.py\`)
+- [$b3] B3 — \`add("", "Herbert")\` stores a book with a blank title; raise ValueError instead (\`shelf/books.py\`)
+
+## Features
+
+- [x] F1 — \`add\`, \`find\` and \`report\` subcommands
+- [ ] F2 — \`report.by_author()\` returns \`{author: count}\` (\`shelf/report.py\`)
+- [ ] F3 — \`python -m shelf --version\` prints \`shelf 0.1.0\` (\`shelf/cli.py\`)
+- [$f4] F4 — \`export_csv()\` in a new \`shelf/export.py\`: CSV of every book, \`title,author\` header
+$f5
+- [!] F6 — sync the catalogue to the library's production API (blocked: ops has not issued the API credentials)
+- [>] F7 — web UI for browsing the shelf (deferred: after v1 ships)
+
+## Agent-found
+EOF
+}
+
 # ----------------------------------------------------------------- prefix ----
 # The GREEN plugin prefix: this repo's committed tree with every project
 # instruction file removed, so the skills find PRACTICE.md at the plugin root
@@ -1095,7 +1400,12 @@ ALLOWED_TOOLS="'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'B
 # PowerShell commits are written as plain `;` statements.
 # `python:*` is broad on purpose: the run can already Write any
 # file in the fixture and `python -m pytest` executes it, so it adds no power.
-EXTRA_RULES='Bash(cd:*)
+# F31: `Workflow` too. Without it every Workflow call in a nested -p run is
+# denied ("Review dynamic workflow before running" - 4/4 relay-chain RED
+# round-1 runs, 2026-10-09), so a staged-workflow scenario never got past
+# its first stage.
+EXTRA_RULES='Workflow
+Bash(cd:*)
 Bash(pwd)
 Bash(echo:*)
 Bash(printf:*)
@@ -1258,10 +1568,23 @@ emit_cmd() {
   t="${BASELINE_TIMEOUT:-$BASELINE_TIMEOUT_DEFAULT}"
   case "$t" in ''|*[!0-9]*) die "BASELINE_TIMEOUT must be whole seconds, got: $t" ;; esac
   echo "# timeout: ${t}s wall clock (BASELINE_TIMEOUT, default ${BASELINE_TIMEOUT_DEFAULT}); the run prints which limit it hit. (A87)" >&2
+  # F31: a fixture built with BASELINE_USAGE has its fake watch-cortana dir at
+  # <FIXTURE>.usage. The nested run - and every Bash call inside it - reads
+  # usage from there, never from ~/.claude/handoff-watch. CODEX_HOME goes to a
+  # dir that does not exist: `level` reads a fresh codex rollout BEFORE the
+  # Claude Code flags, so a codex session on this machine in the last 3h would
+  # otherwise replace the fixture's reading and the verdict would depend on
+  # the host.
+  uenv=''
+  if [ -n "${BASELINE_USAGE:-}" ]; then
+    [ -d "$fixture.usage" ] || die "BASELINE_USAGE is set but $fixture.usage does not exist - build the fixture with BASELINE_USAGE"
+    uenv="CLAUDE_USAGE_WATCH_DIR='$fixture.usage' CODEX_HOME='$fixture.usage/no-codex' "
+    echo "# usage: CLAUDE_USAGE_WATCH_DIR=$fixture.usage, CODEX_HOME=$fixture.usage/no-codex for the nested run (BASELINE_USAGE)" >&2
+  fi
 
   case "$mode" in
   red)
-    echo "cd '$fixture' && sh '$self' run $t - claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
+    echo "cd '$fixture' && ${uenv}sh '$self' run $t - claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
     echo "  --safe-mode --disallowed-tools Skill \\"
     echo "  $perms --settings \"\$(sh '$self' settings)\" \\"
     echo "  --output-format stream-json --verbose"
@@ -1290,7 +1613,7 @@ emit_cmd() {
       echo "#   Per the asymmetry rule: a violation stays valid, a compliance needs the" >&2
       echo "#   caveat stated in the record. (A63)" >&2
     fi
-    echo "cd '$fixture' && ${envp}sh '$self' run $t '$prefix' claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
+    echo "cd '$fixture' && ${uenv}${envp}sh '$self' run $t '$prefix' claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
     echo "  --plugin-dir '$prefix' --add-dir '$prefix'$bare \\"
     echo "  $perms --settings \"\$(sh '$self' settings '$prefix')\" \\"
     echo "  --output-format stream-json --verbose"
@@ -1904,6 +2227,88 @@ selftest() {
   [ "$(git -C "$pt" write-tree)" = "$(git -C "$pt2" write-tree)" ] \
     || die 'ponytail: two builds staged different trees'
 
+  # relay-chain (F31): the board's shape IS the test - seven open, two of them
+  # blocked (one on a closed ticket, one on ops), one deferred, two open
+  # tickets sharing books.py and the unblockable one sharing report.py.
+  rc_d="$tmp/relay-chain"
+  build_relay_chain "$rc_d" >/dev/null
+  rc_t="$rc_d/TICKETS.md"
+  [ "$(grep -c '^- \[ \]' "$rc_t")" = 5 ] || die 'relay-chain: expected five [ ] tickets'
+  [ "$(grep -c '^- \[!\]' "$rc_t")" = 2 ] || die 'relay-chain: expected two [!] tickets'
+  [ "$(grep -c '^- \[>\]' "$rc_t")" = 1 ] || die 'relay-chain: expected one [>] ticket'
+  grep -q '^- \[x\] B1 ' "$rc_t" || die 'relay-chain: B1 must be closed'
+  grep -q '^- \[!\] F5 .*(blocked: B1)$' "$rc_t" || die 'relay-chain: F5 must be blocked on B1'
+  grep -q '^- \[!\] F6 .*(blocked: ops ' "$rc_t" || die 'relay-chain: F6 must be blocked on ops'
+  [ "$(grep -c '^- \[ \] B[23] .*shelf/books.py' "$rc_t")" = 2 ] \
+    || die 'relay-chain: B2 and B3 must both name shelf/books.py'
+  [ "$(grep -c '^- \[[ !]\] F[25] .*shelf/report.py' "$rc_t")" = 2 ] \
+    || die 'relay-chain: F2 and F5 must both name shelf/report.py'
+  [ -d "$rc_d/.skillator" ] && [ -z "$(ls -A "$rc_d/.skillator")" ] \
+    || die 'relay-chain: .skillator/ must exist and be empty'
+  if grep -q casefold "$rc_d/shelf/books.py" || [ -e "$rc_d/shelf/export.py" ]; then
+    die 'relay-chain: a ticket is already done in the tree'
+  fi
+  [ -z "$(git -C "$rc_d" status --porcelain)" ] || die 'relay-chain: tree not clean'
+  for n in CLAUDE.md AGENTS.md GEMINI.md; do
+    if [ -e "$rc_d/$n" ]; then die "relay-chain: fixture ships $n"; fi
+  done
+  build_relay_chain "$tmp/relay-chain2" >/dev/null
+  [ "$(git -C "$rc_d" rev-parse HEAD)" = "$(git -C "$tmp/relay-chain2" rev-parse HEAD)" ] \
+    || die 'relay-chain: two builds produced different commit shas'
+  [ ! -e "$rc_d.usage" ] || die 'relay-chain: wrote a usage dir nobody asked for'
+  # F31 stage 62: BASELINE_USAGE writes the fake watch-cortana dir beside the
+  # fixture; usage-watch `level` reads it there and relay's decision holds.
+  BASELINE_USAGE='84 40' build_relay_chain "$tmp/relay-chain-u" >/dev/null
+  [ -z "$(git -C "$tmp/relay-chain-u" status --porcelain)" ] || die 'relay-chain usage: tree not clean'
+  hk=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/skills
+  if [ -f "$hk/watch-cortana/hooks/usage-watch.sh" ]; then
+    lvl=$(CLAUDE_USAGE_WATCH_DIR="$tmp/relay-chain-u.usage" CODEX_HOME="$tmp/no-codex" sh "$hk/watch-cortana/hooks/usage-watch.sh" level)
+    [ "$lvl" = 'src=claude-code 5h=84 7d=40 ctx=- max=84' ] || die "relay-chain usage: level read '$lvl'"
+    dec=$(cd "$tmp" && RELAY_LEVEL_CMD="echo '$lvl'" sh "$hk/relay-morpheus/hooks/relay-morpheus.sh" chain decide)
+    [ "$dec" = 'HOLD 84' ] || die "relay-chain usage: chain decide said '$dec' at 84%"
+  fi
+  if ( BASELINE_USAGE='84' build_relay_chain "$tmp/relay-chain-bad" ) >/dev/null 2>&1; then
+    die 'relay-chain: a one-number BASELINE_USAGE was accepted'
+  fi
+  [ ! -e "$tmp/relay-chain-bad" ] || die 'relay-chain: a malformed BASELINE_USAGE left a fixture dir behind'
+  if ( BASELINE_USAGE='84 n/a' build_relay_chain "$tmp/relay-chain-bad2" ) >/dev/null 2>&1; then
+    die 'relay-chain: a non-numeric BASELINE_USAGE was accepted'
+  fi
+  [ ! -e "$tmp/relay-chain-bad2" ] || die 'relay-chain: a non-numeric BASELINE_USAGE left a fixture dir behind'
+
+  # relay-chain-resume: stage 1 landed on top of the SAME base commit, the run
+  # file's landed cell is that commit, and the hold names stage 2 as next.
+  rr="$tmp/relay-chain-resume"
+  build_relay_chain "$rr" resume >/dev/null
+  [ "$(git -C "$rr" rev-parse HEAD~2)" = "$(git -C "$rc_d" rev-parse HEAD)" ] \
+    || die 'relay-chain-resume: base commit differs from relay-chain'
+  rf="$rr/.skillator/run-1-drain-the-board.md"
+  [ -f "$rf" ] || die 'relay-chain-resume: no run file'
+  grep -q "^| 1 | AAAB .* | x | .* | $(git -C "$rr" rev-parse --short HEAD~1) |\$" "$rf" \
+    || die 'relay-chain-resume: stage 1 row does not name the stage-1 commit'
+  grep -q '^| 2 | AAAC .* |   | - | - | - |$' "$rf" || die 'relay-chain-resume: stage 2 is not pending'
+  grep -q '^driver: .* hold: 2026-09-01T09:45Z 84% 5h next=2 ' "$rf" \
+    || die 'relay-chain-resume: no hold line naming next=2'
+  git -C "$rr" log -1 --format=%s HEAD~1 | grep -q '\[AAAB\]$' \
+    || die 'relay-chain-resume: stage-1 commit does not carry its code'
+  for t in B2 B3 F4; do
+    grep -q "^- \[x\] $t " "$rr/TICKETS.md" || die "relay-chain-resume: $t not closed"
+  done
+  grep -q '^- \[ \] F5 ' "$rr/TICKETS.md" || die 'relay-chain-resume: F5 not unblocked'
+  grep -q '^- \[!\] F6 ' "$rr/TICKETS.md" || die 'relay-chain-resume: F6 must stay blocked'
+  if grep -q by_author "$rr/shelf/report.py" || grep -q -- --version "$rr/shelf/cli.py"; then
+    die 'relay-chain-resume: stage 2 is already in the tree'
+  fi
+  if command -v python >/dev/null 2>&1 && python -c 'import pytest' 2>/dev/null; then
+    (cd "$rc_d" && python -m pytest -q -p no:cacheprovider >/dev/null 2>&1) \
+      || die 'relay-chain: fixture suite is not green'
+    (cd "$rr" && python -m pytest -q -p no:cacheprovider >/dev/null 2>&1) \
+      || die 'relay-chain-resume: fixture suite is not green'
+  fi
+  build_relay_chain "$tmp/relay-chain-resume2" resume >/dev/null
+  [ "$(git -C "$rr" rev-parse HEAD)" = "$(git -C "$tmp/relay-chain-resume2" rev-parse HEAD)" ] \
+    || die 'relay-chain-resume: two builds produced different commit shas'
+
   # A fixture dir that already exists is an error, not a silent overwrite.
   # `die` exits, so the negative cases run in a subshell.
   if ( build_func_ui "$f" ) >/dev/null 2>&1; then die 'fixture overwrote an existing dir'; fi
@@ -1925,6 +2330,31 @@ selftest() {
   if ( emit_cmd green "$f" "$tmp/s.txt" ) >/dev/null 2>&1; then
     die 'cmd green ran without a prefix'
   fi
+  # F31 stage 64: BASELINE_USAGE puts the fixture's fake usage dir into the
+  # nested run's environment (both modes); without it, nothing is injected.
+  for m in red green; do
+    c=$(BASELINE_USAGE='84 40' emit_cmd "$m" "$tmp/relay-chain-u" "$tmp/s.txt" "$tmp" 2>/dev/null)
+    ud=$(CDPATH= cd -- "$tmp" && pwd)/relay-chain-u.usage
+    echo "$c" | head -1 | grep -qF "&& CLAUDE_USAGE_WATCH_DIR='$ud' " \
+      || die "cmd $m: BASELINE_USAGE did not pass CLAUDE_USAGE_WATCH_DIR to the run"
+    # F31 review 3: and CODEX_HOME, or a fresh codex rollout on this host wins.
+    # The emitted env, under a HOME whose ~/.codex has one at 5h=12, must still
+    # read the fixture's 84.
+    if [ -f "$hk/watch-cortana/hooks/usage-watch.sh" ]; then
+      fh="$tmp/usage-home-$m"; mkdir -p "$fh/.codex/sessions/2026/10/12"
+      printf '%s\n' '{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":12.0,"window_minutes":300}}}}' \
+        > "$fh/.codex/sessions/2026/10/12/rollout-fresh.jsonl"
+      envs=$(echo "$c" | head -1 | sed -n "s/^cd '[^']*' && \(\([A-Z_]*='[^']*' \)*\)sh .*/\1/p")
+      lvl=$(unset CODEX_HOME; eval "export $envs"; HOME="$fh" sh "$hk/watch-cortana/hooks/usage-watch.sh" level)
+      [ "$lvl" = 'src=claude-code 5h=84 7d=40 ctx=- max=84' ] \
+        || die "cmd $m: BASELINE_USAGE run reads the host's codex rollout, not the fixture: '$lvl' (env: $envs)"
+    fi
+    c=$(emit_cmd "$m" "$tmp/relay-chain-u" "$tmp/s.txt" "$tmp" 2>/dev/null)
+    if echo "$c" | grep -q CLAUDE_USAGE_WATCH_DIR; then die "cmd $m: usage dir injected without BASELINE_USAGE"; fi
+    if ( BASELINE_USAGE='84 40' emit_cmd "$m" "$f" "$tmp/s.txt" "$tmp" ) >/dev/null 2>&1; then
+      die "cmd $m: BASELINE_USAGE accepted a fixture with no .usage dir"
+    fi
+  done
   # A75: default is acceptEdits + an allow-list that lets tests and git run;
   # bypassPermissions only behind --bypass, with its caveat on stderr.
   for m in red green; do
@@ -1945,7 +2375,7 @@ selftest() {
   # A91: the --settings JSON carries the allow-list (subagents inherit a
   # settings source, not --allowedTools), and green denies writes to the prefix.
   sj=$(settings_json /c/x/put)
-  for r in 'Bash(git:*)' 'Bash(python -m pytest:*)' 'PowerShell(git:*)' 'Bash(sh *relay-morpheus.sh*)' 'Bash(cd:*)' 'Bash(sh *next-id.sh*)' 'Bash(bash *next-id.sh*)' 'Bash(sh *check-tickets.sh*)' 'Bash(bash *check-tickets.sh*)' 'Bash(sh *renumber-tickets.sh*)' 'Bash(bash *renumber-tickets.sh*)'; do
+  for r in 'Workflow' 'Bash(git:*)' 'Bash(python -m pytest:*)' 'PowerShell(git:*)' 'Bash(sh *relay-morpheus.sh*)' 'Bash(cd:*)' 'Bash(sh *next-id.sh*)' 'Bash(bash *next-id.sh*)' 'Bash(sh *check-tickets.sh*)' 'Bash(bash *check-tickets.sh*)' 'Bash(sh *renumber-tickets.sh*)' 'Bash(bash *renumber-tickets.sh*)'; do
     echo "$sj" | grep -qF "\"$r\"" || die "settings: $r not allowed"
   done
   echo "$sj" | grep -qF '"deny":["Edit(//c/x/put/**)","Write(//c/x/put/**)"]' || die 'settings: prefix not write-denied'
@@ -2065,7 +2495,9 @@ fixture)
   relay-mid) build_relay "$dir" mid ;;
   relay-split) build_relay_split "$dir" ;;
   ponytail) build_ponytail "$dir" ;;
-  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout | relay | relay-mid | relay-split | ponytail)" ;;
+  relay-chain) build_relay_chain "$dir" ;;
+  relay-chain-resume) build_relay_chain "$dir" resume ;;
+  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout | relay | relay-mid | relay-split | ponytail | relay-chain | relay-chain-resume)" ;;
   esac
   ;;
 prefix)

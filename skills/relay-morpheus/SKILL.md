@@ -1,13 +1,13 @@
 ---
 name: relay-morpheus
 description: >-
-  Use when work runs in stages and the session may not survive to the end of
-  them — a multi-stage plan, a fan-out of subagents, a laptop that sleeps, a
-  dropping connection, a usage limit closing in.
-  Also when the user says "staged workflow", "keep going across sessions",
-  "resume the run", "what was in flight", or asks why a dispatched agent went
-  quiet. NOT for writing a session handoff (`handoff-cortana`) and NOT for the
-  board (`tickets-zordon`).
+  Use when work runs in stages and the session may not survive to their end —
+  a multi-stage plan, a fan-out of subagents, a sleeping laptop, a dropping
+  link, a usage limit closing in.
+  Also when the user says "staged workflow", "work all open tickets in
+  stages", "keep going", "auto-start the next workflow", "next stage", "pause
+  at 80% usage", "resume the run", or "what was in flight". NOT for writing a
+  session handoff (`handoff-cortana`) and NOT for the board (`tickets-zordon`).
 ---
 
 # relay-morpheus — staged runs that outlive the session
@@ -138,10 +138,31 @@ so a redispatch that duplicates work overwrites rather than appends.
 Then carry on. A resume does not need permission to continue — see
 `grayskull-power` §3, **run to the end**.
 
+## Chaining ticket workflows
+
+When the stages are ticket workflows that start each other — "work every open
+ticket in staged workflows, keep going" — the rule above gains a second half:
+
+```
+THE NEXT STAGE IS STARTED BY THE LAST ONE'S COMPLETION, AND BY NOTHING
+ELSE UNTIL USAGE SAYS SO
+```
+
+Two isolated runs (`practice/baselines/scenario-relay-chain*.txt`) dispatched
+with no plan on disk, read no usage between stages, named stages by their
+content (two runs picked the same name), and started a stage at 84 % of the
+5-hour window. So a chain is run **only** by the loop in
+[references/chain.md](references/chain.md): every stage `chain plan`ned with
+its code and exact prompt before the first dispatch; `chain decide` (on
+`usage-watch level`) before every stage, the first included; `chain hold` at 80 % and a `chain wait` listener instead
+of a new stage; `mode:` in the run file naming what was actually dispatched.
+Read that file before the first `chain` command.
+
 ## Scripts
 
 `hooks/relay-morpheus.sh` · `hooks/relay-morpheus.ps1` — the same commands, mirrored per
-`PLATFORMS.md`: `init`, `add`, `stage`, `heartbeat`, `status`, `orphans`. They are
+`PLATFORMS.md`: `init`, `add`, `stage`, `heartbeat`, `status`, `orphans`, and
+`chain plan|dispatch|hold|release|wait|status|decide`. They are
 bookkeeping, not judgement; every one reads or edits `.skillator/run.md` and
 nothing else. Run `selftest` on both after touching either.
 

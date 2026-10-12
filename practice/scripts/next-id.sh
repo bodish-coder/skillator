@@ -5,7 +5,7 @@
 #
 #   next-id.sh <KIND> [board-path]      reserve and print the next number
 #   next-id.sh --peek <KIND> [board]    print it without reserving
-#   next-id.sh --runs <dir> RUN|S       also count staged-run files (F22)
+#   next-id.sh --runs <dir> RUN|S|W     also count staged-run files (F22)
 #   next-id.sh --count <n> <KIND>       reserve n in a row, one per line
 #   next-id.sh --selftest
 #
@@ -25,6 +25,13 @@
 # run.md) to the max, in the working tree and on every ref: RUN from the
 # filename `run-<n>-`, S from the stage-table rows `| <n> |`. Without it a
 # RUN-4 restarted at stage 1 and two worktrees both made RUN-4.
+# Kind W (F31) is a relay-chain workflow code and exists only with --runs:
+# 4 chars of base 36 over ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 (A = 0),
+# padded with A - counter 1 = AAAB, 37 = AABB, 1679615 = 9999, then refused.
+# The max is taken over the chain block headers `### <CODE> - stage <n>` in
+# run files (tree and every ref), decoded, and the shared counter W. Stage
+# cells are NOT scanned: a ticket-led stage name ("A110 code-yoda") reads as a
+# code, and `chain plan` writes every cell together with its header anyway.
 set -e
 
 prog=next-id.sh
@@ -51,12 +58,31 @@ run_names() { sed -n 's#^\(.*/\)\{0,1\}run-\([0-9][0-9]*\)\(-.*\)\{0,1\}\.md$#\2
 # Stage numbers from stage-table rows ("| 12 | name | ...").
 stage_rows() { sed -n 's/^| *\([0-9][0-9]*\) *|.*/\1/p'; }
 
+# W (F31): chain block headers "### AAQ7 - stage 66 - ..." -> decoded numbers.
+# The separator is any one token, so a hand-typed em dash still counts.
+W_RE='^### [A-Z0-9]{4} [^ ]+ stage [0-9]'
+W_ABC=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
+W_MAX=1679615
+code_rows() {
+  grep -E "$W_RE" | cut -c5-8 | awk -v abc="$W_ABC" '
+    { n=0; for (i=1; i<=4; i++) n = n*36 + index(abc, substr($0,i,1)) - 1; print n }'
+}
+# Print the numbers $1..$2, encoded as 4-char codes when the kind is W.
+emit() {
+  if [ "$kind" != W ]; then seq "$1" "$2"; return 0; fi
+  [ "$2" -le "$W_MAX" ] || die "kind W exhausted: $2 > $W_MAX (9999)"
+  seq "$1" "$2" | awk -v abc="$W_ABC" '{ n=$1+0; c="";
+    for (i=0; i<4; i++) { c = substr(abc, n%36+1, 1) c; n = int(n/36) } print c }'
+}
+
 allocate() {
   peek=$1 kind=$2 board=$3 runs=$4 count=$5
   case $kind in ''|*[!A-Z]*) die "KIND must be capital letters (A, B, F, RUN, S), got '$kind'" 2 ;; esac
   case $count in ''|*[!0-9]*|0) die "--count wants a positive number, got '$count'" 2 ;; esac
   if [ -n "$runs" ]; then
-    case $kind in RUN|S) ;; *) die "--runs counts only RUN or S, not '$kind'" 2 ;; esac
+    case $kind in RUN|S|W) ;; *) die "--runs counts only RUN, S or W, not '$kind'" 2 ;; esac
+  elif [ "$kind" = W ]; then
+    die "kind W (workflow code) needs --runs <dir>: codes live in run files" 2
   fi
 
   gdir=.
@@ -84,7 +110,11 @@ allocate() {
   if [ -n "$runs" ]; then
     for f in "$runs"/run-*.md "$runs"/run.md; do
       [ -f "$f" ] || continue
-      if [ "$kind" = RUN ]; then r=$(echo "$f" | run_names | max_num); else r=$(stage_rows < "$f" | max_num); fi
+      case $kind in
+        RUN) r=$(echo "$f" | run_names | max_num) ;;
+        W) r=$(code_rows < "$f" | max_num) ;;
+        *) r=$(stage_rows < "$f" | max_num) ;;
+      esac
       if [ "$r" -gt "$m" ]; then m=$r; fi
     done
     [ "$ingit" = 1 ] && rrel=$(git -C "$runs" rev-parse --show-prefix 2>/dev/null || true)
@@ -101,6 +131,8 @@ allocate() {
       if [ -n "$runs" ]; then
         if [ "$kind" = RUN ]; then
           r=$(git -C "$top" ls-tree -r --name-only "$ref" -- "${rrel:-.}" 2>/dev/null | run_names | max_num)
+        elif [ "$kind" = W ]; then
+          r=$(git -C "$top" grep -h -E "$W_RE" "$ref" -- "${rrel}run-*.md" "${rrel}run.md" 2>/dev/null | code_rows | max_num)
         else
           r=$(git -C "$top" grep -h -E '^\| *[0-9]+ *\|' "$ref" -- "${rrel}run-*.md" "${rrel}run.md" 2>/dev/null | stage_rows | max_num)
         fi
@@ -116,7 +148,7 @@ allocate() {
       c=$(tr -dc 0-9 < "$counter")
       if [ -n "$c" ] && [ "$c" -gt "$m" ]; then m=$c; fi
     fi
-    seq $((m + 1)) $((m + count))
+    emit $((m + 1)) $((m + count))
     return 0
   fi
 
@@ -144,11 +176,16 @@ allocate() {
     if [ -n "$c" ] && [ "$c" -gt "$m" ]; then m=$c; fi
   fi
   n=$((m + count))
+  # Refused before the counter moves: an exhausted W must not burn numbers.
+  if [ "$kind" = W ] && [ "$n" -gt "$W_MAX" ]; then
+    rm -rf "$lock"; trap - EXIT INT TERM
+    die "kind W exhausted: $n > $W_MAX (9999)"
+  fi
   echo "$n" > "$counter.tmp.$$"
   mv -f "$counter.tmp.$$" "$counter"
   rm -rf "$lock"
   trap - EXIT INT TERM
-  seq $((m + 1)) "$n"
+  emit $((m + 1)) "$n"
 }
 
 selftest() {
@@ -220,12 +257,37 @@ selftest() {
   if sh "$me" --runs .skillator A >/dev/null 2>&1; then fail "--runs accepted kind A"; fi
   if sh "$me" --count 0 S >/dev/null 2>&1; then fail "--count 0 accepted"; fi
 
+  # Kind W (F31): 4-char base-36 workflow codes, A = 0, never reused.
+  set +e; sh "$me" W >/dev/null 2>"$t/errw"; rc=$?; set -e
+  [ "$rc" = 2 ] && grep -q 'needs --runs' "$t/errw" || fail "W without --runs: want exit 2 + message, got $rc"
+  # A cell that merely starts with 4 capitals is a stage name, not a code.
+  printf '| 40 | ZZZZ cell only |   | - | - | - |\n' >> .skillator/run-3-here.md
+  w=$(sh "$me" --runs .skillator W) && [ "$w" = AAAB ] || fail "W first code: want AAAB, got $w"
+  w=$(cd "$t/second" && sh "$me" --runs .skillator W) && [ "$w" = AAAC ] ||
+    fail "W from another worktree: want AAAC, got $w"
+  (cd "$t/far" && printf '## Chain\n### AABA - stage 12 - c\nprompt: |\n  x\n' >> .skillator/run-5-there.md &&
+    g commit -q -am chain)
+  w=$(sh "$me" --runs .skillator W) && [ "$w" = AABB ] || fail "W code on another ref (AABA=36) ignored: want AABB, got $w"
+  w1=$(sh "$me" --peek --runs .skillator W); w2=$(sh "$me" --peek --runs .skillator W)
+  [ "$w1" = AABC ] && [ "$w2" = AABC ] || fail "W --peek reserved or miscounted: $w1 $w2"
+  w=$(sh "$me" --runs .skillator --count 3 W | paste -sd, -) && [ "$w" = AABC,AABD,AABE ] ||
+    fail "W --count 3: want AABC,AABD,AABE, got $w"
+  # Decode carries: BAA9 = 36^3 + 35 = 46691, so next is BABA (46692).
+  printf '## Chain\n### BAA9 - stage 7 - b\n' >> .skillator/run-3-here.md
+  w=$(sh "$me" --runs .skillator W) && [ "$w" = BABA ] || fail "W decode/encode carry: want BABA after BAA9, got $w"
+  # The top of the range: 9998 -> 9999, then refused without moving the counter.
+  printf '### 9998 - stage 7 - top\n' >> .skillator/run-3-here.md
+  w=$(sh "$me" --runs .skillator W) && [ "$w" = 9999 ] || fail "W round trip at the top: want 9999, got $w"
+  set +e; sh "$me" --runs .skillator W >/dev/null 2>"$t/errw"; rc=$?; set -e
+  [ "$rc" != 0 ] && grep -q exhausted "$t/errw" || fail "W past 9999 not refused (rc $rc)"
+  [ "$(tr -dc 0-9 < "$common/skillator/ids/W")" = 1679615 ] || fail "W exhaustion moved the counter"
+
   mkdir "$t/plain" && printf -- '- [ ] A7 - x\n' > "$t/plain/TICKETS.md"
   h=$(cd "$t/plain" && GIT_CEILING_DIRECTORIES=$t sh "$me" A 2>"$t/err2")
   [ "$h" = 8 ] || fail "outside git: want 8, got $h"
   grep -q 'not in a git repo' "$t/err2" || fail "outside git: no stderr note"
 
-  echo "ok - next-id.sh selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, runs RUN 6, runs S 13-15, no-git 8)"
+  echo "ok - next-id.sh selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, runs RUN 6, runs S 13-15, W AAAB/AAAC/AABB/peek/count 3/BABA/9999/exhausted, no-git 8)"
 }
 
 if [ "${1:-}" = --selftest ]; then

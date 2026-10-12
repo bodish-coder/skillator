@@ -3,14 +3,17 @@
 #   usage-watch.sh probe ["<original statusline command>"]   (statusLine command)
 #   usage-watch.sh gate                                      (Stop hook)
 #   usage-watch.sh check                                     (any host, no stdin)
+#   usage-watch.sh level                                     (any host, no stdin, no side effect)
 # Threshold: $CLAUDE_USAGE_HANDOFF_PCT, default 92.
+# State dir: $CLAUDE_USAGE_WATCH_DIR, default ~/.claude/handoff-watch (the
+# override exists so tests never touch a live session's flags).
 mode="${1:-probe}"; then_cmd="$2"
 # The state dir keeps its original name on purpose: it is storage, not a
 # skill reference. Renaming it with the skill would strand every live
 # session's flag and .done marker at the old path - a session that had
 # already fired would fire a second time. Skill renames must not migrate
 # a user's machine.
-dir="$HOME/.claude/handoff-watch"
+dir="${CLAUDE_USAGE_WATCH_DIR:-$HOME/.claude/handoff-watch}"
 limit="${CLAUDE_USAGE_HANDOFF_PCT:-92}"
 # The 7-day window is watched separately and lower. The 5-hour window refills in
 # hours, so crossing it is a pause; the weekly one does not, so crossing it ends
@@ -105,6 +108,13 @@ codex_newest_fresh() {
     END { if (p != "" && now - m < w) print p }'
 }
 
+# True when file $1 exists and was written inside the freshness window. A file
+# whose mtime this host cannot read is not fresh - same decline as above.
+fresh_file() {
+  [ -f "$1" ] || return 1
+  mtime_list "$1" | awk -v now="$(now_epoch)" -v w="$stale_secs" '{ if (now - $1 < w) ok=1 } END { exit !ok }'
+}
+
 # Last token_count line of a codex rollout, or nothing.
 codex_last_tc() { tail -400 "$1" | grep '"token_count"' | tail -1; }
 
@@ -151,6 +161,74 @@ codex_wk_pct() {
     END { if (wk!="") printf "%.1f", wk+0 }'
 }
 
+# Newest main flag in the state dir. Its siblings (.weekly, .fivehour, .ctx,
+# .done) are written after it, so picking by mtime alone would read one of
+# them as the max and compare it against the wrong threshold.
+main_flag() {
+  ls -t "$dir" 2>/dev/null | grep -v '\.done$' | grep -v '\.weekly$' \
+    | grep -v '\.fivehour$' | grep -v '\.ctx$' | head -1
+}
+
+# F31: "<5h> <7d> <ctx>" from one codex rollout, '-' for each one absent.
+# 5h = max of the rate_limits windows that are NOT the 10080-minute one,
+# WITHOUT the context ratio - a full context is a compaction, not a quota.
+codex_level() {
+  line=$(codex_last_tc "$1")
+  [ -n "$line" ] || return 0
+  printf '%s' "$line" | awk '
+    match($0,/"last_token_usage":\{[^}]*"total_tokens":[0-9]+/){
+      t=substr($0,RSTART,RLENGTH); sub(/.*"total_tokens":/,"",t) }
+    match($0,/"model_context_window":[0-9]+/){
+      w=substr($0,RSTART,RLENGTH); sub(/.*:/,"",w) }
+    { h=""; wk=""; s=$0
+      while (match(s,/\{[^{}]*"used_percent":[0-9.]+[^{}]*\}/)) {
+        block=substr(s,RSTART,RLENGTH)
+        v=block; sub(/.*"used_percent":/,"",v); sub(/[^0-9.].*/,"",v)
+        if (block ~ /"window_minutes":10080/) { if (wk=="" || v+0>wk+0) wk=v }
+        else { if (h=="" || v+0>h+0) h=v }
+        s=substr(s,RSTART+RLENGTH) } }
+    END { c=""; if (w+0>0 && t+0>0) c=sprintf("%.1f", 100*t/w)
+          printf "%s %s %s", (h==""?"-":sprintf("%.1f",h+0)), (wk==""?"-":sprintf("%.1f",wk+0)), (c==""?"-":c) }'
+}
+
+# level (F31): one machine line for relay-morpheus's chain hold, and nothing
+# else - no stdin, no .done, no threshold, no directory created.
+#   src=<claude-code|codex|none> 5h=<pct|-> 7d=<pct|-> ctx=<pct|-> max=<pct|->
+# Same source order as `check`: a fresh codex rollout first, then the newest
+# Claude Code flag. On Claude Code 5h is the probe's .fivehour flag (the
+# statusline's rate_limits.five_hour.used_percentage); when that is absent, or
+# older than the codex freshness window (3h), it prints '-'. max is the max of every window, context included, and is for
+# reading only: relay's chain decide never holds on it (a full context is a
+# compaction, not a quota) - with no 5h it falls back to 7d, else unobservable.
+if [ "$mode" = level ]; then
+  src=none; h=-; wk=-; cx=-; mx=-
+  roll=$(codex_newest_fresh "${CODEX_HOME:-$HOME/.codex}/sessions")
+  if [ -n "$roll" ]; then
+    set -- $(codex_level "$roll")
+    if [ "$#" = 3 ] && { [ "$1" != - ] || [ "$2" != - ] || [ "$3" != - ]; }; then
+      src=codex; h=$1; wk=$2; cx=$3
+      mx=$(printf '%s %s %s\n' "$h" "$wk" "$cx" | awk '{m=""; for(i=1;i<=NF;i++) if ($i!="-" && (m=="" || $i+0>m+0)) m=$i; print (m==""?"-":m)}')
+    fi
+  fi
+  if [ "$src" = none ]; then
+    f=$(main_flag); key=
+    if [ -n "$f" ]; then key=$f; mx=$(read_pct "$dir/$f"); [ -n "$mx" ] || mx=-
+    else f=$(ls -t "$dir" 2>/dev/null | grep '\.weekly$' | head -1); [ -n "$f" ] && key=${f%.weekly}
+    fi
+    if [ -n "$key" ]; then
+      src=claude-code
+      # Same freshness window as a codex rollout: the statusline rewrites
+      # .fivehour on every render, so one older than that is a dead session's
+      # or an idle one's - its 5h is unobservable, not a reading to hold on.
+      v=; fresh_file "$dir/$key.fivehour" && v=$(read_pct "$dir/$key.fivehour"); [ -n "$v" ] && h=$v
+      v=$(read_pct "$dir/$key.weekly");   [ -n "$v" ] && wk=$v
+      v=$(read_pct "$dir/$key.ctx");      [ -n "$v" ] && cx=$v
+    fi
+  fi
+  echo "src=$src 5h=$h 7d=$wk ctx=$cx max=$mx"
+  exit 0
+fi
+
 # check: any host, no stdin. Reads whatever usage the host leaves on disk.
 # ponytail: only Claude Code has a hook that can see the % AND inject at turn
 # end. Elsewhere this is called from the always-on project file grayskull-power
@@ -171,7 +249,7 @@ if [ "$mode" = check ]; then
     # `.weekly` is written after the main flag, so it is always the newest -
     # picking it here would report the 7-day number as the max and compare it
     # against the wrong threshold. It is read below, by name, not by mtime.
-    f=$(ls -t "$dir" 2>/dev/null | grep -v '\.done$' | grep -v '\.weekly$' | head -1)
+    f=$(main_flag)
     [ -n "$f" ] && { pct=$(read_pct "$dir/$f"); src=claude-code; key=$f; wk=$(read_pct "$dir/$f.weekly"); }
     # A weekly flag with no main flag beside it is a real state (see the gate),
     # so fall back to it rather than reporting no signal at all.
@@ -218,6 +296,14 @@ if [ "$mode" = probe ]; then
   wk=$(printf '%s' "$raw" | tr -d ' 	' | grep -o '"seven_day":{[^}]*"used_percentage":[0-9.]*' | grep -o '[0-9.]*$' | head -1)
   if [ -n "$wk" ]; then mkdir -p "$dir"; printf '%s' "$wk" > "$flag.weekly"
   else rm -f "$flag.weekly"; fi   # never let a stale weekly number outlive its payload
+  # F31: the 5-hour window and the context on their own, for `level`. The key
+  # is rate_limits.five_hour.used_percentage (verified against the statusline
+  # docs, 2026-10-10); the main flag stays the max of every window.
+  for pair in five_hour:fivehour context_window:ctx; do
+    v=$(printf '%s' "$raw" | tr -d ' 	' | grep -o "\"${pair%%:*}\":{[^}]*\"used_percentage\":[0-9.]*" | grep -o '[0-9.]*$' | head -1)
+    if [ -n "$v" ]; then mkdir -p "$dir"; printf '%s' "$v" > "$flag.${pair#*:}"
+    else rm -f "$flag.${pair#*:}"; fi
+  done
   [ -n "$then_cmd" ] && printf '%s' "$raw" | sh -c "$then_cmd"
   exit 0
 fi

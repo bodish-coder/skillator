@@ -4,7 +4,7 @@
 #
 #   next-id.ps1 <KIND> [board-path]      reserve and print the next number
 #   next-id.ps1 -Peek <KIND> [board]     print it without reserving
-#   next-id.ps1 -Runs <dir> RUN|S        also count staged-run files (F22)
+#   next-id.ps1 -Runs <dir> RUN|S|W      also count staged-run files (F22)
 #   next-id.ps1 -Count <n> <KIND>        reserve n in a row, one per line
 #   next-id.ps1 -Selftest
 #
@@ -16,6 +16,9 @@
 # (default 30) is broken. Sub-parts (A58c) count as their parent.
 # -Runs <dir> adds relay-morpheus run files to the max, in the working tree and
 # on every ref: RUN from the filename `run-<n>-`, S from stage rows `| <n> |`.
+# Kind W (F31): a 4-char base-36 relay-chain workflow code (A = 0, AAAB first,
+# 9999 last), only with -Runs; the max is over `### <CODE> - stage <n>` chain
+# headers, decoded - see next-id.sh for why stage cells are not scanned.
 param(
   [string]$Kind,
   [string]$Board,
@@ -59,6 +62,32 @@ function Get-StageMax([string[]]$lines) {
   return $m
 }
 
+# W (F31): chain headers "### AAQ7 - stage 66 - ..." -> decoded max; the
+# separator is any one token. Encode pads with A (= 0) to four chars.
+$W_RE = '^### ([A-Z0-9]{4}) [^ ]+ stage [0-9]'
+$W_ABC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+$W_MAX = 1679615
+function Get-CodeMax([string[]]$lines) {
+  $m = 0
+  foreach ($l in $lines) {
+    if ("$l" -cmatch $W_RE) {
+      $n = 0; foreach ($ch in $Matches[1].ToCharArray()) { $n = $n * 36 + $W_ABC.IndexOf($ch) }
+      if ($n -gt $m) { $m = $n }
+    }
+  }
+  return $m
+}
+function Encode-W([int64]$n) {
+  $c = ''
+  for ($i = 0; $i -lt 4; $i++) { $c = $W_ABC.Substring([int]($n % 36), 1) + $c; $n = [math]::Floor($n / 36) }
+  return $c
+}
+function Emit([string]$k, [int64]$from, [int64]$to) {
+  if ($k -cne 'W') { return @($from..$to) }
+  if ($to -gt $W_MAX) { [Console]::Error.WriteLine("${prog}: kind W exhausted: $to > $W_MAX (9999)"); exit 1 }
+  return @($from..$to | ForEach-Object { Encode-W $_ })
+}
+
 # Run git with args; return @(exitcode, stdout-lines). Never throws.
 function Invoke-GitQuiet([string[]]$a) {
   $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
@@ -80,8 +109,11 @@ function Allocate([string]$k, [string]$b, [bool]$peekOnly, [string]$runs, [strin
     [Console]::Error.WriteLine("${prog}: -Count wants a positive number, got '$cnt'"); exit 2
   }
   $cnt = [int64]$cnt
-  if ($runs -and $k -cnotin @('RUN', 'S')) {
-    [Console]::Error.WriteLine("${prog}: -Runs counts only RUN or S, not '$k'"); exit 2
+  if ($runs -and $k -cnotin @('RUN', 'S', 'W')) {
+    [Console]::Error.WriteLine("${prog}: -Runs counts only RUN, S or W, not '$k'"); exit 2
+  }
+  if (-not $runs -and $k -ceq 'W') {
+    [Console]::Error.WriteLine("${prog}: kind W (workflow code) needs -Runs <dir>: codes live in run files"); exit 2
   }
   $gdir = '.'
   if ($b) { $gdir = Split-Path -Parent $b; if (-not $gdir) { $gdir = '.' } }
@@ -115,6 +147,7 @@ function Allocate([string]$k, [string]$b, [bool]$peekOnly, [string]$runs, [strin
   if ($runs) {
     foreach ($f in @(Get-ChildItem -LiteralPath $runs -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'run-*.md' -or $_.Name -eq 'run.md' })) {
       if ($k -ceq 'RUN') { $x = Get-RunMax @($f.Name) }
+      elseif ($k -ceq 'W') { $x = Get-CodeMax ([IO.File]::ReadAllLines($f.FullName, [Text.Encoding]::UTF8)) }
       else { $x = Get-StageMax ([IO.File]::ReadAllLines($f.FullName, [Text.Encoding]::UTF8)) }
       if ($x -gt $m) { $m = $x }
     }
@@ -136,6 +169,9 @@ function Allocate([string]$k, [string]$b, [bool]$peekOnly, [string]$runs, [strin
           $spec = $rrel; if (-not $spec) { $spec = '.' }
           $s = Invoke-GitQuiet @('-C', $top, 'ls-tree', '-r', '--name-only', $ref, '--', $spec)
           $x = Get-RunMax $s[1]
+        } elseif ($k -ceq 'W') {
+          $s = Invoke-GitQuiet @('-C', $top, 'grep', '-h', '-E', '^### [A-Z0-9]{4} [^ ]+ stage [0-9]', $ref, '--', "${rrel}run-*.md", "${rrel}run.md")
+          $x = Get-CodeMax $s[1]
         } else {
           $s = Invoke-GitQuiet @('-C', $top, 'grep', '-h', '-E', '^\| *[0-9]+ *\|', $ref, '--', "${rrel}run-*.md", "${rrel}run.md")
           $x = Get-StageMax $s[1]
@@ -149,7 +185,7 @@ function Allocate([string]$k, [string]$b, [bool]$peekOnly, [string]$runs, [strin
 
   if (-not $inGit -or $peekOnly) {
     if ($inGit) { $c = Read-Counter $counter; if ($c -gt $m) { $m = $c } }
-    return @(($m + 1)..($m + $cnt))
+    return (Emit $k ($m + 1) ($m + $cnt))
   }
 
   New-Item -ItemType Directory -Force -Path $ids | Out-Null
@@ -178,13 +214,15 @@ function Allocate([string]$k, [string]$b, [bool]$peekOnly, [string]$runs, [strin
   try {
     $c = Read-Counter $counter; if ($c -gt $m) { $m = $c }
     $n = $m + $cnt
+    # Refused before the counter moves: an exhausted W must not burn numbers.
+    if ($k -ceq 'W' -and $n -gt $W_MAX) { [Console]::Error.WriteLine("${prog}: kind W exhausted: $n > $W_MAX (9999)"); exit 1 }
     $t = "$counter.tmp.$PID"
     [IO.File]::WriteAllText($t, "$n`n")
     Move-Item -Force -LiteralPath $t -Destination $counter
   } finally {
     Remove-Item -Recurse -Force -LiteralPath $lock -ErrorAction SilentlyContinue
   }
-  return @(($m + 1)..$n)
+  return (Emit $k ($m + 1) $n)
 }
 
 function Run-Selftest {
@@ -278,6 +316,31 @@ function Run-Selftest {
     $null = Alloc $main @('-Runs', '.skillator', 'A'); if ($script:lastCode -ne 2) { Fail "-Runs accepted kind A" }
     $null = Alloc $main @('-Count', '0', 'S'); if ($script:lastCode -ne 2) { Fail "-Count 0 accepted" }
 
+    # Kind W (F31): 4-char base-36 workflow codes, A = 0, never reused.
+    $null = Alloc $main @('W')
+    if ($script:lastCode -ne 2 -or $script:lastErr -notmatch 'needs -Runs') { Fail "W without -Runs: want exit 2 + message, got $script:lastCode" }
+    # A cell that merely starts with 4 capitals is a stage name, not a code.
+    [IO.File]::AppendAllText((Join-Path $sk 'run-3-here.md'), "| 40 | ZZZZ cell only |   | - | - | - |`n")
+    $w = Alloc $main @('-Runs', '.skillator', 'W'); if ($w -ne 'AAAB') { Fail "W first code: want AAAB, got $w" }
+    $w = Alloc $sec @('-Runs', '.skillator', 'W'); if ($w -ne 'AAAC') { Fail "W from another worktree: want AAAC, got $w" }
+    [IO.File]::AppendAllText((Join-Path $fsk 'run-5-there.md'), "## Chain`n### AABA - stage 12 - c`nprompt: |`n  x`n")
+    G $far @('commit', '-q', '-am', 'chain')
+    $w = Alloc $main @('-Runs', '.skillator', 'W'); if ($w -ne 'AABB') { Fail "W code on another ref (AABA=36) ignored: want AABB, got $w" }
+    $w1 = Alloc $main @('-Peek', '-Runs', '.skillator', 'W'); $w2 = Alloc $main @('--peek', '--runs', '.skillator', 'W')
+    if ($w1 -ne 'AABC' -or $w2 -ne 'AABC') { Fail "W -Peek reserved or miscounted: $w1 $w2" }
+    Push-Location $main
+    try { $all = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $me -Runs .skillator -Count 3 W) } finally { Pop-Location }
+    if (($all -join ',') -ne 'AABC,AABD,AABE') { Fail "W -Count 3: want AABC,AABD,AABE, got $($all -join ',')" }
+    # Decode carries: BAA9 = 36^3 + 35 = 46691, so next is BABA (46692).
+    [IO.File]::AppendAllText((Join-Path $sk 'run-3-here.md'), "## Chain`n### BAA9 - stage 7 - b`n")
+    $w = Alloc $main @('-Runs', '.skillator', 'W'); if ($w -ne 'BABA') { Fail "W decode/encode carry: want BABA after BAA9, got $w" }
+    # The top of the range: 9998 -> 9999, then refused without moving the counter.
+    [IO.File]::AppendAllText((Join-Path $sk 'run-3-here.md'), "### 9998 - stage 7 - top`n")
+    $w = Alloc $main @('-Runs', '.skillator', 'W'); if ($w -ne '9999') { Fail "W round trip at the top: want 9999, got $w" }
+    $null = Alloc $main @('-Runs', '.skillator', 'W')
+    if ($script:lastCode -eq 0 -or $script:lastErr -notmatch 'exhausted') { Fail "W past 9999 not refused (rc $script:lastCode)" }
+    if ((Read-Counter (Join-Path $common 'skillator/ids/W')) -ne 1679615) { Fail 'W exhaustion moved the counter' }
+
     $plain = Join-Path $t 'plain'; New-Item -ItemType Directory -Path $plain | Out-Null
     [IO.File]::WriteAllText((Join-Path $plain 'TICKETS.md'), "- [ ] A7 - x`n")
     $env:GIT_CEILING_DIRECTORIES = $t
@@ -285,7 +348,7 @@ function Run-Selftest {
     if ($h -ne '8') { Fail "outside git: want 8, got $h" }
     if ($script:lastErr -notmatch 'not in a git repo') { Fail 'outside git: no stderr note' }
 
-    Write-Output 'ok - next-id.ps1 selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, runs RUN 6, runs S 13-15, no-git 8)'
+    Write-Output 'ok - next-id.ps1 selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, runs RUN 6, runs S 13-15, W AAAB/AAAC/AABB/peek/count 3/BABA/9999/exhausted, no-git 8)'
   } finally {
     Remove-Item -Recurse -Force -LiteralPath $t -ErrorAction SilentlyContinue
   }

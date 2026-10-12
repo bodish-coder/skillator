@@ -97,6 +97,7 @@ re-check anything an agent asserts without evidence.
 | Ready to merge a branch | `mergeprep-oracle`, then `merge-smith` |
 | Ship to a VPS / set up deployment | `deploy-merlin`, then `deploy-niyoj` |
 | A staged run the session may not outlive — fan-out, long build, flaky link | `relay-morpheus` (the ledger; the build skill still does the building) |
+| Work the whole board as workflows that start each other — "work all open tickets in staged workflows", "keep going", "auto next", "next stage", a pause at 80 % usage | `relay-morpheus` → `references/chain.md` (the board rules stay `tickets-zordon`'s) |
 | A plan whose tasks are written and now have to be built | `tasks-sentinels` — one task, one fresh agent, reviewed before the next |
 | Session ending, context or usage running out | `handoff-cortana` |
 | Starting from someone else's handoff doc | `resume-cortana` |

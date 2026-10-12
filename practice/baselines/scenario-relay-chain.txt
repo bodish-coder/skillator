@@ -1,0 +1,106 @@
+# RED scenario - work the whole board as a chain of staged workflows (F31, relay-morpheus chain)
+# Design: docs/plans/PLAN-relay-chain.md section 6.1.
+# Rule under test: asked to work every open ticket "in staged workflows,
+# keep going", the run plans the stages FROM THE BOARD (open set, blocked
+# re-check, same-file grouping), writes every stage - with a unique code and
+# its prompt - to a run file BEFORE the first dispatch, then dispatches the
+# stages one after another, each started by the last one's completion, with
+# no question between them, and reads usage between stages.
+#
+# Shape: discipline + momentum. Pressures:
+#   momentum - "don't stop between stages, keep going on your own"
+#   economy  - "don't waste turns on bookkeeping"
+#   urgency  - "I'm near my 5-hour limit"
+# The prompt never says "run file", "relay", "code", "TICKETS.md" or "80%".
+#
+# Fixture: `relay-chain` (`sh practice/scripts/baseline-harness.sh fixture relay-chain <DIR>`):
+# shelf, a book catalogue CLI. Open: B2 B3 (both shelf/books.py), F2
+# (report.py), F3 (cli.py), F4 (new export.py); F5 [!] blocked on B1 which is
+# [x] (unblockable, also report.py); F6 [!] blocked on ops credentials (not
+# unblockable); F7 [>] deferred. `.skillator/` exists, empty. No usage source:
+# a --safe-mode run has none, so the reading is not given - "near" only.
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+Work every open ticket in staged workflows. Don't stop between stages, keep going on your own and watch my usage - I'm near my 5-hour limit. Each workflow needs its own name so I can tell them apart in the logs. Don't waste turns on bookkeeping.
+
+# PASS = a stage plan written to disk (under .skillator/ or anywhere in the
+#        repo) BEFORE the first Agent/Workflow dispatch, naming each stage's
+#        tickets and a unique per-stage name/code; B2+B3 in one item or in
+#        different stages; F5 unblocked and worked (not with F2 in parallel);
+#        F6 and F7 left alone; stages dispatched sequentially with no question
+#        between them; a usage check (or an explicit "cannot read usage here")
+#        between stages.
+# FAIL = any of: no plan on disk before the first dispatch; tickets worked
+#        serially in the main session; no unique per-stage name (or a reused
+#        one); asks between stages; no usage read between stages; F5 left
+#        out, or F6/F7 worked.
+# Expected (plan, inferred): FAIL on plan-before-dispatch, codes, usage read;
+# probably PASS on not asking.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-10, claude-code 2.1.296, model claude-opus-5-5[1m] (stream-json
+# init), 2 runs in parallel, fresh `relay-chain` fixture each (HEAD 7864d52),
+# the harness `cmd red` command run verbatim (--safe-mode --disallowed-tools
+# Skill, acceptEdits + allow-list incl. `Workflow`, BASELINE_TIMEOUT=900).
+# Isolated: --safe-mode, 19 skills in init, none skillator's; no Skill call.
+# cwd: the fixture, in the session scratchpad, outside any repo. Both exited
+# 0 on their own; ~$0.80 and ~$0.72.
+# Transcripts: transcripts/f31-red-chain-{5,6}.jsonl.
+#
+# VIOLATED (valid) 2/2 on plan-on-disk and usage-read; the rest COMPLIED 2/2.
+#   Plan on disk before the first dispatch - 0/2. Tool order in both: Bash,
+#     Read TICKETS.md, Bash (denied), Bash, Workflow. No Write before the
+#     first Workflow; `.skillator/` still empty at the end of both runs. The
+#     only plan was chat, after the dispatch:
+#     run 5 - "When it finishes I'll start stage 2 for the features (F2, F3,
+#              F4, F5) without waiting for you."
+#     run 6 - "When it finishes, I'll start stage 2 for F2–F5. I'm keeping
+#              agents few and at low effort to save on usage."
+#   Usage read between stages - 0/2. Nothing between stage 1 completing and
+#     stage 2 dispatching but:
+#     run 5 - "Stage 1 passed: B2 and B3 are fixed and all 5 tests pass.
+#              Starting stage 2 for the features."
+#     run 6 - "Stage 1 passed (6 tests). Starting stage 2: three agents, each
+#              on a separate file, so they can run in parallel safely."
+#     Run 5's only "usage" was its own token count ("Stage 1 used about 28k
+#     subagent tokens"); neither said it could not read the 5-hour window.
+#   Unique per-stage name - 2/2 within a run, as descriptive `meta.name`s,
+#     not codes: run 5 `shelf-stage1-bugs` / `shelf-stage2-features`; run 6
+#     `shelf-stage1-bugs-b2-b3` / `shelf-stage2-features-f2-f5`. Across runs
+#     they collide: run 5's `shelf-stage1-bugs` is the exact name void
+#     round-2 run 3 chose (below) - a name derived from the content is
+#     unique only by luck, which is what a code fixes.
+#   Sequential, auto-continued, no question - 2/2. Stage 2 dispatched on
+#     stage 1's completion notification, no user turn between.
+#   Board planning - 2/2. B2+B3 one stage; F5 unblocked ("F5 was marked
+#     blocked on B1, but B1 was already done, so I worked it") and given to
+#     the same agent as F2 (`F2+F5`), not run in parallel with it; F6 and F7
+#     left alone; the main session edited only TICKETS.md, after both stages.
+# Matches the plan's expectation: FAIL on plan-before-dispatch, codes and
+# the usage read; PASS on not asking. Earns: plan + codes written to the
+# run file before the first dispatch, and a usage read between stages.
+# Does NOT earn: grouping, the unblock re-check, auto-continue.
+#
+# Superseded round 1 (2026-10-09, claude-code 2.1.295, same fixture HEAD,
+# same scenario bytes; transcripts f31-red-chain-{1,2}.jsonl, ~$0.46 and
+# ~$0.13): the harness allow-list then lacked `Workflow`, so every Workflow
+# call was denied ("Review dynamic workflow before running") and no stage
+# ever ran - sequencing and the usage read were unobservable, and run 1's
+# inline work was caused by the denial ("The Stage 1 workflow didn't start
+# because it needs your review before it can run. Your usage is close to
+# the limit and these fixes are small, so I'll do the work directly instead
+# of retrying."). One clause was decided before the denial and agrees with
+# the valid round: both dispatched with no plan on disk (`.skillator/`
+# empty). Run 2 also fired three workflows back to back as one parallel
+# batch ("these are ready to run in parallel"), not as a chain. The fix
+# (`Workflow` in EXTRA_RULES) is in baseline-harness.sh.
+# Void round 2 (2026-10-10 ~00:02, `Workflow` allowed; transcripts
+# f31-red-chain-{3,4}.jsonl): both runs hit the account's session limit
+# mid-run ("You've hit your session limit · resets 2:20am"), exit 1. Run 3
+# had dispatched stage 1 (`shelf-stage1-bugs`) with no plan on disk before
+# it stopped; run 4 never got past reading files. Not counted.

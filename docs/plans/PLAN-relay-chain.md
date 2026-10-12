@@ -218,7 +218,7 @@ call that did not happen.
 
 | Host | 5-hour reading available to `usage-watch` | Used for the hold |
 |---|---|---|
-| claude-code | the probe writes `max(all used_percentage)` to the flag and `seven_day` to `.weekly` (`verified`). The 5-hour value is **not** separable today — the main flag is max(5h, context) | new: probe also writes `<flag>.fivehour` from `five_hour.used_percentage` (`inferred`: the sibling key of the verified `seven_day`; stage 62 confirms the key against a live statusline JSON and records it). Fallback when absent: the main flag (max) — holds earlier, never later |
+| claude-code | the probe writes `max(all used_percentage)` to the flag and `seven_day` to `.weekly` (`verified`). The 5-hour value is **not** separable today — the main flag is max(5h, context) | new: probe also writes `<flag>.fivehour` from `five_hour.used_percentage` (`inferred`: the sibling key of the verified `seven_day`; stage 62 confirms the key against a live statusline JSON and records it). Fallback when absent: the 7-day reading (`max(5h, 7d)` is the 7-day reading when the 5-hour one cannot be separated); with neither window, `UNOBSERVABLE`. Never the main flag (max) and never context |
 | codex | `rate_limits.*.used_percent` per window in the rollout; `window_minutes 10080` = 7-day (`verified` A98). The 5-hour window is the max non-10080 window, excluding the context ratio | that value; context stays out of the hold (a full context is a compaction, not a quota) |
 | cursor · antigravity · pi | **none** (`verified` PLATFORMS.md) | no hold possible. The plan says so once; each stage's ruling carries `usage: unobservable`. The chain runs to the end. Rejected: a blind stage cap — it invents a seventh stop |
 
@@ -291,7 +291,7 @@ gate still fires mid-stage if reached — unchanged.
 | 11 | Code collision across clones that never fetched | documented best-effort, same as ticket IDs; a code also carries the stage number in every place it appears, so a collision is a cosmetic duplicate, never a wrong dispatch |
 | 12 | Workflow tool absent | §3.4 — Agent fan-out, `mode: agents` recorded |
 | 13 | Compaction drops in-flight state | all state the loop needs is in the run file (`hold:`, `driver:`, `run:`, prompt, codes); after compaction the session re-reads `resume` — PLATFORMS non-negotiable "write state before any checkpoint" |
-| 14 | 5-hour and context conflated (Claude Code) | `.fivehour` flag; fallback to max is conservative. A hold that fires on context % is a false hold, costs 10 minutes, never a wrong dispatch |
+| 14 | 5-hour and context conflated (Claude Code) | `.fivehour` flag; without it decide falls back to the 7-day reading, then `UNOBSERVABLE` — never to max, so context % never fires a hold |
 | 15 | The hold fires at 80 %, watch-cortana at 92 % mid-stage | expected; the running stage finishes under watch-cortana's drain order; the chain's `hold:` is written by the resume when it sees the `.done` marker |
 | 16 | `chain wait` itself consumes the Stop hook / usage | it is a shell loop, not model turns; the main session is idle inside Monitor. On hosts without Monitor the session ends the turn instead |
 | 17 | Stage prompts drift from the chain block (edited by hand) | `chain dispatch` copies the block verbatim at dispatch time; the In-flight block is what ran, the chain block is what was planned; both stay |
@@ -405,7 +405,8 @@ file's stage table columns; `tasks-sentinels`; `handoff-cortana`;
 ## 8. Open risks
 
 1. `five_hour.used_percentage` key name is `inferred` — stage 62 must capture a
-   real statusline payload; if absent, the hold runs on the max and holds early.
+   real statusline payload; if absent, the hold runs on the 7-day reading, and
+   with no 7-day reading either the decision is `UNOBSERVABLE`.
 2. Monitor's maximum wait and whether its completion reliably re-enters the
    session after hours idle is `inferred`; the re-arm loop covers a short max,
    not a Monitor that never returns — the resume path covers that.

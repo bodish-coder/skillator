@@ -4,19 +4,29 @@ $ErrorActionPreference = 'Stop'
 $ps  = Join-Path $PSScriptRoot 'usage-watch.ps1'
 $sh  = Join-Path $PSScriptRoot 'usage-watch.sh'
 $sid = "selftest-$PID"
-$flag = Join-Path $HOME ".claude\handoff-watch\$sid"
 # check-mode fixtures live here, never in the user's real HOME: `check` writes a
 # genuine one-shot .done when it fires, so running it against the live
 # ~/.codex/sessions would burn a real session's handoff (and be non-deterministic).
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "watch-cortana-selftest-$PID"
+# The probe/gate session's state dir is a temp one too (CLAUDE_USAGE_WATCH_DIR),
+# never the live ~/.claude/handoff-watch: a probe writes up to four flags
+# (.weekly, .fivehour, .ctx beside the main one), and a 98.2% flag there is
+# what a concurrent chain's `level` would read as the newest session and hold.
+$liveW = Join-Path $tmp 'watch'
+$flag = Join-Path $liveW $sid
+$noCodexHome = Join-Path $tmp 'no-codex-home'
 $shExe = (Get-Command sh -ErrorAction SilentlyContinue)
 
 # --- helpers ----------------------------------------------------------------
 # A crashed script must fail the test: capture the output AND the exit code, so
 # "produced no output" can never be mistaken for "correctly did not fire".
 function Run($mode, $json) {
-  $out = if ($null -eq $json) { (& powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode $mode) -join "`n" }
-         else { ($json | & powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode $mode) -join "`n" }
+  $oW = $env:CLAUDE_USAGE_WATCH_DIR; $oC = $env:CODEX_HOME
+  $env:CLAUDE_USAGE_WATCH_DIR = $liveW; $env:CODEX_HOME = $noCodexHome
+  try {
+    $out = if ($null -eq $json) { (& powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode $mode) -join "`n" }
+           else { ($json | & powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode $mode) -join "`n" }
+  } finally { $env:CLAUDE_USAGE_WATCH_DIR = $oW; $env:CODEX_HOME = $oC }
   if ($LASTEXITCODE -ne 0) { throw "ps $mode`: exit $LASTEXITCODE, output '$out'" }
   $out
 }
@@ -26,19 +36,23 @@ function Gate($json)  { Run 'gate'  $json }
 function RunSh($mode, $hm, $json) {
   $posix = ($hm -replace '\\', '/')
   $old = $env:HOME; $env:HOME = $posix
+  $oW = $env:CLAUDE_USAGE_WATCH_DIR; $oC = $env:CODEX_HOME
+  Remove-Item Env:CLAUDE_USAGE_WATCH_DIR -ErrorAction SilentlyContinue; $env:CODEX_HOME = "$posix/.codex"
   try {
     $out = if ($null -eq $json) { (& $shExe.Source $sh $mode) -join "`n" }
            else { ($json | & $shExe.Source $sh $mode) -join "`n" }
-  } finally { $env:HOME = $old }
+  } finally { $env:HOME = $old; $env:CLAUDE_USAGE_WATCH_DIR = $oW; $env:CODEX_HOME = $oC }
   if ($LASTEXITCODE -ne 0) { throw "sh $mode`: exit $LASTEXITCODE, output '$out'" }
   $out
 }
 # $HOME in a child PowerShell follows USERPROFILE on Windows.
 function RunCheck($hm) {
   $oldU = $env:USERPROFILE; $oldH = $env:HOME
+  $oW = $env:CLAUDE_USAGE_WATCH_DIR; $oC = $env:CODEX_HOME
   $env:USERPROFILE = $hm; $env:HOME = $hm
+  Remove-Item Env:CLAUDE_USAGE_WATCH_DIR -ErrorAction SilentlyContinue; $env:CODEX_HOME = Join-Path $hm '.codex'
   try { $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode check) -join "`n" }
-  finally { $env:USERPROFILE = $oldU; $env:HOME = $oldH }
+  finally { $env:USERPROFILE = $oldU; $env:HOME = $oldH; $env:CLAUDE_USAGE_WATCH_DIR = $oW; $env:CODEX_HOME = $oC }
   if ($LASTEXITCODE -ne 0) { throw "ps check: exit $LASTEXITCODE, output '$out'" }
   $out
 }
@@ -79,7 +93,7 @@ function NoDoneFiles($hm) {
   -not (Get-ChildItem (Join-Path $hm '.claude\handoff-watch') -Filter '*.done' -ErrorAction SilentlyContinue)
 }
 
-Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
 # The runtime state dir is storage, not a skill reference, and must survive a
 # skill rename: a session that already fired wrote its .done under the old path
@@ -117,7 +131,12 @@ try {
   # window does not, so crossing it ends the week's work - which is why it
   # fires at a lower threshold and adds a fourth step the other windows have no
   # use for: ask the user where to go next, with recommendations.
-  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
+  # F31 review 3: a clear takes every flag the probe wrote (.fivehour and .ctx
+  # too), and the flags were never in the live ~/.claude/handoff-watch.
+  $left = @(Get-ChildItem (Split-Path $flag -Parent) -File -Filter "$sid*" -ErrorAction SilentlyContinue)
+  if ($left) { throw "selftest: a clear left $($left.Name -join ', ') behind" }
+  if ((Split-Path $flag -Parent) -eq (Join-Path $HOME '.claude\handoff-watch')) { throw 'selftest: probe/gate run against the live ~/.claude/handoff-watch' }
 
   # A 5-hour spike must NOT fire the weekly order, even though it is the max.
   Probe (& $sl 98.2 12 40)
@@ -125,7 +144,7 @@ try {
   $r = Gate $stop
   if ($r -notmatch '"decision":"block"') { throw 'gate: 5-hour spike did not fire at all' }
   if ($r -match 'AskUserQuestion') { throw 'gate: 5-hour spike fired the weekly order' }
-  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
   # The weekly window alone, over 90 but under the 92 the other windows use.
   Probe (& $sl 40 91 55)
@@ -139,12 +158,12 @@ try {
   if ($r -notmatch '91') { throw 'gate: weekly block does not name the percentage' }
   if ($r -notmatch 'AskUserQuestion') { throw 'gate: weekly block has no step 4' }
   if ($r -notmatch 'recommend') { throw 'gate: step 4 does not ask for a recommendation' }
-  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
   # Weekly under its own threshold and nothing else over: silence.
   Probe (& $sl 40 89 55)
   if (Gate $stop) { throw 'gate: weekly fired below 90' }
-  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
   # F18/finding 4: the two gates fire at different times in one session. A
   # 5-hour spike at 10:00 must not eat the weekly order when the 7-day window
@@ -155,7 +174,7 @@ try {
   Probe (& $sl 98.2 91 55)
   $r = Gate $stop
   if ($r -notmatch 'AskUserQuestion') { throw 'gate sequence: the weekly order was eaten by the earlier .done' }
-  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
   # F18 review: step 4 must come BEFORE "Then tell the user ... and stop.".
   # Appending it after put the stop instruction ahead of the one step whose
@@ -166,7 +185,7 @@ try {
   $iAsk = $r.IndexOf('AskUserQuestion'); $iStop = $r.IndexOf('Then tell the user')
   if ($iAsk -lt 0 -or $iStop -lt 0) { throw 'gate: weekly order is missing a piece' }
   if ($iAsk -gt $iStop) { throw 'gate: step 4 comes after the stop instruction' }
-  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
   # F18 review: a weekly flag with NO main flag beside it is reachable - it is
   # exactly what a probe that failed halfway leaves behind - and the gate used
@@ -175,7 +194,7 @@ try {
   [IO.File]::WriteAllText((Join-Path (Convert-Path (Split-Path $flag -Parent)) "$sid.weekly"), '91')
   $r = Gate $stop
   if ($r -notmatch 'AskUserQuestion') { throw 'gate: weekly-only flag did not fire' }
-  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
   # A45/F18: `sort` is a name Windows steals. The sh probe used to pipe the
   # percentages through `sort -g`, which from a PowerShell parent resolves to
@@ -202,11 +221,11 @@ try {
   }
 
   # A12 regression, gate side: a BOM'd flag below threshold must not fire.
-  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
   Set-Content $flag '12.0' -Encoding utf8
   if (Gate $stop) { throw 'gate: BOM flag fired below threshold (A12)' }
   if (Test-Path "$flag.done") { throw 'gate: BOM flag burned the one-shot (A12)' }
-  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
   # --- check mode, against fixture HOMEs only --------------------------------
   # codex rollout below threshold: report, do not fire, leave no .done behind.
@@ -363,7 +382,7 @@ try {
   # --- A98/A99: codex Stop stdin, gate reads the rollout named by transcript_path
   New-Item $tmp -ItemType Directory -Force | Out-Null
   $sidCx  = "selftest-a99-$PID"
-  $flagCx = Join-Path $HOME ".claude\handoff-watch\$sidCx"
+  $flagCx = Join-Path $liveW $sidCx
   function CxStop($tp) {
     if (-not $tp) { return "{`"session_id`":`"$sidCx`",`"stop_hook_active`":false}" }
     $tpEsc = $tp.Replace('\', '\\')   # raw JSON bytes: one path separator -> two backslash chars
@@ -436,11 +455,93 @@ try {
     ClearCxSh
   }
 
+  # --- F31: `level` and CLAUDE_USAGE_WATCH_DIR, on BOTH twins ----------------
+  # `level` is what relay-morpheus's chain hold reads, so it must separate the
+  # 5-hour window from the context (a full context is not a quota), say `none`
+  # rather than 0 when there is nothing, and never write a thing. The override
+  # dir is how every test here, and the chain fixtures, stay off the live
+  # ~/.claude/handoff-watch.
+  function RunW($tw, $mode, $wdir, $codexHome, $json) {
+    $oW = $env:CLAUDE_USAGE_WATCH_DIR; $oC = $env:CODEX_HOME
+    $env:CLAUDE_USAGE_WATCH_DIR = $wdir.Replace('\', '/'); $env:CODEX_HOME = $codexHome.Replace('\', '/')
+    try {
+      if ($tw -eq 'sh') {
+        $out = if ($null -eq $json) { (& $shExe.Source $sh $mode) -join "`n" } else { ($json | & $shExe.Source $sh $mode) -join "`n" }
+      } else {
+        $out = if ($null -eq $json) { (& powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode $mode) -join "`n" }
+               else { ($json | & powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode $mode) -join "`n" }
+      }
+    } finally { $env:CLAUDE_USAGE_WATCH_DIR = $oW; $env:CODEX_HOME = $oC }
+    if ($LASTEXITCODE -ne 0) { throw "$tw $mode`: exit $LASTEXITCODE, output '$out'" }
+    $out
+  }
+  # The real statusline shape (code.claude.com/docs/en/statusline, 2026-10-10):
+  # rate_limits.five_hour / seven_day, context_window with a nested object.
+  $slw = { param($s, $a, $b, $c) "{`"session_id`":`"$s`",`"rate_limits`":{`"five_hour`":{`"used_percentage`":$a,`"resets_at`":1738425600},`"seven_day`":{`"used_percentage`":$b,`"resets_at`":1738857600}},`"context_window`":{`"context_window_size`":200000,`"used_percentage`":$c,`"current_usage`":{`"input_tokens`":8500}}}" }
+  $noCodex = Join-Path $tmp 'f31-no-codex'
+  $twins = @('ps'); if ($shExe) { $twins += 'sh' }
+  foreach ($tw in $twins) {
+    # Nothing anywhere: src=none, and the dir is NOT created.
+    $w = Join-Path $tmp "f31-none-$tw"
+    $l = RunW $tw 'level' $w $noCodex $null
+    if ($l -ne 'src=none 5h=- 7d=- ctx=- max=-') { throw "$tw level none: got '$l'" }
+    if (Test-Path $w) { throw "$tw level: created the state dir" }
+
+    # Probe through the override dir, then level separates 5h (78) from ctx (88).
+    $w = Join-Path $tmp "f31-cc-$tw"
+    RunW $tw 'probe' $w $noCodex (& $slw 'sess-f31' 78 40.5 88) | Out-Null
+    if (-not (Test-Path (Join-Path $w 'sess-f31'))) { throw "$tw probe: CLAUDE_USAGE_WATCH_DIR not honoured" }
+    if ((Get-Content (Join-Path $w 'sess-f31.fivehour') -Raw).Trim() -ne '78') { throw "$tw probe: .fivehour not the five_hour value" }
+    $l = RunW $tw 'level' $w $noCodex $null
+    if ($l -ne 'src=claude-code 5h=78 7d=40.5 ctx=88 max=88') { throw "$tw level cc: got '$l'" }
+    # F31 review 3: the statusline rewrites .fivehour on every render; one
+    # older than the codex freshness window (3h) is a dead or idle session's,
+    # and holding on it never releases. 5h goes '-', the rest stays.
+    (Get-Item (Join-Path $w 'sess-f31.fivehour')).LastWriteTime = (Get-Date).AddHours(-4)
+    $l = RunW $tw 'level' $w $noCodex $null
+    if ($l -ne 'src=claude-code 5h=- 7d=40.5 ctx=88 max=88') { throw "$tw level: a 4h-old .fivehour was read as live, got '$l'" }
+    (Get-Item (Join-Path $w 'sess-f31.fivehour')).LastWriteTime = (Get-Date).AddHours(-2)
+    $l = RunW $tw 'level' $w $noCodex $null
+    if ($l -ne 'src=claude-code 5h=78 7d=40.5 ctx=88 max=88') { throw "$tw level: a 2h-old .fivehour was dropped, got '$l'" }
+    if (Get-ChildItem $w -Filter '*.done') { throw "$tw level: wrote a .done" }
+
+    # check must still pick the MAIN flag: .ctx is written last, so a pick by
+    # mtime alone would read the context (10) instead of the max (98).
+    $w = Join-Path $tmp "f31-shadow-$tw"
+    RunW $tw 'probe' $w $noCodex (& $slw 'sess-f31' 98 40 10) | Out-Null
+    $c = RunW $tw 'check' $w $noCodex $null
+    if ($c -notmatch '^HANDOFF NOW \(claude-code 98%\)') { throw "$tw check: a .fivehour/.ctx flag shadowed the max, got '$c'" }
+    if (-not (Test-Path (Join-Path $w 'sess-f31.done'))) { throw "$tw check: CLAUDE_USAGE_WATCH_DIR not honoured for .done" }
+    $l = RunW $tw 'level' $w $noCodex $null
+    if ($l -ne 'src=claude-code 5h=98 7d=40 ctx=10 max=98') { throw "$tw level after check: got '$l'" }
+
+    # gate reads the override dir too.
+    $w = Join-Path $tmp "f31-gate-$tw"
+    RunW $tw 'probe' $w $noCodex (& $slw 'sess-g' 97 40 10) | Out-Null
+    $g = RunW $tw 'gate' $w $noCodex '{"session_id":"sess-g","stop_hook_active":false}'
+    if ($g -notmatch '"decision":"block"') { throw "$tw gate: CLAUDE_USAGE_WATCH_DIR not honoured, got '$g'" }
+
+    # A payload with no rate_limits (API-key user): no .fivehour, and a stale
+    # one from the previous payload is removed - 5h=- , the caller uses max.
+    RunW $tw 'probe' $w $noCodex '{"session_id":"sess-g","context_window":{"used_percentage":30}}' | Out-Null
+    if (Test-Path (Join-Path $w 'sess-g.fivehour')) { throw "$tw probe: stale .fivehour outlived its payload" }
+    $l = RunW $tw 'level' $w $noCodex $null
+    if ($l -ne 'src=claude-code 5h=- 7d=- ctx=30 max=30') { throw "$tw level no-rate-limits: got '$l'" }
+
+    # codex: 5h is the max non-10080 window WITHOUT the context ratio (90%).
+    $hc = NewHome "f31-codex-$tw"
+    $line = '{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"total_tokens":180000},"model_context_window":200000},"rate_limits":{"primary":{"used_percent":12.0,"window_minutes":300},"secondary":{"used_percent":45,"window_minutes":10080}}}}'
+    $cd = Join-Path $hc '.codex\sessions\2026\10\10'; New-Item $cd -ItemType Directory -Force | Out-Null
+    [IO.File]::WriteAllText([IO.Path]::Combine((Convert-Path $cd), 'rollout-f31.jsonl'), "$line`n")
+    $l = RunW $tw 'level' (Join-Path $tmp "f31-cx-$tw") (Join-Path $hc '.codex') $null
+    if ($l -ne 'src=codex 5h=12.0 7d=45.0 ctx=90.0 max=90.0') { throw "$tw level codex: got '$l'" }
+    if (Test-Path (Join-Path $tmp "f31-cx-$tw")) { throw "$tw level codex: created the state dir" }
+  }
+
   'ok'
 }
 finally {
   # try/finally, not a trailing line: a failing assertion must still clean up.
-  Remove-Item "$flag", "$flag.weekly", "$flag.done", "$flag.weekly.done" -ErrorAction SilentlyContinue
-  Remove-Item (Join-Path $HOME ".claude\handoff-watch\selftest-a99-$PID*") -ErrorAction SilentlyContinue
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
   Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

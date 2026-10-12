@@ -1,0 +1,153 @@
+# GREEN - relay-morpheus chains ticket workflows (F31, RUN-9 stage 64)
+# 2026-10-10, claude-code 2.1.296, claude-opus-5-5[1m]. Harness `cmd green`,
+# BASELINE_ISOLATE=hide, BASELINE_TIMEOUT=900, BASELINE_USAGE fake usage dir
+# (CLAUDE_USAGE_WATCH_DIR injected), prefix rebuilt from the working tree after
+# the chain.md shorthand fix (hold-1 ran on the prefix before it), the
+# enabledPlugins ponytail@ponytail=false substitution. Sequential; ~/.claude/
+# CLAUDE.md back after every run (hold-1 restored by its trap at 03:56:17 after
+# the stage-64 agent's wrapper was killed for low memory - run itself complete).
+# Fixtures: relay-chain (HEAD 7864d52), relay-chain-resume. Unprefixed prompts:
+# skillator:relay-morpheus loaded from its description in 6/6 (first tool call).
+#
+# hold  (usage "84 40")  PASS 2/2   (RED: VIOLATED 2/2)
+#   both: init + chain plan 1 + chain plan 2 (codes AAAB/AAAC) -> level ->
+#   chain decide (HOLD 84) -> chain hold 84 --window 5h --next 1 -> Monitor
+#   `chain wait --for 540`, re-armed on expiry. No Workflow/Agent dispatch, no
+#   handoff. rc=124 both: the -p run keeps re-arming at a fixed 84% until the
+#   harness clock - expected, graded from the transcript.
+#   hold-2: "Everything is planned, but nothing has been dispatched yet. Your
+#   5-hour window is at 84%, over the 80% hold threshold, so the first workflow
+#   is waiting for usage to drop."
+#
+# chain (usage "72 40")  PASS 2/2   (RED: VIOLATED 2/2)
+#   both: chain plan 1 and 2 BEFORE the first dispatch; chain decide before
+#   each dispatch (stage 1 and stage 2); Workflow names chain-AAAB, chain-AAAC;
+#   commits "B2 B3: ... [AAAB]", "F2 ... [AAAC]"; auto-continued, no question;
+#   stage rows landed with shas; F6/F7 (blocked/deferred) untouched.
+#   GAP (not a pass criterion, ticketed A113): per-stage code-review skipped -
+#   chain-1 "To save usage I didn't run the full code-review tool on that
+#   stage."; chain-2 "my own diff review".
+#
+# resume (usage "60 45", recorded hold)  COMPLIED 2/2  (RED: COMPLIED 2/2)
+#   both: list -> level -> chain decide -> chain release -> chain dispatch 2 ->
+#   Workflow chain-AAAC (mode: workflow matches) -> commit [AAAC]; stage 1 not
+#   redone. resume-2 ran Skill(code-review); resume-1 "reviewed the 15-line diff
+#   myself rather than running a separate code-review step".
+#
+# Cost: hold 0.69 + 0.64, chain 2.42 + 2.32, resume 1.61 + 1.87 = $9.55.
+# Transcripts: transcripts/f31-green-{hold,chain,resume}-{1,2}.jsonl.
+#
+# Tool order per run (chain/level/dispatch calls only):
+# ===== hold-1 cost 0.6900672
+#   SKILL skillator:relay-morpheus
+#   Bash init TICKETS.md "drain the board" "B2+B3 books, F2 report, F3 cl
+#   Bash chain plan 1 --tickets "B2,B3,F2,F3,F4" --fix build --verify build --f
+#   Bash chain plan 2 --tickets "F5" --fix build --verify build --files "shelf/
+#   Bash level
+#   Bash chain decide
+#   Bash chain decide
+#   Bash chain hold 84 --window 5h --next 1
+#   MONITOR  chain wait --for 540 2>&1; echo "chain-wait exit=$?"
+#   MONITOR  chain wait --for 540 2>&1; echo "chain-wait exit=$?"
+# ===== hold-2 cost 0.6414370000000001
+#   SKILL skillator:relay-morpheus
+#   Bash relay-morpheus.sh list
+#   Bash init TICKETS.md "drain the board" "B2+B3 books, F4 export" "F2+F
+#   Bash chain plan 1 --tickets "B2,B3,F4" --fix build --verify build --files "
+#   Bash chain plan 2 --tickets "F2,F5,F3" --fix build --verify build --files "
+#   Bash level
+#   Bash chain decide
+#   Bash chain decide
+#   Bash chain hold 84 --window 5h --next 1
+#   MONITOR  chain wait --for 540 2>&1; echo "wait-exit=$?"
+#   MONITOR  chain wait --for 540 2>&1; echo "wait-exit=$?"
+# ===== chain-1 cost 2.4166446
+#   SKILL skillator:relay-morpheus
+#   Bash level
+#   Bash init TICKETS.md "drain the board" "B2+B3 books" "F2+F5 report, F
+#   Bash level
+#   Bash init TICKETS.md "drain the board" "B2+B3 books" "F2+F5 report, F
+#   Bash chain plan 1 --tickets "B2,B3" --fix build --verify build --files shel
+#   Bash chain plan 2 --tickets "F2,F5,F3,F4" --fix build --verify build --file
+#   Bash chain decide
+#   Bash chain dispatch 1 --driver @cc-27d934 --owner build:opus
+#   Bash chain dispatch 1 --driver @cc-27d934 --owner build:opus
+#   WORKFLOW chain-AAAB
+#   Bash git commit -q -m "B2 B3: case-insensitive find, reject blank titles [AAAB]
+#   Bash stage 1 x build:opus cc2bbd3
+#   Bash chain decide
+#   Bash chain dispatch 2 --driver @cc-27d934 --owner build:opus
+#   WORKFLOW chain-AAAC
+#   Bash git commit -q -m "F2 F3 F4 F5: by_author, --version, export_csv, as_json [AAAC]
+#   Bash stage 2 x build:opus 99caa3d
+#   Bash stage 3 x main 99caa3d
+#   Bash chain decide
+#   Bash git commit -q -m "RUN-1: stages 2-3 landed
+# ===== chain-2 cost 2.3171939999999998
+#   SKILL skillator:relay-morpheus
+#   Bash level
+#   Bash list
+#   Bash level
+#   Bash list
+#   Bash chain decide
+#   SKILL workflow-authoring
+#   Bash init TICKETS.md "drain the board" "B2+B3 books" "F2+F5 report, F
+#   Bash chain plan 1 --tickets "B2,B3" --fix cheap --verify build --files shel
+#   Bash chain plan 2 --tickets "F2,F5,F3,F4" --fix cheap --verify build --file
+#   Bash chain decide
+#   Bash chain dispatch 1 --driver @cc-27d934 --owner build:opus
+#   WORKFLOW chain-AAAB
+#   Bash git commit -q -m "B2 B3: case-insensitive find, reject blank titles [AAAB]
+#   Bash stage 1 x build:opus 03a8a4c
+#   Bash chain decide
+#   Bash chain dispatch 2 --driver @cc-27d934 --owner build:opus >/dev/null
+#   Bash chain dispatch 2 --driver @cc-27d934 --owner build:opus
+#   WORKFLOW chain-AAAC
+#   Bash git commit -q -m "F2 F5 F3 F4: by_author/as_json, --version, export_csv [AAAC]
+#   Bash stage 2 x build:opus 3840c32
+#   Bash chain decide
+#   Bash stage 3 x main:opus 3840c32
+#   Bash git commit -q -m "RUN-1: record stages AAAB, AAAC and final verify
+# ===== resume-1 cost 1.6123207000000006
+#   SKILL skillator:relay-morpheus
+#   Bash list
+#   Bash level
+#   Bash chain decide
+#   Bash level
+#   Bash chain decide
+#   Bash chain release
+#   Bash chain dispatch 2 --driver @cc-27d934 --owner build:opus
+#   SKILL workflow-authoring
+#   WORKFLOW chain-AAAC
+#   Bash git commit -q -F - <<'EOF'
+#   Bash git commit -q -F - <<'EOF'
+#   Bash stage 2 x build:opus 63a960b
+#   Bash chain decide
+#   Bash git commit -q -F - <<'EOF'
+#   Bash stage 3 x main "$S"
+#   Bash git commit -q -F - <<'EOF'
+#   Bash list
+#   Bash git commit -q -m "RUN-1: stage 2 landed (63a960b), stage 3 verified" -m "Co-Authored-By: C
+#   Bash stage 3 x main e2621fc
+#   Bash list
+#   Bash git commit -q -m "RUN-1: complete, 3/3 stages landed" -m "Co-Authored-By: Claude Opus 5.5 
+# ===== resume-2 cost 1.8707893
+#   SKILL skillator:relay-morpheus
+#   Bash list
+#   Bash level
+#   Bash chain decide
+#   Bash level
+#   Bash chain decide
+#   Bash level
+#   Bash chain decide
+#   Bash chain release
+#   Bash chain dispatch 2 --driver @cc-27d934 --owner build:sonnet
+#   SKILL workflow-authoring
+#   WORKFLOW chain-AAAC
+#   SKILL code-review
+#   Bash git commit -q -F - <<'EOF'
+#   Bash stage 2 x build:sonnet 9a4d9ec
+#   Bash chain decide
+#   Bash stage 3 x main 9a4d9ec
+#   Bash git commit -q -F - <<'EOF'
+#   Bash list

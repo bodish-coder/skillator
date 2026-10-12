@@ -316,6 +316,10 @@ for the host table.
 **Never start a workflow the user didn't opt into.** A workflow can spawn dozens
 of agents; if the board is big and they didn't ask, say what it would cost first.
 
+**Several workflows in a row, each starting the next with a usage hold** —
+"work every open ticket in staged workflows, keep going" — is `relay-morpheus` →
+`references/chain.md`; the board rules on this page do not change there.
+
 ### The shape
 
 Scout inline first — read `TICKETS.md`, pick the tickets for this cycle, group

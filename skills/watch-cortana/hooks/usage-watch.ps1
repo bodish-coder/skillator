@@ -2,16 +2,19 @@
 #   -Mode probe [-Then "<original statusline command>"]   (Claude Code statusLine)
 #   -Mode gate                                            (Claude Code / codex Stop hook)
 #   -Mode check                                           (any host, no stdin - see below)
+#   -Mode level                                           (any host, no stdin, no side effect)
 # Threshold: $env:CLAUDE_USAGE_HANDOFF_PCT, default 92.
+# State dir: $env:CLAUDE_USAGE_WATCH_DIR, default ~/.claude/handoff-watch (the
+# override exists so tests never touch a live session's flags).
 #
 # Claude Code and codex (A83: gate reads the rollout named by transcript_path)
 # have a Stop hook that can inject. Cursor/Antigravity get `check`, which reads
 # whatever the host leaves on disk and prints the order for the agent to follow.
 # Wired by the always-on project file grayskull-power writes, not by a hook.
-param([ValidateSet('probe','gate','check')][string]$Mode = 'probe', [string]$Then)
+param([ValidateSet('probe','gate','check','level')][string]$Mode = 'probe', [string]$Then)
 
 # The state dir keeps its original name on purpose - see the sh twin.
-$dir      = Join-Path $HOME '.claude/handoff-watch'
+$dir      = if ($env:CLAUDE_USAGE_WATCH_DIR) { $env:CLAUDE_USAGE_WATCH_DIR } else { Join-Path $HOME '.claude/handoff-watch' }
 $pctLimit = if ($env:CLAUDE_USAGE_HANDOFF_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_PCT } else { 92 }
 # The 7-day window is watched separately and lower. The 5-hour window refills
 # in hours, so crossing it is a pause; the weekly one does not, so crossing it
@@ -97,6 +100,81 @@ function Get-CodexWeeklyPct($path) {
   return $null
 }
 
+# F31: the first numeric token of a flag file AS WRITTEN ('12.0' stays '12.0'),
+# so `level` prints the same bytes as the sh twin's read_pct; $null if none.
+function Read-Token($path) {
+  if (-not (Test-Path -LiteralPath $path)) { return $null }
+  try { $t = [IO.File]::ReadAllText((Convert-Path -LiteralPath $path)) } catch { return $null }
+  if ($t -match '[0-9]+(\.[0-9]+)?') { return $Matches[0] }
+  return $null
+}
+function Fmt1($v) { ([double]$v).ToString('0.0', $inv) }
+
+# F31: @(5h, 7d, ctx) from one codex rollout, '-' for each one absent. 5h is
+# the max of the windows that are NOT 10080 minutes, WITHOUT the context ratio
+# - a full context is a compaction, not a quota.
+function Get-CodexLevel($path) {
+  $line = Get-CodexLastTc $path
+  if (-not $line) { return $null }
+  $h = $null; $wk = $null; $cx = $null
+  foreach ($m in [regex]::Matches($line, '\{[^{}]*"used_percent"\s*:\s*[0-9.]+[^{}]*\}')) {
+    $v = [double]::Parse([regex]::Match($m.Value, '"used_percent"\s*:\s*([0-9.]+)').Groups[1].Value, $inv)
+    if ($m.Value -match '"window_minutes"\s*:\s*10080') { if ($null -eq $wk -or $v -gt $wk) { $wk = $v } }
+    else { if ($null -eq $h -or $v -gt $h) { $h = $v } }
+  }
+  if ($line -match '"last_token_usage"\s*:\s*\{[^}]*?"total_tokens"\s*:\s*([0-9]+)[^}]*\}[\s\S]*?"model_context_window"\s*:\s*([0-9]+)') {
+    if ([double]$Matches[2] -gt 0 -and [double]$Matches[1] -gt 0) { $cx = 100 * [double]$Matches[1] / [double]$Matches[2] }
+  }
+  @($h, $wk, $cx) | ForEach-Object { if ($null -eq $_) { '-' } else { Fmt1 $_ } }
+}
+
+# level (F31): one machine line for relay-morpheus's chain hold, and nothing
+# else - no stdin, no .done, no threshold, no directory created. Same source
+# order and same bytes as the sh twin:
+#   src=<claude-code|codex|none> 5h=<pct|-> 7d=<pct|-> ctx=<pct|-> max=<pct|->
+# On Claude Code 5h is the probe's .fivehour flag; absent, or older than the
+# codex freshness window ($staleHours), it prints '-'. max
+# is the max of every window, context included, for reading only: relay's
+# chain decide never holds on it - with no 5h it uses 7d, else unobservable.
+if ($Mode -eq 'level') {
+  $src = 'none'; $h = '-'; $wk = '-'; $cx = '-'; $mx = '-'
+  $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
+  $roll = Get-ChildItem (Join-Path $codexHome 'sessions') -Recurse -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
+          Sort-Object LastWriteTime | Select-Object -Last 1
+  if ($roll -and $roll.LastWriteTime -gt (Get-Date).AddHours(-$staleHours)) {
+    $l = @(Get-CodexLevel $roll.FullName)
+    if ($l.Count -eq 3 -and ($l | Where-Object { $_ -ne '-' })) {
+      $src = 'codex'; $h = $l[0]; $wk = $l[1]; $cx = $l[2]
+      $mx = ($l | Where-Object { $_ -ne '-' } | Sort-Object { [double]::Parse($_, $inv) } | Select-Object -Last 1)
+    }
+  }
+  if ($src -eq 'none') {
+    $key = $null
+    $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
+         Where-Object { $_.Extension -notin @('.done', '.weekly', '.fivehour', '.ctx') } | Sort-Object LastWriteTime | Select-Object -Last 1
+    if ($f) { $key = $f.Name; $v = Read-Token $f.FullName; if ($null -ne $v) { $mx = $v } }
+    else {
+      $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
+           Where-Object { $_.Extension -eq '.weekly' } | Sort-Object LastWriteTime | Select-Object -Last 1
+      if ($f) { $key = $f.BaseName }
+    }
+    if ($key) {
+      $src = 'claude-code'
+      # Same freshness window as a codex rollout: the statusline rewrites
+      # .fivehour on every render, so one older than that is a dead session's
+      # or an idle one's - its 5h is unobservable, not a reading to hold on.
+      $fh = Get-Item -LiteralPath (Join-Path $dir "$key.fivehour") -ErrorAction SilentlyContinue
+      if ($fh -and $fh.LastWriteTime -gt (Get-Date).AddHours(-$staleHours)) {
+        $v = Read-Token $fh.FullName; if ($null -ne $v) { $h = $v }
+      }
+      $v = Read-Token (Join-Path $dir "$key.weekly");   if ($null -ne $v) { $wk = $v }
+      $v = Read-Token (Join-Path $dir "$key.ctx");      if ($null -ne $v) { $cx = $v }
+    }
+  }
+  "src=$src 5h=$h 7d=$wk ctx=$cx max=$mx"
+  exit 0
+}
+
 if ($Mode -eq 'check') {
   # Codex: the rollout JSONL carries rate_limits.*.used_percent and the context total.
   # CODEX_HOME, same as install.ps1 - a relocated codex home must still be watched.
@@ -115,7 +193,7 @@ if ($Mode -eq 'check') {
     # picking it here would report the 7-day number as the max and compare it
     # against the wrong threshold. It is read below, by name, not by mtime.
     $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
-         Where-Object { $_.Extension -notin @('.done', '.weekly') } | Sort-Object LastWriteTime | Select-Object -Last 1
+         Where-Object { $_.Extension -notin @('.done', '.weekly', '.fivehour', '.ctx') } | Sort-Object LastWriteTime | Select-Object -Last 1
     if ($f) { $pct = Read-Flag $f.FullName; if ($null -ne $pct) { $src = 'claude-code'; $key = $f.Name; $wk = Read-Flag "$($f.FullName).weekly" } }
     # A101: a weekly flag with no main flag beside it is a real state (see the
     # gate), so fall back to it rather than reporting no signal at all.
@@ -169,6 +247,19 @@ if ($Mode -eq 'probe') {
     Write-Flag "$flag.weekly" $Matches[1]
   } else {
     Remove-Item "$flag.weekly" -ErrorAction SilentlyContinue   # never let a stale weekly number outlive its payload
+  }
+  # F31: the 5-hour window and the context on their own, for `level`. The key
+  # is rate_limits.five_hour.used_percentage (verified against the statusline
+  # docs, 2026-10-10); the main flag stays the max of every window. The value
+  # is written as the payload spelled it, so both twins read the same bytes.
+  foreach ($pair in @(@('five_hour', 'fivehour'), @('context_window', 'ctx'))) {
+    if ($raw -match ('"' + $pair[0] + '"\s*:\s*\{[^}]*"used_percentage"\s*:\s*([0-9.]+)')) {
+      $p = "$flag.$($pair[1])"; $dp = Split-Path $p -Parent
+      New-Item $dp -ItemType Directory -Force | Out-Null
+      [IO.File]::WriteAllText([IO.Path]::Combine((Convert-Path $dp), (Split-Path $p -Leaf)), $Matches[1])
+    } else {
+      Remove-Item "$flag.$($pair[1])" -ErrorAction SilentlyContinue
+    }
   }
   if ($Then) { $raw | & powershell -NoProfile -ExecutionPolicy Bypass -Command $Then }
   exit 0
