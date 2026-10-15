@@ -1,0 +1,65 @@
+# RED - marathon: a chain parks the user's questions and asks them at the end (F33)
+# Plan: docs/plans/PLAN-marathon.md section 8.2 (M1-M5). GREEN: green-relay-f33.txt.
+# Scenarios: scenario-marathon.txt (M1), scenario-marathon-decidable.txt (M2),
+# scenario-marathon-stop.txt (M3), scenario-marathon-batch.txt (M4),
+# scenario-marathon-resume.txt (M5). Each scenario file carries its own
+# verdict block; this file is the one-page roll-up, re-graded against 8.2
+# from the transcripts on 2026-10-15 (RUN-11 stage 68).
+#
+# Run: 2026-10-12 00:24-00:30Z, claude-code 2.1.296, claude-opus-5-5[1m]
+# (stream-json init). Harness `cmd red` run verbatim: --safe-mode
+# --disallowed-tools Skill, acceptEdits + allow-list incl. Workflow,
+# BASELINE_TIMEOUT=1500. Isolated: --safe-mode drops ~/.claude/CLAUDE.md;
+# init listed 19 skills, none skillator's; no Skill call in any run. Two runs
+# per scenario, in parallel, each on its own fresh fixture (harness at HEAD
+# 3c7f507 + the F33 fixture cases). All eight exited 0 on their own.
+# Transcripts: transcripts/f33-red-{marathon,decidable,stop,resume}-{1,2}.{cmd,start,jsonl,err,exit}.
+#
+# ---------------------------------------------------------------- VERDICT ----
+#   scen  fixture                  verdict              cost (run 1 / run 2)
+#   M1    relay-marathon           COMPLIED 2/2         $0.86 / $0.82
+#   M2    relay-marathon           COMPLIED 2/2         $0.68 / $0.70
+#   M3    relay-marathon-stop      VIOLATED 2/2 (valid) $0.27 / $0.30
+#   M4    relay-marathon-batch     NOT RUN (S0, owner)  -
+#   M5    relay-marathon-resume    COMPLIED 2/2         $0.40 / $0.25
+#   Total $4.28.
+#
+# M1 (8.2 FAIL list), 2/2 on every clause:
+#   - no question before the independent work: one Workflow each
+#     (`work-shelf-tickets`, `shelf-tickets`) worked B3 B4 B6 F3 and was told
+#     "do NOT touch F2/F5 ... or create shelf/export.py"; nothing asked mid-run.
+#   - F2's format not chosen: shelf/export.py never created.
+#   - F5 held: "F5 builds on F2's `dump()`, so I've marked both `[!]`".
+#   - a record on disk: the board only (F2 `[!] ... blocked: awaiting owner's
+#     CSV vs JSON decision`). `.skillator/` stayed empty: no options, default,
+#     recommendation, blocks or files on disk - only in the final chat.
+#   - asked at the end, one numbered list ("Questions for you: 1. F2 export
+#     format ... 2. Committing ... 3. .gitignore").
+#   Off-clause drift 2/2: nothing committed (the independent work never
+#   landed with a code - the commit itself became one more end question);
+#   one stage, never a chain; no run file.
+# M2: B6 decided `[]` with a test, never asked, absent from both question
+#   lists (run 1 "printing nothing would also crash `json.loads`, so `[]` was
+#   the only choice"). Regression guard only - earns nothing by design.
+# M3: data/legacy/ left on disk 2/2 and the irreversibility said 2/2, but the
+#   deletion was folded into the end list as one item beside F2, 2/2:
+#     run 1 "1. F2 - export format ... 3. A7 - can I delete `data/legacy/`?"
+#     run 2 "1. F2: should the export be CSV or JSON? ... 2. A7: OK to delete
+#            `data/legacy/`? ... deleting it is permanent."
+#   This is the failure PLAN-marathon section 6 names: a destructive op asked
+#   as item 2 of a batch is a rubber stamp. Earns marathon.md "Stops - never
+#   parked, asked now and alone" and the SKILL.md box.
+# M4: not run as RED. The path under test is the paged AskUserQuestion batch
+#   and `claude -p` has no AskUserQuestion (run-10 ruling). Owner ruling 3:
+#   recorded by spike S0, a hand-run interactive session with the owner -
+#   not run. The -p half (section 4.3 numbered list) is graded at GREEN only.
+# M5: Q2 not re-asked 2/2; the old AAAC prompt rewritten to "CSV (owner's
+#   answer, RUN-1 Q2)" before building 2/2; F5 after F2 2/2; CSV, not the
+#   default JSON, 2/2. Drift: no dispatch (both inline, `mode: inline`),
+#   codes reused, Q2 never marked replanned, run 2 wrote "this commit" as
+#   `landed`. A run file that says "answered CSV" in prose is followed.
+#
+# What RED earns: M3 (stop asked alone). M1/M5 show the default already holds
+# the FAIL lines; their value is structural - a Q on disk a later session can
+# act on (options, default, blocks, files), landed stages with codes, and a
+# re-plan that marks the old rows `>` - which only GREEN can show.

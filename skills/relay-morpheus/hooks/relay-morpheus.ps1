@@ -15,12 +15,22 @@
 #   relay-morpheus.ps1 -Mode selftest
 #
 # Chain (F31) - stages that are ticket workflows, each started by the last:
-#   -Mode chain -Action plan -N <n> -PromptFile F [-Tickets T] [-Fix t -Verify t] [-Files F] [-ChainMode workflow|agents]
+#   -Mode chain -Action plan -N <n> -PromptFile F [-Tickets T] [-Fix t -Verify t] [-Files F] [-After "66,67"] [-ChainMode workflow|agents]
 #   -Mode chain -Action dispatch -N <n> -Driver @tag [-Owner O] [-Take] [-Override] [-Confirmed]
 #   -Mode chain -Action hold -Pct 84 [-Window 5h|7d] [-Next n]
 #   -Mode chain -Action release [-Override [-Confirmed]]
 #   -Mode chain -Action wait [-Interval 600] [-Max 19800] [-For 1500]
 #   -Mode chain -Action status | decide
+#   -Mode chain -Action next                           NEXT n CODE | HOLD | ASK k | UNBLOCK Qk | WAIT n | BLOCKED n | FINAL, then IDLE lines
+#   -Mode chain -Action edge -N <n> -After "66,67" | -IndependentOf Qk -Why "<ruling>"
+#
+# Marathon (F33, chain runs only) - questions only the user can answer are
+# parked in `## Decisions` and asked together at the end (references/marathon.md):
+#   -Mode park -N <stage> -Ticket T -Reason taste|fact|conflict -Question "...?" -Header H
+#        -Option1 "label | does | hurts" -Option2 ... [-Option3 -Option4] -Default L [-Recommended L]
+#        -Files "a, b" [-Blocks "F2b, F5"] [-Gated "..."] [-Done "..."] -Stop none   (-N 0: planning)
+#   -Mode answer -Q Qk -Text "<answer>" | -Ruled | -Replanned <n> | -Moot "<why>" | -SameAs Qj
+#   -Mode queue [-MarkAsked] [-Asks live|end]
 # Exit 2 = refused by a usage/driver/state guard; wait: 0 RELEASE, 2 STOP (the
 # 7-day stop - nothing to wait for), 3 STUCK, 4 UNOBSERVABLE, 5 WAITING
 # (re-arm). $env:RELAY_CHAIN_HOLD_PCT (80),
@@ -29,7 +39,9 @@
 #
 # Any mode takes an optional -Id: `-Mode status -Id 3`.
 #
-# States: pending | '~' in flight | 'x' landed | '!' failed
+# States: pending | '~' in flight | 'x' landed | '!' failed | '?' parked (no
+# item passed, at least one waits on a decision) | '>' re-planned (landed
+# names the new stage: `stage 71`)
 #
 # RUN ids and stage numbers are serial across the whole project, not per run
 # (F22): they come from practice/scripts/next-id.ps1 (kinds RUN and S), which
@@ -43,8 +55,33 @@
 # state is spelled `pending` rather than ''.
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','selftest')][string]$Mode,
-  [ValidateSet('plan','dispatch','hold','release','wait','status','decide')][string]$Action = 'status',
+  [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','selftest')][string]$Mode,
+  [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','edge')][string]$Action = 'status',
+  [string]$Ticket = '',
+  [string]$Reason = '',
+  [string]$Question = '',
+  [string]$Header = '',
+  [string]$Option1 = '',
+  [string]$Option2 = '',
+  [string]$Option3 = '',
+  [string]$Option4 = '',
+  [string]$Default = '',
+  [string]$Recommended = '',
+  [string]$Blocks = '',
+  [string]$Stop = '',
+  [string]$Done = '',
+  [string]$Gated = '',
+  [string]$After = '',
+  [string]$IndependentOf = '',
+  [string]$Why = '',
+  [string]$Q = '',
+  [string]$Text = '',
+  [switch]$Ruled,
+  [string]$Replanned = '',
+  [string]$Moot = '',
+  [string]$SameAs = '',
+  [switch]$MarkAsked,
+  [string]$Asks = '',
   [string]$PromptFile = '',
   [string]$Tickets = '',
   [string]$Files = '',
@@ -305,8 +342,9 @@ function DoList {
       if ($null -ne $n) {
         $tot++
         $st = Cell $l 3
-        if ($st -eq 'x') { $dn++ }
-        if ($st -eq '~' -or $st -eq '!') { $open += $n }
+        # A `>` row is closed - its work moved to the stage it names.
+        if ($st -eq 'x' -or $st -eq '>') { $dn++ }
+        if ($st -eq '~' -or $st -eq '!' -or $st -eq '?') { $open += $n }
       }
     }
     $row = "RUN-{0}  {1,-42}  {2}/{3} done" -f $id, $title, $dn, $tot
@@ -335,13 +373,17 @@ function DoResume($spec) {
 function DoStage($n, $state, $owner, $landed) {
   if (-not $n) { Die "usage: -Mode stage -N <n> -State <s> [-Owner o] [-Landed l]" }
   if ($state -eq 'pending') { $state = '' }
-  if ($state -notin @('', '~', 'x', '!')) { Die "unknown state: $state (one of pending ~ x !)" }
+  if ($state -notin @('', '~', 'x', '!', '?', '>')) { Die "unknown state: $state (one of pending ~ x ! ? >)" }
   # Same reason `init` refuses it in a stage name: a `|` adds a column, and the
   # next positional read writes state into the wrong cell. `landed` takes a
   # path, so this is reachable without an exotic owner string.
   foreach ($v in @($owner, $landed)) { if ($v -match '\|') { Die "'|' in owner/landed would shift every column: $v" } }
   if ($state -eq 'x' -and -not $landed) {
     Die "stage $n marked landed with no sha or path - that is the lie the next session believes"
+  }
+  # F33: a re-planned row is closed, so it names where its work went.
+  if ($state -eq '>' -and -not $landed) {
+    Die "stage $n marked re-planned with no 'stage <new>' - a closed row names where its work went"
   }
   NeedRun
   Lock
@@ -575,13 +617,6 @@ function BlockPrompt($n) {
   while ($buf.Count -gt 0 -and $buf[$buf.Count - 1] -eq '') { $buf.RemoveAt($buf.Count - 1) }
   $buf -join "`n"
 }
-function FirstOpenRow {
-  foreach ($l in @(Get-Content $Run)) {
-    $n = RowNum $l
-    if ($null -ne $n -and (Cell $l 3) -in @('', '!')) { return $n }
-  }
-  $null
-}
 function Indent($text) { @("$text" -split "`n" | ForEach-Object { if ($_ -eq '') { '' } else { "  $_" } }) }
 
 # Remove stage <n>'s block from `## In flight`: its `### stage <n> - ` line up
@@ -674,6 +709,7 @@ function DoChainPlan($n) {
   }
   if ($ChainMode -notin @('workflow', 'agents')) { Die "chain plan: -ChainMode is workflow or agents, not $ChainMode" }
   NeedRun
+  $af = if ($After) { AfterList $n $After } else { '' }
   $tk = $Tickets
   if ($Fix) {
     $vf = if ($Verify) { $Verify } else { 'build' }
@@ -691,6 +727,7 @@ function DoChainPlan($n) {
     $blk = @("### $code - stage $n - $name")
     if ($tk) { $blk += "tickets: $tk" }
     if ($Files) { $blk += "files: $Files" }
+    if ($af) { $blk += "after: $af" }
     $blk += 'prompt: |'; $blk += (Indent $text)
     # The code goes in front of the stage cell: the column count does not
     # change, so every positional reader still works.
@@ -721,6 +758,13 @@ function DoChainDispatch($n) {
     if ($hp[1] -ne '-') { Refuse "chain is held ($($hp[1])) - chain release first, or chain wait" }
     $st = RowCellN $n 3
     if ($st -notin @('', '!')) { Refuse "stage $n is '$st', not pending or failed - a stage is never dispatched twice" }
+    # F33: a stage a holding decision waits on runs only on a prompt written
+    # after the answer - re-planned as a new stage, or ruled independent.
+    $w = @(ChainScan | Where-Object { $_.StartsWith("IDLE $n Q") }) | Select-Object -First 1
+    if ($w) { Refuse "stage $n waits on $($w.Substring(("IDLE $n ").Length)) - its prompt predates the answer; re-plan it (references/marathon.md, Unblock) or chain edge $n --independent-of with a ruling" }
+    # An after: stage that has not landed is refused the same way.
+    $w = @(ChainScan | Where-Object { $_.StartsWith("IDLE $n - after ") }) | Select-Object -First 1
+    if ($w) { Refuse "stage $n waits on stage $($w.Substring(("IDLE $n - after ").Length)) (after:) - not landed yet; chain next names what can run" }
     $note = @()
     $od = $hp[0]; $otag = $od.Split(' ')[0]
     if ($od -ne '-' -and $otag -ne $drv) {
@@ -761,7 +805,8 @@ function DoChainHold {
   if ($Window -notin @('5h', '7d')) { Die "chain hold: -Window is 5h or 7d, not $Window" }
   NeedRun
   $hp = HdrParts; if (-not $hp) { Die "no ## Chain section in $Run - chain plan a stage first" }
-  $nx = if ($Next) { $Next } else { FirstOpenRow }; if ($null -eq $nx -or "$nx" -eq '') { $nx = '-' }
+  # next= is what `chain next` would dispatch, read with the hold ignored.
+  $nx = if ($Next) { $Next } else { ChainScan -NextOnly }; if ($null -eq $nx -or "$nx" -eq '') { $nx = '-' }
   Lock
   try {
     $hp = HdrParts
@@ -829,15 +874,479 @@ function DoChainWait {
   }
 }
 
+# The Chain section, then (F33) the Decisions section when there is one.
 function DoChainStatus {
   PickRun
   if (-not (Test-Path $Run)) { return }
   $on = $false
   foreach ($l in @(Get-Content $Run)) {
-    if ($l -ceq '## Chain') { $on = $true; $l; continue }
-    if ($on -and $l -match '^## ') { break }
+    if ($l.StartsWith('## ')) { $on = ($l -ceq '## Chain' -or $l -ceq '## Decisions') }
     if ($on) { $l }
   }
+}
+
+# --------------------------------------------------------------- marathon ----
+# F33: a chain that never waits on the user for a question it could postpone.
+# Same `## Decisions` section, same refusals, same exit codes as
+# relay-morpheus.sh, which carries the full reasoning. A Q header never holds
+# the word `stage`: the W allocator would read `### Q100 x stage 7` as a code.
+# Common key and token shapes (R6: a heuristic). A full 40-hex sha matches too.
+$SECRET_RE = '(^|[^A-Za-z0-9])(sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})|[0-9a-fA-F]{40,}|-----BEGIN [A-Z ]*PRIVATE KEY'
+
+# The run file is line-based, git-tracked, and its question text comes from
+# agents that read untrusted repo content.
+function FieldOk($cmd, $name, $v) {
+  $v = "$v"
+  if ($v.Contains("`n") -or $v.Contains("`r")) { Refuse "${cmd}: $name has a line break - the run file is line-based, one line per field" }
+  if ($v.Trim().StartsWith('#')) { Refuse "${cmd}: $name starts with '#' - it would read as a heading in the run file" }
+  if ($v -cmatch $SECRET_RE) { Refuse "${cmd}: $name has a key or token shape - a fact question asks where a secret lives (an env var name), never its value" }
+}
+function HasChain { foreach ($l in @(Get-Content $Run)) { if ($l -ceq '## Chain') { return $true } }; $false }
+# `Q2`, `q2`, `2` and `RUN-11 Q2` all name Q2; $null otherwise.
+function QNum($s) { $k = "$s" -replace '.*[Qq]', ''; if ($k -match '^[1-9][0-9]*$') { return $k }; $null }
+# One value out of Q<k>'s block ('state' = the header's second word).
+function QGet($k, $f) {
+  $sec = ''; $inq = $false
+  foreach ($l in @(Get-Content $Run)) {
+    if ($l.StartsWith('## ')) { $sec = $l; $inq = $false; continue }
+    if ($sec -cne '## Decisions') { continue }
+    if ($l.StartsWith('### ')) {
+      $inq = $false; $h = @($l.Trim() -split '\s+')
+      if ($h.Count -gt 1 -and $h[1] -ceq "Q$k") { if ($f -eq 'state') { if ($h.Count -gt 2) { return $h[2] }; return '' }; $inq = $true }
+      continue
+    }
+    if ($inq -and $l.StartsWith("${f}: ")) { return $l.Substring($f.Length + 2) }
+  }
+  $null
+}
+# "66, 67" out of "66,67": each a stage of this run and not <n>.
+function AfterList($n, $s) {
+  $o = @()
+  foreach ($a in @("$s" -split '[ ,]+' | Where-Object { $_ })) {
+    if ($a -notmatch '^[0-9]+$') { Die "after: '$a' is not a stage number" }
+    if ([int]$a -eq [int]$n) { Die "after: stage $n cannot wait on itself" }
+    if (-not (RowCellN $a 2)) { Die "after: no stage $a in $Run" }
+    $o += $a
+  }
+  if (-not $o) { Die "after: no stage numbers in '$s'" }
+  $o -join ', '
+}
+
+# Keyed on (stage, ticket, question) among the decisions that still hold: a
+# repeat prints the existing Q and writes nothing; a second question, or one
+# asked again after a moot or a re-plan, is new.
+function DoPark([string[]]$opts) {
+  $opts = @($opts | Where-Object { $null -ne $_ -and "$_" -ne '' })
+  foreach ($o in $opts) { FieldOk 'park' 'option' $o }
+  NeedRun
+  if (-not (HasChain)) { Refuse "park: $Run has no ## Chain section - decisions are parked in chain runs only (F33); ask or rule as before" }
+  # A stop is never parked: it is asked now, alone (references/marathon.md, Stops).
+  if ($Stop -ceq 'none') { }
+  elseif (-not $Stop) { Refuse "park: --stop is required - none, or the stop this is (destructive|security|outside|scope|repro)" }
+  elseif ($Stop -cin @('destructive', 'security', 'outside', 'scope', 'repro')) { Refuse "park: a stop ($Stop) is never parked - halt the chain and ask it now, alone, before the queue" }
+  else { Refuse "park: --stop is none|destructive|security|outside|scope|repro, not '$Stop'" }
+  foreach ($f in @(@('ticket', $Ticket), @('reason', $Reason), @('question', $Question), @('header', $Header), @('default', $Default), @('files', $Files))) {
+    if (-not "$($f[1])".Trim()) { Refuse "park: --$($f[0]) is required" }
+  }
+  if ($Reason -cnotin @('taste', 'fact', 'conflict')) { Refuse "park: --reason is taste|fact|conflict, not '$Reason' - anything else is a ruling" }
+  # Counted on the trimmed value, in characters (code points, as the sh twin).
+  $hl = @($Header.Trim().ToCharArray() | Where-Object { -not [char]::IsLowSurrogate($_) }).Count
+  if ($hl -gt 8) { Refuse "park: --header '$($Header.Trim())' is $hl characters - the question chip takes 8" }
+  if (-not $Question.EndsWith('?')) { Refuse "park: --question must be a question (end with '?')" }
+  if ($opts.Count -lt 2 -or $opts.Count -gt 4) { Refuse "park: $($opts.Count) option(s) - a decision has 2 to 4 (one sensible answer is a ruling; 'Other' is added by the tool)" }
+  foreach ($f in @(@('ticket', $Ticket), @('question', $Question), @('header', $Header), @('default', $Default), @('recommended', $Recommended),
+                   @('blocks', $Blocks), @('files', $Files), @('gated', $Gated), @('done', $Done))) { FieldOk 'park' $f[0] $f[1] }
+  $df = $Default.Trim(); $rc = $Recommended.Trim(); $olines = @(); $labels = @(); $hit = $false
+  foreach ($o in $opts) {
+    if (@($o.ToCharArray() | Where-Object { $_ -eq '|' }).Count -ne 2) { Refuse "park: an option is 'label | does | hurts' - exactly two '|', and none inside a field: $o" }
+    $p = $o -split '\|'; $l = $p[0].Trim(); $dd = $p[1].Trim(); $hh = $p[2].Trim()
+    if (-not $l -or -not $dd -or -not $hh) { Refuse "park: an option needs a label, what it does and where it hurts: $o" }
+    $b = $l -replace ' *\(Recommended\)$', ''
+    if ($rc -and $b -ceq $rc -and $b -ceq $l) { $l = "$l (Recommended)" }
+    if ($b -ceq $df) { $hit = $true }
+    $labels += $b
+    $olines += "  - $l | $dd | $hh"
+  }
+  if (-not $hit) { Refuse "park: --default '$df' is not one of the option labels" }
+  if ($rc -and $labels -cnotcontains $rc) { Refuse "park: --recommended '$rc' is not one of the option labels" }
+  $bl = if ($Blocks.Trim()) { $Blocks.Trim() } else { $Ticket.Trim() }
+  $pk = 'planning'
+  if ($N) {
+    if (-not (RowCellN $N 2)) { Die "park: no stage $N in $Run" }
+    $pk = "stage $N"
+  }
+  $t1 = @($Ticket.Trim() -split '\s+')[0]
+  Lock
+  try {
+    $sec = ''; $qq = ''; $pp = ''; $tt = ''; $qt = ''; $got = $null; $m = 0
+    foreach ($l in @(Get-Content $Run)) {
+      if ($l.StartsWith('## ')) { $sec = $l; continue }
+      if ($sec -cne '## Decisions') { continue }
+      if ($l -cmatch '^### Q([0-9]+) ') {
+        $qq = "Q$($Matches[1])"; $pp = ''; $tt = ''; $qt = ''; if ([int]$Matches[1] -gt $m) { $m = [int]$Matches[1] }
+        $h = @($l.Trim() -split '\s+'); if ($h.Count -lt 3 -or $h[2] -cnotin @('open', 'asked', 'answered', 'ruled')) { $qq = '' }
+        continue
+      }
+      if ($l.StartsWith('### ')) { $qq = ''; continue }
+      if (-not $qq) { continue }
+      if ($l.StartsWith('parked: ')) { $pp = $l.Substring(8) -replace ' \(.*', '' }
+      if ($l.StartsWith('ticket: ')) { $tt = @($l.Substring(8).Trim() -split '\s+')[0] }
+      if ($l.StartsWith('question: ')) { $qt = $l.Substring(10) }
+      if (-not $got -and $pp -ceq $pk -and $tt -ceq $t1 -and $qt -ceq $Question.Trim()) { $got = $qq }
+    }
+    if ($got) { return $got }
+    $k = $m + 1
+    $c = if ($pk -ne 'planning') { CodeOf $N } else { $null }
+    $pl = if ($c) { "$pk ($c)" } else { $pk }
+    $blk = @("### Q$k open $(Now)", "parked: $pl", "ticket: $($Ticket.Trim())", "reason: $Reason",
+             "question: $($Question.Trim())", "header: $($Header.Trim())", 'options:') + $olines +
+           @("default: $df", "blocks: $bl", "files: $($Files.Trim())")
+    if ($Gated.Trim()) { $blk += "gated: $($Gated.Trim())" }
+    if ($Done.Trim()) { $blk += "done: $($Done.Trim())" }
+    $blk += 'answer: -'
+    PutInSection 'Decisions' $blk 'asks: end'
+    StampUpdated
+  } finally { Unlock }
+  "Q$k"
+}
+
+# Written once, under the lock: a Q that is not open or asked is refused (exit
+# 2). "you decide" / "your call" is -Ruled: the default, as a ruling. The
+# closing moves -Replanned <n>, -Moot "<why>" and -SameAs Qj stop it holding.
+function DoAnswer {
+  $k = QNum $Q; if (-not $k) { Die 'usage: -Mode answer -Q Q<k> -Text "<answer>" | -Ruled | -Replanned <n> | -Moot "<why>" | -SameAs Qj' }
+  $moves = @()
+  if ($Replanned) { $moves += , @('replanned', $Replanned) }
+  if ($Moot) { $moves += , @('moot', $Moot) }
+  if ($SameAs) { $moves += , @('same-as', $SameAs) }
+  if ($moves.Count -gt 1) { Die "answer: one move per call" }
+  if ($moves.Count -eq 1) {
+    if ($Ruled -or $Text) { Die "answer: --$($moves[0][0]) goes alone" }
+    return (QMove $k $moves[0][0] $moves[0][1])
+  }
+  $ruled = [bool]$Ruled; $txt = $Text
+  if ($ruled -and $txt) { Die "answer: an answer or --ruled, not both" }
+  if (-not $ruled -and -not "$txt".Trim()) { Die "answer: no answer given - an unanswered question stays as it is" }
+  FieldOk 'answer' 'answer' $txt
+  if ("$txt".Trim().ToLowerInvariant().TrimEnd('.', '!') -in @('you decide', 'your call', 'you choose', 'up to you')) { $ruled = $true }
+  NeedRun
+  if (-not (HasChain)) { Refuse "answer: $Run has no ## Chain section - decisions live in chain runs only (F33)" }
+  Lock
+  try {
+    $s = QGet $k 'state'; if ($null -eq $s) { Die "no Q$k in $Run" }
+    if ($s -cnotin @('open', 'asked')) { Refuse "Q$k is '$s' - an answer is written once; a change of mind after it is a new ticket" }
+    if ($ruled) { $ns = 'ruled'; $txt = QGet $k 'default' } else { $ns = 'answered'; $txt = "$txt".Trim() }
+    $t = Now; $sec = ''; $inq = $false
+    $out = foreach ($l in @(Get-Content $Run)) {
+      if ($l.StartsWith('## ')) { $sec = $l; $inq = $false }
+      if ($sec -ceq '## Decisions' -and $l.StartsWith('### ')) {
+        $inq = $false; $h = @($l.Trim() -split '\s+')
+        if ($h.Count -gt 1 -and $h[1] -ceq "Q$k") { $inq = $true; if ($h.Count -gt 3) { "### Q$k $ns $($h[3])" } else { "### Q$k $ns" }; continue }
+      }
+      if ($inq -and $l.StartsWith('answer: ')) { "answer: $txt"; "${ns}: $t"; continue }
+      $l
+    }
+    WriteRun $out
+    StampUpdated
+  } finally { Unlock }
+  "Q$k ${ns}: $txt"
+}
+
+function QMove($k, $mv, $mval) {
+  $j = $null; $mb = ''; $mf = ''
+  if ($mv -eq 'replanned') { if ("$mval" -notmatch '^[0-9]+$') { Die "answer --replanned: '$mval' is not a stage number" } }
+  elseif ($mv -eq 'moot') { if (-not "$mval".Trim()) { Die "answer --moot: say why - it is the ruling" }; FieldOk 'answer' 'moot' $mval }
+  else {
+    $j = QNum $mval; if (-not $j) { Die "answer --same-as: '$mval' is not a decision id (Q2)" }
+    if ($j -eq $k) { Die "answer --same-as: Q$k cannot be its own duplicate" }
+  }
+  NeedRun
+  if (-not (HasChain)) { Refuse "answer: $Run has no ## Chain section - decisions live in chain runs only (F33)" }
+  Lock
+  try {
+    $s = QGet $k 'state'; if ($null -eq $s) { Die "no Q$k in $Run" }
+    if ($mv -eq 'replanned') {
+      if ($s -cnotin @('answered', 'ruled')) { Refuse "Q$k is '$s' - only an answered or ruled decision is re-planned" }
+      $c = CodeOf $mval; if (-not $c) { Die "stage $mval has no chain block - chain plan the new stage first" }
+      $ns = 'replanned'; $body = "replanned: stage $mval ($c)"; $note = "Q$k replanned as stage $mval ($c)"
+    } elseif ($mv -eq 'moot') {
+      if ($s -cnotin @('open', 'asked', 'answered', 'ruled')) { Refuse "Q$k is '$s' - already closed" }
+      $ns = 'moot'; $body = "moot: $("$mval".Trim())"; $note = "Q$k moot - $("$mval".Trim())"
+    } else {
+      if ($s -cnotin @('open', 'asked')) { Refuse "Q$k is '$s' - only an unanswered decision folds into another" }
+      $sj = QGet $j 'state'
+      if ($sj -cnotin @('open', 'asked')) { $shown = if ($sj) { $sj } else { 'missing' }; Refuse "Q$j is '$shown' - a duplicate folds into an unanswered decision" }
+      $ns = "same-as-Q$j"; $body = "same-as: Q$j"; $note = "Q$k is the same question as Q$j - its blocks and files joined Q$j"
+      $mb = QGet $k 'blocks'; $mf = QGet $k 'files'
+    }
+    $sec = ''; $inq = $false; $inj = $false
+    $out = foreach ($l in @(Get-Content $Run)) {
+      if ($l.StartsWith('## ')) { $sec = $l; $inq = $false; $inj = $false }
+      if ($sec -ceq '## Decisions' -and $l.StartsWith('### ')) {
+        $inq = $false; $inj = $false; $h = @($l.Trim() -split '\s+')
+        if ($h.Count -gt 1 -and $h[1] -ceq "Q$k") { $inq = $true; if ($h.Count -gt 3) { "### Q$k $ns $($h[3])" } else { "### Q$k $ns" }; continue }
+        if ($j -and $h.Count -gt 1 -and $h[1] -ceq "Q$j") { $inj = $true }
+      }
+      if ($inq -and $l.StartsWith('answer: ')) { $l; $body; continue }
+      if ($inj -and $mb -and $l.StartsWith('blocks: ')) { "$l, $mb"; continue }
+      if ($inj -and $mf -and $l.StartsWith('files: ')) { "$l, $mf"; continue }
+      $l
+    }
+    WriteRun $out
+    AddRuling $note
+    StampUpdated
+  } finally { Unlock }
+  "Q$k $ns"
+}
+
+function NormPath($p) {
+  $p = ("$p" -replace '\\', '/').Trim()
+  while ($p.StartsWith('./')) { $p = $p.Substring(2) }
+  while ($p.Length -gt 1 -and $p.EndsWith('/')) { $p = $p.Substring(0, $p.Length - 1) }
+  $p
+}
+function PathsOf($s) { @("$s" -split ',' | ForEach-Object { NormPath $_ } | Where-Object { $_ -ne '' }) }
+function PathsMeet($a, $b) { ($a -ceq $b) -or $b.StartsWith("$a/", [StringComparison]::Ordinal) -or $a.StartsWith("$b/", [StringComparison]::Ordinal) }
+function IdsOf($s) { @("$s" -split '[^A-Za-z0-9]+' | Where-Object { $_ -cmatch '^[A-Z]+[0-9]+[a-z]*$' }) }
+function SrefsOf($s) {
+  $w = @("$s" -split '[^A-Za-z0-9]+')
+  for ($i = 0; $i -lt $w.Count - 1; $i++) { if ($w[$i] -ceq 'stage' -and $w[$i + 1] -match '^[0-9]+$') { [int]$w[$i + 1] } }
+}
+# F2 and F2b meet (the whole holds its part); F2a and F2b do not.
+function TMatch($a, $b) {
+  if ($a -cnotmatch '^([A-Z]+[0-9]+)(.*)$') { return $false }; $ba = $Matches[1]; $sa = $Matches[2]
+  if ($b -cnotmatch '^([A-Z]+[0-9]+)(.*)$') { return $false }; $bb = $Matches[1]; $sb = $Matches[2]
+  ($ba -ceq $bb) -and ($sa -eq '' -or $sb -eq '' -or $sa -ceq $sb)
+}
+
+# The verdict, then one IDLE line per reason a stage waits; see chain_scan in
+# relay-morpheus.sh. A decision holds while open, asked, answered or ruled.
+# A `>` row has landed only once the stage its landed cell names has.
+# -NextOnly: only the stage NEXT would name, the hold and ask order ignored.
+function ChainScan([switch]$NextOnly) {
+  $rep = @{}
+  $st = @{}; $rows = New-Object System.Collections.Generic.List[int]; $code = @{}
+  $tk = @{}; $fl = @{}; $hasf = @{}; $af = @{}; $ind = @{}
+  $qs = @{}; $ql = New-Object System.Collections.Generic.List[int]; $qp = @{}; $qb = @{}; $qbs = @{}; $qf = @{}
+  $sec = ''; $cs = 0; $inp = $false; $qk = 0; $hold = ''; $asks = ''
+  foreach ($l in @(Get-Content $Run)) {
+    if ($l.StartsWith('## ')) { $sec = $l; $cs = 0; $qk = 0; continue }
+    if ($sec -ceq '## Stages') { $n = RowNum $l; if ($null -ne $n) { $st[$n] = Cell $l 3; $rows.Add($n); if ((Cell $l 6) -cmatch 'stage ([0-9]+)') { $rep[$n] = [int]$Matches[1] } }; continue }
+    if ($sec -ceq '## Chain') {
+      if ($l.StartsWith('driver: ')) { $i = $l.IndexOf('     hold: '); $j = $l.IndexOf('     mode: '); if ($i -ge 0 -and $j -gt $i) { $hold = $l.Substring($i + 11, $j - $i - 11) }; continue }
+      if ($l.StartsWith('### ')) { $cs = 0; if ($l -cmatch '^### ([A-Z0-9]{4}) - stage ([0-9]+) - ') { $cs = [int]$Matches[2]; $code[$cs] = $Matches[1]; $inp = $false }; continue }
+      if ($cs -and -not $inp) {
+        if ($l -ceq 'prompt: |') { $inp = $true }
+        elseif ($l.StartsWith('tickets: ')) { $tk[$cs] = @($tk[$cs]) + @(IdsOf $l.Substring(9)) }
+        elseif ($l.StartsWith('files: ')) { $hasf[$cs] = $true; $fl[$cs] = @($fl[$cs]) + @(PathsOf $l.Substring(7)) }
+        elseif ($l.StartsWith('after: ')) { $af[$cs] = @($af[$cs]) + @($l.Substring(7) -split '[^0-9]+' | Where-Object { $_ } | ForEach-Object { [int]$_ }) }
+        elseif ($l.StartsWith('independent-of: ')) { foreach ($w in @($l.Substring(16) -split '[^Q0-9]+')) { if ($w -cmatch '^Q([0-9]+)$') { $ind["$cs,$([int]$Matches[1])"] = $true } } }
+      }
+      continue
+    }
+    if ($sec -ceq '## Decisions') {
+      if ($l.StartsWith('asks: ')) { $asks = $l.Substring(6).Trim(); continue }
+      if ($l -cmatch '^### Q([0-9]+) ') {
+        $qk = [int]$Matches[1]; $h = @($l.Trim() -split '\s+')
+        if (-not $qs.ContainsKey($qk)) { $qs[$qk] = if ($h.Count -gt 2) { $h[2] } else { '' }; $ql.Add($qk) } else { $qk = 0 }
+        continue
+      }
+      if ($l.StartsWith('### ')) { $qk = 0; continue }
+      if ($qk) {
+        if ($l.StartsWith('parked: ')) { if ($l -cmatch 'stage ([0-9]+)') { $qp[$qk] = [int]$Matches[1] } }
+        elseif ($l.StartsWith('blocks: ')) { $qb[$qk] = @(IdsOf $l.Substring(8)); $qbs[$qk] = @(SrefsOf $l.Substring(8)) }
+        elseif ($l.StartsWith('files: ')) { $qf[$qk] = @(PathsOf $l.Substring(7)) }
+      }
+    }
+  }
+  $holding = { param($k) $qs[$k] -cin @('open', 'asked', 'answered', 'ruled') }
+  $landed = $null
+  $landed = { param($s, $d) if ($st[$s] -ceq 'x') { return $true }
+    if ($st[$s] -ceq '>' -and $rep.ContainsKey($s) -and [int]$d -lt 64) { return (& $landed $rep[$s] ([int]$d + 1)) }; $false }
+  # $true when an unlanded after: stage behind d (transitively) is a failed one.
+  $failBehind = $null
+  $failBehind = { param($d, $depth)
+    if ($depth -gt 64) { return $false }
+    foreach ($a in @($af[$d] | Where-Object { $null -ne $_ })) {
+      if (& $landed $a 0) { continue }
+      if ($st[$a] -ceq '!' -or (& $failBehind $a ($depth + 1))) { return $true }
+    }
+    $false }
+  $rs = @{}; $seen = @{}
+  $rank = @{ 'blocks' = 1; 'files' = 2; 'nofiles' = 3; 'after' = 4 }
+  $why = { param($n, $k, $w) $key = "$n,$k"; if (-not $rs.ContainsKey($key) -or $rank[$w] -lt $rank[$rs[$key]]) { $rs[$key] = $w } }
+  # Walk after: edges back from d; a ? stage on the way holds n on its Qs.
+  $behind = $null
+  $behind = { param($n, $d, $depth)
+    if ($depth -gt 64 -or $seen.ContainsKey("$n,$d")) { return }
+    $seen["$n,$d"] = $true
+    foreach ($a in @($af[$d] | Where-Object { $null -ne $_ })) {
+      if (& $landed $a 0) { continue }
+      if ($st[$a] -ceq '?') { foreach ($k in $ql) { if ((& $holding $k) -and $qp[$k] -eq $a) { & $why $n $k 'after' } } }
+      & $behind $n $a ($depth + 1)
+    }
+  }
+  $openk = 0; $unb = @(); $askd = @()
+  foreach ($k in $ql) { if ($qs[$k] -ceq 'open') { $openk++ }; if ($qs[$k] -cin @('answered', 'ruled')) { $unb += "Q$k" }; if ($qs[$k] -ceq 'asked') { $askd += "Q$k" } }
+  $nx = $null; $out = New-Object System.Collections.Generic.List[string]; $nf = 0; $nbk = 0
+  foreach ($n in $rows) {
+    if (-not $code.ContainsKey($n)) { continue }
+    $s = $st[$n]
+    if ($s -ceq '~') { $out.Add("IDLE $n inflight"); $nf++; continue }
+    if ($s -ceq '?') { $out.Add("IDLE $n parked"); continue }
+    if ($s -cne '' -and $s -cne '!') { continue }
+    if ($s -ceq '!') { $out.Add("IDLE $n failed") }
+    foreach ($k in $ql) {
+      if (-not (& $holding $k)) { continue }
+      foreach ($b in @($qb[$k] | Where-Object { $_ })) { foreach ($t in @($tk[$n] | Where-Object { $_ })) { if (TMatch $b $t) { & $why $n $k 'blocks' } } }
+      foreach ($b in @($qbs[$k] | Where-Object { $null -ne $_ })) { if ($b -eq $n) { & $why $n $k 'blocks' } }
+      if (-not $ind.ContainsKey("$n,$k")) {
+        if (-not $hasf[$n]) { & $why $n $k 'nofiles' }
+        else { foreach ($b in @($qf[$k] | Where-Object { $_ })) { foreach ($t in @($fl[$n] | Where-Object { $_ })) { if (PathsMeet $b $t) { & $why $n $k 'files' } } } }
+      }
+    }
+    & $behind $n $n 0
+    $waits = $false
+    foreach ($k in $ql) { if ($rs.ContainsKey("$n,$k")) { $out.Add("IDLE $n Q$k $($rs["$n,$k"])"); $waits = $true } }
+    foreach ($a in @($af[$n] | Where-Object { $null -ne $_ })) { if (-not (& $landed $a 0)) { $out.Add("IDLE $n - after $a"); $waits = $true } }
+    if ($s -ceq '' -and -not $waits -and ($null -eq $nx -or $n -lt $nx)) { $nx = $n }
+    if ($s -ceq '' -and (& $failBehind $n 0)) { $nbk++ }
+  }
+  if ($NextOnly) { if ($null -ne $nx) { "$nx" }; return }
+  if ($asks -ceq 'live' -and $openk) { $v = 'ASK' } elseif ($null -ne $nx) { $v = 'NEXT' } elseif ($unb) { $v = 'UNBLOCK' }
+  elseif ($openk) { $v = 'ASK' } elseif ($nf) { $v = 'WAIT' } elseif ($nbk) { $v = 'BLOCKED' } else { $v = 'FINAL' }
+  # The hold gates dispatch, not questions: ASK and UNBLOCK go on under it.
+  if ($hold -and $hold -ne '-' -and $v -ne 'ASK' -and $v -ne 'UNBLOCK') { "HOLD $hold" }
+  elseif ($v -eq 'NEXT') { "NEXT $nx $($code[$nx])" }
+  elseif ($v -eq 'ASK') { "ASK $openk - open decisions to ask in one batch: read references/marathon.md, The end batch" }
+  elseif ($v -eq 'UNBLOCK') { foreach ($u in $unb) { "UNBLOCK $u - answered, not yet re-planned: references/marathon.md, Unblock" } }
+  elseif ($v -eq 'WAIT') { "WAIT $nf - in flight, nothing else can start: wait for a stage to land, then chain next" }
+  elseif ($v -eq 'BLOCKED') { "BLOCKED $nbk - pending behind a failed stage: retry it as a new stage and close the failed row (stage <n> > - `"stage <new>`"), or report it: references/marathon.md, The loop" }
+  elseif ($askd) { "FINAL - unanswered, name them in the summary: $($askd -join ' ')" } else { 'FINAL' }
+  $out
+}
+
+function DoChainNext {
+  NeedRun
+  if (-not (HasChain)) { Die "no ## Chain section in $Run - chain next reads a chain" }
+  $null = HdrParts
+  ChainScan
+}
+
+# An edge found after planning: one line into the stage's existing block,
+# ahead of its prompt, under the lock. The code and the prompt are untouched.
+function DoChainEdge($n) {
+  if (-not $n) { Die 'usage: -Mode chain -Action edge -N <n> -After "66,67" | -IndependentOf Qk -Why "<ruling>"' }
+  if ($After -and $IndependentOf) { Die "chain edge: one edge per call - --after or --independent-of" }
+  if (-not $After -and -not $IndependentOf) { Die "chain edge: --after or --independent-of is required" }
+  NeedRun
+  if ($After) { $line = "after: $(AfterList $n $After)"; $k = $null }
+  else {
+    $k = QNum $IndependentOf; if (-not $k) { Die "chain edge: '$IndependentOf' is not a decision id (Q2)" }
+    if (-not "$Why".Trim()) { Die "chain edge: --independent-of needs --why - the ruling that says why stage $n's prompt does not depend on Q$k" }
+    FieldOk 'chain edge' 'why' $Why
+    $line = "independent-of: Q$k"
+  }
+  Lock
+  try {
+    $c = CodeOf $n; if (-not $c) { Die "stage $n has no chain block - chain plan $n first" }
+    $sn = RowCellN $n 3; if ($sn -cin @('x', '>')) { Die "stage $n is closed ($sn) - an edge on it changes nothing" }
+    if ($k -and $null -eq (QGet $k 'state')) { Die "no Q$k in $Run" }
+    $inb = $false; $done = $false
+    $out = foreach ($l in @(Get-Content $Run)) {
+      if (-not $inb -and $l -cmatch "^### [A-Z0-9]{4} - stage $n - ") { $inb = $true; $l; continue }
+      if ($inb -and -not $done -and ($l -ceq 'prompt: |' -or $l.StartsWith('#'))) { $line; $done = $true }
+      if ($inb -and $l.StartsWith('#')) { $inb = $false }
+      $l
+    }
+    WriteRun $out
+    if ($k) { AddRuling "${c}: stage $n independent of Q$k - $("$Why".Trim())" }
+    StampUpdated
+  } finally { Unlock }
+  $c
+}
+
+# The open (and asked) decisions in batch order - most blocked work first
+# (tickets plus the stages idle on it), then the oldest - as the numbered list
+# hosts without AskUserQuestion print. Chips are cut to 8.
+function DoQueue {
+  if ($Asks -and $Asks -cnotin @('live', 'end')) { Die "queue: --asks is live or end, not $Asks" }
+  NeedRun
+  if (-not (HasChain)) { Refuse "queue: $Run has no ## Chain section - decisions live in chain runs only (F33)" }
+  Lock
+  try {
+    if ($Asks) {
+      $lines = @(Get-Content $Run)
+      if ($lines -ccontains '## Decisions') {
+        $sec = ''; $done = $false; $out = New-Object System.Collections.Generic.List[string]
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+          $l = $lines[$i]
+          if ($l.StartsWith('## ')) { $sec = $l }
+          if ($sec -ceq '## Decisions' -and $l.StartsWith('asks: ')) { if (-not $done) { $out.Add("asks: $Asks") }; $done = $true; continue }
+          $out.Add($l)
+          if ($l -ceq '## Decisions' -and -not $done) {
+            if ($i + 1 -lt $lines.Count -and $lines[$i + 1].StartsWith('asks: ')) { $i++ }
+            $out.Add("asks: $Asks"); $done = $true
+          }
+        }
+        WriteRun $out
+      } else { PutInSection 'Decisions' @() "asks: $Asks" }
+      AddRuling "decisions: asks $Asks (the user's word)"
+    }
+    $w = @{}; $hs = @{}; $seenI = @{}
+    foreach ($l in @(ChainScan)) {
+      if ($l -cmatch '^IDLE ([0-9]+) (Q[0-9]+) ' -and -not $seenI.ContainsKey("$($Matches[2]),$($Matches[1])")) {
+        $seenI["$($Matches[2]),$($Matches[1])"] = $true; $w[$Matches[2]] = 1 + [int]$w[$Matches[2]]
+        $hs[$Matches[2]] = if ($hs[$Matches[2]]) { "$($hs[$Matches[2]]), $($Matches[1])" } else { $Matches[1] }
+      }
+    }
+    $sec = ''; $qq = ''; $qst = @{}; $ord = @(); $qn = @{}; $hd = @{}; $bl = @{}; $nb = @{}; $op = @{}
+    foreach ($l in @(Get-Content $Run)) {
+      if ($l.StartsWith('## ')) { $sec = $l; $qq = ''; continue }
+      if ($sec -cne '## Decisions') { continue }
+      if ($l -cmatch '^### (Q[0-9]+) ') {
+        $qq = $Matches[1]; if ($qst.ContainsKey($qq)) { $qq = ''; continue }
+        $h = @($l.Trim() -split '\s+'); $qst[$qq] = if ($h.Count -gt 2) { $h[2] } else { '' }; $ord += $qq; $op[$qq] = @(); continue
+      }
+      if ($l.StartsWith('### ')) { $qq = ''; continue }
+      if (-not $qq) { continue }
+      if ($l.StartsWith('question: ')) { $qn[$qq] = $l.Substring(10) }
+      elseif ($l.StartsWith('header: ')) { $x = $l.Substring(8); if ($x.Length -gt 8) { $x = $x.Substring(0, 8) }; $hd[$qq] = $x }
+      elseif ($l.StartsWith('blocks: ')) { $bl[$qq] = $l.Substring(8); $nb[$qq] = @(IdsOf $bl[$qq]).Count }
+      elseif ($l.StartsWith('  - ')) { $op[$qq] += ($l.Substring(4) -replace ' \| ', ' - ') }
+    }
+    $c = @($ord | Where-Object { $qst[$_] -cin @('open', 'asked') })
+    $wt = @{}; foreach ($x in $c) { $wt[$x] = [int]$w[$x] + [int]$nb[$x] }
+    for ($i = 0; $i -lt $c.Count; $i++) { for ($j = $i + 1; $j -lt $c.Count; $j++) {
+      if ($wt[$c[$j]] -gt $wt[$c[$i]] -or ($wt[$c[$j]] -eq $wt[$c[$i]] -and [int]$c[$j].Substring(1) -lt [int]$c[$i].Substring(1))) { $t1 = $c[$i]; $c[$i] = $c[$j]; $c[$j] = $t1 } } }
+    $rid = IdOf $Run; if (-not $rid) { $rid = '?' }
+    if (-not $c) { "no open decisions in RUN-$rid" }
+    else {
+      $hint = if ($c.Count -gt 1) { "$($c[0]) a, $($c[1]) you decide" } else { "$($c[0]) a" }
+      "$($c.Count) decision$(if ($c.Count -gt 1) { 's' }) parked in RUN-$rid - answer as `"$hint`":"
+      foreach ($x in $c) {
+        $hold = if ($hs[$x]) { "; holds stage $($hs[$x])" } else { '' }
+        $tag = if ($qst[$x] -ceq 'asked') { '  [asked]' } else { '' }
+        "$x [$($hd[$x])] $($qn[$x])  (blocks $($bl[$x])$hold)$tag"
+        $li = 0
+        foreach ($o in @($op[$x] | Where-Object { $_ -match '\(Recommended\)' }) + @($op[$x] | Where-Object { $_ -notmatch '\(Recommended\)' })) { "   $('abcdefgh'[$li])) $o"; $li++ }
+      }
+    }
+    if ($MarkAsked) {
+      $t = Now; $sec = ''; $inq = $false
+      $out = foreach ($l in @(Get-Content $Run)) {
+        if ($l.StartsWith('## ')) { $sec = $l; $inq = $false }
+        if ($sec -ceq '## Decisions' -and $l.StartsWith('### ')) {
+          $inq = $false; $h = @($l.Trim() -split '\s+')
+          if ($h.Count -gt 2 -and $h[1] -cmatch '^Q[0-9]+$' -and $h[2] -ceq 'open') { $inq = $true; if ($h.Count -gt 3) { "### $($h[1]) asked $($h[3])" } else { "### $($h[1]) asked" }; continue }
+        }
+        if ($inq -and $l.StartsWith('answer: ')) { "asked: $t" }
+        $l
+      }
+      WriteRun $out
+    }
+    if ($MarkAsked -or $Asks) { StampUpdated }
+  } finally { Unlock }
 }
 
 # Each expected-failure check asserts on the message it expects. Catching
@@ -932,6 +1441,14 @@ function ChainSelftest($d) {
   if ((BlockPrompt $s3) -cne 'item F3: --version') { Die "chain plan: a CRLF prompt kept its CR" }
   if ($txt -match "`r") { Die "chain plan: wrote CR into the run file" }
   if (Test-Path "$Run.lock") { Die "chain plan: left the lock behind" }
+  # F33: every F31 check below runs with a `## Decisions` section present -
+  # Q1, Q100 and Q999 in states that hold nothing - and passes unchanged.
+  PutInSection 'Decisions' @("### Q1 moot 2026-01-01T00:00Z", "parked: stage $s1 ($c1)", 'ticket: B2', 'blocks: B2, B3',
+    'files: shelf/books.py', 'answer: -', 'moot: selftest', '### Q100 replanned 2026-01-01T00:00Z', 'parked: planning',
+    'ticket: F2', 'blocks: F2', 'files: shelf/', 'answer: x', "replanned: stage $s2 ($c2)",
+    '### Q999 same-as-Q1 2026-01-01T00:00Z', 'ticket: B3', 'answer: -') 'asks: end'
+  $txt = [IO.File]::ReadAllText($Run)
+  if (-not ($txt.IndexOf("`n## Chain`n") -lt $txt.IndexOf("`n## Decisions`n") -and $txt.IndexOf("`n## Decisions`n") -lt $txt.IndexOf("`n## Rulings"))) { Die "selftest: ## Decisions not between ## Chain and ## Rulings" }
 
   # dispatch: never without a driver, a block, or past a hold; prompt verbatim.
   SetLevel 'src=claude-code 5h=40 7d=10 ctx=5 max=40'
@@ -976,14 +1493,15 @@ function ChainSelftest($d) {
   $script:Driver = '@cc-b'
   AgeDrv
 
-  # hold: idempotent, keeps its since, names the next open stage; locked.
+  # hold: idempotent, keeps its since, names the stage `chain next` would
+  # dispatch - $s3, not the failed $s2 row a first-open-row pick named; locked.
   $script:Pct = '84'; $script:Next = ''; $script:Window = '5h'
   $h1 = DoChainHold
   if (-not (DrvFresh)) { Die "chain hold: did not refresh the driver stamp" }
-  if ($h1 -notmatch " 84% 5h next=$s2$") { Die "chain hold: next is not the first open stage ($s2): $h1" }
+  if ($h1 -notmatch " 84% 5h next=$s3$") { Die "chain hold: next is not chain next's NEXT ($s3): $h1" }
   WriteRun (Get-Content $Run | ForEach-Object { $_ -replace 'hold: \S+ ', 'hold: 2026-01-01T00:00Z ' })
   $script:Pct = '86'; $h2 = DoChainHold
-  if ($h2 -ne "hold: 2026-01-01T00:00Z 86% 5h next=$s2") { Die "chain hold: a second hold restarted the clock: $h2" }
+  if ($h2 -ne "hold: 2026-01-01T00:00Z 86% 5h next=$s3") { Die "chain hold: a second hold restarted the clock or lost next: $h2" }
   if (Test-Path "$Run.lock") { Die "chain hold: left the lock behind" }
   ShouldFail 'REFUSED: chain is held' { DoChainDispatch $s2 }
 
@@ -1019,7 +1537,7 @@ function ChainSelftest($d) {
   ShouldFail 'REFUSED: 7-day window at 91%' { DoChainRelease }
   if (-not (Select-String -Path $Run -Pattern '^driver: .*     hold: 20' -Quiet)) { Die "chain release: a refused release cleared the hold" }
   $script:Confirmed = $true; DoChainRelease | Out-Null
-  if (-not (Select-String -Path $Run -SimpleMatch "${c2}: override: user confirmed past 7d 90% (91%)" -Quiet)) { Die "chain release: no ruling for the 7-day override" }
+  if (-not (Select-String -Path $Run -SimpleMatch "${c3}: override: user confirmed past 7d 90% (91%)" -Quiet)) { Die "chain release: no ruling for the 7-day override" }
   if (-not (Select-String -Path $Run -Pattern '^driver: @cc-b \S+     hold: -     mode: workflow$' -Quiet)) { Die "chain release: hold not cleared" }
   $script:Override = $false; $script:Confirmed = $false
   if ((DoChainRelease) -ne 'not held') { Die "chain release: not idempotent" }
@@ -1027,7 +1545,7 @@ function ChainSelftest($d) {
   AgeDrv
   SetLevel 'src=claude-code 5h=83 7d=10 ctx=5 max=83'; $script:Override = $true
   DoChainRelease | Out-Null; $script:Override = $false
-  if (-not (Select-String -Path $Run -SimpleMatch "${c2}: override: user asked at 83%" -Quiet)) { Die "chain release -Override: no ruling" }
+  if (-not (Select-String -Path $Run -SimpleMatch "${c3}: override: user asked at 83%" -Quiet)) { Die "chain release -Override: no ruling" }
   if (-not (DrvFresh)) { Die "chain release: did not refresh the driver stamp" }
   # F31 review 2: another session's hold, wait, release and heartbeat leave a
   # dead driver's stamp as it was, so the resumer can take the chain over.
@@ -1190,6 +1708,8 @@ function ChainSelftest($d) {
       SetLevel 'src=claude-code 5h=40 7d=10 ctx=5 max=40'; $script:Driver = '@cc-x'
       $out = @(DoChainDispatch $xs)
       if ($out[0] -ne $xc -or $out[1] -cne $want1) { Die "cross: ps did not read the sh-planned block verbatim" }
+      # Stage two is planned too, so the hold's next= (chain next's NEXT) names it.
+      $null = (& $shExe.Source $shScript chain plan ($xs + 1) --prompt-file $p1.Replace('\', '/') 2>$null)
       $script:Pct = '84'; $script:Next = ''; DoChainHold | Out-Null
       WriteRun (Get-Content $Run | ForEach-Object { $_ -replace 'hold: \S+ ', 'hold: 2026-01-01T00:00Z ' })
       $env:RELAY_LEVEL_CMD = "echo 'src=claude-code 5h=84 7d=10 ctx=5 max=84'"
@@ -1206,6 +1726,355 @@ function ChainSelftest($d) {
     [Console]::Error.WriteLine("note: sh not on PATH - chain cross-mirror round trip skipped")
   }
   $env:RELAY_CHAIN_DRIVER = $savedDrv
+  Remove-Item Env:RELAY_LEVEL_CMD -ErrorAction SilentlyContinue
+}
+
+# F33. A question is on disk the moment it is found, nothing waiting on it
+# runs on a pre-answer prompt, and the file stays readable by every F31 parser
+# and by relay-morpheus.sh - whose `chain next` must print the same lines.
+function MarathonSelftest($d) {
+  $gc = @('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'core.autocrlf=false', '-c', 'core.hooksPath=NUL')
+  function G { $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    & git @gc @args 2>&1 | Out-Null; $ErrorActionPreference = $prev
+    if ($LASTEXITCODE -ne 0) { throw "selftest: git $args failed" } }
+  function Spawn([string]$argline) {
+    $psi = New-Object Diagnostics.ProcessStartInfo 'powershell'
+    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $argline"
+    $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    [Diagnostics.Process]::Start($psi)
+  }
+  function Reap($p) { $null = $p.StandardOutput.ReadToEnd(); $null = $p.StandardError.ReadToEnd(); $p.WaitForExit(); $p.ExitCode }
+  # A refusal (exit 2 through -File) whose message holds $want, literally.
+  function No($label, $want, $block) {
+    try { & $block | Out-Null } catch {
+      if ("$_" -notmatch '^REFUSED: ' -or "$_" -notmatch [regex]::Escape($want)) { Die "${label}: want a refusal /$want/, got: $_" }
+      return
+    }
+    Die "${label}: expected a refusal /$want/ and got none"
+  }
+  function First { @(ChainScan)[0] }
+  function Has($line) { @(ChainScan) -ccontains $line }
+  function Plan($n, $tickets, $files, $after) {
+    $script:PromptFile = $pf; $script:Tickets = $tickets; $script:Files = $files; $script:After = $after; $script:Fix = ''; $script:Verify = ''
+    try { DoChainPlan $n } finally { $script:After = ''; $script:Files = ''; $script:Tickets = '' }
+  }
+  function SetPark { $script:N = $m2; $script:Ticket = 'F2'; $script:Reason = 'taste'; $script:Question = 'Should export write CSV or JSON?'
+    $script:Header = 'Format'; $script:Default = 'JSON'; $script:Recommended = 'JSON'; $script:Files = 'shelf/export.py, tests/test_export.py'
+    $script:Stop = 'none'; $script:Blocks = ''; $script:Done = ''; $script:Gated = '' }
+  function Park2($t, $f) { $script:N = 0; $script:Ticket = $t; $script:Reason = 'fact'; $script:Question = 'Which env var?'; $script:Header = 'Env'
+    $script:Default = 'A_URL'; $script:Recommended = ''; $script:Files = $f; $script:Stop = 'none'; $script:Blocks = ''; $script:Done = ''; $script:Gated = ''
+    DoPark @('A_URL | ours | ops may differ', 'B_URL | runbook | unconfirmed') }
+  function Ans($qq, $txt, [switch]$ruled, $rep = '', $moot = '', $same = '') {
+    $script:Q = $qq; $script:Text = $txt; $script:Ruled = [bool]$ruled; $script:Replanned = $rep; $script:Moot = $moot; $script:SameAs = $same
+    try { DoAnswer } finally { $script:Text = ''; $script:Ruled = $false; $script:Replanned = ''; $script:Moot = ''; $script:SameAs = '' }
+  }
+  function Queue([switch]$mark, $asks = '') { $script:MarkAsked = [bool]$mark; $script:Asks = $asks
+    try { DoQueue } finally { $script:MarkAsked = $false; $script:Asks = '' } }
+  function Same($a, $b) { [Convert]::ToBase64String([IO.File]::ReadAllBytes($a)) -ceq [Convert]::ToBase64String([IO.File]::ReadAllBytes($b)) }
+
+  $savedDrv = $env:RELAY_CHAIN_DRIVER; $env:RELAY_CHAIN_DRIVER = ''; $script:Driver = ''
+  $env:RELAY_LEVEL_CMD = "echo 'src=claude-code 5h=40 7d=10 ctx=5 max=40'"
+  $d6 = Join-Path $d 'marathon'; New-Item -ItemType Directory -Force $d6 | Out-Null; G init -q $d6
+  $script:Dir = Join-Path $d6 '.skillator'; $script:Run = ''
+  $script:Plan = 'TICKETS.md'; $script:Title = 'marathon'; $script:Stages = 'B3 books,F2 export,F5 export,B4 cli,F6 shelf,F9 docs,F10 notes,final'
+  DoInit | Out-Null
+  $m1 = $null; foreach ($l in @(Get-Content $Run)) { if ($l -match '^\| (\d+) \| B3 books \|') { $m1 = [int]$Matches[1] } }
+  $m2 = $m1 + 1; $m3 = $m1 + 2; $m4 = $m1 + 3; $m5 = $m1 + 4; $m6 = $m1 + 5; $m7 = $m1 + 6
+  $pf = Join-Path $d6 'p'; [IO.File]::WriteAllText($pf, "item: do it`n")
+  $O1 = 'JSON | matches list --json | spreadsheet users convert it'; $O2 = 'CSV | opens in Excel | needs quoting'
+
+  # D3: a run with no ## Chain is refused - park, answer and queue alike.
+  SetPark; No 'park: no chain' 'no ## Chain section' { DoPark @($O1, $O2) }
+  No 'queue: no chain' 'no ## Chain section' { Queue }
+  if (Select-String -Path $Run -Pattern '^## Decisions' -Quiet) { Die "park: wrote Decisions into a run with no chain" }
+
+  Plan $m1 'B3' 'shelf/books.py' '' | Out-Null
+  $cm2 = Plan $m2 'F2' 'shelf/export.py, tests/test_export.py' ''
+  $cm3 = Plan $m3 'F5' './shelf\export.py' "$m2"
+  if (-not (Select-String -Path $Run -Pattern "^after: $m2$" -Quiet)) { Die "chain plan -After: no after: line" }
+  if ((BlockPrompt $m3) -cne 'item: do it') { Die "chain plan -After: the after: line leaked into the prompt" }
+  $script:PromptFile = $pf; $script:After = "$m4"
+  try { ShouldFail 'cannot wait on itself' { DoChainPlan $m4 } } finally { $script:After = '' }
+  $cm4 = Plan $m4 'B4' '' ''
+  Plan $m5 'F6' 'shelf/' '' | Out-Null
+  $cm6 = Plan $m6 'F9' 'docs/guide.md' ''
+  Plan $m7 'F10' 'notes/a.md' "$m3" | Out-Null
+  if ((First) -cne "NEXT $m1 $(CodeOf $m1)") { Die "chain next: lowest pending stage is not first: $(First)" }
+
+  # --- park: every refusal is exit 2 and writes nothing.
+  $before = Join-Path $d6 'before'; Copy-Item $Run $before
+  SetPark; No 'park: 1 option' '1 option' { DoPark @($O1) }
+  No 'park: 5 options' '5 option(s)' { DoPark @($O1, $O2, 'a | b | c', 'd | e | f', 'g | h | i') }
+  SetPark; $script:Default = ''; No 'park: no default' '--default is required' { DoPark @($O1, $O2) }
+  SetPark; $script:Reason = ''; No 'park: no reason' '--reason is required' { DoPark @($O1, $O2) }
+  SetPark; $script:Reason = 'whim'; No 'park: bad reason' 'taste|fact|conflict' { DoPark @($O1, $O2) }
+  SetPark; $script:Stop = ''; No 'park: no stop' '--stop is required' { DoPark @($O1, $O2) }
+  SetPark; $script:Stop = 'destructive'; No 'park: a stop' 'never parked' { DoPark @($O1, $O2) }
+  SetPark; $script:Header = ''; No 'park: no header' '--header is required' { DoPark @($O1, $O2) }
+  SetPark; $script:Header = 'Formatsss'; No 'park: long header' 'chip takes 8' { DoPark @($O1, $O2) }
+  SetPark; $script:Question = 'CSV or JSON.'; No 'park: not a question' 'must be a question' { DoPark @($O1, $O2) }
+  SetPark; $script:Files = ''; No 'park: no files' '--files is required' { DoPark @($O1, $O2) }
+  SetPark; $script:Question = "CSV or`n## Rulings?"; No 'park: newline in question' 'line break' { DoPark @($O1, $O2) }
+  SetPark; No 'park: CR in option' 'line break' { DoPark @("$O1`r", $O2) }
+  No 'park: pipe in an option field' "exactly two '|'" { DoPark @($O1, 'CSV | opens | in | Excel') }
+  SetPark; $script:Question = '## Rulings?'; No 'park: leading # in question' "starts with '#'" { DoPark @($O1, $O2) }
+  SetPark; No 'park: leading # in option' "starts with '#'" { DoPark @($O1, '# CSV | x | y') }
+  SetPark; $script:Question = 'Use sk-abcdefghijklmnop0123456789?'; No 'park: sk- secret' 'token shape' { DoPark @($O1, $O2) }
+  SetPark; No 'park: ghp_ secret' 'token shape' { DoPark @($O1, 'CSV | ghp_abcdefghijklmnopqrstuvwxyz0123 | x') }
+  SetPark; $script:Done = 'landed 0123456789abcdef0123456789abcdef01234567'; No 'park: 40-hex secret' 'token shape' { DoPark @($O1, $O2) }
+  SetPark; $script:Default = 'YAML'; No 'park: default not a label' 'not one of the option labels' { DoPark @($O1, $O2) }
+  if (-not (Same $before $Run)) { Die "park: a refused park changed the run file" }
+
+  SetPark; $script:Blocks = 'F2'; $script:Done = 'nothing landed'
+  $q1 = DoPark @($O1, $O2)
+  if ($q1 -cne 'Q1') { Die "park: first decision is '$q1', not Q1" }
+  $txt = [IO.File]::ReadAllText($Run)
+  if ($txt -cnotmatch '(?m)^### Q1 open 20[0-9-]+T[0-9:]+Z$') { Die "park: no Q1 header" }
+  if ($txt -cnotmatch "(?m)^parked: stage $m2 \($cm2\)$" -or $txt -cnotmatch '(?m)^  - JSON \(Recommended\) \| matches list --json \| spreadsheet users convert it$' -or
+      $txt -cnotmatch '(?m)^default: JSON$' -or $txt -cnotmatch '(?m)^answer: -$') { Die "park: block shape wrong" }
+  if (-not ($txt.IndexOf("`n## Chain`n") -lt $txt.IndexOf("`n## Decisions`n") -and $txt.IndexOf("`n## Decisions`n") -lt $txt.IndexOf("`n## Rulings"))) { Die "park: ## Decisions not between ## Chain and ## Rulings" }
+  Copy-Item -Force $Run $before
+  SetPark; if ((DoPark @($O1, $O2)) -cne 'Q1') { Die "park: a repeat (same stage and ticket) did not print the existing Q1" }
+  if (-not (Same $before $Run)) { Die "park: a repeat park wrote to the run file" }
+  if (Test-Path "$Run.lock") { Die "park: left the lock behind" }
+
+  # --- stage ? and >, and list counts ?.
+  DoStage $m2 '?' '' ''
+  if (-not (Select-String -Path $Run -Pattern "^\| $m2 \| $cm2 F2 export \| \? \|" -Quiet)) { Die "stage: ? not written" }
+  if (-not ((DoList) -match "\(stage $m2 open\)")) { Die "list: a ? stage is not counted open" }
+  ShouldFail 'no .stage <new>.' { DoStage $m2 '>' '' '' }
+  $script:Driver = '@cc-m'
+  No 'dispatch: a ? stage' 'not pending or failed' { DoChainDispatch $m2 }
+
+  # --- chain next: held files (normalised, directory prefix), no files, after, transitive ?.
+  $out = @(ChainScan)
+  if ($out[0] -cne "NEXT $m1 $(CodeOf $m1)") { Die "chain next: want NEXT ${m1}: $($out -join ' / ')" }
+  foreach ($want in @("IDLE $m2 parked", "IDLE $m3 Q1 files", "IDLE $m3 - after $m2", "IDLE $m4 Q1 nofiles", "IDLE $m5 Q1 files", "IDLE $m7 Q1 after", "IDLE $m7 - after $m3")) {
+    if ($out -cnotcontains $want) { Die "chain next: no '$want' in: $($out -join ' / ')" }
+  }
+  if ($out | Where-Object { $_.StartsWith("IDLE $m6 ") -or $_.StartsWith("IDLE $m1 ") }) { Die "chain next: an independent stage is idle: $($out -join ' / ')" }
+  No 'dispatch: a stage idle on Q1' 'waits on Q1' { DoChainDispatch $m3 }
+  No 'dispatch: a no-files stage while Q1 holds' 'waits on Q1 nofiles' { DoChainDispatch $m4 }
+  DoStage $m1 '!' '' ''
+  if ((First) -cne "NEXT $m6 $cm6") { Die "chain next: a ! row was offered: $(First)" }
+  if (-not (Has "IDLE $m1 failed")) { Die "chain next: no 'IDLE $m1 failed'" }
+  $script:Driver = ''; $script:Pct = '84'; $script:Next = ''; $script:Window = '5h'
+  DoChainHold | Out-Null
+  if ((First) -cne "HOLD $((HdrParts)[1])") { Die "chain next: no HOLD while held: $(First)" }
+  DoChainRelease | Out-Null
+  DoStage $m1 'x' '-' 'aaa1111'; DoStage $m6 'x' '-' 'aaa2222'
+  if ((First) -notlike 'ASK 1 *') { Die "chain next: want ASK 1: $(First)" }
+  if ((First) -notmatch 'references/marathon\.md') { Die "chain next: ASK does not point at marathon.md" }
+  DoChainHold | Out-Null
+  if ((First) -notlike 'ASK 1 *') { Die "chain next: a hold suppressed ASK" }
+  DoChainRelease | Out-Null
+
+  # --- edge: one line ahead of the prompt; the code and prompt untouched.
+  $script:IndependentOf = 'Q1'; $script:Why = ''
+  ShouldFail 'needs --why' { DoChainEdge $m4 }
+  $script:Why = 'B4 is cli.py only'
+  try { $e = DoChainEdge $m4 } finally { $script:IndependentOf = ''; $script:Why = '' }
+  if ($e -cne $cm4) { Die "chain edge: did not print the stage code" }
+  if (-not (Select-String -Path $Run -Pattern "^\| $m4 \| $cm4 B4 cli \|" -Quiet) -or (BlockPrompt $m4) -cne 'item: do it') { Die "chain edge: changed the code or the prompt" }
+  if (-not (Select-String -Path $Run -SimpleMatch "${cm4}: stage $m4 independent of Q1 - B4 is cli.py only" -Quiet)) { Die "chain edge -IndependentOf: no ruling" }
+  if ((First) -cne "NEXT $m4 $cm4") { Die "chain edge -IndependentOf: stage $m4 still held: $(First)" }
+  DoStage $m4 'x' '-' 'aaa3333'
+  $script:After = "$m1"; try { DoChainEdge $m5 | Out-Null } finally { $script:After = '' }
+  $lines = @(Get-Content $Run); $b = [array]::FindIndex($lines, [Predicate[string]]{ $args[0] -cmatch "- stage $m5 - " })
+  $pi = [array]::FindIndex($lines, $b, [Predicate[string]]{ $args[0] -ceq 'prompt: |' })
+  if ($lines[$pi - 1] -cne "after: $m1") { Die "chain edge -After: not ahead of the prompt" }
+  if ((BlockPrompt $m5) -cne 'item: do it') { Die "chain edge -After: changed the prompt" }
+
+  # --- answer: written once, under the lock; an answered Q still holds.
+  No 'answer: secret' 'token shape' { Ans 'Q1' 'sk-abcdefghijklmnop0123456789' }
+  if ((Ans 'Q1' 'CSV') -cne 'Q1 answered: CSV') { Die "answer: wrong confirmation" }
+  $txt = [IO.File]::ReadAllText($Run)
+  if ($txt -cnotmatch '(?m)^### Q1 answered ' -or $txt -cnotmatch '(?m)^answer: CSV$') { Die "answer: not on disk" }
+  No 'answer: twice' 'written once' { Ans 'Q1' 'JSON' }
+  $out = @(ChainScan)
+  if ($out[0] -notlike 'UNBLOCK Q1 *') { Die "chain next: want UNBLOCK Q1: $($out -join ' / ')" }
+  if ($out -cnotcontains "IDLE $m3 Q1 files") { Die "chain next: an answered Q1 stopped holding stage ${m3}" }
+  $script:Driver = '@cc-m'; No 'dispatch: held by an answered Q' 'waits on Q1' { DoChainDispatch $m3 }; $script:Driver = ''
+  $n8 = [int](DoAdd 'F2 export CSV'); Plan $n8 'F2' 'shelf/export.py' '' | Out-Null
+  DoStage $m2 '>' '-' "stage $n8"; DoStage $m3 '>' '-' "stage $n8"
+  if (-not (Select-String -Path $Run -Pattern "^\| $m3 \| $cm3 F5 export \| > \| - \| [^|]* \| stage $n8 \|" -Quiet)) { Die "stage >: row not closed with its new stage" }
+  Ans 'Q1' '' -rep "$n8" | Out-Null
+  if (-not (Select-String -Path $Run -Pattern "^replanned: stage $n8 " -Quiet) -or -not (Select-String -Path $Run -SimpleMatch "Q1 replanned as stage $n8" -Quiet)) { Die "answer -Replanned: no body line or ruling" }
+  if (Select-String -Path $Run -Pattern '^### Q[0-9]+ .*stage' -Quiet) { Die "a Q header line names a stage" }
+  $out = @(ChainScan)
+  if ($out[0] -cne "NEXT $m5 $(CodeOf $m5)") { Die "chain next: replanned Q1 still holds: $($out -join ' / ')" }
+  if ($out | Where-Object { $_ -match 'Q1' }) { Die "chain next: a replanned Q1 is still named" }
+
+  # --- ruled, moot, same-as.
+  if ((Park2 'F11' 'sync/a.py') -cne 'Q2' -or (Park2 'F12' 'sync/b.py') -cne 'Q3' -or (Park2 'F13' 'sync/c.py') -cne 'Q4') { Die "park: planning-time Qs not Q2..Q4" }
+  if (-not (Select-String -Path $Run -Pattern '^parked: planning$' -Quiet)) { Die "park: a planning park does not say so" }
+  if ((Ans 'Q2' 'you decide') -cne 'Q2 ruled: A_URL') { Die "answer: 'you decide' is not ruled with the default" }
+  Ans 'Q3' '' -moot 'F12 closed by hand' | Out-Null
+  No 'moot twice' 'already closed' { Ans 'Q3' '' -moot 'again' }
+  No 'same-as: into a ruled Q' 'folds into an unanswered' { Ans 'Q4' '' -same 'Q2' }
+  if ((Park2 'F14' 'sync/d.py') -cne 'Q5') { Die "park: Q5" }
+  Ans 'Q4' '' -same 'Q5' | Out-Null
+  if ((QGet 5 'blocks') -cne 'F14, F13' -or (QGet 5 'files') -cne 'sync/d.py, sync/c.py') { Die "same-as: blocks/files did not join Q5" }
+  if (-not (Select-String -Path $Run -Pattern '^### Q4 same-as-Q5 ' -Quiet)) { Die "same-as: header state" }
+
+  # --- queue: batch order, 8-char chips, -MarkAsked; asks: live.
+  if (@(Queue)[0] -cne "1 decision parked in RUN-$(IdOf $Run) - answer as `"Q5 a`":") { Die "queue: header line: $(@(Queue)[0])" }
+  Queue -mark | Out-Null
+  if (-not (Select-String -Path $Run -Pattern '^### Q5 asked ' -Quiet) -or -not (Select-String -Path $Run -Pattern '^asked: ' -Quiet)) { Die "queue -MarkAsked: Q5 not asked" }
+  if (-not (@(Queue) -cmatch '^Q5 \[Env\] .*\[asked\]$')) { Die "queue: an asked Q is not marked" }
+  if ((Ans 'Q5' 'B_URL') -cne 'Q5 answered: B_URL') { Die "answer: an asked Q" }
+  Queue -asks live | Out-Null
+  if (@(Get-Content $Run | Where-Object { $_ -ceq 'asks: live' }).Count -ne 1 -or @(Get-Content $Run | Where-Object { $_.StartsWith('asks: ') }).Count -ne 1) { Die "queue -Asks live: not one asks: live line" }
+  if ((Park2 'F15' 'sync/e.py') -cne 'Q6') { Die "park: Q6" }
+  No 'replanned: an open Q' 'only an answered or ruled' { Ans 'Q6' '' -rep "$n8" }
+  if ((First) -notlike 'ASK 1 *') { Die "chain next: asks: live did not ask before NEXT: $(First)" }
+  Queue -asks end | Out-Null
+  if ((First) -notlike 'NEXT *') { Die "chain next: asks: end still asks before NEXT" }
+  Park2 'F16' 'x/f.py' | Out-Null
+  $script:N = 0; $script:Ticket = 'F17'; $script:Reason = 'taste'; $script:Question = 'Which name?'; $script:Header = 'Naminglong'
+  $script:Default = 'a'; $script:Recommended = 'd'; $script:Files = 'x/g.py'; $script:Stop = 'none'; $script:Blocks = 'F17, F18, F19'
+  No 'park: a 10-char header' 'chip takes 8' { DoPark @('a | b | c', 'd | e | f') }
+  $script:Header = 'Name'; DoPark @('a | b | c', 'd | e | f') | Out-Null
+  $qo = (@(Queue) | Where-Object { $_ -cmatch '^Q[0-9]+ ' } | ForEach-Object { $_.Split(' ')[0] }) -join ' '
+  if ($qo -cne 'Q8 Q6 Q7') { Die "queue: want Q8 Q6 Q7 (most blocked, then oldest), got '$qo'" }
+  $ql8 = @(Queue); $i8 = [array]::IndexOf($ql8, @($ql8 | Where-Object { $_.StartsWith('Q8 ') })[0])
+  if ($ql8[$i8 + 1] -cnotlike '   a) d (Recommended)*') { Die "queue: the recommended option is not first" }
+  WriteRun (Get-Content $Run | ForEach-Object { if ($_ -ceq 'header: Name') { 'header: Namingtoolong' } else { $_ } })
+  if (-not (@(Queue) -cmatch '^Q8 \[Namingto\] ')) { Die "queue: a hand-made long header was not cut to 8" }
+  foreach ($l in @(Queue)) { if ($l -cmatch '^Q[0-9]+ \[([^\]]*)\]' -and $Matches[1].Length -gt 8) { Die "queue: a header over 8 characters" } }
+  if (-not ((DoChainStatus) -ccontains '## Decisions')) { Die "chain status: no ## Decisions" }
+
+  # --- FINAL when nothing is dispatchable and nothing holds.
+  foreach ($k in 5, 6, 7, 8) { if ((QGet $k 'state') -cnotin @('answered', 'ruled')) { Ans "Q$k" '' -moot 'selftest' | Out-Null } }
+  foreach ($k in 2, 5) { Ans "Q$k" '' -moot 'selftest' | Out-Null }
+  foreach ($sn in @($m5, $m7, $n8)) { DoStage $sn 'x' '-' "bbb$sn" }
+  if ((First) -cne 'FINAL') { Die "chain next: want FINAL: $(First)" }
+
+  # --- the W allocator: Q1, Q100 and Q999 in every state leave the next code as it was.
+  $d7 = Join-Path $d6 'alloc'; New-Item -ItemType Directory -Force $d7 | Out-Null; G init -q $d7
+  $rf = Join-Path $d7 'run-1-a.md'; [IO.File]::WriteAllText($rf, "### AAAB - stage 1 - x`n")
+  $savedNid = $env:RELAY_NEXT_ID; $nid = FindNextId
+  $olderr = [Console]::Error; [Console]::SetError([IO.TextWriter]::Null)
+  try {
+    $env:RELAY_NEXT_ID = Join-Path $d7 'nope.ps1'; $w0 = AllocCode $d7
+    if ($null -eq $savedNid) { Remove-Item Env:RELAY_NEXT_ID -ErrorAction SilentlyContinue } else { $env:RELAY_NEXT_ID = $savedNid }
+    $p0 = if ($nid) { "$(& $nid -Peek -Runs $d7 W)" } else { '' }
+    foreach ($k in 1, 100, 999) { foreach ($s in 'open', 'asked', 'answered', 'ruled', 'moot', 'replanned', 'same-as-Q1') {
+      [IO.File]::AppendAllText($rf, "### Q$k $s 2026-10-11T14:02Z`nparked: stage 9 (ZZZZ)`nreplanned: stage 99 (ZZZY)`n") } }
+    $env:RELAY_NEXT_ID = Join-Path $d7 'nope.ps1'
+    if ((AllocCode $d7) -cne $w0) { Die "AllocCode: Q headers moved the next W code" }
+    if ($null -eq $savedNid) { Remove-Item Env:RELAY_NEXT_ID -ErrorAction SilentlyContinue } else { $env:RELAY_NEXT_ID = $savedNid }
+    if ($nid -and "$(& $nid -Peek -Runs $d7 W)" -cne $p0) { Die "next-id.ps1: Q headers moved the next W code" }
+  } finally {
+    [Console]::SetError($olderr)
+    if ($null -eq $savedNid) { Remove-Item Env:RELAY_NEXT_ID -ErrorAction SilentlyContinue } else { $env:RELAY_NEXT_ID = $savedNid }
+  }
+
+  # --- through -File: chain next prints, a refused park exits 2.
+  $o = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Mode chain -Action next -Run $Run)
+  if ($LASTEXITCODE -ne 0 -or $o[0] -cne 'FINAL') { Die "-File: chain next gave '$($o -join ' / ')' / $LASTEXITCODE" }
+  $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Mode park -Ticket F30 -Reason taste -Question 'A?' -Header A -Option1 'a | b | c' -Default a -Files y/z -Stop none -Run $Run 2>$null | Out-Null }
+  finally { $ErrorActionPreference = $prev }
+  if ($LASTEXITCODE -ne 2) { Die "-File: a one-option park exited $LASTEXITCODE, not 2" }
+
+  # --- two parks at once get two Qs, under the lock.
+  $pa = Spawn "-Mode park -Ticket F20 -Reason taste -Question `"A?`" -Header A -Option1 `"a | b | c`" -Option2 `"d | e | f`" -Default a -Files y/a -Stop none -Run `"$Run`""
+  $pb = Spawn "-Mode park -Ticket F21 -Reason taste -Question `"B?`" -Header B -Option1 `"a | b | c`" -Option2 `"d | e | f`" -Default a -Files y/b -Stop none -Run `"$Run`""
+  $ra = Reap $pa; $rb = Reap $pb
+  if ($ra -ne 0 -or $rb -ne 0) { Die "park: two parallel parks exited $ra and $rb" }
+  if (@(Select-String -Path $Run -Pattern '^### Q9 ').Count -ne 1 -or @(Select-String -Path $Run -Pattern '^### Q10 ').Count -ne 1) { Die "park: two parallel parks did not get Q9 and Q10 once each" }
+  if (Test-Path "$Run.lock") { Die "marathon: left the lock behind" }
+
+  # --- F33 review (stage 68): one case per finding; each fails on the code
+  # before the fix. (Review 7 and 8 are sh-only: no getline here, and -N is an
+  # [int].) Its own run, so the numbers above stay as they are.
+  $d8 = Join-Path $d6 'review'; New-Item -ItemType Directory -Force $d8 | Out-Null; G init -q $d8
+  $script:Dir = Join-Path $d8 '.skillator'; $script:Run = ''; $script:Title = 'review'; $script:Stages = 'r1,r2,r3,r4,r5'
+  DoInit | Out-Null
+  $r1 = $null; foreach ($l in @(Get-Content $Run)) { if ($l -match '^\| (\d+) \| r1 \|') { $r1 = [int]$Matches[1] } }
+  $r2 = $r1 + 1; $r3 = $r1 + 2; $r4 = $r1 + 3
+  Plan $r1 'F40' 'a.py' '' | Out-Null; Plan $r2 'F41' 'b.py' "$r1" | Out-Null; Plan $r3 'AB12' 'c.py' '' | Out-Null
+  # review 3: an unlanded after: stage refuses the dispatch, as a holding Q does.
+  $script:Driver = '@cc-v'; No 'review 3: dispatch past an unlanded after:' "waits on stage $r1 (after:)" { DoChainDispatch $r2 }; $script:Driver = ''
+  # review 9: a two-letter ticket id (AB12) is a ticket id, as on the board.
+  function P3($qq, $hh) { $script:N = 0; $script:Ticket = 'AB12'; $script:Reason = 'fact'; $script:Question = $qq; $script:Header = $hh
+    $script:Default = 'a'; $script:Recommended = ''; $script:Files = 'z.py'; $script:Stop = 'none'; $script:Blocks = ''; $script:Done = ''; $script:Gated = ''
+    DoPark @('a | b | c', 'd | e | f') }
+  if ((P3 'Which key?' 'Key') -cne 'Q1') { Die "review: first park is not Q1" }
+  if (-not (Has "IDLE $r3 Q1 blocks")) { Die "review 9: Q1 blocks AB12 and did not hold stage $r3 (tickets AB12): $(@(ChainScan) -join ' / ')" }
+  # review 4: keyed on the question too, among the decisions still holding.
+  if ((P3 'Which key?' 'Key') -cne 'Q1') { Die "review 4: a repeat did not print the existing Q1" }
+  if ((P3 'Which port?' 'Port') -cne 'Q2') { Die "review 4: a second question on the same ticket returned the old Q" }
+  Ans 'Q1' '' -moot 'ticket closed' | Out-Null
+  if ((P3 'Which key?' 'Key') -cne 'Q3') { Die "review 4: the question parked again after Q1 went moot returned the closed Q1" }
+  # review 10: the header is measured trimmed. (In characters already here;
+  # the non-ASCII case is pinned on the sh side only - this port's Get-Content
+  # reads a BOM-less UTF-8 run file as ANSI, so a non-ASCII line does not
+  # survive a rewrite here, a separate defect.)
+  if ((P3 'Which env?' '  Format  ') -cne 'Q4' -or -not (Select-String -Path $Run -Pattern '^header: Format$' -CaseSensitive -Quiet)) { Die "review 10: a padded 6-character header was refused or stored untrimmed" }
+  foreach ($k in 2, 3, 4) { Ans "Q$k" '' -moot 'selftest' | Out-Null }
+  # review 5: hold's next= is chain next's NEXT - not the failed first row.
+  DoStage $r1 '!' '' ''
+  if ((First) -cne "NEXT $r3 $(CodeOf $r3)") { Die "review 5: want NEXT ${r3}: $(First)" }
+  $script:Pct = '84'; $script:Next = ''; $script:Window = '5h'
+  if ((DoChainHold) -notmatch " next=$r3$") { Die "review 5: chain hold did not name chain next's NEXT ($r3): $((HdrParts)[1])" }
+  DoChainRelease | Out-Null
+  # review 2: nothing dispatchable is FINAL only when nothing is in flight and
+  # nothing pending waits behind a failed stage.
+  DoStage $r3 'x' '-' 'ccc3333'
+  if ((First) -notlike 'BLOCKED 1 *') { Die "review 2: a stage pending behind a failed one is not BLOCKED: $(First)" }
+  DoChainHold | Out-Null
+  if ((First) -cne "HOLD $((HdrParts)[1])") { Die "review 2: BLOCKED under a hold is not HOLD: $(First)" }
+  DoChainRelease | Out-Null
+  DoStage $r1 '~' '' ''
+  if ((First) -notlike 'WAIT 1 *') { Die "review 2: a stage in flight is not WAIT: $(First)" }
+  # review 1: a `>` row has landed only once the stage it names has.
+  Plan $r4 'F40' 'a.py' '' | Out-Null
+  DoStage $r1 '>' '-' "stage $r4"
+  if ((First) -cne "NEXT $r4 $(CodeOf $r4)" -or -not (Has "IDLE $r2 - after $r1")) { Die "review 1: an after: on a re-planned stage was met before its replacement landed: $(@(ChainScan) -join ' / ')" }
+  DoStage $r4 'x' '-' 'ddd4444'
+  if ((First) -cne "NEXT $r2 $(CodeOf $r2)") { Die "review 1: the replacement landed and stage $r2 still waits: $(First)" }
+  # review 6: list counts a closed `>` row as done.
+  if (-not ((DoList) -match ' 3/5 done')) { Die "review 6: list did not count the > row done: $(@(DoList)[0])" }
+  if (Test-Path "$Run.lock") { Die "review: left the lock behind" }
+
+  # Cross-mirror: this side parks, relay-morpheus.sh queues and answers, and
+  # both `chain next` print the same lines on the same file at every step.
+  $shExe = Get-Command sh -ErrorAction SilentlyContinue
+  $shScript = Join-Path $PSScriptRoot 'relay-morpheus.sh'
+  if ($shExe -and (Test-Path $shScript)) {
+    $x = Join-Path $d 'mcross'; New-Item -ItemType Directory -Force $x | Out-Null; G init -q $x
+    $script:Dir = Join-Path $x '.skillator'; $script:Run = ''; $script:Title = 'mcross'; $script:Stages = 'F2 export,F5 export,B4 cli,final'
+    DoInit | Out-Null
+    $x1 = $null; foreach ($l in @(Get-Content $Run)) { if ($l -match '^\| (\d+) \| F2 export \|') { $x1 = [int]$Matches[1] } }
+    Plan $x1 'F2' 'shelf/export.py' '' | Out-Null; Plan ($x1 + 1) 'F5' 'shelf\export.py' "$x1" | Out-Null; Plan ($x1 + 2) 'B4' '' '' | Out-Null
+    $oldRun = $env:RELAY_RUN; $env:RELAY_RUN = $Run.Replace('\', '/')
+    $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try {
+      function Both($why) {
+        $a = @(ChainScan) -join "`n"; $b = @(& $shExe.Source $shScript chain next 2>$null) -join "`n"
+        if ($a -cne $b) { Die "cross ($why): chain next differs - ps: [$a] sh: [$b]" }
+      }
+      Both 'planned'
+      $script:N = $x1; $script:Ticket = 'F2'; $script:Reason = 'taste'; $script:Question = 'CSV or JSON?'; $script:Header = 'Format'
+      $script:Default = 'JSON'; $script:Recommended = 'JSON'; $script:Files = 'shelf/'; $script:Stop = 'none'; $script:Blocks = 'F2, F5'; $script:Done = ''; $script:Gated = ''
+      DoPark @($O1, $O2) | Out-Null; DoStage $x1 '?' '' ''
+      Both 'parked'
+      $sq = @(& $shExe.Source $shScript queue 2>$null)
+      if (($sq -join "`n") -cne (@(Queue) -join "`n")) { Die "cross: queue differs - sh: [$($sq -join ' / ')]" }
+      $o = (& $shExe.Source $shScript answer Q1 CSV 2>$null) -join ' '
+      if ($o -cne 'Q1 answered: CSV' -or (QGet 1 'state') -cne 'answered') { Die "cross: sh answer of a ps park gave '$o'" }
+      Both 'answered'
+      $o = (& $shExe.Source $shScript answer Q1 JSON 2>$null) -join ' '
+      if ($LASTEXITCODE -ne 2) { Die "cross: sh answered a ps-answered Q twice" }
+      $b = [IO.File]::ReadAllBytes($Run)
+      if ($b[0] -eq 0xEF -or [Text.Encoding]::UTF8.GetString($b) -match "`r") { Die "cross: the shared run file gained a BOM or CR" }
+    } finally { $ErrorActionPreference = $prev; $env:RELAY_RUN = $oldRun }
+  } else {
+    [Console]::Error.WriteLine("note: sh not on PATH - marathon cross-mirror round trip skipped")
+  }
+  $env:RELAY_CHAIN_DRIVER = $savedDrv; $script:Driver = ''
   Remove-Item Env:RELAY_LEVEL_CMD -ErrorAction SilentlyContinue
 }
 
@@ -1349,6 +2218,7 @@ function DoSelftest {
     }
 
     ChainSelftest $d
+    MarathonSelftest $d
     "ok"
   } finally { Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue }
 }
@@ -1378,10 +2248,15 @@ try {
         'wait'     { $r = DoChainWait; $r[1]; exit $r[0] }
         'status'   { DoChainStatus }
         'decide'   { ChainDecide (LevelLine) }
+        'next'     { DoChainNext }
+        'edge'     { DoChainEdge $N }
       }
     }
+    'park'      { DoPark @($Option1, $Option2, $Option3, $Option4 | Where-Object { $_ }) }
+    'answer'    { DoAnswer }
+    'queue'     { DoQueue }
     'selftest'  { DoSelftest }
-    default     { Die "unknown mode: $Mode (init|add|stage|heartbeat|status|orphans|chain|selftest)" }
+    default     { Die "unknown mode: $Mode (init|add|stage|heartbeat|status|orphans|chain|park|answer|queue|selftest)" }
   }
 } catch {
   # Write-Error would itself throw under $ErrorActionPreference = 'Stop', making

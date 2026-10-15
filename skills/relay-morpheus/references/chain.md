@@ -28,13 +28,16 @@ grep -nE '^\s*- \[[ ~!]\]' TICKETS.md
 2. `[!]` rows: read `(blocked: …)`. Names a ticket that is now `[x]`, or a
    file/condition the tree satisfies (check the tree, not the text) → flip it
    to `[ ]` and put it in a **later** stage than what unblocked it. Otherwise
-   leave it out and say so.
+   leave it out and say so. `(blocked: RUN-n Qk)` resolves only when Qk is
+   `replanned` or `moot` (`RM chain status` shows `## Decisions`).
 3. Name the files per ticket (ticket text plus one grep). Same-file tickets are
    one item or different stages — never two agents in one stage.
 4. Tier each ticket per seat (`tickets-zordon` table): `A110 deep/build`.
 5. One stage = one Workflow call, at most six items, ordered by dependency
    then age. The last stage is always `verify review bump commit push`, owned
-   by the main session.
+   by the main session. A stage that needs another's output gets `--after <n>`.
+6. A ticket whose spec leaves a user-owned choice open → `RM park` it now
+   ([marathon.md](marathon.md), Park); it joins no stage until answered.
 
 Write every stage to the run file, then plan every work stage with its exact
 prompt, **before the first dispatch**:
@@ -76,7 +79,9 @@ copies the planned prompt verbatim into an In-flight block, and prints the code
 and the prompt. Then:
 
 1. Flip the stage's tickets to `[~]` with the session tag; grep them back.
-2. Call `Workflow` with the `work-tickets` script shape from `tickets-zordon`,
+2. Call `Workflow` with the `work-tickets` script shape from `tickets-zordon`;
+   every fix and verify prompt carries the marathon.md paste-in paragraph,
+   and the VERDICT schema its `parked` field.
    `meta.name: 'chain-<CODE>'`, every agent `label: '<CODE> fix:B2'` /
    `'<CODE> verify:B2'`, `args` = the items with tiers.
 3. Edit the In-flight block's `run: -` to the `runId` the tool returned — no
@@ -96,7 +101,8 @@ Run every line, in order, before the next dispatch:
    believing an empty one. `null` → ticket stays `[~]`, said in the ruling.
    `passed:false` → `[ ]` with the `why` on the line. `passed:true` → `[x]`
    only when the evidence names a check that ran. The main session flips the
-   board; no agent does.
+   board; no agent does. A verdict with `parked` → marathon.md (Park) first:
+   `RM park` before anything else; `parked.stop` not `none` is a stop, now.
 2. Regression sweep, then `code-review:code-review` on the staged diff; fix
    findings via a fix agent (3-pass cap).
 3. Commit with the ticket-first message and the code trailing:
@@ -120,8 +126,13 @@ Run every line, in order, before the next dispatch:
 7. Blocked re-check (step 1.2); a newly unblocked ticket → `RM add "<stage>"`,
    then `chain plan` it with its own prompt file.
 8. Re-read the board; dropped or someone-else's `[~]` tickets leave the item
-   list with a ruling. Dispatch the next pending stage (step 2). None left →
-   the final main-session stage: review, version bump, commit; the push asks.
+   list with a ruling. Then `RM chain next`: `NEXT` → step 2; `HOLD` → step 4;
+   `ASK` / `UNBLOCK` → [marathon.md](marathon.md) (The end batch, Unblock)
+   before anything final; `WAIT` → a stage is in flight, wait for its
+   notification; `BLOCKED` → stages wait on a failed one: retry it (step 3.3)
+   and close the failed row `>` naming the retry, or report it; `FINAL` → the
+   main-session stage: review, version bump, commit; the push asks on its own,
+   after the batch.
 
 ## Step 4 — the 80 % hold
 
@@ -174,4 +185,4 @@ dispatch `next`; over → `RM chain hold` again (same `since`) and arm the
 listener. The driver's stamp is refreshed by its own `dispatch`, `heartbeat`,
 `hold`, `release` and every `wait` poll, so a tag older than 20 minutes is a
 driver that stopped, and may be taken.
-Nothing is asked; the file is the plan.
+Nothing is asked but the parked queue (`chain next` → `ASK`); the file is the plan.

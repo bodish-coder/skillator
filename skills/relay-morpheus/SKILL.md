@@ -2,12 +2,13 @@
 name: relay-morpheus
 description: >-
   Use when work runs in stages and the session may not survive to their end —
-  a multi-stage plan, a fan-out of subagents, a sleeping laptop, a dropping
-  link, a usage limit closing in.
-  Also when the user says "staged workflow", "work all open tickets in
-  stages", "keep going", "auto-start the next workflow", "next stage", "pause
-  at 80% usage", "resume the run", or "what was in flight". NOT for writing a
-  session handoff (`handoff-cortana`) and NOT for the board (`tickets-zordon`).
+  a multi-stage plan, subagent fan-out, a sleeping laptop, a dropping link, a
+  usage limit.
+  Also on "staged workflow", "work all open tickets in stages", "keep going",
+  "auto-start the next workflow", "next stage", "pause at 80% usage",
+  "marathon", "ask me everything at the end", "resume the run", or "what was
+  in flight". NOT for writing a session handoff (`handoff-cortana`) and NOT
+  for the board (`tickets-zordon`).
 ---
 
 # relay-morpheus — staged runs that outlive the session
@@ -96,7 +97,9 @@ last seen: wrote store.py, tests not yet run.
   say, JSON consumers expect a list — costs a one-line change if wrong.
 ```
 
-**States:** `` (pending) · `~` in flight · `x` landed · `!` failed.
+**States:** `` (pending) · `~` in flight · `x` landed · `!` failed · `?`
+parked (chain only: every item waits on a decision) · `>` re-planned (`landed`
+names the new stage).
 **`landed`** is a commit sha or a path, never a claim. An empty `landed` on an
 `x` row is a lie the next session will believe.
 **Numbers are serial across the project, not per run.** `init` takes the RUN
@@ -158,11 +161,28 @@ its code and exact prompt before the first dispatch; `chain decide` (on
 of a new stage; `mode:` in the run file naming what was actually dispatched.
 Read that file before the first `chain` command.
 
+Every chain is a **marathon**: a question only the user can answer is parked
+on disk (`park`), the chain goes on with every stage that does not wait on it
+(`chain next`), and the queue is asked once, at the end. The six stops are
+never parked:
+
+```
+A STOP IS ASKED THE MOMENT IT IS REACHED, AS THE ONLY QUESTION -
+NEVER AS ONE ITEM OF THE END BATCH
+```
+
+Two baseline runs (`scenario-marathon-stop.txt`) left an untracked directory
+alone, said its deletion could not be undone, and then asked it as item 2 of 3
+beside a format question. Read [references/marathon.md](references/marathon.md)
+when a verdict carries `parked`, a stop fires, or `chain next` prints `ASK` or
+`UNBLOCK`.
+
 ## Scripts
 
 `hooks/relay-morpheus.sh` · `hooks/relay-morpheus.ps1` — the same commands, mirrored per
 `PLATFORMS.md`: `init`, `add`, `stage`, `heartbeat`, `status`, `orphans`, and
-`chain plan|dispatch|hold|release|wait|status|decide`. They are
+`chain plan|dispatch|hold|release|wait|status|decide|next|edge`, and the
+marathon's `park`, `answer`, `queue`. They are
 bookkeeping, not judgement; every one reads or edits `.skillator/run.md` and
 nothing else. Run `selftest` on both after touching either.
 

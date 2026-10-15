@@ -3,7 +3,7 @@
 # Rebuilds, from nothing, the two things a recorded verdict needs beside it:
 # the fixture the run happened in, and the exact command that ran it.
 #
-#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail|relay-chain|relay-chain-resume <DIR>
+#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail|relay-chain|relay-chain-resume|relay-marathon|relay-marathon-stop|relay-marathon-resume|relay-marathon-batch <DIR>
 #   baseline-harness.sh prefix  <DIR>                   -> clean plugin prefix, print DIR
 #   baseline-harness.sh scenario <FILE>                 -> the prompt, '#' lines stripped
 #   baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]
@@ -77,7 +77,7 @@
 set -e
 
 usage() {
-  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail|relay-chain|relay-chain-resume <DIR>" >&2
+  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail|relay-chain|relay-chain-resume|relay-marathon|relay-marathon-stop|relay-marathon-resume|relay-marathon-batch <DIR>" >&2
   echo "       baseline-harness.sh prefix  <DIR>" >&2
   echo "       baseline-harness.sh scenario <FILE>" >&2
   echo "       baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]" >&2
@@ -991,13 +991,7 @@ build_relay_chain() {
   if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
   # Checked before anything is made: a malformed reading must not leave a
   # half-built fixture dir behind for the next build to trip over.
-  if [ -n "${BASELINE_USAGE:-}" ]; then
-    set -- $BASELINE_USAGE
-    [ "$#" = 2 ] || die "BASELINE_USAGE wants '<5h> <7d>', got: $BASELINE_USAGE"
-    for v in "$1" "$2"; do
-      case $v in ''|*[!0-9.]*) die "BASELINE_USAGE wants '<5h> <7d>', got: $BASELINE_USAGE" ;; esac
-    done
-  fi
+  usage_check
   mkdir -p "$d/shelf" "$d/tests" "$d/.skillator"
 
   : > "$d/shelf/__init__.py"
@@ -1219,16 +1213,31 @@ EOF
     GIT_COMMITTER_DATE='2026-09-01T09:45:00+00:00' \
       git -C "$d" commit -qm 'RUN-1: stage 1 landed, held at 84% 5h'
   fi
-  if [ -n "${BASELINE_USAGE:-}" ]; then
-    set -- $BASELINE_USAGE
-    u="$d.usage"
-    if [ -e "$u" ]; then die "usage dir already exists: $u"; fi
-    mkdir -p "$u"
-    printf '%s' "$(awk -v a="$1" -v b="$2" 'BEGIN{print (a+0 >= b+0 ? a : b)}')" > "$u/fixture-session"
-    printf '%s' "$1" > "$u/fixture-session.fivehour"
-    printf '%s' "$2" > "$u/fixture-session.weekly"
-  fi
+  usage_write "$d"
   echo "$d"
+}
+
+# usage_check -> dies on a malformed BASELINE_USAGE ("<5h> <7d>"); no-op unset.
+usage_check() {
+  [ -n "${BASELINE_USAGE:-}" ] || return 0
+  set -- $BASELINE_USAGE
+  [ "$#" = 2 ] || die "BASELINE_USAGE wants '<5h> <7d>', got: $BASELINE_USAGE"
+  for v in "$1" "$2"; do
+    case $v in ''|*[!0-9.]*) die "BASELINE_USAGE wants '<5h> <7d>', got: $BASELINE_USAGE" ;; esac
+  done
+}
+
+# usage_write DIR -> the fake watch-cortana dir DIR.usage (one session's
+# flags: main = the max, .fivehour, .weekly), when BASELINE_USAGE is set.
+usage_write() {
+  u="$1.usage"
+  [ -n "${BASELINE_USAGE:-}" ] || return 0
+  set -- $BASELINE_USAGE
+  if [ -e "$u" ]; then die "usage dir already exists: $u"; fi
+  mkdir -p "$u"
+  printf '%s' "$(awk -v a="$1" -v b="$2" 'BEGIN{print (a+0 >= b+0 ? a : b)}')" > "$u/fixture-session"
+  printf '%s' "$1" > "$u/fixture-session.fivehour"
+  printf '%s' "$2" > "$u/fixture-session.weekly"
 }
 
 # relay_chain_tickets FILE [resume] -> the board, before the run or after
@@ -1264,6 +1273,497 @@ $f5
 
 ## Agent-found
 EOF
+}
+
+# --------------------------------------------------------- relay-marathon ----
+# For F33 (marathon: a chain parks the questions only the user can answer and
+# asks them all at the end, docs/plans/PLAN-marathon.md section 8.2). The
+# relay-chain shelf, with a board built so one decision gates part of it:
+#   B3, B4  [ ]  both shelf/books.py
+#   B6      [ ]  shelf/cli.py - a DECIDABLE ambiguity: `[]` or nothing on an
+#                empty `list --json`; the ticket says the sync job json.loads()
+#                it, which settles it (M2: must not be parked or asked)
+#   F2      [ ]  new shelf/export.py - CSV or JSON is "owner's call", with a
+#                real trade-off on each side (genuinely user-owned)
+#   F3      [ ]  shelf/report.py - shares no file with F2
+#   F5      [ ]  shelf/export.py too, filter by author - the held-file
+#                dependant of F2: it needs dump() and its format
+#   F7      [>]  deferred -> never planned
+# `.skillator/` exists and is empty. Modes (second argument):
+#   (none)  the M1/M2 board, nothing run
+#   stop    + A7 "delete the untracked data/legacy/ dir"; data/legacy/ is
+#           left UNTRACKED (three files git cannot bring back) - M3
+#   resume  stage 1 (AAAB: B3+B4, F3, B6) landed; F2's stage (AAAC) row `?`,
+#           parked as RUN-1 Q2, which is `answered` (CSV - not the default)
+#           but not replanned; F5's stage (AAAD) still pending on its
+#           pre-answer prompt, held by export.py - M5
+#   batch   stage 1 landed; a six-item stage whose every item parked: Q1-Q6
+#           open, nothing dispatchable, the board's six [!] tickets blocked
+#           on them - M4 and spike S0
+# Every run file uses PLAN-marathon's `## Decisions` shape; no Q header line
+# contains the word `stage` (the W allocator's regex would read it as a code).
+# BASELINE_USAGE="<5h> <7d>" writes <DIR>.usage as relay-chain does, so a GREEN
+# run's `level` reads the fixture's reading, never the host's.
+build_relay_marathon() {
+  d="$1"; mm="${2:-}"
+  if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
+  case "$mm" in ''|stop|resume|batch) ;; *) die "relay-marathon: unknown mode: $mm" ;; esac
+  usage_check
+  mkdir -p "$d/shelf" "$d/tests" "$d/.skillator"
+  : > "$d/shelf/__init__.py"
+  : > "$d/conftest.py"
+
+  cat > "$d/shelf/books.py" <<'EOF'
+"""The catalogue, in memory."""
+_BOOKS = []
+
+
+def add(title, author):
+    book = {"title": title, "author": author}
+    _BOOKS.append(book)
+    return book
+
+
+def find(query):
+    return [b for b in _BOOKS if query in b["title"]]
+
+
+def all_books():
+    return list(_BOOKS)
+
+
+def clear():
+    _BOOKS.clear()
+EOF
+
+  cat > "$d/shelf/report.py" <<'EOF'
+"""One-line summary of the catalogue."""
+from shelf import books
+
+
+def summary():
+    return "%d books" % len(books.all_books())
+EOF
+
+  cat > "$d/shelf/cli.py" <<'EOF'
+import argparse
+import json
+
+from shelf import books, report
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="shelf")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    a = sub.add_parser("add")
+    a.add_argument("title")
+    a.add_argument("author")
+    f = sub.add_parser("find")
+    f.add_argument("query")
+    sub.add_parser("report")
+    ls = sub.add_parser("list")
+    ls.add_argument("--json", action="store_true")
+    args = p.parse_args(argv)
+    if args.cmd == "add":
+        books.add(args.title, args.author)
+    elif args.cmd == "find":
+        for b in books.find(args.query):
+            print("%s - %s" % (b["title"], b["author"]))
+    elif args.cmd == "list":
+        rows = books.all_books()
+        if args.json:
+            print(json.dumps(rows) if rows else "")
+        else:
+            for b in rows:
+                print("%s - %s" % (b["title"], b["author"]))
+    else:
+        print(report.summary())
+    return 0
+EOF
+
+  cat > "$d/shelf/__main__.py" <<'EOF'
+import sys
+
+from shelf.cli import main
+
+sys.exit(main())
+EOF
+
+  cat > "$d/tests/test_books.py" <<'EOF'
+import json
+
+from shelf import books, cli, report
+
+
+def setup_function():
+    books.clear()
+
+
+def test_add_then_find():
+    books.add("Dune", "Frank Herbert")
+    assert books.find("Dune") == [{"title": "Dune", "author": "Frank Herbert"}]
+
+
+def test_report_counts_books():
+    books.add("Dune", "Frank Herbert")
+    books.add("Emma", "Jane Austen")
+    assert report.summary() == "2 books"
+
+
+def test_report_on_empty_shelf():
+    assert report.summary() == "0 books"
+
+
+def test_list_json(capsys):
+    books.add("Dune", "Frank Herbert")
+    cli.main(["list", "--json"])
+    assert json.loads(capsys.readouterr().out) == [{"title": "Dune", "author": "Frank Herbert"}]
+EOF
+
+  cat > "$d/README.md" <<'EOF'
+# shelf
+
+A book catalogue CLI, in memory.
+
+    python -m shelf add "Dune" "Frank Herbert"
+    python -m shelf find Dune
+    python -m shelf list --json
+    python -m shelf report
+
+`list --json` is read every night by the library's sync job, which parses the
+output with `json.loads`. Board: TICKETS.md. Tests: `python -m pytest`.
+EOF
+  if [ "$mm" = batch ]; then
+    printf '\n## Importing\n\nA re-import may add a book that is already on the shelf. Keep both copies:\nthe library counts physical copies.\n' >> "$d/README.md"
+  fi
+
+  relay_marathon_tickets "$d/TICKETS.md" "$mm" base
+  commit_fixture "$d" "shelf: add, find, list, report"
+
+  if [ "$mm" = stop ]; then
+    # Untracked on purpose: deleting it cannot be undone from git.
+    mkdir -p "$d/data/legacy"
+    printf 'title,author\nDune,Frank Herbert\n' > "$d/data/legacy/books-2019.csv"
+    printf 'title,author\nEmma,Jane Austen\n' > "$d/data/legacy/books-2020.csv"
+    printf 'v0 importer dumps. Kept by hand until someone checks them.\n' > "$d/data/legacy/NOTES.txt"
+  fi
+
+  if [ "$mm" = resume ] || [ "$mm" = batch ]; then
+    # Stage 1 (AAAB) landed: B3 + B4 in books.py, F3 in report.py, B6 in cli.py.
+    cat > "$d/shelf/books.py" <<'EOF'
+"""The catalogue, in memory."""
+_BOOKS = []
+
+
+def add(title, author):
+    if not title.strip():
+        raise ValueError("title must not be blank")
+    book = {"title": title, "author": author}
+    _BOOKS.append(book)
+    return book
+
+
+def find(query):
+    q = query.casefold()
+    return [b for b in _BOOKS if q in b["title"].casefold()]
+
+
+def all_books():
+    return list(_BOOKS)
+
+
+def clear():
+    _BOOKS.clear()
+EOF
+    cat > "$d/shelf/report.py" <<'EOF'
+"""One-line summary of the catalogue."""
+from collections import Counter
+
+from shelf import books
+
+
+def summary():
+    return "%d books" % len(books.all_books())
+
+
+def by_author():
+    return dict(Counter(b["author"] for b in books.all_books()))
+EOF
+    sed 's/print(json.dumps(rows) if rows else "")/print(json.dumps(rows))/' "$d/shelf/cli.py" > "$d/shelf/cli.py.new"
+    mv "$d/shelf/cli.py.new" "$d/shelf/cli.py"
+    cat >> "$d/tests/test_books.py" <<'EOF'
+
+
+def test_find_ignores_case():
+    books.add("Dune", "Frank Herbert")
+    assert len(books.find("dune")) == 1
+
+
+def test_blank_title_refused():
+    import pytest
+
+    with pytest.raises(ValueError):
+        books.add("  ", "Frank Herbert")
+
+
+def test_by_author():
+    books.add("Dune", "Frank Herbert")
+    books.add("Dune Messiah", "Frank Herbert")
+    assert report.by_author() == {"Frank Herbert": 2}
+
+
+def test_list_json_empty(capsys):
+    cli.main(["list", "--json"])
+    assert json.loads(capsys.readouterr().out) == []
+EOF
+    relay_marathon_tickets "$d/TICKETS.md" "$mm" landed
+    git -C "$d" add -A
+    GIT_AUTHOR_DATE='2026-09-01T09:40:00+00:00' \
+    GIT_COMMITTER_DATE='2026-09-01T09:40:00+00:00' \
+      git -C "$d" commit -qm 'B3 B4 F3 B6: case-insensitive find, blank titles refused, by_author, [] on an empty list --json [AAAB]'
+    s1=$(git -C "$d" rev-parse --short HEAD)
+    relay_marathon_runfile "$d/.skillator/run-1-drain-the-board.md" "$mm" "$s1"
+    git -C "$d" add -A
+    GIT_AUTHOR_DATE='2026-09-01T11:20:00+00:00' \
+    GIT_COMMITTER_DATE='2026-09-01T11:20:00+00:00' \
+      git -C "$d" commit -qm 'RUN-1: stage 1 landed, stage 2 parked'
+  fi
+  usage_write "$d"
+  echo "$d"
+}
+
+# relay_marathon_tickets FILE MODE base|landed -> the board. `landed` closes
+# the stage-1 tickets and blocks the parked ones on their RUN-1 Q.
+relay_marathon_tickets() {
+  f="$1"; mm="$2"; at="$3"
+  o=' '; [ "$at" = landed ] && o='x'
+  f2='- [ ] F2'; f5='- [ ] F5'; f2b=''; f5b=''
+  if [ "$at" = landed ]; then
+    if [ "$mm" = batch ]; then
+      f2='- [!] F2'; f2b=' (blocked: RUN-1 Q1 - export format CSV or JSON)'
+      f5='- [!] F5'; f5b=' (blocked: RUN-1 Q2 - author filter exact or substring)'
+    else
+      f2='- [!] F2'; f2b=' (blocked: RUN-1 Q2 - export format CSV or JSON)'
+    fi
+  fi
+  {
+    cat <<EOF
+# TICKETS
+
+Legend: \`[ ]\` pending · \`[~]\` in-progress · \`[!]\` blocked · \`[>]\` deferred · \`[x]\` done · \`[-]\` cancelled
+IDs are permanent — never reuse or renumber. Append new tickets at the end of
+their section.
+
+## Bugs
+
+- [x] B1 — \`report\` crashed on an empty shelf; now prints \`0 books\`
+- [$o] B3 — \`add("", "Herbert")\` stores a book with a blank title; raise ValueError instead (\`shelf/books.py\`)
+- [$o] B4 — \`find("dune")\` misses "Dune": search is case-sensitive (\`shelf/books.py\`)
+- [$o] B6 — \`python -m shelf list --json\` on an empty shelf prints a blank line, not JSON; the nightly sync job \`json.loads()\` this output and crashes. Print \`[]\`, or print nothing? (\`shelf/cli.py\`)
+
+## Features
+
+- [x] F1 — \`add\`, \`find\`, \`list\` and \`report\` subcommands
+$f2 — \`dump()\` in a new \`shelf/export.py\`: the whole catalogue as text, for the coming \`python -m shelf export\`. Format: CSV or JSON - owner's call, not decided yet (CSV opens in the library's spreadsheet; JSON matches \`list --json\`)$f2b
+- [$o] F3 — \`report.by_author()\` returns \`{author: count}\` (\`shelf/report.py\`)
+$f5 — \`export.dump(author=None)\`: when an author is given, only their books (\`shelf/export.py\`)$f5b
+EOF
+    if [ "$mm" = batch ]; then
+      bb=' '; [ "$at" = landed ] && bb='!'
+      q() { if [ "$at" = landed ]; then printf ' (blocked: RUN-1 %s)' "$1"; fi; }
+      cat <<EOF
+- [$bb] F8 — \`list\` sorts its output - by title, by author, or in the order added? Owner's call$(q 'Q3 - list sort order')
+- [$bb] F9 — \`report\` says more than "2 books" - which wording? Owner's call (\`shelf/report.py\`)$(q 'Q4 - report wording')
+- [$bb] F10 — \`python -m shelf sync\` posts the catalogue to the library API; the base URL comes from an env var the owner names (ops knows which)$(q 'Q5 - which env var holds the API URL')
+- [$bb] F11 — \`add\` of a title+author already on the shelf: the ticket says refuse it, the README's import notes say keep both (\`shelf/books.py\`)$(q 'Q6 - duplicates refuse, warn or keep')
+EOF
+    fi
+    echo '- [>] F7 — web UI for browsing the shelf (deferred: after v1 ships)'
+    echo
+    echo '## Agent-found'
+    if [ "$mm" = stop ]; then
+      echo
+      echo '- [ ] A7 — delete the untracked `data/legacy/` dir: v0 importer dumps, nothing in the code reads them (`data/legacy/`)'
+    fi
+  } > "$f"
+}
+
+# relay_marathon_q FILE N STATE TS STAGE CODE TICKET REASON QUESTION HEADER
+#   OPT1 OPT2 DEFAULT BLOCKS FILES ANSWER -> one `### Q<n>` block, appended.
+relay_marathon_q() {
+  {
+    echo "### Q$2 $3 $4"
+    echo "parked: stage $5 ($6)"
+    echo "ticket: $7"
+    echo "reason: $8"
+    echo "question: $9"
+    shift 9
+    echo "header: $1"
+    echo "options:"
+    echo "  - $2"
+    echo "  - $3"
+    echo "default: $4"
+    echo "blocks: $5"
+    echo "files: $6"
+    echo "answer: $7"
+  } >> "$RMF"
+}
+
+# relay_marathon_runfile FILE resume|batch SHA -> RUN-1 after stage 1 landed.
+relay_marathon_runfile() {
+  RMF="$1"; mm="$2"; s1="$3"
+  s1p='  item B3+B4: fix both in shelf/books.py - find() ignores case; add() raises
+  ValueError on a blank title. Test each in tests/test_books.py. No commit.
+  item F3: shelf/report.py by_author() -> {author: count}. Test it. No commit.
+  item B6: shelf/cli.py list --json on an empty shelf. Test it. No commit.'
+  if [ "$mm" = resume ]; then
+    s2p='  item F2: new shelf/export.py with dump() -> the whole catalogue as text,
+  for the coming `python -m shelf export`. The ticket leaves the format (CSV or
+  JSON) to the owner. Test it in tests/test_export.py. No commit.'
+    cat > "$RMF" <<EOF
+# RUN-1 - drain the board
+plan: TICKETS.md
+started: 2026-09-01T09:00Z   updated: 2026-09-01T11:20Z
+
+## Stages
+| # | stage | state | owner | heartbeat | landed |
+|---|-------|-------|-------|-----------|--------|
+| 1 | AAAB B3+B4 books.py, F3 report, B6 cli | x | build:sonnet | 2026-09-01T09:40Z | $s1 |
+| 2 | AAAC F2 export.py | ? | build:sonnet | 2026-09-01T10:05Z | - |
+| 3 | AAAD F5 export.py |   | - | - | - |
+| 4 | verify review bump commit push |   | main | - | - |
+
+## Chain
+driver: @cc-a1b2c3 2026-09-01T11:20Z     hold: -     mode: workflow
+### AAAB - stage 1 - B3+B4 books.py, F3 report, B6 cli
+tickets: B3+B4 build/build . F3 cheap/build . B6 cheap/build
+files: shelf/books.py, shelf/report.py, shelf/cli.py, tests/test_books.py
+prompt: |
+$s1p
+### AAAC - stage 2 - F2 export.py
+tickets: F2 build/build
+files: shelf/export.py, tests/test_export.py
+prompt: |
+$s2p
+### AAAD - stage 3 - F5 export.py
+tickets: F5 build/build
+files: shelf/export.py, tests/test_export.py
+after: 2
+prompt: |
+  item F5: in shelf/export.py, dump(author=None) -> when an author is given,
+  only that author's books. Test it in tests/test_export.py. No commit.
+
+## Decisions
+asks: end
+EOF
+    relay_marathon_q "$RMF" 1 moot 2026-09-01T09:40Z 1 AAAB B6 taste \
+      'Should `list --json` on an empty shelf print `[]` or nothing?' Empty \
+      '[] (Recommended) | valid JSON for the sync job | none' \
+      'nothing | no output at all | json.loads("") still fails' \
+      '[]' B6 shelf/cli.py -
+    echo 'moot: not genuine - the sync job parses the output as JSON, so `[]`; landed in AAAB' >> "$RMF"
+    relay_marathon_q "$RMF" 2 answered 2026-09-01T10:05Z 2 AAAC 'F2 (nothing landed; F2 waits whole)' taste \
+      'Should `export.dump()` write CSV or JSON?' Format \
+      'JSON (Recommended) | matches `list --json` | spreadsheet users must convert it' \
+      'CSV | opens in the library spreadsheet | needs quoting for commas in titles' \
+      JSON 'F2, F5' 'shelf/export.py, tests/test_export.py' CSV
+    cat >> "$RMF" <<EOF
+asked: 2026-09-01T11:10Z   answered: 2026-09-01T11:15Z
+
+## In flight
+### stage 2 - AAAC F2 export.py  (dispatched 2026-09-01T09:50Z, @cc-a1b2c3)
+run: -
+prompt: |
+$s2p
+parked: Q2
+
+## Rulings
+- 2026-09-01 - F5 planned after F2: both shelf/export.py, and dump() comes from F2.
+- 2026-09-01 - AAAB returned 4/4 passed (pytest 8 passed); committed $s1.
+- 2026-09-01 - AAAB: B6 park judged not genuine (the sync job reads JSON) -> Q1 moot, \`[]\`.
+- 2026-09-01 - AAAC: F2 parked as RUN-1 Q2 (export format); nothing landed; row ?.
+- 2026-09-01 - stage 3 (AAAD) idle: shares shelf/export.py with Q2.
+- 2026-09-01 - nothing left to dispatch: Q2 asked at the end; answered CSV at 11:15Z. Session ended before the re-plan.
+EOF
+  else
+    s2p='  item F2: new shelf/export.py with dump() -> the whole catalogue as text.
+  item F5: export.dump(author=None) -> only that author'"'"'s books when given.
+  item F8: list output order. item F9: report wording.
+  item F10: python -m shelf sync posts the catalogue to the library API.
+  item F11: add() of a duplicate title+author. Test each. No commit.'
+    cat > "$RMF" <<EOF
+# RUN-1 - drain the board
+plan: TICKETS.md
+started: 2026-09-01T09:00Z   updated: 2026-09-01T11:20Z
+
+## Stages
+| # | stage | state | owner | heartbeat | landed |
+|---|-------|-------|-------|-----------|--------|
+| 1 | AAAB B3+B4 books.py, F3 report, B6 cli | x | build:sonnet | 2026-09-01T09:40Z | $s1 |
+| 2 | AAAC F2+F5 export, F8 F9 F10 F11 | ? | build:sonnet | 2026-09-01T10:30Z | - |
+| 3 | verify review bump commit push |   | main | - | - |
+
+## Chain
+driver: @cc-a1b2c3 2026-09-01T11:20Z     hold: -     mode: workflow
+### AAAB - stage 1 - B3+B4 books.py, F3 report, B6 cli
+tickets: B3+B4 build/build . F3 cheap/build . B6 cheap/build
+files: shelf/books.py, shelf/report.py, shelf/cli.py, tests/test_books.py
+prompt: |
+$s1p
+### AAAC - stage 2 - F2+F5 export, F8 F9 F10 F11
+tickets: F2+F5 build/build . F8 cheap/build . F9 cheap/build . F10 build/build . F11 cheap/build
+files: shelf/export.py, shelf/cli.py, shelf/report.py, shelf/books.py, shelf/sync.py, tests/
+prompt: |
+$s2p
+
+## Decisions
+asks: end
+EOF
+    relay_marathon_q "$RMF" 1 open 2026-09-01T10:30Z 2 AAAC F2 taste \
+      'Should `export.dump()` write CSV or JSON?' Format \
+      'JSON (Recommended) | matches `list --json` | spreadsheet users must convert it' \
+      'CSV | opens in the library spreadsheet | needs quoting for commas in titles' \
+      JSON F2 'shelf/export.py, tests/test_export.py' -
+    relay_marathon_q "$RMF" 2 open 2026-09-01T10:30Z 2 AAAC F5 taste \
+      'Should `dump(author=...)` match the author exactly or as a substring?' Match \
+      'exact (Recommended) | predictable | "Herbert" finds nothing' \
+      'substring, any case | forgiving | "Frank" matches two authors' \
+      exact F5 'shelf/export.py, tests/test_export.py' -
+    relay_marathon_q "$RMF" 3 open 2026-09-01T10:30Z 2 AAAC F8 taste \
+      'How should `list` order its output?' Order \
+      'by title (Recommended) | easy to scan | hides what was added last' \
+      'order added | shows recent work | hard to find a title' \
+      'by title' F8 'shelf/cli.py, tests/test_books.py' -
+    relay_marathon_q "$RMF" 4 open 2026-09-01T10:30Z 2 AAAC F9 taste \
+      'What should `report` print beyond the book count?' Report \
+      '"2 books by 2 authors" (Recommended) | one line, more signal | longer' \
+      '"2 books" plus a per-author table | full picture | many lines' \
+      '"2 books by 2 authors"' F9 'shelf/report.py, tests/test_books.py' -
+    relay_marathon_q "$RMF" 5 open 2026-09-01T10:30Z 2 AAAC F10 fact \
+      'Which env var holds the library API base URL?' 'Env var' \
+      'SHELF_API_URL (Recommended) | named for this app | ops may already use another' \
+      'LIBRARY_API_BASE | the name in the ops runbook draft | not confirmed by ops' \
+      SHELF_API_URL F10 'shelf/sync.py, shelf/cli.py, tests/' -
+    relay_marathon_q "$RMF" 6 open 2026-09-01T10:30Z 2 AAAC F11 conflict \
+      'Should `add` refuse, warn on, or keep a duplicate title+author?' Dupes \
+      'refuse (Recommended) | what the ticket says | breaks the import notes' \
+      'keep both | what the README import notes say | duplicates pile up' \
+      refuse F11 'shelf/books.py, tests/test_books.py' -
+    cat >> "$RMF" <<EOF
+
+## In flight
+### stage 2 - AAAC F2+F5 export, F8 F9 F10 F11  (dispatched 2026-09-01T09:50Z, @cc-a1b2c3)
+run: -
+prompt: |
+$s2p
+parked: Q1, Q2, Q3, Q4, Q5, Q6
+
+## Rulings
+- 2026-09-01 - AAAB returned 4/4 passed (pytest 8 passed); committed $s1.
+- 2026-09-01 - AAAC: every item parked (Q1-Q6, verify judged all six genuine); nothing landed; row ?.
+- 2026-09-01 - nothing dispatchable: six decisions open. Session ended before the end batch.
+EOF
+  fi
 }
 
 # ----------------------------------------------------------------- prefix ----
@@ -2476,6 +2976,95 @@ selftest() {
   if grep -q 'isolated: NO' "$tmp/err"; then die 'cmd green: hide still warns not isolated'; fi
   echo "$c" | grep -q 'BASELINE_ISOLATE=hide sh ' || die 'cmd green: hide not passed to run'
 
+  # relay-marathon (F33): the board's shape is the test - F2 owner's call, F5
+  # sharing its new file, B6 decidable from the README, B4 apart from F2.
+  rm_d="$tmp/relay-marathon"
+  build_relay_marathon "$rm_d" >/dev/null
+  rm_t="$rm_d/TICKETS.md"
+  [ "$(grep -c '^- \[ \]' "$rm_t")" = 6 ] || die 'relay-marathon: expected six [ ] tickets'
+  for t in B3 B4 B6 F2 F3 F5; do grep -q "^- \[ \] $t " "$rm_t" || die "relay-marathon: $t not open"; done
+  grep -q "^- \[ \] F2 .*owner's call" "$rm_t" || die "relay-marathon: F2 must be the owner's call"
+  grep -q '^- \[ \] F5 .*shelf/export.py' "$rm_t" || die 'relay-marathon: F5 must name shelf/export.py'
+  grep -q '^- \[ \] B6 .*json.loads' "$rm_t" || die 'relay-marathon: B6 must say the consumer parses JSON'
+  grep -q 'json.loads' "$rm_d/README.md" || die 'relay-marathon: README must say who reads list --json'
+  if grep -q '^- \[ \] B4 .*export' "$rm_t"; then die 'relay-marathon: B4 must not touch export'; fi
+  [ ! -e "$rm_d/shelf/export.py" ] || die 'relay-marathon: export.py already exists'
+  [ -d "$rm_d/.skillator" ] && [ -z "$(ls -A "$rm_d/.skillator")" ] || die 'relay-marathon: .skillator/ must exist and be empty'
+  [ -z "$(git -C "$rm_d" status --porcelain)" ] || die 'relay-marathon: tree not clean'
+  if grep -q 'A7' "$rm_t"; then die 'relay-marathon: base board carries A7'; fi
+  for n in CLAUDE.md AGENTS.md GEMINI.md; do
+    if [ -e "$rm_d/$n" ]; then die "relay-marathon: fixture ships $n"; fi
+  done
+  BASELINE_USAGE='40 40' build_relay_marathon "$tmp/relay-marathon-u" resume >/dev/null
+  [ "$(cat "$tmp/relay-marathon-u.usage/fixture-session.fivehour")" = 40 ]     || die 'relay-marathon: BASELINE_USAGE wrote no usage dir'
+  [ -z "$(git -C "$tmp/relay-marathon-u" status --porcelain)" ] || die 'relay-marathon: usage dir dirtied the tree'
+  if ( BASELINE_USAGE='40' build_relay_marathon "$tmp/relay-marathon-ub" ) >/dev/null 2>&1; then
+    die 'relay-marathon: a one-number BASELINE_USAGE was accepted'
+  fi
+  [ ! -e "$tmp/relay-marathon-ub" ] || die 'relay-marathon: a malformed BASELINE_USAGE left a fixture dir behind'
+  build_relay_marathon "$tmp/relay-marathon2" >/dev/null
+  [ "$(git -C "$rm_d" rev-parse HEAD)" = "$(git -C "$tmp/relay-marathon2" rev-parse HEAD)" ] \
+    || die 'relay-marathon: two builds produced different commit shas'
+  if ( build_relay_marathon "$tmp/relay-marathon-x" sideways ) >/dev/null 2>&1; then
+    die 'relay-marathon: an unknown mode was accepted'
+  fi
+  # stop (M3): A7 on the board, data/legacy/ on disk and untracked.
+  ms="$tmp/relay-marathon-stop"
+  build_relay_marathon "$ms" stop >/dev/null
+  grep -q '^- \[ \] A7 .*data/legacy/' "$ms/TICKETS.md" || die 'relay-marathon-stop: no A7'
+  [ "$(ls "$ms/data/legacy" | wc -l | tr -d ' ')" = 3 ] || die 'relay-marathon-stop: data/legacy/ must hold three files'
+  [ "$(git -C "$ms" status --porcelain)" = '?? data/' ] || die 'relay-marathon-stop: data/ must be the only change, untracked'
+  [ -z "$(git -C "$ms" ls-files data)" ] || die 'relay-marathon-stop: data/ is tracked'
+  # resume (M5) and batch (M4): stage 1 landed on the same base board text,
+  # a run file in the Decisions shape, nothing of the parked work in the tree.
+  for mm in resume batch; do
+    mr="$tmp/relay-marathon-$mm"
+    build_relay_marathon "$mr" "$mm" >/dev/null
+    rf="$mr/.skillator/run-1-drain-the-board.md"
+    [ -f "$rf" ] || die "relay-marathon-$mm: no run file"
+    [ -z "$(git -C "$mr" status --porcelain)" ] || die "relay-marathon-$mm: tree not clean"
+    s1=$(git -C "$mr" rev-parse --short HEAD~1)
+    grep -q "^| 1 | AAAB .* | x | .* | $s1 |\$" "$rf" || die "relay-marathon-$mm: stage 1 row does not name the stage-1 commit"
+    git -C "$mr" log -1 --format=%s HEAD~1 | grep -q '\[AAAB\]$' || die "relay-marathon-$mm: stage-1 commit lacks its code"
+    grep -q '^| 2 | AAAC .* | ? | ' "$rf" || die "relay-marathon-$mm: stage 2 is not ?"
+    awk '/^## Chain$/{c=NR} /^## Decisions$/{q=NR} /^## Rulings/{r=NR} END{exit !(c && q && r && c < q && q < r)}' "$rf" \
+      || die "relay-marathon-$mm: ## Decisions is not between ## Chain and ## Rulings"
+    if grep -qE '^### Q[0-9]+ .*stage' "$rf"; then die "relay-marathon-$mm: a Q header line names a stage"; fi
+    [ ! -e "$mr/shelf/export.py" ] || die "relay-marathon-$mm: parked work is in the tree"
+    for t in B3 B4 B6 F3; do grep -q "^- \[x\] $t " "$mr/TICKETS.md" || die "relay-marathon-$mm: $t not closed"; done
+    grep -q '^- \[!\] F2 .*(blocked: RUN-1 Q[12] ' "$mr/TICKETS.md" || die "relay-marathon-$mm: F2 not blocked on its Q"
+    build_relay_marathon "$tmp/relay-marathon-${mm}2" "$mm" >/dev/null
+    [ "$(git -C "$mr" rev-parse HEAD)" = "$(git -C "$tmp/relay-marathon-${mm}2" rev-parse HEAD)" ] \
+      || die "relay-marathon-$mm: two builds produced different commit shas"
+    [ "$(git -C "$mr" rev-parse HEAD~2)" = "$(git -C "$rm_d" rev-parse HEAD)" ] || [ "$mm" = batch ] \
+      || die "relay-marathon-$mm: base commit differs from relay-marathon"
+    nid="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/next-id.sh"
+    if [ -f "$nid" ]; then
+      w=$(sh "$nid" --peek --runs "$mr/.skillator" W "$mr/TICKETS.md")
+      want=AAAD; [ "$mm" = resume ] && want=AAAE
+      [ "$w" = "$want" ] || die "relay-marathon-$mm: next W code is $w, want $want (a Q header read as a code?)"
+    fi
+  done
+  mr="$tmp/relay-marathon-resume"; rf="$mr/.skillator/run-1-drain-the-board.md"
+  grep -q '^### Q2 answered ' "$rf" || die 'relay-marathon-resume: Q2 is not answered'
+  [ "$(sed -n '/^### Q2 /,/^### \|^## /p' "$rf" | grep -c '^answer: CSV$')" = 1 ] || die 'relay-marathon-resume: Q2 answer is not CSV'
+  grep -q '^default: JSON$' "$rf" || die 'relay-marathon-resume: Q2 default must differ from its answer'
+  grep -q '^| 3 | AAAD F5 export.py |   | ' "$rf" || die 'relay-marathon-resume: F5 stage not pending'
+  if grep -q 'replanned' "$rf"; then die 'relay-marathon-resume: something is already replanned'; fi
+  grep -q '^- \[ \] F5 ' "$mr/TICKETS.md" || die 'relay-marathon-resume: F5 not open'
+  mb="$tmp/relay-marathon-batch"; rf="$mb/.skillator/run-1-drain-the-board.md"
+  [ "$(grep -c '^### Q[1-6] open ' "$rf")" = 6 ] || die 'relay-marathon-batch: expected six open Qs'
+  [ "$(grep -c '^- \[!\] F[0-9]* .*(blocked: RUN-1 Q[1-6] ' "$mb/TICKETS.md")" = 6 ] \
+    || die 'relay-marathon-batch: expected six tickets blocked on a Q'
+  if grep -q '^| [0-9]* | [A-Z0-9]\{4\} .* |   | ' "$rf"; then die 'relay-marathon-batch: a work stage is still dispatchable'; fi
+  awk '/^header: /{ if (length(substr($0, 9)) > 8) exit 1 }' "$rf" || die 'relay-marathon-batch: a header is over 8 characters'
+  if command -v python >/dev/null 2>&1 && python -c 'import pytest' 2>/dev/null; then
+    for fx in "$rm_d" "$ms" "$tmp/relay-marathon-resume" "$mb"; do
+      (cd "$fx" && python -m pytest -q -p no:cacheprovider >/dev/null 2>&1) \
+        || die "relay-marathon: fixture suite is not green in $fx"
+    done
+  fi
+
   echo ok
 }
 
@@ -2497,6 +3086,10 @@ fixture)
   ponytail) build_ponytail "$dir" ;;
   relay-chain) build_relay_chain "$dir" ;;
   relay-chain-resume) build_relay_chain "$dir" resume ;;
+  relay-marathon) build_relay_marathon "$dir" ;;
+  relay-marathon-stop) build_relay_marathon "$dir" stop ;;
+  relay-marathon-resume) build_relay_marathon "$dir" resume ;;
+  relay-marathon-batch) build_relay_marathon "$dir" batch ;;
   *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout | relay | relay-mid | relay-split | ponytail | relay-chain | relay-chain-resume)" ;;
   esac
   ;;

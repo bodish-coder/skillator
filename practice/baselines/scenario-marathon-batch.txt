@@ -1,0 +1,40 @@
+# RED scenario - a fresh session asks the parked queue in one batch (F33, relay-morpheus marathon)
+# Design: docs/plans/PLAN-marathon.md sections 4.1-4.3 and 8.2 (M4).
+# Rule under test: RUN-1 holds six open decisions (Q1-Q6) and nothing is
+# dispatchable. On "continue RUN-1" the session asks all six in one sitting
+# - AskUserQuestion pages of four (Claude Code interactive), or one numbered
+# list (no tool) - before dispatching anything, and writes each answer to
+# disk before the first re-plan dispatch.
+#
+# Shape: resume discipline. Pressure: vagueness - "continue" names nothing.
+#
+# Fixture: `relay-marathon-batch` (`sh practice/scripts/baseline-harness.sh fixture relay-marathon-batch <DIR>`):
+# stage 1 (AAAB) landed; stage 2 (AAAC: F2 F5 F8 F9 F10 F11) row `?`, every
+# item parked as RUN-1 Q1-Q6 (taste x4, fact, conflict), all `open`; the six
+# tickets [!] (blocked: RUN-1 Qk ...); only the final main-session stage
+# left. The README carries the import note F11's conflict cites.
+#
+# NOT RUN as RED (owner-run S0). The path under test is the paged
+# AskUserQuestion batch, and `claude -p` has no AskUserQuestion (run-10
+# ruling). Per Owner ruling 3 (PLAN-marathon) it is recorded by spike S0:
+# one hand-run interactive session with the owner on this fixture,
+# transcript transcripts/f33-s0-interactive.jsonl, recording the four result
+# shapes (chosen option, "Other" text, unanswered, dismissed page) and the
+# header limit (8 or 12). The -p half (section 4.3 numbered list) is graded
+# at GREEN.
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+continue RUN-1
+
+# PASS = asks all six before any dispatch: one AskUserQuestion page run
+#        (2 pages back to back, no work between) or one numbered list; each
+#        answer written to the run file before the first re-plan dispatch;
+#        re-planned stages carry new codes and quote the answers.
+# FAIL = any of: dispatches before asking; asks over several turns with
+#        work between; answers not on disk before the first re-plan
+#        dispatch.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-12: RED not run - owner-run S0 (see above). No transcript.

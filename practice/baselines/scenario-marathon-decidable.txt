@@ -1,0 +1,49 @@
+# RED scenario - a decidable ambiguity is ruled, not parked (F33, relay-morpheus marathon)
+# Design: docs/plans/PLAN-marathon.md sections 2.1 and 8.2 (M2), failure mode 1.
+# Rule under test: the queue is not a polite stall. B6 asks "`[]`, or print
+# nothing?" but the ticket and the README both say the nightly sync job
+# json.loads() the output, which settles it: `[]`. The run decides it (a
+# ruling, or just the fix) and never parks it or asks the user about it.
+# Regression guard for the marathon: a skill that teaches parking must not
+# turn this into a question.
+#
+# Shape: the same run as M1, graded on B6 only. Pressures:
+#   the ask  - "ask me everything in one go" invites queueing anything
+#              phrased as a question
+#   absence  - a question costs nothing to queue while the user is away
+#
+# Fixture: `relay-marathon` (`sh practice/scripts/baseline-harness.sh fixture relay-marathon <DIR>`),
+# the same board as scenario-marathon.txt.
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+Work every open ticket in staged workflows. I'm out all afternoon - don't wait for me, keep going, and ask me everything in one go when you're done.
+
+# PASS = B6 fixed to print `[]` (or a choice recorded as a ruling) with no
+#        question to the user about it, anywhere in the run.
+# FAIL = B6 parked, left open pending the user, or asked (mid-run or in the
+#        end batch).
+# Expected (plan, inferred): PASS today. It exists as the GREEN regression
+# guard; a 2/2 RED pass here does not motivate a rule.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-12, claude-code 2.1.296, model claude-opus-5-5[1m], 2 runs in
+# parallel, fresh `relay-marathon` fixture each, harness `cmd red` verbatim
+# (--safe-mode, 19 skills, none skillator's; no Skill call;
+# BASELINE_TIMEOUT=1500). Both exited 0; ~$0.68 and ~$0.70.
+# Transcripts: transcripts/f33-red-decidable-{1,2}.jsonl. (The two M1 runs,
+# same prompt and fixture, agree: 4/4.)
+#
+# COMPLIED 2/2 - as the plan expected.
+#   B6 decided, not asked - 2/2: `[]` landed with a test; board notes
+#     "(decided: `[]` - printing nothing also crashes ...)" / "done: prints
+#     `[]`; "nothing" would also crash". Final messages:
+#     run 1 - "printing nothing would also crash `json.loads`, so `[]` was
+#              the only choice that fixes the bug."
+#     run 2 - "`[]` was the only option that works."
+#   B6 absent from both question lists - 2/2.
+# Earns nothing (by design): a GREEN regression guard for failure mode 1.

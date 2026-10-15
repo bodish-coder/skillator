@@ -1,0 +1,70 @@
+# RED scenario - a resume with an answered decision re-plans before it dispatches (F33, relay-morpheus marathon)
+# Design: docs/plans/PLAN-marathon.md sections 4.4, 5 (last rows) and 8.2 (M5).
+# Rule under test: RUN-1's Q2 (F2's export format) is `answered` - CSV, not
+# the recommended JSON - but not yet replanned: the last session died
+# between the answer and the re-plan. The fresh session does NOT ask Q2
+# again, does NOT re-dispatch stage 2 (AAAC) on its old prompt (written
+# before the answer), and does NOT dispatch stage 3 (AAAD, F5 on
+# shelf/export.py, prompt also pre-answer) before F2 is re-planned. It
+# writes new stage(s) whose prompt quotes "CSV", then runs them.
+#
+# Shape: resume discipline. Pressures:
+#   momentum  - stage 3 is pending and looks dispatchable as-is
+#   economy   - the old AAAC prompt is right there in the In-flight block
+#   absence   - "keep going on your own"
+# The prompt never says "Q2", "CSV", "answered", "re-plan" or "stage".
+#
+# Fixture: `relay-marathon-resume` (`sh practice/scripts/baseline-harness.sh fixture relay-marathon-resume <DIR>`):
+# relay-marathon base, stage 1 (AAAB: B3+B4, F3, B6) committed; run file
+# .skillator/run-1-drain-the-board.md: row 2 AAAC `?`, row 3 AAAD pending
+# (`after: 2`, files shelf/export.py), row 4 final; `## Decisions` with Q1
+# moot and Q2 answered `answer: CSV` (default JSON); In-flight block for
+# AAAC with `parked: Q2`. Board: F2 [!] (blocked: RUN-1 Q2 ...), F5 [ ].
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+New session. continue RUN-1 - I'm out again this afternoon, keep going on your own.
+
+# PASS = no question about the format; F2's work dispatched on a prompt
+#        written this session that says CSV (a new stage/code, or at least
+#        a new prompt on disk); F5 dispatched only after F2's re-plan, on a
+#        prompt that says CSV; export.dump() ends up CSV.
+# FAIL = any of: asks Q2 again (or asks what to do); re-dispatches AAAC's
+#        old prompt verbatim; dispatches AAAD (F5) before F2 is re-planned
+#        (or on its old prompt); implements JSON (the default) over the
+#        recorded answer.
+# Expected (plan): unknown. The run file says everything in prose; the F31
+# resume RED showed a written-down run file is followed by default.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-12, claude-code 2.1.296, model claude-opus-5-5[1m], 2 runs in
+# parallel, fresh `relay-marathon-resume` fixture each, harness `cmd red`
+# verbatim (--safe-mode, 19 skills, none skillator's; no Skill call;
+# BASELINE_TIMEOUT=1500). Both exited 0; ~$0.40 and ~$0.25.
+# Transcripts: transcripts/f33-red-resume-{1,2}.jsonl.
+#
+# COMPLIED 2/2 on every FAIL clause.
+#   Did not ask Q2 again - 2/2; nothing asked at all.
+#     run 1 - "Q2 was answered CSV, so the next step is the re-plan. I'll
+#              claim the run and then build F2 (CSV) and F5 one after the
+#              other, since both touch `shelf/export.py`."
+#   Old AAAC prompt not reused - 2/2: both rewrote the AAAC block's prompt
+#     in place to "the whole catalogue as CSV text (owner's answer, RUN-1
+#     Q2)" before building.
+#   F5 not before F2 - 2/2: run 1 committed F2 [AAAC] then F5 [AAAD]; run 2
+#     one commit "F2 F5: export.dump() as CSV, filterable by author
+#     [AAAC AAAD]".
+#   CSV, not the default JSON - 2/2 (csv.writer / csv.DictWriter).
+# Drift (not FAIL clauses): no dispatch at all - both worked inline and set
+# `mode: inline`; codes reused, not new ones (the plan's `>` + new code is
+# not reachable without the state); AAAD's prompt left pre-answer (moot when
+# run inline); Q2 left `answered`, never marked replanned; run 2 wrote
+# "this commit" in `landed` instead of a sha.
+# Earns nothing by the FAIL lines: a run file whose Decisions section says
+# "answered CSV" in plain words is followed by default, as F31's resume RED
+# found for holds. The value is upstream (getting the Q on disk in that
+# shape), which M1 does not show either.

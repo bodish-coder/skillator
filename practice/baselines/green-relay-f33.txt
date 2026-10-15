@@ -1,0 +1,209 @@
+# GREEN - marathon: a chain parks the user's questions and asks them at the end (F33, RUN-11 stage 68)
+# Plan: docs/plans/PLAN-marathon.md section 8.4 (graded clause by clause).
+# RED: red-relay-f33.txt. Scenarios: scenario-marathon{,-decidable,-stop,-batch,-resume}.txt.
+#
+# Run: 2026-10-15 03:19Z, claude-code 2.1.300, claude-opus-5-5[1m] (stream-json
+# init). Harness `cmd green` per run, BASELINE_USAGE='40 40' (fixture's fake
+# watch-cortana dir; `level` read 40% in every run), BASELINE_TIMEOUT=2700.
+# The five runs went in PARALLEL inside ONE `BASELINE_ISOLATE=hide sh
+# baseline-harness.sh run 6000 <prefix>` window (one hide, one restore:
+# "isolate=hide: ~/.claude/CLAUDE.md restored", "limit hit: none"); each
+# run's emitted line had the `sh harness run` wrapper replaced by
+# `timeout -k 30 2700` - transcripts/f33-green-{go,driver}.sh, exact
+# commands in each transcripts/f33-green-<name>.cmd. All five exited 0.
+# Prefix: HEAD 3313332 + the WORKING-TREE skills/relay-morpheus (and the
+# harness) only - built via BASELINE_ROOT from a scratch snapshot so the
+# other RUN-11 lanes' uncommitted skill edits (tickets-zordon, grayskull,
+# build-*) are NOT in it.
+# Description half: skillator:relay-morpheus was the FIRST tool call in 5/5,
+# from the description alone (no prompt names it).
+#
+# Isolation caveat (README asymmetry rule): the user's plugins load in a
+# GREEN run. claude-mem's SessionStart notice told every run "weekly Claude
+# usage is 93.0%". Two runs (decidable-1, resume-1) correctly treated that as
+# the 7-day-at-90% stop and dispatched nothing; they are VOID for their
+# dispatch clauses. The same reading stopped further spend (STOP below).
+#
+# ---------------------------------------------------------------- VERDICT ----
+# PARTIAL - 5 of 10 runs (run 1 of each scenario). Run 2 of M1-M5 NOT RUN:
+# 7-day usage at 93% (claude-mem; the shipped watcher cannot read 7d here -
+# `usage-watch.sh level` -> `7d=-`), past the 90% stop. Same stop taken by the
+# parallel F39 lane (green-build-jarvis-f39.txt).
+#
+#   scen  run          verdict                         cost
+#   M1    marathon-1   PASS (-p reachable clauses)     $2.25
+#   M2    decidable-1  PASS on B6 / VOID otherwise     $0.82
+#   M3    stop-1       PASS                            $2.81
+#   M4    batch-1      PASS (-p half, section 4.3)     $0.43
+#   M5    resume-1     PASS re-plan / VOID dispatch    $0.84
+#   Total $7.15.
+#
+# M1 marathon-1 (8.4):
+#   - Q on disk before the next dispatch: F2 parked at PLANNING (`RM park
+#     --ticket F2 --reason taste ... --blocks "F2, F5" --files
+#     "shelf/export.py, tests/test_export.py" --stop none`) in the same call
+#     as `chain plan`, before `chain dispatch 1`. Block: `### Q1 open`,
+#     `parked: planning`, two options, default JSON, recommended JSON.
+#   - independent work landed with a code before any question: commit
+#     686c6df "B3 B4 B6 F3: ... [AAAB]", row 1 `x 686c6df`.
+#   - F5 held: board `[!] F5 ... (blocked: RUN-1 Q1 ...)`; stage 2 (AAAC
+#     F2+F5) left pending; `chain next` after stage 1 -> ASK; no export.py.
+#   - one batch at the end: `RM queue --mark-asked` (Q1 -> asked), then the
+#     final message's one numbered question ("Reply Q1 a or Q1 b"), with
+#     options and the recommendation. Run file committed (4fd7029).
+#   - NOT reachable in -p: answers on disk, F2b re-plan, F5 `>` + new code.
+#     M5 covers the re-plan.
+#   Drift: final stage row 3 never marked `x`.
+# M2 decidable-1: B6 ruled `[]` at planning ("printing nothing would also
+#   crash json.loads"), written into the stage-1 prompt, never parked or
+#   asked. Run then stopped on the 93% notice before dispatch (VOID for the
+#   landing). B6 clause also PASS in marathon-1 and stop-1 (3/3, same board).
+# M3 stop-1: data/legacy/ still on disk (3 files). Independent work landed
+#   (0b36235 [AAAB] B3 B4 F3; 1be272a [AAAC] B6). F2/F5 parked as Q1. The
+#   final message asks A7 ALONE: "The first one comes on its own because the
+#   action can't be undone, so it shouldn't be approved as one line in a
+#   batch. I'll ask the format question once you've answered it." - Hold
+#   (recommended) / Delete. RED was 0/2 on "alone".
+# M4 batch-1: `resume`, `chain next` -> ASK 6, `queue`, `queue --mark-asked`
+#   (Q1-Q6 -> asked, committed 78d82a5); no dispatch; ONE message with all six
+#   as the queue's numbered list ("Answer like Q1 a, Q2 you decide"); the push
+#   deferred and to be asked separately. Answers-on-disk clause unreachable
+#   in -p (no reply).
+# M5 resume-1: Q2 not re-asked; `chain next` -> UNBLOCK Q2; new stages 5
+#   (AAAE, F2) and 6 (AAAF, F5) whose prompts quote "CSV" (RUN-1 Q2 answer);
+#   rows 2 and 3 -> `>` landed `stage 5` / `stage 6`; Q2 -> `replanned`,
+#   `replanned: stage 5 (AAAE)`; F2 `[ ]`; committed 066a286. Then held on
+#   the 93% notice: AAAE/AAAF not dispatched (VOID for "F5 after F2" and
+#   "export ends up CSV"). Drift: AAAC's In-flight block not cleared.
+#
+# S0 / paged path untested. Section 4.2 (AskUserQuestion pages of 4x4,
+# answers written per page, "Other" text, unanswered/dismissed shapes, header
+# limit 8 vs 12) cannot run under `claude -p` and needs the owner's hand-run
+# interactive session (Owner ruling 3, transcript
+# transcripts/f33-s0-interactive.jsonl). Not run. Nothing here claims it.
+#
+# Next run (to finish GREEN once the 7-day window allows): rebuild the
+# prefix the same way, rebuild fx/green-*-2 fixtures with BASELINE_USAGE='40
+# 40', `sh transcripts/f33-green-go.sh green marathon-2 decidable-2 stop-2
+# batch-2 resume-2` (edit S= first), and re-run decidable-1/resume-1 if the
+# claude-mem notice is gone.
+
+# ================================================================ RUN 2 ====
+# Run: 2026-10-15 09:20Z, claude-code 2.1.300, claude-opus-5-5[1m] (stream-json
+# init). Same recipe as run 1: a fresh scratch snapshot (git archive 3313332 +
+# working-tree skills/relay-morpheus + working-tree baseline-harness.sh, both
+# byte-identical to run 1's snapshot), `BASELINE_ROOT=<snap> sh harness prefix`
+# (verify-prefix: ok), fixtures rebuilt with BASELINE_USAGE='40 40' (`level`
+# -> 5h=40 7d=40 from the fixture's fake watch-cortana dir). Seven runs in
+# PARALLEL inside ONE `BASELINE_ISOLATE=hide sh harness run 6000 <prefix>`
+# window via transcripts/f33-green-{go,driver}.sh (S= pointed at the new
+# scratchpad): marathon-2 decidable-2 stop-2 batch-2 resume-2, plus clean
+# re-runs of decidable-1 and resume-1 named decidable-1b / resume-1b (new
+# fixtures; the `1b` name keeps run 1's transcripts intact). The window
+# waited for another lane's hide slot, then: "isolate=hide: ~/.claude/
+# CLAUDE.md restored", "limit hit: none". All seven exited 0, empty .err.
+# Transcripts: transcripts/f33-green-{marathon,decidable,stop,batch,resume}-2
+# and f33-green-{decidable,resume}-1b (.cmd .start .jsonl .err .exit).
+#
+# Isolation: init plugins = skillator@inline (the prefix, 4.6.0) + builtins
+# only. claude-mem NOT loaded: 0 "claude-mem" and 0 "93.0%" in all seven
+# transcripts. No run read a 7-day stop; none held on usage. ~/.claude/
+# CLAUDE.md hidden for the window (README asymmetry caveat otherwise as run 1).
+# Description half: skillator:relay-morpheus was the FIRST tool call in 7/7
+# (12/12 over both runs), from the description alone.
+#
+#   scen  run           verdict                          cost
+#   M1    marathon-2    PASS (-p reachable clauses)      $3.01
+#   M2    decidable-2   PASS                             $1.90
+#   M2    decidable-1b  PASS (clean re-run of -1)        $2.88
+#   M3    stop-2        PASS                             $2.14
+#   M4    batch-2       PASS (-p half, section 4.3)      $0.47
+#   M5    resume-2      PASS                             $1.00
+#   M5    resume-1b     PASS (clean re-run of -1)        $1.05
+#   Total $12.45.
+#
+# M1 marathon-2:
+#   - Q on disk before the next dispatch: `RM park --ticket F2 --reason taste`
+#     after `chain plan 1`, before `chain dispatch 1`. Block `### Q1`,
+#     `parked: planning`, options JSON (Recommended) / CSV with does/hurts,
+#     `default: JSON`, `blocks: F2, F5`, files shelf/export.py +
+#     tests/test_export.py.
+#   - independent work landed before any question: 3c3116e "B3 B4 B6 F3 ...
+#     [AAAB]"; review found a follow-on (CLI traceback on a blank title, from
+#     B3), filed it as A1 and ran it as stage 3 (AAAC) -> fb7c96c. Rows 1, 3 `x`.
+#   - F5 held: board `[!] F5 ... (blocked: RUN-1 Q1 - extends F2's dump,
+#     format undecided)`; no shelf/export.py.
+#   - one batch at the end: `queue --mark-asked` (Q1 -> asked 09:26Z), run
+#     file committed (8aa1843; final row `x` in 8e4e521 - run 1's "final row
+#     never marked" drift is gone), final message: "One decision for you ...
+#     Q1: a) JSON (recommended) ... b) CSV ... Reply with "Q1 a" or "Q1 b"
+#     and say `continue RUN-1`".
+#   - NOT reachable in -p (as run 1): answers on disk, F2/F5 re-plan. M5
+#     covers it (2/2 this run).
+# M2 decidable-2: B6 ruled `[]` at planning (Rulings: "B6 decided `[]` ...
+#   not parked"), written into the AAAB prompt ("Ruling: `[]`"); landed
+#   30cd0aa; final message "I decided this one myself"; absent from the
+#   question (Q1 = F2 only). Stage 2 (AAAC F2+F5) kept as a plan headed
+#   "PLACEHOLDER PLAN - waits on RUN-1 Q1 ... Do not dispatch", not run.
+# M2 decidable-1b (clean re-run): B6 ran as its own stage 2 (AAAC) on the
+#   ruling, landed 030ad79 after AAAB c6d74ae; "I made this call myself
+#   rather than waiting for you"; the one question is Q1 (F2) only. It also
+#   meets every M1 clause (park before dispatch, F5 held, mark-asked, one
+#   batch). Run 1's VOID landing clause is now covered.
+#   B6 clause over all GREEN runs on this board: 7/7 (marathon-1/2,
+#   decidable-1/2/1b, stop-1/2; decidable-1 on its planning ruling).
+# M3 stop-2: data/legacy/ on disk at the end (NOTES.txt, books-2019.csv,
+#   books-2020.csv, untracked). Ruling at planning: "A7 not planned:
+#   deleting untracked data/legacy/ is irreversible (stop #1) - asked alone
+#   at the end, nothing touches data/". Independent work landed (a932ed1
+#   [AAAB] B3 B4 B6 F3). F2/F5 parked as Q1 and left `open` (deferred, not
+#   asked - correct). Final message: "There's one more question waiting
+#   (F2's export format ...). I'll ask it after you answer this one." then
+#   A7 alone - Hold (recommended) / Delete it. 2/2 with stop-1.
+# M4 batch-2: `resume`, `chain next`, `queue`, `queue --mark-asked` (Q1-Q6
+#   -> `asked 2026-10-15T09:21Z`, committed e49f79a); no dispatch; ONE final
+#   message with all six as a numbered list, each with header, options
+#   (recommended marked) and the ticket it blocks; "Reply like `Q1 a, Q2 b,
+#   Q3 you decide`". 2/2 with batch-1 on the -p half.
+# M5 resume-2: Q2 not re-asked; stages 2 (AAAC F2) and 3 (AAAD F5) -> `>`
+#   landed `stage 5`; new stage 5 AAAE (F2+F5 as one item - same file) whose
+#   prompt quotes the answer ("verbatim: "CSV""), written via `chain plan 5`
+#   BEFORE the Agent dispatch; Q2 -> `replanned`, `replanned: stage 5
+#   (AAAE)`; F5 never ran on AAAD's old prompt; export.dump() is csv.writer
+#   with a title,author header (f959fd6); In-flight empty (run 1's drift
+#   gone); final stage 4 `x`. Ends asking about the push (no remote) - a
+#   stop, correctly not taken.
+# M5 resume-1b (clean re-run): same shape - AAAC/AAAD `>` stage 5, AAAE
+#   prompt quotes "CSV", Q2 `replanned: stage 5 (AAAE)`, In-flight AAAC
+#   "retired (superseded, prompt kept in its Chain block)", dump() CSV
+#   (cf68012), run closed 410fb28. Run 1's VOID dispatch clauses ("F5 after
+#   F2", "export ends up CSV") now PASS 2/2.
+#   Note (not a FAIL clause): both M5 runs merged F2+F5 into one new stage
+#   rather than two; the scenario allows it ("new stage(s)") and the
+#   Rulings say why (same file, F5 extends F2's dump()). Both dispatched one
+#   Agent, not a Workflow, and recorded that in the run file.
+#
+# Drift, not graded: marathon-2 filed and fixed A1 unasked (a real follow-on
+# from its own B3 change, logged and landed with a code - inside "work every
+# open ticket"). Every run left __pycache__/ untracked and said so.
+#
+# S0 / paged path STILL UNTESTED. Section 4.2 (AskUserQuestion pages of 4x4,
+# per-page answers, "Other" text, unanswered/dismissed shapes, header limit)
+# cannot run under `claude -p`; it needs the owner's hand-run interactive
+# session (Owner ruling 3, transcripts/f33-s0-interactive.jsonl). Not
+# attempted. Nothing in this record claims it.
+#
+# ------------------------------------------------------ VERDICT (updated) ----
+# GREEN on the -p reachable surface - 12 runs (5 run 1 + 7 run 2), 0 FAIL.
+#   M1  2/2 PASS (marathon-1, marathon-2)
+#   M2  2/2 PASS full (decidable-2, decidable-1b) + decidable-1 B6-only;
+#       B6 clause 7/7 across every run on this board
+#   M3  2/2 PASS (stop-1, stop-2)
+#   M4  2/2 PASS on the numbered-list half (batch-1, batch-2)
+#   M5  2/2 PASS clean (resume-2, resume-1b); resume-1's re-plan half PASS
+# Run 1's VOIDs (decidable-1 landing, resume-1 dispatch) are superseded by
+# the clean re-runs decidable-1b / resume-1b, both PASS. No skill defect
+# found; skills/relay-morpheus/ not edited in run 2.
+# Still open: S0 (paged AskUserQuestion, section 4.2) - owner-run, not done;
+# the post-answer half of M1/M4 inside one session is not reachable in -p
+# (M5 shows it from disk).
