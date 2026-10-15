@@ -54,6 +54,26 @@ percentage to give them — see `PLATFORMS.md`), so run
   files absent → `rules-orko: none`. From here on, a standing rule the user
   states ("from now on", "always", "never", "in this repo") routes to
   `rules-orko` and is on disk before the next tool call.
+- **`tiers`** (F39) — resolve tier → model for this host once per session, so
+  `build-jarvis` never has to ask which model. Read `.skillator/tiers.local.md`:
+  - missing, or its `host:` is not this host → write it: `deep`, `build` and
+    `cheap` each set to the **first** slug in this host's column of
+    `PLATFORMS.md` § Role tiers (Claude Code: `fable` / `opus` / `sonnet`, the
+    Agent tool's `model` values; codex: `gpt-6-astra/high` / `gpt-6-astra/medium`
+    / `gpt-6-astra/low`), a model the user named in this session winning over
+    the column;
+  - present → keep its models, drop every `down:` line not dated today.
+  The shape (`host:`, `deep:`, `build:`, `cheap:`, `written:`, `down:` lines) is
+  `skills/build-jarvis/references/grade.md` § The tiers file. The file is local to
+  this machine and account: make sure the repo's `.gitignore` carries
+  `.skillator/*.local.md` (append the line if missing; a repo with no
+  `.gitignore` gets one with that line). Report `tiers deep=<m> build=<m>
+  cheap=<m>`, plus `(<m> down)` for any model marked down today. Nothing is
+  probed: a model that turns out unavailable is marked down by build-jarvis at
+  dispatch, which retries one tier lower.
+  On **Claude Code** also check that `build-jarvis`'s `UserPromptSubmit` route
+  hook is wired (`build-jarvis/references/route-hook.md`); not wired → say so in
+  one line and offer it, never wire it silently.
 - **Upstream watch** (F23c, F29) — only in a repo that has
   `skills/design-arwen/UPSTREAM.md` (skillator itself); anywhere else skip it
   silently, because those tickets belong on skillator's board, not the user's.
@@ -84,7 +104,7 @@ percentage to give them — see `PLATFORMS.md`), so run
 Then state the active set in **one line** — not a feature tour:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · code-yoda full · live-friday armed (npm run dev) · watch-cortana armed at 92% · rules-orko: 2 project · 1 global
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · code-yoda full · live-friday armed (npm run dev) · watch-cortana armed at 92% · rules-orko: 2 project · 1 global · tiers deep=fable build=opus cheap=sonnet
 ```
 
 The banner is printed at the top of the reply, before any of this. It fires

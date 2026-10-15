@@ -80,7 +80,7 @@ Manual install paths, if you'd rather not run the script:
 Model names and tool names inside the skills are **Claude Code defaults**;
 [`PLATFORMS.md`](PLATFORMS.md) maps them to each host's tiers, delegation
 mechanism, and context checkpoints. [`WORKFLOW.md`](WORKFLOW.md) is the
-`build-*` skills' deterministic-orchestration path — one workflow script
+`build-jarvis`'s deterministic-orchestration path — one workflow script
 instead of hand-dispatched subagents, for builds wide enough to earn it. Keep
 both alongside `skills/` — the skills refer to them.
 
@@ -121,18 +121,20 @@ Deactivating is deleting `.skillator/grayskull.md`.
   working system: scan the code, interview the user, emit workflow specs to
   confirm, then a dependency-ordered plan to wire the UI to a real backend
   (stops at the confirmed plan). Invoke with `/designui-galadriel`.
-- **build family** (`build-vision` · `build-ultron` · `build-jarvis`) — three tiers of the "brainstorm then build" flow;
-  pick by how much model firepower and ceremony you want:
-  - **build-vision** — **`deep` tier** plans · **build tier**
-    implements · full ceremony: session `.md` on disk · handoff before context
-    checkpoint · rework. Cross-platform via `references/platforms.md`:
-    Claude Code (Fable → Opus), Cursor (GPT-5.6-Sol → Claude
-    Opus), Codex (Sol high-reasoning design → Sol build,
-    auto-compaction aware).
-  - **build-ultron** — **Opus** plans · **Opus** builds. All-Opus,
-    autonomous, no ceremony.
-  - **build-jarvis** — **Opus** plans · **Opus + Sonnet** builds
-    (Opus core, Sonnet the simple tasks). Autonomous, no ceremony.
+- **build-jarvis** — the one build skill: every feature, whether asked for
+  directly, logged on the board or named in a headless "work these tickets",
+  goes through it. Step 0 grades each seat (design / build / verify) by
+  complexity and criticality from the `PRACTICE.md` §4 table, takes the models
+  from `grayskull-power`'s `.skillator/tiers.local.md` (else `PLATFORMS.md`),
+  steps down only when a model is unavailable or the 5-hour window is past 70 %,
+  and prints one grade line before it spends anything. Design is included, so
+  nothing runs in front of it. Design questions are ruled into the design file
+  or parked with `relay-morpheus`, never asked mid-build. Full ceremony (session
+  record, handoff checkpoint, TRACE, rework) only when the work outlives the
+  session. "use fable", "opus only", "cheap", "full ceremony" are settings, not
+  other skills. An optional Claude Code `UserPromptSubmit` hook routes
+  feature-shaped prompts to it. `build-vision` and `build-ultron` are retired
+  names that redirect to it for one release.
 - **deploy-merlin** — step-by-step wizard that preps a project for the
   standard single-VPS deployment (Docker Compose + nginx + GitHub Actions): it
   interviews you for the specifics (domain, IP, SSH user, app slug, repo, ports),
@@ -186,7 +188,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
 - **grayskull-power** — one entry point that switches the whole skillator workflow on:
   arms the standing skills (reads `TICKETS.md`, checks `watch-cortana` is wired),
   prints the state in a single line, then routes each request to the one skill
-  that fits — across skillator (`audit-sherlock` for rot, `build-vision` for
+  that fits — across skillator (`audit-sherlock` for rot, `build-jarvis` for
   features, `design-arwen` for UI, `mergeprep-oracle`/`deploy-niyoj` for shipping) *and*
   the wider installed toolkit: `code-review`, `security-review`,
   `run`/`webapp-testing` to see it actually work, `workflow-authoring`/`mem-search`

@@ -1,0 +1,53 @@
+# RED - does a feature request reach a build skill today? (F39, RUN-11 stage 74)
+# Plan: docs/plans/PLAN-parallel-runs.md section 3 "F39".
+# Scenarios: scenario-build-route-{direct-1,direct-2,board-1,board-2,headless-1,headless-2}.txt
+# (one prompt each; 2 direct, 2 via the board, 2 headless "work these tickets").
+#
+# What RED means here. This is a routing test, so RED is NOT a --safe-mode
+# run (that disables every skill and invocation would be impossible by
+# construction). RED = the plugin as it stood BEFORE the F39 edits: the
+# harness `cmd green` shape with a prefix built from the working tree at
+# 2026-10-15T02:45Z (build-vision / build-ultron / build-jarvis still three
+# skills, their old descriptions, tickets-zordon with no build hand-off).
+# Prefix: scratchpad f39/put-red (`baseline-harness.sh prefix`), verified
+# unmodified before and after by `run`.
+#
+# Run: 2026-10-15 02:45Z, claude-code 2.1.300, claude-opus-5-5 (stream-json
+# init); the six runs in PARALLEL inside ONE harness `run` (one
+# BASELINE_ISOLATE=hide window, so ~/.claude/CLAUDE.md hidden once and
+# restored once - "isolate=hide: ~/.claude/CLAUDE.md restored", "limit hit:
+# none"). Each run: its own fresh `relay-chain` fixture (HEAD 7864d52), the
+# emitted `cmd green` line with the `sh harness run` wrapper replaced by
+# `timeout -k 30 600` and `--max-budget-usd 3` appended (the driver script
+# and every exact command are in transcripts/f39-build-red-<name>.cmd).
+# All six exited 0 on their own, $0.47-$0.67 each.
+# init listed skillator:build-jarvis, build-ultron, build-vision and
+# superpowers:brainstorming in all six - the skills were available.
+# Transcripts: transcripts/f39-build-red-<name>.{cmd,start,jsonl,err,exit}.
+#
+# ---------------------------------------------------------------- VERDICT ----
+# VIOLATED 6/6 (valid). A build skill was invoked in 0 of 6 runs; a grade
+# line (a tier per seat, printed before spending) in 0 of 6; a named model
+# on any dispatch in 0 of 6 - no run dispatched an agent at all. Every
+# feature was designed and coded inline in the main session.
+#
+#   prompt        Skill calls                  then
+#   direct-1      none                         Glob, Read x6, Write, Edit x6, PowerShell
+#   direct-2      none                         Bash, Glob, Read x8, Write ... (SQLite
+#                                              loans table, 12-process race test)
+#   board-1       skillator:tickets-zordon     logged F8, Bash/Edit inline
+#   board-2       skillator:tickets-zordon     logged F8, Read/Edit inline
+#   headless-1    skillator:tickets-zordon     F2+F3 inline, committed 447ce98
+#   headless-2    skillator:tickets-zordon     F4 inline, committed 7c2e983
+#
+# Verbatim, headless-1's result: "I did both tickets myself rather than
+# handing each to a separate agent as the ticket workflow normally does,
+# because each was a few lines in a different file."
+# direct-2 (concurrency - the critical case) designed a SQLite store and a
+# race test with no design pass, no design file and no deep-tier review.
+#
+# Earns: build-jarvis's description firing on a bare feature request; the
+# tickets-zordon F-ticket hand-off; the grade line before the first spend.
+# Does NOT test: build quality (both RED and GREEN builds are incidental -
+# the claim is routing), the hook (not installed in RED or GREEN, see the
+# GREEN record).

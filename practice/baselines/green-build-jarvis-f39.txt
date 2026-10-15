@@ -1,0 +1,290 @@
+# GREEN - does a feature request reach build-jarvis now? (F39, RUN-11 stage 74)
+# RED: red-build-jarvis-f39.txt (0/6 invoked a build skill, 0/6 grade line).
+# Scenarios: scenario-build-route-{direct-1,direct-2,board-1,board-2,headless-1,headless-2}.txt,
+# unchanged bytes from RED.
+#
+# Prefix: scratchpad f39/put-green, built from the WORKING TREE at ~03:00Z
+# (skills/, practice/, PRACTICE.md, PLATFORMS.md, WORKFLOW.md overlaid - other
+# implementers' uncommitted relay-morpheus and holo-r2d2 work rides along;
+# .claude-plugin/*.json is HEAD's, description only). It carried the F39
+# build-jarvis (new description, Step 0 grade, references/), the redirect
+# stubs, tickets-zordon's F-ticket hand-off and the grayskull routing - but
+# NOT the JSON form of the route hook (that change came after round 2).
+# No .skillator/tiers.local.md in any fixture (grayskull never armed), so
+# every grade line rightly said `tiers: defaults`.
+#
+# Same harness shape as RED: claude-code 2.1.300, claude-opus-5-5, six runs
+# in parallel inside one BASELINE_ISOLATE=hide `run` ("~/.claude/CLAUDE.md
+# restored", "limit hit: none"), own fresh relay-chain fixture each (HEAD
+# 7864d52), `timeout -k 30 600`, `--max-budget-usd 3`; driver scripts
+# transcripts/f39-build-par.sh and f39-build-par-hook.sh, exact commands in
+# each <name>.cmd. All exited 0 on their own, $0.34-$0.70 each.
+# Transcripts: transcripts/f39-build-green-<name>.* (round 1),
+# transcripts/f39-build-greenhook-<name>.* (round 2).
+#
+# Isolation caveat (README asymmetry rule): the user's plugins load in a
+# GREEN run. superpowers injects "You have superpowers" at SessionStart, and
+# claude-mem reported weekly usage at 93% - which two runs correctly treated
+# as the 7-day-at-90% stop (see below). Neither changes what was loaded.
+#
+# ---------------------------------------------------- ROUND 1 (no hook) ----
+# 2026-10-15 03:01Z.
+#
+#   prompt       build-jarvis  grade line                                       then
+#   direct-1     NO            -                                                inline: Glob, Read x5, Write, Edit x5
+#   direct-2     NO            -                                                inline: SQLite loans + race test
+#   board-1      YES (1st)     bounded . critical no . design - . build         logged F8; Agent model=sonnet built
+#                              cheap=sonnet . verify build=opus . ceremony      it; main session verified; [x]
+#                              lean . tiers: defaults . usage unobservable
+#   board-2      YES (1st)     bounded . critical no . design - . build         logged F8, graded, then STOPPED:
+#                              cheap=sonnet . verify build=opus . ceremony      "weekly Claude usage is at 93%,
+#                              lean . usage 5h unobservable . tiers: defaults   past the 90% weekly limit"
+#   headless-1   YES (1st)     bounded . critical no . design - . build         Agent model=sonnet per ticket
+#                              cheap=sonnet . verify build=opus (this session)  (F2, F3); [x] both
+#                              . ceremony lean . tiers: defaults . usage
+#                              unobservable
+#   headless-2   YES (1st)     none printed                                     wrote design file, Rulings in its
+#                                                                               report, STOPPED on the same 93%
+#
+# Board / headless-ticket path: 4/4 invoked skillator:build-jarvis as the
+# FIRST tool call (RED: 0/4 - tickets-zordon then inline work). Named models
+# on every dispatch (RED: no dispatch at all).
+# Direct path: 0/2 - same as RED. No skill was loaded; the build was inline.
+# The description alone does not route a bare "add X" prompt.
+#
+# Grade vs the Step 0 table, on four tickets:
+#   F8 `list` sorted by author, then title (books.py + cli.py, full spec)
+#      -> row 2: design -, build cheap, verify build, critical no.   MATCH
+#   F8 `find --json` (cli.py, named)  -> row 1, same tiers.           MATCH
+#   F2 report.by_author() (report.py, named) -> row 1.                MATCH
+#   F3 --version (cli.py, named)      -> row 1.                       MATCH
+#   (F2+F3 share one grade line - one build-jarvis pass, two tasks, as
+#   tickets-zordon now says. The critical case, direct-2 lending, was
+#   never graded: build-jarvis never loaded on it.)
+# headless-2 (F4) stopped before dispatch and printed no grade line:
+#   VIOLATED on "one printed grade line before spending" only if the design
+#   pass counts as spending; it wrote the design file itself (seat -), so
+#   nothing was dispatched. Recorded, not counted as a match.
+# The two weekly stops: verbatim board-2 "I stopped before building because
+#   your weekly Claude usage is at **93%**, past the 90% weekly limit where
+#   I'm supposed to check with you first." The reading came from the user's
+#   claude-mem plugin inside the nested run, not from the fixture; a valid
+#   six-stops response, not a routing failure.
+#
+# --------------------------------- ROUND 2 (route hook, plain stdout) ----
+# 2026-10-15 ~03:20Z, direct-1 and direct-2 only, fresh fixtures, the same
+# prefix plus a --settings file adding the UserPromptSubmit hook
+# (sh <prefix>/skills/build-jarvis/hooks/feature-route.sh). At that point the
+# hook printed its route as PLAIN stdout.
+#   direct-1  NO skill loaded, inline (same tools as round 1)
+#   direct-2  NO skill loaded, inline
+# stream-json does not log UserPromptSubmit hooks, so whether the line
+# reached the model was then checked by probe (claude -p, haiku, outside the
+# harness): plain stdout arrives as "UserPromptSubmit hook success: skillator
+# route ..." and the probe answered NONE when asked to quote any line
+# beginning "skillator route"; hookSpecificOutput.additionalContext JSON it
+# quoted back verbatim. The hook now emits the JSON form (both twins,
+# selftests updated) - and a probe with the shipped sh hook quoted the route
+# back: "Yes, one line in my context begins with "skillator route". It came
+# from the UserPromptSubmit hook".
+#
+# --------------------------------------------------------------- VERDICT ----
+# PARTIAL. Board and headless-ticket routing: PASS 4/4 (RED 0/4), grade line
+# matches the table on 4/4 sample tickets. Direct routing: FAIL 0/2 without
+# the hook (RED 0/2) and 0/2 with the plain-stdout hook. Round 3 - direct-1
+# and direct-2 with the JSON hook - was NOT run: the probe that proved the
+# JSON form reported weekly usage at 95% (claude-mem), past the 7-day 90%
+# stop, so no further baseline spend was made. Next run: rebuild the prefix,
+# `sh transcripts/f39-build-par-hook.sh` shape with SETF pointing at a
+# settings file whose UserPromptSubmit hook runs the shipped feature-route.sh.
+#
+# ------------------------- ROUND 3 (route hook, JSON additionalContext) ----
+# 2026-10-15, direct-1 and direct-2 only. Two attempts: 3a on the tree as
+# found, then ONE fix to build-jarvis/SKILL.md and 3b on a rebuilt prefix.
+# Each attempt: prefix rebuilt from the working tree by `baseline-harness.sh
+# prefix` (skills/, practice/, PRACTICE.md, PLATFORMS.md, WORKFLOW.md overlaid,
+# other implementers' uncommitted work riding along; .claude-plugin/*.json is
+# HEAD's); `diff -r` of skills/build-jarvis against the tree: identical. Fresh
+# relay-chain fixtures (HEAD 7864d52). Both runs in parallel inside ONE
+# BASELINE_ISOLATE=hide `run` ("~/.claude/CLAUDE.md restored", "limit hit:
+# none"), `timeout -k 30 600`, `--max-budget-usd 3`, claude-code 2.1.300.
+# Driver: transcripts/f39-build-par-r3.sh = f39-build-par-hook.sh plus
+# `--include-hook-events`, so the stream now shows the UserPromptSubmit hook.
+# --settings: the harness's settings JSON plus one UserPromptSubmit hook,
+# `sh <prefix>/skills/build-jarvis/hooks/feature-route.sh`, timeout 5 - the
+# shipped hook from the prefix, installed as references/route-hook.md says
+# (transcripts/f39-build-greenr3-settings.json, the 3a copy).
+# Transcripts: transcripts/f39-greenr3-<name>.* (3a), f39-greenr3b-<name>.* (3b).
+# Hook: in all four runs the stream has hook_response UserPromptSubmit,
+# outcome success, exit 0, output = the route JSON verbatim.
+# Usage notices: none. "weekly", "93%", "95%" and "claude-mem" each appear 0
+# times in all four streams; claude-mem did not load. superpowers still
+# injects at SessionStart - the asymmetry caveat stands.
+#
+# ROUND 3a - the tree as found (JSON hook, SKILL.md as stage 74 left it):
+#   prompt     build-jarvis         grade line     then                          $
+#   direct-1   YES (1st tool call)  NONE printed   wrote a `-`-seat design file, 0.64
+#                                                  Agent model=sonnet built T1,
+#                                                  main session verified; the
+#                                                  report has no grade line
+#   direct-2   YES (1st tool call)  NONE printed   designed, built and verified  0.61
+#                                                  ALL inline in the main
+#                                                  session, no Agent call
+# Routing: PASS 2/2 (rounds 1 and 2: 0/2). Grade line: FAIL 0/2.
+# Why, from the streams: both graded only in thinking. direct-1: "Ticket F4 is
+#   bounded and non-critical, so I'll draft a lean one-task design and hand it
+#   off to a build agent (Sonnet for build, Opus for verification)"; its design
+#   file carries "Ruling: critical no", never reply text. direct-2: "Since this
+#   is a concurrency-critical task and budget won't cover dispatched subagents,
+#   I'll run everything in this session", reported as "with the $3 budget I did
+#   the design, build and checks myself". The $3 is the harness's
+#   --max-budget-usd, which Claude Code shows the model - a harness confound,
+#   but the rationalization (a cap folds the seats into the orchestrator) is
+#   the skill's to close: round 1's dispatched runs cost $0.34-$0.70 under the
+#   same cap.
+#
+# FIX (skills/build-jarvis/SKILL.md, body only; description, hooks and
+# references untouched):
+#   - Step 0.7: "Printed means reply text the user sees, starting `grade:`,
+#     before the design file is written or anything is dispatched" - thinking,
+#     a design-file Ruling or an end summary is not printed.
+#   - Phase 3 relay: the grade line again as the report's first line.
+#   - Rules: "Grade before spending" now covers the design file; new rule "A
+#     budget is a step-down, never a merge"; a four-row rationalization table
+#     (graded in my reasoning / too small for the line / budget won't cover
+#     subagents / critical so do it myself).
+#   Hook selftests after the fix: sh `ok` (rc 0), ps1 `ok`.
+#
+# ROUND 3b - after the fix, the one re-run (started 09:29Z, after waiting for
+# another implementer's hide window to clear):
+#   direct-1  build-jarvis YES (1st tool call). $0.88.
+#     grade line: "grade: bounded . critical no . design - . build cheap=sonnet
+#     . verify build=opus . ceremony lean . tiers: defaults . usage unobservable"
+#     then: wrote the `-` design file, Agent model=sonnet built, Agent
+#     model=opus verified, main session re-ran the checks and ticked F4.
+#   direct-2  build-jarvis YES (1st tool call). $1.23.
+#     grade line: "grade: bounded . critical yes (concurrency) . design
+#     deep->build=sonnet . build build=sonnet . verify deep=opus, held .
+#     ceremony lean . tiers: defaults . usage unobservable"
+#     then: wrote the design file ITSELF, Agent model=sonnet built, Agent
+#     model=opus held verify + whole-diff review, main session re-ran tests.
+# Routing: PASS 2/2. Every dispatch names its model, verify on a separate
+#   seat (3a: one run of two dispatched nothing). Critical caught on direct-2
+#   with its word (concurrency), verify held - the case rounds 1-2 never graded.
+# Grade line: PRESENT 2/2 but LATE 2/2 - each printed it only as the first
+#   line of the final report, after the design file and both Agent dispatches.
+#   The rule under test is "before it spends anything": FAIL 0/2 on timing.
+#   Neither run wrote any reply text before its first spend; the first text
+#   came after the design-file Write ("I've written the design file. Now I'm
+#   handing the build to a Sonnet agent.").
+# Grade vs the Step 0 table:
+#   direct-1 CSV export (F4, named, 1-2 files, full spec) -> row 2:
+#     design -, build cheap, verify build, critical no.            MATCH
+#   direct-2 lending, race-safe -> critical (concurrency): design deep, build
+#     build, verify deep held. Printed design deep->build with "Ruling: design
+#     seat deep->build - $3 spend cap reads as cheap" (the new budget rule,
+#     applied to the design seat of critical work, which its "non-critical"
+#     wording leaves open); build mislabelled build=sonnet (PLATFORMS
+#     claude-code build = Opus); verify deep=opus held (deep's first
+#     claude-code slug is Fable). With design at build, not `-`, it still
+#     wrote the design file itself instead of dispatching a design agent.
+#                                                                  PARTIAL
+#
+# ------------------------------------------- VERDICT (after round 3) ----
+# PARTIAL, better than round 2.
+#   Routing to build-jarvis: direct 2/2 in 3a and 2/2 in 3b with the shipped
+#     JSON hook (rounds 1-2 without it, or with plain stdout: 0/2); board and
+#     headless 4/4 (round 1, no hook needed). The hook is what routes a bare
+#     "add X" prompt, so grayskull's arm step offering it carries the result.
+#   Grade line before spending: board/headless 3/4 (round 1); direct 0/4
+#     (3a never printed it, 3b printed it late as the report's first line).
+#   Dispatch discipline: 3b 2/2 named-model dispatch with a separate verify
+#     seat (3a 1/2; direct-2 built inline on the budget rationalization).
+# Next fix, NOT run (one re-run was this stage's allowance): put the grade
+#   line where the model emits text before its first tool call - Step 0.7
+#   "your first reply text after loading this skill is the grade line, before
+#   the design-file Write", plus a red flag "about to Write the design file
+#   and no `grade:` line in this reply yet - stop"; and say whether the budget
+#   step-down reaches the design seat of critical work. Re-run direct-1 and
+#   direct-2 with transcripts/f39-build-par-r3.sh.
+#
+# ------------------------------------- ROUND 4 (stage 74 round 4, one fix) ----
+# 2026-10-15, direct-1 and direct-2 only, started 13:33:54Z.
+# FIX (skills/build-jarvis/SKILL.md body only; description, hooks, references
+# untouched):
+#   - Step 0.7 now reads "Your first reply text after loading this skill is the
+#     grade line - before the design-file Write, before any Agent call."
+#   - Red flag: "about to Write the design file, or call Agent, with no
+#     `grade:` line in your reply text yet - stop and print it first."
+#   - Budget rule: the step-down "never reaches critical work: critical keeps
+#     its deep design seat (a dispatched design agent) and its deep, held
+#     verify"; one rationalization row for "the cap reads as cheap, so the
+#     critical design seat drops to build".
+#   - Under the seat table: critical's build seat is the build tier
+#     (build=opus on Claude Code, per PLATFORMS.md), never cheap.
+# Prefix rebuilt from the working tree (`baseline-harness.sh prefix`), `diff -r`
+# of skills/build-jarvis against the tree: identical. Fresh relay-chain
+# fixtures (HEAD 7864d52). Same driver (transcripts/f39-build-par-r3.sh), same
+# shipped JSON hook from the prefix, --settings
+# transcripts/f39-build-greenr4-settings.json, both in parallel inside one
+# harness `run`. Hook: hook_response UserPromptSubmit, success, in both.
+# Transcripts: transcripts/f39-greenr4-<name>.*.
+# ISOLATION CAVEAT: the outer `run` was started WITHOUT BASELINE_ISOLATE=hide
+#   (round 3 set it there; the BASELINE_ISOLATE=hide inside each .cmd only
+#   reaches `timeout`, not the harness), so ~/.claude/CLAUDE.md was NOT hidden
+#   for these two runs - round4's stderr has no "isolate=hide" line. Not
+#   re-run: the allowance was one re-run, and direct-1 repeats round 3b's
+#   timing pattern exactly. Grade it as un-isolated.
+# Wall clock: the harness printed "limit hit: none" yet direct-2 ran 6363 s
+#   (106 min) under `timeout -k 30 600` and a 900 s harness clock - neither
+#   limit fired on this Windows host.
+#
+#   direct-1  build-jarvis YES (1st tool call). $0.72, 100 s, exit 0.
+#     sequence: Skill -> Bash/Glob/Read x5 -> Write design file -> text "I've
+#     written the design file. Next I'm sending the build task to a Sonnet
+#     agent." -> Agent model=sonnet built -> main session ran diff + tests ->
+#     final report, first line "grade: bounded . critical no . design - .
+#     build cheap=sonnet . verify build=opus . ceremony lean . usage
+#     unobservable . tiers: defaults".
+#     Grade line before spend: FAIL (after the Write and the Agent call - the
+#       same place as 3b). Seats: row 2, MATCH. Verify ran in the main
+#       session (an Opus session), not a dispatched verify seat.
+#   direct-2  build-jarvis YES (1st tool call). $1.23, 6363 s, exit 0.
+#     sequence: Skill -> Bash x3/PowerShell -> text "Reading the shelf code
+#     before writing the design." -> Read x5 -> Agent model=fable "Design
+#     lending feature" (HTTP 429, out of usage credits) -> Agent model=opus
+#     design (ended "[Request interrupted by user for tool use]" - nobody
+#     interrupted; the cause is not in the stream) -> final report: nothing
+#     built, "Grade: grade: bounded . critical yes (concurrency) . design deep
+#     . build build=opus . verify deep, held . ceremony lean . tiers: defaults
+#     . usage unobservable", a Ruling "design seat deep fable->opus - fable
+#     out of credits", the design rulings it would pass on, and "Which do you
+#     want?" (continue / change / stop).
+#     Grade line before spend: FAIL (one reply line before the first Agent,
+#       and it was not the grade). Seats vs table: design deep, dispatched to a
+#       design agent; build build=opus; verify deep held; critical named with
+#       its word. MATCH - the 3b misgrades (design stepped down under the cap,
+#       build=sonnet on critical, design file written by the orchestrator)
+#       are all gone. The fable->opus move is the unavailable-at-dispatch
+#       retry, correctly said as a Ruling. No build/verify to grade: the
+#       interrupted design agent ended the run.
+# Grade line before spending: FAIL 0/2 (rounds 3a-4 direct: 0/6).
+# Seat table: MATCH 2/2 (3b: 1/2). Budget/critical rule: HOLDS (critical kept
+#   deep design + held verify under the $3 cap).
+#
+# ------------------------------------------- VERDICT (after round 4) ----
+# PARTIAL. The seat half is fixed: routing 2/2, critical caught and kept at
+#   deep design / build=opus / deep held verify under a spend cap, every
+#   dispatch names its model. The timing half is not: in both runs the model
+#   emits no reply text before its first spend except a narration line, and
+#   prints the grade only as the report's first line. Three wordings of
+#   "print it before spending" in the body (3b's rule, round 4's "first reply
+#   text" and red flag) have not moved it; in -p stream mode the body's
+#   instruction loses to the habit of reporting at the end.
+# Next fix, NOT run (one re-run was this round's allowance): move the
+#   instruction to where it is read at the decision point rather than in the
+#   body - the route hook's additionalContext ("after loading build-jarvis,
+#   your first reply text is the `grade:` line") or a REQUIRED `grade:` slot
+#   as the design file's first line that the orchestrator must echo as reply
+#   text before the Write (structural form, skill-smith section 3). Re-run
+#   isolated (BASELINE_ISOLATE=hide on the OUTER `run`).

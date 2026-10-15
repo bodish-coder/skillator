@@ -145,14 +145,17 @@ clean board is a precondition for allocating, not a nicety.
 ## When to log
 
 - User reports a bug → log a `B` ticket before fixing.
-- User asks for a feature/change of any size → log an `F` ticket before building.
+- User asks for a feature/change of any size → log an `F` ticket before building,
+  then **invoke `skillator:build-jarvis`** with that ticket. The board logs;
+  build-jarvis grades, designs and builds. Never build an `F` ticket inline here.
 - **Anything Claude/an agent finds itself → an `A` ticket, if it passes the gate
   below.** A stack trace in a test run, a crash while driving the app, a bug
   spotted during review: log it as pending and keep going. `A` means "nobody
   asked for this, we found it" — it is what keeps discoveries from dying with
   the chat.
 
-Trivial one-line edits the user asked for inline don't need a ticket.
+A non-feature one-line edit the user asked for inline (typo, comment, rename,
+formatting) needs no ticket and goes direct. A feature of any size is an `F`.
 
 ### The gate — a ticket names a change, not a finding
 
@@ -276,13 +279,27 @@ duplicate across the two still fails. For an old ID the board does not show,
 
 ## Work tickets in parallel, not in a line
 
+**An `F` ticket is built by `skillator:build-jarvis`, never here.** Before any
+edit for one — logged a minute ago, picked from the board, or named in a
+headless "work these tickets" — invoke build-jarvis with its id and title. Its
+grade line is that ticket's tiering, its phases are the dispatch. **Several
+`F` tickets are ONE build-jarvis pass**, one task block per ticket — never one
+build-jarvis per ticket. "One agent per ticket" below means, for an `F`, that
+ticket's build seat is one dispatched agent inside that pass: it gets the pass's
+grade and its own task block, and implements only that (no regrade, no verify of
+its own, never build-jarvis loaded as an orchestrator). "It is only a few lines"
+is the grade's call (a `—` design seat, a cheap build), not a reason to skip it.
+`B` and `A` tickets stay on this page's dispatch below.
+
 Flipping a ticket to `[~]` means **dispatch an agent for it**, one agent per
-ticket, all in a single message so they run concurrently. Never work a queue of
-tickets serially in the main session — that is the linear development this skill
-exists to break.
+ticket, all in a single message so they run concurrently (for `F` tickets,
+build-jarvis's Phase 2 does that dispatch). Never work a queue of tickets
+serially in the main session — that is the linear development this skill exists
+to break.
 
 - Give each agent its ticket ID, the one-line title, and the repo context it
-  needs; tell it to report back what it changed and whether it verified.
+  needs; tell it to report back what it changed and whether it verified (an F
+  build seat: which of its task's tests it ran - the verify seat is not its).
 - **Name a model for every dispatch — never let it inherit the session's, and
   grade the tier per ticket, not once for the batch.** Same table as workflow
   mode's scout (below); a mechanical fix and the agent judging it warrant
@@ -354,6 +371,12 @@ Two rules that override the table:
   model on under-specified work costs more, not less.
 - **A `[!]`/`[>]` ticket is not tiered, it is not dispatched.** Tiering a ticket
   nobody can work is the cheapest agent of all to skip.
+
+**`F` tickets in a workflow:** run ONE `skillator:build-jarvis` pass for all of
+them first (grade + design, one task block per ticket) and take its grade line
+as each item's tiers. The item's fix prompt is that ticket's task block plus the
+design file path: the item agent is the build seat only — it does not load
+build-jarvis, regrade, or verify its own work. The verify seat is unchanged.
 
 Say the tiering out loud before the call — one line per ticket, `id fix/verify` —
 so the user can overrule a grade before it costs anything. Slugs below are Claude

@@ -11,12 +11,21 @@ every skill "to be safe" is the failure this is meant to prevent.
 
 ## Process before implementation — but only where it adds something
 
-`build-vision` / `build-ultron` / `build-jarvis` **are** the process for a build: it runs `PRACTICE.md` §§1-6
-and adds tier routing, a session record and a rework loop on top. Chaining any of
-the merged process skills in front of it re-runs the same work and burns the
-budget the build needs.
+`build-jarvis` **is** the process for a build, and it **includes the design
+step**: it runs `PRACTICE.md` §§1-6 and adds the Step 0 grade (a tier per seat),
+ruled-or-parked design questions and, when the work outlives the session, a
+session record and a rework loop. So `superpowers:brainstorming` does **not**
+also run for a feature — nor `writing-plans`, nor a second build skill. Chaining
+any of them in front re-runs the same work and burns the budget the build needs.
+`build-vision` and `build-ultron` are retired names that redirect here; style
+words ("use fable", "opus only", "cheap", "full ceremony") are settings of
+build-jarvis's grade, not other skills.
 
-**"Build X" → a `build-*` skill directly.** When the answer is a decision and
+**"Build X" → `build-jarvis` directly**, every time: a direct request, a
+feature `tickets-zordon` has just logged, an F ticket picked off the board or
+named in a headless "work these tickets". On Claude Code the `UserPromptSubmit`
+route hook (`build-jarvis/references/route-hook.md`) puts the same line in front
+of a feature-shaped prompt. When the answer is a decision and
 no code will be written, run PRACTICE §1 here in the session instead — classify,
 ask one question at a time, present, stop.
 
@@ -28,7 +37,7 @@ that backwards is how a session produces confident wrong work.
 
 | When | Skill |
 |---|---|
-| Anything creative that ends in code | `build-vision` · `build-ultron` · `build-jarvis` — they run PRACTICE §§1-6 for you |
+| Anything creative that ends in code | `build-jarvis` — it runs PRACTICE §§1-6 for you, design included |
 | A design/decision question with no build behind it | PRACTICE §1 — classify, question one at a time, present, stop |
 | A bug with an unknown cause | **PRACTICE §7 first** — root cause before any fix, and the three-fix rule |
 | A multi-step task with a spec already agreed, outside a build run | PRACTICE §2 — write the tasks in plan shape, then §3 self-review them |
@@ -81,7 +90,7 @@ re-check anything an agent asserts without evidence.
 
 | The request is… | Skill |
 |---|---|
-| A bug, a feature, "log this", "what's pending", "mark done" | `tickets-zordon` |
+| A bug, a feature, "log this", "what's pending", "mark done" | `tickets-zordon` (an F ticket it logs or picks goes on to `build-jarvis`) |
 | The user states how they work - "from now on", "always X", "never Y", "stop doing", "in this repo nobody", "I prefer" - or asks what rules apply here, or why a preference was forgotten between chats | `rules-orko` (armed at invoke; the rule is on disk before the next tool call, at global or project scope - asked when the wording does not settle it) |
 | 4+ open tickets, a sweep, "ultracode", "work the board" | `tickets-zordon` (workflow mode) |
 | "why is this broken", audit a whole app, unknown-cause rot, pre-release sweep | `audit-sherlock` |
@@ -89,7 +98,7 @@ re-check anything an agent asserts without evidence.
 | "find bloat", "audit for over-engineering", what the whole repo can lose | `code-yoda` → `references/audit.md` (defects it meets go to `audit-sherlock`) |
 | "what did we defer", "list the shortcuts", the `shortcut:` / `ponytail:` marker ledger, "anything we knowingly left for later" | `code-yoda` → `references/debt.md` (rows reach the board only through `tickets-zordon`'s gate) |
 | You notice bloat while doing something else and want to *suggest* a code-yoda pass | one line, Yoda's voice, picked from code-yoda §8 — "Heavy, this diff is. A review from code-yoda, take you should." — then carry on; never run it unasked |
-| Build a real feature, design-then-implement | `build-vision` (ceremony, Fable design) · `build-ultron` (all-Opus, no ceremony) · `build-jarvis` (Sonnet offload) |
+| Build, add, implement or change a feature, any size, any entry (direct, logged, an F ticket, a headless run) | `build-jarvis` — grades its own models per seat; "use fable" / "opus only" / "cheap" / "full ceremony" are settings there, not other skills |
 | Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`) |
 | A static/mock UI that needs to actually work | `designui-galadriel` |
 | What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-watson` |

@@ -1,0 +1,22 @@
+# Scenario - F39 build routing, prompt "headless-1" (RUN-11 stage 74).
+# Plan: docs/plans/PLAN-parallel-runs.md section 3 "F39".
+# Rule under test: a feature request - direct, logged on the board, or a
+# headless "work these tickets" - reaches skillator:build-jarvis (Skill call
+# in the main session or in a dispatched agent), and build-jarvis prints one
+# grade line (design/build/verify tiers) before it spends anything.
+# The prompt never names a skill, a model, a tier or "grade".
+#
+# Fixture: `relay-chain` (sh practice/scripts/baseline-harness.sh fixture
+# relay-chain <DIR>): shelf, a book catalogue CLI with a skillator board
+# (F2 report.by_author, F3 --version, F4 export_csv in a new export.py).
+# Shape: routing (technique). No pressure sentence: the claim is "did the
+# build skill load", and a pressure line would only add a reason to skip it.
+#
+# PASS = a Skill call naming build-jarvis (any build-* counts for RED) in the
+#        stream, main session or subagent; GREEN also needs the grade line.
+# FAIL = the feature is designed/built with no build skill loaded.
+# Verdicts: red-build-jarvis-f39.txt, green-build-jarvis-f39.txt.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Work these tickets: F2 and F3. I am not at the keyboard, so run it through to the end without asking me anything.

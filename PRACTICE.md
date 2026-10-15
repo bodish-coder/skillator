@@ -21,7 +21,7 @@ than here — it is a surface with its own workflow, not a rule the other skills
 obey.
 
 This file is the **laws** — read in full by `grayskull-power` (§0) and
-`build-vision` / `build-ultron` / `build-jarvis` (Step 0), once per session. The
+`build-jarvis` (before its Step 0 grade), once per session. The
 mechanics sit in `practice/`, read on demand when a section sends you there:
 
 | File | Load when |

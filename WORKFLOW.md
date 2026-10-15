@@ -1,6 +1,6 @@
-# Workflow mode — deterministic orchestration for the build-* skills
+# Workflow mode — deterministic orchestration for build-jarvis
 
-The build-* skills normally dispatch phases as **individual subagents**
+`build-jarvis` (and `tickets-zordon`'s board fan-out) normally dispatch phases as **individual subagents**
 you spawn one at a time. That is the default and stays the default.
 
 **Workflow mode** runs the same phases as a single deterministic script instead:
@@ -20,8 +20,8 @@ Switch to workflow mode when **any** of these hold:
 Stay with plain subagent dispatch when:
 
 - The build is 1-3 sequential tasks (a script buys nothing).
-- The phases need your judgement between them (prime's checkpoints, a design
-  you want to read before building).
+- The phases need your judgement between them (full ceremony's checkpoint, a
+  design you want to read before building).
 - The host has no Workflow tool — see the host table below.
 
 **Never start a workflow the user didn't opt into**, unless the criteria above
@@ -42,14 +42,14 @@ Off `claude-code`, workflow mode is a *pattern*, not a tool. Don't pretend a
 
 ## Phase → script mapping
 
-The skills' phases map onto script stages one-for-one. Roles keep their tiers
-(`references/platforms.md` in prime, `PLATFORMS.md` for the rest) — pass them as
-`opts.model`.
+The skill's phases map onto script stages one-for-one. Every seat keeps the tier
+build-jarvis's Step 0 grade gave it (models from `.skillator/tiers.local.md`,
+else `PLATFORMS.md`) — pass them as `opts.model`, never a literal.
 
 | Skill phase | Script |
 |-------------|--------|
-| Design / plan | one `agent()` at the **`deep` tier**, with a `schema` so TASKS comes back as an array — not prose you have to parse |
-| Build | `pipeline(design.tasks, buildStage, verifyStage)` at the **build tier** |
+| Design / plan | one `agent()` on the **design seat's** model, with a `schema` so TASKS comes back as an array — not prose you have to parse |
+| Build | `pipeline(design.tasks, buildStage, verifyStage)`, each task on **its own tagged tier** |
 | Verify | second pipeline stage, or a `parallel()` judge panel per task |
 | Rework | loop the failed items back through the build stage |
 
@@ -73,12 +73,12 @@ const DESIGN = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['id', 'summary', 'files', 'complexity'],
+        required: ['id', 'summary', 'files', 'build'],
         properties: {
           id: { type: 'string' },
           summary: { type: 'string' },
           files: { type: 'array', items: { type: 'string' } },
-          complexity: { type: 'string', enum: ['SIMPLE', 'COMPLEX'] },
+          build: { type: 'string', enum: ['cheap', 'build', 'deep'] },
           dependsOn: { type: 'array', items: { type: 'string' } },
         },
       },
@@ -87,36 +87,40 @@ const DESIGN = {
 }
 ```
 
-`complexity` is what **build-jarvis** routes on. `build-ultron` and
-**build-vision** can ignore it.
+`build` is the task's build-seat tier from the Step 0 table; the build stage
+reads it per task. (It replaces the old `SIMPLE`/`COMPLEX` tag.)
 
 ## Reference script
 
-Written for **build-vision**. For `build-ultron`, use `model: 'opus'` in both stages and drop
-the session-file lines. For `build-jarvis`, drop the design file too and pick the build
-model per task: `t.complexity === 'SIMPLE' ? 'sonnet' : 'opus'`.
+Written for **build-jarvis**. `args.tiers` is the tier → model map for this run
+(`{ deep: 'fable', build: 'opus', cheap: 'sonnet' }` from the tiers file) and
+`args.grade` the seat tiers from the grade line (`{ design: 'deep', verify:
+'build' }`). A lean build passes `sessionFile: null`.
 
 ```js
 export const meta = {
-  name: 'build-*',
-  description: 'Design at the deep tier, then build + verify each task in parallel',
+  name: 'build-jarvis',
+  description: 'Design on the graded tier, then build + verify each task in parallel',
   phases: [
-    { title: 'Design', detail: 'one deep-tier agent, structured output' },
-    { title: 'Build', detail: 'one build-tier agent per task' },
+    { title: 'Design', detail: 'one design-seat agent, structured output' },
+    { title: 'Build', detail: 'one agent per task, on its own tier' },
     { title: 'Verify', detail: 'verification check per task' },
   ],
 }
 
 const TASK = args.task
-const SESSION_FILE = args.sessionFile   // prime only; null for -mid / -lite
+const SESSION_FILE = args.sessionFile   // full ceremony only; null when lean
+const M = args.tiers                    // { deep, build, cheap } -> model
+const G = args.grade                    // { design, verify } -> tier
 
 phase('Design')
 const design = await agent(
   `Design, do not implement. Task: ${TASK}
    Read the repo for context. Commit to ONE approach.
    Split the work into independently-buildable tasks, each naming the files it
-   touches. Tag each SIMPLE or COMPLEX. Give one concrete end-to-end check.`,
-  { model: 'fable', schema: DESIGN, phase: 'Design' },
+   touches. Tag each with its build tier (cheap|build|deep) per the Step 0
+   table. Give one concrete end-to-end check.`,
+  { model: M[G.design], schema: DESIGN, phase: 'Design' },
 )
 if (!design?.tasks?.length) return { error: 'design returned no tasks' }
 log(`${design.tasks.length} tasks: ${design.chosen}`)
@@ -132,14 +136,14 @@ const results = await pipeline(
      Task ${t.id}: ${t.summary}
      Touch ONLY: ${t.files.join(', ')}
      If you hit a blocker only a human can resolve, stop and say so.`,
-    { model: 'opus', label: `build:${t.id}`, phase: 'Build', isolation: 'worktree' },
+    { model: M[t.build], label: `build:${t.id}`, phase: 'Build', isolation: 'worktree' },
   ),
   (built, t) => agent(
     `Verify task ${t.id} landed. Check: ${design.verification}
      Files: ${t.files.join(', ')}
      Build agent reported: ${built}
      Run the check. Report the ACTUAL result with evidence, never a claim.`,
-    { model: 'opus', label: `verify:${t.id}`, phase: 'Verify', schema: VERDICT },
+    { model: M[G.verify], label: `verify:${t.id}`, phase: 'Verify', schema: VERDICT },
   ).then(v => ({ task: t, built, verdict: v })),
 )
 
@@ -164,7 +168,7 @@ pass: { type: 'boolean' }, evidence: { type: 'string' } } }`.
 - **`dependsOn` is not free either.** `pipeline()` runs items independently. If
   tasks have a real ordering, either chain them inside one `agent()` prompt or
   run the dependent ones in a second `pipeline()` after the first returns.
-- **The design/session file still rules.** In `-prime`, write it *before* the
+- **The design/session file still rules.** In full ceremony, write it *before* the
   workflow starts and pass its path in `args` — the workflow's own result is
   not durable memory. Append the Outcome section from the returned object.
 - **Checkpoints stay yours.** A workflow cannot run `handoff-cortana`, `/compact`, or

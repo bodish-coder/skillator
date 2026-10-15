@@ -40,12 +40,13 @@ of "invoke a skill", "Fable subagents", `AskUserQuestion` and the watch hooks.
 level; skips its core when `PONYTAIL MODE ACTIVE` is in context) · `codegraph` (indexed, else init once) · `live-friday` (if the
 repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
 `usage-watch … check` elsewhere) · `relay-morpheus` (an unfinished `.skillator/run.md`
-is the first thing you say) · `rules-orko` (rules read, clashes asked).
+is the first thing you say) · `rules-orko` (rules read, clashes asked) · `tiers`
+(`.skillator/tiers.local.md`).
 
 Then one line:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files · code-yoda full · live-friday armed (npm run dev) · watch-cortana 92%/90wk · relay r7 stage 2 of 4
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files · code-yoda full · live-friday armed (npm run dev) · watch-cortana 92%/90wk · relay r7 stage 2 of 4 · tiers deep=fable build=opus cheap=sonnet
 ```
 
 **Load [`references/arming.md`](references/arming.md)** — what each check does,
@@ -54,11 +55,11 @@ CLAUDE.md / AGENTS.md / GEMINI.md pointers (exists → skip silently).
 
 ## 2. Route
 
-One skill at a time; chaining "to be safe" is the failure this prevents.
+One skill at a time; chaining "to be safe" is the failure.
 
 | The request is… | Go to |
 |---|---|
-| Build a feature | `build-vision` · `build-ultron` · `build-jarvis` — they *are* PRACTICE §§1-6; nothing in front |
+| A feature, or an F ticket | `build-jarvis` — design included; never `superpowers:brainstorming` first |
 | A bug, cause unknown | PRACTICE §7 **first** — root cause before any fix |
 | A decision, no code behind it | PRACTICE §1 in-session, then stop |
 | Log, list or close a ticket · a stated rule | `tickets-zordon` · `rules-orko` |

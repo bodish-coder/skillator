@@ -1,128 +1,199 @@
 ---
 name: build-jarvis
 description: >-
-  The lightest "brainstorm then build". Use when the user wants a quick,
-  cost-aware build that offloads the simpler or mechanical parts to a cheaper
-  model and doesn't need Fable's creative brainstorm — "just design and build
-  it, cheap where it can be". For a straight all-Opus planâ†’build (no Sonnet
-  offload) use build-ultron; for a Fable-led creative design plus the
-  full ceremony use build-vision. NOT for tiny one-line edits (just
-  do them) or pure design/no-build work.
+  Use whenever a feature is to be added, built, implemented or changed, any
+  size - "add an import command", "implement F12", "support dark mode", "log
+  a feature and work it" - or an F ticket is about to be worked, from the
+  board or headless. Style words switch tiers inside it: "use fable",
+  "cheap", "opus only", "full ceremony". NOT for a non-feature one-line edit
+  (typo, comment, rename, formatting), an unexplained bug, UI craft
+  (design-arwen) or design with no code.
 ---
 
-# build-jarvis — deep-tier design, cheap-tier for the mechanical parts
+# build-jarvis — every feature, graded, designed, built
 
-Two models, no Fable. **Opus** does the design thinking and the complex/core
-implementation; **Sonnet** offloads the simple, mechanical tasks so you don't pay
-Opus rates for boilerplate. A skill can't change the main session's model, so the
-split is done with **subagents** carrying explicit `model` overrides. You (the main
-session) orchestrate only — spawn the agents, route by complexity, relay the result.
+The one build skill. It **is** `PRACTICE.md` §§1-6 for a feature, design
+included, so nothing runs in front of it — not `superpowers:brainstorming`, not
+`writing-plans`, not a second `build-*`. You are the **orchestrator**: you grade,
+dispatch, rule and keep the record. Design and code run in subagents, each with
+an explicit model, because a skill cannot change the main session's model.
 
-## Craft — read this first
+Read **`PRACTICE.md`** first — beside `PLATFORMS.md`, at the plugin root (`../`
+in the `install.sh` layout, `../../` in a checkout or the plugin cache). It owns
+classification, questions, the TASKS shape, self-review, test-first, evidence
+and review. Everything below assumes it.
 
-Read **`PRACTICE.md`** at the plugin root (beside `PLATFORMS.md`). It is
-skillator's process canon — the superpowers process skills merged in, in
-skillator's own words — so none of them is chained in front of this one: classify
-the request spike/bounded/architectural and say which out loud; one question at a
-time; the plan-grade TASKS shape a build agent can work from cold; design
-self-review; the test-first law; fresh-evidence verification; debugging (§7);
-branch lifecycle (§8). Everything below assumes it.
+## Step 0 — GRADE, before anything is spent
 
-## Phase 1 — Opus designs
+1. **Classify** spike / bounded / architectural (PRACTICE §1).
+2. **Criticality.** The work is **critical** when it touches auth, money,
+   concurrency, or a contract others depend on (a shared API, a file format, a
+   schema). Say which word made it critical.
+3. **Tier each seat** from this table — the same one as `practice/task-loop.md`
+   § Model selection and `tickets-zordon`'s scout:
 
-Dispatch one subagent, `model: "opus"`, `subagent_type: "general-purpose"`. Give it
-the user's task text and the repo context. Ask it to commit to an approach and
-**write** an implementation-ready design **with each task tagged by complexity**
-to a file, returning only that path plus a two-line summary:
+   | The work reads like | design | build | verify |
+   |---|---|---|---|
+   | One file, mechanical, the change is named | — | cheap | build |
+   | 1-2 files, complete spec, nothing left to decide | — | cheap | build |
+   | Several files, integration, or choices left open | deep | build | build |
+   | Cause unknown, design judgement, architectural | deep | build | deep |
+   | Critical (any row) | deep | build | **deep, held** |
+
+   Critical's build seat is the **build** tier (`build=opus` on Claude Code,
+   per `PLATFORMS.md`), never cheap.
+
+   `—` = no design pass: the request or ticket *is* the spec, and you write it
+   into the design file as its one task. **build is the floor** for every verify
+   seat and for a build seat working from prose rather than named code.
+4. **Tier → model:** read `.skillator/tiers.local.md` (written by
+   `grayskull-power`'s `tiers` arm step). Missing → the first slug in your
+   host's column of `PLATFORMS.md` § Role tiers, and say `tiers: defaults`.
+5. **Step down, never up on your own** — the one exception is Phase 2's
+   third fix round, and only with its `Ruling:` line:
+   - a tier whose model the file marks `down:` → that seat goes one tier lower;
+   - usage ≥ 70 % of the 5-hour window (`watch-cortana`'s `usage-watch.* level`,
+     the `5h=` field) → every **non-critical** seat one tier lower; `src=none`
+     → no step-down, and say `usage unobservable`;
+   - never below cheap, never a verify seat below build, and a **held** seat
+     keeps the highest tier still available.
+   Every downgrade is a line: `Ruling: <seat> <from>-><to> - <why> - <cost if wrong>`.
+6. **User words win over the table** (unavailability still wins over them):
+   "use fable" / "fable designs" → design and deep seats on fable · "opus only"
+   / "all opus" → every seat opus · "cheap" / "on a budget" → every
+   non-critical seat one tier lower · "top tier" / "best models" → every seat
+   deep · a named model → that seat on it.
+7. **Your first reply text after loading this skill is the grade line** —
+   before the design-file Write, before any Agent call. No confirmation gate;
+   the line is there so the user can overrule before the first token is spent:
+
+   ```
+   grade: bounded · critical no · design - · build cheap=sonnet · verify build=opus · ceremony lean · usage 5h 41%
+   ```
+
+   **Printed means reply text the user sees**, starting `grade:`, before the
+   design file is written or anything is dispatched. A grade worked out in your
+   thinking, a `Ruling: critical no` in the design file, or a summary at the
+   end is not printed — the user cannot overrule a line they never saw.
+
+**Ceremony** is `full` when the work is architectural, has 4+ tasks, runs
+inside a relay run, or is said to outlive this session ("keep going after",
+"hand it over", "full ceremony"); otherwise `lean`. Full adds the session
+record, the handoff checkpoint, the TRACE table and the rework loop —
+**[references/ceremony.md](references/ceremony.md)**.
+
+Grade detail, the tiers file, the unavailable-at-dispatch retry and worked
+examples: **[references/grade.md](references/grade.md)**.
+
+## Design questions — ruled or parked, never asked mid-build
+
+- **Decidable** from the repo, the ticket, PRACTICE or a stated rule → rule it
+  and write it into the design file's `## Decisions`:
+  `Ruling: <what> - <why> - <cost if wrong>`.
+- **Only the user can answer** (taste, a fact only they hold, a conflict nothing
+  settles) → `relay-morpheus park`, and build everything that does not depend on
+  it. A relay run in flight → park on its stage. A standalone build → open a
+  one-stage run first so the park has a home (commands in
+  [references/grade.md](references/grade.md#parking-from-a-standalone-build)).
+- **The six stops** (destructive op, security-sensitive action, a side effect
+  outside this worktree, the 7-day limit at 90 %, a scope breach, a failed
+  repro) → ask now, alone.
+- **Architectural** keeps PRACTICE §1's one approval gate after the design is
+  written and reviewed — asked when the user is present, parked when the run is
+  headless, chained or the user is away.
+- "ask me as you go", "brainstorm with me", "let's design it together" →
+  live questions instead, one at a time (PRACTICE §1); each answer still lands
+  in `## Decisions`.
+
+## Phase 1 — Design
+
+Design seat `—` → write the design file yourself from the request. Otherwise
+dispatch one design agent on the design seat's model with the request verbatim,
+the repo context and `PRACTICE.md`; it writes the file and returns only its path
+plus two lines:
 
 ```
-CHOSEN:       <the approach, one line + why>
+GOAL:         <the task in one line>
+CHOSEN:       <the approach + why; architectural lists 2-3 APPROACHES first>
 DESIGN:       <data model / contracts, key edge cases, out of scope>
-CONSTRAINTS:  <the binding requirements every task must respect — exact
-              values, names, formats, and the stated relationships
-              between components. Not per-task detail: this is what
-              stays true across all of them, copied verbatim into each
-              task reviewer's prompt as [GLOBAL_CONSTRAINTS].>
-TASKS:        <one block per task in PRACTICE.md §2 shape (Files,
-              Interfaces, test-first steps), each tagged
-              [SIMPLE] or [COMPLEX]>
-VERIFICATION: <the concrete end-to-end check that proves it works>
+CONSTRAINTS:  <what stays true across every task - exact values, names,
+              formats; copied verbatim into every reviewer as
+              [GLOBAL_CONSTRAINTS]>
+TASKS:        <one block per task in PRACTICE §2 shape (Files, Interfaces,
+              test-first steps with real code and commands), each tagged
+              build=<tier> from the Step 0 table>
+VERIFICATION: <the exact end-to-end command and its expected output>
+## Decisions  <every Ruling: made so far; parked questions by Q-id>
 ```
 
-**The design file — one file, no ceremony.** Write it to the scratchpad as
-`design-<YYYY-MM-DD>-<slug>.md`. It is not a session record and this tier keeps
-none; it exists because `practice/task-loop.md` and every template in
-`practice/prompts.md` take a `<DESIGN_FILE>` path
-(`taskwork.sh brief <DESIGN_FILE> <N>`), and because a Sonnet agent working one
-task needs the contracts on disk rather than re-summarised into its prompt.
-Confirm the path in your reply.
+Lean: `design-<YYYY-MM-DD>-<slug>.md` in the scratchpad. Full:
+`docs/sessions/session-<YYYY-MM-DD>-<slug>.md`, plus the REQUIREMENTS / TRACE
+slots in [references/ceremony.md](references/ceremony.md). Then self-review it
+(PRACTICE §3) and fix inline. A **spike** stops at Phase 1: the probe and a
+recommendation, nothing kept.
 
-## Phase 2 — Build (route by complexity)
+## Phase 2 — Build
 
-Work the TASKS list, routing each:
-- **[COMPLEX] / core → `model: "opus"`** subagent.
-- **[SIMPLE] / mechanical → `model: "sonnet"`** subagent.
+One agent per task, fresh context, the **design file path** and its own task
+block — never the design pasted, never this session's history (PRACTICE §4;
+procedure `practice/task-loop.md`, prompt text `practice/prompts.md`). Each task
+runs on its own tagged tier. Several F tickets are one pass, one task block per
+ticket; each ticket's build agent implements its block only — it never loads
+this skill, regrades or runs its own verify. Review each task against its block
+before the next dispatch; a failed review goes to a fix agent. A third round may
+go one tier up, and only with
+`Ruling: <seat> <from>-><to> - reviews <1> and <2> failed: <why each failed> - <cost if wrong>`
+citing both failed reviews; no Ruling, no step up. Independent tasks fan out;
+same-file tasks do not.
 
-Each agent gets the **design file path** and its own task block — never the design
-pasted into the prompt, never this session's history (PRACTICE.md §4; procedure in
-`practice/task-loop.md`, prompt text in `practice/prompts.md`). It builds exactly
-that and stays inside its declared files. Independent tasks can run in parallel (git worktree if they'd touch
-the same tree). If the design hits a real blocker only the user can resolve, stop
-and surface it — don't guess.
+**4+ independent tasks, a sweep, or the user asked** → run Phases 1-3 as one
+workflow script (`WORKFLOW.md`): write the design file first, pass its path in
+`args`, and the build stage reads each task's tier: `model: M[t.build]`.
 
-## Phase 3 — Verify & relay
+## Phase 3 — Verify, review, relay
 
-Run the VERIFICATION step (Opus agent or main session) through PRACTICE.md §5:
-identify the command, run it in full now, read the whole output and exit code,
-and only then claim — with the evidence attached. Never from an earlier run. On failure, fix it ([SIMPLE]→Sonnet,
-[COMPLEX]→Opus) and re-run. Then relay concisely: the approach, what was built
-(files), and the verification result.
-
-## Workflow mode — wide builds
-
-When the design returns **4+ independent tasks**, or the work is a sweep
-(migration, audit, codemod), or the user asked for it, run Phases 1-3 as a
-**single deterministic workflow script** instead of hand-dispatched subagents:
-design → one build agent per task → verify each → loop the failures. Read
-**`WORKFLOW.md`** (beside the installed skills, or at the repo/plugin root) for
-the criteria, host table, and a ready script. Write the design file before the
-call and pass its path in `args`, exactly as Phase 2 would.
-
-The [SIMPLE]/[COMPLEX] routing survives the switch — it becomes the schema's
-`complexity` field, and the build stage picks the model per task:
-`model: t.complexity === 'SIMPLE' ? 'sonnet' : 'opus'`. Same rule, one call.
-
-For 1-3 sequential tasks, stay with plain dispatch.
+Run VERIFICATION through PRACTICE §5 — the command, now, in full, exit code
+read — on the verify seat. Anything bigger than bounded, or critical, gets one
+whole-diff review on the verify seat's tier (PRACTICE §6,
+`code-review:code-review`). Failures go back through Phase 2's fix loop. Then
+relay: the grade line again as the report's first line, what was built
+(files), the verification evidence, every Ruling, every parked Q-id.
 
 ## Rules
 
-- **Route by tag, not vibe.** [SIMPLE]→Sonnet, [COMPLEX]→Opus, design→Opus. Don't
-  send boilerplate to Opus (waste) or core logic to Sonnet.
-- **Both build phases are subagents.** Don't design or code in the main session.
-- **Autonomous but honest.** No confirmation gate; but if a phase fails or an agent
-  returns nothing, say so and stop rather than continuing on a missing piece.
-- **Handoff before any context loss.** This tier runs no `/compact` or `/clear` of
-  its own, but if you or the user are about to run either, **first run the
-  `handoff-cortana` skill** — never compact/clear without a verified handoff.
-- **Pass the design by path, never by paste.** Pasting it parks the whole design
-  in your context for the rest of the session (`practice/task-loop.md`, Context
-  hygiene), and the canon's templates take a `<DESIGN_FILE>` path anyway.
-- **Minimal ceremony, real canon.** The scratchpad design file is the only
-  artifact this tier writes — no session record, no Outcome section, no rework
-  loop, and no §6 whole-branch reviewer — that end-of-build `deep`-tier pass is
-  prime's ceremony, and this tier seats no `deep` model. It ships on §5 evidence
-  plus §4's per-task review. PRACTICE.md §§1-5, and §6's receiving-review
-  discipline, still apply.
-- Need Fable's creative brainstorm, a handoff checkpoint, or a kept session
-  record? Use build-vision. Want all-Opus (no Sonnet offload)? Use build-ultron.
+- **Grade before spending.** No design file, no dispatch, before the grade
+  line is printed as reply text.
+- **A budget is a step-down, never a merge.** A spend cap (`--max-budget-usd`,
+  "on a budget", a cost ceiling) means "cheap" — every non-critical seat one
+  tier lower, said in a `Ruling:`. It never reaches critical work: critical
+  keeps its deep design seat (a dispatched design agent) and its deep, held
+  verify. It never folds the seats into this session:
+  a subagent costs no more than the same work done here, and the orchestrator
+  that builds has nobody to verify it.
+
+| Rationalization | Reality |
+|---|---|
+| "I graded it — it's in my reasoning / the design file's Rulings." | Not printed. The line exists so the user can overrule it before spend; invisible, it overrules nothing. |
+| "Small and obvious; the grade line is ceremony." | It is one line. Size does not waive it; `design -` already says it was small. |
+| "The budget won't cover subagents, so I'll design, build and verify here." | Same tokens, minus the second pair of eyes. Step seats down; keep them separate. |
+| "Critical work — safer if I do it all myself." | Critical makes verify **deep, held**: a different seat, not this one. |
+| "The cap reads as cheap, so the critical design seat drops to build." | The step-down is for non-critical seats only. Critical design stays deep and dispatched. |
+
+**Red flag:** about to Write the design file, or call Agent, with no `grade:`
+line in your reply text yet — stop and print it first.
+- **Never an unnamed model.** An omitted model inherits the session's.
+- **The design file is the handover.** Pass it by path; the orchestrator does
+  not design or code, bar writing a `—`-seat design file and the record.
+- **Autonomous, honest.** A phase that fails or an agent that returns nothing is
+  said plainly; nothing continues on a missing piece.
+- **Handoff before context loss.** About to `/compact` or `/clear` → run
+  `handoff-cortana` first.
 
 ## Other hosts
 
-Opus/Sonnet and the Agent tool above are the **Claude Code** defaults. On Cursor,
-Codex, Antigravity, Pi, or Prime Agent, map them through `PLATFORMS.md` (beside the
-installed skills, or at the repo/plugin root): design + [COMPLEX] → **build
-tier**, [SIMPLE] → **cheap tier**,
-dispatched with that host's delegate mechanism. Where the host has no delegation,
-run the phases **sequentially in one session**, switching model between them and
-writing each phase's output to disk before the switch — the file is the handover,
-not chat history.
+`PLATFORMS.md` turns tiers into slugs and dispatch into the host's delegate
+mechanism; no delegation → run the seats sequentially in one session, each
+phase's output written to disk before the model switch. Per-host notes, the
+seat table and the Opus-version limit: [references/platforms.md](references/platforms.md).
+The `UserPromptSubmit` route hook that puts a feature prompt here on Claude
+Code: [references/route-hook.md](references/route-hook.md).

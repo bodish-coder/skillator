@@ -35,6 +35,13 @@ A host whose slug list doesn't contain an obvious match for a tier gets the
 closest one **and a recorded substitution**. Never leave the model unnamed: an
 omitted model inherits the session's, which is usually the most expensive one.
 
+**Defaults for `build-jarvis`.** The first slug in a cell is that tier's
+default model on that host. `grayskull-power`'s `tiers` arm step writes them
+to `.skillator/tiers.local.md` (gitignored) once per session, and
+`build-jarvis` reads that file; with no file it takes these first slugs
+directly. A model that fails at dispatch as unavailable is marked `down:` in the
+file and the seat retries one tier lower.
+
 ## Detect the host
 
 | Signal | Host |
