@@ -1,0 +1,5 @@
+# isolate=hide: hiding ~/.claude/CLAUDE.md for this run. If this run dies, restore with:
+#   mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md
+# limit: harness wall clock 600s (BASELINE_TIMEOUT), SIGKILL 30s after that
+# isolate=hide: ~/.claude/CLAUDE.md restored
+# limit hit: none - the run exited 0 on its own

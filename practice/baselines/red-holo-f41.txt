@@ -1,0 +1,26 @@
+# RED - "Help me, Obi-Wan" on a run with two parked decisions (F41, holo-r2d2, RUN-11 stage 75)
+# 2026-10-15, claude-code 2.1.300, claude-opus-5-5[1m]. Harness `cmd red`
+# (--safe-mode --disallowed-tools Skill, acceptEdits + allow-list),
+# BASELINE_TIMEOUT=600, 2 runs in parallel, fresh fixture each
+# (`node skills/holo-r2d2/scripts/holo.mjs --fixture <DIR>`: RUN-1, Q1 Format
+# + Q2 Match open, stages 1 x / 2 ? / 3 pending after 2 / 4 final). No
+# skillator skill in init; no Artifact tool in -p. Both runs exited 0 (run 2's
+# wrapper exit 127 comes from the harness's own line 3107 after the run, not
+# from claude: "the run exited 0 on its own"). Cost $0.05 + $0.08.
+# Scenario: scenario-holo-f41.txt. Transcripts: transcripts/f41-red-holo-{1,2}.*
+#
+# VIOLATED 2/2 - no page, no diagram, no stage graph. The phrase was read as a
+# plea for help, the run file read, and the two questions given as prose:
+#   run 1 - "You're probably here about RUN-1 (shelf export), which is
+#            stalled. ... **Q1: Format.** Should `export.dump()` write JSON or
+#            CSV? - **JSON (recommended, default):** ... Reply with your picks
+#            (e.g. "JSON, exact"), or say "defaults" ... I'll record the
+#            answers in the run file, then build stage 2 and stage 3"
+#   run 2 - "You're on RUN-1 (shelf export). Stage 1 is done ... two
+#            questions are waiting on you ... I'd go with the recommended
+#            option on both. ... Reply with your two answers"
+# Both: options as bullets (no side-by-side does/hurts), the stage graph as a
+# sentence ("Stage 3 waits on stage 2 and on Q1" - it also waits on Q2, through
+# the parked stage 2: `chain next` prints IDLE 3 Q2 after), and an offer to
+# take answers and build. Run file untouched 2/2 (run 2 ran pytest, leaving
+# __pycache__). What a fix must add: the phrase -> the script -> a page.

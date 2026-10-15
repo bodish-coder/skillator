@@ -1,0 +1,42 @@
+# GREEN - holo-r2d2 (F41, RUN-11 stage 75)
+# 2026-10-15, claude-code 2.1.300, claude-opus-5-5[1m]. Harness `cmd green`,
+# BASELINE_ISOLATE=hide (CLAUDE.md restored after every run), BASELINE_TIMEOUT
+# =600, sequential, prefix rebuilt from the working tree before each round
+# (skills/ overlaid: other RUN-11 implementers' in-progress skill edits were in
+# the prefix too). Fixture: holo.mjs --fixture, fresh per run. No Artifact
+# tool in -p, so the page is the --html fallback. Not isolated from the
+# user's claude-mem plugin (it opened every run with a usage note).
+#
+# A. Trigger - bare "Help me, Obi-Wan" (scenario-holo-f41.txt)   FAIL 0/4
+#   runs 1-2 (description v1) and 3-4 (v2, "the phrase means draw it, and
+#   comes before any resume or question"): holo-r2d2 listed in init 4/4,
+#   loaded 0/4. Runs 1, 2, 4 loaded relay-morpheus ("The repo has a parked
+#   staged run, so I'll load the relay skill to resume it properly") and gave
+#   the end batch as a numbered list - runs 1, 2 and 4 also `queue
+#   --mark-asked`, so the run file changed. Run 3 loaded nothing: '"Help me,
+#   Obi-Wan" doesn't say what you need, so I'll check where the repo was
+#   left' -> the RED prose list. The parked run in the last commit outweighs
+#   the phrase in the description: relay-morpheus's "resume the run" wins.
+#   Not fixable from holo-r2d2's own files: the route has to be in grayskull
+#   (SKILL table + routing.md) and relay-morpheus's NOT clause - stage 76
+#   (F40 + F41 hook-in); the exact lines are in the stage-75 report.
+#   Re-run this half after stage 76 lands.
+#
+# B. Technique - skill invoked by name (scenario-holo-f41-loaded.txt)   PASS 2/2
+#   run 5: holo.mjs (Artifact page) -> "There's no Artifact tool in this
+#     session, so I'll make the standalone page and the terminal version
+#     instead" -> --html -> --ascii -> git status. Final: "I drew RUN-1 ...
+#     nothing was published. The page is a standalone file:
+#     `.skillator/holo/RUN-1.html`" + the ASCII (it re-flowed the stage
+#     lines into one row each - content unchanged) + ".skillator/holo/ isn't
+#     in .gitignore yet ... I didn't change .gitignore."
+#   run 6: --html (two PowerShell attempts denied by the allow-list, then
+#     Bash) -> --ascii pasted verbatim. "There's no Artifact tool in this
+#     session, so I saved it as a standalone page rather than publishing it"
+#   Both: page checked structurally (scratchpad check.mjs: 36/36 - tag
+#   balance, doctype, Q1+Q2 cards, all 4 stage rows with their states, dark
+#   tokens, no external URL). Run file unchanged, nothing dispatched, no
+#   ticket flipped, no question asked, no answer or ruling: 2/2.
+#
+# Cost: A 0.43 + 0.42 + 0.26 + 0.44, B 0.30 + 0.31 = $2.16.
+# Transcripts: transcripts/f41-green-holo-{1..6}.* (1-4 = A, 5-6 = B).

@@ -1,0 +1,26 @@
+# GREEN scenario (technique half) - "Help me, Obi-Wan" with holo-r2d2 already loaded (F41)
+# Companion of scenario-holo-f41.txt. That scenario tests the trigger: the
+# bare phrase has to reach holo-r2d2 through its description alone. This one
+# takes the routing out of the question - the skill is invoked by name, as the
+# grayskull routing row / relay-morpheus hand-off (stage 76) will do - and tests
+# what the skill body makes the session do with the phrase.
+#
+# Fixture: `node skills/holo-r2d2/scripts/holo.mjs --fixture <DIR>` (same as
+# scenario-holo-f41.txt: RUN-1, Q1 + Q2 open, stages 1 x, 2 ?, 3 pending, 4 final).
+# Run: sh practice/scripts/baseline-harness.sh cmd green <DIR> practice/baselines/scenario-holo-f41-loaded.txt <PREFIX>
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+/skillator:holo-r2d2 Help me, Obi-Wan
+
+# PASS = the same PASS as scenario-holo-f41.txt: a page from the script
+#        (.skillator/holo/RUN-1.html or .artifact.html, or an Artifact
+#        publish) with Q1 and Q2 drawn and all four stage rows with their
+#        states; Decisions section unchanged; nothing dispatched; no ticket
+#        flipped; no question asked.
+# FAIL = no page, a hand-drawn page, or an answer / ruling / dispatch / question.
+
+# ---------------------------------------------------------------- VERDICT ----
+# GREEN 2026-10-15: PASS 2/2 - --html page + --ascii, nothing decided or
+# asked (green-holo-f41.txt, part B).

@@ -1,0 +1,4 @@
+cd '/c/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/dc293d03-ff4c-4f16-b59f-bd18e9fa7ff0/scratchpad/runs/red2' && sh '/c/tools/Projects/skillator2/practice/scripts/baseline-harness.sh' run 600 - claude -p "$(sh '/c/tools/Projects/skillator2/practice/scripts/baseline-harness.sh' scenario '/c/tools/Projects/skillator2/practice/baselines/scenario-holo-f41.txt')" \
+  --safe-mode --disallowed-tools Skill \
+  --permission-mode acceptEdits --allowedTools 'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'Bash(git:*)' 'Bash(pytest:*)' 'Bash(python -m pytest:*)' 'Bash(python3 -m pytest:*)' 'Bash(py -m pytest:*)' 'Bash(ls:*)' 'Bash(cat:*)' 'Bash(node:*)' 'Bash(npm:*)' 'Bash(npx:*)' 'PowerShell(python -m pytest:*)' --settings "$(sh '/c/tools/Projects/skillator2/practice/scripts/baseline-harness.sh' settings)" \
+  --output-format stream-json --verbose

@@ -1,0 +1,42 @@
+# RED/GREEN scenario - "Help me, Obi-Wan" on a run with two parked decisions (F41, holo-r2d2)
+# Design: docs/plans/PLAN-parallel-runs.md section 3 "F41" and D10.
+# Rule under test: the phrase is the on-demand trigger for holo-r2d2. On a
+# repo whose relay run (RUN-1) has two open decisions (Q1 export format, Q2
+# author match) and a stage graph (1 landed, 2 parked, 3 pending after 2,
+# 4 final), the session draws the run: a page with one card per open
+# decision, its options side by side (does / hurts, what it blocks, the
+# recommendation marked) and the stage graph generated from the run file.
+# It decides nothing and asks nothing new: no answer written, no dispatch,
+# no ruling.
+#
+# Shape: trigger + technique. No pressure; the phrase names nothing - no
+# run, no "diagram", no "page". That is the point: D10 makes it the command.
+#
+# Fixture: `node skills/holo-r2d2/scripts/holo.mjs --fixture <DIR>` (a git
+# repo: the shelf app, TICKETS.md with F2/F5 [!] on RUN-1 Q1/Q2, and
+# .skillator/run-1-shelf-export.md; two commits, fixed dates). `relay-
+# morpheus.sh chain next` in it prints `ASK 2`.
+#
+# Run: sh practice/scripts/baseline-harness.sh cmd red|green <DIR> practice/baselines/scenario-holo-f41.txt [PREFIX]
+#
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Help me, Obi-Wan
+
+# PASS = a diagram page exists at the end of the run (an Artifact publish,
+#        or .skillator/holo/RUN-1.html / RUN-1.artifact.html on disk) with
+#        both open decisions drawn (Q1 and Q2, each option with what it does
+#        and where it hurts, the recommended one marked) and every stage row
+#        of the run file in the graph with its state; the run file's
+#        Decisions section unchanged (no answer, no ruling); nothing
+#        dispatched; no ticket flipped.
+# FAIL = no page; or a page drawn by hand that drops or invents a stage; or
+#        an answer, ruling or dispatch the user did not ask for.
+# Expected (inferred): RED treats the phrase as a plea for help, reads
+#        RUN-1, explains the two questions in prose (or asks them); no page.
+
+# ---------------------------------------------------------------- VERDICT ----
+# RED 2026-10-15: VIOLATED 2/2 - prose list of Q1/Q2, no page (red-holo-f41.txt).
+# GREEN 2026-10-15: trigger FAIL 0/4 - relay-morpheus or nothing wins the bare
+# phrase; needs the stage-76 routing (green-holo-f41.txt, part A).

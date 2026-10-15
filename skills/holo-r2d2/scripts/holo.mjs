@@ -1,0 +1,848 @@
+#!/usr/bin/env node
+// holo-r2d2: draw a relay run file (and, optionally, a design file) as one page.
+//
+//   node holo.mjs [RUN-n | n | <run file>] [--design <file>] [--out <path>]
+//        -> an Artifact-shaped page (no doctype/html/head/body) for the
+//           Artifact tool; default .skillator/holo/<RUN-n>.artifact.html
+//   node holo.mjs [run] [--design <file>] --html [--out <path>]
+//        -> a standalone page with its own doctype, for hosts without the
+//           Artifact tool; default .skillator/holo/<RUN-n>.html
+//   node holo.mjs [run] [--design <file>] --ascii      -> the same, for a terminal
+//   node holo.mjs --design <file> [--html|--ascii]     -> design components only
+//   node holo.mjs --fixture <DIR>                      -> the RED/GREEN fixture repo
+//   node holo.mjs --selftest
+//
+// The page is generated from the run file and nothing else: every row of
+// `## Stages`, every `### CODE - stage n` block of `## Chain` (tickets, files,
+// after), every `### Qk` of `## Decisions`. It decides nothing and asks
+// nothing; it never writes the run file (answers go through
+// `relay-morpheus.sh answer`, run by the session).
+//
+// No npm dependencies. Inline SVG only - no CDN, so the page draws offline.
+
+import { readFile, writeFile, mkdir, readdir, cp, stat } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve, dirname, basename, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+// --------------------------------------------------------------- model ----
+const STATE = { "": "pending", "~": "inflight", "x": "landed", "!": "failed", "?": "parked", ">": "replanned" };
+const LABEL = {
+  pending: "pending", inflight: "in flight", landed: "landed", failed: "failed",
+  parked: "parked", replanned: "replanned", unknown: "unknown",
+};
+const GLYPH = {
+  pending: "[ ]", inflight: "[~]", landed: "[x]", failed: "[!]",
+  parked: "[?]", replanned: "[>]", unknown: "[*]",
+};
+const ORDER = ["landed", "inflight", "parked", "failed", "replanned", "pending", "unknown"];
+// A decision holds its work while open, asked, answered or ruled; it lets go
+// only at replanned or moot (references/marathon.md). Cards are drawn for the
+// ones still waiting on the user: open and asked.
+const HOLDING = new Set(["open", "asked", "answered", "ruled"]);
+const ASKABLE = new Set(["open", "asked"]);
+const FINAL_STAGE = /^verify review bump commit push\b/i;
+
+const ids = (s) => (s || "").match(/\b[A-Z]{1,3}\d+[a-z]?\b/g) || [];
+const nums = (s) => ((s || "").match(/\d+/g) || []).map(Number);
+const list = (s) => (s || "").split(",").map((x) => x.trim()).filter((x) => x && x !== "-");
+const normPath = (p) => p.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+const meets = (a, b) => {
+  a = normPath(a); b = normPath(b);
+  return a === b || b.startsWith(a + "/") || a.startsWith(b + "/");
+};
+
+export function parseRun(md) {
+  const run = {
+    id: "", title: "", plan: "", started: "", updated: "",
+    stages: [], chain: null, asks: "", qs: [], inflight: {}, rulings: [],
+  };
+  let sec = "", cur = null, q = null, inPrompt = false, inOpts = false;
+  for (const l of md.replace(/\r/g, "").split("\n")) {
+    let m;
+    if (!run.id && (m = /^# (RUN-\d+)\s*(?:-|\u2014|\u2013)\s*(.*)$/.exec(l))) {
+      run.id = m[1]; run.title = m[2].trim(); continue;
+    }
+    if (l.startsWith("## ")) { sec = l.slice(3).trim(); cur = null; q = null; inPrompt = false; continue; }
+    if (sec === "") {
+      if ((m = /^plan:\s*(.*)$/.exec(l))) run.plan = m[1].trim();
+      if ((m = /started:\s*(\S+)/.exec(l))) run.started = m[1];
+      if ((m = /updated:\s*(\S+)/.exec(l))) run.updated = m[1];
+      continue;
+    }
+    // A prompt body is indented two spaces (or blank); it ends at the first
+    // line that is neither. Nothing inside it is a field.
+    if (inPrompt) {
+      if (l === "" || l.startsWith("  ")) continue;
+      inPrompt = false;
+    }
+    if (sec === "Stages") {
+      if (!/^\|\s*\d+\s*\|/.test(l)) continue;
+      const c = l.split("|").slice(1);
+      if (c.length && c[c.length - 1].trim() === "") c.pop();
+      const [n, name, st, owner, hb, landed] = c.map((x) => (x ?? "").trim());
+      run.stages.push({
+        n: Number(n), raw: name, name, code: "", st,
+        state: STATE[st] ?? "unknown", owner: owner || "-", heartbeat: hb || "-", landed: landed || "-",
+        tickets: [], files: [], after: [], indep: [], implicit: [], waits: [], replacedBy: null,
+      });
+    } else if (sec === "Chain") {
+      if (!run.chain) run.chain = { driver: "-", hold: "-", mode: "-", blocks: {} };
+      if ((m = /^driver: (.*?)\s{2,}hold: (.*?)\s{2,}mode: (.*)$/.exec(l))) {
+        Object.assign(run.chain, { driver: m[1].trim(), hold: m[2].trim(), mode: m[3].trim() });
+      } else if ((m = /^### (\S+) - stage (\d+) - (.*)$/.exec(l))) {
+        cur = { code: m[1], n: Number(m[2]), name: m[3], tickets: "", files: [], after: [], indep: [] };
+        run.chain.blocks[cur.n] = cur;
+      } else if (cur) {
+        if (/^prompt:/.test(l)) inPrompt = true;
+        else if ((m = /^tickets: (.*)$/.exec(l))) cur.tickets = m[1];
+        else if ((m = /^files: (.*)$/.exec(l))) cur.files.push(...list(m[1]));
+        else if ((m = /^after: (.*)$/.exec(l))) cur.after.push(...nums(m[1]));
+        else if ((m = /^independent-of: (.*)$/.exec(l))) cur.indep.push(...(m[1].match(/Q\d+/g) || []));
+      }
+    } else if (sec === "Decisions") {
+      if ((m = /^asks: (.*)$/.exec(l))) { run.asks = m[1].trim(); continue; }
+      if ((m = /^### Q(\d+) (\S+)(?: (\S+))?\s*$/.exec(l))) {
+        q = { k: Number(m[1]), id: "Q" + m[1], state: m[2], ts: m[3] || "", f: {}, options: [] };
+        run.qs.push(q); inOpts = false; continue;
+      }
+      if (/^### /.test(l)) { q = null; inOpts = false; continue; } // unreadable header: never merge into the Q above
+      if (!q) continue;
+      if (inOpts && (m = /^ {2}- (.*)$/.exec(l))) {
+        const [label = "", does = "", hurts = ""] = m[1].split("|").map((x) => x.trim());
+        const rec = /\s*\(Recommended\)$/.test(label);
+        q.options.push({ label: label.replace(/\s*\(Recommended\)$/, ""), does, hurts, rec });
+        continue;
+      }
+      inOpts = false;
+      if (/^options:\s*$/.test(l)) { inOpts = true; continue; }
+      if ((m = /^([a-z][a-z -]*): ?(.*)$/.exec(l))) q.f[m[1]] = m[2];
+    } else if (sec === "In flight") {
+      if ((m = /^### stage (\d+) - (.*)$/.exec(l))) {
+        cur = { n: Number(m[1]), head: m[2].trim(), parked: [], files: [], lastSeen: "" };
+        run.inflight[cur.n] = cur;
+      } else if (cur) {
+        if (/^prompt:/.test(l)) inPrompt = true;
+        else if ((m = /^parked: (.*)$/.exec(l))) cur.parked.push(...(m[1].match(/Q\d+/g) || []));
+        else if ((m = /^files: (.*)$/.exec(l))) cur.files.push(...list(m[1]));
+        else if ((m = /^last seen: (.*)$/.exec(l))) cur.lastSeen = m[1];
+      }
+    } else if (sec === "Rulings") {
+      if (l.startsWith("- ")) run.rulings.push(l.slice(2));
+    }
+  }
+  derive(run);
+  return run;
+}
+
+function derive(run) {
+  const byN = new Map(run.stages.map((s) => [s.n, s]));
+  const blocks = run.chain?.blocks ?? {};
+  for (const s of run.stages) {
+    const b = blocks[s.n];
+    if (b) {
+      s.code = b.code;
+      if (s.raw.startsWith(b.code + " ")) s.name = s.raw.slice(b.code.length + 1);
+      s.tickets = ids(b.tickets);
+      s.files = [...b.files];
+      s.after = b.after.filter((a) => byN.has(a) && a !== s.n);
+      s.indep = b.indep;
+    }
+    const inf = run.inflight[s.n];
+    if (inf) {
+      if (!s.files.length) s.files = [...inf.files];
+      s.lastSeen = inf.lastSeen;
+    }
+    if (s.state === "replanned") {
+      const t = /stage (\d+)/.exec(s.landed);
+      if (t && byN.has(Number(t[1]))) s.replacedBy = Number(t[1]);
+    }
+  }
+  // The chain's last stage is the main session's and comes after everything
+  // (chain.md Step 1.5). Drawn dashed: it is a convention, not an `after:` line.
+  const last = run.stages[run.stages.length - 1];
+  if (last && FINAL_STAGE.test(last.name) && !last.after.length) {
+    last.implicit = run.stages.filter((s) => s !== last).map((s) => s.n);
+  }
+  // Which stages a decision still holds - display only; `relay-morpheus.sh
+  // chain next` is the judge. Same tests as its IDLE lines: blocks, files,
+  // no files, and a `?` row parked on it.
+  for (const q of run.qs) {
+    q.blocks = list(q.f.blocks);
+    q.files = list(q.f.files);
+    q.holds = [];
+    if (!HOLDING.has(q.state)) continue;
+    const blockIds = new Set(q.blocks.flatMap(ids));
+    for (const s of run.stages) {
+      if (s.indep.includes(q.id)) continue;
+      let why = "";
+      if (s.state === "parked" && run.inflight[s.n]?.parked.includes(q.id)) why = "parked";
+      else if (s.state === "pending" || s.state === "failed") {
+        if (s.tickets.some((t) => blockIds.has(t))) why = "blocks";
+        else if (s.files.some((f) => q.files.some((g) => meets(f, g)))) why = "files";
+        else if (run.chain && blocks[s.n] && !s.files.length) why = "nofiles";
+      }
+      if (why) { q.holds.push(s.n); s.waits.push(q.id); }
+    }
+  }
+  // ... and a stage behind a `?` stage through after: waits on that stage's Qs.
+  const byQ = new Map(run.qs.map((q) => [q.id, q]));
+  for (const s of run.stages) {
+    if (s.state !== "pending" && s.state !== "failed") continue;
+    const seen = new Set(), todo = [...s.after];
+    while (todo.length) {
+      const d = byN.get(todo.pop());
+      if (!d || seen.has(d.n)) continue;
+      seen.add(d.n);
+      if (d.state === "parked") {
+        for (const qid of run.inflight[d.n]?.parked ?? []) {
+          const q = byQ.get(qid);
+          if (!q || !HOLDING.has(q.state) || s.indep.includes(qid) || s.waits.includes(qid)) continue;
+          s.waits.push(qid); q.holds.push(s.n);
+        }
+      }
+      todo.push(...d.after);
+    }
+  }
+  for (const q of run.qs) q.holds.sort((a, b) => a - b);
+  for (const s of run.stages) s.waits.sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+}
+
+export function parseDesign(md) {
+  const out = { title: "", parts: [] };
+  let cur = null, para = [], inFence = false;
+  const flush = () => { if (cur && !cur.lead && para.length) cur.lead = para.join(" "); para = []; };
+  for (const l of md.replace(/\r/g, "").split("\n")) {
+    if (/^```/.test(l)) { inFence = !inFence; if (cur) cur.code++; continue; }
+    if (inFence) continue;
+    let m;
+    if (!out.title && (m = /^# (.*)$/.exec(l))) { out.title = m[1].trim(); continue; }
+    if ((m = /^## (.*)$/.exec(l))) { flush(); cur = { name: m[1].trim(), lead: "", subs: [], bullets: 0, code: 0 }; out.parts.push(cur); continue; }
+    if (!cur) continue;
+    if ((m = /^### (.*)$/.exec(l))) { flush(); cur.subs.push(m[1].trim()); continue; }
+    if (/^\s*([-*]|\d+\.)\s/.test(l)) { flush(); cur.bullets++; continue; }
+    if (l.trim() === "" || /^\|/.test(l)) { flush(); continue; }
+    if (!cur.lead) para.push(l.trim());
+  }
+  flush();
+  for (const p of out.parts) { p.code = Math.floor(p.code / 2); if (p.lead.length > 220) p.lead = p.lead.slice(0, 217) + "..."; }
+  return out;
+}
+
+// -------------------------------------------------------------- layout ----
+// Column = dependency depth (after: plus the implicit final edge); a column's
+// stages may run side by side, so each sits in its own lane.
+export function layout(run) {
+  const byN = new Map(run.stages.map((s) => [s.n, s]));
+  const depth = new Map();
+  const deps = (s) => [...s.after, ...s.implicit].filter((d) => byN.has(d));
+  const visit = (s, seen) => {
+    if (depth.has(s.n)) return depth.get(s.n);
+    if (seen.has(s.n)) return 0; // a cycle in hand-edited after: lines - draw, do not hang
+    seen.add(s.n);
+    const d = Math.max(-1, ...deps(s).map((x) => visit(byN.get(x), seen))) + 1;
+    depth.set(s.n, d);
+    return d;
+  };
+  for (const s of run.stages) visit(s, new Set());
+  const cols = [];
+  for (const s of run.stages) (cols[depth.get(s.n)] ??= []).push(s);
+  // a cycle can leave a depth unused; drop the hole or the lane count is NaN
+  const dense = cols.filter(Boolean);
+  const pos = new Map();
+  dense.forEach((c, ci) => c.forEach((s, li) => pos.set(s.n, { col: ci, lane: li })));
+  const edges = [];
+  for (const s of run.stages) {
+    for (const d of s.after) edges.push({ from: d, to: s.n, kind: "after" });
+    for (const d of s.implicit) edges.push({ from: d, to: s.n, kind: "implicit" });
+    if (s.replacedBy) edges.push({ from: s.n, to: s.replacedBy, kind: "replaced" });
+  }
+  return { cols: dense, pos, edges };
+}
+
+// ---------------------------------------------------------------- html ----
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "\u2026" : s);
+function wrap(text, width) {
+  const out = [];
+  let line = "";
+  for (let w of String(text).split(/\s+/).filter(Boolean)) {
+    while (w.length > width) { if (line) { out.push(line); line = ""; } out.push(w.slice(0, width)); w = w.slice(width); }
+    if (!line) line = w;
+    else if (line.length + 1 + w.length <= width) line += " " + w;
+    else { out.push(line); line = w; }
+  }
+  if (line) out.push(line);
+  return out.length ? out : [""];
+}
+const tspans = (lines, x, y, lh) =>
+  lines.map((t, i) => `<tspan x="${x}" y="${y + i * lh}">${esc(t)}</tspan>`).join("");
+
+function stageGraph(run) {
+  if (!run.stages.length) return `<p class="empty">No stage rows in this run file.</p>`;
+  const { cols, pos, edges } = layout(run);
+  const NW = 208, NH = 70, CW = 252, RH = 86, PX = 14, PY = 30;
+  const lanes = Math.max(...cols.map((c) => c.length));
+  const W = PX * 2 + cols.length * CW - (CW - NW), H = PY + lanes * RH + 6;
+  const xy = (n) => { const p = pos.get(n); return { x: PX + p.col * CW, y: PY + p.lane * RH }; };
+  const bands = Array.from({ length: lanes }, (_, i) =>
+    `<rect class="band" x="0" y="${PY + i * RH - 8}" width="${W}" height="${RH - 2}" rx="6"/>` +
+    `<text class="lane" x="${W - 6}" y="${PY + i * RH + 4}" text-anchor="end">lane ${i + 1}</text>`).join("");
+  const heads = cols.map((c, i) =>
+    `<text class="colh" x="${PX + i * CW}" y="16">${i === 0 ? "start" : "step " + (i + 1)}${c.length > 1 ? " \u00b7 " + c.length + " in parallel" : ""}</text>`).join("");
+  const arrows = edges.map((e) => {
+    const a = xy(e.from), b = xy(e.to);
+    const x1 = a.x + NW, y1 = a.y + NH / 2, x2 = b.x - 4, y2 = b.y + NH / 2, mx = (x1 + x2) / 2;
+    const d = x2 > x1
+      ? `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`
+      : `M${a.x + NW / 2},${a.y + NH} C${a.x + NW / 2},${a.y + NH + 30} ${b.x + NW / 2},${b.y - 30} ${b.x + NW / 2},${b.y - 4}`;
+    return `<path class="edge e-${e.kind}" data-edge="${e.from}-${e.to}" data-kind="${e.kind}" d="${d}" marker-end="url(#holo-arrow)"/>`;
+  }).join("");
+  const nodes = run.stages.map((s) => {
+    const { x, y } = xy(s.n);
+    const tip = [`stage ${s.n}${s.code ? " " + s.code : ""} - ${s.name}`, `state: ${LABEL[s.state]}${s.state === "unknown" ? " (" + s.st + ")" : ""}`,
+      `owner: ${s.owner}`, `landed: ${s.landed}`, `files: ${s.files.join(", ") || "-"}`,
+      s.after.length ? `after: ${s.after.join(", ")}` : "", s.waits.length ? `waits on: ${s.waits.join(", ")}` : ""].filter(Boolean).join("\n");
+    const third = s.waits.length ? `waits on ${s.waits.join(" ")}`
+      : s.files.length ? `${s.files.length} file${s.files.length > 1 ? "s" : ""}${s.tickets.length ? " \u00b7 " + s.tickets.join(" ") : ""}`
+      : s.landed !== "-" ? `landed ${s.landed}` : s.owner;
+    return `<g class="node s-${s.state}" data-stage="${s.n}" data-state="${s.state}" transform="translate(${x},${y})">` +
+      `<title>${esc(tip)}</title>` +
+      `<rect width="${NW}" height="${NH}" rx="7"/>` +
+      `<text class="nid" x="10" y="19">#${s.n}${s.code ? " \u00b7 " + esc(s.code) : ""}</text>` +
+      `<text class="nst" x="${NW - 10}" y="19" text-anchor="end">${LABEL[s.state]}</text>` +
+      `<text class="nname" x="10" y="39">${esc(clip(s.name, 29))}</text>` +
+      `<text class="nmeta${s.waits.length ? " held" : ""}" x="10" y="58">${esc(clip(third, 32))}</text></g>`;
+  }).join("");
+  return `<div class="scroll"><svg class="graph" role="img" aria-label="Stage graph of ${esc(run.id)}: ${run.stages.length} stages in ${cols.length} step(s)" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="min-width:${Math.min(W, 560)}px">` +
+    `<defs><marker id="holo-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>` +
+    bands + heads + arrows + nodes + `</svg></div>`;
+}
+
+function stageList(run) {
+  const rows = run.stages.map((s) =>
+    `<li class="srow s-${s.state}" data-stage="${s.n}" data-state="${s.state}">` +
+    `<span class="dot" aria-hidden="true"></span>` +
+    `<span class="sn">${s.n}</span>` +
+    `<span class="sname">${s.code ? `<b>${esc(s.code)}</b> ` : ""}${esc(s.name)}` +
+    `<span class="sfiles">${s.files.length ? esc(s.files.join(" \u00b7 ")) : "files: not listed in the run file"}` +
+    `${s.after.length ? ` \u00b7 after ${s.after.join(", ")}` : ""}${s.waits.length ? ` \u00b7 waits on ${s.waits.join(", ")}` : ""}</span></span>` +
+    `<span class="sst">${LABEL[s.state]}${s.state === "unknown" ? " (" + esc(s.st) + ")" : ""}` +
+    `<span class="sl">${s.landed !== "-" ? esc(s.landed) : esc(s.owner)}</span></span></li>`).join("");
+  return `<ol class="stages">${rows}</ol>`;
+}
+
+function optionFlow(run, q, o, i) {
+  const W = 268, half = 126, lh = 15;
+  const top = wrap(o.label, 30), does = wrap(o.does || "-", 15), hurts = wrap(o.hurts || "-", 15);
+  const then = wrap(`then: ${q.blocks.length ? "unblocks " + q.blocks.join(", ") : "unblocks the parked work"}` +
+    `${q.holds.length ? "; re-plans stage " + q.holds.join(", ") : ""}`, 34);
+  const th = 30 + top.length * lh + (o.rec ? 16 : 0);
+  const by = th + 22, bh = 26 + Math.max(does.length, hurts.length) * lh;
+  const ty = by + bh + 22, tH = 14 + then.length * lh;
+  const H = ty + tH + 2;
+  const rec = o.rec ? `<text class="rtag" x="12" y="${38 + top.length * lh}">recommended</text>` : "";
+  const def = q.f.default && q.f.default === o.label ? `<text class="dtag" x="${W - 12}" y="17" text-anchor="end">default</text>` : "";
+  return `<figure class="opt${o.rec ? " rec" : ""}" data-rec="${o.rec ? 1 : 0}" data-option="${esc(o.label)}">` +
+    `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Option ${i + 1}: ${esc(o.label)}. Does: ${esc(o.does)}. Hurts: ${esc(o.hurts)}.">` +
+    `<rect class="b-pick" x="1" y="1" width="${W - 2}" height="${th}" rx="7"/>` +
+    `<text class="okey" x="12" y="17">option ${i + 1}</text>${def}` +
+    `<text class="olabel">${tspans(top, 12, 36, lh)}</text>${rec}` +
+    `<path class="edge" d="M${W / 2},${th + 1} L${half / 2 + 1},${by - 3}" marker-end="url(#holo-arrow)"/>` +
+    `<path class="edge" d="M${W / 2},${th + 1} L${W - half / 2 - 1},${by - 3}" marker-end="url(#holo-arrow)"/>` +
+    `<rect class="b-does" x="1" y="${by}" width="${half}" height="${bh}" rx="6"/>` +
+    `<text class="bk" x="10" y="${by + 16}">does</text><text class="bt">${tspans(does, 10, by + 32, lh)}</text>` +
+    `<rect class="b-hurts" x="${W - half - 1}" y="${by}" width="${half}" height="${bh}" rx="6"/>` +
+    `<text class="bk" x="${W - half + 8}" y="${by + 16}">hurts</text><text class="bt">${tspans(hurts, W - half + 8, by + 32, lh)}</text>` +
+    `<path class="edge" d="M${half / 2 + 1},${by + bh} L${W / 2},${ty - 3}" marker-end="url(#holo-arrow)"/>` +
+    `<path class="edge" d="M${W - half / 2 - 1},${by + bh} L${W / 2},${ty - 3}"/>` +
+    `<rect class="b-then" x="1" y="${ty}" width="${W - 2}" height="${tH}" rx="6"/>` +
+    `<text class="bt">${tspans(then, 12, ty + 18, lh)}</text>` +
+    `</svg>` +
+    `<button type="button" class="ans" hidden data-q="${q.id}" data-answer="${esc(o.label)}">Choose ${esc(clip(o.label, 28))}</button>` +
+    `</figure>`;
+}
+
+function qCard(run, q) {
+  const n = run.qs.filter((x) => ASKABLE.has(x.state)).length;
+  const pos = run.qs.filter((x) => ASKABLE.has(x.state)).indexOf(q) + 1;
+  const meta = [
+    ["ticket", q.f.ticket], ["reason", q.f.reason], ["parked", q.f.parked],
+    ["blocks", q.blocks.join(", ")], ["holds stages", q.holds.join(", ")],
+    ["files", q.files.join(", ")], ["default", q.f.default], ["done", q.f.done], ["gated", q.f.gated],
+  ].filter(([, v]) => v).map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("");
+  return `<article class="qcard" data-q="${q.id}" data-state="${q.state}">` +
+    `<header><span class="qid">${esc(run.id)} ${q.id} (${pos}/${n})</span>` +
+    `<span class="chip">${esc(q.f.header || q.id)}</span><span class="qst">${esc(q.state)}</span></header>` +
+    `<h3>${esc(q.f.question || "(no question text)")}</h3>` +
+    `<dl class="meta">${meta}</dl>` +
+    `<div class="opts">${q.options.map((o, i) => optionFlow(run, q, o, i)).join("")}</div>` +
+    `<div class="answer" hidden><label>Or in your own words <input type="text" maxlength="300" data-q="${q.id}"></label>` +
+    `<button type="button" class="ans-own" data-q="${q.id}">Send</button>` +
+    `<p class="sent" aria-live="polite"></p></div>` +
+    `</article>`;
+}
+
+function otherQs(run) {
+  const rest = run.qs.filter((q) => !ASKABLE.has(q.state));
+  if (!rest.length) return "";
+  const rows = rest.map((q) => {
+    const out = q.f.replanned ? `replanned: ${q.f.replanned}` : q.f.moot ? `moot: ${q.f.moot}` : q.f["same-as"] ? `same as ${q.f["same-as"]}` : `answer: ${q.f.answer ?? "-"}`;
+    return `<li data-q="${q.id}" data-state="${esc(q.state)}"><span class="qid">${q.id}</span><span class="qst">${esc(q.state)}</span>` +
+      `<span>${esc(q.f.question || "")}<span class="sfiles">${esc(out)}${HOLDING.has(q.state) && q.holds.length ? " \u00b7 still holds stage " + q.holds.join(", ") : ""}</span></span></li>`;
+  }).join("");
+  return `<details class="closedq"><summary>${rest.length} other decision${rest.length > 1 ? "s" : ""} (answered, ruled, re-planned, moot)</summary><ul>${rows}</ul></details>`;
+}
+
+function designBlock(d, src) {
+  if (!d) return "";
+  const cards = d.parts.map((p, i) =>
+    `<article class="comp" data-component="${i + 1}"><h3><span class="cn">${i + 1}</span>${esc(p.name)}</h3>` +
+    (p.lead ? `<p>${esc(p.lead)}</p>` : "") +
+    (p.subs.length ? `<ul>${p.subs.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : "") +
+    `<p class="cm">${p.subs.length} part${p.subs.length === 1 ? "" : "s"} \u00b7 ${p.bullets} point${p.bullets === 1 ? "" : "s"}${p.code ? " \u00b7 " + p.code + " code block" + (p.code > 1 ? "s" : "") : ""}</p></article>`).join("");
+  return `<section class="design"><h2>Design \u00b7 ${esc(d.title || basename(src))}<span class="n">${d.parts.length} sections</span></h2>` +
+    `<p class="src">${esc(src)}</p><div class="comps">${cards}</div></section>`;
+}
+
+const DARK = `
+  --ground:#121512; --surface:#191d19; --ink:#e6e9e5; --mid:#a0a79f; --faint:#6f766e; --rule:#2b302a;
+  --landed:#6cc28d; --landed-bg:#16271c; --inflight:#7fb0f0; --inflight-bg:#152235;
+  --parked:#c3a1ec; --parked-bg:#251c33; --failed:#f08b80; --failed-bg:#341a17;
+  --replanned:#9da19c; --replanned-bg:#222622; --pending:#a0a79f; --pending-bg:#191d19;
+  --does:#6cc28d; --does-bg:#16271c; --hurts:#f08b80; --hurts-bg:#341a17; --accent:#e5a660; --accent-bg:#33240f;
+`;
+const CSS = `
+:root{
+  --ground:#f3f4f1; --surface:#fbfbf9; --ink:#1a1d1a; --mid:#5a615a; --faint:#8a908a; --rule:#dde1db;
+  --landed:#2f7d4f; --landed-bg:#e3f1e8; --inflight:#1f63b8; --inflight-bg:#e2ecf9;
+  --parked:#7a4bb3; --parked-bg:#efe7f8; --failed:#b3261e; --failed-bg:#f8e3e1;
+  --replanned:#7b7f7b; --replanned-bg:#eceeeb; --pending:#5a615a; --pending-bg:#fbfbf9;
+  --does:#2f7d4f; --does-bg:#e8f3ec; --hurts:#b3261e; --hurts-bg:#f9e9e7; --accent:#a8590c; --accent-bg:#fbefe2;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){${DARK}}}
+:root[data-theme="dark"]{${DARK}}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;margin:0 auto;
+  max-width:64rem;padding:2rem 16px 4rem;-webkit-font-smoothing:antialiased}
+h1{font-family:var(--mono);font-size:1rem;margin:0 0 .25rem;letter-spacing:.03em}
+h1 .t{color:var(--mid);font-weight:400}
+.sub{color:var(--mid);font-size:.8125rem;margin:0 0 1rem;overflow-wrap:anywhere}
+h2{display:flex;gap:.5rem;align-items:baseline;font-family:var(--mono);font-size:.6875rem;text-transform:uppercase;
+  letter-spacing:.12em;color:var(--mid);margin:2.25rem 0 .75rem;padding-bottom:.4rem;border-bottom:1px solid var(--rule)}
+h2 .n{font-weight:400;color:var(--faint)}
+.counts{display:flex;flex-wrap:wrap;border:1px solid var(--rule);border-radius:4px;background:var(--surface);overflow:hidden}
+.counts div{flex:1 1 5.5rem;padding:.5rem .7rem;border-left:1px solid var(--rule)}
+.counts div:first-child{border-left:0}
+.counts b{display:block;font-family:var(--mono);font-size:1.05rem;font-variant-numeric:tabular-nums}
+.counts span{font-size:.6875rem;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.counts .c-landed b{color:var(--landed)} .counts .c-inflight b{color:var(--inflight)} .counts .c-parked b{color:var(--parked)}
+.counts .c-failed b{color:var(--failed)} .counts .c-q b{color:var(--accent)}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--rule);border-radius:6px;background:var(--surface);padding:.5rem}
+svg{display:block;font-family:var(--sans)}
+.graph{max-width:none;height:auto}
+.band{fill:var(--ground);opacity:.55} .lane{fill:var(--faint);font-size:10px;font-family:var(--mono)}
+.colh{fill:var(--mid);font-size:10.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em}
+.edge{fill:none;stroke:var(--faint);stroke-width:1.5} .e-implicit{stroke-dasharray:5 4} .e-replaced{stroke-dasharray:2 3;stroke:var(--replanned)}
+.arrowhead{fill:var(--faint)}
+.node rect{stroke-width:1.6}
+.nid{font-family:var(--mono);font-size:11.5px;font-weight:700;fill:var(--ink)}
+.nst{font-size:10.5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em}
+.nname{font-size:12.5px;fill:var(--ink)} .nmeta{font-size:11px;fill:var(--mid);font-family:var(--mono)} .nmeta.held{fill:var(--parked)}
+${["landed", "inflight", "parked", "failed", "replanned", "pending", "unknown"].map((s) => {
+  const c = s === "unknown" ? "failed" : s;
+  return `.s-${s} rect{fill:var(--${c}-bg);stroke:var(--${c})} .s-${s} .nst{fill:var(--${c})} .srow.s-${s} .dot{background:var(--${c})} .srow.s-${s} .sst{color:var(--${c})}`;
+}).join("\n")}
+.s-pending rect{stroke-dasharray:4 3} .s-replanned rect{stroke-dasharray:2 3} .s-replanned .nname{text-decoration:line-through}
+.legend{display:flex;flex-wrap:wrap;gap:.35rem .9rem;margin:.6rem 0 0;padding:0;list-style:none;font-size:.75rem;color:var(--mid)}
+.legend li{display:flex;align-items:center;gap:.35rem}
+.legend i,.dot{display:inline-block;width:.7rem;height:.7rem;border-radius:2px}
+.stages{list-style:none;margin:1rem 0 0;padding:0}
+.srow{display:grid;grid-template-columns:.8rem 2.6rem minmax(0,1fr) auto;gap:.6rem;align-items:baseline;padding:.45rem 0;border-bottom:1px solid var(--rule)}
+.sn{font-family:var(--mono);font-weight:700;font-variant-numeric:tabular-nums}
+.sname{min-width:0;overflow-wrap:anywhere} .sname b{font-family:var(--mono);font-size:.8125rem}
+.sfiles{display:block;font-family:var(--mono);font-size:.75rem;color:var(--mid);overflow-wrap:anywhere}
+.sst{font-family:var(--mono);font-size:.6875rem;text-transform:uppercase;letter-spacing:.05em;text-align:right;white-space:nowrap}
+.sl{display:block;color:var(--faint);text-transform:none;letter-spacing:0}
+.qcard{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:6px;padding:1rem;margin:0 0 1.25rem}
+.qcard header{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;font-family:var(--mono);font-size:.75rem}
+.qid{font-weight:700} .chip{background:var(--accent-bg);color:var(--accent);border-radius:3px;padding:0 .4rem}
+.qst{color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.qcard h3{font-size:1.05rem;margin:.5rem 0 .6rem;line-height:1.35}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.3rem 1rem;margin:0 0 .9rem}
+.meta div{min-width:0} .meta dt{font-size:.6875rem;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.meta dd{margin:0;font-family:var(--mono);font-size:.75rem;overflow-wrap:anywhere}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.75rem}
+.opt{margin:0;padding:.5rem;border:1px solid var(--rule);border-radius:6px;background:var(--ground)}
+.opt.rec{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.opt svg{width:100%;height:auto}
+.b-pick{fill:var(--surface);stroke:var(--mid);stroke-width:1.2} .opt.rec .b-pick{fill:var(--accent-bg);stroke:var(--accent)}
+.b-does{fill:var(--does-bg);stroke:var(--does)} .b-hurts{fill:var(--hurts-bg);stroke:var(--hurts)} .b-then{fill:var(--surface);stroke:var(--rule)}
+.okey,.bk{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;fill:var(--faint)}
+.dtag{font-family:var(--mono);font-size:10px;fill:var(--mid)} .rtag{font-family:var(--mono);font-size:10.5px;font-weight:700;fill:var(--accent)}
+.olabel{font-size:13.5px;font-weight:600;fill:var(--ink)} .bt{font-size:12px;fill:var(--ink)}
+button{font:inherit;font-size:.8125rem;margin-top:.5rem;padding:.4rem .8rem;border-radius:4px;border:1px solid var(--accent);
+  background:var(--accent-bg);color:var(--ink);cursor:pointer;min-height:2.25rem}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.opt button{width:100%}
+.answer{margin-top:.75rem} .answer label{display:flex;flex-direction:column;gap:.25rem;font-size:.75rem;color:var(--mid)}
+.answer input{font:inherit;padding:.4rem;border:1px solid var(--rule);border-radius:4px;background:var(--surface);color:var(--ink)}
+.sent{font-family:var(--mono);font-size:.75rem;color:var(--landed);min-height:1em;margin:.4rem 0 0}
+.closedq ul,.comps ul{list-style:none;padding:0;margin:.5rem 0 0}
+.closedq li{display:grid;grid-template-columns:2.6rem 6.5rem minmax(0,1fr);gap:.5rem;padding:.35rem 0;border-bottom:1px solid var(--rule);font-size:.8125rem}
+summary{cursor:pointer;font-family:var(--mono);font-size:.6875rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mid);margin-top:.5rem}
+.comps{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.75rem}
+.comp{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:.8rem}
+.comp h3{display:flex;gap:.5rem;align-items:baseline;font-size:.9375rem;margin:0 0 .4rem}
+.cn{font-family:var(--mono);font-size:.75rem;color:var(--accent)}
+.comp p{margin:0 0 .4rem;font-size:.8125rem} .comp li{font-size:.8125rem;padding:.1rem 0;border-top:1px solid var(--rule)}
+.cm,.src{font-family:var(--mono);font-size:.6875rem;color:var(--faint)}
+.empty{color:var(--mid)}
+.foot{margin-top:2.5rem;font-size:.75rem;color:var(--faint)}
+@media (max-width:480px){.srow{grid-template-columns:.8rem 2.2rem minmax(0,1fr)} .sst{grid-column:3;text-align:left}}
+`;
+
+// Answers back from the page (Claude Code, `db` capability): one document per
+// decision in the `answers` collection. The page only records a choice; the
+// session reads it (ArtifactData list) and writes `relay-morpheus.sh answer`.
+// Outside a viewer that grants `db` - a saved file, another host - the
+// buttons stay hidden and the page is read-only.
+const CLIENT = `
+(function(){
+  var run = document.querySelector("main[data-run]");
+  if (!run || !window.claude || typeof window.claude.use !== "function") return;
+  var runId = run.getAttribute("data-run");
+  window.claude.use("db").then(function(db){
+    if (!db) return;
+    var col = db.collection("answers");
+    var cards = document.querySelectorAll(".qcard");
+    cards.forEach(function(card){
+      card.querySelectorAll("button.ans").forEach(function(b){ b.hidden = false; });
+      var a = card.querySelector(".answer"); if (a) a.hidden = false;
+    });
+    function say(q, text){
+      var p = document.querySelector('.qcard[data-q="' + q + '"] .sent');
+      if (p) p.textContent = text;
+    }
+    function send(q, answer, kind){
+      answer = String(answer || "").trim();
+      if (!answer) return;
+      say(q, "sending...");
+      col.doc(q).set({ run: runId, q: q, answer: answer.slice(0, 300), kind: kind, at: new Date().toISOString() })
+        .then(function(){ say(q, "sent: " + answer + " - the session writes it to the run file"); })
+        .catch(function(e){ say(q, "not sent (" + ((e && e.code) || "error") + ") - answer in the terminal instead"); });
+    }
+    document.addEventListener("click", function(ev){
+      var b = ev.target.closest && ev.target.closest("button");
+      if (!b) return;
+      var q = b.getAttribute("data-q");
+      if (b.classList.contains("ans")) send(q, b.getAttribute("data-answer"), "option");
+      else if (b.classList.contains("ans-own")) {
+        var i = document.querySelector('.answer input[data-q="' + q + '"]');
+        send(q, i && i.value, "words");
+      }
+    });
+    col.onSnapshot(function(snap){
+      snap.docs.forEach(function(d){
+        var v = d.data(); if (v && v.run === runId && v.answer) say(d.id, "sent: " + v.answer + " - the session writes it to the run file");
+      });
+    }, function(){});
+  });
+})();
+`;
+
+export function render(run, opts = {}) {
+  const design = opts.design ? designBlock(opts.design, opts.designPath || "") : "";
+  const title = run ? `Holo ${run.id}` : `Holo design`;
+  let body = "";
+  if (run) {
+    const c = Object.fromEntries(ORDER.map((s) => [s, run.stages.filter((x) => x.state === s).length]));
+    const askable = run.qs.filter((q) => ASKABLE.has(q.state));
+    const chips = ORDER.filter((s) => s !== "unknown" || c.unknown)
+      .map((s) => `<div class="c-${s}"><b>${c[s]}</b><span>${LABEL[s]}</span></div>`).join("") +
+      `<div class="c-q"><b>${askable.length}</b><span>open decisions</span></div>`;
+    const ch = run.chain;
+    const sub = [run.plan && `plan ${run.plan}`, run.updated && `updated ${run.updated}`,
+      ch && `driver ${ch.driver}`, ch && `hold ${ch.hold}`, ch && `mode ${ch.mode}`].filter(Boolean).map(esc).join(" \u00b7 ");
+    const legend = ORDER.filter((s) => s !== "unknown").map((s) =>
+      `<li><i style="background:var(--${s})"></i>${LABEL[s]}</li>`).join("") +
+      `<li>\u2192 after:</li><li>- - \u2192 final stage, by convention</li>`;
+    const qs = askable.length
+      ? askable.map((q) => qCard(run, q)).join("")
+      : `<p class="empty">No open decisions in ${esc(run.id)}.</p>`;
+    body = `<header><h1>${esc(run.id)} <span class="t">\u00b7 ${esc(run.title)}</span></h1><p class="sub">${sub}</p>` +
+      `<div class="counts">${chips}</div></header>` +
+      `<section class="decisions"><h2>Decisions waiting on you<span class="n">${askable.length}</span></h2>${qs}${otherQs(run)}</section>` +
+      `<section class="run"><h2>Stage graph<span class="n">${run.stages.length} stages</span></h2>${stageGraph(run)}` +
+      `<ul class="legend">${legend}</ul>${stageList(run)}</section>`;
+  }
+  body += design;
+  const src = [run && opts.runPath, opts.designPath].filter(Boolean).map(esc).join(" + ");
+  body = `<main data-run="${esc(run?.id ?? "")}">${body}<p class="foot">Drawn by holo-r2d2 from ${src || "the run file"}` +
+    `${run ? ` at ${esc(run.updated || "?")}` : ""}. It decides nothing: answers are written to the run file by the session (relay-morpheus answer).</p></main>`;
+  return { title, css: CSS, body, script: CLIENT };
+}
+
+export const artifactPage = (r) => `<title>${esc(r.title)}</title>\n<style>${r.css}</style>\n${r.body}\n<script>${r.script}</script>\n`;
+export const standalonePage = (r) =>
+  `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n` +
+  `<title>${esc(r.title)}</title>\n<style>${r.css}</style>\n</head>\n<body>\n${r.body}\n<script>${r.script}</script>\n</body>\n</html>\n`;
+
+// --------------------------------------------------------------- ascii ----
+const ASCII_MAP = { "\u2014": "-", "\u2013": "-", "\u00b7": ".", "\u2026": "...", "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2192": "->", "\u00a7": "S", "\u00d7": "x" };
+const toAscii = (s) => String(s ?? "").replace(/[^\x09\x0a\x20-\x7e]/g, (c) => ASCII_MAP[c] ?? "?");
+
+export function renderAscii(run, opts = {}) {
+  const out = [];
+  if (run) {
+    out.push(`${run.id} - ${run.title}`);
+    out.push([run.plan && `plan: ${run.plan}`, run.updated && `updated: ${run.updated}`,
+      run.chain && `driver: ${run.chain.driver}  hold: ${run.chain.hold}  mode: ${run.chain.mode}`].filter(Boolean).join("   "));
+    out.push(ORDER.map((s) => `${GLYPH[s]} ${LABEL[s]} ${run.stages.filter((x) => x.state === s).length}`).join("  "));
+    const askable = run.qs.filter((q) => ASKABLE.has(q.state));
+    out.push("", `DECISIONS WAITING ON YOU (${askable.length})`);
+    if (!askable.length) out.push("  none");
+    askable.forEach((q, qi) => {
+      out.push(`  ${run.id} ${q.id} (${qi + 1}/${askable.length}) [${q.f.header || q.id}] ${q.f.reason || ""} - ${q.state}`);
+      out.push(`    ${q.f.question || ""}`);
+      out.push(`    ticket ${q.f.ticket || "-"} | blocks ${q.blocks.join(", ") || "-"} | holds stage ${q.holds.join(", ") || "-"}`);
+      out.push(`    files ${q.files.join(", ") || "-"}`);
+      q.options.forEach((o, i) => {
+        const tags = [o.rec && "recommended", q.f.default === o.label && "default"].filter(Boolean).join(", ");
+        out.push(`    ${o.rec ? "*" : " "} ${i + 1}. ${o.label}${tags ? "  (" + tags + ")" : ""}`);
+        out.push(`         does:  ${o.does}`);
+        out.push(`         hurts: ${o.hurts}`);
+      });
+    });
+    const rest = run.qs.filter((q) => !ASKABLE.has(q.state));
+    if (rest.length) out.push(`  other: ${rest.map((q) => `${q.id} ${q.state}`).join(", ")}`);
+    const { cols } = layout(run);
+    out.push("", `STAGE GRAPH (${run.stages.length} stages; one step = stages that may run side by side)`);
+    cols.forEach((c, ci) => {
+      out.push(`  step ${ci + 1}${c.length > 1 ? `  (${c.length} lanes)` : ""}`);
+      for (const s of c) {
+        const dep = [...s.after.map((a) => `after ${a}`), s.implicit.length ? "after all (final)" : ""].filter(Boolean).join(", ");
+        out.push(`    ${GLYPH[s.state]} ${String(s.n).padStart(3)} ${s.code ? s.code + " " : ""}${s.name}  -- ${LABEL[s.state]}` +
+          `${s.landed !== "-" ? " " + s.landed : ""}${s.waits.length ? "  waits on " + s.waits.join(" ") : ""}`);
+        out.push(`          files: ${s.files.join(", ") || "-"}${dep ? "   " + dep : ""}${s.replacedBy ? "   replaced by " + s.replacedBy : ""}`);
+      }
+    });
+  }
+  if (opts.design) {
+    const d = opts.design;
+    out.push("", `DESIGN ${d.title} (${opts.designPath || ""}) - ${d.parts.length} sections`);
+    d.parts.forEach((p, i) => {
+      out.push(`  ${i + 1}. ${p.name}  [${p.subs.length} parts, ${p.bullets} points]`);
+      for (const s of p.subs) out.push(`       - ${s}`);
+    });
+  }
+  return toAscii(out.join("\n")) + "\n";
+}
+
+// ----------------------------------------------------------------- cli ----
+function findRoot(start) {
+  let d = resolve(start);
+  for (;;) {
+    if (existsSync(join(d, ".skillator"))) return d;
+    if (existsSync(join(d, ".git"))) return resolve(start); // never climb out of the repo
+    const up = dirname(d);
+    if (up === d) return resolve(start);
+    d = up;
+  }
+}
+
+async function runFiles(root) {
+  const dir = join(root, ".skillator");
+  let names = [];
+  try { names = await readdir(dir); } catch { return []; }
+  return names.filter((n) => /^run-\d+-.*\.md$/.test(n)).map((n) => join(dir, n));
+}
+
+async function resolveRun(arg, root) {
+  if (arg && existsSync(arg) && (await stat(arg)).isFile()) return resolve(arg);
+  const files = await runFiles(root);
+  if (arg) {
+    const m = /^(?:RUN-)?(\d+)$/i.exec(arg);
+    if (!m) throw new Error(`'${arg}' is not a run file, RUN-<n> or <n>`);
+    const hit = files.filter((f) => basename(f).startsWith(`run-${m[1]}-`));
+    if (!hit.length) throw new Error(`no .skillator/run-${m[1]}-*.md under ${root}`);
+    return hit[0];
+  }
+  // No run named: the live one - a `~` row or a decision still open.
+  const live = [];
+  for (const f of files) {
+    const r = parseRun(await readFile(f, "utf8"));
+    if (r.stages.some((s) => s.state === "inflight") || r.qs.some((q) => ASKABLE.has(q.state))) live.push([f, r.id]);
+  }
+  if (live.length === 1) return live[0][0];
+  if (!live.length && files.length === 1) return files[0];
+  const cand = (live.length ? live : files.map((f) => [f, basename(f)])).map(([f, id]) => `  ${id}  ${f}`).join("\n");
+  const e = new Error(`${live.length ? live.length + " live runs" : files.length ? "no live run" : "no run files"} - name one (Help me, Obi-Wan RUN-<n>):\n${cand}`);
+  e.code = 2;
+  throw e;
+}
+
+async function buildFixture(dir) {
+  dir = resolve(dir);
+  if (existsSync(dir)) throw new Error(`fixture dir already exists: ${dir}`);
+  const src = join(HERE, "fixtures", "repo-two-qs");
+  await cp(src, dir, { recursive: true, filter: (p) => basename(p) !== "_run.md" });
+  const env = { ...process.env, GIT_AUTHOR_DATE: "2026-09-01T09:00:00+00:00", GIT_COMMITTER_DATE: "2026-09-01T09:00:00+00:00" };
+  const git = (...a) => execFileSync("git", ["-C", dir, ...a], { env, encoding: "utf8" }).trim();
+  git("init", "-q");
+  for (const [k, v] of [["user.email", "fixture@example.invalid"], ["user.name", "fixture"], ["commit.gpgsign", "false"], ["core.autocrlf", "false"]]) git("config", k, v);
+  git("add", "-A");
+  git("commit", "-qm", "B3 B4 F3: case-insensitive find, blank titles refused, by_author [AAAB]");
+  const sha = git("rev-parse", "--short=7", "HEAD");
+  await mkdir(join(dir, ".skillator"), { recursive: true });
+  const md = (await readFile(join(src, "_run.md"), "utf8")).replaceAll("@LANDED@", sha);
+  await writeFile(join(dir, ".skillator", "run-1-shelf-export.md"), md);
+  git("add", "-A");
+  git("commit", "-qm", "RUN-1: stage 1 landed, stage 2 parked on Q1 and Q2");
+  return dir;
+}
+
+function parseArgs(argv) {
+  const o = { pos: [], mode: "artifact" };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    const val = () => { if (i + 1 >= argv.length || argv[i + 1].startsWith("--")) throw new Error(`${a} needs a value`); return argv[++i]; };
+    if (a === "--ascii") o.mode = "ascii";
+    else if (a === "--html") o.mode = "html";
+    else if (a === "--out") o.out = val();
+    else if (a === "--design") o.design = val();
+    else if (a === "--root") o.root = val();
+    else if (a === "--fixture") o.fixture = val();
+    else if (a === "--selftest") o.selftest = true;
+    else if (a === "-h" || a === "--help") o.help = true;
+    else if (a.startsWith("--")) throw new Error(`unknown flag ${a}`);
+    else o.pos.push(a);
+  }
+  if (o.pos.length > 1) throw new Error(`one run at a time, got: ${o.pos.join(" ")}`);
+  return o;
+}
+
+async function main(argv) {
+  const o = parseArgs(argv);
+  if (o.help) { console.log((await readFile(fileURLToPath(import.meta.url), "utf8")).split("\n").slice(1, 15).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); return; }
+  if (o.selftest) return selftest();
+  if (o.fixture) { console.log(await buildFixture(o.fixture)); return; }
+  const root = findRoot(o.root ?? process.cwd());
+  let run = null, runPath = "";
+  if (o.pos.length || !o.design) {
+    runPath = await resolveRun(o.pos[0], root);
+    run = parseRun(await readFile(runPath, "utf8"));
+    if (!run.id) throw new Error(`${runPath}: no '# RUN-<n> - <title>' line - not a relay run file`);
+  }
+  let design = null;
+  if (o.design) design = parseDesign(await readFile(o.design, "utf8"));
+  const rel = (p) => (p ? relative(root, p).replace(/\\/g, "/") : p);
+  const opts = { design, designPath: o.design && rel(resolve(o.design)), runPath: rel(runPath) };
+  if (o.mode === "ascii") { process.stdout.write(renderAscii(run, opts)); return; }
+  const r = render(run, opts);
+  const stem = run ? run.id : basename(o.design).replace(/\.md$/i, "");
+  const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}${o.mode === "html" ? "" : ".artifact"}.html`));
+  await mkdir(dirname(out), { recursive: true });
+  const gen = join(root, ".skillator", "holo");
+  if (dirname(out) === gen && !existsSync(join(gen, ".gitignore"))) await writeFile(join(gen, ".gitignore"), "*\n"); // generated output, never committed
+  await writeFile(out, o.mode === "html" ? standalonePage(r) : artifactPage(r), "utf8");
+  const nq = run ? run.qs.filter((q) => ASKABLE.has(q.state)).length : 0;
+  console.log(`holo: ${run ? `${run.id} ${run.stages.length} stages, ${nq} open decision${nq === 1 ? "" : "s"}` : "design only"}` +
+    `${design ? `, ${design.parts.length} design sections` : ""} -> ${out}` +
+    (o.mode === "html" ? " (standalone page)" : " (Artifact page: publish it with the Artifact tool, capabilities {db:{}})"));
+}
+
+// ------------------------------------------------------------ selftest ----
+function selftest() {
+  let fails = 0;
+  const ok = (c, msg, got) => { if (!c) { fails++; console.error(`selftest FAIL: ${msg}`, got === undefined ? "" : got); } };
+  const fx = (n) => readFileSyncText(join(HERE, "fixtures", n));
+  const rowsOf = (md) => [...md.matchAll(/^\|\s*(\d+)\s*\|[^|]*\|([^|]*)\|/gm)].map((m) => [Number(m[1]), STATE[m[2].trim()] ?? "unknown"]);
+
+  // 1. every state, every Q state, a chain with after:, files, a replan
+  const md = fx("fixture-all-states.md");
+  const run = parseRun(md);
+  const r = render(run, { runPath: "fixture-all-states.md" });
+  const page = artifactPage(r), full = standalonePage(r), ascii = renderAscii(run);
+  const rows = rowsOf(md);
+  ok(rows.length === 8 && run.stages.length === rows.length, "all-states: 8 rows parsed", run.stages.length);
+  for (const st of ["pending", "inflight", "landed", "failed", "parked", "replanned", "unknown"]) {
+    ok(run.stages.some((s) => s.state === st), `all-states: fixture covers ${st}`);
+  }
+  // The graph is generated, not drawn: every row of the table - read here by
+  // a regex independent of parseRun - is a node, a list row and an ASCII line
+  // carrying its own state.
+  for (const [n, st] of rows) {
+    const re = new RegExp(`data-stage="${n}" data-state="${st}"`, "g");
+    ok((page.match(re) || []).length === 2, `stage ${n} drawn as ${st} in graph and list`, (page.match(re) || []).length);
+    ok(new RegExp(`^\\s+\\${GLYPH[st][0]}\\${GLYPH[st][1]}\\${GLYPH[st][2]}\\s+${n} `, "m").test(ascii), `ascii row for stage ${n} as ${st}`);
+  }
+  ok((page.match(/class="node /g) || []).length === rows.length, "one node per row, no extras");
+  ok(page.includes('data-edge="1-2" data-kind="after"') && page.includes('data-edge="2-4" data-kind="after"'), "after: edges drawn");
+  ok(page.includes('data-edge="5-6" data-kind="replaced"'), "replanned stage points at its replacement");
+  ok(page.includes('data-edge="1-8" data-kind="implicit"'), "final stage after everything, dashed");
+  ok((page.match(/data-edge="/g) || []).length === 10 && !page.includes('data-edge="9-'), "10 edges, none invented (after: 9 names no stage)", (page.match(/data-edge="/g) || []).length);
+  const qOpen = run.qs.filter((q) => ASKABLE.has(q.state));
+  ok(qOpen.length === 2 && (page.match(/<article class="qcard"/g) || []).length === 2, "a card per open/asked Q only", qOpen.length);
+  for (const q of qOpen) for (const o of q.options) ok(page.includes(`data-option="${esc(o.label)}"`), `${q.id} option ${o.label} drawn`);
+  ok((page.match(/data-rec="1"/g) || []).length === 2, "recommended marked once per card");
+  const q1 = run.qs.find((q) => q.id === "Q1");
+  ok(q1.holds.join() === "3,4", "Q1 holds the parked stage 3 and stage 4 (blocks)", q1.holds);
+  ok(run.qs.find((q) => q.id === "Q100")?.state === "replanned", "Q100 header parsed (no stage word on it)");
+  ok(run.qs.length === 7, "seven Qs, one per state", run.qs.length);
+  ok(!run.qs.find((q) => q.id === "Q3").holds.length, "a moot Q holds nothing");
+  ok(run.stages.find((s) => s.n === 4).waits.includes("Q1"), "stage 4 waits on Q1");
+  ok(!run.stages.find((s) => s.n === 2).files.some((f) => f.includes("prompt")), "indented prompt lines are not fields");
+  ok(run.stages.find((s) => s.n === 2).name === "F2 export <b>", "code stripped from the stage cell");
+  ok(page.includes("F2 export &lt;b&gt;") && !page.includes("export <b>"), "html escaped");
+  ok(!/<(!doctype|html|head|body)\b/i.test(page), "artifact page has no wrapper tags");
+  ok(/^<!doctype html>/.test(full) && full.includes('name="viewport"'), "standalone page has its own doctype and viewport");
+  ok(page.includes("@media (prefers-color-scheme:dark)") && page.includes(':root[data-theme="dark"]') && /body\{background:var\(--ground\)/.test(page), "tokens, dark mode, body background");
+  ok(!/<script[^>]+src=/i.test(page) && !/https?:\/\//.test(page), "no external fetch: draws offline");
+  ok(!/[^\x09\x0a\x20-\x7e]/.test(ascii), "ascii output is ASCII");
+  ok(/<title>Holo RUN-9<\/title>/.test(page), "two-to-four word title");
+
+  // 2. a plain (non-chain) run file, the RUN-11 shape: rows only
+  const plain = parseRun(fx("fixture-plain.md"));
+  const pp = artifactPage(render(plain));
+  ok(plain.stages.length === 4 && !plain.chain, "plain: 4 rows, no chain");
+  for (const [n, st] of rowsOf(fx("fixture-plain.md"))) ok(pp.includes(`data-stage="${n}" data-state="${st}"`), `plain: stage ${n} as ${st}`);
+  ok(pp.includes("No open decisions in RUN-3"), "plain: says there are no decisions");
+  ok(plain.stages[3].implicit.length === 3, "plain: final stage after the other three");
+
+  // 3. the RED/GREEN fixture's run file: two open Qs
+  const two = parseRun(fx("repo-two-qs/_run.md").replaceAll("@LANDED@", "abc1234"));
+  const tp = artifactPage(render(two));
+  ok((tp.match(/<article class="qcard"/g) || []).length === 2, "two-qs: two cards");
+  ok(two.stages.find((s) => s.n === 3).waits.join() === "Q1,Q2", "two-qs: stage 3 waits on Q1 (F6 in its blocks) and Q2 (after the ? stage 2), as chain next says", two.stages.find((s) => s.n === 3).waits);
+  ok(tp.includes('data-edge="2-3" data-kind="after"'), "two-qs: 3 after 2");
+  ok(renderAscii(two).includes("RUN-1 Q2 (2/2) [Match]"), "two-qs: ascii numbers the batch");
+
+  // 4. design sections
+  const d = parseDesign(fx("fixture-design.md"));
+  const dp = artifactPage(render(null, { design: d, designPath: "fixture-design.md" }));
+  ok(d.parts.length === 3 && (dp.match(/class="comp"/g) || []).length === 3, "design: one component per ## section", d.parts.length);
+  ok(d.parts[1].subs.length === 2, "design: ### parts listed", d.parts[1].subs);
+  ok(!d.parts.some((p) => p.name.includes("not a heading")), "design: fenced code is skipped");
+
+  // 5. a run that decided something odd still draws: unknown state, cycle
+  const odd = parseRun("# RUN-4 - odd\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 1 | a | z | - | - | - |\n| 2 | b |   | - | - | - |\n\n## Chain\ndriver: -     hold: -     mode: agents\n### AAAA - stage 1 - a\nafter: 2\nprompt: |\n  x\n### AAAB - stage 2 - b\nafter: 1\nprompt: |\n  y\n");
+  const op = artifactPage(render(odd));
+  ok(op.includes('data-stage="1" data-state="unknown"') && op.includes('data-stage="2" data-state="pending"'), "unknown state and a cycle still draw");
+  ok(!op.includes("NaN"), "a cycle leaves no NaN in the drawing");
+  const hdr = parseRun("# RUN-6 - hdr\n\n## Decisions\n### Q1 open\nquestion: first\n### Q2 answered 2026-09-01T10:30Z by-user\nquestion: second\n");
+  ok(hdr.qs.length === 1 && hdr.qs[0].f.question === "first", "an unreadable Q header never merges into the Q above");
+  ok(parseArgs(["--html", "RUN-12"]).pos[0] === "RUN-12", "--html takes no path; the run stays the run");
+
+  if (fails) { console.error(`selftest: ${fails} failed`); process.exitCode = 1; } else console.log("selftest: ok");
+}
+
+function readFileSyncText(p) { return readFileSync(p, "utf8"); }
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main(process.argv.slice(2)).catch((e) => { console.error(`holo: ${e.message}`); process.exit(e.code === 2 ? 2 : 1); });
+}

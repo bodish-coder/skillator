@@ -1,0 +1,3 @@
+# limit: harness wall clock 600s (BASELINE_TIMEOUT), SIGKILL 30s after that
+# limit hit: none - the run exited 0 on its own
+/c/tools/Projects/skillator2/practice/scripts/baseline-harness.sh: line 3107: : command not found
