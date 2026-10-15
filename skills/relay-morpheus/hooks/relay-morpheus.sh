@@ -615,6 +615,8 @@ alloc_code() {
 #            [--files F] [--mode workflow|agents]
 chain_plan() {
   n=${1:-}; [ -n "$n" ] && shift || die "usage: chain plan <n> --prompt-file F [--tickets T] [--fix t --verify t] [--files F] [--mode m]"
+  # <n> goes into sed and awk patterns unescaped: `6.` would match stage 66.
+  case $n in *[!0-9]*) die "chain plan: '$n' is not a stage number" ;; esac
   pf= tk= fx= vf= fl= md=workflow af=
   while [ "$#" -gt 0 ]; do
     [ "$#" -ge 2 ] || die "chain plan: $1 needs a value"
@@ -666,6 +668,7 @@ chain_plan() {
 # one winner and one exit 2.
 chain_dispatch() {
   n=${1:-}; [ -n "$n" ] && shift || die "usage: chain dispatch <n> --driver TAG [--owner O] [--take] [--override] [--confirmed]"
+  case $n in *[!0-9]*) die "chain dispatch: '$n' is not a stage number" ;; esac
   drv="${RELAY_CHAIN_DRIVER:-}" ow= take=0 conf=0 ov=0
   while [ "$#" -gt 0 ]; do
     case $1 in
@@ -1295,7 +1298,14 @@ cmd_queue() {
   fi
   chain_scan > "$RUN.scan.$$"
   rid=$(id_of "$RUN")
-  awk -v id="${rid:-?}" '
+  # Bytes, not the locale: the chip is cut at 8 characters by counting the
+  # bytes that start one (not 0x80-0xBF), so a UTF-8 or C locale and the ps1
+  # twin all cut a non-ASCII header in the same place.
+  LC_ALL=C awk -v id="${rid:-?}" '
+    BEGIN { for (i = 128; i < 192; i++) cont = cont sprintf("%c", i) }
+    function cut8(s,   i, k, c, o) { o = ""; k = 0
+      for (i = 1; i <= length(s); i++) { c = substr(s, i, 1); if (!index(cont, c) && ++k > 8) break; o = o c }
+      return o }
     FNR == NR { if ($1 == "IDLE" && $3 ~ /^Q[0-9]+$/ && !(($3, $2) in s)) { s[$3, $2] = 1; w[$3]++; hs[$3] = hs[$3] (hs[$3] == "" ? "" : ", ") $2 } next }
     /^## / { sec = $0; q = ""; next }
     sec != "## Decisions" { next }
@@ -1303,7 +1313,7 @@ cmd_queue() {
     /^### / { q = ""; next }
     q == "" { next }
     index($0, "question: ") == 1 { qq[q] = substr($0, 11); next }
-    index($0, "header: ") == 1 { hd[q] = substr(substr($0, 9), 1, 8); next }
+    index($0, "header: ") == 1 { hd[q] = cut8(substr($0, 9)); next }
     index($0, "blocks: ") == 1 { bl[q] = substr($0, 9); m = split(bl[q], t, /[^A-Za-z0-9]+/)
       for (i = 1; i <= m; i++) if (t[i] ~ /^[A-Z]+[0-9]+[a-z]*$/) nb[q]++; next }
     /^  - / { o = substr($0, 5); gsub(/ \| /, " - ", o); op[q, ++no[q]] = o; next }
@@ -1999,6 +2009,12 @@ marathon_selftest() {
   cp "$RUN" "$d6/before"
   if (chain_edge "${r1%?}." --after "$r3" >/dev/null 2>&1); then die "review 8: chain edge took a non-numeric stage"; fi
   cmp -s "$d6/before" "$RUN" || die "review 8: a refused chain edge changed the run file"
+  # A123 (b): chain plan and chain dispatch refuse a non-numeric <n> too.
+  for _c in chain_plan chain_dispatch; do
+    if ($_c . --prompt-file "$d6/p" --driver @cc-v >/dev/null 2>"$d6/err"); then die "A123: $_c took '.'"; fi
+    grep -q "'.' is not a stage number" "$d6/err" || die "A123: $_c '.' not refused as a stage number: $(cat "$d6/err")"
+  done
+  cmp -s "$d6/before" "$RUN" || die "A123: a refused chain plan or dispatch changed the run file"
   # review 9: a two-letter ticket id (AB12) is a ticket id, as on the board.
   P3() { cmd_park --ticket AB12 --reason fact --question "$1" --header "$2" --option 'a | b | c' --option 'd | e | f' --default a --files z.py --stop none; }
   [ "$(P3 'Which key?' Key)" = Q1 ] || die "review: first park is not Q1"
@@ -2010,8 +2026,18 @@ marathon_selftest() {
   [ "$(P3 'Which key?' Key)" = Q3 ] || die "review 4: the question parked again after Q1 went moot returned the closed Q1"
   # review 10: the header is measured trimmed, in characters.
   [ "$(P3 'Which env?' '  Format  ')" = Q4 ] && grep -qx 'header: Format' "$RUN" || die "review 10: a padded 6-character header was refused or stored untrimmed"
-  [ "$(P3 'Which host?' "$(printf '\303\234bersich')")" = Q5 ] || die "review 10: an 8-character non-ASCII header was refused"
-  no "review 10: a 9-character header" 'is 9 characters' P3 'Which user?' "$(printf '\303\234bersicht')"
+  U=$(printf '\303\234')
+  [ "$(P3 "Which ${U}bersicht?" "${U}bersich")" = Q5 ] || die "review 10: an 8-character non-ASCII header was refused"
+  no "review 10: a 9-character header" 'is 9 characters' P3 'Which user?' "${U}bersicht"
+  # A123 (c): queue cuts the chip at 8 characters, not 8 bytes, so an
+  # 8-character non-ASCII header shows whole - as on the ps1 side.
+  cmd_queue | grep -q "^Q5 \[${U}bersich\] Which ${U}bersicht?  (" || die "A123: queue cut an 8-character non-ASCII header: $(cmd_queue | grep '^Q5 ')"
+  # A122: ten rewrites leave a run file holding non-ASCII text byte for byte
+  # as it was, timestamps aside (the ps1 twin re-encoded it on every write).
+  a122() { LC_ALL=C sed 's/[0-9]\{4\}-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]Z/T/g' "$RUN"; }
+  a122 > "$d6/a122"
+  for _r in 1 2 3 4 5; do chain_hold 84 >/dev/null; chain_release >/dev/null; done
+  a122 | cmp -s "$d6/a122" - || die "A122: 10 rewrites changed the bytes of a run file holding non-ASCII text"
   for k in 2 3 4 5; do cmd_answer "Q$k" --moot selftest >/dev/null; done
   # review 5: hold's next= is chain next's NEXT - not the failed first row.
   cmd_stage "$r1" '!'

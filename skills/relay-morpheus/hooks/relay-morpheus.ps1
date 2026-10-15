@@ -249,7 +249,7 @@ function WriteRun($lines) {
 
 function StampUpdated {
   $t = Now
-  WriteRun (Get-Content $Run | ForEach-Object {
+  WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object {
     if ($_ -match '^started: ') { $_ -replace 'updated: .*', "updated: $t" } else { $_ }
   })
 }
@@ -309,7 +309,7 @@ function DoAdd($name) {
   $n = (Alloc 'S' 1 $dir)[0]
   Lock
   try {
-    $lines = @(Get-Content $Run)
+    $lines = @(Get-Content -Encoding UTF8 $Run)
     # After the last table row of `## Stages`; the separator row counts, so an
     # empty table still takes its first row in the right place.
     $on = $false; $last = -1
@@ -333,7 +333,7 @@ function DoList {
   if (-not $all) { "no runs in $Dir"; return }
   foreach ($f in $all) {
     $id = IdOf $f.Name; if (-not $id) { $id = '?' }
-    $lines = Get-Content $f.FullName
+    $lines = Get-Content -Encoding UTF8 $f.FullName
     $title = ($lines[0] -replace '^# RUN[-a-zA-Z0-9]* *- *', '')
     $plan  = ($lines[1] -replace '^plan: *', '')
     $tot = 0; $dn = 0; $open = @()
@@ -365,7 +365,7 @@ function DoResume($spec) {
   "# that is not x. The In-flight block holds the exact prompt to redispatch"
   "# anything that was running."
   ""
-  Get-Content $f
+  Get-Content -Encoding UTF8 $f
 }
 
 # Keyed by stage number, so a redispatch rewrites its row instead of appending
@@ -398,7 +398,7 @@ function DoStage($n, $state, $owner, $landed) {
 function SetRow($n, $state, $owner, $landed) {
   $t = Now
   $found = $false
-  $out = foreach ($l in @(Get-Content $Run)) {
+  $out = foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
     if ((RowNum $l) -eq [int]$n) {
       $found = $true
       $c = $l -split '\|'
@@ -421,7 +421,7 @@ function DoHeartbeat($n) {
   if (-not $n) { Die "usage: -Mode heartbeat -N <n> [-Driver TAG]" }
   NeedRun
   $st = $null; $la = ''
-  Get-Content $Run | ForEach-Object {
+  Get-Content -Encoding UTF8 $Run | ForEach-Object {
     if ((RowNum $_) -eq $n) {
       $st = Cell $_ 3
       $la = Cell $_ 6
@@ -440,7 +440,7 @@ function DoStatus {
   PickRun
   if (-not (Test-Path $Run)) { return }
   $on = $false
-  Get-Content $Run | ForEach-Object {
+  Get-Content -Encoding UTF8 $Run | ForEach-Object {
     if ($_ -match '^## Stages')        { $on = $true }
     elseif ($_ -match '^## In flight') { $on = $false }
     if ($on) { $_ }
@@ -454,7 +454,7 @@ function DoOrphans($limit) {
   if (-not (Test-Path $Run)) { return }
   $t = AsUtc (Now)
   $any = $false
-  Get-Content $Run | ForEach-Object {
+  Get-Content -Encoding UTF8 $Run | ForEach-Object {
     $n = RowNum $_
     if (($null -ne $n) -and ((Cell $_ 3) -eq '~')) {
       $any = $true
@@ -545,7 +545,7 @@ function ChainDecide($line) {
 
 function ChainHdr {
   $on = $false
-  foreach ($l in @(Get-Content $Run)) {
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
     if ($l -ceq '## Chain') { $on = $true; continue }
     if ($on -and $l -match '^driver: ') { return $l }
   }
@@ -588,7 +588,7 @@ function TouchDriver { if (IsMe) { $hp = HdrParts; SetHdr "$(Me) $(Now)" $hp[1] 
 # Rewrite the header line in place. The caller holds the lock.
 function SetHdr($drv, $hold, $mode) {
   $on = $false; $done = $false
-  $out = foreach ($l in @(Get-Content $Run)) {
+  $out = foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
     if ($l -ceq '## Chain') { $on = $true }
     if ($on -and -not $done -and $l -match '^driver: ') { $done = $true; "driver: $drv${SEP}hold: $hold${SEP}mode: $mode" } else { $l }
   }
@@ -596,11 +596,11 @@ function SetHdr($drv, $hold, $mode) {
 }
 
 function RowCellN($n, $i) {
-  foreach ($l in @(Get-Content $Run)) { if ((RowNum $l) -eq [int]$n) { return (Cell $l $i) } }
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ((RowNum $l) -eq [int]$n) { return (Cell $l $i) } }
   $null
 }
 function CodeOf($n) {
-  foreach ($l in @(Get-Content $Run)) { if ($l -cmatch "^### ([A-Z0-9]{4}) - stage $n - ") { return $Matches[1] } }
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ($l -cmatch "^### ([A-Z0-9]{4}) - stage $n - ") { return $Matches[1] } }
   $null
 }
 # The prompt of stage <n>'s chain block, verbatim: the lines under
@@ -608,7 +608,7 @@ function CodeOf($n) {
 # blanks dropped. One string, lines joined by LF.
 function BlockPrompt($n) {
   $inb = $false; $inp = $false; $buf = New-Object System.Collections.Generic.List[string]
-  foreach ($l in @(Get-Content $Run)) {
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
     if (-not $inb) { if ($l -cmatch "^### [A-Z0-9]{4} - stage $n - ") { $inb = $true }; continue }
     if ($l -match '^#') { break }
     if (-not $inp) { if ($l -ceq 'prompt: |') { $inp = $true }; continue }
@@ -625,7 +625,7 @@ function Indent($text) { @("$text" -split "`n" | ForEach-Object { if ($_ -eq '')
 # resume read the first one.
 function DropInFlight($n) {
   $sec = $false; $skip = $false
-  $out = foreach ($l in @(Get-Content $Run)) {
+  $out = foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
     if ($l -match '^## ') { $sec = ($l -ceq '## In flight') }
     if ($skip -and $l -match '^#') { $skip = $false }
     if ($sec -and $l.StartsWith("### stage $n - ")) { $skip = $true; continue }
@@ -637,7 +637,7 @@ function DropInFlight($n) {
 # Append a line at the end of `## Rulings` (made at the end if missing).
 function AddRuling($text) {
   $r = "- $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd', $INV)) - $text"
-  $lines = @(Get-Content $Run); $on = $false; $last = -1
+  $lines = @(Get-Content -Encoding UTF8 $Run); $on = $false; $last = -1
   for ($i = 0; $i -lt $lines.Count; $i++) {
     if ($lines[$i] -match '^## Rulings') { $on = $true; $last = $i; continue }
     if ($on -and $lines[$i] -match '^## ') { $on = $false }
@@ -653,7 +653,7 @@ function AddRuling($text) {
 # blank lines). A missing section is made before `## Rulings`, or at the end,
 # starting with line $first.
 function PutInSection($sec, [string[]]$blk, $first) {
-  $lines = @(Get-Content $Run); $h = "## $sec"
+  $lines = @(Get-Content -Encoding UTF8 $Run); $h = "## $sec"
   $s = -1; for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i] -ceq $h) { $s = $i; break } }
   if ($s -ge 0) {
     $e = $lines.Count
@@ -731,7 +731,7 @@ function DoChainPlan($n) {
     $blk += 'prompt: |'; $blk += (Indent $text)
     # The code goes in front of the stage cell: the column count does not
     # change, so every positional reader still works.
-    WriteRun (Get-Content $Run | ForEach-Object {
+    WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object {
       if ((RowNum $_) -eq [int]$n) { $p = $_ -split '\|'; $p[2] = " $code $($p[2].TrimStart())"; $p -join '|' } else { $_ }
     })
     PutInSection 'Chain' $blk "driver: -${SEP}hold: -${SEP}mode: $ChainMode"
@@ -879,7 +879,7 @@ function DoChainStatus {
   PickRun
   if (-not (Test-Path $Run)) { return }
   $on = $false
-  foreach ($l in @(Get-Content $Run)) {
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
     if ($l.StartsWith('## ')) { $on = ($l -ceq '## Chain' -or $l -ceq '## Decisions') }
     if ($on) { $l }
   }
@@ -901,13 +901,13 @@ function FieldOk($cmd, $name, $v) {
   if ($v.Trim().StartsWith('#')) { Refuse "${cmd}: $name starts with '#' - it would read as a heading in the run file" }
   if ($v -cmatch $SECRET_RE) { Refuse "${cmd}: $name has a key or token shape - a fact question asks where a secret lives (an env var name), never its value" }
 }
-function HasChain { foreach ($l in @(Get-Content $Run)) { if ($l -ceq '## Chain') { return $true } }; $false }
+function HasChain { foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ($l -ceq '## Chain') { return $true } }; $false }
 # `Q2`, `q2`, `2` and `RUN-11 Q2` all name Q2; $null otherwise.
 function QNum($s) { $k = "$s" -replace '.*[Qq]', ''; if ($k -match '^[1-9][0-9]*$') { return $k }; $null }
 # One value out of Q<k>'s block ('state' = the header's second word).
 function QGet($k, $f) {
   $sec = ''; $inq = $false
-  foreach ($l in @(Get-Content $Run)) {
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
     if ($l.StartsWith('## ')) { $sec = $l; $inq = $false; continue }
     if ($sec -cne '## Decisions') { continue }
     if ($l.StartsWith('### ')) {
@@ -979,7 +979,7 @@ function DoPark([string[]]$opts) {
   Lock
   try {
     $sec = ''; $qq = ''; $pp = ''; $tt = ''; $qt = ''; $got = $null; $m = 0
-    foreach ($l in @(Get-Content $Run)) {
+    foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
       if ($l.StartsWith('## ')) { $sec = $l; continue }
       if ($sec -cne '## Decisions') { continue }
       if ($l -cmatch '^### Q([0-9]+) ') {
@@ -1037,7 +1037,7 @@ function DoAnswer {
     if ($s -cnotin @('open', 'asked')) { Refuse "Q$k is '$s' - an answer is written once; a change of mind after it is a new ticket" }
     if ($ruled) { $ns = 'ruled'; $txt = QGet $k 'default' } else { $ns = 'answered'; $txt = "$txt".Trim() }
     $t = Now; $sec = ''; $inq = $false
-    $out = foreach ($l in @(Get-Content $Run)) {
+    $out = foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
       if ($l.StartsWith('## ')) { $sec = $l; $inq = $false }
       if ($sec -ceq '## Decisions' -and $l.StartsWith('### ')) {
         $inq = $false; $h = @($l.Trim() -split '\s+')
@@ -1080,7 +1080,7 @@ function QMove($k, $mv, $mval) {
       $mb = QGet $k 'blocks'; $mf = QGet $k 'files'
     }
     $sec = ''; $inq = $false; $inj = $false
-    $out = foreach ($l in @(Get-Content $Run)) {
+    $out = foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
       if ($l.StartsWith('## ')) { $sec = $l; $inq = $false; $inj = $false }
       if ($sec -ceq '## Decisions' -and $l.StartsWith('### ')) {
         $inq = $false; $inj = $false; $h = @($l.Trim() -split '\s+')
@@ -1129,7 +1129,7 @@ function ChainScan([switch]$NextOnly) {
   $tk = @{}; $fl = @{}; $hasf = @{}; $af = @{}; $ind = @{}
   $qs = @{}; $ql = New-Object System.Collections.Generic.List[int]; $qp = @{}; $qb = @{}; $qbs = @{}; $qf = @{}
   $sec = ''; $cs = 0; $inp = $false; $qk = 0; $hold = ''; $asks = ''
-  foreach ($l in @(Get-Content $Run)) {
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
     if ($l.StartsWith('## ')) { $sec = $l; $cs = 0; $qk = 0; continue }
     if ($sec -ceq '## Stages') { $n = RowNum $l; if ($null -ne $n) { $st[$n] = Cell $l 3; $rows.Add($n); if ((Cell $l 6) -cmatch 'stage ([0-9]+)') { $rep[$n] = [int]$Matches[1] } }; continue }
     if ($sec -ceq '## Chain') {
@@ -1253,7 +1253,7 @@ function DoChainEdge($n) {
     $sn = RowCellN $n 3; if ($sn -cin @('x', '>')) { Die "stage $n is closed ($sn) - an edge on it changes nothing" }
     if ($k -and $null -eq (QGet $k 'state')) { Die "no Q$k in $Run" }
     $inb = $false; $done = $false
-    $out = foreach ($l in @(Get-Content $Run)) {
+    $out = foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
       if (-not $inb -and $l -cmatch "^### [A-Z0-9]{4} - stage $n - ") { $inb = $true; $l; continue }
       if ($inb -and -not $done -and ($l -ceq 'prompt: |' -or $l.StartsWith('#'))) { $line; $done = $true }
       if ($inb -and $l.StartsWith('#')) { $inb = $false }
@@ -1276,7 +1276,7 @@ function DoQueue {
   Lock
   try {
     if ($Asks) {
-      $lines = @(Get-Content $Run)
+      $lines = @(Get-Content -Encoding UTF8 $Run)
       if ($lines -ccontains '## Decisions') {
         $sec = ''; $done = $false; $out = New-Object System.Collections.Generic.List[string]
         for ($i = 0; $i -lt $lines.Count; $i++) {
@@ -1301,7 +1301,7 @@ function DoQueue {
       }
     }
     $sec = ''; $qq = ''; $qst = @{}; $ord = @(); $qn = @{}; $hd = @{}; $bl = @{}; $nb = @{}; $op = @{}
-    foreach ($l in @(Get-Content $Run)) {
+    foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
       if ($l.StartsWith('## ')) { $sec = $l; $qq = ''; continue }
       if ($sec -cne '## Decisions') { continue }
       if ($l -cmatch '^### (Q[0-9]+) ') {
@@ -1334,7 +1334,7 @@ function DoQueue {
     }
     if ($MarkAsked) {
       $t = Now; $sec = ''; $inq = $false
-      $out = foreach ($l in @(Get-Content $Run)) {
+      $out = foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
         if ($l.StartsWith('## ')) { $sec = $l; $inq = $false }
         if ($sec -ceq '## Decisions' -and $l.StartsWith('### ')) {
           $inq = $false; $h = @($l.Trim() -split '\s+')
@@ -1369,7 +1369,7 @@ function ChainSelftest($d) {
     & git @gc @args 2>&1 | Out-Null; $ErrorActionPreference = $prev
     if ($LASTEXITCODE -ne 0) { throw "selftest: git $args failed" } }
   function SetLevel($l) { $env:RELAY_LEVEL_CMD = "echo '$l'" }
-  function AgeDrv { WriteRun (Get-Content $Run | ForEach-Object { $_ -replace '^driver: (@\S+) \S+ ', 'driver: $1 2026-01-01T00:00Z ' }) }
+  function AgeDrv { WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { $_ -replace '^driver: (@\S+) \S+ ', 'driver: $1 2026-01-01T00:00Z ' }) }
   function DrvFresh { $l = ChainHdr; ($l -match '^driver: @') -and ($l -notmatch '^driver: @\S+ 2026-01-01T00:00Z ') }
   # A child powershell on this script, for the two-process races.
   function Spawn([string]$argline) {
@@ -1411,7 +1411,7 @@ function ChainSelftest($d) {
   $script:Dir = Join-Path $d4 '.skillator'; $script:Run = ''
   $script:Plan = 'TICKETS.md'; $script:Title = 'chain test'; $script:Stages = 'B2+B3 books,F2 report,F3 cli,verify review bump commit push'
   DoInit | Out-Null
-  $s1 = $null; foreach ($l in @(Get-Content $Run)) { if ($l -match '^\| (\d+) \| B2\+B3 books \|') { $s1 = [int]$Matches[1] } }
+  $s1 = $null; foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ($l -match '^\| (\d+) \| B2\+B3 books \|') { $s1 = [int]$Matches[1] } }
   $s2 = $s1 + 1; $s3 = $s1 + 2
   $p1 = Join-Path $d4 'p1'; [IO.File]::WriteAllText($p1, "item B2+B3: fix both in shelf/books.py.`n`n  keep this indent | and this pipe`nlast line`n")
   $p2 = Join-Path $d4 'p2'; [IO.File]::WriteAllText($p2, "item F2: by_author`n")
@@ -1431,7 +1431,7 @@ function ChainSelftest($d) {
   $script:PromptFile = ''; ShouldFail 'PromptFile with the stage' { DoChainPlan $s1 }
   $txt = [IO.File]::ReadAllText($Run)
   if ($txt -notmatch "(?m)^\| $s1 \| $c1 B2\+B3 books \|   \| - \| - \| - \|$") { Die "chain plan: cell not prefixed with the code" }
-  foreach ($l in @(Get-Content $Run)) { if ((RowNum $l) -eq $s1 -and ($l -split '\|').Count -ne 8) { Die "chain plan: the row's column count changed" } }
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ((RowNum $l) -eq $s1 -and ($l -split '\|').Count -ne 8) { Die "chain plan: the row's column count changed" } }
   if ($txt -notmatch "(?m)^### $c1 - stage $s1 - B2\+B3 books$") { Die "chain plan: no block header" }
   if ($txt -notmatch '(?m)^tickets: B2 build/build \. B3 build/build$') { Die "chain plan: tickets line wrong" }
   if ($txt -notmatch '(?m)^driver: -     hold: -     mode: workflow$') { Die "chain plan: no Chain header" }
@@ -1460,7 +1460,7 @@ function ChainSelftest($d) {
   if ($out[0] -ne $c1) { Die "chain dispatch: did not print the code first" }
   if ($out[1] -cne $want1) { Die "chain dispatch: printed prompt not verbatim" }
   $on = $false; $p = $false; $buf = @()
-  foreach ($l in @(Get-Content $Run)) {
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
     if ($l.StartsWith("### stage $s1 - ")) { $on = $true; continue }
     if ($on -and $l -match '^## ') { break }
     if ($on -and $l -eq 'prompt: |') { $p = $true; continue }
@@ -1499,7 +1499,7 @@ function ChainSelftest($d) {
   $h1 = DoChainHold
   if (-not (DrvFresh)) { Die "chain hold: did not refresh the driver stamp" }
   if ($h1 -notmatch " 84% 5h next=$s3$") { Die "chain hold: next is not chain next's NEXT ($s3): $h1" }
-  WriteRun (Get-Content $Run | ForEach-Object { $_ -replace 'hold: \S+ ', 'hold: 2026-01-01T00:00Z ' })
+  WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { $_ -replace 'hold: \S+ ', 'hold: 2026-01-01T00:00Z ' })
   $script:Pct = '86'; $h2 = DoChainHold
   if ($h2 -ne "hold: 2026-01-01T00:00Z 86% 5h next=$s3") { Die "chain hold: a second hold restarted the clock or lost next: $h2" }
   if (Test-Path "$Run.lock") { Die "chain hold: left the lock behind" }
@@ -1519,7 +1519,7 @@ function ChainSelftest($d) {
   $r = DoChainWait; if ($r[0] -ne 2 -or $r[1] -ne 'STOP 85 7d') { Die "chain wait: a 7-day-only 85% wants STOP 85 7d / 2, got '$($r[1])' / $($r[0])" }
   SetLevel 'src=codex 5h=10 7d=91 ctx=- max=91'
   $r = DoChainWait; if ($r[0] -ne 2 -or $r[1] -ne 'STOP 91 7d') { Die "chain wait: 7d 91% wants STOP 91 7d / 2, got '$($r[1])' / $($r[0])" }
-  WriteRun (Get-Content $Run | ForEach-Object { $_ -replace 'hold: 2026-01-01T00:00Z ', "hold: $(Now) " })
+  WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { $_ -replace 'hold: 2026-01-01T00:00Z ', "hold: $(Now) " })
   SetLevel 'src=claude-code 5h=84 7d=10 ctx=5 max=84'; $script:For = 1
   AgeDrv
   $r = DoChainWait; if ($r[0] -ne 5 -or $r[1] -notlike 'WAITING 84 *') { Die "chain wait: -For spent, want WAITING/5, got '$($r[1])' / $($r[0])" }
@@ -1580,7 +1580,7 @@ function ChainSelftest($d) {
   # F31 review 3: a redispatch of a failed stage replaces its In-flight block -
   # one block per stage, the new one, not the old block with its dead run id.
   $inb = $false
-  WriteRun (Get-Content $Run | ForEach-Object {
+  WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object {
     if ($_.StartsWith("### stage $s2 - ")) { $inb = $true; $_ } elseif ($_ -match '^#') { $inb = $false; $_ }
     elseif ($inb -and $_ -match '^run: ') { 'run: dead-run-1' } else { $_ } })
   if (-not (Select-String -Path $Run -Pattern '^run: dead-run-1$' -Quiet)) { Die "selftest: did not mark the old In-flight block" }
@@ -1624,7 +1624,7 @@ function ChainSelftest($d) {
   # F31 review 2: a hand-mangled Chain header (4-space separators) is left
   # alone by the driver's heartbeat - row stamped, no throw, header unchanged.
   $good = [IO.File]::ReadAllBytes($Run)
-  WriteRun (Get-Content $Run | ForEach-Object { $_ -replace '^(driver: @\S+ \S+)     hold: (.*)     mode: ', '$1    hold: $2    mode: ' })
+  WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { $_ -replace '^(driver: @\S+ \S+)     hold: (.*)     mode: ', '$1    hold: $2    mode: ' })
   $bad = ChainHdr; if ($bad -match '     ') { Die "selftest: did not mangle the Chain header: $bad" }
   $script:Driver = ($bad -replace '^driver: ', '').Split(' ')[0]
   DoHeartbeat $s1
@@ -1650,7 +1650,7 @@ function ChainSelftest($d) {
   # has no age, so another session's dispatch must not read it as stale and
   # take the chain over with no -Take and no ruling.
   [IO.File]::WriteAllBytes($Run, $good)
-  WriteRun (Get-Content $Run | ForEach-Object { $_ -replace '^driver: (@\S+) \S+     hold: ', 'driver: $1     hold: ' })
+  WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { $_ -replace '^driver: (@\S+) \S+     hold: ', 'driver: $1     hold: ' })
   $bad = ChainHdr; if (-not $bad.StartsWith("driver: $Driver     hold: ")) { Die "selftest: did not strip the driver stamp: $bad" }
   DoHeartbeat $s1
   if ((ChainHdr) -cne $bad) { Die "heartbeat: rewrote a stampless driver cell: $(ChainHdr)" }
@@ -1699,7 +1699,7 @@ function ChainSelftest($d) {
     $x = Join-Path $d 'cross'; New-Item -ItemType Directory -Force $x | Out-Null; G init -q $x
     $script:Dir = Join-Path $x '.skillator'; $script:Run = ''; $script:Title = 'cross'; $script:Stages = 'one,two'
     DoInit | Out-Null
-    $xs = $null; foreach ($l in @(Get-Content $Run)) { if ($l -match '^\| (\d+) \| one \|') { $xs = [int]$Matches[1] } }
+    $xs = $null; foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ($l -match '^\| (\d+) \| one \|') { $xs = [int]$Matches[1] } }
     $oldRun = $env:RELAY_RUN; $env:RELAY_RUN = $Run.Replace('\', '/')
     $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try {
@@ -1711,7 +1711,7 @@ function ChainSelftest($d) {
       # Stage two is planned too, so the hold's next= (chain next's NEXT) names it.
       $null = (& $shExe.Source $shScript chain plan ($xs + 1) --prompt-file $p1.Replace('\', '/') 2>$null)
       $script:Pct = '84'; $script:Next = ''; DoChainHold | Out-Null
-      WriteRun (Get-Content $Run | ForEach-Object { $_ -replace 'hold: \S+ ', 'hold: 2026-01-01T00:00Z ' })
+      WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { $_ -replace 'hold: \S+ ', 'hold: 2026-01-01T00:00Z ' })
       $env:RELAY_LEVEL_CMD = "echo 'src=claude-code 5h=84 7d=10 ctx=5 max=84'"
       $o = (& $shExe.Source $shScript chain wait --interval 1 2>$null) -join ' '; $rc = $LASTEXITCODE
       if ($rc -ne 3 -or $o -notlike 'STUCK 84 *2026-01-01T00:00Z*') { Die "cross: sh did not read the ps hold's since: '$o' / $rc" }
@@ -1778,7 +1778,7 @@ function MarathonSelftest($d) {
   $script:Dir = Join-Path $d6 '.skillator'; $script:Run = ''
   $script:Plan = 'TICKETS.md'; $script:Title = 'marathon'; $script:Stages = 'B3 books,F2 export,F5 export,B4 cli,F6 shelf,F9 docs,F10 notes,final'
   DoInit | Out-Null
-  $m1 = $null; foreach ($l in @(Get-Content $Run)) { if ($l -match '^\| (\d+) \| B3 books \|') { $m1 = [int]$Matches[1] } }
+  $m1 = $null; foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ($l -match '^\| (\d+) \| B3 books \|') { $m1 = [int]$Matches[1] } }
   $m2 = $m1 + 1; $m3 = $m1 + 2; $m4 = $m1 + 3; $m5 = $m1 + 4; $m6 = $m1 + 5; $m7 = $m1 + 6
   $pf = Join-Path $d6 'p'; [IO.File]::WriteAllText($pf, "item: do it`n")
   $O1 = 'JSON | matches list --json | spreadsheet users convert it'; $O2 = 'CSV | opens in Excel | needs quoting'
@@ -1880,7 +1880,7 @@ function MarathonSelftest($d) {
   if ((First) -cne "NEXT $m4 $cm4") { Die "chain edge -IndependentOf: stage $m4 still held: $(First)" }
   DoStage $m4 'x' '-' 'aaa3333'
   $script:After = "$m1"; try { DoChainEdge $m5 | Out-Null } finally { $script:After = '' }
-  $lines = @(Get-Content $Run); $b = [array]::FindIndex($lines, [Predicate[string]]{ $args[0] -cmatch "- stage $m5 - " })
+  $lines = @(Get-Content -Encoding UTF8 $Run); $b = [array]::FindIndex($lines, [Predicate[string]]{ $args[0] -cmatch "- stage $m5 - " })
   $pi = [array]::FindIndex($lines, $b, [Predicate[string]]{ $args[0] -ceq 'prompt: |' })
   if ($lines[$pi - 1] -cne "after: $m1") { Die "chain edge -After: not ahead of the prompt" }
   if ((BlockPrompt $m5) -cne 'item: do it') { Die "chain edge -After: changed the prompt" }
@@ -1924,7 +1924,7 @@ function MarathonSelftest($d) {
   if (-not (@(Queue) -cmatch '^Q5 \[Env\] .*\[asked\]$')) { Die "queue: an asked Q is not marked" }
   if ((Ans 'Q5' 'B_URL') -cne 'Q5 answered: B_URL') { Die "answer: an asked Q" }
   Queue -asks live | Out-Null
-  if (@(Get-Content $Run | Where-Object { $_ -ceq 'asks: live' }).Count -ne 1 -or @(Get-Content $Run | Where-Object { $_.StartsWith('asks: ') }).Count -ne 1) { Die "queue -Asks live: not one asks: live line" }
+  if (@(Get-Content -Encoding UTF8 $Run | Where-Object { $_ -ceq 'asks: live' }).Count -ne 1 -or @(Get-Content -Encoding UTF8 $Run | Where-Object { $_.StartsWith('asks: ') }).Count -ne 1) { Die "queue -Asks live: not one asks: live line" }
   if ((Park2 'F15' 'sync/e.py') -cne 'Q6') { Die "park: Q6" }
   No 'replanned: an open Q' 'only an answered or ruled' { Ans 'Q6' '' -rep "$n8" }
   if ((First) -notlike 'ASK 1 *') { Die "chain next: asks: live did not ask before NEXT: $(First)" }
@@ -1939,7 +1939,7 @@ function MarathonSelftest($d) {
   if ($qo -cne 'Q8 Q6 Q7') { Die "queue: want Q8 Q6 Q7 (most blocked, then oldest), got '$qo'" }
   $ql8 = @(Queue); $i8 = [array]::IndexOf($ql8, @($ql8 | Where-Object { $_.StartsWith('Q8 ') })[0])
   if ($ql8[$i8 + 1] -cnotlike '   a) d (Recommended)*') { Die "queue: the recommended option is not first" }
-  WriteRun (Get-Content $Run | ForEach-Object { if ($_ -ceq 'header: Name') { 'header: Namingtoolong' } else { $_ } })
+  WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { if ($_ -ceq 'header: Name') { 'header: Namingtoolong' } else { $_ } })
   if (-not (@(Queue) -cmatch '^Q8 \[Namingto\] ')) { Die "queue: a hand-made long header was not cut to 8" }
   foreach ($l in @(Queue)) { if ($l -cmatch '^Q[0-9]+ \[([^\]]*)\]' -and $Matches[1].Length -gt 8) { Die "queue: a header over 8 characters" } }
   if (-not ((DoChainStatus) -ccontains '## Decisions')) { Die "chain status: no ## Decisions" }
@@ -1992,7 +1992,7 @@ function MarathonSelftest($d) {
   $d8 = Join-Path $d6 'review'; New-Item -ItemType Directory -Force $d8 | Out-Null; G init -q $d8
   $script:Dir = Join-Path $d8 '.skillator'; $script:Run = ''; $script:Title = 'review'; $script:Stages = 'r1,r2,r3,r4,r5'
   DoInit | Out-Null
-  $r1 = $null; foreach ($l in @(Get-Content $Run)) { if ($l -match '^\| (\d+) \| r1 \|') { $r1 = [int]$Matches[1] } }
+  $r1 = $null; foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ($l -match '^\| (\d+) \| r1 \|') { $r1 = [int]$Matches[1] } }
   $r2 = $r1 + 1; $r3 = $r1 + 2; $r4 = $r1 + 3
   Plan $r1 'F40' 'a.py' '' | Out-Null; Plan $r2 'F41' 'b.py' "$r1" | Out-Null; Plan $r3 'AB12' 'c.py' '' | Out-Null
   # review 3: an unlanded after: stage refuses the dispatch, as a holding Q does.
@@ -2008,12 +2008,24 @@ function MarathonSelftest($d) {
   if ((P3 'Which port?' 'Port') -cne 'Q2') { Die "review 4: a second question on the same ticket returned the old Q" }
   Ans 'Q1' '' -moot 'ticket closed' | Out-Null
   if ((P3 'Which key?' 'Key') -cne 'Q3') { Die "review 4: the question parked again after Q1 went moot returned the closed Q1" }
-  # review 10: the header is measured trimmed. (In characters already here;
-  # the non-ASCII case is pinned on the sh side only - this port's Get-Content
-  # reads a BOM-less UTF-8 run file as ANSI, so a non-ASCII line does not
-  # survive a rewrite here, a separate defect.)
+  # review 10: the header is measured trimmed, in characters.
   if ((P3 'Which env?' '  Format  ') -cne 'Q4' -or -not (Select-String -Path $Run -Pattern '^header: Format$' -CaseSensitive -Quiet)) { Die "review 10: a padded 6-character header was refused or stored untrimmed" }
-  foreach ($k in 2, 3, 4) { Ans "Q$k" '' -moot 'selftest' | Out-Null }
+  $U = [string][char]0xDC
+  if ((P3 "Which ${U}bersicht?" "${U}bersich") -cne 'Q5') { Die "review 10: an 8-character non-ASCII header was refused" }
+  No 'review 10: a 9-character header' 'is 9 characters' { P3 'Which user?' "${U}bersicht" }
+  # A123 (c): queue cuts the chip at 8 characters, so an 8-character
+  # non-ASCII header shows whole - as on the sh side.
+  if (-not (@(Queue) -cmatch ('^Q5 \[' + "${U}bersich" + '\] Which ' + "${U}" + 'bersicht\?  \('))) { Die "A123: queue cut an 8-character non-ASCII header: $(@(Queue) -cmatch '^Q5 ')" }
+  # A122: every rewrite read the BOM-less UTF-8 run file as ANSI and wrote it
+  # back as UTF-8, so each write re-encoded the non-ASCII bytes (one header
+  # grew a run file to 2 GB). Ten rewrites leave its bytes as they were,
+  # timestamps aside; Latin-1 maps each byte to one char, so this is bytes.
+  function NormRun { [regex]::Replace([Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($Run)), '\d{4}-\d\d-\d\dT\d\d:\d\dZ', 'T') }
+  $a122 = NormRun
+  if (-not $a122.Contains([string][char]0xC3 + [char]0x9C + 'bersicht?')) { Die "A122: the parked question is not UTF-8 on disk" }
+  for ($ri = 0; $ri -lt 5; $ri++) { $script:Pct = '84'; $script:Next = ''; $script:Window = '5h'; DoChainHold | Out-Null; DoChainRelease | Out-Null }
+  if ((NormRun) -cne $a122) { Die "A122: 10 rewrites changed the bytes of a run file holding non-ASCII text" }
+  foreach ($k in 2, 3, 4, 5) { Ans "Q$k" '' -moot 'selftest' | Out-Null }
   # review 5: hold's next= is chain next's NEXT - not the failed first row.
   DoStage $r1 '!' '' ''
   if ((First) -cne "NEXT $r3 $(CodeOf $r3)") { Die "review 5: want NEXT ${r3}: $(First)" }
@@ -2047,7 +2059,7 @@ function MarathonSelftest($d) {
     $x = Join-Path $d 'mcross'; New-Item -ItemType Directory -Force $x | Out-Null; G init -q $x
     $script:Dir = Join-Path $x '.skillator'; $script:Run = ''; $script:Title = 'mcross'; $script:Stages = 'F2 export,F5 export,B4 cli,final'
     DoInit | Out-Null
-    $x1 = $null; foreach ($l in @(Get-Content $Run)) { if ($l -match '^\| (\d+) \| F2 export \|') { $x1 = [int]$Matches[1] } }
+    $x1 = $null; foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ($l -match '^\| (\d+) \| F2 export \|') { $x1 = [int]$Matches[1] } }
     Plan $x1 'F2' 'shelf/export.py' '' | Out-Null; Plan ($x1 + 1) 'F5' 'shelf\export.py' "$x1" | Out-Null; Plan ($x1 + 2) 'B4' '' '' | Out-Null
     $oldRun = $env:RELAY_RUN; $env:RELAY_RUN = $Run.Replace('\', '/')
     $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
@@ -2165,7 +2177,7 @@ function DoSelftest {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Mode init -Plan p -Title t -Stages "one,two" -Run $f2 | Out-Null
     if (-not (Select-String -Path $f2 -Pattern '^\| \d+ \| two \|' -Quiet)) { Die "-File: -Stages did not split" }
     # Stage numbers are serial now, so take this run's first one from the file.
-    $n2 = @(Get-Content $f2 | ForEach-Object { RowNum $_ } | Where-Object { $null -ne $_ })[0]
+    $n2 = @(Get-Content -Encoding UTF8 $f2 | ForEach-Object { RowNum $_ } | Where-Object { $null -ne $_ })[0]
     & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Mode stage -N $n2 -State pending -Run $f2 | Out-Null
     if ($LASTEXITCODE -ne 0) { Die "-File: -State pending failed" }
 
@@ -2192,7 +2204,7 @@ function DoSelftest {
       if (-not (Select-String -Path $f5 -Pattern '^\| 26 \| c \|' -Quiet)) { Die "F22: second worktree reused a stage number" }
       $script:Dir = $sk; $script:Run = $f4
       $got = DoAdd 'late one'; if ("$got" -ne '27') { Die "add: did not take the next serial number (got $got)" }
-      $fl = @(Get-Content $f4); $p = [array]::FindIndex($fl, [Predicate[string]]{ $args[0] -match '^\| 25 \|' })
+      $fl = @(Get-Content -Encoding UTF8 $f4); $p = [array]::FindIndex($fl, [Predicate[string]]{ $args[0] -match '^\| 25 \|' })
       if ($fl[$p + 1] -notmatch '^\| 27 \| late one \|') { Die "add: row not after the last stage" }
       ShouldFail 'would shift every column' { DoAdd 'a | b' }
       DoStage 27 '~' 'build:opus' ''
