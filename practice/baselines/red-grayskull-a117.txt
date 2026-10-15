@@ -1,0 +1,38 @@
+# RED - grayskull-power codegraph honesty (A117, RUN-11 stage 78)
+# 2026-10-15, claude-code 2.1.300, claude-opus-5-5[1m]. Scenario:
+# scenario-grayskull-a117.txt. Prefix: baseline-harness.sh `prefix`, built
+# while skills/grayskull-power matched HEAD 852b032 (diff -r: identical);
+# other skills/ carried other RUN-11 implementers' working-tree edits.
+# Harness `cmd green` with that prefix (RED = the old skill loaded, not a
+# skill-less --safe-mode run), BASELINE_ISOLATE=hide on the OUTER run (CLAUDE.md
+# restored after every run), BASELINE_TIMEOUT=1500, sequential. Emitted command
+# edited (recorded verbatim in each .cmd): allow-list + 'Bash(codegraph:*)'
+# 'Bash(grep:*)' 'Bash(wc:*)' 'Bash(command -v:*)', and --max-budget-usd 5.
+#
+# Round 1 - fixture `a117-fixture.sh <DIR>` (codegraph NOT initialized)
+#   transcripts/a117-red-{1,2}.*
+#   run 1: "codegraph installed, not indexed (init writes to the repo, so
+#     held)"; blast radius read all 16 files by hand: 9 files incl. all 8.
+#   run 2: "codegraph not initialized (init skipped: it writes files)";
+#     blast radius all 8.
+#   Confound: "do not edit" made both sides skip `codegraph init`, so no run
+#   could count coverage. Round 1 does not grade half (a). Superseded by v2.
+#
+# Round 2 (v2) - fixture `a117-fixture.sh <DIR> indexed` (17 tracked, index
+#   of 6 files: 4 py, 1 js, 1 yaml - the skillator2 shape)
+#   transcripts/a117-v2-red-{1,2}.*
+#   run 1: armed line "codegraph 6 files indexed" - a bare count that reads
+#     as the whole map. In prose it noticed codegraph "only indexes the .py,
+#     .js and .yml files" and searched instead; blast radius all 8.
+#   run 2: armed line "codegraph 6 files indexed (the shell and Makefile
+#     callers aren't indexed, so I mapped them with grep)"; blast radius 8/8
+#     (9 files with build.sh).
+#
+# VERDICT RED: FAIL 2/2 on half (a) - the armed line is the skill's own
+#   template ("codegraph 412 files") filled in: N files, no N/tracked, no
+#   language list, no `partial`. Half (b) PASS 2/2: on a 16-file fixture the
+#   model greps / reads everything unprompted, so the old skill's wrong
+#   instruction (codegraph callers/impact) did not cost a caller here. That
+#   half is the ticket's skillator2 measurement (codegraph: 0 of 58 readers of
+#   relay-morpheus.sh; git grep: 58), not this fixture: a 16-file repo is
+#   small enough to read whole, and the run says so.

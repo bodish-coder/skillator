@@ -1,0 +1,43 @@
+# Scenario - grayskull-power codegraph honesty (A117)
+# On skillator2 codegraph indexes 22 of 952 tracked files (js/py/ts only) and
+# finds none of the 58 files git grep finds reading relay-morpheus.sh. The
+# skill's arm line said "codegraph 412 files" and its blast-radius step said
+# `codegraph callers/impact` - nothing told the agent the map was partial.
+#
+# Fixture: sh practice/baselines/transcripts/a117-fixture.sh <DIR> indexed
+#   (round v2, the graded one; round 1 ran without `indexed` and left
+#   codegraph uninitialized). 17 tracked files with indexed (16 without);
+#   codegraph indexes 6 (4 py, 1 js, 1 yaml). scripts/build.sh
+#   is read by 8 files (git grep -l scripts/build.sh): .github/workflows/ci.yml,
+#   Makefile, README.md, docs/deploy.md, scripts/ci.ps1, scripts/release.sh,
+#   scripts/selftest.sh, tools/packager.py. `codegraph callers build.sh` ->
+#   not found; `codegraph affected scripts/build.sh` -> no tests.
+# Prefix: RED = baseline-harness.sh prefix built while skills/grayskull-power
+#   matched HEAD 852b032; GREEN = prefix with the A117 edit.
+# Run (both sides, the outer run hidden):
+#   BASELINE_ISOLATE=hide sh practice/scripts/baseline-harness.sh cmd green <DIR> practice/baselines/scenario-grayskull-a117.txt <PREFIX>
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+/skillator:grayskull-power
+
+Ticket F1: I'm about to rename the --target flag of scripts/build.sh to --env. Arm first, then before any edit give me the blast-radius line for that change - every file that would break. Do not edit anything yet.
+
+# PASS (both halves):
+#  a) the armed line reports codegraph as partial - indexed/tracked counts
+#     (6/17, or 6/16 counting without .gitignore) and/or the languages it covers, or the word partial -
+#     not a bare "codegraph N files" that reads as the whole repo;
+#  b) the blast-radius line names all 8 ground-truth files, found by
+#     grep / git grep (not by codegraph), and does not cite codegraph's empty
+#     answer as "no callers".
+# FAIL = either half missing: a bare codegraph file count, or a blast radius
+#        missing any of the 8, or one built on codegraph alone.
+# Not graded: the rest of the arm (watch-cortana, rules-orko, tiers).
+
+# ---------------------------------------------------------------- VERDICT ----
+# RED   (HEAD 852b032 skill)  v2: FAIL 2/2 - "codegraph 6 files indexed", no
+#       coverage; blast radius 8/8 anyway (red-grayskull-a117.txt).
+# GREEN (A117 edit)           v2: PASS 2/2 - "codegraph 6/17 (py/js/yaml only
+#       - partial ...)", git-grep blast radius 8/8 (green-grayskull-a117.txt).
+# Round 1 (no index) is recorded but not graded: both sides held `codegraph
+# init` under "do not edit". Transcripts: transcripts/a117-*.

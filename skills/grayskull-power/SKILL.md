@@ -18,16 +18,16 @@ description: >-
 ```
 
 Unconditional — the receipt that the skill loaded, not a reward for clean
-arming. Once per session, not per request.
+arming. Once a session.
 
 One call: **arm** the standing skills, **announce** the state, **route** each
-request, under the §3 ground rules.
+request — under §3.
 
 ## 0. Host and canon
 
 Read `PLATFORMS.md` (host mechanics) and `PRACTICE.md` (process canon, cited by
 section below). Both sit **beside the installed skills**: try `../` first (the
-`install.sh` layout — Cursor, Codex, Antigravity, Pi), then `../../` (git
+`install.sh` layout), then `../../` (git
 checkout, Claude Code plugin cache). Neither resolves → say so, continue, detect
 the host from its tools, never assume `claude-code`.
 
@@ -37,7 +37,7 @@ of "invoke a skill", "Fable subagents", `AskUserQuestion` and the watch hooks.
 ## 1. Arm (once, on invoke)
 
 `tickets-zordon` (read `TICKETS.md`, report the open set) · `code-yoda` (restraint
-level; skips its core when `PONYTAIL MODE ACTIVE` is in context) · `codegraph` (indexed, else init once) · `live-friday` (if the
+level; skips its core when `PONYTAIL MODE ACTIVE` is in context) · `codegraph` (indexed/tracked, else init once) · `live-friday` (if the
 repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
 `usage-watch … check` elsewhere) · `relay-morpheus` (an unfinished `.skillator/run.md`
 is the first thing you say) · `rules-orko` (rules read, clashes asked) · `tiers`
@@ -46,7 +46,7 @@ is the first thing you say) · `rules-orko` (rules read, clashes asked) · `tier
 Then one line:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files · code-yoda full · live-friday armed (npm run dev) · watch-cortana 92%/90wk · relay r7 stage 2 of 4 · tiers deep=fable build=opus cheap=sonnet
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 22/952 partial (js/py/ts only) · code-yoda full · live-friday armed (npm run dev) · watch-cortana 92%/90wk · relay r7 stage 2 of 4 · tiers deep=fable build=opus cheap=sonnet
 ```
 
 **Load [`references/arming.md`](references/arming.md)** — what each check does,
@@ -86,6 +86,7 @@ the long tail, why the order holds.
 - **Blast radius named in one line before the edit — no line, no edit.** In
   your visible output, not your head. No line → write it now, or name the
   field you cannot fill without guessing and step back.
+  Shell, PowerShell, Markdown, file-name refs: `git grep -l`.
 - **Scope contract:** >2 unrelated files, or one outside the ticket's contract,
   stops and asks. Smallest change that fixes the cause; no refactoring inside it.
 - **Before a commit:** regression sweep the callers you named, then

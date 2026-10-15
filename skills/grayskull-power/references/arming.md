@@ -23,7 +23,17 @@ each one actually means.
   `codegraph index` if it was already initialized), **once**. Still 0 after that
   means the repo has no indexable source — a docs/skills/config repo — so say
   `codegraph: no code to index` and never retry it this session. Already indexed
-  → `codegraph sync` and move on.
+  → `codegraph sync` (a stale index miscounts; status flags it as pending
+  changes or an older engine).
+  **Then count its coverage — codegraph is a map of some files, not the repo.**
+  Compare `codegraph status` "Files" with `git ls-files | wc -l`, and read its
+  "Files by Language". Report `codegraph <indexed>/<tracked> [partial] (<langs> only)` - the banner's form.
+  It is **`codegraph: partial`** when indexed is under half of tracked, or the
+  repo tracks any `.sh`, `.ps1` or `.md` (codegraph indexes none of them). On
+  a partial map, codegraph answers only for js/ts/py symbols; every blast
+  radius also runs `git grep -l` (ground-rules.md, "Map before you cut"). Measured on
+  skillator2: 22/952 indexed, 0 of the 58 files that name `relay-morpheus.sh`
+  found by codegraph, all 58 by `git grep -l relay-morpheus.sh`.
 - **`live-friday`** — if the repo has a runnable surface (a dev script,
   `Cargo.toml`, `CMakeLists.txt`, a `Makefile`, `go.mod`, a Python entry point),
   it is armed: the *first* change to that project starts the app or build in the
@@ -104,7 +114,7 @@ percentage to give them — see `PLATFORMS.md`), so run
 Then state the active set in **one line** — not a feature tour:
 
 ```
-grayskull-power: board 3 open (B2, F7, A1) · codegraph 412 files indexed · code-yoda full · live-friday armed (npm run dev) · watch-cortana armed at 92% · rules-orko: 2 project · 1 global · tiers deep=fable build=opus cheap=sonnet
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 22/952 partial (js/py/ts only) · code-yoda full · live-friday armed (npm run dev) · watch-cortana armed at 92% · rules-orko: 2 project · 1 global · tiers deep=fable build=opus cheap=sonnet
 ```
 
 The banner is printed at the top of the reply, before any of this. It fires

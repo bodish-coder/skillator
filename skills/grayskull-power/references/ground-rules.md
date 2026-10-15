@@ -15,7 +15,15 @@ half-lands is how one bug becomes three `A` tickets.
    upstream docs. Not memory of how the library "usually" behaves. The map is
    second-hand; a stale index lies confidently, so code beats graph on conflict.
 3. **Map before you cut.** `codegraph explore "<area>"` for the lay of the land,
-   `codegraph callers <symbol>` and `codegraph impact <symbol>` for who breaks.
+   `codegraph callers <symbol>` and `codegraph impact <symbol>` for who breaks —
+   **for js/ts/py symbols only.** codegraph indexes no shell, PowerShell or
+   Markdown, and never sees a file named inside a string (`sh scripts/x.sh`, a
+   `subprocess` argv, a CI step, a doc). For those, and for any file-name
+   reference, the caller list is `git grep -l '<file name or symbol>'`
+   (`grep -rln` outside git). On a repo armed `codegraph: partial`, run the grep
+   on every blast radius, codegraph or not. **Grep wins on conflict**: a grep
+   hit codegraph missed is a caller until you have read it and ruled it out;
+   "codegraph: not found" is never "no callers".
    `understand-anything:understand` for architecture, `graphify` for a repo-wide
    graph, `claude-mem:mem-search` for "have we hit this before".
 4. **Tag every claim** — `verified` (you ran it or read it), `inferred` (follows
@@ -26,6 +34,7 @@ State the blast radius in one line before editing — **no line, no edit**:
 
 ```
 foo() → impact: 3 callers (a.ts:40, b.ts:12, worker.ts:88) · no schema change · affected tests: 2 of 3 · verified
+relay-morpheus.sh → git grep -l: 16 outside baselines (its .ps1 mirror, SKILL.md, chain.md, holo.mjs, …) · codegraph: not indexed (sh) · affected tests: its selftest · verified
 ```
 
 **The consequence, because a rule without one is decoration.** Gathering the
@@ -53,7 +62,9 @@ Every ticket names the files it may touch, before work starts. Then:
 
 **Regression sweep first.** The blast-radius line is worthless if nobody checks
 it afterwards. Run the callers you named, plus `codegraph affected <changed
-files>` for the tests that cover them. Green, or the fix is not done.
+files>` for the tests that cover them — and, for any changed file codegraph
+does not index, `git grep -l <its file name>` for the tests and scripts that
+run it. Green, or the fix is not done.
 
 Then **`code-review:code-review` over the staged diff** — the cheap, correct tool
 for a working diff, and the one `audit-sherlock` itself points at for this job.

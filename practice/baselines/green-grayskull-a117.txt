@@ -1,0 +1,36 @@
+# GREEN - grayskull-power codegraph honesty (A117, RUN-11 stage 78)
+# 2026-10-15, claude-code 2.1.300, claude-opus-5-5[1m]. Scenario:
+# scenario-grayskull-a117.txt. Prefix: baseline-harness.sh `prefix` built from
+# the working tree with the A117 edit (SKILL.md, references/arming.md,
+# ground-rules.md, routing.md); diff -r against the RED prefix's skills/:
+# only those 4 files differ. Same harness, isolation, timeout, allow-list
+# additions and budget as red-grayskull-a117.txt (each .cmd verbatim).
+#
+# Round 1 - fixture not initialized   transcripts/a117-green-{1,2}.*
+#   run 1: "codegraph not initialized (repo is mostly .sh/.ps1/.md, so git
+#     grep is the map)"; blast radius 8/8 by git grep.
+#   run 2: `codegraph status` went through the PowerShell tool, which the
+#     allow-list does not cover -> denied -> "codegraph not checked
+#     (permission denied)"; "Codegraph doesn't index .sh, .ps1, .yml,
+#     Makefile or .md files, so I mapped this with git grep"; 8/8.
+#   Same confound as RED round 1 (no index, init held under "do not edit"):
+#   half (a) not gradable. Superseded by v2.
+#
+# Round 2 (v2) - fixture indexed (17 tracked, 6 indexed)
+#   transcripts/a117-v2-green-{1,2}.*
+#   run 1: "codegraph 6/17 (py/js/yaml only - partial: repo tracks
+#     .sh/.ps1/.md)"; blast-radius line "build.sh --target -> --env · git grep
+#     -l: 9 files ... · codegraph: build.sh not indexed (sh) · ... · verified",
+#     all 8 listed; packager.py flagged "codegraph can't see this because the
+#     flag is inside a string".
+#   run 2: "codegraph 6/16 partial (py/js/yaml only, no .sh/.ps1/.md)" (16:
+#     it counted without .gitignore); blast radius all 8, "git grep ...
+#     Codegraph only indexes 6 of them and skips .sh, .ps1 and .md".
+#
+# VERDICT GREEN: PASS 2/2 (v2) - both halves: <indexed>/<tracked> (<langs>
+#   only) + partial on the armed line, and a git-grep blast radius naming all
+#   8, codegraph cited as not covering sh. RED v2 FAIL 2/2 on half (a).
+# Caveat: half (b) passed on RED too (small fixture, see red record); the
+#   (b) evidence for the change is the skillator2 measurement in arming.md.
+# Not checked: nested runs could not exercise `codegraph sync` on a stale
+#   index (the fixture index is fresh).

@@ -71,7 +71,7 @@ that backwards is how a session produces confident wrong work.
 | Writing a `Workflow` script (user opted in) | `workflow-authoring` **before** the script |
 | "Have we hit this before?" — recall past sessions | `claude-mem:mem-search` |
 | A codebase nobody here knows yet | `understand-anything:understand`, `claude-mem:learn-codebase` |
-| Who calls this / what breaks if I change it | `codegraph` (`callers`, `impact`, `explore`) |
+| Who calls this / what breaks if I change it | `codegraph` (`callers`, `impact`, `explore`) for js/ts/py symbols; `git grep -l` / `grep -rln` for shell, PowerShell, Markdown and file-name refs — grep wins on conflict |
 | A whole-repo knowledge graph, docs and code together | `graphify` |
 
 **Tricky analysis and review go to Fable.** Anything where the answer is a
