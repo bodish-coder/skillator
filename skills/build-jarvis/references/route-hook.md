@@ -10,6 +10,13 @@ to the turn as its own context block:
 {"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"skillator route (build-jarvis hook): this prompt is a feature request. Your first action is the Skill tool with skill skillator:build-jarvis - ..."}}
 ```
 
+The route also says that once build-jarvis has loaded, the first reply text is
+its `grade:` line, before the design-file Write and any Agent call, and that
+the same line then opens the design file and every Agent prompt (A119). The
+body's Step 0.7 says the same, but in F39 rounds 3a-4 direct prompts printed
+the grade only in the final report, 0/6; the hook's line sits in the turn's own
+context, read at the decision point.
+
 JSON, not plain stdout: plain stdout reaches the model too, but prefixed
 `UserPromptSubmit hook success:`, and a probe model asked to quote any line
 beginning `skillator route` read past it; the JSON form it quoted back
@@ -58,7 +65,7 @@ eighteen not, plus a two-line prompt), feed event JSON through the hook path
 (escaped quotes, an escaped newline, a nested `prompt` key that must not be
 read, a `cwd` full of build words that must not match, bad and empty stdin),
 check the route text
-needs no JSON escaping, and check the script is pure ASCII with LF endings.
+needs no JSON escaping and still orders the grade line first, and check the script is pure ASCII with LF endings.
 The two print the same bytes for the same event. `classify "<text>"` (`-Mode classify -Text`) shows
 the verdict for one prompt.
 

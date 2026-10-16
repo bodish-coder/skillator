@@ -1,0 +1,107 @@
+# GREEN - build-jarvis grade: line before spending (A119, RUN-11 stage 80, lane B)
+# RED: red-build-a119.txt (F39 round 4 on the committed body, 0/2; 0/6 across
+# F39 rounds 3a-4). Scenarios: scenario-build-a119-direct-{1,2}.txt.
+# Rule: after Skill(build-jarvis), the first `grade:` line is REPLY TEXT before
+# the first Write and the first Agent call; seats match the Step 0 table.
+#
+# Setup, both rounds: prefix rebuilt from the working tree
+# (`BASELINE_ROOT=<repo> sh <harness copy> prefix`), `diff -r` of
+# skills/build-jarvis against the tree identical, `verify-prefix` ok after the
+# runs. Fresh `relay-chain` fixtures (HEAD 7864d52). --settings = the
+# harness's settings JSON plus one UserPromptSubmit hook `sh
+# <prefix>/skills/build-jarvis/hooks/feature-route.sh`, timeout 5 (the shipped
+# hook, as references/route-hook.md installs it). Driver:
+# transcripts/a119-par.sh = f39-build-par-r3.sh with the A119 scenarios and
+# the harness taken from $H, a private snapshot copy of baseline-harness.sh
+# (HEAD d890073; lane H was editing the live file). Each run: `timeout -k 30
+# 900`, `--max-budget-usd 3` (kept for comparability with F39 round 4; see
+# A121 on the model seeing the cap). Both runs in parallel inside ONE OUTER
+# `BASELINE_ISOLATE=hide sh <harness> run 1800 <prefix> sh a119-par.sh ...`:
+# outer stderr "isolate=hide: hiding ~/.claude/CLAUDE.md", then "restored",
+# "limit hit: none"; ~/.claude/CLAUDE.md.skillator-hidden checked present
+# mid-run (round 2). claude-code 2.1.301, claude-opus-5-5. Hook:
+# hook_response UserPromptSubmit success in all four runs.
+#
+# ------------------------------------------------ ROUND 1 (option 1 only) ----
+# FIX: the route hook's additionalContext (feature-route.sh / .ps1, ROUTE)
+#   gains: "Once build-jarvis has loaded, your first reply text - before the
+#   design-file Write and before any Agent call - is its one grade: line
+#   (Step 0.7), printed as text the user sees, not kept in thinking or saved
+#   for the final report." SKILL.md untouched. Both selftests ok.
+# Run 2026-10-15T18:32:52Z. Transcripts: transcripts/a119-greenr1-<name>.*.
+#   direct-1  PASS. Skill -> Glob x2 -> TEXT "grade: bounded . critical no .
+#     design - . build cheap=sonnet . verify build=opus . ceremony lean .
+#     tiers: defaults . usage unobservable" -> Read x5 -> Write design file ->
+#     Agent sonnet build -> Agent opus verify -> report. $0.87, 118 s.
+#     Seats: row 2, MATCH (verify dispatched to its own seat this time).
+#     Board: F4 already exists; no ticket logged, F4 ticked at the end - right.
+#   direct-2  FAIL. Skill -> Bash x3 -> Agent opus "Design shelf lending"
+#     (prompt does not carry the grade) -> narration -> Agent build -> Agent
+#     verify -> grade: only as the final report's first line. $1.95, 307 s.
+#     Seats: critical yes (concurrency), design deep=opus, build build=opus,
+#     verify deep held - MATCH. Board: no F ticket for lending and none was
+#     logged - the route's board-first clause was ignored. Also: after the
+#     verify findings the orchestrator Edited shelf/loans.py and the test
+#     itself (the body says the orchestrator does not code).
+# Round 1: 1/2. The miss is the dispatch-first path: when the first spend is
+#   a design agent, nothing ties the grade to that call.
+#
+# ---------------------------------- ROUND 2 (option 1 + option 2, last) ----
+# FIX, added on top of round 1:
+#   - SKILL.md Step 0.7: "The line is a required input. It is the design
+#     file's first line and the first line of every Agent prompt (design,
+#     build, verify), verbatim. So whichever spend comes first - the
+#     design-file Write or a design agent - print the line as reply text, then
+#     paste the same line into that call."
+#   - Design-file template's first line `grade: <the Step 0 line, verbatim -
+#     also already printed as reply text>`.
+#   - Red flag names the design agent and critical work explicitly.
+#   - ROUTE text: "... - the same line then opens the design file and every
+#     Agent prompt, a design agent included - not kept in thinking ...".
+#   Both selftests check both route clauses; twins print identical bytes.
+# Run 2026-10-16T02:06:52Z. Transcripts: transcripts/a119-greenr2-<name>.*.
+#   direct-1  PASS. Glob -> Read TICKETS.md -> TEXT "F4 already covers this.
+#     Loading build-jarvis..." -> Skill -> TEXT "grade: bounded . critical no
+#     . design - . build cheap=sonnet . verify build=opus . ceremony lean .
+#     tiers: defaults . usage unobservable" -> Read x4 -> Write design file
+#     (first line the grade) -> Agent sonnet build (prompt's first line the
+#     grade) -> verify in the main (Opus) session -> report. $0.68, 103 s.
+#     Seats: row 2, MATCH. Board-first clause: checked the board BEFORE the
+#     Skill load, found F4, logged nothing - right for this fixture.
+#   direct-2  FAIL. Skill -> Bash/Glob -> Read TICKETS.md -> TEXT "No ticket
+#     for lending yet - logging F8 directly (... rather than spending budget
+#     loading another skill)" -> Edit TICKETS.md (F8) -> Agent fable design,
+#     prompt's FIRST LINE the grade -> 429 -> Ruling fable->opus -> Agent opus
+#     design (grade first line) -> Agent opus build (grade first line) ->
+#     Agent opus verify, held (grade first line) -> grade: as reply text only
+#     in the final report. $2.25, 472 s.
+#     Seats: critical yes (concurrency, quoted), design deep=fable (->opus by
+#     Ruling on 429), build build=opus, verify deep held - MATCH. Board: F8 is
+#     the right next id and was logged, but inline after build-jarvis loaded,
+#     not via tickets-zordon first as the route says - the stated reason is
+#     the $3 cap (A121's skew), the outcome on the board is correct.
+# Round 2: 1/2. Option 2 moved the grade into every spend (design file and
+#   all five Agent prompts across the round carry it as line one), but in
+#   direct-2 the one reply line before the first spend went to the ticket
+#   narration; the "first reply text" slot was used up by the board step.
+#
+# ---------------------------------------------------------------- VERDICT ----
+# PARTIAL 1/2 (both rounds 1/2; RED 0/2, F39 0/6). The cap of two GREEN
+#   rounds is spent. Fixed: the bounded/plain path (direct-1, 2/2 rounds),
+#   and the grade now reaches every Agent prompt and the design file. Not
+#   fixed: the critical/longer path (direct-2) - the model emits one
+#   narration line for whatever it does first (dispatch, ticket logging) and
+#   still saves the grade line for the report.
+# F39 review-fix route text, now GREEN-covered: board-first clause - right
+#   in 2/2 board checks this round (F4 found, nothing logged; F8 logged when
+#   missing) but its ORDER is not followed (direct-2 logs after loading
+#   build-jarvis, inline instead of via tickets-zordon; round 1 direct-2 never
+#   logged). Not-a-feature tail: not exercised (both prompts are features);
+#   no misfire.
+# Next fix, NOT run: a structural gate rather than more wording - a PreToolUse
+#   hook on Agent/Write (build-jarvis's own, beside feature-route) that reads
+#   transcript_path and denies the call with "print your grade: line as reply
+#   text first" while no main-thread assistant text block starting `grade:`
+#   exists since the last build-jarvis Skill call. Or, lighter: tell the model
+#   that any reply text before its first spend opens with the grade line
+#   (so the narration line becomes "grade: ... - logging F8 first").

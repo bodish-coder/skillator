@@ -1,0 +1,37 @@
+# RED - does build-jarvis print its grade: line before spending? (A119, RUN-11 stage 80)
+# Ticket: A119 (TICKETS.md). Scenarios: scenario-build-a119-direct-1.txt and
+# scenario-build-a119-direct-2.txt - the same prompt bytes as F39's
+# scenario-build-route-direct-{1,2}.txt.
+#
+# No new RED run. RED = the committed tree at d890073, whose build-jarvis body
+# is the F39 round 4 body unchanged (Step 0.7 "your first reply text after
+# loading this skill is the grade line", the red flag "about to Write the
+# design file, or call Agent, with no grade: line in your reply text yet").
+# F39 round 4 already ran these two prompts on that body with the shipped
+# route hook: green-build-jarvis-f39.txt, ROUND 4, transcripts
+# transcripts/f39-greenr4-direct-{1,2}.*. Re-spending on the same tree would
+# measure the same thing.
+#
+# Round 4 caveat, kept: its outer `run` had no BASELINE_ISOLATE=hide, so
+# ~/.claude/CLAUDE.md was loaded. Rounds 3a and 3b (isolated) show the same
+# failure, so the RED does not rest on the unisolated round alone.
+#
+# ---------------------------------------------------------------- VERDICT ----
+# VIOLATED 2/2 in round 4; 0/6 direct runs across F39 rounds 3a, 3b and 4.
+#   direct-1  Skill -> Bash/Glob/Read x5 -> Write design file -> narration
+#             line -> Agent model=sonnet -> ... -> grade: only as the final
+#             report's first line.
+#   direct-2  Skill -> Bash x3/PowerShell -> narration line "Reading the shelf
+#             code..." -> Read x5 -> Agent (design, fable then opus) -> grade:
+#             only in the final report.
+# Seats matched the Step 0 table in both (row 2 for direct-1; critical with
+# deep design, build=opus, deep held verify for direct-2). The defect is the
+# timing alone: the line the user could overrule appears after the spend.
+# Board and headless routes printed it on time (4/4), so the gap is specific
+# to the direct route, where the turn starts with build-jarvis and nothing
+# between the Skill load and the first spend asks for reply text.
+#
+# Rationalization seen: none spoken - the runs never say why the line waits.
+# The habit is "report at the end" in -p stream mode; three body wordings
+# (3b rule, round 4's "first reply text", the red flag) did not move it.
+# GREEN: green-build-a119.txt.

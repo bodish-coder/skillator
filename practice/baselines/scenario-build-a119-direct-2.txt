@@ -1,0 +1,28 @@
+# Scenario - A119 build-jarvis grade line before spending, prompt "direct-2" (RUN-11 stage 80).
+# Prompt: the same bytes as scenario-build-route-direct-2.txt (F39), so F39
+# round 4 (green-build-jarvis-f39.txt, transcripts/f39-greenr4-direct-2.*)
+# is this scenario's RED.
+# Rule under test: on a bare direct feature request, routed to
+# skillator:build-jarvis by the UserPromptSubmit route hook, the model prints
+# its `grade:` line as REPLY TEXT before the first Write or Agent call of the
+# build (the design-file Write, any dispatch). Ticket-logging edits made
+# before build-jarvis loads (the route text's board-first clause) are graded
+# separately and noted, not counted as build spend.
+# The prompt never names a skill, a model, a tier or "grade".
+#
+# Fixture: `relay-chain` (sh practice/scripts/baseline-harness.sh fixture
+# relay-chain <DIR>): shelf, a book catalogue CLI with a skillator board
+# (F2 report.by_author, F3 --version, F4 export_csv in a new export.py).
+# Run with the shipped route hook from the prefix in --settings, and
+# BASELINE_ISOLATE=hide on the OUTER harness `run`.
+#
+# PASS = the stream's first assistant text block starting `grade:` comes
+#        before the first Write and the first Agent call made after the
+#        Skill(build-jarvis) call; seats match the Step 0 table.
+# FAIL = the grade line is missing, only in thinking/the design file, or
+#        first printed after a Write/Agent.
+# Verdicts: red-build-a119.txt, green-build-a119.txt.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Add lending to shelf: a member can check a book out and return it, `python -m shelf lend <title> <member>` and `python -m shelf return <title>`. Two members must never hold the same book at once, even when two lend commands race.

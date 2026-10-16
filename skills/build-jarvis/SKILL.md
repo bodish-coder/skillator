@@ -76,6 +76,11 @@ and review. Everything below assumes it.
    thinking, a `Ruling: critical no` in the design file, or a summary at the
    end is not printed — the user cannot overrule a line they never saw.
 
+   **The line is a required input.** It is the design file's first line and
+   the first line of every Agent prompt (design, build, verify), verbatim. So
+   whichever spend comes first — the design-file Write *or* a design agent —
+   print the line as reply text, then paste the same line into that call.
+
 **Ceremony** is `full` when the work is architectural, has 4+ tasks, runs
 inside a relay run, or is said to outlive this session ("keep going after",
 "hand it over", "full ceremony"); otherwise `lean`. Full adds the session
@@ -113,6 +118,7 @@ the repo context and `PRACTICE.md`; it writes the file and returns only its path
 plus two lines:
 
 ```
+grade: <the Step 0 line, verbatim - also already printed as reply text>
 GOAL:         <the task in one line>
 CHOSEN:       <the approach + why; architectural lists 2-3 APPROACHES first>
 DESIGN:       <data model / contracts, key edge cases, out of scope>
@@ -179,8 +185,9 @@ relay: the grade line again as the report's first line, what was built
 | "Critical work — safer if I do it all myself." | Critical makes verify **deep, held**: a different seat, not this one. |
 | "The cap reads as cheap, so the critical design seat drops to build." | The step-down is for non-critical seats only. Critical design stays deep and dispatched. |
 
-**Red flag:** about to Write the design file, or call Agent, with no `grade:`
-line in your reply text yet — stop and print it first.
+**Red flag:** about to Write the design file, or call Agent — a design agent
+included — with no `grade:` line in your reply text yet: stop and print it
+first. Critical work is no exception; it is where the overrule matters most.
 - **Never an unnamed model.** An omitted model inherits the session's.
 - **The design file is the handover.** Pass it by path; the orchestrator does
   not design or code, bar writing a `—`-seat design file and the record.

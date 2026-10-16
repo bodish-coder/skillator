@@ -7,7 +7,7 @@
 # Same patterns and output bytes as the sh twin. Install: ../references/route-hook.md.
 param([ValidateSet('hook','classify','selftest')][string]$Mode = 'hook', [string]$Text = '')
 
-$Route = 'skillator route (build-jarvis hook): this prompt is a feature request. Your first action is the Skill tool with skill skillator:build-jarvis - before reading code, designing or editing anything, whatever the size - except when TICKETS.md has no F ticket for it yet: then log one with skillator:tickets-zordon first, and load build-jarvis right after. It includes the design step, so do not also run superpowers:brainstorming or another build-* skill. Not a feature after all (a bug, a question, a typo, comment, rename or formatting edit)? Ignore this.'
+$Route = 'skillator route (build-jarvis hook): this prompt is a feature request. Your first action is the Skill tool with skill skillator:build-jarvis - before reading code, designing or editing anything, whatever the size - except when TICKETS.md has no F ticket for it yet: then log one with skillator:tickets-zordon first, and load build-jarvis right after. It includes the design step, so do not also run superpowers:brainstorming or another build-* skill. Once build-jarvis has loaded, your first reply text - before the design-file Write and before any Agent call - is its one grade: line (Step 0.7), printed as text the user sees - the same line then opens the design file and every Agent prompt, a design agent included - not kept in thinking or saved for the final report. Not a feature after all (a bug, a question, a typo, comment, rename or formatting edit)? Ignore this.'
 
 # The sh twin's patterns, verbatim. Logged feature first; then the veto (git
 # chore in imperative position, failure phrasing, adding tests); then an F ticket
@@ -102,6 +102,8 @@ function Capture([string]$raw) {
 $out = Capture '{"session_id":"s1","cwd":"C:/work/build-tools","prompt":"Please add a \"--json\" flag\nto find","hook_event_name":"UserPromptSubmit"}'
 if ($out -cne ($Json + "`n")) { Fail 'hook: feature prompt did not print the route JSON' }
 if ($Route.IndexOfAny([char[]]@([char]34, [char]92)) -ge 0) { Fail 'Route holds a quote or backslash - it would break the JSON' }
+if (-not $Route.Contains('first reply text - before the design-file Write and before any Agent call - is its one grade: line')) { Fail 'Route lost the grade-line-first order (A119)' }
+if (-not $Route.Contains('opens the design file and every Agent prompt, a design agent included')) { Fail 'Route lost the grade line as the first line of every spend (A119)' }
 $out = Capture '{"session_id":"s1","cwd":"C:/add/build","prompt":"what does report.py do?","hook_event_name":"UserPromptSubmit"}'
 if ($out) { Fail 'hook: a question printed something (cwd words leaked into the match?)' }
 $out = Capture '{"prompt":"say \"add a button\" back to me \\ please"}'

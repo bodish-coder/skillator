@@ -17,7 +17,7 @@
 # Mirror: feature-route.ps1 - same patterns, same output bytes.
 # Install: ../references/route-hook.md.
 
-ROUTE='skillator route (build-jarvis hook): this prompt is a feature request. Your first action is the Skill tool with skill skillator:build-jarvis - before reading code, designing or editing anything, whatever the size - except when TICKETS.md has no F ticket for it yet: then log one with skillator:tickets-zordon first, and load build-jarvis right after. It includes the design step, so do not also run superpowers:brainstorming or another build-* skill. Not a feature after all (a bug, a question, a typo, comment, rename or formatting edit)? Ignore this.'
+ROUTE='skillator route (build-jarvis hook): this prompt is a feature request. Your first action is the Skill tool with skill skillator:build-jarvis - before reading code, designing or editing anything, whatever the size - except when TICKETS.md has no F ticket for it yet: then log one with skillator:tickets-zordon first, and load build-jarvis right after. It includes the design step, so do not also run superpowers:brainstorming or another build-* skill. Once build-jarvis has loaded, your first reply text - before the design-file Write and before any Agent call - is its one grade: line (Step 0.7), printed as text the user sees - the same line then opens the design file and every Agent prompt, a design agent included - not kept in thinking or saved for the final report. Not a feature after all (a bug, a question, a typo, comment, rename or formatting edit)? Ignore this.'
 
 # Feature-shaped: a feature being logged, a build verb opening a sentence or a
 # request, or an F ticket being worked (verb opening the sentence, then an id of
@@ -139,6 +139,10 @@ EOF
   out=$(printf '%s' '{"session_id":"s1","cwd":"C:/work/build-tools","prompt":"Please add a \"--json\" flag\nto find","hook_event_name":"UserPromptSubmit"}' | sh "$h")
   [ "$out" = "$(json_out)" ] || die "hook: feature prompt did not print the route JSON"
   case $ROUTE in *'"'*|*'\'*) die 'ROUTE holds a quote or backslash - it would break the JSON' ;; esac
+  case $ROUTE in *'first reply text - before the design-file Write and before any Agent call - is its one grade: line'*) ;;
+    *) die 'ROUTE lost the grade-line-first order (A119)' ;; esac
+  case $ROUTE in *'opens the design file and every Agent prompt, a design agent included'*) ;;
+    *) die 'ROUTE lost the grade line as the first line of every spend (A119)' ;; esac
   out=$(printf '%s' '{"session_id":"s1","cwd":"C:/add/build","prompt":"what does report.py do?","hook_event_name":"UserPromptSubmit"}' | sh "$h")
   [ -z "$out" ] || die "hook: a question printed something (cwd words leaked into the match?)"
   out=$(printf '%s' '{"prompt":"say \"add a button\" back to me \\ please"}' | sh "$h")
