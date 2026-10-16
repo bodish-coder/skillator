@@ -15,6 +15,9 @@
 //           holo-decisions/1 set (decisions that are not a relay run's)
 //   node holo.mjs --answers <final.json>               -> the finalized export as
 //           `relay-morpheus.sh answer` lines (printed, never run)
+//   node holo.mjs [run] --batch                        -> the end batch's drawing in one call:
+//           the Artifact page, the standalone page, the wizard (open decisions), then the
+//           ASCII and every path on stdout - the block to paste above the questions
 //   node holo.mjs --fixture <DIR>                      -> the RED/GREEN fixture repo
 //   node holo.mjs --selftest
 //
@@ -721,6 +724,7 @@ function parseArgs(argv) {
     if (a === "--ascii") o.mode = "ascii";
     else if (a === "--html") o.mode = "html";
     else if (a === "--wizard") o.mode = "wizard";
+    else if (a === "--batch") o.mode = "batch";
     else if (a === "--decisions") { o.mode = "wizard"; o.decisions = val(); }
     else if (a === "--answers") o.answers = val();
     else if (a === "--out") o.out = val();
@@ -783,6 +787,23 @@ async function main(argv) {
   const rel = (p) => (p ? relative(root, p).replace(/\\/g, "/") : p);
   const opts = { design, designPath: o.design && rel(resolve(o.design)), runPath: rel(runPath) };
   if (o.mode === "ascii") { process.stdout.write(renderAscii(run, opts)); return; }
+  // F41 end batch: every drawing at once, so none is skipped - two GREEN runs
+  // that ran the pieces one by one drew the wizard and the ASCII but never the
+  // page, and pasted neither picture.
+  if (o.mode === "batch") {
+    if (!run) throw new Error("--batch draws a run - name one");
+    const r = render(run, opts), dir = join(root, ".skillator", "holo");
+    const art = join(dir, `${run.id}.artifact.html`), html = join(dir, `${run.id}.html`);
+    await writeGenerated(root, art, artifactPage(r));
+    await writeGenerated(root, html, standalonePage(r));
+    const set = setFromRun(run, rel(runPath));
+    let wiz = "";
+    if (set.decisions.length) { wiz = join(dir, `${run.id}.wizard.html`); await writeGenerated(root, wiz, wizardPage(set)); }
+    process.stdout.write(renderAscii(run, opts));
+    console.log(`\npage: ${rel(html)}  (Artifact tool: publish ${rel(art)})`);
+    if (wiz) console.log(`answer all ${set.decisions.length} in the decision wizard: ${rel(wiz)}`);
+    return;
+  }
   const r = render(run, opts);
   const stem = run ? run.id : basename(o.design).replace(/\.md$/i, "");
   const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}${o.mode === "html" ? "" : ".artifact"}.html`));
@@ -874,6 +895,7 @@ function selftest() {
   const hdr = parseRun("# RUN-6 - hdr\n\n## Decisions\n### Q1 open\nquestion: first\n### Q2 answered 2026-09-01T10:30Z by-user\nquestion: second\n");
   ok(hdr.qs.length === 1 && hdr.qs[0].f.question === "first", "an unreadable Q header never merges into the Q above");
   ok(parseArgs(["--html", "RUN-12"]).pos[0] === "RUN-12", "--html takes no path; the run stays the run");
+  ok(parseArgs(["RUN-12", "--batch"]).mode === "batch", "--batch is a mode");
 
   // 6. F42 wizard: only open/asked decisions are asked; the rest is settled
   const set = setFromRun(run, "fixture-all-states.md");

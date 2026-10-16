@@ -40,3 +40,35 @@
 #
 # Cost: A 0.43 + 0.42 + 0.26 + 0.44, B 0.30 + 0.31 = $2.16.
 # Transcripts: transcripts/f41-green-holo-{1..6}.* (1-4 = A, 5-6 = B).
+#
+# ---------------------------------------- RE-RUN after stage 76 (2026-10-16) ----
+# Prefix from the working tree (after e54abd5: relay-morpheus's NOT clause and
+# description, grayskull routing rows, marathon.md draw steps). Same harness
+# settings, BASELINE_ISOLATE=hide, sequential.
+#
+# A. Trigger - bare "Help me, Obi-Wan" (scenario-holo-f41.txt)   PASS 2/2
+#   runs 7, 8: Skill(holo-r2d2) as the FIRST action (was 0/4) -> holo.mjs
+#   --html and --ascii (Bash after PowerShell allow-list misses) -> the run
+#   in words + the picture. Page: 2 cards (Q1, Q2), recommendation marked on
+#   both, stages 1 landed / 2 parked / 3, 4 pending = the run file; no URL.
+#   git status clean: nothing answered, dispatched or flipped. $0.29 each, ~30 s.
+#
+# C. End batch - "continue RUN-1" on relay-marathon-batch, six open Qs
+#    (scenario-holo-f41-batch.txt, new; -p so no AskUserQuestion)
+#   round 1, runs 1-2: PARTIAL. Both drew before asking (`--ascii` and
+#     `--wizard`, after `queue --mark-asked`) and named the wizard path, but
+#     neither wrote the diagram page (no --html) and neither pasted the
+#     picture: they ran two of the three pieces. $0.42, $0.43.
+#   FIX: `holo.mjs RUN-n --batch` - one call writes the Artifact page, the
+#     standalone page and the wizard, and prints the ASCII and every path;
+#     marathon.md's end batch names that one command and "paste the whole
+#     output above the questions".
+#   round 2, runs 3-4: PASS 2/2. --batch ran; RUN-1.html with 6 cards and
+#     stages 1 landed / 2 parked / 3 pending (= the run file), the wizard,
+#     the artifact page; the final message carries the picture, the page
+#     path and the wizard path above the six questions. Six Qs `asked`,
+#     none answered, nothing in flight. $0.49, $0.45.
+#
+# VERDICT: F41 GREEN - trigger 2/2 (after the stage-76 routing), technique
+#   2/2 (B), end batch 2/2 after the --batch fix. Transcripts:
+#   f41-green-holo-{7,8}.*, f41-green-batch-{1..4}.*.

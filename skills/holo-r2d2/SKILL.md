@@ -57,6 +57,7 @@ node <SKILL>/scripts/holo.mjs RUN-12 --design docs/plans/PLAN-x.md   # + the des
 node <SKILL>/scripts/holo.mjs --design docs/plans/PLAN-x.md          # design only
 node <SKILL>/scripts/holo.mjs RUN-12 --html    # standalone page -> .skillator/holo/RUN-12.html
 node <SKILL>/scripts/holo.mjs RUN-12 --ascii   # the same, for a terminal
+node <SKILL>/scripts/holo.mjs RUN-12 --batch   # end batch: page + standalone + wizard, ASCII and paths printed
 node <SKILL>/scripts/holo.mjs --selftest
 ```
 

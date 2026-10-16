@@ -128,11 +128,13 @@ print. A user who types mid-run while work can dispatch gets one line —
    `RM answer Qk --moot "<why>"`. **Deduplicate**: the later of two parks of one
    question → `RM answer Qk --same-as Qj` (its blocks and files join Qj).
 2. `RM queue` prints the batch, most-blocked first, chips cut to 8.
-   **Draw it** before asking (`holo-r2d2`): `node <skills>/holo-r2d2/scripts/holo.mjs
-   RUN-<n>`, published with the Artifact tool where there is one (private,
-   `capabilities: {db: {}}`), else `--html` and the path. Two or more
-   questions: also the decision wizard (`holo.mjs RUN-<n> --wizard`), whose
-   finalized JSON becomes `RM answer` lines (`holo.mjs --answers <file>`).
+   **Draw it** before asking - one command, `node <skills>/holo-r2d2/scripts/holo.mjs
+   RUN-<n> --batch`: it writes the page, the standalone page and the decision
+   wizard and prints the ASCII picture with every path. **Paste that whole
+   output above the questions**, every time - the picture is part of the
+   batch, not an extra. With the Artifact tool, also publish the
+   `.artifact.html` it names (private, `capabilities: {db: {}}`). The
+   wizard's finalized JSON becomes `RM answer` lines (`holo.mjs --answers <file>`).
 3. **AskUserQuestion in your tool list** (interactive Claude Code): pages of up to
    4 questions × 4 options, back to back, no dispatch between. Header = the chip
    as-is; question text `RUN-11 Q7 (2/3): <question>`; option 1 is the
@@ -142,8 +144,8 @@ print. A user who types mid-run while work can dispatch gets one line —
    `--ruled`. Unanswered or dismissed → leave it; it is not asked again this
    marathon.
 4. **No AskUserQuestion** (`-p`, Codex, Cursor, agents): `RM queue --mark-asked`,
-   paste `holo.mjs RUN-<n> --ascii` above its list as the one message (with the
-   wizard's path), run FINAL on what landed, end the turn.
+   the `--batch` output (picture and paths) above its list as the one message,
+   run FINAL on what landed, end the turn.
    The reply (same session or `continue RUN-n`) becomes `RM answer` calls,
    written before any dispatch, then Unblock and a second FINAL.
 

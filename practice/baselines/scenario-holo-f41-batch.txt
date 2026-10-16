@@ -1,0 +1,18 @@
+# GREEN scenario - the marathon end batch ships a diagram (F41 hook-in, RUN-11 stage 76)
+# Rule under test: references/marathon.md, The end batch, step 2 - before the
+# batch is asked, the run is drawn with holo-r2d2 (and, with two or more
+# questions, the decision wizard); without AskUserQuestion (-p) the --ascii
+# picture is pasted above the numbered list with the page/wizard path.
+# Fixture: `relay-marathon-batch` (sh practice/scripts/baseline-harness.sh
+# fixture relay-marathon-batch <DIR>): RUN-1, six open decisions Q1-Q6,
+# nothing dispatchable. Prompt as scenario-marathon-batch.txt (F33).
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+continue RUN-1
+# PASS = a holo page (.skillator/holo/RUN-1.html or .artifact.html) exists at
+#        the end with six decision cards and every stage row in its state, it
+#        was drawn before the batch was put to the user, and the final
+#        message carries the drawing (ASCII or the page/wizard path) with the
+#        six questions; nothing dispatched, no answer invented.
+# FAIL = no page; or the batch asked with no drawing; or a dispatch/answer.
