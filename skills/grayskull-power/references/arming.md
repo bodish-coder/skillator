@@ -82,7 +82,8 @@ percentage to give them — see `PLATFORMS.md`), so run
   probed: a model that turns out unavailable is marked down by build-jarvis at
   dispatch, which retries one tier lower.
   On **Claude Code** also check that `build-jarvis`'s `UserPromptSubmit` route
-  hook is wired (`build-jarvis/references/route-hook.md`); not wired → say so in
+  hook and its `PreToolUse` grade gate are wired
+  (`build-jarvis/references/route-hook.md`); either not wired → say so in
   one line and offer it, never wire it silently.
 - **Upstream watch** (F23c, F29) — only in a repo that has
   `skills/design-arwen/UPSTREAM.md` (skillator itself); anywhere else skip it

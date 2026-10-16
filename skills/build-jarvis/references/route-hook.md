@@ -69,6 +69,38 @@ needs no JSON escaping and still orders the grade line first, and check the scri
 The two print the same bytes for the same event. `classify "<text>"` (`-Mode classify -Text`) shows
 the verdict for one prompt.
 
+## The grade gate (A119)
+
+The route's text was still read past: with it, direct prompts printed the grade
+before spending 1/2 (direct-2, critical, narrated and dispatched first).
+`hooks/grade-gate.sh` (Windows: `hooks/grade-gate.ps1`) is a `PreToolUse` hook
+on `Agent|Task|Write|Edit|MultiEdit|NotebookEdit`. It reads the session transcript named in the event:
+after the last assistant `Skill` call naming build-jarvis, if no assistant text
+block has a line starting `grade:`, it denies the call with the reason "print
+your one grade: line as reply text first ... then make this call again".
+Thinking and the skill body (a user line) do not count. No build-jarvis load,
+a missing or unreadable transcript, bad stdin: it prints nothing and allows.
+Replayed on the F39/A119 direct transcripts cut at their first spend, it
+denies both failing direct-2 runs and allows the passing direct-1.
+Not gated: Bash and PowerShell - reading the code before the grade is allowed,
+and a shell write is not told apart from a read. The text block and the tool
+call of one message may reach the transcript in either order, so a grade
+printed in the same message can be denied once; the reason says retry.
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Agent|Task|Write|Edit|MultiEdit|NotebookEdit", "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"<SKILL>/hooks/grade-gate.ps1\" -Mode hook", "timeout": 5 } ] }
+    ]
+  }
+}
+```
+
+POSIX: `"command": "sh <SKILL>/hooks/grade-gate.sh"`. Verify with
+`grade-gate.sh selftest` / `grade-gate.ps1 -Mode selftest` (both print `ok`);
+`check <transcript>` (`-Mode check -Path`) prints `deny` or `-` for one file.
+
 ## Other hosts
 
 Codex's `hooks.json` lists `UserPromptSubmit` and an `additionalContext`
