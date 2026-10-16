@@ -92,7 +92,10 @@ and the prompt. Then:
    every fix and verify prompt carries the marathon.md paste-in paragraph,
    and the VERDICT schema its `parked` field.
    `meta.name: 'chain-<CODE>'`, every agent `label: '<CODE> fix:B2'` /
-   `'<CODE> verify:B2'`, `args` = the items with tiers.
+   `'<CODE> verify:B2'`, `args` = the items with tiers. **An F ticket's item is
+   a `build-jarvis` pass** (F39), not a bare fix agent: its prompt opens with
+   "Load skillator:build-jarvis" and the ticket, and build-jarvis grades,
+   designs and builds it - B and A tickets keep the fix/verify shape.
 3. Edit the In-flight block's `run: -` to the `runId` the tool returned — no
    command fills it. The prompt on disk is the truth; the id is a same-session
    hint for `resumeFromRunId`.

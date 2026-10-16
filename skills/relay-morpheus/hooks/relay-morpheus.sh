@@ -19,6 +19,16 @@
 #                                                      TICKETS.md, under its lock (F36; mark: ' ' ~ x ! > -)
 #   relay-morpheus.sh selftest
 #
+# Run queue and landing (F38) - one file, <main checkout>/.skillator/queue.md:
+#   relay-morpheus.sh queue-run add <id> | list | next | start <id> | pause <id> | done <id>
+#        next: START RUN-n | BUSY RUN-n <state> | DONE - one run at a time, paused ones skipped
+#   relay-morpheus.sh land <id> --start | --finish | --abort
+#        runs land on main one at a time: --start rebases the run branch onto main (exit 3 on a
+#        conflict), the session sweeps, reviews and bumps on the run branch, --finish fast-forwards
+#        main and removes the run's worktree and branch
+#   relay-morpheus.sh away on | off | status            the away flow's flag ("I'll be back" / "I'm back")
+#   relay-morpheus.sh queue --all [--mark-asked]        the end batch across every run with open decisions
+#
 # Chain (F31) - stages that are ticket workflows, each started by the last:
 #   relay-morpheus.sh chain plan <n> --prompt-file F [--tickets T] [--fix t --verify t] [--files F] [--after 66,67] [--mode workflow|agents]
 #   relay-morpheus.sh chain dispatch <n> --driver @tag [--owner O] [--take] [--override] [--confirmed]
@@ -671,6 +681,127 @@ cmd_board() {
     mv "$_bf.tmp.$$" "$_bf"; unlock; LOCK=$_bsv
   else rm -f "$_bf.tmp.$$"; unlock; LOCK=$_bsv; die "board: no ticket $bid in $_bf"; fi
   echo "$bid [$mk]"
+}
+
+# ------------------------------------------------------------ run queue ----
+# F38: runs wait their turn in <main>/.skillator/queue.md and land on main one
+# at a time. The file is written only under its own lock.
+qfile() { _qm=$(main_of) || _qm=$(pwd); mkdir -p "$_qm/.skillator"; printf '%s' "$_qm/.skillator/queue.md"; }
+q_init() {
+  [ -f "$1" ] || printf '%s\n' "# Run queue" "away: -" "landing: -" "" "| # | run | state | since |" "|---|-----|-------|-------|" > "$1"
+}
+q_locked() {   # <fn> <args...>: fn with the queue file appended, under its lock
+  _rqf=$(qfile)
+  _rqsv=$LOCK; LOCK=; lock "$_rqf.lock"; q_init "$_rqf"   # created under the lock: two first callers, one header
+  _rqrc=0; "$@" "$_rqf" || _rqrc=$?
+  unlock; LOCK=$_rqsv; return $_rqrc
+}
+q_hdr() { sed -n "s/^$1: //p" "$2" | head -1; }
+q_sethdr() {   # <key> <value> <file>
+  awk -v k="$1: " -v v="$2" 'index($0, k) == 1 { print k v; next } { print }' "$3" > "$3.tmp.$$" && mv "$3.tmp.$$" "$3"
+}
+q_state() { awk -v r="$1" -F'|' '/^\| *[0-9]+ *\|/ { x = $3; gsub(/ /, "", x); if (x == r) { s = $4; gsub(/ /, "", s); print s; exit } }' "$2"; }
+q_set() {   # <run> <state> <file>
+  awk -v r="$1" -v st="$2" -v t="$(now)" -F'|' -v OFS='|' '/^\| *[0-9]+ *\|/ { x = $3; gsub(/ /, "", x); if (x == r) { $4 = " " st " "; $5 = " " t " " } } { print }' "$3" > "$3.tmp.$$" && mv "$3.tmp.$$" "$3"
+}
+run_id_arg() {   # RUN-12 | run-12 | 12 -> RUN-12
+  _ri=${1#RUN-}; _ri=${_ri#run-}
+  case "$_ri" in ''|*[!0-9]*) die "'$1' is not a run id (RUN-12)" ;; esac
+  echo "RUN-$_ri"
+}
+qr_add_() {
+  resolve "${1#RUN-}" >/dev/null || { echo "no run file for $1 - see: relay-morpheus.sh list" >&2; return 1; }
+  [ -z "$(q_state "$1" "$2")" ] || { echo "$1 is already queued ($(q_state "$1" "$2"))"; return 0; }
+  _qn=$(awk -F'|' '/^\| *[0-9]+ *\|/ { n = $2 + 0 } END { print n + 1 }' "$2")
+  printf '| %s | %s | queued | %s |\n' "$_qn" "$1" "$(now)" >> "$2"; echo "$1 queued (#$_qn)"
+}
+qr_next_() {
+  awk -F'|' '/^\| *[0-9]+ *\|/ { r = $3; s = $4; gsub(/ /, "", r); gsub(/ /, "", s)
+      if (s == "running" || s == "landing") { busy = busy ? busy : r " " s }
+      else if (s == "queued" && first == "") first = r }
+    END { if (busy) print "BUSY " busy; else if (first) print "START " first; else print "DONE" }' "$2"
+}
+qr_set_() {   # <run> <state> <file>
+  [ -n "$(q_state "$1" "$3")" ] || { echo "$1 is not in the run queue - queue-run add $1 first" >&2; return 1; }
+  # One run at a time: starting refuses while another runs or lands.
+  if [ "$2" = running ]; then
+    _qb=$(awk -v r="$1" -F'|' '/^\| *[0-9]+ *\|/ { x = $3; s = $4; gsub(/ /, "", x); gsub(/ /, "", s); if (x != r && (s == "running" || s == "landing")) { print x " " s; exit } }' "$3")
+    [ -z "$_qb" ] || { echo "BUSY $_qb - one run at a time; pause it first, or wait" >&2; return 2; }
+  fi
+  # A paused or finished run gives up a landing it held.
+  _ql=$(q_hdr landing "$3"); [ "${_ql%% *}" != "$1" ] || [ "$2" = running ] || q_sethdr landing - "$3"
+  q_set "$1" "$2" "$3"; echo "$1 $2"
+}
+cmd_queue_run() {
+  sub=${1:-list}; [ "$#" -gt 0 ] && shift
+  case $sub in
+    add)   r=$(run_id_arg "${1:-}"); q_locked qr_add_ "$r" || die "queue-run: $r cannot be queued" ;;
+    list)  f=$(qfile); q_init "$f"; sed -n '/^away: /p; /^landing: /p; /^| /p' "$f" ;;
+    next)  q_locked qr_next_ x ;;
+    start) r=$(run_id_arg "${1:-}"); _qrc=0; q_locked qr_set_ "$r" running || _qrc=$?
+           [ "$_qrc" = 0 ] || { [ "$_qrc" = 2 ] && exit 2; die "queue-run: $r is not queued"; } ;;
+    # A hard stop pauses only its own run; the 7-day stop halts everything.
+    pause) r=$(run_id_arg "${1:-}"); q_locked qr_set_ "$r" paused || die "queue-run: $r is not queued" ;;
+    done)  r=$(run_id_arg "${1:-}"); q_locked qr_set_ "$r" landed || die "queue-run: $r is not queued" ;;
+    *) die "usage: relay-morpheus.sh queue-run add <id> | list | next | start <id> | pause <id> | done <id>" ;;
+  esac
+}
+away_() {   # <on|off|status> <file>
+  case $1 in
+    on) q_sethdr away "$(now)" "$2"; echo "away since $(q_hdr away "$2")" ;;
+    off) _was=$(q_hdr away "$2"); q_sethdr away - "$2"; echo "back (away was: $_was)" ;;
+    status) echo "away: $(q_hdr away "$2")" ;;
+  esac
+}
+cmd_away() {
+  case "${1:-status}" in on|off|status) q_locked away_ "${1:-status}" ;; *) die "usage: relay-morpheus.sh away on | off | status" ;; esac
+}
+land_() {   # <run> <start|finish|abort> <run file> <queue file>
+  _lr=$1; _lm=$2; _lf=$3; _lq=$4
+  _lw=$(hdr_field "$_lf" worktree); _lb=$(hdr_field "$_lf" branch)
+  [ -n "$_lw" ] && [ -n "$_lb" ] || { echo "$_lr has no run worktree/branch (an --here run) - it landed with its stages" >&2; return 1; }
+  _mr=$(main_of) || { echo "land: not in a git repo" >&2; return 1; }
+  _mb=$(git -C "$_mr" symbolic-ref -q --short HEAD) || { echo "land: the main checkout is on a detached HEAD" >&2; return 1; }
+  _cur=$(q_hdr landing "$_lq"); _cur=${_cur%% *}
+  case $_lm in
+    start)
+      [ "$_cur" = - ] || [ "$_cur" = "$_lr" ] || { echo "LANDING $_cur - one run lands at a time; land $_lr --start after it finishes" >&2; return 2; }
+      [ -d "$_lw" ] || { echo "run worktree $_lw is missing - resume recreates it" >&2; return 1; }
+      [ -z "$(git -C "$_lw" status --porcelain)" ] || { echo "the run worktree $_lw has uncommitted changes - commit them on $_lb first" >&2; return 2; }
+      # The rebase rewrites the run branch: nothing may still be built on it.
+      awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4; gsub(/ /,"",s); if (s == "~") f=1} END{exit !f}' "$_lf" \
+        && { echo "$_lr has stages in flight - they branch from $_lb; land once they have landed" >&2; return 2; }
+      _lprev=$(q_state "$_lr" "$_lq")
+      if ! git -C "$_lw" rebase -q "$_mb" >/dev/null 2>&1; then
+        git -C "$_lw" rebase --abort >/dev/null 2>&1 || :
+        echo "CONFLICT: $_lb does not rebase onto $_mb - resolve it on the run branch (a fix stage), then land $_lr --start again" >&2; return 3
+      fi
+      q_sethdr landing "$_lr $(now) was=${_lprev:--}" "$_lq"
+      [ -z "$(q_state "$_lr" "$_lq")" ] || q_set "$_lr" landing "$_lq"
+      echo "landing $_lr: $_lb rebased onto $_mb - now the regression sweep and /code-review on $_mb..$_lb, the version bump, all committed on $_lb; then land $_lr --finish" ;;
+    finish)
+      [ "$_cur" = "$_lr" ] || { echo "$_lr is not landing (landing: $_cur) - land $_lr --start first" >&2; return 2; }
+      [ -z "$(git -C "$_lw" status --porcelain)" ] || { echo "the run worktree $_lw has uncommitted changes - commit them first" >&2; return 2; }
+      git -C "$_mr" merge -q --ff-only "$_lb" >/dev/null 2>&1 || { echo "main ($_mb) does not fast-forward to $_lb (moved since --start?) - land $_lr --start again" >&2; return 3; }
+      _lleft=
+      git -C "$_mr" worktree remove "$_lw" >/dev/null 2>&1 || _lleft="git worktree remove \"$_lw\""
+      git -C "$_mr" branch -d "$_lb" >/dev/null 2>&1 || _lleft="${_lleft:+$_lleft; }git branch -d $_lb"
+      [ -z "$_lleft" ] || echo "LEFT BEHIND: $_lleft (in use? run it from the main checkout)" >&2
+      q_sethdr landing - "$_lq"
+      [ -z "$(q_state "$_lr" "$_lq")" ] || q_set "$_lr" landed "$_lq"
+      echo "landed $_lr on $_mb at $(git -C "$_mr" rev-parse --short HEAD) - nothing pushed; one push per marathon, asked alone" ;;
+    abort)
+      [ "$_cur" = "$_lr" ] || { echo "$_lr is not landing" >&2; return 2; }
+      _lprev=$(q_hdr landing "$_lq"); _lprev=${_lprev##* was=}; case "$_lprev" in ''|-|*' '*) _lprev=running ;; esac
+      q_sethdr landing - "$_lq"; [ -z "$(q_state "$_lr" "$_lq")" ] || q_set "$_lr" "$_lprev" "$_lq"
+      echo "landing of $_lr abandoned - back to $_lprev; its branch stays rebased onto $_mb (nothing on main moved)" ;;
+  esac
+}
+cmd_land() {
+  r=$(run_id_arg "${1:-}"); m=${2:-}
+  case $m in --start) m=start ;; --finish) m=finish ;; --abort) m=abort ;; *) die "usage: relay-morpheus.sh land <id> --start | --finish | --abort" ;; esac
+  f=$(resolve "${r#RUN-}") || die "no run matching $r - see: relay-morpheus.sh list"
+  q_locked land_ "$r" "$m" "$f"
 }
 
 # ------------------------------------------------------------------ chain ----
@@ -1677,6 +1808,19 @@ chain_edge() {
 # then the oldest - as the numbered list hosts without AskUserQuestion print.
 # The header chip is cut to 8. --mark-asked flips the open ones to asked.
 cmd_queue() {
+  # F38: --all is the marathon's one end batch - every run with an open or
+  # asked decision, each under its own heading.
+  case " $* " in *" --all "*)
+    _qa=; for a in "$@"; do [ "$a" = --all ] || _qa="$_qa $a"; done
+    _any=0
+    for f in "$DIR"/run-*.md; do
+      [ -f "$f" ] && grep -qx '## Chain' "$f" && grep -Eq '^### Q[0-9]+ (open|asked)( |$)' "$f" || continue
+      _any=1; echo "## RUN-$(id_of "$f")"
+      ( RUN=$f; cmd_queue $_qa ) || exit $?
+    done
+    [ "$_any" = 1 ] || echo "no open decisions in any run"
+    return 0 ;;
+  esac
   mark=0 asks=
   while [ "$#" -gt 0 ]; do
     case $1 in
@@ -2263,9 +2407,10 @@ chain_selftest() {
   ( RELAY_LEVEL_CMD=$lv chain_dispatch "$sb" --driver @b >/dev/null ) || die "F36: B could not dispatch after A landed"
   RUN=$ra; ( RELAY_LEVEL_CMD=$lv RELAY_LEASE_STALE=-1 chain_dispatch "$sa2" --driver @a >/dev/null ) || die "F36: a stale lease was not taken"
   grep -q "lease on src from RUN-$(id_of "$rb") stage $sb was .* stale" "$RUN" || die "F36: taking a stale lease left no ruling"
-  printf '%s\n' '# board' '- [ ] F9 — lease me' '- [ ] F90 — not me' > "$d6/TICKETS.md"
+  em=$(printf '\342\200\224')   # the board's dash, kept out of this ASCII file
+  printf '%s\n' '# board' "- [ ] F9 $em lease me" "- [ ] F90 $em not me" > "$d6/TICKETS.md"
   ( cd "$d6" && cmd_board F9 '~' >/dev/null ) || die "F36: board failed"
-  grep -q '^- \[~\] F9 — lease me$' "$d6/TICKETS.md" && grep -q '^- \[ \] F90 — not me$' "$d6/TICKETS.md" || die "F36: board flipped the wrong line: $(cat "$d6/TICKETS.md")"
+  grep -q "^- \\[~\\] F9 $em lease me\$" "$d6/TICKETS.md" && grep -q "^- \\[ \\] F90 $em not me\$" "$d6/TICKETS.md" || die "F36: board flipped the wrong line: $(cat "$d6/TICKETS.md")"
   if ( cd "$d6" && cmd_board F91 x >/dev/null 2>&1 ); then die "F36: board accepted a missing ticket"; fi
   [ ! -e "$d6/TICKETS.md.lock" ] && [ ! -e "$reg.lock" ] || die "F36: a lock was left behind"
   RUN=$sv6_run; DIR=$sv6_dir
@@ -2313,6 +2458,51 @@ chain_selftest() {
     || die "F37: a conflicting merge did not exit 3 with the run branch untouched (rc $rc)"
   git -C "$d7" worktree remove --force "$sw4" >/dev/null 2>&1 || :
   RUN=$sv7_run; DIR=$sv7_dir
+  # F38: two queued runs start one at a time; a paused run is skipped; away
+  # on/off; each run lands on main by --start (rebase) then --finish (ff),
+  # one at a time, worktree and branch removed; a landing conflict exits 3
+  # with nothing moved; queue --all lists both runs' open decisions once.
+  d8="$d/queue"; mkdir -p "$d8"; git init -q "$d8"; g8() { git -c user.name=t -c user.email=t@t "$@"; }
+  echo base > "$d8/m.txt"; g8 -C "$d8" add m.txt; g8 -C "$d8" commit -q -m base
+  sv8_run=$RUN; sv8_dir=$DIR; DIR="$d8/.skillator"
+  ( cd "$d8" && RUN= && RELAY_WORKTREE=on cmd_init T.md "one" "o1" >/dev/null 2>&1 && RUN= && RELAY_WORKTREE=on cmd_init T.md "two" "t1" >/dev/null 2>&1 ) || die "F38: init"
+  f1=$(ls "$DIR"/run-*-one.md); f2=$(ls "$DIR"/run-*-two.md); i1="RUN-$(id_of "$f1")"; i2="RUN-$(id_of "$f2")"
+  ( cd "$d8"
+    cmd_queue_run add "$i1" >/dev/null && cmd_queue_run add "$i2" >/dev/null || die "F38: add"
+    [ "$(cmd_queue_run next)" = "START $i1" ] || die "F38: next is not the first queued run: $(cmd_queue_run next)"
+    cmd_queue_run start "$i1" >/dev/null
+    [ "$(cmd_queue_run next)" = "BUSY $i1 running" ] || die "F38: a second run would start beside the first"
+    cmd_queue_run pause "$i1" >/dev/null
+    [ "$(cmd_queue_run next)" = "START $i2" ] || die "F38: a paused run blocked the queue"
+    cmd_queue_run start "$i2" >/dev/null
+    set +e; ( cmd_queue_run start "$i1" >/dev/null 2>&1 ); rc=$?; set -e
+    [ "$rc" = 2 ] || die "F38: a second run started while one runs (rc $rc)"
+    cmd_queue_run pause "$i2" >/dev/null; cmd_queue_run start "$i1" >/dev/null
+    if ( cmd_queue_run add 999 >/dev/null 2>&1 ); then die "F38: queued a run that does not exist"; fi
+    cmd_away on >/dev/null; grep -q '^away: 20' .skillator/queue.md || die "F38: away on"
+    cmd_away off >/dev/null; grep -q '^away: -$' .skillator/queue.md || die "F38: away off"
+    w1=$(hdr_field "$f1" worktree); w2=$(hdr_field "$f2" worktree)
+    echo one > "$w1/one.txt"; g8 -C "$w1" add one.txt; g8 -C "$w1" commit -q -m one
+    echo two > "$w2/two.txt"; g8 -C "$w2" add two.txt; g8 -C "$w2" commit -q -m two
+    cmd_land "$i1" --start >/dev/null || die "F38: land one --start"
+    set +e; ( cmd_land "$i2" --start >/dev/null 2>&1 ); rc=$?; set -e
+    [ "$rc" = 2 ] || die "F38: a second run started landing beside the first (rc $rc)"
+    cmd_land "$i1" --finish >/dev/null || die "F38: land one --finish"
+    [ -f one.txt ] && [ ! -d "$w1" ] && ! git rev-parse -q --verify "refs/heads/$(hdr_field "$f1" branch)" >/dev/null || die "F38: one did not land on main, or left its worktree/branch"
+    [ "$(q_state "$i1" .skillator/queue.md)" = landed ] || die "F38: the queue does not say one landed"
+    echo clash > m.txt; g8 commit -q -am "main moves"; echo other > "$w2/m.txt"; g8 -C "$w2" commit -q -am "two clashes"
+    h8=$(git rev-parse HEAD); t8=$(git -C "$w2" rev-parse HEAD)
+    set +e; ( cmd_land "$i2" --start >/dev/null 2>&1 ); rc=$?; set -e
+    [ "$rc" = 3 ] && [ "$(git rev-parse HEAD)" = "$h8" ] && [ "$(git -C "$w2" rev-parse HEAD)" = "$t8" ] && grep -q '^landing: -$' .skillator/queue.md \
+      || die "F38: a landing conflict did not exit 3 with nothing moved (rc $rc)"
+  ) || exit 1
+  for f in "$f1" "$f2"; do RUN=$f; chain_plan "$(sed -n 's/^| \([0-9]*\) | [ot][1] |.*/\1/p' "$f")" --prompt-file "$d7/p" --files x.py >/dev/null; done
+  RUN=$f1; cmd_park --stage "$(sed -n 's/^| \([0-9]*\) | o1 |.*/\1/p' "$f1")" --ticket F1 --reason taste --question "One?" --header One --option "a | b | c" --option "d | e | f" --default a --files x.py --stop none >/dev/null
+  RUN=$f2; cmd_park --stage "$(sed -n 's/^| \([0-9]*\) | t1 |.*/\1/p' "$f2")" --ticket F2 --reason taste --question "Two?" --header Two --option "a | b | c" --option "d | e | f" --default a --files x.py --stop none >/dev/null
+  out=$(cmd_queue --all)
+  printf '%s\n' "$out" | grep -q "^## $i1\$" && printf '%s\n' "$out" | grep -q "^## $i2\$" && printf '%s\n' "$out" | grep -q 'One?' && printf '%s\n' "$out" | grep -q 'Two?' \
+    || die "F38: queue --all did not list both runs' decisions: $out"
+  RUN=$sv8_run; DIR=$sv8_dir
   # F31 review 2: a hand-mangled Chain header (4-space separators) is left
   # alone by the driver's heartbeat - row stamped, exit 0, header unchanged.
   cp "$RUN" "$d4/good"
@@ -2677,6 +2867,9 @@ case "$c" in
   resume)    cmd_resume "$@" ;;
   init)      cmd_init "$@" ;;
   board)     cmd_board "$@" ;;
+  queue-run) cmd_queue_run "$@" ;;
+  land)      cmd_land "$@" ;;
+  away)      cmd_away "$@" ;;
   add)       cmd_add "$@" ;;
   stage)     cmd_stage "$@" ;;
   heartbeat) cmd_heartbeat "$@" ;;

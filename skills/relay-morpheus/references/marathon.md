@@ -128,15 +128,22 @@ print. A user who types mid-run while work can dispatch gets one line —
    `RM answer Qk --moot "<why>"`. **Deduplicate**: the later of two parks of one
    question → `RM answer Qk --same-as Qj` (its blocks and files join Qj).
 2. `RM queue` prints the batch, most-blocked first, chips cut to 8.
+   **Draw it** before asking (`holo-r2d2`): `node <skills>/holo-r2d2/scripts/holo.mjs
+   RUN-<n>`, published with the Artifact tool where there is one (private,
+   `capabilities: {db: {}}`), else `--html` and the path. Two or more
+   questions: also the decision wizard (`holo.mjs RUN-<n> --wizard`), whose
+   finalized JSON becomes `RM answer` lines (`holo.mjs --answers <file>`).
 3. **AskUserQuestion in your tool list** (interactive Claude Code): pages of up to
    4 questions × 4 options, back to back, no dispatch between. Header = the chip
    as-is; question text `RUN-11 Q7 (2/3): <question>`; option 1 is the
-   recommended one; description "does · hurts". After **each** page, before the
+   recommended one; description "does · hurts". The first page's first
+   question text ends `- drawn: <link or path>`. After **each** page, before the
    next: `RM answer Qk "<label or the user's own words>"`; "you decide" →
    `--ruled`. Unanswered or dismissed → leave it; it is not asked again this
    marathon.
 4. **No AskUserQuestion** (`-p`, Codex, Cursor, agents): `RM queue --mark-asked`,
-   paste its list as the one message, run FINAL on what landed, end the turn.
+   paste `holo.mjs RUN-<n> --ascii` above its list as the one message (with the
+   wizard's path), run FINAL on what landed, end the turn.
    The reply (same session or `continue RUN-n`) becomes `RM answer` calls,
    written before any dispatch, then Unblock and a second FINAL.
 
@@ -157,6 +164,52 @@ For each `UNBLOCK Qk`, while it still holds:
    `Q2: CSV - replanned as stage 71 (AAQB); stage 70 (F5) replanned as 72`.
 5. Back to `chain next`. New parks start the next round; at most **3 rounds**,
    then FINAL with the rest reported open and their tickets `[!]`.
+
+## A marathon of runs (F38)
+
+Several runs wait their turn in one queue, `<main>/.skillator/queue.md`:
+
+```sh
+RM queue-run add 12        # each run, in order (-Mode queue-run -Sub add -Id 12)
+RM queue-run next          # START RUN-12 | BUSY RUN-12 running | DONE
+RM queue-run start 12      # then `continue RUN-12` - its chain runs as above
+```
+
+One run runs at a time. A run reaching FINAL lands, then `queue-run next`
+starts the next one. **A hard stop pauses only its own run** - `queue-run pause
+<n>`, its stop asked alone as above - and the queue moves on; the 7-day stop
+halts everything.
+
+**Landing** - one run at a time, on main, never pushed:
+
+1. `RM land <n> --start` - rebases the run branch onto main in the run's
+   worktree (exit 3 on a conflict: nothing moved; a fix stage resolves it on
+   the run branch, then `--start` again; exit 2: another run is landing).
+2. Regression sweep, `code-review:code-review` on `main..run/RUN-<n>-...`, the
+   version bump - all committed on the run branch.
+3. `RM land <n> --finish` - fast-forwards main, removes the worktree and the
+   branch, marks the run `landed`. Then commit the board on main: run branches
+   never commit `TICKETS.md` (F36's `board` writes it in the main checkout).
+
+**One push per marathon**: after the last run has landed, the push is asked
+alone - one question, *Hold (recommended)* first. Never per run.
+
+**One end batch for all runs**: `RM queue --all` lists every run's open
+decisions, each under `## RUN-<n>`; ask them as one batch (The end batch),
+answer each with `RM <n> answer Qk ...`.
+
+**Away** - "I'll be back" → `RM away on`; "I'm back" → `RM away off`, then
+`queue --all` and ask every parked question, then Unblock. While away, when a
+batch is ready:
+
+1. Draw it (`holo-r2d2`, the decision wizard for several questions) and send
+   `PushNotification`: `RUN-<n>: <k> decisions waiting - <link or path>`.
+2. Wait up to 30 minutes for answers (`Monitor`: AskUserQuestion pending in
+   the terminal, or answers posted on the page).
+3. No answer: the questions stay open, their tickets `[!]` with the question
+   id, and `queue-run next` starts the next queued run. **Never a default** -
+   an unanswered decision is not decided.
+4. Queue drained and still unanswered: notify once more, end the turn cleanly.
 
 ## Usage and resume
 

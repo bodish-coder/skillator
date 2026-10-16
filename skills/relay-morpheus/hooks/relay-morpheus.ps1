@@ -55,7 +55,7 @@
 # state is spelled `pending` rather than ''.
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','board','selftest')][string]$Mode,
+  [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','board','queue-run','land','away','selftest')][string]$Mode,
   [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','merge','edge')][string]$Action = 'status',
   [string]$Ticket = '',
   [string]$Reason = '',
@@ -103,6 +103,7 @@ param(
   [string]$Stages,
   [switch]$Here,
   [switch]$All,
+  [string]$Sub = '',
   [string]$Mark = $null,
   [int]$N,
   [string]$State = 'pending',
@@ -1076,6 +1077,104 @@ function LeaseBeat($n) { $r = RunTag; $t = Now; LeaseLocked { param($reg) $k = 0
   if (Test-Path -LiteralPath $reg) { LeaseWrite $reg @(LeaseRead $reg | ForEach-Object { if ($_.r -ceq $r -and $_.s -ceq "$n") { $_.h = $t; $k++ }; $_ }) }; $k } }
 function LeaseForeign { $r = RunTag; $st = LeaseStale; LeaseLocked { param($reg) @(LeaseRead $reg | Where-Object { $_.r -cne $r -and (LeaseAge $_.h) -lt $st }) } }
 
+# F38: runs wait their turn in <main>/.skillator/queue.md and land on main one
+# at a time. The file is written only under its own lock. Same file and rules
+# as relay-morpheus.sh: -Mode queue-run -Sub add|list|next|start|pause|done -Id n,
+# -Mode land -Id n -Sub start|finish|abort, -Mode away -Sub on|off|status.
+function QFile { $m = MainOf; if (-not $m) { $m = (Get-Location).Path }; $d = "$m/.skillator"; if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force $d | Out-Null }; "$d/queue.md" }
+function QLocked([scriptblock]$body) {
+  $f = QFile
+  $sv = $script:Lock; $script:Lock = $null
+  Lock "$f.lock"
+  try {
+    # Created under the lock: two first callers, one header.
+    if (-not (Test-Path -LiteralPath $f)) { [IO.File]::WriteAllText($f, "# Run queue`naway: -`nlanding: -`n`n| # | run | state | since |`n|---|-----|-------|-------|`n", (New-Object Text.UTF8Encoding($false))) }
+    & $body $f
+  } finally { Unlock; $script:Lock = $sv }
+}
+function QLines($f) { @(Get-Content -Encoding UTF8 $f) }
+function QSave($f, $lines) { [IO.File]::WriteAllText("$f.tmp.$PID", (($lines -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false))); Move-Item -Force -LiteralPath "$f.tmp.$PID" -Destination $f }
+function QHdr($f, $k) { foreach ($l in (QLines $f)) { if ($l.StartsWith("${k}: ")) { return $l.Substring($k.Length + 2) } }; '' }
+function QSetHdr($f, $k, $v) { QSave $f @(QLines $f | ForEach-Object { if ($_.StartsWith("${k}: ")) { "${k}: $v" } else { $_ } }) }
+function QState($f, $r) { foreach ($l in (QLines $f)) { if ($null -ne (RowNum $l) -and (Cell $l 2) -ceq $r) { return (Cell $l 3) } }; '' }
+function QSet($f, $r, $st) { $t = Now; QSave $f @(QLines $f | ForEach-Object { if ($null -ne (RowNum $_) -and (Cell $_ 2) -ceq $r) { $c = $_ -split '\|'; $c[3] = " $st "; $c[4] = " $t "; $c -join '|' } else { $_ } }) }
+function RunIdArg($v) { $n = "$v" -replace '^(RUN-|run-)', ''; if ($n -notmatch '^\d+$') { Die "'$v' is not a run id (RUN-12)" }; "RUN-$n" }
+function DoQueueRun {
+  $sub = if ($Sub) { $Sub } else { 'list' }
+  switch ($sub) {
+    'add' { $r = RunIdArg $Id; if (-not (Resolve-Run ($r -replace '^RUN-', ''))) { Die "no run file for $r - see: -Mode list" }
+            QLocked { param($f) if (QState $f $r) { "$r is already queued ($(QState $f $r))"; return }
+              $n = 1; foreach ($l in (QLines $f)) { $k = RowNum $l; if ($null -ne $k) { $n = $k + 1 } }
+              QSave $f (@(QLines $f) + "| $n | $r | queued | $(Now) |"); "$r queued (#$n)" } }
+    'list' { $f = QFile; if (-not (Test-Path -LiteralPath $f)) { QLocked { param($f) } | Out-Null }; QLines $f | Where-Object { $_ -like 'away: *' -or $_ -like 'landing: *' -or $_ -like '| *' } }
+    'next' { QLocked { param($f) $busy = ''; $first = ''
+               foreach ($l in (QLines $f)) { if ($null -eq (RowNum $l)) { continue }; $r = Cell $l 2; $st = Cell $l 3
+                 if ($st -cin @('running', 'landing')) { if (-not $busy) { $busy = "$r $st" } } elseif ($st -ceq 'queued' -and -not $first) { $first = $r } }
+               if ($busy) { "BUSY $busy" } elseif ($first) { "START $first" } else { 'DONE' } } }
+    { $_ -cin @('start', 'pause', 'done') } {
+      $r = RunIdArg $Id; $st = @{ 'start' = 'running'; 'pause' = 'paused'; 'done' = 'landed' }[$sub]
+      # A hard stop pauses only its own run; the 7-day stop halts everything.
+      QLocked { param($f) if (-not (QState $f $r)) { Die "queue-run: $r is not queued - queue-run add first" }
+        # One run at a time: starting refuses while another runs or lands.
+        if ($st -ceq 'running') { foreach ($l in (QLines $f)) { if ($null -ne (RowNum $l) -and (Cell $l 2) -cne $r -and (Cell $l 3) -cin @('running', 'landing')) { Refuse "BUSY $(Cell $l 2) $(Cell $l 3) - one run at a time; pause it first, or wait" } } }
+        # A paused or finished run gives up a landing it held.
+        if ($st -cne 'running' -and (QHdr $f 'landing').Split(' ')[0] -ceq $r) { QSetHdr $f 'landing' '-' }
+        QSet $f $r $st; "$r $st" } }
+    default { Die "usage: -Mode queue-run -Sub add|list|next|start|pause|done [-Id n]" }
+  }
+}
+function DoAway {
+  $sub = if ($Sub) { $Sub } else { 'status' }
+  if ($sub -cnotin @('on', 'off', 'status')) { Die "usage: -Mode away -Sub on|off|status" }
+  QLocked { param($f)
+    if ($sub -ceq 'on') { QSetHdr $f 'away' (Now); "away since $(QHdr $f 'away')" }
+    elseif ($sub -ceq 'off') { $was = QHdr $f 'away'; QSetHdr $f 'away' '-'; "back (away was: $was)" }
+    else { "away: $(QHdr $f 'away')" } }
+}
+function DoLand {
+  $r = RunIdArg $Id
+  if ($Sub -cnotin @('start', 'finish', 'abort')) { Die "usage: -Mode land -Id <n> -Sub start|finish|abort" }
+  $rf = Resolve-Run ($r -replace '^RUN-', ''); if (-not $rf) { Die "no run matching $r - see: -Mode list" }
+  $lw = HdrField $rf 'worktree'; $lb = HdrField $rf 'branch'
+  if (-not $lw -or -not $lb) { Die "$r has no run worktree/branch (a -Here run) - it landed with its stages" }
+  $mr = MainOf; if (-not $mr) { Die "land: not in a git repo" }
+  $mb = @(GitOut @('-C', $mr, 'symbolic-ref', '-q', '--short', 'HEAD')); if (-not $mb.Count) { Die "land: the main checkout is on a detached HEAD" }; $mb = $mb[0]
+  $rc = 0
+  $msg = QLocked { param($f)
+    $cur = (QHdr $f 'landing').Split(' ')[0]
+    if ($Sub -ceq 'start') {
+      if ($cur -cne '-' -and $cur -cne $r) { Refuse "LANDING $cur - one run lands at a time; land $r after it finishes" }
+      if (-not (Test-Path -LiteralPath $lw)) { Die "run worktree $lw is missing - resume recreates it" }
+      if (@(GitOut @('-C', $lw, 'status', '--porcelain')).Count) { Refuse "the run worktree $lw has uncommitted changes - commit them on $lb first" }
+      # The rebase rewrites the run branch: nothing may still be built on it.
+      if (@(Get-Content -Encoding UTF8 $rf | Where-Object { $null -ne (RowNum $_) -and (Cell $_ 3) -ceq '~' }).Count) { Refuse "$r has stages in flight - they branch from $lb; land once they have landed" }
+      $prev = QState $f $r; if (-not $prev) { $prev = '-' }
+      if (-not (GitOk @('-C', $lw, 'rebase', '-q', $mb))) {
+        $null = GitOk @('-C', $lw, 'rebase', '--abort')
+        [Console]::Error.WriteLine("CONFLICT: $lb does not rebase onto $mb - resolve it on the run branch (a fix stage), then land $r -Sub start again"); return 3
+      }
+      QSetHdr $f 'landing' "$r $(Now) was=$prev"; if (QState $f $r) { QSet $f $r 'landing' }
+      "landing ${r}: $lb rebased onto $mb - now the regression sweep and /code-review on $mb..$lb, the version bump, all committed on $lb; then land $r -Sub finish"
+    } elseif ($Sub -ceq 'finish') {
+      if ($cur -cne $r) { Refuse "$r is not landing (landing: $cur) - land $r -Sub start first" }
+      if (@(GitOut @('-C', $lw, 'status', '--porcelain')).Count) { Refuse "the run worktree $lw has uncommitted changes - commit them first" }
+      if (-not (GitOk @('-C', $mr, 'merge', '-q', '--ff-only', $lb))) { [Console]::Error.WriteLine("main ($mb) does not fast-forward to $lb (moved since start?) - land $r -Sub start again"); return 3 }
+      $left = @()
+      if (-not (GitOk @('-C', $mr, 'worktree', 'remove', $lw))) { $left += "git worktree remove `"$lw`"" }
+      if (-not (GitOk @('-C', $mr, 'branch', '-d', $lb))) { $left += "git branch -d $lb" }
+      if ($left) { [Console]::Error.WriteLine("LEFT BEHIND: $($left -join '; ') (in use? run it from the main checkout)") }
+      QSetHdr $f 'landing' '-'; if (QState $f $r) { QSet $f $r 'landed' }
+      "landed $r on $mb at $(@(GitOut @('-C', $mr, 'rev-parse', '--short', 'HEAD'))[0]) - nothing pushed; one push per marathon, asked alone"
+    } else {
+      if ($cur -cne $r) { Refuse "$r is not landing" }
+      $prev = ((QHdr $f 'landing') -split ' was=')[-1]; if (-not $prev -or $prev -eq '-' -or $prev -match ' ') { $prev = 'running' }
+      QSetHdr $f 'landing' '-'; if (QState $f $r) { QSet $f $r $prev }
+      "landing of $r abandoned - back to $prev; its branch stays rebased onto $mb (nothing on main moved)"
+    } }
+  if ($msg -is [int]) { exit $msg }
+  $msg
+}
+
 # F36 (D1): TICKETS.md is written in the main checkout only, under its own
 # lock - one board, however many run worktrees there are.
 function DoBoard {
@@ -1667,6 +1766,21 @@ function DoChainEdge($n) {
 # (tickets plus the stages idle on it), then the oldest - as the numbered list
 # hosts without AskUserQuestion print. Chips are cut to 8.
 function DoQueue {
+  # F38: -All is the marathon's one end batch - every run with an open or
+  # asked decision, each under its own heading.
+  if ($All) {
+    $any = $false; $sv = $script:Run
+    try {
+      foreach ($f in @(RunFiles | Where-Object { $_.Name -like 'run-*.md' })) {
+        $ls = @(Get-Content -Encoding UTF8 $f.FullName)
+        if (-not ($ls -ccontains '## Chain') -or -not @($ls | Where-Object { $_ -cmatch '^### Q\d+ (open|asked)( |$)' }).Count) { continue }
+        $any = $true; "## RUN-$(IdOf $f.Name)"; $script:Run = $f.FullName
+        $script:All = $false; try { DoQueue } finally { $script:All = $true }
+      }
+    } finally { $script:Run = $sv }
+    if (-not $any) { 'no open decisions in any run' }
+    return
+  }
   if ($Asks -and $Asks -cnotin @('live', 'end')) { Die "queue: --asks is live or end, not $Asks" }
   NeedRun
   if (-not (HasChain)) { Refuse "queue: $Run has no ## Chain section - decisions live in chain runs only (F33)" }
@@ -2842,6 +2956,54 @@ function DoSelftest {
       } finally { foreach ($k in 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL') { Set-Item "env:$k" $null } }
     } finally { $env:RELAY_LEVEL_CMD = $svl }
 
+    # F38: two queued runs start one at a time; a paused run is skipped; away
+    # on/off; each lands on main by start (rebase) then finish (ff), one at a
+    # time, worktree and branch removed; a landing conflict exits 3 with
+    # nothing moved; queue -All lists both runs' open decisions once.
+    $d8 = (Join-Path $d 'queue') -replace '\\', '/'
+    New-Item -ItemType Directory -Force $d8 | Out-Null; G init -q $d8
+    [IO.File]::WriteAllText("$d8/m.txt", "base`n"); G -C $d8 add m.txt; G -C $d8 commit -q -m base
+    function R8([string[]]$a) { Push-Location $d8; $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+      try { $o = & powershell @me6 @a 2>&1 | ForEach-Object { "$_" } | Out-String; [pscustomobject]@{ rc = $LASTEXITCODE; out = $o.Trim() } } finally { $ErrorActionPreference = $prev; Pop-Location } }
+    $env:RELAY_WORKTREE = 'on'
+    try { $null = R8 @('-Mode', 'init', '-Plan', 'T.md', '-Title', 'one', '-Stages', 'o1'); $null = R8 @('-Mode', 'init', '-Plan', 'T.md', '-Title', 'two', '-Stages', 't1') } finally { $env:RELAY_WORKTREE = 'off' }
+    $f1 = @(Get-ChildItem "$d8/.skillator" -Filter 'run-*-one.md')[0].FullName; $f2 = @(Get-ChildItem "$d8/.skillator" -Filter 'run-*-two.md')[0].FullName
+    $n1 = IdOf (Split-Path -Leaf $f1); $n2 = IdOf (Split-Path -Leaf $f2); $i1 = "RUN-$n1"; $i2 = "RUN-$n2"
+    # Not $n: names are case-blind, and DoPark below reads the script's $N.
+    foreach ($q8 in @($n1, $n2)) { if ((R8 @('-Mode', 'queue-run', '-Sub', 'add', '-Id', $q8)).rc -ne 0) { Die "F38: add $q8" } }
+    if ((R8 @('-Mode', 'queue-run', '-Sub', 'next')).out -cne "START $i1") { Die "F38: next is not the first queued run" }
+    $null = R8 @('-Mode', 'queue-run', '-Sub', 'start', '-Id', $n1)
+    if ((R8 @('-Mode', 'queue-run', '-Sub', 'next')).out -cne "BUSY $i1 running") { Die "F38: a second run would start beside the first" }
+    $null = R8 @('-Mode', 'queue-run', '-Sub', 'pause', '-Id', $n1)
+    if ((R8 @('-Mode', 'queue-run', '-Sub', 'next')).out -cne "START $i2") { Die "F38: a paused run blocked the queue" }
+    $null = R8 @('-Mode', 'queue-run', '-Sub', 'start', '-Id', $n2)
+    if ((R8 @('-Mode', 'queue-run', '-Sub', 'start', '-Id', $n1)).rc -ne 2) { Die "F38: a second run started while one runs" }
+    $null = R8 @('-Mode', 'queue-run', '-Sub', 'pause', '-Id', $n2); $null = R8 @('-Mode', 'queue-run', '-Sub', 'start', '-Id', $n1)
+    if ((R8 @('-Mode', 'queue-run', '-Sub', 'add', '-Id', '999')).rc -eq 0) { Die "F38: queued a run that does not exist" }
+    $null = R8 @('-Mode', 'away', '-Sub', 'on'); if (-not (Select-String -LiteralPath "$d8/.skillator/queue.md" -Pattern '^away: 20' -Quiet)) { Die "F38: away on" }
+    $null = R8 @('-Mode', 'away', '-Sub', 'off'); if (-not (Select-String -LiteralPath "$d8/.skillator/queue.md" -Pattern '^away: -$' -Quiet)) { Die "F38: away off" }
+    $w1 = HdrField $f1 'worktree'; $w2 = HdrField $f2 'worktree'; $b1 = HdrField $f1 'branch'
+    [IO.File]::WriteAllText("$w1/one.txt", "one`n"); G -C $w1 add one.txt; G -C $w1 commit -q -m one
+    [IO.File]::WriteAllText("$w2/two.txt", "two`n"); G -C $w2 add two.txt; G -C $w2 commit -q -m two
+    $o = R8 @('-Mode', 'land', '-Id', $n1, '-Sub', 'start'); if ($o.rc -ne 0) { Die "F38: land one start: $($o.out)" }
+    if ((R8 @('-Mode', 'land', '-Id', $n2, '-Sub', 'start')).rc -ne 2) { Die "F38: a second run started landing beside the first" }
+    $o = R8 @('-Mode', 'land', '-Id', $n1, '-Sub', 'finish'); if ($o.rc -ne 0) { Die "F38: land one finish: $($o.out)" }
+    if (-not (Test-Path "$d8/one.txt") -or (Test-Path $w1) -or (GitOk @('-C', $d8, 'rev-parse', '-q', '--verify', "refs/heads/$b1"))) { Die "F38: one did not land on main, or left its worktree/branch" }
+    if ((QState "$d8/.skillator/queue.md" $i1) -cne 'landed') { Die "F38: the queue does not say one landed" }
+    [IO.File]::WriteAllText("$d8/m.txt", "clash`n"); G -C $d8 commit -q -am 'main moves'
+    [IO.File]::WriteAllText("$w2/m.txt", "other`n"); G -C $w2 commit -q -am 'two clashes'
+    $h8 = @(GitOut @('-C', $d8, 'rev-parse', 'HEAD'))[0]; $t8 = @(GitOut @('-C', $w2, 'rev-parse', 'HEAD'))[0]
+    $o = R8 @('-Mode', 'land', '-Id', $n2, '-Sub', 'start')
+    if ($o.rc -ne 3 -or @(GitOut @('-C', $d8, 'rev-parse', 'HEAD'))[0] -ne $h8 -or @(GitOut @('-C', $w2, 'rev-parse', 'HEAD'))[0] -ne $t8 -or -not (Select-String -LiteralPath "$d8/.skillator/queue.md" -Pattern '^landing: -$' -Quiet)) { Die "F38: a landing conflict did not exit 3 with nothing moved (rc $($o.rc)): $($o.out)" }
+    foreach ($pr in @(@($f1, 'o1', 'F1', 'One?'), @($f2, 't1', 'F2', 'Two?'))) {
+      $sn = & $num $pr[0] $pr[1]
+      $null = R8 @('-Mode', 'chain', '-Action', 'plan', '-N', $sn, '-PromptFile', "$d7/p", '-Files', 'x.py', '-Run', $pr[0])
+      $o = R8 @('-Mode', 'park', '-N', $sn, '-Ticket', $pr[2], '-Reason', 'taste', '-Question', $pr[3], '-Header', 'H', '-Option1', 'a | b | c', '-Option2', 'd | e | f', '-Default', 'a', '-Files', 'x.py', '-Stop', 'none', '-Run', $pr[0])
+      if ($o.rc -ne 0) { Die "F38: park $($pr[3]): $($o.out)" }
+    }
+    $o = R8 @('-Mode', 'queue', '-All')
+    if ($o.out -notmatch "(?m)^## $i1\s*$" -or $o.out -notmatch "(?m)^## $i2\s*$" -or $o.out -notmatch 'One\?' -or $o.out -notmatch 'Two\?') { Die "F38: queue -All did not list both runs' decisions: $($o.out)" }
+
     ChainSelftest $d
     MarathonSelftest $d
     "ok"
@@ -2852,7 +3014,7 @@ try {
   # -Id names the run for every mode that touches one.
   if ($Id) {
     $f = Resolve-Run $Id
-    if (-not $f -and $Mode -ne 'resume') { Die "no run matching '$Id' - see: -Mode list" }
+    if (-not $f -and $Mode -cnotin @('resume', 'queue-run', 'land')) { Die "no run matching '$Id' - see: -Mode list" }
     if ($f) { $Run = $f }
   }
   switch ($Mode) {
@@ -2860,6 +3022,9 @@ try {
     'resume'    { DoResume $Id }
     'init'      { DoInit }
     'board'     { DoBoard }
+    'queue-run' { DoQueueRun }
+    'land'      { DoLand }
+    'away'      { DoAway }
     'add'       { DoAdd $Title }
     'stage'     { DoStage $N $State $Owner $Landed }
     'heartbeat' { DoHeartbeat $N }

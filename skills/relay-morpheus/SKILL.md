@@ -2,13 +2,12 @@
 name: relay-morpheus
 description: >-
   Use when work runs in stages and the session may not survive to their end —
-  a multi-stage plan, subagent fan-out, a sleeping laptop, a dropping link, a
-  usage limit.
-  Also on "staged workflow", "work all open tickets in stages", "keep going",
-  "auto-start the next workflow", "next stage", "pause at 80% usage",
-  "marathon", "ask me everything at the end", "resume the run", or "what was
-  in flight". NOT for writing a session handoff (`handoff-cortana`) and NOT
-  for the board (`tickets-zordon`).
+  a multi-stage plan, fan-out, a sleeping laptop, a dropping link, a usage
+  limit. Also on "marathon", "May the Force be with you",
+  "Use the Force on F35 F36", "work the board", "keep going",
+  "I'll be back", "I'm back", "ask me everything at the end", "resume the
+  run". NOT for a session handoff (`handoff-cortana`), the board
+  (`tickets-zordon`) or drawing a run ("Help me, Obi-Wan" — `holo-r2d2`).
 ---
 
 # relay-morpheus — staged runs that outlive the session
@@ -126,6 +125,12 @@ now - files disjoint from what is in flight and from each other - capped at 2
 below 50 % of the 5-hour window, else 1. A stage that runs beside another works
 in its own worktree off the run branch; `chain merge <n>` brings it back (exit
 3 on a conflict: the stage fails). [references/chain.md](references/chain.md).
+**A marathon of runs (F38).** Runs wait in one queue (`queue-run add|next|
+start|pause|done`), run one at a time, and land on main one at a time
+(`land <n> --start`, review and bump on the run branch, `land <n> --finish`);
+one end batch across runs (`queue --all`), one push per marathon, and an away
+flow (`away on|off`) that notifies, waits 30 minutes and moves on - never a
+default. [references/marathon.md](references/marathon.md).
 **Numbers are serial across the project, not per run.** `init` takes the RUN
 id and every stage number from the F21 allocator (`practice/scripts/next-id.sh`,
 kinds `RUN` and `S`), which reads every run file in the tree and on every ref

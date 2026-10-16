@@ -95,6 +95,32 @@ function Invoke-GitQuiet([string[]]$a) {
   return @($code, @($out))
 }
 
+# A125: a lock is freed by renaming it away - one atomic step - then deleting
+# the renamed copy. Remove-Item -Recurse on 5.1 deletes the stamp first and can
+# leave the directory behind for a moment: a stamp-less lock that waiters judged
+# stale and broke while its holder had moved on, two at a time - two holders,
+# and a counter read while the other replaced it ("Could not find file ...\S").
+# Each take writes `owner` (pid + a random id) beside `stamp` (seconds, all the
+# sh twin reads). Freeing names the owner it means: the holder its own, a
+# breaker the one it judged stale ('' for a lock with no owner file - the sh
+# twin's, or one that died before writing it). A renamed lock with another
+# owner is a fresh one, and goes back; if it cannot go back (someone took the
+# path meanwhile) it is left where it is, never deleted.
+function Lock-Owner([string]$l) {
+  $f = Join-Path $l 'owner'
+  if (Test-Path -LiteralPath $f) { try { return ([IO.File]::ReadAllText($f)).Trim() } catch { return $null } }
+  ''
+}
+function Free-Lock([string]$l, [string]$owner) {
+  $g = "$l.free.$PID.$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+  try { [IO.Directory]::Move($l, $g) } catch { return }   # gone, or freed by another
+  if ((Lock-Owner $g) -cne $owner) {
+    try { [IO.Directory]::Move($g, $l) } catch { [Console]::Error.WriteLine("${prog}: a fresh lock was moved aside and could not go back: $g") }
+    return
+  }
+  Remove-Item -Recurse -Force -LiteralPath $g -ErrorAction SilentlyContinue
+}
+
 function Read-Counter([string]$f) {
   if (-not (Test-Path -LiteralPath $f)) { return 0 }
   $d = ([IO.File]::ReadAllText($f) -replace '[^0-9]', '')
@@ -194,17 +220,19 @@ function Allocate([string]$k, [string]$b, [bool]$peekOnly, [string]$runs, [strin
   $waited = 0
   # Atomic take: build the lock (stamp inside) under a private name, then
   # rename it into place; the rename fails if the lock exists.
+  $me = "$PID.$([guid]::NewGuid().ToString('N'))"
   while ($true) {
     $tmp = Join-Path $ids "$k.lock.tmp.$PID"
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     [IO.File]::WriteAllText((Join-Path $tmp 'stamp'), "$(Now)`n")
+    [IO.File]::WriteAllText((Join-Path $tmp 'owner'), "$me`n")
     try { [IO.Directory]::Move($tmp, $lock); break } catch { Remove-Item -Recurse -Force -LiteralPath $tmp }
-    $st = ''
+    $st = ''; $ow = Lock-Owner $lock
     $sf = Join-Path $lock 'stamp'
     if (Test-Path -LiteralPath $sf) { try { $st = ([IO.File]::ReadAllText($sf) -replace '[^0-9]', '') } catch { } }
     if (($st -and ((Now) - [int64]$st) -gt $stale) -or (-not $st -and $waited -gt $stale)) {
       [Console]::Error.WriteLine("${prog}: breaking stale lock $lock")
-      Remove-Item -Recurse -Force -LiteralPath $lock -ErrorAction SilentlyContinue
+      if ($null -ne $ow) { Free-Lock $lock $ow }
       continue
     }
     if ($waited -gt (2 * $stale)) { [Console]::Error.WriteLine("${prog}: lock $lock still held after ${waited}s"); exit 1 }
@@ -220,7 +248,7 @@ function Allocate([string]$k, [string]$b, [bool]$peekOnly, [string]$runs, [strin
     [IO.File]::WriteAllText($t, "$n`n")
     Move-Item -Force -LiteralPath $t -Destination $counter
   } finally {
-    Remove-Item -Recurse -Force -LiteralPath $lock -ErrorAction SilentlyContinue
+    Free-Lock $lock $me
   }
   return (Emit $k ($m + 1) $n)
 }
