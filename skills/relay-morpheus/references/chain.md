@@ -104,14 +104,18 @@ Run every line, in order, before the next dispatch:
    board; no agent does. A verdict with `parked` → marathon.md (Park) first:
    `RM park` before anything else; `parked.stop` not `none` is a stop, now.
 2. Regression sweep, then `code-review:code-review` on the staged diff; fix
-   findings via a fix agent (3-pass cap).
+   findings via a fix agent (3-pass cap). Usage pressure lowers the level,
+   never the call: `/code-review low` is the floor. Reading the diff yourself
+   is not a review - "to save usage I reviewed it myself" lands nothing.
 3. Commit with the ticket-first message and the code trailing:
-   `B2 B3: <what> [<CODE>]`. Then `RM stage 66 x build:opus <sha>` and delete
+   `B2 B3: <what> [<CODE>]`. No review result from step 2, no `x`: the stage
+   stays `~`. Then `RM stage 66 x build:opus <sha>` and delete
    the stage's In-flight block by hand (no command does). No passing ticket →
    `RM stage 66 '!'`, block kept with the failure appended, chain continues;
    one retry stage per ticket via `RM add`.
 4. Republish the board artifact once (`tickets-zordon`).
-5. `Ruling:` line — `<CODE>: <what the verdicts decided, what was dropped>`.
+5. `Ruling:` line — `<CODE>: <what the verdicts decided, what was dropped>;
+   review <level>: <n> findings, <fixed|none>`.
 6. Usage read, every stage, no exception:
 
    ```sh

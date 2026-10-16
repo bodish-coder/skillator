@@ -172,35 +172,106 @@ need_run() { pick_run; [ -f "$RUN" ] || die "no run file at $RUN (relay-morpheus
 # Every mutation is a read-modify-write of the whole file, and SKILL.md
 # sanctions concurrent in-flight stages - two `stage` calls landing at once
 # would lose one row, which is the loss this whole skill exists to prevent.
-# `mkdir` is the portable atomic test-and-set. ponytail: a spin with a stale
-# timeout, not a lock manager; if a run ever needs more than one writer per
-# second, the ledger is the wrong shape, not the lock.
+# The lock is a FILE made by an exclusive create (`set -C`: O_EXCL) that holds
+# its holder, `<pid> sh` - taking it and naming the holder are one step.
+# ponytail: a spin with a stale timeout, not a lock manager; if a run ever
+# needs more than one writer per second, the ledger is the wrong shape, not
+# the lock.
 LOCK=""
-# The lock dir carries its holder's pid. Breaking a stale lock without checking
-# it let B delete a slow-but-alive A's lock, and A's release then deleted B's -
-# admitting C mid-write, which is the lost update the lock exists to prevent.
+LOCK_ME="$$ sh"
+# A115: the lock was a dir from mkdir with its pid written after, and every race
+# review found lived in that gap or in a check-then-rm: a waiter read '' from a
+# live holder's fresh dir, judged it pidless and deleted it, or deleted a lock
+# that turned over between its check and its rm - two holders, a lost row. Now
+# there is no pidless window, and breakers take turns: a break holds
+# `$LOCK.break` (same exclusive create), re-judges the lock under it - nobody
+# but a breaker removes a dead holder's lock, so it cannot turn over between
+# that re-judge and the removal - then RENAMES it away and re-judges the
+# renamed file, giving back a live lock it took by mistake. Without the turns
+# the rename alone let two breakers race: one stole the lock the other had just
+# taken, and every waiter spinning through the give-back's forks (100 ms on
+# MSYS) took it too - 142 double holds in 400 runs of an empty stale lock.
+# ponytail: a breaker that dies inside its milliseconds leaves `.break`, which
+# is cleared by the same dead-holder rule.
+# Stale: older than LOCK_STALE_S with a dead holder, or empty (it died between
+# the create and the write). 10s: a hold is one read-modify-write, well under a
+# second. The 30s backstop breaks a holder that sits unchanged that long, live
+# or not; only a change to a DIFFERENT holder restarts that clock - a failed
+# read flapping with it must not, or a pid reused by a live process spins
+# forever (RUN-9).
+# Cross-port: kill -0 cannot see a ps1 holder's Windows pid (nor ps1 an MSYS
+# pid), so the other port's holder is never judged dead; only the backstop
+# breaks it. A lock DIR left by a version before A115 is stale once older than
+# LOCK_STALE_S. ponytail: drop the dir case one release after A115.
+LOCK_STALE_S=10
+lock_read() {   # <path>: its holder; '' when unreadable or empty
+  if [ -d "$1" ]; then cat "$1/pid" 2>/dev/null || :; else cat "$1" 2>/dev/null || :; fi
+}
+# lock_dead <path> <holder judged> [force]: 0 when <path> is still that stale lock.
+lock_dead() {
+  _lf=$1; if [ -d "$_lf" ] && [ -e "$_lf/pid" ]; then _lf="$_lf/pid"; fi
+  _lm=$(stat -c %Y "$_lf" 2>/dev/null || stat -f %m "$_lf" 2>/dev/null) || return 1
+  [ $(( $(date +%s) - _lm )) -gt "$LOCK_STALE_S" ] || return 1
+  [ ! -d "$1" ] || return 0
+  [ "$(lock_read "$1")" = "$2" ] || return 1
+  if [ -z "$2" ] || [ "${3:-}" = force ]; then return 0; fi
+  case "$2" in *" ps1") return 1 ;; esac
+  case "${2% sh}" in ''|*[!0-9]*) return 0 ;; esac
+  ! kill -0 "${2% sh}" 2>/dev/null
+}
+# lock_steal <path> <holder judged> [force]: rename away, re-judge, then delete
+# or give back.
+lock_steal() {
+  _lb="$1.broken.$$"; rm -rf "$_lb" 2>/dev/null || :
+  mv "$1" "$_lb" 2>/dev/null || return 0   # gone: released, or broken already
+  if lock_dead "$_lb" "$2" "${3:-}"; then rm -rf "$_lb" 2>/dev/null || :; return 0; fi
+  if [ -d "$_lb" ]; then mv "$_lb" "$1" 2>/dev/null || :; return 0; fi
+  # Given back by link (atomic, refuses an existing name), or a fresh exclusive
+  # copy where links are not supported.
+  ln "$_lb" "$1" 2>/dev/null || { ( set -C; cat "$_lb" > "$1" ) 2>/dev/null || :; }
+  rm -f "$_lb" 2>/dev/null || :
+}
+lock_break() {   # <holder judged> [force]
+  _lg="$LOCK.break"
+  if ! ( set -C; echo "$LOCK_ME" > "$_lg" ) 2>/dev/null; then
+    _lc2=$(lock_read "$_lg"); lock_dead "$_lg" "$_lc2" && lock_steal "$_lg" "$_lc2" || :
+    return 0
+  fi
+  lock_dead "$LOCK" "$1" "${2:-}" && lock_steal "$LOCK" "$1" "${2:-}" || :
+  rm -f "$_lg" 2>/dev/null || :
+}
 lock() {
-  LOCK="$RUN.lock"
-  mkdir "$LOCK" 2>/dev/null && { echo $$ > "$LOCK/pid"; return; }   # the common case
-  held=$(cat "$LOCK/pid" 2>/dev/null)                               # who had it when we arrived
-  i=0
-  while ! mkdir "$LOCK" 2>/dev/null; do
-    i=$((i+1))
-    # 30s of one holder's turn means that process died holding it. Break it
-    # only if the pid has not changed since we arrived - otherwise the lock has
-    # already turned over and we would be stealing it from someone alive.
-    if [ "$i" -gt 300 ] && [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$held" ]; then
-      rm -rf "$LOCK"
+  LOCK="$RUN.lock"; _ll=; _li=0
+  until ( set -C; echo "$LOCK_ME" > "$LOCK" ) 2>/dev/null; do
+    _lc=$(lock_read "$LOCK")
+    if [ -n "$_lc" ] && [ "$_lc" != "$_ll" ]; then _ll=$_lc; _li=0; fi
+    _li=$((_li+1))
+    if [ "$_li" -gt 300 ]; then lock_dead "$LOCK" "$_lc" force && lock_break "$_lc" force || :
+    elif [ $((_li % 10)) = 1 ]; then lock_dead "$LOCK" "$_lc" && lock_break "$_lc" || :
     fi
     sleep 0.1 2>/dev/null || sleep 1
   done
-  echo $$ > "$LOCK/pid"
 }
 # No EXIT trap: this file is sourced by cmd_selftest, whose own cleanup trap a
 # lock() installed here would silently replace - which leaked one mktemp dir
 # per selftest run. Release is explicit, on both the success and failure paths.
+# Released the way it is broken - renamed, then re-read - so a lock that turned
+# over after the check is given back, not deleted. Retried until it is gone or
+# reads as someone else's; never fails, since the mutation already landed.
 unlock() {
-  if [ -n "$LOCK" ] && [ "$(cat "$LOCK/pid" 2>/dev/null)" = "$$" ]; then rm -rf "$LOCK"; fi
+  if [ -n "$LOCK" ]; then
+    _lr="$LOCK.rel.$$"; _lk=0
+    while [ "$_lk" -lt 20 ] && [ -e "$LOCK" ]; do
+      _lc=$(lock_read "$LOCK")
+      if [ -n "$_lc" ] && [ "$_lc" != "$LOCK_ME" ]; then break; fi
+      if [ "$_lc" = "$LOCK_ME" ] && mv "$LOCK" "$_lr" 2>/dev/null; then
+        [ "$(lock_read "$_lr")" = "$LOCK_ME" ] || ln "$_lr" "$LOCK" 2>/dev/null || { ( set -C; cat "$_lr" > "$LOCK" ) 2>/dev/null || :; }
+        rm -f "$_lr" 2>/dev/null || :
+        break
+      fi
+      _lk=$((_lk+1)); sleep 0.05 2>/dev/null || sleep 1
+    done
+  fi
   LOCK=""
 }
 
@@ -1725,6 +1796,50 @@ chain_selftest() {
   grep -q "^| $s5 | [A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9] F9 race |" "$RUN" || die "chain plan: two parallel plans put two codes in the cell"
   [ "$(grep -c " - stage $s5 - " "$RUN")" = 1 ] || die "chain plan: two parallel plans wrote two blocks"
   [ ! -e "$RUN.lock" ] || die "chain: parallel calls left the lock behind"
+  # A115: the lock is one exclusively-created file holding `<pid> sh`.
+  # (nopid) a holder that died between the create and the write leaves an
+  # empty file, broken once older than LOCK_STALE_S. (late) one that wrote its
+  # pid and died: a waiter that came first sees the pid appear and breaks the
+  # lock once the file is that old. The pid is an impossible one - an OS reuses
+  # a just-exited process's pid. (olddir) a pre-A115 lock dir, on the same clock.
+  for c in nopid late olddir; do
+    case $c in
+      nopid) : > "$RUN.lock"; touch -t 202001010000 "$RUN.lock" ;;
+      late) : > "$RUN.lock" ;;
+      olddir) mkdir "$RUN.lock"; echo 99999999 > "$RUN.lock/pid"; touch -t 202001010000 "$RUN.lock/pid" "$RUN.lock" ;;
+    esac
+    RELAY_RUN="$RUN" sh "$me" add "A115 $c" >/dev/null 2>&1 & p1=$!
+    if [ "$c" = late ]; then sleep 1; echo "99999999 sh" > "$RUN.lock"; fi
+    k=0; while kill -0 "$p1" 2>/dev/null && [ "$k" -lt 25 ]; do sleep 1; k=$((k+1)); done
+    if kill -0 "$p1" 2>/dev/null; then kill "$p1"; rm -rf "$RUN.lock"; die "lock ($c): a waiter still spins on a dead holder's lock after 25s"; fi
+    set +e; wait "$p1"; r1=$?; set -e
+    [ "$r1" = 0 ] || { rm -rf "$RUN.lock"; die "lock ($c): a waiter on a dead holder's lock exited $r1"; }
+    grep -q "| A115 $c |" "$RUN" || die "lock ($c): the waiter's add did not land"
+    [ ! -e "$RUN.lock" ] || die "lock ($c): left the lock behind"
+  done
+  # A live holder is never broken by the 10s rule, however old its file: one
+  # of this port (kill -0 sees it) or of the other (whose pid kill -0 cannot
+  # see, so only the 30s backstop may break it). The dir lock found no pid file
+  # in a file lock and broke both at once.
+  for c in "$$ sh" "1 ps1"; do
+    echo "$c" > "$RUN.lock"; touch -t 202001010000 "$RUN.lock"
+    RELAY_RUN="$RUN" sh "$me" add "A115 live ${c#* }" >/dev/null 2>&1 & p1=$!
+    sleep 2
+    if [ "$(cat "$RUN.lock" 2>/dev/null)" != "$c" ] || ! kill -0 "$p1" 2>/dev/null; then
+      kill "$p1" 2>/dev/null; rm -rf "$RUN.lock"; die "lock: a waiter broke a live holder's lock ($c)"
+    fi
+    rm -f "$RUN.lock"
+    set +e; wait "$p1"; r1=$?; set -e
+    [ "$r1" = 0 ] && grep -q "| A115 live ${c#* } |" "$RUN" || die "lock: a waiter on a released lock exited $r1 or lost its row ($c)"
+  done
+  # The race: a dead holder's stale lock and six callers at once. Exactly one
+  # breaks it and every add lands - a lost row means two held it at once.
+  echo "99999999 sh" > "$RUN.lock"; touch -t 202001010000 "$RUN.lock"
+  pids=; for w in 1 2 3 4 5 6; do RELAY_RUN="$RUN" sh "$me" add "A115 race $w" >/dev/null 2>&1 & pids="$pids $!"; done
+  bad=0; set +e; for p in $pids; do wait "$p" || bad=$((bad+1)); done; set -e
+  n=$(grep -c '| A115 race [1-6] |' "$RUN" || :)
+  [ "$bad" = 0 ] && [ "$n" = 6 ] || die "lock race: $bad of 6 callers failed, $n of 6 rows landed"
+  for x in "$RUN".lock*; do [ ! -e "$x" ] || die "lock race: left $x behind"; done
   # F31 review 2: a hand-mangled Chain header (4-space separators) is left
   # alone by the driver's heartbeat - row stamped, exit 0, header unchanged.
   cp "$RUN" "$d4/good"

@@ -210,29 +210,117 @@ function NeedRun { PickRun; if (-not (Test-Path $Run)) { Die "no run file at $Ru
 # Every mutation is a read-modify-write of the whole file, and SKILL.md
 # sanctions concurrent in-flight stages - two `stage` calls landing at once
 # would lose one row, which is the loss this whole skill exists to prevent.
-# Creating a directory is the portable atomic test-and-set, same as the sh
-# twin. ponytail: a spin with a stale timeout, not a lock manager.
+# The lock is a FILE made by an exclusive create (CreateNew) that holds its
+# holder, `<pid> ps1`, written through the same handle - taking it and naming
+# the holder are one step. ponytail: a spin with a stale timeout, not a lock
+# manager.
 $script:Lock = $null
-# The lock dir carries its holder's pid. Breaking a stale lock without checking
-# it let B delete a slow-but-alive A's lock, and A's release then deleted B's -
-# admitting C mid-write, which is the lost update the lock exists to prevent.
-function LockPid { try { (Get-Content (Join-Path $script:Lock 'pid') -Raw -ErrorAction Stop).Trim() } catch { '' } }
+$LockMe = "$PID ps1"
+# A115: the lock was a dir with its pid written after, and every race review
+# found lived in that gap or in a check-then-delete: a waiter read '' from a
+# live holder's fresh dir and deleted it, a pid-write failure left the holder
+# waiting on its own pidless dir, or a lock that turned over between the check
+# and the slow Remove-Item was deleted - two holders, a lost row. Now there is
+# no pidless window, and breakers take turns: a break holds "$Lock.break" (same
+# exclusive create), re-judges the lock under it - nobody but a breaker removes
+# a dead holder's lock, so it cannot turn over between that re-judge and the
+# removal - then RENAMES it away and re-judges the renamed file, moving back a
+# live lock it took by mistake (Move refuses an existing name). Without the
+# turns the rename alone let two breakers race, and waiters spinning through
+# the give-back took the lock too (142 double holds in 400 sh runs of an empty
+# stale lock). ponytail: a breaker that dies inside its milliseconds leaves
+# `.break`, cleared by the same dead-holder rule. Same rules as
+# relay-morpheus.sh: stale when older than
+# $LockStaleS with a dead holder, or empty (it died between the create and the
+# write); the 30s backstop breaks a holder unchanged that long, live or not,
+# and only a change to a DIFFERENT holder restarts that clock - a failed read
+# flapping with it must not, or a pid reused by a live process spins forever
+# (RUN-9). Cross-port: Get-Process cannot see a sh holder's MSYS pid (nor
+# kill -0 a Windows pid), so the other port's holder is never judged dead;
+# only the backstop breaks it. A lock DIR left by a version before A115 is
+# stale once older than $LockStaleS. ponytail: drop the dir case one release
+# after A115.
+$LockStaleS = 10
+# Every read shares Delete, so a reading waiter never fails the holder's
+# release or a breaker's rename. $null: unreadable; '': empty.
+function LockRead($p) {
+  if (Test-Path -LiteralPath $p -PathType Container) {
+    $p = Join-Path $p 'pid'; if (-not (Test-Path -LiteralPath $p)) { return '' } }
+  try { $s = [IO.File]::Open($p, 'Open', 'Read', 'ReadWrite, Delete') } catch { return $null }
+  try { (New-Object IO.StreamReader($s)).ReadToEnd().Trim() } catch { $null } finally { $s.Dispose() }
+}
+# $true when $p is still the stale lock judged as holding $judged.
+function LockDead($p, $judged, [bool]$force) {
+  $f = $p; $dir = Test-Path -LiteralPath $p -PathType Container
+  if ($dir -and (Test-Path -LiteralPath (Join-Path $p 'pid'))) { $f = Join-Path $p 'pid' }
+  try { $age = ((Get-Date) - (Get-Item -LiteralPath $f -Force -ErrorAction Stop).LastWriteTime).TotalSeconds } catch { return $false }
+  if ($age -le $LockStaleS) { return $false }
+  if ($dir) { return $true }
+  $now = LockRead $p
+  if ($null -eq $now -or $now -cne $judged) { return $false }
+  if ($judged -eq '' -or $force) { return $true }
+  if ($judged -like '* sh') { return $false }
+  $n = $judged -replace ' ps1$', ''
+  if ($n -notmatch '^\d{1,9}$') { return $true }
+  return -not (Get-Process -Id ([int]$n) -ErrorAction SilentlyContinue)
+}
+function LockCreate($p) {
+  try { $s = [IO.File]::Open($p, 'CreateNew', 'Write', 'None') } catch { return $false }
+  try { $b = [Text.Encoding]::ASCII.GetBytes("$LockMe`n"); $s.Write($b, 0, $b.Length); $s.Dispose() }
+  catch { $s.Dispose(); try { [IO.File]::Delete($p) } catch {}; throw }
+  return $true
+}
+# Rename $p away, re-judge it, then delete it or give it back.
+function LockSteal($p, $judged, [bool]$force) {
+  $b = "$p.broken.$PID"
+  if (Test-Path -LiteralPath $b) { Remove-Item -LiteralPath $b -Recurse -Force -ErrorAction SilentlyContinue }
+  try { [IO.Directory]::Move($p, $b) } catch { return }   # gone: released, or broken already
+  if (LockDead $b $judged $force) { Remove-Item -LiteralPath $b -Recurse -Force -ErrorAction SilentlyContinue; return }
+  try { [IO.Directory]::Move($b, $p) } catch { Remove-Item -LiteralPath $b -Recurse -Force -ErrorAction SilentlyContinue }
+}
+function LockBreak($judged, [bool]$force) {
+  $g = "$($script:Lock).break"
+  if (-not (LockCreate $g)) {
+    $c = LockRead $g; if ($null -ne $c -and (LockDead $g $c $false)) { LockSteal $g $c $false }
+    return
+  }
+  try { if (LockDead $script:Lock $judged $force) { LockSteal $script:Lock $judged $force } }
+  finally { for ($k = 0; $k -lt 20 -and (Test-Path -LiteralPath $g); $k++) { try { [IO.File]::Delete($g) } catch { Start-Sleep -Milliseconds 20 } } }
+}
 function Lock {
-  $script:Lock = "$Run.lock"
-  try { New-Item -ItemType Directory -Path $script:Lock -ErrorAction Stop | Out-Null
-        Set-Content (Join-Path $script:Lock 'pid') "$PID"; return } catch {}
-  $held = LockPid
-  for ($i = 0; ; $i++) {
-    try { New-Item -ItemType Directory -Path $script:Lock -ErrorAction Stop | Out-Null
-          Set-Content (Join-Path $script:Lock 'pid') "$PID"; return } catch {}
-    # 30s of ONE holder's turn means that process died holding it. Break it
-    # only if the pid has not changed since we arrived.
-    if ($i -gt 300 -and (LockPid) -eq $held) { Remove-Item -Recurse -Force $script:Lock -ErrorAction SilentlyContinue }
+  $script:Lock = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$Run.lock")
+  $last = ''; $i = 0
+  while (-not (LockCreate $script:Lock)) {
+    $cur = LockRead $script:Lock
+    if ($cur -and $cur -cne $last) { $last = $cur; $i = 0 }
+    $i++
+    if ($null -ne $cur -and ($i -gt 300 -or $i % 10 -eq 1)) {
+      if (LockDead $script:Lock $cur ($i -gt 300)) { LockBreak $cur ($i -gt 300) }
+    }
     Start-Sleep -Milliseconds 100
   }
 }
+# Released the way it is broken - renamed, then re-read - so a lock that turned
+# over after the check is moved back, not deleted. Retried until the lock is
+# gone or reads as someone else's: a waiter's read or a sharing violation can
+# fail one try, and stopping on a failed read left an orphan behind.
 function Unlock {
-  if ($script:Lock -and (LockPid) -eq "$PID") { Remove-Item -Recurse -Force $script:Lock -ErrorAction SilentlyContinue }
+  if ($script:Lock) {
+    $r = "$($script:Lock).rel.$PID"
+    for ($k = 0; $k -lt 40 -and (Test-Path -LiteralPath $script:Lock); $k++) {
+      $cur = LockRead $script:Lock
+      if ($null -ne $cur -and $cur -cne $LockMe) { break }
+      if ($cur -ceq $LockMe) {
+        $moved = $true; try { [IO.Directory]::Move($script:Lock, $r) } catch { $moved = $false }
+        if ($moved) {
+          if ((LockRead $r) -cne $LockMe) { try { [IO.Directory]::Move($r, $script:Lock) } catch {} }
+          try { [IO.File]::Delete($r) } catch {}
+          break
+        }
+      }
+      Start-Sleep -Milliseconds 50
+    }
+  }
   $script:Lock = $null
 }
 
@@ -1621,6 +1709,52 @@ function ChainSelftest($d) {
   if (-not (Select-String -Path $Run -Pattern "^\| $s5 \| [A-Z0-9]{4} F9 race \|" -CaseSensitive -Quiet)) { Die "chain plan: two parallel plans put two codes in the cell" }
   if (@(Select-String -Path $Run -SimpleMatch " - stage $s5 - ").Count -ne 1) { Die "chain plan: two parallel plans wrote two blocks" }
   if (Test-Path "$Run.lock") { Die "chain: parallel calls left the lock behind" }
+  # A115: the lock is one exclusively-created file holding `<pid> ps1`.
+  # (nopid) a holder that died between the create and the write leaves an
+  # empty file, broken once older than $LockStaleS. (late) one that wrote its
+  # pid and died: a waiter that came first sees the pid appear and breaks the
+  # lock once the file is that old. The pid is an impossible one (odd; Windows
+  # pids are multiples of 4) - a just-exited process's pid is soon reused.
+  # (olddir) a pre-A115 lock dir, on the same clock.
+  $old = (Get-Date).AddMinutes(-5)
+  foreach ($c in @('nopid', 'late', 'olddir')) {
+    if ($c -eq 'olddir') {
+      New-Item -ItemType Directory "$Run.lock" | Out-Null; [IO.File]::WriteAllText("$Run.lock\pid", '99999999')
+      (Get-Item -LiteralPath "$Run.lock\pid").LastWriteTime = $old; (Get-Item -LiteralPath "$Run.lock").LastWriteTime = $old
+    } else { [IO.File]::WriteAllText("$Run.lock", '') }
+    if ($c -eq 'nopid') { (Get-Item -LiteralPath "$Run.lock").LastWriteTime = $old }
+    $pa = Spawn "-Mode add -Title `"A115 $c`" -Run `"$Run`""
+    if ($c -eq 'late') { Start-Sleep -Seconds 2; [IO.File]::WriteAllText("$Run.lock", "99999999 ps1`n") }
+    if (-not $pa.WaitForExit(25000)) { $pa.Kill(); Remove-Item -Recurse -Force "$Run.lock" -ErrorAction SilentlyContinue; Die "lock ($c): a waiter still spins on a dead holder's lock after 25s" }
+    $ra = Reap $pa
+    if ($ra -ne 0) { Remove-Item -Recurse -Force "$Run.lock" -ErrorAction SilentlyContinue; Die "lock ($c): a waiter on a dead holder's lock exited $ra" }
+    if (-not (Select-String -Path $Run -SimpleMatch "| A115 $c |" -Quiet)) { Die "lock ($c): the waiter's add did not land" }
+    if (Test-Path "$Run.lock") { Die "lock ($c): left the lock behind" }
+  }
+  # A live holder is never broken by the 10s rule, however old its file: one
+  # of this port (Get-Process sees it) or of the other (whose MSYS pid it
+  # cannot see, so only the 30s backstop may break it). The dir lock found no
+  # pid file in a file lock and broke both at once.
+  foreach ($c in @("$PID ps1", '1 sh')) {
+    [IO.File]::WriteAllText("$Run.lock", "$c`n"); (Get-Item -LiteralPath "$Run.lock").LastWriteTime = $old
+    $t = "A115 live $($c.Split(' ')[1])"
+    $pa = Spawn "-Mode add -Title `"$t`" -Run `"$Run`""
+    Start-Sleep -Seconds 4
+    $held = try { [IO.File]::ReadAllText("$Run.lock").Trim() } catch { '' }
+    if ($held -cne $c -or $pa.HasExited) { if (-not $pa.HasExited) { $pa.Kill() }; Remove-Item -Force "$Run.lock" -ErrorAction SilentlyContinue; Die "lock: a waiter broke a live holder's lock ($c)" }
+    Remove-Item -Force "$Run.lock"
+    if (-not $pa.WaitForExit(25000)) { $pa.Kill(); Die "lock: a waiter on a released lock still spins ($c)" }
+    $ra = Reap $pa
+    if ($ra -ne 0 -or -not (Select-String -Path $Run -SimpleMatch "| $t |" -Quiet)) { Die "lock: a waiter on a released lock exited $ra or lost its row ($c)" }
+  }
+  # The race: a dead holder's stale lock and six callers at once. Exactly one
+  # breaks it and every add lands - a lost row means two held it at once.
+  [IO.File]::WriteAllText("$Run.lock", "99999999 ps1`n"); (Get-Item -LiteralPath "$Run.lock").LastWriteTime = $old
+  $ps = @(1..6 | ForEach-Object { Spawn "-Mode add -Title `"A115 race $_`" -Run `"$Run`"" })
+  $bad = @($ps | ForEach-Object { Reap $_ } | Where-Object { $_ -ne 0 }).Count
+  $n = @(Select-String -Path $Run -Pattern '^\| \d+ \| A115 race [1-6] \|').Count
+  if ($bad -ne 0 -or $n -ne 6) { Die "lock race: $bad of 6 callers failed, $n of 6 rows landed" }
+  if (Get-ChildItem -Path (Split-Path $Run) -Filter "$(Split-Path -Leaf $Run).lock*") { Die "lock race: left a lock or a broken lock behind" }
   # F31 review 2: a hand-mangled Chain header (4-space separators) is left
   # alone by the driver's heartbeat - row stamped, no throw, header unchanged.
   $good = [IO.File]::ReadAllBytes($Run)
