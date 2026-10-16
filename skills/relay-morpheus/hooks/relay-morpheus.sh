@@ -29,6 +29,10 @@
 #   relay-morpheus.sh chain next                       NEXT n CODE | HOLD | ASK k | UNBLOCK Qk | WAIT n | BLOCKED n | FINAL, then IDLE lines
 #        (F36: `chain dispatch` leases the stage's files across runs - LEASED <path> RUN-m stage s, exit 2,
 #        when another run's live stage holds one; `chain next` prints IDLE <n> leased <path> RUN-m stage s)
+#   relay-morpheus.sh chain next --all                 F37: every stage that can start now, one NEXT line each,
+#                                                      capped by usage (2 below 50% of 5h, else 1; RELAY_CHAIN_PARALLEL)
+#   relay-morpheus.sh chain merge <n>                  F37: merge a parallel stage's branch into the run branch
+#                                                      (exit 3 on a conflict: the stage fails)
 #   relay-morpheus.sh chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
 #
 # Marathon (F33, chain runs only) - questions only the user can answer are
@@ -1000,11 +1004,33 @@ chain_dispatch() {
             note="${note:+$note; }$c: override: user asked at $pct%" ;;
     UNOBSERVABLE) echo "note: usage unobservable on this host - dispatched with no usage check" >&2 ;;
   esac
+  # F37: never beside an in-flight stage whose files it shares (or with unknown files).
+  w=$(chain_scan | grep "^IDLE $n inflight-files " | head -1)
+  [ -z "$w" ] || refuse "stage $n shares files with stage ${w#IDLE $n inflight-files }, in flight - chain next --all names what can run beside it"
   case "$_dz" in TOOK*) note="${note:+$note; }$c: ${_dz#TOOK }" ;; esac
   name=$(row_cell "$n" 3)
+  # F37: with another stage of this run in flight, this one works in its own
+  # worktree off the run branch, merged back by `chain merge <n>` on landing.
+  nfl=$(chain_scan | grep -c '^IDLE [0-9]* inflight$' || :)
+  # F37: the cap is a gate here, not only a hint in chain next --all.
+  cap=$(parallel_cap "$dv")
+  [ "$nfl" -lt "$cap" ] || refuse "$nfl stage(s) in flight, the cap is $cap (usage $pct%) - wait for one to land; chain next --all says when"
+  swt=; sbr=; rwt=$(hdr_field "$RUN" worktree)
+  if [ -n "$rwt" ] && [ -d "$rwt" ] && [ "$nfl" -gt 0 ]; then
+    swt="$rwt.s$n"; sbr="$(hdr_field "$RUN" branch)-s$n"
+    # A retry reuses what a failed attempt left: its worktree, or its branch.
+    if [ -d "$swt" ]; then :
+    elif git -C "$rwt" rev-parse -q --verify "refs/heads/$sbr" >/dev/null 2>&1; then
+      git -C "$rwt" worktree add -q "$swt" "$sbr" >/dev/null 2>&1 || die "could not recreate stage $n's worktree $swt from $sbr"
+    else
+      git -C "$rwt" worktree add -q -b "$sbr" "$swt" HEAD >/dev/null 2>&1 || die "could not create stage $n's worktree $swt on $sbr"
+    fi
+    echo "stage $n works and commits in: $swt (branch $sbr) - chain merge $n when it lands" >&2
+  fi
   blk="$RUN.blk.$$"; t=$(now)
   { echo "### stage $n - $name  (dispatched $t, $drv)"
     echo "run: -"
+    [ -z "$swt" ] || { echo "worktree: $swt"; echo "branch: $sbr"; }
     echo "prompt: |"
     block_prompt "$n" | awk '{ print ($0 == "" ? "" : "  " $0) }'
   } > "$blk"
@@ -1019,6 +1045,45 @@ chain_dispatch() {
   LEASED_N=
   echo "$c"
   block_prompt "$n"
+}
+
+# inflight_field <n> <key>: a field of stage n's In-flight block, before its prompt.
+inflight_field() {
+  awk -v n="$1" -v k="$2: " '/^## /{sec=$0; b=0; next}
+    sec == "## In flight" && /^### stage / { b = (index($0, "### stage " n " - ") == 1); next }
+    sec == "## In flight" && b && /^prompt:/ { b = 0 }
+    sec == "## In flight" && b && index($0, k) == 1 { print substr($0, length(k) + 1); exit }' "$RUN"
+}
+# F37: a parallel stage's branch goes back onto the run branch, in the run's
+# worktree, as a merge commit; its worktree and branch are then removed. A
+# conflict aborts the merge and exits 3 - the stage fails, a retry is planned.
+chain_merge() {
+  n=${1:-}; case $n in ''|*[!0-9]*) die "usage: chain merge <n>" ;; esac
+  need_run
+  swt=$(inflight_field "$n" worktree); sbr=$(inflight_field "$n" branch)
+  if [ -z "$swt" ] && [ -z "$sbr" ]; then echo "stage $n has no stage worktree - it committed on the run branch; nothing to merge"; return 0; fi
+  rwt=$(hdr_field "$RUN" worktree); [ -n "$rwt" ] && [ -d "$rwt" ] || die "run worktree $rwt is missing - relay-morpheus.sh resume recreates it"
+  [ -n "$sbr" ] && git -C "$rwt" rev-parse -q --verify "refs/heads/$sbr" >/dev/null 2>&1 \
+    || die "stage $n's In-flight block names no usable branch ('$sbr') - fix the block; this is bookkeeping, not a conflict"
+  # Merges land one at a time, and only onto a clean run worktree: the stage
+  # that runs there may still be writing - wait for it to commit, then merge.
+  lock "$RUN.merge.lock"
+  if [ -n "$(git -C "$rwt" status --porcelain 2>/dev/null)" ]; then
+    refuse "the run worktree $rwt has uncommitted changes (a stage working there?) - merge once it has committed"
+  fi
+  if git -C "$rwt" merge --no-ff --no-edit -m "merge stage $n ($sbr)" "$sbr" >/dev/null 2>&1; then
+    git -C "$rwt" worktree remove "$swt" >/dev/null 2>&1 || echo "note: could not remove $swt (uncommitted files?) - remove it by hand" >&2
+    git -C "$rwt" branch -d "$sbr" >/dev/null 2>&1 || :
+    git -C "$rwt" rev-parse HEAD
+    unlock
+  elif git -C "$rwt" rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+    git -C "$rwt" merge --abort >/dev/null 2>&1 || :
+    unlock
+    echo "CONFLICT: stage $n ($sbr) does not merge onto $(hdr_field "$RUN" branch) - the stage fails: stage $n '!' and plan a retry stage on the merged branch" >&2
+    exit 3
+  else
+    die "git merge of $sbr into $rwt failed before merging (index.lock? a broken ref?) - not a conflict; retry chain merge $n"
+  fi
 }
 
 # chain hold <pct> [--window 5h|7d] [--next n] [--driver TAG]. Idempotent: a second hold
@@ -1406,7 +1471,7 @@ q_move() {
 # `chain_scan next` prints only the stage NEXT would name (or nothing), with
 # the hold and the ask order ignored - what `chain hold` writes as next=.
 chain_scan() {
-  awk -v only="${1:-}" -v lf="${LEASEF:-}" '
+  awk -v only="${1:-}" -v lf="${LEASEF:-}" -v all="${SCAN_ALL:-}" -v cap="${SCAN_CAP:-1}" '
     function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
     function norm(p) { gsub(/\\/, "/", p); p = trim(p); while (substr(p, 1, 2) == "./") p = substr(p, 3)
       while (length(p) > 1 && substr(p, length(p)) == "/") p = substr(p, 1, length(p) - 1); return p }
@@ -1469,7 +1534,11 @@ chain_scan() {
       openk = 0; unb = ""; askd = ""
       for (i = 1; i <= nq; i++) { k = ql[i]; if (qs[k] == "open") openk++
         if (qs[k] == "answered" || qs[k] == "ruled") unb = unb " Q" k; if (qs[k] == "asked") askd = askd " Q" k }
-      nx = ""; no = 0; nf = 0; nbk = 0; nl = 0
+      nx = ""; no = 0; nf = 0; nbk = 0; nl = 0; nc = 0; ni = 0; infall = 0
+      # F37: what the stages in flight touch. One with no files: could touch
+      # anything, so nothing runs beside it.
+      for (r = 1; r <= nr; r++) { n = row[r]; if (!(n in code) || st[n] != "~") continue
+        if (!hasf[n]) infall = n; else { mt = split(fl[n], t, SUBSEP); for (y = 2; y <= mt; y++) { ifp[++ni] = t[y]; ifs[ni] = n } } }
       if (lf != "") while ((getline lz < lf) > 0) { split(lz, z, "\t"); lp[++nl] = norm(z[1]); lrn[nl] = z[2]; lsn[nl] = z[3] }
       for (r = 1; r <= nr; r++) { n = row[r]; if (!(n in code)) continue; s = st[n]
         if (s == "~") { out[++no] = "IDLE " n " inflight"; nf++; continue }
@@ -1492,14 +1561,38 @@ chain_scan() {
         ma = split(af[n], a, " "); for (x = 1; x <= ma; x++) if (!landed(a[x])) { out[++no] = "IDLE " n " - after " a[x]; waits = 1 }
         if (hasf[n] && nl) { mt = split(fl[n], t, SUBSEP); hit = 0
           for (y = 2; y <= mt && !hit; y++) for (z2 = 1; z2 <= nl && !hit; z2++) if (meet(lp[z2], t[y])) { out[++no] = "IDLE " n " leased " t[y] " " lrn[z2] " stage " lsn[z2]; waits = 1; hit = 1 } }
+        if ((s == "" || s == "!") && !waits && (infall || ni)) {
+          if (infall) { out[++no] = "IDLE " n " inflight-files " infall; waits = 1 }
+          else if (!hasf[n]) { out[++no] = "IDLE " n " inflight-files " ifs[1]; waits = 1 }
+          else { mt = split(fl[n], t, SUBSEP); hit = 0
+            for (y = 2; y <= mt && !hit; y++) for (z2 = 1; z2 <= ni && !hit; z2++) if (meet(ifp[z2], t[y])) { out[++no] = "IDLE " n " inflight-files " ifs[z2]; waits = 1; hit = 1 } }
+        }
+        if (s == "" && !waits) cand[++nc] = n
         if (s == "" && !waits && (nx == "" || n < nx + 0)) nx = n
         if (s == "" && failbehind(n, 0)) nbk++
       }
       if (only != "") { if (nx != "") print nx; exit }
+      # F37 --all: every candidate that fits - files disjoint from the ones
+      # already picked, and no more than cap stages in flight in all.
+      nch = 0
+      if (all != "" && nc) {
+        free = cap - nf; anyf = 0
+        for (i = 1; i <= nc; i++) { n = cand[i]
+          if (free <= 0) { out[++no] = "IDLE " n " slots"; continue }
+          if (anyf || (!hasf[n] && nch)) { out[++no] = "IDLE " n " parallel-files " pk[1]; continue }
+          mt = split(fl[n], t, SUBSEP); hit = 0
+          for (y = 2; y <= mt && !hit; y++) for (z2 = 1; z2 <= npp && !hit; z2++) if (meet(pp[z2], t[y])) { out[++no] = "IDLE " n " parallel-files " pps[z2]; hit = 1 }
+          if (hit) continue
+          pk[++nch] = n; free--; if (!hasf[n]) anyf = 1
+          for (y = 2; y <= mt; y++) { pp[++npp] = t[y]; pps[npp] = n }
+        }
+        if (!nch) nx = ""
+      }
       if (asks == "live" && openk) v = "ASK"; else if (nx != "") v = "NEXT"; else if (unb != "") v = "UNBLOCK"
       else if (openk) v = "ASK"; else if (nf) v = "WAIT"; else if (nbk) v = "BLOCKED"; else v = "FINAL"
       # The hold gates dispatch, not questions: ASK and UNBLOCK go on under it.
       if (hold != "" && hold != "-" && v != "ASK" && v != "UNBLOCK") print "HOLD " hold
+      else if (v == "NEXT" && nch) { for (i = 1; i <= nch; i++) print "NEXT " pk[i] " " code[pk[i]] }
       else if (v == "NEXT") print "NEXT " nx " " code[nx]
       else if (v == "ASK") print "ASK " openk " - open decisions to ask in one batch: read references/marathon.md, The end batch"
       else if (v == "UNBLOCK") { mb = split(unb, b, " "); for (x = 1; x <= mb; x++) print "UNBLOCK " b[x] " - answered, not yet re-planned: references/marathon.md, Unblock" }
@@ -1510,7 +1603,23 @@ chain_scan() {
     }' "$RUN"
 }
 
+# F37: how many stages may be in flight at once - 2 below 50% of the 5-hour
+# window, 1 at or above it or when usage cannot be read; RELAY_CHAIN_PARALLEL
+# overrides.
+parallel_cap() {   # [decision already read]: the cap, from one reading
+  if [ -n "${RELAY_CHAIN_PARALLEL:-}" ]; then
+    case $RELAY_CHAIN_PARALLEL in *[!0-9]*|''|0) die "RELAY_CHAIN_PARALLEL='$RELAY_CHAIN_PARALLEL' is not a whole number of at least 1" ;; esac
+    echo "$RELAY_CHAIN_PARALLEL"; return
+  fi
+  _cp=${1:-$(chain_decide "$(level_line)")}
+  case "$_cp" in
+    "RELEASE "*) awk -v p="${_cp#RELEASE }" 'BEGIN{print (p + 0 < 50) ? 2 : 1}' ;;
+    *) echo 1 ;;
+  esac
+}
 chain_next() {
+  SCAN_ALL=; SCAN_CAP=1
+  case "${1:-}" in --all) SCAN_ALL=1; SCAN_CAP=$(parallel_cap) ;; '') ;; *) die "usage: chain next [--all]" ;; esac
   need_run
   has_chain || die "no ## Chain section in $RUN - chain next reads a chain"
   hdr_check
@@ -1521,7 +1630,7 @@ chain_next() {
   done
   LEASEF="$RUN.lz.$$"; leases_to "$LEASEF"
   _cr=0; chain_scan || _cr=$?
-  rm -f "$LEASEF"; LEASEF=; return $_cr
+  rm -f "$LEASEF"; LEASEF=; SCAN_ALL=; return $_cr
 }
 
 # chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
@@ -1652,9 +1761,10 @@ cmd_chain() {
     wait)     chain_wait "$@" ;;
     status)   chain_status ;;
     decide)   chain_decide "$(level_line)" ;;
-    next)     chain_next ;;
+    next)     chain_next "$@" ;;
+    merge)    chain_merge "$@" ;;
     edge)     chain_edge "$@" ;;
-    *) die "usage: relay-morpheus.sh chain plan|dispatch|hold|release|wait|status|decide|next|edge ..." ;;
+    *) die "usage: relay-morpheus.sh chain plan|dispatch|hold|release|wait|status|decide|next|merge|edge ..." ;;
   esac
 }
 
@@ -2006,12 +2116,18 @@ chain_selftest() {
   # F31 review: the checks and the claim are one lock hold. Two processes
   # dispatching one stage at once -> exactly one 0 and one 2, one block.
   me="$HERE/${0##*/}"   # this file, or the mutant copy a mutation check runs
+  # F37 refuses a stage beside in-flight stages it may share files with; this
+  # race is about the claim, so stages 1-2 read as landed while it runs.
+  r12=$(grep -E "^\| ($s1|$s2) \|" "$RUN")
+  sed -E "s/^(\| ($s1|$s2) \|[^|]*\|) ~ \|/\1 x |/" "$RUN" > "$RUN.x" && mv "$RUN.x" "$RUN"
   set +e
   RELAY_RUN="$RUN" sh "$me" chain dispatch "$s3" --driver @cc-b >/dev/null 2>&1 & p1=$!
   RELAY_RUN="$RUN" sh "$me" chain dispatch "$s3" --driver @cc-b >/dev/null 2>&1 & p2=$!
   wait $p1; r1=$?; wait $p2; r2=$?
   set -e
   { [ "$r1" = 0 ] && [ "$r2" = 2 ]; } || { [ "$r1" = 2 ] && [ "$r2" = 0 ]; } || die "chain dispatch: two parallel dispatches of one stage exited $r1 and $r2, not 0 and 2"
+  printf '%s\n' "$r12" > "$RUN.r12"
+  awk -v f="$RUN.r12" 'BEGIN{while ((getline l < f) > 0) { split(l, c, "|"); k = c[2] + 0; keep[k] = l }} /^\| *[0-9]+ *\|/ { split($0, c, "|"); k = c[2] + 0; if (k in keep) { print keep[k]; next } } { print }' "$RUN" > "$RUN.x" && mv "$RUN.x" "$RUN"; rm -f "$RUN.r12"
   [ "$(grep -c "^### stage $s3 - " "$RUN")" = 1 ] || die "chain dispatch: two parallel dispatches wrote two In-flight blocks"
   # Same for plan: two processes planning one stage -> one code in the cell.
   s5=$(cmd_add "F9 race") || die "add failed"
@@ -2153,6 +2269,50 @@ chain_selftest() {
   if ( cd "$d6" && cmd_board F91 x >/dev/null 2>&1 ); then die "F36: board accepted a missing ticket"; fi
   [ ! -e "$d6/TICKETS.md.lock" ] && [ ! -e "$reg.lock" ] || die "F36: a lock was left behind"
   RUN=$sv6_run; DIR=$sv6_dir
+  # F37: four stages - a.py, b.py, a.py again, c.py. --all at cap 2 offers the
+  # first two (disjoint), idles the third on the first's file and the fourth
+  # on slots; two are in flight at once, the second in its own worktree;
+  # chain merge brings a clean stage back, and a conflicting one exits 3 with
+  # the run branch untouched. The cap follows usage.
+  d7="$d/par"; mkdir -p "$d7"; git init -q "$d7"; git -C "$d7" -c user.name=t -c user.email=t@t commit -q --allow-empty -m base
+  sv7_run=$RUN; sv7_dir=$DIR; DIR="$d7/.skillator"; RUN=""
+  ( cd "$d7" && RELAY_WORKTREE=on cmd_init T.md "par" "P a" "P b" "P a2" "P c" >/dev/null 2>&1 ) || die "F37: init"
+  RUN=$(ls "$DIR"/run-*-par.md); rwt=$(hdr_field "$RUN" worktree); [ -d "$rwt" ] || die "F37: no run worktree"
+  num7() { sed -n "s/^| \([0-9]*\) | $1 |.*/\1/p" "$RUN"; }
+  p1=$(num7 "P a"); p2=$(num7 "P b"); p3=$(num7 "P a2"); p4=$(num7 "P c")
+  printf 'x\n' > "$d7/p"
+  for pf in "$p1 a.py" "$p2 b.py" "$p3 a.py" "$p4 c.py"; do chain_plan ${pf% *} --prompt-file "$d7/p" --files ${pf#* } >/dev/null || die "F37: plan $pf"; done
+  out=$(RELAY_CHAIN_PARALLEL=2 chain_next --all)
+  [ "$(printf '%s\n' "$out" | grep -c '^NEXT ')" = 2 ] && printf '%s\n' "$out" | grep -q "^NEXT $p1 " && printf '%s\n' "$out" | grep -q "^NEXT $p2 " \
+    && printf '%s\n' "$out" | grep -q "^IDLE $p4 slots\$" || die "F37: --all at cap 2: $out"
+  out=$(RELAY_CHAIN_PARALLEL=3 chain_next --all)
+  [ "$(printf '%s\n' "$out" | grep -c '^NEXT ')" = 3 ] && printf '%s\n' "$out" | grep -q "^NEXT $p4 " \
+    && printf '%s\n' "$out" | grep -q "^IDLE $p3 parallel-files $p1\$" || die "F37: --all at cap 3: $out"
+  [ "$(RELAY_LEVEL_CMD='echo "src=codex 5h=60 7d=10 ctx=- max=60"' parallel_cap)" = 1 ] && [ "$(RELAY_LEVEL_CMD='echo "src=codex 5h=10 7d=10 ctx=- max=10"' parallel_cap)" = 2 ] \
+    && [ "$(RELAY_LEVEL_CMD='echo nothing' parallel_cap)" = 1 ] || die "F37: the cap does not follow usage"
+  lv7='echo "src=codex 5h=10 7d=10 ctx=- max=10"'
+  ( RELAY_LEVEL_CMD=$lv7 chain_dispatch "$p1" --driver @p >/dev/null 2>&1 ) || die "F37: dispatch $p1"
+  ( RELAY_LEVEL_CMD=$lv7 chain_dispatch "$p2" --driver @p >/dev/null 2>&1 ) || die "F37: dispatch $p2 beside $p1"
+  [ "$(row_cell "$p1" 4)" = '~' ] && [ "$(row_cell "$p2" 4)" = '~' ] || die "F37: two stages are not in flight at once"
+  [ -z "$(inflight_field "$p1" worktree)" ] && sw2=$(inflight_field "$p2" worktree) && [ -d "$sw2" ] || die "F37: the second stage has no worktree of its own"
+  set +e; ( RELAY_LEVEL_CMD=$lv7 chain_dispatch "$p3" --driver @p >/dev/null 2>&1 ); rc=$?; set -e
+  [ "$rc" = 2 ] || die "F37: a stage sharing a.py with one in flight dispatched (rc $rc)"
+  out=$(RELAY_CHAIN_PARALLEL=2 chain_next --all); printf '%s\n' "$out" | grep -q '^WAIT 2 ' || die "F37: two in flight at cap 2 is not WAIT: $out"
+  g7() { git -c user.name=t -c user.email=t@t "$@"; }
+  echo b > "$sw2/b.py"; g7 -C "$sw2" add b.py; g7 -C "$sw2" commit -q -m "stage b"
+  ( GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t chain_merge "$p2" >/dev/null 2>&1 ) || die "F37: a clean stage did not merge"
+  [ -f "$rwt/b.py" ] && [ ! -d "$sw2" ] || die "F37: merge did not land b.py on the run branch or left the stage worktree"
+  cmd_stage "$p2" x "" "$(git -C "$rwt" rev-parse --short HEAD)"
+  ( RELAY_LEVEL_CMD=$lv7 chain_dispatch "$p4" --driver @p >/dev/null 2>&1 ) || die "F37: dispatch $p4"
+  sw4=$(inflight_field "$p4" worktree); [ -d "$sw4" ] || die "F37: no worktree for $p4"
+  echo y > "$sw4/a.py"; echo c > "$sw4/c.py"; g7 -C "$sw4" add a.py c.py; g7 -C "$sw4" commit -q -m "stage c, strays into a.py"
+  echo x > "$rwt/a.py"; g7 -C "$rwt" add a.py; g7 -C "$rwt" commit -q -m "stage a"
+  h7=$(git -C "$rwt" rev-parse HEAD)
+  set +e; ( GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t chain_merge "$p4" >/dev/null 2>&1 ); rc=$?; set -e
+  [ "$rc" = 3 ] && [ "$(git -C "$rwt" rev-parse HEAD)" = "$h7" ] && [ ! -e "$rwt/.git/MERGE_HEAD" ] && [ -z "$(git -C "$rwt" status --porcelain)" ] \
+    || die "F37: a conflicting merge did not exit 3 with the run branch untouched (rc $rc)"
+  git -C "$d7" worktree remove --force "$sw4" >/dev/null 2>&1 || :
+  RUN=$sv7_run; DIR=$sv7_dir
   # F31 review 2: a hand-mangled Chain header (4-space separators) is left
   # alone by the driver's heartbeat - row stamped, exit 0, header unchanged.
   cp "$RUN" "$d4/good"

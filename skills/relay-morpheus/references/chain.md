@@ -97,6 +97,24 @@ and the prompt. Then:
    command fills it. The prompt on disk is the truth; the id is a same-session
    hint for `resumeFromRunId`.
 
+**Several in flight (F37).** `RM chain next --all` prints one `NEXT` line per
+stage that can start now - its after: stages landed, its files disjoint from
+every stage in flight and from the others it names, held by no decision and no
+other run's lease - capped by usage: 2 below 50 % of the 5-hour window, 1 at or
+above it or unobservable (`RELAY_CHAIN_PARALLEL` overrides). Dispatch each
+(one dispatch and one Workflow/Agent call per stage). A stage left out says
+why: `IDLE <n> slots`, `IDLE <n> parallel-files <m>`, `IDLE <n> inflight-files
+<m>`; dispatch refuses a stage that shares files with one in flight, and one
+with no `files:` never runs beside anything. A stage dispatched while another
+is in flight gets its own worktree off the run branch - dispatch says so on
+stderr and writes `worktree:`/`branch:` into its In-flight block; its prompt
+must say to work and commit there. Each stage is landed by Step 3 when **its
+own** notification arrives - the others keep running - and before its `stage x`
+run `RM chain merge <n>`: it merges the stage branch into the run branch and
+removes the stage worktree. Exit 3 is a conflict: the merge is aborted, the
+stage is `!`, and a retry stage is planned on the merged branch. Then
+`chain next --all` again fills the free slots.
+
 `mode:` in the Chain header names what actually ran: `workflow` for a Workflow
 call, `agents` for Agent fan-out. A run file that says `workflow` while Agents
 were used is a lie the next session believes — fix it with

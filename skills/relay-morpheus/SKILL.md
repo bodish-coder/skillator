@@ -121,6 +121,11 @@ or re-planning releases; a lease silent past 20 min is taken, with a ruling.
 Board edits from a run worktree go through `relay-morpheus.sh board <ID>
 <mark>` (`-Mode board -Ticket -Mark`), which writes the main checkout's
 `TICKETS.md` under its lock.
+**Parallel stages (F37).** `chain next --all` names every stage that can run
+now - files disjoint from what is in flight and from each other - capped at 2
+below 50 % of the 5-hour window, else 1. A stage that runs beside another works
+in its own worktree off the run branch; `chain merge <n>` brings it back (exit
+3 on a conflict: the stage fails). [references/chain.md](references/chain.md).
 **Numbers are serial across the project, not per run.** `init` takes the RUN
 id and every stage number from the F21 allocator (`practice/scripts/next-id.sh`,
 kinds `RUN` and `S`), which reads every run file in the tree and on every ref

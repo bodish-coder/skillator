@@ -56,7 +56,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','board','selftest')][string]$Mode,
-  [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','edge')][string]$Action = 'status',
+  [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','merge','edge')][string]$Action = 'status',
   [string]$Ticket = '',
   [string]$Reason = '',
   [string]$Question = '',
@@ -102,6 +102,7 @@ param(
   [string]$Title,
   [string]$Stages,
   [switch]$Here,
+  [switch]$All,
   [string]$Mark = $null,
   [int]$N,
   [string]$State = 'pending',
@@ -994,9 +995,30 @@ function DoChainDispatch($n) {
     } elseif ($d -eq 'UNOBSERVABLE') {
       [Console]::Error.WriteLine('note: usage unobservable on this host - dispatched with no usage check')
     }
+    # F37: never beside an in-flight stage whose files it shares (or with unknown files).
+    $w = @(ChainScan | Where-Object { $_.StartsWith("IDLE $n inflight-files ") }) | Select-Object -First 1
+    if ($w) { Refuse "stage $n shares files with stage $($w.Substring(("IDLE $n inflight-files ").Length)), in flight - chain next -All names what can run beside it" }
     if ($took.Count) { $note += "${c}: $($took -join '; ')" }
     $name = RowCellN $n 2; $t = Now; $prompt = BlockPrompt $n
-    $blk = @("### stage $n - $name  (dispatched $t, $drv)", 'run: -', 'prompt: |') + (Indent $prompt)
+    # F37: with another stage of this run in flight, this one works in its own
+    # worktree off the run branch, merged back by `chain merge <n>` on landing.
+    $nfl = @(ChainScan | Where-Object { $_ -match '^IDLE \d+ inflight$' }).Count
+    # F37: the cap is a gate here, not only a hint in chain next -All.
+    $cap = ParallelCap $d
+    if ($nfl -ge $cap) { Refuse "$nfl stage(s) in flight, the cap is $cap - wait for one to land; chain next -All says when" }
+    $swt = ''; $sbr = ''; $rwt = HdrField $Run 'worktree'
+    if ($rwt -and (Test-Path -LiteralPath $rwt) -and $nfl -gt 0) {
+      $swt = "$rwt.s$n"; $sbr = "$(HdrField $Run 'branch')-s$n"
+      # A retry reuses what a failed attempt left: its worktree, or its branch.
+      if (Test-Path -LiteralPath $swt) { }
+      elseif (GitOk @('-C', $rwt, 'rev-parse', '-q', '--verify', "refs/heads/$sbr")) {
+        if (-not (GitOk @('-C', $rwt, 'worktree', 'add', '-q', $swt, $sbr))) { Die "could not recreate stage $n's worktree $swt from $sbr" }
+      } elseif (-not (GitOk @('-C', $rwt, 'worktree', 'add', '-q', '-b', $sbr, $swt, 'HEAD'))) { Die "could not create stage $n's worktree $swt on $sbr" }
+      [Console]::Error.WriteLine("stage $n works and commits in: $swt (branch $sbr) - chain merge $n when it lands")
+    }
+    $blk = @("### stage $n - $name  (dispatched $t, $drv)", 'run: -')
+    if ($swt) { $blk += @("worktree: $swt", "branch: $sbr") }
+    $blk += @('prompt: |') + (Indent $prompt)
     DropInFlight $n
     PutInSection 'In flight' $blk $null
     SetHdr "$drv $t" '-' $hp[2]
@@ -1076,6 +1098,50 @@ function DoBoard {
     Move-Item -Force -LiteralPath "$f.tmp.$PID" -Destination $f
   } finally { Unlock; $script:Lock = $sv }
   "$Ticket [$Mark]"
+}
+
+# A field of stage n's In-flight block, before its prompt.
+function InflightField($n, $k) {
+  $sec = ''; $b = $false
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
+    if ($l.StartsWith('## ')) { $sec = $l; $b = $false; continue }
+    if ($sec -cne '## In flight') { continue }
+    if ($l.StartsWith('### stage ')) { $b = $l.StartsWith("### stage $n - "); continue }
+    if ($b -and $l.StartsWith('prompt:')) { $b = $false }
+    if ($b -and $l.StartsWith("${k}: ")) { return $l.Substring($k.Length + 2) }
+  }
+  ''
+}
+# F37: a parallel stage's branch goes back onto the run branch, in the run's
+# worktree, as a merge commit; its worktree and branch are then removed. A
+# conflict aborts the merge and exits 3 - the stage fails, a retry is planned.
+function DoChainMerge($n) {
+  if (-not $n) { Die 'usage: -Mode chain -Action merge -N <n>' }
+  NeedRun
+  $swt = InflightField $n 'worktree'; $sbr = InflightField $n 'branch'
+  if (-not $swt -and -not $sbr) { "stage $n has no stage worktree - it committed on the run branch; nothing to merge"; return }
+  $rwt = HdrField $Run 'worktree'
+  if (-not $rwt -or -not (Test-Path -LiteralPath $rwt)) { Die "run worktree $rwt is missing - -Mode resume recreates it" }
+  if (-not $sbr -or -not (GitOk @('-C', $rwt, 'rev-parse', '-q', '--verify', "refs/heads/$sbr"))) { Die "stage $n's In-flight block names no usable branch ('$sbr') - fix the block; this is bookkeeping, not a conflict" }
+  # Merges land one at a time, and only onto a clean run worktree: the stage
+  # that runs there may still be writing - wait for it to commit, then merge.
+  $conflict = $false; $sha = $null
+  Lock "$Run.merge.lock"
+  try {
+    if (@(GitOut @('-C', $rwt, 'status', '--porcelain')).Count) { Refuse "the run worktree $rwt has uncommitted changes (a stage working there?) - merge once it has committed" }
+    if (GitOk @('-C', $rwt, 'merge', '--no-ff', '--no-edit', '-m', "merge stage $n ($sbr)", $sbr)) {
+      if (-not (GitOk @('-C', $rwt, 'worktree', 'remove', $swt))) { [Console]::Error.WriteLine("note: could not remove $swt (uncommitted files?) - remove it by hand") }
+      $null = GitOk @('-C', $rwt, 'branch', '-d', $sbr)
+      $sha = @(GitOut @('-C', $rwt, 'rev-parse', 'HEAD'))[0]
+    } elseif (GitOk @('-C', $rwt, 'rev-parse', '-q', '--verify', 'MERGE_HEAD')) {
+      $null = GitOk @('-C', $rwt, 'merge', '--abort'); $conflict = $true
+    } else { Die "git merge of $sbr into $rwt failed before merging (index.lock? a broken ref?) - not a conflict; retry chain merge $n" }
+  } finally { Unlock }
+  if ($conflict) {
+    [Console]::Error.WriteLine("CONFLICT: stage $n ($sbr) does not merge onto $(HdrField $Run 'branch') - the stage fails: stage $n '!' and plan a retry stage on the merged branch")
+    exit 3
+  }
+  $sha
 }
 
 function DoChainHold {
@@ -1469,6 +1535,11 @@ function ChainScan([switch]$NextOnly) {
   $openk = 0; $unb = @(); $askd = @()
   foreach ($k in $ql) { if ($qs[$k] -ceq 'open') { $openk++ }; if ($qs[$k] -cin @('answered', 'ruled')) { $unb += "Q$k" }; if ($qs[$k] -ceq 'asked') { $askd += "Q$k" } }
   $nx = $null; $out = New-Object System.Collections.Generic.List[string]; $nf = 0; $nbk = 0
+  # F37: what the stages in flight touch. One with no files: could touch
+  # anything, so nothing runs beside it.
+  $infall = $null; $ifp = New-Object System.Collections.Generic.List[object]; $cand = New-Object System.Collections.Generic.List[int]
+  foreach ($n in $rows) { if ($code.ContainsKey($n) -and $st[$n] -ceq '~') {
+    if (-not $hasf[$n]) { $infall = $n } else { foreach ($t in @($fl[$n] | Where-Object { $_ })) { $ifp.Add(@($t, $n)) } } } }
   foreach ($n in $rows) {
     if (-not $code.ContainsKey($n)) { continue }
     $s = $st[$n]
@@ -1494,14 +1565,38 @@ function ChainScan([switch]$NextOnly) {
       foreach ($t in @($fl[$n] | Where-Object { $_ })) { if ($hit) { break }
         foreach ($lz in $script:Leases) { if (PathsMeet (NormPath $lz.p) $t) { $out.Add("IDLE $n leased $t $($lz.r) stage $($lz.s)"); $waits = $true; $hit = $true; break } } }
     }
+    if (($s -ceq '' -or $s -ceq '!') -and -not $waits -and ($null -ne $infall -or $ifp.Count)) {
+      if ($null -ne $infall) { $out.Add("IDLE $n inflight-files $infall"); $waits = $true }
+      elseif (-not $hasf[$n]) { $out.Add("IDLE $n inflight-files $($ifp[0][1])"); $waits = $true }
+      else { $hit = $false
+        foreach ($t in @($fl[$n] | Where-Object { $_ })) { if ($hit) { break }; foreach ($q in $ifp) { if (PathsMeet $q[0] $t) { $out.Add("IDLE $n inflight-files $($q[1])"); $waits = $true; $hit = $true; break } } } }
+    }
+    if ($s -ceq '' -and -not $waits) { $cand.Add($n) }
     if ($s -ceq '' -and -not $waits -and ($null -eq $nx -or $n -lt $nx)) { $nx = $n }
     if ($s -ceq '' -and (& $failBehind $n 0)) { $nbk++ }
   }
   if ($NextOnly) { if ($null -ne $nx) { "$nx" }; return }
+  # F37 -All: every candidate that fits - files disjoint from the ones already
+  # picked, and no more than the cap in flight in all.
+  $pk = New-Object System.Collections.Generic.List[int]
+  if ($script:ScanAll -and $cand.Count) {
+    $free = $script:ScanCap - $nf; $anyf = $false; $pp = New-Object System.Collections.Generic.List[object]
+    foreach ($n in $cand) {
+      if ($free -le 0) { $out.Add("IDLE $n slots"); continue }
+      if ($anyf -or (-not $hasf[$n] -and $pk.Count)) { $out.Add("IDLE $n parallel-files $($pk[0])"); continue }
+      $hit = $false
+      foreach ($t in @($fl[$n] | Where-Object { $_ })) { if ($hit) { break }; foreach ($q in $pp) { if (PathsMeet $q[0] $t) { $out.Add("IDLE $n parallel-files $($q[1])"); $hit = $true; break } } }
+      if ($hit) { continue }
+      $pk.Add($n); $free--; if (-not $hasf[$n]) { $anyf = $true }
+      foreach ($t in @($fl[$n] | Where-Object { $_ })) { $pp.Add(@($t, $n)) }
+    }
+    if (-not $pk.Count) { $nx = $null }
+  }
   if ($asks -ceq 'live' -and $openk) { $v = 'ASK' } elseif ($null -ne $nx) { $v = 'NEXT' } elseif ($unb) { $v = 'UNBLOCK' }
   elseif ($openk) { $v = 'ASK' } elseif ($nf) { $v = 'WAIT' } elseif ($nbk) { $v = 'BLOCKED' } else { $v = 'FINAL' }
   # The hold gates dispatch, not questions: ASK and UNBLOCK go on under it.
   if ($hold -and $hold -ne '-' -and $v -ne 'ASK' -and $v -ne 'UNBLOCK') { "HOLD $hold" }
+  elseif ($v -eq 'NEXT' -and $pk.Count) { foreach ($k in $pk) { "NEXT $k $($code[$k])" } }
   elseif ($v -eq 'NEXT') { "NEXT $nx $($code[$nx])" }
   elseif ($v -eq 'ASK') { "ASK $openk - open decisions to ask in one batch: read references/marathon.md, The end batch" }
   elseif ($v -eq 'UNBLOCK') { foreach ($u in $unb) { "UNBLOCK $u - answered, not yet re-planned: references/marathon.md, Unblock" } }
@@ -1511,7 +1606,20 @@ function ChainScan([switch]$NextOnly) {
   $out
 }
 
+# F37: how many stages may be in flight at once - 2 below 50% of the 5-hour
+# window, 1 at or above it or when usage cannot be read; RELAY_CHAIN_PARALLEL
+# overrides.
+function ParallelCap($d = $null) {
+  if ($env:RELAY_CHAIN_PARALLEL) {
+    if ($env:RELAY_CHAIN_PARALLEL -notmatch '^\d+$' -or [int]$env:RELAY_CHAIN_PARALLEL -lt 1) { Die "RELAY_CHAIN_PARALLEL='$($env:RELAY_CHAIN_PARALLEL)' is not a whole number of at least 1" }
+    return [int]$env:RELAY_CHAIN_PARALLEL
+  }
+  if (-not $d) { $d = ChainDecide (LevelLine) }
+  if ($d -match '^RELEASE (\S+)$') { if ([double]$Matches[1] -lt 50) { return 2 } }
+  1
+}
 function DoChainNext {
+  $script:ScanAll = [bool]$All; $script:ScanCap = if ($All) { ParallelCap } else { 1 }
   NeedRun
   if (-not (HasChain)) { Die "no ## Chain section in $Run - chain next reads a chain" }
   $null = HdrParts
@@ -1896,10 +2004,15 @@ function ChainSelftest($d) {
 
   # F31 review: the checks and the claim are one lock hold. Two processes
   # dispatching one stage at once -> exactly one 0 and one 2, one block.
+  # F37 refuses a stage beside in-flight stages it may share files with; this
+  # race is about the claim, so stages 1-2 read as landed while it runs.
+  $r12 = @{}; foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { $rn = RowNum $l; if ($rn -eq [int]$s1 -or $rn -eq [int]$s2) { $r12[$rn] = $l } }
+  WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { $rn = RowNum $_; if ($null -ne $rn -and $r12.ContainsKey($rn)) { $c = $_ -split '\|'; if ($c[3].Trim() -ceq '~') { $c[3] = ' x ' }; $c -join '|' } else { $_ } })
   $pa = Spawn "-Mode chain -Action dispatch -N $s3 -Driver @cc-b -Run `"$Run`""
   $pb = Spawn "-Mode chain -Action dispatch -N $s3 -Driver @cc-b -Run `"$Run`""
   $ra = Reap $pa; $rb = Reap $pb
   if ((@($ra, $rb) | Sort-Object) -join ',' -ne '0,2') { Die "chain dispatch: two parallel dispatches of one stage exited $ra and $rb, not 0 and 2" }
+  WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { $rn = RowNum $_; if ($null -ne $rn -and $r12.ContainsKey($rn)) { $r12[$rn] } else { $_ } })
   if (@(Select-String -Path $Run -Pattern "^### stage $s3 - ").Count -ne 1) { Die "chain dispatch: two parallel dispatches wrote two In-flight blocks" }
   # Same for plan: two processes planning one stage -> one code in the cell.
   $s5 = [int](DoAdd 'F9 race')
@@ -1965,9 +2078,10 @@ function ChainSelftest($d) {
   # breaks it and every add lands - a lost row means two held it at once.
   [IO.File]::WriteAllText("$Run.lock", "99999999 ps1`n"); (Get-Item -LiteralPath "$Run.lock").LastWriteTime = $old
   $ps = @(1..6 | ForEach-Object { Spawn "-Mode add -Title `"A115 race $_`" -Run `"$Run`"" })
-  $bad = @($ps | ForEach-Object { Reap $_ } | Where-Object { $_ -ne 0 }).Count
+  $errs = @(); foreach ($q in $ps) { $null = $q.StandardOutput.ReadToEnd(); $e = $q.StandardError.ReadToEnd(); $q.WaitForExit(); if ($q.ExitCode -ne 0) { $errs += "exit $($q.ExitCode): $($e.Trim())" } }
+  $bad = $errs.Count
   $n = @(Select-String -Path $Run -Pattern '^\| \d+ \| A115 race [1-6] \|').Count
-  if ($bad -ne 0 -or $n -ne 6) { Die "lock race: $bad of 6 callers failed, $n of 6 rows landed" }
+  if ($bad -ne 0 -or $n -ne 6) { Die "lock race: $bad of 6 callers failed, $n of 6 rows landed: $($errs -join ' / ')" }
   if (Get-ChildItem -Path (Split-Path $Run) -Filter "$(Split-Path -Leaf $Run).lock*") { Die "lock race: left a lock or a broken lock behind" }
   # F31 review 2: a hand-mangled Chain header (4-space separators) is left
   # alone by the driver's heartbeat - row stamped, no throw, header unchanged.
@@ -2051,13 +2165,14 @@ function ChainSelftest($d) {
     $oldRun = $env:RELAY_RUN; $env:RELAY_RUN = $Run.Replace('\', '/')
     $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     try {
-      $xc = (& $shExe.Source $shScript chain plan $xs --prompt-file $p1.Replace('\', '/') 2>$null | Select-Object -Last 1)
+      # Disjoint files: F37 runs nothing beside an in-flight stage with unknown files.
+      $xc = (& $shExe.Source $shScript chain plan $xs --prompt-file $p1.Replace('\', '/') --files a.py 2>$null | Select-Object -Last 1)
       if ("$xc" -cnotmatch '^[A-Z0-9]{4}$') { Die "cross: sh chain plan gave '$xc'" }
       SetLevel 'src=claude-code 5h=40 7d=10 ctx=5 max=40'; $script:Driver = '@cc-x'
       $out = @(DoChainDispatch $xs)
       if ($out[0] -ne $xc -or $out[1] -cne $want1) { Die "cross: ps did not read the sh-planned block verbatim" }
       # Stage two is planned too, so the hold's next= (chain next's NEXT) names it.
-      $null = (& $shExe.Source $shScript chain plan ($xs + 1) --prompt-file $p1.Replace('\', '/') 2>$null)
+      $null = (& $shExe.Source $shScript chain plan ($xs + 1) --prompt-file $p1.Replace('\', '/') --files b.py 2>$null)
       $script:Pct = '84'; $script:Next = ''; DoChainHold | Out-Null
       WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { $_ -replace 'hold: \S+ ', 'hold: 2026-01-01T00:00Z ' })
       $env:RELAY_LEVEL_CMD = "echo 'src=claude-code 5h=84 7d=10 ctx=5 max=84'"
@@ -2666,6 +2781,67 @@ function DoSelftest {
       if ((Test-Path "$d6/TICKETS.md.lock") -or (Test-Path "$reg.lock")) { Die "F36: a lock was left behind" }
     } finally { $env:RELAY_LEVEL_CMD = $svl }
 
+    # F37: four stages - a.py, b.py, a.py again, c.py. -All at cap 2 offers the
+    # first two and idles c on slots; at cap 3 it idles the second a.py on the
+    # first; two are in flight at once, the second in its own worktree; chain
+    # merge brings a clean stage back, a conflicting one exits 3 with the run
+    # branch untouched. The cap follows usage.
+    $d7 = (Join-Path $d 'par') -replace '\\', '/'
+    New-Item -ItemType Directory -Force $d7 | Out-Null; G init -q $d7; G -C $d7 commit -q --allow-empty -m base
+    $svl = $env:RELAY_LEVEL_CMD; $env:RELAY_LEVEL_CMD = "echo 'src=codex 5h=10 7d=10 ctx=- max=10'"
+    function R7([string[]]$a) { Push-Location $d7; $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+      try { $o = & powershell @me6 @a 2>&1 | ForEach-Object { "$_" } | Out-String; [pscustomobject]@{ rc = $LASTEXITCODE; out = $o } } finally { $ErrorActionPreference = $prev; Pop-Location } }
+    try {
+      $env:RELAY_WORKTREE = 'on'
+      try { $o = R7 @('-Mode', 'init', '-Plan', 'T.md', '-Title', 'par', '-Stages', 'P a,P b,P a2,P c') } finally { $env:RELAY_WORKTREE = 'off' }
+      if ($o.rc -ne 0) { Die "F37: init: $($o.out)" }
+      $r7 = @(Get-ChildItem "$d7/.skillator" -Filter 'run-*-par.md')[0].FullName; $rwt = HdrField $r7 'worktree'
+      if (-not (Test-Path $rwt)) { Die "F37: no run worktree" }
+      $p1 = & $num $r7 'P a'; $p2 = & $num $r7 'P b'; $p3 = & $num $r7 'P a2'; $p4 = & $num $r7 'P c'
+      [IO.File]::WriteAllText("$d7/p", "x`n")
+      foreach ($pl in @(@($p1, 'a.py'), @($p2, 'b.py'), @($p3, 'a.py'), @($p4, 'c.py'))) {
+        $o = R7 @('-Mode', 'chain', '-Action', 'plan', '-N', $pl[0], '-PromptFile', "$d7/p", '-Files', $pl[1], '-Run', $r7); if ($o.rc -ne 0) { Die "F37: plan $($pl[0]): $($o.out)" } }
+      $env:RELAY_CHAIN_PARALLEL = '2'
+      try { $o = R7 @('-Mode', 'chain', '-Action', 'next', '-All', '-Run', $r7) } finally { $env:RELAY_CHAIN_PARALLEL = $null }
+      if (@([regex]::Matches($o.out, '(?m)^NEXT ')).Count -ne 2 -or $o.out -notmatch "(?m)^NEXT $p1 " -or $o.out -notmatch "(?m)^NEXT $p2 " -or $o.out -notmatch "(?m)^IDLE $p4 slots\s*$") { Die "F37: -All at cap 2: $($o.out)" }
+      $env:RELAY_CHAIN_PARALLEL = '3'
+      try { $o = R7 @('-Mode', 'chain', '-Action', 'next', '-All', '-Run', $r7) } finally { $env:RELAY_CHAIN_PARALLEL = $null }
+      if (@([regex]::Matches($o.out, '(?m)^NEXT ')).Count -ne 3 -or $o.out -notmatch "(?m)^IDLE $p3 parallel-files $p1\s*$") { Die "F37: -All at cap 3: $($o.out)" }
+      $svr = $script:Run; $script:Run = $r7
+      try {
+        $env:RELAY_LEVEL_CMD = "echo 'src=codex 5h=60 7d=10 ctx=- max=60'"; $c1 = ParallelCap
+        $env:RELAY_LEVEL_CMD = "echo 'src=codex 5h=10 7d=10 ctx=- max=10'"; $c2 = ParallelCap
+        $env:RELAY_LEVEL_CMD = "echo nothing"; $c3 = ParallelCap
+      } finally { $script:Run = $svr; $env:RELAY_LEVEL_CMD = "echo 'src=codex 5h=10 7d=10 ctx=- max=10'" }
+      if ($c1 -ne 1 -or $c2 -ne 2 -or $c3 -ne 1) { Die "F37: the cap does not follow usage ($c1 $c2 $c3)" }
+      $o = R7 @('-Mode', 'chain', '-Action', 'dispatch', '-N', $p1, '-Driver', '@p', '-Run', $r7); if ($o.rc -ne 0) { Die "F37: dispatch ${p1}: $($o.out)" }
+      $o = R7 @('-Mode', 'chain', '-Action', 'dispatch', '-N', $p2, '-Driver', '@p', '-Run', $r7); if ($o.rc -ne 0) { Die "F37: dispatch $p2 beside ${p1}: $($o.out)" }
+      $svr = $script:Run; $script:Run = $r7
+      try { $s1st = RowCellN $p1 3; $s2st = RowCellN $p2 3; $w1 = InflightField $p1 'worktree'; $sw2 = InflightField $p2 'worktree' } finally { $script:Run = $svr }
+      if ($s1st -cne '~' -or $s2st -cne '~') { Die "F37: two stages are not in flight at once" }
+      if ($w1 -or -not $sw2 -or -not (Test-Path $sw2)) { Die "F37: the second stage has no worktree of its own" }
+      if ((R7 @('-Mode', 'chain', '-Action', 'dispatch', '-N', $p3, '-Driver', '@p', '-Run', $r7)).rc -ne 2) { Die "F37: a stage sharing a.py with one in flight dispatched" }
+      $env:RELAY_CHAIN_PARALLEL = '2'
+      try { $o = R7 @('-Mode', 'chain', '-Action', 'next', '-All', '-Run', $r7) } finally { $env:RELAY_CHAIN_PARALLEL = $null }
+      if ($o.out -notmatch '(?m)^WAIT 2 ') { Die "F37: two in flight at cap 2 is not WAIT: $($o.out)" }
+      [IO.File]::WriteAllText("$sw2/b.py", "b`n"); G -C $sw2 add b.py; G -C $sw2 commit -q -m 'stage b'
+      $env:GIT_AUTHOR_NAME = 't'; $env:GIT_AUTHOR_EMAIL = 't@t'; $env:GIT_COMMITTER_NAME = 't'; $env:GIT_COMMITTER_EMAIL = 't@t'
+      try {
+        $o = R7 @('-Mode', 'chain', '-Action', 'merge', '-N', $p2, '-Run', $r7); if ($o.rc -ne 0) { Die "F37: a clean stage did not merge: $($o.out)" }
+        if (-not (Test-Path "$rwt/b.py") -or (Test-Path $sw2)) { Die "F37: merge did not land b.py on the run branch or left the stage worktree" }
+        $sha = @(GitOut @('-C', $rwt, 'rev-parse', '--short', 'HEAD'))[0]
+        $o = R7 @('-Mode', 'stage', '-N', $p2, '-State', 'x', '-Landed', $sha, '-Run', $r7); if ($o.rc -ne 0) { Die "F37: land ${p2}: $($o.out)" }
+        $o = R7 @('-Mode', 'chain', '-Action', 'dispatch', '-N', $p4, '-Driver', '@p', '-Run', $r7); if ($o.rc -ne 0) { Die "F37: dispatch ${p4}: $($o.out)" }
+        $svr = $script:Run; $script:Run = $r7; try { $sw4 = InflightField $p4 'worktree' } finally { $script:Run = $svr }
+        if (-not $sw4 -or -not (Test-Path $sw4)) { Die "F37: no worktree for $p4" }
+        [IO.File]::WriteAllText("$sw4/a.py", "y`n"); [IO.File]::WriteAllText("$sw4/c.py", "c`n"); G -C $sw4 add a.py c.py; G -C $sw4 commit -q -m 'stage c, strays into a.py'
+        [IO.File]::WriteAllText("$rwt/a.py", "x`n"); G -C $rwt add a.py; G -C $rwt commit -q -m 'stage a'
+        $h7 = @(GitOut @('-C', $rwt, 'rev-parse', 'HEAD'))[0]
+        $o = R7 @('-Mode', 'chain', '-Action', 'merge', '-N', $p4, '-Run', $r7)
+        if ($o.rc -ne 3 -or @(GitOut @('-C', $rwt, 'rev-parse', 'HEAD'))[0] -ne $h7 -or (Test-Path "$rwt/.git/MERGE_HEAD") -or @(GitOut @('-C', $rwt, 'status', '--porcelain')).Count) { Die "F37: a conflicting merge did not exit 3 with the run branch untouched (rc $($o.rc)): $($o.out)" }
+      } finally { foreach ($k in 'GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL') { Set-Item "env:$k" $null } }
+    } finally { $env:RELAY_LEVEL_CMD = $svl }
+
     ChainSelftest $d
     MarathonSelftest $d
     "ok"
@@ -2699,6 +2875,7 @@ try {
         'status'   { DoChainStatus }
         'decide'   { ChainDecide (LevelLine) }
         'next'     { DoChainNext }
+        'merge'    { DoChainMerge $N }
         'edge'     { DoChainEdge $N }
       }
     }
