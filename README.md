@@ -353,6 +353,9 @@ Deactivating is deleting `.skillator/grayskull.md`.
   components. On Claude Code it is a private artifact that can take answers back;
   elsewhere a local Mermaid HTML page plus ASCII. It draws and never answers,
   rules or asks - the questions stay `relay-morpheus`'s. Say "Help me, Obi-Wan".
+  With several decisions to make, it builds an offline decision wizard: one
+  decision per step, the recommendation shown but never pre-selected, drafts,
+  review and an owner-finalized JSON that goes back into the run as answers.
 
 - **remote-cerebro** — a phone into a running coding CLI: codex, cursor-agent, pi or
   gemini, driven over Telegram (or a local `file` channel for tests) while you are

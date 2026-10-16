@@ -9,6 +9,12 @@
 //           Artifact tool; default .skillator/holo/<RUN-n>.html
 //   node holo.mjs [run] [--design <file>] --ascii      -> the same, for a terminal
 //   node holo.mjs --design <file> [--html|--ascii]     -> design components only
+//   node holo.mjs [run] --wizard [--out <path>]        -> the decision wizard (F42): one
+//           open decision per step, offline; default .skillator/holo/<RUN-n>.wizard.html
+//   node holo.mjs --decisions <set.json> [--out <path>] -> the same wizard for a
+//           holo-decisions/1 set (decisions that are not a relay run's)
+//   node holo.mjs --answers <final.json>               -> the finalized export as
+//           `relay-morpheus.sh answer` lines (printed, never run)
 //   node holo.mjs --fixture <DIR>                      -> the RED/GREEN fixture repo
 //   node holo.mjs --selftest
 //
@@ -25,6 +31,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { setFromRun, checkSet, wizardPage, answersToCommands } from "./wizard.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -713,6 +720,9 @@ function parseArgs(argv) {
     const val = () => { if (i + 1 >= argv.length || argv[i + 1].startsWith("--")) throw new Error(`${a} needs a value`); return argv[++i]; };
     if (a === "--ascii") o.mode = "ascii";
     else if (a === "--html") o.mode = "html";
+    else if (a === "--wizard") o.mode = "wizard";
+    else if (a === "--decisions") { o.mode = "wizard"; o.decisions = val(); }
+    else if (a === "--answers") o.answers = val();
     else if (a === "--out") o.out = val();
     else if (a === "--design") o.design = val();
     else if (a === "--root") o.root = val();
@@ -726,12 +736,42 @@ function parseArgs(argv) {
   return o;
 }
 
+// Generated output: .skillator/holo/ carries a `*` .gitignore, so it never lands in a commit.
+async function writeGenerated(root, out, text) {
+  await mkdir(dirname(out), { recursive: true });
+  const gen = join(root, ".skillator", "holo");
+  if (dirname(out).toLowerCase() === gen.toLowerCase() && !existsSync(join(gen, ".gitignore"))) await writeFile(join(gen, ".gitignore"), "*\n");
+  await writeFile(out, text, "utf8");
+}
+
 async function main(argv) {
   const o = parseArgs(argv);
   if (o.help) { console.log((await readFile(fileURLToPath(import.meta.url), "utf8")).split("\n").slice(1, 15).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); return; }
   if (o.selftest) return selftest();
   if (o.fixture) { console.log(await buildFixture(o.fixture)); return; }
+  if (o.answers) {
+    const r = answersToCommands(JSON.parse(await readFile(o.answers, "utf8")));
+    console.log("# POSIX sh lines (Git Bash on Windows) - read them, then run them yourself");
+    for (const c of r.commands) console.log(c);
+    for (const x of r.review) console.log(`# review: ${x}`);
+    for (const x of r.open) console.log(`# still open: ${x}`);
+    return;
+  }
   const root = findRoot(o.root ?? process.cwd());
+  if (o.mode === "wizard") {
+    let set, stem;
+    if (o.decisions) { set = JSON.parse(await readFile(o.decisions, "utf8")); stem = String(set && set.id || "decisions"); }
+    else {
+      const runPath = await resolveRun(o.pos[0], root);
+      const run = parseRun(await readFile(runPath, "utf8"));
+      if (!run.id) throw new Error(`${runPath}: no '# RUN-<n> - <title>' line - not a relay run file`);
+      set = setFromRun(run, relative(root, runPath).replace(/\\/g, "/")); stem = run.id;
+    }
+    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem.replace(/[^A-Za-z0-9_.-]/g, "-")}.wizard.html`));
+    await writeGenerated(root, out, wizardPage(set));
+    console.log(`holo: wizard ${set.id}, ${set.decisions.length} decision${set.decisions.length === 1 ? "" : "s"} to answer, ${(set.settled || []).length} settled -> ${out}`);
+    return;
+  }
   let run = null, runPath = "";
   if (o.pos.length || !o.design) {
     runPath = await resolveRun(o.pos[0], root);
@@ -746,10 +786,7 @@ async function main(argv) {
   const r = render(run, opts);
   const stem = run ? run.id : basename(o.design).replace(/\.md$/i, "");
   const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}${o.mode === "html" ? "" : ".artifact"}.html`));
-  await mkdir(dirname(out), { recursive: true });
-  const gen = join(root, ".skillator", "holo");
-  if (dirname(out) === gen && !existsSync(join(gen, ".gitignore"))) await writeFile(join(gen, ".gitignore"), "*\n"); // generated output, never committed
-  await writeFile(out, o.mode === "html" ? standalonePage(r) : artifactPage(r), "utf8");
+  await writeGenerated(root, out, o.mode === "html" ? standalonePage(r) : artifactPage(r));
   const nq = run ? run.qs.filter((q) => ASKABLE.has(q.state)).length : 0;
   console.log(`holo: ${run ? `${run.id} ${run.stages.length} stages, ${nq} open decision${nq === 1 ? "" : "s"}` : "design only"}` +
     `${design ? `, ${design.parts.length} design sections` : ""} -> ${out}` +
@@ -837,6 +874,49 @@ function selftest() {
   const hdr = parseRun("# RUN-6 - hdr\n\n## Decisions\n### Q1 open\nquestion: first\n### Q2 answered 2026-09-01T10:30Z by-user\nquestion: second\n");
   ok(hdr.qs.length === 1 && hdr.qs[0].f.question === "first", "an unreadable Q header never merges into the Q above");
   ok(parseArgs(["--html", "RUN-12"]).pos[0] === "RUN-12", "--html takes no path; the run stays the run");
+
+  // 6. F42 wizard: only open/asked decisions are asked; the rest is settled
+  const set = setFromRun(run, "fixture-all-states.md");
+  ok(set.decisions.map((x) => x.id).join() === "Q1,Q2", "wizard: asks the open and asked Qs only", set.decisions.map((x) => x.id));
+  ok(set.settled.length === 5, "wizard: answered, ruled, moot, same-as, replanned are settled", set.settled.length);
+  ok(set.decisions.every((x) => x.options.filter((y) => y.recommended).length <= 1), "wizard: one recommendation at most");
+  const wp = wizardPage(set);
+  ok(/^<!doctype html>/.test(wp) && wp.includes('name="viewport"'), "wizard: standalone page");
+  ok(!/<script[^>]+src=|<link[^>]+href=|https?:\/\//i.test(wp), "wizard: offline - no external script, style or URL");
+  ok(!/\binnerHTML\b|outerHTML|insertAdjacentHTML|document\.write/.test(wp), "wizard: user text never parsed as HTML");
+  const evil = { schema: "holo-decisions/1", id: "X", title: "</script><b>", decisions: [{ id: "Q1", question: "</script><script>alert(1)</script>", options: [{ id: "a", label: "<img src=x>" }] }] };
+  const ep = wizardPage(evil);
+  ok((ep.match(/<\/script>/g) || []).length === 2, "wizard: embedded set cannot close its script tag", (ep.match(/<\/script>/g) || []).length);
+  ok(!/"checked"|checked:\s*true/.test(wp), "wizard: nothing pre-selected");
+  let threw = false; try { checkSet({ schema: "holo-decisions/1", id: "X", decisions: [{ id: "Q1", question: "q", options: [{ id: "custom", label: "c" }] }] }); } catch { threw = true; }
+  ok(threw, "wizard: a reserved option id is refused");
+  threw = false; try { checkSet({ schema: "holo-decisions/1", id: "X", decisions: [{ id: "Q1", question: "q", options: [{ id: "a", label: "a", recommended: true }, { id: "b", label: "b", recommended: true }] }] }); } catch { threw = true; }
+  ok(threw, "wizard: two recommendations are refused");
+  // 7. F42 answers back: finalized only, single-quoted, custom flagged
+  const fin = { schema: "holo-answers/1", set: "RUN-9", owner: "Owner", reviewed: true, finalizedAt: "2026-10-16T10:00:00Z", answers: [
+    { id: "Q1", status: "answered", choice: { id: "o1", label: "Keep it's $(rm -rf /) `x`" }, notes: "" },
+    { id: "Q2", status: "custom-review-required", choice: { id: "custom" }, custom: "do B then C", notes: "by Friday" },
+    { id: "Q3", status: "deferred", choice: { id: "defer" }, clarification: "ask legal" }] };
+  const cmds = answersToCommands(fin);
+  ok(cmds.commands[0] === "sh relay-morpheus.sh 9 answer Q1 'Keep it'\\''s $(rm -rf /) `x`'", "answers: run id named, single quotes, a quote escaped, $() inert", cmds.commands[0]);
+  ok(cmds.commands[1] === "sh relay-morpheus.sh 9 answer Q2 'do B then C - by Friday'" && cmds.review.length === 1, "answers: custom passed verbatim and flagged for review", cmds);
+  const odd2 = answersToCommands({ ...fin, answers: [
+    { id: "Q1", status: "answered", choice: { id: "custom" }, custom: "line one\nline two", notes: "" },
+    { id: "Q2", status: "answered", choice: { id: "defer" }, clarification: "" },
+    { id: "Q3", status: "answered", choice: { id: "o1", label: "--ruled" } },
+    { id: "Q4", status: "answered", choice: { id: "custom" }, custom: "" }] });
+  ok(odd2.commands.length === 1 && odd2.commands[0].endsWith("'line one line two'"), "answers: text folded onto one line", odd2.commands);
+  ok(odd2.open.length === 3, "answers: status recomputed from the choice; flag-like and empty text held back", odd2.open);
+  threw = false; try { answersToCommands({ ...fin, set: "my-review" }); } catch { threw = true; }
+  ok(threw, "answers: a set that is not a relay run is refused");
+  threw = false; try { checkSet({ schema: "holo-decisions/1", id: "X", decisions: [{ id: "__proto__", question: "q", options: [] }] }); } catch { threw = true; }
+  ok(threw, "wizard: a prototype name is not a decision id");
+  threw = false; try { checkSet({ schema: "holo-decisions/1", id: "X", decisions: [{ id: "Q1", question: "q", options: [], sources: "a.md" }] }); } catch { threw = true; }
+  ok(threw, "wizard: sources must be a list of text");
+  ok(wizardPage({ schema: "holo-decisions/1", id: "X", decisions: [{ id: "Q1", question: "free text only", options: [] }] }).includes("free text only"), "wizard: a decision with no options still renders (custom and discuss-first)");
+  ok(cmds.open.length === 1 && cmds.open[0].startsWith("Q3: deferred"), "answers: a deferred decision stays open", cmds.open);
+  threw = false; try { answersToCommands({ ...fin, finalizedAt: null }); } catch { threw = true; }
+  ok(threw, "answers: a draft is refused");
 
   if (fails) { console.error(`selftest: ${fails} failed`); process.exitCode = 1; } else console.log("selftest: ok");
 }
