@@ -7,12 +7,16 @@
 #
 #   relay-morpheus.sh list                             every run + how to resume it
 #   relay-morpheus.sh resume <id>                      what a fresh session needs
-#   relay-morpheus.sh init <plan> <title> <stage>...   create the run file
+#   relay-morpheus.sh init [--here] <plan> <title> <stage>...
+#                                                      create the run file, and the run's own
+#                                                      git worktree + branch (F35; --here: none)
 #   relay-morpheus.sh add <stage>                      append a row, print its number
 #   relay-morpheus.sh stage <n> <state> [owner] [landed]
 #   relay-morpheus.sh heartbeat <n>
 #   relay-morpheus.sh status
 #   relay-morpheus.sh orphans [minutes]                default 20
+#   relay-morpheus.sh board <ID> <mark>               flip a ticket's box in the main checkout's
+#                                                      TICKETS.md, under its lock (F36; mark: ' ' ~ x ! > -)
 #   relay-morpheus.sh selftest
 #
 # Chain (F31) - stages that are ticket workflows, each started by the last:
@@ -23,6 +27,8 @@
 #   relay-morpheus.sh chain wait [--interval 600] [--max 19800] [--for 1500]
 #   relay-morpheus.sh chain status | decide
 #   relay-morpheus.sh chain next                       NEXT n CODE | HOLD | ASK k | UNBLOCK Qk | WAIT n | BLOCKED n | FINAL, then IDLE lines
+#        (F36: `chain dispatch` leases the stage's files across runs - LEASED <path> RUN-m stage s, exit 2,
+#        when another run's live stage holds one; `chain next` prints IDLE <n> leased <path> RUN-m stage s)
 #   relay-morpheus.sh chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
 #
 # Marathon (F33, chain runs only) - questions only the user can answer are
@@ -52,9 +58,28 @@ set -e
 
 RUN="${RELAY_RUN:-}"
 DIR="${RELAY_DIR:-.skillator}"
+# F35 (D1): one ledger view for every session - from a linked worktree (a run's
+# own, say) the run files are the MAIN checkout's .skillator, never a copy on
+# the run branch. One git call; RELAY_DIR overrides.
+main_of() {   # the main checkout's root, from any worktree of it; fails outside git
+  _mc=$(git ${1:+-C "$1"} rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+  case "$_mc" in */.git) printf '%s' "${_mc%/.git}" ;; *) return 1 ;; esac
+}
+if [ -z "${RELAY_DIR:-}" ]; then
+  if _rp=$(git rev-parse --path-format=absolute --git-common-dir --show-toplevel 2>/dev/null); then
+    _rc=${_rp%%"
+"*}; _rt=${_rp#*"
+"}   # a literal newline: $(printf) would strip it
+    case "$_rc" in */.git) [ "${_rc%/.git}" = "$_rt" ] || DIR="${_rc%/.git}/.skillator" ;; esac
+  elif git rev-parse --git-dir >/dev/null 2>&1; then
+    echo "relay-morpheus.sh: git older than 2.31 (no --path-format) - one ledger per worktree and no run worktrees" >&2
+  fi
+fi
 # A failure while holding the run lock releases it on the way out; otherwise
 # the next call spins until LOCK_STALE_S judges it dead.
-die() { [ -z "${LOCK:-}" ] || unlock; echo "FAIL: $*" >&2; exit 1; }
+die() { [ -z "${LOCK:-}" ] || unlock; lease_giveback; echo "FAIL: $*" >&2; exit 1; }
+# F36: a lease taken for a dispatch that then refuses or dies is given back.
+lease_giveback() { [ -z "${LEASED_N:-}" ] || { _gn=$LEASED_N; LEASED_N=; lease_locked lease_release_ "$(run_tag)" "$_gn" || :; }; }
 now() { date -u +%Y-%m-%dT%H:%MZ; }
 
 # A run id is a short number a human can say out loud to another session -
@@ -256,7 +281,7 @@ lock_break() {   # <holder judged>
 # Spins on the exclusive create; the holder is read and judged every 10th spin
 # only (a fork costs ~100 ms on MSYS).
 lock() {
-  lock_id; LOCK="$RUN.lock"; _li=0
+  lock_id; LOCK="${1:-$RUN.lock}"; _li=0
   until ( set -C; echo "$LOCK_ME" > "$LOCK" ) 2>/dev/null; do
     _li=$((_li+1))
     if [ $((_li % 10)) = 1 ] && _lc=$(lock_read "$LOCK"); then
@@ -295,10 +320,11 @@ stamp_updated() {
 }
 
 cmd_init() {
-  plan="$1"; title="$2"; shift 2
+  here=0; if [ "${1:-}" = --here ]; then here=1; shift; fi
+  plan="${1:-}"; title="${2:-}"; [ "$#" -ge 2 ] && shift 2 || set --
   [ -n "$RUN" ] || RUN=""
   [ -n "$plan" ] && [ -n "$title" ] && [ "$#" -gt 0 ] \
-    || die "usage: relay-morpheus.sh init <plan> <title> <stage>..."
+    || die "usage: relay-morpheus.sh init [--here] <plan> <title> <stage>..."
   # A `|` in a stage name adds a column, and every later read is positional -
   # the state would be written into the name cell and the sha into heartbeat,
   # silently, with no error anywhere. Checked before any number is reserved.
@@ -318,11 +344,31 @@ cmd_init() {
   # Stage numbers continue after the highest any run has used, so "stage 24"
   # names one stage in the whole project, not one per run.
   nums=$(alloc S "$#" "$(dirname "$RUN")") || exit 1
+  # F35: the run's own worktree and branch, so its stages commit there and
+  # never in an index another run shares. Off with --here, outside git, before
+  # the first commit, or RELAY_WORKTREE=off.
+  wt=; br=
+  # It branches from the caller's HEAD - the branch the user is on - and an
+  # uncommitted plan file is copied in, so the stages can read what they build.
+  if [ "$here" = 0 ] && [ "${RELAY_WORKTREE:-on}" != off ] && _mr=$(main_of) \
+     && _hd=$(git rev-parse -q --verify HEAD 2>/dev/null); then
+    br="run/RUN-$id-$(slug "$title")"
+    wt="$(dirname "$_mr")/$(basename "$_mr").runs/RUN-$id-$(slug "$title")"
+    git -C "$_mr" worktree add -q -b "$br" "$wt" "$_hd" >/dev/null 2>&1 \
+      || die "could not create the run worktree $wt on branch $br (use --here to run in this checkout)"
+    if [ -f "$plan" ] && [ -n "$(git status --porcelain -- "$plan" 2>/dev/null)" ]; then
+      _pr=$(git ls-files --full-name --others --cached -- "$plan" 2>/dev/null | head -1)
+      [ -n "$_pr" ] || _pr=$(git rev-parse --show-prefix 2>/dev/null)$plan
+      mkdir -p "$(dirname "$wt/$_pr")" && cp "$plan" "$wt/$_pr" \
+        && echo "note: $plan is not committed - copied into the run worktree" >&2
+    fi
+  fi
   t=$(now)
   {
     echo "# RUN-$id - $title"
     echo "plan: $plan"
     echo "started: $t   updated: $t"
+    [ -z "$wt" ] || { echo "worktree: $wt"; echo "branch: $br"; }
     echo
     echo "## Stages"
     echo "| # | stage | state | owner | heartbeat | landed |"
@@ -340,6 +386,26 @@ cmd_init() {
   # The whole point of the id: this line is what gets pasted into another
   # session, or said out loud. A path is not a sentence.
   echo "hand this to any session:  continue RUN-$id"
+  [ -z "$wt" ] || echo "stages work and commit in:  $wt  (branch $br)"
+}
+
+# F35: a run's worktree, recreated from its branch when the directory is gone
+# (deleted, another machine). Prints the path; nothing for a --here run.
+hdr_field() { sed -n '/^## /q; s/^'"$2"': //p' "$1" | head -1; }   # <run file> <key>, header only
+worktree_of() {   # <run file>
+  _w=$(hdr_field "$1" worktree); _b=$(hdr_field "$1" branch)
+  [ -n "$_w" ] || return 0
+  # Recreated only while the run has open work: a finished run's branch is
+  # merged, and a fresh checkout of it helps nobody. The prune drops the
+  # missing worktree's registration, which `worktree add` would refuse.
+  if [ ! -d "$_w" ] && [ -n "$_b" ] && _mr=$(main_of) \
+     && awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4; gsub(/ /,"",s); if (s != "x" && s != ">") o=1} END{exit !o}' "$1"; then
+    git -C "$_mr" worktree prune 2>/dev/null || :
+    if _we=$(git -C "$_mr" worktree add -q "$_w" "$_b" 2>&1); then echo "# worktree recreated from $_b" >&2
+    else printf '%s  (branch %s) - MISSING: git could not recreate it: %s\n' "$_w" "$_b" "$(printf '%s' "$_we" | head -1)"; return 0; fi
+  fi
+  [ -d "$_w" ] || { printf '%s  (branch %s) - MISSING\n' "$_w" "$_b"; return 0; }
+  printf '%s  (branch %s)\n' "$_w" "$_b"
 }
 
 # A stage found mid-run gets its row the same way init's did: the next serial
@@ -391,6 +457,9 @@ cmd_stage() {
   set_row "$n" "$state" "$owner" "$landed" || die "no stage $n in $RUN"
   stamp_updated
   unlock
+  # F36: any state but in flight frees the stage's files (landed, failed,
+  # re-planned, parked, reset). Chain runs only: nothing else takes a lease.
+  if [ "$state" != '~' ] && has_chain; then lease_locked lease_release_ "$(run_tag)" "$n" || :; fi
 }
 
 # Rewrite row <n>'s state/owner/heartbeat/landed. The caller holds the lock;
@@ -434,6 +503,10 @@ cmd_heartbeat() {
   # F31: the driver's own heartbeat keeps its stamp fresh - a live driver in a
   # 40-minute stage is not stale. Anyone else's leaves the stamp alone.
   if is_me; then lock; touch_driver; stamp_updated; unlock; fi
+  if [ "$st" = '~' ] && has_chain && [ -n "$(stage_files "$n")" ]; then
+    _hb=$(lease_locked lease_beat_ "$(run_tag)" "$n") || _hb=
+    [ "$_hb" != 0 ] || echo "WARNING: stage $n holds no lease on its files any more - another run took it as stale and may be editing them; tell the user before landing" >&2
+  fi
 }
 
 # One line per run, newest last, with the sentence that resumes it.
@@ -455,8 +528,10 @@ cmd_list() {
     [ -n "$open" ] && printf '  (stage %s open)' "$open"
     printf '
           plan: %s
-          resume: continue RUN-%s
-' "$plan" "$id"
+' "$plan"
+    wtl=$(hdr_field "$f" worktree)
+    [ -z "$wtl" ] || printf '          worktree: %s\n' "$wtl"
+    printf '          resume: continue RUN-%s\n' "$id"
   done
   [ "$any" = 1 ] || echo "no runs in $DIR"
 }
@@ -469,6 +544,8 @@ cmd_resume() {
   echo "# Read the plan named below, then the ledger, then start at the first"
   echo "# stage that is not x. The In-flight block holds the exact prompt to"
   echo "# redispatch anything that was running."
+  w=$(worktree_of "$f")
+  [ -z "$w" ] || echo "# Stages work and commit in: $w"
   echo
   cat "$f"
 }
@@ -488,6 +565,108 @@ cmd_orphans() {
       echo "stage $num ($name): silent ${a}m (limit ${limit}m) - redispatch from its In-flight block"
     fi
   done
+}
+
+# ---------------------------------------------------------------- leases ----
+# F36: a stage's `files:` are leased across runs at dispatch, in one registry
+# per clone - `<git-common-dir>/skillator/leases`, which every worktree of the
+# clone shares - one tab-separated line per path: `path RUN-n stage driver
+# heartbeat`. A path another run's stage holds with a live heartbeat (younger
+# than RELAY_LEASE_STALE, 20 min) refuses the dispatch; a stale one is taken,
+# with a ruling. Landing, failing or re-planning a stage releases its leases;
+# its heartbeat refreshes them. Paths meet as in chain next: equal, or one a
+# directory of the other. Leases are between runs - stages of one run are
+# kept apart by chain next. Outside git there is no registry and no lease.
+TAB=$(printf '\t')
+run_tag() { echo "RUN-$(id_of "$RUN")"; }
+lease_meet() {
+  [ "$1" = "$2" ] && return 0
+  case "$2" in "$1"/*) return 0 ;; esac
+  case "$1" in "$2"/*) return 0 ;; esac
+  return 1
+}
+# The stage's files: lines from its chain block, normalised as chain next does.
+stage_files() {
+  awk -v n="$1" '
+    function norm(p) { gsub(/\\/, "/", p); sub(/^[ \t]+/, "", p); sub(/[ \t\r]+$/, "", p)
+      while (substr(p, 1, 2) == "./") p = substr(p, 3)
+      while (length(p) > 1 && substr(p, length(p)) == "/") p = substr(p, 1, length(p) - 1); return p }
+    /^## / { sec = $0; cs = 0; next }
+    sec == "## Chain" && /^### / { cs = index($0, " - stage " n " - ") && $0 ~ /^### [A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9] - stage /; inp = 0; next }
+    sec == "## Chain" && cs && !inp { if ($0 == "prompt: |") inp = 1
+      else if (index($0, "files: ") == 1) { m = split(substr($0, 8), w, /,/); for (i = 1; i <= m; i++) { q = norm(w[i]); if (q != "") print q } } }
+  ' "$RUN"
+}
+# lease_locked <fn> <args...>: <fn> with the registry path appended, under the
+# registry's own lock; a run lock the caller holds is kept.
+# Its variables are _q*: lock() and lock_break() use _l* (sh has no `local`).
+lease_locked() {
+  _qg=$(git -C "$(dirname "$RUN")" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
+  mkdir -p "$_qg/skillator" 2>/dev/null || return 0
+  _qsv=$LOCK; LOCK=; lock "$_qg/skillator/leases.lock"
+  _qrc=0; "$@" "$_qg/skillator/leases" || _qrc=$?
+  unlock; LOCK=$_qsv; return $_qrc
+}
+leases_to() { lease_locked lease_foreign_ "$(run_tag)" > "$1" 2>/dev/null || :; }   # <file>: other runs' live leases
+lease_line() { printf '%s\t%s\t%s\t%s\t%s\n' "$@"; }
+# <run> <stage> <driver> <files file> <registry>: prints LEASED ... and returns
+# 2 on a live foreign lease; prints TOOK ... for stale ones it took.
+lease_take_() {
+  _lr=$1 _ls=$2 _ld=$3 _lf=$4 _lreg=$5 _lt=$(now) _lst=${RELAY_LEASE_STALE:-20} _lhit= _ltook=
+  [ -f "$_lreg" ] || : > "$_lreg"
+  : > "$_lreg.new.$$"
+  while IFS="$TAB" read -r lp lr ls ld lh; do
+    [ -n "$lp" ] || continue
+    [ "$lr" = "$_lr" ] && [ "$ls" = "$_ls" ] && continue   # a redispatch replaces its own
+    if [ "$lr" != "$_lr" ]; then
+      _lo=0; while IFS= read -r fp; do lease_meet "$lp" "$fp" && { _lo=1; break; }; done < "$_lf"
+      if [ "$_lo" = 1 ]; then
+        _la=$(age_min "$lh" "$_lt")
+        if [ "$_la" -lt "$_lst" ]; then _lhit="LEASED $lp $lr stage $ls"; break; fi
+        _ltook="${_ltook:+$_ltook; }lease on $lp from $lr stage $ls was ${_la}m stale (limit ${_lst}m), taken"
+        continue
+      fi
+    fi
+    lease_line "$lp" "$lr" "$ls" "$ld" "$lh" >> "$_lreg.new.$$"
+  done < "$_lreg"
+  if [ -n "$_lhit" ]; then rm -f "$_lreg.new.$$"; echo "$_lhit"; return 2; fi
+  while IFS= read -r fp; do lease_line "$fp" "$_lr" "$_ls" "$_ld" "$_lt" >> "$_lreg.new.$$"; done < "$_lf"
+  mv "$_lreg.new.$$" "$_lreg"
+  [ -z "$_ltook" ] || echo "TOOK $_ltook"
+}
+lease_release_() {   # <run> <stage> <registry>
+  [ -f "$3" ] || return 0
+  awk -F "$TAB" -v r="$1" -v s="$2" '!($2 == r && $3 == s)' "$3" > "$3.new.$$" && mv "$3.new.$$" "$3"
+}
+lease_beat_() {   # <run> <stage> <registry>: prints how many leases it refreshed
+  [ -f "$3" ] || { echo 0; return 0; }
+  awk -F "$TAB" -v OFS="$TAB" -v r="$1" -v s="$2" -v t="$(now)" -v c="$3.count.$$" '$2 == r && $3 == s { $5 = t; k++ } { print } END { print k + 0 > c }' "$3" > "$3.new.$$" && mv "$3.new.$$" "$3"
+  cat "$3.count.$$"; rm -f "$3.count.$$"
+}
+lease_foreign_() {   # <run> <registry>: other runs' live leases
+  [ -f "$2" ] || return 0
+  _lt=$(now); _lst=${RELAY_LEASE_STALE:-20}
+  while IFS="$TAB" read -r lp lr ls ld lh; do
+    [ -n "$lp" ] && [ "$lr" != "$1" ] || continue
+    [ "$(age_min "$lh" "$_lt")" -lt "$_lst" ] && lease_line "$lp" "$lr" "$ls" "$ld" "$lh"
+  done < "$2"
+  return 0
+}
+
+# F36 (D1): TICKETS.md is written in the main checkout only, under its own
+# lock - one board, however many run worktrees there are.
+cmd_board() {
+  bid=${1:-}; mk=${2-}
+  [ "$#" = 2 ] || die "usage: relay-morpheus.sh board <ID> <mark>  (mark: ' ' ~ x ! > -)"
+  printf '%s' "$bid" | grep -Eqx '[A-Z]{1,3}[0-9]+[a-z]?' || die "board: '$bid' is not a ticket id"
+  case "$mk" in ' '|'~'|x|'!'|'>'|'-') ;; *) die "board: mark is one of ' ' ~ x ! > -" ;; esac
+  _bm=$(main_of) || _bm=$(pwd); _bf="$_bm/TICKETS.md"
+  [ -f "$_bf" ] || die "board: no $_bf"
+  _bsv=$LOCK; LOCK=; lock "$_bf.lock"
+  if awk -v id="$bid" -v mk="$mk" '!f && substr($0, 1, 3) == "- [" && substr($0, 5, 2) == "] " && substr($0, 7, length(id) + 1) == id " " { $0 = "- [" mk substr($0, 5); f = 1 } { print } END { exit !f }' "$_bf" > "$_bf.tmp.$$"; then
+    mv "$_bf.tmp.$$" "$_bf"; unlock; LOCK=$_bsv
+  else rm -f "$_bf.tmp.$$"; unlock; LOCK=$_bsv; die "board: no ticket $bid in $_bf"; fi
+  echo "$bid [$mk]"
 }
 
 # ------------------------------------------------------------------ chain ----
@@ -511,7 +690,7 @@ WEEKLY_PCT="${RELAY_CHAIN_WEEKLY_PCT:-90}"
 DRIVER_STALE="${RELAY_CHAIN_DRIVER_STALE:-20}"
 SEP='     '
 
-refuse() { [ -z "${LOCK:-}" ] || unlock; echo "REFUSED: $*" >&2; exit 2; }
+refuse() { [ -z "${LOCK:-}" ] || unlock; lease_giveback; echo "REFUSED: $*" >&2; exit 2; }
 is_num() { case "$1" in ''|*[!0-9.]*|.*|*.*.*) return 1 ;; esac; }
 
 # One `level` line from watch-cortana (RELAY_LEVEL_CMD overrides, for tests).
@@ -764,6 +943,30 @@ chain_dispatch() {
   case "$drv" in *' '*|*'|'*) die "chain dispatch: driver tag has a space or a pipe: $drv" ;; esac
   need_run
   dv=$(chain_decide "$(level_line)"); pct=$(echo "$dv" | cut -d' ' -f2)
+  # F36: the stage's files are leased BEFORE the run lock - the registry wait
+  # must never stretch a run-lock hold - and given back if the dispatch is
+  # then refused or dies. A stage with no files: line could touch anything, so
+  # it waits while another run holds any live lease.
+  _dz=; LEASED_N=
+  case "$(row_cell "$n" 4)" in ''|'!') _dp=1 ;; *) _dp= ;; esac
+  if [ -n "$_dp" ] && has_chain && [ -n "$(code_of "$n")" ]; then
+    _df="$RUN.files.$$"; stage_files "$n" > "$_df"
+    if [ -s "$_df" ]; then
+      _dz=$(lease_locked lease_take_ "$(run_tag)" "$n" "$drv" "$_df") || {
+        _drc=$?; rm -f "$_df"
+        [ "$_drc" = 2 ] && refuse "$_dz - another run's live stage holds it; chain next names what can run"
+        die "lease: $_dz"; }
+      LEASED_N=$n
+    else
+      _fz="$RUN.lz.$$"; leases_to "$_fz"
+      if [ -s "$_fz" ]; then
+        _fr=$(head -1 "$_fz" | cut -f2); rm -f "$_fz" "$_df"
+        refuse "stage $n names no files: line, and $_fr holds live leases - plan it with --files, or wait for that run to land"
+      fi
+      rm -f "$_fz"
+    fi
+    rm -f "$_df"
+  fi
   lock
   hdr_check
   c=$(code_of "$n")
@@ -797,6 +1000,7 @@ chain_dispatch() {
             note="${note:+$note; }$c: override: user asked at $pct%" ;;
     UNOBSERVABLE) echo "note: usage unobservable on this host - dispatched with no usage check" >&2 ;;
   esac
+  case "$_dz" in TOOK*) note="${note:+$note; }$c: ${_dz#TOOK }" ;; esac
   name=$(row_cell "$n" 3)
   blk="$RUN.blk.$$"; t=$(now)
   { echo "### stage $n - $name  (dispatched $t, $drv)"
@@ -812,6 +1016,7 @@ chain_dispatch() {
   set_row "$n" '~' "$ow" "" || die "no stage $n in $RUN"
   stamp_updated
   unlock
+  LEASED_N=
   echo "$c"
   block_prompt "$n"
 }
@@ -833,7 +1038,8 @@ chain_hold() {
   hdr_check
   # next= is what `chain next` would dispatch (never a `!` row, never one
   # that waits), read with the hold ignored - a second hold still names it.
-  [ -n "$nx" ] || nx=$(chain_scan next); [ -n "$nx" ] || nx=-
+  if [ -z "$nx" ]; then LEASEF="$RUN.lz.$$"; leases_to "$LEASEF"; nx=$(chain_scan next); rm -f "$LEASEF"; LEASEF=; fi
+  [ -n "$nx" ] || nx=-
   lock
   hdr_check
   old=$(hdr_hold); since=$(now)
@@ -1200,7 +1406,7 @@ q_move() {
 # `chain_scan next` prints only the stage NEXT would name (or nothing), with
 # the hold and the ask order ignored - what `chain hold` writes as next=.
 chain_scan() {
-  awk -v only="${1:-}" '
+  awk -v only="${1:-}" -v lf="${LEASEF:-}" '
     function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
     function norm(p) { gsub(/\\/, "/", p); p = trim(p); while (substr(p, 1, 2) == "./") p = substr(p, 3)
       while (length(p) > 1 && substr(p, length(p)) == "/") p = substr(p, 1, length(p) - 1); return p }
@@ -1263,7 +1469,8 @@ chain_scan() {
       openk = 0; unb = ""; askd = ""
       for (i = 1; i <= nq; i++) { k = ql[i]; if (qs[k] == "open") openk++
         if (qs[k] == "answered" || qs[k] == "ruled") unb = unb " Q" k; if (qs[k] == "asked") askd = askd " Q" k }
-      nx = ""; no = 0; nf = 0; nbk = 0
+      nx = ""; no = 0; nf = 0; nbk = 0; nl = 0
+      if (lf != "") while ((getline lz < lf) > 0) { split(lz, z, "\t"); lp[++nl] = norm(z[1]); lrn[nl] = z[2]; lsn[nl] = z[3] }
       for (r = 1; r <= nr; r++) { n = row[r]; if (!(n in code)) continue; s = st[n]
         if (s == "~") { out[++no] = "IDLE " n " inflight"; nf++; continue }
         if (s == "?") { out[++no] = "IDLE " n " parked"; continue }
@@ -1283,6 +1490,8 @@ chain_scan() {
         waits = 0
         for (i = 1; i <= nq; i++) { k = ql[i]; if ((n, k) in rs) { out[++no] = "IDLE " n " Q" k " " rs[n, k]; waits = 1 } }
         ma = split(af[n], a, " "); for (x = 1; x <= ma; x++) if (!landed(a[x])) { out[++no] = "IDLE " n " - after " a[x]; waits = 1 }
+        if (hasf[n] && nl) { mt = split(fl[n], t, SUBSEP); hit = 0
+          for (y = 2; y <= mt && !hit; y++) for (z2 = 1; z2 <= nl && !hit; z2++) if (meet(lp[z2], t[y])) { out[++no] = "IDLE " n " leased " t[y] " " lrn[z2] " stage " lsn[z2]; waits = 1; hit = 1 } }
         if (s == "" && !waits && (nx == "" || n < nx + 0)) nx = n
         if (s == "" && failbehind(n, 0)) nbk++
       }
@@ -1305,7 +1514,14 @@ chain_next() {
   need_run
   has_chain || die "no ## Chain section in $RUN - chain next reads a chain"
   hdr_check
-  chain_scan
+  # The driver's loop keeps its own in-flight stages' leases fresh: a stage
+  # that runs long without reporting must not look abandoned to other runs.
+  for _ns in $(awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4; gsub(/ /,"",s); if (s == "~") {n=$2; gsub(/ /,"",n); print n}}' "$RUN"); do
+    lease_locked lease_beat_ "$(run_tag)" "$_ns" >/dev/null || :
+  done
+  LEASEF="$RUN.lz.$$"; leases_to "$LEASEF"
+  _cr=0; chain_scan || _cr=$?
+  rm -f "$LEASEF"; LEASEF=; return $_cr
 }
 
 # chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
@@ -1443,7 +1659,8 @@ cmd_chain() {
 }
 
 cmd_selftest() {
-  d=$(mktemp -d); trap 'rm -rf "$d"' EXIT
+  RELAY_WORKTREE=off; export RELAY_WORKTREE; unset RELAY_DIR RELAY_RUN
+  d=$(mktemp -d); d5=; trap 'rm -rf "$d" ${d5:+"$d5"}' EXIT
   # Each scratch dir is its own git repo, so the allocator keeps its counter
   # there and not in whatever repo the selftest was started from.
   git init -q "$d"
@@ -1870,6 +2087,72 @@ chain_selftest() {
   n=$(grep -c '| A115 race [1-6] |' "$RUN" || :)
   [ "$bad" = 0 ] && [ "$n" = 6 ] || die "lock race: $bad of 6 callers failed, $n of 6 rows landed"
   for x in "$RUN".lock*; do [ ! -e "$x" ] || die "lock race: left $x behind"; done
+  # F35: two runs from one clone, each in its own worktree on its own branch;
+  # neither run's commit shows in the other, main's index and HEAD untouched;
+  # a run started from inside a run worktree still lands in the main ledger;
+  # resume recreates a deleted worktree from its branch.
+  d5=$(mktemp -d); g5() { git -c user.name=t -c user.email=t@t "$@"; }
+  git init -q "$d5/m"; g5 -C "$d5/m" commit -q --allow-empty -m base
+  base=$(git -C "$d5/m" rev-parse HEAD)
+  printf 'the plan\n' > "$d5/m/plan.md"
+  ( cd "$d5/m" && RELAY_WORKTREE=on sh "$me" init plan.md alpha s1 >/dev/null 2>&1 && RELAY_WORKTREE=on sh "$me" init p.md beta s1 >/dev/null 2>&1 ) \
+    || die "F35: init with a worktree failed"
+  fa=$(ls "$d5"/m/.skillator/run-*-alpha.md) && fb=$(ls "$d5"/m/.skillator/run-*-beta.md) || die "F35: run files not in the main ledger"
+  wa=$(sed -n 's/^worktree: //p' "$fa"); wb=$(sed -n 's/^worktree: //p' "$fb")
+  ba=$(sed -n 's/^branch: //p' "$fa"); bb=$(sed -n 's/^branch: //p' "$fb")
+  [ -d "$wa" ] && [ -d "$wb" ] && [ "$wa" != "$wb" ] || die "F35: no separate worktrees ($wa, $wb)"
+  [ "$(cat "$wa/plan.md" 2>/dev/null)" = "the plan" ] || die "F35: the uncommitted plan was not copied into the run worktree"
+  case "$ba $bb" in "run/RUN-"*"-alpha run/RUN-"*"-beta") ;; *) die "F35: branches not run/RUN-<n>-<slug>: $ba $bb" ;; esac
+  echo a > "$wa/a.txt"; g5 -C "$wa" add a.txt; g5 -C "$wa" commit -q -m "stage alpha"
+  echo b > "$wb/b.txt"; g5 -C "$wb" add b.txt; g5 -C "$wb" commit -q -m "stage beta"
+  [ "$(git -C "$d5/m" diff --name-only "$base" "$ba")" = a.txt ] || die "F35: alpha's branch carries more than its own commit"
+  [ "$(git -C "$d5/m" diff --name-only "$base" "$bb")" = b.txt ] || die "F35: beta's branch carries more than its own commit"
+  [ "$(git -C "$d5/m" rev-parse HEAD)" = "$base" ] && [ -z "$(git -C "$d5/m" status --porcelain -- . ':!.skillator' ':!plan.md')" ] || die "F35: main's HEAD or index moved"
+  ( cd "$wa" && RELAY_WORKTREE=on sh "$me" init p.md gamma s1 >/dev/null 2>&1 ) || die "F35: init from a run worktree failed"
+  fg=$(ls "$d5"/m/.skillator/run-*-gamma.md 2>/dev/null) || die "F35: a run started in a worktree did not land in the main ledger"
+  git -C "$d5/m" merge-base --is-ancestor "$ba" "$(hdr_field "$fg" branch)" || die "F35: a run started in alpha's worktree did not branch from alpha"
+  [ ! -d "$wa/.skillator" ] || ! ls "$wa"/.skillator/run-*-gamma.md >/dev/null 2>&1 || die "F35: the run file was written on the run branch"
+  ( cd "$d5/m" && sh "$me" list ) | grep -q "worktree: $wa" || die "F35: list does not show the worktree"
+  rm -rf "$wa"
+  ( cd "$d5/m" && sh "$me" resume "$(id_of "$fa")" 2>/dev/null ) | grep -q "Stages work and commit in: $wa" || die "F35: resume does not name the worktree"
+  [ -f "$wa/a.txt" ] || die "F35: resume did not recreate the worktree from its branch"
+  ( cd "$d5/m" && RELAY_WORKTREE=on sh "$me" init --here p.md delta s1 >/dev/null 2>&1 ) || die "F35: init --here failed"
+  ! grep -q '^worktree:' "$(ls "$d5"/m/.skillator/run-*-delta.md)" || die "F35: --here made a worktree"
+  # F36: two runs plan one file. The first dispatch leases it; the second run
+  # is refused (LEASED, exit 2) and idles in chain next until the first lands;
+  # then it dispatches. A stale lease is taken with a ruling. The board helper
+  # flips a ticket in the main checkout's TICKETS.md.
+  d6="$d/lease"; mkdir -p "$d6"; git init -q "$d6"
+  sv6_run=$RUN; sv6_dir=$DIR; DIR="$d6/.skillator"
+  RUN=""; cmd_init T.md "lease a" "A one" "A two" >/dev/null; ra=$(ls "$DIR"/run-*-lease-a.md)
+  RUN=""; cmd_init T.md "lease b" "B one" >/dev/null; rb=$(ls "$DIR"/run-*-lease-b.md)
+  printf 'x\n' > "$d6/p"
+  RUN=$ra; sa=$(sed -n 's/^| \([0-9]*\) | A one |.*/\1/p' "$RUN"); sa2=$(sed -n 's/^| \([0-9]*\) | A two |.*/\1/p' "$RUN")
+  chain_plan "$sa" --prompt-file "$d6/p" --files src/x.py >/dev/null || die "F36: plan A"
+  chain_plan "$sa2" --prompt-file "$d6/p" --files "src/x.py/" >/dev/null || die "F36: plan A2"
+  RUN=$rb; sb=$(sed -n 's/^| \([0-9]*\) | B one |.*/\1/p' "$RUN")
+  chain_plan "$sb" --prompt-file "$d6/p" --files "./src" >/dev/null || die "F36: plan B"
+  lv='echo "src=codex 5h=10 7d=10 ctx=- max=10"'
+  RUN=$ra; ( RELAY_LEVEL_CMD=$lv chain_dispatch "$sa" --driver @a >/dev/null ) || die "F36: dispatch A failed"
+  reg="$(git -C "$d6" rev-parse --path-format=absolute --git-common-dir)/skillator/leases"
+  grep -q "^src/x.py${TAB}RUN-$(id_of "$ra")${TAB}$sa${TAB}@a${TAB}" "$reg" || die "F36: dispatch did not lease src/x.py: $(cat "$reg")"
+  RUN=$rb; set +e; msg=$( ( RELAY_LEVEL_CMD=$lv chain_dispatch "$sb" --driver @b ) 2>&1 >/dev/null ); rc=$?; set -e
+  [ "$rc" = 2 ] && printf '%s' "$msg" | grep -q "LEASED src/x.py RUN-$(id_of "$ra") stage $sa" || die "F36: B dispatched over A's live lease (rc $rc): $msg"
+  [ "$(row_cell "$sb" 4)" = "" ] || die "F36: a refused dispatch changed B's row"
+  out=$(chain_next); printf '%s\n' "$out" | grep -q "^IDLE $sb leased src RUN-$(id_of "$ra") stage $sa\$" || die "F36: chain next did not idle B on the lease: $out"
+  ! printf '%s\n' "$out" | grep -q "^NEXT $sb " || die "F36: chain next named a leased stage: $out"
+  RUN=$ra; cmd_stage "$sa" x "" abc1234
+  ! grep -q "${TAB}RUN-$(id_of "$ra")${TAB}$sa${TAB}" "$reg" || die "F36: landing did not release the lease"
+  RUN=$rb; chain_next | grep -q "^NEXT $sb " || die "F36: B still idle after A landed"
+  ( RELAY_LEVEL_CMD=$lv chain_dispatch "$sb" --driver @b >/dev/null ) || die "F36: B could not dispatch after A landed"
+  RUN=$ra; ( RELAY_LEVEL_CMD=$lv RELAY_LEASE_STALE=-1 chain_dispatch "$sa2" --driver @a >/dev/null ) || die "F36: a stale lease was not taken"
+  grep -q "lease on src from RUN-$(id_of "$rb") stage $sb was .* stale" "$RUN" || die "F36: taking a stale lease left no ruling"
+  printf '%s\n' '# board' '- [ ] F9 — lease me' '- [ ] F90 — not me' > "$d6/TICKETS.md"
+  ( cd "$d6" && cmd_board F9 '~' >/dev/null ) || die "F36: board failed"
+  grep -q '^- \[~\] F9 — lease me$' "$d6/TICKETS.md" && grep -q '^- \[ \] F90 — not me$' "$d6/TICKETS.md" || die "F36: board flipped the wrong line: $(cat "$d6/TICKETS.md")"
+  if ( cd "$d6" && cmd_board F91 x >/dev/null 2>&1 ); then die "F36: board accepted a missing ticket"; fi
+  [ ! -e "$d6/TICKETS.md.lock" ] && [ ! -e "$reg.lock" ] || die "F36: a lock was left behind"
+  RUN=$sv6_run; DIR=$sv6_dir
   # F31 review 2: a hand-mangled Chain header (4-space separators) is left
   # alone by the driver's heartbeat - row stamped, exit 0, header unchanged.
   cp "$RUN" "$d4/good"
@@ -2233,6 +2516,7 @@ case "$c" in
   list)      cmd_list ;;
   resume)    cmd_resume "$@" ;;
   init)      cmd_init "$@" ;;
+  board)     cmd_board "$@" ;;
   add)       cmd_add "$@" ;;
   stage)     cmd_stage "$@" ;;
   heartbeat) cmd_heartbeat "$@" ;;

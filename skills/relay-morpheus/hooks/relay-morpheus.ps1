@@ -55,7 +55,7 @@
 # state is spelled `pending` rather than ''.
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','selftest')][string]$Mode,
+  [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','board','selftest')][string]$Mode,
   [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','edge')][string]$Action = 'status',
   [string]$Ticket = '',
   [string]$Reason = '',
@@ -101,6 +101,8 @@ param(
   [string]$Plan,
   [string]$Title,
   [string]$Stages,
+  [switch]$Here,
+  [string]$Mark = $null,
   [int]$N,
   [string]$State = 'pending',
   [string]$Owner = '',
@@ -113,6 +115,32 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $Dir) { $Dir = if ($env:RELAY_DIR) { $env:RELAY_DIR } else { '.skillator' } }
+# git, never throwing: $true when it exited 0. Output discarded.
+function GitOk([string[]]$a) {
+  $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { & git @a 2>&1 | Out-Null; return ($LASTEXITCODE -eq 0) } catch { return $false } finally { $ErrorActionPreference = $prev }
+}
+function GitOut([string[]]$a) {
+  $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { $o = @(& git @a 2>$null); if ($LASTEXITCODE -ne 0) { return @() }; return $o } catch { return @() } finally { $ErrorActionPreference = $prev }
+}
+# The main checkout's root, from any worktree of it; $null outside git.
+function MainOf {
+  $c = @(GitOut @('rev-parse', '--path-format=absolute', '--git-common-dir'))
+  if ($c.Count -and $c[0] -match '/\.git$') { return ($c[0] -replace '/\.git$', '') }
+  return $null
+}
+# F35 (D1): one ledger view for every session - from a linked worktree (a run's
+# own, say) the run files are the MAIN checkout's .skillator, never a copy on
+# the run branch. One git call; RELAY_DIR or -Dir overrides.
+if (-not $env:RELAY_DIR -and -not $PSBoundParameters.ContainsKey('Dir')) {
+  $rp = @(GitOut @('rev-parse', '--path-format=absolute', '--git-common-dir', '--show-toplevel'))
+  if ($rp.Count -ge 2) {
+    if ($rp[0] -match '/\.git$' -and ($rp[0] -replace '/\.git$', '') -ne $rp[1]) { $Dir = ($rp[0] -replace '/\.git$', '') + '/.skillator' }
+  } elseif (GitOk @('rev-parse', '--git-dir')) {
+    [Console]::Error.WriteLine("relay-morpheus.ps1: git older than 2.31 (no --path-format) - one ledger per worktree and no run worktrees")
+  }
+}
 if (-not $Run -and $env:RELAY_RUN) { $Run = $env:RELAY_RUN }
 
 # A run id is a short number a human can say out loud to another session -
@@ -292,8 +320,9 @@ function LockBreak($judged) {
   try { if (LockDead $script:Lock $judged) { LockSteal $script:Lock $judged } }
   finally { for ($k = 0; $k -lt 20 -and (LockRead $g) -ceq $LockMe; $k++) { try { [IO.File]::Delete($g) } catch { Start-Sleep -Milliseconds 20 } } }
 }
-function Lock {
-  $script:Lock = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath("$Run.lock")
+function Lock([string]$path = '') {
+  if (-not $path) { $path = "$Run.lock" }
+  $script:Lock = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($path)
   $i = 0
   while (-not (LockCreate $script:Lock)) {
     $i++
@@ -368,9 +397,33 @@ function DoInit {
   # names one stage in the whole project, not one per run.
   if (-not $dir) { $dir = '.' }
   $nums = Alloc 'S' $names.Count $dir
-  $t = Now
   $id = $script:id
-  $lines = @("# RUN-$id - $Title", "plan: $Plan", "started: $t   updated: $t", "",
+  # F35: the run's own worktree and branch, so its stages commit there and
+  # never in an index another run shares. Off with -Here, outside git, before
+  # the first commit, or RELAY_WORKTREE=off.
+  $wt = ''; $br = ''
+  # It branches from the caller's HEAD - the branch the user is on - and an
+  # uncommitted plan file is copied in, so the stages can read what they build.
+  if (-not $Here -and $env:RELAY_WORKTREE -cne 'off') {
+    $mr = MainOf
+    $hd = @(GitOut @('rev-parse', '-q', '--verify', 'HEAD'))
+    if ($mr -and $hd.Count) {
+      $sl = Slug $Title
+      $br = "run/RUN-$id-$sl"; $wt = ($mr -replace '/[^/]*$', '') + '/' + ($mr -replace '^.*/', '') + ".runs/RUN-$id-$sl"
+      if (-not (GitOk @('-C', $mr, 'worktree', 'add', '-q', '-b', $br, $wt, $hd[0]))) { Die "could not create the run worktree $wt on branch $br (use -Here to run in this checkout)" }
+      if ((Test-Path -LiteralPath $Plan -PathType Leaf) -and @(GitOut @('status', '--porcelain', '--', $Plan)).Count) {
+        $pr = @(GitOut @('ls-files', '--full-name', '--others', '--cached', '--', $Plan))
+        $rel = if ($pr.Count) { $pr[0] } else { (@(GitOut @('rev-parse', '--show-prefix')) + @(''))[0] + ($Plan -replace '\\', '/') }
+        $dst = "$wt/$rel"; New-Item -ItemType Directory -Force (Split-Path -Parent $dst) | Out-Null
+        Copy-Item -LiteralPath $Plan -Destination $dst
+        [Console]::Error.WriteLine("note: $Plan is not committed - copied into the run worktree")
+      }
+    }
+  }
+  $t = Now
+  $lines = @("# RUN-$id - $Title", "plan: $Plan", "started: $t   updated: $t")
+  if ($wt) { $lines += @("worktree: $wt", "branch: $br") }
+  $lines += @("",
              "## Stages", "| # | stage | state | owner | heartbeat | landed |",
              "|---|-------|-------|-------|-----------|--------|")
   for ($i = 0; $i -lt $names.Count; $i++) { $lines += "| $($nums[$i]) | $($names[$i]) |   | - | - | - |" }
@@ -380,6 +433,33 @@ function DoInit {
   # The whole point of the id: this line is what gets pasted into another
   # session, or said out loud. A path is not a sentence.
   "hand this to any session:  continue RUN-$id"
+  if ($wt) { "stages work and commit in:  $wt  (branch $br)" }
+}
+
+# F35: a run's worktree, recreated from its branch when the directory is gone
+# (deleted, another machine). '' for a -Here run.
+# <run file> <key>: a header field - the lines before the first `## `.
+function HdrField($f, $k) {
+  foreach ($l in (Get-Content -Encoding UTF8 $f)) { if ($l -like '## *') { break }; if ($l -like "${k}: *") { return $l.Substring($k.Length + 2) } }
+  ''
+}
+function WorktreeOf($f) {
+  $w = HdrField $f 'worktree'; $b = HdrField $f 'branch'
+  if (-not $w) { return '' }
+  # Recreated only while the run has open work: a finished run's branch is
+  # merged, and a fresh checkout of it helps nobody. The prune drops the
+  # missing worktree's registration, which `worktree add` would refuse.
+  $open = @(Get-Content -Encoding UTF8 $f | Where-Object { $null -ne (RowNum $_) -and (Cell $_ 3) -ne 'x' -and (Cell $_ 3) -ne '>' }).Count
+  if (-not (Test-Path -LiteralPath $w) -and $b -and $open) {
+    $mr = MainOf
+    if ($mr) {
+      $null = GitOk @('-C', $mr, 'worktree', 'prune')
+      if (GitOk @('-C', $mr, 'worktree', 'add', '-q', $w, $b)) { [Console]::Error.WriteLine("# worktree recreated from $b") }
+      else { return "$w  (branch $b) - MISSING: git could not recreate it" }
+    }
+  }
+  if (-not (Test-Path -LiteralPath $w)) { return "$w  (branch $b) - MISSING" }
+  "$w  (branch $b)"
 }
 
 # A stage found mid-run gets its row the same way init's did: the next serial
@@ -434,6 +514,8 @@ function DoList {
     if ($open) { $row += "  (stage $($open -join ',') open)" }
     $row
     "          plan: $plan"
+    $wl = HdrField $f.FullName 'worktree'
+    if ($wl) { "          worktree: $wl" }
     "          resume: continue RUN-$id"
   }
 }
@@ -447,6 +529,8 @@ function DoResume($spec) {
   "# Read the plan named below, then the ledger, then start at the first stage"
   "# that is not x. The In-flight block holds the exact prompt to redispatch"
   "# anything that was running."
+  $w = WorktreeOf $f
+  if ($w) { "# Stages work and commit in: $w" }
   ""
   Get-Content -Encoding UTF8 $f
 }
@@ -474,6 +558,9 @@ function DoStage($n, $state, $owner, $landed) {
     if (-not (SetRow $n $state $owner $landed)) { Die "no stage $n in $Run" }
     StampUpdated
   } finally { Unlock }
+  # F36: any state but in flight frees the stage's files (landed, failed,
+  # re-planned, parked, reset). Chain runs only; never fails the landed write.
+  if ($state -cne '~' -and (HasChain)) { try { LeaseRelease $n } catch { [Console]::Error.WriteLine("note: lease release failed: $_") } }
 }
 
 # Rewrite row <n>'s state/owner/heartbeat/landed ('' state = pending). The
@@ -514,6 +601,10 @@ function DoHeartbeat($n) {
   if ($null -eq $st) { Die "no stage $n in $Run" }
   if ($st -eq '') { $st = 'pending' }
   DoStage $n $st '' $la
+  if ($st -ceq '~' -and (HasChain) -and @(StageFiles $n).Count) {
+    $k = try { LeaseBeat $n } catch { $null }
+    if ($k -eq 0) { [Console]::Error.WriteLine("WARNING: stage $n holds no lease on its files any more - another run took it as stale and may be editing them; tell the user before landing") }
+  }
   # F31: the driver's own heartbeat keeps its stamp fresh - a live driver in a
   # 40-minute stage is not stale. Anyone else's leaves the stamp alone.
   if (IsMe) { Lock; try { TouchDriver; StampUpdated } finally { Unlock } }
@@ -834,6 +925,40 @@ function DoChainDispatch($n) {
   if ($drv -match '[ |]') { Die "chain dispatch: driver tag has a space or a pipe: $drv" }
   NeedRun
   $d = ChainDecide (LevelLine)
+  # F36: the stage's files are leased BEFORE the run lock - the registry wait
+  # must never stretch a run-lock hold - and given back if the dispatch is then
+  # refused or dies. A stage with no files: line could touch anything, so it
+  # waits while another run holds any live lease.
+  $leased = $false; $took = @()
+  if ((RowCellN $n 3) -cin @('', '!') -and (HasChain) -and (CodeOf $n)) {
+    $files = @(StageFiles $n)
+    if ($files.Count) {
+      $r = RunTag; $stl = LeaseStale; $tn = Now
+      $res = LeaseLocked { param($reg)
+        $keep = @(); $hit = ''; $tk = @()
+        foreach ($z in @(LeaseRead $reg)) {
+          if ($z.r -ceq $r -and $z.s -ceq "$n") { continue }
+          if ($z.r -cne $r -and @($files | Where-Object { PathsMeet $z.p $_ }).Count) {
+            $a = LeaseAge $z.h
+            if ($a -lt $stl) { $hit = "LEASED $($z.p) $($z.r) stage $($z.s)"; break }
+            $tk += "lease on $($z.p) from $($z.r) stage $($z.s) was ${a}m stale (limit ${stl}m), taken"; continue
+          }
+          $keep += $z
+        }
+        if (-not $hit) {
+          foreach ($f in $files) { $keep += [pscustomobject]@{ p = $f; r = $r; s = "$n"; d = $drv; h = $tn } }
+          LeaseWrite $reg $keep
+        }
+        [pscustomobject]@{ hit = $hit; took = $tk }
+      }
+      if ($res -and $res.hit) { Refuse "$($res.hit) - another run's live stage holds it; chain next names what can run" }
+      if ($res) { $leased = $true; $took = @($res.took) }
+    } else {
+      $fz = @(LeaseForeign)
+      if ($fz.Count) { Refuse "stage $n names no files: line, and $($fz[0].r) holds live leases - plan it with -Files, or wait for that run to land" }
+    }
+  }
+  try {
   Lock
   try {
     $hp = HdrParts; $c = CodeOf $n
@@ -869,6 +994,7 @@ function DoChainDispatch($n) {
     } elseif ($d -eq 'UNOBSERVABLE') {
       [Console]::Error.WriteLine('note: usage unobservable on this host - dispatched with no usage check')
     }
+    if ($took.Count) { $note += "${c}: $($took -join '; ')" }
     $name = RowCellN $n 2; $t = Now; $prompt = BlockPrompt $n
     $blk = @("### stage $n - $name  (dispatched $t, $drv)", 'run: -', 'prompt: |') + (Indent $prompt)
     DropInFlight $n
@@ -878,8 +1004,78 @@ function DoChainDispatch($n) {
     if (-not (SetRow $n '~' $Owner '')) { Die "no stage $n in $Run" }
     StampUpdated
   } finally { Unlock }
+  } catch { if ($leased) { try { LeaseRelease $n } catch {} }; throw }
   $c
   $prompt
+}
+
+# F36: a stage's files are leased across runs at dispatch, in one registry per
+# clone - <git-common-dir>/skillator/leases, which every worktree shares - one
+# tab-separated line per path: path RUN-n stage driver heartbeat. Same rules as
+# relay-morpheus.sh: another run's live lease (younger than RELAY_LEASE_STALE,
+# 20 min) refuses; a stale one is taken with a ruling; landing, failing or
+# re-planning releases; a heartbeat refreshes. Outside git: no registry.
+function RunTag { "RUN-$(IdOf (Split-Path -Leaf $Run))" }
+function LeaseStale { if ($env:RELAY_LEASE_STALE) { [int]$env:RELAY_LEASE_STALE } else { 20 } }
+function StageFiles($n) {
+  $sec = ''; $cs = $false; $inp = $false
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
+    if ($l.StartsWith('## ')) { $sec = $l; $cs = $false; continue }
+    if ($sec -cne '## Chain') { continue }
+    if ($l.StartsWith('### ')) { $cs = $l -cmatch "^### [A-Z0-9]{4} - stage $n - "; $inp = $false; continue }
+    if ($cs -and -not $inp) { if ($l -ceq 'prompt: |') { $inp = $true } elseif ($l.StartsWith('files: ')) { PathsOf $l.Substring(7) } }
+  }
+}
+function LeaseRead($reg) {
+  if (-not (Test-Path -LiteralPath $reg)) { return @() }
+  @(Get-Content -Encoding UTF8 $reg | Where-Object { $_ } | ForEach-Object { $z = $_ -split "`t"; [pscustomobject]@{ p = $z[0]; r = $z[1]; s = $z[2]; d = $z[3]; h = $z[4] } })
+}
+function LeaseWrite($reg, $ls) {
+  $txt = (@($ls | ForEach-Object { "$($_.p)`t$($_.r)`t$($_.s)`t$($_.d)`t$($_.h)" }) -join "`n")
+  if ($txt) { $txt += "`n" }
+  [IO.File]::WriteAllText("$reg.new.$PID", $txt, (New-Object Text.UTF8Encoding($false)))
+  Move-Item -Force -LiteralPath "$reg.new.$PID" -Destination $reg
+}
+function LeaseAge($h) { try { [int]((AsUtc (Now)) - (AsUtc $h)).TotalMinutes } catch { 99999 } }
+# Runs $body with the registry path, under the registry's own lock; a run lock
+# the caller holds is kept. Nothing outside git.
+function LeaseLocked([scriptblock]$body) {
+  $rd = Split-Path -Parent ($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Run))
+  $gd = @(GitOut @('-C', $rd, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+  if (-not $gd.Count) { return }
+  $dir = "$($gd[0])/skillator"; if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
+  $sv = $script:Lock; $script:Lock = $null
+  Lock "$dir/leases.lock"
+  try { & $body "$dir/leases" } finally { Unlock; $script:Lock = $sv }
+}
+function LeaseRelease($n) { $r = RunTag; LeaseLocked { param($reg) if (Test-Path -LiteralPath $reg) { LeaseWrite $reg @(LeaseRead $reg | Where-Object { -not ($_.r -ceq $r -and $_.s -ceq "$n") }) } } }
+# Prints how many leases it refreshed.
+function LeaseBeat($n) { $r = RunTag; $t = Now; LeaseLocked { param($reg) $k = 0
+  if (Test-Path -LiteralPath $reg) { LeaseWrite $reg @(LeaseRead $reg | ForEach-Object { if ($_.r -ceq $r -and $_.s -ceq "$n") { $_.h = $t; $k++ }; $_ }) }; $k } }
+function LeaseForeign { $r = RunTag; $st = LeaseStale; LeaseLocked { param($reg) @(LeaseRead $reg | Where-Object { $_.r -cne $r -and (LeaseAge $_.h) -lt $st }) } }
+
+# F36 (D1): TICKETS.md is written in the main checkout only, under its own
+# lock - one board, however many run worktrees there are.
+function DoBoard {
+  if (-not $Ticket -or $null -eq $Mark) { Die "usage: -Mode board -Ticket <ID> -Mark <' '|~|x|!|>|->" }
+  if ($Ticket -cnotmatch '^[A-Z]{1,3}[0-9]+[a-z]?$') { Die "board: '$Ticket' is not a ticket id" }
+  if ($Mark -cnotin @(' ', '~', 'x', '!', '>', '-')) { Die "board: mark is one of ' ' ~ x ! > -" }
+  $m = MainOf; if (-not $m) { $m = (Get-Location).Path }
+  $f = "$m/TICKETS.md"; if (-not (Test-Path -LiteralPath $f)) { Die "board: no $f" }
+  $sv = $script:Lock; $script:Lock = $null
+  Lock "$f.lock"
+  try {
+    $raw = [IO.File]::ReadAllText($f); $nl = if ($raw.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $lines = $raw -split "`r?`n"; $hit = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+      $l = $lines[$i]
+      if (-not $hit -and $l.Length -ge 7 -and $l.StartsWith('- [') -and $l.Substring(4, 2) -ceq '] ' -and $l.Substring(6).StartsWith("$Ticket ", [StringComparison]::Ordinal)) { $lines[$i] = '- [' + $Mark + $l.Substring(4); $hit = $true }
+    }
+    if (-not $hit) { Die "board: no ticket $Ticket in $f" }
+    [IO.File]::WriteAllText("$f.tmp.$PID", ($lines -join $nl), (New-Object Text.UTF8Encoding($false)))
+    Move-Item -Force -LiteralPath "$f.tmp.$PID" -Destination $f
+  } finally { Unlock; $script:Lock = $sv }
+  "$Ticket [$Mark]"
 }
 
 function DoChainHold {
@@ -889,7 +1085,8 @@ function DoChainHold {
   NeedRun
   $hp = HdrParts; if (-not $hp) { Die "no ## Chain section in $Run - chain plan a stage first" }
   # next= is what `chain next` would dispatch, read with the hold ignored.
-  $nx = if ($Next) { $Next } else { ChainScan -NextOnly }; if ($null -eq $nx -or "$nx" -eq '') { $nx = '-' }
+  $nx = if ($Next) { $Next } else { $script:Leases = @(LeaseForeign); try { ChainScan -NextOnly } finally { $script:Leases = $null } }
+  if ($null -eq $nx -or "$nx" -eq '') { $nx = '-' }
   Lock
   try {
     $hp = HdrParts
@@ -1292,6 +1489,11 @@ function ChainScan([switch]$NextOnly) {
     $waits = $false
     foreach ($k in $ql) { if ($rs.ContainsKey("$n,$k")) { $out.Add("IDLE $n Q$k $($rs["$n,$k"])"); $waits = $true } }
     foreach ($a in @($af[$n] | Where-Object { $null -ne $_ })) { if (-not (& $landed $a 0)) { $out.Add("IDLE $n - after $a"); $waits = $true } }
+    if ($hasf[$n] -and $script:Leases) {
+      $hit = $false
+      foreach ($t in @($fl[$n] | Where-Object { $_ })) { if ($hit) { break }
+        foreach ($lz in $script:Leases) { if (PathsMeet (NormPath $lz.p) $t) { $out.Add("IDLE $n leased $t $($lz.r) stage $($lz.s)"); $waits = $true; $hit = $true; break } } }
+    }
     if ($s -ceq '' -and -not $waits -and ($null -eq $nx -or $n -lt $nx)) { $nx = $n }
     if ($s -ceq '' -and (& $failBehind $n 0)) { $nbk++ }
   }
@@ -1313,7 +1515,11 @@ function DoChainNext {
   NeedRun
   if (-not (HasChain)) { Die "no ## Chain section in $Run - chain next reads a chain" }
   $null = HdrParts
-  ChainScan
+  # The driver's loop keeps its own in-flight stages' leases fresh: a stage
+  # that runs long without reporting must not look abandoned to other runs.
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { $rn = RowNum $l; if ($null -ne $rn -and (Cell $l 3) -ceq '~') { try { $null = LeaseBeat $rn } catch {} } }
+  $script:Leases = @(LeaseForeign)
+  try { ChainScan } finally { $script:Leases = $null }
 }
 
 # An edge found after planning: one line into the stage's existing block,
@@ -2233,6 +2439,7 @@ function MarathonSelftest($d) {
 }
 
 function DoSelftest {
+  $env:RELAY_WORKTREE = 'off'; $env:RELAY_DIR = $null; $env:RELAY_RUN = $null
   $d = Join-Path ([IO.Path]::GetTempPath()) ("relay-" + [guid]::NewGuid())
   New-Item -ItemType Directory -Force $d | Out-Null
   # Each scratch dir is its own git repo, so the allocator keeps its counter
@@ -2371,6 +2578,94 @@ function DoSelftest {
       [Console]::Error.WriteLine("note: next-id.ps1 not found beside the skills - F22 allocator checks skipped")
     }
 
+    # F35: two runs from one clone, each in its own worktree on its own branch;
+    # neither run's commit shows in the other, main's HEAD and index untouched;
+    # a run started inside a run worktree lands in the main ledger; resume
+    # recreates a deleted worktree from its branch; -Here makes none.
+    $d5 = (Join-Path ([IO.Path]::GetTempPath()) ("relay-f35-" + [guid]::NewGuid())) -replace '\\', '/'
+    try {
+      $m5 = "$d5/m"; G init -q $m5; G -C $m5 commit -q --allow-empty -m base
+      $base = @(GitOut @('-C', $m5, 'rev-parse', 'HEAD'))[0]
+      $me = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+      $env:RELAY_WORKTREE = 'on'
+      function Rm5([string]$at, [string[]]$a) { Push-Location $at; $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        try { $o = & powershell @me @a 2>&1 | ForEach-Object { "$_" } | Out-String; if ($LASTEXITCODE -ne 0) { Die "F35: $($a -join ' ') failed: $o" }; $o } finally { $ErrorActionPreference = $prev; Pop-Location } }
+      [IO.File]::WriteAllText("$m5/plan.md", "the plan`n")
+      $null = Rm5 $m5 @('-Mode', 'init', '-Plan', 'plan.md', '-Title', 'alpha', '-Stages', 's1')
+      $null = Rm5 $m5 @('-Mode', 'init', '-Plan', 'p.md', '-Title', 'beta', '-Stages', 's1')
+      $fa = @(Get-ChildItem "$m5/.skillator" -Filter 'run-*-alpha.md')[0].FullName; $fb = @(Get-ChildItem "$m5/.skillator" -Filter 'run-*-beta.md')[0].FullName
+      if (-not $fa -or -not $fb) { Die "F35: run files not in the main ledger" }
+      $hdr = { param($f, $k) ((Get-Content -Encoding UTF8 $f) | Where-Object { $_ -like "${k}: *" } | Select-Object -First 1) -replace "^${k}: ", '' }
+      $wa = & $hdr $fa 'worktree'; $wb = & $hdr $fb 'worktree'; $ba = & $hdr $fa 'branch'; $bb = & $hdr $fb 'branch'
+      if (-not (Test-Path $wa) -or -not (Test-Path $wb) -or $wa -eq $wb) { Die "F35: no separate worktrees ($wa, $wb)" }
+      if ($ba -notmatch '^run/RUN-\d+-alpha$' -or $bb -notmatch '^run/RUN-\d+-beta$') { Die "F35: branches not run/RUN-<n>-<slug>: $ba $bb" }
+      if (-not (Test-Path "$wa/plan.md") -or [IO.File]::ReadAllText("$wa/plan.md").Trim() -ne 'the plan') { Die "F35: the uncommitted plan was not copied into the run worktree" }
+      [IO.File]::WriteAllText("$wa/a.txt", "a`n"); G -C $wa add a.txt; G -C $wa commit -q -m 'stage alpha'
+      [IO.File]::WriteAllText("$wb/b.txt", "b`n"); G -C $wb add b.txt; G -C $wb commit -q -m 'stage beta'
+      if ((@(GitOut @('-C', $m5, 'diff', '--name-only', $base, $ba)) -join ',') -ne 'a.txt') { Die "F35: alpha's branch carries more than its own commit" }
+      if ((@(GitOut @('-C', $m5, 'diff', '--name-only', $base, $bb)) -join ',') -ne 'b.txt') { Die "F35: beta's branch carries more than its own commit" }
+      if (@(GitOut @('-C', $m5, 'rev-parse', 'HEAD'))[0] -ne $base) { Die "F35: main's HEAD moved" }
+      if (@(GitOut @('-C', $m5, 'status', '--porcelain', '--', '.', ':!.skillator', ':!plan.md')).Count) { Die "F35: main's index or tree moved" }
+      $null = Rm5 $wa @('-Mode', 'init', '-Plan', 'p.md', '-Title', 'gamma', '-Stages', 's1')
+      $fg = @(Get-ChildItem "$m5/.skillator" -Filter 'run-*-gamma.md')
+      if (-not $fg) { Die "F35: a run started in a worktree did not land in the main ledger" }
+      if (-not (GitOk @('-C', $m5, 'merge-base', '--is-ancestor', $ba, (HdrField $fg[0].FullName 'branch')))) { Die "F35: a run started in alpha's worktree did not branch from alpha" }
+      if ((Test-Path "$wa/.skillator") -and (Get-ChildItem "$wa/.skillator" -Filter 'run-*-gamma.md')) { Die "F35: the run file was written on the run branch" }
+      if (-not ((Rm5 $m5 @('-Mode', 'list')) -match [regex]::Escape("worktree: $wa"))) { Die "F35: list does not show the worktree" }
+      Remove-Item -Recurse -Force $wa
+      $ida = IdOf (Split-Path -Leaf $fa)
+      if (-not ((Rm5 $m5 @('-Mode', 'resume', '-Id', $ida)) -match [regex]::Escape("Stages work and commit in: $wa"))) { Die "F35: resume does not name the worktree" }
+      if (-not (Test-Path "$wa/a.txt")) { Die "F35: resume did not recreate the worktree from its branch" }
+      $null = Rm5 $m5 @('-Mode', 'init', '-Here', '-Plan', 'p.md', '-Title', 'delta', '-Stages', 's1')
+      $fd = @(Get-ChildItem "$m5/.skillator" -Filter 'run-*-delta.md')[0].FullName
+      if ((Get-Content -Encoding UTF8 $fd) -match '^worktree:') { Die "F35: -Here made a worktree" }
+    } finally {
+      $env:RELAY_WORKTREE = 'off'
+      Remove-Item -Recurse -Force $d5 -ErrorAction SilentlyContinue   # the worktrees sit in $d5/m.runs
+    }
+
+    # F36: two runs plan one file; the first dispatch leases it, the second run
+    # is refused (LEASED, exit 2) and idles in chain next until the first lands;
+    # a stale lease is taken with a ruling; board flips one ticket in TICKETS.md.
+    $d6 = (Join-Path $d 'lease') -replace '\\', '/'
+    New-Item -ItemType Directory -Force $d6 | Out-Null; G init -q $d6
+    $me6 = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+    $svl = $env:RELAY_LEVEL_CMD; $env:RELAY_LEVEL_CMD = "echo 'src=codex 5h=10 7d=10 ctx=- max=10'"
+    function R6([string[]]$a) { Push-Location $d6; $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+      try { $o = & powershell @me6 @a 2>&1 | ForEach-Object { "$_" } | Out-String; [pscustomobject]@{ rc = $LASTEXITCODE; out = $o } } finally { $ErrorActionPreference = $prev; Pop-Location } }
+    try {
+      $null = R6 @('-Mode', 'init', '-Plan', 'T.md', '-Title', 'lease a', '-Stages', 'A one,A two')
+      $null = R6 @('-Mode', 'init', '-Plan', 'T.md', '-Title', 'lease b', '-Stages', 'B one')
+      $ra = @(Get-ChildItem "$d6/.skillator" -Filter 'run-*-lease-a.md')[0].FullName; $rb = @(Get-ChildItem "$d6/.skillator" -Filter 'run-*-lease-b.md')[0].FullName
+      $num = { param($f, $nm) foreach ($l in (Get-Content -Encoding UTF8 $f)) { if ($l -match "^\| (\d+) \| $nm \|") { return $Matches[1] } } }
+      $sa = & $num $ra 'A one'; $sa2 = & $num $ra 'A two'; $sb = & $num $rb 'B one'
+      [IO.File]::WriteAllText("$d6/p", "x`n")
+      foreach ($pl in @(@($ra, $sa, 'src/x.py'), @($ra, $sa2, 'src/x.py/'), @($rb, $sb, './src'))) {
+        $o = R6 @('-Mode', 'chain', '-Action', 'plan', '-N', $pl[1], '-PromptFile', "$d6/p", '-Files', $pl[2], '-Run', $pl[0]); if ($o.rc -ne 0) { Die "F36: plan $($pl[1]): $($o.out)" } }
+      $ida = IdOf (Split-Path -Leaf $ra); $idb = IdOf (Split-Path -Leaf $rb)
+      $o = R6 @('-Mode', 'chain', '-Action', 'dispatch', '-N', $sa, '-Driver', '@a', '-Run', $ra); if ($o.rc -ne 0) { Die "F36: dispatch A: $($o.out)" }
+      $reg = "$d6/.git/skillator/leases"
+      if (-not ((Get-Content -Encoding UTF8 $reg) -ccontains "src/x.py`tRUN-$ida`t$sa`t@a`t$((Get-Content -Encoding UTF8 $reg | Select-Object -First 1).Split("`t")[4])")) { Die "F36: dispatch did not lease src/x.py: $(Get-Content $reg)" }
+      $o = R6 @('-Mode', 'chain', '-Action', 'dispatch', '-N', $sb, '-Driver', '@b', '-Run', $rb)
+      if ($o.rc -ne 2 -or $o.out -notmatch [regex]::Escape("LEASED src/x.py RUN-$ida stage $sa")) { Die "F36: B dispatched over A's live lease (rc $($o.rc)): $($o.out)" }
+      $o = R6 @('-Mode', 'chain', '-Action', 'next', '-Run', $rb)
+      if ($o.out -notmatch [regex]::Escape("IDLE $sb leased src RUN-$ida stage $sa") -or $o.out -match "NEXT $sb ") { Die "F36: chain next did not idle B on the lease: $($o.out)" }
+      $o = R6 @('-Mode', 'stage', '-N', $sa, '-State', 'x', '-Landed', 'abc1234', '-Run', $ra); if ($o.rc -ne 0) { Die "F36: land A: $($o.out)" }
+      if ((Get-Content -Encoding UTF8 $reg) -match "`tRUN-$ida`t$sa`t") { Die "F36: landing did not release the lease" }
+      $o = R6 @('-Mode', 'chain', '-Action', 'next', '-Run', $rb); if ($o.out -notmatch "NEXT $sb ") { Die "F36: B still idle after A landed: $($o.out)" }
+      $o = R6 @('-Mode', 'chain', '-Action', 'dispatch', '-N', $sb, '-Driver', '@b', '-Run', $rb); if ($o.rc -ne 0) { Die "F36: B could not dispatch after A landed: $($o.out)" }
+      $env:RELAY_LEASE_STALE = '-1'
+      try { $o = R6 @('-Mode', 'chain', '-Action', 'dispatch', '-N', $sa2, '-Driver', '@a', '-Run', $ra) } finally { $env:RELAY_LEASE_STALE = $null }
+      if ($o.rc -ne 0) { Die "F36: a stale lease was not taken: $($o.out)" }
+      if (-not (Select-String -LiteralPath $ra -Pattern "lease on src from RUN-$idb stage $sb was .* stale" -Quiet)) { Die "F36: taking a stale lease left no ruling" }
+      [IO.File]::WriteAllText("$d6/TICKETS.md", "# board`n- [ ] F9 $([char]0x2014) lease me`n- [ ] F90 $([char]0x2014) not me`n", (New-Object Text.UTF8Encoding($false)))
+      $o = R6 @('-Mode', 'board', '-Ticket', 'F9', '-Mark', '~'); if ($o.rc -ne 0) { Die "F36: board failed: $($o.out)" }
+      $tl = [IO.File]::ReadAllText("$d6/TICKETS.md")
+      if (-not $tl.Contains("- [~] F9 $([char]0x2014) lease me`n") -or -not $tl.Contains("- [ ] F90 $([char]0x2014) not me")) { Die "F36: board flipped the wrong line: $tl" }
+      if ((R6 @('-Mode', 'board', '-Ticket', 'F91', '-Mark', 'x')).rc -eq 0) { Die "F36: board accepted a missing ticket" }
+      if ((Test-Path "$d6/TICKETS.md.lock") -or (Test-Path "$reg.lock")) { Die "F36: a lock was left behind" }
+    } finally { $env:RELAY_LEVEL_CMD = $svl }
+
     ChainSelftest $d
     MarathonSelftest $d
     "ok"
@@ -2388,6 +2683,7 @@ try {
     'list'      { DoList }
     'resume'    { DoResume $Id }
     'init'      { DoInit }
+    'board'     { DoBoard }
     'add'       { DoAdd $Title }
     'stage'     { DoStage $N $State $Owner $Landed }
     'heartbeat' { DoHeartbeat $N }

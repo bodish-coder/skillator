@@ -102,6 +102,25 @@ parked (chain only: every item waits on a decision) · `>` re-planned (`landed`
 names the new stage).
 **`landed`** is a commit sha or a path, never a claim. An empty `landed` on an
 `x` row is a lie the next session will believe.
+**One run, one worktree (F35).** In a git repo with a commit, `init` also
+creates the run's own worktree, `<repo>/../<repo>.runs/RUN-<n>-<slug>`, on
+branch `run/RUN-<n>-<slug>`, and writes both into the run file's header. Every
+stage of the run works and commits **there** - say so in each dispatch prompt -
+never in the main checkout, whose index another run may be using. The run
+file itself stays in the main checkout's `.skillator/`, whichever worktree
+calls the script. `resume` names the worktree and recreates it from its branch
+if it is gone. `init --here` (`-Here`) keeps the old one-checkout behaviour.
+The run reaches main through its final stage: merge `run/RUN-<n>-<slug>` from
+the main checkout, then `git worktree remove <worktree>` and
+`git branch -d run/RUN-<n>-<slug>` - nothing removes them for you.
+**Leases across runs (F36).** `chain dispatch` leases the stage's `files:` in
+one registry per clone (`<git-common-dir>/skillator/leases`); a file another
+run's live stage holds refuses the dispatch (`LEASED <path> RUN-m stage s`,
+exit 2) and `chain next` shows the stage `IDLE ... leased`. Landing, failing
+or re-planning releases; a lease silent past 20 min is taken, with a ruling.
+Board edits from a run worktree go through `relay-morpheus.sh board <ID>
+<mark>` (`-Mode board -Ticket -Mark`), which writes the main checkout's
+`TICKETS.md` under its lock.
 **Numbers are serial across the project, not per run.** `init` takes the RUN
 id and every stage number from the F21 allocator (`practice/scripts/next-id.sh`,
 kinds `RUN` and `S`), which reads every run file in the tree and on every ref

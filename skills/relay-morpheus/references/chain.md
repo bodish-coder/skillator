@@ -48,6 +48,15 @@ printf '%s\n' "<the exact per-item prompts the script will send>" > .skillator/c
 RM chain plan 66 --tickets "B2,B3" --fix build --verify build --files shelf/books.py --prompt-file .skillator/chain-66.txt
 ```
 
+`init` printed the run's worktree (`stages work and commit in: ...`): every
+prompt file says "work and commit in <worktree> (branch run/RUN-<n>-...),
+never in the main checkout". The final stage merges that branch into main
+from the main checkout, then removes the worktree and the branch. A `LEASED`
+refusal (exit 2) means another run's stage holds one of this stage's files:
+`chain next` lists it `IDLE <n> leased ...`; dispatch something else and come
+back after that run lands. Ticket boxes are flipped with `RM board <ID> <mark>`
+- the main checkout's board, under its lock.
+
 `chain plan` allocates the 4-character code (`next-id.sh --runs .skillator W`),
 prefixes it to the stage cell, and appends a block under `## Chain`. It refuses
 without a prompt file and never reissues a code. Repeat for each work stage;
