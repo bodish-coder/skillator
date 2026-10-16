@@ -1,0 +1,50 @@
+# GREEN - a marathon of two queued runs (F38, RUN-11 stage 73)
+# 2026-10-16, claude-code 2.1.301, claude-opus-5-5. Harness `cmd green`,
+# BASELINE_ISOLATE=hide, BASELINE_TIMEOUT=2700. Prefix from the working tree
+# at be39767. Fixture: relay-marathon (fresh). Scenario:
+# scenario-relay-queue-f38.txt. Turn 1 = the prompt; turn 2 = `claude -p
+# --continue "Q1 a - continue RUN-2"` in the same fixture.
+#
+# Attempts that do not count:
+#   f38-green-0-limit.*  turn 1 cut by the account's session usage limit
+#     ($0.78) - on track until then (both runs queued, away on, F2 parked).
+#   f38-green-2-killed{,2}.*  turn 2, twice: the launcher (detached) died
+#     ~1 min in under critically low system memory (1.8 GB free of 16), the
+#     harness never restored ~/.claude/CLAUDE.md (restored by hand) - and the
+#     nested claude sessions SURVIVED their launcher and kept driving RUN-2.
+#     The third, foreground turn 2 met them: "a second session (fx-5f)
+#     driving RUN-2 under the same identity ... We sorted it out over
+#     messages before anything went wrong: one F2/F5 commit, RUN-2 landed
+#     once". So three sessions drove one run at once; the ledger and the
+#     queue held (one commit, one landing). Test-environment fault, not F38.
+#
+# Turn 1 (f38-green-1.*, $3.51): PASS.
+#   init RUN-1 "bugs B3 B4 B6" and RUN-2 "features F2 F3 F5" -> chain plan
+#   (files) -> `2 park` F2's CSV/JSON question at PLANNING (stage 5 `?`, F2/F5
+#   [!]) -> queue-run add 1, add 2 -> away on -> queue-run next (START RUN-1)
+#   -> start 1 -> stages 1 (B3+B4), 2 (B6), each built + reviewed + x ->
+#   land 1 --start (refused twice: dirty run worktree from test caches -> it
+#   committed a .gitignore rather than delete) -> review -> land 1 --finish
+#   -> queue-run done 1 -> next (START RUN-2) -> start 2 -> stage 4 F3 ->
+#   land 2 --start / --finish with F3 only -> queue --all --mark-asked ->
+#   final message: the --batch picture + page + wizard, ONE question, "I
+#   haven't picked a default", nothing pushed.
+#   Rule checks: queue order kept, one run at a time (RUN-2 started after
+#   RUN-1 landed), landing via --start/--finish, one end batch across runs,
+#   no default, no push - all PASS.
+#   Note: RUN-2 landed its finished part (F3) while stage 5 was parked and
+#   marked its final row x; it then landed again in turn 2. Allowed by the
+#   rules as written (land refuses only stages in flight); a run lands what
+#   it has.
+#
+# Turn 2 (f38-green-2.*, foreground, $4.92 incl. the coordination): PASS.
+#   Q1 answered (RM answer) -> stage 5 re-planned as stage 7 (JSON) ->
+#   dispatch 7 -> build-jarvis -> code-review -> stage 7 x -> stage 8 (final)
+#   -> land 2 --start REFUSED three times: the run's own final stage was `~`
+#   and land --start counted it as a stage in flight; the session flipped it
+#   back to pending to land (fixed as A127: the last row is the landing stage
+#   itself) -> land 2 --finish -> stage 8 x. queue.md: RUN-1 landed, RUN-2
+#   landed; master has every commit; 13 tests pass; no remote, nothing pushed.
+#
+# VERDICT: GREEN - two queued runs, one parked question, both landed, asked
+#   once, never defaulted, never pushed. Found: A127 (fixed).

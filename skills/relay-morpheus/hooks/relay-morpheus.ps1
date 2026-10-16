@@ -1147,7 +1147,9 @@ function DoLand {
       if (-not (Test-Path -LiteralPath $lw)) { Die "run worktree $lw is missing - resume recreates it" }
       if (@(GitOut @('-C', $lw, 'status', '--porcelain')).Count) { Refuse "the run worktree $lw has uncommitted changes - commit them on $lb first" }
       # The rebase rewrites the run branch: nothing may still be built on it.
-      if (@(Get-Content -Encoding UTF8 $rf | Where-Object { $null -ne (RowNum $_) -and (Cell $_ 3) -ceq '~' }).Count) { Refuse "$r has stages in flight - they branch from $lb; land once they have landed" }
+      # The last row is the landing stage itself - in flight while it lands (A127).
+      $rws = @(Get-Content -Encoding UTF8 $rf | Where-Object { $null -ne (RowNum $_) })
+      if (@($rws | Select-Object -First ([Math]::Max(0, $rws.Count - 1)) | Where-Object { (Cell $_ 3) -ceq '~' }).Count) { Refuse "$r has stages in flight - they branch from $lb; land once they have landed" }
       $prev = QState $f $r; if (-not $prev) { $prev = '-' }
       if (-not (GitOk @('-C', $lw, 'rebase', '-q', $mb))) {
         $null = GitOk @('-C', $lw, 'rebase', '--abort')
@@ -2985,7 +2987,9 @@ function DoSelftest {
     $w1 = HdrField $f1 'worktree'; $w2 = HdrField $f2 'worktree'; $b1 = HdrField $f1 'branch'
     [IO.File]::WriteAllText("$w1/one.txt", "one`n"); G -C $w1 add one.txt; G -C $w1 commit -q -m one
     [IO.File]::WriteAllText("$w2/two.txt", "two`n"); G -C $w2 add two.txt; G -C $w2 commit -q -m two
-    $o = R8 @('-Mode', 'land', '-Id', $n1, '-Sub', 'start'); if ($o.rc -ne 0) { Die "F38: land one start: $($o.out)" }
+    $ft = @(Get-Content -Encoding UTF8 $f1 | ForEach-Object { RowNum $_ } | Where-Object { $null -ne $_ })[-1]
+    $null = R8 @('-Mode', 'stage', '-N', $ft, '-State', '~', '-Owner', 'main', '-Run', $f1)
+    $o = R8 @('-Mode', 'land', '-Id', $n1, '-Sub', 'start'); if ($o.rc -ne 0) { Die "F38: land one start (A127: the landing stage itself is in flight): $($o.out)" }
     if ((R8 @('-Mode', 'land', '-Id', $n2, '-Sub', 'start')).rc -ne 2) { Die "F38: a second run started landing beside the first" }
     $o = R8 @('-Mode', 'land', '-Id', $n1, '-Sub', 'finish'); if ($o.rc -ne 0) { Die "F38: land one finish: $($o.out)" }
     if (-not (Test-Path "$d8/one.txt") -or (Test-Path $w1) -or (GitOk @('-C', $d8, 'rev-parse', '-q', '--verify', "refs/heads/$b1"))) { Die "F38: one did not land on main, or left its worktree/branch" }

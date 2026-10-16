@@ -769,7 +769,8 @@ land_() {   # <run> <start|finish|abort> <run file> <queue file>
       [ -d "$_lw" ] || { echo "run worktree $_lw is missing - resume recreates it" >&2; return 1; }
       [ -z "$(git -C "$_lw" status --porcelain)" ] || { echo "the run worktree $_lw has uncommitted changes - commit them on $_lb first" >&2; return 2; }
       # The rebase rewrites the run branch: nothing may still be built on it.
-      awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4; gsub(/ /,"",s); if (s == "~") f=1} END{exit !f}' "$_lf" \
+      # The last row is the landing stage itself - in flight while it lands (A127).
+      awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4; gsub(/ /,"",s); if (p) f=1; p=(s == "~")} END{exit !f}' "$_lf" \
         && { echo "$_lr has stages in flight - they branch from $_lb; land once they have landed" >&2; return 2; }
       _lprev=$(q_state "$_lr" "$_lq")
       if ! git -C "$_lw" rebase -q "$_mb" >/dev/null 2>&1; then
@@ -2484,7 +2485,8 @@ chain_selftest() {
     w1=$(hdr_field "$f1" worktree); w2=$(hdr_field "$f2" worktree)
     echo one > "$w1/one.txt"; g8 -C "$w1" add one.txt; g8 -C "$w1" commit -q -m one
     echo two > "$w2/two.txt"; g8 -C "$w2" add two.txt; g8 -C "$w2" commit -q -m two
-    cmd_land "$i1" --start >/dev/null || die "F38: land one --start"
+    _ft=$(awk -F'|' '/^\| *[0-9]+ *\|/{n=$2} END{gsub(/ /,"",n); print n}' "$f1"); ( RUN=$f1; cmd_stage "$_ft" '~' main ) >/dev/null
+    cmd_land "$i1" --start >/dev/null || die "F38: land one --start (A127: the landing stage itself is in flight)"
     set +e; ( cmd_land "$i2" --start >/dev/null 2>&1 ); rc=$?; set -e
     [ "$rc" = 2 ] || die "F38: a second run started landing beside the first (rc $rc)"
     cmd_land "$i1" --finish >/dev/null || die "F38: land one --finish"
