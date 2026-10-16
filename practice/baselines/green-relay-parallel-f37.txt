@@ -1,0 +1,27 @@
+# GREEN - parallel stages in a chain (F37, RUN-11 stage 72)
+# 2026-10-16, claude-code 2.1.301, claude-opus-5-5. Harness `cmd green`,
+# BASELINE_ISOLATE=hide (restored), BASELINE_TIMEOUT=2700, BASELINE_USAGE="20 10"
+# (fixture built with it: cap 2). Prefix from the working tree at fde1237.
+# Fixture: relay-chain. Scenario: scenario-relay-parallel-f37.txt. Launched
+# detached (nohup) - an earlier attempt was reaped by Claude Code for low
+# system memory. Transcript: transcripts/f37-green-1.*. $2.81.
+#
+# Sequence (relay-morpheus calls): init "drain the board" (4 stages: B2+B3
+#   books.py | F2+F5 report.py | F3+F4 cli/export | final) -> chain plan 1-3
+#   with --files -> chain decide -> chain next --all -> chain dispatch 1 ->
+#   chain dispatch 2 (both `~` at once; stage 2 in its own stage worktree) ->
+#   board flips -> Agent "AAAB fix B2 B3" and Agent "AAAC build F2 F5" (F
+#   tickets through build-jarvis) -> chain merge 2 -> code-review -> stage 1
+#   x, stage 2 x -> chain next --all -> dispatch 3 (slot freed) -> build ->
+#   review -> stage 3 x -> land 1 --start -> review -> land 1 --finish.
+#   Final: "Stages 1 and 2 ran side by side, and stage 3 started once a slot
+#   freed up (the limit is two at a time)."
+# PASS: two stages in flight at once (1 + 2, file-disjoint), the parallel
+#   stage merged back with chain merge before its stage x, the cap held
+#   (3 waited for a slot), FINAL with every work stage landed; and the run
+#   landed through land --start/--finish (F38's landing, unprompted).
+# Gap found (A126): the run worktree and stage worktrees live in
+#   <repo>.runs/, outside the session's allowed folders, so the subagents'
+#   shell commands were refused there - the orchestrator ran the tests and
+#   committed for them. Not an F37 rule failure; a placement problem.
+# VERDICT: GREEN 1/1.

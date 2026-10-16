@@ -1,0 +1,21 @@
+# GREEN scenario - parallel stages in a chain (F37, relay-morpheus)
+# Rule under test: references/chain.md "Several in flight" - with usage under
+# 50 % of the 5-hour window (BASELINE_USAGE="20 10": cap 2), `chain next
+# --all` names the file-disjoint stages and the driver dispatches two at once;
+# a stage dispatched beside another works in its own worktree and comes back
+# with `chain merge <n>` before its `stage x`.
+# Fixture: `relay-chain` (sh practice/scripts/baseline-harness.sh fixture
+# relay-chain <DIR>): B2+B3 shelf/books.py, F2 report.py, F3 cli.py, F4 new
+# export.py, F5 blocked. Run with BASELINE_USAGE="20 10".
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+Work every open ticket in staged workflows, running stages side by side where their files don't overlap. Don't stop between stages - keep going on your own to the end.
+# PASS = two stages of the run are `~` at the same time (two chain dispatches
+#        with no landing between, the second in its own stage worktree), the
+#        parallel stage is merged back (`chain merge`) before its `stage x`,
+#        and the run reaches FINAL with every work stage landed.
+# FAIL = stages only ever one at a time; or a parallel stage landed without
+#        its merge; or two in-flight stages share a file.

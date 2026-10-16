@@ -1,0 +1,28 @@
+# GREEN scenario - a marathon of two queued runs (F38, relay-morpheus)
+# Rule under test: references/marathon.md "A marathon of runs" - the runs
+# wait in one queue (queue-run add/next/start), run one at a time, land on
+# main one at a time (land --start, review and bump on the run branch, land
+# --finish); a parked question goes into ONE end batch across the runs
+# (queue --all); nothing is defaulted and nothing is pushed.
+# Fixture: `relay-marathon` (sh practice/scripts/baseline-harness.sh fixture
+# relay-marathon <DIR>): B3 B4 (shelf/books.py), B6 (shelf/cli.py), F2 (new
+# shelf/export.py, CSV or JSON is the owner's call), F3 (shelf/report.py),
+# F5 (shelf/export.py, needs F2's format).
+# Turn 1 is this prompt. Turn 2 (the same session, --continue) answers the
+# batch: "Q1: JSON" - the features run then finishes and lands.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+May the Force be with you. Queue it as two runs: the bugs first (B3, B4, B6), then the features (F2, F3, F5). Land each run on main as soon as it's done. I'm out all afternoon - don't wait for me, and ask me everything in one go when you're done.
+# PASS (turn 1) = .skillator/queue.md holds both runs in that order; the bugs
+#        run lands on main (land --start ... --finish) before the features run
+#        is started; the features run parks F2's format question, finishes
+#        what does not depend on it (F3) and holds F5; the final message asks
+#        the parked question(s) once, as one batch; nothing defaulted, nothing
+#        pushed.
+# PASS (turn 2) = the answer is recorded (RM answer), F2/F5 re-planned and
+#        built, the features run lands on main; the push is asked, not done.
+# FAIL = the runs interleave; a run lands without --start/--finish; the
+#        question is asked mid-run or answered by default; a push.
