@@ -41,7 +41,42 @@
 #   GREEN isolated with BASELINE_ISOLATE=hide (A63b, verified 2026-09-24 on
 #         2.1.281, practice/baselines/green-harness-isolation.txt): `run` hides
 #         ~/.claude/CLAUDE.md as CLAUDE.md.skillator-hidden for the nested run
-#         and restores it (trap on EXIT INT TERM). Never two hidden runs at once.
+#         and restores it (trap on EXIT INT TERM). Never two hidden runs at once
+#         (an inner `run` inside an outer run's hide window does not hide again).
+#   GREEN unisolated is REFUSED by `run` (A121): a run with a plugin prefix, or
+#         with --plugin-dir among its args, needs BASELINE_ISOLATE=hide (or
+#         bare with --bare in the args). BASELINE_ISOLATE=off runs it
+#         unisolated on purpose and says so in the .err - the escape hatch for
+#         re-running an old unisolated record (a93, a94, f32, f34, a114).
+#   BASELINE_ISOLATE is read by `run` and nothing else. A driver that rewrites
+#         the emitted `sh <harness> run ...` into a bare `timeout claude ...`
+#         keeps `BASELINE_ISOLATE=hide` on a line where it reaches only
+#         `timeout` and claude, which ignore it: F39 round 4 ran with
+#         ~/.claude/CLAUDE.md loaded that way. Put it on the OUTER `run` that
+#         wraps the driver. An inner `run` started inside an outer run's hide
+#         window sees the window and does not hide again (or refuse).
+#   --max-budget-usd is SEEN by the nested model (A121). The flag is not
+#         emitted here, but drivers add it, and the model reads the cap: F39
+#         round 3a cited "the $3 budget" as its reason to skip a dispatch. Any
+#         scenario that weighs cost - tiering, "is it worth an agent" - is
+#         skewed by a cap; leave it off those runs or record it as a condition.
+#
+# Time limits (A120). `run` used to put CMD under `timeout -k 30 SECONDS`. On
+# Git Bash that fails twice (probed 2026-10-16 with sleep fixtures):
+#  1. Signals to a native .exe (node, claude) go through the MSYS stub, and
+#     that is not reliable: in 1 of 6 probes node.exe ignored timeout's TERM
+#     AND its KILL, and node plus its native ping child lived on after
+#     timeout returned 137 (the other 5 died). MSYS-only trees always died.
+#  2. The timer stops while the host sleeps. F39 round 4 direct-2 (a bare
+#     `timeout -k 30 600 claude`, started 13:33:55Z) ran 106 min because the
+#     laptop slept 13:36:26Z-15:17:56Z (System log, Power-Troubleshooter):
+#     timeout never fired and claude exited 0 on its own.
+# So `run` starts CMD in its own process group and a watchdog that reads the
+# real clock every second (a wake fires it at once). Past SECONDS it sends
+# SIGTERM to the group, and on Windows `taskkill /T /F` on the run's Windows
+# pids, which reaches native children too; 30 s later, SIGKILL to the group.
+# It reports "LIMIT HIT: harness wall clock" (rc 124, or 137 if SIGKILL was
+# needed). A bare `timeout claude` has neither fix: always go through `run`.
 #
 # Permissions (A75). The default emitted command runs under
 # `--permission-mode acceptEdits` plus an explicit `--allowedTools` list
@@ -1966,8 +2001,8 @@ settings_json() {
 BASELINE_TIMEOUT_DEFAULT=2700
 
 # run SECONDS PREFIX|- CMD... -> the emitted command's wrapper. Checks the
-# prefix before and after, runs CMD under `timeout`, and says on stderr which
-# limit (if any) ended it. stdout is CMD's alone, so `> run.jsonl` still works.
+# prefix before and after, runs CMD in its own process group under a wall-clock
+# watchdog (A120 - no `timeout`), and says on stderr which limit (if any) ended it. stdout is CMD's alone, so `> run.jsonl` still works.
 # A63b: BASELINE_ISOLATE=hide renames ~/.claude/CLAUDE.md to
 # CLAUDE.md.skillator-hidden for the nested run only (owner-approved), restoring
 # it on exit, on INT/TERM, and after the run. A leftover hidden file means an
@@ -1979,6 +2014,13 @@ hide_restore() {
 }
 hide_begin() {
   HIDE_MD="$HOME/.claude/CLAUDE.md"; HIDE_BAK="$HIDE_MD.skillator-hidden"; HIDE_ON=''
+  # A121: an inner `run` inside a live outer run's hide window - the file is
+  # hidden by that run, not stale. Neither hide again nor refuse.
+  if [ -n "${BASELINE_RUN_HIDING:-}" ] && kill -0 "$BASELINE_RUN_HIDING" 2>/dev/null \
+     && [ -e "$HIDE_BAK" ] && [ ! -e "$HIDE_MD" ]; then
+    echo "# isolate=hide: inside the hide window of outer run $BASELINE_RUN_HIDING - ~/.claude/CLAUDE.md is already hidden" >&2
+    return 0
+  fi
   if [ -e "$HIDE_BAK" ]; then
     echo "# REFUSED: $HIDE_BAK exists - a previous hidden run died. Restore first:" >&2
     echo "#   mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md" >&2
@@ -1995,6 +2037,7 @@ hide_begin() {
   # the stale-file refusal above; SIGKILL to the harness is likewise.
   mv "$HIDE_MD" "$HIDE_BAK" || return 1
   HIDE_ON=1
+  BASELINE_RUN_HIDING=$$; export BASELINE_RUN_HIDING
   trap 'hide_restore' EXIT
   trap 'hide_restore; exit 130' INT
   trap 'hide_restore; exit 143' TERM
@@ -2011,9 +2054,54 @@ hide_end() {
   echo "# isolate=hide: ~/.claude/CLAUDE.md restored" >&2
 }
 
+# A121: a GREEN run (plugin prefix, or --plugin-dir in CMD) must be isolated.
+# BASELINE_ISOLATE is read here and in emit_cmd, nowhere else: it has to be in
+# the environment of THIS `run` - on an inner command it reaches nothing.
+run_isolation() {
+  p="$1"; shift
+  green=''; hasbare=''
+  [ "$p" != - ] && green=1
+  for a in "$@"; do
+    case "$a" in --plugin-dir|--plugin-dir=*) green=1 ;; --bare) hasbare=1 ;; esac
+  done
+  [ -n "$green" ] || return 0
+  case "${BASELINE_ISOLATE:-}" in
+  hide) return 0 ;;
+  bare)
+    if [ -n "$hasbare" ]; then
+      echo "# isolated: UNVERIFIED (BASELINE_ISOLATE=bare, --bare) - grade as untested isolation" >&2
+      return 0
+    fi
+    echo "# REFUSED: GREEN run with BASELINE_ISOLATE=bare but no --bare in the command." >&2
+    return 1 ;;
+  off)
+    echo "# ISOLATION OFF: GREEN run with BASELINE_ISOLATE=off - ~/.claude/CLAUDE.md loads" >&2
+    echo "#   into it. A violation stays valid; a compliance needs the A63 caveat in its record." >&2
+    return 0 ;;
+  esac
+  echo "# REFUSED: GREEN run without isolation (BASELINE_ISOLATE='${BASELINE_ISOLATE:-}') -" >&2
+  echo "#   ~/.claude/CLAUDE.md would load into it (F39 round 4, A121). Put" >&2
+  echo "#   BASELINE_ISOLATE=hide in the environment of THIS run command, not an inner one;" >&2
+  echo "#   or BASELINE_ISOLATE=off to run it unisolated on purpose (said in the .err)." >&2
+  return 1
+}
+
+# A120: kill the run's whole tree. POSIX: signal its process group. Windows
+# (Git Bash): a native .exe never sees the signal, so also taskkill /T /F every
+# Windows pid the run had - that reaches native children and grandchildren.
+run_tree_kill() {
+  kill -s "$1" -- "-$RUN_CPID" 2>/dev/null || kill -s "$1" "$RUN_CPID" 2>/dev/null || :
+  w2=''; [ -r "/proc/$RUN_CPID/winpid" ] && w2=$(cat "/proc/$RUN_CPID/winpid" 2>/dev/null)
+  for w in $RUN_WINPIDS $w2; do
+    MSYS2_ARG_CONV_EXCL='*' taskkill /T /F /PID "$w" >/dev/null 2>&1 || :
+  done
+}
+
 run_nested() {
   t="$1"; p="$2"; shift 2
   case "$t" in ''|*[!0-9]*) die "run: timeout must be whole seconds, got: $t" ;; esac
+  run_isolation "$p" "$@" || die 'run: refused - GREEN run without isolation'
+  HIDE_ON=
   hiding=''
   if [ "${BASELINE_ISOLATE:-}" = hide ]; then
     hide_begin || die 'run: isolate=hide refused to start'
@@ -2022,19 +2110,53 @@ run_nested() {
   if [ "$p" != - ]; then
     verify_prefix "$p" || die "prefix is dirty BEFORE the run - rebuild it: $p"
   fi
-  echo "# limit: harness wall clock ${t}s (BASELINE_TIMEOUT), SIGKILL 30s after that" >&2
+  grace="${BASELINE_KILL_GRACE:-30}"
+  echo "# limit: harness wall clock ${t}s (BASELINE_TIMEOUT), real time, whole process tree; SIGKILL ${grace}s after that" >&2
+  mark=$(mktemp "${TMPDIR:-/tmp}/bh-limit.XXXXXX") || die 'run: mktemp failed'
+  rm -f "$mark"
+  deadline=$(( $(date +%s) + t ))
   set +e
-  timeout -k 30 "$t" "$@" < /dev/null
+  # own process group (job control), so the kill reaches the whole POSIX tree
+  set -m 2>/dev/null
+  "$@" < /dev/null &
+  RUN_CPID=$!
+  RUN_WINPIDS=''
+  [ -r "/proc/$RUN_CPID/winpid" ] && RUN_WINPIDS=$(cat "/proc/$RUN_CPID/winpid" 2>/dev/null)
+  (
+    trap - EXIT INT TERM
+    while kill -0 "$RUN_CPID" 2>/dev/null; do
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        : > "$mark.term"
+        run_tree_kill TERM
+        gend=$(( $(date +%s) + grace ))
+        while kill -0 "$RUN_CPID" 2>/dev/null && [ "$(date +%s)" -lt "$gend" ]; do sleep 1; done
+        if kill -0 "$RUN_CPID" 2>/dev/null; then : > "$mark.kill"; run_tree_kill KILL; fi
+        exit 0
+      fi
+      sleep 1
+    done
+  ) &
+  RUN_WPID=$!
+  set +m 2>/dev/null
+  trap 'run_tree_kill KILL; hide_restore; exit 130' INT
+  trap 'run_tree_kill KILL; hide_restore; exit 143' TERM
+  wait "$RUN_CPID"
   rc=$?
+  kill -- "-$RUN_WPID" 2>/dev/null || kill "$RUN_WPID" 2>/dev/null
+  wait "$RUN_WPID" 2>/dev/null
+  trap - INT TERM
+  [ -n "$HIDE_ON" ] && { trap 'hide_restore; exit 130' INT; trap 'hide_restore; exit 143' TERM; }
+  if [ -e "$mark.kill" ]; then rc=137; elif [ -e "$mark.term" ]; then rc=124; fi
+  rm -f "$mark.term" "$mark.kill"
   set -e
   if [ -n "$hiding" ]; then hide_end || die 'run: CLAUDE.md was not restored'; fi
   case "$rc" in
   0)   echo "# limit hit: none - the run exited 0 on its own" >&2 ;;
-  124) echo "# LIMIT HIT: harness wall clock, ${t}s (BASELINE_TIMEOUT) - SIGTERM sent." >&2
+  124) echo "# LIMIT HIT: harness wall clock, ${t}s (BASELINE_TIMEOUT) - process tree killed (SIGTERM; taskkill /T /F on Windows)." >&2
        echo "#   No stream output at all means it hung before turn 1 (SessionStart hooks);" >&2
        echo "#   output that stops mid-run means it was slow or stuck. Either way: no verdict." >&2 ;;
-  137) echo "# LIMIT HIT: harness wall clock, ${t}s, and SIGTERM was ignored - SIGKILLed 30s later." >&2 ;;
-  125|126|127) echo "# limit hit: none - timeout could not start the command (rc=$rc)" >&2 ;;
+  137) echo "# LIMIT HIT: harness wall clock, ${t}s, and the tree outlived SIGTERM - SIGKILLed ${grace}s later." >&2 ;;
+  126|127) echo "# limit hit: none - the command could not start (rc=$rc)" >&2 ;;
   *)   echo "# limit hit: none from the harness - claude itself exited $rc (its own error or" >&2
        echo "#   limit, e.g. --max-budget-usd or auth; the stream's result line says which)" >&2 ;;
   esac
@@ -2102,17 +2224,25 @@ emit_cmd() {
       echo "#   ~/.claude/CLAUDE.md is renamed to CLAUDE.md.skillator-hidden while the" >&2
       echo "#   run is live and restored after it (A63b, verified 2026-09-24)." >&2
     elif [ "${BASELINE_ISOLATE:-}" = bare ]; then
-      bare=' --bare'
+      bare=' --bare'; envp='BASELINE_ISOLATE=bare '
       echo "# isolated: UNVERIFIED — --bare claims to skip CLAUDE.md discovery but was" >&2
       echo "#   never confirmed on this host, and it reads auth only from" >&2
       echo "#   ANTHROPIC_API_KEY. Prove the isolation in the run before trusting it." >&2
       [ -n "${ANTHROPIC_API_KEY:-}" ] || echo "#   ANTHROPIC_API_KEY is not set: this --bare run will fail to authenticate." >&2
+    elif [ "${BASELINE_ISOLATE:-}" = off ]; then
+      envp='BASELINE_ISOLATE=off '
+      echo "# isolated: NO (BASELINE_ISOLATE=off). ~/.claude/CLAUDE.md loads into this run." >&2
+      echo "#   --safe-mode would drop it but also suppresses --plugin-dir. Per the asymmetry" >&2
+      echo "#   rule: a violation stays valid, a compliance needs the caveat stated. (A63)" >&2
     else
-      echo "# isolated: NO. ~/.claude/CLAUDE.md loads into this run. --safe-mode would" >&2
-      echo "#   drop it but also suppresses --plugin-dir, so the skill would not load." >&2
-      echo "#   Per the asymmetry rule: a violation stays valid, a compliance needs the" >&2
-      echo "#   caveat stated in the record. (A63)" >&2
+      echo "# isolated: NO - and 'run' will REFUSE this GREEN run (A121). Set" >&2
+      echo "#   BASELINE_ISOLATE=hide (or off, to run unisolated on purpose) and re-emit." >&2
     fi
+    echo "# BASELINE_ISOLATE must stay on the OUTER 'sh <harness> run' below: set on an" >&2
+    echo "#   inner command (a driver's own 'timeout claude ...') it reaches nothing, and a" >&2
+    echo "#   bare 'timeout claude' also loses the whole-tree, sleep-proof kill. (A120, A121)" >&2
+    echo "# --max-budget-usd, if a driver adds it, is visible to the nested model and skews" >&2
+    echo "#   any cost-weighing scenario (F39 round 3a cited the \$3 budget). (A121)" >&2
     echo "cd '$fixture' && ${uenv}${envp}sh '$self' run $t '$prefix' claude -p \"\$(sh '$self' scenario '$scenario')\" \\"
     echo "  --plugin-dir '$prefix' --add-dir '$prefix'$bare \\"
     echo "  $perms --settings \"\$(sh '$self' settings '$prefix')\" \\"
@@ -2903,6 +3033,59 @@ selftest() {
   grep -q 'claude itself exited 7' "$tmp/err" || die 'run: own exit misreported'
   ( run_nested 5 - true ) 2>"$tmp/err" || die 'run: a clean command failed'
   grep -q 'limit hit: none' "$tmp/err" || die 'run: clean exit misreported'
+  # A120: a run past its limit is killed with its whole tree (a child and a
+  # grandchild that sleep), within limit + a few seconds, and leaves no orphan.
+  cat > "$tmp/fx-tree.sh" <<'FX'
+sleep 61 &
+echo $! > "$1/fx-child.pid"
+sh -c 'sleep 62 & echo $! > "$0/fx-grand.pid"; wait' "$1" &
+sleep 63
+FX
+  t0=$(date +%s); rc=0
+  ( run_nested 2 - sh "$tmp/fx-tree.sh" "$tmp" ) 2>"$tmp/err" || rc=$?
+  t1=$(date +%s)
+  [ "$rc" = 124 ] || die "run: tree fixture past its limit gave rc=$rc, want 124"
+  [ $((t1 - t0)) -le 8 ] || die "run: tree fixture took $((t1 - t0))s against a 2s limit"
+  grep -q 'LIMIT HIT: harness wall clock, 2s' "$tmp/err" || die 'run: tree fixture limit not reported'
+  sleep 1
+  for f in fx-child fx-grand; do
+    [ -s "$tmp/$f.pid" ] || die "run: tree fixture wrote no $f.pid"
+    if kill -0 "$(cat "$tmp/$f.pid")" 2>/dev/null; then
+      kill "$(cat "$tmp/$f.pid")" 2>/dev/null; die "run: $f outlived the limit kill (orphan)"
+    fi
+  done
+  # A120, Windows: claude is a native .exe. timeout's signals never reached a
+  # native node.exe or its native child (both outlived `timeout -k`); the
+  # taskkill /T /F must. Only where node and /proc/<pid>/winpid both exist.
+  if [ -r /proc/self/winpid ] && command -v node >/dev/null 2>&1 && command -v tasklist >/dev/null 2>&1; then
+    cat > "$tmp/fx-native.js" <<'FX'
+const cp = require('child_process'), fs = require('fs');
+const c = cp.spawn('ping', ['-n', '64', '127.0.0.1'], {stdio: 'ignore'});
+fs.writeFileSync(process.argv[2], process.pid + ' ' + c.pid);
+setTimeout(() => {}, 65000);
+FX
+    rm -f "$tmp/fx-native.pids"; t0=$(date +%s); rc=0
+    ( run_nested 3 - node "$tmp/fx-native.js" "$tmp/fx-native.pids" ) 2>"$tmp/err" || rc=$?
+    t1=$(date +%s)
+    [ "$rc" = 124 ] || die "run: native tree past its limit gave rc=$rc, want 124"
+    [ $((t1 - t0)) -le 9 ] || die "run: native tree took $((t1 - t0))s against a 3s limit"
+    [ -s "$tmp/fx-native.pids" ] || die 'run: native fixture wrote no pids'
+    sleep 1
+    for w in $(cat "$tmp/fx-native.pids"); do
+      if MSYS2_ARG_CONV_EXCL='*' tasklist /FI "PID eq $w" /NH 2>/dev/null | grep -qi -e node -e ping; then
+        MSYS2_ARG_CONV_EXCL='*' taskkill /T /F /PID "$w" >/dev/null 2>&1
+        die "run: native pid $w outlived the limit kill (orphan)"
+      fi
+    done
+  fi
+  # A120: a tree that ignores SIGTERM is SIGKILLed after the grace (POSIX; on
+  # Windows taskkill /F ends it at once, so 124 is right there too).
+  t0=$(date +%s); rc=0
+  ( BASELINE_KILL_GRACE=2 run_nested 1 - sh -c 'trap "" TERM; sleep 60 & wait; sleep 60' ) 2>"$tmp/err" || rc=$?
+  t1=$(date +%s)
+  case "$rc" in 124|137) ;; *) die "run: TERM-ignoring run gave rc=$rc, want 124/137" ;; esac
+  [ $((t1 - t0)) -le 8 ] || die "run: TERM-ignoring run took $((t1 - t0))s against 1s + 2s grace"
+  grep -q 'LIMIT HIT: harness wall clock, 1s' "$tmp/err" || die 'run: TERM-ignoring run limit not reported'
 
   # A88: the prefix carries uncommitted skill edits (and says so), is
   # read-only, and a run that writes into it is caught before and after.
@@ -2935,11 +3118,28 @@ selftest() {
     die 'prefix: files are writable'
   fi
   verify_prefix "$p" 2>/dev/null || die 'prefix: fresh prefix fails its own manifest'
-  rc=0; ( run_nested 5 "$p" sh -c "chmod u+w '$p/skills'; echo x > '$p/skills/leak.mjs'" ) 2>"$tmp/err" || rc=$?
+  # A121: a prefix run is GREEN - unisolated it is refused before anything runs
+  if ( unset BASELINE_ISOLATE; run_nested 5 "$p" sh -c "touch '$tmp/ran-green'" ) 2>"$tmp/err"; then
+    die 'run: an unisolated GREEN run was not refused'
+  fi
+  [ ! -e "$tmp/ran-green" ] || die 'run: unisolated GREEN refused, but the command ran'
+  grep -q 'REFUSED: GREEN run without isolation' "$tmp/err" || die 'run: GREEN refusal not said in the .err'
+  grep -q 'environment of THIS run command' "$tmp/err" || die 'run: GREEN refusal does not say where BASELINE_ISOLATE goes'
+  if ( unset BASELINE_ISOLATE; run_nested 5 - sh -c "touch '$tmp/ran-green'" --plugin-dir x ) 2>"$tmp/err"; then
+    die 'run: --plugin-dir without a prefix not treated as GREEN'
+  fi
+  if ( BASELINE_ISOLATE=bare run_nested 5 "$p" true ) 2>"$tmp/err"; then
+    die 'run: BASELINE_ISOLATE=bare without --bare was accepted'
+  fi
+  ( BASELINE_ISOLATE=off run_nested 5 "$p" true ) 2>"$tmp/err" || die 'run: BASELINE_ISOLATE=off GREEN run failed'
+  grep -q 'ISOLATION OFF: GREEN run with BASELINE_ISOLATE=off' "$tmp/err" || die 'run: isolate=off not flagged in the .err'
+  ( unset BASELINE_ISOLATE; run_nested 5 - true ) 2>"$tmp/err" || die 'run: a RED run was refused for isolation'
+  if grep -q 'REFUSED\|ISOLATION OFF' "$tmp/err"; then die 'run: a RED run was flagged for isolation'; fi
+  rc=0; ( BASELINE_ISOLATE=off run_nested 5 "$p" sh -c "chmod u+w '$p/skills'; echo x > '$p/skills/leak.mjs'" ) 2>"$tmp/err" || rc=$?
   [ "$rc" = 3 ] || die "run: a write into the prefix gave rc=$rc, want 3"
   grep -q 'WROTE INTO THE PREFIX' "$tmp/err" || die 'run: prefix write not reported'
   grep -q 'leak.mjs' "$tmp/err" || die 'run: prefix write does not name the file'
-  if ( run_nested 5 "$p" true ) 2>"$tmp/err"; then die 'run: accepted an already-dirty prefix'; fi
+  if ( BASELINE_ISOLATE=off run_nested 5 "$p" true ) 2>"$tmp/err"; then die 'run: accepted an already-dirty prefix'; fi
   grep -q 'dirty BEFORE the run' "$tmp/err" || die 'run: dirty prefix refused for the wrong reason'
   s2="$tmp/src2"; mkdir -p "$s2/.claude-plugin" "$s2/skills/a"
   echo '{}' > "$s2/.claude-plugin/plugin.json"; echo canon > "$s2/PRACTICE.md"; echo c > "$s2/skills/a/SKILL.md"
@@ -2968,13 +3168,29 @@ selftest() {
   [ ! -e "$tmp/ran" ] || die 'hide: stale hidden file refused, but the command ran'
   grep -q 'mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md' "$tmp/err" \
     || die 'hide: stale refusal did not print the restore command'
-  rm "$md.skillator-hidden"; rm "$md"
+  rm "$md.skillator-hidden"
+  # A121: an inner `run` inside an outer run's hide window neither hides again
+  # nor takes the outer hide for a stale one.
+  self_h=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")
+  ( HOME="$fh" BASELINE_ISOLATE=hide run_nested 20 - \
+      sh "$self_h" run 10 - sh -c "[ ! -e '$md' ] && touch '$tmp/inner-ran'" ) 2>"$tmp/err" \
+    || { cat "$tmp/err" >&2; die 'hide: inner run inside the hide window failed'; }
+  [ -e "$tmp/inner-ran" ] || die 'hide: inner run did not run its command'
+  grep -q 'inside the hide window of outer run' "$tmp/err" || die 'hide: inner run did not see the window'
+  [ -f "$md" ] && [ ! -e "$md.skillator-hidden" ] || die 'hide: not restored after an inner run'
+  rm "$md"
   ( HOME="$fh" BASELINE_ISOLATE=hide run_nested 5 - true ) 2>"$tmp/err" || die 'hide: no CLAUDE.md made it fail'
   grep -q 'nothing to hide' "$tmp/err" || die 'hide: missing CLAUDE.md not reported'
   c=$(BASELINE_ISOLATE=hide emit_cmd green "$f" "$tmp/s.txt" "$tmp" 2>"$tmp/err")
   grep -q 'isolated: YES (CLAUDE.md hidden for the run)' "$tmp/err" || die 'cmd green: hide not announced'
   if grep -q 'isolated: NO' "$tmp/err"; then die 'cmd green: hide still warns not isolated'; fi
   echo "$c" | grep -q 'BASELINE_ISOLATE=hide sh ' || die 'cmd green: hide not passed to run'
+  grep -q 'must stay on the OUTER' "$tmp/err" || die 'cmd green: outer-run placement of BASELINE_ISOLATE not stated'
+  grep -q 'max-budget-usd, if a driver adds it, is visible' "$tmp/err" || die 'cmd green: budget-cap visibility not stated'
+  c=$( (unset BASELINE_ISOLATE; emit_cmd green "$f" "$tmp/s.txt" "$tmp") 2>"$tmp/err")
+  grep -q "'run' will REFUSE this GREEN run" "$tmp/err" || die 'cmd green: unisolated emit does not warn of the refusal'
+  c=$(BASELINE_ISOLATE=off emit_cmd green "$f" "$tmp/s.txt" "$tmp" 2>"$tmp/err")
+  echo "$c" | grep -q 'BASELINE_ISOLATE=off sh ' || die 'cmd green: off not passed to run'
 
   # relay-marathon (F33): the board's shape is the test - F2 owner's call, F5
   # sharing its new file, B6 decidable from the README, B4 apart from F2.

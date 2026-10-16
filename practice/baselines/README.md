@@ -119,8 +119,10 @@ shape as the proven hook rule; not re-run). With a prefix, the JSON also denies
 with "directory that is denied by your permission settings").
 
 **Timeout (A87).** The emitted command runs claude through `sh
-baseline-harness.sh run <SECONDS> <PREFIX|-> claude …`, which wraps it in
-`timeout -k 30`. Default **2700 s** (45 min; A84's nine-subagent GREEN fit well
+baseline-harness.sh run <SECONDS> <PREFIX|-> claude …`, which runs it in its own
+process group under a wall-clock watchdog (A120: SIGTERM to the group, plus
+`taskkill /T /F` on Windows, SIGKILL after `BASELINE_KILL_GRACE`, default 30 s;
+the clock is real time, so a host that slept past the limit is killed on wake). Default **2700 s** (45 min; A84's nine-subagent GREEN fit well
 inside), override with `BASELINE_TIMEOUT=<seconds>`. On exit it prints to
 stderr which limit ended the run: `LIMIT HIT: harness wall clock` (rc 124; no
 stream output at all means it hung before turn 1, in SessionStart hooks),
@@ -243,8 +245,11 @@ exists. `BASELINE_ISOLATE=hide sh practice/scripts/baseline-harness.sh cmd green
 in `green-harness-isolation.txt`: without hide the run quoted
 `# Global Behavioral Guidelines`, with hide it answered `NONE` while the
 skillator plugin still loaded from `--plugin-dir`; the file's sha256 was
-unchanged afterwards. Do not run two hidden runs at once - the second refuses.
-A GREEN run without `hide` still needs the caveat line.
+unchanged afterwards. Do not run two hidden runs at once - the second refuses
+(an inner `run` inside an outer run's hide window is fine; it does not hide
+again). A GREEN run without `hide` is refused (A121); `BASELINE_ISOLATE=off`
+runs it anyway and writes an `# ISOLATION OFF` line to its .err - the record
+then needs the caveat line. `BASELINE_ISOLATE` goes on the OUTER `run` line.
 
 ## 2026-09-05 — A51, the three re-runs
 
