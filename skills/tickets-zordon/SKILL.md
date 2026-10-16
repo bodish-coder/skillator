@@ -4,7 +4,7 @@ description: >-
   Use when the user reports a bug or asks for a feature, says "log this",
   "what's pending", "ticket", "B3", "F12", "A4", "next ticket number", "mark
   it done", "block it", "defer it", "cancel it", "list tickets", "list tickets
-  status", "ultracode", "work the board", "use a workflow",
+  status", "ultracode", "use a workflow",
   mentions TICKETS.md, or when starting work and you need the open set. Also
   at session end, to sync statuses. NOT an issue tracker or Jira/GitHub sync;
   NOT for harvesting `ponytail:` markers (`code-yoda`).
@@ -321,7 +321,7 @@ board as plain dispatch, scripted.
 - **4+ open tickets** to work in this cycle (real fan-out).
 - The tickets are a sweep — the same change across N files, an audit, a codemod.
 - You want each fix **adversarially verified** before flipping it to `[x]`.
-- The user asked: **"ultracode"**, "use a workflow", "work the board", "fan out
+- The user asked: **"ultracode"**, "use a workflow", "fan out
   agents", "orchestrate this with subagents".
 
 **Stay with plain dispatch when:** 1-3 tickets, tickets needing your judgement

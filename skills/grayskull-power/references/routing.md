@@ -92,7 +92,7 @@ re-check anything an agent asserts without evidence.
 |---|---|
 | A bug, a feature, "log this", "what's pending", "mark done" | `tickets-zordon` (an F ticket it logs or picks goes on to `build-jarvis`) |
 | The user states how they work - "from now on", "always X", "never Y", "stop doing", "in this repo nobody", "I prefer" - or asks what rules apply here, or why a preference was forgotten between chats | `rules-orko` (armed at invoke; the rule is on disk before the next tool call, at global or project scope - asked when the wording does not settle it) |
-| 4+ open tickets, a sweep, "ultracode", "work the board" | `tickets-zordon` (workflow mode) |
+| 4+ open tickets, a sweep, "ultracode" | `tickets-zordon` (workflow mode) |
 | "why is this broken", audit a whole app, unknown-cause rot, pre-release sweep | `audit-sherlock` |
 | "is this over-engineered", "what can we delete", "simplify review" of a diff — complexity only, correctness stays with `code-review` | `code-yoda` → `references/review.md` |
 | "find bloat", "audit for over-engineering", what the whole repo can lose | `code-yoda` → `references/audit.md` (defects it meets go to `audit-sherlock`) |
@@ -105,6 +105,8 @@ re-check anything an agent asserts without evidence.
 | "check screenshot", or verify a change in a running app visually | `screenshot-argus` |
 | Ready to merge a branch | `mergeprep-oracle`, then `merge-smith` |
 | Ship to a VPS / set up deployment | `deploy-merlin`, then `deploy-niyoj` |
+| "Help me, Obi-Wan", "help me obiwan", "help me obi wan kenobi" - alone, with RUN-n or a ticket - or a run, its parked decisions, a plan or a design wanted as a diagram, **even when a relay run is parked** | `holo-r2d2` (draws the page; relay-morpheus keeps the questions and writes the answers) |
+| A marathon over the board - "May the Force be with you", "may the force be with u", "MTFBWY", "marathon", "go marathon", "run the marathon", `/skillator:marathon`, "work the board"; over named tickets - "Use the Force on F35 F36", "marathon F35 F36", "go marathon F35 F36"; "I'll be back" (arm the away flow); "I'm back" (ask every parked question, then unblock) | `relay-morpheus` → `references/marathon.md` (never `tickets-zordon` workflow mode; the board rules stay its own) |
 | A staged run the session may not outlive — fan-out, long build, flaky link | `relay-morpheus` (the ledger; the build skill still does the building) |
 | Work the whole board as workflows that start each other — "work all open tickets in staged workflows", "keep going", "auto next", "next stage", a pause at 80 % usage | `relay-morpheus` → `references/chain.md` (the board rules stay `tickets-zordon`'s) |
 | A plan whose tasks are written and now have to be built | `tasks-sentinels` — one task, one fresh agent, reviewed before the next |

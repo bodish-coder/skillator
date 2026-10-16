@@ -69,7 +69,7 @@ One skill at a time; chaining "to be safe" is the failure.
 | A mock UI to make real · a spec only in chat | `designui-galadriel` · `spec-watson` |
 | Screenshots · auth/secrets · a skill | `screenshot-argus` · `security-review` · `skill-smith` |
 | Merge · deploy · ending · resuming | `mergeprep-oracle`→`merge-smith` · `deploy-merlin`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |
-| A staged run · written tasks to build | `relay-morpheus` · `tasks-sentinels` |
+| A staged run, marathon · written tasks · Obi-Wan | `relay-morpheus` · `tasks-sentinels` · `holo-r2d2` |
 | Tricky analysis | Parallel Fable subagents; you reconcile |
 
 **Nothing matches?** Do it directly — a one-line edit needs no skill, but still
