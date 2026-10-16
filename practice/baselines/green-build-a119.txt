@@ -105,3 +105,40 @@
 #   exists since the last build-jarvis Skill call. Or, lighter: tell the model
 #   that any reply text before its first spend opens with the grade line
 #   (so the narration line becomes "grade: ... - logging F8 first").
+#
+# ------------------------------------------ ROUND 3 (the grade gate, F42 run) ----
+# FIX: hooks/grade-gate.{sh,ps1} (a7b6a24) - a PreToolUse hook on
+#   Agent|Task|Write|Edit|MultiEdit|NotebookEdit that denies the call while
+#   build-jarvis is loaded and no assistant text block has a `grade:` line.
+#   --settings = the harness settings JSON + the route hook + the gate, both
+#   from the prefix (sh <prefix>/skills/build-jarvis/hooks/...). Prefix from
+#   the working tree at e54abd5 (diff -r skills/build-jarvis: identical).
+#   Fresh relay-chain fixtures. Runs ONE AT A TIME (the machine ran low on
+#   memory earlier in the session), each in its own OUTER
+#   `BASELINE_ISOLATE=hide sh baseline-harness.sh run 1000 <prefix> sh drv.sh`
+#   ("restored", "limit hit: none" both times); per run timeout -k 30 900,
+#   --max-budget-usd 3. claude-code 2.1.301. Transcripts:
+#   transcripts/a119-greenr3-direct-{1,2}.*.
+#   direct-1  PASS. Skill(build-jarvis) -> TEXT "grade: bounded . critical no
+#     . design - . build cheap=sonnet . verify build=opus . ceremony lean ..."
+#     -> Bash/Read x5 -> Write design file -> Agent sonnet build -> verify ->
+#     report. The gate never fired. $0.67, 96 s.
+#   direct-2  PASS, gate-enforced. Read TICKETS.md -> Skill(tickets-zordon) ->
+#     next-id -> Edit TICKETS.md (F ticket logged BEFORE build-jarvis - the
+#     route's board-first order, missed in rounds 1-2) -> Skill(build-jarvis)
+#     -> Agent opus (design) -> PreToolUse DENIED by the grade gate -> TEXT
+#     "grade: bounded . critical yes (concurrency) . design deep=opus . build
+#     build=opus . verify deep=opus, held ..." -> Agent opus design (ran) ->
+#     build -> held verify -> report. $2.07, 450 s. One Agent call was
+#     ATTEMPTED before the grade and refused; no Write or Agent EXECUTED
+#     before it.
+#     Seats: critical named with its word; design deep, build build=opus,
+#     verify deep held - MATCH.
+# Round 3: 2/2 - direct-1 on its own, direct-2 because the gate refused the
+#   first spend. The wording alone still loses on the critical path; the gate
+#   is what holds it.
+#
+# ---------------------------------------------------------------- VERDICT ----
+# GREEN 2/2 with the gate wired (rounds 1-2 without it: 1/2, 1/2; RED 0/2).
+#   Caveat stated: on direct-2 the model's first attempt was a spend; the
+#   hook denied it. The gate is opt-in (grayskull arming offers it).
