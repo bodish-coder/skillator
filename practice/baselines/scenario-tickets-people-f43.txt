@@ -1,0 +1,20 @@
+# RED/GREEN scenario - tickets know their apps and people (F43, tickets-zordon)
+# Rule under test: tickets-zordon "Apps and people" - assignment writes an
+# [owner: @handle] tag on the ticket's one line (a handle from
+# .skillator/team.md), and `list tickets app:<app>` shows only that app's
+# tickets, each line verbatim with its [app: ...] [owner: ...] [by: ...]
+# tags, contributors from the commits that name the ticket.
+# Fixture: practice/baselines/fixture-tickets-monorepo.sh <DIR> - apps/web,
+# apps/api, packages/ui; .skillator/team.md (@vidul, @asha); two authors;
+# commits naming F1 (web) and F2 (api); B1 (web bug) open, unassigned.
+# RED = the same prompt with a prefix built from the commit before F43.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Assign B1 to Asha. Then list the tickets for the web app, with who worked on each one.
+# PASS = TICKETS.md's B1 line gains `[owner: @asha]` and nothing else on the
+#        board changes; the list shows only web tickets (B1, F1 - not F2),
+#        as checkbox lines with their tags, F1 naming @vidul and @asha as its builders
+#        (from the commits), and the count line.
+# FAIL = no owner tag (or a free-text "assigned to Asha"), other lines
+#        edited, F2 listed under web, or contributors invented/missing.

@@ -28,6 +28,9 @@ const inGroups = (id) => GROUPS.some(([p]) => id.startsWith(p));
 // ponytail: ID + em-dash + title is the whole line format the skill enforces.
 // A hyphen separator is tolerated because hand-typed tickets use one.
 const LINE = /^(\s*)- \[([ x~!>-])\]\s+([A-Za-z]+\d+[a-z]?)\s*[—-]\s*(.*)$/;
+// F43: trailing `[app: ..] [owner: @x] [by: @y, a@b]` tags. Lifted out of the
+// title and drawn as chips; a line without them parses exactly as before.
+const TAG = /\s*\[(app|owner|by):\s*([^\]]*)\]/g;
 
 export function parse(md) {
   const out = [];
@@ -37,7 +40,9 @@ export function parse(md) {
     const [, indent, ch, id, title] = m;
     const state = STATES[ch];
     if (!state) continue;
-    out.push({ id, title: title.trim(), status: state[0], glyph: state[1], sub: indent.length > 0 });
+    const tags = [];
+    const bare = title.replace(TAG, (_, k, v) => { tags.push([k, v.trim()]); return ""; });
+    out.push({ id, title: bare.trim(), tags, status: state[0], glyph: state[1], sub: indent.length > 0 });
   }
   return out;
 }
@@ -62,11 +67,16 @@ function countLine(c) {
     ` · ${c.total} total`;
 }
 
+const tagChips = (t) => (t.tags || []).length
+  ? ` <span class="tags">${t.tags.map(([k, v]) =>
+      `<span class="tag tag-${k}"><b>${k}</b> ${esc(v)}</span>`).join("")}</span>`
+  : "";
+
 const li = (t) =>
   `<li class="s-${t.status.replace("-", "")}${t.sub ? " sub" : ""}">` +
   `<span class="g" aria-hidden="true">${t.glyph}</span>` +
   `<span class="id">${esc(t.id)}</span>` +
-  `<span class="t">${esc(t.title)}</span>` +
+  `<span class="t">${esc(t.title)}${tagChips(t)}</span>` +
   `<span class="st">${t.status}${t.archived ? " · archived" : ""}</span></li>`;
 
 function section(name, ts) {
@@ -169,6 +179,11 @@ summary{cursor:pointer;font-family:var(--mono);font-size:.6875rem;text-transform
 summary:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 details ul{margin-top:.75rem}
 .empty{color:var(--mid)}
+.tags{display:inline-flex;flex-wrap:wrap;gap:.25rem;margin-left:.25rem;vertical-align:baseline}
+.tag{font-family:var(--mono);font-size:.6875rem;line-height:1.3;color:var(--mid);
+  border:1px solid var(--rule);border-radius:3px;padding:0 .35rem;background:var(--surface);white-space:nowrap}
+.tag b{font-weight:400;color:var(--faint)}
+.tag-owner{color:var(--ink)}
 </style>
 <header>
   <h1>TICKETS <span class="repo">· ${esc(title)}</span></h1>
@@ -221,6 +236,17 @@ not a ticket line
   ok(h2.indexOf(">B0<") > h2.indexOf("<details"), "archived ticket sits in the closed list");
   ok(h2.includes("done · archived"), "archived ticket is marked");
   ok(!render(md, "demo").includes("archived in"), "no archive, no archive note");
+  // F43: tags come off the title, render as chips, and never break the parse.
+  const tagged = parse(`- [~] F12 — Bulk <x> [app: web, api] [owner: @asha] [by: @vidul, z@q.io] (@cc-abc123)
+- [ ] F13 — Plain [ish] title`);
+  ok(tagged.length === 2, "tagged lines parse", tagged.length);
+  ok(tagged[0].title === "Bulk <x> (@cc-abc123)", "tags lifted off the title", tagged[0].title);
+  ok(JSON.stringify(tagged[0].tags) === JSON.stringify([["app", "web, api"], ["owner", "@asha"], ["by", "@vidul, z@q.io"]]), "tags read", tagged[0].tags);
+  ok(tagged[1].title === "Plain [ish] title" && tagged[1].tags.length === 0, "a bracket that is not a tag stays", tagged[1]);
+  const th = render(`## Features
+- [~] F12 — Bulk [app: web] [owner: @asha] (@cc-abc123)`, "demo");
+  ok(th.includes('<span class="tag tag-app"><b>app</b> web</span>') && th.includes('<span class="tag tag-owner"><b>owner</b> @asha</span>'), "tags render as chips");
+  ok(!/<span class="t">[^<]*\[app:/.test(th), "no raw tag text in the title");
   if (!process.exitCode) console.log("selftest: ok");
 }
 

@@ -228,6 +228,14 @@ li.row.sub { padding-inline-start: 2ch; }
   background: var(--sunk); border: 1px solid var(--hair);
   border-radius: 3px; padding: 0 0.25em;
 }
+.tags { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; vertical-align: baseline; }
+.tag {
+  font: 400 0.6875rem/1.4 var(--mono); color: var(--muted); white-space: nowrap;
+  background: var(--sunk); border: 1px solid var(--hair);
+  border-radius: 3px; padding: 0 0.35em;
+}
+.tag b { font-weight: 400; opacity: 0.75; }
+.tag-owner { color: var(--ink); }
 .why {
   grid-column: 3; display: block;
   color: var(--muted); font-size: 0.8125rem;
@@ -535,7 +543,11 @@ function parse(text) {
     if (!idm) { errs.push({ line: i + 1, raw }); continue; }
 
     const id = idm[1].toUpperCase();
-    let title = idm[2].trim();
+    /* F43: `[app: ..] [owner: @x] [by: @y]` tags come off the title and draw
+       as chips; a line without them parses exactly as before. */
+    const tags = [];
+    let title = idm[2].replace(/\s*\[(app|owner|by):\s*([^\]]*)\]/g,
+      (_, k, v) => { tags.push([k, v.trim()]); return ""; }).trim();
 
     /* A trailing parenthetical is a reason only when it names one. Everything
        else — (@owner), (branch: x), (was B7), (runtime) — is part of the title. */
@@ -548,7 +560,7 @@ function parse(text) {
 
     const pm = id.match(/^([A-Za-z]+)(\d+)([a-z]?)$/);
     out.push({
-      id, st, title, why,
+      id, st, title, why, tags,
       prefix: pm ? pm[1] : "?",
       num: pm ? parseInt(pm[2], 10) : 0,
       part: pm ? pm[3] : "",
@@ -651,7 +663,7 @@ function visible() {
     if (!app.states.has(t.st)) return false;
     if (!app.types.has(t.prefix) && SERIES.some(s => s.p === t.prefix)) return false;
     if (!q) return true;
-    return (t.id + " " + t.title + " " + (t.why || "")).toLowerCase().includes(q);
+    return (t.id + " " + t.title + " " + (t.why || "") + " " + tagText(t)).toLowerCase().includes(q);
   });
 }
 const byOrder = (a, b) =>
@@ -675,6 +687,11 @@ function grouped(ts) {
 }
 
 /* ── render ────────────────────────────────────────────────────────────── */
+const tagText = t => (t.tags || []).map(([k, v]) => ` [${k}: ${v}]`).join("");
+const tagHTML = t => (t.tags || []).length
+  ? ` <span class="tags">${t.tags.map(([k, v]) =>
+      `<span class="tag tag-${k}"><b>${k}</b> ${esc(v)}</span>`).join("")}</span>`
+  : "";
 function rowHTML(t) {
   const s = BY_K[t.st];
   const showParent = app.view === "status" && t.parent;
@@ -683,7 +700,7 @@ function rowHTML(t) {
   return `<li class="row${t.sub && app.view === "type" ? " sub" : ""}" data-st="${esc(t.st)}">` +
     `<span class="mark" aria-hidden="true">[${t.st === " " ? "&nbsp;" : esc(t.st)}]</span>` +
     `<span class="tid">${esc(t.id)}</span>` +
-    `<span class="ttl"><span class="vh">${s.label}. </span>${rich(t.title)}` +
+    `<span class="ttl"><span class="vh">${s.label}. </span>${rich(t.title)}${tagHTML(t)}` +
       (showParent ? ` <span class="tid">(${esc(t.parent)})</span>` : "") + `</span>` +
     (t.why ? `<span class="why"><b>${esc(t.why.split(":")[0])}:</b>` +
              `${rich(t.why.slice(t.why.indexOf(":") + 1))}</span>` : "") +
@@ -769,7 +786,7 @@ function setPlain(groups, vis) {
       const indent = app.view === "type" && t.sub ? "    " : "  ";
       let title = t.title;
       if (title.length > 80) title = title.slice(0, 79).trimEnd() + "…";
-      lines.push(`${indent}[${t.st}] ${t.id} — ${title}${t.why ? ` (${t.why})` : ""}${parent}`);
+      lines.push(`${indent}[${t.st}] ${t.id} — ${title}${tagText(t)}${t.why ? ` (${t.why})` : ""}${parent}`);
     }
     lines.push("");
   }

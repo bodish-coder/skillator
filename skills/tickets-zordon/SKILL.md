@@ -4,7 +4,7 @@ description: >-
   Use when the user reports a bug or asks for a feature, says "log this",
   "what's pending", "ticket", "B3", "F12", "A4", "next ticket number", "mark
   it done", "block it", "defer it", "cancel it", "list tickets", "list tickets
-  status", "ultracode", "use a workflow",
+  status", "assign F12 to @asha", "ultracode", "use a workflow",
   mentions TICKETS.md, or when starting work and you need the open set. Also
   at session end, to sync statuses. NOT an issue tracker or Jira/GitHub sync;
   NOT for harvesting `ponytail:` markers (`code-yoda`).
@@ -49,8 +49,9 @@ their section.
 ```
 
 Line format, kept greppable: `- [<status>] <ID> — <one-line title>`. Optional
-trailing ` (@owner)` or ` (branch: x)` if the user wants it; nothing else.
-Sub-parts are indented two spaces under their parent.
+trailing ` (@owner)` or ` (branch: x)` if the user wants it, and the
+`[app: ..] [owner: ..] [by: ..]` tags of **Apps and people** before it; nothing
+else. Sub-parts are indented two spaces under their parent.
 
 ## Who touched it
 
@@ -76,7 +77,55 @@ Two sessions want the same `[ ]` ticket: the one whose tag is already on a `[~]`
 row owns it. If a row you are working flips under you, stop and tell the user —
 that is two sessions on one ticket, not a merge to resolve.
 
+## Apps and people
+
+A ticket can say which apps it touches, who it is assigned to and who built it —
+trailing tags on its one line, in this order, before the session tag:
+
+```
+- [ ] F12 — Bulk delete [app: web, api] [owner: @asha] [by: @vidul, @asha] (@cc-a4f1c9)
+```
+
+Every tag is optional and lines without them stay valid; never add an empty one.
+
+- **People** are `@handles` from `.skillator/team.md`, one per line:
+  `- @vidul: vidul@ikran.in, other@x.com`. No team file = no people: no
+  `owner`/`by` tags, no assigning, nothing about people in a list.
+- **Apps** are the workspace folders: `apps/*`, `packages/*`, `services/*`, and
+  the package manager's workspaces (`package.json` `"workspaces"`,
+  `pnpm-workspace.yaml`); each folder name is an app. No such folder = no apps.
+- `owner` = the person it is assigned to. `by` = authors of commits whose subject
+  names the ID as a word (`F1` never matches `F12`), mapped to handles; an email
+  not in the team file shows as the email. `app` = apps those commits' files
+  sit in; it may be hand-set or corrected on the line.
+
+`scripts/ticket-meta.sh` beside this file does all of it (Windows:
+`ticket-meta.ps1`, same arguments) and edits only the one line, every other byte
+kept, in the main checkout's `TICKETS.md`:
+
+```sh
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh apps            # app names
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh app-of <path>.. # app of a path
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh by F12          # who built it
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh apps-of F12     # apps it touched
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh assign F12 @asha
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # write app + by
+```
+
+- **"assign F12 to @asha"**, "assign it to asha" → `assign`. It sets or replaces
+  `[owner: ..]` and refuses a handle not in the team file — say so, and offer to
+  add the person there; never invent one.
+- **`tag <ID>`** when a ticket is closed (`[x]`), and when commits naming it land
+  (a merge, a pull). It recomputes `app` and `by` from the commits; with none it
+  leaves a hand-set `app` alone.
+- Both print the edited line — that is the read-back. Both write under
+  `TICKETS.md.lock`, the lock relay-morpheus's `board` flip takes, and refuse
+  after 30 s rather than break someone else's.
+- Tags go before the trailing `(..)` groups and before a bare `Plan: S<n>`, so
+  `check-tickets.sh` still sees that pointer.
+
 ## Allocating an ID
+
 
 Never take "highest on my board + 1" by hand: two worktrees or sessions that do
 not share a `TICKETS.md` both get the same number. Run the allocator from the
@@ -206,7 +255,9 @@ write the ticket.**
 - Dropped — won't fix, obsolete, duplicate, or the user called it off → `[-]`,
   with a short ` — reason` on the line (`[-] B9 — Safari flicker (dup of B4)`).
   Cancelled is a closed state, not a deleted one: the line and its number stay.
-- Reference the ID in commit messages: `B3: reject uploads over 5MB`.
+- Reference the ID in commit messages: `B3: reject uploads over 5MB` — that
+  subject is how `by` and `app` find the work. Closing it → `tag <ID>`
+  (**Apps and people**).
 - **A board edit is not done until you have read it back.** After every status
   flip, `grep -n '<ID>' TICKETS.md` and report from *that output*, never from the
   edit you believe you made. An edit whose hunk is missing from `git diff` is a
@@ -510,7 +561,15 @@ the board", "what's open". **By status** when the user says so — `list tickets
 status`, "status wise", "group by status", "what's in progress".
 
 Either way: checkbox lines, the same shape the file uses. Never a prose summary,
-never a markdown table, never a numbered list.
+never a markdown table, never a numbered list. A line's `[app: ..]`, `[owner: ..]`
+and `[by: ..]` tags show as they appear on it; a repo with none shows none.
+
+Filters narrow either view and print it the same way; the count line then counts
+what the filter kept:
+
+- `list tickets app:web` — tickets whose `[app: ..]` names `web`.
+- `list tickets @asha` — tickets where `@asha` is the `owner` or in `by`.
+- `list tickets status app:web` — filters combine with the status view.
 
 Both views also republish the artifact board and give its link once per session
 (**The artifact board**). The chat list is the answer; the link is the copy the

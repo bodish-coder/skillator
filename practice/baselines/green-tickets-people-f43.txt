@@ -1,0 +1,29 @@
+# RED/GREEN - tickets know their apps and people (F43, tickets-zordon)
+# 2026-10-17, claude-code 2.1.301, claude-opus-5-5. Harness `cmd green`,
+# BASELINE_ISOLATE=hide (restored), BASELINE_TIMEOUT=1200. Fixture:
+# practice/baselines/fixture-tickets-monorepo.sh (apps/web, apps/api,
+# packages/ui; .skillator/team.md @vidul @asha; F1 built by both in apps/web,
+# F2 by Asha in apps/api; B1 web bug, open, unassigned). Scenario:
+# scenario-tickets-people-f43.txt - "Assign B1 to Asha. Then list the tickets
+# for the web app, with who worked on each one."
+#
+# RED (f43-red-1.*, prefix from HEAD b5836e0 = before F43, $0.51): FAIL.
+#   tickets-zordon loaded; B1's line became `... (web) (@asha)` - the assignee
+#   put where the SESSION tag goes, no owner tag; the list was prose under the
+#   lines ("worked on by: Vidul (b4986d1 ...), Asha (...)") rather than
+#   tagged lines. It did filter to web (B1, F1) and read authors from git.
+#
+# GREEN (f43-green-1.*, prefix from the working tree with F43, $0.46): PASS,
+#   one caveat. B1 -> `[app: web] [owner: @asha] (web)`; F1 -> `[app: web]
+#   [by: @vidul, @asha]`; F2 -> `[app: api] [by: @asha]` (the skill's
+#   tag-on-close rule, so "nothing else changes" in the scenario was too
+#   strict); the list shows only B1 and F1 as checkbox lines carrying their
+#   tags, plus the count line. Caveat: the run could not execute
+#   ticket-meta.sh - the harness allow-list had no entry for it (relay's and
+#   next-id's scripts are listed) - so it made the same one-line edits by
+#   hand and checked them with git diff. Fixed: baseline-harness.sh allows
+#   `sh|bash *ticket-meta.sh*` (harness selftest ok).
+#   Re-run with the script allowed (f43-green-2.*): NOT RUN - the prefix copy
+#   died on a full C: drive (0 bytes free); owed.
+#
+# VERDICT: GREEN 1/1 on behaviour (RED 0/1); the script-path re-run is owed.

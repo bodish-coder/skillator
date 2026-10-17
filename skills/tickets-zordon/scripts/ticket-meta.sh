@@ -1,0 +1,418 @@
+#!/bin/sh
+# ticket-meta.sh - apps and people on TICKETS.md lines (F43). Windows twin:
+# ticket-meta.ps1, same output; keep the two in step.
+#
+#   ticket-meta.sh apps                 detected app names, one per line
+#   ticket-meta.sh app-of <path>...     the app(s) those paths belong to
+#   ticket-meta.sh by <ID>              @handles (or emails) of the ticket's committers
+#   ticket-meta.sh apps-of <ID>         apps the ticket's commits touched
+#   ticket-meta.sh assign <ID> @handle  set [owner: @handle] on the ticket's line
+#   ticket-meta.sh tag <ID>             recompute [app: ..] and [by: ..] on it
+#   ticket-meta.sh selftest             fixture repo, every subcommand, prints ok
+#
+# Apps: folders under apps/*, packages/*, services/*, plus package.json
+# "workspaces" and pnpm-workspace.yaml globs; the folder name is the app. No such
+# folder = no apps. People: .skillator/team.md, lines `- @handle: a@x, b@y`. No
+# team file = no people (by prints nothing, assign refuses).
+# A ticket's commits are the commits on HEAD whose subject names its ID as a
+# word (F1 never matches F12 or F1a). The board edited is the main checkout's
+# TICKETS.md; only the one ticket line changes, every other byte is kept.
+set -u
+LC_ALL=C
+export LC_ALL
+
+NL='
+'
+CR=$(printf '\r')
+EMD=$(printf '\342\200\224')
+ENDASH=$(printf '\342\200\223')
+SOH=$(printf '\001')
+TOP=''
+MAIN=''
+LOCKF=''
+LOCK_ME=''
+
+die() { board_unlock; echo "ticket-meta: $*" >&2; exit 1; }
+
+# Resolved once, in the main shell: a die inside $(...) only ends the subshell,
+# and an empty top would turn `apps/*` into a scan of /apps.
+need_git() {
+  TOP=$(git rev-parse --show-toplevel 2>/dev/null) || TOP=''
+  [ -n "$TOP" ] || die "not inside a git repo"
+  d=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || d=''
+  case $d in
+    */.git) MAIN=${d%/.git} ;;
+    *) MAIN=$TOP ;;
+  esac
+}
+
+# 0 when the whole argument is one line.
+one_line() { case $1 in *"$NL"*|*"$CR"*) return 1 ;; esac; return 0; }
+
+# ID <- the argument, letters upper-cased, sub-part letter lower; refused unless
+# the WHOLE argument is one id.
+norm_id() {
+  one_line "$1" || die "not a ticket id (line break in it)"
+  ID=$(printf '%s' "$1" | awk '{ match($0, /^[A-Za-z]*/); print toupper(substr($0, 1, RLENGTH)) substr($0, RLENGTH + 1) }')
+  printf '%s' "$ID" | grep -Eqx '[A-Z]{1,3}[0-9]+[a-z]?' || die "not a ticket id: $1"
+}
+
+team_file() {
+  for r in "$TOP" "$MAIN"; do
+    if [ -f "$r/.skillator/team.md" ]; then printf '%s\n' "$r/.skillator/team.md"; return 0; fi
+  done
+  return 1
+}
+
+# One row per known email: "@handle email" (email lowercased); a handle with no
+# email gets one row "@handle".
+team_rows() {
+  f=$(team_file) || return 0
+  tr -d '\r' < "$f" | awk '
+    /^[ \t]*[-*][ \t]*@[A-Za-z0-9_.-]+[ \t]*:/ {
+      line = $0; sub(/^[ \t]*[-*][ \t]*/, "", line)
+      h = line; sub(/[ \t]*:.*/, "", h)
+      rest = line; sub(/^[^:]*:/, "", rest)
+      n = split(rest, e, ","); k = 0
+      for (i = 1; i <= n; i++) {
+        x = e[i]; gsub(/^[ \t]+|[ \t]+$/, "", x)
+        if (x != "") { print h, tolower(x); k++ }
+      }
+      if (k == 0) print h
+    }'
+}
+
+# Workspace patterns, one per line, relative to the repo top.
+patterns() {
+  r=$1
+  printf '%s\n' 'apps/*' 'packages/*' 'services/*'
+  if [ -f "$r/package.json" ]; then
+    # "workspaces": [..] is the list; "workspaces": {"packages": [..], "nohoist":
+    # [..]} - only its "packages" list.
+    tr -d '\r' < "$r/package.json" | tr '\n\t' '  ' |
+      sed -n 's/.*"workspaces"[[:space:]]*:[[:space:]]*//p' |
+      sed 's/^{[^}]*"packages"[[:space:]]*:[[:space:]]*\[/[/' |
+      sed -n 's/^\[\([^]]*\)\].*/\1/p' |
+      grep -o '"[^"]*"' | tr -d '"'
+  fi
+  if [ -f "$r/pnpm-workspace.yaml" ]; then
+    tr -d '\r' < "$r/pnpm-workspace.yaml" | awk '
+      /^packages:/ { f = 1; next }
+      f && /^[^ \t#-]/ { f = 0 }
+      f && /^[ \t]*-/ { x = $0; sub(/^[ \t]*-[ \t]*/, "", x); sub(/[ \t]+#.*/, "", x)
+                        gsub(/["\047]/, "", x); sub(/[ \t]+$/, "", x); print x }'
+  fi
+}
+
+# "name<TAB>relpath" per app folder, unique by path.
+app_rows() {
+  r=$TOP
+  patterns "$r" | while IFS= read -r p; do
+    case $p in ''|'!'*) continue ;; esac
+    p=${p#./}; p=${p%/}
+    p=$(printf '%s' "$p" | sed 's#\*\*#*#g')
+    for d in "$r"/$p; do
+      [ -d "$d" ] || continue
+      printf '%s\t%s\n' "${d##*/}" "${d#"$r"/}"
+    done
+  done | sort -u
+}
+
+# Paths on stdin -> app names, first-seen order, one per path (longest folder wins).
+map_paths() {
+  ROWS=$(app_rows) awk '
+    BEGIN { n = split(ENVIRON["ROWS"], R, "\n")
+            for (i = 1; i <= n; i++) { split(R[i], f, "\t"); nm[i] = f[1]; pa[i] = f[2] }
+            t = ENVIRON["TOP"] }
+    { p = $0; gsub(/\\/, "/", p)
+      if (index(p, t "/") == 1) p = substr(p, length(t) + 2)
+      sub(/^(\.\/)+/, "", p)
+      best = ""; bl = 0
+      for (i = 1; i <= n; i++) {
+        q = pa[i]
+        if (q != "" && (p == q || index(p, q "/") == 1) && length(q) > bl) { best = nm[i]; bl = length(q) }
+      }
+      if (best != "" && !(best in seen)) { seen[best] = 1; print best } }'
+}
+
+# One pass over HEAD's history: for every commit whose subject names the id as
+# a word, "E<TAB>email" then "P<TAB>path" per file it changed.
+commits_info() {
+  # --grep (fixed string, whole message) only narrows git's side; the subject
+  # word match below is the rule.
+  git -c core.quotepath=off -c log.showSignature=false log --reverse -F --grep="$1" \
+      --format="${SOH}%ae%x09%s" --name-only 2>/dev/null | ID=$1 awk '
+    index($0, ENVIRON["SOH"]) == 1 {
+      s = substr($0, 2); e = s; sub(/\t.*/, "", e); sub(/^[^\t]*\t/, "", s)
+      hit = match(s, "(^|[^A-Za-z0-9])" ENVIRON["ID"] "([^A-Za-z0-9]|$)")
+      if (hit) print "E\t" tolower(e)
+      next }
+    hit && $0 != "" { print "P\t" $0 }'
+}
+
+# commits_info on stdin -> handles (emails when unknown), first-seen order.
+by_from() {
+  team=$(team_rows)
+  [ -n "$team" ] || { cat > /dev/null; return 0; }
+  TEAM=$team awk -F'\t' '
+    BEGIN { n = split(ENVIRON["TEAM"], T, "\n")
+            for (i = 1; i <= n; i++) { split(T[i], f, " "); if (f[2] != "") h[f[2]] = f[1] } }
+    $1 == "E" { x = ($2 in h) ? h[$2] : $2; if (!(x in seen)) { seen[x] = 1; print x } }'
+}
+
+# commits_info on stdin -> apps those files sit in, sorted.
+apps_from() { awk -F'\t' '$1 == "P" { print substr($0, 3) }' | map_paths | sort -u; }
+
+join_list() { awk 'NR > 1 { printf ", " } { printf "%s", $0 } END { if (NR) printf "\n" }'; }
+
+# The board lock relay-morpheus's `board` takes: TICKETS.md.lock, made by an
+# exclusive create holding "<pid> sh <uname tag>". Waited on, never broken -
+# after TICKET_META_LOCK_WAIT seconds (30) it refuses; only ours is released.
+board_lock() {
+  LOCK_ME="$$ sh $(uname -s 2>/dev/null | cut -c1-5)"
+  w=${TICKET_META_LOCK_WAIT:-30}
+  case $w in ''|*[!0-9]*) w=30 ;; esac
+  deadline=$(( $(date +%s) + w ))
+  until ( set -C; echo "$LOCK_ME" > "$1" ) 2>/dev/null; do
+    if [ "$(date +%s)" -ge "$deadline" ]; then
+      h=$(cat "$1" 2>/dev/null) || h=''
+      die "$1 is locked by '${h:-?}' (a relay-morpheus board flip or another ticket-meta); waited ${w}s - retry, or delete it if that holder is gone"
+    fi
+    sleep 0.1 2>/dev/null || sleep 1
+  done
+  LOCKF=$1
+  trap 'board_unlock; exit 1' HUP INT TERM
+}
+board_unlock() {
+  [ -n "$LOCKF" ] || return 0
+  [ "$(cat "$LOCKF" 2>/dev/null)" = "$LOCK_ME" ] && rm -f "$LOCKF"
+  LOCKF=''
+  trap - HUP INT TERM
+}
+
+# Rewrite the one line of $ID in the board, under the board lock. SET_APP /
+# SET_OWNER / SET_BY from the environment; an empty one leaves that tag as is.
+# The line is `[indent]- [<mark>] <ID> <dash> ...`, loose spacing allowed, the
+# dash an em dash, an en dash or a hyphen - the shapes the viewers accept.
+edit_line() {
+  f="$MAIN/TICKETS.md"
+  [ -f "$f" ] || die "no TICKETS.md at $f"
+  board_lock "$f.lock"
+  re="^[ \t]*- \\[.\\][ \t]+$ID[ \t]*($EMD|$ENDASH|-)"
+  n=$(RE=$re awk '$0 ~ ENVIRON["RE"] { c++ } END { print c + 0 }' "$f")
+  [ "$n" = 1 ] || die "$ID: $n matching lines in $f, need exactly 1"
+  eol=0
+  [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ] && eol=1
+  tmp="$f.ticket-meta.$$"
+  RE=$re EOL=$eol awk '
+    function find(line, key) { return match(line, "[ \t]*\\[" key ":[ \t]*[^]]*\\]") }
+    # A tag goes where it is, else before the next tag in app/owner/by order,
+    # else before the trailing (..) groups and a bare "Plan: S<n>" before them
+    # (check-tickets must still see that pointer as bare).
+    function settag(line, key, val,    i, pos, head) {
+      if (find(line, key))
+        return substr(line, 1, RSTART - 1) " [" key ": " val "]" substr(line, RSTART + RLENGTH)
+      pos = 0
+      for (i = 1; i <= 3; i++) if (ORD[i] == key) break
+      for (i = i + 1; i <= 3; i++)
+        if (find(line, ORD[i]) && (pos == 0 || RSTART < pos)) pos = RSTART
+      if (pos == 0) {
+        pos = length(line) + 1
+        if (match(line, /([ \t]*\([^()]*\))+[ \t]*$/)) pos = RSTART
+        head = substr(line, 1, pos - 1)
+        if (match(head, /[ \t]*Plan: S[0-9]+\.?$/)) pos = RSTART
+      }
+      return substr(line, 1, pos - 1) " [" key ": " val "]" substr(line, pos)
+    }
+    BEGIN { ORD[1] = "app"; ORD[2] = "owner"; ORD[3] = "by"; re = ENVIRON["RE"] }
+    { line = $0; cr = ""
+      if (sub(/\r$/, "", line)) cr = "\r"
+      if (line ~ re) {
+        if (ENVIRON["SET_APP"] != "") line = settag(line, "app", ENVIRON["SET_APP"])
+        if (ENVIRON["SET_OWNER"] != "") line = settag(line, "owner", ENVIRON["SET_OWNER"])
+        if (ENVIRON["SET_BY"] != "") line = settag(line, "by", ENVIRON["SET_BY"])
+      }
+      if (NR > 1) printf "\n"
+      printf "%s%s", line, cr }
+    END { if (NR && ENVIRON["EOL"] == "1") printf "\n" }' "$f" > "$tmp" || { rm -f "$tmp"; die "write failed"; }
+  mv -f "$tmp" "$f" || { rm -f "$tmp"; die "cannot replace $f"; }
+  board_unlock
+  RE=$re awk '$0 ~ ENVIRON["RE"]' "$f"
+}
+
+cmd_assign() {
+  [ $# -eq 2 ] || die "usage: assign <ID> @handle"
+  norm_id "$1"
+  h=$2
+  case $h in @*) ;; *) h="@$h" ;; esac
+  one_line "$h" && printf '%s' "$h" | grep -Eqx '@[A-Za-z0-9_.-]+' || die "not a handle (@name): $2"
+  team_file > /dev/null || die "no .skillator/team.md - this repo has no people; add one to assign"
+  team_rows | awk '{ print $1 }' | grep -qxF -- "$h" || die "$h is not in .skillator/team.md"
+  SET_APP='' SET_OWNER=$h SET_BY='' edit_line
+}
+
+cmd_tag() {
+  [ $# -eq 1 ] || die "usage: tag <ID>"
+  norm_id "$1"
+  info=$(commits_info "$ID")
+  a=$(printf '%s\n' "$info" | apps_from | join_list)
+  b=$(printf '%s\n' "$info" | by_from | join_list)
+  SET_APP=$a SET_OWNER='' SET_BY=$b edit_line
+}
+
+selftest() {
+  self=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")
+  T=$(mktemp -d 2>/dev/null || mktemp -d -t ticketmeta)
+  trap 'rm -rf "$T"' EXIT
+  fail=0
+  D=$(printf '\342\200\224')
+  eq() { [ "$2" = "$3" ] || { echo "FAIL: $1: expected [$3] got [$2]"; fail=1; }; }
+  run() { sh "$self" "$@" 2>/dev/null | tr -d '\r' | tr '\n' ' ' | sed 's/ $//'; }
+  mkdir -p "$T/hooks"
+  commit() {
+    em=$1; msg=$2; shift 2
+    for p in "$@"; do mkdir -p "$(dirname -- "$p")"; echo "$msg" >> "$p"; done
+    git add -A && git -c user.name=t -c user.email="$em" -c commit.gpgsign=false \
+      -c core.hooksPath="$T/hooks" commit -q -m "$msg" > /dev/null
+  }
+
+  # --- monorepo fixture: three app roots, a package.json workspace, a pnpm one
+  M="$T/mono"
+  mkdir -p "$M" && cd "$M" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  mkdir -p apps/web apps/api packages/ui tools/cli libs/core .skillator src
+  printf '{\n  "name": "mono",\n  "workspaces": ["apps/*", "packages/*", "tools/cli"]\n}\n' > package.json
+  printf "packages:\n  - 'libs/*'\n  - '!libs/skip'\n" > pnpm-workspace.yaml
+  printf '# Team\n\n- @vidul: vidul@ikran.in, V2@X.com\n- @asha: asha@x.com\n' > .skillator/team.md
+  printf '# TICKETS\n\n## Bugs\n\n- [ ] B2 %s Button misaligned (@cc-aaaaaa)\n\n## Features\n\n- [~] F1 %s Dark mode (@cc-bbbbbb)\n- [ ] F12 %s Bulk delete\n- [ ] F3 %s Hand tagged [app: web] (@cc-cccccc)\n' \
+    "$D" "$D" "$D" "$D" > TICKETS.md
+  for d in apps/web apps/api packages/ui tools/cli libs/core src; do echo x > "$d/f.txt"; done
+  commit vidul@ikran.in "init" README.md
+  commit vidul@ikran.in "F1: dark mode in web" apps/web/index.js
+  commit asha@x.com "F12: bulk delete in api" apps/api/server.js
+  commit ghost@x.com "B2 fix button" packages/ui/button.js
+  commit v2@x.com "fix F1 theme tokens" packages/ui/theme.js
+  commit asha@x.com "F12a: core helper" libs/core/h.js
+  cp TICKETS.md "$T/before.md"
+
+  eq apps "$(run apps)" "api cli core ui web"
+  eq app-of "$(run app-of apps/web/index.js ./packages/ui/x.js README.md "$(git rev-parse --show-toplevel)/libs/core/h.js" apps/web)" "web ui core"
+  eq "by F1" "$(run by F1)" "@vidul"
+  eq "by F12 (not F12a)" "$(run by F12)" "@asha"
+  eq "by B2 unknown email" "$(run by B2)" "ghost@x.com"
+  eq "apps-of F1" "$(run apps-of F1)" "ui web"
+  eq "apps-of F12" "$(run apps-of F12)" "api"
+  eq "apps-of F3 none" "$(run apps-of F3)" ""
+
+  sh "$self" assign F1 @nobody > /dev/null 2>&1 && { echo "FAIL: assign accepted an unknown handle"; fail=1; }
+  cmp -s TICKETS.md "$T/before.md" || { echo "FAIL: refused assign changed the board"; fail=1; }
+  eq "assign F12" "$(run assign F12 @asha)" "- [ ] F12 $D Bulk delete [owner: @asha]"
+  eq "assign F1" "$(run assign F1 asha)" "- [~] F1 $D Dark mode [owner: @asha] (@cc-bbbbbb)"
+  eq "reassign F1" "$(run assign F1 @vidul)" "- [~] F1 $D Dark mode [owner: @vidul] (@cc-bbbbbb)"
+  eq "tag F1" "$(run tag F1)" "- [~] F1 $D Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)"
+  eq "tag B2" "$(run tag B2)" "- [ ] B2 $D Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)"
+  eq "tag F3 keeps hand app" "$(run tag F3)" "- [ ] F3 $D Hand tagged [app: web] (@cc-cccccc)"
+  sh "$self" tag F9 > /dev/null 2>&1 && { echo "FAIL: tag accepted a missing ticket"; fail=1; }
+  printf '# TICKETS\n\n## Bugs\n\n- [ ] B2 %s Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)\n\n## Features\n\n- [~] F1 %s Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)\n- [ ] F12 %s Bulk delete [owner: @asha]\n- [ ] F3 %s Hand tagged [app: web] (@cc-cccccc)\n' \
+    "$D" "$D" "$D" "$D" > "$T/want.md"
+  cmp -s TICKETS.md "$T/want.md" || { echo "FAIL: board bytes differ beyond the edited tags"; diff "$T/want.md" TICKETS.md; fail=1; }
+
+  # --- edge fixture (review of F43): object-shaped workspaces, hand-written
+  # tags, loose line shapes, Plan pointers, the board lock, hostile arguments
+  E="$T/edge"
+  mkdir -p "$E" && cd "$E" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  mkdir -p apps/web tools/cli tools/other .skillator
+  for d in apps/web tools/cli tools/other; do echo x > "$d/f.txt"; done
+  printf '{\n  "name": "edge",\n  "workspaces": {\n    "nohoist": ["tools/*"],\n    "packages": ["apps/*", "tools/cli"]\n  }\n}\n' > package.json
+  printf -- '- @vidul: vidul@ikran.in\n' > .skillator/team.md
+  printf -- '# TICKETS\n\n- [ ] F4 %s Hand owner [owner:@vidul] (@cc-111111)\n- [ ]  F7%s Spacing\n- [ ] F8 - Hyphen\n  - [ ] F8a %s Sub part\n- [x] F5 %s Shipped Plan: S3 (@cc-222222)\n- [x] F6 %s Done right, RED/GREEN 3/3 (@cc-333333)\n' \
+    "$D" "$D" "$D" "$D" "$D" > TICKETS.md
+  commit vidul@ikran.in "init" README.md
+  commit vidul@ikran.in "F5: web" apps/web/a.js
+  commit vidul@ikran.in "F6: web" apps/web/b.js
+  # 10: an object "workspaces" takes its "packages", never "nohoist"
+  eq "object workspaces" "$(run apps)" "cli web"
+  # 1: a board lock held by someone else is waited on, then refused; never broken
+  printf '99999 ps1\n' > TICKETS.md.lock
+  cp TICKETS.md "$T/edge0.md"
+  TICKET_META_LOCK_WAIT=1 sh "$self" assign F4 @vidul > /dev/null 2> "$T/err" && { echo "FAIL: wrote through a held board lock"; fail=1; }
+  grep -q 'locked' "$T/err" || { echo "FAIL: lock refusal does not say locked: $(cat "$T/err")"; fail=1; }
+  cmp -s TICKETS.md "$T/edge0.md" || { echo "FAIL: board changed under a held lock"; fail=1; }
+  eq "foreign lock kept" "$(cat TICKETS.md.lock)" "99999 ps1"
+  rm -f TICKETS.md.lock
+  # 2: a line break in an argument is refused whole, never half-used
+  sh "$self" assign F4 "$(printf '@vidul\n@evil')" > /dev/null 2>&1 && { echo "FAIL: assign took a multi-line handle"; fail=1; }
+  sh "$self" by "$(printf 'F5\nzz')" > /dev/null 2>&1 && { echo "FAIL: by took a multi-line id"; fail=1; }
+  sh "$self" assign "$(printf 'F4\nF5')" @vidul > /dev/null 2>&1 && { echo "FAIL: assign took a multi-line id"; fail=1; }
+  sh "$self" by "F5$NL" > /dev/null 2>&1 && { echo "FAIL: by took an id ending in a line break"; fail=1; }
+  sh "$self" assign F4 "@vidul$NL" > /dev/null 2>&1 && { echo "FAIL: assign took a handle ending in a line break"; fail=1; }
+  cmp -s TICKETS.md "$T/edge0.md" || { echo "FAIL: a refused argument changed the board"; fail=1; }
+  # 3: a hand-written [owner:@x] is replaced, not duplicated
+  eq "hand tag replaced" "$(run assign F4 @vidul)" "- [ ] F4 $D Hand owner [owner: @vidul] (@cc-111111)"
+  [ ! -e TICKETS.md.lock ] || { echo "FAIL: our board lock was left behind"; fail=1; }
+  # 9: loose spacing, a hyphen, a sub-part, a lower-case id
+  eq "loose line" "$(run assign f7 @vidul)" "- [ ]  F7$D Spacing [owner: @vidul]"
+  eq "hyphen line" "$(run assign F8 @vidul)" "- [ ] F8 - Hyphen [owner: @vidul]"
+  eq "sub-part line" "$(run assign F8a @vidul)" "  - [ ] F8a $D Sub part [owner: @vidul]"
+  # 5: tags go before a bare Plan pointer, so check-tickets still catches it
+  eq "tag before Plan" "$(run tag F5)" "- [x] F5 $D Shipped [app: web] [by: @vidul] Plan: S3 (@cc-222222)"
+  eq "tag F6" "$(run tag F6)" "- [x] F6 $D Done right, RED/GREEN 3/3 [app: web] [by: @vidul] (@cc-333333)"
+  ct="$(dirname -- "$self")/../../../practice/scripts/check-tickets.sh"
+  if [ -f "$ct" ]; then
+    sh "$ct" "$E/TICKETS.md" > /dev/null 2>&1 && { echo "FAIL: check-tickets passed a tagged bare Plan line"; fail=1; }
+    grep -v ' F5 ' TICKETS.md > "$T/noplan.md"
+    sh "$ct" "$T/noplan.md" > /dev/null 2>&1 || { echo "FAIL: check-tickets failed a tagged board: $(sh "$ct" "$T/noplan.md" 2>&1)"; fail=1; }
+  else
+    echo "skip: check-tickets.sh not beside this install" >&2
+  fi
+  # 8: tag reads history once - one git log, no per-commit diff-tree
+  mkdir -p "$T/shim"
+  realgit=$(command -v git)
+  printf '#!/bin/sh\necho "$*" >> "%s"\nexec "%s" "$@"\n' "$T/gitcalls" "$realgit" > "$T/shim/git"
+  chmod +x "$T/shim/git"
+  : > "$T/gitcalls"
+  PATH="$T/shim:$PATH" sh "$self" tag F6 > /dev/null 2>&1
+  eq "git log calls in tag" "$(grep -cE '(^| )log( |$)' "$T/gitcalls")" "1"
+  eq "diff-tree calls in tag" "$(grep -c 'diff-tree' "$T/gitcalls")" "0"
+  # 7: outside any repo every subcommand stops, it never scans /apps
+  mkdir -p "$T/nogit" && cd "$T/nogit"
+  GIT_CEILING_DIRECTORIES=$T sh "$self" apps > "$T/out" 2> "$T/err" && { echo "FAIL: apps ran outside a git repo: $(cat "$T/out")"; fail=1; }
+  grep -q 'not inside a git repo' "$T/err" || { echo "FAIL: no 'not inside a git repo' outside one: $(cat "$T/err")"; fail=1; }
+  # 4: a repo with no commits answers empty, exit 0
+  mkdir -p "$T/empty" && cd "$T/empty" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  mkdir -p .skillator && printf -- '- @vidul: vidul@ikran.in\n' > .skillator/team.md
+  printf -- '- [ ] F1 %s New\n' "$D" > TICKETS.md
+  sh "$self" by F1 > "$T/out" 2>&1 || { echo "FAIL: by failed in a repo with no commits: $(cat "$T/out")"; fail=1; }
+  eq "empty repo tag" "$(run tag F1)" "- [ ] F1 $D New"
+
+  # --- solo, non-monorepo: no workspace folders, no team.md
+  S="$T/solo"
+  mkdir -p "$S/src" && cd "$S" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  printf '{ "name": "solo" }\n' > package.json
+  printf '# TICKETS\n\n- [ ] F1 %s Thing (@cc-dddddd)\n' "$D" > TICKETS.md
+  commit vidul@ikran.in "F1: thing" src/a.js
+  eq "solo apps" "$(run apps)" ""
+  eq "solo apps-of" "$(run apps-of F1)" ""
+  eq "solo by" "$(run by F1)" ""
+  sh "$self" assign F1 @vidul > /dev/null 2>&1 && { echo "FAIL: assign worked with no team.md"; fail=1; }
+  eq "solo tag" "$(run tag F1)" "- [ ] F1 $D Thing (@cc-dddddd)"
+
+  cd "$T/.." || true
+  [ "$fail" = 0 ] || exit 1
+  echo ok
+}
+
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|tag|selftest"
+c=$1; shift
+[ "$c" = selftest ] && { selftest; exit 0; }
+need_git
+export TOP SOH
+case $c in
+  apps) app_rows | cut -f1 | sort -u ;;
+  app-of) for p in "$@"; do printf '%s
+' "$p"; done | map_paths ;;
+  by) [ $# -eq 1 ] || die "usage: by <ID>"; norm_id "$1"; commits_info "$ID" | by_from ;;
+  apps-of) [ $# -eq 1 ] || die "usage: apps-of <ID>"; norm_id "$1"; commits_info "$ID" | apps_from ;;
+  assign) cmd_assign "$@" ;;
+  tag) cmd_tag "$@" ;;
+  *) die "unknown subcommand: $c" ;;
+esac
