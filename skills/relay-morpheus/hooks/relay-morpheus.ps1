@@ -22,6 +22,7 @@
 #   -Mode chain -Action wait [-Interval 600] [-Max 19800] [-For 1500]
 #   -Mode chain -Action status | decide
 #   -Mode chain -Action next                           NEXT n CODE | HOLD | ASK k | UNBLOCK Qk | WAIT n | BLOCKED n | FINAL, then IDLE lines
+#   -Mode chain -Action next -Holds                    A118: only the IDLE <n> Qk <why> lines; read-only, no lease beat
 #   -Mode chain -Action edge -N <n> -After "66,67" | -IndependentOf Qk -Why "<ruling>"
 #
 # Marathon (F33, chain runs only) - questions only the user can answer are
@@ -103,6 +104,7 @@ param(
   [string]$Stages,
   [switch]$Here,
   [switch]$All,
+  [switch]$Holds,
   [string]$Sub = '',
   [string]$Mark = $null,
   [int]$N,
@@ -1725,10 +1727,14 @@ function ParallelCap($d = $null) {
   1
 }
 function DoChainNext {
+  if ($All -and $Holds) { Die "usage: -Mode chain -Action next [-All | -Holds]" }
   $script:ScanAll = [bool]$All; $script:ScanCap = if ($All) { ParallelCap } else { 1 }
   NeedRun
   if (-not (HasChain)) { Die "no ## Chain section in $Run - chain next reads a chain" }
   $null = HdrParts
+  # A118: -Holds is read-only (holo-r2d2 polls it) - only the decision-hold
+  # lines, no verdict, no lease beat, no lease file, no lock.
+  if ($Holds) { $script:Leases = $null; @(ChainScan) | Where-Object { $_ -cmatch '^IDLE \d+ Q\d+ [a-z]+$' }; return }
   # The driver's loop keeps its own in-flight stages' leases fresh: a stage
   # that runs long without reporting must not look abandoned to other runs.
   foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { $rn = RowNum $l; if ($null -ne $rn -and (Cell $l 3) -ceq '~') { try { $null = LeaseBeat $rn } catch {} } }
@@ -2437,6 +2443,24 @@ function MarathonSelftest($d) {
     if ($out -cnotcontains $want) { Die "chain next: no '$want' in: $($out -join ' / ')" }
   }
   if ($out | Where-Object { $_.StartsWith("IDLE $m6 ") -or $_.StartsWith("IDLE $m1 ") }) { Die "chain next: an independent stage is idle: $($out -join ' / ')" }
+  # A118: -Holds prints those Q lines only, in order, and writes nothing.
+  $hWant = @($out | Where-Object { $_ -cmatch '^IDLE \d+ Q\d+ [a-z]+$' }) -join "`n"
+  $hReg = "$(@(GitOut @('-C', (Split-Path -Parent $Run), 'rev-parse', '--path-format=absolute', '--git-common-dir'))[0])/skillator/leases"
+  $hRegT = if (Test-Path -LiteralPath $hReg) { "$((Get-Item -LiteralPath $hReg).LastWriteTimeUtc.Ticks) $([Convert]::ToBase64String([IO.File]::ReadAllBytes($hReg)))" } else { $null }
+  $hRun = [IO.File]::ReadAllBytes($Run)
+  $script:Holds = $true
+  try {
+    $hGot = @(DoChainNext) -join "`n"
+    ShouldFail 'usage: -Mode chain -Action next' { $hAll = $script:All; $script:All = $true; try { DoChainNext } finally { $script:All = $hAll } }
+  } finally { $script:Holds = $false }
+  if (-not $hWant -or $hGot -cne $hWant) { Die "chain next -Holds: want [$hWant], got [$hGot]" }
+  if ([Convert]::ToBase64String($hRun) -cne [Convert]::ToBase64String([IO.File]::ReadAllBytes($Run))) { Die "chain next -Holds: wrote to the run file" }
+  $hRegT2 = if (Test-Path -LiteralPath $hReg) { "$((Get-Item -LiteralPath $hReg).LastWriteTimeUtc.Ticks) $([Convert]::ToBase64String([IO.File]::ReadAllBytes($hReg)))" } else { $null }
+  if ($hRegT -ne $hRegT2) { Die "chain next -Holds: touched the lease registry" }
+  if (Test-Path -LiteralPath "$Run.lock") { Die "chain next -Holds: left a lock" }
+  $hRunSv = $Run; $script:Run = "$d/nochain.md"; [IO.File]::WriteAllText($script:Run, "# run`n")
+  $script:Holds = $true
+  try { ShouldFail ([regex]::Escape("FAIL: no ## Chain section in $script:Run - chain next reads a chain")) { DoChainNext } } finally { $script:Holds = $false; $script:Run = $hRunSv }
   No 'dispatch: a stage idle on Q1' 'waits on Q1' { DoChainDispatch $m3 }
   No 'dispatch: a no-files stage while Q1 holds' 'waits on Q1 nofiles' { DoChainDispatch $m4 }
   DoStage $m1 '!' '' ''

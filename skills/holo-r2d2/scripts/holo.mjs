@@ -65,7 +65,7 @@ const meets = (a, b) => {
   return a === b || b.startsWith(a + "/") || a.startsWith(b + "/");
 };
 
-export function parseRun(md) {
+export function parseRun(md, holds = null) {
   const run = {
     id: "", title: "", plan: "", started: "", updated: "",
     stages: [], chain: null, asks: "", qs: [], inflight: {}, rulings: [],
@@ -144,11 +144,11 @@ export function parseRun(md) {
       if (l.startsWith("- ")) run.rulings.push(l.slice(2));
     }
   }
-  derive(run);
+  derive(run, holds);
   return run;
 }
 
-function derive(run) {
+function derive(run, holds = null) {
   const byN = new Map(run.stages.map((s) => [s.n, s]));
   const blocks = run.chain?.blocks ?? {};
   for (const s of run.stages) {
@@ -177,9 +177,26 @@ function derive(run) {
   if (last && FINAL_STAGE.test(last.name) && !last.after.length) {
     last.implicit = run.stages.filter((s) => s !== last).map((s) => s.n);
   }
-  // Which stages a decision still holds - display only; `relay-morpheus.sh
-  // chain next` is the judge. Same tests as its IDLE lines: blocks, files,
-  // no files, and a `?` row parked on it.
+  // Which stages a decision still holds. A118: relay-morpheus is the judge -
+  // `chain next --holds` prints its own IDLE <n> Q<k> <why> lines, and when
+  // they are given the page draws exactly those (plus a `?` row's own parked
+  // Qs, which are data in its In-flight block, not a rule). The rules below are
+  // only the fallback for when relay-morpheus cannot be run.
+  run.holdsFrom = holds ? "relay" : "estimate";
+  if (holds) {
+    const byQ = new Map(run.qs.map((q) => [q.id, q]));
+    for (const q of run.qs) { q.blocks = list(q.f.blocks); q.files = list(q.f.files); q.holds = []; }
+    const add = (n, qid) => {
+      const q = byQ.get(qid), s = byN.get(n);
+      if (!q || !s || q.holds.includes(n)) return;
+      q.holds.push(n); s.waits.push(qid);
+    };
+    for (const h of holds) add(h.n, h.q);
+    for (const s of run.stages) if (s.state === "parked") for (const qid of run.inflight[s.n]?.parked ?? []) if (HOLDING.has(byQ.get(qid)?.state)) add(s.n, qid);
+    for (const q of run.qs) q.holds.sort((a, b) => a - b);
+    for (const s of run.stages) s.waits.sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+    return;
+  }
   for (const q of run.qs) {
     q.blocks = list(q.f.blocks);
     q.files = list(q.f.files);
@@ -748,6 +765,30 @@ async function writeGenerated(root, out, text) {
   await writeFile(out, text, "utf8");
 }
 
+// A118: the holds as relay-morpheus judges them - `chain next --holds`, read-only
+// (it refreshes no lease and writes nothing). sh first, then the ps1 twin;
+// HOLO_RELAY_CMD replaces both (tests). null when the run has no chain or
+// relay-morpheus cannot be run - the page then falls back to its estimate.
+export function parseHolds(text) {
+  return String(text).split(/\r?\n/).map((l) => /^IDLE (\d+) (Q\d+) (\w+)\s*$/.exec(l)).filter(Boolean).map((m) => ({ n: Number(m[1]), q: m[2], why: m[3] }));
+}
+function relayHolds(md, runPath, root) {
+  if (!/^## Chain$/m.test(md)) return null;
+  const env = { ...process.env, RELAY_RUN: runPath };
+  const tries = [];
+  if (process.env.HOLO_RELAY_CMD) tries.push(["sh", ["-c", process.env.HOLO_RELAY_CMD]]);
+  else {
+    const rm = join(HERE, "..", "..", "relay-morpheus", "hooks");
+    if (existsSync(join(rm, "relay-morpheus.sh"))) tries.push(["sh", [join(rm, "relay-morpheus.sh"), "chain", "next", "--holds"]]);
+    if (existsSync(join(rm, "relay-morpheus.ps1"))) tries.push(["powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(rm, "relay-morpheus.ps1"), "-Mode", "chain", "-Action", "next", "-Holds", "-Run", runPath]]);
+  }
+  for (const [cmd, args] of tries) {
+    try { return parseHolds(execFileSync(cmd, args, { env, cwd: root, encoding: "utf8", timeout: 60000, stdio: ["ignore", "pipe", "ignore"] })); }
+    catch { /* next */ }
+  }
+  return null;
+}
+
 async function main(argv) {
   const o = parseArgs(argv);
   if (o.help) { console.log((await readFile(fileURLToPath(import.meta.url), "utf8")).split("\n").slice(1, 15).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); return; }
@@ -767,7 +808,8 @@ async function main(argv) {
     if (o.decisions) { set = JSON.parse(await readFile(o.decisions, "utf8")); stem = String(set && set.id || "decisions"); }
     else {
       const runPath = await resolveRun(o.pos[0], root);
-      const run = parseRun(await readFile(runPath, "utf8"));
+      const md = await readFile(runPath, "utf8");
+      const run = parseRun(md, relayHolds(md, runPath, root));
       if (!run.id) throw new Error(`${runPath}: no '# RUN-<n> - <title>' line - not a relay run file`);
       set = setFromRun(run, relative(root, runPath).replace(/\\/g, "/")); stem = run.id;
     }
@@ -779,7 +821,8 @@ async function main(argv) {
   let run = null, runPath = "";
   if (o.pos.length || !o.design) {
     runPath = await resolveRun(o.pos[0], root);
-    run = parseRun(await readFile(runPath, "utf8"));
+    const md = await readFile(runPath, "utf8");
+    run = parseRun(md, relayHolds(md, runPath, root));
     if (!run.id) throw new Error(`${runPath}: no '# RUN-<n> - <title>' line - not a relay run file`);
   }
   let design = null;
@@ -896,6 +939,15 @@ function selftest() {
   ok(hdr.qs.length === 1 && hdr.qs[0].f.question === "first", "an unreadable Q header never merges into the Q above");
   ok(parseArgs(["--html", "RUN-12"]).pos[0] === "RUN-12", "--html takes no path; the run stays the run");
   ok(parseArgs(["RUN-12", "--batch"]).mode === "batch", "--batch is a mode");
+  // A118: relay-morpheus judges the holds. Given its lines, the page draws
+  // them even where holo's own rules would say otherwise - a holds change in
+  // relay-morpheus moves the page with no edit here.
+  const h1 = parseHolds("NEXT 7 AAAB\nIDLE 3 Q2 files\nIDLE 4 - after 3\nIDLE 5 Q1 blocks\n");
+  ok(h1.length === 2 && h1[0].n === 3 && h1[0].q === "Q2" && h1[1].why === "blocks", "holds: IDLE Q lines parsed, others skipped", h1);
+  const rr = parseRun(md, [{ n: 6, q: "Q2", why: "files" }]);
+  ok(rr.holdsFrom === "relay" && rr.qs.find((q) => q.id === "Q2").holds.join() === "3,6" && rr.stages.find((s) => s.n === 6).waits.join() === "Q2", "holds: relay's lines drawn as given (3 is the parked row's own Q2)", rr.qs.find((q) => q.id === "Q2").holds);
+  ok(rr.qs.find((q) => q.id === "Q1").holds.join() === "3", "holds: a parked row keeps its own parked Qs (data, not a rule)", rr.qs.find((q) => q.id === "Q1").holds);
+  ok(parseRun(md).holdsFrom === "estimate", "holds: no relay lines -> the estimate");
 
   // 6. F42 wizard: only open/asked decisions are asked; the rest is settled
   const set = setFromRun(run, "fixture-all-states.md");

@@ -117,6 +117,8 @@ run `RM chain merge <n>`: it merges the stage branch into the run branch and
 removes the stage worktree. Exit 3 is a conflict: the merge is aborted, the
 stage is `!`, and a retry stage is planned on the merged branch. Then
 `chain next --all` again fills the free slots.
+`chain next --holds` (A118) prints only the `IDLE <n> Qk <why>` lines and
+writes nothing - no lease beat, no lock - for readers such as holo-r2d2.
 
 `mode:` in the Chain header names what actually ran: `workflow` for a Workflow
 call, `agents` for Agent fan-out. A run file that says `workflow` while Agents

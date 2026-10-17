@@ -41,6 +41,7 @@
 #        when another run's live stage holds one; `chain next` prints IDLE <n> leased <path> RUN-m stage s)
 #   relay-morpheus.sh chain next --all                 F37: every stage that can start now, one NEXT line each,
 #                                                      capped by usage (2 below 50% of 5h, else 1; RELAY_CHAIN_PARALLEL)
+#   relay-morpheus.sh chain next --holds               A118: only the IDLE <n> Qk <why> lines; read-only, no lease beat
 #   relay-morpheus.sh chain merge <n>                  F37: merge a parallel stage's branch into the run branch
 #                                                      (exit 3 on a conflict: the stage fails)
 #   relay-morpheus.sh chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
@@ -1755,11 +1756,15 @@ parallel_cap() {   # [decision already read]: the cap, from one reading
   esac
 }
 chain_next() {
-  SCAN_ALL=; SCAN_CAP=1
-  case "${1:-}" in --all) SCAN_ALL=1; SCAN_CAP=$(parallel_cap) ;; '') ;; *) die "usage: chain next [--all]" ;; esac
+  SCAN_ALL=; SCAN_CAP=1; _hd=
+  case "${1:-} ${2:-}" in "--all --holds"|"--holds --all") die "usage: chain next [--all | --holds]" ;; esac
+  case "${1:-}" in --all) SCAN_ALL=1; SCAN_CAP=$(parallel_cap) ;; --holds) _hd=1 ;; '') ;; *) die "usage: chain next [--all | --holds]" ;; esac
   need_run
   has_chain || die "no ## Chain section in $RUN - chain next reads a chain"
   hdr_check
+  # A118: --holds is read-only (holo-r2d2 polls it) - only the decision-hold
+  # lines, no verdict, no lease beat, no lease file, no lock.
+  if [ -n "$_hd" ]; then chain_scan | grep -E '^IDLE [0-9]+ Q[0-9]+ [a-z]+$' || :; return 0; fi
   # The driver's loop keeps its own in-flight stages' leases fresh: a stage
   # that runs long without reporting must not look abandoned to other runs.
   for _ns in $(awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4; gsub(/ /,"",s); if (s == "~") {n=$2; gsub(/ /,"",n); print n}}' "$RUN"); do
@@ -2665,6 +2670,19 @@ marathon_selftest() {
     printf '%s\n' "$out" | grep -qx "$want" || die "chain next: no '$want' in: $out"
   done
   ! printf '%s\n' "$out" | grep -q "^IDLE $m6 \|^IDLE $m1 " || die "chain next: an independent stage is idle: $out"
+  # A118: --holds prints those Q lines only, in order, and writes nothing.
+  hw=$(printf '%s\n' "$out" | grep -E '^IDLE [0-9]+ Q[0-9]+ [a-z]+$')
+  reg="$(git -C "$(dirname "$RUN")" rev-parse --path-format=absolute --git-common-dir)/skillator/leases"
+  cp "$RUN" "$d6/hbefore"; hre=; if [ -e "$reg" ]; then cp "$reg" "$d6/hreg"; hre=1; fi; : > "$d6/hmark"
+  [ "$(chain_next --holds)" = "$hw" ] && [ -n "$hw" ] || die "chain next --holds: want '$hw', got: $(chain_next --holds)"
+  cmp -s "$d6/hbefore" "$RUN" || die "chain next --holds: wrote to the run file"
+  if [ -n "$hre" ]; then cmp -s "$d6/hreg" "$reg" && [ -z "$(find "$reg" -newer "$d6/hmark")" ] || die "chain next --holds: touched the lease registry"
+  else [ ! -e "$reg" ] || die "chain next --holds: created the lease registry"; fi
+  [ ! -e "$RUN.lock" ] || die "chain next --holds: left a lock"
+  if (chain_next --holds --all >/dev/null 2>&1); then die "chain next --holds --all: accepted"; fi
+  printf '# run\n' > "$d6/nochain.md"
+  set +e; hm=$( (RUN="$d6/nochain.md"; chain_next --holds) 2>&1 >/dev/null ); hrc=$?; set -e
+  [ "$hrc" = 1 ] && [ "$hm" = "FAIL: no ## Chain section in $d6/nochain.md - chain next reads a chain" ] || die "chain next --holds: no chain gave rc $hrc: $hm"
   no "dispatch: a stage idle on Q1" 'waits on Q1' chain_dispatch "$m3" --driver @cc-m
   no "dispatch: a no-files stage while Q1 holds" 'waits on Q1 nofiles' chain_dispatch "$m4" --driver @cc-m
   # A failed row is never offered; the next pending one is.
