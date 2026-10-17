@@ -1,0 +1,16 @@
+TASK - stage 68 review fixes (F33 relay-morpheus marathon). Ten /code-review findings on the staged F33 diff; both ports carry each logic bug.
+Your files: skills/relay-morpheus/** only (hooks/relay-morpheus.sh, hooks/relay-morpheus.ps1, SKILL.md, references/chain.md, references/marathon.md). Nothing else - not the harness, not the green/red records.
+For EACH finding: reproduce it first with a tiny run file in a scratch dir (both ports where it applies). Reproduced -> fix in sh AND ps1, add a selftest case that fails on the old code and passes now. Not reproduced -> write `Not reproduced: <finding> - <what you ran>` and leave the code. Smallest change that fixes the cause; no refactoring.
+Findings (sh line numbers; the ps1 mirror carries the same logic):
+1. sh:1117 chain_scan landed() counts a '>' re-planned row as landed, so `after: <m>` on a re-planned stage is satisfied before its replacement ('stage <new>' in the landed cell) lands (ps1:1154). Fix: follow the replacement, or '>' is not landed.
+2. sh:509 verdict is FINAL when nothing is dispatchable and no decision is open/answered, even with '~' rows in flight or pending rows behind an after: edge on a '!' or '~' stage. Add the missing verdict(s) (e.g. WAIT <n> while work is in flight; BLOCKED <n> behind a failed stage) and update chain.md step 5 / marathon.md where the driver reads verdicts - keep it to the lines that name the verdicts.
+3. sh:127 chain_dispatch refuses `IDLE <n> Q...` but not `IDLE <n> - after <m>` (ps1:769): an unlanded --after predecessor must refuse dispatch too.
+4. sh:303 cmd_park de-dups on (stage, first ticket word) only, so a second different question on the same stage+ticket, or a new one after Q1 is moot/replanned, returns the old Q. Key on the question text as well, and ignore closed Qs.
+5. sh:745 chain hold picks next= from first_open_row; it must come from chain_scan's NEXT.
+6. sh:368 cmd_list counts only 'x' as done; '>' rows are closed and must count as done (or leave the total).
+7. sh:589 cmd_queue --asks awk: getline after '## Decisions' ignores its return value and does not update sec.
+8. sh:531 chain_edge does not check <n> is numeric (used unescaped in sed/awk) - add the `case $n in *[!0-9]*) die` guard park uses.
+9. sh:440 chain_scan ids() accepts only single-letter ticket ids; match the board's [A-Z]+[0-9]+ like base()/tmatch.
+10. sh:271 cmd_park checks --header length on the untrimmed value and in bytes; check the trimmed value, in characters.
+Then: both selftests (sh selftest, ps1 selftest) pass; pure ASCII, LF, no BOM. Re-run NO baseline (these are script-logic fixes; selftests are the proof) - Ruling by the main session.
+Report per COMMON RULES: per finding, Reproduced/Not reproduced, the fix, the selftest case name.

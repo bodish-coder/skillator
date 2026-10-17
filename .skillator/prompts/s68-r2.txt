@@ -1,0 +1,8 @@
+TASK - stage 68 resume (F33 finish marathon): GREEN run 2, then nothing else.
+State: F33 relay-morpheus work is in the tree, uncommitted. Selftests sh+ps1 ok. RED in practice/baselines/red-relay-f33.txt. GREEN run 1: M1 PASS, M3 PASS, M4 PASS, M2 B6 PASS rest VOID, M5 re-plan PASS dispatch VOID - both VOIDs from claude-mem's weekly notice leaking into nested runs. claude-mem is no longer loaded in nested runs (verified by the main session 08:40Z).
+Do:
+1. Read practice/baselines/green-relay-f33.txt in full (recipe in its last paragraph), practice/baselines/transcripts/f33-green-go.sh and f33-green-driver.sh.
+2. Rebuild the prefix; rebuild fx/green-*-2 fixtures with BASELINE_USAGE='40 40'; run marathon-2 decidable-2 stop-2 batch-2 resume-2 (edit S= in f33-green-go.sh first). Then re-run decidable-1 and resume-1 clean.
+3. Grade each against the scenario files (practice/baselines/scenario-marathon*.txt). Append a RUN 2 section and an updated VERDICT to green-relay-f33.txt (earlier sections untouched). S0 / paged path stays untested - say so, do not attempt it.
+4. If a run fails on a real skill defect, a fix inside skills/relay-morpheus/ is in scope: make it, re-run both selftests, re-run the failing scenario once. Anything else: report, do not edit.
+Report per COMMON RULES.

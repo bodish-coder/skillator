@@ -1,0 +1,35 @@
+COMMON RULES (every RUN-11 implementer)
+- Repo: C:\tools\Projects\skillator2 (Windows, Git Bash + PowerShell 5.1). Other implementers work in this SAME working tree at the same time on other files. Touch only the files your task names (and new files you create for it). Never `git add -A`, never commit, never push, never stash, never reset/checkout files you did not change. The main session commits.
+- Never edit TICKETS.md or .skillator/run-*.md (the main session owns them). Report instead.
+- Skill edits follow skills/skill-smith (read its SKILL.md first): RED baseline recorded before the fix, GREEN after, same harness: practice/scripts/baseline-harness.sh (see existing practice/baselines/scenario-*.txt and green-*.txt for the shape). Baseline runs hide ~/.claude/CLAUDE.md while they run, so only ONE baseline run may run on this machine at a time: if the harness refuses because ~/.claude/CLAUDE.md.skillator-hidden exists, another implementer is mid-run - wait (poll every 2-3 min, up to 60 min) and retry. Never move or delete that file yourself.
+- Scripts come in sh + ps1 mirrors: pure ASCII, LF, no BOM, empty cell is `-`; run both selftests after touching either.
+- Repo canon: PRACTICE.md, PLATFORMS.md, practice/task-loop.md. Owner plan: docs/plans/PLAN-parallel-runs.md (the decisions table D1-D10 binds; read it first).
+- Decide what you can; write each decision as `Ruling: <what> - <why> - <cost if wrong>` in your report. Do NOT ask the user anything. If you hit a destructive op, a security-sensitive action, anything outside this worktree (push/merge/publish), or a scope breach, stop that part and end your report with `STOP: <what>`.
+- If a choice is genuinely the owner's (taste, a fact only they know, a conflict nothing settles): do everything that does not depend on it, touch nothing that does, end with `PARKED: <question>, 2-4 options (does/hurts), recommendation, files it would touch`.
+- Final report: files changed, every verification you ran with its result (command + pass/fail lines), RED/GREEN records written, Rulings, PARKED/STOP if any, and anything unrelated you found (one line each).
+
+TASK RUN-11 stage 74 - F39: one build skill.
+
+Ticket F39 and the owner decisions D3-D6 are in docs/plans/PLAN-parallel-runs.md (section 3 "F39" is the spec; read sections 1-2 too). Summary:
+
+Merge build-vision / build-ultron into one `build-jarvis` with Step 0 GRADE:
+- tier per seat (design/build/verify) from the PRACTICE.md section 4 / practice/task-loop.md table; top tier first;
+- step down when a tier is unavailable, or when usage >= 70% of the 5-hour window (non-critical seats only); critical work (auth, money, concurrency, shared contract) keeps the highest available tier on its verify seat;
+- user words override ("use fable", "cheap", "opus only"); one printed grade line before spending; every downgrade is a Ruling;
+- tier->model from grayskull's gitignored `.skillator/tiers.local.md`, else PLATFORMS.md role-tier defaults; a dispatch failing as unavailable marks that model down in the file and retries one tier lower.
+Design questions are ruled (into a Decisions section of the design file) or parked via relay-morpheus `park` (a standalone build gets a one-stage relay run so parks have a home); never asked mid-build except the six stops; "ask me as you go" / "brainstorm with me" switches to live questions. Ceremony (design on disk, handoff checkpoints, session record) only when the work is multi-stage or outlives the session. build-vision and build-ultron become short redirect stubs; their unique content moves to skills/build-jarvis/references/.
+
+Routing, so it ALWAYS runs for a feature:
+- build-jarvis description matches any feature request (add/build/implement/change a feature); style words only switch tiers;
+- tickets-zordon logs an F ticket then hands it to build-jarvis (its workflow-mode fix seat for F tickets runs the build-jarvis procedure);
+- skills/grayskull-power/references/routing.md (~line 84 and ~92) agree;
+- routing says build-jarvis includes design so superpowers:brainstorming does not also run;
+- a Claude Code UserPromptSubmit hook script (sh + ps1) that injects the route for feature-shaped prompts, with install instructions mirroring how other skillator hooks are documented. Do NOT install it into the user's settings (outside the worktree): document + selftest it.
+
+grayskull-power: new arm step `tiers` writing `.skillator/tiers.local.md` (add to .gitignore) and adding `tiers deep=.. build=.. cheap=..` to the state line (SKILL.md + references/arming.md + references/hosts.md as needed). Keep grayskull SKILL.md short.
+
+Update every reference to build-vision/build-ultron across the repo that would now mislead (grep; ~15 files) EXCEPT skills/relay-morpheus/** and TICKETS.md (other owners) - list any you could not change. Also .claude-plugin/plugin.json and marketplace.json description text (never the version).
+
+Verify: RED first (how often a build skill is invoked today) then GREEN, ~6 feature prompts: 2 direct ("add CSV export to the shelf app"), 2 via the board ("log a feature ... and work it"), 2 as a headless "work these tickets" prompt. Done = build-jarvis invoked every time, and the grade line matches the table on 4 sample tickets. Records: practice/baselines/scenario-build-route*.txt, red-/green-build-jarvis-f39.txt.
+
+Your files: skills/build-jarvis/**, skills/build-vision/**, skills/build-ultron/**, skills/grayskull-power/**, skills/tickets-zordon/SKILL.md, PRACTICE.md, PLATFORMS.md, README*, .gitignore, .claude-plugin/*.json (descriptions only), other docs referencing build-*, practice/baselines/*build*. NOT skills/relay-morpheus/**, NOT practice/scripts/baseline-harness.sh (another implementer owns it now; if you need a fixture, put a standalone script at practice/scripts/fixtures-build.sh, or use an existing fixture).

@@ -1,0 +1,20 @@
+TASK RUN-11 stage 75 - F41: new skill holo-r2d2 (core).
+
+Spec: docs/plans/PLAN-parallel-runs.md section 3 "F41" and D10 (read sections 1-2 too).
+
+Build skills/holo-r2d2/:
+- SKILL.md in skillator style (read skills/skill-smith/SKILL.md and two existing skills first, e.g. skills/relay-morpheus/SKILL.md and skills/tickets-zordon/SKILL.md).
+- A renderer script (node, no npm deps, like skills/tickets-zordon/board/artifact.mjs) that reads a relay run file (.skillator/run-<n>-*.md: see skills/relay-morpheus/SKILL.md "The run file", plus the `## Chain` and `## Decisions` sections written by relay-morpheus park/chain: skills/relay-morpheus/references/marathon.md, chain.md, docs/plans/PLAN-marathon.md section 2 for the Q block format) and emits ONE Artifact-shaped HTML page (no doctype/html/body; inline SVG preferred, or mermaid from cdn.jsdelivr.net with an exact version; colour tokens on :root with a dark-mode override; works at phone width) containing:
+  (a) a card per open decision (Q) with its options side by side as small flow diagrams (does / hurts, what it blocks, recommendation marked);
+  (b) the run's stage graph in parallel lanes with dependency arrows (after:), files per stage, states coloured (landed / in flight / parked / failed / replanned / pending);
+  (c) optionally, the components from a design file's sections.
+- `--ascii` output for terminals; `--html <path>` standalone page (with its own doctype) for hosts without the Artifact tool, default .skillator/holo/<run>.html.
+- `--selftest` with fixture run files covering every state. The stage graph is generated from the run file, never hand-drawn: the selftest asserts every stage row appears with its state.
+
+SKILL.md covers: when it fires (end batch, plan/design approval, away-flow push link, on demand); trigger phrases "Help me, Obi-Wan" / "help me obiwan" / "help me obi wan kenobi" (+ "Help me, Obi-Wan RUN-12" for a run, "Help me, Obi-Wan F39" for a ticket's design/plan); Claude Code publish via the Artifact tool (private; the link goes into the AskUserQuestion question text); answers back from the page (describe the artifact data-capability path; the session still writes every answer to the run file with `relay-morpheus.sh answer` - the page never writes the run file); other-host fallback; it decides nothing and asks nothing.
+
+Do NOT edit relay-morpheus, grayskull-power, routing.md or marathon.md (a later stage hooks it in): put in your report the exact lines those files need.
+
+Verify: selftest passes; render the real .skillator/run-11-parallel-runs-marathon-one.md and a seeded fixture with 2 open Qs, and check the HTML structurally (node). RED/GREEN for the trigger: RED = what "Help me, Obi-Wan" does today on a fixture run with 2 parked Qs (record it); GREEN = with the skill loaded, the phrase produces the page. Records: practice/baselines/scenario-holo*.txt, red-/green-holo-f41.txt.
+
+Your files: skills/holo-r2d2/**, practice/baselines/*holo*. Nothing else.

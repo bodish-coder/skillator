@@ -1,0 +1,13 @@
+TASK RUN-11 stage 68 - F33: finish marathon mode for relay-morpheus and get it to GREEN.
+
+F33 (TICKETS.md line): marathon mode for staged workflows: relay-morpheus chains stages back to back and never stops for a decision; a stage that needs user input parks the question in a decisions queue on the run file, the run carries on with every stage that does not depend on it, and at the end all parked questions are asked in one batch (AskUserQuestion), then the unblocked stages run. Done = RED/GREEN where a chain with one decision-gated stage finishes the other stages before asking.
+
+State (verified 2026-10-15): the implementation is in the working tree, uncommitted, by an earlier session: skills/relay-morpheus/hooks/relay-morpheus.sh and .ps1 (park/answer/queue, chain next/edge, ? and > states), skills/relay-morpheus/references/marathon.md, SKILL.md and references/chain.md edits, practice/scripts/baseline-harness.sh (fixture relay-marathon), scenarios practice/baselines/scenario-marathon*.txt (M1-M5), RED transcripts practice/baselines/transcripts/f33-red-*. Design: docs/plans/PLAN-marathon.md (sections 8.2-8.4 are the tests; "Owner rulings" at the end bind). GREEN has NOT been run. Spike S0 (hand-run paged AskUserQuestion) needs the owner and is out of scope: the record must say "S0 / paged path untested".
+
+Do:
+1. Run both selftests (sh and ps1). Fix what fails (in your files only).
+2. Write the RED record if missing (practice/baselines/red-*.txt shape as other tickets) by grading the existing f33-red-* transcripts against PLAN-marathon 8.2.
+3. Run GREEN M1-M5 x2 with the plugin loaded (harness), grade against 8.4, fix and re-run what fails (cap 3 fix rounds per scenario). Write practice/baselines/green-relay-f33.txt with the verdict table, costs, and the S0 note.
+4. Run the context-audit / check-grayskull-sync scripts if they exist under practice/scripts.
+
+Your files: skills/relay-morpheus/**, practice/scripts/baseline-harness.sh, practice/baselines/*marathon*, practice/baselines/*f33*, docs/plans/PLAN-marathon.md. Nothing else.

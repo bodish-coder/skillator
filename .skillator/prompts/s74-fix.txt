@@ -1,0 +1,21 @@
+TASK - stage 74 review fixes (F39 one build-jarvis). Ten /code-review findings on the staged F39 diff.
+Your files: skills/build-jarvis/** (SKILL.md, references/*, hooks/feature-route.sh + .ps1), skills/tickets-zordon/SKILL.md, PRACTICE.md. Nothing else - not relay-morpheus (another implementer is in it), not the harness, not the baselines.
+Main-session rulings (binding):
+- R1 one build-jarvis pass per batch: several F tickets = ONE build-jarvis pass, one task block per ticket; "one agent per ticket" means each ticket's Build seat is one dispatched agent inside that pass. A workflow item agent never loads build-jarvis as an orchestrator: it receives the parent's grade and implements its one task block (build seat only, no regrade, no own verify). Fix tickets-zordon ~L285-300 and ~L368-371 to say this once, consistently.
+- R2 size: build-jarvis takes every FEATURE of any size (the grade picks lean ceremony). A non-feature one-line edit (typo, comment, rename, formatting) is not a feature and goes direct. The description's NOT clause and the hook text must say the same thing; description stays <= 80 words.
+- R3 the board first: the route text tells the model, when the request has no ticket on TICKETS.md, to log the F ticket (tickets-zordon) and then load build-jarvis - one line, not a new step.
+- R4 escalation: Phase 2's third-round step up is allowed only with a `Ruling:` line citing the two failed reviews; Step 0.5's "never up on your own" gets that one exception named.
+Fix list:
+1. references/grade.md ~L83: the worked critical example at 74% usage steps design deep->build and build build->cheap - rewrite it to keep critical's deep design + build-tier build + held verify (non-critical seats step down).
+2. tickets-zordon ~L370 (R1).
+3. tickets-zordon ~L285 vs the next paragraph (R1).
+4. hook route text (R3), both twins byte-identical output.
+5. hook P_TICKET: word-anchor the verb alternatives (no `do` in does/undo), require the ticket id shape the board uses, and test the veto BEFORE P_TICKET so a bug/question about a ticket is vetoed. Cases that must be `-`: "why does the F3 export crash?", "undo the F2 change", "how do I refresh, F5?".
+6. SKILL.md description vs body vs hook vs tickets-zordon (R2).
+7. SKILL.md Phase 2 vs Step 0.5 (R4).
+8. hook P_VETO: a bare noun must not veto a feature. Must be `feature`: "add error handling to the upload API", "support push notifications", "build a deploy button", "add release notes page". Must stay vetoed: "push it", "merge the branch", "the build is failing", "commit this", "deploy to prod". Veto on imperative-verb position or failure phrasing, not the bare noun.
+9. sh prompt_of: read the TOP-LEVEL "prompt" only (no greedy match), matching ps1's ConvertFrom-Json `.prompt`. Case: '{"prompt":"say hi","extra":{"prompt":"add a flag"}}' -> `-` on both.
+10. PRACTICE.md ~L24 "(its Craft step)" -> name the step build-jarvis really reads PRACTICE in. And both hooks: split on newlines as sentence breaks so "fix it\nadd a flag" routes as feature.
+For each hook case: add it to BOTH selftests (it must fail on the old code - check by running the old twin from `git show :<path>` into a scratch file), fix, both selftests ok, and diff the two twins' output on every case (byte-identical). Pure ASCII, LF, no BOM.
+Re-run NO baseline (Ruling: classification is proven by the selftest cases; the routing GREEN already passed) - unless your fix changes the injected route text beyond R3's one line; then say so and do not run it either - the main session decides.
+Report per COMMON RULES: per finding, the fix and the selftest case names.

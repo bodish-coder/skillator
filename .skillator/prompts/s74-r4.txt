@@ -1,0 +1,10 @@
+TASK - stage 74 round 4 (F39 build-jarvis): the grade line must come BEFORE any spend. One fix, one re-run.
+State: round 3 (practice/baselines/green-build-jarvis-f39.txt, ROUND 3 + "VERDICT (after round 3)") - with the shipped JSON hook, direct requests now load build-jarvis 2/2, but the grade line came before spending 0/4: 3b printed it only after the design-file Write and both dispatches. direct-2 also stepped the design seat of CRITICAL work down to build under the budget rule, labelled build as build=sonnet on critical work, and wrote the design file itself.
+Main-session rulings (binding):
+- Ruling: a budget step-down never reaches critical work - critical keeps its deep design seat and opus verify; the step-down applies to non-critical seats only - why: build-jarvis's critical carve-out exists exactly for this - cost if wrong: critical builds cost more under a tight budget.
+Do:
+1. Read skills/build-jarvis/SKILL.md (round 3's fix is in it), PLATFORMS.md seat table, and the round-3 section of the green file.
+2. Edit skills/build-jarvis/SKILL.md body only (description, hooks, references untouched unless the fix cannot live in SKILL.md): Step 0.7 - your first reply text after loading the skill is the `grade:` line, before the design-file Write or any dispatch; add the red flag "about to Write the design file with no `grade:` line yet - stop"; write the ruling above into the budget rule; critical work's build label follows PLATFORMS (build tier), not cheap. Keep the edit small - skill-smith rules.
+3. Re-run direct-1 and direct-2 once with practice/baselines/transcripts/f39-build-par-r3.sh (rename outputs greenr4; fresh fixtures; rebuild the prefix from the current tree). Grade strictly: the grade line is reply text before the first Write/Agent call; seats match the table.
+4. Append ROUND 4 and "VERDICT (after round 4)" to the green file (earlier rounds untouched). Run both feature-route selftests if you touched the hook.
+Report per COMMON RULES.

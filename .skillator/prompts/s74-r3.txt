@@ -1,0 +1,9 @@
+TASK - stage 74 resume (F39 one build-jarvis): GREEN round 3, then nothing else.
+State: F39's skill work is already in the tree, uncommitted (build-jarvis rewritten + references/ + hooks/feature-route.{sh,ps1}, build-vision/ultron stubs, tickets-zordon, grayskull-power, PLATFORMS, PRACTICE, README, WORKFLOW, audit-sherlock). RED 0/6; GREEN board+headless 4/4; direct 0/2 without hook and 0/2 with the old plain-stdout hook. The hook now emits hookSpecificOutput.additionalContext JSON.
+Do:
+1. Read practice/baselines/green-build-jarvis-f39.txt in full (the recipe is its last section) and practice/baselines/transcripts/f39-build-par-hook.sh.
+2. Rebuild the GREEN prefix from the current tree; run ROUND 3: direct-1 and direct-2 on fresh fixtures, with --settings carrying a UserPromptSubmit hook that runs the SHIPPED skills/build-jarvis/hooks/feature-route.sh from the prefix.
+3. Grade each against the scenario's pass criteria. Append a ROUND 3 section and an updated VERDICT to green-build-jarvis-f39.txt (keep earlier rounds untouched).
+4. If round 3 fails, find why from the transcripts. A fix inside build-jarvis/ or its hook is in scope: make it, re-run selftests (sh + ps1), re-run round 3 once. Anything outside those files: report it, do not edit.
+Note: claude-mem is no longer loaded in nested runs (verified by the main session 08:40Z) - if a usage/weekly notice appears in a nested run anyway, record it and say where it came from.
+Report per COMMON RULES.

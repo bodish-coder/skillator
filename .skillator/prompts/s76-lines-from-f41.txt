@@ -1,0 +1,23 @@
+Lines the F41 (holo-r2d2) implementer prepared for stage 76. They were not applied; those files belong to other stages.
+
+1. skills/grayskull-power/SKILL.md, routing table, a row above "A staged run":
+   | "Help me, Obi-Wan" (+ RUN-n, + a ticket) · a run, its decisions, a plan or design to see drawn | `holo-r2d2` — draws; never answers, rules or asks |
+
+2. skills/grayskull-power/references/routing.md, a row above the two relay-morpheus rows:
+   | "Help me, Obi-Wan", "help me obiwan", "help me obi wan kenobi" - alone, with RUN-n or a ticket - or a run, its parked decisions, a plan or a design wanted as a diagram, **even when a relay run is parked** | `holo-r2d2` (draws the page; relay-morpheus keeps the questions and writes the answers) |
+
+3. relay-morpheus SKILL.md description, end of the NOT clause:
+   ... NOT for drawing a run or its decisions ("Help me, Obi-Wan" - `holo-r2d2`).
+   And in the body, under the marathon paragraph:
+   "At `ASK`, draw before asking: `holo-r2d2` (`node <skills>/holo-r2d2/scripts/holo.mjs RUN-<n>`), then the end batch."
+
+4. relay-morpheus/references/marathon.md, The end batch:
+   - New step 2b: "**Draw it**: `node <skills>/holo-r2d2/scripts/holo.mjs RUN-<n>`. With the Artifact tool, publish `.skillator/holo/RUN-<n>.artifact.html` (private, `capabilities: {db: {}}`). Without it, run `--html` and give the path. Answers posted on the page become `RM answer` calls before Unblock (holo-r2d2, Answers from the page)."
+   - Step 3 question text: `RUN-11 Q7 (1/3): <question> - drawn: <link>` (the link on the first page only).
+   - Step 4: "paste `holo.mjs RUN-<n> --ascii` above the queue list."
+
+5. F38 away flow (chain.md / marathon.md): the PushNotification body is `RUN-<n>: <k> decisions waiting - <holo link>`.
+
+6. .gitignore: `.skillator/holo/`
+
+7. Any README or skill list that enumerates skills: add holo-r2d2.

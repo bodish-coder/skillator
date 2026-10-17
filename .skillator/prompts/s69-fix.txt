@@ -1,0 +1,19 @@
+TASK - RUN-11 stage 69 fix round (A115 lock), lane A. /code-review on your predecessor's staged lock rewrite (relay-morpheus.sh lock()/lock_stale(), ps1 Lock/LockStale/Unlock) found races. The current uncommitted tree holds that rewrite plus the A113 chain.md landing lines (keep those as they are).
+Your files: skills/relay-morpheus/hooks/relay-morpheus.sh and relay-morpheus.ps1 only.
+Findings (sh line numbers approximate):
+1. sh ~212 / ps1 ~250: the "pid unchanged before breaking" re-check means nothing when the judged pid is '' (pidless stale dir): a fresh holder between mkdir and writing its pid also reads '', so a second waiter deletes the live holder's new lock -> two holders, a lost row (and in sh, set -e kills the first holder's echo mid-mutation).
+2. sh ~212: check-then-rm TOCTOU: W2 confirms pid==P, W1 breaks + mkdir + echo, then W2 rm -rf's W1's live lock and also takes it. ps1 is wider (Remove-Item is slow).
+3. ps1 ~241: New-Item and Set-Content share one try/catch - a Set-Content sharing violation after New-Item makes the holder wait on its own pidless lock (10 s stall; or a double hold if a waiter breaks it first).
+4. ps1 ~260: Unlock retry stops once the pid stops reading as $PID, not once the lock is gone - can leave an orphan pidless dir with a fresh mtime (10 s stall for every waiter; flaky selftest).
+5. ps1 ~234: LockStale judges an MSYS pid from a sh holder dead (Get-Process) - document the cross-port limit in ps1 as sh already does (ponytail note), or make both ports write a marker that names the port.
+6. sh ~207: resetting the clock on every pid change also fires on a failed read ('' flapping with P), so the 30 s backstop never fires - a pid reused by a live process then spins forever (RUN-9 style hang). Only a change to a DIFFERENT non-empty pid is a handover.
+7. ps1 ~1662 selftest 'late': uses a just-exited cmd.exe pid as the dead holder; Windows reuses pids fast -> flaky false red. Use an impossible pid.
+8. sh ~221: sh unlock is a single rm -rf with no retry; under set -e a failed rm exits non-zero after the mutation landed - parity with ps1 Unlock.
+9. Altitude (the root cause of 1-3): taking the lock (mkdir) and recording the holder (pid write) are two steps. Replace with ONE atomic step: create the lock as a FILE with exclusive create + the pid as its content (sh: `( set -C; echo $$ > "$LOCKF" ) 2>/dev/null`; ps1: [IO.File]::Open($p, 'CreateNew', 'Write', 'None') then write the pid, close). Break a stale lock by RENAMING it to a unique name (mv / [IO.File]::Move to "$LOCKF.broken.$$"), then re-read the RENAMED file: if its pid is the one you judged stale, delete it and retry the create; if not, you stole a live lock - rename it back (or treat the rename failure as "someone else won") - exactly one waiter wins a break. Drop the dir-mtime fallback (no pidless window exists any more; a partially-written file is judged by its mtime only if empty).
+Do:
+1. Reproduce 1 or 2 first: a race harness in a scratch dir - two waiters + a stale lock, many iterations, a shared counter file incremented under the lock; the old (current tree) code loses increments or shows two holders. Record the numbers. If you cannot reproduce in reasonable time, say so and still fix by design (9).
+2. Implement 9 in both ports, keeping the lock path compatible enough that a leftover old lock DIR from an older version is treated as stale and removed (one release of compatibility). Fix 4-8 as they still apply after 9.
+3. Selftest cases in both ports: the race harness (N waiters, counter == expected, never two holders), the nopid/late cases updated to the file lock, impossible-pid dead holder. They must fail on the current-tree code where feasible.
+4. Both full selftests ok (ps1 run it 3 times); A122's `Get-Content -Encoding UTF8` reads stay; pure ASCII, LF, no BOM.
+No baseline.
+Report per COMMON RULES.
