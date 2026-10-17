@@ -122,6 +122,8 @@ fix dispatch 02:55Z: common.txt + s69-fix.txt (atomic file lock + rename-to-brea
 - 2026-10-16 - Stage 77: sweep (grade-gate, feature-route, holo, next-id, taskwork, check-tickets/grayskull-sync/routing, context-audit, relay sh+ps1 selftests) all ok; version 4.6.0 -> 4.7.0; push authorised by the owner ("Push after 77"). Open after RUN-11: F34 (other session), A116, A118, A126.
 - 2026-10-17 - After 4.7.0 landed: A128 (60fed6f, codegraph check script per shell), A126 (70e71f0, run worktrees under .skillator/worktrees/; ticket stays [ ] - its GREEN was NOT run: the launcher hides ~/.claude/CLAUDE.md, which a subagent will not do on a coordinator's word, so it waits for the owner), A116 (0d48e6f, cerebro pi gate never waits forever), A118 (5b28c4a, chain next --holds; holo draws relay's holds). Sweep 2026-10-17: grade-gate ok, feature-route ok, holo selftest ok, codegraph-check ok, check-tickets ok, grayskull-sync ok, check-routing ok, context-audit OK (0 OVER), cerebro 121/121, relay-morpheus sh+ps1 selftest ok.
 
+- 2026-10-17 - F45 owner decisions: two tags `[decide: @h]` (decision) / `[owner: @h]` (implementation); a NEW state `[?]` pending decision. Ruling: decide -> `[?]`, assign -> `[ ]` from any state, `decided <ID>` -> `[ ]`; `[?]` counts as open everywhere (legend, status view, check/archive scripts, board, relay `board`) - costs a new mark every board reader must learn.
+
 ## Resume (continue RUN-11, after the 7-day window resets)
 1. Check usage first (/usage). Then per stage, in order:
 2. Stage 74 (F39): run GREEN round 3 (direct-1/2 with the JSON hook; recipe at end of practice/baselines/green-build-jarvis-f39.txt) -> regression sweep -> /code-review on F39's files -> commit "F39: ..." -> stage 74 x.
