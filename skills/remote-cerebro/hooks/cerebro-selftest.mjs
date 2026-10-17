@@ -425,6 +425,48 @@ export async function run() {
       assert(notes.some((n) => /expired; channel closed/.test(n)), `no expiry close: ${notes.join(" | ")}`);
     } finally { for (const f of hd.session_shutdown || []) f(); for (const k of Object.keys(process.env)) if (/^CEREBRO_/.test(k)) delete process.env[k]; }
   });
+  await t("AT7", "A116: no desk UI -> the phone decides (pi's no-UI confirm does not deny first); no answer at all -> denied after CEREBRO_APPROVAL_MS", async () => {
+    const c = await armed("pi", { mode: "attach", profile: "write", bin: { file: NODE, pre: [STUB("stub-native.mjs"), "pi"] } });
+    const ad = c.b.adapter;
+    Object.assign(process.env, { CEREBRO_MODE: "attach", CEREBRO_ARM_NONCE: ad.armToken, CEREBRO_IPC: ad.ipc, CEREBRO_CWD: proj, CEREBRO_HOME: c.home, CEREBRO_PROFILE: "write", CEREBRO_APPROVAL_MS: "400" });
+    const hd = {}; const pi = { on: (ev, fn) => { (hd[ev] ||= []).push(fn); }, sendUserMessage: () => {} };
+    (await import(pathToFileURL(path.join(HOOKS, "pi-cerebro.ts")).href + "?a116")).default(pi);
+    const notes = [];
+    const noUi = { hasUI: false, ui: { notify: (m) => notes.push(m), confirm: async () => false }, isIdle: () => true, abort: () => {} };
+    for (const f of hd.session_start) f({}, noUi);
+    try {
+      const gate = hd.tool_call[0]({ toolName: "bash", input: { command: "make" } }, noUi);
+      assert(await drive(c.b, () => c.phone.lastAsk()), "gate ask not on phone"); const a = c.phone.lastAsk();
+      let res = "pending"; gate.then((r) => { res = r; });
+      await sleep(50); assert(res === "pending", `the no-UI confirm decided first: ${JSON.stringify(res)}`);
+      c.phone.tap(`a:${a.nonce}`, a.msgId);
+      assert(await drive(c.b, () => res !== "pending"), "phone answer did not reach the gate"); assert(res === undefined, `gate result ${JSON.stringify(res)}`);
+      const stuck = { ui: { notify: (m) => notes.push(m), confirm: () => new Promise(() => {}) }, isIdle: () => true, abort: () => {} };
+      const t0 = Date.now(); const r2 = await hd.tool_call[0]({ toolName: "edit", input: { path: "index.js" } }, stuck);
+      assert(r2?.block && Date.now() - t0 < 5000, `no answer did not deny in time (${Date.now() - t0} ms): ${JSON.stringify(r2)}`);
+      assert(notes.some((n) => /no answer in 400 ms: denied/.test(n)), `no timeout note: ${notes.join(" | ")}`);
+      // A desk confirm that throws is a deny, never an exception out of the gate.
+      const r4 = await hd.tool_call[0]({ toolName: "edit", input: { path: "a.js" } }, { ui: { notify: () => {}, confirm: () => { throw new Error("ui gone"); } }, isIdle: () => true, abort: () => {} });
+      assert(r4?.block, `a throwing desk confirm did not deny: ${JSON.stringify(r4)}`);
+    } finally { for (const f of hd.session_shutdown || []) f(); for (const k of Object.keys(process.env)) if (/^CEREBRO_/.test(k)) delete process.env[k]; }
+  });
+  await t("AT8", "A116: own/plain gate with no desk UI denies at once; a desk confirm that never answers is denied after CEREBRO_APPROVAL_MS", async () => {
+    const h = mkHome();
+    Object.assign(process.env, { CEREBRO_MODE: "own", CEREBRO_CWD: proj, CEREBRO_HOME: h, CEREBRO_PROFILE: "write", CEREBRO_APPROVAL_MS: "300" });
+    const hd = {}; const pi = { on: (ev, fn) => { (hd[ev] ||= []).push(fn); } };
+    try {
+      (await import(pathToFileURL(path.join(HOOKS, "pi-cerebro.ts")).href + "?a116own")).default(pi);
+      const ask = (ctx) => hd.tool_call[0]({ toolName: "bash", input: { command: "ls" } }, ctx);
+      const r1 = await ask({ hasUI: false, ui: { notify: () => {}, confirm: async () => true } });
+      assert(r1?.reason === "cerebro: denied", `no desk UI was not denied by the gate: ${JSON.stringify(r1)}`);
+      const t0 = Date.now(); const r2 = await ask({ ui: { notify: () => {}, confirm: () => new Promise(() => {}) } });
+      assert(r2?.reason === "cerebro: denied" && Date.now() - t0 < 5000, `a confirm that never answers was not denied (${Date.now() - t0} ms): ${JSON.stringify(r2)}`);
+      const r3 = await ask({ ui: { notify: () => {}, confirm: async () => true } });
+      assert(r3 === undefined, `a desk yes was not honoured: ${JSON.stringify(r3)}`);
+      const r5 = await ask({ ui: { notify: () => {}, confirm: async () => { throw new Error("rpc gone"); } } });
+      assert(r5?.reason === "cerebro: denied", `a rejecting desk confirm did not deny: ${JSON.stringify(r5)}`);
+    } finally { for (const k of Object.keys(process.env)) if (/^CEREBRO_/.test(k)) delete process.env[k]; }
+  });
   await t("AT6", "attach: TTL, idle and lock apply as in own mode; attach refused for gemini", async () => {
     const c = await armed("pi", { mode: "attach", bin: { file: NODE, pre: [STUB("stub-native.mjs"), "pi"] } });
     let threw = null; try { await armed("pi", { home: c.home }); } catch (e) { threw = e; } assert(threw instanceof Refused && threw.kind === "refused:lock", `lock: ${threw?.message}`);

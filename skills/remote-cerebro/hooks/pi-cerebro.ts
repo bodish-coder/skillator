@@ -48,22 +48,50 @@ export default function cerebro(pi: any) {
     else pi.on("session_start", (_e: any, ctx: any) => say(ctx, auth.notice || "cerebro: not armed", "warning"));
   }
 
+  // A116: an ask never waits forever. No answer from anyone within
+  // CEREBRO_APPROVAL_MS (default 10 min, at most setTimeout's 2^31-1 ms) is a
+  // deny. A session with no desk UI (pi's hasUI false: print mode) leaves the
+  // desk out of the race - pi's no-UI confirm says "no" at once, which would
+  // deny before the phone could answer - so the phone decides alone, and a
+  // phone that is unavailable is a deny, not a wait. (RPC mode has a UI: pi
+  // 0.74.2 sends the confirm as an extension_ui_request - checked on real pi.)
+  // Whatever happens - a confirm that throws, the channel closed mid-ask by
+  // /kill or expiry - the gate returns a decision; it never throws.
+  const approvalMs = ((n: number) => (Number.isFinite(n) && n > 0 ? Math.min(n, 2147483647) : 600000))(Number(taken.CEREBRO_APPROVAL_MS));
+  const waited = approvalMs < 1000 ? `${approvalMs} ms` : `${Math.round(approvalMs / 1000)} s`;
   async function askBoth(ctx: any, title: string, detail: string): Promise<boolean> {
-    if (!channel) return !!(await ctx.ui.confirm(title, detail));
+    const hasDesk = ctx?.hasUI !== false && typeof ctx?.ui?.confirm === "function";
+    const ch = channel; // the interval may null `channel` mid-ask; this ask keeps its own
+    if (!ch && !hasDesk) { say(ctx, "cerebro: no desk to ask and no phone: denied"); return false; }
     const ac = new AbortController();
-    const id = channel.ask(title, detail);
-    // "unavailable" (channel error, unpaired, bridge gone): the phone did not answer,
-    // so it never wins the race; the desk alone decides.
-    const phone = channel.waitAnswer(id).then((d: string) => {
-      if (d !== "unavailable") return { who: "phone", ok: d === "allow" };
-      say(ctx, "cerebro: phone unavailable; answer here");
-      return new Promise(() => {});
-    });
-    const desk = Promise.resolve(ctx.ui.confirm(title, detail, { signal: ac.signal })).then((ok: any) => ({ who: "desk", ok: !!ok }));
-    const first: any = await Promise.race([phone, desk]);
-    if (first.who === "phone") { ac.abort(); say(ctx, `cerebro: answered on the phone: ${first.ok ? "allowed once" : "denied"}`); }
-    else { channel.localAnswer(id, first.ok ? "allow" : "deny"); channel.forget(id); }
-    return first.ok;
+    const racers: Promise<any>[] = [];
+    let id: string | null = null;
+    if (ch) {
+      id = ch.ask(title, detail);
+      // "unavailable" (channel error, unpaired, bridge gone): the phone did not
+      // answer, so it never wins the race; the desk decides - or, with no desk, it is a deny.
+      racers.push(Promise.resolve(ch.waitAnswer(id)).then((d: string) => {
+        if (d !== "unavailable") return { who: "phone", ok: d === "allow" };
+        if (!hasDesk) return { who: "none", ok: false };
+        say(ctx, "cerebro: phone unavailable; answer here");
+        return new Promise(() => {});
+      }, () => (hasDesk ? new Promise(() => {}) : { who: "none", ok: false })));
+    }
+    if (hasDesk) racers.push(Promise.resolve().then(() => ctx.ui.confirm(title, detail, { signal: ac.signal }))
+      .then((ok: any) => ({ who: "desk", ok: !!ok }), () => ({ who: "desk", ok: false })));
+    let t: any = null;
+    racers.push(new Promise((r) => { t = setTimeout(() => r({ who: "timeout", ok: false }), approvalMs); }));
+    let first: any;
+    try { first = await Promise.race(racers); }
+    catch { first = { who: "error", ok: false }; }
+    finally { clearTimeout(t); ac.abort(); }
+    if (first.who === "phone") say(ctx, `cerebro: answered on the phone: ${first.ok ? "allowed once" : "denied"}`);
+    else {
+      if (first.who === "timeout") say(ctx, `cerebro: no answer in ${waited}: denied`);
+      if (first.who === "none") say(ctx, "cerebro: phone unavailable and no desk to ask: denied");
+      if (ch && id !== null) { try { ch.localAnswer(id, first.ok ? "allow" : "deny"); ch.forget(id); } catch { /* channel gone */ } }
+    }
+    return first.ok === true;
   }
 
   pi.on("tool_call", async (event: any, ctx: any) => {
@@ -111,6 +139,9 @@ export default function cerebro(pi: any) {
 export function ipcChannel(addr: string, nonce: string) {
   let seq = 0; let open = true; let connected = false;
   const answers = new Map<string, string>(); const waiters = new Map<string, (d: string) => void>();
+  // A116: an ask settled at the desk or by the timeout is forgotten; a phone
+  // answer that arrives later is dropped instead of kept for ever.
+  const forgotten = new Set<string>();
   const inbox: any[] = []; const outq: string[] = [];
   // The bridge is gone: no phone answer will come. "unavailable", not "deny": the desk decides.
   const denyAll = () => { for (const [id, w] of waiters) { waiters.delete(id); w("unavailable"); } };
@@ -120,7 +151,7 @@ export function ipcChannel(addr: string, nonce: string) {
   sock.on("close", () => { open = false; denyAll(); });
   sock.on("data", lineSplitter((l: string) => {
     let m: any; try { m = JSON.parse(l); } catch { return; }
-    if (m.type === "answer") { const w = waiters.get(m.id); if (w) { waiters.delete(m.id); w(m.decision); } else answers.set(m.id, m.decision); }
+    if (m.type === "answer") { const w = waiters.get(m.id); if (w) { waiters.delete(m.id); w(m.decision); } else if (!forgotten.delete(m.id)) answers.set(m.id, m.decision); }
     else inbox.push(m);
   }));
   const put = (o: any) => {
@@ -137,7 +168,7 @@ export function ipcChannel(addr: string, nonce: string) {
         waiters.set(id, resolve);
       });
     },
-    forget(id: string) { waiters.delete(id); },
+    forget(id: string) { waiters.delete(id); answers.delete(id); forgotten.add(id); },
     localAnswer(id: string, decision: string) { put({ type: "local-answer", id, decision }); },
     reply(text: string) { put({ type: "reply", text }); },
     drain() { return inbox.splice(0); },
