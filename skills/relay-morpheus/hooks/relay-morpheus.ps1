@@ -421,6 +421,12 @@ function RowNum($line) {
 
 function Cell($line, $i) { ($line -split '\|')[$i].Trim() }
 
+# A129: a run or stage worktree sits under <repo>/.skillator/worktrees/, and
+# its files' paths can pass Windows' 260-character limit ("Filename too
+# long"), so every worktree is created with core.longpaths on, and keeps it
+# in its config.
+function WtAdd($at, [string[]]$a) { GitOk (@('-c', 'core.longpaths=true', '-C', $at, 'worktree', 'add') + $a) }
+function WtLongPaths($wt) { $null = GitOk @('-C', $wt, 'config', 'core.longpaths', 'true') }
 function DoInit {
   if (-not $Plan -or -not $Title -or -not $Stages) {
     Die 'usage: -Mode init -Plan <p> -Title <t> -Stages "alpha,beta"'
@@ -464,7 +470,8 @@ function DoInit {
       $wd = "$mr/.skillator/worktrees"; if (-not (Test-Path -LiteralPath $wd)) { New-Item -ItemType Directory -Force $wd | Out-Null }
       if (-not (Test-Path -LiteralPath "$wd/.gitignore")) { [IO.File]::WriteAllText("$wd/.gitignore", "*`n", (New-Object Text.UTF8Encoding($false))) }
       $br = "run/RUN-$id-$sl"; $wt = "$wd/RUN-$id-$sl"
-      if (-not (GitOk @('-C', $mr, 'worktree', 'add', '-q', '-b', $br, $wt, $hd[0]))) { Die "could not create the run worktree $wt on branch $br (use -Here to run in this checkout)" }
+      if (-not (WtAdd $mr @('-q', '-b', $br, $wt, $hd[0]))) { Die "could not create the run worktree $wt on branch $br (use -Here to run in this checkout)" }
+      WtLongPaths $wt
       if ((Test-Path -LiteralPath $Plan -PathType Leaf) -and @(GitOut @('status', '--porcelain', '--', $Plan)).Count) {
         $pr = @(GitOut @('ls-files', '--full-name', '--others', '--cached', '--', $Plan))
         $rel = if ($pr.Count) { $pr[0] } else { (@(GitOut @('rev-parse', '--show-prefix')) + @(''))[0] + ($Plan -replace '\\', '/') }
@@ -509,7 +516,7 @@ function WorktreeOf($f) {
     $mr = MainOf
     if ($mr) {
       $null = GitOk @('-C', $mr, 'worktree', 'prune')
-      if (GitOk @('-C', $mr, 'worktree', 'add', '-q', $w, $b)) { [Console]::Error.WriteLine("# worktree recreated from $b") }
+      if (WtAdd $mr @('-q', $w, $b)) { WtLongPaths $w; [Console]::Error.WriteLine("# worktree recreated from $b") }
       else { return "$w  (branch $b) - MISSING: git could not recreate it" }
     }
   }
@@ -1098,8 +1105,10 @@ function DoChainDispatch($n) {
       # A retry reuses what a failed attempt left: its worktree, or its branch.
       if (Test-Path -LiteralPath $swt) { }
       elseif (GitOk @('-C', $rwt, 'rev-parse', '-q', '--verify', "refs/heads/$sbr")) {
-        if (-not (GitOk @('-C', $rwt, 'worktree', 'add', '-q', $swt, $sbr))) { Die "could not recreate stage $n's worktree $swt from $sbr" }
-      } elseif (-not (GitOk @('-C', $rwt, 'worktree', 'add', '-q', '-b', $sbr, $swt, 'HEAD'))) { Die "could not create stage $n's worktree $swt on $sbr" }
+        if (-not (WtAdd $rwt @('-q', $swt, $sbr))) { Die "could not recreate stage $n's worktree $swt from $sbr" }
+        WtLongPaths $swt
+      } elseif (-not (WtAdd $rwt @('-q', '-b', $sbr, $swt, 'HEAD'))) { Die "could not create stage $n's worktree $swt on $sbr" }
+      else { WtLongPaths $swt }
       [Console]::Error.WriteLine("stage $n works and commits in: $swt (branch $sbr) - chain merge $n when it lands")
     }
     $blk = @("### stage $n - $name  (dispatched $t, $drv)", 'run: -')
@@ -1269,9 +1278,24 @@ function DoLand {
       $rws = @(Get-Content -Encoding UTF8 $rf | Where-Object { $null -ne (RowNum $_) })
       if (@($rws | Select-Object -First ([Math]::Max(0, $rws.Count - 1)) | Where-Object { (Cell $_ 3) -ceq '~' }).Count) { Refuse "$r has stages in flight - they branch from $lb; land once they have landed" }
       $prev = QState $f $r; if (-not $prev) { $prev = '-' }
-      if (-not (GitOk @('-C', $lw, 'rebase', '-q', $mb))) {
+      # A129: a failed rebase is a CONFLICT only when it stopped mid-rebase -
+      # git's rebase-merge or rebase-apply dir exists. Anything else (a ref
+      # that does not resolve, "Filename too long", a locked index) is git's
+      # own error, said as such: exit 1, not 3.
+      $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+      try { $rbo = @(& git -C $lw rebase -q $mb 2>&1 | ForEach-Object { "$_" }); $rbc = $LASTEXITCODE } finally { $ErrorActionPreference = $eap }
+      if ($rbc -ne 0) {
+        # Plain --git-path (any git): a relative answer is relative to the worktree.
+        $rbin = 0
+        foreach ($rk in @('rebase-merge', 'rebase-apply')) {
+          $rx = @(GitOut @('-C', $lw, 'rev-parse', '--git-path', $rk))
+          if (-not $rx.Count) { continue }
+          $rp = $rx[0]; if (-not [IO.Path]::IsPathRooted($rp)) { $rp = Join-Path $lw $rp }
+          if (Test-Path -LiteralPath $rp) { $rbin++ }
+        }
         $null = GitOk @('-C', $lw, 'rebase', '--abort')
-        [Console]::Error.WriteLine("CONFLICT: $lb does not rebase onto $mb - resolve it on the run branch (a fix stage), then land $r -Sub start again"); return 3
+        if ($rbin) { [Console]::Error.WriteLine("CONFLICT: $lb does not rebase onto $mb - resolve it on the run branch (a fix stage), then land $r -Sub start again"); return 3 }
+        Die "land: git rebase failed before any conflict: $(@($rbo | Where-Object { "$_".Trim() })[0])"
       }
       QSetHdr $f 'landing' "$r $(Now) was=$prev"; if (QState $f $r) { QSet $f $r 'landing' }
       "landing ${r}: $lb rebased onto $mb - now the regression sweep and /code-review on $mb..$lb, the version bump, all committed on $lb; then land $r -Sub finish"
@@ -3029,6 +3053,7 @@ function DoSelftest {
       $wa = & $hdr $fa 'worktree'; $wb = & $hdr $fb 'worktree'; $ba = & $hdr $fa 'branch'; $bb = & $hdr $fb 'branch'
       if (-not (Test-Path $wa) -or -not (Test-Path $wb) -or $wa -eq $wb) { Die "F35: no separate worktrees ($wa, $wb)" }
       if ($wa -notmatch '/m/\.skillator/worktrees/RUN-\d{4}-alpha$') { Die "A126: the run worktree is not under the repo's .skillator/worktrees: $wa" }
+      if (@(GitOut @('-C', $wa, 'config', 'core.longpaths'))[0] -cne 'true') { Die "A129: the run worktree has no core.longpaths" }
       if (@(GitOut @('-C', $m5, 'status', '--porcelain', '--', '.skillator/worktrees')).Count) { Die "A126: the worktrees show up in the main checkout's status" }
       if ($ba -notmatch '^run/RUN-\d{4}-alpha$' -or $bb -notmatch '^run/RUN-\d{4}-beta$') { Die "F35/F44: branches not run/RUN-00nn-<slug>: $ba $bb" }
       if (-not (Test-Path "$wa/plan.md") -or [IO.File]::ReadAllText("$wa/plan.md").Trim() -ne 'the plan') { Die "F35: the uncommitted plan was not copied into the run worktree" }
@@ -3212,6 +3237,14 @@ function DoSelftest {
     [IO.File]::WriteAllText("$w2/two.txt", "two`n"); G -C $w2 add two.txt; G -C $w2 commit -q -m two
     $ft = @(Get-Content -Encoding UTF8 $f1 | ForEach-Object { RowNum $_ } | Where-Object { $null -ne $_ })[-1]
     $null = R8 @('-Mode', 'stage', '-N', $ft, '-State', '~', '-Owner', 'main', '-Run', $f1)
+    # A129: a rebase that fails for a non-conflict reason (the main branch
+    # does not resolve) is git's error, exit 1, with no rebase left in progress.
+    $ob = @(GitOut @('-C', $d8, 'symbolic-ref', 'HEAD'))[0]; G -C $d8 symbolic-ref HEAD refs/heads/a129-missing
+    $o = R8 @('-Mode', 'land', '-Id', $n1, '-Sub', 'start')
+    G -C $d8 symbolic-ref HEAD $ob
+    if ($o.rc -ne 1 -or $o.out -notmatch 'FAIL: land: git rebase failed before any conflict: .*a129-missing') { Die "A129: a non-conflict rebase failure gave rc $($o.rc): $($o.out)" }
+    foreach ($x in @(GitOut @('-C', $w1, 'rev-parse', '--path-format=absolute', '--git-path', 'rebase-merge', '--git-path', 'rebase-apply'))) { if (Test-Path -LiteralPath $x) { Die "A129: left a rebase in progress: $x" } }
+    if (-not (Select-String -LiteralPath "$d8/.skillator/queue.md" -Pattern '^landing: -$' -Quiet)) { Die "A129: a failed rebase took the landing" }
     $o = R8 @('-Mode', 'land', '-Id', $n1, '-Sub', 'start'); if ($o.rc -ne 0) { Die "F38: land one start (A127: the landing stage itself is in flight): $($o.out)" }
     if ((R8 @('-Mode', 'land', '-Id', $n2, '-Sub', 'start')).rc -ne 2) { Die "F38: a second run started landing beside the first" }
     $o = R8 @('-Mode', 'land', '-Id', $n1, '-Sub', 'finish'); if ($o.rc -ne 0) { Die "F38: land one finish: $($o.out)" }

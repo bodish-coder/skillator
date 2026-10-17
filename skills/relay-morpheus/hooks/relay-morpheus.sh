@@ -394,6 +394,17 @@ stamp_updated() {
   mv "$RUN.tmp.$$" "$RUN"
 }
 
+# A129: a run or stage worktree sits under <repo>/.skillator/worktrees/, and
+# its files' paths can pass Windows' 260-character limit ("Filename too
+# long"). On Windows (Git Bash, MSYS, Cygwin) every worktree is created with
+# core.longpaths on, and keeps it in its config.
+on_windows() { case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) return 0 ;; esac; return 1; }
+wt_add() {   # <git -C dir> <worktree add args...>
+  _wd=$1; shift
+  if on_windows; then git -c core.longpaths=true -C "$_wd" worktree add "$@"; else git -C "$_wd" worktree add "$@"; fi
+}
+wt_longpaths() { if on_windows; then git -C "$1" config core.longpaths true >/dev/null 2>&1 || :; fi; }
+
 cmd_init() {
   here=0; rown=
   while :; do
@@ -443,8 +454,9 @@ cmd_init() {
     mkdir -p "$_mr/.skillator/worktrees"
     [ -f "$_mr/.skillator/worktrees/.gitignore" ] || printf '*\n' > "$_mr/.skillator/worktrees/.gitignore"
     wt="$_mr/.skillator/worktrees/RUN-$id-$(slug "$title")"
-    git -C "$_mr" worktree add -q -b "$br" "$wt" "$_hd" >/dev/null 2>&1 \
+    wt_add "$_mr" -q -b "$br" "$wt" "$_hd" >/dev/null 2>&1 \
       || die "could not create the run worktree $wt on branch $br (use --here to run in this checkout)"
+    wt_longpaths "$wt"
     if [ -f "$plan" ] && [ -n "$(git status --porcelain -- "$plan" 2>/dev/null)" ]; then
       _pr=$(git ls-files --full-name --others --cached -- "$plan" 2>/dev/null | head -1)
       [ -n "$_pr" ] || _pr=$(git rev-parse --show-prefix 2>/dev/null)$plan
@@ -491,7 +503,7 @@ worktree_of() {   # <run file>
   if [ ! -d "$_w" ] && [ -n "$_b" ] && _mr=$(main_of) \
      && awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4; gsub(/ /,"",s); if (s != "x" && s != ">") o=1} END{exit !o}' "$1"; then
     git -C "$_mr" worktree prune 2>/dev/null || :
-    if _we=$(git -C "$_mr" worktree add -q "$_w" "$_b" 2>&1); then echo "# worktree recreated from $_b" >&2
+    if _we=$(wt_add "$_mr" -q "$_w" "$_b" 2>&1); then wt_longpaths "$_w"; echo "# worktree recreated from $_b" >&2
     else printf '%s  (branch %s) - MISSING: git could not recreate it: %s\n' "$_w" "$_b" "$(printf '%s' "$_we" | head -1)"; return 0; fi
   fi
   [ -d "$_w" ] || { printf '%s  (branch %s) - MISSING\n' "$_w" "$_b"; return 0; }
@@ -916,9 +928,23 @@ land_() {   # <run> <start|finish|abort> <run file> <queue file>
       awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4; gsub(/ /,"",s); if (p) f=1; p=(s == "~")} END{exit !f}' "$_lf" \
         && { echo "$_lr has stages in flight - they branch from $_lb; land once they have landed" >&2; return 2; }
       _lprev=$(q_state "$_lr" "$_lq")
-      if ! git -C "$_lw" rebase -q "$_mb" >/dev/null 2>&1; then
+      # A129: a failed rebase is a CONFLICT only when it stopped mid-rebase -
+      # git's rebase-merge or rebase-apply dir exists. Anything else (a ref
+      # that does not resolve, "Filename too long", a locked index) is git's
+      # own error, said as such: exit 1, not 3.
+      if ! _lre=$(git -C "$_lw" rebase -q "$_mb" 2>&1 >/dev/null); then
+        # Plain --git-path (any git): a relative answer is relative to the worktree.
+        _lin=0
+        for _lk in rebase-merge rebase-apply; do
+          _lx=$(git -C "$_lw" rev-parse --git-path "$_lk" 2>/dev/null) || continue
+          case $_lx in /*|[A-Za-z]:*) ;; *) _lx="$_lw/$_lx" ;; esac
+          [ ! -d "$_lx" ] || _lin=1
+        done
         git -C "$_lw" rebase --abort >/dev/null 2>&1 || :
-        echo "CONFLICT: $_lb does not rebase onto $_mb - resolve it on the run branch (a fix stage), then land $_lr --start again" >&2; return 3
+        if [ "$_lin" = 1 ]; then
+          echo "CONFLICT: $_lb does not rebase onto $_mb - resolve it on the run branch (a fix stage), then land $_lr --start again" >&2; return 3
+        fi
+        echo "FAIL: land: git rebase failed before any conflict: $(printf '%s\n' "$_lre" | grep . | head -1)" >&2; return 1
       fi
       q_sethdr landing "$_lr $(now) was=${_lprev:--}" "$_lq"
       [ -z "$(q_state "$_lr" "$_lq")" ] || q_set "$_lr" landing "$_lq"
@@ -1296,9 +1322,11 @@ chain_dispatch() {
     # A retry reuses what a failed attempt left: its worktree, or its branch.
     if [ -d "$swt" ]; then :
     elif git -C "$rwt" rev-parse -q --verify "refs/heads/$sbr" >/dev/null 2>&1; then
-      git -C "$rwt" worktree add -q "$swt" "$sbr" >/dev/null 2>&1 || die "could not recreate stage $n's worktree $swt from $sbr"
+      wt_add "$rwt" -q "$swt" "$sbr" >/dev/null 2>&1 || die "could not recreate stage $n's worktree $swt from $sbr"
+      wt_longpaths "$swt"
     else
-      git -C "$rwt" worktree add -q -b "$sbr" "$swt" HEAD >/dev/null 2>&1 || die "could not create stage $n's worktree $swt on $sbr"
+      wt_add "$rwt" -q -b "$sbr" "$swt" HEAD >/dev/null 2>&1 || die "could not create stage $n's worktree $swt on $sbr"
+      wt_longpaths "$swt"
     fi
     echo "stage $n works and commits in: $swt (branch $sbr) - chain merge $n when it lands" >&2
   fi
@@ -2569,6 +2597,7 @@ chain_selftest() {
   ba=$(sed -n 's/^branch: //p' "$fa"); bb=$(sed -n 's/^branch: //p' "$fb")
   [ -d "$wa" ] && [ -d "$wb" ] && [ "$wa" != "$wb" ] || die "F35: no separate worktrees ($wa, $wb)"
   case "$wa" in */m/.skillator/worktrees/RUN-[0-9][0-9][0-9][0-9]-alpha) ;; *) die "A126: the run worktree is not under the repo's .skillator/worktrees: $wa" ;; esac
+  ! on_windows || [ "$(git -C "$wa" config core.longpaths)" = true ] || die "A129: the run worktree has no core.longpaths on Windows"
   [ -z "$(git -C "$d5/m" status --porcelain --ignored=no -- .skillator/worktrees)" ] || die "A126: the worktrees show up in the main checkout's status"
   [ "$(cat "$wa/plan.md" 2>/dev/null)" = "the plan" ] || die "F35: the uncommitted plan was not copied into the run worktree"
   case "$ba $bb" in "run/RUN-"[0-9][0-9][0-9][0-9]"-alpha run/RUN-"[0-9][0-9][0-9][0-9]"-beta") ;; *) die "F35/F44: branches not run/RUN-00nn-<slug>: $ba $bb" ;; esac
@@ -2713,6 +2742,15 @@ chain_selftest() {
     echo one > "$w1/one.txt"; g8 -C "$w1" add one.txt; g8 -C "$w1" commit -q -m one
     echo two > "$w2/two.txt"; g8 -C "$w2" add two.txt; g8 -C "$w2" commit -q -m two
     _ft=$(awk -F'|' '/^\| *[0-9]+ *\|/{n=$2} END{gsub(/ /,"",n); print n}' "$f1"); ( RUN=$f1; cmd_stage "$_ft" '~' main ) >/dev/null
+    # A129: a rebase that fails for a non-conflict reason (the main branch
+    # does not resolve) is git's error, exit 1, with no rebase left in progress.
+    _ob=$(git symbolic-ref HEAD); git symbolic-ref HEAD refs/heads/a129-missing
+    set +e; msg=$( ( cmd_land "$i1" --start ) 2>&1 >/dev/null ); rc=$?; set -e
+    git symbolic-ref HEAD "$_ob"
+    [ "$rc" = 1 ] && printf '%s\n' "$msg" | grep -q '^FAIL: land: git rebase failed before any conflict: .*a129-missing' \
+      || die "A129: a non-conflict rebase failure gave rc $rc: $msg"
+    for _x in $(git -C "$w1" rev-parse --path-format=absolute --git-path rebase-merge --git-path rebase-apply); do [ ! -d "$_x" ] || die "A129: left a rebase in progress: $_x"; done
+    grep -q '^landing: -$' .skillator/queue.md || die "A129: a failed rebase took the landing"
     cmd_land "$i1" --start >/dev/null || die "F38: land one --start (A127: the landing stage itself is in flight)"
     set +e; ( cmd_land "$i2" --start >/dev/null 2>&1 ); rc=$?; set -e
     [ "$rc" = 2 ] || die "F38: a second run started landing beside the first (rc $rc)"
