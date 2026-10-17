@@ -1,0 +1,28 @@
+# GREEN (round 1) - run worktrees inside the repo (A126, after RUN-11)
+# 2026-10-17, claude-code 2.1.301, claude-opus-5-5. Harness `cmd green`,
+# BASELINE_ISOLATE=hide (restored), BASELINE_TIMEOUT=2700, BASELINE_USAGE="20 10".
+# Prefix from the working tree after 70e71f0 (A126) + 5b28c4a (A118).
+# Fixture: relay-chain. Scenario: scenario-relay-parallel-f37.txt (the F37 run
+# that exposed A126). Launched detached. Transcript: transcripts/a126-green-1.*.
+# $2.77. The run was CUT by the account's session usage limit while stages 1
+# and 2 were in flight ("Stages 1 (AAAB) and 2 (AAAC) are running in parallel
+# in separate worktrees"), so no stage landed.
+#
+# What the run shows (graded with scratchpad grade126.py, refusal reasons from
+# the stream's permission_denied events):
+#   F37 run (worktrees in <repo>.runs/, before A126) - the subagents' refusals
+#     were "asyncAgent: Permission prompts are not available in this context":
+#     a background agent cannot ask, so anything outside the allow-list died.
+#   This run (worktrees in <repo>/.skillator/worktrees/) - that reason is
+#     gone; the subagents' refusals are now Claude Code's command-shape rules:
+#     "This command changes directory before running a version-control
+#     command" (cd <worktree> && git ...) x4, "Compound command changes working
+#     directory (Set-Location/Push-Location ...)" x3, "contains subexpressions
+#     $()", "expandable strings with embedded expressions", "brace with quote
+#     character", one plain "requires approval".
+# VERDICT: NOT YET. The placement half of A126 holds (no location refusals);
+#   agents still lose commands because they `cd` into the worktree and chain
+#   commands. Next fix: the dispatch guidance (chain.md, the prompt every stage
+#   gets) - never cd into a worktree: `git -C <worktree> ...`, absolute paths,
+#   `python -m pytest <worktree>/tests`, one command per call, no $() - then
+#   re-run this scenario.
