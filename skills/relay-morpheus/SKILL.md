@@ -102,7 +102,8 @@ names the new stage).
 **`landed`** is a commit sha or a path, never a claim. An empty `landed` on an
 `x` row is a lie the next session will believe.
 **One run, one worktree (F35).** In a git repo with a commit, `init` also
-creates the run's own worktree, `<repo>/../<repo>.runs/RUN-<n>-<slug>`, on
+creates the run's own worktree, `<repo>/.skillator/worktrees/RUN-<n>-<slug>`
+(git-ignored, inside the repo so dispatched agents may work there), on
 branch `run/RUN-<n>-<slug>`, and writes both into the run file's header. Every
 stage of the run works and commits **there** - say so in each dispatch prompt -
 never in the main checkout, whose index another run may be using. The run

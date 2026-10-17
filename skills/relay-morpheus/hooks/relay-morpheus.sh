@@ -367,7 +367,12 @@ cmd_init() {
   if [ "$here" = 0 ] && [ "${RELAY_WORKTREE:-on}" != off ] && _mr=$(main_of) \
      && _hd=$(git rev-parse -q --verify HEAD 2>/dev/null); then
     br="run/RUN-$id-$(slug "$title")"
-    wt="$(dirname "$_mr")/$(basename "$_mr").runs/RUN-$id-$(slug "$title")"
+    # A126: inside the repo, where the session's allowed folders reach - a
+    # sibling <repo>.runs/ left every dispatched agent's shell refused. The
+    # `*` .gitignore keeps the checkouts out of git, grep and codegraph.
+    mkdir -p "$_mr/.skillator/worktrees"
+    [ -f "$_mr/.skillator/worktrees/.gitignore" ] || printf '*\n' > "$_mr/.skillator/worktrees/.gitignore"
+    wt="$_mr/.skillator/worktrees/RUN-$id-$(slug "$title")"
     git -C "$_mr" worktree add -q -b "$br" "$wt" "$_hd" >/dev/null 2>&1 \
       || die "could not create the run worktree $wt on branch $br (use --here to run in this checkout)"
     if [ -f "$plan" ] && [ -n "$(git status --porcelain -- "$plan" 2>/dev/null)" ]; then
@@ -2362,6 +2367,8 @@ chain_selftest() {
   wa=$(sed -n 's/^worktree: //p' "$fa"); wb=$(sed -n 's/^worktree: //p' "$fb")
   ba=$(sed -n 's/^branch: //p' "$fa"); bb=$(sed -n 's/^branch: //p' "$fb")
   [ -d "$wa" ] && [ -d "$wb" ] && [ "$wa" != "$wb" ] || die "F35: no separate worktrees ($wa, $wb)"
+  case "$wa" in */m/.skillator/worktrees/RUN-*) ;; *) die "A126: the run worktree is not under the repo's .skillator/worktrees: $wa" ;; esac
+  [ -z "$(git -C "$d5/m" status --porcelain --ignored=no -- .skillator/worktrees)" ] || die "A126: the worktrees show up in the main checkout's status"
   [ "$(cat "$wa/plan.md" 2>/dev/null)" = "the plan" ] || die "F35: the uncommitted plan was not copied into the run worktree"
   case "$ba $bb" in "run/RUN-"*"-alpha run/RUN-"*"-beta") ;; *) die "F35: branches not run/RUN-<n>-<slug>: $ba $bb" ;; esac
   echo a > "$wa/a.txt"; g5 -C "$wa" add a.txt; g5 -C "$wa" commit -q -m "stage alpha"

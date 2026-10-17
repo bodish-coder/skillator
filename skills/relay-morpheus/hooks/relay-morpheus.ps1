@@ -411,7 +411,12 @@ function DoInit {
     $hd = @(GitOut @('rev-parse', '-q', '--verify', 'HEAD'))
     if ($mr -and $hd.Count) {
       $sl = Slug $Title
-      $br = "run/RUN-$id-$sl"; $wt = ($mr -replace '/[^/]*$', '') + '/' + ($mr -replace '^.*/', '') + ".runs/RUN-$id-$sl"
+      # A126: inside the repo, where the session's allowed folders reach - a
+      # sibling <repo>.runs/ left every dispatched agent's shell refused. The
+      # `*` .gitignore keeps the checkouts out of git, grep and codegraph.
+      $wd = "$mr/.skillator/worktrees"; if (-not (Test-Path -LiteralPath $wd)) { New-Item -ItemType Directory -Force $wd | Out-Null }
+      if (-not (Test-Path -LiteralPath "$wd/.gitignore")) { [IO.File]::WriteAllText("$wd/.gitignore", "*`n", (New-Object Text.UTF8Encoding($false))) }
+      $br = "run/RUN-$id-$sl"; $wt = "$wd/RUN-$id-$sl"
       if (-not (GitOk @('-C', $mr, 'worktree', 'add', '-q', '-b', $br, $wt, $hd[0]))) { Die "could not create the run worktree $wt on branch $br (use -Here to run in this checkout)" }
       if ((Test-Path -LiteralPath $Plan -PathType Leaf) -and @(GitOut @('status', '--porcelain', '--', $Plan)).Count) {
         $pr = @(GitOut @('ls-files', '--full-name', '--others', '--cached', '--', $Plan))
@@ -2829,6 +2834,8 @@ function DoSelftest {
       $hdr = { param($f, $k) ((Get-Content -Encoding UTF8 $f) | Where-Object { $_ -like "${k}: *" } | Select-Object -First 1) -replace "^${k}: ", '' }
       $wa = & $hdr $fa 'worktree'; $wb = & $hdr $fb 'worktree'; $ba = & $hdr $fa 'branch'; $bb = & $hdr $fb 'branch'
       if (-not (Test-Path $wa) -or -not (Test-Path $wb) -or $wa -eq $wb) { Die "F35: no separate worktrees ($wa, $wb)" }
+      if ($wa -notlike '*/m/.skillator/worktrees/RUN-*') { Die "A126: the run worktree is not under the repo's .skillator/worktrees: $wa" }
+      if (@(GitOut @('-C', $m5, 'status', '--porcelain', '--', '.skillator/worktrees')).Count) { Die "A126: the worktrees show up in the main checkout's status" }
       if ($ba -notmatch '^run/RUN-\d+-alpha$' -or $bb -notmatch '^run/RUN-\d+-beta$') { Die "F35: branches not run/RUN-<n>-<slug>: $ba $bb" }
       if (-not (Test-Path "$wa/plan.md") -or [IO.File]::ReadAllText("$wa/plan.md").Trim() -ne 'the plan') { Die "F35: the uncommitted plan was not copied into the run worktree" }
       [IO.File]::WriteAllText("$wa/a.txt", "a`n"); G -C $wa add a.txt; G -C $wa commit -q -m 'stage alpha'
@@ -2852,7 +2859,7 @@ function DoSelftest {
       if ((Get-Content -Encoding UTF8 $fd) -match '^worktree:') { Die "F35: -Here made a worktree" }
     } finally {
       $env:RELAY_WORKTREE = 'off'
-      Remove-Item -Recurse -Force $d5 -ErrorAction SilentlyContinue   # the worktrees sit in $d5/m.runs
+      Remove-Item -Recurse -Force $d5 -ErrorAction SilentlyContinue   # the worktrees sit in $d5/m/.skillator/worktrees
     }
 
     # F36: two runs plan one file; the first dispatch leases it, the second run
