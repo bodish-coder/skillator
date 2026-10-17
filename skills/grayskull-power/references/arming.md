@@ -16,7 +16,14 @@ each one actually means.
   to run one of its modes, whenever you make one, is a single line in Yoda's
   voice, chosen from code-yoda §8 — "Heavy, this diff is. A review from
   code-yoda, take you should."
-- **`codegraph`** — the code map the rest of the skill leans on. Check in order:
+- **`codegraph`** — the code map the rest of the skill leans on. **Run the
+  check script, never a hand translation of it** (A128: Codex turned the POSIX
+  steps below into a PowerShell one-liner that died with a ParserError):
+  `sh <SKILL>/scripts/codegraph-check.sh`, or on a PowerShell host
+  `powershell -NoProfile -ExecutionPolicy Bypass -File <SKILL>/scripts/codegraph-check.ps1`.
+  It prints the banner's codegraph part in one line - `missing`, `not
+  indexed`, or `codegraph <indexed>/<tracked> [partial] (<langs> only)` with
+  `- N pending: codegraph sync` - and changes nothing. Then act on the line:
   `command -v codegraph` → missing? say so and offer
   `npm i -g @colbymchenry/codegraph` (never install silently). Present but
   `codegraph status` shows **0 files / 0 nodes** → `codegraph init` (then
