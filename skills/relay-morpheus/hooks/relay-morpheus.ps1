@@ -6,12 +6,14 @@
 #
 #   relay-morpheus.ps1 -Mode list                      every run + how to resume it
 #   relay-morpheus.ps1 -Mode resume -Id 3              what a fresh session needs
-#   relay-morpheus.ps1 -Mode init -Plan <p> -Title <t> -Stages "alpha,beta,gamma"
+#   relay-morpheus.ps1 -Mode init -Plan <p> -Title <t> -Stages "alpha,beta,gamma" [-RunOwner @h]
 #   relay-morpheus.ps1 -Mode add -Title <stage>        append a row, print its number
 #   relay-morpheus.ps1 -Mode stage -N 2 -State '~' [-Owner build:sonnet] [-Landed sha]
 #   relay-morpheus.ps1 -Mode heartbeat -N 2
 #   relay-morpheus.ps1 -Mode status
 #   relay-morpheus.ps1 -Mode orphans [-Minutes 20]
+#   relay-morpheus.ps1 -Mode owner [-Id 12] -Text @handle | -   F44: the run's owner, an @handle
+#                                                      from .skillator/team.md (`-` clears it)
 #   relay-morpheus.ps1 -Mode selftest
 #
 # Chain (F31) - stages that are ticket workflows, each started by the last:
@@ -56,7 +58,7 @@
 # state is spelled `pending` rather than ''.
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','board','queue-run','land','away','selftest')][string]$Mode,
+  [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','board','queue-run','land','away','owner','selftest')][string]$Mode,
   [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','merge','edge')][string]$Action = 'status',
   [string]$Ticket = '',
   [string]$Reason = '',
@@ -110,6 +112,7 @@ param(
   [int]$N,
   [string]$State = 'pending',
   [string]$Owner = '',
+  [string]$RunOwner = '',
   [string]$Landed = '',
   [int]$Minutes = 20,
   [string]$Run = '',
@@ -152,14 +155,34 @@ if (-not $Run -and $env:RELAY_RUN) { $Run = $env:RELAY_RUN }
 # handing a run over a copy-paste of a path instead of a sentence.
 function RunFiles {
   if (-not (Test-Path $Dir)) { return @() }
-  @(Get-ChildItem $Dir -Filter 'run*.md' -File -ErrorAction SilentlyContinue | Sort-Object Name)
+  # F44: in run-number order (run-0012 after run-2), a bare run.md last.
+  @(Get-ChildItem $Dir -Filter 'run*.md' -File -ErrorAction SilentlyContinue |
+    Sort-Object @{ Expression = { $k = RunNum (([IO.Path]::GetFileNameWithoutExtension($_.Name) -creplace '^run-', '') -replace '-.*$', ''); if ($null -eq $k) { [int64]::MaxValue } else { $k } } }, Name)
 }
-# The id out of a filename, with no regex to get wrong.
+# F44: a run is named RUN-0012 - the serial number zero-padded to four digits
+# (more past 9999, never cut), in its file, header, branch, worktree and queue
+# row. Runs named before that (run-12-*.md, `# RUN-12`) keep working: every
+# spelling reads to its bare number, and every id printed is padded.
+# 12 | RUN-12 | run-0012 | Run-0012 (the prefix in any case) -> 12; $null on
+# anything else, or past 9 digits.
+function RunNum($v) {
+  $s = "$v" -replace '^RUN-', ''
+  if ($s -notmatch '\A[0-9]+\z') { return $null }
+  $s = $s.TrimStart('0'); if (-not $s) { $s = '0' }
+  if ($s.Length -gt 9) { return $null }
+  [int64]$s
+}
+# Two spellings of one run (RUN-7, RUN-0007), by number.
+function SameRun($a, $b) { if ("$a" -ceq "$b") { return $true }; $x = RunNum $a; $y = RunNum $b; ($null -ne $x) -and ($x -eq $y) }
+function PadId($v) { $k = RunNum $v; if ($null -eq $k) { return '' }; $k.ToString('0000', [cultureinfo]::InvariantCulture) }
+# RUN-12 -> RUN-0012; anything else as it is.
+function CanonTag($v) { $p = PadId $v; if ($p) { "RUN-$p" } else { "$v" } }
+# The id out of a filename, with no regex to get wrong - printed padded (F44).
 function IdOf($path) {
   $b = [IO.Path]::GetFileNameWithoutExtension($path)
   if (-not $b.StartsWith('run-')) { return '' }
   $b = $b.Substring(4).Split('-')[0]
-  if ($b -match '^\d+$') { return $b }
+  if ($b -match '^\d+$') { return (PadId $b) }
   return ''
 }
 function NextId {
@@ -206,14 +229,35 @@ function Alloc($kind, $count, $dir) {
   @(($m + 1)..($m + $count))
 }
 
-# RUN-3, run-3, 3 and a path all resolve to the same file, because whoever
-# types it next is working from memory of a conversation.
+# RUN-3, run-3, 3, RUN-0003 and a path all resolve to the same file, because
+# whoever types it next is working from memory of a conversation. A run named
+# before F44 (run-3-*.md) is found by the padded spelling too.
 function Resolve-Run($spec) {
   if ($spec -match '[\/]' -and (Test-Path $spec)) { return (Resolve-Path $spec).Path }
-  $n = ($spec -replace '\D', '')
-  if (-not $n) { return $null }
-  foreach ($f in RunFiles) { if ((IdOf $f.Name) -eq $n) { return $f.FullName } }
+  $p = PadId ($spec -replace '\D', '')
+  if (-not $p) { return $null }
+  foreach ($f in RunFiles) { if ((IdOf $f.Name) -ceq $p) { return $f.FullName } }
   $null
+}
+# F44: a run's owner is an @handle from tickets-zordon's team file, found as
+# ticket-meta.ps1's Get-TeamFile finds it: <worktree top>/.skillator/team.md,
+# then <main checkout>/.skillator/team.md; lines `- @asha: asha@x.com`.
+# Without one, any well-formed handle.
+function TeamFile {
+  $top = @(GitOut @('rev-parse', '--show-toplevel'))
+  if (-not $top.Count) { return $null }
+  $mr = MainOf; if (-not $mr) { $mr = $top[0] }
+  foreach ($r in @($top[0], $mr)) { $f = "$r/.skillator/team.md"; if (Test-Path -LiteralPath $f -PathType Leaf) { return $f } }
+  $null
+}
+function OwnerCheck($h) {
+  if ("$h" -match "[`r`n]") { Die "owner: '$h' is more than one line - give one @handle" }
+  if ("$h" -cnotmatch '^@[A-Za-z0-9_.-]+$') { Die "owner: '$h' is not an @handle (@name)" }
+  $tf = TeamFile
+  if ($tf) {
+    $known = @(Get-Content -Encoding UTF8 -LiteralPath $tf | ForEach-Object { if ($_ -match '^[ \t]*[-*][ \t]*(@[A-Za-z0-9_.-]+)[ \t]*:') { $Matches[1] } })
+    if ($known -cnotcontains $h) { Die "owner: $h is not in $tf - add them there first" }
+  } else { [Console]::Error.WriteLine("note: no .skillator/team.md - owner $h taken as written, not checked against a team") }
 }
 # With no id given, fall back to the one run if there is exactly one. Two or
 # more and this refuses rather than guessing which.
@@ -387,12 +431,13 @@ function DoInit {
   # the state would land in the name cell and the sha in heartbeat, silently.
   # Checked before any number is reserved.
   foreach ($nm in $names) { if ($nm -match '\|') { Die "stage name contains '|', which would shift every column: $nm" } }
+  if ($RunOwner) { OwnerCheck $RunOwner }
   if (-not $script:Run) {
     if (-not (Test-Path $Dir)) { New-Item -ItemType Directory -Force $Dir | Out-Null }
-    $script:id = (Alloc 'RUN' 1 $Dir)[0]
+    $script:id = PadId ((Alloc 'RUN' 1 $Dir)[0])   # F44: RUN-0012, in every name made below
     $script:Run = Join-Path $Dir ("run-{0}-{1}.md" -f $script:id, (Slug $Title))
   } else {
-    $script:id = IdOf $script:Run; if (-not $script:id) { $script:id = '1' }
+    $script:id = IdOf $script:Run; if (-not $script:id) { $script:id = '0001' }
   }
   if (Test-Path $Run) { Die "run file already exists: $Run (a run file is never overwritten)" }
   $dir = Split-Path -Parent $Run
@@ -432,6 +477,7 @@ function DoInit {
   $t = Now
   $lines = @("# RUN-$id - $Title", "plan: $Plan", "started: $t   updated: $t")
   if ($wt) { $lines += @("worktree: $wt", "branch: $br") }
+  if ($RunOwner) { $lines += "owner: $RunOwner" }
   $lines += @("",
              "## Stages", "| # | stage | state | owner | heartbeat | landed |",
              "|---|-------|-------|-------|-----------|--------|")
@@ -523,6 +569,8 @@ function DoList {
     if ($open) { $row += "  (stage $($open -join ',') open)" }
     $row
     "          plan: $plan"
+    $ow = HdrField $f.FullName 'owner'
+    if ($ow) { "          owner: $ow" }
     $wl = HdrField $f.FullName 'worktree'
     if ($wl) { "          worktree: $wl" }
     "          resume: continue RUN-$id"
@@ -540,6 +588,8 @@ function DoResume($spec) {
   "# anything that was running."
   $w = WorktreeOf $f
   if ($w) { "# Stages work and commit in: $w" }
+  $ow = HdrField $f 'owner'
+  if ($ow) { "# Run owner: $ow" }
   ""
   Get-Content -Encoding UTF8 $f
 }
@@ -622,12 +672,40 @@ function DoHeartbeat($n) {
 function DoStatus {
   PickRun
   if (-not (Test-Path $Run)) { return }
+  $ow = HdrField $Run 'owner'
+  if ($ow) { "owner: $ow" }
   $on = $false
   Get-Content -Encoding UTF8 $Run | ForEach-Object {
     if ($_ -match '^## Stages')        { $on = $true }
     elseif ($_ -match '^## In flight') { $on = $false }
     if ($on) { $_ }
   }
+}
+
+# F44: -Text @handle writes (or replaces) the run's `owner:` header line,
+# -Text - removes it - under the run lock, header only (before the first `## `).
+function DoOwner {
+  $v = $Text
+  if (-not $v) { Die "usage: -Mode owner [-Id n] -Text @handle | -" }
+  NeedRun
+  if ($v -ceq '-') { $v = '' } else { OwnerCheck $v }
+  Lock
+  try {
+    $lines = @(Get-Content -Encoding UTF8 $Run)
+    $hd = $lines.Count; for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].StartsWith('## ')) { $hd = $i; break } }
+    $o = -1; $last = -1
+    for ($i = 0; $i -lt $hd; $i++) { if ($o -lt 0 -and $lines[$i].StartsWith('owner: ')) { $o = $i }; if ($lines[$i] -ne '') { $last = $i } }
+    $out = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+      if ($i -eq $o) { if ($v) { $out.Add("owner: $v") }; continue }
+      $out.Add($lines[$i])
+      if ($o -lt 0 -and $i -eq $last -and $v) { $out.Add("owner: $v") }
+    }
+    WriteRun $out
+    StampUpdated
+  } finally { Unlock }
+  $rt = "RUN-$(IdOf (Split-Path -Leaf $Run))"
+  if ($v) { "$rt owner: $v" } else { "$rt owner cleared" }
 }
 
 # The network-loss list: in-flight rows nobody has heard from. A dropped agent
@@ -946,8 +1024,8 @@ function DoChainDispatch($n) {
       $res = LeaseLocked { param($reg)
         $keep = @(); $hit = ''; $tk = @()
         foreach ($z in @(LeaseRead $reg)) {
-          if ($z.r -ceq $r -and $z.s -ceq "$n") { continue }
-          if ($z.r -cne $r -and @($files | Where-Object { PathsMeet $z.p $_ }).Count) {
+          if ((SameRun $z.r $r) -and $z.s -ceq "$n") { continue }
+          if (-not (SameRun $z.r $r) -and @($files | Where-Object { PathsMeet $z.p $_ }).Count) {
             $a = LeaseAge $z.h
             if ($a -lt $stl) { $hit = "LEASED $($z.p) $($z.r) stage $($z.s)"; break }
             $tk += "lease on $($z.p) from $($z.r) stage $($z.s) was ${a}m stale (limit ${stl}m), taken"; continue
@@ -1045,7 +1123,15 @@ function DoChainDispatch($n) {
 # relay-morpheus.sh: another run's live lease (younger than RELAY_LEASE_STALE,
 # 20 min) refuses; a stale one is taken with a ruling; landing, failing or
 # re-planning releases; a heartbeat refreshes. Outside git: no registry.
-function RunTag { "RUN-$(IdOf (Split-Path -Leaf $Run))" }
+# F44: a run's lease tag is its id as its FILE spells it - RUN-0012 for a run
+# named since F44, RUN-7 for one named before - so a pre-F44 relay-morpheus
+# sharing the registry still matches its own rows. Every read here compares
+# by number (SameRun), so both spellings are one run.
+function RunTag {
+  $b = [IO.Path]::GetFileNameWithoutExtension((Split-Path -Leaf $Run)); $k = ''
+  if ($b.StartsWith('run-')) { $k = $b.Substring(4).Split('-')[0]; if ($k -notmatch '\A[0-9]+\z') { $k = '' } }
+  "RUN-$k"
+}
 function LeaseStale { if ($env:RELAY_LEASE_STALE) { [int]$env:RELAY_LEASE_STALE } else { 20 } }
 function StageFiles($n) {
   $sec = ''; $cs = $false; $inp = $false
@@ -1078,11 +1164,11 @@ function LeaseLocked([scriptblock]$body) {
   Lock "$dir/leases.lock"
   try { & $body "$dir/leases" } finally { Unlock; $script:Lock = $sv }
 }
-function LeaseRelease($n) { $r = RunTag; LeaseLocked { param($reg) if (Test-Path -LiteralPath $reg) { LeaseWrite $reg @(LeaseRead $reg | Where-Object { -not ($_.r -ceq $r -and $_.s -ceq "$n") }) } } }
+function LeaseRelease($n) { $r = RunTag; LeaseLocked { param($reg) if (Test-Path -LiteralPath $reg) { LeaseWrite $reg @(LeaseRead $reg | Where-Object { -not ((SameRun $_.r $r) -and $_.s -ceq "$n") }) } } }
 # Prints how many leases it refreshed.
 function LeaseBeat($n) { $r = RunTag; $t = Now; LeaseLocked { param($reg) $k = 0
-  if (Test-Path -LiteralPath $reg) { LeaseWrite $reg @(LeaseRead $reg | ForEach-Object { if ($_.r -ceq $r -and $_.s -ceq "$n") { $_.h = $t; $k++ }; $_ }) }; $k } }
-function LeaseForeign { $r = RunTag; $st = LeaseStale; LeaseLocked { param($reg) @(LeaseRead $reg | Where-Object { $_.r -cne $r -and (LeaseAge $_.h) -lt $st }) } }
+  if (Test-Path -LiteralPath $reg) { LeaseWrite $reg @(LeaseRead $reg | ForEach-Object { if ((SameRun $_.r $r) -and $_.s -ceq "$n") { $_.h = $t; $k++ }; $_ }) }; $k } }
+function LeaseForeign { $r = RunTag; $st = LeaseStale; LeaseLocked { param($reg) @(LeaseRead $reg | Where-Object { -not (SameRun $_.r $r) -and (LeaseAge $_.h) -lt $st }) } }
 
 # F38: runs wait their turn in <main>/.skillator/queue.md and land on main one
 # at a time. The file is written only under its own lock. Same file and rules
@@ -1096,16 +1182,33 @@ function QLocked([scriptblock]$body) {
   try {
     # Created under the lock: two first callers, one header.
     if (-not (Test-Path -LiteralPath $f)) { [IO.File]::WriteAllText($f, "# Run queue`naway: -`nlanding: -`n`n| # | run | state | since |`n|---|-----|-------|-------|`n", (New-Object Text.UTF8Encoding($false))) }
+    QNorm $f
     & $body $f
   } finally { Unlock; $script:Lock = $sv }
 }
 function QLines($f) { @(Get-Content -Encoding UTF8 $f) }
+# F44: rows and the landing header written before F44 (RUN-12) are rewritten
+# padded (RUN-0012) under the lock, so every reader sees one form.
+function QNorm($f) {
+  $ch = $false
+  $out = @(foreach ($l in (QLines $f)) {
+    if ($null -ne (RowNum $l)) {
+      $c = $l -split '\|'; $w = $c[2].Trim(); $t = CanonTag $w
+      if ($t -cne $w) { $c[2] = " $t "; $l = $c -join '|'; $ch = $true }
+    } elseif ($l.StartsWith('landing: ')) {
+      $w = $l.Substring(9).Split(' ')[0]; $t = CanonTag $w
+      if ($t -cne $w) { $l = 'landing: ' + $t + $l.Substring(9 + $w.Length); $ch = $true }
+    }
+    $l })
+  if ($ch) { QSave $f $out }
+}
 function QSave($f, $lines) { [IO.File]::WriteAllText("$f.tmp.$PID", (($lines -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false))); Move-Item -Force -LiteralPath "$f.tmp.$PID" -Destination $f }
 function QHdr($f, $k) { foreach ($l in (QLines $f)) { if ($l.StartsWith("${k}: ")) { return $l.Substring($k.Length + 2) } }; '' }
 function QSetHdr($f, $k, $v) { QSave $f @(QLines $f | ForEach-Object { if ($_.StartsWith("${k}: ")) { "${k}: $v" } else { $_ } }) }
-function QState($f, $r) { foreach ($l in (QLines $f)) { if ($null -ne (RowNum $l) -and (Cell $l 2) -ceq $r) { return (Cell $l 3) } }; '' }
-function QSet($f, $r, $st) { $t = Now; QSave $f @(QLines $f | ForEach-Object { if ($null -ne (RowNum $_) -and (Cell $_ 2) -ceq $r) { $c = $_ -split '\|'; $c[3] = " $st "; $c[4] = " $t "; $c -join '|' } else { $_ } }) }
-function RunIdArg($v) { $n = "$v" -replace '^(RUN-|run-)', ''; if ($n -notmatch '^\d+$') { Die "'$v' is not a run id (RUN-12)" }; "RUN-$n" }
+# F44: rows match by number - a row queued as RUN-12 is RUN-0012's.
+function QState($f, $r) { foreach ($l in (QLines $f)) { if ($null -ne (RowNum $l) -and (CanonTag (Cell $l 2)) -ceq (CanonTag $r)) { return (Cell $l 3) } }; '' }
+function QSet($f, $r, $st) { $t = Now; QSave $f @(QLines $f | ForEach-Object { if ($null -ne (RowNum $_) -and (CanonTag (Cell $_ 2)) -ceq (CanonTag $r)) { $c = $_ -split '\|'; $c[3] = " $st "; $c[4] = " $t "; $c -join '|' } else { $_ } }) }
+function RunIdArg($v) { $p = PadId $v; if (-not $p) { Die "'$v' is not a run id (RUN-0012)" }; "RUN-$p" }   # 12 | RUN-12 | RUN-0012 -> RUN-0012
 function DoQueueRun {
   $sub = if ($Sub) { $Sub } else { 'list' }
   switch ($sub) {
@@ -1113,9 +1216,17 @@ function DoQueueRun {
             QLocked { param($f) if (QState $f $r) { "$r is already queued ($(QState $f $r))"; return }
               $n = 1; foreach ($l in (QLines $f)) { $k = RowNum $l; if ($null -ne $k) { $n = $k + 1 } }
               QSave $f (@(QLines $f) + "| $n | $r | queued | $(Now) |"); "$r queued (#$n)" } }
-    'list' { $f = QFile; if (-not (Test-Path -LiteralPath $f)) { QLocked { param($f) } | Out-Null }; QLines $f | Where-Object { $_ -like 'away: *' -or $_ -like 'landing: *' -or $_ -like '| *' } }
+    'list' { $f = QFile; QLocked { param($f) } | Out-Null
+             # F44: ids printed padded, and each run's owner in a last column.
+             foreach ($l in (QLines $f)) {
+               if ($l -like 'away: *' -or $l -like 'landing: *') { $l }
+               elseif ($l -like '| # |*') { "$l owner |" }
+               elseif ($l -like '|---|*') { "$l-------|" }
+               elseif ($l -like '| *') { $c = $l -split '\|'; $rr = $c[2].Trim(); $ow = ''; $rf = Resolve-Run $rr
+                 if ($rf) { $ow = HdrField $rf 'owner' }; if (-not $ow) { $ow = '-' }
+                 $c[2] = " $(CanonTag $rr) "; ($c -join '|') + " $ow |" } } }
     'next' { QLocked { param($f) $busy = ''; $first = ''
-               foreach ($l in (QLines $f)) { if ($null -eq (RowNum $l)) { continue }; $r = Cell $l 2; $st = Cell $l 3
+               foreach ($l in (QLines $f)) { if ($null -eq (RowNum $l)) { continue }; $r = CanonTag (Cell $l 2); $st = Cell $l 3
                  if ($st -cin @('running', 'landing')) { if (-not $busy) { $busy = "$r $st" } } elseif ($st -ceq 'queued' -and -not $first) { $first = $r } }
                if ($busy) { "BUSY $busy" } elseif ($first) { "START $first" } else { 'DONE' } } }
     { $_ -cin @('start', 'pause', 'done') } {
@@ -1123,9 +1234,9 @@ function DoQueueRun {
       # A hard stop pauses only its own run; the 7-day stop halts everything.
       QLocked { param($f) if (-not (QState $f $r)) { Die "queue-run: $r is not queued - queue-run add first" }
         # One run at a time: starting refuses while another runs or lands.
-        if ($st -ceq 'running') { foreach ($l in (QLines $f)) { if ($null -ne (RowNum $l) -and (Cell $l 2) -cne $r -and (Cell $l 3) -cin @('running', 'landing')) { Refuse "BUSY $(Cell $l 2) $(Cell $l 3) - one run at a time; pause it first, or wait" } } }
+        if ($st -ceq 'running') { foreach ($l in (QLines $f)) { if ($null -ne (RowNum $l) -and (CanonTag (Cell $l 2)) -cne $r -and (Cell $l 3) -cin @('running', 'landing')) { Refuse "BUSY $(CanonTag (Cell $l 2)) $(Cell $l 3) - one run at a time; pause it first, or wait" } } }
         # A paused or finished run gives up a landing it held.
-        if ($st -cne 'running' -and (QHdr $f 'landing').Split(' ')[0] -ceq $r) { QSetHdr $f 'landing' '-' }
+        if ($st -cne 'running' -and (CanonTag (QHdr $f 'landing').Split(' ')[0]) -ceq $r) { QSetHdr $f 'landing' '-' }
         QSet $f $r $st; "$r $st" } }
     default { Die "usage: -Mode queue-run -Sub add|list|next|start|pause|done [-Id n]" }
   }
@@ -1148,7 +1259,7 @@ function DoLand {
   $mb = @(GitOut @('-C', $mr, 'symbolic-ref', '-q', '--short', 'HEAD')); if (-not $mb.Count) { Die "land: the main checkout is on a detached HEAD" }; $mb = $mb[0]
   $rc = 0
   $msg = QLocked { param($f)
-    $cur = (QHdr $f 'landing').Split(' ')[0]
+    $cur = CanonTag (QHdr $f 'landing').Split(' ')[0]
     if ($Sub -ceq 'start') {
       if ($cur -cne '-' -and $cur -cne $r) { Refuse "LANDING $cur - one run lands at a time; land $r after it finishes" }
       if (-not (Test-Path -LiteralPath $lw)) { Die "run worktree $lw is missing - resume recreates it" }
@@ -2790,6 +2901,65 @@ function DoSelftest {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Mode stage -N $n2 -State pending -Run $f2 | Out-Null
     if ($LASTEXITCODE -ne 0) { Die "-File: -State pending failed" }
 
+    # --- F44: a new run is RUN-00NN in its file, header and handoff line; an
+    # old-format run-7 file resolves by 7, RUN-7 and RUN-0007, and the next run
+    # after it is RUN-0008; the owner is set, replaced and cleared in the header
+    # and shown by list, status and resume; an unknown or multi-line handle is
+    # refused.
+    $d44 = Join-Path $d 'f44'; New-Item -ItemType Directory -Force $d44 | Out-Null; G init -q $d44
+    $sv44 = @($script:Dir, $script:Run)
+    try {
+      $script:Dir = $d44; $script:Run = ''; $script:Title = 'third thing'; $script:Stages = 'one'
+      $o44 = @(DoInit)
+      $f44 = Join-Path $d44 'run-0001-third-thing.md'
+      if (-not (Test-Path -LiteralPath $f44)) { Die "F44: the new run file is not run-0001-*: $(Get-ChildItem $d44 -Name)" }
+      if (@(Get-Content -Encoding UTF8 $f44)[0] -cne '# RUN-0001 - third thing') { Die "F44: header not RUN-0001: $(@(Get-Content -Encoding UTF8 $f44)[0])" }
+      if ($o44 -cnotcontains 'hand this to any session:  continue RUN-0001') { Die "F44: handoff line not padded: $o44" }
+      $f7 = Join-Path $d44 'run-7-old-seven.md'
+      [IO.File]::WriteAllText($f7, "# RUN-7 - old seven`nplan: o.md`nstarted: 2026-01-01T00:00Z   updated: 2026-01-01T00:00Z`n`n## Stages`n| # | stage | state | owner | heartbeat | landed |`n|---|-------|-------|-------|-----------|--------|`n| 70 | s |   | - | - | - |`n")
+      $f7 = (Get-Item -LiteralPath $f7).FullName
+      foreach ($sp in @('7', 'RUN-7', 'RUN-0007', 'run-0007', 'run-7')) { if ((Resolve-Run $sp) -ne $f7) { Die "F44: old run-7 did not resolve as '$sp'" } }
+      $script:Run = ''; if (-not (@(DoList) -match '^RUN-0007  old seven')) { Die "F44: list did not print the old run padded" }
+      # team.md is found as tickets-zordon finds it - from the location's
+      # worktree top, then its main checkout - so the owner calls run in $d44.
+      $loc44 = (Get-Location).Path; Set-Location $d44
+      $script:Run = $f44; $script:Text = '@asha'; $null = DoOwner
+      if ((HdrField $f44 'owner') -cne '@asha') { Die "F44: owner not written in the header (no team.md)" }
+      [IO.File]::WriteAllText("$d44/team.md", "- @asha: asha@x.com`n")
+      $script:Text = '@vidul'; $null = DoOwner   # a team.md outside <top>/.skillator/ is not the team file
+      Remove-Item -LiteralPath "$d44/team.md"; New-Item -ItemType Directory -Force "$d44/.skillator" | Out-Null
+      [IO.File]::WriteAllText("$d44/.skillator/team.md", "# Team`n`n- @vidul: vidul@ikran.in, v2@x.com`n- @asha: asha@x.com`n")
+      $script:Text = '@vidul'; $null = DoOwner
+      if (@(Get-Content -Encoding UTF8 $f44 | Where-Object { $_ -like 'owner: *' }).Count -ne 1 -or (HdrField $f44 'owner') -cne '@vidul') { Die "F44: owner was not replaced" }
+      $script:Text = '@zed'; ShouldFail 'is not in' { DoOwner }
+      $script:Text = "@vidul`n@asha"; ShouldFail 'more than one line' { DoOwner }
+      $script:Text = 'vidul'; ShouldFail 'not an @handle' { DoOwner }
+      if ((HdrField $f44 'owner') -cne '@vidul') { Die "F44: a refused owner changed the header" }
+      if (Test-Path "$f44.lock") { Die "F44: owner left the lock behind" }
+      $script:Run = ''; if (-not (@(DoList) -ceq '          owner: @vidul')) { Die "F44: list does not show the owner" }
+      $script:Run = $f44; if (@(DoStatus)[0] -cne 'owner: @vidul') { Die "F44: status does not show the owner" }
+      if (-not (@(DoResume 1) -ceq '# Run owner: @vidul')) { Die "F44: resume does not show the owner" }
+      $script:Text = '-'; $null = DoOwner
+      if (@(Get-Content -Encoding UTF8 $f44 | Where-Object { $_ -like 'owner: *' }).Count) { Die "F44: owner - did not clear it" }
+      $script:Run = ''; $script:Title = 'fourth thing'; $script:RunOwner = '@asha'; $null = DoInit
+      $f48 = Join-Path $d44 'run-0008-fourth-thing.md'
+      if (-not (Test-Path -LiteralPath $f48) -or (HdrField $f48 'owner') -cne '@asha') { Die "F44: the run after run-7 is not RUN-0008 with its owner: $(Get-ChildItem $d44 -Name)" }
+      $script:Run = ''; $script:Title = 'fifth'; $script:RunOwner = '@zed'; ShouldFail 'is not in' { DoInit }
+      Set-Location $loc44
+      # F44 review: the RUN- prefix in any case; more than 9 digits is not a
+      # run id (no Int64 overflow); list walks the runs in number order.
+      foreach ($sp in @('Run-7', 'rUN-0007')) { if ((Resolve-Run $sp) -ne $f7) { Die "F44: '$sp' did not resolve (prefix case)" } }
+      if ((RunIdArg 'Run-12') -cne 'RUN-0012') { Die "F44: RunIdArg Run-12 is not RUN-0012" }
+      ShouldFail "'1234567890' is not a run id" { RunIdArg '1234567890' }
+      ShouldFail "is not a run id" { RunIdArg '12345678901234567890' }
+      if ($null -ne (Resolve-Run 'RUN-12345678901234567890')) { Die "F44: Resolve-Run accepted a 20-digit id" }
+      $d9 = Join-Path $d 'f44order'; New-Item -ItemType Directory -Force $d9 | Out-Null
+      foreach ($x in @('1-a', '2-b', '0012-c')) { [IO.File]::WriteAllText("$d9/run-$x.md", "# RUN-$($x.Split('-')[0]) - $($x.Split('-')[1])`nplan: p`n`n## Stages`n") }
+      $script:Dir = $d9; $script:Run = ''
+      $ord = (@(DoList | Where-Object { $_ -match '^RUN-' } | ForEach-Object { $_.Split(' ')[0] }) -join ' ')
+      if ($ord -cne 'RUN-0001 RUN-0002 RUN-0012') { Die "F44: list is not in run-number order: $ord" }
+    } finally { if ($loc44) { Set-Location $loc44 }; $script:Dir = $sv44[0]; $script:Run = $sv44[1]; $script:Title = 'selftest'; $script:Stages = 'alpha,beta'; $script:Text = ''; $script:RunOwner = '' }
+
     # --- F22: RUN ids and stage numbers are serial across the project. Before
     # the allocator, two worktrees both made RUN-4 and every run had a stage 1.
     if (FindNextId) {
@@ -2858,9 +3028,9 @@ function DoSelftest {
       $hdr = { param($f, $k) ((Get-Content -Encoding UTF8 $f) | Where-Object { $_ -like "${k}: *" } | Select-Object -First 1) -replace "^${k}: ", '' }
       $wa = & $hdr $fa 'worktree'; $wb = & $hdr $fb 'worktree'; $ba = & $hdr $fa 'branch'; $bb = & $hdr $fb 'branch'
       if (-not (Test-Path $wa) -or -not (Test-Path $wb) -or $wa -eq $wb) { Die "F35: no separate worktrees ($wa, $wb)" }
-      if ($wa -notlike '*/m/.skillator/worktrees/RUN-*') { Die "A126: the run worktree is not under the repo's .skillator/worktrees: $wa" }
+      if ($wa -notmatch '/m/\.skillator/worktrees/RUN-\d{4}-alpha$') { Die "A126: the run worktree is not under the repo's .skillator/worktrees: $wa" }
       if (@(GitOut @('-C', $m5, 'status', '--porcelain', '--', '.skillator/worktrees')).Count) { Die "A126: the worktrees show up in the main checkout's status" }
-      if ($ba -notmatch '^run/RUN-\d+-alpha$' -or $bb -notmatch '^run/RUN-\d+-beta$') { Die "F35: branches not run/RUN-<n>-<slug>: $ba $bb" }
+      if ($ba -notmatch '^run/RUN-\d{4}-alpha$' -or $bb -notmatch '^run/RUN-\d{4}-beta$') { Die "F35/F44: branches not run/RUN-00nn-<slug>: $ba $bb" }
       if (-not (Test-Path "$wa/plan.md") -or [IO.File]::ReadAllText("$wa/plan.md").Trim() -ne 'the plan') { Die "F35: the uncommitted plan was not copied into the run worktree" }
       [IO.File]::WriteAllText("$wa/a.txt", "a`n"); G -C $wa add a.txt; G -C $wa commit -q -m 'stage alpha'
       [IO.File]::WriteAllText("$wb/b.txt", "b`n"); G -C $wb add b.txt; G -C $wb commit -q -m 'stage beta'
@@ -2905,9 +3075,17 @@ function DoSelftest {
       foreach ($pl in @(@($ra, $sa, 'src/x.py'), @($ra, $sa2, 'src/x.py/'), @($rb, $sb, './src'))) {
         $o = R6 @('-Mode', 'chain', '-Action', 'plan', '-N', $pl[1], '-PromptFile', "$d6/p", '-Files', $pl[2], '-Run', $pl[0]); if ($o.rc -ne 0) { Die "F36: plan $($pl[1]): $($o.out)" } }
       $ida = IdOf (Split-Path -Leaf $ra); $idb = IdOf (Split-Path -Leaf $rb)
+      # F44: a pre-F44 run's row (RUN-7, unpadded) is left as written for an
+      # older relay-morpheus sharing the registry, and A's own row in the
+      # unpadded spelling is A's - a redispatch replaces it, not refused.
+      $reg = "$d6/.git/skillator/leases"; New-Item -ItemType Directory -Force (Split-Path -Parent $reg) | Out-Null
+      [IO.File]::WriteAllText($reg, "old/y.py`tRUN-7`t70`t@o`t$(Now)`nsrc/x.py`tRUN-$([int]$ida)`t$sa`t@a`t$(Now)`n")
+      $svr = $script:Run; $script:Run = "$d6/run-7-old.md"; $t7 = RunTag; $script:Run = $ra; $ta = RunTag; $script:Run = $svr
+      if ($t7 -cne 'RUN-7' -or $ta -cne "RUN-$ida") { Die "F44: RunTag does not spell the id as the run file does: $t7 $ta" }
       $o = R6 @('-Mode', 'chain', '-Action', 'dispatch', '-N', $sa, '-Driver', '@a', '-Run', $ra); if ($o.rc -ne 0) { Die "F36: dispatch A: $($o.out)" }
-      $reg = "$d6/.git/skillator/leases"
-      if (-not ((Get-Content -Encoding UTF8 $reg) -ccontains "src/x.py`tRUN-$ida`t$sa`t@a`t$((Get-Content -Encoding UTF8 $reg | Select-Object -First 1).Split("`t")[4])")) { Die "F36: dispatch did not lease src/x.py: $(Get-Content $reg)" }
+      if (-not ((Get-Content -Encoding UTF8 $reg) -match "^old/y\.py`tRUN-7`t70`t")) { Die "F44: a pre-F44 run's lease row was rewritten: $(Get-Content $reg)" }
+      if (@((Get-Content -Encoding UTF8 $reg) -match "^src/x\.py`t").Count -ne 1) { Die "F44: A's unpadded row was not replaced by its redispatch: $(Get-Content $reg)" }
+      if (-not ((Get-Content -Encoding UTF8 $reg) -match "^src/x\.py`tRUN-$ida`t$sa`t@a`t")) { Die "F36: dispatch did not lease src/x.py: $(Get-Content $reg)" }
       $o = R6 @('-Mode', 'chain', '-Action', 'dispatch', '-N', $sb, '-Driver', '@b', '-Run', $rb)
       if ($o.rc -ne 2 -or $o.out -notmatch [regex]::Escape("LEASED src/x.py RUN-$ida stage $sa")) { Die "F36: B dispatched over A's live lease (rc $($o.rc)): $($o.out)" }
       $o = R6 @('-Mode', 'chain', '-Action', 'next', '-Run', $rb)
@@ -3003,14 +3181,28 @@ function DoSelftest {
     $f1 = @(Get-ChildItem "$d8/.skillator" -Filter 'run-*-one.md')[0].FullName; $f2 = @(Get-ChildItem "$d8/.skillator" -Filter 'run-*-two.md')[0].FullName
     $n1 = IdOf (Split-Path -Leaf $f1); $n2 = IdOf (Split-Path -Leaf $f2); $i1 = "RUN-$n1"; $i2 = "RUN-$n2"
     # Not $n: names are case-blind, and DoPark below reads the script's $N.
-    foreach ($q8 in @($n1, $n2)) { if ((R8 @('-Mode', 'queue-run', '-Sub', 'add', '-Id', $q8)).rc -ne 0) { Die "F38: add $q8" } }
+    if ($i1 -notmatch '^RUN-\d{4}$' -or $i2 -notmatch '^RUN-\d{4}$') { Die "F44: run ids not padded: $i1 $i2" }
+    # F44: add <n> and add RUN-00nn are one row; a row written before F44
+    # (RUN-<n>, unpadded) is the same run, and the rest of F38 runs on it.
+    if ((R8 @('-Mode', 'queue-run', '-Sub', 'add', '-Id', "$([int]$n1)")).rc -ne 0) { Die "F38: add $n1" }
+    if ((R8 @('-Mode', 'queue-run', '-Sub', 'add', '-Id', $i1)).out -notmatch 'already queued') { Die "F44: add RUN-00nn after add <n> did not see the row" }
+    if (@(Get-Content -Encoding UTF8 "$d8/.skillator/queue.md" | Where-Object { $_ -match "^\| \d+ \| $i1 \| queued \|" }).Count -ne 1) { Die "F44: queue row not written padded, once" }
+    [IO.File]::AppendAllText("$d8/.skillator/queue.md", "| 2 | RUN-$([int]$n2) | queued | $(Now) |`n")
+    if ((R8 @('-Mode', 'queue-run', '-Sub', 'add', '-Id', $i2)).out -notmatch 'already queued') { Die "F44: an old-format RUN-<n> row is not the same run" }
+    $qf = @(Get-Content -Encoding UTF8 "$d8/.skillator/queue.md")
+    if (-not ($qf -match "^\| 2 \| $i2 \| queued \|") -or ($qf -match "^\| 2 \| RUN-$([int]$n2) \|")) { Die "F44: the old-format row was not rewritten padded: $qf" }
+    if ((R8 @('-Mode', 'owner', '-Id', $n1, '-Text', '@lead')).rc -ne 0) { Die "F44: owner on a queued run" }
+    $ql = (R8 @('-Mode', 'queue-run', '-Sub', 'list')).out
+    if ($ql -notmatch "(?m)^\| 1 \| $i1 \| queued \| .* \| @lead \|\s*$" -or $ql -notmatch "(?m)^\| 2 \| $i2 \| queued \| .* \| - \|\s*$") { Die "F44: queue-run list does not show padded ids and owners: $ql" }
     if ((R8 @('-Mode', 'queue-run', '-Sub', 'next')).out -cne "START $i1") { Die "F38: next is not the first queued run" }
     $null = R8 @('-Mode', 'queue-run', '-Sub', 'start', '-Id', $n1)
     if ((R8 @('-Mode', 'queue-run', '-Sub', 'next')).out -cne "BUSY $i1 running") { Die "F38: a second run would start beside the first" }
     $null = R8 @('-Mode', 'queue-run', '-Sub', 'pause', '-Id', $n1)
     if ((R8 @('-Mode', 'queue-run', '-Sub', 'next')).out -cne "START $i2") { Die "F38: a paused run blocked the queue" }
     $null = R8 @('-Mode', 'queue-run', '-Sub', 'start', '-Id', $n2)
-    if ((R8 @('-Mode', 'queue-run', '-Sub', 'start', '-Id', $n1)).rc -ne 2) { Die "F38: a second run started while one runs" }
+    $o = R8 @('-Mode', 'queue-run', '-Sub', 'start', '-Id', $n1)
+    if ($o.rc -ne 2) { Die "F38: a second run started while one runs" }
+    if ($o.out -notmatch "BUSY $i2 running ") { Die "F44: the BUSY refusal does not name the padded id: $($o.out)" }
     $null = R8 @('-Mode', 'queue-run', '-Sub', 'pause', '-Id', $n2); $null = R8 @('-Mode', 'queue-run', '-Sub', 'start', '-Id', $n1)
     if ((R8 @('-Mode', 'queue-run', '-Sub', 'add', '-Id', '999')).rc -eq 0) { Die "F38: queued a run that does not exist" }
     $null = R8 @('-Mode', 'away', '-Sub', 'on'); if (-not (Select-String -LiteralPath "$d8/.skillator/queue.md" -Pattern '^away: 20' -Quiet)) { Die "F38: away on" }
@@ -3082,8 +3274,9 @@ try {
     'park'      { DoPark @($Option1, $Option2, $Option3, $Option4 | Where-Object { $_ }) }
     'answer'    { DoAnswer }
     'queue'     { DoQueue }
+    'owner'     { DoOwner }
     'selftest'  { DoSelftest }
-    default     { Die "unknown mode: $Mode (init|add|stage|heartbeat|status|orphans|chain|park|answer|queue|selftest)" }
+    default     { Die "unknown mode: $Mode (init|add|stage|heartbeat|status|orphans|chain|park|answer|queue|owner|selftest)" }
   }
 } catch {
   # Write-Error would itself throw under $ErrorActionPreference = 'Stop', making

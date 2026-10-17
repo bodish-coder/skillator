@@ -50,7 +50,16 @@ RM chain plan 66 --tickets "B2,B3" --fix build --verify build --files shelf/book
 
 `init` printed the run's worktree (`stages work and commit in: ...`): every
 prompt file says "work and commit in <worktree> (branch run/RUN-<n>-...),
-never in the main checkout". The final stage merges that branch into main
+never in the main checkout", and pastes this paragraph verbatim (A126 - a
+background agent cannot ask for approval, so a command shape the host gates
+is simply lost):
+
+> In the worktree, run one plain command per call, by absolute path - never
+> `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`,
+> `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`.
+> Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with
+> the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs;
+> read and edit files with the file tools, not shell redirection. The final stage merges that branch into main
 from the main checkout, then removes the worktree and the branch. A `LEASED`
 refusal (exit 2) means another run's stage holds one of this stage's files:
 `chain next` lists it `IDLE <n> leased ...`; dispatch something else and come

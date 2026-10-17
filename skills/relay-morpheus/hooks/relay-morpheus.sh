@@ -7,7 +7,7 @@
 #
 #   relay-morpheus.sh list                             every run + how to resume it
 #   relay-morpheus.sh resume <id>                      what a fresh session needs
-#   relay-morpheus.sh init [--here] <plan> <title> <stage>...
+#   relay-morpheus.sh init [--here] [--owner @h] <plan> <title> <stage>...
 #                                                      create the run file, and the run's own
 #                                                      git worktree + branch (F35; --here: none)
 #   relay-morpheus.sh add <stage>                      append a row, print its number
@@ -17,11 +17,13 @@
 #   relay-morpheus.sh orphans [minutes]                default 20
 #   relay-morpheus.sh board <ID> <mark>               flip a ticket's box in the main checkout's
 #                                                      TICKETS.md, under its lock (F36; mark: ' ' ~ x ! > -)
+#   relay-morpheus.sh [<id>] owner @handle | -        F44: the run's owner, an @handle from
+#                                                      .skillator/team.md (`-` clears it)
 #   relay-morpheus.sh selftest
 #
 # Run queue and landing (F38) - one file, <main checkout>/.skillator/queue.md:
 #   relay-morpheus.sh queue-run add <id> | list | next | start <id> | pause <id> | done <id>
-#        next: START RUN-n | BUSY RUN-n <state> | DONE - one run at a time, paused ones skipped
+#        next: START RUN-0012 | BUSY RUN-0012 <state> | DONE - one run at a time, paused ones skipped
 #   relay-morpheus.sh land <id> --start | --finish | --abort
 #        runs land on main one at a time: --start rebases the run branch onto main (exit 3 on a
 #        conflict), the session sweeps, reviews and bumps on the run branch, --finish fast-forwards
@@ -100,12 +102,44 @@ now() { date -u +%Y-%m-%dT%H:%MZ; }
 # A run id is a short number a human can say out loud to another session -
 # "continue RUN-3". The timestamp ids this replaces were unsayable, which made
 # handing a run over a copy-paste of a path instead of a sentence.
+# F44: a run is named RUN-0012 - the serial number zero-padded to four digits
+# (more past 9999, never cut), in its file, header, branch, worktree and queue
+# row. Runs named before that (run-12-*.md, `# RUN-12`) keep working: every
+# spelling reads to its bare number, and every id printed is padded.
+# The *_ forms set a variable and fork nothing - they run once per lease or
+# queue row; the plain forms print, for $(...) callers.
+# run_num_: RN <- the bare number of 12 | RUN-12 | run-0012 | Run-0012 (the
+# prefix in any case); fails on anything else, or past 9 digits.
+run_num_() {
+  _rn=$1; case $_rn in [Rr][Uu][Nn]-*) _rn=${_rn#????} ;; esac
+  case $_rn in ''|*[!0-9]*) return 1 ;; esac
+  _rn=${_rn#"${_rn%%[!0]*}"}; RN=${_rn:-0}
+  [ "${#RN}" -le 9 ]
+}
+pad_id_() { run_num_ "$1" || return 1; PAD=$RN; while [ "${#PAD}" -lt 4 ]; do PAD=0$PAD; done; }   # PAD <- 0012
+canon_tag_() { if pad_id_ "$1"; then CT=RUN-$PAD; else CT=$1; fi; }   # CT <- RUN-0012; else as is
+same_run() { [ "$1" = "$2" ] && return 0; run_num_ "$1" || return 1; _sr=$RN; run_num_ "$2" && [ "$_sr" = "$RN" ]; }
+run_num() { run_num_ "$1" || return 1; echo "$RN"; }
+pad_id() { pad_id_ "$1" || return 1; echo "$PAD"; }
+canon_tag() { canon_tag_ "$1"; echo "$CT"; }
+# One awk function, cn(): a queue or lease cell (RUN-12, RUN-0012) -> its bare number.
+AWK_CN='function cn(x) { gsub(/ /, "", x); sub(/^[Rr][Uu][Nn]-/, "", x); sub(/^0+/, "", x); return x }'
+
 # The id out of a run filename, with no regex to get wrong: basename, drop the
-# `run-` prefix, keep the leading digits.
+# `run-` prefix, keep the leading digits - printed padded (F44).
 id_of() {
   b=${1##*/}; b=${b#run-}; b=${b%%-*}; b=${b%.md}
-  case $b in ''|*[!0-9]*) return 0 ;; esac
-  echo "$b"
+  pad_id_ "$b" && echo "$PAD"
+  return 0
+}
+
+# F44: run files in run-number order (run-0012 after run-2), then a bare
+# run.md - for list, queue --all and anything else that walks the runs.
+runs_sorted() {
+  for _sf in "$DIR"/run-*.md; do [ -f "$_sf" ] && printf '%s\n' "$_sf"; done |
+    awk '{ b = $0; sub(/.*\//, "", b); sub(/^run-/, "", b); sub(/[-.].*/, "", b); printf "%d\t%s\n", (b ~ /^[0-9]+$/ ? b + 0 : 0), $0 }' |
+    sort -s -n -k1,1 | cut -f2-
+  [ ! -f "$DIR/run.md" ] || printf '%s\n' "$DIR/run.md"
 }
 
 next_id() {
@@ -113,7 +147,7 @@ next_id() {
   for f in "$DIR"/run-*.md; do
     [ -f "$f" ] || continue
     b=${f##*/run-}; b=${b%%-*}
-    case $b in ''|*[!0-9]*) continue ;; esac
+    run_num_ "$b" || continue; b=$RN   # 0012 is twelve, not octal ten
     [ "$b" -gt "$n" ] && n=$b
   done
   echo $((n + 1))
@@ -160,16 +194,42 @@ alloc() {
   seq $((m + 1)) $((m + $2))
 }
 
-# `RUN-3`, `run-3`, `3` and a path all resolve to the same file, because
-# whoever types it next is working from memory of a conversation.
+# `RUN-3`, `run-3`, `3`, `RUN-0003` and a path all resolve to the same file,
+# because whoever types it next is working from memory of a conversation. A
+# run named before F44 (run-3-*.md) is found by the padded spelling too.
 resolve() {
   case "$1" in */*) [ -f "$1" ] && { echo "$1"; return 0; } ;; esac
-  n=$(printf %s "$1" | tr -cd '0-9')
-  [ -n "$n" ] || return 1
-  for f in "$DIR"/run-"$n"-*.md "$DIR"/run-"$n".md; do
-    [ -f "$f" ] && { echo "$f"; return 0; }
+  _rs=$(printf %s "$1" | tr -cd '0-9')
+  pad_id_ "$_rs" || return 1; _rs=$RN; _rp=$PAD
+  for _rf in "$DIR"/run-"$_rp"-*.md "$DIR"/run-"$_rp".md "$DIR"/run-"$_rs"-*.md "$DIR"/run-"$_rs".md; do
+    [ -f "$_rf" ] && { echo "$_rf"; return 0; }
   done
   return 1
+}
+
+# F44: a run's owner is an @handle from tickets-zordon's team file, found as
+# ticket-meta.sh's team_file finds it: <worktree top>/.skillator/team.md, then
+# <main checkout>/.skillator/team.md; lines `- @asha: asha@x.com`. Without one,
+# any well-formed handle.
+team_file() {
+  _tt=$(git rev-parse --show-toplevel 2>/dev/null) || _tt=
+  [ -n "$_tt" ] || return 1
+  _tm=$(main_of) || _tm=$_tt
+  for _tr in "$_tt" "$_tm"; do
+    if [ -f "$_tr/.skillator/team.md" ]; then printf '%s\n' "$_tr/.skillator/team.md"; return 0; fi
+  done
+  return 1
+}
+owner_check() {   # <@handle>: dies unless it may own a run
+  case "$1" in *"
+"*|*"$(printf '\r')"*) die "owner: '$1' is more than one line - give one @handle" ;; esac
+  printf '%s\n' "$1" | grep -Eqx '@[A-Za-z0-9_.-]+' || die "owner: '$1' is not an @handle (@name)"
+  if _tf=$(team_file); then
+    tr -d '\r' < "$_tf" | awk '/^[ \t]*[-*][ \t]*@[A-Za-z0-9_.-]+[ \t]*:/ { h = $0; sub(/^[ \t]*[-*][ \t]*/, "", h); sub(/[ \t]*:.*/, "", h); print h }' \
+      | grep -qxF -- "$1" || die "owner: $1 is not in $_tf - add them there first"
+  else
+    echo "note: no .skillator/team.md - owner $1 taken as written, not checked against a team" >&2
+  fi
 }
 
 # With no id given, fall back to the one open run if there is exactly one.
@@ -335,24 +395,33 @@ stamp_updated() {
 }
 
 cmd_init() {
-  here=0; if [ "${1:-}" = --here ]; then here=1; shift; fi
+  here=0; rown=
+  while :; do
+    case "${1:-}" in
+      --here) here=1; shift ;;
+      --owner) [ "$#" -ge 2 ] || die "init: --owner needs an @handle"; rown=$2; shift 2 ;;
+      *) break ;;
+    esac
+  done
   plan="${1:-}"; title="${2:-}"; [ "$#" -ge 2 ] && shift 2 || set --
   [ -n "$RUN" ] || RUN=""
   [ -n "$plan" ] && [ -n "$title" ] && [ "$#" -gt 0 ] \
-    || die "usage: relay-morpheus.sh init [--here] <plan> <title> <stage>..."
+    || die "usage: relay-morpheus.sh init [--here] [--owner @handle] <plan> <title> <stage>..."
   # A `|` in a stage name adds a column, and every later read is positional -
   # the state would be written into the name cell and the sha into heartbeat,
   # silently, with no error anywhere. Checked before any number is reserved.
   for s in "$@"; do
     case "$s" in *'|'*) die "stage name contains '|', which would shift every column: $s" ;; esac
   done
+  [ -z "$rown" ] || owner_check "$rown"
   if [ -z "$RUN" ]; then
     mkdir -p "$DIR"
     id=$(alloc RUN 1 "$DIR") || exit 1
+    id=$(pad_id "$id")   # F44: RUN-0012, in every name made below
     RUN="$DIR/run-$id-$(slug "$title").md"
   else
     id=$(id_of "$RUN")
-    [ -n "$id" ] || id=1
+    [ -n "$id" ] || id=0001
   fi
   [ -f "$RUN" ] && die "run file already exists: $RUN (a run file is never overwritten)"
   mkdir -p "$(dirname "$RUN")"
@@ -389,6 +458,7 @@ cmd_init() {
     echo "plan: $plan"
     echo "started: $t   updated: $t"
     [ -z "$wt" ] || { echo "worktree: $wt"; echo "branch: $br"; }
+    [ -z "$rown" ] || echo "owner: $rown"
     echo
     echo "## Stages"
     echo "| # | stage | state | owner | heartbeat | landed |"
@@ -532,7 +602,10 @@ cmd_heartbeat() {
 # One line per run, newest last, with the sentence that resumes it.
 cmd_list() {
   any=0
-  for f in "$DIR"/run-*.md "$DIR"/run.md; do
+  _rl=$(runs_sorted); _lifs=$IFS; IFS='
+'
+  for f in $_rl; do
+    IFS=$_lifs
     [ -f "$f" ] || continue
     any=1
     id=$(id_of "$f"); [ -n "$id" ] || id="?"
@@ -549,10 +622,13 @@ cmd_list() {
     printf '
           plan: %s
 ' "$plan"
+    ow=$(hdr_field "$f" owner)
+    [ -z "$ow" ] || printf '          owner: %s\n' "$ow"
     wtl=$(hdr_field "$f" worktree)
     [ -z "$wtl" ] || printf '          worktree: %s\n' "$wtl"
     printf '          resume: continue RUN-%s\n' "$id"
   done
+  IFS=$_lifs
   [ "$any" = 1 ] || echo "no runs in $DIR"
 }
 
@@ -566,11 +642,42 @@ cmd_resume() {
   echo "# redispatch anything that was running."
   w=$(worktree_of "$f")
   [ -z "$w" ] || echo "# Stages work and commit in: $w"
+  ow=$(hdr_field "$f" owner)
+  [ -z "$ow" ] || echo "# Run owner: $ow"
   echo
   cat "$f"
 }
 
-cmd_status() { pick_run; [ -f "$RUN" ] || return 0; sed -n '/^## Stages/,/^## In flight/p' "$RUN" | sed '$d'; }
+cmd_status() {
+  pick_run; [ -f "$RUN" ] || return 0
+  ow=$(hdr_field "$RUN" owner); [ -z "$ow" ] || echo "owner: $ow"
+  sed -n '/^## Stages/,/^## In flight/p' "$RUN" | sed '$d'
+}
+
+# F44: `owner @handle` writes (or replaces) the run's `owner:` header line,
+# `owner -` removes it - under the run lock, header only (before the first `## `).
+cmd_owner() {
+  [ "$#" = 1 ] || die "usage: relay-morpheus.sh [<id>] owner @handle | -"
+  need_run
+  _ov=$1; if [ "$_ov" = - ]; then _ov=; else owner_check "$_ov"; fi
+  lock
+  RELAY_OWNER=$_ov awk '
+    { line[NR] = $0 }
+    END {
+      v = ENVIRON["RELAY_OWNER"]; h = NR + 1
+      for (i = 1; i <= NR; i++) if (line[i] ~ /^## /) { h = i; break }
+      for (i = 1; i < h; i++) { if (!o && index(line[i], "owner: ") == 1) o = i; if (line[i] != "") last = i }
+      for (i = 1; i <= NR; i++) {
+        if (i == o) { if (v != "") print "owner: " v; continue }
+        print line[i]
+        if (!o && i == last && v != "") print "owner: " v
+      }
+    }' "$RUN" > "$RUN.tmp.$$" || { rm -f "$RUN.tmp.$$"; die "owner: could not rewrite $RUN"; }
+  mv "$RUN.tmp.$$" "$RUN"
+  stamp_updated
+  unlock
+  if [ -n "$_ov" ]; then echo "RUN-$(id_of "$RUN") owner: $_ov"; else echo "RUN-$(id_of "$RUN") owner cleared"; fi
+}
 
 # The network-loss list: in-flight rows nobody has heard from. This is the only
 # signal there is - a dropped agent sends no error, it just stops reporting.
@@ -598,7 +705,11 @@ cmd_orphans() {
 # directory of the other. Leases are between runs - stages of one run are
 # kept apart by chain next. Outside git there is no registry and no lease.
 TAB=$(printf '\t')
-run_tag() { echo "RUN-$(id_of "$RUN")"; }
+# F44: a run's lease tag is its id as its FILE spells it - RUN-0012 for a run
+# named since F44, RUN-7 for one named before - so a pre-F44 relay-morpheus
+# sharing the registry still matches its own rows. Every read here compares
+# by number, so both spellings are one run.
+run_tag() { _rt=${RUN##*/}; _rt=${_rt#run-}; _rt=${_rt%%-*}; _rt=${_rt%.md}; case $_rt in ''|*[!0-9]*) _rt= ;; esac; echo "RUN-$_rt"; }
 lease_meet() {
   [ "$1" = "$2" ] && return 0
   case "$2" in "$1"/*) return 0 ;; esac
@@ -637,8 +748,9 @@ lease_take_() {
   : > "$_lreg.new.$$"
   while IFS="$TAB" read -r lp lr ls ld lh; do
     [ -n "$lp" ] || continue
-    [ "$lr" = "$_lr" ] && [ "$ls" = "$_ls" ] && continue   # a redispatch replaces its own
-    if [ "$lr" != "$_lr" ]; then
+    _lsame=0; ! same_run "$lr" "$_lr" || _lsame=1   # F44: RUN-7 and RUN-0007 are one run
+    [ "$_lsame" = 1 ] && [ "$ls" = "$_ls" ] && continue   # a redispatch replaces its own
+    if [ "$_lsame" = 0 ]; then
       _lo=0; while IFS= read -r fp; do lease_meet "$lp" "$fp" && { _lo=1; break; }; done < "$_lf"
       if [ "$_lo" = 1 ]; then
         _la=$(age_min "$lh" "$_lt")
@@ -656,18 +768,19 @@ lease_take_() {
 }
 lease_release_() {   # <run> <stage> <registry>
   [ -f "$3" ] || return 0
-  awk -F "$TAB" -v r="$1" -v s="$2" '!($2 == r && $3 == s)' "$3" > "$3.new.$$" && mv "$3.new.$$" "$3"
+  awk -F "$TAB" -v r="$1" -v s="$2" "$AWK_CN"' !(cn($2) == cn(r) && $3 == s)' "$3" > "$3.new.$$" && mv "$3.new.$$" "$3"
 }
 lease_beat_() {   # <run> <stage> <registry>: prints how many leases it refreshed
   [ -f "$3" ] || { echo 0; return 0; }
-  awk -F "$TAB" -v OFS="$TAB" -v r="$1" -v s="$2" -v t="$(now)" -v c="$3.count.$$" '$2 == r && $3 == s { $5 = t; k++ } { print } END { print k + 0 > c }' "$3" > "$3.new.$$" && mv "$3.new.$$" "$3"
+  awk -F "$TAB" -v OFS="$TAB" -v r="$1" -v s="$2" -v t="$(now)" -v c="$3.count.$$" "$AWK_CN"' cn($2) == cn(r) && $3 == s { $5 = t; k++ } { print } END { print k + 0 > c }' "$3" > "$3.new.$$" && mv "$3.new.$$" "$3"
   cat "$3.count.$$"; rm -f "$3.count.$$"
 }
 lease_foreign_() {   # <run> <registry>: other runs' live leases
   [ -f "$2" ] || return 0
   _lt=$(now); _lst=${RELAY_LEASE_STALE:-20}
   while IFS="$TAB" read -r lp lr ls ld lh; do
-    [ -n "$lp" ] && [ "$lr" != "$1" ] || continue
+    [ -n "$lp" ] || continue
+    ! same_run "$lr" "$1" || continue
     [ "$(age_min "$lh" "$_lt")" -lt "$_lst" ] && lease_line "$lp" "$lr" "$ls" "$ld" "$lh"
   done < "$2"
   return 0
@@ -696,9 +809,21 @@ qfile() { _qm=$(main_of) || _qm=$(pwd); mkdir -p "$_qm/.skillator"; printf '%s' 
 q_init() {
   [ -f "$1" ] || printf '%s\n' "# Run queue" "away: -" "landing: -" "" "| # | run | state | since |" "|---|-----|-------|-------|" > "$1"
 }
+# F44: rows and the landing header written before F44 (RUN-12) are rewritten
+# padded (RUN-0012) under the lock, so every reader sees one form.
+q_norm_() {
+  awk "$AWK_CN"'
+    function pd(x) { x = cn(x); return (x ~ /^[0-9]+$/ && length(x) <= 9) ? sprintf("RUN-%04d", x + 0) : "" }
+    BEGIN { FS = OFS = "|" }
+    /^\| *[0-9]+ *\|/ && pd($3) != "" { $3 = " " pd($3) " " }
+    /^landing: / { w = substr($0, 10); k = index(w, " "); h = k ? substr(w, 1, k - 1) : w
+                   if (pd(h) != "") $0 = "landing: " pd(h) (k ? substr(w, k) : "") }
+    { print }' "$1" > "$1.tmp.$$" && mv "$1.tmp.$$" "$1"
+}
 q_locked() {   # <fn> <args...>: fn with the queue file appended, under its lock
   _rqf=$(qfile)
   _rqsv=$LOCK; LOCK=; lock "$_rqf.lock"; q_init "$_rqf"   # created under the lock: two first callers, one header
+  q_norm_ "$_rqf"
   _rqrc=0; "$@" "$_rqf" || _rqrc=$?
   unlock; LOCK=$_rqsv; return $_rqrc
 }
@@ -706,23 +831,23 @@ q_hdr() { sed -n "s/^$1: //p" "$2" | head -1; }
 q_sethdr() {   # <key> <value> <file>
   awk -v k="$1: " -v v="$2" 'index($0, k) == 1 { print k v; next } { print }' "$3" > "$3.tmp.$$" && mv "$3.tmp.$$" "$3"
 }
-q_state() { awk -v r="$1" -F'|' '/^\| *[0-9]+ *\|/ { x = $3; gsub(/ /, "", x); if (x == r) { s = $4; gsub(/ /, "", s); print s; exit } }' "$2"; }
+# F44: rows match by number - a row queued as RUN-12 is RUN-0012's.
+q_state() { awk -v r="$1" -F'|' "$AWK_CN"' /^\| *[0-9]+ *\|/ { if (cn($3) == cn(r)) { s = $4; gsub(/ /, "", s); print s; exit } }' "$2"; }
 q_set() {   # <run> <state> <file>
-  awk -v r="$1" -v st="$2" -v t="$(now)" -F'|' -v OFS='|' '/^\| *[0-9]+ *\|/ { x = $3; gsub(/ /, "", x); if (x == r) { $4 = " " st " "; $5 = " " t " " } } { print }' "$3" > "$3.tmp.$$" && mv "$3.tmp.$$" "$3"
+  awk -v r="$1" -v st="$2" -v t="$(now)" -F'|' -v OFS='|' "$AWK_CN"' /^\| *[0-9]+ *\|/ { if (cn($3) == cn(r)) { $4 = " " st " "; $5 = " " t " " } } { print }' "$3" > "$3.tmp.$$" && mv "$3.tmp.$$" "$3"
 }
-run_id_arg() {   # RUN-12 | run-12 | 12 -> RUN-12
-  _ri=${1#RUN-}; _ri=${_ri#run-}
-  case "$_ri" in ''|*[!0-9]*) die "'$1' is not a run id (RUN-12)" ;; esac
+run_id_arg() {   # RUN-12 | run-12 | 12 | RUN-0012 -> RUN-0012
+  _ri=$(pad_id "$1") || die "'$1' is not a run id (RUN-0012)"
   echo "RUN-$_ri"
 }
 qr_add_() {
-  resolve "${1#RUN-}" >/dev/null || { echo "no run file for $1 - see: relay-morpheus.sh list" >&2; return 1; }
+  resolve "$1" >/dev/null || { echo "no run file for $1 - see: relay-morpheus.sh list" >&2; return 1; }
   [ -z "$(q_state "$1" "$2")" ] || { echo "$1 is already queued ($(q_state "$1" "$2"))"; return 0; }
   _qn=$(awk -F'|' '/^\| *[0-9]+ *\|/ { n = $2 + 0 } END { print n + 1 }' "$2")
   printf '| %s | %s | queued | %s |\n' "$_qn" "$1" "$(now)" >> "$2"; echo "$1 queued (#$_qn)"
 }
 qr_next_() {
-  awk -F'|' '/^\| *[0-9]+ *\|/ { r = $3; s = $4; gsub(/ /, "", r); gsub(/ /, "", s)
+  awk -F'|' "$AWK_CN"' /^\| *[0-9]+ *\|/ { r = $3; s = $4; gsub(/ /, "", r); gsub(/ /, "", s); if (cn(r) ~ /^[0-9]+$/) r = sprintf("RUN-%04d", cn(r))
       if (s == "running" || s == "landing") { busy = busy ? busy : r " " s }
       else if (s == "queued" && first == "") first = r }
     END { if (busy) print "BUSY " busy; else if (first) print "START " first; else print "DONE" }' "$2"
@@ -731,18 +856,30 @@ qr_set_() {   # <run> <state> <file>
   [ -n "$(q_state "$1" "$3")" ] || { echo "$1 is not in the run queue - queue-run add $1 first" >&2; return 1; }
   # One run at a time: starting refuses while another runs or lands.
   if [ "$2" = running ]; then
-    _qb=$(awk -v r="$1" -F'|' '/^\| *[0-9]+ *\|/ { x = $3; s = $4; gsub(/ /, "", x); gsub(/ /, "", s); if (x != r && (s == "running" || s == "landing")) { print x " " s; exit } }' "$3")
+    _qb=$(awk -v r="$1" -F'|' "$AWK_CN"' /^\| *[0-9]+ *\|/ { x = $3; s = $4; gsub(/ /, "", x); gsub(/ /, "", s); if (cn(x) != cn(r) && (s == "running" || s == "landing")) { print sprintf("RUN-%04d", cn(x) + 0) " " s; exit } }' "$3")
     [ -z "$_qb" ] || { echo "BUSY $_qb - one run at a time; pause it first, or wait" >&2; return 2; }
   fi
   # A paused or finished run gives up a landing it held.
-  _ql=$(q_hdr landing "$3"); [ "${_ql%% *}" != "$1" ] || [ "$2" = running ] || q_sethdr landing - "$3"
+  _ql=$(q_hdr landing "$3"); canon_tag_ "${_ql%% *}"; [ "$CT" != "$1" ] || [ "$2" = running ] || q_sethdr landing - "$3"
   q_set "$1" "$2" "$3"; echo "$1 $2"
 }
 cmd_queue_run() {
   sub=${1:-list}; [ "$#" -gt 0 ] && shift
   case $sub in
     add)   r=$(run_id_arg "${1:-}"); q_locked qr_add_ "$r" || die "queue-run: $r cannot be queued" ;;
-    list)  f=$(qfile); q_init "$f"; sed -n '/^away: /p; /^landing: /p; /^| /p' "$f" ;;
+    list)  q_locked q_norm_; f=$(qfile)
+           # F44: each run's owner in a last column - one awk pass over the
+           # run files' headers, then the queue file.
+           set --; for _sf in "$DIR"/run-*.md; do [ -f "$_sf" ] && set -- "$@" "$_sf"; done
+           awk "$AWK_CN"'
+             FILENAME != Q { if (FNR == 1) { k = FILENAME; sub(/.*\//, "", k); sub(/^run-/, "", k); sub(/[-.].*/, "", k); k = cn(k); hd = 1 }
+                             sub(/\r$/, "")
+                             if (/^## /) hd = 0; else if (hd && index($0, "owner: ") == 1 && !(k in own)) own[k] = substr($0, 8)
+                             next }
+             /^away: / || /^landing: / { print; next }
+             /^\| # \|/ { print $0 " owner |"; next }
+             /^\|---\|/ { print $0 "-------|"; next }
+             /^\| / { split($0, c, "|"); x = cn(c[3]); print $0 " " ((x in own) ? own[x] : "-") " |" }' Q="$f" "$@" "$f" ;;
     next)  q_locked qr_next_ x ;;
     start) r=$(run_id_arg "${1:-}"); _qrc=0; q_locked qr_set_ "$r" running || _qrc=$?
            [ "$_qrc" = 0 ] || { [ "$_qrc" = 2 ] && exit 2; die "queue-run: $r is not queued"; } ;;
@@ -768,7 +905,7 @@ land_() {   # <run> <start|finish|abort> <run file> <queue file>
   [ -n "$_lw" ] && [ -n "$_lb" ] || { echo "$_lr has no run worktree/branch (an --here run) - it landed with its stages" >&2; return 1; }
   _mr=$(main_of) || { echo "land: not in a git repo" >&2; return 1; }
   _mb=$(git -C "$_mr" symbolic-ref -q --short HEAD) || { echo "land: the main checkout is on a detached HEAD" >&2; return 1; }
-  _cur=$(q_hdr landing "$_lq"); _cur=${_cur%% *}
+  _cur=$(q_hdr landing "$_lq"); canon_tag_ "${_cur%% *}"; _cur=$CT
   case $_lm in
     start)
       [ "$_cur" = - ] || [ "$_cur" = "$_lr" ] || { echo "LANDING $_cur - one run lands at a time; land $_lr --start after it finishes" >&2; return 2; }
@@ -807,7 +944,7 @@ land_() {   # <run> <start|finish|abort> <run file> <queue file>
 cmd_land() {
   r=$(run_id_arg "${1:-}"); m=${2:-}
   case $m in --start) m=start ;; --finish) m=finish ;; --abort) m=abort ;; *) die "usage: relay-morpheus.sh land <id> --start | --finish | --abort" ;; esac
-  f=$(resolve "${r#RUN-}") || die "no run matching $r - see: relay-morpheus.sh list"
+  f=$(resolve "$r") || die "no run matching $r - see: relay-morpheus.sh list"
   q_locked land_ "$r" "$m" "$f"
 }
 
@@ -1823,12 +1960,16 @@ cmd_queue() {
   # asked decision, each under its own heading.
   case " $* " in *" --all "*)
     _qa=; for a in "$@"; do [ "$a" = --all ] || _qa="$_qa $a"; done
-    _any=0
-    for f in "$DIR"/run-*.md; do
+    _any=0; _rl=$(runs_sorted); _lifs=$IFS; IFS='
+'
+    for f in $_rl; do
+      IFS=$_lifs
+      case $f in */run.md) continue ;; esac
       [ -f "$f" ] && grep -qx '## Chain' "$f" && grep -Eq '^### Q[0-9]+ (open|asked)( |$)' "$f" || continue
       _any=1; echo "## RUN-$(id_of "$f")"
       ( RUN=$f; cmd_queue $_qa ) || exit $?
     done
+    IFS=$_lifs
     [ "$_any" = 1 ] || echo "no open decisions in any run"
     return 0 ;;
   esac
@@ -2000,28 +2141,29 @@ cmd_selftest() {
   cmd_init plan-b.md "second thing" one two three >/dev/null
   RUN=""
 
-  [ "$(id_of "$d2/run-2-second-thing.md")" = 2 ] || die "id_of: wrong id"
+  [ "$(id_of "$d2/run-0002-second-thing.md")" = 0002 ] || die "id_of: wrong id"
+  [ "$(id_of "$d2/run-2-second-thing.md")" = 0002 ] || die "id_of: an old-format name did not print padded"
   [ "$(id_of "$d2/run.md")" = "" ]               || die "id_of: invented an id for a bare run.md"
   [ "$(next_id)" = 3 ]                           || die "next_id: did not follow the highest existing id"
 
   # RUN-2, run-2 and 2 must all land on the same file - whoever types it next
   # is working from memory of a conversation, not from a path.
-  for spell in RUN-2 run-2 2; do
-    [ "$(resolve "$spell")" = "$d2/run-2-second-thing.md" ] || die "resolve: '$spell' did not resolve"
+  for spell in RUN-2 run-2 2 RUN-0002 run-0002 0002; do
+    [ "$(resolve "$spell")" = "$d2/run-0002-second-thing.md" ] || die "resolve: '$spell' did not resolve"
   done
   resolve nope-9 >/dev/null 2>&1 && die "resolve: matched a run that does not exist"
 
   # The counts come from one awk pass because `grep -c` prints 0 AND exits 1,
   # which silently produced "0" twice in the same field.
-  RUN="$d2/run-1-first-thing.md"; cmd_stage 1 x owner sha111
+  RUN="$d2/run-0001-first-thing.md"; cmd_stage 1 x owner sha111
   RUN=""
-  cmd_list | grep -q 'RUN-1  first thing *1/2 done' || die "list: wrong counts for run 1"
+  cmd_list | grep -q 'RUN-0001  first thing *1/2 done' || die "list: wrong counts for run 1"
   # The ZERO case is the one that regresses: `grep -c` prints 0 and also exits
   # 1, so `$(grep -c ... || echo 0)` put two zeros in one field. A run with
   # something already done hides it, which is how the first version passed.
-  cmd_list | grep -q 'RUN-2  second thing *0/3 done' || die "list: wrong counts for a run with nothing done"
-  cmd_list | grep -q 'resume: continue RUN-2'       || die "list: no resume sentence"
-  RUN="$d2/run-2-second-thing.md"; cmd_stage 3 '~' owner
+  cmd_list | grep -q 'RUN-0002  second thing *0/3 done' || die "list: wrong counts for a run with nothing done"
+  cmd_list | grep -q 'resume: continue RUN-0002'       || die "list: no resume sentence"
+  RUN="$d2/run-0002-second-thing.md"; cmd_stage 3 '~' owner
   RUN=""
   cmd_list | grep -q '(stage 3 open)' || die "list: did not surface the open stage"
 
@@ -2029,7 +2171,61 @@ cmd_selftest() {
   RUN=""
   if (pick_run 2>/dev/null); then die "pick_run: guessed between two runs"; fi
 
-  cmd_resume 1 | grep -q '# RUN-1 - first thing' || die "resume: did not print the ledger"
+  cmd_resume 1 | grep -q '# RUN-0001 - first thing' || die "resume: did not print the ledger"
+
+  # --- F44: a new run is RUN-00NN in its file, header and handoff line; an
+  # old-format run-7 file resolves by 7, RUN-7 and RUN-0007; the owner is set,
+  # replaced and cleared in the header and shown by list and status.
+  RUN=""; out=$(cmd_init plan-c.md "third thing" one)
+  [ -f "$d2/run-0003-third-thing.md" ] || die "F44: the new run file is not run-0003-*: $(ls "$d2")"
+  [ "$(head -1 "$d2/run-0003-third-thing.md")" = "# RUN-0003 - third thing" ] || die "F44: header not RUN-0003: $(head -1 "$d2/run-0003-third-thing.md")"
+  printf '%s\n' "$out" | grep -qx 'hand this to any session:  continue RUN-0003' || die "F44: handoff line not padded: $out"
+  printf '%s\n' '# RUN-7 - old seven' 'plan: o.md' 'started: 2026-01-01T00:00Z   updated: 2026-01-01T00:00Z' '' '## Stages'     '| # | stage | state | owner | heartbeat | landed |' '|---|-------|-------|-------|-----------|--------|' '| 70 | s |   | - | - | - |' > "$d2/run-7-old-seven.md"
+  for spell in 7 RUN-7 RUN-0007 run-0007 run-7; do
+    [ "$(resolve "$spell")" = "$d2/run-7-old-seven.md" ] || die "F44: old run-7 did not resolve as '$spell'"
+  done
+  [ "$(next_id)" = 8 ] || die "F44: next_id after run-7 and run-0003 is not 8: $(next_id)"
+  RUN=""; cmd_list | grep -q 'RUN-0007  old seven' || die "F44: list did not print the old run padded"
+  RUN="$d2/run-0003-third-thing.md"
+  # team.md is found as tickets-zordon finds it - from the cwd's worktree top,
+  # then its main checkout - so every owner call below runs inside $d2.
+  ( cd "$d2" && cmd_owner @asha ) >/dev/null 2>&1 || die "F44: owner with no team.md refused a well-formed handle"
+  [ "$(hdr_field "$RUN" owner)" = @asha ] || die "F44: owner not written in the header: $(cat "$RUN")"
+  printf '%s\n' '- @asha: asha@x.com' > "$d2/team.md"
+  ( cd "$d2" && cmd_owner @vidul ) >/dev/null 2>&1 || die "F44: a team.md outside <top>/.skillator/ was read: @vidul refused"
+  rm -f "$d2/team.md"; mkdir -p "$d2/.skillator"
+  printf '%s\n' '# Team' '' '- @vidul: vidul@ikran.in, v2@x.com' '- @asha: asha@x.com' > "$d2/.skillator/team.md"
+  ( cd "$d2" && cmd_owner @vidul ) >/dev/null || die "F44: owner refused a team handle"
+  [ "$(grep -c '^owner: ' "$RUN")" = 1 ] && [ "$(hdr_field "$RUN" owner)" = @vidul ] || die "F44: owner was not replaced: $(cat "$RUN")"
+  awk '/^## /{exit} /^owner: /{f=1} END{exit !f}' "$RUN" || die "F44: owner line is not in the header"
+  if (cd "$d2" && cmd_owner @zed >/dev/null 2>&1); then die "F44: owner accepted a handle not in team.md"; fi
+  if (cd "$d2" && cmd_owner "@vidul
+@asha" >/dev/null 2>&1); then die "F44: owner accepted a newline"; fi
+  if (cd "$d2" && cmd_owner vidul >/dev/null 2>&1); then die "F44: owner accepted a handle with no @"; fi
+  [ "$(hdr_field "$RUN" owner)" = @vidul ] || die "F44: a refused owner changed the header"
+  [ ! -e "$RUN.lock" ] || die "F44: owner left the lock behind"
+  RUN=""; cmd_list | grep -q '^          owner: @vidul$' || die "F44: list does not show the owner: $(cmd_list)"
+  RUN="$d2/run-0003-third-thing.md"; cmd_status | head -1 | grep -qx 'owner: @vidul' || die "F44: status does not show the owner"
+  cmd_resume 3 | grep -qx '# Run owner: @vidul' || die "F44: resume does not show the owner"
+  ( cd "$d2" && cmd_owner - ) >/dev/null; ! grep -q '^owner: ' "$RUN" || die "F44: owner - did not clear it"
+  RUN=""; ( cd "$d2" && cmd_init --owner @asha plan-d.md "fourth thing" one ) >/dev/null || die "F44: init --owner failed"
+  [ "$(hdr_field "$d2/run-0008-fourth-thing.md" owner)" = @asha ] || die "F44: init --owner did not write the owner"
+  RUN=""; if (cd "$d2" && cmd_init --owner @zed plan-e.md "fifth" one >/dev/null 2>&1); then die "F44: init --owner accepted a handle not in team.md"; fi
+  # F44 review: the RUN- prefix in any case; more than 9 digits is not a run
+  # id (no printf overflow); list walks the runs in number order.
+  for spell in Run-7 rUN-0007; do
+    [ "$(resolve "$spell")" = "$d2/run-7-old-seven.md" ] || die "F44: '$spell' did not resolve (prefix case)"
+  done
+  [ "$(run_id_arg Run-12)" = RUN-0012 ] || die "F44: run_id_arg Run-12 is not RUN-0012"
+  out=$( (run_id_arg 1234567890) 2>&1 ) && die "F44: a 10-digit run id was accepted: $out"
+  printf '%s\n' "$out" | grep -qx "FAIL: '1234567890' is not a run id (RUN-0012)" || die "F44: a 10-digit id gave: $out"
+  out=$(resolve RUN-12345678901234567890 2>&1) && die "F44: resolve accepted a 20-digit id"
+  [ -z "$out" ] || die "F44: resolve on a 20-digit id said: $out"
+  d9=$(mktemp -d); sv9=$DIR; DIR=$d9
+  for x in 1-a 2-b 0012-c; do printf '# RUN-%s - %s\nplan: p\n\n## Stages\n' "${x%%-*}" "${x#*-}" > "$d9/run-$x.md"; done
+  [ "$(RUN=""; cmd_list | sed -n 's/^\(RUN-[0-9]*\) .*/\1/p' | tr '\n' ' ')" = "RUN-0001 RUN-0002 RUN-0012 " ] || die "F44: list is not in run-number order: $(RUN=""; cmd_list)"
+  DIR=$sv9; rm -rf "$d9"
+  RUN=""
   rm -rf "$d2"
 
   # --- F22: RUN ids and stage numbers are serial across the project. Before
@@ -2372,10 +2568,10 @@ chain_selftest() {
   wa=$(sed -n 's/^worktree: //p' "$fa"); wb=$(sed -n 's/^worktree: //p' "$fb")
   ba=$(sed -n 's/^branch: //p' "$fa"); bb=$(sed -n 's/^branch: //p' "$fb")
   [ -d "$wa" ] && [ -d "$wb" ] && [ "$wa" != "$wb" ] || die "F35: no separate worktrees ($wa, $wb)"
-  case "$wa" in */m/.skillator/worktrees/RUN-*) ;; *) die "A126: the run worktree is not under the repo's .skillator/worktrees: $wa" ;; esac
+  case "$wa" in */m/.skillator/worktrees/RUN-[0-9][0-9][0-9][0-9]-alpha) ;; *) die "A126: the run worktree is not under the repo's .skillator/worktrees: $wa" ;; esac
   [ -z "$(git -C "$d5/m" status --porcelain --ignored=no -- .skillator/worktrees)" ] || die "A126: the worktrees show up in the main checkout's status"
   [ "$(cat "$wa/plan.md" 2>/dev/null)" = "the plan" ] || die "F35: the uncommitted plan was not copied into the run worktree"
-  case "$ba $bb" in "run/RUN-"*"-alpha run/RUN-"*"-beta") ;; *) die "F35: branches not run/RUN-<n>-<slug>: $ba $bb" ;; esac
+  case "$ba $bb" in "run/RUN-"[0-9][0-9][0-9][0-9]"-alpha run/RUN-"[0-9][0-9][0-9][0-9]"-beta") ;; *) die "F35/F44: branches not run/RUN-00nn-<slug>: $ba $bb" ;; esac
   echo a > "$wa/a.txt"; g5 -C "$wa" add a.txt; g5 -C "$wa" commit -q -m "stage alpha"
   echo b > "$wb/b.txt"; g5 -C "$wb" add b.txt; g5 -C "$wb" commit -q -m "stage beta"
   [ "$(git -C "$d5/m" diff --name-only "$base" "$ba")" = a.txt ] || die "F35: alpha's branch carries more than its own commit"
@@ -2406,8 +2602,16 @@ chain_selftest() {
   RUN=$rb; sb=$(sed -n 's/^| \([0-9]*\) | B one |.*/\1/p' "$RUN")
   chain_plan "$sb" --prompt-file "$d6/p" --files "./src" >/dev/null || die "F36: plan B"
   lv='echo "src=codex 5h=10 7d=10 ctx=- max=10"'
-  RUN=$ra; ( RELAY_LEVEL_CMD=$lv chain_dispatch "$sa" --driver @a >/dev/null ) || die "F36: dispatch A failed"
+  # F44: a pre-F44 run's row (RUN-7, unpadded) is left as written for an older
+  # relay-morpheus sharing the registry, and A's own row in the unpadded
+  # spelling is A's - a redispatch replaces it rather than being refused.
   reg="$(git -C "$d6" rev-parse --path-format=absolute --git-common-dir)/skillator/leases"
+  mkdir -p "${reg%/leases}"
+  printf 'old/y.py\tRUN-7\t70\t@o\t%s\nsrc/x.py\tRUN-%s\t%s\t@a\t%s\n' "$(now)" "$(run_num "$(id_of "$ra")")" "$sa" "$(now)" > "$reg"
+  [ "$(RUN=$d6/run-7-old.md; run_tag)" = RUN-7 ] && [ "$(RUN=$ra; run_tag)" = "RUN-$(id_of "$ra")" ] || die "F44: run_tag does not spell the id as the run file does"
+  RUN=$ra; ( RELAY_LEVEL_CMD=$lv chain_dispatch "$sa" --driver @a >/dev/null ) || die "F36: dispatch A failed"
+  grep -q "^old/y.py${TAB}RUN-7${TAB}70${TAB}" "$reg" || die "F44: a pre-F44 run's lease row was rewritten: $(cat "$reg")"
+  [ "$(grep -c "^src/x.py${TAB}" "$reg")" = 1 ] || die "F44: A's unpadded row was not replaced by its redispatch: $(cat "$reg")"
   grep -q "^src/x.py${TAB}RUN-$(id_of "$ra")${TAB}$sa${TAB}@a${TAB}" "$reg" || die "F36: dispatch did not lease src/x.py: $(cat "$reg")"
   RUN=$rb; set +e; msg=$( ( RELAY_LEVEL_CMD=$lv chain_dispatch "$sb" --driver @b ) 2>&1 >/dev/null ); rc=$?; set -e
   [ "$rc" = 2 ] && printf '%s' "$msg" | grep -q "LEASED src/x.py RUN-$(id_of "$ra") stage $sa" || die "F36: B dispatched over A's live lease (rc $rc): $msg"
@@ -2480,16 +2684,27 @@ chain_selftest() {
   sv8_run=$RUN; sv8_dir=$DIR; DIR="$d8/.skillator"
   ( cd "$d8" && RUN= && RELAY_WORKTREE=on cmd_init T.md "one" "o1" >/dev/null 2>&1 && RUN= && RELAY_WORKTREE=on cmd_init T.md "two" "t1" >/dev/null 2>&1 ) || die "F38: init"
   f1=$(ls "$DIR"/run-*-one.md); f2=$(ls "$DIR"/run-*-two.md); i1="RUN-$(id_of "$f1")"; i2="RUN-$(id_of "$f2")"
+  case "$i1 $i2" in RUN-[0-9][0-9][0-9][0-9]" "RUN-[0-9][0-9][0-9][0-9]) ;; *) die "F44: run ids not padded: $i1 $i2" ;; esac
   ( cd "$d8"
-    cmd_queue_run add "$i1" >/dev/null && cmd_queue_run add "$i2" >/dev/null || die "F38: add"
+    # F44: add <n> and add RUN-00nn are one row; a row written before F44
+    # (RUN-<n>, unpadded) is the same run, and the rest of F38 runs on it.
+    cmd_queue_run add "$(run_num "$i1")" >/dev/null || die "F38: add"
+    cmd_queue_run add "$i1" | grep -q 'already queued' || die "F44: add RUN-00nn after add <n> did not see the row"
+    [ "$(grep -c "^| [0-9]* | $i1 | queued |" .skillator/queue.md)" = 1 ] || die "F44: queue row not written padded, once: $(cat .skillator/queue.md)"
+    printf '| 2 | RUN-%s | queued | %s |\n' "$(run_num "$i2")" "$(now)" >> .skillator/queue.md
+    cmd_queue_run add "$i2" | grep -q 'already queued' || die "F44: an old-format RUN-<n> row is not the same run"
+    grep -q "^| 2 | $i2 | queued |" .skillator/queue.md && ! grep -q "^| 2 | RUN-$(run_num "$i2") |" .skillator/queue.md || die "F44: the old-format row was not rewritten padded: $(cat .skillator/queue.md)"
+    ( RUN=$f1; cmd_owner @lead ) >/dev/null 2>&1 || die "F44: owner on a queued run"
+    cmd_queue_run list | grep -q "^| 1 | $i1 | queued | .* | @lead |\$" && cmd_queue_run list | grep -q "^| 2 | $i2 | queued | .* | - |\$"       || die "F44: queue-run list does not show padded ids and owners: $(cmd_queue_run list)"
     [ "$(cmd_queue_run next)" = "START $i1" ] || die "F38: next is not the first queued run: $(cmd_queue_run next)"
     cmd_queue_run start "$i1" >/dev/null
     [ "$(cmd_queue_run next)" = "BUSY $i1 running" ] || die "F38: a second run would start beside the first"
     cmd_queue_run pause "$i1" >/dev/null
     [ "$(cmd_queue_run next)" = "START $i2" ] || die "F38: a paused run blocked the queue"
     cmd_queue_run start "$i2" >/dev/null
-    set +e; ( cmd_queue_run start "$i1" >/dev/null 2>&1 ); rc=$?; set -e
+    set +e; msg=$( ( cmd_queue_run start "$i1" ) 2>&1 >/dev/null ); rc=$?; set -e
     [ "$rc" = 2 ] || die "F38: a second run started while one runs (rc $rc)"
+    printf '%s\n' "$msg" | grep -q "^BUSY $i2 running " || die "F44: the BUSY refusal does not name the padded id: $msg"
     cmd_queue_run pause "$i2" >/dev/null; cmd_queue_run start "$i1" >/dev/null
     if ( cmd_queue_run add 999 >/dev/null 2>&1 ); then die "F38: queued a run that does not exist"; fi
     cmd_away on >/dev/null; grep -q '^away: 20' .skillator/queue.md || die "F38: away on"
@@ -2884,7 +3099,7 @@ c="${1:-}"; [ "$#" -gt 0 ] && shift || true
 # An id may lead: `relay-morpheus.sh 3 status`. Checked before the command names so
 # a run can never be shadowed by one.
 case "$c" in
-  RUN-*|run-*|[0-9]*)
+  [Rr][Uu][Nn]-*|[0-9]*)
     if f=$(resolve "$c"); then RUN="$f"; c="${1:-status}"; [ "$#" -gt 0 ] && shift || true; fi
     ;;
 esac
@@ -2907,5 +3122,6 @@ case "$c" in
   park)      cmd_park "$@" ;;
   answer)    cmd_answer "$@" ;;
   queue)     cmd_queue "$@" ;;
-  *) sed -n '2,53p' "$0" >&2; exit 1 ;;
+  owner)     cmd_owner "$@" ;;
+  *) sed -n '2,55p' "$0" >&2; exit 1 ;;
 esac

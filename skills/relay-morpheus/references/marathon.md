@@ -173,8 +173,9 @@ Several runs wait their turn in one queue, `<main>/.skillator/queue.md`:
 
 ```sh
 RM queue-run add 12        # each run, in order (-Mode queue-run -Sub add -Id 12)
-RM queue-run next          # START RUN-12 | BUSY RUN-12 running | DONE
-RM queue-run start 12      # then `continue RUN-12` - its chain runs as above
+RM queue-run next          # START RUN-0012 | BUSY RUN-0012 running | DONE
+RM queue-run start 12      # then `continue RUN-0012` - its chain runs as above
+RM queue-run list          # the rows, ids padded, with each run's owner (F44)
 ```
 
 One run runs at a time. A run reaching FINAL lands, then `queue-run next`

@@ -46,11 +46,11 @@ Every run gets a short number when it is created, and `init` prints the
 sentence that resumes it:
 
 ```
-hand this to any session:  continue RUN-3
+hand this to any session:  continue RUN-0003
 ```
 
 That sentence is the whole interface. A fresh session — another machine,
-another host, a colleague — needs nothing else: **"continue RUN-3"**. It has no
+another host, a colleague — needs nothing else: **"continue RUN-0003"**. It has no
 transcript, so the ledger is what it reads, and the ledger is on disk because
 it was written before the work, not after.
 
@@ -60,21 +60,35 @@ relay-morpheus.sh resume 3      # everything a session that has never seen it ne
 relay-morpheus.sh 3 status      # any command takes the id first
 ```
 
-`RUN-3`, `run-3` and `3` all resolve to the same run, because whoever types it
-next is working from memory of a conversation rather than from a path. With one
-run open and no id given, that run is assumed; with two or more, the script
-refuses rather than guessing.
+**One name, everywhere (F44).** A run is `RUN-0003`: its serial number,
+zero-padded to four digits (more past 9999, never cut). That one name is the run
+file (`run-0003-<slug>.md`), its `# RUN-0003` header, its branch and worktree,
+its queue row and the resume sentence. `RUN-0003`, `RUN-3`, `run-3` and `3` all
+resolve to the same run, because whoever types it next is working from memory
+of a conversation rather than from a path - and a run named before F44
+(`run-3-*.md`, `# RUN-3`) is found by every spelling too, and listed padded.
+With one run open and no id given, that run is assumed; with two or more, the
+script refuses rather than guessing.
+
+**Run owners (F44).** A run can be given to a team member: `relay-morpheus.sh
+[<id>] owner @asha` (`-Mode owner [-Id n] -Text @asha`) writes an `owner: @asha`
+line in the run file's header, `owner -` clears it, and `init --owner @asha`
+(`-RunOwner @asha`) sets it at the start. Handles come from tickets-zordon's
+`.skillator/team.md` (`- @asha: asha@x.com`); a handle not in it is refused, and
+with no team file any well-formed `@handle` is taken, with a note. `list`,
+`resume`, `status` and `queue-run list` show the owner.
 
 ## The run file
 
-`.skillator/run-<id>-<slug>.md`, one per run, in the repo. Markdown because a human and any
+`.skillator/run-<0000>-<slug>.md`, one per run, in the repo. Markdown because a human and any
 host both have to read it with no tooling. Git-tracked by default; a repo that
 objects can `.gitignore` it and lose only the shared view, not the resume.
 
 ```markdown
-# RUN-7 — notekeep v2
+# RUN-0007 — notekeep v2
 plan: docs/plans/PLAN-notekeep.md
 started: 2026-09-22T09:14Z   updated: 2026-09-22T10:02Z
+owner: @asha
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -102,9 +116,9 @@ names the new stage).
 **`landed`** is a commit sha or a path, never a claim. An empty `landed` on an
 `x` row is a lie the next session will believe.
 **One run, one worktree (F35).** In a git repo with a commit, `init` also
-creates the run's own worktree, `<repo>/.skillator/worktrees/RUN-<n>-<slug>`
+creates the run's own worktree, `<repo>/.skillator/worktrees/RUN-0007-<slug>`
 (git-ignored, inside the repo so dispatched agents may work there), on
-branch `run/RUN-<n>-<slug>`, and writes both into the run file's header. Every
+branch `run/RUN-0007-<slug>`, and writes both into the run file's header. Every
 stage of the run works and commits **there** - say so in each dispatch prompt -
 never in the main checkout, whose index another run may be using. The run
 file itself stays in the main checkout's `.skillator/`, whichever worktree
@@ -137,7 +151,7 @@ id and every stage number from the F21 allocator (`practice/scripts/next-id.sh`,
 kinds `RUN` and `S`), which reads every run file in the tree and on every ref
 and keeps a counter every worktree of the clone shares — so two worktrees never
 both make RUN-4, and a new run's first stage continues after the highest stage
-any run has used (RUN-7 above starts at 41). "Stage 42" names one stage in the
+any run has used (RUN-0007 above starts at 41). "Stage 42" names one stage in the
 whole project. Existing run files are never renumbered.
 **Rulings** are appended, never rewritten — see `tasks-sentinels`, which is
 where they come from and which writes into this same file.

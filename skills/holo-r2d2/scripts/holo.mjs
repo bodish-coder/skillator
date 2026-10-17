@@ -610,7 +610,8 @@ export function render(run, opts = {}) {
   body += design;
   const src = [run && opts.runPath, opts.designPath].filter(Boolean).map(esc).join(" + ");
   body = `<main data-run="${esc(run?.id ?? "")}">${body}<p class="foot">Drawn by holo-r2d2 from ${src || "the run file"}` +
-    `${run ? ` at ${esc(run.updated || "?")}` : ""}. It decides nothing: answers are written to the run file by the session (relay-morpheus answer).</p></main>`;
+    `${run ? ` at ${esc(run.updated || "?")}` : ""}. It decides nothing: answers are written to the run file by the session (relay-morpheus answer).` +
+    `${run && run.chain ? ` Holds: ${run.holdsFrom === "relay" ? "as relay-morpheus chain next judges them" : "estimated here - relay-morpheus could not be run"}.` : ""}</p></main>`;
   return { title, css: CSS, body, script: CLIENT };
 }
 
@@ -626,7 +627,7 @@ const toAscii = (s) => String(s ?? "").replace(/[^\x09\x0a\x20-\x7e]/g, (c) => A
 export function renderAscii(run, opts = {}) {
   const out = [];
   if (run) {
-    out.push(`${run.id} - ${run.title}`);
+    out.push(`${run.id} - ${run.title}${run.holdsFrom === "estimate" && run.chain ? "  (holds estimated - relay-morpheus not run)" : ""}`);
     out.push([run.plan && `plan: ${run.plan}`, run.updated && `updated: ${run.updated}`,
       run.chain && `driver: ${run.chain.driver}  hold: ${run.chain.hold}  mode: ${run.chain.mode}`].filter(Boolean).join("   "));
     out.push(ORDER.map((s) => `${GLYPH[s]} ${LABEL[s]} ${run.stages.filter((x) => x.state === s).length}`).join("  "));
@@ -689,14 +690,21 @@ async function runFiles(root) {
   return names.filter((n) => /^run-\d+-.*\.md$/.test(n)).map((n) => join(dir, n));
 }
 
+// F44: runs are named RUN-0012 (run-0012-*.md); runs named before that are
+// run-12-*.md. Any spelling - 12, RUN-12, RUN-0012 - finds either, by number.
+function runFilesFor(arg, files) {
+  const m = /^(?:RUN-)?(\d+)$/i.exec(arg);
+  if (!m) return null;
+  return files.filter((f) => { const k = /^run-(\d+)-/.exec(basename(f)); return k && BigInt(k[1]) === BigInt(m[1]); });
+}
+
 async function resolveRun(arg, root) {
   if (arg && existsSync(arg) && (await stat(arg)).isFile()) return resolve(arg);
   const files = await runFiles(root);
   if (arg) {
-    const m = /^(?:RUN-)?(\d+)$/i.exec(arg);
-    if (!m) throw new Error(`'${arg}' is not a run file, RUN-<n> or <n>`);
-    const hit = files.filter((f) => basename(f).startsWith(`run-${m[1]}-`));
-    if (!hit.length) throw new Error(`no .skillator/run-${m[1]}-*.md under ${root}`);
+    const hit = runFilesFor(arg, files);
+    if (!hit) throw new Error(`'${arg}' is not a run file, RUN-<n> or <n>`);
+    if (!hit.length) throw new Error(`no .skillator/run-${arg.replace(/^RUN-/i, "")}-*.md under ${root}`);
     return hit[0];
   }
   // No run named: the live one - a `~` row or a decision still open.
@@ -773,17 +781,20 @@ export function parseHolds(text) {
   return String(text).split(/\r?\n/).map((l) => /^IDLE (\d+) (Q\d+) (\w+)\s*$/.exec(l)).filter(Boolean).map((m) => ({ n: Number(m[1]), q: m[2], why: m[3] }));
 }
 function relayHolds(md, runPath, root) {
-  if (!/^## Chain$/m.test(md)) return null;
+  if (!/^## Chain\r?$/m.test(md)) return null;
   const env = { ...process.env, RELAY_RUN: runPath };
   const tries = [];
+  // HOLO_RELAY_CMD: a test hook only (the selftest's stub relay); unset in use.
   if (process.env.HOLO_RELAY_CMD) tries.push(["sh", ["-c", process.env.HOLO_RELAY_CMD]]);
   else {
     const rm = join(HERE, "..", "..", "relay-morpheus", "hooks");
     if (existsSync(join(rm, "relay-morpheus.sh"))) tries.push(["sh", [join(rm, "relay-morpheus.sh"), "chain", "next", "--holds"]]);
     if (existsSync(join(rm, "relay-morpheus.ps1"))) tries.push(["powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(rm, "relay-morpheus.ps1"), "-Mode", "chain", "-Action", "next", "-Holds", "-Run", runPath]]);
   }
+  // A port that cannot start or fails (a broken sh, a timeout) falls through to
+  // the next; 30 s each, so a dead sh costs one PowerShell start, not a minute.
   for (const [cmd, args] of tries) {
-    try { return parseHolds(execFileSync(cmd, args, { env, cwd: root, encoding: "utf8", timeout: 60000, stdio: ["ignore", "pipe", "ignore"] })); }
+    try { return parseHolds(execFileSync(cmd, args, { env, cwd: root, encoding: "utf8", timeout: 30000, stdio: ["ignore", "pipe", "ignore"] })); }
     catch { /* next */ }
   }
   return null;
@@ -939,6 +950,11 @@ function selftest() {
   ok(hdr.qs.length === 1 && hdr.qs[0].f.question === "first", "an unreadable Q header never merges into the Q above");
   ok(parseArgs(["--html", "RUN-12"]).pos[0] === "RUN-12", "--html takes no path; the run stays the run");
   ok(parseArgs(["RUN-12", "--batch"]).mode === "batch", "--batch is a mode");
+  // F44: RUN-0012 is the run name now; an old run-12 file still answers to it.
+  const rf = ["/r/.skillator/run-0012-new.md", "/r/.skillator/run-7-old.md", "/r/.skillator/run-120-other.md"];
+  ok(["12", "RUN-12", "RUN-0012", "0012"].every((a) => (runFilesFor(a, rf) || [])[0] === rf[0]), "F44: 12, RUN-12 and RUN-0012 all find run-0012");
+  ok(["7", "RUN-0007"].every((a) => (runFilesFor(a, rf) || [])[0] === rf[1]), "F44: RUN-0007 finds an old run-7 file");
+  ok(parseRun("# RUN-0012 - padded\n").id === "RUN-0012", "F44: a padded header parses");
   // A118: relay-morpheus judges the holds. Given its lines, the page draws
   // them even where holo's own rules would say otherwise - a holds change in
   // relay-morpheus moves the page with no edit here.
@@ -948,6 +964,9 @@ function selftest() {
   ok(rr.holdsFrom === "relay" && rr.qs.find((q) => q.id === "Q2").holds.join() === "3,6" && rr.stages.find((s) => s.n === 6).waits.join() === "Q2", "holds: relay's lines drawn as given (3 is the parked row's own Q2)", rr.qs.find((q) => q.id === "Q2").holds);
   ok(rr.qs.find((q) => q.id === "Q1").holds.join() === "3", "holds: a parked row keeps its own parked Qs (data, not a rule)", rr.qs.find((q) => q.id === "Q1").holds);
   ok(parseRun(md).holdsFrom === "estimate", "holds: no relay lines -> the estimate");
+  ok(/^## Chain\r?$/m.test(md.replace(/\n/g, "\r\n")), "holds: a CRLF run file still reads as a chain run");
+  ok(artifactPage(render(rr)).includes("as relay-morpheus chain next judges them") && artifactPage(render(parseRun(md))).includes("estimated here"), "holds: the page says where its holds came from");
+  ok(!artifactPage(render(plain)).includes("Holds:"), "holds: a run with no chain says nothing about holds");
 
   // 6. F42 wizard: only open/asked decisions are asked; the rest is settled
   const set = setFromRun(run, "fixture-all-states.md");
