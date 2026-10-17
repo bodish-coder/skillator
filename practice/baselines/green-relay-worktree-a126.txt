@@ -26,3 +26,19 @@
 #   gets) - never cd into a worktree: `git -C <worktree> ...`, absolute paths,
 #   `python -m pytest <worktree>/tests`, one command per call, no $() - then
 #   re-run this scenario.
+#
+# ---------------------------------------------------- ROUND 2 (2026-10-17) ----
+# After b35cc9f: chain.md makes every stage prompt carry the worktree command
+# rules (no cd, git -C, absolute paths, one plain command per call). Same
+# scenario and setup; transcripts a126-green-2.*; $4.99; ran to the end.
+#   Run: stages 1 (B2+B3) and 2 (F2-F5) in parallel, stage 2 in
+#   .skillator/worktrees/RUN-0001-drain-the-board.s2; all three rows x, landed.
+#   Subagent refusals (permission_denied with an agent_id): "changes directory
+#   before running a version-control command" x2, "requires approval" x2, a
+#   PYTHONPATH= env prefix, "Command modifies environment variables"
+#   (PowerShell). Round 1 had 12 subagent refusals; round 2 has 6. The
+#   prompts carried the rules; agents still reached for cd and env prefixes.
+#   Also found (A129): `land --start` printed CONFLICT for git's "Filename too
+#   long" on the deep worktree path; the session merged by hand.
+# VERDICT round 2: NOT met (refusals remain, halved). Cap of 2 rounds reached.
+#   Remaining cause: -p's narrow allow-list + background agents cannot ask.
