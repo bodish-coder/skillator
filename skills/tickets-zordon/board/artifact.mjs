@@ -17,6 +17,7 @@ const STATES = {
   " ": ["pending", "[ ]"],
   "~": ["in-progress", "[~]"],
   "!": ["blocked", "[!]"],
+  "?": ["decision", "[?]"],   // F45: pending decision - open, waiting on a [decide:] person
   ">": ["deferred", "[>]"],
   "x": ["done", "[x]"],
   "-": ["cancelled", "[-]"],
@@ -27,10 +28,10 @@ const GROUPS = [["B", "Bugs"], ["F", "Features"], ["A", "Agent-found"]];
 const inGroups = (id) => GROUPS.some(([p]) => id.startsWith(p));
 // ponytail: ID + em-dash + title is the whole line format the skill enforces.
 // A hyphen separator is tolerated because hand-typed tickets use one.
-const LINE = /^(\s*)- \[([ x~!>-])\]\s+([A-Za-z]+\d+[a-z]?)\s*[—-]\s*(.*)$/;
-// F43: trailing `[app: ..] [owner: @x] [by: @y, a@b]` tags. Lifted out of the
+const LINE = /^(\s*)- \[([ x~!?>-])\]\s+([A-Za-z]+\d+[a-z]?)\s*[—-]\s*(.*)$/;
+// F43/F45: trailing `[app: ..] [decide: @x] [owner: @x] [by: @y, a@b]` tags. Lifted out of the
 // title and drawn as chips; a line without them parses exactly as before.
-const TAG = /\s*\[(app|owner|by):\s*([^\]]*)\]/g;
+const TAG = /\s*\[(app|decide|owner|by):\s*([^\]]*)\]/g;
 
 export function parse(md) {
   const out = [];
@@ -51,9 +52,9 @@ export function tally(ts) {
   const n = (s) => ts.filter((t) => t.status === s).length;
   const c = {
     pending: n("pending"), inprogress: n("in-progress"), blocked: n("blocked"),
-    deferred: n("deferred"), done: n("done"), cancelled: n("cancelled"),
+    decision: n("decision"), deferred: n("deferred"), done: n("done"), cancelled: n("cancelled"),
   };
-  c.open = c.pending + c.inprogress + c.blocked;
+  c.open = c.pending + c.inprogress + c.blocked + c.decision;
   c.closed = c.done + c.cancelled;
   c.total = c.open + c.deferred + c.closed;
   return c;
@@ -62,7 +63,8 @@ export function tally(ts) {
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
 function countLine(c) {
-  return `${c.open} open (${c.pending} pending · ${c.inprogress} in-progress · ${c.blocked} blocked)` +
+  return `${c.open} open (${c.pending} pending · ${c.inprogress} in-progress · ${c.blocked} blocked` +
+    ` · ${c.decision} pending decision)` +
     ` · ${c.deferred} deferred · ${c.closed} closed (${c.done} done · ${c.cancelled} cancelled)` +
     ` · ${c.total} total`;
 }
@@ -77,7 +79,7 @@ const li = (t) =>
   `<span class="g" aria-hidden="true">${t.glyph}</span>` +
   `<span class="id">${esc(t.id)}</span>` +
   `<span class="t">${esc(t.title)}${tagChips(t)}</span>` +
-  `<span class="st">${t.status}${t.archived ? " · archived" : ""}</span></li>`;
+  `<span class="st">${t.status === "decision" ? "pending decision" : t.status}${t.archived ? " · archived" : ""}</span></li>`;
 
 function section(name, ts) {
   if (!ts.length) return "";
@@ -86,7 +88,7 @@ function section(name, ts) {
 }
 
 const CHIPS = [
-  ["pending", "pending"], ["inprogress", "in progress"], ["blocked", "blocked"],
+  ["pending", "pending"], ["inprogress", "in progress"], ["blocked", "blocked"], ["decision", "to decide"],
   ["deferred", "deferred"], ["done", "done"], ["cancelled", "cancelled"],
 ];
 
@@ -128,16 +130,16 @@ export function render(md, title, archiveMd = "", archiveName = "TICKETS-archive
 <style>
 :root{
   --ground:#f4f5f2; --surface:#fbfbf9; --ink:#191c19; --mid:#5c625c; --faint:#8b918b;
-  --rule:#dfe3dd; --amber:#a8590c; --red:#b0241a; --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --rule:#dfe3dd; --amber:#a8590c; --red:#b0241a; --violet:#6d3fb3; --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --ground:#141714; --surface:#191d19; --ink:#e7eae6; --mid:#9aa199; --faint:#6e756d;
-  --rule:#2a2f29; --amber:#e0a25c; --red:#f08b80;
+  --rule:#2a2f29; --amber:#e0a25c; --red:#f08b80; --violet:#b9a0ef;
 }}
 :root[data-theme="dark"]{
   --ground:#141714; --surface:#191d19; --ink:#e7eae6; --mid:#9aa199; --faint:#6e756d;
-  --rule:#2a2f29; --amber:#e0a25c; --red:#f08b80;
+  --rule:#2a2f29; --amber:#e0a25c; --red:#f08b80; --violet:#b9a0ef;
 }
 *{box-sizing:border-box}
 body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;
@@ -154,6 +156,7 @@ h1 .repo{color:var(--mid);font-weight:400}
 .chip .k{font-size:.6875rem;color:var(--faint);letter-spacing:.05em;text-transform:uppercase}
 .c-inprogress .v{color:var(--amber)}
 .c-blocked .v{color:var(--red)}
+.c-decision .v{color:var(--violet)}
 .c-total{background:color-mix(in oklab,var(--ground) 60%,var(--surface))}
 section{margin:0 0 2rem}
 h2{display:flex;align-items:baseline;gap:.5rem;font-family:var(--mono);font-size:.6875rem;font-weight:700;
@@ -171,6 +174,7 @@ li.sub{padding-left:1.4rem;grid-template-columns:1.9rem 3.4rem 1fr auto}
 .st{font-size:.6875rem;color:var(--faint);letter-spacing:.04em;text-align:right;white-space:nowrap}
 .s-inprogress .id,.s-inprogress .g,.s-inprogress .st{color:var(--amber)}
 .s-blocked .id,.s-blocked .g,.s-blocked .st{color:var(--red)}
+.s-decision .id,.s-decision .g,.s-decision .st{color:var(--violet)}
 .s-deferred .id,.s-deferred .t{color:var(--mid)}
 .s-done .t,.s-cancelled .t{color:var(--mid);text-decoration:line-through;text-decoration-color:var(--rule)}
 details{margin-top:2.5rem;border-top:1px solid var(--rule);padding-top:.75rem}
@@ -184,6 +188,7 @@ details ul{margin-top:.75rem}
   border:1px solid var(--rule);border-radius:3px;padding:0 .35rem;background:var(--surface);white-space:nowrap}
 .tag b{font-weight:400;color:var(--faint)}
 .tag-owner{color:var(--ink)}
+.tag-decide{color:var(--violet);border-color:var(--violet)}
 </style>
 <header>
   <h1>TICKETS <span class="repo">· ${esc(title)}</span></h1>
@@ -219,7 +224,7 @@ not a ticket line
   const html = render(md, "demo");
   ok(html.includes("Working &lt;thing&gt; &amp; more"), "escapes html");
   ok(!/<(!doctype|html|head|body)\b/i.test(html), "no wrapper tags");
-  ok(html.includes('data-count-line="5 open (3 pending · 1 in-progress · 1 blocked) · 1 deferred · 3 closed (2 done · 1 cancelled) · 9 total"'), "count line");
+  ok(html.includes('data-count-line="5 open (3 pending · 1 in-progress · 1 blocked · 0 pending decision) · 1 deferred · 3 closed (2 done · 1 cancelled) · 9 total"'), "count line");
   // every ticket the chips count must appear in a list — see inGroups
   const shown = (html.match(/<li /g) || []).length;
   ok(shown === 9, "every ticket rendered", shown);
@@ -247,6 +252,27 @@ not a ticket line
 - [~] F12 — Bulk [app: web] [owner: @asha] (@cc-abc123)`, "demo");
   ok(th.includes('<span class="tag tag-app"><b>app</b> web</span>') && th.includes('<span class="tag tag-owner"><b>owner</b> @asha</span>'), "tags render as chips");
   ok(!/<span class="t">[^<]*\[app:/.test(th), "no raw tag text in the title");
+  // F45: [?] is "pending decision" - parsed, counted inside open, labelled.
+  const dmd = `## Features
+- [?] F30 — Pick a vendor [decide: @asha]
+- [ ] F31 — Plain
+- [x] F32 — Done
+`;
+  const dts = parse(dmd);
+  ok(dts.length === 3 && dts[0].status === "decision" && dts[0].glyph === "[?]", "[?] parses as decision", dts[0]);
+  const dc = tally(dts);
+  ok(dc.decision === 1 && dc.open === 2 && dc.closed === 1 && dc.total === 3, "[?] counts as open", dc);
+  const dh = render(dmd, "demo");
+  ok(dh.includes('data-count-line="2 open (1 pending · 0 in-progress · 0 blocked · 1 pending decision) · 0 deferred · 1 closed (1 done · 0 cancelled) · 3 total"'), "count line names pending decision", dh.match(/data-count-line="[^"]*"/)?.[0]);
+  ok(dh.includes('<li class="s-decision">') && dh.includes('>pending decision<'), "[?] row has its own class and label");
+  ok(dh.includes('c-decision'), "a pending-decision chip");
+  ok(dh.indexOf(">F30<") < dh.indexOf("<details"), "[?] is listed open, not closed");
+  // F45: [decide: @x] is a tag like the others - a chip, never title text.
+  ok(dts[0].title === "Pick a vendor" && dts[0].tags.length === 1 && dts[0].tags[0][0] === "decide", "decide tag lifted off the title", dts[0]);
+  ok(!/<span class="t">[^<]*\[decide:/.test(dh), "no raw [decide: in the title");
+  ok((dh.match(/class="tag tag-decide"/g) || []).length === 1 && dh.includes('<span class="tag tag-decide"><b>decide</b> @asha</span>'), "one decide chip");
+  const three = parse("- [ ] F33 — Split [app: web] [decide: @vidul] [owner: @asha] (@cc-1)")[0];
+  ok(three.title === "Split (@cc-1)" && JSON.stringify(three.tags) === JSON.stringify([["app", "web"], ["decide", "@vidul"], ["owner", "@asha"]]), "app + decide + owner split cleanly", three);
   if (!process.exitCode) console.log("selftest: ok");
 }
 

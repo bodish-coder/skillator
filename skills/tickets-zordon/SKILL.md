@@ -25,7 +25,7 @@ Create it if missing, with exactly this shape:
 ```markdown
 # TICKETS
 
-Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[>]` deferred · `[x]` done · `[-]` cancelled
+Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[?]` pending decision · `[>]` deferred · `[x]` done · `[-]` cancelled
 IDs are permanent — never reuse or renumber. Append new tickets at the end of
 their section.
 
@@ -50,7 +50,7 @@ their section.
 
 Line format, kept greppable: `- [<status>] <ID> — <one-line title>`. Optional
 trailing ` (@owner)` or ` (branch: x)` if the user wants it, and the
-`[app: ..] [owner: ..] [by: ..]` tags of **Apps and people** before it; nothing
+`[app: ..] [decide: ..] [owner: ..] [by: ..]` tags of **Apps and people** before it; nothing
 else. Sub-parts are indented two spaces under their parent.
 
 ## Who touched it
@@ -79,22 +79,24 @@ that is two sessions on one ticket, not a merge to resolve.
 
 ## Apps and people
 
-A ticket can say which apps it touches, who it is assigned to and who built it —
-trailing tags on its one line, in this order, before the session tag:
+A ticket can say which apps it touches, who must decide it, who implements it
+and who built it — trailing tags on its one line, in this order, before the
+session tag:
 
 ```
-- [ ] F12 — Bulk delete [app: web, api] [owner: @asha] [by: @vidul, @asha] (@cc-a4f1c9)
+- [ ] F12 — Bulk delete [app: web, api] [decide: @vidul] [owner: @asha] [by: @vidul, @asha] (@cc-a4f1c9)
 ```
 
 Every tag is optional and lines without them stay valid; never add an empty one.
 
 - **People** are `@handles` from `.skillator/team.md`, one per line:
   `- @vidul: vidul@ikran.in, other@x.com`. No team file = no people: no
-  `owner`/`by` tags, no assigning, nothing about people in a list.
+  `decide`/`owner`/`by` tags, no assigning, nothing about people in a list.
 - **Apps** are the workspace folders: `apps/*`, `packages/*`, `services/*`, and
   the package manager's workspaces (`package.json` `"workspaces"`,
   `pnpm-workspace.yaml`); each folder name is an app. No such folder = no apps.
-- `owner` = the person it is assigned to. `by` = authors of commits whose subject
+- `decide` = the person who must make a decision on it. `owner` = the person
+  who implements it. `by` = authors of commits whose subject
   names the ID as a word (`F1` never matches `F12`), mapped to handles; an email
   not in the team file shows as the email. `app` = apps those commits' files
   sit in; it may be hand-set or corrected on the line.
@@ -108,17 +110,33 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh apps            # app names
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh app-of <path>.. # app of a path
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh by F12          # who built it
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh apps-of F12     # apps it touched
-sh <skills>/tickets-zordon/scripts/ticket-meta.sh assign F12 @asha
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh assign F12 @asha   # implements it
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh decide F12 @asha   # must decide it
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh decided F12        # decision made
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # write app + by
 ```
 
-- **"assign F12 to @asha"**, "assign it to asha" → `assign`. It sets or replaces
-  `[owner: ..]` and refuses a handle not in the team file — say so, and offer to
-  add the person there; never invent one.
+**An assignment reopens the ticket.** Whoever it moves to, it must not stay
+closed, deferred or in someone else's progress:
+
+- **"assign F12 to @asha"**, "assign it to asha" → `assign`: sets or replaces
+  `[owner: ..]` and the box becomes `[ ]`, from any state.
+- **"assign it for a decision to @asha"**, "Asha decides F12" → `decide`: sets or
+  replaces `[decide: ..]` and the box becomes `[?]`, from any state.
+- **"decided"**, "Asha decided F12" → `decided`: `[?]` back to `[ ]`; the
+  `[decide: ..]` tag stays as the record. It refuses a ticket that is not `[?]`.
+- The same handle again for the same kind, with the box already `[ ]` (assign)
+  or `[?]` (decide), changes nothing and says `no change`; any other box still
+  moves.
+- Moving a `[~]` ticket drops its trailing session tag `(@cc-…)` and warns which
+  session was working it — tell that session it no longer owns the ticket. A
+  relay lease is per stage and is released when that stage lands or fails.
+- Both refuse a handle not in the team file — say so, and offer to add the
+  person there; never invent one.
 - **`tag <ID>`** when a ticket is closed (`[x]`), and when commits naming it land
   (a merge, a pull). It recomputes `app` and `by` from the commits; with none it
   leaves a hand-set `app` alone.
-- Both print the edited line — that is the read-back. Both write under
+- Every edit prints the edited line — that is the read-back. All write under
   `TICKETS.md.lock`, the lock relay-morpheus's `board` flip takes, and refuse
   after 30 s rather than break someone else's.
 - Tags go before the trailing `(..)` groups and before a bare `Plan: S<n>`, so
@@ -245,6 +263,11 @@ write the ticket.**
   **open**: report it at session end, and unblock back to `[ ]` or `[~]` the
   moment the dependency clears. Never leave an agent spinning on a blocked
   ticket — flip it and move to the next one.
+- Waiting on a person's decision (which option, whether to do it at all) →
+  `[?]` pending decision, via `ticket-meta decide <ID> @who` so the line names
+  who decides. Pending decision is **open**, like blocked: report it at session
+  end, never build it before the decision, and flip it to `[ ]` with
+  `ticket-meta decided <ID>` once the answer is in.
 - Postponed by choice — not now, waiting on a condition that isn't a hard
   dependency (a later milestone, a build that hasn't run, hardware not on the
   bench) → `[>]`, with ` (deferred: <until what>)` on the line. Deferred is
@@ -490,10 +513,11 @@ return results.filter(Boolean)
 Whole board: read `TICKETS.md`. Just the open ones:
 
 ```
-grep -nE '^\s*- \[[ ~!]\]' TICKETS.md
+grep -nE '^\s*- \[[ ~!?]\]' TICKETS.md
 ```
 
-`[x]` and `[-]` are the closed states, so neither shows up there; `[!]` does.
+`[x]` and `[-]` are the closed states, so neither shows up there; `[!]` and
+`[?]` do.
 
 When the user says a bare ID ("do B3", "what's F12"), grep for it and act on
 that line — in `TICKETS-archive.md` if the board does not have it.
@@ -586,12 +610,13 @@ Bugs
 Features
   [ ] F1 — Dark mode
   [ ] F2 — Bulk delete in the table view
+  [?] F3 — Pick the chart library [decide: @asha]
 
 Agent-found
   [ ] A1 — Unhandled promise rejection in the upload worker
   [>] A2 — `parseDate` returns Invalid Date on empty string (deferred: after the parser rewrite)
 
-6 open (4 pending · 1 in-progress · 1 blocked) · 1 deferred · 9 closed (8 done · 1 cancelled) · 16 total
+7 open (4 pending · 1 in-progress · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
 ```
 
 ### By status (`list tickets status`)
@@ -606,6 +631,9 @@ In progress
 Blocked
   [!] B3 — Avatar upload 500s over 5MB (blocked: needs S3 creds from ops)
 
+Pending decision
+  [?] F3 — Pick the chart library [decide: @asha]
+
 Deferred
   [>] A2 — `parseDate` returns Invalid Date on empty string (deferred: after the parser rewrite)
 
@@ -615,7 +643,7 @@ Pending
   [ ] F2 — Bulk delete in the table view
   [ ] A1 — Unhandled promise rejection in the upload worker
 
-6 open (4 pending · 1 in-progress · 1 blocked) · 1 deferred · 9 closed (8 done · 1 cancelled) · 16 total
+7 open (4 pending · 1 in-progress · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
 ```
 
 A sub-part shown away from its parent carries the parent ID in trailing
@@ -632,34 +660,35 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
   always**, no matter how many there are. A long title truncates at ~80 chars
   with `…`; it never disappears. If the board is too long to print, **page it —
   never abbreviate it** (below).
-- **Open and deferred, by default** (`[ ]`, `[~]`, `[!]`, `[>]`) — every
+- **Open and deferred, by default** (`[ ]`, `[~]`, `[!]`, `[?]`, `[>]`) — every
   deferred ticket is listed, just counted apart. Closed tickets on request
   ("show everything", "what did we finish") — then `[x]` and `[-]` too.
 - **Drop empty sections.** No "Features: none", no empty `Blocked`.
 - **Blocked and deferred show their reason**; that is the whole point of
-  `[!]` and `[>]`.
-- **The counts must add up, and the line must show its work.** Six mutually
+  `[!]` and `[>]`. Pending decision shows who decides — its `[decide: ..]` tag.
+- **The counts must add up, and the line must show its work.** Seven mutually
   exclusive states, two buckets and a loner:
-  `open = pending + in-progress + blocked` (blocked is open, just stuck) ·
+  `open = pending + in-progress + blocked + pending decision` (blocked and
+  pending decision are open, just waiting) ·
   `closed = done + cancelled` · deferred is **neither** — it stands alone
   between them, so it never inflates the open count someone is judging the
   week by · `total = open + deferred + closed`. Each bucket prints its own
   subtotal with the breakdown in parentheses, so the arithmetic is checkable on
   sight and blocked is never mistaken for a bucket beside open.
-- **Always print all six states, zeros included.** Never drop a term because
+- **Always print all seven states, zeros included.** Never drop a term because
   it is `0`. `0 blocked` is information — it says nothing is stuck, which is
   exactly what someone scanning the board wants to know — and a fixed-shape line
   can be compared against last session's at a glance. An empty board still
   prints the full line:
 
   ```
-  0 open (0 pending · 0 in-progress · 0 blocked) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total
+  0 open (0 pending · 0 in-progress · 0 blocked · 0 pending decision) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total
   ```
 - **One count line after the list**, and nothing else. No commentary on the
   board's health, no suggested next ticket unless asked:
 
   ```
-  6 open (4 pending · 1 in-progress · 1 blocked) · 1 deferred · 9 closed (8 done · 1 cancelled) · 16 total
+  7 open (4 pending · 1 in-progress · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
   ```
 - Legend only if the user seems new to the board, and then one line.
 
@@ -668,7 +697,7 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
 Long boards are where the list is *most* needed and most often ruined. Do not
 compress by dropping titles. Compress by **showing less of the board, in full**:
 
-1. **In-progress and blocked print in full, always.** However big the board,
+1. **In-progress, blocked and pending decision print in full, always.** However big the board,
    that is what the person asking is actually working on and stuck behind.
 2. **Pending prints in full up to 20 lines per section**, oldest first. Over
    that, print 20 and add one line naming the rest and how to see it:
@@ -680,7 +709,7 @@ compress by dropping titles. Compress by **showing less of the board, in full**:
    files drift: a `B68` logged during a burst of agent findings ends up under
    `## Agent-found` and stays there forever. The ID is the classification; the
    heading is just where the line happened to land. Sort within a group by status
-   (in-progress, blocked, deferred, pending) then by number.
+   (in-progress, blocked, pending decision, deferred, pending) then by number.
 4. **`list tickets <prefix>`** (`list tickets A`, `list tickets B`) scopes to one
    type and prints it whole, no cap. That is the escape hatch the truncation line
    points at, so it must actually work.

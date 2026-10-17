@@ -1,0 +1,19 @@
+# GREEN - an assignment reopens a ticket (F45, tickets-zordon)
+# 2026-10-17, claude-code 2.1.301, claude-opus-5-5. Harness `cmd green`,
+# BASELINE_ISOLATE=hide (restored), BASELINE_TIMEOUT=1200, run in the
+# foreground. Prefix from the working tree with F45 and its review fixes.
+# Fixture: practice/baselines/fixture-tickets-monorepo.sh (F1, F2 done [x];
+# team.md @vidul @asha). Scenario: scenario-tickets-reassign-f45.txt.
+# Transcript: transcripts/f45-green-2.* ($0.50). (f45-green-0-killed.* was
+# reaped by Claude Code mid-run under low memory; a second attempt ran on a
+# half-deleted fixture and was discarded.)
+#
+# Sequence: Skill(tickets-zordon) -> read TICKETS.md + team.md -> ticket-meta
+#   assign F1 @vidul, decide F2 @asha (one compound command refused for quoted
+#   text, the decide re-run on its own) -> grep + git diff read-back.
+# Board after:
+#   - [ ] F1 — product grid on the home page [owner: @vidul]       (from [x])
+#   - [?] F2 — /orders endpoint returns the last 20 orders [decide: @asha]  (from [x])
+#   B1 unchanged. The reply shows both lines and explains [?] as "pending
+#   decision" and that F2 returns to pending once Asha decides.
+# VERDICT: GREEN 1/1.

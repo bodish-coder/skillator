@@ -1322,9 +1322,10 @@ function DoLand {
 # F36 (D1): TICKETS.md is written in the main checkout only, under its own
 # lock - one board, however many run worktrees there are.
 function DoBoard {
-  if (-not $Ticket -or $null -eq $Mark) { Die "usage: -Mode board -Ticket <ID> -Mark <' '|~|x|!|>|->" }
+  if (-not $Ticket -or $null -eq $Mark) { Die "usage: -Mode board -Ticket <ID> -Mark <' '|~|x|!|?|>|->" }
   if ($Ticket -cnotmatch '^[A-Z]{1,3}[0-9]+[a-z]?$') { Die "board: '$Ticket' is not a ticket id" }
-  if ($Mark -cnotin @(' ', '~', 'x', '!', '>', '-')) { Die "board: mark is one of ' ' ~ x ! > -" }
+  # F45: '?' is pending decision (tickets-zordon), an open state like '!'.
+  if ($Mark -cnotin @(' ', '~', 'x', '!', '?', '>', '-')) { Die "board: mark is one of ' ' ~ x ! ? > -" }
   $m = MainOf; if (-not $m) { $m = (Get-Location).Path }
   $f = "$m/TICKETS.md"; if (-not (Test-Path -LiteralPath $f)) { Die "board: no $f" }
   $sv = $script:Lock; $script:Lock = $null
@@ -3127,6 +3128,10 @@ function DoSelftest {
       $o = R6 @('-Mode', 'board', '-Ticket', 'F9', '-Mark', '~'); if ($o.rc -ne 0) { Die "F36: board failed: $($o.out)" }
       $tl = [IO.File]::ReadAllText("$d6/TICKETS.md")
       if (-not $tl.Contains("- [~] F9 $([char]0x2014) lease me`n") -or -not $tl.Contains("- [ ] F90 $([char]0x2014) not me")) { Die "F36: board flipped the wrong line: $tl" }
+      # F45: '?' (pending decision) is a mark like the others.
+      $o = R6 @('-Mode', 'board', '-Ticket', 'F9', '-Mark', '?'); if ($o.rc -ne 0) { Die "F45: board refused mark '?': $($o.out)" }
+      $tl = [IO.File]::ReadAllText("$d6/TICKETS.md")
+      if (-not $tl.Contains("- [?] F9 $([char]0x2014) lease me`n") -or -not $tl.Contains("- [ ] F90 $([char]0x2014) not me")) { Die "F45: board did not set [?]: $tl" }
       if ((R6 @('-Mode', 'board', '-Ticket', 'F91', '-Mark', 'x')).rc -eq 0) { Die "F36: board accepted a missing ticket" }
       if ((Test-Path "$d6/TICKETS.md.lock") -or (Test-Path "$reg.lock")) { Die "F36: a lock was left behind" }
     } finally { $env:RELAY_LEVEL_CMD = $svl }

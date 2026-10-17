@@ -39,5 +39,5 @@ const next =
   html.slice(0, a + BEGIN.length) + "\n" + safe.replace(/\s*$/, "") + "\n" + html.slice(b);
 
 await writeFile(outPath, next);
-const n = (md.match(/^\s*[-*]\s+\[[ x~!>\-]\]/gm) || []).length;
+const n = (md.match(/^\s*[-*]\s+\[[ x~!?>\-]\]/gm) || []).length;
 console.log(`refresh: baked ${n} ticket lines from ${mdPath} into ${outPath}`);

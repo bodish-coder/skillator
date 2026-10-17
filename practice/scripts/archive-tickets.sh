@@ -256,6 +256,7 @@ selftest() {
 - [x] F3 - old, with a continuation line
    continuation of F3
 - [>] F4 - deferred, old
+- [?] F5 - pending decision, old [decide: @asha]
 EOF
   GIT_COMMITTER_DATE="@$old" GIT_AUTHOR_DATE="@$old" g add TICKETS.md
   GIT_COMMITTER_DATE="@$old" GIT_AUTHOR_DATE="@$old" g commit -q -m old
@@ -274,7 +275,7 @@ EOF
   [ "$(cat TICKETS.md)" = "$before" ] || fail "--dry-run wrote the board"
   [ ! -f TICKETS-archive.md ] || fail "--dry-run wrote the archive"
   for id in B1 F1 F1a F1b F3; do echo "$out" | grep -q "  $id " || fail "dry run omits $id: $out"; done
-  for id in B2 B3 B9 F2 F2a F4; do echo "$out" | grep -q "  $id " && fail "dry run would move $id: $out"; done
+  for id in B2 B3 B9 F2 F2a F4 F5; do echo "$out" | grep -q "  $id " && fail "dry run would move $id: $out"; done
 
   b0=$(wc -l < TICKETS.md | tr -d ' ')
   sh "$me" > "$t/out" || fail "real run errored: $(cat "$t/out")"
@@ -283,9 +284,10 @@ EOF
     grep -q "\] $id " TICKETS-archive.md || fail "$id missing from the archive"
   done
   grep -q '^   continuation of F3$' TICKETS-archive.md || fail "continuation line lost"
-  for id in B2 B3 B9 F2 F2a F2b F4; do grep -q "\] $id " TICKETS.md || fail "$id left the board"; done
+  # F45: [?] (pending decision) is open - an old one is never archived.
+  for id in B2 B3 B9 F2 F2a F2b F4 F5; do grep -q "\] $id " TICKETS.md || fail "$id left the board"; done
   ka=$(grep -c '^ *- \[' TICKETS.md); kb=$(grep -c '^ *- \[' TICKETS-archive.md)
-  [ "$ka" = 7 ] && [ "$kb" = 5 ] || fail "ticket lines: want 7 + 5, got $ka + $kb"
+  [ "$ka" = 8 ] && [ "$kb" = 5 ] || fail "ticket lines: want 8 + 5, got $ka + $kb"
   b1=$(wc -l < TICKETS.md | tr -d ' ')
   sq=$(sed -n 's/.*+ \([0-9]*\) blank squeezed.*/\1/p' "$t/out")
   [ $((b1 + 6 + sq)) = "$b0" ] || fail "line count: $b0 != $b1 + 6 moved + $sq squeezed ($(cat "$t/out"))"
@@ -308,7 +310,7 @@ EOF
   printf -- '- [ ] B2 - duplicate\n' >> TICKETS.md
   if sh "$me" >/dev/null 2>&1; then fail "archived a board with a duplicate ID"; fi
   if sh "$me" --days x >/dev/null 2>&1; then fail "--days x accepted"; fi
-  echo "ok - archive-tickets.sh selftest passed (dry run writes nothing, flip date not last edit, parent waits for parts, continuation moves, uncommitted close stays, second run appends, --days, refuses a bad board)"
+  echo "ok - archive-tickets.sh selftest passed (dry run writes nothing, flip date not last edit, parent waits for parts, continuation moves, uncommitted close stays, old [?] stays, second run appends, --days, refuses a bad board)"
 }
 
 dry=0 days=14 board= want=

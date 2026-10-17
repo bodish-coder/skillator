@@ -6,7 +6,9 @@
 #   ticket-meta.sh app-of <path>...     the app(s) those paths belong to
 #   ticket-meta.sh by <ID>              @handles (or emails) of the ticket's committers
 #   ticket-meta.sh apps-of <ID>         apps the ticket's commits touched
-#   ticket-meta.sh assign <ID> @handle  set [owner: @handle] on the ticket's line
+#   ticket-meta.sh assign <ID> @handle  [owner: @handle] (implements it), box -> [ ]
+#   ticket-meta.sh decide <ID> @handle  [decide: @handle] (must decide), box -> [?]
+#   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
 #   ticket-meta.sh tag <ID>             recompute [app: ..] and [by: ..] on it
 #   ticket-meta.sh selftest             fixture repo, every subcommand, prints ok
 #
@@ -191,7 +193,10 @@ board_unlock() {
 }
 
 # Rewrite the one line of $ID in the board, under the board lock. SET_APP /
-# SET_OWNER / SET_BY from the environment; an empty one leaves that tag as is.
+# SET_DECIDE / SET_OWNER / SET_BY from the environment; an empty one leaves that
+# tag as is. SET_MARK sets the box; NEED_MARK refuses a line whose box is not
+# that; SAME_KEY + SAME_VAL: a line already carrying [SAME_KEY: SAME_VAL] is
+# left exactly as it is (box included), and that is said.
 # The line is `[indent]- [<mark>] <ID> <dash> ...`, loose spacing allowed, the
 # dash an em dash, an en dash or a hyphen - the shapes the viewers accept.
 edit_line() {
@@ -201,20 +206,44 @@ edit_line() {
   re="^[ \t]*- \\[.\\][ \t]+$ID[ \t]*($EMD|$ENDASH|-)"
   n=$(RE=$re awk '$0 ~ ENVIRON["RE"] { c++ } END { print c + 0 }' "$f")
   [ "$n" = 1 ] || die "$ID: $n matching lines in $f, need exactly 1"
+  cur=$(RE=$re awk '$0 ~ ENVIRON["RE"]' "$f" | tr -d '\r')
+  mk=$(printf '%s\n' "$cur" | awk '{ match($0, /- \[/); print substr($0, RSTART + 3, 1) }')
+  if [ -n "${NEED_MARK:-}" ] && [ "$mk" != "$NEED_MARK" ]; then
+    die "$ID is [$mk], not [$NEED_MARK] - nothing to change"
+  fi
+  if [ -n "${SAME_KEY:-}" ]; then
+    v=$(printf '%s\n' "$cur" | K=$SAME_KEY awk '{ if (match($0, "\\[" ENVIRON["K"] ":[ \t]*[^]]*\\]")) {
+          v = substr($0, RSTART, RLENGTH); sub(/^\[[^:]*:[ \t]*/, "", v); sub(/[ \t]*\]$/, "", v); print v } }')
+    # a no-op only when the box is already where this assignment puts it
+    if [ "$v" = "$SAME_VAL" ] && [ "$mk" = "${SET_MARK:-}" ]; then
+      board_unlock
+      printf '%s\n' "$cur"
+      echo "no change: $ID already has [$SAME_KEY: $SAME_VAL]"
+      return 0
+    fi
+  fi
+  # Moving a line out of [~] drops the working session's trailing (@agent-id)
+  # tag - only that exact shape - and names that session afterwards.
+  drop=0 sess=''
+  if [ "$mk" = '~' ] && [ -n "${SET_MARK:-}" ] && [ "$SET_MARK" != '~' ]; then
+    drop=1
+    sess=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/)) {
+          s = substr($0, RSTART + 1); sub(/\).*/, "", s); print s } }')
+  fi
   eol=0
   [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ] && eol=1
   tmp="$f.ticket-meta.$$"
-  RE=$re EOL=$eol awk '
+  RE=$re EOL=$eol DROP=$drop awk '
     function find(line, key) { return match(line, "[ \t]*\\[" key ":[ \t]*[^]]*\\]") }
-    # A tag goes where it is, else before the next tag in app/owner/by order,
+    # A tag goes where it is, else before the next tag in app/decide/owner/by order,
     # else before the trailing (..) groups and a bare "Plan: S<n>" before them
     # (check-tickets must still see that pointer as bare).
     function settag(line, key, val,    i, pos, head) {
       if (find(line, key))
         return substr(line, 1, RSTART - 1) " [" key ": " val "]" substr(line, RSTART + RLENGTH)
       pos = 0
-      for (i = 1; i <= 3; i++) if (ORD[i] == key) break
-      for (i = i + 1; i <= 3; i++)
+      for (i = 1; i <= 4; i++) if (ORD[i] == key) break
+      for (i = i + 1; i <= 4; i++)
         if (find(line, ORD[i]) && (pos == 0 || RSTART < pos)) pos = RSTART
       if (pos == 0) {
         pos = length(line) + 1
@@ -224,11 +253,16 @@ edit_line() {
       }
       return substr(line, 1, pos - 1) " [" key ": " val "]" substr(line, pos)
     }
-    BEGIN { ORD[1] = "app"; ORD[2] = "owner"; ORD[3] = "by"; re = ENVIRON["RE"] }
+    BEGIN { ORD[1] = "app"; ORD[2] = "decide"; ORD[3] = "owner"; ORD[4] = "by"; re = ENVIRON["RE"] }
     { line = $0; cr = ""
       if (sub(/\r$/, "", line)) cr = "\r"
       if (line ~ re) {
+        if (ENVIRON["SET_MARK"] != "") {
+          match(line, /- \[/); line = substr(line, 1, RSTART + 2) ENVIRON["SET_MARK"] substr(line, RSTART + 4)
+        }
+        if (ENVIRON["DROP"] == "1") sub(/[ \t]*\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/, "", line)
         if (ENVIRON["SET_APP"] != "") line = settag(line, "app", ENVIRON["SET_APP"])
+        if (ENVIRON["SET_DECIDE"] != "") line = settag(line, "decide", ENVIRON["SET_DECIDE"])
         if (ENVIRON["SET_OWNER"] != "") line = settag(line, "owner", ENVIRON["SET_OWNER"])
         if (ENVIRON["SET_BY"] != "") line = settag(line, "by", ENVIRON["SET_BY"])
       }
@@ -238,17 +272,43 @@ edit_line() {
   mv -f "$tmp" "$f" || { rm -f "$tmp"; die "cannot replace $f"; }
   board_unlock
   RE=$re awk '$0 ~ ENVIRON["RE"]' "$f"
+  if [ "$drop" = 1 ]; then
+    if [ -n "$sess" ]; then
+      echo "warning: $ID was in progress under $sess - that session is no longer the owner; tell it"
+    else
+      echo "warning: $ID was in progress - whoever was working it is no longer the owner; tell them"
+    fi
+  fi
 }
 
-cmd_assign() {
-  [ $# -eq 2 ] || die "usage: assign <ID> @handle"
+# <ID> @handle -> ID, HANDLE; the handle must be in the team file.
+id_and_handle() {
+  [ $# -eq 2 ] || die "usage: $CMD <ID> @handle"
   norm_id "$1"
-  h=$2
-  case $h in @*) ;; *) h="@$h" ;; esac
-  one_line "$h" && printf '%s' "$h" | grep -Eqx '@[A-Za-z0-9_.-]+' || die "not a handle (@name): $2"
+  HANDLE=$2
+  case $HANDLE in @*) ;; *) HANDLE="@$HANDLE" ;; esac
+  one_line "$HANDLE" && printf '%s' "$HANDLE" | grep -Eqx '@[A-Za-z0-9_.-]+' || die "not a handle (@name): $2"
   team_file > /dev/null || die "no .skillator/team.md - this repo has no people; add one to assign"
-  team_rows | awk '{ print $1 }' | grep -qxF -- "$h" || die "$h is not in .skillator/team.md"
-  SET_APP='' SET_OWNER=$h SET_BY='' edit_line
+  team_rows | awk '{ print $1 }' | grep -qxF -- "$HANDLE" || die "$HANDLE is not in .skillator/team.md"
+}
+
+# F45: an assignment reopens. Implementation -> [owner:] and the box [ ];
+# decision -> [decide:] and the box [?]; the same handle again changes nothing.
+cmd_assign() {
+  CMD=assign; id_and_handle "$@"
+  SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER=$HANDLE SET_BY='' SAME_KEY=owner SAME_VAL=$HANDLE NEED_MARK='' edit_line
+}
+
+cmd_decide() {
+  CMD=decide; id_and_handle "$@"
+  SET_MARK='?' SET_APP='' SET_DECIDE=$HANDLE SET_OWNER='' SET_BY='' SAME_KEY=decide SAME_VAL=$HANDLE NEED_MARK='' edit_line
+}
+
+# The decision is made: [?] -> [ ]; the [decide:] tag stays as the record.
+cmd_decided() {
+  [ $# -eq 1 ] || die "usage: decided <ID>"
+  norm_id "$1"
+  SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' SAME_KEY='' NEED_MARK='?' edit_line
 }
 
 cmd_tag() {
@@ -257,7 +317,7 @@ cmd_tag() {
   info=$(commits_info "$ID")
   a=$(printf '%s\n' "$info" | apps_from | join_list)
   b=$(printf '%s\n' "$info" | by_from | join_list)
-  SET_APP=$a SET_OWNER='' SET_BY=$b edit_line
+  SET_MARK='' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b SAME_KEY='' NEED_MARK='' edit_line
 }
 
 selftest() {
@@ -306,13 +366,13 @@ selftest() {
   sh "$self" assign F1 @nobody > /dev/null 2>&1 && { echo "FAIL: assign accepted an unknown handle"; fail=1; }
   cmp -s TICKETS.md "$T/before.md" || { echo "FAIL: refused assign changed the board"; fail=1; }
   eq "assign F12" "$(run assign F12 @asha)" "- [ ] F12 $D Bulk delete [owner: @asha]"
-  eq "assign F1" "$(run assign F1 asha)" "- [~] F1 $D Dark mode [owner: @asha] (@cc-bbbbbb)"
-  eq "reassign F1" "$(run assign F1 @vidul)" "- [~] F1 $D Dark mode [owner: @vidul] (@cc-bbbbbb)"
-  eq "tag F1" "$(run tag F1)" "- [~] F1 $D Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)"
+  eq "assign F1" "$(run assign F1 asha)" "- [ ] F1 $D Dark mode [owner: @asha] warning: F1 was in progress under @cc-bbbbbb - that session is no longer the owner; tell it"
+  eq "reassign F1" "$(run assign F1 @vidul)" "- [ ] F1 $D Dark mode [owner: @vidul]"
+  eq "tag F1" "$(run tag F1)" "- [ ] F1 $D Dark mode [app: ui, web] [owner: @vidul] [by: @vidul]"
   eq "tag B2" "$(run tag B2)" "- [ ] B2 $D Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)"
   eq "tag F3 keeps hand app" "$(run tag F3)" "- [ ] F3 $D Hand tagged [app: web] (@cc-cccccc)"
   sh "$self" tag F9 > /dev/null 2>&1 && { echo "FAIL: tag accepted a missing ticket"; fail=1; }
-  printf '# TICKETS\n\n## Bugs\n\n- [ ] B2 %s Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)\n\n## Features\n\n- [~] F1 %s Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)\n- [ ] F12 %s Bulk delete [owner: @asha]\n- [ ] F3 %s Hand tagged [app: web] (@cc-cccccc)\n' \
+  printf '# TICKETS\n\n## Bugs\n\n- [ ] B2 %s Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)\n\n## Features\n\n- [ ] F1 %s Dark mode [app: ui, web] [owner: @vidul] [by: @vidul]\n- [ ] F12 %s Bulk delete [owner: @asha]\n- [ ] F3 %s Hand tagged [app: web] (@cc-cccccc)\n' \
     "$D" "$D" "$D" "$D" > "$T/want.md"
   cmp -s TICKETS.md "$T/want.md" || { echo "FAIL: board bytes differ beyond the edited tags"; diff "$T/want.md" TICKETS.md; fail=1; }
 
@@ -323,7 +383,7 @@ selftest() {
   mkdir -p apps/web tools/cli tools/other .skillator
   for d in apps/web tools/cli tools/other; do echo x > "$d/f.txt"; done
   printf '{\n  "name": "edge",\n  "workspaces": {\n    "nohoist": ["tools/*"],\n    "packages": ["apps/*", "tools/cli"]\n  }\n}\n' > package.json
-  printf -- '- @vidul: vidul@ikran.in\n' > .skillator/team.md
+  printf -- '- @vidul: vidul@ikran.in\n- @asha: asha@x.com\n' > .skillator/team.md
   printf -- '# TICKETS\n\n- [ ] F4 %s Hand owner [owner:@vidul] (@cc-111111)\n- [ ]  F7%s Spacing\n- [ ] F8 - Hyphen\n  - [ ] F8a %s Sub part\n- [x] F5 %s Shipped Plan: S3 (@cc-222222)\n- [x] F6 %s Done right, RED/GREEN 3/3 (@cc-333333)\n' \
     "$D" "$D" "$D" "$D" "$D" > TICKETS.md
   commit vidul@ikran.in "init" README.md
@@ -347,7 +407,7 @@ selftest() {
   sh "$self" assign F4 "@vidul$NL" > /dev/null 2>&1 && { echo "FAIL: assign took a handle ending in a line break"; fail=1; }
   cmp -s TICKETS.md "$T/edge0.md" || { echo "FAIL: a refused argument changed the board"; fail=1; }
   # 3: a hand-written [owner:@x] is replaced, not duplicated
-  eq "hand tag replaced" "$(run assign F4 @vidul)" "- [ ] F4 $D Hand owner [owner: @vidul] (@cc-111111)"
+  eq "hand tag replaced" "$(run assign F4 @asha)" "- [ ] F4 $D Hand owner [owner: @asha] (@cc-111111)"
   [ ! -e TICKETS.md.lock ] || { echo "FAIL: our board lock was left behind"; fail=1; }
   # 9: loose spacing, a hyphen, a sub-part, a lower-case id
   eq "loose line" "$(run assign f7 @vidul)" "- [ ]  F7$D Spacing [owner: @vidul]"
@@ -384,6 +444,76 @@ selftest() {
   sh "$self" by F1 > "$T/out" 2>&1 || { echo "FAIL: by failed in a repo with no commits: $(cat "$T/out")"; fail=1; }
   eq "empty repo tag" "$(run tag F1)" "- [ ] F1 $D New"
 
+  # --- F45: assigning reopens; a decision assignment is the [?] state
+  A="$T/f45"
+  mkdir -p "$A/.skillator" && cd "$A" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  printf -- '- @vidul: vidul@ikran.in\n- @asha: asha@x.com\n' > .skillator/team.md
+  {
+    printf -- '# TICKETS\n\n'
+    printf -- '- [x] F20 %s Done thing (@cc-1)\n' "$D"
+    printf -- '- [>] F21 %s Later thing (deferred: q4) (@cc-2)\n' "$D"
+    printf -- '- [ ] F22 %s Open thing\n' "$D"
+    printf -- '- [-] F23 %s Dropped thing\n' "$D"
+    printf -- '- [?] F24 %s Waiting [decide: @asha]\n' "$D"
+    printf -- '- [ ] F25 %s Both [app: web] [by: @vidul]\n' "$D"
+    printf -- '- [x] F26 %s Shipped (@cc-3)\n' "$D"
+    printf -- '- [x] F27 %s Kept [owner: @asha]\n' "$D"
+    printf -- '- [ ] F28 %s Decided before [decide: @asha]\n' "$D"
+    printf -- '- [?] F29 %s Owner waiting [owner: @vidul]\n' "$D"
+    printf -- '- [~] F31 %s Working (@cc-bbbbbb)\n' "$D"
+    printf -- '- [~] F32 %s Busy (a note) (@cc-cccccc)\n' "$D"
+  } > TICKETS.md
+  commit vidul@ikran.in "init" README.md
+  eq "decide from [x]" "$(run decide F20 @asha)" "- [?] F20 $D Done thing [decide: @asha] (@cc-1)"
+  eq "decide from [>]" "$(run decide F21 asha)" "- [?] F21 $D Later thing [decide: @asha] (deferred: q4) (@cc-2)"
+  eq "decide from [ ]" "$(run decide F22 @vidul)" "- [?] F22 $D Open thing [decide: @vidul]"
+  eq "assign from [?]" "$(run assign F20 @vidul)" "- [ ] F20 $D Done thing [decide: @asha] [owner: @vidul] (@cc-1)"
+  eq "assign from [-]" "$(run assign F23 @vidul)" "- [ ] F23 $D Dropped thing [owner: @vidul]"
+  eq "assign from [x]" "$(run assign F26 @asha)" "- [ ] F26 $D Shipped [owner: @asha] (@cc-3)"
+  eq "decided" "$(run decided F24)" "- [ ] F24 $D Waiting [decide: @asha]"
+  # the same handle with the box not yet the target still moves the box
+  eq "same owner from [x]" "$(run assign F27 @asha)" "- [ ] F27 $D Kept [owner: @asha]"
+  eq "same decider from [ ]" "$(run decide F28 @asha)" "- [?] F28 $D Decided before [decide: @asha]"
+  eq "same owner from [?]" "$(run assign F29 @vidul)" "- [ ] F29 $D Owner waiting [owner: @vidul]"
+  cp TICKETS.md "$T/f45a.md"
+  sh "$self" decided F23 > /dev/null 2>&1 && { echo "FAIL: decided flipped a ticket that is not [?]"; fail=1; }
+  sh "$self" decided "$(printf 'F22\nF23')" > /dev/null 2>&1 && { echo "FAIL: decided took a multi-line id"; fail=1; }
+  sh "$self" decide F23 "@asha$NL" > /dev/null 2>&1 && { echo "FAIL: decide took a handle ending in a line break"; fail=1; }
+  sh "$self" decide F23 @nobody > /dev/null 2>&1 && { echo "FAIL: decide took an unknown handle"; fail=1; }
+  cmp -s TICKETS.md "$T/f45a.md" || { echo "FAIL: a refused decide/decided changed the board"; fail=1; }
+  # same handle, same kind, box already the target: nothing changes - and it says so
+  sh "$self" assign F27 @asha > "$T/out" 2>&1 || { echo "FAIL: same-handle assign failed: $(cat "$T/out")"; fail=1; }
+  grep -q 'no change' "$T/out" || { echo "FAIL: same-handle assign did not say no change: $(cat "$T/out")"; fail=1; }
+  sh "$self" decide F28 @asha > "$T/out" 2>&1 || { echo "FAIL: same-handle decide failed: $(cat "$T/out")"; fail=1; }
+  grep -q 'no change' "$T/out" || { echo "FAIL: same-handle decide did not say no change: $(cat "$T/out")"; fail=1; }
+  cmp -s TICKETS.md "$T/f45a.md" || { echo "FAIL: a same-handle assignment changed the board"; fail=1; }
+  # tag order: app, decide, owner, by
+  eq "decide between tags" "$(run decide F25 @asha)" "- [?] F25 $D Both [app: web] [decide: @asha] [by: @vidul]"
+  eq "owner after decide" "$(run assign F25 @vidul)" "- [ ] F25 $D Both [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]"
+  # leaving [~] drops that session's tag and says whose it was; other (..) stay
+  sh "$self" assign F31 @asha > "$T/out" 2>&1 || { echo "FAIL: assign of a [~] ticket failed: $(cat "$T/out")"; fail=1; }
+  eq "assign from [~]" "$(head -n 1 "$T/out" | tr -d '\r')" "- [ ] F31 $D Working [owner: @asha]"
+  grep -q 'F31 was in progress under @cc-bbbbbb' "$T/out" || { echo "FAIL: no warning naming the [~] session: $(cat "$T/out")"; fail=1; }
+  sh "$self" decide F32 @vidul > "$T/out" 2>&1 || { echo "FAIL: decide of a [~] ticket failed: $(cat "$T/out")"; fail=1; }
+  eq "decide from [~]" "$(head -n 1 "$T/out" | tr -d '\r')" "- [?] F32 $D Busy [decide: @vidul] (a note)"
+  grep -q 'F32 was in progress under @cc-cccccc' "$T/out" || { echo "FAIL: no warning naming the [~] session: $(cat "$T/out")"; fail=1; }
+  {
+    printf -- '# TICKETS\n\n'
+    printf -- '- [ ] F20 %s Done thing [decide: @asha] [owner: @vidul] (@cc-1)\n' "$D"
+    printf -- '- [?] F21 %s Later thing [decide: @asha] (deferred: q4) (@cc-2)\n' "$D"
+    printf -- '- [?] F22 %s Open thing [decide: @vidul]\n' "$D"
+    printf -- '- [ ] F23 %s Dropped thing [owner: @vidul]\n' "$D"
+    printf -- '- [ ] F24 %s Waiting [decide: @asha]\n' "$D"
+    printf -- '- [ ] F25 %s Both [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]\n' "$D"
+    printf -- '- [ ] F26 %s Shipped [owner: @asha] (@cc-3)\n' "$D"
+    printf -- '- [ ] F27 %s Kept [owner: @asha]\n' "$D"
+    printf -- '- [?] F28 %s Decided before [decide: @asha]\n' "$D"
+    printf -- '- [ ] F29 %s Owner waiting [owner: @vidul]\n' "$D"
+    printf -- '- [ ] F31 %s Working [owner: @asha]\n' "$D"
+    printf -- '- [?] F32 %s Busy [decide: @vidul] (a note)\n' "$D"
+  } > "$T/want45.md"
+  cmp -s TICKETS.md "$T/want45.md" || { echo "FAIL: F45 board bytes"; diff "$T/want45.md" TICKETS.md; fail=1; }
+
   # --- solo, non-monorepo: no workspace folders, no team.md
   S="$T/solo"
   mkdir -p "$S/src" && cd "$S" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
@@ -401,7 +531,7 @@ selftest() {
   echo ok
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|tag|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|tag|selftest"
 c=$1; shift
 [ "$c" = selftest ] && { selftest; exit 0; }
 need_git
@@ -413,6 +543,8 @@ case $c in
   by) [ $# -eq 1 ] || die "usage: by <ID>"; norm_id "$1"; commits_info "$ID" | by_from ;;
   apps-of) [ $# -eq 1 ] || die "usage: apps-of <ID>"; norm_id "$1"; commits_info "$ID" | apps_from ;;
   assign) cmd_assign "$@" ;;
+  decide) cmd_decide "$@" ;;
+  decided) cmd_decided "$@" ;;
   tag) cmd_tag "$@" ;;
   *) die "unknown subcommand: $c" ;;
 esac

@@ -78,6 +78,19 @@ EOF
     exit 1
   fi
 
+  # F45: [?] (pending decision) is a ticket state like any other: a board with
+  # one passes, it is open (a bare Plan pointer on it is fine), and its ID
+  # still counts toward duplicates.
+  printf '# Board\n\n- [?] A6 - waiting on a decision [decide: @asha]. Plan: S4\n- [ ] A7 - open\n' > "$stmp/q.md"
+  sh "$0" "$stmp/q.md" >"$stmp/q.out" 2>&1 || {
+    echo "SELFTEST FAIL: a board with a [?] line failed" >&2; cat "$stmp/q.out" >&2; exit 1; }
+  grep -q '2 ticket IDs' "$stmp/q.out" || {
+    echo "SELFTEST FAIL: [?] line not counted as a ticket" >&2; cat "$stmp/q.out" >&2; exit 1; }
+  printf -- '- [?] A7 - same number, pending decision\n' >> "$stmp/q.md"
+  if sh "$0" "$stmp/q.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: a [?] line duplicating an ID passed" >&2; exit 1
+  fi
+
   # A92: with no argument the board is the current git repo's top-level
   # TICKETS.md (from a subdirectory too), else the current directory's -
   # never the board beside this script.

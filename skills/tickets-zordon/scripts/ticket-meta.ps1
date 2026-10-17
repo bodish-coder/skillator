@@ -2,7 +2,8 @@
 # ticket-meta.sh, which carries the full reasoning; same output, keep in step.
 #
 #   ticket-meta.ps1 apps | app-of <path>... | by <ID> | apps-of <ID>
-#   ticket-meta.ps1 assign <ID> @handle | tag <ID> | selftest
+#   ticket-meta.ps1 assign <ID> @handle | decide <ID> @handle | decided <ID>
+#   ticket-meta.ps1 tag <ID> | selftest
 #
 # Windows PowerShell 5.1 safe: no ?:, ??, && or ||.
 $ErrorActionPreference = 'Stop'
@@ -231,16 +232,16 @@ function Find-Tag([string]$line, [string]$key) {
   return [regex]::Match($line, '[ \t]*\[' + $key + ':[ \t]*[^\]]*\]')
 }
 
-# A tag goes where it is, else before the next tag in app/owner/by order, else
+# A tag goes where it is, else before the next tag in app/decide/owner/by order, else
 # before the trailing (..) groups and a bare "Plan: S<n>" before them
 # (check-tickets must still see that pointer as bare).
 function Set-Tag([string]$line, [string]$key, [string]$val) {
   $tag = " [$key" + ": $val]"
   $m = Find-Tag $line $key
   if ($m.Success) { return $line.Substring(0, $m.Index) + $tag + $line.Substring($m.Index + $m.Length) }
-  $ord = @('app', 'owner', 'by')
+  $ord = @('app', 'decide', 'owner', 'by')
   $pos = -1
-  for ($i = [array]::IndexOf($ord, $key) + 1; $i -lt 3; $i++) {
+  for ($i = [array]::IndexOf($ord, $key) + 1; $i -lt 4; $i++) {
     $m = Find-Tag $line $ord[$i]
     if ($m.Success -and ($pos -lt 0 -or $m.Index -lt $pos)) { $pos = $m.Index }
   }
@@ -285,10 +286,13 @@ function Unlock-Board {
   $script:LockF = $null
 }
 
-# Rewrite the one line of $id under the board lock; an empty value leaves that
-# tag as it is. The line is `[indent]- [<mark>] <ID> <dash> ...`, loose spacing
-# allowed, the dash an em dash, an en dash or a hyphen.
-function Edit-Line([string]$id, [string]$app, [string]$owner, [string]$by) {
+# Rewrite the one line of $id under the board lock. $o: app / decide / owner /
+# by (an empty or missing value leaves that tag as it is), mark (sets the box),
+# need (refuses a line whose box is not that), samekey + sameval (a line
+# already carrying [samekey: sameval] is left exactly as it is, box included,
+# and that is said). The line is `[indent]- [<mark>] <ID> <dash> ...`, loose
+# spacing allowed, the dash an em dash, an en dash or a hyphen.
+function Edit-Line([string]$id, [hashtable]$o) {
   $f = (Get-MainRoot) + '/TICKETS.md'
   if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { Fail "no TICKETS.md at $f" }
   Lock-Board "$f.lock"
@@ -302,9 +306,32 @@ function Edit-Line([string]$id, [string]$app, [string]$owner, [string]$by) {
     $i = $hits[0]
     $line = $lines[$i]; $cr = ''
     if ($line.EndsWith("`r")) { $cr = "`r"; $line = $line.Substring(0, $line.Length - 1) }
-    if ($app -ne '') { $line = Set-Tag $line 'app' $app }
-    if ($owner -ne '') { $line = Set-Tag $line 'owner' $owner }
-    if ($by -ne '') { $line = Set-Tag $line 'by' $by }
+    $b = $line.IndexOf('- [') + 3
+    $mk = $line.Substring($b, 1)
+    if ($o.need -and $mk -cne $o.need) { Fail "$id is [$mk], not [$($o.need)] - nothing to change" }
+    if ($o.samekey) {
+      $m = [regex]::Match($line, '\[' + $o.samekey + ':[ \t]*([^\]]*?)[ \t]*\]')
+      # a no-op only when the box is already where this assignment puts it
+      if ($m.Success -and $m.Groups[1].Value -ceq $o.sameval -and $mk -ceq $o.mark) {
+        return @($line, "no change: $id already has [$($o.samekey): $($o.sameval)]")
+      }
+    }
+    # Moving a line out of [~] drops the working session's trailing (@agent-id)
+    # tag - only that exact shape - and names that session afterwards.
+    $warn = $null
+    if ($mk -ceq '~' -and $o.mark -and $o.mark -cne '~') {
+      $sm = [regex]::Match($line, '[ \t]*\((@[A-Za-z]+-[A-Za-z0-9]+)\)[ \t]*$')
+      if ($sm.Success) {
+        $line = $line.Substring(0, $sm.Index)
+        $warn = "warning: $id was in progress under $($sm.Groups[1].Value) - that session is no longer the owner; tell it"
+      } else {
+        $warn = "warning: $id was in progress - whoever was working it is no longer the owner; tell them"
+      }
+    }
+    if ($o.mark) { $line = $line.Substring(0, $b) + $o.mark + $line.Substring($b + 1) }
+    foreach ($k in @('app', 'decide', 'owner', 'by')) {
+      if ($o[$k]) { $line = Set-Tag $line $k $o[$k] }
+    }
     $lines[$i] = $line + $cr
     $tmp = "$f.ticket-meta.$PID"
     [System.IO.File]::WriteAllBytes($tmp, $Utf8.GetBytes([string]::Join([string][char]10, $lines)))
@@ -317,11 +344,13 @@ function Edit-Line([string]$id, [string]$app, [string]$owner, [string]$by) {
   } finally {
     Unlock-Board
   }
+  if ($warn) { return @($line, $warn) }
   return $line
 }
 
-function Do-Assign([string[]]$a) {
-  if ($a.Count -ne 2) { Fail 'usage: assign <ID> @handle' }
+# <ID> @handle -> @(id, handle); the handle must be in the team file.
+function Get-IdAndHandle([string]$cmd, [string[]]$a) {
+  if ($a.Count -ne 2) { Fail "usage: $cmd <ID> @handle" }
   $id = Get-NormId $a[0]
   $h = $a[1]
   if (-not $h.StartsWith('@')) { $h = '@' + $h }
@@ -330,7 +359,26 @@ function Do-Assign([string[]]$a) {
   $known = $false
   foreach ($t in (Get-TeamRows)) { if ($t.h -ceq $h) { $known = $true } }
   if (-not $known) { Fail "$h is not in .skillator/team.md" }
-  return (Edit-Line $id '' $h '')
+  return @($id, $h)
+}
+
+# F45: an assignment reopens. Implementation -> [owner:] and the box [ ];
+# decision -> [decide:] and the box [?]; the same handle again changes nothing.
+function Do-Assign([string[]]$a) {
+  $x = Get-IdAndHandle 'assign' $a
+  return (Edit-Line $x[0] @{ mark = ' '; owner = $x[1]; samekey = 'owner'; sameval = $x[1] })
+}
+
+function Do-Decide([string[]]$a) {
+  $x = Get-IdAndHandle 'decide' $a
+  return (Edit-Line $x[0] @{ mark = '?'; decide = $x[1]; samekey = 'decide'; sameval = $x[1] })
+}
+
+# The decision is made: [?] -> [ ]; the [decide:] tag stays as the record.
+function Do-Decided([string[]]$a) {
+  if ($a.Count -ne 1) { Fail 'usage: decided <ID>' }
+  $id = Get-NormId $a[0]
+  return (Edit-Line $id @{ mark = ' '; need = '?' })
 }
 
 function Do-Tag([string[]]$a) {
@@ -339,7 +387,7 @@ function Do-Tag([string[]]$a) {
   $info = Get-Info $id
   $apps = [string]::Join(', ', @(Get-AppsFrom $info))
   $by = [string]::Join(', ', @(Get-ByFrom $info))
-  return (Edit-Line $id $apps '' $by)
+  return (Edit-Line $id @{ app = $apps; by = $by })
 }
 
 function Invoke-Cmd([string]$c, [string[]]$a) {
@@ -351,6 +399,8 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'by' { if ($a.Count -ne 1) { Fail 'usage: by <ID>' }; return (Get-ByFrom (Get-Info (Get-NormId $a[0]))) }
     'apps-of' { if ($a.Count -ne 1) { Fail 'usage: apps-of <ID>' }; return (Get-AppsFrom (Get-Info (Get-NormId $a[0]))) }
     'assign' { return (Do-Assign $a) }
+    'decide' { return (Do-Decide $a) }
+    'decided' { return (Do-Decided $a) }
     'tag' { return (Do-Tag $a) }
     default { Fail "unknown subcommand: $c" }
   }
@@ -431,14 +481,14 @@ function Invoke-Selftest {
     $now = [System.IO.File]::ReadAllBytes("$M/TICKETS.md")
     if ([Convert]::ToBase64String($now) -ne [Convert]::ToBase64String($before)) { Write-Output 'FAIL: refused assign changed the board'; $script:fail = 1 }
     Eq 'assign F12' (Run assign F12 '@asha') "- [ ] F12 $dash Bulk delete [owner: @asha]"
-    Eq 'assign F1' (Run assign F1 'asha') "- [~] F1 $dash Dark mode [owner: @asha] (@cc-bbbbbb)"
-    Eq 'reassign F1' (Run assign F1 '@vidul') "- [~] F1 $dash Dark mode [owner: @vidul] (@cc-bbbbbb)"
-    Eq 'tag F1' (Run tag F1) "- [~] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)"
+    Eq 'assign F1' (Run assign F1 'asha') "- [ ] F1 $dash Dark mode [owner: @asha] warning: F1 was in progress under @cc-bbbbbb - that session is no longer the owner; tell it"
+    Eq 'reassign F1' (Run assign F1 '@vidul') "- [ ] F1 $dash Dark mode [owner: @vidul]"
+    Eq 'tag F1' (Run tag F1) "- [ ] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul]"
     Eq 'tag B2' (Run tag B2) "- [ ] B2 $dash Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)"
     Eq 'tag F3 keeps hand app' (Run tag F3) "- [ ] F3 $dash Hand tagged [app: web] (@cc-cccccc)"
     if (-not (Refused tag F9)) { Write-Output 'FAIL: tag accepted a missing ticket'; $script:fail = 1 }
     $want = "# TICKETS`n`n## Bugs`n`n- [ ] B2 $dash Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)`n`n## Features`n`n" +
-      "- [~] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)`n- [ ] F12 $dash Bulk delete [owner: @asha]`n" +
+      "- [ ] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul]`n- [ ] F12 $dash Bulk delete [owner: @asha]`n" +
       "- [ ] F3 $dash Hand tagged [app: web] (@cc-cccccc)`n"
     $got = [System.IO.File]::ReadAllBytes("$M/TICKETS.md")
     if ([Convert]::ToBase64String($got) -ne [Convert]::ToBase64String($Utf8.GetBytes($want))) {
@@ -451,7 +501,7 @@ function Invoke-Selftest {
     Init-Repo $E
     foreach ($dd in @('apps/web', 'tools/cli', 'tools/other')) { W "$E/$dd/f.txt" "x`n" }
     W "$E/package.json" "{`n  `"name`": `"edge`",`n  `"workspaces`": {`n    `"nohoist`": [`"tools/*`"],`n    `"packages`": [`"apps/*`", `"tools/cli`"]`n  }`n}`n"
-    W "$E/.skillator/team.md" "- @vidul: vidul@ikran.in`n"
+    W "$E/.skillator/team.md" "- @vidul: vidul@ikran.in`n- @asha: asha@x.com`n"
     $edge0 = "# TICKETS`n`n- [ ] F4 $dash Hand owner [owner:@vidul] (@cc-111111)`n- [ ]  F7$dash Spacing`n- [ ] F8 - Hyphen`n" +
       "  - [ ] F8a $dash Sub part`n- [x] F5 $dash Shipped Plan: S3 (@cc-222222)`n- [x] F6 $dash Done right, RED/GREEN 3/3 (@cc-333333)`n"
     W "$E/TICKETS.md" $edge0
@@ -479,7 +529,7 @@ function Invoke-Selftest {
     if (-not (Refused assign F4 "@vidul`n")) { Write-Output 'FAIL: assign took a handle ending in a line break'; $script:fail = 1 }
     if (-not (& $same $edge0)) { Write-Output 'FAIL: a refused argument changed the board'; $script:fail = 1 }
     # 3: a hand-written [owner:@x] is replaced, not duplicated
-    Eq 'hand tag replaced' (Run assign F4 '@vidul') "- [ ] F4 $dash Hand owner [owner: @vidul] (@cc-111111)"
+    Eq 'hand tag replaced' (Run assign F4 '@asha') "- [ ] F4 $dash Hand owner [owner: @asha] (@cc-111111)"
     if (Test-Path -LiteralPath "$board.lock") { Write-Output 'FAIL: our board lock was left behind'; $script:fail = 1 }
     # 9: loose spacing, a hyphen, a sub-part, a lower-case id
     Eq 'loose line' (Run assign f7 '@vidul') "- [ ]  F7$dash Spacing [owner: @vidul]"
@@ -519,6 +569,57 @@ function Invoke-Selftest {
     if ($msg -ne '') { Write-Output "FAIL: by threw in a repo with no commits: [$msg]"; $script:fail = 1 }
     Eq 'empty repo tag' (Run tag F1) "- [ ] F1 $dash New"
 
+    # --- F45: assigning reopens; a decision assignment is the [?] state
+    $A = "$T/f45"
+    Init-Repo $A
+    W "$A/.skillator/team.md" "- @vidul: vidul@ikran.in`n- @asha: asha@x.com`n"
+    W "$A/TICKETS.md" ("# TICKETS`n`n- [x] F20 $dash Done thing (@cc-1)`n- [>] F21 $dash Later thing (deferred: q4) (@cc-2)`n" +
+      "- [ ] F22 $dash Open thing`n- [-] F23 $dash Dropped thing`n- [?] F24 $dash Waiting [decide: @asha]`n" +
+      "- [ ] F25 $dash Both [app: web] [by: @vidul]`n- [x] F26 $dash Shipped (@cc-3)`n- [x] F27 $dash Kept [owner: @asha]`n" +
+      "- [ ] F28 $dash Decided before [decide: @asha]`n- [?] F29 $dash Owner waiting [owner: @vidul]`n" +
+      "- [~] F31 $dash Working (@cc-bbbbbb)`n- [~] F32 $dash Busy (a note) (@cc-cccccc)`n")
+    Commit 'vidul@ikran.in' 'init' 'README.md'
+    $board = "$A/TICKETS.md"
+    Eq 'decide from [x]' (Run decide F20 '@asha') "- [?] F20 $dash Done thing [decide: @asha] (@cc-1)"
+    Eq 'decide from [>]' (Run decide F21 'asha') "- [?] F21 $dash Later thing [decide: @asha] (deferred: q4) (@cc-2)"
+    Eq 'decide from [ ]' (Run decide F22 '@vidul') "- [?] F22 $dash Open thing [decide: @vidul]"
+    Eq 'assign from [?]' (Run assign F20 '@vidul') "- [ ] F20 $dash Done thing [decide: @asha] [owner: @vidul] (@cc-1)"
+    Eq 'assign from [-]' (Run assign F23 '@vidul') "- [ ] F23 $dash Dropped thing [owner: @vidul]"
+    Eq 'assign from [x]' (Run assign F26 '@asha') "- [ ] F26 $dash Shipped [owner: @asha] (@cc-3)"
+    Eq 'decided' (Run decided F24) "- [ ] F24 $dash Waiting [decide: @asha]"
+    # the same handle with the box not yet the target still moves the box
+    Eq 'same owner from [x]' (Run assign F27 '@asha') "- [ ] F27 $dash Kept [owner: @asha]"
+    Eq 'same decider from [ ]' (Run decide F28 '@asha') "- [?] F28 $dash Decided before [decide: @asha]"
+    Eq 'same owner from [?]' (Run assign F29 '@vidul') "- [ ] F29 $dash Owner waiting [owner: @vidul]"
+    $f45a = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
+    if (-not (Refused decided F23)) { Write-Output 'FAIL: decided flipped a ticket that is not [?]'; $script:fail = 1 }
+    if (-not (Refused decided "F22`nF23")) { Write-Output 'FAIL: decided took a multi-line id'; $script:fail = 1 }
+    if (-not (Refused decide F23 "@asha`n")) { Write-Output 'FAIL: decide took a handle ending in a line break'; $script:fail = 1 }
+    if (-not (Refused decide F23 '@nobody')) { Write-Output 'FAIL: decide took an unknown handle'; $script:fail = 1 }
+    if (-not (& $same $f45a)) { Write-Output 'FAIL: a refused decide/decided changed the board'; $script:fail = 1 }
+    # same handle, same kind, box already the target: nothing changes - and it says so
+    $o = [string]::Join(' ', @(Run assign F27 '@asha'))
+    if ($o -notmatch 'no change') { Write-Output "FAIL: same-handle assign did not say no change: [$o]"; $script:fail = 1 }
+    $o = [string]::Join(' ', @(Run decide F28 '@asha'))
+    if ($o -notmatch 'no change') { Write-Output "FAIL: same-handle decide did not say no change: [$o]"; $script:fail = 1 }
+    if (-not (& $same $f45a)) { Write-Output 'FAIL: a same-handle assignment changed the board'; $script:fail = 1 }
+    # tag order: app, decide, owner, by
+    Eq 'decide between tags' (Run decide F25 '@asha') "- [?] F25 $dash Both [app: web] [decide: @asha] [by: @vidul]"
+    Eq 'owner after decide' (Run assign F25 '@vidul') "- [ ] F25 $dash Both [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]"
+    # leaving [~] drops that session's tag and says whose it was; other (..) stay
+    $o = @(Run assign F31 '@asha')
+    Eq 'assign from [~]' $o[0] "- [ ] F31 $dash Working [owner: @asha]"
+    if (([string]::Join(' ', $o)) -notmatch 'F31 was in progress under @cc-bbbbbb') { Write-Output "FAIL: no warning naming the [~] session: [$o]"; $script:fail = 1 }
+    $o = @(Run decide F32 '@vidul')
+    Eq 'decide from [~]' $o[0] "- [?] F32 $dash Busy [decide: @vidul] (a note)"
+    if (([string]::Join(' ', $o)) -notmatch 'F32 was in progress under @cc-cccccc') { Write-Output "FAIL: no warning naming the [~] session: [$o]"; $script:fail = 1 }
+    $want45 = "# TICKETS`n`n- [ ] F20 $dash Done thing [decide: @asha] [owner: @vidul] (@cc-1)`n- [?] F21 $dash Later thing [decide: @asha] (deferred: q4) (@cc-2)`n" +
+      "- [?] F22 $dash Open thing [decide: @vidul]`n- [ ] F23 $dash Dropped thing [owner: @vidul]`n- [ ] F24 $dash Waiting [decide: @asha]`n" +
+      "- [ ] F25 $dash Both [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]`n- [ ] F26 $dash Shipped [owner: @asha] (@cc-3)`n- [ ] F27 $dash Kept [owner: @asha]`n" +
+      "- [?] F28 $dash Decided before [decide: @asha]`n- [ ] F29 $dash Owner waiting [owner: @vidul]`n" +
+      "- [ ] F31 $dash Working [owner: @asha]`n- [?] F32 $dash Busy [decide: @vidul] (a note)`n"
+    if (-not (& $same $want45)) { Write-Output 'FAIL: F45 board bytes'; $script:fail = 1 }
+
     # --- solo, non-monorepo: no workspace folders, no team.md
     $S = "$T/solo"
     Init-Repo $S
@@ -539,7 +640,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|tag|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|tag|selftest')
   exit 1
 }
 $cmd = [string]$args[0]

@@ -16,7 +16,7 @@
 #   relay-morpheus.sh status
 #   relay-morpheus.sh orphans [minutes]                default 20
 #   relay-morpheus.sh board <ID> <mark>               flip a ticket's box in the main checkout's
-#                                                      TICKETS.md, under its lock (F36; mark: ' ' ~ x ! > -)
+#                                                      TICKETS.md, under its lock (F36; mark: ' ' ~ x ! ? > -)
 #   relay-morpheus.sh [<id>] owner @handle | -        F44: the run's owner, an @handle from
 #                                                      .skillator/team.md (`-` clears it)
 #   relay-morpheus.sh selftest
@@ -802,9 +802,10 @@ lease_foreign_() {   # <run> <registry>: other runs' live leases
 # lock - one board, however many run worktrees there are.
 cmd_board() {
   bid=${1:-}; mk=${2-}
-  [ "$#" = 2 ] || die "usage: relay-morpheus.sh board <ID> <mark>  (mark: ' ' ~ x ! > -)"
+  [ "$#" = 2 ] || die "usage: relay-morpheus.sh board <ID> <mark>  (mark: ' ' ~ x ! ? > -)"
   printf '%s' "$bid" | grep -Eqx '[A-Z]{1,3}[0-9]+[a-z]?' || die "board: '$bid' is not a ticket id"
-  case "$mk" in ' '|'~'|x|'!'|'>'|'-') ;; *) die "board: mark is one of ' ' ~ x ! > -" ;; esac
+  # F45: '?' is pending decision (tickets-zordon), an open state like '!'.
+  case "$mk" in ' '|'~'|x|'!'|'?'|'>'|'-') ;; *) die "board: mark is one of ' ' ~ x ! ? > -" ;; esac
   _bm=$(main_of) || _bm=$(pwd); _bf="$_bm/TICKETS.md"
   [ -f "$_bf" ] || die "board: no $_bf"
   _bsv=$LOCK; LOCK=; lock "$_bf.lock"
@@ -2657,6 +2658,9 @@ chain_selftest() {
   printf '%s\n' '# board' "- [ ] F9 $em lease me" "- [ ] F90 $em not me" > "$d6/TICKETS.md"
   ( cd "$d6" && cmd_board F9 '~' >/dev/null ) || die "F36: board failed"
   grep -q "^- \\[~\\] F9 $em lease me\$" "$d6/TICKETS.md" && grep -q "^- \\[ \\] F90 $em not me\$" "$d6/TICKETS.md" || die "F36: board flipped the wrong line: $(cat "$d6/TICKETS.md")"
+  # F45: '?' (pending decision) is a mark like the others.
+  ( cd "$d6" && cmd_board F9 '?' >/dev/null ) || die "F45: board refused mark '?'"
+  grep -q "^- \\[?\\] F9 $em lease me\$" "$d6/TICKETS.md" && grep -q "^- \\[ \\] F90 $em not me\$" "$d6/TICKETS.md" || die "F45: board did not set [?]: $(cat "$d6/TICKETS.md")"
   if ( cd "$d6" && cmd_board F91 x >/dev/null 2>&1 ); then die "F36: board accepted a missing ticket"; fi
   [ ! -e "$d6/TICKETS.md.lock" ] && [ ! -e "$reg.lock" ] || die "F36: a lock was left behind"
   RUN=$sv6_run; DIR=$sv6_dir

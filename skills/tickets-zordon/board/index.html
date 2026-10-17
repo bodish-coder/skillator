@@ -22,6 +22,8 @@
   --accent-soft: oklch(0.945 0.030 250);
   --danger:  oklch(0.487 0.180 25);
   --danger-soft: oklch(0.950 0.032 25);
+  --decide:  oklch(0.480 0.170 300);
+  --decide-soft: oklch(0.950 0.030 300);
   --ring:    var(--accent);
 
   --s1: 0.25rem; --s2: 0.5rem; --s3: 0.75rem; --s4: 1rem;
@@ -50,6 +52,8 @@
   --accent-soft: oklch(0.300 0.055 250);
   --danger:  oklch(0.740 0.145 25);
   --danger-soft: oklch(0.305 0.060 25);
+  --decide:  oklch(0.760 0.120 300);
+  --decide-soft: oklch(0.300 0.055 300);
 }
 
 * { box-sizing: border-box; }
@@ -236,6 +240,7 @@ li.row.sub { padding-inline-start: 2ch; }
 }
 .tag b { font-weight: 400; opacity: 0.75; }
 .tag-owner { color: var(--ink); }
+.tag-decide { color: var(--decide); border-color: var(--decide); background: var(--decide-soft); }
 .why {
   grid-column: 3; display: block;
   color: var(--muted); font-size: 0.8125rem;
@@ -252,6 +257,8 @@ li.row[data-st="~"] .mark, li.row[data-st="~"] .tid { color: var(--accent); }
 li.row[data-st="~"] { background: var(--accent-soft); }
 li.row[data-st="!"] .mark, li.row[data-st="!"] .tid { color: var(--danger); }
 li.row[data-st="!"] { background: var(--danger-soft); }
+li.row[data-st="?"] .mark, li.row[data-st="?"] .tid { color: var(--decide); }
+li.row[data-st="?"] { background: var(--decide-soft); }
 li.row[data-st="x"] .ttl, li.row[data-st="-"] .ttl { color: var(--muted); }
 li.row[data-st="-"] .tid { text-decoration: line-through; }
 
@@ -414,7 +421,7 @@ body.dragging::after {
 <!--TICKETS:BEGIN-->
 # TICKETS
 
-Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[x]` done · `[-]` cancelled
+Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[?]` pending decision · `[>]` deferred · `[x]` done · `[-]` cancelled
 IDs are permanent — never reuse or renumber. Append new tickets at the end of
 their section.
 
@@ -499,13 +506,15 @@ const STATES = [
   { k: " ", key: "pending",     label: "pending",     bucket: "open"   },
   { k: "~", key: "inprogress",  label: "in-progress", bucket: "open"   },
   { k: "!", key: "blocked",     label: "blocked",     bucket: "open"   },
+  { k: "?", key: "decision",    label: "pending decision", bucket: "open" },
   { k: ">", key: "deferred",    label: "deferred",    bucket: "defer"  },
   { k: "x", key: "done",        label: "done",        bucket: "closed" },
   { k: "-", key: "cancelled",   label: "cancelled",   bucket: "closed" },
 ];
 const BY_K = Object.fromEntries(STATES.map(s => [s.k, s]));
-/* Sort order inside a group: in-progress, blocked, deferred, pending, then closed. */
-const SORT = { "~": 0, "!": 1, ">": 2, " ": 3, "x": 4, "-": 5 };
+/* Sort order inside a group: in-progress, blocked, pending decision, deferred,
+   pending, then closed. */
+const SORT = { "~": 0, "!": 1, "?": 2, ">": 3, " ": 4, "x": 5, "-": 6 };
 const SERIES = [
   { p: "B", title: "Bugs" },
   { p: "F", title: "Features" },
@@ -531,7 +540,7 @@ function parse(text) {
     const h = raw.match(/^#{2,3}\s+(.+?)\s*$/);
     if (h) { heading = h[1]; continue; }
 
-    const m = raw.match(/^(\s*)[-*]\s+\[([ x~!>\-])\]\s+(.*\S)\s*$/);
+    const m = raw.match(/^(\s*)[-*]\s+\[([ x~!?>\-])\]\s+(.*\S)\s*$/);
     if (!m) continue;
 
     const indent = m[1].replace(/\t/g, "  ").length;
@@ -543,10 +552,10 @@ function parse(text) {
     if (!idm) { errs.push({ line: i + 1, raw }); continue; }
 
     const id = idm[1].toUpperCase();
-    /* F43: `[app: ..] [owner: @x] [by: @y]` tags come off the title and draw
+    /* F43/F45: `[app: ..] [decide: @x] [owner: @x] [by: @y]` tags come off the title and draw
        as chips; a line without them parses exactly as before. */
     const tags = [];
-    let title = idm[2].replace(/\s*\[(app|owner|by):\s*([^\]]*)\]/g,
+    let title = idm[2].replace(/\s*\[(app|decide|owner|by):\s*([^\]]*)\]/g,
       (_, k, v) => { tags.push([k, v.trim()]); return ""; }).trim();
 
     /* A trailing parenthetical is a reason only when it names one. Everything
@@ -577,14 +586,14 @@ function parse(text) {
 function tally(ts) {
   const c = Object.fromEntries(STATES.map(s => [s.key, 0]));
   for (const t of ts) { const s = BY_K[t.st]; if (s) c[s.key]++; }
-  const open = c.pending + c.inprogress + c.blocked;
+  const open = c.pending + c.inprogress + c.blocked + c.decision;
   const closed = c.done + c.cancelled;
   return { ...c, open, closed, deferredTotal: c.deferred, total: open + c.deferred + closed };
 }
-/* Fixed shape, all six states, zeros included. Whole board, never the filter. */
+/* Fixed shape, all seven states, zeros included. Whole board, never the filter. */
 function tallyLine(c) {
   return `${c.open} open (${c.pending} pending · ${c.inprogress} in-progress · ` +
-         `${c.blocked} blocked) · ${c.deferred} deferred · ` +
+         `${c.blocked} blocked · ${c.decision} pending decision) · ${c.deferred} deferred · ` +
          `${c.closed} closed (${c.done} done · ${c.cancelled} cancelled) · ${c.total} total`;
 }
 
@@ -607,7 +616,7 @@ const app = {
   source: "built-in snapshot",
   view: "type",
   q: "",
-  states: new Set([" ", "~", "!", ">"]),   /* open + deferred by default */
+  states: new Set([" ", "~", "!", "?", ">"]),   /* open + deferred by default */
   types: new Set(["B", "F", "A"]),
   fatal: null,
 };
@@ -901,7 +910,7 @@ function toHash() {
   if (app.view !== "type") p.set("v", app.view);
   if (app.q) p.set("q", app.q);
   const st = STATES.filter(s => app.states.has(s.k)).map(s => s.key).join(",");
-  if (st !== "pending,inprogress,blocked,deferred") p.set("s", st);
+  if (st !== "pending,inprogress,blocked,decision,deferred") p.set("s", st);
   const ty = SERIES.filter(s => app.types.has(s.p)).map(s => s.p).join(",");
   if (ty !== "B,F,A") p.set("t", ty);
   const h = p.toString();

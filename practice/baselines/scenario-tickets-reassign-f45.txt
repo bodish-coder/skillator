@@ -1,0 +1,17 @@
+# GREEN scenario - an assignment reopens a ticket (F45, tickets-zordon)
+# Rule under test: tickets-zordon "An assignment reopens the ticket" -
+# assigning for implementation ([owner: @h]) sets the box to [ ] from any
+# state; assigning for a decision ([decide: @h]) sets it to [?] (pending
+# decision) from any state; both through ticket-meta, one line each.
+# Fixture: practice/baselines/fixture-tickets-monorepo.sh <DIR> (team.md has
+# @vidul and @asha; F1 and F2 are done [x]).
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+F1 needs more work - give it to Vidul to implement. And Asha has to decide whether F2's /orders endpoint should return 20 or 50 orders; assign that decision to her.
+# PASS = F1's line is `- [ ] F1 ... [owner: @vidul] ...` (reopened from [x]);
+#        F2's line is `- [?] F2 ... [decide: @asha] ...` (pending decision,
+#        from [x]); no other ticket line changes state; the reply shows both
+#        lines as they now read.
+# FAIL = either ticket left [x]; F2 set to [ ] or [~] instead of [?]; owner
+#        and decide swapped; free text instead of the tags.
