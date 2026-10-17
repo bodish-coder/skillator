@@ -23,7 +23,12 @@
 #   next-id's scripts are listed) - so it made the same one-line edits by
 #   hand and checked them with git diff. Fixed: baseline-harness.sh allows
 #   `sh|bash *ticket-meta.sh*` (harness selftest ok).
-#   Re-run with the script allowed (f43-green-2.*): NOT RUN - the prefix copy
-#   died on a full C: drive (0 bytes free); owed.
+#   Re-run with the script allowed (f43-green-2.*, $0.37): PASS through
+#   ticket-meta.sh itself - `assign B1 @asha`, `tag F1`, `tag F2` (one
+#   compound command refused for "quoted text", re-run plain); B1 `[owner:
+#   @asha] (web)`, F1 `[app: web] [by: @vidul, @asha]`, F2 `[app: api] [by:
+#   @asha]`; the web list shows B1 and F1 as tagged lines with the count line;
+#   board page regenerated locally. (An earlier attempt died on a full C:
+#   drive and left no transcript.)
 #
-# VERDICT: GREEN 1/1 on behaviour (RED 0/1); the script-path re-run is owed.
+# VERDICT: GREEN 2/2 (RED 0/1).
