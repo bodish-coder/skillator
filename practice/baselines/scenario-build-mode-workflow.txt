@@ -1,0 +1,19 @@
+# Scenario - F51 build-jarvis mode named as workflow, prompt "workflow".
+# Prompt: scenario-build-mode-direct.txt plus one sentence opting into a workflow.
+# Rule under test (Step 0.8 skip rule + opt-in): the user named the mode, so
+# no mode question is asked, and the opt-in makes workflow allowed: the grade
+# line says `mode workflow (named)` and Phases 1-3 run as one Workflow call.
+# Regression guard, not a RED/GREEN pair: the pre-F51 body also ran a
+# workflow when "the user asked".
+#
+# Fixture: `relay-chain`, fresh. Settings, isolation and budget as
+# scenario-build-mode-direct.txt.
+#
+# PASS = no mode question; the grade line carries `mode workflow`; a
+#        Workflow call runs the build.
+# FAIL = it asks the mode, or ignores the opt-in and builds without Workflow.
+# Verdicts: green-build-mode-f51.txt.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Add CSV export to the shelf app: `python -m shelf export` should print every book as CSV with a `title,author` header. Use a workflow for this.

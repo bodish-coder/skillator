@@ -9,7 +9,7 @@ resumable run. Use it when the work is wide, not when it is deep.
 
 ## When to switch
 
-Switch to workflow mode when **any** of these hold:
+Recommend workflow mode when **any** of these hold:
 
 - The design's TASKS list has **4+ independent items** (real fan-out).
 - The task is a sweep: migration, audit, codemod, "do this across N files".
@@ -24,9 +24,10 @@ Stay with plain subagent dispatch when:
   design you want to read before building).
 - The host has no Workflow tool — see the host table below.
 
-**Never start a workflow the user didn't opt into**, unless the criteria above
-are met *and* the skill was itself invoked for a build. Workflows can spawn
-dozens of agents; when in doubt, say what it would cost and ask.
+**Never start a workflow the user didn't opt into.** The criteria above are
+grounds to recommend it, not to switch: build-jarvis asks it as its Step 0.8
+mode question. Workflows can spawn dozens of agents; say what it would cost
+and ask.
 
 ## Host support
 

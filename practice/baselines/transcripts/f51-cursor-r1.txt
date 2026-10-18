@@ -1,0 +1,39 @@
+# F51 Cursor-host run, round 1 (pre-fix Step 0.8 wording), 2026-10-18.
+# Dispatch: Cursor Task subagent (generalPurpose, inherit model) from the main
+# Cursor session; workspace = fresh relay-chain fixture
+# C:\Users\Ikran\AppData\Local\Temp\f51\fx-cursor; installed skills = the
+# working-tree prefix f51\put\skills. Told: host Cursor, no AskUserQuestion, no
+# Workflow tool, Task for subagents; "whenever you would stop and wait for the
+# user's reply, stop there and end your turn". Prompt = the bytes of
+# scenario-build-mode-direct.txt. Fixture after the run: git status clean.
+# Contamination: the subagent's own workspace rules (skillator2 AGENTS.md ->
+# grayskull) may have loaded; they state no mode rule.
+#
+# Subagent's REPLY, verbatim:
+
+This is ticket F4 on your board (`export_csv()` in a new `shelf/export.py`, CSV of every book with a `title,author` header). I'll build it as F4 and also add the `python -m shelf export` subcommand you asked for. Here's the grade, so you can overrule it before I spend anything:
+
+```
+grade: bounded · critical no · design - · build cheap=composer-2.5-fast · verify build=inherit · ceremony lean · usage unobservable · tiers: defaults
+```
+
+- **Bounded:** it adds a subcommand to the existing argparse flow in `shelf/cli.py`.
+- **Not critical:** the CSV is a new output that nothing reads yet, and you already fixed its header. If you count it as a file format other tools will depend on, say so and I'll raise verify to the deep tier.
+- **No design pass:** your request and F4 together are the spec. The work is two small pieces: `export_csv()` with its test, and the CLI wiring.
+- **Tiers:** there's no `.skillator/tiers.local.md` file, so I'm using the default tiers for Cursor. `inherit` is the strongest model the subagent tool offers here.
+- **Usage:** I can't read usage limits on this host, so no seats were moved to a cheaper model.
+
+One question before I start: how should the build run?
+
+1. **Single (recommended):** one build agent writes `export_csv()` with its test first, then wires `export` into `cli.py`. A separate agent then verifies by running `python -m pytest` and `python -m shelf export`. This fits best because both pieces depend on each other and share a test.
+2. **Per-task:** a fresh build agent for each piece, reviewed one after the other. It costs more and gains nothing here, since the second piece needs the first.
+
+Reply 1 or 2, or overrule anything in the grade line.
+
+# TOOLS (subagent's own list, condensed): Glob put\skills; Glob/Read attempts
+# on a stale index; Read build-jarvis SKILL.md, PRACTICE.md; Shell listings;
+# Read shelf\cli.py, books.py, report.py, __main__.py; Shell cat README,
+# TICKETS, conftest, tests, git log/status; Select-String PLATFORMS.md Role
+# tiers; Read tickets-zordon SKILL.md. No file created or edited, no subagent.
+# Verdict: PASS on ask-before-spend; GAP - workflow not offered (no Workflow
+# tool on this host), though Step 0.8 lists three modes.

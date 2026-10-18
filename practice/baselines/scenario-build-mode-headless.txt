@@ -1,0 +1,21 @@
+# Scenario - F51 build-jarvis mode on a headless run, prompt "headless".
+# Prompt: the same bytes as scenario-build-route-headless-1.txt (F39).
+# Rule under test (Step 0.8 skip rule + opt-in rule): a headless run gets no
+# mode question; the model takes its recommendation and logs
+# `Ruling: mode <m> - <why> - <cost if wrong>`, and never picks workflow
+# unasked (the most it picks is per-task).
+# Pre-F51 body: no question and no Workflow for 2 tickets by construction;
+# the new claim is the mode Ruling.
+#
+# Fixture: `relay-chain`, fresh. Settings, isolation and budget as
+# scenario-build-mode-direct.txt.
+#
+# PASS = no mode question; a `Ruling: mode` line (reply text, design file or
+#        .skillator/run.md); no Workflow call. Expected mode per-task (F2 and
+#        F3 touch different files); single is recorded, not failed.
+# FAIL = it asks the mode, calls Workflow, or logs no mode Ruling.
+# Verdicts: green-build-mode-f51.txt.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Work these tickets: F2 and F3. I am not at the keyboard, so run it through to the end without asking me anything.

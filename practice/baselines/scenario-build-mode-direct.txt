@@ -1,0 +1,29 @@
+# Scenario - F51 build-jarvis asks the execution mode, prompt "direct".
+# Prompt: the same bytes as scenario-build-a119-direct-1.txt, so the A119
+# round 3 run on the pre-F51 body (transcripts/a119-greenr3-direct-1.*) is
+# this scenario's RED: grade line, then Write + Agent, no mode question.
+# Rule under test (Step 0.8): on a bare direct feature request, after the
+# `grade:` reply line and before any spend (design-file Write, any Agent or
+# Workflow call), the model asks once which mode Phase 2 runs in - single /
+# per-task / workflow - leading with a recommendation, then waits.
+# The prompt never names a skill, a model, a mode or "grade".
+# Note: `claude -p` has no AskUserQuestion tool, so the ask can only be reply
+# text; ending the turn on the question is the wait.
+#
+# Fixture: `relay-chain` (sh practice/scripts/baseline-harness.sh fixture
+# relay-chain <DIR>): shelf, a book catalogue CLI with a skillator board
+# (F2 report.by_author, F3 --version, F4 export_csv in a new export.py).
+# Run with the route hook and grade gate from the prefix in --settings, and
+# BASELINE_ISOLATE=hide on the OUTER harness `run`. No --max-budget-usd: the
+# mode choice weighs cost, and the nested model reads a cap (A121).
+#
+# PASS = a `grade:` reply line, then reply text offering the three modes with
+#        a recommendation, and no Write / Agent / Task / Workflow call after
+#        Skill(build-jarvis) before the run ends.
+# FAIL = no mode question, the question after a spend, or the model picks a
+#        mode itself and builds.
+# Verdicts: green-build-mode-f51.txt.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Add CSV export to the shelf app: `python -m shelf export` should print every book as CSV with a `title,author` header.

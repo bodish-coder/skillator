@@ -1,0 +1,4 @@
+cd '/c/Users/Ikran/AppData/Local/Temp/f51r2/fx-direct' && BASELINE_ISOLATE=hide sh '/c/Users/Ikran/AppData/Local/Temp/f51r2/harness.sh' run 900 '/c/Users/Ikran/AppData/Local/Temp/f51r2/put' claude -p "$(sh '/c/Users/Ikran/AppData/Local/Temp/f51r2/harness.sh' scenario '/c/tools/Projects/skillator2/practice/baselines/scenario-build-mode-direct.txt')" \
+  --plugin-dir '/c/Users/Ikran/AppData/Local/Temp/f51r2/put' --add-dir '/c/Users/Ikran/AppData/Local/Temp/f51r2/put' \
+  --permission-mode acceptEdits --allowedTools 'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'Bash(git:*)' 'Bash(pytest:*)' 'Bash(python -m pytest:*)' 'Bash(python3 -m pytest:*)' 'Bash(py -m pytest:*)' 'Bash(ls:*)' 'Bash(cat:*)' 'Bash(node:*)' 'Bash(npm:*)' 'Bash(npx:*)' 'PowerShell(python -m pytest:*)' --settings '/c/Users/Ikran/AppData/Local/Temp/f51r2/settings.json' \
+  --output-format stream-json --verbose --include-hook-events

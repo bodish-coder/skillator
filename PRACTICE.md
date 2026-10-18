@@ -241,8 +241,9 @@ rules that keep a test honest (name the break it catches; no mirror assertions;
 no change detectors; assert real behavior, never mock behavior), and the
 checklist.
 
-**Per task, not per build:** each build agent gets one task, fresh context, the
-design file path and the design's `CONSTRAINTS:` — never the session history.
+**Per task, not per build:** each build agent gets one task (build-jarvis mode
+single: one agent, the blocks in order), fresh context, the design file path
+and the design's `CONSTRAINTS:` — never the session history.
 When a task comes back,
 review it against its own spec before dispatching the next: spec compliance
 first, then code quality. A failed review goes back to a fix agent with the

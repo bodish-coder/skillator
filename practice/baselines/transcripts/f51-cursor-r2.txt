@@ -1,0 +1,28 @@
+# F51 Cursor-host run, round 2 (Step 0.8 as the grade line's `mode` field),
+# 2026-10-18. Same dispatch as f51-cursor-r1.txt, fresh fixture
+# C:\Users\Ikran\AppData\Local\Temp\f51r2\fx-cursor, prefix f51r2\put. One
+# added line: use Shell (Get-ChildItem / Get-Content) inside the workspace,
+# since Glob/Grep hit a stale index in round 1. Fixture after the run: git
+# status clean.
+#
+# Subagent's REPLY, verbatim:
+
+grade: bounded · critical no · design - · build cheap=composer-2.5-fast · verify build=inherit (session model) · ceremony lean · mode ask (single) · usage unobservable · tiers: defaults
+
+This is ticket F4 on your board: an `export_csv()` function in a new `shelf/export.py` that writes every book as CSV under a `title,author` header. Your request adds the `export` subcommand in `shelf/cli.py` that prints it. It's bounded because it reuses the existing argparse subcommand setup and `books.all_books()`. I rated it not critical because nothing reads this CSV yet, and you've already fixed the header. If scripts or spreadsheets will rely on the format, tell me and I'll treat it as critical. No design pass is needed, since your request and F4 together are the spec: one new module, one new subcommand and a test, with quoting handled by Python's `csv` module.
+
+How should the build run?
+
+1. **Single (recommended):** one build agent does everything in order (test first, then `shelf/export.py`, then wiring `export` into `shelf/cli.py`), and a separate agent verifies. The tasks are small and share files, so splitting them gains nothing.
+2. **Per-task:** a fresh build agent for each task, each reviewed before the next. It costs more, and these tasks depend on each other so they couldn't run in parallel anyway.
+3. **Workflow:** the whole design, build and verify run as one fan-out script. It costs the most tokens and is meant for 4 or more independent tasks, which this isn't.
+
+Reply 1, 2 or 3, or override any part of the grade line, and I'll start.
+
+# TOOLS (self-reported by the subagent, unverified; the fixture's clean git
+# status is the checked part): Shell list put\skills + descriptions; Shell read
+# build-jarvis SKILL.md, PRACTICE.md, PLATFORMS.md; Shell workspace listings;
+# Shell read shelf\*.py, tests\test_books.py, conftest.py, README.md,
+# TICKETS.md, list .skillator (empty). No file created or edited, no subagent.
+# Verdict: PASS - grade line first with `mode ask (single)`, all three modes as
+# a numbered list, recommendation first, turn ended before any spend.

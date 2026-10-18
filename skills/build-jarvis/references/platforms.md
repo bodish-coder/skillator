@@ -16,7 +16,7 @@ Where it is: the plugin root, `../../PLATFORMS.md` from this file once installed
 | Seat | Tier from Step 0 | Job | Must not |
 |---|---|---|---|
 | **Design** | `deep`, or `—` | Approaches, contracts, the task breakdown, written to the design file | Write production code |
-| **Build** | per task, `cheap` or `build` | Implement exactly one task block | Redesign, or expand scope beyond the block |
+| **Build** | per task, `cheap` or `build` | Implement exactly one task block (mode single: every block, in order) | Redesign, or expand scope beyond the block |
 | **Verify** | `build`, or `deep` (held when critical) | Run VERIFICATION, review the diff | Fix what it reviews |
 | **You** | `orchestrator` | Grade, dispatch, rule, park, keep the record and the tiers file | Design or code, bar a `—`-seat design file and the record |
 
@@ -42,7 +42,8 @@ file is the handover, not chat history. Say so in the grade line
 
 ## Parallel builds
 
-Fan the build seat out wherever the host delegates in parallel. Two tasks that
+In mode per-task, fan the build seat out wherever the host delegates in
+parallel. Two tasks that
 would touch the same tree get a git worktree first (`PRACTICE.md` §8), on every
 host.
 

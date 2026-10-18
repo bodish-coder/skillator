@@ -1,0 +1,136 @@
+# GREEN - build-jarvis settles the execution mode before spending (F51)
+# Scenarios: scenario-build-mode-{direct,single,headless,workflow}.txt.
+# RED (direct): transcripts/a119-greenr3-direct-1.* - the same prompt bytes on
+#   the pre-F51 body: grade line -> Write design file -> Agent build, no mode
+#   question. single/headless/workflow are regression guards (the old body
+#   passes their "no question" half by construction).
+# Rule: Step 0.8 - a bare feature request asks single / per-task / workflow
+#   once, after the `grade:` line and before any spend, recommendation first;
+#   a named mode or a headless run skips the ask (headless logs
+#   `Ruling: mode`); workflow only on the user's opt-in.
+#
+# Setup, both rounds: prefix built from the working tree
+#   (`BASELINE_ROOT=<repo> sh <harness> prefix`), `diff -r skills/build-jarvis`
+#   against the tree identical. Harness = a HEAD (5bde960) snapshot of
+#   baseline-harness.sh (the live file has another lane's unstaged edits).
+#   Fresh `relay-chain` fixtures per run, under %TEMP%\f51 and %TEMP%\f51r2
+#   (no CLAUDE.md / AGENTS.md / GEMINI.md in the fixture). --settings = the
+#   harness settings JSON + the prefix's feature-route.sh (UserPromptSubmit)
+#   + grade-gate.sh (PreToolUse Agent|Task|Write|Edit|MultiEdit|NotebookEdit),
+#   as A119 round 3. Each run its own OUTER
+#   `BASELINE_ISOLATE=hide sh <harness> run 900 <prefix> claude -p ...`,
+#   one at a time; every .err says "restored" and "limit hit: none".
+#   No --max-budget-usd (the mode choice weighs cost; A121).
+#   claude-code 2.1.302, claude-opus-5-5. Driven from a Cursor session.
+#   Cursor-host runs: a Cursor Task subagent given the prefix as its installed
+#   skills (transcripts/f51-cursor-r{1,2}.txt).
+#   Caveat: `claude -p` has no AskUserQuestion tool, so on Claude Code the ask
+#   can only be reply text and "waiting" is ending the turn.
+#
+# ------------------------------------------------ ROUND 1 (handoff wording) ----
+# Body: Step 0.8 as a separate "ask once, right after the grade line" item
+#   with the mode table and skip rules; the grade line had no mode field.
+# Run 2026-10-18T12:23Z-12:29Z. Transcripts: transcripts/f51-greenr1-<name>.*.
+#   direct    FAIL. Glob -> Read TICKETS.md -> Skill -> Read x4 -> Write
+#     (DENIED by the grade gate, twice) -> TEXT "grade: bounded . critical no
+#     . design - . build cheap=sonnet . verify build=opus . ceremony lean ..."
+#     -> Write design file -> Agent sonnet build -> verify -> report. No mode
+#     question, no mode Ruling: step 8 skipped outright. $0.83, 122 s.
+#   single    PASS. Skill -> Bash -> Glob -> TEXT "grade: ... . mode single
+#     (user named) ..." (the model put the mode into the grade line
+#     unprompted) -> Write design
+#     -> one Agent sonnet build -> main-session verify. No Workflow. $0.51.
+#   headless  PASS. Skill -> Write DENIED x2 -> grade line -> design file with
+#     "Ruling: mode single - headless run, `-` design seat, two tiny tasks -
+#     cost if wrong: slightly less isolation per task, negligible." -> one
+#     Agent sonnet build for F2+F3. No question, no Workflow. $0.68.
+#   cursor    PASS with a gap: grade line, then a numbered mode question with
+#     a recommendation, turn ended, fixture clean - but only single/per-task
+#     offered (workflow dropped: no Workflow tool on the host).
+# Round 1: Claude Code 2/3 - the one that matters (direct) failed, the same
+#   way A119's grade line did before the gate: a separate "ask" step after the
+#   gated line is skipped. Cursor 1/1 with the missing workflow option.
+#
+# --------------------------------- ROUND 2 (mode as a grade-line field) ----
+# FIX (SKILL.md only):
+#   - the Step 0.7 example line gains `· mode ask (single)`;
+#   - Step 0.8 becomes "the grade line's `mode` field": `mode ask (<rec>)` =
+#     ask once, all three modes, recommendation first (AskUserQuestion; no
+#     such tool -> a numbered list), then END YOUR TURN; `mode <m> (named)`;
+#     `mode <m> (ruled)` + Ruling for headless/chained/relay; "A bare feature
+#     request is not headless, whatever tools you lack.";
+#   - the workflow row: "no `Workflow` tool -> the host's parallel subagents".
+#   The grade gate already forces the line out before the first spend, so
+#   the mode decision now rides on an enforced line.
+# Run 2026-10-18T12:32Z-12:42Z. Transcripts: transcripts/f51-greenr2-<name>.*.
+#   direct    PASS. Skill -> Glob -> Read x3 -> TEXT "grade: bounded .
+#     critical no . design - . build cheap=sonnet . verify build=opus .
+#     ceremony lean . mode ask (single) ... Which build mode do you want?
+#     1. single (recommended) ... 2. per-task ... 3. workflow ..." -> end of
+#     run. No Write, no Agent; fixture git status clean. $0.26, 20 s.
+#   single    PASS. Skill -> TEXT "grade: ... . mode single (named) ..." ->
+#     Write design -> one Agent sonnet build -> main-session verify (Bash
+#     tests, TICKETS.md flip only). No question, no Workflow. $0.54.
+#   headless  PASS. Skill -> Write DENIED x2 -> TEXT "grade: ... . mode single
+#     (ruled) ..." -> design file "Ruling: mode single - headless run, owner
+#     away; two small one-file tasks - cost if wrong: serial instead of
+#     parallel, minor time." -> one Agent sonnet build. No question, no
+#     Workflow. $0.69.
+#   workflow  PASS. Read TICKETS.md -> Skill -> TEXT "grade: ... . mode
+#     workflow (named) ..." -> Read WORKFLOW.md -> Skill(workflow-authoring)
+#     -> Write design -> Workflow call (sonnet build, opus verify) -> report.
+#     No question. $0.86. Aside, not this rule: the script names literal
+#     'sonnet'/'opus' rather than `M[t.build]` (Phase 2's tier read).
+#   cursor    PASS. "grade: ... . mode ask (single) ..." then all three modes
+#     as a numbered list, single recommended, turn ended, fixture clean.
+# Round 2: Claude Code 4/4, Cursor 1/1.
+#
+# ------------------------------- ROUND 3 (review fixes, regression only) ----
+# FIX, from the pre-commit review (no change to the ask itself):
+#   - SKILL.md: after the answer, reprint the line as `mode <m> (asked)` -
+#     that line goes into the design file and Agent prompts; Phase 2 opens
+#     with the mode (per-task / single) instead of an unconditional "one
+#     agent per task"; the red flag covers spending with `mode ask` still
+#     unanswered; "the one Step 0 ask"; per-task "the usual pick".
+#   - references/platforms.md: build seat "(mode single: every block, in
+#     order)"; parallel fan-out is per-task mode's.
+#   - WORKFLOW.md: the criteria "recommend" workflow; the exception that let
+#     build-jarvis start one unasked ("unless the criteria above are met and
+#     the skill was itself invoked for a build") is gone.
+#   - PRACTICE.md §4: "each build agent gets one task (build-jarvis mode
+#     single: one agent, the blocks in order)".
+#   Prefix: PRACTICE.md, WORKFLOW.md and platforms.md checked byte-equal to
+#   the working tree (cmp). Same settings and isolation.
+# Run 2026-10-18T12:50Z-12:55Z. Transcripts: transcripts/f51-greenr3-<name>.*.
+#   direct    PASS. Glob -> Grep -> Skill -> Glob -> TEXT "grade: ... . mode
+#     ask (single) ... how should the build run? 1. single (recommended) ...
+#     2. per-task ... 3. workflow ..." -> end. Fixture clean. $0.23, 21 s.
+#   single    PASS. Skill -> Reads -> Write DENIED x2 -> TEXT "grade: ... .
+#     mode single (named) ..." -> Write design -> one Agent sonnet build ->
+#     main-session verify. No question, no Workflow. $0.79. (`python -m shelf
+#     export` via PowerShell was refused by the harness allow-list; the test
+#     suite covers it - an allow-list gap, not this rule.)
+#   workflow  PASS. Skill -> TEXT "grade: ... . mode workflow (named) ..." ->
+#     Read WORKFLOW.md -> Skill(workflow-authoring) -> Write design ->
+#     Workflow call -> report. No question. $0.86.
+# Round 3: 3/3. Spend, all Claude Code rounds: $2.02 + $2.35 + $1.88 = $6.25.
+#
+# ---------------------------------------------------------------- VERDICT ----
+# GREEN (round 3: 3/3 on the final body; round 2: 4/4 Claude Code + 1/1
+#   Cursor; round 1: 2/3 + 1/1 with a gap; RED = the pre-F51 body,
+#   a119-greenr3-direct-1, no question). Cursor round 3 not re-run: the
+#   round 3 edits do not touch the ask.
+#   Headless picked single, not per-task: the rule is "unasked, the most you
+#   pick is per-task", so single with a Ruling complies; F51's first done text
+#   said "per-task" and was corrected to the rule.
+# Not covered: one run per scenario (A119 needed rounds to show flakiness);
+#   the ask is not hook-enforced - the gate checks only that a `grade:` line
+#   exists, not its `mode` field. If a later run skips the ask, extending
+#   grade-gate to require `mode` on the line is the structural fix.
+#   Interactive Claude Code (with AskUserQuestion) not run; antigravity not run.
+#   The prefixes also carried another lane's uncommitted skills/ edits
+#   (relay-morpheus, tickets-zordon scripts); none is on this rule's path.
+# Regression: build-jarvis grade-gate.{sh,ps1} and feature-route.{sh,ps1}
+#   selftests ok; the route hook loaded build-jarvis in all 10 Claude Code
+#   runs; the grade line came before the first executed spend in all 10
+#   (gate-enforced in 4).

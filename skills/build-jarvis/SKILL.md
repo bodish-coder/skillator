@@ -64,11 +64,12 @@ and review. Everything below assumes it.
    non-critical seat one tier lower · "top tier" / "best models" → every seat
    deep · a named model → that seat on it.
 7. **Your first reply text after loading this skill is the grade line** —
-   before the design-file Write, before any Agent call. No confirmation gate;
-   the line is there so the user can overrule before the first token is spent:
+   before the design-file Write, before any Agent call. No confirmation gate
+   (step 8's mode question is the one Step 0 ask); the line is there so the
+   user can overrule before the first token is spent:
 
    ```
-   grade: bounded · critical no · design - · build cheap=sonnet · verify build=opus · ceremony lean · usage 5h 41%
+   grade: bounded · critical no · design - · build cheap=sonnet · verify build=opus · ceremony lean · mode ask (single) · usage 5h 41%
    ```
 
    **Printed means reply text the user sees**, starting `grade:`, before the
@@ -80,6 +81,29 @@ and review. Everything below assumes it.
    the first line of every Agent prompt (design, build, verify), verbatim. So
    whichever spend comes first — the design-file Write *or* a design agent —
    print the line as reply text, then paste the same line into that call.
+8. **Mode — the grade line's `mode` field, settled before any spend.** How
+   Phase 2 runs:
+
+   | Mode | What runs | Fits |
+   |---|---|---|
+   | **single** | One build agent does every task in order; design and verify stay their own seats | `—` design seat, 1-3 tightly coupled tasks, tasks sharing files |
+   | **per-task** | One fresh build agent per task (`tasks-sentinels`); same-file tasks never fan out | Several independent tasks — the usual pick when nothing else fits |
+   | **workflow** | Phases 1-3 as one workflow script (`WORKFLOW.md`); no `Workflow` tool → the host's parallel subagents | 4+ independent tasks or a sweep — costs the most tokens |
+
+   - `mode ask (<recommended>)` — the default. Right after the grade line, ask
+     once: all three modes, your recommendation first (`AskUserQuestion`; no
+     such tool → a numbered list). Then **end your turn** — no design-file
+     Write, no Agent, until the user answers. Then reprint the line with
+     `mode <m> (asked)`; that line is the one the design file and every
+     Agent prompt carry.
+   - `mode <m> (named)` — the user already named one ("single agent", "one
+     agent per task", "use a workflow", "ultracode"). No question.
+   - `mode <m> (ruled)` — the prompt or run says headless, chained or inside a
+     relay. No question; log `Ruling: mode <m> - <why> - <cost if wrong>`.
+     A bare feature request is not headless, whatever tools you lack.
+
+   Recommend from the grade row and how coupled the work reads. **Never
+   workflow without the user's opt-in**: unasked, the most you pick is per-task.
 
 **Ceremony** is `full` when the work is architectural, has 4+ tasks, runs
 inside a relay run, or is said to outlive this session ("keep going after",
@@ -140,21 +164,23 @@ recommendation, nothing kept.
 
 ## Phase 2 — Build
 
-One agent per task, fresh context, the **design file path** and its own task
-block — never the design pasted, never this session's history (PRACTICE §4;
-procedure `practice/task-loop.md`, prompt text `practice/prompts.md`). Each task
-runs on its own tagged tier. Several F tickets are one pass, one task block per
-ticket; each ticket's build agent implements its block only — it never loads
-this skill, regrades or runs its own verify. Review each task against its block
-before the next dispatch; a failed review goes to a fix agent. A third round may
-go one tier up, and only with
+The Step 0.8 mode decides the shape. **per-task**: one agent per task, each on
+its own tagged tier; independent tasks fan out, same-file tasks do not.
+**single**: one build agent takes every task block in order, on the highest
+tagged tier, and reports per block. Either way a build agent gets fresh context,
+the **design file path** and its task block(s) — never the design pasted, never
+this session's history (PRACTICE §4; procedure `practice/task-loop.md`, prompt
+text `practice/prompts.md`). Several F tickets are one pass, one task block per
+ticket; a build agent implements its block(s) only — it never loads this skill,
+regrades or runs its own verify. Review each block against its spec before the
+next dispatch; a failed review goes to a fix agent. A third round may go one
+tier up, and only with
 `Ruling: <seat> <from>-><to> - reviews <1> and <2> failed: <why each failed> - <cost if wrong>`
-citing both failed reviews; no Ruling, no step up. Independent tasks fan out;
-same-file tasks do not.
+citing both failed reviews; no Ruling, no step up.
 
-**4+ independent tasks, a sweep, or the user asked** → run Phases 1-3 as one
-workflow script (`WORKFLOW.md`): write the design file first, pass its path in
-`args`, and the build stage reads each task's tier: `model: M[t.build]`.
+**Mode workflow** (the user opted in) → run Phases 1-3 as one workflow script
+(`WORKFLOW.md`): write the design file first, pass its path in `args`, and the
+build stage reads each task's tier: `model: M[t.build]`.
 
 ## Phase 3 — Verify, review, relay
 
@@ -186,8 +212,9 @@ relay: the grade line again as the report's first line, what was built
 | "The cap reads as cheap, so the critical design seat drops to build." | The step-down is for non-critical seats only. Critical design stays deep and dispatched. |
 
 **Red flag:** about to Write the design file, or call Agent — a design agent
-included — with no `grade:` line in your reply text yet: stop and print it
-first. Critical work is no exception; it is where the overrule matters most.
+included — with no `grade:` line in your reply text yet, or with `mode ask`
+still unanswered: stop and print or ask first. Critical work is no exception;
+it is where the overrule matters most.
 - **Never an unnamed model.** An omitted model inherits the session's.
 - **The design file is the handover.** Pass it by path; the orchestrator does
   not design or code, bar writing a `—`-seat design file and the record.

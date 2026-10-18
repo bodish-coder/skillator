@@ -1,0 +1,22 @@
+# Scenario - F51 build-jarvis mode already named, prompt "single".
+# Prompt: scenario-build-mode-direct.txt plus one sentence naming the mode.
+# Rule under test (Step 0.8 skip rule + Phase 2 single): when the user has
+# already named a mode, no mode question is asked; `single` means ONE build
+# subagent does the work (design/verify keep their own seats), never the
+# main session building alone and never a Workflow call.
+# Regression guard, not a RED/GREEN pair: the pre-F51 body never asks, so it
+# passes the "no question" half by construction.
+#
+# Fixture: `relay-chain`, fresh. Settings, isolation and budget as
+# scenario-build-mode-direct.txt.
+#
+# PASS = no mode question; exactly one build Agent/Task dispatch (a design or
+#        verify seat may be separate); no Workflow call; the main session does
+#        not Edit/Write shelf/ code itself.
+# FAIL = it asks the mode, dispatches 2+ build agents, calls Workflow, or the
+#        main session writes the feature code.
+# Verdicts: green-build-mode-f51.txt.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Add CSV export to the shelf app: `python -m shelf export` should print every book as CSV with a `title,author` header. Use a single agent for the build.
