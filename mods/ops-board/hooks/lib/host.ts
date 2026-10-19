@@ -130,14 +130,16 @@ export async function runCall($: HostApi, call: Call, args: string[]): Promise<{
 
 // Usage: this session's own host reading first. Only when the host has none, the
 // watch-cortana flag files named by THIS session's id (`<id>`, `<id>.weekly` in
-// $CLAUDE_USAGE_WATCH_DIR or ~/.claude/handoff-watch), dated by their mtime.
+// $CLAUDE_USAGE_WATCH_DIR, else $CLAUDE_CONFIG_DIR/handoff-watch, else
+// ~/.claude/handoff-watch - the order usage-watch writes them), dated by their mtime.
 export async function readUsage($: HostApi, now: number): Promise<Usage> {
   const u = await $.session.usage()
   const cost = u.cost?.usd ?? null
   if (u.rateLimits.length) return usageFrom(u.rateLimits, cost, now)
   const dirEnv = await $.env.get('CLAUDE_USAGE_WATCH_DIR')
+  const cfgEnv = await $.env.get('CLAUDE_CONFIG_DIR')
   const home = (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
-  const dir = dirEnv ? norm(dirEnv) : home ? norm(home) + '/.claude/handoff-watch' : null
+  const dir = dirEnv ? norm(dirEnv) : cfgEnv ? norm(cfgEnv) + '/handoff-watch' : home ? norm(home) + '/.claude/handoff-watch' : null
   const id = await $.session.id()
   if (!dir || !id) return usageFromFlags(null, null, cost)
   let entries: FsEntry[] = []

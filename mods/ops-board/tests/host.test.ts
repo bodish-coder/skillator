@@ -186,6 +186,21 @@ test('readUsage: another session file is never read; CLAUDE_USAGE_WATCH_DIR wins
   const u = await readUsage($, NOW)
   expect([u.five, u.seven, seen.reads, seen.lists]).toEqual([null, null, [], ['/w']])
 })
+test('readUsage: CLAUDE_CONFIG_DIR/handoff-watch is read when CLAUDE_USAGE_WATCH_DIR is unset', async () => {
+  const [$, seen] = fake({
+    env: { HOME: '/h', CLAUDE_CONFIG_DIR: 'C:\\cfg\\prof' }, id: 'sid-1',
+    dirs: { 'C:/cfg/prof/handoff-watch': [entry('sid-1', NOW)], '/h/.claude/handoff-watch': [entry('sid-1', NOW)] },
+    files: { 'C:/cfg/prof/handoff-watch/sid-1': '41', '/h/.claude/handoff-watch/sid-1': '99' },
+  })
+  const u = await readUsage($, NOW)
+  expect(seen.lists).toEqual(['C:/cfg/prof/handoff-watch'])
+  expect(u.five?.pct).toBe(41)
+})
+test('readUsage: CLAUDE_USAGE_WATCH_DIR still wins over CLAUDE_CONFIG_DIR', async () => {
+  const [$, seen] = fake({ env: { HOME: '/h', CLAUDE_CONFIG_DIR: '/cfg', CLAUDE_USAGE_WATCH_DIR: '/w' }, id: 'sid-1', dirs: { '/w': [], '/cfg/handoff-watch': [entry('sid-1', NOW)] } })
+  await readUsage($, NOW)
+  expect(seen.lists).toEqual(['/w'])
+})
 test('readUsage: no flag dir at all is not observed', async () => {
   const [$] = fake({ env: { HOME: '/h' } })
   const u = await readUsage($, NOW)
