@@ -5,15 +5,22 @@
 #   usage-watch.sh check                                     (any host, no stdin)
 #   usage-watch.sh level                                     (any host, no stdin, no side effect)
 # Threshold: $CLAUDE_USAGE_HANDOFF_PCT, default 92.
-# State dir: $CLAUDE_USAGE_WATCH_DIR, default ~/.claude/handoff-watch (the
-# override exists so tests never touch a live session's flags).
+# State dir: $CLAUDE_USAGE_WATCH_DIR, else $CLAUDE_CONFIG_DIR/handoff-watch,
+# else ~/.claude/handoff-watch (the first override exists so tests never touch
+# a live session's flags; A130: the second keeps a profile's flags its own).
 mode="${1:-probe}"; then_cmd="$2"
 # The state dir keeps its original name on purpose: it is storage, not a
 # skill reference. Renaming it with the skill would strand every live
 # session's flag and .done marker at the old path - a session that had
 # already fired would fire a second time. Skill renames must not migrate
 # a user's machine.
-dir="${CLAUDE_USAGE_WATCH_DIR:-$HOME/.claude/handoff-watch}"
+# A130: a CLAUDE_CONFIG_DIR profile keeps its flags in its own config dir - the
+# probe writes there and check/level read there, so one profile never reads
+# another's sessions. Same order as the ops-board mod's usage read. Claude Code
+# on Windows hands over a backslashed path; `tr` it so every join below is '/'.
+if [ -n "${CLAUDE_USAGE_WATCH_DIR:-}" ]; then dir=$CLAUDE_USAGE_WATCH_DIR
+elif [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then dir="$(printf '%s' "$CLAUDE_CONFIG_DIR" | tr '\\' '/')/handoff-watch"
+else dir="$HOME/.claude/handoff-watch"; fi
 limit="${CLAUDE_USAGE_HANDOFF_PCT:-92}"
 # The 7-day window is watched separately and lower. The 5-hour window refills in
 # hours, so crossing it is a pause; the weekly one does not, so crossing it ends
@@ -169,6 +176,26 @@ main_flag() {
     | grep -v '\.fivehour$' | grep -v '\.ctx$' | head -1
 }
 
+# A130: the flag key check/level may read, or nothing. Inside Claude Code
+# (CLAUDE_CODE_SESSION_ID set) only this session's own flags count - never the
+# newest file in the dir, which may be another session's. Elsewhere the newest
+# main flag (else the newest .weekly - A101), and only while fresh. Must match
+# Get-FlagKey in the PowerShell twin.
+flag_key() {
+  if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    k=$CLAUDE_CODE_SESSION_ID
+    if fresh_file "$dir/$k" || fresh_file "$dir/$k.weekly"; then printf '%s' "$k"; fi
+    return 0
+  fi
+  k=$(main_flag)
+  if [ -n "$k" ]; then fresh_file "$dir/$k" && printf '%s' "$k"; return 0; fi
+  k=$(ls -t "$dir" 2>/dev/null | grep '\.weekly$' | head -1)
+  [ -n "$k" ] && fresh_file "$dir/$k" && printf '%s' "${k%.weekly}"
+  return 0
+}
+# A fresh flag's first number, else nothing.
+read_fresh() { fresh_file "$1" && read_pct "$1"; return 0; }
+
 # F31: "<5h> <7d> <ctx>" from one codex rollout, '-' for each one absent.
 # 5h = max of the rate_limits windows that are NOT the 10080-minute one,
 # WITHOUT the context ratio - a full context is a compaction, not a quota.
@@ -211,18 +238,17 @@ if [ "$mode" = level ]; then
     fi
   fi
   if [ "$src" = none ]; then
-    f=$(main_flag); key=
-    if [ -n "$f" ]; then key=$f; mx=$(read_pct "$dir/$f"); [ -n "$mx" ] || mx=-
-    else f=$(ls -t "$dir" 2>/dev/null | grep '\.weekly$' | head -1); [ -n "$f" ] && key=${f%.weekly}
-    fi
+    # A130: this session's flags only, and every one inside the same freshness
+    # window as a codex rollout: the statusline rewrites them on every render,
+    # so an older one is a dead or idle session's - unobservable, not a
+    # reading to hold on.
+    key=$(flag_key)
     if [ -n "$key" ]; then
       src=claude-code
-      # Same freshness window as a codex rollout: the statusline rewrites
-      # .fivehour on every render, so one older than that is a dead session's
-      # or an idle one's - its 5h is unobservable, not a reading to hold on.
-      v=; fresh_file "$dir/$key.fivehour" && v=$(read_pct "$dir/$key.fivehour"); [ -n "$v" ] && h=$v
-      v=$(read_pct "$dir/$key.weekly");   [ -n "$v" ] && wk=$v
-      v=$(read_pct "$dir/$key.ctx");      [ -n "$v" ] && cx=$v
+      v=$(read_fresh "$dir/$key");          [ -n "$v" ] && mx=$v
+      v=$(read_fresh "$dir/$key.fivehour"); [ -n "$v" ] && h=$v
+      v=$(read_fresh "$dir/$key.weekly");   [ -n "$v" ] && wk=$v
+      v=$(read_fresh "$dir/$key.ctx");      [ -n "$v" ] && cx=$v
     fi
   fi
   echo "src=$src 5h=$h 7d=$wk ctx=$cx max=$mx"
@@ -234,7 +260,7 @@ fi
 # end. Elsewhere this is called from the always-on project file grayskull-power
 # writes. cursor/antigravity expose nothing - say so, don't invent a number.
 if [ "$mode" = check ]; then
-  pct=""; src=none; key=none
+  pct=""; wk=""; src=none; key=none
   # A32: recurse at any depth, and ignore a rollout older than the freshness
   # window - a week-old Codex session sitting at 98% must not make this fire on
   # a machine that is now running something else.
@@ -246,16 +272,14 @@ if [ "$mode" = check ]; then
     if [ -n "$pct" ] || [ -n "$wk" ]; then src=codex; key=$(basename "$roll" .jsonl); fi
   fi
   if [ -z "$pct" ] && [ -z "$wk" ]; then
-    # `.weekly` is written after the main flag, so it is always the newest -
-    # picking it here would report the 7-day number as the max and compare it
-    # against the wrong threshold. It is read below, by name, not by mtime.
-    f=$(main_flag)
-    [ -n "$f" ] && { pct=$(read_pct "$dir/$f"); src=claude-code; key=$f; wk=$(read_pct "$dir/$f.weekly"); }
-    # A weekly flag with no main flag beside it is a real state (see the gate),
-    # so fall back to it rather than reporting no signal at all.
-    if [ -z "$f" ]; then
-      f=$(ls -t "$dir" 2>/dev/null | grep '\.weekly$' | head -1)
-      [ -n "$f" ] && { wk=$(read_pct "$dir/$f"); src=claude-code; key=${f%.weekly}; }
+    # A130: this session's flags only (flag_key), each one read only while
+    # fresh. `.weekly` is read by name, never picked by mtime (it is always
+    # the newest, and would be compared against the wrong threshold); a
+    # weekly flag with no main flag beside it still counts (A101).
+    k=$(flag_key)
+    if [ -n "$k" ]; then
+      pct=$(read_fresh "$dir/$k"); wk=$(read_fresh "$dir/$k.weekly")
+      if [ -n "$pct" ] || [ -n "$wk" ]; then src=claude-code; key=$k; fi
     fi
   fi
   if [ -z "$pct" ] && [ -z "$wk" ]; then

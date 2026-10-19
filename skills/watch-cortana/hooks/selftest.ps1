@@ -16,6 +16,12 @@ $liveW = Join-Path $tmp 'watch'
 $flag = Join-Path $liveW $sid
 $noCodexHome = Join-Path $tmp 'no-codex-home'
 $shExe = (Get-Command sh -ErrorAction SilentlyContinue)
+# A130: the state dir follows CLAUDE_CONFIG_DIR, and check/level read only the
+# flag named by CLAUDE_CODE_SESSION_ID. Run inside Claude Code, both are
+# inherited from the live session - every case below would then read (and
+# `check` write a .done into) the real profile's handoff-watch. Cases that
+# want them set them explicitly.
+Remove-Item Env:CLAUDE_CONFIG_DIR, Env:CLAUDE_CODE_SESSION_ID -ErrorAction SilentlyContinue
 
 # --- helpers ----------------------------------------------------------------
 # A crashed script must fail the test: capture the output AND the exit code, so
@@ -536,6 +542,102 @@ try {
     $l = RunW $tw 'level' (Join-Path $tmp "f31-cx-$tw") (Join-Path $hc '.codex') $null
     if ($l -ne 'src=codex 5h=12.0 7d=45.0 ctx=90.0 max=90.0') { throw "$tw level codex: got '$l'" }
     if (Test-Path (Join-Path $tmp "f31-cx-$tw")) { throw "$tw level codex: created the state dir" }
+  }
+
+  # --- A130: CLAUDE_CONFIG_DIR, this session's flag only, nothing stale ------
+  # Found 2026-10-18: a session run with CLAUDE_CONFIG_DIR=~/.claude-vidul had
+  # `check` report ANOTHER session's 3-day-old 55% from ~/.claude/handoff-watch
+  # as current, and relay's chain hold decided on the same `level` line.
+  # Resolution order (same as the probe): CLAUDE_USAGE_WATCH_DIR, else
+  # $CLAUDE_CONFIG_DIR/handoff-watch, else ~/.claude/handoff-watch. A reading
+  # is this session's when its flag is named CLAUDE_CODE_SESSION_ID (when
+  # set), and current only inside the 3h freshness window.
+  function RunA130($tw, $mode, $hm, $cfg, $sessId, $wdir, $json) {
+    $keep = @{}; foreach ($n in 'HOME', 'USERPROFILE', 'CLAUDE_USAGE_WATCH_DIR', 'CLAUDE_CONFIG_DIR', 'CLAUDE_CODE_SESSION_ID', 'CODEX_HOME') { $keep[$n] = [Environment]::GetEnvironmentVariable($n) }
+    try {
+      $env:USERPROFILE = $hm; $env:HOME = if ($tw -eq 'sh') { $hm -replace '\\', '/' } else { $hm }
+      $env:CODEX_HOME = Join-Path $tmp 'a130-no-codex'
+      foreach ($p in @(@('CLAUDE_CONFIG_DIR', $cfg), @('CLAUDE_CODE_SESSION_ID', $sessId), @('CLAUDE_USAGE_WATCH_DIR', $wdir))) {
+        [Environment]::SetEnvironmentVariable($p[0], $(if ($p[1]) { $p[1] } else { $null }))
+      }
+      if ($tw -eq 'sh') {
+        $out = if ($null -eq $json) { (& $shExe.Source $sh $mode) -join "`n" } else { ($json | & $shExe.Source $sh $mode) -join "`n" }
+      } else {
+        $out = if ($null -eq $json) { (& powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode $mode) -join "`n" }
+               else { ($json | & powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode $mode) -join "`n" }
+      }
+    } finally { foreach ($n in $keep.Keys) { [Environment]::SetEnvironmentVariable($n, $keep[$n]) } }
+    if ($LASTEXITCODE -ne 0) { throw "$tw $mode`: exit $LASTEXITCODE, output '$out'" }
+    $out
+  }
+  # A flag file in $d, written $ageHours ago.
+  function PutFlag($d, $name, $value, $ageHours = 0) {
+    New-Item $d -ItemType Directory -Force | Out-Null
+    $p = [IO.Path]::Combine((Convert-Path $d), $name)
+    [IO.File]::WriteAllText($p, $value)
+    if ($ageHours) { (Get-Item -LiteralPath $p).LastWriteTime = (Get-Date).AddHours(-$ageHours) }
+  }
+  foreach ($tw in $twins) {
+    # 1. The ticket's case: HOME's dir holds another session's 3-day-old 55%,
+    #    the profile has nothing for the live session. Neither is current.
+    $hm = NewHome "a130-repro-$tw"; $cfg = Join-Path $tmp "a130-repro-cfg-$tw"
+    New-Item $cfg -ItemType Directory -Force | Out-Null
+    $hw = Join-Path $hm '.claude\handoff-watch'
+    PutFlag $hw 'old-sess' '55' 72; PutFlag $hw 'old-sess.weekly' '95' 72; PutFlag $hw 'old-sess.fivehour' '40' 72
+    $c = RunA130 $tw 'check' $hm $cfg 'live-sess' $null $null
+    if ($c -notmatch '^watch-cortana: no usage signal') { throw "$tw check a130: another session's 3-day-old reading reported as current, got '$c'" }
+    if (-not (NoDoneFiles $hm)) { throw "$tw check a130: burned a one-shot on another session's reading" }
+    $l = RunA130 $tw 'level' $hm $cfg 'live-sess' $null $null
+    if ($l -ne 'src=none 5h=- 7d=- ctx=- max=-') { throw "$tw level a130: another session's 3-day-old reading reported as current, got '$l'" }
+
+    # 2. The profile's dir is the one read, for this session's own flags.
+    PutFlag (Join-Path $cfg 'handoff-watch') 'live-sess' '30'; PutFlag (Join-Path $cfg 'handoff-watch') 'live-sess.weekly' '20'
+    PutFlag (Join-Path $cfg 'handoff-watch') 'live-sess.fivehour' '30'
+    $c = RunA130 $tw 'check' $hm $cfg 'live-sess' $null $null
+    if ($c -notmatch '^watch-cortana: claude-code 30(\.0)?% of 92% - ok$') { throw "$tw check a130: CLAUDE_CONFIG_DIR not honoured, got '$c'" }
+    $l = RunA130 $tw 'level' $hm $cfg 'live-sess' $null $null
+    if ($l -ne 'src=claude-code 5h=30 7d=20 ctx=- max=30') { throw "$tw level a130: CLAUDE_CONFIG_DIR not honoured, got '$l'" }
+
+    # 3. The probe writes where the readers read.
+    $cfgP = Join-Path $tmp "a130-probe-cfg-$tw"
+    RunA130 $tw 'probe' $hm $cfgP $null $null (& $slw 'sess-p' 61 20 10) | Out-Null
+    if (-not (Test-Path (Join-Path $cfgP 'handoff-watch\sess-p'))) { throw "$tw probe a130: did not write under CLAUDE_CONFIG_DIR" }
+    if (Test-Path (Join-Path $hw 'sess-p')) { throw "$tw probe a130: wrote under HOME despite CLAUDE_CONFIG_DIR" }
+
+    # 4. A fresh flag from ANOTHER session in the same dir is not this one's.
+    $cfg4 = Join-Path $tmp "a130-other-cfg-$tw"
+    PutFlag (Join-Path $cfg4 'handoff-watch') 'other-sess' '97'; PutFlag (Join-Path $cfg4 'handoff-watch') 'other-sess.fivehour' '97'
+    $c = RunA130 $tw 'check' $hm $cfg4 'live-sess' $null $null
+    if ($c -match 'HANDOFF NOW' -or $c -notmatch '^watch-cortana: no usage signal') { throw "$tw check a130: read another session's flag, got '$c'" }
+    if (Get-ChildItem (Join-Path $cfg4 'handoff-watch') -Filter '*.done') { throw "$tw check a130: burned another session's one-shot" }
+    $l = RunA130 $tw 'level' $hm $cfg4 'live-sess' $null $null
+    if ($l -ne 'src=none 5h=- 7d=- ctx=- max=-') { throw "$tw level a130: read another session's flag, got '$l'" }
+
+    # 5. No session id (a non-Claude host): the newest flag, but only if fresh.
+    $cfg5 = Join-Path $tmp "a130-stale-cfg-$tw"
+    PutFlag (Join-Path $cfg5 'handoff-watch') 'any-sess' '97' 4; PutFlag (Join-Path $cfg5 'handoff-watch') 'any-sess.weekly' '95' 4
+    $c = RunA130 $tw 'check' $hm $cfg5 $null $null $null
+    if ($c -notmatch '^watch-cortana: no usage signal') { throw "$tw check a130: a 4h-old flag reported as current, got '$c'" }
+    $l = RunA130 $tw 'level' $hm $cfg5 $null $null $null
+    if ($l -ne 'src=none 5h=- 7d=- ctx=- max=-') { throw "$tw level a130: a 4h-old flag reported as current, got '$l'" }
+    # ...and the same flags 2h old are inside the window.
+    PutFlag (Join-Path $cfg5 'handoff-watch') 'any-sess' '50' 2; PutFlag (Join-Path $cfg5 'handoff-watch') 'any-sess.weekly' '40' 2
+    $c = RunA130 $tw 'check' $hm $cfg5 $null $null $null
+    if ($c -notmatch '^watch-cortana: claude-code 50(\.0)?% of 92% - ok$') { throw "$tw check a130: a 2h-old flag was dropped, got '$c'" }
+    $l = RunA130 $tw 'level' $hm $cfg5 $null $null $null
+    if ($l -ne 'src=claude-code 5h=- 7d=40 ctx=- max=50') { throw "$tw level a130: a 2h-old flag was dropped, got '$l'" }
+
+    # 6. This session's own flags gone stale are not current either.
+    $cfg6 = Join-Path $tmp "a130-ownstale-cfg-$tw"
+    PutFlag (Join-Path $cfg6 'handoff-watch') 'live-sess' '97' 4; PutFlag (Join-Path $cfg6 'handoff-watch') 'live-sess.weekly' '95' 4
+    $l = RunA130 $tw 'level' $hm $cfg6 'live-sess' $null $null
+    if ($l -ne 'src=none 5h=- 7d=- ctx=- max=-') { throw "$tw level a130: this session's 4h-old flag reported as current, got '$l'" }
+
+    # 7. CLAUDE_USAGE_WATCH_DIR still beats CLAUDE_CONFIG_DIR.
+    $w7 = Join-Path $tmp "a130-override-$tw"
+    PutFlag $w7 'live-sess' '44'
+    $l = RunA130 $tw 'level' $hm $cfg 'live-sess' $w7 $null
+    if ($l -ne 'src=claude-code 5h=- 7d=- ctx=- max=44') { throw "$tw level a130: CLAUDE_USAGE_WATCH_DIR did not win, got '$l'" }
   }
 
   'ok'

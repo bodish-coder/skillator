@@ -4,8 +4,9 @@
 #   -Mode check                                           (any host, no stdin - see below)
 #   -Mode level                                           (any host, no stdin, no side effect)
 # Threshold: $env:CLAUDE_USAGE_HANDOFF_PCT, default 92.
-# State dir: $env:CLAUDE_USAGE_WATCH_DIR, default ~/.claude/handoff-watch (the
-# override exists so tests never touch a live session's flags).
+# State dir: $env:CLAUDE_USAGE_WATCH_DIR, else $env:CLAUDE_CONFIG_DIR/handoff-watch,
+# else ~/.claude/handoff-watch (the first override exists so tests never touch
+# a live session's flags; A130: the second keeps a profile's flags its own).
 #
 # Claude Code and codex (A83: gate reads the rollout named by transcript_path)
 # have a Stop hook that can inject. Cursor/Antigravity get `check`, which reads
@@ -14,7 +15,12 @@
 param([ValidateSet('probe','gate','check','level')][string]$Mode = 'probe', [string]$Then)
 
 # The state dir keeps its original name on purpose - see the sh twin.
-$dir      = if ($env:CLAUDE_USAGE_WATCH_DIR) { $env:CLAUDE_USAGE_WATCH_DIR } else { Join-Path $HOME '.claude/handoff-watch' }
+# A130: a CLAUDE_CONFIG_DIR profile keeps its flags in its own config dir - the
+# probe writes there and check/level read there, so one profile never reads
+# another's sessions. Same order as the ops-board mod's usage read.
+$dir      = if ($env:CLAUDE_USAGE_WATCH_DIR) { $env:CLAUDE_USAGE_WATCH_DIR }
+            elseif ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR 'handoff-watch' }
+            else { Join-Path $HOME '.claude/handoff-watch' }
 $pctLimit = if ($env:CLAUDE_USAGE_HANDOFF_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_PCT } else { 92 }
 # The 7-day window is watched separately and lower. The 5-hour window refills
 # in hours, so crossing it is a pause; the weekly one does not, so crossing it
@@ -110,6 +116,38 @@ function Read-Token($path) {
 }
 function Fmt1($v) { ([double]$v).ToString('0.0', $inv) }
 
+# A130: true when $path is a file written inside the freshness window. The
+# statusline rewrites every flag on each render, so an older one is a dead or
+# idle session's - not a current reading.
+function Test-Fresh($path) {
+  $i = Get-Item -LiteralPath $path -ErrorAction SilentlyContinue
+  [bool]($i -and -not $i.PSIsContainer -and $i.LastWriteTime -gt (Get-Date).AddHours(-$staleHours))
+}
+
+# A130: the flag key check/level may read, or $null. Inside Claude Code
+# (CLAUDE_CODE_SESSION_ID set) only this session's own flags count - never the
+# newest file in the dir, which may be another session's. Elsewhere the newest
+# main flag (else the newest .weekly), and only while fresh.
+function Get-FlagKey {
+  if ($env:CLAUDE_CODE_SESSION_ID) {
+    $k = $env:CLAUDE_CODE_SESSION_ID
+    if ((Test-Fresh (Join-Path $dir $k)) -or (Test-Fresh (Join-Path $dir "$k.weekly"))) { return $k }
+    return $null
+  }
+  # `.weekly` is written after the main flag, so it is always the newest -
+  # the main flag is picked first, by name, never by mtime alone.
+  $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
+       Where-Object { $_.Extension -notin @('.done', '.weekly', '.fivehour', '.ctx') } | Sort-Object LastWriteTime | Select-Object -Last 1
+  if ($f) { if (Test-Fresh $f.FullName) { return $f.Name }; return $null }
+  # A101: a weekly flag with no main flag beside it is a real state.
+  $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
+       Where-Object { $_.Extension -eq '.weekly' } | Sort-Object LastWriteTime | Select-Object -Last 1
+  if ($f -and (Test-Fresh $f.FullName)) { return $f.BaseName }
+  $null
+}
+# A fresh flag's value via $reader, else $null.
+function Read-Fresh($path, $reader) { if (Test-Fresh $path) { & $reader $path } else { $null } }
+
 # F31: @(5h, 7d, ctx) from one codex rollout, '-' for each one absent. 5h is
 # the max of the windows that are NOT 10080 minutes, WITHOUT the context ratio
 # - a full context is a compaction, not a quota.
@@ -149,26 +187,17 @@ if ($Mode -eq 'level') {
     }
   }
   if ($src -eq 'none') {
-    $key = $null
-    $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
-         Where-Object { $_.Extension -notin @('.done', '.weekly', '.fivehour', '.ctx') } | Sort-Object LastWriteTime | Select-Object -Last 1
-    if ($f) { $key = $f.Name; $v = Read-Token $f.FullName; if ($null -ne $v) { $mx = $v } }
-    else {
-      $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
-           Where-Object { $_.Extension -eq '.weekly' } | Sort-Object LastWriteTime | Select-Object -Last 1
-      if ($f) { $key = $f.BaseName }
-    }
+    # A130: this session's flags only, and every one inside the same freshness
+    # window as a codex rollout: the statusline rewrites them on every render,
+    # so an older one is a dead or idle session's - unobservable, not a
+    # reading to hold on.
+    $key = Get-FlagKey
     if ($key) {
       $src = 'claude-code'
-      # Same freshness window as a codex rollout: the statusline rewrites
-      # .fivehour on every render, so one older than that is a dead session's
-      # or an idle one's - its 5h is unobservable, not a reading to hold on.
-      $fh = Get-Item -LiteralPath (Join-Path $dir "$key.fivehour") -ErrorAction SilentlyContinue
-      if ($fh -and $fh.LastWriteTime -gt (Get-Date).AddHours(-$staleHours)) {
-        $v = Read-Token $fh.FullName; if ($null -ne $v) { $h = $v }
-      }
-      $v = Read-Token (Join-Path $dir "$key.weekly");   if ($null -ne $v) { $wk = $v }
-      $v = Read-Token (Join-Path $dir "$key.ctx");      if ($null -ne $v) { $cx = $v }
+      $v = Read-Fresh (Join-Path $dir $key) ${function:Read-Token};             if ($null -ne $v) { $mx = $v }
+      $v = Read-Fresh (Join-Path $dir "$key.fivehour") ${function:Read-Token};  if ($null -ne $v) { $h = $v }
+      $v = Read-Fresh (Join-Path $dir "$key.weekly") ${function:Read-Token};    if ($null -ne $v) { $wk = $v }
+      $v = Read-Fresh (Join-Path $dir "$key.ctx") ${function:Read-Token};       if ($null -ne $v) { $cx = $v }
     }
   }
   "src=$src 5h=$h 7d=$wk ctx=$cx max=$mx"
@@ -189,18 +218,13 @@ if ($Mode -eq 'check') {
   }
   # Claude Code: the statusline probe already wrote the number.
   if ($null -eq $pct -and $null -eq $wk) {
-    # `.weekly` is written after the main flag, so it is always the newest -
-    # picking it here would report the 7-day number as the max and compare it
-    # against the wrong threshold. It is read below, by name, not by mtime.
-    $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
-         Where-Object { $_.Extension -notin @('.done', '.weekly', '.fivehour', '.ctx') } | Sort-Object LastWriteTime | Select-Object -Last 1
-    if ($f) { $pct = Read-Flag $f.FullName; if ($null -ne $pct) { $src = 'claude-code'; $key = $f.Name; $wk = Read-Flag "$($f.FullName).weekly" } }
-    # A101: a weekly flag with no main flag beside it is a real state (see the
-    # gate), so fall back to it rather than reporting no signal at all.
-    if (-not $f) {
-      $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
-           Where-Object { $_.Extension -eq '.weekly' } | Sort-Object LastWriteTime | Select-Object -Last 1
-      if ($f) { $wk = Read-Flag $f.FullName; if ($null -ne $wk) { $src = 'claude-code'; $key = $f.BaseName } }
+    # A130: this session's flags only (Get-FlagKey), each one read only while
+    # fresh. A weekly flag with no main flag beside it still counts (A101).
+    $k = Get-FlagKey
+    if ($k) {
+      $pct = Read-Fresh (Join-Path $dir $k) ${function:Read-Flag}
+      $wk  = Read-Fresh (Join-Path $dir "$k.weekly") ${function:Read-Flag}
+      if ($null -ne $pct -or $null -ne $wk) { $src = 'claude-code'; $key = $k }
     }
   }
   # ponytail: cursor and antigravity expose no usage anywhere on disk - say so

@@ -18,7 +18,7 @@ only the `gate` (see **Codex** below); for cursor/antigravity see **Other hosts*
 
 | Piece | Event | Job |
 |---|---|---|
-| `hooks/usage-watch.* probe` | `statusLine` | The **only** place Claude Code exposes `rate_limits.*.used_percentage`. Records the highest percentage seen to `~/.claude/handoff-watch/<session_id>` (`CLAUDE_USAGE_WATCH_DIR` overrides), then delegates to whatever statusline was already configured. |
+| `hooks/usage-watch.* probe` | `statusLine` | The **only** place Claude Code exposes `rate_limits.*.used_percentage`. Records the highest percentage seen to `<config dir>/handoff-watch/<session_id>` - `<config dir>` is `$CLAUDE_CONFIG_DIR` when set, else `~/.claude`; `CLAUDE_USAGE_WATCH_DIR` overrides both - then delegates to whatever statusline was already configured. |
 | `hooks/usage-watch.* gate` | `Stop` | At the end of a turn, if the recorded percentage ≥ threshold, returns `{"decision":"block"}` with the three-step preserve order below. |
 | `hooks/usage-watch.* level` | none — called | Prints one line, `src=<claude-code\|codex\|none> 5h= 7d= ctx= max=`, from the same sources as `check`; no stdin, no `.done`, no threshold. `relay-morpheus` reads it between chain stages. |
 
@@ -211,16 +211,18 @@ the handoff should be written immediately.
   *that config dir's* `settings.json`. A `CLAUDE_CONFIG_DIR` profile
   (`~/.claude-work`, `~/.claude-bodish`, …) is a separate install: arming
   `~/.claude` arms nothing else. Wire every profile you actually code in, and
-  point `-Then` at that profile's own statusline command — the flag files are
-  shared (`~/.claude/handoff-watch/`) but the hooks are not.
+  point `-Then` at that profile's own statusline command. Each profile keeps
+  its own flag files too (`$CLAUDE_CONFIG_DIR/handoff-watch/`), and `check` /
+  `level` read only the current session's (`CLAUDE_CODE_SESSION_ID`), and only
+  while under 3 hours old (A130).
 - **Never fires** — the statusline is where the percentage comes from. If
-  `~/.claude/handoff-watch/<session_id>` does not exist, the probe is not wired in
+  `<config dir>/handoff-watch/<session_id>` does not exist, the probe is not wired in
   as `statusLine`, or this Claude Code build predates the `rate_limits` statusline
   field (2.0.44+).
 - **Statusline went blank** — the `-Then` command is wrong or missing.
-- **Fired once, want it again** — delete `~/.claude/handoff-watch/<session_id>.done`.
+- **Fired once, want it again** — delete `<config dir>/handoff-watch/<session_id>.done`.
 - **Stale flag files** — plain text, a few bytes each; delete
-  `~/.claude/handoff-watch/` whenever.
+  `<config dir>/handoff-watch/` whenever.
 
 ## Related
 

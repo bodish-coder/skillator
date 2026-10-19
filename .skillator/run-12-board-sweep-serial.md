@@ -7,7 +7,7 @@ Owner: @cc-0211b2 (Claude Code). Owner request: "can u do pending and in progres
 2. B3 ticket-meta.sh CRLF. [x]
 3. A132 pending rounding. [x]
 4. A135 harness overlays commands/. [x]
-5. A130 usage-watch CLAUDE_CONFIG_DIR. [ ]
+5. A130 usage-watch CLAUDE_CONFIG_DIR. [x]
 6. A131 next-id.ps1 lock under load. [ ]
 7. Bump, push as bodish-coder, update skillator + install ops-board@skillator in the six profiles with skillator (owner chose 2026-10-20). [ ]
 
@@ -30,3 +30,5 @@ Owner: @cc-0211b2 (Claude Code). Owner request: "can u do pending and in progres
 - 2026-10-20 - Ruling: released the stale watchdog hold (2026-10-19T21:57Z mem 0.9 GB) - memory 4.15 GB free now, green; the live mod copy cannot release it (A136 sync points it at installed 4.8.1, which has no watchdog command) - costs a dispatch under low memory if it drops again before the profile update.
 - 2026-10-20 - relay selftest re-run killed by the low-memory reaper again (sh never finished; 4.15 -> 3.62 GB and falling); orphan selftest bash stopped; not restarted - owed, owner to decide (reaper flag or free memory).
 - 2026-10-20 - A135 fixed (one agent, sonnet; failing-first; harness selftest ok in the FOREGROUND - the reaper only kills background commands). Reviewed in the main session (17-line diff).
+- 2026-10-20 - Ruling: A130 fix seat build (opus) - two ports plus relay hold reads the same line, a contract others depend on - costs opus tokens.
+- 2026-10-20 - A130 fixed (one agent, opus; repro: relay HOLD 95 on a 3-day-old foreign reading -> UNOBSERVABLE). Agent Rulings: flag = $CLAUDE_CODE_SESSION_ID file, no fallback when set (cost: headless claude -p chain drivers read src=none -> relay UNOBSERVABLE); unset -> newest fresh flag; stale = 3 h mtime on every flag (existing window); probe+gate move to the profile dir too (cost: a profile session live across the upgrade may fire one handoff twice); selftest clears inherited CLAUDE_CONFIG_DIR/SESSION_ID. My check: selftest.ps1 ok, ps1 ASCII, live session now src=none (correct - ~/.claude-bodish/handoff-watch absent until the profile update installs the new probe). Logged A138 (mod readUsage skips CLAUDE_CONFIG_DIR). Not acted on: leaked selftest-*.ctx/.fivehour files from 2026-10-10..12 in the real ~/.claude/handoff-watch (outside the worktree, owner's call).
