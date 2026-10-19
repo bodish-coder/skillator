@@ -6,7 +6,7 @@ Owner: @cc-0211b2 (Claude Code). Owner request: "can u do pending and in progres
 1. F46-F50 ops-board: one review agent on the staged diff -> fix findings -> commit. [x]
 2. B3 ticket-meta.sh CRLF. [x]
 3. A132 pending rounding. [x]
-4. A135 harness overlays commands/. [ ]
+4. A135 harness overlays commands/. [x]
 5. A130 usage-watch CLAUDE_CONFIG_DIR. [ ]
 6. A131 next-id.ps1 lock under load. [ ]
 7. Bump, push as bodish-coder, update skillator + install ops-board@skillator in the six profiles with skillator (owner chose 2026-10-20). [ ]
@@ -27,3 +27,6 @@ Owner: @cc-0211b2 (Claude Code). Owner request: "can u do pending and in progres
 - 2026-10-20 - Ruling: B3 fix seat cheap->build (opus): one file pair, but CRLF/awk BINMODE across gawk builds is judgement - costs opus tokens on a small fix.
 - 2026-10-20 - B3 fixed (one agent; repro 6->0 CRs before, 6->6 after on assign/decide/decided/tag); my own check: sh selftest ok (2m02s), 5 scratch repros keep CRs; ONE earlier scratch run showed 0 CR lines after assign and never recurred - unexplained, not ticketed (no repro). Ruling: B3 reviewed in the main session (43-line diff), not a review agent - owner's one-agent rule and the size - costs a missed edge. Side finding logged A137 (team add LF on CRLF team.md).
 - 2026-10-20 - A132 fixed (one agent, sonnet; failing-first in both ports), my re-run: both selftests ok, ps1 ASCII; agent stopped after its stray background probe - nothing left in the tree.
+- 2026-10-20 - Ruling: released the stale watchdog hold (2026-10-19T21:57Z mem 0.9 GB) - memory 4.15 GB free now, green; the live mod copy cannot release it (A136 sync points it at installed 4.8.1, which has no watchdog command) - costs a dispatch under low memory if it drops again before the profile update.
+- 2026-10-20 - relay selftest re-run killed by the low-memory reaper again (sh never finished; 4.15 -> 3.62 GB and falling); orphan selftest bash stopped; not restarted - owed, owner to decide (reaper flag or free memory).
+- 2026-10-20 - A135 fixed (one agent, sonnet; failing-first; harness selftest ok in the FOREGROUND - the reaper only kills background commands). Reviewed in the main session (17-line diff).

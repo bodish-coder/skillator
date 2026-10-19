@@ -1824,6 +1824,9 @@ EOF
 #      is dirty is overlaid the same way skills/ is (working tree over the
 #      archive, deletions honoured, every dirty path named on stderr). A dirty
 #      path outside OVERLAY_PATHS is still just a warning, not an overlay.
+#      (A135) commands/ is in the list: it is the plugin's slash-command dir
+#      (the manifest sets no "commands" key, so the default ./commands applies),
+#      and a GREEN run of an uncommitted command edit must test that edit.
 #   2. `--add-dir` makes the prefix writable, and runs wrote files into it that
 #      the next run reusing the prefix then inherited. The prefix is now
 #      chmod -R a-w (on Windows that protects existing files but NOT the
@@ -1853,7 +1856,7 @@ verify_prefix() {
 
 # Every root path a skill reads at plugin-root runtime (A95). Kept as one list
 # so build_prefix and its "everything else" warning agree on what is covered.
-OVERLAY_PATHS="skills references practice PRACTICE.md PLATFORMS.md WORKFLOW.md"
+OVERLAY_PATHS="skills commands references practice PRACTICE.md PLATFORMS.md WORKFLOW.md"
 
 build_prefix() {
   d="$1"
@@ -3244,6 +3247,18 @@ FX
   commit_fixture "$s2" 'clean source'
   BASELINE_ROOT="$s2" build_prefix "$tmp/put2" >/dev/null 2>"$tmp/err" || die 'prefix: clean build failed'
   if grep -q WARNING "$tmp/err"; then die 'prefix: warned on a clean tree'; fi
+  # A135: commands/ (the plugin's slash commands) is overlaid too - an
+  # uncommitted commands/x.md edit reaches the prefix and is NOT reported as
+  # "outside the overlaid paths".
+  s3="$tmp/src3"; mkdir -p "$s3/.claude-plugin" "$s3/skills/a" "$s3/commands"
+  echo '{}' > "$s3/.claude-plugin/plugin.json"; echo canon > "$s3/PRACTICE.md"; echo c > "$s3/skills/a/SKILL.md"
+  echo committed > "$s3/commands/x.md"
+  commit_fixture "$s3" 'commands source'
+  echo uncommitted-cmd > "$s3/commands/x.md"
+  BASELINE_ROOT="$s3" build_prefix "$tmp/put3" >/dev/null 2>"$tmp/err" || die 'prefix: commands build failed'
+  [ "$(cat "$tmp/put3/commands/x.md")" = uncommitted-cmd ] || die 'prefix: dirty commands/ file did not reach the prefix'
+  grep -q 'commands/ has uncommitted changes' "$tmp/err" || die 'prefix: no warning for dirty commands/'
+  if grep -q 'OUTSIDE the overlaid paths' "$tmp/err"; then die 'prefix: dirty commands/ file reported as outside the overlaid paths'; fi
 
   # A63b: BASELINE_ISOLATE=hide, against a fake HOME only - never the real one.
   fh="$tmp/fakehome"; mkdir -p "$fh/.claude"; echo '# Fake memory' > "$fh/.claude/CLAUDE.md"
