@@ -219,21 +219,33 @@ facts() {
 }
 
 # Shared by --kv and the human report: GB figures (one decimal below 10, whole
-# from 10) and the watchdog judgement, over KEY=value lines on stdin.
+# from 10) and the watchdog judgement, over KEY=value lines on stdin. Given the
+# threshold a figure is below (lim, bytes), its text never reads as that threshold:
+# where rounding would reach it (0.97 GB -> "1.0") it is floored ("0.9"), to two
+# decimals should one still reach it. Same as figure() in mods/ops-board facts.ts.
 AWK_LIB='
-function gb(b,  t) {
+function gb(b, lim,  v, t, txt, f) {
   if (b == "") return "?"
-  t = int(b * 10 / 1073741824 + 0.5)
-  if (t < 100) return int(t / 10) "." (t % 10) " GB"
-  return int(b / 1073741824 + 0.5) " GB"
+  v = b / 1073741824
+  t = int(v * 10 + 0.5)
+  txt = (t < 100) ? int(t / 10) "." (t % 10) : int(v + 0.5) ""
+  if (lim == "" || b + 0 >= lim || (txt + 0) * 1073741824 < lim) return txt " GB"
+  f = int(v * 10) / 10
+  if (f * 1073741824 < lim) return sprintf("%.1f", f) " GB"
+  return sprintf("%.2f", int(v * 100) / 100) " GB"
+}
+function fig(b, red, amber) {
+  if (b != "" && b + 0 < red) return gb(b, red)
+  if (b != "" && b + 0 < amber) return gb(b, amber)
+  return gb(b)
 }
 function add(s) { REASONS = REASONS (REASONS == "" ? "" : "; ") s }
 function judge(  G) {
   G = 1073741824; LEVEL = "green"; REASONS = ""
-  if (DF != "" && DF + 0 < G) { LEVEL = "red"; add("disk " gb(DF) " free (below 1 GB)") }
-  else if (DF != "" && DF + 0 < 5 * G) add("disk " gb(DF) " free (below 5 GB)")
-  if (MF != "" && MF + 0 < G) { LEVEL = "red"; add("memory " gb(MF) " free (below 1 GB)") }
-  else if (MF != "" && MF + 0 < 2 * G) add("memory " gb(MF) " free (below 2 GB)")
+  if (DF != "" && DF + 0 < G) { LEVEL = "red"; add("disk " gb(DF, G) " free (below 1 GB)") }
+  else if (DF != "" && DF + 0 < 5 * G) add("disk " gb(DF, 5 * G) " free (below 5 GB)")
+  if (MF != "" && MF + 0 < G) { LEVEL = "red"; add("memory " gb(MF, G) " free (below 1 GB)") }
+  else if (MF != "" && MF + 0 < 2 * G) add("memory " gb(MF, 2 * G) " free (below 2 GB)")
   if (NLK > 0) add(NLK " stale lock" (NLK > 1 ? "s" : ""))
   if (HD != "" && HD != "-") add("held (" HD ")")
   if (LEVEL != "red" && REASONS != "") LEVEL = "amber"
@@ -266,8 +278,8 @@ human() {
       printf "%s", (ag == "" ? "AGENTS    none\n" : ag)
       printf "UNPUSHED  %s\n", (up == "-" ? "- (no upstream)" : up)
       printf "GREENS    %s\n", (ow == "" ? "none owed" : "owed: " ow)
-      printf "DISK      %s %s free of %s\n", (dr == "" ? "?" : dr), gb(DF), gb(dt)
-      printf "MEMORY    %s free\n", gb(MF)
+      printf "DISK      %s %s free of %s\n", (dr == "" ? "?" : dr), fig(DF, 1073741824, 5368709120), gb(dt)
+      printf "MEMORY    %s free\n", fig(MF, 1073741824, 2147483648)
       printf "%s", (lk == "" ? "LOCKS     none stale\n" : lk)
       printf "HOLD      %s\n", ((HD == "" || HD == "-") ? "none" : HD)
       printf "WATCHDOG  %s\n", (LEVEL == "green" ? "ok" : LEVEL " - " REASONS)
@@ -378,6 +390,14 @@ EOF
   PENDING_DF_CMD="echo '10737418240 1000000000000 X:'"
   PENDING_MEM_CMD="echo 1610612736"
   eq "amber" "$(run | awk '/^(RUNS|QUEUED|DISK|WATCHDOG) /')" "RUNS      none open${NL}QUEUED    none${NL}DISK      X: 10 GB free of 931 GB${NL}WATCHDOG  amber - memory 1.5 GB free (below 2 GB); 1 stale lock"
+  # A figure below its threshold never reads as the threshold: 0.97 GB is "0.9", not "1.0".
+  PENDING_DF_CMD="echo '1041529569 1000000000000 X:'"
+  PENDING_MEM_CMD="echo 2115271393"
+  eq "below threshold floors" "$(run | awk '/^(DISK|MEMORY|WATCHDOG) /')" "DISK      X: 0.9 GB free of 931 GB${NL}MEMORY    1.9 GB free${NL}WATCHDOG  red - disk 0.9 GB free (below 1 GB); memory 1.9 GB free (below 2 GB); 1 stale lock"
+  PENDING_DF_CMD="echo '3500398346 1000000000000 X:'"
+  PENDING_MEM_CMD="echo 3435973836"
+  eq "normal rounding stays" "$(run | awk '/^(DISK|MEMORY|WATCHDOG) /')" "DISK      X: 3.3 GB free of 931 GB${NL}MEMORY    3.2 GB free${NL}WATCHDOG  amber - disk 3.3 GB free (below 5 GB); 1 stale lock"
+  PENDING_DF_CMD="echo '10737418240 1000000000000 X:'"
   rm -f .skillator/run.md.lock
   PENDING_MEM_CMD="echo 3435973836"
   eq "green" "$(run --kv | awk '/^(RUN|QUEUED|LOCK|HOLD|WATCHDOG)=/')" "HOLD=-${NL}WATCHDOG=green"

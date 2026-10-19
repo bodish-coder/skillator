@@ -330,13 +330,29 @@ function Get-Facts {
   return @($out)
 }
 
-# GB figures: one decimal below 10, whole from 10; '?' when unknown.
-function Get-Gb([string]$b) {
+# GB figures: one decimal below 10, whole from 10; '?' when unknown. Given the
+# threshold a figure is below ($lim, bytes), its text never reads as that
+# threshold: where rounding would reach it (0.97 GB -> '1.0') it is floored
+# ('0.9'), to two decimals should one still reach it. Same as figure() in
+# mods/ops-board facts.ts.
+function Get-Gb([string]$b, [double]$lim = 0) {
   if ($b -eq '') { return '?' }
   $x = [double]$b
   $t = [long][Math]::Floor($x * 10 / $GbBytes + 0.5)
-  if ($t -lt 100) { return ('{0}.{1} GB' -f [long][Math]::Floor($t / 10), ($t % 10)) }
-  return ('{0} GB' -f [long][Math]::Floor($x / $GbBytes + 0.5))
+  if ($t -lt 100) { $txt = '{0}.{1}' -f [long][Math]::Floor($t / 10), ($t % 10) }
+  else { $txt = [string][long][Math]::Floor($x / $GbBytes + 0.5) }
+  if ($lim -le 0 -or $x -ge $lim -or [double]$txt * $GbBytes -lt $lim) { return "$txt GB" }
+  $inv = [Globalization.CultureInfo]::InvariantCulture
+  $f1 = [Math]::Floor($x / $GbBytes * 10) / 10
+  if ($f1 * $GbBytes -lt $lim) { return ($f1.ToString('0.0', $inv) + ' GB') }
+  return (([Math]::Floor($x / $GbBytes * 100) / 100).ToString('0.00', $inv) + ' GB')
+}
+
+# One figure as the report shows it: floored against the threshold it is below.
+function Get-Fig([string]$b, [double]$red, [double]$amber) {
+  if ($b -ne '' -and [double]$b -lt $red) { return (Get-Gb $b $red) }
+  if ($b -ne '' -and [double]$b -lt $amber) { return (Get-Gb $b $amber) }
+  return (Get-Gb $b)
 }
 
 function Split-Kv([string]$l) {
@@ -357,10 +373,10 @@ function Get-Judge($facts) {
   }
   $level = 'green'
   $why = New-Object System.Collections.ArrayList
-  if ($df -ne '' -and [double]$df -lt $GbBytes) { $level = 'red'; [void]$why.Add("disk $(Get-Gb $df) free (below 1 GB)") }
-  elseif ($df -ne '' -and [double]$df -lt 5 * $GbBytes) { [void]$why.Add("disk $(Get-Gb $df) free (below 5 GB)") }
-  if ($mf -ne '' -and [double]$mf -lt $GbBytes) { $level = 'red'; [void]$why.Add("memory $(Get-Gb $mf) free (below 1 GB)") }
-  elseif ($mf -ne '' -and [double]$mf -lt 2 * $GbBytes) { [void]$why.Add("memory $(Get-Gb $mf) free (below 2 GB)") }
+  if ($df -ne '' -and [double]$df -lt $GbBytes) { $level = 'red'; [void]$why.Add("disk $(Get-Gb $df $GbBytes) free (below 1 GB)") }
+  elseif ($df -ne '' -and [double]$df -lt 5 * $GbBytes) { [void]$why.Add("disk $(Get-Gb $df (5 * $GbBytes)) free (below 5 GB)") }
+  if ($mf -ne '' -and [double]$mf -lt $GbBytes) { $level = 'red'; [void]$why.Add("memory $(Get-Gb $mf $GbBytes) free (below 1 GB)") }
+  elseif ($mf -ne '' -and [double]$mf -lt 2 * $GbBytes) { [void]$why.Add("memory $(Get-Gb $mf (2 * $GbBytes)) free (below 2 GB)") }
   if ($nlk -gt 0) {
     $s = ''
     if ($nlk -gt 1) { $s = 's' }
@@ -421,8 +437,8 @@ function Format-Human($facts) {
   if ($ow.Count -eq 0) { [void]$out.Add('GREENS    none owed') } else { [void]$out.Add('GREENS    owed: ' + [string]::Join(' ', [string[]]$ow.ToArray())) }
   $d = $dr
   if ($d -eq '') { $d = '?' }
-  [void]$out.Add("DISK      $d $(Get-Gb $j.Df) free of $(Get-Gb $dt)")
-  [void]$out.Add("MEMORY    $(Get-Gb $j.Mf) free")
+  [void]$out.Add("DISK      $d $(Get-Fig $j.Df $GbBytes (5 * $GbBytes)) free of $(Get-Gb $dt)")
+  [void]$out.Add("MEMORY    $(Get-Fig $j.Mf $GbBytes (2 * $GbBytes)) free")
   if ($lk.Count -eq 0) { [void]$out.Add('LOCKS     none stale') } else { foreach ($x in $lk) { [void]$out.Add($x) } }
   if ($j.Hd -eq '' -or $j.Hd -ceq '-') { [void]$out.Add('HOLD      none') } else { [void]$out.Add("HOLD      $($j.Hd)") }
   if ($j.Level -ceq 'green') { [void]$out.Add('WATCHDOG  ok') } else { [void]$out.Add("WATCHDOG  $($j.Level) - $($j.Reasons)") }
@@ -577,6 +593,18 @@ function Invoke-Selftest {
     Eq 'amber' (@(Run) | Where-Object { $_ -cmatch '^(RUNS|QUEUED|DISK|WATCHDOG) ' }) ([string]::Join("`n", @(
       'RUNS      none open', 'QUEUED    none', 'DISK      X: 10 GB free of 931 GB',
       'WATCHDOG  amber - memory 1.5 GB free (below 2 GB); 1 stale lock')))
+    # A figure below its threshold never reads as the threshold: 0.97 GB is "0.9", not "1.0".
+    $env:PENDING_DF_CMD = "'1041529569 1000000000000 X:'"
+    $env:PENDING_MEM_CMD = "'2115271393'"
+    Eq 'below threshold floors' (@(Run) | Where-Object { $_ -cmatch '^(DISK|MEMORY|WATCHDOG) ' }) ([string]::Join("`n", @(
+      'DISK      X: 0.9 GB free of 931 GB', 'MEMORY    1.9 GB free',
+      'WATCHDOG  red - disk 0.9 GB free (below 1 GB); memory 1.9 GB free (below 2 GB); 1 stale lock')))
+    $env:PENDING_DF_CMD = "'3500398346 1000000000000 X:'"
+    $env:PENDING_MEM_CMD = "'3435973836'"
+    Eq 'normal rounding stays' (@(Run) | Where-Object { $_ -cmatch '^(DISK|MEMORY|WATCHDOG) ' }) ([string]::Join("`n", @(
+      'DISK      X: 3.3 GB free of 931 GB', 'MEMORY    3.2 GB free',
+      'WATCHDOG  amber - disk 3.3 GB free (below 5 GB); 1 stale lock')))
+    $env:PENDING_DF_CMD = "'10737418240 1000000000000 X:'"
     Remove-Item -LiteralPath "$R/.skillator/run.md.lock" -Force
     $env:PENDING_MEM_CMD = "'3435973836'"
     Eq 'green' (@(Run --kv) | Where-Object { $_ -cmatch '^(RUN|QUEUED|LOCK|HOLD|WATCHDOG)=' }) "HOLD=-`nWATCHDOG=green"
