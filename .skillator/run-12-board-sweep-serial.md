@@ -4,7 +4,7 @@ Owner: @cc-0211b2 (Claude Code). Owner request: "can u do pending and in progres
 
 ## Stages (serial, one agent each)
 1. F46-F50 ops-board: one review agent on the staged diff -> fix findings -> commit. [x]
-2. B3 ticket-meta.sh CRLF. [ ]
+2. B3 ticket-meta.sh CRLF. [x]
 3. A132 pending rounding. [ ]
 4. A135 harness overlays commands/. [ ]
 5. A130 usage-watch CLAUDE_CONFIG_DIR. [ ]
@@ -24,3 +24,5 @@ Owner: @cc-0211b2 (Claude Code). Owner request: "can u do pending and in progres
 - 2026-10-20 - F46-F50 review (one agent, 5 angles): no issues >= 80, 6 dropped (<=35: restore BOM/invalid-UTF-8 round trip, orphan owner file blocks hides, pre-R1b harness, relative RELAY_DIR sh/ps1, team.md BOM, tasklist pid reuse) - committed.
 - 2026-10-20 - A136 (security review of e124610): ops-board ran scripts from the session repo - fixed in the main session (one-line resolver change, RED->GREEN test), not a dispatched agent - costs nothing; the dev-mods live copy keeps the old resolver until the profile update (re-synced then, so its band finds the installed scripts).
 - 2026-10-20 - F53 built (one build agent, 2 departures: type column 15, AgentStatus declared locally - both judged sound by verify), verify PASS (validate, tsc, 180/180; 0 issues >= 80, 4 dropped <= 60: closed pane on Agents keeps the 5 s list poll, fast-ending workflow agent may stay running, listing flag on a hung list, run with no runId doubled) - committed, stays [~] for the live check.
+- 2026-10-20 - Ruling: B3 fix seat cheap->build (opus): one file pair, but CRLF/awk BINMODE across gawk builds is judgement - costs opus tokens on a small fix.
+- 2026-10-20 - B3 fixed (one agent; repro 6->0 CRs before, 6->6 after on assign/decide/decided/tag); my own check: sh selftest ok (2m02s), 5 scratch repros keep CRs; ONE earlier scratch run showed 0 CR lines after assign and never recurred - unexplained, not ticketed (no repro). Ruling: B3 reviewed in the main session (43-line diff), not a review agent - owner's one-agent rule and the size - costs a missed edge. Side finding logged A137 (team add LF on CRLF team.md).

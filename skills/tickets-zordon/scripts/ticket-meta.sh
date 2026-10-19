@@ -238,7 +238,9 @@ edit_line() {
   eol=0
   [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ] && eol=1
   tmp="$f.ticket-meta.$$"
-  RE=$re EOL=$eol DROP=$drop awk '
+  # BINMODE=3: Windows gawk would otherwise drop each line's \r on the way in
+  # (B3); elsewhere it is ignored and the \r arrives in $0 as is.
+  RE=$re EOL=$eol DROP=$drop awk -v BINMODE=3 '
     function find(line, key) { return match(line, "[ \t]*\\[" key ":[ \t]*[^]]*\\]") }
     # A tag goes where it is, else before the next tag in app/decide/owner/by order,
     # else before the trailing (..) groups and a bare "Plan: S<n>" before them
@@ -712,6 +714,25 @@ selftest() {
   eq "solo by" "$(run by F1)" ""
   sh "$self" assign F1 @vidul > /dev/null 2>&1 && { echo "FAIL: assign worked with no team.md"; fail=1; }
   eq "solo tag" "$(run tag F1)" "- [ ] F1 $D Thing (@cc-dddddd)"
+
+  # --- B3: every edit keeps the board's line endings byte for byte - a CRLF
+  # board stays CRLF (Windows gawk drops \r on read), an LF board stays LF
+  C="$T/crlf"
+  mkdir -p "$C/.skillator" && cd "$C" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  printf -- '- @vidul: vidul@ikran.in\r\n- @asha: asha@x.com\r\n' > .skillator/team.md
+  commit vidul@ikran.in "F4: four" src/a.js
+  for nl in crlf lf; do
+    r=''; [ "$nl" = crlf ] && r=$(printf '\r')
+    printf -- "# TICKETS$r\n$r\n- [ ] F1 %s One$r\n- [ ] F2 %s Two$r\n- [?] F3 %s Three [decide: @asha]$r\n- [ ] F4 %s Four$r\n" \
+      "$D" "$D" "$D" "$D" > TICKETS.md
+    sh "$self" assign F1 @vidul > /dev/null 2>&1 || { echo "FAIL: $nl assign failed"; fail=1; }
+    sh "$self" decide F2 @asha > /dev/null 2>&1 || { echo "FAIL: $nl decide failed"; fail=1; }
+    sh "$self" decided F3 > /dev/null 2>&1 || { echo "FAIL: $nl decided failed"; fail=1; }
+    sh "$self" tag F4 > /dev/null 2>&1 || { echo "FAIL: $nl tag failed"; fail=1; }
+    printf -- "# TICKETS$r\n$r\n- [ ] F1 %s One [owner: @vidul]$r\n- [?] F2 %s Two [decide: @asha]$r\n- [ ] F3 %s Three [decide: @asha]$r\n- [ ] F4 %s Four [by: @vidul]$r\n" \
+      "$D" "$D" "$D" "$D" > "$T/want-$nl.md"
+    cmp -s TICKETS.md "$T/want-$nl.md" || { echo "FAIL: $nl board line endings or bytes"; od -c TICKETS.md | head -n 4; fail=1; }
+  done
 
   cd "$T/.." || true
   [ "$fail" = 0 ] || exit 1

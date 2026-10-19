@@ -860,6 +860,27 @@ function Invoke-Selftest {
     Eq 'solo by' (Run by F1) ''
     if (-not (Refused assign F1 '@vidul')) { Write-Output 'FAIL: assign worked with no team.md'; $script:fail = 1 }
     Eq 'solo tag' (Run tag F1) "- [ ] F1 $dash Thing (@cc-dddddd)"
+
+    # --- B3: every edit keeps the board's line endings byte for byte - a CRLF
+    # board stays CRLF, an LF board stays LF
+    $C = "$T/crlf"
+    Init-Repo $C
+    W "$C/.skillator/team.md" "- @vidul: vidul@ikran.in`r`n- @asha: asha@x.com`r`n"
+    Commit 'vidul@ikran.in' 'F4: four' 'src/a.js'
+    foreach ($nl in @("`r`n", "`n")) {
+      $name = 'lf'; if ($nl -ceq "`r`n") { $name = 'crlf' }
+      W "$C/TICKETS.md" ("# TICKETS$nl$nl- [ ] F1 $dash One$nl- [ ] F2 $dash Two$nl" +
+        "- [?] F3 $dash Three [decide: @asha]$nl- [ ] F4 $dash Four$nl")
+      Run assign F1 '@vidul' | Out-Null
+      Run decide F2 '@asha' | Out-Null
+      Run decided F3 | Out-Null
+      Run tag F4 | Out-Null
+      $want = ("# TICKETS$nl$nl- [ ] F1 $dash One [owner: @vidul]$nl- [?] F2 $dash Two [decide: @asha]$nl" +
+        "- [ ] F3 $dash Three [decide: @asha]$nl- [ ] F4 $dash Four [by: @vidul]$nl")
+      if ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes("$C/TICKETS.md")) -cne [Convert]::ToBase64String($Utf8.GetBytes($want))) {
+        Write-Output "FAIL: $name board line endings or bytes"; $script:fail = 1
+      }
+    }
   } finally {
     Set-Location -LiteralPath $here
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
