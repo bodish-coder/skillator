@@ -427,6 +427,18 @@ const CURSOR_UNSAFE_SANDBOX = new Set(["disabled", "off", "none", "danger-full-a
  *  permits none, so this list is empty; an entry is a predicate over the parsed rule. */
 export const GEMINI_PERMITTED_ALLOW_RULES = [];
 
+/** An admin token or root reaches the phone along with the shell. Unknown counts
+ *  as elevated: the arm refuses rather than guess. */
+export function whoamiElevated(status, stdout) {
+  return status !== 0 || /S-1-16-(12288|16384)\b/.test(stdout || "");
+}
+export function isElevated() {
+  if (!IS_WIN) return typeof process.geteuid === "function" && process.geteuid() === 0;
+  const exe = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "whoami.exe");
+  const r = spawnSync(exe, ["/groups"], { encoding: "utf8", windowsHide: true, timeout: 10000 });
+  return whoamiElevated(r.status, r.stdout);
+}
+
 /** Failure mode 7: refuse to arm when a host config widens auto-approval. No override. */
 export function checkWidening(host, { home, cwd, env = {} }) {
   const out = [];

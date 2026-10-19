@@ -16,7 +16,7 @@ import * as br from "./cerebro-bridge.mjs";
 const { IS_WIN, gateDecide, requestPolicy, checkSpawnArgv, checkWidening, redact, chunkText, lineSplitter,
   attachAuthorize, writeArmToken, armTokenPath, stateDir, icaclsVerdict, checkCredsFile, parseTomlLite,
   geminiPolicyToml, pidAlive } = core;
-const { Bridge, FileChannel, NativeSupervisor, Refused, main, acpProof, doctor, requirementsPath, HOOKS, sleep } = br;
+const { Bridge, FileChannel, NativeSupervisor, Refused, main, acpProof, doctor, requirementsPath, HOOKS, sleep, resolveHostBin, looksLikeNode } = br;
 
 const NODE = process.execPath;
 const STUB = (n) => path.join(HOOKS, "stubs", n);
@@ -93,7 +93,7 @@ export async function run() {
       fs.writeFileSync(path.join(stateDir(home), `acp-proof-${host}.json`), JSON.stringify({ host, version: "stub-acp 1.0.0", permissionReached: true, outsideReadGated: true }));
     }
     const mirror = [];
-    const b = new Bridge({ host, mode: o.mode || "own", cwd: o.cwd || proj, profile: o.profile || "read", home, channel: ch, clock: clk.now, bin: o.bin || BINS[host], confirm: o.confirm || (async () => true), allowedUserId: UID, env, mirror: (s) => mirror.push(s), token: TOKEN, ttlMs: o.ttlMs, idleMs: o.idleMs, attachStdio: "ignore", attachLog: o.attachLog });
+    const b = new Bridge({ host, mode: o.mode || "own", cwd: o.cwd || proj, profile: o.profile || "read", home, channel: ch, clock: clk.now, bin: o.bin || BINS[host], confirm: o.confirm || (async () => true), allowedUserId: UID, env, mirror: (s) => mirror.push(s), token: TOKEN, ttlMs: o.ttlMs, idleMs: o.idleMs, attachStdio: "ignore", attachLog: o.attachLog, elevated: o.elevated ?? false });
     for (const k of ["ttlMs", "idleMs"]) if (o[k] === undefined) b[k] = k === "ttlMs" ? 2 * 3600e3 : 30 * 60e3;
     const { code } = await b.arm();
     let off = 0; try { off = Number(fs.readFileSync(br.offsetFile(home, ch), "utf8")) || 0; } catch { /* first arming on this channel */ }
@@ -273,7 +273,7 @@ export async function run() {
   await t("RC5", "a .. path escaping the cwd -> ask", async () => { const d = g("read", { path: "../outside/notes.txt" }); assert(d.action === "ask" && d.reason === "outside-cwd", JSON.stringify(d)); });
   await t("RC6", "a symlink escaping the cwd -> ask", async () => {
     const l = path.join(proj, "linkout"); try { fs.symlinkSync(outsideDir, l, "dir"); } catch (e) { return { skip: `symlinks need privilege here (${e.code})` }; }
-    try { const d = g("read", { path: "linkout/notes.txt" }); assert(d.action === "ask", JSON.stringify(d)); } finally { fs.rmSync(l, { force: true, recursive: false }); }
+    try { const d = g("read", { path: "linkout/notes.txt" }); assert(d.action === "ask", JSON.stringify(d)); } finally { try { fs.unlinkSync(l); } catch { try { fs.rmdirSync(l); } catch { /* left for the root cleanup */ } } }
   });
   await t("RC7", "a junction escaping the cwd -> ask; a junction into ~/.ssh -> blocked", async () => {
     const j = path.join(proj, "junc"), js = path.join(proj, "sshj");
@@ -588,7 +588,7 @@ export async function run() {
   const sup = (host, o = {}) => {
     const home = o.home || mkHome(); const clk = clockAt(); const log = path.join(root, `stub-${host}-${crypto.randomBytes(3).toString("hex")}.jsonl`); const lines = []; const asks = [];
     const s = new NativeSupervisor({ host, home, cwd: proj, env: envFor(home, { STUB_LOG: log, ...(o.env || {}) }), bin: NB(host === "cursor" ? "agent" : host), clock: clk.now, ttlMs: o.ttlMs ?? 2 * 3600e3, shared: !!o.shared,
-      confirm: async (q) => { asks.push(q); return o.answer ?? true; }, log: (x) => lines.push(x), agyStdio: "ignore" });
+      confirm: async (q) => { asks.push(q); return o.answer ?? true; }, log: (x) => lines.push(x), agyStdio: "ignore", elevated: o.elevated ?? false });
     return { s, home, clk, log, lines, asks };
   };
   const calls = (log, ...words) => stubLog(log).filter((c) => words.every((w) => c.argv.includes(w)));
@@ -638,6 +638,7 @@ export async function run() {
     const n = sup("cursor"); await n.s.start(); const pid = n.s.child.pid; await logged(n.log, "worker", "start");
     const c = calls(n.log, "worker", "start")[0]; assert(c && c.argv.includes("--worker-dir") && c.argv.includes(proj) && c.argv.includes("1800"), JSON.stringify(c));
     assert(checkSpawnArgv(c.argv).length === 0, "refused flag in worker line");
+    assert(c.argv.indexOf("start") > c.argv.indexOf("--idle-release-timeout") && c.argv.indexOf("start") > c.argv.indexOf("--worker-dir"), `worker options must precede start: ${c.argv.join(" ")}`);
     n.clk.adv(2 * 3600e3); await n.s.tick(); assert(await waitDead([pid]), "worker alive");
     const h = mkHome(); fs.mkdirSync(path.join(h, ".cursor")); fs.writeFileSync(path.join(h, ".cursor", "cli-config.json"), JSON.stringify({ permissions: { allow: ["*"] } }));
     const m = sup("cursor", { home: h }); let e = null; try { await m.s.start(); } catch (x) { e = x; } assert(e?.kind === "refused:widening", e?.message);
@@ -645,6 +646,8 @@ export async function run() {
   await t("NV7", "agy: session-scoped --remote-control; teardown runs `agy remote-control stop` and kills the session", async () => {
     const n = sup("agy"); await n.s.start(); const pid = n.s.child.pid; await logged(n.log, "--remote-control");
     assert(calls(n.log, "--remote-control").length === 1 && calls(n.log, "remote-control", "start").length === 0, "persistent daemon used");
+    assert(calls(n.log, "--remote-control", "--mode", "plan").length === 1, "agy not started in --mode plan");
+    assert(n.asks.some((q) => /--mode plan/.test(q) && /phone can still switch/.test(q)), "arming screen does not state the agy mode");
     fs.writeFileSync(path.join(stateDir(n.home), "KILL"), "x"); await n.s.tick();
     assert(calls(n.log, "remote-control", "stop").length === 1, "no stop"); assert(await waitDead([pid]), "session alive");
   });
@@ -659,6 +662,37 @@ export async function run() {
     const c = await armed("pi"); const b = sup("codex", { home: c.home }); let f = null; try { await b.s.start(); } catch (x) { f = x; } assert(f?.kind === "refused:lock", f?.message);
     assert(!fs.existsSync(requirementsPath(c.home, b.s.env)), "requirements written although the lock refused");
     const d = sup("cursor"); await d.s.start(); assert(d.lines.some((l) => /native checklist/.test(l) && /no idle timer/.test(l)), "no checklist"); await d.s.teardown("test-end", { attended: false });
+  });
+  await t("NV10", "cursor bin: no bare `agent` fallback; on Windows only cursor-agent.cmd, never the bundled-Node .exe beside it; a Node-looking binary refuses native and bridge arms", async () => {
+    const a = path.join(root, "bin-a"), b = path.join(root, "bin-b"); fs.mkdirSync(a, { recursive: true }); fs.mkdirSync(b, { recursive: true });
+    fs.writeFileSync(path.join(b, IS_WIN ? "agent.exe" : "agent"), "");
+    const ext = ".COM;.EXE;.BAT;.CMD";
+    assert(resolveHostBin("cursor", { PATH: b, PATHEXT: ext }) === null, "bare `agent` taken for cursor");
+    if (IS_WIN) {
+      fs.writeFileSync(path.join(a, "cursor-agent.exe"), ""); fs.writeFileSync(path.join(a, "cursor-agent.cmd"), "");
+      const r = resolveHostBin("cursor", { PATH: [b, a].join(path.delimiter), PATHEXT: ext });
+      assert(r?.file === path.join(a, "cursor-agent.cmd"), `took ${r?.file}`);
+      const w = resolveHostBin("cursor", { Path: [b, a].join(path.delimiter), PATHEXT: ext });
+      assert(w?.file === path.join(a, "cursor-agent.cmd"), `Windows-cased Path: took ${w?.file}`);
+    }
+    assert(looksLikeNode("v24.5.0") && !looksLikeNode("2026.10.12-d47ca18") && !looksLikeNode("agent-stub 0.0.0"), "looksLikeNode");
+    const n = sup("cursor"); n.s.bin = { file: NODE, pre: [] }; let e = null; try { await n.s.start(); } catch (x) { e = x; }
+    assert(e?.kind === "refused:wrong-bin" && /bundled Node/.test(e.message), `native: ${e?.message}`);
+    let f = null; try { await armed("cursor", { bin: { file: NODE, pre: [] }, pair: false }); } catch (x) { f = x; }
+    assert(f?.kind === "refused:wrong-bin" && /bundled Node/.test(f.message), `bridge: ${f?.message}`);
+  });
+  await t("NV11", "an elevated terminal refuses every arm, native and bridge, before anything is spawned", async () => {
+    const n = sup("agy", { elevated: true }); let e = null; try { await n.s.start(); } catch (x) { e = x; }
+    assert(e?.kind === "refused:elevated", e?.message); assert(!n.s.child && stubLog(n.log).length === 0, "spawned although elevated");
+    const x2 = sup("codex", { elevated: true }); let e2 = null; try { await x2.s.start(); } catch (x) { e2 = x; }
+    assert(e2?.kind === "refused:elevated", e2?.message);
+    assert(!fs.existsSync(requirementsPath(x2.home, x2.s.env)) && !fs.existsSync(path.join(stateDir(x2.home), "lock")), "codex: requirements.toml or lock written although elevated");
+    const bh = mkHome(); let f = null; try { await armed("pi", { home: bh, elevated: true, pair: false }); } catch (x) { f = x; }
+    assert(f?.kind === "refused:elevated", f?.message); assert(!fs.existsSync(path.join(stateDir(bh), "lock")), "bridge: lock taken although elevated");
+    assert(core.whoamiElevated(0, "Mandatory Label\\High Mandatory Level  Label  S-1-16-12288") && core.whoamiElevated(0, "S-1-16-16384") && core.whoamiElevated(1, ""), "elevated groups / whoami failure not counted as elevated");
+    assert(!core.whoamiElevated(0, "Mandatory Label\\Medium Mandatory Level  Label  S-1-16-8192"), "medium integrity counted as elevated");
+    assert(typeof core.isElevated() === "boolean", "isElevated");
+    const c = sup("codex"); await c.s.start(); assert(c.lines.some((l) => /terminal not elevated/.test(l)), "checklist does not state elevation"); await c.s.teardown("test-end", { attended: false });
   });
 
   // ------------------------------------------------------------- redaction --
@@ -704,7 +738,8 @@ export async function run() {
       const lines = doctor({ home: h, cwd: proj, env: envFor(h), log: () => {}, bins: { pi: BINS.pi, gemini: BINS.gemini, codex: NB("codex"), agy: NB("agy"), cursor: { file: NODE, pre: [] } } });
       const all = lines.join("\n");
       assert(/pi: stub-pi 0\.0\.1/.test(all) && /gemini: stub-acp 1\.0\.0/.test(all), "versions");
-      assert(/BROKEN: this cursor-agent prints Node's version/.test(all), "shim defect not detected");
+      assert(/BROKEN: this is Cursor's bundled Node/.test(all), "shim defect not detected");
+      assert(/elevated: (no|YES)/.test(all), "doctor does not report elevation");
       assert(/STRAY: .*pi-cerebro\.ts/.test(all), "stray extension not warned");
       assert(/ACP proof: none - arm refused/.test(all), "proof status");
     } finally { fs.rmSync(path.join(proj, ".pi"), { recursive: true, force: true }); }

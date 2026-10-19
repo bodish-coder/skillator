@@ -73,8 +73,9 @@ a repo file or the chat.
 ## Refused, with no override
 
 Approvals stay on. `--yolo`, `--force`, `--dangerously-*`, `--approval-mode yolo`,
-`-a never`, `-s danger-full-access`, and configs that auto-approve shell or
-writes, abort the arm. **No flag, no config, no "yes" at stop #2 and no Ruling
+`-a never`, `-s danger-full-access`, configs that auto-approve shell or
+writes, and an elevated terminal (Windows Administrator, root), abort the
+arm. agy, which keeps no such config, starts in `--mode plan`. **No flag, no config, no "yes" at stop #2 and no Ruling
 turns this off.** When the user asks for fewer taps, say no in one line, then
 offer `--profile write` (pi) or the native route. On gemini, also say it has no
 native remote and that in attach mode its approvals cannot be answered from the

@@ -20,7 +20,7 @@ import { EventEmitter } from "node:events";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   IS_WIN, VERSION, stateDir, credsPath, codexHome, Audit, redact, chunkText, checkSpawnArgv,
-  checkWidening, requestPolicy, secretRoots, lineSplitter, writeArmToken, deleteArmToken,
+  checkWidening, isElevated, requestPolicy, secretRoots, lineSplitter, writeArmToken, deleteArmToken,
   scrubEnv, parseEnvFile, checkCredsFile, pidAlive, killTree, which, PROFILE_TOOLS, parseTomlLite,
   procIdentity, procIdentityAsync, icaclsVerdict, sleepSync, allRoots, realResolve, isUnder,
 } from "./cerebro-core.mjs";
@@ -68,11 +68,14 @@ function runBin(bin, args, { cwd, env, timeout = 20000 } = {}) {
   return { code: r.status, out: (r.stdout || "") + (r.stderr || ""), stdout: r.stdout || "" };
 }
 
-const HOST_BIN_NAMES = { pi: ["pi"], gemini: ["gemini"], codex: ["codex"], cursor: ["cursor-agent", "agent"], agy: ["agy"] };
+const HOST_BIN_NAMES = { pi: ["pi"], gemini: ["gemini"], codex: ["codex"], cursor: ["cursor-agent"], agy: ["agy"] };
 export function resolveHostBin(host, env = process.env) {
-  for (const n of HOST_BIN_NAMES[host] || []) { const f = which(n, env); if (f) return { file: f, pre: [] }; }
+  // Windows: every cursor-agent.exe / agent.exe in Cursor's install is the bundled Node; only the .cmd is the CLI.
+  const look = IS_WIN && host === "cursor" ? { ...env, PATHEXT: ".CMD" } : env;
+  for (const n of HOST_BIN_NAMES[host] || []) { const f = which(n, look); if (f) return { file: f, pre: [] }; }
   return null;
 }
+export const looksLikeNode = (version) => /^v\d+\.\d+\.\d+$/.test(String(version).trim());
 export function childEnv(base = process.env, extra = {}) {
   const e = { ...base }; scrubEnv(e); return { ...e, ...extra };
 }
@@ -876,6 +879,7 @@ export class Bridge {
     if (mode === "attach" && host !== "pi") throw new Refused("refused:mode", "attach mode is pi-only in v1 (gemini attach and cursor attach are v2)");
     if (!["read", "write"].includes(this.profile)) throw new Refused("refused:profile", `profile must be read or write`);
     if (this.ttlMs > MAX_TTL) throw new Refused("refused:ttl", "TTL is at most 12 h");
+    if (this.elevated ?? isElevated()) throw new Refused("refused:elevated", "this terminal runs as Administrator/root (or elevation could not be checked); arm from an ordinary, non-elevated terminal");
     const bad = checkSpawnArgv(hostSpawn(host, { mode, profile: this.profile }));
     if (bad.length) throw new Refused("refused:yolo", `refused flag ${bad.join(" ")}`);
     const wid = checkWidening(host, { home, cwd: this.cwd, env: this.env });
@@ -884,6 +888,7 @@ export class Bridge {
     if (!this.bin) throw new Refused("refused:missing", `${host} is not on PATH`);
     if (host === "gemini" || host === "cursor") {
       const p = readProof(home, host); const v = hostVersion(this.bin, this.env);
+      if (host === "cursor" && looksLikeNode(v)) throw new Refused("refused:wrong-bin", `${this.bin.file} is Cursor's bundled Node (${v}), not the CLI; cursor-agent.cmd is`);
       if (!p || !p.permissionReached || !p.outsideReadGated || p.version !== v)
         throw new Refused("refused:acp-proof", `${host} ACP does not arm until \`cerebro doctor --acp-proof ${host}\` records that permission requests reach the bridge and outside reads are gated (version ${v}${p ? `, proof was for ${p.version}` : ", no proof"})`);
     }
@@ -1025,10 +1030,12 @@ export class NativeSupervisor {
     const { host, home } = this;
     if (!["codex", "cursor", "agy"].includes(host)) throw new Refused("refused:host", `no native route for ${host}`);
     if (this.ttlMs > MAX_TTL) throw new Refused("refused:ttl", "TTL is at most 12 h");
+    if (this.elevated ?? isElevated()) throw new Refused("refused:elevated", "this terminal runs as Administrator/root (or elevation could not be checked); arm from an ordinary, non-elevated terminal");
     const wid = host === "agy" ? [] : checkWidening(host, { home, cwd: this.cwd, env: this.env });
     if (wid.length) throw new Refused("refused:widening", `a config widens auto-approval (no override):\n  ${wid.join("\n  ")}`);
     this.bin ||= resolveHostBin(host, this.env);
     if (!this.bin) throw new Refused("refused:missing", `${host} is not on PATH`);
+    if (host === "cursor") { const v = hostVersion(this.bin, this.env); if (looksLikeNode(v)) throw new Refused("refused:wrong-bin", `${this.bin.file} is Cursor's bundled Node (${v}), not the CLI; cursor-agent.cmd is`); }
     const warn = [];
     if (host === "codex") {
       this.threads = await this.listThreads();
@@ -1039,6 +1046,7 @@ export class NativeSupervisor {
       `  TTL ${Math.round(this.ttlMs / 60e3)} min (wall clock). There is NO idle timer on a native route: cerebro cannot see the vendor relay's traffic.`,
       "  The phone can do things the bridge forbids (other folders, model choice, possibly thread-level approval settings).",
       host === "codex" ? "  codex requirements.toml limits (no `never` approvals, no danger-full-access) are added now and removed at teardown." : "",
+      host === "agy" ? "  agy starts in --mode plan (it waits for your review before implementing). The phone can still switch it to accept-edits or auto, which approve without asking." : "",
       ...warn.map((w) => `  WARNING: ${w}`),
       "  Pairing codes stay on this screen; never send one over any channel.",
     ].filter(Boolean).join("\n");
@@ -1053,10 +1061,10 @@ export class NativeSupervisor {
         if (this.shared) { const r = runBin(this.bin, ["remote-control", "start", "--json"], { env }); this.log(`codex remote-control start: exit ${r.code}`); }
         else this.child = spawnBin(this.bin, ["remote-control", "--no-daemon", "--json"], { cwd: this.cwd, env, stdio: ["ignore", "pipe", "pipe"] });
       } else if (host === "cursor") {
-        const args = ["worker", "start", "--worker-dir", this.cwd, "--idle-release-timeout", "1800"];
+        const args = ["worker", "--worker-dir", this.cwd, "--idle-release-timeout", "1800", "start"];
         if (args.some((a) => NATIVE_REFUSED_CURSOR.includes(a))) throw new Refused("refused:yolo", "refused cursor worker flag");
         this.child = spawnBin(this.bin, args, { cwd: this.cwd, env, stdio: ["ignore", "pipe", "pipe"] });
-      } else this.child = spawnBin(this.bin, ["--remote-control"], { cwd: this.cwd, env, stdio: this.agyStdio || "inherit" });
+      } else this.child = spawnBin(this.bin, ["--remote-control", "--mode", "plan"], { cwd: this.cwd, env, stdio: this.agyStdio || "inherit" });
     } catch (e) { requirementsRestore(home); releaseLock(home); throw e; }
     if (this.child) {
       this.child.on("exit", (c) => { this.childExit = c ?? "signal"; });
@@ -1075,11 +1083,12 @@ export class NativeSupervisor {
     return [
       "native checklist:",
       `  [x] TTL set: ${Math.round(this.ttlMs / 60e3)} min; no idle timer (acknowledged at the arming screen)`,
-      `  [x] approval/sandbox widening configs: none found`,
+      `  [x] approval/sandbox widening configs: none found${this.host === "agy" ? " (agy keeps none; it starts in --mode plan)" : ""}`,
+      "  [x] terminal not elevated (no Administrator token, not root)",
       this.host === "codex" ? `  [x] requirements.toml limits: ${this.reqResult}` : null,
       this.host === "codex" ? `  [${this.shared ? " " : "x"}] embedded route (stopping touches no local codex session)` : null,
       this.host === "cursor" ? "  [x] worker flags: none of --computer-use --share-desktop --connect-workspace --sync-dashboard-secrets --mint-github-token" : null,
-      this.host === "agy" ? "  [x] session-scoped --remote-control (not the persistent daemon)" : null,
+      this.host === "agy" ? "  [x] session-scoped --remote-control (not the persistent daemon), --mode plan" : null,
       "  [ ] paired account is your own: confirm in the vendor app",
       "  [ ] stop drill: pending (`cerebro stop --drill`)",
     ].filter(Boolean);
@@ -1245,7 +1254,7 @@ export function doctor({ home = os.homedir(), cwd = process.cwd(), env = process
     if (!bin) { p(`  ${host}: not on PATH`); continue; }
     const v = hostVersion(bin, env);
     p(`  ${host}: ${v}  (${bin.file}${bin.pre?.length ? " " + bin.pre.map((x) => path.basename(x)).join(" ") : ""})`);
-    if (host === "cursor" && /^v\d+\.\d+\.\d+$/.test(v)) p("    BROKEN: this cursor-agent prints Node's version; the Git-Bash shim is being hit. Use cursor-agent.cmd / agent.exe.");
+    if (host === "cursor" && looksLikeNode(v)) p("    BROKEN: this is Cursor's bundled Node, not the CLI (arm refused). On Windows only cursor-agent.cmd is the CLI.");
     if (host === "cursor" && IS_WIN) { const shim = String(env.PATH || "").split(path.delimiter).map((d) => path.join(d, "cursor-agent")).find((f) => { try { return fs.statSync(f).isFile(); } catch { return false; } }); if (shim) p(`    note: extensionless Git-Bash shim at ${shim} is ignored (known broken on this box)`); }
     const wid = host === "pi" || host === "agy" ? [] : checkWidening(host, { home, cwd, env });
     for (const w of wid) p(`    WIDENING (arm refused): ${w}`);
@@ -1263,6 +1272,7 @@ export function doctor({ home = os.homedir(), cwd = process.cwd(), env = process
   const cp = credsPath(home);
   const probs = fs.existsSync(cp) ? checkCredsFile(cp) : [`${cp} not found (see references/channels.md)`];
   p(`  creds: ${probs.length ? probs.join("; ") : "ok (user-only, outside any repo)"}`);
+  p(`  elevated: ${isElevated() ? "YES - every arm is refused from this terminal; use a non-admin one" : "no"}`);
   const st = readState(home); const lk = readJsonFile(lockFile(home));
   p(`  state: ${st?.armed ? `ARMED ${st.host} ${st.route} pid ${st.pid}${lk && !pidAlive(lk.pid) ? " (STALE: pid dead; `cerebro stop` cleans up)" : ""}` : "not armed"}`);
   return lines;

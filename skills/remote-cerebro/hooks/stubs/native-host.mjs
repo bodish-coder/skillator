@@ -18,7 +18,7 @@ const stubName = host === "cursor" ? "agent" : host;
 const sup = new br.NativeSupervisor({
   host, home, cwd, ttlMs: Number(ttl), env: process.env, shared: shared === "shared",
   bin: { file: process.execPath, pre: [path.join(here, "stub-native.mjs"), stubName] },
-  confirm: async () => true, log: () => {}, agyStdio: "ignore",
+  confirm: async () => true, log: () => {}, agyStdio: "ignore", elevated: false,
 });
 process.on("message", (m) => {
   if (m.emit) process.emit(m.emit, m.emit);

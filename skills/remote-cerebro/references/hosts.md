@@ -23,7 +23,7 @@ cerebro supervisor (TTL, teardown, checklist).
 | gemini | own: bridge to `gemini --acp --approval-mode default --policy cerebro-gemini.toml` | **unknown until risk 3**; ships, `arm` refuses until `doctor --acp-proof gemini` | docs `verified`; `ask_user` reaching ACP `inferred` |
 | gemini | attach: `AfterAgent` hook, `decision:"deny"` + `reason` as the next prompt | v2, shipped disabled; turn-end only, **approvals cannot be answered from the phone**, blocks the desk while waiting | docs `verified`; behaviour **must-verify** (risk 4) |
 | gemini | native | **not possible**: no remote, server or daemon option in 0.57.0 | `verified` |
-| agy | native: session-scoped `agy --remote-control`; `agy remote-control stop` at teardown | works (outside the ticket's list) | surface `verified` |
+| agy | native: session-scoped `agy --remote-control --mode plan`; `agy remote-control stop` at teardown | works (outside the ticket's list); run live 2026-10-19. Without `--mode` agy 1.4.2 started in accept-edits (file edits auto-approved); `--mode` takes only accept-edits / auto / plan, and the phone can still switch it (A134) | surface `verified`; live arm + teardown `verified` |
 
 ## Where it cannot be done
 
@@ -40,9 +40,13 @@ cerebro supervisor (TTL, teardown, checklist).
 
 ## Host notes the code depends on
 
-- **cursor on Windows:** the Git-Bash `cursor-agent` shim prints Node's version and
-  help (`verified` defect). `which()` only accepts PATHEXT names on Windows, so
-  cerebro runs `cursor-agent.cmd` / `agent.exe`; `doctor` flags the shim.
+- **cursor on Windows:** every `cursor-agent.exe` / `agent.exe` in
+  `%LOCALAPPDATA%\cursor-agent` is the bundled Node (prints `v24.5.0`); only
+  `cursor-agent.cmd` is the CLI (`verified`, 2026.10.12-d47ca18). cerebro looks up
+  `cursor-agent.cmd` only, has no bare `agent` fallback (`~/.grok/bin/agent.exe`
+  is another CLI), and refuses an arm whose binary reports a Node version.
+  `worker` options go before `start` (`agent worker [options] start`, `verified`
+  from help; A133).
 - **`.cmd` shims** (codex, pi, gemini, cursor npm installs) run through `cmd.exe
   /d /s /c`; arguments carrying `% ^ & | < > "` are refused, not quoted. Prompts
   travel on stdin, never argv. `taskkill /T /F` reaching the grandchild through a
