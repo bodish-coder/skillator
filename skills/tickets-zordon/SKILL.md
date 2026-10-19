@@ -116,6 +116,11 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh decided F12        # decision 
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # write app + by
 ```
 
+The team file is kept with `ticket-meta team add @h "Name" email[,email]`,
+`team remove @h` and `team list`. A member line is `- @handle: a@x, b@y`, with an
+optional indented `  name: Full Name` line directly under it. `team remove` warns,
+and still removes, when open tickets still name the handle.
+
 **An assignment reopens the ticket.** Whoever it moves to, it must not stay
 closed, deferred or in someone else's progress:
 
@@ -598,6 +603,14 @@ what the filter kept:
 Both views also republish the artifact board and give its link once per session
 (**The artifact board**). The chat list is the answer; the link is the copy the
 user can open elsewhere.
+
+**What's pending beyond the board** - "what's pending everywhere", "what's still
+running", "anything unpushed": run `scripts/pending.sh` (Windows:
+`pending.ps1`, same output) and paste what it prints. One report: board counts,
+open relay runs and the run queue, live sessions, unpushed commits, tickets whose
+line says a GREEN is `owed`, disk, memory, stale locks and any watchdog hold.
+`--kv` prints the same facts as `KEY=value` lines for tools (the ops-board mod);
+`--machine` only the machine facts. It reads; it never edits the board.
 
 ### By type (default)
 

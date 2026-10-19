@@ -37,7 +37,7 @@
 #   relay-morpheus.sh chain hold <pct> [--window 5h|7d] [--next n]
 #   relay-morpheus.sh chain release [--override [--confirmed]]
 #   relay-morpheus.sh chain wait [--interval 600] [--max 19800] [--for 1500]
-#   relay-morpheus.sh chain status | decide
+#   relay-morpheus.sh chain status | decide [--level "<level line>"]   F49: --level decides on that line
 #   relay-morpheus.sh chain next                       NEXT n CODE | HOLD | ASK k | UNBLOCK Qk | WAIT n | BLOCKED n | FINAL, then IDLE lines
 #        (F36: `chain dispatch` leases the stage's files across runs - LEASED <path> RUN-m stage s, exit 2,
 #        when another run's live stage holds one; `chain next` prints IDLE <n> leased <path> RUN-m stage s)
@@ -47,6 +47,13 @@
 #   relay-morpheus.sh chain merge <n>                  F37: merge a parallel stage's branch into the run branch
 #                                                      (exit 3 on a conflict: the stage fails)
 #   relay-morpheus.sh chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
+#
+# Watchdog (F48) - one file, <main checkout>/.skillator/watchdog.hold = "<since> <reason>":
+#   relay-morpheus.sh watchdog hold "<reason>" | release | status
+#        a hold refuses every new `chain dispatch` (and a GREEN baseline-harness `run`), exit 2,
+#        until released; a second hold keeps its since. status: HELD <since> <reason> | CLEAR
+#        (a hold file that exists holds: an empty one is HELD ? -). RELAY_DIR overrides the
+#        place; a git dir kept elsewhere uses the toplevel; outside git ./.skillator of the cwd
 #
 # Marathon (F33, chain runs only) - questions only the user can answer are
 # parked in `## Decisions` and asked together at the end (references/marathon.md):
@@ -912,6 +919,74 @@ away_() {   # <on|off|status> <file>
 cmd_away() {
   case "${1:-status}" in on|off|status) q_locked away_ "${1:-status}" ;; *) die "usage: relay-morpheus.sh away on | off | status" ;; esac
 }
+# ------------------------------------------------------------- watchdog ----
+# F48: the ops-board mod holds this clone when the machine is red (disk or
+# memory below 1 GB): one file (where: R2b below),
+# "<since> <reason>", written under its own lock. While it exists every new
+# `chain dispatch` and every GREEN baseline-harness `run` is refused, exit 2.
+# Released only on purpose (`watchdog release`, the mod's /ops resume) - never
+# by a reading that looks better.
+# R2b: one file per clone, by one rule shared with baseline-harness
+# watchdog_refuse and pending: RELAY_DIR if set; else in git <main>/.skillator/watchdog.hold, main = the
+# common dir's parent when it ends in /.git, else the toplevel (a git dir
+# kept elsewhere, --separate-git-dir); outside git ./.skillator of the cwd.
+# DIR never moves it. $1, if given, is where to ask git from (the dispatch
+# guard asks from the run file).
+wd_path() {
+  if [ -n "${RELAY_DIR:-}" ]; then printf '%s' "$RELAY_DIR/watchdog.hold"; return 0; fi
+  _wc=$(git ${1:+-C "$1"} rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || _wc=''
+  case "$_wc" in
+    '') _wm='' ;;
+    */.git) _wm=${_wc%/.git} ;;
+    *) _wm=$(git ${1:+-C "$1"} rev-parse --show-toplevel 2>/dev/null) || _wm='' ;;
+  esac
+  if [ -n "$_wm" ]; then printf '%s' "$_wm/.skillator/watchdog.hold"
+  else printf '%s' "$(pwd)/.skillator/watchdog.hold"; fi
+}
+# wd_read [from]: 0 and WD_SINCE / WD_WHY set while held; 1 when clear.
+# R6: a file that exists holds whatever its content - a missing since reads
+# ?, a missing reason - (an empty or blank file: HELD ? -).
+wd_read() {
+  _wf=$(wd_path "${1:-}"); [ -f "$_wf" ] || return 1
+  _wl=$(awk 'NR == 1 { gsub(/\r/, ""); gsub(/^[ \t]+|[ \t]+$/, ""); i = index($0, " ")
+               a = (i ? substr($0, 1, i - 1) : $0); b = (i ? substr($0, i + 1) : "")
+               print (a == "" ? "?" : a) " " (b == "" ? "-" : b); done = 1; exit }
+             END { if (!done) print "? -" }' "$_wf" 2>/dev/null) || _wl='? -'
+  [ -n "$_wl" ] || _wl='? -'
+  WD_SINCE=${_wl%% *}; WD_WHY=${_wl#* }
+  return 0
+}
+wd_hold_() {   # <reason> <file>
+  _ws=$(now); if wd_read && [ "$WD_SINCE" != '?' ]; then _ws=$WD_SINCE; fi
+  printf '%s %s\n' "$_ws" "$1" > "$2.tmp.$$" && mv "$2.tmp.$$" "$2"
+  echo "watchdog: held $_ws $1"
+}
+wd_release_() {   # <file>
+  if [ -f "$1" ]; then rm -f "$1"; echo "watchdog: released"; else echo "watchdog: not held"; fi
+}
+wd_locked() {   # <fn> <args...>: fn with the hold file appended, under its lock
+  _wdf=$(wd_path)
+  # only a hold makes the folder - status and release never create one
+  if [ "$1" = wd_hold_ ]; then mkdir -p "${_wdf%/*}"
+  elif [ ! -f "$_wdf" ]; then echo "watchdog: not held"; return 0; fi
+  _wdsv=$LOCK; LOCK=; lock "$_wdf.lock"
+  _wdrc=0; "$@" "$_wdf" || _wdrc=$?
+  unlock; LOCK=$_wdsv; return $_wdrc
+}
+cmd_watchdog() {
+  case "${1:-status}" in
+    hold)
+      _wr=$(trim "${2:-}")
+      [ -n "$_wr" ] || die "watchdog hold: say why - the reason is what the band and every refusal show"
+      case "$_wr" in *"
+"*) die "watchdog hold: the reason is one line" ;; esac
+      wd_locked wd_hold_ "$_wr" ;;
+    release) wd_locked wd_release_ ;;
+    status) if wd_read; then echo "HELD $WD_SINCE $WD_WHY"; else echo CLEAR; fi ;;
+    *) die 'usage: relay-morpheus.sh watchdog hold "<reason>" | release | status' ;;
+  esac
+}
+
 land_() {   # <run> <start|finish|abort> <run file> <queue file>
   _lr=$1; _lm=$2; _lf=$3; _lq=$4
   _lw=$(hdr_field "$_lf" worktree); _lb=$(hdr_field "$_lf" branch)
@@ -1248,6 +1323,9 @@ chain_dispatch() {
   [ -n "$drv" ] || die "chain dispatch: name this session (--driver @cc-xxxx or RELAY_CHAIN_DRIVER) - two sessions must not drive one chain"
   case "$drv" in *' '*|*'|'*) die "chain dispatch: driver tag has a space or a pipe: $drv" ;; esac
   need_run
+  # F48: a watchdog hold (disk or memory red) refuses every new stage, before
+  # any lease or lock is taken.
+  if wd_read "$(dirname "$RUN")"; then refuse "watchdog hold ($WD_WHY) - clear the cause, then /ops resume or relay-morpheus watchdog release"; fi
   dv=$(chain_decide "$(level_line)"); pct=$(echo "$dv" | cut -d' ' -f2)
   # F36: the stage's files are leased BEFORE the run lock - the registry wait
   # must never stretch a run-lock hold - and given back if the dispatch is
@@ -2085,11 +2163,20 @@ cmd_chain() {
     release)  chain_release "$@" ;;
     wait)     chain_wait "$@" ;;
     status)   chain_status ;;
-    decide)   chain_decide "$(level_line)" ;;
+    decide)   chain_decide_cmd "$@" ;;
     next)     chain_next "$@" ;;
     merge)    chain_merge "$@" ;;
     edge)     chain_edge "$@" ;;
     *) die "usage: relay-morpheus.sh chain plan|dispatch|hold|release|wait|status|decide|next|merge|edge ..." ;;
+  esac
+}
+# F49: `chain decide --level "<line>"` decides on a reading the caller already
+# has (the ops-board mod's, from the host) - the same table, never re-made.
+chain_decide_cmd() {
+  case "$#:${1:-}" in
+    0:) chain_decide "$(level_line)" ;;
+    2:--level) chain_decide "$2" ;;
+    *) die 'usage: relay-morpheus.sh chain decide [--level "src=.. 5h=.. 7d=.. ctx=.. max=.."]' ;;
   esac
 }
 
@@ -2299,6 +2386,40 @@ cmd_selftest() {
   echo ok
 }
 
+# R2b / R6 (F48 review round 2), separate processes as the mod runs them: the
+# hold's place is one rule - RELAY_DIR; else in git <main>/.skillator, main =
+# the common dir's parent, or the toplevel when the git dir lives elsewhere
+# (--separate-git-dir); outside git ./.skillator of the cwd. A hold file that
+# exists holds whatever its content: empty or blank reads HELD ? -.
+wd_r2b_r6() {   # <relay script> <scratch dir>
+  _x=$1; _t=$2
+  git init -q --separate-git-dir "$_t/sep.git" "$_t/sep" && mkdir -p "$_t/sep/sub" || die "R2b: cannot make a separate-git-dir repo"
+  ( cd "$_t/sep/sub" && unset RELAY_DIR && sh "$_x" watchdog hold "disk 0.6 GB free" >/dev/null ) || die "R2b: hold in a separate-git-dir repo failed"
+  [ -f "$_t/sep/.skillator/watchdog.hold" ] || die "R2b: a hold in a separate-git-dir repo did not land in <toplevel>/.skillator"
+  [ ! -e "$_t/sep/sub/.skillator" ] && [ ! -e "$_t/sep.git/.skillator" ] || die "R2b: a separate-git-dir hold made a stray .skillator"
+  case "$(cd "$_t/sep" && unset RELAY_DIR && sh "$_x" watchdog status)" in "HELD "*"Z disk 0.6 GB free") ;;
+    *) die "R2b: status from the separate-git-dir repo's root: $(cd "$_t/sep" && sh "$_x" watchdog status)" ;; esac
+  [ "$(cd "$_t/sep/sub" && unset RELAY_DIR && sh "$_x" watchdog release)" = "watchdog: released" ] && [ ! -e "$_t/sep/.skillator/watchdog.hold" ] ||
+    die "R2b: release in a separate-git-dir repo"
+  ( cd "$_t/sep/sub" && RELAY_DIR="$_t/rd" sh "$_x" watchdog hold "mem 0.6 GB free" >/dev/null ) || die "R2b: hold with RELAY_DIR failed"
+  [ -f "$_t/rd/watchdog.hold" ] && [ ! -e "$_t/sep/.skillator/watchdog.hold" ] || die "R2b: RELAY_DIR did not take the hold"
+  rm -rf "$_t/rd"
+  _ng=$(mktemp -d); mkdir -p "$_ng/a"   # the scratch dir is a repo itself
+  ( cd "$_ng/a" && unset RELAY_DIR && sh "$_x" watchdog hold "disk 0.5 GB free" >/dev/null ) || die "R2b: hold outside git failed"
+  [ -f "$_ng/a/.skillator/watchdog.hold" ] || die "R2b: outside git the hold is not ./.skillator of the cwd"
+  [ "$(cd "$_ng/a" && unset RELAY_DIR && sh "$_x" watchdog release)" = "watchdog: released" ] || die "R2b: release outside git"
+  rm -rf "$_ng"
+  mkdir -p "$_t/sep/.skillator"; : > "$_t/sep/.skillator/watchdog.hold"
+  [ "$(cd "$_t/sep/sub" && unset RELAY_DIR && sh "$_x" watchdog status)" = "HELD ? -" ] ||
+    die "R6: status of an empty hold file: $(cd "$_t/sep/sub" && sh "$_x" watchdog status)"
+  printf ' \t \r\n' > "$_t/sep/.skillator/watchdog.hold"
+  [ "$(cd "$_t/sep/sub" && unset RELAY_DIR && sh "$_x" watchdog status)" = "HELD ? -" ] ||
+    die "R6: status of a blank hold file: $(cd "$_t/sep/sub" && sh "$_x" watchdog status)"
+  printf '2026-01-01T00:00Z\n' > "$_t/sep/.skillator/watchdog.hold"
+  [ "$(cd "$_t/sep/sub" && unset RELAY_DIR && sh "$_x" watchdog status)" = "HELD 2026-01-01T00:00Z -" ] || die "R6: status of a hold with no reason"
+  rm -rf "$_t/sep" "$_t/sep.git"
+}
+
 # F31. The chain's whole value is that its state survives on disk and that
 # its one decision - hold or go - is right, so both are pinned here.
 chain_selftest() {
@@ -2326,6 +2447,15 @@ chain_selftest() {
   [ "$(HOLD_PCT=70 chain_decide 'src=codex 5h=75 7d=1 ctx=- max=75')" = "HOLD 75" ] || die "chain_decide: RELAY_CHAIN_HOLD_PCT ignored"
   # Garbage from the level command reads as unobservable, never as 0%.
   [ "$(RELAY_LEVEL_CMD='echo oops; exit 1' level_line)" = "src=none 5h=- 7d=- ctx=- max=-" ] || die "level_line: an error did not read as src=none"
+  # F49: `chain decide --level` decides on the line it is given (the ops-board
+  # mod's host reading), never on usage-watch's.
+  for row in 'HOLD 82|src=host 5h=82 7d=61 ctx=- max=-' 'HOLD 91 7d|src=host 5h=41 7d=91 ctx=- max=-' \
+    'UNOBSERVABLE|src=none 5h=- 7d=- ctx=- max=-' 'RELEASE 41|src=host 5h=41 7d=55 ctx=- max=-'; do
+    want=${row%%|*}; got=$(RELAY_LEVEL_CMD='echo src=host 5h=99 7d=99 ctx=- max=-' cmd_chain decide --level "${row#*|}")
+    [ "$got" = "$want" ] || die "F49: chain decide --level '${row#*|}': want '$want', got '$got'"
+  done
+  if (cmd_chain decide --level >/dev/null 2>&1); then die "F49: chain decide --level with no line was accepted"; fi
+  if (cmd_chain decide --lvl x >/dev/null 2>&1); then die "F49: chain decide took an unknown flag"; fi
 
   cd_save=$(pwd)
   d4="$d/chain"; mkdir -p "$d4"; git init -q "$d4"
@@ -2365,6 +2495,62 @@ chain_selftest() {
 
   # dispatch: never without a driver, a block, or past a hold; prompt copied verbatim.
   export RELAY_LEVEL_CMD='echo src=claude-code 5h=40 7d=10 ctx=5 max=40'
+  # F48: a watchdog hold (the ops-board mod's, on a red disk or memory reading)
+  # refuses every new dispatch until released; a second hold keeps its since.
+  # R2: the hold is the main checkout's (from git, not cwd or DIR) - work from
+  # inside the scratch repo, so the real one's .skillator is never touched.
+  cd "$d4"
+  wdf="$DIR/watchdog.hold"
+  [ "$(cmd_watchdog status)" = CLEAR ] || die "F48: watchdog status with no hold: $(cmd_watchdog status)"
+  out=$(cmd_watchdog hold "disk 0.8 GB free (below 1 GB)") || die "F48: watchdog hold failed"
+  case "$out" in "watchdog: held 20"*"Z disk 0.8 GB free (below 1 GB)") ;; *) die "F48: watchdog hold said: $out" ;; esac
+  [ "$(cat "$wdf")" = "${out#watchdog: held }" ] || die "F48: hold file is not '<since> <reason>': $(cat "$wdf")"
+  [ "$(cmd_watchdog status)" = "HELD ${out#watchdog: held }" ] || die "F48: watchdog status: $(cmd_watchdog status)"
+  printf '%s\n' '2026-01-01T00:00Z disk 0.8 GB free (below 1 GB)' > "$wdf"
+  out=$(cmd_watchdog hold "mem 0.5 GB free") || die "F48: second watchdog hold failed"
+  [ "$out" = "watchdog: held 2026-01-01T00:00Z mem 0.5 GB free" ] || die "F48: a second hold restarted the clock: $out"
+  if (cmd_watchdog hold "" >/dev/null 2>&1); then die "F48: watchdog hold with no reason was accepted"; fi
+  if (cmd_watchdog hold "a
+b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
+  LC_ALL=C grep -q "$(printf '\r')" "$wdf" && die "F48: hold file has a CR"
+  [ ! -e "$wdf.lock" ] || die "F48: watchdog hold left its lock behind"
+  set +e; out=$( (chain_dispatch "$s1" --driver @cc-a) 2>&1 ); rc=$?; set -e
+  [ "$rc" = 2 ] && [ "$out" = "REFUSED: watchdog hold (mem 0.5 GB free) - clear the cause, then /ops resume or relay-morpheus watchdog release" ] ||
+    die "F48: dispatch while held: want exit 2 and the hold text, got $rc: $out"
+  grep -q "^| $s1 | $c1 B2+B3 books |   | - |" "$RUN" && [ ! -e "$RUN.lock" ] || die "F48: a held dispatch touched the row or left the lock"
+  [ "$(cmd_watchdog release)" = "watchdog: released" ] && [ ! -e "$wdf" ] || die "F48: watchdog release did not remove the hold"
+  [ "$(cmd_watchdog release)" = "watchdog: not held" ] || die "F48: a second release did not say not held"
+  [ "$(cmd_watchdog status)" = CLEAR ] || die "F48: status after release: $(cmd_watchdog status)"
+  if (cmd_watchdog bogus >/dev/null 2>&1); then die "F48: watchdog took an unknown action"; fi
+  # R2: one hold file per clone - <main checkout>/.skillator/watchdog.hold
+  # whatever the cwd. Held from a subdir, it shows from the root and the
+  # subdir, a release from the subdir clears it, and no <subdir>/.skillator
+  # appears; status and release never create a folder.
+  wme="$HERE/${0##*/}"; wr="$d/wdrepo"; mkdir -p "$wr/sub/deep"; git init -q "$wr"
+  ( cd "$wr/sub/deep" && unset RELAY_DIR && sh "$wme" watchdog hold "disk 0.7 GB free" >/dev/null ) || die "R2: watchdog hold from a subdir failed"
+  [ -f "$wr/.skillator/watchdog.hold" ] || die "R2: a hold from a subdir did not land in the main checkout's .skillator"
+  out=$(cd "$wr" && sh "$wme" watchdog status)
+  case "$out" in "HELD "*"Z disk 0.7 GB free") ;; *) die "R2: status from the repo root after a subdir hold: $out" ;; esac
+  [ "$(cd "$wr/sub/deep" && sh "$wme" watchdog status)" = "$out" ] || die "R2: status from the subdir differs from the root's"
+  [ "$(cd "$wr/sub/deep" && sh "$wme" watchdog release)" = "watchdog: released" ] || die "R2: release from the subdir did not release"
+  [ ! -e "$wr/.skillator/watchdog.hold" ] || die "R2: release from the subdir left the main checkout's hold"
+  [ "$(cd "$wr" && sh "$wme" watchdog status)" = CLEAR ] || die "R2: status from the root after a subdir release"
+  [ ! -e "$wr/sub/deep/.skillator" ] && [ ! -e "$wr/sub/.skillator" ] || die "R2: a stray <subdir>/.skillator was created"
+  rm -rf "$wr/.skillator"
+  ( cd "$wr/sub" && sh "$wme" watchdog status && sh "$wme" watchdog release ) >/dev/null || die "R2: status/release with no .skillator failed"
+  [ ! -e "$wr/.skillator" ] && [ ! -e "$wr/sub/.skillator" ] || die "R2: watchdog status/release created a folder"
+  wd_r2b_r6 "$wme" "$d"
+  # R6: a hold file that exists holds, whatever its content - an empty one
+  # refuses a dispatch with reason -, and a hold over it starts a fresh since.
+  : > "$wdf"
+  [ "$(cmd_watchdog status)" = "HELD ? -" ] || die "R6: status of an empty hold file: $(cmd_watchdog status)"
+  set +e; out=$( (chain_dispatch "$s1" --driver @cc-a) 2>&1 ); rc=$?; set -e
+  [ "$rc" = 2 ] && [ "$out" = "REFUSED: watchdog hold (-) - clear the cause, then /ops resume or relay-morpheus watchdog release" ] ||
+    die "R6: dispatch with an empty hold file: want exit 2 and the hold text, got $rc: $out"
+  out=$(cmd_watchdog hold "disk 0.4 GB free") || die "R6: hold over an empty hold file failed"
+  case "$out" in "watchdog: held 20"*"Z disk 0.4 GB free") ;; *) die "R6: hold over an empty file kept a '?' since: $out" ;; esac
+  [ "$(cmd_watchdog release)" = "watchdog: released" ] && [ ! -e "$wdf" ] || die "R6: release after an empty-file hold"
+  cd "$cd_save"
   if (chain_dispatch "$s1" >/dev/null 2>&1); then die "chain dispatch: ran with no driver named"; fi
   out=$(chain_dispatch "$s1" --driver @cc-a --owner build:opus) || die "chain dispatch failed"
   [ "$(printf '%s\n' "$out" | head -1)" = "$c1" ] || die "chain dispatch: did not print the code first"
@@ -3165,5 +3351,6 @@ case "$c" in
   answer)    cmd_answer "$@" ;;
   queue)     cmd_queue "$@" ;;
   owner)     cmd_owner "$@" ;;
-  *) sed -n '2,55p' "$0" >&2; exit 1 ;;
+  watchdog)  cmd_watchdog "$@" ;;
+  *) sed -n '2,69p' "$0" >&2; exit 1 ;;
 esac

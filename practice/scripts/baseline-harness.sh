@@ -2013,6 +2013,8 @@ hide_restore() {
   # only the run that did the hiding restores - a racing loser never touches it
   [ -n "$HIDE_ON" ] || return 0
   if [ -e "$HIDE_BAK" ] && [ ! -e "$HIDE_MD" ]; then mv "$HIDE_BAK" "$HIDE_MD"; fi
+  # R1: the owner file goes once the hidden copy is back (or already gone)
+  [ -e "$HIDE_BAK" ] || rm -f "$HIDE_BAK.owner"
 }
 hide_begin() {
   HIDE_MD="$HOME/.claude/CLAUDE.md"; HIDE_BAK="$HIDE_MD.skillator-hidden"; HIDE_ON=''
@@ -2026,18 +2028,34 @@ hide_begin() {
   if [ -e "$HIDE_BAK" ]; then
     echo "# REFUSED: $HIDE_BAK exists - a previous hidden run died. Restore first:" >&2
     echo "#   mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md" >&2
+    echo "# and clear its owner file ~/.claude/CLAUDE.md.skillator-hidden.owner (the pid of the" >&2
+    echo "# run that hid it - check that pid is not running first):" >&2
+    echo "#   rm -f ~/.claude/CLAUDE.md.skillator-hidden.owner" >&2
     return 1
   fi
   if [ ! -e "$HIDE_MD" ]; then
     echo "# isolate=hide: no ~/.claude/CLAUDE.md - nothing to hide, running as-is" >&2
     return 0
   fi
+  # R1b: name the hiding run BEFORE the rename, so a session-end restore never
+  # sees CLAUDE.md hidden without its owner: "<pid> <epoch> <winpid>", one
+  # ASCII line, LF; winpid from /proc/$$/winpid under MSYS/Cygwin, else -.
+  # Written only if absent (noclobber): an owner file already there is another
+  # run starting, or a dead one - refuse, as for a stale hidden copy.
+  _hw=-; [ -r "/proc/$$/winpid" ] && _hw=$(tr -d '\r\n ' < "/proc/$$/winpid" 2>/dev/null)
+  case "$_hw" in ''|*[!0-9]*) _hw=- ;; esac
+  if ! ( set -C; printf '%s %s %s\n' "$$" "$(date +%s)" "$_hw" > "$HIDE_BAK.owner" ) 2>/dev/null; then
+    echo "# REFUSED: cannot write the owner file $HIDE_BAK.owner - not hiding ~/.claude/CLAUDE.md." >&2
+    echo "# If it is left from a dead run (check the pid in it is not running), clear it:" >&2
+    echo "#   rm -f ~/.claude/CLAUDE.md.skillator-hidden.owner" >&2
+    return 1
+  fi
   echo "# isolate=hide: hiding ~/.claude/CLAUDE.md for this run. If this run dies, restore with:" >&2
   echo "#   mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md" >&2
-  # rename first: a run whose mv lost a race arms no trap, so it cannot restore
-  # another run's hide mid-run. A kill in the gap below is caught next time by
-  # the stale-file refusal above; SIGKILL to the harness is likewise.
-  mv "$HIDE_MD" "$HIDE_BAK" || return 1
+  # a run whose mv lost a race arms no trap, so it cannot restore another
+  # run's hide mid-run; its owner file (written exclusively above) goes. A
+  # kill in the gap below is caught next time by the refusals above.
+  if ! mv "$HIDE_MD" "$HIDE_BAK"; then rm -f "$HIDE_BAK.owner"; return 1; fi
   HIDE_ON=1
   BASELINE_RUN_HIDING=$$; export BASELINE_RUN_HIDING
   trap 'hide_restore' EXIT
@@ -2099,9 +2117,41 @@ run_tree_kill() {
   done
 }
 
+# F48: the ops-board mod's watchdog hold - <main checkout>/.skillator/
+# watchdog.hold (R2b rule below, as for relay-morpheus), written by
+# `relay-morpheus watchdog hold` when disk or memory is red. While it exists a
+# GREEN run is refused, exit 2, before anything starts; a RED run is not held.
+watchdog_refuse() {   # <prefix|-> <cmd...>
+  _wg=''; [ "$1" != - ] && _wg=1; shift
+  for _wa in "$@"; do case "$_wa" in --plugin-dir|--plugin-dir=*) _wg=1 ;; esac; done
+  [ -n "$_wg" ] || return 0
+  # R2b: the one rule relay-morpheus and pending use - RELAY_DIR; else in git
+  # <main>/.skillator, main = the common dir's parent when it ends in /.git,
+  # else the toplevel (--separate-git-dir); outside git ./.skillator.
+  if [ -n "${RELAY_DIR:-}" ]; then _wh="$RELAY_DIR/watchdog.hold"
+  else
+    _wc=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || _wc=''
+    case "$_wc" in
+      '') _wm='' ;;
+      */.git) _wm=${_wc%/.git} ;;
+      *) _wm=$(git rev-parse --show-toplevel 2>/dev/null) || _wm='' ;;
+    esac
+    if [ -n "$_wm" ]; then _wh="$_wm/.skillator/watchdog.hold"; else _wh="$(pwd)/.skillator/watchdog.hold"; fi
+  fi
+  [ -f "$_wh" ] || return 0
+  # R6: a hold file that exists holds whatever its content; no reason reads -
+  _wy=$(awk 'NR == 1 { gsub(/\r/, ""); gsub(/^[ \t]+|[ \t]+$/, ""); i = index($0, " ")
+               print (i && substr($0, i + 1) != "" ? substr($0, i + 1) : "-"); done = 1; exit }
+             END { if (!done) print "-" }' "$_wh" 2>/dev/null) || _wy=-
+  [ -n "$_wy" ] || _wy=-
+  echo "REFUSED: watchdog hold ($_wy) - clear the cause, then /ops resume or relay-morpheus watchdog release" >&2
+  return 2
+}
+
 run_nested() {
   t="$1"; p="$2"; shift 2
   case "$t" in ''|*[!0-9]*) die "run: timeout must be whole seconds, got: $t" ;; esac
+  watchdog_refuse "$p" "$@" || exit 2
   run_isolation "$p" "$@" || die 'run: refused - GREEN run without isolation'
   HIDE_ON=
   hiding=''
@@ -3135,6 +3185,52 @@ FX
   fi
   ( BASELINE_ISOLATE=off run_nested 5 "$p" true ) 2>"$tmp/err" || die 'run: BASELINE_ISOLATE=off GREEN run failed'
   grep -q 'ISOLATION OFF: GREEN run with BASELINE_ISOLATE=off' "$tmp/err" || die 'run: isolate=off not flagged in the .err'
+  # F48: a watchdog hold (<main>/.skillator/watchdog.hold, relay-morpheus
+  # watchdog hold) refuses a GREEN run, exit 2, before anything starts; a RED
+  # run is not held; released, the GREEN run goes.
+  wdr="$tmp/wd-repo"; git init -q "$wdr"; mkdir -p "$wdr/.skillator"
+  printf '%s\n' '2026-10-18T09:00Z disk 0.8 GB free (below 1 GB)' > "$wdr/.skillator/watchdog.hold"
+  rc=0; ( cd "$wdr" && unset RELAY_DIR && BASELINE_ISOLATE=off run_nested 5 - sh -c "touch '$tmp/ran-held'" --plugin-dir x ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 2 ] || die "run: a GREEN run while the watchdog holds gave rc=$rc, want 2"
+  [ ! -e "$tmp/ran-held" ] || die 'run: a GREEN run started while the watchdog holds'
+  grep -qx 'REFUSED: watchdog hold (disk 0.8 GB free (below 1 GB)) - clear the cause, then /ops resume or relay-morpheus watchdog release' "$tmp/err" \
+    || die "run: the watchdog refusal does not say why: $(cat "$tmp/err")"
+  rc=0; ( cd "$wdr" && unset RELAY_DIR && BASELINE_ISOLATE=hide HOME="$tmp/no-home" run_nested 5 "$p" true ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 2 ] && grep -q '^REFUSED: watchdog hold' "$tmp/err" || die "run: a prefix GREEN run while held gave rc=$rc"
+  ( cd "$wdr" && unset RELAY_DIR && run_nested 5 - sh -c "touch '$tmp/ran-red'" ) 2>"$tmp/err" || die 'run: a RED run was held by the watchdog'
+  [ -e "$tmp/ran-red" ] || die 'run: a RED run did not run under a watchdog hold'
+  rm -f "$wdr/.skillator/watchdog.hold"
+  ( cd "$wdr" && unset RELAY_DIR && BASELINE_ISOLATE=off run_nested 5 - sh -c "touch '$tmp/ran-held'" --plugin-dir x ) 2>"$tmp/err" \
+    || die 'run: a GREEN run was refused with no watchdog hold'
+  [ -e "$tmp/ran-held" ] || die 'run: released, the GREEN run still did not run'
+  # R2b: one rule for the hold's place, shared by relay-morpheus, pending and
+  # this harness - in a repo whose git dir lives elsewhere (--separate-git-dir)
+  # a hold taken by relay from a subdir is seen by pending and refuses a GREEN
+  # run here; outside git ./.skillator of the cwd; RELAY_DIR overrides.
+  # R6: an empty hold file still holds (reason -).
+  hk2=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/skills
+  sgr="$tmp/wd-sep"; git init -q --separate-git-dir "$tmp/wd-sep.git" "$sgr" && mkdir -p "$sgr/sub" || die 'run: cannot make a separate-git-dir repo'
+  ( cd "$sgr/sub" && unset RELAY_DIR && sh "$hk2/relay-morpheus/hooks/relay-morpheus.sh" watchdog hold 'disk 0.6 GB free' >/dev/null ) \
+    || die 'run: relay watchdog hold in a separate-git-dir repo failed'
+  [ -f "$sgr/.skillator/watchdog.hold" ] || die 'run: relay put a separate-git-dir hold somewhere else than <toplevel>/.skillator'
+  _ph=$(cd "$sgr/sub" && unset RELAY_DIR && sh "$hk2/tickets-zordon/scripts/pending.sh" --machine | awk '/^HOLD=/')
+  case "$_ph" in 'HOLD='*'Z disk 0.6 GB free') ;; *) die "run: pending did not see relay's separate-git-dir hold: $_ph" ;; esac
+  rc=0; ( cd "$sgr/sub" && unset RELAY_DIR && BASELINE_ISOLATE=off run_nested 5 - sh -c "touch '$tmp/ran-sep'" --plugin-dir x ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 2 ] && [ ! -e "$tmp/ran-sep" ] && grep -q '^REFUSED: watchdog hold (disk 0.6 GB free)' "$tmp/err" \
+    || die "run: a GREEN run in a separate-git-dir repo under a hold gave rc=$rc: $(cat "$tmp/err")"
+  : > "$sgr/.skillator/watchdog.hold"
+  rc=0; ( cd "$sgr/sub" && unset RELAY_DIR && BASELINE_ISOLATE=off run_nested 5 - sh -c "touch '$tmp/ran-sep'" --plugin-dir x ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 2 ] && [ ! -e "$tmp/ran-sep" ] && grep -qx 'REFUSED: watchdog hold (-) - clear the cause, then /ops resume or relay-morpheus watchdog release' "$tmp/err" \
+    || die "run: an empty hold file did not refuse a GREEN run: rc=$rc $(cat "$tmp/err")"
+  rm -rf "$sgr" "$tmp/wd-sep.git"
+  mkdir -p "$tmp/wd-nogit/.skillator" "$tmp/wd-rd"
+  printf '%s\n' '2026-10-18T09:00Z nogit low' > "$tmp/wd-nogit/.skillator/watchdog.hold"
+  rc=0; ( cd "$tmp/wd-nogit" && unset RELAY_DIR && BASELINE_ISOLATE=off run_nested 5 - true --plugin-dir x ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 2 ] && grep -q '^REFUSED: watchdog hold (nogit low)' "$tmp/err" || die "run: outside git a ./.skillator hold did not refuse: rc=$rc"
+  printf '%s\n' '2026-10-18T09:00Z rd low' > "$tmp/wd-rd/watchdog.hold"
+  rc=0; ( cd "$wdr" && RELAY_DIR="$tmp/wd-rd" BASELINE_ISOLATE=off run_nested 5 - true --plugin-dir x ) 2>"$tmp/err" || rc=$?
+  [ "$rc" = 2 ] && grep -q '^REFUSED: watchdog hold (rd low)' "$tmp/err" || die "run: a RELAY_DIR hold did not refuse: rc=$rc"
+  rm -rf "$tmp/wd-nogit" "$tmp/wd-rd"
   ( unset BASELINE_ISOLATE; run_nested 5 - true ) 2>"$tmp/err" || die 'run: a RED run was refused for isolation'
   if grep -q 'REFUSED\|ISOLATION OFF' "$tmp/err"; then die 'run: a RED run was flagged for isolation'; fi
   rc=0; ( BASELINE_ISOLATE=off run_nested 5 "$p" sh -c "chmod u+w '$p/skills'; echo x > '$p/skills/leak.mjs'" ) 2>"$tmp/err" || rc=$?
@@ -3158,6 +3254,46 @@ FX
   [ ! -e "$md.skillator-hidden" ] || die 'hide: hidden copy left behind'
   grep -q 'mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md' "$tmp/err" \
     || die 'hide: restore command not printed'
+  # R1b: the hiding run names itself in <hidden>.owner ("<pid> <epoch>
+  # <winpid>") while hidden, and removes it after the restore. winpid is
+  # /proc/$$/winpid under MSYS/Cygwin when readable, else -.
+  ( HOME="$fh" BASELINE_ISOLATE=hide run_nested 5 - sh -c "cp '$md.skillator-hidden.owner' '$tmp/owner'" ) \
+    2>"$tmp/err" || die 'hide: owner file not written while hidden'
+  _ol=$(cat "$tmp/owner")
+  _on=$(echo "$_ol" | awk '{ print NF }'); _op=${_ol%% *}; _oe=${_ol#* }; _ox=${_oe#* }; _oe=${_oe%% *}
+  [ "$_on" = 3 ] || die "hide: owner line '$_ol' has $_on fields, want 3 (<pid> <epoch> <winpid>)"
+  [ "$_op" = "$$" ] || die "hide: owner pid is '$_op', want the harness pid $$"
+  case "$_oe" in ''|*[!0-9]*) die "hide: owner epoch is '$_oe', want whole seconds" ;; esac
+  _ow=-; if [ -r "/proc/$$/winpid" ]; then _ow=$(tr -d '\r\n ' < "/proc/$$/winpid"); fi
+  case "$(uname -s 2>/dev/null)" in
+    MSYS*|MINGW*|CYGWIN*) case "$_ox" in ''|*[!0-9]*) die "hide: owner winpid is '$_ox', want a number under MSYS" ;; esac ;;
+  esac
+  [ "$_ox" = "$_ow" ] || die "hide: owner winpid is '$_ox', want '$_ow'"
+  [ "$(wc -l < "$tmp/owner" | tr -d ' ')" = 1 ] || die 'hide: owner file is not one LF-terminated line'
+  if tr -d '\n' < "$tmp/owner" | grep -q "$(printf '\r')"; then die 'hide: owner file has CR'; fi
+  [ ! -e "$md.skillator-hidden.owner" ] || die 'hide: owner file left behind after restore'
+  # R1b: the owner file is written BEFORE the rename - at the moment CLAUDE.md
+  # is hidden its owner already exists (a stand-in mv records what it saw).
+  ( mv() { case "${2:-}" in *.skillator-hidden) [ -f "$2.owner" ] && : > "$tmp/owner-first" ;; esac; command mv "$@"; }
+    HOME="$fh" BASELINE_ISOLATE=hide run_nested 5 - true ) 2>"$tmp/err" || die 'hide: run with the order probe failed'
+  [ -e "$tmp/owner-first" ] || die 'hide: CLAUDE.md was hidden before its owner file existed'
+  [ -f "$md" ] && [ ! -e "$md.skillator-hidden" ] && [ ! -e "$md.skillator-hidden.owner" ] || die 'hide: order probe run not restored'
+  # R1b: the owner file cannot be written -> no rename, the run refused.
+  mkdir "$md.skillator-hidden.owner"
+  if ( HOME="$fh" BASELINE_ISOLATE=hide run_nested 5 - sh -c "touch '$tmp/ran-ow'" ) 2>"$tmp/err"; then
+    die 'hide: ran although the owner file could not be written'
+  fi
+  [ ! -e "$tmp/ran-ow" ] || die 'hide: owner write failed, but the command ran'
+  [ -f "$md" ] && [ ! -e "$md.skillator-hidden" ] || die 'hide: CLAUDE.md was hidden although its owner file could not be written'
+  grep -q 'owner' "$tmp/err" || die "hide: owner-write refusal does not say why: $(cat "$tmp/err")"
+  rmdir "$md.skillator-hidden.owner"
+  # R1b: the rename fails -> the owner file it wrote is removed, the run refused.
+  if ( mv() { case "${2:-}" in *.skillator-hidden) return 1 ;; esac; command mv "$@"; }
+       HOME="$fh" BASELINE_ISOLATE=hide run_nested 5 - sh -c "touch '$tmp/ran-mv'" ) 2>"$tmp/err"; then
+    die 'hide: ran although the rename failed'
+  fi
+  [ ! -e "$tmp/ran-mv" ] || die 'hide: rename failed, but the command ran'
+  [ -f "$md" ] && [ ! -e "$md.skillator-hidden.owner" ] || die 'hide: a failed rename left its owner file behind'
   rc=0; ( HOME="$fh" BASELINE_ISOLATE=hide run_nested 5 - sh -c 'exit 9' ) 2>"$tmp/err" || rc=$?
   [ "$rc" = 9 ] || die "hide: failing command gave rc=$rc, want 9"
   [ -f "$md" ] && [ ! -e "$md.skillator-hidden" ] || die 'hide: not restored after a failing run'
@@ -3170,6 +3306,10 @@ FX
   [ ! -e "$tmp/ran" ] || die 'hide: stale hidden file refused, but the command ran'
   grep -q 'mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md' "$tmp/err" \
     || die 'hide: stale refusal did not print the restore command'
+  grep -q 'CLAUDE.md.skillator-hidden.owner' "$tmp/err" \
+    || die 'hide: stale refusal did not mention the owner file'
+  grep -q 'rm -f ~/.claude/CLAUDE.md.skillator-hidden.owner' "$tmp/err" \
+    || die 'hide: stale refusal did not say how to clear the owner file'
   rm "$md.skillator-hidden"
   # A121: an inner `run` inside an outer run's hide window neither hides again
   # nor takes the outer hide for a stale one.

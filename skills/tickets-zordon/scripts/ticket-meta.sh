@@ -10,12 +10,17 @@
 #   ticket-meta.sh decide <ID> @handle  [decide: @handle] (must decide), box -> [?]
 #   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
 #   ticket-meta.sh tag <ID>             recompute [app: ..] and [by: ..] on it
+#   ticket-meta.sh team add @handle "Name" email[,email...]
+#                                       a member into .skillator/team.md
+#   ticket-meta.sh team remove @handle  that member out (warns on open tickets)
+#   ticket-meta.sh team list            "@handle: emails (Name)" per member
 #   ticket-meta.sh selftest             fixture repo, every subcommand, prints ok
 #
 # Apps: folders under apps/*, packages/*, services/*, plus package.json
 # "workspaces" and pnpm-workspace.yaml globs; the folder name is the app. No such
-# folder = no apps. People: .skillator/team.md, lines `- @handle: a@x, b@y`. No
-# team file = no people (by prints nothing, assign refuses).
+# folder = no apps. People: .skillator/team.md, lines `- @handle: a@x, b@y`,
+# each optionally followed by an indented `  name: Full Name` line. No team
+# file = no people (by prints nothing, assign refuses). `team add` creates it.
 # A ticket's commits are the commits on HEAD whose subject names its ID as a
 # word (F1 never matches F12 or F1a). The board edited is the main checkout's
 # TICKETS.md; only the one ticket line changes, every other byte is kept.
@@ -320,6 +325,134 @@ cmd_tag() {
   SET_MARK='' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b SAME_KEY='' NEED_MARK='' edit_line
 }
 
+# Members of team file $1, one row each: "@handle<TAB>emails<TAB>name" - the
+# emails as written, trimmed, ", "-joined; the name from an indented `name: ..`
+# line straight under the member line (the readers above never see that line).
+team_members() {
+  tr -d '\r' < "$1" | awk '
+    function flush() { if (h != "") print h "\t" em "\t" nm; h = "" }
+    /^[ \t]*[-*][ \t]*@[A-Za-z0-9_.-]+[ \t]*:/ {
+      flush()
+      line = $0; sub(/^[ \t]*[-*][ \t]*/, "", line)
+      h = line; sub(/[ \t]*:.*/, "", h)
+      rest = line; sub(/^[^:]*:/, "", rest)
+      n = split(rest, e, ","); em = ""; nm = ""
+      for (i = 1; i <= n; i++) {
+        x = e[i]; gsub(/^[ \t]+|[ \t]+$/, "", x)
+        if (x != "") em = (em == "") ? x : em ", " x
+      }
+      next }
+    h != "" && /^[ \t]+name:/ { x = $0; sub(/^[ \t]+name:[ \t]*/, "", x); sub(/[ \t]+$/, "", x); nm = x; next }
+    { flush() }
+    END { flush() }'
+}
+
+# TH <- the argument as an @handle (the @ may be left off), refused unless the
+# whole argument is one handle matching $2.
+team_handle() {
+  TH=$1
+  case $TH in @*) ;; *) TH="@$TH" ;; esac
+  one_line "$TH" && printf '%s' "$TH" | grep -Eqx -- "$2" || die "not a handle (@name, $3): $1"
+}
+
+TEAM_USAGE='usage: team add @handle "Name" email[,email...] | team remove @handle | team list'
+
+# add: `- @handle: a@x, b@y` and `  name: Name` under it, appended to the team
+# file (created with a `# Team` header when there is none). The new handle is
+# a-z 0-9 _ -; one already there, in any case, is refused.
+team_add() {
+  [ $# -ge 3 ] || die "$TEAM_USAGE"
+  team_handle "$1" '@[a-z0-9_-]+' 'lower-case a-z 0-9 _ -'
+  one_line "$2" && printf '%s' "$2" | grep -Eqx '[ -~]+' || die "not a name (one line of printable ASCII): $2"
+  NAME=$(printf '%s' "$2" | sed 's/^ *//; s/ *$//')
+  [ -n "$NAME" ] || die "not a name (empty): $2"
+  shift 2
+  for a in "$@"; do one_line "$a" || die "not an email (line break in it)"; done
+  ems=$(printf '%s\n' "$@" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -v '^$')
+  [ -n "$ems" ] || die "no email given - $TEAM_USAGE"
+  bad=$(printf '%s\n' "$ems" | grep -Evx '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+' | head -n 1)
+  [ -z "$bad" ] || die "not an email: $bad"
+  EMS=$(printf '%s\n' "$ems" | join_list)
+  f=$(team_file) || f="$MAIN/.skillator/team.md"
+  board_lock "$MAIN/TICKETS.md.lock"
+  tmp="$f.ticket-meta.$$"
+  if [ -f "$f" ]; then
+    lh=$(printf '%s' "$TH" | tr 'A-Z' 'a-z')
+    team_members "$f" | cut -f1 | tr 'A-Z' 'a-z' | grep -qxF -- "$lh" && die "$TH is already in $f"
+    cat "$f" > "$tmp" || { rm -f "$tmp"; die "write failed"; }
+    if [ -s "$f" ] && [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" != 0a ]; then printf '\n' >> "$tmp"; fi
+  else
+    mkdir -p "${f%/*}" || die "cannot create ${f%/*}"
+    printf '# Team\n\n' > "$tmp" || { rm -f "$tmp"; die "write failed"; }
+  fi
+  printf -- '- %s: %s\n  name: %s\n' "$TH" "$EMS" "$NAME" >> "$tmp" || { rm -f "$tmp"; die "write failed"; }
+  mv -f "$tmp" "$f" || { rm -f "$tmp"; die "cannot replace $f"; }
+  board_unlock
+  printf -- '- %s: %s\n  name: %s\n' "$TH" "$EMS" "$NAME"
+}
+
+# remove: that member's line and its `name:` line go, every other byte stays.
+# Open tickets (not [x], not [-]) still naming the handle in [owner:],
+# [decide:] or [by:] are listed in a warning; the removal goes ahead.
+team_remove() {
+  [ $# -eq 1 ] || die "$TEAM_USAGE"
+  team_handle "$1" '@[A-Za-z0-9_.-]+' 'letters, digits, _ . -'
+  f=$(team_file) || die "no .skillator/team.md - this repo has no people"
+  board_lock "$MAIN/TICKETS.md.lock"
+  team_members "$f" | cut -f1 | grep -qxF -- "$TH" || die "$TH is not in $f"
+  eol=0
+  [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ] && eol=1
+  tmp="$f.ticket-meta.$$"
+  # BINMODE=3: Windows gawk would otherwise drop each line's \r on the way in.
+  H=$TH EOL=$eol awk -v BINMODE=3 '
+    { line = $0; sub(/\r$/, "", line)
+      if (line ~ /^[ \t]*[-*][ \t]*@[A-Za-z0-9_.-]+[ \t]*:/) {
+        h = line; sub(/^[ \t]*[-*][ \t]*/, "", h); sub(/[ \t]*:.*/, "", h)
+        skip = (h == ENVIRON["H"]); if (skip) next
+      } else if (skip && line ~ /^[ \t]+name:/) next
+      else skip = 0
+      if (k++) printf "\n"
+      printf "%s", $0 }
+    END { if (k && ENVIRON["EOL"] == "1") printf "\n" }' "$f" > "$tmp" || { rm -f "$tmp"; die "write failed"; }
+  mv -f "$tmp" "$f" || { rm -f "$tmp"; die "cannot replace $f"; }
+  board_unlock
+  echo "removed: $TH"
+  b="$MAIN/TICKETS.md"
+  [ -f "$b" ] || return 0
+  ids=$(tr -d '\r' < "$b" | H=$TH awk '
+    match($0, /^[ \t]*- \[.\][ \t]+[A-Z]+[0-9]+[a-z]?/) {
+      id = substr($0, RSTART, RLENGTH); sub(/^[ \t]*- \[.\][ \t]+/, "", id)
+      mk = substr($0, index($0, "- [") + 3, 1)
+      if (mk != " " && mk != "~" && mk != "!" && mk != "?") next   # open: [ ] [~] [!] [?]
+      s = $0; hit = 0
+      while (match(s, /\[(owner|decide|by):[^]]*\]/)) {
+        t = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+        sub(/^\[[a-z]+:/, "", t); sub(/\]$/, "", t)
+        n = split(t, p, ",")
+        for (i = 1; i <= n; i++) { x = p[i]; gsub(/^[ \t]+|[ \t]+$/, "", x); if (x == ENVIRON["H"]) hit = 1 }
+      }
+      if (hit) print id }' | join_list)
+  [ -z "$ids" ] || echo "warning: $TH is still named on open tickets: $ids - reassign them"
+}
+
+# list: "@handle: a@x, b@y (Name)" per member, file order; no team file = nothing.
+team_list() {
+  [ $# -eq 0 ] || die "$TEAM_USAGE"
+  f=$(team_file) || return 0
+  team_members "$f" | awk -F'\t' '{ s = $1 ":"; if ($2 != "") s = s " " $2; if ($3 != "") s = s " (" $3 ")"; print s }'
+}
+
+cmd_team() {
+  [ $# -ge 1 ] || die "$TEAM_USAGE"
+  sub=$1; shift
+  case $sub in
+    add) team_add "$@" ;;
+    remove) team_remove "$@" ;;
+    list) team_list "$@" ;;
+    *) die "$TEAM_USAGE" ;;
+  esac
+}
+
 selftest() {
   self=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")
   T=$(mktemp -d 2>/dev/null || mktemp -d -t ticketmeta)
@@ -514,6 +647,60 @@ selftest() {
   } > "$T/want45.md"
   cmp -s TICKETS.md "$T/want45.md" || { echo "FAIL: F45 board bytes"; diff "$T/want45.md" TICKETS.md; fail=1; }
 
+  # --- team add / remove / list: .skillator/team.md written under the board lock
+  G="$T/team"
+  mkdir -p "$G" && cd "$G" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  {
+    printf -- '# TICKETS\n\n'
+    printf -- '- [ ] F1 %s One [owner: @asha]\n' "$D"
+    printf -- '- [x] F2 %s Two [owner: @asha]\n' "$D"
+    printf -- '- [?] F3 %s Three [decide: @asha]\n' "$D"
+    printf -- '- [-] F4 %s Four [by: @asha]\n' "$D"
+    printf -- '- [>] F5 %s Five [by: @vidul, @asha]\n' "$D"
+    printf -- '- [ ] F6 %s Six\n' "$D"
+    printf -- '- [ ] F7 %s Seven [owner: @ashab]\n' "$D"
+    printf -- '- [~] F8 %s Eight [owner: @asha]\n' "$D"
+    printf -- '- [!] F9 %s Nine [by: @asha]\n' "$D"
+  } > TICKETS.md
+  tf="$G/.skillator/team.md"
+  eq "team list, no file" "$(run team list)" ""
+  eq "team add, no file" "$(run team add @asha "Asha Rao" asha@x.com)" "- @asha: asha@x.com   name: Asha Rao"
+  printf -- '# Team\n\n- @asha: asha@x.com\n  name: Asha Rao\n' > "$T/team1.md"
+  cmp -s "$tf" "$T/team1.md" || { echo "FAIL: team add to a missing file"; diff "$T/team1.md" "$tf"; fail=1; }
+  eq "team add second" "$(run team add vidul " Vidul Ikran " "vidul@ikran.in, V2@X.com" x@y.org)" "- @vidul: vidul@ikran.in, V2@X.com, x@y.org   name: Vidul Ikran"
+  printf -- '# Team\n\n- @asha: asha@x.com\n  name: Asha Rao\n- @vidul: vidul@ikran.in, V2@X.com, x@y.org\n  name: Vidul Ikran\n' > "$T/team2.md"
+  cmp -s "$tf" "$T/team2.md" || { echo "FAIL: team add second"; diff "$T/team2.md" "$tf"; fail=1; }
+  [ ! -e TICKETS.md.lock ] || { echo "FAIL: team add left the board lock behind"; fail=1; }
+  # the existing readers see the new member and every email, the last one included
+  eq "assign to an added member" "$(run assign F6 @vidul)" "- [ ] F6 $D Six [owner: @vidul]"
+  commit X@Y.org "F6: six" six.txt
+  eq "by maps an added email" "$(run by F6)" "@vidul"
+  sh "$self" team add @asha "Other Asha" o@x.com > /dev/null 2> "$T/err" && { echo "FAIL: team add took a duplicate handle"; fail=1; }
+  grep -q 'already' "$T/err" || { echo "FAIL: duplicate refusal does not say already: $(cat "$T/err")"; fail=1; }
+  sh "$self" team add @Bad.Name "Bad" b@x.com > /dev/null 2>&1 && { echo "FAIL: team add took a bad handle"; fail=1; }
+  sh "$self" team add "@neo$NL@evil" "Neo" n@x.com > /dev/null 2>&1 && { echo "FAIL: team add took a multi-line handle"; fail=1; }
+  sh "$self" team add @neo "Neo" "neo@x.com, not-an-email" > /dev/null 2>&1 && { echo "FAIL: team add took a bad email"; fail=1; }
+  sh "$self" team add @neo "Neo" "neo@x.com$NL" > /dev/null 2>&1 && { echo "FAIL: team add took an email ending in a line break"; fail=1; }
+  sh "$self" team add @neo "Ne${NL}o" neo@x.com > /dev/null 2>&1 && { echo "FAIL: team add took a multi-line name"; fail=1; }
+  sh "$self" team add @neo "Neo" > /dev/null 2>&1 && { echo "FAIL: team add took no email"; fail=1; }
+  printf '99999 ps1\n' > TICKETS.md.lock
+  TICKET_META_LOCK_WAIT=1 sh "$self" team add @neo "Neo" neo@x.com > /dev/null 2>&1 && { echo "FAIL: team add wrote through a held board lock"; fail=1; }
+  rm -f TICKETS.md.lock
+  cmp -s "$tf" "$T/team2.md" || { echo "FAIL: a refused team add changed team.md"; diff "$T/team2.md" "$tf"; fail=1; }
+  sh "$self" team list > "$T/out" 2>&1 || { echo "FAIL: team list failed: $(cat "$T/out")"; fail=1; }
+  printf -- '@asha: asha@x.com (Asha Rao)\n@vidul: vidul@ikran.in, V2@X.com, x@y.org (Vidul Ikran)\n' > "$T/want"
+  cmp -s "$T/out" "$T/want" || { echo "FAIL: team list output"; diff "$T/want" "$T/out"; fail=1; }
+  sh "$self" team remove @nobody > /dev/null 2> "$T/err" && { echo "FAIL: team remove took an unknown handle"; fail=1; }
+  grep -q 'not in' "$T/err" || { echo "FAIL: unknown-handle refusal does not say not in: $(cat "$T/err")"; fail=1; }
+  cmp -s "$tf" "$T/team2.md" || { echo "FAIL: a refused team remove changed team.md"; fail=1; }
+  cp TICKETS.md "$T/board-before.md"
+  eq "team remove, open tickets" "$(run team remove @asha)" "removed: @asha warning: @asha is still named on open tickets: F1, F3, F8, F9 - reassign them"
+  printf -- '# Team\n\n- @vidul: vidul@ikran.in, V2@X.com, x@y.org\n  name: Vidul Ikran\n' > "$T/team3.md"
+  cmp -s "$tf" "$T/team3.md" || { echo "FAIL: team remove"; diff "$T/team3.md" "$tf"; fail=1; }
+  cmp -s TICKETS.md "$T/board-before.md" || { echo "FAIL: team remove changed the board"; fail=1; }
+  [ ! -e TICKETS.md.lock ] || { echo "FAIL: team remove left the board lock behind"; fail=1; }
+  eq "team list after remove" "$(run team list)" "@vidul: vidul@ikran.in, V2@X.com, x@y.org (Vidul Ikran)"
+
   # --- solo, non-monorepo: no workspace folders, no team.md
   S="$T/solo"
   mkdir -p "$S/src" && cd "$S" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
@@ -531,7 +718,7 @@ selftest() {
   echo ok
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|tag|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|tag|team|selftest"
 c=$1; shift
 [ "$c" = selftest ] && { selftest; exit 0; }
 need_git
@@ -546,5 +733,6 @@ case $c in
   decide) cmd_decide "$@" ;;
   decided) cmd_decided "$@" ;;
   tag) cmd_tag "$@" ;;
+  team) cmd_team "$@" ;;
   *) die "unknown subcommand: $c" ;;
 esac

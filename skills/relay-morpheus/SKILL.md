@@ -229,6 +229,8 @@ when a verdict carries `parked`, a stop fires, or `chain next` prints `ASK` or
 marathon's `park`, `answer`, `queue`. They are
 bookkeeping, not judgement; every one reads or edits `.skillator/run.md` and
 nothing else. Run `selftest` on both after touching either.
+`watchdog hold "<why>" | release | status` (F48, the ops-board mod on red disk/memory) holds every new `chain dispatch` and GREEN harness `run`, exit 2, until released.
+`chain decide --level "<level line>"` (F49) decides on a reading the caller already has.
 
 ```sh
 sh  relay-morpheus.sh  init plan.md "notekeep v2" "list --json" "tags" "export" "README"

@@ -4,6 +4,7 @@
 #   ticket-meta.ps1 apps | app-of <path>... | by <ID> | apps-of <ID>
 #   ticket-meta.ps1 assign <ID> @handle | decide <ID> @handle | decided <ID>
 #   ticket-meta.ps1 tag <ID> | selftest
+#   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
 #
 # Windows PowerShell 5.1 safe: no ?:, ??, && or ||.
 $ErrorActionPreference = 'Stop'
@@ -390,6 +391,187 @@ function Do-Tag([string[]]$a) {
   return (Edit-Line $id @{ app = $apps; by = $by })
 }
 
+# Members of team file $f, file order: @{ h = '@handle'; e = emails as written,
+# trimmed, ', '-joined; n = name from an indented `name: ..` line straight under
+# the member line (Get-TeamRows never sees that line).
+function Get-TeamMembers([string]$f) {
+  $rows = New-Object System.Collections.ArrayList
+  $cur = $null
+  $text = [System.IO.File]::ReadAllText($f, $Utf8).Replace("`r", '')
+  foreach ($line in $text.Split([char]10)) {
+    $m = [regex]::Match($line, '^[ \t]*[-*][ \t]*(@[A-Za-z0-9_.-]+)[ \t]*:(.*)$')
+    if ($m.Success) {
+      $em = New-Object System.Collections.ArrayList
+      foreach ($e in ($m.Groups[2].Value -split ',')) {
+        $x = $e.Trim(" `t")
+        if ($x -ne '') { [void]$em.Add($x) }
+      }
+      $cur = @{ h = $m.Groups[1].Value; e = [string]::Join(', ', $em.ToArray()); n = '' }
+      [void]$rows.Add($cur)
+      continue
+    }
+    if ($null -ne $cur) {
+      $nm = [regex]::Match($line, '^[ \t]+name:[ \t]*(.*?)[ \t]*$')
+      if ($nm.Success) { $cur.n = $nm.Groups[1].Value; continue }
+    }
+    $cur = $null
+  }
+  return ,$rows
+}
+
+# The argument as an @handle (the @ may be left off), refused unless the whole
+# argument is one handle matching $re.
+function Get-TeamHandle([string]$s, [string]$re, [string]$what) {
+  $h = $s
+  if (-not $h.StartsWith('@')) { $h = '@' + $h }
+  if (-not (Test-OneLine $h) -or $h -cnotmatch $re) { Fail "not a handle (@name, $what): $s" }
+  return $h
+}
+
+$script:TeamUsage = 'usage: team add @handle "Name" email[,email...] | team remove @handle | team list'
+
+function Write-TeamFile([string]$f, [byte[]]$bytes) {
+  $tmp = "$f.ticket-meta.$PID"
+  [System.IO.File]::WriteAllBytes($tmp, $bytes)
+  try {
+    if (Test-Path -LiteralPath $f -PathType Leaf) { [System.IO.File]::Replace($tmp, $f, [NullString]::Value) }
+    else { [System.IO.File]::Move($tmp, $f) }
+  } catch {
+    Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+    Fail "cannot replace $f ($($_.Exception.Message))"
+  }
+}
+
+# add: `- @handle: a@x, b@y` and `  name: Name` under it, appended to the team
+# file (created with a `# Team` header when there is none). The new handle is
+# a-z 0-9 _ -; one already there, in any case, is refused.
+function Do-TeamAdd([string[]]$a) {
+  if ($a.Count -lt 3) { Fail $script:TeamUsage }
+  $h = Get-TeamHandle $a[0] '\A@[a-z0-9_-]+\z' 'lower-case a-z 0-9 _ -'
+  if (-not (Test-OneLine $a[1]) -or $a[1] -cnotmatch '\A[ -~]+\z') { Fail "not a name (one line of printable ASCII): $($a[1])" }
+  $name = $a[1].Trim(' ')
+  if ($name -eq '') { Fail "not a name (empty): $($a[1])" }
+  for ($i = 2; $i -lt $a.Count; $i++) { if (-not (Test-OneLine $a[$i])) { Fail 'not an email (line break in it)' } }
+  $ems = New-Object System.Collections.ArrayList
+  for ($i = 2; $i -lt $a.Count; $i++) {
+    foreach ($e in ($a[$i] -split ',')) {
+      $x = $e.Trim(' ')
+      if ($x -ne '') { [void]$ems.Add($x) }
+    }
+  }
+  if ($ems.Count -eq 0) { Fail "no email given - $($script:TeamUsage)" }
+  foreach ($e in $ems) {
+    if ($e -cnotmatch '\A[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+\z') { Fail "not an email: $e" }
+  }
+  $emsText = [string]::Join(', ', $ems.ToArray())
+  $mainRoot = Get-MainRoot
+  $f = Get-TeamFile
+  if ($null -eq $f) { $f = "$mainRoot/.skillator/team.md" }
+  Lock-Board "$mainRoot/TICKETS.md.lock"
+  try {
+    if (Test-Path -LiteralPath $f -PathType Leaf) {
+      foreach ($r in (Get-TeamMembers $f)) { if ($r.h.ToLowerInvariant() -ceq $h) { Fail "$h is already in $f" } }
+      $prev = [System.IO.File]::ReadAllBytes($f)
+      if ($prev.Length -gt 0 -and $prev[$prev.Length - 1] -ne 10) { $prev = [byte[]]($prev + [byte]10) }
+    } else {
+      [void][System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($f))
+      $prev = $Utf8.GetBytes("# Team`n`n")
+    }
+    $new = $Utf8.GetBytes("- ${h}: $emsText`n  name: $name`n")
+    Write-TeamFile $f ([byte[]]($prev + $new))
+  } finally {
+    Unlock-Board
+  }
+  return @("- ${h}: $emsText", "  name: $name")
+}
+
+# remove: that member's line and its `name:` line go, every other byte stays.
+# Open tickets (not [x], not [-]) still naming the handle in [owner:],
+# [decide:] or [by:] are listed in a warning; the removal goes ahead.
+function Do-TeamRemove([string[]]$a) {
+  if ($a.Count -ne 1) { Fail $script:TeamUsage }
+  $h = Get-TeamHandle $a[0] '\A@[A-Za-z0-9_.-]+\z' 'letters, digits, _ . -'
+  $f = Get-TeamFile
+  if ($null -eq $f) { Fail 'no .skillator/team.md - this repo has no people' }
+  $mainRoot = Get-MainRoot
+  Lock-Board "$mainRoot/TICKETS.md.lock"
+  try {
+    $known = $false
+    foreach ($r in (Get-TeamMembers $f)) { if ($r.h -ceq $h) { $known = $true } }
+    if (-not $known) { Fail "$h is not in $f" }
+    $text = $Utf8.GetString([System.IO.File]::ReadAllBytes($f))
+    $lines = $text.Split([char]10)
+    $eol = $text.EndsWith("`n")
+    $n = $lines.Count
+    if ($eol) { $n-- }
+    $kept = New-Object System.Collections.ArrayList
+    $skip = $false
+    for ($i = 0; $i -lt $n; $i++) {
+      $raw = $lines[$i]
+      $line = $raw
+      if ($line.EndsWith("`r")) { $line = $line.Substring(0, $line.Length - 1) }
+      $m = [regex]::Match($line, '^[ \t]*[-*][ \t]*(@[A-Za-z0-9_.-]+)[ \t]*:')
+      if ($m.Success) {
+        $skip = ($m.Groups[1].Value -ceq $h)
+        if ($skip) { continue }
+      } elseif ($skip -and $line -cmatch '^[ \t]+name:') {
+        continue
+      } else {
+        $skip = $false
+      }
+      [void]$kept.Add($raw)
+    }
+    $body = [string]::Join("`n", $kept.ToArray())
+    if ($eol -and $kept.Count -gt 0) { $body += "`n" }
+    Write-TeamFile $f ($Utf8.GetBytes($body))
+  } finally {
+    Unlock-Board
+  }
+  $res = @("removed: $h")
+  $b = "$mainRoot/TICKETS.md"
+  if (-not (Test-Path -LiteralPath $b -PathType Leaf)) { return $res }
+  $ids = New-Object System.Collections.ArrayList
+  foreach ($bl in ([System.IO.File]::ReadAllText($b, $Utf8).Replace("`r", '').Split([char]10))) {
+    $m = [regex]::Match($bl, '^[ \t]*- \[(.)\][ \t]+([A-Z]+[0-9]+[a-z]?)')
+    if (-not $m.Success) { continue }
+    if (@(' ', '~', '!', '?') -cnotcontains $m.Groups[1].Value) { continue }   # open: [ ] [~] [!] [?]
+    $hit = $false
+    foreach ($tg in [regex]::Matches($bl, '\[(owner|decide|by):([^\]]*)\]')) {
+      foreach ($x in ($tg.Groups[2].Value -split ',')) { if ($x.Trim(" `t") -ceq $h) { $hit = $true } }
+    }
+    if ($hit) { [void]$ids.Add($m.Groups[2].Value) }
+  }
+  if ($ids.Count -gt 0) { $res += "warning: $h is still named on open tickets: $([string]::Join(', ', $ids.ToArray())) - reassign them" }
+  return $res
+}
+
+# list: "@handle: a@x, b@y (Name)" per member, file order; no team file = nothing.
+function Do-TeamList([string[]]$a) {
+  if ($a.Count -ne 0) { Fail $script:TeamUsage }
+  $f = Get-TeamFile
+  if ($null -eq $f) { return @() }
+  $acc = New-Object System.Collections.ArrayList
+  foreach ($r in (Get-TeamMembers $f)) {
+    $s = $r.h + ':'
+    if ($r.e -ne '') { $s += ' ' + $r.e }
+    if ($r.n -ne '') { $s += ' (' + $r.n + ')' }
+    [void]$acc.Add($s)
+  }
+  return $acc.ToArray()
+}
+
+function Do-Team([string[]]$a) {
+  if ($a.Count -lt 1) { Fail $script:TeamUsage }
+  $sub = @()
+  if ($a.Count -gt 1) { $sub = @($a[1..($a.Count - 1)]) }
+  switch -CaseSensitive ($a[0]) {
+    'add' { return (Do-TeamAdd $sub) }
+    'remove' { return (Do-TeamRemove $sub) }
+    'list' { return (Do-TeamList $sub) }
+    default { Fail $script:TeamUsage }
+  }
+}
+
 function Invoke-Cmd([string]$c, [string[]]$a) {
   # Resolved first: outside a repo every subcommand stops here.
   $null = Get-Top
@@ -402,6 +584,7 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'decide' { return (Do-Decide $a) }
     'decided' { return (Do-Decided $a) }
     'tag' { return (Do-Tag $a) }
+    'team' { return (Do-Team $a) }
     default { Fail "unknown subcommand: $c" }
   }
 }
@@ -620,6 +803,52 @@ function Invoke-Selftest {
       "- [ ] F31 $dash Working [owner: @asha]`n- [?] F32 $dash Busy [decide: @vidul] (a note)`n"
     if (-not (& $same $want45)) { Write-Output 'FAIL: F45 board bytes'; $script:fail = 1 }
 
+    # --- team add / remove / list: .skillator/team.md written under the board lock
+    $G = "$T/team"
+    Init-Repo $G
+    W "$G/TICKETS.md" ("# TICKETS`n`n- [ ] F1 $dash One [owner: @asha]`n- [x] F2 $dash Two [owner: @asha]`n" +
+      "- [?] F3 $dash Three [decide: @asha]`n- [-] F4 $dash Four [by: @asha]`n- [>] F5 $dash Five [by: @vidul, @asha]`n" +
+      "- [ ] F6 $dash Six`n- [ ] F7 $dash Seven [owner: @ashab]`n- [~] F8 $dash Eight [owner: @asha]`n- [!] F9 $dash Nine [by: @asha]`n")
+    $tf = "$G/.skillator/team.md"
+    $teamIs = { param($want) (Test-Path -LiteralPath $tf) -and ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tf)) -ceq [Convert]::ToBase64String($Utf8.GetBytes($want))) }
+    Eq 'team list, no file' (Run team list) ''
+    Eq 'team add, no file' (Run team add '@asha' 'Asha Rao' 'asha@x.com') '- @asha: asha@x.com   name: Asha Rao'
+    $team1 = "# Team`n`n- @asha: asha@x.com`n  name: Asha Rao`n"
+    if (-not (& $teamIs $team1)) { Write-Output 'FAIL: team add to a missing file'; $script:fail = 1 }
+    Eq 'team add second' (Run team add 'vidul' ' Vidul Ikran ' 'vidul@ikran.in, V2@X.com' 'x@y.org') '- @vidul: vidul@ikran.in, V2@X.com, x@y.org   name: Vidul Ikran'
+    $team2 = $team1 + "- @vidul: vidul@ikran.in, V2@X.com, x@y.org`n  name: Vidul Ikran`n"
+    if (-not (& $teamIs $team2)) { Write-Output 'FAIL: team add second'; $script:fail = 1 }
+    if (Test-Path -LiteralPath "$G/TICKETS.md.lock") { Write-Output 'FAIL: team add left the board lock behind'; $script:fail = 1 }
+    # the existing readers see the new member and every email, the last one included
+    Eq 'assign to an added member' (Run assign F6 '@vidul') "- [ ] F6 $dash Six [owner: @vidul]"
+    Commit 'X@Y.org' 'F6: six' 'six.txt'
+    Eq 'by maps an added email' (Run by F6) '@vidul'
+    $msg = ErrOf team add '@asha' 'Other Asha' 'o@x.com'
+    if ($msg -notmatch 'already') { Write-Output "FAIL: duplicate refusal does not say already: [$msg]"; $script:fail = 1 }
+    if (-not (Refused team add '@Bad.Name' 'Bad' 'b@x.com')) { Write-Output 'FAIL: team add took a bad handle'; $script:fail = 1 }
+    if (-not (Refused team add "@neo`n@evil" 'Neo' 'n@x.com')) { Write-Output 'FAIL: team add took a multi-line handle'; $script:fail = 1 }
+    if (-not (Refused team add '@neo' 'Neo' 'neo@x.com, not-an-email')) { Write-Output 'FAIL: team add took a bad email'; $script:fail = 1 }
+    if (-not (Refused team add '@neo' 'Neo' "neo@x.com`n")) { Write-Output 'FAIL: team add took an email ending in a line break'; $script:fail = 1 }
+    if (-not (Refused team add '@neo' "Ne`no" 'neo@x.com')) { Write-Output 'FAIL: team add took a multi-line name'; $script:fail = 1 }
+    if (-not (Refused team add '@neo' 'Neo')) { Write-Output 'FAIL: team add took no email'; $script:fail = 1 }
+    W "$G/TICKETS.md.lock" "99999 sh MINGW`n"
+    $env:TICKET_META_LOCK_WAIT = '1'
+    $held = Refused team add '@neo' 'Neo' 'neo@x.com'
+    Remove-Item Env:\TICKET_META_LOCK_WAIT
+    Remove-Item -LiteralPath "$G/TICKETS.md.lock" -Force
+    if (-not $held) { Write-Output 'FAIL: team add wrote through a held board lock'; $script:fail = 1 }
+    if (-not (& $teamIs $team2)) { Write-Output 'FAIL: a refused team add changed team.md'; $script:fail = 1 }
+    Eq 'team list' (Run team list) '@asha: asha@x.com (Asha Rao) @vidul: vidul@ikran.in, V2@X.com, x@y.org (Vidul Ikran)'
+    $msg = ErrOf team remove '@nobody'
+    if ($msg -notmatch 'not in') { Write-Output "FAIL: unknown-handle refusal does not say not in: [$msg]"; $script:fail = 1 }
+    if (-not (& $teamIs $team2)) { Write-Output 'FAIL: a refused team remove changed team.md'; $script:fail = 1 }
+    $boardBefore = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes("$G/TICKETS.md"))
+    Eq 'team remove, open tickets' (Run team remove '@asha') 'removed: @asha warning: @asha is still named on open tickets: F1, F3, F8, F9 - reassign them'
+    if (-not (& $teamIs "# Team`n`n- @vidul: vidul@ikran.in, V2@X.com, x@y.org`n  name: Vidul Ikran`n")) { Write-Output 'FAIL: team remove'; $script:fail = 1 }
+    if ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes("$G/TICKETS.md")) -cne $boardBefore) { Write-Output 'FAIL: team remove changed the board'; $script:fail = 1 }
+    if (Test-Path -LiteralPath "$G/TICKETS.md.lock") { Write-Output 'FAIL: team remove left the board lock behind'; $script:fail = 1 }
+    Eq 'team list after remove' (Run team list) '@vidul: vidul@ikran.in, V2@X.com, x@y.org (Vidul Ikran)'
+
     # --- solo, non-monorepo: no workspace folders, no team.md
     $S = "$T/solo"
     Init-Repo $S
@@ -640,7 +869,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|tag|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|tag|team|selftest')
   exit 1
 }
 $cmd = [string]$args[0]

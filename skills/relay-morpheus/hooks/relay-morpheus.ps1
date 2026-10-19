@@ -22,10 +22,18 @@
 #   -Mode chain -Action hold -Pct 84 [-Window 5h|7d] [-Next n]
 #   -Mode chain -Action release [-Override [-Confirmed]]
 #   -Mode chain -Action wait [-Interval 600] [-Max 19800] [-For 1500]
-#   -Mode chain -Action status | decide
+#   -Mode chain -Action status | decide [-Text "<level line>"]   F49: -Text decides on that line
 #   -Mode chain -Action next                           NEXT n CODE | HOLD | ASK k | UNBLOCK Qk | WAIT n | BLOCKED n | FINAL, then IDLE lines
 #   -Mode chain -Action next -Holds                    A118: only the IDLE <n> Qk <why> lines; read-only, no lease beat
 #   -Mode chain -Action edge -N <n> -After "66,67" | -IndependentOf Qk -Why "<ruling>"
+#
+# Watchdog (F48) - one file, <main checkout>/.skillator/watchdog.hold = "<since> <reason>":
+#   -Mode watchdog -Action hold -Reason "<reason>" | -Action release | -Action status
+#        a hold refuses every new chain dispatch (and a GREEN baseline-harness `run`), exit 2,
+#        until released; a second hold keeps its since. status: HELD <since> <reason> | CLEAR
+#        (a hold file that exists holds: an empty one is HELD ? -). RELAY_DIR overrides the
+#        place (-Dir does not); a git dir kept elsewhere uses the toplevel; outside git
+#        ./.skillator of the location
 #
 # Marathon (F33, chain runs only) - questions only the user can answer are
 # parked in `## Decisions` and asked together at the end (references/marathon.md):
@@ -58,7 +66,7 @@
 # state is spelled `pending` rather than ''.
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','board','queue-run','land','away','owner','selftest')][string]$Mode,
+  [Parameter(Mandatory = $true)][ValidateSet('init','add','stage','heartbeat','status','orphans','list','resume','chain','park','answer','queue','board','queue-run','land','away','owner','watchdog','selftest')][string]$Mode,
   [ValidateSet('plan','dispatch','hold','release','wait','status','decide','next','merge','edge')][string]$Action = 'status',
   [string]$Ticket = '',
   [string]$Reason = '',
@@ -132,8 +140,11 @@ function GitOut([string[]]$a) {
   try { $o = @(& git @a 2>$null); if ($LASTEXITCODE -ne 0) { return @() }; return $o } catch { return @() } finally { $ErrorActionPreference = $prev }
 }
 # The main checkout's root, from any worktree of it; $null outside git.
-function MainOf {
-  $c = @(GitOut @('rev-parse', '--path-format=absolute', '--git-common-dir'))
+# $mainFrom, if given, is where to ask git from (git -C).
+function MainOf([string]$mainFrom = '') {
+  $ga = @('rev-parse', '--path-format=absolute', '--git-common-dir')
+  if ($mainFrom) { $ga = @('-C', $mainFrom) + $ga }
+  $c = @(GitOut $ga)
   if ($c.Count -and $c[0] -match '/\.git$') { return ($c[0] -replace '/\.git$', '') }
   return $null
 }
@@ -811,6 +822,10 @@ function ChainDecide($line) {
   "RELEASE $h"
 }
 
+# F49: -Text decides on a reading the caller already has (the ops-board
+# mod's, from the host) - the same table, never re-made.
+function DoChainDecide { if ($Text) { ChainDecide $Text } else { ChainDecide (LevelLine) } }
+
 function ChainHdr {
   $on = $false
   foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
@@ -1018,6 +1033,10 @@ function DoChainDispatch($n) {
   if (-not $drv) { Die "chain dispatch: name this session (-Driver @cc-xxxx or RELAY_CHAIN_DRIVER) - two sessions must not drive one chain" }
   if ($drv -match '[ |]') { Die "chain dispatch: driver tag has a space or a pipe: $drv" }
   NeedRun
+  # F48: a watchdog hold (disk or memory red) refuses every new stage, before
+  # any lease or lock is taken.
+  $wdHold = WdRead (Split-Path -Parent $Run)
+  if ($wdHold) { Refuse "watchdog hold ($($wdHold.why)) - clear the cause, then /ops resume or relay-morpheus watchdog release" }
   $d = ChainDecide (LevelLine)
   # F36: the stage's files are leased BEFORE the run lock - the registry wait
   # must never stretch a run-lock hold - and given back if the dispatch is then
@@ -1258,6 +1277,73 @@ function DoAway {
     elseif ($sub -ceq 'off') { $was = QHdr $f 'away'; QSetHdr $f 'away' '-'; "back (away was: $was)" }
     else { "away: $(QHdr $f 'away')" } }
 }
+# F48: the ops-board mod holds this clone when the machine is red (disk or
+# memory below 1 GB): one file (where: R2b below),
+# "<since> <reason>", written under its own lock. While it exists every new
+# `chain dispatch` and every GREEN baseline-harness `run` is refused, exit 2.
+# Released only on purpose (-Action release, the mod's /ops resume) - never by
+# a reading that looks better. Same file and words as relay-morpheus.sh.
+# R2b: one file per clone, by one rule shared with baseline-harness
+# watchdog_refuse and pending: RELAY_DIR if set; else in git
+# <main>/.skillator/watchdog.hold, main = the common dir's parent when it ends
+# in /.git, else the toplevel (a git dir kept elsewhere, --separate-git-dir);
+# outside git ./.skillator of the location. -Dir never moves it. $wdFrom, if
+# given, is where to ask git from (the dispatch guard asks from the run file).
+function WdPath([string]$wdFrom = '') {
+  if ($env:RELAY_DIR) { return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath((Join-Path $env:RELAY_DIR 'watchdog.hold')) }
+  $wdC = @('rev-parse', '--path-format=absolute', '--git-common-dir'); $wdT = @('rev-parse', '--show-toplevel')
+  if ($wdFrom) { $wdC = @('-C', $wdFrom) + $wdC; $wdT = @('-C', $wdFrom) + $wdT }
+  $wdCommon = @(GitOut $wdC); $wdMain = ''
+  if ($wdCommon.Count -and $wdCommon[0] -match '/\.git$') { $wdMain = $wdCommon[0] -replace '/\.git$', '' }
+  elseif ($wdCommon.Count) { $wdTop = @(GitOut $wdT); if ($wdTop.Count) { $wdMain = [string]$wdTop[0] } }
+  if ($wdMain) { return "$wdMain/.skillator/watchdog.hold" }
+  "$((Get-Location).ProviderPath)/.skillator/watchdog.hold"
+}
+# R6: a hold file that exists holds whatever its content - a missing since
+# reads ?, a missing reason - (an empty or blank file: HELD ? -).
+function WdRead([string]$wdFrom = '') {
+  $f = WdPath $wdFrom
+  if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { return $null }
+  try { $l = [string](([IO.File]::ReadAllText($f) -split "`n")[0]) } catch { $l = '' }
+  $l = $l.Replace("`r", '').Trim(" `t".ToCharArray())
+  $i = $l.IndexOf(' ')
+  if ($i -lt 0) { $wdS = $l; $wdW = '' } else { $wdS = $l.Substring(0, $i); $wdW = $l.Substring($i + 1) }
+  if ($wdS -eq '') { $wdS = '?' }
+  if ($wdW -eq '') { $wdW = '-' }
+  [pscustomobject]@{ since = $wdS; why = $wdW }
+}
+function DoWatchdog {
+  if ($Action -cnotin @('hold', 'release', 'status')) { Die 'usage: -Mode watchdog -Action hold -Reason "<reason>" | -Action release | -Action status' }
+  if ($Action -ceq 'status') {
+    $wdCur = WdRead
+    if ($wdCur) { return "HELD $($wdCur.since) $($wdCur.why)" }
+    return 'CLEAR'
+  }
+  $wdWhy = "$Reason".Trim()
+  if ($Action -ceq 'hold') {
+    if (-not $wdWhy) { Die 'watchdog hold: say why - the reason is what the band and every refusal show' }
+    if ($wdWhy -match "[`r`n]") { Die 'watchdog hold: the reason is one line' }
+  }
+  $f = WdPath
+  # only a hold makes the folder - status and release never create one
+  if ($Action -ceq 'release' -and -not (Test-Path -LiteralPath $f -PathType Leaf)) { return 'watchdog: not held' }
+  $dd = Split-Path -Parent $f
+  if (-not (Test-Path -LiteralPath $dd)) { New-Item -ItemType Directory -Force $dd | Out-Null }
+  $sv = $script:Lock; $script:Lock = $null
+  Lock "$f.lock"
+  try {
+    if ($Action -ceq 'hold') {
+      $wdCur = WdRead; $wdAt = if ($wdCur -and $wdCur.since -cne '?') { $wdCur.since } else { Now }
+      [IO.File]::WriteAllText("$f.tmp.$PID", "$wdAt $wdWhy`n", (New-Object Text.UTF8Encoding($false)))
+      Move-Item -Force -LiteralPath "$f.tmp.$PID" -Destination $f
+      $wdMsg = "watchdog: held $wdAt $wdWhy"
+    } elseif (Test-Path -LiteralPath $f -PathType Leaf) {
+      Remove-Item -LiteralPath $f -Force; $wdMsg = 'watchdog: released'
+    } else { $wdMsg = 'watchdog: not held' }
+  } finally { Unlock; $script:Lock = $sv }
+  $wdMsg
+}
+
 function DoLand {
   $r = RunIdArg $Id
   if ($Sub -cnotin @('start', 'finish', 'abort')) { Die "usage: -Mode land -Id <n> -Sub start|finish|abort" }
@@ -2066,6 +2152,16 @@ function ChainSelftest($d) {
   # Garbage from the level command reads as unobservable, never as 0%.
   $env:RELAY_LEVEL_CMD = "throw 'oops'"
   if ((LevelLine) -ne 'src=none 5h=- 7d=- ctx=- max=-') { Die "LevelLine: an error did not read as src=none" }
+  # F49: `chain decide -Text` decides on the line it is given (the ops-board
+  # mod's host reading), never on usage-watch's.
+  $env:RELAY_LEVEL_CMD = "echo 'src=host 5h=99 7d=99 ctx=- max=-'"
+  foreach ($row in @(@('HOLD 82', 'src=host 5h=82 7d=61 ctx=- max=-'), @('HOLD 91 7d', 'src=host 5h=41 7d=91 ctx=- max=-'),
+      @('UNOBSERVABLE', 'src=none 5h=- 7d=- ctx=- max=-'), @('RELEASE 41', 'src=host 5h=41 7d=55 ctx=- max=-'))) {
+    $script:Text = $row[1]
+    try { $got = DoChainDecide } finally { $script:Text = '' }
+    if ($got -ne $row[0]) { Die "F49: chain decide -Text '$($row[1])': want '$($row[0])', got '$got'" }
+  }
+  if ((DoChainDecide) -ne 'HOLD 99 7d') { Die "F49: chain decide with no -Text did not read the level command" }
 
   $d4 = Join-Path $d 'chain'; New-Item -ItemType Directory -Force $d4 | Out-Null; G init -q $d4
   $script:Dir = Join-Path $d4 '.skillator'; $script:Run = ''
@@ -2112,6 +2208,129 @@ function ChainSelftest($d) {
 
   # dispatch: never without a driver, a block, or past a hold; prompt verbatim.
   SetLevel 'src=claude-code 5h=40 7d=10 ctx=5 max=40'
+  # F48: a watchdog hold (the ops-board mod's, on a red disk or memory reading)
+  # refuses every new dispatch until released; a second hold keeps its since.
+  # R2: the hold is the main checkout's (from git, not the location or -Dir) -
+  # work from inside the scratch repo, so the real one's .skillator is never touched.
+  Push-Location $d4
+  $wdFile = Join-Path $script:Dir 'watchdog.hold'
+  function Wd($act, $why = '') { $script:Action = $act; $script:Reason = $why; try { DoWatchdog } finally { $script:Action = 'status'; $script:Reason = '' } }
+  if ((Wd 'status') -cne 'CLEAR') { Die "F48: watchdog status with no hold: $(Wd 'status')" }
+  $out = Wd 'hold' 'disk 0.8 GB free (below 1 GB)'
+  if ($out -cnotmatch '^watchdog: held 20\S*Z disk 0\.8 GB free \(below 1 GB\)$') { Die "F48: watchdog hold said: $out" }
+  $wdSince = $out.Substring('watchdog: held '.Length)
+  if ([IO.File]::ReadAllText($wdFile) -cne "$wdSince`n") { Die "F48: hold file is not '<since> <reason>' LF: $([IO.File]::ReadAllText($wdFile))" }
+  if ((Wd 'status') -cne "HELD $wdSince") { Die "F48: watchdog status: $(Wd 'status')" }
+  [IO.File]::WriteAllText($wdFile, "2026-01-01T00:00Z disk 0.8 GB free (below 1 GB)`n")
+  $out = Wd 'hold' 'mem 0.5 GB free'
+  if ($out -cne 'watchdog: held 2026-01-01T00:00Z mem 0.5 GB free') { Die "F48: a second hold restarted the clock: $out" }
+  ShouldFail 'watchdog hold: say why' { Wd 'hold' '' }
+  ShouldFail 'one line' { Wd 'hold' "a`nb" }
+  $bytes = [IO.File]::ReadAllBytes($wdFile)
+  if ($bytes -contains 13 -or ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF)) { Die "F48: hold file has a CR or a BOM" }
+  if (Test-Path "$wdFile.lock") { Die "F48: watchdog hold left its lock behind" }
+  $script:Driver = '@cc-a'
+  try { ShouldFail '^REFUSED: watchdog hold \(mem 0\.5 GB free\) - clear the cause, then /ops resume or relay-morpheus watchdog release$' { DoChainDispatch $s1 } }
+  finally { $script:Driver = '' }
+  # The exit code and the words, from a separate process, as a caller sees them.
+  $psi = New-Object Diagnostics.ProcessStartInfo 'powershell'
+  # R2b: -Dir does not move the hold - the child runs in the scratch repo with
+  # -Dir pointing elsewhere and still sees the main checkout's hold.
+  $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Mode chain -Action dispatch -N $s1 -Driver @cc-a -Dir `"$(Join-Path $d 'not-the-hold')`" -Run `"$Run`""
+  $psi.WorkingDirectory = $d4
+  if ($psi.EnvironmentVariables.ContainsKey('RELAY_DIR')) { $psi.EnvironmentVariables.Remove('RELAY_DIR') }
+  $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $wdProc = [Diagnostics.Process]::Start($psi)
+  $null = $wdProc.StandardOutput.ReadToEnd(); $wdErr = $wdProc.StandardError.ReadToEnd(); $wdProc.WaitForExit()
+  if ($wdProc.ExitCode -ne 2 -or $wdErr.Trim() -cne 'REFUSED: watchdog hold (mem 0.5 GB free) - clear the cause, then /ops resume or relay-morpheus watchdog release') {
+    Die "F48: dispatch while held (child): want exit 2 and the hold text, got $($wdProc.ExitCode): $wdErr" }
+  if (-not (Select-String -Path $Run -Pattern "^\| $s1 \| $c1 B2\+B3 books \|   \| - \|" -Quiet) -or (Test-Path "$Run.lock")) { Die "F48: a held dispatch touched the row or left the lock" }
+  if ((Wd 'release') -cne 'watchdog: released' -or (Test-Path -LiteralPath $wdFile)) { Die "F48: watchdog release did not remove the hold" }
+  if ((Wd 'release') -cne 'watchdog: not held') { Die "F48: a second release did not say not held" }
+  if ((Wd 'status') -cne 'CLEAR') { Die "F48: status after release: $(Wd 'status')" }
+  ShouldFail 'usage: -Mode watchdog' { Wd 'plan' }
+  # R2: one hold file per clone - <main checkout>/.skillator/watchdog.hold
+  # whatever the location. Held from a subdir, it shows from the root and the
+  # subdir, a release from the subdir clears it, and no <subdir>/.skillator
+  # appears; status and release never create a folder. Separate processes, as
+  # the mod and a shell in a subdir run it.
+  function WdChild([string]$wdAt, [string]$wdAct, [string]$wdWhy = '', [string]$wdRd = '', [string]$wdExtra = '') {
+    $wpsi = New-Object Diagnostics.ProcessStartInfo 'powershell'
+    $wargs = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Mode watchdog -Action $wdAct"
+    if ($wdWhy) { $wargs += " -Reason `"$wdWhy`"" }
+    if ($wdExtra) { $wargs += " $wdExtra" }
+    $wpsi.Arguments = $wargs; $wpsi.WorkingDirectory = $wdAt
+    $wpsi.UseShellExecute = $false; $wpsi.RedirectStandardOutput = $true; $wpsi.RedirectStandardError = $true
+    if ($wpsi.EnvironmentVariables.ContainsKey('RELAY_DIR')) { $wpsi.EnvironmentVariables.Remove('RELAY_DIR') }
+    if ($wdRd) { $wpsi.EnvironmentVariables['RELAY_DIR'] = $wdRd }
+    $wp = [Diagnostics.Process]::Start($wpsi)
+    $wo = $wp.StandardOutput.ReadToEnd(); $we = $wp.StandardError.ReadToEnd(); $wp.WaitForExit()
+    if ($wp.ExitCode -ne 0) { Die "R2: watchdog $wdAct from $wdAt exited $($wp.ExitCode): $we" }
+    $wo.Trim()
+  }
+  $wdRepo = Join-Path $d 'wdrepo'; $wdSub = Join-Path $wdRepo 'sub'; $wdDeep = Join-Path $wdSub 'deep'
+  New-Item -ItemType Directory -Force $wdDeep | Out-Null; G init -q $wdRepo
+  $wdMain = Join-Path (Join-Path $wdRepo '.skillator') 'watchdog.hold'
+  $null = WdChild $wdDeep 'hold' 'disk 0.7 GB free'
+  if (-not (Test-Path -LiteralPath $wdMain -PathType Leaf)) { Die "R2: a hold from a subdir did not land in the main checkout's .skillator" }
+  $out = WdChild $wdRepo 'status'
+  if ($out -cnotmatch '^HELD 20\S*Z disk 0\.7 GB free$') { Die "R2: status from the repo root after a subdir hold: $out" }
+  if ((WdChild $wdDeep 'status') -cne $out) { Die "R2: status from the subdir differs from the root's" }
+  if ((WdChild $wdDeep 'release') -cne 'watchdog: released') { Die "R2: release from the subdir did not release" }
+  if (Test-Path -LiteralPath $wdMain) { Die "R2: release from the subdir left the main checkout's hold" }
+  if ((WdChild $wdRepo 'status') -cne 'CLEAR') { Die "R2: status from the root after a subdir release" }
+  if ((Test-Path -LiteralPath (Join-Path $wdDeep '.skillator')) -or (Test-Path -LiteralPath (Join-Path $wdSub '.skillator'))) { Die "R2: a stray <subdir>/.skillator was created" }
+  Remove-Item -Recurse -Force -LiteralPath (Join-Path $wdRepo '.skillator')
+  $null = WdChild $wdSub 'status'; $null = WdChild $wdSub 'release'
+  if ((Test-Path -LiteralPath (Join-Path $wdRepo '.skillator')) -or (Test-Path -LiteralPath (Join-Path $wdSub '.skillator'))) { Die "R2: watchdog status/release created a folder" }
+  # R2b: one rule for the hold's place - RELAY_DIR; else in git the main
+  # checkout (the common dir's parent, or the toplevel when the git dir lives
+  # elsewhere: --separate-git-dir); outside git ./.skillator of the location.
+  # -Dir never moves it.
+  $wdSep = Join-Path $d 'sep'; $wdSepSub = Join-Path $wdSep 'sub'
+  G init -q --separate-git-dir (Join-Path $d 'sep.git') $wdSep
+  New-Item -ItemType Directory -Force $wdSepSub | Out-Null
+  $wdSepHold = Join-Path (Join-Path $wdSep '.skillator') 'watchdog.hold'
+  $null = WdChild $wdSepSub 'hold' 'disk 0.6 GB free'
+  if (-not (Test-Path -LiteralPath $wdSepHold -PathType Leaf)) { Die "R2b: a hold in a separate-git-dir repo did not land in <toplevel>/.skillator" }
+  if ((Test-Path -LiteralPath (Join-Path $wdSepSub '.skillator')) -or (Test-Path -LiteralPath (Join-Path (Join-Path $d 'sep.git') '.skillator'))) { Die "R2b: a separate-git-dir hold made a stray .skillator" }
+  $out = WdChild $wdSep 'status'
+  if ($out -cnotmatch '^HELD 20\S*Z disk 0\.6 GB free$') { Die "R2b: status from the separate-git-dir repo's root: $out" }
+  if ((WdChild $wdSepSub 'release') -cne 'watchdog: released' -or (Test-Path -LiteralPath $wdSepHold)) { Die "R2b: release in a separate-git-dir repo" }
+  $wdRdDir = Join-Path $d 'rd'
+  $null = WdChild $wdSepSub 'hold' 'mem 0.6 GB free' $wdRdDir
+  if (-not (Test-Path -LiteralPath (Join-Path $wdRdDir 'watchdog.hold') -PathType Leaf) -or (Test-Path -LiteralPath $wdSepHold)) { Die "R2b: RELAY_DIR did not take the hold" }
+  Remove-Item -Recurse -Force -LiteralPath $wdRdDir
+  $wdOther = Join-Path $d 'other-dir'
+  $null = WdChild $wdSepSub 'hold' 'disk 0.55 GB free' '' "-Dir `"$wdOther`""
+  if (-not (Test-Path -LiteralPath $wdSepHold -PathType Leaf) -or (Test-Path -LiteralPath $wdOther)) { Die "R2b: -Dir moved the hold" }
+  if ((WdChild $wdSep 'release' '' '' "-Dir `"$wdOther`"") -cne 'watchdog: released') { Die "R2b: release with -Dir did not release the main checkout's hold" }
+  $wdNoGitRoot = Join-Path ([IO.Path]::GetTempPath()) ("relay-nogit-" + [guid]::NewGuid())   # $d is a repo itself
+  $wdNoGit = Join-Path $wdNoGitRoot 'a'; New-Item -ItemType Directory -Force $wdNoGit | Out-Null
+  $null = WdChild $wdNoGit 'hold' 'disk 0.5 GB free'
+  if (-not (Test-Path -LiteralPath (Join-Path (Join-Path $wdNoGit '.skillator') 'watchdog.hold') -PathType Leaf)) { Die "R2b: outside git the hold is not ./.skillator of the location" }
+  if ((WdChild $wdNoGit 'release') -cne 'watchdog: released') { Die "R2b: release outside git" }
+  # R6: a hold file that exists holds whatever its content - empty or blank
+  # reads HELD ? -, a missing reason -.
+  New-Item -ItemType Directory -Force (Split-Path -Parent $wdSepHold) | Out-Null
+  [IO.File]::WriteAllText($wdSepHold, '')
+  if (($out = WdChild $wdSepSub 'status') -cne 'HELD ? -') { Die "R6: status of an empty hold file: $out" }
+  [IO.File]::WriteAllText($wdSepHold, " `t `r`n")
+  if (($out = WdChild $wdSepSub 'status') -cne 'HELD ? -') { Die "R6: status of a blank hold file: $out" }
+  [IO.File]::WriteAllText($wdSepHold, "2026-01-01T00:00Z`n")
+  if (($out = WdChild $wdSepSub 'status') -cne 'HELD 2026-01-01T00:00Z -') { Die "R6: status of a hold with no reason: $out" }
+  Remove-Item -Recurse -Force -LiteralPath $wdSep, (Join-Path $d 'sep.git'), $wdNoGitRoot
+  # R6, in-process: an empty hold file refuses a dispatch with reason -, and
+  # a hold over it starts a fresh since.
+  [IO.File]::WriteAllText($wdFile, '')
+  if ((Wd 'status') -cne 'HELD ? -') { Die "R6: status of an empty hold file (in-process): $(Wd 'status')" }
+  $script:Driver = '@cc-a'
+  try { ShouldFail '^REFUSED: watchdog hold \(-\) - clear the cause' { DoChainDispatch $s1 } }
+  finally { $script:Driver = '' }
+  $out = Wd 'hold' 'disk 0.4 GB free'
+  if ($out -cnotmatch '^watchdog: held 20\S*Z disk 0\.4 GB free$') { Die "R6: hold over an empty file kept a '?' since: $out" }
+  if ((Wd 'release') -cne 'watchdog: released') { Die "R6: release after an empty-file hold" }
+  Pop-Location
   $script:Driver = ''; $savedDrv = $env:RELAY_CHAIN_DRIVER; $env:RELAY_CHAIN_DRIVER = ''
   ShouldFail 'name this session' { DoChainDispatch $s1 }
   $script:Driver = '@cc-a'; $script:Owner = 'build:opus'
@@ -3303,7 +3522,7 @@ try {
         'release'  { DoChainRelease }
         'wait'     { $r = DoChainWait; $r[1]; exit $r[0] }
         'status'   { DoChainStatus }
-        'decide'   { ChainDecide (LevelLine) }
+        'decide'   { DoChainDecide }
         'next'     { DoChainNext }
         'merge'    { DoChainMerge $N }
         'edge'     { DoChainEdge $N }
@@ -3313,8 +3532,9 @@ try {
     'answer'    { DoAnswer }
     'queue'     { DoQueue }
     'owner'     { DoOwner }
+    'watchdog'  { DoWatchdog }
     'selftest'  { DoSelftest }
-    default     { Die "unknown mode: $Mode (init|add|stage|heartbeat|status|orphans|chain|park|answer|queue|owner|selftest)" }
+    default     { Die "unknown mode: $Mode (init|add|stage|heartbeat|status|orphans|chain|park|answer|queue|owner|watchdog|selftest)" }
   }
 } catch {
   # Write-Error would itself throw under $ErrorActionPreference = 'Stop', making
