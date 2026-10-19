@@ -86,11 +86,13 @@ async function configDir($: HostApi): Promise<string | null> {
 }
 
 // The first that holds skills/tickets-zordon/scripts/ticket-meta.sh: $SKILLATOR_ROOT,
-// the plugin folder two up (a repo checkout), the repo root, then the installPath of
+// the plugin folder two up (a repo checkout), then the installPath of
 // skillator@skillator in <config dir>/plugins/installed_plugins.json. None: null.
-export async function skillatorRoot($: HostApi, repoRoot: string | null): Promise<string | null> {
+// A136: never the session's repo - any repo opened would otherwise have its own
+// scripts run by the band's poll, unasked. Developing in a checkout: set SKILLATOR_ROOT.
+export async function skillatorRoot($: HostApi): Promise<string | null> {
   const env = await $.env.get('SKILLATOR_ROOT')
-  const tries = [env ? norm(env) : null, up($.plugin.root, 2), repoRoot ? norm(repoRoot) : null]
+  const tries = [env ? norm(env) : null, up($.plugin.root, 2)]
   for (const t of tries) if (t && await has($, t)) return t
   const cfg = await configDir($)
   if (!cfg) return null
@@ -113,7 +115,7 @@ export const NO_SCRIPTS = 'skillator scripts not found - set SKILLATOR_ROOT'
 export async function runCall($: HostApi, call: Call, args: string[]): Promise<{ code: number; out: string; err: string; argv: string[] }> {
   const win = await isWindows($)
   const repo = await $.session.repo()
-  const root = await skillatorRoot($, repo?.root ?? null)
+  const root = await skillatorRoot($)
   if (!root) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
   const argv = argvFor(call, win, root, args)
   const timeoutMs = call === 'pending-machine' ? 15000 : 30000

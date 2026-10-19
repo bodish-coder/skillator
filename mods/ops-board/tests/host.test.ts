@@ -87,12 +87,13 @@ test('isWindows: OS=Windows_NT, anything else is not', async () => {
 
 test('skillatorRoot: SKILLATOR_ROOT first', async () => {
   const [$] = fake({ env: { SKILLATOR_ROOT: 'D:\\sk\\', HOME: '/h' }, exists: ['D:/sk' + META, '/s' + META] })
-  expect(await skillatorRoot($, '/r')).toBe('D:/sk')
+  expect(await skillatorRoot($)).toBe('D:/sk')
 })
-test('skillatorRoot: the plugin folder two up, then the repo', async () => {
+test('skillatorRoot: the plugin folder two up; never the session repo (A136)', async () => {
   const env = { SKILLATOR_ROOT: '/nowhere', HOME: '/h' }, exists = ['C:/x/skillator' + META, '/r' + META]
-  expect(await skillatorRoot(fake({ env, exists, root: 'C:\\x\\skillator\\mods\\ops-board' })[0], '/r')).toBe('C:/x/skillator')
-  expect(await skillatorRoot(fake({ env, exists, root: '/elsewhere/mods/ops-board' })[0], '/r')).toBe('/r')
+  expect(await skillatorRoot(fake({ env, exists, root: 'C:\\x\\skillator\\mods\\ops-board' })[0])).toBe('C:/x/skillator')
+  // a repo opened in the session that ships the scripts is not trusted to run them
+  expect(await skillatorRoot(fake({ env, exists, root: '/elsewhere/mods/ops-board' })[0])).toBe(null)
 })
 test('skillatorRoot: installed_plugins.json of the config dir', async () => {
   const [$, seen] = fake({
@@ -104,15 +105,15 @@ test('skillatorRoot: installed_plugins.json of the config dir', async () => {
       'skillator@skillator': [{ scope: 'project', installPath: 'C:\\gone' },
         { scope: 'user', installPath: 'C:\\Users\\i\\.claude-v\\plugins\\cache\\skillator\\skillator\\4.8.1' }] } }) },
   })
-  expect(await skillatorRoot($, null)).toBe('C:/Users/i/.claude-v/plugins/cache/skillator/skillator/4.8.1')
+  expect(await skillatorRoot($)).toBe('C:/Users/i/.claude-v/plugins/cache/skillator/skillator/4.8.1')
   expect(seen.reads).toEqual(['C:/Users/i/.claude-v/plugins/installed_plugins.json'])
 })
 test('skillatorRoot: HOME/.claude without CLAUDE_CONFIG_DIR; nothing found is null', async () => {
   const [$, seen] = fake({ root: '/elsewhere/mods/ops-board', env: { HOME: '/h' } })
-  expect(await skillatorRoot($, '/r')).toBe(null)
+  expect(await skillatorRoot($)).toBe(null)
   expect(seen.reads).toEqual(['/h/.claude/plugins/installed_plugins.json'])
   const bad = fake({ root: '/e/mods/ops-board', env: { HOME: '/h' }, files: { '/h/.claude/plugins/installed_plugins.json': 'not json' } })[0]
-  expect(await skillatorRoot(bad, null)).toBe(null)
+  expect(await skillatorRoot(bad)).toBe(null)
 })
 
 const repo = (root: string): SessionRepo => ({ root, remote: null, internal: false, name: null })
@@ -149,6 +150,13 @@ test('runCall: no scripts found runs nothing and says how to fix it', async () =
   const r = await runCall($, 'pending', [])
   expect(seen.runs.length).toBe(0)
   expect(r).toEqual({ code: 127, out: '', err: 'skillator scripts not found - set SKILLATOR_ROOT', argv: [] })
+})
+test('runCall: a session repo that ships the scripts is never run from (A136)', async () => {
+  const [$, seen] = fake({ root: '/elsewhere/mods/ops-board', env: { HOME: '/h' }, exists: ['/evil' + META],
+    repo: { root: '/evil' } as SessionRepo })
+  const r = await runCall($, 'pending', [])
+  expect(seen.runs.length).toBe(0)
+  expect(r.code).toBe(127)
 })
 
 const NOW = 1_800_000_000_000
