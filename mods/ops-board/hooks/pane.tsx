@@ -8,6 +8,7 @@ import { paint } from './paint'
 import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
 import { pollRuns, readRuns, RunsTab } from './runstab'
+import { AgentsTab, pollAgents, readAgents, WorkflowsTab } from './agentstab'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
 // state shown by colour (a `●` per row, headings in the same colour), footer keys.
@@ -15,7 +16,7 @@ import { pollRuns, readRuns, RunsTab } from './runstab'
 export const PANE_ID = 'ops-board'
 export const PANE_TITLE = 'ops board'
 
-export type Tab = 'tickets' | 'runs' | 'health'
+export type Tab = 'tickets' | 'runs' | 'health' | 'agents' | 'workflows'
 // Each file names the atoms it reads or writes as its own consts: the engine's scan
 // lists state access from those, not from an import (register.tsx repeats them).
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
@@ -229,7 +230,8 @@ export async function readView($: EngineInterface, cols: number): Promise<View> 
   }
 }
 
-const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Runs' }, { id: 'health', label: 'Health' }]
+const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Runs' },
+  { id: 'health', label: 'Health' }, { id: 'agents', label: 'Agents' }, { id: 'workflows', label: 'Workflows' }]
 
 export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement> {
   const t = $.ui.resolve(e)
@@ -244,6 +246,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
           onPress={() => {
             void update($, tabA, () => x.id)
             if (x.id === 'runs') void pollRuns($).catch(() => {})       // read on entering the tab
+            if (x.id === 'agents') void pollAgents($).catch(() => {})   // read on entering the tab
           }}>{x.label}</Button>
       ))}
     </Box>
@@ -254,6 +257,16 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         {bar}
         <Text> </Text>
         {HealthTab(els, await readHealth($))}
+      </Box>
+    )
+  }
+  if (tab === 'agents' || tab === 'workflows') {
+    const v = await readAgents($, cols)
+    return (
+      <Box flexDirection="column">
+        {bar}
+        <Text> </Text>
+        {tab === 'agents' ? AgentsTab(els, v) : WorkflowsTab(els, v)}
       </Box>
     )
   }

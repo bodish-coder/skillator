@@ -12,6 +12,7 @@ import { buildModel, offsetFor, PANE_ID, PANE_TITLE, readView, renderPane } from
 import type { Tab } from './pane'
 import { clearDialog, DIALOG_ID, renderDialog } from './assign'
 import { pollRuns, RUNS_POLL_MS } from './runstab'
+import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -264,6 +265,10 @@ async function arm($: EngineInterface) {
   $.clock.every(RUNS_POLL_MS, () => {
     void (async () => { if ((await read($, tabA)) === 'runs') await pollRuns($) })().catch(() => {})
   })
+  // F53: the Agents tab re-reads $.agent.list() every 5 s while it is the tab shown.
+  $.clock.every(AGENTS_POLL_MS, () => {
+    void (async () => { if ((await read($, tabA)) === 'agents') await pollAgents($) })().catch(() => {})
+  })
 }
 
 async function openPane($: EngineInterface, asked: boolean) {
@@ -272,15 +277,16 @@ async function openPane($: EngineInterface, asked: boolean) {
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Runs', health: 'Health' }
-const USAGE = 'usage: /ops [tickets|runs|health|resume]'
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Runs', health: 'Health', agents: 'Agents', workflows: 'Workflows' }
+const TABS: Tab[] = ['tickets', 'runs', 'health', 'agents', 'workflows']
+const USAGE = 'usage: /ops [tickets|runs|health|agents|workflows|resume]'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'ops',
-      description: 'Open the ops board pane: the TICKETS.md board, runs and health',
-      argumentHint: '[tickets|runs|health|resume]',
+      description: 'Open the ops board pane: the TICKETS.md board, runs, health, agents and workflows',
+      argumentHint: '[tickets|runs|health|agents|workflows|resume]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -323,9 +329,10 @@ export const register: Register = on => {
     void arm($).catch(() => {})
     const word = e.args.trim().toLowerCase()
     if (word === 'resume') return { text: await resume($) }
-    if (word && word !== 'tickets' && word !== 'runs' && word !== 'health') return { text: USAGE }
+    if (word && !TABS.includes(word as Tab)) return { text: USAGE }
     if (word) await update($, tabA, () => word as Tab)
     if (word === 'runs') void pollRuns($).catch(() => {})
+    if (word === 'agents') void pollAgents($).catch(() => {})
     const r = await openPane($, true)
     if (!r.isPlaced) return { text: `ops board is open but not drawn: ${r.reason}` }
     return { text: word ? `ops board opened on ${TAB_NAME[word as Tab]}.` : 'ops board opened.' }
@@ -362,6 +369,34 @@ export const register: Register = on => {
     } catch { /* the next start reports it */ }
     return next(e)
   })
+
+  // F53: the Agents and Workflows tabs read the engine's own events; each passes its
+  // event through as it came (the spawn, the turn, the tool call untouched).
+  on('agent.spawn', async ($, e, next) => {
+    const r = await next(e)
+    await noteSpawn($, e, r).catch(() => {})
+    return r
+  }).catch(($, e, next) => next(e))
+
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId !== undefined) await noteTurnStart($, e.agentId).catch(() => {})
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId !== undefined) await noteTurnEnd($, e.agentId, e.reason).catch(() => {})
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // Every tool call in an agent's loop stamps its last activity, unawaited so no tool
+  // waits on it; the Workflow tool's answer names its run.
+  on('tool.call', async ($, e, next) => {
+    if (e.agentId !== undefined) void noteActivity($, e.agentId).catch(() => {})
+    if (e.tool !== 'Workflow') return next(e)
+    const r = await next(e)
+    await noteWorkflowCall($, e.tool_use_id, r).catch(() => {})
+    return r
+  }).catch(($, e, next) => next(e))
 
   // F47: the assign / decide dialog and the Add person form.
   on('ui.render', { component: 'Pane', requestId: 'ops-assign' }, async ($, e) => renderDialog($, e))
