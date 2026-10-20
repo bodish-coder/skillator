@@ -9,7 +9,7 @@ Owner: @cc-0211b2 (Claude Code). Owner request: "can u do pending and in progres
 4. A135 harness overlays commands/. [x]
 5. A130 usage-watch CLAUDE_CONFIG_DIR. [x]
 6. A131 next-id.ps1 lock under load. [x]
-7. Bump 4.9.0, push as bodish-coder, update skillator + install ops-board@skillator in the six profiles with skillator (owner chose 2026-10-20). [ ]
+7. Bump 4.9.0, push as bodish-coder, update skillator + install ops-board@skillator in the six profiles with skillator (owner chose 2026-10-20). [x]
 
 ## Log
 - 2026-10-20 - Ruling: mode per-task serial - the owner named it - costs wall-clock.
@@ -38,3 +38,5 @@ Owner: @cc-0211b2 (Claude Code). Owner request: "can u do pending and in progres
 - 2026-10-20 - A131 fixed (build agent, opus: reproduced 3/6, cause verified = Move refused while a waiter holds stamp open) and verified (held verify agent, opus: PASS - old Free-Lock fails the new case, 0/8 load rounds, no issue >= 80; dropped: retry widens the stale-break re-take window to ~5 s (~35), late move-back restores a finished lock (~30), helper quoting (~30), +5 s before a permanent error (~20)). Not ticketed: sh rm -rf may hit "busy" in a mixed sh/ps1 clone (not reproduced).
 - 2026-10-20 - A137 dispatched (cheap=sonnet: two ports, change named, B3 precedent).
 - 2026-10-20 - A137 fixed (one agent, sonnet; failing first, no separate scratch repro - the selftest case was the repro), my ps1 re-run ok. Board sweep done: every dispatchable ticket closed.
+- 2026-10-20 - 4.9.0 bumped (a3c6fa2) and pushed as bodish-coder (5bde960..a3c6fa2), gh switched back to IkranActual. Profiles: skillator 4.9.0 + ops-board 0.1.0 (user scope) in .claude, -bodish, -ikran, -info, -vidul, -work; each copy checked for F53, A136, pending.sh. A quoting bug in my first loop (`\$p`) ran five profiles against C:\Users\Ikran$p, which created that folder (fresh .claude.json + backups only) - removed; re-run correct. -vidul: marketplace refresh fails - its known_marketplaces.json points every marketplace at -bodish/-work folders (pre-existing); install used the cached catalog, content verified current. Owner's call to repair. dev-mods ops-board copy removed (the installed one replaces it after restart).
+- RUN-12 done. Open after it: F46-F50 + F53 [~] (owner's live check), F52 [~] (@cu-04f282, GREEN after 2026-10-23), A126 (owner's interactive GREEN). Owed: relay-morpheus sh/ps1 selftests (reaped twice for memory).
