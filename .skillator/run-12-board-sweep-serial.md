@@ -9,7 +9,7 @@ Owner: @cc-0211b2 (Claude Code). Owner request: "can u do pending and in progres
 4. A135 harness overlays commands/. [x]
 5. A130 usage-watch CLAUDE_CONFIG_DIR. [x]
 6. A131 next-id.ps1 lock under load. [x]
-7. Bump, push as bodish-coder, update skillator + install ops-board@skillator in the six profiles with skillator (owner chose 2026-10-20). [ ]
+7. Bump 4.9.0, push as bodish-coder, update skillator + install ops-board@skillator in the six profiles with skillator (owner chose 2026-10-20). [ ]
 
 ## Log
 - 2026-10-20 - Ruling: mode per-task serial - the owner named it - costs wall-clock.
