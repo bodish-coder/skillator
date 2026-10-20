@@ -472,12 +472,17 @@ function Do-TeamAdd([string[]]$a) {
     if (Test-Path -LiteralPath $f -PathType Leaf) {
       foreach ($r in (Get-TeamMembers $f)) { if ($r.h.ToLowerInvariant() -ceq $h) { Fail "$h is already in $f" } }
       $prev = [System.IO.File]::ReadAllBytes($f)
-      if ($prev.Length -gt 0 -and $prev[$prev.Length - 1] -ne 10) { $prev = [byte[]]($prev + [byte]10) }
+      # the file's own line ending (its first line's) is kept; LF or a new file stays LF (A137)
+      $nl = "`n"
+      $p10 = [Array]::IndexOf($prev, [byte]10)
+      if ($p10 -gt 0 -and $prev[$p10 - 1] -eq 13) { $nl = "`r`n" }
+      if ($prev.Length -gt 0 -and $prev[$prev.Length - 1] -ne 10) { $prev = [byte[]]($prev + $Utf8.GetBytes($nl)) }
     } else {
       [void][System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($f))
+      $nl = "`n"
       $prev = $Utf8.GetBytes("# Team`n`n")
     }
-    $new = $Utf8.GetBytes("- ${h}: $emsText`n  name: $name`n")
+    $new = $Utf8.GetBytes("- ${h}: $emsText$nl  name: $name$nl")
     Write-TeamFile $f ([byte[]]($prev + $new))
   } finally {
     Unlock-Board
@@ -848,6 +853,17 @@ function Invoke-Selftest {
     if ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes("$G/TICKETS.md")) -cne $boardBefore) { Write-Output 'FAIL: team remove changed the board'; $script:fail = 1 }
     if (Test-Path -LiteralPath "$G/TICKETS.md.lock") { Write-Output 'FAIL: team remove left the board lock behind'; $script:fail = 1 }
     Eq 'team list after remove' (Run team list) '@vidul: vidul@ikran.in, V2@X.com, x@y.org (Vidul Ikran)'
+
+    # --- A137: team add / remove keep team.md's line endings - CRLF stays CRLF
+    # (name: line included), LF stays LF
+    foreach ($nl in @("`r`n", "`n")) {
+      $tag = if ($nl -eq "`n") { 'lf' } else { 'crlf' }
+      W $tf "# Team$nl$nl- @asha: asha@x.com$nl  name: Asha Rao$nl"
+      [void](Run team add '@neo' 'Neo Q' 'neo@x.com')
+      if (-not (& $teamIs "# Team$nl$nl- @asha: asha@x.com$nl  name: Asha Rao$nl- @neo: neo@x.com$nl  name: Neo Q$nl")) { Write-Output "FAIL: $tag team add line endings or bytes"; $script:fail = 1 }
+      [void](Run team remove '@asha')
+      if (-not (& $teamIs "# Team$nl$nl- @neo: neo@x.com$nl  name: Neo Q$nl")) { Write-Output "FAIL: $tag team remove line endings or bytes"; $script:fail = 1 }
+    }
 
     # --- solo, non-monorepo: no workspace folders, no team.md
     $S = "$T/solo"

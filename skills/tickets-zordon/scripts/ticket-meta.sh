@@ -377,17 +377,20 @@ team_add() {
   EMS=$(printf '%s\n' "$ems" | join_list)
   f=$(team_file) || f="$MAIN/.skillator/team.md"
   board_lock "$MAIN/TICKETS.md.lock"
+  cr=''
   tmp="$f.ticket-meta.$$"
   if [ -f "$f" ]; then
     lh=$(printf '%s' "$TH" | tr 'A-Z' 'a-z')
     team_members "$f" | cut -f1 | tr 'A-Z' 'a-z' | grep -qxF -- "$lh" && die "$TH is already in $f"
     cat "$f" > "$tmp" || { rm -f "$tmp"; die "write failed"; }
-    if [ -s "$f" ] && [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" != 0a ]; then printf '\n' >> "$tmp"; fi
+    # the file's own line ending (its first line's) is kept; LF or a new file stays LF (A137)
+    [ "$(head -n 1 "$f" | tail -c 2 | od -An -tx1 | tr -d ' \n')" = 0d0a ] && cr=$(printf '\r')
+    if [ -s "$f" ] && [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" != 0a ]; then printf '%s\n' "$cr" >> "$tmp"; fi
   else
     mkdir -p "${f%/*}" || die "cannot create ${f%/*}"
     printf '# Team\n\n' > "$tmp" || { rm -f "$tmp"; die "write failed"; }
   fi
-  printf -- '- %s: %s\n  name: %s\n' "$TH" "$EMS" "$NAME" >> "$tmp" || { rm -f "$tmp"; die "write failed"; }
+  printf -- '- %s: %s%s\n  name: %s%s\n' "$TH" "$EMS" "$cr" "$NAME" "$cr" >> "$tmp" || { rm -f "$tmp"; die "write failed"; }
   mv -f "$tmp" "$f" || { rm -f "$tmp"; die "cannot replace $f"; }
   board_unlock
   printf -- '- %s: %s\n  name: %s\n' "$TH" "$EMS" "$NAME"
@@ -702,6 +705,20 @@ selftest() {
   cmp -s TICKETS.md "$T/board-before.md" || { echo "FAIL: team remove changed the board"; fail=1; }
   [ ! -e TICKETS.md.lock ] || { echo "FAIL: team remove left the board lock behind"; fail=1; }
   eq "team list after remove" "$(run team list)" "@vidul: vidul@ikran.in, V2@X.com, x@y.org (Vidul Ikran)"
+
+  # --- A137: team add / remove keep team.md's line endings - CRLF stays CRLF
+  # (name: line included), LF stays LF
+  for nl in crlf lf; do
+    r=''; [ "$nl" = crlf ] && r=$(printf '\r')
+    printf -- "# Team$r\n$r\n- @asha: asha@x.com$r\n  name: Asha Rao$r\n" > "$tf"
+    sh "$self" team add @neo "Neo Q" neo@x.com > /dev/null 2>&1 || { echo "FAIL: $nl team add failed"; fail=1; }
+    printf -- "# Team$r\n$r\n- @asha: asha@x.com$r\n  name: Asha Rao$r\n- @neo: neo@x.com$r\n  name: Neo Q$r\n" > "$T/want-team-$nl.md"
+    cmp -s "$tf" "$T/want-team-$nl.md" || { echo "FAIL: $nl team add line endings or bytes"; od -c "$tf" | head -n 6; fail=1; }
+    sh "$self" team remove @asha > /dev/null 2>&1 || { echo "FAIL: $nl team remove failed"; fail=1; }
+    printf -- "# Team$r\n$r\n- @neo: neo@x.com$r\n  name: Neo Q$r\n" > "$T/want-team-$nl.md"
+    cmp -s "$tf" "$T/want-team-$nl.md" || { echo "FAIL: $nl team remove line endings or bytes"; od -c "$tf" | head -n 6; fail=1; }
+  done
+  rm -f TICKETS.md.lock
 
   # --- solo, non-monorepo: no workspace folders, no team.md
   S="$T/solo"
