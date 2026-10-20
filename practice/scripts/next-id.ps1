@@ -111,11 +111,26 @@ function Lock-Owner([string]$l) {
   if (Test-Path -LiteralPath $f) { try { return ([IO.File]::ReadAllText($f)).Trim() } catch { return $null } }
   ''
 }
+# A131: Windows refuses to rename a directory while any process has a file in
+# it open - a waiter reading stamp or owner, AV, the indexer - and that refusal
+# was taken for "gone": the release left a live-looking lock that every waiter
+# sat out for $stale seconds (two in a row: "still held after 61s"). So a
+# move is retried while its source is there and its target is not (~5 s).
+function Move-Dir([string]$from, [string]$to) {
+  for ($i = 0; ; $i++) {
+    try { [IO.Directory]::Move($from, $to); return $true } catch { }
+    if ($i -ge 200 -or -not (Test-Path -LiteralPath $from) -or (Test-Path -LiteralPath $to)) { return $false }
+    Start-Sleep -Milliseconds 25
+  }
+}
 function Free-Lock([string]$l, [string]$owner) {
   $g = "$l.free.$PID.$([guid]::NewGuid().ToString('N').Substring(0, 8))"
-  try { [IO.Directory]::Move($l, $g) } catch { return }   # gone, or freed by another
+  if (-not (Move-Dir $l $g)) {   # gone, or freed by another - or held open past the retries
+    if (Test-Path -LiteralPath $l) { [Console]::Error.WriteLine("${prog}: could not free $l (a file in it held open) - left to the stale break") }
+    return
+  }
   if ((Lock-Owner $g) -cne $owner) {
-    try { [IO.Directory]::Move($g, $l) } catch { [Console]::Error.WriteLine("${prog}: a fresh lock was moved aside and could not go back: $g") }
+    if (-not (Move-Dir $g $l)) { [Console]::Error.WriteLine("${prog}: a fresh lock was moved aside and could not go back: $g") }
     return
   }
   Remove-Item -Recurse -Force -LiteralPath $g -ErrorAction SilentlyContinue
@@ -309,6 +324,21 @@ function Run-Selftest {
     if ($script:lastErr -notmatch 'stale lock') { Fail 'stale lock broken silently' }
     if (Test-Path -LiteralPath $lock) { Fail 'lock left behind' }
 
+    # A131: a release that meets a file held open inside the lock (a waiter
+    # reading its stamp, AV, the indexer) waits it out - it does not leave a
+    # live-looking lock for the stale break.
+    $hl = Join-Path $common 'skillator\ids\H.lock'
+    New-Item -ItemType Directory -Force -Path $hl | Out-Null
+    [IO.File]::WriteAllText((Join-Path $hl 'stamp'), "$(Now)`n"); [IO.File]::WriteAllText((Join-Path $hl 'owner'), "me`n")
+    $ready = Join-Path $t 'held'
+    $hp = Start-Process powershell -WindowStyle Hidden -PassThru -ArgumentList '-NoProfile', '-Command',
+      "`$f = [IO.File]::Open('$hl\stamp', 'Open', 'Read', 'Read'); [IO.File]::WriteAllText('$ready', '1'); Start-Sleep -Milliseconds 1500; `$f.Close()"
+    for ($i = 0; $i -lt 300 -and -not (Test-Path -LiteralPath $ready); $i++) { Start-Sleep -Milliseconds 100 }
+    if (-not (Test-Path -LiteralPath $ready)) { Fail 'A131 case: the file-holding helper never started' }
+    Free-Lock $hl 'me' 2>$null
+    $hp.WaitForExit()
+    if (Test-Path -LiteralPath $hl) { Fail 'release met a file held open in the lock and left the lock behind (A131)' }
+
     $q = Alloc $main @('A', '-Peek'); if ($q -ne '23') { Fail "-Peek after KIND: want 23, got $q" }
     $q = Alloc $main @('A', '--peek'); if ($q -ne '23') { Fail "--peek after KIND: want 23, got $q" }
     $q = Alloc $main @('A', '--peek'); if ($q -ne '23') { Fail "--peek after KIND reserved: got $q" }
@@ -376,7 +406,7 @@ function Run-Selftest {
     if ($h -ne '8') { Fail "outside git: want 8, got $h" }
     if ($script:lastErr -notmatch 'not in a git repo') { Fail 'outside git: no stderr note' }
 
-    Write-Output 'ok - next-id.ps1 selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, runs RUN 6, runs S 13-15, W AAAB/AAAC/AABB/peek/count 3/BABA/9999/exhausted, no-git 8)'
+    Write-Output 'ok - next-id.ps1 selftest passed (4, 5, 21, peek 22, stale lock -> 22, release past an open file, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, runs RUN 6, runs S 13-15, W AAAB/AAAC/AABB/peek/count 3/BABA/9999/exhausted, no-git 8)'
   } finally {
     Remove-Item -Recurse -Force -LiteralPath $t -ErrorAction SilentlyContinue
   }
