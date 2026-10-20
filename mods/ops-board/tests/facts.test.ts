@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { parseMachine, classify, gb, usageFrom, usageFromFlags, levelLine, pctOf, isStale, ageText, STALE_MS } from '../hooks/lib/facts'
+import { parseMachine, classify, gb, usageFrom, usageFromFlags, usageFromLevel, levelLine, pctOf, isStale, ageText, STALE_MS } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
 
 const GB = 1073741824
@@ -268,4 +268,14 @@ test('parseMachine: every HOLD value but exactly - is held; an empty one reads a
   expect(parseMachine('HOLD=-\r\n', 1).hold).toBeNull()
   expect(classify(parseMachine('DISK_FREE=' + 50 * GB + '\nMEM_FREE=' + 8 * GB + '\nHOLD=\n', 1)))
     .toEqual({ level: 'amber', reasons: ['held - /ops resume to release'] })
+})
+
+test('usageFromLevel: codex line, dashes, none', () => {
+  const u = usageFromLevel('src=codex 5h=41 7d=55.5 ctx=7 max=-', 1000)
+  expect(u.five).toEqual({ pct: 41, resetsAt: null, source: 'watch-cortana', at: 1000 })
+  expect(u.seven?.pct).toBe(55.5)
+  expect(usageFromLevel('src=claude-code 5h=- 7d=12 ctx=- max=-', 0).five).toBeNull()
+  expect(usageFromLevel('src=none 5h=- 7d=- ctx=- max=-', 0)).toEqual({ five: null, seven: null, spendLimitPct: null, costUsd: null, decision: null })
+  expect(usageFromLevel('garbage\r\n', 0).seven).toBeNull()
+  expect(levelLine(usageFromLevel('src=codex 5h=41 7d=55 ctx=- max=-', 0), 0)).toBe('src=watch-cortana 5h=41 7d=55 ctx=- max=-')
 })

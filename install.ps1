@@ -4,12 +4,21 @@
 #   .\install.ps1 -DryRun    show what it would do
 #   .\install.ps1 -Force     refresh skills that are already installed
 #   .\install.ps1 -Link      install as symlinks into this repo (stay live on git pull)
+#   .\install.ps1 -SelfTest  install into a temp HOME and profile, check what was written; prints ok
+#   -Profile <path>          the profile that gets `function ops` (default: your
+#                            CurrentUserAllHosts profile) - there so a test never
+#                            touches the real one
+# F54: /pending and /list-tickets are written as each host's own command file (codex
+# prompts, Gemini CLI commands, cursor commands, pi prompt templates, Antigravity
+# skill-commands) from host-commands\<host>\, rewritten every run - see Write-Commands.
 # Claude Code is left to its plugin install whenever one exists, -Force included.
 # Skills already symlinked to this repo are left alone - they are always current.
-param([switch]$DryRun, [switch]$Force, [switch]$Link)
+param([switch]$DryRun, [switch]$Force, [switch]$Link, [switch]$SelfTest,
+      [string]$Profile = $PROFILE.CurrentUserAllHosts)
 
 $ErrorActionPreference = 'Stop'
 $src = Join-Path $PSScriptRoot 'skills'
+$selfPath = $PSCommandPath
 
 $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { "$HOME\.codex" }
 
@@ -171,6 +180,255 @@ function Remove-Unshipped([string]$dest) {
   }
 }
 
+# the ops\ dir of the installed Claude Code plugin (its installPath in
+# installed_plugins.json + \mods\ops-board\ops), or '' when that has no ops.ps1.
+function Get-PluginOps {
+  $ipj = Join-Path $HOME '.claude\plugins\installed_plugins.json'
+  if ($pluginDirs.Count -eq 0 -or -not (Test-Path -LiteralPath $ipj -PathType Leaf)) { return '' }
+  try { $j = [IO.File]::ReadAllText($ipj) | ConvertFrom-Json } catch { return '' }
+  if (-not $j.plugins) { return '' }
+  foreach ($p in $j.plugins.PSObject.Properties) {
+    if ($p.Name -notlike 'skillator@*') { continue }
+    foreach ($e in @($p.Value)) {
+      if (-not $e.installPath) { continue }
+      $ops = Join-Path $e.installPath 'mods\ops-board\ops'
+      if (Test-Path -LiteralPath (Join-Path $ops 'ops.ps1') -PathType Leaf) { return $ops }
+    }
+    break
+  }
+  return ''
+}
+
+# Write-OpsFunction <shimSrc> <profile>: `function ops` between marker comments,
+# idempotent - an existing block is replaced in place, none -> appended after one blank
+# line, several (a damaged profile) -> the first replaced, the rest removed. Every other
+# line is kept; the file's encoding (UTF-8 with or without BOM, UTF-16 LE/BE with BOM)
+# and line endings are kept; a new profile is UTF-8 without BOM, LF. Returns the
+# duplicates removed.
+function Write-OpsFunction([string]$shimSrc, [string]$path) {
+  $text = ''; $enc = New-Object Text.UTF8Encoding $false
+  if (Test-Path -LiteralPath $path -PathType Leaf) {
+    $bytes = [IO.File]::ReadAllBytes($path)
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+      $enc = New-Object Text.UTF8Encoding $true
+    } elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+      $enc = New-Object Text.UnicodeEncoding $false, $true
+    } elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) {
+      $enc = New-Object Text.UnicodeEncoding $true, $true
+    }
+    $text = [IO.File]::ReadAllText($path, $enc)
+  } else {
+    $dir = Split-Path -Parent $path
+    if ($dir) { New-Item -ItemType Directory -Force $dir | Out-Null }
+  }
+  $nl = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+  $q = $shimSrc.Replace("'", "''")
+  $block = "# >>> skillator ops >>>" + $nl +
+    "function ops { & powershell -NoProfile -ExecutionPolicy Bypass -File '$q\ops.ps1' @args }" + $nl +
+    "# <<< skillator ops <<<" + $nl
+  $re = [regex]'(?s)# >>> skillator ops >>>.*?# <<< skillator ops <<<(\r?\n)?'
+  $n = $re.Matches($text).Count
+  if ($n -eq 0) {
+    if ($text.Length -gt 0) {
+      if (-not $text.EndsWith("`n")) { $text += $nl }
+      $text += $nl
+    }
+    $text += $block
+  } else {
+    $m = $re.Match($text)
+    $rest = $re.Replace($text.Substring($m.Index + $m.Length), '')
+    $text = $text.Substring(0, $m.Index) + $block + $rest
+  }
+  [IO.File]::WriteAllText($path, $text, $enc)
+  return [Math]::Max($n - 1, 0)
+}
+
+# Write-Cmd <template> <skills-dir> <target>: one command file (or say it would). The
+# template with {{SKILLS}} replaced by the skills dir as the host sees it (C:\...); no
+# other templating, except that Gemini CLI's pending.toml runs pending.ps1 in place of
+# pending.sh. UTF-8 without BOM, LF - the bytes install.sh writes but for the separators
+# inside {{SKILLS}} and that shell line (pi's frontmatter and gemini's TOML reject a BOM).
+function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
+  if ($DryRun) { Write-Host "        would write $target"; return }
+  $text = [IO.File]::ReadAllText($tpl).Replace("`r", '')
+  if ($tpl -like '*\gemini\pending.toml') {
+    $re = [regex]'(?m)^!\{sh "\{\{SKILLS\}\}/tickets-zordon/scripts/pending\.sh"\}$'
+    if (-not $re.IsMatch($text)) { throw "no pending.sh shell line in $tpl" }
+    $text = $re.Replace($text,
+      '!{powershell -NoProfile -ExecutionPolicy Bypass -File "{{SKILLS}}\tickets-zordon\scripts\pending.ps1"}')
+  }
+  $text = $text.Replace('{{SKILLS}}', $skillsDir)
+  New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+  [IO.File]::WriteAllText($target, $text, (New-Object Text.UTF8Encoding $false))
+  Write-Host "        * $target"
+}
+
+# Write-Commands <cli> <dest>: F54 - /pending and /list-tickets as the host's own command
+# file, user level, rewritten every run. Called per dest; per-CLI files are written for
+# the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
+# written into each antigravity dest with no .skillator-owned marker and kept out of
+# .skillator-installed, so Remove-Unshipped never touches them. Claude Code: nothing (the
+# ops-board mod has its own /pending, /list-tickets). Same as install.sh write_commands.
+function Write-Commands([string]$cli, [string]$dest) {
+  $c = Join-Path $PSScriptRoot 'host-commands'
+  $names = 'pending', 'list-tickets'
+  switch ($cli) {
+    'codex'  { foreach ($n in $names) { Write-Cmd "$c\codex\$n.md" $dest "$codexHome\prompts\$n.md" } }
+    'cursor' { foreach ($n in $names) { Write-Cmd "$c\cursor\$n.md" $dest "$HOME\.cursor\commands\$n.md" } }
+    'pi' {
+      if ($dest -ne "$HOME\.pi\agent\skills") { return }
+      foreach ($n in $names) { Write-Cmd "$c\pi\$n.md" $dest "$HOME\.pi\agent\prompts\$n.md" }
+    }
+    'antigravity' {
+      foreach ($n in $names) {
+        Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
+        # an older run may have marked it owned - it is not a manifest skill
+        if (-not $DryRun) { Remove-Item -LiteralPath "$dest\$n\$owned" -Force -ErrorAction SilentlyContinue }
+      }
+      # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
+      if ($dest -eq "$HOME\.gemini\skills") {
+        foreach ($n in $names) { Write-Cmd "$c\gemini\$n.toml" $dest "$HOME\.gemini\commands\$n.toml" }
+      }
+    }
+  }
+}
+
+# -SelfTest: install into a temp HOME / USERPROFILE / CODEX_HOME holding the four marker
+# dirs and a temp -Profile, then check the command files (F54), the ops-board copy and
+# the profile function (F55). Never touches the real HOME or profile. Costs one full
+# install per host dest on disk until it returns. Returns '' or the failure.
+function Invoke-SelfTest([string]$T) {
+  $prof = Join-Path $T 'profile.ps1'
+  foreach ($m in '.codex','.cursor','.gemini','.pi') { New-Item -ItemType Directory -Force (Join-Path $T $m) | Out-Null }
+  $env:HOME = $T; $env:USERPROFILE = $T; $env:CODEX_HOME = Join-Path $T '.codex'
+  $run = { param([string[]]$more)
+    $o = & powershell -NoProfile -ExecutionPolicy Bypass -File $selfPath -Profile $prof @more | Out-String
+    $script:selfCode = $LASTEXITCODE
+    $o
+  }
+  $read = { param([string]$rel) [IO.File]::ReadAllText((Join-Path $T $rel)) }
+  $has = { param([string]$rel, [string]$s) (& $read $rel).Contains($s) }
+
+  # dry run first: says what it would write, writes nothing (the profile included)
+  $out = & $run @('-DryRun')
+  if ($script:selfCode -ne 0) { return "dry run exited $script:selfCode" }
+  if (-not $out.Contains("would write function ops in $prof")) { return 'dry-run ops line' }
+  if (-not $out.Contains("would write $T\.pi\agent\prompts\list-tickets.md")) { return 'dry-run command line' }
+  if (-not $out.Contains("would write $T\.gemini\config\skills\pending\SKILL.md")) { return 'dry-run skill-command line' }
+  if (Test-Path -LiteralPath $prof) { return 'dry run wrote the profile' }
+  if (Test-Path -LiteralPath (Join-Path $T '.codex\prompts')) { return 'dry run wrote a command file' }
+
+  $null = & $run @()
+  if ($script:selfCode -ne 0) { return "install exited $script:selfCode" }
+  $cmds = @('.codex\prompts\pending.md', '.codex\prompts\list-tickets.md',
+            '.gemini\commands\pending.toml', '.gemini\commands\list-tickets.toml',
+            '.cursor\commands\pending.md', '.cursor\commands\list-tickets.md',
+            '.pi\agent\prompts\pending.md', '.pi\agent\prompts\list-tickets.md',
+            '.gemini\config\skills\pending\SKILL.md', '.gemini\config\skills\list-tickets\SKILL.md',
+            '.gemini\skills\pending\SKILL.md', '.gemini\skills\list-tickets\SKILL.md')
+  foreach ($f in $cmds + @('.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
+                           '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $T $f) -PathType Leaf)) { return "missing $f" }
+  }
+  if (-not (& $has '.codex\prompts\pending.md' "sh $T\.codex\skills/tickets-zordon/scripts/pending.sh")) { return 'codex prompt not substituted' }
+  if (-not (& $has '.gemini\config\skills\pending\SKILL.md' "$T\.gemini\config\skills/tickets-zordon/SKILL.md")) { return 'agy skill not substituted with its own dest' }
+  if (-not (& $has '.gemini\skills\list-tickets\SKILL.md' "$T\.gemini\skills/tickets-zordon/SKILL.md")) { return 'agy skill not substituted with its own dest' }
+  if ((& $read '.gemini\commands\pending.toml') -notmatch '(?m)^!\{powershell ') { return 'gemini shell injection' }
+  if (-not (& $has '.gemini\commands\pending.toml' "!{powershell -NoProfile -ExecutionPolicy Bypass -File `"$T\.gemini\skills\tickets-zordon\scripts\pending.ps1`"}")) { return 'gemini pending path' }
+  if ((& $read '.gemini\commands\pending.toml') -match '(?m)^!\{sh ') { return 'gemini pending kept the sh line' }
+  if (-not (& $has '.gemini\commands\list-tickets.toml' '{{args}}')) { return 'gemini args' }
+  if (-not (& $has '.pi\agent\prompts\list-tickets.md' '$ARGUMENTS')) { return 'pi args' }
+  if ((& $read '.pi\agent\prompts\list-tickets.md') -notmatch '(?m)^argument-hint: ') { return 'pi argument-hint' }
+  if ((& $read '.cursor\commands\pending.md') -notmatch '(?m)^description: ') { return 'cursor description' }
+  if ((& $read '.codex\prompts\pending.md').StartsWith('---')) { return 'codex prompt has frontmatter' }
+  if ((& $read '.gemini\config\skills\pending\SKILL.md') -cnotmatch '(?m)^name: pending$') { return 'agy skill name' }
+  if ((& $read '.gemini\skills\list-tickets\SKILL.md') -cnotmatch '(?m)^name: list-tickets$') { return 'agy skill name' }
+  if ([IO.File]::ReadAllBytes((Join-Path $T '.pi\agent\prompts\pending.md'))[0] -ne 0x2D) { return 'pi prompt does not start with - (BOM?)' }
+  foreach ($f in $cmds) {
+    $b = [IO.File]::ReadAllBytes((Join-Path $T $f))
+    if ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) { return "BOM in $f" }
+    if ($b -contains 13) { return "CR in $f" }
+    if ((& $read $f).Contains('{{SKILLS}}')) { return "placeholder left in $f" }
+  }
+  foreach ($d in '.gemini\config\skills', '.gemini\skills') {
+    $mf = @([IO.File]::ReadAllLines((Join-Path $T "$d\.skillator-installed")))
+    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets') { return "command skill in manifest $d" }
+    if (Test-Path -LiteralPath (Join-Path $T "$d\pending\.skillator-owned")) { return "command skill carries an ownership marker in $d" }
+  }
+  $opsLine = "-File '$T\.cursor\skills\ops-board\ops\ops.ps1' @args"
+  $count = { @(Select-String -LiteralPath $prof -SimpleMatch -Pattern '# >>> skillator ops >>>').Count }
+  if ((& $count) -ne 1) { return 'profile does not hold one ops block' }
+  if (-not ([IO.File]::ReadAllText($prof).Contains($opsLine))) { return 'ops function target (first dest: cursor, since claude-code has no plugin here)' }
+
+  # second run: command files are rewritten, installed skills are not, the
+  # skill-commands survive the prune and lose a stale marker an older run left
+  [IO.File]::AppendAllText((Join-Path $T '.codex\prompts\pending.md'), "stale`n")
+  [IO.File]::AppendAllText((Join-Path $T '.gemini\skills\pending\SKILL.md'), "stale`n")
+  [IO.File]::WriteAllText((Join-Path $T '.gemini\skills\list-tickets\.skillator-owned'), '')
+  [IO.File]::WriteAllText((Join-Path $T '.pi\agent\skills\tickets-zordon\.selftest-sentinel'), '')
+  $null = & $run @()
+  if ($script:selfCode -ne 0) { return "second install exited $script:selfCode" }
+  if (& $has '.codex\prompts\pending.md' 'stale') { return 'codex prompt not rewritten' }
+  if (-not (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\pending\SKILL.md'))) { return 'agy skill-command pruned' }
+  if (& $has '.gemini\skills\pending\SKILL.md' 'stale') { return 'agy skill-command not rewritten' }
+  if (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\list-tickets\.skillator-owned')) { return 'stale marker kept on a skill-command' }
+  if (-not (Test-Path -LiteralPath (Join-Path $T '.pi\agent\skills\tickets-zordon\.selftest-sentinel'))) { return 'installed skill was rewritten' }
+  if ((& $count) -ne 1) { return 'second run: profile does not hold one ops block' }
+
+  # a damaged profile - two blocks around a user line - ends with one block, user line kept
+  $blk = "# >>> skillator ops >>>`nfunction ops { 'old' }`n# <<< skillator ops <<<`n"
+  [IO.File]::WriteAllText($prof, "Set-Alias ll ls`n$blk`n$blk")
+  $out = & $run @()
+  if ($script:selfCode -ne 0) { return "third install exited $script:selfCode" }
+  if ((& $count) -ne 1) { return 'duplicate ops blocks not collapsed' }
+  $pt = [IO.File]::ReadAllText($prof)
+  if (-not $pt.Contains('Set-Alias ll ls')) { return 'user line lost from the profile' }
+  if (-not $pt.Contains($opsLine)) { return 'ops function target after the repair' }
+  if (-not $out.Contains('removed 1 duplicate')) { return 'duplicate removal not reported' }
+
+  # a UTF-16 LE profile (BOM) with a non-ASCII line is written back as UTF-16 LE, line kept
+  $uline = '# caf' + [char]0xE9 + ' ' + [char]0x00FC + 'ber'
+  $u16 = New-Object Text.UnicodeEncoding $false, $true
+  [IO.File]::WriteAllBytes($prof, [byte[]]($u16.GetPreamble() + $u16.GetBytes("$uline`r`n")))
+  $null = & $run @()
+  if ($script:selfCode -ne 0) { return "fourth install exited $script:selfCode" }
+  $ub = [IO.File]::ReadAllBytes($prof)
+  if ($ub.Length -lt 2 -or $ub[0] -ne 0xFF -or $ub[1] -ne 0xFE) { return 'UTF-16 LE profile lost its BOM' }
+  $ut = $u16.GetString($ub, 2, $ub.Length - 2)
+  if (-not $ut.Contains($uline)) { return 'non-ASCII line lost from a UTF-16 LE profile' }
+  if (-not $ut.Contains($opsLine)) { return 'ops function target in a UTF-16 LE profile' }
+
+  # the plugin installed: the function still runs the first dest written (refreshed every
+  # run), never the versioned plugin cache a plugin update can remove
+  $P = Join-Path $T 'p'
+  foreach ($m in '.cursor', '.claude\plugins\cache\skillator', 'pc\mods\ops-board\ops') { New-Item -ItemType Directory -Force (Join-Path $P $m) | Out-Null }
+  [IO.File]::WriteAllText((Join-Path $P 'pc\mods\ops-board\ops\ops.ps1'), '')
+  [IO.File]::WriteAllText((Join-Path $P '.claude\plugins\installed_plugins.json'),
+    ('{"plugins":{"skillator@skillator":[{"installPath":"' + (Join-Path $P 'pc').Replace('\', '\\') + '"}]}}'))
+  $prof2 = Join-Path $P 'profile.ps1'
+  $env:HOME = $P; $env:USERPROFILE = $P; $env:CODEX_HOME = Join-Path $P '.codex'
+  $null = & powershell -NoProfile -ExecutionPolicy Bypass -File $selfPath -Profile $prof2 | Out-String
+  if ($LASTEXITCODE -ne 0) { return "plugin install exited $LASTEXITCODE" }
+  if (-not ([IO.File]::ReadAllText($prof2).Contains("-File '$P\.cursor\skills\ops-board\ops\ops.ps1' @args"))) { return 'ops function target with the plugin installed (first dest written, not the plugin cache)' }
+  return ''
+}
+
+if ($SelfTest) {
+  $saved = @{ HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; CODEX_HOME = $env:CODEX_HOME }
+  $T = Join-Path ([IO.Path]::GetTempPath()) ("skillator-selftest-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+  New-Item -ItemType Directory -Force $T | Out-Null
+  $T = (Get-Item -LiteralPath $T).FullName.TrimEnd('\')
+  try { $why = Invoke-SelfTest $T }
+  catch { $why = "selftest threw: $($_.Exception.Message)" }
+  finally {
+    foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k], 'Process') }
+    Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  if ($why) { Write-Output "FAIL: $why"; exit 1 }
+  Write-Output 'ok'; exit 0
+}
+
+$writtenDests = @()
 foreach ($cli in $targets.Keys) {
   $marker = $targets[$cli].Marker
   if (-not (Test-Path $marker) -and -not (Get-Command $cli -ErrorAction SilentlyContinue)) {
@@ -235,8 +493,10 @@ foreach ($cli in $targets.Keys) {
     # skills reference PLATFORMS.md / PRACTICE.md / WORKFLOW.md, practice/ and references/ beside the
     # installed skills - refresh them every run, even when no skill needed installing,
     # so the plain `git pull; .\install.ps1` update path picks up doc changes.
+    # F55: ops-board\ is the ops terminal app (hooks\lib, types, ops) - same refresh.
+    $writtenDests += $dest
     if ($DryRun) {
-      Write-Host "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice\ references\ in $dest"
+      Write-Host "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice\ references\ ops-board\ in $dest"
     } else {
       New-Item -ItemType Directory -Force $dest | Out-Null
       foreach ($doc in 'PLATFORMS.md','PRACTICE.md','WORKFLOW.md') {
@@ -248,9 +508,17 @@ foreach ($cli in $targets.Keys) {
       $references = Join-Path $dest 'references'
       if (Test-Path $references) { Remove-Item $references -Recurse -Force }
       Copy-Item (Join-Path $PSScriptRoot 'references') $dest -Recurse -Force
+      $board = Join-Path $dest 'ops-board'
+      if (Test-Path $board) { Remove-Item $board -Recurse -Force }
+      New-Item -ItemType Directory -Force (Join-Path $board 'hooks') | Out-Null
+      $mod = Join-Path $PSScriptRoot 'mods\ops-board'
+      Copy-Item (Join-Path $mod 'hooks\lib') (Join-Path $board 'hooks') -Recurse -Force
+      Copy-Item (Join-Path $mod 'types') $board -Recurse -Force
+      Copy-Item (Join-Path $mod 'ops') $board -Recurse -Force
       # LF, no BOM - the same bytes install.sh writes, so either twin reads the other's
       [IO.File]::WriteAllText((Join-Path $dest $manifest), (($shipped -join "`n") + "`n"))
     }
+    Write-Commands $cli $dest
   }
 }
 
@@ -296,3 +564,27 @@ if ($old.Count -gt 0) {
 }
 
 Write-Host "`nPrime Agent: no markdown-skill loader - point its AGENTS.md at $src\<skill>\SKILL.md."
+
+# F55: the ops board - one launch line per dest, and `function ops` in the PowerShell
+# profile. It runs the first dest this run wrote (its ops-board\ is refreshed every
+# run); the Claude Code plugin's copy only when no dest was written - its versioned
+# cache dir goes away on a plugin update. Rewritten every run (the dest can change).
+# Same as install.sh.
+$shimSrc = ''
+if ($writtenDests.Count -gt 0) { $shimSrc = Join-Path $writtenDests[0] 'ops-board\ops' }
+if (-not $shimSrc) { $shimSrc = Get-PluginOps }
+if ($shimSrc) { Write-Host "" }
+foreach ($d in $writtenDests) {
+  Write-Host "ops   sh $($d.Replace('\', '/'))/ops-board/ops/ops.sh <repo>   (Windows: powershell -NoProfile -ExecutionPolicy Bypass -File $d\ops-board\ops\ops.ps1 -Repo <repo>)"
+}
+if ($shimSrc) {
+  if ($DryRun) {
+    Write-Host "        would write function ops in $Profile -> $shimSrc\ops.ps1"
+  } else {
+    $dups = Write-OpsFunction $shimSrc $Profile
+    Write-Host "ops   function ops in $Profile -> $shimSrc\ops.ps1 (new shells; or . `$PROFILE now)"
+    if ($writtenDests.Count -eq 0) { Write-Host "      the plugin's copy (no skills dir written) - run this again after a plugin update" }
+    Write-Host "      remove: delete the '# >>> skillator ops >>>' block from that file"
+    if ($dups -gt 0) { Write-Host "      removed $dups duplicate ops block(s) from $Profile" -ForegroundColor Yellow }
+  }
+}

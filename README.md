@@ -67,6 +67,12 @@ install** whenever one exists — no duplicate shadowing the plugin cache. Prime
 Agent has no markdown-skill loader, so point its `AGENTS.md` at the `SKILL.md`
 you want.
 
+Every run also copies the `ops` board app (`ops-board/`, node 22.18+) beside the
+skills, prints its launch line per host, and puts `ops` on PATH: `install.sh`
+writes `~/.local/bin/ops`, `install.ps1` a `function ops` block between
+`# >>> skillator ops >>>` markers in your PowerShell profile — delete either to
+remove it.
+
 Manual install paths, if you'd rather not run the script:
 
 | Host | Path |

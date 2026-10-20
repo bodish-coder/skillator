@@ -1,8 +1,9 @@
 import { atom, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, TextProps } from 'claude-code'
 import type { Board, Member, TeamView } from '../types'
-import { isOpen, openAddPerson, removeMember } from './assign'
-import { sameHandle } from './lib/team'
+import { openAddPerson, removeMember } from './assign'
+import { ticketsOf } from './lib/team'
+export { ticketsOf } from './lib/team'
 
 // F47 team management: `t` in the Tickets tab. Who is on .skillator/team.md, what
 // open tickets name them, you marked. Add and remove run ticket-meta `team`.
@@ -10,15 +11,6 @@ import { sameHandle } from './lib/team'
 const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 
 type Els = { Box: ElementConstructor<BoxProps>; Text: ElementConstructor<TextProps>; Button: ElementConstructor<ButtonProps> }
-
-// "you · 3 owned · 1 decide" over the open tickets ([ ] [~] [!] [?]).
-export function ticketsOf(m: Member, board: Board | null, me: string | null): string {
-  const open = (board?.tickets ?? []).filter(isOpen)
-  const owned = open.filter(t => sameHandle(t.owner, m.handle)).length
-  const decide = open.filter(t => sameHandle(t.decide, m.handle)).length
-  const parts = [...(m.handle === me ? ['you'] : []), ...(owned ? [`${owned} owned`] : []), ...(decide ? [`${decide} decide`] : [])]
-  return parts.join(' · ') || '-'
-}
 
 export function TeamTab($: EngineInterface, els: Els, tv: TeamView, team: Member[], board: Board | null, me: string | null, cols: number): RenderElement[] {
   const { Box, Text, Button } = els

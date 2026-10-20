@@ -111,6 +111,16 @@ export function usageFrom(rate: { kind: string; percentUsed: number; resetsAt?: 
   }
 }
 
+// `usage-watch level`: "src=<claude-code|codex|none> 5h=<pct|-> 7d=<pct|-> ctx=<pct|-> max=<pct|->".
+// src=none or a '-' figure is null. Never throws. The hold decision stays relay's.
+export function usageFromLevel(line: string, now: number): Usage {
+  const kv = new Map<string, string>()
+  for (const w of line.replace(/\r/g, '').trim().split(/\s+/)) { const i = w.indexOf('='); if (i > 0) kv.set(w.slice(0, i), w.slice(i + 1)) }
+  const pct = (k: string) => { const v = kv.get(k); return v !== undefined && /^\d+(\.\d+)?$/.test(v) ? Number(v) : null }
+  const w = (p: number | null) => (p === null || kv.get('src') === 'none' ? null : mkWindow(p, null, 'watch-cortana', now))
+  return { five: w(pct('5h')), seven: w(pct('7d')), spendLimitPct: null, costUsd: null, decision: null }
+}
+
 // The first number in a watch-cortana flag file (a BOM, CR or stray space never counts).
 export function pctOf(text: string): number | null {
   const m = /[0-9]+(\.[0-9]+)?/.exec(text)

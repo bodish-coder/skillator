@@ -43,40 +43,62 @@ const fake = (w: World): [HostApi, Seen] => {
   return [$, seen]
 }
 const PS = ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File']
-const TM = 'skills/tickets-zordon/scripts/ticket-meta'
-const PE = 'skills/tickets-zordon/scripts/pending'
-const RM = 'skills/relay-morpheus/hooks/relay-morpheus'
-const META = '/skills/tickets-zordon/scripts/ticket-meta.sh'
+const TM = 'tickets-zordon/scripts/ticket-meta'
+const PE = 'tickets-zordon/scripts/pending'
+const RM = 'relay-morpheus/hooks/relay-morpheus'
+const UW = 'watch-cortana/hooks/usage-watch'
+const META = '/tickets-zordon/scripts/ticket-meta.sh'
+
+test('argvFor joins the skills dir, no skills/ segment', () => {
+  expect(argvFor('pending', false, '/s/skills', [])).toEqual(['sh', '/s/skills/' + PE + '.sh'])
+  expect(argvFor('meta-assign', true, 'C:/u/.codex/skills', ['F1', '@a'])).toEqual([...PS, 'C:/u/.codex/skills/' + TM + '.ps1', 'assign', 'F1', '@a'])
+})
+test('skillatorRoot: plugin tree -> its skills dir', async () => {
+  const [$] = fake({ root: '/s/mods/ops-board', exists: ['/s/skills' + META] })
+  expect(await skillatorRoot($)).toBe('/s/skills')
+})
+test('skillatorRoot: SKILLATOR_ROOT as a repo or as a flat install dest', async () => {
+  const [a] = fake({ env: { SKILLATOR_ROOT: '/r' }, exists: ['/r/skills' + META] })
+  expect(await skillatorRoot(a)).toBe('/r/skills')
+  const [b] = fake({ env: { SKILLATOR_ROOT: '/u/.codex/skills' }, exists: ['/u/.codex/skills' + META] })
+  expect(await skillatorRoot(b)).toBe('/u/.codex/skills')
+})
+test('skillatorRoot: installPath + /skills', async () => {
+  const [$] = fake({ env: { HOME: '/h' }, exists: ['C:/c/skills' + META],
+    files: { '/h/.claude/plugins/installed_plugins.json': JSON.stringify({ plugins: { 'skillator@skillator': [{ installPath: 'C:\\c' }] } }) } })
+  expect(await skillatorRoot($)).toBe('C:/c/skills')
+})
 
 test('argvFor: both spellings of every call', () => {
   const cases: [Call, string[], string[], string[]][] = [
-    ['pending', [], [`/s/${PE}.sh`], [`C:/s/${PE}.ps1`]],
-    ['pending-kv', [], [`/s/${PE}.sh`, '--kv'], [`C:/s/${PE}.ps1`, '--kv']],
-    ['pending-machine', [], [`/s/${PE}.sh`, '--machine'], [`C:/s/${PE}.ps1`, '--machine']],
-    ['meta-assign', ['F1', '@vidul'], [`/s/${TM}.sh`, 'assign', 'F1', '@vidul'], [`C:/s/${TM}.ps1`, 'assign', 'F1', '@vidul']],
-    ['meta-decide', ['F2', '@asha'], [`/s/${TM}.sh`, 'decide', 'F2', '@asha'], [`C:/s/${TM}.ps1`, 'decide', 'F2', '@asha']],
-    ['meta-decided', ['F2'], [`/s/${TM}.sh`, 'decided', 'F2'], [`C:/s/${TM}.ps1`, 'decided', 'F2']],
-    ['meta-team-add', ['@ravi', 'Ravi Kumar', 'r@x.org,s@y.org'], [`/s/${TM}.sh`, 'team', 'add', '@ravi', 'Ravi Kumar', 'r@x.org,s@y.org'], [`C:/s/${TM}.ps1`, 'team', 'add', '@ravi', 'Ravi Kumar', 'r@x.org,s@y.org']],
-    ['meta-team-remove', ['@asha'], [`/s/${TM}.sh`, 'team', 'remove', '@asha'], [`C:/s/${TM}.ps1`, 'team', 'remove', '@asha']],
-    ['relay-list', [], [`/s/${RM}.sh`, 'list'], [`C:/s/${RM}.ps1`, '-Mode', 'list']],
-    ['relay-chain-status', ['RUN-0014'], [`/s/${RM}.sh`, 'RUN-0014', 'chain', 'status'],
-      [`C:/s/${RM}.ps1`, '-Mode', 'chain', '-Action', 'status', '-Id', 'RUN-0014']],
-    ['relay-queue-add', ['RUN-0014'], [`/s/${RM}.sh`, 'queue-run', 'add', 'RUN-0014'],
-      [`C:/s/${RM}.ps1`, '-Mode', 'queue-run', '-Sub', 'add', '-Id', 'RUN-0014']],
-    ['relay-hold', ['disk 0.8 GB free (below 1 GB)'], [`/s/${RM}.sh`, 'watchdog', 'hold', 'disk 0.8 GB free (below 1 GB)'],
-      [`C:/s/${RM}.ps1`, '-Mode', 'watchdog', '-Action', 'hold', '-Reason', 'disk 0.8 GB free (below 1 GB)']],
-    ['relay-release', [], [`/s/${RM}.sh`, 'watchdog', 'release'], [`C:/s/${RM}.ps1`, '-Mode', 'watchdog', '-Action', 'release']],
-    ['relay-hold-status', [], [`/s/${RM}.sh`, 'watchdog', 'status'], [`C:/s/${RM}.ps1`, '-Mode', 'watchdog', '-Action', 'status']],
-    ['relay-decide', ['src=host 5h=41 7d=55 ctx=- max=-'], [`/s/${RM}.sh`, 'chain', 'decide', '--level', 'src=host 5h=41 7d=55 ctx=- max=-'],
-      [`C:/s/${RM}.ps1`, '-Mode', 'chain', '-Action', 'decide', '-Text', 'src=host 5h=41 7d=55 ctx=- max=-']],
+    ['pending', [], [`/s/skills/${PE}.sh`], [`C:/s/skills/${PE}.ps1`]],
+    ['pending-kv', [], [`/s/skills/${PE}.sh`, '--kv'], [`C:/s/skills/${PE}.ps1`, '--kv']],
+    ['pending-machine', [], [`/s/skills/${PE}.sh`, '--machine'], [`C:/s/skills/${PE}.ps1`, '--machine']],
+    ['meta-assign', ['F1', '@vidul'], [`/s/skills/${TM}.sh`, 'assign', 'F1', '@vidul'], [`C:/s/skills/${TM}.ps1`, 'assign', 'F1', '@vidul']],
+    ['meta-decide', ['F2', '@asha'], [`/s/skills/${TM}.sh`, 'decide', 'F2', '@asha'], [`C:/s/skills/${TM}.ps1`, 'decide', 'F2', '@asha']],
+    ['meta-decided', ['F2'], [`/s/skills/${TM}.sh`, 'decided', 'F2'], [`C:/s/skills/${TM}.ps1`, 'decided', 'F2']],
+    ['meta-team-add', ['@ravi', 'Ravi Kumar', 'r@x.org,s@y.org'], [`/s/skills/${TM}.sh`, 'team', 'add', '@ravi', 'Ravi Kumar', 'r@x.org,s@y.org'], [`C:/s/skills/${TM}.ps1`, 'team', 'add', '@ravi', 'Ravi Kumar', 'r@x.org,s@y.org']],
+    ['meta-team-remove', ['@asha'], [`/s/skills/${TM}.sh`, 'team', 'remove', '@asha'], [`C:/s/skills/${TM}.ps1`, 'team', 'remove', '@asha']],
+    ['relay-list', [], [`/s/skills/${RM}.sh`, 'list'], [`C:/s/skills/${RM}.ps1`, '-Mode', 'list']],
+    ['relay-chain-status', ['RUN-0014'], [`/s/skills/${RM}.sh`, 'RUN-0014', 'chain', 'status'],
+      [`C:/s/skills/${RM}.ps1`, '-Mode', 'chain', '-Action', 'status', '-Id', 'RUN-0014']],
+    ['relay-queue-add', ['RUN-0014'], [`/s/skills/${RM}.sh`, 'queue-run', 'add', 'RUN-0014'],
+      [`C:/s/skills/${RM}.ps1`, '-Mode', 'queue-run', '-Sub', 'add', '-Id', 'RUN-0014']],
+    ['relay-hold', ['disk 0.8 GB free (below 1 GB)'], [`/s/skills/${RM}.sh`, 'watchdog', 'hold', 'disk 0.8 GB free (below 1 GB)'],
+      [`C:/s/skills/${RM}.ps1`, '-Mode', 'watchdog', '-Action', 'hold', '-Reason', 'disk 0.8 GB free (below 1 GB)']],
+    ['relay-release', [], [`/s/skills/${RM}.sh`, 'watchdog', 'release'], [`C:/s/skills/${RM}.ps1`, '-Mode', 'watchdog', '-Action', 'release']],
+    ['relay-hold-status', [], [`/s/skills/${RM}.sh`, 'watchdog', 'status'], [`C:/s/skills/${RM}.ps1`, '-Mode', 'watchdog', '-Action', 'status']],
+    ['relay-decide', ['src=host 5h=41 7d=55 ctx=- max=-'], [`/s/skills/${RM}.sh`, 'chain', 'decide', '--level', 'src=host 5h=41 7d=55 ctx=- max=-'],
+      [`C:/s/skills/${RM}.ps1`, '-Mode', 'chain', '-Action', 'decide', '-Text', 'src=host 5h=41 7d=55 ctx=- max=-']],
+    ['usage-level', [], [`/s/skills/${UW}.sh`, 'level'], [`C:/s/skills/${UW}.ps1`, '-Mode', 'level']],
   ]
   for (const [call, args, sh, ps] of cases) {
-    expect(argvFor(call, false, '/s', args)).toEqual(['sh', ...sh])
-    expect(argvFor(call, true, 'C:/s/', args)).toEqual([...PS, ...ps])
+    expect(argvFor(call, false, '/s/skills', args)).toEqual(['sh', ...sh])
+    expect(argvFor(call, true, 'C:/s/skills/', args)).toEqual([...PS, ...ps])
   }
-  expect(argvFor('meta-assign', true, 'C:/s', ['F1', '@vidul'])).toEqual(
+  expect(argvFor('meta-assign', true, 'C:/s/skills', ['F1', '@vidul'])).toEqual(
     ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:/s/skills/tickets-zordon/scripts/ticket-meta.ps1', 'assign', 'F1', '@vidul'])
-  expect(argvFor('meta-assign', false, '/s', ['F1', '@vidul'])).toEqual(
+  expect(argvFor('meta-assign', false, '/s/skills', ['F1', '@vidul'])).toEqual(
     ['sh', '/s/skills/tickets-zordon/scripts/ticket-meta.sh', 'assign', 'F1', '@vidul'])
 })
 
@@ -86,12 +108,12 @@ test('isWindows: OS=Windows_NT, anything else is not', async () => {
 })
 
 test('skillatorRoot: SKILLATOR_ROOT first', async () => {
-  const [$] = fake({ env: { SKILLATOR_ROOT: 'D:\\sk\\', HOME: '/h' }, exists: ['D:/sk' + META, '/s' + META] })
-  expect(await skillatorRoot($)).toBe('D:/sk')
+  const [$] = fake({ env: { SKILLATOR_ROOT: 'D:\\sk\\', HOME: '/h' }, exists: ['D:/sk/skills' + META, '/s/skills' + META] })
+  expect(await skillatorRoot($)).toBe('D:/sk/skills')
 })
 test('skillatorRoot: the plugin folder two up; never the session repo (A136)', async () => {
-  const env = { SKILLATOR_ROOT: '/nowhere', HOME: '/h' }, exists = ['C:/x/skillator' + META, '/r' + META]
-  expect(await skillatorRoot(fake({ env, exists, root: 'C:\\x\\skillator\\mods\\ops-board' })[0])).toBe('C:/x/skillator')
+  const env = { SKILLATOR_ROOT: '/nowhere', HOME: '/h' }, exists = ['C:/x/skillator/skills' + META, '/r/skills' + META]
+  expect(await skillatorRoot(fake({ env, exists, root: 'C:\\x\\skillator\\mods\\ops-board' })[0])).toBe('C:/x/skillator/skills')
   // a repo opened in the session that ships the scripts is not trusted to run them
   expect(await skillatorRoot(fake({ env, exists, root: '/elsewhere/mods/ops-board' })[0])).toBe(null)
 })
@@ -99,13 +121,13 @@ test('skillatorRoot: installed_plugins.json of the config dir', async () => {
   const [$, seen] = fake({
     root: '/elsewhere/mods/ops-board',
     env: { CLAUDE_CONFIG_DIR: 'C:\\Users\\i\\.claude-v', HOME: '/h' },
-    exists: ['C:/Users/i/.claude-v/plugins/cache/skillator/skillator/4.8.1' + META],
+    exists: ['C:/Users/i/.claude-v/plugins/cache/skillator/skillator/4.8.1/skills' + META],
     files: { 'C:/Users/i/.claude-v/plugins/installed_plugins.json': JSON.stringify({ version: 2, plugins: {
       'other@x': [{ installPath: 'C:\\o' }],
       'skillator@skillator': [{ scope: 'project', installPath: 'C:\\gone' },
         { scope: 'user', installPath: 'C:\\Users\\i\\.claude-v\\plugins\\cache\\skillator\\skillator\\4.8.1' }] } }) },
   })
-  expect(await skillatorRoot($)).toBe('C:/Users/i/.claude-v/plugins/cache/skillator/skillator/4.8.1')
+  expect(await skillatorRoot($)).toBe('C:/Users/i/.claude-v/plugins/cache/skillator/skillator/4.8.1/skills')
   expect(seen.reads).toEqual(['C:/Users/i/.claude-v/plugins/installed_plugins.json'])
 })
 test('skillatorRoot: HOME/.claude without CLAUDE_CONFIG_DIR; nothing found is null', async () => {
@@ -119,31 +141,31 @@ test('skillatorRoot: HOME/.claude without CLAUDE_CONFIG_DIR; nothing found is nu
 const repo = (root: string): SessionRepo => ({ root, remote: null, internal: false, name: null })
 
 test('runCall: sh form, cwd the main checkout, argv returned', async () => {
-  const [$, seen] = fake({ env: { HOME: '/h' }, exists: ['/s' + META], repo: repo('/r'), run: () => ran('watchdog: held x\n') })
+  const [$, seen] = fake({ env: { HOME: '/h' }, exists: ['/s/skills' + META], repo: repo('/r'), run: () => ran('watchdog: held x\n') })
   const r = await runCall($, 'relay-hold', ['disk 0.8 GB free (below 1 GB)'])
   expect(seen.runs.length).toBe(1)
-  expect(seen.runs[0]!.argv).toEqual(['sh', `/s/${RM}.sh`, 'watchdog', 'hold', 'disk 0.8 GB free (below 1 GB)'])
+  expect(seen.runs[0]!.argv).toEqual(['sh', `/s/skills/${RM}.sh`, 'watchdog', 'hold', 'disk 0.8 GB free (below 1 GB)'])
   expect(seen.runs[0]!.init).toEqual({ cwd: '/r', timeoutMs: 30000 })
   expect(r).toEqual({ code: 0, out: 'watchdog: held x\n', err: '', argv: seen.runs[0]!.argv })
 })
 test('runCall: ps1 form on Windows; --machine has a 15 s budget; stderr and exit code kept', async () => {
   const [$, seen] = fake({
-    root: 'C:\\s\\mods\\ops-board', env: { OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\i' }, exists: ['C:/s' + META],
+    root: 'C:\\s\\mods\\ops-board', env: { OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\i' }, exists: ['C:/s/skills' + META],
     repo: repo('C:\\r'), run: () => ran('', 2, 'pending: no TICKETS.md'),
   })
   const r = await runCall($, 'pending-machine', [])
-  expect(seen.runs[0]!.argv).toEqual([...PS, `C:/s/${PE}.ps1`, '--machine'])
+  expect(seen.runs[0]!.argv).toEqual([...PS, `C:/s/skills/${PE}.ps1`, '--machine'])
   expect(seen.runs[0]!.init).toEqual({ cwd: 'C:\\r', timeoutMs: 15000 })
   expect([r.code, r.out, r.err]).toEqual([2, '', 'pending: no TICKETS.md'])
 })
 test('runCall: outside a repo the session cwd is used', async () => {
-  const [$, seen] = fake({ exists: ['/s' + META], repo: null })
+  const [$, seen] = fake({ exists: ['/s/skills' + META], repo: null })
   await runCall($, 'relay-list', [])
   expect(seen.runs[0]!.init).toEqual({ timeoutMs: 30000 })
 })
 test('runCall: a command that cannot start or times out resolves code -1', async () => {
-  const [$] = fake({ exists: ['/s' + META], run: () => { throw new Error('timed out after 30000 ms') } })
-  expect(await runCall($, 'pending', [])).toEqual({ code: -1, out: '', err: 'timed out after 30000 ms', argv: ['sh', `/s/${PE}.sh`] })
+  const [$] = fake({ exists: ['/s/skills' + META], run: () => { throw new Error('timed out after 30000 ms') } })
+  expect(await runCall($, 'pending', [])).toEqual({ code: -1, out: '', err: 'timed out after 30000 ms', argv: ['sh', `/s/skills/${PE}.sh`] })
 })
 test('runCall: no scripts found runs nothing and says how to fix it', async () => {
   const [$, seen] = fake({ root: '/elsewhere/mods/ops-board', env: { HOME: '/h' } })
@@ -152,7 +174,7 @@ test('runCall: no scripts found runs nothing and says how to fix it', async () =
   expect(r).toEqual({ code: 127, out: '', err: 'skillator scripts not found - set SKILLATOR_ROOT', argv: [] })
 })
 test('runCall: a session repo that ships the scripts is never run from (A136)', async () => {
-  const [$, seen] = fake({ root: '/elsewhere/mods/ops-board', env: { HOME: '/h' }, exists: ['/evil' + META],
+  const [$, seen] = fake({ root: '/elsewhere/mods/ops-board', env: { HOME: '/h' }, exists: ['/evil/skills' + META],
     repo: { root: '/evil' } as SessionRepo })
   const r = await runCall($, 'pending', [])
   expect(seen.runs.length).toBe(0)

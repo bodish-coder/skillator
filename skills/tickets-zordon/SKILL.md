@@ -612,6 +612,17 @@ line says a GREEN is `owed`, disk, memory, stale locks and any watchdog hold.
 `--kv` prints the same facts as `KEY=value` lines for tools (the ops-board mod);
 `--machine` only the machine facts. It reads; it never edits the board.
 
+**The board as a terminal app** - "open the board", "ops", a host with no
+board pane: `ops` (on PATH after `install.sh`: `~/.local/bin/ops`; after
+`install.ps1`: a `function ops` in the PowerShell profile) runs the same views
+beside any CLI, from the repo or with the repo as its first argument. Without
+the shim: `sh <skills>/ops-board/ops/ops.sh <repo>` (Windows: `powershell
+-NoProfile -ExecutionPolicy Bypass -File <skills>\ops-board\ops\ops.ps1 -Repo
+<repo>`), where `<skills>` is the dir holding this skill - install copies
+`ops-board/` beside it; in this repo it is `mods/ops-board/ops/`. It needs node
+22.18 or newer. Its assign, decide and team writes go through `ticket-meta`,
+like every other board write.
+
 ### By type (default)
 
 ```

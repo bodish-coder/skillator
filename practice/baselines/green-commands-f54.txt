@@ -1,0 +1,45 @@
+F54 - /pending and /list-tickets command files per host
+Probe: sh practice/scripts/probe-commands.sh  (read-only: `<cli> --version` + path tests)
+Date: 2026-10-20, machine: the author's Windows 11 box, Git Bash
+
+== RED half: probe before any real install ==
+Every row is `absent`. That is expected and correct: install.sh / install.ps1 have only
+been exercised through --selftest (temp HOME), never run for real, so none of these
+files exist yet. The CLIs themselves are found and versioned. `agent` on PATH here is
+Grok's CLI, not Cursor's; Cursor is detected through `cursor-agent` only.
+
+codex | /c/Users/Ikran/.codex/prompts/pending.md | absent | codex-cli 0.163.0
+codex | /c/Users/Ikran/.codex/prompts/list-tickets.md | absent | codex-cli 0.163.0
+gemini | /c/Users/Ikran/.gemini/commands/pending.toml | absent | 0.57.0
+gemini | /c/Users/Ikran/.gemini/commands/list-tickets.toml | absent | 0.57.0
+antigravity | /c/Users/Ikran/.gemini/config/skills/pending/SKILL.md | absent | 1.4.2
+antigravity | /c/Users/Ikran/.gemini/config/skills/list-tickets/SKILL.md | absent | 1.4.2
+antigravity | /c/Users/Ikran/.gemini/skills/pending/SKILL.md | absent | 1.4.2
+antigravity | /c/Users/Ikran/.gemini/skills/list-tickets/SKILL.md | absent | 1.4.2
+cursor | /c/Users/Ikran/.cursor/commands/pending.md | absent | 2026.10.16-e3cb207
+cursor | /c/Users/Ikran/.cursor/commands/list-tickets.md | absent | 2026.10.16-e3cb207
+pi | /c/Users/Ikran/.pi/agent/prompts/pending.md | absent | 0.74.2
+pi | /c/Users/Ikran/.pi/agent/prompts/list-tickets.md | absent | 0.74.2
+
+live picker check lines the probe prints (the owner runs them; the probe runs none):
+  agy -p '/pending' --mode plan --sandbox
+  pi -p '/pending' --no-tools
+  gemini -p '/pending' --approval-mode plan
+  cursor-agent -p '/pending' --mode ask   (never bare 'agent')
+  codex: type / in the TUI, look for /prompts:pending and /prompts:list-tickets
+
+== GREEN half: after a real `sh install.sh` ==
+TO FILL by the owner/controller: re-run the probe; every installed host should now read
+`present` (codex, gemini, antigravity x2 dests, cursor, pi).
+
+== Owner picker check (fill per host) ==
+For each host: type / in its TUI, confirm both commands are listed, save a screenshot,
+and for the headless ones paste the first lines of the answer. A host whose picker does
+not list the command: say so here, update the PLATFORMS.md row, log an A ticket.
+
+host        picker lists /pending + /list-tickets   screenshot path   headless expanded /pending (first lines)
+codex       [ ] yes  [ ] no                          ____________      n/a (picker only)
+gemini      [ ] yes  [ ] no                          ____________      ____________
+antigravity [ ] yes  [ ] no                          ____________      ____________
+cursor      [ ] yes  [ ] no  (user dir inferred)     ____________      ____________
+pi          [ ] yes  [ ] no                          ____________      ____________

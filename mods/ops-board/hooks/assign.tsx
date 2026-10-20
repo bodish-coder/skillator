@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 import type { AssignDraft, Box as State, Member, PersonDraft, Ticket } from '../types'
 import { STATE_NAME } from './lib/board'
+export { isOpen } from './lib/board'
 import { runCall } from './lib/host'
 import { sameHandle } from './lib/team'
 import type { Call } from './lib/host'
@@ -22,8 +23,6 @@ const assignA = atom({ plugin: 'ops-board', key: 'assign' } as const, null)
 const personA = atom({ plugin: 'ops-board', key: 'person' } as const, null)
 
 const HANDLE = /^@[a-z0-9_-]+$/
-const OPEN: State[] = [' ', '~', '!', '?']
-export const isOpen = (t: Ticket) => OPEN.includes(t.box)
 
 // A state in words for the Change line: `?` reads "decision" there.
 const word = (b: State) => (b === '?' ? 'decision' : STATE_NAME[b])

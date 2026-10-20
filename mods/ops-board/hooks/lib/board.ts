@@ -1,3 +1,4 @@
+import type { Color } from 'claude-code'
 import type { Board, Box, Filter, Ticket } from '../../types'
 
 export type StateColor = 'amber' | 'red' | 'violet' | 'neutral' | 'dim' | 'green'
@@ -5,6 +6,14 @@ export type StateColor = 'amber' | 'red' | 'violet' | 'neutral' | 'dim' | 'green
 export const STATE_COLOR: Record<Box, StateColor> = {
   '~': 'amber', '!': 'red', '?': 'violet', ' ': 'neutral', '>': 'dim', 'x': 'green', '-': 'dim',
 }
+// Theme keys follow the person's theme on every surface; dim states are drawn dim.
+export const PAINT: Record<StateColor, Color> = {
+  amber: 'warning', red: 'error', violet: 'permission', neutral: 'text', dim: 'inactive', green: 'success',
+}
+export const paint = (b: Box): Color => PAINT[STATE_COLOR[b]]
+// Open = [ ] [~] [!] [?] (tickets-zordon, pending); deferred and closed are not.
+const OPEN: Box[] = [' ', '~', '!', '?']
+export const isOpen = (t: Ticket) => OPEN.includes(t.box)
 export const STATE_NAME: Record<Box, string> = {
   '~': 'in progress', '!': 'blocked', '?': 'pending decision', ' ': 'pending', '>': 'deferred', 'x': 'done', '-': 'cancelled',
 }

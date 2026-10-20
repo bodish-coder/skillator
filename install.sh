@@ -5,6 +5,10 @@
 #   ./install.sh --dry-run  show what it would do
 #   ./install.sh --force    refresh skills that are already installed
 #   ./install.sh --link     install as symlinks into this repo (stay live on git pull)
+#   ./install.sh --selftest install into a temp HOME and check what was written; prints ok
+# F54: /pending and /list-tickets are written as each host's own command file (codex
+# prompts, Gemini CLI commands, cursor commands, pi prompt templates, Antigravity
+# skill-commands) from host-commands/<host>/, rewritten every run - see write_commands.
 # A96: a skill dir this script copies gets an ownership marker (.skillator-owned),
 # and each skills dir a manifest (.skillator-installed) of the skillator skills in it.
 # The marker records the SKILL.md hash and every file the installer placed. The next
@@ -19,12 +23,13 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 src="$root/skills"
-dry=""; force=""; link=""
+dry=""; force=""; link=""; selftest=""
 for a in "$@"; do
   case "$a" in
     --dry-run) dry=1 ;;
     --force)   force=1 ;;
     --link)    link=1 ;;
+    --selftest) selftest=1 ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
@@ -218,16 +223,176 @@ install_into() {
   # skills reference PLATFORMS.md / PRACTICE.md / WORKFLOW.md, practice/ and references/ beside the
   # installed skills - refresh them every run, even when no skill needed installing,
   # so the plain `git pull && ./install.sh` update path picks up doc changes.
+  # F55: ops-board/ is the ops terminal app (hooks/lib, types, ops) - same refresh.
   if [ -n "$dry" ]; then
-    echo "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice/ references/ in $_dest"
+    echo "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice/ references/ ops-board/ in $_dest"
   else
     mkdir -p "$_dest"
     cp "$root/PLATFORMS.md" "$root/PRACTICE.md" "$root/WORKFLOW.md" "$_dest/"
     rm -rf "$_dest/practice" && cp -R "$root/practice" "$_dest/"
     rm -rf "$_dest/references" && cp -R "$root/references" "$_dest/"
+    rm -rf "$_dest/ops-board" && mkdir -p "$_dest/ops-board/hooks" &&
+      cp -R "$root/mods/ops-board/hooks/lib" "$_dest/ops-board/hooks/" &&
+      cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$_dest/ops-board/"
     printf '%s\n' "$shipped" > "$_dest/$manifest"
   fi
+  # the targets loop is a subshell - the summary reads the dests from this file
+  echo "$_dest" >> "$tmpdests"
 }
+
+# subst <template> <skills-dir> <target>: the template with {{SKILLS}} replaced by the
+# skills dir as the host sees it (native, forward slashes). No other templating.
+subst() {
+  _sk=$(native "$2" | sed 's/[#&\\]/\\&/g')
+  sed "s#{{SKILLS}}#$_sk#g" "$1" > "$3"
+}
+
+# subst_gemini_pending <template> <skills-dir> <target>: Gemini CLI's pending.toml. On
+# Windows (cygpath: Git Bash / Cygwin) Gemini CLI runs !{} without Git's sh on PATH, so
+# the shell line is install.ps1's powershell form with the Windows path - the same bytes
+# install.ps1 writes. Elsewhere the template as is.
+subst_gemini_pending() {
+  if ! command -v cygpath >/dev/null 2>&1; then subst "$@"; return; fi
+  _line='^!{sh "{{SKILLS}}/tickets-zordon/scripts/pending\.sh"}$'
+  grep -q "$_line" "$1" || { echo "no pending.sh shell line in $1" >&2; return 1; }
+  _sk=$(cygpath -w "$2" | sed 's/[#&\\]/\\&/g')
+  sed "s#$_line#!{powershell -NoProfile -ExecutionPolicy Bypass -File \"{{SKILLS}}\\\\tickets-zordon\\\\scripts\\\\pending.ps1\"}#" "$1" |
+    sed "s#{{SKILLS}}#$_sk#g" > "$3"
+}
+
+# put_cmd <template> <skills-dir> <target>: write one command file (or say it would).
+put_cmd() {
+  if [ -n "$dry" ]; then echo "        would write $3"; return 0; fi
+  mkdir -p "$(dirname -- "$3")"
+  case "$1" in
+    */gemini/pending.toml) subst_gemini_pending "$1" "$2" "$3" || exit 1 ;;
+    *) subst "$1" "$2" "$3" ;;
+  esac
+  echo "        * $3"
+}
+
+# write_commands <cli> <dest>: F54 - /pending and /list-tickets as the host's own command
+# file, user level, rewritten every run. Called per dest; per-CLI files are written for
+# the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
+# written into each antigravity dest with no .skillator-owned marker and kept out of
+# .skillator-installed, so prune_dest never touches them. Claude Code: nothing (the
+# ops-board mod has its own /pending, /list-tickets).
+write_commands() {
+  _c="$root/host-commands"
+  case "$1" in
+    codex)
+      for _n in pending list-tickets; do put_cmd "$_c/codex/$_n.md" "$2" "$codex_home/prompts/$_n.md"; done ;;
+    cursor)
+      for _n in pending list-tickets; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
+    pi)
+      [ "$2" = "$HOME/.pi/agent/skills" ] || return 0
+      for _n in pending list-tickets; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done ;;
+    antigravity)
+      for _n in pending list-tickets; do
+        put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
+        # an older run may have marked it owned - it is not a manifest skill
+        [ -n "$dry" ] || rm -f "$2/$_n/$owned"
+      done
+      # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
+      if [ "$2" = "$HOME/.gemini/skills" ]; then
+        for _n in pending list-tickets; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
+      fi ;;
+  esac
+}
+
+# plugin_ops: the ops/ dir of the installed Claude Code plugin (its installPath in
+# installed_plugins.json + /mods/ops-board/ops), or nothing when that has no ops.sh.
+plugin_ops() {
+  _ipj="$HOME/.claude/plugins/installed_plugins.json"
+  [ -n "$plugin" ] && [ -f "$_ipj" ] || return 0
+  _ip=$(tr -d '\r' < "$_ipj" | grep -A12 '"skillator@' |
+        sed -n 's/.*"installPath"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p' | head -1 | sed 's#\\\\#/#g')
+  if [ -n "$_ip" ] && [ -f "$_ip/mods/ops-board/ops/ops.sh" ]; then echo "$_ip/mods/ops-board/ops"; fi
+}
+
+# native <path>: the path as the host programs see it - on Git Bash / Cygwin the mixed
+# form (C:/Users/...: forward slashes, readable by sh and by native node / powershell),
+# elsewhere unchanged.
+native() {
+  if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
+}
+
+# --selftest: install into a temp HOME / CODEX_HOME holding the four marker dirs, then
+# check the command files (F54), the ops-board copy and the shim (F55). Never touches
+# the real HOME. Costs one full install per host dest on disk until it exits.
+if [ -n "$selftest" ]; then
+  T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+  mkdir -p "$T/.codex" "$T/.cursor" "$T/.gemini" "$T/.pi"
+  HOME=$T CODEX_HOME=$T/.codex sh "$0" >/dev/null || { echo "FAIL: install exited $?"; exit 1; }
+  for f in .codex/prompts/pending.md .codex/prompts/list-tickets.md .gemini/commands/pending.toml .gemini/commands/list-tickets.toml \
+           .cursor/commands/pending.md .cursor/commands/list-tickets.md .pi/agent/prompts/pending.md .pi/agent/prompts/list-tickets.md \
+           .gemini/config/skills/pending/SKILL.md .gemini/config/skills/list-tickets/SKILL.md \
+           .gemini/skills/pending/SKILL.md .gemini/skills/list-tickets/SKILL.md \
+           .codex/skills/ops-board/ops/app.ts .pi/agent/skills/ops-board/hooks/lib/board.ts \
+           .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json; do
+    [ -f "$T/$f" ] || { echo "FAIL: missing $f"; exit 1; }
+  done
+  N=$(native "$T")
+  grep -qF "sh $N/.codex/skills/tickets-zordon/scripts/pending.sh" "$T/.codex/prompts/pending.md" || { echo "FAIL: codex prompt not substituted"; exit 1; }
+  grep -qF "$N/.gemini/config/skills/tickets-zordon/SKILL.md" "$T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: agy skill not substituted with its own dest"; exit 1; }
+  grep -qF "$N/.gemini/skills/tickets-zordon/SKILL.md" "$T/.gemini/skills/list-tickets/SKILL.md" || { echo "FAIL: agy skill not substituted with its own dest"; exit 1; }
+  # the path is quoted (a HOME with a space); under Git Bash (cygpath) it is install.ps1's
+  # powershell form with the Windows path - Gemini CLI on Windows runs !{} without sh
+  if command -v cygpath >/dev/null 2>&1; then
+    grep -q '^!{sh ' "$T/.gemini/commands/pending.toml" && { echo "FAIL: gemini pending kept the sh line on Windows"; exit 1; }
+    _want='!{powershell -NoProfile -ExecutionPolicy Bypass -File "'"$(cygpath -w "$T")"'\.gemini\skills\tickets-zordon\scripts\pending.ps1"}'
+  else
+    grep -q '^!{sh ' "$T/.gemini/commands/pending.toml" || { echo "FAIL: gemini shell injection"; exit 1; }
+    _want='!{sh "'"$N"'/.gemini/skills/tickets-zordon/scripts/pending.sh"}'
+  fi
+  grep -qxF -- "$_want" "$T/.gemini/commands/pending.toml" || { echo "FAIL: gemini pending path"; exit 1; }
+  grep -qF '{{args}}' "$T/.gemini/commands/list-tickets.toml" || { echo "FAIL: gemini args"; exit 1; }
+  grep -qF '$ARGUMENTS' "$T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: pi args"; exit 1; }
+  grep -q '^argument-hint: ' "$T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: pi argument-hint"; exit 1; }
+  grep -q '^description: ' "$T/.cursor/commands/pending.md" || { echo "FAIL: cursor description"; exit 1; }
+  head -1 "$T/.codex/prompts/pending.md" | grep -q '^---' && { echo "FAIL: codex prompt has frontmatter"; exit 1; }
+  grep -q '^name: pending$' "$T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
+  grep -q '^name: list-tickets$' "$T/.gemini/skills/list-tickets/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
+  for f in .codex/prompts .gemini/commands .cursor/commands .pi/agent/prompts \
+           .gemini/config/skills/pending .gemini/config/skills/list-tickets .gemini/skills/pending .gemini/skills/list-tickets; do
+    grep -rqF '{{SKILLS}}' "$T/$f" && { echo "FAIL: placeholder left in $f"; exit 1; }
+  done
+  for d in .gemini/config/skills .gemini/skills; do
+    grep -qxE 'pending|list-tickets' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
+    [ -e "$T/$d/pending/.skillator-owned" ] && { echo "FAIL: command skill carries an ownership marker in $d"; exit 1; }
+  done
+  [ -x "$T/.local/bin/ops" ] || { echo "FAIL: missing .local/bin/ops"; exit 1; }
+  grep -q "exec sh \"$T/.cursor/skills/ops-board/ops/ops.sh\"" "$T/.local/bin/ops" || { echo "FAIL: shim target (first dest: cursor, since claude-code has no plugin here)"; exit 1; }
+  # second run: command files are rewritten, installed skills are not, the
+  # skill-commands survive the prune and lose a stale marker an older run left
+  echo stale >> "$T/.codex/prompts/pending.md"
+  echo stale >> "$T/.gemini/skills/pending/SKILL.md"
+  : > "$T/.gemini/skills/list-tickets/.skillator-owned"
+  : > "$T/.pi/agent/skills/tickets-zordon/.selftest-sentinel"
+  out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0") || { echo "FAIL: second install exited $?"; exit 1; }
+  printf '%s\n' "$out" | grep -q "not on your PATH" || { echo "FAIL: PATH note"; exit 1; }
+  grep -q stale "$T/.codex/prompts/pending.md" && { echo "FAIL: codex prompt not rewritten"; exit 1; }
+  [ -f "$T/.gemini/skills/pending/SKILL.md" ] || { echo "FAIL: agy skill-command pruned"; exit 1; }
+  grep -q stale "$T/.gemini/skills/pending/SKILL.md" && { echo "FAIL: agy skill-command not rewritten"; exit 1; }
+  [ -e "$T/.gemini/skills/list-tickets/.skillator-owned" ] && { echo "FAIL: stale marker kept on a skill-command"; exit 1; }
+  [ -f "$T/.pi/agent/skills/tickets-zordon/.selftest-sentinel" ] || { echo "FAIL: installed skill was rewritten"; exit 1; }
+  out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0" --dry-run) || { echo "FAIL: dry run exited $?"; exit 1; }
+  printf '%s\n' "$out" | grep -q "would write $T/.local/bin/ops" || { echo "FAIL: dry-run shim line"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: dry-run command line"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "would write $T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: dry-run skill-command line"; exit 1; }
+  # the plugin installed: the shim still runs the first dest written (refreshed every
+  # run), never the versioned plugin cache a plugin update can remove
+  P=$T/p
+  mkdir -p "$P/.cursor" "$P/.claude/plugins/cache/skillator" "$P/pc/mods/ops-board/ops"
+  : > "$P/pc/mods/ops-board/ops/ops.sh"
+  printf '{\n  "plugins": {\n    "skillator@skillator": [\n      {\n        "installPath": "%s"\n      }\n    ]\n  }\n}\n' "$P/pc" > "$P/.claude/plugins/installed_plugins.json"
+  HOME=$P CODEX_HOME=$P/.codex sh "$0" >/dev/null || { echo "FAIL: plugin install exited $?"; exit 1; }
+  grep -q "exec sh \"$P/.cursor/skills/ops-board/ops/ops.sh\"" "$P/.local/bin/ops" || { echo "FAIL: shim target with the plugin installed (first dest written, not the plugin cache)"; exit 1; }
+  echo ok; exit 0
+fi
+
+tmpdests=$(mktemp)
+trap 'rm -f "$tmpdests"' EXIT
 
 echo "$targets" | while IFS='|' read -r cli marker dests; do
   [ -n "$cli" ] || continue
@@ -246,6 +411,7 @@ echo "$targets" | while IFS='|' read -r cli marker dests; do
     IFS=$oifs
     prune_dest "$dest"
     install_into "$cli" "$dest"
+    write_commands "$cli" "$dest"
     IFS='|'
   done
   IFS=$oifs
@@ -299,3 +465,32 @@ fi
 
 echo
 echo "Prime Agent: no markdown-skill loader - point its AGENTS.md at $src/<skill>/SKILL.md."
+
+# F55: the ops board - one launch line per dest, and the `ops` shim on PATH. The shim
+# runs the first dest this run wrote (its ops-board/ is refreshed every run); the
+# Claude Code plugin's copy only when no dest was written - its versioned cache dir
+# goes away on a plugin update. Rewritten every run (the dest can change). PATH is
+# reported, never edited.
+shim_src=""
+if [ -s "$tmpdests" ]; then shim_src="$(sed -n 1p "$tmpdests")/ops-board/ops"; fi
+if [ -z "$shim_src" ]; then shim_src=$(plugin_ops); fi
+if [ -n "$shim_src" ]; then echo; fi
+while IFS= read -r d; do
+  echo "ops   sh $d/ops-board/ops/ops.sh <repo>   (Windows: powershell -NoProfile -ExecutionPolicy Bypass -File $d/ops-board/ops/ops.ps1 -Repo <repo>)"
+done < "$tmpdests"
+if [ -n "$shim_src" ]; then
+  if [ -n "$dry" ]; then
+    echo "        would write $HOME/.local/bin/ops -> $shim_src/ops.sh"
+  else
+    mkdir -p "$HOME/.local/bin"
+    printf '#!/usr/bin/env sh\nexec sh "%s/ops.sh" "$@"\n' "$shim_src" > "$HOME/.local/bin/ops"
+    chmod 755 "$HOME/.local/bin/ops"
+    echo "ops   $HOME/.local/bin/ops -> $shim_src/ops.sh"
+    [ -s "$tmpdests" ] || echo "      the plugin's copy (no skills dir written) - run this again after a plugin update"
+    echo "      remove: rm $HOME/.local/bin/ops"
+    case ":$PATH:" in
+      *":$HOME/.local/bin:"*) ;;
+      *) echo "      $HOME/.local/bin is not on your PATH - add it, or run the launch line above" ;;
+    esac
+  fi
+fi

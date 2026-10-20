@@ -2,9 +2,13 @@ import type { FsEntry, ProcessRunInit, ProcessRunResult, SessionRepo, SessionUsa
 import type { Usage } from '../../types'
 import { usageFrom, usageFromFlags } from './facts'
 import type { Flag } from './facts'
+import { argvFor, MARKER, NO_SCRIPTS, norm, up } from './calls'
+import type { Call } from './calls'
+export { argvFor, NO_SCRIPTS } from './calls'
+export type { Call } from './calls'
 
-// $-using: the platform, where skillator's scripts live, and every script call in
-// both spellings (design §2). No shell: argv only.
+// $-using: the platform, where skillator's scripts live (the skills dir), and running a
+// call from the table in ./calls (design §2, D2/D3). No shell: argv only.
 
 // The part of `$` this file uses. The plugin's `$` (EngineInterface) is one.
 export type HostApi = {
@@ -23,59 +27,12 @@ export type HostApi = {
   }
 }
 
-export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-decide' | 'meta-decided'
-  | 'meta-team-add' | 'meta-team-remove'
-  | 'relay-list' | 'relay-chain-status' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
-
-const PENDING = 'skills/tickets-zordon/scripts/pending'
-const META = 'skills/tickets-zordon/scripts/ticket-meta'
-const RELAY = 'skills/relay-morpheus/hooks/relay-morpheus'
-const MARKER = '/' + META + '.sh'
-
-// Forward slashes, no trailing one: both hosts take them, and joins stay simple.
-const norm = (p: string) => p.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
-const up = (p: string, n: number) => {
-  let s = norm(p)
-  for (let i = 0; i < n; i++) s = s.slice(0, Math.max(s.lastIndexOf('/'), 0)) || s
-  return s
-}
-
 export async function isWindows($: HostApi): Promise<boolean> {
   return (await $.env.get('OS')) === 'Windows_NT'
 }
 
-// One table: each call's script and its words for the sh and the ps1 port.
-// args: meta-assign/meta-decide [id, @handle]; meta-decided [id]; meta-team-add
-// [@handle, name, emails comma-joined]; meta-team-remove [@handle]; relay-chain-status and
-// relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; others none.
-const TABLE: Record<Call, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
-  'pending':            { script: PENDING, sh: a => a, ps: a => a },
-  'pending-kv':         { script: PENDING, sh: a => ['--kv', ...a], ps: a => ['--kv', ...a] },
-  'pending-machine':    { script: PENDING, sh: a => ['--machine', ...a], ps: a => ['--machine', ...a] },
-  'meta-assign':        { script: META, sh: a => ['assign', ...a], ps: a => ['assign', ...a] },
-  'meta-decide':        { script: META, sh: a => ['decide', ...a], ps: a => ['decide', ...a] },
-  'meta-decided':       { script: META, sh: a => ['decided', ...a], ps: a => ['decided', ...a] },
-  'meta-team-add':      { script: META, sh: a => ['team', 'add', ...a], ps: a => ['team', 'add', ...a] },
-  'meta-team-remove':   { script: META, sh: a => ['team', 'remove', ...a], ps: a => ['team', 'remove', ...a] },
-  'relay-list':         { script: RELAY, sh: () => ['list'], ps: () => ['-Mode', 'list'] },
-  'relay-chain-status': { script: RELAY, sh: a => [a[0] ?? '', 'chain', 'status'], ps: a => ['-Mode', 'chain', '-Action', 'status', '-Id', a[0] ?? ''] },
-  'relay-queue-add':    { script: RELAY, sh: a => ['queue-run', 'add', a[0] ?? ''], ps: a => ['-Mode', 'queue-run', '-Sub', 'add', '-Id', a[0] ?? ''] },
-  'relay-hold':         { script: RELAY, sh: a => ['watchdog', 'hold', a[0] ?? ''], ps: a => ['-Mode', 'watchdog', '-Action', 'hold', '-Reason', a[0] ?? ''] },
-  'relay-release':      { script: RELAY, sh: () => ['watchdog', 'release'], ps: () => ['-Mode', 'watchdog', '-Action', 'release'] },
-  'relay-hold-status':  { script: RELAY, sh: () => ['watchdog', 'status'], ps: () => ['-Mode', 'watchdog', '-Action', 'status'] },
-  'relay-decide':       { script: RELAY, sh: a => ['chain', 'decide', '--level', a[0] ?? ''], ps: a => ['-Mode', 'chain', '-Action', 'decide', '-Text', a[0] ?? ''] },
-}
-
-export function argvFor(call: Call, win: boolean, root: string, args: string[]): string[] {
-  const t = TABLE[call]
-  const base = norm(root) + '/' + t.script
-  return win
-    ? ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', base + '.ps1', ...t.ps(args)]
-    : ['sh', base + '.sh', ...t.sh(args)]
-}
-
-async function has($: HostApi, root: string): Promise<boolean> {
-  try { return await $.fs.exists(root + MARKER) } catch { return false }
+async function has($: HostApi, dir: string): Promise<boolean> {
+  try { return await $.fs.exists(dir + '/' + MARKER) } catch { return false }
 }
 
 async function configDir($: HostApi): Promise<string | null> {
@@ -85,15 +42,17 @@ async function configDir($: HostApi): Promise<string | null> {
   return home ? norm(home) + '/.claude' : null
 }
 
-// The first that holds skills/tickets-zordon/scripts/ticket-meta.sh: $SKILLATOR_ROOT,
-// the plugin folder two up (a repo checkout), then the installPath of
-// skillator@skillator in <config dir>/plugins/installed_plugins.json. None: null.
-// A136: never the session's repo - any repo opened would otherwise have its own
-// scripts run by the band's poll, unasked. Developing in a checkout: set SKILLATOR_ROOT.
+// The skills dir (the directory that contains tickets-zordon/): the first that holds
+// tickets-zordon/scripts/ticket-meta.sh of $SKILLATOR_ROOT/skills, $SKILLATOR_ROOT itself
+// (a flat install dest), the plugin folder two up + /skills (a repo checkout), then each
+// installPath + /skills of skillator@skillator in <config dir>/plugins/installed_plugins.json.
+// None: null. A136: never the session's repo - any repo opened would otherwise have its
+// own scripts run by the band's poll, unasked. Developing in a checkout: set SKILLATOR_ROOT.
 export async function skillatorRoot($: HostApi): Promise<string | null> {
   const env = await $.env.get('SKILLATOR_ROOT')
-  const tries = [env ? norm(env) : null, up($.plugin.root, 2)]
-  for (const t of tries) if (t && await has($, t)) return t
+  const tries = env ? [norm(env) + '/skills', norm(env)] : []
+  tries.push(up($.plugin.root, 2) + '/skills')
+  for (const t of tries) if (await has($, t)) return t
   const cfg = await configDir($)
   if (!cfg) return null
   let installed: unknown
@@ -102,12 +61,10 @@ export async function skillatorRoot($: HostApi): Promise<string | null> {
   if (!Array.isArray(entries)) return null
   for (const e of entries) {
     const p = (e as { installPath?: unknown })?.installPath
-    if (typeof p === 'string' && p && await has($, norm(p))) return norm(p)
+    if (typeof p === 'string' && p && await has($, norm(p) + '/skills')) return norm(p) + '/skills'
   }
   return null
 }
-
-export const NO_SCRIPTS = 'skillator scripts not found - set SKILLATOR_ROOT'
 
 // Runs one call in the main checkout (the session's cwd outside a repo). Never rejects:
 // a command that cannot start or outlasts its budget comes back as code -1, its reason
@@ -115,9 +72,9 @@ export const NO_SCRIPTS = 'skillator scripts not found - set SKILLATOR_ROOT'
 export async function runCall($: HostApi, call: Call, args: string[]): Promise<{ code: number; out: string; err: string; argv: string[] }> {
   const win = await isWindows($)
   const repo = await $.session.repo()
-  const root = await skillatorRoot($)
-  if (!root) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
-  const argv = argvFor(call, win, root, args)
+  const skills = await skillatorRoot($)
+  if (!skills) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
+  const argv = argvFor(call, win, skills, args)
   const timeoutMs = call === 'pending-machine' ? 15000 : 30000
   const init: ProcessRunInit = repo ? { cwd: repo.root, timeoutMs } : { timeoutMs }
   try {

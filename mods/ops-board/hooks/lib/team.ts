@@ -1,4 +1,5 @@
-import type { Member } from '../../types'
+import type { Board, Member } from '../../types'
+import { isOpen } from './board'
 
 // `.skillator/team.md`, read as ticket-meta reads it (team_rows / team_members): a
 // member line is `^[ \t]*[-*][ \t]*@[A-Za-z0-9_.-]+[ \t]*:` then emails, comma-split
@@ -36,4 +37,13 @@ export function meOf(team: Member[], email: string): string | null {
   const e = email.trim().toLowerCase()
   if (!e) return null
   return team.find(m => m.emails.includes(e))?.handle ?? null
+}
+
+// "you · 3 owned · 1 decide" over the open tickets ([ ] [~] [!] [?]).
+export function ticketsOf(m: Member, board: Board | null, me: string | null): string {
+  const open = (board?.tickets ?? []).filter(isOpen)
+  const owned = open.filter(t => sameHandle(t.owner, m.handle)).length
+  const decide = open.filter(t => sameHandle(t.decide, m.handle)).length
+  const parts = [...(m.handle === me ? ['you'] : []), ...(owned ? [`${owned} owned`] : []), ...(decide ? [`${decide} decide`] : [])]
+  return parts.join(' · ') || '-'
 }

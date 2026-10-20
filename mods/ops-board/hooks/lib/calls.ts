@@ -1,0 +1,56 @@
+// The one call table (design D3): each skillator script call in both spellings, argv
+// only, no shell. Pure: the mod's host.ts and the standalone ops app both build on it.
+// Paths are relative to the *skills dir* - the directory that contains tickets-zordon/
+// (<repo>/skills, <plugin cache>/skills, or an install.sh dest) - so no skills/ segment.
+
+export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-decide' | 'meta-decided'
+  | 'meta-team-add' | 'meta-team-remove'
+  | 'relay-list' | 'relay-chain-status' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
+  | 'usage-level'
+
+// Exists under a skills dir: what marks a directory as one.
+export const MARKER = 'tickets-zordon/scripts/ticket-meta.sh'
+export const NO_SCRIPTS = 'skillator scripts not found - set SKILLATOR_ROOT'
+
+const PENDING = 'tickets-zordon/scripts/pending'
+const META = 'tickets-zordon/scripts/ticket-meta'
+const RELAY = 'relay-morpheus/hooks/relay-morpheus'
+const WATCH = 'watch-cortana/hooks/usage-watch'
+
+// Forward slashes, no trailing one: both hosts take them, and joins stay simple.
+export const norm = (p: string) => p.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
+export const up = (p: string, n: number) => {
+  let s = norm(p)
+  for (let i = 0; i < n; i++) s = s.slice(0, Math.max(s.lastIndexOf('/'), 0)) || s
+  return s
+}
+
+// args: meta-assign/meta-decide [id, @handle]; meta-decided [id]; meta-team-add
+// [@handle, name, emails comma-joined]; meta-team-remove [@handle]; relay-chain-status and
+// relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; others none.
+const TABLE: Record<Call, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
+  'pending':            { script: PENDING, sh: a => a, ps: a => a },
+  'pending-kv':         { script: PENDING, sh: a => ['--kv', ...a], ps: a => ['--kv', ...a] },
+  'pending-machine':    { script: PENDING, sh: a => ['--machine', ...a], ps: a => ['--machine', ...a] },
+  'meta-assign':        { script: META, sh: a => ['assign', ...a], ps: a => ['assign', ...a] },
+  'meta-decide':        { script: META, sh: a => ['decide', ...a], ps: a => ['decide', ...a] },
+  'meta-decided':       { script: META, sh: a => ['decided', ...a], ps: a => ['decided', ...a] },
+  'meta-team-add':      { script: META, sh: a => ['team', 'add', ...a], ps: a => ['team', 'add', ...a] },
+  'meta-team-remove':   { script: META, sh: a => ['team', 'remove', ...a], ps: a => ['team', 'remove', ...a] },
+  'relay-list':         { script: RELAY, sh: () => ['list'], ps: () => ['-Mode', 'list'] },
+  'relay-chain-status': { script: RELAY, sh: a => [a[0] ?? '', 'chain', 'status'], ps: a => ['-Mode', 'chain', '-Action', 'status', '-Id', a[0] ?? ''] },
+  'relay-queue-add':    { script: RELAY, sh: a => ['queue-run', 'add', a[0] ?? ''], ps: a => ['-Mode', 'queue-run', '-Sub', 'add', '-Id', a[0] ?? ''] },
+  'relay-hold':         { script: RELAY, sh: a => ['watchdog', 'hold', a[0] ?? ''], ps: a => ['-Mode', 'watchdog', '-Action', 'hold', '-Reason', a[0] ?? ''] },
+  'relay-release':      { script: RELAY, sh: () => ['watchdog', 'release'], ps: () => ['-Mode', 'watchdog', '-Action', 'release'] },
+  'relay-hold-status':  { script: RELAY, sh: () => ['watchdog', 'status'], ps: () => ['-Mode', 'watchdog', '-Action', 'status'] },
+  'relay-decide':       { script: RELAY, sh: a => ['chain', 'decide', '--level', a[0] ?? ''], ps: a => ['-Mode', 'chain', '-Action', 'decide', '-Text', a[0] ?? ''] },
+  'usage-level':        { script: WATCH, sh: () => ['level'], ps: () => ['-Mode', 'level'] },
+}
+
+export function argvFor(call: Call, win: boolean, skillsDir: string, args: string[]): string[] {
+  const t = TABLE[call]
+  const base = norm(skillsDir) + '/' + t.script
+  return win
+    ? ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', base + '.ps1', ...t.ps(args)]
+    : ['sh', base + '.sh', ...t.sh(args)]
+}

@@ -1,0 +1,6 @@
+description = "What is pending - board counts, runs, sessions, unpushed commits, machine (tickets-zordon pending script)"
+prompt = '''
+!{sh "{{SKILLS}}/tickets-zordon/scripts/pending.sh"}
+
+Above is the output of tickets-zordon's pending script for this repo. Paste it to me unchanged; it reads, it never edits the board.
+'''
