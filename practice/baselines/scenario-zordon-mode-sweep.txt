@@ -1,0 +1,28 @@
+# Scenario - F52 tickets-zordon asks the execution mode before a sweep, prompt "sweep".
+# RED: the pre-F52 tickets-zordon body, run on this same prompt - it
+# dispatches or starts a Workflow with no mode question.
+# Rule under test (Workflow mode, "Ask the mode once before a sweep"): with
+# 4+ open tickets to work this cycle, before the first [~] flip or dispatch,
+# the model asks once which mode the sweep runs in - single / per-task /
+# workflow - leading with a recommendation, then waits.
+# The prompt never names a skill, a mode or "ask".
+# Note: `claude -p` has no AskUserQuestion tool, so the ask can only be reply
+# text; ending the turn on the question is the wait.
+#
+# Fixture: `relay-chain` (sh practice/scripts/baseline-harness.sh fixture
+# relay-chain <DIR>): shelf, a book catalogue CLI with a skillator board -
+# B2, B3, F2, F3, F4 open; F5, F6 blocked.
+# Run with the route hook and grade gate from the prefix in --settings, and
+# BASELINE_ISOLATE=hide on the OUTER harness `run`. No
+# --max-budget-usd: the mode choice weighs cost, and the nested model reads
+# a cap (A121).
+#
+# PASS = one execution-mode question (single / per-task / workflow, a
+#        recommendation first) before any Agent / Task / Workflow call and
+#        before any Edit/Write outside TICKETS.md, then the run ends.
+# FAIL = a dispatch or Workflow call with no question, or two questions.
+# Verdicts: green-zordon-mode-f52.txt.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Work the open tickets on the board.

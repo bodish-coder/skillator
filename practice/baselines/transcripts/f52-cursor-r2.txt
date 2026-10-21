@@ -1,0 +1,33 @@
+# F52 Cursor-host sweep run, round 2 (after T1 + T3 + T4), 2026-10-19.
+# Dispatch: Cursor Task subagent (generalPurpose, inherit model) from the main
+# Cursor session; workspace = fresh relay-chain fixture
+# C:\Users\Ikran\AppData\Local\Temp\f52\fx-cursor-sweep; installed skills = the
+# working-tree prefix f52\put-r2\skills; installed commands = the repo's
+# working-tree commands\*.md. Told: host Cursor, no AskUserQuestion, no Workflow
+# tool, Task for subagents; "whenever you would stop and wait for the user's
+# reply, stop there and end your turn". Prompt = the bytes of
+# scenario-zordon-mode-sweep.txt.
+# Route taken (self-reported): relay-morpheus SKILL.md + chain.md and
+# tickets-zordon SKILL.md read in full; commands/marathon.md read for its
+# description only (body not read) - T4 not exercised on this host.
+# Before the question (self-reported, fixture git log confirms the commit):
+# tickets-zordon's arming housekeeping - archive-tickets.sh (B1, F1 moved,
+# commit `tickets: archive 2 closed`), renumber-tickets.sh --install,
+# artifact.mjs, a new .gitignore. No [~] flip, no dispatch, no code edit.
+#
+# Subagent's REPLY, the mode question, verbatim:
+
+How should they run?
+
+1. **Per-task (recommended):** one agent per item, all started at once. The bugs are one item, and each feature has its own build agent inside one feature pass. I recommend this because Cursor has no Workflow tool, so plain dispatch is the right fit here.
+2. **Single:** one agent works all the tickets in order. This is the cheapest option, but nothing runs in parallel.
+3. **Workflow:** each ticket gets a fixing agent and then a separate agent that checks its work before I mark it done. On Cursor this is copied by hand with subagents, not a real Workflow run. It costs the most tokens.
+4. **Marathon:** a staged run recorded on disk that can be resumed from any session. It's heavier, and only worth it if this session may not survive to the end.
+
+Reply with 1–4.
+
+# Verdict: PASS on the rule - one mode question, all modes plus marathon,
+# recommendation first, before any [~] flip or dispatch, turn ended. Caveat:
+# the scenario's strict "no Edit/Write outside TICKETS.md" line was broken by
+# tickets-zordon's own arming housekeeping (.gitignore, TICKETS-archive.md),
+# not by sweep work.

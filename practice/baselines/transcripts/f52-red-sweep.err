@@ -1,0 +1,7 @@
+# isolate=hide: hiding ~/.claude/CLAUDE.md for this run. If this run dies, restore with:
+#   mv ~/.claude/CLAUDE.md.skillator-hidden ~/.claude/CLAUDE.md
+# limit: harness wall clock 300s (BASELINE_TIMEOUT), real time, whole process tree; SIGKILL 30s after that
+# isolate=hide: ~/.claude/CLAUDE.md restored
+# LIMIT HIT: harness wall clock, 300s (BASELINE_TIMEOUT) - process tree killed (SIGTERM; taskkill /T /F on Windows).
+#   No stream output at all means it hung before turn 1 (SessionStart hooks);
+#   output that stops mid-run means it was slow or stuck. Either way: no verdict.

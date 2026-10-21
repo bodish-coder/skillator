@@ -1,0 +1,4 @@
+cd '/c/Users/Ikran/AppData/Local/Temp/f52/fx-red-sweep' && BASELINE_ISOLATE=hide sh '/c/Users/Ikran/AppData/Local/Temp/f52/harness.sh' run 300 '/c/Users/Ikran/AppData/Local/Temp/f52/put-red' claude -p "$(sh '/c/Users/Ikran/AppData/Local/Temp/f52/harness.sh' scenario '/c/Users/Ikran/AppData/Local/Temp/f52/scenario-red-sweep.txt')" \
+  --plugin-dir '/c/Users/Ikran/AppData/Local/Temp/f52/put-red' --add-dir '/c/Users/Ikran/AppData/Local/Temp/f52/put-red' \
+  --permission-mode acceptEdits --allowedTools 'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'Bash(git:*)' 'Bash(pytest:*)' 'Bash(python -m pytest:*)' 'Bash(python3 -m pytest:*)' 'Bash(py -m pytest:*)' 'Bash(ls:*)' 'Bash(cat:*)' 'Bash(node:*)' 'Bash(npm:*)' 'Bash(npx:*)' 'PowerShell(python -m pytest:*)' --settings '/c/Users/Ikran/AppData/Local/Temp/f52/settings-red-sweep.json' \
+  --output-format stream-json --verbose --include-hook-events

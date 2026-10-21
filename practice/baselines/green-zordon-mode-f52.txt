@@ -1,0 +1,66 @@
+# GREEN - a board sweep settles its execution mode before dispatching (F52)
+# Scenarios: scenario-zordon-mode-sweep.txt, scenario-zordon-mode-named.txt.
+# Rule: with the user present, a bare "work the open tickets" on a 4+ ticket
+#   board asks once - single / per-task / workflow (and marathon, when reached
+#   through relay-morpheus) - before the first [~] flip or dispatch; a named
+#   mode skips the ask; headless / chained / relay skips it with
+#   `Ruling: mode <m>`; workflow only on opt-in.
+# Fixture: `relay-chain` (B2, B3, F2, F3, F4 open; F5, F6 blocked; F7 deferred).
+# Setup: HEAD (69fb423) snapshot of baseline-harness.sh; prefixes from the
+#   working tree; --settings = harness settings + the prefix's feature-route.sh
+#   and grade-gate.sh; each run its own OUTER `BASELINE_ISOLATE=hide sh <harness>
+#   run <s> <prefix> claude -p ...`; no --max-budget-usd. claude-code 2.1.302,
+#   claude-opus-5-5. Driven from a Cursor session.
+#   NOTE: the prefix overlays skills/, references/, practice/ and the root docs,
+#   NOT commands/ (A135) - an uncommitted commands/marathon.md edit is not in a
+#   prefix; commit it (or fix A135) before the owed Claude Code rerun.
+#
+# ---------------------------------------------------------------- RED ----
+# Body: pre-F52 tickets-zordon ("Switch to workflow mode when any of these
+#   hold", no mode question). Run 2026-10-19T05:56Z, 300 s wall clock.
+#   Transcripts: transcripts/f52-red-sweep.*.
+#   sweep  FAIL. First action Skill(skillator:marathon) -> Skill(relay-morpheus)
+#     -> read chain.md / marathon.md -> baseline tests -> `relay-morpheus init`
+#     "drain the board" -> chain-1..3 prompt files -> `chain plan` x3 ->
+#     usage read hung, ruled `src=none` -> `chain dispatch 1`. No question;
+#     tickets-zordon never loaded. Cut by the 300 s limit mid-dispatch.
+#   Finding that widened F52 (owner decision): "work the board" routes to
+#   relay-morpheus (its description lists it) and the /marathon command, so
+#   a tickets-zordon-only rule is never reached on this prompt.
+#
+# ------------------------------- ROUND 1 (T1 tickets-zordon + T3 marathon.md) ----
+# FIX: tickets-zordon "Ask the mode once before a sweep" (mode table, skip
+#   rules, Ruling, F tickets get the sweep's answer as a named mode);
+#   relay-morpheus references/marathon.md "## Entry - a marathon is picked,
+#   not assumed" (bare "work the board" = sweep: ask first, marathon offered).
+# Run 2026-10-19T06:46Z-06:56Z. Transcripts: transcripts/f52-greenr1-<name>.*.
+#   sweep  FAIL. Skill(skillator:marathon) first -> relay-morpheus -> READ the
+#     new marathon.md (Entry at the top) -> init -> chain plan -> chain
+#     dispatch 1 -> Agent fix:B2+B3 -> commit -> dispatch 2. No question, no
+#     `Ruling: mode` (only the skill's template text appears in the stream).
+#     Cause: the model picked the /marathon command itself, and the command
+#     body ("Load relay-morpheus and run a marathon") outranked marathon.md.
+#   named  PASS. Skill(tickets-zordon) -> Skill(build-jarvis) -> grade line
+#     "... mode workflow (named) ..." -> design file -> Workflow call (4 items,
+#     sonnet build + opus verify). No question. Then the account hit its
+#     weekly spend limit ("You've hit your individual spend limit ... resets
+#     Oct 23"): claude exit 1 after the Workflow call. $1.35.
+# Round 1: 1/2.
+#
+# ------------------------------------- ROUND 2 (T4 commands/marathon.md) ----
+# FIX: commands/marathon.md - description: only for a marathon the user typed
+#   (/marathon) or named; body: typed / named / headless or chained -> run the
+#   marathon; reached any other way -> a sweep: no init, no chain plan, follow
+#   marathon.md "Entry".
+# Claude Code: NOT RUN - weekly spend limit (stop #4) until 2026-10-23.
+# Cursor (transcripts/f52-cursor-r2.txt): sweep PASS on the rule - one mode
+#   question (per-task recommended, single, workflow, marathon) before any
+#   [~] flip or dispatch, turn ended. It reached the rule through the skills
+#   (relay-morpheus + tickets-zordon), reading the command's description only,
+#   so T4 itself was not exercised. Caveat: tickets-zordon's arming
+#   housekeeping (archive commit, .gitignore) ran before the question.
+#
+# ---------------------------------------------------------------- VERDICT ----
+# PARTIAL. named: PASS (Claude Code). sweep: FAIL on Claude Code round 1,
+#   PASS on Cursor round 2. GREEN owed: the sweep on Claude Code after
+#   2026-10-23, with T4 committed first (A135), before F52 can close.

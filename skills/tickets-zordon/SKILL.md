@@ -395,7 +395,33 @@ Dynamic workflows let you write a script that orchestrates many agents
 deterministically: real control flow, structured results, a resumable run. Same
 board as plain dispatch, scripted.
 
-**Switch to workflow mode when any of these hold:**
+**Ask the mode once before a sweep.** When this cycle has 4+ open tickets to
+work, or the tickets are a sweep, settle how they run before the first `[~]`
+flip or dispatch:
+
+| Mode | What runs | Fits |
+|---|---|---|
+| **single** | One dispatched agent works the cycle's tickets in order — never the main session | Tightly coupled tickets, tickets sharing files |
+| **per-task** | Plain dispatch: one agent per ticket, all in one message (above); same-file tickets stay one item | Independent tickets — the usual pick when nothing else fits |
+| **workflow** | The script in "The shape" below; no `Workflow` tool → the host's parallel delegate, never claimed as a `Workflow` call | 4+ independent tickets or a sweep — costs the most tokens |
+
+A sweep reached through relay-morpheus also offers **marathon** (its
+`references/marathon.md`): the staged form of workflow that keeps going across
+sessions.
+
+Ask once: all three modes, your recommendation first (`AskUserQuestion`; no
+such tool → a numbered list). Then **end your turn** — no `[~]` flip, no
+dispatch, until the user answers. No question when the user already named a
+mode ("ultracode", "use a workflow", "fan out agents", "one agent per ticket",
+"single agent") — use it. No question when the run is headless, chained or
+inside a relay — take your recommendation and log
+`Ruling: mode <m> - <why> - <cost if wrong>`. Unasked, the most you pick is
+per-task.
+
+**`F` tickets in the sweep still go to ONE build-jarvis pass**, handed the
+sweep's answer as a named mode, so the user is asked once.
+
+**Recommend workflow when any of these hold:**
 
 - **4+ open tickets** to work in this cycle (real fan-out).
 - The tickets are a sweep — the same change across N files, an audit, a codemod.
@@ -403,8 +429,9 @@ board as plain dispatch, scripted.
 - The user asked: **"ultracode"**, "use a workflow", "fan out
   agents", "orchestrate this with subagents".
 
-**Stay with plain dispatch when:** 1-3 tickets, tickets needing your judgement
-between them, or a host with no `Workflow` tool. Off `claude-code`, workflow mode
+**Stay with plain dispatch when:** 1-3 tickets (no question — per-task, as
+today), tickets needing your judgement between them, or a host with no
+`Workflow` tool. Off `claude-code`, workflow mode
 is a *pattern* — emulate it with the host's parallel delegate mechanism and don't
 claim a `Workflow` call happened. See `WORKFLOW.md` beside the installed skills
 for the host table.

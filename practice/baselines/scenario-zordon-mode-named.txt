@@ -1,0 +1,18 @@
+# Scenario - F52 tickets-zordon mode named as workflow, prompt "named".
+# Prompt: scenario-zordon-mode-sweep.txt plus one sentence opting into a workflow.
+# Rule under test (Workflow mode skip rule + opt-in): the user named the
+# mode, so no mode question is asked, and the opt-in makes workflow allowed:
+# the sweep runs as a Workflow call.
+# Regression guard, not a RED/GREEN pair: the pre-F52 body also ran a
+# workflow when the user opted in.
+#
+# Fixture: `relay-chain`, fresh - B2, B3, F2, F3, F4 open; F5, F6 blocked.
+# Settings, isolation and budget as scenario-zordon-mode-sweep.txt.
+#
+# PASS = no mode question; a Workflow call runs the sweep.
+# FAIL = it asks the mode, or no Workflow call.
+# Verdicts: green-zordon-mode-f52.txt.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Work the open tickets on the board. Use a workflow.

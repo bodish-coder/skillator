@@ -1,0 +1,4 @@
+cd '/c/Users/Ikran/AppData/Local/Temp/f52/fx-green-named' && BASELINE_ISOLATE=hide sh '/c/Users/Ikran/AppData/Local/Temp/f52/harness.sh' run 900 '/c/Users/Ikran/AppData/Local/Temp/f52/put-green' claude -p "$(sh '/c/Users/Ikran/AppData/Local/Temp/f52/harness.sh' scenario '/c/tools/Projects/skillator2/practice/baselines/scenario-zordon-mode-named.txt')" \
+  --plugin-dir '/c/Users/Ikran/AppData/Local/Temp/f52/put-green' --add-dir '/c/Users/Ikran/AppData/Local/Temp/f52/put-green' \
+  --permission-mode acceptEdits --allowedTools 'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'Bash(git:*)' 'Bash(pytest:*)' 'Bash(python -m pytest:*)' 'Bash(python3 -m pytest:*)' 'Bash(py -m pytest:*)' 'Bash(ls:*)' 'Bash(cat:*)' 'Bash(node:*)' 'Bash(npm:*)' 'Bash(npx:*)' 'PowerShell(python -m pytest:*)' --settings '/c/Users/Ikran/AppData/Local/Temp/f52/settings-green-named.json' \
+  --output-format stream-json --verbose --include-hook-events
