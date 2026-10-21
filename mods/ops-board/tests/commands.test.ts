@@ -25,7 +25,8 @@ const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
 
 type World = { runs: (readonly string[])[]; model: string[]; pending: ProcessRunResult }
 
-function world(on: On, board: string | null = BOARD): World {
+// readErr: the board is there (stat answers) but the engine refuses its read.
+function world(on: On, board: string | null = BOARD, readErr?: string): World {
   const w: World = { runs: [], model: [], pending: ran('TICKETS   4 open\n') }
   mock.clock(on, { now: 1_000_000 })
   mock.env(on, { SKILLATOR_ROOT: '/s' })
@@ -43,7 +44,11 @@ function world(on: On, board: string | null = BOARD): World {
     return f !== undefined ? { value: { kind: 'file' as const, size: f.length, mtimeMs: 1000, isLink: false } } : { deny: 'ENOENT' }
   })
   on('fs.exists', ($, e) => ({ value: at(e.path) !== undefined }))
-  on('fs.read', ($, e) => { const f = at(e.path); return f !== undefined ? { value: f } : { deny: 'ENOENT' } })
+  on('fs.read', ($, e) => {
+    const f = at(e.path)
+    if (readErr && f !== undefined && e.path.endsWith('TICKETS.md')) return { deny: readErr }
+    return f !== undefined ? { value: f } : { deny: 'ENOENT' }
+  })
   on('process.run', ($, e) => {
     if (e.argv.join(' ') === 'git config user.email') return { value: ran('') }
     if (e.argv[1] === PENDING && e.argv.length === 2) { w.runs.push(e.argv); return { value: w.pending } }
@@ -93,4 +98,13 @@ test('/list-tickets without a TICKETS.md says so', async ($, on) => {
   await start($)
   const out = await $.command.run({ command: 'list-tickets', args: '', ...RUN })
   expect(out.text).toContain('no TICKETS.md')
+})
+
+test('/list-tickets on a board it cannot read names the error, never "no TICKETS.md"', async ($, on) => {
+  world(on, BOARD, 'read budget exceeded')
+  await start($)
+  const out = await $.command.run({ command: 'list-tickets', args: '', ...RUN })
+  expect(out.text).not.toContain('no TICKETS.md')
+  expect(out.text).toContain('read budget exceeded')
+  expect(out.text).toContain('/archive-tickets')
 })

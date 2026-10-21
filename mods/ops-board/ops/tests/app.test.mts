@@ -107,6 +107,16 @@ for (const [kind, skip] of launchers) {
     assert.doesNotMatch(readFileSync(s.log, 'utf8'), /ticket-meta|watchdog|hold|release|queue/)
   })
 
+  test(`${kind}: a TICKETS.md that is there but will not read names the error, never "no TICKETS.md"`, { skip }, () => {
+    const t = mkTmp(join(tmpdir(), 'ops-app-'))
+    execFileSync('git', ['init', '-q'], { cwd: t })
+    mkdirSync(join(t, 'TICKETS.md'))                  // stat answers, the read fails (EISDIR)
+    const r = launch(kind, t, [...ONCE, '--skills', fixtureSkills().dir])
+    assert.equal(r.code, 0, r.err)
+    assert.doesNotMatch(r.out, /no TICKETS\.md/)
+    assert.match(r.out, /TICKETS\.md not loaded: /)
+  })
+
   test(`${kind}: a bad flag is refused by the app, its exit code passed through`, { skip }, () => {
     const r = launch(kind, fixtureRepo(), ['--bogus'])
     assert.equal(r.code, 2)

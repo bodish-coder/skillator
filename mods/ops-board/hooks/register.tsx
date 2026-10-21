@@ -56,6 +56,16 @@ async function setBoard($: EngineInterface, next: Board) {
 }
 
 const failed = (path: string, error: string): Board => ({ path, mtimeMs: 0, size: 0, tickets: [], error })
+const TOO_BIG = 'TICKETS.md is over 4 MiB - not read; /archive-tickets moves the closed rows out'
+const notLoaded = (e: unknown) =>
+  `TICKETS.md not loaded: ${String((e as Error)?.message ?? e)} - /archive-tickets moves the closed rows out`
+
+// The board at path. Only a stat that fails is "no TICKETS.md"; a read the engine
+// refuses or a parse that throws names its error (a big board read as missing, before).
+async function loadBoard($: EngineInterface, path: string, st: { mtimeMs: number; size: number }): Promise<Board> {
+  if (st.size > MAX_READ) return failed(path, TOO_BIG)
+  try { return parseBoard(await $.fs.read(path), path, st.mtimeMs, st.size) } catch (e) { return failed(path, notLoaded(e)) }
+}
 
 // One poll: TICKETS.md re-read when its mtime or size moved; team.md likewise.
 async function poll($: EngineInterface) {
@@ -63,15 +73,15 @@ async function poll($: EngineInterface) {
   if (!repo) return setBoard($, failed('', 'not a git repo - no TICKETS.md board here'))
   const root = norm(repo.root)
   const path = root + '/TICKETS.md'
-  try {
-    const st = await $.fs.stat(path)
+  let st: { mtimeMs: number; size: number } | null = null
+  try { st = await $.fs.stat(path) } catch { /* no board */ }
+  if (!st) await setBoard($, failed(path, `no TICKETS.md at ${root}`))
+  else {
     const cur = await read($, boardA)
     if (!cur || cur.error || cur.path !== path || cur.mtimeMs !== st.mtimeMs || cur.size !== st.size) {
-      if (st.size > MAX_READ) await setBoard($, failed(path, 'TICKETS.md is over 4 MiB - not read'))
-      else await setBoard($, parseBoard(await $.fs.read(path), path, st.mtimeMs, st.size))
+      // the engine can refuse to hold the parsed board too - say so, not "missing"
+      try { await setBoard($, await loadBoard($, path, st)) } catch (e) { await setBoard($, failed(path, notLoaded(e))) }
     }
-  } catch {
-    await setBoard($, failed(path, `no TICKETS.md at ${root}`))
   }
   const teamPath = root + '/.skillator/team.md'
   let seen = 'none'
@@ -308,13 +318,10 @@ export const register: Register = on => {
     const repo = await $.session.repo()
     if (!repo) return { text: 'not a git repo - no TICKETS.md board here' }
     const path = norm(repo.root) + '/TICKETS.md'
-    try {
-      const st = await $.fs.stat(path)
-      if (st.size > MAX_READ) return { text: 'TICKETS.md is over 4 MiB - not read' }
-      return { text: listView(parseBoard(await $.fs.read(path), path, st.mtimeMs, st.size), e.args) }
-    } catch {
-      return { text: `no TICKETS.md at ${norm(repo.root)}` }
-    }
+    let st: { mtimeMs: number; size: number }
+    try { st = await $.fs.stat(path) } catch { return { text: `no TICKETS.md at ${norm(repo.root)}` } }
+    const board = await loadBoard($, path, st)
+    return { text: board.error ?? listView(board, e.args) }
   })
 
   on('command.run', { command: 'pending' }, async ($) => {

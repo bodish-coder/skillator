@@ -46,7 +46,8 @@ const ran = (stdout: string, exitCode = 0): ProcessRunResult =>
   ({ exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
 
 // The engine beneath the plugin: a repo at /r, its files, git's email, the pane opener.
-function world(on: On, files: Record<string, string>, placed = true): [World, MockClock] {
+// readErr: TICKETS.md is there (stat answers) but the engine refuses its read.
+function world(on: On, files: Record<string, string>, placed = true, readErr?: string): [World, MockClock] {
   const w: World = { files: {}, placed, opens: [], scrolls: 0, offsets: [], runs: [], commands: [] }
   for (const [p, text] of Object.entries(files)) w.files[p] = { text, mtimeMs: 1000 }
   // The engine hands a hook the path resolved for this machine (C:\r\TICKETS.md on Windows).
@@ -64,6 +65,7 @@ function world(on: On, files: Record<string, string>, placed = true): [World, Mo
   on('fs.exists', ($, e) => ({ value: !!at(e.path) }))
   on('fs.read', ($, e) => {
     const f = at(e.path)
+    if (readErr && f && e.path.endsWith('TICKETS.md')) return { deny: readErr }
     return f ? { value: f.text } : { deny: 'ENOENT ' + e.path }
   })
   on('process.run', ($, e) => {
@@ -141,6 +143,17 @@ for (const surface of SURFACES) {
       expect(await ui.find({ key: k }), k).toBeDefined()
     expect((await ui.find({ key: 'key:filter' }))?.props.hotkey).toBe('f')
     expect((await ui.find({ key: 'key:done' }))?.props.hotkey).toBe('x')
+    await ui.unmount()
+  })
+
+  test(`${surface}: a board that is there but will not load names the error, never "no TICKETS.md"`, WITH, async ($, on) => {
+    const [, clock] = world(on, { '/r/TICKETS.md': BOARD }, true, 'read budget exceeded')
+    await start($, clock)
+    const ui = await mountPane($, surface)
+    const all = (await texts(ui)).join('\n')
+    expect(all).not.toContain('no TICKETS.md')
+    expect(all).toContain('read budget exceeded')
+    expect(all).toContain('/archive-tickets')
     await ui.unmount()
   })
 
