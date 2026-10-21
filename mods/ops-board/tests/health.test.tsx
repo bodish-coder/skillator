@@ -193,7 +193,10 @@ test('a flag file named for another session is ignored: not available', async ($
   await ui.unmount()
 })
 
-test('a host figure past 15 minutes shows its age and stale, and is re-decided without it', async ($, on) => {
+// A140: 16 minutes on the mock clock run every wait due on the way - ~720 timer
+// callbacks (2 s board poll x480, 5 s agents x192, 30 s runs x32, 60 s slow x16),
+// measured at 300-640 ms per simulated minute: 6-8 s of real work, past the 5 s default.
+test('a host figure past 15 minutes shows its age and stale, and is re-decided without it', { timeoutMs: 30_000 }, async ($, on) => {
   const [w, clock] = world(on)
   await start($, clock)
   w.rate = []                                   // no new reading: the last one ages
