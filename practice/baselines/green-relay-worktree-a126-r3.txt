@@ -1,0 +1,42 @@
+# GREEN (round 3) - run worktree inside the repo, interactive session (A126)
+# 2026-10-21, claude-code (interactive session dispatching a background agent),
+# claude-sonnet-5-5, Windows 11, Git Bash. Worktree:
+# C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0014-sweep-the-workable-board
+# (branch run/RUN-0014-sweep-the-workable-board). Rounds 1-2 ran headless (-p)
+# and lost commands to the narrow allow-list; this round is an interactive
+# session and the agent is a background agent. One plain command per call, by
+# absolute path, no cd, no &&, no $(), no heredoc.
+#
+# Commands (outcome = ran / refused / needed approval):
+#  1. git -C <wt> status                                    ran. clean tree.
+#  2. claude plugin test <wt>/mods/ops-board                ran. 192 pass, 0 fail,
+#     "Ran 192 tests across 14 files. [18.11s]"
+#  3. node --import <wt>/mods/ops-board/ops/loader.mjs --test
+#       <wt>/mods/ops-board/ops/tests/{app,draw,nodehost,state}.test.mts
+#                                                           ran (not refused). TEST
+#     RESULT: 4 fail / 0 pass. Each file died at load: ERR_UNSUPPORTED_ESM_URL_SCHEME,
+#     "On Windows, absolute paths must be valid file:// URLs. Received protocol
+#     'c:'". Not a permission matter; a Windows path form in the invocation or
+#     loader. Not fixed (report only).
+#  4. sh <wt>/install.sh --selftest                         ran. exit 0, tail "ok".
+#     Ran past the 120 s foreground limit, moved to background by the host.
+#  5. sh <wt>/skills/relay-morpheus/hooks/relay-morpheus.sh selftest
+#                                                           ran. exit 0, tail "ok".
+#     Also past 120 s, backgrounded. Run alongside 4, it logged Git Bash fork
+#     failures ("fork: retry: Resource temporarily unavailable", awk "File too
+#     large") yet still ended ok.
+#
+# Not part of the five, also logged:
+#  - cat of practice/baselines/green-relay-worktree-a126.txt   ran.
+#  - Glob of ops/tests/*.test.mts                              ran.
+#  - bash `sleep 100; tail ...` (waiting on 4 and 5)           REFUSED by the
+#    harness ("To wait for a condition, use Monitor with an until-loop"). A wait
+#    guard, not a test command; replaced by a run_in_background until-loop and
+#    bounded for-loops, which ran.
+#  - No command needed approval.
+#
+# VERDICT: PASS on the A126 question - none of the five dispatched commands was
+# refused and none needed approval; the agent ran its tests in its own worktree.
+# Caveats for the board: (a) one non-task `sleep` wait was refused (literal
+# reading of "nothing refused" would make this FAIL; refused shape: foreground
+# sleep); (b) item 3 fails 4/4 on a Windows file-URL error, a separate defect.
