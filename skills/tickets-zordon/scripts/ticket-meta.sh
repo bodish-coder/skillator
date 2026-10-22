@@ -11,6 +11,9 @@
 #   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
 #   ticket-meta.sh testing <ID> <test>  box -> [%] testing, the line says ` (testing: <test>)`
 #   ticket-meta.sh tested <ID> pass|fail  [%] -> [x] (pass) or [~] (fail); the note stays
+#   ticket-meta.sh done <ID> [evidence] box -> [x], tagged, ` **Done <date>: <evidence>**`
+#   ticket-meta.sh block <ID> <on what> box -> [!], the line says ` (blocked: <on what>)`
+#   ticket-meta.sh defer <ID> <until>   box -> [>], the line says ` (deferred: <until>)`
 #   ticket-meta.sh tag <ID>             recompute [app: ..] and [by: ..] on it
 #   ticket-meta.sh team add @handle "Name" email[,email...]
 #                                       a member into .skillator/team.md
@@ -218,14 +221,19 @@ edit_line() {
   if [ -n "${NEED_MARK:-}" ] && [ "$mk" != "$NEED_MARK" ]; then
     die "$ID is [$mk], not [$NEED_MARK] - nothing to change"
   fi
-  # F62: the same test on a line already [%] is a no-op, like a same-handle assignment.
-  if [ -n "${SET_TESTING:-}" ] && [ "$mk" = '%' ]; then
-    v=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\(testing:[^()]*\)/)) {
-          v = substr($0, RSTART + 9, RLENGTH - 10); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }')
-    if [ "$v" = "$SET_TESTING" ]; then
+  # F64: REFUSE_MARKS lists the boxes this change may not start from.
+  case ${REFUSE_MARKS:-} in *"$mk"*)
+    die "$ID is [$mk] (closed) - reopen it first (assign), then $CMD" ;;
+  esac
+  # F62/F64: the same note on a line already in that box is a no-op, like a
+  # same-handle assignment. NOTE_KEY + NOTE_VAL is ` (<key>: <val>)`.
+  if [ -n "${NOTE_VAL:-}" ] && [ "$mk" = "${SET_MARK:-}" ]; then
+    v=$(printf '%s\n' "$cur" | K=$NOTE_KEY awk '{ k = ENVIRON["K"]; if (match($0, "\\(" k ":[^()]*\\)")) {
+          v = substr($0, RSTART + length(k) + 2, RLENGTH - length(k) - 3); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }')
+    if [ "$v" = "$NOTE_VAL" ]; then
       board_unlock
       printf '%s\n' "$cur"
-      echo "no change: $ID is already [%] (testing: $v)"
+      echo "no change: $ID is already [$mk] ($NOTE_KEY: $v)"
       return 0
     fi
   fi
@@ -275,11 +283,10 @@ edit_line() {
       }
       return substr(line, 1, pos - 1) " [" key ": " val "]" substr(line, pos)
     }
-    # F62: ` (testing: <test>)` replaces the one there, else goes before a trailing
+    # F62/F64: a note replaces the one matching pat, else goes before a trailing
     # (@agent-id) session tag, else at the end of the line.
-    function settesting(line, val,    note) {
-      note = " (testing: " val ")"
-      if (match(line, /[ \t]*\(testing:[^()]*\)/))
+    function setnote(line, note, pat) {
+      if (match(line, pat))
         return substr(line, 1, RSTART - 1) note substr(line, RSTART + RLENGTH)
       if (match(line, /[ \t]*\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/))
         return substr(line, 1, RSTART - 1) note substr(line, RSTART)
@@ -297,7 +304,14 @@ edit_line() {
         if (ENVIRON["SET_DECIDE"] != "") line = settag(line, "decide", ENVIRON["SET_DECIDE"])
         if (ENVIRON["SET_OWNER"] != "") line = settag(line, "owner", ENVIRON["SET_OWNER"])
         if (ENVIRON["SET_BY"] != "") line = settag(line, "by", ENVIRON["SET_BY"])
-        if (ENVIRON["SET_TESTING"] != "") line = settesting(line, ENVIRON["SET_TESTING"])
+        # (testing: ..) replaces only itself; (blocked: ..) and (deferred: ..)
+        # replace either - the line says only the current wait (F64).
+        if (ENVIRON["NOTE_VAL"] != "") {
+          k = ENVIRON["NOTE_KEY"]; p = (k == "testing") ? "testing" : "(blocked|deferred)"
+          line = setnote(line, " (" k ": " ENVIRON["NOTE_VAL"] ")", "[ \t]*\\(" p ":[^()]*\\)")
+        }
+        if (ENVIRON["DONE_NOTE"] != "")
+          line = setnote(line, " **Done " ENVIRON["DONE_NOTE"] "**", "[ \t]*\\*\\*Done [^*]*\\*\\*")
       }
       if (NR > 1) printf "\n"
       printf "%s%s", line, cr }
@@ -354,7 +368,7 @@ cmd_testing() {
   t=$(printf '%s' "$t" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
   [ -n "$t" ] || die "usage: testing <ID> <what test> - the test is blank"
   case $t in *'('*|*')'*) die "the test cannot hold ( or ) - it sits in (testing: ..)" ;; esac
-  SET_MARK='%' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' SET_TESTING=$t SAME_KEY='' NEED_MARK='' edit_line
+  SET_MARK='%' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_KEY=testing NOTE_VAL=$t SAME_KEY='' NEED_MARK='' edit_line
 }
 
 # The test's result: [%] -> [x] on pass, [~] on fail; the (testing: ..) note stays as the record.
@@ -366,7 +380,54 @@ cmd_tested() {
     fail|FAIL|Fail) mk='~' ;;
     *) die "usage: tested <ID> pass|fail - not '$2'" ;;
   esac
-  SET_MARK=$mk SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' SET_TESTING='' SAME_KEY='' NEED_MARK='%' edit_line
+  SET_MARK=$mk SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' SAME_KEY='' NEED_MARK='%' edit_line
+}
+
+# F64: NOTE <- the words after the id: one line, trimmed, no parentheses (it
+# sits on the line as a note). $1 = what it is, $2 = 1 when it may be blank.
+note_text() {
+  what=$1 blank=$2; shift 2
+  NOTE=$*
+  one_line "$NOTE" || die "the $what is one line"
+  NOTE=$(printf '%s' "$NOTE" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  [ -n "$NOTE" ] || [ "$blank" = 1 ] || die "usage: $CMD <ID> <$what> - it is blank"
+  case $NOTE in *'('*|*')'*) die "the $what cannot hold ( or ) - it sits on the line as a note" ;; esac
+}
+
+# F64: finished and verified: the box [x], the tag a close owes (app + by from
+# the commits), and with evidence ` **Done <YYYY-MM-DD>: <evidence>**` - the
+# form the board's closed lines use; it replaces an earlier Done note. Refuses
+# a cancelled [-] (reopen it with assign first).
+cmd_done() {
+  CMD=done
+  [ $# -ge 1 ] || die "usage: done <ID> [evidence]"
+  norm_id "$1"; shift
+  note_text evidence 1 "$@"
+  case $NOTE in *'*'*) die "the evidence cannot hold * - it sits in **Done ..**" ;; esac
+  dn=''
+  [ -z "$NOTE" ] || dn="$(date -u +%Y-%m-%d): $NOTE"
+  info=$(commits_info "$ID")
+  a=$(printf '%s\n' "$info" | apps_from | join_list)
+  b=$(printf '%s\n' "$info" | by_from | join_list)
+  SET_MARK='x' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b NOTE_VAL='' DONE_NOTE=$dn REFUSE_MARKS='-' SAME_KEY='' NEED_MARK='' edit_line
+}
+
+# F64: can't proceed until something outside it lands: [!], ` (blocked: <on what>)`.
+cmd_block() {
+  CMD=block
+  [ $# -ge 2 ] || die "usage: block <ID> <on what>"
+  norm_id "$1"; shift
+  note_text 'on what' 0 "$@"
+  SET_MARK='!' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_KEY=blocked NOTE_VAL=$NOTE REFUSE_MARKS='x-' SAME_KEY='' NEED_MARK='' edit_line
+}
+
+# F64: postponed by choice until a condition: [>], ` (deferred: <until what>)`.
+cmd_defer() {
+  CMD=defer
+  [ $# -ge 2 ] || die "usage: defer <ID> <until what>"
+  norm_id "$1"; shift
+  note_text 'until what' 0 "$@"
+  SET_MARK='>' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_KEY=deferred NOTE_VAL=$NOTE REFUSE_MARKS='x-' SAME_KEY='' NEED_MARK='' edit_line
 }
 
 cmd_tag() {
@@ -748,6 +809,79 @@ selftest() {
   } > "$T/want62.md"
   cmp -s TICKETS.md "$T/want62.md" || { echo "FAIL: F62 board bytes"; diff "$T/want62.md" TICKETS.md; fail=1; }
 
+  # --- F64: done / block / defer - the boxes /sync-tickets used to hand-edit
+  Q="$T/f64"
+  mkdir -p "$Q/apps/web" && cd "$Q" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  {
+    printf -- '# TICKETS\n\n'
+    printf -- '- [~] F50 %s Built (@cc-eeeeee)\n' "$D"
+    printf -- '- [%%] F51 %s Tested (testing: unit run)\n' "$D"
+    printf -- '- [ ] F52 %s Plain\n' "$D"
+    printf -- '- [!] F53 %s Stuck (blocked: old dep)\n' "$D"
+    printf -- '- [~] F54 %s Busy (@cc-ffffff)\n' "$D"
+    printf -- '- [?] F55 %s Choice [decide: @asha]\n' "$D"
+    printf -- '- [-] F56 %s Dropped\n' "$D"
+    printf -- '- [x] F57 %s Shipped\n' "$D"
+    printf -- '- [>] F58 %s Later (deferred: q4)\n' "$D"
+  } > TICKETS.md
+  commit vidul@ikran.in "init" README.md
+  commit vidul@ikran.in "F50: built" apps/web/a.js
+  TODAY=$(date -u +%Y-%m-%d)
+  sh "$self" done F50 RED/GREEN 3/3, abc1234 > "$T/out" 2>&1 || { echo "FAIL: done of a [~] ticket failed: $(cat "$T/out")"; fail=1; }
+  eq "done from [~], tagged, evidence" "$(head -n 1 "$T/out" | tr -d '\r')" "- [x] F50 $D Built [app: web] **Done $TODAY: RED/GREEN 3/3, abc1234** (@cc-eeeeee)"
+  grep -q 'F50 was in progress under @cc-eeeeee' "$T/out" || { echo "FAIL: done from [~] did not warn: $(cat "$T/out")"; fail=1; }
+  eq "done from [%], no evidence" "$(run done F51)" "- [x] F51 $D Tested (testing: unit run)"
+  eq "block from [ ]" "$(run block F52 needs S3 creds from ops)" "- [!] F52 $D Plain (blocked: needs S3 creds from ops)"
+  eq "block replaces the note" "$(run block F53 '  new dep ')" "- [!] F53 $D Stuck (blocked: new dep)"
+  sh "$self" block F53 new dep > "$T/out" 2>&1 || { echo "FAIL: same block failed: $(cat "$T/out")"; fail=1; }
+  grep -q 'no change' "$T/out" || { echo "FAIL: same block did not say no change: $(cat "$T/out")"; fail=1; }
+  sh "$self" defer F54 after the parser rewrite > "$T/out" 2>&1 || { echo "FAIL: defer of a [~] ticket failed: $(cat "$T/out")"; fail=1; }
+  eq "defer from [~]" "$(head -n 1 "$T/out" | tr -d '\r')" "- [>] F54 $D Busy (deferred: after the parser rewrite) (@cc-ffffff)"
+  grep -q 'F54 was in progress under @cc-ffffff' "$T/out" || { echo "FAIL: defer from [~] did not warn: $(cat "$T/out")"; fail=1; }
+  eq "defer from [?] keeps tags" "$(run defer F55 q1)" "- [>] F55 $D Choice [decide: @asha] (deferred: q1)"
+  sh "$self" defer F58 q4 > "$T/out" 2>&1 || { echo "FAIL: same defer failed: $(cat "$T/out")"; fail=1; }
+  grep -q 'no change' "$T/out" || { echo "FAIL: same defer did not say no change: $(cat "$T/out")"; fail=1; }
+  eq "block from [>] replaces deferred" "$(run block F58 the vendor fix)" "- [!] F58 $D Later (blocked: the vendor fix)"
+  cp TICKETS.md "$T/f64a.md"
+  sh "$self" done F56 > /dev/null 2>&1 && { echo "FAIL: done closed a cancelled ticket"; fail=1; }
+  sh "$self" block F57 dep > /dev/null 2>&1 && { echo "FAIL: block took a closed [x] ticket"; fail=1; }
+  sh "$self" defer F56 later > /dev/null 2>&1 && { echo "FAIL: defer took a cancelled ticket"; fail=1; }
+  sh "$self" block F99 dep > /dev/null 2> "$T/err" && { echo "FAIL: block took an unknown id"; fail=1; }
+  grep -q '0 matching lines' "$T/err" || { echo "FAIL: unknown-id refusal: $(cat "$T/err")"; fail=1; }
+  sh "$self" block F52 > /dev/null 2>&1 && { echo "FAIL: block took no reason"; fail=1; }
+  sh "$self" defer F52 '  ' > /dev/null 2>&1 && { echo "FAIL: defer took a blank condition"; fail=1; }
+  sh "$self" block F52 'a (b)' > /dev/null 2>&1 && { echo "FAIL: block took parentheses"; fail=1; }
+  sh "$self" defer F52 "a${NL}b" > /dev/null 2>&1 && { echo "FAIL: defer took a line break"; fail=1; }
+  sh "$self" done F52 'run (it)' > /dev/null 2>&1 && { echo "FAIL: done took parentheses"; fail=1; }
+  sh "$self" done F52 "a${NL}b" > /dev/null 2>&1 && { echo "FAIL: done took a line break"; fail=1; }
+  sh "$self" done F52 'a ** b' > /dev/null 2>&1 && { echo "FAIL: done took an asterisk"; fail=1; }
+  sh "$self" done "$(printf 'F52\nF53')" > /dev/null 2>&1 && { echo "FAIL: done took a multi-line id"; fail=1; }
+  cmp -s TICKETS.md "$T/f64a.md" || { echo "FAIL: a refused done/block/defer changed the board"; diff "$T/f64a.md" TICKETS.md; fail=1; }
+  {
+    printf -- '# TICKETS\n\n'
+    printf -- '- [x] F50 %s Built [app: web] **Done %s: RED/GREEN 3/3, abc1234** (@cc-eeeeee)\n' "$D" "$TODAY"
+    printf -- '- [x] F51 %s Tested (testing: unit run)\n' "$D"
+    printf -- '- [!] F52 %s Plain (blocked: needs S3 creds from ops)\n' "$D"
+    printf -- '- [!] F53 %s Stuck (blocked: new dep)\n' "$D"
+    printf -- '- [>] F54 %s Busy (deferred: after the parser rewrite) (@cc-ffffff)\n' "$D"
+    printf -- '- [>] F55 %s Choice [decide: @asha] (deferred: q1)\n' "$D"
+    printf -- '- [-] F56 %s Dropped\n' "$D"
+    printf -- '- [x] F57 %s Shipped\n' "$D"
+    printf -- '- [!] F58 %s Later (blocked: the vendor fix)\n' "$D"
+  } > "$T/want64.md"
+  cmp -s TICKETS.md "$T/want64.md" || { echo "FAIL: F64 board bytes"; diff "$T/want64.md" TICKETS.md; fail=1; }
+  # A137 / B3: a CRLF board stays CRLF through done, block and defer; LF stays LF
+  for nl in crlf lf; do
+    r=''; [ "$nl" = crlf ] && r=$(printf '\r')
+    printf -- "# TICKETS$r\n$r\n- [~] F50 %s One (@cc-eeeeee)$r\n- [ ] F52 %s Two$r\n- [ ] F53 %s Three$r\n" "$D" "$D" "$D" > TICKETS.md
+    sh "$self" done F50 unit run > /dev/null 2>&1 || { echo "FAIL: $nl done failed"; fail=1; }
+    sh "$self" block F52 ops > /dev/null 2>&1 || { echo "FAIL: $nl block failed"; fail=1; }
+    sh "$self" defer F53 q2 > /dev/null 2>&1 || { echo "FAIL: $nl defer failed"; fail=1; }
+    printf -- "# TICKETS$r\n$r\n- [x] F50 %s One [app: web] **Done %s: unit run** (@cc-eeeeee)$r\n- [!] F52 %s Two (blocked: ops)$r\n- [>] F53 %s Three (deferred: q2)$r\n" \
+      "$D" "$TODAY" "$D" "$D" > "$T/want64-$nl.md"
+    cmp -s TICKETS.md "$T/want64-$nl.md" || { echo "FAIL: $nl done/block/defer line endings or bytes"; od -c TICKETS.md | head -n 6; fail=1; }
+  done
+
   # --- team add / remove / list: .skillator/team.md written under the board lock
   G="$T/team"
   mkdir -p "$G" && cd "$G" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
@@ -853,7 +987,7 @@ selftest() {
   echo ok
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|tag|team|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|done|block|defer|tag|team|selftest"
 c=$1; shift
 [ "$c" = selftest ] && { selftest; exit 0; }
 need_git
@@ -869,6 +1003,9 @@ case $c in
   decided) cmd_decided "$@" ;;
   testing) cmd_testing "$@" ;;
   tested) cmd_tested "$@" ;;
+  done) cmd_done "$@" ;;
+  block) cmd_block "$@" ;;
+  defer) cmd_defer "$@" ;;
   tag) cmd_tag "$@" ;;
   team) cmd_team "$@" ;;
   *) die "unknown subcommand: $c" ;;

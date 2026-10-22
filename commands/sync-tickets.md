@@ -12,5 +12,6 @@ step for this repo's TICKETS.md (`$PRACTICE` resolved as that skill says). Argum
    reason naming the evidence. Never invent evidence; unsure → stays `[~]`, "evidence unclear".
 2. Show the proposals as one table (ID, now -> proposed, reason) and ask once: accept all /
    pick / none.
-3. Apply only what the user accepts, with ticket-meta as the skill says, then read the board
+3. Apply only what the user accepts, each with its ticket-meta subcommand as the skill says (`done`,
+   `testing`, `block`, `defer`, `decide`) - never a hand-edited box - then read the board
    back. Headless, chained or relay, or no answer → apply nothing and say `applied: none (headless)`.

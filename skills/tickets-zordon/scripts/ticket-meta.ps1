@@ -4,6 +4,7 @@
 #   ticket-meta.ps1 apps | app-of <path>... | by <ID> | apps-of <ID>
 #   ticket-meta.ps1 assign <ID> @handle | decide <ID> @handle | decided <ID>
 #   ticket-meta.ps1 testing <ID> <what test> | tested <ID> pass|fail
+#   ticket-meta.ps1 done <ID> [evidence] | block <ID> <on what> | defer <ID> <until what>
 #   ticket-meta.ps1 tag <ID> | selftest
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
 #
@@ -257,6 +258,14 @@ function Set-Tag([string]$line, [string]$key, [string]$val) {
   return $line.Substring(0, $pos) + $tag + $line.Substring($pos)
 }
 
+function Set-Note([string]$line, [string]$note, [string]$pat) {
+  $m = [regex]::Match($line, $pat)
+  if ($m.Success) { return $line.Substring(0, $m.Index) + $note + $line.Substring($m.Index + $m.Length) }
+  $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$')
+  if ($sm.Success) { return $line.Substring(0, $sm.Index) + $note + $line.Substring($sm.Index) }
+  return $line.TrimEnd(' ', "`t") + $note
+}
+
 # The board lock relay-morpheus's `board` takes: TICKETS.md.lock, made by an
 # exclusive create holding "<pid> ps1". Waited on, never broken - after
 # TICKET_META_LOCK_WAIT seconds (30) it refuses; only ours is released.
@@ -311,11 +320,14 @@ function Edit-Line([string]$id, [hashtable]$o) {
     $b = $line.IndexOf('- [') + 3
     $mk = $line.Substring($b, 1)
     if ($o.need -and $mk -cne $o.need) { Fail "$id is [$mk], not [$($o.need)] - nothing to change" }
-    # F62: the same test on a line already [%] is a no-op, like a same-handle assignment.
-    if ($o.testing -and $mk -ceq '%') {
-      $m = [regex]::Match($line, '\(testing:([^()]*)\)')
-      if ($m.Success -and $m.Groups[1].Value.Trim() -ceq $o.testing) {
-        return @($line, "no change: $id is already [%] (testing: $($o.testing))")
+    # F64: refuse lists the boxes this change may not start from.
+    if ($o.refuse -and $o.refuse.Contains($mk)) { Fail "$id is [$mk] (closed) - reopen it first (assign), then $($o.cmd)" }
+    # F62/F64: the same note on a line already in that box is a no-op, like a
+    # same-handle assignment. notekey + noteval is ` (<key>: <val>)`.
+    if ($o.noteval -and $mk -ceq $o.mark) {
+      $m = [regex]::Match($line, '\(' + $o.notekey + ':([^()]*)\)')
+      if ($m.Success -and $m.Groups[1].Value.Trim() -ceq $o.noteval) {
+        return @($line, "no change: $id is already [$mk] ($($o.notekey): $($o.noteval))")
       }
     }
     if ($o.samekey) {
@@ -342,16 +354,16 @@ function Edit-Line([string]$id, [hashtable]$o) {
     foreach ($k in @('app', 'decide', 'owner', 'by')) {
       if ($o[$k]) { $line = Set-Tag $line $k $o[$k] }
     }
-    # F62: ` (testing: <test>)` replaces the one there, else goes before a trailing
-    # (@agent-id) session tag, else at the end of the line.
-    if ($o.testing) {
-      $note = ' (testing: ' + $o.testing + ')'
-      $m = [regex]::Match($line, '[ \t]*\(testing:[^()]*\)')
-      $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$')
-      if ($m.Success) { $line = $line.Substring(0, $m.Index) + $note + $line.Substring($m.Index + $m.Length) }
-      elseif ($sm.Success) { $line = $line.Substring(0, $sm.Index) + $note + $line.Substring($sm.Index) }
-      else { $line = $line.TrimEnd(' ', "`t") + $note }
+    # F62/F64: a note replaces the one matching its pattern, else goes before a
+    # trailing (@agent-id) session tag, else at the end of the line. (testing: ..)
+    # replaces only itself; (blocked: ..) and (deferred: ..) replace either - the
+    # line says only the current wait.
+    if ($o.noteval) {
+      $p = 'testing'
+      if ($o.notekey -cne 'testing') { $p = '(blocked|deferred)' }
+      $line = Set-Note $line (' (' + $o.notekey + ': ' + $o.noteval + ')') ('[ \t]*\(' + $p + ':[^()]*\)')
     }
+    if ($o.done) { $line = Set-Note $line (' **Done ' + $o.done + '**') '[ \t]*\*\*Done [^*]*\*\*' }
     $lines[$i] = $line + $cr
     $tmp = "$f.ticket-meta.$PID"
     [System.IO.File]::WriteAllBytes($tmp, $Utf8.GetBytes([string]::Join([string][char]10, $lines)))
@@ -411,7 +423,52 @@ function Do-Testing([string[]]$a) {
   $t = $t.Trim()
   if ($t -eq '') { Fail 'usage: testing <ID> <what test> - the test is blank' }
   if ($t.Contains('(') -or $t.Contains(')')) { Fail 'the test cannot hold ( or ) - it sits in (testing: ..)' }
-  return (Edit-Line $id @{ mark = '%'; testing = $t })
+  return (Edit-Line $id @{ mark = '%'; notekey = 'testing'; noteval = $t })
+}
+
+# F64: the words after the id: one line, trimmed, no parentheses (it sits on
+# the line as a note); blank only when $blank.
+function Get-NoteText([string]$cmd, [string]$what, [bool]$blank, [string[]]$a) {
+  $t = ''
+  if ($a.Count -gt 1) { $t = [string]::Join(' ', @($a[1..($a.Count - 1)])) }
+  if (-not (Test-OneLine $t)) { Fail "the $what is one line" }
+  $t = $t.Trim()
+  if ($t -eq '' -and -not $blank) { Fail "usage: $cmd <ID> <$what> - it is blank" }
+  if ($t.Contains('(') -or $t.Contains(')')) { Fail "the $what cannot hold ( or ) - it sits on the line as a note" }
+  return $t
+}
+
+# F64: finished and verified: the box [x], the tag a close owes (app + by from
+# the commits), and with evidence ` **Done <YYYY-MM-DD>: <evidence>**` - the
+# form the board's closed lines use; it replaces an earlier Done note. Refuses
+# a cancelled [-] (reopen it with assign first).
+function Do-Done([string[]]$a) {
+  if ($a.Count -lt 1) { Fail 'usage: done <ID> [evidence]' }
+  $id = Get-NormId $a[0]
+  $t = Get-NoteText 'done' 'evidence' $true $a
+  if ($t.Contains('*')) { Fail 'the evidence cannot hold * - it sits in **Done ..**' }
+  $dn = ''
+  if ($t -ne '') { $dn = [DateTime]::UtcNow.ToString('yyyy-MM-dd') + ': ' + $t }
+  $info = Get-Info $id
+  $apps = [string]::Join(', ', @(Get-AppsFrom $info))
+  $by = [string]::Join(', ', @(Get-ByFrom $info))
+  return (Edit-Line $id @{ mark = 'x'; app = $apps; by = $by; done = $dn; refuse = '-'; cmd = 'done' })
+}
+
+# F64: can't proceed until something outside it lands: [!], ` (blocked: <on what>)`.
+function Do-Block([string[]]$a) {
+  if ($a.Count -lt 2) { Fail 'usage: block <ID> <on what>' }
+  $id = Get-NormId $a[0]
+  $t = Get-NoteText 'block' 'on what' $false $a
+  return (Edit-Line $id @{ mark = '!'; notekey = 'blocked'; noteval = $t; refuse = 'x-'; cmd = 'block' })
+}
+
+# F64: postponed by choice until a condition: [>], ` (deferred: <until what>)`.
+function Do-Defer([string[]]$a) {
+  if ($a.Count -lt 2) { Fail 'usage: defer <ID> <until what>' }
+  $id = Get-NormId $a[0]
+  $t = Get-NoteText 'defer' 'until what' $false $a
+  return (Edit-Line $id @{ mark = '>'; notekey = 'deferred'; noteval = $t; refuse = 'x-'; cmd = 'defer' })
 }
 
 # The test's result: [%] -> [x] on pass, [~] on fail; the (testing: ..) note stays as the record.
@@ -631,6 +688,9 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'decided' { return (Do-Decided $a) }
     'testing' { return (Do-Testing $a) }
     'tested' { return (Do-Tested $a) }
+    'done' { return (Do-Done $a) }
+    'block' { return (Do-Block $a) }
+    'defer' { return (Do-Defer $a) }
     'tag' { return (Do-Tag $a) }
     'team' { return (Do-Team $a) }
     default { Fail "unknown subcommand: $c" }
@@ -885,6 +945,65 @@ function Invoke-Selftest {
       "- [~] F44 $dash Failing (testing: live check)`n- [ ] F46 $dash Not testing`n"
     if (-not (& $same $want62)) { Write-Output 'FAIL: F62 board bytes'; $script:fail = 1 }
 
+    # --- F64: done / block / defer - the boxes /sync-tickets used to hand-edit
+    $Q = "$T/f64"
+    Init-Repo $Q
+    W "$Q/apps/web/f.txt" "x`n"
+    W "$Q/TICKETS.md" ("# TICKETS`n`n- [~] F50 $dash Built (@cc-eeeeee)`n- [%] F51 $dash Tested (testing: unit run)`n" +
+      "- [ ] F52 $dash Plain`n- [!] F53 $dash Stuck (blocked: old dep)`n- [~] F54 $dash Busy (@cc-ffffff)`n" +
+      "- [?] F55 $dash Choice [decide: @asha]`n- [-] F56 $dash Dropped`n- [x] F57 $dash Shipped`n- [>] F58 $dash Later (deferred: q4)`n")
+    Commit 'vidul@ikran.in' 'init' 'README.md'
+    Commit 'vidul@ikran.in' 'F50: built' 'apps/web/a.js'
+    $board = "$Q/TICKETS.md"
+    $today = [DateTime]::UtcNow.ToString('yyyy-MM-dd')
+    $o = @(Run done F50 'RED/GREEN' '3/3,' 'abc1234')
+    Eq 'done from [~], tagged, evidence' $o[0] "- [x] F50 $dash Built [app: web] **Done ${today}: RED/GREEN 3/3, abc1234** (@cc-eeeeee)"
+    if (([string]::Join(' ', $o)) -notmatch 'F50 was in progress under @cc-eeeeee') { Write-Output "FAIL: done from [~] did not warn: [$o]"; $script:fail = 1 }
+    Eq 'done from [%], no evidence' (Run done F51) "- [x] F51 $dash Tested (testing: unit run)"
+    Eq 'block from [ ]' (Run block F52 needs S3 creds from ops) "- [!] F52 $dash Plain (blocked: needs S3 creds from ops)"
+    Eq 'block replaces the note' (Run block F53 '  new dep ') "- [!] F53 $dash Stuck (blocked: new dep)"
+    $o = [string]::Join(' ', @(Run block F53 new dep))
+    if ($o -notmatch 'no change') { Write-Output "FAIL: same block did not say no change: [$o]"; $script:fail = 1 }
+    $o = @(Run defer F54 after the parser rewrite)
+    Eq 'defer from [~]' $o[0] "- [>] F54 $dash Busy (deferred: after the parser rewrite) (@cc-ffffff)"
+    if (([string]::Join(' ', $o)) -notmatch 'F54 was in progress under @cc-ffffff') { Write-Output "FAIL: defer from [~] did not warn: [$o]"; $script:fail = 1 }
+    Eq 'defer from [?] keeps tags' (Run defer F55 q1) "- [>] F55 $dash Choice [decide: @asha] (deferred: q1)"
+    $o = [string]::Join(' ', @(Run defer F58 q4))
+    if ($o -notmatch 'no change') { Write-Output "FAIL: same defer did not say no change: [$o]"; $script:fail = 1 }
+    Eq 'block from [>] replaces deferred' (Run block F58 the vendor fix) "- [!] F58 $dash Later (blocked: the vendor fix)"
+    $f64a = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
+    if (-not (Refused done F56)) { Write-Output 'FAIL: done closed a cancelled ticket'; $script:fail = 1 }
+    if (-not (Refused block F57 dep)) { Write-Output 'FAIL: block took a closed [x] ticket'; $script:fail = 1 }
+    if (-not (Refused defer F56 later)) { Write-Output 'FAIL: defer took a cancelled ticket'; $script:fail = 1 }
+    $msg = ErrOf block F99 dep
+    if ($msg -notmatch '0 matching lines') { Write-Output "FAIL: unknown-id refusal: [$msg]"; $script:fail = 1 }
+    if (-not (Refused block F52)) { Write-Output 'FAIL: block took no reason'; $script:fail = 1 }
+    if (-not (Refused defer F52 '  ')) { Write-Output 'FAIL: defer took a blank condition'; $script:fail = 1 }
+    if (-not (Refused block F52 'a (b)')) { Write-Output 'FAIL: block took parentheses'; $script:fail = 1 }
+    if (-not (Refused defer F52 "a`nb")) { Write-Output 'FAIL: defer took a line break'; $script:fail = 1 }
+    if (-not (Refused done F52 'run (it)')) { Write-Output 'FAIL: done took parentheses'; $script:fail = 1 }
+    if (-not (Refused done F52 "a`nb")) { Write-Output 'FAIL: done took a line break'; $script:fail = 1 }
+    if (-not (Refused done F52 'a ** b')) { Write-Output 'FAIL: done took an asterisk'; $script:fail = 1 }
+    if (-not (Refused done "F52`nF53")) { Write-Output 'FAIL: done took a multi-line id'; $script:fail = 1 }
+    if (-not (& $same $f64a)) { Write-Output 'FAIL: a refused done/block/defer changed the board'; $script:fail = 1 }
+    $want64 = "# TICKETS`n`n- [x] F50 $dash Built [app: web] **Done ${today}: RED/GREEN 3/3, abc1234** (@cc-eeeeee)`n" +
+      "- [x] F51 $dash Tested (testing: unit run)`n- [!] F52 $dash Plain (blocked: needs S3 creds from ops)`n" +
+      "- [!] F53 $dash Stuck (blocked: new dep)`n- [>] F54 $dash Busy (deferred: after the parser rewrite) (@cc-ffffff)`n" +
+      "- [>] F55 $dash Choice [decide: @asha] (deferred: q1)`n- [-] F56 $dash Dropped`n- [x] F57 $dash Shipped`n" +
+      "- [!] F58 $dash Later (blocked: the vendor fix)`n"
+    if (-not (& $same $want64)) { Write-Output 'FAIL: F64 board bytes'; $script:fail = 1 }
+    # A137 / B3: a CRLF board stays CRLF through done, block and defer; LF stays LF
+    foreach ($nl in @("`r`n", "`n")) {
+      $name = 'lf'; if ($nl -ceq "`r`n") { $name = 'crlf' }
+      W $board ("# TICKETS$nl$nl- [~] F50 $dash One (@cc-eeeeee)$nl- [ ] F52 $dash Two$nl- [ ] F53 $dash Three$nl")
+      Run done F50 unit run | Out-Null
+      Run block F52 ops | Out-Null
+      Run defer F53 q2 | Out-Null
+      $want = ("# TICKETS$nl$nl- [x] F50 $dash One [app: web] **Done ${today}: unit run** (@cc-eeeeee)$nl" +
+        "- [!] F52 $dash Two (blocked: ops)$nl- [>] F53 $dash Three (deferred: q2)$nl")
+      if (-not (& $same $want)) { Write-Output "FAIL: $name done/block/defer line endings or bytes"; $script:fail = 1 }
+    }
+
     # --- team add / remove / list: .skillator/team.md written under the board lock
     $G = "$T/team"
     Init-Repo $G
@@ -983,7 +1102,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|tag|team|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|done|block|defer|tag|team|selftest')
   exit 1
 }
 $cmd = [string]$args[0]

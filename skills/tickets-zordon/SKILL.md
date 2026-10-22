@@ -115,6 +115,9 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh decide F12 @asha   # must deci
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh decided F12        # decision made
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh testing F12 owner live check  # [%], waits on that test
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh tested F12 pass    # [%] -> [x]; fail -> [~]
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh done F12 RED/GREEN 3/3, abc1234  # [x] + tag, ` **Done <date>: ..**`
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh block F12 S3 creds from ops     # [!] ` (blocked: ..)`
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh defer F12 after the parser rewrite  # [>] ` (deferred: ..)`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # write app + by
 ```
 
@@ -144,6 +147,12 @@ closed, deferred or in someone else's progress:
 - **`tag <ID>`** when a ticket is closed (`[x]`), and when commits naming it land
   (a merge, a pull). It recomputes `app` and `by` from the commits; with none it
   leaves a hand-set `app` alone.
+- **`done`, `block`, `defer`** (F64) set `[x]`, `[!]`, `[>]` from any box but a
+  cancelled `[-]`; `block` and `defer` also refuse a done `[x]` (reopen with
+  `assign`). `block`/`defer` replace an earlier `(blocked: ..)` or
+  `(deferred: ..)` note — the line says only the current wait — and the same
+  text again on the same box says `no change`. Tags, other notes and the session
+  tag stay; leaving `[~]` warns like `assign`.
 - Every edit prints the edited line — that is the read-back. All write under
   `TICKETS.md.lock`, the lock relay-morpheus's `board` flip takes, and refuse
   after 30 s rather than break someone else's.
@@ -264,7 +273,11 @@ write the ticket.**
 ## Working a ticket
 
 - Starting → flip to `[~]` and stamp your session tag — see **Who touched it**.
-- Finished *and verified* (tests/build/manual check actually run) → `[x]`.
+- Finished *and verified* (tests/build/manual check actually run) → `[x]`,
+  via `ticket-meta done <ID> [evidence]`: the box `[x]`, the `tag` a close owes,
+  and, when evidence is given, ` **Done <YYYY-MM-DD>: <evidence>**` before the
+  session tag (one line, no parentheses or `*`; it replaces an earlier Done
+  note). It refuses a cancelled `[-]` ticket - reopen it with `assign` first.
   Not verified, not done.
 - Built, but the verifying test has not run yet and is not yours to run now —
   an owner's live check, a GREEN on another host, a CI run → `[%]` testing,
@@ -275,7 +288,8 @@ write the ticket.**
   `tested <ID> fail` → back to `[~]` to fix; the `(testing: ..)` note stays as
   the record. Not for a test you can run yourself this turn — run it.
 - Can't proceed — waiting on someone, a credential, an upstream fix, or another
-  ticket → `[!]`, with ` (blocked: <what on>)` on the line. Blocked is still
+  ticket → `[!]`, with ` (blocked: <what on>)` on the line, via
+  `ticket-meta block <ID> <what on>`. Blocked is still
   **open**: report it at session end, and unblock back to `[ ]` or `[~]` the
   moment the dependency clears. Never leave an agent spinning on a blocked
   ticket — flip it and move to the next one.
@@ -286,7 +300,8 @@ write the ticket.**
   `ticket-meta decided <ID>` once the answer is in.
 - Postponed by choice — not now, waiting on a condition that isn't a hard
   dependency (a later milestone, a build that hasn't run, hardware not on the
-  bench) → `[>]`, with ` (deferred: <until what>)` on the line. Deferred is
+  bench) → `[>]`, with ` (deferred: <until what>)` on the line, via
+  `ticket-meta defer <ID> <until what>`. Deferred is
   **not open and not closed** — it is off the board until the condition
   arrives: not pending (nobody is picking it up next), not blocked (nobody owes
   you anything), not cancelled (it will be done). Report it at session end as
@@ -399,9 +414,10 @@ status it really has. **Propose from evidence, never invent it.**
    - `[%]` → `ticket-meta testing <ID> <what test>`.
    - `[?]` → `ticket-meta decide <ID> @who`; with no `.skillator/team.md` (decide
      refuses) flip the box by hand and write ` (decide: <who>)`.
-   - `[x]`, `[!]`, `[>]` → ticket-meta has no subcommand for these: edit that one
-     line's box and append its note, as UTF-8 (**Working a ticket**), then
-     `ticket-meta tag <ID>` on each `[x]`.
+   - `[x]` → `ticket-meta done <ID> <the evidence>` (it tags the ticket too).
+   - `[!]` → `ticket-meta block <ID> <on what>`.
+   - `[>]` → `ticket-meta defer <ID> <until what>`.
+   - Never hand-edit a box ticket-meta has a subcommand for.
    - Stamp your session tag on every flipped row (**Who touched it**).
 5. Read the board back — `grep -n '<ID>' TICKETS.md` for every applied ID —
    run `sh "$PRACTICE/scripts/check-tickets.sh"`, and report from that output: `in progress 14 -> 6
