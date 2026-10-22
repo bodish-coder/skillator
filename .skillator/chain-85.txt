@@ -1,0 +1,19 @@
+Ticket A126 (skillator repo), the GREEN it is still owed: "a dispatched agent runs its tests in its own worktree with no refusal". Earlier rounds ran headless (-p) and lost commands to the narrow allow-list; this round is an interactive session dispatching you, a background agent, into a run worktree inside the repo (.skillator/worktrees/, per 70e71f0).
+
+Do, each as one plain command by absolute path, and log every command you run with its outcome (ran / refused / needed approval):
+1. git -C "<worktree>" status
+2. the ops-board mod suite: claude plugin test "<worktree>/mods/ops-board"
+3. the standalone ops suite: node --import "<worktree>/mods/ops-board/ops/loader.mjs" --test with each "<worktree>/mods/ops-board/ops/tests/<name>.test.mts" file as an argument
+4. sh "<worktree>/install.sh" --selftest
+5. sh "<worktree>/skills/relay-morpheus/hooks/relay-morpheus.sh" selftest
+Then write practice/baselines/green-relay-worktree-a126-r3.txt in the worktree (follow the shape of the existing practice/baselines/green-relay-worktree-a126.txt: date, host, what ran, each command with its outcome, verdict PASS only if nothing was refused and no approval was needed, else FAIL with the refused shapes). Commit it as "A126: GREEN round 3 (interactive session, background agent) - <PASS|FAIL>". Do not fix anything you find; report it.
+
+WHERE: work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0014-sweep-the-workable-board (branch run/RUN-0014-sweep-the-workable-board), never in the main checkout C:/tools/Projects/skillator2. Do not edit TICKETS.md (the main session flips the board). Do not push.
+
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0014-sweep-the-workable-board" status`, `git -C "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0014-sweep-the-workable-board" add <paths>`, `git -C "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0014-sweep-the-workable-board" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+Before you edit, decide whether the ticket needs a choice only the user can make (taste, a fact only they know, a conflict nothing settles). If you can decide it from the ticket, spec, repo conventions or the user's words, decide it and say `Ruling:` in your report. If not: do every part that does not depend on the answer, and touch nothing that does. Do not stub it, guess it or leave a placeholder. Then end your report with `PARKED:` plus the question, 2-4 options with what each does and where it hurts, your recommendation and default, the part that waits, and every file or directory it will touch (err wide). If the choice is a destructive, security or outside-the-worktree act, say `STOP:` instead. Never ask the user and never wait.
+
+Owner rule: one agent at a time - do not spawn subagents or parallel fan-outs; do every phase yourself, in order.
+
+REPORT (under 300 words): what you changed (files), the commit sha(s), the exact checks you ran and their result lines, every command that was refused or needed approval, any Ruling:/PARKED:/STOP: lines.
