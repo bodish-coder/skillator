@@ -1,6 +1,6 @@
 # RUN-0014 - sweep the workable board
 plan: TICKETS.md
-started: 2026-10-21T15:20Z   updated: 2026-10-22T09:09Z
+started: 2026-10-21T15:20Z   updated: 2026-10-22T09:38Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0014-sweep-the-workable-board
 branch: run/RUN-0014-sweep-the-workable-board
 
@@ -17,10 +17,10 @@ branch: run/RUN-0014-sweep-the-workable-board
 | 91 | AAAH F58 F59 F54 headless host checks | x | build:opus | 2026-10-22T07:38Z | a807c61 |
 | 92 | AAAI F55 live keys via pty | x | build:opus | 2026-10-22T07:42Z | 6eee520 |
 | 93 | verify review bump | x | main:opus | 2026-10-22T09:09Z | 39e3297 |
-| 94 | AAAJ F58 engage block first on Claude Code | ! | build:opus | 2026-10-22T07:51Z | 63d25da |
+| 94 | AAAJ F58 engage block first on Claude Code | > | build:opus | 2026-10-22T09:38Z | 100 |
 | 95 | AAAK B6 command frontmatter YAML | x | cheap:sonnet | 2026-10-22T07:58Z | 7cc907d |
-| 96 | AAAL F58 engage as a skill | ! | build:opus | 2026-10-22T08:02Z | ab659fe |
-| 97 | AAAM F58 re-land engage skill, block before answer | ! | build:opus | 2026-10-22T08:20Z | 111af11 |
+| 96 | AAAL F58 engage as a skill | > | build:opus | 2026-10-22T09:38Z | 100 |
+| 97 | AAAM F58 re-land engage skill, block before answer | > | build:opus | 2026-10-22T09:38Z | 100 |
 | 98 | AAAN A142 A144 ops Git Bash sh port, footer separator | x | build:opus | 2026-10-22T08:51Z | a925d1c |
 | 99 | AAAO A143 assign keeps session tag | x | build:opus | 2026-10-22T08:58Z | 7362a0a |
 | 100 | AAAP F58 round 5 last try | x | build:opus | 2026-10-22T08:57Z | 3e79033 |
