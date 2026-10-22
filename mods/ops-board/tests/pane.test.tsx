@@ -438,6 +438,8 @@ test('F61: every group starts collapsed - headers with counts, no rows; a click 
   const ui = await mountPane($, 'terminal')
   expect(await heads(ui)).toEqual(['▸ IN PROGRESS (1)', '▸ BLOCKED (1)', '▸ PENDING DECISION (1)', '▸ PENDING (2)', '▸ DEFERRED (1)'])
   expect(await rowKeys(ui)).toEqual([])
+  // collapsed groups are not an empty board: no "no open tickets" over the headers
+  expect((await texts(ui)).join('\n')).not.toMatch(/no open tickets|no ticket matches/)
   expect(await state($, 'openGroups')).toBeNull()       // never set: the atom's default, no groups open
   // the first header is the selection, drawn inverse; the count line is the board's, not the view's
   const inv = async (k: string) => ((await ui.find({ key: k }))!.children[0] as { props: { inverse?: boolean } }).props.inverse
@@ -524,6 +526,7 @@ test('F61: a filter shows the matching groups with their filtered counts; x adds
   await ui.press({ key: 'key:filter' })
   await ui.select({ key: 'sel:app', value: 'web' })
   expect(await heads(ui)).toEqual(['▸ IN PROGRESS (1)', '▸ PENDING (1)'])
+  expect((await texts(ui)).join('\n')).not.toContain('no ticket matches the filter')
   await ui.select({ key: 'sel:app', value: 'all' })
   await ui.press({ key: 'key:done' })
   expect(await heads(ui)).toEqual(['▸ IN PROGRESS (1)', '▸ BLOCKED (1)', '▸ PENDING DECISION (1)', '▸ PENDING (2)', '▸ DEFERRED (1)', '▸ DONE (6)', '▸ CANCELLED (1)'])

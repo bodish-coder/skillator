@@ -84,7 +84,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
 
   if (!v.board || v.board.error) {
     out.push(<Text dimColor>{v.board?.error ?? 'reading TICKETS.md…'}</Text>)
-  } else if (m.rows.length === 0) {
+  } else if (!m.groups.length) {   // F61: m.rows holds only open groups' rows; test the groups
     out.push(<Text dimColor>{m.filterActive ? 'no ticket matches the filter' : 'no open tickets'}</Text>)
   }
 
