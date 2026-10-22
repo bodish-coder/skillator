@@ -160,12 +160,18 @@ test('/ops opens the full-screen overlay at the terminal\'s rows; q closes it an
   const root = repo()
   const nowhere = mkTmp('ops-pi-noskills-')
   const open = f.cmd.handler(`--skills "${nowhere}"`, f.ctx(root))
-  await new Promise(r => setTimeout(r, 300))     // the first board read
-  const lines = f.view.render(90)
-  assert.equal(lines.length, 18)
-  assert.match(lines.map(strip).join('\n'), /F90 +pi fixture ticket/)
-  assert.ok(f.requested > 0, 'the engine asks pi to render')
-  f.view.handleInput('q')
+  // A148: wait for the first board read (bounded), not a fixed 300 ms - under load the
+  // view came late, the test threw before q, and the polls kept node alive (a hang).
+  const shown = () => (f.view ? f.view.render(90).map(strip).join('\n') : '')
+  for (const t0 = Date.now(); !/F90 +pi fixture ticket/.test(shown()) && Date.now() - t0 < 10_000;) await new Promise(r => setTimeout(r, 50))
+  try {
+    const lines = f.view.render(90)
+    assert.equal(lines.length, 18)
+    assert.match(lines.map(strip).join('\n'), /F90 +pi fixture ticket/)
+    assert.ok(f.requested > 0, 'the engine asks pi to render')
+  } finally {
+    f.view?.handleInput('q')                       // always close: a failed assert must not leave the polls running
+  }
   await open                                       // resolves: done() was called; the test ends, so no timer is left
 })
 

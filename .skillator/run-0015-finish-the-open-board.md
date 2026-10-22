@@ -1,6 +1,6 @@
 # RUN-0015 - finish the open board
 plan: TICKETS.md
-started: 2026-10-22T09:38Z   updated: 2026-10-22T12:15Z
+started: 2026-10-22T09:38Z   updated: 2026-10-22T12:20Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board
 branch: run/RUN-0015-finish-the-open-board
 
@@ -14,6 +14,7 @@ branch: run/RUN-0015-finish-the-open-board
 | 105 | AAAT A145 pi skill warnings | x | build:opus | 2026-10-22T11:41Z | 1c67ae4 |
 | 106 | AAAU A146 A147 ops Team footer, ctrl+c, pi disk | x | build:opus | 2026-10-22T11:51Z | 725069f |
 | 107 | AAAV B5 round 2 review fixes | x | build:opus | 2026-10-22T12:05Z | 32f9110 |
+| 108 | AAAW B4 large board on AewaAirbender copy | ~ | build:opus | 2026-10-22T12:20Z | - |
 
 ## In flight
 
@@ -142,6 +143,30 @@ prompt: |
   Owner rule: one agent at a time - do not spawn subagents or parallel fan-outs; do every phase yourself, in order.
 
   REPORT (under 300 words): what you changed (files), the commit sha(s), the exact checks you ran and their result lines, every command that was refused or needed approval, any Ruling:/PARKED:/STOP: lines.
+### AAAW - stage 108 - B4 large board on AewaAirbender copy
+tickets: B4 build/build
+files: mods/ops-board,skills/tickets-zordon/scripts,.claude-plugin/marketplace.json,practice/baselines/b4-large-board-repro.txt
+prompt: |
+  Ticket B4 (skillator repo) - read its line in C:/tools/Projects/skillator2/TICKETS.md (read only). The owner's other repo showed "no TICKETS.md at <root>" in the ops board with the file there; 4.10.0 stopped masking the real error (only a failed stat says "no TICKETS.md"; anything else says `TICKETS.md not loaded: <error> - /archive-tickets moves the closed rows out`). It never reproduced from size alone (pane 775 KB / 3000 tickets in the mock engine, standalone 957 KB).
+
+  Candidate repo found on this machine: C:/tools/Projects/AewaAirbender - its TICKETS.md is 3.8 MB, 1435 ticket lines. That repo is the OWNER's: treat it as READ-ONLY. Never write, archive, commit, run ticket-meta/archive-tickets against it, or change files there. Copy its TICKETS.md (and .skillator/team.md if present) into a scratch git repo under the scratchpad and work on the copy.
+
+  Do (systematic debugging - root cause before any fix):
+  1. Reproduce on the copy with every surface that reads the board: the standalone app `--once` (mods/ops-board/ops/ops.sh and ops.ps1 with the scratch repo as the argument), pending.sh / pending.ps1 (--kv and --machine), /list-tickets' parser, and the Claude Code pane's load path (mods/ops-board/hooks - read how it reads the file: which host API ($.fs.read or a process run), and that API's documented limits in mods/ops-board/.claude-plugin/types/claude-code/index.d.ts - a size cap, a truncation flag like isStdoutTruncated, a timeout). Drive the pane path in the mock engine with the real 3.8 MB file, and say which surface fails, with the exact error text. Tag each claim verified/inferred.
+  2. If something fails: fix the cause with the smallest change (e.g. read in a way the host allows at that size, or a clear message naming the real limit), test red first with a fixture of that size (generate it - do not commit the owner's board), and run `claude plugin test "<worktree>/mods/ops-board"`, `npm --prefix "<worktree>/mods/ops-board/ops" test` (WITH `timeout 300` in front - the suite intermittently hangs in pi/tests/ops.test.mts, another ticket), pending selftests (sh `--selftest`, ps1 `--selftest`). Bump ops-board 0.3.1 -> 0.3.2 (mods/ops-board/.claude-plugin/plugin.json and its .claude-plugin/marketplace.json entry) if the pane changed. Commit as "B4: <what>".
+  3. If nothing fails on the copy at 3.8 MB: write what you ran and saw into practice/baselines/b4-large-board-repro.txt, commit it as "B4: not reproduced on a 3.8 MB board - <surfaces>", and say so.
+
+  TICKETS.md in the worktree is a copy - never stage or commit it.
+
+  WHERE: work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board (branch run/RUN-0015-finish-the-open-board), never in the main checkout C:/tools/Projects/skillator2. Do not edit TICKETS.md (the main session flips the board). Do not push.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board" status`, `git -C "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board" add <paths>`, `git -C "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Before you edit, decide whether the ticket needs a choice only the user can make (taste, a fact only they know, a conflict nothing settles). If you can decide it from the ticket, spec, repo conventions or the user's words, decide it and say `Ruling:` in your report. If not: do every part that does not depend on the answer, and touch nothing that does. Do not stub it, guess it or leave a placeholder. Then end your report with `PARKED:` plus the question, 2-4 options with what each does and where it hurts, your recommendation and default, the part that waits, and every file or directory it will touch (err wide). If the choice is a destructive, security or outside-the-worktree act, say `STOP:` instead. Never ask the user and never wait.
+
+  Owner rule: one agent at a time - do not spawn subagents or parallel fan-outs; do every phase yourself, in order.
+
+  REPORT (under 300 words): what you changed (files), the commit sha(s), the exact checks you ran and their result lines, every command that was refused or needed approval, any Ruling:/PARKED:/STOP: lines.
 
 ## Rulings
 - 2026-10-22T13:50Z - Owner: "can we complete all the tickets". Ruling: agent-workable now - B5 (cause found: dialog pane opens unshown behind the ops pane; fix = forms inside the ops pane, ruled consistent with standalone/pi/antigravity), F60 (engage by hook), F56 (pi /ops live keys via ConPTY). Not agent-workable: B4 (owner's other repo), F52 (Claude Code GREEN after 2026-10-23), F55/F57 human glance in a real window. Stages 101+102 together (disjoint), 103 after 101 lands. Stage 104 verify/review/bump/land - landing covered by the owner's standing merge+push answer (2026-10-22).
@@ -155,3 +180,6 @@ prompt: |
 - 2026-10-22T16:00Z - AAAU: 106 landed 3f80022 (A146), 725069f (A147) - ops 79/79, mod 196/196, pending selftest ok. One full ops run hung >15 min in pi/tests/ops.test.mts (killed; alone 7/7, rerun ok) - watch in the sweep. Stage 104 starts.
 - 2026-10-22T16:30Z - Stage 104 sweep at 725069f: ops 79/79 (13 s, no hang), mod 196/196, pending sh+ps1 ok, ticket-meta ok, install.sh/ps1 ok, validate ok. Review (sonnet) of b735722 1c67ae4 3f80022 725069f: none at 80+; B5 #1 (70, scroll hook moves the hidden Tickets selection while a form is up) verified by reading register.tsx:421-431; #2 (60, re-open drops closeOnEscape / tab switch leaves an invisible form) and #3 (50, Esc on add-person-from-assign drops both levels) plausible. Ruling: fix all three as stage 107 before landing - the owner is about to test B5 live; A147 #4 (30, df Capacity '-') and A145 BOM (15) not acted on.
 - 2026-10-22T17:00Z - AAAV: 107 landed 32f9110 - B5 review findings 1-3 red then green, mod 199/199, ops-board 0.3.1. Stage 104: run branch merged into main (ab84f22, clean); on main mod and ops suites re-run green; bumped 4.11.3; pushed as bodish-coder; plugins updated; installers re-run --force so pi gets the .ignore and the A146/A147 code. B5 stays [~] until the owner's live check. Worktree and branch removed.
+- 2026-10-22T17:30Z - Correction to the 17:00Z line (written before the sweep): on main the mod suite passed 199/199, but the ops suite HUNG in pi/tests/ops.test.mts (killed after >10 min); 258866f is committed, NOT pushed, plugins not updated, installers not re-run. pi file alone 5/5 in ~2 s; full-suite repeat running. Push held until the hang is understood.
+- 2026-10-22T17:31Z - Owner: "b4 solve it with agent". Candidate repo found read-only: C:/tools/Projects/AewaAirbender/TICKETS.md, 3.8 MB / 1435 tickets (4x the largest tested). Run branch fast-forwarded to main (258866f). Stage 108: reproduce on a scratch COPY (owner's repo read-only), fix the cause or record not-reproduced.
+- 2026-10-22T17:55Z - A148 (ops suite hang) root-caused and fixed in the main session: pi/tests/ops.test.mts:157 slept a fixed 300 ms; under load f.view was null, line 164 threw before q, the overlay's poll timers kept node alive. Now waits (bounded 10 s) and closes in a finally; full suite 79/79 twice under load. Ruling: test-only change done inline, not an agent - one test, the owner waiting on the push. Pushing 4.11.3 now (B5 round 2 for the owner's live check); B4 (stage 108) lands as 4.11.4.
