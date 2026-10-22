@@ -1,0 +1,216 @@
+F56 - `/ops` inside pi: scripted-pty live check (RUN-0015 stage 103)
+Date: 2026-10-22
+Host: Windows 11 (10.0.26300), pi 0.74.2 (npm @earendil-works/pi-coding-agent; it
+announces 1.4.0 is available - not updated), node at C:\Program Files\nodejs, Git for
+Windows sh.
+
+VERDICT
+  /ops in pi ............................. PASS (with findings 1-6, none blocking)
+  Capture mode: pty (real ConPTY, scripted) - not `ran`. No human looked at a
+  Windows Terminal window; see "Not checked".
+  ctrl+c: with the board open (run 2, Add person form up) one ctrl+c closed the
+  whole board and returned to pi's editor - the board/overlay takes it, pi did
+  not exit. After q (board already closed, run 3) one ctrl+c went to pi: the
+  screen did not change and pi stayed alive (no exit on a single press).
+
+HOW IT WAS DRIVEN
+  Install: `HOME=<scratch>/f56home sh <worktree>/install.sh` - a scratch HOME, never
+  the real ~/.pi. It wrote <scratch>/f56home/.pi/agent/extensions/skillator-ops.ts:
+    export { default } from "<scratch>/f56home/.pi/agent/skills/ops-board/pi/index.ts";
+  Repo: a fresh `git clone` of the RUN-0015 worktree into the scratchpad (f56clone),
+  with the worktree's working TICKETS.md copied over it (the board copy under test).
+  pi: pywinpty 3.0.5 ConPTY at 100 cols x 32 rows, cwd = the clone,
+    argv  ["C:/Program Files/nodejs/node.exe", ".../pi-coding-agent/dist/cli.js"]
+    env   PI_CODING_AGENT_DIR=<scratch>/f56home/.pi/agent, HOME/USERPROFILE=<scratch>/f56home
+  Every byte fed to pyte 0.8.2 (pip --target into the scratchpad); the 100x32 screen
+  dumped after each key. Keys: Enter = CR, down = ESC[B, tab = HT, ctrl+c = 0x03.
+  No model call: no normal prompt was ever sent (footer stayed 0.0%/272k).
+  Three runs:
+    run 1  fixed 8 s startup sleep - pi's first start downloads fd and ripgrep into
+           the agent dir/bin, so every key landed before the editor existed. Discarded.
+    run 2  waits for pi's footer, then the brief's exact keys: /ops Enter 1 2 3 1 down
+           Enter a Enter down d Enter t q ctrl+c. The clone had no .skillator/team.md,
+           so `a` Enter opened Add person and every later key was typed into that form
+           (down = next field; d, t, q became text). ctrl+c then closed the board.
+           Board unchanged. Kept for the ctrl+c-while-open result.
+    run 3  same, but at Add person it typed @qa-bot / QA Bot / qa@example.com (tab
+           between) + Enter, then Enter on the Assign dialog it returned to; then the
+           brief's keys resume: down d Enter t q ctrl+c.
+  After each run pi was killed with `taskkill /F /T` on the ConPTY child (it was alive
+  - expected, nothing quits pi); a Win32_Process sweep then showed no node/sh/fd/rg
+  naming the scratch dir or pi-coding-agent.
+
+RESULT LINES
+  run 3: every frame longest line 100 cols at 100 (no overflow); pi alive after
+         ctrl+c; killed; process sweep empty.
+  board: B5 [~] -> [ ] [owner: @qa-bot]; F60 [ ] -> [?] [decide: @qa-bot];
+         new .skillator/team.md with @qa-bot. Nothing else in the clone changed.
+
+SCREENS (run 3, trimmed: pi banner and blank rows dropped, 100 cols)
+
+----- start (pi ready) -----
+[Extensions]
+  skillator-ops.ts
+[Skill conflicts]
+  ~\.pi\agent\skills\PLATFORMS.md
+    description is required
+  ~\.pi\agent\skills\PRACTICE.md
+    description is required
+  ~\.pi\agent\skills\WORKFLOW.md
+    description is required
+0.0%/272k (auto)                                                                    gpt-5.4 • medium
+
+----- typed /ops -----
+/ops
+→ ops                   [u] skillator ops board: tickets, runs, health (--once: one frame)
+
+----- Enter (/ops) -----
+ 1 Tickets   2 Runs   3 Health                                                        ops · f56clone
+filter  app: all                                                              f filter · x show done
+● In progress (6)
+› ● B4   ops on a large TICKETS.md shows "no TICKETS.md at <root>" with the file there (owner repor…
+  ● B5   ops-board pane (Claude Code, installed ops-board 0.1.0 @ a3c6fa2): in the Team view (t), `…
+  ● F52  tickets-zordon Workflow mode asks the execution mode too (owner decision 2026-10-18, split…
+  ● F55  ops for every host, part 2: standalone `ops` terminal app (sh + ps1 launchers) run beside …
+  ● F56  ops for every host, part 3: Pi native port - the ops views inside pi through i…  @cc-0211b2
+  ● F57  ops for every host, part 4: Antigravity native port - the ops views as a webvi…  @cc-0211b2
+● Pending (1)
+  ● F60  /engage on Claude Code by hook (owner 2026-10-22, after F58 closed host-limited): a UserPr…
+● Deferred (2)
+  ● A62  auto-invocation is untested on cursor, codex, antigravity and pi; `PLATFORMS.md` now says …
+    ● A62d prime-agent auto-invocation is unverified (deferred: prime-agent is not installed on thi…
+7 open (1 pending · 6 in progress · 0 blocked · 0 decision) · 2 deferred
+↑↓ move · enter line · a assign · d decide · t team · r reload · q quit
+● ops · mem 2.2 GB · /tmp 103 GB free · 5h ? · 7d ?
+
+----- 1 -----  (same as above)
+
+----- 2 (Runs, 1.5 s after the key) -----
+ 1 Tickets   2 Runs   3 Health                                                        ops · f56clone
+reading runs…
+↑↓ move · enter stages · s start a planned run · r reload · q quit
+
+----- 3 (Health) -----
+Usage          from watch-cortana usage-watch level
+  5-hour        not observable here
+  7-day         not observable here
+  Relay         no decision without a reading
+  Credit        not available
+Machine
+  Memory        2.2 GB free        amber < 2 GB · red < 1 GB
+  Disk /tmp     103 GB free        amber < 5 GB · red < 1 GB
+  Hold          none
+  Stale locks   none
+R resume (releases the hold on a fresh non-red reading) · r reload · q quit
+
+----- 1, down, Enter (line) -----
+› ● B5   ops-board pane (Claude Code, installed ops-board 0.1.0 @ a3c6fa2): in the Team view (t), `…
+      - [~] B5 — ops-board pane (Claude Code, installed ops-board 0.1.0 @ a3c6fa2): in the Team vie…
+
+----- a -----
+  ┌─ Assign B5 ─────────────────────────────────────────────────────┐
+  │  (•) implementation   ( ) decision          a / d               │
+  │  no .skillator/team.md yet - + add person creates it            │
+  │  › + add person                                                 │
+  │  Change  [~] in progress → [ ] pending, owner (pick someone)    │
+  │  ! B5 is in progress - this moves it to pending; tell whoever i…│
+  │  Runs    ticket-meta assign B5 @?                               │
+  │  Enter confirm · Esc cancel                                     │
+  └─────────────────────────────────────────────────────────────────┘
+
+----- Enter -> Add person, typed -----
+  ┌─ Add person ────────────────────────────────────────────────────┐
+  │  Handle   @qa-bot                                               │
+  │  Name     QA Bot                                                │
+  │  Emails   qa@example.com_                                       │
+  │  Runs    ticket-meta team add @qa-bot "QA Bot" qa@example.com   │
+  │  tab next field · enter add · esc cancel                        │
+  └─────────────────────────────────────────────────────────────────┘
+
+----- Enter (team add) - back on the Assign dialog -----
+  ┌─ Assign B5 ─────────────────────────────────────────────────────┐
+  │  › @qa-bot   QA Bot                                             │
+  │    + add person                                                 │
+  │  Change  [~] in progress → [ ] pending, owner @qa-bot           │
+  │  Runs    ticket-meta assign B5 @qa-bot                          │
+  └─────────────────────────────────────────────────────────────────┘
+✓ @qa-bot added to .skillator/team.md
+ran: sh C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/25dfb0fd-18f3-4f25-bc…
+
+----- Enter (assign) -----
+filter  app: all · who: all · mine: off                                       f filter · x show done
+● Pending (2)
+› ● B5   ops-board pane (Claude Code, installed ops-board 0.1.0 @ a3c6fa2): in the Team vi…  @qa-bot
+      owner:@qa-bot
+✓ B5 now pending, owned by @qa-bot: ops-board pane (Claude Code, installed ops-board 0.1.0 @ a3c6fa…
+warning: B5 was in progress - its box left [~]; tell whoever was working it
+7 open (2 pending · 5 in progress · 0 blocked · 0 decision) · 2 deferred
+
+----- down (F60), d -----
+  ┌─ Assign F60 for a decision ─────────────────────────────────────┐
+  │  ( ) implementation   (•) decision          a / d               │
+  │  › @qa-bot   QA Bot                                             │
+  │  Change  [ ] pending → [?] decision, decide @qa-bot             │
+  │  Runs    ticket-meta decide F60 @qa-bot                         │
+  └─────────────────────────────────────────────────────────────────┘
+
+----- Enter (decide) -----
+● Pending decision (1)
+› ● F60  /engage on Claude Code by hook (owner 2026-10-22, after F58 closed host-li…  decide @qa-bot
+✓ F60 now pending decision, for @qa-bot to decide: /engage on Claude Code by hook (owner 2026-10-22…
+7 open (1 pending · 5 in progress · 0 blocked · 1 decision) · 2 deferred
+↑↓ move · enter line · a assign · d decide · D decided · t team · r reload · q quit
+
+----- t (Team) -----
+Team  .skillator/team.md · 1 person
+› @qa-bot  QA Bot        qa@example.com        1 owned · 1 decide
+n add · del remove (asks first) · esc back
+
+----- q -----
+(board closed from the Team view; pi's editor and footer back, process alive)
+
+----- ctrl+c (once, after q) -----
+(no visible change; pi alive 2.5 s and 5.5 s later; killed by the driver)
+
+----- run 2: ctrl+c with the Add person form open -----
+(board overlay gone in one press, pi's editor back, pi alive)
+
+BOARD DIFF (clone's TICKETS.md, run 3; long lines cut in the middle)
+< - [~] B5 — ops-board pane (Claude Co ... (as standalone, pi and antigravity already overlay them), no second pane.
+> - [ ] B5 — ops-board pane (Claude Co ... (as standalone, pi and antigravity already overlay them), no second pane. [owner: @qa-bot]
+< - [ ] F60 — /engage on Claude Code b ... engage show the block first (headless + one live), other hosts unchanged.
+> - [?] F60 — /engage on Claude Code b ... engage show the block first (headless + one live), other hosts unchanged. [decide: @qa-bot]
+New (untracked) .skillator/team.md:
+  # Team
+
+  - @qa-bot: qa@example.com
+    name: QA Bot
+
+FINDINGS (not fixed - reported only)
+  1. The brief's key script cannot land an assign on a repo with no
+     .skillator/team.md: `a` Enter opens Add person (by design - "+ add person
+     creates it"), and the following keys become form text. Run 3 added one person
+     through the form; the assign/decide then landed exactly as the dialogs said.
+  2. q from the Team view closes the whole board; that view's footer lists only
+     "n add · del remove · esc back". Works, but q is undocumented there.
+  3. ctrl+c with the board open closes the board in one press, form included (a
+     half-typed Add person is dropped without asking). pi never exits on one press.
+  4. Health under pi on Windows reads "Disk /tmp" (and "/tmp 103 GB" in the status
+     row): pi's ticket-meta/facts calls run through sh ("ran: sh ..."), and the clone
+     sits under %TEMP%, which Git Bash mounts as /tmp. The standalone ps1 launcher
+     says "Disk C:" for the same machine. Cosmetic.
+  5. pi lists three "Skill conflicts ... description is required" at every start:
+     the installer copies PLATFORMS.md, PRACTICE.md and WORKFLOW.md into
+     ~/.pi/agent/skills, and pi 0.74 tries to load top-level .md there as skills.
+     Not an ops bug - an install-layout warning shown to every pi user.
+  6. pi's first start in a fresh agent dir downloads fd and ripgrep before the
+     editor appears; any keys sent sooner stall behind it (run 1). Host behaviour.
+  The Runs tab showed "reading runs…" at 1.5 s and was left before it filled; the
+  standalone run showed the list. Not timed further.
+
+NOT CHECKED
+  - A human at a real Windows Terminal (fonts, glyphs, colours): pyte emulated the
+    ConPTY bytes.
+  - Widths other than 100x32 (no 60/80/120 run inside pi), resize, Esc, R, s, D.
+  - pi 1.4.0 (the version pi offers to update to) - only 0.74.2 was driven.
+  - What a second ctrl+c does in pi (exit or not) - only one press was sent.
