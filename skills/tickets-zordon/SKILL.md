@@ -413,10 +413,12 @@ Ask once: all three modes, your recommendation first (`AskUserQuestion`; no
 such tool → a numbered list). Then **end your turn** — no `[~]` flip, no
 dispatch, until the user answers. No question when the user already named a
 mode ("ultracode", "use a workflow", "fan out agents", "one agent per ticket",
-"single agent") — use it. No question when the run is headless, chained or
-inside a relay — take your recommendation and log
-`Ruling: mode <m> - <why> - <cost if wrong>`. Unasked, the most you pick is
-per-task.
+"single agent") — use it. No question when the mode was already answered this
+turn (by the user, or by relay-morpheus's `references/marathon.md` entry) —
+don't re-ask. No question when the run is headless, chained or inside a relay —
+take your recommendation, capped at per-task unless the user named workflow,
+and log `Ruling: mode <m> - <why> - <cost if wrong>`. Unasked, the most you
+pick is per-task.
 
 **`F` tickets in the sweep still go to ONE build-jarvis pass**, handed the
 sweep's answer as a named mode, so the user is asked once.

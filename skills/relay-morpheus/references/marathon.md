@@ -6,7 +6,8 @@
 request.** With the user present, ask tickets-zordon's sweep mode question first
 (Workflow mode, "Ask the mode once before a sweep"), with **marathon** offered
 beside single / per-task / workflow: the staged chain on this page, which keeps
-going across sessions and parks questions to one end batch.
+going across sessions and parks questions to one end batch. Already answered
+this turn - don't re-ask.
 
 **Run a marathon without asking only when it was named** — `/marathon`,
 "marathon", "keep going", "work them all, staged", "while I'm away" — or the run
@@ -16,7 +17,7 @@ is headless, chained or already inside a relay. Then log
 **Another mode picked → hand the tickets to tickets-zordon in that mode.** No
 run is opened: no `init`, no `chain plan`.
 
-Every chain runs as a marathon unless the user said "ask me as you go"
+Once picked, every chain runs as a marathon unless the user said "ask me as you go"
 (`RM queue --asks live`, then a parked question is asked at the next
 between-stage point). Design: `docs/plans/PLAN-marathon.md`. `RM` is the same
 page shorthand as in [chain.md](chain.md): type the full `sh "<path>" …` every

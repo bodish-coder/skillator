@@ -12,7 +12,8 @@ headless / chained run:** load `skillator:relay-morpheus` and run a marathon
 command for a bare "work the board" / "work the open tickets" with the user
 present: do not `init` or `chain plan`. Follow relay-morpheus
 `references/marathon.md`, "Entry — a marathon is picked, not assumed": ask the
-mode once, with marathon one of the options.
+mode once, with marathon one of the options (already answered this turn -
+don't re-ask).
 
 Tickets: $ARGUMENTS
 
