@@ -276,8 +276,11 @@ write the ticket.**
 - Finished *and verified* (tests/build/manual check actually run) → `[x]`,
   via `ticket-meta done <ID> [evidence]`: the box `[x]`, the `tag` a close owes,
   and, when evidence is given, ` **Done <YYYY-MM-DD>: <evidence>**` before the
-  session tag (one line, no parentheses or `*`; it replaces an earlier Done
-  note). It refuses a cancelled `[-]` ticket - reopen it with `assign` first.
+  session tag (it replaces an earlier Done note). The evidence is one line with
+  **no parentheses and no `*`** — ticket-meta refuses them — so write a commit,
+  a test result or a quote without them: `RUN-0017 stage 110, bd408c6`, not
+  `(RUN-0017, bd408c6)`; `sweep PASS 8/8`, not `**PASS** (8/8)`. It refuses a
+  cancelled `[-]` ticket - reopen it with `assign` first.
   Not verified, not done.
 - Built, but the verifying test has not run yet and is not yours to run now —
   an owner's live check, a GREEN on another host, a CI run → `[%]` testing,
@@ -397,13 +400,18 @@ status it really has. **Propose from evidence, never invent it.**
 
    | Proposal | Only when |
    |---|---|
-   | `[x]` done | the line's Done criterion is shown met by named evidence — a commit, a test result, an owner confirmation quoted on the line. Cite it. |
+   | `[x]` done | the line's Done criterion is shown met by named evidence — a commit, a test result, an owner confirmation quoted on the line. Cite it, and write it without parentheses or `*` (see step 4). |
    | `[%]` testing | built, and a named test or check is still owed (an owner's live check, another host's GREEN, a CI run) — ` (testing: <what>)` |
    | `[!]` blocked | it cannot proceed until something outside it lands — ` (blocked: <on what>)` |
    | `[>]` deferred | postponed by choice until a condition — ` (deferred: <until what>)` |
    | `[?]` decision | it waits on a person's choice — name who decides |
-   | stays `[~]` | still being worked: a commit naming it in the last 24 hours, or a run stage on it dispatched and not done |
+   | stays `[~]` | still being worked: a session tag on the line (`(@cc-a4f1c9)`, any agent prefix — reason "worked by @cc-a4f1c9"), a commit naming it in the last 24 hours, or a run stage on it dispatched and not done |
    | stays `[~]`, "evidence unclear" | anything else. Unsure is not done. |
+
+   A `[~]` row carrying a session tag is held by that session: it stays `[~]`
+   ("worked by @cc-xxxx") and is **never** proposed for another status, whatever
+   its notes or commits say — unless the user names that ID in the command's
+   arguments or in the answer.
 
 3. Show **one table** — `ID | now -> proposed | reason (the evidence, one line)`
    — then ask **once**: accept all / pick (which IDs) / none. No question tool
@@ -412,9 +420,13 @@ status it really has. **Propose from evidence, never invent it.**
    (`claude -p`, a chained or relay stage), or the question comes back
    unanswered → propose only, apply nothing, and say `applied: none (headless)`.
    - `[%]` → `ticket-meta testing <ID> <what test>`.
-   - `[?]` → `ticket-meta decide <ID> @who`; with no `.skillator/team.md` (decide
-     refuses) flip the box by hand and write ` (decide: <who>)`.
-   - `[x]` → `ticket-meta done <ID> <the evidence>` (it tags the ticket too).
+   - `[?]` → `ticket-meta decide <ID> @who`. With no `.skillator/team.md`
+     (decide refuses) do **not** flip the box by hand: leave the row `[~]` and
+     say in the report who decides and that `decide` needs a team file. Only if
+     the user then asks for it: `ticket-meta team add @who "Name" <email>`
+     (it creates the team file), then `decide`.
+   - `[x]` → `ticket-meta done <ID> <the evidence>` (it tags the ticket too),
+     the evidence written without parentheses or `*`.
    - `[!]` → `ticket-meta block <ID> <on what>`.
    - `[>]` → `ticket-meta defer <ID> <until what>`.
    - Never hand-edit a box ticket-meta has a subcommand for.
