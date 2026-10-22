@@ -929,8 +929,8 @@ function Invoke-Selftest {
     Eq 'testing replaces the note' (Run testing F42 '  new check ') "- [%] F42 $dash Under test (testing: new check)"
     $o = [string]::Join(' ', @(Run testing F42 new check))
     if ($o -notmatch 'no change') { Write-Output "FAIL: same testing did not say no change: [$o]"; $script:fail = 1 }
-    Eq 'tested pass' (Run tested F43 pass) "- [x] F43 $dash Passing (testing: unit run)"
-    Eq 'tested fail' (Run tested F44 FAIL) "- [~] F44 $dash Failing (testing: live check)"
+    Eq 'tested pass, any case' (Run tested F43 PaSs) "- [x] F43 $dash Passing (testing: unit run)"
+    Eq 'tested fail, any case' (Run tested F44 fAiL) "- [~] F44 $dash Failing (testing: live check)"
     $f62a = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
     if (-not (Refused tested F46 pass)) { Write-Output 'FAIL: tested flipped a ticket that is not [%]'; $script:fail = 1 }
     if (-not (Refused tested F42 maybe)) { Write-Output 'FAIL: tested took a verdict that is not pass/fail'; $script:fail = 1 }

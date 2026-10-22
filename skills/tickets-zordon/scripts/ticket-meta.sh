@@ -375,9 +375,10 @@ cmd_testing() {
 cmd_tested() {
   [ $# -eq 2 ] || die "usage: tested <ID> pass|fail"
   norm_id "$1"
-  case $2 in
-    pass|PASS|Pass) mk='x' ;;
-    fail|FAIL|Fail) mk='~' ;;
+  # any case, as ticket-meta.ps1 takes it
+  case $(printf '%s' "$2" | tr '[:upper:]' '[:lower:]') in
+    pass) mk='x' ;;
+    fail) mk='~' ;;
     *) die "usage: tested <ID> pass|fail - not '$2'" ;;
   esac
   SET_MARK=$mk SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' SAME_KEY='' NEED_MARK='%' edit_line
@@ -787,8 +788,8 @@ selftest() {
   eq "testing replaces the note" "$(run testing F42 '  new check ')" "- [%] F42 $D Under test (testing: new check)"
   sh "$self" testing F42 new check > "$T/out" 2>&1 || { echo "FAIL: same testing failed: $(cat "$T/out")"; fail=1; }
   grep -q 'no change' "$T/out" || { echo "FAIL: same testing did not say no change: $(cat "$T/out")"; fail=1; }
-  eq "tested pass" "$(run tested F43 pass)" "- [x] F43 $D Passing (testing: unit run)"
-  eq "tested fail" "$(run tested F44 FAIL)" "- [~] F44 $D Failing (testing: live check)"
+  eq "tested pass, any case" "$(run tested F43 PaSs)" "- [x] F43 $D Passing (testing: unit run)"
+  eq "tested fail, any case" "$(run tested F44 fAiL)" "- [~] F44 $D Failing (testing: live check)"
   cp TICKETS.md "$T/f62a.md"
   sh "$self" tested F46 pass > /dev/null 2>&1 && { echo "FAIL: tested flipped a ticket that is not [%]"; fail=1; }
   sh "$self" tested F42 maybe > /dev/null 2>&1 && { echo "FAIL: tested took a verdict that is not pass/fail"; fail=1; }
