@@ -380,6 +380,16 @@ function Invoke-SelfTest([string]$T) {
 
   $null = & $run @()
   if ($script:selfCode -ne 0) { return "install exited $script:selfCode" }
+  # B6: every frontmatter in commands\ and host-commands\ must be valid YAML or pi never registers
+  # the command. No YAML parser in the installer, so a narrow check: an unquoted plain value
+  # holding ": " (the one slip that bit /archive-tickets). Quote such a value.
+  foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'commands'), (Join-Path $PSScriptRoot 'host-commands') -Recurse -Filter '*.md' -File)) {
+    $ls = [IO.File]::ReadAllLines($f.FullName)
+    if ($ls.Count -eq 0 -or $ls[0].TrimEnd() -ne '---') { continue }
+    for ($i = 1; $i -lt $ls.Count -and $ls[$i].TrimEnd() -ne '---'; $i++) {
+      if ($ls[$i] -match '^[A-Za-z_-]+:\s+([^"''\[{|>&*!#%\s].*)$' -and $Matches[1].Contains(': ')) { return "frontmatter has an unquoted ': ' (invalid YAML, pi will not register the command): $($f.FullName): $($ls[$i])" }
+    }
+  }
   $cmds = @('.codex\prompts\pending.md', '.codex\prompts\list-tickets.md',
             '.gemini\commands\pending.toml', '.gemini\commands\list-tickets.toml',
             '.cursor\commands\pending.md', '.cursor\commands\list-tickets.md',

@@ -1,5 +1,5 @@
 ---
-description: Archive closed tickets: move [x]/[-] rows closed over 14 days (--days N) from TICKETS.md to TICKETS-archive.md (tickets-zordon)
+description: "Archive closed tickets: move [x]/[-] rows closed over 14 days (--days N) from TICKETS.md to TICKETS-archive.md (tickets-zordon)"
 ---
 Load the `tickets-zordon` skill ({{SKILLS}}/tickets-zordon/SKILL.md) and run its "Archive what has stayed closed"
 step for this repo's TICKETS.md. Arguments: the words typed after the command (`--days N`, default 14).

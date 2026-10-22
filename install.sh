@@ -381,6 +381,14 @@ if [ -n "$selftest" ]; then
   printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/ide-calls"\n' "$T" > "$T/fake-ide"; chmod 755 "$T/fake-ide"
   export SKILLATOR_AGY_IDE="$T/fake-ide"
   HOME=$T CODEX_HOME=$T/.codex sh "$0" >/dev/null || { echo "FAIL: install exited $?"; exit 1; }
+  # B6: every frontmatter in commands/ and host-commands/ must be valid YAML or pi never registers
+  # the command. No YAML parser in the installer, so a narrow check: an unquoted plain value
+  # holding ": " (the one slip that bit /archive-tickets). Quote such a value.
+  _bad=$(find "$root/commands" "$root/host-commands" -type f -name '*.md' | while read -r f; do
+    awk -v f="$f" 'NR==1 { if ($0 != "---") exit } NR>1 && /^---[ \t\r]*$/ { exit }
+      NR>1 && /^[A-Za-z_-]+:[ \t]+[^"\x27\[{|>&*!#% \t]/ { v=$0; sub(/^[A-Za-z_-]+:[ \t]+/, "", v); if (v ~ /: /) print f ": " $0 }' "$f"
+  done)
+  [ -z "$_bad" ] || { echo "FAIL: frontmatter has an unquoted \": \" (invalid YAML, pi will not register the command): $_bad"; exit 1; }
   for f in .codex/prompts/pending.md .codex/prompts/list-tickets.md .gemini/commands/pending.toml .gemini/commands/list-tickets.toml \
            .cursor/commands/pending.md .cursor/commands/list-tickets.md .pi/agent/prompts/pending.md .pi/agent/prompts/list-tickets.md \
            .gemini/config/skills/pending/SKILL.md .gemini/config/skills/list-tickets/SKILL.md \
