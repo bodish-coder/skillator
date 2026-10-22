@@ -252,9 +252,9 @@ function chipLine(t: Ticket): Seg[] {
   return out
 }
 
-// The tag a row carries at its right: the session working it (only while [~] - A143 keeps
-// the tag after the box moves on), else its owner or decider.
-const tagOf = (t: Ticket) => (t.box === '~' ? t.session : null) ?? t.owner ?? (t.decide ? 'decide ' + t.decide : null)
+// The tag a row carries at its right: the session working it (only while [~] or [%] - A143
+// keeps the tag after the box moves on), else its owner or decider.
+const tagOf = (t: Ticket) => (t.box === '~' || t.box === '%' ? t.session : null) ?? t.owner ?? (t.decide ? 'decide ' + t.decide : null)
 
 // F61: groups as headers `  ▸ In progress (1)` (open: `▾`) in the state's colour, every one
 // collapsed at first; Enter on a header opens or closes it. The selected header or row is

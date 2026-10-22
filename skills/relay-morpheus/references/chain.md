@@ -20,11 +20,14 @@ section. A board of 1-3 tickets is `tickets-zordon` plain dispatch, not a chain.
 ## Step 1 — plan from the board (main session, before anything is dispatched)
 
 ```sh
-grep -nE '^\s*- \[[ ~!]\]' TICKETS.md
+grep -nE '^\s*- \[[ ~%!?]\]' TICKETS.md
 ```
 
 1. `[ ]` and `[~]` go in. A `[~]` stamped by another session's tag is skipped
-   with a ruling. `[>]` is never planned and never re-checked.
+   with a ruling. `[%]` (waiting on a test result) and `[?]` (waiting on a
+   person's decision) are open but not planned — list them in the run file as
+   owed, and plan one only once its result or decision is in. `[>]` is never
+   planned and never re-checked.
 2. `[!]` rows: read `(blocked: …)`. Names a ticket that is now `[x]`, or a
    file/condition the tree satisfies (check the tree, not the text) → flip it
    to `[ ]` and put it in a **later** stage than what unblocked it. Otherwise

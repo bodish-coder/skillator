@@ -323,7 +323,8 @@ write the ticket.**
   cp1252 (a bare Python `open()` on Windows) matches nothing and changes
   nothing while exiting 0. Read, write and compare it as UTF-8.
 - Cycle end / session end: re-read the file and correct any status that drifted,
-  then report the open set (`[ ]` and `[~]`) to the user.
+  then report the open set — every open box: `[ ]`, `[~]`, `[%]`, `[!]` and
+  `[?]` — to the user.
 - Once the turn's edits are read back, republish the artifact board — see
   **The artifact board**. Board changed, artifact stale, is a bug.
 

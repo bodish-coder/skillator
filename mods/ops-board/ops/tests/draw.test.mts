@@ -250,10 +250,12 @@ test('health with readings: bars, relay, machine rows with their thresholds', ()
   assert.match(h, /  Hold          set 03:29Z: mem 0\.5 GB/)
   assert.match(h, /  Stale locks   none/)
 })
-test('A143 follow-up: a row shows its session tag only while [~]; a stale one left on [ ] yields to the owner', () => {
+test('A143 follow-up: a row shows its session tag only while [~] or [%]; a stale one left on [ ] yields to the owner', () => {
   const b = '# Tickets\n\n- [~] F1 — live work [owner: @vidul] (@cc-aaaaaa)\n- [ ] F2 — handed over [owner: @asha] (@cc-bbbbbb)\n'
+    + '- [%] F3 — built (testing: live check) [owner: @asha] (@cc-cccccc)\n'
   const f = text(opened(onBoard(initial(80, 24, 0), parseBoard(b, 'T', 1, 1), [{ handle: '@asha', emails: [] }], null)))
   assert.match(f, /F1 +live work +@cc-aaaaaa/)
+  assert.match(f, /F3 +built.* +@cc-cccccc/)
   assert.match(f, /F2 +handed over +@asha/)
   assert.doesNotMatch(f, /F2 .*@cc-bbbbbb/)
 })
