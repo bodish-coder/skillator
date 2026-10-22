@@ -1,6 +1,6 @@
 # RUN-0015 - finish the open board
 plan: TICKETS.md
-started: 2026-10-22T09:38Z   updated: 2026-10-22T11:29Z
+started: 2026-10-22T09:38Z   updated: 2026-10-22T12:15Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board
 branch: run/RUN-0015-finish-the-open-board
 
@@ -10,9 +10,10 @@ branch: run/RUN-0015-finish-the-open-board
 | 101 | AAAQ B5 dialogs inside the ops pane | x | build:opus | 2026-10-22T10:10Z | b735722 |
 | 102 | AAAR F60 engage by hook | ! | build:opus | 2026-10-22T10:15Z | 3aec85f |
 | 103 | AAAS F56 pi ops keys via pty | x | build:opus | 2026-10-22T11:27Z | 0c9886d |
-| 104 | verify review bump land |   | - | - | - |
-| 105 | AAAT A145 pi skill warnings | ~ | build:opus | 2026-10-22T11:29Z | - |
-| 106 | AAAU A146 A147 ops Team footer, ctrl+c, pi disk | ~ | build:opus | 2026-10-22T11:29Z | - |
+| 104 | verify review bump land | x | main:opus | 2026-10-22T12:15Z | ab84f22 |
+| 105 | AAAT A145 pi skill warnings | x | build:opus | 2026-10-22T11:41Z | 1c67ae4 |
+| 106 | AAAU A146 A147 ops Team footer, ctrl+c, pi disk | x | build:opus | 2026-10-22T11:51Z | 725069f |
+| 107 | AAAV B5 round 2 review fixes | x | build:opus | 2026-10-22T12:05Z | 32f9110 |
 
 ## In flight
 
@@ -120,6 +121,27 @@ prompt: |
   Owner rule: one agent at a time - do not spawn subagents or parallel fan-outs; do every phase yourself, in order.
 
   REPORT (under 300 words): what you changed (files), the commit sha(s), the exact checks you ran and their result lines, every command that was refused or needed approval, any Ruling:/PARKED:/STOP: lines.
+### AAAV - stage 107 - B5 round 2 review fixes
+tickets: B5 build/build
+files: mods/ops-board/hooks,mods/ops-board/tests,mods/ops-board/.claude-plugin/plugin.json,.claude-plugin/marketplace.json
+prompt: |
+  Ticket B5 round 2 (skillator repo) - three review findings on b735722 (the assign / decide / add-person forms now drawn inside the ops-board pane). Read the B5 line in C:/tools/Projects/skillator2/TICKETS.md (read only) and `git -C "<worktree>" show b735722`. Host API: mods/ops-board/.claude-plugin/types/claude-code/index.d.ts.
+
+  1. (verified by the main session) mods/ops-board/hooks/register.tsx `ui.scroll` hook on requestId 'ops-board' checks only `tab === 'tickets'`, not whether a form is up: with a form showing, a one-row up/down moves selectedA on the hidden Tickets list (the selection has jumped after Cancel), and a form taller than the pane cannot scroll or scrolls by the Tickets model's offset. Fix: pass the event through (`return next(e)`) while a form is up.
+  2. (review, confidence 60) closeOnEscape is "set anew" on every ui.open: openPane (the /ops command and the arm path) does not pass it, so a re-open while a form is up silently drops Esc-as-Cancel; and `/ops runs|health|agents` while a form is up hides the form (renderForm runs after the other tabs' branches in pane.tsx) but isFormUp stays true, so the next Esc/close on that tab is consumed as an invisible Cancel. Fix the smallest way: keep closeOnEscape when a form is up on re-open, and clear the form (or make isFormUp tab-aware) when the tab changes away from the form's view.
+  3. (review, confidence 50) Esc on an Add person form opened from the assign form calls closeForm, which clears both personA and assignA - but the form's Cancel button (cancelPerson) returns to the assign form. Esc should do what Cancel does: drop one level.
+
+  Reproduce each with a failing test in mods/ops-board/tests (the existing assign.test.tsx style - mount the pane, drive keys/scroll/close events) before fixing; say verified/inferred for each. Done = all three red then green, `claude plugin test "<worktree>/mods/ops-board"` all pass, `claude plugin validate "<worktree>/mods/ops-board"` ok, ops-board version 0.3.0 -> 0.3.1 in mods/ops-board/.claude-plugin/plugin.json and its .claude-plugin/marketplace.json entry. Commit as "B5: <what>". TICKETS.md in the worktree is a copy - never stage or commit it.
+
+  WHERE: work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board (branch run/RUN-0015-finish-the-open-board), never in the main checkout C:/tools/Projects/skillator2. Do not edit TICKETS.md (the main session flips the board). Do not push.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board" status`, `git -C "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board" add <paths>`, `git -C "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Before you edit, decide whether the ticket needs a choice only the user can make (taste, a fact only they know, a conflict nothing settles). If you can decide it from the ticket, spec, repo conventions or the user's words, decide it and say `Ruling:` in your report. If not: do every part that does not depend on the answer, and touch nothing that does. Do not stub it, guess it or leave a placeholder. Then end your report with `PARKED:` plus the question, 2-4 options with what each does and where it hurts, your recommendation and default, the part that waits, and every file or directory it will touch (err wide). If the choice is a destructive, security or outside-the-worktree act, say `STOP:` instead. Never ask the user and never wait.
+
+  Owner rule: one agent at a time - do not spawn subagents or parallel fan-outs; do every phase yourself, in order.
+
+  REPORT (under 300 words): what you changed (files), the commit sha(s), the exact checks you ran and their result lines, every command that was refused or needed approval, any Ruling:/PARKED:/STOP: lines.
 
 ## Rulings
 - 2026-10-22T13:50Z - Owner: "can we complete all the tickets". Ruling: agent-workable now - B5 (cause found: dialog pane opens unshown behind the ops pane; fix = forms inside the ops pane, ruled consistent with standalone/pi/antigravity), F60 (engage by hook), F56 (pi /ops live keys via ConPTY). Not agent-workable: B4 (owner's other repo), F52 (Claude Code GREEN after 2026-10-23), F55/F57 human glance in a real window. Stages 101+102 together (disjoint), 103 after 101 lands. Stage 104 verify/review/bump/land - landing covered by the owner's standing merge+push answer (2026-10-22).
@@ -129,3 +151,7 @@ prompt: |
 - 2026-10-22T15:05Z - AAAS: 103 landed 0c9886d - F56 PASS in pi (ConPTY), closed [x]. Owner closed F60 host-limited. Findings filed A145 (pi skill warnings), A146 (Team footer q, ctrl+c drops a form), A147 (Disk /tmp under pi). Ruling: stages 105 (A145, installers) and 106 (A146+A147, mods/ops-board) run together - disjoint; then 104 verify/review/bump/land.
 - 2026-10-22T15:06Z - Ruling: watchdog hold from 11:28Z (0.9 GB) released at 1.17 GB; 105 and 106 dispatched together on the owner's standing 'together' preference - costs a slow machine if memory dips.
 - 2026-10-22T15:20Z - Owner: "update here will run ops and check a". Ruling: main fast-forwarded to 0c9886d (B5, F60 evidence, F56 evidence), bumped 4.11.2 (ops-board 0.3.0 from b735722), pushed as bodish-coder, plugins updated, so the owner can check B5 live. No /code-review on b735722 yet - mod 196/196 re-run here; stage 104 reviews the whole branch before the final land. 105/106 continue on the run branch.
+- 2026-10-22T15:40Z - AAAT: 105 landed 1c67ae4 - A145 [x] (pi .ignore for the canon files).
+- 2026-10-22T16:00Z - AAAU: 106 landed 3f80022 (A146), 725069f (A147) - ops 79/79, mod 196/196, pending selftest ok. One full ops run hung >15 min in pi/tests/ops.test.mts (killed; alone 7/7, rerun ok) - watch in the sweep. Stage 104 starts.
+- 2026-10-22T16:30Z - Stage 104 sweep at 725069f: ops 79/79 (13 s, no hang), mod 196/196, pending sh+ps1 ok, ticket-meta ok, install.sh/ps1 ok, validate ok. Review (sonnet) of b735722 1c67ae4 3f80022 725069f: none at 80+; B5 #1 (70, scroll hook moves the hidden Tickets selection while a form is up) verified by reading register.tsx:421-431; #2 (60, re-open drops closeOnEscape / tab switch leaves an invisible form) and #3 (50, Esc on add-person-from-assign drops both levels) plausible. Ruling: fix all three as stage 107 before landing - the owner is about to test B5 live; A147 #4 (30, df Capacity '-') and A145 BOM (15) not acted on.
+- 2026-10-22T17:00Z - AAAV: 107 landed 32f9110 - B5 review findings 1-3 red then green, mod 199/199, ops-board 0.3.1. Stage 104: run branch merged into main (ab84f22, clean); on main mod and ops suites re-run green; bumped 4.11.3; pushed as bodish-coder; plugins updated; installers re-run --force so pi gets the .ignore and the A146/A147 code. B5 stays [~] until the owner's live check. Worktree and branch removed.
