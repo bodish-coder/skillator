@@ -67,6 +67,16 @@ async function loadBoard($: EngineInterface, path: string, st: { mtimeMs: number
   try { return parseBoard(await $.fs.read(path), path, st.mtimeMs, st.size) } catch (e) { return failed(path, notLoaded(e)) }
 }
 
+// B4: the pane holds the board in one $.state value, which the host caps at 4194304
+// characters of JSON. Title and line both carry a ticket's text, so a 3.8 MB board of
+// long lines came to 7.7 M and never loaded. The pane draws a title on one row and a
+// line wrapped under it, so it keeps the head of each; /list-tickets reads the file whole.
+const TITLE_MAX = 200
+const LINE_MAX = 2000
+const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
+const held = (b: Board): Board => (b.error ? b
+  : { ...b, tickets: b.tickets.map(t => ({ ...t, title: clip(t.title, TITLE_MAX), line: clip(t.line, LINE_MAX) })) })
+
 // One poll: TICKETS.md re-read when its mtime or size moved; team.md likewise.
 async function poll($: EngineInterface) {
   const repo = await $.session.repo()
@@ -80,7 +90,7 @@ async function poll($: EngineInterface) {
     const cur = await read($, boardA)
     if (!cur || cur.error || cur.path !== path || cur.mtimeMs !== st.mtimeMs || cur.size !== st.size) {
       // the engine can refuse to hold the parsed board too - say so, not "missing"
-      try { await setBoard($, await loadBoard($, path, st)) } catch (e) { await setBoard($, failed(path, notLoaded(e))) }
+      try { await setBoard($, held(await loadBoard($, path, st))) } catch (e) { await setBoard($, failed(path, notLoaded(e))) }
     }
   }
   const teamPath = root + '/.skillator/team.md'
