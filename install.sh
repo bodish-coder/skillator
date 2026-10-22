@@ -186,6 +186,23 @@ prune_dest() {
   done
 }
 
+# pi_ignore <dest>: A145 - pi (0.74) loads every top-level .md in its skills dir as a
+# skill, so the canon docs beside the skills warned "description is required" at each
+# start. Its skill loader honours .ignore / .gitignore / .fdignore in that dir (core/
+# skills.js addIgnoreRules), so list the three docs there: pi skips them, the files stay
+# at ../ for every skill. Missing lines are appended; a user's own lines are kept.
+pi_ignore() {
+  _ig="$1/.ignore"
+  if [ ! -f "$_ig" ]; then
+    echo "# written by the skillator installer: pi must not load these docs as skills" > "$_ig"
+  elif [ -n "$(tail -c 1 "$_ig")" ]; then
+    echo >> "$_ig"
+  fi
+  for _d in PLATFORMS.md PRACTICE.md WORKFLOW.md; do
+    tr -d '\r' < "$_ig" | grep -qxF "/$_d" || echo "/$_d" >> "$_ig"
+  done
+}
+
 # install_into <cli> <dest>: sync the skills, then always refresh the shared docs.
 install_into() {
   _cli=$1; _dest=$2
@@ -228,6 +245,7 @@ install_into() {
   # F57: and antigravity/, the same board as an Antigravity IDE extension (put_agy_ext).
   if [ -n "$dry" ]; then
     echo "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice/ references/ ops-board/ in $_dest"
+    if [ "$_cli" = pi ]; then echo "        would list the three docs in $_dest/.ignore (pi skips them as skills)"; fi
   else
     mkdir -p "$_dest"
     cp "$root/PLATFORMS.md" "$root/PRACTICE.md" "$root/WORKFLOW.md" "$_dest/"
@@ -237,6 +255,7 @@ install_into() {
       cp -R "$root/mods/ops-board/hooks/lib" "$_dest/ops-board/hooks/" &&
       cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$root/mods/ops-board/pi" "$root/mods/ops-board/antigravity" "$_dest/ops-board/"
     printf '%s\n' "$shipped" > "$_dest/$manifest"
+    if [ "$_cli" = pi ]; then pi_ignore "$_dest"; fi
   fi
   # the targets loop is a subshell - the summary reads the dests from this file
   echo "$_dest" >> "$tmpdests"
@@ -424,6 +443,15 @@ if [ -n "$selftest" ]; then
   # F56: pi's extension re-exports the board from the pi dest's ops-board/pi (native path)
   grep -qxF "export { default } from \"$N/.pi/agent/skills/ops-board/pi/index.ts\";" "$T/.pi/agent/extensions/skillator-ops.ts" || { echo "FAIL: pi extension target"; exit 1; }
   [ "$(ls "$T/.pi/agent/extensions")" = skillator-ops.ts ] || { echo "FAIL: pi extensions dir holds more than skillator-ops.ts"; exit 1; }
+  # A145: pi's skills dirs list the three docs in .ignore (pi skips them as skills); the
+  # docs are still there at ../ from every skill, and no other host gets a .ignore
+  for d in .pi/agent/skills .pi/skills; do
+    for f in PLATFORMS.md PRACTICE.md WORKFLOW.md; do
+      [ -f "$T/$d/$f" ] || { echo "FAIL: missing $d/$f"; exit 1; }
+      grep -qxF "/$f" "$T/$d/.ignore" || { echo "FAIL: $d/.ignore does not list /$f"; exit 1; }
+    done
+  done
+  [ -e "$T/.codex/skills/.ignore" ] && { echo "FAIL: a non-pi dest got a .ignore"; exit 1; }
   # F57: the Antigravity IDE got one install of the VSIX packed in Antigravity's own dest,
   # and the VSIX's entry requires that dest's ops-board/antigravity/extension.cjs
   _agy=$T/.gemini/config/skills/ops-board/antigravity
@@ -451,7 +479,10 @@ if [ -n "$selftest" ]; then
   echo stale >> "$T/.gemini/skills/pending/SKILL.md"
   : > "$T/.gemini/skills/list-tickets/.skillator-owned"
   : > "$T/.pi/agent/skills/tickets-zordon/.selftest-sentinel"
+  printf 'my-own-line' >> "$T/.pi/agent/skills/.ignore"
   out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0") || { echo "FAIL: second install exited $?"; exit 1; }
+  grep -qx 'my-own-line' "$T/.pi/agent/skills/.ignore" || { echo "FAIL: pi .ignore lost a user line"; exit 1; }
+  [ "$(grep -cxF /PLATFORMS.md "$T/.pi/agent/skills/.ignore")" = 1 ] || { echo "FAIL: pi .ignore lines duplicated on the second run"; exit 1; }
   printf '%s\n' "$out" | grep -q "not on your PATH" || { echo "FAIL: PATH note"; exit 1; }
   grep -q stale "$T/.codex/prompts/pending.md" && { echo "FAIL: codex prompt not rewritten"; exit 1; }
   grep -q stale "$T/.pi/agent/extensions/skillator-ops.ts" && { echo "FAIL: pi extension not rewritten"; exit 1; }

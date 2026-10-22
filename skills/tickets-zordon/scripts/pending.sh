@@ -174,7 +174,15 @@ machine_kv() {
   if [ -n "${PENDING_DF_CMD:-}" ]; then
     dfl=$(sh -c "$PENDING_DF_CMD" 2>/dev/null | tr -d '\r' | awk 'NR == 1')
   else
-    dfl=$(df -Pk "$MAIN" 2>/dev/null | tr -d '\r' | awk 'NR == 2 { d = $6; for (i = 7; i <= NF; i++) d = d " " $i; if ($1 ~ /^[A-Za-z]:$/) d = $1; printf "%.0f %.0f %s\n", $4 * 1024, $2 * 1024, d }')
+    # Columns found from Capacity (n%): a filesystem or mount with spaces keeps
+    # its sizes. A147: under Git Bash the filesystem is the Windows path (C:,
+    # C:/Users/.../Temp for /tmp) - its drive letter names the disk, not the mount.
+    dfl=$(df -Pk "$MAIN" 2>/dev/null | tr -d '\r' | awk 'NR == 2 {
+      for (c = 5; c <= NF && $c !~ /^[0-9]+%$/; c++) ;
+      if (c > NF) exit
+      d = $(c + 1); for (i = c + 2; i <= NF; i++) d = d " " $i
+      if ($1 ~ /^[A-Za-z]:([\\\/]|$)/) d = substr($1, 1, 2)
+      printf "%.0f %.0f %s\n", $(c - 1) * 1024, $(c - 3) * 1024, d }')
   fi
   free=$(num "$(printf '%s\n' "$dfl" | awk '{ print $1 }')")
   total=$(num "$(printf '%s\n' "$dfl" | awk '{ print $2 }')")
@@ -402,6 +410,17 @@ EOF
   PENDING_MEM_CMD="echo 3435973836"
   eq "green" "$(run --kv | awk '/^(RUN|QUEUED|LOCK|HOLD|WATCHDOG)=/')" "HOLD=-${NL}WATCHDOG=green"
   eq "bad arg" "$(run --nope)" "pending: usage: pending.sh [--kv | --machine | --selftest]"
+  # A147: the real df -Pk parse, through a fake df. Git Bash reports a mounted
+  # Windows dir (/tmp, /) with its Windows path as the filesystem - the drive is
+  # its letter, not the MSYS mount; a filesystem or mount with spaces still
+  # reads its sizes from the columns before Capacity.
+  mkdir -p "$T/bin"
+  dfk() { printf '%s\n' '#!/bin/sh' "printf '%s\\n' 'Filesystem 1024-blocks Used Available Capacity Mounted on' '$1'" > "$T/bin/df"; chmod +x "$T/bin/df"
+    PATH="$T/bin:$PATH" PENDING_DF_CMD='' run --machine | awk '/^(DRIVE|DISK_FREE|DISK_TOTAL)=/'; }
+  eq "df, msys temp mount" "$(dfk 'C:/Users/someone/AppData/Local/Temp   998831100 890389084 108442016      90% /tmp')" "DRIVE=C:${NL}DISK_FREE=111044624384${NL}DISK_TOTAL=1022803046400"
+  eq "df, msys root, spaces" "$(dfk 'C:/Program Files/Git   998831100 890389100 108442000      90% /')" "DRIVE=C:${NL}DISK_FREE=111044608000${NL}DISK_TOTAL=1022803046400"
+  eq "df, msys drive mount" "$(dfk 'C:               998831100 890389084 108442016      90% /c')" "DRIVE=C:${NL}DISK_FREE=111044624384${NL}DISK_TOTAL=1022803046400"
+  eq "df, unix mount, spaces" "$(dfk '/dev/sda1 1000 600 400 60% /mnt/my disk')" "DRIVE=/mnt/my disk${NL}DISK_FREE=409600${NL}DISK_TOTAL=1024000"
 
   cd "$T/.." || true
   [ "$fail" = 0 ] || exit 1

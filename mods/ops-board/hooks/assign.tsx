@@ -162,7 +162,9 @@ async function addPerson($: EngineInterface) {
   await closeForm($)
 }
 
-async function cancelPerson($: EngineInterface) {
+// Cancel, and Esc (the register hook's refused ui.close): one level back - Add person
+// opened from the assign form returns to it, any other form goes.
+export async function cancelPerson($: EngineInterface) {
   const p = await read($, personA)
   const d = await read($, assignA)
   if (p?.back === 'assign' && d) {

@@ -142,7 +142,7 @@ function keysOf(s: State, m: Model): string[] {
   if (s.filterField) return ['←→ field', '↑↓ value', 'enter/esc leave']
   if (s.tab === 'runs') return ['↑↓ move', 'enter stages', 's start a planned run', 'r reload', 'q quit']
   if (s.tab === 'health') return ['R resume (releases the hold on a fresh non-red reading)', 'r reload', 'q quit']
-  if (s.showTeam) return ['n add', 'del remove (asks first)', 'esc back']
+  if (s.showTeam) return ['n add', 'del remove (asks first)', 'esc back', 'q quit']   // A146: q closes the board here too
   const sel = m.rows.find(t => t.id === m.selected)
   return ['↑↓ move', 'enter line', 'a assign', 'd decide', ...(sel && isDecidable(sel) ? ['D decided'] : []), 't team', 'r reload', 'q quit']
 }

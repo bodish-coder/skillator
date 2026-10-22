@@ -519,7 +519,9 @@ function toTab(s: State, tab: Tab): Step {
 
 export function reduce(s: State, k: Key): Step {
   const quit: Step = { state: { ...s, quit: true }, effects: [{ kind: 'quit' }] }
-  if (k.ctrl && k.name === 'c') return quit
+  // A146: a form holding typed text is not thrown away by one ctrl+c - it cancels the
+  // form (as Esc), the board stays; the next ctrl+c quits. An empty form has nothing to lose.
+  if (k.ctrl && k.name === 'c') return s.person && (s.person.handle || s.person.name || s.person.emails) ? personKey(s, { name: 'escape' }) : quit
   if (s.person) return personKey(s, k)
   if (s.dialog) return dialogKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
