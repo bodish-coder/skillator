@@ -30,12 +30,13 @@ type World = {
   toasts: string[]
   writes: string[]
   answer: (argv: readonly string[]) => ProcessRunResult | null
+  refuse: string | null
 }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
 function world(on: On, files: Record<string, string>, env: Record<string, string> = {}): [World, MockClock] {
-  const w: World = { files: { ...files, [META + '.sh']: '#!/bin/sh\n' }, runs: [], opens: [], closes: [], toasts: [], writes: [], answer: () => null }
+  const w: World = { files: { ...files, [META + '.sh']: '#!/bin/sh\n' }, runs: [], opens: [], closes: [], toasts: [], writes: [], answer: () => null, refuse: null }
   const at = (p: string) => w.files[p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')]
   const clock = mock.clock(on, { now: 1_000_000 })
   mock.env(on, { SKILLATOR_ROOT: '/s', ...env })
@@ -62,7 +63,7 @@ function world(on: On, files: Record<string, string>, env: Record<string, string
   })
   on('ui.open', ($, e) => {
     w.opens.push({ id: e.id, title: e.title, focus: e.focus, closeOnEscape: e.closeOnEscape, holdToasts: e.holdToasts, rows: e.rows })
-    return { value: { isPlaced: true as const } }
+    return { value: w.refuse === null ? { isPlaced: true as const } : { isPlaced: false as const, reason: w.refuse } }
   })
   on('ui.close', ($, e) => { w.closes.push(e.id); return { value: undefined } })
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
@@ -304,6 +305,21 @@ test('no team file: the dialog says so and still offers + add person', WITH, asy
   expect(await dlg.find({ key: 'go' })).toBeUndefined()
   expect(w.runs).toEqual([])
   await dlg.unmount()
+  await pane.unmount()
+})
+
+// B5: the host may leave a pane open but undrawn (a narrow terminal, a surface that
+// places no panes); the press then did nothing at all. The reason has to reach the person.
+test('a dialog the host leaves undrawn says why, for assign and for add person', WITH, async ($, on) => {
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const pane = await mountPane($, 'terminal')
+  w.refuse = 'under 144 columns unasked (100 now)'
+  await pane.press({ key: 'key:assign' })
+  expect(w.toasts.at(-1)).toBe('ops board: the Assign F3 dialog is not drawn: under 144 columns unasked (100 now)')
+  await pane.press({ key: 'key:team' })
+  await pane.press({ key: 'team:add' })
+  expect(w.toasts.at(-1)).toBe('ops board: the Add person dialog is not drawn: under 144 columns unasked (100 now)')
   await pane.unmount()
 })
 

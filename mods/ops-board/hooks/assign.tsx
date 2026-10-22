@@ -14,6 +14,13 @@ import { paint } from './paint'
 export const DIALOG_ID = 'ops-assign'
 const DIALOG = { focus: true, closeOnEscape: true, holdToasts: true, rows: 12 } as const
 
+// B5: the host can leave a pane open but undrawn (a narrow terminal, a surface that
+// places none) - say why, or the press does nothing the person can see.
+async function openDialog($: EngineInterface, title: string) {
+  const r = await $.ui.open({ id: DIALOG_ID, title, ...DIALOG })
+  if (!r.isPlaced) $.ui.toast(`ops board: the ${title} dialog is not drawn: ${r.reason}`, { timeoutMs: 10000 })
+}
+
 // Each file names the atoms it reads or writes as its own consts (see pane.tsx).
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
@@ -54,7 +61,7 @@ export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], 
   const draft: AssignDraft = { id: t.id, kind, handle: startHandle(t, kind, await read($, teamA), await read($, meA)), result: null }
   await update($, personA, () => null)
   await update($, assignA, () => draft)
-  await $.ui.open({ id: DIALOG_ID, title: titleOf(draft), ...DIALOG })
+  await openDialog($, titleOf(draft))
 }
 
 export async function closeDialog($: EngineInterface) {
@@ -104,7 +111,7 @@ export async function runDecided($: EngineInterface, id: string) {
 export async function openAddPerson($: EngineInterface, back: PersonDraft['back']) {
   if (back === 'team') await update($, assignA, () => null)
   await update($, personA, () => ({ handle: '', name: '', emails: '', result: null, back }))
-  await $.ui.open({ id: DIALOG_ID, title: 'Add person', ...DIALOG })
+  await openDialog($, 'Add person')
 }
 
 const handleOf = (s: string) => '@' + s.trim().replace(/^@+/, '').toLowerCase()
@@ -132,7 +139,7 @@ async function addPerson($: EngineInterface) {
     const next = { ...d, handle: h, result: `✓ ${h} added to .skillator/team.md` }
     await update($, personA, () => null)
     await update($, assignA, () => next)
-    await $.ui.open({ id: DIALOG_ID, title: titleOf(next), ...DIALOG })
+    await openDialog($, titleOf(next))
     return
   }
   await closeDialog($)
@@ -143,7 +150,7 @@ async function cancelPerson($: EngineInterface) {
   const d = await read($, assignA)
   if (p?.back === 'assign' && d) {
     await update($, personA, () => null)
-    await $.ui.open({ id: DIALOG_ID, title: titleOf(d), ...DIALOG })
+    await openDialog($, titleOf(d))
     return
   }
   await closeDialog($)
@@ -204,7 +211,7 @@ export async function renderDialog($: EngineInterface, e: RenderInput<'Pane'>): 
   const radio = (kind: AssignDraft['kind'], text: string) => (
     <Button key={kind === 'owner' ? 'kind:implementation' : 'kind:decision'} plain onPress={() => {
       set(x => ({ ...x, kind }))
-      void $.ui.open({ id: DIALOG_ID, title: titleOf({ ...d, kind }), ...DIALOG })
+      void openDialog($, titleOf({ ...d, kind }))
     }}>
       <Text color={d.kind === kind ? 'success' : undefined}>{d.kind === kind ? '(•)' : '( )'}</Text>{' ' + text}
     </Button>
