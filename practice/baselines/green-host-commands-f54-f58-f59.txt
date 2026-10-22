@@ -1,0 +1,138 @@
+# GREEN - host commands run headless: /pending (F54), /engage (F58), /archive-tickets (F59)
+# Date: 2026-10-22, the author's Windows 11 box, Git Bash + PowerShell 5.1. RUN-0014 stage 91.
+# Branch: run/RUN-0014-sweep-the-workable-board at 4a0bebe (plugin 4.11.0).
+# Hosts: claude-code 2.1.308 (claude-opus-5-5) | pi 0.74.2 (openai/gpt-5.4-mini, --thinking low)
+#   | cursor-agent 2026.10.19-6bbf2c4 (model Auto) | agy 1.4.5 | codex-cli 0.163.0 | gemini 0.57.0
+# Setup:
+#   $S = the session scratchpad. Scratch HOME $S/h with .claude .codex .cursor .gemini .pi marker
+#   dirs; `HOME=$S/h CODEX_HOME=$S/h/.codex SKILLATOR_AGY_IDE=$S/fake-ide sh install.sh`
+#   (worktree copy). Wrote codex/cursor/pi/gemini command files + antigravity command skills
+#   under $S/h; the real ~ was never written.
+#   Boards: `git clone <worktree>` into $S/clone, $S/clone-claude, $S/clone-pi, $S/clone-x.
+#   Neither the main checkout nor the worktree board was touched.
+#   Auth: CLIs keep auth in their home dir, so the scratch HOME was put in front of each host
+#   by a per-host route, not by moving HOME:
+#     claude  --plugin-dir <worktree> (the installed plugin is the 4.9.1 cache)
+#     pi      -np --prompt-template $S/h/.pi/agent/prompts (+ -ns --skill ...tickets-zordon), -ne
+#     cursor  installed $S/h/.cursor/commands/*.md copied to $S/clone-x/.cursor/commands (project scope)
+#     gemini  installed $S/h/.gemini/commands/*.toml copied to $S/clone-x/.gemini/commands
+#   Harness: every run under Git Bash needs MSYS_NO_PATHCONV=1 (see finding H1).
+#
+# ---------------------------------------------------------------- claude-code ----
+# /engage   cd $S/clone; claude -p '/skillator:engage what version is in .claude-plugin/plugin.json?
+#             answer in one line' --plugin-dir <worktree> --max-budget-usd 1 --allowedTools Read
+#   RESOLVED: session transcript holds `<command-name>/skillator:engage</command-name>` and the
+#             engage.md body ("rewrite a rough prompt", 2 hits).
+#   OUTPUT:   "1. The version in `.claude-plugin/plugin.json` is **4.11.0**."
+#   FAIL      no **Engaged prompt:** block. Likely because the rough prompt itself said "answer
+#             in one line", which the model obeyed over step 2. Not re-run (retries max 1, used
+#             below).
+#   retry:    same, bare '/engage ...' + --output-format stream-json. slash_commands lists
+#             "skillator:engage", "skillator:archive-tickets". But the transcript user message is
+#             the literal "/engage what version..." - NOT expanded. Answer "1. The version is
+#             `4.11.0`". FINDING C1: under -p only the namespaced /skillator:engage resolves.
+#             The bare /engage that commands/engage.md and the README imply does not.
+# /archive-tickets   cd $S/clone-claude; claude -p '/skillator:archive-tickets' --plugin-dir <worktree>
+#             --max-budget-usd 2 --allowedTools Read Bash Glob Grep Skill
+#   GREEN     transcript `<command-name>/skillator:archive-tickets`; Bash ran
+#             `sh practice/scripts/archive-tickets.sh --dry-run` ->
+#             `sh practice/scripts/archive-tickets.sh && sh practice/scripts/check-tickets.sh` ->
+#             `git add TICKETS.md TICKETS-archive.md && git commit`.
+#             "I moved 32 closed tickets into the archive and committed them as
+#             `240141f tickets: archive 32 closed`" ... "`check-tickets.sh` passed".
+#             clone log: 240141f tickets: archive 32 closed. Nothing pushed.
+#
+# ---------------------------------------------------------------- pi ----
+# probe     echo '{"type":"get_commands"}' | PI_CODING_AGENT_DIR=$S/h/.pi/agent pi --mode rpc
+#   lists prompt commands: engage, list-tickets, pending (+ ops extension).
+#   archive-tickets is MISSING. FINDING P1 below.
+# /pending  cd $S/clone-pi; pi -p --mode json --no-session -ne -np --prompt-template $S/h/.pi/agent/prompts
+#             -ns --skill $S/h/.pi/agent/skills/tickets-zordon --model openai/gpt-5.4-mini --thinking low '/pending'
+#   GREEN     first user message is the expanded template: "Load the `tickets-zordon` skill
+#             (C:/.../scratchpad/h/.pi/agent/skills/tickets-zordon/SKILL.md). Then ...". It ran
+#             `sh C:/.../h/.pi/agent/skills/tickets-zordon/scripts/pending.sh` and printed
+#             "TICKETS   10 open   [~]6 [!]0 [?]0 [ ]4   [>]2 deferred" (the clone's board).
+#   (two earlier runs were harness errors, not host results: '/pending' was mangled to
+#    "C:/Program Files/Git/pending" (H1), then a /c/... template path loaded nothing (H2).)
+# /engage   same flags, '/engage tell me the plugin version'
+#   GREEN     user message expanded ("Engage: rewrite a rough prompt into a strong one ...
+#             The prompt: `tell me the plugin version`"); output
+#             "**Engaged prompt:**\n\n> Tell me the plugin version for this repo's pi coding agent
+#             setup ..." then "The plugin version is `0.74.2`". The command works. The rewrite
+#             read "plugin" as pi's own package (a quality note, not a resolution failure).
+# /archive-tickets  same flags + -nt, '/archive-tickets'
+#   FAIL      user message stays the literal "/archive-tickets" (not expanded); reply
+#             "I'll check the repo instructions first, then handle `/archive-tickets`."
+#   FINDING P1: the frontmatter of archive-tickets is invalid YAML. The line is
+#     `description: Archive closed tickets: move [x]/[-] rows ...` - an unquoted second ": ".
+#     python yaml.safe_load: "mapping values are not allowed here, line 2, column 36".
+#     pi drops the template without a word. The same line is in host-commands/pi/archive-tickets.md,
+#     host-commands/cursor/archive-tickets.md, host-commands/antigravity/archive-tickets/SKILL.md
+#     and commands/archive-tickets.md. Claude Code and cursor tolerate it; antigravity was not
+#     probed with it. gemini's .toml quotes it and is fine.
+#
+# ---------------------------------------------------------------- cursor-agent ----
+# (`cursor-agent` from Git Bash runs bare node - prints node's help / "v24.5.0", H3; driven via
+#  PowerShell `& $env:LOCALAPPDATA\cursor-agent\cursor-agent.cmd`.)
+# /pending  cursor-agent.cmd -p "/pending" --trust --workspace $S\clone-x --output-format stream-json
+#   GREEN     it ran `powershell -NoProfile -ExecutionPolicy Bypass -File
+#             C:/Users/Ikran/.cursor/skills/tickets-zordon/scripts/pending.ps1`. That is the path
+#             in the REAL ~/.cursor/commands/pending.md (4.10.0 install), not the project copy.
+#             So cursor resolves the user-level ~/.cursor/commands dir, and it wins over the
+#             project copy. The F54 "inferred" cursor dir is now probed.
+#             Result: "TICKETS   10 open   [~]6 [!]0 [?]0 [ ]4   [>]2 deferred".
+# /engage   cursor-agent.cmd -p "/engage tell me the plugin version" --mode ask --trust --workspace $S\clone-x
+#   GREEN     (project-scope engage.md; the real ~ has none) "**Engaged prompt:**\n> Report the
+#             version of the plugin defined in this repo ..." then "The **skillator** plugin in
+#             this repo is version **4.11.0**."
+# /archive-tickets  cursor-agent.cmd -p "/archive-tickets" --trust --workspace $S\clone-x --output-format stream-json
+#   GREEN     ran `sh C:/.../scratchpad/h/.cursor/skills/practice/scripts/archive-tickets.sh --dry-run`
+#             (the installed file's path), then the move + check-tickets.sh, then
+#             `git add TICKETS.md TICKETS-archive.md; git commit`. "The dry run would move 32
+#             closed tickets ... committed both files together as `2fd69ad tickets: archive 32
+#             closed`". clone-x HEAD 2fd69ad touches only those 2 files (32+/32-).
+#
+# ---------------------------------------------------------------- antigravity (agy) ----
+# /pending  cd $S/clone; agy -p '/pending' --mode plan --sandbox --print-timeout 240s
+#   GREEN     resolved the REAL-home 4.10.0 command skill (~/.gemini/config/skills/pending). agy
+#             has no home override in `agy --help`, so the branch copy was not tried.
+#             "TICKETS   10 open   [~]6 [!]0 [?]0 [ ]4   [>]2 deferred".
+#   /engage and /archive-tickets not run: they are not in the real ~ yet, and installing the
+#   branch there is outside the brief.
+#
+# ---------------------------------------------------------------- gemini ----
+# /pending  cd $S/clone-x; gemini -p '/pending' --approval-mode default
+#   BLOCKED   rc=41 "Please set an Auth method in your C:\Users\Ikran\.gemini\settings.json or
+#             specify one of the following environment variables before running: GEMINI_API_KEY,
+#             GOOGLE_GENAI_USE_VERTEXAI, GOOGLE_GENAI_USE_GCA". Gemini CLI is not authenticated
+#             on this box. (--approval-mode yolo was refused by this session's permission
+#             classifier first.) Unverified.
+#
+# ---------------------------------------------------------------- codex ----
+# /pending  cd $S/clone; codex exec --json --ephemeral -s read-only '/prompts:pending'
+#   BLOCKED   rc=1 "unexpected status 401 Unauthorized: Missing bearer or basic authentication";
+#             `codex login status` -> "Not logged in". Whether `codex exec` expands
+#             /prompts:<name> at all is still unproven. codex's prompts dir stays inferred.
+#
+# ---------------------------------------------------------------- harness findings ----
+# H1  Git Bash (MSYS) rewrites a lone '/pending' argument to "C:/Program Files/Git/pending".
+#     Set MSYS_NO_PATHCONV=1 before driving any CLI with a slash command. Args with a ':'
+#     or a space survived.
+# H2  pi --prompt-template with an MSYS path (/c/...) silently loads nothing (get_commands -> []).
+#     It needs C:/...
+# H3  `cursor-agent` resolved by Git Bash runs node with no script. Use cursor-agent.cmd / .ps1.
+# H4  (unexplained, not chased) the first install into $S/h said "skip cursor (not installed)"
+#     and "skip antigravity", and the .cursor/.gemini dirs were gone afterwards. Re-created, the
+#     second run installed all hosts.
+#
+# ---------------------------------------------------------------- verdicts ----
+# F54  GREEN for pi (branch install), cursor (user-level ~/.cursor/commands, now probed) and
+#      antigravity (real-home install). gemini and codex are UNVERIFIED (not authenticated), and
+#      codex's dir stays inferred.
+# F58  NOT YET. Two other CLIs are green (pi, cursor), but on Claude Code /skillator:engage
+#      resolved with no **Engaged prompt:** block (C1-adjacent; prompt shape likely). Bare
+#      /engage does not resolve under -p (C1). Owed: one Claude Code run with a rough prompt
+#      that does not dictate the output shape.
+# F59  GREEN per its Done line: Claude Code and cursor ran dry run -> move -> check -> own
+#      commit in scratch clones. Defect P1: invalid YAML frontmatter, so pi never registers
+#      /archive-tickets, and antigravity's SKILL.md is at risk.
