@@ -247,8 +247,9 @@ function chipLine(t: Ticket): Seg[] {
   return out
 }
 
-// The tag a row carries at its right: the session working it, else its owner or decider.
-const tagOf = (t: Ticket) => t.session ?? t.owner ?? (t.decide ? 'decide ' + t.decide : null)
+// The tag a row carries at its right: the session working it (only while [~] - A143 keeps
+// the tag after the box moves on), else its owner or decider.
+const tagOf = (t: Ticket) => (t.box === '~' ? t.session : null) ?? t.owner ?? (t.decide ? 'decide ' + t.decide : null)
 
 // Groups as `● In progress (1)` in the state's colour; rows `  ● F52  title    @tag`, the
 // selected one `› ` and inverse; Enter shows the chips and the raw line under a row.
