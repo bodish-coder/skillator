@@ -109,3 +109,58 @@
 #   the Skill path. A wording lever is spent; the remaining levers are structural (e.g. a
 #   UserPromptSubmit hook / the command producing the rewrite as its own turn) or accepting
 #   "block before the answer text" as the bar - an owner call.
+
+# ======================================================================================
+# Round 4 - RUN-0014 stage 97, 2026-10-22, same box/host/clone. Owner's decision: re-land
+#   /engage as a skill and accept the bar "the **Engaged prompt:** block is shown before
+#   the answer text; reading files first is allowed". GREEN = in every run, the first
+#   assistant TEXT that is not a skill banner holds the exact label **Engaged prompt:**
+#   with a quote block, and the answer follows it. 4 of 4 allowed claude -p runs used.
+# Invocation: as round 3 (--allowedTools "Read,Grep,Glob,Skill"); run 4 used one claude -p
+#   with --input-format stream-json and two user messages (the rough prompt, then a bare
+#   "/skillator:engage"), so the empty-argument case was testable headless.
+#
+# ---- run 1 (r4 v1: round-3 skill, order rule reworded - read first, block is the first
+#   text, label never renamed) - ops-board prompt ----
+#   TOOL Skill skillator:engage ; TOOL Grep
+#   TEXT "Long lines were left out, so I'll pull the status markers by themselves."
+#   TOOL Bash x3 (held), Read x3
+#   TEXT "**Engaged prompt:** Read `TICKETS.md` without changing anything ..." inline, then answer
+#   VERDICT: RED - a progress note is the first text; the block is inline, not a quote block.
+#
+# ---- run 2 (round 1: "your first text in this turn is the block - a progress note you
+#   would write between tool calls is where the block goes instead"; block shape as a
+#   two-line template) - ops-board prompt ----
+#   TOOL Skill skillator:engage ; TOOL Grep x2, PowerShell, Bash (held), Read x3
+#   TEXT "**Engaged prompt:** Read the ops board (`TICKETS.md`) ... Read only: no edits and
+#        no commits.\n\nI read `TICKETS.md` directly ..."
+#   VERDICT: RED on shape only - order fixed (block is the first text, label exact, answer
+#   follows) but the prompt sits on the label's line, no `> `.
+#
+# ---- run 3 (round 2: "the label line ends right after the colon - a newline, never a
+#   space, follows it - and the next line begins with `> `"; the example rendered, not
+#   fenced) - "/skillator:engage explain what the routing check script checks" ----
+#   TOOL Skill skillator:engage ; TOOL Glob, Read x2, Bash (held)
+#   TEXT "**Engaged prompt:**\n> Explain what `practice/scripts/check-routing.sh` checks. ...
+#        Answer as a numbered list.\n\n`practice/scripts/check-routing.sh` is a POSIX `sh` lint ..."
+#   VERDICT: GREEN.
+#
+# ---- run 4 (round 2 wording) - empty argument after a previous message ----
+#   turn 1 "tell me what the ops board shows and which tickets are still open":
+#     TOOL Skill skillator:grayskull-power ; TEXT "## I HAVE THE POWER!!" ; reads ; the answer.
+#   turn 2 "/skillator:engage":
+#     TOOL Skill skillator:engage args "" (host: "already loaded above; instructions unchanged")
+#     TOOL Read, Bash x2 (held)
+#     TEXT "I carried out the sharpened prompt. Doing so turned up more than my first answer
+#          did: ..." - no **Engaged prompt:** anywhere in the turn.
+#   VERDICT: RED - the empty-argument path rewrites silently and skips the block.
+#
+# VERDICT round 4: RED. 1 of 4 runs GREEN (run 3). The relaxed bar fixed the order (runs 2,
+#   3: block first, label exact) and round 2 fixed the quote shape (run 3), but the
+#   ops-board prompt was not re-run on the round-2 wording, and the empty-argument case
+#   drops the block entirely. Max 2 rounds reached: reverted (skills/engage removed,
+#   commands/engage.md restored as committed). Draft kept as $S/f58-round4/SKILL.md +
+#   engage-command.patch.
+# Reading: a next round would target the empty-argument path (the skill arrives as the
+#   expanded slash command, then "already loaded" on the Skill call, and the model treats
+#   the previous answer as the work) and re-run the ops-board prompt on the round-2 wording.
