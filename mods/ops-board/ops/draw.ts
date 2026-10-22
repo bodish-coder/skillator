@@ -150,9 +150,14 @@ function keysOf(s: State, m: Model): string[] {
 function keysLine(s: State, m: Model): Seg[] {
   // The Team view asking before a remove: the question takes the keys line's place.
   if (s.teamConfirm && !s.person && !s.dialog) return [{ text: `remove ${s.teamConfirm} from .skillator/team.md? (y/n)`, color: 'warning' }]
+  // A144: one separator throughout. Too wide: drop the arrow hints, then the first hint,
+  // until it fits - never the last (quit / leave / cancel).
   const ks = keysOf(s, m)
-  const wide = ks.join(' · ')
-  return [dim(cells(wide) <= s.cols ? wide : ks.join('  '))]
+  while (ks.length > 1 && cells(ks.join(' · ')) > s.cols) {
+    const arrow = ks.findIndex(k => /^[↑↓←→]/.test(k))
+    ks.splice(arrow >= 0 && arrow < ks.length - 1 ? arrow : 0, 1)
+  }
+  return [dim(ks.join(' · '))]
 }
 
 // --- the band: one line from 80 columns, as the mock ---

@@ -114,6 +114,18 @@ test('the keys line as the mock; D decided only on a decidable row', () => {
   assert.equal(f3.selected, 'F3')
   assert.match(keys(f3), /D decided/)
   assert.match(keys(f3), /q quit$/)
+  // A144: one separator throughout - " · " stays when "D decided" joins the row.
+  for (const cols of [80, 60, 40]) {
+    for (const x of [{ ...s, cols }, { ...f3, cols }, reduce({ ...s, cols }, { name: '3' }).state]) {
+      const f = frame(x, P)
+      const line = f.find(l => /r reload/.test(l))
+      assert.ok(line, `${cols}: no keys line ending q quit\n${f.join('\n')}`)
+      assert.ok(cells(line) <= cols, `${cells(line)} > ${cols}: ${line}`)
+      assert.doesNotMatch(line, /\S {2}\S/, line)
+      assert.match(line, /q quit$/, line)
+    }
+  }
+  assert.match(keys(f3), / · D decided · /)
   assert.match(text(reduce(s, { name: '2' }).state), /↑↓ move · enter stages · s start a planned run/)
   assert.match(text(reduce(s, { name: '3' }).state), /R resume \(releases the hold on a fresh non-red reading\)/)
 })
