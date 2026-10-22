@@ -359,3 +359,32 @@ test('the first render arms the poll when session.start never ran (a hot reload)
   expect(await ui.find({ key: 'row:F9' })).toBeDefined()
   await ui.unmount()
 })
+
+// B4: a 3.8 MB board of long ticket lines (the owner's shape: ~1400 tickets, most closed,
+// a line up to tens of KB). Held whole - title and line both carrying the text - the
+// parsed board was 7.7 M characters, over the host's 4 MiB $.state value limit, and
+// the pane said "TICKETS.md not loaded" with the file fine. Generated, never a real board.
+function bigBoard(): string {
+  const words = 'the operator sees the map widget overlap the coverage layer after a link drop and '
+  const out = ['# Tickets', '', '## Open', '']
+  for (let i = 1; i <= 1400; i++) {
+    const box = i % 7 === 0 ? '~' : i % 11 === 0 ? '!' : 'x'
+    const len = i === 1400 ? 43_000 : 2_700
+    out.push(`- [${box}] F${i} — ${words.repeat(Math.ceil(len / words.length)).slice(0, len)}`)
+  }
+  return out.join('\r\n') + '\r\n'
+}
+
+test('a 3.8 MB board of long lines loads in the pane (B4)', WITH, async ($, on) => {
+  const big = bigBoard()
+  expect(big.length).toBeGreaterThan(3_800_000)
+  expect(big.length).toBeLessThan(4 * 1024 * 1024)
+  const [, clock] = world(on, { '/r/TICKETS.md': big })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  const all = (await texts(ui)).join('\n')
+  expect(all).not.toContain('not loaded')
+  expect(await ui.find({ key: 'row:F7' })).toBeDefined()
+  expect((await ui.find({ key: 'count' }))?.text).toBe('309 open ●200 ●109 · 1091 done hidden')
+  await ui.unmount()
+})
