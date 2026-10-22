@@ -224,6 +224,7 @@ install_into() {
   # installed skills - refresh them every run, even when no skill needed installing,
   # so the plain `git pull && ./install.sh` update path picks up doc changes.
   # F55: ops-board/ is the ops terminal app (hooks/lib, types, ops) - same refresh.
+  # F56: and pi/, the same board as a pi extension (write_commands points pi at it).
   if [ -n "$dry" ]; then
     echo "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice/ references/ ops-board/ in $_dest"
   else
@@ -233,7 +234,7 @@ install_into() {
     rm -rf "$_dest/references" && cp -R "$root/references" "$_dest/"
     rm -rf "$_dest/ops-board" && mkdir -p "$_dest/ops-board/hooks" &&
       cp -R "$root/mods/ops-board/hooks/lib" "$_dest/ops-board/hooks/" &&
-      cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$_dest/ops-board/"
+      cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$root/mods/ops-board/pi" "$_dest/ops-board/"
     printf '%s\n' "$shipped" > "$_dest/$manifest"
   fi
   # the targets loop is a subshell - the summary reads the dests from this file
@@ -271,6 +272,19 @@ put_cmd() {
   echo "        * $3"
 }
 
+# put_pi_ext <skills-dir>: F56 - /ops in pi. pi 0.74 loads every ~/.pi/agent/extensions/*.ts
+# (probed 2026-10-22 with PI_CODING_AGENT_DIR on a temp dir: get_commands lists it,
+# source "auto"); this one re-exports the board's extension from the dest's
+# ops-board/pi/, so the data layer has one copy. Rewritten every run, like the prompts.
+put_pi_ext() {
+  _ext="$HOME/.pi/agent/extensions/skillator-ops.ts"
+  if [ -n "$dry" ]; then echo "        would write $_ext"; return 0; fi
+  mkdir -p "$(dirname -- "$_ext")"
+  _to=$(native "$1" | sed 's/[\\"]/\\&/g')
+  printf '// skillator ops board in pi (/ops) - written by the skillator installer, rewritten every run.\nexport { default } from "%s/ops-board/pi/index.ts";\n' "$_to" > "$_ext"
+  echo "        * $_ext"
+}
+
 # write_commands <cli> <dest>: F54 - /pending, /list-tickets, /engage and /archive-tickets as the host's own command
 # file, user level, rewritten every run. Called per dest; per-CLI files are written for
 # the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
@@ -286,7 +300,8 @@ write_commands() {
       for _n in pending list-tickets engage archive-tickets; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
     pi)
       [ "$2" = "$HOME/.pi/agent/skills" ] || return 0
-      for _n in pending list-tickets engage archive-tickets; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done ;;
+      for _n in pending list-tickets engage archive-tickets; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
+      put_pi_ext "$2" ;;
     antigravity)
       for _n in pending list-tickets engage archive-tickets; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
@@ -318,7 +333,7 @@ native() {
 }
 
 # --selftest: install into a temp HOME / CODEX_HOME holding the four marker dirs, then
-# check the command files (F54), the ops-board copy and the shim (F55). Never touches
+# check the command files (F54), the ops-board copy and the shim (F55), pi's /ops extension (F56). Never touches
 # the real HOME. Costs one full install per host dest on disk until it exits.
 if [ -n "$selftest" ]; then
   T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
@@ -333,7 +348,9 @@ if [ -n "$selftest" ]; then
            .codex/prompts/archive-tickets.md .gemini/commands/archive-tickets.toml .cursor/commands/archive-tickets.md \
            .pi/agent/prompts/archive-tickets.md .gemini/config/skills/archive-tickets/SKILL.md .gemini/skills/archive-tickets/SKILL.md \
            .codex/skills/ops-board/ops/app.ts .pi/agent/skills/ops-board/hooks/lib/board.ts \
-           .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json; do
+           .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json \
+           .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
+           .pi/agent/extensions/skillator-ops.ts; do
     [ -f "$T/$f" ] || { echo "FAIL: missing $f"; exit 1; }
   done
   N=$(native "$T")
@@ -354,6 +371,9 @@ if [ -n "$selftest" ]; then
   grep -qF '$ARGUMENTS' "$T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: pi args"; exit 1; }
   grep -q '^argument-hint: ' "$T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: pi argument-hint"; exit 1; }
   grep -q '^description: ' "$T/.cursor/commands/pending.md" || { echo "FAIL: cursor description"; exit 1; }
+  # F56: pi's extension re-exports the board from the pi dest's ops-board/pi (native path)
+  grep -qxF "export { default } from \"$N/.pi/agent/skills/ops-board/pi/index.ts\";" "$T/.pi/agent/extensions/skillator-ops.ts" || { echo "FAIL: pi extension target"; exit 1; }
+  [ "$(ls "$T/.pi/agent/extensions")" = skillator-ops.ts ] || { echo "FAIL: pi extensions dir holds more than skillator-ops.ts"; exit 1; }
   head -1 "$T/.codex/prompts/pending.md" | grep -q '^---' && { echo "FAIL: codex prompt has frontmatter"; exit 1; }
   grep -q '^name: pending$' "$T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
   grep -q '^name: list-tickets$' "$T/.gemini/skills/list-tickets/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
@@ -370,12 +390,14 @@ if [ -n "$selftest" ]; then
   # second run: command files are rewritten, installed skills are not, the
   # skill-commands survive the prune and lose a stale marker an older run left
   echo stale >> "$T/.codex/prompts/pending.md"
+  echo stale >> "$T/.pi/agent/extensions/skillator-ops.ts"
   echo stale >> "$T/.gemini/skills/pending/SKILL.md"
   : > "$T/.gemini/skills/list-tickets/.skillator-owned"
   : > "$T/.pi/agent/skills/tickets-zordon/.selftest-sentinel"
   out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0") || { echo "FAIL: second install exited $?"; exit 1; }
   printf '%s\n' "$out" | grep -q "not on your PATH" || { echo "FAIL: PATH note"; exit 1; }
   grep -q stale "$T/.codex/prompts/pending.md" && { echo "FAIL: codex prompt not rewritten"; exit 1; }
+  grep -q stale "$T/.pi/agent/extensions/skillator-ops.ts" && { echo "FAIL: pi extension not rewritten"; exit 1; }
   [ -f "$T/.gemini/skills/pending/SKILL.md" ] || { echo "FAIL: agy skill-command pruned"; exit 1; }
   grep -q stale "$T/.gemini/skills/pending/SKILL.md" && { echo "FAIL: agy skill-command not rewritten"; exit 1; }
   [ -e "$T/.gemini/skills/list-tickets/.skillator-owned" ] && { echo "FAIL: stale marker kept on a skill-command"; exit 1; }
@@ -383,6 +405,7 @@ if [ -n "$selftest" ]; then
   out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0" --dry-run) || { echo "FAIL: dry run exited $?"; exit 1; }
   printf '%s\n' "$out" | grep -q "would write $T/.local/bin/ops" || { echo "FAIL: dry-run shim line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: dry-run command line"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/extensions/skillator-ops.ts" || { echo "FAIL: dry-run pi extension line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: dry-run skill-command line"; exit 1; }
   # the plugin installed: the shim still runs the first dest written (refreshed every
   # run), never the versioned plugin cache a plugin update can remove

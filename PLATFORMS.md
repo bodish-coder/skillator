@@ -210,6 +210,7 @@ Evidence tags: **verified** = read from the host's docs/binary or exercised here
 | gemini CLI | `~/.gemini/commands/<n>.toml`, `!{...}` shell injection, `{{args}}` | verified (dir, `!{`, `{{args}}`) |
 | antigravity | skills, `/<n>` in `agy`; both dests `~/.gemini/config/skills/` and `~/.gemini/skills/` | verified (a skill is a slash command) |
 | pi | `~/.pi/agent/prompts/<n>.md`, `$ARGUMENTS` | verified |
+| pi `/ops` (F56) | the ops board as a pi extension: `~/.pi/agent/extensions/skillator-ops.ts` re-exports `~/.pi/agent/skills/ops-board/pi/index.ts`; full-screen overlay, Tickets / Runs / Health, assign / decide, the standalone app's keys; `/ops --once` notifies one frame | verified headless (pi 0.74.2 `--mode rpc`: `get_commands` lists it, `/ops --once` draws); the live overlay is the owner's check |
 | codex | `$CODEX_HOME/prompts/<n>.md` → `/prompts:<n>` | inferred (docs) until the picker check |
 | cursor | user `~/.cursor/commands/<n>.md` | project dir verified; user dir inferred until the picker check |
 | prime-agent | none; the skill route stays | verified (no loader) |

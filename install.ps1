@@ -263,6 +263,20 @@ function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
   Write-Host "        * $target"
 }
 
+# Write-PiExt <skills-dir>: F56 - /ops in pi. pi 0.74 loads every ~\.pi\agent\extensions\*.ts
+# (probed 2026-10-22); this one re-exports the board's extension from the dest's
+# ops-board\pi\ (forward slashes), so the data layer has one copy. Rewritten every run,
+# UTF-8 without BOM, LF - the bytes install.sh writes. Same as install.sh put_pi_ext.
+function Write-PiExt([string]$skillsDir) {
+  $ext = "$HOME\.pi\agent\extensions\skillator-ops.ts"
+  if ($DryRun) { Write-Host "        would write $ext"; return }
+  New-Item -ItemType Directory -Force (Split-Path -Parent $ext) | Out-Null
+  $to = $skillsDir.Replace('\', '/').Replace('"', '\"')
+  $text = "// skillator ops board in pi (/ops) - written by the skillator installer, rewritten every run.`nexport { default } from `"$to/ops-board/pi/index.ts`";`n"
+  [IO.File]::WriteAllText($ext, $text, (New-Object Text.UTF8Encoding $false))
+  Write-Host "        * $ext"
+}
+
 # Write-Commands <cli> <dest>: F54 - /pending, /list-tickets, /engage and /archive-tickets as the host's own command
 # file, user level, rewritten every run. Called per dest; per-CLI files are written for
 # the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
@@ -279,6 +293,7 @@ function Write-Commands([string]$cli, [string]$dest) {
     'pi' {
       if ($dest -ne "$HOME\.pi\agent\skills") { return }
       foreach ($n in $names) { Write-Cmd "$c\pi\$n.md" $dest "$HOME\.pi\agent\prompts\$n.md" }
+      Write-PiExt $dest
     }
     'antigravity' {
       foreach ($n in $names) {
@@ -296,7 +311,7 @@ function Write-Commands([string]$cli, [string]$dest) {
 
 # -SelfTest: install into a temp HOME / USERPROFILE / CODEX_HOME holding the four marker
 # dirs and a temp -Profile, then check the command files (F54), the ops-board copy and
-# the profile function (F55). Never touches the real HOME or profile. Costs one full
+# the profile function (F55), pi's /ops extension (F56). Never touches the real HOME or profile. Costs one full
 # install per host dest on disk until it returns. Returns '' or the failure.
 function Invoke-SelfTest([string]$T) {
   $prof = Join-Path $T 'profile.ps1'
@@ -315,6 +330,7 @@ function Invoke-SelfTest([string]$T) {
   if ($script:selfCode -ne 0) { return "dry run exited $script:selfCode" }
   if (-not $out.Contains("would write function ops in $prof")) { return 'dry-run ops line' }
   if (-not $out.Contains("would write $T\.pi\agent\prompts\list-tickets.md")) { return 'dry-run command line' }
+  if (-not $out.Contains("would write $T\.pi\agent\extensions\skillator-ops.ts")) { return 'dry-run pi extension line' }
   if (-not $out.Contains("would write $T\.gemini\config\skills\pending\SKILL.md")) { return 'dry-run skill-command line' }
   if (Test-Path -LiteralPath $prof) { return 'dry run wrote the profile' }
   if (Test-Path -LiteralPath (Join-Path $T '.codex\prompts')) { return 'dry run wrote a command file' }
@@ -332,7 +348,9 @@ function Invoke-SelfTest([string]$T) {
             '.codex\prompts\archive-tickets.md', '.gemini\commands\archive-tickets.toml', '.cursor\commands\archive-tickets.md',
             '.pi\agent\prompts\archive-tickets.md', '.gemini\config\skills\archive-tickets\SKILL.md', '.gemini\skills\archive-tickets\SKILL.md')
   foreach ($f in $cmds + @('.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
-                           '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json')) {
+                           '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
+                           '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
+                           '.pi\agent\extensions\skillator-ops.ts')) {
     if (-not (Test-Path -LiteralPath (Join-Path $T $f) -PathType Leaf)) { return "missing $f" }
   }
   if (-not (& $has '.codex\prompts\pending.md' "sh $T\.codex\skills/tickets-zordon/scripts/pending.sh")) { return 'codex prompt not substituted' }
@@ -345,6 +363,12 @@ function Invoke-SelfTest([string]$T) {
   if (-not (& $has '.pi\agent\prompts\list-tickets.md' '$ARGUMENTS')) { return 'pi args' }
   if ((& $read '.pi\agent\prompts\list-tickets.md') -notmatch '(?m)^argument-hint: ') { return 'pi argument-hint' }
   if ((& $read '.cursor\commands\pending.md') -notmatch '(?m)^description: ') { return 'cursor description' }
+  # F56: pi's extension re-exports the board from the pi dest's ops-board/pi (forward slashes, no BOM, no CR)
+  $piExt = "export { default } from `"$($T.Replace('\', '/'))/.pi/agent/skills/ops-board/pi/index.ts`";"
+  if (@((& $read '.pi\agent\extensions\skillator-ops.ts').Split("`n")) -cnotcontains $piExt) { return 'pi extension target' }
+  $pb = [IO.File]::ReadAllBytes((Join-Path $T '.pi\agent\extensions\skillator-ops.ts'))
+  if ($pb[0] -ne 0x2F -or $pb -contains 13) { return 'pi extension has a BOM or CR' }
+  if (@(Get-ChildItem -LiteralPath (Join-Path $T '.pi\agent\extensions')).Count -ne 1) { return 'pi extensions dir holds more than skillator-ops.ts' }
   if ((& $read '.codex\prompts\pending.md').StartsWith('---')) { return 'codex prompt has frontmatter' }
   if ((& $read '.gemini\config\skills\pending\SKILL.md') -cnotmatch '(?m)^name: pending$') { return 'agy skill name' }
   if ((& $read '.gemini\skills\list-tickets\SKILL.md') -cnotmatch '(?m)^name: list-tickets$') { return 'agy skill name' }
@@ -368,12 +392,14 @@ function Invoke-SelfTest([string]$T) {
   # second run: command files are rewritten, installed skills are not, the
   # skill-commands survive the prune and lose a stale marker an older run left
   [IO.File]::AppendAllText((Join-Path $T '.codex\prompts\pending.md'), "stale`n")
+  [IO.File]::AppendAllText((Join-Path $T '.pi\agent\extensions\skillator-ops.ts'), "stale`n")
   [IO.File]::AppendAllText((Join-Path $T '.gemini\skills\pending\SKILL.md'), "stale`n")
   [IO.File]::WriteAllText((Join-Path $T '.gemini\skills\list-tickets\.skillator-owned'), '')
   [IO.File]::WriteAllText((Join-Path $T '.pi\agent\skills\tickets-zordon\.selftest-sentinel'), '')
   $null = & $run @()
   if ($script:selfCode -ne 0) { return "second install exited $script:selfCode" }
   if (& $has '.codex\prompts\pending.md' 'stale') { return 'codex prompt not rewritten' }
+  if (& $has '.pi\agent\extensions\skillator-ops.ts' 'stale') { return 'pi extension not rewritten' }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\pending\SKILL.md'))) { return 'agy skill-command pruned' }
   if (& $has '.gemini\skills\pending\SKILL.md' 'stale') { return 'agy skill-command not rewritten' }
   if (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\list-tickets\.skillator-owned')) { return 'stale marker kept on a skill-command' }
@@ -520,6 +546,8 @@ foreach ($cli in $targets.Keys) {
       Copy-Item (Join-Path $mod 'hooks\lib') (Join-Path $board 'hooks') -Recurse -Force
       Copy-Item (Join-Path $mod 'types') $board -Recurse -Force
       Copy-Item (Join-Path $mod 'ops') $board -Recurse -Force
+      # F56: pi\, the same board as a pi extension (Write-Commands points pi at it)
+      Copy-Item (Join-Path $mod 'pi') $board -Recurse -Force
       # LF, no BOM - the same bytes install.sh writes, so either twin reads the other's
       [IO.File]::WriteAllText((Join-Path $dest $manifest), (($shipped -join "`n") + "`n"))
     }
