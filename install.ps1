@@ -277,6 +277,27 @@ function Write-PiExt([string]$skillsDir) {
   Write-Host "        * $ext"
 }
 
+# Write-PiIgnore <dest>: A145 - pi (0.74) loads every top-level .md in its skills dir as a
+# skill, so the canon docs beside the skills warned "description is required" at each
+# start. Its skill loader honours .ignore / .gitignore / .fdignore in that dir (core\
+# skills.js addIgnoreRules), so list the three docs there: pi skips them, the files stay
+# at ..\ for every skill. Missing lines are appended (LF, no BOM - the bytes install.sh
+# writes); a user's own lines are kept. Same as install.sh pi_ignore.
+function Write-PiIgnore([string]$dest) {
+  $ig = Join-Path $dest '.ignore'
+  $enc = New-Object Text.UTF8Encoding $false
+  if (-not (Test-Path -LiteralPath $ig -PathType Leaf)) {
+    [IO.File]::WriteAllText($ig, "# written by the skillator installer: pi must not load these docs as skills`n", $enc)
+  } else {
+    $cur = [IO.File]::ReadAllText($ig)
+    if ($cur.Length -gt 0 -and -not $cur.EndsWith("`n")) { [IO.File]::AppendAllText($ig, "`n", $enc) }
+  }
+  $have = @([IO.File]::ReadAllLines($ig) | ForEach-Object { $_.TrimEnd("`r") })
+  foreach ($d in 'PLATFORMS.md', 'PRACTICE.md', 'WORKFLOW.md') {
+    if ($have -cnotcontains "/$d") { [IO.File]::AppendAllText($ig, "/$d`n", $enc) }
+  }
+}
+
 # Get-AgyIde: the Antigravity IDE's CLI (the VS Code fork, not agy) - $env:SKILLATOR_AGY_IDE
 # when set (the selftest's fake), else antigravity-ide on PATH, else the default per-user
 # install. '' when none is there. Same as install.sh agy_ide.
@@ -422,6 +443,16 @@ function Invoke-SelfTest([string]$T) {
   $pb = [IO.File]::ReadAllBytes((Join-Path $T '.pi\agent\extensions\skillator-ops.ts'))
   if ($pb[0] -ne 0x2F -or $pb -contains 13) { return 'pi extension has a BOM or CR' }
   if (@(Get-ChildItem -LiteralPath (Join-Path $T '.pi\agent\extensions')).Count -ne 1) { return 'pi extensions dir holds more than skillator-ops.ts' }
+  # A145: pi's skills dirs list the three docs in .ignore (pi skips them as skills); the
+  # docs are still there at ..\ from every skill, and no other host gets a .ignore
+  foreach ($d in '.pi\agent\skills', '.pi\skills') {
+    $igl = @([IO.File]::ReadAllLines((Join-Path $T "$d\.ignore")))
+    foreach ($f in 'PLATFORMS.md', 'PRACTICE.md', 'WORKFLOW.md') {
+      if (-not (Test-Path -LiteralPath (Join-Path $T "$d\$f") -PathType Leaf)) { return "missing $d\$f" }
+      if ($igl -cnotcontains "/$f") { return "$d\.ignore does not list /$f" }
+    }
+  }
+  if (Test-Path -LiteralPath (Join-Path $T '.codex\skills\.ignore')) { return 'a non-pi dest got a .ignore' }
   # F57: the Antigravity IDE got one install of the VSIX packed in Antigravity's own dest,
   # and the VSIX's entry requires that dest's ops-board/antigravity/extension.cjs
   $agy = Join-Path $T '.gemini\config\skills\ops-board\antigravity'
@@ -458,8 +489,12 @@ function Invoke-SelfTest([string]$T) {
   [IO.File]::AppendAllText((Join-Path $T '.gemini\skills\pending\SKILL.md'), "stale`n")
   [IO.File]::WriteAllText((Join-Path $T '.gemini\skills\list-tickets\.skillator-owned'), '')
   [IO.File]::WriteAllText((Join-Path $T '.pi\agent\skills\tickets-zordon\.selftest-sentinel'), '')
+  [IO.File]::AppendAllText((Join-Path $T '.pi\agent\skills\.ignore'), 'my-own-line')
   $null = & $run @()
   if ($script:selfCode -ne 0) { return "second install exited $script:selfCode" }
+  $igl = @([IO.File]::ReadAllLines((Join-Path $T '.pi\agent\skills\.ignore')))
+  if ($igl -cnotcontains 'my-own-line') { return 'pi .ignore lost a user line' }
+  if (@($igl | Where-Object { $_ -ceq '/PLATFORMS.md' }).Count -ne 1) { return 'pi .ignore lines duplicated on the second run' }
   if (& $has '.codex\prompts\pending.md' 'stale') { return 'codex prompt not rewritten' }
   if (& $has '.pi\agent\extensions\skillator-ops.ts' 'stale') { return 'pi extension not rewritten' }
   if (@(& $ideCalls).Count -ne 2) { return 'antigravity extension not reinstalled on the second run' }
@@ -596,6 +631,7 @@ foreach ($cli in $targets.Keys) {
     $writtenDests += $dest
     if ($DryRun) {
       Write-Host "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice\ references\ ops-board\ in $dest"
+      if ($cli -eq 'pi') { Write-Host "        would list the three docs in $dest\.ignore (pi skips them as skills)" }
     } else {
       New-Item -ItemType Directory -Force $dest | Out-Null
       foreach ($doc in 'PLATFORMS.md','PRACTICE.md','WORKFLOW.md') {
@@ -620,6 +656,7 @@ foreach ($cli in $targets.Keys) {
       Copy-Item (Join-Path $mod 'antigravity') $board -Recurse -Force
       # LF, no BOM - the same bytes install.sh writes, so either twin reads the other's
       [IO.File]::WriteAllText((Join-Path $dest $manifest), (($shipped -join "`n") + "`n"))
+      if ($cli -eq 'pi') { Write-PiIgnore $dest }
     }
     Write-Commands $cli $dest
   }

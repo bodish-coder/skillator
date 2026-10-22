@@ -161,6 +161,10 @@ prompts loaded a skill unprompted from project-local `.pi/skills` (both
 `func-ui`-triggering runs stopped at the plan, matching that skill's contract).
 Its discovery dirs are `~/.pi/agent/skills` · `~/.agents/skills` · `.pi/skills` ·
 `.agents/skills`; only the project-level `.pi/skills` was exercised here.
+pi also reads every top-level `.md` in `~/.pi/agent/skills` / `.pi/skills` as a
+skill, so the installer lists PLATFORMS.md, PRACTICE.md and WORKFLOW.md in that
+dir's `.ignore` (pi's skill loader honours it) - without it pi warns
+"description is required" for each at every start (A145).
 
 Transcripts for the 2026-09-06 codex/cursor runs and the 2026-09-23 cursor/pi
 re-runs are JSONL from each host's own stream, committed at
