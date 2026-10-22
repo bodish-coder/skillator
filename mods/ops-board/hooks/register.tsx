@@ -10,7 +10,7 @@ import { HIDDEN, restoreClaudeMd, RESTORE_NOTE } from './lib/restore'
 import { countsOf, renderBand, statusText } from './band'
 import { buildModel, offsetFor, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
 import type { Tab } from './pane'
-import { clearForm, closeForm, isFormUp } from './assign'
+import { cancelPerson, clearForm, isFormUp } from './assign'
 import { pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 
@@ -281,8 +281,11 @@ async function arm($: EngineInterface) {
   })
 }
 
+// closeOnEscape is set anew by every ui.open: while a form is up it stays, so Esc is
+// still the form's Cancel after a re-open.
 async function openPane($: EngineInterface, asked: boolean) {
-  const r = await $.ui.open(asked ? { id: PANE_ID, title: PANE_TITLE, focus: true } : { id: PANE_ID, title: PANE_TITLE })
+  const esc = (await isFormUp($)) ? { closeOnEscape: true as const } : {}
+  const r = await $.ui.open(asked ? { id: PANE_ID, title: PANE_TITLE, focus: true, ...esc } : { id: PANE_ID, title: PANE_TITLE, ...esc })
   await update($, narrowA, () => !r.isPlaced)
   return r
 }
@@ -337,6 +340,9 @@ export const register: Register = on => {
     const word = e.args.trim().toLowerCase()
     if (word === 'resume') return { text: await resume($) }
     if (word && !TABS.includes(word as Tab)) return { text: USAGE }
+    // A form draws only on Tickets: leaving it drops the form, or a later Esc / close
+    // on that tab would be taken as the hidden form's Cancel.
+    if (word && word !== 'tickets') await clearForm($)
     if (word) await update($, tabA, () => word as Tab)
     if (word === 'runs') void pollRuns($).catch(() => {})
     if (word === 'agents') void pollAgents($).catch(() => {})
@@ -411,7 +417,7 @@ export const register: Register = on => {
   on('ui.close', async ($, e, next) => {
     if (e.id !== PANE_ID || !(await isFormUp($))) return next(e)
     if (e.origin.kind === 'unload') { await clearForm($); return next(e) }
-    await closeForm($)
+    await cancelPerson($)                                   // what the form's Cancel does
     return { value: undefined }
   }).catch(($, e, next) => next(e))
 
@@ -420,7 +426,7 @@ export const register: Register = on => {
   // the selection would leave it. Wheel ticks and page keys scroll as ever.
   on('ui.scroll', { requestId: 'ops-board' }, async ($, e, next) => {
     if (e.pointer || e.origin.kind !== 'person' || Math.abs(e.by) !== 1) return next(e)
-    if ((await read($, tabA)) !== 'tickets') return next(e)
+    if ((await read($, tabA)) !== 'tickets' || (await isFormUp($))) return next(e)   // a form scrolls as itself
     const m = buildModel(await readView($, lastCols))
     const at = m.rows.findIndex(t => t.id === m.selected)
     const to = m.rows[at + e.by]

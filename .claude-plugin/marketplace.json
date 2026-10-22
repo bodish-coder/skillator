@@ -37,7 +37,7 @@
       "name": "ops-board",
       "source": "./mods/ops-board",
       "description": "Ops board mod for skillator: a pane of the TICKETS.md board, a band above the prompt with machine and usage facts, and /list-tickets, /pending, /ops commands.",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "category": "productivity"
     }
   ]

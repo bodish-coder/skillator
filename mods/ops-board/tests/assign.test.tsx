@@ -31,6 +31,7 @@ type World = {
   runs: Run[]
   opens: Open[]
   closes: string[]
+  scrolls: number[]
   toasts: string[]
   writes: string[]
   answer: (argv: readonly string[]) => ProcessRunResult | null
@@ -39,7 +40,7 @@ const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
 function world(on: On, files: Record<string, string>, env: Record<string, string> = {}): [World, MockClock] {
-  const w: World = { files: { ...files, [META + '.sh']: '#!/bin/sh\n' }, runs: [], opens: [], closes: [], toasts: [], writes: [], answer: () => null }
+  const w: World = { files: { ...files, [META + '.sh']: '#!/bin/sh\n' }, runs: [], opens: [], closes: [], scrolls: [], toasts: [], writes: [], answer: () => null }
   const at = (p: string) => w.files[p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')]
   const clock = mock.clock(on, { now: 1_000_000 })
   mock.env(on, { SKILLATOR_ROOT: '/s', ...env })
@@ -70,6 +71,7 @@ function world(on: On, files: Record<string, string>, env: Record<string, string
   })
   on('ui.close', ($, e) => { w.closes.push(e.id); return { value: undefined } })
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
+  on('ui.scroll', ($, e) => { w.scrolls.push(e.offset); return {} })
   // The person's ring moves (select). The mod's own $.ui.focus onto a form's first
   // element is not answered by the mock engine (no ring beneath it): it is caught,
   // and the ring's landing is the owner's live check.
@@ -86,6 +88,7 @@ const PEEK: Plugin = {
     on('command.run', { command: 'peek' }, async ($, e) => {
       const v = e.args === 'assign' ? await $.state.get({ plugin: 'ops-board', key: 'assign' })
         : e.args === 'person' ? await $.state.get({ plugin: 'ops-board', key: 'person' })
+        : e.args === 'selected' ? await $.state.get({ plugin: 'ops-board', key: 'selected' })
         : await $.state.get({ plugin: 'ops-board', key: 'teamView' })
       return { text: JSON.stringify(v.value ?? null) }
     })
@@ -93,7 +96,7 @@ const PEEK: Plugin = {
 }
 const WITH = { plugins: [PEEK] }
 const RUN = { origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 120 } }
-const state = async ($: Engine, key: 'assign' | 'person' | 'teamView') =>
+const state = async ($: Engine, key: 'assign' | 'person' | 'teamView' | 'selected') =>
   JSON.parse((await $.command.run({ command: 'peek', args: key, ...RUN })).text ?? 'null') as unknown
 
 async function start($: Engine, clock: MockClock) {
@@ -420,6 +423,58 @@ test('Esc on a form clears the draft, keeps the board open and goes back to the 
   // with no form up, a close is the board's own
   await $.command.run({ command: 'close', args: 'ops-board', ...RUN })
   expect(w.closes).toEqual(['ops-board'])
+  await pane.unmount()
+})
+
+// B5 round 2 (1): a one-row arrow while a form is up is the form's scroll, never a
+// move of the hidden Tickets selection.
+test('up/down while a form is up scroll the form and leave the Tickets selection where it was', WITH, async ($, on) => {
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const pane = await mountPane($, 'terminal')
+  await select($, 'F3')
+  await pane.press({ key: 'key:assign' })
+  await $.ui.scroll({ component: 'Pane', requestId: 'ops-board', offset: 1, by: 1, bodyRows: 6, contentRows: 20, origin: { kind: 'person' } })
+  expect(await state($, 'selected')).toBe('F3')
+  expect(w.scrolls).toEqual([1])                       // passed through as it came
+  await pane.press({ key: 'cancel' })
+  expect((await pane.find({ key: 'row:F3' }))?.children.some(c => (c as { props?: { inverse?: boolean } }).props?.inverse)).toBe(true)
+  await pane.unmount()
+})
+
+// B5 round 2 (2): /ops while a form is up keeps Esc as the form's Cancel; /ops to
+// another tab drops the form, so a later Esc or close is the board's own.
+test('/ops while a form is up keeps Esc-as-Cancel; /ops runs drops the form and close is the board\'s', WITH, async ($, on) => {
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const pane = await mountPane($, 'terminal')
+  await pane.press({ key: 'key:assign' })
+  await $.command.run({ command: 'ops', args: '', ...RUN })
+  expect([w.opens.at(-1)!.id, w.opens.at(-1)!.closeOnEscape]).toEqual(['ops-board', true])
+  expect(await state($, 'assign')).not.toBeNull()
+  await $.command.run({ command: 'ops', args: 'runs', ...RUN })
+  expect(await state($, 'assign')).toBeNull()
+  formClosed(w)
+  await $.command.run({ command: 'close', args: 'ops-board', ...RUN })
+  expect(w.closes).toEqual(['ops-board'])
+  await pane.unmount()
+})
+
+// B5 round 2 (3): Esc on Add person opened from the assign form does what its Cancel
+// does - one level back, to the assign form.
+test('Esc on add person from the assign form goes back to the assign form', WITH, async ($, on) => {
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const pane = await mountPane($, 'terminal')
+  await select($, 'B1')
+  await pane.press({ key: 'key:assign' })
+  await pane.press({ key: 'who:+add' })
+  await $.command.run({ command: 'close', args: 'ops-board', ...RUN })
+  expect(await state($, 'person')).toBeNull()
+  expect((await state($, 'assign') as { id: string } | null)?.id).toBe('B1')
+  expect(await title(pane)).toBe('Assign B1  Esc cancels')
+  expect(w.closes).toEqual([])
+  formOpen(w)
   await pane.unmount()
 })
 
