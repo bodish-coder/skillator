@@ -39,7 +39,7 @@ export function meOf(team: Member[], email: string): string | null {
   return team.find(m => m.emails.includes(e))?.handle ?? null
 }
 
-// "you · 3 owned · 1 decide" over the open tickets ([ ] [~] [!] [?]).
+// "you · 3 owned · 1 decide" over the open tickets ([ ] [~] [%] [!] [?]).
 export function ticketsOf(m: Member, board: Board | null, me: string | null): string {
   const open = (board?.tickets ?? []).filter(isOpen)
   const owned = open.filter(t => sameHandle(t.owner, m.handle)).length

@@ -4,7 +4,7 @@ import { GROUPS, isOpen, visible } from './board'
 // The Tickets tab's model (design §5): groups, drawn rows, line keys for keeping a
 // row in view, the count line. Pure; pane.tsx draws it, the ops app frames it.
 
-const OPEN_STATES: State[] = ['~', '!', '?', ' ', '>']
+const OPEN_STATES: State[] = ['~', '%', '!', '?', ' ', '>']
 
 export type Model = {
   groups: { box: State; title: string; tickets: Ticket[] }[]
@@ -47,7 +47,7 @@ export function buildModel(v: View): Model {
   const filterActive = !!(v.filter.app || v.filter.who || v.filter.mine)
   const all = v.board?.tickets ?? []
   const pool = v.board ? visible(v.board, { ...v.filter, showDone: true }, v.me) : []
-  // Open = [ ] [~] [!] [?] (tickets-zordon, countLine, pending.sh); deferred keeps
+  // Open = [ ] [~] [%] [!] [?] (tickets-zordon, countLine, pending.sh); deferred keeps
   // its own dot after the open ones. "hidden by filter" is the open ones the filter
   // leaves out, deferred not among them, so match + hidden = the unfiltered "n open".
   const open = pool.filter(isOpen)

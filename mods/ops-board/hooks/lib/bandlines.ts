@@ -9,7 +9,7 @@ import { ageText, DISK, figure, HOLD_UNKNOWN, isStale, MEM } from './facts'
 export const NARROW_COLUMNS = 110
 const FACTS_OLD_MS = 3 * 60 * 1000          // a machine poll missed twice: its facts show their age
 
-export type Counts = { open: number; progress: number; blocked: number; decision: number }
+export type Counts = { open: number; progress: number; testing: number; blocked: number; decision: number }
 export type BandInput = {
   watch: Watch; machine: Machine | null; usage: Usage | null
   relay: string | null              // "RUN-0012 2/4": the first run not all done
@@ -21,11 +21,11 @@ export type Seg = { text: string; color?: Color; dim?: boolean; inverse?: boolea
 const LEVEL_COLOR: Record<Level, Color> = { green: 'success', amber: 'warning', red: 'error' }
 const GLYPH: Record<Level, string> = { green: '●', amber: '▲', red: '■' }
 
-// Open = [ ] [~] [!] [?]; deferred and closed are not open (tickets-zordon, pending).
+// Open = [ ] [~] [%] [!] [?]; deferred and closed are not open (tickets-zordon, pending).
 export function countsOf(board: Board | null): Counts | null {
   if (!board || board.error) return null
   const n = (b: string) => board.tickets.filter(t => t.box === b).length
-  return { open: n(' ') + n('~') + n('!') + n('?'), progress: n('~'), blocked: n('!'), decision: n('?') }
+  return { open: n(' ') + n('~') + n('%') + n('!') + n('?'), progress: n('~'), testing: n('%'), blocked: n('!'), decision: n('?') }
 }
 
 // The status line: `ops <n> open · 7d <pct>`. A figure past 15 minutes says so; none
@@ -89,7 +89,7 @@ export function bandSegs(v: BandInput): Seg[][] {
   if (v.narrow) {
     const c = v.counts
     const counts: Seg[][] = c ? [[{ text: `${c.open} open` },
-      ...([['~', c.progress], ['!', c.blocked], ['?', c.decision]] as const)
+      ...([['~', c.progress], ['%', c.testing], ['!', c.blocked], ['?', c.decision]] as const)
         .filter(([, n]) => n > 0).flatMap(([b, n]): Seg[] => [{ text: ' ' }, { text: '●' + n, color: paint(b) }])]] : []
     const one = join([lead, ...counts, ...(v.relay ? [[{ text: v.relay }]] : []), disk, mem])
     const amberWords: Seg[][] = m?.locks.length ? [[{ text: 'locks ' }, { text: `${m.locks.length} stale`, color: 'warning' }]] : []

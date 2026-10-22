@@ -152,6 +152,15 @@ test('filter row, tags, expanded chips and raw line, count line, done shown', ()
   assert.match(text(fm), /←→ field/)
   assert.match(frame(fm, { color: true, ascii: false }).find(l => l.startsWith('\x1b[2mfilter'))!, /\x1b\[7mall\x1b\[0m/)
 })
+// F62: [%] testing - its own group between In progress and Blocked, cyan, named in the count line.
+test('[%] testing: group after in progress, cyan dot, counted open', () => {
+  const t = onBoard(initial(80, 24, 0), parseBoard('- [!] B1 — stuck\n- [%] F7 — built thing (testing: owner live check)\n- [~] F8 — working\n', 'T', 1, 1), [], null)
+  const f = text(t)
+  assert.match(f, /● In progress \(1\)\n[› ] ● F8 +working[^\n]*\n\n?● Testing \(1\)\n[› ] ● F7 +built thing[^\n]*\n\n?● Blocked \(1\)/)
+  assert.match(f, /^3 open \(0 pending · 1 in progress · 1 testing · 1 blocked · 0 decision\)$/m)
+  assert.match(frame(t, { color: true, ascii: false }).find(l => l.includes('F7  built'))!, /\x1b\[36m●/)
+  assert.doesNotMatch(text(s), /testing/)          // none under test: the count line stays as it was
+})
 test('toast and the dialog result show; control characters never reach the terminal', () => {
   const t = sized({ ...s, toast: '✓ B2 now pending\nran: sh x' })
   assert.ok(t.some(l => l === '✓ B2 now pending'))

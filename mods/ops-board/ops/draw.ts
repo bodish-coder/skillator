@@ -128,8 +128,10 @@ function countLine(s: State, m: Model): Seg[] {
   if (m.filterActive) return [dim(m.count.text)]
   const pool = visible(s.board, { ...s.filter, showDone: true }, s.me)
   const n = (b: Box) => pool.filter(t => t.box === b).length
-  const open = n(' ') + n('~') + n('!') + n('?')
-  const head = `${open} open (${n(' ')} pending · ${n('~')} in progress · ${n('!')} blocked · ${n('?')} decision)`
+  const open = n(' ') + n('~') + n('%') + n('!') + n('?')
+  // F62: testing is named only while a ticket is under test, so the line keeps its 80-column fit.
+  const head = `${open} open (${n(' ')} pending · ${n('~')} in progress` + (n('%') ? ` · ${n('%')} testing` : '')
+    + ` · ${n('!')} blocked · ${n('?')} decision)`
     + (n('>') ? ` · ${n('>')} deferred` : '')
   // Done shown: the closed count too when it fits (the Done and Cancelled heads carry it anyway).
   const closed = ` · ${n('x') + n('-')} closed`
@@ -219,7 +221,7 @@ function bandSegs(s: State): Seg[][] {
 // --- the Tickets tab, as the mock ---
 
 const GROUP_WORD: Record<Box, string> = {
-  '~': 'In progress', '!': 'Blocked', '?': 'Pending decision', ' ': 'Pending', '>': 'Deferred', x: 'Done', '-': 'Cancelled',
+  '~': 'In progress', '%': 'Testing', '!': 'Blocked', '?': 'Pending decision', ' ': 'Pending', '>': 'Deferred', x: 'Done', '-': 'Cancelled',
 }
 
 function filterLine(s: State): Seg[] {

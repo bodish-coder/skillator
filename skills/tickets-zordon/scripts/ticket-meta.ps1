@@ -3,6 +3,7 @@
 #
 #   ticket-meta.ps1 apps | app-of <path>... | by <ID> | apps-of <ID>
 #   ticket-meta.ps1 assign <ID> @handle | decide <ID> @handle | decided <ID>
+#   ticket-meta.ps1 testing <ID> <what test> | tested <ID> pass|fail
 #   ticket-meta.ps1 tag <ID> | selftest
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
 #
@@ -310,6 +311,13 @@ function Edit-Line([string]$id, [hashtable]$o) {
     $b = $line.IndexOf('- [') + 3
     $mk = $line.Substring($b, 1)
     if ($o.need -and $mk -cne $o.need) { Fail "$id is [$mk], not [$($o.need)] - nothing to change" }
+    # F62: the same test on a line already [%] is a no-op, like a same-handle assignment.
+    if ($o.testing -and $mk -ceq '%') {
+      $m = [regex]::Match($line, '\(testing:([^()]*)\)')
+      if ($m.Success -and $m.Groups[1].Value.Trim() -ceq $o.testing) {
+        return @($line, "no change: $id is already [%] (testing: $($o.testing))")
+      }
+    }
     if ($o.samekey) {
       $m = [regex]::Match($line, '\[' + $o.samekey + ':[ \t]*([^\]]*?)[ \t]*\]')
       # a no-op only when the box is already where this assignment puts it
@@ -321,7 +329,8 @@ function Edit-Line([string]$id, [hashtable]$o) {
     # tag (A143: the session tag and [owner:] are different facts) and names
     # that session afterwards, so it can be told its ticket moved.
     $warn = $null
-    if ($mk -ceq '~' -and $o.mark -and $o.mark -cne '~') {
+    # F62: [~] -> [%] is the working session's own next step, not a move away from it.
+    if ($mk -ceq '~' -and $o.mark -and $o.mark -cne '~' -and $o.mark -cne '%') {
       $sm = [regex]::Match($line, '[ \t]*\((@[A-Za-z]+-[A-Za-z0-9]+)\)[ \t]*$')
       if ($sm.Success) {
         $warn = "warning: $id was in progress under $($sm.Groups[1].Value) - its box left [~], the session tag stays; tell that session"
@@ -332,6 +341,16 @@ function Edit-Line([string]$id, [hashtable]$o) {
     if ($o.mark) { $line = $line.Substring(0, $b) + $o.mark + $line.Substring($b + 1) }
     foreach ($k in @('app', 'decide', 'owner', 'by')) {
       if ($o[$k]) { $line = Set-Tag $line $k $o[$k] }
+    }
+    # F62: ` (testing: <test>)` replaces the one there, else goes before a trailing
+    # (@agent-id) session tag, else at the end of the line.
+    if ($o.testing) {
+      $note = ' (testing: ' + $o.testing + ')'
+      $m = [regex]::Match($line, '[ \t]*\(testing:[^()]*\)')
+      $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$')
+      if ($m.Success) { $line = $line.Substring(0, $m.Index) + $note + $line.Substring($m.Index + $m.Length) }
+      elseif ($sm.Success) { $line = $line.Substring(0, $sm.Index) + $note + $line.Substring($sm.Index) }
+      else { $line = $line.TrimEnd(' ', "`t") + $note }
     }
     $lines[$i] = $line + $cr
     $tmp = "$f.ticket-meta.$PID"
@@ -380,6 +399,28 @@ function Do-Decided([string[]]$a) {
   if ($a.Count -ne 1) { Fail 'usage: decided <ID>' }
   $id = Get-NormId $a[0]
   return (Edit-Line $id @{ mark = ' '; need = '?' })
+}
+
+# F62: built, waiting on a test: the box [%] and ` (testing: <test>)` on the
+# line. The test is one line, trimmed, not blank, no parentheses (it sits in one).
+function Do-Testing([string[]]$a) {
+  if ($a.Count -lt 2) { Fail 'usage: testing <ID> <what test>' }
+  $id = Get-NormId $a[0]
+  $t = [string]::Join(' ', @($a[1..($a.Count - 1)]))
+  if (-not (Test-OneLine $t)) { Fail 'the test is one line' }
+  $t = $t.Trim()
+  if ($t -eq '') { Fail 'usage: testing <ID> <what test> - the test is blank' }
+  if ($t.Contains('(') -or $t.Contains(')')) { Fail 'the test cannot hold ( or ) - it sits in (testing: ..)' }
+  return (Edit-Line $id @{ mark = '%'; testing = $t })
+}
+
+# The test's result: [%] -> [x] on pass, [~] on fail; the (testing: ..) note stays as the record.
+function Do-Tested([string[]]$a) {
+  if ($a.Count -ne 2) { Fail 'usage: tested <ID> pass|fail' }
+  $id = Get-NormId $a[0]
+  $v = $a[1].ToLowerInvariant()
+  if ($v -ceq 'pass') { $mk = 'x' } elseif ($v -ceq 'fail') { $mk = '~' } else { Fail "usage: tested <ID> pass|fail - not '$($a[1])'" }
+  return (Edit-Line $id @{ mark = $mk; need = '%' })
 }
 
 function Do-Tag([string[]]$a) {
@@ -539,7 +580,7 @@ function Do-TeamRemove([string[]]$a) {
   foreach ($bl in ([System.IO.File]::ReadAllText($b, $Utf8).Replace("`r", '').Split([char]10))) {
     $m = [regex]::Match($bl, '^[ \t]*- \[(.)\][ \t]+([A-Z]+[0-9]+[a-z]?)')
     if (-not $m.Success) { continue }
-    if (@(' ', '~', '!', '?') -cnotcontains $m.Groups[1].Value) { continue }   # open: [ ] [~] [!] [?]
+    if (@(' ', '~', '!', '?', '%') -cnotcontains $m.Groups[1].Value) { continue }   # open: [ ] [~] [!] [?] [%]
     $hit = $false
     foreach ($tg in [regex]::Matches($bl, '\[(owner|decide|by):([^\]]*)\]')) {
       foreach ($x in ($tg.Groups[2].Value -split ',')) { if ($x.Trim(" `t") -ceq $h) { $hit = $true } }
@@ -588,6 +629,8 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'assign' { return (Do-Assign $a) }
     'decide' { return (Do-Decide $a) }
     'decided' { return (Do-Decided $a) }
+    'testing' { return (Do-Testing $a) }
+    'tested' { return (Do-Tested $a) }
     'tag' { return (Do-Tag $a) }
     'team' { return (Do-Team $a) }
     default { Fail "unknown subcommand: $c" }
@@ -811,12 +854,43 @@ function Invoke-Selftest {
       "- [ ] F31 $dash Working [owner: @asha] (@cc-bbbbbb)`n- [?] F32 $dash Busy [decide: @vidul] (a note) (@cc-cccccc)`n"
     if (-not (& $same $want45)) { Write-Output 'FAIL: F45 board bytes'; $script:fail = 1 }
 
+    # --- F62: [%] testing - built, waiting on a test; pass -> [x], fail -> [~]
+    $P = "$T/f62"
+    Init-Repo $P
+    W "$P/TICKETS.md" ("# TICKETS`n`n- [~] F40 $dash Built (@cc-dddddd)`n- [ ] F41 $dash Plain`n" +
+      "- [%] F42 $dash Under test (testing: old check)`n- [%] F43 $dash Passing (testing: unit run)`n" +
+      "- [%] F44 $dash Failing (testing: live check)`n- [ ] F46 $dash Not testing`n")
+    Commit 'vidul@ikran.in' 'init' 'README.md'
+    $board = "$P/TICKETS.md"
+    $o = @(Run testing F40 owner live check in Antigravity)
+    Eq 'testing from [~]' $o[0] "- [%] F40 $dash Built (testing: owner live check in Antigravity) (@cc-dddddd)"
+    if (([string]::Join(' ', $o)) -match 'was in progress') { Write-Output "FAIL: testing warned like a reassignment: [$o]"; $script:fail = 1 }
+    Eq 'testing from [ ]' (Run testing F41 'unit tests') "- [%] F41 $dash Plain (testing: unit tests)"
+    Eq 'testing replaces the note' (Run testing F42 '  new check ') "- [%] F42 $dash Under test (testing: new check)"
+    $o = [string]::Join(' ', @(Run testing F42 new check))
+    if ($o -notmatch 'no change') { Write-Output "FAIL: same testing did not say no change: [$o]"; $script:fail = 1 }
+    Eq 'tested pass' (Run tested F43 pass) "- [x] F43 $dash Passing (testing: unit run)"
+    Eq 'tested fail' (Run tested F44 FAIL) "- [~] F44 $dash Failing (testing: live check)"
+    $f62a = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
+    if (-not (Refused tested F46 pass)) { Write-Output 'FAIL: tested flipped a ticket that is not [%]'; $script:fail = 1 }
+    if (-not (Refused tested F42 maybe)) { Write-Output 'FAIL: tested took a verdict that is not pass/fail'; $script:fail = 1 }
+    if (-not (Refused tested F42)) { Write-Output 'FAIL: tested took no verdict'; $script:fail = 1 }
+    if (-not (Refused testing F46)) { Write-Output 'FAIL: testing took no test'; $script:fail = 1 }
+    if (-not (Refused testing F46 '  ')) { Write-Output 'FAIL: testing took a blank test'; $script:fail = 1 }
+    if (-not (Refused testing F46 'run (it)')) { Write-Output 'FAIL: testing took a test with parentheses'; $script:fail = 1 }
+    if (-not (Refused testing F46 "a`nb")) { Write-Output 'FAIL: testing took a test with a line break'; $script:fail = 1 }
+    if (-not (& $same $f62a)) { Write-Output 'FAIL: a refused testing/tested changed the board'; $script:fail = 1 }
+    $want62 = "# TICKETS`n`n- [%] F40 $dash Built (testing: owner live check in Antigravity) (@cc-dddddd)`n- [%] F41 $dash Plain (testing: unit tests)`n" +
+      "- [%] F42 $dash Under test (testing: new check)`n- [x] F43 $dash Passing (testing: unit run)`n" +
+      "- [~] F44 $dash Failing (testing: live check)`n- [ ] F46 $dash Not testing`n"
+    if (-not (& $same $want62)) { Write-Output 'FAIL: F62 board bytes'; $script:fail = 1 }
+
     # --- team add / remove / list: .skillator/team.md written under the board lock
     $G = "$T/team"
     Init-Repo $G
     W "$G/TICKETS.md" ("# TICKETS`n`n- [ ] F1 $dash One [owner: @asha]`n- [x] F2 $dash Two [owner: @asha]`n" +
       "- [?] F3 $dash Three [decide: @asha]`n- [-] F4 $dash Four [by: @asha]`n- [>] F5 $dash Five [by: @vidul, @asha]`n" +
-      "- [ ] F6 $dash Six`n- [ ] F7 $dash Seven [owner: @ashab]`n- [~] F8 $dash Eight [owner: @asha]`n- [!] F9 $dash Nine [by: @asha]`n")
+      "- [ ] F6 $dash Six`n- [ ] F7 $dash Seven [owner: @ashab]`n- [~] F8 $dash Eight [owner: @asha]`n- [!] F9 $dash Nine [by: @asha]`n- [%] F10 $dash Ten [owner: @asha] (testing: a live check)`n")
     $tf = "$G/.skillator/team.md"
     $teamIs = { param($want) (Test-Path -LiteralPath $tf) -and ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tf)) -ceq [Convert]::ToBase64String($Utf8.GetBytes($want))) }
     Eq 'team list, no file' (Run team list) ''
@@ -851,7 +925,7 @@ function Invoke-Selftest {
     if ($msg -notmatch 'not in') { Write-Output "FAIL: unknown-handle refusal does not say not in: [$msg]"; $script:fail = 1 }
     if (-not (& $teamIs $team2)) { Write-Output 'FAIL: a refused team remove changed team.md'; $script:fail = 1 }
     $boardBefore = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes("$G/TICKETS.md"))
-    Eq 'team remove, open tickets' (Run team remove '@asha') 'removed: @asha warning: @asha is still named on open tickets: F1, F3, F8, F9 - reassign them'
+    Eq 'team remove, open tickets' (Run team remove '@asha') 'removed: @asha warning: @asha is still named on open tickets: F1, F3, F8, F9, F10 - reassign them'
     if (-not (& $teamIs "# Team`n`n- @vidul: vidul@ikran.in, V2@X.com, x@y.org`n  name: Vidul Ikran`n")) { Write-Output 'FAIL: team remove'; $script:fail = 1 }
     if ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes("$G/TICKETS.md")) -cne $boardBefore) { Write-Output 'FAIL: team remove changed the board'; $script:fail = 1 }
     if (Test-Path -LiteralPath "$G/TICKETS.md.lock") { Write-Output 'FAIL: team remove left the board lock behind'; $script:fail = 1 }
@@ -909,7 +983,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|tag|team|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|tag|team|selftest')
   exit 1
 }
 $cmd = [string]$args[0]

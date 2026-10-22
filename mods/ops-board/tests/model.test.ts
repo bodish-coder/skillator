@@ -15,7 +15,7 @@ test('tickets model lives in lib', () => {
 })
 test('band, health, runs line builders live in lib', () => {
   expect(NARROW_COLUMNS).toBe(110)
-  expect(countsOf(board)).toEqual({ open: 7, progress: 1, blocked: 1, decision: 1 })
+  expect(countsOf(board)).toEqual({ open: 7, progress: 1, testing: 0, blocked: 1, decision: 1 })
   const band = bandLines({ watch: { level: 'green', reasons: [] }, machine: null, usage: null, relay: null, counts: countsOf(board), narrow: true, cols: 80, now: 0 })
   expect(band).toHaveLength(2)
   expect(healthLines({ usage: null, machine: null, relay: null, now: 0 }).map(l => l.key)).toContain('h:machine')

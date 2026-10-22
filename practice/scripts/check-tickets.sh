@@ -91,6 +91,18 @@ EOF
     echo "SELFTEST FAIL: a [?] line duplicating an ID passed" >&2; exit 1
   fi
 
+  # F62: [%] (testing: built, waiting on a test result) likewise - it passes, it
+  # is open, and its ID counts toward duplicates.
+  printf '# Board\n\n- [%%] A8 - built, under test (testing: a live check). Plan: S4\n- [ ] A9 - open\n' > "$stmp/t.md"
+  sh "$0" "$stmp/t.md" >"$stmp/t.out" 2>&1 || {
+    echo "SELFTEST FAIL: a board with a [%] line failed" >&2; cat "$stmp/t.out" >&2; exit 1; }
+  grep -q '2 ticket IDs' "$stmp/t.out" || {
+    echo "SELFTEST FAIL: [%] line not counted as a ticket" >&2; cat "$stmp/t.out" >&2; exit 1; }
+  printf -- '- [%%] A9 - same number, under test\n' >> "$stmp/t.md"
+  if sh "$0" "$stmp/t.md" >/dev/null 2>&1; then
+    echo "SELFTEST FAIL: a [%] line duplicating an ID passed" >&2; exit 1
+  fi
+
   # A92: with no argument the board is the current git repo's top-level
   # TICKETS.md (from a subdirectory too), else the current directory's -
   # never the board beside this script.

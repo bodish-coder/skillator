@@ -1,30 +1,31 @@
 import type { Color } from 'claude-code'
 import type { Board, Box, Filter, Ticket } from '../../types'
 
-export type StateColor = 'amber' | 'red' | 'violet' | 'neutral' | 'dim' | 'green'
+export type StateColor = 'amber' | 'cyan' | 'red' | 'violet' | 'neutral' | 'dim' | 'green'
 // The pane shows state by colour; listView() keeps the bracket codes.
 export const STATE_COLOR: Record<Box, StateColor> = {
-  '~': 'amber', '!': 'red', '?': 'violet', ' ': 'neutral', '>': 'dim', 'x': 'green', '-': 'dim',
+  '~': 'amber', '%': 'cyan', '!': 'red', '?': 'violet', ' ': 'neutral', '>': 'dim', 'x': 'green', '-': 'dim',
 }
 // Theme keys follow the person's theme on every surface; dim states are drawn dim.
 export const PAINT: Record<StateColor, Color> = {
-  amber: 'warning', red: 'error', violet: 'permission', neutral: 'text', dim: 'inactive', green: 'success',
+  amber: 'warning', cyan: 'suggestion', red: 'error', violet: 'permission', neutral: 'text', dim: 'inactive', green: 'success',
 }
 export const paint = (b: Box): Color => PAINT[STATE_COLOR[b]]
-// Open = [ ] [~] [!] [?] (tickets-zordon, pending); deferred and closed are not.
-const OPEN: Box[] = [' ', '~', '!', '?']
+// Open = [ ] [~] [%] [!] [?] (tickets-zordon, pending); deferred and closed are not.
+// F62: [%] is testing - built, waiting on a test result.
+const OPEN: Box[] = [' ', '~', '%', '!', '?']
 export const isOpen = (t: Ticket) => OPEN.includes(t.box)
 export const STATE_NAME: Record<Box, string> = {
-  '~': 'in progress', '!': 'blocked', '?': 'pending decision', ' ': 'pending', '>': 'deferred', 'x': 'done', '-': 'cancelled',
+  '~': 'in progress', '%': 'testing', '!': 'blocked', '?': 'pending decision', ' ': 'pending', '>': 'deferred', 'x': 'done', '-': 'cancelled',
 }
 export const GROUPS: { box: Box; title: string }[] = [
-  { box: '~', title: 'IN PROGRESS' }, { box: '!', title: 'BLOCKED' }, { box: '?', title: 'PENDING DECISION' },
+  { box: '~', title: 'IN PROGRESS' }, { box: '%', title: 'TESTING' }, { box: '!', title: 'BLOCKED' }, { box: '?', title: 'PENDING DECISION' },
   { box: ' ', title: 'PENDING' }, { box: '>', title: 'DEFERRED' }, { box: 'x', title: 'DONE' }, { box: '-', title: 'CANCELLED' },
 ]
 
 // A ticket line as ticket-meta and pending read it: `- [b]`, blanks, the id
 // ([A-Z]{1,3}[0-9]+[a-z]?), then an em dash, an en dash or a plain `-`.
-const TICKET = /^([ \t]*)- \[([ ~!?>x-])\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)[ \t]*(?:—|–|-)[ \t]*(.*)$/
+const TICKET = /^([ \t]*)- \[([ ~%!?>x-])\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)[ \t]*(?:—|–|-)[ \t]*(.*)$/
 // Anchored on the id, so `F3—re-run the GREEN` keeps "re-run the GREEN".
 const ID_DASH = /^[A-Z]{1,3}[0-9]+[a-z]?[ \t]*(?:—|–|-)[ \t]*/
 const handles = (s: string) => s.split(',').map(x => x.trim().toLowerCase()).filter(Boolean)
@@ -76,17 +77,17 @@ export function visible(b: Board, f: Filter, me: string | null): Ticket[] {
 
 export function countLine(ts: Ticket[]): string {
   const n = (b: Box) => ts.filter(t => t.box === b).length
-  const open = n(' ') + n('~') + n('!') + n('?')
+  const open = n(' ') + n('~') + n('%') + n('!') + n('?')
   const closed = n('x') + n('-')
-  return `${open} open (${n(' ')} pending · ${n('~')} in-progress · ${n('!')} blocked · ${n('?')} pending decision)` +
+  return `${open} open (${n(' ')} pending · ${n('~')} in-progress · ${n('%')} testing · ${n('!')} blocked · ${n('?')} pending decision)` +
     ` · ${n('>')} deferred · ${closed} closed (${n('x')} done · ${n('-')} cancelled) · ${ts.length} total`
 }
 
 const TYPE_NAME: Record<string, string> = { B: 'Bugs', F: 'Features', A: 'Agent-found' }
 const TYPE_ORDER = ['B', 'F', 'A']
-const STATUS_RANK: Box[] = ['~', '!', '?', '>', ' ']
+const STATUS_RANK: Box[] = ['~', '%', '!', '?', '>', ' ']
 const STATUS_VIEW: { box: Box; title: string }[] = [
-  { box: '~', title: 'In progress' }, { box: '!', title: 'Blocked' }, { box: '?', title: 'Pending decision' },
+  { box: '~', title: 'In progress' }, { box: '%', title: 'Testing' }, { box: '!', title: 'Blocked' }, { box: '?', title: 'Pending decision' },
   { box: '>', title: 'Deferred' }, { box: ' ', title: 'Pending' }, { box: 'x', title: 'Done' }, { box: '-', title: 'Cancelled' },
 ]
 const prefixOf = (id: string) => (/^[A-Za-z]+/.exec(id)?.[0] ?? id).toUpperCase()
@@ -117,7 +118,7 @@ export function listView(b: Board, args: string): string {
   const list = pool.filter(t => all || (t.box !== 'x' && t.box !== '-'))
   const ids = new Set(list.map(t => t.id))
   const byId = new Map(b.tickets.map(t => [t.id, t] as const))
-  const openCount = pool.filter(t => ' ~!?'.includes(t.box)).length
+  const openCount = pool.filter(isOpen).length
   const big = openCount >= 30 && !prefix
   const out: string[] = []
 

@@ -88,11 +88,11 @@ function Get-Board {
     }
   }
   $n = @{}
-  foreach ($k in @(' ', '~', '!', '?', '>')) { $n[$k] = 0; if ($c.ContainsKey($k)) { $n[$k] = [int]$c[$k] } }
+  foreach ($k in @(' ', '~', '!', '?', '%', '>')) { $n[$k] = 0; if ($c.ContainsKey($k)) { $n[$k] = [int]$c[$k] } }
   $counts = @(
-    ('OPEN=' + ($n[' '] + $n['~'] + $n['!'] + $n['?'])),
+    ('OPEN=' + ($n[' '] + $n['~'] + $n['!'] + $n['?'] + $n['%'])),
     ('PENDING=' + $n[' ']), ('PROGRESS=' + $n['~']), ('BLOCKED=' + $n['!']),
-    ('DECISION=' + $n['?']), ('DEFERRED=' + $n['>']))
+    ('DECISION=' + $n['?']), ('TESTING=' + $n['%']), ('DEFERRED=' + $n['>']))
   return @{ Counts = $counts; Owed = @($owed) }
 }
 
@@ -399,7 +399,7 @@ function Format-Human($facts) {
   foreach ($l in @($facts)) {
     $kv = Split-Kv $l
     $k = $kv[0]; $v = $kv[1]
-    if (@('OPEN', 'PENDING', 'PROGRESS', 'BLOCKED', 'DECISION', 'DEFERRED') -ccontains $k) { $n[$k] = $v }
+    if (@('OPEN', 'PENDING', 'PROGRESS', 'BLOCKED', 'DECISION', 'TESTING', 'DEFERRED') -ccontains $k) { $n[$k] = $v }
     elseif ($k -ceq 'RUN') {
       $a = $v.Split('|')
       $pre = '          '
@@ -429,7 +429,7 @@ function Format-Human($facts) {
     }
   }
   $out = New-Object System.Collections.ArrayList
-  [void]$out.Add("TICKETS   $([long]$n['OPEN']) open   [~]$([long]$n['PROGRESS']) [!]$([long]$n['BLOCKED']) [?]$([long]$n['DECISION']) [ ]$([long]$n['PENDING'])   [>]$([long]$n['DEFERRED']) deferred")
+  [void]$out.Add("TICKETS   $([long]$n['OPEN']) open   [~]$([long]$n['PROGRESS']) [%]$([long]$n['TESTING']) [!]$([long]$n['BLOCKED']) [?]$([long]$n['DECISION']) [ ]$([long]$n['PENDING'])   [>]$([long]$n['DEFERRED']) deferred")
   if ($runs.Count -eq 0) { [void]$out.Add('RUNS      none open') } else { foreach ($x in $runs) { [void]$out.Add($x) } }
   if ($q.Count -eq 0) { [void]$out.Add('QUEUED    none') } else { [void]$out.Add('QUEUED    ' + [string]::Join(' ', [string[]]$q.ToArray())) }
   if ($ag.Count -eq 0) { [void]$out.Add('AGENTS    none') } else { foreach ($x in $ag) { [void]$out.Add($x) } }
@@ -487,6 +487,7 @@ function Invoke-Selftest {
       "- [!] B2 $dash orders 500 past page 3",
       "- [?] F1 $dash pick the chart library [decide: @asha]",
       "- [>] F2 $dash later thing",
+      "- [%] F4 $dash built, under test (testing: live check)",
       "- [ ] F3 $dash pending one",
       "  - [ ] F3a $dash a towed car, slowed down",
       "- [x] A1 $dash fixed, the GREEN re-run is OWED",
@@ -535,14 +536,14 @@ function Invoke-Selftest {
     $env:PENDING_T = $T
     $env:RELAY_DIR = $null
 
-    Eq 'kv' (Run --kv) ([string]::Join("`n", @('OPEN=5', 'PENDING=2', 'PROGRESS=1', 'BLOCKED=1', 'DECISION=1', 'DEFERRED=1',
+    Eq 'kv' (Run --kv) ([string]::Join("`n", @('OPEN=6', 'PENDING=2', 'PROGRESS=1', 'BLOCKED=1', 'DECISION=1', 'TESTING=1', 'DEFERRED=1',
       'RUN=RUN-0012|2/4|@vidul|stage three title', 'SESSION=repo-c0|busy|C:\w\r|4', 'UNPUSHED=-', 'OWED=A1',
       'DRIVE=X:', 'DISK_FREE=858993459', 'DISK_TOTAL=1000000000000', 'MEM_FREE=3435973836',
       'LOCK=.skillator/run.md.lock|34|1234 sh MINGW', 'HOLD=-', 'WATCHDOG=red')))
     # No queue.md: queue-run list is never called (it would create the file).
     if (Test-Path -LiteralPath "$R/.skillator/queue.md") { Write-Output 'FAIL: pending created .skillator/queue.md'; $script:fail = 1 }
     W "$R/.skillator/queue.md" "# Run queue`n"
-    Eq 'human' (Run) ([string]::Join("`n", @('TICKETS   5 open   [~]1 [!]1 [?]1 [ ]2   [>]1 deferred',
+    Eq 'human' (Run) ([string]::Join("`n", @('TICKETS   6 open   [~]1 [%]1 [!]1 [?]1 [ ]2   [>]1 deferred',
       'RUNS      RUN-0012  2/4  stage three title', '          owner @vidul', 'QUEUED    RUN-0013',
       'AGENTS    repo-c0 busy idle 4m', 'UNPUSHED  - (no upstream)', 'GREENS    owed: A1',
       'DISK      X: 0.8 GB free of 931 GB', 'MEMORY    3.2 GB free',

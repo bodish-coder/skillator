@@ -1,4 +1,4 @@
-export type Box = ' ' | '~' | '!' | '?' | '>' | 'x' | '-'
+export type Box = ' ' | '~' | '%' | '!' | '?' | '>' | 'x' | '-'
 export type Ticket = {
   id: string; box: Box; title: string; line: string      // line = exact text after "- [b] "
   parent: string | null; indent: number; section: string // heading it sits under

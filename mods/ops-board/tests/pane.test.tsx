@@ -274,7 +274,7 @@ for (const surface of SURFACES) {
   })
 }
 
-test('open counts [ ] [~] [!] [?] only; deferred keeps its own dim dot after them', WITH, async ($, on) => {
+test('open counts [ ] [~] [%] [!] [?] only; deferred keeps its own dim dot after them', WITH, async ($, on) => {
   const [, clock] = world(on, { '/r/TICKETS.md': '- [>] A4 — later\n- [>] A5 — later too\n- [ ] F1 — now\n' })
   await start($, clock)
   const ui = await mountPane($, 'terminal')
@@ -287,6 +287,19 @@ test('open counts [ ] [~] [!] [?] only; deferred keeps its own dim dot after the
   expect(dots.map(d => d.children[0])).toEqual(['●1', '●2'])
   expect(dots[1]!.props.color).toBe('inactive')            // deferred is drawn dim
   expect(dots[0]!.props.color).not.toBe('inactive')
+  await ui.unmount()
+})
+
+// F62: [%] testing is its own group between In progress and Blocked, open, drawn in suggestion.
+test('[%] testing: its own group after in progress, counted open, its own colour', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': '- [!] B1 — stuck\n- [%] F7 — built thing (testing: owner live check)\n- [~] F8 — working\n- [ ] F9 — later\n' })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  const heads = (await ui.findAll({ type: 'Box' })).filter(t => t.key?.startsWith('head:')).map(t => t.text)
+  expect(heads).toEqual(['IN PROGRESS 1', 'TESTING 1', 'BLOCKED 1', 'PENDING 1'])
+  expect((await ui.find({ key: 'row:F7' }))?.text).toMatch(/^● F7  built thing/)
+  expect(((await ui.find({ key: 'head:%' }))!.children[0] as { props: { color?: string } }).props.color).toBe('suggestion')
+  expect((await ui.find({ key: 'count' }))!.text).toBe('4 open ●1 ●1 ●1 ●1')
   await ui.unmount()
 })
 

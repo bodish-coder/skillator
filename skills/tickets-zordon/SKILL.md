@@ -25,7 +25,7 @@ Create it if missing, with exactly this shape:
 ```markdown
 # TICKETS
 
-Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[?]` pending decision · `[>]` deferred · `[x]` done · `[-]` cancelled
+Legend: `[ ]` pending · `[~]` in-progress · `[%]` testing · `[!]` blocked · `[?]` pending decision · `[>]` deferred · `[x]` done · `[-]` cancelled
 IDs are permanent — never reuse or renumber. Append new tickets at the end of
 their section.
 
@@ -113,6 +113,8 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh apps-of F12     # apps it touc
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh assign F12 @asha   # implements it
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh decide F12 @asha   # must decide it
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh decided F12        # decision made
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh testing F12 owner live check  # [%], waits on that test
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh tested F12 pass    # [%] -> [x]; fail -> [~]
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # write app + by
 ```
 
@@ -264,6 +266,14 @@ write the ticket.**
 - Starting → flip to `[~]` and stamp your session tag — see **Who touched it**.
 - Finished *and verified* (tests/build/manual check actually run) → `[x]`.
   Not verified, not done.
+- Built, but the verifying test has not run yet and is not yours to run now —
+  an owner's live check, a GREEN on another host, a CI run → `[%]` testing,
+  via `ticket-meta testing <ID> <what test>`, which writes
+  ` (testing: <what test>)` on the line (one line, no parentheses). Testing is
+  **open**: report it at session end, and never build on it as if done. It
+  leaves only on the result: `ticket-meta tested <ID> pass` → `[x]`,
+  `tested <ID> fail` → back to `[~]` to fix; the `(testing: ..)` note stays as
+  the record. Not for a test you can run yourself this turn — run it.
 - Can't proceed — waiting on someone, a credential, an upstream fix, or another
   ticket → `[!]`, with ` (blocked: <what on>)` on the line. Blocked is still
   **open**: report it at session end, and unblock back to `[ ]` or `[~]` the
@@ -548,11 +558,11 @@ return results.filter(Boolean)
 Whole board: read `TICKETS.md`. Just the open ones:
 
 ```
-grep -nE '^\s*- \[[ ~!?]\]' TICKETS.md
+grep -nE '^\s*- \[[ ~%!?]\]' TICKETS.md
 ```
 
-`[x]` and `[-]` are the closed states, so neither shows up there; `[!]` and
-`[?]` do.
+`[x]` and `[-]` are the closed states, so neither shows up there; `[%]`, `[!]`
+and `[?]` do.
 
 When the user says a bare ID ("do B3", "what's F12"), grep for it and act on
 that line — in `TICKETS-archive.md` if the board does not have it.
@@ -670,13 +680,15 @@ Agent-found
   [ ] A1 — Unhandled promise rejection in the upload worker
   [>] A2 — `parseDate` returns Invalid Date on empty string (deferred: after the parser rewrite)
 
-7 open (4 pending · 1 in-progress · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
+7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
 ```
 
 ### By status (`list tickets status`)
 
 Same lines, regrouped. Sections in this order — **in-progress first**, because
-that is what someone asking for a status view wants to see:
+that is what someone asking for a status view wants to see — In progress,
+Testing, Blocked, Pending decision, Deferred, Pending (this board has nothing
+under test, so no Testing section):
 
 ```
 In progress
@@ -697,7 +709,7 @@ Pending
   [ ] F2 — Bulk delete in the table view
   [ ] A1 — Unhandled promise rejection in the upload worker
 
-7 open (4 pending · 1 in-progress · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
+7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
 ```
 
 A sub-part shown away from its parent carries the parent ID in trailing
@@ -714,35 +726,36 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
   always**, no matter how many there are. A long title truncates at ~80 chars
   with `…`; it never disappears. If the board is too long to print, **page it —
   never abbreviate it** (below).
-- **Open and deferred, by default** (`[ ]`, `[~]`, `[!]`, `[?]`, `[>]`) — every
+- **Open and deferred, by default** (`[ ]`, `[~]`, `[%]`, `[!]`, `[?]`, `[>]`) — every
   deferred ticket is listed, just counted apart. Closed tickets on request
   ("show everything", "what did we finish") — then `[x]` and `[-]` too.
 - **Drop empty sections.** No "Features: none", no empty `Blocked`.
 - **Blocked and deferred show their reason**; that is the whole point of
-  `[!]` and `[>]`. Pending decision shows who decides — its `[decide: ..]` tag.
-- **The counts must add up, and the line must show its work.** Seven mutually
+  `[!]` and `[>]`. Pending decision shows who decides — its `[decide: ..]` tag;
+  testing shows what test — its `(testing: ..)` note.
+- **The counts must add up, and the line must show its work.** Eight mutually
   exclusive states, two buckets and a loner:
-  `open = pending + in-progress + blocked + pending decision` (blocked and
-  pending decision are open, just waiting) ·
+  `open = pending + in-progress + testing + blocked + pending decision`
+  (testing, blocked and pending decision are open, just waiting) ·
   `closed = done + cancelled` · deferred is **neither** — it stands alone
   between them, so it never inflates the open count someone is judging the
   week by · `total = open + deferred + closed`. Each bucket prints its own
   subtotal with the breakdown in parentheses, so the arithmetic is checkable on
   sight and blocked is never mistaken for a bucket beside open.
-- **Always print all seven states, zeros included.** Never drop a term because
+- **Always print all eight states, zeros included.** Never drop a term because
   it is `0`. `0 blocked` is information — it says nothing is stuck, which is
   exactly what someone scanning the board wants to know — and a fixed-shape line
   can be compared against last session's at a glance. An empty board still
   prints the full line:
 
   ```
-  0 open (0 pending · 0 in-progress · 0 blocked · 0 pending decision) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total
+  0 open (0 pending · 0 in-progress · 0 testing · 0 blocked · 0 pending decision) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total
   ```
 - **One count line after the list**, and nothing else. No commentary on the
   board's health, no suggested next ticket unless asked:
 
   ```
-  7 open (4 pending · 1 in-progress · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
+  7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
   ```
 - Legend only if the user seems new to the board, and then one line.
 
@@ -751,7 +764,7 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
 Long boards are where the list is *most* needed and most often ruined. Do not
 compress by dropping titles. Compress by **showing less of the board, in full**:
 
-1. **In-progress, blocked and pending decision print in full, always.** However big the board,
+1. **In-progress, testing, blocked and pending decision print in full, always.** However big the board,
    that is what the person asking is actually working on and stuck behind.
 2. **Pending prints in full up to 20 lines per section**, oldest first. Over
    that, print 20 and add one line naming the rest and how to see it:
@@ -763,7 +776,7 @@ compress by dropping titles. Compress by **showing less of the board, in full**:
    files drift: a `B68` logged during a burst of agent findings ends up under
    `## Agent-found` and stays there forever. The ID is the classification; the
    heading is just where the line happened to land. Sort within a group by status
-   (in-progress, blocked, pending decision, deferred, pending) then by number.
+   (in-progress, testing, blocked, pending decision, deferred, pending) then by number.
 4. **`list tickets <prefix>`** (`list tickets A`, `list tickets B`) scopes to one
    type and prints it whole, no cap. That is the escape hatch the truncation line
    points at, so it must actually work.

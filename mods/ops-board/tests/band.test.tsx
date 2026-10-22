@@ -1,7 +1,7 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On, ProcessRunResult } from 'claude-code'
 import type { Engine, MockClock, Plugin } from 'claude-code/testing'
-import { bandLines, countsOf, statusText } from '../hooks/band'
+import { bandLines, bandSegs, countsOf, statusText } from '../hooks/band'
 import type { BandInput } from '../hooks/band'
 import { classify, parseMachine, usageFrom, STALE_MS } from '../hooks/lib/facts'
 import { parseBoard } from '../hooks/lib/board'
@@ -96,8 +96,17 @@ test('status line: ops <n> open · 7d <pct>; stale says so; unknown is left out'
 })
 
 test('countsOf: open excludes deferred and closed', () => {
-  expect(COUNTS).toEqual({ open: 5, progress: 1, blocked: 1, decision: 1 })
+  expect(COUNTS).toEqual({ open: 5, progress: 1, testing: 0, blocked: 1, decision: 1 })
   expect(countsOf(null)).toBeNull()
+})
+
+// F62: [%] testing is open; on the narrow band its dot sits after in progress, before blocked.
+test('countsOf: [%] testing counts as open; the narrow band dots it after in progress', () => {
+  const c = countsOf(parseBoard('- [~] F1 — a\n- [%] F2 — b (testing: x)\n- [%] F3 — c\n- [!] F4 — d\n- [>] F5 — e\n', 'T', 0, 0))
+  expect(c).toEqual({ open: 4, progress: 1, testing: 2, blocked: 1, decision: 0 })
+  const segs = bandSegs(input(GREEN_KV, { narrow: true, cols: 96, counts: c }))[0]!
+  const dots = segs.filter(s => s.text.startsWith('●') && s.text.length > 1)
+  expect(dots.map(s => [s.text, s.color])).toEqual([['●1', 'warning'], ['●2', 'suggestion'], ['●1', 'error']])
 })
 
 // ---- the engine: polls, hold, resume, status line, restore ----

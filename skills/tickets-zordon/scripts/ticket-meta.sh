@@ -9,6 +9,8 @@
 #   ticket-meta.sh assign <ID> @handle  [owner: @handle] (implements it), box -> [ ]
 #   ticket-meta.sh decide <ID> @handle  [decide: @handle] (must decide), box -> [?]
 #   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
+#   ticket-meta.sh testing <ID> <test>  box -> [%] testing, the line says ` (testing: <test>)`
+#   ticket-meta.sh tested <ID> pass|fail  [%] -> [x] (pass) or [~] (fail); the note stays
 #   ticket-meta.sh tag <ID>             recompute [app: ..] and [by: ..] on it
 #   ticket-meta.sh team add @handle "Name" email[,email...]
 #                                       a member into .skillator/team.md
@@ -216,6 +218,17 @@ edit_line() {
   if [ -n "${NEED_MARK:-}" ] && [ "$mk" != "$NEED_MARK" ]; then
     die "$ID is [$mk], not [$NEED_MARK] - nothing to change"
   fi
+  # F62: the same test on a line already [%] is a no-op, like a same-handle assignment.
+  if [ -n "${SET_TESTING:-}" ] && [ "$mk" = '%' ]; then
+    v=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\(testing:[^()]*\)/)) {
+          v = substr($0, RSTART + 9, RLENGTH - 10); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }')
+    if [ "$v" = "$SET_TESTING" ]; then
+      board_unlock
+      printf '%s\n' "$cur"
+      echo "no change: $ID is already [%] (testing: $v)"
+      return 0
+    fi
+  fi
   if [ -n "${SAME_KEY:-}" ]; then
     v=$(printf '%s\n' "$cur" | K=$SAME_KEY awk '{ if (match($0, "\\[" ENVIRON["K"] ":[ \t]*[^]]*\\]")) {
           v = substr($0, RSTART, RLENGTH); sub(/^\[[^:]*:[ \t]*/, "", v); sub(/[ \t]*\]$/, "", v); print v } }')
@@ -231,7 +244,8 @@ edit_line() {
   # tag (A143: the session tag and [owner:] are different facts) and names
   # that session afterwards, so it can be told its ticket moved.
   moved=0 sess=''
-  if [ "$mk" = '~' ] && [ -n "${SET_MARK:-}" ] && [ "$SET_MARK" != '~' ]; then
+  # F62: [~] -> [%] is the working session's own next step, not a move away from it.
+  if [ "$mk" = '~' ] && [ -n "${SET_MARK:-}" ] && [ "$SET_MARK" != '~' ] && [ "$SET_MARK" != '%' ]; then
     moved=1
     sess=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/)) {
           s = substr($0, RSTART + 1); sub(/\).*/, "", s); print s } }')
@@ -261,6 +275,17 @@ edit_line() {
       }
       return substr(line, 1, pos - 1) " [" key ": " val "]" substr(line, pos)
     }
+    # F62: ` (testing: <test>)` replaces the one there, else goes before a trailing
+    # (@agent-id) session tag, else at the end of the line.
+    function settesting(line, val,    note) {
+      note = " (testing: " val ")"
+      if (match(line, /[ \t]*\(testing:[^()]*\)/))
+        return substr(line, 1, RSTART - 1) note substr(line, RSTART + RLENGTH)
+      if (match(line, /[ \t]*\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/))
+        return substr(line, 1, RSTART - 1) note substr(line, RSTART)
+      sub(/[ \t]+$/, "", line)
+      return line note
+    }
     BEGIN { ORD[1] = "app"; ORD[2] = "decide"; ORD[3] = "owner"; ORD[4] = "by"; re = ENVIRON["RE"] }
     { line = $0; cr = ""
       if (sub(/\r$/, "", line)) cr = "\r"
@@ -272,6 +297,7 @@ edit_line() {
         if (ENVIRON["SET_DECIDE"] != "") line = settag(line, "decide", ENVIRON["SET_DECIDE"])
         if (ENVIRON["SET_OWNER"] != "") line = settag(line, "owner", ENVIRON["SET_OWNER"])
         if (ENVIRON["SET_BY"] != "") line = settag(line, "by", ENVIRON["SET_BY"])
+        if (ENVIRON["SET_TESTING"] != "") line = settesting(line, ENVIRON["SET_TESTING"])
       }
       if (NR > 1) printf "\n"
       printf "%s%s", line, cr }
@@ -316,6 +342,31 @@ cmd_decided() {
   [ $# -eq 1 ] || die "usage: decided <ID>"
   norm_id "$1"
   SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' SAME_KEY='' NEED_MARK='?' edit_line
+}
+
+# F62: built, waiting on a test: the box [%] and ` (testing: <test>)` on the
+# line. The test is one line, trimmed, not blank, no parentheses (it sits in one).
+cmd_testing() {
+  [ $# -ge 2 ] || die "usage: testing <ID> <what test>"
+  norm_id "$1"; shift
+  t=$*
+  one_line "$t" || die "the test is one line"
+  t=$(printf '%s' "$t" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  [ -n "$t" ] || die "usage: testing <ID> <what test> - the test is blank"
+  case $t in *'('*|*')'*) die "the test cannot hold ( or ) - it sits in (testing: ..)" ;; esac
+  SET_MARK='%' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' SET_TESTING=$t SAME_KEY='' NEED_MARK='' edit_line
+}
+
+# The test's result: [%] -> [x] on pass, [~] on fail; the (testing: ..) note stays as the record.
+cmd_tested() {
+  [ $# -eq 2 ] || die "usage: tested <ID> pass|fail"
+  norm_id "$1"
+  case $2 in
+    pass|PASS|Pass) mk='x' ;;
+    fail|FAIL|Fail) mk='~' ;;
+    *) die "usage: tested <ID> pass|fail - not '$2'" ;;
+  esac
+  SET_MARK=$mk SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' SET_TESTING='' SAME_KEY='' NEED_MARK='%' edit_line
 }
 
 cmd_tag() {
@@ -428,7 +479,7 @@ team_remove() {
     match($0, /^[ \t]*- \[.\][ \t]+[A-Z]+[0-9]+[a-z]?/) {
       id = substr($0, RSTART, RLENGTH); sub(/^[ \t]*- \[.\][ \t]+/, "", id)
       mk = substr($0, index($0, "- [") + 3, 1)
-      if (mk != " " && mk != "~" && mk != "!" && mk != "?") next   # open: [ ] [~] [!] [?]
+      if (mk != " " && mk != "~" && mk != "!" && mk != "?" && mk != "%") next   # open: [ ] [~] [!] [?] [%]
       s = $0; hit = 0
       while (match(s, /\[(owner|decide|by):[^]]*\]/)) {
         t = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
@@ -655,6 +706,48 @@ selftest() {
   } > "$T/want45.md"
   cmp -s TICKETS.md "$T/want45.md" || { echo "FAIL: F45 board bytes"; diff "$T/want45.md" TICKETS.md; fail=1; }
 
+  # --- F62: [%] testing - built, waiting on a test; pass -> [x], fail -> [~]
+  P="$T/f62"
+  mkdir -p "$P" && cd "$P" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  {
+    printf -- '# TICKETS\n\n'
+    printf -- '- [~] F40 %s Built (@cc-dddddd)\n' "$D"
+    printf -- '- [ ] F41 %s Plain\n' "$D"
+    printf -- '- [%%] F42 %s Under test (testing: old check)\n' "$D"
+    printf -- '- [%%] F43 %s Passing (testing: unit run)\n' "$D"
+    printf -- '- [%%] F44 %s Failing (testing: live check)\n' "$D"
+    printf -- '- [ ] F46 %s Not testing\n' "$D"
+  } > TICKETS.md
+  commit vidul@ikran.in "init" README.md
+  sh "$self" testing F40 owner live check in Antigravity > "$T/out" 2>&1 || { echo "FAIL: testing a [~] ticket failed: $(cat "$T/out")"; fail=1; }
+  eq "testing from [~]" "$(head -n 1 "$T/out" | tr -d '\r')" "- [%] F40 $D Built (testing: owner live check in Antigravity) (@cc-dddddd)"
+  grep -q 'was in progress' "$T/out" && { echo "FAIL: testing warned like a reassignment: $(cat "$T/out")"; fail=1; }
+  eq "testing from [ ]" "$(run testing F41 'unit tests')" "- [%] F41 $D Plain (testing: unit tests)"
+  eq "testing replaces the note" "$(run testing F42 '  new check ')" "- [%] F42 $D Under test (testing: new check)"
+  sh "$self" testing F42 new check > "$T/out" 2>&1 || { echo "FAIL: same testing failed: $(cat "$T/out")"; fail=1; }
+  grep -q 'no change' "$T/out" || { echo "FAIL: same testing did not say no change: $(cat "$T/out")"; fail=1; }
+  eq "tested pass" "$(run tested F43 pass)" "- [x] F43 $D Passing (testing: unit run)"
+  eq "tested fail" "$(run tested F44 FAIL)" "- [~] F44 $D Failing (testing: live check)"
+  cp TICKETS.md "$T/f62a.md"
+  sh "$self" tested F46 pass > /dev/null 2>&1 && { echo "FAIL: tested flipped a ticket that is not [%]"; fail=1; }
+  sh "$self" tested F42 maybe > /dev/null 2>&1 && { echo "FAIL: tested took a verdict that is not pass/fail"; fail=1; }
+  sh "$self" tested F42 > /dev/null 2>&1 && { echo "FAIL: tested took no verdict"; fail=1; }
+  sh "$self" testing F46 > /dev/null 2>&1 && { echo "FAIL: testing took no test"; fail=1; }
+  sh "$self" testing F46 '  ' > /dev/null 2>&1 && { echo "FAIL: testing took a blank test"; fail=1; }
+  sh "$self" testing F46 'run (it)' > /dev/null 2>&1 && { echo "FAIL: testing took a test with parentheses"; fail=1; }
+  sh "$self" testing F46 "a${NL}b" > /dev/null 2>&1 && { echo "FAIL: testing took a test with a line break"; fail=1; }
+  cmp -s TICKETS.md "$T/f62a.md" || { echo "FAIL: a refused testing/tested changed the board"; fail=1; }
+  {
+    printf -- '# TICKETS\n\n'
+    printf -- '- [%%] F40 %s Built (testing: owner live check in Antigravity) (@cc-dddddd)\n' "$D"
+    printf -- '- [%%] F41 %s Plain (testing: unit tests)\n' "$D"
+    printf -- '- [%%] F42 %s Under test (testing: new check)\n' "$D"
+    printf -- '- [x] F43 %s Passing (testing: unit run)\n' "$D"
+    printf -- '- [~] F44 %s Failing (testing: live check)\n' "$D"
+    printf -- '- [ ] F46 %s Not testing\n' "$D"
+  } > "$T/want62.md"
+  cmp -s TICKETS.md "$T/want62.md" || { echo "FAIL: F62 board bytes"; diff "$T/want62.md" TICKETS.md; fail=1; }
+
   # --- team add / remove / list: .skillator/team.md written under the board lock
   G="$T/team"
   mkdir -p "$G" && cd "$G" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
@@ -669,6 +762,7 @@ selftest() {
     printf -- '- [ ] F7 %s Seven [owner: @ashab]\n' "$D"
     printf -- '- [~] F8 %s Eight [owner: @asha]\n' "$D"
     printf -- '- [!] F9 %s Nine [by: @asha]\n' "$D"
+    printf -- '- [%%] F10 %s Ten [owner: @asha] (testing: a live check)\n' "$D"
   } > TICKETS.md
   tf="$G/.skillator/team.md"
   eq "team list, no file" "$(run team list)" ""
@@ -702,7 +796,7 @@ selftest() {
   grep -q 'not in' "$T/err" || { echo "FAIL: unknown-handle refusal does not say not in: $(cat "$T/err")"; fail=1; }
   cmp -s "$tf" "$T/team2.md" || { echo "FAIL: a refused team remove changed team.md"; fail=1; }
   cp TICKETS.md "$T/board-before.md"
-  eq "team remove, open tickets" "$(run team remove @asha)" "removed: @asha warning: @asha is still named on open tickets: F1, F3, F8, F9 - reassign them"
+  eq "team remove, open tickets" "$(run team remove @asha)" "removed: @asha warning: @asha is still named on open tickets: F1, F3, F8, F9, F10 - reassign them"
   printf -- '# Team\n\n- @vidul: vidul@ikran.in, V2@X.com, x@y.org\n  name: Vidul Ikran\n' > "$T/team3.md"
   cmp -s "$tf" "$T/team3.md" || { echo "FAIL: team remove"; diff "$T/team3.md" "$tf"; fail=1; }
   cmp -s TICKETS.md "$T/board-before.md" || { echo "FAIL: team remove changed the board"; fail=1; }
@@ -759,7 +853,7 @@ selftest() {
   echo ok
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|tag|team|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|tag|team|selftest"
 c=$1; shift
 [ "$c" = selftest ] && { selftest; exit 0; }
 need_git
@@ -773,6 +867,8 @@ case $c in
   assign) cmd_assign "$@" ;;
   decide) cmd_decide "$@" ;;
   decided) cmd_decided "$@" ;;
+  testing) cmd_testing "$@" ;;
+  tested) cmd_tested "$@" ;;
   tag) cmd_tag "$@" ;;
   team) cmd_team "$@" ;;
   *) die "unknown subcommand: $c" ;;

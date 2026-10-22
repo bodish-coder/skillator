@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { parseBoard, listView, countLine, visible, STATE_COLOR } from '../hooks/lib/board'
+import { parseBoard, listView, countLine, visible, STATE_COLOR, STATE_NAME, GROUPS, isOpen, paint } from '../hooks/lib/board'
 import { parseTeam, meOf } from '../hooks/lib/team'
 import { BOARD, BY_TYPE, BY_STATUS } from './fixtures'
 
@@ -11,8 +11,24 @@ test('by type matches tickets-zordon', () => {
 test('by status matches tickets-zordon', () => {
   expect(listView(parseBoard(BOARD, 'T', 0, 0), 'status')).toBe(BY_STATUS)
 })
-test('empty board prints all seven states', () => {
-  expect(countLine([])).toBe('0 open (0 pending · 0 in-progress · 0 blocked · 0 pending decision) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total')
+test('empty board prints all eight states', () => {
+  expect(countLine([])).toBe('0 open (0 pending · 0 in-progress · 0 testing · 0 blocked · 0 pending decision) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total')
+})
+// F62: [%] testing - built, waiting on a test result. Open; its own group and status
+// heading between In progress and Blocked; drawn in the suggestion colour.
+test('[%] testing parses, is open, groups and lists between in progress and blocked', () => {
+  const b = parseBoard('- [!] B1 — stuck\n- [%] F7 — built thing (testing: owner live check)\n- [~] F8 — working\n- [ ] F9 — later\n', 'T', 0, 0)
+  const t = b.tickets.find(x => x.id === 'F7')!
+  expect([t.box, t.title]).toEqual(['%', 'built thing'])
+  expect(isOpen(t)).toBe(true)
+  expect(STATE_NAME['%']).toBe('testing')
+  expect(STATE_COLOR['%']).toBe('cyan')
+  expect(paint('%')).toBe('suggestion')
+  expect(GROUPS.map(g => g.box).slice(0, 3)).toEqual(['~', '%', '!'])
+  expect(GROUPS.find(g => g.box === '%')!.title).toBe('TESTING')
+  expect(countLine(b.tickets)).toBe('4 open (1 pending · 1 in-progress · 1 testing · 1 blocked · 0 pending decision) · 0 deferred · 0 closed (0 done · 0 cancelled) · 4 total')
+  expect(listView(b, 'status').split('\n').filter(l => l && !l.startsWith(' ')).slice(0, 4)).toEqual(['In progress', 'Testing', 'Blocked', 'Pending'])
+  expect(listView(b, '')).toContain('[%] F7 — built thing (testing: owner live check)')
 })
 test('tags parsed, title kept', () => {
   const t = parseBoard('- [?] F3 — Pick the chart library [app: web, api] [decide: @asha] (@cc-a4f1c9)\n', 'T', 0, 0).tickets[0]!

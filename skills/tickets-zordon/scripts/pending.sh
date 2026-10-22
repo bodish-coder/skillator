@@ -9,7 +9,7 @@
 #   pending.sh --selftest   fixture repo, every mode, prints ok
 #
 # --kv keys, in this order:
-#   OPEN= PENDING= PROGRESS= BLOCKED= DECISION= DEFERRED=   counts on the main checkout's TICKETS.md
+#   OPEN= PENDING= PROGRESS= BLOCKED= DECISION= TESTING= DEFERRED=   counts on the main checkout's TICKETS.md
 #   RUN=<id>|<done>/<total>|<owner or ->|<first open stage or ->   per run not all done (relay list)
 #   QUEUED=<id>                       per row of `relay-morpheus queue-run list` in state queued
 #                                     (none while .skillator/queue.md does not exist)
@@ -24,7 +24,7 @@
 #                                     an empty or blank file is held: HOLD=? -
 #   WATCHDOG=red|amber|green          red: disk or memory free < 1 GB; amber: disk < 5 GB,
 #                                     memory < 2 GB, a stale lock or a hold; else green
-# OPEN = [ ] [~] [!] [?], as tickets-zordon's count line has it; deferred [>]
+# OPEN = [ ] [~] [!] [?] [%], as tickets-zordon's count line has it; deferred [>]
 # is not open and has its own key.
 #
 # Creates nothing: `queue-run list` (which creates the queue file when absent)
@@ -81,8 +81,8 @@ board() {   # counts | owed
       if (tolower($0) ~ /(^|[^a-z0-9_])owed([^a-z0-9_]|$)/) ow = ow "OWED=" id "\n"
     }
     END {
-      p = c[" "] + 0; g = c["~"] + 0; b = c["!"] + 0; q = c["?"] + 0; d = c[">"] + 0
-      if (what == "counts") printf "OPEN=%d\nPENDING=%d\nPROGRESS=%d\nBLOCKED=%d\nDECISION=%d\nDEFERRED=%d\n", p + g + b + q, p, g, b, q, d
+      p = c[" "] + 0; g = c["~"] + 0; b = c["!"] + 0; q = c["?"] + 0; t = c["%"] + 0; d = c[">"] + 0
+      if (what == "counts") printf "OPEN=%d\nPENDING=%d\nPROGRESS=%d\nBLOCKED=%d\nDECISION=%d\nTESTING=%d\nDEFERRED=%d\n", p + g + b + q + t, p, g, b, q, t, d
       else printf "%s", ow
     }' "$f"
 }
@@ -268,7 +268,7 @@ K == "HOLD" { HD = V }
 human() {
   awk "$AWK_LIB"'
     K == "OPEN" { o = V } K == "PENDING" { np = V } K == "PROGRESS" { ng = V }
-    K == "BLOCKED" { nb = V } K == "DECISION" { nq = V } K == "DEFERRED" { nd = V }
+    K == "BLOCKED" { nb = V } K == "DECISION" { nq = V } K == "TESTING" { nt = V } K == "DEFERRED" { nd = V }
     K == "RUN" { split(V, a, "|"); runs = runs (runs == "" ? "RUNS      " : "          ") a[1] "  " a[2] "  " a[4] "\n"
                  if (a[3] != "-") runs = runs "          owner " a[3] "\n" }
     K == "QUEUED" { q = q (q == "" ? "" : " ") V }
@@ -280,7 +280,7 @@ human() {
                   lk = lk (lk == "" ? "LOCKS     " : "          ") lp " " substr(s, 1, j - 1) "m (" substr(s, j + 1) ")\n" }
     END {
       judge()
-      printf "TICKETS   %d open   [~]%d [!]%d [?]%d [ ]%d   [>]%d deferred\n", o, ng, nb, nq, np, nd
+      printf "TICKETS   %d open   [~]%d [%%]%d [!]%d [?]%d [ ]%d   [>]%d deferred\n", o, ng, nt, nb, nq, np, nd
       printf "%s", (runs == "" ? "RUNS      none open\n" : runs)
       printf "QUEUED    %s\n", (q == "" ? "none" : q)
       printf "%s", (ag == "" ? "AGENTS    none\n" : ag)
@@ -312,6 +312,7 @@ selftest() {
     "- [!] B2 $D orders 500 past page 3" \
     "- [?] F1 $D pick the chart library [decide: @asha]" \
     "- [>] F2 $D later thing" \
+    "- [%] F4 $D built, under test (testing: live check)" \
     "- [ ] F3 $D pending one" \
     "  - [ ] F3a $D a towed car, slowed down" \
     "- [x] A1 $D fixed, the GREEN re-run is OWED" \
@@ -359,11 +360,11 @@ EOF
   export PENDING_RELAY PENDING_DF_CMD PENDING_MEM_CMD PENDING_SESSIONS_DIR PENDING_NOW PENDING_T
   unset RELAY_DIR 2>/dev/null || :
 
-  eq "kv" "$(run --kv)" "OPEN=5${NL}PENDING=2${NL}PROGRESS=1${NL}BLOCKED=1${NL}DECISION=1${NL}DEFERRED=1${NL}RUN=RUN-0012|2/4|@vidul|stage three title${NL}SESSION=repo-c0|busy|C:\\w\\r|4${NL}UNPUSHED=-${NL}OWED=A1${NL}DRIVE=X:${NL}DISK_FREE=858993459${NL}DISK_TOTAL=1000000000000${NL}MEM_FREE=3435973836${NL}LOCK=.skillator/run.md.lock|34|1234 sh MINGW${NL}HOLD=-${NL}WATCHDOG=red"
+  eq "kv" "$(run --kv)" "OPEN=6${NL}PENDING=2${NL}PROGRESS=1${NL}BLOCKED=1${NL}DECISION=1${NL}TESTING=1${NL}DEFERRED=1${NL}RUN=RUN-0012|2/4|@vidul|stage three title${NL}SESSION=repo-c0|busy|C:\\w\\r|4${NL}UNPUSHED=-${NL}OWED=A1${NL}DRIVE=X:${NL}DISK_FREE=858993459${NL}DISK_TOTAL=1000000000000${NL}MEM_FREE=3435973836${NL}LOCK=.skillator/run.md.lock|34|1234 sh MINGW${NL}HOLD=-${NL}WATCHDOG=red"
   # No queue.md: queue-run list is never called (it would create the file).
   [ ! -e .skillator/queue.md ] || { echo "FAIL: pending created .skillator/queue.md"; fail=1; }
   echo '# Run queue' > .skillator/queue.md
-  eq "human" "$(run)" "TICKETS   5 open   [~]1 [!]1 [?]1 [ ]2   [>]1 deferred${NL}RUNS      RUN-0012  2/4  stage three title${NL}          owner @vidul${NL}QUEUED    RUN-0013${NL}AGENTS    repo-c0 busy idle 4m${NL}UNPUSHED  - (no upstream)${NL}GREENS    owed: A1${NL}DISK      X: 0.8 GB free of 931 GB${NL}MEMORY    3.2 GB free${NL}LOCKS     .skillator/run.md.lock 34m (1234 sh MINGW)${NL}HOLD      none${NL}WATCHDOG  red - disk 0.8 GB free (below 1 GB); 1 stale lock"
+  eq "human" "$(run)" "TICKETS   6 open   [~]1 [%]1 [!]1 [?]1 [ ]2   [>]1 deferred${NL}RUNS      RUN-0012  2/4  stage three title${NL}          owner @vidul${NL}QUEUED    RUN-0013${NL}AGENTS    repo-c0 busy idle 4m${NL}UNPUSHED  - (no upstream)${NL}GREENS    owed: A1${NL}DISK      X: 0.8 GB free of 931 GB${NL}MEMORY    3.2 GB free${NL}LOCKS     .skillator/run.md.lock 34m (1234 sh MINGW)${NL}HOLD      none${NL}WATCHDOG  red - disk 0.8 GB free (below 1 GB); 1 stale lock"
   # R2: HOLD= comes from <main>/.skillator/watchdog.hold itself, the words
   # `relay-morpheus watchdog status` gives (CRLF tolerated, first line only).
   printf '2026-01-01T11:00Z disk low\r\nsecond line\n' > .skillator/watchdog.hold
