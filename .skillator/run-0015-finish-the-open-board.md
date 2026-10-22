@@ -1,6 +1,6 @@
 # RUN-0015 - finish the open board
 plan: TICKETS.md
-started: 2026-10-22T09:38Z   updated: 2026-10-22T12:41Z
+started: 2026-10-22T09:38Z   updated: 2026-10-22T16:03Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0015-finish-the-open-board
 branch: run/RUN-0015-finish-the-open-board
 
@@ -8,7 +8,7 @@ branch: run/RUN-0015-finish-the-open-board
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
 | 101 | AAAQ B5 dialogs inside the ops pane | x | build:opus | 2026-10-22T10:10Z | b735722 |
-| 102 | AAAR F60 engage by hook | ! | build:opus | 2026-10-22T10:15Z | 3aec85f |
+| 102 | AAAR F60 engage by hook | x | build:opus | 2026-10-22T16:03Z | 3aec85f |
 | 103 | AAAS F56 pi ops keys via pty | x | build:opus | 2026-10-22T11:27Z | 0c9886d |
 | 104 | verify review bump land | x | main:opus | 2026-10-22T12:15Z | ab84f22 |
 | 105 | AAAT A145 pi skill warnings | x | build:opus | 2026-10-22T11:41Z | 1c67ae4 |
@@ -184,3 +184,4 @@ prompt: |
 - 2026-10-22T17:31Z - Owner: "b4 solve it with agent". Candidate repo found read-only: C:/tools/Projects/AewaAirbender/TICKETS.md, 3.8 MB / 1435 tickets (4x the largest tested). Run branch fast-forwarded to main (258866f). Stage 108: reproduce on a scratch COPY (owner's repo read-only), fix the cause or record not-reproduced.
 - 2026-10-22T17:55Z - A148 (ops suite hang) root-caused and fixed in the main session: pi/tests/ops.test.mts:157 slept a fixed 300 ms; under load f.view was null, line 164 threw before q, the overlay's poll timers kept node alive. Now waits (bounded 10 s) and closes in a finally; full suite 79/79 twice under load. Ruling: test-only change done inline, not an agent - one test, the owner waiting on the push. Pushing 4.11.3 now (B5 round 2 for the owner's live check); B4 (stage 108) lands as 4.11.4.
 - 2026-10-22T18:30Z - AAAW: 108 landed ae4a383 - B4 [x]: $.state value cap (4,194,304 chars) exceeded by the parsed 3.8 MB board (7.7 M chars); pane now trims stored title/line; real host loads it. Agent's headless `claude -p "/ops-board:list-tickets"` became a model turn on the scratch copy (no changes; one Bash and one Write blocked); AewaAirbender only read. Merged into main, 4.11.4, pushed, plugins updated. RUN-0015 complete; worktree and branch removed.
+- 2026-10-22T22:40Z - Stage 102 closed x at its evidence commit 3aec85f: the owner closed F60 host-limited, so the RED evidence is the stage's landed result.
