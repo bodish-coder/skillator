@@ -68,6 +68,34 @@ test('run: argv from the call table, cwd = repo root, never rejects', async () =
   assert.equal(parseBoard('- [ ] F1 — a\n', 'T', 0, 0).tickets.length, 1)
 })
 
+// A142: under Git Bash (ops.sh, or MSYSTEM set) the .sh port runs, not the .ps1.
+test('the script spelling: Windows runs .ps1; Git Bash (ops.sh or MSYSTEM) runs .sh', async () => {
+  const keys = ['OS', 'MSYSTEM', 'SKILLATOR_OPS_SHELL']
+  const saved = keys.map(k => process.env[k])
+  const set = (env: Record<string, string>) => { for (const k of keys) { if (k in env) process.env[k] = env[k]; else delete process.env[k] } }
+  const t = mkTmp(join(tmpdir(), 'ops-'))
+  const dir = echoSkills(join(t, 's'))
+  try {
+    const cases: [Record<string, string>, string][] = [
+      [{ OS: 'Windows_NT' }, 'powershell'],                                         // plain Windows (ops.ps1)
+      [{ OS: 'Windows_NT', MSYSTEM: 'MINGW64' }, 'sh'],                             // a Git Bash shell
+      [{ OS: 'Windows_NT', SKILLATOR_OPS_SHELL: 'sh' }, 'sh'],                      // launched by ops.sh
+      [{ OS: 'Windows_NT', MSYSTEM: 'MINGW64', SKILLATOR_OPS_SHELL: 'ps1' }, 'powershell'], // ops.ps1 started from Git Bash
+      [{}, 'sh'],                                                                   // not Windows
+    ]
+    for (const [env, first] of cases) {
+      set(env)
+      const h = await makeHost({ appDir: '/x', cwd: t, skills: dir })
+      const r = await h.run('meta-assign', ['F1', '@a'])
+      assert.equal(r.argv[0], first, JSON.stringify(env))
+      assert.equal(h.win, first === 'powershell', JSON.stringify(env))
+      assert.match(r.argv.join(' '), first === 'sh' ? /ticket-meta\.sh assign F1 @a$/ : /ticket-meta\.ps1 assign F1 @a$/)
+    }
+  } finally {
+    keys.forEach((k, i) => { const v = saved[i]; if (v === undefined) delete process.env[k]; else process.env[k] = v })
+  }
+})
+
 test('run: a script that is not there comes back non-zero, not a rejection', async () => {
   const t = mkTmp(join(tmpdir(), 'ops-'))
   const dir = skills(join(t, 's'))                                   // marker only, no relay script

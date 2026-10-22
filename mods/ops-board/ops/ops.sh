@@ -20,6 +20,8 @@ dir=$here
 if [ -n "$msys" ]; then dir=$(cd -- "$here" && pwd -W); fi
 case $dir in /*) path=$dir ;; *) path=/$dir ;; esac
 url=file://$(printf '%s' "$path" | sed 's/%/%25/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g')
+# A142: the board runs skillator's .sh scripts from here, on Windows too (nodehost.ts).
+SKILLATOR_OPS_SHELL=sh; export SKILLATOR_OPS_SHELL
 loader=$url/loader.mjs
 app=$dir/app.ts
 if [ -n "$msys" ] && [ -t 0 ] && [ -t 1 ]; then

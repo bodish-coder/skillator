@@ -89,9 +89,21 @@ function spawnArgv(argv: string[], cwd: string, timeoutMs: number): Promise<RunR
   })
 }
 
+// Which spelling of the scripts runs (A142): the .ps1 on Windows, the .sh elsewhere - and
+// under Git Bash on Windows too, chosen by the launching shell, not the platform. The
+// launcher says which it is (SKILLATOR_OPS_SHELL: ops.sh sets sh, ops.ps1 sets ps1); with
+// no launcher word, MSYSTEM (set by Git Bash / MSYS2) means sh. The Claude Code mod
+// (hooks/lib/host.ts) keeps the platform: no shell launches it.
+export function windowsScripts(env: Env): boolean {
+  if (env.OS !== 'Windows_NT') return false
+  if (env.SKILLATOR_OPS_SHELL === 'sh') return false
+  if (env.SKILLATOR_OPS_SHELL === 'ps1') return true
+  return !env.MSYSTEM
+}
+
 // opts.skills (the app's --skills): that dir, or its skills/ child, when it holds the marker.
 export async function makeHost(opts: { appDir: string; cwd: string; skills?: string }): Promise<Host> {
-  const win = process.env.OS === 'Windows_NT'
+  const win = windowsScripts(process.env)
   const has = (d: string) => existsSync(d + '/' + MARKER)
   const skillsDir = opts.skills !== undefined
     ? [norm(opts.skills), norm(opts.skills) + '/skills'].find(has) ?? null

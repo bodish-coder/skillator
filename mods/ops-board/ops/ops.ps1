@@ -27,6 +27,8 @@ if (-not $ok) {
 # node --import takes a URL (file:///C:/...), not a drive path.
 $loader = ([System.Uri](Join-Path $PSScriptRoot 'loader.mjs')).AbsoluteUri
 $app = Join-Path $PSScriptRoot 'app.ts'
+# A142: the board runs skillator's .ps1 scripts from here, even when started from Git Bash.
+$env:SKILLATOR_OPS_SHELL = 'ps1'
 # The frame is UTF-8; when this host relays node's output (a pipe), decode it as UTF-8.
 $enc = [Console]::OutputEncoding
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
