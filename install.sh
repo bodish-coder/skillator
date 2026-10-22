@@ -225,6 +225,7 @@ install_into() {
   # so the plain `git pull && ./install.sh` update path picks up doc changes.
   # F55: ops-board/ is the ops terminal app (hooks/lib, types, ops) - same refresh.
   # F56: and pi/, the same board as a pi extension (write_commands points pi at it).
+  # F57: and antigravity/, the same board as an Antigravity IDE extension (put_agy_ext).
   if [ -n "$dry" ]; then
     echo "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice/ references/ ops-board/ in $_dest"
   else
@@ -234,7 +235,7 @@ install_into() {
     rm -rf "$_dest/references" && cp -R "$root/references" "$_dest/"
     rm -rf "$_dest/ops-board" && mkdir -p "$_dest/ops-board/hooks" &&
       cp -R "$root/mods/ops-board/hooks/lib" "$_dest/ops-board/hooks/" &&
-      cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$root/mods/ops-board/pi" "$_dest/ops-board/"
+      cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$root/mods/ops-board/pi" "$root/mods/ops-board/antigravity" "$_dest/ops-board/"
     printf '%s\n' "$shipped" > "$_dest/$manifest"
   fi
   # the targets loop is a subshell - the summary reads the dests from this file
@@ -285,6 +286,41 @@ put_pi_ext() {
   echo "        * $_ext"
 }
 
+# agy_ide: the Antigravity IDE's CLI (the VS Code fork, not agy) - $SKILLATOR_AGY_IDE when
+# set (the selftest's fake), else antigravity-ide on PATH, else the default install
+# (Windows per-user, macOS). Nothing when none is there.
+agy_ide() {
+  if [ -n "${SKILLATOR_AGY_IDE:-}" ]; then [ -x "$SKILLATOR_AGY_IDE" ] && echo "$SKILLATOR_AGY_IDE"; return 0; fi
+  if command -v antigravity-ide >/dev/null 2>&1; then command -v antigravity-ide; return 0; fi
+  for _i in "${LOCALAPPDATA:-}/Programs/Antigravity IDE/bin/antigravity-ide" \
+            "/Applications/Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide"; do
+    case $_i in /*|[A-Za-z]:*) [ -x "$_i" ] && { echo "$_i"; return 0; } ;; esac
+  done
+  return 0
+}
+
+# put_agy_ext <skills-dir>: F57 - the ops board in the Antigravity IDE (command "skillator:
+# Ops board"). The IDE (1.107.0, probed 2026-10-22) ignores a folder dropped beside its
+# extensions.json, so ops-board/antigravity/pack.mjs writes a VSIX whose extension.cjs
+# requires the dest's ops-board/antigravity/extension.cjs, and the IDE's own CLI installs
+# it (--install-extension --force) - the data layer keeps one copy. Every run. A failed
+# install is a warning, never the installer's exit code.
+put_agy_ext() {
+  _ide=$(agy_ide)
+  if [ -z "$_ide" ]; then echo "        skip  the Antigravity IDE ops board (no antigravity-ide CLI found)"; return 0; fi
+  _vsix="$1/ops-board/antigravity/skillator-ops.vsix"
+  if [ -n "$dry" ]; then echo "        would install the ops board extension $_vsix with $_ide"; return 0; fi
+  if ! command -v node >/dev/null 2>&1; then echo "        skip  the Antigravity IDE ops board (needs node 22.18 or newer to pack it)"; return 0; fi
+  if ! _o=$(node "$(native "$1")/ops-board/antigravity/pack.mjs" "$(native "$_vsix")" 2>&1); then
+    echo "warn  the Antigravity IDE ops board was not packed: $_o"; return 0
+  fi
+  if _o=$("$_ide" --install-extension "$(native "$_vsix")" --force 2>&1); then
+    echo "        * Antigravity IDE extension skillator.skillator-ops ($_vsix)"
+  else
+    echo "warn  the Antigravity IDE did not install the ops board: $_o"
+  fi
+}
+
 # write_commands <cli> <dest>: F54 - /pending, /list-tickets, /engage and /archive-tickets as the host's own command
 # file, user level, rewritten every run. Called per dest; per-CLI files are written for
 # the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
@@ -308,6 +344,8 @@ write_commands() {
         # an older run may have marked it owned - it is not a manifest skill
         [ -n "$dry" ] || rm -f "$2/$_n/$owned"
       done
+      # F57: the Antigravity IDE's extension, from Antigravity's own dest
+      if [ "$2" = "$HOME/.gemini/config/skills" ]; then put_agy_ext "$2"; fi
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
       if [ "$2" = "$HOME/.gemini/skills" ]; then
         for _n in pending list-tickets engage archive-tickets; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
@@ -333,11 +371,15 @@ native() {
 }
 
 # --selftest: install into a temp HOME / CODEX_HOME holding the four marker dirs, then
-# check the command files (F54), the ops-board copy and the shim (F55), pi's /ops extension (F56). Never touches
-# the real HOME. Costs one full install per host dest on disk until it exits.
+# check the command files (F54), the ops-board copy and the shim (F55), pi's /ops extension (F56),
+# the Antigravity IDE extension through a fake IDE CLI (F57). Never touches the real HOME or IDE. Costs one full install per host dest on disk until it exits.
 if [ -n "$selftest" ]; then
   T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
   mkdir -p "$T/.codex" "$T/.cursor" "$T/.gemini" "$T/.pi"
+  # F57: a fake Antigravity IDE CLI that logs its arguments - every run below inherits
+  # it, so the selftest never installs into the real IDE
+  printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/ide-calls"\n' "$T" > "$T/fake-ide"; chmod 755 "$T/fake-ide"
+  export SKILLATOR_AGY_IDE="$T/fake-ide"
   HOME=$T CODEX_HOME=$T/.codex sh "$0" >/dev/null || { echo "FAIL: install exited $?"; exit 1; }
   for f in .codex/prompts/pending.md .codex/prompts/list-tickets.md .gemini/commands/pending.toml .gemini/commands/list-tickets.toml \
            .cursor/commands/pending.md .cursor/commands/list-tickets.md .pi/agent/prompts/pending.md .pi/agent/prompts/list-tickets.md \
@@ -374,6 +416,13 @@ if [ -n "$selftest" ]; then
   # F56: pi's extension re-exports the board from the pi dest's ops-board/pi (native path)
   grep -qxF "export { default } from \"$N/.pi/agent/skills/ops-board/pi/index.ts\";" "$T/.pi/agent/extensions/skillator-ops.ts" || { echo "FAIL: pi extension target"; exit 1; }
   [ "$(ls "$T/.pi/agent/extensions")" = skillator-ops.ts ] || { echo "FAIL: pi extensions dir holds more than skillator-ops.ts"; exit 1; }
+  # F57: the Antigravity IDE got one install of the VSIX packed in Antigravity's own dest,
+  # and the VSIX's entry requires that dest's ops-board/antigravity/extension.cjs
+  _agy=$T/.gemini/config/skills/ops-board/antigravity
+  for f in ops.ts extension.cjs pack.mjs package.json; do [ -f "$_agy/$f" ] || { echo "FAIL: missing antigravity/$f"; exit 1; }; done
+  [ "$(cat "$T/ide-calls")" = "--install-extension $N/.gemini/config/skills/ops-board/antigravity/skillator-ops.vsix --force" ] || { echo "FAIL: antigravity ide install call: $(cat "$T/ide-calls")"; exit 1; }
+  [ "$(head -c 2 "$_agy/skillator-ops.vsix")" = PK ] || { echo "FAIL: antigravity vsix is not a zip"; exit 1; }
+  grep -aqF "require(\"$N/.gemini/config/skills/ops-board/antigravity/extension.cjs\")" "$_agy/skillator-ops.vsix" || { echo "FAIL: antigravity vsix entry target"; exit 1; }
   head -1 "$T/.codex/prompts/pending.md" | grep -q '^---' && { echo "FAIL: codex prompt has frontmatter"; exit 1; }
   grep -q '^name: pending$' "$T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
   grep -q '^name: list-tickets$' "$T/.gemini/skills/list-tickets/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
@@ -398,6 +447,7 @@ if [ -n "$selftest" ]; then
   printf '%s\n' "$out" | grep -q "not on your PATH" || { echo "FAIL: PATH note"; exit 1; }
   grep -q stale "$T/.codex/prompts/pending.md" && { echo "FAIL: codex prompt not rewritten"; exit 1; }
   grep -q stale "$T/.pi/agent/extensions/skillator-ops.ts" && { echo "FAIL: pi extension not rewritten"; exit 1; }
+  [ "$(wc -l < "$T/ide-calls" | tr -d ' ')" = 2 ] || { echo "FAIL: antigravity extension not reinstalled on the second run"; exit 1; }
   [ -f "$T/.gemini/skills/pending/SKILL.md" ] || { echo "FAIL: agy skill-command pruned"; exit 1; }
   grep -q stale "$T/.gemini/skills/pending/SKILL.md" && { echo "FAIL: agy skill-command not rewritten"; exit 1; }
   [ -e "$T/.gemini/skills/list-tickets/.skillator-owned" ] && { echo "FAIL: stale marker kept on a skill-command"; exit 1; }
@@ -406,6 +456,10 @@ if [ -n "$selftest" ]; then
   printf '%s\n' "$out" | grep -q "would write $T/.local/bin/ops" || { echo "FAIL: dry-run shim line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: dry-run command line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/extensions/skillator-ops.ts" || { echo "FAIL: dry-run pi extension line"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "would install the ops board extension $T/.gemini/config/skills/ops-board/antigravity/skillator-ops.vsix with $T/fake-ide" || { echo "FAIL: dry-run antigravity extension line"; exit 1; }
+  [ "$(wc -l < "$T/ide-calls" | tr -d ' ')" = 2 ] || { echo "FAIL: dry run called the Antigravity IDE"; exit 1; }
+  out=$(HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --dry-run) || { echo "FAIL: no-IDE dry run exited $?"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "skip  the Antigravity IDE ops board (no antigravity-ide CLI found)" || { echo "FAIL: no-IDE skip line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: dry-run skill-command line"; exit 1; }
   # the plugin installed: the shim still runs the first dest written (refreshed every
   # run), never the versioned plugin cache a plugin update can remove

@@ -277,6 +277,38 @@ function Write-PiExt([string]$skillsDir) {
   Write-Host "        * $ext"
 }
 
+# Get-AgyIde: the Antigravity IDE's CLI (the VS Code fork, not agy) - $env:SKILLATOR_AGY_IDE
+# when set (the selftest's fake), else antigravity-ide on PATH, else the default per-user
+# install. '' when none is there. Same as install.sh agy_ide.
+function Get-AgyIde {
+  if ($env:SKILLATOR_AGY_IDE) { if (Test-Path -LiteralPath $env:SKILLATOR_AGY_IDE -PathType Leaf) { return $env:SKILLATOR_AGY_IDE } else { return '' } }
+  $c = Get-Command antigravity-ide -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($c) { return $c.Source }
+  $d = "$env:LOCALAPPDATA\Programs\Antigravity IDE\bin\antigravity-ide.cmd"
+  if ($env:LOCALAPPDATA -and (Test-Path -LiteralPath $d -PathType Leaf)) { return $d }
+  return ''
+}
+
+# Write-AgyExt <skills-dir>: F57 - the ops board in the Antigravity IDE (command "skillator:
+# Ops board"). The IDE (1.107.0, probed 2026-10-22) ignores a folder dropped beside its
+# extensions.json, so ops-board\antigravity\pack.mjs writes a VSIX whose extension.cjs
+# requires the dest's ops-board/antigravity/extension.cjs, and the IDE's own CLI installs
+# it (--install-extension --force). Every run. A failed install is a warning, never the
+# installer's exit code. Same as install.sh put_agy_ext.
+function Write-AgyExt([string]$skillsDir) {
+  $ErrorActionPreference = 'Continue'     # the IDE's CLI writes notes to stderr
+  $ide = Get-AgyIde
+  if (-not $ide) { Write-Host "        skip  the Antigravity IDE ops board (no antigravity-ide CLI found)"; return }
+  $vsix = "$skillsDir\ops-board\antigravity\skillator-ops.vsix"
+  if ($DryRun) { Write-Host "        would install the ops board extension $vsix with $ide"; return }
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Write-Host "        skip  the Antigravity IDE ops board (needs node 22.18 or newer to pack it)"; return }
+  $o = & node "$skillsDir\ops-board\antigravity\pack.mjs" $vsix 2>&1 | Out-String
+  if ($LASTEXITCODE -ne 0) { Write-Host "warn  the Antigravity IDE ops board was not packed: $o" -ForegroundColor Yellow; return }
+  $o = & $ide --install-extension $vsix --force 2>&1 | Out-String
+  if ($LASTEXITCODE -eq 0) { Write-Host "        * Antigravity IDE extension skillator.skillator-ops ($vsix)" }
+  else { Write-Host "warn  the Antigravity IDE did not install the ops board: $o" -ForegroundColor Yellow }
+}
+
 # Write-Commands <cli> <dest>: F54 - /pending, /list-tickets, /engage and /archive-tickets as the host's own command
 # file, user level, rewritten every run. Called per dest; per-CLI files are written for
 # the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
@@ -301,6 +333,8 @@ function Write-Commands([string]$cli, [string]$dest) {
         # an older run may have marked it owned - it is not a manifest skill
         if (-not $DryRun) { Remove-Item -LiteralPath "$dest\$n\$owned" -Force -ErrorAction SilentlyContinue }
       }
+      # F57: the Antigravity IDE's extension, from Antigravity's own dest
+      if ($dest -eq "$HOME\.gemini\config\skills") { Write-AgyExt $dest }
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
       if ($dest -eq "$HOME\.gemini\skills") {
         foreach ($n in $names) { Write-Cmd "$c\gemini\$n.toml" $dest "$HOME\.gemini\commands\$n.toml" }
@@ -311,12 +345,19 @@ function Write-Commands([string]$cli, [string]$dest) {
 
 # -SelfTest: install into a temp HOME / USERPROFILE / CODEX_HOME holding the four marker
 # dirs and a temp -Profile, then check the command files (F54), the ops-board copy and
-# the profile function (F55), pi's /ops extension (F56). Never touches the real HOME or profile. Costs one full
+# the profile function (F55), pi's /ops extension (F56), the Antigravity IDE extension
+# through a fake IDE CLI (F57). Never touches the real HOME, profile or IDE. Costs one full
 # install per host dest on disk until it returns. Returns '' or the failure.
 function Invoke-SelfTest([string]$T) {
   $prof = Join-Path $T 'profile.ps1'
   foreach ($m in '.codex','.cursor','.gemini','.pi') { New-Item -ItemType Directory -Force (Join-Path $T $m) | Out-Null }
   $env:HOME = $T; $env:USERPROFILE = $T; $env:CODEX_HOME = Join-Path $T '.codex'
+  # F57: a fake Antigravity IDE CLI that logs its arguments - every run below inherits it,
+  # so the selftest never installs into the real IDE
+  $calls = Join-Path $T 'ide-calls'
+  [IO.File]::WriteAllText((Join-Path $T 'fake-ide.ps1'), "Add-Content -LiteralPath '$calls' -Value (`$args -join ' ')`nexit 0`n")
+  $env:SKILLATOR_AGY_IDE = Join-Path $T 'fake-ide.ps1'
+  $ideCalls = { if (Test-Path -LiteralPath $calls) { @([IO.File]::ReadAllLines($calls)) } else { @() } }
   $run = { param([string[]]$more)
     $o = & powershell -NoProfile -ExecutionPolicy Bypass -File $selfPath -Profile $prof @more | Out-String
     $script:selfCode = $LASTEXITCODE
@@ -331,6 +372,8 @@ function Invoke-SelfTest([string]$T) {
   if (-not $out.Contains("would write function ops in $prof")) { return 'dry-run ops line' }
   if (-not $out.Contains("would write $T\.pi\agent\prompts\list-tickets.md")) { return 'dry-run command line' }
   if (-not $out.Contains("would write $T\.pi\agent\extensions\skillator-ops.ts")) { return 'dry-run pi extension line' }
+  if (-not $out.Contains("would install the ops board extension $T\.gemini\config\skills\ops-board\antigravity\skillator-ops.vsix with $env:SKILLATOR_AGY_IDE")) { return 'dry-run antigravity extension line' }
+  if (@(& $ideCalls).Count -ne 0) { return 'dry run called the Antigravity IDE' }
   if (-not $out.Contains("would write $T\.gemini\config\skills\pending\SKILL.md")) { return 'dry-run skill-command line' }
   if (Test-Path -LiteralPath $prof) { return 'dry run wrote the profile' }
   if (Test-Path -LiteralPath (Join-Path $T '.codex\prompts')) { return 'dry run wrote a command file' }
@@ -369,6 +412,15 @@ function Invoke-SelfTest([string]$T) {
   $pb = [IO.File]::ReadAllBytes((Join-Path $T '.pi\agent\extensions\skillator-ops.ts'))
   if ($pb[0] -ne 0x2F -or $pb -contains 13) { return 'pi extension has a BOM or CR' }
   if (@(Get-ChildItem -LiteralPath (Join-Path $T '.pi\agent\extensions')).Count -ne 1) { return 'pi extensions dir holds more than skillator-ops.ts' }
+  # F57: the Antigravity IDE got one install of the VSIX packed in Antigravity's own dest,
+  # and the VSIX's entry requires that dest's ops-board/antigravity/extension.cjs
+  $agy = Join-Path $T '.gemini\config\skills\ops-board\antigravity'
+  foreach ($f in 'ops.ts', 'extension.cjs', 'pack.mjs', 'package.json') { if (-not (Test-Path -LiteralPath (Join-Path $agy $f) -PathType Leaf)) { return "missing antigravity\$f" } }
+  $ic = @(& $ideCalls)
+  if ($ic.Count -ne 1 -or $ic[0] -cne "--install-extension $agy\skillator-ops.vsix --force") { return "antigravity ide install call: $($ic -join ' | ')" }
+  $vb = [IO.File]::ReadAllBytes((Join-Path $agy 'skillator-ops.vsix'))
+  if ($vb[0] -ne 0x50 -or $vb[1] -ne 0x4B) { return 'antigravity vsix is not a zip' }
+  if (-not [Text.Encoding]::UTF8.GetString($vb).Contains("require(`"$($agy.Replace('\', '/'))/extension.cjs`")")) { return 'antigravity vsix entry target' }
   if ((& $read '.codex\prompts\pending.md').StartsWith('---')) { return 'codex prompt has frontmatter' }
   if ((& $read '.gemini\config\skills\pending\SKILL.md') -cnotmatch '(?m)^name: pending$') { return 'agy skill name' }
   if ((& $read '.gemini\skills\list-tickets\SKILL.md') -cnotmatch '(?m)^name: list-tickets$') { return 'agy skill name' }
@@ -400,6 +452,7 @@ function Invoke-SelfTest([string]$T) {
   if ($script:selfCode -ne 0) { return "second install exited $script:selfCode" }
   if (& $has '.codex\prompts\pending.md' 'stale') { return 'codex prompt not rewritten' }
   if (& $has '.pi\agent\extensions\skillator-ops.ts' 'stale') { return 'pi extension not rewritten' }
+  if (@(& $ideCalls).Count -ne 2) { return 'antigravity extension not reinstalled on the second run' }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\pending\SKILL.md'))) { return 'agy skill-command pruned' }
   if (& $has '.gemini\skills\pending\SKILL.md' 'stale') { return 'agy skill-command not rewritten' }
   if (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\list-tickets\.skillator-owned')) { return 'stale marker kept on a skill-command' }
@@ -440,12 +493,17 @@ function Invoke-SelfTest([string]$T) {
   $env:HOME = $P; $env:USERPROFILE = $P; $env:CODEX_HOME = Join-Path $P '.codex'
   $null = & powershell -NoProfile -ExecutionPolicy Bypass -File $selfPath -Profile $prof2 | Out-String
   if ($LASTEXITCODE -ne 0) { return "plugin install exited $LASTEXITCODE" }
+  # no IDE CLI: the antigravity dest says so and installs nothing
+  $env:HOME = $T; $env:USERPROFILE = $T; $env:CODEX_HOME = Join-Path $T '.codex'
+  $env:SKILLATOR_AGY_IDE = Join-Path $T 'none.ps1'
+  $out = & $run @('-DryRun')
+  if (-not $out.Contains('skip  the Antigravity IDE ops board (no antigravity-ide CLI found)')) { return 'no-IDE skip line' }
   if (-not ([IO.File]::ReadAllText($prof2).Contains("-File '$P\.cursor\skills\ops-board\ops\ops.ps1' @args"))) { return 'ops function target with the plugin installed (first dest written, not the plugin cache)' }
   return ''
 }
 
 if ($SelfTest) {
-  $saved = @{ HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; CODEX_HOME = $env:CODEX_HOME }
+  $saved = @{ HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; CODEX_HOME = $env:CODEX_HOME; SKILLATOR_AGY_IDE = $env:SKILLATOR_AGY_IDE }
   $T = Join-Path ([IO.Path]::GetTempPath()) ("skillator-selftest-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
   New-Item -ItemType Directory -Force $T | Out-Null
   $T = (Get-Item -LiteralPath $T).FullName.TrimEnd('\')
@@ -548,6 +606,8 @@ foreach ($cli in $targets.Keys) {
       Copy-Item (Join-Path $mod 'ops') $board -Recurse -Force
       # F56: pi\, the same board as a pi extension (Write-Commands points pi at it)
       Copy-Item (Join-Path $mod 'pi') $board -Recurse -Force
+      # F57: antigravity\, the same board as an Antigravity IDE extension (Write-AgyExt)
+      Copy-Item (Join-Path $mod 'antigravity') $board -Recurse -Force
       # LF, no BOM - the same bytes install.sh writes, so either twin reads the other's
       [IO.File]::WriteAllText((Join-Path $dest $manifest), (($shipped -join "`n") + "`n"))
     }

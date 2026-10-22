@@ -1,0 +1,18 @@
+{
+  "name": "skillator-ops",
+  "publisher": "skillator",
+  "displayName": "skillator ops board",
+  "description": "The skillator ops board - tickets, runs, health, assign / decide - as a panel in the Antigravity IDE.",
+  "version": "1.0.0",
+  "license": "MIT",
+  "type": "module",
+  "engines": { "vscode": "^1.90.0" },
+  "main": "./extension.cjs",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      { "command": "skillator.ops", "title": "Ops board", "category": "skillator" },
+      { "command": "skillator.opsOnce", "title": "Ops board - one frame", "category": "skillator" }
+    ]
+  }
+}
