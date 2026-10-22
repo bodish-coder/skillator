@@ -1,0 +1,209 @@
+F55 - standalone `ops` terminal app: scripted-pty live check (RUN-0014 stage 92)
+Date: 2026-10-22
+Host: Windows 11 (10.0.26300), node v22.23.2, Windows PowerShell 5.1, Git for Windows bash.
+
+VERDICT
+  ops.ps1 (PowerShell launcher) .......... PASS
+  ops.sh  (Git Bash launcher) ............ PASS
+  Capture mode: pty (real ConPTY, scripted) - not `ran`. No human looked at a
+  Windows Terminal or mintty window; see "Not checked".
+
+HOW THE PTY WAS DRIVEN
+  No tmux, no `script` on this host; /usr/bin/winpty exists but needs a console.
+  pywinpty 3.0.5 (already installed in C:\Python313) opens a real ConPTY - the
+  same pseudo-console Windows Terminal hosts - at 80 cols x 30 rows. A Python
+  driver (scratchpad only) spawned the launcher in it, wrote keystrokes as bytes
+  (arrow down = ESC[B, Enter = CR, backspace = DEL, tab = HT), and fed every
+  byte the app wrote into pyte 0.8.2 (pip --target into the scratchpad, not the
+  repo), a VT emulator, whose 80x30 screen was dumped after each key.
+  Target board: a fresh `git clone` of the RUN-0014 worktree into the
+  scratchpad per launcher (f55clone for ps1, f55clone-sh for sh); the clone's
+  own launcher ran against the clone. The main checkout's board was never
+  touched.
+    ps1: powershell.exe -NoProfile -ExecutionPolicy Bypass -File <clone>\mods\ops-board\ops\ops.ps1 -Repo <clone>
+    sh:  "C:\Program Files\Git\bin\bash.exe" --noprofile --norc -c "sh '<clone>/mods/ops-board/ops/ops.sh' '<clone>'"
+  Key script: start, 2, 3, 1, down, t, n, type @qa-bot/QA Bot/qa@example.com,
+  Enter, n, type @temp-x/tmp@example.com, Enter, backspace, y, t, a, Enter,
+  down, d, Enter, q.
+  No .skillator/team.md existed in the clone, so the team was built from the
+  app itself (team add x2, team remove x1) before the assign.
+  Every process was gone after each run (q exited 0; no node/powershell left
+  naming the clones).
+
+RESULT LINES
+  ps1: after q: alive=False exit=0 ; every frame longest line 80 cols
+  sh:  after q: alive=False exit=0 ; every frame longest line 80 cols
+  The two runs' frames are identical except the repo name in the tab bar and
+  the live memory/disk figures (diffed after stripping both).
+  Extra: `ops.sh <clone> --once --no-color --cols N --tab T` for T in
+  tickets/runs/health: longest line 60 at N=60 and 80 at N=80 (chars, not bytes).
+
+SCREENS (ops.ps1 run, trimmed: blank rows dropped, 80 cols)
+
+----- start -----
+ 1 Tickets   2 Runs   3 Health                                    ops · f55clone
+filter  app: all                                          f filter · x show done
+● In progress (6)
+› ● B4   ops on a large TICKETS.md shows "no TICKETS.md at <root>" with the fil…
+  ● F52  tickets-zordon Workflow mode asks the execution mode too (…  @cu-04f282
+  ● F54  ops for every host, part 1: /pending and /list-tickets as …  @cc-0211b2
+  ● F55  ops for every host, part 2: standalone `ops` terminal app …  @cc-0211b2
+  ● F58  `/engage` in every CLI (owner request 2026-10-21): the user's rough pr…
+  ● F59  `/archive-tickets` in every CLI (owner request 2026-10-21): runs ticke…
+● Pending (4)
+  ● F56  ops for every host, part 3: Pi native port - the ops views…  @cc-0211b2
+  ● F57  ops for every host, part 4: Antigravity native port - the …  @cc-0211b2
+  ● A126 relay-morpheus run worktrees live in `<repo>/../<repo>.run…  @cc-fa7ff0
+  ● A140 mods/ops-board test "a host figure past 15 minutes shows its age and s…
+● Deferred (2)
+  ● A62  auto-invocation is untested on cursor, codex, antigravity …  @cc-629d8e
+    ● A62d prime-agent auto-invocation is unverified (deferred: pri…  @cc-b30f8f
+10 open (4 pending · 6 in progress · 0 blocked · 0 decision) · 2 deferred
+↑↓ move · enter line · a assign · d decide · t team · r reload · q quit
+● ops · mem 3.9 GB · C: 118 GB free · 5h ? · 7d ?
+
+----- key 2 (Runs) -----
+ 1 Tickets   2 Runs   3 Health                                    ops · f55clone
+› ● RUN-0001  relay-morpheus: staged runs that survive sessions         8/8 done
+  ● RUN-0002  name every skill for a character                          4/4 done
+  ● RUN-0003  drain the board                                         28/29 done
+  ...  (RUN-0004 .. RUN-0012)
+  ● RUN-0013  13 - ops for every host: F55 standalone TUI, then F54 c…  0/0 done
+10 open (4 pending · 6 in progress · 0 blocked · 0 decision) · 2 deferred
+↑↓ move · enter stages · s start a planned run · r reload · q quit
+● ops · mem 3.9 GB · C: 118 GB free · 5h ? · 7d ?
+
+----- key 3 (Health) -----
+ 1 Tickets   2 Runs   3 Health                                    ops · f55clone
+Usage          from watch-cortana usage-watch level
+  5-hour        not observable here
+  7-day         not observable here
+  Relay         no usage reading (UNOBSERVABLE)
+  Credit        not available
+Machine
+  Memory        3.9 GB free        amber < 2 GB · red < 1 GB
+  Disk C:       118 GB free        amber < 5 GB · red < 1 GB
+  Hold          none
+  Stale locks   none
+10 open (4 pending · 6 in progress · 0 blocked · 0 decision) · 2 deferred
+R resume (releases the hold on a fresh non-red reading) · r reload · q quit
+
+----- key 1, then arrow down -----
+  ● B4   ops on a large TICKETS.md shows "no TICKETS.md at <root>" with the fil…
+› ● F52  tickets-zordon Workflow mode asks the execution mode too (…  @cu-04f282
+
+----- t (Team view, no team.md yet) -----
+Team  .skillator/team.md · 0 people
+  no .skillator/team.md yet - n adds the first person (ticket-meta creates the …
+n add · del remove (asks first) · esc back
+
+----- n, typed -----
+  ┌─ Add person ────────────────────────────────────────────────────┐
+  │  Handle   @qa-bot                                               │
+  │  Name     QA Bot                                                │
+  │  Emails   qa@example.com_                                       │
+  │                                                                 │
+  │  Runs    ticket-meta team add @qa-bot "QA Bot" qa@example.com   │
+  │  tab next field · enter add · esc cancel                        │
+  └─────────────────────────────────────────────────────────────────┘
+
+----- Enter (team add @qa-bot) -----
+Team  .skillator/team.md · 1 person
+› @qa-bot  QA Bot        qa@example.com        -
+✓ @qa-bot added to .skillator/team.md
+ran: powershell -NoProfile -ExecutionPolicy Bypass -File C:/Users/Ikran/AppData…
+
+----- n + Enter (team add @temp-x), backspace -----
+Team  .skillator/team.md · 2 people
+  @qa-bot  QA Bot        qa@example.com        -
+› @temp-x  temp-x        tmp@example.com       -
+remove @temp-x from .skillator/team.md? (y/n)
+
+----- y (team remove @temp-x) -----
+Team  .skillator/team.md · 1 person
+› @qa-bot  QA Bot        qa@example.com        -
+✓ @temp-x removed from .skillator/team.md
+
+----- t (back to Tickets), a (assign dialog on F52) -----
+  ┌─ Assign F52 ────────────────────────────────────────────────────┐
+  │  (•) implementation   ( ) decision          a / d               │
+  │                                                                 │
+  │  › @qa-bot   QA Bot                                             │
+  │    + add person                                                 │
+  │                                                                 │
+  │  Change  [~] in progress → [ ] pending, owner @qa-bot           │
+  │  ! F52 is in progress under @cu-04f282 - this moves it to pendi…│
+  │  Runs    ticket-meta assign F52 @qa-bot                         │
+  │                                                                 │
+  │  Enter confirm · Esc cancel                                     │
+  └─────────────────────────────────────────────────────────────────┘
+↑↓ person · a / d kind · enter confirm · esc cancel
+
+----- Enter (assign) -----
+● In progress (5)
+  ...
+● Pending (5)
+› ● F52  tickets-zordon Workflow mode asks the execution mode too (own…  @qa-bot
+✓ F52 now pending, owned by @qa-bot: tickets-zordon Workflow mode asks the exec…
+warning: F52 was in progress under @cu-04f282 - that session is no longer the o…
+ran: powershell -NoProfile -ExecutionPolicy Bypass -File C:/Users/Ikran/AppData…
+10 open (5 pending · 5 in progress · 0 blocked · 0 decision) · 2 deferred
+
+----- down to F56, d (decide dialog) -----
+  ┌─ Assign F56 for a decision ─────────────────────────────────────┐
+  │  ( ) implementation   (•) decision          a / d               │
+  │  › @qa-bot   QA Bot                                             │
+  │  Change  [ ] pending → [?] decision, decide @qa-bot             │
+  │  Runs    ticket-meta decide F56 @qa-bot                         │
+  └─────────────────────────────────────────────────────────────────┘
+
+----- Enter (decide) -----
+● Pending decision (1)
+› ● F56  ops for every host, part 3: Pi native port - the ops views…  @cc-0211b2
+● Pending (4)
+  ● F52  tickets-zordon Workflow mode asks the execution mode too (own…  @qa-bot
+✓ F56 now pending decision, for @qa-bot to decide: ops for every host, part 3: …
+10 open (4 pending · 5 in progress · 0 blocked · 1 decision) · 2 deferred
+↑↓ move  enter line  a assign  d decide  D decided  t team  r reload  q quit
+
+----- q -----
+process exited, code 0 (alt screen restored)
+
+SCREENS (ops.sh run): identical frame for frame to the above (tab bar reads
+"ops · f55clone-sh"; memory 2.8 GB on the Health tab). Its start frame:
+ 1 Tickets   2 Runs   3 Health                                 ops · f55clone-sh
+filter  app: all                                          f filter · x show done
+● In progress (6)
+› ● B4   ops on a large TICKETS.md shows "no TICKETS.md at <root>" with the fil…
+
+BOARD DIFF AFTER ASSIGN + DECIDE (clone's TICKETS.md, same in both runs; long
+lines cut at the change)
+-- [~] F52 — tickets-zordon Workflow mode asks the execution mode too ... (@cu-04f282)
++- [ ] F52 — tickets-zordon Workflow mode asks the execution mode too ... [owner: @qa-bot]
+-- [ ] F56 — ops for every host, part 3: Pi native port - ... After F55. (@cc-0211b2)
++- [?] F56 — ops for every host, part 3: Pi native port - ... After F55. [decide: @qa-bot] (@cc-0211b2)
+New (untracked) .skillator/team.md, same in both runs:
+  # Team
+
+  - @qa-bot: qa@example.com
+    name: QA Bot
+
+FINDINGS (not fixed - reported only)
+  1. Under Git Bash the ticket-meta effects run through powershell
+     ("ran: powershell -NoProfile ... ticket-meta.ps1"), not the .sh scripts:
+     nodehost chooses by platform, not by the launching shell. It works; noted
+     only because "the Git Bash run" exercises the .ps1 data layer.
+  2. Assigning an in-progress ticket replaces its session tag "(@cu-04f282)"
+     with "[owner: @qa-bot]"; the app warns first in the dialog and in the
+     toast. ticket-meta behaviour, as designed by the warning - noted.
+  3. The footer separator changes from " · " to two spaces when the
+     "D decided" key joins the row (fits at 80). Cosmetic, not an overflow.
+
+NOT CHECKED
+  - A human looking at a real Windows Terminal or mintty window (fonts,
+    glyph rendering, colours): pyte emulated the bytes ConPTY produced.
+  - ops.sh's winpty branch: under ConPTY node sees a TTY, so ops.sh ran node
+    directly; the mintty-pipes -> winpty path was not reached.
+  - Resize events, Esc (not sent: readline's lone-ESC timing), the R resume
+    and s start-run actions, and widths other than 80 live (60/80 checked
+    with --once only).
