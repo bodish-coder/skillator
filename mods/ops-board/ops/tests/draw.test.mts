@@ -182,7 +182,8 @@ test('team view and add-person form draw in the body at 80 columns', () => {
   const tv = reduce(two, { name: 't' }).state
   const t = text(tv)
   assert.match(t, /Team  \.skillator\/team\.md · 2 people\n› @asha +Asha Rao +a@x, asha@y +\S.*\n  @vidul +Vidul K +v@x/)
-  assert.match(t, /\nn add · del remove \(asks first\) · esc back\n/)
+  // A146: q closes the whole board from the Team view too, so its footer lists it
+  assert.match(t, /\nn add · del remove \(asks first\) · esc back · q quit\n/)
   assert.match(text(reduce(tv, { name: 'down' }).state), /\n  @asha .*\n› @vidul /)
   const f = reduce(tv, { name: 'n' }).state
   const ft = text(f)

@@ -314,7 +314,17 @@ test('add person: a refusal keeps the form open with ticket-meta\'s stderr; Esc 
   assert.equal(typed.person?.handle, 'q1t'); assert.equal(typed.quit, false); assert.equal(typed.tab, 'tickets')
   assert.equal(reduce(typed, key('backspace')).state.person?.handle, 'q1')
   assert.equal(reduce(typed, key('tab', { shift: true })).state.personField, 'emails')
-  assert.equal(reduce(typed, key('c', { ctrl: true })).effects[0]?.kind, 'quit')
+  // A146: ctrl+c in a form with typed text cancels the form first; the board stays
+  const cc = reduce(typed, key('c', { ctrl: true }))
+  assert.equal(cc.state.quit, false); assert.deepEqual(cc.effects, [])
+  assert.equal(cc.state.person, null); assert.equal(cc.state.showTeam, true)
+  assert.equal(reduce(cc.state, key('c', { ctrl: true })).effects[0]?.kind, 'quit')   // a second one quits
+  const ccDialog = reduce(type(press(s0, 'a', 'down', 'return'), 'z'), key('c', { ctrl: true }))
+  assert.equal(ccDialog.state.quit, false); assert.equal(ccDialog.state.person, null); assert.equal(ccDialog.state.dialog?.id, 'F3')
+  // an empty form holds nothing to lose: ctrl+c quits as anywhere else
+  assert.equal(reduce(press(s0, 't', 'n'), key('c', { ctrl: true })).effects[0]?.kind, 'quit')
+  // q from the Team view closes the board (its footer says so - draw.test)
+  assert.equal(reduce(press(s0, 't'), key('q')).effects[0]?.kind, 'quit')
   // Name: given, it is passed as typed (trimmed)
   const named = type(press(type(press(type(press(s0, 't', 'n'), '@Ravi'), 'tab'), ' Ravi Menon '), 'tab'), 'r@x, r2@y')
   const nr = reduce(named, key('return'))

@@ -95,6 +95,13 @@ test('view: the frame at pi\'s width and the terminal\'s rows, each line within 
   assert.match(view.render(70).map(strip).join('\n'), /Assign F91 for a decision|Assign F91/)
   view.handleInput('\x1b')
   assert.equal(engine.state.dialog, null)
+  // A146: the Team view's footer lists q; ctrl+c in a half-typed Add person cancels the form, the board stays
+  view.handleInput('t')
+  assert.match(view.render(70).map(strip).join('\n'), /esc back · q quit/)
+  view.handleInput('n'); view.handleInput('a')
+  assert.equal(engine.state.person?.handle, 'a')
+  view.handleInput('\x03')
+  assert.equal(engine.state.person, null); assert.equal(engine.state.quit, false); assert.equal(engine.state.showTeam, true)
   assert.ok(renders > 0)
   view.dispose()
 })
