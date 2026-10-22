@@ -8,7 +8,7 @@
 #   -Profile <path>          the profile that gets `function ops` (default: your
 #                            CurrentUserAllHosts profile) - there so a test never
 #                            touches the real one
-# F54: /pending, /list-tickets, /engage and /archive-tickets are written as each host's own command file (codex
+# F54: /pending, /list-tickets, /engage, /archive-tickets and /sync-tickets are written as each host's own command file (codex
 # prompts, Gemini CLI commands, cursor commands, pi prompt templates, Antigravity
 # skill-commands) from host-commands\<host>\, rewritten every run - see Write-Commands.
 # Claude Code is left to its plugin install whenever one exists, -Force included.
@@ -330,16 +330,16 @@ function Write-AgyExt([string]$skillsDir) {
   else { Write-Host "warn  the Antigravity IDE did not install the ops board: $o" -ForegroundColor Yellow }
 }
 
-# Write-Commands <cli> <dest>: F54 - /pending, /list-tickets, /engage and /archive-tickets as the host's own command
+# Write-Commands <cli> <dest>: F54 - /pending, /list-tickets, /engage, /archive-tickets and /sync-tickets as the host's own command
 # file, user level, rewritten every run. Called per dest; per-CLI files are written for
 # the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
 # written into each antigravity dest with no .skillator-owned marker and kept out of
 # .skillator-installed, so Remove-Unshipped never touches them. Claude Code: nothing (the
-# ops-board mod has its own /pending, /list-tickets; /engage and /archive-tickets are the plugin's commands/*.md).
+# ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets and /sync-tickets are the plugin's commands/*.md).
 # Same as install.sh write_commands.
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
-  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets'
+  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets'
   switch ($cli) {
     'codex'  { foreach ($n in $names) { Write-Cmd "$c\codex\$n.md" $dest "$codexHome\prompts\$n.md" } }
     'cursor' { foreach ($n in $names) { Write-Cmd "$c\cursor\$n.md" $dest "$HOME\.cursor\commands\$n.md" } }
@@ -420,7 +420,9 @@ function Invoke-SelfTest([string]$T) {
             '.codex\prompts\engage.md', '.gemini\commands\engage.toml', '.cursor\commands\engage.md',
             '.pi\agent\prompts\engage.md', '.gemini\config\skills\engage\SKILL.md', '.gemini\skills\engage\SKILL.md',
             '.codex\prompts\archive-tickets.md', '.gemini\commands\archive-tickets.toml', '.cursor\commands\archive-tickets.md',
-            '.pi\agent\prompts\archive-tickets.md', '.gemini\config\skills\archive-tickets\SKILL.md', '.gemini\skills\archive-tickets\SKILL.md')
+            '.pi\agent\prompts\archive-tickets.md', '.gemini\config\skills\archive-tickets\SKILL.md', '.gemini\skills\archive-tickets\SKILL.md',
+            '.codex\prompts\sync-tickets.md', '.gemini\commands\sync-tickets.toml', '.cursor\commands\sync-tickets.md',
+            '.pi\agent\prompts\sync-tickets.md', '.gemini\config\skills\sync-tickets\SKILL.md', '.gemini\skills\sync-tickets\SKILL.md')
   foreach ($f in $cmds + @('.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
@@ -474,7 +476,7 @@ function Invoke-SelfTest([string]$T) {
   }
   foreach ($d in '.gemini\config\skills', '.gemini\skills') {
     $mf = @([IO.File]::ReadAllLines((Join-Path $T "$d\.skillator-installed")))
-    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets') { return "command skill in manifest $d" }
+    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets') { return "command skill in manifest $d" }
     if (Test-Path -LiteralPath (Join-Path $T "$d\pending\.skillator-owned")) { return "command skill carries an ownership marker in $d" }
   }
   $opsLine = "-File '$T\.cursor\skills\ops-board\ops\ops.ps1' @args"

@@ -4,7 +4,7 @@ description: >-
   Use when the user reports a bug or asks for a feature, says "log this",
   "what's pending", "ticket", "B3", "F12", "A4", "next ticket number", "mark
   it done", "block it", "defer it", "cancel it", "list tickets", "list tickets
-  status", "assign F12 to @asha", "ultracode", "use a workflow",
+  status", "sync tickets", "assign F12 to @asha", "ultracode", "use a workflow",
   mentions TICKETS.md, or when starting work and you need the open set. Also
   at session end, to sync statuses. NOT an issue tracker or Jira/GitHub sync;
   NOT for harvesting `ponytail:` markers (`code-yoda`).
@@ -366,6 +366,46 @@ Sessions read only `TICKETS.md`. The allocator, `check-tickets.sh` and the
 artifact board read both files, so an archived number is never reused and a
 duplicate across the two still fails. For an old ID the board does not show,
 `grep -n '<ID>' TICKETS-archive.md` before saying it does not exist.
+
+### Sync what is in progress (`/sync-tickets`)
+
+`[~]` collects rows that are really done, waiting on a test, stuck or parked,
+because nothing flips them back. On `/sync-tickets` (or "sync tickets"), walk
+**every** `[~]` row — or only the IDs given as arguments — and propose the
+status it really has. **Propose from evidence, never invent it.**
+
+1. For each `[~]` row read its line and its notes (`Done = ..`, `Progress ..`,
+   `Owed ..`, `blocked`, `waiting on`), then `git log --oneline -F --grep=<ID>`
+   (keep only subjects naming the ID as a word — `F1` is not `F12`) and any
+   practice/baselines file or run file (`.skillator/run-*.md`) the line cites.
+2. Propose exactly one:
+
+   | Proposal | Only when |
+   |---|---|
+   | `[x]` done | the line's Done criterion is shown met by named evidence — a commit, a test result, an owner confirmation quoted on the line. Cite it. |
+   | `[%]` testing | built, and a named test or check is still owed (an owner's live check, another host's GREEN, a CI run) — ` (testing: <what>)` |
+   | `[!]` blocked | it cannot proceed until something outside it lands — ` (blocked: <on what>)` |
+   | `[>]` deferred | postponed by choice until a condition — ` (deferred: <until what>)` |
+   | `[?]` decision | it waits on a person's choice — name who decides |
+   | stays `[~]` | still being worked: a commit naming it in the last 24 hours, or a run stage on it dispatched and not done |
+   | stays `[~]`, "evidence unclear" | anything else. Unsure is not done. |
+
+3. Show **one table** — `ID | now -> proposed | reason (the evidence, one line)`
+   — then ask **once**: accept all / pick (which IDs) / none. No question tool
+   on the host → print the choices as a numbered list and stop.
+4. **Apply only the accepted rows, and only on the user's answer.** Headless
+   (`claude -p`, a chained or relay stage), or the question comes back
+   unanswered → propose only, apply nothing, and say `applied: none (headless)`.
+   - `[%]` → `ticket-meta testing <ID> <what test>`.
+   - `[?]` → `ticket-meta decide <ID> @who`; with no `.skillator/team.md` (decide
+     refuses) flip the box by hand and write ` (decide: <who>)`.
+   - `[x]`, `[!]`, `[>]` → ticket-meta has no subcommand for these: edit that one
+     line's box and append its note, as UTF-8 (**Working a ticket**), then
+     `ticket-meta tag <ID>` on each `[x]`.
+   - Stamp your session tag on every flipped row (**Who touched it**).
+5. Read the board back — `grep -n '<ID>' TICKETS.md` for every applied ID —
+   run `sh "$PRACTICE/scripts/check-tickets.sh"`, and report from that output: `in progress 14 -> 6
+   (3 done, 2 testing, 1 blocked, 1 deferred, 1 decision)`.
 
 ## Work tickets in parallel, not in a line
 

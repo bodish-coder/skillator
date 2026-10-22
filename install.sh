@@ -6,7 +6,7 @@
 #   ./install.sh --force    refresh skills that are already installed
 #   ./install.sh --link     install as symlinks into this repo (stay live on git pull)
 #   ./install.sh --selftest install into a temp HOME and check what was written; prints ok
-# F54: /pending, /list-tickets, /engage and /archive-tickets are written as each host's own command file (codex
+# F54: /pending, /list-tickets, /engage, /archive-tickets and /sync-tickets are written as each host's own command file (codex
 # prompts, Gemini CLI commands, cursor commands, pi prompt templates, Antigravity
 # skill-commands) from host-commands/<host>/, rewritten every run - see write_commands.
 # A96: a skill dir this script copies gets an ownership marker (.skillator-owned),
@@ -340,25 +340,25 @@ put_agy_ext() {
   fi
 }
 
-# write_commands <cli> <dest>: F54 - /pending, /list-tickets, /engage and /archive-tickets as the host's own command
+# write_commands <cli> <dest>: F54 - /pending, /list-tickets, /engage, /archive-tickets and /sync-tickets as the host's own command
 # file, user level, rewritten every run. Called per dest; per-CLI files are written for
 # the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
 # written into each antigravity dest with no .skillator-owned marker and kept out of
 # .skillator-installed, so prune_dest never touches them. Claude Code: nothing (the
-# ops-board mod has its own /pending, /list-tickets; /engage and /archive-tickets are the plugin's commands/*.md).
+# ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets and /sync-tickets are the plugin's commands/*.md).
 write_commands() {
   _c="$root/host-commands"
   case "$1" in
     codex)
-      for _n in pending list-tickets engage archive-tickets; do put_cmd "$_c/codex/$_n.md" "$2" "$codex_home/prompts/$_n.md"; done ;;
+      for _n in pending list-tickets engage archive-tickets sync-tickets; do put_cmd "$_c/codex/$_n.md" "$2" "$codex_home/prompts/$_n.md"; done ;;
     cursor)
-      for _n in pending list-tickets engage archive-tickets; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
+      for _n in pending list-tickets engage archive-tickets sync-tickets; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
     pi)
       [ "$2" = "$HOME/.pi/agent/skills" ] || return 0
-      for _n in pending list-tickets engage archive-tickets; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
+      for _n in pending list-tickets engage archive-tickets sync-tickets; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
       put_pi_ext "$2" ;;
     antigravity)
-      for _n in pending list-tickets engage archive-tickets; do
+      for _n in pending list-tickets engage archive-tickets sync-tickets; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
         [ -n "$dry" ] || rm -f "$2/$_n/$owned"
@@ -367,7 +367,7 @@ write_commands() {
       if [ "$2" = "$HOME/.gemini/config/skills" ]; then put_agy_ext "$2"; fi
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
       if [ "$2" = "$HOME/.gemini/skills" ]; then
-        for _n in pending list-tickets engage archive-tickets; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
+        for _n in pending list-tickets engage archive-tickets sync-tickets; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
       fi ;;
   esac
 }
@@ -416,6 +416,8 @@ if [ -n "$selftest" ]; then
            .gemini/config/skills/engage/SKILL.md .gemini/skills/engage/SKILL.md \
            .codex/prompts/archive-tickets.md .gemini/commands/archive-tickets.toml .cursor/commands/archive-tickets.md \
            .pi/agent/prompts/archive-tickets.md .gemini/config/skills/archive-tickets/SKILL.md .gemini/skills/archive-tickets/SKILL.md \
+           .codex/prompts/sync-tickets.md .gemini/commands/sync-tickets.toml .cursor/commands/sync-tickets.md \
+           .pi/agent/prompts/sync-tickets.md .gemini/config/skills/sync-tickets/SKILL.md .gemini/skills/sync-tickets/SKILL.md \
            .codex/skills/ops-board/ops/app.ts .pi/agent/skills/ops-board/hooks/lib/board.ts \
            .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json \
            .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
@@ -467,7 +469,7 @@ if [ -n "$selftest" ]; then
     grep -rqF '{{SKILLS}}' "$T/$f" && { echo "FAIL: placeholder left in $f"; exit 1; }
   done
   for d in .gemini/config/skills .gemini/skills; do
-    grep -qxE 'pending|list-tickets|engage|archive-tickets' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
+    grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
     [ -e "$T/$d/pending/.skillator-owned" ] && { echo "FAIL: command skill carries an ownership marker in $d"; exit 1; }
   done
   [ -x "$T/.local/bin/ops" ] || { echo "FAIL: missing .local/bin/ops"; exit 1; }
