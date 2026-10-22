@@ -8,7 +8,7 @@ import { NO_SCRIPTS, readUsage, runCall } from './lib/host'
 import { parseRuns } from './lib/runs'
 import { HIDDEN, restoreClaudeMd, RESTORE_NOTE } from './lib/restore'
 import { countsOf, renderBand, statusText } from './band'
-import { buildModel, offsetFor, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
+import { buildModel, lineKey, offsetFor, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
 import type { Tab } from './pane'
 import { cancelPerson, clearForm, isFormUp } from './assign'
 import { pollRuns, RUNS_POLL_MS } from './runstab'
@@ -434,23 +434,27 @@ export const register: Register = on => {
   // Up/down: the arrows on a focused pane arrive as scrolls with no pointer. One
   // row moves the selection instead of the window; the window follows only when
   // the selection would leave it. Wheel ticks and page keys scroll as ever.
+  // F61: the selection walks the group headers and the rows of open groups, and the
+  // focus ring follows it, so Enter opens or closes the header shown selected.
   on('ui.scroll', { requestId: 'ops-board' }, async ($, e, next) => {
     if (e.pointer || e.origin.kind !== 'person' || Math.abs(e.by) !== 1) return next(e)
     if ((await read($, tabA)) !== 'tickets' || (await isFormUp($))) return next(e)   // a form scrolls as itself
     const m = buildModel(await readView($, lastCols))
-    const at = m.rows.findIndex(t => t.id === m.selected)
-    const to = m.rows[at + e.by]
+    const at = m.selected === null ? -1 : m.items.indexOf(m.selected)
+    const to = m.items[at + e.by]
     if (at < 0 || !to) return next(e)
-    await update($, selectedA, () => to.id)
+    await update($, selectedA, () => to)
+    void $.ui.focus({ requestId: PANE_ID, key: lineKey(to) }).catch(() => {})   // a site not holding the keys: no ring to move
     if (e.contentRows <= e.bodyRows) return {}
-    const offset = offsetFor(m, to.id, lastScroll.offset, e.bodyRows)
+    const offset = offsetFor(m, to, lastScroll.offset, e.bodyRows)
     return offset === null ? {} : next({ ...e, offset })
   }).catch(($, e, next) => next(e))   // failing, the arrow scrolls as the engine would
 
-  // Tab and shift-Tab walk the row buttons: the ring landing on a row selects it.
+  // Tab and shift-Tab walk the row and header buttons: the ring landing on one selects it.
   on('ui.focus', { requestId: 'ops-board' }, async ($, e, next) => {
     const el = e.element
     if (el?.startsWith('row:')) await update($, selectedA, () => el.slice(4))
+    else if (el?.startsWith('head:')) await update($, selectedA, () => el)
     return next(e)
   }).catch(($, e, next) => next(e))
 }

@@ -32,7 +32,6 @@ async function showForm($: EngineInterface, ring: string) {
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
 const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
-const selectedA = atom({ plugin: 'ops-board', key: 'selected' } as const, null)
 const assignA = atom({ plugin: 'ops-board', key: 'assign' } as const, null)
 const personA = atom({ plugin: 'ops-board', key: 'person' } as const, null)
 
@@ -59,10 +58,11 @@ function startHandle(t: Ticket, kind: AssignDraft['kind'], team: Member[], me: s
   return on(kind === 'owner' ? t.owner : t.decide) ?? on(me) ?? team[0]?.handle ?? null
 }
 
-// `a` / `d`: the dialog on the row the pane shows selected (its model resolves
-// a stale or hidden selection to the first row), else the stored selection.
+// `a` / `d`: the dialog on the ticket the pane shows selected (its model resolves a
+// stale selection to the first item). F61: a header selected - or a ticket hidden in a
+// collapsed group, shown as its header - is no ticket: the pane says to select one.
 export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], shown: string | null) {
-  const id = shown ?? (await read($, selectedA))
+  const id = shown
   const t = id ? await findTicket($, id) : null
   if (!t) { $.ui.toast('ops board: select a ticket first'); return }
   const draft: AssignDraft = { id: t.id, kind, handle: startHandle(t, kind, await read($, teamA), await read($, meA)), result: null }

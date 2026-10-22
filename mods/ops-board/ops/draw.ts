@@ -11,7 +11,7 @@ import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State } from './state'
 import { dialogLines, formLines, teamRow, viewOf } from './state'
-import { buildModel, chipsOf, isDecidable, offsetFor } from '../hooks/lib/ticketsmodel'
+import { buildModel, chipsOf, headKey, isDecidable, isHead, offsetFor } from '../hooks/lib/ticketsmodel'
 import { runLines, stageTickets } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM } from '../hooks/lib/facts'
@@ -26,7 +26,7 @@ const SGR: Record<string, string> = { warning: '33', error: '31', permission: '3
 // --ascii: the design's map, plus the arrows, marks, dashes and box lines a raster console
 // font lacks. Every glyph used maps to one cell except '…', which becomes three.
 const ASCII: Record<string, string> = {
-  '●': '*', '▲': '^', '■': '#', '█': '=', '░': '-', '…': '...', '▾': 'v',
+  '●': '*', '▲': '^', '■': '#', '█': '=', '░': '-', '…': '...', '▾': 'v', '▸': '>',
   '✓': '+', '✗': 'x', '→': '>', '←': '<', '↑': '^', '↓': 'v', '•': '*', '›': '>', '‹': '<', '—': '-', '–': '-',
   '┌': '+', '┐': '+', '└': '+', '┘': '+', '─': '-', '│': '|', '·': '.',
 }
@@ -101,7 +101,7 @@ function spread(left: Seg[], right: Seg[], cols: number): Seg[] {
 
 type Keyed = { key: string; segs: Seg[] }
 
-// The window of `h` lines that keeps row `id` (line 'row:'+id, and its chips) in view;
+// The window of `h` lines that keeps item `id` (line 'row:'+id and its chips, or a header) in view;
 // when lines are left below it, the last line says so.
 function windowOf(lines: Keyed[], id: string | null, h: number): Seg[][] {
   if (lines.length <= h) return lines.map(l => l.segs)
@@ -145,8 +145,11 @@ function keysOf(s: State, m: Model): string[] {
   if (s.tab === 'runs') return ['↑↓ move', 'enter stages', 's start a planned run', 'r reload', 'q quit']
   if (s.tab === 'health') return ['R resume (releases the hold on a fresh non-red reading)', 'r reload', 'q quit']
   if (s.showTeam) return ['n add', 'del remove (asks first)', 'esc back', 'q quit']   // A146: q closes the board here too
-  const sel = m.rows.find(t => t.id === m.selected)
-  return ['↑↓ move', 'enter line', 'a assign', 'd decide', ...(sel && isDecidable(sel) ? ['D decided'] : []), 't team', 'r reload', 'q quit']
+  const sel = m.rows.find(t => t.id === m.ticket)
+  // F61: on a header Enter opens or closes its group
+  const head = isHead(m.selected) ? m.groups.find(g => headKey(g.box) === m.selected) : undefined
+  const enter = head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
+  return ['↑↓ move', enter, 'a assign', 'd decide', ...(sel && isDecidable(sel) ? ['D decided'] : []), 't team', 'r reload', 'q quit']
 }
 
 function keysLine(s: State, m: Model): Seg[] {
@@ -253,18 +256,23 @@ function chipLine(t: Ticket): Seg[] {
 // the tag after the box moves on), else its owner or decider.
 const tagOf = (t: Ticket) => (t.box === '~' ? t.session : null) ?? t.owner ?? (t.decide ? 'decide ' + t.decide : null)
 
-// Groups as `● In progress (1)` in the state's colour; rows `  ● F52  title    @tag`, the
-// selected one `› ` and inverse; Enter shows the chips and the raw line under a row.
+// F61: groups as headers `  ▸ In progress (1)` (open: `▾`) in the state's colour, every one
+// collapsed at first; Enter on a header opens or closes it. The selected header or row is
+// `› ` and inverse. Rows `  ● F52  title    @tag` under an open header; Enter shows the
+// chips and the raw line under a row.
 function ticketLines(s: State, m: Model): Keyed[] {
   const b = s.board
   if (!b || b.error) return [{ key: 'msg', segs: [dim(b?.error ?? 'reading TICKETS.md…')] }]
-  if (!m.rows.length) return [{ key: 'msg', segs: [dim(m.filterActive ? 'no ticket matches the filter' : 'no open tickets')] }]
+  if (!m.groups.length) return [{ key: 'msg', segs: [dim(m.filterActive ? 'no ticket matches the filter' : 'no open tickets')] }]
   const out: Keyed[] = []
   const shown = new Set(m.rows.map(t => t.id))
   const idW = Math.max(4, ...m.rows.map(t => t.id.length + 1))
   for (const g of m.groups) {
-    const c = paint(g.box)
-    out.push({ key: 'head:' + g.box, segs: [{ text: '●', color: c }, { text: ` ${GROUP_WORD[g.box]} (${g.tickets.length})`, color: c, bold: true }] })
+    const hk = headKey(g.box)
+    const on = hk === m.selected
+    out.push({ key: hk, segs: [{ text: on ? '› ' : '  ' },
+      { text: `${g.open ? '▾' : '▸'} ${GROUP_WORD[g.box]} (${g.tickets.length})`, color: paint(g.box), bold: true, inverse: on }] })
+    if (!g.open) continue
     for (const t of g.tickets) {
       const nested = !!t.parent && shown.has(t.parent) && g.tickets.some(p => p.id === t.parent)
       const sel = t.id === m.selected

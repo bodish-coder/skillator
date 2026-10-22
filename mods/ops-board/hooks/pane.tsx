@@ -3,9 +3,9 @@ import type { BoxProps, ButtonProps, Color, ElementConstructor, EngineInterface,
   SelectProps, TextProps } from 'claude-code'
 import type { Filter } from '../types'
 import { STATE_COLOR } from './lib/board'
-import { buildModel, chipsOf, isDecidable } from './lib/ticketsmodel'
+import { buildModel, chipsOf, headKey, isDecidable, toggleGroup } from './lib/ticketsmodel'
 import type { Model, View } from './lib/ticketsmodel'
-export { buildModel, offsetFor } from './lib/ticketsmodel'
+export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
 import { openAssign, renderForm, runDecided } from './assign'
 import { paint } from './paint'
@@ -32,6 +32,9 @@ const expandedA = atom({ plugin: 'ops-board', key: 'expanded' } as const, null)
 const filterA = atom({ plugin: 'ops-board', key: 'filter' } as const, { app: null, who: null, mine: false, showDone: false })
 const filterOpenA = atom({ plugin: 'ops-board', key: 'filterOpen' } as const, false)
 const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
+// F61: the boxes of the open groups, this session; empty = every group collapsed. Only
+// the set is held, never rows: the board's own value stays within $.state's cap (B4).
+const openA = atom({ plugin: 'ops-board', key: 'openGroups' } as const, [])
 
 const CHIP_KEY: Color = 'permission'
 const CHIP_VALUE: Color = 'suggestion'
@@ -87,7 +90,19 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
 
   const shownIds = new Set(m.rows.map(t => t.id))
   for (const g of m.groups) {
-    out.push(<Box key={'head:' + g.box}><Text color={paint(g.box)} bold>{`${g.title} ${g.tickets.length}`}</Text></Box>)
+    // F61: a header is a Button - Enter under the focus or a click opens or closes it.
+    const hk = headKey(g.box)
+    const head = cut(`${g.open ? '▾' : '▸'} ${g.title} (${g.tickets.length})`, v.cols - 1)
+    out.push(
+      <Button key={hk} plain onPress={() => {
+        // the header stands for a ticket hidden in it (moved there by an edit): opening lands on it
+        void update($, selectedA, x => (hk === m.selected && x && !x.startsWith('head:') && g.tickets.some(t => t.id === x) ? x : hk))
+        void update($, openA, x => toggleGroup(x, g.box))
+      }}>
+        <Text color={paint(g.box)} bold inverse={hk === m.selected}>{head}</Text>
+      </Button>,
+    )
+    if (!g.open) continue
     for (const t of g.tickets) {
       const nested = !!t.parent && shownIds.has(t.parent) && g.tickets.some(p => p.id === t.parent)
       const lead = nested ? '  ' : ''
@@ -143,8 +158,8 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   out.push(
     <Box key="keys" flexDirection="row" gap={2}>
       <Text dimColor>↑↓ move</Text>
-      <Button key="key:assign" plain dimColor hotkey="a" onPress={() => { void openAssign($, 'owner', m.selected) }}>assign</Button>
-      <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openAssign($, 'decide', m.selected) }}>decide</Button>
+      <Button key="key:assign" plain dimColor hotkey="a" onPress={() => { void openAssign($, 'owner', m.ticket) }}>assign</Button>
+      <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openAssign($, 'decide', m.ticket) }}>decide</Button>
       <Button key="key:filter" plain dimColor hotkey="f" onPress={() => { void update($, filterOpenA, x => !x) }}>filter</Button>
       <Button key="key:done" plain dimColor hotkey="x" onPress={() => setFilter(x => ({ ...x, showDone: !x.showDone }))}>done</Button>
       <Button key="key:team" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => ({ selected: null, confirm: false })) }}>team</Button>
@@ -157,7 +172,7 @@ export async function readView($: EngineInterface, cols: number): Promise<View> 
   return {
     board: await read($, boardA), team: await read($, teamA), me: await read($, meA),
     filter: await read($, filterA), filterOpen: await read($, filterOpenA),
-    selected: await read($, selectedA), expanded: await read($, expandedA), cols,
+    selected: await read($, selectedA), expanded: await read($, expandedA), open: await read($, openA), cols,
   }
 }
 

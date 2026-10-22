@@ -83,16 +83,20 @@ test('view: the frame at pi\'s width and the terminal\'s rows, each line within 
   }
   const text = view.render(70).map(strip).join('\n')
   assert.match(text, /1 Tickets/)
-  assert.match(text, /F90 +pi fixture ticket/)
+  assert.match(text, /▸ Pending \(1\)/)                // F61: every group starts collapsed
+  view.handleInput('\x1b[B')                          // down to the Pending header; Enter opens it
+  view.handleInput('\r')
+  assert.match(view.render(70).map(strip).join('\n'), /F90 +pi fixture ticket/)
   view.handleInput('2')
   assert.equal(engine.state.tab, 'runs')
   assert.match(view.render(70).map(strip)[0]!, /2 Runs/)
   view.handleInput('3')
   assert.match(view.render(70).map(strip).join('\n'), /Usage .*from watch-cortana/)
   view.handleInput('1')
+  view.handleInput('\x1b[B')                          // from the Pending header to its row
   view.handleInput('a')                               // assign: the dialog opens on the selected ticket
-  assert.equal(engine.state.dialog?.id, 'F91')
-  assert.match(view.render(70).map(strip).join('\n'), /Assign F91 for a decision|Assign F91/)
+  assert.equal(engine.state.dialog?.id, 'F90')
+  assert.match(view.render(70).map(strip).join('\n'), /Assign F90/)
   view.handleInput('\x1b')
   assert.equal(engine.state.dialog, null)
   // A146: the Team view's footer lists q; ctrl+c in a half-typed Add person cancels the form, the board stays
@@ -142,7 +146,7 @@ test('/ops --once notifies one plain frame of the repo it is run in, and opens n
   for (const l of lines) assert.ok([...l].length <= 60, l)
   assert.doesNotMatch(f.notes[0]!.msg, /\x1b/)
   assert.match(lines[0]!, /1 Tickets {3}2 Runs {3}3 Health/)
-  assert.match(f.notes[0]!.msg, /F90 +pi fixture ticket/)
+  assert.match(f.notes[0]!.msg, /▸ Pending \(1\)/)    // F61: headers only at first
 })
 
 test('/ops with a wrong flag says so with the usage, as an error', async () => {
@@ -163,11 +167,11 @@ test('/ops opens the full-screen overlay at the terminal\'s rows; q closes it an
   // A148: wait for the first board read (bounded), not a fixed 300 ms - under load the
   // view came late, the test threw before q, and the polls kept node alive (a hang).
   const shown = () => (f.view ? f.view.render(90).map(strip).join('\n') : '')
-  for (const t0 = Date.now(); !/F90 +pi fixture ticket/.test(shown()) && Date.now() - t0 < 10_000;) await new Promise(r => setTimeout(r, 50))
+  for (const t0 = Date.now(); !/▸ Pending \(1\)/.test(shown()) && Date.now() - t0 < 10_000;) await new Promise(r => setTimeout(r, 50))
   try {
     const lines = f.view.render(90)
     assert.equal(lines.length, 18)
-    assert.match(lines.map(strip).join('\n'), /F90 +pi fixture ticket/)
+    assert.match(lines.map(strip).join('\n'), /▸ Pending \(1\)/)
     assert.ok(f.requested > 0, 'the engine asks pi to render')
   } finally {
     f.view?.handleInput('q')                       // always close: a failed assert must not leave the polls running

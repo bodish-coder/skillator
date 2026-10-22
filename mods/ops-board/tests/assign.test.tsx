@@ -108,8 +108,19 @@ const SURFACES = ['terminal', 'desktop'] as const
 type Surface = (typeof SURFACES)[number]
 const props = (title: string) => ({ title, isFocused: true, bodyColumns: 54, placement: 'dock' as const,
   scroll: { offset: 0, bodyRows: 40 }, view: {} })
-const mountPane = ($: Engine, surface: Surface) =>
-  $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: 'ops-board', props: props('ops board') })
+// F61: groups start collapsed; these tests act on rows, so every group is opened first.
+async function openAll(pane: Mounted<Surface, 'Pane'>) {
+  for (const b of (await pane.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && x.text.startsWith('▸')))
+    await pane.press({ key: b.key! })
+}
+const mountPane = async ($: Engine, surface: Surface) => {
+  const pane = await $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: 'ops-board', props: props('ops board') })
+  await openAll(pane)
+  // opening ends on a header; the first row is the selection, as before groups collapsed
+  const first = (await pane.findAll({ type: 'Button' })).find(x => x.key?.startsWith('row:'))
+  if (first) await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: first.key!, origin: { kind: 'person' } })
+  return pane
+}
 const select = ($: Engine, id: string) =>
   $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: 'row:' + id, origin: { kind: 'person' } })
 // Every pane the mod opened is the ops board itself: never a second pane.
@@ -136,6 +147,7 @@ for (const surface of SURFACES) {
     expect((await pane.find({ key: 'key:decide' }))?.props.hotkey).toBe('d')
     expect((await pane.find({ key: 'key:team' }))?.props.hotkey).toBe('t')
     await pane.press({ key: 'key:done' })
+    await openAll(pane)
     await select($, 'F1')
     await pane.press({ key: 'key:assign' })
 

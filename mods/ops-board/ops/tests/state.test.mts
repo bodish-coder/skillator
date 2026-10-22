@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { initial, reduce, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, viewOf, startHandle, settle, afterRun } from '../state'
 import type { State } from '../state'
+import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
 import { buildModel } from '../../hooks/lib/ticketsmodel'
 import { continuePrompt } from '../../hooks/lib/runlines'
@@ -10,7 +11,9 @@ import { continuePrompt } from '../../hooks/lib/runlines'
 // F3 [?] is drawn before F1 [ ], so the first row - the selection in force - is F3.
 const BOARD = '- [ ] F1 — Dark mode [owner: @asha]\n- [?] F3 — Pick chart [decide: @asha]\n- [x] F4 — Done one\n'
 const team = [{ handle: '@asha', emails: ['a@x'], name: 'Asha' }, { handle: '@vidul', emails: ['v@x'] }]
-const s0 = onBoard(initial(80, 24, 0), parseBoard(BOARD, 'T', 1, 1), team, '@vidul')
+// F61: groups start collapsed; the row tests below run on every group open, F3 selected.
+const ALL: Box[] = ['~', '%', '!', '?', ' ', '>', 'x', '-']
+const s0: State = { ...onBoard(initial(80, 24, 0), parseBoard(BOARD, 'T', 1, 1), team, '@vidul'), open: ALL, selected: 'F3' }
 const key = (name: string, extra = {}) => ({ name, ...extra })
 const press = (s: typeof s0, ...names: string[]) => names.reduce((x, n) => reduce(x, key(n)).state, s)
 const ok = (out: string, argv = ['sh', 'x']) => ({ code: 0, out, err: '', argv })
@@ -32,14 +35,16 @@ test('viewOf feeds buildModel: rows in group order, filter mode shown as filterO
   assert.equal(viewOf(reduce(s0, key('f')).state).filterOpen, true)
 })
 
-test('down/up (and j/k) move the selection over visible rows, stopping at the ends; x shows done', () => {
+test('down/up (and j/k) move the selection over headers and visible rows, stopping at the ends; x shows done', () => {
   let { state } = reduce(s0, key('down'))
+  assert.equal(state.selected, 'head: ')                 // F61: the Pending header between F3 and F1
+  ;({ state } = reduce(state, key('down')))
   assert.equal(state.selected, 'F1')
   assert.equal(reduce(state, key('down')).state.selected, 'F1')
-  ;({ state } = reduce(state, key('up')))
+  ;({ state } = reduce(press(state, 'up'), key('up')))
   assert.equal(state.selected, 'F3')
-  assert.equal(reduce(state, key('j')).state.selected, 'F1')
-  assert.equal(reduce(press(state, 'j'), key('k')).state.selected, 'F3')
+  assert.equal(press(state, 'j', 'j').selected, 'F1')
+  assert.equal(press(state, 'j', 'j', 'k', 'k').selected, 'F3')
   const done = reduce(state, key('x')).state
   assert.equal(done.filter.showDone, true)
   assert.deepEqual(buildModel(viewOf(done)).rows.map(t => t.id), ['F3', 'F1', 'F4'])
@@ -53,7 +58,7 @@ test('Enter toggles the raw line of the selected row', () => {
 })
 
 test('a opens the assign dialog on the selected row, starts on the owner, Enter runs meta-assign', () => {
-  const { state } = reduce(press(s0, 'down'), key('a'))
+  const { state } = reduce(press(s0, 'down', 'down'), key('a'))
   assert.equal(state.dialog?.id, 'F1'); assert.equal(state.dialog?.handle, '@asha'); assert.equal(state.dialog?.kind, 'owner')
   assert.deepEqual(dialogLines(state), [
     'Assign F1',
@@ -105,13 +110,13 @@ test('d on a row opens a decision; a / d in the dialog switch kind; D on a [?] r
   assert.deepEqual([dr.effects[0]!.call, dr.effects[0]!.args], ['meta-decided', ['F3']])
   assert.equal(settle(dr.effects[0]!.then(ok(''))(dr.state)).state.toast, '✓ F3 decided, now pending: Pick chart\nran: sh x')
   assert.match(settle(dr.effects[0]!.then({ code: 2, out: '', err: 'no', argv: ['sh'] })(dr.state)).state.toast ?? '', /^✗ ticket-meta decided F3 refused: no/)
-  const notDecidable = reduce(press(s0, 'down'), key('D'))           // F1 is [ ]
+  const notDecidable = reduce(press(s0, 'down', 'down'), key('D'))   // F1 is [ ]
   assert.equal(notDecidable.effects.length, 0); assert.ok(notDecidable.state.toast)
 })
 
 test('a dialog on a ticket in progress warns; an empty team starts on no one and Enter runs nothing', () => {
   const b = parseBoard('- [~] F9 — Busy (@cc-1)\n', 'T', 1, 1)
-  const s = reduce(onBoard(initial(80, 24, 0), b, [], null), key('a')).state
+  const s = reduce({ ...onBoard(initial(80, 24, 0), b, [], null), open: ['~'] as Box[], selected: 'F9' }, key('a')).state
   assert.equal(s.dialog?.handle, null)
   assert.ok(dialogLines(s).some(l => l.includes('F9 is in progress under @cc-1')))
   // A143: ticket-meta keeps the session tag beside the owner; the warning must not say it drops
@@ -375,7 +380,7 @@ test('personArgs / personError: as the mod\'s addArgs and its check', () => {
 })
 
 test('no team file: the dialog offers only + add person, the first add creates the file', () => {
-  const s = reduce(onBoard(initial(80, 24, 0), s0.board!, [], null), key('a')).state
+  const s = reduce({ ...onBoard(initial(80, 24, 0), s0.board!, [], null), open: ALL, selected: 'F3' }, key('a')).state
   assert.equal(s.dialog?.handle, null)
   const ls = dialogLines(s)
   assert.ok(ls.includes('  no .skillator/team.md yet - + add person creates it'), ls.join('\n'))
@@ -383,4 +388,71 @@ test('no team file: the dialog offers only + add person, the first add creates t
   const f = reduce(s, key('return')).state
   assert.equal(f.person?.back, 'assign')
   assert.equal(reduce(s, key('n')).state.person?.back, 'assign')         // n on + add person, too
+})
+
+// ---- F61: collapsible status groups ----
+
+const fresh = onBoard(initial(80, 24, 0), parseBoard(BOARD, 'T', 1, 1), team, '@vidul')
+
+test('F61: every group starts collapsed - headers only, the first one selected; counts are every ticket the filter shows', () => {
+  assert.deepEqual(fresh.open, [])
+  const m = buildModel(viewOf(fresh))
+  assert.deepEqual(m.items, ['head:?', 'head: '])
+  assert.deepEqual(m.rows, [])
+  assert.equal(m.selected, 'head:?')
+  assert.deepEqual(m.groups.map(g => [g.box, g.tickets.length, g.open]), [['?', 1, false], [' ', 1, false]])
+  assert.equal(reduce(fresh, key('down')).state.selected, 'head: ')
+  assert.equal(press(fresh, 'down', 'down').selected, 'head: ')        // the end
+  assert.equal(press(fresh, 'down', 'up').selected, 'head:?')
+})
+
+test('F61: Enter on a header opens and closes it; the selection stays on the header; Enter on a row still shows its line', () => {
+  const o = reduce(fresh, key('return')).state
+  assert.deepEqual(o.open, ['?'])
+  assert.equal(o.selected, 'head:?')
+  assert.equal(o.expanded, null)
+  assert.deepEqual(buildModel(viewOf(o)).items, ['head:?', 'F3', 'head: '])
+  const row = press(o, 'down', 'return')
+  assert.equal(row.selected, 'F3'); assert.equal(row.expanded, 'F3'); assert.deepEqual(row.open, ['?'])
+  assert.deepEqual(press(o, 'return').open, [])
+  // the open set is kept across tabs and board reloads (session state)
+  const back = onBoard(press(o, '2', '1'), parseBoard(BOARD, 'T', 2, 2), team, '@vidul')
+  assert.deepEqual(back.open, ['?'])
+})
+
+test('F61: a / d / D on a header ask for a ticket; on a row they work as before', () => {
+  for (const k of ['a', 'd']) {
+    const r = reduce(fresh, key(k)).state
+    assert.equal(r.dialog, null); assert.equal(r.toast, 'ops board: select a ticket first')
+  }
+  const D = reduce(fresh, key('D'))
+  assert.equal(D.effects.length, 0); assert.ok(D.state.toast)
+  const onRow = press(fresh, 'return', 'down')
+  assert.equal(reduce(onRow, key('d')).state.dialog?.id, 'F3')
+  assert.deepEqual(reduce(onRow, key('D')).effects.map(e => e.kind === 'run' ? e.call : e.kind), ['meta-decided'])
+})
+
+test('F61: the selected ticket in a group that closes shows as its header; reopening lands back on it', () => {
+  const onF3 = press(fresh, 'return', 'down')
+  const closed = { ...onF3, open: [] as Box[] }
+  assert.equal(buildModel(viewOf(closed)).selected, 'head:?')
+  assert.equal(closed.selected, 'F3')
+  assert.equal(buildModel(viewOf({ ...closed, open: ['?'] as Box[] })).selected, 'F3')
+  // from the header shown selected, down moves on from the header
+  assert.equal(reduce(closed, key('down')).state.selected, 'head: ')
+  // Enter on that header opens the group and lands back on the ticket
+  const back = reduce(closed, key('return')).state
+  assert.deepEqual(back.open, ['?']); assert.equal(buildModel(viewOf(back)).selected, 'F3')
+  // a header Enter closes (the selection on it) stays on the header when opened again
+  const shut = press(fresh, 'return', 'return', 'return')
+  assert.equal(shut.selected, 'head:?'); assert.deepEqual(shut.open, ['?'])
+})
+
+test('F61: a filter keeps matching groups with their filtered counts; x adds Done and Cancelled collapsed', () => {
+  const asha = { ...fresh, filter: { ...fresh.filter, who: '@asha' } }
+  assert.deepEqual(buildModel(viewOf(asha)).groups.map(g => [g.box, g.tickets.length]), [['?', 1], [' ', 1]])
+  const vidul = { ...fresh, filter: { ...fresh.filter, mine: true } }
+  assert.deepEqual(buildModel(viewOf(vidul)).items, [])
+  const done = reduce(fresh, key('x')).state
+  assert.deepEqual(buildModel(viewOf(done)).items, ['head:?', 'head: ', 'head:x'])
 })

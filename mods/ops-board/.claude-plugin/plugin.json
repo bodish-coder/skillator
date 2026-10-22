@@ -1,6 +1,6 @@
 {
   "name": "ops-board",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Ops board for skillator: a pane of the TICKETS.md board, a band above the prompt with machine and usage facts, and /list-tickets, /pending, /ops commands.",
   "author": { "name": "bodish-coder" },
   "license": "MIT"

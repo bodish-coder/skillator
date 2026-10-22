@@ -80,8 +80,9 @@ for (const [kind, skip] of launchers) {
     assert.equal(lines.length, 20, r.out)
     for (const l of lines) { assert.ok([...l].length <= 80, l); assert.doesNotMatch(l, /\x1b/) }
     assert.match(lines[0]!, new RegExp(`^ 1 Tickets   2 Runs   3 Health +ops · ${basename(t)}$`))
-    assert.match(r.out, /● In progress \(1\)\r?\n› ● F2  Bulk delete/)
-    assert.match(r.out, /● Pending \(1\)\r?\n  ● F1  Dark mode +@asha\r?\n/)
+    // F61: every group starts collapsed - its header and count, no rows
+    assert.match(r.out, /› ▸ In progress \(1\)\r?\n  ▸ Pending \(1\)\r?\n/)
+    assert.doesNotMatch(r.out, /F2  Bulk delete/)
     assert.match(lines.at(-1)!, /^● ops · mem 8\.4 GB · C: 84 GB free · 5h \? · 7d \?/)
     const calls = readFileSync(s.log, 'utf8')
     assert.match(calls, /--machine/)
@@ -157,7 +158,7 @@ test('live: alt screen, hidden cursor, raw keys; 2 reads the runs, q quits and r
   const send = (k: string) => { if (!sent.has(k)) { sent.add(k); child.stdin.write(k) } }
   child.stdout.setEncoding('utf8').on('data', (d: string) => {
     out += d
-    if (/● F2  Bulk delete/.test(out)) send('2')
+    if (/▸ In progress \(1\)/.test(out)) send('2')
     if (sent.has('2') && /RUN-0099  fixture run/.test(out)) send('q')
   })
   const timer = setTimeout(() => child.kill(), 60000)

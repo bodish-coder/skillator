@@ -3,11 +3,16 @@ import assert from 'node:assert/strict'
 import { ansi, frame, frameSegs, fit, cells, glyph, plain, paintScreen } from '../draw'
 import { initial, onBoard, onMachine, onRuns, onUsage, reduce } from '../state'
 import type { State } from '../state'
+import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
 import { BOARD } from '../../tests/fixtures'
 // The block's excerpt, with the layout the owner approved in the mock (controller ruling
 // 2026-10-20: where the mock and the excerpt differ on what the user sees, the mock wins).
-const s = onBoard(initial(80, 24, 0), parseBoard(BOARD, 'T', 1, 1), [{ handle: '@asha', emails: [] }], null)
+// F61: groups start collapsed; the row tests run with every group open, the first row selected.
+const ALL: Box[] = ['~', '%', '!', '?', ' ', '>', 'x', '-']
+const fresh = onBoard(initial(80, 24, 0), parseBoard(BOARD, 'T', 1, 1), [{ handle: '@asha', emails: [] }], null)
+const s: State = { ...fresh, open: ALL, selected: 'B2' }
+const opened = (x: State): State => ({ ...x, open: ALL })
 const P = { color: false, ascii: false }
 const text = (x: State) => frame(x, P).join('\n')
 const sized = (x: State) => {
@@ -24,7 +29,7 @@ test('a frame is rows × ≤cols, tab bar first, band last, no escapes without c
   assert.match(f[0]!, /^ 1 Tickets   2 Runs   3 Health +ops$/)
   assert.match(sized({ ...s, repo: 'skillator2' })[0]!, /^ 1 Tickets   2 Runs   3 Health +ops · skillator2$/)
   assert.match(f[23]!, /^● ops · mem \? · disk \? · 5h \? · 7d \?$/)       // one band line at 80 columns
-  assert.match(text(s), /● In progress \(1\)\n› ● B2  CSV export drops the last row/)
+  assert.match(text(s), /  ▾ In progress \(1\)\n› ● B2  CSV export drops the last row/)
 })
 test('colour on: dot carries the state colour, selected row inverse', () => {
   const f = frame(s, { color: true, ascii: false })
@@ -110,8 +115,7 @@ test('frameSegs is exactly rows lines at any size; tiny terminals still draw', (
 test('the keys line as the mock; D decided only on a decidable row', () => {
   const keys = (x: State) => frame(x, P).find(l => l.includes('a assign'))!
   assert.equal(keys(s), '↑↓ move · enter line · a assign · d decide · t team · r reload · q quit')
-  const f3 = reduce(reduce(s, { name: 'down' }).state, { name: 'down' }).state
-  assert.equal(f3.selected, 'F3')
+  const f3: State = { ...s, selected: 'F3' }
   assert.match(keys(f3), /D decided/)
   assert.match(keys(f3), /q quit$/)
   // A144: one separator throughout - " · " stays when "D decided" joins the row.
@@ -132,7 +136,7 @@ test('the keys line as the mock; D decided only on a decidable row', () => {
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
   let x: State = { ...s, rows: 13 }
   assert.match(text(x), /\n  …\n/)
-  for (let i = 0; i < 6; i++) x = reduce(x, { name: 'down' }).state
+  for (let i = 0; i < 9; i++) x = reduce(x, { name: 'down' }).state     // headers are stops too (F61)
   assert.equal(x.selected, 'A1')
   assert.ok(sized(x).some(l => l.startsWith('› ● A1 ')), text(x))
 })
@@ -141,11 +145,11 @@ test('filter row, tags, expanded chips and raw line, count line, done shown', ()
   assert.match(f, /^filter  app: all · who: all · mine: off +f filter · x show done$/m)
   assert.match(f, /^  ● F3  Pick the chart library +decide @asha$/m)
   assert.match(f, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
-  assert.match(f, /● Pending decision \(1\)\n/)
-  const ex = text(reduce(reduce(reduce(s, { name: 'down' }).state, { name: 'down' }).state, { name: 'return' }).state)
+  assert.match(f, /  ▾ Pending decision \(1\)\n/)
+  const ex = text(reduce({ ...s, selected: 'F3' }, { name: 'return' }).state)
   assert.match(ex, /      decide:@asha   D decided\n      - \[\?\] F3 — Pick the chart library \[decide: @asha\]/)
   const done = text(reduce(s, { name: 'x' }).state)
-  assert.match(done, /● Done \(8\)/)
+  assert.match(done, /  ▾ Done \(8\)/)
   assert.match(done, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
   assert.match(text({ ...reduce(s, { name: 'x' }).state, cols: 100 }), /· 1 deferred · 9 closed$/m)
   const fm = reduce(s, { name: 'f' }).state
@@ -154,9 +158,9 @@ test('filter row, tags, expanded chips and raw line, count line, done shown', ()
 })
 // F62: [%] testing - its own group between In progress and Blocked, cyan, named in the count line.
 test('[%] testing: group after in progress, cyan dot, counted open', () => {
-  const t = onBoard(initial(80, 24, 0), parseBoard('- [!] B1 — stuck\n- [%] F7 — built thing (testing: owner live check)\n- [~] F8 — working\n', 'T', 1, 1), [], null)
+  const t = opened(onBoard(initial(80, 24, 0), parseBoard('- [!] B1 — stuck\n- [%] F7 — built thing (testing: owner live check)\n- [~] F8 — working\n', 'T', 1, 1), [], null))
   const f = text(t)
-  assert.match(f, /● In progress \(1\)\n[› ] ● F8 +working[^\n]*\n\n?● Testing \(1\)\n[› ] ● F7 +built thing[^\n]*\n\n?● Blocked \(1\)/)
+  assert.match(f, /▾ In progress \(1\)\n[› ] ● F8 +working[^\n]*\n\n?  ▾ Testing \(1\)\n[› ] ● F7 +built thing[^\n]*\n\n?  ▾ Blocked \(1\)/)
   assert.match(f, /^3 open \(0 pending · 1 in progress · 1 testing · 1 blocked · 0 decision\)$/m)
   assert.match(frame(t, { color: true, ascii: false }).find(l => l.includes('F7  built'))!, /\x1b\[36m●/)
   assert.doesNotMatch(text(s), /testing/)          // none under test: the count line stays as it was
@@ -168,7 +172,7 @@ test('toast and the dialog result show; control characters never reach the termi
   const d = reduce(s, { name: 'a' }).state
   const refused = { ...d, dialog: { ...d.dialog!, result: 'not on the team' } }
   assert.match(frame(refused, { color: true, ascii: false }).find(l => l.includes('not on the team'))!, /\x1b\[31m  not on the team/)
-  const evil = onBoard(initial(80, 24, 0), parseBoard('- [ ] F1 — bad \x1b[2J\x07title\n', 'T', 1, 1), [], null)
+  const evil = opened(onBoard(initial(80, 24, 0), parseBoard('- [ ] F1 — bad \x1b[2J\x07title\n', 'T', 1, 1), [], null))
   for (const l of frame(evil, P)) assert.doesNotMatch(l, /[\x00-\x08\x0b-\x1f\x7f]/)
 })
 test('no board yet; team view; runs as the mock with stages on Enter', () => {
@@ -248,8 +252,58 @@ test('health with readings: bars, relay, machine rows with their thresholds', ()
 })
 test('A143 follow-up: a row shows its session tag only while [~]; a stale one left on [ ] yields to the owner', () => {
   const b = '# Tickets\n\n- [~] F1 — live work [owner: @vidul] (@cc-aaaaaa)\n- [ ] F2 — handed over [owner: @asha] (@cc-bbbbbb)\n'
-  const f = text(onBoard(initial(80, 24, 0), parseBoard(b, 'T', 1, 1), [{ handle: '@asha', emails: [] }], null))
+  const f = text(opened(onBoard(initial(80, 24, 0), parseBoard(b, 'T', 1, 1), [{ handle: '@asha', emails: [] }], null)))
   assert.match(f, /F1 +live work +@cc-aaaaaa/)
   assert.match(f, /F2 +handed over +@asha/)
   assert.doesNotMatch(f, /F2 .*@cc-bbbbbb/)
+})
+
+// ---- F61: collapsible status groups ----
+
+test('F61: every group starts collapsed - one header per group with its count, the first selected, no rows', () => {
+  const f = text(fresh)
+  assert.match(f, /\n› ▸ In progress \(1\)\n  ▸ Blocked \(1\)\n  ▸ Pending decision \(1\)\n  ▸ Pending \(4\)\n  ▸ Deferred \(1\)\n/)
+  assert.doesNotMatch(f, /● B2 /)
+  // the count line is the board's, not the view's
+  assert.match(f, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
+  // colour: the glyph and the words in the state's colour, the selected header inverse
+  const c = frame(fresh, { color: true, ascii: false })
+  assert.match(c.find(l => l.includes('In progress'))!, /\x1b\[33;1;7m▸ In progress \(1\)/)
+  assert.match(c.find(l => l.includes('Blocked'))!, /\x1b\[31;1m▸ Blocked \(1\)/)
+})
+
+test('F61: Enter opens a group under its header, ▾; the keys line says what Enter does on a header', () => {
+  const keys = (x: State) => frame(x, P).find(l => l.includes('a assign'))!
+  assert.match(keys(fresh), /^↑↓ move · enter open · a assign/)
+  const o = reduce(fresh, { name: 'return' }).state
+  assert.match(text(o), /› ▾ In progress \(1\)\n  ● B2  CSV export drops the last row[^\n]*\n  ▸ Blocked \(1\)/)
+  assert.match(keys(o), /^↑↓ move · enter close · a assign/)
+  assert.match(keys(reduce(o, { name: 'down' }).state), /^↑↓ move · enter line · a assign/)
+})
+
+test('F61: ascii draws the headers > and v', () => {
+  const a = frame(reduce(fresh, { name: 'return' }).state, { color: false, ascii: true }).join('\n')
+  assert.match(a, /> v In progress \(1\)\n  \* B2 /)
+  assert.match(a, /\n  > Blocked \(1\)/)
+  assert.equal(glyph('▸', true), '>')
+})
+
+test('F61: headers fit 80, 60 and 40 columns, a 240-ticket group too, colour and ascii', () => {
+  const many = Array.from({ length: 240 }, (_, i) => `- [ ] F${i + 1} — pending ticket number ${i + 1} with a long title`).join('\n') + '\n- [?] F999 — decide\n'
+  const big = onBoard(initial(80, 24, 0), parseBoard(many, 'T', 1, 1), [], null)
+  for (const cols of [80, 60, 40]) {
+    for (const x of [big, opened(big), fresh, s]) {
+      const f = sized({ ...x, cols })
+      for (const p of [{ color: true, ascii: false }, { color: false, ascii: true }])
+        for (const l of frame({ ...x, cols }, p)) assert.ok(cells(l.replace(/\x1b\[[0-9;]*m/g, '')) <= cols, l)
+      if (x === big) assert.ok(f.some(l => /^  ▸ Pending \(240\)$/.test(l)), f.join('\n'))
+    }
+  }
+})
+
+test('F61: the selected header scrolls into view in a short terminal', () => {
+  let x: State = { ...opened(fresh), rows: 13, selected: 'B2' }
+  for (let i = 0; i < 10; i++) x = reduce(x, { name: 'down' }).state
+  assert.equal(x.selected, 'head:>')
+  assert.ok(sized(x).some(l => l.startsWith('› ▾ Deferred (1)')), text(x))
 })

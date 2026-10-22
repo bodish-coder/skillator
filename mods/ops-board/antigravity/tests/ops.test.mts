@@ -122,14 +122,15 @@ test('the one-frame command returns the plain frame of the workspace folder and 
   for (const l of lines) assert.ok([...l].length <= 60, l)
   assert.doesNotMatch(text, /\x1b/)
   assert.match(lines[0]!, /1 Tickets {3}2 Runs {3}3 Health/)
-  assert.match(text, /F90 +agy fixture ticket <b>/)
+  // F61: every group starts collapsed - headers with counts, no rows
+  assert.match(text, /› ▸ Pending decision \(1\)\n  ▸ Pending \(1\)/)
   assert.equal(f.out.join(''), text + '\n')
 })
 
 test('no workspace folder: the frame is of deps.cwd; a wrong flag is an error message with the usage', async () => {
   const f = fakeIde(null)
   registerOps(f.api, f.ctx, { appDir, env: {}, cwd: repo() })
-  assert.match(await f.cmds.get(ONCE)!(noSkills()) as string, /F90 +agy fixture ticket/)
+  assert.match(await f.cmds.get(ONCE)!(noSkills()) as string, /▸ Pending \(1\)/)
   assert.equal(await f.cmds.get(ONCE)!(['--tab', 'agents']), null)
   assert.match(f.errors[0]!, /--tab is one of tickets, runs, health, got agents/)
   assert.match(f.errors[0]!, /^usage: skillator\.ops /m)
@@ -149,7 +150,11 @@ test('the panel: frames at the size the page reports, keys reach the reducer, q 
   const rows = f.lastFrame().split('\n')
   assert.equal(rows.length, 18)
   for (const l of rows) assert.ok([...l].length <= 70, l)
-  assert.match(rows.join('\n'), /F90 +agy fixture ticket <b>/)
+  assert.match(rows.join('\n'), /▸ Pending \(1\)/)
+  f.send({ type: 'key', key: 'ArrowDown' })            // F61: down to the Pending header, Enter opens it
+  f.send({ type: 'key', key: 'Enter' })
+  await new Promise(r => setTimeout(r, 50))
+  assert.match(f.lastFrame(), /▾ Pending \(1\)\n› ● F90 +agy fixture ticket <b>|▾ Pending \(1\)\n {2}● F90 +agy fixture ticket <b>/)
   assert.match(f.posted.at(-1)!.html, /&lt;b&gt;/)        // the title's markup is text, never markup
   // a second open reveals the same panel
   await f.cmds.get(OPEN)!()
@@ -162,9 +167,10 @@ test('the panel: frames at the size the page reports, keys reach the reducer, q 
   await new Promise(r => setTimeout(r, 50))
   assert.match(f.lastFrame(), /Usage .*from watch-cortana/)
   f.send({ type: 'key', key: '1' })
+  f.send({ type: 'key', key: 'ArrowDown' })            // from the Pending header to its row
   f.send({ type: 'key', key: 'a' })                    // assign: the dialog opens on the selected ticket
   await new Promise(r => setTimeout(r, 50))
-  assert.match(f.lastFrame(), /Assign F91/)
+  assert.match(f.lastFrame(), /Assign F90/)
   f.send({ type: 'key', key: 'Escape' })
   f.send({ type: 'key', key: 'q' })
   await new Promise(r => setTimeout(r, 50))

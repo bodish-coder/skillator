@@ -95,6 +95,7 @@ const PEEK: Plugin = {
         : e.args === 'expanded' ? await $.state.get({ plugin: 'ops-board', key: 'expanded' })
         : e.args === 'narrow' ? await $.state.get({ plugin: 'ops-board', key: 'narrow' })
         : e.args === 'tab' ? await $.state.get({ plugin: 'ops-board', key: 'tab' })
+        : e.args === 'openGroups' ? await $.state.get({ plugin: 'ops-board', key: 'openGroups' })
         : await $.state.get({ plugin: 'ops-board', key: 'me' })
       return { text: JSON.stringify(v.value ?? null) }
     })
@@ -102,7 +103,7 @@ const PEEK: Plugin = {
 }
 const WITH = { plugins: [PEEK] }
 const RUN = { origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 120 } }
-const state = async ($: Engine, key: 'selected' | 'expanded' | 'narrow' | 'tab' | 'me') =>
+const state = async ($: Engine, key: 'selected' | 'expanded' | 'narrow' | 'tab' | 'me' | 'openGroups') =>
   JSON.parse((await $.command.run({ command: 'peek', args: key, ...RUN })).text ?? 'undefined') as unknown
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -113,17 +114,26 @@ const mountPane = ($: Engine, surface: (typeof SURFACES)[number], props = PANE) 
 const texts = async (ui: { findAll: (q: { type?: string; key?: string }) => Promise<{ key: string | undefined; text: string }[]> }) =>
   (await ui.findAll({ type: 'Text' })).map(t => t.text)
 
+// F61: every group starts collapsed. The group headers, as drawn; openAll presses each
+// collapsed one open, as a person clicking down the list would.
+type Ui = { findAll: (q: { type?: string }) => Promise<{ key: string | undefined; text: string }[]>; press: (q: { key: string }) => Promise<unknown> }
+const heads = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('head:')).map(b => b.text)
+async function openAll(ui: Ui) {
+  for (const b of (await ui.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && x.text.startsWith('▸')))
+    await ui.press({ key: b.key! })
+}
+const rowKeys = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('row:')).map(b => b.key)
+
 for (const surface of SURFACES) {
   test(`${surface}: rows grouped by state, coloured dots, chips and the count line`, WITH, async ($, on) => {
     const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
     await start($, clock)
     const ui = await mountPane($, surface)
+    await openAll(ui)
 
     expect((await ui.find({ key: 'row:F3' }))?.text).toMatch(/^● F3  cart drawer/)
-    const heads = (await ui.findAll({ type: 'Box' })).filter(t => t.key?.startsWith('head:')).map(t => t.text)
-    expect(heads).toEqual(['IN PROGRESS 1', 'BLOCKED 1', 'PENDING DECISION 1', 'PENDING 2', 'DEFERRED 1'])
-    const rows = (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('row:')).map(b => b.key)
-    expect(rows).toEqual(['row:F3', 'row:B2', 'row:F2', 'row:F1', 'row:B1', 'row:A4'])
+    expect(await heads(ui)).toEqual(['▾ IN PROGRESS (1)', '▾ BLOCKED (1)', '▾ PENDING DECISION (1)', '▾ PENDING (2)', '▾ DEFERRED (1)'])
+    expect(await rowKeys(ui)).toEqual(['row:F3', 'row:B2', 'row:F2', 'row:F1', 'row:B1', 'row:A4'])
     // State is colour, not a bracket code: the head and the dot share it.
     const dot = async (id: string) => ((await ui.find({ key: 'row:' + id }))!.children
       .find(c => (c as { children?: unknown[] }).children?.[0] === '●') as { props: { color?: string } }).props.color
@@ -162,9 +172,10 @@ for (const surface of SURFACES) {
     await start($, clock)
     const ui = await mountPane($, surface)
 
+    await openAll(ui)
     await ui.press({ key: 'key:done' })
-    expect((await ui.find({ key: 'head:x' }))?.text).toBe('DONE 6')
-    expect((await ui.find({ key: 'head:-' }))?.text).toBe('CANCELLED 1')
+    expect((await ui.find({ key: 'head:x' }))?.text).toBe('▸ DONE (6)')
+    expect((await ui.find({ key: 'head:-' }))?.text).toBe('▸ CANCELLED (1)')
     expect((await ui.find({ key: 'count' }))?.text).toBe('5 open ●1 ●1 ●1 ●2 ●1 · ●6 ●1 closed')
     await ui.press({ key: 'key:done' })
     expect(await ui.find({ key: 'head:x' })).toBeUndefined()
@@ -200,9 +211,13 @@ for (const surface of SURFACES) {
     const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })
     await start($, clock)
     const ui = await mountPane($, surface)
+    await openAll(ui)
+    await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:F3', origin: { kind: 'person' } })
     const arrow = (by: number) => $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: Math.max(0, by), by,
       bodyRows: 40, contentRows: 30, origin: { kind: 'person' } })
 
+    await arrow(1)                                        // F3 -> the BLOCKED header -> B2
+    expect(await state($, 'selected')).toBe('head:!')
     await arrow(1)
     expect(await state($, 'selected')).toBe('B2')
     expect(w.scrolls).toBe(0)
@@ -232,15 +247,19 @@ for (const surface of SURFACES) {
     const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })
     await start($, clock)
     const ui = await mountPane($, surface, { ...PANE, scroll: { offset: 0, bodyRows: 6 } })
+    await openAll(ui)
+    await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:F3', origin: { kind: 'person' } })
     const arrow = (by: number) => $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 1, by,
       bodyRows: 6, contentRows: 20, origin: { kind: 'person' } })
     await arrow(1)
+    await arrow(1)
     // B2 and its chips are lines 7-8 (tabs, filters, gap, IN PROGRESS, F3, chips, BLOCKED): the window moves to 3.
     expect(await state($, 'selected')).toBe('B2')
-    expect(w.offsets).toEqual([3])
-    for (let i = 0; i < 3; i++) await arrow(1)
+    expect(w.offsets.at(-1)).toBe(3)
+    const before = w.scrolls
+    for (let i = 0; i < 5; i++) await arrow(1)            // the PENDING DECISION header, F2, the PENDING header, F1, B1
     expect(await state($, 'selected')).toBe('B1')
-    expect(w.scrolls).toBe(4)
+    expect(w.scrolls).toBe(before + 5)
     await ui.unmount()
   })
 
@@ -248,6 +267,7 @@ for (const surface of SURFACES) {
     const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })
     await start($, clock)
     const ui = await mountPane($, surface)
+    await openAll(ui)
     expect(await ui.find({ key: 'row:F9' })).toBeUndefined()
     w.files['/r/TICKETS.md'] = { text: OPEN + '- [ ] F9 — a new ticket\n' + CLOSED, mtimeMs: 5000 }
     await clock.advance(2000)
@@ -259,6 +279,7 @@ for (const surface of SURFACES) {
     const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
     await start($, clock)
     const ui = await mountPane($, surface)
+    await openAll(ui)
     expect((await ui.find({ key: 'tab:tickets' }))?.props.variant).toBe('primary')
     await ui.press({ key: 'tab:health' })
     expect(await state($, 'tab')).toBe('health')
@@ -295,8 +316,8 @@ test('[%] testing: its own group after in progress, counted open, its own colour
   const [, clock] = world(on, { '/r/TICKETS.md': '- [!] B1 — stuck\n- [%] F7 — built thing (testing: owner live check)\n- [~] F8 — working\n- [ ] F9 — later\n' })
   await start($, clock)
   const ui = await mountPane($, 'terminal')
-  const heads = (await ui.findAll({ type: 'Box' })).filter(t => t.key?.startsWith('head:')).map(t => t.text)
-  expect(heads).toEqual(['IN PROGRESS 1', 'TESTING 1', 'BLOCKED 1', 'PENDING 1'])
+  await openAll(ui)
+  expect(await heads(ui)).toEqual(['▾ IN PROGRESS (1)', '▾ TESTING (1)', '▾ BLOCKED (1)', '▾ PENDING (1)'])
   expect((await ui.find({ key: 'row:F7' }))?.text).toMatch(/^● F7  built thing/)
   expect(((await ui.find({ key: 'head:%' }))!.children[0] as { props: { color?: string } }).props.color).toBe('suggestion')
   expect((await ui.find({ key: 'count' }))!.text).toBe('4 open ●1 ●1 ●1 ●1')
@@ -317,6 +338,7 @@ test('long titles are cut to the pane with an ellipsis', WITH, async ($, on) => 
   const [, clock] = world(on, { '/r/TICKETS.md': OPEN + long })
   await start($, clock)
   const ui = await mountPane($, 'terminal')
+  await openAll(ui)
   const row = (await ui.find({ key: 'row:F7' }))!.text
   expect(row.length).toBeLessThanOrEqual(54)
   expect(row).toEndWith('…')
@@ -366,6 +388,7 @@ test('the first render arms the poll when session.start never ran (a hot reload)
   const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })
   const ui = await mountPane($, 'terminal')
   await clock.settle()
+  await openAll(ui)
   expect((await ui.find({ key: 'row:F3' }))?.text).toMatch(/^● F3/)
   w.files['/r/TICKETS.md'] = { text: OPEN + '- [ ] F9 — later\n', mtimeMs: 9000 }
   await clock.advance(2000)
@@ -397,7 +420,144 @@ test('a 3.8 MB board of long lines loads in the pane (B4)', WITH, async ($, on) 
   const ui = await mountPane($, 'terminal')
   const all = (await texts(ui)).join('\n')
   expect(all).not.toContain('not loaded')
+  // F61: headers only at first; the open set held is a few boxes, never rows.
+  expect(await heads(ui)).toEqual(['▸ IN PROGRESS (200)', '▸ BLOCKED (109)'])
+  expect(await ui.find({ key: 'row:F7' })).toBeUndefined()
+  await ui.press({ key: 'head:~' })
   expect(await ui.find({ key: 'row:F7' })).toBeDefined()
+  expect(JSON.stringify(await state($, 'openGroups'))).toBe('["~"]')
   expect((await ui.find({ key: 'count' }))?.text).toBe('309 open ●200 ●109 · 1091 done hidden')
+  await ui.unmount()
+})
+
+// ---- F61: collapsible status groups ----
+
+test('F61: every group starts collapsed - headers with counts, no rows; a click opens one, again closes it', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  expect(await heads(ui)).toEqual(['▸ IN PROGRESS (1)', '▸ BLOCKED (1)', '▸ PENDING DECISION (1)', '▸ PENDING (2)', '▸ DEFERRED (1)'])
+  expect(await rowKeys(ui)).toEqual([])
+  expect(await state($, 'openGroups')).toBeNull()       // never set: the atom's default, no groups open
+  // the first header is the selection, drawn inverse; the count line is the board's, not the view's
+  const inv = async (k: string) => ((await ui.find({ key: k }))!.children[0] as { props: { inverse?: boolean } }).props.inverse
+  expect(await inv('head:~')).toBe(true)
+  expect(await inv('head:!')).toBe(false)
+  expect((await ui.find({ key: 'count' }))?.text).toBe('5 open ●1 ●1 ●1 ●2 ●1 · 7 done hidden')
+
+  await ui.press({ key: 'head: ' })
+  expect(await state($, 'openGroups')).toEqual([' '])
+  expect(await state($, 'selected')).toBe('head: ')
+  expect((await ui.find({ key: 'head: ' }))?.text).toBe('▾ PENDING (2)')
+  expect(await rowKeys(ui)).toEqual(['row:F1', 'row:B1'])
+  await ui.press({ key: 'head: ' })
+  expect(await rowKeys(ui)).toEqual([])
+  expect((await ui.find({ key: 'head: ' }))?.text).toBe('▸ PENDING (2)')
+  await ui.unmount()
+})
+
+// The mod also moves the focus ring onto the item ($.ui.focus) so Enter acts on it; the
+// test engine has no ring to move (no implementation for ui.focus) - checked live.
+test('F61: up/down walk the headers and the rows of open groups; Tab onto a header selects it', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  const arrow = (by: number) => $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 0, by,
+    bodyRows: 40, contentRows: 30, origin: { kind: 'person' } })
+  await arrow(1)
+  expect(await state($, 'selected')).toBe('head:!')       // collapsed: header to header
+  await ui.press({ key: 'head:!' })
+  await arrow(1)
+  expect(await state($, 'selected')).toBe('B2')           // into the open group's rows
+  await arrow(1)
+  expect(await state($, 'selected')).toBe('head:?')
+  await arrow(-1)
+  await arrow(-1)
+  expect(await state($, 'selected')).toBe('head:!')
+  await arrow(-1)
+  await arrow(-1)                                         // at the top: the arrow scrolls as the engine would
+  expect(await state($, 'selected')).toBe('head:~')
+  // Tab landing on a header selects it
+  await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'head:>', origin: { kind: 'person' } })
+  expect(await state($, 'selected')).toBe('head:>')
+  await ui.unmount()
+})
+
+test('F61: a click on the header of the selected ticket\'s group closes it and selects the header', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'head: ' })
+  await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:B1', origin: { kind: 'person' } })
+  await ui.press({ key: 'head:~' })                       // another group opened: B1 stays selected
+  await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:B1', origin: { kind: 'person' } })
+  expect(await state($, 'selected')).toBe('B1')
+  // collapse PENDING by its header: the header is the selection, drawn inverse
+  await ui.press({ key: 'head: ' })
+  expect(await ui.find({ key: 'row:B1' })).toBeUndefined()
+  expect(((await ui.find({ key: 'head: ' }))!.children[0] as { props: { inverse?: boolean } }).props.inverse).toBe(true)
+  await ui.unmount()
+})
+
+test('F61: a and d on a ticket row still open the in-pane form; on a header they ask for a ticket', WITH, async ($, on) => {
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  const toasts: string[] = []
+  on('ui.toast', ($, e) => { toasts.push(e.text); return { value: undefined } })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'key:assign' })                   // the first header is selected: no form
+  expect(toasts.at(-1)).toBe('ops board: select a ticket first')
+  expect(await ui.find({ key: 'form:title' })).toBeUndefined()
+  await ui.press({ key: 'head:?' })
+  await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 0, by: 1, bodyRows: 40, contentRows: 30, origin: { kind: 'person' } })
+  expect(await state($, 'selected')).toBe('F2')
+  await ui.press({ key: 'key:decide' })
+  expect((await ui.find({ key: 'form:title' }))?.text).toBe('Assign F2 for a decision  Esc cancels')
+  expect(w.opens.length).toBeGreaterThan(0)
+  await ui.unmount()
+})
+
+test('F61: a filter shows the matching groups with their filtered counts; x adds Done collapsed', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'key:filter' })
+  await ui.select({ key: 'sel:app', value: 'web' })
+  expect(await heads(ui)).toEqual(['▸ IN PROGRESS (1)', '▸ PENDING (1)'])
+  await ui.select({ key: 'sel:app', value: 'all' })
+  await ui.press({ key: 'key:done' })
+  expect(await heads(ui)).toEqual(['▸ IN PROGRESS (1)', '▸ BLOCKED (1)', '▸ PENDING DECISION (1)', '▸ PENDING (2)', '▸ DEFERRED (1)', '▸ DONE (6)', '▸ CANCELLED (1)'])
+  await ui.unmount()
+})
+
+for (const cols of [80, 60, 40]) {
+  test(`F61: headers fit ${cols} columns`, WITH, async ($, on) => {
+    const many = Array.from({ length: 240 }, (_, i) => `- [ ] F${i + 1} — pending ticket number ${i + 1}`).join('\n') + '\n- [?] F999 — ' + 'a decision '.repeat(10) + '\n'
+    const [, clock] = world(on, { '/r/TICKETS.md': many })
+    await start($, clock)
+    const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: cols })
+    expect(await heads(ui)).toEqual(['▸ PENDING DECISION (1)', '▸ PENDING (240)'])
+    await openAll(ui)
+    for (const b of (await ui.findAll({ type: 'Button' })).filter(x => /^(head|row):/.test(x.key ?? '')))
+      expect(b.text.length, b.key).toBeLessThanOrEqual(cols)
+    await ui.unmount()
+  })
+}
+
+test('F61: a selected ticket an edit moves into a collapsed group shows as its header; opening lands back on it', WITH, async ($, on) => {
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  await ui.press({ key: 'head: ' })
+  await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:B1', origin: { kind: 'person' } })
+  expect(await state($, 'selected')).toBe('B1')
+  // B1 goes [ ] -> [!] in the file: BLOCKED is collapsed, its header stands for B1
+  w.files['/r/TICKETS.md'] = { text: BOARD.replace('- [ ] B1', '- [!] B1'), mtimeMs: 7000 }
+  await clock.advance(2000)
+  expect(await ui.find({ key: 'row:B1' })).toBeUndefined()
+  expect(((await ui.find({ key: 'head:!' }))!.children[0] as { props: { inverse?: boolean } }).props.inverse).toBe(true)
+  await ui.press({ key: 'head:!' })
+  expect(await state($, 'selected')).toBe('B1')
+  expect((await ui.find({ key: 'row:B1' }))?.children.some(c => (c as { props?: { inverse?: boolean } }).props?.inverse)).toBe(true)
   await ui.unmount()
 })

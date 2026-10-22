@@ -8,7 +8,7 @@ import type { Call } from '../hooks/lib/calls'
 import type { View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
-import { buildModel } from '../hooks/lib/ticketsmodel'
+import { buildModel, headKey, isHead, toggleGroup } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, parseMachine, usageFromLevel } from '../hooks/lib/facts'
@@ -27,6 +27,7 @@ export type State = {
   board: Board | null; team: Member[]; me: string | null
   filter: Filter; filterField: FilterField | null
   selected: string | null; expanded: string | null; showTeam: boolean
+  open: Box[]                              // F61: the open groups' boxes this session; none = all collapsed
   machine: Machine | null; usage: Usage | null; watch: Watch
   relay: string | null                     // band: "RUN-0012 2/4", the first relay run not all done
   runs: RunView[]; runsSelected: string | null; runsExpanded: string | null
@@ -60,7 +61,7 @@ const TABS: Tab[] = ['tickets', 'runs', 'health']
 export const initial = (cols: number, rows: number, now: number): State => ({
   tab: 'tickets', board: null, team: [], me: null,
   filter: { app: null, who: null, mine: false, showDone: false }, filterField: null,
-  selected: null, expanded: null, showTeam: false,
+  selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, relay: null,
   runs: [], runsSelected: null, runsExpanded: null, runsRead: false,
   dialog: null, dialogIndex: 0, person: null, personField: 'handle', teamSelected: null, teamConfirm: null, toast: null, notes: [],
@@ -69,7 +70,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
 
 export const viewOf = (s: State): View => ({
   board: s.board, team: s.team, me: s.me, filter: s.filter, filterOpen: s.filterField !== null,
-  selected: s.selected, expanded: s.expanded, cols: s.cols,
+  selected: s.selected, expanded: s.expanded, open: s.open, cols: s.cols,
 })
 
 export function onBoard(s: State, board: Board, team: Member[], me: string | null): State {
@@ -134,8 +135,9 @@ export function dialogLines(s: State): string[] {
   return out
 }
 
+// F61: a header selected is no ticket - `ticket` is null there, and the toast asks for one.
 function openDialog(s: State, kind: AssignDraft['kind']): State {
-  const id = buildModel(viewOf(s)).selected
+  const id = buildModel(viewOf(s)).ticket
   const t = id ? ticketOf(s, id) : null
   if (!t) return toast(s, 'ops board: select a ticket first')
   const handle = startHandle(t, kind, s.team, s.me)
@@ -318,7 +320,7 @@ function teamKey(s: State, k: Key): Step {
 
 // D: ticket-meta decided <ID> ([?] -> [ ], the [decide:] tag kept).
 function decided(s: State): Step {
-  const id = buildModel(viewOf(s)).selected
+  const id = buildModel(viewOf(s)).ticket
   const t = id ? ticketOf(s, id) : null
   if (!t || t.box !== '?' || !t.decide) {
     return { state: toast(s, 'D marks a decision taken: only on a [?] row with a [decide:] tag'), effects: [] }
@@ -490,15 +492,24 @@ function ticketsKey(s: State, k: Key): Step {
   const same = { state: s, effects: [] }
   if (s.showTeam) return teamKey(s, k)
   const m = buildModel(viewOf(s))
+  // F61: up/down walk the group headers and the rows of open groups (the model's items).
   const move = (by: number): Step => {
-    const to = m.rows[m.rows.findIndex(t => t.id === m.selected) + by]
-    return { state: to ? { ...s, selected: to.id } : s, effects: [] }
+    const at = m.selected === null ? -1 : m.items.indexOf(m.selected)
+    const to = at < 0 ? undefined : m.items[at + by]
+    return { state: to ? { ...s, selected: to } : s, effects: [] }
   }
   switch (k.name) {
     case 'up': case 'k': return move(-1)
     case 'down': case 'j': return move(1)
     case 'return': case 'enter': {
       const id = m.selected
+      // on a header: open or close its group, the header stays selected - unless it stands
+      // for a ticket hidden in it (the stored selection), which opening lands back on
+      if (isHead(id)) {
+        const g = m.groups.find(x => headKey(x.box) === id)
+        const keep = s.selected && !isHead(s.selected) && g?.tickets.some(t => t.id === s.selected)
+        return { state: g ? { ...s, selected: keep ? s.selected : id, open: toggleGroup(s.open, g.box) } : s, effects: [] }
+      }
       return { state: { ...s, expanded: id && s.expanded !== id ? id : null }, effects: [] }
     }
     case 'a': return { state: openDialog(s, 'owner'), effects: [] }
