@@ -10,7 +10,7 @@ import { HIDDEN, restoreClaudeMd, RESTORE_NOTE } from './lib/restore'
 import { countsOf, renderBand, statusText } from './band'
 import { buildModel, offsetFor, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
 import type { Tab } from './pane'
-import { clearDialog, DIALOG_ID, renderDialog } from './assign'
+import { clearForm, closeForm, isFormUp } from './assign'
 import { pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 
@@ -405,13 +405,14 @@ export const register: Register = on => {
     return r
   }).catch(($, e, next) => next(e))
 
-  // F47: the assign / decide dialog and the Add person form.
-  on('ui.render', { component: 'Pane', requestId: 'ops-assign' }, async ($, e) => renderDialog($, e))
-
-  // Esc or the close mark: the draft goes with the dialog.
+  // B5: while an assign / add person form is up in the board, Esc (the form opens
+  // the pane closeOnEscape) or the close mark is its Cancel: the form goes, the
+  // view it came from is back, the board stays open. An unload passes, form cleared.
   on('ui.close', async ($, e, next) => {
-    if (e.id === DIALOG_ID) await clearDialog($)
-    return next(e)
+    if (e.id !== PANE_ID || !(await isFormUp($))) return next(e)
+    if (e.origin.kind === 'unload') { await clearForm($); return next(e) }
+    await closeForm($)
+    return { value: undefined }
   }).catch(($, e, next) => next(e))
 
   // Up/down: the arrows on a focused pane arrive as scrolls with no pointer. One

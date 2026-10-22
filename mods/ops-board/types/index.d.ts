@@ -22,7 +22,7 @@ export type RunView = { id: string; title: string; done: number; total: number; 
                         decisions: string[] }                 // F50: parked `## Decisions` still unanswered, "Q1 F49 <question> - <what> waits on it"
 export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string | null; result: string | null }
 // F47 team management (T6): the Team view in the Tickets tab, and the Add person form
-// (drawn in the ops-assign dialog; `back` = where a finished add returns).
+// (drawn as a form in the ops-board pane; `back` = where a finished add returns).
 export type TeamView = { selected: string | null; confirm: boolean }
 export type PersonDraft = { handle: string; name: string; emails: string; result: string | null; back: 'assign' | 'team' }
 // F53: the Agents and Workflows tabs. Every field is one the engine reports (design F53, findings 1-5).

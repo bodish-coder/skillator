@@ -8,17 +8,24 @@ import { sameHandle } from './lib/team'
 import type { Call } from './lib/host'
 import { paint } from './paint'
 
-// F47: the assign / decide dialog (pane `ops-assign`), the Decided button's call
-// and the Add person form. Every write is a ticket-meta run; the mod writes no file.
+// F47: the assign / decide form, the Decided button's call and the Add person
+// form. Every write is a ticket-meta run; the mod writes no file.
+//
+// B5: the forms are a mode of the ops-board pane's own body, never a second pane.
+// `a` / `d` / add are pressed while the ops-board pane holds the keys, and the host
+// refuses another pane's focus then (PaneOpenArgs.focus): a dialog pane opened as an
+// unshown tab behind it, so the press showed nothing. A form up is the assign or
+// person atom set; renderPane draws it in place of the view it came from.
 
-export const DIALOG_ID = 'ops-assign'
-const DIALOG = { focus: true, closeOnEscape: true, holdToasts: true, rows: 12 } as const
+const PANE = 'ops-board'          // pane.tsx's PANE_ID (it imports this file)
+const PANE_NAME = 'ops board'     // pane.tsx's PANE_TITLE
 
-// B5: the host can leave a pane open but undrawn (a narrow terminal, a surface that
-// places none) - say why, or the press does nothing the person can see.
-async function openDialog($: EngineInterface, title: string) {
-  const r = await $.ui.open({ id: DIALOG_ID, title, ...DIALOG })
-  if (!r.isPlaced) $.ui.toast(`ops board: the ${title} dialog is not drawn: ${r.reason}`, { timeoutMs: 10000 })
+// While a form is up, Esc (closeOnEscape) raises ui.close on the pane, which the
+// register hook refuses and turns into Cancel; the ring goes to the form's first
+// element. A deny (the pane does not hold the keys) leaves the ring to the person.
+async function showForm($: EngineInterface, ring: string) {
+  await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
+  void $.ui.focus({ requestId: PANE, key: ring }).catch(() => {})
 }
 
 // Each file names the atoms it reads or writes as its own consts (see pane.tsx).
@@ -61,17 +68,27 @@ export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], 
   const draft: AssignDraft = { id: t.id, kind, handle: startHandle(t, kind, await read($, teamA), await read($, meA)), result: null }
   await update($, personA, () => null)
   await update($, assignA, () => draft)
-  await openDialog($, titleOf(draft))
+  await showForm($, whoKey(draft))
 }
 
-export async function closeDialog($: EngineInterface) {
-  await clearDialog($)
-  await $.ui.close({ id: DIALOG_ID })
+const whoKey = (d: AssignDraft) => (d.handle ? 'who:' + d.handle : 'who:+add')
+
+export async function isFormUp($: EngineInterface): Promise<boolean> {
+  return (await read($, assignA)) !== null || (await read($, personA)) !== null
 }
 
-export async function clearDialog($: EngineInterface) {
+export async function clearForm($: EngineInterface) {
   await update($, assignA, () => null)
   await update($, personA, () => null)
+}
+
+// Done or Cancel: back to the view the form came from, Esc the pane's own again
+// (it hands the keys back, the board stays). A form already gone (Esc during a
+// run) leaves the pane as it is.
+export async function closeForm($: EngineInterface) {
+  if (!(await isFormUp($))) return
+  await clearForm($)
+  await $.ui.open({ id: PANE, title: PANE_NAME })
 }
 
 // Assign: ticket-meta assign|decide <ID> @h. Done: a toast with what it said and
@@ -92,7 +109,7 @@ async function confirm($: EngineInterface) {
   const role = d.kind === 'decide' ? `for ${d.handle} to decide` : `owned by ${d.handle}`
   const head = `✓ ${d.id} ${closed ? 'reopened as' : 'now'} ${state}, ${role}${t ? ': ' + t.title : ''}`
   $.ui.toast([head, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
-  await closeDialog($)
+  await closeForm($)
 }
 
 // The Decided button: ticket-meta decided <ID> ([?] -> [ ], the [decide:] tag kept).
@@ -106,12 +123,12 @@ export async function runDecided($: EngineInterface, id: string) {
   $.ui.toast([`✓ ${id} decided, now pending${t ? ': ' + t.title : ''}`, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
 }
 
-// --- team: Add person (in this dialog) and remove (from the Team view) ---
+// --- team: Add person (a form in the pane) and remove (from the Team view) ---
 
 export async function openAddPerson($: EngineInterface, back: PersonDraft['back']) {
   if (back === 'team') await update($, assignA, () => null)
   await update($, personA, () => ({ handle: '', name: '', emails: '', result: null, back }))
-  await openDialog($, 'Add person')
+  await showForm($, 'handle')
 }
 
 const handleOf = (s: string) => '@' + s.trim().replace(/^@+/, '').toLowerCase()
@@ -139,10 +156,10 @@ async function addPerson($: EngineInterface) {
     const next = { ...d, handle: h, result: `✓ ${h} added to .skillator/team.md` }
     await update($, personA, () => null)
     await update($, assignA, () => next)
-    await openDialog($, titleOf(next))
+    await showForm($, whoKey(next))
     return
   }
-  await closeDialog($)
+  await closeForm($)
 }
 
 async function cancelPerson($: EngineInterface) {
@@ -150,10 +167,10 @@ async function cancelPerson($: EngineInterface) {
   const d = await read($, assignA)
   if (p?.back === 'assign' && d) {
     await update($, personA, () => null)
-    await openDialog($, titleOf(d))
+    await showForm($, whoKey(d))
     return
   }
-  await closeDialog($)
+  await closeForm($)
 }
 
 export async function removeMember($: EngineInterface, h: string) {
@@ -168,21 +185,28 @@ export async function removeMember($: EngineInterface, h: string) {
 
 // --- drawing ---
 
-export async function renderDialog($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement> {
+// The form up in the ops-board pane, or null when none is (the pane draws its view).
+// Cancel is a plain Button, not role="dismiss": a desktop would draw that as the
+// whole pane's close control.
+export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement | null> {
+  const p = await read($, personA)
+  const d = await read($, assignA)
+  if (!p && !d) return null
   const t = $.ui.resolve(e)
   const { Box, Text, Button } = t
   const Input = e.surface !== 'mobile' && 'Input' in t ? t.Input : null
   const cols = Math.max(20, e.props.bodyColumns)
-  const p = await read($, personA)
-  const d = await read($, assignA)
   const team = await read($, teamA)
   const label = (s: string) => <Text dimColor>{s}</Text>
+  const heading = (s: string) => <Box key="form:title"><Text bold>{s}</Text><Text dimColor>{'  Esc cancels'}</Text></Box>
 
   if (p) {
     const [who, name, emails] = addArgs(p) as [string, string, string]   // never `h`: the JSX factory
     const set = (k: 'handle' | 'name' | 'emails') => (v: string) => { void update($, personA, x => (x ? { ...x, [k]: v, result: null } : x)) }
     return (
       <Box flexDirection="column">
+        {heading('Add person')}
+        <Text> </Text>
         {Input
           ? [
               <Input key="handle" label="Handle  " placeholder="@handle" value={p.handle} autoFocus onInput={set('handle')} onSubmit={set('handle')} />,
@@ -197,22 +221,19 @@ export async function renderDialog($: EngineInterface, e: RenderInput<'Pane'>): 
         <Text> </Text>
         <Box flexDirection="row" gap={4}>
           <Button key="add" variant="primary" onPress={() => { void addPerson($) }}>Add</Button>
-          <Button key="cancel" role="dismiss" onPress={() => { void cancelPerson($) }}>Cancel</Button>
+          <Button key="cancel" onPress={() => { void cancelPerson($) }}>Cancel</Button>
         </Box>
       </Box>
     )
   }
 
-  if (!d) return <Box flexDirection="column"><Text dimColor>Nothing to assign - press a or d on a ticket.</Text></Box>
+  if (!d) return null
   const tk = await findTicket($, d.id)
   const from: State = tk?.box ?? ' '
   const to: State = d.kind === 'decide' ? '?' : ' '
   const set = (fn: (x: AssignDraft) => AssignDraft) => { void update($, assignA, x => (x ? fn({ ...x, result: null }) : x)) }
   const radio = (kind: AssignDraft['kind'], text: string) => (
-    <Button key={kind === 'owner' ? 'kind:implementation' : 'kind:decision'} plain onPress={() => {
-      set(x => ({ ...x, kind }))
-      void openDialog($, titleOf({ ...d, kind }))
-    }}>
+    <Button key={kind === 'owner' ? 'kind:implementation' : 'kind:decision'} plain onPress={() => set(x => ({ ...x, kind }))}>
       <Text color={d.kind === kind ? 'success' : undefined}>{d.kind === kind ? '(•)' : '( )'}</Text>{' ' + text}
     </Button>
   )
@@ -236,6 +257,7 @@ export async function renderDialog($: EngineInterface, e: RenderInput<'Pane'>): 
   const isGood = !!d.result?.startsWith('✓')
   return (
     <Box flexDirection="column">
+      {heading(titleOf(d))}
       <Box key="title"><Text dimColor wrap="truncate-end">{cut(tk?.title ?? d.id, cols)}</Text></Box>
       <Text> </Text>
       <Box key="for" flexDirection="row" gap={3}>{label('For')}{radio('owner', 'implementation')}{radio('decide', 'decision')}</Box>
@@ -260,7 +282,7 @@ export async function renderDialog($: EngineInterface, e: RenderInput<'Pane'>): 
       <Text> </Text>
       <Box flexDirection="row" gap={4}>
         {d.handle && <Button key="go" variant="primary" onPress={() => { void confirm($) }}>Assign</Button>}
-        <Button key="cancel" role="dismiss" onPress={() => { void closeDialog($) }}>Cancel</Button>
+        <Button key="cancel" onPress={() => { void closeForm($) }}>Cancel</Button>
       </Box>
     </Box>
   )

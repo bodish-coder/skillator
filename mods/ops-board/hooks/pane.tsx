@@ -7,7 +7,7 @@ import { buildModel, chipsOf, isDecidable } from './lib/ticketsmodel'
 import type { Model, View } from './lib/ticketsmodel'
 export { buildModel, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
-import { openAssign, runDecided } from './assign'
+import { openAssign, renderForm, runDecided } from './assign'
 import { paint } from './paint'
 import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
@@ -210,6 +210,10 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       </Box>
     )
   }
+  // B5: an assign / decide / add person form up draws in place of the view it came
+  // from (Tickets or Team); Esc or Cancel brings that view back.
+  const form = await renderForm($, e)
+  if (form) return form
   const v = await readView($, cols)
   const tv = await read($, teamViewA)
   if (tv) {
