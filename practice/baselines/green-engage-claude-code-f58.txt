@@ -55,3 +55,57 @@
 #   /skillator:engage user message, CLAUDE.md's "before anything else" skill load comes first
 #   and the engage steps are not carried past it; when the same body arrives as a Skill tool
 #   result (run 4) the block is shown - one run, trivial prompt, so a lead, not proof. Next lever is not more wording in engage.md.
+
+# ======================================================================================
+# Round 3 - RUN-0014 stage 96, 2026-10-22, same box/host/clone. Owner's decision: move the
+#   rules into a skill. skills/engage/SKILL.md (all rewrite rules, reply shape as a recipe:
+#   banner if required -> **Engaged prompt:** quote block before any tool call -> the work)
+#   and commands/engage.md thinned to "Invoke the skillator:engage skill with the Skill
+#   tool, args: $ARGUMENTS ... and follow it." 4 of 4 allowed claude -p runs used.
+# Invocation: as above, but --allowedTools "Read,Grep,Glob,Skill". Turn order read from the
+#   stream-json (assistant TEXT and tool_use, in order).
+#
+# ---- run 5: skill v1 (reads of files the prompt names allowed before the block) ----
+#   init: slash_commands and skills both list skillator:engage
+#   TOOL Skill skillator:engage (args = the rough prompt)   - the command routed as intended
+#   TOOL Grep, PowerShell (held), Read, Read                - the work: reading TICKETS.md
+#   TEXT "**Engaged prompt:** Read this worktree's `TICKETS.md` ... Read only ..." inline (not
+#        a quote block), then the answer in the same text.
+#   No grayskull-power load, no banner (the expanded command no longer competes with CLAUDE.md;
+#   the model just skipped it).
+#   VERDICT: RED on order - the block appears (first time via the command path) but after the work.
+#
+# ---- run 6: round 1 - "before any tool call except loading a skill"; files named, read after ----
+#   TOOL Skill skillator:engage
+#   TOOL Grep, PowerShell x2, Bash (held)
+#   TEXT "I'm reading TICKETS.md directly. The shell tools blocked ..."   <- status line first
+#   TOOL Read, Read
+#   TEXT "**Engaged prompt:** Read this repo's `TICKETS.md` ..." inline, then the answer.
+#   VERDICT: RED - work, a status line, more work, then the block.
+#
+# ---- run 7: round 2 - top line "Your next output after loading this skill is text, not a
+#   tool call", example marks "(only now the first tool call)", last line "Now write the
+#   block - before any tool call." ----
+#   TOOL Skill skillator:engage
+#   TOOL Grep, PowerShell (held), Read, Grep
+#   TEXT "**Sharpened request:** list every ticket ..." - label renamed, after the work.
+#   VERDICT: RED.
+#
+# ---- run 8: round 2 wording, a different rough prompt ----
+#   "/skillator:engage explain what the routing check script checks and if anything is missing from it"
+#   TOOL Skill skillator:engage
+#   TOOL Grep, Read, Read, Bash x2 (held), Grep, Glob
+#   TEXT "I didn't run the script ... ## What it checks ..." - no block at all.
+#   VERDICT: RED.
+#
+# VERDICT round 3: RED. 0 of 4 runs show the block before the work; 2 of 3 repro runs show
+#   it after the work, 1 renamed, the other prompt none. Max 2 rounds reached: stopped and
+#   reverted (skills/engage removed, commands/engage.md restored as committed). The draft
+#   is kept as $S/f58-round3/SKILL.md + engage-command.patch.
+# Reading: moving the rules into a skill fixed the routing (the command now reliably calls
+#   Skill skillator:engage, and the block shows up at all) but not the order - on this host
+#   and model (claude -p, opus-5-5) the model reads before it writes any text, whatever the
+#   body says. Stage-94 run 4's "block first" was the trivial prompt (nothing to read), not
+#   the Skill path. A wording lever is spent; the remaining levers are structural (e.g. a
+#   UserPromptSubmit hook / the command producing the rewrite as its own turn) or accepting
+#   "block before the answer text" as the bar - an owner call.
