@@ -18,6 +18,8 @@
 #     "On Windows, absolute paths must be valid file:// URLs. Received protocol
 #     'c:'". Not a permission matter; a Windows path form in the invocation or
 #     loader. Not fixed (report only).
+#     A141 resolved: the cause is the absolute C:/ path given to --import. Use
+#     `npm --prefix <wt>/mods/ops-board/ops test` (77 pass, 0 fail on Windows).
 #  4. sh <wt>/install.sh --selftest                         ran. exit 0, tail "ok".
 #     Ran past the 120 s foreground limit, moved to background by the host.
 #  5. sh <wt>/skills/relay-morpheus/hooks/relay-morpheus.sh selftest
