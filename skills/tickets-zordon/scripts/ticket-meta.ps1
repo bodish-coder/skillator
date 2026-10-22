@@ -317,16 +317,16 @@ function Edit-Line([string]$id, [hashtable]$o) {
         return @($line, "no change: $id already has [$($o.samekey): $($o.sameval)]")
       }
     }
-    # Moving a line out of [~] drops the working session's trailing (@agent-id)
-    # tag - only that exact shape - and names that session afterwards.
+    # Moving a line out of [~] keeps the working session's trailing (@agent-id)
+    # tag (A143: the session tag and [owner:] are different facts) and names
+    # that session afterwards, so it can be told its ticket moved.
     $warn = $null
     if ($mk -ceq '~' -and $o.mark -and $o.mark -cne '~') {
       $sm = [regex]::Match($line, '[ \t]*\((@[A-Za-z]+-[A-Za-z0-9]+)\)[ \t]*$')
       if ($sm.Success) {
-        $line = $line.Substring(0, $sm.Index)
-        $warn = "warning: $id was in progress under $($sm.Groups[1].Value) - that session is no longer the owner; tell it"
+        $warn = "warning: $id was in progress under $($sm.Groups[1].Value) - its box left [~], the session tag stays; tell that session"
       } else {
-        $warn = "warning: $id was in progress - whoever was working it is no longer the owner; tell them"
+        $warn = "warning: $id was in progress - its box left [~]; tell whoever was working it"
       }
     }
     if ($o.mark) { $line = $line.Substring(0, $b) + $o.mark + $line.Substring($b + 1) }
@@ -669,14 +669,14 @@ function Invoke-Selftest {
     $now = [System.IO.File]::ReadAllBytes("$M/TICKETS.md")
     if ([Convert]::ToBase64String($now) -ne [Convert]::ToBase64String($before)) { Write-Output 'FAIL: refused assign changed the board'; $script:fail = 1 }
     Eq 'assign F12' (Run assign F12 '@asha') "- [ ] F12 $dash Bulk delete [owner: @asha]"
-    Eq 'assign F1' (Run assign F1 'asha') "- [ ] F1 $dash Dark mode [owner: @asha] warning: F1 was in progress under @cc-bbbbbb - that session is no longer the owner; tell it"
-    Eq 'reassign F1' (Run assign F1 '@vidul') "- [ ] F1 $dash Dark mode [owner: @vidul]"
-    Eq 'tag F1' (Run tag F1) "- [ ] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul]"
+    Eq 'assign F1' (Run assign F1 'asha') "- [ ] F1 $dash Dark mode [owner: @asha] (@cc-bbbbbb) warning: F1 was in progress under @cc-bbbbbb - its box left [~], the session tag stays; tell that session"
+    Eq 'reassign F1' (Run assign F1 '@vidul') "- [ ] F1 $dash Dark mode [owner: @vidul] (@cc-bbbbbb)"
+    Eq 'tag F1' (Run tag F1) "- [ ] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)"
     Eq 'tag B2' (Run tag B2) "- [ ] B2 $dash Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)"
     Eq 'tag F3 keeps hand app' (Run tag F3) "- [ ] F3 $dash Hand tagged [app: web] (@cc-cccccc)"
     if (-not (Refused tag F9)) { Write-Output 'FAIL: tag accepted a missing ticket'; $script:fail = 1 }
     $want = "# TICKETS`n`n## Bugs`n`n- [ ] B2 $dash Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)`n`n## Features`n`n" +
-      "- [ ] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul]`n- [ ] F12 $dash Bulk delete [owner: @asha]`n" +
+      "- [ ] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)`n- [ ] F12 $dash Bulk delete [owner: @asha]`n" +
       "- [ ] F3 $dash Hand tagged [app: web] (@cc-cccccc)`n"
     $got = [System.IO.File]::ReadAllBytes("$M/TICKETS.md")
     if ([Convert]::ToBase64String($got) -ne [Convert]::ToBase64String($Utf8.GetBytes($want))) {
@@ -796,16 +796,19 @@ function Invoke-Selftest {
     Eq 'owner after decide' (Run assign F25 '@vidul') "- [ ] F25 $dash Both [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]"
     # leaving [~] drops that session's tag and says whose it was; other (..) stay
     $o = @(Run assign F31 '@asha')
-    Eq 'assign from [~]' $o[0] "- [ ] F31 $dash Working [owner: @asha]"
+    Eq 'assign from [~]' $o[0] "- [ ] F31 $dash Working [owner: @asha] (@cc-bbbbbb)"
     if (([string]::Join(' ', $o)) -notmatch 'F31 was in progress under @cc-bbbbbb') { Write-Output "FAIL: no warning naming the [~] session: [$o]"; $script:fail = 1 }
     $o = @(Run decide F32 '@vidul')
-    Eq 'decide from [~]' $o[0] "- [?] F32 $dash Busy [decide: @vidul] (a note)"
+    Eq 'decide from [~]' $o[0] "- [?] F32 $dash Busy [decide: @vidul] (a note) (@cc-cccccc)"
     if (([string]::Join(' ', $o)) -notmatch 'F32 was in progress under @cc-cccccc') { Write-Output "FAIL: no warning naming the [~] session: [$o]"; $script:fail = 1 }
+    # A143: the session tag and the owner are different facts - both stay
+    if (([string]::Join(' ', $o)) -match 'no longer the owner') { Write-Output "FAIL: warning still says the session lost the ticket: [$o]"; $script:fail = 1 }
+    if (-not ($o[0].EndsWith('(@cc-cccccc)'))) { Write-Output "FAIL: decide dropped the [~] session tag: [$($o[0])]"; $script:fail = 1 }
     $want45 = "# TICKETS`n`n- [ ] F20 $dash Done thing [decide: @asha] [owner: @vidul] (@cc-1)`n- [?] F21 $dash Later thing [decide: @asha] (deferred: q4) (@cc-2)`n" +
       "- [?] F22 $dash Open thing [decide: @vidul]`n- [ ] F23 $dash Dropped thing [owner: @vidul]`n- [ ] F24 $dash Waiting [decide: @asha]`n" +
       "- [ ] F25 $dash Both [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]`n- [ ] F26 $dash Shipped [owner: @asha] (@cc-3)`n- [ ] F27 $dash Kept [owner: @asha]`n" +
       "- [?] F28 $dash Decided before [decide: @asha]`n- [ ] F29 $dash Owner waiting [owner: @vidul]`n" +
-      "- [ ] F31 $dash Working [owner: @asha]`n- [?] F32 $dash Busy [decide: @vidul] (a note)`n"
+      "- [ ] F31 $dash Working [owner: @asha] (@cc-bbbbbb)`n- [?] F32 $dash Busy [decide: @vidul] (a note) (@cc-cccccc)`n"
     if (-not (& $same $want45)) { Write-Output 'FAIL: F45 board bytes'; $script:fail = 1 }
 
     # --- team add / remove / list: .skillator/team.md written under the board lock

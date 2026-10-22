@@ -125,7 +125,7 @@ export function dialogLines(s: State): string[] {
   out.push(`  Change  [${from}] ${word(from)} → [${to}] ${word(to)}, ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`)
   if (tk?.box === '~') {
     out.push(tk.session
-      ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${word(to)} and drops that tag`
+      ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${word(to)}; the tag stays - tell that session`
       : `  ! ${tk.id} is in progress - this moves it to ${word(to)}; tell whoever is working it`)
   }
   out.push(`  Runs    ticket-meta ${d.kind === 'decide' ? 'decide' : 'assign'} ${d.id} ${d.handle ?? '@?'}`)

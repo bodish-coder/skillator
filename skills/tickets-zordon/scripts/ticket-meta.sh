@@ -227,11 +227,12 @@ edit_line() {
       return 0
     fi
   fi
-  # Moving a line out of [~] drops the working session's trailing (@agent-id)
-  # tag - only that exact shape - and names that session afterwards.
-  drop=0 sess=''
+  # Moving a line out of [~] keeps the working session's trailing (@agent-id)
+  # tag (A143: the session tag and [owner:] are different facts) and names
+  # that session afterwards, so it can be told its ticket moved.
+  moved=0 sess=''
   if [ "$mk" = '~' ] && [ -n "${SET_MARK:-}" ] && [ "$SET_MARK" != '~' ]; then
-    drop=1
+    moved=1
     sess=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/)) {
           s = substr($0, RSTART + 1); sub(/\).*/, "", s); print s } }')
   fi
@@ -240,7 +241,7 @@ edit_line() {
   tmp="$f.ticket-meta.$$"
   # BINMODE=3: Windows gawk would otherwise drop each line's \r on the way in
   # (B3); elsewhere it is ignored and the \r arrives in $0 as is.
-  RE=$re EOL=$eol DROP=$drop awk -v BINMODE=3 '
+  RE=$re EOL=$eol awk -v BINMODE=3 '
     function find(line, key) { return match(line, "[ \t]*\\[" key ":[ \t]*[^]]*\\]") }
     # A tag goes where it is, else before the next tag in app/decide/owner/by order,
     # else before the trailing (..) groups and a bare "Plan: S<n>" before them
@@ -267,7 +268,6 @@ edit_line() {
         if (ENVIRON["SET_MARK"] != "") {
           match(line, /- \[/); line = substr(line, 1, RSTART + 2) ENVIRON["SET_MARK"] substr(line, RSTART + 4)
         }
-        if (ENVIRON["DROP"] == "1") sub(/[ \t]*\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/, "", line)
         if (ENVIRON["SET_APP"] != "") line = settag(line, "app", ENVIRON["SET_APP"])
         if (ENVIRON["SET_DECIDE"] != "") line = settag(line, "decide", ENVIRON["SET_DECIDE"])
         if (ENVIRON["SET_OWNER"] != "") line = settag(line, "owner", ENVIRON["SET_OWNER"])
@@ -279,11 +279,11 @@ edit_line() {
   mv -f "$tmp" "$f" || { rm -f "$tmp"; die "cannot replace $f"; }
   board_unlock
   RE=$re awk '$0 ~ ENVIRON["RE"]' "$f"
-  if [ "$drop" = 1 ]; then
+  if [ "$moved" = 1 ]; then
     if [ -n "$sess" ]; then
-      echo "warning: $ID was in progress under $sess - that session is no longer the owner; tell it"
+      echo "warning: $ID was in progress under $sess - its box left [~], the session tag stays; tell that session"
     else
-      echo "warning: $ID was in progress - whoever was working it is no longer the owner; tell them"
+      echo "warning: $ID was in progress - its box left [~]; tell whoever was working it"
     fi
   fi
 }
@@ -504,13 +504,13 @@ selftest() {
   sh "$self" assign F1 @nobody > /dev/null 2>&1 && { echo "FAIL: assign accepted an unknown handle"; fail=1; }
   cmp -s TICKETS.md "$T/before.md" || { echo "FAIL: refused assign changed the board"; fail=1; }
   eq "assign F12" "$(run assign F12 @asha)" "- [ ] F12 $D Bulk delete [owner: @asha]"
-  eq "assign F1" "$(run assign F1 asha)" "- [ ] F1 $D Dark mode [owner: @asha] warning: F1 was in progress under @cc-bbbbbb - that session is no longer the owner; tell it"
-  eq "reassign F1" "$(run assign F1 @vidul)" "- [ ] F1 $D Dark mode [owner: @vidul]"
-  eq "tag F1" "$(run tag F1)" "- [ ] F1 $D Dark mode [app: ui, web] [owner: @vidul] [by: @vidul]"
+  eq "assign F1" "$(run assign F1 asha)" "- [ ] F1 $D Dark mode [owner: @asha] (@cc-bbbbbb) warning: F1 was in progress under @cc-bbbbbb - its box left [~], the session tag stays; tell that session"
+  eq "reassign F1" "$(run assign F1 @vidul)" "- [ ] F1 $D Dark mode [owner: @vidul] (@cc-bbbbbb)"
+  eq "tag F1" "$(run tag F1)" "- [ ] F1 $D Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)"
   eq "tag B2" "$(run tag B2)" "- [ ] B2 $D Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)"
   eq "tag F3 keeps hand app" "$(run tag F3)" "- [ ] F3 $D Hand tagged [app: web] (@cc-cccccc)"
   sh "$self" tag F9 > /dev/null 2>&1 && { echo "FAIL: tag accepted a missing ticket"; fail=1; }
-  printf '# TICKETS\n\n## Bugs\n\n- [ ] B2 %s Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)\n\n## Features\n\n- [ ] F1 %s Dark mode [app: ui, web] [owner: @vidul] [by: @vidul]\n- [ ] F12 %s Bulk delete [owner: @asha]\n- [ ] F3 %s Hand tagged [app: web] (@cc-cccccc)\n' \
+  printf '# TICKETS\n\n## Bugs\n\n- [ ] B2 %s Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)\n\n## Features\n\n- [ ] F1 %s Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)\n- [ ] F12 %s Bulk delete [owner: @asha]\n- [ ] F3 %s Hand tagged [app: web] (@cc-cccccc)\n' \
     "$D" "$D" "$D" "$D" > "$T/want.md"
   cmp -s TICKETS.md "$T/want.md" || { echo "FAIL: board bytes differ beyond the edited tags"; diff "$T/want.md" TICKETS.md; fail=1; }
 
@@ -630,11 +630,14 @@ selftest() {
   eq "owner after decide" "$(run assign F25 @vidul)" "- [ ] F25 $D Both [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]"
   # leaving [~] drops that session's tag and says whose it was; other (..) stay
   sh "$self" assign F31 @asha > "$T/out" 2>&1 || { echo "FAIL: assign of a [~] ticket failed: $(cat "$T/out")"; fail=1; }
-  eq "assign from [~]" "$(head -n 1 "$T/out" | tr -d '\r')" "- [ ] F31 $D Working [owner: @asha]"
+  eq "assign from [~]" "$(head -n 1 "$T/out" | tr -d '\r')" "- [ ] F31 $D Working [owner: @asha] (@cc-bbbbbb)"
   grep -q 'F31 was in progress under @cc-bbbbbb' "$T/out" || { echo "FAIL: no warning naming the [~] session: $(cat "$T/out")"; fail=1; }
   sh "$self" decide F32 @vidul > "$T/out" 2>&1 || { echo "FAIL: decide of a [~] ticket failed: $(cat "$T/out")"; fail=1; }
-  eq "decide from [~]" "$(head -n 1 "$T/out" | tr -d '\r')" "- [?] F32 $D Busy [decide: @vidul] (a note)"
+  eq "decide from [~]" "$(head -n 1 "$T/out" | tr -d '\r')" "- [?] F32 $D Busy [decide: @vidul] (a note) (@cc-cccccc)"
   grep -q 'F32 was in progress under @cc-cccccc' "$T/out" || { echo "FAIL: no warning naming the [~] session: $(cat "$T/out")"; fail=1; }
+  # A143: the session tag and the owner are different facts - both stay on the board
+  grep -q "^- \[ \] F31 $D Working \[owner: @asha\] (@cc-bbbbbb)\$" TICKETS.md || { echo "FAIL: assign dropped the [~] session tag"; fail=1; }
+  grep -q 'no longer the owner' "$T/out" && { echo "FAIL: warning still says the session lost the ticket: $(cat "$T/out")"; fail=1; }
   {
     printf -- '# TICKETS\n\n'
     printf -- '- [ ] F20 %s Done thing [decide: @asha] [owner: @vidul] (@cc-1)\n' "$D"
@@ -647,8 +650,8 @@ selftest() {
     printf -- '- [ ] F27 %s Kept [owner: @asha]\n' "$D"
     printf -- '- [?] F28 %s Decided before [decide: @asha]\n' "$D"
     printf -- '- [ ] F29 %s Owner waiting [owner: @vidul]\n' "$D"
-    printf -- '- [ ] F31 %s Working [owner: @asha]\n' "$D"
-    printf -- '- [?] F32 %s Busy [decide: @vidul] (a note)\n' "$D"
+    printf -- '- [ ] F31 %s Working [owner: @asha] (@cc-bbbbbb)\n' "$D"
+    printf -- '- [?] F32 %s Busy [decide: @vidul] (a note) (@cc-cccccc)\n' "$D"
   } > "$T/want45.md"
   cmp -s TICKETS.md "$T/want45.md" || { echo "FAIL: F45 board bytes"; diff "$T/want45.md" TICKETS.md; fail=1; }
 

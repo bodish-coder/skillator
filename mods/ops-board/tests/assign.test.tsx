@@ -164,8 +164,8 @@ for (const surface of SURFACES) {
 
   test(`${surface}: d on an in-progress ticket warns first; the ps1 form on Windows; its warning reaches the toast`, WITH, async ($, on) => {
     const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM }, { OS: 'Windows_NT' })
-    w.answer = () => ran('- [ ] F3 — cart drawer keeps items on reload [app: web] [owner: @asha]\n' +
-      'warning: F3 was in progress under @cc-4ae496 - that session is no longer the owner; tell it\n')
+    w.answer = () => ran('- [ ] F3 — cart drawer keeps items on reload [app: web] [owner: @asha] (@cc-4ae496)\n' +
+      'warning: F3 was in progress under @cc-4ae496 - its box left [~], the session tag stays; tell that session\n')
     await start($, clock)
     const pane = await mountPane($, surface)
     await pane.press({ key: 'key:decide' })            // F3, the first row, is selected
@@ -173,15 +173,15 @@ for (const surface of SURFACES) {
     expect(w.opens.at(-1)?.title).toBe('Assign F3 for a decision')
     const dlg = await mountDialog($, surface)
     expect((await dlg.find({ key: 'kind:decision' }))?.text).toBe('(•) decision')
-    expect((await dlg.find({ key: 'warn' }))?.text).toBe('! F3 is in progress under @cc-4ae496 - this moves it to decision and drops that tag')
+    expect((await dlg.find({ key: 'warn' }))?.text).toBe('! F3 is in progress under @cc-4ae496 - this moves it to decision; the tag stays - tell that session')
     await dlg.press({ key: 'kind:implementation' })
     await dlg.press({ key: 'who:@asha' })
     expect((await dlg.find({ key: 'change' }))?.text).toBe('Change  ● in progress -> ● pending  owner @asha')
-    expect((await dlg.find({ key: 'warn' }))?.text).toBe('! F3 is in progress under @cc-4ae496 - this moves it to pending and drops that tag')
+    expect((await dlg.find({ key: 'warn' }))?.text).toBe('! F3 is in progress under @cc-4ae496 - this moves it to pending; the tag stays - tell that session')
     await dlg.press({ key: 'go' })
     expect(w.runs[0]!.argv).toEqual(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', META + '.ps1', 'assign', 'F3', '@asha'])
     expect(w.toasts[0]).toContain('✓ F3 now pending, owned by @asha: cart drawer keeps items on reload')
-    expect(w.toasts[0]).toContain('warning: F3 was in progress under @cc-4ae496 - that session is no longer the owner; tell it')
+    expect(w.toasts[0]).toContain('warning: F3 was in progress under @cc-4ae496 - its box left [~], the session tag stays; tell that session')
     expect(w.toasts[0]).toContain('ran: powershell -NoProfile -ExecutionPolicy Bypass -File ' + META + '.ps1 assign F3 @asha')
     expect(w.writes).toEqual([])
     await dlg.unmount()

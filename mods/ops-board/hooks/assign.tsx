@@ -230,7 +230,7 @@ export async function renderDialog($: EngineInterface, e: RenderInput<'Pane'>): 
   const verb = d.kind === 'decide' ? 'decide' : 'assign'
   const warn = tk?.box === '~'
     ? (tk.session
-        ? `! ${tk.id} is in progress under ${tk.session} - this moves it to ${word(to)} and drops that tag`
+        ? `! ${tk.id} is in progress under ${tk.session} - this moves it to ${word(to)}; the tag stays - tell that session`
         : `! ${tk.id} is in progress - this moves it to ${word(to)}; tell whoever is working it`)
     : null
   const isGood = !!d.result?.startsWith('✓')

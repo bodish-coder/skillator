@@ -114,6 +114,9 @@ test('a dialog on a ticket in progress warns; an empty team starts on no one and
   const s = reduce(onBoard(initial(80, 24, 0), b, [], null), key('a')).state
   assert.equal(s.dialog?.handle, null)
   assert.ok(dialogLines(s).some(l => l.includes('F9 is in progress under @cc-1')))
+  // A143: ticket-meta keeps the session tag beside the owner; the warning must not say it drops
+  assert.ok(dialogLines(s).some(l => l.includes('the tag stays - tell that session')))
+  assert.ok(!dialogLines(s).some(l => l.includes('drops that tag')))
   assert.ok(dialogLines(s).some(l => l.includes('no .skillator/team.md yet')))
   assert.equal(reduce(s, key('return')).effects.length, 0)
   assert.equal(reduce(initial(80, 24, 0), key('a')).state.toast, 'ops board: select a ticket first')

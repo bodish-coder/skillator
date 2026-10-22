@@ -133,9 +133,10 @@ closed, deferred or in someone else's progress:
 - The same handle again for the same kind, with the box already `[ ]` (assign)
   or `[?]` (decide), changes nothing and says `no change`; any other box still
   moves.
-- Moving a `[~]` ticket drops its trailing session tag `(@cc-…)` and warns which
-  session was working it — tell that session it no longer owns the ticket. A
-  relay lease is per stage and is released when that stage lands or fails.
+- Moving a `[~]` ticket keeps its trailing session tag `(@cc-…)` beside the new
+  `[owner:]`/`[decide:]` — which session works it and who owns it are different
+  facts — and warns which session was working it; tell that session its box
+  moved. A relay lease is per stage and is released when that stage lands or fails.
 - Both refuse a handle not in the team file — say so, and offer to add the
   person there; never invent one.
 - **`tag <ID>`** when a ticket is closed (`[x]`), and when commits naming it land
