@@ -164,3 +164,54 @@
 # Reading: a next round would target the empty-argument path (the skill arrives as the
 #   expanded slash command, then "already loaded" on the Skill call, and the model treats
 #   the previous answer as the work) and re-run the ops-board prompt on the round-2 wording.
+
+# ======================================================================================
+# Round 5 - RUN-0014 stage 100, 2026-10-22, same box/host (claude-code 2.1.308) and clone.
+#   The last try (owner). Bar unchanged from round 4: the first assistant TEXT that is not a
+#   skill banner holds **Engaged prompt:**, a newline, a `> ` quote block, before the answer;
+#   reading files first is allowed. 3 of 4 allowed claude -p runs used, one change round.
+# Change: the round-4 draft re-landed (skills/engage/SKILL.md + thin commands/engage.md),
+#   ONLY the empty-argument path edited, in both files: "Args empty -> the prompt is the
+#   user's previous message, even if you already answered it. The block is still shown, then
+#   the work is redone ... every time /engage is used - also when this skill was loaded
+#   earlier in the session and the host says 'already loaded'; that note means these steps,
+#   not that the block was shown." Frontmatter of both parsed with yaml.safe_load.
+# Invocation: as round 4 (--plugin-dir <worktree> --allowedTools "Read,Grep,Glob,Skill"
+#   --max-turns 25 --output-format stream-json --verbose, from $S/f58clone); run (c) with
+#   --input-format stream-json fed $S/f58-r4-run4-in.jsonl (rough prompt, then bare
+#   "/skillator:engage"). Streams: $S/f58-r5-run{1,2,3}.jsonl.
+#
+# ---- run (a) "/skillator:engage tell me what the ops board shows and which tickets are still open" ----
+#   TOOL Skill skillator:engage (args = the rough prompt)
+#   TOOL Glob, Grep, Read, PowerShell (held), Bash x2 (held)
+#   TEXT "Shell reads are being blocked, so I'm reading TICKETS.md directly."   <- first text
+#   TOOL Read x2, Grep
+#   TEXT "**Engaged prompt:**\n> Read the skillator ops board (`TICKETS.md` ...) ... read-only:
+#        no edits, no commits.\n\nThe board has **13 open tickets** ..."
+#   VERDICT: RED - a progress note is the first non-banner text; block shape and label correct.
+#
+# ---- run (b) "/skillator:engage explain what the routing check script checks" ----
+#   TOOL Skill skillator:engage ; TOOL Glob, Read
+#   TEXT "**Engaged prompt:**\n> Explain what `practice/scripts/check-routing.sh` checks: ...
+#        Read-only. Change no files.\n\n---\n\n`practice/scripts/check-routing.sh` makes sure ..."
+#   VERDICT: GREEN.
+#
+# ---- run (c) empty argument after a previous message ----
+#   turn 1 "tell me what the ops board shows ...": TOOL Skill skillator:grayskull-power ;
+#     TEXT "## I HAVE THE POWER!!" ; reads (one progress note) ; the answer (12 open).
+#   turn 2 "/skillator:engage":
+#     TOOL Skill skillator:engage args ""
+#     TOOL Bash (held)
+#     TEXT "The live report still needs your approval, so this comes from `TICKETS.md` only.
+#          ... ## Open tickets: 11 ..." - no **Engaged prompt:** anywhere in the turn.
+#   VERDICT: RED - the explicit empty-argument wording did not bring the block back; the
+#     model redid the work silently, as in round 4 run 4.
+#
+# VERDICT round 5: RED. 1 of 3 runs GREEN (b, as round 4 run 3). The ops-board prompt still
+#   lets a progress note lead, and the empty-argument path still drops the block. Reverted:
+#   skills/engage removed, commands/engage.md restored as committed. Draft kept as
+#   $S/f58-round5/SKILL.md + engage-command.patch.
+# Closed host-limited on Claude Code (owner: no round 6). On claude -p / opus-5-5 the block
+#   is reliable only when the prompt needs no progress note and an argument is given; the
+#   committed command (inline steps) stays as shipped. A structural lever (a hook, or the
+#   command producing the rewrite as its own turn) is the only untried route.
