@@ -64,3 +64,51 @@
 # PARTIAL. named: PASS (Claude Code). sweep: FAIL on Claude Code round 1,
 #   PASS on Cursor round 2. GREEN owed: the sweep on Claude Code after
 #   2026-10-23, with T4 committed first (A135), before F52 can close.
+#
+# ------------------------------ ROUND 3 (Claude Code GREEN, RUN-0016 stage 109) ----
+# Owner ruled 2026-10-22: run now (7-day window at 24%).
+# A135: BOTH fixed and moot. A135 is [x] (commands in OVERLAY_PATHS, 2026-10-20)
+#   and commands/marathon.md is committed at HEAD (9d26cac, 4a0bebe). The
+#   worktree was clean, so the prefix = HEAD 8c2d7d1 (no overlay warning).
+# Setup: harness = the worktree's baseline-harness.sh at HEAD; `prefix` ->
+#   %TEMP%\f52cc\put; fresh `relay-chain` fixtures %TEMP%\f52cc\fx-{sweep,named};
+#   --settings = the harness settings JSON + the prefix's feature-route.sh
+#   (UserPromptSubmit) + grade-gate.sh (PreToolUse Agent|Task|Write|Edit|
+#   MultiEdit|NotebookEdit); --include-hook-events. Each run its own OUTER
+#   `BASELINE_ISOLATE=hide sh <harness> run 900 <prefix> claude -p ...`, one at
+#   a time; both .err say "restored" and "limit hit: none". No
+#   --max-budget-usd. claude-code 2.1.308, claude-opus-5-5[1m]. Driven from a
+#   Claude Code subagent. Transcripts: transcripts/f52-cc-{sweep,named}.*.
+# Confound, both runs: the host's ops-board mod (F48 watchdog, memory red)
+#   wrote `.skillator/watchdog.hold` = "mem 0.7/0.8 GB free (below 1 GB)" INTO
+#   THE FIXTURE during each run (timestamps 12:52Z / 12:53Z, the run's start;
+#   the fixtures are built without it). Both models read it.
+#
+#   sweep  PASS. 2026-10-22T12:51:50Z-12:52:50Z, $0.44, 11 turns.
+#     Skill(skillator:tickets-zordon) -> read the board and code (Bash, Glob,
+#     Read; one Bash refused by the classifier, "A variable in this command
+#     can't be checked") -> ONE mode question as reply text, turn ended:
+#     "1. One agent (recommended) / 2. One agent per group / 3. Workflow",
+#     recommendation first. No [~] flip, no Edit/Write, no Agent/Task/Workflow,
+#     no second question. Marathon not offered - relay-morpheus and /marathon
+#     were never reached (round-1 path gone), so not required. The
+#     recommendation cited the (leaked) watchdog hold; the question itself did
+#     not depend on it.
+#   named  FAIL (by the scenario bar: no Workflow call). 2026-10-22T12:53:04Z-
+#     12:54:25Z, $0.55, 10 turns. Skill(tickets-zordon) with args "... use a
+#     workflow" -> read the board -> found the leaked watchdog.hold -> grepped
+#     relay-morpheus for it -> tried to read free memory (PowerShell, refused
+#     twice: "$()" and "needs approval") -> stopped with a question about the
+#     HOLD: release it and run the workflow / run capped at 2 agents / skip the
+#     workflow (single agent). No mode question in the F52 sense - it planned
+#     the named workflow (items, fix+verify tiers) and asked only because of
+#     the hold. So the skip-the-ask rule held; the Workflow call did not happen
+#     because of the host-written hold, not the F52 rule. Not retried: the brief
+#     allows a retry only on a driver invocation error, and this is neither.
+#
+# ---------------------------------------------------------------- VERDICT ----
+# Claude Code round 3: sweep PASS, named FAIL (scenario bar), the FAIL caused by
+#   the host ops-board watchdog hold leaking into the fixture (memory 0.7-0.8 GB).
+#   Owed before F52 closes: the named scenario rerun on Claude Code with host
+#   memory >= 1 GB (no hold written), or with the mod's hold kept out of the
+#   fixture - a harness/mod finding, not fixed here.
