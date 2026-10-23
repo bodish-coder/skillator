@@ -19,7 +19,8 @@
 // this listener on 127.0.0.1. Every request is checked: `Authorization: HMAC <base64>`
 // = HMAC-SHA256 over the raw body bytes, keyed with the base64-decoded security token,
 // compared in constant time; unsigned or bad = 401, logged. The sender must be linked
-// (.skillator/teams-ids.md: aadObjectId -> email) to an email on .skillator/team.md -
+// (<git dir>/skillator/teams-ids.json: aadObjectId -> email, written only by `link` -
+// never a repo file a pull could change) to an email on .skillator/team.md -
 // an outgoing-webhook activity carries the sender's AAD object id and display name, not
 // an email. Accepted messages are appended to <common git dir>/skillator/team-inbox.jsonl
 // (inbox.mjs) - outside the working tree, so no commit or pull can carry one in.
@@ -174,12 +175,16 @@ export function parseTeam(text) {
   return out
 }
 
-// teams-ids.md: `- <aadObjectId>: email (anything after)`. Map of lower-cased id -> email.
-export function parseIds(text) {
+// The sender links: <git dir>/skillator/teams-ids.json, { "<aadObjectId>": "email" },
+// written only by `link` (the owner's act). Map of lower-cased id -> lower-cased email.
+// A repo file (the old .skillator/teams-ids.md) is never read: a pulled commit could add one.
+export function readIds(box) {
   const out = new Map()
-  for (const raw of String(text).split(/\r?\n/)) {
-    const m = /^[ \t]*[-*][ \t]*([0-9A-Za-z][0-9A-Za-z-]{7,})[ \t]*:[ \t]*([^\s,(]+@[^\s,(]+)/.exec(raw)
-    if (m) out.set(m[1].toLowerCase(), m[2].toLowerCase())
+  let j = null
+  try { j = JSON.parse(readFileSync(join(box, IDS), 'utf8')) } catch { return out }
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return out
+  for (const [k, v] of Object.entries(j)) {
+    if (/^[0-9A-Za-z][0-9A-Za-z-]{7,}$/.test(k) && typeof v === 'string' && /^[^\s@]+@[^\s@]+$/.test(v)) out.set(k.toLowerCase(), v.toLowerCase())
   }
   return out
 }
@@ -254,7 +259,7 @@ export function startListener({ root, port, token, log = () => {}, nonce = null 
       return reply(res, 400)
     }
     if (a?.type !== 'message') { log(`${iso()} dropped:not-a-message bytes=${n}`); return reply(res, 200, 'Not delivered: not a message.') }
-    const who = senderOf(a, parseTeam(read(TEAM)), parseIds(read(IDS)))
+    const who = senderOf(a, parseTeam(read(TEAM)), readIds(box))
     const aad = typeof a?.from?.aadObjectId === 'string' ? a.from.aadObjectId.replace(/[^0-9A-Za-z-]/g, '') : '-'
     const name = typeof a?.from?.name === 'string' ? JSON.stringify(a.from.name.slice(0, 80)) : '-'
     if (!who.ok) {
@@ -486,13 +491,17 @@ async function cmdLink(argv) {
   const e = email.trim().toLowerCase()
   const member = parseTeam(team).find(m => m.emails.includes(e))
   if (!member) { err(`${e} is not on .skillator/team.md - add the person there first (ticket-meta team add)`); return 1 }
-  const p = join(root, IDS)
-  let cur = ''
-  try { cur = readFileSync(p, 'utf8') } catch { cur = '# Teams sender ids (teams-uhura, F66): - <aadObjectId>: <email on team.md>\n\n' }
-  if (parseIds(cur).get(aad.toLowerCase()) === e) { out(`already linked: ${aad} -> ${e} (${member.handle})`); return 0 }
-  mkdirSync(dirname(p), { recursive: true })
-  writeFileSync(p, cur + (cur.endsWith('\n') ? '' : '\n') + `- ${aad}: ${e}\n`)
-  out(`linked: ${aad} -> ${e} (${member.handle}) in ${IDS}`)
+  const box = inboxDir(root)
+  if (!box) throw new Error('no git dir - the links live in it')
+  const ids = readIds(box)
+  if (ids.get(aad.toLowerCase()) === e) { out(`already linked: ${aad} -> ${e} (${member.handle})`); return 0 }
+  ids.set(aad.toLowerCase(), e)
+  const p = join(box, IDS)
+  mkdirSync(box, { recursive: true })
+  const tmp = p + '.' + process.pid + '.tmp'
+  writeFileSync(tmp, JSON.stringify(Object.fromEntries(ids), null, 2) + '\n')
+  renameSync(tmp, p)
+  out(`linked: ${aad} -> ${e} (${member.handle}) in ${p}`)
   return 0
 }
 

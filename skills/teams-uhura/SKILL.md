@@ -37,9 +37,10 @@ pasted one, so it waits for the owner at the prompt.
   base64-decoded security token, constant-time compare), unsigned or bad = 401
   and logged; body capped at 64 KiB; acked within 5 s.
 - **Who may send.** An outgoing-webhook activity carries the sender's AAD object
-  id and display name, **not an email**. The sender's id must be linked in
-  `.skillator/teams-ids.md` (`team.mjs link <aadObjectId> <email>`) to an email
-  on `.skillator/team.md`. Anyone else is dropped and logged with their id.
+  id and display name, **not an email**. The sender's id must be linked by the
+  owner (`team.mjs link <aadObjectId> <email>`, kept in the git dir's
+  `skillator/teams-ids.json`, never a repo file) to an email on
+  `.skillator/team.md`. Anyone else is dropped and logged with their id.
 - **Inbox.** Accepted messages go to `<repo>/.git/skillator/team-inbox.jsonl`
   (one JSON per line: `ts`, `from`, `email`, `text`, `id`; deduped on `id`),
   inside the git dir, so no commit or pull can carry one in.

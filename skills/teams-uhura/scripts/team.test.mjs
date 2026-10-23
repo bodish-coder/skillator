@@ -10,7 +10,7 @@ import { spawnSync, spawn } from 'node:child_process'
 import { tmpdir, homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { verifyHmac, cleanText, senderOf, parseTeam, parseIds, startListener, cardPayload, say, statusText, loadConfig, BODY_MAX,
+import { verifyHmac, cleanText, senderOf, parseTeam, startListener, cardPayload, say, statusText, loadConfig, BODY_MAX,
   configPath, validateConfig, saveConfig, clearConfig } from './team.mjs'
 import { mainRoot, parseInbox, after, INBOX, READ, DELIVERED, frameMessages, inboxDir } from './inbox.mjs'
 
@@ -21,13 +21,16 @@ const AAD_ASHA = '6f0a1c2e-0000-4000-8000-00000000a5a1'
 const AAD_EVE = '6f0a1c2e-0000-4000-8000-0000000000e7'
 const AAD_GONE = '6f0a1c2e-0000-4000-8000-00000000901e'
 
-// A repo: .git, team.md (asha, vidul), teams-ids.md (asha linked, gone linked to an email not on the team).
+// A repo: .git, team.md (asha, vidul); the sender links in the git dir (asha linked, gone
+// linked to an email not on the team). A committed .skillator/teams-ids.md maps eve to
+// asha's email - repo-controlled, so it must be ignored.
 function repo() {
   const r = mkdtempSync(join(tmpdir(), 'uhura-'))
-  mkdirSync(join(r, '.git', 'info'), { recursive: true })
+  mkdirSync(join(r, '.git', 'skillator'), { recursive: true })
   mkdirSync(join(r, '.skillator'))
   writeFileSync(join(r, '.skillator/team.md'), '# Team\n\n- @asha: Asha@X.com, a2@x.com\n  name: Asha Rao\n- @vidul: vidul@ikran.in\n')
-  writeFileSync(join(r, '.skillator/teams-ids.md'), `# Teams ids\n\n- ${AAD_ASHA}: asha@x.com (Asha Rao)\n- ${AAD_GONE}: gone@x.com\n`)
+  writeFileSync(join(r, '.git/skillator/teams-ids.json'), JSON.stringify({ [AAD_ASHA]: 'asha@x.com', [AAD_GONE]: 'gone@x.com' }))
+  writeFileSync(join(r, '.skillator/teams-ids.md'), `- ${AAD_EVE}: asha@x.com\n`)
   return r
 }
 
@@ -84,7 +87,7 @@ test('cleanText strips the bot @mention (28: entity, else the first), keeps peop
 
 test('senderOf: the aad id must be linked, and the linked email must be on team.md', () => {
   const team = parseTeam(readFileSync(join(repo(), '.skillator/team.md'), 'utf8'))
-  const ids = parseIds(`- ${AAD_ASHA}: ASHA@x.com\n- ${AAD_GONE}: gone@x.com\n`)
+  const ids = new Map([[AAD_ASHA.toLowerCase(), 'asha@x.com'], [AAD_GONE.toLowerCase(), 'gone@x.com']])
   assert.deepEqual(senderOf(activity(), team, ids), { ok: true, handle: '@asha', email: 'asha@x.com' })
   assert.equal(senderOf(activity({ from: { id: '29:e', name: 'Asha Rao', aadObjectId: AAD_EVE } }), team, ids).reason, 'sender-unlinked')
   assert.equal(senderOf(activity({ from: { id: '29:g', name: 'Gone', aadObjectId: AAD_GONE } }), team, ids).reason, 'sender-not-on-team')
@@ -151,6 +154,24 @@ test('listener: senders not linked to team.md are dropped and logged with their 
   assert.equal(inboxOf(r), '')
   assert.ok(logs.some(l => l.includes('dropped:sender-unlinked') && l.includes(AAD_EVE)))
   assert.ok(logs.some(l => l.includes('dropped:sender-not-on-team') && l.includes(AAD_GONE)))
+})
+
+test('a committed .skillator/teams-ids.md is ignored; link writes the git dir, refusing emails not on team.md', async t => {
+  const r = repo()
+  const { post, logs } = await listener(t, r)
+  const body = JSON.stringify(activity({ id: 'eve-1', from: { id: '29:e', name: 'Asha Rao', aadObjectId: AAD_EVE } }))
+  await post(body, { authorization: sign(body) })
+  assert.equal(inboxOf(r), '')
+  assert.ok(logs.some(l => l.includes('dropped:sender-unlinked') && l.includes(AAD_EVE)))
+  const link = (...a) => spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'link', ...a], { encoding: 'utf8', cwd: r })
+  assert.equal(link(AAD_EVE, 'nobody@x.com').status, 1)
+  const ok = link(AAD_EVE, 'vidul@ikran.in')
+  assert.equal(ok.status, 0, ok.stderr)
+  assert.equal(JSON.parse(readFileSync(join(r, '.git/skillator/teams-ids.json'), 'utf8'))[AAD_EVE.toLowerCase()], 'vidul@ikran.in')
+  assert.equal(readFileSync(join(r, '.skillator/teams-ids.md'), 'utf8'), `- ${AAD_EVE}: asha@x.com\n`)   // untouched
+  const b2 = JSON.stringify(activity({ id: 'eve-2', from: { id: '29:e', name: 'Eve', aadObjectId: AAD_EVE } }))
+  await post(b2, { authorization: sign(b2) })
+  assert.equal(parseInbox(inboxOf(r))[0].from, '@vidul')
 })
 
 test('listener: the body cap - an oversized POST is 413 and never read whole; GET is 405', async t => {
