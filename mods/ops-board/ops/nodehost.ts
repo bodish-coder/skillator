@@ -5,7 +5,7 @@ import { spawn, execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { readFile, stat as fsStat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
-import { argvFor, MARKER, NO_SCRIPTS, norm, up } from '../hooks/lib/calls'
+import { argvFor, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, norm, up } from '../hooks/lib/calls'
 import type { Call } from '../hooks/lib/calls'
 
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
@@ -103,6 +103,15 @@ export function windowsScripts(env: Env): boolean {
   return !env.MSYSTEM
 }
 
+// F66: the node a node call runs, by absolute path - never a bare `node`, which libuv on
+// Windows looks up in the child's cwd (the repo) first. Ruling: this process's own
+// binary when it is node (the standalone app, pi on node); otherwise (the Antigravity
+// IDE's Electron, a bun-run host) the first node on PATH in an absolute entry; else none.
+export async function nodeFor(execPath: string, env: Env, win: boolean, exists: (p: string) => Promise<boolean>): Promise<string | null> {
+  if (/(^|[\\/])node(\.exe)?$/i.test(execPath)) return execPath
+  return findNode(env.PATH ?? env.Path, win, exists)
+}
+
 // opts.skills (the app's --skills): that dir, or its skills/ child, when it holds the marker.
 export async function makeHost(opts: { appDir: string; cwd: string; skills?: string }): Promise<Host> {
   const win = windowsScripts(process.env)
@@ -116,7 +125,13 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
     win, skillsDir, repoRoot,
     async run(call, args, stdin) {
       if (!skillsDir) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
-      return spawnArgv(argvFor(call, win, skillsDir, args), repoRoot, call === 'pending-machine' ? 15000 : 30000, stdin)
+      let nodeBin = ''
+      if (isNodeCall(call)) {
+        const n = await nodeFor(process.execPath, process.env, process.platform === 'win32', async p => existsSync(p))
+        if (!n) return { code: 127, out: '', err: NO_NODE, argv: [] }
+        nodeBin = n
+      }
+      return spawnArgv(argvFor(call, win, skillsDir, args, nodeBin), repoRoot, call === 'pending-machine' ? 15000 : 30000, stdin)
     },
     async stat(path) {
       try { const s = await fsStat(abs(path)); return { mtimeMs: s.mtimeMs, size: s.size } } catch { return null }

@@ -94,7 +94,9 @@ function userOnly(p) {
   if (process.platform !== 'win32') { chmodSync(p, 0o600); return }
   const who = process.env.USERDOMAIN && process.env.USERNAME ? `${process.env.USERDOMAIN}\\${process.env.USERNAME}` : process.env.USERNAME
   if (!who) throw new Error('cannot restrict the config: no USERNAME')
-  const icacls = args => spawnSync('icacls', [p, ...args], { encoding: 'utf8', windowsHide: true })
+  // by absolute path: a bare name is looked up in the cwd (the repo) first on Windows
+  const exe = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'icacls.exe')
+  const icacls = args => spawnSync(exe, [p, ...args], { encoding: 'utf8', windowsHide: true, cwd: dirname(p) })
   const r = icacls(['/inheritance:r', '/grant:r', `${who}:F`])
   if (r.status !== 0) throw new Error(`cannot restrict the config to ${who} (icacls exit ${r.status})`)
   // explicit entries other than this user (a sandbox group, a policy default) go too

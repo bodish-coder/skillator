@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import type { EngineInterface, ProcessRunInit, ProcessRunResult, FsEntry, SessionRepo, SessionUsage } from 'claude-code'
-import { argvFor, isWindows, skillatorRoot, runCall, readUsage } from '../hooks/lib/host'
+import { argvFor, findNode, isWindows, skillatorRoot, runCall, readUsage } from '../hooks/lib/host'
 import type { Call, HostApi } from '../hooks/lib/host'
 
 // Compile-time: the plugin's own `$` is a HostApi, so register passes `$` as is.
@@ -102,20 +102,46 @@ test('argvFor: both spellings of every call', () => {
     ['sh', '/s/skills/tickets-zordon/scripts/ticket-meta.sh', 'assign', 'F1', '@vidul'])
 })
 
-test('argvFor: F66 teams-uhura calls run node on both platforms; the config never rides argv', () => {
+test('argvFor: F66 teams-uhura calls run the node binary given, by absolute path; the config never rides argv', () => {
   const T = 'teams-uhura/scripts/team.mjs'
+  const N = '/usr/bin/node'
   for (const win of [false, true]) {
-    expect(argvFor('team-mark-read', win, '/s/skills', ['1729'])).toEqual(['node', `/s/skills/${T}`, 'inbox', 'mark-read', '--upto', '1729'])
-    expect(argvFor('team-config-show', win, '/s/skills', [])).toEqual(['node', `/s/skills/${T}`, 'config', 'show'])
-    expect(argvFor('team-config-save', win, '/s/skills', ['ignored'])).toEqual(['node', `/s/skills/${T}`, 'config', 'save'])
-    expect(argvFor('team-config-clear', win, '/s/skills', [])).toEqual(['node', `/s/skills/${T}`, 'config', 'clear'])
+    expect(argvFor('team-mark-read', win, '/s/skills', ['1729'], N)).toEqual([N, `/s/skills/${T}`, 'inbox', 'mark-read', '--upto', '1729'])
+    expect(argvFor('team-config-show', win, '/s/skills', [], N)).toEqual([N, `/s/skills/${T}`, 'config', 'show'])
+    expect(argvFor('team-config-save', win, '/s/skills', ['ignored'], N)).toEqual([N, `/s/skills/${T}`, 'config', 'save'])
+    expect(argvFor('team-config-clear', win, '/s/skills', [], N)).toEqual([N, `/s/skills/${T}`, 'config', 'clear'])
   }
 })
 
+// A bare `node` is searched in the child's cwd first on Windows (libuv): a node.exe
+// committed to the repo would run. node is found on PATH, absolute entries only.
+test('findNode: PATH only - empty, ".", relative and UNC entries skipped; Windows wants node.exe', async () => {
+  const has = (...ps: string[]) => async (p: string) => ps.includes(p)
+  expect(await findNode('.:bin:/usr/local/bin:/usr/bin', false, has('/usr/bin/node', './node', 'bin/node'))).toBe('/usr/bin/node')
+  expect(await findNode('.:bin::', false, has('./node', 'bin/node'))).toBe(null)
+  expect(await findNode('.;tools;\\\\host\\share;"C:\\Program Files\\nodejs"', true,
+    has('./node.exe', 'tools/node.exe', '//host/share/node.exe', 'C:/Program Files/nodejs/node.exe'))).toBe('C:/Program Files/nodejs/node.exe')
+  expect(await findNode(undefined, true, has('node.exe'))).toBe(null)
+})
+
+test('runCall: a node.exe in the repo (the cwd) is never what runs - the PATH one is, or nothing', async () => {
+  const [$, seen] = fake({ env: { SKILLATOR_ROOT: '/s', OS: 'Windows_NT', Path: '.;C:\\nodejs' }, repo: { root: 'C:/r', remote: null, internal: false, name: 'r' },
+    exists: ['/s/skills' + META, 'C:/r/node.exe', './node.exe', 'C:/nodejs/node.exe'], run: () => ran('{}') })
+  await runCall($, 'team-config-show', [])
+  expect(seen.runs[0]!.argv[0]).toBe('C:/nodejs/node.exe')
+  const [$2, seen2] = fake({ env: { SKILLATOR_ROOT: '/s', PATH: '.:node_modules/.bin' }, repo: { root: '/r', remote: null, internal: false, name: 'r' },
+    exists: ['/s/skills' + META, '/r/node', './node', 'node_modules/.bin/node'] })
+  const r = await runCall($2, 'team-mark-read', ['1'])
+  expect(r.code).toBe(127)
+  expect(r.err).toContain('node not found')
+  expect(seen2.runs).toHaveLength(0)
+})
+
 test('runCall: stdin reaches the process (the setup form\'s values), never argv', async () => {
-  const [$, seen] = fake({ env: { SKILLATOR_ROOT: '/s' }, exists: ['/s/skills' + META], run: () => ran('saved') })
+  const [$, seen] = fake({ env: { SKILLATOR_ROOT: '/s', PATH: '/usr/bin' }, exists: ['/s/skills' + META, '/usr/bin/node'], run: () => ran('saved') })
   const r = await runCall($, 'team-config-save', [], '{"token":"c2VjcmV0"}')
   expect(r.code).toBe(0)
+  expect(seen.runs[0]!.argv[0]).toBe('/usr/bin/node')
   expect(seen.runs[0]!.init?.stdin).toBe('{"token":"c2VjcmV0"}')
   expect(seen.runs[0]!.argv.join(' ')).not.toContain('c2VjcmV0')
 })

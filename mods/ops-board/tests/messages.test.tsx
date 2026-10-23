@@ -9,6 +9,7 @@ import type { Engine, MockClock } from 'claude-code/testing'
 const ROOT = '/s'
 const TEAM_JS = ROOT + '/skills/teams-uhura/scripts/team.mjs'
 const BOX = '/r/.git/skillator'
+const NODE = '/usr/bin/node'        // found on PATH; the '.' entry (the repo) is skipped
 const rec = (id: string, from: string, text: string, min: number) =>
   JSON.stringify({ ts: `2026-10-23T09:${String(min).padStart(2, '0')}:00.000Z`, from, email: from.slice(1) + '@x.com', text, id })
 const INBOX = [rec('1', '@asha', 'can you look at F12?', 10), rec('2', '@vidul', 'build is red', 11), rec('3', '@asha', 'never mind', 12)].join('\n') + '\n'
@@ -23,12 +24,14 @@ const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
 function world(on: On, cfg = CFG_SET): [World, MockClock] {
   const w: World = {
     files: { '/r/TICKETS.md': '# Tickets\n\n- [ ] F1 — one\n', [ROOT + '/skills/tickets-zordon/scripts/ticket-meta.sh']: '#!/bin/sh\n',
-      [BOX + '/team-inbox.jsonl']: INBOX, [BOX + '/team-inbox.read']: '1\n' },
+      [BOX + '/team-inbox.jsonl']: INBOX, [BOX + '/team-inbox.read']: '1\n',
+      // a node planted in the repo (the cwd, and the '.' PATH entry) - never what runs
+      [NODE]: 'ELF', './node': 'PLANTED', '/r/node': 'PLANTED' },
     runs: [], toasts: [], cfg, save: ran('saved: /h/.skillator/teams.json (this user only)\n'),
   }
   const at = (p: string) => p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')
   const clock = mock.clock(on, { now: new Date(2026, 9, 23, 12, 0).getTime() })
-  mock.env(on, { SKILLATOR_ROOT: ROOT, HOME: '/h' })
+  mock.env(on, { SKILLATOR_ROOT: ROOT, HOME: '/h', PATH: '.:/usr/bin' })
   mock.store(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.repo', () => ({ value: { root: '/r', remote: null, internal: false, name: 'r' } }))
@@ -50,7 +53,7 @@ function world(on: On, cfg = CFG_SET): [World, MockClock] {
     const a = e.argv
     if (a.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
     w.runs.push({ argv: a, stdin: e.init?.stdin })
-    if (a[0] === 'node' && a[1] === TEAM_JS) {
+    if (a[0] === NODE && a[1] === TEAM_JS) {
       if (a[2] === 'config' && a[3] === 'show') return { value: ran(w.cfg) }
       if (a[2] === 'config' && a[3] === 'save') return { value: w.save }
       if (a[2] === 'config' && a[3] === 'clear') return { value: ran('cleared: /h/.skillator/teams.json\n') }
@@ -88,7 +91,7 @@ test('the Messages tab: unread count on the tab, newest first, a read marker; ma
   expect((await ui.find({ key: 'row:3' }))?.text).toContain('never mind')
   await ui.press({ key: 'key:markread' })
   await clock.settle()
-  expect(w.runs.find(r => r.argv[2] === 'inbox')?.argv).toEqual(['node', TEAM_JS, 'inbox', 'mark-read', '--upto', '3'])
+  expect(w.runs.find(r => r.argv[2] === 'inbox')?.argv).toEqual([NODE, TEAM_JS, 'inbox', 'mark-read', '--upto', '3'])
   await clock.advance(2100)
   expect((await ui.find({ key: 'tab:messages' }))?.text).toBe('Messages')
   await ui.unmount()
@@ -123,7 +126,7 @@ test('the setup form opens by itself when nothing is configured; the token is ma
   await ui.press({ key: 'setup:save' })
   await clock.settle()
   const save = w.runs.find(r => r.argv[3] === 'save')!
-  expect(save.argv).toEqual(['node', TEAM_JS, 'config', 'save'])
+  expect(save.argv).toEqual([NODE, TEAM_JS, 'config', 'save'])
   expect(JSON.parse(save.stdin!)).toEqual({ token: TOKEN, workflowUrl: 'https://prod.example/w?sig=SECRETSIG', port: 4100, statusPosts: true })
   expect(await ui.find({ key: 'setup:token' })).toBeUndefined()
   expect(w.toasts.at(-1)).toContain('✓ Teams settings saved')

@@ -61,9 +61,27 @@ const NODE: Partial<Record<Call, (a: string[]) => string[]>> = {
   'team-config-clear': () => ['config', 'clear'],
 }
 
-export function argvFor(call: Call, win: boolean, skillsDir: string, args: string[]): string[] {
+export const isNodeCall = (call: Call) => NODE[call] !== undefined
+export const NO_NODE = 'node not found on PATH (absolute entries only) - teams-uhura needs Node'
+
+// The node binary for a node call, by absolute path. Never a bare `node`: on Windows
+// libuv looks in the child's cwd (the repo) before PATH, so a node.exe committed to a
+// repo would run. PATH entries that are empty, relative ('.', 'bin') or UNC are skipped;
+// the first absolute one holding node (node.exe on Windows) wins. Quotes are stripped.
+export async function findNode(pathEnv: string | undefined, win: boolean, exists: (p: string) => Promise<boolean>): Promise<string | null> {
+  for (const raw of (pathEnv ?? '').split(win ? ';' : ':')) {
+    const d = raw.trim().replace(/^"(.*)"$/, '$1')
+    if (!(win ? /^[A-Za-z]:[\\/]/.test(d) : d.startsWith('/'))) continue
+    const c = norm(d) + '/' + (win ? 'node.exe' : 'node')
+    try { if (await exists(c)) return c } catch { /* not there */ }
+  }
+  return null
+}
+
+// `nodeBin`: the absolute node for a node call (findNode, or the host's own node).
+export function argvFor(call: Call, win: boolean, skillsDir: string, args: string[], nodeBin = ''): string[] {
   const n = NODE[call]
-  if (n) return ['node', norm(skillsDir) + '/' + TEAM_JS, ...n(args)]
+  if (n) return [nodeBin, norm(skillsDir) + '/' + TEAM_JS, ...n(args)]
   const t = TABLE[call as ScriptCall]
   const base = norm(skillsDir) + '/' + t.script
   return win

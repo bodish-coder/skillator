@@ -1,9 +1,9 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, existsSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, existsSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { findSkillsDir, makeHost } from '../nodehost'
+import { findSkillsDir, makeHost, nodeFor } from '../nodehost'
 import { parseBoard } from '../../hooks/lib/board'      // proves the loader resolves the lib's own imports
 import { NO_SCRIPTS } from '../../hooks/lib/calls'
 import { skills, echoSkills } from './fixtures'
@@ -66,6 +66,31 @@ test('run: argv from the call table, cwd = repo root, never rejects', async () =
   const n = await none.run('pending', [])
   assert.deepEqual(n, { code: 127, out: '', err: NO_SCRIPTS, argv: [] })
   assert.equal(parseBoard('- [ ] F1 — a\n', 'T', 0, 0).tickets.length, 1)
+})
+
+// F66: a node call never runs a node the repo (the child's cwd) supplies - a planted
+// node.exe / node in the repo root is not what runs; this process's own node is.
+test('run: a node call runs this node by absolute path, not a node planted in the repo', async () => {
+  const t = mkTmp(join(tmpdir(), 'ops-node-'))
+  const dir = echoSkills(join(t, 's'))
+  mkdirSync(join(dir, 'teams-uhura/scripts'), { recursive: true })
+  writeFileSync(join(dir, 'teams-uhura/scripts/team.mjs'), 'console.log(process.execPath)\n')
+  for (const f of ['node.exe', 'node', 'node.cmd', 'node.bat']) writeFileSync(join(t, f), 'echo PLANTED\n')
+  const h = await makeHost({ appDir: '/x', cwd: t, skills: dir })
+  const r = await h.run('team-config-show', [])
+  assert.equal(r.code, 0, r.err)
+  assert.equal(r.argv[0], process.execPath)
+  assert.equal(r.out.trim(), process.execPath)
+  assert.doesNotMatch(r.out + r.err, /PLANTED/)
+})
+
+test('nodeFor: this process when it is node; else PATH, absolute entries only; else none', async () => {
+  const has = (...ps: string[]) => async (p: string) => ps.includes(p)
+  assert.equal(await nodeFor('C:\\nodejs\\node.exe', { PATH: '.' }, true, has()), 'C:\\nodejs\\node.exe')
+  assert.equal(await nodeFor('/usr/bin/node', {}, false, has()), '/usr/bin/node')
+  // the Antigravity IDE (Electron) or another host binary is not node: PATH, skipping '.'
+  assert.equal(await nodeFor('C:\\Antigravity\\Antigravity.exe', { Path: '.;C:\\nodejs' }, true, has('./node.exe', 'C:/nodejs/node.exe')), 'C:/nodejs/node.exe')
+  assert.equal(await nodeFor('/opt/bun/bun', { PATH: '.:bin' }, false, has('./node', 'bin/node')), null)
 })
 
 // A142: under Git Bash (ops.sh, or MSYSTEM set) the .sh port runs, not the .ps1.

@@ -2,9 +2,9 @@ import type { FsEntry, ProcessRunInit, ProcessRunResult, SessionRepo, SessionUsa
 import type { Usage } from '../../types'
 import { usageFrom, usageFromFlags } from './facts'
 import type { Flag } from './facts'
-import { argvFor, MARKER, NO_SCRIPTS, norm, up } from './calls'
+import { argvFor, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, norm, up } from './calls'
 import type { Call } from './calls'
-export { argvFor, NO_SCRIPTS } from './calls'
+export { argvFor, findNode, NO_SCRIPTS } from './calls'
 export type { Call } from './calls'
 
 // $-using: the platform, where skillator's scripts live (the skills dir), and running a
@@ -76,7 +76,16 @@ export async function runCall($: HostApi, call: Call, args: string[], stdin?: st
   const repo = await $.session.repo()
   const skills = await skillatorRoot($)
   if (!skills) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
-  const argv = argvFor(call, win, skills, args)
+  // F66: a node call runs the node found on PATH (absolute entries), never a bare `node`
+  // the child's cwd (the repo) could supply. The mod has no node of its own to reuse.
+  let nodeBin = ''
+  if (isNodeCall(call)) {
+    const path = (await $.env.get('PATH')) ?? (await $.env.get('Path'))
+    const found = await findNode(path, win, p => $.fs.exists(p))
+    if (!found) return { code: 127, out: '', err: NO_NODE, argv: [] }
+    nodeBin = found
+  }
+  const argv = argvFor(call, win, skills, args, nodeBin)
   const timeoutMs = call === 'pending-machine' ? 15000 : 30000
   const init: ProcessRunInit = { ...(repo ? { cwd: repo.root } : {}), timeoutMs, ...(stdin !== undefined ? { stdin } : {}) }
   try {
