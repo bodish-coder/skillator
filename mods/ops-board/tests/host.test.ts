@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import type { EngineInterface, ProcessRunInit, ProcessRunResult, FsEntry, SessionRepo, SessionUsage } from 'claude-code'
-import { argvFor, findNode, isWindows, skillatorRoot, runCall, readUsage } from '../hooks/lib/host'
+import { argvFor, findNode, gitBin, isWindows, skillatorRoot, runCall, readUsage } from '../hooks/lib/host'
 import type { Call, HostApi } from '../hooks/lib/host'
 
 // Compile-time: the plugin's own `$` is a HostApi, so register passes `$` as is.
@@ -42,7 +42,11 @@ const fake = (w: World): [HostApi, Seen] => {
   }
   return [$, seen]
 }
-const PS = ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File']
+// A150: the shells by absolute path - System32's Windows PowerShell (no SystemRoot in
+// these worlds: C:/Windows), /bin/sh elsewhere.
+const PWSH = 'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
+const SH = '/bin/sh'
+const PS = [PWSH, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File']
 const TM = 'tickets-zordon/scripts/ticket-meta'
 const PE = 'tickets-zordon/scripts/pending'
 const RM = 'relay-morpheus/hooks/relay-morpheus'
@@ -50,8 +54,8 @@ const UW = 'watch-cortana/hooks/usage-watch'
 const META = '/tickets-zordon/scripts/ticket-meta.sh'
 
 test('argvFor joins the skills dir, no skills/ segment', () => {
-  expect(argvFor('pending', false, '/s/skills', [])).toEqual(['sh', '/s/skills/' + PE + '.sh'])
-  expect(argvFor('meta-assign', true, 'C:/u/.codex/skills', ['F1', '@a'])).toEqual([...PS, 'C:/u/.codex/skills/' + TM + '.ps1', 'assign', 'F1', '@a'])
+  expect(argvFor('pending', false, '/s/skills', [], SH)).toEqual([SH, '/s/skills/' + PE + '.sh'])
+  expect(argvFor('meta-assign', true, 'C:/u/.codex/skills', ['F1', '@a'], PWSH)).toEqual([...PS, 'C:/u/.codex/skills/' + TM + '.ps1', 'assign', 'F1', '@a'])
 })
 test('skillatorRoot: plugin tree -> its skills dir', async () => {
   const [$] = fake({ root: '/s/mods/ops-board', exists: ['/s/skills' + META] })
@@ -93,13 +97,13 @@ test('argvFor: both spellings of every call', () => {
     ['usage-level', [], [`/s/skills/${UW}.sh`, 'level'], [`C:/s/skills/${UW}.ps1`, '-Mode', 'level']],
   ]
   for (const [call, args, sh, ps] of cases) {
-    expect(argvFor(call, false, '/s/skills', args)).toEqual(['sh', ...sh])
-    expect(argvFor(call, true, 'C:/s/skills/', args)).toEqual([...PS, ...ps])
+    expect(argvFor(call, false, '/s/skills', args, SH)).toEqual([SH, ...sh])
+    expect(argvFor(call, true, 'C:/s/skills/', args, PWSH)).toEqual([...PS, ...ps])
   }
-  expect(argvFor('meta-assign', true, 'C:/s/skills', ['F1', '@vidul'])).toEqual(
-    ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:/s/skills/tickets-zordon/scripts/ticket-meta.ps1', 'assign', 'F1', '@vidul'])
-  expect(argvFor('meta-assign', false, '/s/skills', ['F1', '@vidul'])).toEqual(
-    ['sh', '/s/skills/tickets-zordon/scripts/ticket-meta.sh', 'assign', 'F1', '@vidul'])
+  expect(argvFor('meta-assign', true, 'C:/s/skills', ['F1', '@vidul'], PWSH)).toEqual(
+    [PWSH, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:/s/skills/tickets-zordon/scripts/ticket-meta.ps1', 'assign', 'F1', '@vidul'])
+  expect(argvFor('meta-assign', false, '/s/skills', ['F1', '@vidul'], SH)).toEqual(
+    [SH, '/s/skills/tickets-zordon/scripts/ticket-meta.sh', 'assign', 'F1', '@vidul'])
 })
 
 test('argvFor: F66 teams-uhura calls run the node binary given, by absolute path; the config never rides argv', () => {
@@ -135,6 +139,34 @@ test('runCall: a node.exe in the repo (the cwd) is never what runs - the PATH on
   expect(r.code).toBe(127)
   expect(r.err).toContain('node not found')
   expect(seen2.runs).toHaveLength(0)
+})
+
+// A150: a script call never runs a powershell.exe / sh the repo (the child's cwd)
+// supplies: argv[0] is System32's Windows PowerShell (SystemRoot honoured) or /bin/sh -
+// absolute, outside the repo - whatever the repo or a '.' PATH entry holds.
+test('runCall: a powershell.exe / sh in the repo (the cwd) is never what runs', async () => {
+  const [$, seen] = fake({ env: { SKILLATOR_ROOT: '/s', OS: 'Windows_NT', Path: '.;C:\\r' }, repo: { root: 'C:/r', remote: null, internal: false, name: 'r' },
+    exists: ['/s/skills' + META, 'C:/r/powershell.exe', './powershell.exe', 'C:/r/sh.exe'], run: () => ran('') })
+  await runCall($, 'pending-machine', [])
+  expect(seen.runs[0]!.argv[0]).toBe(PWSH)
+  expect(seen.runs[0]!.init?.cwd).toBe('C:/r')
+  const [$2, seen2] = fake({ env: { SKILLATOR_ROOT: '/s', OS: 'Windows_NT', SystemRoot: 'D:\\Win' }, repo: { root: 'C:/r', remote: null, internal: false, name: 'r' },
+    exists: ['/s/skills' + META], run: () => ran('') })
+  await runCall($2, 'relay-list', [])
+  expect(seen2.runs[0]!.argv[0]).toBe('D:/Win/System32/WindowsPowerShell/v1.0/powershell.exe')
+  const [$3, seen3] = fake({ env: { SKILLATOR_ROOT: '/s', PATH: '.::/r' }, repo: { root: '/r', remote: null, internal: false, name: 'r' },
+    exists: ['/s/skills' + META, '/r/sh', './sh'], run: () => ran('') })
+  await runCall($3, 'pending', [])
+  expect(seen3.runs[0]!.argv[0]).toBe(SH)
+})
+
+test('gitBin: Windows - git.exe from an absolute PATH entry, else none; elsewhere git', async () => {
+  const [$] = fake({ env: { OS: 'Windows_NT', Path: '.;tools;C:\\Git\\cmd' }, exists: ['./git.exe', 'tools/git.exe', 'C:/Git/cmd/git.exe'] })
+  expect(await gitBin($)).toBe('C:/Git/cmd/git.exe')
+  const [$2] = fake({ env: { OS: 'Windows_NT', Path: '.;tools' }, exists: ['./git.exe', 'tools/git.exe'] })
+  expect(await gitBin($2)).toBe(null)
+  const [$3] = fake({ env: { PATH: '/usr/bin' } })
+  expect(await gitBin($3)).toBe('git')
 })
 
 test('runCall: stdin reaches the process (the setup form\'s values), never argv', async () => {
@@ -188,7 +220,7 @@ test('runCall: sh form, cwd the main checkout, argv returned', async () => {
   const [$, seen] = fake({ env: { HOME: '/h' }, exists: ['/s/skills' + META], repo: repo('/r'), run: () => ran('watchdog: held x\n') })
   const r = await runCall($, 'relay-hold', ['disk 0.8 GB free (below 1 GB)'])
   expect(seen.runs.length).toBe(1)
-  expect(seen.runs[0]!.argv).toEqual(['sh', `/s/skills/${RM}.sh`, 'watchdog', 'hold', 'disk 0.8 GB free (below 1 GB)'])
+  expect(seen.runs[0]!.argv).toEqual([SH, `/s/skills/${RM}.sh`, 'watchdog', 'hold', 'disk 0.8 GB free (below 1 GB)'])
   expect(seen.runs[0]!.init).toEqual({ cwd: '/r', timeoutMs: 30000 })
   expect(r).toEqual({ code: 0, out: 'watchdog: held x\n', err: '', argv: seen.runs[0]!.argv })
 })
@@ -209,7 +241,7 @@ test('runCall: outside a repo the session cwd is used', async () => {
 })
 test('runCall: a command that cannot start or times out resolves code -1', async () => {
   const [$] = fake({ exists: ['/s/skills' + META], run: () => { throw new Error('timed out after 30000 ms') } })
-  expect(await runCall($, 'pending', [])).toEqual({ code: -1, out: '', err: 'timed out after 30000 ms', argv: ['sh', `/s/skills/${PE}.sh`] })
+  expect(await runCall($, 'pending', [])).toEqual({ code: -1, out: '', err: 'timed out after 30000 ms', argv: [SH, `/s/skills/${PE}.sh`] })
 })
 test('runCall: no scripts found runs nothing and says how to fix it', async () => {
   const [$, seen] = fake({ root: '/elsewhere/mods/ops-board', env: { HOME: '/h' } })

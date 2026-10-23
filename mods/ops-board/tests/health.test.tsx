@@ -110,7 +110,7 @@ for (const surface of SURFACES) {
     expect(await text('relay')).toBe('relay: stages run (RELEASE 41)')
     expect(await text('decide')).toBe('same decision relay-morpheus makes: chain decide --level "src=host 5h=41 7d=55 ctx=- max=-"')
     // relay-morpheus decided it, on this session's own line, never empty.
-    expect(decides(w)).toEqual([['sh', RELAY + '.sh', 'chain', 'decide', '--level', 'src=host 5h=41 7d=55 ctx=- max=-']])
+    expect(decides(w)).toEqual([['/bin/sh', RELAY + '.sh', 'chain', 'decide', '--level', 'src=host 5h=41 7d=55 ctx=- max=-']])
     expect(await text('h:credit')).toBe('CREDIT')
     expect(await text('credit')).toBe('not available · this host exposes no credit source')
     expect(await ui.find({ key: 'spend' })).toBeUndefined()
@@ -214,7 +214,7 @@ test('a host figure past 15 minutes shows its age and stale, and is re-decided w
 test('Windows: the decision runs through the ps1 with -Text', async ($, on) => {
   const [w, clock] = world(on, { OS: 'Windows_NT' })
   await start($, clock)
-  expect(decides(w)[0]).toEqual(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', RELAY + '.ps1',
+  expect(decides(w)[0]).toEqual(['C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', RELAY + '.ps1',
     '-Mode', 'chain', '-Action', 'decide', '-Text', 'src=host 5h=41 7d=55 ctx=- max=-'])
 })
 

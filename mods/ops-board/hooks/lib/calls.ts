@@ -69,23 +69,51 @@ export const NO_NODE = 'node not found on PATH (absolute entries only) - teams-u
 // libuv looks in the child's cwd (the repo) before PATH, so a node.exe committed to a
 // repo would run. PATH entries that are empty, relative ('.', 'bin') or UNC are skipped;
 // the first absolute one holding node (node.exe on Windows) wins. Quotes are stripped.
-export async function findNode(pathEnv: string | undefined, win: boolean, exists: (p: string) => Promise<boolean>): Promise<string | null> {
+export const findNode = (pathEnv: string | undefined, win: boolean, exists: (p: string) => Promise<boolean>) =>
+  findExe('node', pathEnv, win, exists)
+
+// A150: any program by name, the same way - PATH only, absolute entries only, `<name>.exe`
+// on Windows. null when no absolute entry holds it.
+export async function findExe(name: string, pathEnv: string | undefined, win: boolean, exists: (p: string) => Promise<boolean>): Promise<string | null> {
   for (const raw of (pathEnv ?? '').split(win ? ';' : ':')) {
     const d = raw.trim().replace(/^"(.*)"$/, '$1')
     if (!(win ? /^[A-Za-z]:[\\/]/.test(d) : d.startsWith('/'))) continue
-    const c = norm(d) + '/' + (win ? 'node.exe' : 'node')
+    const c = norm(d) + '/' + (win ? name + '.exe' : name)
     try { if (await exists(c)) return c } catch { /* not there */ }
   }
   return null
 }
 
-// `nodeBin`: the absolute node for a node call (findNode, or the host's own node).
-export function argvFor(call: Call, win: boolean, skillsDir: string, args: string[], nodeBin = ''): string[] {
+// A150: Windows' own folder - %SystemRoot% when it is an absolute drive path, else
+// C:/Windows (a relative or UNC SystemRoot would put the repo or a share back in reach).
+export const systemRoot = (v: string | undefined) => {
+  const s = (v ?? '').trim()
+  return /^[A-Za-z]:[\\/]/.test(s) ? norm(s) : 'C:/Windows'
+}
+export const powershellExe = (sysRoot: string | undefined) => systemRoot(sysRoot) + '/System32/WindowsPowerShell/v1.0/powershell.exe'
+export const tasklistExe = (sysRoot: string | undefined) => systemRoot(sysRoot) + '/System32/tasklist.exe'
+// POSIX guarantees /bin/sh; naming it needs no PATH (Ruling A150: no lookup there).
+export const BIN_SH = '/bin/sh'
+export const NO_SH = 'sh not found on PATH (absolute entries only) - the .sh scripts need it'
+
+// A150: the shell a script call runs, by absolute path - never a bare `sh` / `powershell`,
+// which libuv on Windows looks up in the child's cwd (the repo) before PATH. `scriptsWin`:
+// the .ps1 spelling (System32's Windows PowerShell); else the .sh one - on Windows (Git
+// Bash) the first sh.exe in an absolute PATH entry, elsewhere /bin/sh. null: no sh found.
+export async function shellFor(scriptsWin: boolean, platformWin: boolean, env: { path?: string; systemRoot?: string },
+  exists: (p: string) => Promise<boolean>): Promise<string | null> {
+  if (scriptsWin) return powershellExe(env.systemRoot)
+  return platformWin ? findExe('sh', env.path, true, exists) : BIN_SH
+}
+
+// `bin`: the absolute program the call runs - node for a node call (findNode, or the
+// host's own node), else the shell (shellFor).
+export function argvFor(call: Call, win: boolean, skillsDir: string, args: string[], bin: string): string[] {
   const n = NODE[call]
-  if (n) return [nodeBin, norm(skillsDir) + '/' + TEAM_JS, ...n(args)]
+  if (n) return [bin, norm(skillsDir) + '/' + TEAM_JS, ...n(args)]
   const t = TABLE[call as ScriptCall]
   const base = norm(skillsDir) + '/' + t.script
   return win
-    ? ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', base + '.ps1', ...t.ps(args)]
-    : ['sh', base + '.sh', ...t.sh(args)]
+    ? [bin, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', base + '.ps1', ...t.ps(args)]
+    : [bin, base + '.sh', ...t.sh(args)]
 }

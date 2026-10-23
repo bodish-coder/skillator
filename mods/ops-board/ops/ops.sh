@@ -27,8 +27,13 @@ app=$dir/app.ts
 if [ -n "$msys" ] && [ -t 0 ] && [ -t 1 ]; then
   once=
   for a in "$@"; do [ "$a" = --once ] && once=1; done
-  if [ -z "$once" ] && ! node -e 'process.exit(process.stdin.isTTY && process.stdout.isTTY ? 0 : 1)' && command -v winpty >/dev/null 2>&1; then
-    exec winpty node.exe --import "$loader" "$app" "$@"
+  # A150: winpty starts its program through CreateProcess, which looks in the current
+  # directory (the repo, cd'd into above) before PATH - so node goes to it by absolute
+  # Windows path, the one this shell resolves; no absolute node: no winpty.
+  nodep=$(command -v node 2>/dev/null || true)
+  case $nodep in /*) nodew=$(cd -- "$(dirname -- "$nodep")" && pwd -W)/node.exe ;; *) nodew= ;; esac
+  if [ -z "$once" ] && [ -n "$nodew" ] && ! node -e 'process.exit(process.stdin.isTTY && process.stdout.isTTY ? 0 : 1)' && command -v winpty >/dev/null 2>&1; then
+    exec winpty "$nodew" --import "$loader" "$app" "$@"
   fi
 fi
 exec node --import "$loader" "$app" "$@"

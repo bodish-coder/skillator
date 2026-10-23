@@ -40,14 +40,14 @@ function fake(env: Record<string, string>, paths: Record<string, string>, o: Opt
       run: async (argv, init) => {
         seen.runs.push({ argv, init })
         seen.order.push('run ' + argv[0])
-        if (argv[0] === 'tasklist') {
+        if (/\/System32\/tasklist\.exe$/.test(argv[0] ?? '')) {
           if (o.task === 'throws') throw new Error('spawn tasklist ENOENT')
           if (o.task === 'fails') return ran('', 1, 'ERROR: Invalid argument/option')
           const pid = /PID eq (\d+)/.exec(argv[2] ?? '')?.[1] ?? '?'
           return o.task === 'alive' ? ran(`bash.exe                     ${pid} Console                    1      9,120 K\r\n`)
             : ran('INFO: No tasks are running which match the specified criteria.\r\n')
         }
-        if (argv[0] === 'sh' && argv[1] === '-c') {
+        if (argv[0] === '/bin/sh' && argv[1] === '-c') {
           if (o.pid === 'throws') throw new Error('spawn sh ENOENT')
           return o.pid === 'alive' ? ran('') : ran('', 1, 'kill: (4242) - No such process')
         }
@@ -64,6 +64,11 @@ function fake(env: Record<string, string>, paths: Record<string, string>, o: Opt
 }
 
 const OWNER_AT = 1760774400                 // the owner file's epoch, seconds
+// A150: host commands run by absolute path, never a bare name the cwd (the repo) could
+// supply on Windows: System32's tasklist and Windows PowerShell (no SystemRoot set here:
+// C:/Windows), /bin/sh for the pid check.
+const TASKLIST = 'C:/Windows/System32/tasklist.exe'
+const PWSH = 'C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 const HID = '/h/.claude/CLAUDE.md.skillator-hidden'
 const MD = '/h/.claude/CLAUDE.md'
 const TEXT = '# mine\nalways X\n'
@@ -122,9 +127,17 @@ test('Windows: Remove-Item through powershell, USERPROFILE as home', async () =>
   const lines = await restoreClaudeMd($, 'restore')
   expect(files.get(md)).toBe(TEXT)
   expect(seen.runs.map(r => r.argv)).toEqual([
-    ['powershell', '-NoProfile', '-Command', `Remove-Item -LiteralPath '${hid}'`]])
+    [PWSH, '-NoProfile', '-Command', `Remove-Item -LiteralPath '${hid}'`]])
   expect(files.has(hid)).toBe(false)
   expect(lines[0]).toStartWith('✓ Restored ~/.claude/CLAUDE.md')
+})
+
+test('A150 Windows: tasklist and powershell from SystemRoot by absolute path, never a bare name', async () => {
+  const hid = 'C:/Users/v/.claude/CLAUDE.md.skillator-hidden'
+  const [$, seen] = fake({ OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\v', SystemRoot: 'D:\\Win' },
+    { [hid]: TEXT, [hid + '.owner']: `77 ${OWNER_AT} 5150\n` }, { task: 'dead' })
+  await restoreClaudeMd($, 'restore')
+  expect(seen.runs.map(r => r.argv[0])).toEqual(['D:/Win/System32/tasklist.exe', 'D:/Win/System32/WindowsPowerShell/v1.0/powershell.exe'])
 })
 
 test('the removal failing: CLAUDE.md is back all the same; the note says the hidden copy is left, and where', async () => {
@@ -177,7 +190,7 @@ const OWN = HID + '.owner'
 test('restore: a live run holding it (owner pid alive) - left alone, nothing written or removed', async () => {
   const [$, seen, files] = fake({ HOME: '/h' }, { [HID]: TEXT, [OWN]: '4242 1760774400\n' }, { pid: 'alive' })
   const lines = await restoreClaudeMd($, 'restore')
-  expect(seen.runs.map(r => r.argv)).toEqual([['sh', '-c', 'kill -0 4242']])
+  expect(seen.runs.map(r => r.argv)).toEqual([['/bin/sh', '-c', 'kill -0 4242']])
   expect(seen.writes).toEqual([])
   expect(files.has(HID)).toBe(true)
   expect(files.has(OWN)).toBe(true)
@@ -188,7 +201,7 @@ test('restore: a live run holding it (owner pid alive) - left alone, nothing wri
 test('restore: the owner pid dead - restored, the hidden copy and the owner file removed together', async () => {
   const [$, seen, files] = fake({ HOME: '/h' }, { [HID]: TEXT, [OWN]: '4242 1760774400\n' }, { pid: 'dead' })
   const lines = await restoreClaudeMd($, 'restore')
-  expect(seen.runs.map(r => r.argv)).toEqual([['sh', '-c', 'kill -0 4242'], ['rm', '-f', '--', HID, OWN]])
+  expect(seen.runs.map(r => r.argv)).toEqual([['/bin/sh', '-c', 'kill -0 4242'], ['rm', '-f', '--', HID, OWN]])
   expect(files.get(MD)).toBe(TEXT)
   expect(files.has(HID)).toBe(false)
   expect(files.has(OWN)).toBe(false)
@@ -200,8 +213,8 @@ test('restore, Windows: the owner winpid not running (tasklist) - both removed b
   const hid = 'C:/Users/v/.claude/CLAUDE.md.skillator-hidden'
   const [$, seen, files] = fake({ OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\v' }, { [hid]: TEXT, [hid + '.owner']: `77 ${OWNER_AT} 5150\n` }, { task: 'dead' })
   await restoreClaudeMd($, 'restore')
-  expect(seen.runs.map(r => r.argv)).toEqual([['tasklist', '/FI', 'PID eq 5150', '/NH'],
-    ['powershell', '-NoProfile', '-Command', `Remove-Item -LiteralPath '${hid}', '${hid}.owner'`]])
+  expect(seen.runs.map(r => r.argv)).toEqual([[TASKLIST, '/FI', 'PID eq 5150', '/NH'],
+    [PWSH, '-NoProfile', '-Command', `Remove-Item -LiteralPath '${hid}', '${hid}.owner'`]])
   expect(files.has(hid)).toBe(false)
   expect(files.has(hid + '.owner')).toBe(false)
 })
@@ -211,7 +224,7 @@ test('restore: the pid check failing, or an unreadable owner file - no restore, 
     const [$, seen, files] = fake({ HOME: '/h' }, { [HID]: TEXT, [OWN]: owner }, o)
     const lines = await restoreClaudeMd($, 'restore')
     expect(seen.writes).toEqual([])
-    expect(seen.runs.filter(r => r.argv[0] !== 'sh')).toEqual([])
+    expect(seen.runs.filter(r => r.argv[0] !== '/bin/sh')).toEqual([])
     expect(files.has(HID)).toBe(true)
     expect(files.has(OWN)).toBe(true)
     expect(lines).toHaveLength(1)
@@ -236,7 +249,7 @@ const WIN = { OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\v' }
 test('R1b Windows: tasklist naming the winpid - alive, left alone', async () => {
   const [$, seen, files] = fake(WIN, { [WHID]: TEXT, [WHID + '.owner']: `4242 ${OWNER_AT} 9876\n` }, { task: 'alive' })
   const lines = await restoreClaudeMd($, 'restore')
-  expect(seen.runs.map(r => r.argv)).toEqual([['tasklist', '/FI', 'PID eq 9876', '/NH']])
+  expect(seen.runs.map(r => r.argv)).toEqual([[TASKLIST, '/FI', 'PID eq 9876', '/NH']])
   expect(files.has(WMD)).toBe(false)
   expect(lines).toEqual(['▲ ~/.claude/CLAUDE.md is hidden by a running GREEN run (pid 9876) - left alone'])
 })
@@ -246,7 +259,7 @@ test('R1b Windows: winpid - (or the old two-field line), or tasklist failing - u
     [`4242 ${OWNER_AT} 9876\n`, { task: 'throws' }], [`4242 ${OWNER_AT} 9876\n`, { task: 'fails' }]] as [string, Opts][]) {
     const [$, seen, files] = fake(WIN, { [WHID]: TEXT, [WHID + '.owner']: owner }, o)
     const lines = await restoreClaudeMd($, 'restore')
-    expect(seen.runs.filter(r => r.argv[0] !== 'tasklist')).toEqual([])
+    expect(seen.runs.filter(r => r.argv[0] !== TASKLIST)).toEqual([])
     expect(seen.writes).toEqual([])
     expect(files.has(WMD)).toBe(false)
     expect(lines).toHaveLength(1)
@@ -257,7 +270,7 @@ test('R1b Windows: winpid - (or the old two-field line), or tasklist failing - u
 test('R1b POSIX: a three-field line with winpid - checks kill -0 <pid>', async () => {
   const [$, seen, files] = fake({ HOME: '/h' }, { [HID]: TEXT, [OWN]: `4242 ${OWNER_AT} -\n` }, { pid: 'dead' })
   await restoreClaudeMd($, 'restore')
-  expect(seen.runs.map(r => r.argv)).toEqual([['sh', '-c', 'kill -0 4242'], ['rm', '-f', '--', HID, OWN]])
+  expect(seen.runs.map(r => r.argv)).toEqual([['/bin/sh', '-c', 'kill -0 4242'], ['rm', '-f', '--', HID, OWN]])
   expect(files.get(MD)).toBe(TEXT)
 })
 
@@ -266,7 +279,7 @@ test('R1b: an owner file over 6 hours old, its run dead or unknown - not restore
   for (const o of [{ pid: 'dead', now: late }, { pid: 'throws', now: late }] as Opts[]) {
     const [$, seen, files] = fake({ HOME: '/h' }, { [HID]: TEXT, [OWN]: `4242 ${OWNER_AT} -\n` }, o)
     const lines = await restoreClaudeMd($, 'restore')
-    expect(seen.runs.filter(r => r.argv[0] !== 'sh')).toEqual([])
+    expect(seen.runs.filter(r => r.argv[0] !== '/bin/sh')).toEqual([])
     expect(seen.writes).toEqual([])
     expect(files.has(HID)).toBe(true)
     expect(files.has(MD)).toBe(false)

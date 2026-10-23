@@ -1,11 +1,11 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, existsSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, isAbsolute, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { findSkillsDir, makeHost, nodeFor } from '../nodehost'
+import { findSkillsDir, gitFor, makeHost, nodeFor } from '../nodehost'
 import { parseBoard } from '../../hooks/lib/board'      // proves the loader resolves the lib's own imports
-import { NO_SCRIPTS } from '../../hooks/lib/calls'
+import { NO_SCRIPTS, NO_SH, powershellExe, shellFor } from '../../hooks/lib/calls'
 import { skills, echoSkills } from './fixtures'
 const tmpDirs: string[] = []
 const mkTmp = (prefix: string): string => { const d = mkdtempSync(prefix); tmpDirs.push(d); return d }
@@ -59,7 +59,7 @@ test('run: argv from the call table, cwd = repo root, never rejects', async () =
   assert.equal(r.code, 0, r.err)
   assert.match(r.out, /--kv/)
   assert.ok(r.out.includes(basename(t)), 'ran in the repo root: ' + r.out)
-  assert.equal(r.argv[0], h.win ? 'powershell' : 'sh')
+  assert.ok(isAbsolute(r.argv[0]!), r.argv[0])
   const m = await h.run('meta-assign', ['F1', '@a'])
   assert.match(m.out, /assign\s+F1\s+@a/)
   const none = await isolated(t, () => makeHost({ appDir: '/x', cwd: t }))
@@ -93,6 +93,56 @@ test('nodeFor: this process when it is node; else PATH, absolute entries only; e
   assert.equal(await nodeFor('/opt/bun/bun', { PATH: '.:bin' }, false, has('./node', 'bin/node')), null)
 })
 
+// A150: a script call never runs a sh / powershell the repo (the child's cwd) supplies -
+// on Windows libuv looks in the cwd before PATH. Planted ones in the repo root are not
+// what runs: argv[0] is absolute and outside the repo, and the scripts still run.
+// NoDefaultCurrentDirectoryInExePath (set by some hosts, Claude Code's shell among them)
+// turns that cwd search off; it is cleared here so the test sees what a user's shell does.
+test('run: a script call runs an absolute sh / powershell, not one planted in the repo', async () => {
+  const keys = ['MSYSTEM', 'SKILLATOR_OPS_SHELL', 'NoDefaultCurrentDirectoryInExePath']
+  const saved = keys.map(k => process.env[k])
+  delete process.env.NoDefaultCurrentDirectoryInExePath
+  const t = mkTmp(join(tmpdir(), 'ops-shell-'))
+  const dir = echoSkills(join(t, 's'))
+  for (const f of ['sh.exe', 'sh', 'sh.cmd', 'powershell.exe', 'powershell', 'powershell.cmd', 'git.exe', 'git']) writeFileSync(join(t, f), 'echo PLANTED\n')
+  try {
+    for (const shell of process.platform === 'win32' ? ['ps1', 'sh'] : ['sh']) {
+      process.env.SKILLATOR_OPS_SHELL = shell
+      const h = await makeHost({ appDir: '/x', cwd: t, skills: dir })
+      const r = await h.run('pending-kv', [])
+      assert.equal(r.code, 0, shell + ': ' + r.err)
+      const a0 = fwd(r.argv[0]!)
+      assert.ok(isAbsolute(a0), shell + ': ' + a0)
+      assert.ok(!a0.toLowerCase().startsWith(fwd(t).toLowerCase() + '/'), shell + ' ran from the repo: ' + a0)
+      assert.match(r.out, /--kv/)
+      assert.doesNotMatch(r.out + r.err, /PLANTED/)
+      if (shell === 'ps1') assert.equal(a0.toLowerCase(), powershellExe(process.env.SystemRoot).toLowerCase())
+    }
+  } finally {
+    keys.forEach((k, i) => { const v = saved[i]; if (v === undefined) delete process.env[k]; else process.env[k] = v })
+  }
+})
+
+test('shellFor: System32 powershell; sh by PATH (absolute entries) on Windows, /bin/sh elsewhere; else none', async () => {
+  const has = (...ps: string[]) => async (p: string) => ps.includes(p)
+  const PS = '/System32/WindowsPowerShell/v1.0/powershell.exe'
+  assert.equal(await shellFor(true, true, { systemRoot: 'D:\\Win' }, has()), 'D:/Win' + PS)
+  assert.equal(await shellFor(true, true, {}, has()), 'C:/Windows' + PS)
+  assert.equal(await shellFor(true, true, { systemRoot: 'Windows' }, has()), 'C:/Windows' + PS)   // relative: the default
+  assert.equal(await shellFor(true, true, { systemRoot: '\\\\host\\share' }, has()), 'C:/Windows' + PS) // UNC: the default
+  assert.equal(await shellFor(false, true, { path: '.;bin;\\\\h\\s;C:\\Git\\usr\\bin' }, has('./sh.exe', 'bin/sh.exe', '//h/s/sh.exe', 'C:/Git/usr/bin/sh.exe')), 'C:/Git/usr/bin/sh.exe')
+  assert.equal(await shellFor(false, true, { path: '.;bin' }, has('./sh.exe', 'bin/sh.exe')), null)
+  assert.equal(await shellFor(false, false, { path: '.:' }, has('./sh')), '/bin/sh')
+  assert.ok(NO_SH.includes('sh not found'))
+})
+
+test('gitFor: Windows - git.exe on PATH, absolute entries only, else none; elsewhere git (execvp: no cwd search)', async () => {
+  const has = (...ps: string[]) => async (p: string) => ps.includes(p)
+  assert.equal(await gitFor({ Path: '.;C:\\Git\\cmd' }, true, has('./git.exe', 'C:/Git/cmd/git.exe')), 'C:/Git/cmd/git.exe')
+  assert.equal(await gitFor({ PATH: '.;tools' }, true, has('./git.exe', 'tools/git.exe')), null)
+  assert.equal(await gitFor({ PATH: '/usr/bin' }, false, has()), 'git')
+})
+
 // A142: under Git Bash (ops.sh, or MSYSTEM set) the .sh port runs, not the .ps1.
 test('the script spelling: Windows runs .ps1; Git Bash (ops.sh or MSYSTEM) runs .sh', async () => {
   const keys = ['OS', 'MSYSTEM', 'SKILLATOR_OPS_SHELL']
@@ -112,7 +162,9 @@ test('the script spelling: Windows runs .ps1; Git Bash (ops.sh or MSYSTEM) runs 
       set(env)
       const h = await makeHost({ appDir: '/x', cwd: t, skills: dir })
       const r = await h.run('meta-assign', ['F1', '@a'])
-      assert.equal(r.argv[0], first, JSON.stringify(env))
+      const a0 = fwd(r.argv[0]!)
+      assert.ok(isAbsolute(a0), a0)
+      assert.match(basename(a0), first === 'sh' ? /^sh(\.exe)?$/i : /^powershell\.exe$/i, JSON.stringify(env))
       assert.equal(h.win, first === 'powershell', JSON.stringify(env))
       assert.match(r.argv.join(' '), first === 'sh' ? /ticket-meta\.sh assign F1 @a$/ : /ticket-meta\.ps1 assign F1 @a$/)
     }

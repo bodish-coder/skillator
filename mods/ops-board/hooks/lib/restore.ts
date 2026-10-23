@@ -1,4 +1,5 @@
 import type { ProcessRunInit, ProcessRunResult } from 'claude-code'
+import { BIN_SH, powershellExe, tasklistExe } from './calls'
 
 // F48, design §9: a CLAUDE.md the baseline harness hid as CLAUDE.md.skillator-hidden
 // (an interrupted GREEN run) is put back. Both ~/.claude and $CLAUDE_CONFIG_DIR are
@@ -42,9 +43,13 @@ function moveArgv(win: boolean, from: string, to: string): string[] {
     : ['mv', '-n', from, to]
 }
 
-function removeArgv(win: boolean, paths: string[]): string[] {
+// A150: what runs does so by absolute path - System32's powershell / tasklist, /bin/sh -
+// never a bare name the cwd (the session's repo) could supply on Windows. `rm` stays bare
+// (Ruling: POSIX execvp never searches the cwd unless PATH names '.' or an empty entry).
+// moveArgv above is only ever shown, for a person to type: it keeps the short names.
+function removeArgv(win: boolean, sysRoot: string | undefined, paths: string[]): string[] {
   return win
-    ? ['powershell', '-NoProfile', '-Command', `Remove-Item -LiteralPath ${paths.map(quote).join(', ')}`]
+    ? [powershellExe(sysRoot), '-NoProfile', '-Command', `Remove-Item -LiteralPath ${paths.map(quote).join(', ')}`]
     : ['rm', '-f', '--', ...paths]
 }
 
@@ -59,7 +64,7 @@ type Owner = { state: 'none' }
   | { state: 'unknown'; why: string; epoch: number | null }
 
 // `timeout` hands out the check's time only when a check runs.
-async function ownerOf($: RestoreApi, owner: string, win: boolean, timeout: () => number): Promise<Owner> {
+async function ownerOf($: RestoreApi, owner: string, win: boolean, sysRoot: string | undefined, timeout: () => number): Promise<Owner> {
   if (!await exists($, owner)) return { state: 'none' }
   let text: string
   try { text = await $.fs.read(owner) } catch (e) { return { state: 'unknown', why: errText(e), epoch: null } }
@@ -72,7 +77,7 @@ async function ownerOf($: RestoreApi, owner: string, win: boolean, timeout: () =
   if (timeoutMs < 1) return unknown('no time left in the session end budget')
   if (win) {
     try {
-      const r = await $.process.run(['tasklist', '/FI', `PID eq ${winpid}`, '/NH'], { timeoutMs })
+      const r = await $.process.run([tasklistExe(sysRoot), '/FI', `PID eq ${winpid}`, '/NH'], { timeoutMs })
       if (r.exitCode !== 0) return unknown(r.stderr.trim() || r.stdout.trim() || `tasklist exit ${r.exitCode}`)
       if (!r.stdout.trim()) return unknown('tasklist said nothing')
       const alive = new RegExp(`(^|\\s)${winpid}(\\s|$)`).test(r.stdout)
@@ -82,7 +87,7 @@ async function ownerOf($: RestoreApi, owner: string, win: boolean, timeout: () =
     }
   }
   try {
-    const r = await $.process.run(['sh', '-c', `kill -0 ${pid}`], { timeoutMs })
+    const r = await $.process.run([BIN_SH, '-c', `kill -0 ${pid}`], { timeoutMs })
     if (r.exitCode === 0) return { state: 'alive', pid, epoch }
     const err = r.stderr.trim()
     if (/not permitted/i.test(err)) return { state: 'alive', pid, epoch }   // EPERM: there, another user's
@@ -104,6 +109,7 @@ async function exists($: RestoreApi, p: string): Promise<boolean> {
 // comes from what is left of it; the note is stored before any removal runs.
 export async function restoreClaudeMd($: RestoreApi, mode: 'report' | 'restore', remainingMs = 5000): Promise<string[]> {
   const win = (await $.env.get('OS')) === 'Windows_NT'
+  const sysRoot = win ? (await $.env.get('SystemRoot')) ?? (await $.env.get('SYSTEMROOT')) : undefined
   const homeRaw = win
     ? (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
     : (await $.env.get('HOME')) || (await $.env.get('USERPROFILE'))
@@ -143,7 +149,7 @@ export async function restoreClaudeMd($: RestoreApi, mode: 'report' | 'restore',
     const cmd = byHand(moveArgv(win, hidden, md))
     const ownerPath = hidden + OWNER_EXT
     const share = (await left()) / (todo.length - i)
-    const owner = await ownerOf($, ownerPath, win, () => take(Math.min(2000, share / 2)))
+    const owner = await ownerOf($, ownerPath, win, sysRoot, () => take(Math.min(2000, share / 2)))
     if (owner.state === 'alive') {
       lines.push(`▲ ${shown(md)} is hidden by a running GREEN run (pid ${owner.pid}) - left alone`)
       continue
@@ -159,7 +165,7 @@ export async function restoreClaudeMd($: RestoreApi, mode: 'report' | 'restore',
       continue
     }
     const gone = owner.state === 'dead' ? [hidden, ownerPath] : [hidden]
-    lines.push(await restoreOne($, win, md, hidden, gone, shown, save,
+    lines.push(await restoreOne($, win, sysRoot, md, hidden, gone, shown, save,
       async () => take((await left()) / (todo.length - i))))
   }
   if (lines.length) await save([])
@@ -176,7 +182,7 @@ const byHand = (argv: string[]) => (argv[0] === 'mv' ? argv.join(' ') : argv[3]!
 // One folder: write CLAUDE.md from the hidden copy, check it, store the note, then
 // remove the copy. `gone` = the hidden copy, and its owner file when there was one:
 // removed together. `timeout` = what the removal may take, asked for when it runs.
-async function restoreOne($: RestoreApi, win: boolean, md: string, hidden: string, gone: string[],
+async function restoreOne($: RestoreApi, win: boolean, sysRoot: string | undefined, md: string, hidden: string, gone: string[],
   shown: (p: string) => string, save: (extra: string[]) => Promise<void>, timeout: () => Promise<number>): Promise<string> {
   const failed = (why: string) =>
     `■ Could not restore ${shown(md)} from ${HIDDEN}: ${why}. The hidden copy is kept at ${hidden}.`
@@ -189,7 +195,7 @@ async function restoreOne($: RestoreApi, win: boolean, md: string, hidden: strin
   try { back = await $.fs.read(md) } catch { back = null }
   if (back !== text) return failed(`${shown(md)} does not read back as written - compare it with the hidden copy`)
 
-  const argv = removeArgv(win, gone)
+  const argv = removeArgv(win, sysRoot, gone)
   const head = `✓ Restored ${shown(md)} from ${HIDDEN} (an interrupted baseline run left it hidden).`
   // Stored first: should session end be cut short during the removal, the note still says it.
   await save([`${head} ▲ If ${hidden} is still there, remove it by hand: ${argv.join(' ')}`])

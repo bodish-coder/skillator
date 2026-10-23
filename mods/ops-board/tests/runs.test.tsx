@@ -170,11 +170,11 @@ for (const surface of SURFACES) {
     expect(await text('finished')).toBe('1 finished run not shown')
 
     await ui.press({ key: 'start:RUN-0014' })
-    expect(w.runs.filter(a => a[2] === 'queue-run')).toEqual([['sh', RELAY + '.sh', 'queue-run', 'add', 'RUN-0014']])
+    expect(w.runs.filter(a => a[2] === 'queue-run')).toEqual([['/bin/sh', RELAY + '.sh', 'queue-run', 'add', 'RUN-0014']])
     expect(w.submits).toHaveLength(1)
     expect(w.submits[0]).toStartWith('continue RUN-0014')
     expect(w.toasts.at(-1)).toContain('✓ RUN-0014 queued')
-    expect(w.toasts.at(-1)).toContain(`ran: sh ${RELAY}.sh queue-run add RUN-0014`)
+    expect(w.toasts.at(-1)).toContain(`ran: /bin/sh ${RELAY}.sh queue-run add RUN-0014`)
     await ui.unmount()
   })
 }
@@ -187,7 +187,7 @@ test('Start run: queue-run add refusing is said with its words and the command; 
   await ui.press({ key: 'start:RUN-0014' })
   expect(w.submits).toEqual([])
   expect(w.toasts.at(-1)).toContain('■ RUN-0014 not queued: REFUSED: RUN-0014 is already queued')
-  expect(w.toasts.at(-1)).toContain(`ran: sh ${RELAY}.sh queue-run add RUN-0014`)
+  expect(w.toasts.at(-1)).toContain(`ran: /bin/sh ${RELAY}.sh queue-run add RUN-0014`)
   await ui.unmount()
 })
 
@@ -195,7 +195,7 @@ test('Windows: list, chain status and queue-run add go through the ps1', async (
   const [w, clock] = world(on, { OS: 'Windows_NT' })
   await start($, clock)
   const ui = await runsTab($, 'terminal')
-  const ps = ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', RELAY + '.ps1']
+  const ps = ['C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', RELAY + '.ps1']
   expect(w.runs).toContainEqual([...ps, '-Mode', 'list'])
   await ui.press({ key: 'tab:runs' })
   await ui.unmount()

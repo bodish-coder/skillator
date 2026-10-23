@@ -230,7 +230,7 @@ for (const surface of SURFACES) {
     await start($, clock)
     expect(holds(w).map(a => a.slice(2))).toEqual([['watchdog', 'hold', 'disk 0.8 GB free (below 1 GB)']])
     expect(w.toasts.at(-1)).toContain('HOLD - disk 0.8 GB free (below 1 GB). New relay stages and GREEN runs are held.')
-    expect(w.toasts.at(-1)).toContain(`ran: sh ${RELAY} watchdog hold disk 0.8 GB free (below 1 GB)`)
+    expect(w.toasts.at(-1)).toContain(`ran: /bin/sh ${RELAY} watchdog hold disk 0.8 GB free (below 1 GB)`)
     const ui = await mountBand($, surface)
     expect((await ui.find({ key: 'line:0' }))?.text).toBe(
       ' ■ HOLD  disk 0.8 GB free (below 1 GB). New relay stages and GREEN runs are held. Free space, then /ops resume. ')
@@ -247,7 +247,7 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'line:0' }))?.text).toContain('held - /ops resume to release')
     const out = (await resume()).text ?? ''
     expect(w.runs.filter(a => a[3] === 'release').map(a => a.slice(2))).toEqual([['watchdog', 'release']])
-    expect(out).toBe(`watchdog: released\nran: sh ${RELAY} watchdog release`)
+    expect(out).toBe(`watchdog: released\nran: /bin/sh ${RELAY} watchdog release`)
     expect((await ui.find({ key: 'line:0' }))?.text).not.toContain('held')
     expect(holds(w)).toHaveLength(1)
     await ui.unmount()
@@ -299,7 +299,7 @@ test('/ops resume when not red: relay-morpheus answers, shown with the command t
   const [w, clock] = world(on)
   await start($, clock)
   const out = await $.command.run({ command: 'ops', args: 'resume', ...RUN })
-  expect(out.text).toBe(`watchdog: released\nran: sh ${RELAY} watchdog release`)
+  expect(out.text).toBe(`watchdog: released\nran: /bin/sh ${RELAY} watchdog release`)
   expect(w.runs.filter(a => a[1] === RELAY && a[2] === 'watchdog').map(a => a[3])).toEqual(['release'])
 })
 

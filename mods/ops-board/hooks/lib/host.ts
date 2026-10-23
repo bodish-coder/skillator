@@ -2,7 +2,7 @@ import type { FsEntry, ProcessRunInit, ProcessRunResult, SessionRepo, SessionUsa
 import type { Usage } from '../../types'
 import { usageFrom, usageFromFlags } from './facts'
 import type { Flag } from './facts'
-import { argvFor, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, norm, up } from './calls'
+import { argvFor, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, up } from './calls'
 import type { Call } from './calls'
 export { argvFor, findNode, NO_SCRIPTS } from './calls'
 export type { Call } from './calls'
@@ -66,6 +66,21 @@ export async function skillatorRoot($: HostApi): Promise<string | null> {
   return null
 }
 
+async function pathOf($: HostApi): Promise<string | undefined> {
+  return (await $.env.get('PATH')) ?? (await $.env.get('Path'))
+}
+async function systemRootOf($: HostApi): Promise<string | undefined> {
+  return (await $.env.get('SystemRoot')) ?? (await $.env.get('SYSTEMROOT'))
+}
+
+// A150: the git the mod runs (cwd = the repo). Windows: git.exe in the first absolute PATH
+// entry holding one, else none - never a bare `git`, which a Windows spawn may look up in
+// the cwd first. Elsewhere `git` as is (Ruling: execvp searches PATH only, never the cwd,
+// unless PATH itself names '.' or an empty entry - the user's own shell does the same).
+export async function gitBin($: HostApi): Promise<string | null> {
+  return await isWindows($) ? findExe('git', await pathOf($), true, p => $.fs.exists(p)) : 'git'
+}
+
 // Runs one call in the main checkout (the session's cwd outside a repo). Never rejects:
 // a command that cannot start or outlasts its budget comes back as code -1, its reason
 // in `err`. 30 s budget; `pending --machine` (the band's poll) 15 s.
@@ -76,16 +91,21 @@ export async function runCall($: HostApi, call: Call, args: string[], stdin?: st
   const repo = await $.session.repo()
   const skills = await skillatorRoot($)
   if (!skills) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
-  // F66: a node call runs the node found on PATH (absolute entries), never a bare `node`
-  // the child's cwd (the repo) could supply. The mod has no node of its own to reuse.
-  let nodeBin = ''
+  // F66 / A150: node, sh and powershell all by absolute path, never a bare name the
+  // child's cwd (the repo) could supply. node: found on PATH (absolute entries) - the mod
+  // has no node of its own to reuse; powershell: System32's; sh: /bin/sh.
+  let bin: string
+  const exists = (p: string) => $.fs.exists(p)
   if (isNodeCall(call)) {
-    const path = (await $.env.get('PATH')) ?? (await $.env.get('Path'))
-    const found = await findNode(path, win, p => $.fs.exists(p))
+    const found = await findNode(await pathOf($), win, exists)
     if (!found) return { code: 127, out: '', err: NO_NODE, argv: [] }
-    nodeBin = found
+    bin = found
+  } else {
+    const sh = await shellFor(win, win, { path: await pathOf($), systemRoot: await systemRootOf($) }, exists)
+    if (!sh) return { code: 127, out: '', err: NO_SH, argv: [] }
+    bin = sh
   }
-  const argv = argvFor(call, win, skills, args, nodeBin)
+  const argv = argvFor(call, win, skills, args, bin)
   const timeoutMs = call === 'pending-machine' ? 15000 : 30000
   const init: ProcessRunInit = { ...(repo ? { cwd: repo.root } : {}), timeoutMs, ...(stdin !== undefined ? { stdin } : {}) }
   try {

@@ -90,7 +90,7 @@ test('/pending failure returns the error and the command that ran', async ($, on
   await start($)
   const out = await $.command.run({ command: 'pending', args: '', ...RUN })
   expect(out.text).toContain('boom')
-  expect(out.text).toContain(`sh ${PENDING}`)
+  expect(out.text).toContain(`/bin/sh ${PENDING}`)
 })
 
 test('/list-tickets without a TICKETS.md says so', async ($, on) => {

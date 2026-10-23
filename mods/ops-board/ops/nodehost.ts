@@ -5,7 +5,7 @@ import { spawn, execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { readFile, stat as fsStat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
-import { argvFor, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, norm, up } from '../hooks/lib/calls'
+import { argvFor, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, up } from '../hooks/lib/calls'
 import type { Call } from '../hooks/lib/calls'
 
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
@@ -49,11 +49,16 @@ export function findSkillsDir(appDir: string, env: Env, exists: (p: string) => b
 
 const readJsonFile = (p: string): unknown => JSON.parse(readFileSync(p, 'utf8'))
 
+const platformWin = () => process.platform === 'win32'
+const fileExists = async (p: string) => existsSync(p)
+
 // git's stdout trimmed, or null when git is absent, fails, or prints nothing.
-function git(args: string[], cwd: string): Promise<string | null> {
+async function git(args: string[], cwd: string): Promise<string | null> {
+  const bin = await gitFor(process.env, platformWin(), fileExists)
+  if (!bin) return null
   return new Promise(res => {
     try {
-      execFile('git', args, { cwd, windowsHide: true, timeout: 10000 }, (err, out) => {
+      execFile(bin, args, { cwd, windowsHide: true, timeout: 10000 }, (err, out) => {
         const s = String(out ?? '').trim()
         res(err || !s ? null : s)
       })
@@ -112,6 +117,14 @@ export async function nodeFor(execPath: string, env: Env, win: boolean, exists: 
   return findNode(env.PATH ?? env.Path, win, exists)
 }
 
+// A150: the git this host runs (cwd = the repo). Windows: git.exe in the first absolute
+// PATH entry holding one, else none - never a bare `git`, which libuv looks up in the cwd
+// first. Elsewhere `git` as is (Ruling: execvp searches PATH only, never the cwd, unless
+// PATH itself names '.' or an empty entry - the user's own shell does the same there).
+export async function gitFor(env: Env, win: boolean, exists: (p: string) => Promise<boolean>): Promise<string | null> {
+  return win ? findExe('git', env.PATH ?? env.Path, true, exists) : 'git'
+}
+
 // opts.skills (the app's --skills): that dir, or its skills/ child, when it holds the marker.
 export async function makeHost(opts: { appDir: string; cwd: string; skills?: string }): Promise<Host> {
   const win = windowsScripts(process.env)
@@ -125,13 +138,19 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
     win, skillsDir, repoRoot,
     async run(call, args, stdin) {
       if (!skillsDir) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
-      let nodeBin = ''
+      // F66 / A150: node, sh and powershell all by absolute path - never from the repo.
+      let bin: string
       if (isNodeCall(call)) {
-        const n = await nodeFor(process.execPath, process.env, process.platform === 'win32', async p => existsSync(p))
+        const n = await nodeFor(process.execPath, process.env, platformWin(), fileExists)
         if (!n) return { code: 127, out: '', err: NO_NODE, argv: [] }
-        nodeBin = n
+        bin = n
+      } else {
+        const env = process.env
+        const sh = await shellFor(win, platformWin(), { path: env.PATH ?? env.Path, systemRoot: env.SystemRoot ?? env.SYSTEMROOT }, fileExists)
+        if (!sh) return { code: 127, out: '', err: NO_SH, argv: [] }
+        bin = sh
       }
-      return spawnArgv(argvFor(call, win, skillsDir, args, nodeBin), repoRoot, call === 'pending-machine' ? 15000 : 30000, stdin)
+      return spawnArgv(argvFor(call, win, skillsDir, args, bin), repoRoot, call === 'pending-machine' ? 15000 : 30000, stdin)
     },
     async stat(path) {
       try { const s = await fsStat(abs(path)); return { mtimeMs: s.mtimeMs, size: s.size } } catch { return null }
