@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { spawnSync } from 'node:child_process'
+import { spawnSync, spawn } from 'node:child_process'
 import { tmpdir, homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -357,6 +357,37 @@ test('say: POSTs the card to the Workflows URL; refuses a plain-http URL that is
   const down = await say('x', { TEAMS_WORKFLOW_URL: 'http://127.0.0.1:1/x?sig=SECRETSIG' })
   assert.equal(down.ok, false)
   assert.doesNotMatch(down.error, /SECRETSIG/)
+})
+
+// say reads its text from stdin only: the reply often quotes a teammate, and a shell line
+// would run $(...), backticks or a stray quote. Text on argv is refused.
+test('say --stdin: $(id), backticks, quotes and newlines are sent literally; text on argv is refused', async t => {
+  const got = []
+  const srv = createServer((req, res) => {
+    let b = ''
+    req.on('data', d => { b += d })
+    req.on('end', () => { got.push(JSON.parse(b)); res.writeHead(202); res.end() })
+  })
+  await new Promise(res => srv.listen(0, '127.0.0.1', res))
+  t.after(() => new Promise(res => srv.close(res)))
+  const env = { ...process.env, TEAMS_WORKFLOW_URL: `http://127.0.0.1:${srv.address().port}/w?sig=S`, SKILLATOR_TEAMS_CONFIG: join(tmpdir(), 'none-' + Date.now() + '.json') }
+  const text = 'ok $(id) and `whoami` "quoted" \'single\'\nline two; rm -rf /'
+  const run = (args, input) => new Promise(res => {
+    const c = spawn(process.execPath, [join(HERE, 'team.mjs'), ...args], { env, cwd: repo() })
+    let out = '', err = ''
+    c.stdout.on('data', d => { out += d }); c.stderr.on('data', d => { err += d })
+    c.on('close', code => res({ code, out, err }))
+    c.stdin.end(input ?? '')
+  })
+  const r = await run(['say', '--stdin'], text + '\n')
+  assert.equal(r.code, 0, r.err)
+  assert.equal(got.at(-1).attachments[0].content.body[0].text, text)
+  const argv = await run(['say', 'hello there'])
+  assert.equal(argv.code, 2)
+  assert.match(argv.err, /stdin/)
+  assert.equal(got.length, 1)
+  const empty = await run(['say', '--stdin'], '   \n')
+  assert.equal(empty.code, 2)
 })
 
 test('statusText: the ticket edit as one line, with the repo and the title', () => {

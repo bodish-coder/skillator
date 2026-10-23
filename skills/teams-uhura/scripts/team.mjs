@@ -5,7 +5,9 @@
 //   node team.mjs listen [--port N]         the same in the foreground (Ctrl-C stops it)
 //   node team.mjs stop [--port N]           stops the listener this machine started
 //   node team.mjs status [--port N]         listener, config (set / not set, never values), inbox
-//   node team.mjs say <text...>             posts to the channel through the Workflows webhook
+//   node team.mjs say --stdin <<'EOF'       posts the text on stdin through the Workflows webhook
+//                                           (stdin only: text on argv is refused - a shell line
+//                                           would run $(...), backticks or quotes in a reply)
 //   node team.mjs post-status <sub> <ID> [args...]   ticket-meta's opt-in status post
 //   node team.mjs link <aadObjectId> <email>         names a Teams sender (email must be on team.md)
 //   node team.mjs inbox [--unread] [--mark-read]     lists messages (framed as data)
@@ -571,8 +573,14 @@ export async function main(argv) {
       case 'inbox': return await cmdInbox(rest)
       case 'post-status': return await cmdPostStatus(rest, cfg)
       case 'say': {
-        const text = rest.join(' ').trim()
-        if (!text) { err('usage: say <text>'); return 2 }
+        // The text comes on stdin only, never argv: a reply often quotes a teammate,
+        // and on a shell line $(...), backticks or a quote in it would run.
+        if (rest.length !== 1 || rest[0] !== '--stdin') {
+          err("say reads the text from stdin only: node team.mjs say --stdin <<'EOF' ... EOF (text on the command line is refused)")
+          return 2
+        }
+        const text = (await stdinText()).replace(/\r?\n$/, '')
+        if (!text.trim()) { err('say: no text on stdin'); return 2 }
         const r = await say(text, cfg)
         if (!r.ok) { err(r.error); return 1 }
         out('posted to the Teams channel')

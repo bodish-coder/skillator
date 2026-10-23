@@ -474,6 +474,9 @@ if [ -n "$selftest" ]; then
            .gemini/config/skills/team-messages/SKILL.md:.gemini/config/skills .gemini/skills/team-messages/SKILL.md:.gemini/skills \
            .gemini/antigravity-cli/skills/team-messages/SKILL.md:.gemini/antigravity-cli/skills; do
     grep -qF "$N/${f#*:}/teams-uhura/scripts/team.mjs inbox --unread --mark-read" "$T/${f%%:*}" || { echo "FAIL: team-messages not substituted in ${f%%:*}"; exit 1; }
+    # the reply goes on stdin through a quoted heredoc, never inside a command line
+    grep -qF "$N/${f#*:}/teams-uhura/scripts/team.mjs say --stdin <<'EOF'" "$T/${f%%:*}" || { echo "FAIL: team-messages reply not on stdin in ${f%%:*}"; exit 1; }
+    grep -qF 'say "<text>"' "$T/${f%%:*}" && { echo "FAIL: team-messages puts reply text on argv in ${f%%:*}"; exit 1; }
     grep -qF '{{SKILLS}}' "$T/${f%%:*}" && { echo "FAIL: placeholder left in ${f%%:*}"; exit 1; }
   done
   grep -q '^name: team-messages$' "$T/.gemini/antigravity-cli/skills/team-messages/SKILL.md" || { echo "FAIL: agy skill name team-messages"; exit 1; }
