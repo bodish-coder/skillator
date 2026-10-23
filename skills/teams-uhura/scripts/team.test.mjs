@@ -11,7 +11,7 @@ import { tmpdir, homedir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { verifyHmac, cleanText, senderOf, parseTeam, startListener, cardPayload, say, statusText, loadConfig, BODY_MAX,
-  configPath, validateConfig, saveConfig, clearConfig } from './team.mjs'
+  configPath, validateConfig, saveConfig, clearConfig, sidOfWhoami, aceSids, aclSids } from './team.mjs'
 import { mainRoot, parseInbox, after, INBOX, READ, DELIVERED, frameMessages, inboxDir } from './inbox.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -573,6 +573,22 @@ test('saveConfig: JSON outside the repo, user-only, merged; clear removes it; ne
   assert.equal(clearConfig(f), true)
   assert.equal(existsSync(f), false)
   assert.equal(clearConfig(f), false)
+})
+
+test('userOnly reads SIDs, not names: whoami /user and the SDDL icacls /save writes', () => {
+  assert.equal(sidOfWhoami('"ikranactual_360\\ikran","S-1-5-21-111-222-333-1001"\r\n'), 'S-1-5-21-111-222-333-1001')
+  assert.equal(sidOfWhoami('"Ünïcode Ñame\\Ünïcode","S-1-5-21-9-9-9-1002"'), 'S-1-5-21-9-9-9-1002')
+  assert.equal(sidOfWhoami('garbage'), null)
+  assert.deepEqual(aceSids('D:PAI(A;;FA;;;S-1-5-21-111-222-333-1001)(A;OICI;0x1200a9;;;S-1-5-21-5-5-5-1003)(A;;FA;;;SY)(D;;FA;;;BA)'),
+    ['S-1-5-21-111-222-333-1001', 'S-1-5-21-5-5-5-1003', 'SY', 'BA'])
+  assert.deepEqual(aceSids('D:PAI(A;;FA;;;S-1-5-21-1-2-3-4)S:AI(AU;FA;;;;WD)'), ['S-1-5-21-1-2-3-4'])   // the SACL is not the DACL
+  if (process.platform === 'win32') {
+    const me = sidOfWhoami(spawnSync(join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'whoami.exe'), ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8' }).stdout)
+    assert.ok(me)
+    const f = join(mkdtempSync(join(tmpdir(), 'uhura-acl-')), 'teams.json')
+    saveConfig(f, { token: TOKEN, workflowUrl: '', port: 4000, statusPosts: false }, null)
+    assert.deepEqual(aclSids(f), [me])
+  }
 })
 
 test('config show/save/clear through the CLI: the token over stdin, never printed', () => {

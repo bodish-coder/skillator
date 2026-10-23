@@ -29,8 +29,8 @@
 // in environment variables of the same names, and are never printed or logged.
 import { createServer } from 'node:http'
 import { createHmac, timingSafeEqual, randomBytes } from 'node:crypto'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, rmSync, openSync, statSync, renameSync, chmodSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, rmSync, openSync, statSync, renameSync, chmodSync, mkdtempSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve, isAbsolute } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -94,21 +94,44 @@ const inside = (child, parent) => {
 
 // Restricts a file to this user: chmod 600, or on Windows an ACL of this user alone
 // (inheritance removed). Throws when it cannot - the caller then keeps nothing.
+// Windows tools by absolute path: a bare name is looked up in the cwd (the repo) first.
+const sys32 = exe => join(process.env.SystemRoot || 'C:\\Windows', 'System32', exe)
+
+// The SID in `whoami /user /fo csv /nh` ("domain\user","S-1-5-..."), or null.
+export const sidOfWhoami = out => /"(S-1-\d+(?:-\d+)+)"\s*$/m.exec(String(out))?.[1] ?? null
+
+// The trustees of a security descriptor's DACL (SDDL `D:` part): a SID or an SDDL alias
+// (SY, BA, WD, ...) per ACE, in order. The SACL (`S:`) is not read.
+export function aceSids(sddl) {
+  const d = /D:[A-Z]*((?:\([^)]*\))*)/.exec(String(sddl))?.[1] ?? ''
+  return [...d.matchAll(/\(([^)]*)\)/g)].map(m => m[1].split(';')[5] ?? '').filter(Boolean)
+}
+
+// The DACL's trustees of file `p`, read as SIDs: icacls /save writes the SDDL (UTF-16).
+export function aclSids(p) {
+  const dir = mkdtempSync(join(tmpdir(), 'uhura-acl-'))
+  try {
+    const out = join(dir, 'acl')
+    const r = spawnSync(sys32('icacls.exe'), [p, '/save', out], { windowsHide: true, cwd: dir })
+    if (r.status !== 0) throw new Error(`cannot read the config's ACL (icacls exit ${r.status})`)
+    return aceSids(readFileSync(out).toString('utf16le'))
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+}
+
+// Windows: this user's SID from whoami (never a name: a non-ASCII or oddly spelled name
+// could miss its own entry), inheritance removed, the SID granted full control, every
+// other trustee removed by SID, then the DACL read back as SIDs - anything but this SID
+// left, or a step failing, throws (fail closed).
 function userOnly(p) {
   if (process.platform !== 'win32') { chmodSync(p, 0o600); return }
-  const who = process.env.USERDOMAIN && process.env.USERNAME ? `${process.env.USERDOMAIN}\\${process.env.USERNAME}` : process.env.USERNAME
-  if (!who) throw new Error('cannot restrict the config: no USERNAME')
-  // by absolute path: a bare name is looked up in the cwd (the repo) first on Windows
-  const exe = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'icacls.exe')
-  const icacls = args => spawnSync(exe, [p, ...args], { encoding: 'utf8', windowsHide: true, cwd: dirname(p) })
-  const r = icacls(['/inheritance:r', '/grant:r', `${who}:F`])
-  if (r.status !== 0) throw new Error(`cannot restrict the config to ${who} (icacls exit ${r.status})`)
-  // explicit entries other than this user (a sandbox group, a policy default) go too
-  const others = () => icacls([]).stdout.split(/\r?\n/).map(l => l.replace(p, '').trim())
-    .map(l => /^(.+?):\(/.exec(l)?.[1]).filter(x => x && x.toLowerCase() !== who.toLowerCase())
-  for (const o of others()) icacls(['/remove:g', o, '/remove:d', o])
-  const left = others()
-  if (left.length) throw new Error(`cannot restrict the config to ${who}: ${left.join(', ')} still listed`)
+  const sid = sidOfWhoami(spawnSync(sys32('whoami.exe'), ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true, cwd: dirname(p) }).stdout)
+  if (!sid) throw new Error('cannot restrict the config: whoami gave no SID')
+  const icacls = args => spawnSync(sys32('icacls.exe'), [p, ...args], { windowsHide: true, cwd: dirname(p) })
+  const r = icacls(['/inheritance:r', '/grant:r', `*${sid}:F`])
+  if (r.status !== 0) throw new Error(`cannot restrict the config to ${sid} (icacls exit ${r.status})`)
+  for (const o of aclSids(p)) if (o !== sid) icacls(['/remove:g', `*${o}`, '/remove:d', `*${o}`])
+  const left = aclSids(p)
+  if (left.length !== 1 || left[0] !== sid) throw new Error(`cannot restrict the config to ${sid}: ${left.join(', ') || 'no entry'} on its ACL`)
 }
 
 // Saves the config whole: checked, merged over what is saved (empty token / URL keep
