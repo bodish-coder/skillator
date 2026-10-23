@@ -395,6 +395,33 @@ test('hook pre-check: no inbox - silent, exit 0, node never started; inbox - nod
   assert.match(pre(wt).stdout, /> hi/)
 })
 
+test('hook: the delivered marker is per session; it advances only past what was framed; a new session starts at the read marker', () => {
+  const r = repo()
+  const recs = Array.from({ length: 25 }, (_, i) => JSON.stringify({ ts: '2026-10-23T09:20:00.000Z', from: '@asha', email: 'asha@x.com', text: 'm' + i, id: 'id' + i }))
+  writeFileSync(join(box(r), INBOX), recs.join('\n') + '\n')
+  const as = sid => JSON.stringify({ hook_event_name: 'UserPromptSubmit', cwd: r, session_id: sid, prompt: 'hi' })
+  const ctx = sid => { const h = hook(r, as(sid)); return h.stdout ? JSON.parse(h.stdout).hookSpecificOutput.additionalContext : '' }
+  const a1 = ctx('sess-a')
+  assert.match(a1, /> m0\n/)
+  assert.match(a1, /> m19\n/)
+  assert.doesNotMatch(a1, /> m20\n/)
+  assert.match(a1, /5 more come with the next prompt/)
+  const a2 = ctx('sess-a')
+  assert.match(a2, /> m20\n/)
+  assert.match(a2, /> m24\n/)
+  assert.equal(ctx('sess-a'), '')
+  // a parallel session (a worktree, another window) still gets them: no stealing
+  assert.match(ctx('sess-b'), /> m0\n/)
+  // a new session starts at what a person has read, not at the start of history
+  writeFileSync(join(box(r), READ), 'id22\n')
+  const c = ctx('sess-c')
+  assert.doesNotMatch(c, /> m22\n/)
+  assert.match(c, /> m23\n/)
+  // a session id with path characters cannot name another file
+  assert.match(ctx('../../x'), /> m23\n/)
+  assert.equal(existsSync(join(r, '.git', 'x')), false)
+})
+
 test('frameMessages: one quoted line block per message, capped, newlines kept inside the quote', () => {
   const recs = Array.from({ length: 30 }, (_, i) => ({ ts: '2026-10-23T09:20:00.000Z', from: '@a', email: 'a@x', text: `m${i}\nsecond`, id: String(i) }))
   const f = frameMessages(recs, { max: 20 })

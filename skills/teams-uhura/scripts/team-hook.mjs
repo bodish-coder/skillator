@@ -7,7 +7,7 @@
 // filesystem only, no git, no network. Any failure is silent too: it never blocks a prompt.
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { inboxDir, readInbox, after, readMarker, writeMarker, frameMessages, INBOX, DELIVERED } from './inbox.mjs'
+import { inboxDir, readInbox, after, readMarker, writeMarker, frameMessages, INBOX, DELIVERED, READ } from './inbox.mjs'
 
 async function stdinText() {
   if (process.stdin.isTTY) return ''
@@ -17,19 +17,31 @@ async function stdinText() {
   return s
 }
 
+const SHOWN = 20
+
+// The delivered marker is per session (team-inbox.delivered.<session id>), so a parallel
+// session - a worktree, another window - never takes another's messages. A session with
+// no marker yet starts at the read marker: what a person has not read, not all history.
+// The marker moves only past what this turn framed; the rest come with the next prompt.
+// Ruling: old sessions' marker files are left (one short line each).
 async function main() {
   let cwd = process.cwd()
+  let sid = ''
   try {
     const e = JSON.parse(await stdinText())
     if (e && typeof e.cwd === 'string' && e.cwd) cwd = e.cwd
+    if (e && typeof e.session_id === 'string') sid = e.session_id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80)
   } catch { /* no event: the process cwd */ }
   const box = inboxDir(cwd)
   if (!box || !existsSync(join(box, INBOX))) return
-  const fresh = after(readInbox(box), readMarker(box, DELIVERED))
+  const marker = sid ? `${DELIVERED}.${sid}` : DELIVERED
+  const from = readMarker(box, marker) ?? readMarker(box, READ)
+  const fresh = after(readInbox(box), from)
   if (!fresh.length) return
-  const additionalContext = frameMessages(fresh)
+  const shown = fresh.slice(0, SHOWN)
+  const additionalContext = frameMessages(shown, { max: SHOWN, more: fresh.length - shown.length })
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext } }) + '\n')
-  writeMarker(box, DELIVERED, fresh[fresh.length - 1].id)
+  writeMarker(box, marker, shown[shown.length - 1].id)
 }
 
 main().catch(() => {}).finally(() => { process.exitCode = 0 })
