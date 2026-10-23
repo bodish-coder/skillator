@@ -3,7 +3,7 @@
 // one table, and its `then` folds the result back in. No process, terminal or fs here -
 // app.ts executes the effects, the tests drive reduce without any process, and F56 takes
 // it as is.
-import type { AssignDraft, Board, Box, Filter, Machine, Member, PersonDraft, RunView, Ticket, Usage, Watch } from '../types'
+import type { AssignDraft, Board, Box, Filter, Machine, Member, Msg, PersonDraft, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
 import type { View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
@@ -14,8 +14,11 @@ import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, parseMachine, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
 import { continuePrompt } from '../hooks/lib/runlines'
+import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
+import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
+import type { SetupField, SetupValues } from '../hooks/lib/teamsconfig'
 
-export type Tab = 'tickets' | 'runs' | 'health'
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages'
 export type FilterField = 'app' | 'who' | 'mine'
 // node readline keypress names: 'up', 'down', 'left', 'right', 'return', 'escape', 'tab', 'a', 'D', ...
 // `sequence` is the character typed (app.ts sets it for printable keys): the Add person form's text.
@@ -42,12 +45,19 @@ export type State = {
   decidedLine: string | null               // the level line relay last decided on
   holdOutcome: string | null               // while red: '' held, else why the hold failed; null = not red
   lockSig: string                          // the stale locks the note lists
+  // F66: the Messages tab (teams-uhura's inbox) and the Teams setup form. The form's
+  // values live only in this process; the token is drawn masked, never logged.
+  messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
+  teamsCfg: TeamsCfgView | null
+  setup: Setup | null; setupField: SetupField
 }
+export type Setup = SetupValues & { result: string | null; confirmClear: boolean; touched: boolean }
 
 export type Step = { state: State; effects: Effect[] }
 // A run's result folded into the state as it then is; it may ask for more effects.
 export type Then = (r: RunResult) => (s: State) => State | Step
-export type Effect = { kind: 'run'; call: Call; args: string[]; then: Then }
+// stdin (F66): written to the run's standard input - the setup form's values, never argv.
+export type Effect = { kind: 'run'; call: Call; args: string[]; then: Then; stdin?: string }
   | { kind: 'poll'; what: 'board' | 'slow' | 'runs' } | { kind: 'quit' }
 
 // A `then`'s answer as a step: a bare state asks for nothing more.
@@ -56,7 +66,7 @@ export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: 
 // A run's result applied at `now`, the clock when it landed (a `then` stamps facts with s.now).
 export const afterRun = (e: { then: Then }, r: RunResult, s: State, now: number): Step => settle(e.then(r)({ ...s, now }))
 
-const TABS: Tab[] = ['tickets', 'runs', 'health']
+const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages']
 
 export const initial = (cols: number, rows: number, now: number): State => ({
   tab: 'tickets', board: null, team: [], me: null,
@@ -66,6 +76,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   runs: [], runsSelected: null, runsExpanded: null, runsRead: false,
   dialog: null, dialogIndex: 0, person: null, personField: 'handle', teamSelected: null, teamConfirm: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
+  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
 })
 
 export const viewOf = (s: State): View => ({
@@ -88,7 +99,8 @@ const timedOut = (r: RunResult) => r.code === -1 && /^timed out/.test(r.err)
 const word = (b: Box) => (b === '?' ? 'decision' : STATE_NAME[b])
 const ticketOf = (s: State, id: string): Ticket | null => s.board?.tickets.find(t => t.id === id) ?? null
 const toast = (s: State, text: string): State => ({ ...s, toast: text })
-const run = (call: Call, args: string[], then: Then): Effect => ({ kind: 'run', call, args, then })
+const run = (call: Call, args: string[], then: Then, stdin?: string): Effect =>
+  (stdin === undefined ? { kind: 'run', call, args, then } : { kind: 'run', call, args, then, stdin })
 
 function addNotes(xs: string[], add: string[], drop: (n: string) => boolean = () => false): string[] {
   return [...xs.filter(n => !drop(n)), ...add.filter(n => !xs.includes(n) || drop(n))]
@@ -523,8 +535,131 @@ function ticketsKey(s: State, k: Key): Step {
   }
 }
 
+// --- F66: the Messages tab and the Teams setup form ---
+
+// The inbox (its text) and the read marker's id, as the engine read them.
+export function onInbox(s: State, text: string, readId: string | null): State {
+  const messages = parseInbox(text)
+  return { ...s, messages, msgRead: readId, msgSelected: selectedOf(messages, s.msgSelected) }
+}
+
+const teamWhy = (r: RunResult, what: string) => (timedOut(r) ? `${what} did not finish in 30 s` : why(r, what).replace(/^team: /, ''))
+
+const openSetup = (s: State): State =>
+  ({ ...s, setup: { ...freshSetup(s.teamsCfg), result: null, confirmClear: false, touched: false }, setupField: 'token' })
+
+// `config show` read: the view kept; `auto` (entering the tab) opens the form when no
+// token is saved yet; a form not typed in yet takes the saved port and posts.
+const cfgThen = (auto: boolean): Then => r => x => {
+  if (r.code !== 0) return x
+  const cfg = parseCfgView(r.out)
+  if (!cfg) return x
+  const y: State = { ...x, teamsCfg: cfg }
+  if (y.setup && !y.setup.touched) return { ...y, setup: { ...y.setup, ...freshSetup(cfg) } }
+  return auto && !cfg.token && !y.setup ? openSetup(y) : y
+}
+const showCfg = (auto: boolean): Effect => run('team-config-show', [], cfgThen(auto))
+
+// Enter: checked here first (the same rules teams-uhura applies again), then `config
+// save` with the values on stdin. Done: the form goes, a toast, the view read again.
+function saveSetup(s: State): Step {
+  const v = s.setup!
+  const bad = setupError(v, s.teamsCfg)
+  if (bad) return { state: { ...s, setup: { ...v, result: bad } }, effects: [] }
+  const then: Then = r => x => {
+    if (r.code !== 0) return x.setup ? { ...x, setup: { ...x.setup, result: teamWhy(r, 'teams-uhura') } } : toast(x, teamWhy(r, 'teams-uhura'))
+    const said = r.out.trim().split(/\r?\n/)[0] ?? ''
+    return { state: { ...x, setup: null, toast: [`✓ Teams settings saved${said ? ' - ' + said : ''}`, ran(r.argv)].join('\n') }, effects: [showCfg(false)] }
+  }
+  return { state: { ...s, setup: { ...v, result: null } }, effects: [run('team-config-save', [], then, setupJson(v))] }
+}
+
+function clearSetup(s: State): Step {
+  const then: Then = r => x => {
+    if (r.code !== 0) return x.setup ? { ...x, setup: { ...x.setup, result: teamWhy(r, 'teams-uhura'), confirmClear: false } } : toast(x, teamWhy(r, 'teams-uhura'))
+    return { state: { ...x, setup: null, toast: [`✓ Teams settings cleared - ${r.out.trim().split(/\r?\n/)[0] ?? ''}`, ran(r.argv)].join('\n') }, effects: [showCfg(false)] }
+  }
+  return { state: { ...s, setup: { ...s.setup!, confirmClear: false } }, effects: [run('team-config-clear', [], then)] }
+}
+
+const TEXT_FIELDS: Partial<Record<SetupField, 'token' | 'url' | 'port'>> = { token: 'token', url: 'url', port: 'port' }
+
+function setupKey(s: State, k: Key): Step {
+  const v = s.setup!
+  const same = { state: s, effects: [] }
+  if (v.confirmClear) {
+    if (k.name === 'y') return clearSetup(s)
+    return k.name === 'n' || k.name === 'escape' ? { state: { ...s, setup: { ...v, confirmClear: false } }, effects: [] } : same
+  }
+  const f = s.setupField
+  const field = (by: number): Step => {
+    const at = SETUP_FIELDS.indexOf(f)
+    return { state: { ...s, setupField: SETUP_FIELDS[(at + by + SETUP_FIELDS.length) % SETUP_FIELDS.length]! }, effects: [] }
+  }
+  const set = (patch: Partial<SetupValues>): Step => ({ state: { ...s, setup: { ...v, ...patch, result: null, touched: true } }, effects: [] })
+  const tf = TEXT_FIELDS[f]
+  switch (k.name) {
+    case 'escape': return { state: { ...s, setup: null }, effects: [] }
+    case 'tab': return field(k.shift ? -1 : 1)
+    case 'up': return field(-1)
+    case 'down': return field(1)
+    case 'return': case 'enter': return f === 'clear' ? { state: { ...s, setup: { ...v, confirmClear: true, result: null } }, effects: [] } : saveSetup(s)
+    case 'backspace': return tf ? set({ [tf]: [...v[tf]].slice(0, -1).join('') }) : same
+    case 'left': case 'right': return f === 'posts' ? set({ posts: !v.posts }) : same
+    case 'space': if (f === 'posts') return set({ posts: !v.posts }); break
+  }
+  const ch = k.sequence
+  if (f === 'posts' && ch === ' ') return set({ posts: !v.posts })
+  if (tf && !k.ctrl && ch && [...ch].length === 1 && ch > ' ' && ch !== '\x7f' && [...v[tf]].length < 2000) return set({ [tf]: v[tf] + ch })
+  return same
+}
+
+// The form as text: the token masked (one bullet a character; a saved one only "set"),
+// the URL as typed or only its host when saved. Never the token, never in a log.
+export function setupLines(s: State): string[] {
+  const v = s.setup
+  if (!v) return []
+  const cur = (f: SetupField) => (s.setupField === f ? '› ' : '  ')
+  const caret = (f: SetupField) => (s.setupField === f ? '_' : '')
+  const cfg = s.teamsCfg
+  const out = ['Teams setup',
+    `${cur('token')}Token          ${tokenShown(v, cfg)}${caret('token')}`,
+    `${cur('url')}Workflow URL   ${urlShown(v, cfg)}${caret('url')}`,
+    `${cur('port')}Port           ${v.port}${caret('port')}`,
+    `${cur('posts')}Status posts   ${v.posts ? '[x] on' : '[ ] off'}`,
+    `${cur('clear')}[ Clear the saved settings ]`,
+    '',
+    `  Saves ${cfg?.path || '~/.skillator/teams.json'} - this user only, outside every repo`]
+  if (v.confirmClear) out.push('  clear the saved Teams settings? (y/n)')
+  if (v.result) out.push(`  ${v.result}`)
+  out.push('  tab next field · space on/off · enter save · esc cancel')
+  return out
+}
+
+// m: everything read - teams-uhura writes the marker (the newest id).
+function markRead(s: State): Step {
+  const id = s.messages.at(-1)?.id
+  if (!id) return { state: toast(s, 'no team messages to mark read'), effects: [] }
+  const then: Then = r => x => (r.code !== 0 ? toast(x, `✗ not marked read: ${teamWhy(r, 'teams-uhura')}`) : { ...x, msgRead: id })
+  return { state: s, effects: [run('team-mark-read', [id], then)] }
+}
+
+function messagesKey(s: State, k: Key): Step {
+  const cur = selectedOf(s.messages, s.msgSelected)
+  switch (k.name) {
+    case 'up': case 'k': return { state: { ...s, msgSelected: moveSel(s.messages, s.msgSelected, -1) }, effects: [] }
+    case 'down': case 'j': return { state: { ...s, msgSelected: moveSel(s.messages, s.msgSelected, 1) }, effects: [] }
+    case 'return': case 'enter': return { state: { ...s, msgSelected: cur, msgExpanded: cur && s.msgExpanded !== cur ? cur : null }, effects: [] }
+    case 'm': return markRead(s)
+    case 's': return { state: openSetup(s), effects: [showCfg(false)] }
+    case 'escape': return { state: { ...s, toast: null }, effects: [] }
+    default: return { state: s, effects: [] }
+  }
+}
+
 function toTab(s: State, tab: Tab): Step {
   const effects: Effect[] = tab === 'runs' && s.tab !== 'runs' ? [{ kind: 'poll', what: 'runs' }] : []
+  if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(true))
   return { state: { ...s, tab }, effects }
 }
 
@@ -532,7 +667,11 @@ export function reduce(s: State, k: Key): Step {
   const quit: Step = { state: { ...s, quit: true }, effects: [{ kind: 'quit' }] }
   // A146: a form holding typed text is not thrown away by one ctrl+c - it cancels the
   // form (as Esc), the board stays; the next ctrl+c quits. An empty form has nothing to lose.
-  if (k.ctrl && k.name === 'c') return s.person && (s.person.handle || s.person.name || s.person.emails) ? personKey(s, { name: 'escape' }) : quit
+  if (k.ctrl && k.name === 'c') {
+    if (s.setup?.touched) return { state: { ...s, setup: null }, effects: [] }
+    return s.person && (s.person.handle || s.person.name || s.person.emails) ? personKey(s, { name: 'escape' }) : quit
+  }
+  if (s.setup) return setupKey(s, k)
   if (s.person) return personKey(s, k)
   if (s.dialog) return dialogKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
@@ -542,6 +681,7 @@ export function reduce(s: State, k: Key): Step {
     case '1': return toTab(s, 'tickets')
     case '2': return toTab(s, 'runs')
     case '3': return toTab(s, 'health')
+    case '4': return toTab(s, 'messages')
     case 'tab': {
       const at = TABS.indexOf(s.tab)
       return toTab(s, TABS[(at + (k.shift ? TABS.length - 1 : 1)) % TABS.length]!)
@@ -551,5 +691,6 @@ export function reduce(s: State, k: Key): Step {
   }
   if (s.tab === 'tickets') return ticketsKey(s, k)
   if (s.tab === 'runs') return runsKey(s, k)
+  if (s.tab === 'messages') return messagesKey(s, k)
   return k.name === 'escape' ? { state: { ...s, toast: null }, effects: [] } : { state: s, effects: [] }
 }

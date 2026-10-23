@@ -224,8 +224,9 @@ test('tabs, filter mode, team view, refresh, quit', () => {
   assert.equal(reduce(s0, key('3')).state.tab, 'health')
   assert.equal(reduce(press(s0, '3'), key('1')).state.tab, 'tickets')
   assert.equal(reduce(s0, key('tab')).state.tab, 'runs')
-  assert.equal(reduce(s0, key('tab', { shift: true })).state.tab, 'health')
-  assert.equal(reduce(press(s0, '3'), key('tab')).state.tab, 'tickets')
+  assert.equal(reduce(s0, key('tab', { shift: true })).state.tab, 'messages')
+  assert.equal(reduce(press(s0, '4'), key('tab')).state.tab, 'tickets')
+  assert.equal(reduce(press(s0, '3'), key('tab')).state.tab, 'messages')
 
   const f = reduce(s0, key('f')).state
   assert.equal(f.filterField, 'app')

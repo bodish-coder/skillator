@@ -51,11 +51,18 @@ export type WorkflowRow = {
   error: string | null        // Workflow answer error (22351), or an errored call's text
   denied: number              // its agent() spawns that agent.spawn denied (454)
 }
+// F66: the Messages tab. Msg is one line of teams-uhura's inbox (<repo>/.git/skillator/
+// team-inbox.jsonl); TeamsCfgView is what `team.mjs config show` says - never a secret.
+export type Msg = { ts: string; from: string; email: string; text: string; id: string }
+export type TeamsCfgView = { path: string; token: boolean; workflowUrl: string | null; port: number; statusPosts: boolean }
+// The setup form in the pane: only what is safe to hold in $.state - the field values
+// live in the module (the token never reaches $.state); `rev` redraws it.
+export type SetupView = { rev: number; field: string; result: string | null; confirmClear: boolean }
 declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
       board: Board | null; team: Member[]; me: string | null
-      tab: 'tickets' | 'runs' | 'health' | 'agents' | 'workflows'; selected: string | null; expanded: string | null
+      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'workflows'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
@@ -63,6 +70,10 @@ declare module 'claude-code' {
       relay: string | null   // F48 band: "RUN-0012 2/4", the first relay run not all done
       teamView: TeamView | null; person: PersonDraft | null
       agents: AgentRow[]; workflows: WorkflowRow[]   // F53: the Agents and Workflows tabs
+      // F66: the Messages tab - the inbox (newest MSG_MAX), the read marker's id, the
+      // row picked / opened, the saved config's view, the setup form's safe part
+      messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
+      teamsCfg: TeamsCfgView | null; setup: SetupView | null
     }
   }
 }

@@ -13,7 +13,7 @@ export type Host = {
   win: boolean
   skillsDir: string | null
   repoRoot: string                                   // main checkout (git-common-dir's parent), else toplevel, else cwd
-  run(call: Call, args: string[]): Promise<RunResult> // never rejects; 30 s / 15 s budgets; cwd = repoRoot
+  run(call: Call, args: string[], stdin?: string): Promise<RunResult> // never rejects; 30 s / 15 s budgets; cwd = repoRoot; stdin (F66) written then closed
   stat(path: string): Promise<{ mtimeMs: number; size: number } | null>
   read(path: string): Promise<string>
   gitEmail(): Promise<string | null>
@@ -70,7 +70,7 @@ async function findRepoRoot(cwd: string): Promise<string> {
   return norm(top ?? cwd)
 }
 
-function spawnArgv(argv: string[], cwd: string, timeoutMs: number): Promise<RunResult> {
+function spawnArgv(argv: string[], cwd: string, timeoutMs: number, stdin?: string): Promise<RunResult> {
   return new Promise(res => {
     let out = '', err = '', done = false
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -86,6 +86,8 @@ function spawnArgv(argv: string[], cwd: string, timeoutMs: number): Promise<RunR
     child.stderr?.setEncoding('utf8').on('data', (d: string) => { err += d })
     child.on('error', e => finish({ code: -1, out, err: err + String(e?.message ?? e) }))
     child.on('close', code => finish({ code: code ?? -1, out, err }))
+    child.stdin?.on('error', () => { /* the child closed it early */ })
+    child.stdin?.end(stdin ?? '')
   })
 }
 
@@ -112,9 +114,9 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
   const abs = (p: string) => (isAbsolute(p) ? p : join(repoRoot, p))
   return {
     win, skillsDir, repoRoot,
-    async run(call, args) {
+    async run(call, args, stdin) {
       if (!skillsDir) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
-      return spawnArgv(argvFor(call, win, skillsDir, args), repoRoot, call === 'pending-machine' ? 15000 : 30000)
+      return spawnArgv(argvFor(call, win, skillsDir, args), repoRoot, call === 'pending-machine' ? 15000 : 30000, stdin)
     },
     async stat(path) {
       try { const s = await fsStat(abs(path)); return { mtimeMs: s.mtimeMs, size: s.size } } catch { return null }

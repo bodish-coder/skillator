@@ -102,6 +102,24 @@ test('argvFor: both spellings of every call', () => {
     ['sh', '/s/skills/tickets-zordon/scripts/ticket-meta.sh', 'assign', 'F1', '@vidul'])
 })
 
+test('argvFor: F66 teams-uhura calls run node on both platforms; the config never rides argv', () => {
+  const T = 'teams-uhura/scripts/team.mjs'
+  for (const win of [false, true]) {
+    expect(argvFor('team-mark-read', win, '/s/skills', ['1729'])).toEqual(['node', `/s/skills/${T}`, 'inbox', 'mark-read', '--upto', '1729'])
+    expect(argvFor('team-config-show', win, '/s/skills', [])).toEqual(['node', `/s/skills/${T}`, 'config', 'show'])
+    expect(argvFor('team-config-save', win, '/s/skills', ['ignored'])).toEqual(['node', `/s/skills/${T}`, 'config', 'save'])
+    expect(argvFor('team-config-clear', win, '/s/skills', [])).toEqual(['node', `/s/skills/${T}`, 'config', 'clear'])
+  }
+})
+
+test('runCall: stdin reaches the process (the setup form\'s values), never argv', async () => {
+  const [$, seen] = fake({ env: { SKILLATOR_ROOT: '/s' }, exists: ['/s/skills' + META], run: () => ran('saved') })
+  const r = await runCall($, 'team-config-save', [], '{"token":"c2VjcmV0"}')
+  expect(r.code).toBe(0)
+  expect(seen.runs[0]!.init?.stdin).toBe('{"token":"c2VjcmV0"}')
+  expect(seen.runs[0]!.argv.join(' ')).not.toContain('c2VjcmV0')
+})
+
 test('isWindows: OS=Windows_NT, anything else is not', async () => {
   expect(await isWindows(fake({ env: { OS: 'Windows_NT' } })[0])).toBe(true)
   expect(await isWindows(fake({ env: { HOME: '/h' } })[0])).toBe(false)

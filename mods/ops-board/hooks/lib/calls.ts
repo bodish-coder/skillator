@@ -7,6 +7,7 @@ export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' 
   | 'meta-team-add' | 'meta-team-remove'
   | 'relay-list' | 'relay-chain-status' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
   | 'usage-level'
+  | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear'
 
 // Exists under a skills dir: what marks a directory as one.
 export const MARKER = 'tickets-zordon/scripts/ticket-meta.sh'
@@ -28,7 +29,8 @@ export const up = (p: string, n: number) => {
 // args: meta-assign/meta-decide [id, @handle]; meta-decided [id]; meta-team-add
 // [@handle, name, emails comma-joined]; meta-team-remove [@handle]; relay-chain-status and
 // relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; others none.
-const TABLE: Record<Call, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
+type ScriptCall = Exclude<Call, 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear'>
+const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
   'pending':            { script: PENDING, sh: a => a, ps: a => a },
   'pending-kv':         { script: PENDING, sh: a => ['--kv', ...a], ps: a => ['--kv', ...a] },
   'pending-machine':    { script: PENDING, sh: a => ['--machine', ...a], ps: a => ['--machine', ...a] },
@@ -47,8 +49,22 @@ const TABLE: Record<Call, { script: string; sh: (a: string[]) => string[]; ps: (
   'usage-level':        { script: WATCH, sh: () => ['level'], ps: () => ['-Mode', 'level'] },
 }
 
+// F66: teams-uhura's script is Node (no sh / ps1 twin): `node <skills>/teams-uhura/
+// scripts/team.mjs ...` on every platform. team-mark-read [id]; team-config-save takes
+// the setup form's values on stdin (runCall / Host.run's stdin) - never argv, where
+// another process could read them; the others no args.
+const TEAM_JS = 'teams-uhura/scripts/team.mjs'
+const NODE: Partial<Record<Call, (a: string[]) => string[]>> = {
+  'team-mark-read': a => ['inbox', 'mark-read', '--upto', a[0] ?? ''],
+  'team-config-show': () => ['config', 'show'],
+  'team-config-save': () => ['config', 'save'],
+  'team-config-clear': () => ['config', 'clear'],
+}
+
 export function argvFor(call: Call, win: boolean, skillsDir: string, args: string[]): string[] {
-  const t = TABLE[call]
+  const n = NODE[call]
+  if (n) return ['node', norm(skillsDir) + '/' + TEAM_JS, ...n(args)]
+  const t = TABLE[call as ScriptCall]
   const base = norm(skillsDir) + '/' + t.script
   return win
     ? ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', base + '.ps1', ...t.ps(args)]

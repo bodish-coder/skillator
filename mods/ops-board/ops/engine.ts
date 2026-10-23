@@ -5,7 +5,8 @@
 import type { Board, Member } from '../types'
 import type { Host } from './nodehost'
 import type { Effect, Key, State, Step } from './state'
-import { onBoard, onMachine, onRuns, onUsage, reduce, afterRun } from './state'
+import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun } from './state'
+import { inboxDirOf, INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
 import { parseBoard } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
 import { parseRuns } from '../hooks/lib/runs'
@@ -60,7 +61,7 @@ export function makeEngine(o: EngineOpts): Engine {
     if (e.kind === 'quit') { o.onQuit(); return }
     if (e.kind === 'poll') return e.what === 'board' ? guarded('board', () => pollBoard(true)) : guarded(e.what, e.what === 'slow' ? pollSlow : pollRuns)
     if (once && e.call !== 'relay-decide') return
-    const r = await host.run(e.call, e.args)
+    const r = await host.run(e.call, e.args, e.stdin)
     await apply(afterRun(e, r, state, Date.now()))
   }
 
@@ -103,7 +104,23 @@ export function makeEngine(o: EngineOpts): Engine {
       if (tst) { try { team = parseTeam(await host.read(teamPath)) } catch { team = [] } }
     }
     if (moved && board) state = onBoard(state, board, team, email ? meOf(team, email) : null)
+    await pollInbox(root)
     draw()
+  }
+
+  // F66: teams-uhura's inbox and read marker (in the repo's git dir), re-read when either moved.
+  let inboxSig = ''
+  const pollInbox = async (root: string) => {
+    const dir = inboxDirOf(root)
+    const ist = await host.stat(dir + '/' + INBOX_FILE)
+    const rst = await host.stat(dir + '/' + READ_FILE)
+    const sig = `${ist ? `${ist.mtimeMs}:${ist.size}` : 'none'}|${rst ? `${rst.mtimeMs}:${rst.size}` : 'none'}`
+    if (sig === inboxSig) return
+    inboxSig = sig
+    let text = '', readId: string | null = null
+    if (ist && ist.size <= MAX_READ) { try { text = await host.read(dir + '/' + INBOX_FILE) } catch { text = '' } }
+    if (rst) { try { readId = (await host.read(dir + '/' + READ_FILE)).trim() || null } catch { readId = null } }
+    state = onInbox(state, text, readId)
   }
 
   let chains: Record<string, string> = {}

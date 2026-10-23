@@ -79,7 +79,7 @@ for (const [kind, skip] of launchers) {
     const lines = r.out.replace(/\r?\n$/, '').split(/\r?\n/)
     assert.equal(lines.length, 20, r.out)
     for (const l of lines) { assert.ok([...l].length <= 80, l); assert.doesNotMatch(l, /\x1b/) }
-    assert.match(lines[0]!, new RegExp(`^ 1 Tickets   2 Runs   3 Health +ops · ${basename(t)}$`))
+    assert.match(lines[0]!, new RegExp(`^ 1 Tickets   2 Runs   3 Health   4 Messages +ops · ${basename(t)}$`))
     // F61: every group starts collapsed - its header and count, no rows
     assert.match(r.out, /› ▸ In progress \(1\)\r?\n  ▸ Pending \(1\)\r?\n/)
     assert.doesNotMatch(r.out, /F2  Bulk delete/)
@@ -101,7 +101,7 @@ for (const [kind, skip] of launchers) {
     assert.equal(r.code, 0, r.err)
     const lines = r.out.replace(/\r?\n$/, '').split(/\r?\n/)
     assert.equal(lines.length, 20, r.out)
-    assert.match(lines[0]!, new RegExp(`3 Health +ops · ${basename(repo)}$`))
+    assert.match(lines[0]!, new RegExp(`3 Health   4 Messages +ops · ${basename(repo)}$`))
     assert.match(r.out, /› ● RUN-0099  fixture run +1\/2 done/)
     assert.match(lines.at(-1)!, /RUN-0099|mem 8\.4 GB/)
     assert.deepEqual(files.map(f => (existsSync(f) ? `${statSync(f).mtimeMs}:${readFileSync(f, 'utf8')}` : 'none')), before)

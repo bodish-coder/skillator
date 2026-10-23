@@ -2,7 +2,7 @@
 // ops/ that touches the terminal: state.ts decides, draw.ts draws, engine.ts runs the
 // polls and effects (through nodehost's run), this wires them to the terminal.
 //   node --import ./loader.mjs app.ts [--once] [--cols N] [--rows N] [--no-color] [--ascii]
-//                                     [--skills <dir>] [--tab tickets|runs|health]
+//                                     [--skills <dir>] [--tab tickets|runs|health|messages]
 // --once draws one frame to stdout and exits 0, without raw mode - the smoke test and the
 // screenshot helper. It reads only: of the effects the polls ask for it runs relay's
 // decision (a read) and nothing else, so it never sets or releases the watchdog hold.
@@ -23,8 +23,8 @@ export type Opts = {
   skills: string | null; tab: Tab; error: string | null
 }
 
-export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no-color] [--ascii] [--skills <dir>] [--tab tickets|runs|health]'
-const TABS: Tab[] = ['tickets', 'runs', 'health']
+export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no-color] [--ascii] [--skills <dir>] [--tab tickets|runs|health|messages]'
+const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages']
 
 // The flags; the first wrong one is `error` (the launcher has taken the repo dir already).
 // NO_COLOR (any non-empty value) turns colour off as --no-color does.

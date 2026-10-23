@@ -154,7 +154,7 @@ test('/ops with a wrong flag says so with the usage, as an error', async () => {
   registerOps(f.pi, opts)
   await f.cmd.handler('--tab agents', f.ctx(repo()))
   assert.equal(f.notes[0]!.type, 'error')
-  assert.match(f.notes[0]!.msg, /--tab is one of tickets, runs, health, got agents/)
+  assert.match(f.notes[0]!.msg, /--tab is one of tickets, runs, health, messages, got agents/)
   assert.match(f.notes[0]!.msg, /^usage: \/ops /m)
 })
 

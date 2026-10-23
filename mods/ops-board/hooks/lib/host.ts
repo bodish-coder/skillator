@@ -69,14 +69,16 @@ export async function skillatorRoot($: HostApi): Promise<string | null> {
 // Runs one call in the main checkout (the session's cwd outside a repo). Never rejects:
 // a command that cannot start or outlasts its budget comes back as code -1, its reason
 // in `err`. 30 s budget; `pending --machine` (the band's poll) 15 s.
-export async function runCall($: HostApi, call: Call, args: string[]): Promise<{ code: number; out: string; err: string; argv: string[] }> {
+// `stdin` (F66: the setup form's values for team-config-save) is written to the child's
+// standard input - never put on argv.
+export async function runCall($: HostApi, call: Call, args: string[], stdin?: string): Promise<{ code: number; out: string; err: string; argv: string[] }> {
   const win = await isWindows($)
   const repo = await $.session.repo()
   const skills = await skillatorRoot($)
   if (!skills) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
   const argv = argvFor(call, win, skills, args)
   const timeoutMs = call === 'pending-machine' ? 15000 : 30000
-  const init: ProcessRunInit = repo ? { cwd: repo.root, timeoutMs } : { timeoutMs }
+  const init: ProcessRunInit = { ...(repo ? { cwd: repo.root } : {}), timeoutMs, ...(stdin !== undefined ? { stdin } : {}) }
   try {
     const r = await $.process.run(argv, init)
     return { code: r.exitCode, out: r.stdout, err: r.stderr, argv }

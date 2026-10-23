@@ -10,7 +10,8 @@ import type { Seg } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State } from './state'
-import { dialogLines, formLines, teamRow, viewOf } from './state'
+import { dialogLines, formLines, setupLines, teamRow, viewOf } from './state'
+import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, isDecidable, isHead, offsetFor } from '../hooks/lib/ticketsmodel'
 import { runLines, stageTickets } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
@@ -114,10 +115,14 @@ function windowOf(lines: Keyed[], id: string | null, h: number): Seg[][] {
 
 // --- the fixed lines ---
 
-const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Runs'], ['health', '3 Health']]
+const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Runs'], ['health', '3 Health'], ['messages', '4 Messages']]
 
 function tabsLine(s: State): Seg[] {
-  const tabs = join(TABS.map(([id, label]): Seg[] => [id === s.tab ? { text: label, inverse: true, bold: true } : dim(label)]), '   ')
+  // F66: the unread count rides on the Messages label
+  const unread = unreadCount(s.messages, s.msgRead)
+  const label = (id: State['tab'], l: string) => (id === 'messages' && unread ? `${l} (${unread})` : l)
+  const tabs = join(TABS.map(([id, l]): Seg[] => [id === s.tab ? { text: label(id, l), inverse: true, bold: true }
+    : id === 'messages' && unread ? { text: label(id, l), color: 'suggestion' } : dim(l)]), '   ')
   return spread([{ text: ' ' }, ...tabs], [dim(s.repo ? `ops · ${s.repo}` : 'ops')], s.cols)
 }
 
@@ -139,11 +144,13 @@ function countLine(s: State, m: Model): Seg[] {
 }
 
 function keysOf(s: State, m: Model): string[] {
+  if (s.setup) return ['tab / shift-tab field', 'space on/off', 'enter save', 'esc cancel']
   if (s.person) return ['tab / shift-tab field', 'enter add', 'esc cancel']
   if (s.dialog) return ['↑↓ person', 'a / d kind', 'enter confirm', 'esc cancel']
   if (s.filterField) return ['←→ field', '↑↓ value', 'enter/esc leave']
   if (s.tab === 'runs') return ['↑↓ move', 'enter stages', 's start a planned run', 'r reload', 'q quit']
   if (s.tab === 'health') return ['R resume (releases the hold on a fresh non-red reading)', 'r reload', 'q quit']
+  if (s.tab === 'messages') return ['↑↓ move', 'enter open', 'm mark all read', 's setup', 'q quit']
   if (s.showTeam) return ['n add', 'del remove (asks first)', 'esc back', 'q quit']   // A146: q closes the board here too
   const sel = m.rows.find(t => t.id === m.ticket)
   // F61: on a header Enter opens or closes its group
@@ -475,6 +482,23 @@ function formBody(s: State): Seg[][] {
   return boxBody(s, { title: ls[0] ?? '', rows })
 }
 
+// --- F66: the Messages tab and the Teams setup form ---
+
+function messagesBody(s: State, h: number): Seg[][] {
+  const lines = messageLines({ msgs: s.messages, readId: s.msgRead, selected: s.msgSelected, expanded: s.msgExpanded, cols: s.cols })
+  const sel = selectedOf(s.messages, s.msgSelected)
+  return windowOf(lines.map(l => ({ key: l.key, segs: l.segs.map(x => ({ ...x, text: clean(x.text) })) })), sel, h)
+}
+
+// The setup form, boxed like Add person; its result line (a check or teams-uhura's
+// refusal) in red. The token is never in these lines (setupLines masks it).
+function setupBody(s: State): Seg[][] {
+  const ls = setupLines(s)
+  const res = s.setup?.result ? '  ' + s.setup.result : null
+  const rows: Boxed['rows'] = ls.slice(1).map(l => ({ text: l, color: l === res ? 'error' : /\(y\/n\)$/.test(l) ? 'warning' : undefined }))
+  return boxBody(s, { title: ls[0] ?? '', rows })
+}
+
 // --- the frame ---
 
 // The toast (what the last action said) and the notes (stale locks, a hold not set).
@@ -491,10 +515,12 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
   const tail = tailLines(s).slice(0, Math.floor(h / 2))
   const block = tail.length && h - tail.length >= 2 ? [[], ...tail] : tail
   const room = h - block.length
-  const main = s.person ? formBody(s)
+  const main = s.setup ? setupBody(s)
+    : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s)
+    : s.tab === 'messages' ? messagesBody(s, room)
     : ticketsBody(s, m, room)
   const top = main.slice(0, room)
   while (top.length < room) top.push([])

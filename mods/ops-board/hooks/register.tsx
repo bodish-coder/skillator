@@ -13,6 +13,7 @@ import type { Tab } from './pane'
 import { cancelPerson, clearForm, isFormUp } from './assign'
 import { pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
+import { closeSetup, enterMessages, isSetupUp, pollInbox } from './messagestab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -103,6 +104,7 @@ async function poll($: EngineInterface) {
     await update($, teamA, () => t)
     await update($, meA, () => (email ? meOf(t, email) : null))
   }
+  await pollInbox($).catch(() => {})       // F66: the Teams inbox, re-read when it moved
   await updateStatus($)
 }
 
@@ -300,16 +302,16 @@ async function openPane($: EngineInterface, asked: boolean) {
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Runs', health: 'Health', agents: 'Agents', workflows: 'Workflows' }
-const TABS: Tab[] = ['tickets', 'runs', 'health', 'agents', 'workflows']
-const USAGE = 'usage: /ops [tickets|runs|health|agents|workflows|resume]'
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Runs', health: 'Health', messages: 'Messages', agents: 'Agents', workflows: 'Workflows' }
+const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'agents', 'workflows']
+const USAGE = 'usage: /ops [tickets|runs|health|messages|agents|workflows|resume]'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'ops',
-      description: 'Open the ops board pane: the TICKETS.md board, runs, health, agents and workflows',
-      argumentHint: '[tickets|runs|health|agents|workflows|resume]',
+      description: 'Open the ops board pane: the TICKETS.md board, runs, health, Teams messages, agents and workflows',
+      argumentHint: '[tickets|runs|health|messages|agents|workflows|resume]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -356,6 +358,7 @@ export const register: Register = on => {
     if (word) await update($, tabA, () => word as Tab)
     if (word === 'runs') void pollRuns($).catch(() => {})
     if (word === 'agents') void pollAgents($).catch(() => {})
+    if (word === 'messages') void enterMessages($).catch(() => {})
     const r = await openPane($, true)
     if (!r.isPlaced) return { text: `ops board is open but not drawn: ${r.reason}` }
     return { text: word ? `ops board opened on ${TAB_NAME[word as Tab]}.` : 'ops board opened.' }
@@ -425,6 +428,12 @@ export const register: Register = on => {
   // the pane closeOnEscape) or the close mark is its Cancel: the form goes, the
   // view it came from is back, the board stays open. An unload passes, form cleared.
   on('ui.close', async ($, e, next) => {
+    // F66: the Teams setup form up - Esc is its Cancel (an unload just drops it)
+    if (e.id === PANE_ID && (await isSetupUp($))) {
+      await closeSetup($)
+      if (e.origin.kind === 'unload') return next(e)
+      return { value: undefined }
+    }
     if (e.id !== PANE_ID || !(await isFormUp($))) return next(e)
     if (e.origin.kind === 'unload') { await clearForm($); return next(e) }
     await cancelPerson($)                                   // what the form's Cancel does
