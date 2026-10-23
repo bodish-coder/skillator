@@ -469,9 +469,9 @@ function Invoke-SelfTest([string]$T) {
                    @('.gemini\config\skills\team-messages\SKILL.md', '.gemini\config\skills'), @('.gemini\skills\team-messages\SKILL.md', '.gemini\skills'),
                    @('.gemini\antigravity-cli\skills\team-messages\SKILL.md', '.gemini\antigravity-cli\skills'))) {
     if (-not (& $has $p[0] "$T\$($p[1])/teams-uhura/scripts/team.mjs inbox --unread --mark-read")) { return "team-messages not substituted in $($p[0])" }
-    # the reply goes on stdin through a quoted heredoc, never inside a command line
-    if (-not (& $has $p[0] "$T\$($p[1])/teams-uhura/scripts/team.mjs say --stdin <<'EOF'")) { return "team-messages reply not on stdin in $($p[0])" }
-    if (& $has $p[0] 'say "<text>"') { return "team-messages puts reply text on argv in $($p[0])" }
+    # the reply goes in a file the agent writes with its own tool - never into shell source
+    if (-not (& $has $p[0] "$T\$($p[1])/teams-uhura/scripts/team.mjs say --file <that path>")) { return "team-messages reply not by say --file in $($p[0])" }
+    foreach ($bad in @("<<'EOF'", "@'", 'say "')) { if (& $has $p[0] $bad) { return "team-messages puts reply text in shell source in $($p[0])" } }
     if (& $has $p[0] '{{SKILLS}}') { return "placeholder left in $($p[0])" }
   }
   if ((& $read '.gemini\antigravity-cli\skills\team-messages\SKILL.md') -cnotmatch '(?m)^name: team-messages$') { return 'agy skill name team-messages' }

@@ -5,9 +5,9 @@
 //   node team.mjs listen [--port N]         the same in the foreground (Ctrl-C stops it)
 //   node team.mjs stop [--port N]           stops the listener this machine started
 //   node team.mjs status [--port N]         listener, config (set / not set, never values), inbox
-//   node team.mjs say --stdin <<'EOF'       posts the text on stdin through the Workflows webhook
-//                                           (stdin only: text on argv is refused - a shell line
-//                                           would run $(...), backticks or quotes in a reply)
+//   node team.mjs say --file <path>         posts the file's text through the Workflows webhook
+//   node team.mjs say --stdin               the same from stdin (for scripts). Text on argv is
+//                                           refused: a reply in shell source could run as a command
 //   node team.mjs post-status <sub> <ID> [args...]   ticket-meta's opt-in status post
 //   node team.mjs link <aadObjectId> <email>         names a Teams sender (email must be on team.md)
 //   node team.mjs inbox [--unread] [--mark-read]     lists messages (framed as data)
@@ -575,11 +575,22 @@ export async function main(argv) {
       case 'say': {
         // The text comes on stdin only, never argv: a reply often quotes a teammate,
         // and on a shell line $(...), backticks or a quote in it would run.
-        if (rest.length !== 1 || rest[0] !== '--stdin') {
-          err("say reads the text from stdin only: node team.mjs say --stdin <<'EOF' ... EOF (text on the command line is refused)")
+        // --file <path>: the reply written by the agent's own file tool, so it never
+        // enters shell source (a heredoc or here-string can be closed from inside it).
+        // Ruling: the file is the caller's; say never deletes it.
+        let text
+        if (rest.length === 1 && rest[0] === '--stdin') text = await stdinText()
+        else if (rest[0] === '--file' && rest.length === 2) {
+          let st
+          try { st = statSync(rest[1]) } catch { err(`say: no file at ${rest[1]}`); return 1 }
+          if (!st.isFile()) { err(`say: not a file: ${rest[1]}`); return 1 }
+          if (st.size > BODY_MAX) { err(`say: file too big (over ${BODY_MAX} bytes)`); return 2 }
+          text = readFileSync(rest[1], 'utf8').replace(/^\uFEFF/, '')
+        } else {
+          err('say takes the text from a file or stdin only: node team.mjs say --file <path> (text on the command line is refused)')
           return 2
         }
-        const text = (await stdinText()).replace(/\r?\n$/, '')
+        text = text.replace(/\r?\n$/, '')
         if (!text.trim()) { err('say: no text on stdin'); return 2 }
         const r = await say(text, cfg)
         if (!r.ok) { err(r.error); return 1 }

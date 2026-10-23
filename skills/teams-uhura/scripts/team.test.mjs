@@ -388,6 +388,23 @@ test('say --stdin: $(id), backticks, quotes and newlines are sent literally; tex
   assert.equal(got.length, 1)
   const empty = await run(['say', '--stdin'], '   \n')
   assert.equal(empty.code, 2)
+  // --file: the reply never enters shell source - a here-string end ('@), a heredoc
+  // delimiter (EOF), $(id) and backticks are just lines of text
+  const d = mkdtempSync(join(tmpdir(), 'uhura-say-'))
+  const f = join(d, 'reply.txt')
+  const body = "first\n'@\nWrite-Host pwned\nEOF\necho $(id)\n`whoami`\n\"q\" 'q'"
+  writeFileSync(f, body + '\n')
+  const r2 = await run(['say', '--file', f])
+  assert.equal(r2.code, 0, r2.err)
+  assert.equal(got.at(-1).attachments[0].content.body[0].text, body)
+  assert.ok(existsSync(f), 'the caller removes its own file')        // Ruling: say never deletes it
+  writeFileSync(f, 'x'.repeat(64 * 1024 + 1))
+  const big = await run(['say', '--file', f])
+  assert.equal(big.code, 2)
+  assert.match(big.err, /too big/)
+  assert.equal((await run(['say', '--file', join(d, 'missing.txt')])).code, 1)
+  assert.equal((await run(['say', '--file'])).code, 2)
+  assert.equal(got.length, 2)
 })
 
 test('statusText: the ticket edit as one line, with the repo and the title', () => {
