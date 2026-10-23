@@ -1,0 +1,16 @@
+{
+  "description": "skillator: F66 teams-uhura - unread Teams channel messages into the next turn as context, framed as data (silent with no inbox)",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/teams-uhura/scripts/team-hook.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
