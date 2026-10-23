@@ -37,9 +37,11 @@ done
 codex_home=${CODEX_HOME:-$HOME/.codex}
 
 # cli | marker (proves the CLI is installed) | global skills dir(s), '|'-separated
-# antigravity has two: ~/.gemini/config/skills is Antigravity's own documented path,
+# antigravity has three: ~/.gemini/config/skills is Antigravity's own documented path,
 # ~/.gemini/skills is what Gemini CLI 0.57 actually reads (probed 2026-09-06, again
-# for A73 2026-09-23: it does NOT read ~/.gemini/config/skills).
+# for A73 2026-09-23: it does NOT read ~/.gemini/config/skills), and B8:
+# ~/.gemini/antigravity-cli/skills is what agy (Antigravity CLI 1.4.5) reads as its
+# global skills dir (2026-10-23). The IDE extension goes from config/skills only.
 # pi has two: ~/.pi/agent/skills is what pi 0.74 reads; ~/.pi/skills is not on its
 # discovery list (probed for A73) and is kept only so an existing install is not
 # orphaned.
@@ -59,7 +61,7 @@ targets="
 claude-code|$HOME/.claude|$HOME/.claude/skills
 cursor|$HOME/.cursor|$HOME/.cursor/skills
 codex|$codex_home|$codex_home/skills
-antigravity|$HOME/.gemini|$HOME/.gemini/config/skills|$HOME/.gemini/skills
+antigravity|$HOME/.gemini|$HOME/.gemini/config/skills|$HOME/.gemini/skills|$HOME/.gemini/antigravity-cli/skills
 pi|$HOME/.pi|$HOME/.pi/agent/skills|$HOME/.pi/skills
 "
 
@@ -418,6 +420,9 @@ if [ -n "$selftest" ]; then
            .pi/agent/prompts/archive-tickets.md .gemini/config/skills/archive-tickets/SKILL.md .gemini/skills/archive-tickets/SKILL.md \
            .codex/prompts/sync-tickets.md .gemini/commands/sync-tickets.toml .cursor/commands/sync-tickets.md \
            .pi/agent/prompts/sync-tickets.md .gemini/config/skills/sync-tickets/SKILL.md .gemini/skills/sync-tickets/SKILL.md \
+           .gemini/antigravity-cli/skills/tickets-zordon/SKILL.md .gemini/antigravity-cli/skills/pending/SKILL.md \
+           .gemini/antigravity-cli/skills/list-tickets/SKILL.md .gemini/antigravity-cli/skills/engage/SKILL.md \
+           .gemini/antigravity-cli/skills/archive-tickets/SKILL.md .gemini/antigravity-cli/skills/sync-tickets/SKILL.md \
            .codex/skills/ops-board/ops/app.ts .pi/agent/skills/ops-board/hooks/lib/board.ts \
            .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json \
            .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
@@ -428,6 +433,8 @@ if [ -n "$selftest" ]; then
   grep -qF "sh $N/.codex/skills/tickets-zordon/scripts/pending.sh" "$T/.codex/prompts/pending.md" || { echo "FAIL: codex prompt not substituted"; exit 1; }
   grep -qF "$N/.gemini/config/skills/tickets-zordon/SKILL.md" "$T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: agy skill not substituted with its own dest"; exit 1; }
   grep -qF "$N/.gemini/skills/tickets-zordon/SKILL.md" "$T/.gemini/skills/list-tickets/SKILL.md" || { echo "FAIL: agy skill not substituted with its own dest"; exit 1; }
+  # B8: agy 1.4.5 reads ~/.gemini/antigravity-cli/skills - its commands point at that dest
+  grep -qF "$N/.gemini/antigravity-cli/skills/tickets-zordon/SKILL.md" "$T/.gemini/antigravity-cli/skills/pending/SKILL.md" || { echo "FAIL: agy-cli skill not substituted with its own dest"; exit 1; }
   # the path is quoted (a HOME with a space); under Git Bash (cygpath) it is install.ps1's
   # powershell form with the Windows path - Gemini CLI on Windows runs !{} without sh
   if command -v cygpath >/dev/null 2>&1; then
@@ -461,14 +468,19 @@ if [ -n "$selftest" ]; then
   [ "$(cat "$T/ide-calls")" = "--install-extension $N/.gemini/config/skills/ops-board/antigravity/skillator-ops.vsix --force" ] || { echo "FAIL: antigravity ide install call: $(cat "$T/ide-calls")"; exit 1; }
   [ "$(head -c 2 "$_agy/skillator-ops.vsix")" = PK ] || { echo "FAIL: antigravity vsix is not a zip"; exit 1; }
   grep -aqF "require(\"$N/.gemini/config/skills/ops-board/antigravity/extension.cjs\")" "$_agy/skillator-ops.vsix" || { echo "FAIL: antigravity vsix entry target"; exit 1; }
+  # B8: the VSIX is packed and installed from ~/.gemini/config/skills only
+  for d in .gemini/skills .gemini/antigravity-cli/skills; do
+    [ -e "$T/$d/ops-board/antigravity/skillator-ops.vsix" ] && { echo "FAIL: antigravity vsix packed in $d"; exit 1; }
+  done
   head -1 "$T/.codex/prompts/pending.md" | grep -q '^---' && { echo "FAIL: codex prompt has frontmatter"; exit 1; }
   grep -q '^name: pending$' "$T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
   grep -q '^name: list-tickets$' "$T/.gemini/skills/list-tickets/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
   for f in .codex/prompts .gemini/commands .cursor/commands .pi/agent/prompts \
-           .gemini/config/skills/pending .gemini/config/skills/list-tickets .gemini/skills/pending .gemini/skills/list-tickets; do
+           .gemini/config/skills/pending .gemini/config/skills/list-tickets .gemini/skills/pending .gemini/skills/list-tickets \
+           .gemini/antigravity-cli/skills/pending .gemini/antigravity-cli/skills/engage; do
     grep -rqF '{{SKILLS}}' "$T/$f" && { echo "FAIL: placeholder left in $f"; exit 1; }
   done
-  for d in .gemini/config/skills .gemini/skills; do
+  for d in .gemini/config/skills .gemini/skills .gemini/antigravity-cli/skills; do
     grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
     [ -e "$T/$d/pending/.skillator-owned" ] && { echo "FAIL: command skill carries an ownership marker in $d"; exit 1; }
   done
@@ -502,6 +514,7 @@ if [ -n "$selftest" ]; then
   out=$(HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --dry-run) || { echo "FAIL: no-IDE dry run exited $?"; exit 1; }
   printf '%s\n' "$out" | grep -qF "skip  the Antigravity IDE ops board (no antigravity-ide CLI found)" || { echo "FAIL: no-IDE skip line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: dry-run skill-command line"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "would write $T/.gemini/antigravity-cli/skills/pending/SKILL.md" || { echo "FAIL: dry-run agy-cli skill-command line"; exit 1; }
   # the plugin installed: the shim still runs the first dest written (refreshed every
   # run), never the versioned plugin cache a plugin update can remove
   P=$T/p

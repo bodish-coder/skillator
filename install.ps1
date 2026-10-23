@@ -31,7 +31,7 @@ $targets = [ordered]@{
   'claude-code' = @{ Marker = "$HOME\.claude"; Dests = @("$HOME\.claude\skills") }
   'cursor'      = @{ Marker = "$HOME\.cursor"; Dests = @("$HOME\.cursor\skills") }
   'codex'       = @{ Marker = $codexHome;       Dests = @("$codexHome\skills") }
-  'antigravity' = @{ Marker = "$HOME\.gemini"; Dests = @("$HOME\.gemini\config\skills", "$HOME\.gemini\skills") }
+  'antigravity' = @{ Marker = "$HOME\.gemini"; Dests = @("$HOME\.gemini\config\skills", "$HOME\.gemini\skills", "$HOME\.gemini\antigravity-cli\skills") }
   'pi'          = @{ Marker = "$HOME\.pi";     Dests = @("$HOME\.pi\agent\skills", "$HOME\.pi\skills") }
 }
 
@@ -396,6 +396,7 @@ function Invoke-SelfTest([string]$T) {
   if (-not $out.Contains("would install the ops board extension $T\.gemini\config\skills\ops-board\antigravity\skillator-ops.vsix with $env:SKILLATOR_AGY_IDE")) { return 'dry-run antigravity extension line' }
   if (@(& $ideCalls).Count -ne 0) { return 'dry run called the Antigravity IDE' }
   if (-not $out.Contains("would write $T\.gemini\config\skills\pending\SKILL.md")) { return 'dry-run skill-command line' }
+  if (-not $out.Contains("would write $T\.gemini\antigravity-cli\skills\pending\SKILL.md")) { return 'dry-run agy-cli skill-command line' }
   if (Test-Path -LiteralPath $prof) { return 'dry run wrote the profile' }
   if (Test-Path -LiteralPath (Join-Path $T '.codex\prompts')) { return 'dry run wrote a command file' }
 
@@ -422,8 +423,11 @@ function Invoke-SelfTest([string]$T) {
             '.codex\prompts\archive-tickets.md', '.gemini\commands\archive-tickets.toml', '.cursor\commands\archive-tickets.md',
             '.pi\agent\prompts\archive-tickets.md', '.gemini\config\skills\archive-tickets\SKILL.md', '.gemini\skills\archive-tickets\SKILL.md',
             '.codex\prompts\sync-tickets.md', '.gemini\commands\sync-tickets.toml', '.cursor\commands\sync-tickets.md',
-            '.pi\agent\prompts\sync-tickets.md', '.gemini\config\skills\sync-tickets\SKILL.md', '.gemini\skills\sync-tickets\SKILL.md')
-  foreach ($f in $cmds + @('.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
+            '.pi\agent\prompts\sync-tickets.md', '.gemini\config\skills\sync-tickets\SKILL.md', '.gemini\skills\sync-tickets\SKILL.md',
+            '.gemini\antigravity-cli\skills\pending\SKILL.md', '.gemini\antigravity-cli\skills\list-tickets\SKILL.md',
+            '.gemini\antigravity-cli\skills\engage\SKILL.md', '.gemini\antigravity-cli\skills\archive-tickets\SKILL.md',
+            '.gemini\antigravity-cli\skills\sync-tickets\SKILL.md')
+  foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
                            '.pi\agent\extensions\skillator-ops.ts')) {
@@ -432,6 +436,8 @@ function Invoke-SelfTest([string]$T) {
   if (-not (& $has '.codex\prompts\pending.md' "sh $T\.codex\skills/tickets-zordon/scripts/pending.sh")) { return 'codex prompt not substituted' }
   if (-not (& $has '.gemini\config\skills\pending\SKILL.md' "$T\.gemini\config\skills/tickets-zordon/SKILL.md")) { return 'agy skill not substituted with its own dest' }
   if (-not (& $has '.gemini\skills\list-tickets\SKILL.md' "$T\.gemini\skills/tickets-zordon/SKILL.md")) { return 'agy skill not substituted with its own dest' }
+  # B8: agy 1.4.5 reads ~/.gemini/antigravity-cli/skills - its commands point at that dest
+  if (-not (& $has '.gemini\antigravity-cli\skills\pending\SKILL.md' "$T\.gemini\antigravity-cli\skills/tickets-zordon/SKILL.md")) { return 'agy-cli skill not substituted with its own dest' }
   if ((& $read '.gemini\commands\pending.toml') -notmatch '(?m)^!\{powershell ') { return 'gemini shell injection' }
   if (-not (& $has '.gemini\commands\pending.toml' "!{powershell -NoProfile -ExecutionPolicy Bypass -File `"$T\.gemini\skills\tickets-zordon\scripts\pending.ps1`"}")) { return 'gemini pending path' }
   if ((& $read '.gemini\commands\pending.toml') -match '(?m)^!\{sh ') { return 'gemini pending kept the sh line' }
@@ -464,6 +470,10 @@ function Invoke-SelfTest([string]$T) {
   $vb = [IO.File]::ReadAllBytes((Join-Path $agy 'skillator-ops.vsix'))
   if ($vb[0] -ne 0x50 -or $vb[1] -ne 0x4B) { return 'antigravity vsix is not a zip' }
   if (-not [Text.Encoding]::UTF8.GetString($vb).Contains("require(`"$($agy.Replace('\', '/'))/extension.cjs`")")) { return 'antigravity vsix entry target' }
+  # B8: the VSIX is packed and installed from ~/.gemini/config/skills only
+  foreach ($d in '.gemini\skills', '.gemini\antigravity-cli\skills') {
+    if (Test-Path -LiteralPath (Join-Path $T "$d\ops-board\antigravity\skillator-ops.vsix")) { return "antigravity vsix packed in $d" }
+  }
   if ((& $read '.codex\prompts\pending.md').StartsWith('---')) { return 'codex prompt has frontmatter' }
   if ((& $read '.gemini\config\skills\pending\SKILL.md') -cnotmatch '(?m)^name: pending$') { return 'agy skill name' }
   if ((& $read '.gemini\skills\list-tickets\SKILL.md') -cnotmatch '(?m)^name: list-tickets$') { return 'agy skill name' }
@@ -474,7 +484,7 @@ function Invoke-SelfTest([string]$T) {
     if ($b -contains 13) { return "CR in $f" }
     if ((& $read $f).Contains('{{SKILLS}}')) { return "placeholder left in $f" }
   }
-  foreach ($d in '.gemini\config\skills', '.gemini\skills') {
+  foreach ($d in '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
     $mf = @([IO.File]::ReadAllLines((Join-Path $T "$d\.skillator-installed")))
     if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets') { return "command skill in manifest $d" }
     if (Test-Path -LiteralPath (Join-Path $T "$d\pending\.skillator-owned")) { return "command skill carries an ownership marker in $d" }
