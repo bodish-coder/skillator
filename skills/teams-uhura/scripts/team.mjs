@@ -19,7 +19,8 @@
 // compared in constant time; unsigned or bad = 401, logged. The sender must be linked
 // (.skillator/teams-ids.md: aadObjectId -> email) to an email on .skillator/team.md -
 // an outgoing-webhook activity carries the sender's AAD object id and display name, not
-// an email. Accepted messages are appended to .skillator/team-inbox.jsonl (inbox.mjs).
+// an email. Accepted messages are appended to <common git dir>/skillator/team-inbox.jsonl
+// (inbox.mjs) - outside the working tree, so no commit or pull can carry one in.
 // They are data, never instructions.
 // Secrets live in ~/.config/skillator/teams.env (SKILLATOR_TEAMS_CONFIG overrides) or
 // in environment variables of the same names, and are never printed or logged.
@@ -30,7 +31,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve, isAbsolute } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { mainRoot, readInbox, after, readMarker, writeMarker, appendRecord, frameMessages, INBOX, READ, TEAM, IDS, IGNORE_LINE } from './inbox.mjs'
+import { mainRoot, inboxDir, readInbox, after, readMarker, writeMarker, appendRecord, frameMessages, linesOf, ID_RE, INBOX, READ, TEAM, IDS } from './inbox.mjs'
 
 export const BODY_MAX = 64 * 1024
 export const DEFAULT_PORT = 3978
@@ -210,8 +211,9 @@ export function cleanText(text, entities = []) {
   else s = s.replace(/<at>[^<]*<\/at>/i, ' ')
   s = s.replace(/<at>([^<]*)<\/at>/gi, '@$1')
   s = s.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, ' ')
-  s = decode(s)
-  return s.split(/\r?\n/).map(l => l.replace(/[ \t ]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  // every line break a reader might draw becomes \n; any other control character goes
+  s = decode(s).replace(/\t/g, ' ')
+  return linesOf(s).map(l =>l.replace(/[ \t ]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
 // --- the listener ---
@@ -230,7 +232,9 @@ const reply = (res, status, text) => {
 // text, the token or the signature.
 export function startListener({ root, port, token, log = () => {}, nonce = null }) {
   if (!token || !Buffer.from(token, 'base64').length) return Promise.reject(new Error('no security token (TEAMS_HMAC_TOKEN) - the listener does not run unverified'))
-  const seen = new Set(readInbox(root).map(r => r.id))
+  const box = inboxDir(root)
+  if (!box) return Promise.reject(new Error(`${root} is not a git repo - the inbox lives in its git dir`))
+  const seen = new Set(readInbox(box).map(r => r.id))
   const repoName = basename(root)
   const read = rel => { try { return readFileSync(join(root, rel), 'utf8') } catch { return '' } }
 
@@ -253,12 +257,13 @@ export function startListener({ root, port, token, log = () => {}, nonce = null 
       log(`${iso()} dropped:${who.reason} aad=${aad} name=${name} bytes=${n} - link it: team.mjs link ${aad} <email on team.md>`)
       return reply(res, 200, `Not delivered: this sender is not on ${repoName}'s team list.`)
     }
-    const id = typeof a.id === 'string' || typeof a.id === 'number' ? String(a.id).slice(0, 200) : ''
+    const id = typeof a.id === 'string' || typeof a.id === 'number' ? String(a.id) : ''
     if (!id) { log(`${iso()} dropped:no-id from=${who.handle} bytes=${n}`); return reply(res, 200, 'Not delivered: no message id.') }
+    if (!ID_RE.test(id)) { log(`${iso()} dropped:bad-id from=${who.handle} bytes=${n}`); return reply(res, 200, 'Not delivered: the message id is not a plain token.') }
     if (seen.has(id)) { log(`${iso()} dropped:duplicate id=${id} from=${who.handle}`); return reply(res, 200, 'Already delivered.') }
     const text = cleanText(a.text, a.entities)
     if (!text) { log(`${iso()} dropped:empty id=${id} from=${who.handle}`); return reply(res, 200, 'Not delivered: the message was empty.') }
-    appendRecord(root, { ts: iso(), from: who.handle, email: who.email, text, id })
+    appendRecord(box, { ts: iso(), from: who.handle, email: who.email, text, id })
     seen.add(id)
     log(`${iso()} accepted id=${id} from=${who.handle} bytes=${n}`)
     return reply(res, 200, `Delivered to ${repoName}'s skillator inbox - read as data; acted on only on the owner's word.`)
@@ -301,20 +306,6 @@ export function startListener({ root, port, token, log = () => {}, nonce = null 
     server.once('error', rej)
     server.listen(port, '127.0.0.1', () => { server.off('error', rej); res(server) })
   })
-}
-
-// The inbox and its markers stay out of git: one line in the common git dir's
-// info/exclude (it covers every worktree), added once.
-export function ensureIgnored(root) {
-  const m = mainRoot(root)
-  if (!m?.gitDir) return false
-  const ex = join(m.gitDir, 'info', 'exclude')
-  let cur = ''
-  try { cur = readFileSync(ex, 'utf8') } catch { /* none yet */ }
-  if (cur.split(/\r?\n/).includes(IGNORE_LINE)) return true
-  mkdirSync(dirname(ex), { recursive: true })
-  appendFileSync(ex, (cur && !cur.endsWith('\n') ? '\n' : '') + '# skillator teams-uhura (F66): the Teams inbox and its markers\n' + IGNORE_LINE + '\n')
-  return true
 }
 
 // --- posting back: the Workflows "post to a channel when a webhook request is received"
@@ -411,7 +402,7 @@ async function alive(st) {
 async function cmdListen(argv, cfg) {
   const port = portOf(flag(argv, '--port'), cfg)
   const root = rootOrDie()
-  ensureIgnored(root)
+
   const srv = await startListener({ root, port, token: cfg.TEAMS_HMAC_TOKEN, log: l => out(l), nonce: process.env.UHURA_NONCE || null })
   out(`${iso()} listening on 127.0.0.1:${srv.address().port} for ${root}`)
   const stop = () => srv.close(() => process.exit(0))
@@ -425,7 +416,7 @@ async function cmdStart(argv, cfg) {
   if (!cfg.TEAMS_HMAC_TOKEN) { err(`no TEAMS_HMAC_TOKEN in ${configPath()} or the environment - see references/setup.md`); return 2 }
   const st = readState(port)
   if (st && await alive(st)) { out(`already listening on 127.0.0.1:${port} for ${st.root}`); out(`expose it yourself: ${tunnelLine(port)}`); return 0 }
-  ensureIgnored(root)
+
   mkdirSync(stateDir(), { recursive: true })
   const nonce = randomBytes(16).toString('hex')
   const fd = openSync(logFile(port), 'a')
@@ -473,10 +464,10 @@ async function cmdStatus(argv, cfg) {
   out(`config: ${configPath()}${existsSync(configPath()) ? '' : ' (missing)'}`)
   out(`  TEAMS_HMAC_TOKEN ${cfg.TEAMS_HMAC_TOKEN ? 'set' : 'not set'} · TEAMS_WORKFLOW_URL ${cfg.TEAMS_WORKFLOW_URL ? 'set' : 'not set'} · status posts ${cfg.TEAMS_STATUS_POSTS === 'on' ? 'on' : 'off'}`)
   if (process.platform !== 'win32' && existsSync(configPath()) && (statSync(configPath()).mode & 0o077)) out(`  warning: ${configPath()} is readable by others - chmod 600 it`)
-  const m = mainRoot(process.cwd())
-  if (m) {
-    const recs = readInbox(m.root)
-    out(`inbox: ${recs.length} message${recs.length === 1 ? '' : 's'}, ${after(recs, readMarker(m.root, READ)).length} unread (${join(m.root, INBOX)})`)
+  const box = inboxDir(process.cwd())
+  if (box) {
+    const recs = readInbox(box)
+    out(`inbox: ${recs.length} message${recs.length === 1 ? '' : 's'}, ${after(recs, readMarker(box, READ)).length} unread (${join(box, INBOX)})`)
   }
   out(`expose (your act): ${tunnelLine(port)}`)
   return 0
@@ -502,21 +493,23 @@ async function cmdLink(argv) {
 }
 
 async function cmdInbox(argv) {
-  const root = rootOrDie()
+  const box = inboxDir(process.cwd())
+  if (!box) throw new Error('not inside a git repo - run it from the repo the messages are for')
   if (argv[0] === 'mark-read') {
-    const recs = readInbox(root)
+    const recs = readInbox(box)
     const upto = flag(argv, '--upto') ?? recs.at(-1)?.id ?? null
     if (!upto) { out('inbox empty - nothing to mark'); return 0 }
-    writeMarker(root, READ, upto)
+    if (!ID_RE.test(upto)) { err('--upto takes a message id'); return 2 }
+    writeMarker(box, READ, upto)
     out(`read up to ${upto}`)
     return 0
   }
   const unread = has(argv, '--unread'), mark = has(argv, '--mark-read')
-  const recs = readInbox(root)
-  const list = unread ? after(recs, readMarker(root, READ)) : recs
+  const recs = readInbox(box)
+  const list = unread ? after(recs, readMarker(box, READ)) : recs
   if (!list.length) { out(unread ? 'no unread team messages' : 'no team messages'); return 0 }
   out(frameMessages(list, { max: 200 }))
-  if (mark) { writeMarker(root, READ, list.at(-1).id); out(`(marked ${list.length} read)`) }
+  if (mark) { writeMarker(box, READ, list.at(-1).id); out(`(marked ${list.length} read)`) }
   return 0
 }
 
