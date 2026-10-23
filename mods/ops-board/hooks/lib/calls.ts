@@ -7,7 +7,7 @@ export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' 
   | 'meta-team-add' | 'meta-team-remove'
   | 'relay-list' | 'relay-chain-status' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
   | 'usage-level'
-  | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear'
+  | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'
 
 // Exists under a skills dir: what marks a directory as one.
 export const MARKER = 'tickets-zordon/scripts/ticket-meta.sh'
@@ -29,7 +29,7 @@ export const up = (p: string, n: number) => {
 // args: meta-assign/meta-decide [id, @handle]; meta-decided [id]; meta-team-add
 // [@handle, name, emails comma-joined]; meta-team-remove [@handle]; relay-chain-status and
 // relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; others none.
-type ScriptCall = Exclude<Call, 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear'>
+type ScriptCall = Exclude<Call, 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
   'pending':            { script: PENDING, sh: a => a, ps: a => a },
   'pending-kv':         { script: PENDING, sh: a => ['--kv', ...a], ps: a => ['--kv', ...a] },
@@ -59,6 +59,7 @@ const NODE: Partial<Record<Call, (a: string[]) => string[]>> = {
   'team-config-show': () => ['config', 'show'],
   'team-config-save': () => ['config', 'save'],
   'team-config-clear': () => ['config', 'clear'],
+  'team-inbox-tail': () => ['inbox', 'tail'],     // the newest 200 records of an inbox too big to read whole
 }
 
 export const isNodeCall = (call: Call) => NODE[call] !== undefined

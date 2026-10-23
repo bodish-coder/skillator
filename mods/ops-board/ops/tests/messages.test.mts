@@ -7,6 +7,8 @@ import type { State, Effect } from '../state'
 import { frame, cells } from '../draw'
 import { parseInbox, unreadCount } from '../../hooks/lib/inbox'
 import { setupError, unmask, freshSetup } from '../../hooks/lib/teamsconfig'
+import { makeEngine } from '../engine'
+import type { Host } from '../nodehost'
 
 const P = { color: false, ascii: false }
 const text = (s: State) => frame(s, P).join('\n')
@@ -170,6 +172,26 @@ test('setup: Clear asks y/n, then runs config clear; Esc cancels the form', () =
   const st = reduce(s, { name: 'y' })
   assert.deepEqual(runs(st.effects).map(e => e.call), ['team-config-clear'])
   assert.equal(press(openSetup(CFG_SET), 'escape').setup, null)
+})
+
+test('an inbox over 4 MiB: the engine reads its tail through teams-uhura, never a blank tab', async () => {
+  const calls: string[] = []
+  const BOX = '/r/.git/skillator/team-inbox.jsonl'
+  const host: Host = {
+    win: false, skillsDir: '/s', repoRoot: '/r',
+    async run(call, args) {
+      calls.push([call, ...args].join(' '))
+      if (call === 'team-inbox-tail') return { code: 0, out: INBOX, err: '', argv: ['node', 'team.mjs', 'inbox', 'tail'] }
+      return { code: 127, out: '', err: 'not here', argv: [] }
+    },
+    async stat(p) { return p === BOX ? { mtimeMs: 1, size: 5 * 1024 * 1024 } : null },
+    async read(p) { throw new Error('read whole: ' + p) },
+    gitEmail: async () => null,
+  }
+  const engine = makeEngine({ host, email: null, once: false, state: initial(80, 24, 0), onChange: () => {}, onQuit: () => {} })
+  await engine.readAll()
+  assert.deepEqual(engine.state.messages.map(m => m.id), ['1', '2', '3'])
+  assert.ok(calls.includes('team-inbox-tail'))
 })
 
 test('validation rules and the unmask of a masked input', () => {

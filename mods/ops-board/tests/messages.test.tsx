@@ -57,6 +57,7 @@ function world(on: On, cfg = CFG_SET): [World, MockClock] {
       if (a[2] === 'config' && a[3] === 'show') return { value: ran(w.cfg) }
       if (a[2] === 'config' && a[3] === 'save') return { value: w.save }
       if (a[2] === 'config' && a[3] === 'clear') return { value: ran('cleared: /h/.skillator/teams.json\n') }
+      if (a[2] === 'inbox' && a[3] === 'tail') return { value: ran(INBOX) }
       if (a[2] === 'inbox' && a[3] === 'mark-read') { w.files[BOX + '/team-inbox.read'] = a[5] + '\n'; return { value: ran(`read up to ${a[5]}\n`) } }
     }
     if (a.includes('decide')) return { value: ran('UNOBSERVABLE\n') }
@@ -154,6 +155,18 @@ test('setup on re-open: the saved token only as set, the URL only as its host; C
   await clock.settle()
   expect(w.runs.some(r => r.argv[2] === 'config' && r.argv[3] === 'clear')).toBe(true)
   expect(w.toasts.at(-1)).toContain('✓ Teams settings cleared')
+  await ui.unmount()
+})
+
+test('an inbox over 4 MiB: the tab shows its newest messages through teams-uhura, never blank', async ($, on) => {
+  const [w, clock] = world(on)
+  w.files[BOX + '/team-inbox.jsonl'] = 'x'.repeat(4 * 1024 * 1024 + 10)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  expect((await ui.find({ key: 'row:3' }))?.text).toContain('never mind')
+  expect(w.runs.some(r => r.argv[2] === 'inbox' && r.argv[3] === 'tail')).toBe(true)
   await ui.unmount()
 })
 

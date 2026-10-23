@@ -37,6 +37,7 @@ import { fileURLToPath } from 'node:url'
 import { mainRoot, inboxDir, readInbox, after, readMarker, writeMarker, appendRecord, frameMessages, linesOf, ID_RE, INBOX, READ, TEAM, IDS } from './inbox.mjs'
 
 export const BODY_MAX = 64 * 1024
+export const MSG_TEXT_MAX = 8000
 export const DEFAULT_PORT = 3978
 const KEYS = ['TEAMS_HMAC_TOKEN', 'TEAMS_WORKFLOW_URL', 'TEAMS_PORT', 'TEAMS_STATUS_POSTS']
 const SELF = fileURLToPath(import.meta.url)
@@ -270,7 +271,9 @@ export function startListener({ root, port, token, log = () => {}, nonce = null 
     if (!id) { log(`${iso()} dropped:no-id from=${who.handle} bytes=${n}`); return reply(res, 200, 'Not delivered: no message id.') }
     if (!ID_RE.test(id)) { log(`${iso()} dropped:bad-id from=${who.handle} bytes=${n}`); return reply(res, 200, 'Not delivered: the message id is not a plain token.') }
     if (seen.has(id)) { log(`${iso()} dropped:duplicate id=${id} from=${who.handle}`); return reply(res, 200, 'Already delivered.') }
-    const text = cleanText(a.text, a.entities)
+    const full = cleanText(a.text, a.entities)
+    // one message is at most MSG_TEXT_MAX characters in the inbox, cut with '…'
+    const text = full.length > MSG_TEXT_MAX ? full.slice(0, MSG_TEXT_MAX - 1) + '…' : full
     if (!text) { log(`${iso()} dropped:empty id=${id} from=${who.handle}`); return reply(res, 200, 'Not delivered: the message was empty.') }
     appendRecord(box, { ts: iso(), from: who.handle, email: who.email, text, id })
     seen.add(id)
@@ -508,6 +511,12 @@ async function cmdLink(argv) {
 async function cmdInbox(argv) {
   const box = inboxDir(process.cwd())
   if (!box) throw new Error('not inside a git repo - run it from the repo the messages are for')
+  // tail: the newest 200 records, as JSONL - the ops board's read of an inbox too big to
+  // read whole (readInbox reads only its last 4 MiB)
+  if (argv[0] === 'tail') {
+    for (const r of readInbox(box).slice(-200)) process.stdout.write(JSON.stringify(r) + '\n')
+    return 0
+  }
   if (argv[0] === 'mark-read') {
     const recs = readInbox(box)
     const upto = flag(argv, '--upto') ?? recs.at(-1)?.id ?? null

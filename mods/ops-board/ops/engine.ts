@@ -119,6 +119,11 @@ export function makeEngine(o: EngineOpts): Engine {
     inboxSig = sig
     let text = '', readId: string | null = null
     if (ist && ist.size <= MAX_READ) { try { text = await host.read(dir + '/' + INBOX_FILE) } catch { text = '' } }
+    else if (ist) {
+      // too big to read whole: its newest records, through teams-uhura (it reads the tail)
+      const r = await host.run('team-inbox-tail', [])
+      text = r.code === 0 ? r.out : ''
+    }
     if (rst) { try { readId = (await host.read(dir + '/' + READ_FILE)).trim() || null } catch { readId = null } }
     state = onInbox(state, text, readId)
   }

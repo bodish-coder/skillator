@@ -46,6 +46,11 @@ export async function pollInbox($: EngineInterface): Promise<void> {
   let text = ''
   let readId: string | null = null
   if (ist && ist.size <= MAX_READ) { try { text = await $.fs.read(dir + '/' + INBOX_FILE) } catch { text = '' } }
+  else if (ist) {
+    // too big to read whole: its newest records, through teams-uhura (it reads the tail)
+    const r = await runCall($, 'team-inbox-tail', [])
+    text = r.code === 0 ? r.out : ''
+  }
   if (rst) { try { readId = (await $.fs.read(dir + '/' + READ_FILE)).trim() || null } catch { readId = null } }
   const msgs: Msg[] = parseInbox(text)
   await update($, messagesA, () => msgs)

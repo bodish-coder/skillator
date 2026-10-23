@@ -174,6 +174,25 @@ test('a committed .skillator/teams-ids.md is ignored; link writes the git dir, r
   assert.equal(parseInbox(inboxOf(r))[0].from, '@vidul')
 })
 
+test('inbox tail: the newest 200 records of an inbox over 4 MiB, as JSONL; the listener caps one message', async t => {
+  const r = repo()
+  const recs = []
+  for (let i = 0; i < 1300; i++) recs.push(JSON.stringify({ ts: '2026-10-23T09:20:00.000Z', from: '@asha', email: 'asha@x.com', text: 'x'.repeat(4000), id: 'm' + i }))
+  writeFileSync(join(box(r), INBOX), recs.join('\n') + '\n')
+  const out = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'inbox', 'tail'], { encoding: 'utf8', cwd: r, maxBuffer: 64 * 1024 * 1024 })
+  assert.equal(out.status, 0, out.stderr)
+  const got = parseInbox(out.stdout)
+  assert.equal(got.length, 200)
+  assert.equal(got.at(-1).id, 'm1299')
+  const { post } = await listener(t, r)
+  const body = JSON.stringify(activity({ id: 'big-1', text: '<at>skillator</at> ' + 'y'.repeat(20000) }))
+  assert.equal((await post(body, { authorization: sign(body) })).status, 200)
+  const last = parseInbox(inboxOf(r)).at(-1)
+  assert.equal(last.id, 'big-1')
+  assert.ok(last.text.length <= 8000, String(last.text.length))
+  assert.match(last.text, /…$/)
+})
+
 test('listener: the body cap - an oversized POST is 413 and never read whole; GET is 405', async t => {
   const r = repo()
   const { post, url, logs } = await listener(t, r)
