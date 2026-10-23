@@ -88,6 +88,7 @@ Five rows have now been tested; prime-agent has no loader to test.
 | cursor | **yes, verified** — 2026-09-23, `cursor-agent` 2026.09.18, 4/4 — but every load came from the user-level `~/.cursor/skills`; a fixture-local `.cursor/skills`/`.agents/skills` never appeared in its inventory (self-reported, unconfirmed) |
 | antigravity | **yes, verified** — 2026-09-24, `agy` 1.2.9, 4/4 — `grayskull-power` 2/2 from the fixture's project-local `.agents/skills`; the `func-ui`-triggering prompt 2/2 loaded the stale user-level `~/.gemini/config/skills/func-ui` instead of the fixture's `designui-galadriel` |
 | pi | **yes, verified** — 2026-09-23, `pi` 0.74.2 / openai gpt-5.5, 4/4, from project-local `.pi/skills` with `PI_CODING_AGENT_DIR` and `HOME` isolated |
+| muse | **unverified** — F68 (2026-10-24, Muse Code 1.4.12): `muse plugins validate` - 28 skills `supported` (summary `full`); `muse plugins install` into a scratch profile - `active=true skills=28`; an unprompted load from a description not run |
 | prime-agent | **no** — no markdown-skill loader at all; not installed on this machine (2026-09-24), so its always-on-file route is still unrun |
 
 The claude-code runs were headless, from a throwaway fixture outside any repo,
@@ -233,6 +234,7 @@ updated with `git pull --ff-only` only.
 | Antigravity IDE ops board (F57) | the ops board as an extension of the Antigravity IDE (the VS Code fork, `antigravity-ide`; not `agy`): `ops-board/antigravity/pack.mjs` writes a VSIX whose entry requires `~/.gemini/config/skills/ops-board/antigravity/extension.cjs`, installed with `antigravity-ide --install-extension <vsix> --force` (a folder dropped beside `~/.antigravity-ide/extensions/extensions.json` is ignored); command "skillator: Ops board" opens a webview panel - Tickets / Runs / Health, assign / decide, the standalone app's keys; "skillator: Ops board - one frame" writes one frame to the "skillator ops" output channel | verified headless (Antigravity IDE 1.107.0, Electron 39 / node 22.21: `--extensionTestsPath` run activates `skillator.skillator-ops`, both commands listed, the one-frame command draws, the panel opens); the live panel is the owner's check |
 | codex | `$CODEX_HOME/prompts/<n>.md` → `/prompts:<n>` | inferred (docs) until the picker check |
 | cursor | user `~/.cursor/commands/<n>.md` | project dir verified; user dir inferred until the picker check |
+| muse (F68) | none: `.muse-plugin/plugin.json` lists `commands: []` (the command schema is unprobed - superpowers ships none either); the skill route stays | inferred |
 | prime-agent | none; the skill route stays | verified (no loader) |
 
 **cursor** — Cursor's CLI is `cursor-agent` (`agent.exe` beside it). A bare `agent`
@@ -319,6 +321,20 @@ models don't always do: force it with `/skill:<name>`. Delegation isn't native;
 without a subagent extension, run tiered phases **sequentially in one session**,
 switching `/model` between phases, and write each phase's output to disk before
 switching. That file-on-disk step is what makes the tiering safe here.
+
+**muse** (F68) — a native plugin, not an installer dest: `.muse-plugin/plugin.json` (schemaVersion 1)
+lists every `skills/*/SKILL.md` by its frontmatter `name`, and `.muse-plugin/marketplace.json`
+lists the plugin; both carry the `.claude-plugin/plugin.json` version.
+`practice/scripts/check-muse-manifest.sh` fails on a skill left out, a path gone, an id that is
+not the skill's `name` or a version out of step, and `install.sh --selftest` runs it - so a
+new skill or a release bump touches `.muse-plugin/` too. Install: `muse plugins install <clone>`
+(it copies the whole clone into Muse's cache; skills are enabled by default, so
+`muse plugins approve` has no runtime capability to act on); update:
+`muse plugins update skillator` (refreshes from that local source; `/skillator-update` step 4).
+Verified (Muse Code 1.4.12, 2026-10-24): `muse plugins validate <repo>` - valid, summary
+`full`; `muse plugins install` with a scratch USERPROFILE/XDG_DATA_HOME - `skills=28
+active=true`, `approve` returns no runtime capabilities; both print one warning that `.claude-plugin/plugin.json` is ignored. Tiers, delegation, usage %
+and the ops board are unprobed: run the printed `ops` launch line beside it.
 
 **prime-agent** — skills are importable *Python packages*, so these markdown
 skills aren't auto-loaded. Run one by reading its `SKILL.md` (or pointing

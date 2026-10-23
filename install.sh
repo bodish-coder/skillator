@@ -413,6 +413,8 @@ if [ -n "$selftest" ]; then
       NR>1 && /^[A-Za-z_-]+:[ \t]+[^"\x27\[{|>&*!#% \t]/ { v=$0; sub(/^[A-Za-z_-]+:[ \t]+/, "", v); if (v ~ /: /) print f ": " $0 }' "$f"
   done)
   [ -z "$_bad" ] || { echo "FAIL: frontmatter has an unquoted \": \" (invalid YAML, pi will not register the command): $_bad"; exit 1; }
+  # F68: the Muse manifest lists every skill and carries the release version
+  sh "$root/practice/scripts/check-muse-manifest.sh" "$root" > /dev/null || { echo "FAIL: .muse-plugin out of step (sh practice/scripts/check-muse-manifest.sh)"; exit 1; }
   for f in .codex/prompts/pending.md .codex/prompts/list-tickets.md .gemini/commands/pending.toml .gemini/commands/list-tickets.toml \
            .cursor/commands/pending.md .cursor/commands/list-tickets.md .pi/agent/prompts/pending.md .pi/agent/prompts/list-tickets.md \
            .gemini/config/skills/pending/SKILL.md .gemini/config/skills/list-tickets/SKILL.md \

@@ -89,6 +89,7 @@ Manual install paths, if you'd rather not run the script:
 | Codex | `$CODEX_HOME/skills/` (what the installer writes; default `~/.codex/skills/`) — auto-loaded when the task matches. Also reads `~/.agents/skills/` if present, with no dedupe (codex 0.155.1, probed 2026-09-23) |
 | Antigravity CLI | `.agents/skills/` (workspace) or `~/.gemini/antigravity-cli/skills/` (global, what `agy` 1.4.5 reads; the installer also writes `~/.gemini/config/skills/` and `~/.gemini/skills/`) |
 | Pi | `.pi/skills/` (force with `/skill:<name>`) |
+| Muse | native plugin from `.muse-plugin/plugin.json` (every skill; no commands, no hooks): `muse plugins install <clone>` (skills are on at once; nothing to approve); `/skillator-update` runs `muse plugins update skillator` |
 | Prime Agent | anywhere — skills there are Python packages, so read the `SKILL.md` or reference it from `AGENTS.md` |
 
 Model names and tool names inside the skills are **Claude Code defaults**;
