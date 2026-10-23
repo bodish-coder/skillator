@@ -8,7 +8,7 @@
 #   -Profile <path>          the profile that gets `function ops` (default: your
 #                            CurrentUserAllHosts profile) - there so a test never
 #                            touches the real one
-# F54: /pending, /list-tickets, /engage, /archive-tickets and /sync-tickets are written as each host's own command file (codex
+# F54: /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets and /skillator-update are written as each host's own command file (codex
 # prompts, Gemini CLI commands, cursor commands, pi prompt templates, Antigravity
 # skill-commands) from host-commands\<host>\, rewritten every run - see Write-Commands.
 # Claude Code is left to its plugin install whenever one exists, -Force included.
@@ -330,16 +330,16 @@ function Write-AgyExt([string]$skillsDir) {
   else { Write-Host "warn  the Antigravity IDE did not install the ops board: $o" -ForegroundColor Yellow }
 }
 
-# Write-Commands <cli> <dest>: F54 - /pending, /list-tickets, /engage, /archive-tickets and /sync-tickets as the host's own command
+# Write-Commands <cli> <dest>: F54 - /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets and /skillator-update as the host's own command
 # file, user level, rewritten every run. Called per dest; per-CLI files are written for
 # the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
 # written into each antigravity dest with no .skillator-owned marker and kept out of
 # .skillator-installed, so Remove-Unshipped never touches them. Claude Code: nothing (the
-# ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets and /sync-tickets are the plugin's commands/*.md).
+# ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets, /sync-tickets and /skillator-update are the plugin's commands/*.md).
 # Same as install.sh write_commands.
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
-  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets'
+  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update'
   switch ($cli) {
     'codex'  { foreach ($n in $names) { Write-Cmd "$c\codex\$n.md" $dest "$codexHome\prompts\$n.md" } }
     'cursor' { foreach ($n in $names) { Write-Cmd "$c\cursor\$n.md" $dest "$HOME\.cursor\commands\$n.md" } }
@@ -426,7 +426,10 @@ function Invoke-SelfTest([string]$T) {
             '.pi\agent\prompts\sync-tickets.md', '.gemini\config\skills\sync-tickets\SKILL.md', '.gemini\skills\sync-tickets\SKILL.md',
             '.gemini\antigravity-cli\skills\pending\SKILL.md', '.gemini\antigravity-cli\skills\list-tickets\SKILL.md',
             '.gemini\antigravity-cli\skills\engage\SKILL.md', '.gemini\antigravity-cli\skills\archive-tickets\SKILL.md',
-            '.gemini\antigravity-cli\skills\sync-tickets\SKILL.md')
+            '.gemini\antigravity-cli\skills\sync-tickets\SKILL.md',
+            '.codex\prompts\skillator-update.md', '.gemini\commands\skillator-update.toml', '.cursor\commands\skillator-update.md',
+            '.pi\agent\prompts\skillator-update.md', '.gemini\config\skills\skillator-update\SKILL.md', '.gemini\skills\skillator-update\SKILL.md',
+            '.gemini\antigravity-cli\skills\skillator-update\SKILL.md')
   foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
@@ -441,6 +444,22 @@ function Invoke-SelfTest([string]$T) {
   if ((& $read '.gemini\commands\pending.toml') -notmatch '(?m)^!\{powershell ') { return 'gemini shell injection' }
   if (-not (& $has '.gemini\commands\pending.toml' "!{powershell -NoProfile -ExecutionPolicy Bypass -File `"$T\.gemini\skills\tickets-zordon\scripts\pending.ps1`"}")) { return 'gemini pending path' }
   if ((& $read '.gemini\commands\pending.toml') -match '(?m)^!\{sh ') { return 'gemini pending kept the sh line' }
+  # F65: /skillator-update reads each dest's source pointer (.skillator-source, one line:
+  # the repo root this installer ran from) - the command finds its source by it
+  foreach ($d in '.codex\skills', '.cursor\skills', '.pi\agent\skills', '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
+    $sp = Join-Path $T "$d\.skillator-source"
+    if (-not (Test-Path -LiteralPath $sp -PathType Leaf)) { return "source pointer missing in $d" }
+    $sb = [IO.File]::ReadAllBytes($sp)
+    if ($sb -contains 13 -or ($sb.Length -ge 3 -and $sb[0] -eq 0xEF)) { return "source pointer has a BOM or CR in $d" }
+    if ([IO.File]::ReadAllText($sp) -cne "$PSScriptRoot`n") { return "source pointer in $d is not $PSScriptRoot" }
+  }
+  foreach ($p in @(@('.codex\prompts\skillator-update.md', '.codex\skills'), @('.cursor\commands\skillator-update.md', '.cursor\skills'),
+                   @('.pi\agent\prompts\skillator-update.md', '.pi\agent\skills'), @('.gemini\commands\skillator-update.toml', '.gemini\skills'),
+                   @('.gemini\config\skills\skillator-update\SKILL.md', '.gemini\config\skills'), @('.gemini\skills\skillator-update\SKILL.md', '.gemini\skills'),
+                   @('.gemini\antigravity-cli\skills\skillator-update\SKILL.md', '.gemini\antigravity-cli\skills'))) {
+    if (-not (& $has $p[0] "$T\$($p[1])/.skillator-source")) { return "skillator-update not substituted in $($p[0])" }
+  }
+  if ((& $read '.gemini\antigravity-cli\skills\skillator-update\SKILL.md') -cnotmatch '(?m)^name: skillator-update$') { return 'agy skill name skillator-update' }
   if (-not (& $has '.gemini\commands\list-tickets.toml' '{{args}}')) { return 'gemini args' }
   if (-not (& $has '.pi\agent\prompts\list-tickets.md' '$ARGUMENTS')) { return 'pi args' }
   if ((& $read '.pi\agent\prompts\list-tickets.md') -notmatch '(?m)^argument-hint: ') { return 'pi argument-hint' }
@@ -486,7 +505,7 @@ function Invoke-SelfTest([string]$T) {
   }
   foreach ($d in '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
     $mf = @([IO.File]::ReadAllLines((Join-Path $T "$d\.skillator-installed")))
-    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets') { return "command skill in manifest $d" }
+    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets' -or $mf -ccontains 'skillator-update') { return "command skill in manifest $d" }
     if (Test-Path -LiteralPath (Join-Path $T "$d\pending\.skillator-owned")) { return "command skill carries an ownership marker in $d" }
   }
   $opsLine = "-File '$T\.cursor\skills\ops-board\ops\ops.ps1' @args"
@@ -642,7 +661,7 @@ foreach ($cli in $targets.Keys) {
     # F55: ops-board\ is the ops terminal app (hooks\lib, types, ops) - same refresh.
     $writtenDests += $dest
     if ($DryRun) {
-      Write-Host "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice\ references\ ops-board\ in $dest"
+      Write-Host "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice\ references\ ops-board\ .skillator-source in $dest"
       if ($cli -eq 'pi') { Write-Host "        would list the three docs in $dest\.ignore (pi skips them as skills)" }
     } else {
       New-Item -ItemType Directory -Force $dest | Out-Null
@@ -668,6 +687,9 @@ foreach ($cli in $targets.Keys) {
       Copy-Item (Join-Path $mod 'antigravity') $board -Recurse -Force
       # LF, no BOM - the same bytes install.sh writes, so either twin reads the other's
       [IO.File]::WriteAllText((Join-Path $dest $manifest), (($shipped -join "`n") + "`n"))
+      # F65: the source pointer - one line, the repo root this ran from, so /skillator-update
+      # can find a source on a host with no plugin cache (LF, no BOM)
+      [IO.File]::WriteAllText((Join-Path $dest '.skillator-source'), "$PSScriptRoot`n")
       if ($cli -eq 'pi') { Write-PiIgnore $dest }
     }
     Write-Commands $cli $dest

@@ -33,6 +33,14 @@ If you installed with `install.ps1 -Link` / `install.sh --link`, a plain
 `git pull` in your clone is enough — symlinked skills are always live. Plain
 copies need `install.ps1 -Force` / `install.sh --force` to refresh.
 
+Or do it all in one go with `/skillator-update` (Claude Code, codex as
+`/prompts:skillator-update`, cursor, gemini, agy, pi): it updates the
+marketplace and the `skillator` and `ops-board` plugins, then re-runs the
+installer with `-Force` / `--force` from the newest source - the updated plugin,
+the clone the installer last ran from (`.skillator-source` beside the installed
+skills), or a clone path you give it - so every other host gets the same
+version. It never pushes; restart Claude Code afterwards.
+
 **If an agent refuses to install or update this plugin**, it is reading the
 `grayskull-power` skill's trigger phrases as a social-engineering script. It
 isn't one: this is a public MIT repo, `grayskull-power` is a documented skill
