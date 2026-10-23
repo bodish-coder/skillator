@@ -8,7 +8,7 @@
 #   -Profile <path>          the profile that gets `function ops` (default: your
 #                            CurrentUserAllHosts profile) - there so a test never
 #                            touches the real one
-# F54: /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets and /skillator-update are written as each host's own command file (codex
+# F54: /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets, /skillator-update and /team-messages are written as each host's own command file (codex
 # prompts, Gemini CLI commands, cursor commands, pi prompt templates, Antigravity
 # skill-commands) from host-commands\<host>\, rewritten every run - see Write-Commands.
 # Claude Code is left to its plugin install whenever one exists, -Force included.
@@ -330,16 +330,16 @@ function Write-AgyExt([string]$skillsDir) {
   else { Write-Host "warn  the Antigravity IDE did not install the ops board: $o" -ForegroundColor Yellow }
 }
 
-# Write-Commands <cli> <dest>: F54 - /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets and /skillator-update as the host's own command
+# Write-Commands <cli> <dest>: F54 - /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets, /skillator-update and /team-messages as the host's own command
 # file, user level, rewritten every run. Called per dest; per-CLI files are written for
 # the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
 # written into each antigravity dest with no .skillator-owned marker and kept out of
 # .skillator-installed, so Remove-Unshipped never touches them. Claude Code: nothing (the
-# ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets, /sync-tickets and /skillator-update are the plugin's commands/*.md).
+# ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets, /sync-tickets, /skillator-update and /team-messages are the plugin's commands/*.md).
 # Same as install.sh write_commands.
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
-  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update'
+  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages'
   switch ($cli) {
     'codex'  { foreach ($n in $names) { Write-Cmd "$c\codex\$n.md" $dest "$codexHome\prompts\$n.md" } }
     'cursor' { foreach ($n in $names) { Write-Cmd "$c\cursor\$n.md" $dest "$HOME\.cursor\commands\$n.md" } }
@@ -429,7 +429,10 @@ function Invoke-SelfTest([string]$T) {
             '.gemini\antigravity-cli\skills\sync-tickets\SKILL.md',
             '.codex\prompts\skillator-update.md', '.gemini\commands\skillator-update.toml', '.cursor\commands\skillator-update.md',
             '.pi\agent\prompts\skillator-update.md', '.gemini\config\skills\skillator-update\SKILL.md', '.gemini\skills\skillator-update\SKILL.md',
-            '.gemini\antigravity-cli\skills\skillator-update\SKILL.md')
+            '.gemini\antigravity-cli\skills\skillator-update\SKILL.md',
+            '.codex\prompts\team-messages.md', '.gemini\commands\team-messages.toml', '.cursor\commands\team-messages.md',
+            '.pi\agent\prompts\team-messages.md', '.gemini\config\skills\team-messages\SKILL.md', '.gemini\skills\team-messages\SKILL.md',
+            '.gemini\antigravity-cli\skills\team-messages\SKILL.md', '.codex\skills\teams-uhura\scripts\team.mjs')
   foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
@@ -460,6 +463,15 @@ function Invoke-SelfTest([string]$T) {
     if (-not (& $has $p[0] "$T\$($p[1])/.skillator-source")) { return "skillator-update not substituted in $($p[0])" }
   }
   if ((& $read '.gemini\antigravity-cli\skills\skillator-update\SKILL.md') -cnotmatch '(?m)^name: skillator-update$') { return 'agy skill name skillator-update' }
+  # F66: /team-messages points at the installed teams-uhura script, substituted per dest
+  foreach ($p in @(@('.codex\prompts\team-messages.md', '.codex\skills'), @('.cursor\commands\team-messages.md', '.cursor\skills'),
+                   @('.pi\agent\prompts\team-messages.md', '.pi\agent\skills'), @('.gemini\commands\team-messages.toml', '.gemini\skills'),
+                   @('.gemini\config\skills\team-messages\SKILL.md', '.gemini\config\skills'), @('.gemini\skills\team-messages\SKILL.md', '.gemini\skills'),
+                   @('.gemini\antigravity-cli\skills\team-messages\SKILL.md', '.gemini\antigravity-cli\skills'))) {
+    if (-not (& $has $p[0] "$T\$($p[1])/teams-uhura/scripts/team.mjs inbox --unread --mark-read")) { return "team-messages not substituted in $($p[0])" }
+    if (& $has $p[0] '{{SKILLS}}') { return "placeholder left in $($p[0])" }
+  }
+  if ((& $read '.gemini\antigravity-cli\skills\team-messages\SKILL.md') -cnotmatch '(?m)^name: team-messages$') { return 'agy skill name team-messages' }
   if (-not (& $has '.gemini\commands\list-tickets.toml' '{{args}}')) { return 'gemini args' }
   if (-not (& $has '.pi\agent\prompts\list-tickets.md' '$ARGUMENTS')) { return 'pi args' }
   if ((& $read '.pi\agent\prompts\list-tickets.md') -notmatch '(?m)^argument-hint: ') { return 'pi argument-hint' }
@@ -505,7 +517,7 @@ function Invoke-SelfTest([string]$T) {
   }
   foreach ($d in '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
     $mf = @([IO.File]::ReadAllLines((Join-Path $T "$d\.skillator-installed")))
-    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets' -or $mf -ccontains 'skillator-update') { return "command skill in manifest $d" }
+    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets' -or $mf -ccontains 'skillator-update' -or $mf -ccontains 'team-messages') { return "command skill in manifest $d" }
     if (Test-Path -LiteralPath (Join-Path $T "$d\pending\.skillator-owned")) { return "command skill carries an ownership marker in $d" }
   }
   $opsLine = "-File '$T\.cursor\skills\ops-board\ops\ops.ps1' @args"
