@@ -1,12 +1,12 @@
 {
-  "description": "skillator: F66 teams-uhura - unread Teams channel messages into the next turn as context, framed as data (silent with no inbox)",
+  "description": "skillator: F66 teams-uhura - unread Teams channel messages into the next turn as context, framed as data (a shell pre-check: node starts only when the repo has a Teams inbox)",
   "hooks": {
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/teams-uhura/scripts/team-hook.mjs\"",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/team-hook.sh\"",
             "timeout": 5
           }
         ]

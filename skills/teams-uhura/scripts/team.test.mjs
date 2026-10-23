@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, rmSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { spawnSync, spawn } from 'node:child_process'
 import { tmpdir, homedir } from 'node:os'
@@ -355,6 +355,44 @@ test('hook: unread messages - one additionalContext, framed as data, then marked
   assert.equal(again.stdout, '')
   // bad stdin still exits 0, silent
   assert.equal(hook(r, 'not json').status, 0)
+})
+
+// The plugin's hook entry: a shell pre-check, so node starts only when the repo has a
+// Teams inbox, and a missing node is silent. Every prompt of every plugin user pays this.
+const PRE = join(HERE, '../../../hooks/team-hook.sh')
+const shDir = (() => {
+  const c = process.platform === 'win32' ? 'cygpath -w "$(dirname "$(command -v sh)")"' : 'dirname "$(command -v sh)"'
+  return spawnSync('sh', ['-c', c], { encoding: 'utf8' }).stdout.trim()
+})()
+const pre = (cwd, env = process.env) => spawnSync('sh', [PRE], { input: JSON.stringify({ cwd }), encoding: 'utf8', cwd, env })
+
+test('hook pre-check: no inbox - silent, exit 0, node never started; inbox - node frames it; no node - silent', () => {
+  const r = repo()
+  const t0 = Date.now()
+  const h = pre(r)
+  const ms = Date.now() - t0
+  assert.equal(h.status, 0, h.stderr)
+  assert.equal(h.stdout + h.stderr, '')
+  assert.ok(ms < 1000, `${ms} ms`)
+  const noNode = { ...process.env, PATH: shDir, Path: shDir }
+  assert.equal(pre(r, noNode).status, 0)
+  writeFileSync(join(box(r), INBOX), JSON.stringify({ ts: '2026-10-23T09:20:00.000Z', from: '@asha', email: 'asha@x.com', text: 'hi', id: '1' }) + '\n')
+  // no node on PATH and an inbox: silent, exit 0 (skipped where sh and node share a dir)
+  if (!existsSync(join(shDir, process.platform === 'win32' ? 'node.exe' : 'node'))) {
+    const none = pre(r, noNode)
+    assert.equal(none.status, 0)
+    assert.equal(none.stdout + none.stderr, '')
+  }
+  const withInbox = pre(r)
+  assert.equal(withInbox.status, 0, withInbox.stderr)
+  assert.match(JSON.parse(withInbox.stdout).hookSpecificOutput.additionalContext, /> hi/)
+  // from a worktree of the repo: the main checkout's inbox (through .git/commondir)
+  const gd = join(r, '.git', 'worktrees', 'wt'), wt = join(r, 'wt')
+  mkdirSync(gd, { recursive: true }); mkdirSync(wt)
+  writeFileSync(join(wt, '.git'), `gitdir: ${gd.replace(/\\/g, '/')}\r\n`)
+  writeFileSync(join(gd, 'commondir'), '../..\n')
+  rmSync(join(box(r), DELIVERED), { force: true })
+  assert.match(pre(wt).stdout, /> hi/)
 })
 
 test('frameMessages: one quoted line block per message, capped, newlines kept inside the quote', () => {
