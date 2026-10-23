@@ -964,6 +964,24 @@ selftest() {
   sh "$self" assign F1 @vidul > /dev/null 2>&1 && { echo "FAIL: assign worked with no team.md"; fail=1; }
   eq "solo tag" "$(run tag F1)" "- [ ] F1 $D Thing (@cc-dddddd)"
 
+  # --- F66: the opt-in Teams status post runs after a successful edit and never
+  # fails it; off (the default) it never runs. The Workflows URL is loopback port 1:
+  # the post fails at once, offline - nothing reaches Teams.
+  if command -v node > /dev/null 2>&1 && [ -f "$(dirname -- "$self")/../../teams-uhura/scripts/team.mjs" ]; then
+    printf '{ "token": "dG9rZW4=", "workflowUrl": "https://127.0.0.1:1/x", "port": 3978, "statusPosts": true }\n' > "$T/teams.json"
+    printf -- "# TICKETS\n\n- [ ] F7 %s Seven\n- [ ] F8 %s Eight\n" "$D" "$D" > TICKETS.md
+    SKILLATOR_TEAMS_CONFIG="$T/teams.json" TEAMS_STATUS_POSTS='' sh "$self" done F7 shipped > "$T/out" 2> "$T/err"
+    eq "F66 done with a failing post exits 0" "$?" 0
+    grep -q "^- \[x\] F7 $D Seven" TICKETS.md || { echo "FAIL: F66 done with a failing post did not edit"; fail=1; }
+    grep -q 'teams status post failed (the edit stands)' "$T/err" || { echo "FAIL: F66 failing post not said: $(cat "$T/err")"; fail=1; }
+    SKILLATOR_TEAMS_CONFIG="$T/teams.json" TEAMS_STATUS_POSTS=off sh "$self" block F8 creds > "$T/out" 2> "$T/err"
+    eq "F66 posts off exits 0" "$?" 0
+    grep -q teams "$T/err" && { echo "FAIL: F66 posts off still posted: $(cat "$T/err")"; fail=1; }
+    printf '{ "token": "dG9rZW4=", "workflowUrl": "https://127.0.0.1:1/x", "port": 3978, "statusPosts": false }\n' > "$T/teams.json"
+    SKILLATOR_TEAMS_CONFIG="$T/teams.json" TEAMS_STATUS_POSTS='' sh "$self" defer F8 later > "$T/out" 2> "$T/err"
+    grep -q teams "$T/err" && { echo "FAIL: F66 statusPosts false still posted: $(cat "$T/err")"; fail=1; }
+  fi
+
   # --- B3: every edit keeps the board's line endings byte for byte - a CRLF
   # board stays CRLF (Windows gawk drops \r on read), an LF board stays LF
   C="$T/crlf"
@@ -988,6 +1006,23 @@ selftest() {
   echo ok
 }
 
+# F66: the opt-in Teams status post (teams-uhura), after an edit that worked. On when
+# TEAMS_STATUS_POSTS=on, or - that unset - "statusPosts": true in the per-user config
+# (~/.skillator/teams.json, SKILLATOR_TEAMS_CONFIG overrides). Off by default. A post
+# that fails is one line on stderr; the edit stands and the exit stays 0.
+teams_post() {
+  case ${TEAMS_STATUS_POSTS:-} in
+    on) ;;
+    '') grep -Eq '"statusPosts"[[:space:]]*:[[:space:]]*true' "${SKILLATOR_TEAMS_CONFIG:-$HOME/.skillator/teams.json}" 2>/dev/null || return 0 ;;
+    *) return 0 ;;
+  esac
+  _js="$(dirname -- "$0")/../../teams-uhura/scripts/team.mjs"
+  [ -f "$_js" ] && command -v node > /dev/null 2>&1 || return 0
+  _e=$(TEAMS_STATUS_POSTS=on node "$_js" post-status "$@" 2>&1 > /dev/null) ||
+    echo "ticket-meta: teams status post failed (the edit stands): $(printf '%s' "$_e" | tr '\r\n' '  ' | sed 's/^team: //')" >&2
+  return 0
+}
+
 [ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|done|block|defer|tag|team|selftest"
 c=$1; shift
 [ "$c" = selftest ] && { selftest; exit 0; }
@@ -999,14 +1034,14 @@ case $c in
 ' "$p"; done | map_paths ;;
   by) [ $# -eq 1 ] || die "usage: by <ID>"; norm_id "$1"; commits_info "$ID" | by_from ;;
   apps-of) [ $# -eq 1 ] || die "usage: apps-of <ID>"; norm_id "$1"; commits_info "$ID" | apps_from ;;
-  assign) cmd_assign "$@" ;;
+  assign) cmd_assign "$@" && teams_post assign "$@" ;;
   decide) cmd_decide "$@" ;;
   decided) cmd_decided "$@" ;;
-  testing) cmd_testing "$@" ;;
-  tested) cmd_tested "$@" ;;
-  done) cmd_done "$@" ;;
-  block) cmd_block "$@" ;;
-  defer) cmd_defer "$@" ;;
+  testing) cmd_testing "$@" && teams_post testing "$@" ;;
+  tested) cmd_tested "$@" && teams_post tested "$@" ;;
+  done) cmd_done "$@" && teams_post done "$@" ;;
+  block) cmd_block "$@" && teams_post block "$@" ;;
+  defer) cmd_defer "$@" && teams_post defer "$@" ;;
   tag) cmd_tag "$@" ;;
   team) cmd_team "$@" ;;
   *) die "unknown subcommand: $c" ;;

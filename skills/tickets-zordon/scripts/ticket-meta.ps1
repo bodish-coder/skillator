@@ -697,6 +697,38 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
   }
 }
 
+# F66: the opt-in Teams status post (teams-uhura), after an edit that worked. On when
+# TEAMS_STATUS_POSTS=on, or - that unset - "statusPosts": true in the per-user config
+# (~/.skillator/teams.json, SKILLATOR_TEAMS_CONFIG overrides). Off by default. A post
+# that fails is one line on stderr; the edit stands and the exit stays 0. Same as
+# ticket-meta.sh teams_post.
+function Invoke-TeamsPost([string]$c, [string[]]$a) {
+  try {
+    $on = $env:TEAMS_STATUS_POSTS
+    if ([string]::IsNullOrEmpty($on)) {
+      $cfg = $env:SKILLATOR_TEAMS_CONFIG
+      if ([string]::IsNullOrEmpty($cfg)) { $cfg = Join-Path $HOME '.skillator/teams.json' }
+      if (-not (Test-Path -LiteralPath $cfg -PathType Leaf)) { return }
+      if ([System.IO.File]::ReadAllText($cfg) -notmatch '"statusPosts"\s*:\s*true') { return }
+    } elseif ($on -cne 'on') { return }
+    $js = Join-Path $PSScriptRoot '../../teams-uhura/scripts/team.mjs'
+    if (-not (Test-Path -LiteralPath $js -PathType Leaf)) { return }
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return }
+    $prev = $env:TEAMS_STATUS_POSTS
+    $env:TEAMS_STATUS_POSTS = 'on'
+    $ErrorActionPreference = 'Continue'
+    $e = & node $js post-status $c @a 2>&1 | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { [string]$_ }
+    $code = $LASTEXITCODE
+    $env:TEAMS_STATUS_POSTS = $prev
+    if ($code -ne 0) {
+      $why = (($e -join ' ') -replace '[\r\n]+', ' ') -replace '^team: ', ''
+      [Console]::Error.WriteLine("ticket-meta: teams status post failed (the edit stands): $why")
+    }
+  } catch {
+    [Console]::Error.WriteLine("ticket-meta: teams status post failed (the edit stands): $($_.Exception.Message)")
+  }
+}
+
 function Invoke-Selftest {
   # Native calls below (git, sh) write stderr on purpose; under 'Stop' PS 5.1
   # would turn that into a throw. A Fail is a throw either way.
@@ -1073,6 +1105,30 @@ function Invoke-Selftest {
     if (-not (Refused assign F1 '@vidul')) { Write-Output 'FAIL: assign worked with no team.md'; $script:fail = 1 }
     Eq 'solo tag' (Run tag F1) "- [ ] F1 $dash Thing (@cc-dddddd)"
 
+    # --- F66: the opt-in Teams status post runs after a successful edit and never
+    # fails it; off (the default) it never runs. The Workflows URL is loopback port 1:
+    # the post fails at once, offline - nothing reaches Teams. A child process: the
+    # post is the script's own last step, after the edit is printed.
+    if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot '../../teams-uhura/scripts/team.mjs'))) {
+      W "$T/teams.json" "{ `"token`": `"dG9rZW4=`", `"workflowUrl`": `"https://127.0.0.1:1/x`", `"port`": 3978, `"statusPosts`": true }`n"
+      W "$S/TICKETS.md" "# TICKETS`n`n- [ ] F7 $dash Seven`n- [ ] F8 $dash Eight`n"
+      $saved = @($env:SKILLATOR_TEAMS_CONFIG, $env:TEAMS_STATUS_POSTS)
+      $env:SKILLATOR_TEAMS_CONFIG = "$T/teams.json"
+      $child = { param($c) $env:TEAMS_STATUS_POSTS = $c[0]; & powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath @($c[1..($c.Count - 1)]) 2> "$T/err" > "$T/out"; return $LASTEXITCODE }
+      $code = & $child @('', 'done', 'F7', 'shipped')
+      Eq 'F66 done with a failing post exits 0' $code '0'
+      if ([System.IO.File]::ReadAllText("$S/TICKETS.md") -notmatch "(?m)^- \[x\] F7 $dash Seven") { Write-Output 'FAIL: F66 done with a failing post did not edit'; $script:fail = 1 }
+      $err = [System.IO.File]::ReadAllText("$T/err")
+      if ($err -notmatch 'teams status post failed \(the edit stands\)') { Write-Output "FAIL: F66 failing post not said: $err"; $script:fail = 1 }
+      $code = & $child @('off', 'block', 'F8', 'creds')
+      Eq 'F66 posts off exits 0' $code '0'
+      if ([System.IO.File]::ReadAllText("$T/err") -match 'teams') { Write-Output 'FAIL: F66 posts off still posted'; $script:fail = 1 }
+      W "$T/teams.json" "{ `"token`": `"dG9rZW4=`", `"workflowUrl`": `"https://127.0.0.1:1/x`", `"port`": 3978, `"statusPosts`": false }`n"
+      [void](& $child @('', 'defer', 'F8', 'later'))
+      if ([System.IO.File]::ReadAllText("$T/err") -match 'teams') { Write-Output 'FAIL: F66 statusPosts false still posted'; $script:fail = 1 }
+      $env:SKILLATOR_TEAMS_CONFIG = $saved[0]; $env:TEAMS_STATUS_POSTS = $saved[1]
+    }
+
     # --- B3: every edit keeps the board's line endings byte for byte - a CRLF
     # board stays CRLF, an LF board stays LF
     $C = "$T/crlf"
@@ -1120,4 +1176,5 @@ $stdout = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput(), $Ut
 $stdout.NewLine = "`n"
 foreach ($o in @($out)) { if ($null -ne $o) { $stdout.WriteLine([string]$o) } }
 $stdout.Flush()
+if (@('assign', 'testing', 'tested', 'done', 'block', 'defer') -ccontains $cmd) { Invoke-TeamsPost $cmd $rest }
 exit 0
