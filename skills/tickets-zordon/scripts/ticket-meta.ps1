@@ -713,11 +713,17 @@ function Invoke-TeamsPost([string]$c, [string[]]$a) {
     } elseif ($on -cne 'on') { return }
     $js = Join-Path $PSScriptRoot '../../teams-uhura/scripts/team.mjs'
     if (-not (Test-Path -LiteralPath $js -PathType Leaf)) { return }
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return }
+    # A151: the first node on PATH outside the repo - a '.' entry, or one inside the repo
+    # (a node_modules/.bin), could start a node the repo supplies.
+    $top = [System.IO.Path]::GetFullPath((Get-Top)).TrimEnd('\') + '\'
+    $node = Get-Command node -CommandType Application -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source } |
+      Where-Object { [System.IO.Path]::IsPathRooted($_) -and -not ([System.IO.Path]::GetFullPath($_).StartsWith($top, [StringComparison]::OrdinalIgnoreCase)) } |
+      Select-Object -First 1
+    if (-not $node) { return }
     $prev = $env:TEAMS_STATUS_POSTS
     $env:TEAMS_STATUS_POSTS = 'on'
     $ErrorActionPreference = 'Continue'
-    $e = & node $js post-status $c @a 2>&1 | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { [string]$_ }
+    $e = & $node $js post-status $c @a 2>&1 | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { [string]$_ }
     $code = $LASTEXITCODE
     $env:TEAMS_STATUS_POSTS = $prev
     if ($code -ne 0) {
@@ -1126,6 +1132,28 @@ function Invoke-Selftest {
       W "$T/teams.json" "{ `"token`": `"dG9rZW4=`", `"workflowUrl`": `"https://127.0.0.1:1/x`", `"port`": 3978, `"statusPosts`": false }`n"
       [void](& $child @('', 'defer', 'F8', 'later'))
       if ([System.IO.File]::ReadAllText("$T/err") -match 'teams') { Write-Output 'FAIL: F66 statusPosts false still posted'; $script:fail = 1 }
+      # A151: the post never starts a node the repo supplies - not through '.' on PATH
+      # nor an absolute PATH entry inside the repo; the real node still posts (and fails,
+      # offline). NoDefaultCurrentDirectoryInExePath cleared: Windows' cwd search on.
+      $sp = @($env:Path, $env:NoDefaultCurrentDirectoryInExePath)
+      Remove-Item Env:NoDefaultCurrentDirectoryInExePath -ErrorAction SilentlyContinue
+      [void](New-Item -ItemType Directory -Force "$S/bin")
+      foreach ($d in @($S, "$S/bin")) {
+        foreach ($f in @('node.cmd', 'node.bat')) { W "$d/$f" "@echo PLANTED>`"$S\planted`"`r`n" }
+        W "$d/node" "#!/bin/sh`necho PLANTED > planted`n"
+      }
+      foreach ($p in @('.', (Resolve-Path -LiteralPath "$S/bin").Path)) {
+        W "$S/TICKETS.md" "# TICKETS`n`n- [ ] F9 $dash Nine`n"
+        Remove-Item -LiteralPath "$S/planted" -ErrorAction SilentlyContinue
+        $env:Path = "$p;$($sp[0])"
+        [void](& $child @('on', 'done', 'F9', 'x'))
+        $env:Path = $sp[0]
+        if (Test-Path -LiteralPath "$S/planted") { Write-Output "FAIL: A151 PATH ${p}: a node planted in the repo ran"; $script:fail = 1 }
+        $err = [System.IO.File]::ReadAllText("$T/err")
+        if ($err -notmatch 'teams status post failed \(the edit stands\)') { Write-Output "FAIL: A151 PATH ${p}: the real node did not post: $err"; $script:fail = 1 }
+      }
+      if ($null -ne $sp[1]) { $env:NoDefaultCurrentDirectoryInExePath = $sp[1] }
+      Remove-Item -LiteralPath "$S/bin", "$S/node.cmd", "$S/node.bat", "$S/node", "$S/planted" -Recurse -Force -ErrorAction SilentlyContinue
       $env:SKILLATOR_TEAMS_CONFIG = $saved[0]; $env:TEAMS_STATUS_POSTS = $saved[1]
     }
 

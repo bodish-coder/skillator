@@ -28,5 +28,16 @@ while [ -n "$d" ]; do
   d=$n
 done
 [ -n "$c" ] && [ -f "$c/skillator/team-inbox.jsonl" ] || exit 0
-command -v node > /dev/null 2>&1 || exit 0
-exec node "$(dirname -- "$0")/../skills/teams-uhura/scripts/team-hook.mjs"
+# A151: the first node in an absolute PATH entry outside the repo ($d) - a '.' or relative
+# entry, or one inside the repo (a node_modules/.bin), could start a node the repo supplies.
+n=''
+set -f
+o=$IFS; IFS=:
+for p in $PATH; do
+  case $p in /*) ;; *) continue ;; esac
+  case $p/ in "$d"/*) continue ;; esac
+  if [ -f "$p/node" ] && [ -x "$p/node" ]; then n=$p/node; break; fi
+done
+IFS=$o
+[ -n "$n" ] || exit 0
+exec "$n" "$(dirname -- "$0")/../skills/teams-uhura/scripts/team-hook.mjs"

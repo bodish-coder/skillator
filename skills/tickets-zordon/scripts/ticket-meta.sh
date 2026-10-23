@@ -980,6 +980,23 @@ selftest() {
     printf '{ "token": "dG9rZW4=", "workflowUrl": "https://127.0.0.1:1/x", "port": 3978, "statusPosts": false }\n' > "$T/teams.json"
     SKILLATOR_TEAMS_CONFIG="$T/teams.json" TEAMS_STATUS_POSTS='' sh "$self" defer F8 later > "$T/out" 2> "$T/err"
     grep -q teams "$T/err" && { echo "FAIL: F66 statusPosts false still posted: $(cat "$T/err")"; fail=1; }
+    # A151: the post never starts a node the repo supplies - not through '.' on PATH
+    # nor an absolute PATH entry inside the repo; the real node still posts (and fails,
+    # offline). NoDefaultCurrentDirectoryInExePath cleared: Windows' cwd search on.
+    mkdir -p bin
+    for p in . bin; do
+      printf '#!/bin/sh\necho PLANTED > "%s/planted"\n' "$PWD" > "$p/node"
+      printf '@echo PLANTED>"%%~dp0planted"\r\n' > "$p/node.cmd"
+      chmod +x "$p/node"
+    done
+    for p in . "$PWD/bin"; do
+      printf -- "# TICKETS\n\n- [ ] F9 %s Nine\n" "$D" > TICKETS.md
+      rm -f planted bin/planted
+      (unset NoDefaultCurrentDirectoryInExePath; PATH="$p:$PATH" SKILLATOR_TEAMS_CONFIG="$T/teams.json" TEAMS_STATUS_POSTS=on sh "$self" done F9 x > "$T/out" 2> "$T/err")
+      [ -f planted ] || [ -f bin/planted ] && { echo "FAIL: A151 PATH $p: a node planted in the repo ran"; fail=1; }
+      grep -q 'teams status post failed (the edit stands)' "$T/err" || { echo "FAIL: A151 PATH $p: the real node did not post: $(cat "$T/err")"; fail=1; }
+    done
+    rm -rf bin node node.cmd planted
   fi
 
   # --- B3: every edit keeps the board's line endings byte for byte - a CRLF
@@ -1017,8 +1034,20 @@ teams_post() {
     *) return 0 ;;
   esac
   _js="$(dirname -- "$0")/../../teams-uhura/scripts/team.mjs"
-  [ -f "$_js" ] && command -v node > /dev/null 2>&1 || return 0
-  _e=$(TEAMS_STATUS_POSTS=on node "$_js" post-status "$@" 2>&1 > /dev/null) ||
+  [ -f "$_js" ] || return 0
+  # A151: the first node in an absolute PATH entry outside the repo - a '.' or relative
+  # entry, or one inside the repo (a node_modules/.bin), could start a node the repo supplies.
+  _top=$(cd "$TOP" 2>/dev/null && pwd) || _top=$TOP
+  _n=''
+  set -f; _o=$IFS; IFS=:
+  for _p in $PATH; do
+    case $_p in /*) ;; *) continue ;; esac
+    case $_p/ in "$_top"/*|"$TOP"/*) continue ;; esac
+    if [ -f "$_p/node" ] && [ -x "$_p/node" ]; then _n=$_p/node; break; fi
+  done
+  IFS=$_o; set +f
+  [ -n "$_n" ] || return 0
+  _e=$(TEAMS_STATUS_POSTS=on "$_n" "$_js" post-status "$@" 2>&1 > /dev/null) ||
     echo "ticket-meta: teams status post failed (the edit stands): $(printf '%s' "$_e" | tr '\r\n' '  ' | sed 's/^team: //')" >&2
   return 0
 }

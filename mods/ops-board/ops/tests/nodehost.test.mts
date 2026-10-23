@@ -70,18 +70,25 @@ test('run: argv from the call table, cwd = repo root, never rejects', async () =
 
 // F66: a node call never runs a node the repo (the child's cwd) supplies - a planted
 // node.exe / node in the repo root is not what runs; this process's own node is.
+// A151: NoDefaultCurrentDirectoryInExePath cleared, so Windows' cwd search is on.
 test('run: a node call runs this node by absolute path, not a node planted in the repo', async () => {
-  const t = mkTmp(join(tmpdir(), 'ops-node-'))
-  const dir = echoSkills(join(t, 's'))
-  mkdirSync(join(dir, 'teams-uhura/scripts'), { recursive: true })
-  writeFileSync(join(dir, 'teams-uhura/scripts/team.mjs'), 'console.log(process.execPath)\n')
-  for (const f of ['node.exe', 'node', 'node.cmd', 'node.bat']) writeFileSync(join(t, f), 'echo PLANTED\n')
-  const h = await makeHost({ appDir: '/x', cwd: t, skills: dir })
-  const r = await h.run('team-config-show', [])
-  assert.equal(r.code, 0, r.err)
-  assert.equal(r.argv[0], process.execPath)
-  assert.equal(r.out.trim(), process.execPath)
-  assert.doesNotMatch(r.out + r.err, /PLANTED/)
+  const saved = process.env.NoDefaultCurrentDirectoryInExePath
+  delete process.env.NoDefaultCurrentDirectoryInExePath
+  try {
+    const t = mkTmp(join(tmpdir(), 'ops-node-'))
+    const dir = echoSkills(join(t, 's'))
+    mkdirSync(join(dir, 'teams-uhura/scripts'), { recursive: true })
+    writeFileSync(join(dir, 'teams-uhura/scripts/team.mjs'), 'console.log(process.execPath)\n')
+    for (const f of ['node.exe', 'node', 'node.cmd', 'node.bat']) writeFileSync(join(t, f), 'echo PLANTED\n')
+    const h = await makeHost({ appDir: '/x', cwd: t, skills: dir })
+    const r = await h.run('team-config-show', [])
+    assert.equal(r.code, 0, r.err)
+    assert.equal(r.argv[0], process.execPath)
+    assert.equal(r.out.trim(), process.execPath)
+    assert.doesNotMatch(r.out + r.err, /PLANTED/)
+  } finally {
+    if (saved === undefined) delete process.env.NoDefaultCurrentDirectoryInExePath; else process.env.NoDefaultCurrentDirectoryInExePath = saved
+  }
 })
 
 test('nodeFor: this process when it is node; else PATH, absolute entries only; else none', async () => {

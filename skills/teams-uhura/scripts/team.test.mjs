@@ -395,6 +395,37 @@ test('hook pre-check: no inbox - silent, exit 0, node never started; inbox - nod
   assert.match(pre(wt).stdout, /> hi/)
 })
 
+// A151: the pre-check never starts a node the repo supplies - not through a relative PATH
+// entry ('.') nor an absolute one inside the repo (a node_modules/.bin, say); it takes
+// the first node in an absolute PATH entry outside the repo. NoDefaultCurrentDirectoryInExePath
+// (set by some hosts, Claude Code's shell among them) turns Windows' cwd search off; it is
+// cleared so the test sees what a user's shell does.
+test('hook pre-check: a node planted in the repo (PATH ".", or an entry inside the repo) is never what runs', () => {
+  const r = repo()
+  writeFileSync(join(box(r), INBOX), JSON.stringify({ ts: '2026-10-23T09:20:00.000Z', from: '@asha', email: 'asha@x.com', text: 'hi', id: '1' }) + '\n')
+  const bin = join(r, 'bin')
+  mkdirSync(bin)
+  const plant = `#!/bin/sh\necho PLANTED > "${r.replace(/\\/g, '/')}/planted"\necho PLANTED\n`
+  for (const d of [r, bin]) {
+    writeFileSync(join(d, 'node'), plant, { mode: 0o755 })
+    for (const f of ['node.cmd', 'node.bat']) writeFileSync(join(d, f), `@echo PLANTED>"${r}\\planted"\r\n@echo PLANTED\r\n`)
+  }
+  const sep = process.platform === 'win32' ? ';' : ':'
+  const env = { ...process.env }
+  delete env.NoDefaultCurrentDirectoryInExePath
+  const pk = Object.keys(env).filter(k => k.toUpperCase() === 'PATH')
+  const path = env[pk[0] ?? 'PATH'] ?? ''
+  for (const k of pk) delete env[k]
+  for (const first of ['.', bin]) {
+    rmSync(join(box(r), DELIVERED), { force: true })
+    const h = pre(r, { ...env, PATH: first + sep + path })
+    assert.equal(h.status, 0, h.stderr)
+    assert.equal(existsSync(join(r, 'planted')), false, `${first}: the planted node ran`)
+    assert.doesNotMatch(h.stdout + h.stderr, /PLANTED/)
+    assert.match(JSON.parse(h.stdout).hookSpecificOutput.additionalContext, /> hi/, first)
+  }
+})
+
 test('hook: the delivered marker is per session; it advances only past what was framed; a new session starts at the read marker', () => {
   const r = repo()
   const recs = Array.from({ length: 25 }, (_, i) => JSON.stringify({ ts: '2026-10-23T09:20:00.000Z', from: '@asha', email: 'asha@x.com', text: 'm' + i, id: 'id' + i }))
