@@ -69,7 +69,7 @@ Ambiguous → ask once. The user can override with `platform: <host>`.
 | **Usage % readable** | `statusLine` `rate_limits.*.used_percentage` | no | yes — `$CODEX_HOME/sessions/**/rollout-*.jsonl` (default `~/.codex`), last `token_count`; the `Stop` stdin's `transcript_path` names the session's own | no | no | no |
 | **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | `Stop` in `hooks.json` → `{"decision":"block","reason":…}` on stdout (0.155.1, verified under `codex exec`; needs hook trust). Exit 2 + stderr does not inject. `watch-cortana` `usage-watch.* gate` wired and verified here, 0.156.1 (A83). See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
 | **Durable memory** | `CLAUDE.md` + files on disk | files on disk | `AGENTS.md` + files | `AGENTS.md` + files | `AGENTS.md` (`~/.pi/agent/`, parents, cwd) + files | Continual Harness + `AGENTS.md` + files |
-| **Slash command file** (`/pending`, `/list-tickets`, `/engage`, `/archive-tickets`, `/sync-tickets`, `/skillator-update`, `/team-messages`, `/pending-subagent`; F54, F58, F59, F63, F65, F66, F71, texts in `host-commands/<host>/`, tags in "Commands - what is verified") | the ops-board mod's own commands / `commands/*.md`; the installer writes none | `~/.cursor/commands/<n>.md`, `.cursor/commands/<n>.md` | `$CODEX_HOME/prompts/<n>.md` → `/prompts:<n>` | none of its own: a skill is the command, `<ws>/.agents/skills/<n>/SKILL.md` → `/<n>` (workflows deprecated); Gemini CLI: `~/.gemini/commands/<n>.toml` | `~/.pi/agent/prompts/<n>.md`, `.pi/prompts/<n>.md` → `/<n>` | **none — the skill route** (no command mechanism) |
+| **Slash command file** (`/pending`, `/list-tickets`, `/engage`, `/archive-tickets`, `/sync-tickets`, `/skillator-update`, `/team-messages`, `/pending-subagent`, `/verify-subagent`; F54, F58, F59, F63, F65, F66, F71, F72, texts in `host-commands/<host>/`, tags in "Commands - what is verified") | the ops-board mod's own commands / `commands/*.md`; the installer writes none | `~/.cursor/commands/<n>.md`, `.cursor/commands/<n>.md` | `$CODEX_HOME/prompts/<n>.md` → `/prompts:<n>` | none of its own: a skill is the command, `<ws>/.agents/skills/<n>/SKILL.md` → `/<n>` (workflows deprecated); Gemini CLI: `~/.gemini/commands/<n>.toml` | `~/.pi/agent/prompts/<n>.md`, `.pi/prompts/<n>.md` → `/<n>` | **none — the skill route** (no command mechanism) |
 | **Remote drive** (from a phone, `remote-cerebro`; matrix and evidence tags in [`skills/remote-cerebro/references/hosts.md`](skills/remote-cerebro/references/hosts.md)) | not this skill — Claude Code's own Remote Control | native: cloud agent via `agent worker start` (runs here, not the local TUI); bridge via `agent acp` arms only after an ACP proof | native: `codex remote-control` + ChatGPT app (Windows pairing unproven); bridge: `codex app-server` | gemini: **no native remote** — bridge via `--acp` (after an ACP proof); attach hook v2, approvals not answerable from the phone. agy: native `--remote-control` | bridge: `--mode rpc` (own) or `--mode attach` on a pi cerebro launched; no native remote | not possible (not installed, not probed) |
 
 **Frontmatter:** only `name` + `description` are portable. Everything else
@@ -204,7 +204,7 @@ install skills and the shared docs only.
 
 ## Commands - what is verified
 
-`/pending`, `/list-tickets` (F54), `/engage` (F58), `/archive-tickets` (F59), `/sync-tickets` (F63), `/skillator-update` (F65), `/team-messages` (F66) and `/pending-subagent` (F71) are written by the installers at user level
+`/pending`, `/list-tickets` (F54), `/engage` (F58), `/archive-tickets` (F59), `/sync-tickets` (F63), `/skillator-update` (F65), `/team-messages` (F66), `/pending-subagent` (F71) and `/verify-subagent` (F72) are written by the installers at user level
 only, rewritten every run; per-host shapes are in the session design's D7 table.
 Evidence tags: **verified** = read from the host's docs/binary or exercised here;
 **inferred** = from docs only, until the owner's picker check
@@ -226,6 +226,12 @@ version bumped and the push asked. The count defaults to 1 (serial); N or `max` 
 file-disjoint tickets at once in their own stage worktrees (`chain next --all`,
 `chain merge`). A host with no subagent tool runs the stored prompts itself, one at a time.
 
+`/verify-subagent` (F72, `tickets-zordon`) re-checks every `[%]` ticket (or the IDs
+given) with one fresh read-and-run-only agent each: PASS flips it to `[x]` with a
+dated **Verified** note (`ticket-meta verify <ID> pass`), FAIL leaves it `[%]` with what
+failed appended (`verify <ID> fail`), OWNER (the Done line needs the owner's own eyes)
+is never flipped. A host with no subagents runs the checks itself, one at a time.
+
 `/skillator-update` (F65) finds its source in this order: a clone path given as its
 argument; Claude Code's updated plugin (`installPath` of `skillator@<mkt>` in
 `claude plugin list --json` - the package ships `install.sh` / `install.ps1`); the
@@ -236,7 +242,7 @@ updated with `git pull --ff-only` only.
 
 | Host | Path | Tag |
 |---|---|---|
-| claude-code | the ops-board mod's `/pending`, `/list-tickets`; the plugin's `commands/engage.md`, `commands/archive-tickets.md`, `commands/sync-tickets.md`, `commands/skillator-update.md`, `commands/team-messages.md`, `commands/pending-subagent.md` (installer writes none) | verified |
+| claude-code | the ops-board mod's `/pending`, `/list-tickets`; the plugin's `commands/engage.md`, `commands/archive-tickets.md`, `commands/sync-tickets.md`, `commands/skillator-update.md`, `commands/team-messages.md`, `commands/pending-subagent.md`, `commands/verify-subagent.md` (installer writes none) | verified |
 | gemini CLI | `~/.gemini/commands/<n>.toml`, `!{...}` shell injection, `{{args}}` | verified (dir, `!{`, `{{args}}`) |
 | antigravity | skills, `/<n>` in `agy`; all three dests `~/.gemini/config/skills/`, `~/.gemini/skills/` and `~/.gemini/antigravity-cli/skills/` (agy 1.4.5's global dir, B8) | verified (a skill is a slash command) |
 | pi | `~/.pi/agent/prompts/<n>.md`, `$ARGUMENTS` | verified |

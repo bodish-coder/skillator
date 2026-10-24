@@ -349,7 +349,7 @@ function Write-AgyExt([string]$skillsDir) {
 # Same as install.sh write_commands.
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
-  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent'
+  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent'
   switch ($cli) {
     'codex'  { foreach ($n in $names) { Write-Cmd "$c\codex\$n.md" $dest "$codexHome\prompts\$n.md" } }
     'cursor' { foreach ($n in $names) { Write-Cmd "$c\cursor\$n.md" $dest "$HOME\.cursor\commands\$n.md" } }
@@ -439,6 +439,7 @@ function Invoke-SelfTest([string]$T) {
       if ($ls[$i] -match '^[A-Za-z_-]+:\s+([^"''\[{|>&*!#%\s].*)$' -and $Matches[1].Contains(': ')) { return "frontmatter has an unquoted ': ' (invalid YAML, pi will not register the command): $($f.FullName): $($ls[$i])" }
     }
   }
+  if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'commands\verify-subagent.md') -PathType Leaf)) { return 'B6 scan misses commands\verify-subagent.md' }
   # F71: /pending-subagent ships on Claude Code (commands\) and every host, and the scan reaches it
   foreach ($f in 'commands\pending-subagent.md', 'host-commands\codex\pending-subagent.md', 'host-commands\cursor\pending-subagent.md',
                  'host-commands\pi\pending-subagent.md', 'host-commands\opencode\pending-subagent.md',
@@ -472,7 +473,10 @@ function Invoke-SelfTest([string]$T) {
             '.config\opencode\commands\skillator-update.md', '.config\opencode\commands\team-messages.md',
             '.codex\prompts\pending-subagent.md', '.gemini\commands\pending-subagent.toml', '.cursor\commands\pending-subagent.md',
             '.pi\agent\prompts\pending-subagent.md', '.gemini\config\skills\pending-subagent\SKILL.md', '.gemini\skills\pending-subagent\SKILL.md',
-            '.gemini\antigravity-cli\skills\pending-subagent\SKILL.md', '.config\opencode\commands\pending-subagent.md')
+            '.gemini\antigravity-cli\skills\pending-subagent\SKILL.md', '.config\opencode\commands\pending-subagent.md',
+            '.codex\prompts\verify-subagent.md', '.gemini\commands\verify-subagent.toml', '.cursor\commands\verify-subagent.md', '.pi\agent\prompts\verify-subagent.md',
+            '.gemini\config\skills\verify-subagent\SKILL.md', '.gemini\skills\verify-subagent\SKILL.md', '.gemini\antigravity-cli\skills\verify-subagent\SKILL.md',
+            '.config\opencode\commands\verify-subagent.md')
   foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
@@ -483,7 +487,7 @@ function Invoke-SelfTest([string]$T) {
   # F67: opencode - the skills in its global skills dir, the seven commands in its commands\
   # dir, each substituted with that dest, arguments by $ARGUMENTS (BOM, CR, placeholder: the $cmds loop)
   $oc = '.config\opencode'
-  foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent') {
+  foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent') {
     $ot = & $read "$oc\commands\$n.md"
     if (-not $ot.StartsWith("---`n")) { return "opencode $n has no frontmatter" }
     if ($ot -cnotmatch '(?m)^description: ') { return "opencode $n description" }
@@ -499,7 +503,7 @@ function Invoke-SelfTest([string]$T) {
   if ([IO.File]::ReadAllText((Join-Path $T "$oc\skills\.skillator-source")) -cne "$PSScriptRoot`n") { return "source pointer in $oc\skills" }
   if (-not (Test-Path -LiteralPath (Join-Path $T "$oc\skills\tickets-zordon\.skillator-owned") -PathType Leaf)) { return 'opencode skill has no ownership marker' }
   $mf = @([IO.File]::ReadAllLines((Join-Path $T "$oc\skills\.skillator-installed")))
-  foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent') { if ($mf -ccontains $n) { return 'command in opencode manifest' } }
+  foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent') { if ($mf -ccontains $n) { return 'command in opencode manifest' } }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   foreach ($f in '.codex\prompts\skillator-update.md', '.cursor\commands\skillator-update.md', '.pi\agent\prompts\skillator-update.md',
                  '.gemini\commands\skillator-update.toml', '.gemini\skills\skillator-update\SKILL.md', "$oc\commands\skillator-update.md") {
@@ -597,7 +601,7 @@ function Invoke-SelfTest([string]$T) {
   }
   foreach ($d in '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
     $mf = @([IO.File]::ReadAllLines((Join-Path $T "$d\.skillator-installed")))
-    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets' -or $mf -ccontains 'skillator-update' -or $mf -ccontains 'team-messages' -or $mf -ccontains 'pending-subagent') { return "command skill in manifest $d" }
+    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets' -or $mf -ccontains 'skillator-update' -or $mf -ccontains 'team-messages' -or $mf -ccontains 'pending-subagent' -or $mf -ccontains 'verify-subagent') { return "command skill in manifest $d" }
     if (Test-Path -LiteralPath (Join-Path $T "$d\pending\.skillator-owned")) { return "command skill carries an ownership marker in $d" }
   }
   $opsLine = "-File '$T\.cursor\skills\ops-board\ops\ops.ps1' @args"

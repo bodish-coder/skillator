@@ -11,6 +11,7 @@
 #   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
 #   ticket-meta.sh testing <ID> <test>  box -> [%] testing, the line says ` (testing: <test>)`
 #   ticket-meta.sh tested <ID> pass|fail  [%] -> [x] (pass) or [~] (fail); the note stays
+#   ticket-meta.sh verify <ID> pass|fail <evidence>  F72: [%] -> [x] ` **Verified <date>: ..**`, or stays [%] ` (verify failed <date>: ..)`
 #   ticket-meta.sh done <ID> [evidence] box -> [x], tagged, ` **Done <date>: <evidence>**`
 #   ticket-meta.sh block <ID> <on what> box -> [!], the line says ` (blocked: <on what>)`
 #   ticket-meta.sh defer <ID> <until>   box -> [>], the line says ` (deferred: <until>)`
@@ -312,6 +313,11 @@ edit_line() {
         }
         if (ENVIRON["DONE_NOTE"] != "")
           line = setnote(line, " **Done " ENVIRON["DONE_NOTE"] "**", "[ \t]*\\*\\*Done [^*]*\\*\\*")
+        # F72: verify notes - a pass, a fail; each replaces its own earlier one
+        if (ENVIRON["VERIFIED_NOTE"] != "")
+          line = setnote(line, " **Verified " ENVIRON["VERIFIED_NOTE"] "**", "[ \t]*\\*\\*Verified [^*]*\\*\\*")
+        if (ENVIRON["VFAIL_NOTE"] != "")
+          line = setnote(line, " (verify failed " ENVIRON["VFAIL_NOTE"] ")", "[ \t]*\\(verify failed [^()]*\\)")
       }
       if (NR > 1) printf "\n"
       printf "%s%s", line, cr }
@@ -411,6 +417,29 @@ cmd_done() {
   a=$(printf '%s\n' "$info" | apps_from | join_list)
   b=$(printf '%s\n' "$info" | by_from | join_list)
   SET_MARK='x' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b NOTE_VAL='' DONE_NOTE=$dn REFUSE_MARKS='-' SAME_KEY='' NEED_MARK='' edit_line
+}
+
+# F72: /verify-subagent's verdict on a [%] ticket, with the evidence (one line,
+# no parentheses, no *). pass: [x], tagged as a close is, ` **Verified <date>:
+# <evidence>**`. fail: the box stays [%], ` (verify failed <date>: <what failed>)`.
+cmd_verify() {
+  CMD=verify
+  [ $# -ge 3 ] || die "usage: verify <ID> pass|fail <evidence>"
+  norm_id "$1"; shift
+  vd=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  case $vd in pass|fail) ;; *) die "usage: verify <ID> pass|fail <evidence> - not '$1'" ;; esac
+  shift
+  note_text evidence 0 "$@"
+  case $NOTE in *'*'*) die "the evidence cannot hold * - it sits on the line as a note" ;; esac
+  dn="$(date -u +%Y-%m-%d): $NOTE"
+  if [ "$vd" = fail ]; then
+    SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' VFAIL_NOTE=$dn SAME_KEY='' NEED_MARK='%' edit_line
+    return
+  fi
+  info=$(commits_info "$ID")
+  a=$(printf '%s\n' "$info" | apps_from | join_list)
+  b=$(printf '%s\n' "$info" | by_from | join_list)
+  SET_MARK='x' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b NOTE_VAL='' VERIFIED_NOTE=$dn SAME_KEY='' NEED_MARK='%' edit_line
 }
 
 # F64: can't proceed until something outside it lands: [!], ` (blocked: <on what>)`.
@@ -883,6 +912,31 @@ selftest() {
     cmp -s TICKETS.md "$T/want64-$nl.md" || { echo "FAIL: $nl done/block/defer line endings or bytes"; od -c TICKETS.md | head -n 6; fail=1; }
   done
 
+  # --- F72: verify - /verify-subagent's verdict on a [%] ticket; pass -> [x] Verified, fail stays [%]
+  V="$T/f72"
+  mkdir -p "$V/apps/web" && cd "$V" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  {
+    printf -- '# TICKETS\n\n'
+    printf -- '- [%%] F60 %s Built (testing: unit run) (@cc-gggggg)\n' "$D"
+    printf -- '- [%%] F61 %s Failing (testing: live check)\n' "$D"
+    printf -- '- [ ] F62 %s Not testing\n' "$D"
+  } > TICKETS.md
+  commit vidul@ikran.in "init" README.md
+  commit vidul@ikran.in "F60: built" apps/web/a.js
+  eq "verify pass, any case" "$(run verify F60 PaSs RED/GREEN 3/3, abc1234)" "- [x] F60 $D Built [app: web] (testing: unit run) **Verified $TODAY: RED/GREEN 3/3, abc1234** (@cc-gggggg)"
+  eq "verify fail stays [%]" "$(run verify F61 fail unit run red, 2 of 5)" "- [%] F61 $D Failing (testing: live check) (verify failed $TODAY: unit run red, 2 of 5)"
+  eq "verify fail replaces the note" "$(run verify F61 FAIL '  still red ')" "- [%] F61 $D Failing (testing: live check) (verify failed $TODAY: still red)"
+  cp TICKETS.md "$T/f72a.md"
+  sh "$self" verify F60 pass again > /dev/null 2>&1 && { echo "FAIL: verify took a ticket that is not [%]"; fail=1; }
+  sh "$self" verify F62 fail red > /dev/null 2>&1 && { echo "FAIL: verify fail took a ticket that is not [%]"; fail=1; }
+  sh "$self" verify F61 maybe red > /dev/null 2>&1 && { echo "FAIL: verify took a verdict that is not pass/fail"; fail=1; }
+  sh "$self" verify F61 pass > /dev/null 2>&1 && { echo "FAIL: verify took no evidence"; fail=1; }
+  sh "$self" verify F61 fail '  ' > /dev/null 2>&1 && { echo "FAIL: verify took blank evidence"; fail=1; }
+  sh "$self" verify F61 pass 'ran (it)' > /dev/null 2>&1 && { echo "FAIL: verify took parentheses"; fail=1; }
+  sh "$self" verify F61 pass 'a ** b' > /dev/null 2>&1 && { echo "FAIL: verify took an asterisk"; fail=1; }
+  sh "$self" verify F61 fail "a${NL}b" > /dev/null 2>&1 && { echo "FAIL: verify took a line break"; fail=1; }
+  cmp -s TICKETS.md "$T/f72a.md" || { echo "FAIL: a refused verify changed the board"; diff "$T/f72a.md" TICKETS.md; fail=1; }
+
   # --- team add / remove / list: .skillator/team.md written under the board lock
   G="$T/team"
   mkdir -p "$G" && cd "$G" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
@@ -1052,7 +1106,7 @@ teams_post() {
   return 0
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|done|block|defer|tag|team|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|selftest"
 c=$1; shift
 [ "$c" = selftest ] && { selftest; exit 0; }
 need_git
@@ -1068,6 +1122,7 @@ case $c in
   decided) cmd_decided "$@" ;;
   testing) cmd_testing "$@" && teams_post testing "$@" ;;
   tested) cmd_tested "$@" && teams_post tested "$@" ;;
+  verify) cmd_verify "$@" ;;
   done) cmd_done "$@" && teams_post done "$@" ;;
   block) cmd_block "$@" && teams_post block "$@" ;;
   defer) cmd_defer "$@" && teams_post defer "$@" ;;

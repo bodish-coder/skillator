@@ -273,6 +273,10 @@ Deactivating is deleting `.skillator/grayskull.md`.
   deterministic script that fixes and adversarially verifies every ticket in
   parallel, with structured verdicts coming back. The main session always owns
   `TICKETS.md`; agents only report. Invoke with `/tickets-zordon`.
+  `/verify-subagent` re-checks every `[%]` testing ticket with one fresh agent
+  each (read and run tests only): PASS → `[x]` with a dated **Verified** note,
+  FAIL stays `[%]` with what failed, a Done line needing the owner's eyes → OWNER,
+  never flipped.
 - **rules-orko** — how the user works, written down the moment they say it.
   "From now on always run the tests before you commit" or "in this repo nobody
   touches `store.py` without asking" dies with the chat otherwise: two isolated

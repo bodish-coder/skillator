@@ -3,7 +3,7 @@
 #
 #   ticket-meta.ps1 apps | app-of <path>... | by <ID> | apps-of <ID>
 #   ticket-meta.ps1 assign <ID> @handle | decide <ID> @handle | decided <ID>
-#   ticket-meta.ps1 testing <ID> <what test> | tested <ID> pass|fail
+#   ticket-meta.ps1 testing <ID> <what test> | tested <ID> pass|fail | verify <ID> pass|fail <evidence>
 #   ticket-meta.ps1 done <ID> [evidence] | block <ID> <on what> | defer <ID> <until what>
 #   ticket-meta.ps1 tag <ID> | selftest
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
@@ -364,6 +364,9 @@ function Edit-Line([string]$id, [hashtable]$o) {
       $line = Set-Note $line (' (' + $o.notekey + ': ' + $o.noteval + ')') ('[ \t]*\(' + $p + ':[^()]*\)')
     }
     if ($o.done) { $line = Set-Note $line (' **Done ' + $o.done + '**') '[ \t]*\*\*Done [^*]*\*\*' }
+    # F72: verify's notes - a pass's **Verified ..**, a fail's (verify failed ..); each replaces its own earlier one.
+    if ($o.verified) { $line = Set-Note $line (' **Verified ' + $o.verified + '**') '[ \t]*\*\*Verified [^*]*\*\*' }
+    if ($o.vfail) { $line = Set-Note $line (' (verify failed ' + $o.vfail + ')') '[ \t]*\(verify failed [^()]*\)' }
     $lines[$i] = $line + $cr
     $tmp = "$f.ticket-meta.$PID"
     [System.IO.File]::WriteAllBytes($tmp, $Utf8.GetBytes([string]::Join([string][char]10, $lines)))
@@ -478,6 +481,24 @@ function Do-Tested([string[]]$a) {
   $v = $a[1].ToLowerInvariant()
   if ($v -ceq 'pass') { $mk = 'x' } elseif ($v -ceq 'fail') { $mk = '~' } else { Fail "usage: tested <ID> pass|fail - not '$($a[1])'" }
   return (Edit-Line $id @{ mark = $mk; need = '%' })
+}
+
+# F72: /verify-subagent's verdict on a [%] ticket, with the evidence (one line,
+# no parentheses, no *). pass: [x], tagged as a close is, ` **Verified <date>:
+# <evidence>**`. fail: the box stays [%], ` (verify failed <date>: <what failed>)`.
+function Do-Verify([string[]]$a) {
+  if ($a.Count -lt 3) { Fail 'usage: verify <ID> pass|fail <evidence>' }
+  $id = Get-NormId $a[0]
+  $v = $a[1].ToLowerInvariant()
+  if ($v -cne 'pass' -and $v -cne 'fail') { Fail "usage: verify <ID> pass|fail <evidence> - not '$($a[1])'" }
+  $t = Get-NoteText 'verify' 'evidence' $false @($a[1..($a.Count - 1)])
+  if ($t.Contains('*')) { Fail 'the evidence cannot hold * - it sits on the line as a note' }
+  $dn = [DateTime]::UtcNow.ToString('yyyy-MM-dd') + ': ' + $t
+  if ($v -ceq 'fail') { return (Edit-Line $id @{ need = '%'; vfail = $dn; cmd = 'verify' }) }
+  $info = Get-Info $id
+  $apps = [string]::Join(', ', @(Get-AppsFrom $info))
+  $by = [string]::Join(', ', @(Get-ByFrom $info))
+  return (Edit-Line $id @{ mark = 'x'; need = '%'; app = $apps; by = $by; verified = $dn; cmd = 'verify' })
 }
 
 function Do-Tag([string[]]$a) {
@@ -688,6 +709,7 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'decided' { return (Do-Decided $a) }
     'testing' { return (Do-Testing $a) }
     'tested' { return (Do-Tested $a) }
+    'verify' { return (Do-Verify $a) }
     'done' { return (Do-Done $a) }
     'block' { return (Do-Block $a) }
     'defer' { return (Do-Defer $a) }
@@ -1042,6 +1064,28 @@ function Invoke-Selftest {
       if (-not (& $same $want)) { Write-Output "FAIL: $name done/block/defer line endings or bytes"; $script:fail = 1 }
     }
 
+    # --- F72: verify - /verify-subagent's verdict on a [%] ticket; pass -> [x] Verified, fail stays [%]
+    $V = "$T/f72"
+    Init-Repo $V
+    W "$V/apps/web/f.txt" "x`n"
+    W "$V/TICKETS.md" ("# TICKETS`n`n- [%] F60 $dash Built (testing: unit run) (@cc-gggggg)`n- [%] F61 $dash Failing (testing: live check)`n- [ ] F62 $dash Not testing`n")
+    Commit 'vidul@ikran.in' 'init' 'README.md'
+    Commit 'vidul@ikran.in' 'F60: built' 'apps/web/a.js'
+    $board = "$V/TICKETS.md"
+    Eq 'verify pass, any case' (Run verify F60 PaSs 'RED/GREEN' '3/3,' 'abc1234') "- [x] F60 $dash Built [app: web] (testing: unit run) **Verified ${today}: RED/GREEN 3/3, abc1234** (@cc-gggggg)"
+    Eq 'verify fail stays [%]' (Run verify F61 fail unit run 'red,' 2 of 5) "- [%] F61 $dash Failing (testing: live check) (verify failed ${today}: unit run red, 2 of 5)"
+    Eq 'verify fail replaces the note' (Run verify F61 FAIL '  still red ') "- [%] F61 $dash Failing (testing: live check) (verify failed ${today}: still red)"
+    $f72a = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
+    if (-not (Refused verify F60 pass again)) { Write-Output 'FAIL: verify took a ticket that is not [%]'; $script:fail = 1 }
+    if (-not (Refused verify F62 fail red)) { Write-Output 'FAIL: verify fail took a ticket that is not [%]'; $script:fail = 1 }
+    if (-not (Refused verify F61 maybe red)) { Write-Output 'FAIL: verify took a verdict that is not pass/fail'; $script:fail = 1 }
+    if (-not (Refused verify F61 pass)) { Write-Output 'FAIL: verify took no evidence'; $script:fail = 1 }
+    if (-not (Refused verify F61 fail '  ')) { Write-Output 'FAIL: verify took blank evidence'; $script:fail = 1 }
+    if (-not (Refused verify F61 pass 'ran (it)')) { Write-Output 'FAIL: verify took parentheses'; $script:fail = 1 }
+    if (-not (Refused verify F61 pass 'a ** b')) { Write-Output 'FAIL: verify took an asterisk'; $script:fail = 1 }
+    if (-not (Refused verify F61 fail "a`nb")) { Write-Output 'FAIL: verify took a line break'; $script:fail = 1 }
+    if (-not (& $same $f72a)) { Write-Output 'FAIL: a refused verify changed the board'; $script:fail = 1 }
+
     # --- team add / remove / list: .skillator/team.md written under the board lock
     $G = "$T/team"
     Init-Repo $G
@@ -1186,7 +1230,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|done|block|defer|tag|team|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|selftest')
   exit 1
 }
 $cmd = [string]$args[0]
