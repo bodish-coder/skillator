@@ -19,6 +19,7 @@ import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM } from '../hooks
 import type { Limits } from '../hooks/lib/facts'
 import { ticketsOf } from '../hooks/lib/team'
 import { runKeys, runLines as runTabLines } from './runtab'
+import { explorerBody } from './explorer'
 
 export type Paint = { color: boolean; ascii: boolean }
 
@@ -116,7 +117,7 @@ function windowOf(lines: Keyed[], id: string | null, h: number): Seg[][] {
 
 // --- the fixed lines ---
 
-const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages'], ['run', '5 Run']]
+const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Run']]
 
 function tabsLine(s: State): Seg[] {
   // F66: the unread count rides on the Messages label
@@ -159,6 +160,7 @@ function keysOf(s: State, m: Model): string[] {
   }
   if (s.tab === 'health') return ['R resume (releases the hold on a fresh non-red reading)', 'r reload', 'q quit']
   if (s.tab === 'messages') return ['↑↓ move', 'enter open', 'm mark all read', 's setup', 'q quit']
+  if (s.tab === 'explorer') return ['↑↓ move', 'enter open/close', 'r reload', 'q quit']
   if (s.showTeam) return ['n add', 'del remove (asks first)', 'esc back', 'q quit']   // A146: q closes the board here too
   const sel = m.rows.find(t => t.id === m.ticket)
   // F61: on a header Enter opens or closes its group
@@ -543,6 +545,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s)
     : s.tab === 'messages' ? messagesBody(s, room)
+    : s.tab === 'explorer' ? explorerBody(s, room)
     : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room)
     : ticketsBody(s, m, room)
   const top = main.slice(0, room)

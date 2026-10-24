@@ -14,6 +14,8 @@ import { NO_SCRIPTS } from '../hooks/lib/calls'
 import { parseRunFile, RUN_FILE } from '../hooks/lib/runentries'
 import type { Bins } from '../hooks/lib/runentries'
 import { onJobEnd, onJobOut, onRunFile, rescan } from './runtab'
+import { NO_GIT } from '../hooks/lib/explorer'
+import { enterExplorer } from './explorer'
 
 export type Engine = {
   readonly state: State
@@ -66,6 +68,10 @@ export function makeEngine(o: EngineOpts): Engine {
     if (e.kind === 'runfile') return readRunFile(e.scanIfMissing && !once)
     if (e.kind === 'job') return startJob(e.argv, e.cwd)
     if (e.kind === 'stop') { job?.stop(); return }
+    if (e.kind === 'git') {                     // F75: read-only, so --once runs it too
+      const g = host.git ? await host.git(e.args) : { code: 127, out: '', err: NO_GIT, argv: [] }
+      return apply(afterRun(e, g, state, Date.now()))
+    }
     if (once && e.call !== 'relay-decide') return
     const r = await host.run(e.call, e.args, e.stdin)
     await apply(afterRun(e, r, state, Date.now()))
@@ -207,6 +213,7 @@ export function makeEngine(o: EngineOpts): Engine {
       await pollBoard()
       await pollSlow()
       if (state.tab === 'runs') await pollRuns()
+      if (state.tab === 'explorer') await apply(enterExplorer(state))
     },
     async start() {
       draw()
@@ -214,6 +221,7 @@ export function makeEngine(o: EngineOpts): Engine {
       if (stopped) return
       void guarded('slow', pollSlow)
       if (state.tab === 'runs') void guarded('runs', pollRuns)
+      if (state.tab === 'explorer') void apply(enterExplorer(state))
       timers.push(setInterval(() => { void guarded('board', () => pollBoard()) }, BOARD_MS))
       timers.push(setInterval(() => { void guarded('slow', pollSlow) }, SLOW_MS))
       timers.push(setInterval(() => { if (state.tab === 'runs') void guarded('runs', pollRuns) }, RUNS_MS))

@@ -9,6 +9,7 @@ import { argvFor, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO
 import { findBins } from '../hooks/lib/runentries'
 import type { Bins } from '../hooks/lib/runentries'
 import type { Call } from '../hooks/lib/calls'
+import { NO_GIT } from '../hooks/lib/explorer'
 
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
 export type Host = {
@@ -23,6 +24,7 @@ export type Host = {
   // comes, then its end; stop() kills it with its children. Optional: a host may not run jobs.
   bins?(): Promise<Bins>
   spawn?(argv: string[], cwd: string, onOut: (text: string) => void, onEnd: (code: number | null, err: string | null) => void): { stop(): void }
+  git?(args: string[]): Promise<RunResult>         // F75: git <args> by its absolute path (A150), cwd = repoRoot; 15 s
 }
 
 type Env = Record<string, string | undefined>
@@ -195,5 +197,10 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
       return findBins(platformWin(), { path: env.PATH ?? env.Path, systemRoot: env.SystemRoot ?? env.SYSTEMROOT }, fileExists, node)
     },
     spawn: (argv, cwd, onOut, onEnd) => spawnJob(argv, cwd, onOut, onEnd),
+    async git(args) {
+      const bin = await gitFor(process.env, platformWin(), fileExists)
+      if (!bin) return { code: 127, out: '', err: NO_GIT, argv: [] }
+      return spawnArgv([bin, ...args], repoRoot, 15000)
+    },
   }
 }

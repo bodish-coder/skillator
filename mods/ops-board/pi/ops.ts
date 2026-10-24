@@ -94,7 +94,7 @@ const FULL = { overlay: true, overlayOptions: { anchor: 'top-left', width: '100%
 
 export function registerOps(pi: PiApi, deps: Deps): void {
   pi.registerCommand('ops', {
-    description: 'skillator ops board: tickets, workflows, health, messages (--once: one frame)',
+    description: 'skillator ops board: tickets, workflows, health, messages, explorer, run (--once: one frame)',
     handler: async (args, ctx) => {
       const opts = parseArgs(splitArgs(args), deps.env ?? process.env)
       if (opts.error) { ctx.ui.notify(`${opts.error}\n${USAGE.replace(/^usage: ops/, 'usage: /ops')}`, 'error'); return }

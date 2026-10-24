@@ -132,7 +132,7 @@ test('no workspace folder: the frame is of deps.cwd; a wrong flag is an error me
   registerOps(f.api, f.ctx, { appDir, env: {}, cwd: repo() })
   assert.match(await f.cmds.get(ONCE)!(noSkills()) as string, /▸ Pending \(1\)/)
   assert.equal(await f.cmds.get(ONCE)!(['--tab', 'agents']), null)
-  assert.match(f.errors[0]!, /--tab is one of tickets, workflows, health, messages, run, got agents/)
+  assert.match(f.errors[0]!, /--tab is one of tickets, workflows, health, messages, explorer, run, got agents/)
   assert.match(f.errors[0]!, /^usage: skillator\.ops /m)
   await f.cmds.get(OPEN)!(['--tab', 'bogus'])                  // F76: workflows is a tab word now
   assert.equal(f.created, 0)

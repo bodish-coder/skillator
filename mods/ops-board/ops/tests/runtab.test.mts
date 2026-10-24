@@ -61,24 +61,24 @@ const keys = async (e: ReturnType<typeof engineOf>, ...ks: string[]) => { for (c
 test('the Run tab: the first open scans and saves .skillator/run.json through run-entries; the next open reads it', async () => {
   const f = fake({})
   const e = engineOf(f)
-  await keys(e, '5')
+  await keys(e, '6')
   assert.equal(e.state.tab, 'run')
   assert.deepEqual(f.calls, ['run-scan'])
   assert.equal(f.files[RUN_JSON], file(FOUND))
   assert.deepEqual(e.state.runFile?.entries.map(x => x.id), ['npm:build', 'sh:install.sh'])
   assert.match(e.state.toast ?? '', /^✓ \.skillator\/run\.json created - 2 entries\nran: \/bin\/sh /)
   const t = text(e.state)
-  assert.match(t, /5 Run/)
+  assert.match(t, /6 Run/)
   assert.match(t, /› ● npm run build +package\.json/)
   assert.match(t, / {2}● install\.sh +install\.sh/)
-  await keys(e, '1', '5')
+  await keys(e, '1', '6')
   assert.deepEqual(f.calls, ['run-scan'])                    // there now: read, not scanned again
 })
 
 test('the Run tab: r scans again and the merge shows - a rename and a hand entry kept, a gone file missing, a new one added', async () => {
   const f = fake({ [RUN_JSON]: file([{ ...FOUND[0]!, name: 'Build it' }, entry('ps1:install.ps1', 'install.ps1', 'ps1', 'install.ps1', 'install.ps1')]) })
   const e = engineOf(f)
-  await keys(e, '5')
+  await keys(e, '6')
   assert.deepEqual(f.calls, [])
   f.scan = () => {
     f.files[RUN_JSON] = file([entry('hand-1', 'install selftest', 'sh', 'install.sh', 'hand', false, ['--selftest']), { ...FOUND[0]!, name: 'Build it' },
@@ -97,7 +97,7 @@ test('the Run tab: r scans again and the merge shows - a rename and a hand entry
 test('the Run tab: n renames the selected entry through run-entries rename; the new name is in the file', async () => {
   const f = fake({ [RUN_JSON]: file(FOUND) })
   const e = engineOf(f)
-  await keys(e, '5', 'n')
+  await keys(e, '6', 'n')
   assert.equal(e.state.runForm?.mode, 'rename')
   for (let i = 0; i < 'npm run build'.length; i++) await keys(e, 'backspace')
   await keys(e, 'B', 'u', 'i', 'l', 'd', 'space')
@@ -114,7 +114,7 @@ test('the Run tab: n renames the selected entry through run-entries rename; the 
 test('the Run tab: Enter asks first - the exact argv and cwd - and Esc runs nothing', async () => {
   const f = fake({ [RUN_JSON]: file(FOUND) })
   const e = engineOf(f)
-  await keys(e, '5', 'down', 'return')
+  await keys(e, '6', 'down', 'return')
   const t = text(e.state)
   assert.match(t, /Run install\.sh\?/)
   assert.match(t, /Command {2}\/bin\/sh \/r\/install\.sh/)
@@ -129,7 +129,7 @@ test('the Run tab: Enter asks first - the exact argv and cwd - and Esc runs noth
 test('the Run tab: a run streams its output with the exit code and duration; one at a time; s stops it', async () => {
   const f = fake({ [RUN_JSON]: file(FOUND) })
   const e = engineOf(f)
-  await keys(e, '5', 'return', 'return')
+  await keys(e, '6', 'return', 'return')
   assert.deepEqual(f.spawns, [{ argv: ['/usr/bin/npm', 'run', 'build'], cwd: '/r' }])
   f.out!('building\n')
   f.out!('ok: 3 files\n')
@@ -148,7 +148,7 @@ test('the Run tab: a run streams its output with the exit code and duration; one
 test('the Run tab: a failing command shows its exit code; only the tail of the output is kept', async () => {
   const f = fake({ [RUN_JSON]: file(FOUND) })
   const e = engineOf(f)
-  await keys(e, '5', 'return', 'return')
+  await keys(e, '6', 'return', 'return')
   f.out!('x'.repeat(40_000) + '\n')
   f.out!('error: no such target\n')
   f.end!(2, null)

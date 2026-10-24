@@ -74,11 +74,24 @@ export type Job = {
   started: number; ended: number | null; code: number | null
   stopped: boolean; error: string | null; out: string
 }
+// F75: the Explorer tab (hooks/lib/explorer.ts) - the tree's rows of open folders and
+// the changes of open commits only; `open` holds the open sections, folders and commits.
+export type Commit = { sha: string; short: string; date: string; author: string; subject: string }
+export type Change = { status: string; path: string; from: string | null; add: number | null; del: number | null }
+export type TreeRow = { path: string; name: string; depth: number; dir: boolean; count: number }
+export type Explorer = {
+  open: string[]; selected: string | null
+  files: number | null                  // tracked files; null: not read yet
+  tree: TreeRow[]; treeMore: number     // the rows drawn (open folders only); rows past MAX_TREE
+  commits: Commit[] | null
+  changes: Record<string, { list: Change[]; more: number }>   // open commits only
+  error: string | null
+}
 declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
       board: Board | null; team: Member[]; me: string | null
-      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'run'; selected: string | null; expanded: string | null
+      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'explorer' | 'run'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
       runsOpen: ('runs' | 'workflows')[]   // F76: the Workflows tab's open sections this session
@@ -93,6 +106,7 @@ declare module 'claude-code' {
       teamsCfg: TeamsCfgView | null; setup: SetupView | null
       // F79: the Run tab - .skillator/run.json as read, the confirm / rename form, the one job (its output's tail)
       runFile: RunFile | null; runForm: RunForm | null; runJob: Job | null
+      explorer: Explorer     // F75: what the Explorer tab draws, no more (B4)
     }
   }
 }

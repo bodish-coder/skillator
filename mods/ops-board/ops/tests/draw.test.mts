@@ -26,8 +26,10 @@ const RED_HELD = 'DRIVE=C:\nDISK_FREE=90000000000\nDISK_TOTAL=1\nMEM_FREE=500000
 test('a frame is rows × ≤cols, tab bar first, band last, no escapes without colour', () => {
   const f = sized(s)
   assert.equal(f.length, 24)
-  assert.match(f[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Run +ops$/)
-  assert.match(sized({ ...s, repo: 'skillator2' })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Run +ops · skillator2$/)
+  assert.match(f[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Run +ops$/)
+  // F75 + F79: with six tabs "ops · <repo>" fits from 87 columns; at 80 spread() drops it, as at any narrow width
+  assert.match(sized({ ...s, repo: 'skillator2' })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Run$/)
+  assert.match(sized({ ...s, repo: 'skillator2', cols: 100 })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Run +ops · skillator2$/)
   assert.match(f[23]!, /^● ops · mem \? · disk \? · 5h \? · 7d \?$/)       // one band line at 80 columns
   assert.match(text(s), /  ▾ In progress \(1\)\n› ● B2  CSV export drops the last row/)
 })

@@ -15,6 +15,7 @@ import { pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 import { closeSetup, enterMessages, isSetupUp, pollInbox } from './messagestab'
 import { closeRunForm, enterRun, isRunFormUp } from './runtab'
+import { arrowExplorer, enterExplorer, focusExplorer, isExplorerItem } from './explorertab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -306,19 +307,19 @@ async function openPane($: EngineInterface, asked: boolean) {
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', agents: 'Agents', run: 'Run' }
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', agents: 'Agents', explorer: 'Explorer', run: 'Run' }
 // F76: /ops workflows opens the Workflows tab (id runs) with its Workflows section open; /ops runs is
 // an alias that opens it with its Runs section open.
-const WORDS = ['tickets', 'runs', 'health', 'messages', 'agents', 'workflows', 'run']
+const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'run']
 const SECTION_OF: Record<string, 'runs' | 'workflows'> = { runs: 'runs', workflows: 'workflows' }
-const USAGE = 'usage: /ops [tickets|workflows|health|messages|agents|run|resume] - runs opens Workflows too'
+const USAGE = 'usage: /ops [tickets|workflows|health|messages|agents|explorer|run|resume] - runs opens Workflows too'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'ops',
-      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs and Workflow runs), health, Teams messages, agents',
-      argumentHint: '[tickets|workflows|health|messages|agents|run|resume]',
+      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs and Workflow runs), health, Teams messages, agents, the explorer and the run entries',
+      argumentHint: '[tickets|workflows|health|messages|agents|explorer|run|resume]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -369,6 +370,7 @@ export const register: Register = on => {
     if (tab === 'runs') void pollRuns($).catch(() => {})
     if (word === 'agents') void pollAgents($).catch(() => {})
     if (word === 'messages') void enterMessages($).catch(() => {})
+    if (word === 'explorer') void enterExplorer($).catch(() => {})
     if (word === 'run') void enterRun($).catch(() => {})     // F79: the Run tab, first open scans
     const r = await openPane($, true)
     if (!r.isPlaced) return { text: `ops board is open but not drawn: ${r.reason}` }
@@ -465,6 +467,10 @@ export const register: Register = on => {
   // focus ring follows it, so Enter opens or closes the header shown selected.
   on('ui.scroll', { requestId: 'ops-board' }, async ($, e, next) => {
     if (e.pointer || e.origin.kind !== 'person' || Math.abs(e.by) !== 1) return next(e)
+    if ((await read($, tabA)) === 'explorer') {           // F75: the Explorer's own items
+      const o = await arrowExplorer($, e.by, lastScroll.offset, e.bodyRows, lastCols)
+      return o === undefined ? next(e) : o === null || e.contentRows <= e.bodyRows ? {} : next({ ...e, offset: o })
+    }
     if ((await read($, tabA)) !== 'tickets' || (await isFormUp($))) return next(e)   // a form scrolls as itself
     const m = buildModel(await readView($, lastCols))
     const at = m.selected === null ? -1 : m.items.indexOf(m.selected)
@@ -482,6 +488,7 @@ export const register: Register = on => {
     const el = e.element
     if (el?.startsWith('row:')) await update($, selectedA, () => el.slice(4))
     else if (el?.startsWith('head:')) await update($, selectedA, () => el)
+    else if (el && isExplorerItem(el)) await focusExplorer($, el)          // F75
     return next(e)
   }).catch(($, e, next) => next(e))
 }
