@@ -7,8 +7,8 @@
 #   ./install.sh --link     install as symlinks into this repo (stay live on git pull)
 #   ./install.sh --selftest install into a temp HOME and check what was written; prints ok
 # F54: /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets, /skillator-update and /team-messages are written as each host's own command file (codex
-# prompts, Gemini CLI commands, cursor commands, pi prompt templates, Antigravity
-# skill-commands) from host-commands/<host>/, rewritten every run - see write_commands.
+# prompts, Gemini CLI commands, cursor commands, pi prompt templates, opencode commands,
+# Antigravity skill-commands) from host-commands/<host>/, rewritten every run - see write_commands.
 # A96: a skill dir this script copies gets an ownership marker (.skillator-owned),
 # and each skills dir a manifest (.skillator-installed) of the skillator skills in it.
 # The marker records the SKILL.md hash and every file the installer placed. The next
@@ -35,6 +35,10 @@ for a in "$@"; do
 done
 
 codex_home=${CODEX_HOME:-$HOME/.codex}
+# F67: opencode's config dir - $XDG_CONFIG_HOME/opencode when that is set, else
+# ~/.config/opencode (opencode 1.19.4 `debug paths`); skills in <config>/skills, commands
+# in <config>/commands/<n>.md
+oc_config=${XDG_CONFIG_HOME:-$HOME/.config}/opencode
 
 # cli | marker (proves the CLI is installed) | global skills dir(s), '|'-separated
 # antigravity has three: ~/.gemini/config/skills is Antigravity's own documented path,
@@ -63,6 +67,7 @@ cursor|$HOME/.cursor|$HOME/.cursor/skills
 codex|$codex_home|$codex_home/skills
 antigravity|$HOME/.gemini|$HOME/.gemini/config/skills|$HOME/.gemini/skills|$HOME/.gemini/antigravity-cli/skills
 pi|$HOME/.pi|$HOME/.pi/agent/skills|$HOME/.pi/skills
+opencode|$oc_config|$oc_config/skills
 "
 
 # Claude Code can also have them via the plugin marketplace - that counts as installed.
@@ -362,6 +367,9 @@ write_commands() {
       [ "$2" = "$HOME/.pi/agent/skills" ] || return 0
       for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
       put_pi_ext "$2" ;;
+    opencode)
+      # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
     antigravity)
       for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
@@ -396,7 +404,7 @@ native() {
 
 # --selftest: install into a temp HOME / CODEX_HOME holding the four marker dirs, then
 # check the command files (F54), the ops-board copy and the shim (F55), pi's /ops extension (F56),
-# the Antigravity IDE extension through a fake IDE CLI (F57). Never touches the real HOME or IDE. Costs one full install per host dest on disk until it exits.
+# the Antigravity IDE extension through a fake IDE CLI (F57), opencode (F67). Never touches the real HOME or IDE. Costs one full install per host dest on disk until it exits.
 if [ -n "$selftest" ]; then
   T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
   mkdir -p "$T/.codex" "$T/.cursor" "$T/.gemini" "$T/.pi" "$T/.config/opencode"

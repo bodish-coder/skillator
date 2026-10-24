@@ -345,7 +345,8 @@ hooks and usage % are unprobed. What is verified (opencode 1.19.4, 2026-10-24,
 dir is `$XDG_CONFIG_HOME/opencode` when that is set, else `<home>/.config/opencode`,
 and on Windows `<home>` is `%USERPROFILE%` (a changed `HOME` is ignored). Global
 skills load from `<config>/skills/<n>/SKILL.md` (also `skill/`), and from
-`~/.claude/skills/` and `~/.agents/skills/`; project skills from `.opencode/skills/`,
+`~/.claude/skills/` and `~/.agents/skills/` (those two stayed on the real profile
+when `USERPROFILE` was moved to a scratch dir, while `<config>` followed it); project skills from `.opencode/skills/`,
 `.claude/skills/` and `.agents/skills/`, walking up to the git worktree root. A
 skill's `name` must match its folder. The installers write the skills to
 `<config>/skills/` and the seven commands to `<config>/commands/<n>.md`
