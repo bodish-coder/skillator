@@ -715,9 +715,14 @@ user can open elsewhere.
 
 **What's pending beyond the board** - "what's pending everywhere", "what's still
 running", "anything unpushed": run `scripts/pending.sh` (Windows:
-`pending.ps1`, same output) and paste what it prints. One report: board counts,
-open relay runs and the run queue, live sessions, unpushed commits, tickets whose
-line says a GREEN is `owed`, disk, memory, stale locks and any watchdog hold.
+`pending.ps1`, same output) and paste what it prints. One report, plain ASCII
+within 80 columns: the repo and its branch against the upstream; open tickets
+grouped by status with ID, title and owner/session tag (pending capped at 10),
+deferred as IDs; open relay runs marked `live` or `stale` (no `updated:` or
+heartbeat stamp in the last 24 h) and the run queue; this repo's live
+sessions; disk, memory, stale locks and any watchdog hold with its release
+command; open tickets whose line says a GREEN is `owed`; and NEXT - the
+`(testing: ...)` checks the owner owes and what the live runs are on.
 `--kv` prints the same facts as `KEY=value` lines for tools (the ops-board mod);
 `--machine` only the machine facts. It reads; it never edits the board.
 
