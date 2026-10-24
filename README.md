@@ -258,7 +258,10 @@ Deactivating is deleting `.skillator/grayskull.md`.
   of diff and no way to tell which stage produced it. `hooks/relay-morpheus.{sh,ps1}`
   do the bookkeeping — `init`, `stage`, `heartbeat`, `status`, `orphans`, where
   `orphans` is the only signal a dropped agent ever sends: silence. Invoke with
-  `/relay-morpheus`.
+  `/relay-morpheus`. `/pending-subagent [N|max] [IDs]` (every host) works the open
+  tickets as such a run: one fresh implementer per ticket, each diff reviewed and
+  landed, the run merged, the push asked; 1 agent at a time unless a count is given,
+  and tickets that share files never together.
 - **tickets-zordon** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with

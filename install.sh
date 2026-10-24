@@ -6,7 +6,7 @@
 #   ./install.sh --force    refresh skills that are already installed
 #   ./install.sh --link     install as symlinks into this repo (stay live on git pull)
 #   ./install.sh --selftest install into a temp HOME and check what was written; prints ok
-# F54: /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets, /skillator-update and /team-messages are written as each host's own command file (codex
+# F54: /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets, /skillator-update, /team-messages and /pending-subagent are written as each host's own command file (codex
 # prompts, Gemini CLI commands, cursor commands, pi prompt templates, opencode commands,
 # Antigravity skill-commands) from host-commands/<host>/, rewritten every run - see write_commands.
 # A96: a skill dir this script copies gets an ownership marker (.skillator-owned),
@@ -350,28 +350,28 @@ put_agy_ext() {
   fi
 }
 
-# write_commands <cli> <dest>: F54 - /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets, /skillator-update and /team-messages as the host's own command
+# write_commands <cli> <dest>: F54 - /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets, /skillator-update, /team-messages and /pending-subagent as the host's own command
 # file, user level, rewritten every run. Called per dest; per-CLI files are written for
 # the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
 # written into each antigravity dest with no .skillator-owned marker and kept out of
 # .skillator-installed, so prune_dest never touches them. Claude Code: nothing (the
-# ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets, /sync-tickets, /skillator-update and /team-messages are the plugin's commands/*.md).
+# ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets, /sync-tickets, /skillator-update, /team-messages and /pending-subagent are the plugin's commands/*.md).
 write_commands() {
   _c="$root/host-commands"
   case "$1" in
     codex)
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do put_cmd "$_c/codex/$_n.md" "$2" "$codex_home/prompts/$_n.md"; done ;;
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent; do put_cmd "$_c/codex/$_n.md" "$2" "$codex_home/prompts/$_n.md"; done ;;
     cursor)
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
     pi)
       [ "$2" = "$HOME/.pi/agent/skills" ] || return 0
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
       put_pi_ext "$2" ;;
     opencode)
       # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
     antigravity)
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
         [ -n "$dry" ] || rm -f "$2/$_n/$owned"
@@ -380,7 +380,7 @@ write_commands() {
       if [ "$2" = "$HOME/.gemini/config/skills" ]; then put_agy_ext "$2"; fi
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
       if [ "$2" = "$HOME/.gemini/skills" ]; then
-        for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
+        for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
       fi ;;
   esac
 }
@@ -425,6 +425,13 @@ if [ -n "$selftest" ]; then
   done)
   # F67: the scan reaches opencode's command files too
   find "$root/host-commands" -type f -name '*.md' | grep -q '/host-commands/opencode/team-messages\.md$' || { echo "FAIL: B6 scan misses host-commands/opencode"; exit 1; }
+  # F71: /pending-subagent ships on Claude Code (commands/) and every host, and the scan reaches it
+  for f in commands/pending-subagent.md host-commands/codex/pending-subagent.md host-commands/cursor/pending-subagent.md \
+           host-commands/pi/pending-subagent.md host-commands/opencode/pending-subagent.md \
+           host-commands/antigravity/pending-subagent/SKILL.md host-commands/gemini/pending-subagent.toml; do
+    [ -f "$root/$f" ] || { echo "FAIL: missing source $f"; exit 1; }
+  done
+  find "$root/commands" "$root/host-commands" -type f -name '*.md' | grep -c 'pending-subagent' | grep -qx 6 || { echo "FAIL: B6 scan misses a pending-subagent file"; exit 1; }
   [ -z "$_bad" ] || { echo "FAIL: frontmatter has an unquoted \": \" (invalid YAML, pi will not register the command): $_bad"; exit 1; }
   # F68: the Muse manifest lists every skill and carries the release version
   sh "$root/practice/scripts/check-muse-manifest.sh" "$root" > /dev/null || { echo "FAIL: .muse-plugin out of step (sh practice/scripts/check-muse-manifest.sh)"; exit 1; }
@@ -447,6 +454,9 @@ if [ -n "$selftest" ]; then
            .codex/prompts/team-messages.md .gemini/commands/team-messages.toml .cursor/commands/team-messages.md \
            .pi/agent/prompts/team-messages.md .gemini/config/skills/team-messages/SKILL.md .gemini/skills/team-messages/SKILL.md \
            .gemini/antigravity-cli/skills/team-messages/SKILL.md .codex/skills/teams-uhura/scripts/team.mjs \
+           .codex/prompts/pending-subagent.md .gemini/commands/pending-subagent.toml .cursor/commands/pending-subagent.md \
+           .pi/agent/prompts/pending-subagent.md .gemini/config/skills/pending-subagent/SKILL.md .gemini/skills/pending-subagent/SKILL.md \
+           .gemini/antigravity-cli/skills/pending-subagent/SKILL.md .config/opencode/commands/pending-subagent.md \
            .codex/skills/ops-board/ops/app.ts .pi/agent/skills/ops-board/hooks/lib/board.ts \
            .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json \
            .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
@@ -458,7 +468,7 @@ if [ -n "$selftest" ]; then
   # F67: opencode - the skills in its global skills dir, the seven commands in its commands/
   # dir, each substituted with that dest, no placeholder left, arguments by $ARGUMENTS
   _oc=.config/opencode
-  for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do
+  for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent; do
     _f=$T/$_oc/commands/$_n.md
     [ -f "$_f" ] || { echo "FAIL: missing $_oc/commands/$_n.md"; exit 1; }
     head -1 "$_f" | grep -qx -- '---' || { echo "FAIL: opencode $_n has no frontmatter"; exit 1; }
@@ -474,7 +484,7 @@ if [ -n "$selftest" ]; then
   grep -qF -e "<<'EOF'" -e "@'" -e 'say "' "$T/$_oc/commands/team-messages.md" && { echo "FAIL: opencode team-messages puts reply text in shell source"; exit 1; }
   [ "$(cat "$T/$_oc/skills/.skillator-source" 2>/dev/null)" = "$(native "$root")" ] || { echo "FAIL: source pointer in $_oc/skills"; exit 1; }
   [ -f "$T/$_oc/skills/tickets-zordon/.skillator-owned" ] || { echo "FAIL: opencode skill has no ownership marker"; exit 1; }
-  grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
+  grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   for f in .codex/prompts/skillator-update.md .cursor/commands/skillator-update.md .pi/agent/prompts/skillator-update.md \
            .gemini/commands/skillator-update.toml .gemini/skills/skillator-update/SKILL.md $_oc/commands/skillator-update.md; do
@@ -521,6 +531,18 @@ if [ -n "$selftest" ]; then
     grep -qF '{{SKILLS}}' "$T/${f%%:*}" && { echo "FAIL: placeholder left in ${f%%:*}"; exit 1; }
   done
   grep -q '^name: team-messages$' "$T/.gemini/antigravity-cli/skills/team-messages/SKILL.md" || { echo "FAIL: agy skill name team-messages"; exit 1; }
+  # F71: /pending-subagent loads relay-morpheus from the host's own dest and takes the agent count
+  for f in .codex/prompts/pending-subagent.md:.codex/skills .cursor/commands/pending-subagent.md:.cursor/skills \
+           .pi/agent/prompts/pending-subagent.md:.pi/agent/skills .gemini/commands/pending-subagent.toml:.gemini/skills \
+           .gemini/config/skills/pending-subagent/SKILL.md:.gemini/config/skills .gemini/skills/pending-subagent/SKILL.md:.gemini/skills \
+           .gemini/antigravity-cli/skills/pending-subagent/SKILL.md:.gemini/antigravity-cli/skills \
+           .config/opencode/commands/pending-subagent.md:.config/opencode/skills; do
+    grep -qF "$N/${f#*:}/relay-morpheus/SKILL.md" "$T/${f%%:*}" || { echo "FAIL: pending-subagent not substituted in ${f%%:*}"; exit 1; }
+    { grep -qF 'chain merge' "$T/${f%%:*}" && grep -qF 'max' "$T/${f%%:*}"; } || { echo "FAIL: pending-subagent has no agent count in ${f%%:*}"; exit 1; }
+    grep -qF '{{SKILLS}}' "$T/${f%%:*}" && { echo "FAIL: placeholder left in ${f%%:*}"; exit 1; }
+  done
+  grep -q '^name: pending-subagent$' "$T/.gemini/antigravity-cli/skills/pending-subagent/SKILL.md" || { echo "FAIL: agy skill name pending-subagent"; exit 1; }
+  grep -q '^argument-hint: .*max' "$root/commands/pending-subagent.md" || { echo "FAIL: commands/pending-subagent.md argument-hint has no count"; exit 1; }
   grep -qF '{{args}}' "$T/.gemini/commands/list-tickets.toml" || { echo "FAIL: gemini args"; exit 1; }
   grep -qF '$ARGUMENTS' "$T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: pi args"; exit 1; }
   grep -q '^argument-hint: ' "$T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: pi argument-hint"; exit 1; }
@@ -557,7 +579,7 @@ if [ -n "$selftest" ]; then
     grep -rqF '{{SKILLS}}' "$T/$f" && { echo "FAIL: placeholder left in $f"; exit 1; }
   done
   for d in .gemini/config/skills .gemini/skills .gemini/antigravity-cli/skills; do
-    grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
+    grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
     [ -e "$T/$d/pending/.skillator-owned" ] && { echo "FAIL: command skill carries an ownership marker in $d"; exit 1; }
   done
   [ -x "$T/.local/bin/ops" ] || { echo "FAIL: missing .local/bin/ops"; exit 1; }
