@@ -501,14 +501,20 @@ test('F61: a click on the header of the selected ticket\'s group closes it and s
   await ui.unmount()
 })
 
-test('F61: a and d on a ticket row still open the in-pane form; on a header they ask for a ticket', WITH, async ($, on) => {
+// F77: on a header a / d no longer toast 'select a ticket first' - the form opens with
+// an empty Ticket field to type the ID in; on a row it opens on that ticket as before.
+test('F61: a and d on a ticket row still open the in-pane form; on a header they ask for a ticket by number', WITH, async ($, on) => {
   const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
   const toasts: string[] = []
   on('ui.toast', ($, e) => { toasts.push(e.text); return { value: undefined } })
   await start($, clock)
   const ui = await mountPane($, 'terminal')
-  await ui.press({ key: 'key:assign' })                   // the first header is selected: no form
-  expect(toasts.at(-1)).toBe('ops board: select a ticket first')
+  await ui.press({ key: 'key:assign' })                   // the first header is selected: the form asks for the ID
+  expect(toasts).toEqual([])
+  expect((await ui.find({ key: 'form:title' }))?.text).toBe('Assign a ticket  Esc cancels')
+  expect((await ui.find({ key: 'ticket' }))?.props.value).toBe('')
+  expect(await ui.find({ key: 'go' })).toBeUndefined()
+  await ui.press({ key: 'cancel' })
   expect(await ui.find({ key: 'form:title' })).toBeUndefined()
   await ui.press({ key: 'head:?' })
   await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 0, by: 1, bodyRows: 40, contentRows: 30, origin: { kind: 'person' } })

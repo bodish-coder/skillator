@@ -57,7 +57,7 @@ test('runs and health tabs as the mock; the assign box overlays the body', () =>
   assert.match(text(reduce(s, { name: '2' }).state), /reading runs…/)
   assert.match(text(reduce(onRuns(s, '', {}), { name: '2' }).state), /no open runs - plan one with relay-morpheus \(plan-runs\)/)
   const d = text(reduce(s, { name: 'a' }).state)
-  assert.match(d, /  ┌─ Assign B2 ─+┐\n  │  \(•\) implementation   \( \) decision          a \/ d +│\n  │ +│/)
+  assert.match(d, /  ┌─ Assign B2 ─+┐\n  │  Ticket  B2 · \[~\] in progress · CSV export drops the last row +│\n  │  \(•\) implementation   \( \) decision          a \/ d +│\n  │ +│/)
   assert.match(d, /  │  › @asha +│/)
   assert.match(d, /  │  Change  \[~\] in progress → \[ \] pending, owner @asha +│/)
   assert.match(d, /  └─+┘/)
@@ -308,4 +308,17 @@ test('F61: the selected header scrolls into view in a short terminal', () => {
   for (let i = 0; i < 10; i++) x = reduce(x, { name: 'down' }).state
   assert.equal(x.selected, 'head:>')
   assert.ok(sized(x).some(l => l.startsWith('› ▾ Deferred (1)')), text(x))
+})
+
+// F77: the assign box carries the Ticket field; the keys line follows the field in use.
+test('F77: the assign box draws the Ticket line; typing an ID there, the keys say so', () => {
+  const sel = reduce(s, { name: 'a' }).state                        // B2 selected
+  const t = text(sel)
+  assert.match(t, /┌─ Assign B2 ─+┐\n  │  Ticket  B2 · \[~\] in progress · CSV export drops the last row +│/)
+  assert.match(t, /\n↑↓ person · a \/ d kind · tab ticket · enter confirm · esc cancel\n/)
+  const none = reduce({ ...fresh }, { name: 'a' }).state             // a header selected: no ticket
+  const n = text(none)
+  assert.match(n, /┌─ Assign a ticket ─+┐\n  │  Ticket  _ · type a ticket ID, e.g. F12 +│/)
+  assert.match(n, /\ntype the ID · tab person · enter confirm · esc cancel\n/)
+  for (const [cols, rows] of [[80, 24], [40, 12], [20, 5]] as const) sized({ ...none, cols, rows })
 })

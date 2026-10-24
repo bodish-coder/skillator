@@ -146,7 +146,8 @@ function countLine(s: State, m: Model): Seg[] {
 function keysOf(s: State, m: Model): string[] {
   if (s.setup) return ['tab / shift-tab field', 'space on/off', 'enter save', 'esc cancel']
   if (s.person) return ['tab / shift-tab field', 'enter add', 'esc cancel']
-  if (s.dialog) return ['↑↓ person', 'a / d kind', 'enter confirm', 'esc cancel']
+  if (s.dialog) return s.dialogField === 'ticket' ? ['type the ID', 'tab person', 'enter confirm', 'esc cancel']
+    : ['↑↓ person', 'a / d kind', 'tab ticket', 'enter confirm', 'esc cancel']
   if (s.filterField) return ['←→ field', '↑↓ value', 'enter/esc leave']
   if (s.tab === 'runs') return ['↑↓ move', 'enter stages', 's start a planned run', 'r reload', 'q quit']
   if (s.tab === 'health') return ['R resume (releases the hold on a fresh non-red reading)', 'r reload', 'q quit']
@@ -455,7 +456,7 @@ function dialogBody(s: State): Seg[][] {
     const last = i === all.length - 1
     if (last || /^ {2}Change /.test(l)) rows.push({ text: '' })
     for (const part of l.split(/\r?\n/)) rows.push({ text: part, color: l === r ? 'error' : undefined })
-    if (i === 0) rows.push({ text: '' })
+    if (i === 1) rows.push({ text: '' })   // F77: after the Ticket line and the kind
   })
   return boxBody(s, { title: ls[0] ?? '', rows })
 }

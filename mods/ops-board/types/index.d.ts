@@ -20,6 +20,8 @@ export type Stage = { n: number; code: string; ticket: string; title: string; af
 export type RunView = { id: string; title: string; done: number; total: number; owner: string | null;
                         stages: Stage[]; planned: boolean     // planned = chain planned, nothing dispatched
                         decisions: string[] }                 // F50: parked `## Decisions` still unanswered, "Q1 F49 <question> - <what> waits on it"
+// F77: id = the form's Ticket field as typed ('' when opened with no ticket selected),
+// resolved against the board case-insensitively (ticketById); ticket-meta gets the board's ID.
 export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string | null; result: string | null }
 // F47 team management (T6): the Team view in the Tickets tab, and the Add person form
 // (drawn as a form in the ops-board pane; `back` = where a finished add returns).

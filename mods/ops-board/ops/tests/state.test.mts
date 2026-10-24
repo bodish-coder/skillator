@@ -62,6 +62,7 @@ test('a opens the assign dialog on the selected row, starts on the owner, Enter 
   assert.equal(state.dialog?.id, 'F1'); assert.equal(state.dialog?.handle, '@asha'); assert.equal(state.dialog?.kind, 'owner')
   assert.deepEqual(dialogLines(state), [
     'Assign F1',
+    '  Ticket  F1 · [ ] pending · Dark mode',
     '  (•) implementation   ( ) decision          a / d',
     '  › @asha     Asha',
     '    @vidul',
@@ -98,7 +99,8 @@ test('d on a row opens a decision; a / d in the dialog switch kind; D on a [?] r
   const state = reduce(s0, key('d')).state                 // F3, the first row
   assert.equal(state.dialog?.kind, 'decide'); assert.equal(state.dialog?.handle, '@asha')
   assert.equal(dialogLines(state)[0], 'Assign F3 for a decision')
-  assert.equal(dialogLines(state)[1], '  ( ) implementation   (•) decision          a / d')
+  assert.equal(dialogLines(state)[1], '  Ticket  F3 · [?] pending decision · Pick chart')
+  assert.equal(dialogLines(state)[2], '  ( ) implementation   (•) decision          a / d')
   assert.ok(dialogLines(state).includes('  Change  [?] decision → [?] decision, decide @asha'))
   const flipped = reduce(state, key('a')).state
   assert.equal(flipped.dialog?.kind, 'owner'); assert.equal(dialogLines(flipped)[0], 'Assign F3')
@@ -124,7 +126,9 @@ test('a dialog on a ticket in progress warns; an empty team starts on no one and
   assert.ok(!dialogLines(s).some(l => l.includes('drops that tag')))
   assert.ok(dialogLines(s).some(l => l.includes('no .skillator/team.md yet')))
   assert.equal(reduce(s, key('return')).effects.length, 0)
-  assert.equal(reduce(initial(80, 24, 0), key('a')).state.toast, 'ops board: select a ticket first')
+  // F77: nothing selected (no board yet) opens the dialog on an empty Ticket field, no toast
+  const none = reduce(initial(80, 24, 0), key('a')).state
+  assert.equal(none.toast, null); assert.equal(none.dialog?.id, ''); assert.equal(none.dialogField, 'ticket')
 })
 
 test('startHandle: the ticket\'s own handle on the team, else me, else the first member', () => {
@@ -422,9 +426,10 @@ test('F61: Enter on a header opens and closes it; the selection stays on the hea
 })
 
 test('F61: a / d / D on a header ask for a ticket; on a row they work as before', () => {
+  // F77: a / d on a header open the dialog on an empty Ticket field (was: a toast)
   for (const k of ['a', 'd']) {
     const r = reduce(fresh, key(k)).state
-    assert.equal(r.dialog, null); assert.equal(r.toast, 'ops board: select a ticket first')
+    assert.equal(r.toast, null); assert.equal(r.dialog?.id, ''); assert.equal(r.dialogField, 'ticket')
   }
   const D = reduce(fresh, key('D'))
   assert.equal(D.effects.length, 0); assert.ok(D.state.toast)
@@ -456,4 +461,55 @@ test('F61: a filter keeps matching groups with their filtered counts; x adds Don
   assert.deepEqual(buildModel(viewOf(vidul)).items, [])
   const done = reduce(fresh, key('x')).state
   assert.deepEqual(buildModel(viewOf(done)).items, ['head:?', 'head: ', 'head:x'])
+})
+
+// F77: the ticket chosen by number in the dialog - selected, unselected, unknown, changed.
+const typing = (st: State, text: string) => [...text].reduce((x, ch) => reduce(x, key(ch, { sequence: ch })).state, st)
+test('F77: a ticket selected - the Ticket field is prefilled, the cursor on the people; tab reaches the field', () => {
+  const d = reduce(s0, key('a')).state                              // F3 selected
+  assert.equal(d.dialog?.id, 'F3'); assert.equal(d.dialogField, 'who')
+  assert.equal(dialogLines(d)[1], '  Ticket  F3 · [?] pending decision · Pick chart')
+  const onField = reduce(d, key('tab')).state
+  assert.equal(onField.dialogField, 'ticket')
+  assert.equal(dialogLines(onField)[1], '  Ticket  F3_ · [?] pending decision · Pick chart')
+  assert.equal(reduce(onField, key('tab')).state.dialogField, 'who')
+})
+test('F77: no ticket selected - the dialog opens on an empty Ticket field; f1 resolves, Enter runs on F1', () => {
+  const fresh0: State = { ...s0, selected: 'head:?' }
+  let d = reduce(fresh0, key('a')).state
+  assert.equal(d.toast, null); assert.equal(d.dialog?.id, ''); assert.equal(d.dialogField, 'ticket')
+  assert.equal(dialogLines(d)[0], 'Assign a ticket')
+  assert.equal(dialogLines(d)[1], '  Ticket  _ · type a ticket ID, e.g. F12')
+  assert.ok(!dialogLines(d).some(l => l.startsWith('  Change')))
+  assert.equal(reduce(d, key('return')).effects.length, 0)          // Assign waits for a ticket
+  d = typing(d, 'fd1')                                               // a / d / j are text in the field, not keys
+  assert.equal(d.dialog?.kind, 'owner'); assert.equal(d.dialog?.id, 'fd1')
+  d = reduce(reduce(d, key('backspace')).state, key('backspace')).state
+  d = typing(d, '1')
+  assert.equal(d.dialog?.id, 'f1')
+  assert.equal(dialogLines(d)[0], 'Assign F1')
+  assert.equal(dialogLines(d)[1], '  Ticket  f1_ · [ ] pending · Dark mode')
+  assert.ok(dialogLines(d).includes('  Runs    ticket-meta assign F1 @vidul'))
+  const r = reduce(d, key('return'))
+  assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-assign', ['F1', '@vidul']])
+  assert.match(settle(r.effects[0]!.then(ok(''))(r.state)).state.toast ?? '', /^✓ F1 now pending, owned by @vidul: Dark mode/)
+})
+test('F77: an unknown ID says no such ticket and Enter runs nothing', () => {
+  const d = typing(reduce({ ...s0, selected: 'head:?' }, key('d')).state, 'F99')
+  assert.equal(dialogLines(d)[0], 'Assign a ticket for a decision')
+  assert.equal(dialogLines(d)[1], '  Ticket  F99_ · no such ticket')
+  assert.ok(dialogLines(d).includes('  Runs    ticket-meta decide <ID> @vidul'))
+  const r = reduce(d, key('return'))
+  assert.equal(r.effects.length, 0); assert.equal(r.state.dialog?.result, 'no such ticket')
+})
+test('F77: a changed ID moves the dialog to that ticket; Enter runs on the new one', () => {
+  let d = reduce(s0, key('d')).state                                 // F3 selected
+  d = reduce(d, key('tab')).state
+  d = reduce(reduce(d, key('backspace')).state, key('backspace')).state
+  d = typing(d, 'f1')
+  assert.equal(dialogLines(d)[0], 'Assign F1 for a decision')
+  assert.ok(dialogLines(d).includes('  Change  [ ] pending → [?] decision, decide @asha'))
+  d = reduce(d, key('tab')).state
+  const r = reduce(d, key('return'))
+  assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-decide', ['F1', '@asha']])
 })

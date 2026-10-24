@@ -9,7 +9,7 @@ import type { View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
 import { buildModel, headKey, isHead, toggleGroup } from '../hooks/lib/ticketsmodel'
-import { STATE_NAME } from '../hooks/lib/board'
+import { STATE_NAME, ticketById } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, parseMachine, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
@@ -24,6 +24,7 @@ export type FilterField = 'app' | 'who' | 'mine'
 // `sequence` is the character typed (app.ts sets it for printable keys): the Add person form's text.
 export type Key = { name: string; sequence?: string; shift?: boolean; ctrl?: boolean }
 export type PersonField = 'handle' | 'name' | 'emails'
+export type DialogField = 'ticket' | 'who'
 
 export type State = {
   tab: Tab
@@ -36,6 +37,7 @@ export type State = {
   runs: RunView[]; runsSelected: string | null; runsExpanded: string | null
   runsRead: boolean                        // false until relay's list was first read: 'reading runs…'
   dialog: AssignDraft | null; dialogIndex: number    // -1: the cursor is on "+ add person"
+  dialogField: DialogField                            // F77: the keys go to the Ticket field or the people
   person: PersonDraft | null; personField: PersonField  // the Add person form, over the dialog or the Team view
   teamSelected: string | null                         // the Team view's row
   teamConfirm: string | null                          // the handle the Team view asks to remove (y/n)
@@ -74,7 +76,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, relay: null,
   runs: [], runsSelected: null, runsExpanded: null, runsRead: false,
-  dialog: null, dialogIndex: 0, person: null, personField: 'handle', teamSelected: null, teamConfirm: null, toast: null, notes: [],
+  dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
 })
@@ -110,9 +112,10 @@ function addNotes(xs: string[], add: string[], drop: (n: string) => boolean = ()
 
 // The handle a fresh dialog starts on: the ticket's own (owner or decider) when on the
 // team, else me, else the first member - as team.md writes it (moved verbatim from assign.tsx).
-export function startHandle(t: Ticket, kind: 'owner' | 'decide', team: Member[], me: string | null): string | null {
+// F77: no ticket yet (its ID still to be typed) - me, else the first member.
+export function startHandle(t: Ticket | null, kind: 'owner' | 'decide', team: Member[], me: string | null): string | null {
   const on = (h: string | null) => team.find(m => sameHandle(m.handle, h))?.handle ?? null
-  return on(kind === 'owner' ? t.owner : t.decide) ?? on(me) ?? team[0]?.handle ?? null
+  return on(t ? (kind === 'owner' ? t.owner : t.decide) : null) ?? on(me) ?? team[0]?.handle ?? null
 }
 
 // The people the dialog lists: the team, plus the draft's handle when it is not on it.
@@ -121,41 +124,50 @@ function peopleOf(s: State): Member[] {
   return d?.handle && !s.team.some(m => m.handle === d.handle) ? [...s.team, { handle: d.handle, emails: [] }] : s.team
 }
 
-const titleOf = (d: AssignDraft) => (d.kind === 'decide' ? `Assign ${d.id} for a decision` : `Assign ${d.id}`)
+// F77: the heading names the ticket the Ticket field resolves to, else "a ticket".
+const titleOf = (d: AssignDraft, t: Ticket | null) => `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : ''}`
+// The ticket the dialog's Ticket field names (typed in any case), or null.
+const dialogTicket = (s: State): Ticket | null => (s.dialog ? ticketById(s.board?.tickets, s.dialog.id) : null)
 
 export function dialogLines(s: State): string[] {
   const d = s.dialog
   if (!d) return []
-  const tk = ticketOf(s, d.id)
+  const tk = dialogTicket(s)
   const from: Box = tk?.box ?? ' '
   const to: Box = d.kind === 'decide' ? '?' : ' '
   const radio = (k: AssignDraft['kind']) => (d.kind === k ? '(•)' : '( )')
-  const out = [titleOf(d), `  ${radio('owner')} implementation   ${radio('decide')} decision          a / d`]
+  // F77: the Ticket line - the field as typed ('_' the cursor while the keys are on it),
+  // then what it resolves to.
+  const said = tk ? `[${tk.box}] ${STATE_NAME[tk.box]} · ${tk.title}` : d.id.trim() ? 'no such ticket' : 'type a ticket ID, e.g. F12'
+  const out = [titleOf(d, tk), `  Ticket  ${d.id}${s.dialogField === 'ticket' ? '_' : ''} · ${said}`,
+    `  ${radio('owner')} implementation   ${radio('decide')} decision          a / d`]
   const onAdd = s.dialogIndex === -1
   if (!s.team.length) out.push('  no .skillator/team.md yet - + add person creates it')
   for (const m of peopleOf(s)) out.push(`  ${!onAdd && m.handle === d.handle ? '› ' : '  '}${m.handle.padEnd(10)}${m.name ?? ''}`.trimEnd())
   out.push(`  ${onAdd ? '› ' : '  '}+ add person`)
-  out.push(`  Change  [${from}] ${word(from)} → [${to}] ${word(to)}, ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`)
+  if (tk) out.push(`  Change  [${from}] ${word(from)} → [${to}] ${word(to)}, ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`)
   if (tk?.box === '~') {
     out.push(tk.session
       ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${word(to)}; the tag stays - tell that session`
       : `  ! ${tk.id} is in progress - this moves it to ${word(to)}; tell whoever is working it`)
   }
-  out.push(`  Runs    ticket-meta ${d.kind === 'decide' ? 'decide' : 'assign'} ${d.id} ${d.handle ?? '@?'}`)
+  out.push(`  Runs    ticket-meta ${d.kind === 'decide' ? 'decide' : 'assign'} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`)
   if (d.result) out.push(`  ${d.result}`)
   out.push('  Enter confirm · Esc cancel')
   return out
 }
 
-// F61: a header selected is no ticket - `ticket` is null there, and the toast asks for one.
+// F61: a header selected is no ticket - `ticket` is null there. F77: the dialog opens all
+// the same, the keys on its empty Ticket field for the ID to be typed; with a ticket the
+// field is prefilled (tab reaches it to change it) and the keys start on the people.
 function openDialog(s: State, kind: AssignDraft['kind']): State {
   const id = buildModel(viewOf(s)).ticket
   const t = id ? ticketOf(s, id) : null
-  if (!t) return toast(s, 'ops board: select a ticket first')
   const handle = startHandle(t, kind, s.team, s.me)
-  const dialog: AssignDraft = { id: t.id, kind, handle, result: null }
+  const dialog: AssignDraft = { id: t?.id ?? '', kind, handle, result: null }
   // No one to start on (no team file): the cursor starts on "+ add person".
-  return { ...s, dialog, dialogIndex: handle ? Math.max(0, s.team.findIndex(m => m.handle === handle)) : -1 }
+  return { ...s, dialog, dialogField: t ? 'who' : 'ticket',
+    dialogIndex: handle ? Math.max(0, s.team.findIndex(m => m.handle === handle)) : -1 }
 }
 
 // Assign: ticket-meta assign|decide <ID> @h. Done: a toast with what it said and the
@@ -163,26 +175,47 @@ function openDialog(s: State, kind: AssignDraft['kind']): State {
 function confirmAssign(s: State): Step {
   const d = s.dialog
   if (!d) return { state: s, effects: [] }
+  // F77: Assign waits for the Ticket field to name a ticket; ticket-meta gets the board's ID.
+  const tk = dialogTicket(s)
+  if (!tk) return { state: { ...s, dialog: { ...d, result: d.id.trim() ? 'no such ticket' : 'type a ticket ID first' } }, effects: [] }
   if (!d.handle) return { state: { ...s, dialog: { ...d, result: 'pick someone first' } }, effects: [] }
   const handle = d.handle
+  const id = tk.id
   const then: Then = r => x => {
     if (r.code !== 0) {
       const text = timedOut(r) ? 'ticket-meta did not finish in 30 s' : why(r, 'ticket-meta')
       const next = x.dialog ? { ...x, dialog: { ...x.dialog, result: text } } : x
       return timedOut(r) ? toast(next, text) : next
     }
-    const t = ticketOf(x, d.id)
+    const t = ticketOf(x, id)
     const closed = !t || t.box === 'x' || t.box === '-'
     const state = d.kind === 'decide' ? 'pending decision' : 'pending'
     const role = d.kind === 'decide' ? `for ${handle} to decide` : `owned by ${handle}`
-    const head = `✓ ${d.id} ${closed ? 'reopened as' : 'now'} ${state}, ${role}${t ? ': ' + t.title : ''}`
+    const head = `✓ ${id} ${closed ? 'reopened as' : 'now'} ${state}, ${role}${t ? ': ' + t.title : ''}`
     return { ...x, dialog: null, toast: [head, ...notesOf(r.out), ran(r.argv)].join('\n') }
   }
-  return { state: s, effects: [run(d.kind === 'decide' ? 'meta-decide' : 'meta-assign', [d.id, handle], then)] }
+  return { state: s, effects: [run(d.kind === 'decide' ? 'meta-decide' : 'meta-assign', [id, handle], then)] }
+}
+
+// F77: the keys on the Ticket field - a printable character is text there (a / d / j
+// are letters of an ID, not keys), backspace deletes, tab goes to the people.
+function ticketFieldKey(s: State, k: Key): Step {
+  const d = s.dialog!
+  const edit = (id: string): Step => ({ state: { ...s, dialog: { ...d, id, result: null } }, effects: [] })
+  switch (k.name) {
+    case 'tab': case 'down': return { state: { ...s, dialogField: 'who' }, effects: [] }
+    case 'backspace': return edit([...d.id].slice(0, -1).join(''))
+    case 'return': case 'enter': return confirmAssign(s)
+    case 'escape': return { state: { ...s, dialog: null, dialogIndex: 0, dialogField: 'who' }, effects: [] }
+  }
+  const ch = k.sequence
+  if (!k.ctrl && ch && [...ch].length === 1 && ch > ' ' && ch !== '\x7f' && [...d.id].length < 20) return edit(d.id + ch)
+  return { state: s, effects: [] }
 }
 
 function dialogKey(s: State, k: Key): Step {
   const d = s.dialog!
+  if (s.dialogField === 'ticket') return ticketFieldKey(s, k)
   const same = { state: s, effects: [] }
   const people = peopleOf(s)
   const onAdd = s.dialogIndex === -1
@@ -200,8 +233,9 @@ function dialogKey(s: State, k: Key): Step {
     case 'a': return { state: { ...s, dialog: { ...d, kind: 'owner', result: null } }, effects: [] }
     case 'd': return { state: { ...s, dialog: { ...d, kind: 'decide', result: null } }, effects: [] }
     case 'n': return onAdd ? { state: openPerson(s, 'assign'), effects: [] } : same
+    case 'tab': return { state: { ...s, dialogField: 'ticket' }, effects: [] }
     case 'return': case 'enter': return onAdd ? { state: openPerson(s, 'assign'), effects: [] } : confirmAssign(s)
-    case 'escape': return { state: { ...s, dialog: null, dialogIndex: 0 }, effects: [] }
+    case 'escape': return { state: { ...s, dialog: null, dialogIndex: 0, dialogField: 'who' }, effects: [] }
     default: return same
   }
 }
