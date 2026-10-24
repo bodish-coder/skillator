@@ -399,7 +399,10 @@ native() {
 # the Antigravity IDE extension through a fake IDE CLI (F57). Never touches the real HOME or IDE. Costs one full install per host dest on disk until it exits.
 if [ -n "$selftest" ]; then
   T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-  mkdir -p "$T/.codex" "$T/.cursor" "$T/.gemini" "$T/.pi"
+  mkdir -p "$T/.codex" "$T/.cursor" "$T/.gemini" "$T/.pi" "$T/.config/opencode"
+  # F67: opencode's config dir is $XDG_CONFIG_HOME/opencode when that is set - never let
+  # the selftest follow it out of the temp HOME
+  unset XDG_CONFIG_HOME
   # F57: a fake Antigravity IDE CLI that logs its arguments - every run below inherits
   # it, so the selftest never installs into the real IDE
   printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/ide-calls"\n' "$T" > "$T/fake-ide"; chmod 755 "$T/fake-ide"
@@ -412,6 +415,8 @@ if [ -n "$selftest" ]; then
     awk -v f="$f" 'NR==1 { if ($0 != "---") exit } NR>1 && /^---[ \t\r]*$/ { exit }
       NR>1 && /^[A-Za-z_-]+:[ \t]+[^"\x27\[{|>&*!#% \t]/ { v=$0; sub(/^[A-Za-z_-]+:[ \t]+/, "", v); if (v ~ /: /) print f ": " $0 }' "$f"
   done)
+  # F67: the scan reaches opencode's command files too
+  find "$root/host-commands" -type f -name '*.md' | grep -q '/host-commands/opencode/team-messages\.md$' || { echo "FAIL: B6 scan misses host-commands/opencode"; exit 1; }
   [ -z "$_bad" ] || { echo "FAIL: frontmatter has an unquoted \": \" (invalid YAML, pi will not register the command): $_bad"; exit 1; }
   # F68: the Muse manifest lists every skill and carries the release version
   sh "$root/practice/scripts/check-muse-manifest.sh" "$root" > /dev/null || { echo "FAIL: .muse-plugin out of step (sh practice/scripts/check-muse-manifest.sh)"; exit 1; }
@@ -437,10 +442,36 @@ if [ -n "$selftest" ]; then
            .codex/skills/ops-board/ops/app.ts .pi/agent/skills/ops-board/hooks/lib/board.ts \
            .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json \
            .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
-           .pi/agent/extensions/skillator-ops.ts; do
+           .pi/agent/extensions/skillator-ops.ts .config/opencode/skills/tickets-zordon/SKILL.md \
+           .config/opencode/skills/teams-uhura/scripts/team.mjs .config/opencode/skills/ops-board/ops/ops.sh; do
     [ -f "$T/$f" ] || { echo "FAIL: missing $f"; exit 1; }
   done
   N=$(native "$T")
+  # F67: opencode - the skills in its global skills dir, the seven commands in its commands/
+  # dir, each substituted with that dest, no placeholder left, arguments by $ARGUMENTS
+  _oc=.config/opencode
+  for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages; do
+    _f=$T/$_oc/commands/$_n.md
+    [ -f "$_f" ] || { echo "FAIL: missing $_oc/commands/$_n.md"; exit 1; }
+    head -1 "$_f" | grep -qx -- '---' || { echo "FAIL: opencode $_n has no frontmatter"; exit 1; }
+    grep -q '^description: ' "$_f" || { echo "FAIL: opencode $_n description"; exit 1; }
+    grep -qF '{{SKILLS}}' "$_f" && { echo "FAIL: placeholder left in $_oc/commands/$_n.md"; exit 1; }
+    case $_n in engage) ;; *) grep -qF "$N/$_oc/skills/" "$_f" || { echo "FAIL: opencode $_n not substituted with its own dest"; exit 1; } ;; esac
+    case $_n in pending) ;; *) grep -qF '$ARGUMENTS' "$_f" || { echo "FAIL: opencode $_n args"; exit 1; } ;; esac
+  done
+  grep -qF "sh $N/$_oc/skills/tickets-zordon/scripts/pending.sh" "$T/$_oc/commands/pending.md" || { echo "FAIL: opencode pending not substituted"; exit 1; }
+  grep -qF "$N/$_oc/skills/.skillator-source" "$T/$_oc/commands/skillator-update.md" || { echo "FAIL: opencode skillator-update not substituted"; exit 1; }
+  grep -qF "$N/$_oc/skills/teams-uhura/scripts/team.mjs inbox --unread --mark-read" "$T/$_oc/commands/team-messages.md" || { echo "FAIL: opencode team-messages not substituted"; exit 1; }
+  grep -qF "$N/$_oc/skills/teams-uhura/scripts/team.mjs say --file <that path>" "$T/$_oc/commands/team-messages.md" || { echo "FAIL: opencode team-messages reply not by say --file"; exit 1; }
+  grep -qF -e "<<'EOF'" -e "@'" -e 'say "' "$T/$_oc/commands/team-messages.md" && { echo "FAIL: opencode team-messages puts reply text in shell source"; exit 1; }
+  [ "$(cat "$T/$_oc/skills/.skillator-source" 2>/dev/null)" = "$(native "$root")" ] || { echo "FAIL: source pointer in $_oc/skills"; exit 1; }
+  [ -f "$T/$_oc/skills/tickets-zordon/.skillator-owned" ] || { echo "FAIL: opencode skill has no ownership marker"; exit 1; }
+  grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
+  # /skillator-update names opencode among the hosts it refreshes, on every host
+  for f in .codex/prompts/skillator-update.md .cursor/commands/skillator-update.md .pi/agent/prompts/skillator-update.md \
+           .gemini/commands/skillator-update.toml .gemini/skills/skillator-update/SKILL.md $_oc/commands/skillator-update.md; do
+    grep -q 'opencode' "$T/$f" || { echo "FAIL: skillator-update does not name opencode in $f"; exit 1; }
+  done
   grep -qF "sh $N/.codex/skills/tickets-zordon/scripts/pending.sh" "$T/.codex/prompts/pending.md" || { echo "FAIL: codex prompt not substituted"; exit 1; }
   grep -qF "$N/.gemini/config/skills/tickets-zordon/SKILL.md" "$T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: agy skill not substituted with its own dest"; exit 1; }
   grep -qF "$N/.gemini/skills/tickets-zordon/SKILL.md" "$T/.gemini/skills/list-tickets/SKILL.md" || { echo "FAIL: agy skill not substituted with its own dest"; exit 1; }
@@ -552,6 +583,12 @@ if [ -n "$selftest" ]; then
   printf '%s\n' "$out" | grep -qF "skip  the Antigravity IDE ops board (no antigravity-ide CLI found)" || { echo "FAIL: no-IDE skip line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: dry-run skill-command line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.gemini/antigravity-cli/skills/pending/SKILL.md" || { echo "FAIL: dry-run agy-cli skill-command line"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "would write $T/.config/opencode/commands/team-messages.md" || { echo "FAIL: dry-run opencode command line"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "ops   sh $T/.config/opencode/skills/ops-board/ops/ops.sh <repo>" || { echo "FAIL: opencode ops launch line"; exit 1; }
+  # F67: XDG_CONFIG_HOME moves opencode's dir, as it does for opencode itself
+  mkdir -p "$T/xdg/opencode"
+  out=$(HOME=$T CODEX_HOME=$T/.codex XDG_CONFIG_HOME=$T/xdg sh "$0" --dry-run) || { echo "FAIL: XDG dry run exited $?"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "would write $T/xdg/opencode/commands/pending.md" || { echo "FAIL: opencode under XDG_CONFIG_HOME"; exit 1; }
   # the plugin installed: the shim still runs the first dest written (refreshed every
   # run), never the versioned plugin cache a plugin update can remove
   P=$T/p

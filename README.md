@@ -34,7 +34,7 @@ If you installed with `install.ps1 -Link` / `install.sh --link`, a plain
 copies need `install.ps1 -Force` / `install.sh --force` to refresh.
 
 Or do it all in one go with `/skillator-update` (Claude Code, codex as
-`/prompts:skillator-update`, cursor, gemini, agy, pi): it updates the
+`/prompts:skillator-update`, cursor, gemini, agy, pi, opencode): it updates the
 marketplace and the `skillator` and `ops-board` plugins, then re-runs the
 installer with `-Force` / `--force` from the newest source - the updated plugin,
 the clone the installer last ran from (`.skillator-source` beside the installed
@@ -90,6 +90,7 @@ Manual install paths, if you'd rather not run the script:
 | Antigravity CLI | `.agents/skills/` (workspace) or `~/.gemini/antigravity-cli/skills/` (global, what `agy` 1.4.5 reads; the installer also writes `~/.gemini/config/skills/` and `~/.gemini/skills/`) |
 | Pi | `.pi/skills/` (force with `/skill:<name>`) |
 | Muse | native plugin from `.muse-plugin/plugin.json` (every skill; no commands, no hooks): `muse plugins install <clone>` (skills are on at once; nothing to approve); `/skillator-update` runs `muse plugins update skillator` |
+| opencode | `.opencode/skills/` (project) or `~/.config/opencode/skills/` (global, what the installer writes; `$XDG_CONFIG_HOME/opencode/skills/` when that is set) — also reads `~/.claude/skills/` and `~/.agents/skills/`. Commands: `~/.config/opencode/commands/<n>.md` → `/<n>` |
 | Prime Agent | anywhere — skills there are Python packages, so read the `SKILL.md` or reference it from `AGENTS.md` |
 
 Model names and tool names inside the skills are **Claude Code defaults**;

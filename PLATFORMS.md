@@ -51,6 +51,7 @@ file and the seat retries one tier lower.
 | `commentary`/`final` channels; auto context compaction | `codex` |
 | `/skills`, `/agents`, `/model`; skills under `.agents/skills/` | `antigravity` |
 | `/skill:<name>`; AGENTS.md from `~/.pi/agent/`; `/model` mid-session | `pi` |
+| `skill` tool; `opencode.json`; config under `~/.config/opencode/`; Tab switches the build / plan agents | `opencode` |
 | persistent IPython; `rlm(...)`; `prime-agent agents` | `prime-agent` |
 
 Ambiguous → ask once. The user can override with `platform: <host>`.
@@ -89,6 +90,7 @@ Five rows have now been tested; prime-agent has no loader to test.
 | antigravity | **yes, verified** — 2026-09-24, `agy` 1.2.9, 4/4 — `grayskull-power` 2/2 from the fixture's project-local `.agents/skills`; the `func-ui`-triggering prompt 2/2 loaded the stale user-level `~/.gemini/config/skills/func-ui` instead of the fixture's `designui-galadriel` |
 | pi | **yes, verified** — 2026-09-23, `pi` 0.74.2 / openai gpt-5.5, 4/4, from project-local `.pi/skills` with `PI_CODING_AGENT_DIR` and `HOME` isolated |
 | muse | **unverified** — F68 (2026-10-24, Muse Code 1.4.12): `muse plugins validate` - 28 skills `supported` (summary `full`); `muse plugins install` into a scratch profile - `active=true skills=28`; an unprompted load from a description not run |
+| opencode | **unverified** — F67 (2026-10-24, opencode 1.19.4) checked discovery only: `opencode debug skill` lists the skills in `~/.config/opencode/skills`; an unprompted load from the description has not been run |
 | prime-agent | **no** — no markdown-skill loader at all; not installed on this machine (2026-09-24), so its always-on-file route is still unrun |
 
 The claude-code runs were headless, from a throwaway fixture outside any repo,
@@ -235,6 +237,7 @@ updated with `git pull --ff-only` only.
 | codex | `$CODEX_HOME/prompts/<n>.md` → `/prompts:<n>` | inferred (docs) until the picker check |
 | cursor | user `~/.cursor/commands/<n>.md` | project dir verified; user dir inferred until the picker check |
 | muse (F68) | none: `.muse-plugin/plugin.json` lists `commands: []` (the command schema is unprobed - superpowers ships none either); the skill route stays | inferred |
+| opencode (F67) | `~/.config/opencode/commands/<n>.md` (`$XDG_CONFIG_HOME/opencode/commands/` when that is set) → `/<n>`; markdown, frontmatter `description` (also `agent`, `model`, `subtask`), body = the template, `$ARGUMENTS` / `$1`… for arguments | verified (opencode 1.19.4: `opencode debug config` lists a command from `<config>/commands/` and from `.opencode/command/` + `.opencode/commands/`, `$ARGUMENTS` kept in the template; the binary globs `{command,commands}/**/*.md` in every config dir); the TUI picker is the owner's check |
 | prime-agent | none; the skill route stays | verified (no loader) |
 
 **cursor** — Cursor's CLI is `cursor-agent` (`agent.exe` beside it). A bare `agent`
@@ -335,6 +338,22 @@ Verified (Muse Code 1.4.12, 2026-10-24): `muse plugins validate <repo>` - valid,
 `full`; `muse plugins install` with a scratch USERPROFILE/XDG_DATA_HOME - `skills=28
 active=true`, `approve` returns no runtime capabilities; both print one warning that `.claude-plugin/plugin.json` is ignored. Tiers, delegation, usage %
 and the ops board are unprobed: run the printed `ops` launch line beside it.
+
+**opencode** (F67) — not a column of the table above yet: its tiers, delegation,
+hooks and usage % are unprobed. What is verified (opencode 1.19.4, 2026-10-24,
+`opencode debug paths` / `debug skill` / `debug config`, no model call): the config
+dir is `$XDG_CONFIG_HOME/opencode` when that is set, else `<home>/.config/opencode`,
+and on Windows `<home>` is `%USERPROFILE%` (a changed `HOME` is ignored). Global
+skills load from `<config>/skills/<n>/SKILL.md` (also `skill/`), and from
+`~/.claude/skills/` and `~/.agents/skills/`; project skills from `.opencode/skills/`,
+`.claude/skills/` and `.agents/skills/`, walking up to the git worktree root. A
+skill's `name` must match its folder. The installers write the skills to
+`<config>/skills/` and the seven commands to `<config>/commands/<n>.md`
+(`host-commands/opencode/`, the pi texts without `argument-hint`). opencode also
+reads `~/.claude/skills`, so where `install.sh` / `install.ps1` fill that dir
+(Claude Code with no plugin) opencode finds each skill twice (how it settles a
+duplicate name is unprobed). No ops board inside
+opencode: run the printed `ops` launch line.
 
 **prime-agent** — skills are importable *Python packages*, so these markdown
 skills aren't auto-loaded. Run one by reading its `SKILL.md` (or pointing
