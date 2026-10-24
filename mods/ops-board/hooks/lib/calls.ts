@@ -8,6 +8,7 @@ export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' 
   | 'relay-list' | 'relay-chain-status' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
   | 'usage-level'
   | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'
+  | 'run-scan' | 'run-rename'
 
 // Exists under a skills dir: what marks a directory as one.
 export const MARKER = 'tickets-zordon/scripts/ticket-meta.sh'
@@ -17,6 +18,7 @@ const PENDING = 'tickets-zordon/scripts/pending'
 const META = 'tickets-zordon/scripts/ticket-meta'
 const RELAY = 'relay-morpheus/hooks/relay-morpheus'
 const WATCH = 'watch-cortana/hooks/usage-watch'
+const RUNS = 'live-friday/scripts/run-entries'   // F79: the one writer of .skillator/run.json
 
 // Forward slashes, no trailing one: both hosts take them, and joins stay simple.
 export const norm = (p: string) => p.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
@@ -28,7 +30,7 @@ export const up = (p: string, n: number) => {
 
 // args: meta-assign/meta-decide [id, @handle]; meta-decided [id]; meta-team-add
 // [@handle, name, emails comma-joined]; meta-team-remove [@handle]; relay-chain-status and
-// relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; others none.
+// relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; run-rename [id, name]; others none.
 type ScriptCall = Exclude<Call, 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
   'pending':            { script: PENDING, sh: a => a, ps: a => a },
@@ -47,6 +49,8 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'relay-hold-status':  { script: RELAY, sh: () => ['watchdog', 'status'], ps: () => ['-Mode', 'watchdog', '-Action', 'status'] },
   'relay-decide':       { script: RELAY, sh: a => ['chain', 'decide', '--level', a[0] ?? ''], ps: a => ['-Mode', 'chain', '-Action', 'decide', '-Text', a[0] ?? ''] },
   'usage-level':        { script: WATCH, sh: () => ['level'], ps: () => ['-Mode', 'level'] },
+  'run-scan':           { script: RUNS, sh: () => ['scan'], ps: () => ['scan'] },
+  'run-rename':         { script: RUNS, sh: a => ['rename', a[0] ?? '', a[1] ?? ''], ps: a => ['rename', a[0] ?? '', a[1] ?? ''] },
 }
 
 // F66: teams-uhura's script is Node (no sh / ps1 twin): `node <skills>/teams-uhura/

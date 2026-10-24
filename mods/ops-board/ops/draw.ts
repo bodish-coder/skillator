@@ -18,6 +18,7 @@ import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
 import { ticketsOf } from '../hooks/lib/team'
+import { runKeys, runLines as runTabLines } from './runtab'
 
 export type Paint = { color: boolean; ascii: boolean }
 
@@ -115,7 +116,7 @@ function windowOf(lines: Keyed[], id: string | null, h: number): Seg[][] {
 
 // --- the fixed lines ---
 
-const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages']]
+const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages'], ['run', '5 Run']]
 
 function tabsLine(s: State): Seg[] {
   // F66: the unread count rides on the Messages label
@@ -149,6 +150,7 @@ function keysOf(s: State, m: Model): string[] {
   if (s.dialog) return s.dialogField === 'ticket' ? ['type the ID', 'tab person', 'enter confirm', 'esc cancel']
     : ['↑↓ person', 'a / d kind', 'tab ticket', 'enter confirm', 'esc cancel']
   if (s.filterField) return ['←→ field', '↑↓ value', 'enter/esc leave']
+  if (s.tab === 'run') return runKeys(s)                     // F79
   if (s.tab === 'runs') {
     // F76: on a section header Enter opens or closes it
     const cur = runsCursor(s)
@@ -541,6 +543,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s)
     : s.tab === 'messages' ? messagesBody(s, room)
+    : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room)
     : ticketsBody(s, m, room)
   const top = main.slice(0, room)
   while (top.length < room) top.push([])

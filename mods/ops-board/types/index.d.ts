@@ -60,11 +60,25 @@ export type TeamsCfgView = { path: string; token: boolean; workflowUrl: string |
 // The setup form in the pane: only what is safe to hold in $.state - the field values
 // live in the module (the token never reaches $.state); `rev` redraws it.
 export type SetupView = { rev: number; field: string; result: string | null; confirmClear: boolean }
+// F79: the Run tab - .skillator/run.json's entries (written only by live-friday's run-entries),
+// the file as read (missing: no file yet, the first open scans), the confirm / rename form, one job.
+export type RunEntry = {
+  id: string; name: string; kind: string; target: string; args: string[]
+  command: string; cwd: string; source: string; missing: boolean
+}
+export type RunFile = { path: string; entries: RunEntry[]; error: string | null; missing?: boolean }
+export type RunForm = { mode: 'confirm' | 'rename'; id: string; name: string; result: string | null }
+// B4: only the tail of the output is held (OUT_MAX).
+export type Job = {
+  id: string; name: string; argv: string[]; cwd: string
+  started: number; ended: number | null; code: number | null
+  stopped: boolean; error: string | null; out: string
+}
 declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
       board: Board | null; team: Member[]; me: string | null
-      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents'; selected: string | null; expanded: string | null
+      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'run'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
       runsOpen: ('runs' | 'workflows')[]   // F76: the Workflows tab's open sections this session
@@ -77,6 +91,8 @@ declare module 'claude-code' {
       // row picked / opened, the saved config's view, the setup form's safe part
       messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
       teamsCfg: TeamsCfgView | null; setup: SetupView | null
+      // F79: the Run tab - .skillator/run.json as read, the confirm / rename form, the one job (its output's tail)
+      runFile: RunFile | null; runForm: RunForm | null; runJob: Job | null
     }
   }
 }

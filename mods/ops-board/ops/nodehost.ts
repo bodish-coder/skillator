@@ -5,7 +5,9 @@ import { spawn, execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { readFile, stat as fsStat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
-import { argvFor, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, up } from '../hooks/lib/calls'
+import { argvFor, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, systemRoot, up } from '../hooks/lib/calls'
+import { findBins } from '../hooks/lib/runentries'
+import type { Bins } from '../hooks/lib/runentries'
 import type { Call } from '../hooks/lib/calls'
 
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
@@ -17,6 +19,10 @@ export type Host = {
   stat(path: string): Promise<{ mtimeMs: number; size: number } | null>
   read(path: string): Promise<string>
   gitEmail(): Promise<string | null>
+  // F79: the Run tab - the programs an entry runs (absolute), and one job: its output as it
+  // comes, then its end; stop() kills it with its children. Optional: a host may not run jobs.
+  bins?(): Promise<Bins>
+  spawn?(argv: string[], cwd: string, onOut: (text: string) => void, onEnd: (code: number | null, err: string | null) => void): { stop(): void }
 }
 
 type Env = Record<string, string | undefined>
@@ -96,6 +102,32 @@ function spawnArgv(argv: string[], cwd: string, timeoutMs: number, stdin?: strin
   })
 }
 
+// F79: one Run tab job - argv only, no shell; output piece by piece, then its end. Stop kills
+// the tree: taskkill /T by absolute path on Windows (A150), the process group elsewhere.
+export function spawnJob(argv: string[], cwd: string, onOut: (text: string) => void, onEnd: (code: number | null, err: string | null) => void): { stop(): void } {
+  let done = false
+  const end = (code: number | null, err: string | null) => { if (!done) { done = true; onEnd(code, err) } }
+  const win = platformWin()
+  let child: ReturnType<typeof spawn>
+  try { child = spawn(argv[0]!, argv.slice(1), { cwd, windowsHide: true, detached: !win }) }
+  catch (e) { queueMicrotask(() => end(null, String((e as Error)?.message ?? e))); return { stop() { /* never started */ } } }
+  child.stdout?.setEncoding('utf8').on('data', (d: string) => onOut(d))
+  child.stderr?.setEncoding('utf8').on('data', (d: string) => onOut(d))
+  child.on('error', e => end(null, String(e?.message ?? e)))
+  child.on('close', code => end(code, null))
+  child.stdin?.on('error', () => { /* closed early */ })
+  child.stdin?.end()
+  return {
+    stop() {
+      if (done || !child.pid) return
+      try {
+        if (win) execFile(systemRoot(process.env.SystemRoot ?? process.env.SYSTEMROOT) + '/System32/taskkill.exe', ['/T', '/F', '/PID', String(child.pid)], { windowsHide: true }, () => {})
+        else process.kill(-child.pid, 'SIGTERM')
+      } catch { try { child.kill() } catch { /* gone */ } }
+    },
+  }
+}
+
 // Which spelling of the scripts runs (A142): the .ps1 on Windows, the .sh elsewhere - and
 // under Git Bash on Windows too, chosen by the launching shell, not the platform. The
 // launcher says which it is (SKILLATOR_OPS_SHELL: ops.sh sets sh, ops.ps1 sets ps1); with
@@ -157,5 +189,11 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
     },
     read: path => readFile(abs(path), 'utf8'),
     gitEmail: () => git(['config', 'user.email'], repoRoot),
+    bins: async () => {
+      const env = process.env
+      const node = await nodeFor(process.execPath, env, platformWin(), fileExists)
+      return findBins(platformWin(), { path: env.PATH ?? env.Path, systemRoot: env.SystemRoot ?? env.SYSTEMROOT }, fileExists, node)
+    },
+    spawn: (argv, cwd, onOut, onEnd) => spawnJob(argv, cwd, onOut, onEnd),
   }
 }

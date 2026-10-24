@@ -14,6 +14,7 @@ import { cancelPerson, clearForm, isFormUp } from './assign'
 import { pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 import { closeSetup, enterMessages, isSetupUp, pollInbox } from './messagestab'
+import { closeRunForm, enterRun, isRunFormUp } from './runtab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -299,25 +300,25 @@ async function arm($: EngineInterface) {
 // closeOnEscape is set anew by every ui.open: while a form is up it stays, so Esc is
 // still the form's Cancel after a re-open.
 async function openPane($: EngineInterface, asked: boolean) {
-  const esc = (await isFormUp($)) ? { closeOnEscape: true as const } : {}
+  const esc = (await isFormUp($)) || (await isRunFormUp($)) ? { closeOnEscape: true as const } : {}
   const r = await $.ui.open(asked ? { id: PANE_ID, title: PANE_TITLE, focus: true, ...esc } : { id: PANE_ID, title: PANE_TITLE, ...esc })
   await update($, narrowA, () => !r.isPlaced)
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', agents: 'Agents' }
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', agents: 'Agents', run: 'Run' }
 // F76: /ops workflows opens the Workflows tab (id runs) with its Workflows section open; /ops runs is
 // an alias that opens it with its Runs section open.
-const WORDS = ['tickets', 'runs', 'health', 'messages', 'agents', 'workflows']
+const WORDS = ['tickets', 'runs', 'health', 'messages', 'agents', 'workflows', 'run']
 const SECTION_OF: Record<string, 'runs' | 'workflows'> = { runs: 'runs', workflows: 'workflows' }
-const USAGE = 'usage: /ops [tickets|workflows|health|messages|agents|resume] - runs opens Workflows too'
+const USAGE = 'usage: /ops [tickets|workflows|health|messages|agents|run|resume] - runs opens Workflows too'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'ops',
       description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs and Workflow runs), health, Teams messages, agents',
-      argumentHint: '[tickets|workflows|health|messages|agents|resume]',
+      argumentHint: '[tickets|workflows|health|messages|agents|run|resume]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -368,6 +369,7 @@ export const register: Register = on => {
     if (tab === 'runs') void pollRuns($).catch(() => {})
     if (word === 'agents') void pollAgents($).catch(() => {})
     if (word === 'messages') void enterMessages($).catch(() => {})
+    if (word === 'run') void enterRun($).catch(() => {})     // F79: the Run tab, first open scans
     const r = await openPane($, true)
     if (!r.isPlaced) return { text: `ops board is open but not drawn: ${r.reason}` }
     if (word === 'runs') return { text: 'ops board opened on Workflows, Runs open.' }
@@ -442,6 +444,12 @@ export const register: Register = on => {
     if (e.id === PANE_ID && (await isSetupUp($))) {
       await closeSetup($)
       if (e.origin.kind === 'unload') return next(e)
+      return { value: undefined }
+    }
+    // F79: the Run tab's confirm / rename form up - Esc is its Cancel
+    if (e.id === PANE_ID && (await isRunFormUp($))) {
+      if (e.origin.kind === 'unload') return next(e)
+      await closeRunForm($)
       return { value: undefined }
     }
     if (e.id !== PANE_ID || !(await isFormUp($))) return next(e)

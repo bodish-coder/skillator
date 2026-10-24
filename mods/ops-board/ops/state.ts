@@ -18,8 +18,10 @@ import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
 import type { SetupField, SetupValues } from '../hooks/lib/teamsconfig'
+import { enterRunEffect, RUN_INITIAL, runKey } from './runtab'
+import type { RunState } from './runtab'
 
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages'
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'run'   // F79: run = the Run tab (runtab.ts)
 export type FilterField = 'app' | 'who' | 'mine'
 // node readline keypress names: 'up', 'down', 'left', 'right', 'return', 'escape', 'tab', 'a', 'D', ...
 // `sequence` is the character typed (app.ts sets it for printable keys): the Add person form's text.
@@ -54,7 +56,7 @@ export type State = {
   messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
   teamsCfg: TeamsCfgView | null
   setup: Setup | null; setupField: SetupField
-}
+} & RunState                               // F79: the Run tab's file, row, form, job
 export type Setup = SetupValues & { result: string | null; confirmClear: boolean; touched: boolean }
 
 export type Step = { state: State; effects: Effect[] }
@@ -63,6 +65,7 @@ export type Then = (r: RunResult) => (s: State) => State | Step
 // stdin (F66): written to the run's standard input - the setup form's values, never argv.
 export type Effect = { kind: 'run'; call: Call; args: string[]; then: Then; stdin?: string }
   | { kind: 'poll'; what: 'board' | 'slow' | 'runs' } | { kind: 'quit' }
+  | { kind: 'runfile'; scanIfMissing: boolean } | { kind: 'job'; argv: string[]; cwd: string } | { kind: 'stop' }   // F79
 
 // A `then`'s answer as a step: a bare state asks for nothing more.
 export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: x, effects: [] })
@@ -70,7 +73,7 @@ export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: 
 // A run's result applied at `now`, the clock when it landed (a `then` stamps facts with s.now).
 export const afterRun = (e: { then: Then }, r: RunResult, s: State, now: number): Step => settle(e.then(r)({ ...s, now }))
 
-const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages']
+const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'run']
 
 export const initial = (cols: number, rows: number, now: number): State => ({
   tab: 'tickets', board: null, team: [], me: null,
@@ -81,6 +84,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
+  ...RUN_INITIAL,
 })
 
 export const viewOf = (s: State): View => ({
@@ -719,6 +723,7 @@ function messagesKey(s: State, k: Key): Step {
 function toTab(s: State, tab: Tab): Step {
   const effects: Effect[] = tab === 'runs' && s.tab !== 'runs' ? [{ kind: 'poll', what: 'runs' }] : []
   if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(true))
+  if (tab === 'run' && s.tab !== 'run') effects.push(enterRunEffect())
   return { state: { ...s, tab }, effects }
 }
 
@@ -728,6 +733,7 @@ export function reduce(s: State, k: Key): Step {
   // form (as Esc), the board stays; the next ctrl+c quits. An empty form has nothing to lose.
   if (k.ctrl && k.name === 'c') {
     if (s.setup?.touched) return { state: { ...s, setup: null }, effects: [] }
+    if (s.runForm?.mode === 'rename' && s.tab === 'run') return { state: { ...s, runForm: null }, effects: [] }
     return s.person && (s.person.handle || s.person.name || s.person.emails) ? personKey(s, { name: 'escape' }) : quit
   }
   if (s.setup) return setupKey(s, k)
@@ -735,12 +741,14 @@ export function reduce(s: State, k: Key): Step {
   if (s.dialog) return dialogKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
   if (s.filterField) return filterKey(s, k)
+  if (s.tab === 'run' && (s.runForm || k.name === 'r')) return runKey(s, k)   // F79: r rescans here
   switch (k.name) {
     case 'q': return quit
     case '1': return toTab(s, 'tickets')
     case '2': return toTab(s, 'runs')
     case '3': return toTab(s, 'health')
     case '4': return toTab(s, 'messages')
+    case '5': return toTab(s, 'run')
     case 'tab': {
       const at = TABS.indexOf(s.tab)
       return toTab(s, TABS[(at + (k.shift ? TABS.length - 1 : 1)) % TABS.length]!)
@@ -751,5 +759,6 @@ export function reduce(s: State, k: Key): Step {
   if (s.tab === 'tickets') return ticketsKey(s, k)
   if (s.tab === 'runs') return runsKey(s, k)
   if (s.tab === 'messages') return messagesKey(s, k)
+  if (s.tab === 'run') return runKey(s, k)
   return k.name === 'escape' ? { state: { ...s, toast: null }, effects: [] } : { state: s, effects: [] }
 }

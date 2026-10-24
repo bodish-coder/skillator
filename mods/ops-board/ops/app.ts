@@ -2,7 +2,7 @@
 // ops/ that touches the terminal: state.ts decides, draw.ts draws, engine.ts runs the
 // polls and effects (through nodehost's run), this wires them to the terminal.
 //   node --import ./loader.mjs app.ts [--once] [--cols N] [--rows N] [--no-color] [--ascii]
-//                                     [--skills <dir>] [--tab tickets|workflows|health|messages]
+//                                     [--skills <dir>] [--tab tickets|workflows|health|messages|run]
 // F76: --tab workflows is the Workflows tab (state id 'runs'); --tab runs stays an alias.
 // --once draws one frame to stdout and exits 0, without raw mode - the smoke test and the
 // screenshot helper. It reads only: of the effects the polls ask for it runs relay's
@@ -24,8 +24,8 @@ export type Opts = {
   skills: string | null; tab: Tab; error: string | null
 }
 
-export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no-color] [--ascii] [--skills <dir>] [--tab tickets|workflows|health|messages]'
-const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', health: 'health', messages: 'messages' }
+export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no-color] [--ascii] [--skills <dir>] [--tab tickets|workflows|health|messages|run]'
+const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', health: 'health', messages: 'messages', run: 'run' }
 
 // The flags; the first wrong one is `error` (the launcher has taken the repo dir already).
 // NO_COLOR (any non-empty value) turns colour off as --no-color does.
@@ -56,7 +56,7 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         const v = value()
         const tab = v && Object.hasOwn(TAB_WORDS, v) ? TAB_WORDS[v] : undefined
         if (tab) o.tab = tab
-        else o.error = `ops: --tab is one of tickets, workflows, health, messages, got ${v ?? 'nothing'}`
+        else o.error = `ops: --tab is one of tickets, workflows, health, messages, run, got ${v ?? 'nothing'}`
         break
       }
       default: o.error = `ops: unknown flag ${a}`
