@@ -7,14 +7,17 @@
 #   .\install.ps1 -SelfTest  install into a temp HOME and profile, check what was written; prints ok
 #   -Profile <path>          the profile that gets `function ops` (default: your
 #                            CurrentUserAllHosts profile) - there so a test never
-#                            touches the real one
+#                            touches the real one; with no -Profile and a USERPROFILE/HOME
+#                            that is not your user profile dir the step is skipped (B9)
 # F54: /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets, /skillator-update and /team-messages are written as each host's own command file (codex
 # prompts, Gemini CLI commands, cursor commands, pi prompt templates, opencode commands,
 # Antigravity skill-commands) from host-commands\<host>\, rewritten every run - see Write-Commands.
 # Claude Code is left to its plugin install whenever one exists, -Force included.
 # Skills already symlinked to this repo are left alone - they are always current.
 param([switch]$DryRun, [switch]$Force, [switch]$Link, [switch]$SelfTest,
-      [string]$Profile = $PROFILE.CurrentUserAllHosts)
+      # B9: the default - SKILLATOR_DEFAULT_PROFILE stands in for $PROFILE so the selftest
+      # can check a skipped default without the real profile in reach
+      [string]$Profile = $(if ($env:SKILLATOR_DEFAULT_PROFILE) { $env:SKILLATOR_DEFAULT_PROFILE } else { $PROFILE.CurrentUserAllHosts }))
 
 $ErrorActionPreference = 'Stop'
 $src = Join-Path $PSScriptRoot 'skills'
@@ -390,6 +393,9 @@ function Invoke-SelfTest([string]$T) {
   $calls = Join-Path $T 'ide-calls'
   [IO.File]::WriteAllText((Join-Path $T 'fake-ide.ps1'), "Add-Content -LiteralPath '$calls' -Value (`$args -join ' ')`nexit 0`n")
   $env:SKILLATOR_AGY_IDE = Join-Path $T 'fake-ide.ps1'
+  # B9: a run without -Profile would write this file, never the real profile
+  $defProf = Join-Path $T 'default-profile.ps1'
+  $env:SKILLATOR_DEFAULT_PROFILE = $defProf
   $ideCalls = { if (Test-Path -LiteralPath $calls) { @([IO.File]::ReadAllLines($calls)) } else { @() } }
   $run = { param([string[]]$more)
     $o = & powershell -NoProfile -ExecutionPolicy Bypass -File $selfPath -Profile $prof @more | Out-String
@@ -639,12 +645,18 @@ function Invoke-SelfTest([string]$T) {
   $env:SKILLATOR_AGY_IDE = Join-Path $T 'none.ps1'
   $out = & $run @('-DryRun')
   if (-not $out.Contains('skip  the Antigravity IDE ops board (no antigravity-ide CLI found)')) { return 'no-IDE skip line' }
+  # B9: no -Profile and a USERPROFILE / HOME that is not the real user profile dir (the
+  # temp one): the profile step is skipped with a note, the default profile left unwritten
+  $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $selfPath | Out-String
+  if ($LASTEXITCODE -ne 0) { return "no -Profile install exited $LASTEXITCODE" }
+  if (-not $out.Contains('note  function ops not written: USERPROFILE/HOME is not your user profile dir')) { return 'no-Profile note line (scratch USERPROFILE)' }
+  if (Test-Path -LiteralPath $defProf) { return 'default profile written with a scratch USERPROFILE and no -Profile' }
   if (-not ([IO.File]::ReadAllText($prof2).Contains("-File '$P\.cursor\skills\ops-board\ops\ops.ps1' @args"))) { return 'ops function target with the plugin installed (first dest written, not the plugin cache)' }
   return ''
 }
 
 if ($SelfTest) {
-  $saved = @{ HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; CODEX_HOME = $env:CODEX_HOME; SKILLATOR_AGY_IDE = $env:SKILLATOR_AGY_IDE; XDG_CONFIG_HOME = $env:XDG_CONFIG_HOME }
+  $saved = @{ HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; CODEX_HOME = $env:CODEX_HOME; SKILLATOR_AGY_IDE = $env:SKILLATOR_AGY_IDE; SKILLATOR_DEFAULT_PROFILE = $env:SKILLATOR_DEFAULT_PROFILE; XDG_CONFIG_HOME = $env:XDG_CONFIG_HOME }
   $T = Join-Path ([IO.Path]::GetTempPath()) ("skillator-selftest-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
   New-Item -ItemType Directory -Force $T | Out-Null
   $T = (Get-Item -LiteralPath $T).FullName.TrimEnd('\')
@@ -816,7 +828,13 @@ if ($shimSrc) { Write-Host "" }
 foreach ($d in $writtenDests) {
   Write-Host "ops   sh $($d.Replace('\', '/'))/ops-board/ops/ops.sh <repo>   (Windows: powershell -NoProfile -ExecutionPolicy Bypass -File $d\ops-board\ops\ops.ps1 -Repo <repo>)"
 }
-if ($shimSrc) {
+# B9: the default profile follows the Documents folder, not HOME - with no -Profile and a
+# USERPROFILE / HOME that is not the real user profile dir (a scratch install) it is skipped
+$realHome = [IO.Path]::GetFullPath([Environment]::GetFolderPath('UserProfile')).TrimEnd('\')
+$scratch = @($env:USERPROFILE, $env:HOME | Where-Object { $_ -and [IO.Path]::GetFullPath($_).TrimEnd('\') -ne $realHome })
+if ($shimSrc -and -not $PSBoundParameters.ContainsKey('Profile') -and $scratch.Count -gt 0) {
+  Write-Host "note  function ops not written: USERPROFILE/HOME is not your user profile dir ($realHome) and $Profile is that user's; pass -Profile <path> to write it" -ForegroundColor Yellow
+} elseif ($shimSrc) {
   if ($DryRun) {
     Write-Host "        would write function ops in $Profile -> $shimSrc\ops.ps1"
   } else {
