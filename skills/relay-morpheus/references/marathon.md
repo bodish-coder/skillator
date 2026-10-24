@@ -237,3 +237,62 @@ batch is ready:
 stop: watch-cortana's order first and alone, then the queue. A fresh
 `continue RUN-n`: `resume`, then `chain next` — `UNBLOCK` re-plans first without
 asking; `ASK` asks (that is the one question a resume may ask).
+
+## A saved Workflow marathon - /marathon-plan, /marathon-run (F73)
+
+Claude Code only (the Workflow tool). The plan is written first and run later,
+by a second command: typing `/marathon-run` is the explicit opt-in to run it.
+Other hosts have no Workflow tool - there `/pending-subagent` works the tickets.
+
+**Plan** (`/marathon-plan [ids]`) - no agent runs, no `chain dispatch`, no Workflow call:
+
+1. Pick the tickets as [chain.md](chain.md) Step 1 (ids given: only those) and
+   name each one's files. No ticket left → say so, stop.
+2. `RM init TICKETS.md "<title>" "<ID>: <what>" ... "verify review bump commit
+   push"` - one stage per ticket, then the main session's final stage. Numbers
+   come from `init` (and `RM add` for a ticket found later), never by hand.
+3. Phases: a ticket goes in the first phase after every phase holding a ticket
+   that shares one of its files; one phase = file-disjoint tickets. Its stage
+   is planned `--after` those earlier stages.
+4. Per ticket stage: its prompt file `.skillator/prompts/run-<0000>-s<n>.txt`
+   (chain.md Step 1: the worktree paragraph, the Park paste-in above, an F
+   ticket opens with "Load skillator:build-jarvis"; it commits as
+   `<ID>: <what>` - the code does not exist until `chain plan`), then
+   `RM chain plan <n> --tickets <ID> --files "<files>" --prompt-file <it>
+   [--after <m>]` (mode `workflow`).
+5. The script: copy `templates/marathon-workflow.js` (this skill) to the run
+   file's own name with `.workflow.js` for `.md`, beside it; fill `meta` (name
+   `marathon-RUN-<0000>`, one `Phase <k>` entry per phase, then `Verify`) and
+   `PLAN` (`runWorktree` = what `init` printed; per ticket: stage, code from
+   `chain plan`, ID, files, Done line, the prompt file's text verbatim as a
+   JS string). Nothing below `PLAN` is edited.
+6. Show it: the run file's stages, each phase with its tickets, codes and files,
+   tickets left out and why, the agent count (2 per ticket - an implementer and
+   a read-and-run-only verifier; the final stage is the main session's), the
+   script's path, and the line `run it: /marathon-run RUN-<0000>`.
+
+**Run** (`/marathon-run [RUN id]`; none = the one open run with a
+`.workflow.js` beside it, two or more → list them and stop):
+
+1. `RM resume <id>`; the script is the run file's name with `.workflow.js`.
+   A missing script → say `/marathon-plan` writes it, stop.
+2. Phase by phase, in order, skipping a phase whose stages are all `x`:
+   `RM chain decide`; then for each of its stages
+   `RELAY_CHAIN_PARALLEL=<stages in the phase> RM chain dispatch <n> --driver
+   @cc-<6> --owner workflow` - the row goes `~` and the prompt into the run
+   file **before** the agent exists. Note the worktree each names (stderr
+   `stage <n> works and commits in: <path>`; none = the run worktree), flip
+   its ticket `[~]` (`RM board <ID> '~'`), then one call:
+   `Workflow({scriptPath, args: {phase: <k>, worktrees: {"<n>": "<path>"}}})`.
+   Write the returned `runId` into each In-flight block's `run:` line.
+3. Land each returned row as chain.md Step 3 (a `parked` verdict → Park first,
+   a `stop` other than `none` → that stop, now): review, `RM chain merge <n>`
+   for a stage worktree, `RM stage <n> x workflow <sha>`, `RM board <ID> x`;
+   `passed:false` or `null` → `RM stage <n> '!'`, ticket `[ ]` with the why.
+4. A failed stage that a later phase waits on (`BLOCKED`): its retry is a new
+   stage (`RM add`, `chain plan`) run as one Agent call - the saved script is
+   not edited mid-run.
+5. All phases done → `RM chain next` until `FINAL`, then the end batch above
+   (asked once, after the work), then the final stage: `RM stage <final> '~'`,
+   Landing above (`RM land <n> --start`, sweep, `/code-review`, the bump,
+   `--finish`), the push asked alone - headless: `push: waiting for the owner`.

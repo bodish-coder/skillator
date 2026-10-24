@@ -262,6 +262,11 @@ Deactivating is deleting `.skillator/grayskull.md`.
   tickets as such a run: one fresh implementer per ticket, each diff reviewed and
   landed, the run merged, the push asked; 1 agent at a time unless a count is given,
   and tickets that share files never together.
+  `/marathon-plan [IDs]` (Claude Code) writes the same run as a saved Workflow
+  script - one agent per ticket, phases serial where tickets share files, a verify
+  phase - and shows it with its agent count; `/marathon-run [RUN id]` runs it, each
+  stage on disk before its dispatch. Other hosts have no Workflow tool: their
+  commands say so and point at `/pending-subagent`.
 - **tickets-zordon** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with

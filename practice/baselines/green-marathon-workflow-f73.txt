@@ -1,0 +1,139 @@
+# GREEN - /marathon-plan then /marathon-run (F73) headless on Claude Code: two-ticket fixture board, one phase, Workflow
+# 2026-10-24, claude -p "/skillator:marathon-plan" --plugin-dir <worktree RUN-0018> --allowedTools Bash Read Edit Write Glob Grep Skill --max-turns 120
+#   then claude -p "/skillator:marathon-run RUN-0001" --plugin-dir <worktree RUN-0018> --allowedTools Bash Read Edit Write Glob Grep Skill Agent Workflow --max-turns 250
+# fixture: fresh git repo, a.txt (alpha), b.txt (beta), TICKETS.md with F1 (append gamma to a.txt) and F2 (append delta to b.txt)
+#
+# RED (selftests extended first, before any command file existed):
+#   sh install.sh --selftest             -> FAIL: install exited 2 (sed: can't read host-commands/cursor/marathon-plan.md)
+#   powershell ... install.ps1 -SelfTest -> FAIL: install exited 1
+# GREEN: both print ok; claude plugin validate <worktree> -> Validation passed with warnings (README marketplace-line advice only)
+
+## /marathon-plan output (no agents run)
+I've planned RUN-0001 for the two open tickets, F1 and F2, and saved its Workflow script. Nothing has run: no Workflow call, no `chain dispatch`, no agents, and both tickets are still `[ ]`.
+
+**1. Stages** (in `.skillator/run-0001-marathon-f1-f2.md`, numbered by `init`)
+
+| # | stage | state |
+|---|-------|-------|
+| 1 | AAAB F1: append gamma to a.txt | pending |
+| 2 | AAAC F2: append delta to b.txt | pending |
+| 3 | verify review bump commit push (main session) | pending |
+
+**2. Phases**
+- **Phase 1:** F1 (AAAB, `a.txt`, tiers cheap/build) and F2 (AAAC, `b.txt`, tiers cheap/build). They share no files, so they run in parallel and neither waits on the other.
+- **Verify:** one agent per ticket that only reads and runs checks.
+- No tickets were left out.
+
+**3. Agent count:** 4, an implementer and a verifier for each ticket. Stage 3 is done by the main session, not an agent.
+
+**4. Script:** `.skillator/run-0001-marathon-f1-f2.workflow.js`. I filled only `meta` and `PLAN`; everything below them is unchanged from the template.
+- I ran it with fake agents to check it. Both prompts match their prompt files and the run file exactly, and asking for phase 2 is refused because there is only one phase.
+
+**5. Where the files are:**
+- Prompt files: `.skillator/prompts/run-0001-s1.txt` and `-s2.txt`.
+- Run worktree: `.skillator/worktrees/RUN-0001-marathon-f1-f2` on branch `run/RUN-0001-marathon-f1-f2`.
+- None of `.skillator/` is committed yet; `git status` shows it as untracked.
+
+**6. One change from the usual prompt:** the stage code doesn't exist until `chain plan` creates it, so the prompt can't contain it. Each prompt tells the implementer to read its code from the run file's `## Chain` section and put it in the commit message, instead of carrying a `<CODE>` placeholder.
+
+run it: /marathon-run RUN-0001
+
+## /marathon-run RUN-0001 output
+RUN-0001 phase 1 is running in the background as Workflow `wf_d016a639-106` (task `w0tfb70y3`). I'll land the results when it reports back.
+
+1. **Usage check:** `chain decide` returned `UNOBSERVABLE`, meaning it can't read usage on this host. No usage hold was possible, so the run went ahead.
+2. **Recorded before the agents started:** stages 1 (AAAB, F1) and 2 (AAAC, F2) are `~` in the run file. Each has an In-flight block with its exact prompt, and their `run:` lines now hold `wf_d016a639-106`. The file is still ASCII with LF line endings.
+3. **Worktrees:** stage 1 works in the run worktree. Stage 2 got its own worktree, `RUN-0001-marathon-f1-f2.s2` on branch `run/RUN-0001-marathon-f1-f2-s2`, so I'll need `chain merge 2` when it lands.
+4. **Board:** F1 and F2 are `[~]`, confirmed with `grep` on `TICKETS.md`.
+5. **When the Workflow returns** (4 agents: one implementer and one verifier per ticket):
+   - A passed verdict: I review it, run `chain merge 2` for stage 2, then mark the stage `x` with its commit sha and the ticket `x`.
+   - A failed or empty verdict: the stage goes to `!` and the ticket back to `[ ]` with the reason.
+   - A `parked` verdict: I save the question for the single batch at the end.
+   - A `stop` verdict: I ask you right away, as the only question.
+6. **After that:** `chain next` until it says the run is done, then the end batch (no questions parked so far), then stage 3: landing, regression sweep, `/code-review`, version bump. The push will be asked on its own and never made unasked. If no one answers, the run ends with `push: waiting for the owner`.
+
+RUN-0001 is landed on main: F1 and F2 are both done, checked by their verifiers and by me. Nothing was pushed, and this repo has no git remote, so there is nowhere to push yet.
+
+**Run ledger — `/marathon-run RUN-0001`**
+
+| Ref | Sub-feature | Status | Note |
+|---|---|---|---|
+| 1.1 | Resume the run, find its saved script | ✅ Done | `run-0001-marathon-f1-f2.workflow.js` |
+| 1.2 | Usage check before phase 1 | 🔁 Done (modified approach) | **Why:** usage can't be read on this host, so no hold was possible. **Effect:** the phase ran without a usage check; this is written in the run file's rulings. |
+| 1.3 | Record both stages before any agent started | ✅ Done | Both rows `~`, each with its exact prompt on disk; Workflow run id `wf_d016a639-106` written into both. Stage 2 got its own worktree. |
+| 1.4 | Run phase 1 (4 agents) | ✅ Done | 4 of 4 agents finished, no errors |
+| 1.5 | Land F1, stage 1 | ✅ Done | `e6614aa` adds `gamma` to a.txt; I reviewed the diff |
+| 1.6 | Land F2, stage 2 | ✅ Done | `7e17e21` adds `delta` to b.txt; I reviewed it and merged it into the run branch |
+| 1.7 | Mark F1 and F2 done on the board | ✅ Done | Both `[x]`, confirmed with `grep` |
+| 1.8 | Check whether more stages can run | ✅ Done | None left: only the final stage remained, with no open questions |
+| 1.9 | End batch of your questions | ✅ Done | Nothing was parked, so there are no questions |
+| 1.10 | Final stage: rebase onto main, regression check, code review | 🔁 Done (modified approach) | **Why:** the fixture has no tests, so the check was the two Done conditions plus the diff scope. **Effect:** a.txt ends with `gamma`, b.txt ends with `delta`, only those two files changed. `/code-review` found nothing. The rebase rewrote F2's commit as `a870e4e`; the run file still records `7e17e21`, which has the same diff. |
+| 1.11 | Version bump | ⏸ Deferred | **Why:** the fixture has no version file. **Effect:** no version number; add one if you want a release. |
+| 1.12 | Finish landing on main, commit the board | ✅ Done | main is at `6c30435` (`tickets: F1 F2 done - RUN-0001`); the run worktree and branches are removed |
+| 1.13 | Push | ⏸ Deferred | **Why:** a push needs your OK, and the repo has no remote. **Effect:** main is local only. |
+
+Score: 9 ✅ · 2 🔁 · 2 ⏸ · 0 ❌
+
+`.skillator/` is still untracked, as it was before the run. That folder holds the run file, its script and the prompt files. I didn't commit them because the landing step only commits the board.
+
+The board now has 0 open tickets and 2 done.
+
+push: waiting for the owner
+exit 0
+
+## git log --oneline --graph --all (fixture, after the run)
+* 6c30435 tickets: F1 F2 done - RUN-0001
+* a870e4e F2: append delta to b.txt [AAAC]
+* e6614aa F1: append gamma to a.txt [AAAB]
+* 88e3170 fixture board
+
+## git worktree list / branches after the run
+<scratch>/f73-fixture 6c30435 [main]
+* main
+
+## TICKETS.md after the run
+# Tickets
+
+Statuses: [ ] open, [~] in progress, [x] done, [-] cancelled, [>] deferred, [%] testing, [!] blocked
+
+- [x] F1 — append the line `gamma` to a.txt (a.txt only). Done = a.txt ends with gamma.
+- [x] F2 — append the line `delta` to b.txt (b.txt only). Done = b.txt ends with delta.
+
+## run file after the run (In-flight prompts cut)
+# RUN-0001 - marathon F1 F2
+plan: TICKETS.md
+started: 2026-10-24T11:07Z   updated: 2026-10-24T11:16Z
+worktree: <scratch>/f73-fixture/.skillator/worktrees/RUN-0001-marathon-f1-f2
+branch: run/RUN-0001-marathon-f1-f2
+
+## Stages
+| # | stage | state | owner | heartbeat | landed |
+|---|-------|-------|-------|-----------|--------|
+| 1 | AAAB F1: append gamma to a.txt | x | workflow | 2026-10-24T11:14Z | e6614aa |
+| 2 | AAAC F2: append delta to b.txt | x | workflow | 2026-10-24T11:15Z | 7e17e21 |
+| 3 | verify review bump commit push | x | main | 2026-10-24T11:16Z | 6c30435 |
+
+## In flight
+### stage 1 - AAAB F1: append gamma to a.txt  (dispatched 2026-10-24T11:13Z, @cc-0afa22)
+run: wf_d016a639-106
+prompt: | (cut)
+### stage 2 - AAAC F2: append delta to b.txt  (dispatched 2026-10-24T11:13Z, @cc-0afa22)
+run: wf_d016a639-106
+worktree: <scratch>/f73-fixture/.skillator/worktrees/RUN-0001-marathon-f1-f2.s2
+branch: run/RUN-0001-marathon-f1-f2-s2
+prompt: | (cut)
+## Chain
+driver: @cc-0afa22 2026-10-24T11:13Z     hold: -     mode: workflow
+### AAAB - stage 1 - F1: append gamma to a.txt
+tickets: F1 cheap/build
+files: a.txt
+prompt: | (cut)
+### AAAC - stage 2 - F2: append delta to b.txt
+tickets: F2 cheap/build
+files: b.txt
+prompt: | (cut)
+## Rulings
+- 2026-10-24 - phase 1 dispatched with no hold - usage: unobservable on this host - costs a run past the 5h window if usage was high.
+- 2026-10-24 - land --start rebased the run branch: stage 2's 7e17e21 is a870e4e on run/RUN-0001-marathon-f1-f2 - landed cell keeps the verified sha - same tree, same diff.
+- 2026-10-24 - no version bump - the fixture has no version file - nothing to bump; add one if a release is wanted.
+- 2026-10-24 - /code-review low on main..run/RUN-0001-marathon-f1-f2: no findings.

@@ -360,18 +360,18 @@ write_commands() {
   _c="$root/host-commands"
   case "$1" in
     codex)
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent; do put_cmd "$_c/codex/$_n.md" "$2" "$codex_home/prompts/$_n.md"; done ;;
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do put_cmd "$_c/codex/$_n.md" "$2" "$codex_home/prompts/$_n.md"; done ;;
     cursor)
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
     pi)
       [ "$2" = "$HOME/.pi/agent/skills" ] || return 0
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
       put_pi_ext "$2" ;;
     opencode)
       # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
     antigravity)
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent; do
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
         [ -n "$dry" ] || rm -f "$2/$_n/$owned"
@@ -380,7 +380,7 @@ write_commands() {
       if [ "$2" = "$HOME/.gemini/config/skills" ]; then put_agy_ext "$2"; fi
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
       if [ "$2" = "$HOME/.gemini/skills" ]; then
-        for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
+        for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
       fi ;;
   esac
 }
@@ -433,6 +433,19 @@ if [ -n "$selftest" ]; then
   done
   find "$root/commands" "$root/host-commands" -type f -name '*.md' | grep -c 'pending-subagent' | grep -qx 6 || { echo "FAIL: B6 scan misses a pending-subagent file"; exit 1; }
   find "$root/commands" -type f -name '*.md' | grep -q '/commands/verify-subagent\.md$' || { echo "FAIL: B6 scan misses commands/verify-subagent.md"; exit 1; }
+  # F73: /marathon-plan and /marathon-run - Claude Code runs them with the Workflow tool; every
+  # other host's command says it has none and points at /pending-subagent; descriptions quoted (B6)
+  for _n in marathon-plan marathon-run; do
+    for f in commands/$_n.md host-commands/codex/$_n.md host-commands/cursor/$_n.md host-commands/pi/$_n.md \
+             host-commands/opencode/$_n.md host-commands/antigravity/$_n/SKILL.md host-commands/gemini/$_n.toml; do
+      [ -f "$root/$f" ] || { echo "FAIL: missing source $f"; exit 1; }
+    done
+    find "$root/commands" "$root/host-commands" -type f -name '*.md' | grep -c "$_n" | grep -qx 6 || { echo "FAIL: B6 scan misses a $_n file"; exit 1; }
+    grep -q '^description: "' "$root/commands/$_n.md" || { echo "FAIL: commands/$_n.md description not quoted"; exit 1; }
+    grep -qF 'Workflow' "$root/commands/$_n.md" || { echo "FAIL: commands/$_n.md does not name the Workflow tool"; exit 1; }
+    grep -qF 'skillator:relay-morpheus' "$root/commands/$_n.md" || { echo "FAIL: commands/$_n.md does not load relay-morpheus"; exit 1; }
+  done
+  grep -qF 'workflow-authoring' "$root/commands/marathon-plan.md" || { echo "FAIL: commands/marathon-plan.md does not load workflow-authoring"; exit 1; }
   [ -z "$_bad" ] || { echo "FAIL: frontmatter has an unquoted \": \" (invalid YAML, pi will not register the command): $_bad"; exit 1; }
   # F68: the Muse manifest lists every skill and carries the release version
   sh "$root/practice/scripts/check-muse-manifest.sh" "$root" > /dev/null || { echo "FAIL: .muse-plugin out of step (sh practice/scripts/check-muse-manifest.sh)"; exit 1; }
@@ -460,6 +473,10 @@ if [ -n "$selftest" ]; then
            .gemini/antigravity-cli/skills/pending-subagent/SKILL.md .config/opencode/commands/pending-subagent.md \
            .codex/prompts/verify-subagent.md .gemini/commands/verify-subagent.toml .cursor/commands/verify-subagent.md .pi/agent/prompts/verify-subagent.md \
            .gemini/config/skills/verify-subagent/SKILL.md .gemini/skills/verify-subagent/SKILL.md .gemini/antigravity-cli/skills/verify-subagent/SKILL.md \
+           .codex/prompts/marathon-plan.md .gemini/commands/marathon-plan.toml .cursor/commands/marathon-plan.md .pi/agent/prompts/marathon-plan.md \
+           .gemini/config/skills/marathon-plan/SKILL.md .gemini/skills/marathon-plan/SKILL.md .gemini/antigravity-cli/skills/marathon-plan/SKILL.md \
+           .codex/prompts/marathon-run.md .gemini/commands/marathon-run.toml .cursor/commands/marathon-run.md .pi/agent/prompts/marathon-run.md \
+           .gemini/config/skills/marathon-run/SKILL.md .gemini/skills/marathon-run/SKILL.md .gemini/antigravity-cli/skills/marathon-run/SKILL.md \
            .codex/skills/ops-board/ops/app.ts .pi/agent/skills/ops-board/hooks/lib/board.ts \
            .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json \
            .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
@@ -471,7 +488,7 @@ if [ -n "$selftest" ]; then
   # F67: opencode - the skills in its global skills dir, the seven commands in its commands/
   # dir, each substituted with that dest, no placeholder left, arguments by $ARGUMENTS
   _oc=.config/opencode
-  for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent; do
+  for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do
     _f=$T/$_oc/commands/$_n.md
     [ -f "$_f" ] || { echo "FAIL: missing $_oc/commands/$_n.md"; exit 1; }
     head -1 "$_f" | grep -qx -- '---' || { echo "FAIL: opencode $_n has no frontmatter"; exit 1; }
@@ -487,7 +504,7 @@ if [ -n "$selftest" ]; then
   grep -qF -e "<<'EOF'" -e "@'" -e 'say "' "$T/$_oc/commands/team-messages.md" && { echo "FAIL: opencode team-messages puts reply text in shell source"; exit 1; }
   [ "$(cat "$T/$_oc/skills/.skillator-source" 2>/dev/null)" = "$(native "$root")" ] || { echo "FAIL: source pointer in $_oc/skills"; exit 1; }
   [ -f "$T/$_oc/skills/tickets-zordon/.skillator-owned" ] || { echo "FAIL: opencode skill has no ownership marker"; exit 1; }
-  grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
+  grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent|marathon-plan|marathon-run' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   for f in .codex/prompts/skillator-update.md .cursor/commands/skillator-update.md .pi/agent/prompts/skillator-update.md \
            .gemini/commands/skillator-update.toml .gemini/skills/skillator-update/SKILL.md $_oc/commands/skillator-update.md; do
@@ -546,6 +563,19 @@ if [ -n "$selftest" ]; then
   done
   grep -q '^name: pending-subagent$' "$T/.gemini/antigravity-cli/skills/pending-subagent/SKILL.md" || { echo "FAIL: agy skill name pending-subagent"; exit 1; }
   grep -q '^argument-hint: .*max' "$root/commands/pending-subagent.md" || { echo "FAIL: commands/pending-subagent.md argument-hint has no count"; exit 1; }
+  # F73: no Workflow tool off Claude Code - /marathon-plan and /marathon-run say so, load
+  # relay-morpheus from the host's own dest and point at /pending-subagent
+  for _n in marathon-plan marathon-run; do
+    for f in .codex/prompts/$_n.md:.codex/skills .cursor/commands/$_n.md:.cursor/skills \
+             .pi/agent/prompts/$_n.md:.pi/agent/skills .gemini/commands/$_n.toml:.gemini/skills \
+             .gemini/config/skills/$_n/SKILL.md:.gemini/config/skills .gemini/skills/$_n/SKILL.md:.gemini/skills \
+             .gemini/antigravity-cli/skills/$_n/SKILL.md:.gemini/antigravity-cli/skills \
+             .config/opencode/commands/$_n.md:.config/opencode/skills; do
+      grep -qF "$N/${f#*:}/relay-morpheus/SKILL.md" "$T/${f%%:*}" || { echo "FAIL: $_n not substituted in ${f%%:*}"; exit 1; }
+      { grep -qF 'no Workflow tool' "$T/${f%%:*}" && grep -qF '/pending-subagent' "$T/${f%%:*}"; } || { echo "FAIL: $_n does not point at /pending-subagent in ${f%%:*}"; exit 1; }
+    done
+    grep -q "^name: $_n\$" "$T/.gemini/antigravity-cli/skills/$_n/SKILL.md" || { echo "FAIL: agy skill name $_n"; exit 1; }
+  done
   grep -qF '{{args}}' "$T/.gemini/commands/list-tickets.toml" || { echo "FAIL: gemini args"; exit 1; }
   grep -qF '$ARGUMENTS' "$T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: pi args"; exit 1; }
   grep -q '^argument-hint: ' "$T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: pi argument-hint"; exit 1; }
@@ -582,7 +612,7 @@ if [ -n "$selftest" ]; then
     grep -rqF '{{SKILLS}}' "$T/$f" && { echo "FAIL: placeholder left in $f"; exit 1; }
   done
   for d in .gemini/config/skills .gemini/skills .gemini/antigravity-cli/skills; do
-    grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
+    grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent|marathon-plan|marathon-run' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
     [ -e "$T/$d/pending/.skillator-owned" ] && { echo "FAIL: command skill carries an ownership marker in $d"; exit 1; }
   done
   [ -x "$T/.local/bin/ops" ] || { echo "FAIL: missing .local/bin/ops"; exit 1; }
