@@ -11,7 +11,9 @@ import { openAssign, renderForm, runDecided } from './assign'
 import { paint } from './paint'
 import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
-import { pollRuns, readRuns, RunsTab } from './runstab'
+import { openRuns, pollRuns, readRuns, RunsTab } from './runstab'
+import { runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, statusColor } from './lib/runlines'
+import { workflowStatus } from './lib/agents'
 import { AgentsTab, pollAgents, readAgents, WorkflowsTab } from './agentstab'
 import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab'
 
@@ -21,7 +23,9 @@ import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab
 export const PANE_ID = 'ops-board'
 export const PANE_TITLE = 'ops board'
 
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'workflows'
+// F76: one tab, id 'runs', labelled Workflows (owner: relay runs and workflows are one thing):
+// a Runs section and a Workflows section. /ops workflows opens it; /ops runs is an alias.
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'agents'
 // Each file names the atoms it reads or writes as its own consts: the engine's scan
 // lists state access from those, not from an import (register.tsx repeats them).
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
@@ -36,6 +40,8 @@ const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 // F61: the boxes of the open groups, this session; empty = every group collapsed. Only
 // the set is held, never rows: the board's own value stays within $.state's cap (B4).
 const openA = atom({ plugin: 'ops-board', key: 'openGroups' } as const, [])
+// F76: the Workflows tab's open sections (Runs, Workflows), this session; both start open.
+const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows'])
 
 const CHIP_KEY: Color = 'permission'
 const CHIP_VALUE: Color = 'suggestion'
@@ -177,8 +183,34 @@ export async function readView($: EngineInterface, cols: number): Promise<View> 
   }
 }
 
-const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Runs' },
-  { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' }, { id: 'agents', label: 'Agents' }, { id: 'workflows', label: 'Workflows' }]
+const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Workflows' },
+  { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' }, { id: 'agents', label: 'Agents' }]
+
+// F76: the Workflows tab (id 'runs') - a Runs section (relay runs, F50) and a Workflows section (F53),
+// each a header Button with its count that Enter or a click opens and closes, as F61's
+// status groups; an open section draws its body as the old tab did.
+async function RunsAndWorkflows($: EngineInterface, els: Els, cols: number): Promise<RenderElement[]> {
+  const { Text, Button } = els
+  const open = await read($, runsOpenA)
+  const runs = await readRuns($, cols)
+  const agents = await readAgents($, cols)
+  const shown = openRuns(runs.runs)
+  const out: RenderElement[] = []
+  for (const sec of RUNS_SECTIONS) {
+    const on = open.includes(sec)
+    const n = sec === 'runs' ? shown.length : agents.workflows.length
+    // F76: the header in the colour of the most pressing status under it, as a ticket group's
+    const st = sectionStatus(sec === 'runs' ? shown.map(runStatus) : agents.workflows.map(r => workflowStatus(agents.agents, r)))
+    if (sec !== RUNS_SECTIONS[0]) out.push(<Text> </Text>)
+    out.push(
+      <Button key={'sect:' + sec} plain onPress={() => { void update($, runsOpenA, x => toggleGroup(x, sec)) }}>
+        <Text bold color={st ? statusColor(st) : undefined}>{cut(sectionHead(sec, on, n), cols - 1)}</Text>
+      </Button>,
+    )
+    if (on) out.push(...(sec === 'runs' ? RunsTab($, els, runs) : WorkflowsTab(els, agents)))
+  }
+  return out
+}
 
 export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement> {
   const t = $.ui.resolve(e)
@@ -221,13 +253,12 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       </Box>
     )
   }
-  if (tab === 'agents' || tab === 'workflows') {
-    const v = await readAgents($, cols)
+  if (tab === 'agents') {
     return (
       <Box flexDirection="column">
         {bar}
         <Text> </Text>
-        {tab === 'agents' ? AgentsTab(els, v) : WorkflowsTab(els, v)}
+        {AgentsTab(els, await readAgents($, cols))}
       </Box>
     )
   }
@@ -236,7 +267,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       <Box flexDirection="column">
         {bar}
         <Text> </Text>
-        {RunsTab($, els, await readRuns($, cols))}
+        {await RunsAndWorkflows($, els, cols)}
       </Box>
     )
   }

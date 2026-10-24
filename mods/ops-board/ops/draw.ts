@@ -10,10 +10,10 @@ import type { Seg } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State } from './state'
-import { dialogLines, formLines, setupLines, teamRow, viewOf } from './state'
+import { dialogLines, formLines, runsCursor, setupLines, teamRow, viewOf } from './state'
 import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, isDecidable, isHead, offsetFor } from '../hooks/lib/ticketsmodel'
-import { runLines, stageTickets } from '../hooks/lib/runlines'
+import { runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
@@ -115,7 +115,7 @@ function windowOf(lines: Keyed[], id: string | null, h: number): Seg[][] {
 
 // --- the fixed lines ---
 
-const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Runs'], ['health', '3 Health'], ['messages', '4 Messages']]
+const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages']]
 
 function tabsLine(s: State): Seg[] {
   // F66: the unread count rides on the Messages label
@@ -149,7 +149,12 @@ function keysOf(s: State, m: Model): string[] {
   if (s.dialog) return s.dialogField === 'ticket' ? ['type the ID', 'tab person', 'enter confirm', 'esc cancel']
     : ['↑↓ person', 'a / d kind', 'tab ticket', 'enter confirm', 'esc cancel']
   if (s.filterField) return ['←→ field', '↑↓ value', 'enter/esc leave']
-  if (s.tab === 'runs') return ['↑↓ move', 'enter stages', 's start a planned run', 'r reload', 'q quit']
+  if (s.tab === 'runs') {
+    // F76: on a section header Enter opens or closes it
+    const cur = runsCursor(s)
+    const enter = isHead(cur) ? (s.runsOpen.some(x => headKey(x) === cur) ? 'enter close' : 'enter open') : 'enter stages'
+    return ['↑↓ move', enter, 's start a planned run', 'r reload', 'q quit']
+  }
   if (s.tab === 'health') return ['R resume (releases the hold on a fresh non-red reading)', 'r reload', 'q quit']
   if (s.tab === 'messages') return ['↑↓ move', 'enter open', 'm mark all read', 's setup', 'q quit']
   if (s.showTeam) return ['n add', 'del remove (asks first)', 'esc back', 'q quit']   // A146: q closes the board here too
@@ -326,27 +331,41 @@ function ticketsBody(s: State, m: Model, h: number): Seg[][] {
 
 // --- the Runs tab, as the mock ---
 
-const STAGE_MARK: Record<string, Seg> = {
-  x: { text: '✓', color: 'success' }, '~': { text: '●', color: 'warning' }, '!': { text: '✗', color: 'error' },
-  '?': { text: '?', color: 'permission' }, open: { text: '●', color: 'warning' },
-}
-
-function stageLine(st: Stage): Seg[] {
+// F76: a stage's mark is a `●` in its status colour, as the Tickets tab colours a ticket.
+function stageLine(st: Stage, planned: boolean): Seg[] {
   const ids = new Set(stageTickets(st))
   const words = st.title.split(' ')
   while (words.length > 1 && ids.has(words[0]!)) words.shift()
   const t = [...ids].join(' ')
-  return [{ text: '    ' }, STAGE_MARK[st.state] ?? dim('·'), { text: ` ${String(st.n).padStart(2)}  ` },
+  return [{ text: '    ' }, { text: '●', color: statusColor(stageStatus(st, planned)) }, { text: ` ${String(st.n).padStart(2)}  ` },
     ...(t ? [{ text: t + ' ', color: 'suggestion' as Color }] : []), { text: words.join(' ') }]
 }
 
+// F76: the Workflows tab (id 'runs') - a Runs section (relay runs) and a Workflows section, each a header
+// with its count that Enter opens and closes, as F61's groups. The Workflow tool's runs
+// are seen only by the host that runs it (the Claude Code pane), so here it says so.
 function runsBody(s: State, h: number): Seg[][] {
-  if (!s.runs.length) return [[dim(s.runsRead ? 'no open runs - plan one with relay-morpheus (plan-runs)' : 'reading runs…')]]
-  const sel = s.runsSelected ?? s.runs[0]!.id
+  const sel = runsCursor(s)
+  const out: Keyed[] = []
+  for (const sec of RUNS_SECTIONS) {
+    const hk = headKey(sec)
+    const on = s.runsOpen.includes(sec)
+    const n = sec === 'runs' ? (s.runsRead || s.runs.length ? s.runs.length : null) : null
+    const st = sec === 'runs' ? sectionStatus(s.runs.map(runStatus)) : null     // F76: the header's colour
+    out.push({ key: hk, segs: [{ text: hk === sel ? '› ' : '  ' },
+      { text: sectionHead(sec, on, n), bold: true, inverse: hk === sel, color: st ? statusColor(st) : undefined }] })
+    if (!on) continue
+    if (sec === 'workflows') out.push({ key: 'wf:none', segs: [dim('    not observable here - only the host that runs a workflow sees it')] })
+    else out.push(...runRows(s, sel))
+  }
+  return windowOf(out, sel, h)
+}
+
+function runRows(s: State, sel: string): Keyed[] {
+  if (!s.runs.length) return [{ key: 'none', segs: [dim('    ' + (s.runsRead ? 'no open runs - plan one with relay-morpheus (plan-runs)' : 'reading runs…'))] }]
   const idW = Math.max(...s.runs.map(r => r.id.length)) + 2
   const out: Keyed[] = s.runs.map((run: RunView): Keyed => {
-    const done = run.total > 0 && run.done >= run.total
-    const dot: Seg = { text: '●', color: done ? 'success' : run.planned ? 'inactive' : 'warning' }
+    const dot: Seg = { text: '●', color: statusColor(runStatus(run)) }   // F76: the Tickets tab's colours
     const right = run.planned ? `planned · ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}` : `${run.done}/${run.total} done`
     const isSel = run.id === sel
     const avail = s.cols - 3
@@ -360,13 +379,13 @@ function runsBody(s: State, h: number): Seg[][] {
   if (ex) {
     out.push({ key: 'gap', segs: [] }, { key: 'stages', segs: [{ text: `  ${ex.id} stages`, bold: true }] })
     if (!ex.stages.length) out.push({ key: 'none', segs: [dim('    no stages read yet')] })
-    ex.stages.forEach(st => out.push({ key: 'st:' + st.n, segs: stageLine(st) }))
+    ex.stages.forEach(st => out.push({ key: 'st:' + st.n, segs: stageLine(st, ex.planned) }))
     for (const l of runLines(ex, s.board)) {
       if (/^(par|dec):/.test(l.key)) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
     }
     if (ex.planned) out.push({ key: 'start', segs: [dim('    s queues it; its continue prompt is then shown to paste into your CLI')] })
   }
-  return windowOf(out, sel, h)
+  return out
 }
 
 // --- the Health tab, as the mock: Usage and Machine, a label column ---

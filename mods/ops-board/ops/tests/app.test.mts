@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
-import { keyOf, parseArgs } from '../app'
+import { keyOf, parseArgs, USAGE } from '../app'
 const tmpDirs: string[] = []
 const mkTmp = (prefix: string): string => { const d = mkdtempSync(prefix); tmpDirs.push(d); return d }
 after(() => { for (const d of tmpDirs) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) })
@@ -79,7 +79,7 @@ for (const [kind, skip] of launchers) {
     const lines = r.out.replace(/\r?\n$/, '').split(/\r?\n/)
     assert.equal(lines.length, 20, r.out)
     for (const l of lines) { assert.ok([...l].length <= 80, l); assert.doesNotMatch(l, /\x1b/) }
-    assert.match(lines[0]!, new RegExp(`^ 1 Tickets   2 Runs   3 Health   4 Messages +ops · ${basename(t)}$`))
+    assert.match(lines[0]!, new RegExp(`^ 1 Tickets   2 Workflows   3 Health   4 Messages +ops · ${basename(t)}$`))
     // F61: every group starts collapsed - its header and count, no rows
     assert.match(r.out, /› ▸ In progress \(1\)\r?\n  ▸ Pending \(1\)\r?\n/)
     assert.doesNotMatch(r.out, /F2  Bulk delete/)
@@ -179,6 +179,11 @@ test('flags: sizes, paint, tab, skills; anything else is an error', () => {
   assert.equal(parseArgs([], { NO_COLOR: '1' }).color, false)
   assert.match(parseArgs(['--cols', 'x']).error ?? '', /--cols/)
   assert.match(parseArgs(['--tab', 'agents']).error ?? '', /--tab/)
+  // F76: the Workflows tab (id runs) is --tab workflows; --tab runs stays an alias
+  assert.equal(parseArgs(['--tab', 'workflows']).tab, 'runs')
+  assert.equal(parseArgs(['--tab', 'runs']).tab, 'runs')
+  assert.equal(parseArgs(['--tab', 'agents']).error, 'ops: --tab is one of tickets, workflows, health, messages, got agents')
+  assert.match(USAGE, /--tab tickets\|workflows\|health\|messages\]$/)
   assert.match(parseArgs(['stray']).error ?? '', /unknown flag stray/)
 })
 

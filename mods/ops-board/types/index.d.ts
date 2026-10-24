@@ -64,9 +64,10 @@ declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
       board: Board | null; team: Member[]; me: string | null
-      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'workflows'; selected: string | null; expanded: string | null
+      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
+      runsOpen: ('runs' | 'workflows')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
       runs: RunView[]; assign: AssignDraft | null; narrow: boolean
       relay: string | null   // F48 band: "RUN-0012 2/4", the first relay run not all done

@@ -74,6 +74,6 @@ export const info = (o: Partial<AgentInfo> & Pick<AgentInfo, 'id'>): AgentInfo =
 export async function mountTab($: Engine, surface: (typeof SURFACES)[number], tab: 'agents' | 'workflows', bodyColumns: number) {
   const ui = await $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: 'ops-board',
     props: { title: 'ops board', isFocused: true, bodyColumns, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 40 }, view: {} } })
-  await ui.press({ key: 'tab:' + tab })
+  await ui.press({ key: 'tab:' + (tab === 'workflows' ? 'runs' : tab) })   // F76: Workflows is a section of Runs
   return ui
 }

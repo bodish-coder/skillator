@@ -32,6 +32,7 @@ const usageA = atom({ plugin: 'ops-board', key: 'usage' } as const, null)
 const watchA = atom({ plugin: 'ops-board', key: 'watch' } as const, { level: 'green', reasons: [] })
 const notesA = atom({ plugin: 'ops-board', key: 'notes' } as const, [])
 const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
+const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows'])
 
 const MAX_READ = 4 * 1024 * 1024
 const POLL_MS = 2000
@@ -304,16 +305,19 @@ async function openPane($: EngineInterface, asked: boolean) {
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Runs', health: 'Health', messages: 'Messages', agents: 'Agents', workflows: 'Workflows' }
-const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'agents', 'workflows']
-const USAGE = 'usage: /ops [tickets|runs|health|messages|agents|workflows|resume]'
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', agents: 'Agents' }
+// F76: /ops workflows opens the Workflows tab (id runs) with its Workflows section open; /ops runs is
+// an alias that opens it with its Runs section open.
+const WORDS = ['tickets', 'runs', 'health', 'messages', 'agents', 'workflows']
+const SECTION_OF: Record<string, 'runs' | 'workflows'> = { runs: 'runs', workflows: 'workflows' }
+const USAGE = 'usage: /ops [tickets|workflows|health|messages|agents|resume] - runs opens Workflows too'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'ops',
-      description: 'Open the ops board pane: the TICKETS.md board, runs, health, Teams messages, agents and workflows',
-      argumentHint: '[tickets|runs|health|messages|agents|workflows|resume]',
+      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs and Workflow runs), health, Teams messages, agents',
+      argumentHint: '[tickets|workflows|health|messages|agents|resume]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -353,17 +357,21 @@ export const register: Register = on => {
     void arm($).catch(() => {})
     const word = e.args.trim().toLowerCase()
     if (word === 'resume') return { text: await resume($) }
-    if (word && !TABS.includes(word as Tab)) return { text: USAGE }
+    if (word && !WORDS.includes(word)) return { text: USAGE }
+    const tab: Tab | null = word ? (SECTION_OF[word] ? 'runs' : word as Tab) : null
+    const sec = SECTION_OF[word]
     // A form draws only on Tickets: leaving it drops the form, or a later Esc / close
     // on that tab would be taken as the hidden form's Cancel.
-    if (word && word !== 'tickets') await clearForm($)
-    if (word) await update($, tabA, () => word as Tab)
-    if (word === 'runs') void pollRuns($).catch(() => {})
+    if (tab && tab !== 'tickets') await clearForm($)
+    if (tab) await update($, tabA, () => tab)
+    if (sec) await update($, runsOpenA, x => (x.includes(sec) ? x : [...x, sec]))
+    if (tab === 'runs') void pollRuns($).catch(() => {})
     if (word === 'agents') void pollAgents($).catch(() => {})
     if (word === 'messages') void enterMessages($).catch(() => {})
     const r = await openPane($, true)
     if (!r.isPlaced) return { text: `ops board is open but not drawn: ${r.reason}` }
-    return { text: word ? `ops board opened on ${TAB_NAME[word as Tab]}.` : 'ops board opened.' }
+    if (word === 'runs') return { text: 'ops board opened on Workflows, Runs open.' }
+    return { text: tab ? `ops board opened on ${TAB_NAME[tab]}.` : 'ops board opened.' }
   })
 
   on('ui.render', { component: 'Pane', requestId: 'ops-board' }, async ($, e) => {
@@ -398,7 +406,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // F53: the Agents and Workflows tabs read the engine's own events; each passes its
+  // F53: the Agents tab and the Workflows tab's Workflows section read the engine's own events; each passes its
   // event through as it came (the spawn, the turn, the tool call untouched).
   on('agent.spawn', async ($, e, next) => {
     const r = await next(e)

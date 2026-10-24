@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, viewOf, startHandle, settle, afterRun } from '../state'
+import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, viewOf, startHandle, settle, afterRun } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
@@ -220,6 +220,38 @@ test('runs: onRuns sets the runs and the relay text; up/down move; Enter expands
   assert.match(settle(r.effects[0]!.then({ code: 1, out: '', err: 'busy', argv: ['sh'] })(r.state)).state.toast ?? '', /^■ RUN-0012 not queued: busy/)
   const notPlanned = reduce(press(s, 'down'), key('s'))
   assert.equal(notPlanned.effects.length, 0); assert.ok(notPlanned.state.toast)
+})
+
+// F76: the Runs tab holds a Runs and a Workflows section that open and close as F61's
+// groups: up/down walk the headers and the rows of an open section, Enter on a header
+// opens or closes it (a run hidden in it shows as its header selected), s on a header runs nothing.
+test('F76: runs and workflows sections - both start open, Enter on a header closes it, the cursor walks headers', () => {
+  const s = onRuns(reduce(s0, key('2')).state, LIST, { 'RUN-0012': CHAIN })
+  assert.deepEqual(s.runsOpen, ['runs', 'workflows'])
+  assert.equal(runsCursor(s), 'RUN-0012')
+  assert.equal(runsCursor(press(s, 'up')), 'head:runs')
+  assert.equal(runsCursor(press(s, 'up', 'up')), 'head:runs')
+  assert.equal(runsCursor(press(s, 'down', 'down')), 'head:workflows')
+  assert.equal(runsCursor(press(s, 'down', 'down', 'down')), 'head:workflows')
+  // Enter on the Runs header closes it; the cursor stays on the header; down goes to Workflows
+  const shut = press(s, 'up', 'return')
+  assert.deepEqual(shut.runsOpen, ['workflows'])
+  assert.equal(runsCursor(shut), 'head:runs')
+  assert.equal(runsCursor(press(shut, 'down')), 'head:workflows')
+  assert.deepEqual(press(shut, 'return').runsOpen, ['workflows', 'runs'])
+  // s on a header queues nothing
+  const onHead = reduce(press(s, 'up'), key('s'))
+  assert.equal(onHead.effects.length, 0); assert.ok(onHead.state.toast)
+  // closed with a run selected: the header shows selected; opening lands back on the run
+  const hid = { ...s, runsSelected: 'RUN-0013', runsOpen: ['workflows' as const] }
+  assert.equal(runsCursor(hid), 'head:runs')
+  assert.equal(runsCursor(press(hid, 'return')), 'RUN-0013')
+  // the Workflows header
+  const wf = press(s, 'down', 'down', 'return')
+  assert.deepEqual(wf.runsOpen, ['runs'])
+  assert.equal(runsCursor(wf), 'head:workflows')
+  // a new list keeps a header selection
+  assert.equal(onRuns(press(s, 'up'), LIST, {}).runsSelected, 'head:runs')
 })
 
 test('tabs, filter mode, team view, refresh, quit', () => {

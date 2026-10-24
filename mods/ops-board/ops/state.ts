@@ -8,12 +8,13 @@ import type { Call } from '../hooks/lib/calls'
 import type { View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
-import { buildModel, headKey, isHead, toggleGroup } from '../hooks/lib/ticketsmodel'
+import { buildModel, HEAD, headKey, isHead, toggleGroup } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME, ticketById } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, parseMachine, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
-import { continuePrompt } from '../hooks/lib/runlines'
+import { continuePrompt, RUNS_SECTIONS } from '../hooks/lib/runlines'
+import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
 import type { SetupField, SetupValues } from '../hooks/lib/teamsconfig'
@@ -34,7 +35,8 @@ export type State = {
   open: Box[]                              // F61: the open groups' boxes this session; none = all collapsed
   machine: Machine | null; usage: Usage | null; watch: Watch
   relay: string | null                     // band: "RUN-0012 2/4", the first relay run not all done
-  runs: RunView[]; runsSelected: string | null; runsExpanded: string | null
+  runs: RunView[]; runsSelected: string | null; runsExpanded: string | null   // runsSelected: a run id or 'head:<section>'
+  runsOpen: RunsSection[]                  // F76: the Workflows tab's open sections (Runs, Workflows); both start open
   runsRead: boolean                        // false until relay's list was first read: 'reading runs…'
   dialog: AssignDraft | null; dialogIndex: number    // -1: the cursor is on "+ add person"
   dialogField: DialogField                            // F77: the keys go to the Ticket field or the people
@@ -75,7 +77,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   filter: { app: null, who: null, mine: false, showDone: false }, filterField: null,
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, relay: null,
-  runs: [], runsSelected: null, runsExpanded: null, runsRead: false,
+  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false,
   dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
@@ -496,14 +498,28 @@ export function onUsage(s: State, levelOut: string, now: number): Step {
 export function onRuns(s: State, list: string, chains: Record<string, string>): State {
   const runs = parseRuns(list, chains)
   const first = runs.find(x => x.done < x.total)
-  const runsSelected = runs.some(r => r.id === s.runsSelected) ? s.runsSelected : runs[0]?.id ?? null
+  const runsSelected = runs.some(r => r.id === s.runsSelected) || isHead(s.runsSelected) ? s.runsSelected : runs[0]?.id ?? null
   return { ...s, runs, runsSelected, runsRead: true, relay: first ? `${first.id} ${first.done}/${first.total}` : null }
+}
+
+// F76: the Workflows tab's cursor walks each section's header and the runs of an open Runs
+// section (Workflows draws no rows here: the Workflow tool is not observable outside the
+// host that runs it). A run hidden in a closed section shows as its header selected, and
+// stays the one stored, so opening the section lands back on it - as F61's groups.
+export function runsItems(s: State): string[] {
+  return RUNS_SECTIONS.flatMap(sec => [headKey(sec), ...(sec === 'runs' && s.runsOpen.includes('runs') ? s.runs.map(r => r.id) : [])])
+}
+export function runsCursor(s: State): string {
+  const items = runsItems(s)
+  const want = s.runsSelected
+  if (want && items.includes(want)) return want
+  return items[0]!                          // a hidden run (or none): the Runs header
 }
 
 // s: relay-morpheus queue-run add <id> on a planned run; the continue prompt is shown to
 // paste into the CLI (no host to submit it), then the runs are read again.
 function startRun(s: State): Step {
-  const r0 = s.runs.find(r => r.id === s.runsSelected) ?? s.runs[0]
+  const r0 = s.runs.find(r => r.id === runsCursor(s))
   if (!r0 || !r0.planned) return { state: toast(s, 's starts a planned run only'), effects: [] }
   const id = r0.id
   const then: Then = r => x => {
@@ -517,16 +533,25 @@ function startRun(s: State): Step {
 }
 
 function runsKey(s: State, k: Key): Step {
-  const ids = s.runs.map(r => r.id)
-  const cur = s.runsSelected ?? ids[0] ?? null
+  const items = runsItems(s)
+  const cur = runsCursor(s)
   const move = (by: number): Step => {
-    const to = ids[ids.indexOf(cur ?? '') + by]
+    const to = items[items.indexOf(cur) + by]
     return { state: to ? { ...s, runsSelected: to } : s, effects: [] }
   }
   switch (k.name) {
     case 'up': case 'k': return move(-1)
     case 'down': case 'j': return move(1)
-    case 'return': case 'enter': return { state: { ...s, runsExpanded: cur && s.runsExpanded !== cur ? cur : null }, effects: [] }
+    case 'return': case 'enter': {
+      // on a header: open or close its section, the header stays selected - unless it
+      // stands for a run hidden in it (the stored selection), which opening lands back on
+      if (isHead(cur)) {
+        const sec = cur.slice(HEAD.length) as RunsSection
+        const keep = sec === 'runs' && s.runs.some(r => r.id === s.runsSelected)
+        return { state: { ...s, runsSelected: keep ? s.runsSelected : cur, runsOpen: toggleGroup(s.runsOpen, sec) }, effects: [] }
+      }
+      return { state: { ...s, runsExpanded: s.runsExpanded !== cur ? cur : null }, effects: [] }
+    }
     case 's': return startRun(s)
     default: return { state: s, effects: [] }
   }

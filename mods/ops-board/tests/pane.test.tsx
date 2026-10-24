@@ -151,6 +151,7 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'count' }))?.text).toBe('5 open ●1 ●1 ●1 ●2 ●1 · 7 done hidden')
     for (const k of ['key:assign', 'key:decide', 'key:filter', 'key:done', 'tab:tickets', 'tab:runs', 'tab:health'])
       expect(await ui.find({ key: k }), k).toBeDefined()
+    expect(await ui.find({ key: 'tab:workflows' })).toBeUndefined()      // F76: a section of Runs now
     expect((await ui.find({ key: 'key:filter' }))?.props.hotkey).toBe('f')
     expect((await ui.find({ key: 'key:done' }))?.props.hotkey).toBe('x')
     await ui.unmount()
@@ -379,9 +380,9 @@ test('/ops runs switches the tab; an unknown word says how to use it', WITH, asy
   const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
   await start($, clock)
   const run = (args: string) => $.command.run({ command: 'ops', args, ...RUN })
-  expect((await run('runs')).text).toBe('ops board opened on Runs.')
+  expect((await run('runs')).text).toBe('ops board opened on Workflows, Runs open.')   // F76: runs is an alias
   expect(await state($, 'tab')).toBe('runs')
-  expect((await run('bogus')).text).toBe('usage: /ops [tickets|runs|health|messages|agents|workflows|resume]')
+  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|agents|resume] - runs opens Workflows too')
 })
 
 test('the first render arms the poll when session.start never ran (a hot reload)', WITH, async ($, on) => {
