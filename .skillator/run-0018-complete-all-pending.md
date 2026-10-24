@@ -1,6 +1,6 @@
 # RUN-0018 - complete all pending
 plan: TICKETS.md
-started: 2026-10-24T02:25Z   updated: 2026-10-24T17:07Z
+started: 2026-10-24T02:25Z   updated: 2026-10-24T17:59Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-complete-all-pending
 branch: run/RUN-0018-complete-all-pending
 
@@ -18,20 +18,11 @@ branch: run/RUN-0018-complete-all-pending
 | 126 | F76 Runs+Workflows one collapsible tab | x | build:opus | 2026-10-24T14:32Z | 71b82f3 |
 | 127 | F75 ops board Explorer tab | x | build:opus | 2026-10-24T15:36Z | 67abfd2 |
 | 128 | F79 ops board Run tab (one-click build/run/install) | x | build:opus | 2026-10-24T15:28Z | 3e6a89d |
-| 129 | land review fix A: run-entries + runentries + engine | ~ | build:opus | 2026-10-24T16:40Z | - |
-| 130 | land review fix B: runtab/pane/explorer/draw/assign | ~ | build:opus | 2026-10-24T16:50Z | - |
-| 131 | land review fix C: ticket-meta verify | ~ | build:opus | 2026-10-24T17:07Z | - |
+| 129 | land review fix A: run-entries + runentries + engine | x | build:opus | 2026-10-24T17:59Z | 9c9ce33 |
+| 130 | land review fix B: runtab/pane/explorer/draw/assign | x | build:opus | 2026-10-24T17:59Z | 9c9ce33 |
+| 131 | land review fix C: ticket-meta verify | x | build:opus | 2026-10-24T17:59Z | 9c9ce33 |
 
 ## In flight
-### stage 129 - land review fix A  (dispatched 16:30)
-prompt: .skillator/prompts/run-0018-s129.txt (exact text sent)
-last seen: done 16:58 - 6/6 fixed, unstaged in the main checkout; run-entries sh/ps1 selftests ok, ops 133/133, mod 270/270, tsc ok; landed with the land commit.
-### stage 130 - land review fix B  (dispatched 17:00)
-prompt: .skillator/prompts/run-0018-s130.txt (exact text sent)
-last seen: done 17:40 - 7/7 fixed, unstaged; mod 277/277, ops 134/134, validate ok, tsc ok. Left in register.tsx (outside its files): ui.close unload keeps the Run form; /ops <tab> switches tabs with a Run form up - the main session fixes both.
-### stage 131 - land review fix C  (dispatched 17:42)
-prompt: .skillator/prompts/run-0018-s131.txt (exact text sent)
-last seen: dispatched.
 ## Rulings
 - 02:27 - F67 restarted in this run's worktree from the dead agent worktree's diff (b2f60bd), PLATFORMS/README conflicts with F68 resolved keeping both rows - order F67, B9, F69 serial: F67 and B9 both edit install.sh/ps1 - costs nothing.
 - 02:27 - watchdog hold of 2026-10-23 released: 5.1 GB free now - re-held by the mod if memory drops.
@@ -63,3 +54,5 @@ last seen: dispatched.
 - 15:28 - merge of run/RUN-0018-s127 started on the run branch: 16 conflicts in mods/ops-board (tab lists, toggleGroup, types, engine/nodehost, test expectations). Resolution delegated to one merge agent with fixed rules: both tabs kept; order Tickets, Workflows, Health, Messages, Agents, Explorer, Run; standalone keys 5 Explorer, 6 Run (both took 5).
 - 15:36 - stage 127 merge checked by the main session: 67abfd2 (parents 3e6a89d, 6ef6915), worktree clean; mod 268/268, ops 130/130, validate ok, tsc ok; standalone 6 tabs (5 Explorer, 6 Run). Accepted: at 80 cols the tab bar no longer leaves room for 'ops - <repo>' (spread() drops it, as on narrow terminals). Noted: the standalone --once Run frame shows 'reading .skillator/run.json...' (run.json not read in a one-frame draw - F79's own behaviour, not a regression). /code-review of the whole run diff comes at the land on main. Stage worktree RUN-0018-s127 and branch removed.
 - 16:30 - land on main: checks all green (mod 270, ops 130, validate x2, tsc, ticket-meta/run-entries/pending/muse/install.sh/install.ps1 selftests). /code-review low found install.ps1:887 (a user's own HOME skipped function ops) - fixed in the main checkout: only USERPROFILE counts (PowerShell's $HOME comes from it); install.ps1 -SelfTest ok, dry run with HOME=D:\home writes it. Owner ran /code-review xhigh: 15 findings - fixed before the land commit in 3 file-disjoint stages, serial (129 data layer, 130 pane UI, 131 ticket-meta), each a fresh agent in the main checkout, uncommitted; findings saved in the session scratchpad land-review-findings.md - 3.8 GB free.
+- 18:00 - stages 129-131 checked by the main session: 15/15 xhigh findings fixed; main session fixed register.tsx (Run form on /ops <tab> and unload) and the Teams verify wording. /code-review medium on the fix diff (pass 2): 5 real - fixed (stop race, orphan timer, failed verify posted as verified, --tab run stat rejection, every dated fail note); 4 hardening items logged A154. ticket-meta.sh broke on an apostrophe in a new awk comment - caught by the selftest, fixed. All checks green; landed on main as 9c9ce33 (merge of 67abfd2), 4.16.0 / ops-board 0.7.0.
+- 18:00 - RUN-0018 finished: run worktree and branch removed after the push.
