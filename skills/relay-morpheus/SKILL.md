@@ -219,7 +219,8 @@ Two baseline runs (`scenario-marathon-stop.txt`) left an untracked directory
 alone, said its deletion could not be undone, and then asked it as item 2 of 3
 beside a format question. Read [references/marathon.md](references/marathon.md)
 when a verdict carries `parked`, a stop fires, or `chain next` prints `ASK` or
-`UNBLOCK`.
+`UNBLOCK`. `/marathon-plan` and `/marathon-run` (F73) are its last section: a
+marathon saved as a Workflow script (`templates/marathon-workflow.js`), then run.
 
 ## Scripts
 

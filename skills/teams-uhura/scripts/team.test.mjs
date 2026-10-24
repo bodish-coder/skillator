@@ -546,6 +546,8 @@ test('say --stdin: $(id), backticks, quotes and newlines are sent literally; tex
 test('statusText: the ticket edit as one line, with the repo and the title', () => {
   const line = '- [x] F12 — Dark mode [owner: @asha] **Done 2026-10-23: tests green**'
   assert.equal(statusText('done', ['F12', 'tests green'], line, 'shop'), 'shop: F12 done - Dark mode (tests green)')
+  assert.equal(statusText('verify', ['F12', 'pass', '3/3 green'], line, 'shop'), 'shop: F12 verified: 3/3 green - Dark mode')
+  assert.equal(statusText('verify', ['F12', 'fail', 'still red'], line, 'shop'), 'shop: F12 verify failed: still red - Dark mode')
   assert.equal(statusText('assign', ['F12', '@asha'], line, 'shop'), 'shop: F12 assigned to @asha - Dark mode')
   assert.equal(statusText('block', ['F12', 'needs creds'], null, 'shop'), 'shop: F12 blocked - needs creds')
   assert.equal(statusText('tested', ['F12', 'pass'], null, 'shop'), 'shop: F12 tested: pass')

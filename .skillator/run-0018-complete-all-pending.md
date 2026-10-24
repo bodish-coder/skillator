@@ -1,0 +1,65 @@
+# RUN-0018 - complete all pending
+plan: TICKETS.md
+started: 2026-10-24T02:25Z   updated: 2026-10-24T17:07Z
+worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-complete-all-pending
+branch: run/RUN-0018-complete-all-pending
+
+## Stages
+| # | stage | state | owner | heartbeat | landed |
+|---|-------|-------|-------|-----------|--------|
+| 118 | F67 opencode host | x | build:opus | 2026-10-24T02:41Z | 1518c00 |
+| 119 | B9 installer profile under scratch HOME | x | build:opus | 2026-10-24T02:54Z | 3f62261 |
+| 120 | F69 pending redesign | x | build:opus | 2026-10-24T03:29Z | 8154d55 |
+| 121 | F71 /pending-subagent | x | build:opus | 2026-10-24T04:01Z | f14b07e |
+| 122 | F72 /verify-subagent | x | build:opus | 2026-10-24T10:52Z | 2911604 |
+| 123 | F73 /marathon-plan + /marathon-run | x | build:opus | 2026-10-24T11:48Z | f90108e |
+| 124 | F77 assign form ticket by number | x | build:opus | 2026-10-24T12:02Z | eb6d319 |
+| 125 | A152 pending NEXT + word-boundary cut | x | build:opus | 2026-10-24T12:14Z | 617ac7a |
+| 126 | F76 Runs+Workflows one collapsible tab | x | build:opus | 2026-10-24T14:32Z | 71b82f3 |
+| 127 | F75 ops board Explorer tab | x | build:opus | 2026-10-24T15:36Z | 67abfd2 |
+| 128 | F79 ops board Run tab (one-click build/run/install) | x | build:opus | 2026-10-24T15:28Z | 3e6a89d |
+| 129 | land review fix A: run-entries + runentries + engine | ~ | build:opus | 2026-10-24T16:40Z | - |
+| 130 | land review fix B: runtab/pane/explorer/draw/assign | ~ | build:opus | 2026-10-24T16:50Z | - |
+| 131 | land review fix C: ticket-meta verify | ~ | build:opus | 2026-10-24T17:07Z | - |
+
+## In flight
+### stage 129 - land review fix A  (dispatched 16:30)
+prompt: .skillator/prompts/run-0018-s129.txt (exact text sent)
+last seen: done 16:58 - 6/6 fixed, unstaged in the main checkout; run-entries sh/ps1 selftests ok, ops 133/133, mod 270/270, tsc ok; landed with the land commit.
+### stage 130 - land review fix B  (dispatched 17:00)
+prompt: .skillator/prompts/run-0018-s130.txt (exact text sent)
+last seen: done 17:40 - 7/7 fixed, unstaged; mod 277/277, ops 134/134, validate ok, tsc ok. Left in register.tsx (outside its files): ui.close unload keeps the Run form; /ops <tab> switches tabs with a Run form up - the main session fixes both.
+### stage 131 - land review fix C  (dispatched 17:42)
+prompt: .skillator/prompts/run-0018-s131.txt (exact text sent)
+last seen: dispatched.
+## Rulings
+- 02:27 - F67 restarted in this run's worktree from the dead agent worktree's diff (b2f60bd), PLATFORMS/README conflicts with F68 resolved keeping both rows - order F67, B9, F69 serial: F67 and B9 both edit install.sh/ps1 - costs nothing.
+- 02:27 - watchdog hold of 2026-10-23 released: 5.1 GB free now - re-held by the mod if memory drops.
+- 02:43 - stage 118 reviewed by the main session (agent skipped /code-review): installer diff reuses put_cmd/Write-Cmd and the target table, sh+ps1 selftests red then ok, scratch-home opencode lists 28 skills + 7 commands - landed 1518c00.
+- 03:05 - stage 119 reviewed by the main session: install.ps1 only, explicit -Profile honoured, skip only when USERPROFILE/HOME is not GetFolderPath('UserProfile'); a user whose HOME env is set elsewhere now gets the note instead of the profile line - the ticket's Done allows it, the note names -Profile - landed 3f62261.
+- 03:12 - F71 F72 F73 (owner request: /pending-subagent, /verify-subagent flips [%] to [x] on PASS, /marathon-plan + /marathon-run workflow-based) added after F69, serial: all three edit commands/, host-commands/* and the installer selftest command lists - costs nothing.
+- 03:20 - owner: run F71 alongside F69 (overrides one-agent-at-a-time for this pair). F71 in its own worktree RUN-0018-s121 off the run branch at 3f62261, merged back on landing; files disjoint (F69: pending.*, F71: commands/, host-commands/, installers) - 5.4 GB free.
+- 03:24 - owner: F71 takes an agent count `[N|max]` (default 1, file-disjoint only, own stage worktrees) - sent to the stage 121 agent mid-run; prompt above + this ruling are its brief.
+- 03:30 - stage 120 checked by the main session: new pending.sh on the main checkout 1.7 s (was 8.5 s here, 3+ min seen), all F69 sections present, ASCII, 80 cols; agent ran /code-review (1 fix). Follow-up, not blocking: NEXT names only the first in-flight stage (F71 also running), titles cut mid-word - landed 8154d55.
+- 03:30 - watchdog hold re-set by the mod at 02:57Z (0.8 GB during selftests); 5.0 GB free now - left in place: it only gates chain dispatch and GREEN harness runs, neither used here.
+- 03:35 - owner: run F72 in parallel with F71 though both edit the command lists - F72 in worktree RUN-0018-s122 off the run branch at 8154d55; the list-line conflicts are resolved by the main session at merge, keeping both names.
+- 03:58 - stage 121 reviewed by the main session: command text loads relay-morpheus/tickets-zordon/tasks-sentinels and uses their scripts, count parsing + file-disjoint rule in all 7 copies, selftests red then ok, agent ran /code-review low (nothing), live `/pending-subagent 2` ran two stages in parallel and merged - bbb1be9 merged into the run branch as f14b07e. Stage worktree RUN-0018-s121 removal hit Permission denied (a file held open) - removed at the run's end.
+- 10:12 - owner (AskUserQuestion, 'complete pending with agents'): proceed despite the watchdog hold, 0.7 GB free (3 user python audit jobs C:\tmp\audit2.py/audit4.py ~4.8 GB, left running) - one agent at a time; hold left set, chain dispatch not used.
+- 10:12 - stage 122 redispatched to a fresh agent from its WIP (prompt + resume note above). Then serial: 123 F73, then F77, A152, F76, F75 (all ops-board/pending/commands - overlapping or near, so serial); F57 F66 are [%] waiting on the owner's live test - not staged.
+- 10:14 - watchdog released by the owner from the ops board; owner repeated "complete all pending using agents" - stage 122 still running, the queue stays serial (one agent at a time).
+- 11:48 - stage 122 merged by the main session as 2911604: install.sh/install.ps1/PLATFORMS list conflicts with F71 resolved keeping both names; install.sh --selftest ok, install.ps1 -SelfTest ok, ticket-meta.sh selftest ok.
+- 11:48 - stage 123 checked by the main session: f90108e on the run branch, worktree clean; agent selftests red then ok, plugin validate ok, live /marathon-plan then /marathon-run landed both fixture tickets; /code-review low nothing. Follow-up (agent-found, to log at the run's end): `stage <n> x` leaves the stage's In-flight block (seen here for 122 and 123, removed by hand) - the script should drop it.
+- 12:02 - stage 124 checked by the main session: eb6d319 on the run branch, worktree clean; agent: mod 237/237, ops npm test 112/112, plugin validate ok, tsc ok, red first (11 mod + 9 ops failures), /code-review low nothing. Live pane check not possible headless - owed by the owner after release (focus on the Ticket field, typing). The run branch predates F78 (main ecf0a7f, pane.tsx/register.tsx/pane.test.tsx) - expect a merge conflict in pane.test.tsx when the run lands.
+- 12:14 - stage 125 checked by the main session: 617ac7a, worktree clean; selftests red then ok in both ports (same-output check ok), both ports on the main checkout 1.8 s / 2.5 s, 80 cols ASCII. The agent committed with -c core.hooksPath= (bypassed the pre-commit hook), then ran the hook by hand: exit 0, no change - accepted; later prompts forbid it.
+- 12:14 - watchdog re-held 12:07Z (0.5 GB); 2.4 GB free now - continuing on the owner's 10:12 override, one agent at a time.
+- 12:28 - owner: the merged F76 tab is labelled Workflows (runs and workflows are the same to the owner), sections Runs + Workflows inside; /ops runs kept as an alias - sent to the stage 126 agent mid-run (SendMessage), this ruling is part of its brief. Owner also asked for a Run tab (one-click build/run/installer commands of the repo) - logged F79, staged after F75 (pane.tsx tab bar shared - serial).
+- 12:43 - owner: F79 Run tab - discover the build/run/installer scripts on first open and save them to a committed file in the repo so they stay available for the project; refresh re-scans and merges; entries renamable, names saved to that file - added to F79's line before stage 128 is dispatched.
+- 12:44 - owner: F76 rows coloured by status (completed / in progress / pending-not started, failed red) with a `●` per row, Tickets-tab colours reused - sent to the stage 126 agent mid-run (SendMessage); part of its brief.
+- 14:31 - owner: 'can u run another agent parallel' - F75 runs beside F76 (overrides one-agent-at-a-time for this pair), in stage worktree RUN-0018-s127 off the run branch at 617ac7a; files overlap (pane.tsx, register.tsx, ops/state.ts, draw.ts) - F75 kept to new files + one-line additions, the main session resolves at merge - 2.7 GB free.
+- 14:32 - stage 126 checked by the main session: 71b82f3 on the run branch, worktree clean; tab labelled Workflows (id runs), Runs + Workflows sections start open (no row lost; F61 groups start collapsed - accepted), /ops runs alias, status dots via paint(), relay run with a failed stage stays amber, Workflow status inferred from its agents; mod 244/244, ops 115/115, validate ok, tsc ok, red first, /code-review low nothing. Live pane check owed by the owner. F75 (s127) merges onto this.
+- 14:33 - F79 started beside F75 under the owner's 14:31 parallel ruling, in the run worktree (now free after F76 landed) - 3.2 GB free; shared tab-bar lines resolved at the s127 merge.
+- 15:16 - stage 127 (F75) committed 6ef6915 on run/RUN-0018-s127, stage worktree clean; agent: mod 245/245, ops 119/119, validate ok, tsc ok, red first, /code-review low nothing, standalone --once --tab explorer drawn on this repo. Merge into the run branch waits for stage 128 (F79) to commit - its agent is working uncommitted in the run worktree. Expected conflicts: tab lists/unions/usage in pane.tsx, register.tsx, ops/state.ts, draw.ts, app.ts, types/index.d.ts, toggleGroup in ticketsmodel.ts (F76 made it generic too), and tab-bar test expectations.
+- 15:28 - stage 128 (F79) checked by the main session: 3e6a89d on the run branch; run-entries.sh/.ps1 selftests ok (byte-identical output), mod 260/260, ops 123/123, validate ok, tsc ok, red first, /code-review low found 2 bugs in runtab start() - fixed; live install.sh --selftest from the standalone Run tab exit 0. Note: run.json committed with 3 entries (2 found, 1 hand-added); live pane check owed by the owner.
+- 15:28 - merge of run/RUN-0018-s127 started on the run branch: 16 conflicts in mods/ops-board (tab lists, toggleGroup, types, engine/nodehost, test expectations). Resolution delegated to one merge agent with fixed rules: both tabs kept; order Tickets, Workflows, Health, Messages, Agents, Explorer, Run; standalone keys 5 Explorer, 6 Run (both took 5).
+- 15:36 - stage 127 merge checked by the main session: 67abfd2 (parents 3e6a89d, 6ef6915), worktree clean; mod 268/268, ops 130/130, validate ok, tsc ok; standalone 6 tabs (5 Explorer, 6 Run). Accepted: at 80 cols the tab bar no longer leaves room for 'ops - <repo>' (spread() drops it, as on narrow terminals). Noted: the standalone --once Run frame shows 'reading .skillator/run.json...' (run.json not read in a one-frame draw - F79's own behaviour, not a regression). /code-review of the whole run diff comes at the land on main. Stage worktree RUN-0018-s127 and branch removed.
+- 16:30 - land on main: checks all green (mod 270, ops 130, validate x2, tsc, ticket-meta/run-entries/pending/muse/install.sh/install.ps1 selftests). /code-review low found install.ps1:887 (a user's own HOME skipped function ops) - fixed in the main checkout: only USERPROFILE counts (PowerShell's $HOME comes from it); install.ps1 -SelfTest ok, dry run with HOME=D:\home writes it. Owner ran /code-review xhigh: 15 findings - fixed before the land commit in 3 file-disjoint stages, serial (129 data layer, 130 pane UI, 131 ticket-meta), each a fresh agent in the main checkout, uncommitted; findings saved in the session scratchpad land-review-findings.md - 3.8 GB free.

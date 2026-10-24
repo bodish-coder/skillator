@@ -2,7 +2,7 @@
   "name": "skillator-ops",
   "publisher": "skillator",
   "displayName": "skillator ops board",
-  "description": "The skillator ops board - tickets, runs, health, assign / decide - as a panel in the Antigravity IDE.",
+  "description": "The skillator ops board - tickets, workflows, health, assign / decide - as a panel in the Antigravity IDE.",
   "version": "1.0.0",
   "license": "MIT",
   "type": "module",

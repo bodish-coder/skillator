@@ -1,0 +1,23 @@
+Ticket B9 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line): install.ps1 run with
+HOME/USERPROFILE pointed at a scratch dir still writes the `function ops` block into the REAL PowerShell profile,
+because -Profile defaults to $PROFILE.CurrentUserAllHosts, which follows the Documents folder, not HOME.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-complete-all-pending
+(branch run/RUN-0018-complete-all-pending, HEAD 1518c00 = F67 just landed there). Never touch the main checkout,
+never push, never edit TICKETS.md, and never write the real profile
+($PROFILE.CurrentUserAllHosts - here under OneDrive Documents; mtime before you start: 2026-10-24T00:09:04+05:30) - every run you do passes a scratch -Profile, or relies on
+the fix to skip it.
+1. Reproduce first, without touching the real profile: show (read-only - print, do not write) which profile path
+   install.ps1 resolves when HOME and USERPROFILE point at a temp dir and no -Profile is given; say why it is the
+   real one. No repro -> stop and report.
+2. Fix in install.ps1: when no -Profile was given and USERPROFILE (or HOME) is not the real user profile dir
+   ([Environment]::GetFolderPath('UserProfile')), skip the profile step and print one note line saying so and how
+   to get it (-Profile <path>). An explicit -Profile is always honoured. Smallest change; no refactoring.
+3. The sh twin: check what install.sh writes outside $HOME for `ops` (it writes ~/.local/bin/ops; any shell rc
+   file?). If everything follows $HOME, say so with the line numbers and change nothing; if something does not,
+   fix it the same way.
+4. Tests red first: an install.ps1 -SelfTest case that runs with a scratch USERPROFILE/HOME and no -Profile and
+   asserts the note line and that the profile path it would have used was not written (use a sentinel / a fake
+   $PROFILE path you can check - never the real file). Show it FAIL before the fix, ok after.
+Final checks, one at a time (low RAM): `powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -SelfTest`
+and `sh install.sh --selftest`, both ok. Confirm the real profile's mtime is unchanged from before you started.
+Commit as "B9: <what>" with the evidence. Report: sha, the repro output, red and green lines, the sh finding.

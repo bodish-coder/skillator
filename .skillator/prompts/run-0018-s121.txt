@@ -1,0 +1,19 @@
+Ticket F71 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line; it is the spec): add the
+/pending-subagent command. Owning skill: skillator:relay-morpheus (plus tickets-zordon for the board, tasks-sentinels
+for the one-fresh-implementer loop) - the command tells the session to do what that line says, the way
+.skillator/run-0018-complete-all-pending.md in the main checkout shows it done (read it as the worked example).
+Work and commit ONLY in the stage worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-s121
+(branch run/RUN-0018-s121; F69 runs at the same time in the run worktree - never touch it, nor skills/tickets-zordon/scripts/pending.*). Never touch the main checkout, never push, never edit TICKETS.md.
+A new command ships like the existing ones (study /sync-tickets and /archive-tickets end to end first):
+commands/<n>.md for Claude Code, host-commands/<host>/<n>.* for codex, cursor, gemini, antigravity (SKILL.md form),
+pi and opencode, added to the command-name lists in install.sh write_commands and install.ps1 Write-Commands, and to
+every selftest list that names the seven existing commands (pending, list-tickets, engage, archive-tickets,
+sync-tickets, skillator-update, team-messages) in install.sh --selftest, install.ps1 -SelfTest and the B6
+frontmatter scan; README + PLATFORMS command rows. Frontmatter description quoted (B6). The command text loads
+the owning skill and states the behaviour; it never duplicates the skill.
+Tests red first: add the new names to the selftests, show the FAIL line, then make them ok.
+Final checks, one at a time (low RAM): `sh install.sh --selftest`, `powershell -NoProfile -ExecutionPolicy Bypass
+-File install.ps1 -SelfTest`, `claude plugin validate` on the worktree root.
+Live proof: run `claude -p "/skillator:pending-subagent"` with --plugin-dir <worktree> in a scratch clone whose
+TICKETS.md holds two tiny tickets (e.g. add a line to two different files), and show the run file, two landed
+stages and the merge. Commit as "F71: <what>" with the evidence. Report: sha, red/green lines, the live output.

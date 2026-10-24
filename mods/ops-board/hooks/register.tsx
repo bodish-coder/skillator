@@ -14,6 +14,8 @@ import { cancelPerson, clearForm, isFormUp } from './assign'
 import { pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 import { closeSetup, enterMessages, isSetupUp, pollInbox } from './messagestab'
+import { closeRunForm, dropRunForm, enterRun, isRunFormUp } from './runtab'
+import { arrowExplorer, enterExplorer, focusExplorer, isExplorerItem } from './explorertab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -32,6 +34,7 @@ const usageA = atom({ plugin: 'ops-board', key: 'usage' } as const, null)
 const watchA = atom({ plugin: 'ops-board', key: 'watch' } as const, { level: 'green', reasons: [] })
 const notesA = atom({ plugin: 'ops-board', key: 'notes' } as const, [])
 const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
+const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows'])
 
 const MAX_READ = 4 * 1024 * 1024
 const POLL_MS = 2000
@@ -307,22 +310,25 @@ async function arm($: EngineInterface) {
 // closeOnEscape is set anew by every ui.open: while a form is up it stays, so Esc is
 // still the form's Cancel after a re-open.
 async function openPane($: EngineInterface, asked: boolean) {
-  const esc = (await isFormUp($)) ? { closeOnEscape: true as const } : {}
+  const esc = (await isFormUp($)) || (await isRunFormUp($)) ? { closeOnEscape: true as const } : {}
   const r = await $.ui.open(asked ? { id: PANE_ID, title: PANE_TITLE, focus: true, ...esc } : { id: PANE_ID, title: PANE_TITLE, ...esc })
   await update($, narrowA, () => !r.isPlaced)
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Runs', health: 'Health', messages: 'Messages', agents: 'Agents', workflows: 'Workflows' }
-const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'agents', 'workflows']
-const USAGE = 'usage: /ops [tickets|runs|health|messages|agents|workflows|resume]'
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', agents: 'Agents', explorer: 'Explorer', run: 'Run' }
+// F76: /ops workflows opens the Workflows tab (id runs) with its Workflows section open; /ops runs is
+// an alias that opens it with its Runs section open.
+const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'run']
+const SECTION_OF: Record<string, 'runs' | 'workflows'> = { runs: 'runs', workflows: 'workflows' }
+const USAGE = 'usage: /ops [tickets|workflows|health|messages|agents|explorer|run|resume] - runs opens Workflows too'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'ops',
-      description: 'Open the ops board pane: the TICKETS.md board, runs, health, Teams messages, agents and workflows',
-      argumentHint: '[tickets|runs|health|messages|agents|workflows|resume]',
+      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs and Workflow runs), health, Teams messages, agents, the explorer and the run entries',
+      argumentHint: '[tickets|workflows|health|messages|agents|explorer|run|resume]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -362,17 +368,24 @@ export const register: Register = on => {
     void arm($).catch(() => {})
     const word = e.args.trim().toLowerCase()
     if (word === 'resume') return { text: await resume($) }
-    if (word && !TABS.includes(word as Tab)) return { text: USAGE }
+    if (word && !WORDS.includes(word)) return { text: USAGE }
+    const tab: Tab | null = word ? (SECTION_OF[word] ? 'runs' : word as Tab) : null
+    const sec = SECTION_OF[word]
     // A form draws only on Tickets: leaving it drops the form, or a later Esc / close
     // on that tab would be taken as the hidden form's Cancel.
-    if (word && word !== 'tickets') await clearForm($)
-    if (word) await update($, tabA, () => word as Tab)
-    if (word === 'runs') void pollRuns($).catch(() => {})
+    if (tab && tab !== 'tickets') await clearForm($)
+    if (tab && tab !== 'run') await dropRunForm($)
+    if (tab) await update($, tabA, () => tab)
+    if (sec) await update($, runsOpenA, x => (x.includes(sec) ? x : [...x, sec]))
+    if (tab === 'runs') void pollRuns($).catch(() => {})
     if (word === 'agents') void pollAgents($).catch(() => {})
     if (word === 'messages') void enterMessages($).catch(() => {})
+    if (word === 'explorer') void enterExplorer($).catch(() => {})
+    if (word === 'run') void enterRun($).catch(() => {})     // F79: the Run tab, first open scans
     const r = await openPane($, true)
     if (!r.isPlaced) return { text: `ops board is open but not drawn: ${r.reason}` }
-    return { text: word ? `ops board opened on ${TAB_NAME[word as Tab]}.` : 'ops board opened.' }
+    if (word === 'runs') return { text: 'ops board opened on Workflows, Runs open.' }
+    return { text: tab ? `ops board opened on ${TAB_NAME[tab]}.` : 'ops board opened.' }
   })
 
   on('ui.render', { component: 'Pane', requestId: 'ops-board' }, async ($, e) => {
@@ -407,7 +420,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // F53: the Agents and Workflows tabs read the engine's own events; each passes its
+  // F53: the Agents tab and the Workflows tab's Workflows section read the engine's own events; each passes its
   // event through as it came (the spawn, the turn, the tool call untouched).
   on('agent.spawn', async ($, e, next) => {
     const r = await next(e)
@@ -445,6 +458,12 @@ export const register: Register = on => {
       if (e.origin.kind === 'unload') return next(e)
       return { value: undefined }
     }
+    // F79: the Run tab's confirm / rename form up - Esc is its Cancel
+    if (e.id === PANE_ID && e.origin.kind === 'unload') await dropRunForm($)
+    if (e.id === PANE_ID && (await isRunFormUp($))) {
+      await closeRunForm($)
+      return { value: undefined }
+    }
     if (e.id !== PANE_ID || !(await isFormUp($))) return next(e)
     if (e.origin.kind === 'unload') { await clearForm($); return next(e) }
     await cancelPerson($)                                   // what the form's Cancel does
@@ -458,6 +477,10 @@ export const register: Register = on => {
   // focus ring follows it, so Enter opens or closes the header shown selected.
   on('ui.scroll', { requestId: 'ops-board' }, async ($, e, next) => {
     if (e.pointer || e.origin.kind !== 'person' || Math.abs(e.by) !== 1) return next(e)
+    if ((await read($, tabA)) === 'explorer') {           // F75: the Explorer's own items
+      const o = await arrowExplorer($, e.by, lastScroll.offset, e.bodyRows, lastCols)
+      return o === undefined ? next(e) : o === null || e.contentRows <= e.bodyRows ? {} : next({ ...e, offset: o })
+    }
     if ((await read($, tabA)) !== 'tickets' || (await isFormUp($))) return next(e)   // a form scrolls as itself
     const m = buildModel(await readView($, lastCols))
     const at = m.selected === null ? -1 : m.items.indexOf(m.selected)
@@ -481,6 +504,7 @@ export const register: Register = on => {
     const el = e.element
     if (el?.startsWith('row:')) await update($, selectedA, () => el.slice(4))
     else if (el?.startsWith('head:')) await update($, selectedA, () => el)
+    else if (el && isExplorerItem(el)) await focusExplorer($, el)          // F75
     return next(e)
   }).catch(($, e, next) => next(e))
 }

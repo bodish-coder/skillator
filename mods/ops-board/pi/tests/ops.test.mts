@@ -89,7 +89,7 @@ test('view: the frame at pi\'s width and the terminal\'s rows, each line within 
   assert.match(view.render(70).map(strip).join('\n'), /F90 +pi fixture ticket/)
   view.handleInput('2')
   assert.equal(engine.state.tab, 'runs')
-  assert.match(view.render(70).map(strip)[0]!, /2 Runs/)
+  assert.match(view.render(70).map(strip)[0]!, /2 Workflows/)
   view.handleInput('3')
   assert.match(view.render(70).map(strip).join('\n'), /Usage .*from watch-cortana/)
   view.handleInput('1')
@@ -145,7 +145,7 @@ test('/ops --once notifies one plain frame of the repo it is run in, and opens n
   assert.equal(lines.length, 20)
   for (const l of lines) assert.ok([...l].length <= 60, l)
   assert.doesNotMatch(f.notes[0]!.msg, /\x1b/)
-  assert.match(lines[0]!, /1 Tickets {3}2 Runs {3}3 Health/)
+  assert.match(lines[0]!, /1 Tickets {3}2 Workflows {3}3 Health/)
   assert.match(f.notes[0]!.msg, /▸ Pending \(1\)/)    // F61: headers only at first
 })
 
@@ -154,7 +154,7 @@ test('/ops with a wrong flag says so with the usage, as an error', async () => {
   registerOps(f.pi, opts)
   await f.cmd.handler('--tab agents', f.ctx(repo()))
   assert.equal(f.notes[0]!.type, 'error')
-  assert.match(f.notes[0]!.msg, /--tab is one of tickets, runs, health, messages, got agents/)
+  assert.match(f.notes[0]!.msg, /--tab is one of tickets, workflows, health, messages, explorer, run, got agents/)
   assert.match(f.notes[0]!.msg, /^usage: \/ops /m)
 })
 

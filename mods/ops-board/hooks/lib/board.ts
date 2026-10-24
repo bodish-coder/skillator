@@ -15,6 +15,12 @@ export const paint = (b: Box): Color => PAINT[STATE_COLOR[b]]
 // F62: [%] is testing - built, waiting on a test result.
 const OPEN: Box[] = [' ', '~', '%', '!', '?']
 export const isOpen = (t: Ticket) => OPEN.includes(t.box)
+// F77: the ticket a typed ID names on the board - case-insensitive, blanks ignored
+// (`f12` is F12); null when none does or nothing is typed.
+export function ticketById(tickets: readonly Ticket[] | undefined, text: string): Ticket | null {
+  const id = text.trim().toUpperCase()
+  return id ? tickets?.find(t => t.id.toUpperCase() === id) ?? null : null
+}
 export const STATE_NAME: Record<Box, string> = {
   '~': 'in progress', '%': 'testing', '!': 'blocked', '?': 'pending decision', ' ': 'pending', '>': 'deferred', 'x': 'done', '-': 'cancelled',
 }

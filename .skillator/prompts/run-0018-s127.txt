@@ -1,0 +1,27 @@
+Ticket F75 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line; it is the spec): an ops
+board Explorer tab - the project folder as a collapsible tree (git-tracked files, .gitignore respected: use
+`git ls-files`) and a commit list where each commit expands to the files it changed (A/M/D/R with +/- counts, from
+`git log --name-status --numstat`, a bounded number of recent commits); read-only, keys like the other tabs, the same
+in the Claude Code pane (mods/ops-board/hooks) and the standalone ops app (mods/ops-board/ops). Collapsible groups:
+reuse the F61 pattern (hooks/lib/ticketsmodel.ts, how pane.tsx draws headers) - do not invent a second one. git runs
+through the mod's existing absolute-path helpers (hooks/lib/host.ts gitBin / calls.ts, A150) - never a bare `git`
+from the repo cwd. Keep the pane's $.state value small (B4: the host caps a state value at 4,194,304 chars) - hold
+only what is drawn, read lazily on expand.
+PARALLEL: F76 (merge Runs+Workflows into one "Workflows" tab) is being built at the same time in the run worktree
+.skillator/worktrees/RUN-0018-complete-all-pending, touching pane.tsx, register.tsx, agentstab.tsx, runstab.tsx,
+ticketsmodel.ts, ops/state.ts, ops/draw.ts, ops/app.ts and their tests - never touch that worktree. To keep the merge
+small: put the Explorer in NEW files (e.g. hooks/explorertab.tsx, hooks/lib/explorer.ts, ops-side equivalents, new
+test files); in shared files add only what is needed (one TABS entry, one tab branch, one /ops word, one key) as
+small additions in place, no reflow or reordering of neighbouring lines. The main session resolves the overlap at merge.
+Work and commit ONLY in the stage worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-s127
+(branch run/RUN-0018-s127). Never touch the main checkout, never push, never edit TICKETS.md. Never bypass git hooks.
+Tests red first (show the failing lines): new *.test.tsx for the tree and the commit list (terminal + desktop), and
+ops/tests for the standalone app.
+Final checks one at a time (low RAM, never in parallel): `claude plugin test mods/ops-board`, `cd mods/ops-board/ops
+&& npm test`, `claude plugin validate mods/ops-board`, `tsc -p mods/ops-board/tsconfig.json --noEmit` (copy the
+git-ignored mods/ops-board/.claude-plugin/types from the main checkout if missing; never commit it).
+The hooks code spells `$` only as `$.noun.event(...)` at a call site - the validator refuses `$` passed through a
+stored function variable. Live check: run the standalone app's one-frame draw on this repo if it has one; a real
+pane cannot be driven headless - say so plainly.
+Before committing, run /code-review (code-review:code-review, level low) on the staged diff and fix what it finds.
+Commit as "F75: <what>" with the evidence. Report: sha, red/green lines, the live output.

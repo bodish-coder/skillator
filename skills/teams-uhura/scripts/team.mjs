@@ -393,9 +393,9 @@ export function statusText(sub, args, line, repo) {
   const [id = '?', ...rest] = args
   const detail = rest.join(' ').trim()
   const title = titleOf(line)
-  const verbs = { done: 'done', testing: 'in testing', tested: `tested: ${detail}`, block: 'blocked', defer: 'deferred', assign: `assigned to ${detail}` }
+  const verbs = { done: 'done', testing: 'in testing', tested: `tested: ${detail}`, block: 'blocked', defer: 'deferred', assign: `assigned to ${detail}`, verify: rest[0] === 'fail' ? `verify failed: ${rest.slice(1).join(' ').trim()}` : `verified: ${(rest[0] === 'pass' ? rest.slice(1) : rest).join(' ').trim()}` }
   const verb = verbs[sub] ?? sub
-  const withDetail = !['tested', 'assign'].includes(sub) && detail
+  const withDetail = !['tested', 'assign', 'verify'].includes(sub) && detail
   const head = `${repo}: ${id} ${verb}`
   if (title) return head + ` - ${title}` + (withDetail ? ` (${detail})` : '')
   return head + (withDetail ? ` - ${detail}` : '')

@@ -1,0 +1,146 @@
+# GREEN - /pending-subagent (F71) headless on Claude Code: two-ticket fixture board, count 2, both stages in parallel, merged
+# 2026-10-24, claude -p "/skillator:pending-subagent 2" --plugin-dir <worktree RUN-0018-s121> --allowedTools Bash Read Edit Write Glob Grep Skill Agent --max-turns 200
+# fixture: fresh git repo, a.txt (alpha), b.txt (beta), TICKETS.md with F1 (append gamma to a.txt) and F2 (append delta to b.txt)
+#
+# RED (selftests extended first, before any command file existed):
+#   sh install.sh --selftest            -> FAIL: missing source commands/pending-subagent.md
+#   powershell ... install.ps1 -SelfTest -> FAIL: missing source commands\pending-subagent.md
+# GREEN: both print ok; claude plugin validate <worktree> -> Validation passed with warnings (README marketplace-line advice only)
+
+## git log --oneline --graph --all (fixture, after the run)
+* dccc872 F1 F2: close on the board, RUN-0001 record
+*   3307bf4 RUN-0001: merge F1 F2 into main
+|\  
+| *   9406fa8 merge stage 2 (run/RUN-0001-work-f1-f2-s2)
+| |\  
+| | * ea3646d F2: append delta to b.txt
+| |/  
+|/|   
+| * c11ebed F1: append gamma to a.txt
+|/  
+* 75fa2c0 fixture board
+
+## git worktree list / branches after the run
+<scratch>/f71-fixture dccc872 [main]
+* main
+
+## TICKETS.md after the run
+# Tickets
+
+Statuses: [ ] open, [~] in progress, [x] done, [-] cancelled, [>] deferred, [%] testing, [!] blocked
+
+- [x] F1 — append the line `gamma` to a.txt (a.txt only). Done = a.txt ends with gamma. **Done 2026-10-24: RUN-0001 stage 1, c11ebed, a.txt ends with gamma**
+- [x] F2 — append the line `delta` to b.txt (b.txt only). Done = b.txt ends with delta. **Done 2026-10-24: RUN-0001 stage 2, ea3646d, b.txt ends with delta**
+
+## run file .skillator/run-0001-work-f1-f2.md
+# RUN-0001 - work F1 F2
+plan: TICKETS.md
+started: 2026-10-24T03:47Z   updated: 2026-10-24T03:57Z
+worktree: <scratch>/f71-fixture/.skillator/worktrees/RUN-0001-work-f1-f2
+branch: run/RUN-0001-work-f1-f2
+
+## Stages
+| # | stage | state | owner | heartbeat | landed |
+|---|-------|-------|-------|-----------|--------|
+| 1 | AAAB F1 gamma a.txt | x | build:sonnet | 2026-10-24T03:55Z | c11ebed |
+| 2 | AAAC F2 delta b.txt | x | build:sonnet | 2026-10-24T03:55Z | 9406fa8 |
+| 3 | verify review bump commit push | x | main | 2026-10-24T03:56Z | 3307bf4 |
+
+## In flight
+
+## Chain
+driver: @cc-30984a 2026-10-24T03:52Z     hold: -     mode: agents
+### AAAB - stage 1 - F1 gamma a.txt
+tickets: F1 cheap/build
+files: a.txt
+prompt: |
+  Ticket F1 - append the line `gamma` to a.txt (a.txt only). Done = a.txt ends with gamma.
+
+  You are the build seat for this one ticket. The spec is complete; there is nothing to design.
+
+  Work and commit in the run worktree:
+    <scratch>/f71-fixture/.skillator/worktrees/RUN-0001-work-f1-f2
+  (branch run/RUN-0001-work-f1-f2). Never work in the main checkout, never push, never edit TICKETS.md, touch no file but a.txt.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Steps:
+  1. Read <worktree>/a.txt. Append one line `gamma` so the file ends with `gamma` followed by a newline, keeping the existing lines and line endings unchanged.
+  2. Verify: read the file back and confirm the last line is exactly `gamma`; `git -C "<worktree>" diff` shows only that one added line in a.txt.
+  3. Commit: `git -C "<worktree>" add a.txt`, then `git -C "<worktree>" commit -m "F1: append gamma to a.txt"`.
+  4. Report: the commit sha, the diff, and the check you ran with its output.
+### AAAC - stage 2 - F2 delta b.txt
+tickets: F2 cheap/build
+files: b.txt
+prompt: |
+  Ticket F2 - append the line `delta` to b.txt (b.txt only). Done = b.txt ends with delta.
+
+  You are the build seat for this one ticket. The spec is complete; there is nothing to design.
+
+  Work and commit in this stage's own worktree:
+    <scratch>/f71-fixture/.skillator/worktrees/RUN-0001-work-f1-f2.s2
+  (branch run/RUN-0001-work-f1-f2-s2). Never work in the main checkout or the run worktree, never push, never edit TICKETS.md, touch no file but b.txt.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Steps:
+  1. Read <worktree>/b.txt. Append one line `delta` so the file ends with `delta` followed by a newline, keeping the existing lines and line endings unchanged.
+  2. Verify: read the file back and confirm the last line is exactly `delta`; `git -C "<worktree>" diff` shows only that one added line in b.txt.
+  3. Commit: `git -C "<worktree>" add b.txt`, then `git -C "<worktree>" commit -m "F2: append delta to b.txt"`.
+  4. Report: the commit sha, the diff, and the check you ran with its output.
+
+## Rulings
+- 03:52Z - mode agents, RELAY_CHAIN_PARALLEL=2 - the owner asked for 2 agents; usage is UNOBSERVABLE on this host so the default cap would be 1 - costs nothing if wrong: F1 and F2 touch disjoint files.
+- 03:52Z - F1 and F2 implementers are the build seat directly, no build-jarvis load - each ticket names its exact one-line change, nothing to grade or design, and a nested build-jarvis would orchestrate inside a subagent - costs a skipped grade on two one-line appends.
+- 03:52Z - usage: unobservable.
+- 03:58Z - AAAB: F1 passed - c11ebed, blob alpha/gamma LF; review low: 0 findings, step 1 stopped it as trivial and spec-exact, none to fix; usage: unobservable.
+- 03:58Z - AAAC: F2 passed - ea3646d merged as 9406fa8, blob beta/delta LF; review low: 0 findings, none to fix; usage: unobservable.
+- 03:58Z - review ran locally, no gh comment - the repo has no remote and no PR - costs nothing: the findings are recorded here.
+- 03:58Z - no version bump - the repo has no version file and no bump rule - costs nothing until one exists.
+
+## session output (stdout of claude -p)
+Two attempts to arm a Monitor on the usage read were refused: the permission check flags that shell shape for approval. I won't retry it. The `chain decide` background task (`bt01wqxu3`) notifies me when it exits, so I'm waiting on that.
+
+Where the run stands:
+
+1. **Picked:** F1 (`a.txt`) and F2 (`b.txt`). Nothing was skipped, since the board has no `[%]`, `[>]`, `[x]` or `[-]` rows. The two files don't overlap, so both can run at once under a count of 2.
+2. **Run:** RUN-0001 (resume with `continue RUN-0001`). Stage 1 is AAAB/F1 and works in the run worktree. Stage 2 is AAAC/F2 and works in `RUN-0001-work-f1-f2.s2`. Stage 3 is my verify-review-bump-commit-push. Both prompts are stored in the run file.
+3. **Ruling, to record in the run file at dispatch:** each implementer builds its ticket directly instead of loading build-jarvis. Both tickets name the exact one-line change, so there is nothing to design. This also avoids build-jarvis acting as an orchestrator inside a subagent, which tickets-zordon forbids. If that's wrong, the cost is that build-jarvis's grade gets skipped on two one-line appends.
+4. **Blocking now:** `usage-watch.sh level`, under `chain decide`, has been running for over 2 minutes. If it doesn't finish, the background task's 10-minute limit will stop it. Then I'll rerun `chain decide`, and if the reading still won't come back I'll treat usage as unobservable and dispatch.
+
+Both implementers are running:
+
+1. **AAAB (F1):** working in the run worktree.
+2. **AAAC (F2):** working in its own stage worktree, `.s2`.
+
+I'll land each stage when its own agent returns: read the diff, run the regression sweep, run `/code-review`, then merge and mark it `x`. Stage 2 also needs `chain merge 2` first.
+
+F1 and F2 are both done and merged into `main`. Each was built by its own fresh agent in a separate worktree, at the same time. Nothing was pushed, and nothing can be: this repo has no remote.
+
+1. **Picked:** F1 and F2, the only open tickets. Nothing was skipped. They touch different files, so they ran in parallel.
+2. **Checks:** I read each commit's bytes myself. `a.txt` is now `alpha` / `gamma` and `b.txt` is `beta` / `delta`, each with its original line endings. The F2 agent couldn't confirm its line ending (a permission was denied), but the bytes are correct.
+3. **Review:** `/code-review` stopped at its first step: each diff is one added line that exactly matches its ticket. No findings. With no pull request, nothing could be posted, so the result is recorded in the run file.
+4. **Main:** the run branch is merged into `main`, the board closing and run record are committed on top, and the run worktree and both branches are removed. There is no version file, so there was nothing to bump.
+5. **One amend:** I left the Co-Authored-By line off the merge commit and amended it right away (now `3307bf4`). It was my own commit, never pushed.
+6. **Not done:** the online copy of the board wasn't published. No tool for it was available, and your CLAUDE.md asks for local files only.
+
+| Ref | Sub-feature | Status | Note |
+|---|---|---|---|
+| 1.1 | Pick the open tickets | ✅ Done | F1 and F2; nothing skipped |
+| 2.1 | Plan the run, with stored prompts written before dispatch | ✅ Done | RUN-0001, stages AAAB and AAAC |
+| 3.1 | One fresh agent per ticket, 2 at once | 🔁 Done (modified approach) | **Why:** usage can't be read on this host, which would have limited it to 1 agent, so I set it to the 2 you asked for; and each agent built its ticket directly, without loading build-jarvis, because both tickets name the exact one-line change. **Effect:** none here, since the files don't overlap; the build-jarvis grading step was skipped for two one-line appends. |
+| 4.1 | Land stage 1 (F1) | ✅ Done | `c11ebed` |
+| 4.2 | Land stage 2 (F2) | ✅ Done | Its own commit `ea3646d`, merged into the run branch as `9406fa8` |
+| 4.3 | Code review of each stage | 🔁 Done (modified approach) | **Why:** there is no pull request or remote, so it ran on the local commits. **Effect:** no posted comment; the result (0 findings) is in the run file. |
+| 4.4 | Mark the tickets done | ✅ Done | Both `[x]`, board check passes |
+| 4.5 | Publish the online board | ⏸ Deferred | **Why:** no tool for it here, and your CLAUDE.md asks for local files only. **Effect:** `TICKETS.md` itself is the up-to-date board. **Upgrade path:** run the board generator for a local HTML copy if you want one. |
+| 5.1 | Merge into main, remove the worktree and branches | ✅ Done | Board and run record committed as `dccc872` |
+| 5.2 | Version bump | ✅ Done | Nothing to bump: no version file and no rule |
+| 5.3 | Push | ⏸ Deferred | **Why:** the repo has no remote, and a push needs your go-ahead anyway. **Effect:** `main` is 4 commits ahead locally (2 work commits, 2 merges) plus `dccc872`. **Upgrade path:** add a remote, then tell me to push. |
+
+8 ✅ · 2 🔁 · 2 ⏸ · 0 ❌
+
+The two 🔁 rows come from the same cause: this host can't read usage and has no remote or pull request.
+
+push: waiting for the owner (the repo has no remote yet)
+exit 0

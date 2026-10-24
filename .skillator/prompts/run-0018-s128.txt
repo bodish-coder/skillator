@@ -1,0 +1,35 @@
+Ticket F79 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its whole line, including the owner
+addition; it is the spec): an ops board Run tab. Discovery of the repo's build / run / installer entry points
+(package.json scripts, Makefile targets, install.sh / install.ps1, build or run scripts at the root or in scripts/ -
+settle the exact list, keep it small and say what you chose) runs the first time the tab opens in a repo and is saved
+to a committed file in the repo (`.skillator/run.json`: each entry's name, command, working dir, where it was found);
+from then on the tab reads that file. A refresh key re-scans and merges (new entries added, entries whose source is
+gone marked missing, renames and hand-added entries kept). Rename from the tab saves the new name to the file. The mod
+writes that file only through a new script with sh + ps1 ports and a selftest in each (follow how ticket-meta.sh/.ps1
+are the only writer of TICKETS.md and team.md, and how hooks/lib/calls.ts / host.ts call scripts with absolute shells,
+A150). Running: one click or Enter on a row first shows the exact command and working directory and asks to confirm
+(it runs repo code); output streams into the tab with exit code and duration; a running job can be stopped; never a
+shell from the repo cwd (A150). Forms are drawn inside the ops-board pane (B5), never a second pane. Keep $.state
+values small (B4: 4,194,304-char cap) - keep only the tail of a job's output. Same in the Claude Code pane
+(mods/ops-board/hooks) and the standalone ops app (mods/ops-board/ops).
+The tab is labelled "Run"; the existing "Workflows" tab (F76, just landed, internal id `runs`) is a different tab -
+do not rename or merge it. Collapsible groups, if any, reuse the F61 pattern (toggleGroup / headKey).
+PARALLEL: F75 (Explorer tab) is being built at the same time in .skillator/worktrees/RUN-0018-s127 - never touch it.
+It adds one TABS entry, one tab branch, one /ops word and a key in pane.tsx, register.tsx, ops/state.ts, ops/draw.ts.
+Keep your code in NEW files where you can and make shared-file additions small and in place, no reflow or reordering
+of neighbouring lines; the main session resolves the overlap at merge.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-complete-all-pending
+(branch run/RUN-0018-complete-all-pending). Never touch the main checkout, never push, never edit TICKETS.md. Never
+bypass git hooks.
+Tests red first (show the failing lines): *.test.tsx (terminal + desktop) for first-open discovery saved to the file,
+refresh merge, rename persisted, confirm, run, stop and a failing command; ops/tests for the standalone app; the new
+script's selftests in both ports.
+Final checks one at a time (low RAM, never in parallel): the script selftests, `claude plugin test mods/ops-board`,
+`cd mods/ops-board/ops && npm test`, `claude plugin validate mods/ops-board`, `tsc -p mods/ops-board/tsconfig.json
+--noEmit` (.claude-plugin/types is git-ignored; never commit it). If install.sh/ps1 must ship the new script to other
+hosts, add it and run their selftests too.
+The hooks code spells `$` only as `$.noun.event(...)` at a call site - the validator refuses `$` passed through a
+stored function variable. Live check: the Done line asks for a live run of this repo's install.sh --selftest from the
+tab - do it through the standalone app if it can be driven; a real pane cannot be driven headless - say so plainly.
+Before committing, run /code-review (code-review:code-review, level low) on the staged diff and fix what it finds.
+Commit as "F79: <what>" with the evidence. Report: sha, red/green lines, the live output, the run.json it wrote here.

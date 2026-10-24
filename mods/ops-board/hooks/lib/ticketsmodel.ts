@@ -27,11 +27,13 @@ export type View = {
 }
 
 export const HEAD = 'head:'
-export const headKey = (b: State) => HEAD + b
+export const headKey = (b: string) => HEAD + b       // a group's box; F76: a Workflows tab section
 export const isHead = (item: string | null): item is string => !!item && item.startsWith(HEAD)
 // The drawn line an item sits on: a header's own key, a ticket's row.
 export const lineKey = (item: string) => (isHead(item) ? item : 'row:' + item)
-export const toggleGroup = (open: readonly State[], b: State): State[] =>
+// F76: the Workflows tab's sections open and close by the same rule (their names, not boxes);
+// F75: the Explorer's sections, folders and commits too - so it is generic.
+export const toggleGroup = <T>(open: readonly T[], b: T): T[] =>
   open.includes(b) ? open.filter(x => x !== b) : [...open, b]
 
 export const chipsOf = (t: Ticket) =>

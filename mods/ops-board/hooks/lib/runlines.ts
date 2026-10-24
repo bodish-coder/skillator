@@ -1,5 +1,5 @@
 import type { Color } from 'claude-code'
-import type { Board, RunView, Stage } from '../../types'
+import type { Board, Box, RunView, Stage } from '../../types'
 import type { Seg } from './bandlines'
 import type { Line } from './healthlines'
 import { paint } from './board'
@@ -9,6 +9,35 @@ import { paint } from './board'
 // runstab.tsx draws them.
 
 export type RunLine = Line
+
+// F76: the Workflows tab (id 'runs') holds two sections, Runs (relay runs) and Workflows (the Workflow
+// tool's runs), each a header with its count that opens and closes as F61's groups.
+// Both start open, so the merged tab first shows every row the two old tabs did.
+export type RunsSection = 'runs' | 'workflows'
+export const RUNS_SECTIONS: RunsSection[] = ['runs', 'workflows']
+const SECTION_WORD: Record<RunsSection, string> = { runs: 'Runs', workflows: 'Workflows' }
+// '▾ Runs (2)' / '▸ Workflows (1)'; n null: no count is known (none read yet, or not observable).
+export const sectionHead = (sec: RunsSection, open: boolean, n: number | null) =>
+  `${open ? '▾' : '▸'} ${SECTION_WORD[sec]}${n === null ? '' : ` (${n})`}`
+
+// F76 (owner): a run, a stage and a Workflow run each carry a `●` in its status colour,
+// the colour the Tickets tab gives the matching ticket state, so done, in progress and
+// pending read the same in every tab: completed = [x], running = [~], pending (not
+// started) = [ ], failed = [!] (red, as before). A section header takes the colour of
+// the most pressing status in it: running, then failed, pending, completed.
+export type RunStatus = 'completed' | 'running' | 'pending' | 'failed'
+const STATUS_BOX: Record<RunStatus, Box> = { completed: 'x', running: '~', pending: ' ', failed: '!' }
+export const statusColor = (st: RunStatus): Color => paint(STATUS_BOX[st])
+// A run: all landed = completed, planned (nothing dispatched) = pending, else running -
+// a failed stage shows red on its own row.
+export const runStatus = (r: RunView): RunStatus =>
+  r.total > 0 && r.done >= r.total ? 'completed' : r.planned ? 'pending' : 'running'
+// A stage: x landed, ~ / open in flight, ! failed; pending, parked (?), re-planned (>) or
+// unknown (-) has not started; a planned run's stages have not either.
+export const stageStatus = (s: Stage, planned: boolean): RunStatus =>
+  planned ? 'pending' : s.state === 'x' ? 'completed' : s.state === '~' || s.state === 'open' ? 'running' : s.state === '!' ? 'failed' : 'pending'
+const PRESSING: RunStatus[] = ['running', 'failed', 'pending', 'completed']
+export const sectionStatus = (all: RunStatus[]): RunStatus | null => PRESSING.find(st => all.includes(st)) ?? null
 
 export const continuePrompt = (id: string) =>
   `continue ${id}: drive its chain with skillator:relay-morpheus (chain next / chain dispatch)`
@@ -66,7 +95,7 @@ export function runLines(run: RunView, board: Board | null): Line[] {
   const tail = run.planned
     ? `${ids.length} ticket${ids.length === 1 ? '' : 's'} → ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}`
     : `${run.done}/${run.total} done`
-  lines.push({ key: 'run:' + run.id, segs: [{ text: run.id, color: 'suggestion' }, { text: '  ' + run.title }, ...owner, { text: '  ' + tail, dim: run.planned }] })
+  lines.push({ key: 'run:' + run.id, segs: [{ text: '●', color: statusColor(runStatus(run)) }, { text: ' ' }, { text: run.id, color: 'suggestion' }, { text: '  ' + run.title }, ...owner, { text: '  ' + tail, dim: run.planned }] })
   if (!run.stages.length) return lines
   const tw = Math.max(8, ...run.stages.map(s => width(ticketSegs(board, ticketsOf(s))) + 2))
   const head = 'stage'.padEnd(7) + 'ticket'.padEnd(tw) + 'work'.padEnd(26) + 'after'.padEnd(8) + 'files'
@@ -79,7 +108,7 @@ export function runLines(run: RunView, board: Board | null): Line[] {
     const files: Seg = same ? { text: `same file as ${same.n}, so after ${same.n}`, dim: true } : { text: s.files }
     const word = run.planned ? '' : STATE_WORD[s.state] ?? ''
     lines.push({ key: `stage:${run.id}:${s.n}`, segs: [
-      { text: `  ${s.n}`.padEnd(7) }, ...tk, { text: pad + cut(workOf(s), 24).padEnd(26) + s.after.padEnd(8) }, files,
+      { text: '●', color: statusColor(stageStatus(s, run.planned)) }, { text: ` ${s.n}`.padEnd(6) }, ...tk, { text: pad + cut(workOf(s), 24).padEnd(26) + s.after.padEnd(8) }, files,
       ...(word ? [{ text: '  ' + word, color: (s.state === '!' ? 'error' : s.state === 'x' ? 'success' : undefined) as Color | undefined, dim: s.state === 'pending' }] : []),
     ] })
   }

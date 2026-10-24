@@ -151,6 +151,7 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'count' }))?.text).toBe('5 open ●1 ●1 ●1 ●2 ●1 · 7 done hidden')
     for (const k of ['key:assign', 'key:decide', 'key:filter', 'key:done', 'tab:tickets', 'tab:runs', 'tab:health'])
       expect(await ui.find({ key: k }), k).toBeDefined()
+    expect(await ui.find({ key: 'tab:workflows' })).toBeUndefined()      // F76: a section of Runs now
     expect((await ui.find({ key: 'key:filter' }))?.props.hotkey).toBe('f')
     expect((await ui.find({ key: 'key:done' }))?.props.hotkey).toBe('x')
     await ui.unmount()
@@ -379,9 +380,9 @@ test('/ops runs switches the tab; an unknown word says how to use it', WITH, asy
   const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
   await start($, clock)
   const run = (args: string) => $.command.run({ command: 'ops', args, ...RUN })
-  expect((await run('runs')).text).toBe('ops board opened on Runs.')
+  expect((await run('runs')).text).toBe('ops board opened on Workflows, Runs open.')   // F76: runs is an alias
   expect(await state($, 'tab')).toBe('runs')
-  expect((await run('bogus')).text).toBe('usage: /ops [tickets|runs|health|messages|agents|workflows|resume]')
+  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|agents|explorer|run|resume] - runs opens Workflows too')
 })
 
 test('the first render arms the poll when session.start never ran (a hot reload)', WITH, async ($, on) => {
@@ -501,14 +502,20 @@ test('F61: a click on the header of the selected ticket\'s group closes it and s
   await ui.unmount()
 })
 
-test('F61: a and d on a ticket row still open the in-pane form; on a header they ask for a ticket', WITH, async ($, on) => {
+// F77: on a header a / d no longer toast 'select a ticket first' - the form opens with
+// an empty Ticket field to type the ID in; on a row it opens on that ticket as before.
+test('F61: a and d on a ticket row still open the in-pane form; on a header they ask for a ticket by number', WITH, async ($, on) => {
   const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
   const toasts: string[] = []
   on('ui.toast', ($, e) => { toasts.push(e.text); return { value: undefined } })
   await start($, clock)
   const ui = await mountPane($, 'terminal')
-  await ui.press({ key: 'key:assign' })                   // the first header is selected: no form
-  expect(toasts.at(-1)).toBe('ops board: select a ticket first')
+  await ui.press({ key: 'key:assign' })                   // the first header is selected: the form asks for the ID
+  expect(toasts).toEqual([])
+  expect((await ui.find({ key: 'form:title' }))?.text).toBe('Assign a ticket  Esc cancels')
+  expect((await ui.find({ key: 'ticket' }))?.props.value).toBe('')
+  expect(await ui.find({ key: 'go' })).toBeUndefined()
+  await ui.press({ key: 'cancel' })
   expect(await ui.find({ key: 'form:title' })).toBeUndefined()
   await ui.press({ key: 'head:?' })
   await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 0, by: 1, bodyRows: 40, contentRows: 30, origin: { kind: 'person' } })
@@ -588,3 +595,17 @@ for (const surface of SURFACES) {
     await ui.unmount()
   })
 }
+
+// Review #14: F77's typed Ticket field needs an Input; a surface without one (mobile) keeps
+// the old refusal on a header rather than a form whose Ticket field cannot be filled.
+test('mobile: a on a header says select a ticket first - no form it cannot fill', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  const toasts: string[] = []
+  on('ui.toast', ($, e) => { toasts.push(e.text); return { value: undefined } })
+  await start($, clock)
+  const ui = await $.ui.mount({ plugin: 'ops-board', surface: 'mobile', component: 'Pane', requestId: PANE_ID, props: PANE })
+  await ui.press({ key: 'key:assign' })
+  expect(toasts).toEqual(['ops board: select a ticket first'])
+  expect(await ui.find({ key: 'form:title' })).toBeUndefined()
+  await ui.unmount()
+})

@@ -1,0 +1,24 @@
+Finish an in-progress git merge in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-complete-all-pending
+(branch run/RUN-0018-complete-all-pending). `git merge --no-ff --no-commit run/RUN-0018-s127` is already started and
+stopped on conflicts in 16 files under mods/ops-board (git status shows them). Do not abort it, do not reset, do not
+rebase, never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks.
+The two sides: HEAD has F76 (Runs+Workflows merged into one tab labelled "Workflows", internal id `runs`, status
+dots) and F79 (a new "Run" tab, id `run`, hooks/runtab.tsx, ops/runtab.ts, run-entries scripts). The incoming
+branch has F75 (a new "Explorer" tab, id `explorer`, hooks/explorertab.tsx, hooks/lib/explorer.ts, ops/explorer.ts).
+Read each side's commit (git show 71b82f3, 3e6a89d, 6ef6915 --stat and the hunks) before resolving.
+Rules: keep every feature of both sides - nothing dropped. Tab order everywhere (pane TABS, tab unions, /ops words,
+usage strings, standalone tab bar): Tickets, Workflows, Health, Messages, Agents (pane only, as now), Explorer, Run.
+Standalone app number keys: 1 Tickets, 2 Workflows, 3 Health, 4 Messages, 5 Explorer, 6 Run (F75 and F79 both took
+5 - Run moves to 6; update its key handling, help/keys lines and tests). `/ops` usage lists explorer and run.
+hooks/lib/ticketsmodel.ts: both sides made toggleGroup generic - keep one definition that serves every call site
+(Tickets groups, F76's Workflows sections, F75's Explorer tree); typecheck proves it. types/index.d.ts: union of
+both sides' declarations (the validator refuses imports there). engine.ts / nodehost.ts / Host: keep both additions
+(F75's git, F79's spawn/stop). Tests: take both sides' expectation updates and fix tab-bar/usage text to the merged
+order. In the mod's hooks, `$` is spelled only as `$.noun.event(...)` at a call site.
+Checks one at a time (low RAM, never in parallel): `claude plugin test mods/ops-board`, `cd mods/ops-board/ops &&
+npm test`, `claude plugin validate mods/ops-board`, `tsc -p mods/ops-board/tsconfig.json --noEmit`
+(.claude-plugin/types is git-ignored - copy from the main checkout if missing, never commit it). Also show the
+standalone frame: `node --import ./mods/ops-board/ops/loader.mjs mods/ops-board/ops/app.ts --once --tab explorer
+--cols 100 --rows 12 --no-color` and the same with `--tab run`.
+Then commit the merge: "RUN-0018 stage 127: merge F75 Explorer (run/RUN-0018-s127) onto F76 + F79 - <how conflicts
+were resolved>" with the check results. Report: sha, each file's resolution in one line, check results, both frames.

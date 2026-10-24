@@ -1,5 +1,6 @@
 import type { AgentInfo, AgentStatus, TurnCompleteReason } from 'claude-code'
 import type { AgentKind, AgentRow, WorkflowRow } from '../../types'
+import type { RunStatus } from './runlines'
 
 // F53: the folds behind the Agents and Workflows tabs - pure, so a test reads them
 // without an engine. A row is only ever an agent this session saw spawn (agent.spawn)
@@ -131,4 +132,17 @@ export function countsOf(rows: AgentRow[], run: WorkflowRow): Counts {
     running: mine.filter(r => r.status !== null && !isEnded(r.status)).length,
     failed: mine.filter(r => r.status === 'failed' || r.status === 'killed').length + run.denied,
   }
+}
+
+// F76: a Workflow run's status from what the engine reports. The engine says no run
+// ended, so it is read from its agents: one running = running; all ended = completed,
+// or failed when one failed; none started yet = pending. A failed check is failed; a
+// remote run's agents are not reported here, so launched counts as running.
+export function workflowStatus(rows: AgentRow[], run: WorkflowRow): RunStatus {
+  if (run.error) return 'failed'
+  if (run.remote) return 'running'
+  const c = countsOf(rows, run)
+  if (c.running) return 'running'
+  if (c.failed) return 'failed'
+  return c.done ? 'completed' : 'pending'
 }

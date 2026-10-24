@@ -1,0 +1,29 @@
+Ticket F67 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line): make opencode a skillator install host.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-complete-all-pending
+(branch run/RUN-0018-complete-all-pending). Never touch the main checkout, never push, never edit TICKETS.md.
+Starting point: commit b2f60bd there already has the PLATFORMS.md/README.md opencode rows and NEW install.sh
+--selftest checks for opencode (search install.sh for "F67") - they are red: nothing implements them yet.
+Do:
+1. Probe the real opencode here first (`opencode --version`, `opencode debug paths`, `opencode debug skill`,
+   `opencode debug config`; no model calls). Correct any claim in the PLATFORMS.md/README.md F67 text that the
+   probe contradicts (version number included).
+2. host-commands/opencode/<n>.md for the seven commands (pending, list-tickets, engage, archive-tickets,
+   sync-tickets, skillator-update, team-messages): start from the pi texts (host-commands/pi/), drop
+   argument-hint, keep {{SKILLS}} and $ARGUMENTS, frontmatter `description:` quoted as pi's is.
+   skillator-update must name opencode among the hosts it refreshes in ALL its copies (commands/ and every
+   host-commands/*), as the selftest demands; keep the Muse step 4 that is already there.
+3. install.sh: opencode as a dest - skills to <config>/skills (config = $XDG_CONFIG_HOME/opencode if set, else
+   $HOME/.config/opencode; detected the same way the other hosts are), commands to <config>/commands/<n>.md with
+   {{SKILLS}} substituted, ownership markers / manifest / .skillator-source exactly as for the other dests, the
+   `ops` launch line, the dry-run lines. Follow how pi is done; reuse its helpers rather than adding new ones.
+4. install.ps1: the same, mirrored, plus matching -SelfTest checks (on Windows opencode's home is
+   %USERPROFILE%; config is $env:XDG_CONFIG_HOME\opencode if set, else %USERPROFILE%\.config\opencode).
+Tests red first: run `sh install.sh --selftest` before step 3 and keep the FAIL line; then make it green.
+Final checks, one at a time (the machine is low on RAM - never run heavy jobs in parallel):
+`sh install.sh --selftest` and `powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -SelfTest`, both ok.
+Then a real install into a SCRATCH home only (HOME, USERPROFILE, XDG_CONFIG_HOME pointed at a temp dir; never the
+real profile - bug B9: install.ps1 writes the real PowerShell profile unless you pass -Profile <a scratch file>,
+so pass it) and show `opencode debug skill` / `opencode debug config`, run with that scratch env, listing the
+skills and the seven commands.
+Commit as "F67: <what>" with the evidence in the message. Report: sha, the red and green lines, the probe output
+that proves discovery, and anything left unverified.

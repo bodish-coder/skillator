@@ -2,9 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { AgentSpawnInput, AgentSpawnResult, AgentStatus, BoxProps, Color, ElementConstructor, EngineInterface,
   RenderElement, TextProps, ToolCallResult, TurnCompleteReason } from 'claude-code'
 import type { AgentRow, WorkflowRow } from '../types'
-import { agentOrder, countsOf, hms, launched, listed, runSeen, spawned, touched, turnEnded, turnStarted } from './lib/agents'
+import { agentOrder, countsOf, hms, launched, listed, runSeen, spawned, touched, turnEnded, turnStarted, workflowStatus } from './lib/agents'
+import { statusColor } from './lib/runlines'
 
-// F53: the Agents and Workflows tabs - read-only, nothing the engine does not report.
+// F53: the Agents tab and the Workflows section (F76: of the Workflows tab) - read-only, nothing the engine does not report.
 // Rows come from agent.spawn (model, started, workflow run), $.agent.list() (status,
 // name, type: read on entering the Agents tab and every 5 s while it is shown, as no
 // event says a status moved) and the loops' own events (turn.start, tool.call,
@@ -141,13 +142,13 @@ export function agentLines(v: AgentsView): Line[] {
 }
 
 export function workflowLines(v: AgentsView): Line[] {
-  if (!v.workflows.length) return [{ key: 'none', segs: [{ text: 'no workflow run in this session yet', dim: true }] }]
+  if (!v.workflows.length) return [{ key: 'wf:none', segs: [{ text: 'no workflow run in this session yet', dim: true }] }]
   const runs = v.workflows.map((r, i) => ({ r, i })).sort((a, b) => b.r.startedAt - a.r.startedAt || a.i - b.i).map(x => x.r)
   const lines: Line[] = [{ key: 'wf:count', segs: [{ text: plural(runs.length, 'workflow run') }] }]
   const count = (k: number, w: string, color: Color): Seg => (k ? { text: `${k} ${w}`, color } : { text: `${k} ${w}`, dim: true })
   for (const r of runs) {
     lines.push({ key: '', segs: [] })
-    lines.push({ key: 'wf:' + r.key, segs: [{ text: r.name ?? r.runId ?? 'Workflow call', bold: true }, { text: '  started ' + hms(r.startedAt), dim: true }] })
+    lines.push({ key: 'wf:' + r.key, segs: [{ text: '●', color: statusColor(workflowStatus(v.agents, r)) }, { text: ' ' }, { text: r.name ?? r.runId ?? 'Workflow call', bold: true }, { text: '  started ' + hms(r.startedAt), dim: true }] })
     if (r.error) lines.push({ key: 'wfc:' + r.key, segs: [{ text: '    ■ ' + r.error, color: 'error' }] })
     else if (r.remote) lines.push({ key: 'wfc:' + r.key, segs: [{ text: '    remote - its agents run in the cloud, not reported here', dim: true }] })
     else {

@@ -35,7 +35,7 @@ test('inbox: parsed, unread after the read marker', () => {
 })
 
 test('the tab bar says 4 Messages with the unread count; 4 opens it, newest first, a read marker line', () => {
-  assert.match(frame(s0, P)[0]!, /^ 1 Tickets   2 Runs   3 Health   4 Messages \(2\)/)
+  assert.match(frame(s0, P)[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages \(2\)/)
   const st = reduce(s0, { name: '4' })
   assert.equal(st.state.tab, 'messages')
   assert.deepEqual(runs(st.effects).map(e => e.call), ['team-config-show'])

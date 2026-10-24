@@ -34,7 +34,7 @@ If you installed with `install.ps1 -Link` / `install.sh --link`, a plain
 copies need `install.ps1 -Force` / `install.sh --force` to refresh.
 
 Or do it all in one go with `/skillator-update` (Claude Code, codex as
-`/prompts:skillator-update`, cursor, gemini, agy, pi): it updates the
+`/prompts:skillator-update`, cursor, gemini, agy, pi, opencode): it updates the
 marketplace and the `skillator` and `ops-board` plugins, then re-runs the
 installer with `-Force` / `--force` from the newest source - the updated plugin,
 the clone the installer last ran from (`.skillator-source` beside the installed
@@ -90,6 +90,7 @@ Manual install paths, if you'd rather not run the script:
 | Antigravity CLI | `.agents/skills/` (workspace) or `~/.gemini/antigravity-cli/skills/` (global, what `agy` 1.4.5 reads; the installer also writes `~/.gemini/config/skills/` and `~/.gemini/skills/`) |
 | Pi | `.pi/skills/` (force with `/skill:<name>`) |
 | Muse | native plugin from `.muse-plugin/plugin.json` (every skill; no commands, no hooks): `muse plugins install <clone>` (skills are on at once; nothing to approve); `/skillator-update` runs `muse plugins update skillator` |
+| opencode | `.opencode/skills/` (project) or `~/.config/opencode/skills/` (global, what the installer writes; `$XDG_CONFIG_HOME/opencode/skills/` when that is set) — also reads `~/.claude/skills/` and `~/.agents/skills/`. Commands: `~/.config/opencode/commands/<n>.md` → `/<n>` |
 | Prime Agent | anywhere — skills there are Python packages, so read the `SKILL.md` or reference it from `AGENTS.md` |
 
 Model names and tool names inside the skills are **Claude Code defaults**;
@@ -257,7 +258,15 @@ Deactivating is deleting `.skillator/grayskull.md`.
   of diff and no way to tell which stage produced it. `hooks/relay-morpheus.{sh,ps1}`
   do the bookkeeping — `init`, `stage`, `heartbeat`, `status`, `orphans`, where
   `orphans` is the only signal a dropped agent ever sends: silence. Invoke with
-  `/relay-morpheus`.
+  `/relay-morpheus`. `/pending-subagent [N|max] [IDs]` (every host) works the open
+  tickets as such a run: one fresh implementer per ticket, each diff reviewed and
+  landed, the run merged, the push asked; 1 agent at a time unless a count is given,
+  and tickets that share files never together.
+  `/marathon-plan [IDs]` (Claude Code) writes the same run as a saved Workflow
+  script - one agent per ticket, phases serial where tickets share files, a verify
+  phase - and shows it with its agent count; `/marathon-run [RUN id]` runs it, each
+  stage on disk before its dispatch. Other hosts have no Workflow tool: their
+  commands say so and point at `/pending-subagent`.
 - **tickets-zordon** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with
@@ -269,6 +278,10 @@ Deactivating is deleting `.skillator/grayskull.md`.
   deterministic script that fixes and adversarially verifies every ticket in
   parallel, with structured verdicts coming back. The main session always owns
   `TICKETS.md`; agents only report. Invoke with `/tickets-zordon`.
+  `/verify-subagent` re-checks every `[%]` testing ticket with one fresh agent
+  each (read and run tests only): PASS → `[x]` with a dated **Verified** note,
+  FAIL stays `[%]` with what failed, a Done line needing the owner's eyes → OWNER,
+  never flipped.
 - **rules-orko** — how the user works, written down the moment they say it.
   "From now on always run the tests before you commit" or "in this repo nobody
   touches `store.py` without asking" dies with the chat otherwise: two isolated

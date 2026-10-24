@@ -20,6 +20,8 @@ export type Stage = { n: number; code: string; ticket: string; title: string; af
 export type RunView = { id: string; title: string; done: number; total: number; owner: string | null;
                         stages: Stage[]; planned: boolean     // planned = chain planned, nothing dispatched
                         decisions: string[] }                 // F50: parked `## Decisions` still unanswered, "Q1 F49 <question> - <what> waits on it"
+// F77: id = the form's Ticket field as typed ('' when opened with no ticket selected),
+// resolved against the board case-insensitively (ticketById); ticket-meta gets the board's ID.
 export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string | null; result: string | null }
 // F47 team management (T6): the Team view in the Tickets tab, and the Add person form
 // (drawn as a form in the ops-board pane; `back` = where a finished add returns).
@@ -58,13 +60,41 @@ export type TeamsCfgView = { path: string; token: boolean; workflowUrl: string |
 // The setup form in the pane: only what is safe to hold in $.state - the field values
 // live in the module (the token never reaches $.state); `rev` redraws it.
 export type SetupView = { rev: number; field: string; result: string | null; confirmClear: boolean }
+// F79: the Run tab - .skillator/run.json's entries (written only by live-friday's run-entries),
+// the file as read (missing: no file yet, the first open scans), the confirm / rename form, one job.
+export type RunEntry = {
+  id: string; name: string; kind: string; target: string; args: string[]
+  command: string; cwd: string; source: string; missing: boolean
+}
+export type RunFile = { path: string; entries: RunEntry[]; error: string | null; missing?: boolean }
+export type RunForm = { mode: 'confirm' | 'rename'; id: string; name: string; result: string | null }
+// B4: only the tail of the output is held (OUT_MAX).
+export type Job = {
+  id: string; name: string; argv: string[]; cwd: string
+  started: number; ended: number | null; code: number | null
+  stopped: boolean; error: string | null; out: string
+}
+// F75: the Explorer tab (hooks/lib/explorer.ts) - the tree's rows of open folders and
+// the changes of open commits only; `open` holds the open sections, folders and commits.
+export type Commit = { sha: string; short: string; date: string; author: string; subject: string }
+export type Change = { status: string; path: string; from: string | null; add: number | null; del: number | null }
+export type TreeRow = { path: string; name: string; depth: number; dir: boolean; count: number }
+export type Explorer = {
+  open: string[]; selected: string | null
+  files: number | null                  // tracked files; null: not read yet
+  tree: TreeRow[]; treeMore: number     // the rows drawn (open folders only); rows past MAX_TREE
+  commits: Commit[] | null
+  changes: Record<string, { list: Change[]; more: number }>   // open commits only
+  error: string | null
+}
 declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
       board: Board | null; team: Member[]; me: string | null
-      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'workflows'; selected: string | null; expanded: string | null
+      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'explorer' | 'run'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
+      runsOpen: ('runs' | 'workflows')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
       runs: RunView[]; assign: AssignDraft | null; narrow: boolean
       relay: string | null   // F48 band: "RUN-0012 2/4", the first relay run not all done
@@ -74,6 +104,9 @@ declare module 'claude-code' {
       // row picked / opened, the saved config's view, the setup form's safe part
       messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
       teamsCfg: TeamsCfgView | null; setup: SetupView | null
+      // F79: the Run tab - .skillator/run.json as read, the confirm / rename form, the one job (its output's tail)
+      runFile: RunFile | null; runForm: RunForm | null; runJob: Job | null
+      explorer: Explorer     // F75: what the Explorer tab draws, no more (B4)
     }
   }
 }

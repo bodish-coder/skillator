@@ -1,0 +1,26 @@
+Ticket F73 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line; it is the spec): add
+/marathon-plan [ids] and /marathon-run [RUN id]. Owning skills: skillator:relay-morpheus (run file, stages, landing,
+end batch - read its SKILL.md plus references/chain.md and references/marathon.md) and the workflow-authoring skill
+(load it before writing the Workflow script template). /marathon-plan writes the plan - a relay-morpheus run file
+(relay-morpheus.sh init/add, never hand-numbered) plus a Workflow script saved on disk beside it (one agent per
+ticket, phases, serial where tickets share files, a verify phase) - and shows it with its agent count; no agents run.
+/marathon-run [RUN id] runs that saved script with the Workflow tool (typing the command is the explicit opt-in),
+stages tracked in the run file before each dispatch, landing and the end batch as in a marathon.
+Claude Code: commands/marathon-plan.md and commands/marathon-run.md. Other hosts have no Workflow tool: their
+host-commands (codex, cursor, gemini, antigravity SKILL.md form, pi, opencode) say so and point at /pending-subagent.
+Ship like the existing commands - study commands/pending-subagent.md and commands/verify-subagent.md (both just
+landed on this branch) and how install.sh write_commands / install.ps1 Write-Commands, every selftest command list,
+the B6 frontmatter scan, README and PLATFORMS rows name them. Add your two names in place after verify-subagent in
+each list, no reflow. Frontmatter description quoted (B6). The command text loads the owning skills and states the
+behaviour; it never duplicates them. Do not touch the existing commands/marathon.md (it is the older /marathon).
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-complete-all-pending
+(branch run/RUN-0018-complete-all-pending). Never touch the main checkout, never push, never edit TICKETS.md.
+Tests red first: add the names to the selftests, show the FAIL line, then make them ok.
+Final checks, one at a time (low RAM, never in parallel): `sh install.sh --selftest`, `powershell -NoProfile
+-ExecutionPolicy Bypass -File install.ps1 -SelfTest`, `claude plugin validate .` on the worktree root.
+Live proof on Claude Code, in a fresh scratch git repo (not a skillator clone) whose TICKETS.md holds two small
+independent tickets: `claude -p "/skillator:marathon-plan" --plugin-dir <worktree>` (show the run file and saved
+script, agent count, no agents run), then `claude -p "/skillator:marathon-run <RUN id>" --plugin-dir <worktree>`
+(both tickets landed, run file rows x with shas). Leave no claude/node processes running.
+Before committing, run /code-review (code-review:code-review, level low) on the staged diff and fix what it finds.
+Commit as "F73: <what>" with the evidence. Report: sha, red/green lines, the live output and the run file after.

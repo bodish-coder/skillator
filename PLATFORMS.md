@@ -51,6 +51,7 @@ file and the seat retries one tier lower.
 | `commentary`/`final` channels; auto context compaction | `codex` |
 | `/skills`, `/agents`, `/model`; skills under `.agents/skills/` | `antigravity` |
 | `/skill:<name>`; AGENTS.md from `~/.pi/agent/`; `/model` mid-session | `pi` |
+| `skill` tool; `opencode.json`; config under `~/.config/opencode/`; Tab switches the build / plan agents | `opencode` |
 | persistent IPython; `rlm(...)`; `prime-agent agents` | `prime-agent` |
 
 Ambiguous → ask once. The user can override with `platform: <host>`.
@@ -68,7 +69,7 @@ Ambiguous → ask once. The user can override with `platform: <host>`.
 | **Usage % readable** | `statusLine` `rate_limits.*.used_percentage` | no | yes — `$CODEX_HOME/sessions/**/rollout-*.jsonl` (default `~/.codex`), last `token_count`; the `Stop` stdin's `transcript_path` names the session's own | no | no | no |
 | **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | `Stop` in `hooks.json` → `{"decision":"block","reason":…}` on stdout (0.155.1, verified under `codex exec`; needs hook trust). Exit 2 + stderr does not inject. `watch-cortana` `usage-watch.* gate` wired and verified here, 0.156.1 (A83). See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
 | **Durable memory** | `CLAUDE.md` + files on disk | files on disk | `AGENTS.md` + files | `AGENTS.md` + files | `AGENTS.md` (`~/.pi/agent/`, parents, cwd) + files | Continual Harness + `AGENTS.md` + files |
-| **Slash command file** (`/pending`, `/list-tickets`, `/engage`, `/archive-tickets`, `/sync-tickets`, `/skillator-update`, `/team-messages`; F54, F58, F59, F63, F65, F66, texts in `host-commands/<host>/`, tags in "Commands - what is verified") | the ops-board mod's own commands / `commands/*.md`; the installer writes none | `~/.cursor/commands/<n>.md`, `.cursor/commands/<n>.md` | `$CODEX_HOME/prompts/<n>.md` → `/prompts:<n>` | none of its own: a skill is the command, `<ws>/.agents/skills/<n>/SKILL.md` → `/<n>` (workflows deprecated); Gemini CLI: `~/.gemini/commands/<n>.toml` | `~/.pi/agent/prompts/<n>.md`, `.pi/prompts/<n>.md` → `/<n>` | **none — the skill route** (no command mechanism) |
+| **Slash command file** (`/pending`, `/list-tickets`, `/engage`, `/archive-tickets`, `/sync-tickets`, `/skillator-update`, `/team-messages`, `/pending-subagent`, `/verify-subagent`, `/marathon-plan`, `/marathon-run`; F54, F58, F59, F63, F65, F66, F71, F72, F73, texts in `host-commands/<host>/`, tags in "Commands - what is verified") | the ops-board mod's own commands / `commands/*.md`; the installer writes none | `~/.cursor/commands/<n>.md`, `.cursor/commands/<n>.md` | `$CODEX_HOME/prompts/<n>.md` → `/prompts:<n>` | none of its own: a skill is the command, `<ws>/.agents/skills/<n>/SKILL.md` → `/<n>` (workflows deprecated); Gemini CLI: `~/.gemini/commands/<n>.toml` | `~/.pi/agent/prompts/<n>.md`, `.pi/prompts/<n>.md` → `/<n>` | **none — the skill route** (no command mechanism) |
 | **Remote drive** (from a phone, `remote-cerebro`; matrix and evidence tags in [`skills/remote-cerebro/references/hosts.md`](skills/remote-cerebro/references/hosts.md)) | not this skill — Claude Code's own Remote Control | native: cloud agent via `agent worker start` (runs here, not the local TUI); bridge via `agent acp` arms only after an ACP proof | native: `codex remote-control` + ChatGPT app (Windows pairing unproven); bridge: `codex app-server` | gemini: **no native remote** — bridge via `--acp` (after an ACP proof); attach hook v2, approvals not answerable from the phone. agy: native `--remote-control` | bridge: `--mode rpc` (own) or `--mode attach` on a pi cerebro launched; no native remote | not possible (not installed, not probed) |
 
 **Frontmatter:** only `name` + `description` are portable. Everything else
@@ -89,6 +90,7 @@ Five rows have now been tested; prime-agent has no loader to test.
 | antigravity | **yes, verified** — 2026-09-24, `agy` 1.2.9, 4/4 — `grayskull-power` 2/2 from the fixture's project-local `.agents/skills`; the `func-ui`-triggering prompt 2/2 loaded the stale user-level `~/.gemini/config/skills/func-ui` instead of the fixture's `designui-galadriel` |
 | pi | **yes, verified** — 2026-09-23, `pi` 0.74.2 / openai gpt-5.5, 4/4, from project-local `.pi/skills` with `PI_CODING_AGENT_DIR` and `HOME` isolated |
 | muse | **unverified** — F68 (2026-10-24, Muse Code 1.4.12): `muse plugins validate` - 28 skills `supported` (summary `full`); `muse plugins install` into a scratch profile - `active=true skills=28`; an unprompted load from a description not run |
+| opencode | **unverified** — F67 (2026-10-24, opencode 1.19.4) checked discovery only: `opencode debug skill` lists the skills in `~/.config/opencode/skills`; an unprompted load from the description has not been run |
 | prime-agent | **no** — no markdown-skill loader at all; not installed on this machine (2026-09-24), so its always-on-file route is still unrun |
 
 The claude-code runs were headless, from a throwaway fixture outside any repo,
@@ -202,7 +204,7 @@ install skills and the shared docs only.
 
 ## Commands - what is verified
 
-`/pending`, `/list-tickets` (F54), `/engage` (F58), `/archive-tickets` (F59), `/sync-tickets` (F63), `/skillator-update` (F65) and `/team-messages` (F66) are written by the installers at user level
+`/pending`, `/list-tickets` (F54), `/engage` (F58), `/archive-tickets` (F59), `/sync-tickets` (F63), `/skillator-update` (F65), `/team-messages` (F66), `/pending-subagent` (F71), `/verify-subagent` (F72), `/marathon-plan` and `/marathon-run` (F73) are written by the installers at user level
 only, rewritten every run; per-host shapes are in the session design's D7 table.
 Evidence tags: **verified** = read from the host's docs/binary or exercised here;
 **inferred** = from docs only, until the owner's picker check
@@ -216,6 +218,29 @@ Code also gets them at the next turn from the plugin's own `hooks/hooks.json`
 have no plugin hook here, so they read them on the ops board's 4 Messages tab and with
 `/team-messages`.
 
+`/pending-subagent [N|max] [IDs]` (F71, `relay-morpheus` with `tickets-zordon` and
+`tasks-sentinels`) works the open tickets, or the IDs given, as one relay run: a stage
+and its exact prompt in the run file before each dispatch, one fresh implementer per
+ticket, each diff reviewed and landed by the main session, then the run merged, the
+version bumped and the push asked. The count defaults to 1 (serial); N or `max` runs
+file-disjoint tickets at once in their own stage worktrees (`chain next --all`,
+`chain merge`). A host with no subagent tool runs the stored prompts itself, one at a time.
+
+`/verify-subagent` (F72, `tickets-zordon`) re-checks every `[%]` ticket (or the IDs
+given) with one fresh read-and-run-only agent each: PASS flips it to `[x]` with a
+dated **Verified** note (`ticket-meta verify <ID> pass`), FAIL leaves it `[%]` with what
+failed appended (`verify <ID> fail`), OWNER (the Done line needs the owner's own eyes)
+is never flipped. A host with no subagents runs the checks itself, one at a time.
+
+`/marathon-plan [IDs]` and `/marathon-run [RUN id]` (F73, `relay-morpheus`) are a
+marathon saved, then run: the plan is a run file plus a Workflow script beside it
+(`run-<0000>-<slug>.workflow.js`, from relay-morpheus `templates/marathon-workflow.js`:
+one implementer and one verifier per ticket, phases serial where tickets share files),
+shown with its agent count and no agent run; `/marathon-run` runs it one phase per
+Workflow call, every stage `chain dispatch`ed first, then landing and the end batch.
+Claude Code only: every other host's command says it has no Workflow tool and points
+at `/pending-subagent`.
+
 `/skillator-update` (F65) finds its source in this order: a clone path given as its
 argument; Claude Code's updated plugin (`installPath` of `skillator@<mkt>` in
 `claude plugin list --json` - the package ships `install.sh` / `install.ps1`); the
@@ -226,7 +251,7 @@ updated with `git pull --ff-only` only.
 
 | Host | Path | Tag |
 |---|---|---|
-| claude-code | the ops-board mod's `/pending`, `/list-tickets`; the plugin's `commands/engage.md`, `commands/archive-tickets.md`, `commands/sync-tickets.md`, `commands/skillator-update.md`, `commands/team-messages.md` (installer writes none) | verified |
+| claude-code | the ops-board mod's `/pending`, `/list-tickets`; the plugin's `commands/engage.md`, `commands/archive-tickets.md`, `commands/sync-tickets.md`, `commands/skillator-update.md`, `commands/team-messages.md`, `commands/pending-subagent.md`, `commands/verify-subagent.md`, `commands/marathon-plan.md`, `commands/marathon-run.md` (installer writes none) | verified |
 | gemini CLI | `~/.gemini/commands/<n>.toml`, `!{...}` shell injection, `{{args}}` | verified (dir, `!{`, `{{args}}`) |
 | antigravity | skills, `/<n>` in `agy`; all three dests `~/.gemini/config/skills/`, `~/.gemini/skills/` and `~/.gemini/antigravity-cli/skills/` (agy 1.4.5's global dir, B8) | verified (a skill is a slash command) |
 | pi | `~/.pi/agent/prompts/<n>.md`, `$ARGUMENTS` | verified |
@@ -235,6 +260,7 @@ updated with `git pull --ff-only` only.
 | codex | `$CODEX_HOME/prompts/<n>.md` → `/prompts:<n>` | inferred (docs) until the picker check |
 | cursor | user `~/.cursor/commands/<n>.md` | project dir verified; user dir inferred until the picker check |
 | muse (F68) | none: `.muse-plugin/plugin.json` lists `commands: []` (the command schema is unprobed - superpowers ships none either); the skill route stays | inferred |
+| opencode (F67) | `~/.config/opencode/commands/<n>.md` (`$XDG_CONFIG_HOME/opencode/commands/` when that is set) → `/<n>`; markdown, frontmatter `description` (also `agent`, `model`, `subtask`), body = the template, `$ARGUMENTS` / `$1`… for arguments | verified (opencode 1.19.4: `opencode debug config` lists a command from `<config>/commands/` and from `.opencode/command/` + `.opencode/commands/`, `$ARGUMENTS` kept in the template; the binary globs `{command,commands}/**/*.md` in every config dir); the TUI picker is the owner's check |
 | prime-agent | none; the skill route stays | verified (no loader) |
 
 **cursor** — Cursor's CLI is `cursor-agent` (`agent.exe` beside it). A bare `agent`
@@ -335,6 +361,23 @@ Verified (Muse Code 1.4.12, 2026-10-24): `muse plugins validate <repo>` - valid,
 `full`; `muse plugins install` with a scratch USERPROFILE/XDG_DATA_HOME - `skills=28
 active=true`, `approve` returns no runtime capabilities; both print one warning that `.claude-plugin/plugin.json` is ignored. Tiers, delegation, usage %
 and the ops board are unprobed: run the printed `ops` launch line beside it.
+
+**opencode** (F67) — not a column of the table above yet: its tiers, delegation,
+hooks and usage % are unprobed. What is verified (opencode 1.19.4, 2026-10-24,
+`opencode debug paths` / `debug skill` / `debug config`, no model call): the config
+dir is `$XDG_CONFIG_HOME/opencode` when that is set, else `<home>/.config/opencode`,
+and on Windows `<home>` is `%USERPROFILE%` (a changed `HOME` is ignored). Global
+skills load from `<config>/skills/<n>/SKILL.md` (also `skill/`), and from
+`~/.claude/skills/` and `~/.agents/skills/` (those two stayed on the real profile
+when `USERPROFILE` was moved to a scratch dir, while `<config>` followed it); project skills from `.opencode/skills/`,
+`.claude/skills/` and `.agents/skills/`, walking up to the git worktree root. A
+skill's `name` must match its folder. The installers write the skills to
+`<config>/skills/` and the seven commands to `<config>/commands/<n>.md`
+(`host-commands/opencode/`, the pi texts without `argument-hint`). opencode also
+reads `~/.claude/skills`, so where `install.sh` / `install.ps1` fill that dir
+(Claude Code with no plugin) opencode finds each skill twice (how it settles a
+duplicate name is unprobed). No ops board inside
+opencode: run the printed `ops` launch line.
 
 **prime-agent** — skills are importable *Python packages*, so these markdown
 skills aren't auto-loaded. Run one by reading its `SKILL.md` (or pointing

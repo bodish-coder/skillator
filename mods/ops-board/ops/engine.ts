@@ -11,6 +11,11 @@ import { parseBoard } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
 import { parseRuns } from '../hooks/lib/runs'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
+import { parseRunFile, RUN_FILE } from '../hooks/lib/runentries'
+import type { Bins } from '../hooks/lib/runentries'
+import { enterRunEffect, onJobEnd, onJobOut, onRunFile, rescan } from './runtab'
+import { NO_GIT } from '../hooks/lib/explorer'
+import { enterExplorer } from './explorer'
 
 export type Engine = {
   readonly state: State
@@ -60,9 +65,48 @@ export function makeEngine(o: EngineOpts): Engine {
   const runEffect = async (e: Effect): Promise<void> => {
     if (e.kind === 'quit') { o.onQuit(); return }
     if (e.kind === 'poll') return e.what === 'board' ? guarded('board', () => pollBoard(true)) : guarded(e.what, e.what === 'slow' ? pollSlow : pollRuns)
+    if (e.kind === 'runfile') return readRunFile(e.scanIfMissing && !once)
+    if (e.kind === 'job') return startJob(e.argv, e.cwd)
+    if (e.kind === 'stop') { job?.stop(); return }
+    if (e.kind === 'git') {                     // F75: read-only, so --once runs it too
+      const g = host.git ? await host.git(e.args) : { code: 127, out: '', err: NO_GIT, argv: [] }
+      return apply(afterRun(e, g, state, Date.now()))
+    }
     if (once && e.call !== 'relay-decide') return
     const r = await host.run(e.call, e.args, e.stdin)
     await apply(afterRun(e, r, state, Date.now()))
+  }
+
+  // --- F79: the Run tab - run.json read (scanned when absent, through run-entries), one job ---
+  let bins: Bins | null = null
+  let job: { stop(): void } | null = null
+  const readRunFile = async (scanIfMissing: boolean): Promise<void> => {
+    const path = host.repoRoot + '/' + RUN_FILE
+    let st: Awaited<ReturnType<typeof host.stat>>
+    try { st = await host.stat(path) } catch (err) {   // an unreadable .skillator: said on the tab, never a dropped rejection
+      state = onRunFile(state, { path, entries: [], error: `${RUN_FILE} not read: ${String((err as Error)?.message ?? err)}` }, bins, host.repoRoot)
+      draw()
+      return
+    }
+    if (!st && scanIfMissing) return apply(rescan(state))
+    if (!bins && host.bins) { try { bins = await host.bins() } catch { bins = null } }
+    let f = { path, entries: [], error: `no ${RUN_FILE} - r scans the repo for its entry points` } as ReturnType<typeof parseRunFile>
+    if (st && st.size > 1024 * 1024) f = { ...f, error: `${RUN_FILE} is over 1 MiB - not read` }
+    else if (st) { try { f = parseRunFile(await host.read(path), path) } catch (err) { f = { ...f, error: `${RUN_FILE} not read: ${String((err as Error)?.message ?? err)}` } } }
+    state = onRunFile(state, f, bins, host.repoRoot)
+    draw()
+  }
+  const startJob = async (argv: string[], cwd: string): Promise<void> => {
+    if (state.runJob) state = { ...state, runJob: { ...state.runJob, started: Date.now() } }
+    if (!host.spawn) { state = onJobEnd(state, null, 'this host cannot run commands', Date.now()); draw(); return }
+    const tick = setInterval(draw, 1000)
+    job = host.spawn(argv, cwd, text => { state = onJobOut(state, text); draw() }, (code, err) => {
+      clearInterval(tick)
+      job = null
+      state = onJobEnd(state, code, err, Date.now())
+      draw()
+    })
+    draw()
   }
 
   // --- polls (as the mod): the board every 2 s, the slow facts every 60 s, the runs
@@ -174,6 +218,8 @@ export function makeEngine(o: EngineOpts): Engine {
       await pollBoard()
       await pollSlow()
       if (state.tab === 'runs') await pollRuns()
+      if (state.tab === 'explorer') await apply(enterExplorer(state))
+      if (state.tab === 'run') await runEffect(enterRunEffect())    // --tab run: read run.json (never scanned in --once)
     },
     async start() {
       draw()
@@ -181,12 +227,15 @@ export function makeEngine(o: EngineOpts): Engine {
       if (stopped) return
       void guarded('slow', pollSlow)
       if (state.tab === 'runs') void guarded('runs', pollRuns)
+      if (state.tab === 'explorer') void apply(enterExplorer(state))
+      if (state.tab === 'run') void runEffect(enterRunEffect())
       timers.push(setInterval(() => { void guarded('board', () => pollBoard()) }, BOARD_MS))
       timers.push(setInterval(() => { void guarded('slow', pollSlow) }, SLOW_MS))
       timers.push(setInterval(() => { if (state.tab === 'runs') void guarded('runs', pollRuns) }, RUNS_MS))
     },
     stop() {
       stopped = true
+      job?.stop()
       for (const t of timers.splice(0)) clearInterval(t)
     },
   }

@@ -67,6 +67,9 @@ export async function startRun($: EngineInterface, id: string): Promise<void> {
 
 export type RunsView = { runs: RunView[]; board: Board | null; cols: number }
 
+// The runs the tab draws: those not all done (the rest are counted, not drawn).
+export const openRuns = (runs: RunView[]) => runs.filter(r => !(r.total > 0 && r.done >= r.total))
+
 export async function readRuns($: EngineInterface, cols: number): Promise<RunsView> {
   return { runs: await read($, runsA), board: await read($, boardA), cols }
 }
@@ -78,7 +81,7 @@ export function RunsTab($: EngineInterface, els: Els, v: RunsView): RenderElemen
   const out: RenderElement[] = []
   const draw = (l: RunLine) =>
     <Box key={l.key}><Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim}>{s.text}</Text>)}</Text></Box>
-  const open = v.runs.filter(r => !(r.total > 0 && r.done >= r.total))
+  const open = openRuns(v.runs)
   const finished = v.runs.length - open.length
   if (!open.length) out.push(<Box key="none"><Text dimColor>{'no relay run open - /skillator:plan-runs <tickets> plans one'}</Text></Box>)
   open.forEach((run, i) => {

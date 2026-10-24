@@ -11,9 +11,13 @@ import { openAssign, renderForm, runDecided } from './assign'
 import { paint } from './paint'
 import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
-import { pollRuns, readRuns, RunsTab } from './runstab'
+import { openRuns, pollRuns, readRuns, RunsTab } from './runstab'
+import { runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, statusColor } from './lib/runlines'
+import { workflowStatus } from './lib/agents'
 import { AgentsTab, pollAgents, readAgents, WorkflowsTab } from './agentstab'
 import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab'
+import { enterRun, RunTab } from './runtab'
+import { enterExplorer, ExplorerTab, readExplorer } from './explorertab'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
 // state shown by colour (a `●` per row, headings in the same colour), footer keys.
@@ -21,7 +25,9 @@ import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab
 export const PANE_ID = 'ops-board'
 export const PANE_TITLE = 'ops board'
 
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'workflows'
+// F76: one tab, id 'runs', labelled Workflows (owner: relay runs and workflows are one thing):
+// a Runs section and a Workflows section. /ops workflows opens it; /ops runs is an alias.
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'explorer' | 'run'
 // Each file names the atoms it reads or writes as its own consts: the engine's scan
 // lists state access from those, not from an import (register.tsx repeats them).
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
@@ -36,6 +42,10 @@ const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 // F61: the boxes of the open groups, this session; empty = every group collapsed. Only
 // the set is held, never rows: the board's own value stays within $.state's cap (B4).
 const openA = atom({ plugin: 'ops-board', key: 'openGroups' } as const, [])
+// F76: the Workflows tab's open sections (Runs, Workflows), this session; both start open.
+const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows'])
+// F79: the Run tab's confirm / rename form (runtab.tsx); up, the tab bar is not drawn.
+const runFormA = atom({ plugin: 'ops-board', key: 'runForm' } as const, null)
 
 const CHIP_KEY: Color = 'permission'
 const CHIP_VALUE: Color = 'suggestion'
@@ -47,6 +57,7 @@ type Els = {
   Text: ElementConstructor<TextProps>
   Button: ElementConstructor<ButtonProps>
   Select: ElementConstructor<SelectProps> | null
+  canType?: boolean       // the surface draws an Input (F77's typed Ticket field)
 }
 
 // The Tickets tab body: filter row, groups, count line and keys. Handlers write state.
@@ -159,8 +170,8 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   out.push(
     <Box key="keys" flexDirection="row" gap={2}>
       <Text dimColor>↑↓ move</Text>
-      <Button key="key:assign" plain dimColor hotkey="a" onPress={() => { void openAssign($, 'owner', m.ticket) }}>assign</Button>
-      <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openAssign($, 'decide', m.ticket) }}>decide</Button>
+      <Button key="key:assign" plain dimColor hotkey="a" onPress={() => { void openAssign($, 'owner', m.ticket, els.canType) }}>assign</Button>
+      <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openAssign($, 'decide', m.ticket, els.canType) }}>decide</Button>
       <Button key="key:filter" plain dimColor hotkey="f" onPress={() => { void update($, filterOpenA, x => !x) }}>filter</Button>
       <Button key="key:done" plain dimColor hotkey="x" onPress={() => setFilter(x => ({ ...x, showDone: !x.showDone }))}>done</Button>
       <Button key="key:team" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => ({ selected: null, confirm: false })) }}>team</Button>
@@ -179,12 +190,41 @@ export async function readView($: EngineInterface, cols: number): Promise<View> 
   }
 }
 
-const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Runs' },
-  { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' }, { id: 'agents', label: 'Agents' }, { id: 'workflows', label: 'Workflows' }]
+const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Workflows' },
+  { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' }, { id: 'agents', label: 'Agents' },
+  { id: 'explorer', label: 'Explorer' },   // F75: git-tracked files and recent commits (explorertab.tsx)
+  { id: 'run', label: 'Run' }]   // F79: the repo's entry points (runtab.tsx) - not Workflows (id 'runs')
+
+// F76: the Workflows tab (id 'runs') - a Runs section (relay runs, F50) and a Workflows section (F53),
+// each a header Button with its count that Enter or a click opens and closes, as F61's
+// status groups; an open section draws its body as the old tab did.
+async function RunsAndWorkflows($: EngineInterface, els: Els, cols: number): Promise<RenderElement[]> {
+  const { Text, Button } = els
+  const open = await read($, runsOpenA)
+  const runs = await readRuns($, cols)
+  const agents = await readAgents($, cols)
+  const shown = openRuns(runs.runs)
+  const out: RenderElement[] = []
+  for (const sec of RUNS_SECTIONS) {
+    const on = open.includes(sec)
+    const n = sec === 'runs' ? shown.length : agents.workflows.length
+    // F76: the header in the colour of the most pressing status under it, as a ticket group's
+    const st = sectionStatus(sec === 'runs' ? shown.map(runStatus) : agents.workflows.map(r => workflowStatus(agents.agents, r)))
+    if (sec !== RUNS_SECTIONS[0]) out.push(<Text> </Text>)
+    out.push(
+      <Button key={'sect:' + sec} plain onPress={() => { void update($, runsOpenA, x => toggleGroup(x, sec)) }}>
+        <Text bold color={st ? statusColor(st) : undefined}>{cut(sectionHead(sec, on, n), cols - 1)}</Text>
+      </Button>,
+    )
+    if (on) out.push(...(sec === 'runs' ? RunsTab($, els, runs) : WorkflowsTab(els, agents)))
+  }
+  return out
+}
 
 export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement> {
   const t = $.ui.resolve(e)
-  const els: Els = { Box: t.Box, Text: t.Text, Button: t.Button, Select: e.surface !== 'mobile' && 'Select' in t ? t.Select : null }
+  const els: Els = { Box: t.Box, Text: t.Text, Button: t.Button, Select: e.surface !== 'mobile' && 'Select' in t ? t.Select : null,
+    canType: e.surface !== 'mobile' && 'Input' in t }
   const { Box, Text, Button } = els
   const cols = Math.max(20, e.props.bodyColumns)
   const tab = await read($, tabA)
@@ -198,6 +238,8 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
             if (x.id === 'runs') void pollRuns($).catch(() => {})       // read on entering the tab
             if (x.id === 'agents') void pollAgents($).catch(() => {})   // read on entering the tab
             if (x.id === 'messages' && tab !== 'messages') void enterMessages($).catch(() => {})
+            if (x.id === 'explorer') void enterExplorer($).catch(() => {})        // F75: read on entering the tab
+            if (x.id === 'run') void enterRun($).catch(() => {})            // F79: first open scans
           }}>{x.id === 'messages' && unread ? `${x.label} ${unread}` : x.label}</Button>
       ))}
     </Box>
@@ -223,13 +265,33 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       </Box>
     )
   }
-  if (tab === 'agents' || tab === 'workflows') {
-    const v = await readAgents($, cols)
+  if (tab === 'agents') {
     return (
       <Box flexDirection="column">
         {bar}
         <Text> </Text>
-        {tab === 'agents' ? AgentsTab(els, v) : WorkflowsTab(els, v)}
+        {AgentsTab(els, await readAgents($, cols))}
+      </Box>
+    )
+  }
+  // A Run form up draws without the tab bar, as the assign forms do: a tab press would
+  // leave it up, and Esc on that tab (the pane still closeOnEscape) close the board.
+  if (tab === 'run') {
+    const formUp = (await read($, runFormA)) !== null
+    return (
+      <Box flexDirection="column">
+        {!formUp && bar}
+        {!formUp && <Text> </Text>}
+        {await RunTab($, e, els, cols)}
+      </Box>
+    )
+  }
+  if (tab === 'explorer') {
+    return (
+      <Box flexDirection="column">
+        {bar}
+        <Text> </Text>
+        {ExplorerTab($, els, await readExplorer($), cols)}
       </Box>
     )
   }
@@ -238,7 +300,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       <Box flexDirection="column">
         {bar}
         <Text> </Text>
-        {RunsTab($, els, await readRuns($, cols))}
+        {await RunsAndWorkflows($, els, cols)}
       </Box>
     )
   }

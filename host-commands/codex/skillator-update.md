@@ -22,7 +22,7 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
       `source: none found`.
    A source that is a git clone (it has `.git`) → `git -C <src> pull --ff-only` first. It fails
    (diverged, dirty, no upstream) → report it and stop: never merge, reset, stash or force.
-3. **Re-run the installer** from that source, for codex, cursor, gemini, agy, pi and the
+3. **Re-run the installer** from that source, for codex, cursor, gemini, agy, pi, opencode and the
    Antigravity IDE's ops board: on Windows
    `powershell -NoProfile -ExecutionPolicy Bypass -File "<src>/install.ps1" -Force`, elsewhere
    `sh "<src>/install.sh" --force`. A non-zero exit → show the last lines of its output and stop.

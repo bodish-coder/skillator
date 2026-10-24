@@ -1,0 +1,23 @@
+Ticket F76 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line; it is the spec): merge the
+ops board's Runs and Workflows tabs into one tab with collapsible sections. Owning code: the ops-board mod,
+mods/ops-board - hooks/pane.tsx (TABS, the tab switch), hooks/runstab.tsx (Runs), hooks/agentstab.tsx
+(WorkflowsTab; the Agents tab stays as it is), hooks/register.tsx (/ops runs|workflows, the 30 s runs poll that
+fires only while the Runs tab is shown), and the standalone ops app (mods/ops-board/ops/state.ts, draw.ts) which must
+match. One tab (label "Runs") with a `▸ Runs (n)` section and a `▸ Workflows (n)` section, each expanding and
+collapsing the way F61's status groups do on the Tickets tab (reuse that pattern - read hooks/lib/ticketsmodel.ts and
+how pane.tsx draws headers - do not invent a second one). No row lost versus the two old tabs; the runs poll still
+fires while this tab is shown; `/ops runs` and `/ops workflows` both open it (workflows with that section open).
+Keep B5 (forms drawn in the pane) and every existing behaviour of the two bodies.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-complete-all-pending
+(branch run/RUN-0018-complete-all-pending). Never touch the main checkout, never push, never edit TICKETS.md.
+Tests red first (show the failing lines): mods/ops-board/tests (runs.test.tsx, workflows.test.tsx, pane.test.tsx -
+terminal + desktop), and mods/ops-board/ops/tests for the standalone app. Update tests that name the Workflows tab
+to the merged tab; keep their coverage.
+Final checks one at a time (low RAM, never in parallel): `claude plugin test mods/ops-board`, `cd mods/ops-board/ops
+&& npm test`, `claude plugin validate mods/ops-board`, `tsc -p mods/ops-board/tsconfig.json --noEmit` (copy the
+git-ignored mods/ops-board/.claude-plugin/types from the main checkout if missing; never commit it).
+The hooks code spells `$` only as `$.noun.event(...)` at a call site - the validator refuses `$` passed through a
+stored function variable. Live pane check: if it cannot be driven headless, say so plainly.
+Never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+Before committing, run /code-review (code-review:code-review, level low) on the staged diff and fix what it finds.
+Commit as "F76: <what>" with the evidence. Report: sha, red/green lines, what the live check could and could not show.

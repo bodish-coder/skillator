@@ -1,0 +1,24 @@
+Ticket F72 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line; it is the spec): add the
+/verify-subagent command. Owning skill: skillator:tickets-zordon (its ticket-meta / board scripts make the flip and
+the note; never hand-edit around them). Owner ruling 2026-10-24: on PASS the [%] ticket flips to [x] with a dated
+**Verified** note; FAIL leaves it [%] with what failed appended; a Done line needing the owner's own eyes is OWNER,
+never flipped. The verifying agents read and run tests only - never edit code.
+Work and commit ONLY in the stage worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-s122
+(branch run/RUN-0018-s122). Never touch the main checkout, never push, never edit TICKETS.md.
+PARALLEL: F71 (/pending-subagent) is being built at the same time in .skillator/worktrees/RUN-0018-s121 - never
+touch that worktree. It adds its name to the same command lists (install.sh, install.ps1, selftests, README,
+PLATFORMS); the main session merges both and resolves those list lines. Keep your list edits to adding your own
+name in place, one change per list, no reflowing or reordering of neighbouring lines.
+A new command ships like the existing ones (study /sync-tickets and /archive-tickets end to end first):
+commands/<n>.md for Claude Code, host-commands/<host>/<n>.* for codex, cursor, gemini, antigravity (SKILL.md form),
+pi and opencode, added to the command-name lists in install.sh write_commands and install.ps1 Write-Commands, and to
+every selftest list that names the seven existing commands (pending, list-tickets, engage, archive-tickets,
+sync-tickets, skillator-update, team-messages) in install.sh --selftest, install.ps1 -SelfTest and the B6
+frontmatter scan; README + PLATFORMS command rows. Frontmatter description quoted (B6). The command text loads
+the owning skill and states the behaviour; it never duplicates the skill.
+Tests red first: add the new names to the selftests, show the FAIL line, then make them ok.
+Final checks, one at a time (low RAM): `sh install.sh --selftest`, `powershell -NoProfile -ExecutionPolicy Bypass
+-File install.ps1 -SelfTest`, `claude plugin validate` on the worktree root.
+Live proof: `claude -p "/skillator:verify-subagent"` with --plugin-dir <worktree> in a scratch clone whose
+TICKETS.md holds three [%] tickets built to PASS, FAIL and OWNER, and show the board after. Commit as
+"F72: <what>" with the evidence. Report: sha, red/green lines, the live output and the board diff.

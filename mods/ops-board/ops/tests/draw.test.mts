@@ -26,8 +26,10 @@ const RED_HELD = 'DRIVE=C:\nDISK_FREE=90000000000\nDISK_TOTAL=1\nMEM_FREE=500000
 test('a frame is rows × ≤cols, tab bar first, band last, no escapes without colour', () => {
   const f = sized(s)
   assert.equal(f.length, 24)
-  assert.match(f[0]!, /^ 1 Tickets   2 Runs   3 Health   4 Messages +ops$/)
-  assert.match(sized({ ...s, repo: 'skillator2' })[0]!, /^ 1 Tickets   2 Runs   3 Health   4 Messages +ops · skillator2$/)
+  assert.match(f[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Run +ops$/)
+  // F75 + F79: with six tabs "ops · <repo>" fits from 87 columns; at 80 spread() drops it, as at any narrow width
+  assert.match(sized({ ...s, repo: 'skillator2' })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Run$/)
+  assert.match(sized({ ...s, repo: 'skillator2', cols: 100 })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Run +ops · skillator2$/)
   assert.match(f[23]!, /^● ops · mem \? · disk \? · 5h \? · 7d \?$/)       // one band line at 80 columns
   assert.match(text(s), /  ▾ In progress \(1\)\n› ● B2  CSV export drops the last row/)
 })
@@ -57,7 +59,7 @@ test('runs and health tabs as the mock; the assign box overlays the body', () =>
   assert.match(text(reduce(s, { name: '2' }).state), /reading runs…/)
   assert.match(text(reduce(onRuns(s, '', {}), { name: '2' }).state), /no open runs - plan one with relay-morpheus \(plan-runs\)/)
   const d = text(reduce(s, { name: 'a' }).state)
-  assert.match(d, /  ┌─ Assign B2 ─+┐\n  │  \(•\) implementation   \( \) decision          a \/ d +│\n  │ +│/)
+  assert.match(d, /  ┌─ Assign B2 ─+┐\n  │  Ticket  B2 · \[~\] in progress · CSV export drops the last row +│\n  │  \(•\) implementation   \( \) decision          a \/ d +│\n  │ +│/)
   assert.match(d, /  │  › @asha +│/)
   assert.match(d, /  │  Change  \[~\] in progress → \[ \] pending, owner @asha +│/)
   assert.match(d, /  └─+┘/)
@@ -130,7 +132,9 @@ test('the keys line as the mock; D decided only on a decidable row', () => {
     }
   }
   assert.match(keys(f3), / · D decided · /)
-  assert.match(text(reduce(s, { name: '2' }).state), /↑↓ move · enter stages · s start a planned run/)
+  // F76: no run yet, the cursor is on the Runs header (Enter closes it); on a run, Enter shows its stages
+  assert.match(text(reduce(s, { name: '2' }).state), /↑↓ move · enter close · s start a planned run/)
+  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /↑↓ move · enter stages · s start a planned run/)
   assert.match(text(reduce(s, { name: '3' }).state), /R resume \(releases the hold on a fresh non-red reading\)/)
 })
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
@@ -186,6 +190,52 @@ test('no board yet; team view; runs as the mock with stages on Enter', () => {
   assert.ok(f.some(l => /^› ● RUN-0012  board sweep +2\/4 done$/.test(l)), f.join('\n'))
   assert.ok(f.some(l => /^  ● RUN-0011  older run +3\/3 done$/.test(l)), f.join('\n'))
   assert.match(text(reduce(r, { name: 'return' }).state), /  RUN-0012 stages\n/)
+})
+// F76: the Runs tab draws a Runs section and a Workflows section, headers with counts
+// that open and close; the Workflow tool is not observable outside the host that runs it.
+test('F76: Runs and Workflows sections draw as headers; closed, their rows go', () => {
+  const list = 'RUN-0012  board sweep  2/4 done  (stage 3 open)\nRUN-0011  older run  3/3 done\n'
+  const r = reduce(onRuns(s, list, {}), { name: '2' }).state
+  const f = sized(r)
+  assert.ok(f.some(l => /^  ▾ Runs \(2\)$/.test(l)), f.join('\n'))
+  assert.ok(f.some(l => /^  ▾ Workflows$/.test(l)), f.join('\n'))
+  assert.ok(f.some(l => /^    not observable here - only the host that runs a workflow sees it$/.test(l)), f.join('\n'))
+  const up = reduce(r, { name: 'up' }).state
+  assert.ok(sized(up).some(l => /^› ▾ Runs \(2\)$/.test(l)))
+  assert.match(text(up), /enter close/)
+  const shut = sized(reduce(up, { name: 'return' }).state)
+  assert.ok(shut.some(l => /^› ▸ Runs \(2\)$/.test(l)), shut.join('\n'))
+  assert.ok(!shut.some(l => /RUN-0012/.test(l)), shut.join('\n'))
+  const down2 = reduce(reduce(r, { name: 'down' }).state, { name: 'down' }).state
+  assert.ok(sized(down2).some(l => /^› ▾ Workflows$/.test(l)), sized(down2).join('\n'))
+  const wfShut = sized(reduce(down2, { name: 'return' }).state)
+  assert.ok(wfShut.some(l => /^› ▸ Workflows$/.test(l)), wfShut.join('\n'))
+  assert.ok(!wfShut.some(l => /not observable here - only the host/.test(l)), wfShut.join('\n'))
+  assert.match(text(reduce(onRuns(s, '', {}), { name: '2' }).state), /▾ Runs \(0\)\n    no open runs/)
+  assert.match(text(reduce(s, { name: '2' }).state), /▾ Runs\n    reading runs…/)
+})
+// F76 (owner): every run and stage row has a `●` in its status colour, the Tickets tab's
+// colours - completed green ([x]), in progress amber ([~]), not started as a pending
+// ticket ([ ]), failed red ([!]); the Runs header takes the colour of what is under way.
+test('F76: a status dot on every run and stage row, coloured as the Tickets tab', () => {
+  const list = 'RUN-0012  board sweep  1/4 done  (stage 3 open)\nRUN-0011  older run  3/3 done\nRUN-0014  planned one  0/2 done\n'
+  const chain12 = ['## Stages', '| # | stage | state | owner | heartbeat | landed |', '|---|---|---|---|---|---|',
+    '| 1 | S1 F1 | x | b | - | a |', '| 2 | S2 F2 | ! | b | - | |', '| 3 | S3 F3 | ~ | b | - | |', '| 4 | S4 B2 | pending | b | - | |', '',
+    '## Chain', '### S1 - stage 1 - F1 one', 'tickets: F1', '### S2 - stage 2 - F2 two', 'tickets: F2',
+    '### S3 - stage 3 - F3 three', 'tickets: F3', '### S4 - stage 4 - B2 four', 'tickets: B2', ''].join('\n')
+  const chain14 = '## Chain\n### P1 - stage 1 - F1 one\ntickets: F1\n### P2 - stage 2 - F3 three\ntickets: F3\n'
+  const r = reduce(reduce(onRuns(s, list, { 'RUN-0012': chain12, 'RUN-0014': chain14 }), { name: '2' }).state, { name: 'return' }).state
+  const segs = frameSegs({ ...r, rows: 40 })
+  const line = (re: RegExp) => segs.find(l => re.test(l.map(x => x.text).join('')))
+  const dot = (re: RegExp) => line(re)?.find(x => x.text === '●')?.color
+  assert.equal(dot(/RUN-0012  board sweep/), 'warning')     // dispatched, not all landed: in progress
+  assert.equal(dot(/RUN-0011  older run/), 'success')       // all landed: completed
+  assert.equal(dot(/RUN-0014  planned one/), 'text')        // planned: not started
+  assert.equal(dot(/^    ●  1  F1 /), 'success')
+  assert.equal(dot(/^    ●  2  F2 /), 'error')                // failed keeps its red
+  assert.equal(dot(/^    ●  3  F3 /), 'warning')
+  assert.equal(dot(/^    ●  4  B2 /), 'text')
+  assert.equal(line(/▾ Runs \(3\)/)?.find(x => /Runs/.test(x.text))?.color, 'warning')
 })
 // T7a, as the mock's "Add person" frame and Team view (the mock wins over the block's
 // excerpt: the form is boxed like the assign dialog, the Team view's selected row is
@@ -308,4 +358,41 @@ test('F61: the selected header scrolls into view in a short terminal', () => {
   for (let i = 0; i < 10; i++) x = reduce(x, { name: 'down' }).state
   assert.equal(x.selected, 'head:>')
   assert.ok(sized(x).some(l => l.startsWith('› ▾ Deferred (1)')), text(x))
+})
+
+// F77: the assign box carries the Ticket field; the keys line follows the field in use.
+test('F77: the assign box draws the Ticket line; typing an ID there, the keys say so', () => {
+  const sel = reduce(s, { name: 'a' }).state                        // B2 selected
+  const t = text(sel)
+  assert.match(t, /┌─ Assign B2 ─+┐\n  │  Ticket  B2 · \[~\] in progress · CSV export drops the last row +│/)
+  assert.match(t, /\n↑↓ person · a \/ d kind · tab ticket · enter confirm · esc cancel\n/)
+  const none = reduce({ ...fresh }, { name: 'a' }).state             // a header selected: no ticket
+  const n = text(none)
+  assert.match(n, /┌─ Assign a ticket ─+┐\n  │  Ticket  _ · type a ticket ID, e.g. F12 +│/)
+  assert.match(n, /\ntype the ID · tab person · enter confirm · esc cancel\n/)
+  for (const [cols, rows] of [[80, 24], [40, 12], [20, 5]] as const) sized({ ...none, cols, rows })
+})
+// Review #6: the stage dot differs only by colour; with colour off (--no-color, NO_COLOR)
+// or --ascii each stage keeps its state glyph (done, in flight, failed, pending).
+test('F76: with colour off or --ascii a stage row keeps its state glyph', () => {
+  const list = 'RUN-0012  board sweep  1/4 done  (stage 3 open)\n'
+  const chain = ['## Stages', '| # | stage | state | owner | heartbeat | landed |', '|---|---|---|---|---|---|',
+    '| 1 | S1 F1 | x | b | - | a |', '| 2 | S2 F2 | ! | b | - | |', '| 3 | S3 F3 | ~ | b | - | |', '| 4 | S4 B2 | pending | b | - | |', '',
+    '## Chain', '### S1 - stage 1 - F1 one', 'tickets: F1', '### S2 - stage 2 - F2 two', 'tickets: F2',
+    '### S3 - stage 3 - F3 three', 'tickets: F3', '### S4 - stage 4 - B2 four', 'tickets: B2', ''].join('\n')
+  const r = { ...reduce(reduce(onRuns(s, list, { 'RUN-0012': chain }), { name: '2' }).state, { name: 'return' }).state, rows: 40 }
+  const mono = frame(r, P).join('\n')
+  assert.match(mono, /^    ✓  1  F1 /m)
+  assert.match(mono, /^    ✗  2  F2 /m)
+  assert.match(mono, /^    ●  3  F3 /m)
+  assert.match(mono, /^    ·  4  B2 /m)
+  const ascii = frame(r, { color: true, ascii: true }).map(l => l.replace(/\x1b\[[0-9;]*m/g, '')).join('\n')
+  assert.match(ascii, /^    \+  1  F1 /m)
+  assert.match(ascii, /^    x  2  F2 /m)
+  assert.match(ascii, /^    \*  3  F3 /m)
+  assert.match(ascii, /^    \.  4  B2 /m)
+  // colour on: the owner's dots, each in its status colour
+  const col = frame(r, { color: true, ascii: false }).join('\n')
+  assert.match(col, /^    \x1b\[32m●\x1b\[0m  1  /m)
+  assert.match(col, /^    \x1b\[31m●\x1b\[0m  2  /m)
 })

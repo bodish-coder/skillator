@@ -1,0 +1,20 @@
+Ticket F77 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line; it is the spec): in the
+ops board's assign form, choose the ticket by number. Owning code: the ops-board mod, mods/ops-board - hooks/assign.tsx
+(openAssign: today a header or no selection toasts 'ops board: select a ticket first'), hooks/pane.tsx (the a/d keys),
+types (AssignDraft), and the standalone ops app (mods/ops-board/ops/state.ts, draw.ts, app.ts) whose assign dialog
+must behave the same. Behaviour: `a` / `d` with no ticket selected opens the form with a Ticket field instead of the
+toast; typing an ID (case-insensitive, e.g. f12) resolves it against the loaded board and shows its title and state,
+or 'no such ticket' (Assign disabled until it resolves); with a ticket selected the field is prefilled and can be
+changed. Every write still goes through ticket-meta assign|decide exactly as now - the mod writes no file.
+Keep B5's rule: the form is drawn inside the ops-board pane, never a second pane. The existing F61 test
+'a and d on a ticket row still open the in-pane form; on a header they ask for a ticket' changes meaning - update it
+to the new behaviour, do not delete its coverage.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-complete-all-pending
+(branch run/RUN-0018-complete-all-pending). Never touch the main checkout, never push, never edit TICKETS.md.
+Tests red first (show the failing lines): mods/ops-board/tests/assign.test.tsx for selected, unselected, an unknown
+ID and a changed ID, terminal + desktop; mods/ops-board/ops/tests (node --test via ops/package.json) for the standalone app.
+Final checks one at a time (low RAM, never in parallel): `claude plugin test mods/ops-board`, `cd mods/ops-board/ops
+&& npm test`, `claude plugin validate mods/ops-board`, `tsc -p mods/ops-board/tsconfig.json --noEmit`.
+Live check: if a real pane cannot be driven headless, say so plainly - do not claim one.
+Before committing, run /code-review (code-review:code-review, level low) on the staged diff and fix what it finds.
+Commit as "F77: <what>" with the evidence. Report: sha, red/green lines, what the live check could and could not show.

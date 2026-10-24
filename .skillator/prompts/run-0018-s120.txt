@@ -1,0 +1,21 @@
+Ticket F69 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line in full; it is the spec):
+redesign the /pending output.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0018-complete-all-pending
+(branch run/RUN-0018-complete-all-pending). Never touch the main checkout, never push, never edit TICKETS.md.
+The scripts are skills/tickets-zordon/scripts/pending.sh and pending.ps1 (find every caller with `git grep -l pending`
+- the ops-board mod, host commands, selftests - and keep them working; name them before you edit).
+1. Measure first: time both scripts against the main checkout's board (read-only) and find what makes them slow
+   (the owner saw over 3 minutes). Report the slow parts with timings before changing anything.
+2. Redesign per the ticket's "Want:" list: header (repo, branch vs origin, time); open tickets grouped by status
+   with ID, title (truncated to fit) and owner/session tag; deferred collapsed to IDs; stale runs marked stale
+   (define stale from the run file's updated/heartbeat - say the rule); agents with one clear state; machine
+   (disk, memory, hold) on one or two lines with the release hint; a NEXT line (what the owner must test - the
+   `(testing: ...)` notes - and what agents are doing); GREENS only for open tickets; no line repeated (HOLD vs
+   WATCHDOG). Plain ASCII text, fits 80 columns, pastes unchanged on every host.
+3. pending.sh and pending.ps1 give the SAME output for the same board (a selftest compares them on a fixture
+   board, CRLF board included). Target under 10 s on this repo.
+Tests red first: extend the existing pending selftests (`--selftest` on each) with the new layout's cases, show
+FAIL before, ok after. Final checks, one at a time (low RAM): both pending selftests, `sh install.sh --selftest`,
+the ops-board mod tests if it parses pending output (check), and a real run of each script on the main checkout's
+board with its wall time. Paste the real output in your report.
+Commit as "F69: <what>" with the evidence. Report: sha, timings before/after, red and green lines, the real output.

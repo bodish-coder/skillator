@@ -67,6 +67,27 @@ const CHAIN_12 = [
   '',
 ].join('\n')
 
+// F76: a run part way through - stage 1 landed, 2 failed, 3 in flight, 4 not started.
+const CHAIN_13 = [
+  '## Stages', '| # | stage | state | owner | heartbeat | landed |', '|---|---|---|---|---|---|',
+  '| 1 | S1 F46 | x | build | - | abc |', '| 2 | S2 F47 | ! | build | - | |', '| 3 | S3 F48 | ~ | build | - | |', '| 4 | S4 B2 | pending | build | - | |',
+  '', '## Chain',
+  '### S1 - stage 1 - F46 tickets pane', 'tickets: F46', '### S2 - stage 2 - F47 assign', 'tickets: F47',
+  '### S3 - stage 3 - F48 band', 'tickets: F48', '### S4 - stage 4 - B2 cart', 'tickets: B2', '',
+].join('\n')
+
+// The colour of the first `●` under a drawn line (its status dot).
+function dotColor(n: unknown): string | undefined {
+  const node = n as { children?: unknown[]; props?: { color?: string } } | null
+  if (!node || typeof node !== 'object') return undefined
+  if (node.children?.[0] === '●') return node.props?.color ?? 'none'
+  for (const c of node.children ?? []) { const x = dotColor(c); if (x) return x }
+  return undefined
+}
+// A section header's colour: its Button's Text, as the Tickets tab's group headers.
+const headColor = async (ui: { find(q: { key: string }): Promise<{ children: unknown[] } | undefined> }, key: string) =>
+  ((await ui.find({ key }))?.children[0] as { props?: { color?: string } } | undefined)?.props?.color
+
 type World = {
   files: Record<string, string>
   list: string
@@ -112,7 +133,7 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
       w.maxInFlight = Math.max(w.maxInFlight, ++w.inFlight)
       for (let i = 0; i < 200; i++) await Promise.resolve()   // stays in flight a while, no timer
       w.inFlight--
-      return { value: a[2] === 'RUN-0014' ? ran(CHAIN_14) : a[2] === 'RUN-0012' ? ran(CHAIN_12) : ran('', 1, 'no such run') }
+      return { value: a[2] === 'RUN-0014' ? ran(CHAIN_14) : a[2] === 'RUN-0012' ? ran(CHAIN_12) : a[2] === 'RUN-0013' ? ran(CHAIN_13) : ran('', 1, 'no such run') }
     }
     if (a[1] === RELAY + '.sh' && a[2] === 'queue-run') return { value: w.queue }
     if (a.includes('decide')) return { value: ran('UNOBSERVABLE\n') }
@@ -149,11 +170,11 @@ for (const surface of SURFACES) {
     const text = async (key: string) => (await ui.find({ key }))?.text
     // chain status is read for the runs not all done only
     expect(statuses(w).map(a => a[2]).sort()).toEqual(['RUN-0012', 'RUN-0014'])
-    expect(await text('run:RUN-0014')).toBe('RUN-0014  plan from /plan-runs  owner @vidul  3 tickets → 3 stages')
+    expect(await text('run:RUN-0014')).toBe('● RUN-0014  plan from /plan-runs  owner @vidul  3 tickets → 3 stages')
     expect(await text('cols:RUN-0014')).toBe(cols('stage', 'ticket', 'work', 'after', 'files'))
-    expect(await text('stage:RUN-0014:1')).toBe(cols('  1', '● F46', 'tickets pane', '-', 'mods/ops-board/hooks/tickets.tsx'))
-    expect(await text('stage:RUN-0014:2')).toBe(cols('  2', '● F47', 'assign from the pane', '1', 'same file as 1, so after 1'))
-    expect(await text('stage:RUN-0014:3')).toBe(cols('  3', '● F48', 'watchdog band', '-', 'mods/ops-board/hooks/band.tsx'))
+    expect(await text('stage:RUN-0014:1')).toBe(cols('● 1', '● F46', 'tickets pane', '-', 'mods/ops-board/hooks/tickets.tsx'))
+    expect(await text('stage:RUN-0014:2')).toBe(cols('● 2', '● F47', 'assign from the pane', '1', 'same file as 1, so after 1'))
+    expect(await text('stage:RUN-0014:3')).toBe(cols('● 3', '● F48', 'watchdog band', '-', 'mods/ops-board/hooks/band.tsx'))
     expect(await text('par:RUN-0014')).toBe('runs in parallel: 1 and 3 · then 2')
     expect(await text('dec:RUN-0014:0')).toBe('parked  Q1 ● F49 credit source? - planning waits on it')
     expect(await text('edit:RUN-0014')).toBe('Edit in chat: /skillator:plan-runs F46 F47 F48')
@@ -162,7 +183,7 @@ for (const surface of SURFACES) {
     expect(JSON.stringify(await ui.find({ key: 'dec:RUN-0014:0' }))).toContain('"color":"permission"')
     expect(await text('stage:RUN-0014:3')).not.toContain('[~]')
     // a dispatched run: no Start, its stage open
-    expect(await text('run:RUN-0012')).toBe('RUN-0012  the ops board  owner @asha  2/4 done')
+    expect(await text('run:RUN-0012')).toBe('● RUN-0012  the ops board  owner @asha  2/4 done')
     expect(await text('stage:RUN-0012:3')).toContain('open')
     expect(await ui.find({ key: 'start:RUN-0012' })).toBeUndefined()
     // a finished run is counted, not drawn
@@ -209,11 +230,82 @@ test('the runs poll: every 30 s on the Runs tab, never on another tab', async ($
   w.list = LIST.replace(row('0014', 'plan from /plan-runs', 0, 3), row('0014', 'plan from /plan-runs', 1, 3, '1'))
   await clock.advance(30_000)
   expect(statuses(w).length).toBeGreaterThan(n)
-  expect((await ui.find({ key: 'run:RUN-0014' }))?.text).toBe('RUN-0014  plan from /plan-runs  owner @vidul  1/3 done')
+  expect((await ui.find({ key: 'run:RUN-0014' }))?.text).toBe('● RUN-0014  plan from /plan-runs  owner @vidul  1/3 done')
   await ui.press({ key: 'tab:tickets' })
   const m = statuses(w).length
   await clock.advance(30_000)
   expect(statuses(w)).toHaveLength(m)
+  await ui.unmount()
+})
+
+// F76: Runs and Workflows are one tab (labelled Workflows), a section each, opening and closing as F61's
+// status groups do (a header Button with its count; the choice kept for the session).
+for (const surface of SURFACES) {
+  test(`${surface}: F76 one tab - a Runs and a Workflows section, each opens and closes`, async ($, on) => {
+    const [, clock] = world(on)
+    await start($, clock)
+    const ui = await runsTab($, surface)
+    const text = async (key: string) => (await ui.find({ key }))?.text
+    expect(await ui.find({ key: 'tab:workflows' })).toBeUndefined()
+    expect(await text('tab:runs')).toBe('Workflows')            // owner: the merged tab is labelled Workflows
+    expect(await text('sect:runs')).toBe('▾ Runs (2)')
+    expect(await text('sect:workflows')).toBe('▾ Workflows (0)')
+    expect(await text('run:RUN-0014')).toBe('● RUN-0014  plan from /plan-runs  owner @vidul  3 tickets → 3 stages')
+    expect(await text('wf:none')).toBe('no workflow run in this session yet')
+    await ui.press({ key: 'sect:runs' })
+    expect(await text('sect:runs')).toBe('▸ Runs (2)')
+    expect(await ui.find({ key: 'run:RUN-0014' })).toBeUndefined()
+    expect(await ui.find({ key: 'finished' })).toBeUndefined()
+    expect(await text('wf:none')).toBe('no workflow run in this session yet')
+    await ui.press({ key: 'sect:workflows' })
+    expect(await text('sect:workflows')).toBe('▸ Workflows (0)')
+    expect(await ui.find({ key: 'wf:none' })).toBeUndefined()
+    // kept for the session: away and back, both stay closed
+    await ui.press({ key: 'tab:tickets' })
+    await ui.press({ key: 'tab:runs' })
+    expect(await text('sect:runs')).toBe('▸ Runs (2)')
+    expect(await text('sect:workflows')).toBe('▸ Workflows (0)')
+    await ui.press({ key: 'sect:runs' })
+    expect(await text('run:RUN-0014')).toBe('● RUN-0014  plan from /plan-runs  owner @vidul  3 tickets → 3 stages')
+    expect(await text('finished')).toBe('1 finished run not shown')
+    await ui.unmount()
+  })
+}
+
+// F76 (owner): every run and stage row has a `●` in its status colour, the Tickets tab's
+// colours for the matching ticket states - completed green ([x]), in progress amber ([~]),
+// pending / not started as a pending ticket ([ ]), failed red ([!]); the section header
+// takes the colour of what is under way in it.
+for (const surface of SURFACES) {
+  test(`${surface}: F76 a status dot on every run and stage row, coloured as the Tickets tab`, async ($, on) => {
+    const [w, clock] = world(on)
+    w.list = [LIST.trimEnd(), row('0013', 'colours', 1, 4, '3'), ''].join('\n')
+    await start($, clock)
+    const ui = await runsTab($, surface)
+    const dot = async (key: string) => dotColor(await ui.find({ key }))
+    expect((await ui.find({ key: 'run:RUN-0012' }))?.text).toBe('● RUN-0012  the ops board  owner @asha  2/4 done')
+    expect(await dot('run:RUN-0012')).toBe('warning')          // dispatched, not all landed: in progress
+    expect(await dot('run:RUN-0014')).toBe('text')             // planned, not started: pending
+    expect(await dot('stage:RUN-0013:1')).toBe('success')      // landed
+    expect(await dot('stage:RUN-0013:2')).toBe('error')        // failed keeps its red
+    expect(await dot('stage:RUN-0013:3')).toBe('warning')      // in flight
+    expect(await dot('stage:RUN-0013:4')).toBe('text')         // not started
+    expect(await dot('stage:RUN-0014:1')).toBe('text')         // a planned run's stage
+    expect((await ui.find({ key: 'stage:RUN-0013:1' }))?.text).toStartWith('● 1    ')
+    expect(await headColor(ui, 'sect:runs')).toBe('warning')   // a run under way: the header is amber
+    await ui.unmount()
+  })
+}
+
+test('F76: the runs poll fires while the tab is shown, its sections closed', async ($, on) => {
+  const [w, clock] = world(on)
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+  await ui.press({ key: 'sect:runs' })
+  await ui.press({ key: 'sect:workflows' })
+  const n = statuses(w).length
+  await clock.advance(30_000)
+  expect(statuses(w).length).toBeGreaterThan(n)
   await ui.unmount()
 })
 

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "entries": [
+    { "id": "install-selftest", "name": "install.sh --selftest", "kind": "sh", "target": "install.sh", "args": ["--selftest"], "command": "sh install.sh --selftest", "cwd": ".", "source": "hand", "missing": false },
+    { "id": "ps1:install.ps1", "name": "install.ps1", "kind": "ps1", "target": "install.ps1", "args": [], "command": "powershell -File install.ps1", "cwd": ".", "source": "install.ps1", "missing": false },
+    { "id": "sh:install.sh", "name": "install.sh", "kind": "sh", "target": "install.sh", "args": [], "command": "sh install.sh", "cwd": ".", "source": "install.sh", "missing": false }
+  ]
+}
