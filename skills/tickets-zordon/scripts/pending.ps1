@@ -193,6 +193,7 @@ function Get-RunsKv {
     $num = [long]$b
     $id = 'RUN-' + $num.ToString('0000')
     $hdr = $true; $ow = ''; $d = 0; $t = 0; $st = ''; $new = [long]-1
+    $act = New-Object System.Collections.ArrayList
     foreach ($l in (Read-Lines "$dir/$nm")) {
       if ($hdr -and $l.StartsWith('## ', [StringComparison]::Ordinal)) { $hdr = $false }
       if ($hdr -and $ow -eq '' -and $l.StartsWith('owner: ', [StringComparison]::Ordinal)) { $ow = (ConvertTo-Ascii $l.Substring(7)).Trim(" `t".ToCharArray()) }
@@ -205,9 +206,12 @@ function Get-RunsKv {
         $t++
         $s = ([string]$cells[3]) -replace '[ \t]', ''
         if ($s -ceq 'x' -or $s -ceq '>') { $d++ }
-        elseif ($st -eq '') {
-          $st = (ConvertTo-Ascii ([string]$cells[2])).Trim(" `t".ToCharArray())
-          if ($st -eq '') { $st = '-' }
+        else {
+          $y = (ConvertTo-Ascii ([string]$cells[2])).Trim(" `t".ToCharArray())
+          if ($y -eq '') { $y = '-' }
+          if ($st -eq '') { $st = $y }
+          # A152: every in-flight stage, right after the run's RUN line.
+          if ($s -ceq '~') { [void]$act.Add("ACTIVE=$id|$y") }
         }
         $x = Get-Stamp ([string]$cells[5]); if ($x -gt $new) { $new = $x }
       }
@@ -217,7 +221,7 @@ function Get-RunsKv {
       if ($new -ge 0) { $av = Div ([Math]::Max(0, $script:Now - $new)) 60; $a = [string]$av }
       if ($ow -eq '') { $ow = '-' }
       if ($st -eq '') { $st = '-' }
-      [void]$nums.Add($num); [void]$lines.Add("RUN=$id|$d/$t|$ow|$st|$a")
+      [void]$nums.Add($num); [void]$lines.Add([string[]](@("RUN=$id|$d/$t|$ow|$st|$a") + @($act)))
     }
   }
   # Insertion sort on the number: stable, as pending.sh's.
@@ -227,7 +231,9 @@ function Get-RunsKv {
       $k = $lines[$j]; $lines[$j] = $lines[$j - 1]; $lines[$j - 1] = $k
     }
   }
-  return @($lines)
+  $out = New-Object System.Collections.ArrayList
+  foreach ($g in $lines) { foreach ($x in $g) { [void]$out.Add($x) } }
+  return @($out)
 }
 
 function Get-QueuedKv {
@@ -488,7 +494,14 @@ function Get-Judge($facts) {
 function Get-Trunc([string]$s, [int]$w) {
   if ($s.Length -le $w) { return $s }
   if ($w -lt 4) { if ($w -le 0) { return '' }; return $s.Substring(0, $w) }
-  return ($s.Substring(0, $w - 3).TrimEnd(' ') + '...')
+  # A152: cut at a word boundary - back to the last space when the cut falls
+  # inside a word; one word longer than the room is still cut.
+  $c = $s.Substring(0, $w - 3)
+  if ($s[$w - 3] -cne ' ') {
+    $k = $c.LastIndexOf(' ')
+    if ($k -gt 0 -and $c.Substring(0, $k).Trim(' ') -ne '') { $c = $c.Substring(0, $k) }
+  }
+  return ($c.TrimEnd(' ') + '...')
 }
 function Get-Pad([string]$s, [int]$w) { if ($s.Length -ge $w) { return $s } return $s + (' ' * ($w - $s.Length)) }
 function Get-Age([long]$n) {
@@ -531,6 +544,7 @@ function Format-Human($facts) {
   $ow = New-Object System.Collections.ArrayList
   $lk = New-Object System.Collections.ArrayList
   $dr = ''; $dt = ''
+  $act = @{}
   $mn = Get-NormPath $script:Main
   foreach ($l in @($facts)) {
     $kv = Split-Kv $l
@@ -547,6 +561,10 @@ function Format-Human($facts) {
     }
     elseif ($k -ceq 'TEST') { $i = $v.IndexOf('|'); [void]$tests.Add(@($v.Substring(0, $i), $v.Substring($i + 1))) }
     elseif ($k -ceq 'RUN') { [void]$runs.Add($v.Split('|')) }
+    elseif ($k -ceq 'ACTIVE') {
+      $i = $v.IndexOf('|'); $ri = $v.Substring(0, $i)
+      if ($act.ContainsKey($ri)) { $act[$ri] += ', ' + $v.Substring($i + 1) } else { $act[$ri] = $v.Substring($i + 1) }
+    }
     elseif ($k -ceq 'QUEUED') { [void]$q.Add($v) }
     elseif ($k -ceq 'SESSION') {
       $a = $v.Split('|')
@@ -606,6 +624,8 @@ function Format-Human($facts) {
     $tag = $r[2]
     if ($tag -ceq '-') { $tag = '' }
     & $right ($pre + $r[0] + '  ' + (Get-Pad $st 9) + '  ' + (Get-Pad $r[1] 5) + '  ') $stage $tag
+    # A152: every in-flight stage; with none, the first open one.
+    if ($act.ContainsKey($r[0])) { $stage = $act[$r[0]] }
     if ($st.StartsWith('live')) { [void]$live.Add("$($r[0]) at $stage") }
   }
   if ($q.Count -gt 0) { & $wrap '          queued: ' ([string]::Join(' ', [string[]]$q.ToArray())) '                  ' }
@@ -660,7 +680,7 @@ function Format-Human($facts) {
     & $add (Get-Trunc "${pre}test $($tests[$i][0]): $note" 80)
   }
   $lt = 'no run working'
-  if ($live.Count -gt 0) { $lt = [string]::Join(', ', [string[]]$live.ToArray()) }
+  if ($live.Count -gt 0) { $lt = [string]::Join('; ', [string[]]$live.ToArray()) }
   & $wrap '          agents: ' $lt '                  '
   return @($o)
 }
@@ -743,8 +763,8 @@ function Invoke-Selftest {
       '|---|-------|-------|-------|-----------|--------|',
       '| 1 | stage one | x | a | 2026-01-01T11:30Z | abc |',
       '| 2 | stage two | > | a | 2026-01-01T12:20Z | stage 3 |',
-      '| 3 | stage three title |  | - | - | - |',
-      '| 4 | stage four |  | - | - | - |')) + "`n")
+      '| 3 | stage three title | ~ | - | - | - |',
+      '| 4 | stage four | ~ | - | - | - |')) + "`n")
     W "$R/.skillator/run-13-all-landed.md" ([string]::Join("`n", @(
       '# RUN-13 - all landed', 'plan: none', 'started: 2026-01-01T09:00Z   updated: 2026-01-01T09:30Z', '', '## Stages',
       '| # | stage | state | owner | heartbeat | landed |', '|---|-------|-------|-------|-----------|--------|',
@@ -799,7 +819,8 @@ function Invoke-Selftest {
       'TICKET=~|F5|@cc-bbbbbb|a very long title that goes on and on well past the eighty column limit of any terminal',
       'TICKET=>|F6||deferred too', 'TICKET=%|F7||en dash title "quoted" -> arrow',
       'TEST=F4|live check', 'TEST=F7|owner looks at it', 'OWED=B2',
-      'RUN=RUN-0012|2/4|@vidul|stage three title|14', 'RUN=RUN-0014|1/2|-|later stage|44794',
+      'RUN=RUN-0012|2/4|@vidul|stage three title|14', 'ACTIVE=RUN-0012|stage three title', 'ACTIVE=RUN-0012|stage four',
+      'RUN=RUN-0014|1/2|-|later stage|44794', 'ACTIVE=RUN-0014|later stage',
       "SESSION=repo-c0|busy|$M|4", 'SESSION=other-1|busy|C:\elsewhere|94',
       'DRIVE=X:', 'DISK_FREE=858993459', 'DISK_TOTAL=1000000000000', 'MEM_FREE=3435973836',
       'LOCK=.skillator/run.md.lock|34|1234 sh MINGW', 'HOLD=-', 'WATCHDOG=red')))
@@ -811,7 +832,7 @@ function Invoke-Selftest {
       'TICKETS   8 open, 2 deferred',
       '  in progress (2)',
       '    B1    cart drawer keeps items                                     @cc-aaaaaa',
-      '    F5    a very long title that goes on and on well past the eig...  @cc-bbbbbb',
+      '    F5    a very long title that goes on and on well past the...      @cc-bbbbbb',
       '  testing (2)',
       '    F4    built, under test',
       '    F7    en dash title "quoted" -> arrow',
@@ -833,7 +854,7 @@ function Invoke-Selftest {
       'GREENS    owed: B2',
       'NEXT      test F4: live check',
       '          test F7: owner looks at it',
-      '          agents: RUN-0012 at stage three title'))
+      '          agents: RUN-0012 at stage three title, stage four'))
     $H = Run
     Eq 'human' $H $human
     Fits 'human' $H
@@ -915,6 +936,10 @@ function Invoke-Selftest {
     W "$R/TICKETS.md" ([string]::Join("`n", $more) + "`n")
     $P = @(Range (Run) '^  pending ' '^  deferred ')
     Eq 'pending capped' @($P[0], $P[10], $P[11]) ([string]::Join("`n", @('  pending (15)', '    F17   row 17', '    ... 5 more pending: list tickets')))
+    # A152: a title is cut at a word boundary (F5 above); one word longer than
+    # the room is still cut, mid-word.
+    W "$R/TICKETS.md" ("- [ ] F9 $dash " + ('x' * 90) + "`n")
+    Eq 'one long word is cut' (@(Run) | Where-Object { $_ -cmatch '^    F9 ' }) ('    F9    ' + ('x' * 67) + '...')
     # No upstream, and detached.
     G branch -q --unset-upstream
     Eq 'no upstream' (@(Run)[0]) 'REPO      repo  main: no upstream  2026-01-01 12:34Z'

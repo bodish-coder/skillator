@@ -31,6 +31,8 @@
 #                                     newest of the header's `updated:` stamp and the
 #                                     stage rows' heartbeat stamps; - when there is none.
 #                                     STALE = age over 24 h (1440 min) or no stamp at all.
+#   ACTIVE=<run id>|<stage>           A152: per in-flight (~) stage of that run, right
+#                                     after its RUN line, in table order
 #   QUEUED=<id>                       per row of `relay-morpheus queue-run list` in state queued
 #                                     (none while .skillator/queue.md does not exist)
 #   SESSION=<name>|<status>|<cwd>|<min>   per <config dir>/sessions/*.json: a busy one
@@ -173,7 +175,7 @@ runs_kv() {
     function fin(   a) {
       if (id != "" && t > 0 && d < t) {
         a = (new < 0) ? "-" : int((now - new) / 60); if (a != "-" && a < 0) a = 0
-        n++; NUM[n] = num; LINE[n] = "RUN=" id "|" d "/" t "|" (ow == "" ? "-" : ow) "|" (st == "" ? "-" : st) "|" a
+        n++; NUM[n] = num; LINE[n] = "RUN=" id "|" d "/" t "|" (ow == "" ? "-" : ow) "|" (st == "" ? "-" : st) "|" a ac
       }
       id = ""
     }
@@ -181,7 +183,7 @@ runs_kv() {
       fin()
       b = FILENAME; sub(/.*\//, "", b); sub(/^run-/, "", b); sub(/[-.].*/, "", b)
       if (b ~ /^[0-9]+$/) { num = b + 0; id = sprintf("RUN-%04d", num) }
-      hdr = 1; ow = ""; d = 0; t = 0; st = ""; new = -1
+      hdr = 1; ow = ""; d = 0; t = 0; st = ""; new = -1; ac = ""
     }
     { sub(/\r$/, "") }
     id == "" { next }
@@ -192,7 +194,11 @@ runs_kv() {
       split($0, c, "|"); t++
       s = c[4]; gsub(/[ \t]/, "", s)
       if (s == "x" || s == ">") d++
-      else if (st == "") { st = ascii(c[3]); gsub(/^[ \t]+|[ \t]+$/, "", st); if (st == "") st = "-" }
+      else {
+        y = ascii(c[3]); gsub(/^[ \t]+|[ \t]+$/, "", y); if (y == "") y = "-"
+        if (st == "") st = y
+        if (s == "~") ac = ac "\nACTIVE=" id "|" y
+      }
       x = stamp(c[6]); if (x > new) new = x
     }
     END {
@@ -379,7 +385,15 @@ K == "HOLD" { HD = V }
 # GREENS (owed on open tickets), NEXT (what to test, what runs are doing).
 human() {
   awk -v now="$NOW" -v main="$MAIN" "$AWK_TXT$AWK_LIB"'
-    function trunc(s, w) { if (length(s) <= w) return s; if (w < 4) return substr(s, 1, w); s = substr(s, 1, w - 3); sub(/ +$/, "", s); return s "..." }
+    # A152: cut at a word boundary - back to the last space when the cut
+    # falls inside a word; one word longer than the room is still cut.
+    function trunc(s, w,   c) {
+      if (length(s) <= w) return s
+      if (w < 4) return substr(s, 1, w)
+      c = substr(s, 1, w - 3)
+      if (substr(s, w - 2, 1) != " " && match(c, / [^ ]*$/) && substr(c, 1, RSTART - 1) ~ /[^ ]/) c = substr(c, 1, RSTART - 1)
+      sub(/ +$/, "", c); return c "..."
+    }
     function out(s) { sub(/ +$/, "", s); print s }
     function pad(s, w) { while (length(s) < w) s = s " "; return s }
     function wrap(pre, text, cont,   n, a, i, line, has, w) {
@@ -415,6 +429,7 @@ human() {
                     j = index(s, "|"); N[m]++; TID[m, N[m]] = id; TTG[m, N[m]] = substr(s, 1, j - 1); TTI[m, N[m]] = substr(s, j + 1) }
     K == "TEST" { j = index(V, "|"); nt++; XID[nt] = substr(V, 1, j - 1); XN[nt] = substr(V, j + 1) }
     K == "RUN" { split(V, a, "|"); nr++; RI[nr] = a[1]; RD[nr] = a[2]; RO[nr] = a[3]; RG[nr] = a[4]; RA[nr] = a[5] }
+    K == "ACTIVE" { j = index(V, "|"); s = substr(V, 1, j - 1); ACT[s] = ACT[s] (ACT[s] == "" ? "" : ", ") substr(V, j + 1) }
     K == "QUEUED" { q = q (q == "" ? "" : " ") V }
     K == "SESSION" { n = split(V, a, "|"); cw = a[3]; for (j = 4; j < n; j++) cw = cw "|" a[j]
                      ns++; SN[ns] = ascii(a[1]); SS[ns] = a[2]; SA[ns] = a[n] + 0
@@ -451,7 +466,8 @@ human() {
       for (j = 1; j <= nr; j++) {
         st = (RA[j] == "-" || RA[j] + 0 > 1440) ? "stale " (RA[j] == "-" ? "?" : age(RA[j] + 0)) : "live " age(RA[j] + 0)
         right((j == 1 ? "RUNS      " : "          ") RI[j] "  " pad(st, 9) "  " pad(RD[j], 5) "  ", (RG[j] == "-" ? "(no open stage)" : RG[j]), (RO[j] == "-" ? "" : RO[j]))
-        if (st ~ /^live/) live = live (live == "" ? "" : ", ") RI[j] " at " (RG[j] == "-" ? "(no open stage)" : RG[j])
+        # A152: every in-flight stage; with none, the first open one.
+        if (st ~ /^live/) live = live (live == "" ? "" : "; ") RI[j] " at " (ACT[RI[j]] != "" ? ACT[RI[j]] : (RG[j] == "-" ? "(no open stage)" : RG[j]))
       }
       if (q != "") wrap("          queued: ", q, "                  ")
 
@@ -537,8 +553,8 @@ selftest() {
     "|---|-------|-------|-------|-----------|--------|" \
     "| 1 | stage one | x | a | 2026-01-01T11:30Z | abc |" \
     "| 2 | stage two | > | a | 2026-01-01T12:20Z | stage 3 |" \
-    "| 3 | stage three title |  | - | - | - |" \
-    "| 4 | stage four |  | - | - | - |" > .skillator/run-12-demo-run.md
+    "| 3 | stage three title | ~ | - | - | - |" \
+    "| 4 | stage four | ~ | - | - | - |" > .skillator/run-12-demo-run.md
   printf '%s\n' "# RUN-13 - all landed" "plan: none" "started: 2026-01-01T09:00Z   updated: 2026-01-01T09:30Z" "" "## Stages" \
     "| # | stage | state | owner | heartbeat | landed |" "|---|-------|-------|-------|-----------|--------|" \
     "| 1 | one | x | a | - | abc |" "| 2 | two | x | a | - | def |" "| 3 | three | > | a | - | stage 2 |" > .skillator/run-13-all-landed.md
@@ -587,7 +603,7 @@ EOF
   export PENDING_RELAY PENDING_DF_CMD PENDING_MEM_CMD PENDING_SESSIONS_DIR PENDING_NOW PENDING_T
   unset RELAY_DIR 2>/dev/null || :
 
-  eq "kv" "$(run --kv)" "REPO=repo${NL}BRANCH=main|base|2|0${NL}UNPUSHED=2${NL}OPEN=8${NL}PENDING=2${NL}PROGRESS=2${NL}BLOCKED=1${NL}DECISION=1${NL}TESTING=2${NL}DEFERRED=2${NL}TICKET=~|B1|@cc-aaaaaa|cart drawer keeps items${NL}TICKET=!|B2|@vidul|orders 500 past page 3${NL}TICKET=?|F1|decide @asha|pick the chart library${NL}TICKET=>|F2||later thing${NL}TICKET=%|F4||built, under test${NL}TICKET= |F3||pending one${NL}TICKET= |F3a||a towed car, slowed down${NL}TICKET=~|F5|@cc-bbbbbb|a very long title that goes on and on well past the eighty column limit of any terminal${NL}TICKET=>|F6||deferred too${NL}TICKET=%|F7||en dash title \"quoted\" -> arrow${NL}TEST=F4|live check${NL}TEST=F7|owner looks at it${NL}OWED=B2${NL}RUN=RUN-0012|2/4|@vidul|stage three title|14${NL}RUN=RUN-0014|1/2|-|later stage|44794${NL}SESSION=repo-c0|busy|$M|4${NL}SESSION=other-1|busy|C:\\elsewhere|94${NL}DRIVE=X:${NL}DISK_FREE=858993459${NL}DISK_TOTAL=1000000000000${NL}MEM_FREE=3435973836${NL}LOCK=.skillator/run.md.lock|34|1234 sh MINGW${NL}HOLD=-${NL}WATCHDOG=red"
+  eq "kv" "$(run --kv)" "REPO=repo${NL}BRANCH=main|base|2|0${NL}UNPUSHED=2${NL}OPEN=8${NL}PENDING=2${NL}PROGRESS=2${NL}BLOCKED=1${NL}DECISION=1${NL}TESTING=2${NL}DEFERRED=2${NL}TICKET=~|B1|@cc-aaaaaa|cart drawer keeps items${NL}TICKET=!|B2|@vidul|orders 500 past page 3${NL}TICKET=?|F1|decide @asha|pick the chart library${NL}TICKET=>|F2||later thing${NL}TICKET=%|F4||built, under test${NL}TICKET= |F3||pending one${NL}TICKET= |F3a||a towed car, slowed down${NL}TICKET=~|F5|@cc-bbbbbb|a very long title that goes on and on well past the eighty column limit of any terminal${NL}TICKET=>|F6||deferred too${NL}TICKET=%|F7||en dash title \"quoted\" -> arrow${NL}TEST=F4|live check${NL}TEST=F7|owner looks at it${NL}OWED=B2${NL}RUN=RUN-0012|2/4|@vidul|stage three title|14${NL}ACTIVE=RUN-0012|stage three title${NL}ACTIVE=RUN-0012|stage four${NL}RUN=RUN-0014|1/2|-|later stage|44794${NL}ACTIVE=RUN-0014|later stage${NL}SESSION=repo-c0|busy|$M|4${NL}SESSION=other-1|busy|C:\\elsewhere|94${NL}DRIVE=X:${NL}DISK_FREE=858993459${NL}DISK_TOTAL=1000000000000${NL}MEM_FREE=3435973836${NL}LOCK=.skillator/run.md.lock|34|1234 sh MINGW${NL}HOLD=-${NL}WATCHDOG=red"
   # No queue.md: queue-run list is never called (it would create the file).
   [ ! -e .skillator/queue.md ] || { echo "FAIL: pending created .skillator/queue.md"; fail=1; }
   echo '# Run queue' > .skillator/queue.md
@@ -595,7 +611,7 @@ EOF
 TICKETS   8 open, 2 deferred
   in progress (2)
     B1    cart drawer keeps items                                     @cc-aaaaaa
-    F5    a very long title that goes on and on well past the eig...  @cc-bbbbbb
+    F5    a very long title that goes on and on well past the...      @cc-bbbbbb
   testing (2)
     F4    built, under test
     F7    en dash title \"quoted\" -> arrow
@@ -617,7 +633,7 @@ MACHINE   RED  disk X: 0.8 GB free of 931 GB (below 1 GB), memory 3.2 GB free
 GREENS    owed: B2
 NEXT      test F4: live check
           test F7: owner looks at it
-          agents: RUN-0012 at stage three title"
+          agents: RUN-0012 at stage three title, stage four"
   H=$(run)
   eq "human" "$H" "$HUMAN"
   fits "human" "$H"
@@ -707,6 +723,10 @@ MACHINE   ok  disk X: 10 GB free of 931 GB, memory 3.2 GB free
   eq "pending capped" "$(run | awk '/^  pending /, /^  deferred /' | awk 'NR == 1 || NR == 11 || NR == 12')" "  pending (15)
     F17   row 17
     ... 5 more pending: list tickets"
+  # A152: a title is cut at a word boundary (F5 above); one word longer than
+  # the room is still cut, mid-word.
+  printf -- '- [ ] F9 %s %s\n' "$D" "$(printf '%090d' 0 | tr 0 x)" > TICKETS.md
+  eq "one long word is cut" "$(run | awk '/^    F9 /')" "    F9    $(printf '%067d' 0 | tr 0 x)..."
   # No upstream, and detached.
   git branch -q --unset-upstream
   eq "no upstream" "$(run | awk 'NR == 1')" "REPO      repo  main: no upstream  2026-01-01 12:34Z"
