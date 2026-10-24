@@ -11,6 +11,8 @@ import { parseBoard } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
 import { parseRuns } from '../hooks/lib/runs'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
+import { NO_GIT } from '../hooks/lib/explorer'
+import { enterExplorer } from './explorer'
 
 export type Engine = {
   readonly state: State
@@ -60,6 +62,10 @@ export function makeEngine(o: EngineOpts): Engine {
   const runEffect = async (e: Effect): Promise<void> => {
     if (e.kind === 'quit') { o.onQuit(); return }
     if (e.kind === 'poll') return e.what === 'board' ? guarded('board', () => pollBoard(true)) : guarded(e.what, e.what === 'slow' ? pollSlow : pollRuns)
+    if (e.kind === 'git') {                     // F75: read-only, so --once runs it too
+      const g = host.git ? await host.git(e.args) : { code: 127, out: '', err: NO_GIT, argv: [] }
+      return apply(afterRun(e, g, state, Date.now()))
+    }
     if (once && e.call !== 'relay-decide') return
     const r = await host.run(e.call, e.args, e.stdin)
     await apply(afterRun(e, r, state, Date.now()))
@@ -174,6 +180,7 @@ export function makeEngine(o: EngineOpts): Engine {
       await pollBoard()
       await pollSlow()
       if (state.tab === 'runs') await pollRuns()
+      if (state.tab === 'explorer') await apply(enterExplorer(state))
     },
     async start() {
       draw()
@@ -181,6 +188,7 @@ export function makeEngine(o: EngineOpts): Engine {
       if (stopped) return
       void guarded('slow', pollSlow)
       if (state.tab === 'runs') void guarded('runs', pollRuns)
+      if (state.tab === 'explorer') void apply(enterExplorer(state))
       timers.push(setInterval(() => { void guarded('board', () => pollBoard()) }, BOARD_MS))
       timers.push(setInterval(() => { void guarded('slow', pollSlow) }, SLOW_MS))
       timers.push(setInterval(() => { if (state.tab === 'runs') void guarded('runs', pollRuns) }, RUNS_MS))

@@ -60,11 +60,24 @@ export type TeamsCfgView = { path: string; token: boolean; workflowUrl: string |
 // The setup form in the pane: only what is safe to hold in $.state - the field values
 // live in the module (the token never reaches $.state); `rev` redraws it.
 export type SetupView = { rev: number; field: string; result: string | null; confirmClear: boolean }
+// F75: the Explorer tab (hooks/lib/explorer.ts) - the tree's rows of open folders and
+// the changes of open commits only; `open` holds the open sections, folders and commits.
+export type Commit = { sha: string; short: string; date: string; author: string; subject: string }
+export type Change = { status: string; path: string; from: string | null; add: number | null; del: number | null }
+export type TreeRow = { path: string; name: string; depth: number; dir: boolean; count: number }
+export type Explorer = {
+  open: string[]; selected: string | null
+  files: number | null                  // tracked files; null: not read yet
+  tree: TreeRow[]; treeMore: number     // the rows drawn (open folders only); rows past MAX_TREE
+  commits: Commit[] | null
+  changes: Record<string, { list: Change[]; more: number }>   // open commits only
+  error: string | null
+}
 declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
       board: Board | null; team: Member[]; me: string | null
-      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'workflows'; selected: string | null; expanded: string | null
+      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'workflows' | 'explorer'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
@@ -76,6 +89,7 @@ declare module 'claude-code' {
       // row picked / opened, the saved config's view, the setup form's safe part
       messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
       teamsCfg: TeamsCfgView | null; setup: SetupView | null
+      explorer: Explorer     // F75: what the Explorer tab draws, no more (B4)
     }
   }
 }

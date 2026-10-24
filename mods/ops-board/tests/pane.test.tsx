@@ -381,7 +381,7 @@ test('/ops runs switches the tab; an unknown word says how to use it', WITH, asy
   const run = (args: string) => $.command.run({ command: 'ops', args, ...RUN })
   expect((await run('runs')).text).toBe('ops board opened on Runs.')
   expect(await state($, 'tab')).toBe('runs')
-  expect((await run('bogus')).text).toBe('usage: /ops [tickets|runs|health|messages|agents|workflows|resume]')
+  expect((await run('bogus')).text).toBe('usage: /ops [tickets|runs|health|messages|agents|workflows|explorer|resume]')
 })
 
 test('the first render arms the poll when session.start never ran (a hot reload)', WITH, async ($, on) => {

@@ -14,6 +14,7 @@ import { cancelPerson, clearForm, isFormUp } from './assign'
 import { pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 import { closeSetup, enterMessages, isSetupUp, pollInbox } from './messagestab'
+import { arrowExplorer, enterExplorer, focusExplorer, isExplorerItem } from './explorertab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -304,16 +305,16 @@ async function openPane($: EngineInterface, asked: boolean) {
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Runs', health: 'Health', messages: 'Messages', agents: 'Agents', workflows: 'Workflows' }
-const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'agents', 'workflows']
-const USAGE = 'usage: /ops [tickets|runs|health|messages|agents|workflows|resume]'
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Runs', health: 'Health', messages: 'Messages', agents: 'Agents', workflows: 'Workflows', explorer: 'Explorer' }
+const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'agents', 'workflows', 'explorer']
+const USAGE = 'usage: /ops [tickets|runs|health|messages|agents|workflows|explorer|resume]'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'ops',
-      description: 'Open the ops board pane: the TICKETS.md board, runs, health, Teams messages, agents and workflows',
-      argumentHint: '[tickets|runs|health|messages|agents|workflows|resume]',
+      description: 'Open the ops board pane: the TICKETS.md board, runs, health, Teams messages, agents, workflows and the explorer',
+      argumentHint: '[tickets|runs|health|messages|agents|workflows|explorer|resume]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -361,6 +362,7 @@ export const register: Register = on => {
     if (word === 'runs') void pollRuns($).catch(() => {})
     if (word === 'agents') void pollAgents($).catch(() => {})
     if (word === 'messages') void enterMessages($).catch(() => {})
+    if (word === 'explorer') void enterExplorer($).catch(() => {})
     const r = await openPane($, true)
     if (!r.isPlaced) return { text: `ops board is open but not drawn: ${r.reason}` }
     return { text: word ? `ops board opened on ${TAB_NAME[word as Tab]}.` : 'ops board opened.' }
@@ -449,6 +451,10 @@ export const register: Register = on => {
   // focus ring follows it, so Enter opens or closes the header shown selected.
   on('ui.scroll', { requestId: 'ops-board' }, async ($, e, next) => {
     if (e.pointer || e.origin.kind !== 'person' || Math.abs(e.by) !== 1) return next(e)
+    if ((await read($, tabA)) === 'explorer') {           // F75: the Explorer's own items
+      const o = await arrowExplorer($, e.by, lastScroll.offset, e.bodyRows, lastCols)
+      return o === undefined ? next(e) : o === null || e.contentRows <= e.bodyRows ? {} : next({ ...e, offset: o })
+    }
     if ((await read($, tabA)) !== 'tickets' || (await isFormUp($))) return next(e)   // a form scrolls as itself
     const m = buildModel(await readView($, lastCols))
     const at = m.selected === null ? -1 : m.items.indexOf(m.selected)
@@ -466,6 +472,7 @@ export const register: Register = on => {
     const el = e.element
     if (el?.startsWith('row:')) await update($, selectedA, () => el.slice(4))
     else if (el?.startsWith('head:')) await update($, selectedA, () => el)
+    else if (el && isExplorerItem(el)) await focusExplorer($, el)          // F75
     return next(e)
   }).catch(($, e, next) => next(e))
 }

@@ -31,7 +31,8 @@ export const headKey = (b: State) => HEAD + b
 export const isHead = (item: string | null): item is string => !!item && item.startsWith(HEAD)
 // The drawn line an item sits on: a header's own key, a ticket's row.
 export const lineKey = (item: string) => (isHead(item) ? item : 'row:' + item)
-export const toggleGroup = (open: readonly State[], b: State): State[] =>
+// F75: generic - the Explorer's sections, folders and commits open and close the same way.
+export const toggleGroup = <T>(open: readonly T[], b: T): T[] =>
   open.includes(b) ? open.filter(x => x !== b) : [...open, b]
 
 export const chipsOf = (t: Ticket) =>

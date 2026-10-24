@@ -17,8 +17,10 @@ import { continuePrompt } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
 import type { SetupField, SetupValues } from '../hooks/lib/teamsconfig'
+import { enterExplorer, EX0, explorerKey } from './explorer'
+import type { ExState } from './explorer'
 
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages'
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer'
 export type FilterField = 'app' | 'who' | 'mine'
 // node readline keypress names: 'up', 'down', 'left', 'right', 'return', 'escape', 'tab', 'a', 'D', ...
 // `sequence` is the character typed (app.ts sets it for printable keys): the Add person form's text.
@@ -52,6 +54,7 @@ export type State = {
   messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
   teamsCfg: TeamsCfgView | null
   setup: Setup | null; setupField: SetupField
+  explorer: ExState                        // F75: the Explorer tab (ops/explorer.ts)
 }
 export type Setup = SetupValues & { result: string | null; confirmClear: boolean; touched: boolean }
 
@@ -61,6 +64,7 @@ export type Then = (r: RunResult) => (s: State) => State | Step
 // stdin (F66): written to the run's standard input - the setup form's values, never argv.
 export type Effect = { kind: 'run'; call: Call; args: string[]; then: Then; stdin?: string }
   | { kind: 'poll'; what: 'board' | 'slow' | 'runs' } | { kind: 'quit' }
+  | { kind: 'git'; args: string[]; then: Then }       // F75: read-only git, the host's absolute git
 
 // A `then`'s answer as a step: a bare state asks for nothing more.
 export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: x, effects: [] })
@@ -68,7 +72,7 @@ export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: 
 // A run's result applied at `now`, the clock when it landed (a `then` stamps facts with s.now).
 export const afterRun = (e: { then: Then }, r: RunResult, s: State, now: number): Step => settle(e.then(r)({ ...s, now }))
 
-const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages']
+const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'explorer']
 
 export const initial = (cols: number, rows: number, now: number): State => ({
   tab: 'tickets', board: null, team: [], me: null,
@@ -79,6 +83,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
+  explorer: EX0,
 })
 
 export const viewOf = (s: State): View => ({
@@ -694,6 +699,7 @@ function messagesKey(s: State, k: Key): Step {
 function toTab(s: State, tab: Tab): Step {
   const effects: Effect[] = tab === 'runs' && s.tab !== 'runs' ? [{ kind: 'poll', what: 'runs' }] : []
   if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(true))
+  if (tab === 'explorer' && s.tab !== 'explorer') effects.push(...enterExplorer(s).effects)
   return { state: { ...s, tab }, effects }
 }
 
@@ -710,12 +716,14 @@ export function reduce(s: State, k: Key): Step {
   if (s.dialog) return dialogKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
   if (s.filterField) return filterKey(s, k)
+  if (s.tab === 'explorer' && k.name === 'r') return explorerKey(s, k)     // F75: r reads git again too
   switch (k.name) {
     case 'q': return quit
     case '1': return toTab(s, 'tickets')
     case '2': return toTab(s, 'runs')
     case '3': return toTab(s, 'health')
     case '4': return toTab(s, 'messages')
+    case '5': return toTab(s, 'explorer')
     case 'tab': {
       const at = TABS.indexOf(s.tab)
       return toTab(s, TABS[(at + (k.shift ? TABS.length - 1 : 1)) % TABS.length]!)
@@ -726,5 +734,6 @@ export function reduce(s: State, k: Key): Step {
   if (s.tab === 'tickets') return ticketsKey(s, k)
   if (s.tab === 'runs') return runsKey(s, k)
   if (s.tab === 'messages') return messagesKey(s, k)
+  if (s.tab === 'explorer') return explorerKey(s, k)
   return k.name === 'escape' ? { state: { ...s, toast: null }, effects: [] } : { state: s, effects: [] }
 }

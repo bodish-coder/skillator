@@ -14,6 +14,7 @@ import { HealthTab, readHealth } from './health'
 import { pollRuns, readRuns, RunsTab } from './runstab'
 import { AgentsTab, pollAgents, readAgents, WorkflowsTab } from './agentstab'
 import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab'
+import { enterExplorer, ExplorerTab, readExplorer } from './explorertab'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
 // state shown by colour (a `●` per row, headings in the same colour), footer keys.
@@ -21,7 +22,7 @@ import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab
 export const PANE_ID = 'ops-board'
 export const PANE_TITLE = 'ops board'
 
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'workflows'
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'workflows' | 'explorer'
 // Each file names the atoms it reads or writes as its own consts: the engine's scan
 // lists state access from those, not from an import (register.tsx repeats them).
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
@@ -178,7 +179,8 @@ export async function readView($: EngineInterface, cols: number): Promise<View> 
 }
 
 const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Runs' },
-  { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' }, { id: 'agents', label: 'Agents' }, { id: 'workflows', label: 'Workflows' }]
+  { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' }, { id: 'agents', label: 'Agents' }, { id: 'workflows', label: 'Workflows' },
+  { id: 'explorer', label: 'Explorer' }]
 
 export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement> {
   const t = $.ui.resolve(e)
@@ -196,6 +198,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
             if (x.id === 'runs') void pollRuns($).catch(() => {})       // read on entering the tab
             if (x.id === 'agents') void pollAgents($).catch(() => {})   // read on entering the tab
             if (x.id === 'messages' && tab !== 'messages') void enterMessages($).catch(() => {})
+            if (x.id === 'explorer') void enterExplorer($).catch(() => {})        // F75: read on entering the tab
           }}>{x.id === 'messages' && unread ? `${x.label} ${unread}` : x.label}</Button>
       ))}
     </Box>
@@ -228,6 +231,15 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         {bar}
         <Text> </Text>
         {tab === 'agents' ? AgentsTab(els, v) : WorkflowsTab(els, v)}
+      </Box>
+    )
+  }
+  if (tab === 'explorer') {
+    return (
+      <Box flexDirection="column">
+        {bar}
+        <Text> </Text>
+        {ExplorerTab($, els, await readExplorer($), cols)}
       </Box>
     )
   }

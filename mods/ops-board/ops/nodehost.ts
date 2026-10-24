@@ -7,6 +7,7 @@ import { readFile, stat as fsStat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { argvFor, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, up } from '../hooks/lib/calls'
 import type { Call } from '../hooks/lib/calls'
+import { NO_GIT } from '../hooks/lib/explorer'
 
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
 export type Host = {
@@ -17,6 +18,7 @@ export type Host = {
   stat(path: string): Promise<{ mtimeMs: number; size: number } | null>
   read(path: string): Promise<string>
   gitEmail(): Promise<string | null>
+  git?(args: string[]): Promise<RunResult>         // F75: git <args> by its absolute path (A150), cwd = repoRoot; 15 s
 }
 
 type Env = Record<string, string | undefined>
@@ -157,5 +159,10 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
     },
     read: path => readFile(abs(path), 'utf8'),
     gitEmail: () => git(['config', 'user.email'], repoRoot),
+    async git(args) {
+      const bin = await gitFor(process.env, platformWin(), fileExists)
+      if (!bin) return { code: 127, out: '', err: NO_GIT, argv: [] }
+      return spawnArgv([bin, ...args], repoRoot, 15000)
+    },
   }
 }
