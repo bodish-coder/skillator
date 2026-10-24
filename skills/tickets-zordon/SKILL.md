@@ -436,6 +436,42 @@ status it really has. **Propose from evidence, never invent it.**
    run `sh "$PRACTICE/scripts/check-tickets.sh"`, and report from that output: `in progress 14 -> 6
    (3 done, 2 testing, 1 blocked, 1 deferred, 1 decision)`.
 
+### Verify what is in testing (`/verify-subagent`)
+
+`[%]` says built, a check owed. On `/verify-subagent` (or "verify the testing
+tickets"), re-check **every** `[%]` row - or only the IDs given; a named ID not
+in `[%]` is reported `not [%]` and skipped - against evidence obtained **now**,
+never against the line's own claim.
+
+1. **One fresh agent per ticket**, no session history, its own prompt: the ID,
+   the line verbatim, the repo root. A read-only agent type where the host has
+   one; no subagents on the host → check each ticket yourself in turn, same
+   rules. The prompt says:
+   - Read the line's Done criterion (`Done = ..`, the `(testing: ..)` note) and
+     check every part of it: `git log --oneline -F --grep=<ID>` (subjects naming
+     the ID as a word), the files and baselines it cites, and **run** the tests
+     or checks it names. Evidence is what you saw this run, never a quote of the line.
+   - **Read and run tests only** - never edit code, write or delete files in the
+     repo, commit, or touch `TICKETS.md`. A check that would need an edit to run
+     is not run: FAIL, "needs an edit to check".
+   - Answer exactly `VERDICT: PASS|FAIL|OWNER` and `EVIDENCE: <one line>` (no
+     parentheses, no `*`). PASS only when every part is shown met. Anything
+     failing, missing or not runnable is FAIL, the line naming what failed.
+     **OWNER** when any part needs the owner's own eyes - `testing: owner ..`, a
+     live look, a picker or UI check, an account or credentials, a device - even
+     if the rest passed.
+2. **Apply each verdict** in the main session (agents report, you flip), with
+   ticket-meta only - the owner's standing ruling, so no question first, headless included:
+   - PASS → `ticket-meta verify <ID> pass <evidence>`: `[%]` → `[x]`, tagged as a
+     close is, ` **Verified <date>: <evidence>**` on the line.
+   - FAIL → `ticket-meta verify <ID> fail <what failed>`: stays `[%]`,
+     ` (verify failed <date>: <what>)` on the line (it replaces an earlier one).
+   - OWNER → nothing. Never flipped, never marked.
+   - An agent that returns no verdict line is FAIL, "no verdict"; never PASS.
+3. Read the board back - `grep -n '<ID>' TICKETS.md` per ticket - run
+   `sh "$PRACTICE/scripts/check-tickets.sh"`, and report one table
+   `ID | verdict | evidence` and the count: `testing 3 -> 2 (1 verified, 1 failed, 1 owner)`.
+
 ## Work tickets in parallel, not in a line
 
 **An `F` ticket is built by `skillator:build-jarvis`, never here.** Before any
