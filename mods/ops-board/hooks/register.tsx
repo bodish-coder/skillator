@@ -50,9 +50,9 @@ let scriptsNoted = false
 let decidedLine: string | null = null      // the level line relay-morpheus last decided on
 let holdOutcome: string | null = null      // while red: '' held, else why the hold failed; null = not red
 
-async function setBoard($: EngineInterface, next: Board) {
+async function setBoard($: EngineInterface, next: Board, force = false) {
   const cur = await read($, boardA)
-  if (cur && cur.path === next.path && cur.error === next.error && cur.mtimeMs === next.mtimeMs && cur.size === next.size) return
+  if (!force && cur && cur.path === next.path && cur.error === next.error && cur.mtimeMs === next.mtimeMs && cur.size === next.size) return
   await update($, boardA, () => next)
 }
 
@@ -79,7 +79,8 @@ const held = (b: Board): Board => (b.error ? b
   : { ...b, tickets: b.tickets.map(t => ({ ...t, title: clip(t.title, TITLE_MAX), line: clip(t.line, LINE_MAX) })) })
 
 // One poll: TICKETS.md re-read when its mtime or size moved; team.md likewise.
-async function poll($: EngineInterface) {
+// force (F78's `r`): both re-read whatever their stat says.
+async function poll($: EngineInterface, force = false) {
   const repo = await $.session.repo()
   if (!repo) return setBoard($, failed('', 'not a git repo - no TICKETS.md board here'))
   const root = norm(repo.root)
@@ -89,15 +90,15 @@ async function poll($: EngineInterface) {
   if (!st) await setBoard($, failed(path, `no TICKETS.md at ${root}`))
   else {
     const cur = await read($, boardA)
-    if (!cur || cur.error || cur.path !== path || cur.mtimeMs !== st.mtimeMs || cur.size !== st.size) {
+    if (force || !cur || cur.error || cur.path !== path || cur.mtimeMs !== st.mtimeMs || cur.size !== st.size) {
       // the engine can refuse to hold the parsed board too - say so, not "missing"
-      try { await setBoard($, held(await loadBoard($, path, st))) } catch (e) { await setBoard($, failed(path, notLoaded(e))) }
+      try { await setBoard($, held(await loadBoard($, path, st)), force) } catch (e) { await setBoard($, failed(path, notLoaded(e))) }
     }
   }
   const teamPath = root + '/.skillator/team.md'
   let seen = 'none'
   try { const st = await $.fs.stat(teamPath); seen = `${st.mtimeMs}:${st.size}` } catch { /* no team file */ }
-  if (seen !== teamSeen) {
+  if (force || seen !== teamSeen) {
     teamSeen = seen
     let t: Member[] = []
     if (seen !== 'none') { try { t = parseTeam(await $.fs.read(teamPath)) } catch { t = [] } }
@@ -106,6 +107,14 @@ async function poll($: EngineInterface) {
   }
   await pollInbox($).catch(() => {})       // F66: the Teams inbox, re-read when it moved
   await updateStatus($)
+}
+
+// F78: the Tickets tab's `r` - a forced poll, then a toast with what loaded.
+async function refresh($: EngineInterface) {
+  await poll($, true)
+  const b = await read($, boardA)
+  $.ui.toast(b?.error ? `ops board: ${b.error}`
+    : `ops board: refreshed - ${b?.tickets.length ?? 0} tickets, ${(await read($, teamA)).length} people`)
 }
 
 // ---- F48: machine facts, the watchdog, relay, usage, status line, notes ----
@@ -460,6 +469,12 @@ export const register: Register = on => {
     const offset = offsetFor(m, to, lastScroll.offset, e.bodyRows)
     return offset === null ? {} : next({ ...e, offset })
   }).catch(($, e, next) => next(e))   // failing, the arrow scrolls as the engine would
+
+  // F78: the Tickets tab's `r` - a forced poll here, where the poll lives.
+  on('ui.press', { plugin: 'ops-board', element: 'key:refresh' }, async ($, e) => {
+    await refresh($)
+    return { element: e.element }
+  })
 
   // Tab and shift-Tab walk the row and header buttons: the ring landing on one selects it.
   on('ui.focus', { requestId: 'ops-board' }, async ($, e, next) => {

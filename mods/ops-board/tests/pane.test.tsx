@@ -564,3 +564,27 @@ test('F61: a selected ticket an edit moves into a collapsed group shows as its h
   expect((await ui.find({ key: 'row:B1' }))?.children.some(c => (c as { props?: { inverse?: boolean } }).props?.inverse)).toBe(true)
   await ui.unmount()
 })
+
+// F78: r re-reads TICKETS.md and team.md now, even when the 2 s poll sees no mtime or
+// size change (an edit inside the stat's resolution, a board the pane holds stale).
+for (const surface of SURFACES) {
+  test(`${surface}: F78 r refreshes the board and the team regardless of mtime and size`, WITH, async ($, on) => {
+    const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+    const toasts: string[] = []
+    on('ui.toast', ($, e) => { toasts.push(e.text); return { value: undefined } })
+    await start($, clock)
+    const ui = await mountPane($, surface)
+    await openAll(ui)
+    expect((await ui.find({ key: 'row:B1' }))?.text).toMatch(/button focus ring missing/)
+    // same length, same mtime: the 2 s poll keeps the board it holds
+    w.files['/r/TICKETS.md'] = { text: BOARD.replace('button focus ring missing', 'button focus ring MISSING'), mtimeMs: 1000 }
+    w.files['/r/.skillator/team.md'] = { text: TEAM.replace('@asha', '@ashb'), mtimeMs: 1000 }
+    await clock.advance(2000)
+    expect((await ui.find({ key: 'row:B1' }))?.text).toMatch(/button focus ring missing/)
+    await ui.press({ key: 'key:refresh' })
+    await clock.settle()
+    expect((await ui.find({ key: 'row:B1' }))?.text).toMatch(/button focus ring MISSING/)
+    expect(toasts.at(-1)).toBe('ops board: refreshed - 13 tickets, 2 people')
+    await ui.unmount()
+  })
+}

@@ -164,6 +164,8 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       <Button key="key:filter" plain dimColor hotkey="f" onPress={() => { void update($, filterOpenA, x => !x) }}>filter</Button>
       <Button key="key:done" plain dimColor hotkey="x" onPress={() => setFilter(x => ({ ...x, showDone: !x.showDone }))}>done</Button>
       <Button key="key:team" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => ({ selected: null, confirm: false })) }}>team</Button>
+      {/* F78: register.tsx takes this press (ui.press) - the forced poll lives there */}
+      <Button key="key:refresh" plain dimColor hotkey="r" onPress={() => {}}>refresh</Button>
     </Box>,
   )
   return out
