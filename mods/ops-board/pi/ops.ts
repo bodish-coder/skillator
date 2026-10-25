@@ -106,7 +106,7 @@ export function registerOps(pi: PiApi, deps: Deps): void {
         const engine = makeEngine({ host, email, once: true, state: first(opts.cols ?? 80, opts.rows ?? 24), onChange: () => {}, onQuit: () => {} })
         await engine.readAll()
         // plain text: the host styles its own notifications
-        ctx.ui.notify(frame({ ...engine.state, now: Date.now() }, { color: false, ascii: opts.ascii }).join('\n'), 'info')
+        ctx.ui.notify(frame({ ...engine.state, now: Date.now() }, { color: false, ascii: opts.ascii, plain: true }).join('\n'), 'info')
         return
       }
       if (!ctx.hasUI) return

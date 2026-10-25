@@ -6,7 +6,7 @@
 #
 #   pending.sh              the human report: plain ASCII, every line within 80 columns
 #   pending.sh --kv         the same facts as KEY=value lines (the ops-board mod parses these)
-#   pending.sh --machine    DRIVE / DISK_* / MEM_FREE / LOCK / HOLD only (cheap; the band's poll)
+#   pending.sh --machine    DRIVE / DISK_* / MEM_FREE / LOCK / HOLD / BOARD only (cheap; the band's poll)
 #   pending.sh --selftest   fixture repo, every mode, prints ok
 #
 # --kv keys, in this order:
@@ -44,6 +44,10 @@
 #   HOLD=<since> <reason> | HOLD=-    <main>/.skillator/watchdog.hold (RELAY_DIR overrides), read
 #                                     directly - the words relay-morpheus watchdog status gives;
 #                                     an empty or blank file is held: HOLD=? -
+#   BOARD=stale|<behind>|<upstream>|- | BOARD=refused|<behind>|<upstream>|<reason>
+#                                     F82: only while the main checkout is behind its
+#                                     upstream; refused = board-fresh's last run refused a
+#                                     board write (<git dir>/skillator/board-fresh)
 #   WATCHDOG=red|amber|green          red: disk or memory free < 1 GB; amber: disk < 5 GB,
 #                                     memory < 2 GB, a stale lock or a hold; else green
 # OPEN = [ ] [~] [!] [?] [%], as tickets-zordon's count line has it; deferred [>]
@@ -315,6 +319,25 @@ machine_kv() {
   printf 'DRIVE=%s\nDISK_FREE=%s\nDISK_TOTAL=%s\nMEM_FREE=%s\n' "$drive" "$free" "$total" "$mem"
   locks_kv
   hold_kv
+  board_kv
+}
+
+# F82: the board's freshness, one git call. Behind its upstream (local refs, the
+# last fetch): BOARD=refused|<behind>|<upstream>|<reason> when board-fresh's last
+# run refused a write, else BOARD=stale|<behind>|<upstream>|-. Not behind: no line.
+board_kv() {
+  git -C "$MAIN" for-each-ref --format='%(HEAD)|%(upstream:short)|%(upstream:track,nobracket)' refs/heads 2>/dev/null |
+    awk -F'|' -v sf="$MAIN/.git/skillator/board-fresh" '
+      { sub(/\r$/, "") }
+      $1 == "*" { u = $2; tr = $3 }
+      END {
+        if (u == "" || !match(tr, /behind [0-9]+/)) exit
+        be = substr(tr, RSTART + 7, RLENGTH - 7) + 0
+        st = ""; rs = ""
+        if ((getline l < sf) > 0) { sub(/\r$/, "", l); split(l, f, "\t"); st = f[2]; rs = f[5] }
+        if (st == "refused") print "BOARD=refused|" be "|" u "|" rs
+        else print "BOARD=stale|" be "|" u "|-"
+      }'
 }
 
 # R2: the watchdog hold, straight from the file relay-morpheus writes -
@@ -435,6 +458,7 @@ human() {
                      ns++; SN[ns] = ascii(a[1]); SS[ns] = a[2]; SA[ns] = a[n] + 0
                      c = norm(cw); mn = norm(main); SIN[ns] = (c == mn || index(c, mn "/") == 1) }
     K == "OWED" { ow = ow (ow == "" ? "" : " ") V }
+    K == "BOARD" { split(V, bo, "|"); bst = bo[1]; bbe = bo[2]; bup = ascii(bo[3]); brs = ascii(bo[4]) }
     K == "DRIVE" { dr = ascii(V) } K == "DISK_TOTAL" { dt = V }
     K == "LOCK" { s = V; j = index(s, "|"); lp = substr(s, 1, j - 1); s = substr(s, j + 1); j = index(s, "|")
                   lk = lk (lk == "" ? "" : ", ") ascii(lp " " substr(s, 1, j - 1) "m (" substr(s, j + 1) ")") }
@@ -497,8 +521,12 @@ human() {
 
       if (ow == "") out("GREENS    none owed"); else wrap("GREENS    owed: ", ow, "          ")
 
-      if (!nt) out("NEXT      nothing to test")
-      for (j = 1; j <= nt; j++) out(trunc((j == 1 ? "NEXT      " : "          ") "test " XID[j] ": " (XN[j] == "-" ? "(no test named)" : XN[j]), 80))
+      # F82: a stale board first - a refusal with its reason
+      nx = "NEXT      "
+      if (bst == "refused") { wrap(nx "board refused: ", brs, "          "); nx = "          " }
+      else if (bst == "stale") { out(trunc(nx "board stale: " bbe " behind " bup, 80)); nx = "          " }
+      if (!nt) out(nx "nothing to test")
+      for (j = 1; j <= nt; j++) out(trunc((j == 1 ? nx : "          ") "test " XID[j] ": " (XN[j] == "-" ? "(no test named)" : XN[j]), 80))
       wrap("          agents: ", (live == "" ? "no run working" : live), "                  ")
     }'
 }
@@ -727,6 +755,24 @@ MACHINE   ok  disk X: 10 GB free of 931 GB, memory 3.2 GB free
   # the room is still cut, mid-word.
   printf -- '- [ ] F9 %s %s\n' "$D" "$(printf '%090d' 0 | tr 0 x)" > TICKETS.md
   eq "one long word is cut" "$(run | awk '/^    F9 /')" "    F9    $(printf '%067d' 0 | tr 0 x)..."
+  # F82: behind the upstream the board is stale; board-fresh's refusal is said with its reason.
+  eq "not behind, no BOARD" "$(run --kv | awk '/^BOARD=/')" ""
+  git checkout -q -b up82 base && g commit -q --allow-empty -m up && git checkout -q main && git branch -q -f base up82 || die "cannot move base"
+  eq "stale, kv" "$(run --kv | awk '/^BOARD=/')" "BOARD=stale|1|base|-"
+  eq "stale, machine" "$(run --machine | awk '/^BOARD=/')" "BOARD=stale|1|base|-"
+  eq "stale, human" "$(run | awk '/^NEXT /, 0' | awk 'NR <= 2')" "NEXT      board stale: 1 behind base
+          nothing to test"
+  mkdir -p .git/skillator
+  printf '1\trefused\t1\tbase\t1 behind base, 2 local commit(s) not on it\n' > .git/skillator/board-fresh
+  eq "refused, kv" "$(run --kv | awk '/^BOARD=/')" "BOARD=refused|1|base|1 behind base, 2 local commit(s) not on it"
+  eq "refused, human" "$(run | awk '/^NEXT /')" "NEXT      board refused: 1 behind base, 2 local commit(s) not on it"
+  if command -v powershell >/dev/null 2>&1 && [ -f "$PS1" ]; then
+    # (this far down the sh has no relay and the twin its fake one: the board lines only)
+    eq "pending.ps1 = pending.sh, refused board" "$(psrun | awk '/^NEXT /')" "$(run | awk '/^NEXT /')"
+    eq "pending.ps1 = pending.sh, refused board, --kv" "$(psrun --kv | awk '/^BOARD=/')" "$(run --kv | awk '/^BOARD=/')"
+  fi
+  git branch -q -f base main~0 && git branch -q -D up82 && rm -f .git/skillator/board-fresh
+  eq "fresh again, refusal not said" "$(run --kv | awk '/^BOARD=/')" ""
   # No upstream, and detached.
   git branch -q --unset-upstream
   eq "no upstream" "$(run | awk 'NR == 1')" "REPO      repo  main: no upstream  2026-01-01 12:34Z"

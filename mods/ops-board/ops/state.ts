@@ -3,17 +3,17 @@
 // one table, and its `then` folds the result back in. No process, terminal or fs here -
 // app.ts executes the effects, the tests drive reduce without any process, and F56 takes
 // it as is.
-import type { AssignDraft, Board, Box, Filter, Machine, Member, Msg, PersonDraft, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
+import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
 import type { View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
-import { buildModel, HEAD, headKey, isHead, toggleGroup } from '../hooks/lib/ticketsmodel'
+import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, parseReconcile, toggleGroup } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME, ticketById } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
-import { classify, levelLine, parseMachine, usageFromLevel } from '../hooks/lib/facts'
+import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
-import { continuePrompt, RUNS_SECTIONS } from '../hooks/lib/runlines'
+import { continuePrompt, engageOf, RUNS_SECTIONS } from '../hooks/lib/runlines'
 import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
@@ -43,11 +43,13 @@ export type State = {
   runs: RunView[]; runsSelected: string | null; runsExpanded: string | null   // runsSelected: a run id or 'head:<section>'
   runsOpen: RunsSection[]                  // F76: the Workflows tab's open sections (Runs, Workflows); both start open
   runsRead: boolean                        // false until relay's list was first read: 'reading runs…'
+  engage: Engage | null                    // F85: the engage confirm box up
   dialog: AssignDraft | null; dialogIndex: number    // -1: the cursor is on "+ add person"
   dialogField: DialogField                            // F77: the keys go to the Ticket field or the people
   person: PersonDraft | null; personField: PersonField  // the Add person form, over the dialog or the Team view
   teamSelected: string | null                         // the Team view's row
   teamConfirm: string | null                          // the handle the Team view asks to remove (y/n)
+  reconcile: (Reconcile & { index: number }) | null   // F81: the reconcile box, its cursor row
   toast: string | null; notes: string[]
   cols: number; rows: number; now: number; quit: boolean
   repo: string | null                      // the repo root's basename, for the tab bar (app.ts sets it)
@@ -71,6 +73,7 @@ export type Effect = { kind: 'run'; call: Call; args: string[]; then: Then; stdi
   | { kind: 'poll'; what: 'board' | 'slow' | 'runs' } | { kind: 'quit' }
   | { kind: 'runfile'; scanIfMissing: boolean } | { kind: 'job'; argv: string[]; cwd: string } | { kind: 'stop' }   // F79
   | { kind: 'git'; args: string[]; then: Then }       // F75: read-only git, the host's absolute git
+  | { kind: 'mute'; text: string; then?: Then }       // F87: write the watchdog mute file ('' = unmuted); code 1 + err when it failed
 
 // A `then`'s answer as a step: a bare state asks for nothing more.
 export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: x, effects: [] })
@@ -85,8 +88,8 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   filter: { app: null, who: null, mine: false, showDone: false }, filterField: null,
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, relay: null,
-  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false,
-  dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, toast: null, notes: [],
+  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, engage: null,
+  dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
   explorer: EX0,
@@ -350,6 +353,16 @@ function removeMember(s: State, h: string): Step {
   return { state: { ...s, teamConfirm: null }, effects: [run('meta-team-remove', [h], then)] }
 }
 
+// F80 l: ticket-meta team lead @h - it rules who may (a refusal goes in the toast).
+function makeLead(s: State, h: string): Step {
+  const then: Then = r => x => {
+    if (r.code !== 0) return toast(x, [`✗ ticket-meta team lead ${h} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'))
+    const said = notesOf(r.out).filter(l => !/^lead:/.test(l))
+    return { state: toast(x, [`✓ ${h} is the lead`, ...said, ran(r.argv)].join('\n')), effects: [{ kind: 'poll', what: 'board' }] }
+  }
+  return { state: s, effects: [run('meta-team-lead', [h], then)] }
+}
+
 // The Team view's row: the one picked while still on the team, else the first member.
 export const teamRow = (s: State): string | null =>
   s.team.some(m => m.handle === s.teamSelected) ? s.teamSelected : s.team[0]?.handle ?? null
@@ -372,6 +385,7 @@ function teamKey(s: State, k: Key): Step {
     case 'down': case 'j': return move(1)
     case 'n': return { state: openPerson(s, 'team'), effects: [] }
     case 'delete': case 'backspace': return cur ? { state: { ...s, teamConfirm: cur }, effects: [] } : same
+    case 'l': return cur ? makeLead(s, cur) : same
     default: return same
   }
 }
@@ -387,6 +401,61 @@ function decided(s: State): Step {
     ? toast(x, [`✗ ticket-meta decided ${t.id} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'))
     : toast(x, [`✓ ${t.id} decided, now pending: ${t.title}`, ...notesOf(r.out), ran(r.argv)].join('\n'))
   return { state: s, effects: [run('meta-decided', [t.id], then)] }
+}
+
+// --- F81: reconcile (`c`): ticket-meta reconcile's proposals; accept all / pick / none ---
+
+// The box's title, then a row per proposal: a kept one (evidence unclear) is never picked.
+export function reconcileLines(s: State): string[] {
+  const v = s.reconcile
+  if (!v) return []
+  return [`Reconcile tickets - ${v.rows.filter(canApply).length} to change`, ...v.rows.map((p, i) => {
+    const cur = i === v.index ? '› ' : '  '
+    return canApply(p)
+      ? `${cur}${v.picked.includes(p.id) ? '[x]' : '[ ]'} ${p.id}  ${STATE_NAME[p.from]} → ${STATE_NAME[p.to]}  ${p.why}`
+      : `${cur}    ${p.id}  ${STATE_NAME[p.from]} stays - ${p.why}`
+  })]
+}
+
+function openReconcile(s: State): Step {
+  const then: Then = r => x => {
+    if (r.code !== 0) return toast(x, `✗ ticket-meta reconcile refused: ${why(r, 'ticket-meta')}`)
+    const rows = parseReconcile(r.out)
+    if (!rows.length) return toast(x, 'reconcile - every [!] [ ] [~] row matches its evidence')
+    return { ...x, reconcile: { rows, picked: [], index: Math.max(0, rows.findIndex(canApply)) } }
+  }
+  return { state: s, effects: [run('meta-reconcile', [], then)] }
+}
+
+// all: every row that changes; else the picked ones. Each one's ticket-meta run adds its
+// line to the toast (the mod's words), then the board is read again.
+function applyReconcile(s: State, all: boolean): Step {
+  const v = s.reconcile!
+  const todo = v.rows.filter(p => canApply(p) && (all || v.picked.includes(p.id)))
+  if (!todo.length) return { state: toast(s, 'nothing picked - space picks a row, a accepts all'), effects: [] }
+  const effects: Effect[] = todo.map(p => {
+    const { call, args } = applyOf(p)
+    return run(call, args, r => x => {
+      const lines = [...(x.toast ?? '').split('\n').slice(1), appliedLine(p, r.code === 0 ? null : why(r, 'ticket-meta'))]
+      return toast(x, [appliedHead(lines.filter(l => l.startsWith('✓')).length, todo.length), ...lines].join('\n'))
+    })
+  })
+  return { state: { ...s, reconcile: null, toast: `reconcile: applying ${todo.length}` }, effects: [...effects, { kind: 'poll', what: 'board' }] }
+}
+
+function reconcileKey(s: State, k: Key): Step {
+  const v = s.reconcile!
+  const set = (r: NonNullable<State['reconcile']>): Step => ({ state: { ...s, reconcile: r }, effects: [] })
+  const p = v.rows[v.index]
+  switch (k.name) {
+    case 'up': case 'k': return set({ ...v, index: Math.max(0, v.index - 1) })
+    case 'down': case 'j': return set({ ...v, index: Math.min(v.rows.length - 1, v.index + 1) })
+    case 'space': return p && canApply(p) ? set({ ...v, picked: v.picked.includes(p.id) ? v.picked.filter(i => i !== p.id) : [...v.picked, p.id] }) : set(v)
+    case 'a': return applyReconcile(s, true)
+    case 'return': case 'enter': return applyReconcile(s, false)
+    case 'escape': case 'n': return { state: { ...s, reconcile: null }, effects: [] }
+    default: return set(v)
+  }
 }
 
 // --- the filter row: ← → pick a field, ↑ ↓ its value ---
@@ -439,11 +508,20 @@ function lockNote(m: Machine): string {
 // New facts (register.tsx applyMachine): classify; while red and not held, hold through
 // relay-morpheus - every reading, so a failed hold is tried again and a release from
 // outside is held again; the toast only when the outcome changes. Locks: one note.
+// F87: memory read green while muted - the mute file is emptied and the mute ends here.
 export function onMachine(s: State, kv: string, now: number): Step {
-  const m = parseMachine(kv, now)
+  let m = parseMachine(kv, now)
+  const effects: Effect[] = []
+  let unmuted = false
+  if (unmuteDue(m)) {
+    const { mute: _, ...rest } = m
+    m = rest
+    unmuted = true
+    effects.push({ kind: 'mute', text: '' })
+  }
   const w = classify(m)
   let state: State = { ...s, machine: m, watch: w }
-  const effects: Effect[] = []
+  if (unmuted) state.toast = 'watchdog unmuted - memory reads green; memory red holds again'
   if (w.level !== 'red') state.holdOutcome = null
   else if (m.hold === null) {
     effects.push(run('relay-hold', [w.reasons.join('; ')], r => x => {
@@ -482,6 +560,29 @@ function resume(s: State): Step {
   return { state: s, effects: [run('pending-machine', [], read)] }
 }
 
+// F87: F on Health (as /ops resume force) - the mute written first, then the hold released
+// whatever the reading; a slow poll after, so disk red holds again at once.
+function forceResume(s: State): Step {
+  const read: Then = r => x => {
+    const m = r.code === 0 && r.out.trim() ? parseMachine(r.out, x.now) : null
+    const mute = muteText(x.now, m?.memFree ?? null)
+    const release: Then = rr => y => {
+      if (!rr.argv.length) return toast(y, rr.err || NO_SCRIPTS)
+      const said = rr.out.trim() || rr.err.trim()
+      const line = `ran: ${rr.argv.join(' ')}`
+      if (rr.code !== 0) return toast(y, `release failed (exit ${rr.code}): ${said || 'no output'}\n${line}`)
+      const freed = y.machine ? { ...y.machine, hold: null, mute } : null
+      return { state: { ...y, toast: `${said}\n${mutedWords(mute)}, ${mute.slice(mute.indexOf(' ') + 1)} - ${MUTED_HOW}\n${line}`,
+        machine: freed, watch: freed ? classify(freed) : y.watch }, effects: [{ kind: 'poll', what: 'slow' }] }
+    }
+    const wrote: Then = w => y => (w.code !== 0
+      ? toast(y, `could not write ${MUTE_FILE}: ${w.err} - not released`)
+      : { state: y, effects: [run('relay-release', [], release)] })
+    return { state: x, effects: [{ kind: 'mute', text: mute, then: wrote }] }
+  }
+  return { state: s, effects: [run('pending-machine', [], read)] }
+}
+
 // --- usage: watch-cortana's level line, relay's decision ---
 
 // A reading with no window keeps the last one's (it then shows its age). The hold decision
@@ -505,8 +606,8 @@ export function onUsage(s: State, levelOut: string, now: number): Step {
 
 // --- runs ---
 
-export function onRuns(s: State, list: string, chains: Record<string, string>): State {
-  const runs = parseRuns(list, chains)
+export function onRuns(s: State, list: string, chains: Record<string, string>, scripts: Record<string, string> = {}): State {
+  const runs = parseRuns(list, chains, scripts)
   const first = runs.find(x => x.done < x.total)
   const runsSelected = runs.some(r => r.id === s.runsSelected) || isHead(s.runsSelected) ? s.runsSelected : runs[0]?.id ?? null
   return { ...s, runs, runsSelected, runsRead: true, relay: first ? `${first.id} ${first.done}/${first.total}` : null }
@@ -526,12 +627,28 @@ export function runsCursor(s: State): string {
   return items[0]!                          // a hidden run (or none): the Runs header
 }
 
-// s: relay-morpheus queue-run add <id> on a planned run; the continue prompt is shown to
-// paste into the CLI (no host to submit it), then the runs are read again.
-function startRun(s: State): Step {
+// F85: e engages the run under the cursor - refused (a toast naming the driver) while another
+// driver is live, else the confirm box. No session to submit into: Enter shows the exact
+// command to paste - after relay-morpheus queue-run add for a run with no script.
+function openEngage(s: State): Step {
   const r0 = s.runs.find(r => r.id === runsCursor(s))
-  if (!r0 || !r0.planned) return { state: toast(s, 's starts a planned run only'), effects: [] }
-  const id = r0.id
+  if (!r0) return { state: toast(s, 'e engages the run under the cursor'), effects: [] }
+  const e = engageOf(r0, s.now)
+  if ('refused' in e) return { state: toast(s, e.refused), effects: [] }
+  return { state: { ...s, engage: { id: r0.id, ...e } }, effects: [] }
+}
+export function engageLines(s: State): string[] {
+  const g = s.engage
+  if (!g) return []
+  return [`Engage ${g.id}?`, ...(g.queue ? [`First    relay-morpheus queue-run add ${g.id}`] : []), `Paste    ${g.text}`]
+}
+function engageKey(s: State, k: Key): Step {
+  const g = s.engage!
+  const s0 = { ...s, engage: null }
+  if (k.name === 'escape') return { state: s0, effects: [] }
+  if (k.name !== 'return' && k.name !== 'enter') return { state: s, effects: [] }
+  if (!g.queue) return { state: toast(s0, `Paste into your CLI:\n${g.text}`), effects: [] }
+  const id = g.id
   const then: Then = r => x => {
     const tail = r.argv.length ? `\nran: ${r.argv.join(' ')}` : ''
     if (r.code !== 0) return toast(x, `■ ${id} not queued: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}${tail}`)
@@ -539,7 +656,7 @@ function startRun(s: State): Step {
     return { state: toast(x, `✓ ${id} queued${said ? ` - ${said}` : ''}. Paste its continue prompt into your CLI:\n${continuePrompt(id)}${tail}`),
       effects: [{ kind: 'poll', what: 'runs' }] }
   }
-  return { state: s, effects: [run('relay-queue-add', [id], then)] }
+  return { state: s0, effects: [run('relay-queue-add', [id], then)] }
 }
 
 function runsKey(s: State, k: Key): Step {
@@ -562,7 +679,7 @@ function runsKey(s: State, k: Key): Step {
       }
       return { state: { ...s, runsExpanded: s.runsExpanded !== cur ? cur : null }, effects: [] }
     }
-    case 's': return startRun(s)
+    case 'e': return openEngage(s)
     default: return { state: s, effects: [] }
   }
 }
@@ -599,6 +716,7 @@ function ticketsKey(s: State, k: Key): Step {
     case 'f': return { state: { ...s, filterField: 'app' }, effects: [] }
     case 'x': return { state: { ...s, filter: { ...s.filter, showDone: !s.filter.showDone } }, effects: [] }
     case 't': return { state: { ...s, showTeam: true }, effects: [] }
+    case 'c': return openReconcile(s)
     case 'escape': return { state: { ...s, toast: null }, effects: [] }
     default: return same
   }
@@ -746,7 +864,9 @@ export function reduce(s: State, k: Key): Step {
   if (s.setup) return setupKey(s, k)
   if (s.person) return personKey(s, k)
   if (s.dialog) return dialogKey(s, k)
+  if (s.reconcile) return reconcileKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
+  if (s.engage) return engageKey(s, k)          // F85
   if (s.filterField) return filterKey(s, k)
   if (s.tab === 'explorer' && k.name === 'r') return explorerKey(s, k)     // F75: r reads git again too
   if (s.tab === 'run' && (s.runForm || k.name === 'r')) return runKey(s, k)   // F79: r rescans here
@@ -765,6 +885,7 @@ export function reduce(s: State, k: Key): Step {
     case 'r': return { state: s, effects: [{ kind: 'poll', what: 'board' }, { kind: 'poll', what: 'slow' }] }
     case 'R': return resume(s)
   }
+  if (s.tab === 'health' && k.name === 'F') return forceResume(s)     // F87
   if (s.tab === 'tickets') return ticketsKey(s, k)
   if (s.tab === 'runs') return runsKey(s, k)
   if (s.tab === 'messages') return messagesKey(s, k)

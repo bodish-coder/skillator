@@ -6,6 +6,7 @@
 #
 #   relay-morpheus.ps1 -Mode list                      every run + how to resume it
 #   relay-morpheus.ps1 -Mode resume -Id 3              what a fresh session needs
+#   relay-morpheus.ps1 -Mode resume -Id 3 -ReadOnly    the same, a missing worktree said, never recreated (the ops board polls it)
 #   relay-morpheus.ps1 -Mode init -Plan <p> -Title <t> -Stages "alpha,beta,gamma" [-RunOwner @h]
 #   relay-morpheus.ps1 -Mode add -Title <stage>        append a row, print its number
 #   relay-morpheus.ps1 -Mode stage -N 2 -State '~' [-Owner build:sonnet] [-Landed sha]
@@ -25,6 +26,9 @@
 #   -Mode chain -Action status | decide [-Text "<level line>"]   F49: -Text decides on that line
 #   -Mode chain -Action next                           NEXT n CODE | HOLD | ASK k | UNBLOCK Qk | WAIT n | BLOCKED n | FINAL, then IDLE lines
 #   -Mode chain -Action next -Holds                    A118: only the IDLE <n> Qk <why> lines; read-only, no lease beat
+#        (F80: a stage whose ticket someone else owns is IDLE <n> owned <ID> <owner> and its dispatch is
+#        refused; plan and dispatch claim the stage's tickets - ticket-meta.ps1 pick / claim,
+#        RELAY_TICKET_META overrides, a missing file = off)
 #   -Mode chain -Action edge -N <n> -After "66,67" | -IndependentOf Qk -Why "<ruling>"
 #
 # Watchdog (F48) - one file, <main checkout>/.skillator/watchdog.hold = "<since> <reason>":
@@ -115,6 +119,7 @@ param(
   [switch]$Here,
   [switch]$All,
   [switch]$Holds,
+  [switch]$ReadOnly,
   [string]$Sub = '',
   [string]$Mark = $null,
   [int]$N,
@@ -516,14 +521,14 @@ function HdrField($f, $k) {
   foreach ($l in (Get-Content -Encoding UTF8 $f)) { if ($l -like '## *') { break }; if ($l -like "${k}: *") { return $l.Substring($k.Length + 2) } }
   ''
 }
-function WorktreeOf($f) {
+function WorktreeOf($f, [switch]$Ro) {   # -Ro: report a missing worktree, never recreate it
   $w = HdrField $f 'worktree'; $b = HdrField $f 'branch'
   if (-not $w) { return '' }
   # Recreated only while the run has open work: a finished run's branch is
   # merged, and a fresh checkout of it helps nobody. The prune drops the
   # missing worktree's registration, which `worktree add` would refuse.
   $open = @(Get-Content -Encoding UTF8 $f | Where-Object { $null -ne (RowNum $_) -and (Cell $_ 3) -ne 'x' -and (Cell $_ 3) -ne '>' }).Count
-  if (-not (Test-Path -LiteralPath $w) -and $b -and $open) {
+  if (-not $Ro -and -not (Test-Path -LiteralPath $w) -and $b -and $open) {
     $mr = MainOf
     if ($mr) {
       $null = GitOk @('-C', $mr, 'worktree', 'prune')
@@ -604,7 +609,7 @@ function DoResume($spec) {
   "# Read the plan named below, then the ledger, then start at the first stage"
   "# that is not x. The In-flight block holds the exact prompt to redispatch"
   "# anything that was running."
-  $w = WorktreeOf $f
+  $w = WorktreeOf $f -Ro:$ReadOnly
   if ($w) { "# Stages work and commit in: $w" }
   $ow = HdrField $f 'owner'
   if ($ow) { "# Run owner: $ow" }
@@ -633,6 +638,8 @@ function DoStage($n, $state, $owner, $landed) {
   Lock
   try {
     if (-not (SetRow $n $state $owner $landed)) { Die "no stage $n in $Run" }
+    # A153: a landed or re-planned stage is no longer in flight; a failed one keeps its block.
+    if ($state -ceq 'x' -or $state -ceq '>') { DropInFlight $n }
     StampUpdated
   } finally { Unlock }
   # F36: any state but in flight frees the stage's files (landed, failed,
@@ -985,6 +992,59 @@ function AllocCode($dir) {
   $c
 }
 
+# F80: tickets-zordon's ticket-meta.ps1 - who may take a chain's tickets (pick) and
+# the claim a plan or dispatch makes (claim). RELAY_TICKET_META overrides (a missing
+# file = off: no skips, no claims). A child process, in the run file's directory.
+function TMeta([string[]]$a) {
+  $tm = $env:RELAY_TICKET_META
+  if (-not $tm) { $tm = Join-Path $PSScriptRoot '..\..\tickets-zordon\scripts\ticket-meta.ps1' }
+  if (-not (Test-Path -LiteralPath $tm -PathType Leaf)) { return $null }
+  $psi = New-Object Diagnostics.ProcessStartInfo 'powershell'
+  $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$tm`" " + (@($a | ForEach-Object { "`"$_`"" }) -join ' ')
+  $psi.WorkingDirectory = Split-Path -Parent (Resolve-Path -LiteralPath $Run).Path
+  $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $psi.StandardOutputEncoding = New-Object Text.UTF8Encoding($false)
+  # no host to start = a failed call (OwnedMap fails closed on it); stderr read
+  # beside stdout, so a full stderr pipe cannot stall the child
+  try { $p = [Diagnostics.Process]::Start($psi) } catch { return [pscustomobject]@{ out = @(); err = "cannot start powershell: $($_.Exception.Message)"; code = -1 } }
+  $et = $p.StandardError.ReadToEndAsync()
+  $o = $p.StandardOutput.ReadToEnd(); $p.WaitForExit(); $e = $et.Result
+  [pscustomobject]@{ out = @($o -split "`r?`n" | Where-Object { $_ }); err = $e.Trim(); code = $p.ExitCode }
+}
+function ChainTickets($n) {   # stage n's chain-block ticket ids (every stage's when none)
+  $sec = ''; $b = $false; $seen = @{}; $ids = New-Object System.Collections.Generic.List[string]
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
+    if ($l.StartsWith('## ')) { $sec = $l; $b = $false; continue }
+    if ($sec -cne '## Chain') { continue }
+    if ($l.StartsWith('### ')) { $b = (-not $n) -or ($l -cmatch "^### [A-Z0-9]+ - stage $n - "); continue }
+    if ($b -and $l.StartsWith('tickets: ')) { foreach ($t in @(IdsOf $l.Substring(9))) { if ($t -cmatch '^[A-Z]{1,3}[0-9]+[a-z]?$' -and -not $seen.ContainsKey($t)) { $seen[$t] = 1; $ids.Add($t) } } }
+  }
+  $ids.ToArray()
+}
+function OwnedMap($n) {   # ID -> owner, per ticket (stage n's, else the chain's) someone else owns
+  $m = @{}
+  $ids = @(ChainTickets $n)
+  if (-not $ids.Count) { return $m }
+  $r = TMeta (@('pick') + $ids)
+  if ($r -and $r.code -eq 0) { foreach ($l in $r.out) { if ($l -cmatch '^skip (\S+) (\S+)$') { $m[$Matches[1]] = $Matches[2] } } }
+  elseif ($r) {
+    # who owns them is unknown and there is a team: none of them starts (fail closed)
+    Push-Location -LiteralPath (Split-Path -Parent (Resolve-Path -LiteralPath $Run).Path)
+    try { $tf = TeamFile } finally { Pop-Location }
+    if ($tf) {
+      [Console]::Error.WriteLine("note: ticket-meta pick failed ($(($r.err -split "`r?`n") -join ' ')) - stages with tickets wait")
+      foreach ($t in $ids) { $m[$t] = '?' }
+    }
+  }
+  $m
+}
+function ClaimStage($n) {   # claim stage n's tickets for this session's person; a refusal is a note
+  $ids = @(ChainTickets $n)
+  if (-not $ids.Count) { return }
+  $r = TMeta (@('claim') + $ids)
+  if ($r -and $r.code -ne 0) { foreach ($l in @($r.err -split "`r?`n" | Where-Object { $_ })) { [Console]::Error.WriteLine("note: claim refused - $l") } }
+}
+
 function DoChainPlan($n) {
   if (-not $n) { Die 'usage: -Mode chain -Action plan -N <n> -PromptFile F [-Tickets T] [-Fix t -Verify t] [-Files F] [-ChainMode workflow|agents]' }
   if (-not $PromptFile -or -not (Test-Path -LiteralPath $PromptFile -PathType Leaf) -or (Get-Item -LiteralPath $PromptFile).Length -eq 0) {
@@ -1020,6 +1080,7 @@ function DoChainPlan($n) {
     PutInSection 'Chain' $blk "driver: -${SEP}hold: -${SEP}mode: $ChainMode"
     StampUpdated
   } finally { Unlock }
+  ClaimStage $n   # F80: planning a ticket claims it
   $code
 }
 
@@ -1118,6 +1179,16 @@ function DoChainDispatch($n) {
     # F37: the cap is a gate here, not only a hint in chain next -All.
     $cap = ParallelCap $d
     if ($nfl -ge $cap) { Refuse "$nfl stage(s) in flight, the cap is $cap - wait for one to land; chain next -All says when" }
+    # F80: the claim is the gate, before the row flips - a ticket someone else owns, or
+    # claimed first, never starts here. A refused claim is only a note when no one else
+    # owns the tickets (not on the team, a ticket not on the board).
+    $ids = @(ChainTickets $n)
+    $r = $null; if ($ids.Count) { $r = TMeta (@('claim') + $ids) }
+    if ($r -and $r.code -ne 0) {
+      $om = OwnedMap $n
+      foreach ($t in $ids) { if ($om.ContainsKey($t)) { Refuse "stage ${n}: $t is owned by $($om[$t]) - a run takes only unassigned tickets and yours (ticket-meta pick); its owner or the lead reassigns it" } }
+      foreach ($l in @($r.err -split "`r?`n" | Where-Object { $_ })) { [Console]::Error.WriteLine("note: claim refused - $l") }
+    }
     $swt = ''; $sbr = ''; $rwt = HdrField $Run 'worktree'
     if ($rwt -and (Test-Path -LiteralPath $rwt) -and $nfl -gt 0) {
       $swt = "$rwt.s$n"; $sbr = "$(HdrField $Run 'branch')-s$n"
@@ -1418,6 +1489,17 @@ function DoBoard {
   $sv = $script:Lock; $script:Lock = $null
   Lock "$f.lock"
   try {
+    # F82: never a stale board - the guard first, under the lock (its report on
+    # stderr; a refusal is ours, exit 2), and the flip committed at once.
+    $bfr = $null
+    foreach ($c in @((Join-Path $PSScriptRoot '..\..\practice\scripts\board-fresh.ps1'),
+                     (Join-Path $PSScriptRoot '..\..\..\practice\scripts\board-fresh.ps1'))) {
+      if (Test-Path -LiteralPath $c -PathType Leaf) { $bfr = $c; break }
+    }
+    if ($bfr) {
+      $null = & $bfr $m
+      if ($LASTEXITCODE -eq 2) { throw "REFUSED: board: $Ticket not flipped - see board-fresh's report above" }
+    }
     $raw = [IO.File]::ReadAllText($f); $nl = if ($raw.Contains("`r`n")) { "`r`n" } else { "`n" }
     $lines = $raw -split "`r?`n"; $hit = $false
     for ($i = 0; $i -lt $lines.Count; $i++) {
@@ -1427,6 +1509,19 @@ function DoBoard {
     if (-not $hit) { Die "board: no ticket $Ticket in $f" }
     [IO.File]::WriteAllText("$f.tmp.$PID", ($lines -join $nl), (New-Object Text.UTF8Encoding($false)))
     Move-Item -Force -LiteralPath "$f.tmp.$PID" -Destination $f
+    $ErrorActionPreference = 'Continue'
+    $null = & git -C $m ls-files --error-unmatch '--' $f 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $null = & git -C $m diff --quiet HEAD '--' $f 2>$null
+      if ($LASTEXITCODE -ne 0) {
+        $null = & git -C $m commit -q -m "board: $Ticket [$Mark]" '--' $f 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          [Console]::Error.WriteLine("relay-morpheus.ps1: $f written but not committed (git refused) - recorded in .skillator/dirty.log")
+          $who = "relay-morpheus board $Ticket [$Mark]"; if ($Run) { $who += " $(RunTag)" }
+          if ($bfr) { $null = & $bfr -Record $f -Who $who }
+        }
+      }
+    }
   } finally { Unlock; $script:Lock = $sv }
   "$Ticket [$Mark]"
 }
@@ -1865,7 +1960,7 @@ function ChainScan([switch]$NextOnly) {
   }
   $openk = 0; $unb = @(); $askd = @()
   foreach ($k in $ql) { if ($qs[$k] -ceq 'open') { $openk++ }; if ($qs[$k] -cin @('answered', 'ruled')) { $unb += "Q$k" }; if ($qs[$k] -ceq 'asked') { $askd += "Q$k" } }
-  $nx = $null; $out = New-Object System.Collections.Generic.List[string]; $nf = 0; $nbk = 0
+  $nx = $null; $out = New-Object System.Collections.Generic.List[string]; $nf = 0; $nbk = 0; $osk = @()
   # F37: what the stages in flight touch. One with no files: could touch
   # anything, so nothing runs beside it.
   $infall = $null; $ifp = New-Object System.Collections.Generic.List[object]; $cand = New-Object System.Collections.Generic.List[int]
@@ -1891,6 +1986,8 @@ function ChainScan([switch]$NextOnly) {
     $waits = $false
     foreach ($k in $ql) { if ($rs.ContainsKey("$n,$k")) { $out.Add("IDLE $n Q$k $($rs["$n,$k"])"); $waits = $true } }
     foreach ($a in @($af[$n] | Where-Object { $null -ne $_ })) { if (-not (& $landed $a 0)) { $out.Add("IDLE $n - after $a"); $waits = $true } }
+    # F80: tickets someone else owns (ticket-meta pick) - their stages never start here
+    if ($script:Owned) { foreach ($t in @($tk[$n] | Where-Object { $_ })) { if ($script:Owned.ContainsKey($t)) { $out.Add("IDLE $n owned $t $($script:Owned[$t])"); $osk += "stage $n $t $($script:Owned[$t])"; $waits = $true; break } } }
     if ($hasf[$n] -and $script:Leases) {
       $hit = $false
       foreach ($t in @($fl[$n] | Where-Object { $_ })) { if ($hit) { break }
@@ -1933,7 +2030,10 @@ function ChainScan([switch]$NextOnly) {
   elseif ($v -eq 'UNBLOCK') { foreach ($u in $unb) { "UNBLOCK $u - answered, not yet re-planned: references/marathon.md, Unblock" } }
   elseif ($v -eq 'WAIT') { "WAIT $nf - in flight, nothing else can start: wait for a stage to land, then chain next" }
   elseif ($v -eq 'BLOCKED') { "BLOCKED $nbk - pending behind a failed stage: retry it as a new stage and close the failed row (stage <n> > - `"stage <new>`"), or report it: references/marathon.md, The loop" }
-  elseif ($askd) { "FINAL - unanswered, name them in the summary: $($askd -join ' ')" } else { 'FINAL' }
+  else { $fv = 'FINAL'
+    if ($askd) { $fv += " - unanswered, name them in the summary: $($askd -join ' ')" }
+    if ($osk.Count) { $fv += " - skipped, someone else owns them, name them in the summary: $($osk -join ', ')" }
+    $fv }
   $out
 }
 
@@ -1962,7 +2062,8 @@ function DoChainNext {
   # that runs long without reporting must not look abandoned to other runs.
   foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { $rn = RowNum $l; if ($null -ne $rn -and (Cell $l 3) -ceq '~') { try { $null = LeaseBeat $rn } catch {} } }
   $script:Leases = @(LeaseForeign)
-  try { ChainScan } finally { $script:Leases = $null }
+  $script:Owned = OwnedMap
+  try { ChainScan } finally { $script:Leases = $null; $script:Owned = $null }
 }
 
 # An edge found after planning: one line into the stage's existing block,
@@ -2468,7 +2569,8 @@ function ChainSelftest($d) {
   $nb = @(Select-String -Path $Run -SimpleMatch "### stage $s2 - " | Where-Object { $_.Line.StartsWith("### stage $s2 - ") }).Count
   if ($nb -ne 1) { Die "chain dispatch: redispatching a failed stage left $nb In-flight blocks for it" }
   if (Select-String -Path $Run -Pattern '^run: dead-run-1$' -Quiet) { Die "chain dispatch: redispatching a failed stage kept the old In-flight block" }
-  if (@(Select-String -Path $Run -Pattern "^### stage $s1 - ").Count -ne 1) { Die "chain dispatch: replacing stage $s2's block touched stage $s1's" }
+  # A153: stage $s1 landed, so its block went then; the redispatch must not bring it back.
+  if (@(Select-String -Path $Run -Pattern "^### stage $s1 - ").Count -ne 0) { Die "chain dispatch: landed stage $s1 still has an In-flight block" }
   $txt = [IO.File]::ReadAllText($Run)
   if ($txt.IndexOf("`n## In flight`n") -lt 0 -or $txt.IndexOf("`n## In flight`n") -gt $txt.IndexOf("`n## Rulings")) { Die "chain dispatch: the In-flight section lost its place" }
   if (-not (Select-String -Path $Run -SimpleMatch "${c2}: override: user confirmed past 7d 90% (92%)" -Quiet)) { Die "chain dispatch -Confirmed: no ruling" }
@@ -3058,6 +3160,8 @@ function DoSelftest {
   $env:RELAY_WORKTREE = 'off'; $env:RELAY_DIR = $null; $env:RELAY_RUN = $null
   $d = Join-Path ([IO.Path]::GetTempPath()) ("relay-" + [guid]::NewGuid())
   New-Item -ItemType Directory -Force $d | Out-Null
+  # F80: no ticket-meta (no claims, no owner skips) unless a check turns it on
+  $env:RELAY_TICKET_META = Join-Path $d 'nope.ps1'
   # Each scratch dir is its own git repo, so the allocator keeps its counter
   # there and not in whatever repo the selftest was started from.
   $gc = @('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'core.autocrlf=false', '-c', 'core.hooksPath=NUL')
@@ -3123,6 +3227,36 @@ function DoSelftest {
     if (-not ((DoOrphans 0) -match 'stage 2')) { Die "orphans: did not flag a silent stage at limit 0" }
     if ((DoOrphans 9999) -match 'stage 2') { Die "orphans: flagged a fresh heartbeat" }
     if (-not (DoStatus | Select-String -Pattern '^\| 2 \|' -Quiet)) { Die "status: did not print the stage table" }
+
+    # --- A153: landing (x) or re-planning (>) a stage drops its In-flight block
+    # and nothing else; a failed stage (!) keeps it; a stage with no block is a
+    # no-op. Stage 12 is the neighbour whose header starts like stage 1's. The
+    # sh selftest asserts the same expected text, so the two ports agree.
+    $saved = $script:Run; $script:Run = Join-Path $d "a153.md"
+    $blk = { param($k, $s) @("### stage $k - $s  (dispatched 2026-10-01T00:00Z, @t)", 'run: -', 'prompt: |', "  do $s", '') }
+    WriteRun (@('# RUN-9 - a153', 'plan: p.md', 'started: 2026-10-01T00:00Z   updated: 2026-10-01T00:00Z', '',
+      '## Stages', '| # | stage | state | owner | heartbeat | landed |', '|---|-------|-------|-------|-----------|--------|',
+      '| 1 | a | ~ | - | - | - |', '| 2 | b | ~ | - | - | - |', '| 3 | c | ~ | - | - | - |', '| 4 | d |   | - | - | - |', '| 12 | e | ~ | - | - | - |', '',
+      '## In flight') + (& $blk 1 'a') + (& $blk 12 'e') + (& $blk 2 'b') + (& $blk 3 'c') + @('## Rulings', '- keep this ruling'))
+    $a153 = { $l = @(Get-Content -Encoding UTF8 $Run); $i = [array]::IndexOf($l, '## In flight'); ($l[$i..($l.Count - 1)]) -join '/' }
+    $a153f = @()
+    DoStage 1 'x' '-' 'aaa1531'
+    if (Select-String -Path $Run -Pattern '^### stage 1 - ' -Quiet) { $a153f += "x kept stage 1's block" }
+    if (-not (Select-String -Path $Run -Pattern '^### stage 12 - ' -Quiet)) { $a153f += "x on stage 1 dropped neighbour stage 12's block" }
+    DoStage 2 '!' '' ''
+    if (-not (Select-String -Path $Run -Pattern '^### stage 2 - ' -Quiet)) { $a153f += "! dropped stage 2's block" }
+    DoStage 3 '>' '-' 'stage 4'
+    if (Select-String -Path $Run -Pattern '^### stage 3 - ' -Quiet) { $a153f += "> kept stage 3's block" }
+    $before = & $a153
+    DoStage 4 'x' '-' 'aaa1534'
+    if ((& $a153) -cne $before) { $a153f += "x on a stage with no block changed In flight" }
+    $want = (@('## In flight') + (& $blk 12 'e') + (& $blk 2 'b') + @('## Rulings', '- keep this ruling')) -join '/'
+    if ((& $a153) -cne $want) { $a153f += "In flight is not exactly stage 12 + stage 2: $(& $a153)" }
+    $raw = [IO.File]::ReadAllBytes($Run)
+    if ($raw[0] -eq 0xEF) { $a153f += "the run file gained a BOM" }
+    if ([Text.Encoding]::UTF8.GetString($raw) -match "`r") { $a153f += "the run file gained CRLF" }
+    if ($a153f.Count) { Die ("A153: " + ($a153f -join '; ')) }
+    $script:Run = $saved
 
     # The same rollovers relay-morpheus.sh asserts on its own arithmetic. DoOrphans does
     # its date maths independently, so the pair can disagree without this.
@@ -3292,6 +3426,8 @@ function DoSelftest {
       if (-not ((Rm5 $m5 @('-Mode', 'list')) -match [regex]::Escape("worktree: $wa"))) { Die "F35: list does not show the worktree" }
       Remove-Item -Recurse -Force $wa
       $ida = IdOf (Split-Path -Leaf $fa)
+      if (-not ((Rm5 $m5 @('-Mode', 'resume', '-Id', $ida, '-ReadOnly')) -match [regex]::Escape("Stages work and commit in: $wa  (branch $ba) - MISSING"))) { Die "F85: resume -ReadOnly does not say the worktree is missing" }
+      if (Test-Path $wa) { Die "F85: resume -ReadOnly recreated the worktree" }
       if (-not ((Rm5 $m5 @('-Mode', 'resume', '-Id', $ida)) -match [regex]::Escape("Stages work and commit in: $wa"))) { Die "F35: resume does not name the worktree" }
       if (-not (Test-Path "$wa/a.txt")) { Die "F35: resume did not recreate the worktree from its branch" }
       $null = Rm5 $m5 @('-Mode', 'init', '-Here', '-Plan', 'p.md', '-Title', 'delta', '-Stages', 's1')
@@ -3358,6 +3494,33 @@ function DoSelftest {
       if (-not $tl.Contains("- [%] F9 $([char]0x2014) lease me`n") -or -not $tl.Contains("- [ ] F90 $([char]0x2014) not me")) { Die "F62: board did not set [%]: $tl" }
       if ((R6 @('-Mode', 'board', '-Ticket', 'F91', '-Mark', 'x')).rc -eq 0) { Die "F36: board accepted a missing ticket" }
       if ((Test-Path "$d6/TICKETS.md.lock") -or (Test-Path "$reg.lock")) { Die "F36: a lock was left behind" }
+      # F82: a flip is committed at once; behind the upstream with local work it is
+      # refused (exit 2), the board as it was.
+      if ((Test-Path (Join-Path $PSScriptRoot '..\..\practice\scripts\board-fresh.ps1')) -or (Test-Path (Join-Path $PSScriptRoot '..\..\..\practice\scripts\board-fresh.ps1'))) {
+        $d82 = (Join-Path $d 'f82') -replace '\\', '/'
+        $prev82 = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        try {
+          $null = & git init -q --bare "$d82/up.git" 2>&1
+          $null = & git clone -q "$d82/up.git" "$d82/a" 2>&1; $null = & git clone -q "$d82/up.git" "$d82/b" 2>&1
+          foreach ($c82 in @('a', 'b')) { & git -C "$d82/$c82" config user.name t; & git -C "$d82/$c82" config user.email t@t; & git -C "$d82/$c82" config core.autocrlf false }
+          [IO.File]::WriteAllText("$d82/a/TICKETS.md", "- [ ] F9 $([char]0x2014) one`n", (New-Object Text.UTF8Encoding($false)))
+          $null = & git -C "$d82/a" add -A 2>&1; $null = & git -C "$d82/a" commit -qm init 2>&1; $null = & git -C "$d82/a" push -q -u origin HEAD 2>&1
+        } finally { $ErrorActionPreference = $prev82 }
+        $d6s = $d6; $d6 = "$d82/a"
+        try {
+          $o = R6 @('-Mode', 'board', '-Ticket', 'F9', '-Mark', '~'); if ($o.rc -ne 0) { Die "F82: board failed: $($o.out)" }
+          $ErrorActionPreference = 'Continue'
+          if ("$(& git -C "$d82/a" log -1 --format=%s)" -cne 'board: F9 [~]' -or "$(& git -C "$d82/a" status --porcelain)") { Die "F82: the flip was not committed: $(& git -C "$d82/a" log -1 --format=%s)" }
+          $null = & git -C "$d82/b" pull -q 2>&1; [IO.File]::WriteAllText("$d82/b/o.txt", "o`n")
+          $null = & git -C "$d82/b" add -A 2>&1; $null = & git -C "$d82/b" commit -qm other 2>&1; $null = & git -C "$d82/b" push -q 2>&1
+          [IO.File]::WriteAllText("$d82/a/l.txt", "l`n"); $null = & git -C "$d82/a" add -A 2>&1; $null = & git -C "$d82/a" commit -qm local 2>&1
+          [IO.File]::WriteAllText("$d82/a/.git/skillator/board-fresh.stamp", "0`n")
+          $ErrorActionPreference = $prev82
+          $o = R6 @('-Mode', 'board', '-Ticket', 'F9', '-Mark', 'x')
+          if ($o.rc -ne 2 -or $o.out -notmatch 'REFUSED the board write' -or -not ([IO.File]::ReadAllText("$d82/a/TICKETS.md")).Contains("- [~] F9 $([char]0x2014) one")) { Die "F82: a stale board was flipped (rc $($o.rc)): $($o.out)" }
+          if (Test-Path "$d82/a/TICKETS.md.lock") { Die 'F82: a refused flip left the lock' }
+        } finally { $d6 = $d6s; $ErrorActionPreference = $prev82 }
+      }
     } finally { $env:RELAY_LEVEL_CMD = $svl }
 
     # F37: four stages - a.py, b.py, a.py again, c.py. -All at cap 2 offers the
@@ -3495,8 +3658,97 @@ function DoSelftest {
 
     ChainSelftest $d
     MarathonSelftest $d
+    F80Selftest $d
     "ok"
-  } finally { Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue }
+  } finally { $env:RELAY_TICKET_META = $null; Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue }
+}
+
+# F80: a chain takes only unassigned tickets and the session person's own; another's
+# stage is IDLE ... owned, its dispatch refused; planning and dispatching claim.
+function F80Selftest($d) {
+  $tm = Join-Path $PSScriptRoot '..\..\tickets-zordon\scripts\ticket-meta.ps1'
+  if (-not (Test-Path -LiteralPath $tm)) { [Console]::Error.WriteLine('note: ticket-meta.ps1 not beside this skill - F80 checks skipped'); return }
+  $gc = @('-c', 'user.name=t', '-c', 'core.autocrlf=false', '-c', 'core.hooksPath=NUL')
+  function G { $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    & git @gc @args 2>&1 | Out-Null; $ErrorActionPreference = $prev
+    if ($LASTEXITCODE -ne 0) { throw "selftest: git $args failed" } }
+  function No($label, $want, $block) {
+    try { & $block | Out-Null } catch {
+      if ("$_" -notmatch '^REFUSED: ' -or "$_" -notmatch [regex]::Escape($want)) { Die "${label}: want a refusal /$want/, got: $_" }
+      return
+    }
+    Die "${label}: expected a refusal /$want/ and got none"
+  }
+  $saved = @($env:RELAY_CHAIN_DRIVER, $env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME, $env:RELAY_CHAIN_PARALLEL)
+  try {
+    $env:RELAY_CHAIN_DRIVER = ''; $script:Driver = ''; $env:SKILLATOR_ME = $null
+    $env:RELAY_LEVEL_CMD = "echo 'src=claude-code 5h=40 7d=10 ctx=5 max=40'"
+    $d8 = Join-Path $d 'f80'; New-Item -ItemType Directory -Force (Join-Path $d8 '.skillator') | Out-Null; G init -q $d8
+    [IO.File]::WriteAllText((Join-Path $d 'gitconfig'), ''); $env:GIT_CONFIG_GLOBAL = Join-Path $d 'gitconfig'
+    G -C $d8 config user.email asha@x.com
+    $u8 = New-Object Text.UTF8Encoding($false); $em = [string][char]0x2014
+    [IO.File]::WriteAllText((Join-Path $d8 '.skillator/team.md'), "# Team`n`n- @asha: asha@x.com`n- @vidul: vidul@x.com`n", $u8)
+    $tb = Join-Path $d8 'TICKETS.md'
+    [IO.File]::WriteAllText($tb, "# TICKETS`n- [ ] F1 $em free`n- [ ] F2 $em mine [owner: @asha]`n- [ ] F3 $em theirs [owner: @vidul]`n", $u8)
+    $script:Dir = Join-Path $d8 '.skillator'; $script:Run = ''
+    $script:Plan = 'TICKETS.md'; $script:Title = 'f80'; $script:Stages = 'F1 free,F2 mine,F3 theirs'
+    DoInit | Out-Null
+    $t1 = $null; foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ($l -match '^\| (\d+) \| F1 free \|') { $t1 = [int]$Matches[1] } }
+    $t2 = $t1 + 1; $t3 = $t1 + 2
+    $pf = Join-Path $d8 'p'; [IO.File]::WriteAllText($pf, "item: do it`n")
+    $env:RELAY_TICKET_META = $tm
+    foreach ($pl in @(@($t1, 'F1', 'a.py'), @($t2, 'F2', 'b.py'), @($t3, 'F3', 'c.py'))) {
+      $script:PromptFile = $pf; $script:Tickets = $pl[1]; $script:Files = $pl[2]; $script:After = ''; $script:Fix = ''; $script:Verify = ''
+      try { DoChainPlan $pl[0] | Out-Null } finally { $script:Files = ''; $script:Tickets = '' }
+    }
+    $board = [IO.File]::ReadAllText($tb, $u8)
+    if ($board -notmatch "(?m)^- \[ \] F1 $em free \[owner: @asha\]$") { Die "F80: chain plan did not claim F1: $board" }
+    if ($board -notmatch "(?m)^- \[ \] F3 $em theirs \[owner: @vidul\]$") { Die "F80: chain plan took another's ticket: $board" }
+    $env:RELAY_CHAIN_PARALLEL = '3'; $script:All = $true
+    try { $out = @(DoChainNext) } finally { $script:All = $false; $env:RELAY_CHAIN_PARALLEL = $null }
+    if ($out -cnotcontains "NEXT $t1 $(CodeOf $t1)" -or $out -cnotcontains "NEXT $t2 $(CodeOf $t2)") { Die "F80: chain next -All did not pick the unassigned and my own: $($out -join ' | ')" }
+    if ($out -cnotcontains "IDLE $t3 owned F3 @vidul") { Die "F80: another's ticket not listed as skipped with its owner: $($out -join ' | ')" }
+    if (@($out | Where-Object { $_.StartsWith("NEXT $t3 ") }).Count) { Die "F80: chain next picked another's ticket: $($out -join ' | ')" }
+    $script:Driver = '@cc-a'
+    No 'F80: dispatch of another''s ticket' 'F3 is owned by @vidul' { DoChainDispatch $t3 }
+    if (-not (Select-String -LiteralPath $Run -Pattern "^\| $t3 \| $(CodeOf $t3) F3 theirs \|   \|" -Quiet)) { Die "F80: a refused dispatch touched the row" }
+    DoChainDispatch $t2 | Out-Null
+    # review: each check below says FAIL and the block dies at its end, so every red line shows
+    $bad = $false
+    # 1: the claim is the gate - another run claims F1 right after this one looked (a race)
+    [IO.File]::WriteAllText($tb, "# TICKETS`n- [ ] F1 $em free`n- [ ] F2 $em mine [owner: @asha]`n- [ ] F3 $em theirs [owner: @vidul]`n", $u8)
+    $race = Join-Path $d8 'race.ps1'; $flag = Join-Path $d8 'raced'
+    [IO.File]::WriteAllText($race, "& powershell -NoProfile -ExecutionPolicy Bypass -File '$tm' @args`n`$s = `$LASTEXITCODE`nif (`$args[0] -ceq 'pick' -and -not (Test-Path -LiteralPath '$flag')) { [IO.File]::WriteAllText('$flag', ''); `$env:SKILLATOR_ME = '@vidul'; & powershell -NoProfile -ExecutionPolicy Bypass -File '$tm' claim F1 | Out-Null }`nexit `$s`n")
+    $env:RELAY_TICKET_META = $race
+    $rerr = ''; try { DoChainDispatch $t1 | Out-Null } catch { $rerr = "$_" } finally { $env:RELAY_TICKET_META = $tm }
+    $board = [IO.File]::ReadAllText($tb, $u8)
+    if ($rerr -eq '') { if ($board -notmatch "(?m)^- \[ \] F1 $em free \[owner: @asha\]$") { Write-Output "FAIL: F80 review: dispatched a stage whose ticket another run claimed: $board"; $bad = $true } }
+    elseif ($rerr -notmatch '^REFUSED: .*F1 is owned by @vidul') { Write-Output "FAIL: F80 review: race refusal: $rerr"; $bad = $true }
+    # 3: with only another's stage left, FINAL names it - the end summary must
+    SetRow $t1 'x' '' 'a1' | Out-Null; SetRow $t2 'x' '' 'a2' | Out-Null
+    $out = @(DoChainNext)
+    if ($out[0] -notlike "FINAL*stage $t3 F3 @vidul*") { Write-Output "FAIL: F80 review: FINAL does not name the skipped stage: $($out[0])"; $bad = $true }
+    # 2: a token ticket-meta cannot read (HTML5) does not open the owner check
+    [IO.File]::WriteAllText($Run, ([IO.File]::ReadAllText($Run, $u8) -creplace '(?m)^tickets: F3(\r?)$', 'tickets: F3, HTML5$1'), $u8)
+    $out = @(DoChainNext)
+    if ($out -cnotcontains "IDLE $t3 owned F3 @vidul") { Write-Output "FAIL: F80 review: an odd ticket token opened the owner check: $($out -join ' | ')"; $bad = $true }
+    # 2: pick failing with a team.md = ownership unknown, nothing with a ticket starts (fail closed)
+    $broken = Join-Path $d8 'broken.ps1'
+    [IO.File]::WriteAllText($broken, "if (`$args[0] -ceq 'pick') { [Console]::Error.WriteLine('ticket-meta: boom'); exit 1 }`n& powershell -NoProfile -ExecutionPolicy Bypass -File '$tm' @args`nexit `$LASTEXITCODE`n")
+    $env:RELAY_TICKET_META = $broken
+    try { $out = @(DoChainNext) } finally { $env:RELAY_TICKET_META = $tm }
+    if ($out -cnotcontains "IDLE $t3 owned F3 ?") { Write-Output "FAIL: F80 review: a failed pick left another's stage dispatchable: $($out -join ' | ')"; $bad = $true }
+    if ($bad) { Die 'F80 review checks failed' }
+    # not on the team: only unassigned tickets run; no team.md: every ticket, as before
+    G -C $d8 config user.email ghost@x.com
+    if (@(DoChainNext) -cnotcontains "IDLE $t3 owned F3 @vidul") { Die "F80: not on the team, another's ticket was not skipped" }
+    Remove-Item -LiteralPath (Join-Path $d8 '.skillator/team.md') -Force
+    $out = @(DoChainNext)
+    if (@($out | Where-Object { $_ -match 'owned' }).Count) { Die "F80: no team.md, a ticket was still skipped: $($out -join ' | ')" }
+  } finally {
+    $env:RELAY_CHAIN_DRIVER = $saved[0]; $env:GIT_CONFIG_GLOBAL = $saved[1]; $env:SKILLATOR_ME = $saved[2]; $env:RELAY_CHAIN_PARALLEL = $saved[3]
+    $script:Driver = ''; $env:RELAY_TICKET_META = Join-Path $d 'nope.ps1'
+  }
 }
 
 try {

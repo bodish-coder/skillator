@@ -6,11 +6,15 @@ export type Ticket = {
   session: string | null                                 // "(@cc-4ae496)" tag, without parens
 }
 export type Board = { path: string; mtimeMs: number; size: number; tickets: Ticket[]; error: string | null }
-export type Member = { handle: string; emails: string[]; name?: string }   // name: the `  name:` line under it
+export type Member = { handle: string; emails: string[]; name?: string; lead?: true }   // name: the `  name:` line under it; lead: the `lead:` line names it
 export type Filter = { app: string | null; who: string | null; mine: boolean; showDone: boolean }
 export type Lock = { path: string; ageMin: number; holder: string }
 export type Machine = { at: number; drive: string; diskFree: number | null; diskTotal: number | null;
-                        memFree: number | null; locks: Lock[]; hold: string | null }   // bytes
+                        memFree: number | null; locks: Lock[]; hold: string | null    // bytes
+                        board?: BoardFresh                                            // F82: only while behind
+                        mute?: string }                                               // F87: watchdog.mute "<since> <note>", only while muted
+// F82: pending's BOARD= - the main checkout behind its upstream; refused = board-fresh's last run refused a write.
+export type BoardFresh = { state: 'stale' | 'refused'; behind: number; up: string; reason: string }
 export type Window = { pct: number; resetsAt: string | null; source: 'host' | 'watch-cortana'; at: number }
 export type Usage = { five: Window | null; seven: Window | null; spendLimitPct: number | null;
                       costUsd: number | null; decision: string | null }   // decision = relay `chain decide` line
@@ -19,7 +23,16 @@ export type Watch = { level: Level; reasons: string[] }
 export type Stage = { n: number; code: string; ticket: string; title: string; after: string; files: string; state: string }
 export type RunView = { id: string; title: string; done: number; total: number; owner: string | null;
                         stages: Stage[]; planned: boolean     // planned = chain planned, nothing dispatched
-                        decisions: string[] }                 // F50: parked `## Decisions` still unanswered, "Q1 F49 <question> - <what> waits on it"
+                        decisions: string[]                   // F50: parked `## Decisions` still unanswered, "Q1 F49 <question> - <what> waits on it"
+                        // F85: from `relay-morpheus resume <id>` (the run file) and the .workflow.js beside it
+                        mode: string | null                   // the Chain header's mode (agents / workflow); null: no chain
+                        driver: string | null                 // the Chain header's driver cell `<tag> <YYYY-MM-DDTHH:MMZ>`; null: '-'
+                        flights: Flight[]                     // the In-flight blocks
+                        phases: PlanItem[][] | null }         // the script's PLAN phases (read as data, never run); null: no script
+export type Flight = { n: number; by: string | null; run: string | null }   // its dispatcher's tag, its `run:` id
+export type PlanItem = { n: number; ticket: string }
+// F85: the engage confirm in the pane - what goes, and whether relay queue-run add goes first.
+export type Engage = { id: string; text: string; queue: boolean }
 // F77: id = the form's Ticket field as typed ('' when opened with no ticket selected),
 // resolved against the board case-insensitively (ticketById); ticket-meta gets the board's ID.
 export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string | null; result: string | null }
@@ -27,6 +40,10 @@ export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string
 // (drawn as a form in the ops-board pane; `back` = where a finished add returns).
 export type TeamView = { selected: string | null; confirm: boolean }
 export type PersonDraft = { handle: string; name: string; emails: string; result: string | null; back: 'assign' | 'team' }
+// F81: one line of `ticket-meta reconcile` (to === from: kept, evidence unclear) and the
+// form in the pane: the proposals and the ids picked to apply.
+export type Proposal = { id: string; from: Box; to: Box; why: string }
+export type Reconcile = { rows: Proposal[]; picked: string[] }
 // F53: the Agents and Workflows tabs. Every field is one the engine reports (design F53, findings 1-5).
 // The engine's AgentStatus (claude-code d.ts 566), repeated: this contract must be self-contained (no import).
 export type AgentStatus = 'pending' | 'running' | 'waiting' | 'idle' | 'completed' | 'failed' | 'killed'
@@ -97,8 +114,10 @@ declare module 'claude-code' {
       runsOpen: ('runs' | 'workflows')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
       runs: RunView[]; assign: AssignDraft | null; narrow: boolean
+      engage: Engage | null             // F85: the engage confirm up in the Workflows tab
       relay: string | null   // F48 band: "RUN-0012 2/4", the first relay run not all done
       teamView: TeamView | null; person: PersonDraft | null
+      reconcile: Reconcile | null   // F81: the reconcile form up in the Tickets tab
       agents: AgentRow[]; workflows: WorkflowRow[]   // F53: the Agents and Workflows tabs
       // F66: the Messages tab - the inbox (newest MSG_MAX), the read marker's id, the
       // row picked / opened, the saved config's view, the setup form's safe part

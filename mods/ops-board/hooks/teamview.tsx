@@ -1,12 +1,13 @@
 import { atom, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, TextProps } from 'claude-code'
 import type { Board, Member, TeamView } from '../types'
-import { openAddPerson, removeMember } from './assign'
+import { makeLead, openAddPerson, removeMember } from './assign'
 import { ticketsOf } from './lib/team'
 export { ticketsOf } from './lib/team'
 
 // F47 team management: `t` in the Tickets tab. Who is on .skillator/team.md, what
-// open tickets name them, you marked. Add and remove run ticket-meta `team`.
+// open tickets name them, you marked. Add and remove run ticket-meta `team`; F80: the
+// lead marked, `l` makes the selected person lead (ticket-meta team lead rules on it).
 
 const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 
@@ -19,6 +20,7 @@ export function TeamTab($: EngineInterface, els: Els, tv: TeamView, team: Member
   const setTv = (fn: (x: TeamView) => TeamView) => { void update($, teamViewA, x => (x ? fn(x) : x)) }
   const line = (hd: string, n: string, e: string, t: string) => `${hd.padEnd(9)}${n.padEnd(8)}${e.padEnd(22)}${t}`
 
+  if (team.length > 0) out.push(<Box key="team:you"><Text dimColor>{`you: ${me ?? '- (not on the team)'}`}</Text></Box>)
   out.push(<Box key="team:head"><Text dimColor wrap="truncate-end">{line('handle', 'name', 'email', 'tickets')}</Text></Box>)
   if (team.length === 0) out.push(<Text dimColor>no .skillator/team.md yet - a adds the first person</Text>)
   for (const m of team) {
@@ -49,6 +51,7 @@ export function TeamTab($: EngineInterface, els: Els, tv: TeamView, team: Member
     <Box key="team:keys" flexDirection="row" gap={2}>
       <Button key="team:add" plain dimColor hotkey="a" onPress={() => { void openAddPerson($, 'team') }}>add</Button>
       {sel && <Button key="team:remove" plain dimColor hotkey="r" onPress={() => setTv(x => ({ ...x, selected: sel, confirm: true }))}>remove</Button>}
+      {sel && <Button key="team:lead" plain dimColor hotkey="l" onPress={() => { void makeLead($, sel) }}>make lead</Button>}
       <Button key="team:back" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => null) }}>back to tickets</Button>
       <Text dimColor>.skillator/team.md</Text>
     </Box>,

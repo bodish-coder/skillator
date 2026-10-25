@@ -67,7 +67,8 @@ export function keyFromDom(e: DomKey): Key | null {
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-const CLASS: Record<string, string> = { '1': 'b', '2': 'd', '7': 'i', '31': 'c31', '32': 'c32', '33': 'c33', '35': 'c35', '36': 'c36' }
+// F89: draw.ts's highlight (1;97;44) shows as the inverse class here, in the IDE theme's colours
+const CLASS: Record<string, string> = { '1': 'b', '2': 'd', '7': 'i', '44': 'i', '31': 'c31', '32': 'c32', '33': 'c33', '35': 'c35', '36': 'c36' }
 
 // draw.ts's lines (SGR runs: `ESC[<codes>m text ESC[0m`) as HTML: each run a span with a
 // class per code, text escaped, any other escape dropped. One line per frame row.
@@ -148,7 +149,7 @@ export function registerOps(api: VsApi, context: VsContext, deps: Deps): void {
     if ('error' in s) { void api.window.showErrorMessage(s.error!); return null }
     const engine = makeEngine({ host: s.host, email: s.email, once: true, state: s.first(s.opts.cols ?? 80, s.opts.rows ?? 24), onChange: () => {}, onQuit: () => {} })
     await engine.readAll()
-    const text = frame({ ...engine.state, now: Date.now() }, { color: false, ascii: s.opts.ascii }).join('\n')
+    const text = frame({ ...engine.state, now: Date.now() }, { color: false, ascii: s.opts.ascii, plain: true }).join('\n')
     output ??= api.window.createOutputChannel('skillator ops')
     output.clear()
     output.append(text + '\n')

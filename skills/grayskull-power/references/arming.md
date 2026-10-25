@@ -3,7 +3,16 @@
 Run once, on invoke. SKILL.md carries the one-line summary of each; this is what
 each one actually means.
 
-- **`tickets-zordon`** — read `TICKETS.md` at the repo root. Missing? Say so and
+- **`tickets-zordon`** — first the stale-board guard (F82), run on the repo:
+  `sh <practice>/scripts/board-fresh.sh` (Windows: `powershell -NoProfile
+  -ExecutionPolicy Bypass -File "<practice>/scripts/board-fresh.ps1"`;
+  `<practice>` is skillator's `practice/` - `<root>/practice/` in a clone or
+  plugin, `<skills>/practice/` installed). It fetches the upstream (5 s at most,
+  once per 10 min) and fast-forwards when that is safe, saying so in one line.
+  `unchecked` (offline) → `board unchecked` in the active-set line. A refusal
+  (exit 2) → show its report as printed, `board refused: <N> behind` in the
+  active-set line, and no board write until the user reconciles - never pull,
+  merge, reset or stash for it. Then read `TICKETS.md` at the repo root. Missing? Say so and
   create it on the first ticket, not before. Run its archive step first
   (`archive-tickets.sh`; moved rows → commit board + archive together), then
   report the open set: `B` bugs, `F` features, `A` agent-found.
@@ -16,6 +25,9 @@ each one actually means.
   to run one of its modes, whenever you make one, is a single line in Yoda's
   voice, chosen from code-yoda §8 — "Heavy, this diff is. A review from
   code-yoda, take you should."
+  The arm carries to implementers: every implementer prompt skillator writes
+  while this project is on opens with "Load skillator:code-yoda first
+  (restraint, full)", the paste-in line in relay-morpheus `references/chain.md` (A155).
 - **`codegraph`** — the code map the rest of the skill leans on. **Run the
   check script, never a hand translation of it** (A128: Codex turned the POSIX
   steps below into a PowerShell one-liner that died with a ParserError):

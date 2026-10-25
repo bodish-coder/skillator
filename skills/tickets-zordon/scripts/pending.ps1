@@ -4,7 +4,7 @@
 #
 #   pending.ps1              the human report: plain ASCII, every line within 80 columns
 #   pending.ps1 --kv         the same facts as KEY=value lines (the ops-board mod parses these)
-#   pending.ps1 --machine    DRIVE / DISK_* / MEM_FREE / LOCK / HOLD only (cheap; the band's poll)
+#   pending.ps1 --machine    DRIVE / DISK_* / MEM_FREE / LOCK / HOLD / BOARD only (cheap; the band's poll)
 #   pending.ps1 --selftest   fixture repo, every mode, prints ok
 #
 # Test-only overrides: PENDING_DF_CMD, PENDING_MEM_CMD (PowerShell commands
@@ -420,7 +420,31 @@ function Get-MachineKv {
   [void]$out.Add("DISK_TOTAL=$total"); [void]$out.Add("MEM_FREE=$mem")
   foreach ($l in (Get-LocksKv)) { [void]$out.Add($l) }
   [void]$out.Add((Get-HoldKv))
+  foreach ($l in (Get-BoardKv)) { [void]$out.Add($l) }
   return @($out)
+}
+
+# F82: the board's freshness, one git call - as pending.sh board_kv. Behind its
+# upstream: BOARD=refused|.. when board-fresh's last run refused a write, else
+# BOARD=stale|..; not behind: nothing.
+function Get-BoardKv {
+  $u = ''; $tr = ''
+  foreach ($l in @(Git-Out -C $script:Main for-each-ref '--format=%(HEAD)|%(upstream:short)|%(upstream:track,nobracket)' refs/heads)) {
+    if ($null -eq $l) { continue }
+    $p = ([string]$l).TrimEnd("`r").Split('|')
+    if ($p[0] -ceq '*') { $u = [string]$p[1]; $tr = [string]$p[2] }
+  }
+  $x = [regex]::Match($tr, 'behind ([0-9]+)')
+  if ($u -eq '' -or -not $x.Success) { return @() }
+  $be = [long]$x.Groups[1].Value
+  $st = ''; $rs = ''
+  $sf = "$($script:Main)/.git/skillator/board-fresh"
+  if (Test-Path -LiteralPath $sf -PathType Leaf) {
+    $f = ([string](([System.IO.File]::ReadAllText($sf) -split "`n")[0])).TrimEnd("`r").Split("`t")
+    if ($f.Count -ge 5) { $st = $f[1]; $rs = $f[4] }
+  }
+  if ($st -ceq 'refused') { return @("BOARD=refused|$be|$u|$rs") }
+  return @("BOARD=stale|$be|$u|-")
 }
 
 function Get-Facts {
@@ -544,6 +568,7 @@ function Format-Human($facts) {
   $ow = New-Object System.Collections.ArrayList
   $lk = New-Object System.Collections.ArrayList
   $dr = ''; $dt = ''
+  $bst = ''; $bbe = ''; $bup = ''; $brs = ''
   $act = @{}
   $mn = Get-NormPath $script:Main
   foreach ($l in @($facts)) {
@@ -574,6 +599,7 @@ function Format-Human($facts) {
       [void]$ses.Add(@((ConvertTo-Ascii $a[0]), $a[1], [long]$a[$a.Count - 1], $isin))
     }
     elseif ($k -ceq 'OWED') { [void]$ow.Add($v) }
+    elseif ($k -ceq 'BOARD') { $bo = $v.Split('|'); $bst = $bo[0]; $bbe = $bo[1]; $bup = ConvertTo-Ascii $bo[2]; $brs = ConvertTo-Ascii $bo[3] }
     elseif ($k -ceq 'DRIVE') { $dr = ConvertTo-Ascii $v }
     elseif ($k -ceq 'DISK_TOTAL') { $dt = $v }
     elseif ($k -ceq 'LOCK') {
@@ -671,10 +697,14 @@ function Format-Human($facts) {
 
   if ($ow.Count -eq 0) { & $add 'GREENS    none owed' } else { & $wrap 'GREENS    owed: ' ([string]::Join(' ', [string[]]$ow.ToArray())) '          ' }
 
-  if ($tests.Count -eq 0) { & $add 'NEXT      nothing to test' }
+  # F82: a stale board first - a refusal with its reason
+  $nx = 'NEXT      '
+  if ($bst -ceq 'refused') { & $wrap ($nx + 'board refused: ') $brs '          '; $nx = '          ' }
+  elseif ($bst -ceq 'stale') { & $add (Get-Trunc "${nx}board stale: $bbe behind $bup" 80); $nx = '          ' }
+  if ($tests.Count -eq 0) { & $add "${nx}nothing to test" }
   for ($i = 0; $i -lt $tests.Count; $i++) {
     $pre = '          '
-    if ($i -eq 0) { $pre = 'NEXT      ' }
+    if ($i -eq 0) { $pre = $nx }
     $note = $tests[$i][1]
     if ($note -ceq '-') { $note = '(no test named)' }
     & $add (Get-Trunc "${pre}test $($tests[$i][0]): $note" 80)
@@ -940,6 +970,19 @@ function Invoke-Selftest {
     # the room is still cut, mid-word.
     W "$R/TICKETS.md" ("- [ ] F9 $dash " + ('x' * 90) + "`n")
     Eq 'one long word is cut' (@(Run) | Where-Object { $_ -cmatch '^    F9 ' }) ('    F9    ' + ('x' * 67) + '...')
+    # F82: behind the upstream the board is stale; board-fresh's refusal is said with its reason.
+    Eq 'not behind, no BOARD' (@(Run --kv) | Where-Object { $_ -cmatch '^BOARD=' }) ''
+    G checkout -q -b up82 base; G commit -q --allow-empty -m up; G checkout -q main; G branch -q -f base up82
+    Eq 'stale, kv' (@(Run --kv) | Where-Object { $_ -cmatch '^BOARD=' }) 'BOARD=stale|1|base|-'
+    Eq 'stale, machine' (@(Run --machine) | Where-Object { $_ -cmatch '^BOARD=' }) 'BOARD=stale|1|base|-'
+    $H = @(Run); $i = [array]::IndexOf($H, @($H | Where-Object { $_ -cmatch '^NEXT ' })[0])
+    Eq 'stale, human' @($H[$i], $H[$i + 1]) "NEXT      board stale: 1 behind base`n          nothing to test"
+    New-Item -ItemType Directory -Force -Path "$R/.git/skillator" | Out-Null
+    [System.IO.File]::WriteAllText("$R/.git/skillator/board-fresh", "1`trefused`t1`tbase`t1 behind base, 2 local commit(s) not on it`n")
+    Eq 'refused, kv' (@(Run --kv) | Where-Object { $_ -cmatch '^BOARD=' }) 'BOARD=refused|1|base|1 behind base, 2 local commit(s) not on it'
+    Eq 'refused, human' (@(Run) | Where-Object { $_ -cmatch '^NEXT ' }) 'NEXT      board refused: 1 behind base, 2 local commit(s) not on it'
+    G branch -q -f base main; G branch -q -D up82; Remove-Item -LiteralPath "$R/.git/skillator/board-fresh"
+    Eq 'fresh again, refusal not said' (@(Run --kv) | Where-Object { $_ -cmatch '^BOARD=' }) ''
     # No upstream, and detached.
     G branch -q --unset-upstream
     Eq 'no upstream' (@(Run)[0]) 'REPO      repo  main: no upstream  2026-01-01 12:34Z'

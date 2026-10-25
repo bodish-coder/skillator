@@ -25,6 +25,11 @@ export type Opts = {
 }
 
 export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no-color] [--ascii] [--skills <dir>] [--tab tickets|workflows|health|messages|explorer|run]'
+// F89: --help prints this and exits 0. --open is the launchers' (ops.sh / ops.ps1), never the app's.
+export const HELP = USAGE + '\n'
+  + '  launcher: ops [repo-dir] --open   (ops.ps1: -Open) the board in a new tab of the current\n'
+  + '            Windows Terminal window when wt.exe is on PATH, else here as without it\n'
+  + '  NO_COLOR or --no-color drops the colours only; bold, inverse and the › marker stay'
 const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', health: 'health', messages: 'messages', explorer: 'explorer', run: 'run' }
 
 // The flags; the first wrong one is `error` (the launcher has taken the repo dir already).
@@ -83,6 +88,7 @@ export function keyOf(str: string | undefined, key: RawKey): Key | null {
 export const repoName = (root: string): string | null => root.split('/').filter(Boolean).pop() ?? null
 
 export async function main(argv: string[]): Promise<number> {
+  if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write(HELP + '\n'); return 0 }
   const opts = parseArgs(argv)
   if (opts.error) { process.stderr.write(`${opts.error}\n${USAGE}\n`); return 2 }
   const out = process.stdout
@@ -98,7 +104,8 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const host: Host = await makeHost({ appDir: import.meta.dirname, cwd: process.cwd(), ...(opts.skills ? { skills: opts.skills } : {}) })
-  const paint: Paint = { color: opts.color, ascii: opts.ascii }
+  // --once without colour is read as text (pipes, tests, screenshots): no SGR at all
+  const paint: Paint = { color: opts.color, ascii: opts.ascii, plain: once && !opts.color }
   const size = () => ({ cols: opts.cols ?? (out.isTTY && out.columns ? out.columns : 80), rows: opts.rows ?? (out.isTTY && out.rows ? out.rows : 24) })
   const sz = size()
   const state: State = { ...initial(sz.cols, sz.rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot) }
@@ -106,7 +113,7 @@ export async function main(argv: string[]): Promise<number> {
 
   let live = false
   const draw = () => { if (live) out.write(paintScreen(frame({ ...engine.state, now: Date.now() }, paint))) }
-  const engine = makeEngine({ host, email, once, state, onChange: draw, onQuit: () => quit(0) })
+  const engine = makeEngine({ host, email, envMe: process.env.SKILLATOR_ME ?? null, once, state, onChange: draw, onQuit: () => quit(0) })
 
   if (!stdin) {
     await engine.readAll()

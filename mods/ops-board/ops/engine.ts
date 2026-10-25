@@ -3,13 +3,14 @@
 // every change (onChange) and reads `state`. The standalone app (app.ts) and the Pi
 // extension (../pi) both run this one loop - neither re-implements a poll.
 import type { Board, Member } from '../types'
-import type { Host } from './nodehost'
+import type { Host, RunResult } from './nodehost'
+import { MUTE_FILE, muteKv } from '../hooks/lib/facts'
 import type { Effect, Key, State, Step } from './state'
 import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun } from './state'
 import { inboxDirOf, INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
 import { parseBoard } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
-import { parseRuns } from '../hooks/lib/runs'
+import { parseRuns, scriptPathOf } from '../hooks/lib/runs'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
 import { parseRunFile, RUN_FILE } from '../hooks/lib/runentries'
 import type { Bins } from '../hooks/lib/runentries'
@@ -30,6 +31,7 @@ export type EngineOpts = {
   host: Host
   state: State                    // the first state (size, tab, repo)
   email: string | null            // git's user.email: who "me" is on the team
+  envMe?: string | null           // F80: SKILLATOR_ME, overriding the email as ticket-meta whoami does
   once: boolean                   // read only: of the effects the polls ask for, relay's decision (a read) and nothing else
   onChange(): void                // the state moved: draw it
   onQuit(): void                  // the reducer asked to quit
@@ -72,9 +74,28 @@ export function makeEngine(o: EngineOpts): Engine {
       const g = host.git ? await host.git(e.args) : { code: 127, out: '', err: NO_GIT, argv: [] }
       return apply(afterRun(e, g, state, Date.now()))
     }
+    if (e.kind === 'mute') {                    // F87: a write, so never in --once
+      let r: RunResult = { code: 0, out: '', err: '', argv: [] }
+      try {
+        if (once) throw new Error('read only (--once)')
+        if (!host.write) throw new Error('this host cannot write files')
+        await host.write(host.repoRoot + '/' + MUTE_FILE, e.text ? e.text + '\n' : '')
+      } catch (err) { r = { ...r, code: 1, err: String((err as Error)?.message ?? err) } }
+      if (e.then) await apply(afterRun({ then: e.then }, r, state, Date.now()))
+      return
+    }
     if (once && e.call !== 'relay-decide') return
     const r = await host.run(e.call, e.args, e.stdin)
-    await apply(afterRun(e, r, state, Date.now()))
+    await apply(afterRun(e, e.call === 'pending-machine' ? await withMute(r) : r, state, Date.now()))
+  }
+
+  // F87: pending --machine's facts with the mute file's line appended (MUTE=), as the mod does.
+  const withMute = async (r: RunResult): Promise<RunResult> => {
+    if (r.code !== 0 || !r.out.trim()) return r
+    const path = host.repoRoot + '/' + MUTE_FILE
+    let text: string | null = null
+    try { if (await host.stat(path)) text = await host.read(path) } catch { text = null }
+    return { ...r, out: r.out + muteKv(text) }
   }
 
   // --- F79: the Run tab - run.json read (scanned when absent, through run-entries), one job ---
@@ -147,7 +168,7 @@ export function makeEngine(o: EngineOpts): Engine {
       team = []
       if (tst) { try { team = parseTeam(await host.read(teamPath)) } catch { team = [] } }
     }
-    if (moved && board) state = onBoard(state, board, team, email ? meOf(team, email) : null)
+    if (moved && board) state = onBoard(state, board, team, meOf(team, email ?? '', o.envMe))
     await pollInbox(root)
     draw()
   }
@@ -173,6 +194,7 @@ export function makeEngine(o: EngineOpts): Engine {
   }
 
   let chains: Record<string, string> = {}
+  let scripts: Record<string, string> = {}     // F85: each run's .workflow.js, read as text
   const relayFailed = (r: { code: number; err: string; out: string }) => {
     if (r.err === NO_SCRIPTS) return
     setNote(isRelayNote, `▲ relay-morpheus list failed: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}`)
@@ -184,26 +206,31 @@ export function makeEngine(o: EngineOpts): Engine {
     setNote(isRelayNote, null)
     const open = parseRuns(r.out, {}).filter(x => x.done < x.total)
     const next: Record<string, string> = {}
+    const js: Record<string, string> = {}
     for (let i = 0; i < open.length; i += 2) {
       await Promise.all(open.slice(i, i + 2).map(async run => {
-        const c = await host.run('relay-chain-status', [run.id])
-        if (c.code === 0) next[run.id] = c.out
+        const c = await host.run('relay-resume', [run.id])
+        if (c.code !== 0) return
+        next[run.id] = c.out
+        const path = scriptPathOf(c.out, host.repoRoot)
+        if (path) { try { js[run.id] = await host.read(path) } catch { /* no script: an agents run */ } }
       }))
     }
     chains = next
-    state = onRuns(state, r.out, chains)
+    scripts = js
+    state = onRuns(state, r.out, chains, scripts)
     draw()
   }
 
   // Machine facts (and the red → hold rule), relay's first open run for the band, usage
   // (and relay's decision on it). On Runs its own poll reads relay.
   const pollSlow = async () => {
-    const m = await host.run('pending-machine', [])
+    const m = await withMute(await host.run('pending-machine', []))
     if (m.code === 0 && m.out.trim()) await apply(onMachine(state, m.out, Date.now()))
     else if (m.err === NO_SCRIPTS) { setNote(isScriptsNote, `▲ ${NO_SCRIPTS} - no disk, memory, lock, run or usage facts`); draw() }
     if (state.tab !== 'runs') {
       const r = await host.run('relay-list', [])
-      if (r.code === 0) { setNote(isRelayNote, null); state = onRuns(state, r.out, chains) } else relayFailed(r)
+      if (r.code === 0) { setNote(isRelayNote, null); state = onRuns(state, r.out, chains, scripts) } else relayFailed(r)
       draw()
     }
     const u = await host.run('usage-level', [])

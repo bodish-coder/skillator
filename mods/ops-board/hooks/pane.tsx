@@ -8,15 +8,16 @@ import type { Model, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
 import { openAssign, renderForm, runDecided } from './assign'
+import { openReconcile, renderReconcile } from './reconcile'
 import { paint } from './paint'
 import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
-import { openRuns, pollRuns, readRuns, RunsTab } from './runstab'
+import { EngageConfirm, openRuns, pollRuns, readRuns, RunsTab } from './runstab'
 import { runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, statusColor } from './lib/runlines'
 import { workflowStatus } from './lib/agents'
 import { AgentsTab, pollAgents, readAgents, WorkflowsTab } from './agentstab'
 import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab'
-import { enterRun, RunTab } from './runtab'
+import { enterRun, isRunFormUp, RunTab } from './runtab'
 import { enterExplorer, ExplorerTab, readExplorer } from './explorertab'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
@@ -44,8 +45,6 @@ const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 const openA = atom({ plugin: 'ops-board', key: 'openGroups' } as const, [])
 // F76: the Workflows tab's open sections (Runs, Workflows), this session; both start open.
 const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows'])
-// F79: the Run tab's confirm / rename form (runtab.tsx); up, the tab bar is not drawn.
-const runFormA = atom({ plugin: 'ops-board', key: 'runForm' } as const, null)
 
 const CHIP_KEY: Color = 'permission'
 const CHIP_VALUE: Color = 'suggestion'
@@ -175,6 +174,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       <Button key="key:filter" plain dimColor hotkey="f" onPress={() => { void update($, filterOpenA, x => !x) }}>filter</Button>
       <Button key="key:done" plain dimColor hotkey="x" onPress={() => setFilter(x => ({ ...x, showDone: !x.showDone }))}>done</Button>
       <Button key="key:team" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => ({ selected: null, confirm: false })) }}>team</Button>
+      <Button key="key:reconcile" plain dimColor hotkey="c" onPress={() => { void openReconcile($) }}>reconcile</Button>
       {/* F78: register.tsx takes this press (ui.press) - the forced poll lives there */}
       <Button key="key:refresh" plain dimColor hotkey="r" onPress={() => {}}>refresh</Button>
     </Box>,
@@ -216,7 +216,7 @@ async function RunsAndWorkflows($: EngineInterface, els: Els, cols: number): Pro
         <Text bold color={st ? statusColor(st) : undefined}>{cut(sectionHead(sec, on, n), cols - 1)}</Text>
       </Button>,
     )
-    if (on) out.push(...(sec === 'runs' ? RunsTab($, els, runs) : WorkflowsTab(els, agents)))
+    if (on) out.push(...(sec === 'runs' ? RunsTab($, els, runs, agents) : WorkflowsTab(els, agents)))
   }
   return out
 }
@@ -237,6 +237,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
             void update($, tabA, () => x.id)
             if (x.id === 'runs') void pollRuns($).catch(() => {})       // read on entering the tab
             if (x.id === 'agents') void pollAgents($).catch(() => {})   // read on entering the tab
+            if (x.id === 'agents') void pollRuns($).catch(() => {})     // F85: the runs its lead column names
             if (x.id === 'messages' && tab !== 'messages') void enterMessages($).catch(() => {})
             if (x.id === 'explorer') void enterExplorer($).catch(() => {})        // F75: read on entering the tab
             if (x.id === 'run') void enterRun($).catch(() => {})            // F79: first open scans
@@ -262,6 +263,11 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         {bar}
         <Text> </Text>
         {HealthTab(els, await readHealth($))}
+        <Text> </Text>
+        {/* F87: register.tsx takes this press (ui.press) - /ops resume force */}
+        <Box key="keys" flexDirection="row" gap={2}>
+          <Button key="key:force" plain dimColor hotkey="f" onPress={() => {}}>force resume (whatever the reading; mutes memory red)</Button>
+        </Box>
       </Box>
     )
   }
@@ -270,14 +276,14 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       <Box flexDirection="column">
         {bar}
         <Text> </Text>
-        {AgentsTab(els, await readAgents($, cols))}
+        {AgentsTab(els, { ...await readAgents($, cols), runs: openRuns((await readRuns($, cols)).runs), board: await read($, boardA) })}
       </Box>
     )
   }
   // A Run form up draws without the tab bar, as the assign forms do: a tab press would
   // leave it up, and Esc on that tab (the pane still closeOnEscape) close the board.
   if (tab === 'run') {
-    const formUp = (await read($, runFormA)) !== null
+    const formUp = await isRunFormUp($)
     return (
       <Box flexDirection="column">
         {!formUp && bar}
@@ -296,6 +302,9 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
     )
   }
   if (tab === 'runs') {
+    // F85: the engage confirm draws without the tab bar, as the Run tab's form does
+    const g = (await readRuns($, cols)).engage
+    if (g) return <Box flexDirection="column">{EngageConfirm($, els, g)}</Box>
     return (
       <Box flexDirection="column">
         {bar}
@@ -306,7 +315,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   }
   // B5: an assign / decide / add person form up draws in place of the view it came
   // from (Tickets or Team); Esc or Cancel brings that view back.
-  const form = await renderForm($, e)
+  const form = (await renderForm($, e)) ?? (await renderReconcile($, e))   // F81: the reconcile form likewise
   if (form) return form
   const v = await readView($, cols)
   const tv = await read($, teamViewA)

@@ -1,9 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { AgentSpawnInput, AgentSpawnResult, AgentStatus, BoxProps, Color, ElementConstructor, EngineInterface,
   RenderElement, TextProps, ToolCallResult, TurnCompleteReason } from 'claude-code'
-import type { AgentRow, WorkflowRow } from '../types'
-import { agentOrder, countsOf, hms, launched, listed, runSeen, spawned, touched, turnEnded, turnStarted, workflowStatus } from './lib/agents'
-import { statusColor } from './lib/runlines'
+import type { AgentRow, Board, RunView, WorkflowRow } from '../types'
+import { agentLead, agentOrder, countsOf, hms, launched, listed, runSeen, spawned, touched, turnEnded, turnStarted, workflowStatus } from './lib/agents'
+import { shortTitle, stageLead, statusColor } from './lib/runlines'
 
 // F53: the Agents tab and the Workflows section (F76: of the Workflows tab) - read-only, nothing the engine does not report.
 // Rows come from agent.spawn (model, started, workflow run), $.agent.list() (status,
@@ -86,7 +86,8 @@ export async function pollAgents($: EngineInterface): Promise<void> {
   }
 }
 
-export type AgentsView = { agents: AgentRow[]; workflows: WorkflowRow[]; cols: number }
+// F85: runs (the open relay runs) and board give the lead column; none read yet, no column.
+export type AgentsView = { agents: AgentRow[]; workflows: WorkflowRow[]; cols: number; runs?: RunView[]; board?: Board | null }
 
 export async function readAgents($: EngineInterface, cols: number): Promise<AgentsView> {
   return { agents: await read($, agentsA), workflows: await read($, workflowsA), cols }
@@ -116,22 +117,30 @@ export function agentLines(v: AgentsView): Line[] {
     .filter(([k]) => k > 0).map(([k, s]) => `${k} ${s}`)
   const lines: Line[] = [{ key: 'agents:count', segs: [{ text: [plural(v.agents.length, 'agent'), ...words].join(' · ') }] }, { key: '', segs: [] }]
   const wide = v.cols >= WIDE
+  // F85: the lead column - the stage an agent serves (`s137 B10 Muse…`), else `no run`
+  const runs = v.runs ?? []
+  const leadOf = (r: AgentRow) => {
+    const l = agentLead(r, runs)
+    const run = l && runs.find(x => x.id === l.run)
+    return run ? stageLead(run, l!.n, v.board ?? null) : 'no run'
+  }
+  const LW = runs.length ? 30 : 0
   if (wide) {
-    lines.push({ key: 'agents:cols', segs: [{ text: 'name'.padEnd(20) + 'type'.padEnd(16) + 'model'.padEnd(18) + 'status'.padEnd(12) +
+    lines.push({ key: 'agents:cols', segs: [{ text: (LW ? 'stage'.padEnd(LW) : '') + 'name'.padEnd(20) + 'type'.padEnd(16) + 'model'.padEnd(18) + 'status'.padEnd(12) +
       'started'.padEnd(10) + 'last'.padEnd(10) + 'workflow', dim: true }] })
   }
   for (const r of agentOrder(v.agents)) {
     const wf = r.runId ? runTitle(v, r.runId) : null
     if (wide) {
       lines.push({ key: 'agent:' + r.id, segs: [
-        { text: cut(nameOf(r), 18).padEnd(20) + cut(r.type, 15).padEnd(16) + cut(r.model ?? '-', 16).padEnd(18) },
+        { text: (LW ? cut(leadOf(r), LW - 2).padEnd(LW) : '') + cut(nameOf(r), 18).padEnd(20) + cut(r.type, 15).padEnd(16) + cut(r.model ?? '-', 16).padEnd(18) },
         statusSeg(r, 12),
         { text: hms(r.startedAt).padEnd(10) + hms(r.lastAt).padEnd(10) + (wf ?? '-') },
       ] })
     } else {
       const s = statusSeg(r)
       lines.push({ key: 'agent:' + r.id, segs: [
-        { text: '●', color: s.color, dim: s.dim }, { text: ' ' + cut(nameOf(r), Math.max(8, v.cols - 34)) + '  ' }, s,
+        { text: '●', color: s.color, dim: s.dim }, { text: ' ' + (LW ? shortTitle(leadOf(r)) + '  ' : '') + cut(nameOf(r), Math.max(8, v.cols - 34)) + '  ' }, s,
         { text: '  started ' + hms(r.startedAt), dim: true },
       ] })
       lines.push({ key: 'agentd:' + r.id, segs: [{ text: '    ' +

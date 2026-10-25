@@ -240,3 +240,19 @@ test('a file name or commit subject with control bytes is drawn without them', W
   expect(all).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f]/)
   await ui.unmount()
 })
+
+// A154: cleaned where git's output is parsed, so explorerLines() measures the text drawn -
+// a long name with an ESC and a CR is cut to the width of any other long name.
+test('a long file name with an ESC and a CR lines up with any other long name', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  const long = (c: string) => c.repeat(60) + '.ts'
+  w.git = args => (args.join(' ').includes('ls-files') ? ran(`${long('a')}\0b\u001b\r${long('b')}\0`) : answer(args))
+  await start($, clock)
+  const ui = await mountExplorer($, clock, 'terminal', 40)
+  await ui.press({ key: 'xs:files' })
+  await clock.settle()
+  const rows = (await ui.findAll({ type: 'Text' })).map(t => t.text ?? '').filter(t => /^ {4}[ab]{5}/.test(t))
+  expect(rows).toHaveLength(2)
+  expect(rows[1]!.length).toBe(rows[0]!.length)
+  await ui.unmount()
+})

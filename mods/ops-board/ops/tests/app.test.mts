@@ -1,7 +1,7 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
@@ -103,7 +103,7 @@ for (const [kind, skip] of launchers) {
     const lines = r.out.replace(/\r?\n$/, '').split(/\r?\n/)
     assert.equal(lines.length, 20, r.out)
     assert.match(lines[0]!, /3 Health   4 Messages   5 Explorer   6 Run$/)        // the repo label does not fit at 80 beside six tabs
-    assert.match(r.out, /› ● RUN-0099  fixture run +1\/2 done/)
+    assert.match(r.out, /› ● RUN-0099  fixture run +agents · 1\/2 done/)
     assert.match(lines.at(-1)!, /RUN-0099|mem 8\.4 GB/)
     assert.deepEqual(files.map(f => (existsSync(f) ? `${statSync(f).mtimeMs}:${readFileSync(f, 'utf8')}` : 'none')), before)
     assert.doesNotMatch(readFileSync(s.log, 'utf8'), /ticket-meta|watchdog|hold|release|queue/)
@@ -125,6 +125,60 @@ for (const [kind, skip] of launchers) {
     assert.match(r.out + r.err, /ops: unknown flag --bogus/)
   })
 }
+
+// F89: --open. PATH loses every dir holding a real wt (never launched from a test); `stub`
+// puts a wt first that logs its arguments one per line.
+function wtEnv(stub: Launcher | null, lad: string): { env: NodeJS.ProcessEnv; log: string } {
+  const env = { ...process.env, LOCALAPPDATA: lad }
+  const key = Object.keys(env).find(k => k.toUpperCase() === 'PATH') ?? 'PATH'
+  const hasWt = (d: string) => { try { return readdirSync(d).some(n => /^wt(\.exe|\.cmd)?$/i.test(n)) } catch { return false } }
+  const dirs = (env[key] ?? '').split(';').filter(d => d && !hasWt(d))
+  const bin = mkTmp(join(tmpdir(), 'ops-wt-'))
+  const log = join(bin, 'wt.log')
+  if (stub === 'ps1') writeFileSync(join(bin, 'wt.cmd'), `@echo off\r\nfor %%a in (%*) do >>"${log}" echo(%%~a\r\n`)
+  if (stub === 'sh') writeFileSync(join(bin, 'wt'), `#!/bin/sh\nprintf '%s\\n' "$@" > '${log.replace(/\\/g, '/')}'\n`)
+  if (stub) dirs.unshift(bin)
+  env[key] = dirs.join(';')
+  return { env, log }
+}
+
+for (const [kind, flag] of [['ps1', '-Open'], ['sh', '--open']] as const) {
+  const skip = !win || (kind === 'sh' && !hasSh)
+  test(`${kind}: ${flag} with wt on PATH starts the board in a new tab of the current window, the profile when installed`, { skip }, () => {
+    const t = fixtureRepo()
+    const lad = mkTmp(join(tmpdir(), 'ops-lad-'))
+    mkdirSync(join(lad, 'Microsoft/Windows Terminal/Fragments/skillator'), { recursive: true })
+    writeFileSync(join(lad, 'Microsoft/Windows Terminal/Fragments/skillator/ops.json'), '{}')
+    const { env, log } = wtEnv(kind, lad)
+    const r = launch(kind, t, [flag, '--tab', 'health'], env)
+    assert.equal(r.code, 0, r.err)
+    assert.equal(r.out, '')                                  // nothing drawn here
+    const a = readFileSync(log, 'utf8').trim().split(/\r?\n/)
+    assert.deepEqual(a.slice(0, 7), ['-w', '0', 'new-tab', '--title', 'ops', '-p', 'skillator ops'])
+    assert.equal(a[7], '-d')
+    assert.equal(resolve(a[8]!).toLowerCase(), resolve(t).toLowerCase())
+    assert.match(a.slice(9).join(' '), kind === 'ps1' ? /^powershell -NoProfile -ExecutionPolicy Bypass -File \S+ops\.ps1 -Repo \S+ --tab health$/ : /sh\.exe \S+\/ops\.sh --tab health$/)
+    assert.ok(!a.includes('--open') && !a.includes('-Open'), a.join(' '))
+    // no fragment installed: the tab opens in the default profile
+    const bare = wtEnv(kind, mkTmp(join(tmpdir(), 'ops-lad-')))
+    assert.equal(launch(kind, t, [flag], bare.env).code, 0)
+    assert.ok(!readFileSync(bare.log, 'utf8').includes('skillator ops'))
+  })
+  test(`${kind}: ${flag} with no wt runs the board here, as without it`, { skip }, () => {
+    const { env, log } = wtEnv(null, mkTmp(join(tmpdir(), 'ops-lad-')))
+    const r = launch(kind, fixtureRepo(), [flag, ...ONCE, '--skills', fixtureSkills().dir], env)
+    assert.equal(r.code, 0, r.err)
+    assert.equal(r.out.replace(/\r?\n$/, '').split(/\r?\n/).length, 20, r.out)
+    assert.ok(!existsSync(log))
+  })
+}
+
+test('--help prints the usage and the launcher line, exit 0', () => {
+  const r = spawnSync(process.execPath, ['--import', pathToFileURL(join(ops, 'loader.mjs')).href, join(ops, 'app.ts'), '--help'], { encoding: 'utf8' })
+  assert.equal(r.status, 0, r.stderr)
+  assert.ok(r.stdout.startsWith(USAGE + '\n'), r.stdout)
+  assert.match(r.stdout, /--open/)
+})
 
 test('sh launcher refuses an old node with exit 2', { skip: !hasSh }, () => {
   const t = mkTmp(join(tmpdir(), 'ops-node-'))
@@ -168,7 +222,7 @@ test('live: alt screen, hidden cursor, raw keys; 2 reads the runs, q quits and r
   assert.equal(code, 0, err + out.slice(-400))
   assert.ok(out.startsWith('\x1b[?1049h\x1b[?25l'), JSON.stringify(out.slice(0, 40)))
   assert.ok(out.endsWith('\x1b[0m\x1b[?25h\x1b[?1049l'), JSON.stringify(out.slice(-40)))
-  assert.match(out, /\x1b\[H 1 Tickets/)
+  assert.match(out, /\x1b\[H \x1b\[1;7m1 Tickets\x1b\[0m/)        // F89: --no-color keeps the active tab marked
   assert.match(err, /raw:true[\s\S]*raw:false/)
   assert.doesNotMatch(readFileSync(s.log, 'utf8'), /ticket-meta|watchdog|hold|release|queue/)
 })

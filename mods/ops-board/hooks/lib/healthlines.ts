@@ -1,7 +1,7 @@
 import type { Color } from 'claude-code'
 import type { Level, Machine, Usage, Window } from '../../types'
 import type { Seg } from './bandlines'
-import { ageText, DISK, figure, gb, GiB, holdWords, isStale, levelLine, MEM } from './facts'
+import { ageText, DISK, figure, gb, GiB, holdWords, isStale, levelLine, MEM, MUTED_HOW, mutedWords } from './facts'
 import type { Limits } from './facts'
 
 // F49, design §8: the Health tab's lines (mocks m-health, m-health-hold). Pure;
@@ -106,6 +106,14 @@ function machineLines(m: Machine | null, now: number): Line[] {
     ? { key: 'locks', segs: [{ text: 'locks'.padEnd(9) + `${n} stale, not deleted`.padEnd(26) }, { text: 'stale', color: 'warning' }] }
     : { key: 'locks', segs: [{ text: 'locks'.padEnd(9) + 'none stale'.padEnd(26) }, { text: 'ok', color: 'success' }] })
   if (m.hold) out.push({ key: 'held', segs: [{ text: 'held'.padEnd(9) }, { text: `${holdWords(m.hold)} - /ops resume to release`, color: 'warning' }] })
+  // F87: muted by /ops resume force - when, the free memory then, and how it ends
+  if (m.mute) {
+    out.push({ key: 'muted', segs: [{ text: 'muted'.padEnd(9) }, { text: `${mutedWords(m.mute)}, ${m.mute.slice(m.mute.indexOf(' ') + 1)} then`, color: 'warning' }] })
+    out.push({ key: 'muted:how', segs: [{ text: ' '.repeat(9) + MUTED_HOW, dim: true }] })
+  }
+  // F82: a stale board amber, board-fresh's refusal red with its reason
+  if (m.board) out.push({ key: 'board', segs: [{ text: 'board'.padEnd(9) }, { text: `stale: ${m.board.behind} behind ${m.board.up}`, color: 'warning' }] })
+  if (m.board?.state === 'refused') out.push({ key: 'board:why', segs: [{ text: ' '.repeat(9) }, { text: `refused: ${m.board.reason}`, color: 'error' }] })
   if (now - m.at > FACTS_OLD_MS) out.push({ key: 'age', segs: [{ text: `facts ${Math.floor((now - m.at) / 60000)}m old`, dim: true }] })
   return out
 }

@@ -7,6 +7,7 @@
 #
 #   relay-morpheus.sh list                             every run + how to resume it
 #   relay-morpheus.sh resume <id>                      what a fresh session needs
+#   relay-morpheus.sh resume <id> --read-only          the same, a missing worktree said, never recreated (the ops board polls it)
 #   relay-morpheus.sh init [--here] [--owner @h] <plan> <title> <stage>...
 #                                                      create the run file, and the run's own
 #                                                      git worktree + branch (F35; --here: none)
@@ -16,7 +17,9 @@
 #   relay-morpheus.sh status
 #   relay-morpheus.sh orphans [minutes]                default 20
 #   relay-morpheus.sh board <ID> <mark>               flip a ticket's box in the main checkout's
-#                                                      TICKETS.md, under its lock (F36; mark: ' ' ~ x ! ? % > -)
+#                                                      TICKETS.md, under its lock (F36; mark: ' ' ~ x ! ? % > -);
+#                                                      F82: board-fresh first (a stale board: exit 2),
+#                                                      the flip committed at once (`board: <ID> [<mark>]`)
 #   relay-morpheus.sh [<id>] owner @handle | -        F44: the run's owner, an @handle from
 #                                                      .skillator/team.md (`-` clears it)
 #   relay-morpheus.sh selftest
@@ -44,6 +47,9 @@
 #   relay-morpheus.sh chain next --all                 F37: every stage that can start now, one NEXT line each,
 #                                                      capped by usage (2 below 50% of 5h, else 1; RELAY_CHAIN_PARALLEL)
 #   relay-morpheus.sh chain next --holds               A118: only the IDLE <n> Qk <why> lines; read-only, no lease beat
+#        (F80: a stage whose ticket someone else owns is IDLE <n> owned <ID> <owner> and its dispatch is
+#        refused, exit 2; plan and dispatch claim the stage's tickets - tickets-zordon ticket-meta pick /
+#        claim, RELAY_TICKET_META overrides, a missing file = off)
 #   relay-morpheus.sh chain merge <n>                  F37: merge a parallel stage's branch into the run branch
 #                                                      (exit 3 on a conflict: the stage fails)
 #   relay-morpheus.sh chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
@@ -227,6 +233,42 @@ team_file() {
   done
   return 1
 }
+# F80: tickets-zordon's ticket-meta.sh - who may take a chain's tickets (pick) and
+# the claim a plan or dispatch makes (claim). RELAY_TICKET_META overrides (a
+# missing file = off: no skips, no claims). Run from the run file's repo.
+tmeta() {   # <args...>
+  _tmp=${RELAY_TICKET_META-$HERE/../../tickets-zordon/scripts/ticket-meta.sh}
+  [ -f "$_tmp" ] || return 0
+  ( cd "$(dirname "$RUN")" && sh "$_tmp" "$@" )
+}
+chain_tickets() {   # [n]: the ticket ids of stage n's chain block (all stages when none)
+  awk -v n="${1:-}" '/^## /{sec=$0; b=0; next}
+    sec == "## Chain" && /^### / { b = (n == "" || $0 ~ ("^### [A-Z0-9]+ - stage " n " - ")); next }
+    sec == "## Chain" && b && index($0, "tickets: ") == 1 { m = split(substr($0, 10), w, /[^A-Za-z0-9]+/)
+      for (i = 1; i <= m; i++) if (w[i] ~ /^[A-Z][A-Z]?[A-Z]?[0-9]+[a-z]?$/ && !(w[i] in s)) { s[w[i]] = 1; print w[i] } }' "$RUN"
+}
+owned_to() {   # <file> [n]: "ID<TAB>owner" per ticket (stage n's, else the chain's) someone else owns
+  : > "$1"
+  _ids=$(chain_tickets "${2:-}" | tr '\n' ' ')
+  [ -n "$_ids" ] || return 0
+  # shellcheck disable=SC2086
+  if _po=$(tmeta pick $_ids 2>"$1.err"); then
+    printf '%s\n' "$_po" | awk '$1 == "skip" { print $2 "\t" $3 }' > "$1"
+  elif ( cd "$(dirname "$RUN")" && team_file >/dev/null ); then
+    # who owns them is unknown and there is a team: none of them starts (fail closed)
+    echo "note: ticket-meta pick failed ($(tr '\n' ' ' < "$1.err")) - stages with tickets wait" >&2
+    for _i in $_ids; do printf '%s\t?\n' "$_i"; done > "$1"
+  fi
+  rm -f "$1.err"
+}
+claim_stage() {   # <n>: claim stage n's tickets for this session's person; a refusal is a note
+  _ids=$(chain_tickets "$1" | tr '\n' ' ')
+  [ -n "$_ids" ] || return 0
+  # shellcheck disable=SC2086
+  tmeta claim $_ids >/dev/null 2>"$RUN.claim.$$" || sed 's/^/note: claim refused - /' "$RUN.claim.$$" >&2
+  rm -f "$RUN.claim.$$"
+}
+
 owner_check() {   # <@handle>: dies unless it may own a run
   case "$1" in *"
 "*|*"$(printf '\r')"*) die "owner: '$1' is more than one line - give one @handle" ;; esac
@@ -501,13 +543,13 @@ cmd_init() {
 # F35: a run's worktree, recreated from its branch when the directory is gone
 # (deleted, another machine). Prints the path; nothing for a --here run.
 hdr_field() { sed -n '/^## /q; s/^'"$2"': //p' "$1" | head -1; }   # <run file> <key>, header only
-worktree_of() {   # <run file>
+worktree_of() {   # <run file> [ro]  - ro: report a missing worktree, never recreate it
   _w=$(hdr_field "$1" worktree); _b=$(hdr_field "$1" branch)
   [ -n "$_w" ] || return 0
   # Recreated only while the run has open work: a finished run's branch is
   # merged, and a fresh checkout of it helps nobody. The prune drops the
   # missing worktree's registration, which `worktree add` would refuse.
-  if [ ! -d "$_w" ] && [ -n "$_b" ] && _mr=$(main_of) \
+  if [ "${2:-}" != ro ] && [ ! -d "$_w" ] && [ -n "$_b" ] && _mr=$(main_of) \
      && awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4; gsub(/ /,"",s); if (s != "x" && s != ">") o=1} END{exit !o}' "$1"; then
     git -C "$_mr" worktree prune 2>/dev/null || :
     if _we=$(wt_add "$_mr" -q "$_w" "$_b" 2>&1); then wt_longpaths "$_w"; echo "# worktree recreated from $_b" >&2
@@ -564,6 +606,8 @@ cmd_stage() {
   need_run
   lock
   set_row "$n" "$state" "$owner" "$landed" || die "no stage $n in $RUN"
+  # A153: a landed or re-planned stage is no longer in flight; a failed one keeps its block.
+  case "$state" in x|'>') drop_inflight "$n" ;; esac
   stamp_updated
   unlock
   # F36: any state but in flight frees the stage's files (landed, failed,
@@ -653,13 +697,14 @@ cmd_list() {
 
 # Everything a session that has never seen this work needs, in one paste.
 cmd_resume() {
-  [ -n "${1:-}" ] || die "usage: relay-morpheus.sh resume <id>"
+  [ -n "${1:-}" ] || die "usage: relay-morpheus.sh resume <id> [--read-only]"
+  case "${2:-}" in '') _ro= ;; --read-only) _ro=ro ;; *) die "resume: unknown flag $2" ;; esac
   f=$(resolve "$1") || die "no run matching '$1' - see: relay-morpheus.sh list"
   echo "# Resuming $f"
   echo "# Read the plan named below, then the ledger, then start at the first"
   echo "# stage that is not x. The In-flight block holds the exact prompt to"
   echo "# redispatch anything that was running."
-  w=$(worktree_of "$f")
+  w=$(worktree_of "$f" "$_ro")
   [ -z "$w" ] || echo "# Stages work and commit in: $w"
   ow=$(hdr_field "$f" owner)
   [ -z "$ow" ] || echo "# Run owner: $ow"
@@ -817,8 +862,25 @@ cmd_board() {
   _bm=$(main_of) || _bm=$(pwd); _bf="$_bm/TICKETS.md"
   [ -f "$_bf" ] || die "board: no $_bf"
   _bsv=$LOCK; LOCK=; lock "$_bf.lock"
+  # F82: never a stale board - the guard first, under the lock (its report on
+  # stderr; a refusal is ours, exit 2), and the flip committed at once.
+  _bfr=''
+  for _c in "$HERE/../../practice/scripts/board-fresh.sh" "$HERE/../../../practice/scripts/board-fresh.sh"; do
+    [ -f "$_c" ] && { _bfr=$_c; break; }
+  done
+  if [ -n "$_bfr" ] && ! sh "$_bfr" "$_bm"; then
+    unlock; LOCK=$_bsv
+    echo "REFUSED: board: $bid not flipped - see board-fresh's report above" >&2
+    exit 2
+  fi
   if awk -v id="$bid" -v mk="$mk" '!f && substr($0, 1, 3) == "- [" && substr($0, 5, 2) == "] " && substr($0, 7, length(id) + 1) == id " " { $0 = "- [" mk substr($0, 5); f = 1 } { print } END { exit !f }' "$_bf" > "$_bf.tmp.$$"; then
-    mv "$_bf.tmp.$$" "$_bf"; unlock; LOCK=$_bsv
+    mv "$_bf.tmp.$$" "$_bf"
+    if git -C "$_bm" ls-files --error-unmatch -- "$_bf" > /dev/null 2>&1 && ! git -C "$_bm" diff --quiet HEAD -- "$_bf" 2> /dev/null &&
+       ! git -C "$_bm" commit -q -m "board: $bid [$mk]" -- "$_bf" > /dev/null 2>&1; then
+      echo "relay-morpheus.sh: $_bf written but not committed (git refused) - recorded in .skillator/dirty.log" >&2
+      [ -z "$_bfr" ] || sh "$_bfr" --record "$_bf" "relay-morpheus board $bid [$mk]${RUN:+ $(run_tag)}"
+    fi
+    unlock; LOCK=$_bsv
   else rm -f "$_bf.tmp.$$"; unlock; LOCK=$_bsv; die "board: no ticket $bid in $_bf"; fi
   echo "$bid [$mk]"
 }
@@ -1301,6 +1363,7 @@ chain_plan() {
   rm -f "$blk"
   stamp_updated
   unlock
+  claim_stage "$n"   # F80: planning a ticket claims it
   echo "$code"
 }
 
@@ -1396,6 +1459,17 @@ chain_dispatch() {
   # F37: the cap is a gate here, not only a hint in chain next --all.
   cap=$(parallel_cap "$dv")
   [ "$nfl" -lt "$cap" ] || refuse "$nfl stage(s) in flight, the cap is $cap (usage $pct%) - wait for one to land; chain next --all says when"
+  # F80: the claim is the gate, before the row flips - a ticket someone else owns, or
+  # claimed first, never starts here. A refused claim is only a note when no one else
+  # owns the tickets (not on the team, a ticket not on the board).
+  _ids=$(chain_tickets "$n" | tr '\n' ' ')
+  # shellcheck disable=SC2086
+  if [ -n "$_ids" ] && ! _ce=$(tmeta claim $_ids 2>&1 >/dev/null); then
+    OWNF="$RUN.own.$$"; owned_to "$OWNF" "$n"; w=$(head -1 "$OWNF"); rm -f "$OWNF"; OWNF=
+    # shellcheck disable=SC2086
+    [ -z "$w" ] || { set -- $w; refuse "stage $n: $1 is owned by $2 - a run takes only unassigned tickets and yours (ticket-meta pick); its owner or the lead reassigns it"; }
+    echo "note: claim refused - $_ce" >&2
+  fi
   swt=; sbr=; rwt=$(hdr_field "$RUN" worktree)
   if [ -n "$rwt" ] && [ -d "$rwt" ] && [ "$nfl" -gt 0 ]; then
     swt="$rwt.s$n"; sbr="$(hdr_field "$RUN" branch)-s$n"
@@ -1854,7 +1928,7 @@ q_move() {
 # `chain_scan next` prints only the stage NEXT would name (or nothing), with
 # the hold and the ask order ignored - what `chain hold` writes as next=.
 chain_scan() {
-  awk -v only="${1:-}" -v lf="${LEASEF:-}" -v all="${SCAN_ALL:-}" -v cap="${SCAN_CAP:-1}" '
+  awk -v only="${1:-}" -v lf="${LEASEF:-}" -v of="${OWNF:-}" -v all="${SCAN_ALL:-}" -v cap="${SCAN_CAP:-1}" '
     function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
     function norm(p) { gsub(/\\/, "/", p); p = trim(p); while (substr(p, 1, 2) == "./") p = substr(p, 3)
       while (length(p) > 1 && substr(p, length(p)) == "/") p = substr(p, 1, length(p) - 1); return p }
@@ -1923,6 +1997,8 @@ chain_scan() {
       for (r = 1; r <= nr; r++) { n = row[r]; if (!(n in code) || st[n] != "~") continue
         if (!hasf[n]) infall = n; else { mt = split(fl[n], t, SUBSEP); for (y = 2; y <= mt; y++) { ifp[++ni] = t[y]; ifs[ni] = n } } }
       if (lf != "") while ((getline lz < lf) > 0) { split(lz, z, "\t"); lp[++nl] = norm(z[1]); lrn[nl] = z[2]; lsn[nl] = z[3] }
+      # F80: tickets someone else owns (ticket-meta pick) - their stages never start here
+      if (of != "") while ((getline oz < of) > 0) { split(oz, z, "\t"); if (z[1] != "") own[z[1]] = z[2] }
       for (r = 1; r <= nr; r++) { n = row[r]; if (!(n in code)) continue; s = st[n]
         if (s == "~") { out[++no] = "IDLE " n " inflight"; nf++; continue }
         if (s == "?") { out[++no] = "IDLE " n " parked"; continue }
@@ -1942,6 +2018,7 @@ chain_scan() {
         waits = 0
         for (i = 1; i <= nq; i++) { k = ql[i]; if ((n, k) in rs) { out[++no] = "IDLE " n " Q" k " " rs[n, k]; waits = 1 } }
         ma = split(af[n], a, " "); for (x = 1; x <= ma; x++) if (!landed(a[x])) { out[++no] = "IDLE " n " - after " a[x]; waits = 1 }
+        mt = split(tk[n], t, " "); for (y = 1; y <= mt; y++) if (t[y] in own) { out[++no] = "IDLE " n " owned " t[y] " " own[t[y]]; osk = osk (osk == "" ? "" : ",") " stage " n " " t[y] " " own[t[y]]; waits = 1; break }
         if (hasf[n] && nl) { mt = split(fl[n], t, SUBSEP); hit = 0
           for (y = 2; y <= mt && !hit; y++) for (z2 = 1; z2 <= nl && !hit; z2++) if (meet(lp[z2], t[y])) { out[++no] = "IDLE " n " leased " t[y] " " lrn[z2] " stage " lsn[z2]; waits = 1; hit = 1 } }
         if ((s == "" || s == "!") && !waits && (infall || ni)) {
@@ -1981,7 +2058,7 @@ chain_scan() {
       else if (v == "UNBLOCK") { mb = split(unb, b, " "); for (x = 1; x <= mb; x++) print "UNBLOCK " b[x] " - answered, not yet re-planned: references/marathon.md, Unblock" }
       else if (v == "WAIT") print "WAIT " nf " - in flight, nothing else can start: wait for a stage to land, then chain next"
       else if (v == "BLOCKED") print "BLOCKED " nbk " - pending behind a failed stage: retry it as a new stage and close the failed row (stage <n> > - \"stage <new>\"), or report it: references/marathon.md, The loop"
-      else print "FINAL" (askd == "" ? "" : " - unanswered, name them in the summary:" askd)
+      else print "FINAL" (askd == "" ? "" : " - unanswered, name them in the summary:" askd) (osk == "" ? "" : " - skipped, someone else owns them, name them in the summary:" osk)
       for (i = 1; i <= no; i++) print out[i]
     }' "$RUN"
 }
@@ -2016,8 +2093,9 @@ chain_next() {
     lease_locked lease_beat_ "$(run_tag)" "$_ns" >/dev/null || :
   done
   LEASEF="$RUN.lz.$$"; leases_to "$LEASEF"
+  OWNF="$RUN.own.$$"; owned_to "$OWNF"
   _cr=0; chain_scan || _cr=$?
-  rm -f "$LEASEF"; LEASEF=; SCAN_ALL=; return $_cr
+  rm -f "$LEASEF" "$OWNF"; LEASEF=; OWNF=; SCAN_ALL=; return $_cr
 }
 
 # chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
@@ -2184,6 +2262,8 @@ chain_decide_cmd() {
 cmd_selftest() {
   RELAY_WORKTREE=off; export RELAY_WORKTREE; unset RELAY_DIR RELAY_RUN
   d=$(mktemp -d); d5=; trap 'rm -rf "$d" ${d5:+"$d5"}' EXIT
+  # F80: no ticket-meta (no claims, no owner skips) unless a check turns it on
+  RELAY_TICKET_META="$d/nope.sh"; export RELAY_TICKET_META
   # Each scratch dir is its own git repo, so the allocator keeps its counter
   # there and not in whatever repo the selftest was started from.
   git init -q "$d"
@@ -2249,6 +2329,39 @@ cmd_selftest() {
   cmd_orphans 20 | grep -q 'no stages in flight' && die "orphans: missed an in-flight row"
   cmd_orphans 0 | grep -q 'stage 2' || die "orphans: did not flag a silent stage at limit 0"
   cmd_orphans 9999 | grep -q 'stage 2' && die "orphans: flagged a fresh heartbeat"
+
+  # --- A153: landing (x) or re-planning (>) a stage drops its In-flight block
+  # and nothing else; a failed stage (!) keeps it; a stage with no block is a
+  # no-op. Stage 12 is the neighbour whose header starts like stage 1's. The
+  # ps1 selftest asserts the same expected text, so the two ports agree.
+  RUN_S=$RUN; RUN="$d/a153.md"
+  printf '%s\n' '# RUN-9 - a153' 'plan: p.md' 'started: 2026-10-01T00:00Z   updated: 2026-10-01T00:00Z' '' \
+    '## Stages' '| # | stage | state | owner | heartbeat | landed |' '|---|-------|-------|-------|-----------|--------|' \
+    '| 1 | a | ~ | - | - | - |' '| 2 | b | ~ | - | - | - |' '| 3 | c | ~ | - | - | - |' '| 4 | d |   | - | - | - |' '| 12 | e | ~ | - | - | - |' '' \
+    '## In flight' '### stage 1 - a  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do a' '' \
+    '### stage 12 - e  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do e' '' \
+    '### stage 2 - b  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do b' '' \
+    '### stage 3 - c  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do c' '' \
+    '## Rulings' '- keep this ruling' > "$RUN"
+  a153() { sed -n '/^## In flight$/,$p' "$RUN"; }
+  a153f=
+  cmd_stage 1 x - aaa1531
+  grep -q '^### stage 1 - ' "$RUN" && a153f="$a153f; x kept stage 1's block"
+  grep -q '^### stage 12 - ' "$RUN" || a153f="$a153f; x on stage 1 dropped neighbour stage 12's block"
+  cmd_stage 2 '!'
+  grep -q '^### stage 2 - ' "$RUN" || a153f="$a153f; ! dropped stage 2's block"
+  cmd_stage 3 '>' - "stage 4"
+  grep -q '^### stage 3 - ' "$RUN" && a153f="$a153f; > kept stage 3's block"
+  a153 > "$d/a153.before"
+  cmd_stage 4 x - aaa1534
+  a153 | cmp -s "$d/a153.before" - || a153f="$a153f; x on a stage with no block changed In flight"
+  [ "$(a153)" = "$(printf '%s\n' '## In flight' '### stage 12 - e  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do e' '' \
+    '### stage 2 - b  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do b' '' '## Rulings' '- keep this ruling')" ] \
+    || a153f="$a153f; In flight is not exactly stage 12 + stage 2: $(a153 | tr '\n' '/')"
+  [ "$(head -c3 "$RUN" | od -An -tx1 | tr -d ' \n')" != efbbbf ] || a153f="$a153f; the run file gained a BOM"
+  ! grep -q "$(printf '\r')" "$RUN" || a153f="$a153f; the run file gained CRLF"
+  [ -z "$a153f" ] || die "A153:${a153f#;}"
+  RUN=$RUN_S
 
   # --- run ids: the whole point is a sentence a human can say to another
   # session. These pin the three ways it breaks silently.
@@ -2384,7 +2497,76 @@ cmd_selftest() {
 
   chain_selftest
   marathon_selftest
+  f80_selftest
   echo ok
+}
+
+# F80: a chain takes only unassigned tickets and the session person's own; another's
+# stage is IDLE ... owned, its dispatch refused; planning and dispatching claim.
+f80_selftest() {
+  _tm="$HERE/../../tickets-zordon/scripts/ticket-meta.sh"
+  [ -f "$_tm" ] || { echo "note: ticket-meta.sh not beside this skill - F80 checks skipped" >&2; return 0; }
+  unset RELAY_CHAIN_DRIVER SKILLATOR_ME; ME=
+  export RELAY_LEVEL_CMD='echo src=claude-code 5h=40 7d=10 ctx=5 max=40'
+  d8="$d/f80"; mkdir -p "$d8/.skillator"; git init -q "$d8"
+  : > "$d/gitconfig"; GIT_CONFIG_GLOBAL="$d/gitconfig"; export GIT_CONFIG_GLOBAL
+  git -C "$d8" config user.email asha@x.com
+  printf -- '# Team\n\n- @asha: asha@x.com\n- @vidul: vidul@x.com\n' > "$d8/.skillator/team.md"
+  em=$(printf '\342\200\224')
+  printf -- '%s\n' '# TICKETS' "- [ ] F1 $em free" "- [ ] F2 $em mine [owner: @asha]" "- [ ] F3 $em theirs [owner: @vidul]" > "$d8/TICKETS.md"
+  DIR="$d8/.skillator"; RUN=""
+  cmd_init TICKETS.md "f80" "F1 free" "F2 mine" "F3 theirs" >/dev/null
+  set -- "$DIR"/run-*.md; RUN=$1
+  t1=$(sed -n 's/^| \([0-9]*\) | F1 free |.*/\1/p' "$RUN"); t2=$((t1 + 1)); t3=$((t1 + 2))
+  printf 'item: do it\n' > "$d8/p"
+  RELAY_TICKET_META=$_tm; export RELAY_TICKET_META
+  chain_plan "$t1" --prompt-file "$d8/p" --tickets F1 --files a.py >/dev/null 2>"$d8/err" || die "F80: chain plan failed: $(cat "$d8/err")"
+  chain_plan "$t2" --prompt-file "$d8/p" --tickets F2 --files b.py >/dev/null 2>&1
+  chain_plan "$t3" --prompt-file "$d8/p" --tickets F3 --files c.py >/dev/null 2>"$d8/err"
+  grep -q "^- \[ \] F1 $em free \[owner: @asha\]\$" "$d8/TICKETS.md" || die "F80: chain plan did not claim F1: $(cat "$d8/TICKETS.md")"
+  grep -q "^- \[ \] F3 $em theirs \[owner: @vidul\]\$" "$d8/TICKETS.md" || die "F80: chain plan took another's ticket"
+  grep -q 'F3 is owned by @vidul' "$d8/err" || die "F80: chain plan of another's ticket did not say so: $(cat "$d8/err")"
+  out=$(RELAY_CHAIN_PARALLEL=3 chain_next --all)
+  printf '%s\n' "$out" | grep -qx "NEXT $t1 $(code_of "$t1")" && printf '%s\n' "$out" | grep -qx "NEXT $t2 $(code_of "$t2")" ||
+    die "F80: chain next --all did not pick the unassigned and my own: $out"
+  printf '%s\n' "$out" | grep -qx "IDLE $t3 owned F3 @vidul" || die "F80: another's ticket not listed as skipped with its owner: $out"
+  printf '%s\n' "$out" | grep -q "^NEXT $t3 " && die "F80: chain next picked another's ticket: $out"
+  set +e; out=$( (chain_dispatch "$t3" --driver @cc-a) 2>&1 ); rc=$?; set -e
+  [ "$rc" = 2 ] && printf '%s\n' "$out" | grep -q 'F3 is owned by @vidul' || die "F80: dispatch of another's ticket: want exit 2, got $rc: $out"
+  grep -q "^| $t3 | $(code_of "$t3") F3 theirs |   |" "$RUN" || die "F80: a refused dispatch touched the row"
+  chain_dispatch "$t2" --driver @cc-a >/dev/null 2>&1 || die "F80: dispatch of my own ticket refused"
+  # review: each check below says FAIL and the block dies at its end, so every red line shows
+  bad=
+  # 1: the claim is the gate - another run claims F1 right after this one looked (a race)
+  printf -- '%s\n' '# TICKETS' "- [ ] F1 $em free" "- [ ] F2 $em mine [owner: @asha]" "- [ ] F3 $em theirs [owner: @vidul]" > "$d8/TICKETS.md"
+  printf 'case $1 in pick) sh "%s" "$@"; s=$?; [ -e "%s" ] || { : > "%s"; SKILLATOR_ME=@vidul sh "%s" claim F1 >/dev/null 2>&1; }; exit $s ;; esac\nexec sh "%s" "$@"\n' \
+    "$_tm" "$d8/raced" "$d8/raced" "$_tm" "$_tm" > "$d8/race.sh"
+  RELAY_TICKET_META="$d8/race.sh"
+  set +e; out=$( (chain_dispatch "$t1" --driver @cc-a) 2>&1 ); rc=$?; set -e
+  RELAY_TICKET_META=$_tm
+  if [ "$rc" = 0 ]; then grep -q "^- \[ \] F1 $em free \[owner: @asha\]\$" "$d8/TICKETS.md" || { echo "FAIL: F80 review: dispatched a stage whose ticket another run claimed: $(grep F1 "$d8/TICKETS.md")"; bad=1; }
+  else [ "$rc" = 2 ] && printf '%s\n' "$out" | grep -q 'F1 is owned by @vidul' || { echo "FAIL: F80 review: race refusal: rc $rc: $out"; bad=1; }; fi
+  # 3: with only another's stage left, FINAL names it - the end summary must
+  set_row "$t1" x "" a1 >/dev/null; set_row "$t2" x "" a2 >/dev/null
+  out=$(chain_next | head -1)
+  case $out in "FINAL"*"stage $t3 F3 @vidul"*) ;; *) echo "FAIL: F80 review: FINAL does not name the skipped stage: $out"; bad=1 ;; esac
+  # 2: a token ticket-meta cannot read (HTML5) does not open the owner check
+  awk '/^tickets: F3$/ { $0 = "tickets: F3, HTML5" } { print }' "$RUN" > "$RUN.t" && mv "$RUN.t" "$RUN"
+  chain_next | grep -qx "IDLE $t3 owned F3 @vidul" || { echo "FAIL: F80 review: an odd ticket token opened the owner check: $(chain_next)"; bad=1; }
+  # 2: pick failing with a team.md = ownership unknown, nothing with a ticket starts (fail closed)
+  printf 'case $1 in pick) echo "ticket-meta: boom" >&2; exit 1 ;; esac\nexec sh "%s" "$@"\n' "$_tm" > "$d8/broken.sh"
+  RELAY_TICKET_META="$d8/broken.sh"
+  out=$(chain_next 2>&1)
+  printf '%s\n' "$out" | grep -qx "IDLE $t3 owned F3 ?" || { echo "FAIL: F80 review: a failed pick left another's stage dispatchable: $out"; bad=1; }
+  RELAY_TICKET_META=$_tm
+  [ -z "$bad" ] || die "F80 review checks failed"
+  # not on the team: only unassigned tickets run; no team.md: every ticket, as before
+  git -C "$d8" config user.email ghost@x.com
+  chain_next | grep -qx "IDLE $t3 owned F3 @vidul" || die "F80: not on the team, another's ticket was not skipped"
+  rm -f "$d8/.skillator/team.md"
+  chain_next | grep -q "owned" && die "F80: no team.md, a ticket was still skipped: $(chain_next)"
+  unset RELAY_TICKET_META GIT_CONFIG_GLOBAL
+  return 0
 }
 
 # R2b / R6 (F48 review round 2), separate processes as the mod runs them: the
@@ -2674,7 +2856,8 @@ b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
   RELAY_LEVEL_CMD='echo src=claude-code 5h=10 7d=92 ctx=5 max=92' chain_dispatch "$s2" --driver @cc-b --confirmed >/dev/null || die "chain dispatch --confirmed failed"
   [ "$(grep -c "^### stage $s2 - " "$RUN")" = 1 ] || die "chain dispatch: redispatching a failed stage left $(grep -c "^### stage $s2 - " "$RUN") In-flight blocks for it"
   ! grep -q '^run: dead-run-1$' "$RUN" || die "chain dispatch: redispatching a failed stage kept the old In-flight block"
-  [ "$(grep -c "^### stage $s1 - " "$RUN")" = 1 ] || die "chain dispatch: replacing stage $s2's block touched stage $s1's"
+  # A153: stage $s1 landed, so its block went then; the redispatch must not bring it back.
+  [ "$(grep -c "^### stage $s1 - " "$RUN")" = 0 ] || die "chain dispatch: landed stage $s1 still has an In-flight block"
   awk '/^## In flight$/{f=NR} /^## Rulings/{r=NR} END{exit !(f && r && f < r)}' "$RUN" || die "chain dispatch: the In-flight section lost its place"
   grep -q "$c2: override: user confirmed past 7d 90% (92%)" "$RUN" || die "chain dispatch --confirmed: no ruling"
   chain_status | grep -q "^### $c3 - stage $s3 - F3 cli\$" || die "chain status: did not print the chain"
@@ -2800,6 +2983,8 @@ b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
   [ ! -d "$wa/.skillator" ] || ! ls "$wa"/.skillator/run-*-gamma.md >/dev/null 2>&1 || die "F35: the run file was written on the run branch"
   ( cd "$d5/m" && sh "$me" list ) | grep -q "worktree: $wa" || die "F35: list does not show the worktree"
   rm -rf "$wa"
+  ( cd "$d5/m" && sh "$me" resume "$(id_of "$fa")" --read-only 2>/dev/null ) | grep -q "Stages work and commit in: $wa  (branch $ba) - MISSING" || die "F85: resume --read-only does not say the worktree is missing"
+  [ ! -d "$wa" ] || die "F85: resume --read-only recreated the worktree"
   ( cd "$d5/m" && sh "$me" resume "$(id_of "$fa")" 2>/dev/null ) | grep -q "Stages work and commit in: $wa" || die "F35: resume does not name the worktree"
   [ -f "$wa/a.txt" ] || die "F35: resume did not recreate the worktree from its branch"
   ( cd "$d5/m" && RELAY_WORKTREE=on sh "$me" init --here p.md delta s1 >/dev/null 2>&1 ) || die "F35: init --here failed"
@@ -2853,6 +3038,24 @@ b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
   grep -q "^- \\[%\\] F9 $em lease me\$" "$d6/TICKETS.md" && grep -q "^- \\[ \\] F90 $em not me\$" "$d6/TICKETS.md" || die "F62: board did not set [%]: $(cat "$d6/TICKETS.md")"
   if ( cd "$d6" && cmd_board F91 x >/dev/null 2>&1 ); then die "F36: board accepted a missing ticket"; fi
   [ ! -e "$d6/TICKETS.md.lock" ] && [ ! -e "$reg.lock" ] || die "F36: a lock was left behind"
+  # F82: a flip is committed at once; behind the upstream with local work it is
+  # refused (exit 2), the board as it was.
+  if [ -f "$HERE/../../practice/scripts/board-fresh.sh" ] || [ -f "$HERE/../../../practice/scripts/board-fresh.sh" ]; then
+    d82="$d/f82"; mkdir -p "$d82"; git init -q --bare "$d82/up.git"
+    git clone -q "$d82/up.git" "$d82/a" 2>/dev/null; git clone -q "$d82/up.git" "$d82/b" 2>/dev/null
+    for c82 in a b; do git -C "$d82/$c82" config user.name t; git -C "$d82/$c82" config user.email t@t; git -C "$d82/$c82" config core.autocrlf false; done
+    printf '%s\n' "- [ ] F9 $em one" > "$d82/a/TICKETS.md"
+    { git -C "$d82/a" add -A && git -C "$d82/a" commit -qm init && git -C "$d82/a" push -q -u origin HEAD; } >/dev/null 2>&1 || die "F82: fixture"
+    ( cd "$d82/a" && cmd_board F9 '~' >/dev/null ) || die "F82: board failed"
+    [ "$(git -C "$d82/a" log -1 --format=%s)" = "board: F9 [~]" ] && [ -z "$(git -C "$d82/a" status --porcelain)" ] || die "F82: the flip was not committed: $(git -C "$d82/a" log -1 --format=%s)"
+    { git -C "$d82/b" pull -q && echo o > "$d82/b/o.txt" && git -C "$d82/b" add -A && git -C "$d82/b" commit -qm other && git -C "$d82/b" push -q; } >/dev/null 2>&1 || die "F82: fixture push"
+    echo l > "$d82/a/l.txt"; { git -C "$d82/a" add -A && git -C "$d82/a" commit -qm local; } >/dev/null 2>&1
+    echo 0 > "$d82/a/.git/skillator/board-fresh.stamp"
+    set +e; ( cd "$d82/a" && cmd_board F9 x >/dev/null 2>"$d82/err" ); rc=$?; set -e
+    [ "$rc" = 2 ] && grep -q 'REFUSED the board write' "$d82/err" && grep -q "^- \\[~\\] F9 $em one\$" "$d82/a/TICKETS.md" ||
+      die "F82: a stale board was flipped (rc $rc): $(cat "$d82/err")"
+    [ ! -e "$d82/a/TICKETS.md.lock" ] || die "F82: a refused flip left the lock"
+  fi
   RUN=$sv6_run; DIR=$sv6_dir
   # F37: four stages - a.py, b.py, a.py again, c.py. --all at cap 2 offers the
   # first two (disjoint), idles the third on the first's file and the fourth
@@ -3356,5 +3559,5 @@ case "$c" in
   queue)     cmd_queue "$@" ;;
   owner)     cmd_owner "$@" ;;
   watchdog)  cmd_watchdog "$@" ;;
-  *) sed -n '2,69p' "$0" >&2; exit 1 ;;
+  *) sed -n '2,72p' "$0" >&2; exit 1 ;;
 esac

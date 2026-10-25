@@ -62,7 +62,15 @@ is simply lost):
 > `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`.
 > Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with
 > the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs;
-> read and edit files with the file tools, not shell redirection. The final stage merges that branch into main
+> read and edit files with the file tools, not shell redirection.
+
+With grayskull-power on (`.skillator/grayskull.md` present) the prompt opens
+with this line, and without it does not (A155; under `PONYTAIL MODE ACTIVE`
+code-yoda's §0 still skips its core):
+
+> Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+The final stage merges that branch into main
 from the main checkout, then removes the worktree and the branch. A `LEASED`
 refusal (exit 2) means another run's stage holds one of this stage's files:
 `chain next` lists it `IDLE <n> leased ...`; dispatch something else and come
@@ -153,8 +161,8 @@ Run every line, in order, before the next dispatch:
    is not a review - "to save usage I reviewed it myself" lands nothing.
 3. Commit with the ticket-first message and the code trailing:
    `B2 B3: <what> [<CODE>]`. No review result from step 2, no `x`: the stage
-   stays `~`. Then `RM stage 66 x build:opus <sha>` and delete
-   the stage's In-flight block by hand (no command does). No passing ticket →
+   stays `~`. Then `RM stage 66 x build:opus <sha>`, which drops
+   the stage's In-flight block (`>` does too). No passing ticket →
    `RM stage 66 '!'`, block kept with the failure appended, chain continues;
    one retry stage per ticket via `RM add`.
 4. Republish the board artifact once (`tickets-zordon`).

@@ -6,7 +6,8 @@
 #   run-entries.sh scan                 find the entry points and merge them into
 #                                       .skillator/run.json (created by the first scan);
 #                                       prints one summary line
-#   run-entries.sh rename <id> <name>   that entry's name, saved (one line, 1-80 bytes)
+#   run-entries.sh rename <id> <name>   that entry's name, saved (one line, 1-80 bytes);
+#                                       <id> as run.json spells it, escapes kept
 #   run-entries.sh selftest             fixture repo, every subcommand, prints ok
 #
 # Run in the repo root (the ops board runs it there, by absolute shell - A150). Found,
@@ -245,7 +246,8 @@ rename() {
   name=$(printf '%s' "$2" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
   [ -n "$name" ] || die "a name cannot be empty"
   [ ${#name} -le 80 ] || die "a name is at most 80 bytes"
-  RE_ID=$(jtext "$1") RE_NAME=$(jtext "$name")
+  # the id as run.json spells it (escapes kept), so ids that decode alike stay apart
+  RE_ID=$1 RE_NAME=$(jtext "$name")
   export RE_ID RE_NAME
   merge rename
   set -- "$1" $SUM
@@ -349,6 +351,11 @@ $got"
   cp .skillator/run.json hand.json
   re rename nope X 2>/dev/null && fail "rename of an unknown id passed"
   cmp -s hand.json .skillator/run.json || fail "a rename of an unknown id rewrote run.json: $(cat .skillator/run.json)"
+  # an id is matched as run.json spells it: ab and a\u0062 are two entries
+  printf '%s\n' '{"entries":[{"id":"ab"},{"id":"a\u0062"}]}' > .skillator/run.json
+  re rename 'a\u0062' X > /dev/null || fail "rename by an escaped id"
+  grep -qF '{ "id": "a\u0062", "name": "X"' .skillator/run.json || fail "escaped id rename: $(cat .skillator/run.json)"
+  grep -qF '{ "id": "ab", "name": "", ' .skillator/run.json || fail "escaped id rename named ab too: $(cat .skillator/run.json)"
 
   # a file that is not JSON is refused, never overwritten
   printf '{ "entries": [ oops\n' > .skillator/run.json

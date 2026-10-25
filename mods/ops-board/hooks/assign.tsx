@@ -34,6 +34,7 @@ const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
 const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
 const assignA = atom({ plugin: 'ops-board', key: 'assign' } as const, null)
 const personA = atom({ plugin: 'ops-board', key: 'person' } as const, null)
+const reconcileA = atom({ plugin: 'ops-board', key: 'reconcile' } as const, null)   // F81: reconcile.tsx's form
 
 const HANDLE = /^@[a-z0-9_-]+$/
 
@@ -79,12 +80,13 @@ export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], 
 const whoKey = (d: AssignDraft) => (d.handle ? 'who:' + d.handle : 'who:+add')
 
 export async function isFormUp($: EngineInterface): Promise<boolean> {
-  return (await read($, assignA)) !== null || (await read($, personA)) !== null
+  return (await read($, assignA)) !== null || (await read($, personA)) !== null || (await read($, reconcileA)) !== null
 }
 
 export async function clearForm($: EngineInterface) {
   await update($, assignA, () => null)
   await update($, personA, () => null)
+  await update($, reconcileA, () => null)
 }
 
 // Done or Cancel: back to the view the form came from, Esc the pane's own again
@@ -190,6 +192,17 @@ export async function removeMember($: EngineInterface, h: string) {
   }
   const said = notes(r.out).filter(l => !/^removed:/.test(l))
   $.ui.toast([`✓ ${h} removed from .skillator/team.md`, ...said, ran(r.argv)].join('\n'), { timeoutMs: 10000 })
+}
+
+// F80: ticket-meta decides who may (the lead hands over; none set, anyone sets the first).
+export async function makeLead($: EngineInterface, h: string) {
+  const r = await runCall($, 'meta-team-lead', [h])
+  if (r.code !== 0) {
+    $.ui.toast([`✗ ticket-meta team lead ${h} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+    return
+  }
+  const said = notes(r.out).filter(l => !/^lead:/.test(l))
+  $.ui.toast([`✓ ${h} is the lead`, ...said, ran(r.argv)].join('\n'), { timeoutMs: 10000 })
 }
 
 // --- drawing ---

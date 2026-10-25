@@ -94,6 +94,10 @@ allocate() {
     bdir=$(dirname -- "$board")
     rel=$(git -C "$bdir" rev-parse --show-prefix 2>/dev/null || true)$(basename -- "$board")
     common=$(git -C "$gdir" rev-parse --path-format=absolute --git-common-dir)
+    # F82: fetch the upstream first (board-fresh: stamped, time-boxed), so the
+    # ids on its tip are counted, not only the last fetch's.
+    bfresh=$(dirname -- "$0")/board-fresh.sh
+    [ -f "$bfresh" ] && sh "$bfresh" --fetch "$top"
   else
     ingit=0
     [ -n "$board" ] || board=./TICKETS.md
@@ -282,12 +286,22 @@ selftest() {
   [ "$rc" != 0 ] && grep -q exhausted "$t/errw" || fail "W past 9999 not refused (rc $rc)"
   [ "$(tr -dc 0-9 < "$common/skillator/ids/W")" = 1679615 ] || fail "W exhaustion moved the counter"
 
+  # F82: an id taken on the upstream's tip, not yet fetched here, is never handed out again.
+  g init -q --bare -b main "$t/up.git"
+  g clone -q "$t/up.git" "$t/c1" 2>/dev/null
+  (cd "$t/c1" && printf -- '- [ ] A1 - one
+' > TICKETS.md && g add TICKETS.md && g commit -q -m b && g push -q -u origin main) >/dev/null 2>&1
+  g clone -q "$t/up.git" "$t/c2" 2>/dev/null
+  (cd "$t/c1" && printf -- '- [ ] A40 - tip
+' >> TICKETS.md && g commit -q -am tip && g push -q) >/dev/null 2>&1
+  u=$(cd "$t/c2" && sh "$me" A) && [ "$u" = 41 ] || fail "id on the upstream tip not fetched first: want 41, got $u"
+
   mkdir "$t/plain" && printf -- '- [ ] A7 - x\n' > "$t/plain/TICKETS.md"
   h=$(cd "$t/plain" && GIT_CEILING_DIRECTORIES=$t sh "$me" A 2>"$t/err2")
   [ "$h" = 8 ] || fail "outside git: want 8, got $h"
   grep -q 'not in a git repo' "$t/err2" || fail "outside git: no stderr note"
 
-  echo "ok - next-id.sh selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, runs RUN 6, runs S 13-15, W AAAB/AAAC/AABB/peek/count 3/BABA/9999/exhausted, no-git 8)"
+  echo "ok - next-id.sh selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, tip fetched 41, runs RUN 6, runs S 13-15, W AAAB/AAAC/AABB/peek/count 3/BABA/9999/exhausted, no-git 8)"
 }
 
 if [ "${1:-}" = --selftest ]; then

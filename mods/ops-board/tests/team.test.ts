@@ -32,3 +32,21 @@ test('team: member lines as ticket-meta reads them - case kept, dots, * bullets,
   expect(team[4]!.name).toBe('Sub Two')                 // ticket-meta: the last name line under it
   expect(meOf(team, 'a@x.com')).toBe('@Asha')
 })
+
+// F80: one `lead: @handle` line under `# Team` marks that member the lead; a second
+// lead line (hand-written) is ignored, as ticket-meta reads the first.
+test('team: F80 the one lead line marks its member', () => {
+  const team = parseTeam('# Team\nlead: @neo\nlead: @asha\n\n- @asha: a@x\n- @neo: n@x\r\n  name: Neo\r\n')
+  expect(team).toEqual([{ handle: '@asha', emails: ['a@x'] }, { handle: '@neo', emails: ['n@x'], name: 'Neo', lead: true }])
+  expect(parseTeam('- @asha: a@x\n').some(m => m.lead)).toBe(false)
+})
+
+// F80 review: me as ticket-meta whoami finds it - SKILLATOR_ME (a member, @ optional)
+// overrides the email; one not on the team is nobody, never a fall back to the email.
+test('team: F80 SKILLATOR_ME overrides the email for me', () => {
+  const team = parseTeam('- @asha: a@x\n- @neo: n@x\n')
+  expect(meOf(team, 'a@x', 'neo')).toBe('@neo')
+  expect(meOf(team, '', '@neo')).toBe('@neo')
+  expect(meOf(team, 'a@x', '@ghost')).toBe(null)
+  expect(meOf(team, 'a@x', null)).toBe('@asha')
+})

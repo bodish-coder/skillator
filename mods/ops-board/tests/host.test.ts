@@ -83,9 +83,11 @@ test('argvFor: both spellings of every call', () => {
     ['meta-decided', ['F2'], [`/s/skills/${TM}.sh`, 'decided', 'F2'], [`C:/s/skills/${TM}.ps1`, 'decided', 'F2']],
     ['meta-team-add', ['@ravi', 'Ravi Kumar', 'r@x.org,s@y.org'], [`/s/skills/${TM}.sh`, 'team', 'add', '@ravi', 'Ravi Kumar', 'r@x.org,s@y.org'], [`C:/s/skills/${TM}.ps1`, 'team', 'add', '@ravi', 'Ravi Kumar', 'r@x.org,s@y.org']],
     ['meta-team-remove', ['@asha'], [`/s/skills/${TM}.sh`, 'team', 'remove', '@asha'], [`C:/s/skills/${TM}.ps1`, 'team', 'remove', '@asha']],
+    ['meta-team-lead', ['@asha'], [`/s/skills/${TM}.sh`, 'team', 'lead', '@asha'], [`C:/s/skills/${TM}.ps1`, 'team', 'lead', '@asha']],
     ['relay-list', [], [`/s/skills/${RM}.sh`, 'list'], [`C:/s/skills/${RM}.ps1`, '-Mode', 'list']],
-    ['relay-chain-status', ['RUN-0014'], [`/s/skills/${RM}.sh`, 'RUN-0014', 'chain', 'status'],
-      [`C:/s/skills/${RM}.ps1`, '-Mode', 'chain', '-Action', 'status', '-Id', 'RUN-0014']],
+    // F85 review: read-only - a poll never recreates a removed run worktree
+    ['relay-resume', ['RUN-0014'], [`/s/skills/${RM}.sh`, 'resume', 'RUN-0014', '--read-only'],
+      [`C:/s/skills/${RM}.ps1`, '-Mode', 'resume', '-Id', 'RUN-0014', '-ReadOnly']],
     ['relay-queue-add', ['RUN-0014'], [`/s/skills/${RM}.sh`, 'queue-run', 'add', 'RUN-0014'],
       [`C:/s/skills/${RM}.ps1`, '-Mode', 'queue-run', '-Sub', 'add', '-Id', 'RUN-0014']],
     ['relay-hold', ['disk 0.8 GB free (below 1 GB)'], [`/s/skills/${RM}.sh`, 'watchdog', 'hold', 'disk 0.8 GB free (below 1 GB)'],

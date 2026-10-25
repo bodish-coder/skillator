@@ -53,6 +53,14 @@ trailing ` (@owner)` or ` (branch: x)` if the user wants it, and the
 `[app: ..] [decide: ..] [owner: ..] [by: ..]` tags of **Apps and people** before it; nothing
 else. Sub-parts are indented two spaces under their parent.
 
+The title comes first and is short: at most 60 characters, a name the owner
+recognises, ending at the first `. ` or ` (` — /pending cuts it there — and the
+detail follows. Write the title before the spec.
+Good: `- [ ] F12 — CSV export. The table view gets an Export button; ...`.
+Bad: `- [ ] F12 — The table view gets an Export button that writes the filtered rows ...`
+(the title is the whole spec, and /pending shows a cut sentence).
+`check-tickets.sh` warns on every open line whose title is over 60 or empty.
+
 ## Who touched it
 
 Several agent sessions edit one board, so every line says which one last moved
@@ -119,12 +127,53 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh done F12 RED/GREEN 3/3, abc123
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh block F12 S3 creds from ops     # [!] ` (blocked: ..)`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh defer F12 after the parser rewrite  # [>] ` (deferred: ..)`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # write app + by
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh whoami          # F80: my @handle
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh pick F12 F14    # F80: pick / skip <ID> <owner>
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh claim F12       # F80: [owner: <me>], box kept
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh team lead @asha # F80: set / hand over the lead
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh reconcile       # F81: read-only, `ID [now] -> [proposed]  reason`
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh unblock F12     # F81: [!] -> [ ], the blocked note dropped
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh start F12       # F81: [ ] -> [~]
 ```
 
 The team file is kept with `ticket-meta team add @h "Name" email[,email]`,
 `team remove @h` and `team list`. A member line is `- @handle: a@x, b@y`, with an
 optional indented `  name: Full Name` line directly under it. `team remove` warns,
 and still removes, when open tickets still name the handle.
+
+**Roles, me, claims (F80).** The format, in full:
+
+```
+# Team
+lead: @vidul
+
+- @vidul: vidul@ikran.in
+  name: Vidul
+- @asha: asha@x.com
+```
+
+- **One lead**: the one `lead: @handle` line under `# Team` (a team file without
+  it is valid: no lead). Everyone else listed is a member. `team lead @h` sets it
+  when there is none, or hands it over when *me* is the lead; `team lead -` clears
+  it (the lead only). `team remove` of the lead is refused until it is handed over.
+  `team list` marks ` [lead]` and ` (you)`.
+- **Me** is found, never stored: `ticket-meta whoami` maps this repo's git
+  `user.email` to a handle through the team emails; `SKILLATOR_ME=@handle` (on the
+  team) overrides. No match → `not on the team: add <email> to .skillator/team.md`.
+- **Claims**: planning or dispatching a ticket (relay-morpheus `chain plan` /
+  `chain dispatch`, `/pending-subagent`, `/marathon-plan`) runs
+  `ticket-meta claim <ID>...` — `[owner: <me>]`, the box kept. A ticket already
+  owned by someone else is reassigned (`assign` or `claim`) only by that owner or
+  the lead; anyone else is refused, the refusal naming both. Not on the team →
+  claims are refused (`add <email> to team.md`).
+- **Picking**: `ticket-meta pick [IDs]` prints `you: <me>` then `pick <ID>`
+  (unassigned, or mine) or `skip <ID> <owner>` per ticket (no IDs: every `[ ]`
+  `[~]` `[!]` ticket). Runs take only the picked; a skipped one is listed as
+  skipped with its owner, never run. Not on the team → only unassigned tickets.
+  No team file → every ticket is picked and nothing is claimed, as before.
+- These checks are a **team convention, not security**: git's email is self-set
+  and anyone can edit `team.md` or `TICKETS.md` by hand. They stop honest
+  mistakes - two people running one ticket - not a determined teammate.
 
 **An assignment reopens the ticket.** Whoever it moves to, it must not stay
 closed, deferred or in someone else's progress:
@@ -144,6 +193,8 @@ closed, deferred or in someone else's progress:
   moved. A relay lease is per stage and is released when that stage lands or fails.
 - Both refuse a handle not in the team file — say so, and offer to add the
   person there; never invent one.
+- `assign` of a ticket someone else owns is refused unless *me* is that owner
+  or the lead (F80, above) — say who may, never edit the line by hand around it.
 - **`tag <ID>`** when a ticket is closed (`[x]`), and when commits naming it land
   (a merge, a pull). It recomputes `app` and `by` from the commits; with none it
   leaves a hand-set `app` alone.
@@ -389,10 +440,24 @@ duplicate across the two still fails. For an old ID the board does not show,
 ### Sync what is in progress (`/sync-tickets`)
 
 `[~]` collects rows that are really done, waiting on a test, stuck or parked,
-because nothing flips them back. On `/sync-tickets` (or "sync tickets"), walk
-**every** `[~]` row — or only the IDs given as arguments — and propose the
-status it really has. **Propose from evidence, never invent it.**
+because nothing flips them back; `[!]` and `[ ]` rows go stale the same way. On
+`/sync-tickets` (or "sync tickets"), walk **every** `[!]`, `[ ]` and `[~]` row —
+or only the IDs given as arguments — and propose the status it really has.
+**Propose from evidence, never invent it.**
 
+0. **Start from `ticket-meta reconcile [IDs]`** (F81, read-only - the ops
+   board's `c` key runs the same rule). It prints `ID [now] -> [proposed]
+   reason` per row with evidence: a `[!]` whose `(blocked: ..)` names tickets
+   all `[x]` → `[ ]`; a check owed by the owner or a team (a `(testing: ..)`
+   note, a live check, a release build, a device / rig / hardware, a team to
+   confirm) with the code landed → `[%]`; a run stage on it failed, or silent
+   a day → `[!]`; landed → `[%]`; a `[ ]` with commits on main led by its ID
+   (`F81:`, not `board:` ones) → `[~]`. Landed is the ticket's last run stage
+   `x`, or with no stage a commit; a `[!]` still blocked on an open ticket is
+   never `[%]`. A row it keeps says "evidence unclear". It never proposes
+   `[x]` and skips a `[~]` row with a session tag. Its rows go in the table as
+   they are; steps 1-2 add what it cannot see (`[x]`, `[>]`, `[?]`, a `[~]`
+   the line shows done).
 1. For each `[~]` row read its line and its notes (`Done = ..`, `Progress ..`,
    `Owed ..`, `blocked`, `waiting on`), then `git log --oneline -F --grep=<ID>`
    (keep only subjects naming the ID as a word — `F1` is not `F12`) and any
@@ -429,6 +494,7 @@ status it really has. **Propose from evidence, never invent it.**
    - `[x]` → `ticket-meta done <ID> <the evidence>` (it tags the ticket too),
      the evidence written without parentheses or `*`.
    - `[!]` → `ticket-meta block <ID> <on what>`.
+   - `[!]` → `[ ]` → `ticket-meta unblock <ID>`; `[ ]` → `[~]` → `ticket-meta start <ID>`.
    - `[>]` → `ticket-meta defer <ID> <until what>`.
    - Never hand-edit a box ticket-meta has a subcommand for.
    - Stamp your session tag on every flipped row (**Who touched it**).
@@ -765,12 +831,15 @@ command; open tickets whose line says a GREEN is `owed`; and NEXT - the
 **The board as a terminal app** - "open the board", "ops", a host with no
 board pane: `ops` (on PATH after `install.sh`: `~/.local/bin/ops`; after
 `install.ps1`: a `function ops` in the PowerShell profile) runs the same views
-beside any CLI, from the repo or with the repo as its first argument. Without
-the shim: `sh <skills>/ops-board/ops/ops.sh <repo>` (Windows: `powershell
--NoProfile -ExecutionPolicy Bypass -File <skills>\ops-board\ops\ops.ps1 -Repo
-<repo>`), where `<skills>` is the dir holding this skill - install copies
-`ops-board/` beside it; in this repo it is `mods/ops-board/ops/`. It needs node
-22.18 or newer. Its assign, decide and team writes go through `ticket-meta`,
+beside any CLI, from the repo or with the repo as its first argument. An agent
+starts it with `ops --open`: a new tab of the current Windows Terminal window
+(`wt -w 0 new-tab`), never a bare console window; no `wt` → it runs in place.
+Without the shim: `sh <skills>/ops-board/ops/ops.sh <repo> --open` (Windows:
+`powershell -NoProfile -ExecutionPolicy Bypass -File
+<skills>\ops-board\ops\ops.ps1 -Repo <repo> -Open`), where `<skills>` is the
+dir holding this skill - install copies `ops-board/` beside it; in this repo it
+is `mods/ops-board/ops/`. It needs node 22.18 or newer; `ops --help` and
+`mods/ops-board/README.md` give the launch lines per host. Its assign, decide and team writes go through `ticket-meta`,
 like every other board write.
 
 ### By type (default)

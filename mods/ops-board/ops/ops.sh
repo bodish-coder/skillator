@@ -4,9 +4,14 @@
 # Git Bash (mintty): node sees pipes there, not a console, so it cannot read raw keys;
 # when that is so and winpty is on PATH, the board runs through winpty. --once never
 # needs it.
+# F89: --open starts the board in a new tab of the current Windows Terminal window when
+# wt is on PATH under Git Bash (the 'skillator ops' profile when its fragment is
+# installed), else runs it here as without it.
 set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 case ${1:-} in ''|-*) ;; *) cd -- "$1" || exit 2; shift ;; esac
+open=
+for a in "$@"; do shift; if [ "$a" = --open ]; then open=1; else set -- "$@" "$a"; fi; done
 v=$(node -p 'process.versions.node' 2>/dev/null || true)
 maj=${v%%.*}; rest=${v#*.}; min=${rest%%.*}
 case $maj$min in ''|*[!0-9]*) maj=0; min=0 ;; esac
@@ -18,6 +23,14 @@ msys=
 case $(uname -s 2>/dev/null) in MINGW*|MSYS*|CYGWIN*) msys=1 ;; esac
 dir=$here
 if [ -n "$msys" ]; then dir=$(cd -- "$here" && pwd -W); fi
+if [ -n "$open" ] && [ -n "$msys" ] && wt=$(command -v wt 2>/dev/null); then
+  shw=$(cd -- "$(dirname -- "$(command -v sh)")" && pwd -W)/sh.exe
+  set -- -d "$(pwd -W)" "$shw" "$dir/ops.sh" "$@"
+  if [ -n "${LOCALAPPDATA:-}" ] && [ -f "$(cygpath -u "$LOCALAPPDATA")/Microsoft/Windows Terminal/Fragments/skillator/ops.json" ]; then
+    set -- -p 'skillator ops' "$@"
+  fi
+  exec "$wt" -w 0 new-tab --title ops "$@"
+fi
 case $dir in /*) path=$dir ;; *) path=/$dir ;; esac
 url=file://$(printf '%s' "$path" | sed 's/%/%25/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g')
 # A142: the board runs skillator's .sh scripts from here, on Windows too (nodehost.ts).

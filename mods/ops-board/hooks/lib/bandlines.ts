@@ -1,7 +1,7 @@
 import type { Color } from 'claude-code'
 import type { Board, Level, Machine, Usage, Watch, Window } from '../../types'
 import { paint } from './board'
-import { ageText, DISK, figure, HOLD_UNKNOWN, isStale, MEM } from './facts'
+import { ageText, DISK, figure, HOLD_UNKNOWN, isStale, MEM, mutedWords } from './facts'
 
 // F48, design §7: the band's lines - always on, green when fine - the narrow
 // two-line fold and the status line's text. Pure; band.tsx draws them.
@@ -17,6 +17,9 @@ export type BandInput = {
 }
 // One Seg for band, health and runs lines: bold is health's headings, drop the band's fold order.
 export type Seg = { text: string; color?: Color; dim?: boolean; inverse?: boolean; bold?: boolean; drop?: 1 | 2 }
+// Control bytes out of text a file or a program supplied (a tab is a space): no ESC reaches
+// the pane or the terminal, no newline makes a row two. The pane, the ops app and git's parse.
+export const clean = (t: string) => t.replace(/\t/g, ' ').replace(/[\x00-\x08\x0a-\x1f\x7f-\x9f]/g, '')
 
 const LEVEL_COLOR: Record<Level, Color> = { green: 'success', amber: 'warning', red: 'error' }
 const GLYPH: Record<Level, string> = { green: '●', amber: '▲', red: '■' }
@@ -84,6 +87,7 @@ export function bandSegs(v: BandInput): Seg[][] {
     : [{ text: 'locks ' }, { text: 'ok', color: 'success' }]
   const extra: Seg[][] = []
   if (m?.hold) extra.push([{ text: `${m.hold === HOLD_UNKNOWN ? 'held (reason unknown)' : 'held'} - /ops resume to release`, color: 'warning' }])
+  if (m?.mute) extra.push([{ text: mutedWords(m.mute), color: 'warning' }])          // F87
   if (m && now - m.at > FACTS_OLD_MS) extra.push([{ text: `facts ${Math.floor((now - m.at) / 60000)}m old`, dim: true }])
 
   if (v.narrow) {

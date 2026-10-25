@@ -2,6 +2,7 @@
 // the app's state: git ls-files and git log asked as `git` effects (engine.ts runs them
 // through the host's absolute git, A150), folded back by their `then`. Pure, as state.ts.
 import type { Seg } from '../hooks/lib/bandlines'
+import { clean } from '../hooks/lib/bandlines'
 import type { Explorer } from '../hooks/lib/explorer'
 import type { RunResult } from './nodehost'
 import type { Effect, Key, State, Step, Then } from './state'
@@ -63,9 +64,8 @@ export function explorerKey(s: State, k: Key): Step {
   }
 }
 
-// Control characters out (a file name can hold them); the window keeps the selection in
-// view and says when lines are left below it.
-const clean = (t: string) => t.replace(/\t/g, ' ').replace(/[\x00-\x08\x0a-\x1f\x7f-\x9f]/g, '')
+// Control characters out (git's error text can hold them); the window keeps the selection
+// in view and says when lines are left below it.
 export function explorerBody(s: State, h: number): Seg[][] {
   const x = s.explorer.x
   const lines = explorerLines(x, s.cols).map(l => ({ ...l, segs: l.segs.map(g => ({ ...g, text: clean(g.text) })) }))

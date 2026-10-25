@@ -7,12 +7,44 @@
 #   ticket-meta.ps1 done <ID> [evidence] | block <ID> <on what> | defer <ID> <until what>
 #   ticket-meta.ps1 tag <ID> | selftest
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
+#   ticket-meta.ps1 team lead @handle|- | whoami | claim <ID>... | pick [ID...]   (F80)
+#   ticket-meta.ps1 reconcile [ID...] | unblock <ID> | start <ID>   (F81)
+#
+# F82: every board write runs board-fresh.ps1 first (a refusal: its report, exit 2)
+# and is committed at once, `board: <subcommand> <ID>` - as ticket-meta.sh.
 #
 # Windows PowerShell 5.1 safe: no ?:, ??, && or ||.
 $ErrorActionPreference = 'Stop'
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 
 function Fail([string]$msg) { throw "ticket-meta: $msg" }
+
+# F82: the stale-board guard beside the skills (a clone or plugin: <root>/practice/,
+# installed: <skills>/practice/), run under the board lock before the board is read;
+# its refusal (the report on stderr) is ours, exit 2. Same as ticket-meta.sh.
+$script:BFresh = $null
+foreach ($bfc in @("$PSScriptRoot/../../../practice/scripts/board-fresh.ps1", "$PSScriptRoot/../../practice/scripts/board-fresh.ps1")) {
+  if (Test-Path -LiteralPath $bfc -PathType Leaf) { $script:BFresh = $bfc; break }
+}
+$script:Refused = $false
+$script:Sub = ''
+function Assert-BoardFresh([string]$root) {
+  if (-not $script:BFresh) { return }
+  $null = & $script:BFresh $root
+  if ($LASTEXITCODE -eq 2) { $script:Refused = $true; Fail "the board was not written - see board-fresh's report above" }
+}
+# F82: a written board (or team file) is committed at once, `board: ..`, that path
+# only. git refusing leaves it written, said, and recorded in dirty.log.
+function Commit-Board([string]$f, [string]$msg) {
+  # exit codes, not Git-Out: a git that succeeds silently and one that fails both read $null there
+  $ErrorActionPreference = 'Continue'
+  $d = Split-Path -Parent $f
+  $null = & git -C $d ls-files --error-unmatch '--' $f 2>$null; if ($LASTEXITCODE -ne 0) { return }
+  $null = & git -C $d diff --quiet HEAD '--' $f 2>$null; if ($LASTEXITCODE -eq 0) { return }
+  $null = & git -C $d commit -q -m $msg '--' $f 2>$null; if ($LASTEXITCODE -eq 0) { return }
+  [Console]::Error.WriteLine("ticket-meta: $f written but not committed (git refused) - recorded in .skillator/dirty.log")
+  if ($script:BFresh) { $null = & $script:BFresh -Record $f -Who "ticket-meta $($script:Sub)" }
+}
 
 $script:GitCalls = New-Object System.Collections.ArrayList
 
@@ -203,7 +235,7 @@ function Get-Info([string]$id) {
     $l = [string]$l0
     if ($l.StartsWith([string][char]1)) {
       $f = $l.Substring(1).Split([char]9, 2)
-      $hit = ($f.Count -eq 2 -and $f[1] -cmatch $re)
+      $hit = ($f.Count -eq 2 -and $f[1] -cnotmatch '^board:' -and $f[1] -cmatch $re)   # F82: board: commits log tickets
       if ($hit) { [void]$info.e.Add($f[0].ToLowerInvariant()) }
       continue
     }
@@ -308,6 +340,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
   if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { Fail "no TICKETS.md at $f" }
   Lock-Board "$f.lock"
   try {
+    Assert-BoardFresh (Get-MainRoot)
     $text = $Utf8.GetString([System.IO.File]::ReadAllBytes($f))
     $lines = $text.Split([char]10)
     $re = '^[ \t]*- \[.\][ \t]+' + $id + '[ \t]*(' + [char]0x2014 + '|' + [char]0x2013 + '|-)'
@@ -332,9 +365,24 @@ function Edit-Line([string]$id, [hashtable]$o) {
     }
     if ($o.samekey) {
       $m = [regex]::Match($line, '\[' + $o.samekey + ':[ \t]*([^\]]*?)[ \t]*\]')
-      # a no-op only when the box is already where this assignment puts it
-      if ($m.Success -and $m.Groups[1].Value -ceq $o.sameval -and $mk -ceq $o.mark) {
+      # a no-op only when the box is already where this assignment puts it (a claim keeps the box)
+      if ($m.Success -and $m.Groups[1].Value -ceq $o.sameval -and ($mk -ceq $o.mark -or -not $o.mark)) {
         return @($line, "no change: $id already has [$($o.samekey): $($o.sameval)]")
+      }
+    }
+    # F80: a ticket owned by someone else moves only by its owner's or the lead's
+    # hand ($o.me, $o.lead from the caller). A team convention, not security.
+    if ($o.owncheck) {
+      $om = [regex]::Match($line, '\[owner:[ \t]*([^\]]*?)[ \t]*\]')
+      if ($om.Success) {
+        $ow = $om.Groups[1].Value
+        if ($ow -ne '' -and -not (Test-MayTake $ow $o.me $o.lead)) {
+          $who = "only $ow may reassign it (no lead set)"
+          if ($o.lead) { $who = "only $ow or the lead $($o.lead) may reassign it" }
+          $you = $o.me
+          if (-not $you) { $you = $o.mewhy }
+          Fail "$id is owned by $ow - $who (you: $you)"
+        }
       }
     }
     # Moving a line out of [~] keeps the working session's trailing (@agent-id)
@@ -363,6 +411,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
       if ($o.notekey -cne 'testing') { $p = '(blocked|deferred)' }
       $line = Set-Note $line (' (' + $o.notekey + ': ' + $o.noteval + ')') ('[ \t]*\(' + $p + ':[^()]*\)')
     }
+    if ($o.unblock) { $line = ([regex]'[ \t]*\(blocked:[^()]*\)').Replace($line, '', 1) }   # F81 unblock
     if ($o.done) { $line = Set-Note $line (' **Done ' + $o.done + '**') '[ \t]*\*\*Done [^*]*\*\*' }
     # F72: verify's notes - a pass's **Verified ..**, a fail's (verify failed ..); each replaces its own earlier one,
     # and a pass drops an earlier fail's note.
@@ -378,6 +427,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
       Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
       Fail "cannot replace $f ($($_.Exception.Message))"
     }
+    Commit-Board $f "board: $($script:Sub) $id"
   } finally {
     Unlock-Board
   }
@@ -399,11 +449,132 @@ function Get-IdAndHandle([string]$cmd, [string[]]$a) {
   return @($id, $h)
 }
 
+# F80: the session's person, found, never stored: SKILLATOR_ME=@handle (on the
+# team) overrides; else this repo's git user.email through the team emails.
+# @{ me = '@handle' or ''; why = the reason when '' }. git's email is self-set:
+# who "me" is is a team convention, not security.
+function Get-Me {
+  if ($null -eq (Get-TeamFile)) { return @{ me = ''; why = 'no .skillator/team.md' } }
+  $rows = Get-TeamRows
+  $s = "$env:SKILLATOR_ME"
+  if ($s -ne '') {
+    $h = $s
+    if (-not $h.StartsWith('@')) { $h = '@' + $h }
+    if (Test-OneLine $h) { foreach ($t in $rows) { if ($t.h -ceq $h) { return @{ me = $h; why = '' } } } }
+    return @{ me = ''; why = "SKILLATOR_ME=$s is not in .skillator/team.md" }
+  }
+  $em = Git-Out config user.email
+  $e = ''
+  if ($null -ne $em) { $e = ([string](@($em)[0])).Trim().ToLowerInvariant() }
+  if ($e -eq '') { return @{ me = ''; why = 'git user.email is not set - set it, or SKILLATOR_ME=@handle' } }
+  foreach ($t in $rows) { if ($t.e -ceq $e) { return @{ me = $t.h; why = '' } } }
+  return @{ me = ''; why = "not on the team: add $e to .skillator/team.md" }
+}
+
+# The team's one lead: the first `lead: @handle` line of the team file, or ''.
+function Get-Lead {
+  $f = Get-TeamFile
+  if ($null -eq $f) { return '' }
+  foreach ($line in ([System.IO.File]::ReadAllText($f, $Utf8).Replace("`r", '').Split([char]10))) {
+    $m = [regex]::Match($line, '^lead:[ \t]*(@[A-Za-z0-9_.-]+)[ \t]*$')
+    if (-not $m.Success) { continue }
+    $l = $m.Groups[1].Value
+    # a lead line naming no member (hand-edited) is no lead, so anyone may set one
+    foreach ($t in (Get-TeamRows)) { if ($t.h -ieq $l) { return $l } }
+    [Console]::Error.WriteLine("note: lead: $l is not on the team - no lead until one is set (team lead @handle)")
+    return ''
+  }
+  return ''
+}
+
+# True when $me may move a ticket $owner owns: $me is that owner, or the lead.
+function Test-MayTake([string]$owner, [string]$me, [string]$lead) {
+  if (-not $me) { return $false }
+  if ($owner -ieq $me) { return $true }
+  return ($lead -ne '' -and $lead -ieq $me)
+}
+
 # F45: an assignment reopens. Implementation -> [owner:] and the box [ ];
 # decision -> [decide:] and the box [?]; the same handle again changes nothing.
+# F80: a ticket owned by someone else is reassigned only by that owner or the lead.
 function Do-Assign([string[]]$a) {
   $x = Get-IdAndHandle 'assign' $a
-  return (Edit-Line $x[0] @{ mark = ' '; owner = $x[1]; samekey = 'owner'; sameval = $x[1] })
+  $me = Get-Me
+  return (Edit-Line $x[0] @{ mark = ' '; owner = $x[1]; samekey = 'owner'; sameval = $x[1]; owncheck = $true; me = $me.me; mewhy = $me.why; lead = (Get-Lead) })
+}
+
+function Do-Whoami([string[]]$a) {
+  if ($a.Count -ne 0) { Fail 'usage: whoami' }
+  $me = Get-Me
+  if (-not $me.me) { Fail $me.why }
+  return $me.me
+}
+
+# F80: planning or dispatching a ticket claims it: [owner: <me>], the box kept.
+# Mine already: no change. Another's: refused as a reassign is. No team file:
+# nothing to claim (as before). Each id on its own; any refusal fails the call.
+function Do-Claim([string[]]$a) {
+  if ($a.Count -lt 1) { Fail 'usage: claim <ID>...' }
+  if ($null -eq (Get-TeamFile)) { return 'no change: no .skillator/team.md - nothing to claim' }
+  $me = Get-Me
+  if (-not $me.me) { Fail "$($me.why) - claim refused" }
+  $lead = Get-Lead
+  $out = New-Object System.Collections.ArrayList
+  $errs = New-Object System.Collections.ArrayList
+  foreach ($ci in $a) {
+    try {
+      $id = Get-NormId $ci
+      foreach ($l in @(Edit-Line $id @{ owner = $me.me; samekey = 'owner'; sameval = $me.me; refuse = 'x-'; cmd = 'claim'; owncheck = $true; me = $me.me; mewhy = ''; lead = $lead })) { [void]$out.Add($l) }
+    } catch { [void]$errs.Add($_.Exception.Message) }
+  }
+  if ($errs.Count -gt 0) {
+    foreach ($l in $out) { [Console]::Out.WriteLine($l) }
+    Fail ([string]::Join("`n", $errs.ToArray()).Replace('ticket-meta: ', ''))
+  }
+  return $out.ToArray()
+}
+
+# F80: which tickets a run may take. `you: <me>` (or `you: - (<why>)`), then per
+# ticket `pick <ID>` (unassigned, or mine) or `skip <ID> <owner>`. No ids: every
+# open ticket on the board ([ ] [~] [!]). No team file: every ticket is picked;
+# not on the team: only unassigned ones. An id not on the board is unassigned.
+function Do-Pick([string[]]$a) {
+  $bf = (Get-MainRoot) + '/TICKETS.md'
+  $ids = @($a | ForEach-Object { Get-NormId $_ })
+  $hasBoard = Test-Path -LiteralPath $bf -PathType Leaf
+  if ($ids.Count -eq 0 -and -not $hasBoard) { Fail "no TICKETS.md at $bf" }
+  $team = $null -ne (Get-TeamFile)
+  $me = ''
+  if ($team) {
+    $m = Get-Me
+    $me = $m.me
+    $you = $me
+    if (-not $me) { $you = "- ($($m.why))" }
+  } else { $you = '- (no .skillator/team.md: every ticket)' }
+  $mk = @{}; $ow = @{}; $ord = New-Object System.Collections.ArrayList
+  if ($hasBoard) {
+    foreach ($bl in ([System.IO.File]::ReadAllText($bf, $Utf8).Replace("`r", '').Split([char]10))) {
+      $m = [regex]::Match($bl, '^[ \t]*- \[(.)\][ \t]+([A-Z]+[0-9]+[a-z]?)')
+      if (-not $m.Success) { continue }
+      $id = $m.Groups[2].Value
+      if ($mk.ContainsKey($id)) { continue }
+      $mk[$id] = $m.Groups[1].Value
+      $om = [regex]::Match($bl, '\[owner:[ \t]*([^\]]*?)[ \t]*\]')
+      $ow[$id] = ''
+      if ($om.Success) { $ow[$id] = $om.Groups[1].Value }
+      [void]$ord.Add($id)
+    }
+  }
+  if ($ids.Count -eq 0) { $ids = @($ord | Where-Object { @(' ', '~', '!') -ccontains $mk[$_] }) }
+  $res = New-Object System.Collections.ArrayList
+  [void]$res.Add("you: $you")
+  foreach ($id in $ids) {
+    $o = ''
+    if ($ow.ContainsKey($id)) { $o = $ow[$id] }
+    elseif ($id -cmatch '^(.+\d)[a-z]$' -and $ow.ContainsKey($Matches[1])) { $o = $ow[$Matches[1]] }   # a sub-part with no row takes its parent owner
+    if (-not $team -or $o -eq '' -or ($me -ne '' -and $o -ieq $me)) { [void]$res.Add("pick $id") } else { [void]$res.Add("skip $id $o") }
+  }
+  return $res.ToArray()
 }
 
 function Do-Decide([string[]]$a) {
@@ -503,6 +674,141 @@ function Do-Verify([string[]]$a) {
   return (Edit-Line $id @{ mark = 'x'; need = '%'; app = $apps; by = $by; verified = $dn; cmd = 'verify' })
 }
 
+# F81: the wait is over: [!] -> [ ], its (blocked: ..) note dropped. Only from [!].
+function Do-Unblock([string[]]$a) {
+  if ($a.Count -ne 1) { Fail 'usage: unblock <ID>' }
+  $id = Get-NormId $a[0]
+  return (Edit-Line $id @{ mark = ' '; need = '!'; unblock = $true })
+}
+
+# F81: work on it has begun: [ ] -> [~]. Only from [ ].
+function Do-Start([string[]]$a) {
+  if ($a.Count -ne 1) { Fail 'usage: start <ID>' }
+  $id = Get-NormId $a[0]
+  return (Edit-Line $id @{ mark = '~'; need = ' ' })
+}
+
+# F81: read-only - the status each open row really has, from evidence. The rules
+# and the output are ticket-meta.sh cmd_reconcile's, line for line.
+# The ticket ids in $s, as words (F1 is never F12 or F1a).
+function Get-Words([string]$s) {
+  return @(([regex]'[^A-Za-z0-9]+').Replace($s, ' ').Split(' ') | Where-Object { $_ -cmatch '^[A-Z]{1,3}[0-9]+[a-z]?$' })
+}
+# The tickets a commit subject or stage name is about: its leading ids, a stage code before them skipped.
+function Get-LeadIds([string]$s) {
+  $out = @(); $i = 0
+  foreach ($w in ([regex]'[^A-Za-z0-9]+').Replace($s, ' ').Trim().Split(' ')) {
+    $i++
+    if ($w -cmatch '^[A-Z]{1,3}[0-9]+[a-z]?$') { $out += $w }
+    elseif ($i -gt 1 -or $w -cnotmatch '^[A-Z0-9]{4}$') { break }
+  }
+  return $out
+}
+function Get-Owed([string]$s) {
+  $m = [regex]::Match($s, '\(testing:([^()]*)\)')
+  if ($m.Success -and $m.Groups[1].Value.Trim() -ne '') { return 'owed: ' + $m.Groups[1].Value.Trim() }
+  $t = $s.ToLowerInvariant()
+  if ($t -cmatch 'owner live|live look|live check|live test') { return 'the owner must confirm: a live check' }
+  if ($t -cmatch 'release build') { return 'the software team must confirm: a release build' }
+  if ($t -cmatch 'hardware|device|(^|[^a-z])rig([^a-z]|$)') { return 'the hardware team must confirm: on the device or rig' }
+  if ($t -cmatch 'team to confirm|team must confirm') { return 'the team must confirm' }
+  return ''
+}
+function Do-Reconcile([string[]]$a) {
+  $main = Get-MainRoot
+  $bf = "$main/TICKETS.md"
+  if (-not (Test-Path -LiteralPath $bf -PathType Leaf)) { Fail "no TICKETS.md at $bf" }
+  $want = @{}
+  foreach ($x in $a) { $want[(Get-NormId $x)] = $true }
+  # commits: the main checkout's; per id, how many name it and the newest one's sha; `board:` subjects left out
+  $cn = @{}; $cs = @{}
+  $greps = @($want.Keys | ForEach-Object { "--grep=$_" })
+  foreach ($l in @(Git-Out -C $main -c log.showSignature=false log -F @greps '--format=%h%x09%s')) {
+    if ($null -eq $l) { continue }
+    $p = ([string]$l).Split([char]9, 2)
+    if ($p.Count -lt 2 -or $p[1] -clike 'board:*') { continue }
+    $seen = @{}
+    foreach ($w in (Get-LeadIds $p[1])) {
+      if ($seen.ContainsKey($w)) { continue }
+      $seen[$w] = $true
+      if (-not $cn.ContainsKey($w)) { $cn[$w] = 0; $cs[$w] = $p[0] }
+      $cn[$w]++
+    }
+  }
+  # run stages: the rows of .skillator/run-*.md by run, then stage number; the last naming an id counts
+  $rows = New-Object System.Collections.ArrayList
+  if (Test-Path -LiteralPath "$main/.skillator" -PathType Container) {
+    foreach ($rf in @(Get-ChildItem -LiteralPath "$main/.skillator" -Filter 'run-*.md' -File)) {
+      $rm = [regex]::Match($rf.Name, '^run-([0-9]+)(-|\.md$)')
+      if (-not $rm.Success) { continue }
+      foreach ($line in ([System.IO.File]::ReadAllText($rf.FullName, $Utf8).Replace("`r", '').Split([char]10))) {
+        if ($line -cnotmatch '^\| *[0-9]+ *\|') { continue }
+        $c = @($line.Split('|')) + @('', '', '', '', '', '', '', '')
+        [void]$rows.Add(@{ run = [int64]$rm.Groups[1].Value; num = [int64]$c[1].Trim(); state = $c[3].Trim(); name = $c[2].Trim(); hb = $c[5].Trim(); land = $c[6].Trim() })
+      }
+    }
+  }
+  $st = @{}
+  foreach ($r in @($rows | Sort-Object { $_.run }, { $_.num })) {
+    foreach ($w in (Get-LeadIds $r.name)) { $st[$w] = $r }
+  }
+  $mk = @{}; $text = @{}; $ord = New-Object System.Collections.ArrayList
+  foreach ($bl in ([System.IO.File]::ReadAllText($bf, $Utf8).Replace("`r", '').Split([char]10))) {
+    $m = [regex]::Match($bl, '^[ \t]*- \[(.)\][ \t]+([A-Z]+[0-9]+[a-z]?)')
+    if (-not $m.Success -or $mk.ContainsKey($m.Groups[2].Value)) { continue }
+    $mk[$m.Groups[2].Value] = $m.Groups[1].Value; $text[$m.Groups[2].Value] = $bl; [void]$ord.Add($m.Groups[2].Value)
+  }
+  $now = [DateTime]::UtcNow
+  $out = New-Object System.Collections.ArrayList
+  $say = { param($id, $from, $to, $why) [void]$out.Add("$id [$from] -> [$to]  " + ($why -replace '[()]', '')) }
+  foreach ($id in $ord) {
+    $k = $mk[$id]; $line = $text[$id]
+    if ($want.Count -gt 0 -and -not $want.ContainsKey($id)) { continue }
+    if (@(' ', '~', '!') -cnotcontains $k) { continue }
+    if ($k -ceq '~' -and $line -cmatch '\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$') { continue }
+    $s = $null; $sn = ''
+    if ($st.ContainsKey($id)) { $s = $st[$id]; $sn = 'RUN-{0:D4} stage {1}' -f $s.run, $s.num }
+    # landed: a run stage on it decides (only x is), else a commit on main
+    $ev = ''
+    if ($s) { if ($s.state -ceq 'x') { $ev = "$sn $($s.land)" } } elseif ($cn.ContainsKey($id)) { $ev = $cs[$id] }
+    $o = Get-Owed $line
+    $open = @()
+    $bm = [regex]::Match($line, '\(blocked:([^()]*)\)')
+    if ($k -ceq '!' -and $bm.Success) {
+      $b = $bm.Groups[1].Value.Trim()
+      $ws = @(Get-Words $b)
+      $gone = @(); $done = @()
+      foreach ($w in $ws) {
+        if (-not $mk.ContainsKey($w)) { $gone += $w } elseif ($mk[$w] -cne 'x') { $open += $w } else { $done += $w }
+      }
+    }
+    if ($ev -ne '' -and $o -ne '' -and $open.Count -eq 0) { & $say $id $k '%' "code landed in $ev; $o"; continue }
+    if ($k -ceq '!') {
+      if (-not $bm.Success) { & $say $id $k $k 'evidence unclear: no blocked note on the line'; continue }
+      if ($ws.Count -eq 0) { & $say $id $k $k "evidence unclear: blocked on '$b', no ticket to check" }
+      elseif ($gone.Count -gt 0) { & $say $id $k $k ('evidence unclear: blocked on ' + ($gone -join ', ') + ', not on the board') }
+      elseif ($open.Count -eq 0) { & $say $id $k ' ' ('blocked on ' + ($done -join ', ') + ', now done') }
+    } elseif ($k -ceq '~') {
+      if (-not $s) { continue }
+      if ($s.state -ceq '!') { & $say $id $k '!' "$sn failed" }
+      elseif ($s.state -ceq '~') {
+        $hb = [DateTime]::MinValue
+        $styles = [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal
+        if (-not [DateTime]::TryParseExact($s.hb, "yyyy-MM-dd'T'HH:mm'Z'", [Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$hb)) {
+          & $say $id $k $k "evidence unclear: $sn in flight, no heartbeat"
+        } elseif (($now - $hb).TotalMinutes -ge 1440) { & $say $id $k '!' "$sn stale, last heartbeat $($s.hb)" }
+      } elseif ($s.state -ceq 'x') { & $say $id $k '%' "$sn landed $($s.land) - verify its Done line" }
+    } elseif ($s -and $s.state -ceq 'x') { & $say $id $k '%' "$sn landed $($s.land) - verify its Done line" }
+    elseif ($cn.ContainsKey($id)) {
+      $nm = ' commits name it'
+      if ($cn[$id] -eq 1) { $nm = ' commit names it' }
+      & $say $id $k '~' ("$($cn[$id])$nm, newest " + $cs[$id])
+    }
+  }
+  if ($out.Count -eq 0) { return 'no change: nothing to reconcile' }
+  return $out.ToArray()
+}
+
 function Do-Tag([string[]]$a) {
   if ($a.Count -ne 1) { Fail 'usage: tag <ID>' }
   $id = Get-NormId $a[0]
@@ -549,7 +855,7 @@ function Get-TeamHandle([string]$s, [string]$re, [string]$what) {
   return $h
 }
 
-$script:TeamUsage = 'usage: team add @handle "Name" email[,email...] | team remove @handle | team list'
+$script:TeamUsage = 'usage: team add @handle "Name" email[,email...] | team remove @handle | team list | team lead @handle|-'
 
 function Write-TeamFile([string]$f, [byte[]]$bytes) {
   $tmp = "$f.ticket-meta.$PID"
@@ -605,6 +911,7 @@ function Do-TeamAdd([string[]]$a) {
     }
     $new = $Utf8.GetBytes("- ${h}: $emsText$nl  name: $name$nl")
     Write-TeamFile $f ([byte[]]($prev + $new))
+    Commit-Board $f "board: team add $h"
   } finally {
     Unlock-Board
   }
@@ -625,6 +932,7 @@ function Do-TeamRemove([string[]]$a) {
     $known = $false
     foreach ($r in (Get-TeamMembers $f)) { if ($r.h -ceq $h) { $known = $true } }
     if (-not $known) { Fail "$h is not in $f" }
+    if ($h -ieq (Get-Lead)) { Fail "$h is the lead - hand the lead over first (team lead @other), then remove" }
     $text = $Utf8.GetString([System.IO.File]::ReadAllBytes($f))
     $lines = $text.Split([char]10)
     $eol = $text.EndsWith("`n")
@@ -650,6 +958,7 @@ function Do-TeamRemove([string[]]$a) {
     $body = [string]::Join("`n", $kept.ToArray())
     if ($eol -and $kept.Count -gt 0) { $body += "`n" }
     Write-TeamFile $f ($Utf8.GetBytes($body))
+    Commit-Board $f "board: team remove $h"
   } finally {
     Unlock-Board
   }
@@ -671,19 +980,99 @@ function Do-TeamRemove([string[]]$a) {
   return $res
 }
 
-# list: "@handle: a@x, b@y (Name)" per member, file order; no team file = nothing.
+# list: "@handle: a@x, b@y (Name)" per member, file order, the lead marked
+# ` [lead]` and me ` (you)`; no team file = nothing.
 function Do-TeamList([string[]]$a) {
   if ($a.Count -ne 0) { Fail $script:TeamUsage }
   $f = Get-TeamFile
   if ($null -eq $f) { return @() }
+  $me = (Get-Me).me
+  $lead = Get-Lead
   $acc = New-Object System.Collections.ArrayList
   foreach ($r in (Get-TeamMembers $f)) {
     $s = $r.h + ':'
     if ($r.e -ne '') { $s += ' ' + $r.e }
     if ($r.n -ne '') { $s += ' (' + $r.n + ')' }
+    if ($r.h -ceq $lead) { $s += ' [lead]' }
+    if ($r.h -ceq $me) { $s += ' (you)' }
     [void]$acc.Add($s)
   }
   return $acc.ToArray()
+}
+
+# F80: lead @handle sets the one `lead:` line under `# Team` (a member only;
+# allowed when there is no lead, or me is the lead - a hand-over); lead - clears
+# it (the lead only). Every other byte and the line endings stay.
+function Do-TeamLead([string[]]$a) {
+  if ($a.Count -ne 1) { Fail $script:TeamUsage }
+  $h = '-'
+  if ($a[0] -cne '-') { $h = Get-TeamHandle $a[0] '\A@[A-Za-z0-9_.-]+\z' 'letters, digits, _ . -' }
+  $me = Get-Me
+  $f = Get-TeamFile
+  if ($null -eq $f) { Fail 'no .skillator/team.md - this repo has no people' }
+  Lock-Board ((Get-MainRoot) + '/TICKETS.md.lock')
+  try {
+    if ($h -cne '-') {
+      $known = $false
+      foreach ($r in (Get-TeamMembers $f)) { if ($r.h -ceq $h) { $known = $true } }
+      if (-not $known) { Fail "$h is not in $f" }
+    }
+    $lead = Get-Lead
+    if ($lead -ne '') {
+      if ($h -ceq $lead) { return "no change: $h is already the lead" }
+      if (-not ($me.me -and $me.me -ieq $lead)) {
+        $you = $me.me
+        if (-not $you) { $you = $me.why }
+        Fail "only the lead $lead may hand the lead over or clear it (you: $you)"
+      }
+    } elseif ($h -ceq '-') { return 'no change: no lead set' }
+    $text = $Utf8.GetString([System.IO.File]::ReadAllBytes($f))
+    $nl = "`n"
+    $p10 = $text.IndexOf("`n")
+    if ($p10 -gt 0 -and $text[$p10 - 1] -eq "`r") { $nl = "`r`n" }
+    $cr = $nl.Substring(0, $nl.Length - 1)
+    $lines = $text.Split([char]10)
+    $eol = $text.EndsWith("`n")
+    $n = $lines.Count
+    if ($eol) { $n-- }
+    $had = $false; $head = $false
+    for ($i = 0; $i -lt $n; $i++) {
+      $l = $lines[$i].TrimEnd("`r")
+      if ($l -cmatch '^lead:') { $had = $true }
+      if ($l -cmatch '^# Team[ \t]*$') { $head = $true }
+    }
+    $new = ''
+    if ($h -cne '-') { $new = "lead: $h$cr" }
+    if ($h -cne '-' -and -not $had -and -not $head) {
+      $body = "# Team$nl${nl}lead: $h$nl$nl" + $text
+    } else {
+      # every lead: line goes and the first is replaced; none -> in under the # Team heading
+      $kept = New-Object System.Collections.ArrayList
+      $done = $false
+      for ($i = 0; $i -lt $n; $i++) {
+        $raw = $lines[$i]
+        $l = $raw.TrimEnd("`r")
+        if ($l -cmatch '^lead:') {
+          if (-not $done -and $new -ne '') { [void]$kept.Add($new) }
+          $done = $true
+          continue
+        }
+        [void]$kept.Add($raw)
+        if (-not $had -and -not $done -and $l -cmatch '^# Team[ \t]*$') {
+          if ($new -ne '') { [void]$kept.Add($new) }
+          $done = $true
+        }
+      }
+      $body = [string]::Join("`n", $kept.ToArray())
+      if ($eol -and $kept.Count -gt 0) { $body += "`n" }
+    }
+    Write-TeamFile $f ($Utf8.GetBytes($body))
+    Commit-Board $f "board: team lead $h"
+  } finally {
+    Unlock-Board
+  }
+  if ($h -ceq '-') { return 'lead cleared' }
+  return "lead: $h"
 }
 
 function Do-Team([string[]]$a) {
@@ -694,6 +1083,7 @@ function Do-Team([string[]]$a) {
     'add' { return (Do-TeamAdd $sub) }
     'remove' { return (Do-TeamRemove $sub) }
     'list' { return (Do-TeamList $sub) }
+    'lead' { return (Do-TeamLead $sub) }
     default { Fail $script:TeamUsage }
   }
 }
@@ -701,6 +1091,7 @@ function Do-Team([string[]]$a) {
 function Invoke-Cmd([string]$c, [string[]]$a) {
   # Resolved first: outside a repo every subcommand stops here.
   $null = Get-Top
+  $script:Sub = $c
   switch -CaseSensitive ($c) {
     'apps' { return (Get-Apps) }
     'app-of' { return (Map-Paths $a) }
@@ -717,6 +1108,12 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'defer' { return (Do-Defer $a) }
     'tag' { return (Do-Tag $a) }
     'team' { return (Do-Team $a) }
+    'whoami' { return (Do-Whoami $a) }
+    'claim' { return (Do-Claim $a) }
+    'pick' { return (Do-Pick $a) }
+    'reconcile' { return (Do-Reconcile $a) }
+    'unblock' { return (Do-Unblock $a) }
+    'start' { return (Do-Start $a) }
     default { Fail "unknown subcommand: $c" }
   }
 }
@@ -768,6 +1165,13 @@ function Invoke-Selftest {
   $script:fail = 0
   $dash = [string][char]0x2014
   $here = Get-Location
+  # F80: who "me" is comes from git's user.email - never this machine's global one
+  $savedMe = @($env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME, $env:EMAIL)
+  # F82: board writes commit; EMAIL is git's last fallback, so user.email (whoami) stays unset
+  [System.IO.File]::WriteAllText("$T/gitconfig", "[user]`n`tname = t`n")
+  $env:EMAIL = 'board@selftest.invalid'
+  $env:GIT_CONFIG_GLOBAL = "$T/gitconfig"
+  Remove-Item Env:\SKILLATOR_ME -ErrorAction SilentlyContinue
   function Eq([string]$name, $got, [string]$want) {
     $g = [string]::Join(' ', @($got))
     if ($g -cne $want) { Write-Output "FAIL: ${name}: expected [$want] got [$g]"; $script:fail = 1 }
@@ -834,7 +1238,10 @@ function Invoke-Selftest {
     $now = [System.IO.File]::ReadAllBytes("$M/TICKETS.md")
     if ([Convert]::ToBase64String($now) -ne [Convert]::ToBase64String($before)) { Write-Output 'FAIL: refused assign changed the board'; $script:fail = 1 }
     Eq 'assign F12' (Run assign F12 '@asha') "- [ ] F12 $dash Bulk delete [owner: @asha]"
+    Eq 'F82: board write committed' (& git log -1 --format=%s) 'board: assign F12'
+    Eq 'F82: board left clean' (& git status --porcelain -- TICKETS.md) ''
     Eq 'assign F1' (Run assign F1 'asha') "- [ ] F1 $dash Dark mode [owner: @asha] (@cc-bbbbbb) warning: F1 was in progress under @cc-bbbbbb - its box left [~], the session tag stays; tell that session"
+    & git config user.email asha@x.com   # F80: only the owner (or the lead) reassigns
     Eq 'reassign F1' (Run assign F1 '@vidul') "- [ ] F1 $dash Dark mode [owner: @vidul] (@cc-bbbbbb)"
     Eq 'tag F1' (Run tag F1) "- [ ] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)"
     Eq 'tag B2' (Run tag B2) "- [ ] B2 $dash Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)"
@@ -881,7 +1288,8 @@ function Invoke-Selftest {
     if (-not (Refused by "F5`n")) { Write-Output 'FAIL: by took an id ending in a line break'; $script:fail = 1 }
     if (-not (Refused assign F4 "@vidul`n")) { Write-Output 'FAIL: assign took a handle ending in a line break'; $script:fail = 1 }
     if (-not (& $same $edge0)) { Write-Output 'FAIL: a refused argument changed the board'; $script:fail = 1 }
-    # 3: a hand-written [owner:@x] is replaced, not duplicated
+    # 3: a hand-written [owner:@x] is replaced, not duplicated (by its owner, F80)
+    & git config user.email vidul@ikran.in
     Eq 'hand tag replaced' (Run assign F4 '@asha') "- [ ] F4 $dash Hand owner [owner: @asha] (@cc-111111)"
     if (Test-Path -LiteralPath "$board.lock") { Write-Output 'FAIL: our board lock was left behind'; $script:fail = 1 }
     # 9: loose spacing, a hyphen, a sub-part, a lower-case id
@@ -941,9 +1349,9 @@ function Invoke-Selftest {
     Eq 'assign from [x]' (Run assign F26 '@asha') "- [ ] F26 $dash Shipped [owner: @asha] (@cc-3)"
     Eq 'decided' (Run decided F24) "- [ ] F24 $dash Waiting [decide: @asha]"
     # the same handle with the box not yet the target still moves the box
-    Eq 'same owner from [x]' (Run assign F27 '@asha') "- [ ] F27 $dash Kept [owner: @asha]"
+    $env:SKILLATOR_ME = '@asha'; try { Eq 'same owner from [x]' (Run assign F27 '@asha') "- [ ] F27 $dash Kept [owner: @asha]" } finally { $env:SKILLATOR_ME = $null }   # by its owner, F80 review
     Eq 'same decider from [ ]' (Run decide F28 '@asha') "- [?] F28 $dash Decided before [decide: @asha]"
-    Eq 'same owner from [?]' (Run assign F29 '@vidul') "- [ ] F29 $dash Owner waiting [owner: @vidul]"
+    $env:SKILLATOR_ME = '@vidul'; try { Eq 'same owner from [?]' (Run assign F29 '@vidul') "- [ ] F29 $dash Owner waiting [owner: @vidul]" } finally { $env:SKILLATOR_ME = $null }
     $f45a = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
     if (-not (Refused decided F23)) { Write-Output 'FAIL: decided flipped a ticket that is not [?]'; $script:fail = 1 }
     if (-not (Refused decided "F22`nF23")) { Write-Output 'FAIL: decided took a multi-line id'; $script:fail = 1 }
@@ -1146,6 +1554,139 @@ function Invoke-Selftest {
       if (-not (& $teamIs "# Team$nl$nl- @neo: neo@x.com$nl  name: Neo Q$nl")) { Write-Output "FAIL: $tag team remove line endings or bytes"; $script:fail = 1 }
     }
 
+    # --- F80: whoami, picking, claims, one lead
+    $R = "$T/f80"
+    Init-Repo $R
+    W "$R/.skillator/team.md" "# Team`n`n- @vidul: vidul@ikran.in`n  name: Vidul`n- @asha: Asha@X.com`n- @neo: neo@x.com`n"
+    W "$R/TICKETS.md" ("# TICKETS`n`n- [ ] F1 $dash Free`n- [ ] F2 $dash Mine [owner: @asha]`n- [~] F3 $dash Theirs [owner: @vidul] (@cc-aaaaaa)`n" +
+      "- [!] F4 $dash Stuck (blocked: x)`n- [x] F5 $dash Shipped [owner: @vidul]`n- [ ] F6 $dash Neos [owner: @neo]`n- [~] F7 $dash Working (@cc-bbbbbb)`n- [-] F8 $dash Dropped`n")
+    Commit 'vidul@ikran.in' 'init' 'README.md'
+    $board = "$R/TICKETS.md"
+    $tf = "$R/.skillator/team.md"
+    function AsMe([string]$h, [scriptblock]$b) { $p = $env:SKILLATOR_ME; $env:SKILLATOR_ME = $h; try { return (& $b) } finally { $env:SKILLATOR_ME = $p } }
+    # whoami: git user.email (any case) mapped through the team; SKILLATOR_ME overrides
+    $msg = ErrOf whoami
+    if ($msg -notmatch 'user\.email is not set') { Write-Output "FAIL: whoami with no email: [$msg]"; $script:fail = 1 }
+    & git config user.email ASHA@x.com
+    Eq 'whoami by email' (Run whoami) '@asha'
+    Eq 'whoami by SKILLATOR_ME' (AsMe 'neo' { Run whoami }) '@neo'
+    $msg = AsMe '@nobody' { ErrOf whoami }
+    if ($msg -notmatch 'not in \.skillator/team\.md') { Write-Output "FAIL: SKILLATOR_ME refusal: [$msg]"; $script:fail = 1 }
+    & git config user.email ghost@x.com
+    $msg = ErrOf whoami
+    if ($msg -notmatch 'not on the team: add ghost@x\.com to \.skillator/team\.md') { Write-Output "FAIL: whoami not on the team: [$msg]"; $script:fail = 1 }
+    # pick: unassigned and mine picked, another's skipped with its owner; not on the team -> only unassigned
+    Eq 'pick, not on the team' (Run pick) 'you: - (not on the team: add ghost@x.com to .skillator/team.md) pick F1 skip F2 @asha skip F3 @vidul pick F4 skip F6 @neo pick F7'
+    $msg = ErrOf claim F1
+    if ($msg -notmatch 'add ghost@x\.com to \.skillator/team\.md') { Write-Output "FAIL: claim refusal does not say add the email: [$msg]"; $script:fail = 1 }
+    & git config user.email asha@x.com
+    Eq 'pick as asha' (Run pick) 'you: @asha pick F1 pick F2 skip F3 @vidul pick F4 skip F6 @neo pick F7'
+    Eq 'pick given ids' (Run pick f3 F2 F9) 'you: @asha skip F3 @vidul pick F2 pick F9'
+    # review: a sub-part with no row of its own is its parent's (the chain's rule: F3 holds F3a)
+    Eq 'pick a sub-part' (Run pick F3a F2a F1a) 'you: @asha skip F3a @vidul pick F2a pick F1a'
+    # claim (plan / dispatch): [owner: me], the box kept; mine again is no change; another's refused
+    Eq 'claim F1' (Run claim F1) "- [ ] F1 $dash Free [owner: @asha]"
+    Eq 'claim keeps [~]' (Run claim F7) "- [~] F7 $dash Working [owner: @asha] (@cc-bbbbbb)"
+    # review: a closed ticket is not claimed
+    if (-not (Refused claim F8)) { Write-Output 'FAIL: claim of a closed ticket succeeded'; $script:fail = 1 }
+    if ([System.IO.File]::ReadAllText($board, $Utf8) -cnotmatch "(?m)^- \[-\] F8 $dash Dropped`$") { Write-Output 'FAIL: claim wrote onto a closed ticket'; $script:fail = 1 }
+    $o = [string]::Join(' ', @(Run claim F2))
+    if ($o -notmatch 'no change') { Write-Output "FAIL: claim of my own ticket is not no change: [$o]"; $script:fail = 1 }
+    $f80b = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
+    $msg = ErrOf claim F3
+    if ($msg -notmatch 'F3 is owned by @vidul - only @vidul may reassign it') { Write-Output "FAIL: claim refusal: [$msg]"; $script:fail = 1 }
+    # assign: a member's reassign of another's ticket refused; the owner's and the lead's accepted
+    $msg = ErrOf assign F3 '@asha'
+    if ($msg -notmatch 'F3 is owned by @vidul') { Write-Output "FAIL: reassign refusal: [$msg]"; $script:fail = 1 }
+    # review: "assigning" another's ticket to its own owner would reset its box - refused too
+    if (-not (Refused assign F3 '@vidul')) { Write-Output "FAIL: a member reset another's ticket by assigning it to its owner"; $script:fail = 1 }
+    $same = { param($want) [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($board)) -ceq [Convert]::ToBase64String($Utf8.GetBytes($want)) }
+    if (-not (& $same $f80b)) { Write-Output 'FAIL: a refused claim or reassign changed the board'; $script:fail = 1 }
+    Eq 'owner reassigns' @(AsMe '@vidul' { Run assign F3 '@neo' })[0] "- [ ] F3 $dash Theirs [owner: @neo] (@cc-aaaaaa)"
+    Eq 'assign unowned' (Run assign F4 '@vidul') "- [ ] F4 $dash Stuck [owner: @vidul] (blocked: x)"
+    # one lead: set when there is none; only the lead hands it over or clears it; never removed
+    $teamIs = { param($want) [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tf)) -ceq [Convert]::ToBase64String($Utf8.GetBytes($want)) }
+    Eq 'team list, no lead' (Run team list) '@vidul: vidul@ikran.in (Vidul) @asha: Asha@X.com (you) @neo: neo@x.com'
+    if (-not (Refused team lead '@nobody')) { Write-Output 'FAIL: team lead took someone not on the team'; $script:fail = 1 }
+    Eq 'team lead -, none' (Run team lead '-') 'no change: no lead set'
+    Eq 'team lead, none yet' (Run team lead '@vidul') 'lead: @vidul'
+    $lead1 = "# Team`nlead: @vidul`n`n- @vidul: vidul@ikran.in`n  name: Vidul`n- @asha: Asha@X.com`n- @neo: neo@x.com`n"
+    if (-not (& $teamIs $lead1)) { Write-Output 'FAIL: team lead bytes'; $script:fail = 1 }
+    Eq 'team list, lead' (Run team list) '@vidul: vidul@ikran.in (Vidul) [lead] @asha: Asha@X.com (you) @neo: neo@x.com'
+    $msg = ErrOf team lead '@asha'
+    if ($msg -notmatch 'only the lead @vidul') { Write-Output "FAIL: hand-over refusal: [$msg]"; $script:fail = 1 }
+    if (-not (Refused team lead '-')) { Write-Output 'FAIL: a member cleared the lead'; $script:fail = 1 }
+    $msg = AsMe '@vidul' { ErrOf team remove '@vidul' }
+    if ($msg -notmatch 'is the lead - hand the lead over first') { Write-Output "FAIL: lead removal refusal: [$msg]"; $script:fail = 1 }
+    if (-not (& $teamIs $lead1)) { Write-Output 'FAIL: a refused lead change changed team.md'; $script:fail = 1 }
+    $msg = ErrOf claim F6
+    if ($msg -notmatch 'F6 is owned by @neo - only @neo or the lead @vidul may reassign it \(you: @asha\)') { Write-Output "FAIL: refusal does not name both: [$msg]"; $script:fail = 1 }
+    Eq 'the lead reassigns' (AsMe '@vidul' { Run assign F6 '@asha' }) "- [ ] F6 $dash Neos [owner: @asha]"
+    Eq 'hand-over' (AsMe '@vidul' { Run team lead 'asha' }) 'lead: @asha'
+    Eq 'one lead line' @(([System.IO.File]::ReadAllText($tf)) -split "`n" | Where-Object { $_ -match '^lead:' }).Count '1'
+    Eq 'team lead same' (Run team lead '@asha') 'no change: @asha is already the lead'
+    Eq 'team lead - by the lead' (Run team lead '-') 'lead cleared'
+    if ([System.IO.File]::ReadAllText($tf) -match '(?m)^lead:') { Write-Output 'FAIL: team lead - left a lead line'; $script:fail = 1 }
+    # review: the lead matched without case; a lead line naming no member is no lead
+    W $tf "# Team`nlead: @Vidul`n`n- @vidul: vidul@ikran.in`n- @asha: Asha@X.com`n"
+    if (-not (AsMe '@vidul' { Refused team remove '@vidul' })) { Write-Output 'FAIL: the lead was removed (its lead line in another case)'; $script:fail = 1 }
+    W $tf "# Team`nlead: @ghost`n`n- @vidul: vidul@ikran.in`n- @asha: Asha@X.com`n"
+    Eq 'a lead not on the team is no lead' (Run team lead '@asha') 'lead: @asha'
+    Eq 'one lead line, replaced' @(([System.IO.File]::ReadAllText($tf)) -split "`n" | Where-Object { $_ -match '^lead:' }) 'lead: @asha'
+    # no heading, CRLF: the lead line comes in under a new # Team heading, CRLF kept
+    W $tf "- @asha: asha@x.com`r`n"
+    Eq 'team lead, no heading' (Run team lead '@asha') 'lead: @asha'
+    if (-not (& $teamIs "# Team`r`n`r`nlead: @asha`r`n`r`n- @asha: asha@x.com`r`n")) { Write-Output 'FAIL: team lead with no heading, CRLF'; $script:fail = 1 }
+
+    # --- F81: reconcile - read-only proposals from the board, its commits and run stages
+    $K = "$T/f81"
+    Init-Repo $K
+    W "$K/TICKETS.md" ("# TICKETS`n`n- [!] F1 $dash Waits on F2 (blocked: F2 lands first)`n- [x] F2 $dash Shipped`n" +
+      "- [!] F3 $dash Waits on F4 (blocked: F4)`n- [ ] F4 $dash Open, no evidence`n- [!] F5 $dash Waits on a vendor (blocked: the vendor fix)`n" +
+      "- [ ] F6 $dash Committed`n- [~] F7 $dash Stage failed`n- [~] F8 $dash Stage stale`n- [~] F9 $dash Stage landed`n" +
+      "- [ ] F10 $dash Pairing screen, needs an owner live look on the phone`n- [~] F11 $dash Held (@cc-aaaaaa)`n- [ ] F12 $dash Logged only`n" +
+      "- [!] F13 $dash Waits on F4, then a release build (blocked: F4)`n- [~] F14 $dash Stage in flight, then a release build`n" +
+      "- [~] F15 $dash Stage failed, retry queued`n- [ ] F16 $dash Named in passing only`n")
+    W "$K/.skillator/run-0001-x.md" ("# RUN-0001 - x`n`n## Stages`n| # | stage | state | owner | heartbeat | landed |`n|---|-------|-------|-------|-----------|--------|`n" +
+      "| 1 | F7 thing | ! | build:opus | 2026-10-25T10:00Z | - |`n| 2 | F8 thing | ~ | build:opus | 2020-01-01T00:00Z | - |`n" +
+      "| 3 | F9 thing | x | build:opus | 2026-10-25T10:00Z | abc1234 |`n| 4 | F14 thing | ~ | build:opus | 2099-01-01T00:00Z | - |`n" +
+      "| 5 | F15 thing | ! | build:opus | 2026-10-25T10:00Z | - |`n| 6 | F15 retry |   | - | - | - |`n")
+    Commit 'vidul@ikran.in' 'init' 'README.md'
+    Commit 'vidul@ikran.in' 'F6: half of it' 'a.txt'
+    Commit 'vidul@ikran.in' 'board: F12 logged' 'b.txt'
+    Commit 'vidul@ikran.in' 'F10: built' 'c.txt'
+    Commit 'vidul@ikran.in' 'F11: working' 'd.txt'
+    $s6 = [string](@(& git rev-parse --short HEAD~3)[0]); $s10 = [string](@(& git rev-parse --short HEAD~1)[0])
+    # review: an open blocker, a stage in flight, a queued retry and a passing mention propose nothing
+    Commit 'vidul@ikran.in' 'F13: built' 'e.txt'
+    Commit 'vidul@ikran.in' 'F14: half of it' 'f.txt'
+    Commit 'vidul@ikran.in' 'Merge the run branch, F16 in passing' 'g.txt'
+    $f81a = $Utf8.GetString([System.IO.File]::ReadAllBytes("$K/TICKETS.md"))
+    $want81 = @("F1 [!] -> [ ]  blocked on F2, now done",
+      "F5 [!] -> [!]  evidence unclear: blocked on 'the vendor fix', no ticket to check",
+      "F6 [ ] -> [~]  1 commit names it, newest $s6",
+      "F7 [~] -> [!]  RUN-0001 stage 1 failed",
+      "F8 [~] -> [!]  RUN-0001 stage 2 stale, last heartbeat 2020-01-01T00:00Z",
+      "F9 [~] -> [%]  RUN-0001 stage 3 landed abc1234 - verify its Done line",
+      "F10 [ ] -> [%]  code landed in $s10; the owner must confirm: a live check")
+    $got81 = [string]::Join("`n", @(Run reconcile))
+    if ($got81 -cne [string]::Join("`n", $want81)) { Write-Output "FAIL: reconcile proposals: [$got81]"; $script:fail = 1 }
+    if ($Utf8.GetString([System.IO.File]::ReadAllBytes("$K/TICKETS.md")) -cne $f81a) { Write-Output 'FAIL: reconcile wrote the board'; $script:fail = 1 }
+    if (Test-Path -LiteralPath "$K/TICKETS.md.lock") { Write-Output 'FAIL: reconcile left a board lock'; $script:fail = 1 }
+    Eq 'reconcile given ids' (Run reconcile f6 F4) "F6 [ ] -> [~]  1 commit names it, newest $s6"
+    Eq 'reconcile, nothing' (Run reconcile F4 F11 F12) 'no change: nothing to reconcile'
+    # review: from a run worktree, a commit on its branch is not main's
+    & git worktree add -q -b side "$T/f81w" 2>$null | Out-Null
+    Set-Location -LiteralPath "$T/f81w"
+    Commit 'vidul@ikran.in' 'F4: on a branch' 'h.txt'
+    Eq 'reconcile from a worktree' (Run reconcile F4) 'no change: nothing to reconcile'
+    Set-Location -LiteralPath $K
+    # the writers the pane applies [ ] and [~] with: unblock ([!] -> [ ], note dropped), start ([ ] -> [~])
+    Eq 'unblock' (Run unblock F1) "- [ ] F1 $dash Waits on F2"
+    if (-not (Refused unblock F4)) { Write-Output 'FAIL: unblock took a ticket that is not [!]'; $script:fail = 1 }
+    Eq 'start' (Run start F6) "- [~] F6 $dash Committed"
+    if (-not (Refused start F7)) { Write-Output 'FAIL: start took a ticket that is not [ ]'; $script:fail = 1 }
+
     # --- solo, non-monorepo: no workspace folders, no team.md
     $S = "$T/solo"
     Init-Repo $S
@@ -1156,6 +1697,11 @@ function Invoke-Selftest {
     Eq 'solo apps-of' (Run apps-of F1) ''
     Eq 'solo by' (Run by F1) ''
     if (-not (Refused assign F1 '@vidul')) { Write-Output 'FAIL: assign worked with no team.md'; $script:fail = 1 }
+    # F80: no team.md behaves as before - every ticket picked, a claim changes nothing
+    & git config user.email vidul@ikran.in
+    Eq 'solo pick' (Run pick) 'you: - (no .skillator/team.md: every ticket) pick F1'
+    Eq 'solo claim' (Run claim F1) 'no change: no .skillator/team.md - nothing to claim'
+    if (-not (Refused whoami)) { Write-Output 'FAIL: whoami answered with no team.md'; $script:fail = 1 }
     Eq 'solo tag' (Run tag F1) "- [ ] F1 $dash Thing (@cc-dddddd)"
 
     # --- F66: the opt-in Teams status post runs after a successful edit and never
@@ -1226,8 +1772,36 @@ function Invoke-Selftest {
         Write-Output "FAIL: $name board line endings or bytes"; $script:fail = 1
       }
     }
+
+    # --- F82: a stale board is never written. Behind the upstream with a local commit:
+    # refused (exit 2), the board as it was; behind and clean: fast-forwarded, then written.
+    & git init -q --bare "$T/f82up.git" 2>$null | Out-Null
+    & git clone -q "$T/f82up.git" "$T/f82" 2>$null | Out-Null
+    Set-Location -LiteralPath "$T/f82"
+    W "$T/f82/TICKETS.md" "- [ ] F1 $dash One`n"
+    & git add -A 2>$null | Out-Null; & git commit -qm init 2>$null | Out-Null; & git push -q -u origin HEAD 2>$null | Out-Null
+    & git clone -q "$T/f82up.git" "$T/f82b" 2>$null | Out-Null
+    W "$T/f82b/o.txt" "o`n"
+    & git -C "$T/f82b" add -A 2>$null | Out-Null; & git -C "$T/f82b" commit -qm other 2>$null | Out-Null; & git -C "$T/f82b" push -q 2>$null | Out-Null
+    W "$T/f82/l.txt" "l`n"
+    & git add -A 2>$null | Out-Null; & git commit -qm local 2>$null | Out-Null
+    $was = [System.IO.File]::ReadAllBytes("$T/f82/TICKETS.md")
+    $script:Refused = $false
+    $orig = [Console]::Error; [Console]::SetError([System.IO.TextWriter]::Null)
+    try { $msg = ErrOf start F1 } finally { [Console]::SetError($orig) }
+    if (-not $script:Refused -or $msg -notmatch 'board was not written' -or
+        [Convert]::ToBase64String([System.IO.File]::ReadAllBytes("$T/f82/TICKETS.md")) -cne [Convert]::ToBase64String($was)) {
+      Write-Output "FAIL: F82 stale board written or not refused: $msg"; $script:fail = 1
+    }
+    $script:Refused = $false
+    & git reset -q --hard HEAD~1 2>$null | Out-Null
+    $orig = [Console]::Error; [Console]::SetError([System.IO.TextWriter]::Null)
+    try { $got = Run start F1 } finally { [Console]::SetError($orig) }
+    Eq 'F82: behind and clean - fast-forwarded, then written' $got "- [~] F1 $dash One"
+    Eq 'F82: written on the upstream''s tip, committed' (& git log -2 --format=%s) 'board: start F1 other'
   } finally {
     Set-Location -LiteralPath $here
+    $env:GIT_CONFIG_GLOBAL = $savedMe[0]; $env:SKILLATOR_ME = $savedMe[1]; $env:EMAIL = $savedMe[2]
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
   }
   if ($script:fail -ne 0) { exit 1 }
@@ -1235,7 +1809,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|claim|pick|reconcile|unblock|start|selftest')
   exit 1
 }
 $cmd = [string]$args[0]
@@ -1246,6 +1820,7 @@ try {
   $out = Invoke-Cmd $cmd $rest
 } catch {
   [Console]::Error.WriteLine($_.Exception.Message)
+  if ($script:Refused) { exit 2 }
   exit 1
 }
 # UTF-8 out so the em dash on an edited line survives the console.

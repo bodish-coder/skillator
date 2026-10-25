@@ -1,0 +1,36 @@
+{
+  "profiles": [
+    {
+      "guid": "{6b1f0c89-5e2a-4c7d-9f31-0a8e5d2c7f89}",
+      "name": "skillator ops",
+      "commandline": "powershell.exe -NoProfile",
+      "font": { "face": "Cascadia Mono", "size": 11 },
+      "colorScheme": "skillator ops"
+    }
+  ],
+  "schemes": [
+    {
+      "name": "skillator ops",
+      "background": "#101418",
+      "foreground": "#E6E6E6",
+      "cursorColor": "#E6E6E6",
+      "selectionBackground": "#2F6FDB",
+      "black": "#101418",
+      "red": "#F2545B",
+      "green": "#5FD38D",
+      "yellow": "#F5C04A",
+      "blue": "#2F6FDB",
+      "purple": "#C678DD",
+      "cyan": "#4FC1E9",
+      "white": "#D0D0D0",
+      "brightBlack": "#7A7F87",
+      "brightRed": "#FF7B80",
+      "brightGreen": "#8AE6AE",
+      "brightYellow": "#FFD878",
+      "brightBlue": "#6CA0FF",
+      "brightPurple": "#D99BEA",
+      "brightCyan": "#7FD6F2",
+      "brightWhite": "#FFFFFF"
+    }
+  ]
+}

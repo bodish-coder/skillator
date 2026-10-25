@@ -1,6 +1,7 @@
-import type { AgentInfo, AgentStatus, TurnCompleteReason } from 'claude-code'
-import type { AgentKind, AgentRow, WorkflowRow } from '../../types'
+import type { AgentInfo, AgentStatus, Color, TurnCompleteReason } from 'claude-code'
+import type { AgentKind, AgentRow, Board, RunView, WorkflowRow } from '../../types'
 import type { RunStatus } from './runlines'
+import { shortTitle, stageLead, statusColor } from './runlines'
 
 // F53: the folds behind the Agents and Workflows tabs - pure, so a test reads them
 // without an engine. A row is only ever an agent this session saw spawn (agent.spawn)
@@ -145,4 +146,46 @@ export function workflowStatus(rows: AgentRow[], run: WorkflowRow): RunStatus {
   if (c.running) return 'running'
   if (c.failed) return 'failed'
   return c.done ? 'completed' : 'pending'
+}
+
+// F85: the run and stage an agent or a Workflow run serves - `RUN-<n> s<stage>` in its
+// text, a stage's chain code in it (a Workflow agent's label `AAA9 fix:B10`), or its
+// workflow runId as an In-flight block's `run:` id. null: tied to no run.
+export type Lead = { run: string; n: number }
+export function leadOf(text: string, runId: string | null, runs: RunView[]): Lead | null {
+  const m = /\bRUN-(\d+) s(\d+)\b/.exec(text)
+  const named = m ? runs.find(r => Number(r.id.replace(/^RUN-/, '')) === Number(m[1])) : undefined
+  if (named) return { run: named.id, n: Number(m![2]) }
+  const words = new Set(text.split(/[^A-Za-z0-9]+/))
+  for (const r of runs) {
+    const st = r.stages.find(s => words.has(s.code))
+    if (st) return { run: r.id, n: st.n }
+    const f = runId ? r.flights.find(x => x.run === runId) : undefined
+    if (f) return { run: r.id, n: f.n }
+  }
+  return null
+}
+const agentText = (a: AgentRow) => `${a.name ?? ''} ${a.description}`
+export const agentLead = (a: AgentRow, runs: RunView[]) => leadOf(agentText(a), a.runId, runs)
+
+type TreeLine = { key: string; segs: { text: string; color?: Color; dim?: boolean }[] }
+// F85: one tree - under a run (null: `no run`) its Workflow runs and agents, each led by the
+// stage it serves, or, tied to no run, by a short title of its task.
+export function treeLines(run: RunView | null, runs: RunView[], agents: AgentRow[], workflows: WorkflowRow[], board: Board | null): TreeLine[] {
+  const mine = (l: Lead | null) => (run ? l?.run === run.id : l === null)
+  const lead = (l: Lead | null, own: string) => (l && run ? stageLead(run, l.n, board) : shortTitle(own))
+  const out: TreeLine[] = []
+  for (const w of workflows) {
+    const l = leadOf(w.name ?? '', w.runId, runs)
+    if (!mine(l)) continue
+    out.push({ key: `tree:${run?.id ?? '-'}:wf:${w.key}`, segs: [{ text: '  ● ', color: statusColor(workflowStatus(agents, w)) },
+      { text: lead(l, w.name ?? w.runId ?? 'Workflow call') }, { text: '  workflow ' + (w.name ?? w.runId ?? ''), dim: true }] })
+  }
+  for (const a of agentOrder(agents)) {
+    const l = agentLead(a, runs)
+    if (!mine(l)) continue
+    out.push({ key: `tree:${run?.id ?? '-'}:ag:${a.id}`, segs: [{ text: '  ● ', color: a.status ? statusColor(isEnded(a.status) ? (a.status === 'completed' ? 'completed' : 'failed') : 'running') : undefined, dim: !a.status },
+      { text: lead(l, a.description || a.name || a.id) }, { text: `  ${a.kind} ${a.name ?? a.type}  ${a.status ?? 'not listed'}`, dim: true }] })
+  }
+  return out
 }

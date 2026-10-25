@@ -8,6 +8,8 @@
 #   3. A closed ([x]) row whose line still ends in a bare "Plan: S<n>" pointer
 #      with no outcome ever recorded - the ticket says a plan ran, but never
 #      says what happened when it did (A78).
+#   4. A warning only (A156): an open line whose title is over 60 characters
+#      or empty.
 # The archive beside the board (<board without .md>-archive.md, written by
 # archive-tickets.sh - F27) is checked with it: an ID in both files, or twice
 # in the archive, is a duplicate too.
@@ -160,6 +162,21 @@ EOF
     echo "SELFTEST FAIL: conflict markers missed under a path with a space" >&2; exit 1
   fi
 
+  # A156: an open line's title (pending.sh's cut) over 60 characters or empty
+  # is a warning naming the ID and the length - the exit stays 0. Closed lines
+  # and a long line whose title cuts short pass silently.
+  t70=$(printf '%070d' 0 | tr 0 x)
+  printf '%s\n' '# Board' '' "- [ ] A1 - $t70" '- [~] A2 -' "- [x] A3 - $t70" \
+    "- [ ] A4 - short title [owner: @x]. Then $t70 (testing: $t70)" > "$stmp/title.md"
+  sh "$0" "$stmp/title.md" >"$stmp/title.out" 2>&1 || {
+    echo "SELFTEST FAIL: a long title failed the board instead of warning" >&2; cat "$stmp/title.out" >&2; exit 1; }
+  grep -q 'WARN: A1 title is 70 characters' "$stmp/title.out" &&
+    grep -q 'WARN: A2 title is 0 characters' "$stmp/title.out" || {
+    echo "SELFTEST FAIL: long or empty open title not warned with ID and length" >&2; cat "$stmp/title.out" >&2; exit 1; }
+  if grep -qE 'WARN: A[34] ' "$stmp/title.out"; then
+    echo "SELFTEST FAIL: a closed line or a short cut title was warned" >&2; cat "$stmp/title.out" >&2; exit 1
+  fi
+
   echo "ok - check-tickets.sh selftest passed"
 }
 
@@ -235,6 +252,23 @@ if grep -nE '^[[:space:]]*- \[x\][[:space:]].*Plan: S[0-9][0-9]*\.?([[:space:]]*
   sed 's/^/  /' "$tmp/bareplan" >&2
   exit 1
 fi
+
+# A156: a warning, never a failure - an open line's title over 60 characters or
+# empty. The title is pending.sh's cut: tags and (testing: ...) dropped, cut at
+# the first " (" or ". ". Characters, not bytes: a UTF-8 sequence counts one.
+LC_ALL=C awk '
+  { sub(/\r$/, "") }
+  /^[ \t]*- \[[ ~!?%]\][ \t]+[A-Z]+[0-9]+[a-z]*([ \t]|$)/ {
+    r = $0; sub(/^[ \t]*- \[.\][ \t]+/, "", r); match(r, /^[A-Z]+[0-9]+[a-z]*/)
+    id = substr(r, 1, RLENGTH); r = substr(r, RLENGTH + 1)
+    sub(/^[ \t]*(\342\200\224|\342\200\223|-)?[ \t]*/, "", r)
+    gsub(/\[(app|owner|decide|by):[^]]*\]/, "", r); gsub(/\(@[^() ]+\)/, "", r); gsub(/\(testing:[^)]*\)/, "", r)
+    a = index(r, " ("); b = index(r, ". "); if (b && (!a || b < a)) a = b
+    if (a) r = substr(r, 1, a - 1)
+    gsub(/[ \t]+/, " ", r); gsub(/^ +| +$/, "", r)
+    s = r; gsub(/[\300-\367][\200-\277]*/, "?", s); n = length(s)
+    if (n == 0 || n > 60) print "WARN: " id " title is " n " characters (max 60): " substr(r, 1, 80)
+  }' "$board" >&2
 
 n=$(wc -l < "$tmp/ids" | tr -d ' ')
 if [ $# -eq 1 ]; then

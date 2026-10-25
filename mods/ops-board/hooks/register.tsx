@@ -3,7 +3,7 @@ import type { EngineInterface, Register, SiteScroll } from 'claude-code'
 import type { Board, Machine, Member, Usage, Watch } from '../types'
 import { listView, parseBoard } from './lib/board'
 import { meOf, parseTeam } from './lib/team'
-import { classify, levelLine, parseMachine, usageFrom } from './lib/facts'
+import { classify, levelLine, MUTE_FILE, MUTED_HOW, muteKv, mutedWords, muteText, parseMachine, unmuteDue, usageFrom } from './lib/facts'
 import { gitBin, NO_SCRIPTS, readUsage, runCall } from './lib/host'
 import { parseRuns } from './lib/runs'
 import { HIDDEN, restoreClaudeMd, RESTORE_NOTE } from './lib/restore'
@@ -11,7 +11,8 @@ import { countsOf, renderBand, statusText } from './band'
 import { buildModel, lineKey, offsetFor, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
 import type { Tab } from './pane'
 import { cancelPerson, clearForm, isFormUp } from './assign'
-import { pollRuns, RUNS_POLL_MS } from './runstab'
+import { applyReconcile } from './reconcile'
+import { closeEngage, dropEngage, isEngageUp, pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 import { closeSetup, enterMessages, isSetupUp, pollInbox } from './messagestab'
 import { closeRunForm, dropRunForm, enterRun, isRunFormUp } from './runtab'
@@ -44,6 +45,7 @@ const norm = (p: string) => p.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
 // Module state is per load: a hot reload starts a fresh module, so it re-arms.
 let armed = false
 let email: string | null = null
+let envMe: string | null = null            // F80: SKILLATOR_ME, as ticket-meta whoami reads it
 let teamSeen = ''
 let lastScroll: SiteScroll = { offset: 0, bodyRows: 0 }
 let lastCols = 54
@@ -106,7 +108,7 @@ async function poll($: EngineInterface, force = false) {
     let t: Member[] = []
     if (seen !== 'none') { try { t = parseTeam(await $.fs.read(teamPath)) } catch { t = [] } }
     await update($, teamA, () => t)
-    await update($, meA, () => (email ? meOf(t, email) : null))
+    await update($, meA, () => meOf(t, email ?? '', envMe))
   }
   await pollInbox($).catch(() => {})       // F66: the Teams inbox, re-read when it moved
   await updateStatus($)
@@ -156,6 +158,14 @@ function lockNote(m: Machine): string {
 // and a release from outside is held again. A toast says why and how to clear it only
 // when the outcome changes. Stale locks are listed in a note, never deleted.
 async function applyMachine($: EngineInterface, m: Machine) {
+  if (unmuteDue(m)) {
+    try {
+      await writeMute($, '')
+      const { mute: _, ...rest } = m
+      m = rest
+      $.ui.toast('watchdog unmuted - memory reads green; memory red holds again')
+    } catch { /* the next reading tries again */ }
+  }
   const w = classify(m)
   await update($, machineA, () => m)
   await update($, watchA, () => w)
@@ -181,9 +191,22 @@ async function applyMachine($: EngineInterface, m: Machine) {
   }
 }
 
+// F87: the mute file beside the hold - repo.root is the main checkout's for a worktree.
+async function mutePath($: EngineInterface): Promise<string> {
+  const repo = await $.session.repo()
+  if (!repo) throw new Error('not a git repo')
+  return norm(repo.root) + '/' + MUTE_FILE
+}
+async function readMute($: EngineInterface): Promise<string> {
+  try { return muteKv(await $.fs.read(await mutePath($))) } catch { return '' }   // none: not muted
+}
+async function writeMute($: EngineInterface, text: string) {
+  await $.fs.write(await mutePath($), text ? text + '\n' : '')
+}
+
 async function pollMachine($: EngineInterface) {
   const r = await runCall($, 'pending-machine', [])
-  if (r.code === 0 && r.out.trim()) return applyMachine($, parseMachine(r.out, await $.clock.now()))
+  if (r.code === 0 && r.out.trim()) return applyMachine($, parseMachine(r.out + await readMute($), await $.clock.now()))
   // Failed: the last facts stay (the band shows their age).
   if (r.err === NO_SCRIPTS && !scriptsNoted) {
     scriptsNoted = true
@@ -249,19 +272,49 @@ async function slowPoll($: EngineInterface) {
 async function resume($: EngineInterface): Promise<string> {
   const r = await runCall($, 'pending-machine', [])
   if (r.code !== 0 || !r.out.trim()) return 'could not read the machine facts - not released'
-  const m = parseMachine(r.out, await $.clock.now())
+  const m = parseMachine(r.out + await readMute($), await $.clock.now())
   await applyMachine($, m)
-  const w = classify(m)
+  const w = await read($, watchA)          // as applied: an unmute there counts
   if (w.level === 'red') return `still red: ${w.reasons.join('; ')} - not released`
+  return release($)
+}
+
+// relay-morpheus releases the hold; the answer shows what it said and the command that ran.
+async function release($: EngineInterface, after = ''): Promise<string> {
   const rel = await runCall($, 'relay-release', [])
   if (!rel.argv.length) return rel.err || NO_SCRIPTS
   const said = rel.out.trim() || rel.err.trim()
   const ran = `ran: ${rel.argv.join(' ')}`
   if (rel.code !== 0) return `release failed (exit ${rel.code}): ${said || 'no output'}\n${ran}`
-  const freed: Machine = { ...m, hold: null }
-  await update($, machineA, () => freed)
-  await update($, watchA, () => classify(freed))
-  return `${said}\n${ran}`
+  const cur = await read($, machineA)
+  if (cur) {
+    const freed: Machine = { ...cur, hold: null }
+    await update($, machineA, () => freed)
+    await update($, watchA, () => classify(freed))
+  }
+  return `${said}${after}\n${ran}`
+}
+
+// F87: /ops resume force - releases whatever the reading, after writing the mute (so no
+// poll, here or in the ops app, holds again on memory red in between). The free memory at
+// the time rides in the mute file; disk red still holds on the next reading.
+async function forceResume($: EngineInterface): Promise<string> {
+  const r = await runCall($, 'pending-machine', [])
+  const now = await $.clock.now()
+  const m = r.code === 0 && r.out.trim() ? parseMachine(r.out, now) : null
+  const mute = muteText(now, m?.memFree ?? null)
+  try { await writeMute($, mute) } catch (e) { return `could not write ${MUTE_FILE}: ${String((e as Error)?.message ?? e)} - not released` }
+  if (m) await update($, machineA, () => ({ ...m, mute }))
+  const out = await release($, `\n${mutedWords(mute)}, ${mute.slice(mute.indexOf(' ') + 1)} - ${MUTED_HOW}`)
+  if (m) await applyMachine($, { ...m, hold: null, mute })      // disk red holds again here
+  return out
+}
+
+// F87: /ops watchdog on - the mute ends; a red reading holds again now.
+async function watchdogOn($: EngineInterface): Promise<string> {
+  try { await writeMute($, '') } catch (e) { return `could not write ${MUTE_FILE}: ${String((e as Error)?.message ?? e)}` }
+  await pollMachine($).catch(() => {})
+  return 'watchdog on: memory red holds again'
 }
 
 // At start: a hidden CLAUDE.md is reported (never moved: a GREEN may be running), and
@@ -278,6 +331,7 @@ async function startNotes($: EngineInterface) {
 }
 
 async function loadEmail($: EngineInterface) {
+  try { envMe = (await $.env.get('SKILLATOR_ME')) || null } catch { envMe = null }
   const repo = await $.session.repo()
   try {
     const git = await gitBin($)                    // A150: absolute on Windows; none: no email
@@ -310,7 +364,7 @@ async function arm($: EngineInterface) {
 // closeOnEscape is set anew by every ui.open: while a form is up it stays, so Esc is
 // still the form's Cancel after a re-open.
 async function openPane($: EngineInterface, asked: boolean) {
-  const esc = (await isFormUp($)) || (await isRunFormUp($)) ? { closeOnEscape: true as const } : {}
+  const esc = (await isFormUp($)) || (await isRunFormUp($)) || (await isEngageUp($)) ? { closeOnEscape: true as const } : {}
   const r = await $.ui.open(asked ? { id: PANE_ID, title: PANE_TITLE, focus: true, ...esc } : { id: PANE_ID, title: PANE_TITLE, ...esc })
   await update($, narrowA, () => !r.isPlaced)
   return r
@@ -321,14 +375,15 @@ const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', h
 // an alias that opens it with its Runs section open.
 const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'run']
 const SECTION_OF: Record<string, 'runs' | 'workflows'> = { runs: 'runs', workflows: 'workflows' }
-const USAGE = 'usage: /ops [tickets|workflows|health|messages|agents|explorer|run|resume] - runs opens Workflows too'
+const USAGE = 'usage: /ops [tickets|workflows|health|messages|agents|explorer|run|resume [force]|watchdog on] - runs opens Workflows too;'
+  + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'ops',
       description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs and Workflow runs), health, Teams messages, agents, the explorer and the run entries',
-      argumentHint: '[tickets|workflows|health|messages|agents|explorer|run|resume]',
+      argumentHint: '[tickets|workflows|health|messages|agents|explorer|run|resume [force]|watchdog on]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -366,8 +421,10 @@ export const register: Register = on => {
 
   on('command.run', { command: 'ops' }, async ($, e) => {
     void arm($).catch(() => {})
-    const word = e.args.trim().toLowerCase()
+    const word = e.args.trim().toLowerCase().split(/\s+/).join(' ')
     if (word === 'resume') return { text: await resume($) }
+    if (word === 'resume force') return { text: await forceResume($) }       // F87
+    if (word === 'watchdog on') return { text: await watchdogOn($) }
     if (word && !WORDS.includes(word)) return { text: USAGE }
     const tab: Tab | null = word ? (SECTION_OF[word] ? 'runs' : word as Tab) : null
     const sec = SECTION_OF[word]
@@ -375,6 +432,7 @@ export const register: Register = on => {
     // on that tab would be taken as the hidden form's Cancel.
     if (tab && tab !== 'tickets') await clearForm($)
     if (tab && tab !== 'run') await dropRunForm($)
+    if (tab && tab !== 'runs') await dropEngage($)        // F85: the engage confirm likewise
     if (tab) await update($, tabA, () => tab)
     if (sec) await update($, runsOpenA, x => (x.includes(sec) ? x : [...x, sec]))
     if (tab === 'runs') void pollRuns($).catch(() => {})
@@ -464,6 +522,12 @@ export const register: Register = on => {
       await closeRunForm($)
       return { value: undefined }
     }
+    // F85: the engage confirm up - Esc is its Cancel
+    if (e.id === PANE_ID && e.origin.kind === 'unload') await dropEngage($)
+    if (e.id === PANE_ID && (await isEngageUp($))) {
+      await closeEngage($)
+      return { value: undefined }
+    }
     if (e.id !== PANE_ID || !(await isFormUp($))) return next(e)
     if (e.origin.kind === 'unload') { await clearForm($); return next(e) }
     await cancelPerson($)                                   // what the form's Cancel does
@@ -496,6 +560,25 @@ export const register: Register = on => {
   // F78: the Tickets tab's `r` - a forced poll here, where the poll lives.
   on('ui.press', { plugin: 'ops-board', element: 'key:refresh' }, async ($, e) => {
     await refresh($)
+    return { element: e.element }
+  })
+
+  // F87: the Health tab's `f` - /ops resume force, answered in a toast.
+  on('ui.press', { plugin: 'ops-board', element: 'key:force' }, async ($, e) => {
+    $.ui.toast(await forceResume($))
+    return { element: e.element }
+  })
+
+  // F81: the reconcile form's Accept all / Apply picked - ticket-meta writes each row
+  // (reconcile.tsx), then the board is re-read here, where the poll lives.
+  on('ui.press', { plugin: 'ops-board', element: 'reconcile:all' }, async ($, e) => {
+    await applyReconcile($, true)
+    await poll($, true)
+    return { element: e.element }
+  })
+  on('ui.press', { plugin: 'ops-board', element: 'reconcile:picked' }, async ($, e) => {
+    await applyReconcile($, false)
+    await poll($, true)
     return { element: e.element }
   })
 

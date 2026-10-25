@@ -7,26 +7,30 @@
 // writes what frame() returns; tests read it as text.
 import type { Color } from 'claude-code'
 import type { Seg } from '../hooks/lib/bandlines'
+import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State } from './state'
-import { dialogLines, formLines, runsCursor, setupLines, teamRow, viewOf } from './state'
+import { dialogLines, engageLines, formLines, reconcileLines, runsCursor, setupLines, teamRow, viewOf } from './state'
 import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, isDecidable, isHead, offsetFor } from '../hooks/lib/ticketsmodel'
-import { runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
+import { modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
-import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM } from '../hooks/lib/facts'
+import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM, MUTED_HOW, mutedWords } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
 import { ticketsOf } from '../hooks/lib/team'
 import { runKeys, runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
 
-export type Paint = { color: boolean; ascii: boolean }
+// `plain`: text only, no SGR at all - for readers of text (--once without colour, a host's
+// notification, tests). Colour off alone drops only the colours (F89: NO_COLOR asks no more).
+export type Paint = { color: boolean; ascii: boolean; plain?: boolean }
 // A seg whose meaning rides on its colour: `mono` is what it reads with colour off or --ascii.
 type Mono = Seg & { mono?: string }
 
 // Theme names → SGR (CONSTRAINTS); 'text' and any other name draw in the default colour.
 const SGR: Record<string, string> = { warning: '33', error: '31', permission: '35', success: '32', suggestion: '36', inactive: '2' }
+const HIGHLIGHT = ['1', '97', '44']
 
 // --ascii: the design's map, plus the arrows, marks, dashes and box lines a raster console
 // font lacks. Every glyph used maps to one cell except '…', which becomes three.
@@ -57,13 +61,18 @@ export function plain(segs: Seg[]): string {
 export function ansi(segs: Seg[], p: Paint): string {
   return segs.map(s => {
     const text = glyph(!p.color ? (s as Mono).mono ?? s.text : s.text, p.ascii)
-    if (!p.color || !text) return text
+    if (p.plain || !text) return text
     const codes: string[] = []
     const add = (c: string | undefined) => { if (c && !codes.includes(c)) codes.push(c) }
-    add(s.color ? SGR[s.color] : undefined)
-    add(s.dim ? '2' : undefined)
-    add(s.bold ? '1' : undefined)
-    add(s.inverse ? '7' : undefined)
+    // F89: a highlight (selected row, focused field, active tab) is bold bright white on
+    // blue - plain inverse reads poorly on coloured text and some themes; colour off keeps inverse
+    if (p.color && s.inverse) HIGHLIGHT.forEach(add)
+    else {
+      add(p.color && s.color ? SGR[s.color] : undefined)
+      add(s.dim ? '2' : undefined)
+      add(s.bold ? '1' : undefined)
+      add(s.inverse ? '7' : undefined)
+    }
     return codes.length ? `\x1b[${codes.join(';')}m${text}\x1b[0m` : text
   }).join('')
 }
@@ -71,9 +80,6 @@ export function ansi(segs: Seg[], p: Paint): string {
 export function paintScreen(lines: string[]): string {
   return '\x1b[H' + lines.join('\x1b[K\r\n') + '\x1b[K'
 }
-
-// A board title or a script's stderr can carry control bytes; none reaches the terminal.
-const clean = (t: string) => t.replace(/\t/g, ' ').replace(/[\x00-\x08\x0a-\x1f\x7f-\x9f]/g, '')
 
 // One line cut to `cols` cells: the segment that crosses the limit is cut and ends in
 // `ell`, the rest dropped.
@@ -152,23 +158,25 @@ function keysOf(s: State, m: Model): string[] {
   if (s.person) return ['tab / shift-tab field', 'enter add', 'esc cancel']
   if (s.dialog) return s.dialogField === 'ticket' ? ['type the ID', 'tab person', 'enter confirm', 'esc cancel']
     : ['↑↓ person', 'a / d kind', 'tab ticket', 'enter confirm', 'esc cancel']
+  if (s.reconcile) return ['↑↓ move', 'space pick', 'enter apply picked', 'a accept all', 'esc none']   // F81
+  if (s.engage) return ['enter engage', 'esc cancel']        // F85
   if (s.filterField) return ['←→ field', '↑↓ value', 'enter/esc leave']
   if (s.tab === 'run') return runKeys(s)                     // F79
   if (s.tab === 'runs') {
     // F76: on a section header Enter opens or closes it
     const cur = runsCursor(s)
     const enter = isHead(cur) ? (s.runsOpen.some(x => headKey(x) === cur) ? 'enter close' : 'enter open') : 'enter stages'
-    return ['↑↓ move', enter, 's start a planned run', 'r reload', 'q quit']
+    return ['↑↓ move', enter, 'e engage', 'r reload', 'q quit']
   }
-  if (s.tab === 'health') return ['R resume (releases the hold on a fresh non-red reading)', 'r reload', 'q quit']
+  if (s.tab === 'health') return ['R resume (on a fresh non-red reading)', 'F force resume', 'r reload', 'q quit']
   if (s.tab === 'messages') return ['↑↓ move', 'enter open', 'm mark all read', 's setup', 'q quit']
   if (s.tab === 'explorer') return ['↑↓ move', 'enter open/close', 'r reload', 'q quit']
-  if (s.showTeam) return ['n add', 'del remove (asks first)', 'esc back', 'q quit']   // A146: q closes the board here too
+  if (s.showTeam) return ['n add', 'del remove (asks first)', 'l make lead', 'esc back', 'q quit']   // A146: q closes the board here too
   const sel = m.rows.find(t => t.id === m.ticket)
   // F61: on a header Enter opens or closes its group
   const head = isHead(m.selected) ? m.groups.find(g => headKey(g.box) === m.selected) : undefined
   const enter = head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
-  return ['↑↓ move', enter, 'a assign', 'd decide', ...(sel && isDecidable(sel) ? ['D decided'] : []), 't team', 'r reload', 'q quit']
+  return ['↑↓ move', enter, 'a assign', 'd decide', ...(sel && isDecidable(sel) ? ['D decided'] : []), 't team', 'c reconcile', 'r reload', 'q quit']
 }
 
 function keysLine(s: State, m: Model): Seg[] {
@@ -227,6 +235,7 @@ function bandSegs(s: State): Seg[][] {
     [{ text: '5h ' }, usageSeg(u?.five ?? null, held.five, now)],
     [{ text: '7d ' }, usageSeg(u?.seven ?? null, held.seven, now)],
     ...(m?.locks.length ? [[{ text: `${m.locks.length} stale lock${m.locks.length === 1 ? '' : 's'}`, color: 'warning' as Color }]] : []),
+    ...(m?.mute ? [[{ text: mutedWords(m.mute), color: 'warning' as Color }]] : []),     // F87
     ...(m && now - m.at > 3 * 60 * 1000 ? [[dim(`facts ${Math.floor((now - m.at) / 60000)}m old`)]] : []),
   ]
   const room = cols - (right.length ? width(right) + 2 : 0)
@@ -320,7 +329,7 @@ function ticketLines(s: State, m: Model): Keyed[] {
 function teamLines(s: State): Seg[][] {
   const line = (hd: string, n: string, e: string, t: string) => `${hd.padEnd(9)}${n.padEnd(14)}${e.padEnd(22)}${t}`
   const n = s.team.length
-  const out: Seg[][] = [[{ text: 'Team', bold: true }, dim(`  .skillator/team.md · ${n} ${n === 1 ? 'person' : 'people'}`)]]
+  const out: Seg[][] = [[{ text: 'Team', bold: true }, dim(`  .skillator/team.md · ${n} ${n === 1 ? 'person' : 'people'}${s.me ? ` · you: ${s.me}` : ''}`)]]
   if (!n) out.push([dim('  no .skillator/team.md yet - n adds the first person (ticket-meta creates the file)')])
   const sel = teamRow(s)
   for (const m of s.team) {
@@ -375,7 +384,7 @@ function runRows(s: State, sel: string): Keyed[] {
   const idW = Math.max(...s.runs.map(r => r.id.length)) + 2
   const out: Keyed[] = s.runs.map((run: RunView): Keyed => {
     const dot: Seg = { text: '●', color: statusColor(runStatus(run)) }   // F76: the Tickets tab's colours
-    const right = run.planned ? `planned · ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}` : `${run.done}/${run.total} done`
+    const right = modeOf(run) + ' · ' + (run.planned ? `planned · ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}` : `${run.done}/${run.total} done`)
     const isSel = run.id === sel
     const avail = s.cols - 3
     const body = ` ${run.id.padEnd(idW)}${cut(clean(run.title), Math.max(4, avail - idW - 1 - right.length - 2))}`
@@ -390,9 +399,9 @@ function runRows(s: State, sel: string): Keyed[] {
     if (!ex.stages.length) out.push({ key: 'none', segs: [dim('    no stages read yet')] })
     ex.stages.forEach(st => out.push({ key: 'st:' + st.n, segs: stageLine(st, ex.planned) }))
     for (const l of runLines(ex, s.board)) {
-      if (/^(par|dec):/.test(l.key)) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
+      if (/^(par|dec|phase):/.test(l.key)) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
     }
-    if (ex.planned) out.push({ key: 'start', segs: [dim('    s queues it; its continue prompt is then shown to paste into your CLI')] })
+    out.push({ key: 'start', segs: [dim('    e engages it; the command is then shown to paste into your CLI')] })
   }
   return out
 }
@@ -440,6 +449,12 @@ function machineRows(m: Machine | null, red: boolean, now: number): Seg[][] {
       : [dim('none')]),
     row('Stale locks', n ? [{ text: `${n} stale, not deleted`, color: 'warning' }] : [dim('none')]),
   ]
+  // F87: muted by F / /ops resume force - when, the free memory then, how it ends
+  if (m.mute) out.push(row('Muted', [{ text: `${mutedWords(m.mute)}, ${m.mute.slice(m.mute.indexOf(' ') + 1)} then`, color: 'warning' }]),
+    row('', [dim(MUTED_HOW)]))
+  // F82: a stale board amber, board-fresh's refusal red with its reason
+  if (m.board) out.push(row('Board', [{ text: `stale: ${m.board.behind} behind ${m.board.up}`, color: 'warning' }]))
+  if (m.board?.state === 'refused') out.push(row('', [{ text: `refused: ${m.board.reason}`, color: 'error' }]))
   if (now - m.at > 3 * 60 * 1000) out.push([dim(`  facts ${Math.floor((now - m.at) / 60000)}m old`)])
   return out
 }
@@ -544,9 +559,13 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
   const tail = tailLines(s).slice(0, Math.floor(h / 2))
   const block = tail.length && h - tail.length >= 2 ? [[], ...tail] : tail
   const room = h - block.length
+  const [recTitle = '', ...recRows] = reconcileLines(s)    // F81: [] with no reconcile box up
+  const [engTitle = '', ...engRows] = engageLines(s)       // F85: [] with no engage box up
   const main = s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
+    : s.reconcile ? boxBody(s, { title: recTitle, rows: recRows.map(text => ({ text })) })   // F81
+    : s.engage ? boxBody(s, { title: engTitle, rows: engRows.map(text => ({ text })) })      // F85
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s)
     : s.tab === 'messages' ? messagesBody(s, room)
@@ -572,6 +591,6 @@ export function frameSegs(s: State): Seg[][] {
 export function frame(s: State, p: Paint): string[] {
   const cols = Math.max(0, s.cols)
   return frameSegs(s).map(l => p.ascii
-    ? ansi(fitSegs(l.map((x: Mono) => ({ ...x, text: glyph(x.mono ?? x.text, true), mono: undefined })), cols, '...'), { color: p.color, ascii: false })
+    ? ansi(fitSegs(l.map((x: Mono) => ({ ...x, text: glyph(x.mono ?? x.text, true), mono: undefined })), cols, '...'), { ...p, ascii: false })
     : ansi(l, p))
 }

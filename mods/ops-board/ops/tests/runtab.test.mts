@@ -1,5 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import { initial, reduce } from '../state'
 import type { State } from '../state'
 import { frame } from '../draw'
@@ -55,7 +59,7 @@ function fake(files: Record<string, string>): Fake {
   return f
 }
 const engineOf = (f: Fake) => makeEngine({ host: f.host, email: null, once: false, state: initial(100, 40, 0), onChange: () => {}, onQuit: () => {} })
-const text = (s: State) => frame({ ...s, now: s.runJob?.ended ?? s.now }, { color: false, ascii: false }).join('\n')
+const text = (s: State) => frame({ ...s, now: s.runJob?.ended ?? s.now }, { color: false, ascii: false, plain: true }).join('\n')
 const keys = async (e: ReturnType<typeof engineOf>, ...ks: string[]) => { for (const k of ks) await e.key(k.length === 1 ? { name: k, sequence: k } : { name: k }) }
 
 test('the Run tab: the first open scans and saves .skillator/run.json through run-entries; the next open reads it', async () => {
@@ -192,6 +196,35 @@ test('parseRunFile: an entry with no id gets the id run-entries.sh would write (
   const j = JSON.stringify({ entries: [{ name: 'a', kind: 'sh', target: 'a.sh' }, 'junk', { name: 'b', kind: 'sh', target: 'b.sh' }, { id: 'hand-1', kind: 'sh', target: 'c.sh' }, { id: 'x' }, { id: 'x' }] })
   assert.deepEqual(parseRunFile(j, RUN_JSON).entries.map(x => x.id), ['hand-1', 'hand-3', 'hand-1-2', 'x', 'x-2'])
 })
+
+// A154: the id is run-entries' own - its JSON text, escapes kept, never cut - so a pane
+// rename finds the entry; ab and ab decode alike but are two ids there.
+const LONG = 'x'.repeat(310)
+const ODD = `{"entries":[{"id":"ab"},{"id":"a\\u0062"},{"name":"no id"},{"id":"${LONG}"},{"id":"${LONG}"}]}\n`
+test('parseRunFile: ids as run-entries keys them - escapes kept, an id over 300 chars whole', () => {
+  assert.deepEqual(parseRunFile(ODD, RUN_JSON).entries.map(x => x.id), ['ab', 'a\\u0062', 'hand-3', LONG, LONG + '-2'])
+})
+
+const RE = resolve(import.meta.dirname, '../../../../skills/live-friday/scripts/run-entries')
+const reRuns: [string, string | false, string[]][] = [
+  ['sh', spawnSync('sh', ['-c', 'exit 0']).status !== 0 && 'no sh', ['sh', RE + '.sh']],
+  ['ps1', process.platform !== 'win32' && 'Windows only', ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', RE + '.ps1']],
+]
+for (const [kind, skip, [cmd, ...pre]] of reRuns) {
+  test(`${kind}: run-entries rename by each id parseRunFile gives renames that entry (the pane's round trip)`, { skip }, () => {
+    const t = mkdtempSync(join(tmpdir(), 'run-ids-'))
+    try {
+      mkdirSync(join(t, '.skillator'))
+      writeFileSync(join(t, '.skillator/run.json'), ODD)
+      parseRunFile(ODD, RUN_JSON).entries.forEach((e, i) => {
+        const r = spawnSync(cmd, [...pre, 'rename', e.id, `n${i}`], { cwd: t, encoding: 'utf8' })
+        assert.equal(r.status, 0, `rename ${e.id.slice(0, 20)}: ${r.stderr}`)
+      })
+      const after = parseRunFile(readFileSync(join(t, '.skillator/run.json'), 'utf8'), RUN_JSON).entries
+      assert.deepEqual(after.map(x => x.name), ['n0', 'n1', 'n2', 'n3', 'n4'])
+    } finally { rmSync(t, { recursive: true, force: true }) }
+  })
+}
 
 test('duration: seconds carry into minutes - 119.6 s is 2 min 0 s, never 1 min 60 s', () => {
   assert.equal(duration(119_600), '2 min 0 s')

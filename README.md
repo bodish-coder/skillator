@@ -33,8 +33,8 @@ If you installed with `install.ps1 -Link` / `install.sh --link`, a plain
 `git pull` in your clone is enough — symlinked skills are always live. Plain
 copies need `install.ps1 -Force` / `install.sh --force` to refresh.
 
-Or do it all in one go with `/skillator-update` (Claude Code, codex as
-`/prompts:skillator-update`, cursor, gemini, agy, pi, opencode): it updates the
+Or do it all in one go with `/skillator-update` (Claude Code, codex as the
+skill `$skillator-update`, cursor, gemini, agy, pi, opencode): it updates the
 marketplace and the `skillator` and `ops-board` plugins, then re-runs the
 installer with `-Force` / `--force` from the newest source - the updated plugin,
 the clone the installer last ran from (`.skillator-source` beside the installed
@@ -89,7 +89,7 @@ Manual install paths, if you'd rather not run the script:
 | Codex | `$CODEX_HOME/skills/` (what the installer writes; default `~/.codex/skills/`) — auto-loaded when the task matches. Also reads `~/.agents/skills/` if present, with no dedupe (codex 0.155.1, probed 2026-09-23) |
 | Antigravity CLI | `.agents/skills/` (workspace) or `~/.gemini/antigravity-cli/skills/` (global, what `agy` 1.4.5 reads; the installer also writes `~/.gemini/config/skills/` and `~/.gemini/skills/`) |
 | Pi | `.pi/skills/` (force with `/skill:<name>`) |
-| Muse | native plugin from `.muse-plugin/plugin.json` (every skill; no commands, no hooks): `muse plugins install <clone>` (skills are on at once; nothing to approve); `/skillator-update` runs `muse plugins update skillator` |
+| Muse | native plugin from `.muse-plugin/plugin.json` (every skill; no commands, no hooks): install from a clone - `git clone https://github.com/bodish-coder/skillator <dir>`, then `muse plugins install <dir>` (skills are on at once; nothing to approve); update with `git -C <dir> pull` then `muse plugins update skillator` (`/skillator-update` does both). `muse plugins marketplace add` of this repo is unsupported: Muse reads the Claude catalog and fails cloning its github source (B11 tracks a native catalog). The ops-board skip warning is expected - its hook is a Claude Code mod |
 | opencode | `.opencode/skills/` (project) or `~/.config/opencode/skills/` (global, what the installer writes; `$XDG_CONFIG_HOME/opencode/skills/` when that is set) — also reads `~/.claude/skills/` and `~/.agents/skills/`. Commands: `~/.config/opencode/commands/<n>.md` → `/<n>` |
 | Prime Agent | anywhere — skills there are Python packages, so read the `SKILL.md` or reference it from `AGENTS.md` |
 
@@ -384,6 +384,17 @@ Deactivating is deleting `.skillator/grayskull.md`.
   With several decisions to make, it builds an offline decision wizard: one
   decision per step, the recommendation shown but never pre-selected, drafts,
   review and an owner-finalized JSON that goes back into the run as answers.
+
+- **chief-fury** — one session owns a long-running goal ("you own getting this
+  to v1", "chief of staff") and thinks on two tracks: finish the task, and change
+  the environment so the next one goes better - every such finding a ticket. The
+  work goes out to background agents (`relay-morpheus`, `tasks-sentinels`)
+  briefed with pointers, not pasted history; the memory is a goal wiki in
+  `.skillator/wiki/<goal>/` written as dated history, code claims pinned to a
+  commit, superseded never rewritten. A hard decision is scored and, when it
+  scores high, put to a board of up to five role agents whose synthesis names
+  the disagreement and parks one question for the owner. Credits Matt Pocock's
+  and Alireza Rezvani's MIT `chief-of-staff` skills. Invoke with `/chief-fury`.
 
 - **remote-cerebro** — a phone into a running coding CLI: codex, cursor-agent, pi or
   gemini, driven over Telegram (or a local `file` channel for tests) while you are

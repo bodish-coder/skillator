@@ -168,6 +168,10 @@ function Allocate([string]$k, [string]$b, [bool]$peekOnly, [string]$runs, [strin
     $prefix = (Invoke-GitQuiet @('-C', $bdir, 'rev-parse', '--show-prefix'))[1]
     $rel = ([string]($prefix | Select-Object -First 1)) + (Split-Path -Leaf $b)
     $common = [string](Invoke-GitQuiet @('-C', $gdir, 'rev-parse', '--path-format=absolute', '--git-common-dir'))[1][0]
+    # F82: fetch the upstream first (board-fresh: stamped, time-boxed), so the
+    # ids on its tip are counted, not only the last fetch's.
+    $bfresh = Join-Path $PSScriptRoot 'board-fresh.ps1'
+    if (Test-Path -LiteralPath $bfresh) { & $bfresh -Fetch $top | Out-Null }
   } else {
     if (-not $b) { $b = '.\TICKETS.md' }
     [Console]::Error.WriteLine("${prog}: not in a git repo - using the local board only, nothing reserved across sessions")
@@ -399,6 +403,17 @@ function Run-Selftest {
     if ($script:lastCode -eq 0 -or $script:lastErr -notmatch 'exhausted') { Fail "W past 9999 not refused (rc $script:lastCode)" }
     if ((Read-Counter (Join-Path $common 'skillator/ids/W')) -ne 1679615) { Fail 'W exhaustion moved the counter' }
 
+    # F82: an id taken on the upstream's tip, not yet fetched here, is never handed out again.
+    $c1 = Join-Path $t 'c1'; $c2 = Join-Path $t 'c2'
+    G $t @('init', '-q', '--bare', '-b', 'main', (Join-Path $t 'up.git'))
+    G $t @('clone', '-q', (Join-Path $t 'up.git'), $c1)
+    [IO.File]::WriteAllText((Join-Path $c1 'TICKETS.md'), "- [ ] A1 - one`n")
+    G $c1 @('add', 'TICKETS.md'); G $c1 @('commit', '-q', '-m', 'b'); G $c1 @('push', '-q', '-u', 'origin', 'main')
+    G $t @('clone', '-q', (Join-Path $t 'up.git'), $c2)
+    [IO.File]::AppendAllText((Join-Path $c1 'TICKETS.md'), "- [ ] A40 - tip`n")
+    G $c1 @('commit', '-q', '-am', 'tip'); G $c1 @('push', '-q')
+    $u = Alloc $c2 @('A'); if ($u -ne '41') { Fail "id on the upstream tip not fetched first: want 41, got $u" }
+
     $plain = Join-Path $t 'plain'; New-Item -ItemType Directory -Path $plain | Out-Null
     [IO.File]::WriteAllText((Join-Path $plain 'TICKETS.md'), "- [ ] A7 - x`n")
     $env:GIT_CEILING_DIRECTORIES = $t
@@ -406,7 +421,7 @@ function Run-Selftest {
     if ($h -ne '8') { Fail "outside git: want 8, got $h" }
     if ($script:lastErr -notmatch 'not in a git repo') { Fail 'outside git: no stderr note' }
 
-    Write-Output 'ok - next-id.ps1 selftest passed (4, 5, 21, peek 22, stale lock -> 22, release past an open file, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, runs RUN 6, runs S 13-15, W AAAB/AAAC/AABB/peek/count 3/BABA/9999/exhausted, no-git 8)'
+    Write-Output 'ok - next-id.ps1 selftest passed (4, 5, 21, peek 22, stale lock -> 22, release past an open file, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, tip fetched 41, runs RUN 6, runs S 13-15, W AAAB/AAAC/AABB/peek/count 3/BABA/9999/exhausted, no-git 8)'
   } finally {
     Remove-Item -Recurse -Force -LiteralPath $t -ErrorAction SilentlyContinue
   }

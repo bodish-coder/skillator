@@ -1,8 +1,0 @@
-Load the `relay-morpheus` skill ({{SKILLS}}/relay-morpheus/SKILL.md). `/marathon-plan` writes a
-Workflow marathon - a relay-morpheus run file plus a saved Workflow script - and that script runs
-only on Claude Code: this host has no Workflow tool. Tickets: `$ARGUMENTS`.
-
-1. Say so in one line: no Workflow tool on this host, so no script is written and no run is opened.
-2. Point at `/pending-subagent [N|max] [IDs]` (`/prompts:pending-subagent` here): the same tickets, worked to the end with
-   one fresh implementer each - relay-morpheus's run file, landing and end batch. Run it only when
-   the user asks for it; this command itself starts nothing.

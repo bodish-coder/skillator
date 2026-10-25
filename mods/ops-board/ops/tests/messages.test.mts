@@ -10,7 +10,7 @@ import { setupError, unmask, freshSetup } from '../../hooks/lib/teamsconfig'
 import { makeEngine } from '../engine'
 import type { Host } from '../nodehost'
 
-const P = { color: false, ascii: false }
+const P = { color: false, ascii: false, plain: true }
 const text = (s: State) => frame(s, P).join('\n')
 const rec = (id: string, from: string, text: string, min: number) =>
   JSON.stringify({ ts: `2026-10-23T09:${String(min).padStart(2, '0')}:00.000Z`, from, email: from.slice(1) + '@x.com', text, id })
@@ -117,7 +117,7 @@ test('setup: the token is masked as typed and never in any frame; tab walks the 
   assert.match(text(s), /Status posts +\[x\] on/)
   for (const x of [s, { ...s, cols: 40 }, { ...s, cols: 200 }]) assert.ok(!text(x).includes(TOKEN.slice(0, 6)))
   // ascii mode too
-  assert.ok(!frame(s, { color: false, ascii: true }).join('\n').includes(TOKEN.slice(0, 6)))
+  assert.ok(!frame(s, { color: false, ascii: true, plain: true }).join('\n').includes(TOKEN.slice(0, 6)))
 })
 
 test('setup: Enter checks first - https, base64, port 1024-65535 - and saves over stdin, never argv', () => {

@@ -32,6 +32,11 @@ what it needs instead: the design file's path, its own task, the global
 constraints. Nothing else. That is what keeps it inside its task, and it is
 what keeps *your* context free for the only job you cannot delegate — deciding.
 
+With grayskull-power on (`.skillator/grayskull.md` present) the prompt opens
+with this line, and without it does not (A155):
+
+> Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
 ## What this skill does not restate
 
 | You need | Read |

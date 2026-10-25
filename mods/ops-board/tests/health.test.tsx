@@ -231,6 +231,27 @@ test('machine below a threshold: the words agree with the colour', async ($, on)
   await ui.unmount()
 })
 
+test('F82: a stale board is amber, board-fresh\'s refusal red with its reason; none when not behind', async ($, on) => {
+  const [w, clock] = world(on)
+  w.machine = kv(18253611008, 3435973836, ['HOLD=-', 'BOARD=refused|3|origin/main|3 behind origin/main, 1 local commit(s) not on it'])
+  await start($, clock)
+  const ui = await health($, 'terminal')
+  const b = await ui.find({ key: 'board' })
+  expect(b?.text).toBe('board    stale: 3 behind origin/main')
+  expect(JSON.stringify(b)).toContain('"color":"warning"')
+  const why = await ui.find({ key: 'board:why' })
+  expect(why?.text).toBe('         refused: 3 behind origin/main, 1 local commit(s) not on it')
+  expect(JSON.stringify(why)).toContain('"color":"error"')
+  await ui.unmount()
+})
+test('F82: not behind (no BOARD key): no board line', async ($, on) => {
+  const [, clock] = world(on)
+  await start($, clock)
+  const ui = await health($, 'terminal')
+  expect(await ui.find({ key: 'board' })).toBeFalsy()
+  await ui.unmount()
+})
+
 test('no machine facts yet, no usage at all: said, never a figure', async ($, on) => {
   const [w, clock] = world(on)
   w.machine = ''

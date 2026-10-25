@@ -42,7 +42,7 @@ function settle(step: Step): State {
   return s
 }
 const press = (s: State, ...keys: string[]) => keys.reduce((x, k) => settle(reduce(x, { name: k })), s)
-const P = { color: false, ascii: false }
+const P = { color: false, ascii: false, plain: true }
 const text = (s: State) => frame(s, P).join('\n')
 
 test('5 opens Explorer: git ls-files and git log asked as git effects, nothing run through the scripts table', () => {
@@ -98,6 +98,26 @@ test('fits 80, 60 and 40 columns with folders and a commit open', () => {
     assert.equal(f.length, 24)
     for (const l of f) assert.ok(cells(l) <= cols, `${cells(l)} > ${cols}: ${l}`)
   }
+})
+
+// A154: cleaned where git's output is parsed, so the cut is measured on the text drawn.
+test('a long file name or subject with an ESC and a CR is cut to the width of any other', () => {
+  const long = (c: string) => c.repeat(60)
+  const files = `${long('a')}.ts\0b\x1b\r${long('b')}.ts\0`
+  const log = `${SHA1}\x1f1234567\x1f2026-10-24\x1fV\x1f${long('c')}\n${SHA2}\x1f89abcde\x1f2026-10-23\x1fA\x1fd\x1b\r${long('d')}\n`
+  const key = (s: State, name: string): State => {
+    const step = reduce(s, { name })
+    let x = step.state
+    for (const e of gits(step.effects)) x = afterRun(e, ok(e.args === LS_ARGS ? files : log), x, 0).state
+    return x
+  }
+  const s = ['5', 'return', 'down', 'down', 'down', 'return'].reduce(key, initial(40, 24, 0))   // Files, then Commits open
+  const rows = text(s).split('\n')
+  const width = (re: RegExp) => rows.filter(l => re.test(l)).map(l => cells(l))
+  const [a, b] = width(/^ {4}[ab]{5}/)
+  assert.equal(b, a)
+  const [c, d] = width(/2026-10-2[34] {2}[cd]{5}/)
+  assert.equal(d, c)
 })
 
 const hostOf = (git?: Host['git']): Host => ({

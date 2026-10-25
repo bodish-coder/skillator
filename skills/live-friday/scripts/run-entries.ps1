@@ -249,7 +249,8 @@ function Invoke-Rename([string[]]$a) {
   $name = $a[1].Trim()
   if ($name -eq '') { Fail 'a name cannot be empty' }
   if ($Utf8.GetByteCount($name) -gt 80) { Fail 'a name is at most 80 bytes' }
-  $r = Invoke-Merge 'rename' (JText $a[0]) (JText $name)
+  # the id as run.json spells it (escapes kept), so ids that decode alike stay apart
+  $r = Invoke-Merge 'rename' $a[0] (JText $name)
   if ($r.renamed -ne 1) { Fail "no entry with id $($a[0]) in $FILE" }
   Write-Output "renamed $($a[0]) to $name in $FILE"
 }
@@ -352,6 +353,11 @@ function Invoke-Selftest {
     W '.skillator/run.json' "{`"entries`":[{`"id`":`"a`",`"kind`":`"sh`",`"target`":`"a.sh`"}]}`n"
     if ((Re rename 'nope' 'X').code -eq 0) { Bad 'rename of an unknown id passed' }
     if ((RJ) -cne "{`"entries`":[{`"id`":`"a`",`"kind`":`"sh`",`"target`":`"a.sh`"}]}`n") { Bad "a rename of an unknown id rewrote run.json: $(RJ)" }
+    # an id is matched as run.json spells it: ab and a\u0062 are two entries
+    W '.skillator/run.json' ('{"entries":[{"id":"ab"},{"id":"a\u0062"}]}' + "`n")
+    if ((Re rename 'a\u0062' 'X').code -ne 0) { Bad 'rename by an escaped id' }
+    if (-not (RJ).Contains('{ "id": "a\u0062", "name": "X"')) { Bad "escaped id rename: $(RJ)" }
+    if (-not (RJ).Contains('{ "id": "ab", "name": "", ')) { Bad "escaped id rename named ab too: $(RJ)" }
 
     W '.skillator/run.json' "{ `"entries`": [ oops`n"
     if ((Re scan).code -eq 0) { Bad 'a broken run.json was scanned' }

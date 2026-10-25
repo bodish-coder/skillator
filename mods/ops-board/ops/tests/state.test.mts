@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, viewOf, startHandle, settle, afterRun } from '../state'
+import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
@@ -181,6 +181,53 @@ test('R: the fresh reading is stamped with the clock when it lands, not the laun
   assert.equal(later.state.now, 600000)
 })
 
+// F87: F on Health = /ops resume force; MUTE= is the line the engine appends from watchdog.mute.
+const MEM_RED = 'DRIVE=C:\nDISK_FREE=90000000000\nDISK_TOTAL=1\nMEM_FREE=600000000\nHOLD=-\n'
+const MUTED = 'MUTE=2026-10-25T09:00Z mem 0.6 GB free\n'
+const health: State = { ...s0, tab: 'health' }
+
+test('F87: F on Health releases whatever the reading - the mute written first, then relay release, then a poll', () => {
+  const f = reduce({ ...health, now: Date.UTC(2026, 9, 25, 9, 0) }, key('F'))
+  assert.equal(f.effects[0]?.kind === 'run' && f.effects[0].call, 'pending-machine')
+  const read = f.effects[0]!
+  assert.ok(read.kind === 'run')
+  const wrote = settle(read.then(ok(MEM_RED + 'HOLD=2026-10-25T08:00Z mem\n'))(f.state))
+  const mute = wrote.effects[0]!
+  assert.ok(mute.kind === 'mute' && mute.then)
+  assert.equal(mute.text, '2026-10-25T09:00Z mem 0.6 GB free')
+  // the write failing: not released
+  const nope = settle(mute.then({ code: 1, out: '', err: 'EACCES', argv: [] })(wrote.state))
+  assert.equal(nope.state.toast, 'could not write .skillator/watchdog.mute: EACCES - not released'); assert.equal(nope.effects.length, 0)
+  const rel = settle(mute.then({ code: 0, out: '', err: '', argv: [] })(wrote.state)).effects[0]!
+  assert.ok(rel.kind === 'run' && rel.call === 'relay-release')
+  const done = settle(rel.then(ok('watchdog: released'))({ ...wrote.state, machine: onMachine(s0, MEM_RED, 0).state.machine }))
+  assert.equal(done.state.toast, 'watchdog: released\nwatchdog muted (forced 09:00Z), mem 0.6 GB free - memory red does not hold until memory reads green once, or /ops watchdog on; disk red still holds\nran: sh x')
+  assert.equal(done.state.watch.level, 'amber')
+  assert.deepEqual(done.effects, [{ kind: 'poll', what: 'slow' }])
+  // F is Health's only; elsewhere it is not a force
+  assert.ok(!reduce(s0, key('F')).effects.some(e => e.kind === 'run' && e.call === 'pending-machine'))
+})
+
+test('F87: muted, memory red does not hold, disk red does; memory green once unmutes; plain R unchanged', () => {
+  const muted = onMachine(s0, MEM_RED + MUTED, 0)
+  assert.equal(muted.state.watch.level, 'amber')
+  assert.ok(muted.state.watch.reasons.includes('watchdog muted (forced 09:00Z)'))
+  assert.equal(muted.effects.length, 0)
+  const disk = onMachine(s0, RED.replace('MEM_FREE=9000000000', 'MEM_FREE=600000000') + MUTED, 0)
+  assert.equal(disk.state.watch.level, 'red')
+  assert.equal(disk.effects[0]?.kind === 'run' && disk.effects[0].call, 'relay-hold')
+  const green = onMachine(muted.state, GREEN + MUTED, 0)
+  assert.deepEqual(green.effects, [{ kind: 'mute', text: '' }])
+  assert.equal(green.state.machine?.mute, undefined)
+  assert.equal(green.state.toast, 'watchdog unmuted - memory reads green; memory red holds again')
+  // not muted: memory red holds, and R still refuses on it
+  const red = onMachine(s0, MEM_RED, 0)
+  assert.equal(red.effects[0]?.kind === 'run' && red.effects[0].call, 'relay-hold')
+  const rr = reduce(red.state, key('R'))
+  assert.ok(rr.effects[0]?.kind === 'run')
+  assert.match(settle(rr.effects[0].then(ok(MEM_RED))(rr.state)).state.toast ?? '', /^still red: mem 0\.6 GB free \(below 1 GB\) - not released$/)
+})
+
 test('stale locks are listed in one note, replaced when they change, never deleted', () => {
   const kv = GREEN + 'LOCK=.skillator/x.lock|22|pid 7\n'
   const a = onMachine(s0, kv, 0).state
@@ -205,21 +252,23 @@ test('usage: a changed level line asks relay to decide; same line asks nothing; 
 const LIST = 'RUN-0012  Ops everywhere                               0/2 done\n  owner: @asha\nRUN-0013  Other                                      1/3 done  (stage 2 open)\n'
 const CHAIN = '## Chain\n### S1 - stage 1 - F1 Dark mode\ntickets: F1\n### S2 - stage 2 - F3 Chart\ntickets: F3\nafter: 1\n'
 
-test('runs: onRuns sets the runs and the relay text; up/down move; Enter expands; s queues a planned run', () => {
+test('runs: onRuns sets the runs and the relay text; up/down move; Enter expands; e engages (F85: a confirm, then queue-run add)', () => {
   const s = onRuns(reduce(s0, key('2')).state, LIST, { 'RUN-0012': CHAIN })
   assert.equal(s.runs.length, 2); assert.equal(s.relay, 'RUN-0012 0/2'); assert.equal(s.runsSelected, 'RUN-0012')
   assert.equal(reduce(s, key('down')).state.runsSelected, 'RUN-0013')
   assert.equal(reduce(press(s, 'down'), key('up')).state.runsSelected, 'RUN-0012')
   assert.equal(reduce(s, key('return')).state.runsExpanded, 'RUN-0012')
-  const r = reduce(s, key('s'))
+  const asked = reduce(s, key('e'))
+  assert.deepEqual(asked.effects, [])                              // F85: the confirm first
+  assert.deepEqual(asked.state.engage, { id: 'RUN-0012', text: continuePrompt('RUN-0012'), queue: true })
+  assert.equal(reduce(asked.state, key('escape')).state.engage, null)
+  const r = reduce(asked.state, key('return'))
   assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['relay-queue-add', ['RUN-0012']])
   const q = settle(r.effects[0]!.then(ok('queued RUN-0012'))(r.state))
   assert.ok(q.state.toast?.startsWith('✓ RUN-0012 queued - queued RUN-0012.'))
   assert.ok(q.state.toast?.includes(continuePrompt('RUN-0012')))
   assert.deepEqual(q.effects, [{ kind: 'poll', what: 'runs' }])
   assert.match(settle(r.effects[0]!.then({ code: 1, out: '', err: 'busy', argv: ['sh'] })(r.state)).state.toast ?? '', /^■ RUN-0012 not queued: busy/)
-  const notPlanned = reduce(press(s, 'down'), key('s'))
-  assert.equal(notPlanned.effects.length, 0); assert.ok(notPlanned.state.toast)
 })
 
 // F76: the Runs tab holds a Runs and a Workflows section that open and close as F61's
@@ -239,8 +288,8 @@ test('F76: runs and workflows sections - both start open, Enter on a header clos
   assert.equal(runsCursor(shut), 'head:runs')
   assert.equal(runsCursor(press(shut, 'down')), 'head:workflows')
   assert.deepEqual(press(shut, 'return').runsOpen, ['workflows', 'runs'])
-  // s on a header queues nothing
-  const onHead = reduce(press(s, 'up'), key('s'))
+  // e on a header engages nothing
+  const onHead = reduce(press(s, 'up'), key('e'))
   assert.equal(onHead.effects.length, 0); assert.ok(onHead.state.toast)
   // closed with a run selected: the header shows selected; opening lands back on the run
   const hid = { ...s, runsSelected: 'RUN-0013', runsOpen: ['workflows' as const] }
@@ -401,6 +450,73 @@ test('team view: n opens the form (back=team); del asks, y removes, n keeps', ()
   assert.equal(reduce(empty, key('delete')).state.teamConfirm, null)
 })
 
+// F80: l makes the selected person lead - ticket-meta team lead, the only writer; its refusal is the toast.
+test('F80 team view: l makes the selected person lead through ticket-meta; a refusal is the toast', () => {
+  const r = reduce(press(s0, 't', 'down'), key('l'))
+  assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-team-lead', ['@vidul']])
+  const done = settle(r.effects[0]!.then(ok('lead: @vidul\n', ['sh', 'tm']))(r.state))
+  assert.equal(done.state.toast, '✓ @vidul is the lead\nran: sh tm')
+  assert.deepEqual(done.effects, [{ kind: 'poll', what: 'board' }])
+  const no = settle(r.effects[0]!.then({ code: 1, out: '', err: 'ticket-meta: only the lead @asha may hand the lead over or clear it (you: @vidul)', argv: ['sh'] })(r.state)).state
+  assert.match(no.toast ?? '', /^✗ ticket-meta team lead @vidul refused: ticket-meta: only the lead @asha may hand the lead over or clear it \(you: @vidul\)\nran: sh$/)
+  assert.equal(reduce(onBoard(initial(80, 24, 0), s0.board!, [], null), key('t')).state.showTeam, true)
+  assert.equal(reduce(reduce(onBoard(initial(80, 24, 0), s0.board!, [], null), key('t')).state, key('l')).effects.length, 0)
+})
+
+// F81: c - ticket-meta reconcile's proposals in a box; accept all / pick / none, each
+// accepted row through its ticket-meta subcommand, a refusal in the toast, the board re-read.
+const PROPOSALS = 'F1 [ ] -> [~]  2 commits name it, newest abc1234\nF3 [?] -> [?]  evidence unclear: x\nF9 [!] -> [ ]  blocked on F4, now done\n'
+test('F81 c opens the reconcile box from ticket-meta reconcile; nothing to change or a refusal is a toast', () => {
+  const r = reduce(s0, key('c'))
+  assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-reconcile', []])
+  const s = settle(r.effects[0]!.then(ok(PROPOSALS))(r.state)).state
+  assert.deepEqual(s.reconcile?.picked, [])
+  assert.equal(s.reconcile?.index, 0)
+  assert.deepEqual(reconcileLines(s), ['Reconcile tickets - 2 to change',
+    '› [ ] F1  pending → in progress  2 commits name it, newest abc1234',
+    '      F3  pending decision stays - evidence unclear: x',
+    '  [ ] F9  blocked → pending  blocked on F4, now done'])
+  assert.equal(settle(r.effects[0]!.then(ok('no change: nothing to reconcile\n'))(r.state)).state.toast, 'reconcile - every [!] [ ] [~] row matches its evidence')
+  const no = settle(r.effects[0]!.then({ code: 1, out: '', err: 'ticket-meta: no TICKETS.md at /r', argv: ['sh'] })(r.state)).state
+  assert.equal(no.toast, '✗ ticket-meta reconcile refused: ticket-meta: no TICKETS.md at /r')
+  assert.equal(no.reconcile, null)
+})
+
+test('F81 reconcile: a accepts all - each row its subcommand, the toast says each, then the board is read', () => {
+  const r0 = reduce(s0, key('c'))
+  const s = settle(r0.effects[0]!.then(ok(PROPOSALS))(r0.state)).state
+  const r = reduce(s, key('a'))
+  assert.equal(r.state.reconcile, null)
+  assert.deepEqual(r.effects.map(e => (e.kind === 'run' ? [e.call, e.args] : e)), [['meta-start', ['F1']], ['meta-unblock', ['F9']], { kind: 'poll', what: 'board' }])
+  let x = r.state
+  x = settle((r.effects[0] as { then: (y: unknown) => (z: State) => State }).then(ok('- [~] F1'))(x)).state
+  x = settle((r.effects[1] as { then: (y: unknown) => (z: State) => State }).then({ code: 1, out: '', err: 'ticket-meta: F9 is [ ], not [!] - nothing to change', argv: ['sh'] })(x)).state
+  assert.equal(x.toast, '✗ reconcile: 1 of 2 applied\n✓ F1 now in progress\n✗ F9 refused: ticket-meta: F9 is [ ], not [!] - nothing to change')
+})
+
+test('F81 reconcile: space picks, enter applies only the picked; a kept row is never picked; esc is none', () => {
+  const r0 = reduce(s0, key('c'))
+  const s = settle(r0.effects[0]!.then(ok(PROPOSALS))(r0.state)).state
+  assert.deepEqual(press(s, 'down', 'space').reconcile?.picked, [])          // F3: evidence unclear
+  const picked = press(s, 'down', 'down', 'space')
+  assert.deepEqual(picked.reconcile?.picked, ['F9'])
+  assert.deepEqual(press(picked, 'space').reconcile?.picked, [])
+  const r = reduce(picked, key('return'))
+  assert.deepEqual(r.effects.map(e => (e.kind === 'run' ? [e.call, e.args] : e.kind)), [['meta-unblock', ['F9']], 'poll'])
+  assert.equal(reduce(s, key('return')).state.toast, 'nothing picked - space picks a row, a accepts all')
+  assert.equal(reduce(s, key('return')).state.reconcile !== null, true)
+  const none = reduce(s, key('escape'))
+  assert.equal(none.state.reconcile, null)
+  assert.deepEqual(none.effects, [])
+  assert.equal(reduce(s, key('1')).state.reconcile !== null, true)          // the box holds the keys
+})
+
+test('F81 review: a proposal with no writer ([x], [>]) is never applied', () => {
+  const r0 = reduce(s0, key('c'))
+  const s = settle(r0.effects[0]!.then(ok('F1 [ ] -> [x]  done\nF3 [?] -> [>]  later\n'))(r0.state)).state
+  assert.deepEqual(reduce(s, key('a')).effects.filter(e => e.kind === 'run'), [])
+})
+
 test('a bad handle never runs', () => {
   let { state } = reduce(reduce(s0, key('t')).state, key('n'))
   for (const ch of 'A B') state = reduce(state, { name: ch, sequence: ch }).state
@@ -546,4 +662,45 @@ test('F77: a changed ID moves the dialog to that ticket; Enter runs on the new o
   d = reduce(d, key('tab')).state
   const r = reduce(d, key('return'))
   assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-decide', ['F1', '@asha']])
+})
+
+// F85: the ops app shows a run's mode, its script's phases and the next one; e engages
+// it - having no session, Enter prints the exact command to paste; another live driver
+// refuses. Fixture run text and script only.
+test('F85: a workflow run - mode, phases, next phase; e then Enter prints /skillator:marathon-run; a live driver refuses', async () => {
+  const { engageLines } = await import('../state')
+  const { frameSegs } = await import('../draw')
+  const SEP = '     '
+  const run20 = (driver: string) => ['# Resuming .skillator/run-0020-m.md', '',
+    '## Stages', '| # | stage | state | owner | heartbeat | landed |', '|---|---|---|---|---|---|',
+    '| 136 | AAA8 A155 yoda | x | w | - | a |', '| 137 | AAA9 B10 muse |   | - | - | - |', '',
+    '## Chain', `driver: ${driver}${SEP}hold: -${SEP}mode: workflow`,
+    '### AAA8 - stage 136 - A155 yoda', 'tickets: A155', '### AAA9 - stage 137 - B10 muse', 'tickets: B10', ''].join('\n')
+  const script = 'const PLAN = {\n  "phases": [\n    [ { "stage": 136, "ticket": "A155" } ],\n    [ { "stage": 137, "ticket": "B10" } ]\n  ]\n}\n'
+  const list = 'RUN-0020  marathon  1/2 done\n'
+  const s = onRuns(reduce(s0, key('2')).state, list, { 'RUN-0020': run20('-') }, { 'RUN-0020': script })
+  assert.deepEqual(s.runs[0]!.phases, [[{ n: 136, ticket: 'A155' }], [{ n: 137, ticket: 'B10' }]])
+  const open = reduce(s, key('return')).state
+  const txt = frameSegs({ ...open, rows: 40 }).map(l => l.map(x => x.text).join(''))
+  assert.ok(txt.some(l => /RUN-0020  marathon +workflow · 1\/2 done/.test(l)), txt.join('\n'))
+  assert.ok(txt.some(l => l === '    phase 2  s137 B10  ← next'), txt.join('\n'))
+  const asked = reduce(open, key('e')).state
+  assert.deepEqual(engageLines(asked), ['Engage RUN-0020?', 'Paste    /skillator:marathon-run RUN-0020'])
+  assert.ok(frameSegs({ ...asked, rows: 40 }).some(l => l.map(x => x.text).join('').includes('Engage RUN-0020?')))
+  const go = reduce(asked, key('return'))
+  assert.deepEqual(go.effects, [])                                  // nothing queued for a script run
+  assert.equal(go.state.toast, 'Paste into your CLI:\n/skillator:marathon-run RUN-0020')
+  assert.equal(go.state.engage, null)
+  // another driver's stamp 5 minutes old: refused, naming it, no confirm
+  const now = Date.parse('2026-10-18T12:00:00Z')
+  const live = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-live 2026-10-18T11:55Z') }, { 'RUN-0020': script })
+  const refused = reduce(live, key('e')).state
+  assert.equal(refused.engage, null)
+  assert.equal(refused.toast, '■ RUN-0020 not engaged: driven by @cc-live (heartbeat 5m ago, stale at 20m) - never two drivers')
+  // a stamp not in relay's shape fails closed
+  const odd = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-odd 2026-10-18T11:55:30Z') }, { 'RUN-0020': script })
+  assert.equal(reduce(odd, key('e')).state.toast, '■ RUN-0020 not engaged: driven by @cc-odd (heartbeat unreadable: 2026-10-18T11:55:30Z) - never two drivers')
+  // a stale one (45 minutes) engages
+  const stale = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-old 2026-10-18T11:15Z') }, { 'RUN-0020': script })
+  assert.equal(reduce(stale, key('e')).state.engage?.text, '/skillator:marathon-run RUN-0020')
 })

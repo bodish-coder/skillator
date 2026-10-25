@@ -135,6 +135,17 @@ or re-planning releases; a lease silent past 20 min is taken, with a ruling.
 Board edits from a run worktree go through `relay-morpheus.sh board <ID>
 <mark>` (`-Mode board -Ticket -Mark`), which writes the main checkout's
 `TICKETS.md` under its lock.
+**Only my tickets (F80).** A run takes only tickets that are unassigned or the
+session person's own (tickets-zordon `ticket-meta pick`; no `team.md` = every
+ticket, as before). A stage whose `tickets:` name one someone else owns is
+`IDLE <n> owned <ID> <owner>` in `chain next` - listed as skipped with its
+owner, never run - and its `chain dispatch` is refused (exit 2). `chain plan`
+and `chain dispatch` claim the stage's tickets (`ticket-meta claim`: `[owner:
+<me>]`, box kept); at plan a refused claim is a `note:` on stderr, at dispatch
+the claim is the gate - before the row flips, refused (exit 2) when someone
+else owns or claimed a ticket first. Ownership ticket-meta cannot tell (its
+`pick` fails while a `team.md` exists) counts as owned: `owned <ID> ?`. `FINAL`
+names the stages skipped as someone else's.
 **Parallel stages (F37).** `chain next --all` names every stage that can run
 now - files disjoint from what is in flight and from each other - capped at 2
 below 50 % of the 5-hour window, else 1. A stage that runs beside another works
@@ -165,8 +176,8 @@ where they come from and which writes into this same file.
    stale heartbeat is the only signal you get that a network drop took it;
    `hooks/relay-morpheus.* orphans` turns that into a list.
 3. **When it lands** — commit the stage's work, then set `x` and put the sha in
-   `landed`, and delete its In-flight block. In that order: the sha cannot be
-   written before the commit exists.
+   `landed`; `stage <n> x` (and `>`) drops its In-flight block. In that order:
+   the sha cannot be written before the commit exists.
 4. **When it fails** — `!`, and leave the In-flight block where it is with the
    failure appended. A failed stage's prompt is the thing you need most.
 5. **Never** delete a row. A run file only grows.

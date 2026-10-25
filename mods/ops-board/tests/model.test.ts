@@ -72,7 +72,8 @@ test('band, health, runs line builders live in lib', () => {
   expect(band).toHaveLength(2)
   expect(healthLines({ usage: null, machine: null, relay: null, now: 0 }).map(l => l.key)).toContain('h:machine')
   expect(waves([{ n: 1, code: 'a', ticket: 'F1', title: 'x', after: '-', files: '-', state: '' }])).toEqual([[1]])
-  expect(runLines({ id: 'RUN-0001', title: 't', done: 0, total: 1, owner: null, stages: [], planned: false, decisions: [] }, board)[0]!.key).toBe('run:RUN-0001')
+  expect(runLines({ id: 'RUN-0001', title: 't', done: 0, total: 1, owner: null, stages: [], planned: false, decisions: [],
+    mode: null, driver: null, flights: [], phases: null }, board)[0]!.key).toBe('run:RUN-0001')
   expect(isOpen(board.tickets[0]!)).toBe(true)
   expect(ticketsOf({ handle: '@asha', emails: [] }, board, null)).toBe('1 decide')
 })

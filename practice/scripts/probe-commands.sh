@@ -18,7 +18,7 @@ row() {
 }
 
 has codex && row codex "$(ver codex --version)" \
-  "$codex_home/prompts/pending.md" "$codex_home/prompts/list-tickets.md"
+  "$codex_home/skills/pending/SKILL.md" "$codex_home/skills/list-tickets/SKILL.md"
 has gemini && row gemini "$(ver gemini --version)" \
   "$HOME/.gemini/commands/pending.toml" "$HOME/.gemini/commands/list-tickets.toml"
 # agy: the command is a skill; the installer writes both antigravity dests
@@ -45,6 +45,6 @@ has agy && echo "  agy -p '/pending' --mode plan --sandbox"
 has pi && echo "  pi -p '/pending' --no-tools"
 has gemini && echo "  gemini -p '/pending' --approval-mode plan"
 has cursor-agent && echo "  cursor-agent -p '/pending' --mode ask   (never bare 'agent')"
-has codex && echo "picker only: codex - type / in the TUI and look for /prompts:pending, /prompts:list-tickets"
+has codex && echo 'picker only: codex - type $ in the TUI (or /skills) and look for pending, list-tickets'
 echo "every host: type / in its TUI and screenshot the list showing pending and list-tickets."
 exit 0
