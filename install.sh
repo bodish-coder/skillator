@@ -460,6 +460,14 @@ if [ -n "$selftest" ]; then
       grep -F -- "$_yoda" "$root/$f" | grep -qF '.skillator/grayskull.md' || { echo "FAIL: $f has no grayskull-gated code-yoda line (A155)"; exit 1; }
     done
   done
+  # F88: every /pending-subagent copy maps no argument / sequential / parallel / a count to RELAY_CHAIN_PARALLEL
+  for f in commands/pending-subagent.md host-commands/codex/pending-subagent.md host-commands/cursor/pending-subagent.md \
+           host-commands/pi/pending-subagent.md host-commands/opencode/pending-subagent.md \
+           host-commands/antigravity/pending-subagent/SKILL.md host-commands/gemini/pending-subagent.toml; do
+    for _r in '| nothing, `sequential`, `1` | sequential | unset' '| `parallel`, `max`, `parallel max` | parallel | the number of ticket stages' '| `parallel 2`, `2` | parallel, capped | 2 |'; do
+      grep -qF -- "$_r" "$root/$f" || { echo "FAIL: $f has no mode row '$_r' (F88)"; exit 1; }
+    done
+  done
   [ -z "$_bad" ] || { echo "FAIL: frontmatter has an unquoted \": \" (invalid YAML, pi will not register the command): $_bad"; exit 1; }
   # F68: the Muse manifest lists every skill and carries the release version
   sh "$root/practice/scripts/check-muse-manifest.sh" "$root" > /dev/null || { echo "FAIL: .muse-plugin out of step (sh practice/scripts/check-muse-manifest.sh)"; exit 1; }
