@@ -1,7 +1,7 @@
 import type { Color } from 'claude-code'
 import type { Board, Level, Machine, Usage, Watch, Window } from '../../types'
 import { paint } from './board'
-import { ageText, DISK, figure, HOLD_UNKNOWN, isStale, MEM } from './facts'
+import { ageText, DISK, figure, HOLD_UNKNOWN, isStale, MEM, mutedWords } from './facts'
 
 // F48, design §7: the band's lines - always on, green when fine - the narrow
 // two-line fold and the status line's text. Pure; band.tsx draws them.
@@ -87,6 +87,7 @@ export function bandSegs(v: BandInput): Seg[][] {
     : [{ text: 'locks ' }, { text: 'ok', color: 'success' }]
   const extra: Seg[][] = []
   if (m?.hold) extra.push([{ text: `${m.hold === HOLD_UNKNOWN ? 'held (reason unknown)' : 'held'} - /ops resume to release`, color: 'warning' }])
+  if (m?.mute) extra.push([{ text: mutedWords(m.mute), color: 'warning' }])          // F87
   if (m && now - m.at > FACTS_OLD_MS) extra.push([{ text: `facts ${Math.floor((now - m.at) / 60000)}m old`, dim: true }])
 
   if (v.narrow) {

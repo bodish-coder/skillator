@@ -16,7 +16,7 @@ import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, isDecidable, isHead, offsetFor } from '../hooks/lib/ticketsmodel'
 import { modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
-import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM } from '../hooks/lib/facts'
+import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM, MUTED_HOW, mutedWords } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
 import { ticketsOf } from '../hooks/lib/team'
 import { runKeys, runLines as runTabLines } from './runtab'
@@ -160,7 +160,7 @@ function keysOf(s: State, m: Model): string[] {
     const enter = isHead(cur) ? (s.runsOpen.some(x => headKey(x) === cur) ? 'enter close' : 'enter open') : 'enter stages'
     return ['↑↓ move', enter, 'e engage', 'r reload', 'q quit']
   }
-  if (s.tab === 'health') return ['R resume (releases the hold on a fresh non-red reading)', 'r reload', 'q quit']
+  if (s.tab === 'health') return ['R resume (on a fresh non-red reading)', 'F force resume', 'r reload', 'q quit']
   if (s.tab === 'messages') return ['↑↓ move', 'enter open', 'm mark all read', 's setup', 'q quit']
   if (s.tab === 'explorer') return ['↑↓ move', 'enter open/close', 'r reload', 'q quit']
   if (s.showTeam) return ['n add', 'del remove (asks first)', 'l make lead', 'esc back', 'q quit']   // A146: q closes the board here too
@@ -227,6 +227,7 @@ function bandSegs(s: State): Seg[][] {
     [{ text: '5h ' }, usageSeg(u?.five ?? null, held.five, now)],
     [{ text: '7d ' }, usageSeg(u?.seven ?? null, held.seven, now)],
     ...(m?.locks.length ? [[{ text: `${m.locks.length} stale lock${m.locks.length === 1 ? '' : 's'}`, color: 'warning' as Color }]] : []),
+    ...(m?.mute ? [[{ text: mutedWords(m.mute), color: 'warning' as Color }]] : []),     // F87
     ...(m && now - m.at > 3 * 60 * 1000 ? [[dim(`facts ${Math.floor((now - m.at) / 60000)}m old`)]] : []),
   ]
   const room = cols - (right.length ? width(right) + 2 : 0)
@@ -440,6 +441,9 @@ function machineRows(m: Machine | null, red: boolean, now: number): Seg[][] {
       : [dim('none')]),
     row('Stale locks', n ? [{ text: `${n} stale, not deleted`, color: 'warning' }] : [dim('none')]),
   ]
+  // F87: muted by F / /ops resume force - when, the free memory then, how it ends
+  if (m.mute) out.push(row('Muted', [{ text: `${mutedWords(m.mute)}, ${m.mute.slice(m.mute.indexOf(' ') + 1)} then`, color: 'warning' }]),
+    row('', [dim(MUTED_HOW)]))
   // F82: a stale board amber, board-fresh's refusal red with its reason
   if (m.board) out.push(row('Board', [{ text: `stale: ${m.board.behind} behind ${m.board.up}`, color: 'warning' }]))
   if (m.board?.state === 'refused') out.push(row('', [{ text: `refused: ${m.board.reason}`, color: 'error' }]))

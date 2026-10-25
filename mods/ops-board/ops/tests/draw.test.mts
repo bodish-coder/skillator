@@ -144,7 +144,7 @@ test('the keys line as the mock; D decided only on a decidable row', () => {
   // F76: no run yet, the cursor is on the Runs header (Enter closes it); on a run, Enter shows its stages
   assert.match(text(reduce(s, { name: '2' }).state), /↑↓ move · enter close · e engage/)
   assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /↑↓ move · enter stages · e engage/)
-  assert.match(text(reduce(s, { name: '3' }).state), /R resume \(releases the hold on a fresh non-red reading\)/)
+  assert.match(text(reduce(s, { name: '3' }).state), /R resume \(on a fresh non-red reading\) · F force resume · r reload · q quit/)
 })
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
   let x: State = { ...s, rows: 13 }
@@ -311,6 +311,15 @@ test('health with readings: bars, relay, machine rows with their thresholds', ()
   assert.match(h, /  Disk C:       84 GB free +amber < 5 GB · red < 1 GB/)
   assert.match(h, /  Hold          set 03:29Z: mem 0\.5 GB/)
   assert.match(h, /  Stale locks   none/)
+})
+test('F87: muted - the band and the Health tab say so with the time forced and the memory then; F is in the keys', () => {
+  const kv = 'DRIVE=C:\nDISK_FREE=90000000000\nDISK_TOTAL=1\nMEM_FREE=500000000\nHOLD=-\nMUTE=2026-10-25T09:00Z mem 0.5 GB free\n'
+  const x = reduce({ ...onMachine(s, kv, 0).state, cols: 160 }, { name: '3' }).state
+  const h = text(x)
+  assert.match(h, /watchdog muted \(forced 09:00Z\)/)
+  assert.match(h, /  Muted         watchdog muted \(forced 09:00Z\), mem 0\.5 GB free then\n {16}memory red does not hold until memory reads green once/)
+  assert.match(h, /F force resume/)
+  assert.doesNotMatch(text(reduce(onMachine(s, RED_HELD, 0).state, { name: '3' }).state), /Muted/)
 })
 test('F82: the Health tab says a stale board amber and board-fresh\'s refusal red; none when not behind', () => {
   const kvb = RED_HELD + 'BOARD=refused|3|origin/main|3 behind origin/main, 1 local commit(s) not on it\n'

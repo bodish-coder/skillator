@@ -181,6 +181,53 @@ test('R: the fresh reading is stamped with the clock when it lands, not the laun
   assert.equal(later.state.now, 600000)
 })
 
+// F87: F on Health = /ops resume force; MUTE= is the line the engine appends from watchdog.mute.
+const MEM_RED = 'DRIVE=C:\nDISK_FREE=90000000000\nDISK_TOTAL=1\nMEM_FREE=600000000\nHOLD=-\n'
+const MUTED = 'MUTE=2026-10-25T09:00Z mem 0.6 GB free\n'
+const health: State = { ...s0, tab: 'health' }
+
+test('F87: F on Health releases whatever the reading - the mute written first, then relay release, then a poll', () => {
+  const f = reduce({ ...health, now: Date.UTC(2026, 9, 25, 9, 0) }, key('F'))
+  assert.equal(f.effects[0]?.kind === 'run' && f.effects[0].call, 'pending-machine')
+  const read = f.effects[0]!
+  assert.ok(read.kind === 'run')
+  const wrote = settle(read.then(ok(MEM_RED + 'HOLD=2026-10-25T08:00Z mem\n'))(f.state))
+  const mute = wrote.effects[0]!
+  assert.ok(mute.kind === 'mute' && mute.then)
+  assert.equal(mute.text, '2026-10-25T09:00Z mem 0.6 GB free')
+  // the write failing: not released
+  const nope = settle(mute.then({ code: 1, out: '', err: 'EACCES', argv: [] })(wrote.state))
+  assert.equal(nope.state.toast, 'could not write .skillator/watchdog.mute: EACCES - not released'); assert.equal(nope.effects.length, 0)
+  const rel = settle(mute.then({ code: 0, out: '', err: '', argv: [] })(wrote.state)).effects[0]!
+  assert.ok(rel.kind === 'run' && rel.call === 'relay-release')
+  const done = settle(rel.then(ok('watchdog: released'))({ ...wrote.state, machine: onMachine(s0, MEM_RED, 0).state.machine }))
+  assert.equal(done.state.toast, 'watchdog: released\nwatchdog muted (forced 09:00Z), mem 0.6 GB free - memory red does not hold until memory reads green once, or /ops watchdog on; disk red still holds\nran: sh x')
+  assert.equal(done.state.watch.level, 'amber')
+  assert.deepEqual(done.effects, [{ kind: 'poll', what: 'slow' }])
+  // F is Health's only; elsewhere it is not a force
+  assert.ok(!reduce(s0, key('F')).effects.some(e => e.kind === 'run' && e.call === 'pending-machine'))
+})
+
+test('F87: muted, memory red does not hold, disk red does; memory green once unmutes; plain R unchanged', () => {
+  const muted = onMachine(s0, MEM_RED + MUTED, 0)
+  assert.equal(muted.state.watch.level, 'amber')
+  assert.ok(muted.state.watch.reasons.includes('watchdog muted (forced 09:00Z)'))
+  assert.equal(muted.effects.length, 0)
+  const disk = onMachine(s0, RED.replace('MEM_FREE=9000000000', 'MEM_FREE=600000000') + MUTED, 0)
+  assert.equal(disk.state.watch.level, 'red')
+  assert.equal(disk.effects[0]?.kind === 'run' && disk.effects[0].call, 'relay-hold')
+  const green = onMachine(muted.state, GREEN + MUTED, 0)
+  assert.deepEqual(green.effects, [{ kind: 'mute', text: '' }])
+  assert.equal(green.state.machine?.mute, undefined)
+  assert.equal(green.state.toast, 'watchdog unmuted - memory reads green; memory red holds again')
+  // not muted: memory red holds, and R still refuses on it
+  const red = onMachine(s0, MEM_RED, 0)
+  assert.equal(red.effects[0]?.kind === 'run' && red.effects[0].call, 'relay-hold')
+  const rr = reduce(red.state, key('R'))
+  assert.ok(rr.effects[0]?.kind === 'run')
+  assert.match(settle(rr.effects[0].then(ok(MEM_RED))(rr.state)).state.toast ?? '', /^still red: mem 0\.6 GB free \(below 1 GB\) - not released$/)
+})
+
 test('stale locks are listed in one note, replaced when they change, never deleted', () => {
   const kv = GREEN + 'LOCK=.skillator/x.lock|22|pid 7\n'
   const a = onMachine(s0, kv, 0).state
