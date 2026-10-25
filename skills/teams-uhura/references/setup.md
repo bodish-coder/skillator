@@ -4,6 +4,28 @@ Everything here is done by the owner, by hand, once. The skill never creates a
 webhook, never starts a tunnel and never writes a secret anywhere but
 `~/.skillator/teams.json`.
 
+## 0. One script, first time
+
+```sh
+powershell -NoProfile -ExecutionPolicy Bypass -File <SKILL>\scripts\setup.ps1   # Windows
+sh <SKILL>/scripts/setup.sh                                                     # macOS / Linux
+```
+
+It walks sections 1-4 for you, checking each step first and skipping it when done,
+so it is safe to re-run: node; winget (on PATH, else the WindowsApps alias by
+full path, else this window's PATH refreshed, else the three fixes in order, and
+`Repair-WinGetPackageManager` only on your yes; it never edits PATH for you);
+Dev Tunnels (winget; setup.sh uses brew, else Microsoft's install script on your
+yes); `devtunnel user login`; the persistent `skillator-teams` tunnel on the
+port; then, on your yes, it hosts the tunnel (its own window on Windows, the
+background with a log in `~/.skillator/teams/` elsewhere), prints the https URL,
+prints the two Teams steps with that URL filled in, waits for you to save the
+token and the Workflows URL in the ops board form (section 4), and starts the
+listener. It ends with a status table: node, winget (brew), devtunnel, login,
+tunnel, listener, form saved. `--check` runs the checks and the table only and
+changes nothing; `--selftest` runs offline with every command stubbed. The token
+and the Workflows URL never pass through the script.
+
 ## 1. The outgoing webhook (Teams -> the listener)
 
 1. In Teams, open the team (not a chat) -> **...** -> **Manage team** -> **Apps**
