@@ -58,8 +58,21 @@ node <SKILL>/scripts/holo.mjs --design docs/plans/PLAN-x.md          # design on
 node <SKILL>/scripts/holo.mjs RUN-12 --html    # standalone page -> .skillator/holo/RUN-12.html
 node <SKILL>/scripts/holo.mjs RUN-12 --ascii   # the same, for a terminal
 node <SKILL>/scripts/holo.mjs RUN-12 --batch   # end batch: page + standalone + wizard, ASCII and paths printed
+node <SKILL>/scripts/holo.mjs RUN-12 --anatomy [--html]   # + the run as a bench machine (Fig 1)
 node <SKILL>/scripts/holo.mjs --selftest
+node --test <SKILL>/scripts/anatomy.test.mjs
 ```
+
+- **The anatomy view (`--anatomy`).** The same page opens with the run drawn
+  as a bench machine (isometric, after wheresryan22/anatomy, MIT): one
+  station per stage on a rail in stage order, its lamp the state (pending
+  grey, in flight amber and pulsing, landed green with the sha on its face,
+  failed red, parked purple); a re-planned stage rides a bypass track behind
+  the line to its replacement; `after:` lines are belts; each open or asked
+  decision is a lever beside the station it holds, and the lever opens
+  `RUN-n.wizard.html`, written beside the page. The card reads `stage n of m`,
+  the newest heartbeat's age and the resume sentence, all from the run file.
+  Reduced motion stills the pulse; `--ascii` is unchanged.
 
 - **No run named.** The script takes the one live run (a `~` row or an open
   decision). Several live runs → it exits 2 and lists them: draw each of them

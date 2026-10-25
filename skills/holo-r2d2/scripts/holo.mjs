@@ -9,6 +9,8 @@
 //           Artifact tool; default .skillator/holo/<RUN-n>.html
 //   node holo.mjs [run] [--design <file>] --ascii      -> the same, for a terminal
 //   node holo.mjs --design <file> [--html|--ascii]     -> design components only
+//   node holo.mjs [run] --anatomy [--html]             -> + the run as a bench machine (F83),
+//           its decision levers opening <RUN-n>.wizard.html, written beside the page
 //   node holo.mjs [run] --wizard [--out <path>]        -> the decision wizard (F42): one
 //           open decision per step, offline; default .skillator/holo/<RUN-n>.wizard.html
 //   node holo.mjs --decisions <set.json> [--out <path>] -> the same wizard for a
@@ -35,6 +37,7 @@ import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { setFromRun, checkSet, wizardPage, answersToCommands } from "./wizard.mjs";
+import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -603,6 +606,7 @@ export function render(run, opts = {}) {
       : `<p class="empty">No open decisions in ${esc(run.id)}.</p>`;
     body = `<header><h1>${esc(run.id)} <span class="t">\u00b7 ${esc(run.title)}</span></h1><p class="sub">${sub}</p>` +
       `<div class="counts">${chips}</div></header>` +
+      (opts.anatomy ? `<section class="anatomy"><h2>The run as a machine<span class="n">${run.stages.length} stations</span></h2>${anatomyFigure(run, opts.now)}</section>` : "") +
       `<section class="decisions"><h2>Decisions waiting on you<span class="n">${askable.length}</span></h2>${qs}${otherQs(run)}</section>` +
       `<section class="run"><h2>Stage graph<span class="n">${run.stages.length} stages</span></h2>${stageGraph(run)}` +
       `<ul class="legend">${legend}</ul>${stageList(run)}</section>`;
@@ -612,7 +616,8 @@ export function render(run, opts = {}) {
   body = `<main data-run="${esc(run?.id ?? "")}">${body}<p class="foot">Drawn by holo-r2d2 from ${src || "the run file"}` +
     `${run ? ` at ${esc(run.updated || "?")}` : ""}. It decides nothing: answers are written to the run file by the session (relay-morpheus answer).` +
     `${run && run.chain ? ` Holds: ${run.holdsFrom === "relay" ? "as relay-morpheus chain next judges them" : "estimated here - relay-morpheus could not be run"}.` : ""}</p></main>`;
-  return { title, css: CSS, body, script: CLIENT };
+  const fig = run && opts.anatomy;
+  return { title, css: fig ? CSS + ANATOMY_CSS : CSS, body, script: fig ? CLIENT + ANATOMY_SCRIPT : CLIENT };
 }
 
 export const artifactPage = (r) => `<title>${esc(r.title)}</title>\n<style>${r.css}</style>\n${r.body}\n<script>${r.script}</script>\n`;
@@ -750,6 +755,7 @@ function parseArgs(argv) {
     else if (a === "--html") o.mode = "html";
     else if (a === "--wizard") o.mode = "wizard";
     else if (a === "--batch") o.mode = "batch";
+    else if (a === "--anatomy") o.anatomy = true;
     else if (a === "--decisions") { o.mode = "wizard"; o.decisions = val(); }
     else if (a === "--answers") o.answers = val();
     else if (a === "--out") o.out = val();
@@ -802,7 +808,7 @@ function relayHolds(md, runPath, root) {
 
 async function main(argv) {
   const o = parseArgs(argv);
-  if (o.help) { console.log((await readFile(fileURLToPath(import.meta.url), "utf8")).split("\n").slice(1, 15).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); return; }
+  if (o.help) { console.log((await readFile(fileURLToPath(import.meta.url), "utf8")).split("\n").slice(1, 17).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); return; }
   if (o.selftest) return selftest();
   if (o.fixture) { console.log(await buildFixture(o.fixture)); return; }
   if (o.answers) {
@@ -839,7 +845,7 @@ async function main(argv) {
   let design = null;
   if (o.design) design = parseDesign(await readFile(o.design, "utf8"));
   const rel = (p) => (p ? relative(root, p).replace(/\\/g, "/") : p);
-  const opts = { design, designPath: o.design && rel(resolve(o.design)), runPath: rel(runPath) };
+  const opts = { design, designPath: o.design && rel(resolve(o.design)), runPath: rel(runPath), anatomy: o.anatomy && o.mode !== "ascii" };
   if (o.mode === "ascii") { process.stdout.write(renderAscii(run, opts)); return; }
   // F41 end batch: every drawing at once, so none is skipped - two GREEN runs
   // that ran the pieces one by one drew the wizard and the ASCII but never the
@@ -863,6 +869,8 @@ async function main(argv) {
   const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}${o.mode === "html" ? "" : ".artifact"}.html`));
   await writeGenerated(root, out, o.mode === "html" ? standalonePage(r) : artifactPage(r));
   const nq = run ? run.qs.filter((q) => ASKABLE.has(q.state)).length : 0;
+  // The levers link to the wizard by a relative name: write it beside the page.
+  if (opts.anatomy && run && nq) await writeGenerated(root, join(dirname(out), `${run.id}.wizard.html`), wizardPage(setFromRun(run, rel(runPath))));
   console.log(`holo: ${run ? `${run.id} ${run.stages.length} stages, ${nq} open decision${nq === 1 ? "" : "s"}` : "design only"}` +
     `${design ? `, ${design.parts.length} design sections` : ""} -> ${out}` +
     (o.mode === "html" ? " (standalone page)" : " (Artifact page: publish it with the Artifact tool, capabilities {db:{}})"));
