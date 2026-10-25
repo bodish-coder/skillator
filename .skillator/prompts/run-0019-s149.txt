@@ -1,0 +1,16 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+Load skillator:build-jarvis, then build ticket F89 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its whole line, root cause included; it is the spec).
+It runs headless: no one to ask - make the smallest reasonable call for anything open and list it under 'Rulings'.
+Owning code: mods/ops-board/ops/draw.ts (ansi(): with colour off keep bold, inverse and the marker - only colour codes drop; the highlight segments),
+ops/app.ts (--help exits 0 with the usage; the open-in-a-tab flag), ops/ops.ps1 and ops/ops.sh (the launcher: wt -w 0 new-tab when wt.exe is present, else
+today's behaviour), a new mods/ops-board/README.md (the launch lines per host), install.sh/install.ps1 only for the Windows Terminal fragment (install and
+uninstall; temp dirs in tests, never the owner's real LOCALAPPDATA), and the 'the shim' launch lines in skills/tickets-zordon/SKILL.md plus host-commands copies
+that name ops.ps1. F85, F87 and F90 have landed on this branch - build on them. Never launch a real wt.exe or terminal from tests - stub it.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0019-pending-a153-a154-f80 (branch run/RUN-0019-pending-a153-a154-f80). Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+Checks one at a time (low RAM, never in parallel). Keep every .sh/.ps1 pure ASCII, LF, the two ports mirrored.
+Before committing, run the built-in `code-review` skill (Skill tool, skill "code-review", args "low") on the staged diff and fix what it finds - it reviews the local diff, needs no PR, posts nothing, and its one background reviewer does not break the one-agent rule. Do not substitute your own read of the diff.
+Checks: npm --prefix <worktree>/mods/ops-board/ops test; claude plugin test <worktree>/mods/ops-board; tsc -p <worktree>/mods/ops-board/tsconfig.json --noEmit
+(the git-ignored mods/ops-board/.claude-plugin/types folder must be present - copy it from the main checkout if missing, never commit it); sh <worktree>/install.sh --selftest;
+powershell -NoProfile -ExecutionPolicy Bypass -File <worktree>/install.ps1 -SelfTest. Live look in Codex on Windows: say plainly it is the owner's.
+Commit as "F89: <what>" with the evidence. Report: sha, red/green lines, rulings, files touched.

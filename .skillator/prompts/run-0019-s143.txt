@@ -1,0 +1,16 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+Load skillator:build-jarvis, then build ticket F85 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its whole line; it is the spec).
+It runs headless: no one to ask - make the smallest reasonable call for anything open and list it under 'Rulings'.
+Owning code: mods/ops-board/hooks/runstab.tsx (startRun is the pattern: runCall + $.prompt.submit), hooks/lib/runs.ts and hooks/lib/runlines.ts (the run
+model and lines), hooks/agentstab.tsx and hooks/lib/agents.ts (the agent list and its lead column), hooks/pane.tsx / register.tsx only for the key, and the standalone ops app (mods/ops-board/ops/state.ts, draw.ts, app.ts). Read the
+script's PLAN as data (parse the JSON-like literal or a small regex over 'stage'/'ticket' fields) - never import or execute a .workflow.js. The confirm step
+is drawn in the pane (B5: never a second pane). F80 (driver/owner rules), F81 and F82 have landed on this branch - build on them; reuse relay's existing
+driver stamp for the 'live driver' refusal. Tests use fixture run files and scripts, never this repo's .skillator.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0019-pending-a153-a154-f80 (branch run/RUN-0019-pending-a153-a154-f80). Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+Checks one at a time (low RAM, never in parallel). Keep every .sh/.ps1 pure ASCII, LF, the two ports mirrored.
+Before committing, run the built-in `code-review` skill (Skill tool, skill "code-review", args "low") on the staged diff and fix what it finds - it reviews the local diff, needs no PR, posts nothing, and its one background reviewer does not break the one-agent rule. Do not substitute your own read of the diff.
+Checks: claude plugin test <worktree>/mods/ops-board; npm --prefix <worktree>/mods/ops-board/ops test; claude plugin validate <worktree>/mods/ops-board;
+tsc -p <worktree>/mods/ops-board/tsconfig.json --noEmit (the git-ignored mods/ops-board/.claude-plugin/types folder must be in the worktree - copy it from the main checkout if missing, never commit it).
+Live pane check: if it cannot be driven headless, say so plainly.
+Commit as "F85: <what>" with the evidence. Report: sha(s), red/green lines, rulings, files touched.

@@ -1,6 +1,6 @@
 # RUN-3 - drain the board
 plan: docs/plans/PLAN-board-drain.md
-started: 2026-09-23T01:59Z   updated: 2026-09-23T19:47Z
+started: 2026-09-23T01:59Z   updated: 2026-10-25T07:36Z
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
@@ -20,7 +20,7 @@ started: 2026-09-23T01:59Z   updated: 2026-09-23T19:47Z
 | 13 | A58b A60-five GREENs | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
 | 14 | A79 routing RED/GREEN | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
 | 15 | A86 harness allow-list | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
-| 16 | A85 design-arwen declare | ! | build:opus | 2026-09-23T03:19Z | - |
+| 16 | A85 design-arwen declare | > | build:opus | 2026-10-25T07:36Z | RUN-4 s37 |
 | 17 | A84 tasks-sentinels GREEN | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
 | 18 | A58c argus v2 + merge direction | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
 | 19 | F21 unique ticket ids | x | build:opus | 2026-09-23T19:16Z | 933a5c9 |
@@ -216,22 +216,6 @@ prompt: |
   `node --version` and, via PowerShell, `python -m pytest -q`; show both ran
   with zero permission_denials. Keep `--bypass` untouched.
 
-### stage 16 - A85 design-arwen declare  (dispatched wave 4)
-prompt: |
-  (common preamble + wave 3 shared rules) Ticket A85. Evidence:
-  practice/baselines/green-design-arwen.txt and transcripts
-  a58b-design-arwen{1,2}.jsonl (continue half passes, declare half fails 2/2).
-  Yours: skills/design-arwen/SKILL.md (and its references/ files only if the
-  fix belongs there), green-design-arwen.txt (append new runs), transcripts
-  a85-*. Per skill-smith/references/testing.md, first rule out a buried rule
-  or a competing instruction (the declare step sits inside Phase 0 item 6;
-  check whether anything in the skill says to write the Read to DESIGN.md
-  instead). Make the smallest edit that puts the Design Read, with
-  `assumed:` on each guessed field, in visible output before the first
-  Edit/Write when the user is away. Then re-run the same GREEN twice,
-  unchanged prompt, and grade both halves. Report the cause you found and the
-  two verdicts. If both still fail, revert your skill edit and say so.
-
 ### stage 17 - A84 tasks-sentinels GREEN  (dispatched after 15 lands)
 prompt: |
   (common preamble + wave 3 shared rules) Ticket A84. Yours:
@@ -361,3 +345,4 @@ prompt: |
 - 07:40Z - stages 20 and 23 FAILED mid-edit: session usage limit (HTTP 429, resets 12:20 IST). Left in the tree: relay-morpheus.sh partly edited, .ps1 untouched (mirrors diverge); baseline-harness.sh / check-tickets.sh / README harness sections carry partial A87/A88/A91/A92 edits on top of the verified A76 + A86 work. relay status and harness selftest still pass. Resume: SendMessage the same two agents after the reset (their context holds what they changed) rather than reverting blind - costs nothing if they finish; if a resume fails, revert those files to 0608f1f + re-apply A76/A86 from their stage records.
 - 18:40Z - F23 (owner request) joins RUN-3 as stages 24-29: research fans out one agent per upstream (separate output files), then absorb (28) and mechanism (29) run in parallel - 29 owns UPSTREAM.md and the scripts, 28 owns arwen's body. Version: repo already 4.0.0 (unpushed, installed copy 3.10.0) - read as 'ship 4.0.0', no further bump, owner to overrule.
 - 05:10Z - stage 28 round 1: edits done, RED recorded (G3 target 1/2 FAIL, G6 reduced-motion kill 1/2 FAIL; G1 G2 G4 G5 dropped - RED passed them). GREEN x2 + regression x1 reaped for low memory: NO VERDICT. Round 2 to the same agent: 'Re-run GREEN N=2 and the regression N=1 strictly one at a time (wait for each nested claude to exit; kill any orphan from round 1 first), same prefix method, grade G3 and G6 only plus the regression's continue half; then replace UPSTREAM.md's provisional sections column with the real landings and drop provisional. No other edits.' anti-slop additions split to a new A ticket (no failing test yet).
+- 07:36 - stage 16 (A85) closed '>' by RUN-0019's main session: A85 was closed 2026-09-24 in RUN-4 stage 37 (owner decision: 'decide and build'), and its blocker A63b in RUN-4 stage 35 (BASELINE_ISOLATE=hide, no API key) - this row was never updated. RUN-3 has no open stage left.

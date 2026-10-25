@@ -1,0 +1,20 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+Load skillator:build-jarvis, then build ticket F82 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its whole line;
+it is the spec, the owner's two answers included: fast-forward automatically when safe, commit skillator's board edits at once, never push).
+It runs headless: there is no one to ask. Where the spec leaves a choice open, make the smallest reasonable call and list it under 'Rulings'.
+Owning code: a new practice/scripts/board-fresh.sh + board-fresh.ps1 (one shared guard, both ports byte-identical in output), practice/scripts/
+next-id.sh + next-id.ps1 (allocate after the guard's fetch), skills/tickets-zordon/scripts/ticket-meta.sh + .ps1 (call the guard before a board
+write, commit the write), skills/relay-morpheus/hooks/relay-morpheus.sh + .ps1 (`board` mode: same), skills/tickets-zordon/scripts/pending.sh +
+.ps1 (show 'board stale' / the refusal), skills/grayskull-power/references/arming.md (the arm runs the guard), and the ops board Health tab
+(mods/ops-board/hooks/health.tsx, hooks/lib/healthlines.ts, the standalone ops app's health view). The guard never pulls, merges, resets or
+stashes work it does not own - when unsure it refuses and reports. F80 and F81 have landed on this branch (ticket-meta) - build on them.
+Tests use fixture repos with a bare upstream in a scratch dir, never this repo's remote or TICKETS.md; nothing fetches the real network.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0019-pending-a153-a154-f80 (branch run/RUN-0019-pending-a153-a154-f80). Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+Checks one at a time (low RAM, never in parallel). Keep every .sh/.ps1 pure ASCII, LF, the two ports mirrored.
+Before committing, run the built-in `code-review` skill (Skill tool, skill "code-review", args "low") on the staged diff and fix what it finds - it reviews the local diff, needs no PR, posts nothing, and its one background reviewer does not break the one-agent rule. Do not substitute your own read of the diff.
+Checks: board-fresh, next-id, ticket-meta, relay-morpheus and pending selftests in both ports; sh <worktree>/practice/scripts/check-tickets.sh;
+tsc needs mods/ops-board/.claude-plugin/types, which git ignores: copy that folder from the main checkout into the worktree once (read-only on the main side) and never commit it.
+sh <worktree>/install.sh --selftest; claude plugin test <worktree>/mods/ops-board; npm --prefix <worktree>/mods/ops-board/ops test;
+tsc -p <worktree>/mods/ops-board/tsconfig.json --noEmit.
+Commit as "F82: <what>" with the evidence. Report: sha(s), red/green lines, rulings, files touched.

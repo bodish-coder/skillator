@@ -1,0 +1,20 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+Ticket B11 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line and B10's; B11 is the spec). B10 (the clone route) has landed on
+this branch. Goal: a Muse-native catalog so `muse plugins marketplace add <name> https://github.com/bodish-coder/skillator` installs skillator, with
+.claude-plugin/marketplace.json untouched. The open question is what `integrity.digest` (sha256) hashes. Find it from evidence only - Muse's own docs or
+help, files under %LOCALAPPDATA%/Programs/muse, the error text of `muse plugins install`, or the printable strings of the newest muse-bin-*.exe (read-only,
+for interoperability) - and prove a candidate by a scratch-profile install that passes the integrity check. Never guess a format into the repo: if no
+candidate passes within reasonable effort, commit nothing, and report what you tried and what each attempt printed - the stage then fails cleanly and
+B11 stays open. Scratch profiles only (USERPROFILE/HOME/XDG_DATA_HOME to a fresh scratch dir; never the owner's ~/.local/share/muse); muse install copies
+the whole clone - run it in the background and wait. Known facts (verified 2026-10-25): Muse probes marketplace.json, .agents/plugins/marketplace.json,
+.claude-plugin/marketplace.json in that order; a catalog it accepts (plugin_count 1) is {schemaVersion:1, source:"local", name, plugins:[{name, version,
+install:{transport:"local-path", source:"<path relative to the catalog>"}, integrity:{digest:"sha256:<64 hex>"}, availability:{status:"available"}}]};
+a placeholder digest fails 'failed integrity check'. If proven: the catalog in the probed path that does not disturb Claude Code or Codex, a script that
+regenerates the digest (sh + ps1, byte-identical output), the version bump step names it, check-muse-manifest.sh fails on a stale digest, PLATFORMS/README
+name the marketplace route beside B10's clone route.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0019-pending-a153-a154-f80 (branch run/RUN-0019-pending-a153-a154-f80). Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+Checks one at a time (low RAM, never in parallel). Keep every .sh/.ps1 pure ASCII, LF, the two ports mirrored.
+Before committing, run the built-in `code-review` skill (Skill tool, skill "code-review", args "low") on the staged diff and fix what it finds - it reviews the local diff, needs no PR, posts nothing, and its one background reviewer does not break the one-agent rule. Do not substitute your own read of the diff.
+Checks: sh <worktree>/practice/scripts/check-muse-manifest.sh; sh <worktree>/install.sh --selftest; claude plugin validate <worktree>; git -C <worktree> diff main -- .claude-plugin/marketplace.json is empty.
+Commit as "B11: <what>" with the evidence, or nothing. Report: sha or 'not found', the digest rule and its proof (the scratch install output), files touched.

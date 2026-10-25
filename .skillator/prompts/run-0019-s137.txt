@@ -1,0 +1,17 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+Ticket B10 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line; it is the spec, root cause included, and B11's line for
+what is out of scope). The owner keeps how Claude Code installs: do NOT edit .claude-plugin/marketplace.json (its git diff must stay empty).
+Give Muse its separate, documented route - a clone: `git clone https://github.com/bodish-coder/skillator <dir>`, `muse plugins install <dir>`,
+updated by `git -C <dir> pull` then `muse plugins update skillator`. Say that `muse plugins marketplace add` of this repo is unsupported
+(Muse reads the Claude catalog and fails cloning its github source; B11 tracks a native catalog) and that the ops-board skip warning is expected.
+Files: README.md (the Muse row), PLATFORMS.md (the muse row and the muse section), commands/skillator-update.md step 4 and its host copies under
+host-commands/* only if step 4 does not already pull the clone before `muse plugins update` (keep the copies in step - install selftests compare them).
+Verify in a scratch profile only - never the owner's real ~/.local/share/muse: USERPROFILE/HOME/XDG_DATA_HOME set to a fresh scratch dir, clone the
+worktree to a plain scratch path, `muse plugins install <clone> --json` (it copies the clone - run it in the background and wait), then
+`muse plugins list --json` shows skillator active with 28 skills, then `muse plugins update skillator --json` succeeds.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0019-pending-a153-a154-f80 (branch run/RUN-0019-pending-a153-a154-f80). Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+Checks one at a time (low RAM, never in parallel). Keep every .sh/.ps1 pure ASCII, LF, the two ports mirrored.
+Before committing, run the built-in `code-review` skill (Skill tool, skill "code-review", args "low") on the staged diff and fix what it finds - it reviews the local diff, needs no PR, posts nothing, and its one background reviewer does not break the one-agent rule. Do not substitute your own read of the diff.
+Checks: sh <worktree>/practice/scripts/check-muse-manifest.sh; sh <worktree>/install.sh --selftest; git -C <worktree> diff main -- .claude-plugin/marketplace.json is empty.
+Commit as "B10: <what>" with the evidence. Report: sha, the scratch install/list/update results, files touched.

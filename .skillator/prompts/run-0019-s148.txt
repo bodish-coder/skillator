@@ -1,0 +1,13 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+Load skillator:build-jarvis, then build ticket F90 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its whole line; it is the spec).
+It runs headless: no one to ask - make the smallest reasonable call for anything open and list it under 'Rulings'.
+Owning code: install.sh and install.ps1 (the codex branch that writes <codex home>/prompts/<name>.md today - grep put_cmd and codex_home), host-commands/codex/*
+(replace the prompt files with <name>/SKILL.md, or generate them from host-commands/antigravity/<name>/SKILL.md - pick the smaller diff and say why),
+PLATFORMS.md (the Codex row) and README.md (how to call them in Codex). Uninstall and the selftests' file lists follow. F88 has landed on this branch and edits
+the pending-subagent copies - build on it. Tests use temp homes, never the owner's real ~/.codex or ~/.codex-bodish.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0019-pending-a153-a154-f80 (branch run/RUN-0019-pending-a153-a154-f80). Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+Checks one at a time (low RAM, never in parallel). Keep every .sh/.ps1 pure ASCII, LF, the two ports mirrored.
+Before committing, run the built-in `code-review` skill (Skill tool, skill "code-review", args "low") on the staged diff and fix what it finds - it reviews the local diff, needs no PR, posts nothing, and its one background reviewer does not break the one-agent rule. Do not substitute your own read of the diff.
+Checks: sh <worktree>/install.sh --selftest; powershell -NoProfile -ExecutionPolicy Bypass -File <worktree>/install.ps1 -SelfTest; claude plugin validate <worktree>.
+Commit as "F90: <what>" with the evidence. Report: sha, red/green lines, rulings, files touched.

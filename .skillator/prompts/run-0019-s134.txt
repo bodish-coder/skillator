@@ -1,0 +1,27 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+Load skillator:build-jarvis, then build ticket F80 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its
+whole line; it is the spec, owner design included: roles with one lead, whoami, ticket-meta team lead, claims, the Team view).
+It runs headless: there is no one to ask. Where the spec leaves a choice open, make the smallest reasonable call and list it under
+'Rulings' in your report - do not stop.
+Owning code: skills/tickets-zordon/scripts/ticket-meta.sh + ticket-meta.ps1 (whoami, team lead, assign claim rules, picking),
+skills/tickets-zordon/SKILL.md (the convention-not-security note, the commands), .skillator/team.md format docs,
+commands/pending-subagent.md, commands/marathon-plan.md, commands/marathon-run.md and their host copies under host-commands/*
+(all seven hosts - keep them in step, as the install selftests check), skills/relay-morpheus (chain/queue picking: only
+unassigned or mine; another's listed as skipped with its owner), and the ops board Team view (mods/ops-board/hooks/teamview.tsx,
+hooks/lib/team.ts, the standalone ops app's team view if it has one: lead marked, (you) marked, a key to make the selected person
+lead through ticket-meta with a refusal toast, header 'you: @h'). The mod writes no file - every write goes through ticket-meta.
+A153 and A154 have just landed on this branch (relay-morpheus stage mode, ops-board lib) - build on them.
+Do not edit this repo's real .skillator/team.md - tests use fixtures.
+Done (from the ticket) = selftests red first in both ports: unassigned and mine picked, another's skipped; plan claims; a member's
+reassign of another's ticket refused, the owner's and the lead's accepted; one lead only, hand-over rules, lead removal refused;
+whoami by email and by SKILLATOR_ME; no team.md behaves as today; pane tests for the Team view marks. Show the failing lines first.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0019-pending-a153-a154-f80 (branch run/RUN-0019-pending-a153-a154-f80). Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: `python -m pytest "<worktree>/tests"` (or the project's runner with the worktree path as its argument). No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+Checks one at a time (low RAM, never in parallel). Keep every .sh/.ps1 pure ASCII, LF, the two ports mirrored.
+Before committing, run /code-review (code-review:code-review, level low) on the staged diff and fix what it finds.
+Checks: sh <worktree>/skills/tickets-zordon/scripts/ticket-meta.sh selftest; the ps1 twin's selftest; relay-morpheus.sh and .ps1 selftests;
+tsc needs mods/ops-board/.claude-plugin/types, which git ignores: copy that folder from the main checkout into the worktree once (read-only on the main side) and never commit it.
+sh <worktree>/install.sh --selftest; powershell -NoProfile -ExecutionPolicy Bypass -File <worktree>/install.ps1 -SelfTest;
+claude plugin test <worktree>/mods/ops-board; npm --prefix <worktree>/mods/ops-board/ops test; claude plugin validate <worktree>/mods/ops-board;
+tsc -p <worktree>/mods/ops-board/tsconfig.json --noEmit. Live pane check: if it cannot be driven headless, say so plainly.
+Commit as "F80: <what>" with the evidence (one commit or a few, all F80-prefixed). Report: sha(s), red/green lines, rulings, files touched.
