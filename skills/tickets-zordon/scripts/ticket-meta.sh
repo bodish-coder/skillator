@@ -261,7 +261,7 @@ edit_line() {
   # hand (ME, LEAD from the caller). A team convention, not security.
   if [ -n "${OWN_CHECK:-}" ]; then
     ow=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\[owner:[ \t]*[^]]*\]/)) { v = substr($0, RSTART + 7, RLENGTH - 8); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }')
-    if [ -n "$ow" ] && [ "$(lc "$ow")" != "$(lc "$SET_OWNER")" ] && ! may_take "$ow"; then
+    if [ -n "$ow" ] && ! may_take "$ow"; then
       if [ -n "$LEAD" ]; then who="only $ow or the lead $LEAD may reassign it"; else who="only $ow may reassign it (no lead set)"; fi
       die "$ID is owned by $ow - $who (you: ${ME:-$ME_WHY})"
     fi
@@ -393,6 +393,10 @@ lead_of() {
   LEAD=''
   lf=$(team_file) || return 0
   LEAD=$(tr -d '\r' < "$lf" | awk '/^lead:[ \t]*@[A-Za-z0-9_.-]+[ \t]*$/ { sub(/^lead:[ \t]*/, ""); sub(/[ \t]+$/, ""); print; exit }')
+  # a lead line naming no member (hand-edited) is no lead, so anyone may set one
+  if [ -n "$LEAD" ] && ! team_rows | awk '{ print tolower($1) }' | grep -qxF -- "$(lc "$LEAD")"; then
+    echo "note: lead: $LEAD is not on the team - no lead until one is set (team lead @handle)" >&2; LEAD=''
+  fi
 }
 
 # 0 when ME may move a ticket the handle $1 owns: ME is that owner, or the lead.
@@ -429,7 +433,7 @@ cmd_claim() {
   crc=0
   for ci in "$@"; do
     ( norm_id "$ci"
-      SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER=$ME SET_BY='' SAME_KEY=owner SAME_VAL=$ME NEED_MARK='' OWN_CHECK=1 edit_line ) || crc=1
+      SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER=$ME SET_BY='' SAME_KEY=owner SAME_VAL=$ME NEED_MARK='' REFUSE_MARKS='x-' OWN_CHECK=1 edit_line ) || crc=1
   done
   return $crc
 }
@@ -463,7 +467,8 @@ cmd_pick() {
     for (i = 1; i <= n; i++) { split(R[i], c, "\t"); if (c[1] != "" && !(c[1] in mk)) { mk[c[1]] = c[2]; ow[c[1]] = c[3]; ord[++no] = c[1] } }
     me = tolower(ENVIRON["ME"]); m = split(ENVIRON["IDS"], L, " ")
     if (m == 0) for (i = 1; i <= no; i++) if (mk[ord[i]] ~ /^[ ~!]$/) L[++m] = ord[i]
-    for (i = 1; i <= m; i++) { o = ow[L[i]]
+    for (i = 1; i <= m; i++) { o = ow[L[i]]; b = L[i]; sub(/[a-z]$/, "", b)
+      if (!(L[i] in mk) && b != L[i]) o = ow[b]   # a sub-part with no row takes its parent owner
       if (ENVIRON["TEAM"] == "" || o == "" || tolower(o) == me) print "pick " L[i]; else print "skip " L[i] " " o } }'
 }
 
@@ -663,7 +668,7 @@ team_remove() {
   board_lock "$MAIN/TICKETS.md.lock"
   team_members "$f" | cut -f1 | grep -qxF -- "$TH" || die "$TH is not in $f"
   lead_of
-  [ "$TH" != "$LEAD" ] || die "$TH is the lead - hand the lead over first (team lead @other), then remove"
+  [ "$(lc "$TH")" != "$(lc "$LEAD")" ] || die "$TH is the lead - hand the lead over first (team lead @other), then remove"
   eol=0
   [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ] && eol=1
   tmp="$f.ticket-meta.$$"
@@ -917,10 +922,10 @@ selftest() {
   eq "assign from [-]" "$(run assign F23 @vidul)" "- [ ] F23 $D Dropped thing [owner: @vidul]"
   eq "assign from [x]" "$(run assign F26 @asha)" "- [ ] F26 $D Shipped [owner: @asha] (@cc-3)"
   eq "decided" "$(run decided F24)" "- [ ] F24 $D Waiting [decide: @asha]"
-  # the same handle with the box not yet the target still moves the box
-  eq "same owner from [x]" "$(run assign F27 @asha)" "- [ ] F27 $D Kept [owner: @asha]"
+  # the same handle with the box not yet the target still moves the box (by its owner, F80 review)
+  eq "same owner from [x]" "$(SKILLATOR_ME=@asha sh "$self" assign F27 @asha 2>&1)" "- [ ] F27 $D Kept [owner: @asha]"
   eq "same decider from [ ]" "$(run decide F28 @asha)" "- [?] F28 $D Decided before [decide: @asha]"
-  eq "same owner from [?]" "$(run assign F29 @vidul)" "- [ ] F29 $D Owner waiting [owner: @vidul]"
+  eq "same owner from [?]" "$(SKILLATOR_ME=@vidul sh "$self" assign F29 @vidul 2>&1)" "- [ ] F29 $D Owner waiting [owner: @vidul]"
   cp TICKETS.md "$T/f45a.md"
   sh "$self" decided F23 > /dev/null 2>&1 && { echo "FAIL: decided flipped a ticket that is not [?]"; fail=1; }
   sh "$self" decided "$(printf 'F22\nF23')" > /dev/null 2>&1 && { echo "FAIL: decided took a multi-line id"; fail=1; }
@@ -1186,6 +1191,7 @@ selftest() {
     printf -- '- [x] F5 %s Shipped [owner: @vidul]\n' "$D"
     printf -- '- [ ] F6 %s Neos [owner: @neo]\n' "$D"
     printf -- '- [~] F7 %s Working (@cc-bbbbbb)\n' "$D"
+    printf -- '- [-] F8 %s Dropped\n' "$D"
   } > TICKETS.md
   commit vidul@ikran.in "init" README.md
   # whoami: git user.email (any case) mapped through the team; SKILLATOR_ME overrides
@@ -1207,9 +1213,14 @@ selftest() {
   git config user.email asha@x.com
   eq "pick as asha" "$(run pick)" "you: @asha pick F1 pick F2 skip F3 @vidul pick F4 skip F6 @neo pick F7"
   eq "pick given ids" "$(run pick f3 F2 F9)" "you: @asha skip F3 @vidul pick F2 pick F9"
+  # review: a sub-part with no row of its own is its parent's (the chain's rule: F3 holds F3a)
+  eq "pick a sub-part" "$(run pick F3a F2a F1a)" "you: @asha skip F3a @vidul pick F2a pick F1a"
   # claim (plan / dispatch): [owner: me], the box kept; mine again is no change; another's refused
   eq "claim F1" "$(run claim F1)" "- [ ] F1 $D Free [owner: @asha]"
   eq "claim keeps [~]" "$(run claim F7)" "- [~] F7 $D Working [owner: @asha] (@cc-bbbbbb)"
+  # review: a closed ticket is not claimed
+  sh "$self" claim F8 > /dev/null 2>&1 && { echo "FAIL: claim of a closed ticket succeeded"; fail=1; }
+  grep -q "^- \[-\] F8 $D Dropped\$" TICKETS.md || { echo "FAIL: claim wrote onto a closed ticket: $(grep F8 TICKETS.md)"; fail=1; }
   sh "$self" claim F2 > "$T/out" 2>&1 || { echo "FAIL: claim of my own ticket failed: $(cat "$T/out")"; fail=1; }
   grep -q 'no change' "$T/out" || { echo "FAIL: claim of my own ticket is not no change: $(cat "$T/out")"; fail=1; }
   cp TICKETS.md "$T/f80b.md"
@@ -1218,6 +1229,8 @@ selftest() {
   # assign: a member's reassign of another's ticket refused; the owner's and the lead's accepted
   sh "$self" assign F3 @asha > /dev/null 2> "$T/err" && { echo "FAIL: a member reassigned another's ticket"; fail=1; }
   grep -q 'F3 is owned by @vidul' "$T/err" || { echo "FAIL: reassign refusal: $(cat "$T/err")"; fail=1; }
+  # review: "assigning" another's ticket to its own owner would reset its box - refused too
+  sh "$self" assign F3 @vidul > /dev/null 2>&1 && { echo "FAIL: a member reset another's ticket by assigning it to its owner"; fail=1; }
   cmp -s TICKETS.md "$T/f80b.md" || { echo "FAIL: a refused claim or reassign changed the board"; diff "$T/f80b.md" TICKETS.md; fail=1; }
   eq "owner reassigns" "$(SKILLATOR_ME=@vidul sh "$self" assign F3 @neo 2>&1 | head -n 1)" "- [ ] F3 $D Theirs [owner: @neo] (@cc-aaaaaa)"
   eq "assign unowned" "$(run assign F4 @vidul)" "- [ ] F4 $D Stuck [owner: @vidul] (blocked: x)"
@@ -1243,6 +1256,12 @@ selftest() {
   eq "team lead same" "$(run team lead @asha)" "no change: @asha is already the lead"
   eq "team lead - by the lead" "$(run team lead -)" "lead cleared"
   grep -q '^lead:' .skillator/team.md && { echo "FAIL: team lead - left a lead line"; fail=1; }
+  # review: the lead matched without case; a lead line naming no member is no lead
+  printf -- '# Team\nlead: @Vidul\n\n- @vidul: vidul@ikran.in\n- @asha: Asha@X.com\n' > .skillator/team.md
+  SKILLATOR_ME=@vidul sh "$self" team remove @vidul > /dev/null 2>&1 && { echo "FAIL: the lead was removed (its lead line in another case)"; fail=1; }
+  printf -- '# Team\nlead: @ghost\n\n- @vidul: vidul@ikran.in\n- @asha: Asha@X.com\n' > .skillator/team.md
+  eq "a lead not on the team is no lead" "$(run team lead @asha)" "lead: @asha"
+  eq "one lead line, replaced" "$(grep '^lead:' .skillator/team.md)" "lead: @asha"
   # no heading, CRLF: the lead line comes in under a new # Team heading, CRLF kept
   printf -- '- @asha: asha@x.com\r\n' > .skillator/team.md
   eq "team lead, no heading" "$(run team lead @asha)" "lead: @asha"

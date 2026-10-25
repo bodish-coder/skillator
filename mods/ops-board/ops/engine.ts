@@ -30,6 +30,7 @@ export type EngineOpts = {
   host: Host
   state: State                    // the first state (size, tab, repo)
   email: string | null            // git's user.email: who "me" is on the team
+  envMe?: string | null           // F80: SKILLATOR_ME, overriding the email as ticket-meta whoami does
   once: boolean                   // read only: of the effects the polls ask for, relay's decision (a read) and nothing else
   onChange(): void                // the state moved: draw it
   onQuit(): void                  // the reducer asked to quit
@@ -147,7 +148,7 @@ export function makeEngine(o: EngineOpts): Engine {
       team = []
       if (tst) { try { team = parseTeam(await host.read(teamPath)) } catch { team = [] } }
     }
-    if (moved && board) state = onBoard(state, board, team, email ? meOf(team, email) : null)
+    if (moved && board) state = onBoard(state, board, team, meOf(team, email ?? '', o.envMe))
     await pollInbox(root)
     draw()
   }

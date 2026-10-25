@@ -1002,8 +1002,11 @@ function TMeta([string[]]$a) {
   $psi.WorkingDirectory = Split-Path -Parent (Resolve-Path -LiteralPath $Run).Path
   $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
   $psi.StandardOutputEncoding = New-Object Text.UTF8Encoding($false)
-  $p = [Diagnostics.Process]::Start($psi)
-  $o = $p.StandardOutput.ReadToEnd(); $e = $p.StandardError.ReadToEnd(); $p.WaitForExit()
+  # no host to start = a failed call (OwnedMap fails closed on it); stderr read
+  # beside stdout, so a full stderr pipe cannot stall the child
+  try { $p = [Diagnostics.Process]::Start($psi) } catch { return [pscustomobject]@{ out = @(); err = "cannot start powershell: $($_.Exception.Message)"; code = -1 } }
+  $et = $p.StandardError.ReadToEndAsync()
+  $o = $p.StandardOutput.ReadToEnd(); $p.WaitForExit(); $e = $et.Result
   [pscustomobject]@{ out = @($o -split "`r?`n" | Where-Object { $_ }); err = $e.Trim(); code = $p.ExitCode }
 }
 function ChainTickets($n) {   # stage n's chain-block ticket ids (every stage's when none)
@@ -1012,16 +1015,25 @@ function ChainTickets($n) {   # stage n's chain-block ticket ids (every stage's 
     if ($l.StartsWith('## ')) { $sec = $l; $b = $false; continue }
     if ($sec -cne '## Chain') { continue }
     if ($l.StartsWith('### ')) { $b = (-not $n) -or ($l -cmatch "^### [A-Z0-9]+ - stage $n - "); continue }
-    if ($b -and $l.StartsWith('tickets: ')) { foreach ($t in @(IdsOf $l.Substring(9))) { if (-not $seen.ContainsKey($t)) { $seen[$t] = 1; $ids.Add($t) } } }
+    if ($b -and $l.StartsWith('tickets: ')) { foreach ($t in @(IdsOf $l.Substring(9))) { if ($t -cmatch '^[A-Z]{1,3}[0-9]+[a-z]?$' -and -not $seen.ContainsKey($t)) { $seen[$t] = 1; $ids.Add($t) } } }
   }
   $ids.ToArray()
 }
-function OwnedMap {   # ID -> owner, per chain ticket someone else owns
+function OwnedMap($n) {   # ID -> owner, per ticket (stage n's, else the chain's) someone else owns
   $m = @{}
-  $ids = @(ChainTickets $null)
+  $ids = @(ChainTickets $n)
   if (-not $ids.Count) { return $m }
   $r = TMeta (@('pick') + $ids)
-  if ($r) { foreach ($l in $r.out) { if ($l -cmatch '^skip (\S+) (\S+)$') { $m[$Matches[1]] = $Matches[2] } } }
+  if ($r -and $r.code -eq 0) { foreach ($l in $r.out) { if ($l -cmatch '^skip (\S+) (\S+)$') { $m[$Matches[1]] = $Matches[2] } } }
+  elseif ($r) {
+    # who owns them is unknown and there is a team: none of them starts (fail closed)
+    Push-Location -LiteralPath (Split-Path -Parent (Resolve-Path -LiteralPath $Run).Path)
+    try { $tf = TeamFile } finally { Pop-Location }
+    if ($tf) {
+      [Console]::Error.WriteLine("note: ticket-meta pick failed ($(($r.err -split "`r?`n") -join ' ')) - stages with tickets wait")
+      foreach ($t in $ids) { $m[$t] = '?' }
+    }
+  }
   $m
 }
 function ClaimStage($n) {   # claim stage n's tickets for this session's person; a refusal is a note
@@ -1126,10 +1138,6 @@ function DoChainDispatch($n) {
     if ($hp[1] -ne '-') { Refuse "chain is held ($($hp[1])) - chain release first, or chain wait" }
     $st = RowCellN $n 3
     if ($st -notin @('', '!')) { Refuse "stage $n is '$st', not pending or failed - a stage is never dispatched twice" }
-    # F80: a stage whose ticket someone else owns never starts here.
-    $script:Owned = OwnedMap
-    try { $w = @(ChainScan | Where-Object { $_.StartsWith("IDLE $n owned ") }) | Select-Object -First 1 } finally { $script:Owned = $null }
-    if ($w) { $wp = $w.Split(' '); Refuse "stage ${n}: $($wp[3]) is owned by $($wp[4]) - a run takes only unassigned tickets and yours (ticket-meta pick); its owner or the lead reassigns it" }
     # F33: a stage a holding decision waits on runs only on a prompt written
     # after the answer - re-planned as a new stage, or ruled independent.
     $w = @(ChainScan | Where-Object { $_.StartsWith("IDLE $n Q") }) | Select-Object -First 1
@@ -1169,6 +1177,16 @@ function DoChainDispatch($n) {
     # F37: the cap is a gate here, not only a hint in chain next -All.
     $cap = ParallelCap $d
     if ($nfl -ge $cap) { Refuse "$nfl stage(s) in flight, the cap is $cap - wait for one to land; chain next -All says when" }
+    # F80: the claim is the gate, before the row flips - a ticket someone else owns, or
+    # claimed first, never starts here. A refused claim is only a note when no one else
+    # owns the tickets (not on the team, a ticket not on the board).
+    $ids = @(ChainTickets $n)
+    $r = $null; if ($ids.Count) { $r = TMeta (@('claim') + $ids) }
+    if ($r -and $r.code -ne 0) {
+      $om = OwnedMap $n
+      foreach ($t in $ids) { if ($om.ContainsKey($t)) { Refuse "stage ${n}: $t is owned by $($om[$t]) - a run takes only unassigned tickets and yours (ticket-meta pick); its owner or the lead reassigns it" } }
+      foreach ($l in @($r.err -split "`r?`n" | Where-Object { $_ })) { [Console]::Error.WriteLine("note: claim refused - $l") }
+    }
     $swt = ''; $sbr = ''; $rwt = HdrField $Run 'worktree'
     if ($rwt -and (Test-Path -LiteralPath $rwt) -and $nfl -gt 0) {
       $swt = "$rwt.s$n"; $sbr = "$(HdrField $Run 'branch')-s$n"
@@ -1192,7 +1210,6 @@ function DoChainDispatch($n) {
     StampUpdated
   } finally { Unlock }
   } catch { if ($leased) { try { LeaseRelease $n } catch {} }; throw }
-  ClaimStage $n   # F80: dispatching a ticket claims it
   $c
   $prompt
 }
@@ -1917,7 +1934,7 @@ function ChainScan([switch]$NextOnly) {
   }
   $openk = 0; $unb = @(); $askd = @()
   foreach ($k in $ql) { if ($qs[$k] -ceq 'open') { $openk++ }; if ($qs[$k] -cin @('answered', 'ruled')) { $unb += "Q$k" }; if ($qs[$k] -ceq 'asked') { $askd += "Q$k" } }
-  $nx = $null; $out = New-Object System.Collections.Generic.List[string]; $nf = 0; $nbk = 0
+  $nx = $null; $out = New-Object System.Collections.Generic.List[string]; $nf = 0; $nbk = 0; $osk = @()
   # F37: what the stages in flight touch. One with no files: could touch
   # anything, so nothing runs beside it.
   $infall = $null; $ifp = New-Object System.Collections.Generic.List[object]; $cand = New-Object System.Collections.Generic.List[int]
@@ -1944,7 +1961,7 @@ function ChainScan([switch]$NextOnly) {
     foreach ($k in $ql) { if ($rs.ContainsKey("$n,$k")) { $out.Add("IDLE $n Q$k $($rs["$n,$k"])"); $waits = $true } }
     foreach ($a in @($af[$n] | Where-Object { $null -ne $_ })) { if (-not (& $landed $a 0)) { $out.Add("IDLE $n - after $a"); $waits = $true } }
     # F80: tickets someone else owns (ticket-meta pick) - their stages never start here
-    if ($script:Owned) { foreach ($t in @($tk[$n] | Where-Object { $_ })) { if ($script:Owned.ContainsKey($t)) { $out.Add("IDLE $n owned $t $($script:Owned[$t])"); $waits = $true; break } } }
+    if ($script:Owned) { foreach ($t in @($tk[$n] | Where-Object { $_ })) { if ($script:Owned.ContainsKey($t)) { $out.Add("IDLE $n owned $t $($script:Owned[$t])"); $osk += "stage $n $t $($script:Owned[$t])"; $waits = $true; break } } }
     if ($hasf[$n] -and $script:Leases) {
       $hit = $false
       foreach ($t in @($fl[$n] | Where-Object { $_ })) { if ($hit) { break }
@@ -1987,7 +2004,10 @@ function ChainScan([switch]$NextOnly) {
   elseif ($v -eq 'UNBLOCK') { foreach ($u in $unb) { "UNBLOCK $u - answered, not yet re-planned: references/marathon.md, Unblock" } }
   elseif ($v -eq 'WAIT') { "WAIT $nf - in flight, nothing else can start: wait for a stage to land, then chain next" }
   elseif ($v -eq 'BLOCKED') { "BLOCKED $nbk - pending behind a failed stage: retry it as a new stage and close the failed row (stage <n> > - `"stage <new>`"), or report it: references/marathon.md, The loop" }
-  elseif ($askd) { "FINAL - unanswered, name them in the summary: $($askd -join ' ')" } else { 'FINAL' }
+  else { $fv = 'FINAL'
+    if ($askd) { $fv += " - unanswered, name them in the summary: $($askd -join ' ')" }
+    if ($osk.Count) { $fv += " - skipped, someone else owns them, name them in the summary: $($osk -join ', ')" }
+    $fv }
   $out
 }
 
@@ -3638,6 +3658,32 @@ function F80Selftest($d) {
     No 'F80: dispatch of another''s ticket' 'F3 is owned by @vidul' { DoChainDispatch $t3 }
     if (-not (Select-String -LiteralPath $Run -Pattern "^\| $t3 \| $(CodeOf $t3) F3 theirs \|   \|" -Quiet)) { Die "F80: a refused dispatch touched the row" }
     DoChainDispatch $t2 | Out-Null
+    # review: each check below says FAIL and the block dies at its end, so every red line shows
+    $bad = $false
+    # 1: the claim is the gate - another run claims F1 right after this one looked (a race)
+    [IO.File]::WriteAllText($tb, "# TICKETS`n- [ ] F1 $em free`n- [ ] F2 $em mine [owner: @asha]`n- [ ] F3 $em theirs [owner: @vidul]`n", $u8)
+    $race = Join-Path $d8 'race.ps1'; $flag = Join-Path $d8 'raced'
+    [IO.File]::WriteAllText($race, "& powershell -NoProfile -ExecutionPolicy Bypass -File '$tm' @args`n`$s = `$LASTEXITCODE`nif (`$args[0] -ceq 'pick' -and -not (Test-Path -LiteralPath '$flag')) { [IO.File]::WriteAllText('$flag', ''); `$env:SKILLATOR_ME = '@vidul'; & powershell -NoProfile -ExecutionPolicy Bypass -File '$tm' claim F1 | Out-Null }`nexit `$s`n")
+    $env:RELAY_TICKET_META = $race
+    $rerr = ''; try { DoChainDispatch $t1 | Out-Null } catch { $rerr = "$_" } finally { $env:RELAY_TICKET_META = $tm }
+    $board = [IO.File]::ReadAllText($tb, $u8)
+    if ($rerr -eq '') { if ($board -notmatch "(?m)^- \[ \] F1 $em free \[owner: @asha\]$") { Write-Output "FAIL: F80 review: dispatched a stage whose ticket another run claimed: $board"; $bad = $true } }
+    elseif ($rerr -notmatch '^REFUSED: .*F1 is owned by @vidul') { Write-Output "FAIL: F80 review: race refusal: $rerr"; $bad = $true }
+    # 3: with only another's stage left, FINAL names it - the end summary must
+    SetRow $t1 'x' '' 'a1' | Out-Null; SetRow $t2 'x' '' 'a2' | Out-Null
+    $out = @(DoChainNext)
+    if ($out[0] -notlike "FINAL*stage $t3 F3 @vidul*") { Write-Output "FAIL: F80 review: FINAL does not name the skipped stage: $($out[0])"; $bad = $true }
+    # 2: a token ticket-meta cannot read (HTML5) does not open the owner check
+    [IO.File]::WriteAllText($Run, ([IO.File]::ReadAllText($Run, $u8) -creplace '(?m)^tickets: F3(\r?)$', 'tickets: F3, HTML5$1'), $u8)
+    $out = @(DoChainNext)
+    if ($out -cnotcontains "IDLE $t3 owned F3 @vidul") { Write-Output "FAIL: F80 review: an odd ticket token opened the owner check: $($out -join ' | ')"; $bad = $true }
+    # 2: pick failing with a team.md = ownership unknown, nothing with a ticket starts (fail closed)
+    $broken = Join-Path $d8 'broken.ps1'
+    [IO.File]::WriteAllText($broken, "if (`$args[0] -ceq 'pick') { [Console]::Error.WriteLine('ticket-meta: boom'); exit 1 }`n& powershell -NoProfile -ExecutionPolicy Bypass -File '$tm' @args`nexit `$LASTEXITCODE`n")
+    $env:RELAY_TICKET_META = $broken
+    try { $out = @(DoChainNext) } finally { $env:RELAY_TICKET_META = $tm }
+    if ($out -cnotcontains "IDLE $t3 owned F3 ?") { Write-Output "FAIL: F80 review: a failed pick left another's stage dispatchable: $($out -join ' | ')"; $bad = $true }
+    if ($bad) { Die 'F80 review checks failed' }
     # not on the team: only unassigned tickets run; no team.md: every ticket, as before
     G -C $d8 config user.email ghost@x.com
     if (@(DoChainNext) -cnotcontains "IDLE $t3 owned F3 @vidul") { Die "F80: not on the team, another's ticket was not skipped" }

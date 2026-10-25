@@ -36,7 +36,9 @@ export function parseTeam(text: string): Member[] {
 export const sameHandle = (a: string | null | undefined, b: string | null | undefined) =>
   !!a && !!b && a.toLowerCase() === b.toLowerCase()
 
-export function meOf(team: Member[], email: string): string | null {
+// F80: as ticket-meta whoami - SKILLATOR_ME (a member as written, @ optional) overrides the email.
+export function meOf(team: Member[], email: string, envMe?: string | null): string | null {
+  if (envMe) { const h = envMe.startsWith('@') ? envMe : '@' + envMe; return team.find(m => m.handle === h)?.handle ?? null }
   const e = email.trim().toLowerCase()
   if (!e) return null
   return team.find(m => m.emails.includes(e))?.handle ?? null

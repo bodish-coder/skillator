@@ -44,6 +44,7 @@ const norm = (p: string) => p.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
 // Module state is per load: a hot reload starts a fresh module, so it re-arms.
 let armed = false
 let email: string | null = null
+let envMe: string | null = null            // F80: SKILLATOR_ME, as ticket-meta whoami reads it
 let teamSeen = ''
 let lastScroll: SiteScroll = { offset: 0, bodyRows: 0 }
 let lastCols = 54
@@ -106,7 +107,7 @@ async function poll($: EngineInterface, force = false) {
     let t: Member[] = []
     if (seen !== 'none') { try { t = parseTeam(await $.fs.read(teamPath)) } catch { t = [] } }
     await update($, teamA, () => t)
-    await update($, meA, () => (email ? meOf(t, email) : null))
+    await update($, meA, () => meOf(t, email ?? '', envMe))
   }
   await pollInbox($).catch(() => {})       // F66: the Teams inbox, re-read when it moved
   await updateStatus($)
@@ -278,6 +279,7 @@ async function startNotes($: EngineInterface) {
 }
 
 async function loadEmail($: EngineInterface) {
+  try { envMe = (await $.env.get('SKILLATOR_ME')) || null } catch { envMe = null }
   const repo = await $.session.repo()
   try {
     const git = await gitBin($)                    // A150: absolute on Windows; none: no email

@@ -344,7 +344,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
       $om = [regex]::Match($line, '\[owner:[ \t]*([^\]]*?)[ \t]*\]')
       if ($om.Success) {
         $ow = $om.Groups[1].Value
-        if ($ow -ne '' -and $ow -ine $o.owner -and -not (Test-MayTake $ow $o.me $o.lead)) {
+        if ($ow -ne '' -and -not (Test-MayTake $ow $o.me $o.lead)) {
           $who = "only $ow may reassign it (no lead set)"
           if ($o.lead) { $who = "only $ow or the lead $($o.lead) may reassign it" }
           $you = $o.me
@@ -443,7 +443,12 @@ function Get-Lead {
   if ($null -eq $f) { return '' }
   foreach ($line in ([System.IO.File]::ReadAllText($f, $Utf8).Replace("`r", '').Split([char]10))) {
     $m = [regex]::Match($line, '^lead:[ \t]*(@[A-Za-z0-9_.-]+)[ \t]*$')
-    if ($m.Success) { return $m.Groups[1].Value }
+    if (-not $m.Success) { continue }
+    $l = $m.Groups[1].Value
+    # a lead line naming no member (hand-edited) is no lead, so anyone may set one
+    foreach ($t in (Get-TeamRows)) { if ($t.h -ieq $l) { return $l } }
+    [Console]::Error.WriteLine("note: lead: $l is not on the team - no lead until one is set (team lead @handle)")
+    return ''
   }
   return ''
 }
@@ -485,7 +490,7 @@ function Do-Claim([string[]]$a) {
   foreach ($ci in $a) {
     try {
       $id = Get-NormId $ci
-      foreach ($l in @(Edit-Line $id @{ owner = $me.me; samekey = 'owner'; sameval = $me.me; owncheck = $true; me = $me.me; mewhy = ''; lead = $lead })) { [void]$out.Add($l) }
+      foreach ($l in @(Edit-Line $id @{ owner = $me.me; samekey = 'owner'; sameval = $me.me; refuse = 'x-'; cmd = 'claim'; owncheck = $true; me = $me.me; mewhy = ''; lead = $lead })) { [void]$out.Add($l) }
     } catch { [void]$errs.Add($_.Exception.Message) }
   }
   if ($errs.Count -gt 0) {
@@ -532,6 +537,7 @@ function Do-Pick([string[]]$a) {
   foreach ($id in $ids) {
     $o = ''
     if ($ow.ContainsKey($id)) { $o = $ow[$id] }
+    elseif ($id -cmatch '^(.+\d)[a-z]$' -and $ow.ContainsKey($Matches[1])) { $o = $ow[$Matches[1]] }   # a sub-part with no row takes its parent owner
     if (-not $team -or $o -eq '' -or ($me -ne '' -and $o -ieq $me)) { [void]$res.Add("pick $id") } else { [void]$res.Add("skip $id $o") }
   }
   return $res.ToArray()
@@ -756,7 +762,7 @@ function Do-TeamRemove([string[]]$a) {
     $known = $false
     foreach ($r in (Get-TeamMembers $f)) { if ($r.h -ceq $h) { $known = $true } }
     if (-not $known) { Fail "$h is not in $f" }
-    if ($h -ceq (Get-Lead)) { Fail "$h is the lead - hand the lead over first (team lead @other), then remove" }
+    if ($h -ieq (Get-Lead)) { Fail "$h is the lead - hand the lead over first (team lead @other), then remove" }
     $text = $Utf8.GetString([System.IO.File]::ReadAllBytes($f))
     $lines = $text.Split([char]10)
     $eol = $text.EndsWith("`n")
@@ -1163,9 +1169,9 @@ function Invoke-Selftest {
     Eq 'assign from [x]' (Run assign F26 '@asha') "- [ ] F26 $dash Shipped [owner: @asha] (@cc-3)"
     Eq 'decided' (Run decided F24) "- [ ] F24 $dash Waiting [decide: @asha]"
     # the same handle with the box not yet the target still moves the box
-    Eq 'same owner from [x]' (Run assign F27 '@asha') "- [ ] F27 $dash Kept [owner: @asha]"
+    $env:SKILLATOR_ME = '@asha'; try { Eq 'same owner from [x]' (Run assign F27 '@asha') "- [ ] F27 $dash Kept [owner: @asha]" } finally { $env:SKILLATOR_ME = $null }   # by its owner, F80 review
     Eq 'same decider from [ ]' (Run decide F28 '@asha') "- [?] F28 $dash Decided before [decide: @asha]"
-    Eq 'same owner from [?]' (Run assign F29 '@vidul') "- [ ] F29 $dash Owner waiting [owner: @vidul]"
+    $env:SKILLATOR_ME = '@vidul'; try { Eq 'same owner from [?]' (Run assign F29 '@vidul') "- [ ] F29 $dash Owner waiting [owner: @vidul]" } finally { $env:SKILLATOR_ME = $null }
     $f45a = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
     if (-not (Refused decided F23)) { Write-Output 'FAIL: decided flipped a ticket that is not [?]'; $script:fail = 1 }
     if (-not (Refused decided "F22`nF23")) { Write-Output 'FAIL: decided took a multi-line id'; $script:fail = 1 }
@@ -1373,7 +1379,7 @@ function Invoke-Selftest {
     Init-Repo $R
     W "$R/.skillator/team.md" "# Team`n`n- @vidul: vidul@ikran.in`n  name: Vidul`n- @asha: Asha@X.com`n- @neo: neo@x.com`n"
     W "$R/TICKETS.md" ("# TICKETS`n`n- [ ] F1 $dash Free`n- [ ] F2 $dash Mine [owner: @asha]`n- [~] F3 $dash Theirs [owner: @vidul] (@cc-aaaaaa)`n" +
-      "- [!] F4 $dash Stuck (blocked: x)`n- [x] F5 $dash Shipped [owner: @vidul]`n- [ ] F6 $dash Neos [owner: @neo]`n- [~] F7 $dash Working (@cc-bbbbbb)`n")
+      "- [!] F4 $dash Stuck (blocked: x)`n- [x] F5 $dash Shipped [owner: @vidul]`n- [ ] F6 $dash Neos [owner: @neo]`n- [~] F7 $dash Working (@cc-bbbbbb)`n- [-] F8 $dash Dropped`n")
     Commit 'vidul@ikran.in' 'init' 'README.md'
     $board = "$R/TICKETS.md"
     $tf = "$R/.skillator/team.md"
@@ -1396,9 +1402,14 @@ function Invoke-Selftest {
     & git config user.email asha@x.com
     Eq 'pick as asha' (Run pick) 'you: @asha pick F1 pick F2 skip F3 @vidul pick F4 skip F6 @neo pick F7'
     Eq 'pick given ids' (Run pick f3 F2 F9) 'you: @asha skip F3 @vidul pick F2 pick F9'
+    # review: a sub-part with no row of its own is its parent's (the chain's rule: F3 holds F3a)
+    Eq 'pick a sub-part' (Run pick F3a F2a F1a) 'you: @asha skip F3a @vidul pick F2a pick F1a'
     # claim (plan / dispatch): [owner: me], the box kept; mine again is no change; another's refused
     Eq 'claim F1' (Run claim F1) "- [ ] F1 $dash Free [owner: @asha]"
     Eq 'claim keeps [~]' (Run claim F7) "- [~] F7 $dash Working [owner: @asha] (@cc-bbbbbb)"
+    # review: a closed ticket is not claimed
+    if (-not (Refused claim F8)) { Write-Output 'FAIL: claim of a closed ticket succeeded'; $script:fail = 1 }
+    if ([System.IO.File]::ReadAllText($board, $Utf8) -cnotmatch "(?m)^- \[-\] F8 $dash Dropped`$") { Write-Output 'FAIL: claim wrote onto a closed ticket'; $script:fail = 1 }
     $o = [string]::Join(' ', @(Run claim F2))
     if ($o -notmatch 'no change') { Write-Output "FAIL: claim of my own ticket is not no change: [$o]"; $script:fail = 1 }
     $f80b = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
@@ -1407,6 +1418,8 @@ function Invoke-Selftest {
     # assign: a member's reassign of another's ticket refused; the owner's and the lead's accepted
     $msg = ErrOf assign F3 '@asha'
     if ($msg -notmatch 'F3 is owned by @vidul') { Write-Output "FAIL: reassign refusal: [$msg]"; $script:fail = 1 }
+    # review: "assigning" another's ticket to its own owner would reset its box - refused too
+    if (-not (Refused assign F3 '@vidul')) { Write-Output "FAIL: a member reset another's ticket by assigning it to its owner"; $script:fail = 1 }
     $same = { param($want) [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($board)) -ceq [Convert]::ToBase64String($Utf8.GetBytes($want)) }
     if (-not (& $same $f80b)) { Write-Output 'FAIL: a refused claim or reassign changed the board'; $script:fail = 1 }
     Eq 'owner reassigns' @(AsMe '@vidul' { Run assign F3 '@neo' })[0] "- [ ] F3 $dash Theirs [owner: @neo] (@cc-aaaaaa)"
@@ -1434,6 +1447,12 @@ function Invoke-Selftest {
     Eq 'team lead same' (Run team lead '@asha') 'no change: @asha is already the lead'
     Eq 'team lead - by the lead' (Run team lead '-') 'lead cleared'
     if ([System.IO.File]::ReadAllText($tf) -match '(?m)^lead:') { Write-Output 'FAIL: team lead - left a lead line'; $script:fail = 1 }
+    # review: the lead matched without case; a lead line naming no member is no lead
+    W $tf "# Team`nlead: @Vidul`n`n- @vidul: vidul@ikran.in`n- @asha: Asha@X.com`n"
+    if (-not (AsMe '@vidul' { Refused team remove '@vidul' })) { Write-Output 'FAIL: the lead was removed (its lead line in another case)'; $script:fail = 1 }
+    W $tf "# Team`nlead: @ghost`n`n- @vidul: vidul@ikran.in`n- @asha: Asha@X.com`n"
+    Eq 'a lead not on the team is no lead' (Run team lead '@asha') 'lead: @asha'
+    Eq 'one lead line, replaced' @(([System.IO.File]::ReadAllText($tf)) -split "`n" | Where-Object { $_ -match '^lead:' }) 'lead: @asha'
     # no heading, CRLF: the lead line comes in under a new # Team heading, CRLF kept
     W $tf "- @asha: asha@x.com`r`n"
     Eq 'team lead, no heading' (Run team lead '@asha') 'lead: @asha'

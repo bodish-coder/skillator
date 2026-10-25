@@ -141,7 +141,11 @@ ticket, as before). A stage whose `tickets:` name one someone else owns is
 `IDLE <n> owned <ID> <owner>` in `chain next` - listed as skipped with its
 owner, never run - and its `chain dispatch` is refused (exit 2). `chain plan`
 and `chain dispatch` claim the stage's tickets (`ticket-meta claim`: `[owner:
-<me>]`, box kept); a refused claim is a `note:` on stderr.
+<me>]`, box kept); at plan a refused claim is a `note:` on stderr, at dispatch
+the claim is the gate - before the row flips, refused (exit 2) when someone
+else owns or claimed a ticket first. Ownership ticket-meta cannot tell (its
+`pick` fails while a `team.md` exists) counts as owned: `owned <ID> ?`. `FINAL`
+names the stages skipped as someone else's.
 **Parallel stages (F37).** `chain next --all` names every stage that can run
 now - files disjoint from what is in flight and from each other - capped at 2
 below 50 % of the 5-hour window, else 1. A stage that runs beside another works

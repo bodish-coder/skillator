@@ -242,14 +242,21 @@ chain_tickets() {   # [n]: the ticket ids of stage n's chain block (all stages w
   awk -v n="${1:-}" '/^## /{sec=$0; b=0; next}
     sec == "## Chain" && /^### / { b = (n == "" || $0 ~ ("^### [A-Z0-9]+ - stage " n " - ")); next }
     sec == "## Chain" && b && index($0, "tickets: ") == 1 { m = split(substr($0, 10), w, /[^A-Za-z0-9]+/)
-      for (i = 1; i <= m; i++) if (w[i] ~ /^[A-Z]+[0-9]+[a-z]*$/ && !(w[i] in s)) { s[w[i]] = 1; print w[i] } }' "$RUN"
+      for (i = 1; i <= m; i++) if (w[i] ~ /^[A-Z][A-Z]?[A-Z]?[0-9]+[a-z]?$/ && !(w[i] in s)) { s[w[i]] = 1; print w[i] } }' "$RUN"
 }
-owned_to() {   # <file>: "ID<TAB>owner" per chain ticket someone else owns
+owned_to() {   # <file> [n]: "ID<TAB>owner" per ticket (stage n's, else the chain's) someone else owns
   : > "$1"
-  _ids=$(chain_tickets | tr '\n' ' ')
+  _ids=$(chain_tickets "${2:-}" | tr '\n' ' ')
   [ -n "$_ids" ] || return 0
   # shellcheck disable=SC2086
-  tmeta pick $_ids 2>/dev/null | awk '$1 == "skip" { print $2 "\t" $3 }' > "$1" || :
+  if _po=$(tmeta pick $_ids 2>"$1.err"); then
+    printf '%s\n' "$_po" | awk '$1 == "skip" { print $2 "\t" $3 }' > "$1"
+  elif ( cd "$(dirname "$RUN")" && team_file >/dev/null ); then
+    # who owns them is unknown and there is a team: none of them starts (fail closed)
+    echo "note: ticket-meta pick failed ($(tr '\n' ' ' < "$1.err")) - stages with tickets wait" >&2
+    for _i in $_ids; do printf '%s\t?\n' "$_i"; done > "$1"
+  fi
+  rm -f "$1.err"
 }
 claim_stage() {   # <n>: claim stage n's tickets for this session's person; a refusal is a note
   _ids=$(chain_tickets "$1" | tr '\n' ' ')
@@ -1394,10 +1401,6 @@ chain_dispatch() {
   h=$(hdr_hold); [ "$h" = - ] || refuse "chain is held ($h) - chain release first, or chain wait"
   st=$(row_cell "$n" 4)
   case "$st" in ''|'!') ;; *) refuse "stage $n is '$st', not pending or failed - a stage is never dispatched twice" ;; esac
-  # F80: a stage whose ticket someone else owns never starts here.
-  OWNF="$RUN.own.$$"; owned_to "$OWNF"
-  w=$(chain_scan | grep "^IDLE $n owned " | head -1) || :; rm -f "$OWNF"; OWNF=
-  [ -z "$w" ] || { set -- $w; refuse "stage $n: $4 is owned by $5 - a run takes only unassigned tickets and yours (ticket-meta pick); its owner or the lead reassigns it"; }
   # F33: a stage a holding decision waits on runs only on a prompt written
   # after the answer - re-planned as a new stage, or ruled independent.
   w=$(chain_scan | grep "^IDLE $n Q" | head -1)
@@ -1435,6 +1438,17 @@ chain_dispatch() {
   # F37: the cap is a gate here, not only a hint in chain next --all.
   cap=$(parallel_cap "$dv")
   [ "$nfl" -lt "$cap" ] || refuse "$nfl stage(s) in flight, the cap is $cap (usage $pct%) - wait for one to land; chain next --all says when"
+  # F80: the claim is the gate, before the row flips - a ticket someone else owns, or
+  # claimed first, never starts here. A refused claim is only a note when no one else
+  # owns the tickets (not on the team, a ticket not on the board).
+  _ids=$(chain_tickets "$n" | tr '\n' ' ')
+  # shellcheck disable=SC2086
+  if [ -n "$_ids" ] && ! _ce=$(tmeta claim $_ids 2>&1 >/dev/null); then
+    OWNF="$RUN.own.$$"; owned_to "$OWNF" "$n"; w=$(head -1 "$OWNF"); rm -f "$OWNF"; OWNF=
+    # shellcheck disable=SC2086
+    [ -z "$w" ] || { set -- $w; refuse "stage $n: $1 is owned by $2 - a run takes only unassigned tickets and yours (ticket-meta pick); its owner or the lead reassigns it"; }
+    echo "note: claim refused - $_ce" >&2
+  fi
   swt=; sbr=; rwt=$(hdr_field "$RUN" worktree)
   if [ -n "$rwt" ] && [ -d "$rwt" ] && [ "$nfl" -gt 0 ]; then
     swt="$rwt.s$n"; sbr="$(hdr_field "$RUN" branch)-s$n"
@@ -1465,7 +1479,6 @@ chain_dispatch() {
   stamp_updated
   unlock
   LEASED_N=
-  claim_stage "$n"   # F80: dispatching a ticket claims it
   echo "$c"
   block_prompt "$n"
 }
@@ -1984,7 +1997,7 @@ chain_scan() {
         waits = 0
         for (i = 1; i <= nq; i++) { k = ql[i]; if ((n, k) in rs) { out[++no] = "IDLE " n " Q" k " " rs[n, k]; waits = 1 } }
         ma = split(af[n], a, " "); for (x = 1; x <= ma; x++) if (!landed(a[x])) { out[++no] = "IDLE " n " - after " a[x]; waits = 1 }
-        mt = split(tk[n], t, " "); for (y = 1; y <= mt; y++) if (t[y] in own) { out[++no] = "IDLE " n " owned " t[y] " " own[t[y]]; waits = 1; break }
+        mt = split(tk[n], t, " "); for (y = 1; y <= mt; y++) if (t[y] in own) { out[++no] = "IDLE " n " owned " t[y] " " own[t[y]]; osk = osk (osk == "" ? "" : ",") " stage " n " " t[y] " " own[t[y]]; waits = 1; break }
         if (hasf[n] && nl) { mt = split(fl[n], t, SUBSEP); hit = 0
           for (y = 2; y <= mt && !hit; y++) for (z2 = 1; z2 <= nl && !hit; z2++) if (meet(lp[z2], t[y])) { out[++no] = "IDLE " n " leased " t[y] " " lrn[z2] " stage " lsn[z2]; waits = 1; hit = 1 } }
         if ((s == "" || s == "!") && !waits && (infall || ni)) {
@@ -2024,7 +2037,7 @@ chain_scan() {
       else if (v == "UNBLOCK") { mb = split(unb, b, " "); for (x = 1; x <= mb; x++) print "UNBLOCK " b[x] " - answered, not yet re-planned: references/marathon.md, Unblock" }
       else if (v == "WAIT") print "WAIT " nf " - in flight, nothing else can start: wait for a stage to land, then chain next"
       else if (v == "BLOCKED") print "BLOCKED " nbk " - pending behind a failed stage: retry it as a new stage and close the failed row (stage <n> > - \"stage <new>\"), or report it: references/marathon.md, The loop"
-      else print "FINAL" (askd == "" ? "" : " - unanswered, name them in the summary:" askd)
+      else print "FINAL" (askd == "" ? "" : " - unanswered, name them in the summary:" askd) (osk == "" ? "" : " - skipped, someone else owns them, name them in the summary:" osk)
       for (i = 1; i <= no; i++) print out[i]
     }' "$RUN"
 }
@@ -2501,6 +2514,31 @@ f80_selftest() {
   [ "$rc" = 2 ] && printf '%s\n' "$out" | grep -q 'F3 is owned by @vidul' || die "F80: dispatch of another's ticket: want exit 2, got $rc: $out"
   grep -q "^| $t3 | $(code_of "$t3") F3 theirs |   |" "$RUN" || die "F80: a refused dispatch touched the row"
   chain_dispatch "$t2" --driver @cc-a >/dev/null 2>&1 || die "F80: dispatch of my own ticket refused"
+  # review: each check below says FAIL and the block dies at its end, so every red line shows
+  bad=
+  # 1: the claim is the gate - another run claims F1 right after this one looked (a race)
+  printf -- '%s\n' '# TICKETS' "- [ ] F1 $em free" "- [ ] F2 $em mine [owner: @asha]" "- [ ] F3 $em theirs [owner: @vidul]" > "$d8/TICKETS.md"
+  printf 'case $1 in pick) sh "%s" "$@"; s=$?; [ -e "%s" ] || { : > "%s"; SKILLATOR_ME=@vidul sh "%s" claim F1 >/dev/null 2>&1; }; exit $s ;; esac\nexec sh "%s" "$@"\n' \
+    "$_tm" "$d8/raced" "$d8/raced" "$_tm" "$_tm" > "$d8/race.sh"
+  RELAY_TICKET_META="$d8/race.sh"
+  set +e; out=$( (chain_dispatch "$t1" --driver @cc-a) 2>&1 ); rc=$?; set -e
+  RELAY_TICKET_META=$_tm
+  if [ "$rc" = 0 ]; then grep -q "^- \[ \] F1 $em free \[owner: @asha\]\$" "$d8/TICKETS.md" || { echo "FAIL: F80 review: dispatched a stage whose ticket another run claimed: $(grep F1 "$d8/TICKETS.md")"; bad=1; }
+  else [ "$rc" = 2 ] && printf '%s\n' "$out" | grep -q 'F1 is owned by @vidul' || { echo "FAIL: F80 review: race refusal: rc $rc: $out"; bad=1; }; fi
+  # 3: with only another's stage left, FINAL names it - the end summary must
+  set_row "$t1" x "" a1 >/dev/null; set_row "$t2" x "" a2 >/dev/null
+  out=$(chain_next | head -1)
+  case $out in "FINAL"*"stage $t3 F3 @vidul"*) ;; *) echo "FAIL: F80 review: FINAL does not name the skipped stage: $out"; bad=1 ;; esac
+  # 2: a token ticket-meta cannot read (HTML5) does not open the owner check
+  awk '/^tickets: F3$/ { $0 = "tickets: F3, HTML5" } { print }' "$RUN" > "$RUN.t" && mv "$RUN.t" "$RUN"
+  chain_next | grep -qx "IDLE $t3 owned F3 @vidul" || { echo "FAIL: F80 review: an odd ticket token opened the owner check: $(chain_next)"; bad=1; }
+  # 2: pick failing with a team.md = ownership unknown, nothing with a ticket starts (fail closed)
+  printf 'case $1 in pick) echo "ticket-meta: boom" >&2; exit 1 ;; esac\nexec sh "%s" "$@"\n' "$_tm" > "$d8/broken.sh"
+  RELAY_TICKET_META="$d8/broken.sh"
+  out=$(chain_next 2>&1)
+  printf '%s\n' "$out" | grep -qx "IDLE $t3 owned F3 ?" || { echo "FAIL: F80 review: a failed pick left another's stage dispatchable: $out"; bad=1; }
+  RELAY_TICKET_META=$_tm
+  [ -z "$bad" ] || die "F80 review checks failed"
   # not on the team: only unassigned tickets run; no team.md: every ticket, as before
   git -C "$d8" config user.email ghost@x.com
   chain_next | grep -qx "IDLE $t3 owned F3 @vidul" || die "F80: not on the team, another's ticket was not skipped"

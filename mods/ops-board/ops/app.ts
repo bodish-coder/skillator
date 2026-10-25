@@ -106,7 +106,7 @@ export async function main(argv: string[]): Promise<number> {
 
   let live = false
   const draw = () => { if (live) out.write(paintScreen(frame({ ...engine.state, now: Date.now() }, paint))) }
-  const engine = makeEngine({ host, email, once, state, onChange: draw, onQuit: () => quit(0) })
+  const engine = makeEngine({ host, email, envMe: process.env.SKILLATOR_ME ?? null, once, state, onChange: draw, onQuit: () => quit(0) })
 
   if (!stdin) {
     await engine.readAll()
