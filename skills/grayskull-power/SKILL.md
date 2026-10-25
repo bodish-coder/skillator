@@ -17,8 +17,7 @@ description: >-
 ## ⚔️ I HAVE THE POWER!!
 ```
 
-Unconditional — the receipt that the skill loaded, not a reward for clean
-arming. Once a session.
+Unconditional — the receipt it loaded. Once a session.
 
 One call: **arm** the standing skills, **announce** the state, **route** each
 request — under §3.
@@ -70,6 +69,7 @@ One skill at a time; chaining "to be safe" is the failure.
 | Screenshots · auth/secrets · a skill | `screenshot-argus` · `security-review` · `skill-smith` |
 | Merge · deploy · ending · resuming | `mergeprep-oracle`→`merge-smith` · `deploy-merlin`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |
 | A staged run, marathon · written tasks · Obi-Wan | `relay-morpheus` · `tasks-sentinels` · `holo-r2d2` |
+| Own a long goal | `chief-fury` |
 | Tricky analysis | Parallel Fable subagents; you reconcile |
 
 **Nothing matches?** Do it directly — a one-line edit needs no skill, but still

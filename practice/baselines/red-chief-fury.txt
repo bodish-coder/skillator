@@ -1,0 +1,57 @@
+# RED - a long-running goal handed to one session, no skill (F84, chief-fury)
+# 2026-10-25, claude-code 2.1.310, default model. Harness `cmd red`
+# (--safe-mode --disallowed-tools Skill, acceptEdits + allow-list), wall clock
+# 1500 s, 2 runs SERIAL, fresh fixture each (`fixture relay-marathon`: shelf,
+# TICKETS.md with B3 B4 B6 F2 F3 F5 open, F7 deferred). Both exited 0 on their
+# own (limit hit: none). Cost $0.58 + $0.39, 135 s + 123 s.
+# Scenario: scenario-chief-fury.txt. Transcripts:
+# transcripts/f84-red-chief-{1,2}.jsonl, run 1's memory file as
+# transcripts/f84-red-chief-1.HANDOFF.md.
+#
+# What the runs did well, so GREEN must not lose it: both finished B3 B4 B6 F3
+# with tests on a branch, never pushed, refused to guess the two owner
+# decisions, gave a recommendation with trade-offs, flagged "next to the
+# package" breaking under pip. Run 2 found a real cross-cutting risk (B6 makes
+# the nightly sync see `[]` and possibly wipe the library's copy).
+#
+# VIOLATED, 2/2 unless noted - what a chief of staff adds is absent:
+#
+# 1. All work in the main session. Agent/Task calls: 0 and 0. Tools: run 1
+#    Bash 7 Edit 11 Read 1 Write 2; run 2 Bash 7 Edit 7 Read 5 Write 1. The
+#    owner session spent its own context on every edit.
+#
+# 2. Memory is one flat file, written as the present. Run 1 wrote HANDOFF.md
+#    ("Read this first ... anything decided goes here"): open questions + a
+#    dated log - the closest either came. But no index, no page per decision,
+#    code claims in the present tense with no commit ("the CLI isn't really
+#    usable without it", README "still says in memory"), and the owner is told
+#    to "Answer inline (e.g. "Q1: JSON ...")" - i.e. overwrite the question,
+#    no history. Run 2 put everything into TICKETS.md rows ("I put everything
+#    on TICKETS.md ... the options with my recommendations"): the board as the
+#    wiki, one date in the whole file ("added 2026-10-25"), the warning
+#    "because storage is in memory today" undated and unpinned.
+#
+# 3. The storage decision weighed from one seat. Both: a JSON-vs-SQLite pros
+#    and cons list and "Agent's lean: JSON file". No complexity judged (it is
+#    irreversible-ish data format, three named stakeholders - by the ticket's
+#    scoring a board meeting), no second view, no disagreement named. Run 1 even
+#    closed the stakeholder question itself: "The sync job reads `list --json`,
+#    not the storage file, so it's fine either way."
+#
+# 4. Strategic track: none. No lint rule, no standards file, no test or check
+#    added so the next task goes better - only the tasks. Run 2's sync-wipe
+#    risk stayed a sentence in F8's row ("Ship B6 together with F8, not
+#    before") - no ticket, no guard that would make shipping B6 alone fail.
+#
+# 5. The "check in every few days" never became a schedule. No /loop or
+#    /schedule suggested, no recurring wiki lint or board check; run 2:
+#    "Each time you check in, that file and `git log` show where things stand."
+#
+# 6. Decisions asked as numbered prose in the final message (run 1: 2, run 2:
+#    5 incl. merge policy), not parked anywhere a later session's tooling reads.
+#
+# What a fix must add: work through background agents handed pointers; a goal
+# wiki (index + one page per decision/problem/subsystem/preference, dated,
+# commit-pinned, superseded not rewritten); a complexity score per decision and
+# a role-panel synthesis with the disagreement named for the high ones; the
+# strategic finding turned into a ticket; a schedule suggestion.

@@ -385,6 +385,17 @@ Deactivating is deleting `.skillator/grayskull.md`.
   decision per step, the recommendation shown but never pre-selected, drafts,
   review and an owner-finalized JSON that goes back into the run as answers.
 
+- **chief-fury** — one session owns a long-running goal ("you own getting this
+  to v1", "chief of staff") and thinks on two tracks: finish the task, and change
+  the environment so the next one goes better - every such finding a ticket. The
+  work goes out to background agents (`relay-morpheus`, `tasks-sentinels`)
+  briefed with pointers, not pasted history; the memory is a goal wiki in
+  `.skillator/wiki/<goal>/` written as dated history, code claims pinned to a
+  commit, superseded never rewritten. A hard decision is scored and, when it
+  scores high, put to a board of up to five role agents whose synthesis names
+  the disagreement and parks one question for the owner. Credits Matt Pocock's
+  and Alireza Rezvani's MIT `chief-of-staff` skills. Invoke with `/chief-fury`.
+
 - **remote-cerebro** — a phone into a running coding CLI: codex, cursor-agent, pi or
   gemini, driven over Telegram (or a local `file` channel for tests) while you are
   away from the desk. Native first where the vendor ships a remote (codex, cursor's

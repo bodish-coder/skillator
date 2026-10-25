@@ -1,0 +1,78 @@
+# GREEN - chief-fury, a long-running goal owned by one session (F84)
+# 2026-10-25, claude-code 2.1.310, default model. Harness `prefix` (working
+# tree skills/ + practice/ overlaid: chief-fury UNCOMMITTED at the time, its
+# text as committed with this file) and `run` with BASELINE_ISOLATE=hide
+# (~/.claude/CLAUDE.md hidden and restored), --plugin-dir/--add-dir the
+# prefix, acceptEdits + the harness allow-list + Skill. Fresh
+# `fixture relay-marathon` each, 2 runs SERIAL. Prompt:
+# scenario-chief-fury-green.txt = scenario-chief-fury.txt verbatim + "run
+# subagents one at a time" (the host's low-RAM rule, which board.md allows) +
+# "Use skillator:chief-fury" (handed over: this tests the body, not matching).
+# Init listed skillator:chief-fury; both runs invoked it first.
+# Transcripts: transcripts/f84-green-chief-{1,2}.jsonl; the wikis they wrote:
+# transcripts/f84-green-chief-{1,2}-wiki/.
+#
+# RUN 1 - PASS on the wiki, schedule and strategic track; board NOT convened.
+#   $1.10, 284 s, exit 0, limit hit: none. A real `.skillator/watchdog.hold`
+#   ("mem 0.2 GB free (below 1 GB)") appeared in the fixture during the run (the
+#   host's ops-board watchdog, F48), so no agent ran: the run said so in one
+#   line and did the four small tickets in-session (allowed, SKILL.md §2).
+#   It did NOT fall back to a one-seat answer - decision-persistence.md: "No
+#   position has been taken from a single seat. The briefs below are ready."
+#   Wiki .skillator/wiki/shelf-v1/: index + 9 pages (4 decision, 1 problem,
+#   1 subsystem, 2 pref, goal); scores written out (persistence 5, export 4);
+#   code claims pinned ("As of 03dbcc3 ... a blank title prints a traceback
+#   (A1)", then "As of 3e022c9 ... This supersedes the 'prints a traceback'
+#   claim in the 03dbcc3 entry above" - superseded, not rewritten). Strategic:
+#   A2 filed ("list --json is the sync job's contract, but only the README
+#   mentions it" -> a CODING_STANDARDS.md line plus contract tests); F8 filed.
+#   Schedule: "a routine every 3 days ... set up with /schedule and needs your
+#   yes".
+#
+# RUN 2 - PASS on every Done item. $7.69, 1603 s, exit 0, limit hit: none.
+#   Memory was 3.3 GB free before it started.
+#   Board meeting held, twice, seats one at a time, read-only:
+#     persistence (score 5): architect, ops, library staff (in UX's place),
+#       product - security left off with the reason written down.
+#     export (score 4): library staff, architect, ops.
+#   Synthesis in the four parts, decision-persistence.md "## Board synthesis
+#   (2026-10-25)": Agree (not next to the package, all four; atomic writes;
+#   the store is private) / **The disagreement** - "Ops wants **SQLite** ...
+#   Architect, library staff and product want **JSON** ... What it is really
+#   about: **whether v1 has concurrent writers**." / Actions (4, each owned, 3
+#   with a ticket) / The owner's decision - one question, options A/B/C with
+#   gives/costs, "Recommendation (the chief's): **A**". The conflict was
+#   surfaced and left to the owner, not resolved.
+#   Work went out: relay-morpheus RUN-0001 + tasks-sentinels, one implementer
+#   (sonnet) and one reviewer per ticket - 12 agents for B3 B4 B6 F3 A1 A3, in
+#   run worktrees, landed and merged on a local `v1` branch, master untouched,
+#   nothing pushed. The chief's own edits (main-session Edit/Write, counted
+#   from the stream): wiki pages, TICKETS.md, the run file, `.gitignore` and
+#   one line of `tests/test_contracts.py` at the end (A1's exit-0 assert) -
+#   no feature code.
+#   Wiki: index (decisions, subsystems, runs, problems, preferences, each line
+#   dated or pinned) + 7 pages; every History line dated; subsystem "as of
+#   `5fb2970` on branch v1"; sources cited (board agent ids, RUN-0001 file,
+#   TICKETS ids), never copied. Index updated on ingest - committed with the
+#   board in 78c49aa and again at the run's end (493f131).
+#   Strategic: A1 (a contract test that runs the real CLI exactly as the sync
+#   job does) and A2 (a missing or corrupt store fails loudly, not as an empty
+#   shelf - the board's action 2) filed and cited from the pages.
+#   Schedule: "set up a routine with /schedule every 3 days that checks whether
+#   you've answered and starts F8 once you have."
+#
+# RED -> GREEN, what changed (red-chief-fury.txt items):
+#   1 all work in session, 0 agents  -> run 2: 19 agents, no feature code by the chief
+#   2 one flat present-tense file    -> index + one page per thing, dated,
+#                                       sha-pinned, superseded in place
+#   3 one-seat pros/cons             -> scored 5 and 4, two boards, the
+#                                       disagreement named and handed over
+#   4 no strategic track             -> A1/A2 (run 2), A2 + standards line (run 1)
+#   5 no schedule                    -> /schedule suggested, 2/2
+#   6 questions as prose             -> decision pages with status open + the
+#                                       question (2/2); not relay `park`ed -
+#                                       run 2's run had finished, run 1 had none
+#
+# Loophole round: none new that the runs relied on. Run 1's hold is the
+# environment, not the skill; its behaviour under it (no single-seat answer) is
+# the one the skill asks for. Not isolated for discovery: the skill was named.

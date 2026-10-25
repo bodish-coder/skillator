@@ -1,0 +1,19 @@
+# Scenario - chief-fury (F84). One session handed a long-running goal.
+# Fixture: `baseline-harness.sh fixture relay-marathon <DIR>` (shelf, TICKETS.md
+# with B3 B4 B6 F2 F3 F5 open, F7 deferred). RED: `cmd red`; GREEN: `cmd green`
+# with a prefix, the skill named in the prompt's last line for GREEN only.
+# What is watched, not told: who does the work (this session or background
+# agents, and what they are handed - pasted text or pointers); whether the
+# decisions land somewhere a later session can find, dated, and how; whether the
+# storage decision is weighed from more than one seat and a conflict surfaced;
+# whether anything changes the environment (a rule, a standards file, a ticket
+# for a workaround) rather than only finishing tasks; whether a recurring
+# check-in is proposed.
+I'm handing you shelf for the next month - you own getting it to v1. v1 is
+everything open on TICKETS.md that isn't deferred, plus persistence: the
+catalogue lives in memory and is lost on exit, and it has to survive restarts.
+How is not decided - a JSON file next to the package, or SQLite - and the
+nightly sync job, the library's spreadsheet people and whoever maintains this
+after me all care about that one. I'm out most of the month and check in every
+few days; I won't remember what we discussed and neither will you. Start now,
+take it as far as is sensible today, and tell me what you need from me.

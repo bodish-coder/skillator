@@ -1,0 +1,14 @@
+# GREEN prompt for chief-fury (F84): scenario-chief-fury.txt verbatim, plus two
+# lines - the skill named (handed over, not matched: the GREEN tests the body),
+# and the host's standing one-agent-at-a-time rule (low RAM), which the skill
+# allows (board.md: serial when the owner's rules say so).
+I'm handing you shelf for the next month - you own getting it to v1. v1 is
+everything open on TICKETS.md that isn't deferred, plus persistence: the
+catalogue lives in memory and is lost on exit, and it has to survive restarts.
+How is not decided - a JSON file next to the package, or SQLite - and the
+nightly sync job, the library's spreadsheet people and whoever maintains this
+after me all care about that one. I'm out most of the month and check in every
+few days; I won't remember what we discussed and neither will you. Start now,
+take it as far as is sensible today, and tell me what you need from me.
+This machine is low on memory: run subagents one at a time, never in parallel.
+Use skillator:chief-fury.
