@@ -7,6 +7,7 @@
 #
 #   relay-morpheus.sh list                             every run + how to resume it
 #   relay-morpheus.sh resume <id>                      what a fresh session needs
+#   relay-morpheus.sh resume <id> --read-only          the same, a missing worktree said, never recreated (the ops board polls it)
 #   relay-morpheus.sh init [--here] [--owner @h] <plan> <title> <stage>...
 #                                                      create the run file, and the run's own
 #                                                      git worktree + branch (F35; --here: none)
@@ -542,13 +543,13 @@ cmd_init() {
 # F35: a run's worktree, recreated from its branch when the directory is gone
 # (deleted, another machine). Prints the path; nothing for a --here run.
 hdr_field() { sed -n '/^## /q; s/^'"$2"': //p' "$1" | head -1; }   # <run file> <key>, header only
-worktree_of() {   # <run file>
+worktree_of() {   # <run file> [ro]  - ro: report a missing worktree, never recreate it
   _w=$(hdr_field "$1" worktree); _b=$(hdr_field "$1" branch)
   [ -n "$_w" ] || return 0
   # Recreated only while the run has open work: a finished run's branch is
   # merged, and a fresh checkout of it helps nobody. The prune drops the
   # missing worktree's registration, which `worktree add` would refuse.
-  if [ ! -d "$_w" ] && [ -n "$_b" ] && _mr=$(main_of) \
+  if [ "${2:-}" != ro ] && [ ! -d "$_w" ] && [ -n "$_b" ] && _mr=$(main_of) \
      && awk 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{s=$4; gsub(/ /,"",s); if (s != "x" && s != ">") o=1} END{exit !o}' "$1"; then
     git -C "$_mr" worktree prune 2>/dev/null || :
     if _we=$(wt_add "$_mr" -q "$_w" "$_b" 2>&1); then wt_longpaths "$_w"; echo "# worktree recreated from $_b" >&2
@@ -696,13 +697,14 @@ cmd_list() {
 
 # Everything a session that has never seen this work needs, in one paste.
 cmd_resume() {
-  [ -n "${1:-}" ] || die "usage: relay-morpheus.sh resume <id>"
+  [ -n "${1:-}" ] || die "usage: relay-morpheus.sh resume <id> [--read-only]"
+  case "${2:-}" in '') _ro= ;; --read-only) _ro=ro ;; *) die "resume: unknown flag $2" ;; esac
   f=$(resolve "$1") || die "no run matching '$1' - see: relay-morpheus.sh list"
   echo "# Resuming $f"
   echo "# Read the plan named below, then the ledger, then start at the first"
   echo "# stage that is not x. The In-flight block holds the exact prompt to"
   echo "# redispatch anything that was running."
-  w=$(worktree_of "$f")
+  w=$(worktree_of "$f" "$_ro")
   [ -z "$w" ] || echo "# Stages work and commit in: $w"
   ow=$(hdr_field "$f" owner)
   [ -z "$ow" ] || echo "# Run owner: $ow"
@@ -2981,6 +2983,8 @@ b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
   [ ! -d "$wa/.skillator" ] || ! ls "$wa"/.skillator/run-*-gamma.md >/dev/null 2>&1 || die "F35: the run file was written on the run branch"
   ( cd "$d5/m" && sh "$me" list ) | grep -q "worktree: $wa" || die "F35: list does not show the worktree"
   rm -rf "$wa"
+  ( cd "$d5/m" && sh "$me" resume "$(id_of "$fa")" --read-only 2>/dev/null ) | grep -q "Stages work and commit in: $wa  (branch $ba) - MISSING" || die "F85: resume --read-only does not say the worktree is missing"
+  [ ! -d "$wa" ] || die "F85: resume --read-only recreated the worktree"
   ( cd "$d5/m" && sh "$me" resume "$(id_of "$fa")" 2>/dev/null ) | grep -q "Stages work and commit in: $wa" || die "F35: resume does not name the worktree"
   [ -f "$wa/a.txt" ] || die "F35: resume did not recreate the worktree from its branch"
   ( cd "$d5/m" && RELAY_WORKTREE=on sh "$me" init --here p.md delta s1 >/dev/null 2>&1 ) || die "F35: init --here failed"

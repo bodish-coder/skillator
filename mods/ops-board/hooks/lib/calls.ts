@@ -50,7 +50,8 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'meta-testing':       { script: META, sh: a => ['testing', ...a], ps: a => ['testing', ...a] },
   'meta-block':         { script: META, sh: a => ['block', ...a], ps: a => ['block', ...a] },
   'relay-list':         { script: RELAY, sh: () => ['list'], ps: () => ['-Mode', 'list'] },
-  'relay-resume':       { script: RELAY, sh: a => ['resume', a[0] ?? ''], ps: a => ['-Mode', 'resume', '-Id', a[0] ?? ''] },
+  // read-only: a poll must never recreate a run worktree its owner removed
+  'relay-resume':       { script: RELAY, sh: a => ['resume', a[0] ?? '', '--read-only'], ps: a => ['-Mode', 'resume', '-Id', a[0] ?? '', '-ReadOnly'] },
   'relay-queue-add':    { script: RELAY, sh: a => ['queue-run', 'add', a[0] ?? ''], ps: a => ['-Mode', 'queue-run', '-Sub', 'add', '-Id', a[0] ?? ''] },
   'relay-hold':         { script: RELAY, sh: a => ['watchdog', 'hold', a[0] ?? ''], ps: a => ['-Mode', 'watchdog', '-Action', 'hold', '-Reason', a[0] ?? ''] },
   'relay-release':      { script: RELAY, sh: () => ['watchdog', 'release'], ps: () => ['-Mode', 'watchdog', '-Action', 'release'] },

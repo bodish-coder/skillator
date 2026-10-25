@@ -6,6 +6,7 @@
 #
 #   relay-morpheus.ps1 -Mode list                      every run + how to resume it
 #   relay-morpheus.ps1 -Mode resume -Id 3              what a fresh session needs
+#   relay-morpheus.ps1 -Mode resume -Id 3 -ReadOnly    the same, a missing worktree said, never recreated (the ops board polls it)
 #   relay-morpheus.ps1 -Mode init -Plan <p> -Title <t> -Stages "alpha,beta,gamma" [-RunOwner @h]
 #   relay-morpheus.ps1 -Mode add -Title <stage>        append a row, print its number
 #   relay-morpheus.ps1 -Mode stage -N 2 -State '~' [-Owner build:sonnet] [-Landed sha]
@@ -118,6 +119,7 @@ param(
   [switch]$Here,
   [switch]$All,
   [switch]$Holds,
+  [switch]$ReadOnly,
   [string]$Sub = '',
   [string]$Mark = $null,
   [int]$N,
@@ -519,14 +521,14 @@ function HdrField($f, $k) {
   foreach ($l in (Get-Content -Encoding UTF8 $f)) { if ($l -like '## *') { break }; if ($l -like "${k}: *") { return $l.Substring($k.Length + 2) } }
   ''
 }
-function WorktreeOf($f) {
+function WorktreeOf($f, [switch]$Ro) {   # -Ro: report a missing worktree, never recreate it
   $w = HdrField $f 'worktree'; $b = HdrField $f 'branch'
   if (-not $w) { return '' }
   # Recreated only while the run has open work: a finished run's branch is
   # merged, and a fresh checkout of it helps nobody. The prune drops the
   # missing worktree's registration, which `worktree add` would refuse.
   $open = @(Get-Content -Encoding UTF8 $f | Where-Object { $null -ne (RowNum $_) -and (Cell $_ 3) -ne 'x' -and (Cell $_ 3) -ne '>' }).Count
-  if (-not (Test-Path -LiteralPath $w) -and $b -and $open) {
+  if (-not $Ro -and -not (Test-Path -LiteralPath $w) -and $b -and $open) {
     $mr = MainOf
     if ($mr) {
       $null = GitOk @('-C', $mr, 'worktree', 'prune')
@@ -607,7 +609,7 @@ function DoResume($spec) {
   "# Read the plan named below, then the ledger, then start at the first stage"
   "# that is not x. The In-flight block holds the exact prompt to redispatch"
   "# anything that was running."
-  $w = WorktreeOf $f
+  $w = WorktreeOf $f -Ro:$ReadOnly
   if ($w) { "# Stages work and commit in: $w" }
   $ow = HdrField $f 'owner'
   if ($ow) { "# Run owner: $ow" }
@@ -3424,6 +3426,8 @@ function DoSelftest {
       if (-not ((Rm5 $m5 @('-Mode', 'list')) -match [regex]::Escape("worktree: $wa"))) { Die "F35: list does not show the worktree" }
       Remove-Item -Recurse -Force $wa
       $ida = IdOf (Split-Path -Leaf $fa)
+      if (-not ((Rm5 $m5 @('-Mode', 'resume', '-Id', $ida, '-ReadOnly')) -match [regex]::Escape("Stages work and commit in: $wa  (branch $ba) - MISSING"))) { Die "F85: resume -ReadOnly does not say the worktree is missing" }
+      if (Test-Path $wa) { Die "F85: resume -ReadOnly recreated the worktree" }
       if (-not ((Rm5 $m5 @('-Mode', 'resume', '-Id', $ida)) -match [regex]::Escape("Stages work and commit in: $wa"))) { Die "F35: resume does not name the worktree" }
       if (-not (Test-Path "$wa/a.txt")) { Die "F35: resume did not recreate the worktree from its branch" }
       $null = Rm5 $m5 @('-Mode', 'init', '-Here', '-Plan', 'p.md', '-Title', 'delta', '-Stages', 's1')

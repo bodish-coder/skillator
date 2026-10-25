@@ -174,6 +174,8 @@ for (const surface of SURFACES) {
     const text = async (key: string) => (await ui.find({ key }))?.text
     // chain status is read for the runs not all done only
     expect(statuses(w).map(a => a[2]).sort()).toEqual(['RUN-0012', 'RUN-0014'])
+    // F85 review: the poll reads read-only - it never recreates a removed run worktree
+    expect(w.runs.filter(a => a[2] === 'resume').every(a => a[4] === '--read-only')).toBe(true)
     expect(await text('run:RUN-0014')).toBe('● RUN-0014  plan from /plan-runs  owner @vidul  workflow · planned · 3 tickets → 3 stages')
     expect(await text('cols:RUN-0014')).toBe(cols('stage', 'ticket', 'work', 'after', 'files'))
     expect(await text('stage:RUN-0014:1')).toBe(cols('● 1', '● F46', 'tickets pane', '-', 'mods/ops-board/hooks/tickets.tsx'))
