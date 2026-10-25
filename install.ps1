@@ -476,6 +476,15 @@ function Invoke-SelfTest([string]$T) {
       if (-not (& $gated ([IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))))) { return "$f has no grayskull-gated code-yoda line (A155)" }
     }
   }
+  # F88: every /pending-subagent copy maps no argument / sequential / parallel / a count to RELAY_CHAIN_PARALLEL
+  foreach ($f in 'commands\pending-subagent.md', 'host-commands\codex\pending-subagent.md', 'host-commands\cursor\pending-subagent.md',
+                 'host-commands\pi\pending-subagent.md', 'host-commands\opencode\pending-subagent.md',
+                 'host-commands\antigravity\pending-subagent\SKILL.md', 'host-commands\gemini\pending-subagent.toml') {
+    $ct = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))
+    foreach ($r in '| nothing, `sequential`, `1` | sequential | unset', '| `parallel`, `max`, `parallel max` | parallel | the number of ticket stages', '| `parallel 2`, `2` | parallel, capped | 2 |') {
+      if (-not $ct.Contains($r)) { return "$f has no mode row '$r' (F88)" }
+    }
+  }
   $cmds = @('.codex\prompts\pending.md', '.codex\prompts\list-tickets.md',
             '.gemini\commands\pending.toml', '.gemini\commands\list-tickets.toml',
             '.cursor\commands\pending.md', '.cursor\commands\list-tickets.md',
