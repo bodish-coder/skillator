@@ -53,6 +53,14 @@ trailing ` (@owner)` or ` (branch: x)` if the user wants it, and the
 `[app: ..] [decide: ..] [owner: ..] [by: ..]` tags of **Apps and people** before it; nothing
 else. Sub-parts are indented two spaces under their parent.
 
+The title comes first and is short: at most 60 characters, a name the owner
+recognises, ending at the first `. ` or ` (` — /pending cuts it there — and the
+detail follows. Write the title before the spec.
+Good: `- [ ] F12 — CSV export. The table view gets an Export button; ...`.
+Bad: `- [ ] F12 — The table view gets an Export button that writes the filtered rows ...`
+(the title is the whole spec, and /pending shows a cut sentence).
+`check-tickets.sh` warns on every open line whose title is over 60 or empty.
+
 ## Who touched it
 
 Several agent sessions edit one board, so every line says which one last moved
