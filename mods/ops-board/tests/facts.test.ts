@@ -39,6 +39,13 @@ test('parseMachine: empty figures are unknown, HOLD=- is no hold, other --kv key
   expect(parseMachine('', 1)).toEqual({ at: 1, drive: '', diskFree: null, diskTotal: null, memFree: null, locks: [], hold: null })
 })
 
+test('F82: parseMachine reads BOARD - stale, refused with its reason; anything else is no board', () => {
+  expect(parseMachine('HOLD=-\nBOARD=stale|2|origin/main|-\n', 1).board).toEqual({ state: 'stale', behind: 2, up: 'origin/main', reason: '' })
+  expect(parseMachine('BOARD=refused|3|origin/main|3 behind origin/main, 1 other dirty file(s)\n', 1).board)
+    .toEqual({ state: 'refused', behind: 3, up: 'origin/main', reason: '3 behind origin/main, 1 other dirty file(s)' })
+  expect(parseMachine('BOARD=odd|1|x|-\n', 1).board).toBeUndefined()
+})
+
 test('parseMachine on the whole pending --kv output (pending.sh selftest text)', () => {
   const kv = 'OPEN=6\nPENDING=2\nPROGRESS=1\nBLOCKED=1\nDECISION=1\nDEFERRED=1\nRUN=RUN-0012|2/4|@vidul|stage three title\nQUEUED=RUN-0013\n' +
     'SESSION=repo-c0|busy|C:\\w\\r|4\nUNPUSHED=-\nOWED=A1\nDRIVE=X:\nDISK_FREE=858993459\nDISK_TOTAL=1000000000000\nMEM_FREE=3435973836\n' +

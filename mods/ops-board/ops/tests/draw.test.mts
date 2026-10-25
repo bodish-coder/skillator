@@ -312,6 +312,15 @@ test('health with readings: bars, relay, machine rows with their thresholds', ()
   assert.match(h, /  Hold          set 03:29Z: mem 0\.5 GB/)
   assert.match(h, /  Stale locks   none/)
 })
+test('F82: the Health tab says a stale board amber and board-fresh\'s refusal red; none when not behind', () => {
+  const kvb = RED_HELD + 'BOARD=refused|3|origin/main|3 behind origin/main, 1 local commit(s) not on it\n'
+  const x = reduce(onMachine(s, kvb, 0).state, { name: '3' }).state
+  const h = text(x)
+  assert.match(h, /  Board         stale: 3 behind origin\/main\n {16}refused: 3 behind origin\/main, 1 local commit\(s\) not on it/)
+  const col = frame(x, { color: true, ascii: false }).join('\n')
+  assert.match(col, /\x1b\[[0-9;]*m[^\x1b]*stale: 3 behind/)
+  assert.doesNotMatch(text(reduce(onMachine(s, RED_HELD, 0).state, { name: '3' }).state), /Board/)
+})
 test('A143 follow-up: a row shows its session tag only while [~] or [%]; a stale one left on [ ] yields to the owner', () => {
   const b = '# Tickets\n\n- [~] F1 — live work [owner: @vidul] (@cc-aaaaaa)\n- [ ] F2 — handed over [owner: @asha] (@cc-bbbbbb)\n'
     + '- [%] F3 — built (testing: live check) [owner: @asha] (@cc-cccccc)\n'

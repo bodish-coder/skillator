@@ -439,6 +439,9 @@ function machineRows(m: Machine | null, red: boolean, now: number): Seg[][] {
       : [dim('none')]),
     row('Stale locks', n ? [{ text: `${n} stale, not deleted`, color: 'warning' }] : [dim('none')]),
   ]
+  // F82: a stale board amber, board-fresh's refusal red with its reason
+  if (m.board) out.push(row('Board', [{ text: `stale: ${m.board.behind} behind ${m.board.up}`, color: 'warning' }]))
+  if (m.board?.state === 'refused') out.push(row('', [{ text: `refused: ${m.board.reason}`, color: 'error' }]))
   if (now - m.at > 3 * 60 * 1000) out.push([dim(`  facts ${Math.floor((now - m.at) / 60000)}m old`)])
   return out
 }

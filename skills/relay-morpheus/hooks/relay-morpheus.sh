@@ -16,7 +16,9 @@
 #   relay-morpheus.sh status
 #   relay-morpheus.sh orphans [minutes]                default 20
 #   relay-morpheus.sh board <ID> <mark>               flip a ticket's box in the main checkout's
-#                                                      TICKETS.md, under its lock (F36; mark: ' ' ~ x ! ? % > -)
+#                                                      TICKETS.md, under its lock (F36; mark: ' ' ~ x ! ? % > -);
+#                                                      F82: board-fresh first (a stale board: exit 2),
+#                                                      the flip committed at once (`board: <ID> [<mark>]`)
 #   relay-morpheus.sh [<id>] owner @handle | -        F44: the run's owner, an @handle from
 #                                                      .skillator/team.md (`-` clears it)
 #   relay-morpheus.sh selftest
@@ -858,8 +860,25 @@ cmd_board() {
   _bm=$(main_of) || _bm=$(pwd); _bf="$_bm/TICKETS.md"
   [ -f "$_bf" ] || die "board: no $_bf"
   _bsv=$LOCK; LOCK=; lock "$_bf.lock"
+  # F82: never a stale board - the guard first, under the lock (its report on
+  # stderr; a refusal is ours, exit 2), and the flip committed at once.
+  _bfr=''
+  for _c in "$HERE/../../practice/scripts/board-fresh.sh" "$HERE/../../../practice/scripts/board-fresh.sh"; do
+    [ -f "$_c" ] && { _bfr=$_c; break; }
+  done
+  if [ -n "$_bfr" ] && ! sh "$_bfr" "$_bm"; then
+    unlock; LOCK=$_bsv
+    echo "REFUSED: board: $bid not flipped - see board-fresh's report above" >&2
+    exit 2
+  fi
   if awk -v id="$bid" -v mk="$mk" '!f && substr($0, 1, 3) == "- [" && substr($0, 5, 2) == "] " && substr($0, 7, length(id) + 1) == id " " { $0 = "- [" mk substr($0, 5); f = 1 } { print } END { exit !f }' "$_bf" > "$_bf.tmp.$$"; then
-    mv "$_bf.tmp.$$" "$_bf"; unlock; LOCK=$_bsv
+    mv "$_bf.tmp.$$" "$_bf"
+    if git -C "$_bm" ls-files --error-unmatch -- "$_bf" > /dev/null 2>&1 && ! git -C "$_bm" diff --quiet HEAD -- "$_bf" 2> /dev/null &&
+       ! git -C "$_bm" commit -q -m "board: $bid [$mk]" -- "$_bf" > /dev/null 2>&1; then
+      echo "relay-morpheus.sh: $_bf written but not committed (git refused) - recorded in .skillator/dirty.log" >&2
+      [ -z "$_bfr" ] || sh "$_bfr" --record "$_bf" "relay-morpheus board $bid [$mk]${RUN:+ $(run_tag)}"
+    fi
+    unlock; LOCK=$_bsv
   else rm -f "$_bf.tmp.$$"; unlock; LOCK=$_bsv; die "board: no ticket $bid in $_bf"; fi
   echo "$bid [$mk]"
 }
@@ -3015,6 +3034,24 @@ b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
   grep -q "^- \\[%\\] F9 $em lease me\$" "$d6/TICKETS.md" && grep -q "^- \\[ \\] F90 $em not me\$" "$d6/TICKETS.md" || die "F62: board did not set [%]: $(cat "$d6/TICKETS.md")"
   if ( cd "$d6" && cmd_board F91 x >/dev/null 2>&1 ); then die "F36: board accepted a missing ticket"; fi
   [ ! -e "$d6/TICKETS.md.lock" ] && [ ! -e "$reg.lock" ] || die "F36: a lock was left behind"
+  # F82: a flip is committed at once; behind the upstream with local work it is
+  # refused (exit 2), the board as it was.
+  if [ -f "$HERE/../../practice/scripts/board-fresh.sh" ] || [ -f "$HERE/../../../practice/scripts/board-fresh.sh" ]; then
+    d82="$d/f82"; mkdir -p "$d82"; git init -q --bare "$d82/up.git"
+    git clone -q "$d82/up.git" "$d82/a" 2>/dev/null; git clone -q "$d82/up.git" "$d82/b" 2>/dev/null
+    for c82 in a b; do git -C "$d82/$c82" config user.name t; git -C "$d82/$c82" config user.email t@t; git -C "$d82/$c82" config core.autocrlf false; done
+    printf '%s\n' "- [ ] F9 $em one" > "$d82/a/TICKETS.md"
+    { git -C "$d82/a" add -A && git -C "$d82/a" commit -qm init && git -C "$d82/a" push -q -u origin HEAD; } >/dev/null 2>&1 || die "F82: fixture"
+    ( cd "$d82/a" && cmd_board F9 '~' >/dev/null ) || die "F82: board failed"
+    [ "$(git -C "$d82/a" log -1 --format=%s)" = "board: F9 [~]" ] && [ -z "$(git -C "$d82/a" status --porcelain)" ] || die "F82: the flip was not committed: $(git -C "$d82/a" log -1 --format=%s)"
+    { git -C "$d82/b" pull -q && echo o > "$d82/b/o.txt" && git -C "$d82/b" add -A && git -C "$d82/b" commit -qm other && git -C "$d82/b" push -q; } >/dev/null 2>&1 || die "F82: fixture push"
+    echo l > "$d82/a/l.txt"; { git -C "$d82/a" add -A && git -C "$d82/a" commit -qm local; } >/dev/null 2>&1
+    echo 0 > "$d82/a/.git/skillator/board-fresh.stamp"
+    set +e; ( cd "$d82/a" && cmd_board F9 x >/dev/null 2>"$d82/err" ); rc=$?; set -e
+    [ "$rc" = 2 ] && grep -q 'REFUSED the board write' "$d82/err" && grep -q "^- \\[~\\] F9 $em one\$" "$d82/a/TICKETS.md" ||
+      die "F82: a stale board was flipped (rc $rc): $(cat "$d82/err")"
+    [ ! -e "$d82/a/TICKETS.md.lock" ] || die "F82: a refused flip left the lock"
+  fi
   RUN=$sv6_run; DIR=$sv6_dir
   # F37: four stages - a.py, b.py, a.py again, c.py. --all at cap 2 offers the
   # first two (disjoint), idles the third on the first's file and the fourth

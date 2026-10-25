@@ -10,11 +10,41 @@
 #   ticket-meta.ps1 team lead @handle|- | whoami | claim <ID>... | pick [ID...]   (F80)
 #   ticket-meta.ps1 reconcile [ID...] | unblock <ID> | start <ID>   (F81)
 #
+# F82: every board write runs board-fresh.ps1 first (a refusal: its report, exit 2)
+# and is committed at once, `board: <subcommand> <ID>` - as ticket-meta.sh.
+#
 # Windows PowerShell 5.1 safe: no ?:, ??, && or ||.
 $ErrorActionPreference = 'Stop'
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 
 function Fail([string]$msg) { throw "ticket-meta: $msg" }
+
+# F82: the stale-board guard beside the skills (a clone or plugin: <root>/practice/,
+# installed: <skills>/practice/), run under the board lock before the board is read;
+# its refusal (the report on stderr) is ours, exit 2. Same as ticket-meta.sh.
+$script:BFresh = $null
+foreach ($bfc in @("$PSScriptRoot/../../../practice/scripts/board-fresh.ps1", "$PSScriptRoot/../../practice/scripts/board-fresh.ps1")) {
+  if (Test-Path -LiteralPath $bfc -PathType Leaf) { $script:BFresh = $bfc; break }
+}
+$script:Refused = $false
+$script:Sub = ''
+function Assert-BoardFresh([string]$root) {
+  if (-not $script:BFresh) { return }
+  $null = & $script:BFresh $root
+  if ($LASTEXITCODE -eq 2) { $script:Refused = $true; Fail "the board was not written - see board-fresh's report above" }
+}
+# F82: a written board (or team file) is committed at once, `board: ..`, that path
+# only. git refusing leaves it written, said, and recorded in dirty.log.
+function Commit-Board([string]$f, [string]$msg) {
+  # exit codes, not Git-Out: a git that succeeds silently and one that fails both read $null there
+  $ErrorActionPreference = 'Continue'
+  $d = Split-Path -Parent $f
+  $null = & git -C $d ls-files --error-unmatch '--' $f 2>$null; if ($LASTEXITCODE -ne 0) { return }
+  $null = & git -C $d diff --quiet HEAD '--' $f 2>$null; if ($LASTEXITCODE -eq 0) { return }
+  $null = & git -C $d commit -q -m $msg '--' $f 2>$null; if ($LASTEXITCODE -eq 0) { return }
+  [Console]::Error.WriteLine("ticket-meta: $f written but not committed (git refused) - recorded in .skillator/dirty.log")
+  if ($script:BFresh) { $null = & $script:BFresh -Record $f -Who "ticket-meta $($script:Sub)" }
+}
 
 $script:GitCalls = New-Object System.Collections.ArrayList
 
@@ -205,7 +235,7 @@ function Get-Info([string]$id) {
     $l = [string]$l0
     if ($l.StartsWith([string][char]1)) {
       $f = $l.Substring(1).Split([char]9, 2)
-      $hit = ($f.Count -eq 2 -and $f[1] -cmatch $re)
+      $hit = ($f.Count -eq 2 -and $f[1] -cnotmatch '^board:' -and $f[1] -cmatch $re)   # F82: board: commits log tickets
       if ($hit) { [void]$info.e.Add($f[0].ToLowerInvariant()) }
       continue
     }
@@ -310,6 +340,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
   if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { Fail "no TICKETS.md at $f" }
   Lock-Board "$f.lock"
   try {
+    Assert-BoardFresh (Get-MainRoot)
     $text = $Utf8.GetString([System.IO.File]::ReadAllBytes($f))
     $lines = $text.Split([char]10)
     $re = '^[ \t]*- \[.\][ \t]+' + $id + '[ \t]*(' + [char]0x2014 + '|' + [char]0x2013 + '|-)'
@@ -396,6 +427,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
       Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
       Fail "cannot replace $f ($($_.Exception.Message))"
     }
+    Commit-Board $f "board: $($script:Sub) $id"
   } finally {
     Unlock-Board
   }
@@ -879,6 +911,7 @@ function Do-TeamAdd([string[]]$a) {
     }
     $new = $Utf8.GetBytes("- ${h}: $emsText$nl  name: $name$nl")
     Write-TeamFile $f ([byte[]]($prev + $new))
+    Commit-Board $f "board: team add $h"
   } finally {
     Unlock-Board
   }
@@ -925,6 +958,7 @@ function Do-TeamRemove([string[]]$a) {
     $body = [string]::Join("`n", $kept.ToArray())
     if ($eol -and $kept.Count -gt 0) { $body += "`n" }
     Write-TeamFile $f ($Utf8.GetBytes($body))
+    Commit-Board $f "board: team remove $h"
   } finally {
     Unlock-Board
   }
@@ -1033,6 +1067,7 @@ function Do-TeamLead([string[]]$a) {
       if ($eol -and $kept.Count -gt 0) { $body += "`n" }
     }
     Write-TeamFile $f ($Utf8.GetBytes($body))
+    Commit-Board $f "board: team lead $h"
   } finally {
     Unlock-Board
   }
@@ -1056,6 +1091,7 @@ function Do-Team([string[]]$a) {
 function Invoke-Cmd([string]$c, [string[]]$a) {
   # Resolved first: outside a repo every subcommand stops here.
   $null = Get-Top
+  $script:Sub = $c
   switch -CaseSensitive ($c) {
     'apps' { return (Get-Apps) }
     'app-of' { return (Map-Paths $a) }
@@ -1130,8 +1166,10 @@ function Invoke-Selftest {
   $dash = [string][char]0x2014
   $here = Get-Location
   # F80: who "me" is comes from git's user.email - never this machine's global one
-  $savedMe = @($env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME)
-  [System.IO.File]::WriteAllText("$T/gitconfig", '')
+  $savedMe = @($env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME, $env:EMAIL)
+  # F82: board writes commit; EMAIL is git's last fallback, so user.email (whoami) stays unset
+  [System.IO.File]::WriteAllText("$T/gitconfig", "[user]`n`tname = t`n")
+  $env:EMAIL = 'board@selftest.invalid'
   $env:GIT_CONFIG_GLOBAL = "$T/gitconfig"
   Remove-Item Env:\SKILLATOR_ME -ErrorAction SilentlyContinue
   function Eq([string]$name, $got, [string]$want) {
@@ -1200,6 +1238,8 @@ function Invoke-Selftest {
     $now = [System.IO.File]::ReadAllBytes("$M/TICKETS.md")
     if ([Convert]::ToBase64String($now) -ne [Convert]::ToBase64String($before)) { Write-Output 'FAIL: refused assign changed the board'; $script:fail = 1 }
     Eq 'assign F12' (Run assign F12 '@asha') "- [ ] F12 $dash Bulk delete [owner: @asha]"
+    Eq 'F82: board write committed' (& git log -1 --format=%s) 'board: assign F12'
+    Eq 'F82: board left clean' (& git status --porcelain -- TICKETS.md) ''
     Eq 'assign F1' (Run assign F1 'asha') "- [ ] F1 $dash Dark mode [owner: @asha] (@cc-bbbbbb) warning: F1 was in progress under @cc-bbbbbb - its box left [~], the session tag stays; tell that session"
     & git config user.email asha@x.com   # F80: only the owner (or the lead) reassigns
     Eq 'reassign F1' (Run assign F1 '@vidul') "- [ ] F1 $dash Dark mode [owner: @vidul] (@cc-bbbbbb)"
@@ -1732,9 +1772,36 @@ function Invoke-Selftest {
         Write-Output "FAIL: $name board line endings or bytes"; $script:fail = 1
       }
     }
+
+    # --- F82: a stale board is never written. Behind the upstream with a local commit:
+    # refused (exit 2), the board as it was; behind and clean: fast-forwarded, then written.
+    & git init -q --bare "$T/f82up.git" 2>$null | Out-Null
+    & git clone -q "$T/f82up.git" "$T/f82" 2>$null | Out-Null
+    Set-Location -LiteralPath "$T/f82"
+    W "$T/f82/TICKETS.md" "- [ ] F1 $dash One`n"
+    & git add -A 2>$null | Out-Null; & git commit -qm init 2>$null | Out-Null; & git push -q -u origin HEAD 2>$null | Out-Null
+    & git clone -q "$T/f82up.git" "$T/f82b" 2>$null | Out-Null
+    W "$T/f82b/o.txt" "o`n"
+    & git -C "$T/f82b" add -A 2>$null | Out-Null; & git -C "$T/f82b" commit -qm other 2>$null | Out-Null; & git -C "$T/f82b" push -q 2>$null | Out-Null
+    W "$T/f82/l.txt" "l`n"
+    & git add -A 2>$null | Out-Null; & git commit -qm local 2>$null | Out-Null
+    $was = [System.IO.File]::ReadAllBytes("$T/f82/TICKETS.md")
+    $script:Refused = $false
+    $orig = [Console]::Error; [Console]::SetError([System.IO.TextWriter]::Null)
+    try { $msg = ErrOf start F1 } finally { [Console]::SetError($orig) }
+    if (-not $script:Refused -or $msg -notmatch 'board was not written' -or
+        [Convert]::ToBase64String([System.IO.File]::ReadAllBytes("$T/f82/TICKETS.md")) -cne [Convert]::ToBase64String($was)) {
+      Write-Output "FAIL: F82 stale board written or not refused: $msg"; $script:fail = 1
+    }
+    $script:Refused = $false
+    & git reset -q --hard HEAD~1 2>$null | Out-Null
+    $orig = [Console]::Error; [Console]::SetError([System.IO.TextWriter]::Null)
+    try { $got = Run start F1 } finally { [Console]::SetError($orig) }
+    Eq 'F82: behind and clean - fast-forwarded, then written' $got "- [~] F1 $dash One"
+    Eq 'F82: written on the upstream''s tip, committed' (& git log -2 --format=%s) 'board: start F1 other'
   } finally {
     Set-Location -LiteralPath $here
-    $env:GIT_CONFIG_GLOBAL = $savedMe[0]; $env:SKILLATOR_ME = $savedMe[1]
+    $env:GIT_CONFIG_GLOBAL = $savedMe[0]; $env:SKILLATOR_ME = $savedMe[1]; $env:EMAIL = $savedMe[2]
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
   }
   if ($script:fail -ne 0) { exit 1 }
@@ -1753,6 +1820,7 @@ try {
   $out = Invoke-Cmd $cmd $rest
 } catch {
   [Console]::Error.WriteLine($_.Exception.Message)
+  if ($script:Refused) { exit 2 }
   exit 1
 }
 # UTF-8 out so the em dash on an edited line survives the console.

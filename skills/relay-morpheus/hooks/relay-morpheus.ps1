@@ -1487,6 +1487,17 @@ function DoBoard {
   $sv = $script:Lock; $script:Lock = $null
   Lock "$f.lock"
   try {
+    # F82: never a stale board - the guard first, under the lock (its report on
+    # stderr; a refusal is ours, exit 2), and the flip committed at once.
+    $bfr = $null
+    foreach ($c in @((Join-Path $PSScriptRoot '..\..\practice\scripts\board-fresh.ps1'),
+                     (Join-Path $PSScriptRoot '..\..\..\practice\scripts\board-fresh.ps1'))) {
+      if (Test-Path -LiteralPath $c -PathType Leaf) { $bfr = $c; break }
+    }
+    if ($bfr) {
+      $null = & $bfr $m
+      if ($LASTEXITCODE -eq 2) { throw "REFUSED: board: $Ticket not flipped - see board-fresh's report above" }
+    }
     $raw = [IO.File]::ReadAllText($f); $nl = if ($raw.Contains("`r`n")) { "`r`n" } else { "`n" }
     $lines = $raw -split "`r?`n"; $hit = $false
     for ($i = 0; $i -lt $lines.Count; $i++) {
@@ -1496,6 +1507,19 @@ function DoBoard {
     if (-not $hit) { Die "board: no ticket $Ticket in $f" }
     [IO.File]::WriteAllText("$f.tmp.$PID", ($lines -join $nl), (New-Object Text.UTF8Encoding($false)))
     Move-Item -Force -LiteralPath "$f.tmp.$PID" -Destination $f
+    $ErrorActionPreference = 'Continue'
+    $null = & git -C $m ls-files --error-unmatch '--' $f 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $null = & git -C $m diff --quiet HEAD '--' $f 2>$null
+      if ($LASTEXITCODE -ne 0) {
+        $null = & git -C $m commit -q -m "board: $Ticket [$Mark]" '--' $f 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          [Console]::Error.WriteLine("relay-morpheus.ps1: $f written but not committed (git refused) - recorded in .skillator/dirty.log")
+          $who = "relay-morpheus board $Ticket [$Mark]"; if ($Run) { $who += " $(RunTag)" }
+          if ($bfr) { $null = & $bfr -Record $f -Who $who }
+        }
+      }
+    }
   } finally { Unlock; $script:Lock = $sv }
   "$Ticket [$Mark]"
 }
@@ -3466,6 +3490,33 @@ function DoSelftest {
       if (-not $tl.Contains("- [%] F9 $([char]0x2014) lease me`n") -or -not $tl.Contains("- [ ] F90 $([char]0x2014) not me")) { Die "F62: board did not set [%]: $tl" }
       if ((R6 @('-Mode', 'board', '-Ticket', 'F91', '-Mark', 'x')).rc -eq 0) { Die "F36: board accepted a missing ticket" }
       if ((Test-Path "$d6/TICKETS.md.lock") -or (Test-Path "$reg.lock")) { Die "F36: a lock was left behind" }
+      # F82: a flip is committed at once; behind the upstream with local work it is
+      # refused (exit 2), the board as it was.
+      if ((Test-Path (Join-Path $PSScriptRoot '..\..\practice\scripts\board-fresh.ps1')) -or (Test-Path (Join-Path $PSScriptRoot '..\..\..\practice\scripts\board-fresh.ps1'))) {
+        $d82 = (Join-Path $d 'f82') -replace '\\', '/'
+        $prev82 = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        try {
+          $null = & git init -q --bare "$d82/up.git" 2>&1
+          $null = & git clone -q "$d82/up.git" "$d82/a" 2>&1; $null = & git clone -q "$d82/up.git" "$d82/b" 2>&1
+          foreach ($c82 in @('a', 'b')) { & git -C "$d82/$c82" config user.name t; & git -C "$d82/$c82" config user.email t@t; & git -C "$d82/$c82" config core.autocrlf false }
+          [IO.File]::WriteAllText("$d82/a/TICKETS.md", "- [ ] F9 $([char]0x2014) one`n", (New-Object Text.UTF8Encoding($false)))
+          $null = & git -C "$d82/a" add -A 2>&1; $null = & git -C "$d82/a" commit -qm init 2>&1; $null = & git -C "$d82/a" push -q -u origin HEAD 2>&1
+        } finally { $ErrorActionPreference = $prev82 }
+        $d6s = $d6; $d6 = "$d82/a"
+        try {
+          $o = R6 @('-Mode', 'board', '-Ticket', 'F9', '-Mark', '~'); if ($o.rc -ne 0) { Die "F82: board failed: $($o.out)" }
+          $ErrorActionPreference = 'Continue'
+          if ("$(& git -C "$d82/a" log -1 --format=%s)" -cne 'board: F9 [~]' -or "$(& git -C "$d82/a" status --porcelain)") { Die "F82: the flip was not committed: $(& git -C "$d82/a" log -1 --format=%s)" }
+          $null = & git -C "$d82/b" pull -q 2>&1; [IO.File]::WriteAllText("$d82/b/o.txt", "o`n")
+          $null = & git -C "$d82/b" add -A 2>&1; $null = & git -C "$d82/b" commit -qm other 2>&1; $null = & git -C "$d82/b" push -q 2>&1
+          [IO.File]::WriteAllText("$d82/a/l.txt", "l`n"); $null = & git -C "$d82/a" add -A 2>&1; $null = & git -C "$d82/a" commit -qm local 2>&1
+          [IO.File]::WriteAllText("$d82/a/.git/skillator/board-fresh.stamp", "0`n")
+          $ErrorActionPreference = $prev82
+          $o = R6 @('-Mode', 'board', '-Ticket', 'F9', '-Mark', 'x')
+          if ($o.rc -ne 2 -or $o.out -notmatch 'REFUSED the board write' -or -not ([IO.File]::ReadAllText("$d82/a/TICKETS.md")).Contains("- [~] F9 $([char]0x2014) one")) { Die "F82: a stale board was flipped (rc $($o.rc)): $($o.out)" }
+          if (Test-Path "$d82/a/TICKETS.md.lock") { Die 'F82: a refused flip left the lock' }
+        } finally { $d6 = $d6s; $ErrorActionPreference = $prev82 }
+      }
     } finally { $env:RELAY_LEVEL_CMD = $svl }
 
     # F37: four stages - a.py, b.py, a.py again, c.py. -All at cap 2 offers the

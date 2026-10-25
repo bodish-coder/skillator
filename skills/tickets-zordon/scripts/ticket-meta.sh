@@ -32,6 +32,11 @@
 # F80 claims: a ticket owned by someone else is reassigned (assign, claim) only by
 # that owner or the lead. A team convention, not security - git's email is self-set.
 #
+# F82: every board write runs practice/scripts/board-fresh.sh first, under the
+# board lock (a stale board it cannot fast-forward safely: its report, exit 2,
+# nothing written), and is committed at once - `board: <subcommand> <ID>`, that
+# file only (team writes too: `board: team ..`); `board:` commits are not a ticket's work.
+#
 # Apps: folders under apps/*, packages/*, services/*, plus package.json
 # "workspaces" and pnpm-workspace.yaml globs; the folder name is the app. No such
 # folder = no apps. People: .skillator/team.md, lines `- @handle: a@x, b@y`,
@@ -57,6 +62,32 @@ LOCKF=''
 LOCK_ME=''
 
 die() { board_unlock; echo "ticket-meta: $*" >&2; exit 1; }
+
+# F82: the stale-board guard, beside the skills (a clone or plugin:
+# <root>/practice/, installed: <skills>/practice/). Run under the board lock,
+# before the board is read; its refusal (the report on stderr) is ours, exit 2.
+BFRESH=''
+for _c in "$(dirname -- "$0")/../../../practice/scripts/board-fresh.sh" "$(dirname -- "$0")/../../practice/scripts/board-fresh.sh"; do
+  [ -f "$_c" ] && { BFRESH=$_c; break; }
+done
+board_fresh() {
+  [ -n "$BFRESH" ] || return 0
+  sh "$BFRESH" "$MAIN" && return 0
+  board_unlock
+  echo "ticket-meta: the board was not written - see board-fresh's report above" >&2
+  exit 2
+}
+# F82: a written board (or team file) is committed at once, `board: ..`, that
+# path only, so it never sits dirty and unowned. git refusing (no identity, a
+# hook, a merge in progress) leaves it written, said, and recorded in dirty.log.
+board_commit() {
+  _d=$(dirname -- "$1")
+  git -C "$_d" ls-files --error-unmatch -- "$1" > /dev/null 2>&1 || return 0
+  git -C "$_d" diff --quiet HEAD -- "$1" 2> /dev/null && return 0
+  git -C "$_d" commit -q -m "$2" -- "$1" > /dev/null 2>&1 && return 0
+  echo "ticket-meta: $1 written but not committed (git refused) - recorded in .skillator/dirty.log" >&2
+  [ -z "$BFRESH" ] || sh "$BFRESH" --record "$1" "ticket-meta $SUB"
+}
 
 # Resolved once, in the main shell: a die inside $(...) only ends the subshell,
 # and an empty top would turn `apps/*` into a scan of /apps.
@@ -168,7 +199,7 @@ commits_info() {
       --format="${SOH}%ae%x09%s" --name-only 2>/dev/null | ID=$1 awk '
     index($0, ENVIRON["SOH"]) == 1 {
       s = substr($0, 2); e = s; sub(/\t.*/, "", e); sub(/^[^\t]*\t/, "", s)
-      hit = match(s, "(^|[^A-Za-z0-9])" ENVIRON["ID"] "([^A-Za-z0-9]|$)")
+      hit = s !~ /^board:/ && match(s, "(^|[^A-Za-z0-9])" ENVIRON["ID"] "([^A-Za-z0-9]|$)")   # F82: board: commits log tickets
       if (hit) print "E\t" tolower(e)
       next }
     hit && $0 != "" { print "P\t" $0 }'
@@ -225,6 +256,7 @@ edit_line() {
   f="$MAIN/TICKETS.md"
   [ -f "$f" ] || die "no TICKETS.md at $f"
   board_lock "$f.lock"
+  board_fresh
   re="^[ \t]*- \\[.\\][ \t]+$ID[ \t]*($EMD|$ENDASH|-)"
   n=$(RE=$re awk '$0 ~ ENVIRON["RE"] { c++ } END { print c + 0 }' "$f")
   [ "$n" = 1 ] || die "$ID: $n matching lines in $f, need exactly 1"
@@ -349,6 +381,7 @@ edit_line() {
       printf "%s%s", line, cr }
     END { if (NR && ENVIRON["EOL"] == "1") printf "\n" }' "$f" > "$tmp" || { rm -f "$tmp"; die "write failed"; }
   mv -f "$tmp" "$f" || { rm -f "$tmp"; die "cannot replace $f"; }
+  board_commit "$f" "board: $SUB $ID"
   board_unlock
   RE=$re awk '$0 ~ ENVIRON["RE"]' "$f"
   if [ "$moved" = 1 ]; then
@@ -793,6 +826,7 @@ team_add() {
   fi
   printf -- '- %s: %s%s\n  name: %s%s\n' "$TH" "$EMS" "$cr" "$NAME" "$cr" >> "$tmp" || { rm -f "$tmp"; die "write failed"; }
   mv -f "$tmp" "$f" || { rm -f "$tmp"; die "cannot replace $f"; }
+  board_commit "$f" "board: team add $TH"
   board_unlock
   printf -- '- %s: %s\n  name: %s\n' "$TH" "$EMS" "$NAME"
 }
@@ -823,6 +857,7 @@ team_remove() {
       printf "%s", $0 }
     END { if (k && ENVIRON["EOL"] == "1") printf "\n" }' "$f" > "$tmp" || { rm -f "$tmp"; die "write failed"; }
   mv -f "$tmp" "$f" || { rm -f "$tmp"; die "cannot replace $f"; }
+  board_commit "$f" "board: team remove $TH"
   board_unlock
   echo "removed: $TH"
   b="$MAIN/TICKETS.md"
@@ -890,6 +925,7 @@ team_lead() {
       END { if (k && ENVIRON["EOL"] == "1") printf "\n" }' "$tl" "$tl" > "$tmp" || { rm -f "$tmp"; die "write failed"; }
   fi
   mv -f "$tmp" "$tl" || { rm -f "$tmp"; die "cannot replace $tl"; }
+  board_commit "$tl" "board: team lead $TH"
   board_unlock
   if [ "$TH" = - ]; then echo "lead cleared"; else echo "lead: $TH"; fi
 }
@@ -912,6 +948,8 @@ selftest() {
   trap 'rm -rf "$T"' EXIT
   # F80: who "me" is comes from git's user.email - never this machine's global one
   : > "$T/gitconfig"; GIT_CONFIG_GLOBAL="$T/gitconfig"; export GIT_CONFIG_GLOBAL; unset SKILLATOR_ME
+  # F82: board writes commit; EMAIL is git's last fallback, so user.email (whoami) stays unset
+  printf '[user]\n\tname = t\n' > "$T/gitconfig"; EMAIL=board@selftest.invalid; export EMAIL
   fail=0
   D=$(printf '\342\200\224')
   eq() { [ "$2" = "$3" ] || { echo "FAIL: $1: expected [$3] got [$2]"; fail=1; }; }
@@ -954,6 +992,8 @@ selftest() {
   sh "$self" assign F1 @nobody > /dev/null 2>&1 && { echo "FAIL: assign accepted an unknown handle"; fail=1; }
   cmp -s TICKETS.md "$T/before.md" || { echo "FAIL: refused assign changed the board"; fail=1; }
   eq "assign F12" "$(run assign F12 @asha)" "- [ ] F12 $D Bulk delete [owner: @asha]"
+  eq "F82: board write committed" "$(git log -1 --format=%s)" "board: assign F12"
+  eq "F82: board left clean" "$(git status --porcelain -- TICKETS.md)" ""
   eq "assign F1" "$(run assign F1 asha)" "- [ ] F1 $D Dark mode [owner: @asha] (@cc-bbbbbb) warning: F1 was in progress under @cc-bbbbbb - its box left [~], the session tag stays; tell that session"
   git config user.email asha@x.com   # F80: only the owner (or the lead) reassigns
   eq "reassign F1" "$(run assign F1 @vidul)" "- [ ] F1 $D Dark mode [owner: @vidul] (@cc-bbbbbb)"
@@ -1540,6 +1580,23 @@ selftest() {
     cmp -s TICKETS.md "$T/want-$nl.md" || { echo "FAIL: $nl board line endings or bytes"; od -c TICKETS.md | head -n 4; fail=1; }
   done
 
+  # F82: a stale board is never written. Behind the upstream with a local commit:
+  # refused (exit 2), the board as it was; behind and clean: fast-forwarded, then written.
+  git init -q --bare "$T/f82up.git"
+  git clone -q "$T/f82up.git" "$T/f82" 2> /dev/null && cd "$T/f82" || die "cannot clone the F82 fixture"
+  printf -- '- [ ] F1 %s One\n' "$D" > TICKETS.md
+  { git add -A && git commit -qm init && git push -q -u origin HEAD; } > /dev/null 2>&1
+  git clone -q "$T/f82up.git" "$T/f82b" 2> /dev/null
+  (cd "$T/f82b" && echo o > o.txt && git add -A && git commit -qm other && git push -q) > /dev/null 2>&1
+  { echo l > l.txt && git add -A && git commit -qm local; } > /dev/null 2>&1
+  cp TICKETS.md "$T/f82.md"
+  sh "$self" start F1 > "$T/out" 2> "$T/err"; rc=$?
+  [ "$rc" = 2 ] && grep -q 'REFUSED the board write' "$T/err" && cmp -s TICKETS.md "$T/f82.md" ||
+    { echo "FAIL: F82 stale board written or not refused (rc $rc): $(cat "$T/err")"; fail=1; }
+  git reset -q --hard HEAD~1
+  eq "F82: behind and clean - fast-forwarded, then written" "$(run start F1)" "- [~] F1 $D One"
+  eq "F82: written on the upstream's tip, committed" "$(git log -2 --format=%s | tr '\n' ' ')" "board: start F1 other "
+
   cd "$T/.." || true
   [ "$fail" = 0 ] || exit 1
   echo ok
@@ -1576,6 +1633,7 @@ teams_post() {
 
 [ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|claim|pick|reconcile|unblock|start|selftest"
 c=$1; shift
+SUB=$c
 [ "$c" = selftest ] && { selftest; exit 0; }
 need_git
 export TOP SOH

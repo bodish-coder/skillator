@@ -17,7 +17,7 @@ const num = (v: string | undefined): number | null => {
 }
 
 // `pending --machine` (or the same keys inside `pending --kv`): DRIVE, DISK_FREE,
-// DISK_TOTAL, MEM_FREE, LOCK=<path>|<age min>|<holder> (0..n), HOLD=<since> <reason> | -.
+// DISK_TOTAL, MEM_FREE, LOCK=<path>|<age min>|<holder> (0..n), HOLD=<since> <reason> | -, BOARD (F82).
 // Keys it does not know are skipped, so the whole --kv output parses too.
 export function parseMachine(kv: string, now: number): Machine {
   const m: Machine = { at: now, drive: '', diskFree: null, diskTotal: null, memFree: null, locks: [], hold: null }
@@ -33,6 +33,12 @@ export function parseMachine(kv: string, now: number): Machine {
       case 'MEM_FREE': m.memFree = num(val); break
       // R6: only `-` (no hold file) is no hold; any other value, an empty one too, is held.
       case 'HOLD': m.hold = val.trim() === '-' ? null : val.trim() || HOLD_UNKNOWN; break
+      // F82: BOARD=stale|<behind>|<upstream>|- or BOARD=refused|<behind>|<upstream>|<reason>
+      case 'BOARD': {
+        const [state, behind, up, ...why] = val.split('|')
+        if (state === 'stale' || state === 'refused') m.board = { state, behind: num(behind) ?? 0, up: up ?? '', reason: state === 'refused' ? why.join('|') : '' }
+        break
+      }
       case 'LOCK': {
         const a = val.indexOf('|'), b = a < 0 ? -1 : val.indexOf('|', a + 1)
         if (a < 0) break
