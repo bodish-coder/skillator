@@ -461,6 +461,21 @@ function Invoke-SelfTest([string]$T) {
     if (-not $ct.Contains('skillator:relay-morpheus')) { return "commands\$n.md does not load relay-morpheus" }
   }
   if (-not ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'commands\marathon-plan.md'))).Contains('workflow-authoring')) { return 'commands\marathon-plan.md does not load workflow-authoring' }
+  # A155: with grayskull-power on, every implementer prompt opens with the code-yoda line - the
+  # line carried verbatim, in the commands only beside the grayskull.md gate
+  $yoda = 'Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.'
+  $gated = { param([string]$text) @($text -split "`n" | Where-Object { $_.Contains($yoda) -and $_.Contains('.skillator/grayskull.md') }).Count -gt 0 }
+  foreach ($f in 'skills\relay-morpheus\references\chain.md', 'skills\relay-morpheus\references\marathon.md',
+                 'skills\tasks-sentinels\SKILL.md', 'skills\relay-morpheus\templates\marathon-workflow.js') {
+    if (-not ([IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))).Contains($yoda)) { return "$f does not carry the code-yoda line (A155)" }
+  }
+  if (-not ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'skills\grayskull-power\references\arming.md'))).Contains('skillator:code-yoda first')) { return 'arming.md does not say code-yoda carries to implementers (A155)' }
+  foreach ($n in 'pending-subagent', 'marathon-plan', 'marathon-run') {
+    foreach ($f in "commands\$n.md", "host-commands\codex\$n.md", "host-commands\cursor\$n.md", "host-commands\pi\$n.md",
+                   "host-commands\opencode\$n.md", "host-commands\antigravity\$n\SKILL.md", "host-commands\gemini\$n.toml") {
+      if (-not (& $gated ([IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))))) { return "$f has no grayskull-gated code-yoda line (A155)" }
+    }
+  }
   $cmds = @('.codex\prompts\pending.md', '.codex\prompts\list-tickets.md',
             '.gemini\commands\pending.toml', '.gemini\commands\list-tickets.toml',
             '.cursor\commands\pending.md', '.cursor\commands\list-tickets.md',
@@ -573,6 +588,7 @@ function Invoke-SelfTest([string]$T) {
                    @('.config\opencode\commands\pending-subagent.md', '.config\opencode\skills'))) {
     if (-not (& $has $p[0] "$T\$($p[1])/relay-morpheus/SKILL.md")) { return "pending-subagent not substituted in $($p[0])" }
     if (-not ((& $has $p[0] 'chain merge') -and (& $has $p[0] 'max'))) { return "pending-subagent has no agent count in $($p[0])" }
+    if (-not (& $gated (& $read $p[0]))) { return "pending-subagent has no grayskull-gated code-yoda line in $($p[0])" }
   }
   if ((& $read '.gemini\antigravity-cli\skills\pending-subagent\SKILL.md') -cnotmatch '(?m)^name: pending-subagent$') { return 'agy skill name pending-subagent' }
   if ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'commands\pending-subagent.md')) -cnotmatch '(?m)^argument-hint: .*max') { return 'commands\pending-subagent.md argument-hint has no count' }
@@ -586,6 +602,7 @@ function Invoke-SelfTest([string]$T) {
                      @(".config\opencode\commands\$n.md", '.config\opencode\skills'))) {
       if (-not (& $has $p[0] "$T\$($p[1])/relay-morpheus/SKILL.md")) { return "$n not substituted in $($p[0])" }
       if (-not ((& $has $p[0] 'no Workflow tool') -and (& $has $p[0] '/pending-subagent'))) { return "$n does not point at /pending-subagent in $($p[0])" }
+      if (-not (& $gated (& $read $p[0]))) { return "$n has no grayskull-gated code-yoda line in $($p[0])" }
     }
     if ((& $read ".gemini\antigravity-cli\skills\$n\SKILL.md") -cnotmatch "(?m)^name: $n`$") { return "agy skill name $n" }
   }

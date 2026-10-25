@@ -16,6 +16,9 @@ each one actually means.
   to run one of its modes, whenever you make one, is a single line in Yoda's
   voice, chosen from code-yoda §8 — "Heavy, this diff is. A review from
   code-yoda, take you should."
+  The arm carries to implementers: every implementer prompt skillator writes
+  while this project is on opens with "Load skillator:code-yoda first
+  (restraint, full)", the paste-in line in relay-morpheus `references/chain.md` (A155).
 - **`codegraph`** — the code map the rest of the skill leans on. **Run the
   check script, never a hand translation of it** (A128: Codex turned the POSIX
   steps below into a PowerShell one-liner that died with a ParserError):

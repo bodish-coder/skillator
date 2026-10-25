@@ -446,6 +446,20 @@ if [ -n "$selftest" ]; then
     grep -qF 'skillator:relay-morpheus' "$root/commands/$_n.md" || { echo "FAIL: commands/$_n.md does not load relay-morpheus"; exit 1; }
   done
   grep -qF 'workflow-authoring' "$root/commands/marathon-plan.md" || { echo "FAIL: commands/marathon-plan.md does not load workflow-authoring"; exit 1; }
+  # A155: with grayskull-power on, every implementer prompt opens with the code-yoda line - the
+  # line carried verbatim, in the commands only beside the grayskull.md gate
+  _yoda='Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.'
+  for f in skills/relay-morpheus/references/chain.md skills/relay-morpheus/references/marathon.md \
+           skills/tasks-sentinels/SKILL.md skills/relay-morpheus/templates/marathon-workflow.js; do
+    grep -qF -- "$_yoda" "$root/$f" || { echo "FAIL: $f does not carry the code-yoda line (A155)"; exit 1; }
+  done
+  grep -qF 'skillator:code-yoda first' "$root/skills/grayskull-power/references/arming.md" || { echo "FAIL: arming.md does not say code-yoda carries to implementers (A155)"; exit 1; }
+  for _n in pending-subagent marathon-plan marathon-run; do
+    for f in commands/$_n.md host-commands/codex/$_n.md host-commands/cursor/$_n.md host-commands/pi/$_n.md \
+             host-commands/opencode/$_n.md host-commands/antigravity/$_n/SKILL.md host-commands/gemini/$_n.toml; do
+      grep -F -- "$_yoda" "$root/$f" | grep -qF '.skillator/grayskull.md' || { echo "FAIL: $f has no grayskull-gated code-yoda line (A155)"; exit 1; }
+    done
+  done
   [ -z "$_bad" ] || { echo "FAIL: frontmatter has an unquoted \": \" (invalid YAML, pi will not register the command): $_bad"; exit 1; }
   # F68: the Muse manifest lists every skill and carries the release version
   sh "$root/practice/scripts/check-muse-manifest.sh" "$root" > /dev/null || { echo "FAIL: .muse-plugin out of step (sh practice/scripts/check-muse-manifest.sh)"; exit 1; }
@@ -559,6 +573,7 @@ if [ -n "$selftest" ]; then
            .config/opencode/commands/pending-subagent.md:.config/opencode/skills; do
     grep -qF "$N/${f#*:}/relay-morpheus/SKILL.md" "$T/${f%%:*}" || { echo "FAIL: pending-subagent not substituted in ${f%%:*}"; exit 1; }
     { grep -qF 'chain merge' "$T/${f%%:*}" && grep -qF 'max' "$T/${f%%:*}"; } || { echo "FAIL: pending-subagent has no agent count in ${f%%:*}"; exit 1; }
+    grep -F -- "$_yoda" "$T/${f%%:*}" | grep -qF '.skillator/grayskull.md' || { echo "FAIL: pending-subagent has no grayskull-gated code-yoda line in ${f%%:*}"; exit 1; }
     grep -qF '{{SKILLS}}' "$T/${f%%:*}" && { echo "FAIL: placeholder left in ${f%%:*}"; exit 1; }
   done
   grep -q '^name: pending-subagent$' "$T/.gemini/antigravity-cli/skills/pending-subagent/SKILL.md" || { echo "FAIL: agy skill name pending-subagent"; exit 1; }
@@ -573,6 +588,7 @@ if [ -n "$selftest" ]; then
              .config/opencode/commands/$_n.md:.config/opencode/skills; do
       grep -qF "$N/${f#*:}/relay-morpheus/SKILL.md" "$T/${f%%:*}" || { echo "FAIL: $_n not substituted in ${f%%:*}"; exit 1; }
       { grep -qF 'no Workflow tool' "$T/${f%%:*}" && grep -qF '/pending-subagent' "$T/${f%%:*}"; } || { echo "FAIL: $_n does not point at /pending-subagent in ${f%%:*}"; exit 1; }
+      grep -F -- "$_yoda" "$T/${f%%:*}" | grep -qF '.skillator/grayskull.md' || { echo "FAIL: $_n has no grayskull-gated code-yoda line in ${f%%:*}"; exit 1; }
     done
     grep -q "^name: $_n\$" "$T/.gemini/antigravity-cli/skills/$_n/SKILL.md" || { echo "FAIL: agy skill name $_n"; exit 1; }
   done

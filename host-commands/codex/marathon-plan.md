@@ -6,3 +6,4 @@ only on Claude Code: this host has no Workflow tool. Tickets: `$ARGUMENTS`.
 2. Point at `/pending-subagent [N|max] [IDs]` (`/prompts:pending-subagent` here): the same tickets (only the unassigned and yours, F80), worked to the end with
    one fresh implementer each - relay-morpheus's run file, landing and end batch. Run it only when
    the user asks for it; this command itself starts nothing.
+   With grayskull-power on (`.skillator/grayskull.md` present) every implementer prompt opens with this line, and without it does not: `Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.`

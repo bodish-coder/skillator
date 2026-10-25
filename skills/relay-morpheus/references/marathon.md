@@ -96,6 +96,11 @@ default, ticket `[ ]`, one retry stage.
 > wide). If the choice is a destructive, security or outside-the-worktree act,
 > say `STOP:` instead. Never ask the user and never wait.
 
+With grayskull-power on (`.skillator/grayskull.md` present) the prompt opens
+with this line, and without it does not (A155):
+
+> Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
 Verify prompt addendum: *"If the report says PARKED: check that the independent
 part works, check (git diff) that the gated files hold no partial guess, judge
 whether the decision is genuinely the user's, and list every file the gated part

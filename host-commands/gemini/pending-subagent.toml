@@ -23,6 +23,7 @@ TICKETS.md (`[ ]`, `[~]`, `[!]` re-checked). A first word that is neither a coun
    said in the report. Every
    prompt says: work and commit in the run worktree (or the stage worktree dispatch names), never
    the main checkout, never push, never edit TICKETS.md.
+   With grayskull-power on (`.skillator/grayskull.md` present) every prompt opens with this line, and without it does not: `Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.`
 3. **Dispatch** - one fresh implementer per ticket (tasks-sentinels): the host's subagent tool (none: run each stored prompt yourself, one at a time, in a fresh context, and say so), given only that
    stage's stored prompt, no session history. `chain decide`, then `chain dispatch <n>` before
    each agent: it writes the row and the exact prompt into the run file first. Count 1: `chain

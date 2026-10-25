@@ -22,6 +22,8 @@ export const meta = {
 // One inner array per phase. Tickets in one phase share no file; a ticket sharing a file with an
 // earlier one sits in a later phase (its `chain plan` has --after that stage). `prompt` is the
 // stage's prompt file, verbatim - the same text `chain plan --prompt-file` stored in the run file.
+// With grayskull-power on (.skillator/grayskull.md present) that text opens with this line (A155):
+// Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
 const PLAN = {
   run: 'RUN-0000',
   runWorktree: '<the run worktree init printed>',
