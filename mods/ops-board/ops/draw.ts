@@ -11,7 +11,7 @@ import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State } from './state'
-import { dialogLines, formLines, runsCursor, setupLines, teamRow, viewOf } from './state'
+import { dialogLines, formLines, reconcileLines, runsCursor, setupLines, teamRow, viewOf } from './state'
 import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, isDecidable, isHead, offsetFor } from '../hooks/lib/ticketsmodel'
 import { runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
@@ -150,6 +150,7 @@ function keysOf(s: State, m: Model): string[] {
   if (s.person) return ['tab / shift-tab field', 'enter add', 'esc cancel']
   if (s.dialog) return s.dialogField === 'ticket' ? ['type the ID', 'tab person', 'enter confirm', 'esc cancel']
     : ['↑↓ person', 'a / d kind', 'tab ticket', 'enter confirm', 'esc cancel']
+  if (s.reconcile) return ['↑↓ move', 'space pick', 'enter apply picked', 'a accept all', 'esc none']   // F81
   if (s.filterField) return ['←→ field', '↑↓ value', 'enter/esc leave']
   if (s.tab === 'run') return runKeys(s)                     // F79
   if (s.tab === 'runs') {
@@ -166,7 +167,7 @@ function keysOf(s: State, m: Model): string[] {
   // F61: on a header Enter opens or closes its group
   const head = isHead(m.selected) ? m.groups.find(g => headKey(g.box) === m.selected) : undefined
   const enter = head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
-  return ['↑↓ move', enter, 'a assign', 'd decide', ...(sel && isDecidable(sel) ? ['D decided'] : []), 't team', 'r reload', 'q quit']
+  return ['↑↓ move', enter, 'a assign', 'd decide', ...(sel && isDecidable(sel) ? ['D decided'] : []), 't team', 'c reconcile', 'r reload', 'q quit']
 }
 
 function keysLine(s: State, m: Model): Seg[] {
@@ -545,6 +546,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
   const main = s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
+    : s.reconcile ? boxBody(s, { title: reconcileLines(s)[0]!, rows: reconcileLines(s).slice(1).map(text => ({ text })) })   // F81
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s)
     : s.tab === 'messages' ? messagesBody(s, room)

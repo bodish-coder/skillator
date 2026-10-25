@@ -8,6 +8,7 @@
 #   ticket-meta.ps1 tag <ID> | selftest
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
 #   ticket-meta.ps1 team lead @handle|- | whoami | claim <ID>... | pick [ID...]   (F80)
+#   ticket-meta.ps1 reconcile [ID...] | unblock <ID> | start <ID>   (F81)
 #
 # Windows PowerShell 5.1 safe: no ?:, ??, && or ||.
 $ErrorActionPreference = 'Stop'
@@ -379,6 +380,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
       if ($o.notekey -cne 'testing') { $p = '(blocked|deferred)' }
       $line = Set-Note $line (' (' + $o.notekey + ': ' + $o.noteval + ')') ('[ \t]*\(' + $p + ':[^()]*\)')
     }
+    if ($o.unblock) { $line = ([regex]'[ \t]*\(blocked:[^()]*\)').Replace($line, '', 1) }   # F81 unblock
     if ($o.done) { $line = Set-Note $line (' **Done ' + $o.done + '**') '[ \t]*\*\*Done [^*]*\*\*' }
     # F72: verify's notes - a pass's **Verified ..**, a fail's (verify failed ..); each replaces its own earlier one,
     # and a pass drops an earlier fail's note.
@@ -638,6 +640,127 @@ function Do-Verify([string[]]$a) {
   $apps = [string]::Join(', ', @(Get-AppsFrom $info))
   $by = [string]::Join(', ', @(Get-ByFrom $info))
   return (Edit-Line $id @{ mark = 'x'; need = '%'; app = $apps; by = $by; verified = $dn; cmd = 'verify' })
+}
+
+# F81: the wait is over: [!] -> [ ], its (blocked: ..) note dropped. Only from [!].
+function Do-Unblock([string[]]$a) {
+  if ($a.Count -ne 1) { Fail 'usage: unblock <ID>' }
+  $id = Get-NormId $a[0]
+  return (Edit-Line $id @{ mark = ' '; need = '!'; unblock = $true })
+}
+
+# F81: work on it has begun: [ ] -> [~]. Only from [ ].
+function Do-Start([string[]]$a) {
+  if ($a.Count -ne 1) { Fail 'usage: start <ID>' }
+  $id = Get-NormId $a[0]
+  return (Edit-Line $id @{ mark = '~'; need = ' ' })
+}
+
+# F81: read-only - the status each open row really has, from evidence. The rules
+# and the output are ticket-meta.sh cmd_reconcile's, line for line.
+# The ticket ids in $s, as words (F1 is never F12 or F1a).
+function Get-Words([string]$s) {
+  return @(([regex]'[^A-Za-z0-9]+').Replace($s, ' ').Split(' ') | Where-Object { $_ -cmatch '^[A-Z]{1,3}[0-9]+[a-z]?$' })
+}
+function Get-Owed([string]$s) {
+  $m = [regex]::Match($s, '\(testing:([^()]*)\)')
+  if ($m.Success -and $m.Groups[1].Value.Trim() -ne '') { return 'owed: ' + $m.Groups[1].Value.Trim() }
+  $t = $s.ToLowerInvariant()
+  if ($t -cmatch 'owner live|live look|live check|live test') { return 'the owner must confirm: a live check' }
+  if ($t -cmatch 'release build') { return 'the software team must confirm: a release build' }
+  if ($t -cmatch 'hardware|device|(^|[^a-z])rig([^a-z]|$)') { return 'the hardware team must confirm: on the device or rig' }
+  if ($t -cmatch 'team to confirm|team must confirm') { return 'the team must confirm' }
+  return ''
+}
+function Do-Reconcile([string[]]$a) {
+  $main = Get-MainRoot
+  $bf = "$main/TICKETS.md"
+  if (-not (Test-Path -LiteralPath $bf -PathType Leaf)) { Fail "no TICKETS.md at $bf" }
+  $want = @{}
+  foreach ($x in $a) { $want[(Get-NormId $x)] = $true }
+  # commits: per id, how many name it and the newest one's sha; `board:` subjects left out
+  $cn = @{}; $cs = @{}
+  foreach ($l in @(Git-Out -c log.showSignature=false log '--format=%h%x09%s')) {
+    if ($null -eq $l) { continue }
+    $p = ([string]$l).Split([char]9, 2)
+    if ($p.Count -lt 2 -or $p[1] -clike 'board:*') { continue }
+    $seen = @{}
+    foreach ($w in (Get-Words $p[1])) {
+      if ($seen.ContainsKey($w)) { continue }
+      $seen[$w] = $true
+      if (-not $cn.ContainsKey($w)) { $cn[$w] = 0; $cs[$w] = $p[0] }
+      $cn[$w]++
+    }
+  }
+  # run stages: the rows of .skillator/run-*.md by run, then stage number; the last naming an id counts
+  $rows = New-Object System.Collections.ArrayList
+  if (Test-Path -LiteralPath "$main/.skillator" -PathType Container) {
+    foreach ($rf in @(Get-ChildItem -LiteralPath "$main/.skillator" -Filter 'run-*.md' -File)) {
+      $rm = [regex]::Match($rf.Name, '^run-([0-9]+)(-|\.md$)')
+      if (-not $rm.Success) { continue }
+      foreach ($line in ([System.IO.File]::ReadAllText($rf.FullName, $Utf8).Replace("`r", '').Split([char]10))) {
+        if ($line -cnotmatch '^\| *[0-9]+ *\|') { continue }
+        $c = @($line.Split('|')) + @('', '', '', '', '', '', '', '')
+        [void]$rows.Add(@{ run = [int64]$rm.Groups[1].Value; num = [int64]$c[1].Trim(); state = $c[3].Trim(); name = $c[2].Trim(); hb = $c[5].Trim(); land = $c[6].Trim() })
+      }
+    }
+  }
+  $st = @{}
+  foreach ($r in @($rows | Sort-Object { $_.run }, { $_.num })) {
+    if ($r.state -cnotmatch '^[x!~]$') { continue }
+    foreach ($w in (Get-Words $r.name)) { $st[$w] = $r }
+  }
+  $mk = @{}; $text = @{}; $ord = New-Object System.Collections.ArrayList
+  foreach ($bl in ([System.IO.File]::ReadAllText($bf, $Utf8).Replace("`r", '').Split([char]10))) {
+    $m = [regex]::Match($bl, '^[ \t]*- \[(.)\][ \t]+([A-Z]+[0-9]+[a-z]?)')
+    if (-not $m.Success -or $mk.ContainsKey($m.Groups[2].Value)) { continue }
+    $mk[$m.Groups[2].Value] = $m.Groups[1].Value; $text[$m.Groups[2].Value] = $bl; [void]$ord.Add($m.Groups[2].Value)
+  }
+  $now = [DateTime]::UtcNow
+  $out = New-Object System.Collections.ArrayList
+  $say = { param($id, $from, $to, $why) [void]$out.Add("$id [$from] -> [$to]  " + ($why -replace '[()]', '')) }
+  foreach ($id in $ord) {
+    $k = $mk[$id]; $line = $text[$id]
+    if ($want.Count -gt 0 -and -not $want.ContainsKey($id)) { continue }
+    if (@(' ', '~', '!') -cnotcontains $k) { continue }
+    if ($k -ceq '~' -and $line -cmatch '\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$') { continue }
+    $s = $null; $sn = ''
+    if ($st.ContainsKey($id)) { $s = $st[$id]; $sn = 'RUN-{0:D4} stage {1}' -f $s.run, $s.num }
+    $ev = ''
+    if ($cn.ContainsKey($id)) { $ev = $cs[$id] } elseif ($s -and $s.state -ceq 'x') { $ev = "$sn $($s.land)" }
+    $o = Get-Owed $line
+    if ($ev -ne '' -and $o -ne '') { & $say $id $k '%' "code landed in $ev; $o"; continue }
+    if ($k -ceq '!') {
+      $bm = [regex]::Match($line, '\(blocked:([^()]*)\)')
+      if (-not $bm.Success) { & $say $id $k $k 'evidence unclear: no blocked note on the line'; continue }
+      $b = $bm.Groups[1].Value.Trim()
+      $ws = @(Get-Words $b)
+      $open = @(); $gone = @(); $done = @()
+      foreach ($w in $ws) {
+        if (-not $mk.ContainsKey($w)) { $gone += $w } elseif ($mk[$w] -cne 'x') { $open += $w } else { $done += $w }
+      }
+      if ($ws.Count -eq 0) { & $say $id $k $k "evidence unclear: blocked on '$b', no ticket to check" }
+      elseif ($gone.Count -gt 0) { & $say $id $k $k ('evidence unclear: blocked on ' + ($gone -join ', ') + ', not on the board') }
+      elseif ($open.Count -eq 0) { & $say $id $k ' ' ('blocked on ' + ($done -join ', ') + ', now done') }
+    } elseif ($k -ceq '~') {
+      if (-not $s) { continue }
+      if ($s.state -ceq '!') { & $say $id $k '!' "$sn failed" }
+      elseif ($s.state -ceq '~') {
+        $hb = [DateTime]::MinValue
+        $styles = [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal
+        if (-not [DateTime]::TryParseExact($s.hb, "yyyy-MM-dd'T'HH:mm'Z'", [Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$hb)) {
+          & $say $id $k $k "evidence unclear: $sn in flight, no heartbeat"
+        } elseif (($now - $hb).TotalMinutes -ge 1440) { & $say $id $k '!' "$sn stale, last heartbeat $($s.hb)" }
+      } else { & $say $id $k '%' "$sn landed $($s.land) - verify its Done line" }
+    } elseif ($s -and $s.state -ceq 'x') { & $say $id $k '%' "$sn landed $($s.land) - verify its Done line" }
+    elseif ($cn.ContainsKey($id)) {
+      $nm = ' commits name it'
+      if ($cn[$id] -eq 1) { $nm = ' commit names it' }
+      & $say $id $k '~' ("$($cn[$id])$nm, newest " + $cs[$id])
+    }
+  }
+  if ($out.Count -eq 0) { return 'no change: nothing to reconcile' }
+  return $out.ToArray()
 }
 
 function Do-Tag([string[]]$a) {
@@ -938,6 +1061,9 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'whoami' { return (Do-Whoami $a) }
     'claim' { return (Do-Claim $a) }
     'pick' { return (Do-Pick $a) }
+    'reconcile' { return (Do-Reconcile $a) }
+    'unblock' { return (Do-Unblock $a) }
+    'start' { return (Do-Start $a) }
     default { Fail "unknown subcommand: $c" }
   }
 }
@@ -1458,6 +1584,42 @@ function Invoke-Selftest {
     Eq 'team lead, no heading' (Run team lead '@asha') 'lead: @asha'
     if (-not (& $teamIs "# Team`r`n`r`nlead: @asha`r`n`r`n- @asha: asha@x.com`r`n")) { Write-Output 'FAIL: team lead with no heading, CRLF'; $script:fail = 1 }
 
+    # --- F81: reconcile - read-only proposals from the board, its commits and run stages
+    $K = "$T/f81"
+    Init-Repo $K
+    W "$K/TICKETS.md" ("# TICKETS`n`n- [!] F1 $dash Waits on F2 (blocked: F2 lands first)`n- [x] F2 $dash Shipped`n" +
+      "- [!] F3 $dash Waits on F4 (blocked: F4)`n- [ ] F4 $dash Open, no evidence`n- [!] F5 $dash Waits on a vendor (blocked: the vendor fix)`n" +
+      "- [ ] F6 $dash Committed`n- [~] F7 $dash Stage failed`n- [~] F8 $dash Stage stale`n- [~] F9 $dash Stage landed`n" +
+      "- [ ] F10 $dash Pairing screen, needs an owner live look on the phone`n- [~] F11 $dash Held (@cc-aaaaaa)`n- [ ] F12 $dash Logged only`n")
+    W "$K/.skillator/run-0001-x.md" ("# RUN-0001 - x`n`n## Stages`n| # | stage | state | owner | heartbeat | landed |`n|---|-------|-------|-------|-----------|--------|`n" +
+      "| 1 | F7 thing | ! | build:opus | 2026-10-25T10:00Z | - |`n| 2 | F8 thing | ~ | build:opus | 2020-01-01T00:00Z | - |`n" +
+      "| 3 | F9 thing | x | build:opus | 2026-10-25T10:00Z | abc1234 |`n")
+    Commit 'vidul@ikran.in' 'init' 'README.md'
+    Commit 'vidul@ikran.in' 'F6: half of it' 'a.txt'
+    Commit 'vidul@ikran.in' 'board: F12 logged' 'b.txt'
+    Commit 'vidul@ikran.in' 'F10: built' 'c.txt'
+    Commit 'vidul@ikran.in' 'F11: working' 'd.txt'
+    $s6 = [string](@(& git rev-parse --short HEAD~3)[0]); $s10 = [string](@(& git rev-parse --short HEAD~1)[0])
+    $f81a = $Utf8.GetString([System.IO.File]::ReadAllBytes("$K/TICKETS.md"))
+    $want81 = @("F1 [!] -> [ ]  blocked on F2, now done",
+      "F5 [!] -> [!]  evidence unclear: blocked on 'the vendor fix', no ticket to check",
+      "F6 [ ] -> [~]  1 commit names it, newest $s6",
+      "F7 [~] -> [!]  RUN-0001 stage 1 failed",
+      "F8 [~] -> [!]  RUN-0001 stage 2 stale, last heartbeat 2020-01-01T00:00Z",
+      "F9 [~] -> [%]  RUN-0001 stage 3 landed abc1234 - verify its Done line",
+      "F10 [ ] -> [%]  code landed in $s10; the owner must confirm: a live check")
+    $got81 = [string]::Join("`n", @(Run reconcile))
+    if ($got81 -cne [string]::Join("`n", $want81)) { Write-Output "FAIL: reconcile proposals: [$got81]"; $script:fail = 1 }
+    if ($Utf8.GetString([System.IO.File]::ReadAllBytes("$K/TICKETS.md")) -cne $f81a) { Write-Output 'FAIL: reconcile wrote the board'; $script:fail = 1 }
+    if (Test-Path -LiteralPath "$K/TICKETS.md.lock") { Write-Output 'FAIL: reconcile left a board lock'; $script:fail = 1 }
+    Eq 'reconcile given ids' (Run reconcile f6 F4) "F6 [ ] -> [~]  1 commit names it, newest $s6"
+    Eq 'reconcile, nothing' (Run reconcile F4 F11 F12) 'no change: nothing to reconcile'
+    # the writers the pane applies [ ] and [~] with: unblock ([!] -> [ ], note dropped), start ([ ] -> [~])
+    Eq 'unblock' (Run unblock F1) "- [ ] F1 $dash Waits on F2"
+    if (-not (Refused unblock F4)) { Write-Output 'FAIL: unblock took a ticket that is not [!]'; $script:fail = 1 }
+    Eq 'start' (Run start F6) "- [~] F6 $dash Committed"
+    if (-not (Refused start F7)) { Write-Output 'FAIL: start took a ticket that is not [ ]'; $script:fail = 1 }
+
     # --- solo, non-monorepo: no workspace folders, no team.md
     $S = "$T/solo"
     Init-Repo $S
@@ -1553,7 +1715,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|claim|pick|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|claim|pick|reconcile|unblock|start|selftest')
   exit 1
 }
 $cmd = [string]$args[0]

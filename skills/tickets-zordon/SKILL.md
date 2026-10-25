@@ -123,6 +123,9 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh whoami          # F80: my @han
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh pick F12 F14    # F80: pick / skip <ID> <owner>
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh claim F12       # F80: [owner: <me>], box kept
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh team lead @asha # F80: set / hand over the lead
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh reconcile       # F81: read-only, `ID [now] -> [proposed]  reason`
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh unblock F12     # F81: [!] -> [ ], the blocked note dropped
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh start F12       # F81: [ ] -> [~]
 ```
 
 The team file is kept with `ticket-meta team add @h "Name" email[,email]`,
@@ -429,10 +432,22 @@ duplicate across the two still fails. For an old ID the board does not show,
 ### Sync what is in progress (`/sync-tickets`)
 
 `[~]` collects rows that are really done, waiting on a test, stuck or parked,
-because nothing flips them back. On `/sync-tickets` (or "sync tickets"), walk
-**every** `[~]` row — or only the IDs given as arguments — and propose the
-status it really has. **Propose from evidence, never invent it.**
+because nothing flips them back; `[!]` and `[ ]` rows go stale the same way. On
+`/sync-tickets` (or "sync tickets"), walk **every** `[!]`, `[ ]` and `[~]` row —
+or only the IDs given as arguments — and propose the status it really has.
+**Propose from evidence, never invent it.**
 
+0. **Start from `ticket-meta reconcile [IDs]`** (F81, read-only - the ops
+   board's `c` key runs the same rule). It prints `ID [now] -> [proposed]
+   reason` per row with evidence: a `[!]` whose `(blocked: ..)` names tickets
+   all `[x]` → `[ ]`; a check owed by the owner or a team (a `(testing: ..)`
+   note, a live check, a release build, a device / rig / hardware, a team to
+   confirm) with the code landed → `[%]`; a run stage on it failed, or silent
+   a day → `[!]`; landed → `[%]`; a `[ ]` with commits naming it (not `board:`
+   ones) → `[~]`. A row it keeps says "evidence unclear". It never proposes
+   `[x]` and skips a `[~]` row with a session tag. Its rows go in the table as
+   they are; steps 1-2 add what it cannot see (`[x]`, `[>]`, `[?]`, a `[~]`
+   the line shows done).
 1. For each `[~]` row read its line and its notes (`Done = ..`, `Progress ..`,
    `Owed ..`, `blocked`, `waiting on`), then `git log --oneline -F --grep=<ID>`
    (keep only subjects naming the ID as a word — `F1` is not `F12`) and any
@@ -469,6 +484,7 @@ status it really has. **Propose from evidence, never invent it.**
    - `[x]` → `ticket-meta done <ID> <the evidence>` (it tags the ticket too),
      the evidence written without parentheses or `*`.
    - `[!]` → `ticket-meta block <ID> <on what>`.
+   - `[!]` → `[ ]` → `ticket-meta unblock <ID>`; `[ ]` → `[~]` → `ticket-meta start <ID>`.
    - `[>]` → `ticket-meta defer <ID> <until what>`.
    - Never hand-edit a box ticket-meta has a subcommand for.
    - Stamp your session tag on every flipped row (**Who touched it**).

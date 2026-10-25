@@ -3,12 +3,12 @@
 // one table, and its `then` folds the result back in. No process, terminal or fs here -
 // app.ts executes the effects, the tests drive reduce without any process, and F56 takes
 // it as is.
-import type { AssignDraft, Board, Box, Filter, Machine, Member, Msg, PersonDraft, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
+import type { AssignDraft, Board, Box, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
 import type { View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
-import { buildModel, HEAD, headKey, isHead, toggleGroup } from '../hooks/lib/ticketsmodel'
+import { applyOf, buildModel, canApply, HEAD, headKey, isHead, parseReconcile, toggleGroup } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME, ticketById } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, parseMachine, usageFromLevel } from '../hooks/lib/facts'
@@ -48,6 +48,7 @@ export type State = {
   person: PersonDraft | null; personField: PersonField  // the Add person form, over the dialog or the Team view
   teamSelected: string | null                         // the Team view's row
   teamConfirm: string | null                          // the handle the Team view asks to remove (y/n)
+  reconcile: (Reconcile & { index: number }) | null   // F81: the reconcile box, its cursor row
   toast: string | null; notes: string[]
   cols: number; rows: number; now: number; quit: boolean
   repo: string | null                      // the repo root's basename, for the tab bar (app.ts sets it)
@@ -86,7 +87,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, relay: null,
   runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false,
-  dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, toast: null, notes: [],
+  dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
   explorer: EX0,
@@ -400,6 +401,62 @@ function decided(s: State): Step {
   return { state: s, effects: [run('meta-decided', [t.id], then)] }
 }
 
+// --- F81: reconcile (`c`): ticket-meta reconcile's proposals; accept all / pick / none ---
+
+// The box's title, then a row per proposal: a kept one (evidence unclear) is never picked.
+export function reconcileLines(s: State): string[] {
+  const v = s.reconcile
+  if (!v) return []
+  return [`Reconcile tickets - ${v.rows.filter(canApply).length} to change`, ...v.rows.map((p, i) => {
+    const cur = i === v.index ? '› ' : '  '
+    return canApply(p)
+      ? `${cur}${v.picked.includes(p.id) ? '[x]' : '[ ]'} ${p.id}  ${STATE_NAME[p.from]} → ${STATE_NAME[p.to]}  ${p.why}`
+      : `${cur}    ${p.id}  ${STATE_NAME[p.from]} stays - ${p.why}`
+  })]
+}
+
+function openReconcile(s: State): Step {
+  const then: Then = r => x => {
+    if (r.code !== 0) return toast(x, `✗ ticket-meta reconcile refused: ${why(r, 'ticket-meta')}`)
+    const rows = parseReconcile(r.out)
+    if (!rows.length) return toast(x, 'reconcile - every [!] [ ] [~] row matches its evidence')
+    return { ...x, reconcile: { rows, picked: [], index: Math.max(0, rows.findIndex(canApply)) } }
+  }
+  return { state: s, effects: [run('meta-reconcile', [], then)] }
+}
+
+// all: every row that changes; else the picked ones. Each one's ticket-meta run adds its
+// line to the toast (the mod's words), then the board is read again.
+function applyReconcile(s: State, all: boolean): Step {
+  const v = s.reconcile!
+  const todo = v.rows.filter(p => canApply(p) && (all || v.picked.includes(p.id)))
+  if (!todo.length) return { state: toast(s, 'nothing picked - space picks a row, a accepts all'), effects: [] }
+  const head = (ok: number) => `${ok === todo.length ? '✓' : '✗'} reconcile: ${ok} of ${todo.length} applied`
+  const effects: Effect[] = todo.map(p => {
+    const { call, args } = applyOf(p)
+    return run(call, args, r => x => {
+      const lines = [...(x.toast ?? '').split('\n').slice(1), r.code === 0 ? `✓ ${p.id} now ${STATE_NAME[p.to]}` : `✗ ${p.id} refused: ${why(r, 'ticket-meta')}`]
+      return toast(x, [head(lines.filter(l => l.startsWith('✓')).length), ...lines].join('\n'))
+    })
+  })
+  return { state: { ...s, reconcile: null, toast: `reconcile: applying ${todo.length}` }, effects: [...effects, { kind: 'poll', what: 'board' }] }
+}
+
+function reconcileKey(s: State, k: Key): Step {
+  const v = s.reconcile!
+  const set = (r: NonNullable<State['reconcile']>): Step => ({ state: { ...s, reconcile: r }, effects: [] })
+  const p = v.rows[v.index]
+  switch (k.name) {
+    case 'up': case 'k': return set({ ...v, index: Math.max(0, v.index - 1) })
+    case 'down': case 'j': return set({ ...v, index: Math.min(v.rows.length - 1, v.index + 1) })
+    case 'space': return p && canApply(p) ? set({ ...v, picked: v.picked.includes(p.id) ? v.picked.filter(i => i !== p.id) : [...v.picked, p.id] }) : set(v)
+    case 'a': return applyReconcile(s, true)
+    case 'return': case 'enter': return applyReconcile(s, false)
+    case 'escape': case 'n': return { state: { ...s, reconcile: null }, effects: [] }
+    default: return set(v)
+  }
+}
+
 // --- the filter row: ← → pick a field, ↑ ↓ its value ---
 
 function fieldsOf(s: State): FilterField[] {
@@ -610,6 +667,7 @@ function ticketsKey(s: State, k: Key): Step {
     case 'f': return { state: { ...s, filterField: 'app' }, effects: [] }
     case 'x': return { state: { ...s, filter: { ...s.filter, showDone: !s.filter.showDone } }, effects: [] }
     case 't': return { state: { ...s, showTeam: true }, effects: [] }
+    case 'c': return openReconcile(s)
     case 'escape': return { state: { ...s, toast: null }, effects: [] }
     default: return same
   }
@@ -757,6 +815,7 @@ export function reduce(s: State, k: Key): Step {
   if (s.setup) return setupKey(s, k)
   if (s.person) return personKey(s, k)
   if (s.dialog) return dialogKey(s, k)
+  if (s.reconcile) return reconcileKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
   if (s.filterField) return filterKey(s, k)
   if (s.tab === 'explorer' && k.name === 'r') return explorerKey(s, k)     // F75: r reads git again too

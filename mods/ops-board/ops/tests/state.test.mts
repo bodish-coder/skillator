@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, viewOf, startHandle, settle, afterRun } from '../state'
+import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
@@ -412,6 +412,54 @@ test('F80 team view: l makes the selected person lead through ticket-meta; a ref
   assert.match(no.toast ?? '', /^✗ ticket-meta team lead @vidul refused: ticket-meta: only the lead @asha may hand the lead over or clear it \(you: @vidul\)\nran: sh$/)
   assert.equal(reduce(onBoard(initial(80, 24, 0), s0.board!, [], null), key('t')).state.showTeam, true)
   assert.equal(reduce(reduce(onBoard(initial(80, 24, 0), s0.board!, [], null), key('t')).state, key('l')).effects.length, 0)
+})
+
+// F81: c - ticket-meta reconcile's proposals in a box; accept all / pick / none, each
+// accepted row through its ticket-meta subcommand, a refusal in the toast, the board re-read.
+const PROPOSALS = 'F1 [ ] -> [~]  2 commits name it, newest abc1234\nF3 [?] -> [?]  evidence unclear: x\nF9 [!] -> [ ]  blocked on F4, now done\n'
+test('F81 c opens the reconcile box from ticket-meta reconcile; nothing to change or a refusal is a toast', () => {
+  const r = reduce(s0, key('c'))
+  assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-reconcile', []])
+  const s = settle(r.effects[0]!.then(ok(PROPOSALS))(r.state)).state
+  assert.deepEqual(s.reconcile?.picked, [])
+  assert.equal(s.reconcile?.index, 0)
+  assert.deepEqual(reconcileLines(s), ['Reconcile tickets - 2 to change',
+    '› [ ] F1  pending → in progress  2 commits name it, newest abc1234',
+    '      F3  pending decision stays - evidence unclear: x',
+    '  [ ] F9  blocked → pending  blocked on F4, now done'])
+  assert.equal(settle(r.effects[0]!.then(ok('no change: nothing to reconcile\n'))(r.state)).state.toast, 'reconcile - every [!] [ ] [~] row matches its evidence')
+  const no = settle(r.effects[0]!.then({ code: 1, out: '', err: 'ticket-meta: no TICKETS.md at /r', argv: ['sh'] })(r.state)).state
+  assert.equal(no.toast, '✗ ticket-meta reconcile refused: ticket-meta: no TICKETS.md at /r')
+  assert.equal(no.reconcile, null)
+})
+
+test('F81 reconcile: a accepts all - each row its subcommand, the toast says each, then the board is read', () => {
+  const r0 = reduce(s0, key('c'))
+  const s = settle(r0.effects[0]!.then(ok(PROPOSALS))(r0.state)).state
+  const r = reduce(s, key('a'))
+  assert.equal(r.state.reconcile, null)
+  assert.deepEqual(r.effects.map(e => (e.kind === 'run' ? [e.call, e.args] : e)), [['meta-start', ['F1']], ['meta-unblock', ['F9']], { kind: 'poll', what: 'board' }])
+  let x = r.state
+  x = settle((r.effects[0] as { then: (y: unknown) => (z: State) => State }).then(ok('- [~] F1'))(x)).state
+  x = settle((r.effects[1] as { then: (y: unknown) => (z: State) => State }).then({ code: 1, out: '', err: 'ticket-meta: F9 is [ ], not [!] - nothing to change', argv: ['sh'] })(x)).state
+  assert.equal(x.toast, '✗ reconcile: 1 of 2 applied\n✓ F1 now in progress\n✗ F9 refused: ticket-meta: F9 is [ ], not [!] - nothing to change')
+})
+
+test('F81 reconcile: space picks, enter applies only the picked; a kept row is never picked; esc is none', () => {
+  const r0 = reduce(s0, key('c'))
+  const s = settle(r0.effects[0]!.then(ok(PROPOSALS))(r0.state)).state
+  assert.deepEqual(press(s, 'down', 'space').reconcile?.picked, [])          // F3: evidence unclear
+  const picked = press(s, 'down', 'down', 'space')
+  assert.deepEqual(picked.reconcile?.picked, ['F9'])
+  assert.deepEqual(press(picked, 'space').reconcile?.picked, [])
+  const r = reduce(picked, key('return'))
+  assert.deepEqual(r.effects.map(e => (e.kind === 'run' ? [e.call, e.args] : e.kind)), [['meta-unblock', ['F9']], 'poll'])
+  assert.equal(reduce(s, key('return')).state.toast, 'nothing picked - space picks a row, a accepts all')
+  assert.equal(reduce(s, key('return')).state.reconcile !== null, true)
+  const none = reduce(s, key('escape'))
+  assert.equal(none.state.reconcile, null)
+  assert.deepEqual(none.effects, [])
+  assert.equal(reduce(s, key('1')).state.reconcile !== null, true)          // the box holds the keys
 })
 
 test('a bad handle never runs', () => {

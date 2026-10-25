@@ -27,6 +27,10 @@ export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string
 // (drawn as a form in the ops-board pane; `back` = where a finished add returns).
 export type TeamView = { selected: string | null; confirm: boolean }
 export type PersonDraft = { handle: string; name: string; emails: string; result: string | null; back: 'assign' | 'team' }
+// F81: one line of `ticket-meta reconcile` (to === from: kept, evidence unclear) and the
+// form in the pane: the proposals and the ids picked to apply.
+export type Proposal = { id: string; from: Box; to: Box; why: string }
+export type Reconcile = { rows: Proposal[]; picked: string[] }
 // F53: the Agents and Workflows tabs. Every field is one the engine reports (design F53, findings 1-5).
 // The engine's AgentStatus (claude-code d.ts 566), repeated: this contract must be self-contained (no import).
 export type AgentStatus = 'pending' | 'running' | 'waiting' | 'idle' | 'completed' | 'failed' | 'killed'
@@ -99,6 +103,7 @@ declare module 'claude-code' {
       runs: RunView[]; assign: AssignDraft | null; narrow: boolean
       relay: string | null   // F48 band: "RUN-0012 2/4", the first relay run not all done
       teamView: TeamView | null; person: PersonDraft | null
+      reconcile: Reconcile | null   // F81: the reconcile form up in the Tickets tab
       agents: AgentRow[]; workflows: WorkflowRow[]   // F53: the Agents and Workflows tabs
       // F66: the Messages tab - the inbox (newest MSG_MAX), the read marker's id, the
       // row picked / opened, the saved config's view, the setup form's safe part

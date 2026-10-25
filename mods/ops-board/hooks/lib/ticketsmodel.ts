@@ -1,4 +1,5 @@
-import type { Board, Box as State, Filter, Member, Ticket } from '../../types'
+import type { Board, Box as State, Filter, Member, Proposal, Ticket } from '../../types'
+import type { Call } from './calls'
 import { GROUPS, isOpen, visible } from './board'
 
 // The Tickets tab's model (design §5): groups, drawn rows, line keys for keeping a
@@ -87,6 +88,24 @@ export function buildModel(v: View): Model {
         : (closedN ? ` · ${closedN} done hidden` : ''))
   return { groups, rows, items, selected, ticket, lines, count: { open: openT.length, dots, closed, text }, filterActive }
 }
+
+// F81: `ticket-meta reconcile`'s proposals, `<ID> [<now>] -> [<proposed>]  <reason>`; any
+// other line ("no change: ..") is none. A row whose box stays is shown, never applied.
+export function parseReconcile(out: string): Proposal[] {
+  const rows: Proposal[] = []
+  for (const l of out.split(/\r?\n/)) {
+    const m = /^(\S+) \[(.)\] -> \[(.)\] {2}(.*)$/.exec(l)
+    if (m) rows.push({ id: m[1]!, from: m[2] as State, to: m[3] as State, why: m[4]! })
+  }
+  return rows
+}
+export const canApply = (p: Proposal) => p.to !== p.from
+// The ticket-meta subcommand that writes a proposal - the mod writes no file.
+export const applyOf = (p: Proposal): { call: Call; args: string[] } =>
+  p.to === ' ' ? { call: 'meta-unblock', args: [p.id] }
+    : p.to === '~' ? { call: 'meta-start', args: [p.id] }
+    : p.to === '%' ? { call: 'meta-testing', args: [p.id, p.why] }
+    : { call: 'meta-block', args: [p.id, p.why] }
 
 // The first line of the window that keeps `item` (a ticket's row and its chips, or a
 // header) in view, or null when it shows.

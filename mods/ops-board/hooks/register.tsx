@@ -11,6 +11,7 @@ import { countsOf, renderBand, statusText } from './band'
 import { buildModel, lineKey, offsetFor, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
 import type { Tab } from './pane'
 import { cancelPerson, clearForm, isFormUp } from './assign'
+import { applyReconcile } from './reconcile'
 import { pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 import { closeSetup, enterMessages, isSetupUp, pollInbox } from './messagestab'
@@ -498,6 +499,19 @@ export const register: Register = on => {
   // F78: the Tickets tab's `r` - a forced poll here, where the poll lives.
   on('ui.press', { plugin: 'ops-board', element: 'key:refresh' }, async ($, e) => {
     await refresh($)
+    return { element: e.element }
+  })
+
+  // F81: the reconcile form's Accept all / Apply picked - ticket-meta writes each row
+  // (reconcile.tsx), then the board is re-read here, where the poll lives.
+  on('ui.press', { plugin: 'ops-board', element: 'reconcile:all' }, async ($, e) => {
+    await applyReconcile($, true)
+    await poll($, true)
+    return { element: e.element }
+  })
+  on('ui.press', { plugin: 'ops-board', element: 'reconcile:picked' }, async ($, e) => {
+    await applyReconcile($, false)
+    await poll($, true)
     return { element: e.element }
   })
 

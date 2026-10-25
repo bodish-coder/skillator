@@ -114,9 +114,18 @@ test('frameSegs is exactly rows lines at any size; tiny terminals still draw', (
     }
   }
 })
+// F81: the reconcile box in place of the Tickets view, its keys on the keys line.
+test('F81 the reconcile box draws its proposals and its keys', () => {
+  const x: State = { ...s, reconcile: { rows: [{ id: 'F1', from: ' ', to: '~', why: '2 commits name it' }, { id: 'F3', from: '!', to: '!', why: 'evidence unclear: x' }], picked: ['F1'], index: 1 } }
+  const t = text(x)
+  assert.match(t, /┌─ Reconcile tickets - 1 to change ─/)
+  assert.match(t, /│ {2}\[x\] F1 {2}pending → in progress {2}2 commits name it/)
+  assert.match(t, /│› {5}F3 {2}blocked stays - evidence unclear: x/)
+  assert.ok(frame(x, P).includes('↑↓ move · space pick · enter apply picked · a accept all · esc none'))
+})
 test('the keys line as the mock; D decided only on a decidable row', () => {
-  const keys = (x: State) => frame(x, P).find(l => l.includes('a assign'))!
-  assert.equal(keys(s), '↑↓ move · enter line · a assign · d decide · t team · r reload · q quit')
+  const keys = (x: State) => frame({ ...x, cols: 100 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
+  assert.equal(keys(s), '↑↓ move · enter line · a assign · d decide · t team · c reconcile · r reload · q quit')
   const f3: State = { ...s, selected: 'F3' }
   assert.match(keys(f3), /D decided/)
   assert.match(keys(f3), /q quit$/)
@@ -328,7 +337,7 @@ test('F61: every group starts collapsed - one header per group with its count, t
 })
 
 test('F61: Enter opens a group under its header, ▾; the keys line says what Enter does on a header', () => {
-  const keys = (x: State) => frame(x, P).find(l => l.includes('a assign'))!
+  const keys = (x: State) => frame({ ...x, cols: 100 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
   assert.match(keys(fresh), /^↑↓ move · enter open · a assign/)
   const o = reduce(fresh, { name: 'return' }).state
   assert.match(text(o), /› ▾ In progress \(1\)\n  ● B2  CSV export drops the last row[^\n]*\n  ▸ Blocked \(1\)/)

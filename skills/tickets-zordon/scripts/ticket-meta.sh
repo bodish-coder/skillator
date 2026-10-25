@@ -24,6 +24,9 @@
 #   ticket-meta.sh whoami               F80: my @handle (SKILLATOR_ME, else git user.email via the team)
 #   ticket-meta.sh claim <ID>...        F80: [owner: <me>], the box kept (plan / dispatch)
 #   ticket-meta.sh pick [ID...]         F80: `you: ..`, then `pick <ID>` / `skip <ID> <owner>`
+#   ticket-meta.sh reconcile [ID...]    F81: read-only, `ID [now] -> [proposed]  reason` per open row
+#   ticket-meta.sh unblock <ID>         F81: [!] -> [ ], the (blocked: ..) note dropped
+#   ticket-meta.sh start <ID>           F81: [ ] -> [~]
 #   ticket-meta.sh selftest             fixture repo, every subcommand, prints ok
 #
 # F80 claims: a ticket owned by someone else is reassigned (assign, claim) only by
@@ -328,6 +331,7 @@ edit_line() {
           k = ENVIRON["NOTE_KEY"]; p = (k == "testing") ? "testing" : "(blocked|deferred)"
           line = setnote(line, " (" k ": " ENVIRON["NOTE_VAL"] ")", "[ \t]*\\(" p ":[^()]*\\)")
         }
+        if (ENVIRON["DROP_BLOCKED"] != "") sub(/[ \t]*\(blocked:[^()]*\)/, "", line)   # F81 unblock
         if (ENVIRON["DONE_NOTE"] != "")
           line = setnote(line, " **Done " ENVIRON["DONE_NOTE"] "**", "[ \t]*\\*\\*Done [^*]*\\*\\*")
         # F72: verify notes - a pass, a fail; each replaces its own earlier one,
@@ -578,6 +582,128 @@ cmd_defer() {
   norm_id "$1"; shift
   note_text 'until what' 0 "$@"
   SET_MARK='>' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_KEY=deferred NOTE_VAL=$NOTE REFUSE_MARKS='x-' SAME_KEY='' NEED_MARK='' edit_line
+}
+
+# F81: the wait is over: [!] -> [ ], its (blocked: ..) note dropped. Only from [!].
+cmd_unblock() {
+  [ $# -eq 1 ] || die "usage: unblock <ID>"
+  norm_id "$1"
+  SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' DROP_BLOCKED=1 SAME_KEY='' NEED_MARK='!' edit_line
+}
+
+# F81: work on it has begun: [ ] -> [~]. Only from [ ].
+cmd_start() {
+  [ $# -eq 1 ] || die "usage: start <ID>"
+  norm_id "$1"
+  SET_MARK='~' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' SAME_KEY='' NEED_MARK=' ' edit_line
+}
+
+# F81: read-only - the status each open row really has, from evidence. One line per
+# row with something to say: `<ID> [<now>] -> [<proposed>]  <reason>`; a row its
+# evidence does not settle keeps its box, the reason opening 'evidence unclear'.
+# Rules, first that holds: a check owed by the owner or a team (a (testing: ..)
+# note, a live check, a release build, a device / rig / hardware, a team to
+# confirm) with the code landed -> [%]; [!] whose (blocked: ..) names tickets, all
+# [x] -> [ ]; a run stage on it failed, or in flight with no heartbeat for a day ->
+# [!]; landed -> [%]; [ ] with commits naming it -> [~]. Never [x] (verify's job).
+# Commits: HEAD's, the subject naming the id as a word, `board:` subjects left out
+# (they log tickets, not work). Stages: .skillator/run-*.md rows naming the id; the
+# last by run and stage number counts. A [~] row with a session tag is that
+# session's - nothing proposed (/sync-tickets' rule). IDs given: only those rows.
+cmd_reconcile() {
+  bf="$MAIN/TICKETS.md"
+  [ -f "$bf" ] || die "no TICKETS.md at $bf"
+  ids=''
+  for ri in "$@"; do norm_id "$ri"; ids="$ids $ID"; done
+  {
+    echo "${SOH}C"
+    git -c log.showSignature=false log --format='%h%x09%s' 2>/dev/null
+    echo "${SOH}S"
+    for rf in "$MAIN"/.skillator/run-*.md; do
+      [ -f "$rf" ] || continue
+      rn=${rf##*/}; rn=${rn#run-}; rn=${rn%%-*}; rn=${rn%.md}
+      case $rn in ''|*[!0-9]*) continue ;; esac
+      tr -d '\r' < "$rf" | RN=$rn awk -F'|' '/^\| *[0-9]+ *\|/ {
+        for (i = 2; i <= 7; i++) gsub(/^[ \t]+|[ \t]+$/, "", $i)
+        print (ENVIRON["RN"] + 0) "\t" $2 "\t" $4 "\t" $3 "\t" $6 "\t" $7 }'
+    done | sort -t "$(printf '\t')" -k1,1n -k2,2n
+    echo "${SOH}B"
+    tr -d '\r' < "$bf"
+  } | IDS=$ids NOW=$(date -u +%Y-%m-%dT%H:%MZ) awk -F'\t' '
+    function days(y, m, d,    era, yoe, doy, doe) {
+      y -= (m <= 2); era = int((y >= 0 ? y : y - 399) / 400); yoe = y - era * 400
+      doy = int((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1
+      doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy
+      return era * 146097 + doe - 719468 }
+    function mins(s,    P) {
+      if (s !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]Z$/) return -1
+      split(s, P, /[-TZ:]/); return days(P[1] + 0, P[2] + 0, P[3] + 0) * 1440 + P[4] * 60 + P[5] }
+    # the ticket ids in s, as words (F1 is never F12 or F1a), into out[1..n]
+    function words(s, out,    n, i, w, k) {
+      gsub(/[^A-Za-z0-9]+/, " ", s); n = split(s, w, " "); k = 0
+      for (i = 1; i <= n; i++) if (w[i] ~ /^[A-Z][A-Z]?[A-Z]?[0-9]+[a-z]?$/) out[++k] = w[i]
+      return k }
+    function owed(s,    x, t) {
+      if (match(s, /\(testing:[^()]*\)/)) {
+        x = substr(s, RSTART + 9, RLENGTH - 10); gsub(/^[ \t]+|[ \t]+$/, "", x)
+        if (x != "") return "owed: " x }
+      t = tolower(s)
+      if (t ~ /owner live|live look|live check|live test/) return "the owner must confirm: a live check"
+      if (t ~ /release build/) return "the software team must confirm: a release build"
+      if (t ~ /hardware|device|(^|[^a-z])rig([^a-z]|$)/) return "the hardware team must confirm: on the device or rig"
+      if (t ~ /team to confirm|team must confirm/) return "the team must confirm"
+      return "" }
+    function join(a, b) { return a == "" ? b : a ", " b }
+    function say(id, from, to, why) { gsub(/[()]/, "", why); printf "%s [%s] -> [%s]  %s\n", id, from, to, why; said = 1 }
+    function stage(id) { return srun[id] " stage " snum[id] }
+    BEGIN { m = split(ENVIRON["IDS"], L, " "); for (i = 1; i <= m; i++) want[L[i]] = 1; now = mins(ENVIRON["NOW"]) }
+    index($0, ENVIRON["SOH"]) == 1 { sec = substr($0, 2, 1); next }
+    sec == "C" {
+      s = substr($0, length($1) + 2)
+      if (s ~ /^board:/) next
+      n = words(s, W); split("", seen)
+      for (j = 1; j <= n; j++) if (!(W[j] in seen)) { seen[W[j]] = 1; if (!(W[j] in cn)) cs[W[j]] = $1; cn[W[j]]++ }
+      next }
+    sec == "S" {
+      if ($3 !~ /^[x!~]$/) next
+      n = words($4, W)
+      for (j = 1; j <= n; j++) { w = W[j]; st[w] = $3; srun[w] = sprintf("RUN-%04d", $1); snum[w] = $2; shb[w] = $5; sland[w] = $6 }
+      next }
+    sec == "B" && match($0, /^[ \t]*- \[.\][ \t]+[A-Z]+[0-9]+[a-z]?/) {
+      id = substr($0, RSTART, RLENGTH); sub(/^[ \t]*- \[.\][ \t]+/, "", id)
+      if (id in mk) next
+      mk[id] = substr($0, index($0, "- [") + 3, 1); ord[++nb] = id; text[id] = $0 }
+    END {
+      for (i = 1; i <= nb; i++) {
+        id = ord[i]; k = mk[id]; line = text[id]
+        if (m > 0 && !(id in want)) continue
+        if (k != " " && k != "~" && k != "!") continue
+        if (k == "~" && line ~ /\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/) continue
+        ev = (id in cn) ? cs[id] : (st[id] == "x") ? stage(id) " " sland[id] : ""
+        o = owed(line)
+        if (ev != "" && o != "") { say(id, k, "%", "code landed in " ev "; " o); continue }
+        if (k == "!") {
+          if (!match(line, /\(blocked:[^()]*\)/)) { say(id, k, k, "evidence unclear: no blocked note on the line"); continue }
+          b = substr(line, RSTART + 9, RLENGTH - 10); gsub(/^[ \t]+|[ \t]+$/, "", b)
+          n = words(b, W); open = ""; gone = ""; done = ""
+          for (j = 1; j <= n; j++) {
+            if (!(W[j] in mk)) gone = join(gone, W[j])
+            else if (mk[W[j]] != "x") open = join(open, W[j])
+            else done = join(done, W[j]) }
+          if (n == 0) say(id, k, k, "evidence unclear: blocked on \047" b "\047, no ticket to check")
+          else if (gone != "") say(id, k, k, "evidence unclear: blocked on " gone ", not on the board")
+          else if (open == "") say(id, k, " ", "blocked on " done ", now done")
+        } else if (k == "~") {
+          if (st[id] == "!") say(id, k, "!", stage(id) " failed")
+          else if (st[id] == "~") {
+            a = mins(shb[id])
+            if (a < 0) say(id, k, k, "evidence unclear: " stage(id) " in flight, no heartbeat")
+            else if (now - a >= 1440) say(id, k, "!", stage(id) " stale, last heartbeat " shb[id])
+          } else if (st[id] == "x") say(id, k, "%", stage(id) " landed " sland[id] " - verify its Done line")
+        } else if (st[id] == "x") say(id, k, "%", stage(id) " landed " sland[id] " - verify its Done line")
+        else if (id in cn) say(id, k, "~", cn[id] (cn[id] == 1 ? " commit names it" : " commits name it") ", newest " cs[id])
+      }
+      if (!said) print "no change: nothing to reconcile" }'
 }
 
 cmd_tag() {
@@ -1268,6 +1394,53 @@ selftest() {
   printf -- '# Team\r\n\r\nlead: @asha\r\n\r\n- @asha: asha@x.com\r\n' > "$T/lead2.md"
   cmp -s .skillator/team.md "$T/lead2.md" || { echo "FAIL: team lead with no heading, CRLF"; od -c .skillator/team.md | head -n 4; fail=1; }
 
+  # --- F81: reconcile - read-only proposals from the board, its commits and run stages
+  K="$T/f81"
+  mkdir -p "$K/.skillator" && cd "$K" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  {
+    printf -- '# TICKETS\n\n'
+    printf -- '- [!] F1 %s Waits on F2 (blocked: F2 lands first)\n' "$D"
+    printf -- '- [x] F2 %s Shipped\n' "$D"
+    printf -- '- [!] F3 %s Waits on F4 (blocked: F4)\n' "$D"
+    printf -- '- [ ] F4 %s Open, no evidence\n' "$D"
+    printf -- '- [!] F5 %s Waits on a vendor (blocked: the vendor fix)\n' "$D"
+    printf -- '- [ ] F6 %s Committed\n' "$D"
+    printf -- '- [~] F7 %s Stage failed\n' "$D"
+    printf -- '- [~] F8 %s Stage stale\n' "$D"
+    printf -- '- [~] F9 %s Stage landed\n' "$D"
+    printf -- '- [ ] F10 %s Pairing screen, needs an owner live look on the phone\n' "$D"
+    printf -- '- [~] F11 %s Held (@cc-aaaaaa)\n' "$D"
+    printf -- '- [ ] F12 %s Logged only\n' "$D"
+  } > TICKETS.md
+  printf -- '# RUN-0001 - x\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|-------|-------|-------|-----------|--------|\n| 1 | F7 thing | ! | build:opus | 2026-10-25T10:00Z | - |\n| 2 | F8 thing | ~ | build:opus | 2020-01-01T00:00Z | - |\n| 3 | F9 thing | x | build:opus | 2026-10-25T10:00Z | abc1234 |\n' > .skillator/run-0001-x.md
+  commit vidul@ikran.in "init" README.md
+  commit vidul@ikran.in "F6: half of it" a.txt
+  commit vidul@ikran.in "board: F12 logged" b.txt
+  commit vidul@ikran.in "F10: built" c.txt
+  commit vidul@ikran.in "F11: working" d.txt
+  s6=$(git rev-parse --short HEAD~3); s10=$(git rev-parse --short HEAD~1)
+  cp TICKETS.md "$T/f81a.md"
+  sh "$self" reconcile > "$T/out" 2>&1 || { echo "FAIL: reconcile failed: $(cat "$T/out")"; fail=1; }
+  {
+    echo "F1 [!] -> [ ]  blocked on F2, now done"
+    echo "F5 [!] -> [!]  evidence unclear: blocked on 'the vendor fix', no ticket to check"
+    echo "F6 [ ] -> [~]  1 commit names it, newest $s6"
+    echo "F7 [~] -> [!]  RUN-0001 stage 1 failed"
+    echo "F8 [~] -> [!]  RUN-0001 stage 2 stale, last heartbeat 2020-01-01T00:00Z"
+    echo "F9 [~] -> [%]  RUN-0001 stage 3 landed abc1234 - verify its Done line"
+    echo "F10 [ ] -> [%]  code landed in $s10; the owner must confirm: a live check"
+  } > "$T/want81"
+  cmp -s "$T/out" "$T/want81" || { echo "FAIL: reconcile proposals"; diff "$T/want81" "$T/out"; fail=1; }
+  cmp -s TICKETS.md "$T/f81a.md" || { echo "FAIL: reconcile wrote the board"; fail=1; }
+  [ ! -e TICKETS.md.lock ] || { echo "FAIL: reconcile left a board lock"; fail=1; }
+  eq "reconcile given ids" "$(run reconcile f6 F4)" "F6 [ ] -> [~]  1 commit names it, newest $s6"
+  eq "reconcile, nothing" "$(run reconcile F4 F11 F12)" "no change: nothing to reconcile"
+  # the writers the pane applies [ ] and [~] with: unblock ([!] -> [ ], note dropped), start ([ ] -> [~])
+  eq "unblock" "$(run unblock F1)" "- [ ] F1 $D Waits on F2"
+  sh "$self" unblock F4 > /dev/null 2>&1 && { echo "FAIL: unblock took a ticket that is not [!]"; fail=1; }
+  eq "start" "$(run start F6)" "- [~] F6 $D Committed"
+  sh "$self" start F7 > /dev/null 2>&1 && { echo "FAIL: start took a ticket that is not [ ]"; fail=1; }
+
   # --- solo, non-monorepo: no workspace folders, no team.md
   S="$T/solo"
   mkdir -p "$S/src" && cd "$S" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
@@ -1375,7 +1548,7 @@ teams_post() {
   return 0
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|claim|pick|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|claim|pick|reconcile|unblock|start|selftest"
 c=$1; shift
 [ "$c" = selftest ] && { selftest; exit 0; }
 need_git
@@ -1400,5 +1573,8 @@ case $c in
   whoami) cmd_whoami "$@" ;;
   claim) cmd_claim "$@" ;;
   pick) cmd_pick "$@" ;;
+  reconcile) cmd_reconcile "$@" ;;
+  unblock) cmd_unblock "$@" ;;
+  start) cmd_start "$@" ;;
   *) die "unknown subcommand: $c" ;;
 esac
