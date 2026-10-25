@@ -831,12 +831,15 @@ command; open tickets whose line says a GREEN is `owed`; and NEXT - the
 **The board as a terminal app** - "open the board", "ops", a host with no
 board pane: `ops` (on PATH after `install.sh`: `~/.local/bin/ops`; after
 `install.ps1`: a `function ops` in the PowerShell profile) runs the same views
-beside any CLI, from the repo or with the repo as its first argument. Without
-the shim: `sh <skills>/ops-board/ops/ops.sh <repo>` (Windows: `powershell
--NoProfile -ExecutionPolicy Bypass -File <skills>\ops-board\ops\ops.ps1 -Repo
-<repo>`), where `<skills>` is the dir holding this skill - install copies
-`ops-board/` beside it; in this repo it is `mods/ops-board/ops/`. It needs node
-22.18 or newer. Its assign, decide and team writes go through `ticket-meta`,
+beside any CLI, from the repo or with the repo as its first argument. An agent
+starts it with `ops --open`: a new tab of the current Windows Terminal window
+(`wt -w 0 new-tab`), never a bare console window; no `wt` → it runs in place.
+Without the shim: `sh <skills>/ops-board/ops/ops.sh <repo> --open` (Windows:
+`powershell -NoProfile -ExecutionPolicy Bypass -File
+<skills>\ops-board\ops\ops.ps1 -Repo <repo> -Open`), where `<skills>` is the
+dir holding this skill - install copies `ops-board/` beside it; in this repo it
+is `mods/ops-board/ops/`. It needs node 22.18 or newer; `ops --help` and
+`mods/ops-board/README.md` give the launch lines per host. Its assign, decide and team writes go through `ticket-meta`,
 like every other board write.
 
 ### By type (default)

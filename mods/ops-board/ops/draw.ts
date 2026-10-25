@@ -22,12 +22,15 @@ import { ticketsOf } from '../hooks/lib/team'
 import { runKeys, runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
 
-export type Paint = { color: boolean; ascii: boolean }
+// `plain`: text only, no SGR at all - for readers of text (--once without colour, a host's
+// notification, tests). Colour off alone drops only the colours (F89: NO_COLOR asks no more).
+export type Paint = { color: boolean; ascii: boolean; plain?: boolean }
 // A seg whose meaning rides on its colour: `mono` is what it reads with colour off or --ascii.
 type Mono = Seg & { mono?: string }
 
 // Theme names → SGR (CONSTRAINTS); 'text' and any other name draw in the default colour.
 const SGR: Record<string, string> = { warning: '33', error: '31', permission: '35', success: '32', suggestion: '36', inactive: '2' }
+const HIGHLIGHT = ['1', '97', '44']
 
 // --ascii: the design's map, plus the arrows, marks, dashes and box lines a raster console
 // font lacks. Every glyph used maps to one cell except '…', which becomes three.
@@ -58,13 +61,18 @@ export function plain(segs: Seg[]): string {
 export function ansi(segs: Seg[], p: Paint): string {
   return segs.map(s => {
     const text = glyph(!p.color ? (s as Mono).mono ?? s.text : s.text, p.ascii)
-    if (!p.color || !text) return text
+    if (p.plain || !text) return text
     const codes: string[] = []
     const add = (c: string | undefined) => { if (c && !codes.includes(c)) codes.push(c) }
-    add(s.color ? SGR[s.color] : undefined)
-    add(s.dim ? '2' : undefined)
-    add(s.bold ? '1' : undefined)
-    add(s.inverse ? '7' : undefined)
+    // F89: a highlight (selected row, focused field, active tab) is bold bright white on
+    // blue - plain inverse reads poorly on coloured text and some themes; colour off keeps inverse
+    if (p.color && s.inverse) HIGHLIGHT.forEach(add)
+    else {
+      add(p.color && s.color ? SGR[s.color] : undefined)
+      add(s.dim ? '2' : undefined)
+      add(s.bold ? '1' : undefined)
+      add(s.inverse ? '7' : undefined)
+    }
     return codes.length ? `\x1b[${codes.join(';')}m${text}\x1b[0m` : text
   }).join('')
 }
@@ -583,6 +591,6 @@ export function frameSegs(s: State): Seg[][] {
 export function frame(s: State, p: Paint): string[] {
   const cols = Math.max(0, s.cols)
   return frameSegs(s).map(l => p.ascii
-    ? ansi(fitSegs(l.map((x: Mono) => ({ ...x, text: glyph(x.mono ?? x.text, true), mono: undefined })), cols, '...'), { color: p.color, ascii: false })
+    ? ansi(fitSegs(l.map((x: Mono) => ({ ...x, text: glyph(x.mono ?? x.text, true), mono: undefined })), cols, '...'), { ...p, ascii: false })
     : ansi(l, p))
 }

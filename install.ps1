@@ -400,6 +400,9 @@ function Invoke-SelfTest([string]$T) {
   $calls = Join-Path $T 'ide-calls'
   [IO.File]::WriteAllText((Join-Path $T 'fake-ide.ps1'), "Add-Content -LiteralPath '$calls' -Value (`$args -join ' ')`nexit 0`n")
   $env:SKILLATOR_AGY_IDE = Join-Path $T 'fake-ide.ps1'
+  # F89: the Windows Terminal fragment goes under a temp LOCALAPPDATA, never the real one
+  $env:LOCALAPPDATA = Join-Path $T 'lad'
+  $frag = Join-Path $T 'lad\Microsoft\Windows Terminal\Fragments\skillator\ops.json'
   # B9: a run without -Profile would write this file, never the real profile
   $defProf = Join-Path $T 'default-profile.ps1'
   $env:SKILLATOR_DEFAULT_PROFILE = $defProf
@@ -423,6 +426,8 @@ function Invoke-SelfTest([string]$T) {
   if (-not $out.Contains("would write $T\.gemini\config\skills\pending\SKILL.md")) { return 'dry-run skill-command line' }
   if (-not $out.Contains("would write $T\.gemini\antigravity-cli\skills\pending\SKILL.md")) { return 'dry-run agy-cli skill-command line' }
   if (-not $out.Contains("would write $T\.config\opencode\commands\team-messages.md")) { return 'dry-run opencode command line' }
+  if (-not $out.Contains("would write $frag")) { return 'dry-run fragment line' }
+  if (Test-Path -LiteralPath $frag) { return 'dry run wrote the fragment' }
   if (-not $out.Contains("ops   sh $($T.Replace('\', '/'))/.config/opencode/skills/ops-board/ops/ops.sh <repo>")) { return 'opencode ops launch line' }
   # F67: XDG_CONFIG_HOME moves opencode's dir, as it does for opencode itself
   New-Item -ItemType Directory -Force (Join-Path $T 'xdg\opencode') | Out-Null
@@ -434,8 +439,13 @@ function Invoke-SelfTest([string]$T) {
   if (Test-Path -LiteralPath $prof) { return 'dry run wrote the profile' }
   if (Test-Path -LiteralPath (Join-Path $T '.codex\skills\pending')) { return 'dry run wrote a command file' }
 
-  $null = & $run @()
+  $out = & $run @()
   if ($script:selfCode -ne 0) { return "install exited $script:selfCode" }
+  # F89: the ops tab's Windows Terminal profile, the shipped fragment byte for byte, and how to remove it
+  if (-not (Test-Path -LiteralPath $frag -PathType Leaf)) { return 'Windows Terminal fragment not written' }
+  if ([IO.File]::ReadAllText($frag) -cne [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'mods\ops-board\ops\wt-fragment.json'))) { return 'Windows Terminal fragment differs from the shipped one' }
+  if (-not ([IO.File]::ReadAllText($frag).Contains('"name": "skillator ops"'))) { return 'fragment profile name' }
+  if (-not $out.Contains("remove: Remove-Item -Recurse '$(Split-Path -Parent $frag)'")) { return 'fragment remove line' }
   # B6: every frontmatter in commands\ and host-commands\ must be valid YAML or pi never registers
   # the command. No YAML parser in the installer, so a narrow check: an unquoted plain value
   # holding ": " (the one slip that bit /archive-tickets). Quote such a value.
@@ -759,7 +769,7 @@ function Invoke-SelfTest([string]$T) {
 }
 
 if ($SelfTest) {
-  $saved = @{ HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; CODEX_HOME = $env:CODEX_HOME; SKILLATOR_AGY_IDE = $env:SKILLATOR_AGY_IDE; SKILLATOR_DEFAULT_PROFILE = $env:SKILLATOR_DEFAULT_PROFILE; XDG_CONFIG_HOME = $env:XDG_CONFIG_HOME }
+  $saved = @{ HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; CODEX_HOME = $env:CODEX_HOME; SKILLATOR_AGY_IDE = $env:SKILLATOR_AGY_IDE; SKILLATOR_DEFAULT_PROFILE = $env:SKILLATOR_DEFAULT_PROFILE; XDG_CONFIG_HOME = $env:XDG_CONFIG_HOME; LOCALAPPDATA = $env:LOCALAPPDATA }
   $T = Join-Path ([IO.Path]::GetTempPath()) ("skillator-selftest-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
   New-Item -ItemType Directory -Force $T | Out-Null
   $T = (Get-Item -LiteralPath $T).FullName.TrimEnd('\')
@@ -948,5 +958,18 @@ if ($shimSrc -and -not $PSBoundParameters.ContainsKey('Profile') -and $scratch.C
     if ($writtenDests.Count -eq 0) { Write-Host "      the plugin's copy (no skills dir written) - run this again after a plugin update" }
     Write-Host "      remove: delete the '# >>> skillator ops >>>' block from that file"
     if ($dups -gt 0) { Write-Host "      removed $dups duplicate ops block(s) from $Profile" -ForegroundColor Yellow }
+  }
+}
+# F89: the Windows Terminal profile the ops tab opens in (`ops -Open`): a fragment, read
+# when Windows Terminal starts. Rewritten every run. Same as install.sh.
+if ($shimSrc -and $env:LOCALAPPDATA) {
+  $wtDir = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\skillator'
+  if ($DryRun) {
+    Write-Host "        would write $wtDir\ops.json"
+  } else {
+    New-Item -ItemType Directory -Force $wtDir | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'mods\ops-board\ops\wt-fragment.json') -Destination (Join-Path $wtDir 'ops.json') -Force
+    Write-Host "ops   Windows Terminal profile 'skillator ops' -> $wtDir\ops.json"
+    Write-Host "      remove: Remove-Item -Recurse '$wtDir'"
   }
 }

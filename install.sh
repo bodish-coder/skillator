@@ -420,6 +420,8 @@ if [ -n "$selftest" ]; then
   # it, so the selftest never installs into the real IDE
   printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/ide-calls"\n' "$T" > "$T/fake-ide"; chmod 755 "$T/fake-ide"
   export SKILLATOR_AGY_IDE="$T/fake-ide"
+  # F89: the Windows Terminal fragment goes under a temp LOCALAPPDATA, never the real one
+  export LOCALAPPDATA="$T/lad"
   HOME=$T CODEX_HOME=$T/.codex sh "$0" >/dev/null || { echo "FAIL: install exited $?"; exit 1; }
   # B6: every frontmatter in commands/ and host-commands/ must be valid YAML or pi never registers
   # the command. No YAML parser in the installer, so a narrow check: an unquoted plain value
@@ -653,6 +655,14 @@ if [ -n "$selftest" ]; then
   done
   [ -x "$T/.local/bin/ops" ] || { echo "FAIL: missing .local/bin/ops"; exit 1; }
   grep -q "exec sh \"$T/.cursor/skills/ops-board/ops/ops.sh\"" "$T/.local/bin/ops" || { echo "FAIL: shim target (first dest: cursor, since claude-code has no plugin here)"; exit 1; }
+  # F89: Windows - the ops tab's Windows Terminal profile, a fragment under LOCALAPPDATA; elsewhere none
+  _frag="$T/lad/Microsoft/Windows Terminal/Fragments/skillator/ops.json"
+  if command -v cygpath >/dev/null 2>&1; then
+    cmp -s "$root/mods/ops-board/ops/wt-fragment.json" "$_frag" || { echo "FAIL: Windows Terminal fragment"; exit 1; }
+    grep -qF '"name": "skillator ops"' "$_frag" || { echo "FAIL: fragment profile name"; exit 1; }
+  else
+    [ -e "$T/lad" ] && { echo "FAIL: Windows Terminal fragment written off Windows"; exit 1; }
+  fi
   # second run: command files are rewritten, installed skills are not, the
   # skill-commands survive the prune and lose a stale marker an older run left
   echo stale >> "$T/.codex/skills/pending/SKILL.md"
@@ -669,6 +679,9 @@ if [ -n "$selftest" ]; then
   grep -qx 'my-own-line' "$T/.pi/agent/skills/.ignore" || { echo "FAIL: pi .ignore lost a user line"; exit 1; }
   [ "$(grep -cxF /PLATFORMS.md "$T/.pi/agent/skills/.ignore")" = 1 ] || { echo "FAIL: pi .ignore lines duplicated on the second run"; exit 1; }
   printf '%s\n' "$out" | grep -q "not on your PATH" || { echo "FAIL: PATH note"; exit 1; }
+  if command -v cygpath >/dev/null 2>&1; then
+    printf '%s\n' "$out" | grep -qF "remove: rm -r \"$(cygpath -u "$T/lad")/Microsoft/Windows Terminal/Fragments/skillator\"" || { echo "FAIL: fragment remove line"; exit 1; }
+  fi
   grep -q stale "$T/.codex/skills/pending/SKILL.md" && { echo "FAIL: codex skill-command not rewritten"; exit 1; }
   grep -q stale "$T/.pi/agent/extensions/skillator-ops.ts" && { echo "FAIL: pi extension not rewritten"; exit 1; }
   [ "$(wc -l < "$T/ide-calls" | tr -d ' ')" = 2 ] || { echo "FAIL: antigravity extension not reinstalled on the second run"; exit 1; }
@@ -678,6 +691,9 @@ if [ -n "$selftest" ]; then
   [ -f "$T/.pi/agent/skills/tickets-zordon/.selftest-sentinel" ] || { echo "FAIL: installed skill was rewritten"; exit 1; }
   out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0" --dry-run) || { echo "FAIL: dry run exited $?"; exit 1; }
   printf '%s\n' "$out" | grep -q "would write $T/.local/bin/ops" || { echo "FAIL: dry-run shim line"; exit 1; }
+  if command -v cygpath >/dev/null 2>&1; then
+    printf '%s\n' "$out" | grep -qF "would write $(cygpath -u "$T/lad")/Microsoft/Windows Terminal/Fragments/skillator/ops.json" || { echo "FAIL: dry-run fragment line"; exit 1; }
+  fi
   printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/prompts/list-tickets.md" || { echo "FAIL: dry-run command line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/extensions/skillator-ops.ts" || { echo "FAIL: dry-run pi extension line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would install the ops board extension $T/.gemini/config/skills/ops-board/antigravity/skillator-ops.vsix with $T/fake-ide" || { echo "FAIL: dry-run antigravity extension line"; exit 1; }
@@ -806,5 +822,18 @@ if [ -n "$shim_src" ]; then
       *":$HOME/.local/bin:"*) ;;
       *) echo "      $HOME/.local/bin is not on your PATH - add it, or run the launch line above" ;;
     esac
+  fi
+fi
+# F89: Windows (Git Bash) - the Windows Terminal profile the ops tab opens in (`ops --open`):
+# a fragment, read when Windows Terminal starts. Rewritten every run.
+if [ -n "$shim_src" ] && [ -n "${LOCALAPPDATA:-}" ] && command -v cygpath >/dev/null 2>&1; then
+  _wt="$(cygpath -u "$LOCALAPPDATA")/Microsoft/Windows Terminal/Fragments/skillator"
+  if [ -n "$dry" ]; then
+    echo "        would write $_wt/ops.json"
+  else
+    mkdir -p "$_wt"
+    cp "$root/mods/ops-board/ops/wt-fragment.json" "$_wt/ops.json"
+    echo "ops   Windows Terminal profile 'skillator ops' -> $_wt/ops.json"
+    echo "      remove: rm -r \"$_wt\""
   fi
 fi

@@ -42,7 +42,7 @@ function settle(step: Step): State {
   return s
 }
 const press = (s: State, ...keys: string[]) => keys.reduce((x, k) => settle(reduce(x, { name: k })), s)
-const P = { color: false, ascii: false }
+const P = { color: false, ascii: false, plain: true }
 const text = (s: State) => frame(s, P).join('\n')
 
 test('5 opens Explorer: git ls-files and git log asked as git effects, nothing run through the scripts table', () => {

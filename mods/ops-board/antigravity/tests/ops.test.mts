@@ -46,6 +46,7 @@ test('html: SGR runs become classed spans, text is escaped, other escapes are dr
   assert.equal(htmlOf(['a \x1b[33;1mwarn\x1b[0m b']), 'a <span class="c33 b">warn</span> b')
   assert.equal(htmlOf(['\x1b[7msel\x1b[0m', '\x1b[2mdim']), '<span class="i">sel</span>\n<span class="d">dim</span>')
   assert.equal(htmlOf(['x\x1b[Ky\x07z']), 'xyz')
+  assert.equal(htmlOf(['\x1b[1;97;44msel\x1b[0m']), '<span class="b i">sel</span>')   // F89: draw.ts's highlight
 })
 
 test('page: nothing loads, the one script runs by nonce, and it posts size and keys', () => {

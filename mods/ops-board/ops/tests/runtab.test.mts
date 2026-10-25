@@ -59,7 +59,7 @@ function fake(files: Record<string, string>): Fake {
   return f
 }
 const engineOf = (f: Fake) => makeEngine({ host: f.host, email: null, once: false, state: initial(100, 40, 0), onChange: () => {}, onQuit: () => {} })
-const text = (s: State) => frame({ ...s, now: s.runJob?.ended ?? s.now }, { color: false, ascii: false }).join('\n')
+const text = (s: State) => frame({ ...s, now: s.runJob?.ended ?? s.now }, { color: false, ascii: false, plain: true }).join('\n')
 const keys = async (e: ReturnType<typeof engineOf>, ...ks: string[]) => { for (const k of ks) await e.key(k.length === 1 ? { name: k, sequence: k } : { name: k }) }
 
 test('the Run tab: the first open scans and saves .skillator/run.json through run-entries; the next open reads it', async () => {

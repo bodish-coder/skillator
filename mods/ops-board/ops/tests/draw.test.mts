@@ -5,6 +5,7 @@ import { initial, onBoard, onMachine, onRuns, onUsage, reduce } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
+import { headKey } from '../../hooks/lib/ticketsmodel'
 import { BOARD } from '../../tests/fixtures'
 // The block's excerpt, with the layout the owner approved in the mock (controller ruling
 // 2026-10-20: where the mock and the excerpt differ on what the user sees, the mock wins).
@@ -13,7 +14,7 @@ const ALL: Box[] = ['~', '%', '!', '?', ' ', '>', 'x', '-']
 const fresh = onBoard(initial(80, 24, 0), parseBoard(BOARD, 'T', 1, 1), [{ handle: '@asha', emails: [] }], null)
 const s: State = { ...fresh, open: ALL, selected: 'B2' }
 const opened = (x: State): State => ({ ...x, open: ALL })
-const P = { color: false, ascii: false }
+const P = { color: false, ascii: false, plain: true }
 const text = (x: State) => frame(x, P).join('\n')
 const sized = (x: State) => {
   const f = frame(x, P)
@@ -33,9 +34,9 @@ test('a frame is rows × ≤cols, tab bar first, band last, no escapes without c
   assert.match(f[23]!, /^● ops · mem \? · disk \? · 5h \? · 7d \?$/)       // one band line at 80 columns
   assert.match(text(s), /  ▾ In progress \(1\)\n› ● B2  CSV export drops the last row/)
 })
-test('colour on: dot carries the state colour, selected row inverse', () => {
+test('colour on: dot carries the state colour, selected row highlighted', () => {
   const f = frame(s, { color: true, ascii: false })
-  assert.match(f.find(l => l.includes('B2  CSV'))!, /› \x1b\[33m●\x1b\[0m\x1b\[7m/)
+  assert.match(f.find(l => l.includes('B2  CSV'))!, /› \x1b\[33m●\x1b\[0m\x1b\[1;97;44m/)
   for (const l of f) assert.ok(cells(l.replace(/\x1b\[[0-9;]*m/g, '')) <= 80, l)
 })
 test('ascii swaps the glyphs; fit cuts with an ellipsis; a long title never wraps', () => {
@@ -47,7 +48,7 @@ test('ascii swaps the glyphs; fit cuts with an ellipsis; a long title never wrap
   const long = onBoard(initial(80, 24, 0), parseBoard('- [ ] F1 — ' + 'x'.repeat(200) + '\n', 'T', 1, 1), [], null)
   sized(long)
   for (const x of [long, reduce(s, { name: 'a' }).state, reduce(s, { name: '3' }).state]) {
-    const a = frame(x, { color: false, ascii: true })
+    const a = frame(x, { color: false, ascii: true, plain: true })
     assert.equal(a.length, 24)
     for (const l of a) { assert.ok(cells(l) <= 80, l); assert.doesNotMatch(l, /[^\x20-\x7e]/, l) }
   }
@@ -94,10 +95,26 @@ test('ansi: SGR per seg from the theme names, reset after each; none without col
     { text: 'd', dim: true }, { text: 'e', color: 'inactive' }, { text: 'f', color: 'text' }, { text: 'g', color: 'permission' },
     { text: 'h', color: 'success' }, { text: 'i', color: 'suggestion' }]
   assert.equal(ansi(segs, { color: true, ascii: false }),
-    '\x1b[33ma\x1b[0mb\x1b[31;1;7mc\x1b[0m\x1b[2md\x1b[0m\x1b[2me\x1b[0mf\x1b[35mg\x1b[0m\x1b[32mh\x1b[0m\x1b[36mi\x1b[0m')
+    '\x1b[33ma\x1b[0mb\x1b[1;97;44mc\x1b[0m\x1b[2md\x1b[0m\x1b[2me\x1b[0mf\x1b[35mg\x1b[0m\x1b[32mh\x1b[0m\x1b[36mi\x1b[0m')
   assert.equal(ansi(segs, P), 'abcdefghi')
   assert.equal(plain(segs), 'abcdefghi')
-  assert.equal(ansi([{ text: '●' }], { color: false, ascii: true }), '*')
+  assert.equal(ansi([{ text: '●' }], { color: false, ascii: true, plain: true }), '*')
+})
+// F89: a highlight is an explicit background + bold with colour; NO_COLOR / --no-color drops
+// the colours only - bold, dim and inverse stay, and so does the › marker
+test('highlights: background + bold with colour; inverse and bold kept under --no-color', () => {
+  const segs = [{ text: 'a', color: 'warning', bold: true }, { text: 'b', inverse: true }, { text: 'c', color: 'error', inverse: true, bold: true }, { text: 'd', dim: true }]
+  assert.equal(ansi(segs, { color: false, ascii: false }), '\x1b[1ma\x1b[0m\x1b[7mb\x1b[0m\x1b[1;7mc\x1b[0m\x1b[2md\x1b[0m')
+  assert.equal(ansi(segs, { color: true, ascii: false }), '\x1b[33;1ma\x1b[0m\x1b[1;97;44mb\x1b[0m\x1b[1;97;44mc\x1b[0m\x1b[2md\x1b[0m')
+  const no = { color: false, ascii: false }
+  const f = frame(s, no)
+  assert.match(f.find(l => l.includes('B2  CSV'))!, /^› ●\x1b\[7m B2  CSV/)                     // selected row
+  assert.match(f[0]!, /^ \x1b\[1;7m1 Tickets\x1b\[0m/)                                        // active tab
+  assert.match(frame({ ...s, selected: headKey('~') }, no).join('\n'), /› \x1b\[1;7m▾ In progress \(1\)/)  // selected header
+  assert.match(frame({ ...s, filterField: 'app' }, no).join('\n'), /app: \x1b\[7mall\x1b\[0m/)   // focused field
+  for (const l of f) assert.doesNotMatch(l, /\x1b\[(?:[0-9;]*;)?(?:3\d|4\d|9\d)[;m]/)          // no colour code
+  const c = frame(s, { color: true, ascii: false })
+  assert.match(c[0]!, /^ \x1b\[1;97;44m1 Tickets\x1b\[0m/)
 })
 test('paintScreen: home, every line cleared to its end', () => {
   assert.equal(paintScreen(['a', 'b']), '\x1b[Ha\x1b[K\r\nb\x1b[K')
@@ -167,7 +184,7 @@ test('filter row, tags, expanded chips and raw line, count line, done shown', ()
   assert.match(text({ ...reduce(s, { name: 'x' }).state, cols: 100 }), /· 1 deferred · 9 closed$/m)
   const fm = reduce(s, { name: 'f' }).state
   assert.match(text(fm), /←→ field/)
-  assert.match(frame(fm, { color: true, ascii: false }).find(l => l.startsWith('\x1b[2mfilter'))!, /\x1b\[7mall\x1b\[0m/)
+  assert.match(frame(fm, { color: true, ascii: false }).find(l => l.startsWith('\x1b[2mfilter'))!, /\x1b\[1;97;44mall\x1b\[0m/)
 })
 // F62: [%] testing - its own group between In progress and Blocked, cyan, named in the count line.
 test('[%] testing: group after in progress, cyan dot, counted open', () => {
@@ -288,7 +305,7 @@ test('the form: typed fields, the cursor on the active one, a long command wraps
     sized({ ...reduce(two, { name: 't' }).state, cols, rows })
     sized({ ...reduce(reduce(two, { name: 't' }).state, { name: 'delete' }).state, cols, rows })
   }
-  for (const l of frame(no, { color: false, ascii: true })) assert.doesNotMatch(l, /[^\x20-\x7e]/, l)
+  for (const l of frame(no, { color: false, ascii: true, plain: true })) assert.doesNotMatch(l, /[^\x20-\x7e]/, l)
 })
 test('the assign box lists + add person; from it the form overlays the dialog; no team file offers it', () => {
   const d = reduce(two, { name: 'a' }).state
@@ -348,9 +365,9 @@ test('F61: every group starts collapsed - one header per group with its count, t
   assert.doesNotMatch(f, /● B2 /)
   // the count line is the board's, not the view's
   assert.match(f, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
-  // colour: the glyph and the words in the state's colour, the selected header inverse
+  // colour: the glyph and the words in the state's colour, the selected header highlighted (F89)
   const c = frame(fresh, { color: true, ascii: false })
-  assert.match(c.find(l => l.includes('In progress'))!, /\x1b\[33;1;7m▸ In progress \(1\)/)
+  assert.match(c.find(l => l.includes('In progress'))!, /\x1b\[1;97;44m▸ In progress \(1\)/)
   assert.match(c.find(l => l.includes('Blocked'))!, /\x1b\[31;1m▸ Blocked \(1\)/)
 })
 
@@ -364,7 +381,7 @@ test('F61: Enter opens a group under its header, ▾; the keys line says what En
 })
 
 test('F61: ascii draws the headers > and v', () => {
-  const a = frame(reduce(fresh, { name: 'return' }).state, { color: false, ascii: true }).join('\n')
+  const a = frame(reduce(fresh, { name: 'return' }).state, { color: false, ascii: true, plain: true }).join('\n')
   assert.match(a, /> v In progress \(1\)\n  \* B2 /)
   assert.match(a, /\n  > Blocked \(1\)/)
   assert.equal(glyph('▸', true), '>')
@@ -376,7 +393,7 @@ test('F61: headers fit 80, 60 and 40 columns, a 240-ticket group too, colour and
   for (const cols of [80, 60, 40]) {
     for (const x of [big, opened(big), fresh, s]) {
       const f = sized({ ...x, cols })
-      for (const p of [{ color: true, ascii: false }, { color: false, ascii: true }])
+      for (const p of [{ color: true, ascii: false }, { color: false, ascii: true, plain: true }])
         for (const l of frame({ ...x, cols }, p)) assert.ok(cells(l.replace(/\x1b\[[0-9;]*m/g, '')) <= cols, l)
       if (x === big) assert.ok(f.some(l => /^  ▸ Pending \(240\)$/.test(l)), f.join('\n'))
     }
