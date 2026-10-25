@@ -263,6 +263,11 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         {bar}
         <Text> </Text>
         {HealthTab(els, await readHealth($))}
+        <Text> </Text>
+        {/* F87: register.tsx takes this press (ui.press) - /ops resume force */}
+        <Box key="keys" flexDirection="row" gap={2}>
+          <Button key="key:force" plain dimColor hotkey="f" onPress={() => {}}>force resume (whatever the reading; mutes memory red)</Button>
+        </Box>
       </Box>
     )
   }

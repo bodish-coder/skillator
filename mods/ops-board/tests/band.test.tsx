@@ -303,6 +303,85 @@ test('/ops resume when not red: relay-morpheus answers, shown with the command t
   expect(w.runs.filter(a => a[1] === RELAY && a[2] === 'watchdog').map(a => a[3])).toEqual(['release'])
 })
 
+// F87: /ops resume force - releases whatever the reading and mutes memory red (watchdog.mute
+// beside the hold) until memory reads green once or /ops watchdog on; disk red still holds.
+const MUTE = '/r/.skillator/watchdog.mute'
+const MEM_RED_KV = kv(50 * GB, Math.round(0.6 * GB), ['HOLD=-'])
+const DISK_RED_KV = kv(Math.round(0.8 * GB), Math.round(0.6 * GB), ['HOLD=-'])
+const MEM_GREEN_KV = kv(50 * GB, 3 * GB, ['HOLD=-'])
+const releases = (w: World) => w.runs.filter(a => a[3] === 'release')
+
+test('F87: plain /ops resume still refuses on memory red; force releases, writes the mute and says so', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  w.machine = MEM_RED_KV
+  await start($, clock)
+  expect(holds(w)).toHaveLength(1)
+  const ops = (args: string) => $.command.run({ command: 'ops', args, ...RUN })
+  expect((await ops('resume')).text).toBe('still red: mem 0.6 GB free (below 1 GB) - not released')
+  expect(releases(w)).toHaveLength(0)
+  const out = (await ops('resume  FORCE')).text ?? ''
+  expect(releases(w)).toHaveLength(1)
+  expect(w.held).toBeNull()
+  expect(w.files[MUTE]).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\dZ mem 0\.6 GB free\n$/)
+  expect(out).toMatch(/^watchdog: released\nwatchdog muted \(forced \d\d:\d\dZ\), mem 0\.6 GB free - memory red does not hold until memory reads green once, or \/ops watchdog on; disk red still holds\nran: /)
+  const ui = await mountBand($, 'terminal')
+  expect((await ui.find({ key: 'line:0' }))?.text).toMatch(/^▲ ops .* watchdog muted \(forced \d\d:\d\dZ\)$/)
+  await ui.unmount()
+})
+
+test('F87: while muted a memory-red poll does not hold again, disk red does', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  w.machine = MEM_RED_KV
+  await start($, clock)
+  await $.command.run({ command: 'ops', args: 'resume force', ...RUN })
+  const n = holds(w).length
+  await clock.advance(60_000)
+  await clock.advance(60_000)
+  expect(holds(w)).toHaveLength(n)                      // memory red, muted: no hold
+  expect(w.held).toBeNull()
+  w.machine = DISK_RED_KV
+  await clock.advance(60_000)
+  expect(holds(w)).toHaveLength(n + 1)                  // disk red holds, muted or not
+  expect(holds(w).at(-1)?.[4]).toBe('disk 0.8 GB free (below 1 GB)')
+})
+
+test('F87: memory green once unmutes - the next memory red holds again; /ops watchdog on unmutes too', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  w.machine = MEM_RED_KV
+  await start($, clock)
+  await $.command.run({ command: 'ops', args: 'resume force', ...RUN })
+  const n = holds(w).length
+  w.machine = MEM_GREEN_KV
+  await clock.advance(60_000)
+  expect(w.files[MUTE]).toBe('')
+  expect(w.toasts.at(-1)).toBe('watchdog unmuted - memory reads green; memory red holds again')
+  w.machine = MEM_RED_KV
+  await clock.advance(60_000)
+  expect(holds(w)).toHaveLength(n + 1)
+
+  await $.command.run({ command: 'ops', args: 'resume force', ...RUN })
+  expect(w.files[MUTE]).not.toBe('')
+  const m = holds(w).length
+  expect((await $.command.run({ command: 'ops', args: 'watchdog on', ...RUN })).text).toBe('watchdog on: memory red holds again')
+  expect(w.files[MUTE]).toBe('')
+  expect(holds(w)).toHaveLength(m + 1)                  // the reading it takes holds at once
+})
+
+test('F87: the Health tab says muted, and its f key forces the resume', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  w.machine = MEM_RED_KV
+  await start($, clock)
+  const ui = await $.ui.mount({ plugin: 'ops-board', surface: 'terminal', component: 'Pane', requestId: 'ops-board',
+    props: { title: 'ops board', isFocused: true, bodyColumns: 120, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 40 }, view: {} } })
+  await ui.press({ key: 'tab:health' })
+  await ui.press({ key: 'key:force' })
+  expect(releases(w)).toHaveLength(1)
+  expect(w.toasts.at(-1)).toContain('watchdog muted (forced ')
+  expect((await ui.find({ key: 'muted' }))?.text).toMatch(/^muted {4}watchdog muted \(forced \d\d:\d\dZ\), mem 0\.6 GB free then$/)
+  expect((await ui.find({ key: 'muted:how' }))?.text).toContain('memory red does not hold until memory reads green once')
+  await ui.unmount()
+})
+
 test('stale locks: listed in a note, never deleted; ok dismisses it', WITH, async ($, on) => {
   const [w, clock] = world(on)
   w.machine = AMBER_KV

@@ -3,8 +3,8 @@
 // the standalone ops app uses it, and F56 (Pi) takes it as is. argv only, no shell.
 import { spawn, execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { readFile, stat as fsStat } from 'node:fs/promises'
-import { isAbsolute, join } from 'node:path'
+import { mkdir, readFile, stat as fsStat, writeFile } from 'node:fs/promises'
+import { dirname, isAbsolute, join } from 'node:path'
 import { argvFor, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, systemRoot, up } from '../hooks/lib/calls'
 import { findBins } from '../hooks/lib/runentries'
 import type { Bins } from '../hooks/lib/runentries'
@@ -19,6 +19,7 @@ export type Host = {
   run(call: Call, args: string[], stdin?: string): Promise<RunResult> // never rejects; 30 s / 15 s budgets; cwd = repoRoot; stdin (F66) written then closed
   stat(path: string): Promise<{ mtimeMs: number; size: number } | null>
   read(path: string): Promise<string>
+  write?(path: string, text: string): Promise<void>  // F87: the watchdog mute file; its folder made as needed
   gitEmail(): Promise<string | null>
   // F79: the Run tab - the programs an entry runs (absolute), and one job: its output as it
   // comes, then its end; stop() kills it with its children. Optional: a host may not run jobs.
@@ -190,6 +191,7 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
       try { const s = await fsStat(abs(path)); return { mtimeMs: s.mtimeMs, size: s.size } } catch { return null }
     },
     read: path => readFile(abs(path), 'utf8'),
+    async write(path, text) { await mkdir(dirname(abs(path)), { recursive: true }); await writeFile(abs(path), text, 'utf8') },
     gitEmail: () => git(['config', 'user.email'], repoRoot),
     bins: async () => {
       const env = process.env

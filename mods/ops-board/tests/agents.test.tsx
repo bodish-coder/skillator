@@ -128,7 +128,8 @@ test('/ops agents opens the pane on Agents and reads the list; an unknown word g
   expect((await run('agents')).text).toBe('ops board opened on Agents.')
   await clock.settle()
   expect(w.lists).toBe(1)
-  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|agents|explorer|run|resume] - runs opens Workflows too')
+  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|agents|explorer|run|resume [force]|watchdog on] - runs opens Workflows too;'
+    + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)')
 })
 
 test('endStatus: an answer completes a subagent and idles a teammate; aborted is killed; error and refusal fail', () => {

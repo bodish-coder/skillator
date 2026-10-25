@@ -11,7 +11,7 @@ import { NO_SCRIPTS } from '../hooks/lib/calls'
 import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, parseReconcile, toggleGroup } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME, ticketById } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
-import { classify, levelLine, parseMachine, usageFromLevel } from '../hooks/lib/facts'
+import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
 import { continuePrompt, engageOf, RUNS_SECTIONS } from '../hooks/lib/runlines'
 import type { RunsSection } from '../hooks/lib/runlines'
@@ -73,6 +73,7 @@ export type Effect = { kind: 'run'; call: Call; args: string[]; then: Then; stdi
   | { kind: 'poll'; what: 'board' | 'slow' | 'runs' } | { kind: 'quit' }
   | { kind: 'runfile'; scanIfMissing: boolean } | { kind: 'job'; argv: string[]; cwd: string } | { kind: 'stop' }   // F79
   | { kind: 'git'; args: string[]; then: Then }       // F75: read-only git, the host's absolute git
+  | { kind: 'mute'; text: string; then?: Then }       // F87: write the watchdog mute file ('' = unmuted); code 1 + err when it failed
 
 // A `then`'s answer as a step: a bare state asks for nothing more.
 export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: x, effects: [] })
@@ -507,11 +508,20 @@ function lockNote(m: Machine): string {
 // New facts (register.tsx applyMachine): classify; while red and not held, hold through
 // relay-morpheus - every reading, so a failed hold is tried again and a release from
 // outside is held again; the toast only when the outcome changes. Locks: one note.
+// F87: memory read green while muted - the mute file is emptied and the mute ends here.
 export function onMachine(s: State, kv: string, now: number): Step {
-  const m = parseMachine(kv, now)
+  let m = parseMachine(kv, now)
+  const effects: Effect[] = []
+  let unmuted = false
+  if (unmuteDue(m)) {
+    const { mute: _, ...rest } = m
+    m = rest
+    unmuted = true
+    effects.push({ kind: 'mute', text: '' })
+  }
   const w = classify(m)
   let state: State = { ...s, machine: m, watch: w }
-  const effects: Effect[] = []
+  if (unmuted) state.toast = 'watchdog unmuted - memory reads green; memory red holds again'
   if (w.level !== 'red') state.holdOutcome = null
   else if (m.hold === null) {
     effects.push(run('relay-hold', [w.reasons.join('; ')], r => x => {
@@ -546,6 +556,29 @@ function resume(s: State): Step {
     const w = m.state.watch
     if (w.level === 'red') return { state: toast(m.state, `still red: ${w.reasons.join('; ')} - not released`), effects: m.effects }
     return { state: m.state, effects: [...m.effects, run('relay-release', [], release)] }
+  }
+  return { state: s, effects: [run('pending-machine', [], read)] }
+}
+
+// F87: F on Health (as /ops resume force) - the mute written first, then the hold released
+// whatever the reading; a slow poll after, so disk red holds again at once.
+function forceResume(s: State): Step {
+  const read: Then = r => x => {
+    const m = r.code === 0 && r.out.trim() ? parseMachine(r.out, x.now) : null
+    const mute = muteText(x.now, m?.memFree ?? null)
+    const release: Then = rr => y => {
+      if (!rr.argv.length) return toast(y, rr.err || NO_SCRIPTS)
+      const said = rr.out.trim() || rr.err.trim()
+      const line = `ran: ${rr.argv.join(' ')}`
+      if (rr.code !== 0) return toast(y, `release failed (exit ${rr.code}): ${said || 'no output'}\n${line}`)
+      const freed = y.machine ? { ...y.machine, hold: null, mute } : null
+      return { state: { ...y, toast: `${said}\n${mutedWords(mute)}, ${mute.slice(mute.indexOf(' ') + 1)} - ${MUTED_HOW}\n${line}`,
+        machine: freed, watch: freed ? classify(freed) : y.watch }, effects: [{ kind: 'poll', what: 'slow' }] }
+    }
+    const wrote: Then = w => y => (w.code !== 0
+      ? toast(y, `could not write ${MUTE_FILE}: ${w.err} - not released`)
+      : { state: y, effects: [run('relay-release', [], release)] })
+    return { state: x, effects: [{ kind: 'mute', text: mute, then: wrote }] }
   }
   return { state: s, effects: [run('pending-machine', [], read)] }
 }
@@ -852,6 +885,7 @@ export function reduce(s: State, k: Key): Step {
     case 'r': return { state: s, effects: [{ kind: 'poll', what: 'board' }, { kind: 'poll', what: 'slow' }] }
     case 'R': return resume(s)
   }
+  if (s.tab === 'health' && k.name === 'F') return forceResume(s)     // F87
   if (s.tab === 'tickets') return ticketsKey(s, k)
   if (s.tab === 'runs') return runsKey(s, k)
   if (s.tab === 'messages') return messagesKey(s, k)

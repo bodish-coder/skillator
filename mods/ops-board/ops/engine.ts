@@ -3,7 +3,8 @@
 // every change (onChange) and reads `state`. The standalone app (app.ts) and the Pi
 // extension (../pi) both run this one loop - neither re-implements a poll.
 import type { Board, Member } from '../types'
-import type { Host } from './nodehost'
+import type { Host, RunResult } from './nodehost'
+import { MUTE_FILE, muteKv } from '../hooks/lib/facts'
 import type { Effect, Key, State, Step } from './state'
 import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun } from './state'
 import { inboxDirOf, INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
@@ -73,9 +74,28 @@ export function makeEngine(o: EngineOpts): Engine {
       const g = host.git ? await host.git(e.args) : { code: 127, out: '', err: NO_GIT, argv: [] }
       return apply(afterRun(e, g, state, Date.now()))
     }
+    if (e.kind === 'mute') {                    // F87: a write, so never in --once
+      let r: RunResult = { code: 0, out: '', err: '', argv: [] }
+      try {
+        if (once) throw new Error('read only (--once)')
+        if (!host.write) throw new Error('this host cannot write files')
+        await host.write(host.repoRoot + '/' + MUTE_FILE, e.text ? e.text + '\n' : '')
+      } catch (err) { r = { ...r, code: 1, err: String((err as Error)?.message ?? err) } }
+      if (e.then) await apply(afterRun({ then: e.then }, r, state, Date.now()))
+      return
+    }
     if (once && e.call !== 'relay-decide') return
     const r = await host.run(e.call, e.args, e.stdin)
-    await apply(afterRun(e, r, state, Date.now()))
+    await apply(afterRun(e, e.call === 'pending-machine' ? await withMute(r) : r, state, Date.now()))
+  }
+
+  // F87: pending --machine's facts with the mute file's line appended (MUTE=), as the mod does.
+  const withMute = async (r: RunResult): Promise<RunResult> => {
+    if (r.code !== 0 || !r.out.trim()) return r
+    const path = host.repoRoot + '/' + MUTE_FILE
+    let text: string | null = null
+    try { if (await host.stat(path)) text = await host.read(path) } catch { text = null }
+    return { ...r, out: r.out + muteKv(text) }
   }
 
   // --- F79: the Run tab - run.json read (scanned when absent, through run-entries), one job ---
@@ -205,7 +225,7 @@ export function makeEngine(o: EngineOpts): Engine {
   // Machine facts (and the red → hold rule), relay's first open run for the band, usage
   // (and relay's decision on it). On Runs its own poll reads relay.
   const pollSlow = async () => {
-    const m = await host.run('pending-machine', [])
+    const m = await withMute(await host.run('pending-machine', []))
     if (m.code === 0 && m.out.trim()) await apply(onMachine(state, m.out, Date.now()))
     else if (m.err === NO_SCRIPTS) { setNote(isScriptsNote, `▲ ${NO_SCRIPTS} - no disk, memory, lock, run or usage facts`); draw() }
     if (state.tab !== 'runs') {

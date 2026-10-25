@@ -33,6 +33,8 @@ export function parseMachine(kv: string, now: number): Machine {
       case 'MEM_FREE': m.memFree = num(val); break
       // R6: only `-` (no hold file) is no hold; any other value, an empty one too, is held.
       case 'HOLD': m.hold = val.trim() === '-' ? null : val.trim() || HOLD_UNKNOWN; break
+      // F87: MUTE= is not pending's: each host appends the mute file's first line (muteKv)
+      case 'MUTE': if (val.trim()) m.mute = val.trim(); break
       // F82: BOARD=stale|<behind>|<upstream>|- or BOARD=refused|<behind>|<upstream>|<reason>
       case 'BOARD': {
         const [state, behind, up, ...why] = val.split('|')
@@ -88,20 +90,42 @@ export function figure(bytes: number | null, t: Limits): { level: Level | null; 
 // red: disk or memory free < 1 GB. amber: disk < 5 GB, memory < 2 GB, a stale lock
 // (the script lists only locks older than 10 min), or a watchdog hold still set.
 // An unknown figure is never red. `reasons` are the band's words for the level.
+// F87: while muted, memory red is amber (it never holds); disk red stays red.
 export function classify(m: Machine): Watch {
   const red: string[] = [], amber: string[] = []
   for (const [name, bytes, t] of [['disk', m.diskFree, DISK], ['mem', m.memFree, MEM]] as const) {
     const f = figure(bytes, t)
-    if (f.level === 'red') red.push(`${name} ${f.text} free (below 1 GB)`)
+    if (f.level === 'red') (name === 'mem' && m.mute ? amber : red).push(`${name} ${f.text} free (below 1 GB)`)
     else if (f.level === 'amber') amber.push(`${name} ${f.text} low`)
   }
   if (red.length) return { level: 'red', reasons: red }
+  if (m.mute) amber.push(mutedWords(m.mute))
   if (m.locks.length) amber.push(`locks ${m.locks.length} stale`)
   if (m.hold !== null) amber.push('held - /ops resume to release')
   return amber.length ? { level: 'amber', reasons: amber } : { level: 'green', reasons: [] }
 }
 
-const mkWindow = (pct: number, resetsAt: string | null, source: Window['source'], at: number): Window =>
+// F87: /ops resume force mutes memory red until memory reads green once (or /ops watchdog
+// on). The mute lives beside relay-morpheus's watchdog.hold, in the main checkout, so the
+// pane and the ops app (two processes) both read it; "<since> mem <figure> free", blank =
+// not muted (the pane's fs cannot delete, so unmuting writes it empty).
+export const MUTE_FILE = '.skillator/watchdog.mute'
+export const muteText = (now: number, memFree: number | null) =>
+  `${new Date(now).toISOString().slice(0, 16)}Z mem ${gb(memFree)} free`
+// The kv line a host appends to pending --machine's output: the file's first line, or none.
+export const muteKv = (text: string | null) => {
+  const line = (text ?? '').split(/\r?\n/)[0]!.trim()
+  return line ? `\nMUTE=${line}\n` : ''
+}
+export function mutedWords(mute: string): string {
+  const hm = /T(\d\d:\d\d)/.exec(mute.split(' ')[0] ?? '')?.[1]
+  return `watchdog muted (forced ${hm ? hm + 'Z' : mute.split(' ')[0]})`
+}
+// Memory read green (2 GB or more free) while muted: the mute ends.
+export const unmuteDue = (m: Machine) => !!m.mute && figure(m.memFree, MEM).level === 'green'
+export const MUTED_HOW = 'memory red does not hold until memory reads green once, or /ops watchdog on; disk red still holds'
+
+const mkWindow =(pct: number, resetsAt: string | null, source: Window['source'], at: number): Window =>
   ({ pct, resetsAt, source, at })
 
 // `$.session.usage().rateLimits` (the status line's windows) and `cost.usd`.

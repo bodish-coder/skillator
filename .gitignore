@@ -5,4 +5,5 @@
 .skillator/*.local.md
 .skillator/holo/
 .skillator/dirty.log
+.skillator/watchdog.mute
 Microsoft/
