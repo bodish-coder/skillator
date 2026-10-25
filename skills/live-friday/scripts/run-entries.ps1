@@ -353,10 +353,11 @@ function Invoke-Selftest {
     W '.skillator/run.json' "{`"entries`":[{`"id`":`"a`",`"kind`":`"sh`",`"target`":`"a.sh`"}]}`n"
     if ((Re rename 'nope' 'X').code -eq 0) { Bad 'rename of an unknown id passed' }
     if ((RJ) -cne "{`"entries`":[{`"id`":`"a`",`"kind`":`"sh`",`"target`":`"a.sh`"}]}`n") { Bad "a rename of an unknown id rewrote run.json: $(RJ)" }
-    # an id is matched as run.json spells it: ab and ab are two entries
-    W '.skillator/run.json' ('{"entries":[{"id":"ab"},{"id":"ab"}]}' + "`n")
-    if ((Re rename 'ab' 'X').code -ne 0) { Bad 'rename by an escaped id' }
-    if (-not (RJ).Contains('{ "id": "ab", "name": "X"')) { Bad "escaped id rename: $(RJ)" }
+    # an id is matched as run.json spells it: ab and a\u0062 are two entries
+    W '.skillator/run.json' ('{"entries":[{"id":"ab"},{"id":"a\u0062"}]}' + "`n")
+    if ((Re rename 'a\u0062' 'X').code -ne 0) { Bad 'rename by an escaped id' }
+    if (-not (RJ).Contains('{ "id": "a\u0062", "name": "X"')) { Bad "escaped id rename: $(RJ)" }
+    if (-not (RJ).Contains('{ "id": "ab", "name": "", ')) { Bad "escaped id rename named ab too: $(RJ)" }
 
     W '.skillator/run.json' "{ `"entries`": [ oops`n"
     if ((Re scan).code -eq 0) { Bad 'a broken run.json was scanned' }

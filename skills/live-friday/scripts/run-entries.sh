@@ -351,10 +351,11 @@ $got"
   cp .skillator/run.json hand.json
   re rename nope X 2>/dev/null && fail "rename of an unknown id passed"
   cmp -s hand.json .skillator/run.json || fail "a rename of an unknown id rewrote run.json: $(cat .skillator/run.json)"
-  # an id is matched as run.json spells it: ab and ab are two entries
-  printf '%s\n' '{"entries":[{"id":"ab"},{"id":"ab"}]}' > .skillator/run.json
-  re rename 'ab' X > /dev/null || fail "rename by an escaped id"
-  grep -qF '{ "id": "ab", "name": "X"' .skillator/run.json || fail "escaped id rename: $(cat .skillator/run.json)"
+  # an id is matched as run.json spells it: ab and a\u0062 are two entries
+  printf '%s\n' '{"entries":[{"id":"ab"},{"id":"a\u0062"}]}' > .skillator/run.json
+  re rename 'a\u0062' X > /dev/null || fail "rename by an escaped id"
+  grep -qF '{ "id": "a\u0062", "name": "X"' .skillator/run.json || fail "escaped id rename: $(cat .skillator/run.json)"
+  grep -qF '{ "id": "ab", "name": "", ' .skillator/run.json || fail "escaped id rename named ab too: $(cat .skillator/run.json)"
 
   # a file that is not JSON is refused, never overwritten
   printf '{ "entries": [ oops\n' > .skillator/run.json
