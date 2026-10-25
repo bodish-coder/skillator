@@ -16,7 +16,7 @@ import { runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, statusColor } fro
 import { workflowStatus } from './lib/agents'
 import { AgentsTab, pollAgents, readAgents, WorkflowsTab } from './agentstab'
 import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab'
-import { enterRun, RunTab } from './runtab'
+import { enterRun, isRunFormUp, RunTab } from './runtab'
 import { enterExplorer, ExplorerTab, readExplorer } from './explorertab'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
@@ -44,8 +44,6 @@ const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 const openA = atom({ plugin: 'ops-board', key: 'openGroups' } as const, [])
 // F76: the Workflows tab's open sections (Runs, Workflows), this session; both start open.
 const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows'])
-// F79: the Run tab's confirm / rename form (runtab.tsx); up, the tab bar is not drawn.
-const runFormA = atom({ plugin: 'ops-board', key: 'runForm' } as const, null)
 
 const CHIP_KEY: Color = 'permission'
 const CHIP_VALUE: Color = 'suggestion'
@@ -277,7 +275,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   // A Run form up draws without the tab bar, as the assign forms do: a tab press would
   // leave it up, and Esc on that tab (the pane still closeOnEscape) close the board.
   if (tab === 'run') {
-    const formUp = (await read($, runFormA)) !== null
+    const formUp = await isRunFormUp($)
     return (
       <Box flexDirection="column">
         {!formUp && bar}

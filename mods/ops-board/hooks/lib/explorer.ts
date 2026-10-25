@@ -1,6 +1,7 @@
 import type { Color } from 'claude-code'
 import type { Change, Commit, Explorer, TreeRow } from '../../types'
 import type { Seg } from './bandlines'
+import { clean } from './bandlines'
 import type { Model } from './ticketsmodel'
 import { offsetFor, toggleGroup } from './ticketsmodel'
 
@@ -34,13 +35,15 @@ export const isSha = (s: string) => /^[0-9a-f]{7,64}$/.test(s)
 export const changeArgs = (sha: string) =>
   ['-c', 'core.quotePath=false', 'log', '-1', '-m', '--first-parent', '--format=', '--raw', '--numstat', '-M', sha]
 
-export const parseFiles = (out: string) => out.split('\0').map(s => s.replace(/^\n+/, '')).filter(Boolean)
+// A154: names and subjects clean()ed as they are parsed, so what explorerLines() measures
+// and cuts is what is drawn.
+export const parseFiles = (out: string) => out.split('\0').map(s => clean(s.replace(/^\n+/, ''))).filter(Boolean)
 
 export function parseLog(out: string): Commit[] {
   const cs: Commit[] = []
   for (const l of out.split(/\r?\n/)) {
-    const [sha, short, date, author, ...rest] = l.split('\x1f')
-    if (sha && isSha(sha) && short !== undefined) cs.push({ sha, short, date: date ?? '', author: author ?? '', subject: rest.join('\x1f') })
+    const [sha, short, date, author, ...rest] = l.split('\x1f').map(clean)
+    if (sha && isSha(sha) && short !== undefined) cs.push({ sha, short, date: date ?? '', author: author ?? '', subject: rest.join('') })
   }
   return cs
 }
@@ -50,7 +53,7 @@ export function parseChanges(out: string): Change[] {
   const raw = lines.filter(l => l.startsWith(':'))
   const nums = lines.filter(l => /^(\d+|-)\t(\d+|-)\t/.test(l))
   return raw.map((l, i) => {
-    const [meta = '', ...paths] = l.split('\t')
+    const [meta = '', ...paths] = l.split('\t').map(clean)
     const status = (meta.split(' ').pop() ?? '?').charAt(0) || '?'
     const two = (status === 'R' || status === 'C') && paths.length > 1
     const n = nums[i]?.split('\t')

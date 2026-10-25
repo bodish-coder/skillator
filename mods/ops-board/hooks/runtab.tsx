@@ -1,5 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, RenderInput, TextProps } from 'claude-code'
+import { clean } from './lib/bandlines'
 import { runCall, isWindows } from './lib/host'
 import { argvText, entryNote, findBins, jobStatus, keepTail, outLines, parseRunFile, planEntry, RUN_FILE } from './lib/runentries'
 import type { Bins, Job, RunEntry, RunFile, RunForm } from './lib/runentries'
@@ -30,8 +31,6 @@ let live: Live | null = null
 // The programs on PATH, walked once per scan (r, entering the tab) - not on every draw of
 // the confirm form and again at Run, so the argv shown is the argv run.
 let bins: { key: string; bins: Bins } | null = null
-// Control bytes out of what run.json (hand-editable) names: an ESC never reaches the pane.
-const clean = (t: string) => t.replace(/\t/g, ' ').replace(/[\x00-\x08\x0a-\x1f\x7f-\x9f]/g, '')
 
 const ran = (argv: string[]) => 'ran: ' + argvText(argv)
 const why = (r: { code: number; out: string; err: string }) => r.err.trim() || r.out.trim() || `run-entries exited ${r.code}`

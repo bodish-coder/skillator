@@ -7,6 +7,7 @@
 // writes what frame() returns; tests read it as text.
 import type { Color } from 'claude-code'
 import type { Seg } from '../hooks/lib/bandlines'
+import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State } from './state'
@@ -71,9 +72,6 @@ export function ansi(segs: Seg[], p: Paint): string {
 export function paintScreen(lines: string[]): string {
   return '\x1b[H' + lines.join('\x1b[K\r\n') + '\x1b[K'
 }
-
-// A board title or a script's stderr can carry control bytes; none reaches the terminal.
-const clean = (t: string) => t.replace(/\t/g, ' ').replace(/[\x00-\x08\x0a-\x1f\x7f-\x9f]/g, '')
 
 // One line cut to `cols` cells: the segment that crosses the limit is cut and ends in
 // `ell`, the rest dropped.

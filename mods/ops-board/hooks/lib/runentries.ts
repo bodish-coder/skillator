@@ -13,6 +13,32 @@ const MAX_TEXT = 300
 
 const str = (v: unknown) => (typeof v === 'string' ? v.slice(0, MAX_TEXT) : '')
 
+// A154: each entries[i].id string as run-entries keys it - its JSON text, escapes kept,
+// never cut - so `run-entries rename <id>` finds it. `text` already parsed as JSON.
+function rawIds(text: string): string[] {
+  const ids: string[] = []
+  let i = text.charCodeAt(0) === 0xfeff ? 1 : 0
+  const ws = () => { while (' \t\r\n'.includes(text[i] ?? 'x')) i++ }
+  const raw = () => { const s = ++i; while (text[i] !== '"') i += text[i] === '\\' ? 2 : 1; return text.slice(s, i++) }
+  const val = (at: string[]): void => {
+    ws()
+    const c = text[i]
+    if (c === '"') { const s = raw(); if (at.length === 3 && at[0] === 'entries' && at[2] === 'id') ids[+at[1]!] = s; return }
+    if (c !== '{' && c !== '[') { while (i < text.length && !',}] \t\r\n'.includes(text[i]!)) i++; return }
+    i++
+    for (let n = 0; ; n++) {
+      ws()
+      if (text[i] === '}' || text[i] === ']') { i++; return }
+      if (text[i] === ',') { i++; ws() }
+      let k = String(n)
+      if (c === '{') { k = raw(); ws(); i++ }
+      val([...at, k])
+    }
+  }
+  val([])
+  return ids
+}
+
 // run.json's text as the tab lists it; a file that is not the shape says so in `error`.
 export function parseRunFile(text: string, path: string): RunFile {
   let j: unknown
@@ -25,10 +51,11 @@ export function parseRunFile(text: string, path: string): RunFile {
   // repeated id -2, -3.. - so a hand-edited file's rows still key, select and rename apart.
   const used = new Set<string>()
   const entries: RunEntry[] = []
+  const ids = rawIds(text)
   list.slice(0, MAX_ENTRIES).forEach((x, ix) => {
     if (!x || typeof x !== 'object' || Array.isArray(x)) return
     const o = x as Record<string, unknown>
-    let id = str(o.id) || `hand-${ix + 1}`
+    let id = ids[ix] || `hand-${ix + 1}`
     if (used.has(id)) { let c = 2; while (used.has(`${id}-${c}`)) c++; id = `${id}-${c}` }
     used.add(id)
     entries.push({

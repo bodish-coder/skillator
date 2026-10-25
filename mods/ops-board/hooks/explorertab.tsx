@@ -1,5 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, TextProps } from 'claude-code'
+import { clean } from './lib/bandlines'
 import { gitBin } from './lib/host'
 import { changeArgs, EMPTY, explorerLines, explorerOffset, LOG_ARGS, LS_ARGS, moveSel, NO_GIT, parseFiles, selectedOf, toggle,
   withChanges, withError, withFiles, withLog } from './lib/explorer'
@@ -93,10 +94,6 @@ export async function arrowExplorer($: EngineInterface, by: number, top: number,
 export async function readExplorer($: EngineInterface): Promise<Explorer> {
   return read($, explorerA)
 }
-
-// Control bytes out of git's names and subjects, as the standalone app's Explorer
-// (ops/explorer.ts clean()): no ESC reaches the pane, no newline makes an item two rows.
-const clean = (t: string) => t.replace(/\t/g, ' ').replace(/[\x00-\x08\x0a-\x1f\x7f-\x9f]/g, '')
 
 type Els = { Box: ElementConstructor<BoxProps>; Text: ElementConstructor<TextProps>; Button: ElementConstructor<ButtonProps> }
 
