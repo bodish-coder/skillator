@@ -205,21 +205,23 @@ test('usage: a changed level line asks relay to decide; same line asks nothing; 
 const LIST = 'RUN-0012  Ops everywhere                               0/2 done\n  owner: @asha\nRUN-0013  Other                                      1/3 done  (stage 2 open)\n'
 const CHAIN = '## Chain\n### S1 - stage 1 - F1 Dark mode\ntickets: F1\n### S2 - stage 2 - F3 Chart\ntickets: F3\nafter: 1\n'
 
-test('runs: onRuns sets the runs and the relay text; up/down move; Enter expands; s queues a planned run', () => {
+test('runs: onRuns sets the runs and the relay text; up/down move; Enter expands; e engages (F85: a confirm, then queue-run add)', () => {
   const s = onRuns(reduce(s0, key('2')).state, LIST, { 'RUN-0012': CHAIN })
   assert.equal(s.runs.length, 2); assert.equal(s.relay, 'RUN-0012 0/2'); assert.equal(s.runsSelected, 'RUN-0012')
   assert.equal(reduce(s, key('down')).state.runsSelected, 'RUN-0013')
   assert.equal(reduce(press(s, 'down'), key('up')).state.runsSelected, 'RUN-0012')
   assert.equal(reduce(s, key('return')).state.runsExpanded, 'RUN-0012')
-  const r = reduce(s, key('s'))
+  const asked = reduce(s, key('e'))
+  assert.deepEqual(asked.effects, [])                              // F85: the confirm first
+  assert.deepEqual(asked.state.engage, { id: 'RUN-0012', text: continuePrompt('RUN-0012'), queue: true })
+  assert.equal(reduce(asked.state, key('escape')).state.engage, null)
+  const r = reduce(asked.state, key('return'))
   assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['relay-queue-add', ['RUN-0012']])
   const q = settle(r.effects[0]!.then(ok('queued RUN-0012'))(r.state))
   assert.ok(q.state.toast?.startsWith('✓ RUN-0012 queued - queued RUN-0012.'))
   assert.ok(q.state.toast?.includes(continuePrompt('RUN-0012')))
   assert.deepEqual(q.effects, [{ kind: 'poll', what: 'runs' }])
   assert.match(settle(r.effects[0]!.then({ code: 1, out: '', err: 'busy', argv: ['sh'] })(r.state)).state.toast ?? '', /^■ RUN-0012 not queued: busy/)
-  const notPlanned = reduce(press(s, 'down'), key('s'))
-  assert.equal(notPlanned.effects.length, 0); assert.ok(notPlanned.state.toast)
 })
 
 // F76: the Runs tab holds a Runs and a Workflows section that open and close as F61's
@@ -239,8 +241,8 @@ test('F76: runs and workflows sections - both start open, Enter on a header clos
   assert.equal(runsCursor(shut), 'head:runs')
   assert.equal(runsCursor(press(shut, 'down')), 'head:workflows')
   assert.deepEqual(press(shut, 'return').runsOpen, ['workflows', 'runs'])
-  // s on a header queues nothing
-  const onHead = reduce(press(s, 'up'), key('s'))
+  // e on a header engages nothing
+  const onHead = reduce(press(s, 'up'), key('e'))
   assert.equal(onHead.effects.length, 0); assert.ok(onHead.state.toast)
   // closed with a run selected: the header shows selected; opening lands back on the run
   const hid = { ...s, runsSelected: 'RUN-0013', runsOpen: ['workflows' as const] }
@@ -613,4 +615,45 @@ test('F77: a changed ID moves the dialog to that ticket; Enter runs on the new o
   d = reduce(d, key('tab')).state
   const r = reduce(d, key('return'))
   assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-decide', ['F1', '@asha']])
+})
+
+// F85: the ops app shows a run's mode, its script's phases and the next one; e engages
+// it - having no session, Enter prints the exact command to paste; another live driver
+// refuses. Fixture run text and script only.
+test('F85: a workflow run - mode, phases, next phase; e then Enter prints /skillator:marathon-run; a live driver refuses', async () => {
+  const { engageLines } = await import('../state')
+  const { frameSegs } = await import('../draw')
+  const SEP = '     '
+  const run20 = (driver: string) => ['# Resuming .skillator/run-0020-m.md', '',
+    '## Stages', '| # | stage | state | owner | heartbeat | landed |', '|---|---|---|---|---|---|',
+    '| 136 | AAA8 A155 yoda | x | w | - | a |', '| 137 | AAA9 B10 muse |   | - | - | - |', '',
+    '## Chain', `driver: ${driver}${SEP}hold: -${SEP}mode: workflow`,
+    '### AAA8 - stage 136 - A155 yoda', 'tickets: A155', '### AAA9 - stage 137 - B10 muse', 'tickets: B10', ''].join('\n')
+  const script = 'const PLAN = {\n  "phases": [\n    [ { "stage": 136, "ticket": "A155" } ],\n    [ { "stage": 137, "ticket": "B10" } ]\n  ]\n}\n'
+  const list = 'RUN-0020  marathon  1/2 done\n'
+  const s = onRuns(reduce(s0, key('2')).state, list, { 'RUN-0020': run20('-') }, { 'RUN-0020': script })
+  assert.deepEqual(s.runs[0]!.phases, [[{ n: 136, ticket: 'A155' }], [{ n: 137, ticket: 'B10' }]])
+  const open = reduce(s, key('return')).state
+  const txt = frameSegs({ ...open, rows: 40 }).map(l => l.map(x => x.text).join(''))
+  assert.ok(txt.some(l => /RUN-0020  marathon +workflow · 1\/2 done/.test(l)), txt.join('\n'))
+  assert.ok(txt.some(l => l === '    phase 2  s137 B10  ← next'), txt.join('\n'))
+  const asked = reduce(open, key('e')).state
+  assert.deepEqual(engageLines(asked), ['Engage RUN-0020?', 'Paste    /skillator:marathon-run RUN-0020'])
+  assert.ok(frameSegs({ ...asked, rows: 40 }).some(l => l.map(x => x.text).join('').includes('Engage RUN-0020?')))
+  const go = reduce(asked, key('return'))
+  assert.deepEqual(go.effects, [])                                  // nothing queued for a script run
+  assert.equal(go.state.toast, 'Paste into your CLI:\n/skillator:marathon-run RUN-0020')
+  assert.equal(go.state.engage, null)
+  // another driver's stamp 5 minutes old: refused, naming it, no confirm
+  const now = Date.parse('2026-10-18T12:00:00Z')
+  const live = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-live 2026-10-18T11:55Z') }, { 'RUN-0020': script })
+  const refused = reduce(live, key('e')).state
+  assert.equal(refused.engage, null)
+  assert.equal(refused.toast, '■ RUN-0020 not engaged: driven by @cc-live (heartbeat 5m ago, stale at 20m) - never two drivers')
+  // a stamp not in relay's shape fails closed
+  const odd = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-odd 2026-10-18T11:55:30Z') }, { 'RUN-0020': script })
+  assert.equal(reduce(odd, key('e')).state.toast, '■ RUN-0020 not engaged: driven by @cc-odd (heartbeat unreadable: 2026-10-18T11:55:30Z) - never two drivers')
+  // a stale one (45 minutes) engages
+  const stale = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-old 2026-10-18T11:15Z') }, { 'RUN-0020': script })
+  assert.equal(reduce(stale, key('e')).state.engage?.text, '/skillator:marathon-run RUN-0020')
 })

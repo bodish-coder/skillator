@@ -3,7 +3,7 @@
 // one table, and its `then` folds the result back in. No process, terminal or fs here -
 // app.ts executes the effects, the tests drive reduce without any process, and F56 takes
 // it as is.
-import type { AssignDraft, Board, Box, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
+import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
 import type { View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
@@ -13,7 +13,7 @@ import { STATE_NAME, ticketById } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, parseMachine, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
-import { continuePrompt, RUNS_SECTIONS } from '../hooks/lib/runlines'
+import { continuePrompt, engageOf, RUNS_SECTIONS } from '../hooks/lib/runlines'
 import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
@@ -43,6 +43,7 @@ export type State = {
   runs: RunView[]; runsSelected: string | null; runsExpanded: string | null   // runsSelected: a run id or 'head:<section>'
   runsOpen: RunsSection[]                  // F76: the Workflows tab's open sections (Runs, Workflows); both start open
   runsRead: boolean                        // false until relay's list was first read: 'reading runs…'
+  engage: Engage | null                    // F85: the engage confirm box up
   dialog: AssignDraft | null; dialogIndex: number    // -1: the cursor is on "+ add person"
   dialogField: DialogField                            // F77: the keys go to the Ticket field or the people
   person: PersonDraft | null; personField: PersonField  // the Add person form, over the dialog or the Team view
@@ -86,7 +87,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   filter: { app: null, who: null, mine: false, showDone: false }, filterField: null,
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, relay: null,
-  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false,
+  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, engage: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
@@ -572,8 +573,8 @@ export function onUsage(s: State, levelOut: string, now: number): Step {
 
 // --- runs ---
 
-export function onRuns(s: State, list: string, chains: Record<string, string>): State {
-  const runs = parseRuns(list, chains)
+export function onRuns(s: State, list: string, chains: Record<string, string>, scripts: Record<string, string> = {}): State {
+  const runs = parseRuns(list, chains, scripts)
   const first = runs.find(x => x.done < x.total)
   const runsSelected = runs.some(r => r.id === s.runsSelected) || isHead(s.runsSelected) ? s.runsSelected : runs[0]?.id ?? null
   return { ...s, runs, runsSelected, runsRead: true, relay: first ? `${first.id} ${first.done}/${first.total}` : null }
@@ -593,12 +594,28 @@ export function runsCursor(s: State): string {
   return items[0]!                          // a hidden run (or none): the Runs header
 }
 
-// s: relay-morpheus queue-run add <id> on a planned run; the continue prompt is shown to
-// paste into the CLI (no host to submit it), then the runs are read again.
-function startRun(s: State): Step {
+// F85: e engages the run under the cursor - refused (a toast naming the driver) while another
+// driver is live, else the confirm box. No session to submit into: Enter shows the exact
+// command to paste - after relay-morpheus queue-run add for a run with no script.
+function openEngage(s: State): Step {
   const r0 = s.runs.find(r => r.id === runsCursor(s))
-  if (!r0 || !r0.planned) return { state: toast(s, 's starts a planned run only'), effects: [] }
-  const id = r0.id
+  if (!r0) return { state: toast(s, 'e engages the run under the cursor'), effects: [] }
+  const e = engageOf(r0, s.now)
+  if ('refused' in e) return { state: toast(s, e.refused), effects: [] }
+  return { state: { ...s, engage: { id: r0.id, ...e } }, effects: [] }
+}
+export function engageLines(s: State): string[] {
+  const g = s.engage
+  if (!g) return []
+  return [`Engage ${g.id}?`, ...(g.queue ? [`First    relay-morpheus queue-run add ${g.id}`] : []), `Paste    ${g.text}`]
+}
+function engageKey(s: State, k: Key): Step {
+  const g = s.engage!
+  const s0 = { ...s, engage: null }
+  if (k.name === 'escape') return { state: s0, effects: [] }
+  if (k.name !== 'return' && k.name !== 'enter') return { state: s, effects: [] }
+  if (!g.queue) return { state: toast(s0, `Paste into your CLI:\n${g.text}`), effects: [] }
+  const id = g.id
   const then: Then = r => x => {
     const tail = r.argv.length ? `\nran: ${r.argv.join(' ')}` : ''
     if (r.code !== 0) return toast(x, `■ ${id} not queued: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}${tail}`)
@@ -606,7 +623,7 @@ function startRun(s: State): Step {
     return { state: toast(x, `✓ ${id} queued${said ? ` - ${said}` : ''}. Paste its continue prompt into your CLI:\n${continuePrompt(id)}${tail}`),
       effects: [{ kind: 'poll', what: 'runs' }] }
   }
-  return { state: s, effects: [run('relay-queue-add', [id], then)] }
+  return { state: s0, effects: [run('relay-queue-add', [id], then)] }
 }
 
 function runsKey(s: State, k: Key): Step {
@@ -629,7 +646,7 @@ function runsKey(s: State, k: Key): Step {
       }
       return { state: { ...s, runsExpanded: s.runsExpanded !== cur ? cur : null }, effects: [] }
     }
-    case 's': return startRun(s)
+    case 'e': return openEngage(s)
     default: return { state: s, effects: [] }
   }
 }
@@ -816,6 +833,7 @@ export function reduce(s: State, k: Key): Step {
   if (s.dialog) return dialogKey(s, k)
   if (s.reconcile) return reconcileKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
+  if (s.engage) return engageKey(s, k)          // F85
   if (s.filterField) return filterKey(s, k)
   if (s.tab === 'explorer' && k.name === 'r') return explorerKey(s, k)     // F75: r reads git again too
   if (s.tab === 'run' && (s.runForm || k.name === 'r')) return runKey(s, k)   // F79: r rescans here

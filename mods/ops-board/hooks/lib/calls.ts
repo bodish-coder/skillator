@@ -6,7 +6,7 @@
 export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-decide' | 'meta-decided'
   | 'meta-team-add' | 'meta-team-remove' | 'meta-team-lead'
   | 'meta-reconcile' | 'meta-unblock' | 'meta-start' | 'meta-testing' | 'meta-block'
-  | 'relay-list' | 'relay-chain-status' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
+  | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
   | 'usage-level'
   | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'
   | 'run-scan' | 'run-rename'
@@ -31,7 +31,7 @@ export const up = (p: string, n: number) => {
 
 // args: meta-assign/meta-decide [id, @handle]; meta-decided / meta-unblock / meta-start [id];
 // meta-testing / meta-block [id, text]; meta-reconcile [ids...]; meta-team-add
-// [@handle, name, emails comma-joined]; meta-team-remove / meta-team-lead [@handle]; relay-chain-status and
+// [@handle, name, emails comma-joined]; meta-team-remove / meta-team-lead [@handle]; relay-resume and
 // relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; run-rename [id, name]; others none.
 type ScriptCall = Exclude<Call, 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
@@ -50,7 +50,7 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'meta-testing':       { script: META, sh: a => ['testing', ...a], ps: a => ['testing', ...a] },
   'meta-block':         { script: META, sh: a => ['block', ...a], ps: a => ['block', ...a] },
   'relay-list':         { script: RELAY, sh: () => ['list'], ps: () => ['-Mode', 'list'] },
-  'relay-chain-status': { script: RELAY, sh: a => [a[0] ?? '', 'chain', 'status'], ps: a => ['-Mode', 'chain', '-Action', 'status', '-Id', a[0] ?? ''] },
+  'relay-resume':       { script: RELAY, sh: a => ['resume', a[0] ?? ''], ps: a => ['-Mode', 'resume', '-Id', a[0] ?? ''] },
   'relay-queue-add':    { script: RELAY, sh: a => ['queue-run', 'add', a[0] ?? ''], ps: a => ['-Mode', 'queue-run', '-Sub', 'add', '-Id', a[0] ?? ''] },
   'relay-hold':         { script: RELAY, sh: a => ['watchdog', 'hold', a[0] ?? ''], ps: a => ['-Mode', 'watchdog', '-Action', 'hold', '-Reason', a[0] ?? ''] },
   'relay-release':      { script: RELAY, sh: () => ['watchdog', 'release'], ps: () => ['-Mode', 'watchdog', '-Action', 'release'] },

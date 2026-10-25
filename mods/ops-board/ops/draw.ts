@@ -11,10 +11,10 @@ import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State } from './state'
-import { dialogLines, formLines, reconcileLines, runsCursor, setupLines, teamRow, viewOf } from './state'
+import { dialogLines, engageLines, formLines, reconcileLines, runsCursor, setupLines, teamRow, viewOf } from './state'
 import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, isDecidable, isHead, offsetFor } from '../hooks/lib/ticketsmodel'
-import { runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
+import { modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
@@ -151,13 +151,14 @@ function keysOf(s: State, m: Model): string[] {
   if (s.dialog) return s.dialogField === 'ticket' ? ['type the ID', 'tab person', 'enter confirm', 'esc cancel']
     : ['↑↓ person', 'a / d kind', 'tab ticket', 'enter confirm', 'esc cancel']
   if (s.reconcile) return ['↑↓ move', 'space pick', 'enter apply picked', 'a accept all', 'esc none']   // F81
+  if (s.engage) return ['enter engage', 'esc cancel']        // F85
   if (s.filterField) return ['←→ field', '↑↓ value', 'enter/esc leave']
   if (s.tab === 'run') return runKeys(s)                     // F79
   if (s.tab === 'runs') {
     // F76: on a section header Enter opens or closes it
     const cur = runsCursor(s)
     const enter = isHead(cur) ? (s.runsOpen.some(x => headKey(x) === cur) ? 'enter close' : 'enter open') : 'enter stages'
-    return ['↑↓ move', enter, 's start a planned run', 'r reload', 'q quit']
+    return ['↑↓ move', enter, 'e engage', 'r reload', 'q quit']
   }
   if (s.tab === 'health') return ['R resume (releases the hold on a fresh non-red reading)', 'r reload', 'q quit']
   if (s.tab === 'messages') return ['↑↓ move', 'enter open', 'm mark all read', 's setup', 'q quit']
@@ -374,7 +375,7 @@ function runRows(s: State, sel: string): Keyed[] {
   const idW = Math.max(...s.runs.map(r => r.id.length)) + 2
   const out: Keyed[] = s.runs.map((run: RunView): Keyed => {
     const dot: Seg = { text: '●', color: statusColor(runStatus(run)) }   // F76: the Tickets tab's colours
-    const right = run.planned ? `planned · ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}` : `${run.done}/${run.total} done`
+    const right = modeOf(run) + ' · ' + (run.planned ? `planned · ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}` : `${run.done}/${run.total} done`)
     const isSel = run.id === sel
     const avail = s.cols - 3
     const body = ` ${run.id.padEnd(idW)}${cut(clean(run.title), Math.max(4, avail - idW - 1 - right.length - 2))}`
@@ -389,9 +390,9 @@ function runRows(s: State, sel: string): Keyed[] {
     if (!ex.stages.length) out.push({ key: 'none', segs: [dim('    no stages read yet')] })
     ex.stages.forEach(st => out.push({ key: 'st:' + st.n, segs: stageLine(st, ex.planned) }))
     for (const l of runLines(ex, s.board)) {
-      if (/^(par|dec):/.test(l.key)) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
+      if (/^(par|dec|phase):/.test(l.key)) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
     }
-    if (ex.planned) out.push({ key: 'start', segs: [dim('    s queues it; its continue prompt is then shown to paste into your CLI')] })
+    out.push({ key: 'start', segs: [dim('    e engages it; the command is then shown to paste into your CLI')] })
   }
   return out
 }
@@ -547,10 +548,12 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
   const block = tail.length && h - tail.length >= 2 ? [[], ...tail] : tail
   const room = h - block.length
   const [recTitle = '', ...recRows] = reconcileLines(s)    // F81: [] with no reconcile box up
+  const [engTitle = '', ...engRows] = engageLines(s)       // F85: [] with no engage box up
   const main = s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
     : s.reconcile ? boxBody(s, { title: recTitle, rows: recRows.map(text => ({ text })) })   // F81
+    : s.engage ? boxBody(s, { title: engTitle, rows: engRows.map(text => ({ text })) })      // F85
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s)
     : s.tab === 'messages' ? messagesBody(s, room)

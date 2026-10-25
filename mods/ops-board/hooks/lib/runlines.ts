@@ -42,6 +42,45 @@ export const sectionStatus = (all: RunStatus[]): RunStatus | null => PRESSING.fi
 export const continuePrompt = (id: string) =>
   `continue ${id}: drive its chain with skillator:relay-morpheus (chain next / chain dispatch)`
 
+// F85: a run with a /marathon-plan script beside it is a workflow run; else the Chain
+// header's mode, else agents.
+export const modeOf = (r: RunView) => (r.phases ? 'workflow' : r.mode ?? 'agents')
+// The first phase with a stage not landed (x) or moved on (>); -1: none.
+export const nextPhase = (r: RunView) =>
+  r.phases?.findIndex(ph => ph.some(it => !['x', '>'].includes(r.stages.find(s => s.n === it.n)?.state ?? ''))) ?? -1
+
+// F85: engage - relay-morpheus.sh's DRIVER_STALE default: a driver stamp younger is live.
+export const DRIVER_STALE_MIN = 20
+export type EngageCheck = { text: string; queue: boolean } | { refused: string }
+// Never two drivers: a stage in flight, or a driver stamp under 20 min, refuses. A run with
+// a script runs it with /marathon-run; one without is queued (queue-run add) and continued.
+export function engageOf(r: RunView, now: number): EngageCheck {
+  const [tag, stamp] = (r.driver ?? '').split(' ')
+  const flying = r.stages.find(s => s.state === '~')
+  if (flying) {
+    const by = r.flights.find(f => f.n === flying.n)?.by || tag || 'a driver not named'
+    return { refused: `■ ${r.id} not engaged: stage ${flying.n} is in flight, driven by ${by} - never two drivers` }
+  }
+  // relay writes `<tag> YYYY-MM-DDTHH:MMZ`; a stamp that does not read so fails closed
+  const at = /^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/.test(stamp ?? '') ? Date.parse(stamp!.replace(/Z$/, ':00Z')) : NaN
+  const age = Math.floor((now - at) / 60_000)
+  if (tag && !(age >= DRIVER_STALE_MIN)) {
+    const beat = Number.isNaN(age) ? `heartbeat unreadable: ${stamp ?? '-'}` : `heartbeat ${age}m ago, stale at ${DRIVER_STALE_MIN}m`
+    return { refused: `■ ${r.id} not engaged: driven by ${tag} (${beat}) - never two drivers` }
+  }
+  return r.phases ? { text: `/skillator:marathon-run ${r.id}`, queue: false } : { text: continuePrompt(r.id), queue: true }
+}
+
+// F85: a short title - up to the first '. ' or ' (', as /pending cuts one, at most 40 wide.
+export const shortTitle = (s: string) => cut(s.split(/\. | \(/)[0]!.trim(), 40)
+// The lead of a row serving stage n of a run: `s137 B10 Muse marketplace add installs nothing`.
+export function stageLead(r: RunView, n: number, board: Board | null): string {
+  const st = r.stages.find(s => s.n === n)
+  const id = st ? ticketsOf(st)[0] : r.phases?.flat().find(it => it.n === n)?.ticket
+  const title = board?.tickets.find(t => t.id === id)?.title ?? (st ? workOf(st) : '')
+  return [`s${n}`, id, shortTitle(title)].filter(Boolean).join(' ')
+}
+
 const STATE_WORD: Record<string, string> = {
   x: 'landed', '~': 'in flight', '!': 'failed', '?': 'parked', '>': 're-planned', open: 'open', pending: 'pending',
 }
@@ -92,9 +131,10 @@ export function runLines(run: RunView, board: Board | null): Line[] {
   const lines: Line[] = []
   const owner: Seg[] = run.owner ? [{ text: '  ' }, { text: 'owner', dim: true }, { text: ' ' + run.owner }] : []
   const ids = [...new Set(run.stages.flatMap(ticketsOf))]
-  const tail = run.planned
-    ? `${ids.length} ticket${ids.length === 1 ? '' : 's'} → ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}`
-    : `${run.done}/${run.total} done`
+  // F85: the run's mode, and `planned` for a run nothing of which has started
+  const tail = modeOf(run) + ' · ' + (run.planned
+    ? `planned · ${ids.length} ticket${ids.length === 1 ? '' : 's'} → ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}`
+    : `${run.done}/${run.total} done`)
   lines.push({ key: 'run:' + run.id, segs: [{ text: '●', color: statusColor(runStatus(run)) }, { text: ' ' }, { text: run.id, color: 'suggestion' }, { text: '  ' + run.title }, ...owner, { text: '  ' + tail, dim: run.planned }] })
   if (!run.stages.length) return lines
   const tw = Math.max(8, ...run.stages.map(s => width(ticketSegs(board, ticketsOf(s))) + 2))
@@ -117,6 +157,13 @@ export function runLines(run: RunView, board: Board | null): Line[] {
     const [lead, rest] = [t.slice(0, t.indexOf(':') + 1), t.slice(t.indexOf(':') + 1)]
     lines.push({ key: 'par:' + run.id, segs: [{ text: lead, dim: true }, { text: rest }] })
   }
+  // F85: the script's phases, each with its stages and tickets; the next one marked
+  const next = nextPhase(run)
+  run.phases?.forEach((ph, k) => {
+    lines.push({ key: `phase:${run.id}:${k + 1}`, segs: [{ text: `phase ${k + 1}`, dim: k !== next },
+      { text: '  ' + ph.map(it => `s${it.n} ${it.ticket}`).join(' · ') },
+      ...(k === next ? [{ text: '  ← next', color: 'suggestion' as Color }] : [])] })
+  })
   run.decisions.forEach((d, i) => {
     const m = /^(Q\d+) (\S+) (.*)$/.exec(d)
     lines.push({ key: `dec:${run.id}:${i}`, segs: m

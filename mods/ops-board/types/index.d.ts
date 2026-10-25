@@ -22,7 +22,16 @@ export type Watch = { level: Level; reasons: string[] }
 export type Stage = { n: number; code: string; ticket: string; title: string; after: string; files: string; state: string }
 export type RunView = { id: string; title: string; done: number; total: number; owner: string | null;
                         stages: Stage[]; planned: boolean     // planned = chain planned, nothing dispatched
-                        decisions: string[] }                 // F50: parked `## Decisions` still unanswered, "Q1 F49 <question> - <what> waits on it"
+                        decisions: string[]                   // F50: parked `## Decisions` still unanswered, "Q1 F49 <question> - <what> waits on it"
+                        // F85: from `relay-morpheus resume <id>` (the run file) and the .workflow.js beside it
+                        mode: string | null                   // the Chain header's mode (agents / workflow); null: no chain
+                        driver: string | null                 // the Chain header's driver cell `<tag> <YYYY-MM-DDTHH:MMZ>`; null: '-'
+                        flights: Flight[]                     // the In-flight blocks
+                        phases: PlanItem[][] | null }         // the script's PLAN phases (read as data, never run); null: no script
+export type Flight = { n: number; by: string | null; run: string | null }   // its dispatcher's tag, its `run:` id
+export type PlanItem = { n: number; ticket: string }
+// F85: the engage confirm in the pane - what goes, and whether relay queue-run add goes first.
+export type Engage = { id: string; text: string; queue: boolean }
 // F77: id = the form's Ticket field as typed ('' when opened with no ticket selected),
 // resolved against the board case-insensitively (ticketById); ticket-meta gets the board's ID.
 export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string | null; result: string | null }
@@ -104,6 +113,7 @@ declare module 'claude-code' {
       runsOpen: ('runs' | 'workflows')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
       runs: RunView[]; assign: AssignDraft | null; narrow: boolean
+      engage: Engage | null             // F85: the engage confirm up in the Workflows tab
       relay: string | null   // F48 band: "RUN-0012 2/4", the first relay run not all done
       teamView: TeamView | null; person: PersonDraft | null
       reconcile: Reconcile | null   // F81: the reconcile form up in the Tickets tab

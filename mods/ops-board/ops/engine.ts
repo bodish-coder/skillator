@@ -9,7 +9,7 @@ import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun } from '
 import { inboxDirOf, INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
 import { parseBoard } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
-import { parseRuns } from '../hooks/lib/runs'
+import { parseRuns, scriptPathOf } from '../hooks/lib/runs'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
 import { parseRunFile, RUN_FILE } from '../hooks/lib/runentries'
 import type { Bins } from '../hooks/lib/runentries'
@@ -174,6 +174,7 @@ export function makeEngine(o: EngineOpts): Engine {
   }
 
   let chains: Record<string, string> = {}
+  let scripts: Record<string, string> = {}     // F85: each run's .workflow.js, read as text
   const relayFailed = (r: { code: number; err: string; out: string }) => {
     if (r.err === NO_SCRIPTS) return
     setNote(isRelayNote, `▲ relay-morpheus list failed: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}`)
@@ -185,14 +186,19 @@ export function makeEngine(o: EngineOpts): Engine {
     setNote(isRelayNote, null)
     const open = parseRuns(r.out, {}).filter(x => x.done < x.total)
     const next: Record<string, string> = {}
+    const js: Record<string, string> = {}
     for (let i = 0; i < open.length; i += 2) {
       await Promise.all(open.slice(i, i + 2).map(async run => {
-        const c = await host.run('relay-chain-status', [run.id])
-        if (c.code === 0) next[run.id] = c.out
+        const c = await host.run('relay-resume', [run.id])
+        if (c.code !== 0) return
+        next[run.id] = c.out
+        const path = scriptPathOf(c.out, host.repoRoot)
+        if (path) { try { js[run.id] = await host.read(path) } catch { /* no script: an agents run */ } }
       }))
     }
     chains = next
-    state = onRuns(state, r.out, chains)
+    scripts = js
+    state = onRuns(state, r.out, chains, scripts)
     draw()
   }
 
@@ -204,7 +210,7 @@ export function makeEngine(o: EngineOpts): Engine {
     else if (m.err === NO_SCRIPTS) { setNote(isScriptsNote, `▲ ${NO_SCRIPTS} - no disk, memory, lock, run or usage facts`); draw() }
     if (state.tab !== 'runs') {
       const r = await host.run('relay-list', [])
-      if (r.code === 0) { setNote(isRelayNote, null); state = onRuns(state, r.out, chains) } else relayFailed(r)
+      if (r.code === 0) { setNote(isRelayNote, null); state = onRuns(state, r.out, chains, scripts) } else relayFailed(r)
       draw()
     }
     const u = await host.run('usage-level', [])

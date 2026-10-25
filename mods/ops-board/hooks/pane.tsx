@@ -12,7 +12,7 @@ import { openReconcile, renderReconcile } from './reconcile'
 import { paint } from './paint'
 import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
-import { openRuns, pollRuns, readRuns, RunsTab } from './runstab'
+import { EngageConfirm, openRuns, pollRuns, readRuns, RunsTab } from './runstab'
 import { runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, statusColor } from './lib/runlines'
 import { workflowStatus } from './lib/agents'
 import { AgentsTab, pollAgents, readAgents, WorkflowsTab } from './agentstab'
@@ -216,7 +216,7 @@ async function RunsAndWorkflows($: EngineInterface, els: Els, cols: number): Pro
         <Text bold color={st ? statusColor(st) : undefined}>{cut(sectionHead(sec, on, n), cols - 1)}</Text>
       </Button>,
     )
-    if (on) out.push(...(sec === 'runs' ? RunsTab($, els, runs) : WorkflowsTab(els, agents)))
+    if (on) out.push(...(sec === 'runs' ? RunsTab($, els, runs, agents) : WorkflowsTab(els, agents)))
   }
   return out
 }
@@ -237,6 +237,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
             void update($, tabA, () => x.id)
             if (x.id === 'runs') void pollRuns($).catch(() => {})       // read on entering the tab
             if (x.id === 'agents') void pollAgents($).catch(() => {})   // read on entering the tab
+            if (x.id === 'agents') void pollRuns($).catch(() => {})     // F85: the runs its lead column names
             if (x.id === 'messages' && tab !== 'messages') void enterMessages($).catch(() => {})
             if (x.id === 'explorer') void enterExplorer($).catch(() => {})        // F75: read on entering the tab
             if (x.id === 'run') void enterRun($).catch(() => {})            // F79: first open scans
@@ -270,7 +271,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       <Box flexDirection="column">
         {bar}
         <Text> </Text>
-        {AgentsTab(els, await readAgents($, cols))}
+        {AgentsTab(els, { ...await readAgents($, cols), runs: openRuns((await readRuns($, cols)).runs), board: await read($, boardA) })}
       </Box>
     )
   }
@@ -296,6 +297,9 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
     )
   }
   if (tab === 'runs') {
+    // F85: the engage confirm draws without the tab bar, as the Run tab's form does
+    const g = (await readRuns($, cols)).engage
+    if (g) return <Box flexDirection="column">{EngageConfirm($, els, g)}</Box>
     return (
       <Box flexDirection="column">
         {bar}

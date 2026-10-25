@@ -1,6 +1,9 @@
 import { test, expect } from 'claude-code/testing'
 import type { AgentRow } from '../types'
-import { endStatus, MAX_AGENTS, spawned, touched } from '../hooks/lib/agents'
+import { endStatus, leadOf, MAX_AGENTS, spawned, touched, treeLines } from '../hooks/lib/agents'
+import { agentLines } from '../hooks/agentstab'
+import { parseBoard } from '../hooks/lib/board'
+import { parseRuns } from '../hooks/lib/runs'
 import { agentWorld, info, mountTab, RUN, spawnIn, start, SURFACES } from './agentworld'
 
 // F53: the Agents tab. Rows from agent.spawn (model, started, workflow run),
@@ -154,4 +157,42 @@ test('the rows are capped: past MAX_AGENTS the oldest ended rows go first', () =
   expect(rows).toHaveLength(MAX_AGENTS)
   expect(rows.some(r => r.id === 'old')).toBe(false)
   expect(rows.some(r => r.id === 'live')).toBe(true)
+})
+
+// F85: one tree - run -> workflow / agent, each row led by the stage it serves; tied to no
+// run, a short title of its task. Matched by a chain code in a label, `RUN-<n> s<stage>`
+// in a description, or a workflow runId as an In-flight block's `run:` id.
+test('F85 tree: leads by chain code, RUN-n sN and the In-flight run id; the rest under no run; the Agents tab gains the lead column', () => {
+  const SEP = '     '
+  const runs = parseRuns('RUN-0020  marathon                                    1/3 done\n', { 'RUN-0020': [
+    '## Stages', '| # | stage | state | owner | heartbeat | landed |', '|---|---|---|---|---|---|',
+    '| 136 | AAA8 A155 yoda | x | w | - | a |', '| 137 | AAA9 B10 muse | ~ | w | - | - |', '| 138 | AABA F81 reconcile | ~ | w | - | - |', '',
+    '## In flight', '### stage 138 - AABA F81 reconcile  (dispatched 2026-10-18T09:00Z, @cc-f9797c)', 'run: wf_r9', 'prompt: |', '  x', '',
+    '## Chain', `driver: -${SEP}hold: -${SEP}mode: workflow`,
+    '### AAA8 - stage 136 - A155 yoda', 'tickets: A155', '### AAA9 - stage 137 - B10 muse', 'tickets: B10', '### AABA - stage 138 - F81 reconcile', 'tickets: F81', '',
+  ].join('\n') })
+  const board = parseBoard(['# Tickets', '', '## Open', '',
+    '- [~] B10 — Muse marketplace add installs nothing. It clones (owner 2026-10-25)',
+    '- [~] F81 — Ops board reconcile button (owner)', ''].join('\n'), '/r/TICKETS.md', 0, 0)
+  const agents = [
+    row({ id: 'a1', kind: 'workflow', name: 'AAA9 fix:B10', runId: 'wf_r1' }),
+    row({ id: 'a2', description: 'RUN-0020 s138 verify F81' }),
+    row({ id: 'a3', description: 'Explore the auth flow. Find every caller (deep)' }),
+  ]
+  const workflows = [{ key: 'wf_r9', runId: 'wf_r9', name: 'marathon-RUN-0020', remote: false, startedAt: 0, error: null, denied: 0 }]
+  expect(leadOf('AAA9 fix:B10', null, runs)).toEqual({ run: 'RUN-0020', n: 137 })
+  expect(leadOf('not AAA9X', null, runs)).toBeNull()
+  const txt = (ls: { segs: { text: string }[] }[]) => ls.map(l => l.segs.map(x => x.text).join(''))
+  expect(txt(treeLines(runs[0]!, runs, agents, workflows, board))).toEqual([
+    '  ● s138 F81 Ops board reconcile button  workflow marathon-RUN-0020',
+    '  ● s137 B10 Muse marketplace add installs nothing  workflow AAA9 fix:B10  running',
+    '  ● s138 F81 Ops board reconcile button  subagent Explore  running',
+  ])
+  expect(txt(treeLines(null, runs, agents, workflows, board))).toEqual(['  ● Explore the auth flow  subagent Explore  running'])
+  const lines = agentLines({ agents, workflows, cols: 120, runs, board })
+  expect(lines.find(l => l.key === 'agents:cols')!.segs[0]!.text).toStartWith('stage'.padEnd(30) + 'name')
+  expect(lines.find(l => l.key === 'agent:a1')!.segs[0]!.text).toStartWith('s137 B10 Muse marketplace a…  ')
+  expect(lines.find(l => l.key === 'agent:a3')!.segs[0]!.text).toStartWith('no run'.padEnd(30) + 'Explore the auth')
+  // no run read yet: no lead column, as before
+  expect(agentLines({ agents, workflows, cols: 120 }).find(l => l.key === 'agents:cols')!.segs[0]!.text).toStartWith('name')
 })

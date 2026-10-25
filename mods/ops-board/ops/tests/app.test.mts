@@ -103,7 +103,7 @@ for (const [kind, skip] of launchers) {
     const lines = r.out.replace(/\r?\n$/, '').split(/\r?\n/)
     assert.equal(lines.length, 20, r.out)
     assert.match(lines[0]!, /3 Health   4 Messages   5 Explorer   6 Run$/)        // the repo label does not fit at 80 beside six tabs
-    assert.match(r.out, /› ● RUN-0099  fixture run +1\/2 done/)
+    assert.match(r.out, /› ● RUN-0099  fixture run +agents · 1\/2 done/)
     assert.match(lines.at(-1)!, /RUN-0099|mem 8\.4 GB/)
     assert.deepEqual(files.map(f => (existsSync(f) ? `${statSync(f).mtimeMs}:${readFileSync(f, 'utf8')}` : 'none')), before)
     assert.doesNotMatch(readFileSync(s.log, 'utf8'), /ticket-meta|watchdog|hold|release|queue/)

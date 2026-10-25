@@ -142,8 +142,8 @@ test('the keys line as the mock; D decided only on a decidable row', () => {
   }
   assert.match(keys(f3), / · D decided · /)
   // F76: no run yet, the cursor is on the Runs header (Enter closes it); on a run, Enter shows its stages
-  assert.match(text(reduce(s, { name: '2' }).state), /↑↓ move · enter close · s start a planned run/)
-  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /↑↓ move · enter stages · s start a planned run/)
+  assert.match(text(reduce(s, { name: '2' }).state), /↑↓ move · enter close · e engage/)
+  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /↑↓ move · enter stages · e engage/)
   assert.match(text(reduce(s, { name: '3' }).state), /R resume \(releases the hold on a fresh non-red reading\)/)
 })
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
@@ -196,8 +196,8 @@ test('no board yet; team view; runs as the mock with stages on Enter', () => {
   const r = reduce(onRuns(s, list, {}), { name: '2' }).state
   assert.equal(r.runs.length, 2)
   const f = sized(r)
-  assert.ok(f.some(l => /^› ● RUN-0012  board sweep +2\/4 done$/.test(l)), f.join('\n'))
-  assert.ok(f.some(l => /^  ● RUN-0011  older run +3\/3 done$/.test(l)), f.join('\n'))
+  assert.ok(f.some(l => /^› ● RUN-0012  board sweep +agents · 2\/4 done$/.test(l)), f.join('\n'))
+  assert.ok(f.some(l => /^  ● RUN-0011  older run +agents · 3\/3 done$/.test(l)), f.join('\n'))
   assert.match(text(reduce(r, { name: 'return' }).state), /  RUN-0012 stages\n/)
 })
 // F76: the Runs tab draws a Runs section and a Workflows section, headers with counts
