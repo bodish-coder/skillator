@@ -662,6 +662,16 @@ function Do-Start([string[]]$a) {
 function Get-Words([string]$s) {
   return @(([regex]'[^A-Za-z0-9]+').Replace($s, ' ').Split(' ') | Where-Object { $_ -cmatch '^[A-Z]{1,3}[0-9]+[a-z]?$' })
 }
+# The tickets a commit subject or stage name is about: its leading ids, a stage code before them skipped.
+function Get-LeadIds([string]$s) {
+  $out = @(); $i = 0
+  foreach ($w in ([regex]'[^A-Za-z0-9]+').Replace($s, ' ').Trim().Split(' ')) {
+    $i++
+    if ($w -cmatch '^[A-Z]{1,3}[0-9]+[a-z]?$') { $out += $w }
+    elseif ($i -gt 1 -or $w -cnotmatch '^[A-Z0-9]{4}$') { break }
+  }
+  return $out
+}
 function Get-Owed([string]$s) {
   $m = [regex]::Match($s, '\(testing:([^()]*)\)')
   if ($m.Success -and $m.Groups[1].Value.Trim() -ne '') { return 'owed: ' + $m.Groups[1].Value.Trim() }
@@ -678,14 +688,15 @@ function Do-Reconcile([string[]]$a) {
   if (-not (Test-Path -LiteralPath $bf -PathType Leaf)) { Fail "no TICKETS.md at $bf" }
   $want = @{}
   foreach ($x in $a) { $want[(Get-NormId $x)] = $true }
-  # commits: per id, how many name it and the newest one's sha; `board:` subjects left out
+  # commits: the main checkout's; per id, how many name it and the newest one's sha; `board:` subjects left out
   $cn = @{}; $cs = @{}
-  foreach ($l in @(Git-Out -c log.showSignature=false log '--format=%h%x09%s')) {
+  $greps = @($want.Keys | ForEach-Object { "--grep=$_" })
+  foreach ($l in @(Git-Out -C $main -c log.showSignature=false log -F @greps '--format=%h%x09%s')) {
     if ($null -eq $l) { continue }
     $p = ([string]$l).Split([char]9, 2)
     if ($p.Count -lt 2 -or $p[1] -clike 'board:*') { continue }
     $seen = @{}
-    foreach ($w in (Get-Words $p[1])) {
+    foreach ($w in (Get-LeadIds $p[1])) {
       if ($seen.ContainsKey($w)) { continue }
       $seen[$w] = $true
       if (-not $cn.ContainsKey($w)) { $cn[$w] = 0; $cs[$w] = $p[0] }
@@ -707,8 +718,7 @@ function Do-Reconcile([string[]]$a) {
   }
   $st = @{}
   foreach ($r in @($rows | Sort-Object { $_.run }, { $_.num })) {
-    if ($r.state -cnotmatch '^[x!~]$') { continue }
-    foreach ($w in (Get-Words $r.name)) { $st[$w] = $r }
+    foreach ($w in (Get-LeadIds $r.name)) { $st[$w] = $r }
   }
   $mk = @{}; $text = @{}; $ord = New-Object System.Collections.ArrayList
   foreach ($bl in ([System.IO.File]::ReadAllText($bf, $Utf8).Replace("`r", '').Split([char]10))) {
@@ -726,19 +736,23 @@ function Do-Reconcile([string[]]$a) {
     if ($k -ceq '~' -and $line -cmatch '\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$') { continue }
     $s = $null; $sn = ''
     if ($st.ContainsKey($id)) { $s = $st[$id]; $sn = 'RUN-{0:D4} stage {1}' -f $s.run, $s.num }
+    # landed: a run stage on it decides (only x is), else a commit on main
     $ev = ''
-    if ($cn.ContainsKey($id)) { $ev = $cs[$id] } elseif ($s -and $s.state -ceq 'x') { $ev = "$sn $($s.land)" }
+    if ($s) { if ($s.state -ceq 'x') { $ev = "$sn $($s.land)" } } elseif ($cn.ContainsKey($id)) { $ev = $cs[$id] }
     $o = Get-Owed $line
-    if ($ev -ne '' -and $o -ne '') { & $say $id $k '%' "code landed in $ev; $o"; continue }
-    if ($k -ceq '!') {
-      $bm = [regex]::Match($line, '\(blocked:([^()]*)\)')
-      if (-not $bm.Success) { & $say $id $k $k 'evidence unclear: no blocked note on the line'; continue }
+    $open = @()
+    $bm = [regex]::Match($line, '\(blocked:([^()]*)\)')
+    if ($k -ceq '!' -and $bm.Success) {
       $b = $bm.Groups[1].Value.Trim()
       $ws = @(Get-Words $b)
-      $open = @(); $gone = @(); $done = @()
+      $gone = @(); $done = @()
       foreach ($w in $ws) {
         if (-not $mk.ContainsKey($w)) { $gone += $w } elseif ($mk[$w] -cne 'x') { $open += $w } else { $done += $w }
       }
+    }
+    if ($ev -ne '' -and $o -ne '' -and $open.Count -eq 0) { & $say $id $k '%' "code landed in $ev; $o"; continue }
+    if ($k -ceq '!') {
+      if (-not $bm.Success) { & $say $id $k $k 'evidence unclear: no blocked note on the line'; continue }
       if ($ws.Count -eq 0) { & $say $id $k $k "evidence unclear: blocked on '$b', no ticket to check" }
       elseif ($gone.Count -gt 0) { & $say $id $k $k ('evidence unclear: blocked on ' + ($gone -join ', ') + ', not on the board') }
       elseif ($open.Count -eq 0) { & $say $id $k ' ' ('blocked on ' + ($done -join ', ') + ', now done') }
@@ -751,7 +765,7 @@ function Do-Reconcile([string[]]$a) {
         if (-not [DateTime]::TryParseExact($s.hb, "yyyy-MM-dd'T'HH:mm'Z'", [Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$hb)) {
           & $say $id $k $k "evidence unclear: $sn in flight, no heartbeat"
         } elseif (($now - $hb).TotalMinutes -ge 1440) { & $say $id $k '!' "$sn stale, last heartbeat $($s.hb)" }
-      } else { & $say $id $k '%' "$sn landed $($s.land) - verify its Done line" }
+      } elseif ($s.state -ceq 'x') { & $say $id $k '%' "$sn landed $($s.land) - verify its Done line" }
     } elseif ($s -and $s.state -ceq 'x') { & $say $id $k '%' "$sn landed $($s.land) - verify its Done line" }
     elseif ($cn.ContainsKey($id)) {
       $nm = ' commits name it'
@@ -1590,16 +1604,23 @@ function Invoke-Selftest {
     W "$K/TICKETS.md" ("# TICKETS`n`n- [!] F1 $dash Waits on F2 (blocked: F2 lands first)`n- [x] F2 $dash Shipped`n" +
       "- [!] F3 $dash Waits on F4 (blocked: F4)`n- [ ] F4 $dash Open, no evidence`n- [!] F5 $dash Waits on a vendor (blocked: the vendor fix)`n" +
       "- [ ] F6 $dash Committed`n- [~] F7 $dash Stage failed`n- [~] F8 $dash Stage stale`n- [~] F9 $dash Stage landed`n" +
-      "- [ ] F10 $dash Pairing screen, needs an owner live look on the phone`n- [~] F11 $dash Held (@cc-aaaaaa)`n- [ ] F12 $dash Logged only`n")
+      "- [ ] F10 $dash Pairing screen, needs an owner live look on the phone`n- [~] F11 $dash Held (@cc-aaaaaa)`n- [ ] F12 $dash Logged only`n" +
+      "- [!] F13 $dash Waits on F4, then a release build (blocked: F4)`n- [~] F14 $dash Stage in flight, then a release build`n" +
+      "- [~] F15 $dash Stage failed, retry queued`n- [ ] F16 $dash Named in passing only`n")
     W "$K/.skillator/run-0001-x.md" ("# RUN-0001 - x`n`n## Stages`n| # | stage | state | owner | heartbeat | landed |`n|---|-------|-------|-------|-----------|--------|`n" +
       "| 1 | F7 thing | ! | build:opus | 2026-10-25T10:00Z | - |`n| 2 | F8 thing | ~ | build:opus | 2020-01-01T00:00Z | - |`n" +
-      "| 3 | F9 thing | x | build:opus | 2026-10-25T10:00Z | abc1234 |`n")
+      "| 3 | F9 thing | x | build:opus | 2026-10-25T10:00Z | abc1234 |`n| 4 | F14 thing | ~ | build:opus | 2099-01-01T00:00Z | - |`n" +
+      "| 5 | F15 thing | ! | build:opus | 2026-10-25T10:00Z | - |`n| 6 | F15 retry |   | - | - | - |`n")
     Commit 'vidul@ikran.in' 'init' 'README.md'
     Commit 'vidul@ikran.in' 'F6: half of it' 'a.txt'
     Commit 'vidul@ikran.in' 'board: F12 logged' 'b.txt'
     Commit 'vidul@ikran.in' 'F10: built' 'c.txt'
     Commit 'vidul@ikran.in' 'F11: working' 'd.txt'
     $s6 = [string](@(& git rev-parse --short HEAD~3)[0]); $s10 = [string](@(& git rev-parse --short HEAD~1)[0])
+    # review: an open blocker, a stage in flight, a queued retry and a passing mention propose nothing
+    Commit 'vidul@ikran.in' 'F13: built' 'e.txt'
+    Commit 'vidul@ikran.in' 'F14: half of it' 'f.txt'
+    Commit 'vidul@ikran.in' 'Merge the run branch, F16 in passing' 'g.txt'
     $f81a = $Utf8.GetString([System.IO.File]::ReadAllBytes("$K/TICKETS.md"))
     $want81 = @("F1 [!] -> [ ]  blocked on F2, now done",
       "F5 [!] -> [!]  evidence unclear: blocked on 'the vendor fix', no ticket to check",
@@ -1614,6 +1635,12 @@ function Invoke-Selftest {
     if (Test-Path -LiteralPath "$K/TICKETS.md.lock") { Write-Output 'FAIL: reconcile left a board lock'; $script:fail = 1 }
     Eq 'reconcile given ids' (Run reconcile f6 F4) "F6 [ ] -> [~]  1 commit names it, newest $s6"
     Eq 'reconcile, nothing' (Run reconcile F4 F11 F12) 'no change: nothing to reconcile'
+    # review: from a run worktree, a commit on its branch is not main's
+    & git worktree add -q -b side "$T/f81w" 2>$null | Out-Null
+    Set-Location -LiteralPath "$T/f81w"
+    Commit 'vidul@ikran.in' 'F4: on a branch' 'h.txt'
+    Eq 'reconcile from a worktree' (Run reconcile F4) 'no change: nothing to reconcile'
+    Set-Location -LiteralPath $K
     # the writers the pane applies [ ] and [~] with: unblock ([!] -> [ ], note dropped), start ([ ] -> [~])
     Eq 'unblock' (Run unblock F1) "- [ ] F1 $dash Waits on F2"
     if (-not (Refused unblock F4)) { Write-Output 'FAIL: unblock took a ticket that is not [!]'; $script:fail = 1 }

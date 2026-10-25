@@ -543,10 +543,11 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
   const tail = tailLines(s).slice(0, Math.floor(h / 2))
   const block = tail.length && h - tail.length >= 2 ? [[], ...tail] : tail
   const room = h - block.length
+  const [recTitle = '', ...recRows] = reconcileLines(s)    // F81: [] with no reconcile box up
   const main = s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
-    : s.reconcile ? boxBody(s, { title: reconcileLines(s)[0]!, rows: reconcileLines(s).slice(1).map(text => ({ text })) })   // F81
+    : s.reconcile ? boxBody(s, { title: recTitle, rows: recRows.map(text => ({ text })) })   // F81
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s)
     : s.tab === 'messages' ? messagesBody(s, room)

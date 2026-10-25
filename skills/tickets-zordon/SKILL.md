@@ -443,8 +443,10 @@ or only the IDs given as arguments — and propose the status it really has.
    all `[x]` → `[ ]`; a check owed by the owner or a team (a `(testing: ..)`
    note, a live check, a release build, a device / rig / hardware, a team to
    confirm) with the code landed → `[%]`; a run stage on it failed, or silent
-   a day → `[!]`; landed → `[%]`; a `[ ]` with commits naming it (not `board:`
-   ones) → `[~]`. A row it keeps says "evidence unclear". It never proposes
+   a day → `[!]`; landed → `[%]`; a `[ ]` with commits on main led by its ID
+   (`F81:`, not `board:` ones) → `[~]`. Landed is the ticket's last run stage
+   `x`, or with no stage a commit; a `[!]` still blocked on an open ticket is
+   never `[%]`. A row it keeps says "evidence unclear". It never proposes
    `[x]` and skips a `[~]` row with a session tag. Its rows go in the table as
    they are; steps 1-2 add what it cannot see (`[x]`, `[>]`, `[?]`, a `[~]`
    the line shows done).

@@ -3,7 +3,7 @@ import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 import type { Proposal } from '../types'
 import { STATE_NAME } from './lib/board'
 import { runCall } from './lib/host'
-import { applyOf, canApply, parseReconcile } from './lib/ticketsmodel'
+import { appliedHead, appliedLine, applyOf, canApply, parseReconcile } from './lib/ticketsmodel'
 import { closeForm } from './assign'
 import { paint } from './paint'
 
@@ -15,7 +15,7 @@ import { paint } from './paint'
 
 const PANE = 'ops-board'
 const PANE_NAME = 'ops board'
-const reconcileA = atom({ plugin: 'ops-board', key: 'reconcile' } as const, null)
+const reconcileA = atom({ plugin: 'ops-board', key: 'reconcile' } as const, null)   // assign.tsx's twin: the hooks scan reads only this file's consts
 
 const why = (r: { code: number; out: string; err: string }) => r.err.trim() || r.out.trim() || `exit ${r.code}`
 
@@ -39,10 +39,10 @@ export async function applyReconcile($: EngineInterface, all: boolean) {
   for (const p of todo) {
     const { call, args } = applyOf(p)
     const r = await runCall($, call, args)
-    lines.push(r.code === 0 ? `✓ ${p.id} now ${STATE_NAME[p.to]}` : `✗ ${p.id} refused: ${why(r)}`)
+    lines.push(appliedLine(p, r.code === 0 ? null : why(r)))
   }
   const ok = lines.filter(l => l.startsWith('✓')).length
-  $.ui.toast([`${ok === todo.length ? '✓' : '✗'} reconcile: ${ok} of ${todo.length} applied`, ...lines].join('\n'), { timeoutMs: 10000 })
+  $.ui.toast([appliedHead(ok, todo.length), ...lines].join('\n'), { timeoutMs: 10000 })
   await closeForm($)
 }
 

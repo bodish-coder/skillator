@@ -8,7 +8,7 @@ import type { Call } from '../hooks/lib/calls'
 import type { View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
-import { applyOf, buildModel, canApply, HEAD, headKey, isHead, parseReconcile, toggleGroup } from '../hooks/lib/ticketsmodel'
+import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, parseReconcile, toggleGroup } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME, ticketById } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, parseMachine, usageFromLevel } from '../hooks/lib/facts'
@@ -431,12 +431,11 @@ function applyReconcile(s: State, all: boolean): Step {
   const v = s.reconcile!
   const todo = v.rows.filter(p => canApply(p) && (all || v.picked.includes(p.id)))
   if (!todo.length) return { state: toast(s, 'nothing picked - space picks a row, a accepts all'), effects: [] }
-  const head = (ok: number) => `${ok === todo.length ? '✓' : '✗'} reconcile: ${ok} of ${todo.length} applied`
   const effects: Effect[] = todo.map(p => {
     const { call, args } = applyOf(p)
     return run(call, args, r => x => {
-      const lines = [...(x.toast ?? '').split('\n').slice(1), r.code === 0 ? `✓ ${p.id} now ${STATE_NAME[p.to]}` : `✗ ${p.id} refused: ${why(r, 'ticket-meta')}`]
-      return toast(x, [head(lines.filter(l => l.startsWith('✓')).length), ...lines].join('\n'))
+      const lines = [...(x.toast ?? '').split('\n').slice(1), appliedLine(p, r.code === 0 ? null : why(r, 'ticket-meta'))]
+      return toast(x, [appliedHead(lines.filter(l => l.startsWith('✓')).length, todo.length), ...lines].join('\n'))
     })
   })
   return { state: { ...s, reconcile: null, toast: `reconcile: applying ${todo.length}` }, effects: [...effects, { kind: 'poll', what: 'board' }] }

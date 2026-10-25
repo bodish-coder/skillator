@@ -606,18 +606,22 @@ cmd_start() {
 # confirm) with the code landed -> [%]; [!] whose (blocked: ..) names tickets, all
 # [x] -> [ ]; a run stage on it failed, or in flight with no heartbeat for a day ->
 # [!]; landed -> [%]; [ ] with commits naming it -> [~]. Never [x] (verify's job).
-# Commits: HEAD's, the subject naming the id as a word, `board:` subjects left out
-# (they log tickets, not work). Stages: .skillator/run-*.md rows naming the id; the
-# last by run and stage number counts. A [~] row with a session tag is that
+# Landed: the ticket's last run stage is x, or (no stage) a commit names it; a [!]
+# still blocked on an open ticket is never owed. Commits: the main checkout's,
+# the subject's leading ids, `board:` subjects left out (they log tickets, not
+# work). Stages: .skillator/run-*.md rows led by the id (after a stage code); the
+# last by run and stage number counts, whatever its state. A [~] row with a session tag is that
 # session's - nothing proposed (/sync-tickets' rule). IDs given: only those rows.
 cmd_reconcile() {
   bf="$MAIN/TICKETS.md"
   [ -f "$bf" ] || die "no TICKETS.md at $bf"
   ids=''
   for ri in "$@"; do norm_id "$ri"; ids="$ids $ID"; done
+  set --
+  for ri in $ids; do set -- "$@" --grep="$ri"; done
   {
     echo "${SOH}C"
-    git -c log.showSignature=false log --format='%h%x09%s' 2>/dev/null
+    git -C "$MAIN" -c log.showSignature=false log -F "$@" --format='%h%x09%s' 2>/dev/null
     echo "${SOH}S"
     for rf in "$MAIN"/.skillator/run-*.md; do
       [ -f "$rf" ] || continue
@@ -643,6 +647,13 @@ cmd_reconcile() {
       gsub(/[^A-Za-z0-9]+/, " ", s); n = split(s, w, " "); k = 0
       for (i = 1; i <= n; i++) if (w[i] ~ /^[A-Z][A-Z]?[A-Z]?[0-9]+[a-z]?$/) out[++k] = w[i]
       return k }
+    # the tickets a commit subject or stage name is about: its leading ids, a stage code before them skipped
+    function lead(s, out,    n, i, w, k) {
+      gsub(/[^A-Za-z0-9]+/, " ", s); n = split(s, w, " "); k = 0
+      for (i = 1; i <= n; i++) {
+        if (w[i] ~ /^[A-Z][A-Z]?[A-Z]?[0-9]+[a-z]?$/) out[++k] = w[i]
+        else if (i > 1 || w[i] !~ /^[A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9]$/) break }
+      return k }
     function owed(s,    x, t) {
       if (match(s, /\(testing:[^()]*\)/)) {
         x = substr(s, RSTART + 9, RLENGTH - 10); gsub(/^[ \t]+|[ \t]+$/, "", x)
@@ -661,12 +672,11 @@ cmd_reconcile() {
     sec == "C" {
       s = substr($0, length($1) + 2)
       if (s ~ /^board:/) next
-      n = words(s, W); split("", seen)
+      n = lead(s, W); split("", seen)
       for (j = 1; j <= n; j++) if (!(W[j] in seen)) { seen[W[j]] = 1; if (!(W[j] in cn)) cs[W[j]] = $1; cn[W[j]]++ }
       next }
     sec == "S" {
-      if ($3 !~ /^[x!~]$/) next
-      n = words($4, W)
+      n = lead($4, W)
       for (j = 1; j <= n; j++) { w = W[j]; st[w] = $3; srun[w] = sprintf("RUN-%04d", $1); snum[w] = $2; shb[w] = $5; sland[w] = $6 }
       next }
     sec == "B" && match($0, /^[ \t]*- \[.\][ \t]+[A-Z]+[0-9]+[a-z]?/) {
@@ -679,17 +689,20 @@ cmd_reconcile() {
         if (m > 0 && !(id in want)) continue
         if (k != " " && k != "~" && k != "!") continue
         if (k == "~" && line ~ /\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/) continue
-        ev = (id in cn) ? cs[id] : (st[id] == "x") ? stage(id) " " sland[id] : ""
-        o = owed(line)
-        if (ev != "" && o != "") { say(id, k, "%", "code landed in " ev "; " o); continue }
-        if (k == "!") {
-          if (!match(line, /\(blocked:[^()]*\)/)) { say(id, k, k, "evidence unclear: no blocked note on the line"); continue }
+        # landed: a run stage on it decides (only x is), else a commit on main
+        ev = (id in st) ? (st[id] == "x" ? stage(id) " " sland[id] : "") : (id in cn) ? cs[id] : ""
+        o = owed(line); open = ""
+        hb = k == "!" && match(line, /\(blocked:[^()]*\)/)
+        if (hb) {
           b = substr(line, RSTART + 9, RLENGTH - 10); gsub(/^[ \t]+|[ \t]+$/, "", b)
-          n = words(b, W); open = ""; gone = ""; done = ""
+          n = words(b, W); gone = ""; done = ""
           for (j = 1; j <= n; j++) {
             if (!(W[j] in mk)) gone = join(gone, W[j])
             else if (mk[W[j]] != "x") open = join(open, W[j])
-            else done = join(done, W[j]) }
+            else done = join(done, W[j]) } }
+        if (ev != "" && o != "" && open == "") { say(id, k, "%", "code landed in " ev "; " o); continue }
+        if (k == "!") {
+          if (!hb) { say(id, k, k, "evidence unclear: no blocked note on the line"); continue }
           if (n == 0) say(id, k, k, "evidence unclear: blocked on \047" b "\047, no ticket to check")
           else if (gone != "") say(id, k, k, "evidence unclear: blocked on " gone ", not on the board")
           else if (open == "") say(id, k, " ", "blocked on " done ", now done")
@@ -1411,14 +1424,22 @@ selftest() {
     printf -- '- [ ] F10 %s Pairing screen, needs an owner live look on the phone\n' "$D"
     printf -- '- [~] F11 %s Held (@cc-aaaaaa)\n' "$D"
     printf -- '- [ ] F12 %s Logged only\n' "$D"
+    printf -- '- [!] F13 %s Waits on F4, then a release build (blocked: F4)\n' "$D"
+    printf -- '- [~] F14 %s Stage in flight, then a release build\n' "$D"
+    printf -- '- [~] F15 %s Stage failed, retry queued\n' "$D"
+    printf -- '- [ ] F16 %s Named in passing only\n' "$D"
   } > TICKETS.md
-  printf -- '# RUN-0001 - x\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|-------|-------|-------|-----------|--------|\n| 1 | F7 thing | ! | build:opus | 2026-10-25T10:00Z | - |\n| 2 | F8 thing | ~ | build:opus | 2020-01-01T00:00Z | - |\n| 3 | F9 thing | x | build:opus | 2026-10-25T10:00Z | abc1234 |\n' > .skillator/run-0001-x.md
+  printf -- '# RUN-0001 - x\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|-------|-------|-------|-----------|--------|\n| 1 | F7 thing | ! | build:opus | 2026-10-25T10:00Z | - |\n| 2 | F8 thing | ~ | build:opus | 2020-01-01T00:00Z | - |\n| 3 | F9 thing | x | build:opus | 2026-10-25T10:00Z | abc1234 |\n| 4 | F14 thing | ~ | build:opus | 2099-01-01T00:00Z | - |\n| 5 | F15 thing | ! | build:opus | 2026-10-25T10:00Z | - |\n| 6 | F15 retry |   | - | - | - |\n' > .skillator/run-0001-x.md
   commit vidul@ikran.in "init" README.md
   commit vidul@ikran.in "F6: half of it" a.txt
   commit vidul@ikran.in "board: F12 logged" b.txt
   commit vidul@ikran.in "F10: built" c.txt
   commit vidul@ikran.in "F11: working" d.txt
   s6=$(git rev-parse --short HEAD~3); s10=$(git rev-parse --short HEAD~1)
+  # review: an open blocker, a stage in flight, a queued retry and a passing mention propose nothing
+  commit vidul@ikran.in "F13: built" e.txt
+  commit vidul@ikran.in "F14: half of it" f.txt
+  commit vidul@ikran.in "Merge the run branch, F16 in passing" g.txt
   cp TICKETS.md "$T/f81a.md"
   sh "$self" reconcile > "$T/out" 2>&1 || { echo "FAIL: reconcile failed: $(cat "$T/out")"; fail=1; }
   {
@@ -1435,6 +1456,11 @@ selftest() {
   [ ! -e TICKETS.md.lock ] || { echo "FAIL: reconcile left a board lock"; fail=1; }
   eq "reconcile given ids" "$(run reconcile f6 F4)" "F6 [ ] -> [~]  1 commit names it, newest $s6"
   eq "reconcile, nothing" "$(run reconcile F4 F11 F12)" "no change: nothing to reconcile"
+  # review: from a run worktree, a commit on its branch is not main's
+  git worktree add -q -b side "$T/f81w" > /dev/null 2>&1 && cd "$T/f81w" || die "cannot add the fixture worktree"
+  commit vidul@ikran.in "F4: on a branch" h.txt
+  eq "reconcile from a worktree" "$(run reconcile F4)" "no change: nothing to reconcile"
+  cd "$K" || die "cannot return to the fixture"
   # the writers the pane applies [ ] and [~] with: unblock ([!] -> [ ], note dropped), start ([ ] -> [~])
   eq "unblock" "$(run unblock F1)" "- [ ] F1 $D Waits on F2"
   sh "$self" unblock F4 > /dev/null 2>&1 && { echo "FAIL: unblock took a ticket that is not [!]"; fail=1; }

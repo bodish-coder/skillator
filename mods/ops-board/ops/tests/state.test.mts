@@ -462,6 +462,12 @@ test('F81 reconcile: space picks, enter applies only the picked; a kept row is n
   assert.equal(reduce(s, key('1')).state.reconcile !== null, true)          // the box holds the keys
 })
 
+test('F81 review: a proposal with no writer ([x], [>]) is never applied', () => {
+  const r0 = reduce(s0, key('c'))
+  const s = settle(r0.effects[0]!.then(ok('F1 [ ] -> [x]  done\nF3 [?] -> [>]  later\n'))(r0.state)).state
+  assert.deepEqual(reduce(s, key('a')).effects.filter(e => e.kind === 'run'), [])
+})
+
 test('a bad handle never runs', () => {
   let { state } = reduce(reduce(s0, key('t')).state, key('n'))
   for (const ch of 'A B') state = reduce(state, { name: ch, sequence: ch }).state
