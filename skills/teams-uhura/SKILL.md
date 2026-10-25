@@ -54,7 +54,11 @@ pasted one, so it waits for the owner at the prompt.
   tested, block, defer, assign) go the same way; a failed post never fails the
   ticket edit.
 
-Setup, step by step, and the threat model: **`references/setup.md`**.
+**First time: the owner runs `scripts/setup.ps1` (Windows) or `scripts/setup.sh`**
+in their own terminal. It walks node, winget, Dev Tunnels, the login, the
+`skillator-teams` tunnel, the listener and the two Teams steps; it is safe to
+re-run, and `--check` only reports. The secrets go in the ops board form, never
+through the script. Setup by hand and the threat model: **`references/setup.md`**.
 
 ## Arming is the owner's act, every time
 
