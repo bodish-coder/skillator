@@ -89,7 +89,7 @@ Five rows have now been tested; prime-agent has no loader to test.
 | cursor | **yes, verified** — 2026-09-23, `cursor-agent` 2026.09.18, 4/4 — but every load came from the user-level `~/.cursor/skills`; a fixture-local `.cursor/skills`/`.agents/skills` never appeared in its inventory (self-reported, unconfirmed) |
 | antigravity | **yes, verified** — 2026-09-24, `agy` 1.2.9, 4/4 — `grayskull-power` 2/2 from the fixture's project-local `.agents/skills`; the `func-ui`-triggering prompt 2/2 loaded the stale user-level `~/.gemini/config/skills/func-ui` instead of the fixture's `designui-galadriel` |
 | pi | **yes, verified** — 2026-09-23, `pi` 0.74.2 / openai gpt-5.5, 4/4, from project-local `.pi/skills` with `PI_CODING_AGENT_DIR` and `HOME` isolated |
-| muse | **unverified** — F68 (2026-10-24, Muse Code 1.4.12): `muse plugins validate` - 28 skills `supported` (summary `full`); `muse plugins install` into a scratch profile - `active=true skills=28`; an unprompted load from a description not run |
+| muse | **unverified** — F68 (2026-10-24, Muse Code 1.4.12): `muse plugins validate` - 28 skills `supported` (summary `full`); `muse plugins install` into a scratch profile - `active=true skills=28`; B10 (Muse Code 1.4.13): install from a clone only - `marketplace add` of this repo is unsupported (see the muse section); an unprompted load from a description not run |
 | opencode | **unverified** — F67 (2026-10-24, opencode 1.19.4) checked discovery only: `opencode debug skill` lists the skills in `~/.config/opencode/skills`; an unprompted load from the description has not been run |
 | prime-agent | **no** — no markdown-skill loader at all; not installed on this machine (2026-09-24), so its always-on-file route is still unrun |
 
@@ -353,10 +353,17 @@ lists every `skills/*/SKILL.md` by its frontmatter `name`, and `.muse-plugin/mar
 lists the plugin; both carry the `.claude-plugin/plugin.json` version.
 `practice/scripts/check-muse-manifest.sh` fails on a skill left out, a path gone, an id that is
 not the skill's `name` or a version out of step, and `install.sh --selftest` runs it - so a
-new skill or a release bump touches `.muse-plugin/` too. Install: `muse plugins install <clone>`
+new skill or a release bump touches `.muse-plugin/` too. Install from a clone:
+`git clone https://github.com/bodish-coder/skillator <dir>`, then `muse plugins install <dir>`
 (it copies the whole clone into Muse's cache; skills are enabled by default, so
 `muse plugins approve` has no runtime capability to act on); update:
-`muse plugins update skillator` (refreshes from that local source; `/skillator-update` step 4).
+`git -C <dir> pull`, then `muse plugins update skillator` (refreshes from that local source;
+`/skillator-update` step 4 does both). `muse plugins marketplace add` of this repo is
+unsupported (B10): Muse probes `.claude-plugin/marketplace.json` but never
+`.muse-plugin/marketplace.json`, so it reads the Claude catalog and fails cloning its github
+source into a `\\?\` path git refuses on Windows; B11 tracks a Muse-native catalog. The Claude
+catalog stays as it is. Muse also warns that it skips ops-board - expected: its
+`hooks/hooks.json` is a Claude Code mod, which Muse cannot run.
 Verified (Muse Code 1.4.12, 2026-10-24): `muse plugins validate <repo>` - valid, summary
 `full`; `muse plugins install` with a scratch USERPROFILE/XDG_DATA_HOME - `skills=28
 active=true`, `approve` returns no runtime capabilities; both print one warning that `.claude-plugin/plugin.json` is ignored. Tiers, delegation, usage %
