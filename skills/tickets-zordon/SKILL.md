@@ -119,12 +119,50 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh done F12 RED/GREEN 3/3, abc123
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh block F12 S3 creds from ops     # [!] ` (blocked: ..)`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh defer F12 after the parser rewrite  # [>] ` (deferred: ..)`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # write app + by
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh whoami          # F80: my @handle
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh pick F12 F14    # F80: pick / skip <ID> <owner>
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh claim F12       # F80: [owner: <me>], box kept
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh team lead @asha # F80: set / hand over the lead
 ```
 
 The team file is kept with `ticket-meta team add @h "Name" email[,email]`,
 `team remove @h` and `team list`. A member line is `- @handle: a@x, b@y`, with an
 optional indented `  name: Full Name` line directly under it. `team remove` warns,
 and still removes, when open tickets still name the handle.
+
+**Roles, me, claims (F80).** The format, in full:
+
+```
+# Team
+lead: @vidul
+
+- @vidul: vidul@ikran.in
+  name: Vidul
+- @asha: asha@x.com
+```
+
+- **One lead**: the one `lead: @handle` line under `# Team` (a team file without
+  it is valid: no lead). Everyone else listed is a member. `team lead @h` sets it
+  when there is none, or hands it over when *me* is the lead; `team lead -` clears
+  it (the lead only). `team remove` of the lead is refused until it is handed over.
+  `team list` marks ` [lead]` and ` (you)`.
+- **Me** is found, never stored: `ticket-meta whoami` maps this repo's git
+  `user.email` to a handle through the team emails; `SKILLATOR_ME=@handle` (on the
+  team) overrides. No match → `not on the team: add <email> to .skillator/team.md`.
+- **Claims**: planning or dispatching a ticket (relay-morpheus `chain plan` /
+  `chain dispatch`, `/pending-subagent`, `/marathon-plan`) runs
+  `ticket-meta claim <ID>...` — `[owner: <me>]`, the box kept. A ticket already
+  owned by someone else is reassigned (`assign` or `claim`) only by that owner or
+  the lead; anyone else is refused, the refusal naming both. Not on the team →
+  claims are refused (`add <email> to team.md`).
+- **Picking**: `ticket-meta pick [IDs]` prints `you: <me>` then `pick <ID>`
+  (unassigned, or mine) or `skip <ID> <owner>` per ticket (no IDs: every `[ ]`
+  `[~]` `[!]` ticket). Runs take only the picked; a skipped one is listed as
+  skipped with its owner, never run. Not on the team → only unassigned tickets.
+  No team file → every ticket is picked and nothing is claimed, as before.
+- These checks are a **team convention, not security**: git's email is self-set
+  and anyone can edit `team.md` or `TICKETS.md` by hand. They stop honest
+  mistakes - two people running one ticket - not a determined teammate.
 
 **An assignment reopens the ticket.** Whoever it moves to, it must not stay
 closed, deferred or in someone else's progress:
@@ -144,6 +182,8 @@ closed, deferred or in someone else's progress:
   moved. A relay lease is per stage and is released when that stage lands or fails.
 - Both refuse a handle not in the team file — say so, and offer to add the
   person there; never invent one.
+- `assign` of a ticket someone else owns is refused unless *me* is that owner
+  or the lead (F80, above) — say who may, never edit the line by hand around it.
 - **`tag <ID>`** when a ticket is closed (`[x]`), and when commits naming it land
   (a merge, a pull). It recomputes `app` and `by` from the commits; with none it
   leaves a hand-set `app` alone.

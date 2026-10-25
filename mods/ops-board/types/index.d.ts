@@ -6,7 +6,7 @@ export type Ticket = {
   session: string | null                                 // "(@cc-4ae496)" tag, without parens
 }
 export type Board = { path: string; mtimeMs: number; size: number; tickets: Ticket[]; error: string | null }
-export type Member = { handle: string; emails: string[]; name?: string }   // name: the `  name:` line under it
+export type Member = { handle: string; emails: string[]; name?: string; lead?: true }   // name: the `  name:` line under it; lead: the `lead:` line names it
 export type Filter = { app: string | null; who: string | null; mine: boolean; showDone: boolean }
 export type Lock = { path: string; ageMin: number; holder: string }
 export type Machine = { at: number; drive: string; diskFree: number | null; diskTotal: number | null;

@@ -19,13 +19,21 @@
 #   ticket-meta.sh team add @handle "Name" email[,email...]
 #                                       a member into .skillator/team.md
 #   ticket-meta.sh team remove @handle  that member out (warns on open tickets)
-#   ticket-meta.sh team list            "@handle: emails (Name)" per member
+#   ticket-meta.sh team list            "@handle: emails (Name)" per member, [lead] and (you) marked
+#   ticket-meta.sh team lead @handle|-  F80: set / hand over the one lead (no lead, or me is it); - clears
+#   ticket-meta.sh whoami               F80: my @handle (SKILLATOR_ME, else git user.email via the team)
+#   ticket-meta.sh claim <ID>...        F80: [owner: <me>], the box kept (plan / dispatch)
+#   ticket-meta.sh pick [ID...]         F80: `you: ..`, then `pick <ID>` / `skip <ID> <owner>`
 #   ticket-meta.sh selftest             fixture repo, every subcommand, prints ok
+#
+# F80 claims: a ticket owned by someone else is reassigned (assign, claim) only by
+# that owner or the lead. A team convention, not security - git's email is self-set.
 #
 # Apps: folders under apps/*, packages/*, services/*, plus package.json
 # "workspaces" and pnpm-workspace.yaml globs; the folder name is the app. No such
 # folder = no apps. People: .skillator/team.md, lines `- @handle: a@x, b@y`,
-# each optionally followed by an indented `  name: Full Name` line. No team
+# each optionally followed by an indented `  name: Full Name` line, and at most one
+# `lead: @handle` line under the `# Team` heading (F80; none = no lead). No team
 # file = no people (by prints nothing, assign refuses). `team add` creates it.
 # A ticket's commits are the commits on HEAD whose subject names its ID as a
 # word (F1 never matches F12 or F1a). The board edited is the main checkout's
@@ -241,12 +249,21 @@ edit_line() {
   if [ -n "${SAME_KEY:-}" ]; then
     v=$(printf '%s\n' "$cur" | K=$SAME_KEY awk '{ if (match($0, "\\[" ENVIRON["K"] ":[ \t]*[^]]*\\]")) {
           v = substr($0, RSTART, RLENGTH); sub(/^\[[^:]*:[ \t]*/, "", v); sub(/[ \t]*\]$/, "", v); print v } }')
-    # a no-op only when the box is already where this assignment puts it
-    if [ "$v" = "$SAME_VAL" ] && [ "$mk" = "${SET_MARK:-}" ]; then
+    # a no-op only when the box is already where this assignment puts it (a claim keeps the box)
+    if [ "$v" = "$SAME_VAL" ] && { [ "$mk" = "${SET_MARK:-}" ] || [ -z "${SET_MARK:-}" ]; }; then
       board_unlock
       printf '%s\n' "$cur"
       echo "no change: $ID already has [$SAME_KEY: $SAME_VAL]"
       return 0
+    fi
+  fi
+  # F80: a ticket owned by someone else moves only by its owner's or the lead's
+  # hand (ME, LEAD from the caller). A team convention, not security.
+  if [ -n "${OWN_CHECK:-}" ]; then
+    ow=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\[owner:[ \t]*[^]]*\]/)) { v = substr($0, RSTART + 7, RLENGTH - 8); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }')
+    if [ -n "$ow" ] && [ "$(lc "$ow")" != "$(lc "$SET_OWNER")" ] && ! may_take "$ow"; then
+      if [ -n "$LEAD" ]; then who="only $ow or the lead $LEAD may reassign it"; else who="only $ow may reassign it (no lead set)"; fi
+      die "$ID is owned by $ow - $who (you: ${ME:-$ME_WHY})"
     fi
   fi
   # Moving a line out of [~] keeps the working session's trailing (@agent-id)
@@ -350,11 +367,104 @@ id_and_handle() {
   team_rows | awk '{ print $1 }' | grep -qxF -- "$HANDLE" || die "$HANDLE is not in .skillator/team.md"
 }
 
+lc() { printf '%s' "$1" | tr 'A-Z' 'a-z'; }
+
+# F80: ME <- the session's person, found, never stored: SKILLATOR_ME=@handle (on
+# the team) overrides; else this repo's git user.email through the team emails.
+# Fails with ME empty and ME_WHY saying why. git's email is self-set: who "me" is
+# is a team convention, not security.
+me_of() {
+  ME='' ME_WHY=''
+  team_file > /dev/null || { ME_WHY='no .skillator/team.md'; return 1; }
+  if [ -n "${SKILLATOR_ME:-}" ]; then
+    mh=$SKILLATOR_ME; case $mh in @*) ;; *) mh="@$mh" ;; esac
+    if one_line "$mh" && team_rows | awk '{ print $1 }' | grep -qxF -- "$mh"; then ME=$mh; return 0; fi
+    ME_WHY="SKILLATOR_ME=$SKILLATOR_ME is not in .skillator/team.md"; return 1
+  fi
+  em=$(git config user.email 2>/dev/null | tr 'A-Z' 'a-z')
+  [ -n "$em" ] || { ME_WHY='git user.email is not set - set it, or SKILLATOR_ME=@handle'; return 1; }
+  ME=$(team_rows | E=$em awk '$2 == ENVIRON["E"] { print $1; exit }')
+  [ -n "$ME" ] && return 0
+  ME_WHY="not on the team: add $em to .skillator/team.md"; return 1
+}
+
+# LEAD <- the team's one lead: the first `lead: @handle` line of the team file.
+lead_of() {
+  LEAD=''
+  lf=$(team_file) || return 0
+  LEAD=$(tr -d '\r' < "$lf" | awk '/^lead:[ \t]*@[A-Za-z0-9_.-]+[ \t]*$/ { sub(/^lead:[ \t]*/, ""); sub(/[ \t]+$/, ""); print; exit }')
+}
+
+# 0 when ME may move a ticket the handle $1 owns: ME is that owner, or the lead.
+may_take() {
+  [ -n "$ME" ] || return 1
+  [ "$(lc "$1")" = "$(lc "$ME")" ] && return 0
+  [ -n "$LEAD" ] && [ "$(lc "$LEAD")" = "$(lc "$ME")" ]
+}
+
 # F45: an assignment reopens. Implementation -> [owner:] and the box [ ];
 # decision -> [decide:] and the box [?]; the same handle again changes nothing.
+# F80: a ticket owned by someone else is reassigned only by that owner or the lead.
 cmd_assign() {
   CMD=assign; id_and_handle "$@"
-  SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER=$HANDLE SET_BY='' SAME_KEY=owner SAME_VAL=$HANDLE NEED_MARK='' edit_line
+  me_of || :; lead_of
+  SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER=$HANDLE SET_BY='' SAME_KEY=owner SAME_VAL=$HANDLE NEED_MARK='' OWN_CHECK=1 edit_line
+}
+
+cmd_whoami() {
+  [ $# -eq 0 ] || die "usage: whoami"
+  me_of || die "$ME_WHY"
+  echo "$ME"
+}
+
+# F80: planning or dispatching a ticket claims it: [owner: <me>], the box kept.
+# Mine already: no change. Another's: refused as a reassign is. No team file:
+# nothing to claim (as before). Each id on its own; any refusal exits 1.
+cmd_claim() {
+  CMD=claim
+  [ $# -ge 1 ] || die "usage: claim <ID>..."
+  team_file > /dev/null || { echo "no change: no .skillator/team.md - nothing to claim"; return 0; }
+  me_of || die "$ME_WHY - claim refused"
+  lead_of
+  crc=0
+  for ci in "$@"; do
+    ( norm_id "$ci"
+      SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER=$ME SET_BY='' SAME_KEY=owner SAME_VAL=$ME NEED_MARK='' OWN_CHECK=1 edit_line ) || crc=1
+  done
+  return $crc
+}
+
+# F80: which tickets a run may take. `you: <me>` (or `you: - (<why>)`), then per
+# ticket `pick <ID>` (unassigned, or mine) or `skip <ID> <owner>`. No ids: every
+# open ticket on the board ([ ] [~] [!]). No team file: every ticket is picked;
+# not on the team: only unassigned ones. An id not on the board is unassigned.
+cmd_pick() {
+  bf="$MAIN/TICKETS.md"
+  ids=''
+  for pi in "$@"; do norm_id "$pi"; ids="$ids $ID"; done
+  [ -n "$ids" ] || [ -f "$bf" ] || die "no TICKETS.md at $bf"
+  team=''
+  if team_file > /dev/null; then
+    team=1
+    if me_of; then you=$ME; else you="- ($ME_WHY)"; fi
+  else
+    ME=''; you='- (no .skillator/team.md: every ticket)'
+  fi
+  rows=''
+  [ ! -f "$bf" ] || rows=$(tr -d '\r' < "$bf" | awk '
+    match($0, /^[ \t]*- \[.\][ \t]+[A-Z]+[0-9]+[a-z]?/) {
+      id = substr($0, RSTART, RLENGTH); sub(/^[ \t]*- \[.\][ \t]+/, "", id)
+      mk = substr($0, index($0, "- [") + 3, 1); o = ""
+      if (match($0, /\[owner:[ \t]*[^]]*\]/)) { o = substr($0, RSTART + 7, RLENGTH - 8); gsub(/^[ \t]+|[ \t]+$/, "", o) }
+      print id "\t" mk "\t" o }')
+  echo "you: $you"
+  ROWS=$rows IDS=$ids ME=$ME TEAM=$team awk 'BEGIN {
+    n = split(ENVIRON["ROWS"], R, "\n")
+    for (i = 1; i <= n; i++) { split(R[i], c, "\t"); if (c[1] != "" && !(c[1] in mk)) { mk[c[1]] = c[2]; ow[c[1]] = c[3]; ord[++no] = c[1] } }
+    me = tolower(ENVIRON["ME"]); m = split(ENVIRON["IDS"], L, " ")
+    if (m == 0) for (i = 1; i <= no; i++) if (mk[ord[i]] ~ /^[ ~!]$/) L[++m] = ord[i]
+    for (i = 1; i <= m; i++) { o = ow[L[i]]
+      if (ENVIRON["TEAM"] == "" || o == "" || tolower(o) == me) print "pick " L[i]; else print "skip " L[i] " " o } }'
 }
 
 cmd_decide() {
@@ -504,7 +614,7 @@ team_handle() {
   one_line "$TH" && printf '%s' "$TH" | grep -Eqx -- "$2" || die "not a handle (@name, $3): $1"
 }
 
-TEAM_USAGE='usage: team add @handle "Name" email[,email...] | team remove @handle | team list'
+TEAM_USAGE='usage: team add @handle "Name" email[,email...] | team remove @handle | team list | team lead @handle|-'
 
 # add: `- @handle: a@x, b@y` and `  name: Name` under it, appended to the team
 # file (created with a `# Team` header when there is none). The new handle is
@@ -552,6 +662,8 @@ team_remove() {
   f=$(team_file) || die "no .skillator/team.md - this repo has no people"
   board_lock "$MAIN/TICKETS.md.lock"
   team_members "$f" | cut -f1 | grep -qxF -- "$TH" || die "$TH is not in $f"
+  lead_of
+  [ "$TH" != "$LEAD" ] || die "$TH is the lead - hand the lead over first (team lead @other), then remove"
   eol=0
   [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ] && eol=1
   tmp="$f.ticket-meta.$$"
@@ -587,11 +699,55 @@ team_remove() {
   [ -z "$ids" ] || echo "warning: $TH is still named on open tickets: $ids - reassign them"
 }
 
-# list: "@handle: a@x, b@y (Name)" per member, file order; no team file = nothing.
+# list: "@handle: a@x, b@y (Name)" per member, file order, the lead marked
+# ` [lead]` and me ` (you)`; no team file = nothing.
 team_list() {
   [ $# -eq 0 ] || die "$TEAM_USAGE"
+  me_of || :; lead_of
   f=$(team_file) || return 0
-  team_members "$f" | awk -F'\t' '{ s = $1 ":"; if ($2 != "") s = s " " $2; if ($3 != "") s = s " (" $3 ")"; print s }'
+  team_members "$f" | ME=$ME LEAD=$LEAD awk -F'\t' '{ s = $1 ":"; if ($2 != "") s = s " " $2; if ($3 != "") s = s " (" $3 ")"
+    if ($1 == ENVIRON["LEAD"]) s = s " [lead]"; if ($1 == ENVIRON["ME"]) s = s " (you)"; print s }'
+}
+
+# F80: lead @handle sets the one `lead:` line under `# Team` (a member only;
+# allowed when there is no lead, or me is the lead - a hand-over); lead - clears
+# it (the lead only). Every other byte and the line endings stay.
+team_lead() {
+  [ $# -eq 1 ] || die "$TEAM_USAGE"
+  if [ "$1" = - ]; then TH=-; else team_handle "$1" '@[A-Za-z0-9_.-]+' 'letters, digits, _ . -'; fi
+  me_of || :
+  tl=$(team_file) || die "no .skillator/team.md - this repo has no people"
+  board_lock "$MAIN/TICKETS.md.lock"
+  [ "$TH" = - ] || team_members "$tl" | cut -f1 | grep -qxF -- "$TH" || die "$TH is not in $tl"
+  lead_of
+  if [ -n "$LEAD" ]; then
+    if [ "$TH" = "$LEAD" ]; then board_unlock; echo "no change: $TH is already the lead"; return 0; fi
+    [ -n "$ME" ] && [ "$(lc "$ME")" = "$(lc "$LEAD")" ] || die "only the lead $LEAD may hand the lead over or clear it (you: ${ME:-$ME_WHY})"
+  elif [ "$TH" = - ]; then
+    board_unlock; echo "no change: no lead set"; return 0
+  fi
+  cr=''
+  [ "$(head -n 1 "$tl" | tail -c 2 | od -An -tx1 | tr -d ' \n')" = 0d0a ] && cr=$(printf '\r')
+  eol=0
+  [ "$(tail -c 1 "$tl" | od -An -tx1 | tr -d ' \n')" = 0a ] && eol=1
+  tmp="$tl.ticket-meta.$$"
+  if [ "$TH" != - ] && ! tr -d '\r' < "$tl" | grep -Eq '^(lead:|# Team[[:blank:]]*$)'; then
+    printf '# Team%s\n%s\nlead: %s%s\n%s\n' "$cr" "$cr" "$TH" "$cr" "$cr" > "$tmp" && cat "$tl" >> "$tmp" || { rm -f "$tmp"; die "write failed"; }
+  else
+    # every lead: line goes and the first is replaced; none -> in under the # Team heading
+    V=$TH CR=$cr EOL=$eol awk -v BINMODE=3 '
+      function out(s) { if (k++) printf "\n"; printf "%s", s }
+      BEGIN { v = ENVIRON["V"]; nl = (v != "-") ? "lead: " v ENVIRON["CR"] : ""; had = 0 }
+      FNR == NR { l = $0; sub(/\r$/, "", l); if (l ~ /^lead:/) had = 1; next }
+      { l = $0; sub(/\r$/, "", l)
+        if (l ~ /^lead:/) { if (!done && nl != "") out(nl); done = 1; next }
+        out($0)
+        if (!had && !done && l ~ /^# Team[ \t]*$/) { if (nl != "") out(nl); done = 1 } }
+      END { if (k && ENVIRON["EOL"] == "1") printf "\n" }' "$tl" "$tl" > "$tmp" || { rm -f "$tmp"; die "write failed"; }
+  fi
+  mv -f "$tmp" "$tl" || { rm -f "$tmp"; die "cannot replace $tl"; }
+  board_unlock
+  if [ "$TH" = - ]; then echo "lead cleared"; else echo "lead: $TH"; fi
 }
 
 cmd_team() {
@@ -601,6 +757,7 @@ cmd_team() {
     add) team_add "$@" ;;
     remove) team_remove "$@" ;;
     list) team_list "$@" ;;
+    lead) team_lead "$@" ;;
     *) die "$TEAM_USAGE" ;;
   esac
 }
@@ -609,6 +766,8 @@ selftest() {
   self=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0")
   T=$(mktemp -d 2>/dev/null || mktemp -d -t ticketmeta)
   trap 'rm -rf "$T"' EXIT
+  # F80: who "me" is comes from git's user.email - never this machine's global one
+  : > "$T/gitconfig"; GIT_CONFIG_GLOBAL="$T/gitconfig"; export GIT_CONFIG_GLOBAL; unset SKILLATOR_ME
   fail=0
   D=$(printf '\342\200\224')
   eq() { [ "$2" = "$3" ] || { echo "FAIL: $1: expected [$3] got [$2]"; fail=1; }; }
@@ -652,6 +811,7 @@ selftest() {
   cmp -s TICKETS.md "$T/before.md" || { echo "FAIL: refused assign changed the board"; fail=1; }
   eq "assign F12" "$(run assign F12 @asha)" "- [ ] F12 $D Bulk delete [owner: @asha]"
   eq "assign F1" "$(run assign F1 asha)" "- [ ] F1 $D Dark mode [owner: @asha] (@cc-bbbbbb) warning: F1 was in progress under @cc-bbbbbb - its box left [~], the session tag stays; tell that session"
+  git config user.email asha@x.com   # F80: only the owner (or the lead) reassigns
   eq "reassign F1" "$(run assign F1 @vidul)" "- [ ] F1 $D Dark mode [owner: @vidul] (@cc-bbbbbb)"
   eq "tag F1" "$(run tag F1)" "- [ ] F1 $D Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)"
   eq "tag B2" "$(run tag B2)" "- [ ] B2 $D Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)"
@@ -691,7 +851,8 @@ selftest() {
   sh "$self" by "F5$NL" > /dev/null 2>&1 && { echo "FAIL: by took an id ending in a line break"; fail=1; }
   sh "$self" assign F4 "@vidul$NL" > /dev/null 2>&1 && { echo "FAIL: assign took a handle ending in a line break"; fail=1; }
   cmp -s TICKETS.md "$T/edge0.md" || { echo "FAIL: a refused argument changed the board"; fail=1; }
-  # 3: a hand-written [owner:@x] is replaced, not duplicated
+  # 3: a hand-written [owner:@x] is replaced, not duplicated (by its owner, F80)
+  git config user.email vidul@ikran.in
   eq "hand tag replaced" "$(run assign F4 @asha)" "- [ ] F4 $D Hand owner [owner: @asha] (@cc-111111)"
   [ ! -e TICKETS.md.lock ] || { echo "FAIL: our board lock was left behind"; fail=1; }
   # 9: loose spacing, a hyphen, a sub-part, a lower-case id
@@ -1012,6 +1173,82 @@ selftest() {
   done
   rm -f TICKETS.md.lock
 
+  # --- F80: whoami, picking, claims, one lead
+  R="$T/f80"
+  mkdir -p "$R/.skillator" && cd "$R" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
+  printf -- '# Team\n\n- @vidul: vidul@ikran.in\n  name: Vidul\n- @asha: Asha@X.com\n- @neo: neo@x.com\n' > .skillator/team.md
+  {
+    printf -- '# TICKETS\n\n'
+    printf -- '- [ ] F1 %s Free\n' "$D"
+    printf -- '- [ ] F2 %s Mine [owner: @asha]\n' "$D"
+    printf -- '- [~] F3 %s Theirs [owner: @vidul] (@cc-aaaaaa)\n' "$D"
+    printf -- '- [!] F4 %s Stuck (blocked: x)\n' "$D"
+    printf -- '- [x] F5 %s Shipped [owner: @vidul]\n' "$D"
+    printf -- '- [ ] F6 %s Neos [owner: @neo]\n' "$D"
+    printf -- '- [~] F7 %s Working (@cc-bbbbbb)\n' "$D"
+  } > TICKETS.md
+  commit vidul@ikran.in "init" README.md
+  # whoami: git user.email (any case) mapped through the team; SKILLATOR_ME overrides
+  sh "$self" whoami > /dev/null 2> "$T/err" && { echo "FAIL: whoami answered with no user.email"; fail=1; }
+  grep -q 'user.email is not set' "$T/err" || { echo "FAIL: whoami with no email: $(cat "$T/err")"; fail=1; }
+  git config user.email ASHA@x.com
+  eq "whoami by email" "$(run whoami)" "@asha"
+  eq "whoami by SKILLATOR_ME" "$(SKILLATOR_ME=neo sh "$self" whoami 2>&1)" "@neo"
+  SKILLATOR_ME=@nobody sh "$self" whoami > /dev/null 2> "$T/err" && { echo "FAIL: whoami took a SKILLATOR_ME not on the team"; fail=1; }
+  grep -q 'not in .skillator/team.md' "$T/err" || { echo "FAIL: SKILLATOR_ME refusal: $(cat "$T/err")"; fail=1; }
+  git config user.email ghost@x.com
+  sh "$self" whoami > /dev/null 2> "$T/err" && { echo "FAIL: whoami answered for an email not on the team"; fail=1; }
+  grep -q 'not on the team: add ghost@x.com to .skillator/team.md' "$T/err" || { echo "FAIL: whoami not on the team: $(cat "$T/err")"; fail=1; }
+  # pick: unassigned and mine picked, another's skipped with its owner; not on the team -> only unassigned
+  eq "pick, not on the team" "$(run pick)" "you: - (not on the team: add ghost@x.com to .skillator/team.md) pick F1 skip F2 @asha skip F3 @vidul pick F4 skip F6 @neo pick F7"
+  cp TICKETS.md "$T/f80a.md"
+  sh "$self" claim F1 > /dev/null 2> "$T/err" && { echo "FAIL: claim by someone not on the team"; fail=1; }
+  grep -q 'add ghost@x.com to .skillator/team.md' "$T/err" || { echo "FAIL: claim refusal does not say add the email: $(cat "$T/err")"; fail=1; }
+  git config user.email asha@x.com
+  eq "pick as asha" "$(run pick)" "you: @asha pick F1 pick F2 skip F3 @vidul pick F4 skip F6 @neo pick F7"
+  eq "pick given ids" "$(run pick f3 F2 F9)" "you: @asha skip F3 @vidul pick F2 pick F9"
+  # claim (plan / dispatch): [owner: me], the box kept; mine again is no change; another's refused
+  eq "claim F1" "$(run claim F1)" "- [ ] F1 $D Free [owner: @asha]"
+  eq "claim keeps [~]" "$(run claim F7)" "- [~] F7 $D Working [owner: @asha] (@cc-bbbbbb)"
+  sh "$self" claim F2 > "$T/out" 2>&1 || { echo "FAIL: claim of my own ticket failed: $(cat "$T/out")"; fail=1; }
+  grep -q 'no change' "$T/out" || { echo "FAIL: claim of my own ticket is not no change: $(cat "$T/out")"; fail=1; }
+  cp TICKETS.md "$T/f80b.md"
+  sh "$self" claim F3 > /dev/null 2> "$T/err" && { echo "FAIL: claim took another's ticket"; fail=1; }
+  grep -q 'F3 is owned by @vidul - only @vidul may reassign it' "$T/err" || { echo "FAIL: claim refusal: $(cat "$T/err")"; fail=1; }
+  # assign: a member's reassign of another's ticket refused; the owner's and the lead's accepted
+  sh "$self" assign F3 @asha > /dev/null 2> "$T/err" && { echo "FAIL: a member reassigned another's ticket"; fail=1; }
+  grep -q 'F3 is owned by @vidul' "$T/err" || { echo "FAIL: reassign refusal: $(cat "$T/err")"; fail=1; }
+  cmp -s TICKETS.md "$T/f80b.md" || { echo "FAIL: a refused claim or reassign changed the board"; diff "$T/f80b.md" TICKETS.md; fail=1; }
+  eq "owner reassigns" "$(SKILLATOR_ME=@vidul sh "$self" assign F3 @neo 2>&1 | head -n 1)" "- [ ] F3 $D Theirs [owner: @neo] (@cc-aaaaaa)"
+  eq "assign unowned" "$(run assign F4 @vidul)" "- [ ] F4 $D Stuck [owner: @vidul] (blocked: x)"
+  # one lead: set when there is none; only the lead hands it over or clears it; never removed
+  eq "team list, no lead" "$(run team list)" "@vidul: vidul@ikran.in (Vidul) @asha: Asha@X.com (you) @neo: neo@x.com"
+  sh "$self" team lead @nobody > /dev/null 2>&1 && { echo "FAIL: team lead took someone not on the team"; fail=1; }
+  eq "team lead -, none" "$(run team lead -)" "no change: no lead set"
+  eq "team lead, none yet" "$(run team lead @vidul)" "lead: @vidul"
+  printf -- '# Team\nlead: @vidul\n\n- @vidul: vidul@ikran.in\n  name: Vidul\n- @asha: Asha@X.com\n- @neo: neo@x.com\n' > "$T/lead1.md"
+  cmp -s .skillator/team.md "$T/lead1.md" || { echo "FAIL: team lead bytes"; diff "$T/lead1.md" .skillator/team.md; fail=1; }
+  eq "team list, lead" "$(run team list)" "@vidul: vidul@ikran.in (Vidul) [lead] @asha: Asha@X.com (you) @neo: neo@x.com"
+  sh "$self" team lead @asha > /dev/null 2> "$T/err" && { echo "FAIL: a member took the lead from the lead"; fail=1; }
+  grep -q 'only the lead @vidul' "$T/err" || { echo "FAIL: hand-over refusal: $(cat "$T/err")"; fail=1; }
+  sh "$self" team lead - > /dev/null 2>&1 && { echo "FAIL: a member cleared the lead"; fail=1; }
+  SKILLATOR_ME=@vidul sh "$self" team remove @vidul > /dev/null 2> "$T/err" && { echo "FAIL: the lead was removed"; fail=1; }
+  grep -q 'is the lead - hand the lead over first' "$T/err" || { echo "FAIL: lead removal refusal: $(cat "$T/err")"; fail=1; }
+  cmp -s .skillator/team.md "$T/lead1.md" || { echo "FAIL: a refused lead change changed team.md"; diff "$T/lead1.md" .skillator/team.md; fail=1; }
+  sh "$self" claim F6 > /dev/null 2> "$T/err" && { echo "FAIL: claim took another's ticket"; fail=1; }
+  grep -q 'F6 is owned by @neo - only @neo or the lead @vidul may reassign it (you: @asha)' "$T/err" || { echo "FAIL: refusal does not name both: $(cat "$T/err")"; fail=1; }
+  eq "the lead reassigns" "$(SKILLATOR_ME=@vidul sh "$self" assign F6 @asha 2>&1)" "- [ ] F6 $D Neos [owner: @asha]"
+  eq "hand-over" "$(SKILLATOR_ME=@vidul sh "$self" team lead asha 2>&1)" "lead: @asha"
+  eq "one lead line" "$(grep -c '^lead:' .skillator/team.md)" "1"
+  eq "team lead same" "$(run team lead @asha)" "no change: @asha is already the lead"
+  eq "team lead - by the lead" "$(run team lead -)" "lead cleared"
+  grep -q '^lead:' .skillator/team.md && { echo "FAIL: team lead - left a lead line"; fail=1; }
+  # no heading, CRLF: the lead line comes in under a new # Team heading, CRLF kept
+  printf -- '- @asha: asha@x.com\r\n' > .skillator/team.md
+  eq "team lead, no heading" "$(run team lead @asha)" "lead: @asha"
+  printf -- '# Team\r\n\r\nlead: @asha\r\n\r\n- @asha: asha@x.com\r\n' > "$T/lead2.md"
+  cmp -s .skillator/team.md "$T/lead2.md" || { echo "FAIL: team lead with no heading, CRLF"; od -c .skillator/team.md | head -n 4; fail=1; }
+
   # --- solo, non-monorepo: no workspace folders, no team.md
   S="$T/solo"
   mkdir -p "$S/src" && cd "$S" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
@@ -1022,6 +1259,11 @@ selftest() {
   eq "solo apps-of" "$(run apps-of F1)" ""
   eq "solo by" "$(run by F1)" ""
   sh "$self" assign F1 @vidul > /dev/null 2>&1 && { echo "FAIL: assign worked with no team.md"; fail=1; }
+  # F80: no team.md behaves as before - every ticket picked, a claim changes nothing
+  git config user.email vidul@ikran.in
+  eq "solo pick" "$(run pick)" "you: - (no .skillator/team.md: every ticket) pick F1"
+  eq "solo claim" "$(run claim F1)" "no change: no .skillator/team.md - nothing to claim"
+  sh "$self" whoami > /dev/null 2>&1 && { echo "FAIL: whoami answered with no team.md"; fail=1; }
   eq "solo tag" "$(run tag F1)" "- [ ] F1 $D Thing (@cc-dddddd)"
 
   # --- F66: the opt-in Teams status post runs after a successful edit and never
@@ -1114,7 +1356,7 @@ teams_post() {
   return 0
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|claim|pick|selftest"
 c=$1; shift
 [ "$c" = selftest ] && { selftest; exit 0; }
 need_git
@@ -1136,5 +1378,8 @@ case $c in
   defer) cmd_defer "$@" && teams_post defer "$@" ;;
   tag) cmd_tag "$@" ;;
   team) cmd_team "$@" ;;
+  whoami) cmd_whoami "$@" ;;
+  claim) cmd_claim "$@" ;;
+  pick) cmd_pick "$@" ;;
   *) die "unknown subcommand: $c" ;;
 esac

@@ -404,7 +404,7 @@ for (const surface of SURFACES) {
     const pane = await mountPane($, surface)
     await pane.press({ key: 'key:team' })
     expect(await pane.find({ key: 'row:F3' })).toBeUndefined()
-    expect((await pane.find({ key: 'member:@vidul' }))?.text).toMatch(/^@vidul +Vidul +vidul@ikran\.in +you · 1 owned/)
+    expect((await pane.find({ key: 'member:@vidul' }))?.text).toMatch(/^@vidul +Vidul +vidul@ikran\.in +\(you\) · 1 owned/)
     expect((await pane.find({ key: 'member:@asha' }))?.text).toMatch(/^@asha +Asha +asha@example\.com +1 decide/)
     expect((await pane.find({ key: 'team:add' }))?.props.hotkey).toBe('a')
     expect((await pane.find({ key: 'team:remove' }))?.props.hotkey).toBe('r')
@@ -437,6 +437,26 @@ for (const surface of SURFACES) {
     await pane.press({ key: 'team:back' })
     expect(await pane.find({ key: 'row:F3' })).toBeDefined()
     expect(await state($, 'teamView')).toBeNull()
+    expect(w.writes).toEqual([])
+    await pane.unmount()
+  })
+
+  // F80: the lead marked `lead`, me `(you)`, `you: @h` heading the view; l makes the
+  // selected person lead through ticket-meta team lead, its refusal the toast.
+  test(`${surface}: F80 the Team view marks the lead and you; l makes the selected person lead through ticket-meta`, WITH, async ($, on) => {
+    const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM.replace('# Team\n', '# Team\nlead: @asha\n') })
+    w.answer = argv => argv.includes('lead') ? ran('', 1, 'ticket-meta: only the lead @asha may hand the lead over or clear it (you: @vidul)\n') : null
+    await start($, clock)
+    const pane = await mountPane($, surface)
+    await pane.press({ key: 'key:team' })
+    expect((await pane.find({ key: 'team:you' }))?.text).toBe('you: @vidul')
+    expect((await pane.find({ key: 'member:@asha' }))?.text).toMatch(/^@asha +Asha +asha@example\.com +lead · 1 decide/)
+    expect((await pane.find({ key: 'member:@vidul' }))?.text).toMatch(/^@vidul +Vidul +vidul@ikran\.in +\(you\) · 1 owned/)
+    expect((await pane.find({ key: 'team:lead' }))?.props.hotkey).toBe('l')
+    await pane.press({ key: 'member:@vidul' })
+    await pane.press({ key: 'team:lead' })
+    expect(w.runs.at(-1)!.argv).toEqual(['/bin/sh', META + '.sh', 'team', 'lead', '@vidul'])
+    expect(w.toasts.at(-1)).toContain('✗ ticket-meta team lead @vidul refused: ticket-meta: only the lead @asha may hand the lead over or clear it (you: @vidul)')
     expect(w.writes).toEqual([])
     await pane.unmount()
   })
@@ -599,7 +619,7 @@ test('team handles as ticket-meta reads them: @Asha assignable and removable, @j
 
   await pane.press({ key: 'key:team' })
   expect((await pane.find({ key: 'member:@Asha' }))?.text).toMatch(/^@Asha +Asha +asha@example\.com +1 decide/)
-  expect((await pane.find({ key: 'member:@vidul' }))?.text).toMatch(/you · 1 owned/)
+  expect((await pane.find({ key: 'member:@vidul' }))?.text).toMatch(/\(you\) · 1 owned/)
   await pane.press({ key: 'member:@Asha' })
   await pane.press({ key: 'team:remove' })
   await pane.press({ key: 'team:remove-yes' })

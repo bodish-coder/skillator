@@ -7,6 +7,7 @@
 #   ticket-meta.ps1 done <ID> [evidence] | block <ID> <on what> | defer <ID> <until what>
 #   ticket-meta.ps1 tag <ID> | selftest
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
+#   ticket-meta.ps1 team lead @handle|- | whoami | claim <ID>... | pick [ID...]   (F80)
 #
 # Windows PowerShell 5.1 safe: no ?:, ??, && or ||.
 $ErrorActionPreference = 'Stop'
@@ -332,9 +333,24 @@ function Edit-Line([string]$id, [hashtable]$o) {
     }
     if ($o.samekey) {
       $m = [regex]::Match($line, '\[' + $o.samekey + ':[ \t]*([^\]]*?)[ \t]*\]')
-      # a no-op only when the box is already where this assignment puts it
-      if ($m.Success -and $m.Groups[1].Value -ceq $o.sameval -and $mk -ceq $o.mark) {
+      # a no-op only when the box is already where this assignment puts it (a claim keeps the box)
+      if ($m.Success -and $m.Groups[1].Value -ceq $o.sameval -and ($mk -ceq $o.mark -or -not $o.mark)) {
         return @($line, "no change: $id already has [$($o.samekey): $($o.sameval)]")
+      }
+    }
+    # F80: a ticket owned by someone else moves only by its owner's or the lead's
+    # hand ($o.me, $o.lead from the caller). A team convention, not security.
+    if ($o.owncheck) {
+      $om = [regex]::Match($line, '\[owner:[ \t]*([^\]]*?)[ \t]*\]')
+      if ($om.Success) {
+        $ow = $om.Groups[1].Value
+        if ($ow -ne '' -and $ow -ine $o.owner -and -not (Test-MayTake $ow $o.me $o.lead)) {
+          $who = "only $ow may reassign it (no lead set)"
+          if ($o.lead) { $who = "only $ow or the lead $($o.lead) may reassign it" }
+          $you = $o.me
+          if (-not $you) { $you = $o.mewhy }
+          Fail "$id is owned by $ow - $who (you: $you)"
+        }
       }
     }
     # Moving a line out of [~] keeps the working session's trailing (@agent-id)
@@ -399,11 +415,126 @@ function Get-IdAndHandle([string]$cmd, [string[]]$a) {
   return @($id, $h)
 }
 
+# F80: the session's person, found, never stored: SKILLATOR_ME=@handle (on the
+# team) overrides; else this repo's git user.email through the team emails.
+# @{ me = '@handle' or ''; why = the reason when '' }. git's email is self-set:
+# who "me" is is a team convention, not security.
+function Get-Me {
+  if ($null -eq (Get-TeamFile)) { return @{ me = ''; why = 'no .skillator/team.md' } }
+  $rows = Get-TeamRows
+  $s = "$env:SKILLATOR_ME"
+  if ($s -ne '') {
+    $h = $s
+    if (-not $h.StartsWith('@')) { $h = '@' + $h }
+    if (Test-OneLine $h) { foreach ($t in $rows) { if ($t.h -ceq $h) { return @{ me = $h; why = '' } } } }
+    return @{ me = ''; why = "SKILLATOR_ME=$s is not in .skillator/team.md" }
+  }
+  $em = Git-Out config user.email
+  $e = ''
+  if ($null -ne $em) { $e = ([string](@($em)[0])).Trim().ToLowerInvariant() }
+  if ($e -eq '') { return @{ me = ''; why = 'git user.email is not set - set it, or SKILLATOR_ME=@handle' } }
+  foreach ($t in $rows) { if ($t.e -ceq $e) { return @{ me = $t.h; why = '' } } }
+  return @{ me = ''; why = "not on the team: add $e to .skillator/team.md" }
+}
+
+# The team's one lead: the first `lead: @handle` line of the team file, or ''.
+function Get-Lead {
+  $f = Get-TeamFile
+  if ($null -eq $f) { return '' }
+  foreach ($line in ([System.IO.File]::ReadAllText($f, $Utf8).Replace("`r", '').Split([char]10))) {
+    $m = [regex]::Match($line, '^lead:[ \t]*(@[A-Za-z0-9_.-]+)[ \t]*$')
+    if ($m.Success) { return $m.Groups[1].Value }
+  }
+  return ''
+}
+
+# True when $me may move a ticket $owner owns: $me is that owner, or the lead.
+function Test-MayTake([string]$owner, [string]$me, [string]$lead) {
+  if (-not $me) { return $false }
+  if ($owner -ieq $me) { return $true }
+  return ($lead -ne '' -and $lead -ieq $me)
+}
+
 # F45: an assignment reopens. Implementation -> [owner:] and the box [ ];
 # decision -> [decide:] and the box [?]; the same handle again changes nothing.
+# F80: a ticket owned by someone else is reassigned only by that owner or the lead.
 function Do-Assign([string[]]$a) {
   $x = Get-IdAndHandle 'assign' $a
-  return (Edit-Line $x[0] @{ mark = ' '; owner = $x[1]; samekey = 'owner'; sameval = $x[1] })
+  $me = Get-Me
+  return (Edit-Line $x[0] @{ mark = ' '; owner = $x[1]; samekey = 'owner'; sameval = $x[1]; owncheck = $true; me = $me.me; mewhy = $me.why; lead = (Get-Lead) })
+}
+
+function Do-Whoami([string[]]$a) {
+  if ($a.Count -ne 0) { Fail 'usage: whoami' }
+  $me = Get-Me
+  if (-not $me.me) { Fail $me.why }
+  return $me.me
+}
+
+# F80: planning or dispatching a ticket claims it: [owner: <me>], the box kept.
+# Mine already: no change. Another's: refused as a reassign is. No team file:
+# nothing to claim (as before). Each id on its own; any refusal fails the call.
+function Do-Claim([string[]]$a) {
+  if ($a.Count -lt 1) { Fail 'usage: claim <ID>...' }
+  if ($null -eq (Get-TeamFile)) { return 'no change: no .skillator/team.md - nothing to claim' }
+  $me = Get-Me
+  if (-not $me.me) { Fail "$($me.why) - claim refused" }
+  $lead = Get-Lead
+  $out = New-Object System.Collections.ArrayList
+  $errs = New-Object System.Collections.ArrayList
+  foreach ($ci in $a) {
+    try {
+      $id = Get-NormId $ci
+      foreach ($l in @(Edit-Line $id @{ owner = $me.me; samekey = 'owner'; sameval = $me.me; owncheck = $true; me = $me.me; mewhy = ''; lead = $lead })) { [void]$out.Add($l) }
+    } catch { [void]$errs.Add($_.Exception.Message) }
+  }
+  if ($errs.Count -gt 0) {
+    foreach ($l in $out) { [Console]::Out.WriteLine($l) }
+    Fail ([string]::Join("`n", $errs.ToArray()).Replace('ticket-meta: ', ''))
+  }
+  return $out.ToArray()
+}
+
+# F80: which tickets a run may take. `you: <me>` (or `you: - (<why>)`), then per
+# ticket `pick <ID>` (unassigned, or mine) or `skip <ID> <owner>`. No ids: every
+# open ticket on the board ([ ] [~] [!]). No team file: every ticket is picked;
+# not on the team: only unassigned ones. An id not on the board is unassigned.
+function Do-Pick([string[]]$a) {
+  $bf = (Get-MainRoot) + '/TICKETS.md'
+  $ids = @($a | ForEach-Object { Get-NormId $_ })
+  $hasBoard = Test-Path -LiteralPath $bf -PathType Leaf
+  if ($ids.Count -eq 0 -and -not $hasBoard) { Fail "no TICKETS.md at $bf" }
+  $team = $null -ne (Get-TeamFile)
+  $me = ''
+  if ($team) {
+    $m = Get-Me
+    $me = $m.me
+    $you = $me
+    if (-not $me) { $you = "- ($($m.why))" }
+  } else { $you = '- (no .skillator/team.md: every ticket)' }
+  $mk = @{}; $ow = @{}; $ord = New-Object System.Collections.ArrayList
+  if ($hasBoard) {
+    foreach ($bl in ([System.IO.File]::ReadAllText($bf, $Utf8).Replace("`r", '').Split([char]10))) {
+      $m = [regex]::Match($bl, '^[ \t]*- \[(.)\][ \t]+([A-Z]+[0-9]+[a-z]?)')
+      if (-not $m.Success) { continue }
+      $id = $m.Groups[2].Value
+      if ($mk.ContainsKey($id)) { continue }
+      $mk[$id] = $m.Groups[1].Value
+      $om = [regex]::Match($bl, '\[owner:[ \t]*([^\]]*?)[ \t]*\]')
+      $ow[$id] = ''
+      if ($om.Success) { $ow[$id] = $om.Groups[1].Value }
+      [void]$ord.Add($id)
+    }
+  }
+  if ($ids.Count -eq 0) { $ids = @($ord | Where-Object { @(' ', '~', '!') -ccontains $mk[$_] }) }
+  $res = New-Object System.Collections.ArrayList
+  [void]$res.Add("you: $you")
+  foreach ($id in $ids) {
+    $o = ''
+    if ($ow.ContainsKey($id)) { $o = $ow[$id] }
+    if (-not $team -or $o -eq '' -or ($me -ne '' -and $o -ieq $me)) { [void]$res.Add("pick $id") } else { [void]$res.Add("skip $id $o") }
+  }
+  return $res.ToArray()
 }
 
 function Do-Decide([string[]]$a) {
@@ -549,7 +680,7 @@ function Get-TeamHandle([string]$s, [string]$re, [string]$what) {
   return $h
 }
 
-$script:TeamUsage = 'usage: team add @handle "Name" email[,email...] | team remove @handle | team list'
+$script:TeamUsage = 'usage: team add @handle "Name" email[,email...] | team remove @handle | team list | team lead @handle|-'
 
 function Write-TeamFile([string]$f, [byte[]]$bytes) {
   $tmp = "$f.ticket-meta.$PID"
@@ -625,6 +756,7 @@ function Do-TeamRemove([string[]]$a) {
     $known = $false
     foreach ($r in (Get-TeamMembers $f)) { if ($r.h -ceq $h) { $known = $true } }
     if (-not $known) { Fail "$h is not in $f" }
+    if ($h -ceq (Get-Lead)) { Fail "$h is the lead - hand the lead over first (team lead @other), then remove" }
     $text = $Utf8.GetString([System.IO.File]::ReadAllBytes($f))
     $lines = $text.Split([char]10)
     $eol = $text.EndsWith("`n")
@@ -671,19 +803,98 @@ function Do-TeamRemove([string[]]$a) {
   return $res
 }
 
-# list: "@handle: a@x, b@y (Name)" per member, file order; no team file = nothing.
+# list: "@handle: a@x, b@y (Name)" per member, file order, the lead marked
+# ` [lead]` and me ` (you)`; no team file = nothing.
 function Do-TeamList([string[]]$a) {
   if ($a.Count -ne 0) { Fail $script:TeamUsage }
   $f = Get-TeamFile
   if ($null -eq $f) { return @() }
+  $me = (Get-Me).me
+  $lead = Get-Lead
   $acc = New-Object System.Collections.ArrayList
   foreach ($r in (Get-TeamMembers $f)) {
     $s = $r.h + ':'
     if ($r.e -ne '') { $s += ' ' + $r.e }
     if ($r.n -ne '') { $s += ' (' + $r.n + ')' }
+    if ($r.h -ceq $lead) { $s += ' [lead]' }
+    if ($r.h -ceq $me) { $s += ' (you)' }
     [void]$acc.Add($s)
   }
   return $acc.ToArray()
+}
+
+# F80: lead @handle sets the one `lead:` line under `# Team` (a member only;
+# allowed when there is no lead, or me is the lead - a hand-over); lead - clears
+# it (the lead only). Every other byte and the line endings stay.
+function Do-TeamLead([string[]]$a) {
+  if ($a.Count -ne 1) { Fail $script:TeamUsage }
+  $h = '-'
+  if ($a[0] -cne '-') { $h = Get-TeamHandle $a[0] '\A@[A-Za-z0-9_.-]+\z' 'letters, digits, _ . -' }
+  $me = Get-Me
+  $f = Get-TeamFile
+  if ($null -eq $f) { Fail 'no .skillator/team.md - this repo has no people' }
+  Lock-Board ((Get-MainRoot) + '/TICKETS.md.lock')
+  try {
+    if ($h -cne '-') {
+      $known = $false
+      foreach ($r in (Get-TeamMembers $f)) { if ($r.h -ceq $h) { $known = $true } }
+      if (-not $known) { Fail "$h is not in $f" }
+    }
+    $lead = Get-Lead
+    if ($lead -ne '') {
+      if ($h -ceq $lead) { return "no change: $h is already the lead" }
+      if (-not ($me.me -and $me.me -ieq $lead)) {
+        $you = $me.me
+        if (-not $you) { $you = $me.why }
+        Fail "only the lead $lead may hand the lead over or clear it (you: $you)"
+      }
+    } elseif ($h -ceq '-') { return 'no change: no lead set' }
+    $text = $Utf8.GetString([System.IO.File]::ReadAllBytes($f))
+    $nl = "`n"
+    $p10 = $text.IndexOf("`n")
+    if ($p10 -gt 0 -and $text[$p10 - 1] -eq "`r") { $nl = "`r`n" }
+    $cr = $nl.Substring(0, $nl.Length - 1)
+    $lines = $text.Split([char]10)
+    $eol = $text.EndsWith("`n")
+    $n = $lines.Count
+    if ($eol) { $n-- }
+    $had = $false; $head = $false
+    for ($i = 0; $i -lt $n; $i++) {
+      $l = $lines[$i].TrimEnd("`r")
+      if ($l -cmatch '^lead:') { $had = $true }
+      if ($l -cmatch '^# Team[ \t]*$') { $head = $true }
+    }
+    $new = ''
+    if ($h -cne '-') { $new = "lead: $h$cr" }
+    if ($h -cne '-' -and -not $had -and -not $head) {
+      $body = "# Team$nl${nl}lead: $h$nl$nl" + $text
+    } else {
+      # every lead: line goes and the first is replaced; none -> in under the # Team heading
+      $kept = New-Object System.Collections.ArrayList
+      $done = $false
+      for ($i = 0; $i -lt $n; $i++) {
+        $raw = $lines[$i]
+        $l = $raw.TrimEnd("`r")
+        if ($l -cmatch '^lead:') {
+          if (-not $done -and $new -ne '') { [void]$kept.Add($new) }
+          $done = $true
+          continue
+        }
+        [void]$kept.Add($raw)
+        if (-not $had -and -not $done -and $l -cmatch '^# Team[ \t]*$') {
+          if ($new -ne '') { [void]$kept.Add($new) }
+          $done = $true
+        }
+      }
+      $body = [string]::Join("`n", $kept.ToArray())
+      if ($eol -and $kept.Count -gt 0) { $body += "`n" }
+    }
+    Write-TeamFile $f ($Utf8.GetBytes($body))
+  } finally {
+    Unlock-Board
+  }
+  if ($h -ceq '-') { return 'lead cleared' }
+  return "lead: $h"
 }
 
 function Do-Team([string[]]$a) {
@@ -694,6 +905,7 @@ function Do-Team([string[]]$a) {
     'add' { return (Do-TeamAdd $sub) }
     'remove' { return (Do-TeamRemove $sub) }
     'list' { return (Do-TeamList $sub) }
+    'lead' { return (Do-TeamLead $sub) }
     default { Fail $script:TeamUsage }
   }
 }
@@ -717,6 +929,9 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'defer' { return (Do-Defer $a) }
     'tag' { return (Do-Tag $a) }
     'team' { return (Do-Team $a) }
+    'whoami' { return (Do-Whoami $a) }
+    'claim' { return (Do-Claim $a) }
+    'pick' { return (Do-Pick $a) }
     default { Fail "unknown subcommand: $c" }
   }
 }
@@ -768,6 +983,11 @@ function Invoke-Selftest {
   $script:fail = 0
   $dash = [string][char]0x2014
   $here = Get-Location
+  # F80: who "me" is comes from git's user.email - never this machine's global one
+  $savedMe = @($env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME)
+  [System.IO.File]::WriteAllText("$T/gitconfig", '')
+  $env:GIT_CONFIG_GLOBAL = "$T/gitconfig"
+  Remove-Item Env:\SKILLATOR_ME -ErrorAction SilentlyContinue
   function Eq([string]$name, $got, [string]$want) {
     $g = [string]::Join(' ', @($got))
     if ($g -cne $want) { Write-Output "FAIL: ${name}: expected [$want] got [$g]"; $script:fail = 1 }
@@ -835,6 +1055,7 @@ function Invoke-Selftest {
     if ([Convert]::ToBase64String($now) -ne [Convert]::ToBase64String($before)) { Write-Output 'FAIL: refused assign changed the board'; $script:fail = 1 }
     Eq 'assign F12' (Run assign F12 '@asha') "- [ ] F12 $dash Bulk delete [owner: @asha]"
     Eq 'assign F1' (Run assign F1 'asha') "- [ ] F1 $dash Dark mode [owner: @asha] (@cc-bbbbbb) warning: F1 was in progress under @cc-bbbbbb - its box left [~], the session tag stays; tell that session"
+    & git config user.email asha@x.com   # F80: only the owner (or the lead) reassigns
     Eq 'reassign F1' (Run assign F1 '@vidul') "- [ ] F1 $dash Dark mode [owner: @vidul] (@cc-bbbbbb)"
     Eq 'tag F1' (Run tag F1) "- [ ] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)"
     Eq 'tag B2' (Run tag B2) "- [ ] B2 $dash Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)"
@@ -881,7 +1102,8 @@ function Invoke-Selftest {
     if (-not (Refused by "F5`n")) { Write-Output 'FAIL: by took an id ending in a line break'; $script:fail = 1 }
     if (-not (Refused assign F4 "@vidul`n")) { Write-Output 'FAIL: assign took a handle ending in a line break'; $script:fail = 1 }
     if (-not (& $same $edge0)) { Write-Output 'FAIL: a refused argument changed the board'; $script:fail = 1 }
-    # 3: a hand-written [owner:@x] is replaced, not duplicated
+    # 3: a hand-written [owner:@x] is replaced, not duplicated (by its owner, F80)
+    & git config user.email vidul@ikran.in
     Eq 'hand tag replaced' (Run assign F4 '@asha') "- [ ] F4 $dash Hand owner [owner: @asha] (@cc-111111)"
     if (Test-Path -LiteralPath "$board.lock") { Write-Output 'FAIL: our board lock was left behind'; $script:fail = 1 }
     # 9: loose spacing, a hyphen, a sub-part, a lower-case id
@@ -1146,6 +1368,77 @@ function Invoke-Selftest {
       if (-not (& $teamIs "# Team$nl$nl- @neo: neo@x.com$nl  name: Neo Q$nl")) { Write-Output "FAIL: $tag team remove line endings or bytes"; $script:fail = 1 }
     }
 
+    # --- F80: whoami, picking, claims, one lead
+    $R = "$T/f80"
+    Init-Repo $R
+    W "$R/.skillator/team.md" "# Team`n`n- @vidul: vidul@ikran.in`n  name: Vidul`n- @asha: Asha@X.com`n- @neo: neo@x.com`n"
+    W "$R/TICKETS.md" ("# TICKETS`n`n- [ ] F1 $dash Free`n- [ ] F2 $dash Mine [owner: @asha]`n- [~] F3 $dash Theirs [owner: @vidul] (@cc-aaaaaa)`n" +
+      "- [!] F4 $dash Stuck (blocked: x)`n- [x] F5 $dash Shipped [owner: @vidul]`n- [ ] F6 $dash Neos [owner: @neo]`n- [~] F7 $dash Working (@cc-bbbbbb)`n")
+    Commit 'vidul@ikran.in' 'init' 'README.md'
+    $board = "$R/TICKETS.md"
+    $tf = "$R/.skillator/team.md"
+    function AsMe([string]$h, [scriptblock]$b) { $p = $env:SKILLATOR_ME; $env:SKILLATOR_ME = $h; try { return (& $b) } finally { $env:SKILLATOR_ME = $p } }
+    # whoami: git user.email (any case) mapped through the team; SKILLATOR_ME overrides
+    $msg = ErrOf whoami
+    if ($msg -notmatch 'user\.email is not set') { Write-Output "FAIL: whoami with no email: [$msg]"; $script:fail = 1 }
+    & git config user.email ASHA@x.com
+    Eq 'whoami by email' (Run whoami) '@asha'
+    Eq 'whoami by SKILLATOR_ME' (AsMe 'neo' { Run whoami }) '@neo'
+    $msg = AsMe '@nobody' { ErrOf whoami }
+    if ($msg -notmatch 'not in \.skillator/team\.md') { Write-Output "FAIL: SKILLATOR_ME refusal: [$msg]"; $script:fail = 1 }
+    & git config user.email ghost@x.com
+    $msg = ErrOf whoami
+    if ($msg -notmatch 'not on the team: add ghost@x\.com to \.skillator/team\.md') { Write-Output "FAIL: whoami not on the team: [$msg]"; $script:fail = 1 }
+    # pick: unassigned and mine picked, another's skipped with its owner; not on the team -> only unassigned
+    Eq 'pick, not on the team' (Run pick) 'you: - (not on the team: add ghost@x.com to .skillator/team.md) pick F1 skip F2 @asha skip F3 @vidul pick F4 skip F6 @neo pick F7'
+    $msg = ErrOf claim F1
+    if ($msg -notmatch 'add ghost@x\.com to \.skillator/team\.md') { Write-Output "FAIL: claim refusal does not say add the email: [$msg]"; $script:fail = 1 }
+    & git config user.email asha@x.com
+    Eq 'pick as asha' (Run pick) 'you: @asha pick F1 pick F2 skip F3 @vidul pick F4 skip F6 @neo pick F7'
+    Eq 'pick given ids' (Run pick f3 F2 F9) 'you: @asha skip F3 @vidul pick F2 pick F9'
+    # claim (plan / dispatch): [owner: me], the box kept; mine again is no change; another's refused
+    Eq 'claim F1' (Run claim F1) "- [ ] F1 $dash Free [owner: @asha]"
+    Eq 'claim keeps [~]' (Run claim F7) "- [~] F7 $dash Working [owner: @asha] (@cc-bbbbbb)"
+    $o = [string]::Join(' ', @(Run claim F2))
+    if ($o -notmatch 'no change') { Write-Output "FAIL: claim of my own ticket is not no change: [$o]"; $script:fail = 1 }
+    $f80b = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
+    $msg = ErrOf claim F3
+    if ($msg -notmatch 'F3 is owned by @vidul - only @vidul may reassign it') { Write-Output "FAIL: claim refusal: [$msg]"; $script:fail = 1 }
+    # assign: a member's reassign of another's ticket refused; the owner's and the lead's accepted
+    $msg = ErrOf assign F3 '@asha'
+    if ($msg -notmatch 'F3 is owned by @vidul') { Write-Output "FAIL: reassign refusal: [$msg]"; $script:fail = 1 }
+    $same = { param($want) [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($board)) -ceq [Convert]::ToBase64String($Utf8.GetBytes($want)) }
+    if (-not (& $same $f80b)) { Write-Output 'FAIL: a refused claim or reassign changed the board'; $script:fail = 1 }
+    Eq 'owner reassigns' @(AsMe '@vidul' { Run assign F3 '@neo' })[0] "- [ ] F3 $dash Theirs [owner: @neo] (@cc-aaaaaa)"
+    Eq 'assign unowned' (Run assign F4 '@vidul') "- [ ] F4 $dash Stuck [owner: @vidul] (blocked: x)"
+    # one lead: set when there is none; only the lead hands it over or clears it; never removed
+    $teamIs = { param($want) [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($tf)) -ceq [Convert]::ToBase64String($Utf8.GetBytes($want)) }
+    Eq 'team list, no lead' (Run team list) '@vidul: vidul@ikran.in (Vidul) @asha: Asha@X.com (you) @neo: neo@x.com'
+    if (-not (Refused team lead '@nobody')) { Write-Output 'FAIL: team lead took someone not on the team'; $script:fail = 1 }
+    Eq 'team lead -, none' (Run team lead '-') 'no change: no lead set'
+    Eq 'team lead, none yet' (Run team lead '@vidul') 'lead: @vidul'
+    $lead1 = "# Team`nlead: @vidul`n`n- @vidul: vidul@ikran.in`n  name: Vidul`n- @asha: Asha@X.com`n- @neo: neo@x.com`n"
+    if (-not (& $teamIs $lead1)) { Write-Output 'FAIL: team lead bytes'; $script:fail = 1 }
+    Eq 'team list, lead' (Run team list) '@vidul: vidul@ikran.in (Vidul) [lead] @asha: Asha@X.com (you) @neo: neo@x.com'
+    $msg = ErrOf team lead '@asha'
+    if ($msg -notmatch 'only the lead @vidul') { Write-Output "FAIL: hand-over refusal: [$msg]"; $script:fail = 1 }
+    if (-not (Refused team lead '-')) { Write-Output 'FAIL: a member cleared the lead'; $script:fail = 1 }
+    $msg = AsMe '@vidul' { ErrOf team remove '@vidul' }
+    if ($msg -notmatch 'is the lead - hand the lead over first') { Write-Output "FAIL: lead removal refusal: [$msg]"; $script:fail = 1 }
+    if (-not (& $teamIs $lead1)) { Write-Output 'FAIL: a refused lead change changed team.md'; $script:fail = 1 }
+    $msg = ErrOf claim F6
+    if ($msg -notmatch 'F6 is owned by @neo - only @neo or the lead @vidul may reassign it \(you: @asha\)') { Write-Output "FAIL: refusal does not name both: [$msg]"; $script:fail = 1 }
+    Eq 'the lead reassigns' (AsMe '@vidul' { Run assign F6 '@asha' }) "- [ ] F6 $dash Neos [owner: @asha]"
+    Eq 'hand-over' (AsMe '@vidul' { Run team lead 'asha' }) 'lead: @asha'
+    Eq 'one lead line' @(([System.IO.File]::ReadAllText($tf)) -split "`n" | Where-Object { $_ -match '^lead:' }).Count '1'
+    Eq 'team lead same' (Run team lead '@asha') 'no change: @asha is already the lead'
+    Eq 'team lead - by the lead' (Run team lead '-') 'lead cleared'
+    if ([System.IO.File]::ReadAllText($tf) -match '(?m)^lead:') { Write-Output 'FAIL: team lead - left a lead line'; $script:fail = 1 }
+    # no heading, CRLF: the lead line comes in under a new # Team heading, CRLF kept
+    W $tf "- @asha: asha@x.com`r`n"
+    Eq 'team lead, no heading' (Run team lead '@asha') 'lead: @asha'
+    if (-not (& $teamIs "# Team`r`n`r`nlead: @asha`r`n`r`n- @asha: asha@x.com`r`n")) { Write-Output 'FAIL: team lead with no heading, CRLF'; $script:fail = 1 }
+
     # --- solo, non-monorepo: no workspace folders, no team.md
     $S = "$T/solo"
     Init-Repo $S
@@ -1156,6 +1449,11 @@ function Invoke-Selftest {
     Eq 'solo apps-of' (Run apps-of F1) ''
     Eq 'solo by' (Run by F1) ''
     if (-not (Refused assign F1 '@vidul')) { Write-Output 'FAIL: assign worked with no team.md'; $script:fail = 1 }
+    # F80: no team.md behaves as before - every ticket picked, a claim changes nothing
+    & git config user.email vidul@ikran.in
+    Eq 'solo pick' (Run pick) 'you: - (no .skillator/team.md: every ticket) pick F1'
+    Eq 'solo claim' (Run claim F1) 'no change: no .skillator/team.md - nothing to claim'
+    if (-not (Refused whoami)) { Write-Output 'FAIL: whoami answered with no team.md'; $script:fail = 1 }
     Eq 'solo tag' (Run tag F1) "- [ ] F1 $dash Thing (@cc-dddddd)"
 
     # --- F66: the opt-in Teams status post runs after a successful edit and never
@@ -1228,6 +1526,7 @@ function Invoke-Selftest {
     }
   } finally {
     Set-Location -LiteralPath $here
+    $env:GIT_CONFIG_GLOBAL = $savedMe[0]; $env:SKILLATOR_ME = $savedMe[1]
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
   }
   if ($script:fail -ne 0) { exit 1 }
@@ -1235,7 +1534,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|claim|pick|selftest')
   exit 1
 }
 $cmd = [string]$args[0]

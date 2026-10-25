@@ -83,6 +83,7 @@ test('argvFor: both spellings of every call', () => {
     ['meta-decided', ['F2'], [`/s/skills/${TM}.sh`, 'decided', 'F2'], [`C:/s/skills/${TM}.ps1`, 'decided', 'F2']],
     ['meta-team-add', ['@ravi', 'Ravi Kumar', 'r@x.org,s@y.org'], [`/s/skills/${TM}.sh`, 'team', 'add', '@ravi', 'Ravi Kumar', 'r@x.org,s@y.org'], [`C:/s/skills/${TM}.ps1`, 'team', 'add', '@ravi', 'Ravi Kumar', 'r@x.org,s@y.org']],
     ['meta-team-remove', ['@asha'], [`/s/skills/${TM}.sh`, 'team', 'remove', '@asha'], [`C:/s/skills/${TM}.ps1`, 'team', 'remove', '@asha']],
+    ['meta-team-lead', ['@asha'], [`/s/skills/${TM}.sh`, 'team', 'lead', '@asha'], [`C:/s/skills/${TM}.ps1`, 'team', 'lead', '@asha']],
     ['relay-list', [], [`/s/skills/${RM}.sh`, 'list'], [`C:/s/skills/${RM}.ps1`, '-Mode', 'list']],
     ['relay-chain-status', ['RUN-0014'], [`/s/skills/${RM}.sh`, 'RUN-0014', 'chain', 'status'],
       [`C:/s/skills/${RM}.ps1`, '-Mode', 'chain', '-Action', 'status', '-Id', 'RUN-0014']],

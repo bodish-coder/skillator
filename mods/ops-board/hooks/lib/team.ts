@@ -6,17 +6,20 @@ import { isOpen } from './board'
 // and lower-cased; the handle is kept as written, since ticket-meta assign / decide /
 // team remove match it exactly. An indented `  name: Full Name` line straight under a
 // member names it (the last one wins, as in ticket-meta); any other line ends that.
+// F80: the first `lead: @handle` line (ticket-meta lead_of) marks that member lead.
 const MEMBER = /^[ \t]*[-*][ \t]*(@[A-Za-z0-9_.-]+)[ \t]*:(.*)$/
 const NAME = /^[ \t]+name:[ \t]*(.*?)[ \t]*$/
+const LEAD = /^lead:[ \t]*(@[A-Za-z0-9_.-]+)[ \t]*$/m
 
 export function parseTeam(text: string): Member[] {
   const out: Member[] = []
   let last: Member | null = null
+  const lead = LEAD.exec(text.replace(/\r/g, ''))?.[1]
   for (const raw of text.split(/\r?\n/)) {
     const m = MEMBER.exec(raw)
     if (m) {
       const emails = m[2]!.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-      last = { handle: m[1]!, emails }
+      last = { handle: m[1]!, emails, ...(sameHandle(m[1], lead) ? { lead: true as const } : {}) }
       out.push(last)
       continue
     }
@@ -39,11 +42,11 @@ export function meOf(team: Member[], email: string): string | null {
   return team.find(m => m.emails.includes(e))?.handle ?? null
 }
 
-// "you · 3 owned · 1 decide" over the open tickets ([ ] [~] [%] [!] [?]).
+// "lead · (you) · 3 owned · 1 decide" over the open tickets ([ ] [~] [%] [!] [?]).
 export function ticketsOf(m: Member, board: Board | null, me: string | null): string {
   const open = (board?.tickets ?? []).filter(isOpen)
   const owned = open.filter(t => sameHandle(t.owner, m.handle)).length
   const decide = open.filter(t => sameHandle(t.decide, m.handle)).length
-  const parts = [...(m.handle === me ? ['you'] : []), ...(owned ? [`${owned} owned`] : []), ...(decide ? [`${decide} decide`] : [])]
+  const parts = [...(m.lead ? ['lead'] : []), ...(m.handle === me ? ['(you)'] : []), ...(owned ? [`${owned} owned`] : []), ...(decide ? [`${decide} decide`] : [])]
   return parts.join(' · ') || '-'
 }

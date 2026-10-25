@@ -4,7 +4,7 @@
 // (<repo>/skills, <plugin cache>/skills, or an install.sh dest) - so no skills/ segment.
 
 export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-decide' | 'meta-decided'
-  | 'meta-team-add' | 'meta-team-remove'
+  | 'meta-team-add' | 'meta-team-remove' | 'meta-team-lead'
   | 'relay-list' | 'relay-chain-status' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
   | 'usage-level'
   | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'
@@ -29,7 +29,7 @@ export const up = (p: string, n: number) => {
 }
 
 // args: meta-assign/meta-decide [id, @handle]; meta-decided [id]; meta-team-add
-// [@handle, name, emails comma-joined]; meta-team-remove [@handle]; relay-chain-status and
+// [@handle, name, emails comma-joined]; meta-team-remove / meta-team-lead [@handle]; relay-chain-status and
 // relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; run-rename [id, name]; others none.
 type ScriptCall = Exclude<Call, 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
@@ -41,6 +41,7 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'meta-decided':       { script: META, sh: a => ['decided', ...a], ps: a => ['decided', ...a] },
   'meta-team-add':      { script: META, sh: a => ['team', 'add', ...a], ps: a => ['team', 'add', ...a] },
   'meta-team-remove':   { script: META, sh: a => ['team', 'remove', ...a], ps: a => ['team', 'remove', ...a] },
+  'meta-team-lead':     { script: META, sh: a => ['team', 'lead', ...a], ps: a => ['team', 'lead', ...a] },
   'relay-list':         { script: RELAY, sh: () => ['list'], ps: () => ['-Mode', 'list'] },
   'relay-chain-status': { script: RELAY, sh: a => [a[0] ?? '', 'chain', 'status'], ps: a => ['-Mode', 'chain', '-Action', 'status', '-Id', a[0] ?? ''] },
   'relay-queue-add':    { script: RELAY, sh: a => ['queue-run', 'add', a[0] ?? ''], ps: a => ['-Mode', 'queue-run', '-Sub', 'add', '-Id', a[0] ?? ''] },

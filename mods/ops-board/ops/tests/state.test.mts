@@ -401,6 +401,19 @@ test('team view: n opens the form (back=team); del asks, y removes, n keeps', ()
   assert.equal(reduce(empty, key('delete')).state.teamConfirm, null)
 })
 
+// F80: l makes the selected person lead - ticket-meta team lead, the only writer; its refusal is the toast.
+test('F80 team view: l makes the selected person lead through ticket-meta; a refusal is the toast', () => {
+  const r = reduce(press(s0, 't', 'down'), key('l'))
+  assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-team-lead', ['@vidul']])
+  const done = settle(r.effects[0]!.then(ok('lead: @vidul\n', ['sh', 'tm']))(r.state))
+  assert.equal(done.state.toast, '✓ @vidul is the lead\nran: sh tm')
+  assert.deepEqual(done.effects, [{ kind: 'poll', what: 'board' }])
+  const no = settle(r.effects[0]!.then({ code: 1, out: '', err: 'ticket-meta: only the lead @asha may hand the lead over or clear it (you: @vidul)', argv: ['sh'] })(r.state)).state
+  assert.match(no.toast ?? '', /^✗ ticket-meta team lead @vidul refused: ticket-meta: only the lead @asha may hand the lead over or clear it \(you: @vidul\)\nran: sh$/)
+  assert.equal(reduce(onBoard(initial(80, 24, 0), s0.board!, [], null), key('t')).state.showTeam, true)
+  assert.equal(reduce(reduce(onBoard(initial(80, 24, 0), s0.board!, [], null), key('t')).state, key('l')).effects.length, 0)
+})
+
 test('a bad handle never runs', () => {
   let { state } = reduce(reduce(s0, key('t')).state, key('n'))
   for (const ch of 'A B') state = reduce(state, { name: ch, sequence: ch }).state

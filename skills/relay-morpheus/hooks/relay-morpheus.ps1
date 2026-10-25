@@ -25,6 +25,9 @@
 #   -Mode chain -Action status | decide [-Text "<level line>"]   F49: -Text decides on that line
 #   -Mode chain -Action next                           NEXT n CODE | HOLD | ASK k | UNBLOCK Qk | WAIT n | BLOCKED n | FINAL, then IDLE lines
 #   -Mode chain -Action next -Holds                    A118: only the IDLE <n> Qk <why> lines; read-only, no lease beat
+#        (F80: a stage whose ticket someone else owns is IDLE <n> owned <ID> <owner> and its dispatch is
+#        refused; plan and dispatch claim the stage's tickets - ticket-meta.ps1 pick / claim,
+#        RELAY_TICKET_META overrides, a missing file = off)
 #   -Mode chain -Action edge -N <n> -After "66,67" | -IndependentOf Qk -Why "<ruling>"
 #
 # Watchdog (F48) - one file, <main checkout>/.skillator/watchdog.hold = "<since> <reason>":
@@ -987,6 +990,47 @@ function AllocCode($dir) {
   $c
 }
 
+# F80: tickets-zordon's ticket-meta.ps1 - who may take a chain's tickets (pick) and
+# the claim a plan or dispatch makes (claim). RELAY_TICKET_META overrides (a missing
+# file = off: no skips, no claims). A child process, in the run file's directory.
+function TMeta([string[]]$a) {
+  $tm = $env:RELAY_TICKET_META
+  if (-not $tm) { $tm = Join-Path $PSScriptRoot '..\..\tickets-zordon\scripts\ticket-meta.ps1' }
+  if (-not (Test-Path -LiteralPath $tm -PathType Leaf)) { return $null }
+  $psi = New-Object Diagnostics.ProcessStartInfo 'powershell'
+  $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$tm`" " + (@($a | ForEach-Object { "`"$_`"" }) -join ' ')
+  $psi.WorkingDirectory = Split-Path -Parent (Resolve-Path -LiteralPath $Run).Path
+  $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $psi.StandardOutputEncoding = New-Object Text.UTF8Encoding($false)
+  $p = [Diagnostics.Process]::Start($psi)
+  $o = $p.StandardOutput.ReadToEnd(); $e = $p.StandardError.ReadToEnd(); $p.WaitForExit()
+  [pscustomobject]@{ out = @($o -split "`r?`n" | Where-Object { $_ }); err = $e.Trim(); code = $p.ExitCode }
+}
+function ChainTickets($n) {   # stage n's chain-block ticket ids (every stage's when none)
+  $sec = ''; $b = $false; $seen = @{}; $ids = New-Object System.Collections.Generic.List[string]
+  foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
+    if ($l.StartsWith('## ')) { $sec = $l; $b = $false; continue }
+    if ($sec -cne '## Chain') { continue }
+    if ($l.StartsWith('### ')) { $b = (-not $n) -or ($l -cmatch "^### [A-Z0-9]+ - stage $n - "); continue }
+    if ($b -and $l.StartsWith('tickets: ')) { foreach ($t in @(IdsOf $l.Substring(9))) { if (-not $seen.ContainsKey($t)) { $seen[$t] = 1; $ids.Add($t) } } }
+  }
+  $ids.ToArray()
+}
+function OwnedMap {   # ID -> owner, per chain ticket someone else owns
+  $m = @{}
+  $ids = @(ChainTickets $null)
+  if (-not $ids.Count) { return $m }
+  $r = TMeta (@('pick') + $ids)
+  if ($r) { foreach ($l in $r.out) { if ($l -cmatch '^skip (\S+) (\S+)$') { $m[$Matches[1]] = $Matches[2] } } }
+  $m
+}
+function ClaimStage($n) {   # claim stage n's tickets for this session's person; a refusal is a note
+  $ids = @(ChainTickets $n)
+  if (-not $ids.Count) { return }
+  $r = TMeta (@('claim') + $ids)
+  if ($r -and $r.code -ne 0) { foreach ($l in @($r.err -split "`r?`n" | Where-Object { $_ })) { [Console]::Error.WriteLine("note: claim refused - $l") } }
+}
+
 function DoChainPlan($n) {
   if (-not $n) { Die 'usage: -Mode chain -Action plan -N <n> -PromptFile F [-Tickets T] [-Fix t -Verify t] [-Files F] [-ChainMode workflow|agents]' }
   if (-not $PromptFile -or -not (Test-Path -LiteralPath $PromptFile -PathType Leaf) -or (Get-Item -LiteralPath $PromptFile).Length -eq 0) {
@@ -1022,6 +1066,7 @@ function DoChainPlan($n) {
     PutInSection 'Chain' $blk "driver: -${SEP}hold: -${SEP}mode: $ChainMode"
     StampUpdated
   } finally { Unlock }
+  ClaimStage $n   # F80: planning a ticket claims it
   $code
 }
 
@@ -1081,6 +1126,10 @@ function DoChainDispatch($n) {
     if ($hp[1] -ne '-') { Refuse "chain is held ($($hp[1])) - chain release first, or chain wait" }
     $st = RowCellN $n 3
     if ($st -notin @('', '!')) { Refuse "stage $n is '$st', not pending or failed - a stage is never dispatched twice" }
+    # F80: a stage whose ticket someone else owns never starts here.
+    $script:Owned = OwnedMap
+    try { $w = @(ChainScan | Where-Object { $_.StartsWith("IDLE $n owned ") }) | Select-Object -First 1 } finally { $script:Owned = $null }
+    if ($w) { $wp = $w.Split(' '); Refuse "stage ${n}: $($wp[3]) is owned by $($wp[4]) - a run takes only unassigned tickets and yours (ticket-meta pick); its owner or the lead reassigns it" }
     # F33: a stage a holding decision waits on runs only on a prompt written
     # after the answer - re-planned as a new stage, or ruled independent.
     $w = @(ChainScan | Where-Object { $_.StartsWith("IDLE $n Q") }) | Select-Object -First 1
@@ -1143,6 +1192,7 @@ function DoChainDispatch($n) {
     StampUpdated
   } finally { Unlock }
   } catch { if ($leased) { try { LeaseRelease $n } catch {} }; throw }
+  ClaimStage $n   # F80: dispatching a ticket claims it
   $c
   $prompt
 }
@@ -1893,6 +1943,8 @@ function ChainScan([switch]$NextOnly) {
     $waits = $false
     foreach ($k in $ql) { if ($rs.ContainsKey("$n,$k")) { $out.Add("IDLE $n Q$k $($rs["$n,$k"])"); $waits = $true } }
     foreach ($a in @($af[$n] | Where-Object { $null -ne $_ })) { if (-not (& $landed $a 0)) { $out.Add("IDLE $n - after $a"); $waits = $true } }
+    # F80: tickets someone else owns (ticket-meta pick) - their stages never start here
+    if ($script:Owned) { foreach ($t in @($tk[$n] | Where-Object { $_ })) { if ($script:Owned.ContainsKey($t)) { $out.Add("IDLE $n owned $t $($script:Owned[$t])"); $waits = $true; break } } }
     if ($hasf[$n] -and $script:Leases) {
       $hit = $false
       foreach ($t in @($fl[$n] | Where-Object { $_ })) { if ($hit) { break }
@@ -1964,7 +2016,8 @@ function DoChainNext {
   # that runs long without reporting must not look abandoned to other runs.
   foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { $rn = RowNum $l; if ($null -ne $rn -and (Cell $l 3) -ceq '~') { try { $null = LeaseBeat $rn } catch {} } }
   $script:Leases = @(LeaseForeign)
-  try { ChainScan } finally { $script:Leases = $null }
+  $script:Owned = OwnedMap
+  try { ChainScan } finally { $script:Leases = $null; $script:Owned = $null }
 }
 
 # An edge found after planning: one line into the stage's existing block,
@@ -3061,6 +3114,8 @@ function DoSelftest {
   $env:RELAY_WORKTREE = 'off'; $env:RELAY_DIR = $null; $env:RELAY_RUN = $null
   $d = Join-Path ([IO.Path]::GetTempPath()) ("relay-" + [guid]::NewGuid())
   New-Item -ItemType Directory -Force $d | Out-Null
+  # F80: no ticket-meta (no claims, no owner skips) unless a check turns it on
+  $env:RELAY_TICKET_META = Join-Path $d 'nope.ps1'
   # Each scratch dir is its own git repo, so the allocator keeps its counter
   # there and not in whatever repo the selftest was started from.
   $gc = @('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'core.autocrlf=false', '-c', 'core.hooksPath=NUL')
@@ -3528,8 +3583,71 @@ function DoSelftest {
 
     ChainSelftest $d
     MarathonSelftest $d
+    F80Selftest $d
     "ok"
-  } finally { Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue }
+  } finally { $env:RELAY_TICKET_META = $null; Remove-Item -Recurse -Force $d -ErrorAction SilentlyContinue }
+}
+
+# F80: a chain takes only unassigned tickets and the session person's own; another's
+# stage is IDLE ... owned, its dispatch refused; planning and dispatching claim.
+function F80Selftest($d) {
+  $tm = Join-Path $PSScriptRoot '..\..\tickets-zordon\scripts\ticket-meta.ps1'
+  if (-not (Test-Path -LiteralPath $tm)) { [Console]::Error.WriteLine('note: ticket-meta.ps1 not beside this skill - F80 checks skipped'); return }
+  $gc = @('-c', 'user.name=t', '-c', 'core.autocrlf=false', '-c', 'core.hooksPath=NUL')
+  function G { $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    & git @gc @args 2>&1 | Out-Null; $ErrorActionPreference = $prev
+    if ($LASTEXITCODE -ne 0) { throw "selftest: git $args failed" } }
+  function No($label, $want, $block) {
+    try { & $block | Out-Null } catch {
+      if ("$_" -notmatch '^REFUSED: ' -or "$_" -notmatch [regex]::Escape($want)) { Die "${label}: want a refusal /$want/, got: $_" }
+      return
+    }
+    Die "${label}: expected a refusal /$want/ and got none"
+  }
+  $saved = @($env:RELAY_CHAIN_DRIVER, $env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME, $env:RELAY_CHAIN_PARALLEL)
+  try {
+    $env:RELAY_CHAIN_DRIVER = ''; $script:Driver = ''; $env:SKILLATOR_ME = $null
+    $env:RELAY_LEVEL_CMD = "echo 'src=claude-code 5h=40 7d=10 ctx=5 max=40'"
+    $d8 = Join-Path $d 'f80'; New-Item -ItemType Directory -Force (Join-Path $d8 '.skillator') | Out-Null; G init -q $d8
+    [IO.File]::WriteAllText((Join-Path $d 'gitconfig'), ''); $env:GIT_CONFIG_GLOBAL = Join-Path $d 'gitconfig'
+    G -C $d8 config user.email asha@x.com
+    $u8 = New-Object Text.UTF8Encoding($false); $em = [string][char]0x2014
+    [IO.File]::WriteAllText((Join-Path $d8 '.skillator/team.md'), "# Team`n`n- @asha: asha@x.com`n- @vidul: vidul@x.com`n", $u8)
+    $tb = Join-Path $d8 'TICKETS.md'
+    [IO.File]::WriteAllText($tb, "# TICKETS`n- [ ] F1 $em free`n- [ ] F2 $em mine [owner: @asha]`n- [ ] F3 $em theirs [owner: @vidul]`n", $u8)
+    $script:Dir = Join-Path $d8 '.skillator'; $script:Run = ''
+    $script:Plan = 'TICKETS.md'; $script:Title = 'f80'; $script:Stages = 'F1 free,F2 mine,F3 theirs'
+    DoInit | Out-Null
+    $t1 = $null; foreach ($l in @(Get-Content -Encoding UTF8 $Run)) { if ($l -match '^\| (\d+) \| F1 free \|') { $t1 = [int]$Matches[1] } }
+    $t2 = $t1 + 1; $t3 = $t1 + 2
+    $pf = Join-Path $d8 'p'; [IO.File]::WriteAllText($pf, "item: do it`n")
+    $env:RELAY_TICKET_META = $tm
+    foreach ($pl in @(@($t1, 'F1', 'a.py'), @($t2, 'F2', 'b.py'), @($t3, 'F3', 'c.py'))) {
+      $script:PromptFile = $pf; $script:Tickets = $pl[1]; $script:Files = $pl[2]; $script:After = ''; $script:Fix = ''; $script:Verify = ''
+      try { DoChainPlan $pl[0] | Out-Null } finally { $script:Files = ''; $script:Tickets = '' }
+    }
+    $board = [IO.File]::ReadAllText($tb, $u8)
+    if ($board -notmatch "(?m)^- \[ \] F1 $em free \[owner: @asha\]$") { Die "F80: chain plan did not claim F1: $board" }
+    if ($board -notmatch "(?m)^- \[ \] F3 $em theirs \[owner: @vidul\]$") { Die "F80: chain plan took another's ticket: $board" }
+    $env:RELAY_CHAIN_PARALLEL = '3'; $script:All = $true
+    try { $out = @(DoChainNext) } finally { $script:All = $false; $env:RELAY_CHAIN_PARALLEL = $null }
+    if ($out -cnotcontains "NEXT $t1 $(CodeOf $t1)" -or $out -cnotcontains "NEXT $t2 $(CodeOf $t2)") { Die "F80: chain next -All did not pick the unassigned and my own: $($out -join ' | ')" }
+    if ($out -cnotcontains "IDLE $t3 owned F3 @vidul") { Die "F80: another's ticket not listed as skipped with its owner: $($out -join ' | ')" }
+    if (@($out | Where-Object { $_.StartsWith("NEXT $t3 ") }).Count) { Die "F80: chain next picked another's ticket: $($out -join ' | ')" }
+    $script:Driver = '@cc-a'
+    No 'F80: dispatch of another''s ticket' 'F3 is owned by @vidul' { DoChainDispatch $t3 }
+    if (-not (Select-String -LiteralPath $Run -Pattern "^\| $t3 \| $(CodeOf $t3) F3 theirs \|   \|" -Quiet)) { Die "F80: a refused dispatch touched the row" }
+    DoChainDispatch $t2 | Out-Null
+    # not on the team: only unassigned tickets run; no team.md: every ticket, as before
+    G -C $d8 config user.email ghost@x.com
+    if (@(DoChainNext) -cnotcontains "IDLE $t3 owned F3 @vidul") { Die "F80: not on the team, another's ticket was not skipped" }
+    Remove-Item -LiteralPath (Join-Path $d8 '.skillator/team.md') -Force
+    $out = @(DoChainNext)
+    if (@($out | Where-Object { $_ -match 'owned' }).Count) { Die "F80: no team.md, a ticket was still skipped: $($out -join ' | ')" }
+  } finally {
+    $env:RELAY_CHAIN_DRIVER = $saved[0]; $env:GIT_CONFIG_GLOBAL = $saved[1]; $env:SKILLATOR_ME = $saved[2]; $env:RELAY_CHAIN_PARALLEL = $saved[3]
+    $script:Driver = ''; $env:RELAY_TICKET_META = Join-Path $d 'nope.ps1'
+  }
 }
 
 try {

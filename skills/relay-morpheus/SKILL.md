@@ -135,6 +135,13 @@ or re-planning releases; a lease silent past 20 min is taken, with a ruling.
 Board edits from a run worktree go through `relay-morpheus.sh board <ID>
 <mark>` (`-Mode board -Ticket -Mark`), which writes the main checkout's
 `TICKETS.md` under its lock.
+**Only my tickets (F80).** A run takes only tickets that are unassigned or the
+session person's own (tickets-zordon `ticket-meta pick`; no `team.md` = every
+ticket, as before). A stage whose `tickets:` name one someone else owns is
+`IDLE <n> owned <ID> <owner>` in `chain next` - listed as skipped with its
+owner, never run - and its `chain dispatch` is refused (exit 2). `chain plan`
+and `chain dispatch` claim the stage's tickets (`ticket-meta claim`: `[owner:
+<me>]`, box kept); a refused claim is a `note:` on stderr.
 **Parallel stages (F37).** `chain next --all` names every stage that can run
 now - files disjoint from what is in flight and from each other - capped at 2
 below 50 % of the 5-hour window, else 1. A stage that runs beside another works

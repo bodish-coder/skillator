@@ -8,6 +8,9 @@ and `workflow-authoring` (the Workflow script API), and write a Workflow maratho
 relay-morpheus `references/marathon.md`, "A saved Workflow marathon", Plan, says. Tickets: `$ARGUMENTS`
 (none = every open ticket on TICKETS.md).
 
+- Pick first (F80): `ticket-meta pick [IDs]` (tickets-zordon) - only its `pick` tickets are
+  planned (unassigned, or yours); each `skip <ID> <owner>` is shown as skipped with its owner.
+  `chain plan` claims every planned ticket for you (`ticket-meta claim`); say a refused claim.
 - The run file is relay-morpheus's (`init`, `add`, `chain plan`) - never a hand-numbered row.
 - The Workflow script is its `templates/marathon-workflow.js`, filled and saved beside the run file.
 - This command only plans: no Workflow call, no `chain dispatch`, no agent. End by showing the

@@ -192,6 +192,17 @@ export async function removeMember($: EngineInterface, h: string) {
   $.ui.toast([`✓ ${h} removed from .skillator/team.md`, ...said, ran(r.argv)].join('\n'), { timeoutMs: 10000 })
 }
 
+// F80: ticket-meta decides who may (the lead hands over; none set, anyone sets the first).
+export async function makeLead($: EngineInterface, h: string) {
+  const r = await runCall($, 'meta-team-lead', [h])
+  if (r.code !== 0) {
+    $.ui.toast([`✗ ticket-meta team lead ${h} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+    return
+  }
+  const said = notes(r.out).filter(l => !/^lead:/.test(l))
+  $.ui.toast([`✓ ${h} is the lead`, ...said, ran(r.argv)].join('\n'), { timeoutMs: 10000 })
+}
+
 // --- drawing ---
 
 // The form up in the ops-board pane, or null when none is (the pane draws its view).

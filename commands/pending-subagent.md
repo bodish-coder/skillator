@@ -14,12 +14,16 @@ TICKETS.md (`[ ]`, `[~]`, `[!]` re-checked). A first word that is neither a coun
   on landing. `max`: as many as are file-disjoint, no fixed cap.
 - Tickets whose files overlap never run together, whatever the count.
 
-1. **Pick.** Skip `[%]` (owner checks), `[>]` deferred, `[x]` and `[-]`; say which were skipped
+1. **Pick.** First `ticket-meta pick [IDs]` (tickets-zordon, F80): only its `pick` lines run - unassigned
+   tickets and yours; each `skip <ID> <owner>` is listed as skipped with its owner, never run.
+   Then skip `[%]` (owner checks), `[>]` deferred, `[x]` and `[-]`; say which were skipped
    and why. Nothing left → say so and stop.
 2. **Plan** (relay-morpheus, its chain reference): `init` one run over TICKETS.md - one stage per
    ticket, then the main session's final verify-review-bump-commit-push stage. `chain plan` each
    ticket stage with `--files` (what the ticket names or will touch) and its exact prompt file
-   before the first dispatch; a ticket sharing files with an earlier one gets `--after` it. Every
+   before the first dispatch; a ticket sharing files with an earlier one gets `--after` it. `chain
+   plan` and `chain dispatch` claim each ticket for you (`ticket-meta claim`); a refused claim is
+   said in the report. Every
    prompt says: work and commit in the run worktree (or the stage worktree dispatch names), never
    the main checkout, never push, never edit TICKETS.md.
 3. **Dispatch** - one fresh implementer per ticket (tasks-sentinels): the Agent tool, given only that

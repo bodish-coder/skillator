@@ -350,6 +350,16 @@ function removeMember(s: State, h: string): Step {
   return { state: { ...s, teamConfirm: null }, effects: [run('meta-team-remove', [h], then)] }
 }
 
+// F80 l: ticket-meta team lead @h - it rules who may (a refusal goes in the toast).
+function makeLead(s: State, h: string): Step {
+  const then: Then = r => x => {
+    if (r.code !== 0) return toast(x, [`✗ ticket-meta team lead ${h} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'))
+    const said = notesOf(r.out).filter(l => !/^lead:/.test(l))
+    return { state: toast(x, [`✓ ${h} is the lead`, ...said, ran(r.argv)].join('\n')), effects: [{ kind: 'poll', what: 'board' }] }
+  }
+  return { state: s, effects: [run('meta-team-lead', [h], then)] }
+}
+
 // The Team view's row: the one picked while still on the team, else the first member.
 export const teamRow = (s: State): string | null =>
   s.team.some(m => m.handle === s.teamSelected) ? s.teamSelected : s.team[0]?.handle ?? null
@@ -372,6 +382,7 @@ function teamKey(s: State, k: Key): Step {
     case 'down': case 'j': return move(1)
     case 'n': return { state: openPerson(s, 'team'), effects: [] }
     case 'delete': case 'backspace': return cur ? { state: { ...s, teamConfirm: cur }, effects: [] } : same
+    case 'l': return cur ? makeLead(s, cur) : same
     default: return same
   }
 }

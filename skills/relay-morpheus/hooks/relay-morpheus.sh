@@ -44,6 +44,9 @@
 #   relay-morpheus.sh chain next --all                 F37: every stage that can start now, one NEXT line each,
 #                                                      capped by usage (2 below 50% of 5h, else 1; RELAY_CHAIN_PARALLEL)
 #   relay-morpheus.sh chain next --holds               A118: only the IDLE <n> Qk <why> lines; read-only, no lease beat
+#        (F80: a stage whose ticket someone else owns is IDLE <n> owned <ID> <owner> and its dispatch is
+#        refused, exit 2; plan and dispatch claim the stage's tickets - tickets-zordon ticket-meta pick /
+#        claim, RELAY_TICKET_META overrides, a missing file = off)
 #   relay-morpheus.sh chain merge <n>                  F37: merge a parallel stage's branch into the run branch
 #                                                      (exit 3 on a conflict: the stage fails)
 #   relay-morpheus.sh chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
@@ -227,6 +230,35 @@ team_file() {
   done
   return 1
 }
+# F80: tickets-zordon's ticket-meta.sh - who may take a chain's tickets (pick) and
+# the claim a plan or dispatch makes (claim). RELAY_TICKET_META overrides (a
+# missing file = off: no skips, no claims). Run from the run file's repo.
+tmeta() {   # <args...>
+  _tmp=${RELAY_TICKET_META-$HERE/../../tickets-zordon/scripts/ticket-meta.sh}
+  [ -f "$_tmp" ] || return 0
+  ( cd "$(dirname "$RUN")" && sh "$_tmp" "$@" )
+}
+chain_tickets() {   # [n]: the ticket ids of stage n's chain block (all stages when none)
+  awk -v n="${1:-}" '/^## /{sec=$0; b=0; next}
+    sec == "## Chain" && /^### / { b = (n == "" || $0 ~ ("^### [A-Z0-9]+ - stage " n " - ")); next }
+    sec == "## Chain" && b && index($0, "tickets: ") == 1 { m = split(substr($0, 10), w, /[^A-Za-z0-9]+/)
+      for (i = 1; i <= m; i++) if (w[i] ~ /^[A-Z]+[0-9]+[a-z]*$/ && !(w[i] in s)) { s[w[i]] = 1; print w[i] } }' "$RUN"
+}
+owned_to() {   # <file>: "ID<TAB>owner" per chain ticket someone else owns
+  : > "$1"
+  _ids=$(chain_tickets | tr '\n' ' ')
+  [ -n "$_ids" ] || return 0
+  # shellcheck disable=SC2086
+  tmeta pick $_ids 2>/dev/null | awk '$1 == "skip" { print $2 "\t" $3 }' > "$1" || :
+}
+claim_stage() {   # <n>: claim stage n's tickets for this session's person; a refusal is a note
+  _ids=$(chain_tickets "$1" | tr '\n' ' ')
+  [ -n "$_ids" ] || return 0
+  # shellcheck disable=SC2086
+  tmeta claim $_ids >/dev/null 2>"$RUN.claim.$$" || sed 's/^/note: claim refused - /' "$RUN.claim.$$" >&2
+  rm -f "$RUN.claim.$$"
+}
+
 owner_check() {   # <@handle>: dies unless it may own a run
   case "$1" in *"
 "*|*"$(printf '\r')"*) die "owner: '$1' is more than one line - give one @handle" ;; esac
@@ -1303,6 +1335,7 @@ chain_plan() {
   rm -f "$blk"
   stamp_updated
   unlock
+  claim_stage "$n"   # F80: planning a ticket claims it
   echo "$code"
 }
 
@@ -1361,6 +1394,10 @@ chain_dispatch() {
   h=$(hdr_hold); [ "$h" = - ] || refuse "chain is held ($h) - chain release first, or chain wait"
   st=$(row_cell "$n" 4)
   case "$st" in ''|'!') ;; *) refuse "stage $n is '$st', not pending or failed - a stage is never dispatched twice" ;; esac
+  # F80: a stage whose ticket someone else owns never starts here.
+  OWNF="$RUN.own.$$"; owned_to "$OWNF"
+  w=$(chain_scan | grep "^IDLE $n owned " | head -1) || :; rm -f "$OWNF"; OWNF=
+  [ -z "$w" ] || { set -- $w; refuse "stage $n: $4 is owned by $5 - a run takes only unassigned tickets and yours (ticket-meta pick); its owner or the lead reassigns it"; }
   # F33: a stage a holding decision waits on runs only on a prompt written
   # after the answer - re-planned as a new stage, or ruled independent.
   w=$(chain_scan | grep "^IDLE $n Q" | head -1)
@@ -1428,6 +1465,7 @@ chain_dispatch() {
   stamp_updated
   unlock
   LEASED_N=
+  claim_stage "$n"   # F80: dispatching a ticket claims it
   echo "$c"
   block_prompt "$n"
 }
@@ -1856,7 +1894,7 @@ q_move() {
 # `chain_scan next` prints only the stage NEXT would name (or nothing), with
 # the hold and the ask order ignored - what `chain hold` writes as next=.
 chain_scan() {
-  awk -v only="${1:-}" -v lf="${LEASEF:-}" -v all="${SCAN_ALL:-}" -v cap="${SCAN_CAP:-1}" '
+  awk -v only="${1:-}" -v lf="${LEASEF:-}" -v of="${OWNF:-}" -v all="${SCAN_ALL:-}" -v cap="${SCAN_CAP:-1}" '
     function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
     function norm(p) { gsub(/\\/, "/", p); p = trim(p); while (substr(p, 1, 2) == "./") p = substr(p, 3)
       while (length(p) > 1 && substr(p, length(p)) == "/") p = substr(p, 1, length(p) - 1); return p }
@@ -1925,6 +1963,8 @@ chain_scan() {
       for (r = 1; r <= nr; r++) { n = row[r]; if (!(n in code) || st[n] != "~") continue
         if (!hasf[n]) infall = n; else { mt = split(fl[n], t, SUBSEP); for (y = 2; y <= mt; y++) { ifp[++ni] = t[y]; ifs[ni] = n } } }
       if (lf != "") while ((getline lz < lf) > 0) { split(lz, z, "\t"); lp[++nl] = norm(z[1]); lrn[nl] = z[2]; lsn[nl] = z[3] }
+      # F80: tickets someone else owns (ticket-meta pick) - their stages never start here
+      if (of != "") while ((getline oz < of) > 0) { split(oz, z, "\t"); if (z[1] != "") own[z[1]] = z[2] }
       for (r = 1; r <= nr; r++) { n = row[r]; if (!(n in code)) continue; s = st[n]
         if (s == "~") { out[++no] = "IDLE " n " inflight"; nf++; continue }
         if (s == "?") { out[++no] = "IDLE " n " parked"; continue }
@@ -1944,6 +1984,7 @@ chain_scan() {
         waits = 0
         for (i = 1; i <= nq; i++) { k = ql[i]; if ((n, k) in rs) { out[++no] = "IDLE " n " Q" k " " rs[n, k]; waits = 1 } }
         ma = split(af[n], a, " "); for (x = 1; x <= ma; x++) if (!landed(a[x])) { out[++no] = "IDLE " n " - after " a[x]; waits = 1 }
+        mt = split(tk[n], t, " "); for (y = 1; y <= mt; y++) if (t[y] in own) { out[++no] = "IDLE " n " owned " t[y] " " own[t[y]]; waits = 1; break }
         if (hasf[n] && nl) { mt = split(fl[n], t, SUBSEP); hit = 0
           for (y = 2; y <= mt && !hit; y++) for (z2 = 1; z2 <= nl && !hit; z2++) if (meet(lp[z2], t[y])) { out[++no] = "IDLE " n " leased " t[y] " " lrn[z2] " stage " lsn[z2]; waits = 1; hit = 1 } }
         if ((s == "" || s == "!") && !waits && (infall || ni)) {
@@ -2018,8 +2059,9 @@ chain_next() {
     lease_locked lease_beat_ "$(run_tag)" "$_ns" >/dev/null || :
   done
   LEASEF="$RUN.lz.$$"; leases_to "$LEASEF"
+  OWNF="$RUN.own.$$"; owned_to "$OWNF"
   _cr=0; chain_scan || _cr=$?
-  rm -f "$LEASEF"; LEASEF=; SCAN_ALL=; return $_cr
+  rm -f "$LEASEF" "$OWNF"; LEASEF=; OWNF=; SCAN_ALL=; return $_cr
 }
 
 # chain edge <n> --after 66,67 | --independent-of Qk --why "<ruling>"
@@ -2186,6 +2228,8 @@ chain_decide_cmd() {
 cmd_selftest() {
   RELAY_WORKTREE=off; export RELAY_WORKTREE; unset RELAY_DIR RELAY_RUN
   d=$(mktemp -d); d5=; trap 'rm -rf "$d" ${d5:+"$d5"}' EXIT
+  # F80: no ticket-meta (no claims, no owner skips) unless a check turns it on
+  RELAY_TICKET_META="$d/nope.sh"; export RELAY_TICKET_META
   # Each scratch dir is its own git repo, so the allocator keeps its counter
   # there and not in whatever repo the selftest was started from.
   git init -q "$d"
@@ -2419,7 +2463,51 @@ cmd_selftest() {
 
   chain_selftest
   marathon_selftest
+  f80_selftest
   echo ok
+}
+
+# F80: a chain takes only unassigned tickets and the session person's own; another's
+# stage is IDLE ... owned, its dispatch refused; planning and dispatching claim.
+f80_selftest() {
+  _tm="$HERE/../../tickets-zordon/scripts/ticket-meta.sh"
+  [ -f "$_tm" ] || { echo "note: ticket-meta.sh not beside this skill - F80 checks skipped" >&2; return 0; }
+  unset RELAY_CHAIN_DRIVER SKILLATOR_ME; ME=
+  export RELAY_LEVEL_CMD='echo src=claude-code 5h=40 7d=10 ctx=5 max=40'
+  d8="$d/f80"; mkdir -p "$d8/.skillator"; git init -q "$d8"
+  : > "$d/gitconfig"; GIT_CONFIG_GLOBAL="$d/gitconfig"; export GIT_CONFIG_GLOBAL
+  git -C "$d8" config user.email asha@x.com
+  printf -- '# Team\n\n- @asha: asha@x.com\n- @vidul: vidul@x.com\n' > "$d8/.skillator/team.md"
+  em=$(printf '\342\200\224')
+  printf -- '%s\n' '# TICKETS' "- [ ] F1 $em free" "- [ ] F2 $em mine [owner: @asha]" "- [ ] F3 $em theirs [owner: @vidul]" > "$d8/TICKETS.md"
+  DIR="$d8/.skillator"; RUN=""
+  cmd_init TICKETS.md "f80" "F1 free" "F2 mine" "F3 theirs" >/dev/null
+  set -- "$DIR"/run-*.md; RUN=$1
+  t1=$(sed -n 's/^| \([0-9]*\) | F1 free |.*/\1/p' "$RUN"); t2=$((t1 + 1)); t3=$((t1 + 2))
+  printf 'item: do it\n' > "$d8/p"
+  RELAY_TICKET_META=$_tm; export RELAY_TICKET_META
+  chain_plan "$t1" --prompt-file "$d8/p" --tickets F1 --files a.py >/dev/null 2>"$d8/err" || die "F80: chain plan failed: $(cat "$d8/err")"
+  chain_plan "$t2" --prompt-file "$d8/p" --tickets F2 --files b.py >/dev/null 2>&1
+  chain_plan "$t3" --prompt-file "$d8/p" --tickets F3 --files c.py >/dev/null 2>"$d8/err"
+  grep -q "^- \[ \] F1 $em free \[owner: @asha\]\$" "$d8/TICKETS.md" || die "F80: chain plan did not claim F1: $(cat "$d8/TICKETS.md")"
+  grep -q "^- \[ \] F3 $em theirs \[owner: @vidul\]\$" "$d8/TICKETS.md" || die "F80: chain plan took another's ticket"
+  grep -q 'F3 is owned by @vidul' "$d8/err" || die "F80: chain plan of another's ticket did not say so: $(cat "$d8/err")"
+  out=$(RELAY_CHAIN_PARALLEL=3 chain_next --all)
+  printf '%s\n' "$out" | grep -qx "NEXT $t1 $(code_of "$t1")" && printf '%s\n' "$out" | grep -qx "NEXT $t2 $(code_of "$t2")" ||
+    die "F80: chain next --all did not pick the unassigned and my own: $out"
+  printf '%s\n' "$out" | grep -qx "IDLE $t3 owned F3 @vidul" || die "F80: another's ticket not listed as skipped with its owner: $out"
+  printf '%s\n' "$out" | grep -q "^NEXT $t3 " && die "F80: chain next picked another's ticket: $out"
+  set +e; out=$( (chain_dispatch "$t3" --driver @cc-a) 2>&1 ); rc=$?; set -e
+  [ "$rc" = 2 ] && printf '%s\n' "$out" | grep -q 'F3 is owned by @vidul' || die "F80: dispatch of another's ticket: want exit 2, got $rc: $out"
+  grep -q "^| $t3 | $(code_of "$t3") F3 theirs |   |" "$RUN" || die "F80: a refused dispatch touched the row"
+  chain_dispatch "$t2" --driver @cc-a >/dev/null 2>&1 || die "F80: dispatch of my own ticket refused"
+  # not on the team: only unassigned tickets run; no team.md: every ticket, as before
+  git -C "$d8" config user.email ghost@x.com
+  chain_next | grep -qx "IDLE $t3 owned F3 @vidul" || die "F80: not on the team, another's ticket was not skipped"
+  rm -f "$d8/.skillator/team.md"
+  chain_next | grep -q "owned" && die "F80: no team.md, a ticket was still skipped: $(chain_next)"
+  unset RELAY_TICKET_META GIT_CONFIG_GLOBAL
+  return 0
 }
 
 # R2b / R6 (F48 review round 2), separate processes as the mod runs them: the
@@ -3392,5 +3480,5 @@ case "$c" in
   queue)     cmd_queue "$@" ;;
   owner)     cmd_owner "$@" ;;
   watchdog)  cmd_watchdog "$@" ;;
-  *) sed -n '2,69p' "$0" >&2; exit 1 ;;
+  *) sed -n '2,72p' "$0" >&2; exit 1 ;;
 esac

@@ -161,7 +161,7 @@ function keysOf(s: State, m: Model): string[] {
   if (s.tab === 'health') return ['R resume (releases the hold on a fresh non-red reading)', 'r reload', 'q quit']
   if (s.tab === 'messages') return ['↑↓ move', 'enter open', 'm mark all read', 's setup', 'q quit']
   if (s.tab === 'explorer') return ['↑↓ move', 'enter open/close', 'r reload', 'q quit']
-  if (s.showTeam) return ['n add', 'del remove (asks first)', 'esc back', 'q quit']   // A146: q closes the board here too
+  if (s.showTeam) return ['n add', 'del remove (asks first)', 'l make lead', 'esc back', 'q quit']   // A146: q closes the board here too
   const sel = m.rows.find(t => t.id === m.ticket)
   // F61: on a header Enter opens or closes its group
   const head = isHead(m.selected) ? m.groups.find(g => headKey(g.box) === m.selected) : undefined
@@ -318,7 +318,7 @@ function ticketLines(s: State, m: Model): Keyed[] {
 function teamLines(s: State): Seg[][] {
   const line = (hd: string, n: string, e: string, t: string) => `${hd.padEnd(9)}${n.padEnd(14)}${e.padEnd(22)}${t}`
   const n = s.team.length
-  const out: Seg[][] = [[{ text: 'Team', bold: true }, dim(`  .skillator/team.md · ${n} ${n === 1 ? 'person' : 'people'}`)]]
+  const out: Seg[][] = [[{ text: 'Team', bold: true }, dim(`  .skillator/team.md · ${n} ${n === 1 ? 'person' : 'people'}${s.me ? ` · you: ${s.me}` : ''}`)]]
   if (!n) out.push([dim('  no .skillator/team.md yet - n adds the first person (ticket-meta creates the file)')])
   const sel = teamRow(s)
   for (const m of s.team) {
