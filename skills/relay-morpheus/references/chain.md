@@ -153,8 +153,8 @@ Run every line, in order, before the next dispatch:
    is not a review - "to save usage I reviewed it myself" lands nothing.
 3. Commit with the ticket-first message and the code trailing:
    `B2 B3: <what> [<CODE>]`. No review result from step 2, no `x`: the stage
-   stays `~`. Then `RM stage 66 x build:opus <sha>` and delete
-   the stage's In-flight block by hand (no command does). No passing ticket →
+   stays `~`. Then `RM stage 66 x build:opus <sha>`, which drops
+   the stage's In-flight block (`>` does too). No passing ticket →
    `RM stage 66 '!'`, block kept with the failure appended, chain continues;
    one retry stage per ticket via `RM add`.
 4. Republish the board artifact once (`tickets-zordon`).

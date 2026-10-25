@@ -564,6 +564,8 @@ cmd_stage() {
   need_run
   lock
   set_row "$n" "$state" "$owner" "$landed" || die "no stage $n in $RUN"
+  # A153: a landed or re-planned stage is no longer in flight; a failed one keeps its block.
+  case "$state" in x|'>') drop_inflight "$n" ;; esac
   stamp_updated
   unlock
   # F36: any state but in flight frees the stage's files (landed, failed,
@@ -2250,6 +2252,39 @@ cmd_selftest() {
   cmd_orphans 0 | grep -q 'stage 2' || die "orphans: did not flag a silent stage at limit 0"
   cmd_orphans 9999 | grep -q 'stage 2' && die "orphans: flagged a fresh heartbeat"
 
+  # --- A153: landing (x) or re-planning (>) a stage drops its In-flight block
+  # and nothing else; a failed stage (!) keeps it; a stage with no block is a
+  # no-op. Stage 12 is the neighbour whose header starts like stage 1's. The
+  # ps1 selftest asserts the same expected text, so the two ports agree.
+  RUN_S=$RUN; RUN="$d/a153.md"
+  printf '%s\n' '# RUN-9 - a153' 'plan: p.md' 'started: 2026-10-01T00:00Z   updated: 2026-10-01T00:00Z' '' \
+    '## Stages' '| # | stage | state | owner | heartbeat | landed |' '|---|-------|-------|-------|-----------|--------|' \
+    '| 1 | a | ~ | - | - | - |' '| 2 | b | ~ | - | - | - |' '| 3 | c | ~ | - | - | - |' '| 4 | d |   | - | - | - |' '| 12 | e | ~ | - | - | - |' '' \
+    '## In flight' '### stage 1 - a  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do a' '' \
+    '### stage 12 - e  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do e' '' \
+    '### stage 2 - b  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do b' '' \
+    '### stage 3 - c  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do c' '' \
+    '## Rulings' '- keep this ruling' > "$RUN"
+  a153() { sed -n '/^## In flight$/,$p' "$RUN"; }
+  a153f=
+  cmd_stage 1 x - aaa1531
+  grep -q '^### stage 1 - ' "$RUN" && a153f="$a153f; x kept stage 1's block"
+  grep -q '^### stage 12 - ' "$RUN" || a153f="$a153f; x on stage 1 dropped neighbour stage 12's block"
+  cmd_stage 2 '!'
+  grep -q '^### stage 2 - ' "$RUN" || a153f="$a153f; ! dropped stage 2's block"
+  cmd_stage 3 '>' - "stage 4"
+  grep -q '^### stage 3 - ' "$RUN" && a153f="$a153f; > kept stage 3's block"
+  a153 > "$d/a153.before"
+  cmd_stage 4 x - aaa1534
+  a153 | cmp -s "$d/a153.before" - || a153f="$a153f; x on a stage with no block changed In flight"
+  [ "$(a153)" = "$(printf '%s\n' '## In flight' '### stage 12 - e  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do e' '' \
+    '### stage 2 - b  (dispatched 2026-10-01T00:00Z, @t)' 'run: -' 'prompt: |' '  do b' '' '## Rulings' '- keep this ruling')" ] \
+    || a153f="$a153f; In flight is not exactly stage 12 + stage 2: $(a153 | tr '\n' '/')"
+  [ "$(head -c3 "$RUN" | od -An -tx1 | tr -d ' \n')" != efbbbf ] || a153f="$a153f; the run file gained a BOM"
+  ! grep -q "$(printf '\r')" "$RUN" || a153f="$a153f; the run file gained CRLF"
+  [ -z "$a153f" ] || die "A153:${a153f#;}"
+  RUN=$RUN_S
+
   # --- run ids: the whole point is a sentence a human can say to another
   # session. These pin the three ways it breaks silently.
   d2=$(mktemp -d); git init -q "$d2"; DIR="$d2"; RUN=""
@@ -2674,7 +2709,8 @@ b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
   RELAY_LEVEL_CMD='echo src=claude-code 5h=10 7d=92 ctx=5 max=92' chain_dispatch "$s2" --driver @cc-b --confirmed >/dev/null || die "chain dispatch --confirmed failed"
   [ "$(grep -c "^### stage $s2 - " "$RUN")" = 1 ] || die "chain dispatch: redispatching a failed stage left $(grep -c "^### stage $s2 - " "$RUN") In-flight blocks for it"
   ! grep -q '^run: dead-run-1$' "$RUN" || die "chain dispatch: redispatching a failed stage kept the old In-flight block"
-  [ "$(grep -c "^### stage $s1 - " "$RUN")" = 1 ] || die "chain dispatch: replacing stage $s2's block touched stage $s1's"
+  # A153: stage $s1 landed, so its block went then; the redispatch must not bring it back.
+  [ "$(grep -c "^### stage $s1 - " "$RUN")" = 0 ] || die "chain dispatch: landed stage $s1 still has an In-flight block"
   awk '/^## In flight$/{f=NR} /^## Rulings/{r=NR} END{exit !(f && r && f < r)}' "$RUN" || die "chain dispatch: the In-flight section lost its place"
   grep -q "$c2: override: user confirmed past 7d 90% (92%)" "$RUN" || die "chain dispatch --confirmed: no ruling"
   chain_status | grep -q "^### $c3 - stage $s3 - F3 cli\$" || die "chain status: did not print the chain"

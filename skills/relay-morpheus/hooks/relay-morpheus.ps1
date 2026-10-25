@@ -633,6 +633,8 @@ function DoStage($n, $state, $owner, $landed) {
   Lock
   try {
     if (-not (SetRow $n $state $owner $landed)) { Die "no stage $n in $Run" }
+    # A153: a landed or re-planned stage is no longer in flight; a failed one keeps its block.
+    if ($state -ceq 'x' -or $state -ceq '>') { DropInFlight $n }
     StampUpdated
   } finally { Unlock }
   # F36: any state but in flight frees the stage's files (landed, failed,
@@ -2468,7 +2470,8 @@ function ChainSelftest($d) {
   $nb = @(Select-String -Path $Run -SimpleMatch "### stage $s2 - " | Where-Object { $_.Line.StartsWith("### stage $s2 - ") }).Count
   if ($nb -ne 1) { Die "chain dispatch: redispatching a failed stage left $nb In-flight blocks for it" }
   if (Select-String -Path $Run -Pattern '^run: dead-run-1$' -Quiet) { Die "chain dispatch: redispatching a failed stage kept the old In-flight block" }
-  if (@(Select-String -Path $Run -Pattern "^### stage $s1 - ").Count -ne 1) { Die "chain dispatch: replacing stage $s2's block touched stage $s1's" }
+  # A153: stage $s1 landed, so its block went then; the redispatch must not bring it back.
+  if (@(Select-String -Path $Run -Pattern "^### stage $s1 - ").Count -ne 0) { Die "chain dispatch: landed stage $s1 still has an In-flight block" }
   $txt = [IO.File]::ReadAllText($Run)
   if ($txt.IndexOf("`n## In flight`n") -lt 0 -or $txt.IndexOf("`n## In flight`n") -gt $txt.IndexOf("`n## Rulings")) { Die "chain dispatch: the In-flight section lost its place" }
   if (-not (Select-String -Path $Run -SimpleMatch "${c2}: override: user confirmed past 7d 90% (92%)" -Quiet)) { Die "chain dispatch -Confirmed: no ruling" }
@@ -3123,6 +3126,36 @@ function DoSelftest {
     if (-not ((DoOrphans 0) -match 'stage 2')) { Die "orphans: did not flag a silent stage at limit 0" }
     if ((DoOrphans 9999) -match 'stage 2') { Die "orphans: flagged a fresh heartbeat" }
     if (-not (DoStatus | Select-String -Pattern '^\| 2 \|' -Quiet)) { Die "status: did not print the stage table" }
+
+    # --- A153: landing (x) or re-planning (>) a stage drops its In-flight block
+    # and nothing else; a failed stage (!) keeps it; a stage with no block is a
+    # no-op. Stage 12 is the neighbour whose header starts like stage 1's. The
+    # sh selftest asserts the same expected text, so the two ports agree.
+    $saved = $script:Run; $script:Run = Join-Path $d "a153.md"
+    $blk = { param($k, $s) @("### stage $k - $s  (dispatched 2026-10-01T00:00Z, @t)", 'run: -', 'prompt: |', "  do $s", '') }
+    WriteRun (@('# RUN-9 - a153', 'plan: p.md', 'started: 2026-10-01T00:00Z   updated: 2026-10-01T00:00Z', '',
+      '## Stages', '| # | stage | state | owner | heartbeat | landed |', '|---|-------|-------|-------|-----------|--------|',
+      '| 1 | a | ~ | - | - | - |', '| 2 | b | ~ | - | - | - |', '| 3 | c | ~ | - | - | - |', '| 4 | d |   | - | - | - |', '| 12 | e | ~ | - | - | - |', '',
+      '## In flight') + (& $blk 1 'a') + (& $blk 12 'e') + (& $blk 2 'b') + (& $blk 3 'c') + @('## Rulings', '- keep this ruling'))
+    $a153 = { $l = @(Get-Content -Encoding UTF8 $Run); $i = [array]::IndexOf($l, '## In flight'); ($l[$i..($l.Count - 1)]) -join '/' }
+    $a153f = @()
+    DoStage 1 'x' '-' 'aaa1531'
+    if (Select-String -Path $Run -Pattern '^### stage 1 - ' -Quiet) { $a153f += "x kept stage 1's block" }
+    if (-not (Select-String -Path $Run -Pattern '^### stage 12 - ' -Quiet)) { $a153f += "x on stage 1 dropped neighbour stage 12's block" }
+    DoStage 2 '!' '' ''
+    if (-not (Select-String -Path $Run -Pattern '^### stage 2 - ' -Quiet)) { $a153f += "! dropped stage 2's block" }
+    DoStage 3 '>' '-' 'stage 4'
+    if (Select-String -Path $Run -Pattern '^### stage 3 - ' -Quiet) { $a153f += "> kept stage 3's block" }
+    $before = & $a153
+    DoStage 4 'x' '-' 'aaa1534'
+    if ((& $a153) -cne $before) { $a153f += "x on a stage with no block changed In flight" }
+    $want = (@('## In flight') + (& $blk 12 'e') + (& $blk 2 'b') + @('## Rulings', '- keep this ruling')) -join '/'
+    if ((& $a153) -cne $want) { $a153f += "In flight is not exactly stage 12 + stage 2: $(& $a153)" }
+    $raw = [IO.File]::ReadAllBytes($Run)
+    if ($raw[0] -eq 0xEF) { $a153f += "the run file gained a BOM" }
+    if ([Text.Encoding]::UTF8.GetString($raw) -match "`r") { $a153f += "the run file gained CRLF" }
+    if ($a153f.Count) { Die ("A153: " + ($a153f -join '; ')) }
+    $script:Run = $saved
 
     # The same rollovers relay-morpheus.sh asserts on its own arithmetic. DoOrphans does
     # its date maths independently, so the pair can disagree without this.
