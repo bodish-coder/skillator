@@ -23,16 +23,27 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 src="$root/skills"
-dry=""; force=""; link=""; selftest=""
+dry=""; force=""; link=""; selftest=""; font=""; _want_font=""
+usage='usage: install.sh [--dry-run] [--force] [--link] [--selftest] [--ops-font-size <6-72>]'
 for a in "$@"; do
+  if [ -n "$_want_font" ]; then font=$a; _want_font=""; continue; fi
   case "$a" in
     --dry-run) dry=1 ;;
     --force)   force=1 ;;
     --link)    link=1 ;;
     --selftest) selftest=1 ;;
-    *) printf 'unknown option: %s\nusage: install.sh [--dry-run] [--force] [--link] [--selftest]\n' "$a" >&2; exit 2 ;;
+    --ops-font-size) _want_font=1 ;;
+    *) printf 'unknown option: %s\n%s\n' "$a" "$usage" >&2; exit 2 ;;
   esac
 done
+# F102: the ops tab's Windows Terminal font size, 6..72
+[ -n "$_want_font" ] && font=none
+case "$font" in
+  '') ;;
+  *[!0-9]*) font_bad=1 ;;
+  *) [ "$font" -ge 6 ] && [ "$font" -le 72 ] || font_bad=1 ;;
+esac
+[ -n "${font_bad:-}" ] && { printf 'ops font size must be 6..72, got %s\n%s\n' "$font" "$usage" >&2; exit 2; }
 
 codex_home=${CODEX_HOME:-$HOME/.codex}
 # F67: opencode's config dir - $XDG_CONFIG_HOME/opencode when that is set, else
@@ -666,6 +677,16 @@ if [ -n "$selftest" ]; then
   if command -v cygpath >/dev/null 2>&1; then
     cmp -s "$root/mods/ops-board/ops/wt-fragment.json" "$_frag" || { echo "FAIL: Windows Terminal fragment"; exit 1; }
     grep -qF '"name": "skillator ops"' "$_frag" || { echo "FAIL: fragment profile name"; exit 1; }
+    # F102: the font size the user picks, written and kept across runs; 11 = the shipped bytes
+    # (no IDE for these runs, so the ide-calls count below still sees two installs)
+    HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --ops-font-size 9 >/dev/null || { echo "FAIL: font run exited $?"; exit 1; }
+    grep -qF '"size": 9' "$_frag" || { echo "FAIL: font size 9 not written"; exit 1; }
+    HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" >/dev/null || { echo "FAIL: plain font run exited $?"; exit 1; }
+    grep -qF '"size": 9' "$_frag" || { echo "FAIL: font size reset by a plain run"; exit 1; }
+    _rc=0; HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --ops-font-size 3 >/dev/null 2>&1 || _rc=$?
+    { [ "$_rc" = 2 ] && grep -qF '"size": 9' "$_frag"; } || { echo "FAIL: font size 3 accepted"; exit 1; }
+    HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --ops-font-size 11 >/dev/null || { echo "FAIL: font 11 run exited $?"; exit 1; }
+    cmp -s "$root/mods/ops-board/ops/wt-fragment.json" "$_frag" || { echo "FAIL: font size 11 is not the shipped fragment"; exit 1; }
   else
     [ -e "$T/lad" ] && { echo "FAIL: Windows Terminal fragment written off Windows"; exit 1; }
   fi
@@ -850,8 +871,13 @@ if [ -n "$shim_src" ] && [ -n "${LOCALAPPDATA:-}" ] && command -v cygpath >/dev/
     echo "        would write $_wt/ops.json"
   else
     mkdir -p "$_wt"
-    cp "$root/mods/ops-board/ops/wt-fragment.json" "$_wt/ops.json"
-    echo "ops   Windows Terminal profile 'skillator ops' -> $_wt/ops.json"
+    # F102: --ops-font-size, else the size an earlier run wrote, else the shipped 11
+    _size=$font
+    [ -z "$_size" ] && [ -f "$_wt/ops.json" ] && _size=$(sed -n 's/.*"size": \([0-9]*\).*/\1/p' "$_wt/ops.json")
+    _size=${_size:-11}
+    sed "s/\"size\": [0-9]*/\"size\": $_size/" "$root/mods/ops-board/ops/wt-fragment.json" > "$_wt/ops.json"
+    _note=""; [ "$_size" = 11 ] || _note=" (font $_size)"
+    echo "ops   Windows Terminal profile 'skillator ops' -> $_wt/ops.json$_note"
     echo "      remove: rm -r \"$_wt\""
   fi
 fi

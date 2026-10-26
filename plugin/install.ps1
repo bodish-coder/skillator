@@ -14,12 +14,14 @@
 # Antigravity skill-commands) from host-commands\<host>\, rewritten every run - see Write-Commands.
 # Claude Code is left to its plugin install whenever one exists, -Force included.
 # Skills already symlinked to this repo are left alone - they are always current.
-param([switch]$DryRun, [switch]$Force, [switch]$Link, [switch]$SelfTest,
+param([switch]$DryRun, [switch]$Force, [switch]$Link, [switch]$SelfTest, [int]$OpsFontSize = 0,
       # B9: the default - SKILLATOR_DEFAULT_PROFILE stands in for $PROFILE so the selftest
       # can check a skipped default without the real profile in reach
       [string]$Profile = $(if ($env:SKILLATOR_DEFAULT_PROFILE) { $env:SKILLATOR_DEFAULT_PROFILE } else { $PROFILE.CurrentUserAllHosts }))
 # B12: with no [CmdletBinding()] an unknown switch lands in $args - refuse it before anything is written
-if ($args) { [Console]::Error.WriteLine("unknown option: $args`nusage: install.ps1 [-DryRun] [-Force] [-Link] [-SelfTest] [-Profile <path>]"); exit 2 }
+$usage = 'usage: install.ps1 [-DryRun] [-Force] [-Link] [-SelfTest] [-Profile <path>] [-OpsFontSize <6-72>]'
+if ($args) { [Console]::Error.WriteLine("unknown option: $args`n$usage"); exit 2 }
+if ($OpsFontSize -and ($OpsFontSize -lt 6 -or $OpsFontSize -gt 72)) { [Console]::Error.WriteLine("ops font size must be 6..72, got $OpsFontSize`n$usage"); exit 2 }
 
 $ErrorActionPreference = 'Stop'
 $src = Join-Path $PSScriptRoot 'skills'
@@ -454,6 +456,17 @@ function Invoke-SelfTest([string]$T) {
   if ([IO.File]::ReadAllText($frag) -cne [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'mods\ops-board\ops\wt-fragment.json'))) { return 'Windows Terminal fragment differs from the shipped one' }
   if (-not ([IO.File]::ReadAllText($frag).Contains('"name": "skillator ops"'))) { return 'fragment profile name' }
   if (-not $out.Contains("remove: Remove-Item -Recurse '$(Split-Path -Parent $frag)'")) { return 'fragment remove line' }
+  # F102: the font size the user picks, written and kept across runs; 11 = the shipped bytes
+  # (the IDE calls these runs make are dropped, so the ide-calls check below still sees one install)
+  $callsBefore = [IO.File]::ReadAllText($calls)
+  $out = & $run @('-OpsFontSize', '9'); if ($script:selfCode -ne 0) { return "font run exited $script:selfCode" }
+  if (-not ([IO.File]::ReadAllText($frag).Contains('"size": 9'))) { return 'font size 9 not written' }
+  $out = & $run @(); if (-not ([IO.File]::ReadAllText($frag).Contains('"size": 9'))) { return 'font size reset by a plain run' }
+  $out = & { $ErrorActionPreference = 'Continue'; & powershell -NoProfile -ExecutionPolicy Bypass -File $selfPath -Profile $prof -OpsFontSize 3 2>&1 | Out-String }
+  if ($LASTEXITCODE -ne 2 -or -not $out.Contains('usage: install.ps1') -or -not ([IO.File]::ReadAllText($frag).Contains('"size": 9'))) { return 'font size 3 accepted' }
+  $out = & $run @('-OpsFontSize', '11')
+  if ([IO.File]::ReadAllText($frag) -cne [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'mods\ops-board\ops\wt-fragment.json'))) { return 'font size 11 is not the shipped fragment' }
+  [IO.File]::WriteAllText($calls, $callsBefore)
   # B6: every frontmatter in commands\ and host-commands\ must be valid YAML or pi never registers
   # the command. No YAML parser in the installer, so a narrow check: an unquoted plain value
   # holding ": " (the one slip that bit /archive-tickets). Quote such a value.
@@ -994,8 +1007,14 @@ if ($shimSrc -and $env:LOCALAPPDATA) {
     Write-Host "        would write $wtDir\ops.json"
   } else {
     New-Item -ItemType Directory -Force $wtDir | Out-Null
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'mods\ops-board\ops\wt-fragment.json') -Destination (Join-Path $wtDir 'ops.json') -Force
-    Write-Host "ops   Windows Terminal profile 'skillator ops' -> $wtDir\ops.json"
+    # F102: -OpsFontSize, else the size an earlier run wrote, else the shipped 11
+    $size = 11
+    $dest = Join-Path $wtDir 'ops.json'
+    if ($OpsFontSize) { $size = $OpsFontSize }
+    elseif ((Test-Path -LiteralPath $dest) -and ([IO.File]::ReadAllText($dest) -match '"size": (\d+)')) { $size = [int]$Matches[1] }
+    $text = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'mods\ops-board\ops\wt-fragment.json')) -replace '"size": \d+', "`"size`": $size"
+    [IO.File]::WriteAllText($dest, $text, (New-Object Text.UTF8Encoding $false))
+    Write-Host "ops   Windows Terminal profile 'skillator ops' -> $dest$(if ($size -ne 11) { " (font $size)" })"
     Write-Host "      remove: Remove-Item -Recurse '$wtDir'"
   }
 }
