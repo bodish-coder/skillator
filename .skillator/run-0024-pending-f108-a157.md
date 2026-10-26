@@ -9,7 +9,7 @@ branch: run/RUN-0024-pending-f108-a157
 |---|-------|-------|-------|-----------|--------|
 | 175 | AAB5 F108 holo output picker | x | session | 2026-10-26T20:23Z | 94931ff |
 | 176 | AAB6 A157 clone-odo description loads | x | session | 2026-10-26T20:23Z | c6d96d5 |
-| 177 | verify review bump commit |   | - | - | - |
+| 177 | verify review bump commit | x | session | 2026-10-26T20:31Z | d19a4ae |
 | 182 | AACB A158 harness usage fixture | x | subagent | 2026-10-26T20:31Z | bdce915 |
 
 ## In flight
