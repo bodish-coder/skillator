@@ -1,6 +1,6 @@
 # RUN-0024 - pending F108 A157
 plan: TICKETS.md
-started: 2026-10-26T19:54Z   updated: 2026-10-26T20:23Z
+started: 2026-10-26T19:54Z   updated: 2026-10-26T20:31Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0024-pending-f108-a157
 branch: run/RUN-0024-pending-f108-a157
 
@@ -10,11 +10,11 @@ branch: run/RUN-0024-pending-f108-a157
 | 175 | AAB5 F108 holo output picker | x | session | 2026-10-26T20:23Z | 94931ff |
 | 176 | AAB6 A157 clone-odo description loads | x | session | 2026-10-26T20:23Z | c6d96d5 |
 | 177 | verify review bump commit |   | - | - | - |
-| 182 | AACB A158 harness usage fixture |   | - | - | - |
+| 182 | AACB A158 harness usage fixture | x | subagent | 2026-10-26T20:31Z | bdce915 |
 
 ## In flight
 ## Chain
-driver: @cc-9de7d9 2026-10-26T19:56Z     hold: -     mode: agents
+driver: @sher 2026-10-26T20:24Z     hold: -     mode: agents
 ### AAB5 - stage 175 - F108 holo output picker
 tickets: F108 build/deep
 files: plugin/skills/holo-r2d2/scripts/holo.mjs,plugin/skills/holo-r2d2/scripts/fixtures/fixture-design.md,plugin/skills/holo-r2d2/SKILL.md,plugin/.claude-plugin/plugin.json,.claude-plugin/marketplace.json,plugin/.muse-plugin/plugin.json,plugin/.muse-plugin/marketplace.json,plugin/skills/grayskull-power/references/routing.md,plugin/practice/baselines/scenario-holo-f108-outputs.txt,plugin/practice/baselines/green-holo-f108.txt
