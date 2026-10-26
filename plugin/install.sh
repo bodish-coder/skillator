@@ -30,7 +30,7 @@ for a in "$@"; do
     --force)   force=1 ;;
     --link)    link=1 ;;
     --selftest) selftest=1 ;;
-    *) echo "unknown option: $a" >&2; exit 2 ;;
+    *) printf 'unknown option: %s\nusage: install.sh [--dry-run] [--force] [--link] [--selftest]\n' "$a" >&2; exit 2 ;;
   esac
 done
 
@@ -423,7 +423,12 @@ if [ -n "$selftest" ]; then
   export SKILLATOR_AGY_IDE="$T/fake-ide"
   # F89: the Windows Terminal fragment goes under a temp LOCALAPPDATA, never the real one
   export LOCALAPPDATA="$T/lad"
-  HOME=$T CODEX_HOME=$T/.codex sh "$0" >/dev/null || { echo "FAIL: install exited $?"; exit 1; }
+  # B12: an unknown flag is an error - exit 2, the usage line, nothing written
+  _c=0; _o=$(HOME=$T CODEX_HOME=$T/.codex sh "$0" --nope 2>&1) || _c=$?
+  [ "$_c" = 2 ] || { echo "FAIL: unknown flag exited $_c"; exit 1; }
+  printf '%s\n' "$_o" | grep -q '^usage: install.sh' || { echo "FAIL: unknown flag usage line"; exit 1; }
+  [ -z "$(find "$T" -type f ! -name fake-ide)" ] || { echo "FAIL: unknown flag wrote files"; exit 1; }
+  HOME=$T CODEX_HOME=$T/.codex sh "$0" >/dev/null ||{ echo "FAIL: install exited $?"; exit 1; }
   # B6: every frontmatter in commands/ and host-commands/ must be valid YAML or pi never registers
   # the command. No YAML parser in the installer, so a narrow check: an unquoted plain value
   # holding ": " (the one slip that bit /archive-tickets). Quote such a value.

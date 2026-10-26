@@ -18,6 +18,8 @@ param([switch]$DryRun, [switch]$Force, [switch]$Link, [switch]$SelfTest,
       # B9: the default - SKILLATOR_DEFAULT_PROFILE stands in for $PROFILE so the selftest
       # can check a skipped default without the real profile in reach
       [string]$Profile = $(if ($env:SKILLATOR_DEFAULT_PROFILE) { $env:SKILLATOR_DEFAULT_PROFILE } else { $PROFILE.CurrentUserAllHosts }))
+# B12: with no [CmdletBinding()] an unknown switch lands in $args - refuse it before anything is written
+if ($args) { [Console]::Error.WriteLine("unknown option: $args`nusage: install.ps1 [-DryRun] [-Force] [-Link] [-SelfTest] [-Profile <path>]"); exit 2 }
 
 $ErrorActionPreference = 'Stop'
 $src = Join-Path $PSScriptRoot 'skills'
@@ -414,6 +416,12 @@ function Invoke-SelfTest([string]$T) {
   }
   $read = { param([string]$rel) [IO.File]::ReadAllText((Join-Path $T $rel)) }
   $has = { param([string]$rel, [string]$s) (& $read $rel).Contains($s) }
+
+  # B12: an unknown flag is an error - exit 2, the usage line, nothing written
+  $out = & { $ErrorActionPreference = 'Continue'; & powershell -NoProfile -ExecutionPolicy Bypass -File $selfPath -Profile $prof -Nope 2>&1 | Out-String }
+  if ($LASTEXITCODE -ne 2) { return "unknown flag exited $LASTEXITCODE" }
+  if (-not $out.Contains('usage: install.ps1')) { return 'unknown flag usage line' }
+  if (@(Get-ChildItem -LiteralPath $T -Recurse -File | Where-Object { $_.Name -ne 'fake-ide.ps1' }).Count -ne 0) { return 'unknown flag wrote files' }
 
   # dry run first: says what it would write, writes nothing (the profile included)
   $out = & $run @('-DryRun')
