@@ -32,7 +32,6 @@ const PANE_NAME = 'ops board'     // pane.tsx's PANE_TITLE
 export const RUNS_POLL_MS = 30_000
 const CHAIN_STATUS_AT_ONCE = 2
 let polling = false
-let closing = false   // F99: Diagnose's Close running
 
 // One read of relay: the list, then each open run's file and its script. A failed list keeps what was shown.
 export async function pollRuns($: EngineInterface): Promise<void> {
@@ -128,10 +127,9 @@ export async function engageGo($: EngineInterface): Promise<void> {
 }
 
 // F99: Diagnose - the run read fresh (list and resume, read-only), every landed sha asked of git
-// (on HEAD / elsewhere / unknown), the board and the driver stamp; diagnose() judges. For each
-// closable stage the sha Close would write: the file's landed cell, else - only when the run
-// branch is merged into HEAD and holds a `<ID>: ...` commit per ticket - the newest of those;
-// otherwise said with the by-hand command, not closed. Git that cannot be asked is said.
+// (on HEAD / elsewhere / unknown), the board and the driver stamp; diagnose() judges. Each
+// closable stage gets the by-hand close command - its landed cell's sha when on HEAD, else
+// `<sha>`; nothing runs (Close is F104). Git that cannot be asked is said.
 export async function openDiagnose($: EngineInterface, id: string): Promise<void> {
   const l = await runCall($, 'relay-list', [])
   const c = l.code === 0 ? await runCall($, 'relay-resume', [id]) : l
@@ -157,54 +155,15 @@ export async function openDiagnose($: EngineInterface, id: string): Promise<void
     if (r) shas.set(s.landed, r.exitCode === 0 ? 'head' : r.exitCode === 1 ? 'off' : 'none')
   }
   const d = diagnose(run, await read($, boardA), shas, await $.clock.now())
-  const closes: Diagnose['closes'] = []
-  const branch = /^branch: ([^\s-]\S*)\s*$/m.exec(c.out)?.[1]   // never a leading '-': git would read an option
-  let merged: boolean | null = null                          // the run branch's commits all on HEAD; null: not asked yet
-  for (const cl of d.closable) {
-    const byHand = `by hand: relay-morpheus.sh ${id} stage ${cl.n} x <owner> <sha>`
+  const byHand = d.closable.map(cl => {
     const own = run.stages.find(s => s.n === cl.n)?.landed
-    if (own) { closes.push({ n: cl.n, sha: own }); continue }
-    if (!branch) { d.lines.push(`stage ${cl.n}: the run file names no branch - ${byHand}`); continue }
-    merged ??= (await ask(['merge-base', '--is-ancestor', branch, 'HEAD']))?.exitCode === 0
-    if (!merged) { d.lines.push(`stage ${cl.n}: run branch ${branch} ${gitWhy ? 'not checked' : 'is not merged into HEAD'} - ${byHand}`); continue }
-    // newest first; a commit counts for a ticket only when its subject starts `<ID>:`
-    const log = ((await ask(['log', '--format=%h %s', ...cl.tickets.map(t => `--grep=^${t}:`), branch]))?.stdout ?? '')
-      .split('\n').flatMap(x => { const m = /^(\S+) (.*)$/.exec(x); return m ? [{ sha: m[1]!, subject: m[2]! }] : [] })
-    const hit = (e: { subject: string }, t: string) => e.subject.startsWith(t + ':')
-    const missing = cl.tickets.filter(t => !log.some(e => hit(e, t)))
-    if (missing.length) { d.lines.push(`stage ${cl.n}: no commit ${missing.map(t => `"${t}: ..."`).join(', ')} on ${branch} - ${byHand}`); continue }
-    closes.push({ n: cl.n, sha: log.find(e => cl.tickets.some(t => hit(e, t)))!.sha })
-  }
+    return `by hand: relay-morpheus.sh ${id} stage ${cl.n} x <owner> ${own && shas.get(own) === 'head' ? own : '<sha>'}`
+  })
   if (gitWhy) d.lines.push(`git not asked: ${gitWhy}`)
   if ((await read($, tabA)) !== 'runs') return              // the tab left while git answered: no stale view
-  await update($, diagnoseA, () => ({ id, verdict: d.verdict, lines: d.lines, closes, confirm: false }))
+  await update($, diagnoseA, () => ({ id, verdict: d.verdict, lines: d.lines, byHand }))
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
-  void $.ui.focus({ requestId: PANE, key: closes.length ? 'diag:close' : 'diag:back' }).catch(() => {})
-}
-
-// Close confirmed: each lagging stage marked landed through relay-morpheus (never a hand edit);
-// the first refusal stops it and is said with what ran.
-async function closeRun($: EngineInterface): Promise<void> {
-  if (closing) return                                       // a second Yes while the first runs closes nothing
-  closing = true
-  try {
-    const d = await read($, diagnoseA)
-    if (!d) return
-    await closeEngage($)
-    const done: number[] = []
-    for (const c of d.closes) {
-      const r = await runCall($, 'relay-stage-landed', [d.id, String(c.n), c.sha])
-      if (r.code !== 0) {
-        $.ui.toast(`■ ${d.id} stage ${c.n} not closed: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}${r.argv.length ? `\nran: ${r.argv.join(' ')}` : ''}`)
-        break
-      }
-      done.push(c.n)
-    }
-    if (done.length) $.ui.toast(`✓ ${d.id}: stage${done.length === 1 ? '' : 's'} ${done.join(', ')} marked landed`)
-    void pollRuns($).catch(() => {})
-  } finally {
-    closing = false
-  }
+  void $.ui.focus({ requestId: PANE, key: 'diag:back' }).catch(() => {})
 }
 
 export async function readDiagnose($: EngineInterface): Promise<Diagnose | null> {
@@ -238,11 +197,10 @@ export function EngageConfirm($: EngineInterface, els: Els, g: Engage): RenderEl
   ]
 }
 
-// F99: the Diagnose view, in place of the tab (B5). Read-only; Close asks once more.
+// F99: the Diagnose view, in place of the tab (B5). Read-only.
 export function DiagnoseView($: EngineInterface, els: Els, d: Diagnose): RenderElement[] {
   const { Box, Text, Button } = els
   const color = d.verdict === 'finished' ? 'success' : d.verdict === 'still running' ? 'warning' : 'error'
-  const n = d.closes.length
   return [
     <Box key="diag:title"><Text bold>{`Diagnose ${d.id}: `}</Text><Text bold color={color}>{d.verdict}</Text><Text dimColor>{'  Esc back'}</Text></Box>,
     <Text> </Text>,
@@ -250,17 +208,8 @@ export function DiagnoseView($: EngineInterface, els: Els, d: Diagnose): RenderE
       ? d.lines.map((l, i) => <Box key={`diag:line:${i}`}><Text wrap="wrap">{l}</Text></Box>)
       : [<Box key="diag:agree"><Text dimColor>run file, board, git and the driver stamp agree</Text></Box>]),
     <Text> </Text>,
-    ...(n ? [<Box key="diag:close-what"><Text dimColor wrap="wrap">{`Close: relay-morpheus stage <n> x <sha> for ${d.closes.map(c => `${c.n} (${c.sha})`).join(', ')} - the run file only; tickets and git untouched`}</Text></Box>] : []),
-    d.confirm
-      ? <Box key="diag:confirm" flexDirection="row" gap={2}>
-          <Text color="warning">{`mark ${n} stage${n === 1 ? '' : 's'} landed in ${d.id}'s run file?`}</Text>
-          <Button key="diag:close-yes" onPress={() => { void closeRun($) }}>Yes, close</Button>
-          <Button key="diag:close-no" onPress={() => { void update($, diagnoseA, x => (x ? { ...x, confirm: false } : x)) }}>No</Button>
-        </Box>
-      : <Box flexDirection="row" gap={4}>
-          {n > 0 && <Button key="diag:close" variant="primary" onPress={() => { void update($, diagnoseA, x => (x ? { ...x, confirm: true } : x)) }}>Close run</Button>}
-          <Button key="diag:back" onPress={() => { void closeEngage($) }}>Back</Button>
-        </Box>,
+    ...d.byHand.map((l, i) => <Box key={`diag:byhand:${i}`}><Text dimColor wrap="wrap">{l}</Text></Box>),
+    <Button key="diag:back" onPress={() => { void closeEngage($) }}>Back</Button>,
   ]
 }
 

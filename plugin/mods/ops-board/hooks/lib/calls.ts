@@ -6,7 +6,7 @@
 export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-decide' | 'meta-decided'
   | 'meta-team-add' | 'meta-team-remove' | 'meta-team-lead'
   | 'meta-reconcile' | 'meta-unblock' | 'meta-start' | 'meta-testing' | 'meta-block'
-  | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide' | 'relay-stage-landed'
+  | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
   | 'usage-level'
   | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'
   | 'team-setup-check'
@@ -34,7 +34,7 @@ export const up = (p: string, n: number) => {
 // args: meta-assign/meta-decide [id, @handle]; meta-decided / meta-unblock / meta-start [id];
 // meta-testing / meta-block [id, text]; meta-reconcile [ids...]; meta-team-add
 // [@handle, name, emails comma-joined]; meta-team-remove / meta-team-lead [@handle]; relay-resume and
-// relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; relay-stage-landed [RUN-id, n, sha]; run-rename [id, name]; team-setup-check none; others none.
+// relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; run-rename [id, name]; team-setup-check none; others none.
 type ScriptCall = Exclude<Call, 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
   'pending':            { script: PENDING, sh: a => a, ps: a => a },
@@ -59,8 +59,6 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'relay-release':      { script: RELAY, sh: () => ['watchdog', 'release'], ps: () => ['-Mode', 'watchdog', '-Action', 'release'] },
   'relay-hold-status':  { script: RELAY, sh: () => ['watchdog', 'status'], ps: () => ['-Mode', 'watchdog', '-Action', 'status'] },
   'relay-decide':       { script: RELAY, sh: a => ['chain', 'decide', '--level', a[0] ?? ''], ps: a => ['-Mode', 'chain', '-Action', 'decide', '-Text', a[0] ?? ''] },
-  // F99: Diagnose's Close - stage <n> landed at <sha>; owner '' keeps the cell (relay-morpheus.sh set_row)
-  'relay-stage-landed': { script: RELAY, sh: a => [a[0] ?? '', 'stage', a[1] ?? '', 'x', '', a[2] ?? ''], ps: a => ['-Mode', 'stage', '-Id', a[0] ?? '', '-N', a[1] ?? '', '-State', 'x', '-Landed', a[2] ?? ''] },
   'usage-level':        { script: WATCH, sh: () => ['level'], ps: () => ['-Mode', 'level'] },
   'run-scan':           { script: RUNS, sh: () => ['scan'], ps: () => ['scan'] },
   'run-rename':         { script: RUNS, sh: a => ['rename', a[0] ?? '', a[1] ?? ''], ps: a => ['rename', a[0] ?? '', a[1] ?? ''] },

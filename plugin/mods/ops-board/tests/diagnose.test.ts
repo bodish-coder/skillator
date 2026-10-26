@@ -48,7 +48,7 @@ test('inconsistent: one line per disagreement; a lagging stage whose ticket is b
   expect(f).toEqual({ verdict: 'inconsistent', lines: ['stage 157: landed aaa1 is not on HEAD - the run branch is not merged'], closable: [] })
   expect(diagnose(run([], null), null, shas({}), NOW)).toEqual({ verdict: 'inconsistent', lines: ['no stages read from the run file'], closable: [] })
 })
-// Review fixes 2: what Close may touch.
+// Review fixes 2: which stages get the by-hand close command.
 test('a stage under a live driver is never closable - said why', () => {
   const d = diagnose(run([st(157, 'F93', '~'), st(158, 'F94', 'pending')], `@cc-1 ${ago(5)}`), BOARD, shas({}), NOW)
   expect(d.closable).toEqual([])
@@ -59,12 +59,16 @@ test('a stage under a live driver is never closable - said why', () => {
     'stage 158 driven by @cc-1 5m ago - not closable',
   ])
 })
+test('a driver cell with a tag but no stamp: heartbeat unreadable, never "undefined"', () => {
+  const d = diagnose(run([st(157, 'F93', '~')], '@cc-1'), BOARD, shas({}), NOW)
+  expect(d.lines).toEqual(['stage 157: in flight in the run file, but F93 is [x] on the board', 'stage 157 driven by @cc-1 (heartbeat unreadable) - not closable'])
+})
 test('parked and failed stages are said, never closable; pending and in flight with no live driver are', () => {
   const d = diagnose(run([st(157, 'F93', '?'), st(158, 'F94', '!'), st(159, 'F93', 'pending'), st(160, 'F94', '~')], `@cc-1 ${ago(183)}`), BOARD, shas({}), NOW)
   expect(d.lines.slice(0, 2)).toEqual(['stage 157: parked in the run file, but F93 is [x] on the board', 'stage 158: failed in the run file, but F94 is [%] on the board'])
   expect(d.closable).toEqual([{ n: 159, tickets: ['F93'] }, { n: 160, tickets: ['F94'] }])
 })
-test('a stage of two tickets: one box per ticket, every ticket handed to Close', () => {
+test('a stage of two tickets: one box per ticket, every ticket in the closable stage', () => {
   const d = diagnose(run([st(158, 'F93 F94', 'pending')], null), BOARD, shas({}), NOW)
   expect(d.lines[0]).toBe('stage 158: not started in the run file, but F93 is [x], F94 is [%] on the board')
   expect(d.closable).toEqual([{ n: 158, tickets: ['F93', 'F94'] }])

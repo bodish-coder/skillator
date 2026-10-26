@@ -7,7 +7,7 @@ import { DRIVER_STALE_MIN, stageTickets, stampAge } from './runlines'
 // the Chain driver stamp. One line per disagreement; any disagreement is `inconsistent`,
 // else all landed is `finished`, else a live driver (or a planned run) is `still running`,
 // else `stalled`. `closable`: pending or in-flight stages whose tickets are built, with no
-// live driver - what Close may mark landed (runstab.tsx closeRun, after a confirm). Pure.
+// live driver - shown the by-hand close command (runstab.tsx openDiagnose; Close itself is F104). Pure.
 
 export type Verdict = 'finished' | 'still running' | 'stalled' | 'inconsistent'
 export type ShaState = 'head' | 'off' | 'none'
@@ -44,7 +44,7 @@ export function diagnose(run: RunView, board: Board | null, shas: Map<string, Sh
     if (!built) continue
     lines.push(`stage ${s.n}: ${WORD[s.state] ?? 'not started'} in the run file, but ${known.map(([id, b]) => `${id} is [${b}]`).join(', ')} on the board`)
     if (!CLOSABLE.includes(s.state)) continue
-    if (live) lines.push(`stage ${s.n} driven by ${tag} ${Number.isNaN(age) ? `(heartbeat unreadable: ${stamp})` : `${age}m ago`} - not closable`)
+    if (live) lines.push(`stage ${s.n} driven by ${tag} ${Number.isNaN(age) ? `(heartbeat unreadable${stamp ? `: ${stamp}` : ''})` : `${age}m ago`} - not closable`)
     else closable.push({ n: s.n, tickets: ids })
   }
   const verdict: Verdict = lines.length ? 'inconsistent' : finished ? 'finished' : run.planned || live ? 'still running' : 'stalled'

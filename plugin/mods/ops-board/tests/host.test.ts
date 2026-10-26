@@ -96,9 +96,6 @@ test('argvFor: both spellings of every call', () => {
     ['relay-hold-status', [], [`/s/skills/${RM}.sh`, 'watchdog', 'status'], [`C:/s/skills/${RM}.ps1`, '-Mode', 'watchdog', '-Action', 'status']],
     ['relay-decide', ['src=host 5h=41 7d=55 ctx=- max=-'], [`/s/skills/${RM}.sh`, 'chain', 'decide', '--level', 'src=host 5h=41 7d=55 ctx=- max=-'],
       [`C:/s/skills/${RM}.ps1`, '-Mode', 'chain', '-Action', 'decide', '-Text', 'src=host 5h=41 7d=55 ctx=- max=-']],
-    // F99: Diagnose's Close - one stage marked landed in the run file, owner kept ('' on the sh side), never a hand edit
-    ['relay-stage-landed', ['RUN-0021', '157', '1c7f053'], [`/s/skills/${RM}.sh`, 'RUN-0021', 'stage', '157', 'x', '', '1c7f053'],
-      [`C:/s/skills/${RM}.ps1`, '-Mode', 'stage', '-Id', 'RUN-0021', '-N', '157', '-State', 'x', '-Landed', '1c7f053']],
     ['usage-level', [], [`/s/skills/${UW}.sh`, 'level'], [`C:/s/skills/${UW}.ps1`, '-Mode', 'level']],
     // F98: teams-uhura's first-time setup, its --check pass only (the walk is interactive)
     ['team-setup-check', [], ['/s/skills/teams-uhura/scripts/setup.sh', '--check'], ['C:/s/skills/teams-uhura/scripts/setup.ps1', '--check']],
