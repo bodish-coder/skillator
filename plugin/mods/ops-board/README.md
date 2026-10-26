@@ -46,7 +46,10 @@ macOS and Linux terminals get no new tab: run `ops` in a tab of your own.
 - A terminal app cannot pick its font; the terminal does. On Windows the installer
   writes a Windows Terminal profile, `skillator ops`, as a fragment:
   `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\skillator\ops.json` (source:
-  `ops/wt-fragment.json`). Font: Cascadia Mono 11 - it ships with Windows Terminal and
-  draws every glyph the board uses. A dark scheme of the same name keeps the highlight
+  `ops/wt-fragment.json`). Font: Cascadia Mono, size 11 unless `install.ps1 -OpsFontSize <n>`
+  or `ops --font-size <n>` set another - an update keeps the size you set. Cascadia Mono
+  ships with Windows Terminal and draws every glyph the board uses. Ctrl+minus /
+  Ctrl+plus / Ctrl+scroll zooms any Windows Terminal or herdr tab live; the in-session
+  pane draws in the host terminal's font, which the pane cannot change. A dark scheme of the same name keeps the highlight
   blue readable. `--open` opens its tab in that profile once installed (Windows Terminal
   reads fragments when it starts). Remove it by deleting that `skillator` folder.

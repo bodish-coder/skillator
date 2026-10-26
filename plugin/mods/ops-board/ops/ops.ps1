@@ -1,5 +1,5 @@
 # ops - the skillator ops board beside any CLI.
-#   powershell -NoProfile -ExecutionPolicy Bypass -File ops.ps1 [-Repo <dir>] [-Open] [--ascii] [--no-color] [--once] ...
+#   powershell -NoProfile -ExecutionPolicy Bypass -File ops.ps1 [-Repo <dir>] [-Open] [-FontSize N] [--ascii] [--no-color] [--once] ...
 # Needs node 22.18 or newer (it runs the board's .ts directly). Exit code: the app's.
 # F89: -Open (or --open) starts the board in a new tab of the current Windows Terminal
 # window when wt is on PATH (the 'skillator ops' profile when its fragment is installed),
@@ -9,9 +9,30 @@
 param(
   [string]$Repo = '.',
   [switch]$Open,
+  [string]$FontSize = '',
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest = @()
 )
 if ($Rest -contains '--open') { $Open = $true; $Rest = @($Rest | Where-Object { $_ -ne '--open' }) }
+# F102: -FontSize / --font-size N rewrites the installed 'skillator ops' profile's font size, then exits
+$i = [array]::IndexOf($Rest, '--font-size')
+if ($i -ge 0) { $FontSize = "$($Rest[$i + 1])" }
+if ($i -ge 0 -or $FontSize) {
+  $n = 0
+  if (-not [int]::TryParse($FontSize, [ref]$n) -or $n -lt 6 -or $n -gt 72) {
+    [Console]::Error.WriteLine("ops: font size must be 6..72, got $FontSize")
+    exit 2
+  }
+  $frag = ''
+  if ($env:LOCALAPPDATA) { $frag = Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\Fragments\skillator\ops.json' }
+  if (-not $frag -or -not (Test-Path -LiteralPath $frag -PathType Leaf)) {
+    [Console]::Error.WriteLine("ops: no 'skillator ops' profile installed - run install.ps1 first")
+    exit 2
+  }
+  $t = [IO.File]::ReadAllText($frag) -replace '"size": \d+', "`"size`": $n"
+  [IO.File]::WriteAllText($frag, $t, (New-Object System.Text.UTF8Encoding $false))
+  Write-Host "skillator ops font size $n - tabs opened after Windows Terminal restarts use it (Ctrl+minus / Ctrl+plus zooms the current tab now)"
+  exit 0
+}
 try { Set-Location -LiteralPath $Repo -ErrorAction Stop } catch {
   [Console]::Error.WriteLine("ops: no such directory: $Repo")
   exit 2

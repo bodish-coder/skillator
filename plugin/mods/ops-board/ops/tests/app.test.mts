@@ -178,6 +178,8 @@ test('--help prints the usage and the launcher line, exit 0', () => {
   assert.equal(r.status, 0, r.stderr)
   assert.ok(r.stdout.startsWith(USAGE + '\n'), r.stdout)
   assert.match(r.stdout, /--open/)
+  assert.match(r.stdout, /--font-size N/)
+  assert.match(r.stdout, /Ctrl\+minus/)
 })
 
 test('sh launcher refuses an old node with exit 2', { skip: !hasSh }, () => {

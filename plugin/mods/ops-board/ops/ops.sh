@@ -13,6 +13,20 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 case ${1:-} in ''|-*) ;; *) cd -- "$1" || exit 2; shift ;; esac
 open=
 for a in "$@"; do shift; if [ "$a" = --open ]; then open=1; else set -- "$@" "$a"; fi; done
+# F102: --font-size N rewrites the installed 'skillator ops' Windows Terminal profile's font size, then exits
+fs=; want=
+for a in "$@"; do if [ -n "$want" ]; then fs=$a; want=; elif [ "$a" = --font-size ]; then fs=none; want=1; fi; done
+if [ -n "$fs" ]; then
+  case $(uname -s 2>/dev/null) in MINGW*|MSYS*|CYGWIN*) ;; *) echo "ops: --font-size sets the Windows Terminal profile only - zoom this terminal with its own keys" >&2; exit 2 ;; esac
+  case $fs in ''|*[!0-9]*) fs=0 ;; esac
+  if [ "$fs" -lt 6 ] || [ "$fs" -gt 72 ]; then echo "ops: font size must be 6..72" >&2; exit 2; fi
+  frag=
+  [ -n "${LOCALAPPDATA:-}" ] && frag="$(cygpath -u "$LOCALAPPDATA")/Microsoft/Windows Terminal/Fragments/skillator/ops.json"
+  if [ -z "$frag" ] || [ ! -f "$frag" ]; then echo "ops: no 'skillator ops' profile installed - run install.ps1 first" >&2; exit 2; fi
+  sed "s/\"size\": [0-9]*/\"size\": $fs/" "$frag" > "$frag.tmp" && mv "$frag.tmp" "$frag"
+  echo "skillator ops font size $fs - tabs opened after Windows Terminal restarts use it (Ctrl+minus / Ctrl+plus zooms the current tab now)"
+  exit 0
+fi
 v=$(node -p 'process.versions.node' 2>/dev/null || true)
 maj=${v%%.*}; rest=${v#*.}; min=${rest%%.*}
 case $maj$min in ''|*[!0-9]*) maj=0; min=0 ;; esac

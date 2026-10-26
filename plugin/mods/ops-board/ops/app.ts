@@ -32,6 +32,8 @@ export const HELP = USAGE + '\n'
   + '  launcher: ops [repo-dir] --open   (ops.ps1: -Open) the board in a new tab of the current\n'
   + '            Windows Terminal window when wt.exe is on PATH, else here as without it\n'
   + '  ops --status   one row per CLI profile (5h / 7d % used, or why not), then exits\n'
+  + "  ops --font-size N   sets the 'skillator ops' Windows Terminal profile font (install.ps1 -OpsFontSize N too; skillator-update keeps it)\n"
+  + "  zoom: Ctrl+minus / Ctrl+plus / Ctrl+scroll resizes any Windows Terminal or herdr tab live; the in-session pane draws in the host terminal's font\n"
   + '  NO_COLOR or --no-color drops the colours only; bold, inverse and the › marker stay'
 const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', agents: 'runs', health: 'health', messages: 'messages', explorer: 'explorer', build: 'run', run: 'run' }
 
