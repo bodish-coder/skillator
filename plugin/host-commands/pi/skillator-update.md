@@ -30,15 +30,18 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
    Antigravity IDE's ops board: on Windows
    `powershell -NoProfile -ExecutionPolicy Bypass -File "<src>/install.ps1" -Force`, elsewhere
    `sh "<src>/install.sh" --force`. A non-zero exit → show the last lines of its output and stop.
-4. **Muse** - only when `muse` is on PATH and `muse plugins list --json` lists `skillator`:
-   it refreshes from the dir it was installed from (`source.path` in that list, a `\\?\` prefix
-   dropped), not from step 2's source - a git clone there that step 2 did not pull →
+4. **Muse** - only when `muse` is on PATH and `muse plugins list --json` lists `skillator`.
+   Its `source.provenance` is `marketplace-user-added` → `muse plugins marketplace update <name>`
+   (`<name>`: the dir after `marketplaces\` in `source.path`), then `muse plugins remove skillator`
+   and `muse plugins install skillator@<name>` - a plain `update` re-reads the old snapshot and
+   changes nothing. Otherwise it refreshes from the dir it was installed from (`source.path` in
+   that list, a `\\?\` prefix dropped), not from step 2's source - a git clone there that step 2 did not pull →
    `git -C <that dir> pull --ff-only` first, failing as in step 2. Then
    `muse plugins update skillator` - or, when that dir has no `.muse-plugin/plugin.json` but
    `<that dir>/plugin/.muse-plugin/plugin.json` exists (installed before F91 moved the plugin
    into `plugin/`), `muse plugins remove skillator` then `muse plugins install <that dir>/plugin`
-   instead (install refuses a second source; remove keeps the plugin data); note the old and new
-   `version`. It reports a runtime
+   instead (install refuses a second source; remove keeps the plugin data). Either way note the
+   old and new `version`. It reports a runtime
    capability awaiting approval → show `muse plugins approve skillator` to the user, never
    run it on your own.
 5. **Report** one table: host, old -> new version (new: `version` in

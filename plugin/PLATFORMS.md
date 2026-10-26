@@ -89,7 +89,7 @@ Five rows have now been tested; prime-agent has no loader to test.
 | cursor | **yes, verified** — 2026-09-23, `cursor-agent` 2026.09.18, 4/4 — but every load came from the user-level `~/.cursor/skills`; a fixture-local `.cursor/skills`/`.agents/skills` never appeared in its inventory (self-reported, unconfirmed) |
 | antigravity | **yes, verified** — 2026-09-24, `agy` 1.2.9, 4/4 — `grayskull-power` 2/2 from the fixture's project-local `.agents/skills`; the `func-ui`-triggering prompt 2/2 loaded the stale user-level `~/.gemini/config/skills/func-ui` instead of the fixture's `designui-galadriel` |
 | pi | **yes, verified** — 2026-09-23, `pi` 0.74.2 / openai gpt-5.5, 4/4, from project-local `.pi/skills` with `PI_CODING_AGENT_DIR` and `HOME` isolated |
-| muse | **unverified** — F68 (2026-10-24, Muse Code 1.4.12): `muse plugins validate` - 28 skills `supported` (summary `full`); `muse plugins install` into a scratch profile - `active=true skills=28`; B10 (Muse Code 1.4.13): install from a clone only - `marketplace add` of this repo is unsupported (see the muse section); an unprompted load from a description not run |
+| muse | **unverified** — F68 (2026-10-24, Muse Code 1.4.12): `muse plugins validate` - 28 skills `supported` (summary `full`); `muse plugins install` into a scratch profile - `active=true skills=28`; B11 (Muse Code 1.4.13): `marketplace add <name> <git URL>` + `install skillator@<name>` - `active=true skills=29` (a scratch bare clone over `file://`; the GitHub URL once 4.17.x is pushed), the clone route stays (see the muse section); an unprompted load from a description not run |
 | opencode | **unverified** — F67 (2026-10-24, opencode 1.19.4) checked discovery only: `opencode debug skill` lists the skills in `~/.config/opencode/skills`; an unprompted load from the description has not been run |
 | prime-agent | **no** — no markdown-skill loader at all; not installed on this machine (2026-09-24), so its always-on-file route is still unrun |
 
@@ -354,7 +354,19 @@ lists every `skills/*/SKILL.md` by its frontmatter `name`, and `.muse-plugin/mar
 lists the plugin; both carry the `.claude-plugin/plugin.json` version.
 `practice/scripts/check-muse-manifest.sh` fails on a skill left out, a path gone, an id that is
 not the skill's `name` or a version out of step, and `install.sh --selftest` runs it - so a
-new skill or a release bump touches `.muse-plugin/` too. Install from a clone:
+new skill or a release bump touches `.muse-plugin/` too. Install from the marketplace (B11, from
+4.17.x): `muse plugins marketplace add skillator https://github.com/bodish-coder/skillator`, then
+`muse plugins install skillator@skillator`. Muse probes `.claude-plugin/marketplace.json` but
+never `.muse-plugin/marketplace.json`, so it reads the Claude catalog; since F91 its entry is
+`./plugin`, so no second clone (before F91 the entry was a github source, which Muse cloned into a
+`\\?\` path git refuses on Windows - B10). Update: `muse plugins marketplace update skillator`
+(a fresh snapshot in a new `generations/<n>` dir), then `muse plugins remove skillator` +
+`muse plugins install skillator@skillator` - the installed record keeps the old snapshot's path,
+so a plain `muse plugins update skillator` reports `updated` and changes nothing, and `install`
+alone refuses ("already installed from a different source"). Verified (Muse Code 1.4.13,
+2026-10-26, scratch profile, a bare clone of this branch added as `file:///C:/t/b11.git`): add
+`plugins=1`, install 4.17.0 `active=true` with 29 skills, a new commit reached the cache only by
+marketplace update + remove + install. Or install from a clone:
 `git clone https://github.com/bodish-coder/skillator <dir>`, then `muse plugins install <dir>/plugin`
 (F91: the plugin is the `plugin/` folder; it copies that folder into Muse's cache; skills are
 enabled by default, so `muse plugins approve` has no runtime capability to act on); update:
@@ -362,13 +374,7 @@ enabled by default, so `muse plugins approve` has no runtime capability to act o
 `/skillator-update` step 4 does both, and moves an install of `<dir>` made before F91 to
 `<dir>/plugin` with `muse plugins remove skillator` + `muse plugins install` - a plain
 `update` fails there with `missing-manifest`, and `install` alone with "already installed from a
-different source"). `muse plugins marketplace add` of this repo: Muse probes
-`.claude-plugin/marketplace.json` but never `.muse-plugin/marketplace.json`, so it reads the
-Claude catalog. Before F91 that failed cloning the catalog's github source into a `\\?\` path git
-refuses on Windows (B10); since F91 the entry is `./plugin`, and `marketplace add <name> <local
-clone>` + `install skillator@<name>` works (Muse 1.4.13, scratch profile: `plugin_count 1`,
-4.17.1 enabled). Adding by the GitHub URL is unverified until pushed; B11 tracks a Muse-native
-catalog. Muse also warns that it skips ops-board - expected: its
+different source"). Muse also warns that it skips ops-board - expected: its
 `hooks/hooks.json` is a Claude Code mod, which Muse cannot run.
 Verified (Muse Code 1.4.12, 2026-10-24): `muse plugins validate <repo>` - valid, summary
 `full`; `muse plugins install` with a scratch USERPROFILE/XDG_DATA_HOME - `skills=28
