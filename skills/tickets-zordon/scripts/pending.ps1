@@ -288,8 +288,11 @@ function Get-SessionsKv {
     $sd = "$cfg/sessions"
   }
   $out = New-Object System.Collections.ArrayList
-  if (-not (Test-Path -LiteralPath $sd -PathType Container)) { return @() }
-  $names = Sort-Ordinal @(Get-ChildItem -LiteralPath $sd -File -Force | ForEach-Object { $_.Name } | Where-Object { $_ -clike '*.json' -and $_ -cnotlike '.*' })
+  # A149: agy --sandbox denies ~/.claude and Test-Path then throws whatever -ErrorAction says - no sessions, not a crash
+  try {
+    if (-not (Test-Path -LiteralPath $sd -PathType Container)) { return @() }
+    $names = Sort-Ordinal @(Get-ChildItem -LiteralPath $sd -File -Force | ForEach-Object { $_.Name } | Where-Object { $_ -clike '*.json' -and $_ -cnotlike '.*' })
+  } catch { return @() }
   foreach ($nm in $names) {
     $f = "$sd/$nm"
     $m = Get-Num (Get-MTime $f)

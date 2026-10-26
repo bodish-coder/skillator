@@ -74,3 +74,159 @@
 # codex: not logged in - not tried. Once it is, check `codex exec --json --ephemeral -s read-only
 #   '/prompts:engage ...'` expands (the stage-91 open question), the **Engaged prompt:** block, and
 #   a skill route from $CODEX_HOME/skills.
+#
+# ================================================================ 2026-10-26 - A149, RUN-0020 ====
+# Hosts: agy 1.4.7 (model "Gemini 4 Argon (Medium)" per the log), signed in, quota back.
+#   codex-cli 0.164.0 with CODEX_HOME=~/.codex-bodish ("Logged in using ChatGPT"; model gpt-6.1-sol
+#   from its config). Installed skillator on both: 4.16.0 (codex: prompts/*.md, no command skills).
+# Setup: $S = session scratchpad/a149. `git clone C:/tools/Projects/skillator2 $S/clone` (main
+#   d852d71, plugin 4.17.0). Route fixtures with no GEMINI.md / AGENTS.md / CLAUDE.md steer, as
+#   A62c: $S/fixture (agy), $S/fixture-codex and $S/fixture-codex2 (codex) - a README.md and one
+#   commit each. Every run MSYS_NO_PATHCONV=1. Nothing under ~ was written except as noted (c3).
+# agy flags: as r1 (--mode plan --sandbox --new-project --output-format stream-json
+#   --print-timeout 300s --log-file). codex: `codex exec --json --ephemeral -s read-only -C <dir>`.
+# 4.17.0 skill form on codex: Codex docs (developers.openai.com/codex/skills -> learn.chatgpt.com/
+#   docs/build-skills, read 2026-10-26) list repo skills at $CWD/.agents/skills up to the repo
+#   root, invoked as `$name` or /skills. So $S/clone/.agents/skills/{engage,pending}/SKILL.md =
+#   host-commands/antigravity/<n>/SKILL.md with {{SKILLS}} -> $S/clone/skills (install.sh's codex
+#   row writes the same files to <codex home>/skills). ~/.codex-bodish/skills was not touched.
+# Main session's notice: a stray F91 install wrote ~/.gemini/... skills at 05:28 IST
+#   (~/.codex-bodish untouched). agy runs from 05:28 IST on are INSTALL POLLUTED (F91 accident
+#   05:28) and not counted: r12 (05:27:57-05:28:40, straddles) and r13 (05:28:50). r6-r11
+#   (04:59-05:25) predate it. No agy run after r13 (and the 8-run budget was spent).
+#
+# ---------------------------------------------------------------- agy runs (r6-r13, 8 of 8) ----
+# r6  /engage   agy -p '/engage tell me which tickets are still open' (from $S/clone)
+#   RESOLVED: "expanded_commands":[{"name":"engage","type":"skill"}]; log: expanded slash command
+#             "engage" (skill). result SUCCESS, 1 turn, 94789 tokens.
+#   BLOCK SHOWN, FIRST: the response opens "**Engaged prompt:**\n\n> Read [`TICKETS.md`]... list
+#             all currently open tickets ... - **Done when:** Every open and deferred ticket ..."
+#             then "## ⚔️ I HAVE THE POWER!!", then the board (17 open ... 156 total).
+# r7  bare /engage after a first message: stdin two NDJSON lines (schema from the binary's own
+#   errors: `stream input message is missing the "event" field`, `"user" message is missing the
+#   "message" field`):
+#     {"event":"user","message":{"role":"user","content":"whats the deal with the tickets, which ones r still open"}}
+#     {"event":"user","message":{"role":"user","content":"/engage"}}
+#   agy --input-format stream-json (same flags, no -p: `-p --input-format` exits 2 "-p took
+#   "--input-format" as its prompt") < r7.in
+#   RESOLVED on turn 2: log 'expanded slash command "engage" (skill)', 'stream input closed after
+#             2 turn(s)'. (The init event has no expanded_commands in this mode - the log is the
+#             signal.)
+#   BLOCK SHOWN: result 1 answers the rough message; result 2 opens "**Engaged prompt:**\n> Read
+#             `TICKETS.md` at the repository root and report all open and deferred tickets in the
+#             `tickets-zordon` by-type checkbox view ... Done when ..." - the PREVIOUS message,
+#             rewritten - then the board.
+# r8  /pending  agy -p '/pending'
+#   RESOLVED: "expanded_commands":[{"name":"pending","type":"skill"}]. Output: the pending.ps1
+#             report ("REPO clone main: up to date ... TICKETS 17 open, 2 deferred ..."), SUCCESS.
+#   DEFECT SEEN: the skill's own command, in agy's sandbox, failed:
+#             "Test-Path : Access is denied / At ...tickets-zordon\scripts\pending.ps1:291 char:13 /
+#             + if (-not (Test-Path -LiteralPath $sd -PathType Container)) ... UnauthorizedAccess
+#             Exception" (exit 1; $sd = ~/.claude/sessions); `sh .../pending.sh` exit 1, no output.
+#             The model then re-ran it with BypassSandbox: true (log: Monitor sir_flash_lite
+#             triggered=true "executing a script with the 'BypassSandbox: true' flag") - the
+#             report only came out because the sandbox was bypassed.
+# r9  route 'log a bug: the export button is grey' (from $S/fixture, no steer file)
+#   ROUTE: tickets-zordon - first tool call read ~/.gemini/antigravity-cli/skills/tickets-zordon/
+#             SKILL.md; grayskull-power read after it. Answer drafts "B1 — Export button is grey
+#             (@ag-cb3585)" and asks before creating TICKETS.md (plan mode). Fixture unchanged.
+# r10 route 'by the power of grayskull' (from $S/fixture)
+#   ROUTE: grayskull-power - first tool call read .../grayskull-power/SKILL.md, then its
+#             references; reply opens "## ⚔️ I HAVE THE POWER!!" + the state line
+#             "grayskull-power: board none (no TICKETS.md ...) · ... · code-yoda full · ...".
+#             Note: --mode plan did not stop it writing the arming files into the fixture
+#             (.skillator/, CLAUDE.md, AGENTS.md, GEMINI.md, .gitignore) - agy's plan mode, scratch.
+# r11 repro of r8 on the 4.17.0 source (the clone's skills/tickets-zordon/scripts/pending.ps1),
+#   sandbox kept: same "Test-Path : Access is denied ... pending.ps1:291" exit 1. `sh pending.sh`
+#   from agy's PowerShell printed nothing (sh-exit=False) - inconclusive for the sh twin.
+# r12 INSTALL POLLUTED (F91 accident 05:28) - and void anyway: a trailing " ." in my prompt made
+#   the command `pending.ps1 .` -> "pending: usage: ...". Not counted.
+# r13 INSTALL POLLUTED (F91 accident 05:28) - not counted. (It ran the clone's script with
+#   -ErrorAction SilentlyContinue added to Test-Path: still "Test-Path : Access is denied ...
+#   :292" - -ErrorAction does not stop this throw; the local repro below shows the same.)
+#
+# ---------------------------------------------------------------- codex runs (c1-c7, 8 of 8) ----
+# Every codex run first emits an error item, harmless to the run:
+#   "failed to parse plugin hooks config ~/.codex-bodish/plugins/cache/skillator/ops-board/0.7.0/
+#   hooks/hooks.json: unknown field `modules`, expected `description` or `hooks`" - the Claude Code
+#   mod format ({modules}) read by Codex's plugin loader; same cause as B10's Muse skip.
+# c1  installed form: '/prompts:engage tell me which tickets are still open' (-C $S/clone)
+#   NOT RESOLVED: no expansion - the model treated it as text: first message "I'll read the repo's
+#             workflow instructions and check which tickets are still open", then went looking
+#             for the body: `Get-Content .\host-commands\codex\engage.md` -> "Cannot find path",
+#             then `Get-Content .\commands\engage.md` (the Claude Code command in THIS repo).
+#   BLOCK SHOWN, but only because the skillator repo itself carries commands/engage.md:
+#             "**Engaged prompt:**\n\n> Read TICKETS.md and list tickets that are still open ..."
+#             In any other repo /prompts:engage gives codex exec 0.164 nothing. (Answers the
+#             stage-91 open question: codex exec does NOT expand custom prompts.)
+# c2  4.17.0 form: '$engage tell me which tickets are still open' (-C $S/clone, .agents/skills)
+#   RESOLVED: "I'm using the engage and pending skills ..."; first command reads
+#             .agents/skills/engage/SKILL.md (and pending's) - codex listed the project skill.
+#   BLOCK SHOWN, FIRST: "## ⚔️ I HAVE THE POWER!!\n\n**Engaged prompt:**\n\n> Check this
+#             repository's ticket board and report which tickets are still open ... Keep the
+#             board unchanged." then pending.ps1's report.
+# c3  bare $engage after a first message. codex exec is one turn per call, so: c3a `codex exec
+#   --json -s read-only -C $S/clone 'whats the deal with the tickets, which ones r still open'`
+#   WITHOUT --ephemeral (a resume needs the rollout - this wrote one session under
+#   ~/.codex-bodish/sessions), then c3b `codex exec resume --json -c 'sandbox_mode="read-only"'
+#   <thread 01a17576-...> '$engage'` (resume takes no -s/-C; run from $S/clone). Afterwards
+#   `codex delete --force 01a17576-c2a6-7f43-ac1e-80f6790efc17` -> "Deleted session ...".
+#   c3a: answered the rough prompt (17 open ...). c3b RESOLVED: "I'm using the engage skill to
+#             refine your previous request, then carry it out." + reads .agents/skills/engage/
+#             SKILL.md. BLOCK SHOWN, FIRST: "**Engaged prompt:**\n\n> Check this repository's
+#             current ticket board and list which tickets are still open, grouped by type. ...
+#             Read the board without changing tickets or starting implementation." then the board.
+# c4  installed form: '/prompts:pending' (clone's .agents moved aside for this run)
+#   NOT RESOLVED: "I'll read the repository's workflow instructions and check what
+#             `/prompts:pending` should report." - it found ~/.codex-bodish/prompts/pending.md by
+#             itself and ran the script; output right, by detective work, not by the command.
+# c5  4.17.0 form: '$pending'
+#   RESOLVED: "I'll use the pending skill ..."; reads .agents/skills/pending/SKILL.md, runs
+#             skills/tickets-zordon/scripts/pending.ps1 -> exit 0, the report pasted unchanged.
+#             (codex's read-only sandbox lets it read ~/.claude - no r8 failure here.)
+# c6  route 'log a bug: the export button is grey' (-C $S/fixture-codex, no steer)
+#   ROUTE: tickets-zordon - "I'll use the tickets-zordon skill to log the export button bug.";
+#             first command reads ~/.codex-bodish/skills/tickets-zordon/SKILL.md. "Logged **B1**
+#             in `TICKETS.md`: Fix greyed-out export button ...". Note: `-s read-only` did NOT
+#             stop the writes on Windows (TICKETS.md, .gitignore, .git/hooks/{pre-commit,
+#             post-merge}) - a codex 0.164 Windows sandbox gap, not skillator; scratch fixture.
+# c7  route 'by the power of grayskull' (-C $S/fixture-codex2, fresh, no steer)
+#   ROUTE: grayskull-power - "I'll use the grayskull-power skill ..."; first command reads
+#             .../grayskull-power/SKILL.md; "## ⚔️ I HAVE THE POWER!!"; state line
+#             "grayskull-power: board absent · CodeGraph skipped (no index) · code-yoda full ·
+#             ... usage 37.3% / 92% ...". Wrote the arming files (same read-only gap as c6).
+#
+# ---------------------------------------------------------------- the r8 defect, fixed ----
+# pending.ps1 Get-SessionsKv: when the sessions dir (~/.claude/sessions) cannot even be stat'ed,
+#   Test-Path THROWS UnauthorizedAccessException - with -ErrorAction SilentlyContinue too - and
+#   $ErrorActionPreference='Stop' kills the whole report. The data is optional, so:
+#   try { Test-Path / Get-ChildItem } catch { return @() } - no sessions, not a crash.
+# Local repro (agy's run budget spent, so not re-run on agy): a scratch dir with icacls /deny
+#   "<user>:(RA,RD,REA,X)" on cfg and cfg/sessions; PENDING_SESSIONS_DIR=<it>; run from $S/clone.
+#   Test-Path there: "SilentlyContinue THROW: UnauthorizedAccessException" (same with Stop).
+#   RED  (before): "Test-Path : Access is denied ... pending.ps1:292", exit 1 - the r8/r11 failure.
+#   GREEN (after): exit 0, "REPO clone main: up to date ..." / "TICKETS 17 open, 2 deferred".
+#   pending.ps1 --selftest: ok. pending.sh --selftest (ps1/sh parity): ok. pending.sh on the
+#   denied dir: exit 0, same report (the sh twin needs no change).
+#
+# ---------------------------------------------------------------- verdicts (A149 Done) ----
+#                        agy 1.4.7 (installed 4.16.0)        codex 0.164.0
+# 1 /engage, block       PROVEN (r6)                         4.17.0 $engage PROVEN (c2); installed
+#   before the answer                                        /prompts:engage NOT EXPANDED (c1)
+# 2 bare /engage after   PROVEN (r7, stream-json 2 lines)    4.17.0 $engage PROVEN (c3a+c3b, resume)
+#   a message
+# 3 /pending             RESOLVES + output (r8) - only by    4.17.0 $pending PROVEN (c5); installed
+#                        bypassing the sandbox; the fix      /prompts:pending NOT EXPANDED (c4)
+#                        above is proven locally, not yet
+#                        re-run inside agy's sandbox
+# 4 route tickets-zordon PROVEN (r9)                         PROVEN (c6)
+#   route grayskull-power PROVEN (r10)                       PROVEN (c7)
+# Gaps: G1 closed (quota back). G2 closed (agy /engage + bare /engage seen by a model). G4 closed
+#   (routing re-run on agy 1.4.7). G3 stands (no agy home override). The codex note above is
+#   answered: codex exec 0.164 does not expand /prompts:<n>; F90's skill form ($n) works, proven
+#   from a project .agents/skills folder, not yet from an install into <codex home>/skills (F90's
+#   own owner check).
+# Left for the owner: (a) a sandboxed agy /pending after the next install (once the F91 accident
+#   is repaired), to see the try/catch hold inside agy; (b) the F90 live check ($pending after an
+#   install into ~/.codex-bodish/skills); (c) the ops-board hooks.json error item in every codex
+#   run - harmless noise; (d) codex -s read-only and agy --mode plan both wrote files in fixtures.
