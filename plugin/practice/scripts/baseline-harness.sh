@@ -3137,7 +3137,9 @@ selftest() {
   [ -z "$(git -C "$tmp/relay-chain-u" status --porcelain)" ] || die 'relay-chain usage: tree not clean'
   hk=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/skills
   if [ -f "$hk/watch-cortana/hooks/usage-watch.sh" ]; then
-    lvl=$(CLAUDE_USAGE_WATCH_DIR="$tmp/relay-chain-u.usage" CODEX_HOME="$tmp/no-codex" sh "$hk/watch-cortana/hooks/usage-watch.sh" level)
+    # A158: since A130 a set CLAUDE_CODE_SESSION_ID reads only that session's
+    # flags, so the host session's id would hide the fixture's fixture-session.
+    lvl=$(CLAUDE_CODE_SESSION_ID= CLAUDE_USAGE_WATCH_DIR="$tmp/relay-chain-u.usage" CODEX_HOME="$tmp/no-codex" sh "$hk/watch-cortana/hooks/usage-watch.sh" level)
     [ "$lvl" = 'src=claude-code 5h=84 7d=40 ctx=- max=84' ] || die "relay-chain usage: level read '$lvl'"
     dec=$(cd "$tmp" && RELAY_LEVEL_CMD="echo '$lvl'" sh "$hk/relay-morpheus/hooks/relay-morpheus.sh" chain decide)
     [ "$dec" = 'HOLD 84' ] || die "relay-chain usage: chain decide said '$dec' at 84%"
@@ -3220,7 +3222,7 @@ selftest() {
       printf '%s\n' '{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":12.0,"window_minutes":300}}}}' \
         > "$fh/.codex/sessions/2026/10/12/rollout-fresh.jsonl"
       envs=$(echo "$c" | head -1 | sed -n "s/^cd '[^']*' && \(\([A-Z_]*='[^']*' \)*\)sh .*/\1/p")
-      lvl=$(unset CODEX_HOME; eval "export $envs"; HOME="$fh" sh "$hk/watch-cortana/hooks/usage-watch.sh" level)
+      lvl=$(unset CODEX_HOME CLAUDE_CODE_SESSION_ID; eval "export $envs"; HOME="$fh" sh "$hk/watch-cortana/hooks/usage-watch.sh" level)
       [ "$lvl" = 'src=claude-code 5h=84 7d=40 ctx=- max=84' ] \
         || die "cmd $m: BASELINE_USAGE run reads the host's codex rollout, not the fixture: '$lvl' (env: $envs)"
     fi
