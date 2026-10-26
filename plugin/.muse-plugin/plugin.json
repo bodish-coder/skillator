@@ -3,7 +3,7 @@
   "name": "skillator",
   "displayName": "Skillator",
   "version": "4.20.0",
-  "description": "Reusable agent skills (Claude Code, Cursor, Codex, Antigravity, Pi), named purpose-first after fantasy and sci-fi: a grayskull-power router, tickets-zordon for serialised bug/feature tickets, rules-orko for the user's standing rules at global and project scope, watch-cortana for usage-limit auto-handoff, handoff-cortana/resume-cortana for writing and executing a handoff, relay-morpheus for staged runs that outlive the session and marathons over the board, holo-r2d2 for drawing a run and its decisions, chief-fury for owning a long-running goal (a dated goal wiki, board meetings for hard decisions), tasks-sentinels for one-fresh-agent-per-task plan execution, designui-galadriel for turning a mockup into a working app, build-jarvis for every feature, graded per seat from design to verify, design-arwen for native+web UI/UX, a11y-toph for accessibility, tui-tron for terminal UIs, spec-watson for traceable requirement ids, mergeprep-oracle/merge-smith for branch merges, deploy-merlin/deploy-niyoj for VPS deployment, audit-sherlock for a full-app forensic audit, code-yoda for restraint (the laziness ladder, an over-engineering review or audit, the shortcut-marker ledger), remote-cerebro for driving codex/cursor-agent/pi/gemini from a phone with a kill switch and pairing, teams-uhura for a Teams channel beside the board (signed outgoing webhook in, messages as data, Workflows replies), live-friday for a live build/preview loop, and screenshot-argus for a test-screenshot loop",
+  "description": "Reusable agent skills (Claude Code, Cursor, Codex, Antigravity, Pi), named purpose-first after fantasy and sci-fi: a grayskull-power router, tickets-zordon for serialised bug/feature tickets, rules-orko for the user's standing rules at global and project scope, watch-cortana for usage-limit auto-handoff, handoff-cortana/resume-cortana for writing and executing a handoff, relay-morpheus for staged runs that outlive the session and marathons over the board, holo-r2d2 for drawing a run and its decisions, chief-fury for owning a long-running goal (a dated goal wiki, board meetings for hard decisions), tasks-sentinels for one-fresh-agent-per-task plan execution, designui-galadriel for turning a mockup into a working app, build-jarvis for every feature, graded per seat from design to verify, design-arwen for native+web UI/UX, a11y-toph for accessibility, tui-tron for terminal UIs, spec-watson for traceable requirement ids, mergeprep-oracle/merge-smith for branch merges, deploy-merlin/deploy-niyoj for VPS deployment, audit-sherlock for a full-app forensic audit, code-yoda for restraint (the laziness ladder, an over-engineering review or audit, the shortcut-marker ledger), clone-odo for clean-room app cloning (a recon map of screens and flows, must-haves as F tickets, parity scoring, review mining, a rebrand sweep and store-listing lint), remote-cerebro for driving codex/cursor-agent/pi/gemini from a phone with a kill switch and pairing, teams-uhura for a Teams channel beside the board (signed outgoing webhook in, messages as data, Workflows replies), live-friday for a live build/preview loop, and screenshot-argus for a test-screenshot loop",
   "compat": {
     "source": "native",
     "manifestDir": ".muse-plugin"
@@ -33,6 +33,10 @@
       {
         "id": "chief-fury",
         "path": "skills/chief-fury/SKILL.md"
+      },
+      {
+        "id": "clone-odo",
+        "path": "skills/clone-odo/SKILL.md"
       },
       {
         "id": "code-yoda",

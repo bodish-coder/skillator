@@ -130,7 +130,9 @@ percentage to give them — see `PLATFORMS.md`), so run
   `$(git rev-parse --git-common-dir)/skillator/upstream-check.day`, shared by
   every worktree. Also run `sh skills/code-yoda/upstream-check.sh --daily`
   (Windows: the `.ps1` beside it, `-Daily`) — code-yoda's manifest, same
-  output shape, its own stamp. Act on the output of both:
+  output shape, its own stamp. And
+  `sh skills/clone-odo/upstream-check.sh --daily` the same way (clone-odo's
+  manifest, `replica-skill`). Act on the output of all three:
   - `skipped:` or exit 0: nothing to do.
   - each `changed <name> <old>..<new> <url>` line (exit 1, and also exit 2,
     because one failed row does not hide another's change): look for an open
@@ -138,8 +140,9 @@ percentage to give them — see `PLATFORMS.md`), so run
     `<new>`. If there is one, it is already logged. If not, take a number with
     `sh practice/scripts/next-id.sh A` and add
     `- [ ] A<n> — absorb <name> <old>..<new> into <skill> (<url>)`, `<skill>`
-    being the one whose manifest reported it (`design-arwen`, or `code-yoda` for
-    `ponytail`). The procedure is in that skill's `UPSTREAM.md`.
+    being the one whose manifest reported it (`design-arwen`, `code-yoda` for
+    `ponytail`, or `clone-odo` for `replica-skill`). The procedure is in that
+    skill's `UPSTREAM.md`.
   - each `error` line (exit 2): report it in the active-set line as
     `upstreams: check failed (<name>)`. Never call a failed check unchanged. No
     stamp is written, so the next session retries it.

@@ -550,9 +550,12 @@ function Invoke-SelfTest([string]$T) {
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
                            '.pi\agent\extensions\skillator-ops.ts', '.config\opencode\skills\tickets-zordon\SKILL.md',
-                           '.config\opencode\skills\teams-uhura\scripts\team.mjs', '.config\opencode\skills\ops-board\ops\ops.ps1')) {
+                           '.config\opencode\skills\teams-uhura\scripts\team.mjs', '.config\opencode\skills\ops-board\ops\ops.ps1',
+                           '.codex\skills\clone-odo\scripts\odo.ps1', '.codex\skills\clone-odo\scripts\parity.py',
+                           '.config\opencode\skills\clone-odo\templates\features.csv')) {
     if (-not (Test-Path -LiteralPath (Join-Path $T $f) -PathType Leaf)) { return "missing $f" }
   }
+  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'skills\clone-odo\scripts\odo.ps1') selftest *> $null; if ($LASTEXITCODE -ne 0) { return 'clone-odo tools selftest failed (skills\clone-odo\scripts\odo.ps1 selftest)' }
   # F67: opencode - the skills in its global skills dir, the seven commands in its commands\
   # dir, each substituted with that dest, arguments by $ARGUMENTS (BOM, CR, placeholder: the $cmds loop)
   $oc = '.config\opencode'
