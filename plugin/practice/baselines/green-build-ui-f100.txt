@@ -1,0 +1,74 @@
+# GREEN - F100: a UI feature lands in build-jarvis (core design, then
+# design-arwen); a UI-only ask goes to design-arwen alone. RUN-0023.
+# Scenarios: scenario-build-ui-feature.txt, scenario-build-ui-only.txt.
+# No RED: before F100 the router sent every UI ask to design-arwen and
+# build-jarvis had no `ui` field, so the UI-feature path did not exist to fail.
+#
+# Harness: claude-code 2.1.310, claude-opus-5-5[1m]. Prefix built from the
+# worktree at f1e34a1 (`baseline-harness.sh prefix`; practice/ dirty only by
+# the two new scenario files). Fresh relay-chain fixture per run
+# (`baseline-harness.sh fixture relay-chain`). Each run is the harness's own
+# `cmd green` line - its `run 900` with BASELINE_ISOLATE=hide
+# ("~/.claude/CLAUDE.md restored", "limit hit: none" in every .err) - with
+# --settings swapped for transcripts/f100-settings.json (the harness settings
+# plus the prefix's feature-route.sh UserPromptSubmit hook and grade-gate.sh
+# PreToolUse hook, installed as build-jarvis/references/route-hook.md says)
+# and --include-hook-events. Driver: transcripts/f100-drive.sh, runs
+# sequential, exact commands in transcripts/f100-<name>-<n>.cmd. No
+# --max-budget-usd (A121). N=1 each; the miss got a second run (README rule).
+# Isolation caveat (README asymmetry rule): the user's plugins load in GREEN.
+#
+# Grading: skills in order = jq -r 'select(.type=="assistant") |
+# .message.content[]? | select(.type=="tool_use" and .name=="Skill") |
+# .input.skill' over the stream (subagent calls included); the grade line =
+# the assistant text line starting `grade:`.
+#
+#   run            skills in order                                   grade line (ui)  verdict  $     s
+#   ui-feature-1   build-jarvis                                      ui none          FAIL     3.93  656
+#   ui-feature-2   tickets-zordon -> build-jarvis -> design-arwen    ui arwen         PASS*    2.54  469
+#   ui-only-1      design-arwen                                      (none - no       PASS     0.43   28
+#                                                                     build-jarvis)
+#
+# ui-feature-1 (2026-10-26T15:09Z, the design's prompt "Add a settings screen
+#   to the shelf app ..."): route hook fired (route JSON in the stream),
+#   build-jarvis was the first tool call; grade "bounded . critical no . design
+#   deep=fable . build build=opus . verify build=opus . ceremony lean . ui none
+#   . mode single (named) . usage unobservable". Fable design agent, Opus build
+#   agent, built a `settings` command with a numbered prompt; its report: "The
+#   'screen' is a simple numbered prompt, not a full-screen terminal
+#   interface." No design-arwen. Cause: shelf is a CLI with no web or native
+#   surface, so `ui arwen` was not the right grade for that prompt on this
+#   fixture - a scenario fault, not a routing one. The prompt was changed to
+#   name a local web page (scenario header records it).
+# ui-feature-2 (15:22Z, "Add a settings page to the shelf app - a small local
+#   web page served by `python -m shelf serve` - ..."): route hook fired; the
+#   model first logged F8 through tickets-zordon (the board hand-off routing.md
+#   names), then Skill build-jarvis. The grade gate denied the first
+#   design-file Write; the model then printed "grade: bounded . critical no .
+#   design - . build build=opus . verify build=opus . ceremony lean . ui arwen
+#   . mode single (named) . tiers: defaults . usage unobservable" and wrote the
+#   core design file (GOAL..VERIFICATION + `## UI design` requirements). One
+#   Opus build agent, prompt opening with the grade line, loaded
+#   skillator:design-arwen (mode build) before T3's markup and appended its UI
+#   decisions to `## UI design`; tests and an HTTP end-to-end check passed.
+#   * Two departures from the body, recorded not hidden: (a) tickets-zordon ran
+#     before build-jarvis, so build-jarvis was not the literal first Skill
+#     call; (b) the orchestrator ruled "Ruling: 'use a single agent' = one
+#     dispatched agent ... the design-arwen UI pass runs inside that same build
+#     agent rather than as a separate agent" - the scenario's "Use a single
+#     agent" (added so Step 0.8 does not end the turn on its mode question)
+#     was read as folding the UI pass into the build seat. design-arwen still
+#     ran after the core design existed and on top of it, which is the rule
+#     under test; the separate UI-pass seat is untested here.
+# ui-only-1 (15:20Z, "The shelf app's settings page looks generic - bolder
+#   type, clearer hierarchy, keep every feature as it is."): route hook
+#   printed nothing; first tool call Skill skillator:design-arwen ("Mode:
+#   improve"); no build-jarvis call anywhere; it found no settings page in the
+#   CLI fixture and changed nothing.
+#
+# VERDICT: PASS 2/2 scenarios on the F100 rules - a UI feature reaches
+# build-jarvis, is graded `ui arwen`, and design-arwen runs after the core
+# design; a UI-only ask goes to design-arwen with no build-jarvis pass. Open:
+# the separate UI-pass agent (Phase 1) was not exercised - a re-run without
+# "Use a single agent" needs the mode question answered, so it fits a
+# headless/relay-shaped prompt.

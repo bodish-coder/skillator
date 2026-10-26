@@ -1,0 +1,28 @@
+# Scenario - F100 a UI feature lands in build-jarvis, prompt "ui-feature".
+# Rule under test: a feature with a UI routes to skillator:build-jarvis, which
+# grades `ui arwen`, writes the core design (GOAL/CHOSEN/DESIGN/CONSTRAINTS/
+# TASKS/VERIFICATION) first, then runs the UI design pass that loads
+# skillator:design-arwen on that core design file.
+# The prompt never names a skill, a model, a tier or "grade". It names the
+# mode ("single agent") so Step 0.8 does not end the turn on its mode question
+# before Phase 1 runs.
+# Run 1 used the design's prompt ("Add a settings screen to the shelf app
+# where ..."): shelf is a CLI with no web/native surface, and the model built a
+# numbered terminal prompt and graded `ui none` - a fair read of the fixture.
+# From run 2 the prompt says the surface is a local web page, so `ui arwen` is
+# the right grade (green-build-ui-f100.txt).
+#
+# Fixture: `relay-chain` (sh practice/scripts/baseline-harness.sh fixture
+# relay-chain <DIR>): shelf, a book catalogue CLI with a skillator board.
+#
+# PASS = a Skill call skillator:build-jarvis first; a `grade:` reply line
+#        containing `ui arwen`; then a Skill call skillator:design-arwen (main
+#        session or a dispatched agent) after the design file's core sections
+#        exist.
+# FAIL = no build-jarvis, `ui none`, design-arwen before (or instead of) the
+#        core design, or no design-arwen pass.
+# Verdicts: green-build-ui-f100.txt.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Add a settings page to the shelf app - a small local web page served by `python -m shelf serve` - where a member picks the default sort of `list` (title or author) and it is remembered between runs. Use a single agent.

@@ -1,0 +1,17 @@
+# Scenario - F100 a UI-only ask goes to design-arwen alone, prompt "ui-only".
+# Rule under test: UI-only work - polish, redesign, critique of an existing
+# screen with no new behaviour - routes straight to skillator:design-arwen,
+# with no build-jarvis pass and no grade line.
+# The prompt never names a skill, a model or "grade".
+#
+# Fixture: `relay-chain` (sh practice/scripts/baseline-harness.sh fixture
+# relay-chain <DIR>): shelf, a book catalogue CLI with a skillator board.
+#
+# PASS = a Skill call skillator:design-arwen, and no Skill call
+#        skillator:build-jarvis anywhere in the stream.
+# FAIL = build-jarvis loads (graded or handed on), or no design-arwen.
+# Verdicts: green-build-ui-f100.txt.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+The shelf app's settings page looks generic - bolder type, clearer hierarchy, keep every feature as it is.
