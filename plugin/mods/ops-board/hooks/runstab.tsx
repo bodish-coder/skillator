@@ -128,8 +128,8 @@ export async function engageGo($: EngineInterface): Promise<void> {
 
 // F99: Diagnose - the run read fresh (list and resume, read-only), every landed sha asked of git
 // (on HEAD / elsewhere / unknown), the board and the driver stamp; diagnose() judges. Each
-// closable stage gets the by-hand close command - its landed cell's sha when on HEAD, else
-// `<sha>`; nothing runs (Close is F104). Git that cannot be asked is said.
+// closable stage gets the by-hand close command - its landed cell's path, or its sha when on
+// HEAD, else `<sha>`; nothing runs (Close is F104). Git that cannot be asked is said.
 export async function openDiagnose($: EngineInterface, id: string): Promise<void> {
   const l = await runCall($, 'relay-list', [])
   const c = l.code === 0 ? await runCall($, 'relay-resume', [id]) : l
@@ -155,9 +155,14 @@ export async function openDiagnose($: EngineInterface, id: string): Promise<void
     if (r) shas.set(s.landed, r.exitCode === 0 ? 'head' : r.exitCode === 1 ? 'off' : 'none')
   }
   const d = diagnose(run, await read($, boardA), shas, await $.clock.now())
+  // runnable as copied: the script and platform form runCall used for the list; no owner, so the cell is kept
+  const script = l.argv.find(a => /relay-morpheus\.(sh|ps1)$/.test(a))
   const byHand = d.closable.map(cl => {
     const own = run.stages.find(s => s.n === cl.n)?.landed
-    return `by hand: relay-morpheus.sh ${id} stage ${cl.n} x <owner> ${own && shas.get(own) === 'head' ? own : '<sha>'}`
+    const sha = own && (!/^[0-9a-f]{4,40}$/i.test(own) || shas.get(own) === 'head') ? own : '<sha>'   // a path, or a sha on HEAD
+    return script?.endsWith('.ps1')
+      ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${script}" -Mode stage -Id ${id} -N ${cl.n} -State x -Landed ${sha}`
+      : `sh "${script}" ${id} stage ${cl.n} x '' ${sha}`
   })
   if (gitWhy) d.lines.push(`git not asked: ${gitWhy}`)
   if ((await read($, tabA)) !== 'runs') return              // the tab left while git answered: no stale view
@@ -208,7 +213,7 @@ export function DiagnoseView($: EngineInterface, els: Els, d: Diagnose): RenderE
       ? d.lines.map((l, i) => <Box key={`diag:line:${i}`}><Text wrap="wrap">{l}</Text></Box>)
       : [<Box key="diag:agree"><Text dimColor>run file, board, git and the driver stamp agree</Text></Box>]),
     <Text> </Text>,
-    ...d.byHand.map((l, i) => <Box key={`diag:byhand:${i}`}><Text dimColor wrap="wrap">{l}</Text></Box>),
+    ...(d.byHand ?? []).map((l, i) => <Box key={`diag:byhand:${i}`}><Text dimColor wrap="wrap">{l}</Text></Box>),
     <Button key="diag:back" onPress={() => { void closeEngage($) }}>Back</Button>,
   ]
 }

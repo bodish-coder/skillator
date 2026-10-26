@@ -132,12 +132,13 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
     const a = e.argv
     if (a.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
     w.runs.push(a)
-    if (a[1] === RELAY + '.sh' && a[2] === 'list') return { value: ran(w.list) }
-    if (a[1] === RELAY + '.sh' && a[2] === 'resume') {
+    const win = a[5] === RELAY + '.ps1'                       // Windows: -Mode at 7, -Id's value at 9
+    if ((a[1] === RELAY + '.sh' && a[2] === 'list') || (win && a[7] === 'list')) return { value: ran(w.list) }
+    if ((a[1] === RELAY + '.sh' && a[2] === 'resume') || (win && a[7] === 'resume')) {
       w.maxInFlight = Math.max(w.maxInFlight, ++w.inFlight)
       for (let i = 0; i < 200; i++) await Promise.resolve()   // stays in flight a while, no timer
       w.inFlight--
-      const id = a[3]
+      const id = win ? a[9] : a[3]
       return { value: w.resume[id!] !== undefined ? ran(w.resume[id!]!) : id === 'RUN-0014' ? ran(CHAIN_14) : id === 'RUN-0012' ? ran(CHAIN_12) : id === 'RUN-0013' ? ran(CHAIN_13) : ran('', 1, 'no such run') }
     }
     if (a[1] === RELAY + '.sh' && a[2] === 'queue-run') return { value: w.queue }
@@ -418,8 +419,8 @@ const AGENTS_RUN = [
   '### AC01 - stage 1 - B2 cart', 'tickets: B2', 'prompt: |', '  x',
   '### AC02 - stage 2 - F46 pane', 'tickets: F46', 'prompt: |', '  x', '',
 ].join('\n')
-const f85World = (on: On, run20: string) => {
-  const [w, clock] = world(on)
+const f85World = (on: On, run20: string, env: Record<string, string> = {}) => {
+  const [w, clock] = world(on, env)
   w.list = [row('0020', 'marathon', 1, 3), row('0021', 'agents', 0, 2), ''].join('\n')
   w.resume = { 'RUN-0020': run20, 'RUN-0021': AGENTS_RUN }
   w.files['/r/.skillator/run-0020-marathon.workflow.js'] = SCRIPT
@@ -487,7 +488,8 @@ test('F85 never two drivers: a live driver stamp or a stage in flight refuses wi
 })
 
 // F99: Diagnose reads the run file, the board, git and the driver stamp - read-only (Close is F104).
-const BY_HAND = 'by hand: relay-morpheus.sh RUN-0020 stage 137 x <owner>'
+// runnable as copied: the script runCall runs, the owner cell kept ('' / no -Owner)
+const BY_HAND = `sh "${RELAY}.sh" RUN-0020 stage 137 x ''`
 test('F99 Diagnose: inconsistent - a stage in flight whose ticket is [x]; the by-hand close command shown, nothing run', async ($, on) => {
   // stage 137 in flight under a driver 3 h gone; B10 is [x] on the board; no landed cell, so the sha is the placeholder
   const [w, clock] = f85World(on, WF_RUN(`@cc-gone ${stampAgo(183)}`, '~', ['### stage 137 - B10 muse  (dispatched 09:00Z, @cc-gone)', 'run: -']))
@@ -519,10 +521,28 @@ test('F99 Diagnose: inconsistent - a stage in flight whose ticket is [x]; the by
   await ui.press({ key: 'diagnose:RUN-0020' })
   await clock.settle()
   expect((await ui.find({ key: 'diag:byhand:0' }))?.text).toBe(`${BY_HAND} <sha>`)
+  await ui.press({ key: 'diag:back' })
+  // a landed path (relay takes one) is the line's value as is - never asked of git
+  w.resume['RUN-0020'] = cell.replace('| beef01 |', '| docs/out.md |')
+  await ui.press({ key: 'diagnose:RUN-0020' })
+  await clock.settle()
+  expect((await ui.find({ key: 'diag:byhand:0' }))?.text).toBe(`${BY_HAND} docs/out.md`)
   expect(w.runs.some(a => a[3] === 'stage' || a[1] === 'log')).toBe(false)   // nothing written, no run-branch reads
   await ui.unmount()
 })
-test('F99 Diagnose: finished and still running draw their verdict with no Close; Back runs nothing', async ($, on) => {
+test('F99 Diagnose on Windows: the by-hand line is the ps1 form, no -Owner (the cell kept)', async ($, on) => {
+  const [w, clock] = f85World(on, WF_RUN(`@cc-gone ${stampAgo(183)}`, '~'), { OS: 'Windows_NT' })
+  w.files['/r/TICKETS.md'] = BOARD.replace('- [ ] B2 — cart', '- [ ] B2 — cart\n- [x] B10 — muse')
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+  await clock.settle()
+  await ui.press({ key: 'diagnose:RUN-0020' })
+  await clock.settle()
+  expect((await ui.find({ key: 'diag:byhand:0' }))?.text)
+    .toBe(`powershell -NoProfile -ExecutionPolicy Bypass -File "${RELAY}.ps1" -Mode stage -Id RUN-0020 -N 137 -State x -Landed <sha>`)
+  await ui.unmount()
+})
+test('F99 Diagnose: finished and still running draw their verdict with no by-hand line; Back runs nothing', async ($, on) => {
   const [w, clock] = f85World(on, WF_RUN(`@cc-live ${stampAgo(5)}`, '~'))
   w.git = { abc1: 1 }                                                        // off HEAD: the run branch, no disagreement while running
   await start($, clock)
@@ -532,7 +552,7 @@ test('F99 Diagnose: finished and still running draw their verdict with no Close;
   await clock.settle()
   expect((await ui.find({ key: 'diag:title' }))?.text).toBe('Diagnose RUN-0020: still running  Esc back')
   expect((await ui.find({ key: 'diag:agree' }))?.text).toBe('run file, board, git and the driver stamp agree')
-  expect(await ui.find({ key: 'diag:close' })).toBeUndefined()
+  expect(await ui.find({ key: 'diag:byhand:0' })).toBeUndefined()
   await ui.press({ key: 'diag:back' })
   expect(await ui.find({ key: 'diag:title' })).toBeUndefined()
   // a finished run (RUN-0011, 3/3 in LIST) diagnosed: its file read fresh
@@ -547,6 +567,7 @@ test('F99 Diagnose: finished and still running draw their verdict with no Close;
   await ui.press({ key: 'diagnose:RUN-0011' })
   await clock.settle()
   expect((await ui.find({ key: 'diag:title' }))?.text).toBe('Diagnose RUN-0011: finished  Esc back')
+  expect(await ui.find({ key: 'diag:byhand:0' })).toBeUndefined()
   expect(w.runs.some(a => a[3] === 'stage')).toBe(false)
   expect(w.runs.some(a => a[1] === 'merge-base' && a[3] === 'docs/out.md')).toBe(false)
   await ui.unmount()

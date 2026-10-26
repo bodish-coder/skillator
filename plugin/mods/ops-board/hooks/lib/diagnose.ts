@@ -11,7 +11,7 @@ import { DRIVER_STALE_MIN, stageTickets, stampAge } from './runlines'
 
 export type Verdict = 'finished' | 'still running' | 'stalled' | 'inconsistent'
 export type ShaState = 'head' | 'off' | 'none'
-export type Diagnosis = { verdict: Verdict; lines: string[]; closable: { n: number; tickets: string[] }[] }
+export type Diagnosis = { verdict: Verdict; lines: string[]; closable: { n: number }[] }
 
 const BUILT = ['x', '%']            // the ticket's work exists: verified, or testing
 const CLOSED = ['x', '>']           // a stage row no longer open (a > row names where its work went)
@@ -45,7 +45,7 @@ export function diagnose(run: RunView, board: Board | null, shas: Map<string, Sh
     lines.push(`stage ${s.n}: ${WORD[s.state] ?? 'not started'} in the run file, but ${known.map(([id, b]) => `${id} is [${b}]`).join(', ')} on the board`)
     if (!CLOSABLE.includes(s.state)) continue
     if (live) lines.push(`stage ${s.n} driven by ${tag} ${Number.isNaN(age) ? `(heartbeat unreadable${stamp ? `: ${stamp}` : ''})` : `${age}m ago`} - not closable`)
-    else closable.push({ n: s.n, tickets: ids })
+    else closable.push({ n: s.n })
   }
   const verdict: Verdict = lines.length ? 'inconsistent' : finished ? 'finished' : run.planned || live ? 'still running' : 'stalled'
   if (open.length && !live && !run.planned) {
