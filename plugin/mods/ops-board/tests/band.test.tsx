@@ -439,6 +439,37 @@ test('status line: pending | in progress | total · 5h, updated only when the te
   expect(w.statuses.at(-1)).toBe('ops 2 pending | 1 in progress | 5 total · 5h 47% · 7d 61%')
 })
 
+// F97: the session owner (ticket-meta iam, written AFTER the mod armed) reaches the status
+// line and the band on the next 2 s poll; it wins over the email; gone when its file goes.
+// With a handle the line is over STATUS_MAX with 7d, so 7d is left off.
+test('status line and band: F97 the session owner file is polled and wins over the email', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  w.files['/r/.skillator/team.md'] = '# Team\n\n- @vidul: vidul@ikran.in\n- @sher: s@x\n'
+  await start($, clock)
+  expect(w.statuses.at(-1)).toBe('ops @vidul 2 pending | 1 in progress | 5 total · 5h 41%')
+  w.files['/r/.skillator/sessions/cc-sid1.owner'] = '@sher\r\n'          // session.id is 'sid-1' -> cc-sid1
+  await clock.advance(2000)
+  expect(w.statuses.at(-1)).toBe('ops @sher 2 pending | 1 in progress | 5 total · 5h 41%')
+  const ui = await mountBand($, 'terminal')
+  expect((await ui.find({ key: 'line:0' }))?.text).toBe(
+    '● ops @sher  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok')
+  await ui.unmount()
+  w.files['/r/.skillator/sessions/cc-sid1.owner'] = '@ghost\r\n'          // not on the team: nobody, no fall back (8 bytes: the mock's mtime is fixed, the size must move)
+  await clock.advance(2000)
+  expect(w.statuses.at(-1)).toBe('ops 2 pending | 1 in progress | 5 total · 5h 41% · 7d 55%')
+  delete w.files['/r/.skillator/sessions/cc-sid1.owner']
+  await clock.advance(2000)
+  expect(w.statuses.at(-1)).toBe('ops @vidul 2 pending | 1 in progress | 5 total · 5h 41%')
+})
+
+test('status line: F97 SKILLATOR_SESSION names the owner file', WITH, async ($, on) => {
+  const [w, clock] = world(on, { SKILLATOR_SESSION: '@Sher-1' })
+  w.files['/r/.skillator/team.md'] = '- @sher: s@x\n'
+  w.files['/r/.skillator/sessions/sher-1.owner'] = '@sher\n'
+  await start($, clock)
+  expect(w.statuses.at(-1)).toBe('ops @sher 2 pending | 1 in progress | 5 total · 5h 41%')
+})
+
 test('session end puts a hidden CLAUDE.md back and logs it; the next start shows the note', WITH, async ($, on) => {
   const [w, clock] = world(on, { CLAUDE_CONFIG_DIR: '/c' })
   w.files['/h/.claude/CLAUDE.md.skillator-hidden'] = '# mine\n'
