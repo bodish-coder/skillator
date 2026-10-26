@@ -8,6 +8,7 @@
 #   ticket-meta.ps1 tag <ID> | selftest
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
 #   ticket-meta.ps1 team lead @handle|- | whoami | claim <ID>... | pick [ID...]   (F80)
+#   ticket-meta.ps1 iam @handle   (F92: this session's owner; whoami reads it first)
 #   ticket-meta.ps1 reconcile [ID...] | unblock <ID> | start <ID>   (F81)
 #
 # F82: every board write runs board-fresh.ps1 first (a refusal: its report, exit 2)
@@ -449,13 +450,56 @@ function Get-IdAndHandle([string]$cmd, [string[]]$a) {
   return @($id, $h)
 }
 
-# F80: the session's person, found, never stored: SKILLATOR_ME=@handle (on the
-# team) overrides; else this repo's git user.email through the team emails.
+# F92: this session's tag as tickets-zordon "Who touched it" names it, no @:
+# SKILLATOR_SESSION (any host), else Claude Code's session id -> cc-<last 6>; else ''.
+function Get-SessionTag {
+  $t = "$env:SKILLATOR_SESSION".TrimStart('@').ToLowerInvariant()
+  if ($t -eq '' -and "$env:CLAUDE_CODE_SESSION_ID" -ne '') {
+    $s = ("$env:CLAUDE_CODE_SESSION_ID" -replace '[^A-Za-z0-9]', '').ToLowerInvariant()
+    $t = 'cc-' + $s.Substring([Math]::Max(0, $s.Length - 6))
+  }
+  if ($t -cnotmatch '\A[a-z0-9_-]+\z') { return '' }   # a file name: no / or ..
+  return $t
+}
+
+# F92: iam @handle - this session's owner, asked at session start (grayskull-power's
+# arm), kept in <main>/.skillator/sessions/<tag>.owner - git-ignored by the folder's
+# own .gitignore, never team.md or git config.
+function Do-Iam([string[]]$a) {
+  if ($a.Count -ne 1) { Fail 'usage: iam @handle' }
+  $h = $a[0]
+  if (-not $h.StartsWith('@')) { $h = '@' + $h }
+  if (-not (Test-OneLine $h) -or $h -cnotmatch '\A@[A-Za-z0-9_.-]+\z') { Fail "not a handle (@name): $($a[0])" }
+  if ($null -eq (Get-TeamFile)) { Fail 'no .skillator/team.md - this repo has no people' }
+  $known = $false
+  foreach ($t in (Get-TeamRows)) { if ($t.h -ceq $h) { $known = $true } }
+  if (-not $known) { Fail "$h is not in .skillator/team.md" }
+  $tag = Get-SessionTag
+  if ($tag -eq '') { Fail 'no session tag - set SKILLATOR_SESSION=@<agent>-<id> (tickets-zordon: Who touched it)' }
+  $sd = (Get-MainRoot) + '/.skillator/sessions'
+  New-Item -ItemType Directory -Force -Path $sd | Out-Null
+  if (-not (Test-Path -LiteralPath "$sd/.gitignore" -PathType Leaf)) { [System.IO.File]::WriteAllText("$sd/.gitignore", "*`n") }
+  [System.IO.File]::WriteAllText("$sd/$tag.owner", "$h`n")
+  return "$h owns session @$tag"
+}
+
+# F80: the session's person: F92's session owner file first, then
+# SKILLATOR_ME=@handle (on the team), else this repo's git user.email through the
+# team emails.
 # @{ me = '@handle' or ''; why = the reason when '' }. git's email is self-set:
 # who "me" is is a team convention, not security.
 function Get-Me {
   if ($null -eq (Get-TeamFile)) { return @{ me = ''; why = 'no .skillator/team.md' } }
   $rows = Get-TeamRows
+  $tag = Get-SessionTag
+  if ($tag -ne '') {
+    $sf = (Get-MainRoot) + "/.skillator/sessions/$tag.owner"
+    if (Test-Path -LiteralPath $sf -PathType Leaf) {
+      $h = ([System.IO.File]::ReadAllText($sf).Replace("`r", '').Split([char]10))[0]
+      foreach ($t in $rows) { if ($t.h -ceq $h) { return @{ me = $h; why = '' } } }
+      return @{ me = ''; why = "session owner $h ($sf) is not in .skillator/team.md - iam @handle" }
+    }
+  }
   $s = "$env:SKILLATOR_ME"
   if ($s -ne '') {
     $h = $s
@@ -1109,6 +1153,7 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'tag' { return (Do-Tag $a) }
     'team' { return (Do-Team $a) }
     'whoami' { return (Do-Whoami $a) }
+    'iam' { return (Do-Iam $a) }
     'claim' { return (Do-Claim $a) }
     'pick' { return (Do-Pick $a) }
     'reconcile' { return (Do-Reconcile $a) }
@@ -1166,12 +1211,14 @@ function Invoke-Selftest {
   $dash = [string][char]0x2014
   $here = Get-Location
   # F80: who "me" is comes from git's user.email - never this machine's global one
-  $savedMe = @($env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME, $env:EMAIL)
+  $savedMe = @($env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME, $env:EMAIL, $env:SKILLATOR_SESSION, $env:CLAUDE_CODE_SESSION_ID)
   # F82: board writes commit; EMAIL is git's last fallback, so user.email (whoami) stays unset
   [System.IO.File]::WriteAllText("$T/gitconfig", "[user]`n`tname = t`n")
   $env:EMAIL = 'board@selftest.invalid'
   $env:GIT_CONFIG_GLOBAL = "$T/gitconfig"
   Remove-Item Env:\SKILLATOR_ME -ErrorAction SilentlyContinue
+  Remove-Item Env:\SKILLATOR_SESSION -ErrorAction SilentlyContinue
+  Remove-Item Env:\CLAUDE_CODE_SESSION_ID -ErrorAction SilentlyContinue
   function Eq([string]$name, $got, [string]$want) {
     $g = [string]::Join(' ', @($got))
     if ($g -cne $want) { Write-Output "FAIL: ${name}: expected [$want] got [$g]"; $script:fail = 1 }
@@ -1575,6 +1622,24 @@ function Invoke-Selftest {
     & git config user.email ghost@x.com
     $msg = ErrOf whoami
     if ($msg -notmatch 'not on the team: add ghost@x\.com to \.skillator/team\.md') { Write-Output "FAIL: whoami not on the team: [$msg]"; $script:fail = 1 }
+    # F92: the session owner file (iam) wins over SKILLATOR_ME and git's email; not on the team: refused
+    function AsSess([string]$sid, [string]$tag, [scriptblock]$b) {
+      $p = @($env:CLAUDE_CODE_SESSION_ID, $env:SKILLATOR_SESSION); $env:CLAUDE_CODE_SESSION_ID = $sid; $env:SKILLATOR_SESSION = $tag
+      try { return (& $b) } finally { $env:CLAUDE_CODE_SESSION_ID = $p[0]; $env:SKILLATOR_SESSION = $p[1] }
+    }
+    $msg = ErrOf iam '@vidul'
+    if ($msg -notmatch 'no session tag') { Write-Output "FAIL: iam with no session tag: [$msg]"; $script:fail = 1 }
+    Eq 'iam' (AsSess '0a1b-4c5d-AB12CD' '' { Run iam 'vidul' }) '@vidul owns session @cc-ab12cd'
+    if (-not (Test-Path -LiteralPath "$R/.skillator/sessions/cc-ab12cd.owner")) { Write-Output 'FAIL: iam wrote no .skillator/sessions/cc-ab12cd.owner'; $script:fail = 1 }
+    if (@(& git status --porcelain -- .skillator).Count -ne 0) { Write-Output 'FAIL: the session file is not git-ignored'; $script:fail = 1 }
+    Eq 'whoami by session file' (AsSess 'x-ab12cd' '' { AsMe 'neo' { Run whoami } }) '@vidul'
+    Eq 'whoami by SKILLATOR_SESSION' (AsSess '' '@cc-ab12cd' { Run whoami }) '@vidul'
+    Eq 'another session falls back' (AsSess 'x-ffffff' '' { AsMe 'neo' { Run whoami } }) '@neo'
+    if (-not (AsSess 'x-ab12cd' '' { Refused iam '@nobody' })) { Write-Output 'FAIL: iam took a handle not on the team'; $script:fail = 1 }
+    W "$R/.skillator/sessions/cc-ab12cd.owner" "@nobody`n"
+    $msg = AsSess 'x-ab12cd' '' { ErrOf whoami }
+    if ($msg -notmatch 'session owner @nobody') { Write-Output "FAIL: session owner refusal: [$msg]"; $script:fail = 1 }
+    Remove-Item -LiteralPath "$R/.skillator/sessions" -Recurse -Force
     # pick: unassigned and mine picked, another's skipped with its owner; not on the team -> only unassigned
     Eq 'pick, not on the team' (Run pick) 'you: - (not on the team: add ghost@x.com to .skillator/team.md) pick F1 skip F2 @asha skip F3 @vidul pick F4 skip F6 @neo pick F7'
     $msg = ErrOf claim F1
@@ -1802,6 +1867,7 @@ function Invoke-Selftest {
   } finally {
     Set-Location -LiteralPath $here
     $env:GIT_CONFIG_GLOBAL = $savedMe[0]; $env:SKILLATOR_ME = $savedMe[1]; $env:EMAIL = $savedMe[2]
+    $env:SKILLATOR_SESSION = $savedMe[3]; $env:CLAUDE_CODE_SESSION_ID = $savedMe[4]
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
   }
   if ($script:fail -ne 0) { exit 1 }
@@ -1809,7 +1875,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|claim|pick|reconcile|unblock|start|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|claim|pick|reconcile|unblock|start|selftest')
   exit 1
 }
 $cmd = [string]$args[0]

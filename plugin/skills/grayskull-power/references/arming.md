@@ -104,6 +104,22 @@ percentage to give them — see `PLATFORMS.md`), so run
   hook and its `PreToolUse` grade gate are wired
   (`build-jarvis/references/route-hook.md`); either not wired → say so in
   one line and offer it, never wire it silently.
+- **`owner`** (F92) — who drives this session, so claims, assign, the ops
+  board's "you" and run owners are that person, not git's email. Run
+  `ticket-meta.sh team list` (tickets-zordon; Windows the `.ps1`). No
+  `.skillator/team.md`, or one member → no question. Two or more → ask once,
+  before other work: "Who is driving this session?", one option per member
+  (`@handle - name`) plus "someone else" — `AskUserQuestion` on Claude Code, the
+  host's question tool or one plain line elsewhere. Then
+  `ticket-meta.sh iam @handle`: kept for this session only, in git-ignored
+  `.skillator/sessions/<session tag>.owner`, never `team.md` or git config;
+  `whoami` reads it first. "Someone else" → record nothing (offer `team add`).
+  No session tag (no Claude Code session id) → prefix `iam` and every later
+  `ticket-meta` call with `SKILLATOR_SESSION=@<agent>-<id>`, your tickets-zordon tag. Headless (`-p`,
+  chained, no one to answer) → no question, the old rule. On Claude Code the
+  plugin's `SessionStart` hook (`hooks/session-owner.sh`) has already put the
+  team list and this ask in context; a hook cannot ask, so the ask is still
+  yours. Report `owner @handle` (or `owner -`) in the active-set line.
 - **Upstream watch** (F23c, F29) — only in a repo that has
   `skills/design-arwen/UPSTREAM.md` (skillator itself); anywhere else skip it
   silently, because those tickets belong on skillator's board, not the user's.
