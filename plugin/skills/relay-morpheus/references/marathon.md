@@ -356,7 +356,9 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
    `subagent` or `session`), never `workflow`.
 6. A failed stage that a later phase waits on (`BLOCKED`): its retry is a new
    stage (`RM add`, `chain plan`) dispatched with the host's delegate from the
-   table, or done in-session on a host with no delegate - the saved script is
-   not edited mid-run.
+   table, or on a host with no delegate `RM chain dispatch <n> --driver <its
+   tag> --owner session` (row `~`, prompt on disk) before its work starts
+   in-session - the saved
+   script is not edited mid-run.
 7. The end batch, the final stage and the push: step 5 of the Run above,
    unchanged.
