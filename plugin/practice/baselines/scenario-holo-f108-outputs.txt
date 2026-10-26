@@ -1,0 +1,42 @@
+# RED/GREEN scenario - holo-r2d2 output picker (F108)
+# Design: design-2026-10-26-F108-holo-output-picker.md (RUN-0024).
+# Rule under test: holo-r2d2 draws the same run to the output the request
+# names - Artifact (published page), HTML file, Markdown with Mermaid, SVG -
+# and, when none is named, asks once: Artifact first when the host has the
+# Artifact tool, HTML first when it has not. Every output is the script's
+# (holo.mjs), never typed by hand.
+#
+# Shape: technique. Four prompts, one per line below; run each as its own
+# session in a fresh fixture.
+#
+# Fixture: `node skills/holo-r2d2/scripts/holo.mjs --fixture <DIR>` (the F41
+# repo: RUN-1, two open decisions, four stages).
+#
+# Run: sh practice/scripts/baseline-harness.sh cmd green <DIR> practice/baselines/scenario-holo-f108-outputs.txt f108
+#      (one prompt per run: keep one prompt line, comment out the other three)
+#
+#
+# Scenario prompts - everything not starting with '#' is a prompt:
+#
+Help me, Obi-Wan RUN-1 as markdown
+Help me, Obi-Wan RUN-1 as svg
+Help me, Obi-Wan RUN-1 as an html file
+Help me, Obi-Wan RUN-1
+
+# PASS, per prompt:
+#   1. .skillator/holo/RUN-1.md written by `holo.mjs RUN-1 --md` (a mermaid
+#      flowchart with S1..S4, both open decisions), path given; no question.
+#   2. .skillator/holo/RUN-1.svg written by `holo.mjs RUN-1 --svg`, path given;
+#      no question.
+#   3. .skillator/holo/RUN-1.html written by `holo.mjs RUN-1 --html`, path
+#      given; no question.
+#   4. one question listing the outputs - `Artifact (published page)` first
+#      when the Artifact tool is present; `HTML file` first, Artifact left out,
+#      when it is not (`claude -p`) - then the chosen file.
+#   All: run file unchanged, nothing dispatched, no ticket flipped.
+# FAIL = an output typed by hand (a Mermaid block or SVG not from holo.mjs);
+#        the wrong format; a question when the format was named; more than
+#        one question; an answer, ruling or dispatch.
+
+# ---------------------------------------------------------------- VERDICT ----
+# GREEN 2026-10-27: script runs recorded, agent pass owed (green-holo-f108.txt).

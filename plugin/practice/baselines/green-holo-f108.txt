@@ -1,0 +1,31 @@
+# GREEN - holo-r2d2 output picker (F108, RUN-0024)
+# 2026-10-27, Windows 11, Git Bash, node. Fixture: holo.mjs --fixture, fresh
+# (scratchpad/f108/fx). Scenario: scenario-holo-f108-outputs.txt.
+#
+# A. Script - each choice produces its file                       PASS 4/4
+#   node holo.mjs RUN-1 --root <FX>
+#     -> .skillator/holo/RUN-1.artifact.html (Artifact page ...)   25679 bytes
+#   node holo.mjs RUN-1 --root <FX> --html
+#     -> .skillator/holo/RUN-1.html (standalone page)              25841 bytes
+#   node holo.mjs RUN-1 --root <FX> --md
+#     -> .skillator/holo/RUN-1.md (Markdown with a Mermaid stage graph)  2286 bytes
+#   node holo.mjs RUN-1 --root <FX> --svg
+#     -> .skillator/holo/RUN-1.svg (standalone SVG)                 6849 bytes
+#   Same content in each: RUN-1.md carries Q1 Format and Q2 Match with their
+#   options (recommended marked), a mermaid flowchart S1..S4 (landed, parked,
+#   pending, pending; 1-->2, 2-->3, dashed 1/2/3 -.-> 4) and the stage table;
+#   RUN-1.svg has 4 data-stage nodes, "DECISIONS (2)", parses as XML (python
+#   xml.dom.minidom: root <svg>), no <script>, no var(--), no URL but its
+#   xmlns. `--svg --anatomy` -> "--anatomy draws the page: use it with the
+#   Artifact or --html output", exit 1. Fixture `git status` clean after
+#   (.skillator/holo/ gitignored by the script). --selftest: ok.
+#
+# B. Agent pass - the four prompts through `claude -p`             OWED
+#   Not run by the build agent: the harness's GREEN mode needs
+#   BASELINE_ISOLATE=hide, which renames ~/.claude/CLAUDE.md for the nested
+#   run - a change outside the worktree the build seat may not make - and four
+#   nested sessions. Owed: run the four prompts (one per session, fresh
+#   fixture each) with
+#     BASELINE_ISOLATE=hide sh practice/scripts/baseline-harness.sh cmd green <DIR> practice/baselines/scenario-holo-f108-outputs.txt f108
+#   and grade them against the scenario's PASS lines; prompt 4 under -p has no
+#   Artifact tool, so the expected question lists HTML file first.

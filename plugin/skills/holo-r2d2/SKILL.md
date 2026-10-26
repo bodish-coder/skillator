@@ -2,10 +2,11 @@
 name: holo-r2d2
 description: >-
   Use when the user says "Help me, Obi-Wan", "help me obiwan" or "help me obi
-  wan kenobi" - alone, with a run (RUN-12) or a ticket (F39), even while a
-  run is parked: it means "draw it". Also to show a run, its decisions, a
-  plan or a design as a diagram, and when several owner decisions need
-  answering - the decision wizard. NOT for answering or ruling decisions (`relay-morpheus`), NOT the
+  wan kenobi" - alone, with a run (RUN-12) or a ticket (F39): it means
+  "draw it". Also to show a run, its decisions, a
+  plan or a design as a diagram - as an Artifact, an HTML file, Markdown with
+  Mermaid or an SVG, named or asked once - and when several owner decisions
+  need answering - the decision wizard. NOT for answering or ruling decisions (`relay-morpheus`), NOT the
   ticket board (`tickets-zordon`).
 ---
 
@@ -56,6 +57,8 @@ node <SKILL>/scripts/holo.mjs RUN-12           # a named run (RUN-12, run-12 or 
 node <SKILL>/scripts/holo.mjs RUN-12 --design docs/plans/PLAN-x.md   # + the design's sections
 node <SKILL>/scripts/holo.mjs --design docs/plans/PLAN-x.md          # design only
 node <SKILL>/scripts/holo.mjs RUN-12 --html    # standalone page -> .skillator/holo/RUN-12.html
+node <SKILL>/scripts/holo.mjs RUN-12 --md      # Markdown + Mermaid -> .skillator/holo/RUN-12.md
+node <SKILL>/scripts/holo.mjs RUN-12 --svg     # standalone SVG -> .skillator/holo/RUN-12.svg
 node <SKILL>/scripts/holo.mjs RUN-12 --ascii   # the same, for a terminal
 node <SKILL>/scripts/holo.mjs RUN-12 --batch   # end batch: page + standalone + wizard, ASCII and paths printed
 node <SKILL>/scripts/holo.mjs RUN-12 --anatomy [--html]   # + the run as a bench machine (Fig 1)
@@ -96,6 +99,28 @@ node --test <SKILL>/scripts/anatomy.test.mjs
 `.skillator/holo/` is generated output: the script writes a `.gitignore`
 (`*`) into it on first use, so it never lands in a commit.
 
+## Pick the output
+
+Every output carries the same content - header, counts, decisions waiting,
+stage graph, stage list, design sections with their tables - rendered from the
+run file by the script. `--out <path>` overrides any default path.
+
+| Said | Output | Command | Show |
+|---|---|---|---|
+| "artifact", "publish" | Artifact (published page) | `holo.mjs RUN-12` -> `RUN-12.artifact.html` | publish it (Show it, below) |
+| "html", "page", "file" | HTML file | `holo.mjs RUN-12 --html` -> `RUN-12.html` | give the path |
+| "markdown", "md", "mermaid" | Markdown with Mermaid | `holo.mjs RUN-12 --md` -> `RUN-12.md` | give the path |
+| "svg" | SVG | `holo.mjs RUN-12 --svg` -> `RUN-12.svg` | give the path |
+
+- **Named in the request** -> that one.
+- **Not named** -> ask once (`AskUserQuestion`, else a numbered list), in this
+  order: with the Artifact tool present - `Artifact (published page)`,
+  `HTML file`, `Markdown with Mermaid`, `SVG`; without it - `HTML file`,
+  `Markdown with Mermaid`, `SVG` (Artifact left out).
+- **The end batch and the away flow never ask**: `--batch` draws its fixed set
+  (Artifact page, standalone page, wizard, ASCII), as below.
+- `--anatomy` is a page feature: with `--md` or `--svg` the script refuses.
+
 ## Show it
 
 ### Claude Code, with the Artifact tool
@@ -121,6 +146,12 @@ node --test <SKILL>/scripts/anatomy.test.mjs
 `.skillator/holo/RUN-n.html`; give the path. Paste `--ascii` into the message
 as well when the user is in a terminal, so the picture is there without
 opening anything. Never claim a publish that did not happen.
+
+### Markdown and SVG
+
+`--md` and `--svg` write files - give the path. On a host that renders Mermaid
+in chat, the Markdown's fenced `mermaid` block may be pasted as well; it is the
+script's output, copied, never typed.
 
 ## Answers from the page
 
