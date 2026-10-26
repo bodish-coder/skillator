@@ -102,6 +102,7 @@ re-check anything an agent asserts without evidence.
 | Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`) |
 | A static/mock UI that needs to actually work | `designui-galadriel` |
 | What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-watson` |
+| "clone this app", "build my own version of X", "reverse engineer X", "map X's screens", "how close is my clone", "parity check", "what do X's users hate", "rebrand the clone", "lint the store listing", "is anything of the original left" - cloning an existing product, any step of it | `clone-odo` (the recon map, the F tickets for its must-haves and the guard; the screens then go to `build-jarvis` / `design-arwen`, the deploy to `deploy-merlin` behind its preflight) |
 | "check screenshot", or verify a change in a running app visually | `screenshot-argus` |
 | Ready to merge a branch | `mergeprep-oracle`, then `merge-smith` |
 | Ship to a VPS / set up deployment | `deploy-merlin`, then `deploy-niyoj` |

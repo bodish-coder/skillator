@@ -185,3 +185,4 @@ green report and a broken product coexist.
 - [references/patterns.md](references/patterns.md) — the widget contracts
 - `skillator:design-arwen` — a11y as a gate inside a design task (§1)
 - `skillator:audit-sherlock` — whole-codebase audit; routes here for a11y depth
+- `skillator:clone-odo` — `scripts/odo.sh contrast <tokens.json>` gives the WCAG ratio for every text/background pair in a token file, stdlib Python; use it when the colours are tokens and nothing has rendered yet
