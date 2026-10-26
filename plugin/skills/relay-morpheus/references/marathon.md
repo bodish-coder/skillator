@@ -267,7 +267,8 @@ Other hosts have no Workflow tool - there `/pending-subagent` works the tickets.
    [--after <m>]` (mode `workflow`).
 5. The script: copy `templates/marathon-workflow.js` (this skill) to the run
    file's own name with `.workflow.js` for `.md`, beside it; fill `meta` (name
-   `marathon-RUN-<0000>`, one `Phase <k>` entry per phase, then `Verify`) and
+   `marathon-RUN-<0000>`, one `Phase <k>` entry per phase - a ticket's
+   implementer and verifier both run under it, no separate Verify phase) and
    `PLAN` (`runWorktree` = what `init` printed; per ticket: stage, code from
    `chain plan`, ID, files, Done line, the prompt file's text verbatim as a
    JS string). Nothing below `PLAN` is edited.

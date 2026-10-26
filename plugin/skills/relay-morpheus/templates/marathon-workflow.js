@@ -8,14 +8,13 @@
 // args.worktrees - stage number -> the worktree `chain dispatch` named for it (a stage worktree
 //                when another stage was in flight); missing = PLAN.runWorktree.
 // Returns one row per ticket: {stage, code, ticket, worktree, verdict}; verdict null = the agent died.
-// Agents: one implementer and one read-and-run-only verifier per ticket. Pure ASCII.
+// Agents: one implementer and one read-and-run-only verifier per ticket, both under its phase. Pure ASCII.
 
 export const meta = {
   name: 'marathon-RUN-0000',
-  description: 'RUN-0000 <title>: one implementer per ticket, phases serial where tickets share files, one verifier per ticket',
+  description: 'RUN-0000 <title>: one implementer per ticket, phases serial where tickets share files, one verifier per ticket in its phase',
   phases: [
     { title: 'Phase 1', detail: '<tickets in phase 1, e.g. F1 F2>' },
-    { title: 'Verify', detail: 'one read-and-run-only agent per ticket' },
   ],
 }
 
@@ -91,5 +90,5 @@ phase(title)
 log(`${PLAN.run} ${title}: ${items.map(it => it.ticket).join(' ')} - ${items.length * 2} agents`)
 const verdicts = await pipeline(items,
   it => agent(implement(it), { label: `${it.code} fix:${it.ticket}`, phase: title }),
-  (report, it) => agent(verify(it, report), { label: `${it.code} verify:${it.ticket}`, phase: 'Verify', schema: VERDICT }))
+  (report, it) => agent(verify(it, report), { label: `${it.code} verify:${it.ticket}`, phase: title, schema: VERDICT }))
 return items.map((it, i) => ({ stage: it.stage, code: it.code, ticket: it.ticket, worktree: wtOf(it), verdict: verdicts[i] || null }))
