@@ -1,0 +1,239 @@
+# Arming the standing skills — the detail behind SKILL.md §1
+
+Run once, on invoke. SKILL.md carries the one-line summary of each; this is what
+each one actually means.
+
+- **`tickets-zordon`** — first the stale-board guard (F82), run on the repo:
+  `sh <practice>/scripts/board-fresh.sh` (Windows: `powershell -NoProfile
+  -ExecutionPolicy Bypass -File "<practice>/scripts/board-fresh.ps1"`;
+  `<practice>` is skillator's `practice/` - `<root>/practice/` in a clone or
+  plugin, `<skills>/practice/` installed). It fetches the upstream (5 s at most,
+  once per 10 min) and fast-forwards when that is safe, saying so in one line.
+  `unchecked` (offline) → `board unchecked` in the active-set line. A refusal
+  (exit 2) → show its report as printed, `board refused: <N> behind` in the
+  active-set line, and no board write until the user reconciles - never pull,
+  merge, reset or stash for it. Then read `TICKETS.md` at the repo root. Missing? Say so and
+  create it on the first ticket, not before. Run its archive step first
+  (`archive-tickets.sh`; moved rows → commit board + archive together), then
+  report the open set: `B` bugs, `F` features, `A` agent-found.
+- **`code-yoda`** — load it (an arm, not a direct invoke: no code-yoda banner); its core is the session's restraint level
+  (`full` unless the user set another) and governs *what* gets built from here
+  on. If `PONYTAIL MODE ACTIVE` is already in context, the external ponytail
+  plugin has injected that same core and shows the level in its statusline
+  badge: code-yoda's own §0 guard then skips the core, and only its three modes
+  (review · audit · debt) are new. Report the level either way. A suggestion
+  to run one of its modes, whenever you make one, is a single line in Yoda's
+  voice, chosen from code-yoda §8 — "Heavy, this diff is. A review from
+  code-yoda, take you should."
+  The arm carries to implementers: every implementer prompt skillator writes
+  while this project is on opens with "Load skillator:code-yoda first
+  (restraint, full)", the paste-in line in relay-morpheus `references/chain.md` (A155).
+- **`codegraph`** — the code map the rest of the skill leans on. **Run the
+  check script, never a hand translation of it** (A128: Codex turned the POSIX
+  steps below into a PowerShell one-liner that died with a ParserError):
+  `sh <SKILL>/scripts/codegraph-check.sh`, or on a PowerShell host
+  `powershell -NoProfile -ExecutionPolicy Bypass -File <SKILL>/scripts/codegraph-check.ps1`.
+  It prints the banner's codegraph part in one line - `missing`, `not
+  indexed`, or `codegraph <indexed>/<tracked> [partial] (<langs> only)` with
+  `- N pending: codegraph sync` - and changes nothing. Then act on the line:
+  `command -v codegraph` → missing? say so and offer
+  `npm i -g @colbymchenry/codegraph` (never install silently). Present but
+  `codegraph status` shows **0 files / 0 nodes** → `codegraph init` (then
+  `codegraph index` if it was already initialized), **once**. Still 0 after that
+  means the repo has no indexable source — a docs/skills/config repo — so say
+  `codegraph: no code to index` and never retry it this session. Already indexed
+  → `codegraph sync` (a stale index miscounts; status flags it as pending
+  changes or an older engine).
+  **Then count its coverage — codegraph is a map of some files, not the repo.**
+  Compare `codegraph status` "Files" with `git ls-files | wc -l`, and read its
+  "Files by Language". Report `codegraph <indexed>/<tracked> [partial] (<langs> only)` - the banner's form.
+  It is **`codegraph: partial`** when indexed is under half of tracked, or the
+  repo tracks any `.sh`, `.ps1` or `.md` (codegraph indexes none of them). On
+  a partial map, codegraph answers only for js/ts/py symbols; every blast
+  radius also runs `git grep -l` (ground-rules.md, "Map before you cut"). Measured on
+  skillator2: 22/952 indexed, 0 of the 58 files that name `relay-morpheus.sh`
+  found by codegraph, all 58 by `git grep -l relay-morpheus.sh`.
+- **`live-friday`** — if the repo has a runnable surface (a dev script,
+  `Cargo.toml`, `CMakeLists.txt`, a `Makefile`, `go.mod`, a Python entry point),
+  it is armed: the *first* change to that project starts the app or build in the
+  background and hands over the URL/command **before** the edits, so the user
+  watches it run instead of waiting on a reply. Nothing runnable → say
+  `live-friday: nothing to launch` once and drop it. Never auto-launch
+  simulators, migrations or deploys.
+- **`watch-cortana`** — on **Claude Code**, confirm the hooks are wired
+  (`statusLine` runs `usage-watch … -Mode probe`, a `Stop` hook runs
+  `-Mode gate`). Not wired → say so in one line and offer to wire it; never wire
+  it silently. On **every other host** there is no hook that can read the usage %
+and inject at turn end (cursor and antigravity have turn-end hooks; they have no
+percentage to give them — see `PLATFORMS.md`), so run
+  `usage-watch.ps1 -Mode check` / `usage-watch.sh check` once here and report
+  exactly what it says. It reads a real percentage on codex and reports "no
+  usage signal on this host" on cursor and antigravity — repeat that verbatim
+  rather than calling it armed. See that skill's **Other hosts** table.
+- **`rules-orko`** — run `sh <rules-orko>/scripts/rules-orko.sh show` (Windows:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File
+  "<rules-orko>/scripts/rules-orko.ps1" show`; `<rules-orko>` is that skill's
+  directory, a sibling of this one). It prints the repo's committed rules
+  (`.skillator/rules.md`) and this user's own (`~/.skillator/rules.md`),
+  scope-tagged. Read both lists before the first task; every line binds the
+  session as if the user had just typed it. A global rule contradicting a
+  project rule is **asked** - one `AskUserQuestion` per clash, before the work
+  it touches - never settled by you (`rules-orko/references/clashes.md`). Report
+  the counts in the active-set line: `rules-orko: 2 project · 1 global`; both
+  files absent → `rules-orko: none`. From here on, a standing rule the user
+  states ("from now on", "always", "never", "in this repo") routes to
+  `rules-orko` and is on disk before the next tool call.
+- **`tiers`** (F39) — resolve tier → model for this host once per session, so
+  `build-jarvis` never has to ask which model. Read `.skillator/tiers.local.md`:
+  - missing, or its `host:` is not this host → write it: `deep`, `build` and
+    `cheap` each set to the **first** slug in this host's column of
+    `PLATFORMS.md` § Role tiers (Claude Code: `fable` / `opus` / `sonnet`, the
+    Agent tool's `model` values; codex: `gpt-6-astra/high` / `gpt-6-astra/medium`
+    / `gpt-6-astra/low`), a model the user named in this session winning over
+    the column;
+  - present → keep its models, drop every `down:` line not dated today.
+  The shape (`host:`, `deep:`, `build:`, `cheap:`, `written:`, `down:` lines) is
+  `skills/build-jarvis/references/grade.md` § The tiers file. The file is local to
+  this machine and account: make sure the repo's `.gitignore` carries
+  `.skillator/*.local.md` (append the line if missing; a repo with no
+  `.gitignore` gets one with that line). Report `tiers deep=<m> build=<m>
+  cheap=<m>`, plus `(<m> down)` for any model marked down today. Nothing is
+  probed: a model that turns out unavailable is marked down by build-jarvis at
+  dispatch, which retries one tier lower.
+  On **Claude Code** also check that `build-jarvis`'s `UserPromptSubmit` route
+  hook and its `PreToolUse` grade gate are wired
+  (`build-jarvis/references/route-hook.md`); either not wired → say so in
+  one line and offer it, never wire it silently.
+- **`owner`** (F92) — who drives this session, so claims, assign, the ops
+  board's "you" and run owners are that person, not git's email. Run
+  `ticket-meta.sh team list` (tickets-zordon; Windows the `.ps1`). No
+  `.skillator/team.md`, or one member → no question. Two or more → ask once,
+  before other work: "Who is driving this session?", one option per member
+  (`@handle - name`) plus "someone else" — `AskUserQuestion` on Claude Code, the
+  host's question tool or one plain line elsewhere. Then
+  `ticket-meta.sh iam @handle`: kept for this session only, in git-ignored
+  `.skillator/sessions/<session tag>.owner`, never `team.md` or git config;
+  `whoami` reads it first. "Someone else" → record nothing (offer `team add`).
+  No session tag (no Claude Code session id) → prefix `iam` and every later
+  `ticket-meta` call with `SKILLATOR_SESSION=@<agent>-<id>`, your tickets-zordon tag. Headless (`-p`,
+  chained, no one to answer) → no question, the old rule. On Claude Code the
+  plugin's `SessionStart` hook (`hooks/session-owner.sh`) has already put the
+  team list and this ask in context; a hook cannot ask, so the ask is still
+  yours. Report `owner @handle` (or `owner -`) in the active-set line.
+- **Upstream watch** (F23c, F29) — only in a repo that has
+  `skills/design-arwen/UPSTREAM.md` (skillator itself); anywhere else skip it
+  silently, because those tickets belong on skillator's board, not the user's.
+  Run `sh practice/scripts/upstream-check.sh --daily` (Windows:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File
+  practice/scripts/upstream-check.ps1 -Daily`). `--daily` makes it a no-op after
+  the first finished run of the day; the stamp is
+  `$(git rev-parse --git-common-dir)/skillator/upstream-check.day`, shared by
+  every worktree. Also run `sh skills/code-yoda/upstream-check.sh --daily`
+  (Windows: the `.ps1` beside it, `-Daily`) — code-yoda's manifest, same
+  output shape, its own stamp. Act on the output of both:
+  - `skipped:` or exit 0: nothing to do.
+  - each `changed <name> <old>..<new> <url>` line (exit 1, and also exit 2,
+    because one failed row does not hide another's change): look for an open
+    (`[ ]` or `[~]`) ticket line in `TICKETS.md` that names both `<name>` and
+    `<new>`. If there is one, it is already logged. If not, take a number with
+    `sh practice/scripts/next-id.sh A` and add
+    `- [ ] A<n> — absorb <name> <old>..<new> into <skill> (<url>)`, `<skill>`
+    being the one whose manifest reported it (`design-arwen`, or `code-yoda` for
+    `ponytail`). The procedure is in that skill's `UPSTREAM.md`.
+  - each `error` line (exit 2): report it in the active-set line as
+    `upstreams: check failed (<name>)`. Never call a failed check unchanged. No
+    stamp is written, so the next session retries it.
+
+  This is detection and a ticket, never an edit to the skill. Absorbing is a
+  normal ticket that someone takes on purpose.
+
+Then state the active set in **one line** — not a feature tour:
+
+```
+grayskull-power: board 3 open (B2, F7, A1) · codegraph 22/952 partial (js/py/ts only) · code-yoda full · live-friday armed (npm run dev) · watch-cortana armed at 92% · rules-orko: 2 project · 1 global · tiers deep=fable build=opus cheap=sonnet
+```
+
+The banner is printed at the top of the reply, before any of this. It fires
+**once per session**, on invoke — not on every routed request.
+
+---
+
+# Persist it for this project (once, then never again)
+
+Activation should survive the session and the host. Every one of these CLIs
+already reads an always-on instruction file from the repo root — that is the
+carrier, no hook required.
+
+On the **first** invoke in a repo, write these four small files and say so in
+one line. If `.skillator/grayskull.md` already exists, activation is already
+persisted: skip this whole step silently.
+
+**`.skillator/grayskull.md`** — the single source of truth:
+
+```markdown
+# grayskull-power is ON for this project
+
+Load and follow `skillator:grayskull-power` for all work here, before
+anything else. Claude Code: `Skill` tool; Antigravity: `/grayskull-power`;
+Pi: `/skill:grayskull-power`; Codex/Cursor: read that skill's `SKILL.md`.
+Print its banner once per session, then route per table.
+
+Standing rules:
+- `TICKETS.md` is the board — `skillator:tickets-zordon` owns it.
+- Reproduce before fixing; map with `codegraph` first.
+- Before every commit: regression sweep, then `/code-review`
+  (`code-review:code-review`) on the staged diff. `skillator:audit-sherlock`
+  is the whole-app sweep — pre-release, handover, rot — never per-commit,
+  never inside an implementer.
+- Staged work runs to the end, no stop between stages. Six stops: a
+  destructive op, a security-sensitive action, a side effect outside this
+  worktree (merge, push, publish), the 7-day limit at 90%, a scope-contract
+  breach, a failed repro. Else log a `Ruling:` in the run file.
+  `skillator:relay-morpheus` owns `.skillator/run.md`, updated before
+  dispatch, never after.
+- One task per fresh implementer, own prompt, no session history —
+  `skillator:tasks-sentinels` runs that loop. Same-file tasks do not fan out.
+- Usage watch — before each non-trivial step run
+  `<SKILL_DIR>/../watch-cortana/hooks/usage-watch.sh check`
+  (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File
+  "<SKILL_DIR>/../watch-cortana/hooks/usage-watch.ps1" -Mode check`).
+  It prints `HANDOFF NOW` plus an order — follow it. Claude Code's `Stop`
+  hook does this already; skip it.
+```
+
+Write that block **verbatim**, with exactly one substitution — `<SKILL_DIR>`,
+which occurs twice (once for `.sh`, once for `.ps1`). Nothing else in the block
+varies per repo.
+
+`<SKILL_DIR>` is the directory that contains grayskull-power's own `SKILL.md`:
+
+- **Normally** — the skill is installed outside the repo — write its **absolute**
+  path, forward slashes, no trailing slash. e.g.
+  `C:/Users/me/.claude/plugins/skillator/skills/grayskull-power`.
+- **If that directory is inside the repo being activated** (skillator itself,
+  dogfooding), write it **relative to the repo root** instead —
+  `skills/grayskull-power` — so the file stays correct for every clone.
+
+Leave the `/../watch-cortana/…` tail exactly as written; do **not** pre-normalise
+the `/../` away. The check at `practice/scripts/check-grayskull-sync.sh` compares
+the live `.skillator/grayskull.md` against this block on precisely that rule, so
+a hand-tidied path reads as drift.
+
+The path must resolve to a real `usage-watch.sh`. In any repo that is *not*
+skillator, a repo-relative `skills/watch-cortana/…` does not exist — that is why
+the absolute form is the default.
+
+Then the three host pointers, **appended** (never overwriting what is there):
+
+| File | Read by | Line to append |
+|---|---|---|
+| `CLAUDE.md` | Claude Code | `@.skillator/grayskull.md` |
+| `AGENTS.md` | Codex, Cursor | `Read and follow ./.skillator/grayskull.md before any work in this repo.` |
+| `GEMINI.md` | Antigravity | `@.skillator/grayskull.md` |
+
+Create a file only if it is missing; if it exists, append the line only when it
+isn't already present. Three near-identical pointers is deliberate — each host
+reads its own name, and a symlink is not portable to Windows.
+
+Deactivating is deleting `.skillator/grayskull.md`; the pointers then resolve to
+nothing and are harmless. Say that once, don't repeat it.

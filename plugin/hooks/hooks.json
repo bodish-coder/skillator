@@ -1,0 +1,28 @@
+{
+  "description": "skillator: F66 teams-uhura - unread Teams channel messages into the next turn as context, framed as data (a shell pre-check: node starts only when the repo has a Teams inbox); F92 - at session start, the team list and the ask who drives this session",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/session-owner.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/team-hook.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

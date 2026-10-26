@@ -1,0 +1,415 @@
+# Platform adapters — how skillator skills run on each host
+
+Every skill in this repo is written against **role tiers** and **generic
+mechanics**, not against one vendor's tools. This file is the single mapping
+table. A skill that names Claude Code models or `/compact` is showing its
+default; translate through the row for your host.
+
+**If this file isn't reachable** (skill copied out on its own), assume the
+`claude-code` row and say so once.
+
+## Role tiers
+
+These four names are the **only** tier vocabulary skillator uses. `PRACTICE.md`
+§4 and [`practice/task-loop.md`](practice/task-loop.md) name seats with them and
+nothing else; this table is where they become a slug you can actually type.
+
+| Tier | Job | claude-code | cursor | codex | antigravity | pi | prime-agent |
+|------|-----|---|---|---|---|---|---|
+| **deep** | Creative design, hard reasoning, semantic judgement, the final whole-branch review | Fable / Opus | the strongest reasoning slug the Task tool offers (GPT-5.6-Sol, Claude Opus) | `model = "gpt-6-astra"`, then GPT-5.6-Sol — **never Luna** — with `reasoning_effort: high` or `xhigh` | `/model` → Gemini 3.1 Pro or Claude Opus | `/model` → the account's strongest reasoning model | the child-agent config's strongest provider |
+| **build** | Implement the design; review a task's diff — strongest coder available | Opus | Claude Opus, or the strongest coding slug allowed | `reasoning_effort: medium` | `/model` → Claude Sonnet or Opus | `/model` → the account's strongest coding model | the login provider, default child config |
+| **cheap** | Transcription, single-file mechanical edits, bulk summarizing, trivial conflicts | Sonnet / Haiku | the cheapest slug in the Task tool's list | `reasoning_effort: low` | `/model` → Gemini 3.5 Flash or GPT-OSS 120B | `/model` → the cheapest configured provider | a child agent on the cheapest configured provider |
+| **orchestrator** | Main session: dispatch, rule, keep the ledger, write files, checkpoints | the running session | the running session | the running session | the running session | the running session | the running session |
+
+**codex, complex work:** GPT-6-Astra is the prime model and the first choice for
+anything in the **deep** tier; GPT-5.6-Sol is the fallback when Astra is
+unavailable. **Luna is not used for complex work** — it is fine at the `cheap`
+tier, but never for design, hard reasoning, semantic judgement or a whole-branch
+review. Astra is already the default in `~/.codex/config.toml`; the tier is set
+with `reasoning_effort`, not by switching model per task.
+
+Use a *different* model for deep vs build when the host allows it. Same model
+for both is a valid fallback — say so in the run's record.
+
+A host whose slug list doesn't contain an obvious match for a tier gets the
+closest one **and a recorded substitution**. Never leave the model unnamed: an
+omitted model inherits the session's, which is usually the most expensive one.
+
+**Defaults for `build-jarvis`.** The first slug in a cell is that tier's
+default model on that host. `grayskull-power`'s `tiers` arm step writes them
+to `.skillator/tiers.local.md` (gitignored) once per session, and
+`build-jarvis` reads that file; with no file it takes these first slugs
+directly. A model that fails at dispatch as unavailable is marked `down:` in the
+file and the seat retries one tier lower.
+
+## Detect the host
+
+| Signal | Host |
+|--------|------|
+| `Skill` tool; `/compact` and `/clear` | `claude-code` |
+| `Task` tool with `subagent_type` + model slug list | `cursor` |
+| `commentary`/`final` channels; auto context compaction | `codex` |
+| `/skills`, `/agents`, `/model`; skills under `.agents/skills/` | `antigravity` |
+| `/skill:<name>`; AGENTS.md from `~/.pi/agent/`; `/model` mid-session | `pi` |
+| `skill` tool; `opencode.json`; config under `~/.config/opencode/`; Tab switches the build / plan agents | `opencode` |
+| persistent IPython; `rlm(...)`; `prime-agent agents` | `prime-agent` |
+
+Ambiguous → ask once. The user can override with `platform: <host>`.
+
+## The table
+
+| | claude-code | cursor | codex | antigravity | pi | prime-agent |
+|---|---|---|---|---|---|---|
+| **Skill install path** | `~/.claude/skills/<n>/` or plugin cache | `.cursor/skills/<n>/`, `.agents/skills/<n>/`, global `~/.cursor/skills/`, `~/.agents/skills/` (nested dirs too) | `$CODEX_HOME/skills/<n>/`, `~/.agents/skills/<n>/` (both load with no dedupe on 0.155.1, probed 2026-09-23; 0.153.2 read only `~/.agents/skills` (A62a); the installer writes only `$CODEX_HOME/skills`) | `<ws>/.agents/skills/<n>/`, global `~/.gemini/skills/<n>/` (read by Gemini CLI 0.57; also reads `~/.agents/skills/`, where a same-named copy wins; `~/.gemini/config/skills/` is not read by the CLI, probed 2026-09-23); the installer also writes `~/.gemini/config/skills/<n>/` for Antigravity's own docs, and `~/.gemini/antigravity-cli/skills/<n>/`, the global dir `agy` 1.4.5 reads (B8, 2026-10-23) | `~/.pi/agent/skills/<n>/`, `~/.agents/skills/<n>/`, `.pi/skills/<n>/` (project-level only; the global `~/.pi/skills/` is not read, probed on pi 0.74) | no markdown-skill loader — see below |
+| **Load another skill** | `Skill` tool | auto-discovered by description; else read its `SKILL.md` and follow it | auto-loaded when the task matches; else read its `SKILL.md` | auto-discovered; force with `/<skill-name>` | force with `/skill:<name>` | Read the `SKILL.md` and follow it |
+| **Delegate work** | `Agent` tool + `model` override | `Task` tool + model slug | subagents (GA Mar 2026) — up to 8 parallel, own context + sandbox | background subagents (`/agents`), nestable | no native delegation — `subagent` extension or a `pi` subprocess; else sequential in-session passes | `rlm(...)` spawns real child agents |
+| **Switch tier** | per-agent `model` | per-Task model slug | `reasoning_effort` low/medium/high/xhigh | `/model` mid-session (Gemini 3.5 Flash / 3.1 Pro / Claude Sonnet / Opus / GPT-OSS 120B, plan-dependent) | `/model` mid-session (15+ providers) | provider chosen at `/login`; tier by prompt + child-agent config |
+| **Context checkpoint** | `/compact`, `/clear` | new composer/chat turn | auto-compacts; new thread for a clean slate | new session (`/agents` keeps background work) | new session | `/refine` + daemon sessions, `prime-agent --resume <id>` |
+| **Always-on project file** | `CLAUDE.md` (`@path` imports) | `AGENTS.md` | `AGENTS.md` | `GEMINI.md` (`@path` imports) | `AGENTS.md` | `AGENTS.md` |
+| **Usage % readable** | `statusLine` `rate_limits.*.used_percentage` | no | yes — `$CODEX_HOME/sessions/**/rollout-*.jsonl` (default `~/.codex`), last `token_count`; the `Stop` stdin's `transcript_path` names the session's own | no | no | no |
+| **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | `Stop` in `hooks.json` → `{"decision":"block","reason":…}` on stdout (0.155.1, verified under `codex exec`; needs hook trust). Exit 2 + stderr does not inject. `watch-cortana` `usage-watch.* gate` wired and verified here, 0.156.1 (A83). See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
+| **Durable memory** | `CLAUDE.md` + files on disk | files on disk | `AGENTS.md` + files | `AGENTS.md` + files | `AGENTS.md` (`~/.pi/agent/`, parents, cwd) + files | Continual Harness + `AGENTS.md` + files |
+| **Slash command file** (`/pending`, `/list-tickets`, `/engage`, `/archive-tickets`, `/sync-tickets`, `/skillator-update`, `/team-messages`, `/pending-subagent`, `/verify-subagent`, `/marathon-plan`, `/marathon-run`; F54, F58, F59, F63, F65, F66, F71, F72, F73, texts in `host-commands/<host>/`, tags in "Commands - what is verified") | the ops-board mod's own commands / `commands/*.md`; the installer writes none | `~/.cursor/commands/<n>.md`, `.cursor/commands/<n>.md` | a skill (F90): `$CODEX_HOME/skills/<n>/SKILL.md`, from `host-commands/antigravity/` → `$<n>` (or pick it in `/skills`) | none of its own: a skill is the command, `<ws>/.agents/skills/<n>/SKILL.md` → `/<n>` (workflows deprecated); Gemini CLI: `~/.gemini/commands/<n>.toml` | `~/.pi/agent/prompts/<n>.md`, `.pi/prompts/<n>.md` → `/<n>` | **none — the skill route** (no command mechanism) |
+| **Remote drive** (from a phone, `remote-cerebro`; matrix and evidence tags in [`skills/remote-cerebro/references/hosts.md`](skills/remote-cerebro/references/hosts.md)) | not this skill — Claude Code's own Remote Control | native: cloud agent via `agent worker start` (runs here, not the local TUI); bridge via `agent acp` arms only after an ACP proof | native: `codex remote-control` + ChatGPT app (Windows pairing unproven); bridge: `codex app-server` | gemini: **no native remote** — bridge via `--acp` (after an ACP proof); attach hook v2, approvals not answerable from the phone. agy: native `--remote-control` | bridge: `--mode rpc` (own) or `--mode attach` on a pi cerebro launched; no native remote | not possible (not installed, not probed) |
+
+**Frontmatter:** only `name` + `description` are portable. Everything else
+(`user-invocable`, `argument-hint`, `license`) is ignored where unsupported —
+harmless, never load-bearing.
+
+## Auto-invocation — what is actually verified
+
+The "Load another skill" row says how a skill *can* be loaded. Whether the host
+loads one **unprompted**, from the description alone, is a separate question.
+Five rows have now been tested; prime-agent has no loader to test.
+
+| Host | Fires on description alone? |
+|---|---|
+| claude-code | **yes, verified** — 2026-09-06, `claude -p` 2.1.261 / Opus 5, 7/7 |
+| codex | **yes, verified** — 2026-09-06, `codex exec` 0.153.2, 2/2 |
+| cursor | **yes, verified** — 2026-09-23, `cursor-agent` 2026.09.18, 4/4 — but every load came from the user-level `~/.cursor/skills`; a fixture-local `.cursor/skills`/`.agents/skills` never appeared in its inventory (self-reported, unconfirmed) |
+| antigravity | **yes, verified** — 2026-09-24, `agy` 1.2.9, 4/4 — `grayskull-power` 2/2 from the fixture's project-local `.agents/skills`; the `func-ui`-triggering prompt 2/2 loaded the stale user-level `~/.gemini/config/skills/func-ui` instead of the fixture's `designui-galadriel` |
+| pi | **yes, verified** — 2026-09-23, `pi` 0.74.2 / openai gpt-5.5, 4/4, from project-local `.pi/skills` with `PI_CODING_AGENT_DIR` and `HOME` isolated |
+| muse | **unverified** — F68 (2026-10-24, Muse Code 1.4.12): `muse plugins validate` - 28 skills `supported` (summary `full`); `muse plugins install` into a scratch profile - `active=true skills=28`; B11 (Muse Code 1.4.13): `marketplace add <name> <git URL>` + `install skillator@<name>` - `active=true skills=29` (a scratch bare clone over `file://`; the GitHub URL once 4.17.x is pushed), the clone route stays (see the muse section); an unprompted load from a description not run |
+| opencode | **unverified** — F67 (2026-10-24, opencode 1.19.4) checked discovery only: `opencode debug skill` lists the skills in `~/.config/opencode/skills`; an unprompted load from the description has not been run |
+| prime-agent | **no** — no markdown-skill loader at all; not installed on this machine (2026-09-24), so its always-on-file route is still unrun |
+
+The claude-code runs were headless, from a throwaway fixture outside any repo,
+with no `CLAUDE.md`/`AGENTS.md` in the cwd: `designui-galadriel` loaded 5/5 from *"just a
+mockup … make it real"* (once under `--plugin-dir` + `--add-dir`, the GREEN
+harness shape), `resume-cortana` from *"pick up the pending tasks from the
+handoffs"*, `grayskull-power` from *"set me up for coding"*. This supersedes the
+earlier A55 observation that no skill fired; see `practice/baselines/README.md`.
+
+**codex (verified).** Same probe shape, 2026-09-06: `codex exec --json -s
+read-only --skip-git-repo-check` from a throwaway fixture in the system temp dir
+holding only `index.html` + `app.js` (hardcoded data, dead button), no
+`AGENTS.md` anywhere in the tree, and a `~/.codex/AGENTS.md` that never mentions
+skills. From *"just a mockup … the buttons don't do anything … make it real"* its
+first message was *"I'm using the func-ui skill for this conversion"*, followed by
+a read of `~/.agents/skills/func-ui/SKILL.md` (the name and path at the time;
+the skill is now `designui-galadriel`). From *"set me up for coding on this
+project — activate the programming skills"* it opened with *"I'm using the
+grayskull-power skill"* and read that `SKILL.md`, then `PLATFORMS.md`. A third run
+of the same prompt in an **empty** directory loaded nothing and asked which
+project to use — a reasonable miss, not a contradiction. Note codex prints
+`Skill descriptions were shortened to fit the skills context budget` when many
+skills are installed, and that it loaded from `~/.agents/skills`, not
+`$CODEX_HOME/skills` (both are installed; see A11).
+
+**cursor (verified).** Earlier probe, `cursor-agent` 2026.09.02-c22c1a3,
+`-p --output-format stream-json --force`: two `designui-galadriel`-triggering prompts
+produced a full plan without ever naming or reading a skill, and the *"activate
+the programming skills"* prompt's first tool call — before any search — was a
+read of `~/.codex/skills/grayskull-power/SKILL.md`, a name and path it was never
+given, but that read was refused by a malformed user-level hook on that machine
+(`Hook blocked with message: --: eval: line 1: syntax error`), blocking *every*
+`read` call. Re-run 2026-09-23, `cursor-agent` 2026.09.18, 4/4 fixture prompts
+loaded a skill unprompted — pointing `CLAUDE_CONFIG_DIR` at an empty temp dir
+avoided that claude-mem Read-hook block (0 "Hook blocked" this run). But every
+load came from the user-level `~/.cursor/skills` (a stale old-name install:
+`func-ui`, `grayskull-power`); a fixture-local `.cursor/skills` / `.agents/skills`
+never appeared in its inventory (self-reported, unconfirmed). Cursor's docs do
+claim description-based auto-loading from `.agents/skills` · `.cursor/skills`
+(project and `~`).
+
+**antigravity (verified).** Earlier only the IDE was installed, with no headless
+agent binary. The Antigravity CLI is now installed (`agy` 1.2.9, signed in) and
+was probed 2026-09-24 with `agy -p … --new-project --sandbox --output-format
+stream-json` from throwaway fixtures in the system temp dir, each holding
+`index.html` + `app.js` + `package.json` and the repo's skills copied into
+`.agents/skills/` (the project-local dir `agy` reads — a probe skill placed only
+there was listed from that path), with no `AGENTS.md`/`CLAUDE.md`/`GEMINI.md` in
+the tree and a `~/.gemini/GEMINI.md` that never mentions skills. 4/4 runs loaded a
+skill as their **first tool call**: *"set me up for coding … activate the
+programming skills"* read the fixture's `.agents/skills/grayskull-power/SKILL.md`
+2/2, although same-named copies sit in `~/.gemini/config/skills` and
+`~/.agents/skills`; *"just a mockup … make it real"* read
+`~/.gemini/config/skills/func-ui/SKILL.md` 2/2 — a stale old-name user-level
+install — and never the fixture's `designui-galadriel`. So `agy` reads
+`~/.gemini/config/skills/` (which Gemini CLI does not), and a leftover old-name
+install there can win over the project copy. The committed transcripts each end
+in a `SUCCESS` result after 9-22 s, having loaded the skill; they do not show the
+skill's later work, so only the load is evidenced. Do **not** probe without
+`--sandbox`/`--new-project`: an earlier unsandboxed round (`--mode plan` does not
+stop edits) resolved to other workspaces, searched the home directory, copied a
+fixture into `~/.gemini/antigravity-cli/scratch/` and built a backend there;
+those runs are discarded.
+
+**pi (verified).** Earlier probe found `pi` 0.74.2 installed but the only
+configured provider, OpenAI, rejected the key on that machine (`401 Incorrect
+API key`), so no probe could run. pi now has a working credential
+(`OPENAI_API_KEY`); re-run 2026-09-23, `pi` 0.74.2 / openai `gpt-5.5`, with
+`PI_CODING_AGENT_DIR` and `HOME` isolated to empty temp dirs: 4/4 fixture
+prompts loaded a skill unprompted from project-local `.pi/skills` (both
+`func-ui`-triggering runs stopped at the plan, matching that skill's contract).
+Its discovery dirs are `~/.pi/agent/skills` · `~/.agents/skills` · `.pi/skills` ·
+`.agents/skills`; only the project-level `.pi/skills` was exercised here.
+pi also reads every top-level `.md` in `~/.pi/agent/skills` / `.pi/skills` as a
+skill, so the installer lists PLATFORMS.md, PRACTICE.md and WORKFLOW.md in that
+dir's `.ignore` (pi's skill loader honours it) - without it pi warns
+"description is required" for each at every start (A145).
+
+Transcripts for the 2026-09-06 codex/cursor runs and the 2026-09-23 cursor/pi
+re-runs are JSONL from each host's own stream, committed at
+`practice/baselines/transcripts/` (`a62-codex-funcui.jsonl`,
+`a62-codex-grayskull2.jsonl`, `a62-cursor-funcui.jsonl`,
+`a62-cursor-funcui2.jsonl`, `a62-cursor-grayskull.jsonl`,
+`a62b-cursor-funcui.jsonl`, `a62b-cursor-funcui2.jsonl`,
+`a62b-cursor-grayskull.jsonl`, `a62b-cursor-grayskull2.jsonl`,
+`a62b-pi-funcui.jsonl`, `a62b-pi-funcui2.jsonl`, `a62b-pi-grayskull.jsonl`,
+`a62b-pi-grayskull2.jsonl`) and the 2026-09-24 antigravity runs
+(`a62c-agy-funcui.jsonl`, `a62c-agy-funcui2.jsonl`,
+`a62c-agy-grayskull.jsonl`, `a62c-agy-grayskull2.jsonl`). **Never promote a row
+here without one.**
+
+**The deterministic route, for the hosts that are not verified and for anyone who
+wants certainty:** the **Always-on project file** row above. `grayskull-power`
+writes `.skillator/grayskull.md` on first invoke and appends a pointer to
+`CLAUDE.md` / `AGENTS.md` / `GEMINI.md`, so the router is in context before the
+first request. That path is verified on claude-code headless (the router loaded
+first, then routed). On cursor/codex/antigravity/pi it rests on the same
+always-on file each host already documents — **not** separately tested here.
+Failing both, name the skill.
+
+On **prime-agent** this is the *only* route: there is no markdown-skill loader, so
+`.skillator/grayskull.md` plus an `AGENTS.md` pointing at it is the activation
+mechanism, and `install.sh` cannot write it for you — it only prints the
+reminder. Nobody has run that path end-to-end on prime-agent; treat it as
+untested until someone does. prime-agent is not installed on this machine
+(checked 2026-09-24: no `prime-agent` on `PATH`, no pip package), so it stays
+deferred.
+
+Nothing in `install.sh` / `install.ps1` writes a user-level always-on line; they
+install skills and the shared docs only.
+
+## Commands - what is verified
+
+`/pending`, `/list-tickets` (F54), `/engage` (F58), `/archive-tickets` (F59), `/sync-tickets` (F63), `/skillator-update` (F65), `/team-messages` (F66), `/pending-subagent` (F71), `/verify-subagent` (F72), `/marathon-plan` and `/marathon-run` (F73) are written by the installers at user level
+only, rewritten every run; per-host shapes are in the session design's D7 table.
+Evidence tags: **verified** = read from the host's docs/binary or exercised here;
+**inferred** = from docs only, until the owner's picker check
+(`practice/baselines/green-commands-f54.txt`, probed by
+`practice/scripts/probe-commands.sh`).
+
+`/team-messages` (F66, `teams-uhura`) lists the Teams inbox's unread messages, framed as
+data, marks them read and offers a reply on the owner's word (`team.mjs say`). Claude
+Code also gets them at the next turn from the plugin's own `hooks/hooks.json`
+(`UserPromptSubmit`, `node .../team-hook.mjs`: silent with no inbox); the other hosts
+have no plugin hook here, so they read them on the ops board's 4 Messages tab and with
+`/team-messages`.
+
+`/pending-subagent [N|max] [IDs]` (F71, `relay-morpheus` with `tickets-zordon` and
+`tasks-sentinels`) works the open tickets, or the IDs given, as one relay run: a stage
+and its exact prompt in the run file before each dispatch, one fresh implementer per
+ticket, each diff reviewed and landed by the main session, then the run merged, the
+version bumped and the push asked. The count defaults to 1 (serial); N or `max` runs
+file-disjoint tickets at once in their own stage worktrees (`chain next --all`,
+`chain merge`). A host with no subagent tool runs the stored prompts itself, one at a time.
+
+`/verify-subagent` (F72, `tickets-zordon`) re-checks every `[%]` ticket (or the IDs
+given) with one fresh read-and-run-only agent each: PASS flips it to `[x]` with a
+dated **Verified** note (`ticket-meta verify <ID> pass`), FAIL leaves it `[%]` with what
+failed appended (`verify <ID> fail`), OWNER (the Done line needs the owner's own eyes)
+is never flipped. A host with no subagents runs the checks itself, one at a time.
+
+`/marathon-plan [IDs]` and `/marathon-run [RUN id]` (F73, `relay-morpheus`) are a
+marathon saved, then run: the plan is a run file plus a Workflow script beside it
+(`run-<0000>-<slug>.workflow.js`, from relay-morpheus `templates/marathon-workflow.js`:
+one implementer and one verifier per ticket, phases serial where tickets share files),
+shown with its agent count and no agent run; `/marathon-run` runs it one phase per
+Workflow call, every stage `chain dispatch`ed first, then landing and the end batch.
+Claude Code only: every other host's command says it has no Workflow tool and points
+at `/pending-subagent`.
+
+`/skillator-update` (F65) finds its source in this order: a clone path given as its
+argument; Claude Code's updated plugin (`installPath` of `skillator@<mkt>` in
+`claude plugin list --json` - the package ships `install.sh` / `install.ps1`); the
+**source pointer** every install run writes into each skills dest,
+`<dest>/.skillator-source` (one line, LF, no BOM: the plugin folder the installer ran
+from - `<clone>/plugin` since F91; an older pointer names the clone root, whose
+forwarding `install.sh` / `install.ps1` still run it); else it asks, and headless it stops with `source: none found`. A git source is
+updated with `git pull --ff-only` only.
+
+| Host | Path | Tag |
+|---|---|---|
+| claude-code | the ops-board mod's `/pending`, `/list-tickets`; the plugin's `commands/engage.md`, `commands/archive-tickets.md`, `commands/sync-tickets.md`, `commands/skillator-update.md`, `commands/team-messages.md`, `commands/pending-subagent.md`, `commands/verify-subagent.md`, `commands/marathon-plan.md`, `commands/marathon-run.md` (installer writes none) | verified |
+| gemini CLI | `~/.gemini/commands/<n>.toml`, `!{...}` shell injection, `{{args}}` | verified (dir, `!{`, `{{args}}`) |
+| antigravity | skills, `/<n>` in `agy`; all three dests `~/.gemini/config/skills/`, `~/.gemini/skills/` and `~/.gemini/antigravity-cli/skills/` (agy 1.4.5's global dir, B8) | verified (a skill is a slash command) |
+| pi | `~/.pi/agent/prompts/<n>.md`, `$ARGUMENTS` | verified |
+| pi `/ops` (F56) | the ops board as a pi extension: `~/.pi/agent/extensions/skillator-ops.ts` re-exports `~/.pi/agent/skills/ops-board/pi/index.ts`; full-screen overlay, Tickets / Runs / Health, assign / decide, the standalone app's keys; `/ops --once` notifies one frame | verified headless (pi 0.74.2 `--mode rpc`: `get_commands` lists it, `/ops --once` draws); the live overlay is the owner's check |
+| Antigravity IDE ops board (F57) | the ops board as an extension of the Antigravity IDE (the VS Code fork, `antigravity-ide`; not `agy`): `ops-board/antigravity/pack.mjs` writes a VSIX whose entry requires `~/.gemini/config/skills/ops-board/antigravity/extension.cjs`, installed with `antigravity-ide --install-extension <vsix> --force` (a folder dropped beside `~/.antigravity-ide/extensions/extensions.json` is ignored); command "skillator: Ops board" opens a webview panel - Tickets / Runs / Health, assign / decide, the standalone app's keys; "skillator: Ops board - one frame" writes one frame to the "skillator ops" output channel | verified headless (Antigravity IDE 1.107.0, Electron 39 / node 22.21: `--extensionTestsPath` run activates `skillator.skillator-ops`, both commands listed, the one-frame command draws, the panel opens); the live panel is the owner's check |
+| codex | a skill (F90): `$CODEX_HOME/skills/<n>/SKILL.md`, written from `host-commands/antigravity/<n>/SKILL.md` (name + description frontmatter, `{{SKILLS}}` filled with that dest) → `$<n>` in the prompt, or pick it in `/skills`; the installer removes the `$CODEX_HOME/prompts/<n>.md` an older run wrote (those names only) | inferred (docs) until the owner runs one as a skill |
+| cursor | user `~/.cursor/commands/<n>.md` | project dir verified; user dir inferred until the picker check |
+| muse (F68) | none: `.muse-plugin/plugin.json` lists `commands: []` (the command schema is unprobed - superpowers ships none either); the skill route stays | inferred |
+| opencode (F67) | `~/.config/opencode/commands/<n>.md` (`$XDG_CONFIG_HOME/opencode/commands/` when that is set) → `/<n>`; markdown, frontmatter `description` (also `agent`, `model`, `subtask`), body = the template, `$ARGUMENTS` / `$1`… for arguments | verified (opencode 1.19.4: `opencode debug config` lists a command from `<config>/commands/` and from `.opencode/command/` + `.opencode/commands/`, `$ARGUMENTS` kept in the template; the binary globs `{command,commands}/**/*.md` in every config dir); the TUI picker is the owner's check |
+| prime-agent | none; the skill route stays | verified (no loader) |
+
+**cursor** — Cursor's CLI is `cursor-agent` (`agent.exe` beside it). A bare `agent`
+on `PATH` can be a different tool (on the author's machine it is Grok's), so the
+probe and every headless check use `cursor-agent`, never `agent`:
+`cursor-agent -p "/pending" --mode ask`.
+
+## Host notes
+
+**cursor** — skills are auto-discovered from those four directories (nested repo
+dirs included, scoped to that dir), matched on `description`, and `name` **must
+match the folder name**. There's no `Skill` tool, so to chain a skill on purpose,
+read its `SKILL.md` yourself — don't delegate skill *interpretation* to a
+subagent. Model slug not in the Task tool's allowed list → closest tier, record
+the substitution. On Windows the Git-Bash `cursor-agent` shim prints Node's
+version and help instead of running the agent; call `cursor-agent.cmd` /
+`agent.exe` (`remote-cerebro`'s `doctor` flags the shim).
+
+**codex** — skills live in `$CODEX_HOME/skills/` (the installer's target; 0.155.1
+also reads `~/.agents/skills/`, with no dedupe) and load when the task matches;
+`AGENTS.md` (`~/.codex/AGENTS.md`, repo root, or a subdir) is the always-on
+layer. Subagents went GA in March 2026: up to 8 in parallel, each with its own
+context window and sandbox — so tiered phases here are real delegation, not a
+sequential fallback.
+
+**codex hooks — what is actually verified.** Codex has a hook system configured
+by `hooks.json`, and its event enum is wider than turn-start events. Read out of
+the shipped binary (`codex.exe`, `codex-cli 0.147.0-alpha.6.5`) with `grep -a`,
+the enum is `PreToolUse`, `PermissionRequest`, `PostToolUse`, `PreCompact`,
+`PostCompact`, `SessionStart`, `SessionEnd`, `UserPromptSubmit`, `SubagentStart`,
+`SubagentStop`, **`Stop`**. Three handler types are in the config schema —
+`command`, `prompt`, `agent` — but only `command` runs: the binary carries
+`prompt hooks are not supported yet` and `agent hooks are not supported yet`
+(and `async hooks are not supported yet`). There is an `additionalContext`
+output field with a per-hook `additionalContextLimit`, and a warning string
+`ignoring additionalContextLimit for <event> hook in <file>: this event cannot
+emit additionalContext` — the binary does not spell out which events those are.
+
+**What is verified.** Two Codex builds are installed on this machine and they
+differ, so cite the one you actually run:
+
+| | on `PATH` (npm shim, `codex-cli 0.153.2`) | `~/AppData/Local/OpenAI/Codex/bin/<hash>/codex.exe` | `codex-cli 0.155.1` (`codex exec`) |
+|---|---|---|---|
+| `Stop` event | yes | yes | yes |
+| exit 2 + stderr continuation prompt | yes | yes | compiled in, does not inject (0.155.1) |
+| `decision:block` JSON payload | **no** | yes | yes (0.155.1) |
+
+Both carry `Stop hook exited with code 2 but did not write a continuation prompt
+to stderr` and `Stop hook requested continuation without a prompt` — strings that
+only exist because the code reads a continuation prompt off stderr after an exit
+2. That is the same convention Claude Code's `Stop` hook uses, and it is present
+in the build that actually runs. `Stop hook returned decision:block without a
+non-empty reason` appears **only** in the Local build, so the JSON form is not
+portable between them.
+
+**Live test, 2026-09-23, `codex-cli 0.155.1`, `codex exec`: the hook fires.** A
+`command` handler in
+`{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":…,"timeout":30}]}]}}`
+ran from both `$CODEX_HOME/hooks.json` and a per-repo `.codex/hooks.json`. The
+per-repo file needs a trusted project. Both need hook trust:
+`--dangerously-bypass-hook-trust`, or trust persisted by the interactive review.
+Untrusted hooks are skipped silently. Stdin carries `stop_hook_active` and
+`last_assistant_message`. **Exit 2 + stderr does not continue the turn**
+(reported `Stop Failed`). **stdout `{"decision":"block","reason":…}` does:** the
+reason re-enters as a `<hook_prompt>` and the model runs again with
+`stop_hook_active:true`. The 0.153.2 failure is superseded. Keep `check` for
+cursor and antigravity.
+
+**A83, 2026-09-24, `codex-cli 0.156.1`, `codex exec`: the usage gate works.**
+`watch-cortana`'s `usage-watch.ps1 -Mode gate` as the `Stop` handler read the
+real rollout named by stdin `transcript_path` (19% = weekly `used_percent`;
+context 18907/258400 = 7.3%), stayed silent at 92%, and at a forced 5% emitted
+`decision:block`; codex ran a second turn on the reason and its `Stop` came
+with `stop_hook_active:true`, where the gate exits clean. Record:
+`practice/baselines/green-codex-stop-gate.txt`.
+
+**antigravity** — skills become slash commands automatically; `/skills` lists
+what it can see. Frontmatter beyond `name`/`description` is dropped, so any
+model tiering must be stated in the body (it is). Background subagents cover the
+delegate rows; `/model` covers the tier rows.
+
+**pi** — skills are `.pi/skills/<name>/SKILL.md` and are read on demand, which
+models don't always do: force it with `/skill:<name>`. Delegation isn't native;
+without a subagent extension, run tiered phases **sequentially in one session**,
+switching `/model` between phases, and write each phase's output to disk before
+switching. That file-on-disk step is what makes the tiering safe here.
+
+**muse** (F68) — a native plugin, not an installer dest: `.muse-plugin/plugin.json` (schemaVersion 1)
+lists every `skills/*/SKILL.md` by its frontmatter `name`, and `.muse-plugin/marketplace.json`
+lists the plugin; both carry the `.claude-plugin/plugin.json` version.
+`practice/scripts/check-muse-manifest.sh` fails on a skill left out, a path gone, an id that is
+not the skill's `name` or a version out of step, and `install.sh --selftest` runs it - so a
+new skill or a release bump touches `.muse-plugin/` too. Install from the marketplace (B11, from
+4.17.x): `muse plugins marketplace add skillator https://github.com/bodish-coder/skillator`, then
+`muse plugins install skillator@skillator`. Muse probes `.claude-plugin/marketplace.json` but
+never `.muse-plugin/marketplace.json`, so it reads the Claude catalog; since F91 its entry is
+`./plugin`, so no second clone (before F91 the entry was a github source, which Muse cloned into a
+`\\?\` path git refuses on Windows - B10). Update: `muse plugins marketplace update skillator`
+(a fresh snapshot in a new `generations/<n>` dir), then `muse plugins remove skillator` +
+`muse plugins install skillator@skillator` - the installed record keeps the old snapshot's path,
+so a plain `muse plugins update skillator` reports `updated` and changes nothing, and `install`
+alone refuses ("already installed from a different source"). Verified (Muse Code 1.4.13,
+2026-10-26, scratch profile, a bare clone of this branch added as `file:///C:/t/b11.git`): add
+`plugins=1`, install 4.17.0 `active=true` with 29 skills, a new commit reached the cache only by
+marketplace update + remove + install. Or install from a clone:
+`git clone https://github.com/bodish-coder/skillator <dir>`, then `muse plugins install <dir>/plugin`
+(F91: the plugin is the `plugin/` folder; it copies that folder into Muse's cache; skills are
+enabled by default, so `muse plugins approve` has no runtime capability to act on); update:
+`git -C <dir> pull`, then `muse plugins update skillator` (refreshes from that local source;
+`/skillator-update` step 4 does both, and moves an install of `<dir>` made before F91 to
+`<dir>/plugin` with `muse plugins remove skillator` + `muse plugins install` - a plain
+`update` fails there with `missing-manifest`, and `install` alone with "already installed from a
+different source"). Muse also warns that it skips ops-board - expected: its
+`hooks/hooks.json` is a Claude Code mod, which Muse cannot run.
+Verified (Muse Code 1.4.12, 2026-10-24): `muse plugins validate <repo>` - valid, summary
+`full`; `muse plugins install` with a scratch USERPROFILE/XDG_DATA_HOME - `skills=28
+active=true`, `approve` returns no runtime capabilities; both print one warning that `.claude-plugin/plugin.json` is ignored. Tiers, delegation, usage %
+and the ops board are unprobed: run the printed `ops` launch line beside it.
+
+**opencode** (F67) — not a column of the table above yet: its tiers, delegation,
+hooks and usage % are unprobed. What is verified (opencode 1.19.4, 2026-10-24,
+`opencode debug paths` / `debug skill` / `debug config`, no model call): the config
+dir is `$XDG_CONFIG_HOME/opencode` when that is set, else `<home>/.config/opencode`,
+and on Windows `<home>` is `%USERPROFILE%` (a changed `HOME` is ignored). Global
+skills load from `<config>/skills/<n>/SKILL.md` (also `skill/`), and from
+`~/.claude/skills/` and `~/.agents/skills/` (those two stayed on the real profile
+when `USERPROFILE` was moved to a scratch dir, while `<config>` followed it); project skills from `.opencode/skills/`,
+`.claude/skills/` and `.agents/skills/`, walking up to the git worktree root. A
+skill's `name` must match its folder. The installers write the skills to
+`<config>/skills/` and the seven commands to `<config>/commands/<n>.md`
+(`host-commands/opencode/`, the pi texts without `argument-hint`). opencode also
+reads `~/.claude/skills`, so where `install.sh` / `install.ps1` fill that dir
+(Claude Code with no plugin) opencode finds each skill twice (how it settles a
+duplicate name is unprobed). No ops board inside
+opencode: run the printed `ops` launch line.
+
+**prime-agent** — skills are importable *Python packages*, so these markdown
+skills aren't auto-loaded. Run one by reading its `SKILL.md` (or pointing
+`AGENTS.md` at it) and following it. `rlm(...)` is the delegate mechanism, and
+child agents are where tiering happens. Note the project's own warning: it is
+**not a security sandbox** — keep the "ask before push / never force-push" rails
+in these skills exactly as written.
+
+## Non-negotiables on every host
+
+- **Write state to disk before any context checkpoint.** Every skill here that
+  compacts, clears, or opens a new session runs its handoff/record step first.
+  Files are the memory; chat history isn't.
+- **Never fake a host's tool.** No tool for a step → do it in-session and say so.
+- **Approval rails don't relax** because a host is more autonomous. Push, force,
+  and destructive steps stay user-confirmed everywhere.
