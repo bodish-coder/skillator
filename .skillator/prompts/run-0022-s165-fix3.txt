@@ -1,0 +1,18 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+You are the FIX seat for ticket F99 on branch run/RUN-0022-pending-b13-f97-f98 (HEAD 27d2430). F99's Diagnose view (plugin/mods/ops-board/hooks/runstab.tsx openDiagnose / DiagnoseView, hooks/lib/diagnose.ts) shows a by-hand close command line keyed diag:byhand:<i>. A review found it wrong. Fix test-first, in hooks/runstab.tsx, hooks/lib/diagnose.ts, types/index.d.ts, tests/runs.test.tsx, tests/diagnose.test.ts only:
+
+1. The line must be runnable as copied on this platform: resolve relay-morpheus's script path the same way runCall resolves a relay script (hooks/lib/host.ts / calls.ts - read how 'relay-*' calls find their script and how Windows picks the .ps1), and show on Windows: powershell -NoProfile -ExecutionPolicy Bypass -File "<abs>/relay-morpheus.ps1" -Mode stage -Id RUN-<n> -N <N> -State x -Landed <sha> ; elsewhere: sh "<abs>/relay-morpheus.sh" RUN-<n> stage <N> x '' <sha> . The owner argument is '' (keeps the stage's owner cell) - never an <owner> placeholder. Read plugin/skills/relay-morpheus/hooks/relay-morpheus.sh and .ps1 'stage' handling to confirm '' / an omitted -Owner keeps the cell, and use whatever does.
+2. The sha: the landed cell's value whenever it has one (a sha on HEAD, or a path - relay accepts a path), else the literal <sha> placeholder. A landed sha git says is NOT on HEAD stays <sha> with the existing disagreement line.
+3. Guard DiagnoseView against an old atom shape: (d.byHand ?? []).map.
+4. tests/runs.test.tsx: the test asserting diag:close is undefined - assert no diag:byhand:0 instead for the finished and still-running verdicts. Add assertions for both platform forms if the test harness can set the platform; else pin the one it runs on and say so.
+5. diagnose.ts: drop the now-unused tickets field from Diagnosis.closable (and its tests) unless something still reads it.
+Leave as is: a driver cell with a tag but no stamp counts as live (fail closed, as engageOf).
+
+Verify: claude plugin test "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0022-pending-b13-f97-f98/plugin/mods/ops-board" and tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/66a4199e-bee7-472b-9aaa-61fc26982c2a/scratchpad/tsconfig-f99.json (both clean), npm --prefix "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0022-pending-b13-f97-f98/plugin/mods/ops-board/ops" test. Commit as "F99: by-hand close line runnable as copied - platform form, script path, owner kept, landed value kept".
+
+Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0022-pending-b13-f97-f98 (branch run/RUN-0022-pending-b13-f97-f98), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+Report back: the commit sha, files changed, red then green (command and pass/fail counts), the exact by-hand line it now prints on this machine, anything not verified.

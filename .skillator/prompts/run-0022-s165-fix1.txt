@@ -1,0 +1,21 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+You are the FIX seat for ticket F99 (ops board Workflows tab: finished runs marked, no Engage, Diagnose, Close after a confirm). F99 is built on branch run/RUN-0022-pending-b13-f97-f98, commits e30da08..52b4b8f; its design is C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/66a4199e-bee7-472b-9aaa-61fc26982c2a/scratchpad/design-2026-10-26-f99-runs-finished-diagnose.md. A whole-diff review found the defects below. Fix each one test-first (a red test that shows it, then the fix), in plugin/mods/ops-board/hooks/lib/diagnose.ts, hooks/runstab.tsx and their tests (tests/diagnose.test.ts, tests/runs.test.tsx) only.
+
+1. Close is offered on a '~' stage whose driver stamp is live (younger than the relay DRIVER_STALE default engageOf uses, hooks/lib/runlines.ts). Closing it drops the In-flight block and frees the lease under a working agent. Fix: a stage with a live driver is never closable; Diagnose says why ("stage N driven by <tag> <age> ago - not closable").
+2. Parked '?' and failed '!' stages are closable when their tickets are built. Fix: only pending '' and '~' stages with no live driver are closable; '?' and '!' get a disagreement line but no Close.
+3. Close's fallback sha is the newest '<first ticket>:' commit on HEAD - it can be an unrelated older commit, and only the first ticket is searched. Fix: a stage with no landed cell is closable only when every one of its tickets has a commit whose subject starts '<ID>:' reachable from the run's branch (the run file's branch: header) and that run branch's commits are all reachable from HEAD; the sha recorded is the newest such commit on the run branch. Otherwise no Close: show the by-hand relay-morpheus command, write nothing.
+4. When git cannot be asked (no git, no repo, timeout, spawn error) the sha check is skipped silently and the verdict can say all four sources agree. Fix: say "git not asked: <why>" as a line, and never say 'finished' with the 'agree' wording when git was not asked.
+5. openDiagnose rebuilds the run's list row without the '(stage N open)' suffix and from a stale poll. Fix: read the run fresh (the relay resume/status the design already uses) or keep the suffix so the open set and planned come out right.
+6. The disagreement line prints the first ticket's box for every ticket of the stage. Fix: one box per ticket.
+7. diagnose.ts looks tickets up case-sensitively; reuse ticketById from hooks/lib/board.ts.
+8. When only finished runs exist, put the same spacer the other groups get between 'no relay run open' and the first finished row; fix the stale openRuns comment that says finished runs are 'counted, not drawn'.
+Leave as is (say so in your report): the serial git calls per sha (perf only) and the duplicated finished-row seg drawing.
+
+Verify: claude plugin test "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0022-pending-b13-f97-f98/plugin/mods/ops-board" and tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/66a4199e-bee7-472b-9aaa-61fc26982c2a/scratchpad/tsconfig-f99.json (both clean), npm --prefix "C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0022-pending-b13-f97-f98/plugin/mods/ops-board/ops" test. Commit as "F99: review fixes 2 - ...".
+
+Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0022-pending-b13-f97-f98 (branch run/RUN-0022-pending-b13-f97-f98), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+Report back: the commit sha, the files changed, the red then green test output per defect (command and pass/fail counts), anything you could not verify, any defect you judged not real and why.
