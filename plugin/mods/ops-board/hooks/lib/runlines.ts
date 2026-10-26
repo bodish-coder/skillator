@@ -29,10 +29,14 @@ export const sectionHead = (sec: RunsSection, open: boolean, n: number | null) =
 export type RunStatus = 'completed' | 'running' | 'pending' | 'failed'
 const STATUS_BOX: Record<RunStatus, Box> = { completed: 'x', running: '~', pending: ' ', failed: '!' }
 export const statusColor = (st: RunStatus): Color => paint(STATUS_BOX[st])
+// F99: finished = every stage row landed or re-planned (relay list's done count); the one definition.
+export const isFinished = (r: RunView) => r.total > 0 && r.done >= r.total
+// Active runs in list order, then the finished ones - a finished run sorts below every active one.
+export const orderRuns = (runs: RunView[]) => [...runs.filter(r => !isFinished(r)), ...runs.filter(isFinished)]
 // A run: all landed = completed, planned (nothing dispatched) = pending, else running -
 // a failed stage shows red on its own row.
 export const runStatus = (r: RunView): RunStatus =>
-  r.total > 0 && r.done >= r.total ? 'completed' : r.planned ? 'pending' : 'running'
+  isFinished(r) ? 'completed' : r.planned ? 'pending' : 'running'
 // A stage: x landed, ~ / open in flight, ! failed; pending, parked (?), re-planned (>) or
 // unknown (-) has not started; a planned run's stages have not either.
 export const stageStatus = (s: Stage, planned: boolean): RunStatus =>
@@ -55,16 +59,21 @@ export const DRIVER_STALE_MIN = 20
 export type EngageCheck = { text: string; queue: boolean } | { refused: string }
 // Never two drivers: a stage in flight, or a driver stamp under 20 min, refuses. A run with
 // a script runs it with /marathon-run; one without is queued (queue-run add) and continued.
+// F99: a driver stamp's age in minutes. relay writes `<tag> YYYY-MM-DDTHH:MMZ`; a stamp that
+// does not read so is NaN (engageOf then fails closed: not stale).
+export const stampAge = (stamp: string | undefined, now: number) => {
+  const at = /^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/.test(stamp ?? '') ? Date.parse(stamp!.replace(/Z$/, ':00Z')) : NaN
+  return Math.floor((now - at) / 60_000)
+}
 export function engageOf(r: RunView, now: number): EngageCheck {
+  if (isFinished(r)) return { refused: `■ ${r.id} not engaged: all ${r.total} stages landed - nothing left to drive` }   // F99
   const [tag, stamp] = (r.driver ?? '').split(' ')
   const flying = r.stages.find(s => s.state === '~')
   if (flying) {
     const by = r.flights.find(f => f.n === flying.n)?.by || tag || 'a driver not named'
     return { refused: `■ ${r.id} not engaged: stage ${flying.n} is in flight, driven by ${by} - never two drivers` }
   }
-  // relay writes `<tag> YYYY-MM-DDTHH:MMZ`; a stamp that does not read so fails closed
-  const at = /^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/.test(stamp ?? '') ? Date.parse(stamp!.replace(/Z$/, ':00Z')) : NaN
-  const age = Math.floor((now - at) / 60_000)
+  const age = stampAge(stamp, now)
   if (tag && !(age >= DRIVER_STALE_MIN)) {
     const beat = Number.isNaN(age) ? `heartbeat unreadable: ${stamp ?? '-'}` : `heartbeat ${age}m ago, stale at ${DRIVER_STALE_MIN}m`
     return { refused: `■ ${r.id} not engaged: driven by ${tag} (${beat}) - never two drivers` }
@@ -74,6 +83,9 @@ export function engageOf(r: RunView, now: number): EngageCheck {
 
 // F85: a short title - up to the first '. ' or ' (', as /pending cuts one, at most 40 wide.
 export const shortTitle = (s: string) => cut(s.split(/\. | \(/)[0]!.trim(), 40)
+// F99: a finished run's one row - the done dot, the rest dim; no stage table, no Engage.
+export const finishedLine = (r: RunView): Line =>
+  ({ key: 'run:' + r.id, segs: [{ text: '●', color: statusColor('completed') }, { text: ` ${r.id}  ${r.title}  ${r.done}/${r.total} done`, dim: true }] })
 // The lead of a row serving stage n of a run: `s137 B10 Muse marketplace add installs nothing`.
 export function stageLead(r: RunView, n: number, board: Board | null): string {
   const st = r.stages.find(s => s.n === n)

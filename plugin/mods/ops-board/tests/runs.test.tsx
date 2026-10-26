@@ -476,3 +476,20 @@ test('F85 never two drivers: a live driver stamp or a stage in flight refuses wi
   await ui.unmount()
 })
 
+
+// F99: a finished run (done >= total) sorts after the active ones, draws dim and never engages.
+import { engageOf, finishedLine, isFinished, orderRuns, stampAge } from '../hooks/lib/runlines'
+test('F99 pure: isFinished, orderRuns, finishedLine, stampAge, engageOf refuses a finished run', () => {
+  const mk = (id: string, done: number, total: number) => ({ id, title: 't ' + id, done, total, owner: null, stages: [], planned: false, decisions: [], mode: null, driver: null, flights: [], phases: null })
+  const [a, b, c] = [mk('RUN-0011', 3, 3), mk('RUN-0012', 2, 4), mk('RUN-0013', 0, 0)]
+  expect([a, b, c].map(isFinished)).toEqual([true, false, false])
+  expect(orderRuns([a, b, c]).map(r => r.id)).toEqual(['RUN-0012', 'RUN-0013', 'RUN-0011'])
+  const l = finishedLine(a)
+  expect(l.key).toBe('run:RUN-0011')
+  expect(l.segs[0]).toEqual({ text: '●', color: 'success' })
+  expect(l.segs.slice(1).every(s => s.dim)).toBe(true)
+  expect(l.segs.map(s => s.text).join('')).toBe('● RUN-0011  t RUN-0011  3/3 done')
+  expect(stampAge(stampAgo(5), NOW)).toBe(5)
+  expect(Number.isNaN(stampAge('yesterday', NOW))).toBe(true)
+  expect(engageOf(a, NOW)).toEqual({ refused: '■ RUN-0011 not engaged: all 3 stages landed - nothing left to drive' })
+})

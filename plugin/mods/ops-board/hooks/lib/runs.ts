@@ -10,7 +10,7 @@ const ROW = /^(RUN-\S+)  (.*?)\s+(\d+)\/(\d+) done(?:  \(stage ([\d,]+) open\))?
 const BLOCK = /^### (\S+) - stage (\d+) - (.*)$/
 const TABLE_ROW = /^\|\s*(\d+)\s*\|([^|]*)\|([^|]*)\|/
 
-type Parsed = { stages: Stage[]; hasChain: boolean; states: Map<number, string>; decisions: string[]
+type Parsed = { stages: Stage[]; hasChain: boolean; states: Map<number, string>; landed: Map<number, string>; decisions: string[]
   mode: string | null; driver: string | null; flights: Flight[] }
 
 // F85: the Chain header is
@@ -36,6 +36,7 @@ function decisionText(q: Q): string | null {
 function parseChain(text: string): Parsed {
   const stages: Stage[] = []
   const states = new Map<number, string>()
+  const landed = new Map<number, string>()
   const qs: Q[] = []
   const flights: Flight[] = []
   let section = '', cur: Stage | null = null, hasChain = false, q: Q | null = null
@@ -61,7 +62,11 @@ function parseChain(text: string): Parsed {
     }
     if (section === 'Stages') {
       const t = TABLE_ROW.exec(line)
-      if (t) states.set(Number(t[1]), t[3]!.trim() || 'pending')
+      if (t) {
+        states.set(Number(t[1]), t[3]!.trim() || 'pending')
+        const la = line.split('|')[6]?.trim()          // F99: the landed cell, 7th column
+        if (la && la !== '-') landed.set(Number(t[1]), la)
+      }
       continue
     }
     if (section === 'In flight') {
@@ -93,7 +98,7 @@ function parseChain(text: string): Parsed {
     else cur.after = val || '-'
   }
   const decisions = qs.map(decisionText).filter((d): d is string => d !== null)
-  return { stages, hasChain, states, decisions, mode, driver, flights }
+  return { stages, hasChain, states, landed, decisions, mode, driver, flights }
 }
 
 // F85: a /marathon-plan script's PLAN, read as data - never imported or run. The template
@@ -150,6 +155,7 @@ export function parseRuns(list: string, chains: Record<string, string>, scripts:
     run.stages = p.stages.map(s => ({
       ...s,
       state: p.states.get(s.n) ?? (openSet.has(s.n) ? 'open' : run.planned ? 'pending' : '-'),
+      ...(p.landed.has(s.n) ? { landed: p.landed.get(s.n)! } : {}),   // F99: only when the cell has a sha
     }))
   }
   return out

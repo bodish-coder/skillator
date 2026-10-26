@@ -228,6 +228,12 @@ test('parseRuns: a stage table in the text gives exact states', () => {
   const r = parseRuns(LIST, { 'RUN-0012': text })[0]!
   expect(r.stages.map(s => s.state)).toEqual(['x', '~'])
 })
+// F99: the landed cell rides on the stage (Diagnose checks it in git); empty or '-' leaves it off
+test('parseRuns: a stage table gives each landed sha', () => {
+  const text = '## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 89 | AA01 B2 cart | x | build | - | abc1234 |\n| 90 | AA02 F3 drawer | ~ | build | - | - |\n\n' + CHAIN_12
+  const r = parseRuns(LIST, { 'RUN-0012': text })[0]!
+  expect(r.stages.map(s => s.landed)).toEqual(['abc1234', undefined])
+})
 test('parseRuns: no runs', () => {
   expect(parseRuns('no runs in /r/.skillator\n', {})).toEqual([])
 })
