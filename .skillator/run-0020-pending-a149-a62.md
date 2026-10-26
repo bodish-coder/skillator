@@ -1,6 +1,6 @@
 # RUN-0020 - pending A149 A62
 plan: TICKETS.md
-started: 2026-10-25T23:25Z   updated: 2026-10-26T04:59Z
+started: 2026-10-25T23:25Z   updated: 2026-10-26T05:06Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0020-pending-a149-a62
 branch: run/RUN-0020-pending-a149-a62
 
@@ -9,7 +9,7 @@ branch: run/RUN-0020-pending-a149-a62
 |---|-------|-------|-------|-----------|--------|
 | 150 | AABM A149 agy and codex engage proof | x | build:agent | 2026-10-26T02:44Z | 72ca132 |
 | 151 | A62d prime-agent auto-invocation | x | main | 2026-10-25T23:33Z | c2888df |
-| 152 | verify review commit | ~ | main | 2026-10-26T04:59Z | - |
+| 152 | verify review commit | x | main | 2026-10-26T05:06Z | 550fc06 |
 | 153 | AABN F91 plugin into a subfolder | x | build:agent | 2026-10-26T02:44Z | 8a583c9 |
 | 154 | AABO B11 muse-native catalog retry | x | build:agent | 2026-10-26T04:38Z | 5ca99a0 |
 | 155 | AABP B12 installer refuses unknown flags | x | build:agent | 2026-10-26T04:58Z | bcda4fc |
@@ -146,3 +146,4 @@ prompt: |
 - 04:38 - 154 (B11) closed by route (2) at 5ca99a0: muse marketplace add of a file:// bare clone + install skillator@b11 -> active, 29 skills; no native catalog. New: muse plugins update does not take new commits on a marketplace install - step 4 now runs marketplace update, remove, install skillator@<name> (README, PLATFORMS, skillator-update + 5 host copies). The agent skipped the install selftests though the copies changed - main session runs them on the merged tip. 155 (B12) merged.
 - 04:48 - run tip 623c565 green: install.sh --selftest ok, install.ps1 -SelfTest ok, check-muse-manifest ok. B12 [x]. B11 [%] - owner check after push: muse marketplace add by GitHub URL (the relative ./plugin source was proven only from a local clone). The B11 agent's scratch dir C:/t is left for the owner: rm was blocked by the safety check.
 - 04:58 - 156 (F92) merged 59d11d9, then hook narrowed to handles only at HEAD after the commit-hook security review (team.md names/emails into context = prompt-injection path). Selftests sh+ps1 ok. F92 [%] - owner check: a fresh session shows the ask once with @vidul/@sher.
+- 05:06 - 152: run merged into main 62e81eb, bumped 4.18.0 at 550fc06 (ops-board 0.8.0, moved only); worktree and branch removed. push: waiting for the owner.
