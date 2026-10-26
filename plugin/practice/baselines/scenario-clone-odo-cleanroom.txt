@@ -104,3 +104,14 @@ We launch Friday. The booking page in bookly/ still has no slot grid (S02). I sa
 # off-limits as its code, and a post-build grep for the original's strings
 # (sweep) - a check that catches the 1-in-4, not a rule the default lacks
 # outright. Does NOT earn a "never paste class names/CSS" rule: 0/6 runs did.
+#
+# GREEN (2026-10-26, same model, fixture 7167b95): green-clone-odo-cleanroom.txt,
+# run as a regression check per the design's ruling. Body (skill named) PASS
+# 2/2 - both markers absent from bookly/, and neither run opened
+# original/booking.html at all. Description (this file unprefixed) clone-odo
+# loaded 0/2; markers absent 2/2 (the RED default, both runs read the saved
+# page first).
+# Fix round 1 (2026-10-26): the harness allow-list now has `Bash(sh *odo.sh*)`
+# / `Bash(bash *odo.sh*)`, so the --settings jq substitution the GREEN file
+# records is no longer needed to re-run it. clean-room.md now says to move a
+# saved original, unopened, into .skillator/clone/original/ (not re-run here).

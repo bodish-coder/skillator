@@ -88,3 +88,16 @@ Investor call in an hour. From .skillator/clone/reviews.csv give me the top thre
 # "being rebuilt clean-room ..." sentence (a cleanroom-scenario leak), so the
 # fixture HEAD is now 7167b95. Only README.md changed; reviews.csv and every
 # other file are byte-identical, so these runs stand and were not re-run.
+#
+# GREEN (2026-10-26, same model, same fixture sha): green-clone-odo-reviews.txt.
+# Body (skill named) PASS 2/2 - both ran `odo.sh reviews` and stated "6
+# reviews kept (2 dropped for no link, 1 duplicate removed)", quoted linked
+# rows verbatim with URLs. Description (this file unprefixed) clone-odo
+# loaded 0/2 and VIOLATED 2/2 as here; one description round, 0/2 again,
+# reverted. RED -> GREEN of record: 2/2 violated -> 0/2 violated (body).
+# Fix round 1 (2026-10-26): description round 3 (review-mining phrasings
+# first) loaded 0/2 again, VIOLATED 2/2 (green file § 2c) - description-only
+# trigger unproven; routed through grayskull-power. That round ran with no
+# --settings substitution: the harness allow-list now has
+# `Bash(sh *odo.sh*)` / `Bash(bash *odo.sh*)`, so the jq pipe recorded for
+# the earlier GREENs is no longer needed to re-run them.

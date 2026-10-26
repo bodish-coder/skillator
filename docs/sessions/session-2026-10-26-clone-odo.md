@@ -952,3 +952,11 @@ TRACE:
 - Ruling: __pycache__/ ignored repo-wide (orchestrator) - every test run writes .pyc beside the tools - cost if wrong: none
 - Ruling: cleanroom fixture states no rule (orchestrator, after Task 1) - the README line 'being rebuilt clean-room from the recon map' made both RED runs comply (testing the fixture, not the skill); without it 1/2 pasted the original's sentence. Line dropped, cleanroom RED re-run on sonnet - cost if wrong: one more fixture sha change
 - Ruling: cleanroom RED 0/2 on the committed fixture 7167b95 (orchestrator, after Task 1 fix round) - no more spend on stronger pressure now: the reviews scenario (RED 2/2 violated) is the skill-smith RED/GREEN of record; cleanroom is recorded 'unfalsified by RED at n=2' (the only violation is the nohint probe, 1/2) and its GREEN runs as a regression check (both markers absent in bookly/) - cost if wrong: the clean-room guard ships without a proven RED->GREEN delta
+
+## Outcome
+- Built:      plugin/skills/clone-odo/** (SKILL.md, references/ x7, templates/, scripts/ odo.sh+odo.ps1 + six tools + tests, UPSTREAM.md, upstream-check.sh/.ps1); grayskull-power SKILL.md/routing.md/arming.md; check-routing.sh; a11y-toph + design-arwen pointers; baseline-harness.sh `odo` fixture + odo.sh allow-list; four manifests at 4.20.0; README; install.sh/.ps1 selftests; .gitignore (.taskwork/, __pycache__/).
+- Why:        one skill absorbing replica-skill 77c9436 (code-yoda/F29 precedent); everything skillator already owns is a hand-off.
+- Tests:      install.sh --selftest ok; check-muse-manifest ok; check-routing ok; check-grayskull-sync ok; odo.sh selftest "ok - clone-odo tools: 56 tests"; check-tickets ok. Baselines: reviews RED 2/2 violated -> GREEN 2/2 pass (skill named); cleanroom RED 0/2, GREEN 2/2 clean (regression only).
+- Trace:      R1-R20 built; R19's description-only half unproven -> A157.
+- Deviations: parity --fail-under reads the feature score (review finding 9, recorded in UPSTREAM.md); bugs are one-line board tickets with an [S1]..[S4] token + .skillator/clone/bugs/B<n>.md detail (finding 6); saved originals live in .skillator/clone/original/ unopened (finding 1).
+- Parked:     none. Owed: install.ps1 -SelfTest and odo.ps1 on Windows; cleanroom GREEN not re-run after the clean-room.md fix round.

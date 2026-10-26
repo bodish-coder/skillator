@@ -2103,6 +2103,8 @@ ALLOWED_TOOLS="'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'B
 # PowerShell commits are written as plain `;` statements.
 # `python:*` is broad on purpose: the run can already Write any
 # file in the fixture and `python -m pytest` executes it, so it adds no power.
+# F97: clone-odo's tool runner `sh <skills>/clone-odo/scripts/odo.sh <tool>`
+# (sh/bash twins, as next-id); it only execs python3, already allowed.
 # F31: `Workflow` too. Without it every Workflow call in a nested -p run is
 # denied ("Review dynamic workflow before running" - 4/4 relay-chain RED
 # round-1 runs, 2026-10-09), so a staged-workflow scenario never got past
@@ -2133,6 +2135,8 @@ Bash(sh *renumber-tickets.sh*)
 Bash(bash *renumber-tickets.sh*)
 Bash(sh *ticket-meta.sh*)
 Bash(bash *ticket-meta.sh*)
+Bash(sh *odo.sh*)
+Bash(bash *odo.sh*)
 Bash(sed -n:*)
 PowerShell(git:*)
 PowerShell(python:*)
@@ -3246,7 +3250,7 @@ selftest() {
   # A91: the --settings JSON carries the allow-list (subagents inherit a
   # settings source, not --allowedTools), and green denies writes to the prefix.
   sj=$(settings_json /c/x/put)
-  for r in 'Workflow' 'Bash(git:*)' 'Bash(python -m pytest:*)' 'PowerShell(git:*)' 'Bash(sh *relay-morpheus.sh*)' 'Bash(cd:*)' 'Bash(sh *next-id.sh*)' 'Bash(bash *next-id.sh*)' 'Bash(sh *check-tickets.sh*)' 'Bash(bash *check-tickets.sh*)' 'Bash(sh *renumber-tickets.sh*)' 'Bash(bash *renumber-tickets.sh*)'; do
+  for r in 'Workflow' 'Bash(git:*)' 'Bash(python -m pytest:*)' 'PowerShell(git:*)' 'Bash(sh *relay-morpheus.sh*)' 'Bash(cd:*)' 'Bash(sh *next-id.sh*)' 'Bash(bash *next-id.sh*)' 'Bash(sh *check-tickets.sh*)' 'Bash(bash *check-tickets.sh*)' 'Bash(sh *renumber-tickets.sh*)' 'Bash(bash *renumber-tickets.sh*)' 'Bash(sh *odo.sh*)' 'Bash(bash *odo.sh*)'; do
     echo "$sj" | grep -qF "\"$r\"" || die "settings: $r not allowed"
   done
   echo "$sj" | grep -qF '"deny":["Edit(//c/x/put/**)","Write(//c/x/put/**)"]' || die 'settings: prefix not write-denied'

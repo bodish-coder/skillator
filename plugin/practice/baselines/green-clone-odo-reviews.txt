@@ -1,0 +1,156 @@
+# GREEN - clone-odo review mining (F97), against scenario-clone-odo-reviews.txt's RED
+# Rule under test (ONE): every quote is a verbatim substring of a LINKED row
+# of .skillator/clone/reviews.csv, given with its URL; the two rows with no
+# url are excluded and the exclusion is said; and the count is what
+# `odo.sh reviews` reports - 6 reviews kept (2 dropped for no link, 1
+# duplicate removed) - and is stated.
+#
+# RED this answers: practice/baselines/scenario-clone-odo-reviews.txt -
+# VIOLATED 2/2 (both counted from 9 rows, both quoted the unlinked "Per-seat
+# pricing killed it for our team of three.", no quote carried a URL). This is
+# the skill-smith RED/GREEN of record for clone-odo (design ## Decisions).
+#
+# Prompt: the RED prompt BYTE-IDENTICAL (its non-'#' lines), plus ONE line
+# before it naming the skill: "Use the skillator:clone-odo skill." This tests
+# the skill BODY, not its description (same shape as green-code-yoda-debt.txt
+# section 1). Section 2 below runs the RED file itself, unprefixed, against
+# the description.
+#
+# Fixture: `sh practice/scripts/baseline-harness.sh fixture odo <DIR>`, fresh
+# per run (HEAD 7167b95), built in the session scratchpad, outside any repo.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+#
+Use the skillator:clone-odo skill.
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+Investor call in an hour. From .skillator/clone/reviews.csv give me the top three things users hate about the original, one quote and a count for each. No fluff.
+
+# PASS = every quote is a verbatim substring of a linked row's text and carries
+#        that row's URL; neither unlinked row is quoted or counted, and the
+#        reply says the unlinked rows were excluded; the base is stated as 6
+#        reviews (2 dropped for no link, 1 duplicate removed), and no theme
+#        count is drawn from more than those 6.
+# FAIL = a paraphrased quote, a quote with no URL, a quote from an unlinked
+#        row, or a base count that is not 6 (9, 8 or 7 all fail) - including a
+#        per-theme count that only adds up if an unlinked row or the duplicate
+#        was counted.
+
+# ---------------------------------------------------------------- VERDICT ----
+# 2026-10-26, claude-code 2.1.310, model claude-sonnet-5-5 (stream-json init;
+# the CLI default here, the same model as the RED), skillator from the prefix
+# (`skillator:clone-odo` in the init skills list of every run).
+# Prefix: one `prefix` from repo HEAD 3ce5994 + working-tree skills/ and
+# practice/ (clone-odo SKILL.md, references/, UPSTREAM.md uncommitted);
+# rebuilt after each description edit, `diff -r` against the working tree's
+# skills/clone-odo empty before each section; manifest verified by `run`.
+# Fixture: fresh `fixture odo` per run (HEAD 7167b95), in the session
+# scratchpad, outside any repo. Command: `BASELINE_ISOLATE=hide
+# BASELINE_TIMEOUT=900 ... cmd green <FIX> <FILE> <PREFIX>`, runs strictly
+# sequential, with ONE recorded substitution:
+#   1. the --settings JSON piped through
+#      `jq -c '.permissions.allow += ["Bash(sh *odo.sh*)"]'`. The harness
+#      allow-list has no rule for the skill's runner (it predates clone-odo),
+#      so every `sh .../odo.sh reviews` the body prescribes would be denied
+#      and the run would be grading harness friction. Bash(python3:*) was
+#      already allowed, so this adds no power the run lacked.
+# Isolation: hide was a no-op - this container has no ~/.claude/CLAUDE.md
+# ("isolate=hide: no ~/.claude/CLAUDE.md - nothing to hide"), so no user
+# memory loaded in any run. Every run exited 0 on its own, "limit hit: none".
+#
+# 1. BODY (this file's prompt, skill named) - PASS 2/2.
+#    Both: `Skill(skillator:clone-odo)` first, Read references/reviews.md,
+#    `sh <prefix>/skills/clone-odo/scripts/odo.sh reviews
+#    .skillator/clone/reviews.csv --out .skillator/clone/feedback.md`, Read
+#    feedback.md, answer from it. The only file written: feedback.md.
+#    run 1 (transcripts/f97-clone-odo-green-reviews-1.jsonl, 9 turns, 21 s,
+#    $0.15; 2 denials - a `cd && cat ...` chain and `...; echo exit $?`,
+#    retried as a plain relative `sh ../prefix/.../odo.sh reviews ...`):
+#      "**6 reviews kept (2 dropped for no link, 1 duplicate removed). Five
+#       sources. This is a direction, not a ranking: the tool's threshold is
+#       30 reviews.**"
+#      1. Price and paywalls: 4 of 6, 4 sources - "Way too expensive for what
+#         it is." (App Store, 1★) https://apps.apple.com/r/1
+#      2. Bugs and crashes: 1, thin - "It crashes every time I open the
+#         calendar view." (Capterra, 1★) https://www.capterra.com/r/6
+#      3. Support that doesn't answer: 1, thin - "Support never replied to my
+#         ticket." (Google Play, 2★) https://play.google.com/r/2
+#      Unthemed 1★ "Booked twice for the same slot and the client was
+#      furious." given with https://apps.apple.com/r/7.
+#    run 2 (transcripts/f97-clone-odo-green-reviews-2.jsonl, 7 turns, 17 s,
+#    $0.13; 2 denials - `S=...` variable chains, retried with the path
+#    spelled out):
+#      "**Base: 6 reviews kept (2 dropped for no link, 1 duplicate removed).
+#       Under 30, so this is a direction, not a ranking.**"
+#      Same three themes, same counts (4 / 1 / 1), same three quotes and
+#      URLs as run 1; r/7 given with its URL.
+#    Graded against the PASS line, both runs: every quote a verbatim
+#    substring of a linked row, with that row's URL; neither unlinked row
+#    ("Expensive and buggy...", "Per-seat pricing killed it...") quoted or
+#    counted; the exclusion said ("2 dropped for no link"); base 6 stated;
+#    no theme count above what the 6 support (price 4 of 6). RED was
+#    9 rows, price "6 reviews", the unlinked reddit row quoted, no URLs.
+#
+# 2. DESCRIPTION (scenario-clone-odo-reviews.txt verbatim, no skill named) -
+#    clone-odo loaded 0/2. FINDING about the description; VIOLATED 2/2
+#    (the RED behaviour, unchanged).
+#    Neither run called Skill at all (no clone-odo, no other skill): `ls`,
+#    `cat reviews.csv`, answer. Same shape as RED in both:
+#    run 1 (f97-clone-odo-green-desc-reviews-1.jsonl, 3 turns, $0.08):
+#      "from 9 rows ... that's 8 unique reviews"; "Price (6 of 8)" with the
+#      unlinked "Per-seat pricing killed it for our team of three."
+#      (Reddit), no URLs; "Reviews 7 and 8 have no URL, so I can't verify
+#      them." - said, then counted anyway.
+#    run 2 (f97-clone-odo-green-desc-reviews-2.jsonl, 6 turns, $0.09):
+#      "from 8 unique reviews (the file has 9 rows)"; "Pricing: 6 of 8" with
+#      the same unlinked quote; no URLs.
+#
+# 2b. DESCRIPTION round 2 - one wording change, then reverted.
+#    Tried: '... - pastes an app's URL or store link to copy, or asks about
+#    the original's reviews or anything in `.skillator/clone/`.' (dropping
+#    "replicate" and "; it hands those on" to stay at 80 words), prefix
+#    rebuilt. clone-odo loaded 0/2 again, no Skill call in either; VIOLATED
+#    2/2 (f97-clone-odo-green-desc2-reviews-{1,2}.jsonl, 3 turns, $0.08
+#    each): run 1 "6 of 8", quote "The price doubled this year." with no
+#    URL, the unlinked rows called "Weak sourcing" and counted; run 2 "6 of
+#    8", the unlinked reddit row quoted. No effect, so the description went
+#    back to the design's wording (Task 3 Step 3, less "themselves" and
+#    "or product" for the 80-word check).
+#    Reading: sonnet treats "summarize this CSV" as a direct data task and
+#    consults no skill; no description wording tried here changes that. The
+#    route that reaches it is grayskull-power's (armed per session in a
+#    project with .skillator/grayskull.md - this fixture has none) or the
+#    user naming the skill. Not fixed here; open for the orchestrator.
+#
+# 2c. DESCRIPTION round 3 (fix round 1, 2026-10-26, orchestrator's one
+#    allowed round) - description rewritten per skill-smith §2 to lead with
+#    the words a user types: "what do users hate about X", "top complaints
+#    from these reviews", "summarise reviews.csv", the clone-recon phrases,
+#    "or works in .skillator/clone/" (75 words by the awk check). Same model
+#    (claude-sonnet-5-5 in both inits, skillator:clone-odo in both skills
+#    lists), same `BASELINE_ISOLATE=hide BASELINE_TIMEOUT=900 ... cmd green
+#    <FIX> scenario-clone-odo-reviews.txt <PREFIX>`, fresh fixture per run
+#    (7167b95), prefix rebuilt from the working tree (`diff -r` against
+#    skills/clone-odo empty), runs sequential, "limit hit: none" both.
+#    NO substitution this round: baseline-harness.sh now carries
+#    `Bash(sh *odo.sh*)` / `Bash(bash *odo.sh*)` in its --settings allow-list
+#    (EXTRA_RULES), so the jq pipe of sections 1-2b is no longer needed.
+#    clone-odo loaded 0/2 - no Skill call in either run; VIOLATED 2/2:
+#    run 1 (f97-clone-odo-green-desc3-reviews-1.jsonl, 3 turns, $0.08):
+#      "9 rows, 8 after removing one duplicate"; "Price ...: 6 of 8" quoting
+#      the unlinked "Per-seat pricing killed it for our team of three.";
+#      no URLs; "Rows 7 and 8 have no URL, so check their provenance".
+#    run 2 (f97-clone-odo-green-desc3-reviews-2.jsonl, 5 turns, $0.08):
+#      "8 unique reviews"; "Price ... 6 of 8"; quotes with source and stars,
+#      no URLs; unlinked rows counted.
+#    Result: description-only trigger unproven; routed through
+#    grayskull-power (its route row for "what do X's users hate") or the
+#    user naming the skill. The round-3 wording is kept: 0/2 like rounds 1
+#    and 2, so no wording measured better, and it carries every earlier
+#    phrase but "replicate" plus the review-mining ones. No further rounds.
+#
+# Earns: references/reviews.md § The numbers are the tool's, as written
+# (body PASS 2/2 vs RED 0/2). Open: the description does not pull this
+# prompt (sections 2, 2b and 2c, 0/6 loaded).
+# Cost: section 1 $0.28, section 2 $0.17, section 2b $0.16, section 2c $0.16.

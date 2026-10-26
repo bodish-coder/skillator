@@ -93,7 +93,26 @@ class Score(unittest.TestCase):
     def test_cli_fail_under(self):
         with redirect_stdout(io.StringIO()):
             self.assertEqual(parity.main([self.path, "--fail-under", "80"]), 1)
-            self.assertEqual(parity.main([self.path, "--fail-under", "10"]), 0)
+            # 2 must-haves not done: under the ship bar at any N (clone-odo change)
+            self.assertEqual(parity.main([self.path, "--fail-under", "10"]), 1)
+
+    def test_fail_under_is_the_feature_score_not_overall(self):
+        # features 75 (must yes 3 + could no 1 = 3/4) + layout 100 -> overall 80;
+        # the ship bar reads the feature score, so 80 fails (deliberate, see UPSTREAM.md).
+        d = self.tmp.name
+        m = write(d, "f75.csv", "feature,area,priority,original,clone,notes\n"
+                  "Pick a slot,booking,must,yes,yes,\nEmbed,sharing,could,yes,no,\n")
+        v = write(d, "v.json", json.dumps({"score": 100.0, "mode": "layout"}))
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(parity.main([m, "--visual", v, "--fail-under", "80"]), 1)
+            self.assertEqual(parity.main([m, "--visual", v, "--fail-under", "75"]), 0)
+
+    def test_fail_under_fails_on_a_missing_must_have(self):
+        rows = "".join("M%d,a,must,yes,yes,\n" % i for i in range(5))
+        p = write(self.tmp.name, "m.csv", "feature,area,priority,original,clone,notes\n"
+                  + rows + "Last,a,must,yes,no,\n")          # 15/18 = 83.3
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(parity.main([p, "--fail-under", "80"]), 1)
 
     def test_ticket_column_is_ignored_and_template_has_it(self):
         p = write(self.tmp.name, "t.csv",

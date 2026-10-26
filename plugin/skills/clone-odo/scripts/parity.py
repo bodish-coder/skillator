@@ -27,6 +27,9 @@ score and listed separately, so the number only ever measures parity.
 With --visual, the layout scores from odo.sh imgdiff --json are averaged and
 reported next to the feature score, and the overall score is
 80% features + 20% layout. Features are what users pay for.
+
+--fail-under N is the ship bar: exit 1 when the feature score (never the
+overall, so layout cannot lift it) is under N, or any must-have is not done.
 """
 
 import argparse
@@ -209,7 +212,9 @@ def main(argv=None):
                     help="odo.sh imgdiff --json outputs to fold in")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--markdown", action="store_true")
-    ap.add_argument("--fail-under", type=float)
+    ap.add_argument("--fail-under", type=float, metavar="N",
+                    help="exit 1 if the feature score is under N or any "
+                         "must-have is not done (layout never counts here)")
     args = ap.parse_args(argv)
     try:
         result = combine(score(load(args.matrix)), visual_scores(args.visual))
@@ -220,7 +225,9 @@ def main(argv=None):
         print(json.dumps(result, indent=2))
     else:
         print(render(result, markdown=args.markdown))
-    if args.fail_under is not None and result["overall"] < args.fail_under:
+    if args.fail_under is not None and (
+            result["feature_score"] < args.fail_under
+            or result["must_have_done"] < result["must_have_total"]):
         return 1
     return 0
 
