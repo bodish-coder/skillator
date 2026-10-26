@@ -6,7 +6,7 @@
 set -e
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 tpl="$root/skills/grayskull-power/references/arming.md"
-live="$root/.skillator/grayskull.md"
+live="$root/../.skillator/grayskull.md"   # F91: this repo's own file, beside plugin/
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 

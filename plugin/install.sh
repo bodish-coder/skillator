@@ -217,8 +217,9 @@ install_into() {
   # $shipped order (ordinal), not the glob's locale order - same as install.ps1
   for _name in $shipped; do
     _s="$src/$_name/"
-    # a skill symlinked to this repo is live - never replace it with a stale copy
-    if [ -L "$_dest/$_name" ]; then continue; fi
+    # a skill symlinked to this repo is live - never replace it with a stale copy;
+    # a dangling one (F91: a pre-subfolder link into <clone>/skills) is reinstalled
+    if [ -L "$_dest/$_name" ] && [ -e "$_dest/$_name" ]; then continue; fi
     if [ -f "$_dest/$_name/SKILL.md" ] && [ -z "$force" ]; then
       # adopt an unmarked copy that is exactly this repo's current skill
       if [ -z "$dry" ] && [ ! -f "$_dest/$_name/$owned" ] &&
@@ -673,7 +674,10 @@ if [ -n "$selftest" ]; then
   printf 'my-own-line' >> "$T/.pi/agent/skills/.ignore"
   # F90: an older run's codex prompt goes, a foreign prompt stays
   mkdir -p "$T/.codex/prompts"; echo old > "$T/.codex/prompts/pending.md"; echo mine > "$T/.codex/prompts/my-own.md"
+  # F91: a --link install from before plugin/ - its link into <clone>/skills now dangles
+  rm -rf "$T/.codex/skills/tui-tron"; ln -s "$T/pre-f91/skills/tui-tron" "$T/.codex/skills/tui-tron" 2>/dev/null || :
   out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0") || { echo "FAIL: second install exited $?"; exit 1; }
+  [ -f "$T/.codex/skills/tui-tron/SKILL.md" ] || { echo "FAIL: dangling pre-F91 link not reinstalled"; exit 1; }
   [ -e "$T/.codex/prompts/pending.md" ] && { echo "FAIL: old codex prompt pending.md kept"; exit 1; }
   [ -f "$T/.codex/prompts/my-own.md" ] || { echo "FAIL: foreign codex prompt removed"; exit 1; }
   grep -qx 'my-own-line' "$T/.pi/agent/skills/.ignore" || { echo "FAIL: pi .ignore lost a user line"; exit 1; }
