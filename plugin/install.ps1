@@ -485,8 +485,8 @@ function Invoke-SelfTest([string]$T) {
     if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $f) -PathType Leaf)) { return "missing source $f" }
   }
   if (@(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'commands'), (Join-Path $PSScriptRoot 'host-commands') -Recurse -Filter '*.md' -File | Where-Object { $_.FullName -match 'pending-subagent' }).Count -ne 5) { return 'B6 scan misses a pending-subagent file' }
-  # F73: /marathon-plan and /marathon-run - Claude Code runs them with the Workflow tool; every
-  # other host's command says it has none and points at /pending-subagent; descriptions quoted (B6)
+  # F73: /marathon-plan and /marathon-run - Claude Code runs them with the Workflow tool, every
+  # other host with its delegate (F101); descriptions quoted (B6)
   foreach ($n in 'marathon-plan', 'marathon-run') {
     foreach ($f in "commands\$n.md", "host-commands\cursor\$n.md", "host-commands\pi\$n.md",
                    "host-commands\opencode\$n.md", "host-commands\antigravity\$n\SKILL.md", "host-commands\gemini\$n.toml") {
@@ -639,8 +639,8 @@ function Invoke-SelfTest([string]$T) {
   }
   if ((& $read '.gemini\antigravity-cli\skills\pending-subagent\SKILL.md') -cnotmatch '(?m)^name: pending-subagent$') { return 'agy skill name pending-subagent' }
   if ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'commands\pending-subagent.md')) -cnotmatch '(?m)^argument-hint: .*max') { return 'commands\pending-subagent.md argument-hint has no count' }
-  # F73: no Workflow tool off Claude Code - /marathon-plan and /marathon-run say so, load
-  # relay-morpheus from the host's own dest and point at /pending-subagent
+  # F73/F101: off Claude Code /marathon-plan and /marathon-run load relay-morpheus from the
+  # host's own dest and run the saved plan with the host's delegate or in-session
   foreach ($n in 'marathon-plan', 'marathon-run') {
     foreach ($p in @(@(".codex\skills\$n\SKILL.md", '.codex\skills'), @(".cursor\commands\$n.md", '.cursor\skills'),
                      @(".pi\agent\prompts\$n.md", '.pi\agent\skills'), @(".gemini\commands\$n.toml", '.gemini\skills'),
@@ -648,7 +648,7 @@ function Invoke-SelfTest([string]$T) {
                      @(".gemini\antigravity-cli\skills\$n\SKILL.md", '.gemini\antigravity-cli\skills'),
                      @(".config\opencode\commands\$n.md", '.config\opencode\skills'))) {
       if (-not (& $has $p[0] "$T\$($p[1])/relay-morpheus/SKILL.md")) { return "$n not substituted in $($p[0])" }
-      if (-not ((& $has $p[0] 'no Workflow tool') -and (& $has $p[0] '/pending-subagent'))) { return "$n does not point at /pending-subagent in $($p[0])" }
+      if (-not ((& $has $p[0] 'chain dispatch') -and (& $has $p[0] '.workflow.js') -and (& $has $p[0] 'Run without the Workflow tool'))) { return "$n does not run the plan with this host's delegate in $($p[0])" }
       if (-not (& $gated (& $read $p[0]))) { return "$n has no grayskull-gated code-yoda line in $($p[0])" }
     }
     if ((& $read ".gemini\antigravity-cli\skills\$n\SKILL.md") -cnotmatch "(?m)^name: $n`$") { return "agy skill name $n" }

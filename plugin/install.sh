@@ -457,8 +457,8 @@ if [ -n "$selftest" ]; then
   done
   find "$root/commands" "$root/host-commands" -type f -name '*.md' | grep -c 'pending-subagent' | grep -qx 5 || { echo "FAIL: B6 scan misses a pending-subagent file"; exit 1; }
   find "$root/commands" -type f -name '*.md' | grep -q '/commands/verify-subagent\.md$' || { echo "FAIL: B6 scan misses commands/verify-subagent.md"; exit 1; }
-  # F73: /marathon-plan and /marathon-run - Claude Code runs them with the Workflow tool; every
-  # other host's command says it has none and points at /pending-subagent; descriptions quoted (B6)
+  # F73: /marathon-plan and /marathon-run - Claude Code runs them with the Workflow tool, every
+  # other host with its delegate (F101); descriptions quoted (B6)
   for _n in marathon-plan marathon-run; do
     for f in commands/$_n.md host-commands/cursor/$_n.md host-commands/pi/$_n.md \
              host-commands/opencode/$_n.md host-commands/antigravity/$_n/SKILL.md host-commands/gemini/$_n.toml; do
@@ -610,8 +610,8 @@ if [ -n "$selftest" ]; then
   done
   grep -q '^name: pending-subagent$' "$T/.gemini/antigravity-cli/skills/pending-subagent/SKILL.md" || { echo "FAIL: agy skill name pending-subagent"; exit 1; }
   grep -q '^argument-hint: .*max' "$root/commands/pending-subagent.md" || { echo "FAIL: commands/pending-subagent.md argument-hint has no count"; exit 1; }
-  # F73: no Workflow tool off Claude Code - /marathon-plan and /marathon-run say so, load
-  # relay-morpheus from the host's own dest and point at /pending-subagent
+  # F73/F101: off Claude Code /marathon-plan and /marathon-run load relay-morpheus from the
+  # host's own dest and run the saved plan with the host's delegate or in-session
   for _n in marathon-plan marathon-run; do
     for f in .codex/skills/$_n/SKILL.md:.codex/skills .cursor/commands/$_n.md:.cursor/skills \
              .pi/agent/prompts/$_n.md:.pi/agent/skills .gemini/commands/$_n.toml:.gemini/skills \
@@ -619,7 +619,7 @@ if [ -n "$selftest" ]; then
              .gemini/antigravity-cli/skills/$_n/SKILL.md:.gemini/antigravity-cli/skills \
              .config/opencode/commands/$_n.md:.config/opencode/skills; do
       grep -qF "$N/${f#*:}/relay-morpheus/SKILL.md" "$T/${f%%:*}" || { echo "FAIL: $_n not substituted in ${f%%:*}"; exit 1; }
-      { grep -qF 'no Workflow tool' "$T/${f%%:*}" && grep -qF '/pending-subagent' "$T/${f%%:*}"; } || { echo "FAIL: $_n does not point at /pending-subagent in ${f%%:*}"; exit 1; }
+      { grep -qF 'chain dispatch' "$T/${f%%:*}" && grep -qF '.workflow.js' "$T/${f%%:*}" && grep -qF 'Run without the Workflow tool' "$T/${f%%:*}"; } || { echo "FAIL: $_n does not run the plan with this host's delegate in ${f%%:*}"; exit 1; }
       grep -F -- "$_yoda" "$T/${f%%:*}" | grep -qF '.skillator/grayskull.md' || { echo "FAIL: $_n has no grayskull-gated code-yoda line in ${f%%:*}"; exit 1; }
     done
     grep -q "^name: $_n\$" "$T/.gemini/antigravity-cli/skills/$_n/SKILL.md" || { echo "FAIL: agy skill name $_n"; exit 1; }
