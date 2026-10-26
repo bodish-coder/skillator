@@ -1,6 +1,6 @@
 # RUN-0024 - pending F108 A157
 plan: TICKETS.md
-started: 2026-10-26T19:54Z   updated: 2026-10-26T19:56Z
+started: 2026-10-26T19:54Z   updated: 2026-10-26T20:14Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0024-pending-f108-a157
 branch: run/RUN-0024-pending-f108-a157
 
@@ -10,6 +10,7 @@ branch: run/RUN-0024-pending-f108-a157
 | 175 | AAB5 F108 holo output picker | ~ | build:opus | 2026-10-26T19:56Z | - |
 | 176 | AAB6 A157 clone-odo description loads | ~ | build:opus | 2026-10-26T19:56Z | - |
 | 177 | verify review bump commit |   | - | - | - |
+| 182 | AACB A158 harness usage fixture |   | - | - | - |
 
 ## In flight
 ### stage 175 - AAB5 F108 holo output picker  (dispatched 2026-10-26T19:56Z, @cc-9de7d9)
@@ -99,7 +100,29 @@ prompt: |
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### AACB - stage 182 - A158 harness usage fixture
+tickets: A158 deep/deep
+files: plugin/practice/scripts/baseline-harness.sh,plugin/skills/watch-cortana/hooks/usage-watch.sh,plugin/skills/watch-cortana/hooks/usage-watch.ps1
+after: 175
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket A158 (agent-found) - fix seat, tier deep: the cause is unknown. No design file: the ticket line is the spec. Follow root-cause-first (plugin/PRACTICE.md §7): reproduce, then find and name the cause with evidence (git log -p on both sides - plugin/practice/scripts/baseline-harness.sh around its F31 usage check at ~3136-3145 and its BASELINE_USAGE fixture writer, and plugin/skills/watch-cortana/hooks/usage-watch.sh and .ps1, which dir/env/file its level mode reads), and only then fix the side that drifted. If the watcher changed on purpose, fix the fixture to match; if the fixture is right and the watcher regressed, fix the watcher in both .sh and .ps1, mirrored. State the cause in the commit message.
+
+  The ticket line, verbatim:
+  - [ ] A158 — baseline-harness selftest fails on the usage fixture. Reproduced 2026-10-26 on main: `sh plugin/practice/scripts/baseline-harness.sh selftest` exits 1 with FAIL: relay-chain usage: level read 'src=none 5h=- 7d=- ctx=- max=-' (baseline-harness.sh:3141). The F31 check writes a fake watch-cortana dir via BASELINE_USAGE='84 40' and reads it back with CLAUDE_USAGE_WATCH_DIR=<dir> usage-watch.sh level, expecting src=claude-code 5h=84 7d=40; the watcher no longer reads that dir. Cause unknown: the fixture's file shape or the watcher's env/path drifted. Done when: the root cause is named, the fixture and usage-watch.sh agree again, and the harness selftest prints ok. Found by RUN-0024 stage 176 (A157). [owner: @sher] (@cc-9de7d9)
+
+  Files you may touch: plugin/practice/scripts/baseline-harness.sh, plugin/skills/watch-cortana/hooks/usage-watch.sh, plugin/skills/watch-cortana/hooks/usage-watch.ps1. Anything else -> stop and report. Verify: the red -  exits 1 with that FAIL line (it is slow: run it with a long timeout and read the exit code directly, not through a pipe); then green - it prints ok, exit 0; plus usage-watch's own selftest if it has one (both .sh and .ps1). Commit messages start with "A158: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0024-pending-f108-a157 (branch run/RUN-0024-pending-f108-a157), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the root cause (with the commit or line that introduced it), the commit sha(s), files changed, the red then green test output, anything you could not verify, any unrelated problem (one line each).
 
 ## Rulings
 - 19:58Z - /pending-subagent parallel (owner, @sher): F106 F109 F111 F110 join RUN-0023 as later stages (they share marathon.md/marathon-workflow.js, register.tsx, types/index.d.ts, pane.tsx, install.* with its F101-F105 and must build on them); F108 and A157 share no RUN-0023 file and run here off main. RELAY_CHAIN_PARALLEL=2, 3 agents session-wide with RUN-0023's fix round, 3 GB free, watchdog gates below 1 GB - cost if wrong: a stage waits on a hold. Q-F108-1 (--batch writes no .md/.svg) and Q-F108-2 (no claude -p -> four script runs, agent pass owed) built on their defaults, parked for the end batch.
 - 19:59Z - 176 runs beside 175, so dispatch gave it the stage worktree .s176; its agent gets the stored prompt with that worktree substituted (.skillator/prompts/run-0024-s176-wt.txt) - cost if wrong: none.
+- Ruling: stage 182 prompt rebuilt - an unquoted heredoc ran the backticks in the A158 ticket line while writing it; restored from TICKETS.md by python; every other stored RUN-0023/0024 prompt compared against the board, only claim tags differ - cost if wrong: an implementer works from a corrupted ticket line.
+- Ruling: A157 not landed as done - the review of b583ee1 found the ruling overclaims: F107 0/6 ran on a 65-skill Linux host the listing-truncation explanation does not cover, NO DESCRIPTION is a model self-report, cost subtotals are sums of rounded figures, description B not recorded verbatim. A fix seat narrows the baseline file to what was measured; the description change stays only if it does not regress; A157 goes [!] blocked on a description-only run on a host with under 100 skills - cost if wrong: one more run file stage.
+- Ruling: F108 review findings 1-2 (renderMarkdown escaping, escaped-pipe cell split) fixed before landing; 3-6 low and in the same file, fixed in the same seat since it is one file and they are each a few lines - cost if wrong: a slightly larger fix diff.
