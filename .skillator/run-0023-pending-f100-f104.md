@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-26T18:55Z
+started: 2026-10-26T14:56Z   updated: 2026-10-26T20:00Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -9,12 +9,16 @@ branch: run/RUN-0023-pending-f100-f104
 |---|-------|-------|-------|-----------|--------|
 | 167 | AABZ F100 build-jarvis UI entry | x | build:opus | 2026-10-26T15:47Z | f39b942 |
 | 168 | AAB0 F102 ops font size | x | build:opus | 2026-10-26T16:22Z | c297369 |
-| 169 | AAB1 F101 marathon without Workflow | ~ | build:opus | 2026-10-26T18:44Z | - |
+| 169 | AAB1 F101 marathon without Workflow | ~ | build:opus | 2026-10-26T19:33Z | - |
 | 170 | AAB2 F103 explorer git actions |   | - | - | - |
 | 171 | AAB3 F104 diagnose close |   | - | - | - |
 | 172 | verify review bump commit |   | - | - | - |
 | 173 | AAB4 F105 codex $ops opens the board |   | - | - | - |
 | 174 | merge origin/ccr-0af663c7-2ecnqn (F97 clone-odo) INTO main | x | main:opus | 2026-10-26T18:55Z | ca1f9e3 |
+| 178 | AAB7 F106 start claims the owner |   | - | - | - |
+| 179 | AAB8 F109 session code and mode |   | - | - | - |
+| 180 | AAB9 F111 ops pane layout B rails |   | - | - | - |
+| 181 | AACA F110 rename skill-smith to skill-prometheus |   | - | - | - |
 
 ## In flight
 ### stage 169 - AAB1 F101 marathon without Workflow  (dispatched 2026-10-26T18:44Z, @cc-9de7d9)
@@ -150,6 +154,90 @@ prompt: |
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### AAB7 - stage 178 - F106 start claims the owner
+tickets: F106 build/deep
+files: plugin/skills/tickets-zordon/scripts/ticket-meta.sh,plugin/skills/tickets-zordon/scripts/ticket-meta.ps1,plugin/skills/tickets-zordon/SKILL.md,plugin/skills/relay-morpheus/hooks/relay-morpheus.sh,plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1,plugin/skills/relay-morpheus/references/marathon.md,plugin/skills/relay-morpheus/templates/marathon-workflow.js,plugin/skills/build-jarvis/SKILL.md
+after: 169
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  grade: architectural · critical yes (F109 changes the TICKETS.md line format, a contract check-tickets, ticket-meta and the ops board all parse) · design deep=fable · build build=opus · verify deep=fable, held · ceremony full (relay run, 5 tickets) · mode per-task (ruled: inside a relay run, /pending-subagent parallel) · usage unobservable · tiers: defaults
+
+  Ticket F106 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/design-2026-10-26-F106-start-claims-owner.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths are repo-relative; use them under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. Q-F106-1 is parked for the owner: build on its default (yes). 
+
+  The ticket line, verbatim:
+  - [ ] F106 — Unowned ticket goes to the session owner on start. When work starts on a ticket with no [owner:] through any path - ticket-meta start, build-jarvis, a plain subagent, a Workflow/marathon script - it gets [owner: <whoami>] as relay chain plan/dispatch already do via claim; a ticket owned by someone else is left alone and the start says so; no team file = no owner, as now. Done when ticket-meta start .sh/.ps1 selftests pin the claim and build-jarvis/marathon-workflow.js call it [owner: @sher] (@cc-982c2a)
+
+  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F106: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### AAB8 - stage 179 - F109 session code and mode
+tickets: F109 build/deep
+files: plugin/skills/tickets-zordon/scripts/ticket-meta.sh,plugin/skills/tickets-zordon/scripts/ticket-meta.ps1,plugin/skills/tickets-zordon/SKILL.md,plugin/skills/tickets-zordon/board/artifact.mjs,plugin/practice/scripts/check-tickets.sh,plugin/skills/relay-morpheus/hooks/relay-morpheus.sh,plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1,plugin/skills/relay-morpheus/references/chain.md,plugin/skills/relay-morpheus/references/marathon.md,plugin/skills/grayskull-power/references/arming.md,plugin/mods/ops-board/hooks/lib/board.ts,plugin/mods/ops-board/hooks/lib/team.ts,plugin/mods/ops-board/hooks/lib/bandlines.ts,plugin/mods/ops-board/hooks/band.tsx,plugin/mods/ops-board/hooks/register.tsx,plugin/mods/ops-board/types/index.d.ts,plugin/mods/ops-board/tests/team.test.ts,plugin/mods/ops-board/tests/board.test.ts,plugin/mods/ops-board/tests/band.test.tsx
+after: 178, 171
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  grade: architectural · critical yes (F109 changes the TICKETS.md line format, a contract check-tickets, ticket-meta and the ops board all parse) · design deep=fable · build build=opus · verify deep=fable, held · ceremony full (relay run, 5 tickets) · mode per-task (ruled: inside a relay run, /pending-subagent parallel) · usage unobservable · tiers: defaults
+
+  Ticket F109 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/design-2026-10-26-F109-session-code-and-mode.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths are repo-relative; use them under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. Q-F109-1 and Q-F109-2 are parked for the owner: build on their defaults (band shows no mode; pending shows the whole token). CRITICAL: this changes the TICKETS.md line format - old @cc- tags must stay valid everywhere, and every parser the design lists gets its test.
+
+  The ticket line, verbatim:
+  - [ ] F109 — 4-character session code on every ticket touch. Owner 2026-10-26: 'every session of claude should have a 4character alpha numeric code so along with owner u can tag which session is handling the tickets via direct|agent|run|workflow'. Today the session tag is @cc-<6 hex> from the session id, with no record of how the work ran. Done when: every session gets a 4-character alphanumeric code (stable for the session, shown by ticket-meta whoami and in the ops band), and every board write by ticket-meta and relay-morpheus stamps owner + code + mode, mode one of direct|agent|run|workflow; old @cc- tags stay valid; check-tickets.sh accepts both; selftests pin the format. (@cc-9de7d9)
+
+  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F109: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### AAB9 - stage 180 - F111 ops pane layout B rails
+tickets: F111 build/deep
+files: plugin/mods/ops-board/hooks/lib/ticketsmodel.ts,plugin/mods/ops-board/hooks/pane.tsx,plugin/mods/ops-board/hooks/register.tsx,plugin/mods/ops-board/types/index.d.ts,plugin/mods/ops-board/tests/pane.test.tsx,plugin/mods/ops-board/tests/model.test.ts,plugin/mods/ops-board/README.md
+after: 179, 170, 171
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  grade: architectural · critical yes (F109 changes the TICKETS.md line format, a contract check-tickets, ticket-meta and the ops board all parse) · design deep=fable · build build=opus · verify deep=fable, held · ceremony full (relay run, 5 tickets) · mode per-task (ruled: inside a relay run, /pending-subagent parallel) · usage unobservable · tiers: defaults
+
+  Ticket F111 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/design-2026-10-26-F111-ops-pane-layout-b-rails.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths are repo-relative; use them under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. Q-F111-1 and Q-F111-2 are parked for the owner: build on their defaults (ASCII only via env + toggle; no tab number hotkeys). The executable visual spec is C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/f111/styles.py (classes Rails and Mono) on C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/f111/mocks.py. The render proof is plugin-test frames at 40/60/80/120 columns (owner ruling Q-F100-1).
+
+  The ticket line, verbatim:
+  - [ ] F111 — Ops-board pane layout that never overlaps or hides actions. Owner 2026-10-26: 'use tui-tron to give 3-4 different options of ops-board show me the mocks in html the design should ensure that overlaps and buttons options hidden in small width doesnt happen'. Mocks: 3-4 tui-tron layouts at 60/80/120 columns, published as HTML. Owner pick 2026-10-26: B whole-word wrap - tabs, keys and the count line wrap whole words onto as many rows as they need, never shortened; the list yields rows and shows how many are below. Style pick 2026-10-26: 2 Status rails - a coloured rail per group, the header naming state and count, the selected row a full-width bar; style 4 Mono ASCII ships as the no-Unicode fallback. Mocks: scratchpad f111/ops-pane-styles.html, artifact HbjY2xWiQapBVGoUwTn4ud. Done when: the pane draws B with no overlapping regions and every action reachable at every width down to 40 columns - below the cutoff actions fold into a ? legend or a second row, never clipped; plugin-test frames at 40/60/80/120 pin it per Q-F100-1; B14's narrow layout rules kept or replaced on purpose. [decide: @sher] (@cc-9de7d9)
+
+  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F111: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### AACA - stage 181 - F110 rename skill-smith to skill-prometheus
+tickets: F110 build/deep
+files: plugin/skills/skill-prometheus/SKILL.md,plugin/skills/skill-prometheus/references/testing.md,plugin/skills/skill-smith/SKILL.md,plugin/.muse-plugin/plugin.json,plugin/skills/grayskull-power/SKILL.md,plugin/skills/grayskull-power/references/routing.md,plugin/PRACTICE.md,README.md,plugin/skills/clone-odo/UPSTREAM.md,plugin/skills/code-yoda/UPSTREAM.md,plugin/skills/design-arwen/UPSTREAM.md,plugin/practice/baselines/README.md,plugin/practice/scripts/baseline-harness.sh,plugin/practice/scripts/context-audit.sh,plugin/practice/scripts/check-routing.sh,plugin/install.sh,plugin/install.ps1
+after: 180, 173
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  grade: architectural · critical yes (F109 changes the TICKETS.md line format, a contract check-tickets, ticket-meta and the ops board all parse) · design deep=fable · build build=opus · verify deep=fable, held · ceremony full (relay run, 5 tickets) · mode per-task (ruled: inside a relay run, /pending-subagent parallel) · usage unobservable · tiers: defaults
+
+  Ticket F110 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/design-2026-10-26-F110-rename-skill-smith-skill-prometheus.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths are repo-relative; use them under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. Owner rulings: the name is skill-prometheus (Q-F110-2 settled by the owner: 'correct the name'); Q-F110-1 is parked: build on its default (extend README.md's retired-names sentence). Before starting, confirm with git log that the run branch contains main's clone-odo merge (plugin/skills/clone-odo/UPSTREAM.md exists in the worktree); if it does not, stop and report - do not create it.
+
+  The ticket line, verbatim:
+  - [ ] F110 — Rename skill-smith. Owner 2026-10-26: 'rename skill-smith can u suggest some new names'. Suggested: skill-q, skill-hermione, skill-geordi, skill-doc; owner pick 2026-10-26: skill-prometheus ('skill-promethus correct the name'). Done when: skill-prometheus replaces skill-smith in the skill dir, manifests, routing, host commands, install selftests and docs; skill-smith stays one release as a pointer, as build-ultron does for build-jarvis; check-routing.sh and the selftests green. [decide: @sher] (@cc-9de7d9)
+
+  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F110: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
 
 ## Rulings
 - 13:00Z - designs by one fable pass (scratchpad design-2026-10-26-f10*.md). Owner, asked: F100 approach 1 approved, F101 approach 1 approved (both arch gates passed); Q-F100-1 plugin-test frames are the pane render proof; Q-F101-1 no live host probes, hosts tagged inferred.
@@ -159,3 +247,6 @@ prompt: |
 - 13:20Z - F105 logged mid-run (owner: Codex one-word ops command) and added as stage 173, design seat - (orchestrator wrote design-2026-10-26-f105-codex-ops.md), --after 169 (shares install.ps1/.sh and PLATFORMS.md with F101/F102) - cost if wrong: none.
 - 13:50Z - 167 F100 built (2f24721 f1e34a1 119c783); medium review found 9, all inside F100's contract (docs must agree): a grade-gate deadlock on the ui-only hand-off, arwen build mode still taking new UI features, the UI pass naming arwen's build mode, PRACTICE/README/manifest descriptions, arwen+tron, a driver with scratchpad paths. Fix agent opus, prompt .skillator/prompts/run-0023-s167-fix1.txt; no new baseline sessions (cost) - cost if wrong: the separate UI-pass seat stays unproven by a live run.
 - 18:44Z resume - watchdog hold of 16:01Z (0.6 GB) released at 1.4 GB free by @sher, one agent at a time; driver @cc-982c2a (stale, 2026-10-26) taken by @cc-9de7d9; usage unobservable on this host - cost if wrong: a stage waits on another hold.
+- 19:30Z - 169 F101 built (9781ef7 94b36a2); medium review (main-session-dispatched, run on the worktree range by hand after the skill forked into main) found 6, 4 verified by reading: no-Workflow retry inherits an Agent call, landing owner hard-coded workflow, driver tag doubled, README stale; plus vacuous installer assertion, RELAY_CHAIN_PARALLEL missing from host texts. Fix agent opus, prompt .skillator/prompts/run-0023-s169-fix1.txt; README.md ruled inside F101's contract (docs say per host what runs) - cost if wrong: one extra file in the stage. Review's 10 findings on main's clone-odo (F107) are out of this stage: noted for the F107 owner check.
+- 19:55Z - 169 fix round 1 2c53043: separate review (read-only agent, diff read in the worktree) confirmed all 6 and found 4: Gemini CLI's ~/.gemini/skills gets the agy text and the selftest locks --owner subagent there (verified, install.sh 54-58/396-400); no-delegate BLOCKED retry not dispatched first; README says every host has the command and puts muse under subagents; RELAY_CHAIN_PARALLEL unguarded. Fix round 2 (of 3) opus, prompt .skillator/prompts/run-0023-s169-fix2.txt - cost if wrong: one more round.
+- 20:05Z - /pending-subagent parallel (owner @sher): stages 178 F106 (after 169), 179 F109 (after 178,171), 180 F111 (after 179,170,171), 181 F110 (after 180,173) added; designs by one fable pass (scratchpad design-2026-10-26-F10{6,9}/F11{0,1}-*.md), tiers build/deep (F109 critical: TICKETS.md line format). Before 178: merge main into this run branch (main has the F107 clone-odo merge that F110 renames inside). Before 181: RUN-0024 (F108 shares manifests and routing.md) lands on main and main is merged here again - the lease already holds 181. Parked for the end batch, built on defaults: Q-F106-1 yes, Q-F109-1 no, Q-F109-2 whole token, Q-F111-1 no, Q-F111-2 no tab number hotkeys (the picked mock shows them), Q-F110-1 extend README l.163; Q-F110-2 settled by the owner (skill-prometheus) - cost if wrong: a follow-up edit per Q.
