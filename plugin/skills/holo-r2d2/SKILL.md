@@ -101,9 +101,10 @@ node --test <SKILL>/scripts/anatomy.test.mjs
 
 ## Pick the output
 
-Every output carries the same content - header, counts, decisions waiting,
-stage graph, stage list, design sections with their tables - rendered from the
-run file by the script. `--out <path>` overrides any default path.
+Every output carries the header, counts, the open decisions, the stage graph,
+every stage and the design sections with their tables - rendered from the run
+file by the script. Closed decisions (answered, ruled, re-planned, moot) are on
+the page only. `--out <path>` overrides any default path.
 
 | Said | Output | Command | Show |
 |---|---|---|---|
