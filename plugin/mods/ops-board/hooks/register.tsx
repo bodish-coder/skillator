@@ -128,11 +128,11 @@ async function addNotes($: EngineInterface, add: string[], drop: (n: string) => 
   await update($, notesA, xs => [...xs.filter(n => !drop(n)), ...add.filter(n => !xs.includes(n) || drop(n))])
 }
 
-// The status line: `ops <n> open · 7d <pct>`, set only when its text changes.
+// The status line (F95: pending | in progress | total · 5h), set only when its text changes.
 async function updateStatus($: EngineInterface) {
   const board = await read($, boardA)
   if (!board) return
-  const text = statusText(countsOf(board)?.open ?? null, await read($, usageA), await $.clock.now())
+  const text = statusText(countsOf(board), await read($, usageA), await $.clock.now())
   if (text === lastStatus) return
   lastStatus = text
   $.ui.status(text)

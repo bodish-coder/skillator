@@ -87,12 +87,19 @@ test('narrow band: the m-narrow two lines', () => {
   ])
 })
 
-test('status line: ops <n> open · 7d <pct>; stale says so; unknown is left out', () => {
-  expect(statusText(5, USAGE, NOW)).toBe('ops 5 open · 7d 55%')
-  expect(statusText(5, USAGE, NOW + STALE_MS + 1)).toBe('ops 5 open · 7d 55% (stale)')
-  expect(statusText(5, null, NOW)).toBe('ops 5 open')
-  expect(statusText(5, usageFrom([{ kind: 'five_hour', percentUsed: 41 }], null, NOW), NOW)).toBe('ops 5 open')
-  expect(statusText(null, USAGE, NOW)).toBe('ops - open · 7d 55%')
+// F95: pending = [ ], in progress = [~], total = every open box; 5h, then 7d while the line stays short.
+test('status line: pending | in progress | total · 5h, 7d while short; stale says so; unknown is left out', () => {
+  const head = 'ops 2 pending | 1 in progress | 5 total'
+  expect(statusText(COUNTS, USAGE, NOW)).toBe(`${head} · 5h 41% · 7d 55%`)
+  expect(statusText(COUNTS, USAGE, NOW + STALE_MS + 1)).toBe(`${head} · 5h 41% (stale)`)
+  expect(statusText(COUNTS, null, NOW)).toBe(head)
+  expect(statusText(COUNTS, usageFrom([{ kind: 'five_hour', percentUsed: 41 }], null, NOW), NOW)).toBe(`${head} · 5h 41%`)
+  expect(statusText(null, USAGE, NOW)).toBe('ops - · 5h 41% · 7d 55%')
+  // [%] testing is in the total only; a 244-box board's line is too long for 7d.
+  const testing = countsOf(parseBoard('- [~] F1 — a\n- [%] F2 — b\n- [%] F3 — c\n- [!] F4 — d\n- [>] F5 — e\n- [x] F6 — f\n', 'T', 0, 0))
+  expect(statusText(testing, null, NOW)).toBe('ops 0 pending | 1 in progress | 4 total')
+  expect(statusText({ open: 244, progress: 13, testing: 200, blocked: 2, decision: 1 }, USAGE, NOW))
+    .toBe('ops 28 pending | 13 in progress | 244 total · 5h 41%')
 })
 
 test('countsOf: open excludes deferred and closed', () => {
@@ -401,17 +408,17 @@ test('stale locks: listed in a note, never deleted; ok dismisses it', WITH, asyn
   await ui.unmount()
 })
 
-test('status line: ops <n> open · 7d <pct>, updated only when the text changes', WITH, async ($, on) => {
+test('status line: pending | in progress | total · 5h, updated only when the text changes', WITH, async ($, on) => {
   const [w, clock] = world(on)
   await start($, clock)
-  expect(w.statuses.at(-1)).toBe('ops 5 open · 7d 55%')
+  expect(w.statuses.at(-1)).toBe('ops 2 pending | 1 in progress | 5 total · 5h 41% · 7d 55%')
   const n = w.statuses.length
   await clock.advance(4000)
   expect(w.statuses).toHaveLength(n)
-  w.rate = [{ kind: 'seven_day', percentUsed: 61 }]
+  w.rate = [{ kind: 'five_hour', percentUsed: 47 }, { kind: 'seven_day', percentUsed: 61 }]
   await $.session.measure({ context: { window: 200000 }, rateLimits: w.rate, changed: ['rateLimits'] })
   await clock.settle()
-  expect(w.statuses.at(-1)).toBe('ops 5 open · 7d 61%')
+  expect(w.statuses.at(-1)).toBe('ops 2 pending | 1 in progress | 5 total · 5h 47% · 7d 61%')
 })
 
 test('session end puts a hidden CLAUDE.md back and logs it; the next start shows the note', WITH, async ($, on) => {
