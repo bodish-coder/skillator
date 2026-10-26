@@ -243,18 +243,27 @@ function derive(run, holds = null) {
 
 export function parseDesign(md) {
   const out = { title: "", parts: [] };
-  let cur = null, para = [], inFence = false;
+  let cur = null, para = [], inFence = false, tbl = null;
   const flush = () => { if (cur && !cur.lead && para.length) cur.lead = para.join(" "); para = []; };
   for (const l of md.replace(/\r/g, "").split("\n")) {
+    if (!/^\s*\|/.test(l)) tbl = null; // a table is one run of consecutive | lines
     if (/^```/.test(l)) { inFence = !inFence; if (cur) cur.code++; continue; }
     if (inFence) continue;
     let m;
     if (!out.title && (m = /^# (.*)$/.exec(l))) { out.title = m[1].trim(); continue; }
-    if ((m = /^## (.*)$/.exec(l))) { flush(); cur = { name: m[1].trim(), lead: "", subs: [], bullets: 0, code: 0 }; out.parts.push(cur); continue; }
+    if ((m = /^## (.*)$/.exec(l))) { flush(); cur = { name: m[1].trim(), lead: "", subs: [], bullets: 0, code: 0, tables: [] }; out.parts.push(cur); continue; }
     if (!cur) continue;
     if ((m = /^### (.*)$/.exec(l))) { flush(); cur.subs.push(m[1].trim()); continue; }
     if (/^\s*([-*]|\d+\.)\s/.test(l)) { flush(); cur.bullets++; continue; }
-    if (l.trim() === "" || /^\|/.test(l)) { flush(); continue; }
+    if (/^\s*\|/.test(l)) {
+      flush();
+      const cells = l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+      if (cells.every((c) => /^:?-+:?$/.test(c)) && tbl && tbl.rows.length === 1 && !tbl.head.length) { tbl.head = tbl.rows.pop(); continue; }
+      if (!tbl) { tbl = { head: [], rows: [] }; cur.tables.push(tbl); }
+      tbl.rows.push(cells);
+      continue;
+    }
+    if (l.trim() === "") { flush(); continue; }
     if (!cur.lead) para.push(l.trim());
   }
   flush();
@@ -433,7 +442,8 @@ function designBlock(d, src) {
     `<article class="comp" data-component="${i + 1}"><h3><span class="cn">${i + 1}</span>${esc(p.name)}</h3>` +
     (p.lead ? `<p>${esc(p.lead)}</p>` : "") +
     (p.subs.length ? `<ul>${p.subs.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : "") +
-    `<p class="cm">${p.subs.length} part${p.subs.length === 1 ? "" : "s"} \u00b7 ${p.bullets} point${p.bullets === 1 ? "" : "s"}${p.code ? " \u00b7 " + p.code + " code block" + (p.code > 1 ? "s" : "") : ""}</p></article>`).join("");
+    p.tables.map((t) => `<table>${t.head.length ? `<thead><tr>${t.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>` : ""}<tbody>${t.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`).join("") +
+    `<p class="cm">${p.subs.length} part${p.subs.length === 1 ? "" : "s"} \u00b7 ${p.bullets} point${p.bullets === 1 ? "" : "s"}${p.code ? " \u00b7 " + p.code + " code block" + (p.code > 1 ? "s" : "") : ""}${p.tables.length ? " \u00b7 " + p.tables.length + " table" + (p.tables.length > 1 ? "s" : "") : ""}</p></article>`).join("");
   return `<section class="design"><h2>Design \u00b7 ${esc(d.title || basename(src))}<span class="n">${d.parts.length} sections</span></h2>` +
     `<p class="src">${esc(src)}</p><div class="comps">${cards}</div></section>`;
 }
@@ -530,6 +540,7 @@ summary{cursor:pointer;font-family:var(--mono);font-size:.6875rem;text-transform
 .comp h3{display:flex;gap:.5rem;align-items:baseline;font-size:.9375rem;margin:0 0 .4rem}
 .cn{font-family:var(--mono);font-size:.75rem;color:var(--accent)}
 .comp p{margin:0 0 .4rem;font-size:.8125rem} .comp li{font-size:.8125rem;padding:.1rem 0;border-top:1px solid var(--rule)}
+.comp table{border-collapse:collapse;font-size:.75rem;margin:.4rem 0;width:100%} .comp th,.comp td{border:1px solid var(--rule);padding:.2rem .4rem;text-align:left;vertical-align:top}
 .cm,.src{font-family:var(--mono);font-size:.6875rem;color:var(--faint)}
 .empty{color:var(--mid)}
 .foot{margin-top:2.5rem;font-size:.75rem;color:var(--faint)}
@@ -671,6 +682,7 @@ export function renderAscii(run, opts = {}) {
     d.parts.forEach((p, i) => {
       out.push(`  ${i + 1}. ${p.name}  [${p.subs.length} parts, ${p.bullets} points]`);
       for (const s of p.subs) out.push(`       - ${s}`);
+      for (const t of p.tables) for (const r of (t.head.length ? [t.head, ...t.rows] : t.rows)) out.push("       | " + r.join(" | ") + " |");
     });
   }
   return toAscii(out.join("\n")) + "\n";
@@ -948,6 +960,10 @@ function selftest() {
   ok(d.parts.length === 3 && (dp.match(/class="comp"/g) || []).length === 3, "design: one component per ## section", d.parts.length);
   ok(d.parts[1].subs.length === 2, "design: ### parts listed", d.parts[1].subs);
   ok(!d.parts.some((p) => p.name.includes("not a heading")), "design: fenced code is skipped");
+  ok(d.parts[1].tables.length === 1 && d.parts[1].tables[0].head.join("|") === "flag|does" && d.parts[1].tables[0].rows.length === 2 && d.parts[1].tables[0].rows[1][1] === "every book", "design: a pipe table is head + rows, separator dropped", d.parts[1].tables);
+  ok(d.parts[2].tables.length === 1 && d.parts[2].tables[0].head.length === 0 && d.parts[2].tables[0].rows[0][1] === "3 cases", "design: a one-line table has no head", d.parts[2].tables);
+  ok((dp.match(/<table>/g) || []).length === 2 && dp.includes("<th>flag</th>") && dp.includes("<td>every book</td>"), "design: tables drawn in the page");
+  ok(renderAscii(null, { design: d, designPath: "fixture-design.md" }).includes("| `--author` | filters by author |"), "design: tables in the ascii");
 
   // 5. a run that decided something odd still draws: unknown state, cycle
   const odd = parseRun("# RUN-4 - odd\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 1 | a | z | - | - | - |\n| 2 | b |   | - | - | - |\n\n## Chain\ndriver: -     hold: -     mode: agents\n### AAAA - stage 1 - a\nafter: 2\nprompt: |\n  x\n### AAAB - stage 2 - b\nafter: 1\nprompt: |\n  y\n");
