@@ -81,7 +81,7 @@ test('live: its loop\'s events move last activity and end it, with no poll', asy
   await ui.unmount()
 })
 
-test('the list: its status stands while listed; dropped with no end seen it is "not listed"; read every 5 s on the Agents tab only', async ($, on) => {
+test('the list: its status stands while listed; dropped with no end seen it is "not listed"; read every 5 s on the Workflows tab only', async ($, on) => {
   const [w, clock] = agentWorld(on)
   await start($, clock)
   await $.agent.spawn(spawnIn({ description: 'scout', subagentType: 'Explore' }))
@@ -116,20 +116,50 @@ test('a loop no spawn or list named (an engine fork) is no row; with none, the t
   await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, turnId: 't-f', agentId: 'fork-1', reason: 'answer' })
   await clock.settle()
   expect(await ui.find({ key: 'agent:fork-1' })).toBeUndefined()
-  expect((await ui.find({ key: 'none' }))?.text)
+  expect((await ui.find({ key: 'agents:none' }))?.text)
     .toBe('no agents in this session yet - subagents, teammates and workflow agents show here as they start')
   await ui.unmount()
 })
 
-test('/ops agents opens the pane on Agents and reads the list; an unknown word gives the usage', async ($, on) => {
+test('/ops agents opens the pane on Workflows and reads the list; an unknown word gives the usage', async ($, on) => {
   const [w, clock] = agentWorld(on)
   await start($, clock)
   const run = (args: string) => $.command.run({ command: 'ops', args, ...RUN })
-  expect((await run('agents')).text).toBe('ops board opened on Agents.')
+  expect((await run('agents')).text).toBe('ops board opened on Workflows, Agents open.')
   await clock.settle()
   expect(w.lists).toBe(1)
-  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|agents|explorer|run|resume [force]|watchdog on] - runs opens Workflows too;'
+  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|explorer|build|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build;'
     + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)')
+})
+
+// F93: no Agents tab - the agents are a section of the Workflows tab, read on entering it and
+// every 5 s while it is shown; /ops agents opens Workflows with that section open.
+test('F93: the agents show as a section of the Workflows tab, polled while it is shown; /ops agents opens it', async ($, on) => {
+  const [w, clock] = agentWorld(on)
+  await start($, clock)
+  await $.agent.spawn(spawnIn({ description: 'scout', subagentType: 'Explore' }))
+  w.list = [info({ id: 'a-scout', description: 'scout', type: 'Explore', status: 'waiting' })]
+  const ui = await mountTab($, 'terminal', 'workflows', 96)
+  const text = async (key: string) => (await ui.find({ key }))?.text
+  expect(await ui.find({ key: 'tab:agents' })).toBeUndefined()
+  expect(await text('sect:agents')).toBe('▾ Agents (1)')
+  expect(await text('agent:a-scout')).toBe(COLS('scout', 'Explore', HAIKU, 'waiting', '14:02:11', '14:02:11', '-'))
+  expect(w.lists).toBe(1)
+  w.list = []
+  await clock.advance(5000)
+  expect(await text('agent:a-scout')).toBe(COLS('scout', 'Explore', HAIKU, 'not listed', '14:02:11', '14:02:11', '-'))
+  await ui.press({ key: 'sect:agents' })
+  expect(await text('sect:agents')).toBe('▸ Agents (1)')
+  expect(await ui.find({ key: 'agent:a-scout' })).toBeUndefined()
+  await ui.press({ key: 'tab:tickets' })
+  const n = w.lists
+  await clock.advance(20_000)
+  expect(w.lists).toBe(n)
+  expect((await $.command.run({ command: 'ops', args: 'agents', ...RUN })).text).toBe('ops board opened on Workflows, Agents open.')
+  await clock.settle()
+  expect((await ui.find({ key: 'tab:runs' }))?.props.variant).toBe('primary')
+  expect(await text('sect:agents')).toBe('▾ Agents (1)')
+  await ui.unmount()
 })
 
 test('endStatus: an answer completes a subagent and idles a teammate; aborted is killed; error and refusal fail', () => {

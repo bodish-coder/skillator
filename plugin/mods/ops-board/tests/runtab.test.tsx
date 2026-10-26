@@ -135,7 +135,7 @@ for (const surface of SURFACES) {
   test(`${surface}: the Run tab's first open scans and saves .skillator/run.json through run-entries; the next open reads it`, WITH, async ($, on) => {
     const [w, clock] = world(on, { '/r/TICKETS.md': '# Tickets\n' })
     const pane = await openRun($, clock, surface)
-    expect((await pane.find({ key: 'tab:run' }))?.text).toBe('Run')
+    expect((await pane.find({ key: 'tab:run' }))?.text).toBe('Build')
     expect((await pane.find({ key: 'tab:runs' }))?.text).toBe('Workflows')         // F76's tab stays itself
     expect(scans(w)).toHaveLength(1)
     expect(scans(w)[0]!.argv).toEqual(['/bin/sh', SCRIPT + '.sh', 'scan'])
@@ -284,7 +284,7 @@ for (const surface of SURFACES) {
     await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
     await clock.settle()
     const said = await $.command.run({ command: 'ops', args: 'run', ...RUN })
-    expect(said.text).toBe('ops board opened on Run.')
+    expect(said.text).toBe('ops board opened on Build.')
     await clock.settle()
     const pane = await $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: 'ops-board', props })
     expect(await text(pane, 'entry:ps1:install.ps1')).toMatch(/missing$/)
@@ -294,6 +294,21 @@ for (const surface of SURFACES) {
     expect(w.spawns).toEqual([])
   })
 }
+
+// F93: the tab reads Build; /ops build opens it (id run), /ops run stays an alias.
+test('F93: /ops build opens the Build tab; run is an alias', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': '# Tickets\n', [RUN_JSON]: file([entry('ps1:install.ps1', 'install.ps1', 'ps1', 'install.ps1', 'install.ps1')]) })
+  await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  expect((await $.command.run({ command: 'ops', args: 'build', ...RUN })).text).toBe('ops board opened on Build.')
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'ops-board', surface: 'terminal', component: 'Pane', requestId: 'ops-board', props })
+  expect((await pane.find({ key: 'tab:run' }))?.text).toBe('Build')
+  expect((await pane.find({ key: 'tab:run' }))?.props.variant).toBe('primary')
+  expect(await text(pane, 'entry:ps1:install.ps1')).toBeDefined()
+  await pane.press({ key: 'tab:tickets' })
+  expect((await $.command.run({ command: 'ops', args: 'run', ...RUN })).text).toBe('ops board opened on Build.')
+})
 
 // Review #7: the tab bar is hidden while a Run form is up, as the assign forms hide it:
 // a tab press would leave the form up and Esc on that tab would close the whole board.

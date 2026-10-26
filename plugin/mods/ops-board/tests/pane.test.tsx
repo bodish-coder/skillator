@@ -382,7 +382,7 @@ test('/ops runs switches the tab; an unknown word says how to use it', WITH, asy
   const run = (args: string) => $.command.run({ command: 'ops', args, ...RUN })
   expect((await run('runs')).text).toBe('ops board opened on Workflows, Runs open.')   // F76: runs is an alias
   expect(await state($, 'tab')).toBe('runs')
-  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|agents|explorer|run|resume [force]|watchdog on] - runs opens Workflows too;'
+  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|explorer|build|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build;'
     + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)')
 })
 

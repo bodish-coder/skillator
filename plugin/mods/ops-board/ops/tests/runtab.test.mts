@@ -72,7 +72,7 @@ test('the Run tab: the first open scans and saves .skillator/run.json through ru
   assert.deepEqual(e.state.runFile?.entries.map(x => x.id), ['npm:build', 'sh:install.sh'])
   assert.match(e.state.toast ?? '', /^✓ \.skillator\/run\.json created - 2 entries\nran: \/bin\/sh /)
   const t = text(e.state)
-  assert.match(t, /6 Run/)
+  assert.match(t, /6 Build/)
   assert.match(t, /› ● npm run build +package\.json/)
   assert.match(t, / {2}● install\.sh +install\.sh/)
   await keys(e, '1', '6')

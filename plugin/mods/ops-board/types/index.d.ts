@@ -108,10 +108,10 @@ declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
       board: Board | null; team: Member[]; me: string | null
-      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'explorer' | 'run'; selected: string | null; expanded: string | null
+      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
-      runsOpen: ('runs' | 'workflows')[]   // F76: the Workflows tab's open sections this session
+      runsOpen: ('runs' | 'workflows' | 'agents')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
       runs: RunView[]; assign: AssignDraft | null; narrow: boolean
       engage: Engage | null             // F85: the engage confirm up in the Workflows tab

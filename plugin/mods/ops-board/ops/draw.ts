@@ -125,7 +125,7 @@ function windowOf(lines: Keyed[], id: string | null, h: number): Seg[][] {
 
 // --- the fixed lines ---
 
-const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Run']]
+const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Build']]
 
 function tabsLine(s: State): Seg[] {
   // F66: the unread count rides on the Messages label

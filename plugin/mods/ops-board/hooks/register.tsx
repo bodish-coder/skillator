@@ -35,7 +35,7 @@ const usageA = atom({ plugin: 'ops-board', key: 'usage' } as const, null)
 const watchA = atom({ plugin: 'ops-board', key: 'watch' } as const, { level: 'green', reasons: [] })
 const notesA = atom({ plugin: 'ops-board', key: 'notes' } as const, [])
 const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
-const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows'])
+const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows', 'agents'])
 
 const MAX_READ = 4 * 1024 * 1024
 const POLL_MS = 2000
@@ -355,9 +355,9 @@ async function arm($: EngineInterface) {
   $.clock.every(RUNS_POLL_MS, () => {
     void (async () => { if ((await read($, tabA)) === 'runs') await pollRuns($) })().catch(() => {})
   })
-  // F53: the Agents tab re-reads $.agent.list() every 5 s while it is the tab shown.
+  // F53: the agents list is re-read every 5 s while Workflows (F93: its Agents section) is the tab shown.
   $.clock.every(AGENTS_POLL_MS, () => {
-    void (async () => { if ((await read($, tabA)) === 'agents') await pollAgents($) })().catch(() => {})
+    void (async () => { if ((await read($, tabA)) === 'runs') await pollAgents($) })().catch(() => {})
   })
 }
 
@@ -370,20 +370,21 @@ async function openPane($: EngineInterface, asked: boolean) {
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', agents: 'Agents', explorer: 'Explorer', run: 'Run' }
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', explorer: 'Explorer', run: 'Build' }
 // F76: /ops workflows opens the Workflows tab (id runs) with its Workflows section open; /ops runs is
-// an alias that opens it with its Runs section open.
-const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'run']
-const SECTION_OF: Record<string, 'runs' | 'workflows'> = { runs: 'runs', workflows: 'workflows' }
-const USAGE = 'usage: /ops [tickets|workflows|health|messages|agents|explorer|run|resume [force]|watchdog on] - runs opens Workflows too;'
+// an alias that opens it with its Runs section open. F93: /ops agents opens it with its Agents section
+// open; /ops build opens tab run, /ops run an alias.
+const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'build', 'run']
+const SECTION_OF: Record<string, 'runs' | 'workflows' | 'agents'> = { runs: 'runs', workflows: 'workflows', agents: 'agents' }
+const USAGE = 'usage: /ops [tickets|workflows|health|messages|explorer|build|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build;'
   + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'ops',
-      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs and Workflow runs), health, Teams messages, agents, the explorer and the run entries',
-      argumentHint: '[tickets|workflows|health|messages|agents|explorer|run|resume [force]|watchdog on]',
+      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs, Workflow runs and agents), health, Teams messages, the explorer and the build entries',
+      argumentHint: '[tickets|workflows|health|messages|explorer|build|resume [force]|watchdog on]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -426,7 +427,7 @@ export const register: Register = on => {
     if (word === 'resume force') return { text: await forceResume($) }       // F87
     if (word === 'watchdog on') return { text: await watchdogOn($) }
     if (word && !WORDS.includes(word)) return { text: USAGE }
-    const tab: Tab | null = word ? (SECTION_OF[word] ? 'runs' : word as Tab) : null
+    const tab: Tab | null = word ? (SECTION_OF[word] ? 'runs' : word === 'build' ? 'run' : word as Tab) : null
     const sec = SECTION_OF[word]
     // A form draws only on Tickets: leaving it drops the form, or a later Esc / close
     // on that tab would be taken as the hidden form's Cancel.
@@ -436,13 +437,14 @@ export const register: Register = on => {
     if (tab) await update($, tabA, () => tab)
     if (sec) await update($, runsOpenA, x => (x.includes(sec) ? x : [...x, sec]))
     if (tab === 'runs') void pollRuns($).catch(() => {})
-    if (word === 'agents') void pollAgents($).catch(() => {})
+    if (tab === 'runs') void pollAgents($).catch(() => {})
     if (word === 'messages') void enterMessages($).catch(() => {})
     if (word === 'explorer') void enterExplorer($).catch(() => {})
-    if (word === 'run') void enterRun($).catch(() => {})     // F79: the Run tab, first open scans
+    if (tab === 'run') void enterRun($).catch(() => {})     // F79: the Build tab, first open scans
     const r = await openPane($, true)
     if (!r.isPlaced) return { text: `ops board is open but not drawn: ${r.reason}` }
     if (word === 'runs') return { text: 'ops board opened on Workflows, Runs open.' }
+    if (word === 'agents') return { text: 'ops board opened on Workflows, Agents open.' }
     return { text: tab ? `ops board opened on ${TAB_NAME[tab]}.` : 'ops board opened.' }
   })
 
