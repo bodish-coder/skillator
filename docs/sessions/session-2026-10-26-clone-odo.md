@@ -950,3 +950,4 @@ TRACE:
 - Ruling: test count (orchestrator, after Task 2) - upstream has 52 tests, not 42, so the suite is 54; Steps/VERIFICATION corrected - cost if wrong: a correct run read as short
 - Ruling: odo.sh --help (orchestrator, after Task 2) - D5's usage sed ran past the comment header and printed three code lines; now prints the leading comment block only - cost if wrong: none, cosmetic
 - Ruling: __pycache__/ ignored repo-wide (orchestrator) - every test run writes .pyc beside the tools - cost if wrong: none
+- Ruling: cleanroom fixture states no rule (orchestrator, after Task 1) - the README line 'being rebuilt clean-room from the recon map' made both RED runs comply (testing the fixture, not the skill); without it 1/2 pasted the original's sentence. Line dropped, cleanroom RED re-run on sonnet - cost if wrong: one more fixture sha change
