@@ -84,13 +84,13 @@ async function findRepoRoot(cwd: string): Promise<string> {
   return norm(top ?? cwd)
 }
 
-function spawnArgv(argv: string[], cwd: string, timeoutMs: number, stdin?: string): Promise<RunResult> {
+export function spawnArgv(argv: string[], cwd: string, timeoutMs: number, stdin?: string, env?: Env): Promise<RunResult> {
   return new Promise(res => {
     let out = '', err = '', done = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const finish = (r: Omit<RunResult, 'argv'>) => { if (done) return; done = true; clearTimeout(timer); res({ ...r, argv }) }
     let child: ReturnType<typeof spawn>
-    try { child = spawn(argv[0]!, argv.slice(1), { cwd, windowsHide: true }) }
+    try { child = spawn(argv[0]!, argv.slice(1), { cwd, windowsHide: true, ...(env ? { env } : {}) }) }
     catch (e) { finish({ code: -1, out: '', err: String((e as Error)?.message ?? e) }); return }
     timer = setTimeout(() => {
       try { child.kill() } catch { /* already gone */ }

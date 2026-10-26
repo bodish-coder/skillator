@@ -83,6 +83,15 @@ writes `~/.local/bin/ops`, `install.ps1` a `function ops` block between
 `# >>> skillator ops >>>` markers in your PowerShell profile — delete either to
 remove it.
 
+`ops --status` (any folder, no repo needed) prints one row per CLI profile — the
+default `~/.claude`, `~/.codex`, `~/.cursor`, `~/.gemini/antigravity-cli` and every
+`~/.claude-*`, `~/.codex-*`, `~/.cursor-*`, `~/.agy-*` — with its 5-hour and 7-day
+% used, or why it has none (not logged in, no quota source, timed out), then exits.
+Claude and Codex numbers come from watch-cortana's reader (a fresh statusline probe
+or Codex session, 3 h); Cursor and agy expose none. `~/.skillator/profiles`, one
+`<name> <cli> <config-dir>` per line, renames a profile, adds one, or hides it
+(name `-`). It only reads: no CLI is started, no credential file is opened.
+
 Manual install paths, if you'd rather not run the script:
 
 | Host | Path |

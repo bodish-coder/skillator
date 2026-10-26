@@ -19,6 +19,7 @@ import { makeHost } from './nodehost'
 import { initial } from './state'
 import { frame, paintScreen } from './draw'
 import { makeEngine } from './engine'
+import { status } from './status'
 
 export type Opts = {
   once: boolean; cols: number | null; rows: number | null; color: boolean; ascii: boolean
@@ -30,6 +31,7 @@ export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no
 export const HELP = USAGE + '\n'
   + '  launcher: ops [repo-dir] --open   (ops.ps1: -Open) the board in a new tab of the current\n'
   + '            Windows Terminal window when wt.exe is on PATH, else here as without it\n'
+  + '  ops --status   one row per CLI profile (5h / 7d % used, or why not), then exits\n'
   + '  NO_COLOR or --no-color drops the colours only; bold, inverse and the › marker stay'
 const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', agents: 'runs', health: 'health', messages: 'messages', explorer: 'explorer', build: 'run', run: 'run' }
 
@@ -90,6 +92,7 @@ export const repoName = (root: string): string | null => root.split('/').filter(
 
 export async function main(argv: string[]): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write(HELP + '\n'); return 0 }
+  if (argv.includes('--status')) { process.stdout.write(await status(process.env, import.meta.dirname)); return 0 }
   const opts = parseArgs(argv)
   if (opts.error) { process.stderr.write(`${opts.error}\n${USAGE}\n`); return 2 }
   const out = process.stdout
