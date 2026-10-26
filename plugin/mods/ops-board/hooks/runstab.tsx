@@ -127,22 +127,27 @@ export async function engageGo($: EngineInterface): Promise<void> {
   void pollRuns($).catch(() => {})
 }
 
-// F99: Diagnose - the run file read fresh (resume, read-only), every landed sha asked of git
+// F99: Diagnose - the run read fresh (list and resume, read-only), every landed sha asked of git
 // (on HEAD / elsewhere / unknown), the board and the driver stamp; diagnose() judges. For each
-// stage the file still holds open whose tickets are built, the sha Close would write: the
-// file's landed cell, else the newest `<ticket>: ...` commit on HEAD; none - said, not closed.
+// closable stage the sha Close would write: the file's landed cell, else - only when the run
+// branch is merged into HEAD and holds a `<ID>: ...` commit per ticket - the newest of those;
+// otherwise said with the by-hand command, not closed. Git that cannot be asked is said.
 export async function openDiagnose($: EngineInterface, id: string): Promise<void> {
-  const listed = (await read($, runsA)).find(r => r.id === id)
-  if (!listed) return
-  const c = await runCall($, 'relay-resume', [id])
-  if (c.code !== 0) { $.ui.toast(`■ ${id} not diagnosed: ${c.err.trim() || c.out.trim() || `exit ${c.code}`}`); return }
-  // one list row rebuilt from what list said, so parseRuns reads the file as the poll does
-  const run = parseRuns(`${id}  ${listed.title}  ${listed.done}/${listed.total} done`, { [id]: c.out })[0]!
+  const l = await runCall($, 'relay-list', [])
+  const c = l.code === 0 ? await runCall($, 'relay-resume', [id]) : l
+  const run = c.code === 0 ? parseRuns(l.out, { [id]: c.out }).find(r => r.id === id) : undefined
+  if (!run) { $.ui.toast(`■ ${id} not diagnosed: ${c.code === 0 ? 'not in relay-morpheus list' : c.err.trim() || c.out.trim() || `exit ${c.code}`}`); return }
   const repo = await $.session.repo()
   const git = repo ? await gitBin($) : null
+  let gitWhy = ''
   const ask = async (args: string[]) => {
-    if (!git || !repo) return null
-    try { return await $.process.run([git, ...args], { cwd: repo.root, timeoutMs: 10000 }) } catch { return null }
+    if (!gitWhy && !repo) gitWhy = 'not in a git repo'
+    if (!gitWhy && !git) gitWhy = 'no git found on PATH'
+    if (gitWhy) return null
+    try { return await $.process.run([git!, ...args], { cwd: repo!.root, timeoutMs: 10000 }) } catch (e) {
+      gitWhy = `git ${args[0]}: ${e instanceof Error ? e.message : String(e)}`
+      return null
+    }
   }
   const shas = new Map<string, ShaState>()
   for (const s of run.stages) {
@@ -153,12 +158,24 @@ export async function openDiagnose($: EngineInterface, id: string): Promise<void
   }
   const d = diagnose(run, await read($, boardA), shas, await $.clock.now())
   const closes: Diagnose['closes'] = []
-  for (const c of d.closable) {
-    const own = run.stages.find(s => s.n === c.n)?.landed
-    const sha = own ?? (await ask(['log', '-1', '--format=%h', `--grep=^${c.ticket}:`, 'HEAD']))?.stdout.trim()
-    if (sha) closes.push({ n: c.n, sha })
-    else d.lines.push(`stage ${c.n}: no commit "${c.ticket}: ..." on HEAD to mark it landed with - by hand: relay-morpheus.sh ${id} stage ${c.n} x <owner> <sha>`)
+  const branch = /^branch: ([^\s-]\S*)\s*$/m.exec(c.out)?.[1]   // never a leading '-': git would read an option
+  let merged: boolean | null = null                          // the run branch's commits all on HEAD; null: not asked yet
+  for (const cl of d.closable) {
+    const byHand = `by hand: relay-morpheus.sh ${id} stage ${cl.n} x <owner> <sha>`
+    const own = run.stages.find(s => s.n === cl.n)?.landed
+    if (own) { closes.push({ n: cl.n, sha: own }); continue }
+    if (!branch) { d.lines.push(`stage ${cl.n}: the run file names no branch - ${byHand}`); continue }
+    merged ??= (await ask(['merge-base', '--is-ancestor', branch, 'HEAD']))?.exitCode === 0
+    if (!merged) { d.lines.push(`stage ${cl.n}: run branch ${branch} ${gitWhy ? 'not checked' : 'is not merged into HEAD'} - ${byHand}`); continue }
+    // newest first; a commit counts for a ticket only when its subject starts `<ID>:`
+    const log = ((await ask(['log', '--format=%h %s', ...cl.tickets.map(t => `--grep=^${t}:`), branch]))?.stdout ?? '')
+      .split('\n').flatMap(x => { const m = /^(\S+) (.*)$/.exec(x); return m ? [{ sha: m[1]!, subject: m[2]! }] : [] })
+    const hit = (e: { subject: string }, t: string) => e.subject.startsWith(t + ':')
+    const missing = cl.tickets.filter(t => !log.some(e => hit(e, t)))
+    if (missing.length) { d.lines.push(`stage ${cl.n}: no commit ${missing.map(t => `"${t}: ..."`).join(', ')} on ${branch} - ${byHand}`); continue }
+    closes.push({ n: cl.n, sha: log.find(e => cl.tickets.some(t => hit(e, t)))!.sha })
   }
+  if (gitWhy) d.lines.push(`git not asked: ${gitWhy}`)
   if ((await read($, tabA)) !== 'runs') return              // the tab left while git answered: no stale view
   await update($, diagnoseA, () => ({ id, verdict: d.verdict, lines: d.lines, closes, confirm: false }))
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
@@ -196,7 +213,7 @@ export async function readDiagnose($: EngineInterface): Promise<Diagnose | null>
 
 export type RunsView = { runs: RunView[]; board: Board | null; cols: number; engage: Engage | null }
 
-// The runs the tab draws: those not all done (the rest are counted, not drawn).
+// The runs the tab draws in full: those not all done (F99: the finished ones get one dim row after them).
 export const openRuns = (runs: RunView[]) => runs.filter(r => !isFinished(r))   // F99: the one definition
 
 export async function readRuns($: EngineInterface, cols: number): Promise<RunsView> {
@@ -272,8 +289,8 @@ export function RunsTab($: EngineInterface, els: Els, v: RunsView, a: AgentsView
     out.push(<Text> </Text>, <Box key="norun"><Text bold>no run</Text></Box>, ...loose.map(draw))
   }
   // F99: finished runs after the active ones - one dim row each, Diagnose only, never Engage
-  v.runs.filter(isFinished).forEach((run, i) => {
-    if (open.length || loose.length || i) out.push(<Text> </Text>)
+  v.runs.filter(isFinished).forEach(run => {
+    out.push(<Text> </Text>)                                // after a run, the no-run tree or 'no relay run open'
     const l = finishedLine(run)
     out.push(
       <Box key={l.key} flexDirection="row" gap={2}>

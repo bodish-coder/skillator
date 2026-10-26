@@ -98,7 +98,8 @@ type World = {
   inFlight: number; maxInFlight: number   // resume calls running at once
   resume: Record<string, string>          // F85: a run's resume text, over the CHAIN_* ones
   git: Record<string, number>             // F99: merge-base --is-ancestor <sha> HEAD's exit code per sha
-  logs: Record<string, string>            // F99: git log --grep=^<ticket>: 's output per ticket
+  logs: Record<string, string>            // F99: git log <rev>'s output per revision (the run branch)
+  gitDown?: string                        // F99: git cannot be asked - every git call refused with this
 }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
@@ -142,8 +143,9 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
     }
     if (a[1] === RELAY + '.sh' && a[2] === 'queue-run') return { value: w.queue }
     // F99: Diagnose's git reads and Close's relay stage call
+    if (a[0] === 'git' && w.gitDown) return { deny: w.gitDown }
     if (a[0] === 'git' && a[1] === 'merge-base') return { value: ran('', w.git[a[3]!] ?? 128) }
-    if (a[0] === 'git' && a[1] === 'log') return { value: ran(w.logs[a[4]!.slice('--grep=^'.length, -1)] ?? '') }
+    if (a[0] === 'git' && a[1] === 'log') return { value: ran(w.logs[a.at(-1)!] ?? '') }
     if (a[1] === RELAY + '.sh' && a[3] === 'stage') return { value: ran('') }
     if (a.includes('decide')) return { value: ran('UNOBSERVABLE\n') }
     return { value: ran('', 1, 'not in this test') }
@@ -390,7 +392,7 @@ const stampAgo = (min: number) => new Date(NOW - min * 60_000).toISOString().sli
 const STAGES = (rows: string[]) => ['## Stages', '| # | stage | state | owner | heartbeat | landed |', '|---|---|---|---|---|---|', ...rows, '']
 const WF_RUN = (driver: string, b10: string, flight: string[] = []) => [
   '# Resuming .skillator/run-0020-marathon.md', '# Read the plan named below', '',
-  '# RUN-0020 - marathon', 'plan: TICKETS.md', '',
+  '# RUN-0020 - marathon', 'plan: TICKETS.md', 'branch: run/RUN-0020-marathon', '',
   ...STAGES(['| 136 | AAA8 A155 code-yoda | x | workflow | - | abc1 |', `| 137 | AAA9 B10 muse | ${b10} | - | - | - |`, '| 138 | AABA F81 reconcile |   | - | - | - |']),
   '## In flight', ...flight, '',
   '## Chain', `driver: ${driver}${SEP}hold: -${SEP}mode: workflow`,
@@ -492,8 +494,8 @@ test('F99 Diagnose: inconsistent - a stage in flight whose ticket is [x]; Close 
   // stage 137 in flight under a driver 3 h gone; B10 is [x] on the board; no landed cell, so the sha comes from git log
   const [w, clock] = f85World(on, WF_RUN(`@cc-gone ${stampAgo(183)}`, '~', ['### stage 137 - B10 muse  (dispatched 09:00Z, @cc-gone)', 'run: -']))
   w.files['/r/TICKETS.md'] = BOARD.replace('- [ ] B2 — cart', '- [ ] B2 — cart\n- [x] B10 — muse\n- [x] A155 — yoda')
-  w.git = { abc1: 0 }
-  w.logs = { B10: 'f00d1e5\n' }
+  w.git = { abc1: 0, 'run/RUN-0020-marathon': 0 }
+  w.logs = { 'run/RUN-0020-marathon': 'f00d1e5 B10: muse\n0ab12cd A155: yoda\n' }
   await start($, clock)
   const ui = await runsTab($, 'terminal')
   await clock.settle()
@@ -504,9 +506,11 @@ test('F99 Diagnose: inconsistent - a stage in flight whose ticket is [x]; Close 
   expect((await ui.find({ key: 'diag:line:0' }))?.text).toBe('stage 137: in flight in the run file, but B10 is [x] on the board')
   expect((await ui.find({ key: 'diag:line:1' }))?.text).toBe('driver @cc-gone: last heartbeat 183m ago, stale at 20m - a stage is still marked in flight')
   expect((await ui.find({ key: 'diag:close-what' }))?.text).toContain('137 (f00d1e5)')
-  expect(w.runs.slice(before).map(a => a.slice(0, 2).join(' '))).toEqual([`/bin/sh ${RELAY}.sh`, 'git merge-base', 'git log'])   // resume, one sha check, one log
-  expect(w.runs.slice(before)[1]).toEqual(['git', 'merge-base', '--is-ancestor', 'abc1', 'HEAD'])
-  expect(w.runs.slice(before)[2]).toEqual(['git', 'log', '-1', '--format=%h', '--grep=^B10:', 'HEAD'])
+  // review fixes 2: list and resume read fresh, the landed sha, the run branch merged, its commits
+  expect(w.runs.slice(before).map(a => a[0] === 'git' ? a.slice(0, 2).join(' ') : a[2])).toEqual(['list', 'resume', 'git merge-base', 'git merge-base', 'git log'])
+  expect(w.runs.slice(before)[2]).toEqual(['git', 'merge-base', '--is-ancestor', 'abc1', 'HEAD'])
+  expect(w.runs.slice(before)[3]).toEqual(['git', 'merge-base', '--is-ancestor', 'run/RUN-0020-marathon', 'HEAD'])
+  expect(w.runs.slice(before)[4]).toEqual(['git', 'log', '--format=%h %s', '--grep=^B10:', 'run/RUN-0020-marathon'])
   expect(w.runs.some(a => a[3] === 'stage')).toBe(false)                     // read-only so far
   await ui.press({ key: 'diag:close' })
   expect((await ui.find({ key: 'diag:confirm' }))?.text).toContain("mark 1 stage landed in RUN-0020's run file?")
@@ -565,6 +569,76 @@ test('F99 Diagnose: a tab switch while it reads leaves no stale view behind', as
   await ui.press({ key: 'tab:runs' })
   expect(await ui.find({ key: 'diag:title' })).toBeUndefined()
   expect(await ui.find({ key: 'sect:runs' })).toBeDefined()
+  await ui.unmount()
+})
+// Review fixes 2.
+const BY_HAND = 'by hand: relay-morpheus.sh RUN-0020 stage 137 x <owner> <sha>'
+test('F99 Diagnose: no Close unless the run branch is merged and holds a commit per ticket - the by-hand command instead', async ($, on) => {
+  const [w, clock] = f85World(on, WF_RUN(`@cc-gone ${stampAgo(183)}`, '~'))
+  w.files['/r/TICKETS.md'] = BOARD.replace('- [ ] B2 — cart', '- [ ] B2 — cart\n- [x] B10 — muse\n- [x] A155 — yoda')
+  w.git = { abc1: 0, 'run/RUN-0020-marathon': 1 }                        // the run branch not merged
+  w.logs = { 'run/RUN-0020-marathon': 'f00d1e5 B10: muse\n', HEAD: 'dead001 B10: an old unrelated fix\n' }
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+  await clock.settle()
+  const all = async () => (await ui.findAll({})).map(x => x.key).filter((k): k is string => !!k?.startsWith('diag:line:'))
+  const said = async () => Promise.all((await all()).map(async k => (await ui.find({ key: k }))?.text))
+  await ui.press({ key: 'diagnose:RUN-0020' })
+  await clock.settle()
+  expect(await ui.find({ key: 'diag:close' })).toBeUndefined()
+  expect(await said()).toContain(`stage 137: run branch run/RUN-0020-marathon is not merged into HEAD - ${BY_HAND}`)
+  await ui.press({ key: 'diag:back' })
+  // merged, but B10's only commit names it mid-subject: not its commit
+  w.git['run/RUN-0020-marathon'] = 0
+  w.logs['run/RUN-0020-marathon'] = '0ab12cd A155: yoda, see B10: x\n'
+  await ui.press({ key: 'diagnose:RUN-0020' })
+  await clock.settle()
+  expect(await ui.find({ key: 'diag:close' })).toBeUndefined()
+  expect(await said()).toContain(`stage 137: no commit "B10: ..." on run/RUN-0020-marathon - ${BY_HAND}`)
+  expect(w.runs.some(a => a[3] === 'stage')).toBe(false)
+  await ui.unmount()
+})
+test('F99 Diagnose: git that cannot be asked is said - never "agree"', async ($, on) => {
+  const [w, clock] = f85World(on, WF_RUN(`@cc-live ${stampAgo(5)}`, '~'))
+  w.list = [row('0011', 'done before', 1, 1), ''].join('\n')
+  w.resume['RUN-0011'] = ['# Resuming .skillator/run-0011-done.md', '', ...STAGES(['| 1 | AA01 A155 yoda | x | build | - | abc1 |']),
+    '## Chain', `driver: -${SEP}hold: -${SEP}mode: agents`, '### AA01 - stage 1 - A155 yoda', 'tickets: A155', 'prompt: |', '  x', ''].join('\n')
+  w.gitDown = 'spawn git ENOENT'
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+  await clock.settle()
+  await ui.press({ key: 'diagnose:RUN-0011' })
+  await clock.settle()
+  expect((await ui.find({ key: 'diag:title' }))?.text).toBe('Diagnose RUN-0011: finished  Esc back')
+  expect(await ui.find({ key: 'diag:agree' })).toBeUndefined()
+  expect((await ui.find({ key: 'diag:line:0' }))?.text).toMatch(/^git not asked: .*spawn git ENOENT/)
+  await ui.unmount()
+})
+test('F99 Diagnose: the run read fresh - its list row with the open stage, not the last poll\'s', async ($, on) => {
+  // no Stages table: the open stage comes from the list row's "(stage 137 open)" only
+  const [w, clock] = f85World(on, ['# Resuming .skillator/run-0020-marathon.md', '', '## Chain', `driver: @cc-gone ${stampAgo(183)}${SEP}hold: -${SEP}mode: workflow`,
+    '### AAA9 - stage 137 - B10 muse', 'tickets: B10', 'prompt: |', '  x', ''].join('\n'))
+  w.files['/r/TICKETS.md'] = BOARD.replace('- [ ] B2 — cart', '- [ ] B2 — cart\n- [x] B10 — muse')
+  w.list = [row('0020', 'marathon', 0, 1), ''].join('\n')
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+  await clock.settle()
+  w.list = [row('0020', 'marathon', 0, 1, '137'), ''].join('\n')          // dispatched since the poll
+  await ui.press({ key: 'diagnose:RUN-0020' })
+  await clock.settle()
+  expect((await ui.find({ key: 'diag:line:0' }))?.text).toBe('stage 137: in flight in the run file, but B10 is [x] on the board')
+  await ui.unmount()
+})
+test('F99: only finished runs - a blank row between "no relay run open" and the first', async ($, on) => {
+  const [w, clock] = world(on)
+  w.list = [row('0011', 'done before', 3, 3), ''].join('\n')
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+  await clock.settle()
+  const nodes = await ui.findAll({})
+  const [i, j] = [nodes.findIndex(x => x.key === 'none'), nodes.findIndex(x => x.key === 'run:RUN-0011')]
+  expect(i >= 0 && j > i).toBe(true)
+  expect(nodes.slice(i + 1, j).some(x => !x.key && x.text === ' ')).toBe(true)
   await ui.unmount()
 })
 
