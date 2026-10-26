@@ -26,6 +26,14 @@ map: F97 -> F107 (source lines only; commit messages keep F97)
 - TICKETS.md:106, :191
 - docs/sessions/session-2026-10-26-clone-odo.md (13 lines)
 - plugin/practice/baselines/{green,scenario}-clone-odo-{cleanroom,reviews}.txt:1
+- plugin/practice/scripts/baseline-harness.sh:1805, :2106, :3084
+- plugin/skills/clone-odo/UPSTREAM.md:3
+
+## Reconcile (merge commit 6d2d846)
+
+- direction 1 (source arrived): 71 paths, 8 FAIL - all `take: renumbered` (TICKETS.md, the session doc, 4 baselines, baseline-harness.sh, UPSTREAM.md: each differs from the source only by F97 -> F107)
+- direction 2 (main undisturbed): 52 paths, 5 FAIL - the 4 manifests (`take: source`; main's only change, version 4.20.0, is present) and TICKETS.md (renumbered; main's lines untouched)
+- unexplained: none
 
 ## Hazard check
 
