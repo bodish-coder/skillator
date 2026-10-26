@@ -31,13 +31,17 @@ export function countsOf(board: Board | null): Counts | null {
   return { open: n(' ') + n('~') + n('%') + n('!') + n('?'), progress: n('~'), testing: n('%'), blocked: n('!'), decision: n('?') }
 }
 
-// The status line: `ops <n> open · 7d <pct>`. A figure past 15 minutes says so; none
-// is left out, never a stale one shown as live.
-export function statusText(open: number | null, u: Usage | null, now: number): string {
-  const head = `ops ${open === null ? '-' : open} open`
-  const w = u?.seven
-  if (!w) return head
-  return `${head} · 7d ${w.pct}%${isStale(w, now) ? ' (stale)' : ''}`
+// F95: the status line: `ops <p> pending | <i> in progress | <t> total · 5h <pct>`, 7d after
+// it only while the line stays within STATUS_MAX. A figure past 15 minutes says so; none is
+// left out, never a stale one shown as live.
+const STATUS_MAX = 60
+export function statusText(c: Counts | null, u: Usage | null, now: number): string {
+  const head = !c ? 'ops -'
+    : `ops ${c.open - c.progress - c.testing - c.blocked - c.decision} pending | ${c.progress} in progress | ${c.open} total`
+  const part = (label: string, w: Window | null | undefined) => (w ? ` · ${label} ${w.pct}%${isStale(w, now) ? ' (stale)' : ''}` : '')
+  const line = head + part('5h', u?.five)
+  const seven = line + part('7d', u?.seven)
+  return seven.length <= STATUS_MAX ? seven : line
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
