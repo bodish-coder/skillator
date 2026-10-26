@@ -72,6 +72,8 @@ try {
   $quoted = '{"type":"assistant","message":{"content":[{"type":"text","text":"say \"x\" grade: later"}]}}'
   $decoy  = '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Send","input":{"text":"grade: fake"}}]}}'
   $other  = '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"skillator:tickets-zordon"}}]}}'
+  $handoff = '{"type":"assistant","message":{"content":[{"type":"text","text":"grade: handed to design-arwen (ui-only) - no build pass"}]}}'
+  $arwen  = '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"skillator:design-arwen"}}]}}'
   if ((T @($other, $narr)) -ne '-') { Fail 'no build-jarvis load must allow' }
   if ((T @($load, $body)) -ne 'deny') { Fail "the skill body's example grade line counted" }
   if ((T @($load, $body, $think)) -ne 'deny') { Fail 'a grade in thinking counted' }
@@ -81,6 +83,7 @@ try {
   if ((T @($load, $body, $first)) -ne '-') { Fail 'a first-line grade did not allow' }
   if ((T @($load, $body, $later)) -ne '-') { Fail 'a grade on a later line did not allow' }
   if ((T @($load, $first, $load, $narr)) -ne 'deny') { Fail 'a reload did not reset the grade' }
+  if ((T @($load, $body, $handoff, $arwen)) -ne '-') { Fail 'the Step 0.0 ui-only hand-off line did not allow' }
   if ((Get-Verdict (Join-Path $d 'missing.jsonl')) -ne '-') { Fail 'a missing transcript must allow' }
   $null = T @($load, $narr)
   $jp = $tf -replace '\\', '\\'

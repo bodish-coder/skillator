@@ -476,7 +476,7 @@ and `grayskull-power` still routes to those:
 
 | Skill | Owns |
 |---|---|
-| `skillator:design-arwen` | The UI/UX design itself — run it **as** the design phase when the deliverable is an interface, and its `references/canvas.md` is §1's visual companion |
+| `skillator:design-arwen` | UI-only design work; inside a UI feature, the UI pass `build-jarvis` runs after its core design. Its `references/canvas.md` is §1's visual companion |
 | `skillator:live-friday` | The app running before the first edit |
 | `skillator:audit-sherlock` | A whole-codebase forensic audit |
 | `skillator:tickets-zordon` | `TICKETS.md`, the board |

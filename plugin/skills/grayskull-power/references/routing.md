@@ -27,7 +27,7 @@ named in a headless "work these tickets". On Claude Code the `UserPromptSubmit`
 route hook (`build-jarvis/references/route-hook.md`) puts the same line in front
 of a feature-shaped prompt. A UI to add or change is a feature: build-jarvis
 grades it `ui arwen|tron` and runs the craft skill after the core design; only
-UI-only work, or the skill named, goes to design-arwen / tui-tron directly.
+UI-only work, the skill named or not, goes to design-arwen / tui-tron directly.
 When the answer is a decision and
 no code will be written, run PRACTICE §1 here in the session instead — classify,
 ask one question at a time, present, stop.
@@ -102,7 +102,7 @@ re-check anything an agent asserts without evidence.
 | "what did we defer", "list the shortcuts", the `shortcut:` / `ponytail:` marker ledger, "anything we knowingly left for later" | `code-yoda` → `references/debt.md` (rows reach the board only through `tickets-zordon`'s gate) |
 | You notice bloat while doing something else and want to *suggest* a code-yoda pass | one line, Yoda's voice, picked from code-yoda §8 — "Heavy, this diff is. A review from code-yoda, take you should." — then carry on; never run it unasked |
 | Build, add, implement or change a feature, any size, any entry (direct, logged, an F ticket, a headless run) | `build-jarvis` — grades its own models per seat; "use fable" / "opus only" / "cheap" / "full ceremony" are settings there, not other skills |
-| UI-only work — redesign, improve or critique an existing UI, native or web, or the user names the skill | `design-arwen` (never `frontend-design`; a UI to build is `build-jarvis`, which runs design-arwen as its UI design step) |
+| UI-only work — redesign, improve or critique an existing UI, native or web, the skill named or not | `design-arwen` (never `frontend-design`; a UI to build is `build-jarvis`, which runs design-arwen as its UI design step) |
 | A static/mock UI that needs to actually work | `designui-galadriel` |
 | What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-watson` |
 | "check screenshot", or verify a change in a running app visually | `screenshot-argus` |

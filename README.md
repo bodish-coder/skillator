@@ -216,7 +216,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   arms the standing skills (reads `TICKETS.md`, checks `watch-cortana` is wired),
   prints the state in a single line, then routes each request to the one skill
   that fits — across skillator (`audit-sherlock` for rot, `build-jarvis` for
-  features, `design-arwen` for UI, `mergeprep-oracle`/`deploy-niyoj` for shipping) *and*
+  features, `design-arwen` for UI-only work, `mergeprep-oracle`/`deploy-niyoj` for shipping) *and*
   the wider installed toolkit: `code-review`, `security-review`,
   `run`/`webapp-testing` to see it actually work, `workflow-authoring`/`mem-search`
   for agent work. The process itself comes from **`PRACTICE.md`** at the repo root

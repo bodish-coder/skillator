@@ -9,7 +9,7 @@ description: >-
   skill is named. NOT for a UI feature to build (build-jarvis runs this as
   its UI design step), backend or non-UI work.
 user-invocable: true
-argument-hint: "[build|redesign|improve|critique] [target]"
+argument-hint: "[build|redesign|improve|critique] [UI-only target]"
 license: MIT
 ---
 
@@ -42,6 +42,10 @@ No mode given → infer from intent and *say which you picked in one line*:
 "make it bolder / fix the spacing / the colors feel flat / add motion" → `improve` ·
 "review this / what's wrong with it" → `critique` · existing app + "modernise, overhaul,
 elevate" → `redesign` · otherwise `build`. Two modes could fit → ask once.
+`build` is for UI-only builds: a restyle, polish, a static page with no behaviour. A new
+UI feature with behaviour (state, data, actions) goes to `skillator:build-jarvis`, even
+when this skill is named; it runs arwen as its design-only UI pass, and that pass follows
+build-jarvis's prompt.
 
 **Every mode reads Phase 0–2 below.** `build`, `redesign`, and `improve` also read
 [references/craft.md](references/craft.md) — the non-negotiable production rules

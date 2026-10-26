@@ -13,8 +13,11 @@
 # --settings swapped for transcripts/f100-settings.json (the harness settings
 # plus the prefix's feature-route.sh UserPromptSubmit hook and grade-gate.sh
 # PreToolUse hook, installed as build-jarvis/references/route-hook.md says)
-# and --include-hook-events. Driver: transcripts/f100-drive.sh, runs
-# sequential, exact commands in transcripts/f100-<name>-<n>.cmd. No
+# and --include-hook-events. Driver: transcripts/f100-drive.sh
+# <scratch-dir> <n> <name>..., runs sequential, exact commands in
+# transcripts/f100-<name>-<n>.cmd - their scratchpad and worktree paths (and
+# f100-settings.json's) are the original run's; the driver rewrites the
+# settings for its own <scratch-dir> and writes fresh .cmd files. No
 # --max-budget-usd (A121). N=1 each; the miss got a second run (README rule).
 # Isolation caveat (README asymmetry rule): the user's plugins load in GREEN.
 #

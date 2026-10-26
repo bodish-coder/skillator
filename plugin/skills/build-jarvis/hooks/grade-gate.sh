@@ -62,6 +62,8 @@ selftest() {
   quoted='{"type":"assistant","message":{"content":[{"type":"text","text":"say \"x\" grade: later"}]}}'
   decoy='{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Send","input":{"text":"grade: fake"}}]}}'
   other='{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"skillator:tickets-zordon"}}]}}'
+  handoff='{"type":"assistant","message":{"content":[{"type":"text","text":"grade: handed to design-arwen (ui-only) - no build pass"}]}}'
+  arwen='{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"skillator:design-arwen"}}]}}'
   t() { printf '%s\n' "$@" > "$d/t.jsonl"; check "$d/t.jsonl"; }
   [ "$(t "$other" "$narr")" = - ] || die "no build-jarvis load must allow"
   [ "$(t "$load" "$body")" = deny ] || die "the skill body's example grade line counted"
@@ -72,6 +74,7 @@ selftest() {
   [ "$(t "$load" "$body" "$first")" = - ] || die "a first-line grade did not allow"
   [ "$(t "$load" "$body" "$later")" = - ] || die "a grade on a later line did not allow"
   [ "$(t "$load" "$first" "$load" "$narr")" = deny ] || die "a reload did not reset the grade"
+  [ "$(t "$load" "$body" "$handoff" "$arwen")" = - ] || die "the Step 0.0 ui-only hand-off line did not allow"
   [ "$(check "$d/missing.jsonl")" = - ] || die "a missing transcript must allow"
   h="$0"
   t "$load" "$narr" > /dev/null
