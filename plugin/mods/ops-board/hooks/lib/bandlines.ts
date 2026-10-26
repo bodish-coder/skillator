@@ -14,6 +14,7 @@ export type BandInput = {
   watch: Watch; machine: Machine | null; usage: Usage | null
   relay: string | null              // "RUN-0012 2/4": the first run not all done
   counts: Counts | null; narrow: boolean; cols: number; now: number
+  me?: string | null                // F97: the session owner's @handle (team.ts meOf), none null
 }
 // One Seg for band, health and runs lines: bold is health's headings, drop the band's fold order.
 export type Seg = { text: string; color?: Color; dim?: boolean; inverse?: boolean; bold?: boolean; drop?: 1 | 2 }
@@ -31,17 +32,19 @@ export function countsOf(board: Board | null): Counts | null {
   return { open: n(' ') + n('~') + n('%') + n('!') + n('?'), progress: n('~'), testing: n('%'), blocked: n('!'), decision: n('?') }
 }
 
-// F95: the status line: `ops <p> pending | <i> in progress | <t> total · 5h <pct>`, 7d after
-// it only while the line stays within STATUS_MAX. A figure past 15 minutes says so; none is
-// left out, never a stale one shown as live.
+// F95: the status line: `ops [@me] <p> pending | <i> in progress | <t> total · 5h <pct>`, 7d
+// after it only while the line stays within STATUS_MAX; F97: past that the handle goes too,
+// and the handle-less line is shown whatever its length. A figure past 15 minutes says so;
+// none is left out, never a stale one shown as live.
 const STATUS_MAX = 60
-export function statusText(c: Counts | null, u: Usage | null, now: number): string {
-  const head = !c ? 'ops -'
-    : `ops ${c.open - c.progress - c.testing - c.blocked - c.decision} pending | ${c.progress} in progress | ${c.open} total`
+export function statusText(c: Counts | null, u: Usage | null, now: number, me: string | null): string {
+  const counts = !c ? '-'
+    : `${c.open - c.progress - c.testing - c.blocked - c.decision} pending | ${c.progress} in progress | ${c.open} total`
   const part = (label: string, w: Window | null | undefined) => (w ? ` · ${label} ${w.pct}%${isStale(w, now) ? ' (stale)' : ''}` : '')
-  const line = head + part('5h', u?.five)
-  const seven = line + part('7d', u?.seven)
-  return seven.length <= STATUS_MAX ? seven : line
+  const five = part('5h', u?.five), seven = part('7d', u?.seven)
+  const head = (who: string | null) => `ops ${who ? who + ' ' : ''}${counts}`
+  const tries = [head(me) + five + seven, head(me) + five, head(null) + five]
+  return tries.find(t => t.length <= STATUS_MAX) ?? tries[2]!
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -82,7 +85,7 @@ export function bandSegs(v: BandInput): Seg[][] {
   if (w.level === 'red') return [redLine(w)]
   const held = (u?.decision ?? '').startsWith('HOLD')
   const held7 = held && / 7d$/.test(u?.decision ?? '')
-  const lead: Seg[] = [{ text: GLYPH[w.level], color: LEVEL_COLOR[w.level] }, { text: ' ops' }]
+  const lead: Seg[] = [{ text: GLYPH[w.level], color: LEVEL_COLOR[w.level] }, { text: v.me ? ` ops ${v.me}` : ' ops' }]
   const disk = figSegs('disk', m?.diskFree, DISK), mem = figSegs('mem', m?.memFree, MEM)
   const five = windowSegs('5h', u?.five ?? null, now, held && !held7)
   const seven = windowSegs('7d', u?.seven ?? null, now, held7)

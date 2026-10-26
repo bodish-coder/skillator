@@ -1,12 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, TextProps } from 'claude-code'
-import type { Board, Engage, RunView } from '../types'
+import type { Board, Diagnose, Engage, RunView } from '../types'
 import type { AgentsView } from './agentstab'
-import { runCall } from './lib/host'
+import { gitBin, runCall } from './lib/host'
 import { parseRuns, scriptPathOf } from './lib/runs'
-import { continuePrompt, engageOf, runLines, stageTickets as ticketsOf } from './lib/runlines'
+import { continuePrompt, engageOf, finishedLine, isFinished, runLines, stageTickets as ticketsOf } from './lib/runlines'
 import type { RunLine } from './lib/runlines'
 import { treeLines } from './lib/agents'
+import { diagnose } from './lib/diagnose'
+import type { ShaState } from './lib/diagnose'
 export { continuePrompt, runLines, waves } from './lib/runlines'
 
 // F50, design §8: the Runs tab (mock m-plan). relay-morpheus list, then resume (F85: the
@@ -21,6 +23,7 @@ const runsA = atom({ plugin: 'ops-board', key: 'runs' } as const, [])
 const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const engageA = atom({ plugin: 'ops-board', key: 'engage' } as const, null)
+const diagnoseA = atom({ plugin: 'ops-board', key: 'diagnose' } as const, null)   // F99
 const tabA = atom({ plugin: 'ops-board', key: 'tab' } as const, 'tickets')
 
 const PANE = 'ops-board'          // pane.tsx's PANE_ID (it imports this file)
@@ -64,18 +67,21 @@ export async function pollRuns($: EngineInterface): Promise<void> {
   }
 }
 
-// F85: the confirm is up while the Workflows tab is the one shown (as the Run tab's form).
+// F85: the confirm is up while the Workflows tab is the one shown (as the Run tab's form); F99: the Diagnose view likewise
 export async function isEngageUp($: EngineInterface): Promise<boolean> {
-  return (await read($, tabA)) === 'runs' && (await read($, engageA)) !== null
+  return (await read($, tabA)) === 'runs' && ((await read($, engageA)) !== null || (await read($, diagnoseA)) !== null)
 }
 // /ops to another tab and an unload: the confirm just goes.
 export async function dropEngage($: EngineInterface) {
   if ((await read($, engageA)) !== null) await update($, engageA, () => null)
+  if ((await read($, diagnoseA)) !== null) await update($, diagnoseA, () => null)   // F99
 }
 // Cancel, Esc and done: the tab back, Esc the pane's own again.
 export async function closeEngage($: EngineInterface) {
-  if ((await read($, engageA)) === null) return
+  const up = (await read($, engageA)) !== null || (await read($, diagnoseA)) !== null   // F99: the Diagnose view too
+  if (!up) return
   await update($, engageA, () => null)
+  await update($, diagnoseA, () => null)
   await $.ui.open({ id: PANE, title: PANE_NAME })
 }
 
@@ -120,10 +126,60 @@ export async function engageGo($: EngineInterface): Promise<void> {
   void pollRuns($).catch(() => {})
 }
 
+// F99: Diagnose - the run read fresh (list and resume, read-only), every landed sha asked of git
+// (on HEAD / elsewhere / unknown), the board and the driver stamp; diagnose() judges. Each
+// closable stage gets the by-hand close command - its landed cell's path, or its sha when on
+// HEAD, else `<sha>`; nothing runs (Close is F104). Git that cannot be asked is said.
+export async function openDiagnose($: EngineInterface, id: string): Promise<void> {
+  const l = await runCall($, 'relay-list', [])
+  const c = l.code === 0 ? await runCall($, 'relay-resume', [id]) : l
+  const run = c.code === 0 ? parseRuns(l.out, { [id]: c.out }).find(r => r.id === id) : undefined
+  if (!run) { $.ui.toast(`■ ${id} not diagnosed: ${c.code === 0 ? 'not in relay-morpheus list' : c.err.trim() || c.out.trim() || `exit ${c.code}`}`); return }
+  const repo = await $.session.repo()
+  const git = repo ? await gitBin($) : null
+  let gitWhy = ''
+  const ask = async (args: string[]) => {
+    if (!gitWhy && !repo) gitWhy = 'not in a git repo'
+    if (!gitWhy && !git) gitWhy = 'no git found on PATH'
+    if (gitWhy) return null
+    try { return await $.process.run([git!, ...args], { cwd: repo!.root, timeoutMs: 10000 }) } catch (e) {
+      gitWhy = `git ${args[0]}: ${e instanceof Error ? e.message : String(e)}`
+      return null
+    }
+  }
+  const shas = new Map<string, ShaState>()
+  for (const s of run.stages) {
+    // a sha only: relay also takes a path, and a > row's cell names a stage - neither is git's
+    if (!s.landed || shas.has(s.landed) || !/^[0-9a-f]{4,40}$/i.test(s.landed)) continue
+    const r = await ask(['merge-base', '--is-ancestor', s.landed, 'HEAD'])
+    if (r) shas.set(s.landed, r.exitCode === 0 ? 'head' : r.exitCode === 1 ? 'off' : 'none')
+  }
+  const d = diagnose(run, await read($, boardA), shas, await $.clock.now())
+  // runnable as copied: the script and platform form runCall used for the list; no owner, so the cell is kept
+  const script = l.argv.find(a => /relay-morpheus\.(sh|ps1)$/.test(a))
+  const byHand = !script ? [] : d.closable.map(cl => {   // no script in the argv: no line, never `sh "undefined"`
+    const own = run.stages.find(s => s.n === cl.n)?.landed
+    const isSha = own !== undefined && /^[0-9a-f]{4,40}$/i.test(own)
+    const sha = own && (!isSha || shas.get(own) === 'head') ? (isSha ? own : `"${own}"`) : '<sha>'   // a path (quoted), or a sha on HEAD
+    return script?.endsWith('.ps1')
+      ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${script}" -Mode stage -Id ${id} -N ${cl.n} -State x -Landed ${sha}`
+      : `sh "${script}" ${id} stage ${cl.n} x '' ${sha}`
+  })
+  if (gitWhy) d.lines.push(`git not asked: ${gitWhy}`)
+  if ((await read($, tabA)) !== 'runs') return              // the tab left while git answered: no stale view
+  await update($, diagnoseA, () => ({ id, verdict: d.verdict, lines: d.lines, byHand }))
+  await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
+  void $.ui.focus({ requestId: PANE, key: 'diag:back' }).catch(() => {})
+}
+
+export async function readDiagnose($: EngineInterface): Promise<Diagnose | null> {
+  return read($, diagnoseA)
+}
+
 export type RunsView = { runs: RunView[]; board: Board | null; cols: number; engage: Engage | null }
 
-// The runs the tab draws: those not all done (the rest are counted, not drawn).
-export const openRuns = (runs: RunView[]) => runs.filter(r => !(r.total > 0 && r.done >= r.total))
+// The runs the tab draws in full: those not all done (F99: the finished ones get one dim row after them).
+export const openRuns = (runs: RunView[]) => runs.filter(r => !isFinished(r))   // F99: the one definition
 
 export async function readRuns($: EngineInterface, cols: number): Promise<RunsView> {
   return { runs: await read($, runsA), board: await read($, boardA), cols, engage: await read($, engageA) }
@@ -147,13 +203,28 @@ export function EngageConfirm($: EngineInterface, els: Els, g: Engage): RenderEl
   ]
 }
 
+// F99: the Diagnose view, in place of the tab (B5). Read-only.
+export function DiagnoseView($: EngineInterface, els: Els, d: Diagnose): RenderElement[] {
+  const { Box, Text, Button } = els
+  const color = d.verdict === 'finished' ? 'success' : d.verdict === 'still running' ? 'warning' : 'error'
+  return [
+    <Box key="diag:title"><Text bold>{`Diagnose ${d.id}: `}</Text><Text bold color={color}>{d.verdict}</Text><Text dimColor>{'  Esc back'}</Text></Box>,
+    <Text> </Text>,
+    ...(d.lines.length
+      ? d.lines.map((l, i) => <Box key={`diag:line:${i}`}><Text wrap="wrap">{l}</Text></Box>)
+      : [<Box key="diag:agree"><Text dimColor>run file, board, git and the driver stamp agree</Text></Box>]),
+    <Text> </Text>,
+    ...(d.byHand ?? []).map((l, i) => <Box key={`diag:byhand:${i}`}><Text dimColor wrap="wrap">{l}</Text></Box>),
+    <Button key="diag:back" onPress={() => { void closeEngage($) }}>Back</Button>,
+  ]
+}
+
 export function RunsTab($: EngineInterface, els: Els, v: RunsView, a: AgentsView): RenderElement[] {
   const { Box, Text, Button } = els
   const out: RenderElement[] = []
   const draw = (l: RunLine) =>
     <Box key={l.key}><Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim}>{s.text}</Text>)}</Text></Box>
   const open = openRuns(v.runs)
-  const finished = v.runs.length - open.length
   if (!open.length) out.push(<Box key="none"><Text dimColor>{'no relay run open - /skillator:plan-runs <tickets> plans one'}</Text></Box>)
   open.forEach((run, i) => {
     if (i) out.push(<Text> </Text>)
@@ -163,6 +234,7 @@ export function RunsTab($: EngineInterface, els: Els, v: RunsView, a: AgentsView
     out.push(
       <Box flexDirection="row" gap={3}>
         <Button key={'engage:' + run.id} variant="primary" onPress={() => { void openEngage($, run.id) }}>Engage</Button>
+        <Button key={'diagnose:' + run.id} onPress={() => { void openDiagnose($, run.id) }}>Diagnose</Button>
         {run.planned && <Box key={'edit:' + run.id}><Text dimColor>{`Edit in chat: /skillator:plan-runs ${ids.join(' ')}`}</Text></Box>}
       </Box>,
     )
@@ -171,9 +243,16 @@ export function RunsTab($: EngineInterface, els: Els, v: RunsView, a: AgentsView
   if (loose.length) {
     out.push(<Text> </Text>, <Box key="norun"><Text bold>no run</Text></Box>, ...loose.map(draw))
   }
-  if (finished) {
-    out.push(<Text> </Text>)
-    out.push(<Box key="finished"><Text dimColor>{`${finished} finished run${finished === 1 ? '' : 's'} not shown`}</Text></Box>)
-  }
+  // F99: finished runs after the active ones - one dim row each, Diagnose only, never Engage
+  v.runs.filter(isFinished).forEach(run => {
+    out.push(<Text> </Text>)                                // after a run, the no-run tree or 'no relay run open'
+    const l = finishedLine(run)
+    out.push(
+      <Box key={l.key} flexDirection="row" gap={2}>
+        <Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim}>{s.text}</Text>)}</Text>
+        <Button key={'diagnose:' + run.id} plain dimColor onPress={() => { void openDiagnose($, run.id) }}>diagnose</Button>
+      </Box>,
+    )
+  })
   return out
 }

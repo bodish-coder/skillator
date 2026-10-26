@@ -263,6 +263,18 @@ test('F76: a status dot on every run and stage row, coloured as the Tickets tab'
   assert.equal(dot(/^    ●  4  B2 /), 'text')
   assert.equal(line(/▾ Runs \(3\)/)?.find(x => /Runs/.test(x.text))?.color, 'warning')
 })
+// F99: a finished run sorts after the active ones and draws dim whole, its done dot kept.
+test('F99: finished runs after the active ones, their rows dim', () => {
+  const list = 'RUN-0011  older run  3/3 done\nRUN-0012  board sweep  2/4 done  (stage 3 open)\n'
+  const r = reduce(onRuns(s, list, {}), { name: '2' }).state
+  const f = sized(r)
+  const i11 = f.findIndex(l => /RUN-0011  older run/.test(l)), i12 = f.findIndex(l => /RUN-0012  board sweep/.test(l))
+  assert.ok(i12 >= 0 && i11 > i12, f.join('\n'))
+  const segs = frameSegs({ ...r, rows: 40 })
+  const line = segs.find(l => /RUN-0011  older run/.test(l.map(x => x.text).join('')))!
+  assert.equal(line.find(x => x.text === '●')?.color, 'success')
+  assert.ok(line.filter(x => x.text !== '●' && x.text.trim()).every(x => x.dim), JSON.stringify(line))
+})
 // T7a, as the mock's "Add person" frame and Team view (the mock wins over the block's
 // excerpt: the form is boxed like the assign dialog, the Team view's selected row is
 // marked at the left edge, its keys read "n add · del remove (asks first) · esc back").

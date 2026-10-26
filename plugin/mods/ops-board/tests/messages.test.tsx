@@ -60,6 +60,8 @@ function world(on: On, cfg = CFG_SET): [World, MockClock] {
       if (a[2] === 'inbox' && a[3] === 'tail') return { value: ran(INBOX) }
       if (a[2] === 'inbox' && a[3] === 'mark-read') { w.files[BOX + '/team-inbox.read'] = a[5] + '\n'; return { value: ran(`read up to ${a[5]}\n`) } }
     }
+    // F98: the setup script's --check pass (sh here: no OS=Windows_NT in this world)
+    if (a[0] === '/bin/sh' && a[1] === ROOT + '/skills/teams-uhura/scripts/setup.sh' && a[2] === '--check') return { value: ran('node: v22.11.0\ndevtunnel: missing - the walk installs it\n\n  node        v22.11.0\n  devtunnel   missing\n', 1) }
     if (a.includes('decide')) return { value: ran('UNOBSERVABLE\n') }
     return { value: ran('', 1, 'not in this test') }
   })
@@ -155,6 +157,41 @@ test('setup on re-open: the saved token only as set, the URL only as its host; C
   await clock.settle()
   expect(w.runs.some(r => r.argv[2] === 'config' && r.argv[3] === 'clear')).toBe(true)
   expect(w.toasts.at(-1)).toContain('✓ Teams settings cleared')
+  await ui.unmount()
+})
+
+// F98: the form offers the first-time setup script, after a confirm; only its --check pass runs
+// here (the walk asks questions and opens a sign-in), and the walk's command is shown for the
+// owner's terminal. Cancel runs nothing.
+test('F98 Run first-time setup: asks once, No runs nothing, Yes runs setup --check and shows its table and the walk command', async ($, on) => {
+  const [w, clock] = world(on, CFG_SET)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  await ui.press({ key: 'key:setup' })
+  await clock.settle()
+  const setupRuns = () => w.runs.filter(r => r.argv[2] === '--check')
+  await ui.press({ key: 'setup:run' })
+  expect((await ui.find({ key: 'setup:run-confirm' }))?.text).toContain("run teams-uhura's first-time setup check now?")
+  expect(setupRuns()).toHaveLength(0)                       // the confirm first
+  await ui.press({ key: 'setup:run-no' })
+  await clock.settle()
+  expect(await ui.find({ key: 'setup:run-confirm' })).toBeUndefined()
+  expect(setupRuns()).toHaveLength(0)                       // No ran nothing
+  await ui.press({ key: 'setup:run' })
+  await ui.press({ key: 'setup:run-yes' })
+  await clock.settle()
+  expect(setupRuns().map(r => r.argv)).toEqual([['/bin/sh', ROOT + '/skills/teams-uhura/scripts/setup.sh', '--check']])
+  expect(await ui.find({ key: 'setup:run-confirm' })).toBeUndefined()
+  expect((await ui.find({ key: 'setup:checked' }))?.text).toContain('devtunnel   missing')
+  expect((await ui.find({ key: 'setup:walk' }))?.text).toContain('runs in your terminal: /bin/sh ' + ROOT + '/skills/teams-uhura/scripts/setup.sh')
+  expect((await ui.find({ key: 'setup:walk' }))?.text).not.toContain('--check')
+  expect(await ui.find({ key: 'setup:result' })).toBeUndefined()   // exit 1 under --check is a table, not an error
+  // the form still saves and cancels as before; Cancel drops the check text
+  await ui.press({ key: 'setup:cancel' })
+  await clock.settle()
+  expect(await ui.find({ key: 'setup:checked' })).toBeUndefined()
   await ui.unmount()
 })
 

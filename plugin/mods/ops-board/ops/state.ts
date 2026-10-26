@@ -13,7 +13,7 @@ import { STATE_NAME, ticketById } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
-import { continuePrompt, engageOf, RUNS_SECTIONS } from '../hooks/lib/runlines'
+import { continuePrompt, engageOf, orderRuns, RUNS_SECTIONS } from '../hooks/lib/runlines'
 import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
@@ -607,7 +607,7 @@ export function onUsage(s: State, levelOut: string, now: number): Step {
 // --- runs ---
 
 export function onRuns(s: State, list: string, chains: Record<string, string>, scripts: Record<string, string> = {}): State {
-  const runs = parseRuns(list, chains, scripts)
+  const runs = orderRuns(parseRuns(list, chains, scripts))   // F99: finished runs after the active ones
   const first = runs.find(x => x.done < x.total)
   const runsSelected = runs.some(r => r.id === s.runsSelected) || isHead(s.runsSelected) ? s.runsSelected : runs[0]?.id ?? null
   return { ...s, runs, runsSelected, runsRead: true, relay: first ? `${first.id} ${first.done}/${first.total}` : null }

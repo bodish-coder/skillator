@@ -9,6 +9,7 @@ export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' 
   | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
   | 'usage-level'
   | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'
+  | 'team-setup-check'
   | 'run-scan' | 'run-rename'
 
 // Exists under a skills dir: what marks a directory as one.
@@ -20,6 +21,7 @@ const META = 'tickets-zordon/scripts/ticket-meta'
 const RELAY = 'relay-morpheus/hooks/relay-morpheus'
 const WATCH = 'watch-cortana/hooks/usage-watch'
 const RUNS = 'live-friday/scripts/run-entries'   // F79: the one writer of .skillator/run.json
+const SETUP = 'teams-uhura/scripts/setup'   // F98: the first-time setup walk; only its --check pass runs from the board
 
 // Forward slashes, no trailing one: both hosts take them, and joins stay simple.
 export const norm = (p: string) => p.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
@@ -32,7 +34,7 @@ export const up = (p: string, n: number) => {
 // args: meta-assign/meta-decide [id, @handle]; meta-decided / meta-unblock / meta-start [id];
 // meta-testing / meta-block [id, text]; meta-reconcile [ids...]; meta-team-add
 // [@handle, name, emails comma-joined]; meta-team-remove / meta-team-lead [@handle]; relay-resume and
-// relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; run-rename [id, name]; others none.
+// relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; run-rename [id, name]; team-setup-check none; others none.
 type ScriptCall = Exclude<Call, 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
   'pending':            { script: PENDING, sh: a => a, ps: a => a },
@@ -60,6 +62,7 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'usage-level':        { script: WATCH, sh: () => ['level'], ps: () => ['-Mode', 'level'] },
   'run-scan':           { script: RUNS, sh: () => ['scan'], ps: () => ['scan'] },
   'run-rename':         { script: RUNS, sh: a => ['rename', a[0] ?? '', a[1] ?? ''], ps: a => ['rename', a[0] ?? '', a[1] ?? ''] },
+  'team-setup-check':   { script: SETUP, sh: () => ['--check'], ps: () => ['--check'] },
 }
 
 // F66: teams-uhura's script is Node (no sh / ps1 twin): `node <skills>/teams-uhura/

@@ -12,7 +12,7 @@ import { openReconcile, renderReconcile } from './reconcile'
 import { paint } from './paint'
 import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
-import { EngageConfirm, openRuns, pollRuns, readRuns, RunsTab } from './runstab'
+import { DiagnoseView, EngageConfirm, openRuns, pollRuns, readDiagnose, readRuns, RunsTab } from './runstab'
 import { runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, statusColor } from './lib/runlines'
 import type { RunsSection } from './lib/runlines'
 import { workflowStatus } from './lib/agents'
@@ -205,15 +205,15 @@ async function RunsAndWorkflows($: EngineInterface, els: Els, cols: number): Pro
   const open = await read($, runsOpenA)
   const runs = await readRuns($, cols)
   const agents = await readAgents($, cols)
-  const shown = openRuns(runs.runs)
+  const active = openRuns(runs.runs)   // F99: finished runs count and draw (RunsTab); the agents tree matches active ones only
   const out: RenderElement[] = []
   for (const sec of [...RUNS_SECTIONS, 'agents'] as RunsSection[]) {   // F93: the pane's agents last
     const on = open.includes(sec)
-    const n = sec === 'runs' ? shown.length : sec === 'workflows' ? agents.workflows.length : agents.agents.length
+    const n = sec === 'runs' ? runs.runs.length : sec === 'workflows' ? agents.workflows.length : agents.agents.length
     // F76: the header in the colour of the most pressing status under it, as a ticket group's
     // (F93: Agents uncoloured - each agent row carries its own status colour)
     const st = sec === 'agents' ? null
-      : sectionStatus(sec === 'runs' ? shown.map(runStatus) : agents.workflows.map(r => workflowStatus(agents.agents, r)))
+      : sectionStatus(sec === 'runs' ? runs.runs.map(runStatus) : agents.workflows.map(r => workflowStatus(agents.agents, r)))
     if (sec !== RUNS_SECTIONS[0]) out.push(<Text> </Text>)
     out.push(
       <Button key={'sect:' + sec} plain onPress={() => { void update($, runsOpenA, x => toggleGroup(x, sec)) }}>
@@ -221,7 +221,7 @@ async function RunsAndWorkflows($: EngineInterface, els: Els, cols: number): Pro
       </Button>,
     )
     if (on) out.push(...(sec === 'runs' ? RunsTab($, els, runs, agents) : sec === 'workflows' ? WorkflowsTab(els, agents)
-      : AgentsTab(els, { ...agents, runs: shown, board: runs.board })))
+      : AgentsTab(els, { ...agents, runs: active, board: runs.board })))
   }
   return out
 }
@@ -300,6 +300,8 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
     // F85: the engage confirm draws without the tab bar, as the Run tab's form does
     const g = (await readRuns($, cols)).engage
     if (g) return <Box flexDirection="column">{EngageConfirm($, els, g)}</Box>
+    const d = await readDiagnose($)
+    if (d) return <Box flexDirection="column">{DiagnoseView($, els, d)}</Box>   // F99: the Diagnose view likewise
     return (
       <Box flexDirection="column">
         {bar}

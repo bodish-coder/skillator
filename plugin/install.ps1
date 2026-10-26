@@ -750,6 +750,16 @@ function Invoke-SelfTest([string]$T) {
   if (-not $ut.Contains($uline)) { return 'non-ASCII line lost from a UTF-16 LE profile' }
   if (-not $ut.Contains($opsLine)) { return 'ops function target in a UTF-16 LE profile' }
 
+  # B13: a profile that cannot be read (held open with no sharing - ReadAllBytes throws, as
+  # it does on a OneDrive placeholder with the app stopped): one warning, the rest still runs, exit 0
+  Remove-Item -LiteralPath $frag -Force
+  $lock = [IO.File]::Open($prof, 'Open', 'ReadWrite', 'None')
+  try { $out = & $run @() } finally { $lock.Close() }
+  if ($script:selfCode -ne 0) { return "unreadable profile install exited $script:selfCode" }
+  if (-not $out.Contains("warn  function ops not written: cannot update $prof")) { return 'unreadable profile warning line' }
+  if (-not $out.Contains('pass -Profile <path> to choose another')) { return 'unreadable profile -Profile way out' }
+  if (-not (Test-Path -LiteralPath $frag)) { return 'Windows Terminal fragment not written after an unreadable profile' }
+
   # the plugin installed: the function still runs the first dest written (refreshed every
   # run), never the versioned plugin cache a plugin update can remove
   $P = Join-Path $T 'p'
@@ -961,11 +971,19 @@ if ($shimSrc -and -not $PSBoundParameters.ContainsKey('Profile') -and $scratch.C
   if ($DryRun) {
     Write-Host "        would write function ops in $Profile -> $shimSrc\ops.ps1"
   } else {
-    $dups = Write-OpsFunction $shimSrc $Profile
-    Write-Host "ops   function ops in $Profile -> $shimSrc\ops.ps1 (new shells; or . `$PROFILE now)"
-    if ($writtenDests.Count -eq 0) { Write-Host "      the plugin's copy (no skills dir written) - run this again after a plugin update" }
-    Write-Host "      remove: delete the '# >>> skillator ops >>>' block from that file"
-    if ($dups -gt 0) { Write-Host "      removed $dups duplicate ops block(s) from $Profile" -ForegroundColor Yellow }
+    # B13: a profile that cannot be read or written (a OneDrive placeholder with the app
+    # stopped) skips this step only - the rest of the install still runs
+    try { $dups = Write-OpsFunction $shimSrc $Profile }
+    catch {
+      Write-Host "warn  function ops not written: cannot update $Profile ($($_.Exception.Message)); pass -Profile <path> to choose another" -ForegroundColor Yellow
+      $dups = $null
+    }
+    if ($null -ne $dups) {
+      Write-Host "ops   function ops in $Profile -> $shimSrc\ops.ps1 (new shells; or . `$PROFILE now)"
+      if ($writtenDests.Count -eq 0) { Write-Host "      the plugin's copy (no skills dir written) - run this again after a plugin update" }
+      Write-Host "      remove: delete the '# >>> skillator ops >>>' block from that file"
+      if ($dups -gt 0) { Write-Host "      removed $dups duplicate ops block(s) from $Profile" -ForegroundColor Yellow }
+    }
   }
 }
 # F89: the Windows Terminal profile the ops tab opens in (`ops -Open`): a fragment, read
