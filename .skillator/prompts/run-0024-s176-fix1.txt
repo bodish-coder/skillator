@@ -1,0 +1,23 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+Ticket A157 (clone-odo description never auto-loads) - review fix round 1. You are a FIX seat on one file: plugin/practice/baselines/green-clone-odo-a157.txt (commit b583ee1). No new claude -p runs. Do not touch plugin/skills/clone-odo/SKILL.md.
+
+Worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0024-pending-f108-a157.s176 (branch run/RUN-0024-pending-f108-a157-s176). The transcripts the file cites are under plugin/practice/baselines/transcripts/ in that worktree; the F107 ones are f97-clone-odo-green-desc{,2,3}-reviews-{1,2}.jsonl.
+
+The review found the ruling claims more than the runs measured. Make the file say only what was measured:
+1. Lines ~11-13 and ~102-107: drop "the 0/10 (F107 0/6 + 0/4 here) is the listing dropping the description". F107's six runs ran in a Linux container with 65 skills in init (check their init records), which the 200+-skill truncation explanation does not cover. Say: this host's 0/4 is consistent with the listing dropping the description; F107's 0/6 on a 65-skill host is not explained by it and remains a wording or prompt-shape result.
+2. Lines ~8-10 and ~40-46: label each claim measured / self-reported / inferred. Measured: init skill counts (260, 207), Skill calls (control 2/2, rewrites 0/4), costs. Self-reported: "NO DESCRIPTION" is the model's copy of its own prompt - say so in the RULING header too. Inferred: "Runs 6 and 8 show that difference is not why" - the probes do not test prompt shape (the control prompt reuses code-yoda's trigger words, the reviews prompt is a data command); say it is not ruled out.
+3. Lines ~112-113: cost subtotals from the per-run transcript costs, unrounded then rounded once: total $1.20, descriptions $0.59, probes $0.19 (recompute from the transcripts and use what you get).
+4. Line ~72: write description B out verbatim (A minus "or", as the file says - reconstruct it exactly from A and confirm 80 words).
+5. Lines ~78-80: say both probes ran with cwd fx-r4, a fresh odo fixture with no run of its own.
+6. Line ~22: one clause on how the default model was established on this host (from the init records), or drop "the CLI default here is not sonnet" if nothing shows it.
+7. Add a "---- VERDICT ----" divider before the reading, and a verdict line: Done-line NOT met - the description does not load 1/2 on this host, and the ruling option is not established (the listing truncation is a separate finding; a run on a host with under 100 skills is owed).
+Also note run 1's answer line "three with no trigger" contradicts its own ledger (2) - one line.
+
+Verify: sh plugin/skills/clone-odo/scripts/odo.sh selftest (ok), sh plugin/practice/scripts/check-routing.sh (ok). Commit message starts with "A157: ".
+
+Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0024-pending-f108-a157.s176 (branch run/RUN-0024-pending-f108-a157-s176), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+Report back: the commit sha, the recomputed cost figures with their source, anything you could not verify (one line each).
