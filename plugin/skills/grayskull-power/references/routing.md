@@ -25,7 +25,10 @@ build-jarvis's grade, not other skills.
 feature `tickets-zordon` has just logged, an F ticket picked off the board or
 named in a headless "work these tickets". On Claude Code the `UserPromptSubmit`
 route hook (`build-jarvis/references/route-hook.md`) puts the same line in front
-of a feature-shaped prompt. When the answer is a decision and
+of a feature-shaped prompt. A UI to add or change is a feature: build-jarvis
+grades it `ui arwen|tron` and runs the craft skill after the core design; only
+UI-only work, or the skill named, goes to design-arwen / tui-tron directly.
+When the answer is a decision and
 no code will be written, run PRACTICE §1 here in the session instead — classify,
 ask one question at a time, present, stop.
 
@@ -47,7 +50,7 @@ that backwards is how a session produces confident wrong work.
 | Review findings landing on you | PRACTICE §6 — verify against this codebase before implementing |
 | Auth, secrets, input handling, anything user-facing | `security-review` |
 | Accessibility as the subject — an a11y/WCAG audit, "can't tab to it", "screen reader reads nothing", contrast failures, AT or CI wiring | `a11y-toph` (inside a design task it stays arwen's gate) |
-| A terminal UI's rendering as the subject — a TUI/curses/Textual/Rich screen that must be proven to draw, "wrong in a narrow terminal", "the footer wraps", mojibake box characters, or no pty to drive it | `tui-tron` |
+| A terminal UI's rendering as the subject, no feature behind it — a TUI/curses/Textual/Rich screen that must be proven to draw, "wrong in a narrow terminal", "the footer wraps", mojibake box characters, or no pty to drive it | `tui-tron` (a TUI feature to build is `build-jarvis`, which runs tui-tron as its UI design step and render proof) |
 | The deliverable is itself a skill, or a skill isn't triggering | `skill-smith` |
 | Branch lifecycle | PRACTICE §8 — isolation, then the finish menu |
 
@@ -99,7 +102,7 @@ re-check anything an agent asserts without evidence.
 | "what did we defer", "list the shortcuts", the `shortcut:` / `ponytail:` marker ledger, "anything we knowingly left for later" | `code-yoda` → `references/debt.md` (rows reach the board only through `tickets-zordon`'s gate) |
 | You notice bloat while doing something else and want to *suggest* a code-yoda pass | one line, Yoda's voice, picked from code-yoda §8 — "Heavy, this diff is. A review from code-yoda, take you should." — then carry on; never run it unasked |
 | Build, add, implement or change a feature, any size, any entry (direct, logged, an F ticket, a headless run) | `build-jarvis` — grades its own models per seat; "use fable" / "opus only" / "cheap" / "full ceremony" are settings there, not other skills |
-| Any UI/UX or front-end craft — build, redesign, improve, critique, native or web | `design-arwen` (never `frontend-design`) |
+| UI-only work — redesign, improve or critique an existing UI, native or web, or the user names the skill | `design-arwen` (never `frontend-design`; a UI to build is `build-jarvis`, which runs design-arwen as its UI design step) |
 | A static/mock UI that needs to actually work | `designui-galadriel` |
 | What a feature must do exists only in a conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session | `spec-watson` |
 | "check screenshot", or verify a change in a running app visually | `screenshot-argus` |

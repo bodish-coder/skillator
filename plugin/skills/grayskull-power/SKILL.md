@@ -58,13 +58,13 @@ One skill at a time; chaining "to be safe" is the failure.
 
 | The request is… | Go to |
 |---|---|
-| A feature, or an F ticket | `build-jarvis` — design included; never `superpowers:brainstorming` first |
+| A feature/F ticket, UI included | `build-jarvis`: core design, then `ui arwen\|tron`; never `superpowers:brainstorming` |
 | A bug, cause unknown | PRACTICE §7 **first** — root cause before any fix |
 | A decision, no code behind it | PRACTICE §1 in-session, then stop |
 | Log, list or close a ticket · a stated rule | `tickets-zordon` · `rules-orko` |
 | Whole-app audit · a staged diff | `audit-sherlock` · `code-review:code-review` |
 | Over-engineering · repo bloat · the shortcut ledger | `code-yoda` (review · audit · debt) |
-| UI/UX craft · a TUI's rendering · watch it live | `design-arwen` (never `frontend-design`) · `tui-tron` · `live-friday` |
+| UI-only polish · TUI rendering · watch it live | `design-arwen` (never `frontend-design`) · `tui-tron` · `live-friday` |
 | A mock UI to make real · a spec only in chat | `designui-galadriel` · `spec-watson` |
 | Screenshots · auth/secrets · a skill | `screenshot-argus` · `security-review` · `skill-smith` |
 | Merge · deploy · ending · resuming | `mergeprep-oracle`→`merge-smith` · `deploy-merlin`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |

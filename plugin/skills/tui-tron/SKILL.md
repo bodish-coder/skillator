@@ -5,8 +5,9 @@ description: >-
   Rich, Ink or bare-ANSI screen that must be proven to draw — "wrong in a
   narrow terminal", "the footer wraps", "columns stop lining up at 80", "it
   redraws garbage", "the box characters are mojibake", "ΓöÇ" — or there is no
-  pty to drive it: no tmux, stdin closed, winpty ASSERT_CONDITION. NOT for a
-  web or native GUI — that is `a11y-toph` and `design-arwen`.
+  pty to drive it: no tmux, stdin closed, winpty ASSERT_CONDITION; or this
+  skill is named. NOT for a TUI feature (build-jarvis) or a
+  web/native GUI (a11y-toph, design-arwen).
 ---
 
 # tui-tron — a terminal UI is proven by capturing frames, at every width

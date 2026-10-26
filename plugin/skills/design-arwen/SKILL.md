@@ -1,14 +1,13 @@
 ---
 name: design-arwen
 description: >-
-  Use whenever the user wants to build, redesign, improve or critique a
-  UI/UX, native or web - page, iOS/Android screen, dashboard,
-  form, onboarding or design system; or asks to make something less
-  generic, bolder, less AI-made; or to pick
-  fonts/colors/layout/motion, fix hierarchy, spacing, contrast, a11y or UI
-  performance, write UX copy and error states, or share one design language
-  across native and web. NOT for backend or non-UI work; `impeccable`
-  owns craft without aesthetic direction, gstack the finished page.
+  Use for UI-only work on a UI/UX, native or web - redesign, improve or
+  critique a page, screen, dashboard, form or design system; make it less
+  generic, bolder, less AI-made; pick fonts/colors/layout/motion; fix
+  hierarchy, spacing, contrast, a11y or UI performance; write UX copy and
+  error states; one design language across native and web - or when this
+  skill is named. NOT for a UI feature to build (build-jarvis runs this as
+  its UI design step), backend or non-UI work.
 user-invocable: true
 argument-hint: "[build|redesign|improve|critique] [target]"
 license: MIT
