@@ -1,0 +1,21 @@
+Load skillator:code-yoda first (restraint, full): no edits beyond what the ticket needs.
+Ticket A149 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line; it is the spec) - a live, headless proof on two hosts, no code change
+unless a run shows a skillator defect. Read practice/baselines/green-agy-engage-skills.txt first: it holds the exact agy flags, the setup, runs r1-r5 (all blocked by a
+429 quota that reset 2026-10-25 23:45) and the owed list (G1-G4, and the codex note at its end). Continue that file - append a dated section, never rewrite the old runs.
+Hosts on this machine (checked 2026-10-26): agy 1.4.7 at C:/Users/Ikran/AppData/Local/agy/bin/agy, signed in; codex-cli 0.164.0, signed in ONLY with
+CODEX_HOME=C:/Users/Ikran/.codex-bodish (without it codex says 'Not logged in'). The installed skillator on both is 4.16.0; main is now 4.17.0, where F90 (merged)
+ships the Codex commands as skills (<codex home>/skills/<name>/SKILL.md, called $engage / picked in /skills) instead of prompts (/prompts:engage). Test what is
+installed AND, if Codex reads project-level skills (check `codex --help` / its docs, not memory), the 4.17.0 skill form from a scratch clone of main with the skills
+placed in that clone's project skill folder - never by writing the owner's real ~/.codex-bodish, ~/.gemini or ~/.agents, and never copy auth.json anywhere.
+Runs, one at a time, at most 8 per host (quota): agy - r1 /engage (the **Engaged prompt:** block before the answer), bare /engage after a first message
+(--input-format stream-json, two lines), /pending, two skill routes ('log a bug: the export button is grey' -> tickets-zordon, 'by the power of grayskull' ->
+grayskull-power) from a fixture without the GEMINI.md steer, as A62c did. codex - the same five with `codex exec --json --ephemeral -s read-only` (the command form the
+installed version takes, and the $skill form if testable). Read-only sandbox / plan mode on every run; the scratch clone under
+C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/f9797c78-1133-441c-9724-e7418d827199/scratchpad/a149 is the working dir, MSYS_NO_PATHCONV=1.
+A quota or login failure is evidence, not a reason to retry: record it and stop that host.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0020-pending-a149-a62 (branch run/RUN-0020-pending-a149-a62) - the baseline
+file (and a skill fix only if a run proves a skillator defect). Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks.
+Run one plain command per call, by absolute path - never `cd` into the worktree. Git: `git -C "<worktree>" ...`. Read and edit files with the file tools.
+Before committing, run the built-in `code-review` skill (Skill tool, skill "code-review", args "low") on the worktree's staged diff.
+Commit as "A149: <what>" with the evidence. Report: sha, per host per run - resolved? block shown? route taken? - verbatim key lines, verdict per Done item
+(proven / not proven + why), anything left for the owner.

@@ -1,0 +1,19 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+Ticket B11 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its line, and B10's and F91's). The goal behind B11: `muse plugins marketplace add
+<name> https://github.com/bodish-coder/skillator` then `muse plugins install skillator@<name>` works. F91 has landed on this branch: the plugin lives in plugin/ and
+the Claude catalog's skillator entry is now the relative source ./plugin (not a github source). F91 found that `muse plugins marketplace add <name> <local clone>` now
+lists skillator and installs it - B10's failure was Muse cloning the github PLUGIN source into a \?\ path; a relative source needs no second clone.
+Order: (1) prove the git-URL form without a push: a bare clone of this branch at a SHORT path (e.g. C:/t/b11.git - F91's file:// probe failed only on 'Filename too
+long' from a long scratch path), then in a scratch Muse profile (USERPROFILE/HOME/XDG_DATA_HOME to a fresh short scratch dir - never the owner's real one):
+`muse plugins marketplace add b11 file:///C:/t/b11.git`, `muse plugins install skillator@b11`, `muse plugins list --json` (active, all skills), `muse plugins update
+skillator`. (2) If that works, B11 needs no native catalog: update README's Muse row and PLATFORMS.md's muse row + section (marketplace add supported once 4.17.x
+is pushed; the clone route stays as the alternative; the ops-board skip expected) and /skillator-update step 4 only if it must change. Do NOT build a native catalog
+or digest machinery in that case. (3) Only if (1) fails for a reason this repo can fix, build the native catalog at a root path Muse probes (marketplace.json or
+.agents/plugins/marketplace.json, never .claude-plugin/) pointing at ./plugin with a digest a script (sh + ps1) regenerates on every bump - find Muse's
+package_sha256 algorithm first (Muse's own wrong-digest error may print the expected value). If (1) fails for a reason outside this repo, say so with Muse's exact error.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0020-pending-a149-a62 (branch run/RUN-0020-pending-a149-a62). Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+Run one plain command per call, by absolute path - never `cd` into the worktree. Git: `git -C "<worktree>" ...`. No `&&` chains, no heredocs; read and edit files with the file tools. Checks one at a time (low RAM). Keep every .sh/.ps1 pure ASCII, LF, the two ports mirrored.
+NEVER run plugin/install.ps1, plugin/install.sh or the root shims without every destination env var (HOME, USERPROFILE, LOCALAPPDATA, CODEX_HOME, XDG_CONFIG_HOME) set to a scratch dir - install.ps1 ignores unknown flags and installs for real (B12, an incident this run).
+Before committing, run the built-in `code-review` skill (Skill tool, skill "code-review", args "low") on YOUR worktree's staged diff and fix what it finds.
+Checks: claude plugin validate <worktree> and <worktree>/plugin; sh <worktree>/plugin/practice/scripts/check-muse-manifest.sh; the scratch Muse transcript of step (1).
+Commit as "B11: <what>" with the evidence. Report: sha, which route closed it and why, the scratch Muse output verbatim, files touched.

@@ -1,0 +1,15 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+Load skillator:build-jarvis, then build ticket F92 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its whole line; it is the spec). It runs headless:
+make the smallest reasonable call for anything open and list it under 'Rulings'. F91 has landed on this branch: the plugin lives in plugin/ (plugin/skills/..., plugin/hooks/...).
+Owning code: plugin/skills/tickets-zordon/scripts/ticket-meta.sh + .ps1 (whoami / find_me - read the session owner file first; how a session tag is known: read how
+the scripts and relay-morpheus already name a session, e.g. the (@cc-xxxxxx) tags and the chain driver stamp - reuse it, do not invent a second scheme), plugin/skills/grayskull-power/SKILL.md
+and references/arming.md (the ask on arm - keep SKILL.md within its word budget; check-grayskull-sync and any word-count check must stay green), the plugin's Claude Code
+hooks (plugin/hooks/) for a SessionStart that only adds the team list and the ask to context, and .gitignore for the session files. tickets-zordon SKILL.md's whoami
+paragraph if it describes the order. Tests use fixture repos and temp dirs, never this repo's .skillator or the owner's home.
+NEVER run plugin/install.ps1, plugin/install.sh or the root shims without every destination env var (HOME, USERPROFILE, LOCALAPPDATA, APPDATA, CODEX_HOME, XDG_CONFIG_HOME) set to a scratch dir (B12 - an incident this run).
+This stage works and commits in its own worktree when the dispatch header says so; else in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0020-pending-a149-a62 (branch run/RUN-0020-pending-a149-a62). Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+Run one plain command per call, by absolute path - never `cd` into the worktree. Git: `git -C "<worktree>" ...`. No `&&` chains, no heredocs; read and edit files with the file tools. Checks one at a time (low RAM; other agents run beside you). Keep every .sh/.ps1 pure ASCII, LF, the two ports mirrored.
+Before committing, run the built-in `code-review` skill (Skill tool, skill "code-review", args "low") on YOUR worktree's staged diff and fix what it finds.
+Checks: ticket-meta.sh selftest and ticket-meta.ps1 selftest (red first for the session-owner cases); sh <worktree>/plugin/practice/scripts/check-grayskull-sync.sh; claude plugin validate <worktree>/plugin.
+A live baseline of the ask is the owner's - say so plainly if you cannot run one headless.
+Commit as "F92: <what>" with the evidence. Report: sha, red/green lines, rulings, files touched.

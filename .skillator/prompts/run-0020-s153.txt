@@ -1,0 +1,19 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+Load skillator:build-jarvis, then build ticket F91 (TICKETS.md in the main checkout C:/tools/Projects/skillator2 - read its whole line, and B11's and B10's; they are the spec).
+Owner chose it on 2026-10-26 to unblock B11. It runs headless: design first and write it down (docs/plans/PLAN-plugin-subfolder.md: what moves, what stays at the root,
+how each host's install and an existing install migrate with no manual step, whether Claude Code's plugin cache path changes), make the smallest reasonable call for
+anything open and list it under 'Rulings', then build it.
+Facts (verified 2026-10-26, Muse 1.4.13 binary and RUN-0019 stage 142): Muse's native catalog takes only transport local-path, with integrity.digest = package_sha256 of
+the plugin folder minus .git, so the catalog must sit OUTSIDE the folder it points at. The Claude catalog (.claude-plugin/marketplace.json) today lists skillator as
+{source: github, repo: bodish-coder/skillator} (the repo root) and ops-board as ./mods/ops-board; with the plugin in a subfolder its skillator entry becomes a relative
+./<subfolder> source like ops-board's. install.sh/.ps1, practice/scripts/*, check-muse-manifest.sh, host-commands, PLATFORMS.md and README name paths - grep them all.
+Keep at the repo root: TICKETS*.md, the .skillator/ folder, practice/, docs/, the catalogs. Scope breach rule: if the design needs more than the payload move plus
+path updates (a new dependency, a host you cannot verify), stop and say so - do not half-move. Never write the owner's real ~/.claude, ~/.codex*, ~/.gemini,
+~/.local/share/muse: scratch homes/profiles only.
+Work and commit ONLY in the run worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0020-pending-a149-a62 (branch run/RUN-0020-pending-a149-a62) - or the stage worktree the header above names, which replaces it. Never touch the main checkout, never push, never edit TICKETS.md, never bypass git hooks (no -c core.hooksPath=, no --no-verify).
+Run one plain command per call, by absolute path - never `cd` into the worktree. Git: `git -C "<worktree>" ...`. No `&&` chains, no heredocs; read and edit files with the file tools. Checks one at a time (low RAM). Keep every .sh/.ps1 pure ASCII, LF, the two ports mirrored.
+Before committing, run the built-in `code-review` skill (Skill tool, skill "code-review", args "low") on YOUR worktree's staged diff and fix what it finds.
+Checks: claude plugin validate <worktree> and of the subfolder; sh <worktree>/install.sh --selftest; powershell -NoProfile -ExecutionPolicy Bypass -File <worktree>/install.ps1 -SelfTest;
+sh <worktree>/practice/scripts/check-muse-manifest.sh; claude plugin test <worktree>/mods/ops-board (or its new path); a scratch-HOME install from a clone for Claude Code
+(claude plugin marketplace add <clone> + install, CLAUDE_CONFIG_DIR scratch) showing the skills load; a scratch Muse profile install from the clone (as B10 did).
+Commit as "F91: <what>" (several commits are fine) with the evidence. Report: sha(s), the plan path, red/green lines, rulings, what an existing install must do.
