@@ -36,8 +36,20 @@ export function parseTeam(text: string): Member[] {
 export const sameHandle = (a: string | null | undefined, b: string | null | undefined) =>
   !!a && !!b && a.toLowerCase() === b.toLowerCase()
 
-// F80: as ticket-meta whoami - SKILLATOR_ME (a member as written, @ optional) overrides the email.
-export function meOf(team: Member[], email: string, envMe?: string | null): string | null {
+// F97: this session's tag as ticket-meta session_tag: SKILLATOR_SESSION (one leading @
+// off, lower-cased), else cc-<last 6 of the session id's [A-Za-z0-9], lower-cased>; a
+// file name, so it must be [a-z0-9_-]+, else there is no tag.
+export function sessionTag(envSession: string | null | undefined, sessionId: string | null | undefined): string | null {
+  let tag = (envSession ?? '').replace(/^@/, '').toLowerCase()
+  if (!tag && sessionId) tag = 'cc-' + sessionId.replace(/[^A-Za-z0-9]/g, '').toLowerCase().slice(-6)
+  return /^[a-z0-9_-]+$/.test(tag) ? tag : null
+}
+
+// F80: as ticket-meta whoami / me_of - F97: the F92 session owner file first (its one
+// line, exact; a handle not on the team is nobody, never a fall back), then SKILLATOR_ME
+// (a member as written, @ optional), then the email.
+export function meOf(team: Member[], email: string, envMe?: string | null, owner?: string | null): string | null {
+  if (owner !== null && owner !== undefined) return team.find(m => m.handle === owner)?.handle ?? null
   if (envMe) { const h = envMe.startsWith('@') ? envMe : '@' + envMe; return team.find(m => m.handle === h)?.handle ?? null }
   const e = email.trim().toLowerCase()
   if (!e) return null

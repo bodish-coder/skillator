@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { meOf, parseTeam } from '../hooks/lib/team'
+import { meOf, parseTeam, sessionTag } from '../hooks/lib/team'
 
 // team.md as ticket-meta `team add` writes it: the member line, then an indented
 // `  name:` line straight under it (T2b). The old shape, with no name, still reads.
@@ -49,4 +49,27 @@ test('team: F80 SKILLATOR_ME overrides the email for me', () => {
   expect(meOf(team, '', '@neo')).toBe('@neo')
   expect(meOf(team, 'a@x', '@ghost')).toBe(null)
   expect(meOf(team, 'a@x', null)).toBe('@asha')
+})
+
+// F97: the session tag as ticket-meta session_tag - SKILLATOR_SESSION (one leading @ off,
+// lower-cased), else cc-<last 6 alnum of the session id, lower-cased>; must be [a-z0-9_-]+.
+test('team: F97 sessionTag as ticket-meta session_tag', () => {
+  expect(sessionTag('@Sher-1', 'x')).toBe('sher-1')
+  expect(sessionTag('@@bad', 'x')).toBe(null)                         // one @ stripped; '@bad' fails the charset
+  expect(sessionTag('', '982c2a-ab12-cd34-EF56')).toBe('cc-34ef56')
+  expect(sessionTag(null, 'sid-1')).toBe('cc-sid1')
+  expect(sessionTag(undefined, 'ab')).toBe('cc-ab')
+  expect(sessionTag('', '')).toBe(null)
+  expect(sessionTag('a b', 'sid-1')).toBe(null)                       // a space: not a file name
+})
+
+// F97: me as ticket-meta me_of - the F92 session owner file first, no fall-through.
+test('team: F97 the session owner file wins over SKILLATOR_ME and the email, and never falls through', () => {
+  const team = parseTeam('- @asha: a@x\n- @sher: s@x\n')
+  expect(meOf(team, 'a@x', 'asha', '@sher')).toBe('@sher')
+  expect(meOf(team, 'a@x', 'asha', '@ghost')).toBe(null)
+  expect(meOf(team, 'a@x', 'asha', '')).toBe(null)                    // the file is there, its line empty
+  expect(meOf(team, 'a@x', 'asha', null)).toBe('@asha')
+  expect(meOf(team, 'a@x', null, undefined)).toBe('@asha')
+  expect(meOf(team, 'a@x', null, '@Sher')).toBe(null)                 // exact, case kept, as grep -qxF
 })

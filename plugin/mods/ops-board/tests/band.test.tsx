@@ -42,7 +42,7 @@ const COUNTS = countsOf(parseBoard(BOARD, 'T', 0, 0))
 const input = (machineKv: string, over: Partial<BandInput> = {}): BandInput => {
   const machine = parseMachine(machineKv, NOW)
   return { watch: classify(machine), machine, usage: USAGE, relay: 'RUN-0012 2/4', counts: COUNTS,
-    narrow: false, cols: 140, now: NOW, ...over }
+    narrow: false, cols: 140, now: NOW, me: null, ...over }
 }
 
 // ---- pure: the texts of mocks m-band, m-narrow and the status line ----
@@ -90,16 +90,34 @@ test('narrow band: the m-narrow two lines', () => {
 // F95: pending = [ ], in progress = [~], total = every open box; 5h, then 7d while the line stays short.
 test('status line: pending | in progress | total · 5h, 7d while short; stale says so; unknown is left out', () => {
   const head = 'ops 2 pending | 1 in progress | 5 total'
-  expect(statusText(COUNTS, USAGE, NOW)).toBe(`${head} · 5h 41% · 7d 55%`)
-  expect(statusText(COUNTS, USAGE, NOW + STALE_MS + 1)).toBe(`${head} · 5h 41% (stale)`)
-  expect(statusText(COUNTS, null, NOW)).toBe(head)
-  expect(statusText(COUNTS, usageFrom([{ kind: 'five_hour', percentUsed: 41 }], null, NOW), NOW)).toBe(`${head} · 5h 41%`)
-  expect(statusText(null, USAGE, NOW)).toBe('ops - · 5h 41% · 7d 55%')
+  expect(statusText(COUNTS, USAGE, NOW, null)).toBe(`${head} · 5h 41% · 7d 55%`)
+  expect(statusText(COUNTS, USAGE, NOW + STALE_MS + 1, null)).toBe(`${head} · 5h 41% (stale)`)
+  expect(statusText(COUNTS, null, NOW, null)).toBe(head)
+  expect(statusText(COUNTS, usageFrom([{ kind: 'five_hour', percentUsed: 41 }], null, NOW), NOW, null)).toBe(`${head} · 5h 41%`)
+  expect(statusText(null, USAGE, NOW, null)).toBe('ops - · 5h 41% · 7d 55%')
   // [%] testing is in the total only; a 244-box board's line is too long for 7d.
   const testing = countsOf(parseBoard('- [~] F1 — a\n- [%] F2 — b\n- [%] F3 — c\n- [!] F4 — d\n- [>] F5 — e\n- [x] F6 — f\n', 'T', 0, 0))
-  expect(statusText(testing, null, NOW)).toBe('ops 0 pending | 1 in progress | 4 total')
-  expect(statusText({ open: 244, progress: 13, testing: 200, blocked: 2, decision: 1 }, USAGE, NOW))
+  expect(statusText(testing, null, NOW, null)).toBe('ops 0 pending | 1 in progress | 4 total')
+  expect(statusText({ open: 244, progress: 13, testing: 200, blocked: 2, decision: 1 }, USAGE, NOW, null))
     .toBe('ops 28 pending | 13 in progress | 244 total · 5h 41%')
+})
+
+// F97: the session owner's handle after `ops`; under STATUS_MAX the 7d goes first, the handle second.
+test('status line: F97 the session owner after ops; 7d dropped first, then the handle', () => {
+  expect(statusText(COUNTS, USAGE, NOW, '@sher')).toBe('ops @sher 2 pending | 1 in progress | 5 total · 5h 41%')   // 63 with 7d > 60
+  expect(statusText(COUNTS, USAGE, NOW, null)).toBe('ops 2 pending | 1 in progress | 5 total · 5h 41% · 7d 55%')
+  expect(statusText(null, USAGE, NOW, '@sher')).toBe('ops @sher - · 5h 41% · 7d 55%')
+  const big = { open: 244, progress: 13, testing: 200, blocked: 2, decision: 1 }
+  expect(statusText(big, USAGE, NOW, '@sher')).toBe('ops @sher 28 pending | 13 in progress | 244 total · 5h 41%')     // 58
+  expect(statusText(big, USAGE, NOW, '@shamsher-rao')).toBe('ops 28 pending | 13 in progress | 244 total · 5h 41%')   // 66 > 60: handle off
+})
+
+test('band: F97 the session owner after ops on the wide and the narrow line', () => {
+  expect(bandLines(input(GREEN_KV, { me: '@sher' }))).toEqual(
+    ['● ops @sher  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok'])
+  expect(bandLines(input(GREEN_KV, { me: '@sher', narrow: true, cols: 96 }))[0]).toBe(
+    '● ops @sher  5 open ●1 ●1 ●1  RUN-0012 2/4  disk 17 GB  mem 3.2 GB')
+  expect(bandLines(input(RED_KV, { me: '@sher' }))).toEqual(bandLines(input(RED_KV)))   // red: the HOLD line, no handle
 })
 
 test('countsOf: open excludes deferred and closed', () => {
@@ -419,6 +437,37 @@ test('status line: pending | in progress | total · 5h, updated only when the te
   await $.session.measure({ context: { window: 200000 }, rateLimits: w.rate, changed: ['rateLimits'] })
   await clock.settle()
   expect(w.statuses.at(-1)).toBe('ops 2 pending | 1 in progress | 5 total · 5h 47% · 7d 61%')
+})
+
+// F97: the session owner (ticket-meta iam, written AFTER the mod armed) reaches the status
+// line and the band on the next 2 s poll; it wins over the email; gone when its file goes.
+// With a handle the line is over STATUS_MAX with 7d, so 7d is left off.
+test('status line and band: F97 the session owner file is polled and wins over the email', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  w.files['/r/.skillator/team.md'] = '# Team\n\n- @vidul: vidul@ikran.in\n- @sher: s@x\n'
+  await start($, clock)
+  expect(w.statuses.at(-1)).toBe('ops @vidul 2 pending | 1 in progress | 5 total · 5h 41%')
+  w.files['/r/.skillator/sessions/cc-sid1.owner'] = '@sher\r\n'          // session.id is 'sid-1' -> cc-sid1
+  await clock.advance(2000)
+  expect(w.statuses.at(-1)).toBe('ops @sher 2 pending | 1 in progress | 5 total · 5h 41%')
+  const ui = await mountBand($, 'terminal')
+  expect((await ui.find({ key: 'line:0' }))?.text).toBe(
+    '● ops @sher  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok')
+  await ui.unmount()
+  w.files['/r/.skillator/sessions/cc-sid1.owner'] = '@ghost\r\n'          // not on the team: nobody, no fall back (8 bytes: the mock's mtime is fixed, the size must move)
+  await clock.advance(2000)
+  expect(w.statuses.at(-1)).toBe('ops 2 pending | 1 in progress | 5 total · 5h 41% · 7d 55%')
+  delete w.files['/r/.skillator/sessions/cc-sid1.owner']
+  await clock.advance(2000)
+  expect(w.statuses.at(-1)).toBe('ops @vidul 2 pending | 1 in progress | 5 total · 5h 41%')
+})
+
+test('status line: F97 SKILLATOR_SESSION names the owner file', WITH, async ($, on) => {
+  const [w, clock] = world(on, { SKILLATOR_SESSION: '@Sher-1' })
+  w.files['/r/.skillator/team.md'] = '- @sher: s@x\n'
+  w.files['/r/.skillator/sessions/sher-1.owner'] = '@sher\n'
+  await start($, clock)
+  expect(w.statuses.at(-1)).toBe('ops @sher 2 pending | 1 in progress | 5 total · 5h 41%')
 })
 
 test('session end puts a hidden CLAUDE.md back and logs it; the next start shows the note', WITH, async ($, on) => {

@@ -2,7 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SiteScroll } from 'claude-code'
 import type { Board, Machine, Member, Usage, Watch } from '../types'
 import { listView, parseBoard } from './lib/board'
-import { meOf, parseTeam } from './lib/team'
+import { meOf, parseTeam, sessionTag } from './lib/team'
+import { clean } from './lib/bandlines'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, muteKv, mutedWords, muteText, parseMachine, unmuteDue, usageFrom } from './lib/facts'
 import { gitBin, NO_SCRIPTS, readUsage, runCall } from './lib/host'
 import { parseRuns } from './lib/runs'
@@ -47,6 +48,7 @@ let armed = false
 let email: string | null = null
 let envMe: string | null = null            // F80: SKILLATOR_ME, as ticket-meta whoami reads it
 let teamSeen = ''
+let ownerSeen = 'none'                      // F97: the session owner file's mtime:size, 'none' when absent
 let lastScroll: SiteScroll = { offset: 0, bodyRows: 0 }
 let lastCols = 54
 let lastStatus: string | null = null
@@ -103,12 +105,24 @@ async function poll($: EngineInterface, force = false) {
   const teamPath = root + '/.skillator/team.md'
   let seen = 'none'
   try { const st = await $.fs.stat(teamPath); seen = `${st.mtimeMs}:${st.size}` } catch { /* no team file */ }
-  if (force || seen !== teamSeen) {
+  // F97: the F92 session owner file - ticket-meta iam writes it after the mod armed, so it
+  // is stat'ed each poll; the tag follows a /clear (a new session id, no session.start).
+  let tag: string | null = null
+  try { tag = sessionTag(await $.env.get('SKILLATOR_SESSION'), await $.session.id()) } catch { tag = null }
+  const ownerPath = tag ? `${root}/.skillator/sessions/${tag}.owner` : null
+  let oseen = 'none'
+  if (ownerPath) { try { const st = await $.fs.stat(ownerPath); oseen = `${st.mtimeMs}:${st.size}` } catch { /* no owner */ } }
+  if (force || seen !== teamSeen || oseen !== ownerSeen) {
     teamSeen = seen
+    ownerSeen = oseen
     let t: Member[] = []
     if (seen !== 'none') { try { t = parseTeam(await $.fs.read(teamPath)) } catch { t = [] } }
+    let owner: string | null = null
+    if (ownerPath && oseen !== 'none') {
+      try { owner = clean((await $.fs.read(ownerPath)).split('\n')[0] ?? '') } catch { owner = null }
+    }
     await update($, teamA, () => t)
-    await update($, meA, () => meOf(t, email ?? '', envMe))
+    await update($, meA, () => meOf(t, email ?? '', envMe, owner))
   }
   await pollInbox($).catch(() => {})       // F66: the Teams inbox, re-read when it moved
   await updateStatus($)
@@ -132,7 +146,7 @@ async function addNotes($: EngineInterface, add: string[], drop: (n: string) => 
 async function updateStatus($: EngineInterface) {
   const board = await read($, boardA)
   if (!board) return
-  const text = statusText(countsOf(board), await read($, usageA), await $.clock.now())
+  const text = statusText(countsOf(board), await read($, usageA), await $.clock.now(), await read($, meA))
   if (text === lastStatus) return
   lastStatus = text
   $.ui.status(text)
