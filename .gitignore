@@ -7,3 +7,6 @@
 .skillator/dirty.log
 .skillator/watchdog.mute
 Microsoft/
+
+# taskwork.sh scratch (briefs, reports, review packages)
+.taskwork/
