@@ -34,6 +34,10 @@ export type Flight = { n: number; by: string | null; run: string | null }   // i
 export type PlanItem = { n: number; ticket: string }
 // F85: the engage confirm in the pane - what goes, and whether relay queue-run add goes first.
 export type Engage = { id: string; text: string; queue: boolean }
+// F99: the Diagnose view in the pane - the verdict, one line per disagreement, the stages Close
+// would mark landed (each with the sha it gets) and whether the close confirm is up.
+export type Diagnose = { id: string; verdict: 'finished' | 'still running' | 'stalled' | 'inconsistent'; lines: string[]
+                         closes: { n: number; sha: string }[]; confirm: boolean }
 // F77: id = the form's Ticket field as typed ('' when opened with no ticket selected),
 // resolved against the board case-insensitively (ticketById); ticket-meta gets the board's ID.
 export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string | null; result: string | null }
@@ -116,6 +120,7 @@ declare module 'claude-code' {
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
       runs: RunView[]; assign: AssignDraft | null; narrow: boolean
       engage: Engage | null             // F85: the engage confirm up in the Workflows tab
+      diagnose: Diagnose | null         // F99: the Diagnose view up in the Workflows tab
       relay: string | null   // F48 band: "RUN-0012 2/4", the first relay run not all done
       teamView: TeamView | null; person: PersonDraft | null
       reconcile: Reconcile | null   // F81: the reconcile form up in the Tickets tab
