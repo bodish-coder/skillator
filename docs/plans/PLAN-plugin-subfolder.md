@@ -36,10 +36,16 @@ that forward to `plugin/install.*` with the same arguments.
 | Claude Code | `/plugin marketplace add bodish-coder/skillator` + `/plugin install skillator` - unchanged; the catalog's skillator entry is now `"source": "./plugin"` (like ops-board's, now `./plugin/mods/ops-board`) | `claude plugin marketplace update` pulls the new catalog, `claude plugin update` installs from `./plugin`. The cache path is unchanged (`plugins/cache/<marketplace>/<plugin>/<version>/`, named by plugin and version, not by source); its content is the subfolder, laid out as before (`skills/`, `mods/`, `install.sh`, ...), so ops-board's `installPath + /skills` lookup still holds |
 | Codex, Cursor, Gemini, Antigravity, pi, opencode | `sh install.sh` / `.\install.ps1` from a clone (root shim) or from the plugin cache | The command re-runs the installer from its source: the Claude Code `installPath` (holds `install.sh` again) or the `.skillator-source` pointer. An old pointer names the clone root, where the shims still answer; the run rewrites the pointer to `<clone>/plugin`. Copies refresh as before |
 | `--link` installs | links point into `<clone>/plugin/skills` | Old links into `<clone>/skills/<name>` dangle after the pull. `install.ps1` already treats them as missing and reinstalls; `install.sh` skipped every link - it now skips only a live one, so a dangling link is reinstalled too |
-| Muse | `muse plugins install <clone>/plugin` | `source.path` is the clone root, which no longer holds `.muse-plugin/plugin.json`: step 4 of `/skillator-update` pulls it and, when `<dir>/plugin/.muse-plugin/plugin.json` is there instead, runs `muse plugins install <dir>/plugin` in place of `update` |
+| Muse | `muse plugins install <clone>/plugin` | `source.path` is the clone root, which no longer holds `.muse-plugin/plugin.json`: step 4 of `/skillator-update` pulls it and, when `<dir>/plugin/.muse-plugin/plugin.json` is there instead, runs `muse plugins remove skillator` + `muse plugins install <dir>/plugin` in place of `update` (verified: `update` alone fails `missing-manifest`, `install` alone "already installed from a different source") |
 
 `/skillator-update` step 5 reads the new version from `<src>/.claude-plugin/plugin.json`,
 or `<src>/plugin/.claude-plugin/plugin.json` when `<src>` is a clone root.
+
+Found on the way (Muse 1.4.13, scratch profile): with the Claude catalog's skillator entry a
+relative `./plugin`, `muse plugins marketplace add <name> <local clone>` lists skillator
+(`plugin_count 1`) and `muse plugins install skillator@<name>` installs it. B10's failure was
+the github source; the GitHub-URL form stays unverified until pushed (a `file://` clone URL
+failed in scratch with "Filename too long" from the long scratch path). Input for B11.
 
 ## Path updates outside the payload's own relative paths
 

@@ -360,11 +360,15 @@ new skill or a release bump touches `.muse-plugin/` too. Install from a clone:
 enabled by default, so `muse plugins approve` has no runtime capability to act on); update:
 `git -C <dir> pull`, then `muse plugins update skillator` (refreshes from that local source;
 `/skillator-update` step 4 does both, and moves an install of `<dir>` made before F91 to
-`<dir>/plugin` with `muse plugins install`). `muse plugins marketplace add` of this repo is
-unsupported (B10): Muse probes `.claude-plugin/marketplace.json` but never
-`.muse-plugin/marketplace.json`, so it reads the Claude catalog and fails cloning its github
-source into a `\\?\` path git refuses on Windows; B11 tracks a Muse-native catalog. The Claude
-catalog stays as it is. Muse also warns that it skips ops-board - expected: its
+`<dir>/plugin` with `muse plugins remove skillator` + `muse plugins install` - a plain
+`update` fails there with `missing-manifest`, and `install` alone with "already installed from a
+different source"). `muse plugins marketplace add` of this repo: Muse probes
+`.claude-plugin/marketplace.json` but never `.muse-plugin/marketplace.json`, so it reads the
+Claude catalog. Before F91 that failed cloning the catalog's github source into a `\\?\` path git
+refuses on Windows (B10); since F91 the entry is `./plugin`, and `marketplace add <name> <local
+clone>` + `install skillator@<name>` works (Muse 1.4.13, scratch profile: `plugin_count 1`,
+4.17.1 enabled). Adding by the GitHub URL is unverified until pushed; B11 tracks a Muse-native
+catalog. Muse also warns that it skips ops-board - expected: its
 `hooks/hooks.json` is a Claude Code mod, which Muse cannot run.
 Verified (Muse Code 1.4.12, 2026-10-24): `muse plugins validate <repo>` - valid, summary
 `full`; `muse plugins install` with a scratch USERPROFILE/XDG_DATA_HOME - `skills=28
