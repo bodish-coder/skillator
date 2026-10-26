@@ -110,7 +110,7 @@ export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: num
   const sel = selectedOf(x)
   out.push(<Text> </Text>)
   out.push(
-    <Box key="keys" flexDirection="row" gap={2}>
+    <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
       <Text dimColor>{sel.startsWith('xf:') ? '↑↓ move' : '↑↓ move · enter open/close'}</Text>
       <Button key="key:reload" plain dimColor hotkey="r" onPress={() => { void enterExplorer($).catch(() => {}) }}>reload</Button>
     </Box>,

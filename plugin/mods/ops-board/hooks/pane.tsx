@@ -169,7 +169,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
           : (c.closed.length ? [<Text dimColor>{` · ${c.closed.reduce((s, d) => s + d.n, 0)} done hidden`}</Text>] : [])}
       </Text></Box>)
   out.push(
-    <Box key="keys" flexDirection="row" gap={2}>
+    <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
       <Text dimColor>↑↓ move</Text>
       <Button key="key:assign" plain dimColor hotkey="a" onPress={() => { void openAssign($, 'owner', m.ticket, els.canType) }}>assign</Button>
       <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openAssign($, 'decide', m.ticket, els.canType) }}>decide</Button>
@@ -234,8 +234,8 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const cols = Math.max(20, e.props.bodyColumns)
   const tab = await read($, tabA)
   const unread = await unreadOf($)          // F66: the unread count rides on the Messages tab
-  const bar = (
-    <Box key="tabs" flexDirection="row" gap={1}>
+  const bar = (   // B14: whole tabs wrap to a second row in a narrow pane, never cut mid-word
+    <Box key="tabs" flexDirection="row" flexWrap="wrap" gap={1}>
       {TABS.map(x => (
         <Button key={'tab:' + x.id} variant={x.id === tab ? 'primary' : undefined} dimColor={x.id !== tab}
           onPress={() => {
@@ -269,7 +269,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         {HealthTab(els, await readHealth($))}
         <Text> </Text>
         {/* F87: register.tsx takes this press (ui.press) - /ops resume force */}
-        <Box key="keys" flexDirection="row" gap={2}>
+        <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
           <Button key="key:force" plain dimColor hotkey="f" onPress={() => {}}>force resume (whatever the reading; mutes memory red)</Button>
         </Box>
       </Box>

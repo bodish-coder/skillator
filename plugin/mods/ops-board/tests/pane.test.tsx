@@ -610,3 +610,15 @@ test('mobile: a on a header says select a ticket first - no form it cannot fill'
   expect(await ui.find({ key: 'form:title' })).toBeUndefined()
   await ui.unmount()
 })
+
+// B14: six tabs are ~72 cells; a 54-column pane cut Explorer mid-word and dropped Build.
+// The bar and the key rows wrap whole buttons instead.
+test('B14: the tab bar and the key rows wrap whole buttons', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: 40 })
+  expect((await ui.find({ key: 'tabs' }))?.props.flexWrap).toBe('wrap')
+  expect((await ui.find({ key: 'keys' }))?.props.flexWrap).toBe('wrap')
+  for (const id of ['tickets', 'runs', 'health', 'messages', 'explorer', 'run']) expect(await ui.find({ key: 'tab:' + id }), id).toBeDefined()
+  await ui.unmount()
+})

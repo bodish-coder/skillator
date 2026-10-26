@@ -290,7 +290,7 @@ export async function RunTab($: EngineInterface, e: RenderInput<'Pane'>, els: El
   }
   out.push(<Text> </Text>)
   out.push(
-    <Box key="keys" flexDirection="row" gap={2}>
+    <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
       <Text dimColor>enter run</Text>
       <Button key="key:rescan" plain dimColor hotkey="r" onPress={() => { void rescan($) }}>rescan</Button>
       {job && job.ended === null && <Button key="key:stop" plain dimColor hotkey="s" onPress={() => { void stopJob($) }}>stop</Button>}

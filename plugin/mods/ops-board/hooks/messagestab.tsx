@@ -155,7 +155,7 @@ export async function MessagesTab($: EngineInterface, els: Els, cols: number): P
   }
   out.push(<Text> </Text>)
   out.push(
-    <Box key="keys" flexDirection="row" gap={2}>
+    <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
       <Button key="key:markread" plain dimColor hotkey="m" onPress={() => { void markRead($) }}>mark all read</Button>
       <Button key="key:setup" plain dimColor hotkey="s" onPress={() => { void (async () => { await openSetup($); await refreshCfg($, false) })() }}>setup</Button>
     </Box>,
