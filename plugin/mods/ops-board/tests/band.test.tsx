@@ -42,7 +42,7 @@ const COUNTS = countsOf(parseBoard(BOARD, 'T', 0, 0))
 const input = (machineKv: string, over: Partial<BandInput> = {}): BandInput => {
   const machine = parseMachine(machineKv, NOW)
   return { watch: classify(machine), machine, usage: USAGE, relay: 'RUN-0012 2/4', counts: COUNTS,
-    narrow: false, cols: 140, now: NOW, ...over }
+    narrow: false, cols: 140, now: NOW, me: null, ...over }
 }
 
 // ---- pure: the texts of mocks m-band, m-narrow and the status line ----
@@ -90,16 +90,34 @@ test('narrow band: the m-narrow two lines', () => {
 // F95: pending = [ ], in progress = [~], total = every open box; 5h, then 7d while the line stays short.
 test('status line: pending | in progress | total · 5h, 7d while short; stale says so; unknown is left out', () => {
   const head = 'ops 2 pending | 1 in progress | 5 total'
-  expect(statusText(COUNTS, USAGE, NOW)).toBe(`${head} · 5h 41% · 7d 55%`)
-  expect(statusText(COUNTS, USAGE, NOW + STALE_MS + 1)).toBe(`${head} · 5h 41% (stale)`)
-  expect(statusText(COUNTS, null, NOW)).toBe(head)
-  expect(statusText(COUNTS, usageFrom([{ kind: 'five_hour', percentUsed: 41 }], null, NOW), NOW)).toBe(`${head} · 5h 41%`)
-  expect(statusText(null, USAGE, NOW)).toBe('ops - · 5h 41% · 7d 55%')
+  expect(statusText(COUNTS, USAGE, NOW, null)).toBe(`${head} · 5h 41% · 7d 55%`)
+  expect(statusText(COUNTS, USAGE, NOW + STALE_MS + 1, null)).toBe(`${head} · 5h 41% (stale)`)
+  expect(statusText(COUNTS, null, NOW, null)).toBe(head)
+  expect(statusText(COUNTS, usageFrom([{ kind: 'five_hour', percentUsed: 41 }], null, NOW), NOW, null)).toBe(`${head} · 5h 41%`)
+  expect(statusText(null, USAGE, NOW, null)).toBe('ops - · 5h 41% · 7d 55%')
   // [%] testing is in the total only; a 244-box board's line is too long for 7d.
   const testing = countsOf(parseBoard('- [~] F1 — a\n- [%] F2 — b\n- [%] F3 — c\n- [!] F4 — d\n- [>] F5 — e\n- [x] F6 — f\n', 'T', 0, 0))
-  expect(statusText(testing, null, NOW)).toBe('ops 0 pending | 1 in progress | 4 total')
-  expect(statusText({ open: 244, progress: 13, testing: 200, blocked: 2, decision: 1 }, USAGE, NOW))
+  expect(statusText(testing, null, NOW, null)).toBe('ops 0 pending | 1 in progress | 4 total')
+  expect(statusText({ open: 244, progress: 13, testing: 200, blocked: 2, decision: 1 }, USAGE, NOW, null))
     .toBe('ops 28 pending | 13 in progress | 244 total · 5h 41%')
+})
+
+// F97: the session owner's handle after `ops`; under STATUS_MAX the 7d goes first, the handle second.
+test('status line: F97 the session owner after ops; 7d dropped first, then the handle', () => {
+  expect(statusText(COUNTS, USAGE, NOW, '@sher')).toBe('ops @sher 2 pending | 1 in progress | 5 total · 5h 41%')   // 63 with 7d > 60
+  expect(statusText(COUNTS, USAGE, NOW, null)).toBe('ops 2 pending | 1 in progress | 5 total · 5h 41% · 7d 55%')
+  expect(statusText(null, USAGE, NOW, '@sher')).toBe('ops @sher - · 5h 41% · 7d 55%')
+  const big = { open: 244, progress: 13, testing: 200, blocked: 2, decision: 1 }
+  expect(statusText(big, USAGE, NOW, '@sher')).toBe('ops @sher 28 pending | 13 in progress | 244 total · 5h 41%')     // 58
+  expect(statusText(big, USAGE, NOW, '@shamsher-rao')).toBe('ops 28 pending | 13 in progress | 244 total · 5h 41%')   // 66 > 60: handle off
+})
+
+test('band: F97 the session owner after ops on the wide and the narrow line', () => {
+  expect(bandLines(input(GREEN_KV, { me: '@sher' }))).toEqual(
+    ['● ops @sher  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok'])
+  expect(bandLines(input(GREEN_KV, { me: '@sher', narrow: true, cols: 96 }))[0]).toBe(
+    '● ops @sher  5 open ●1 ●1 ●1  RUN-0012 2/4  disk 17 GB  mem 3.2 GB')
+  expect(bandLines(input(RED_KV, { me: '@sher' }))).toEqual(bandLines(input(RED_KV)))   // red: the HOLD line, no handle
 })
 
 test('countsOf: open excludes deferred and closed', () => {
