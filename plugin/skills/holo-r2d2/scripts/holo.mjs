@@ -744,7 +744,7 @@ export function renderMarkdown(run, opts = {}) {
 
 // ----------------------------------------------------------------- svg ----
 // Light theme, literal colours: a standalone image cannot rely on prefers-color-scheme.
-const SVG_INK = { landed: "#2f7d4f", inflight: "#1f63b8", parked: "#7a4bb3", failed: "#b3261e", replanned: "#7b7f7b", pending: "#5a615a", unknown: "#b3261e" };
+const SVG_INK = MERMAID_STROKE; // the light CSS state colours, literal
 const SVG_BG = { landed: "#e3f1e8", inflight: "#e2ecf9", parked: "#efe7f8", failed: "#f8e3e1", replanned: "#eceeeb", pending: "#fbfbf9", unknown: "#f8e3e1" };
 export function renderSvg(run, opts = {}) {
   const lines = [];
