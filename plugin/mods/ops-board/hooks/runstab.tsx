@@ -157,9 +157,10 @@ export async function openDiagnose($: EngineInterface, id: string): Promise<void
   const d = diagnose(run, await read($, boardA), shas, await $.clock.now())
   // runnable as copied: the script and platform form runCall used for the list; no owner, so the cell is kept
   const script = l.argv.find(a => /relay-morpheus\.(sh|ps1)$/.test(a))
-  const byHand = d.closable.map(cl => {
+  const byHand = !script ? [] : d.closable.map(cl => {   // no script in the argv: no line, never `sh "undefined"`
     const own = run.stages.find(s => s.n === cl.n)?.landed
-    const sha = own && (!/^[0-9a-f]{4,40}$/i.test(own) || shas.get(own) === 'head') ? own : '<sha>'   // a path, or a sha on HEAD
+    const isSha = own !== undefined && /^[0-9a-f]{4,40}$/i.test(own)
+    const sha = own && (!isSha || shas.get(own) === 'head') ? (isSha ? own : `"${own}"`) : '<sha>'   // a path (quoted), or a sha on HEAD
     return script?.endsWith('.ps1')
       ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${script}" -Mode stage -Id ${id} -N ${cl.n} -State x -Landed ${sha}`
       : `sh "${script}" ${id} stage ${cl.n} x '' ${sha}`

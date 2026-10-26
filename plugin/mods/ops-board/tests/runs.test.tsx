@@ -522,11 +522,11 @@ test('F99 Diagnose: inconsistent - a stage in flight whose ticket is [x]; the by
   await clock.settle()
   expect((await ui.find({ key: 'diag:byhand:0' }))?.text).toBe(`${BY_HAND} <sha>`)
   await ui.press({ key: 'diag:back' })
-  // a landed path (relay takes one) is the line's value as is - never asked of git
+  // a landed path (relay takes one) is the line's value, quoted - never asked of git
   w.resume['RUN-0020'] = cell.replace('| beef01 |', '| docs/out.md |')
   await ui.press({ key: 'diagnose:RUN-0020' })
   await clock.settle()
-  expect((await ui.find({ key: 'diag:byhand:0' }))?.text).toBe(`${BY_HAND} docs/out.md`)
+  expect((await ui.find({ key: 'diag:byhand:0' }))?.text).toBe(`${BY_HAND} "docs/out.md"`)
   expect(w.runs.some(a => a[3] === 'stage' || a[1] === 'log')).toBe(false)   // nothing written, no run-branch reads
   await ui.unmount()
 })
