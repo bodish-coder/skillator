@@ -5,14 +5,19 @@
 # that prompt shape, with another skill's description-only rate on the same
 # harness checked first.
 #
-# RULING: on this host the reviews scenario cannot measure clone-odo's
-# description at all - the skill listing shows `skillator:clone-odo` with NO
-# description text (runs 6 and 8), so no wording can win the match. The
-# host does auto-load description-only on sonnet (control 2/2, code-yoda,
-# whose description IS shown). The 0/10 (F107 0/6 + 0/4 here) is the listing
-# dropping the description, not the wording. Description left unchanged (the
-# two rewrites measured 0/4, no better than the 73-word original, and nothing
-# can be measured until the description is visible).
+# RULING (measured / self-reported / inferred labelled per claim):
+# - Measured: control 2/2 Skill calls (code-yoda), reviews scenario with the
+#   two rewrites 0/4 Skill calls; init skill counts 260 and 207; costs.
+# - Self-reported: both probes (runs 6, 8) answered that clone-odo has "NO
+#   DESCRIPTION" in the listing. That is the model's copy of its own prompt,
+#   not a dump of it.
+# - Inferred: this host's 0/4 is consistent with the listing dropping the
+#   description. F107's 0/6 ran in a Linux container with 65 skills in init
+#   (checked in the init records of f97-clone-odo-green-desc{,2,3}-reviews-
+#   {1,2}.jsonl), which a 200+-skill truncation does not explain; that 0/6
+#   remains a wording or prompt-shape result, unexplained by the listing.
+# Description left unchanged (the two rewrites measured 0/4, no better than
+# the 73-word original).
 #
 # Setup, every run: 2026-10-27, claude-code 2.1.310, Windows/Git Bash host,
 # CLAUDE_CONFIG_DIR=~/.claude-bodish (user plugins installed: skillator 4.19.0
@@ -20,7 +25,8 @@
 # ...; ponytail disabled in user settings). init model claude-sonnet-5-5 in
 # all 8. Command: the harness `cmd green` output verbatim (BASELINE_ISOLATE=hide,
 # 900 s, acceptEdits + allow-list, --plugin-dir/--add-dir PREFIX) with ONE
-# substitution, `--model sonnet` (the CLI default here is not sonnet); runs
+# substitution, `--model sonnet` (nothing in the records shows the CLI
+# default here, so it was pinned); runs
 # 7-8 add a second (below). Driver: scratchpad drive.sh = that command,
 # stream-json to a file. Prefix: `baseline-harness.sh prefix` from the
 # worktree (branch run/RUN-0024-pending-f108-a157-s176, HEAD 452c35f + the
@@ -36,14 +42,16 @@
 #    the 6e07841 of green-code-yoda-debt.txt), prefix0 (HEAD, description
 #    unchanged). 260 skills in init.
 #    run 1  loaded YES - `Skill(skillator:code-yoda)` first call. 5 turns,
-#           30 s, $0.25. "Six markers, three with no trigger." (ledger).
+#           30 s, $0.25. Answer line says "three with no trigger", which
+#           contradicts its own ledger (2).
 #    run 2  loaded YES - `Skill(skillator:code-yoda, "list knowingly
 #           deferred items (ponytail: markers) before release")` first call.
 #           5 turns, 35 s, $0.18.
 #    => 2/2: this host, harness and model DO auto-load from a description.
 #    Caveat: the control prompt is a question whose words sit in code-yoda's
 #    description ("knowingly deferred", "should be tracked"); the reviews
-#    prompt is a data command. Runs 6 and 8 show that difference is not why.
+#    prompt is a data command. The probes do not test prompt shape, so that
+#    difference is NOT ruled out as a reason for 2/2 vs 0/4.
 #
 # 2. DESCRIPTION A (80 words by the awk count; NOT clauses kept):
 #      Use before quoting or counting what users hate about an app - top
@@ -68,15 +76,19 @@
 #    the descriptions that do load on this host use:
 #      Use whenever you are about to say what users hate about an app or
 #      "the original" - top complaints, a quote and a count each, from a
-#      reviews.csv or .skillator/clone/ - read it BEFORE the CSV. Also "clone
-#      this app", ... (rest as A, less "or") NOT for building screens
-#      (build-jarvis, design-arwen) or shipping (deploy-merlin, deploy-niyoj).
+#      reviews.csv or .skillator/clone/ - read it BEFORE the CSV. Also
+#      "clone this app", "build my own version of X", "reverse engineer X",
+#      "map X's screens", "how close is my clone", "rebrand the clone", "is
+#      anything of the original left", an app's store link. NOT for building
+#      screens (build-jarvis, design-arwen) or shipping (deploy-merlin,
+#      deploy-niyoj).
 #    Prefix2, fixture `odo` 7167b95.
 #    run 5  loaded NO - no Skill call; two Bash (ls/head, cat), answer. 3
 #           turns, 20 s, $0.15. "6 of 8", unlinked reddit row quoted.
 #
 # 4. PROBE - why: is the description in the listing at all? Prompt
-#    (scratchpad probe.txt, no fixture use): "Do not call any tool. From the
+#    (scratchpad probe.txt; both probes ran with cwd fx-r4, a fresh odo
+#    fixture with no run of its own): "Do not call any tool. From the
 #    list of available skills in your system prompt, copy verbatim the line
 #    for skillator:clone-odo and the line for skillator:code-yoda ..."
 #    Prefix2 (description B), 260 skills.
@@ -96,18 +108,25 @@
 #           code-yoda's description shown. 1 turn, 14 s, $0.08. "About 160
 #           of the listed skills have no description text at all".
 #
+# ---- VERDICT ----
+# Done-line NOT met: the description does not load 1/2 on this host (0/4),
+# and the ruling option ("this host never auto-loads on that prompt shape")
+# is not established - the control loads 2/2 and the cause of 0/4 is not
+# isolated. The listing truncation is a separate finding (self-reported by
+# the probes, 260 and 207 skills). A run on a host with under 100 skills is
+# owed.
+#
 # Reading: both probes are the model's own report of its prompt, not a dump
-# of it - but they agree, they name the shown code-yoda text exactly, and
-# the parent session on this host also lists many skills as bare names. With
-# 200+ skills, Claude Code's skill listing drops descriptions for most of
-# them; code-yoda keeps its, clone-odo (new, never invoked here) does not.
-# A description that is not in the prompt cannot trigger, so description-only
-# load of clone-odo is unmeasurable on this host whatever its wording. Routes
-# that do reach it: grayskull-power's route row, or the user naming the skill
+# of it, but they agree and they reproduce code-yoda's description. On this
+# host the 0/4 is consistent with the listing dropping clone-odo's
+# description; F107's 0/6 on a 65-skill host is not explained by that and
+# remains a wording or prompt-shape result. Routes that do reach the skill:
+# grayskull-power's route row, or the user naming it
 # (green-clone-odo-reviews.txt § 1, PASS 2/2).
 # Open (not this ticket): which skills keep their description in a crowded
-# listing - by use, by order, by plugin - and whether a host with few skills
-# loads clone-odo from description A or B. Re-run runs 3-5 there.
+# listing, and whether a host with few skills loads clone-odo from
+# description A or B. Re-run runs 3-5 there.
 #
-# Cost: 8 claude -p runs, $1.21 total (control $0.43, descriptions $0.58,
-# probes $0.20).
+# Cost (sum of per-run total_cost_usd from the transcripts, unrounded, rounded
+# once): 8 claude -p runs, $1.20 total (control $0.43, descriptions $0.59,
+# probes $0.19).
