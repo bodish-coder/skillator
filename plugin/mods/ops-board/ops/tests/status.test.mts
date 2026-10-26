@@ -1,0 +1,100 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { discover, render, row } from '../status'
+import type { Reader } from '../status'
+
+// F94: `ops --status` - one row per CLI profile found under a fake HOME (never the owner's
+// real ones), the usage reader stubbed. Every percentage here is made up.
+
+const home = () => mkdtempSync(join(tmpdir(), 'ops-status-')).replace(/\\/g, '/')
+const dir = (h: string, d: string, ...files: string[]) => {
+  mkdirSync(join(h, d), { recursive: true })
+  for (const f of files) writeFileSync(join(h, d, f), '')
+  return `${h}/${d}`
+}
+const said = (out: string): Reader => async () => ({ code: 0, out, err: '' })
+const NONE = said('src=none 5h=- 7d=- ctx=- max=-\n')
+
+test('a profile with a reading shows its 5h and 7d % used; the reader sees only that profile', async () => {
+  const h = home()
+  const d = dir(h, '.claude-alpha', '.credentials.json')
+  writeFileSync(join(h, '.claude.json'), '')                       // a file, not a profile
+  const ps = discover(h)
+  assert.deepEqual(ps, [{ name: 'claude-alpha', cli: 'claude', dir: d }])
+  let env: Record<string, string | undefined> = {}
+  const read: Reader = async e => { env = e; return { code: 0, out: 'src=claude-code 5h=12.0 7d=34.5 ctx=- max=34.5\n', err: '' } }
+  const r = await row(ps[0]!, read, { CLAUDE_USAGE_WATCH_DIR: 'x', CLAUDE_CODE_SESSION_ID: 'y' }, false)
+  assert.deepEqual(r, ['claude-alpha', '12%', '35%', ''])
+  assert.equal(env.CLAUDE_CONFIG_DIR, d)
+  assert.equal(env.CLAUDE_CODE_SESSION_ID, undefined)
+  assert.equal(env.CLAUDE_USAGE_WATCH_DIR, undefined)
+  assert.ok(env.CODEX_HOME?.startsWith(d + '/'), 'codex usage never leaks into a claude row')
+})
+
+test('a profile with no credential file and no reading says not logged in', async () => {
+  const h = home()
+  const d = dir(h, '.codex-beta')
+  let env: Record<string, string | undefined> = {}
+  const read: Reader = async e => { env = e; return NONE(e, 0) }
+  assert.deepEqual(await row(discover(h)[0]!, read, {}, false), ['codex-beta', '-', '-', 'not logged in'])
+  assert.equal(env.CODEX_HOME, d)
+  assert.ok(env.CLAUDE_USAGE_WATCH_DIR?.startsWith(d + '/'), 'claude usage never leaks into a codex row')
+})
+
+test('no quota source: cursor and agy have none; a logged-in profile with no fresh reading says so', async () => {
+  const h = home()
+  dir(h, '.cursor-gamma')
+  dir(h, '.agy-delta')
+  dir(h, '.codex-eps', 'auth.json')
+  let calls = 0
+  const read: Reader = async e => { calls++; return NONE(e, 0) }
+  const rows = []
+  for (const p of discover(h)) rows.push(await row(p, read, {}, false))
+  assert.equal(calls, 1, 'the reader runs for claude and codex rows only')
+  assert.deepEqual(rows.map(r => [r[0], r[3]]), [
+    ['codex-eps', 'no quota source: no reading in the last 3 h'],
+    ['cursor-gamma', 'no quota source: cursor-agent has no usage command'],
+    ['agy-delta', 'no quota source: agy has no usage command'],
+  ])
+})
+
+test('a reader that runs out of time says so in its row', async () => {
+  const h = home()
+  dir(h, '.claude-zeta', '.credentials.json')
+  const read: Reader = async () => ({ code: -1, out: '', err: 'timed out after 5 s' })
+  assert.deepEqual(await row(discover(h)[0]!, read, {}, false), ['claude-zeta', '-', '-', 'timed out after 5 s'])
+})
+
+test('~/.skillator/profiles renames, adds and hides; the table is aligned', async () => {
+  const h = home()
+  dir(h, '.claude-one')
+  dir(h, '.claude-two')
+  const extra = dir(h, 'my codex')
+  mkdirSync(join(h, '.skillator'))
+  writeFileSync(join(h, '.skillator/profiles'), [
+    '# name cli config-dir',
+    `vidul claude ${h}/.claude-one`,
+    `- claude ~/.claude-two`,
+    `work codex ~/my codex`,
+    'odd vim /nowhere',
+    '',
+  ].join('\r\n'))
+  const ps = discover(h)
+  assert.deepEqual(ps, [
+    { name: 'vidul', cli: 'claude', dir: `${h}/.claude-one` },
+    { name: 'work', cli: 'codex', dir: extra },
+    { name: 'odd', cli: 'vim', dir: '/nowhere' },
+  ])
+  const rows = []
+  for (const p of ps) rows.push(await row(p, said('src=codex 5h=- 7d=9.4 ctx=- max=9.4\n'), {}, false))
+  assert.deepEqual(rows[2], ['odd', '-', '-', 'profiles file: unknown cli vim'])
+  assert.equal(render(rows), [
+    'profile  5h used  7d used',
+    'vidul    -        9%',
+    'work     -        9%',
+    'odd      -        -        profiles file: unknown cli vim',
+  ].join('\n') + '\n')
+})

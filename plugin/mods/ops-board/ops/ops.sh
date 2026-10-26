@@ -7,6 +7,7 @@
 # F89: --open starts the board in a new tab of the current Windows Terminal window when
 # wt is on PATH under Git Bash (the 'skillator ops' profile when its fragment is
 # installed), else runs it here as without it.
+# F94: --status prints one quota row per CLI profile and exits 0, from any folder.
 set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 case ${1:-} in ''|-*) ;; *) cd -- "$1" || exit 2; shift ;; esac
@@ -39,7 +40,7 @@ loader=$url/loader.mjs
 app=$dir/app.ts
 if [ -n "$msys" ] && [ -t 0 ] && [ -t 1 ]; then
   once=
-  for a in "$@"; do [ "$a" = --once ] && once=1; done
+  for a in "$@"; do case $a in --once|--status) once=1 ;; esac; done
   # A150: winpty starts its program through CreateProcess, which looks in the current
   # directory (the repo, cd'd into above) before PATH - so node goes to it by absolute
   # Windows path, the one this shell resolves; no absolute node: no winpty.
