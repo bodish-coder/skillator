@@ -741,7 +741,7 @@ build=opus
   - `sweep.py`: docstring "and the replica/ planning folder … Pass --include-replica" → "and the `.skillator/` planning folder at the root (where the original's name belongs). Pass --include-planning to check it too"; `def sweep(root, avoid=(), domains=(), colors=(), include_planning=False, max_size=2_000_000)`; the check `if d == "replica" and rel_dir == "." and not include_replica:` → `if d == ".skillator" and rel_dir == "." and not include_planning:`; argparse `--include-replica` → `--include-planning`; the call `sweep(args.root, avoid, domains, colors, args.include_planning)`.
   - `parity.py` docstring column list gains `ticket     the F ticket for a must row (clone-odo writes it; ignored here)`.
   Write the templates. Write `odo.sh` exactly as D5; write `odo.ps1`.
-- [ ] Step 4: `sh plugin/skills/clone-odo/scripts/odo.sh test` → `Ran 4x tests … OK` (upstream has 42 across the five files; plus 3 new = 45+). `sh plugin/skills/clone-odo/scripts/odo.sh selftest` → `ok - clone-odo tools: 45 tests` (the number as run). `pwsh`/`powershell` present → `odo.ps1 selftest` → the same; absent → say so in the report. `grep -rE '\bF0[1-9]\b|\bF[0-9]+-[HEN][0-9]' plugin/skills/clone-odo/templates` → nothing.
+- [ ] Step 4: `sh plugin/skills/clone-odo/scripts/odo.sh test` → `Ran 4x tests … OK` (upstream has 42 across the five files; plus 3 new = 54 (upstream has 52, not 42; ruled after Task 2)). `sh plugin/skills/clone-odo/scripts/odo.sh selftest` → `ok - clone-odo tools: 45 tests` (the number as run). `pwsh`/`powershell` present → `odo.ps1 selftest` → the same; absent → say so in the report. `grep -rE '\bF0[1-9]\b|\bF[0-9]+-[HEN][0-9]' plugin/skills/clone-odo/templates` → nothing.
 - [ ] Step 5: `git add plugin/skills/clone-odo/scripts plugin/skills/clone-odo/templates && git commit -m "F97: clone-odo tools, runner, templates and their tests (replica-skill 77c9436)"`.
 
 ### Task 3: SKILL.md, references/, UPSTREAM.md, the upstream-check wrappers - then GREEN
@@ -858,7 +858,7 @@ build=opus
 VERIFICATION: run every line below from `/home/user/skillator`, in order, on the verify seat; each must print what the arrow says and exit 0 unless stated.
 
 ```sh
-sh plugin/skills/clone-odo/scripts/odo.sh test 2>&1 | tail -3            # -> "Ran 4N tests in …s" / "OK", N ≥ 45
+sh plugin/skills/clone-odo/scripts/odo.sh test 2>&1 | tail -3            # -> "Ran 4N tests in …s" / "OK", 54
 sh plugin/skills/clone-odo/scripts/odo.sh selftest                       # -> "ok - clone-odo tools: <n> tests"
 PATH=/nonexistent sh plugin/skills/clone-odo/scripts/odo.sh parity x.csv; echo "exit $?"
                                                                           # -> stderr "clone-odo: python3 (3.8 or newer) was not found on PATH. …", "exit 127", no "Traceback"
@@ -947,3 +947,6 @@ TRACE:
 4. **Contradictions** - "python3 missing is a clear message" vs "install selftest must pass on a box with no python": resolved by `selftest` returning 0 with `skipped:` while `parity …` returns 127 - two different commands, two different contracts, both stated. `wc -w` vs `split()`: the gate is `wc -w` (context-audit.sh); the design says so and the number (799) was measured with it.
 5. **Scope** - one skill, five tasks, one coherent implementation. Task 1's fixture is ~150 lines of here-docs inside a 3,500-line harness - the same shape as `build_ponytail`; it stays one task because `baseline-harness.sh` is one file. Nothing wants decomposing. The approval gate (PRACTICE §1) is the orchestrator's next stop.
 - Ruling: review fix (orchestrator) - D9 reviews FAIL line said 'not 7', corrected to 'not 6' to match the 6-kept count stated above it and in Task 1 - cost if wrong: a correct GREEN run scored FAIL
+- Ruling: test count (orchestrator, after Task 2) - upstream has 52 tests, not 42, so the suite is 54; Steps/VERIFICATION corrected - cost if wrong: a correct run read as short
+- Ruling: odo.sh --help (orchestrator, after Task 2) - D5's usage sed ran past the comment header and printed three code lines; now prints the leading comment block only - cost if wrong: none, cosmetic
+- Ruling: __pycache__/ ignored repo-wide (orchestrator) - every test run writes .pyc beside the tools - cost if wrong: none

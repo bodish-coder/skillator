@@ -10,3 +10,4 @@ Microsoft/
 
 # taskwork.sh scratch (briefs, reports, review packages)
 .taskwork/
+__pycache__/
