@@ -332,8 +332,8 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
 2. Phase by phase, in order, skipping a phase whose stages are all `x`:
    `RM chain decide`; then for each of its stages
    `RELAY_CHAIN_PARALLEL=<stages in the phase> RM chain dispatch <n> --driver
-   @<tag>-<6> --owner <delegate>` - the row goes `~` and the prompt into the
-   run file **before** any agent exists. Note the worktree each names, flip its
+   <the Driver tag from the table> --owner <delegate>` - the row goes `~` and
+   the prompt into the run file **before** any agent exists. Note the worktree each names, flip its
    ticket `[~]` (`RM board <ID> '~'`).
 3. Per ticket, through the delegate: the implementer gets the stage prompt (the
    In-flight block's text, prefixed with the script's worktree line when a
@@ -351,5 +351,12 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
    the implementer, then the verifier, ticket by ticket in phase order - the
    stored prompt read and done, then the verify text done as a second pass that
    edits nothing. `run: in-session`.
-5. Landing, failed stages, the end batch, the final stage and the push: steps
-   3-5 of the Run above, unchanged.
+5. Landing: step 3 of the Run above, with the landing owner the host's
+   delegate value from the table - `RM stage <n> x <delegate> <sha>` (`task`,
+   `subagent` or `session`), never `workflow`.
+6. A failed stage that a later phase waits on (`BLOCKED`): its retry is a new
+   stage (`RM add`, `chain plan`) dispatched with the host's delegate from the
+   table, or done in-session on a host with no delegate - the saved script is
+   not edited mid-run.
+7. The end batch, the final stage and the push: step 5 of the Run above,
+   unchanged.

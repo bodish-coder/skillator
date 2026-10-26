@@ -620,6 +620,9 @@ if [ -n "$selftest" ]; then
              .config/opencode/commands/$_n.md:.config/opencode/skills; do
       grep -qF "$N/${f#*:}/relay-morpheus/SKILL.md" "$T/${f%%:*}" || { echo "FAIL: $_n not substituted in ${f%%:*}"; exit 1; }
       { grep -qF 'chain dispatch' "$T/${f%%:*}" && grep -qF '.workflow.js' "$T/${f%%:*}" && grep -qF 'Run without the Workflow tool' "$T/${f%%:*}"; } || { echo "FAIL: $_n does not run the plan with this host's delegate in ${f%%:*}"; exit 1; }
+      grep -qF 'pending-subagent' "$T/${f%%:*}" && { echo "FAIL: $_n still points at /pending-subagent in ${f%%:*}"; exit 1; }
+      case "${f%%:*}" in .cursor/*) _o='task' ;; .pi/*) _o='subagent session' ;; .gemini/commands/*|.config/*) _o='session' ;; *) _o='subagent' ;; esac
+      [ "$_n" = marathon-run ] && for _w in $_o; do grep -qF -- "--owner $_w" "$T/${f%%:*}" || { echo "FAIL: $_n has no --owner $_w in ${f%%:*}"; exit 1; }; done
       grep -F -- "$_yoda" "$T/${f%%:*}" | grep -qF '.skillator/grayskull.md' || { echo "FAIL: $_n has no grayskull-gated code-yoda line in ${f%%:*}"; exit 1; }
     done
     grep -q "^name: $_n\$" "$T/.gemini/antigravity-cli/skills/$_n/SKILL.md" || { echo "FAIL: agy skill name $_n"; exit 1; }

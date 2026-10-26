@@ -649,6 +649,9 @@ function Invoke-SelfTest([string]$T) {
                      @(".config\opencode\commands\$n.md", '.config\opencode\skills'))) {
       if (-not (& $has $p[0] "$T\$($p[1])/relay-morpheus/SKILL.md")) { return "$n not substituted in $($p[0])" }
       if (-not ((& $has $p[0] 'chain dispatch') -and (& $has $p[0] '.workflow.js') -and (& $has $p[0] 'Run without the Workflow tool'))) { return "$n does not run the plan with this host's delegate in $($p[0])" }
+      if (& $has $p[0] 'pending-subagent') { return "$n still points at /pending-subagent in $($p[0])" }
+      $o = switch -Wildcard ($p[0]) { '.cursor\*' { 'task' } '.pi\*' { 'subagent', 'session' } '.gemini\commands\*' { 'session' } '.config\*' { 'session' } default { 'subagent' } }
+      if ($n -eq 'marathon-run') { foreach ($w in $o) { if (-not (& $has $p[0] "--owner $w")) { return "$n has no --owner $w in $($p[0])" } } }
       if (-not (& $gated (& $read $p[0]))) { return "$n has no grayskull-gated code-yoda line in $($p[0])" }
     }
     if ((& $read ".gemini\antigravity-cli\skills\$n\SKILL.md") -cnotmatch "(?m)^name: $n`$") { return "agy skill name $n" }
