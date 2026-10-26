@@ -717,6 +717,15 @@ if [ -n "$selftest" ]; then
   mkdir -p "$T/xdg/opencode"
   out=$(HOME=$T CODEX_HOME=$T/.codex XDG_CONFIG_HOME=$T/xdg sh "$0" --dry-run) || { echo "FAIL: XDG dry run exited $?"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/xdg/opencode/commands/pending.md" || { echo "FAIL: opencode under XDG_CONFIG_HOME"; exit 1; }
+  # B13: the ops shim path cannot be written (a directory where the file goes): one
+  # warning, the rest still runs, exit 0
+  rm -f "$T/.local/bin/ops"; mkdir -p "$T/.local/bin/ops"; rm -rf "$T/lad"
+  out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0" 2>&1) || { echo "FAIL: unwritable shim install exited $?"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "warn  ops shim not written: cannot write $T/.local/bin/ops" || { echo "FAIL: unwritable shim warning line"; exit 1; }
+  if command -v cygpath >/dev/null 2>&1; then
+    [ -f "$_frag" ] || { echo "FAIL: Windows Terminal fragment not written after an unwritable shim"; exit 1; }
+  fi
+  rmdir "$T/.local/bin/ops"
   # the plugin installed: the shim still runs the first dest written (refreshed every
   # run), never the versioned plugin cache a plugin update can remove
   P=$T/p
@@ -820,10 +829,10 @@ done < "$tmpdests"
 if [ -n "$shim_src" ]; then
   if [ -n "$dry" ]; then
     echo "        would write $HOME/.local/bin/ops -> $shim_src/ops.sh"
+  # B13: a shim path that cannot be written skips this step only - the rest still runs
+  elif ! { mkdir -p "$HOME/.local/bin" && printf '#!/usr/bin/env sh\nexec sh "%s/ops.sh" "$@"\n' "$shim_src" > "$HOME/.local/bin/ops" && chmod 755 "$HOME/.local/bin/ops"; } 2>/dev/null; then
+    echo "warn  ops shim not written: cannot write $HOME/.local/bin/ops; run the launch line above instead"
   else
-    mkdir -p "$HOME/.local/bin"
-    printf '#!/usr/bin/env sh\nexec sh "%s/ops.sh" "$@"\n' "$shim_src" > "$HOME/.local/bin/ops"
-    chmod 755 "$HOME/.local/bin/ops"
     echo "ops   $HOME/.local/bin/ops -> $shim_src/ops.sh"
     [ -s "$tmpdests" ] || echo "      the plugin's copy (no skills dir written) - run this again after a plugin update"
     echo "      remove: rm $HOME/.local/bin/ops"
