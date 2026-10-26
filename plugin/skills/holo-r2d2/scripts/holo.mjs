@@ -324,8 +324,8 @@ function wrap(text, width) {
 const tspans = (lines, x, y, lh) =>
   lines.map((t, i) => `<tspan x="${x}" y="${y + i * lh}">${esc(t)}</tspan>`).join("");
 
-function stageGraph(run) {
-  if (!run.stages.length) return `<p class="empty">No stage rows in this run file.</p>`;
+// The graph's inner markup, shared by the page (stageGraph) and the SVG output (renderSvg).
+function stageGraphParts(run) {
   const { cols, pos, edges } = layout(run);
   const NW = 208, NH = 70, CW = 252, RH = 86, PX = 14, PY = 30;
   const lanes = Math.max(...cols.map((c) => c.length));
@@ -360,9 +360,16 @@ function stageGraph(run) {
       `<text class="nname" x="10" y="39">${esc(clip(s.name, 29))}</text>` +
       `<text class="nmeta${s.waits.length ? " held" : ""}" x="10" y="58">${esc(clip(third, 32))}</text></g>`;
   }).join("");
+  return { W, H, inner: bands + heads + arrows + nodes, cols };
+}
+
+const ARROW_DEFS = `<defs><marker id="holo-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>`;
+
+function stageGraph(run) {
+  if (!run.stages.length) return `<p class="empty">No stage rows in this run file.</p>`;
+  const { W, H, inner, cols } = stageGraphParts(run);
   return `<div class="scroll"><svg class="graph" role="img" aria-label="Stage graph of ${esc(run.id)}: ${run.stages.length} stages in ${cols.length} step(s)" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="min-width:${Math.min(W, 560)}px">` +
-    `<defs><marker id="holo-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>` +
-    bands + heads + arrows + nodes + `</svg></div>`;
+    ARROW_DEFS + inner + `</svg></div>`;
 }
 
 function stageList(run) {
@@ -735,6 +742,52 @@ export function renderMarkdown(run, opts = {}) {
   return out.join("\n").replace(/\n{3,}/g, "\n\n") + "\n";
 }
 
+// ----------------------------------------------------------------- svg ----
+// Light theme, literal colours: a standalone image cannot rely on prefers-color-scheme.
+const SVG_INK = { landed: "#2f7d4f", inflight: "#1f63b8", parked: "#7a4bb3", failed: "#b3261e", replanned: "#7b7f7b", pending: "#5a615a", unknown: "#b3261e" };
+const SVG_BG = { landed: "#e3f1e8", inflight: "#e2ecf9", parked: "#efe7f8", failed: "#f8e3e1", replanned: "#eceeeb", pending: "#fbfbf9", unknown: "#f8e3e1" };
+export function renderSvg(run, opts = {}) {
+  const lines = [];
+  if (run) {
+    const ch = run.chain;
+    lines.push(`${run.id} - ${run.title}`, [run.plan && `plan ${run.plan}`, run.updated && `updated ${run.updated}`, ch && `driver ${ch.driver}  hold ${ch.hold}  mode ${ch.mode}`].filter(Boolean).join("   "));
+    lines.push(ORDER.map((s) => `${LABEL[s]} ${run.stages.filter((x) => x.state === s).length}`).join("   "), "");
+    const askable = run.qs.filter((q) => ASKABLE.has(q.state));
+    lines.push(`DECISIONS (${askable.length})`);
+    if (!askable.length) lines.push("  none");
+    for (const q of askable) {
+      lines.push(`  ${q.id} [${q.f.header || q.id}] ${q.f.question || ""}`, `    ticket ${q.f.ticket || "-"} | blocks ${q.blocks.join(", ") || "-"} | holds stage ${q.holds.join(", ") || "-"} | default ${q.f.default || "-"}`);
+      q.options.forEach((o, i) => lines.push(`    ${i + 1}. ${o.label}${o.rec ? " (recommended)" : ""} - does: ${o.does || "-"} - hurts: ${o.hurts || "-"}`));
+    }
+    lines.push("", "STAGES");
+    if (!run.stages.length) lines.push("  No stage rows in this run file.");
+    for (const s of run.stages) lines.push(`  #${s.n} ${s.code ? s.code + " " : ""}${s.name} - ${LABEL[s.state]}${s.landed !== "-" ? " " + s.landed : ""} - ${s.owner}${s.files.length ? " - " + s.files.join(", ") : ""}`);
+  }
+  if (opts.design) {
+    const d = opts.design;
+    lines.push("", `DESIGN ${d.title}${opts.designPath ? " (" + opts.designPath + ")" : ""} - ${d.parts.length} sections`);
+    d.parts.forEach((p, i) => {
+      lines.push(`  ${i + 1}. ${p.name}  [${p.subs.length} parts, ${p.bullets} points, ${p.tables.length} tables]`);
+      for (const s of p.subs) lines.push(`       - ${s}`);
+      for (const t of p.tables) for (const r of (t.head.length ? [t.head, ...t.rows] : t.rows)) lines.push(`       | ${r.join(" | ")} |`);
+    });
+  }
+  const rows = lines.flatMap((l) => l === "" ? [""] : wrap(l, 110).map((w, i) => (i ? "    " : "") + w));
+  const g = run && run.stages.length ? stageGraphParts(run) : null;
+  const LH = 18, PAD = 16;
+  const W = Math.max(g ? g.W : 0, 720), gy = PAD, ty = (g ? g.H + PAD : 0) + PAD;
+  const H = ty + rows.length * LH + PAD;
+  const style = `text{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;fill:#1a1d1a}.row{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}` +
+    `.band{fill:#f3f4f1;opacity:.55}.lane,.colh{font-size:10px;fill:#8a908a}.edge{fill:none;stroke:#8a908a;stroke-width:1.5}.e-implicit{stroke-dasharray:5 4}.e-replaced{stroke-dasharray:2 3;stroke:#7b7f7b}.arrowhead{fill:#8a908a}` +
+    `.node rect{stroke-width:1.6}.nid{font-size:11.5px;font-weight:700}.nst{font-size:10.5px}.nname{font-size:12.5px}.nmeta{font-size:11px;fill:#5a615a}` +
+    Object.keys(SVG_INK).map((s) => `.s-${s} rect{fill:${SVG_BG[s]};stroke:${SVG_INK[s]}}.s-${s} .nst{fill:${SVG_INK[s]}}`).join("") + `.s-pending rect{stroke-dasharray:4 3}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Holo ${esc(run ? run.id : "design")}">` +
+    `<style>${style}</style>${ARROW_DEFS}` +
+    `<rect width="${W}" height="${H}" fill="#fbfbf9"/>` +
+    (g ? `<g transform="translate(0,${gy})">${g.inner}</g>` : "") +
+    rows.map((r, i) => `<text class="row" x="${PAD}" y="${ty + (i + 1) * LH - 4}" xml:space="preserve">${esc(r)}</text>`).join("") + `</svg>\n`;
+}
+
 // ----------------------------------------------------------------- cli ----
 function findRoot(start) {
   let d = resolve(start);
@@ -813,6 +866,7 @@ function parseArgs(argv) {
     if (a === "--ascii") o.mode = "ascii";
     else if (a === "--html") o.mode = "html";
     else if (a === "--md") o.mode = "md";
+    else if (a === "--svg") o.mode = "svg";
     else if (a === "--wizard") o.mode = "wizard";
     else if (a === "--batch") o.mode = "batch";
     else if (a === "--anatomy") o.anatomy = true;
@@ -926,10 +980,11 @@ async function main(argv) {
   }
   if ((o.mode === "md" || o.mode === "svg") && o.anatomy) throw new Error("--anatomy draws the page: use it with the Artifact or --html output");
   const stem = run ? run.id : basename(o.design).replace(/\.md$/i, "");
-  if (o.mode === "md") {
-    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}.md`));
-    await writeGenerated(root, out, renderMarkdown(run, opts));
-    console.log(`holo: ${run ? `${run.id} ${run.stages.length} stages` : "design only"}${design ? `, ${design.parts.length} design sections` : ""} -> ${out} (Markdown with a Mermaid stage graph)`);
+  if (o.mode === "md" || o.mode === "svg") {
+    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}.${o.mode}`));
+    await writeGenerated(root, out, o.mode === "md" ? renderMarkdown(run, opts) : renderSvg(run, opts));
+    console.log(`holo: ${run ? `${run.id} ${run.stages.length} stages` : "design only"}${design ? `, ${design.parts.length} design sections` : ""} -> ${out}` +
+      (o.mode === "md" ? " (Markdown with a Mermaid stage graph)" : " (standalone SVG)"));
     return;
   }
   const r = render(run, opts);
@@ -1027,6 +1082,14 @@ function selftest() {
   ok((mdOut.match(/^### Q\d+ /gm) || []).length === 2, "md: one block per open/asked Q");
   ok(mdOut.includes("| flag | does |") && mdOut.includes("| `--all` | every book |"), "md: design tables reproduced");
   ok(parseArgs(["RUN-12", "--md"]).mode === "md", "--md is a mode");
+  const svgOut = renderSvg(run, { runPath: "fixture-all-states.md", design: d, designPath: "fixture-design.md" });
+  ok(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/.test(svgOut) && svgOut.trim().endsWith("</svg>"), "svg: one standalone svg element");
+  for (const [n, st] of rows) ok(svgOut.includes(`data-stage="${n}" data-state="${st}"`), `svg: stage ${n} drawn as ${st}`);
+  ok((svgOut.match(/data-edge="/g) || []).length === 10, "svg: the same 10 edges");
+  ok(!/<script|var\(--|https?:\/\//.test(svgOut.replace('xmlns="http://www.w3.org/2000/svg"', "")), "svg: no script, no css variable, no external url");
+  ok(svgOut.includes("DECISIONS (2)") && svgOut.includes("| flag | does |"), "svg: decisions and design tables as text");
+  ok(artifactPage(render(run, { runPath: "x" })).includes('data-edge="1-2" data-kind="after"'), "svg split: the page still draws the graph");
+  ok(parseArgs(["RUN-12", "--svg"]).mode === "svg", "--svg is a mode");
 
   // 5. a run that decided something odd still draws: unknown state, cycle
   const odd = parseRun("# RUN-4 - odd\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 1 | a | z | - | - | - |\n| 2 | b |   | - | - | - |\n\n## Chain\ndriver: -     hold: -     mode: agents\n### AAAA - stage 1 - a\nafter: 2\nprompt: |\n  x\n### AAAB - stage 2 - b\nafter: 1\nprompt: |\n  y\n");
