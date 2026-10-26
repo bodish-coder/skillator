@@ -97,6 +97,8 @@ test('argvFor: both spellings of every call', () => {
     ['relay-decide', ['src=host 5h=41 7d=55 ctx=- max=-'], [`/s/skills/${RM}.sh`, 'chain', 'decide', '--level', 'src=host 5h=41 7d=55 ctx=- max=-'],
       [`C:/s/skills/${RM}.ps1`, '-Mode', 'chain', '-Action', 'decide', '-Text', 'src=host 5h=41 7d=55 ctx=- max=-']],
     ['usage-level', [], [`/s/skills/${UW}.sh`, 'level'], [`C:/s/skills/${UW}.ps1`, '-Mode', 'level']],
+    // F98: teams-uhura's first-time setup, its --check pass only (the walk is interactive)
+    ['team-setup-check', [], ['/s/skills/teams-uhura/scripts/setup.sh', '--check'], ['C:/s/skills/teams-uhura/scripts/setup.ps1', '--check']],
   ]
   for (const [call, args, sh, ps] of cases) {
     expect(argvFor(call, false, '/s/skills', args, SH)).toEqual([SH, ...sh])
