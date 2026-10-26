@@ -1,6 +1,6 @@
 # RUN-0021 - pending F93
 plan: TICKETS.md
-started: 2026-10-26T05:49Z   updated: 2026-10-26T06:27Z
+started: 2026-10-26T05:49Z   updated: 2026-10-26T06:33Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0021-pending-f93
 branch: run/RUN-0021-pending-f93
 
@@ -8,7 +8,7 @@ branch: run/RUN-0021-pending-f93
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
 | 157 | AABR F93 Run tab to Build, Agents into Workflows | x | build:opus | 2026-10-26T05:59Z | 1c7f053 |
-| 158 | verify review commit | ~ | main | 2026-10-26T06:27Z | - |
+| 158 | verify review commit | x | main | 2026-10-26T06:33Z | 2ae929d |
 | 159 | AABS F94 ops --status quota across CLI profiles | x | build:opus | 2026-10-26T06:18Z | 39499f0 |
 | 160 | AABT F95 band 5h and pending/in progress/total | x | build:opus | 2026-10-26T06:08Z | 1500d5c |
 | 161 | AABU F96 marathon fix and verify in one phase | x | build:opus | 2026-10-26T06:26Z | 5ade463 |
@@ -88,3 +88,4 @@ prompt: |
 - 06:08 - 160 (F95) merged c3d3040 onto F93: plugin test 304/0 on the merged tip (F95 rewrote its two band tests in place). Repro: the 244 was C:/tools/Projects/AewaAirbender's board (the band reads the session repo's TICKETS.md) - parser right, no bug. 7d kept while the line <= 60 chars (ruling). F95 [%] - owner looks at the band live.
 - 06:18 - 159 (F94) merged e4919c5 cleanly onto F93+F95: ops 160/0, plugin test rerun by main. Live run from C:/: rows for 8 claude, 3 codex, cursor, 4 agy; only codex-bodish has a figure (7d 57%) - Claude rows say 'no reading in the last 3 h' because the profiles' statusLine still points at the old skillator/skills/handoff-watch path (owner's settings, not touched). Cursor and agy expose no quota (verified). F94 [%].
 - 06:27 - 161 (F96) merged: verifier under its ticket's Phase k, no Verify entry in meta.phases; fixture red->green, relay + install selftests ok (agent). F96 [%] - owner sees it on the next /marathon-run.
+- 06:33 - 158: run merged into main 90b2b0f, bumped 4.19.0 / ops-board 0.9.0 at 2ae929d; all checks green; worktree and branch removed. push: waiting for the owner.
