@@ -9,6 +9,8 @@
 //                when another stage was in flight); missing = PLAN.runWorktree.
 // Returns one row per ticket: {stage, code, ticket, worktree, verdict}; verdict null = the agent died.
 // Agents: one implementer and one read-and-run-only verifier per ticket, both under its phase. Pure ASCII.
+// Hosts with no Workflow tool read meta and PLAN as data and never execute this file -
+// relay-morpheus references/marathon.md, "Run without the Workflow tool".
 
 export const meta = {
   name: 'marathon-RUN-0000',

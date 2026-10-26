@@ -35,11 +35,17 @@ and ask.
 |------|-----------|
 | **claude-code** | `Workflow` tool, inline `script`. The real thing. |
 | **codex** | No script runtime — emulate: dispatch stage 1 subagents, collect, dispatch stage 2. Same shape, manual barriers. |
-| **cursor** · **antigravity** · **pi** | No Workflow tool. Use the host's parallel delegate mechanism per `PLATFORMS.md`; drop back to plain dispatch. |
+| **cursor** | No Workflow tool. The Task tool, one Task per agent. |
+| **antigravity** | No Workflow tool. Background subagents. |
+| **muse** | No Workflow tool. Child agents (`--subagent-worktree-isolation` in `muse --help` 1.4.13). |
+| **pi** | No Workflow tool. The subagent extension when installed, else in-session, phases in order. |
+| **opencode** · **gemini** | No Workflow tool; delegation unprobed - in-session, phases in order. |
 | **prime-agent** | `rlm(...)` fan-out in a loop; no caching or resume. |
 
 Off `claude-code`, workflow mode is a *pattern*, not a tool. Don't pretend a
-`Workflow` call happened.
+`Workflow` call happened. The marathon plan is the same file on every host;
+`/marathon-run` dispatches it with that host's delegate (relay-morpheus
+marathon.md § Run without the Workflow tool).
 
 ## Phase → script mapping
 

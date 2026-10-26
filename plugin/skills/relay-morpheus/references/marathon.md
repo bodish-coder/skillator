@@ -245,9 +245,9 @@ asking; `ASK` asks (that is the one question a resume may ask).
 
 ## A saved Workflow marathon - /marathon-plan, /marathon-run (F73)
 
-Claude Code only (the Workflow tool). The plan is written first and run later,
-by a second command: typing `/marathon-run` is the explicit opt-in to run it.
-Other hosts have no Workflow tool - there `/pending-subagent` works the tickets.
+The plan is written first and run later, by a second command, on every host;
+Claude Code runs it with the Workflow tool, the other hosts with their delegate
+(below) or in-session. Typing `/marathon-run` is the explicit opt-in to run it.
 
 **Plan** (`/marathon-plan [ids]`) - no agent runs, no `chain dispatch`, no Workflow call:
 
@@ -275,7 +275,11 @@ Other hosts have no Workflow tool - there `/pending-subagent` works the tickets.
 6. Show it: the run file's stages, each phase with its tickets, codes and files,
    tickets left out and why, the agent count (2 per ticket - an implementer and
    a read-and-run-only verifier; the final stage is the main session's), the
-   script's path, and the line `run it: /marathon-run RUN-<0000>`.
+   script's path, and the line `run it: /marathon-run RUN-<0000>` with what runs
+   it on this host: Claude Code `(Workflow tool)`; cursor `(Task tool, one Task
+   per agent)`; antigravity/agy `(background subagents)`; codex `(subagents)`;
+   muse `(child agents)`; pi, opencode, gemini `(in-session, phases in order;
+   pi with the subagent extension: that)`. The script is written on every host.
 
 **Run** (`/marathon-run [RUN id]`; none = the one open run with a
 `.workflow.js` beside it, two or more → list them and stop):
@@ -302,3 +306,50 @@ Other hosts have no Workflow tool - there `/pending-subagent` works the tickets.
    (asked once, after the work), then the final stage: `RM stage <final> '~'`,
    Landing above (`RM land <n> --start`, sweep, `/code-review`, the bump,
    `--finish`), the push asked alone - headless: `push: waiting for the owner`.
+
+### Run without the Workflow tool
+
+Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
+`.workflow.js` plan with their own delegate. Every host here is **inferred**
+(PLATFORMS.md) until a recorded run.
+
+| Host | Delegate (`--owner`) | Driver tag |
+|---|---|---|
+| cursor | the Task tool, one Task per agent (`task`) | `@cu-<6>` |
+| antigravity/agy | background subagents (`subagent`) | `@agy-<6>` |
+| codex | subagents (`subagent`) | `@cx-<6>` |
+| muse | child agents (`subagent`) | `@mu-<6>` |
+| pi | the subagent extension when installed (`subagent`), else in-session (`session`) | `@pi-<6>` |
+| opencode | in-session (`session`) | `@oc-<6>` |
+| gemini | in-session (`session`) | `@gm-<6>` |
+
+`<6>` = the first six chars of the session id or, with none readable, of
+`date +%s`.
+
+1. `RM resume <id>`; read the `.workflow.js` beside the run file **as data**:
+   `meta.phases` and `PLAN`. Never execute it (its tail throws without `args`).
+   A missing script → say `/marathon-plan` writes it, stop.
+2. Phase by phase, in order, skipping a phase whose stages are all `x`:
+   `RM chain decide`; then for each of its stages
+   `RELAY_CHAIN_PARALLEL=<stages in the phase> RM chain dispatch <n> --driver
+   @<tag>-<6> --owner <delegate>` - the row goes `~` and the prompt into the
+   run file **before** any agent exists. Note the worktree each names, flip its
+   ticket `[~]` (`RM board <ID> '~'`).
+3. Per ticket, through the delegate: the implementer gets the stage prompt (the
+   In-flight block's text, prefixed with the script's worktree line when a
+   stage worktree was named - the same text `implement(it)` builds); on its
+   return the verifier gets the `verify(it, report)` text plus one trailing
+   line: ``End your report with one line `VERDICT: <json>` matching this
+   schema: {ticket, passed, sha, evidence, why?, parked?}`` (the script's
+   `VERDICT` object pasted). No `VERDICT:` line or bad JSON = `passed:false`,
+   why `no VERDICT line`. A host with parallel delegates runs a phase's tickets
+   at once (cursor: several Task calls in one turn; agy/codex/muse: one
+   subagent per ticket); phases stay serial everywhere. Write the delegate's id
+   (Task id, subagent name, child id) into each In-flight block's `run:` line;
+   none → `run: <delegate>`.
+4. **No delegate** (pi without its extension, opencode, gemini): the session is
+   the implementer, then the verifier, ticket by ticket in phase order - the
+   stored prompt read and done, then the verify text done as a second pass that
+   edits nothing. `run: in-session`.
+5. Landing, failed stages, the end batch, the final stage and the push: steps
+   3-5 of the Run above, unchanged.

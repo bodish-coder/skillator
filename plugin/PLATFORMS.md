@@ -238,8 +238,20 @@ marathon saved, then run: the plan is a run file plus a Workflow script beside i
 one implementer and one verifier per ticket, phases serial where tickets share files),
 shown with its agent count and no agent run; `/marathon-run` runs it one phase per
 Workflow call, every stage `chain dispatch`ed first, then landing and the end batch.
-Claude Code only: every other host's command says it has no Workflow tool and points
-at `/pending-subagent`.
+Every other host writes the same plan and `/marathon-run` reads it as data, running each
+stage with that host's delegate or in-session (relay-morpheus marathon.md § Run without
+the Workflow tool). Each tag below turns **verified** only with a recorded run
+(`practice/baselines/README.md`):
+
+| Host | `/marathon-run` runs the agents with | Tag |
+|---|---|---|
+| cursor | marathon: the Task tool, one Task per agent (command text written, Task-tool run not exercised) | inferred |
+| antigravity | marathon: background subagents | inferred |
+| codex | marathon: subagents (the antigravity text, installed as a skill) | inferred |
+| muse | marathon: child agents; no command (`commands: []`) - "plan a marathon" loads relay-morpheus | inferred |
+| pi | marathon: the subagent extension when installed, else in-session | inferred |
+| opencode | marathon: in-session, phases in order (no delegate verified) | inferred |
+| gemini | marathon: in-session, phases in order (no delegate verified) | inferred |
 
 `/skillator-update` (F65) finds its source in this order: a clone path given as its
 argument; Claude Code's updated plugin (`installPath` of `skillator@<mkt>` in
@@ -380,6 +392,8 @@ Verified (Muse Code 1.4.12, 2026-10-24): `muse plugins validate <repo>` - valid,
 `full`; `muse plugins install` with a scratch USERPROFILE/XDG_DATA_HOME - `skills=28
 active=true`, `approve` returns no runtime capabilities; both print one warning that `.claude-plugin/plugin.json` is ignored. Tiers, delegation, usage %
 and the ops board are unprobed: run the printed `ops` launch line beside it.
+Delegate work: child agents: muse --help 1.4.13 lists --subagent-worktree-isolation; the
+in-session name of the tool is unprobed (the ticket's "rlm" child agents are prime-agent's, not muse's).
 
 **opencode** (F67) — not a column of the table above yet: its tiers, delegation,
 hooks and usage % are unprobed. What is verified (opencode 1.19.4, 2026-10-24,
