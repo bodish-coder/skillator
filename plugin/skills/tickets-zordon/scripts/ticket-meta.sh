@@ -21,7 +21,8 @@
 #   ticket-meta.sh team remove @handle  that member out (warns on open tickets)
 #   ticket-meta.sh team list            "@handle: emails (Name)" per member, [lead] and (you) marked
 #   ticket-meta.sh team lead @handle|-  F80: set / hand over the one lead (no lead, or me is it); - clears
-#   ticket-meta.sh whoami               F80: my @handle (SKILLATOR_ME, else git user.email via the team)
+#   ticket-meta.sh whoami               F80: my @handle (F92 session owner, SKILLATOR_ME, else git user.email via the team)
+#   ticket-meta.sh iam @handle          F92: this session's owner (.skillator/sessions/<tag>.owner)
 #   ticket-meta.sh claim <ID>...        F80: [owner: <me>], the box kept (plan / dispatch)
 #   ticket-meta.sh pick [ID...]         F80: `you: ..`, then `pick <ID>` / `skip <ID> <owner>`
 #   ticket-meta.sh reconcile [ID...]    F81: read-only, `ID [now] -> [proposed]  reason` per open row
@@ -406,13 +407,51 @@ id_and_handle() {
 
 lc() { printf '%s' "$1" | tr 'A-Z' 'a-z'; }
 
-# F80: ME <- the session's person, found, never stored: SKILLATOR_ME=@handle (on
-# the team) overrides; else this repo's git user.email through the team emails.
+# F92: STAG <- this session's tag as tickets-zordon "Who touched it" names it, no @:
+# SKILLATOR_SESSION (any host), else Claude Code's session id -> cc-<last 6>; else ''.
+session_tag() {
+  STAG=${SKILLATOR_SESSION:-}
+  STAG=$(printf '%s' "${STAG#@}" | tr 'A-Z' 'a-z')
+  if [ -z "$STAG" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+    STAG=cc-$(printf '%s' "$CLAUDE_CODE_SESSION_ID" | tr -cd 'A-Za-z0-9' | tr 'A-Z' 'a-z' | tail -c 6)
+  fi
+  printf '%s' "$STAG" | grep -Eqx '[a-z0-9_-]+' || STAG=''   # a file name: no / or ..
+}
+
+# F92: iam @handle - this session's owner, asked at session start (grayskull-power's
+# arm), kept in <main>/.skillator/sessions/<tag>.owner - git-ignored by the folder's
+# own .gitignore, never team.md or git config.
+cmd_iam() {
+  [ $# -eq 1 ] || die "usage: iam @handle"
+  h=$1; case $h in @*) ;; *) h="@$h" ;; esac
+  one_line "$h" && printf '%s' "$h" | grep -Eqx '@[A-Za-z0-9_.-]+' || die "not a handle (@name): $1"
+  team_file > /dev/null || die "no .skillator/team.md - this repo has no people"
+  team_rows | awk '{ print $1 }' | grep -qxF -- "$h" || die "$h is not in .skillator/team.md"
+  session_tag
+  [ -n "$STAG" ] || die "no session tag - set SKILLATOR_SESSION=@<agent>-<id> (tickets-zordon: Who touched it)"
+  sd="$MAIN/.skillator/sessions"
+  mkdir -p "$sd" || die "cannot create $sd"
+  [ -f "$sd/.gitignore" ] || printf '*\n' > "$sd/.gitignore" || die "cannot write $sd/.gitignore"
+  printf '%s\n' "$h" > "$sd/$STAG.owner" || die "cannot write $sd/$STAG.owner"
+  echo "$h owns session @$STAG"
+}
+
+# F80: ME <- the session's person: F92's session owner file
+# first, then SKILLATOR_ME=@handle (on the team), else this repo's git user.email
+# through the team emails.
 # Fails with ME empty and ME_WHY saying why. git's email is self-set: who "me" is
 # is a team convention, not security.
 me_of() {
   ME='' ME_WHY=''
   team_file > /dev/null || { ME_WHY='no .skillator/team.md'; return 1; }
+  session_tag
+  sf="$MAIN/.skillator/sessions/$STAG.owner"
+  if [ -n "$STAG" ] && [ -f "$sf" ]; then
+    mh=''; IFS= read -r mh < "$sf" || :
+    mh=${mh%"$CR"}
+    if one_line "$mh" && team_rows | awk '{ print $1 }' | grep -qxF -- "$mh"; then ME=$mh; return 0; fi
+    ME_WHY="session owner $mh ($sf) is not in .skillator/team.md - iam @handle"; return 1
+  fi
   if [ -n "${SKILLATOR_ME:-}" ]; then
     mh=$SKILLATOR_ME; case $mh in @*) ;; *) mh="@$mh" ;; esac
     if one_line "$mh" && team_rows | awk '{ print $1 }' | grep -qxF -- "$mh"; then ME=$mh; return 0; fi
@@ -947,7 +986,7 @@ selftest() {
   T=$(mktemp -d 2>/dev/null || mktemp -d -t ticketmeta)
   trap 'rm -rf "$T"' EXIT
   # F80: who "me" is comes from git's user.email - never this machine's global one
-  : > "$T/gitconfig"; GIT_CONFIG_GLOBAL="$T/gitconfig"; export GIT_CONFIG_GLOBAL; unset SKILLATOR_ME
+  : > "$T/gitconfig"; GIT_CONFIG_GLOBAL="$T/gitconfig"; export GIT_CONFIG_GLOBAL; unset SKILLATOR_ME SKILLATOR_SESSION CLAUDE_CODE_SESSION_ID
   # F82: board writes commit; EMAIL is git's last fallback, so user.email (whoami) stays unset
   printf '[user]\n\tname = t\n' > "$T/gitconfig"; EMAIL=board@selftest.invalid; export EMAIL
   fail=0
@@ -1384,6 +1423,20 @@ selftest() {
   git config user.email ghost@x.com
   sh "$self" whoami > /dev/null 2> "$T/err" && { echo "FAIL: whoami answered for an email not on the team"; fail=1; }
   grep -q 'not on the team: add ghost@x.com to .skillator/team.md' "$T/err" || { echo "FAIL: whoami not on the team: $(cat "$T/err")"; fail=1; }
+  # F92: the session owner file (iam) wins over SKILLATOR_ME and git's email; not on the team: refused
+  sh "$self" iam @vidul > /dev/null 2> "$T/err" && { echo "FAIL: iam with no session tag"; fail=1; }
+  grep -q 'no session tag' "$T/err" || { echo "FAIL: iam with no session tag: $(cat "$T/err")"; fail=1; }
+  eq "iam" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD sh "$self" iam vidul 2>&1)" "@vidul owns session @cc-ab12cd"
+  [ -f .skillator/sessions/cc-ab12cd.owner ] || { echo "FAIL: iam wrote no .skillator/sessions/cc-ab12cd.owner"; fail=1; }
+  [ -z "$(git status --porcelain -- .skillator)" ] || { echo "FAIL: the session file is not git-ignored"; fail=1; }
+  eq "whoami by session file" "$(CLAUDE_CODE_SESSION_ID=x-ab12cd SKILLATOR_ME=neo sh "$self" whoami 2>&1)" "@vidul"
+  eq "whoami by SKILLATOR_SESSION" "$(SKILLATOR_SESSION=@cc-ab12cd sh "$self" whoami 2>&1)" "@vidul"
+  eq "another session falls back" "$(CLAUDE_CODE_SESSION_ID=x-ffffff SKILLATOR_ME=neo sh "$self" whoami 2>&1)" "@neo"
+  CLAUDE_CODE_SESSION_ID=x-ab12cd sh "$self" iam @nobody > /dev/null 2>&1 && { echo "FAIL: iam took a handle not on the team"; fail=1; }
+  printf '@nobody\n' > .skillator/sessions/cc-ab12cd.owner
+  CLAUDE_CODE_SESSION_ID=x-ab12cd sh "$self" whoami > /dev/null 2> "$T/err" && { echo "FAIL: whoami took a session owner not on the team"; fail=1; }
+  grep -q 'session owner @nobody' "$T/err" || { echo "FAIL: session owner refusal: $(cat "$T/err")"; fail=1; }
+  rm -rf .skillator/sessions
   # pick: unassigned and mine picked, another's skipped with its owner; not on the team -> only unassigned
   eq "pick, not on the team" "$(run pick)" "you: - (not on the team: add ghost@x.com to .skillator/team.md) pick F1 skip F2 @asha skip F3 @vidul pick F4 skip F6 @neo pick F7"
   cp TICKETS.md "$T/f80a.md"
@@ -1631,7 +1684,7 @@ teams_post() {
   return 0
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|claim|pick|reconcile|unblock|start|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|claim|pick|reconcile|unblock|start|selftest"
 c=$1; shift
 SUB=$c
 [ "$c" = selftest ] && { selftest; exit 0; }
@@ -1655,6 +1708,7 @@ case $c in
   tag) cmd_tag "$@" ;;
   team) cmd_team "$@" ;;
   whoami) cmd_whoami "$@" ;;
+  iam) cmd_iam "$@" ;;
   claim) cmd_claim "$@" ;;
   pick) cmd_pick "$@" ;;
   reconcile) cmd_reconcile "$@" ;;

@@ -128,6 +128,7 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh block F12 S3 creds from ops   
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh defer F12 after the parser rewrite  # [>] ` (deferred: ..)`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # write app + by
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh whoami          # F80: my @handle
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh iam @asha       # F92: this session's owner
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh pick F12 F14    # F80: pick / skip <ID> <owner>
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh claim F12       # F80: [owner: <me>], box kept
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh team lead @asha # F80: set / hand over the lead
@@ -157,9 +158,13 @@ lead: @vidul
   when there is none, or hands it over when *me* is the lead; `team lead -` clears
   it (the lead only). `team remove` of the lead is refused until it is handed over.
   `team list` marks ` [lead]` and ` (you)`.
-- **Me** is found, never stored: `ticket-meta whoami` maps this repo's git
-  `user.email` to a handle through the team emails; `SKILLATOR_ME=@handle` (on the
-  team) overrides. No match → `not on the team: add <email> to .skillator/team.md`.
+- **Me**: `ticket-meta whoami` reads, in order, this session's owner (F92:
+  `ticket-meta iam @handle`, asked at session start by grayskull-power's arm,
+  kept in git-ignored `.skillator/sessions/<session tag>.owner`; the tag from
+  `SKILLATOR_SESSION`, else Claude Code's session id → `cc-<last 6>`), then
+  `SKILLATOR_ME=@handle`, then this repo's git `user.email` through the team
+  emails. A handle not on the team is refused. No match → `not on the team: add
+  <email> to .skillator/team.md`.
 - **Claims**: planning or dispatching a ticket (relay-morpheus `chain plan` /
   `chain dispatch`, `/pending-subagent`, `/marathon-plan`) runs
   `ticket-meta claim <ID>...` — `[owner: <me>]`, the box kept. A ticket already

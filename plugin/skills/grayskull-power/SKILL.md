@@ -17,7 +17,7 @@ description: >-
 ## ⚔️ I HAVE THE POWER!!
 ```
 
-Unconditional — the receipt it loaded. Once a session.
+The receipt it loaded. Once a session.
 
 One call: **arm** the standing skills, **announce** the state, **route** each
 request — under §3.
@@ -40,7 +40,7 @@ level; skips its core when `PONYTAIL MODE ACTIVE` is in context) · `codegraph` 
 repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
 `usage-watch … check` elsewhere) · `relay-morpheus` (an unfinished `.skillator/run.md`
 is the first thing you say) · `rules-orko` (rules read, clashes asked) · `tiers`
-(`.skillator/tiers.local.md`).
+(`.skillator/tiers.local.md`) · `owner` (ask who drives).
 
 Then one line:
 
@@ -76,7 +76,7 @@ One skill at a time; chaining "to be safe" is the failure.
 obeys §3: "one line" is the diff, never the thinking.
 
 **Load [`references/routing.md`](references/routing.md)** — every row,
-the long tail, why the order holds.
+the long tail.
 
 ## 3. Ground rules
 
