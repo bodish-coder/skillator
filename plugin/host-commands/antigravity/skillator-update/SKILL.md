@@ -34,11 +34,16 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
    it refreshes from the dir it was installed from (`source.path` in that list, a `\\?\` prefix
    dropped), not from step 2's source - a git clone there that step 2 did not pull →
    `git -C <that dir> pull --ff-only` first, failing as in step 2. Then
-   `muse plugins update skillator`; note the old and new `version`. It reports a runtime
+   `muse plugins update skillator` - or, when that dir has no `.muse-plugin/plugin.json` but
+   `<that dir>/plugin/.muse-plugin/plugin.json` exists (installed before F91 moved the plugin
+   into `plugin/`), `muse plugins remove skillator` then `muse plugins install <that dir>/plugin`
+   instead (install refuses a second source; remove keeps the plugin data); note the old and new
+   `version`. It reports a runtime
    capability awaiting approval → show `muse plugins approve skillator` to the user, never
    run it on your own.
 5. **Report** one table: host, old -> new version (new: `version` in
-   `<src>/.claude-plugin/plugin.json`; old: step 1's list for Claude Code, else that file in the
+   `<src>/.claude-plugin/plugin.json`, or `<src>/plugin/.claude-plugin/plugin.json` when `<src>` is a
+   clone root; old: step 1's list for Claude Code, else that file in the
    dir `.skillator-source` named before step 3 rewrote it, else `unknown`), what was written.
    Claude Code updated → say "restart Claude Code to load it"; the other hosts read the new
    files on their next session.

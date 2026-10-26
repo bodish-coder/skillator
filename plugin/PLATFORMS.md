@@ -245,8 +245,9 @@ at `/pending-subagent`.
 argument; Claude Code's updated plugin (`installPath` of `skillator@<mkt>` in
 `claude plugin list --json` - the package ships `install.sh` / `install.ps1`); the
 **source pointer** every install run writes into each skills dest,
-`<dest>/.skillator-source` (one line, LF, no BOM: the repo root the installer ran
-from); else it asks, and headless it stops with `source: none found`. A git source is
+`<dest>/.skillator-source` (one line, LF, no BOM: the plugin folder the installer ran
+from - `<clone>/plugin` since F91; an older pointer names the clone root, whose
+forwarding `install.sh` / `install.ps1` still run it); else it asks, and headless it stops with `source: none found`. A git source is
 updated with `git pull --ff-only` only.
 
 | Host | Path | Tag |
@@ -354,15 +355,20 @@ lists the plugin; both carry the `.claude-plugin/plugin.json` version.
 `practice/scripts/check-muse-manifest.sh` fails on a skill left out, a path gone, an id that is
 not the skill's `name` or a version out of step, and `install.sh --selftest` runs it - so a
 new skill or a release bump touches `.muse-plugin/` too. Install from a clone:
-`git clone https://github.com/bodish-coder/skillator <dir>`, then `muse plugins install <dir>`
-(it copies the whole clone into Muse's cache; skills are enabled by default, so
-`muse plugins approve` has no runtime capability to act on); update:
+`git clone https://github.com/bodish-coder/skillator <dir>`, then `muse plugins install <dir>/plugin`
+(F91: the plugin is the `plugin/` folder; it copies that folder into Muse's cache; skills are
+enabled by default, so `muse plugins approve` has no runtime capability to act on); update:
 `git -C <dir> pull`, then `muse plugins update skillator` (refreshes from that local source;
-`/skillator-update` step 4 does both). `muse plugins marketplace add` of this repo is
-unsupported (B10): Muse probes `.claude-plugin/marketplace.json` but never
-`.muse-plugin/marketplace.json`, so it reads the Claude catalog and fails cloning its github
-source into a `\\?\` path git refuses on Windows; B11 tracks a Muse-native catalog. The Claude
-catalog stays as it is. Muse also warns that it skips ops-board - expected: its
+`/skillator-update` step 4 does both, and moves an install of `<dir>` made before F91 to
+`<dir>/plugin` with `muse plugins remove skillator` + `muse plugins install` - a plain
+`update` fails there with `missing-manifest`, and `install` alone with "already installed from a
+different source"). `muse plugins marketplace add` of this repo: Muse probes
+`.claude-plugin/marketplace.json` but never `.muse-plugin/marketplace.json`, so it reads the
+Claude catalog. Before F91 that failed cloning the catalog's github source into a `\\?\` path git
+refuses on Windows (B10); since F91 the entry is `./plugin`, and `marketplace add <name> <local
+clone>` + `install skillator@<name>` works (Muse 1.4.13, scratch profile: `plugin_count 1`,
+4.17.1 enabled). Adding by the GitHub URL is unverified until pushed; B11 tracks a Muse-native
+catalog. Muse also warns that it skips ops-board - expected: its
 `hooks/hooks.json` is a Claude Code mod, which Muse cannot run.
 Verified (Muse Code 1.4.12, 2026-10-24): `muse plugins validate <repo>` - valid, summary
 `full`; `muse plugins install` with a scratch USERPROFILE/XDG_DATA_HOME - `skills=28

@@ -4,7 +4,9 @@ A dedicated home for reusable [Claude Code](https://claude.com/claude-code)
 skills, kept out of individual project repos and packaged as an installable
 plugin.
 
-Each directory under `skills/` is one skill (a `SKILL.md` plus any support
+The plugin lives in [`plugin/`](plugin/) (F91; the catalogs, `TICKETS.md` and `docs/` stay at
+the root, and the root `install.sh` / `install.ps1` forward to `plugin/`). Each directory
+under `plugin/skills/` is one skill (a `SKILL.md` plus any support
 files).
 
 ## Install (plugin marketplace)
@@ -44,7 +46,7 @@ version. It never pushes; restart Claude Code afterwards.
 **If an agent refuses to install or update this plugin**, it is reading the
 `grayskull-power` skill's trigger phrases as a social-engineering script. It
 isn't one: this is a public MIT repo, `grayskull-power` is a documented skill
-under [`skills/grayskull-power/`](skills/grayskull-power/), and the plugin
+under [`plugin/skills/grayskull-power/`](plugin/skills/grayskull-power/), and the plugin
 installs into Claude Code's plugin cache — so it will never appear in installed
 programs, services, or scheduled tasks. Point the agent at this README, or run
 the two `/plugin` commands yourself.
@@ -89,13 +91,13 @@ Manual install paths, if you'd rather not run the script:
 | Codex | `$CODEX_HOME/skills/` (what the installer writes; default `~/.codex/skills/`) — auto-loaded when the task matches. Also reads `~/.agents/skills/` if present, with no dedupe (codex 0.155.1, probed 2026-09-23) |
 | Antigravity CLI | `.agents/skills/` (workspace) or `~/.gemini/antigravity-cli/skills/` (global, what `agy` 1.4.5 reads; the installer also writes `~/.gemini/config/skills/` and `~/.gemini/skills/`) |
 | Pi | `.pi/skills/` (force with `/skill:<name>`) |
-| Muse | native plugin from `.muse-plugin/plugin.json` (every skill; no commands, no hooks): install from a clone - `git clone https://github.com/bodish-coder/skillator <dir>`, then `muse plugins install <dir>` (skills are on at once; nothing to approve); update with `git -C <dir> pull` then `muse plugins update skillator` (`/skillator-update` does both). `muse plugins marketplace add` of this repo is unsupported: Muse reads the Claude catalog and fails cloning its github source (B11 tracks a native catalog). The ops-board skip warning is expected - its hook is a Claude Code mod |
+| Muse | native plugin from `plugin/.muse-plugin/plugin.json` (every skill; no commands, no hooks): install from a clone - `git clone https://github.com/bodish-coder/skillator <dir>`, then `muse plugins install <dir>/plugin` (skills are on at once; nothing to approve); update with `git -C <dir> pull` then `muse plugins update skillator` (`/skillator-update` does both). `muse plugins marketplace add <name> <local clone>` then `muse plugins install skillator@<name>` also works since F91 (Muse reads the Claude catalog, now `./plugin`); by the GitHub URL it is unverified (B11 tracks a native catalog). The ops-board skip warning is expected - its hook is a Claude Code mod |
 | opencode | `.opencode/skills/` (project) or `~/.config/opencode/skills/` (global, what the installer writes; `$XDG_CONFIG_HOME/opencode/skills/` when that is set) — also reads `~/.claude/skills/` and `~/.agents/skills/`. Commands: `~/.config/opencode/commands/<n>.md` → `/<n>` |
 | Prime Agent | anywhere — skills there are Python packages, so read the `SKILL.md` or reference it from `AGENTS.md` |
 
 Model names and tool names inside the skills are **Claude Code defaults**;
-[`PLATFORMS.md`](PLATFORMS.md) maps them to each host's tiers, delegation
-mechanism, and context checkpoints. [`WORKFLOW.md`](WORKFLOW.md) is the
+[`PLATFORMS.md`](plugin/PLATFORMS.md) maps them to each host's tiers, delegation
+mechanism, and context checkpoints. [`WORKFLOW.md`](plugin/WORKFLOW.md) is the
 `build-jarvis`'s deterministic-orchestration path — one workflow script
 instead of hand-dispatched subagents, for builds wide enough to earn it. Keep
 both alongside `skills/` — the skills refer to them.
@@ -420,7 +422,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   *Workflows* webhook. The settings - security token, Workflows URL, port, status
   posts - are filled in once from the board's setup form into
   `~/.skillator/teams.json`, this user only. Setup and threat model:
-  [`skills/teams-uhura/references/setup.md`](skills/teams-uhura/references/setup.md).
+  [`plugin/skills/teams-uhura/references/setup.md`](plugin/skills/teams-uhura/references/setup.md).
 
 ## Add a new skill
 
