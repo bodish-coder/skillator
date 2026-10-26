@@ -65,6 +65,12 @@ export async function unreadOf($: EngineInterface): Promise<number> {
 
 let draft: SetupValues | null = null
 let touched = false
+// F98: the first-time setup (teams-uhura scripts/setup.ps1 | setup.sh) from the form, after a
+// confirm. Only its --check pass runs here - the walk asks questions and opens a browser
+// sign-in, which no pane child can answer - and its table is shown with the walk's command
+// (the same argv without --check) for the owner's own terminal. Held here, as `draft` is.
+let check: { confirm: boolean; out: string | null; walk: string | null } = { confirm: false, out: null, walk: null }
+const NO_CHECK = { confirm: false, out: null, walk: null }
 
 async function refreshCfg($: EngineInterface, auto: boolean) {
   const r = await runCall($, 'team-config-show', [])
@@ -88,6 +94,7 @@ async function bump($: EngineInterface, patch: Partial<SetupView> = {}) {
 export async function openSetup($: EngineInterface) {
   draft = freshSetup(await read($, teamsCfgA))
   touched = false
+  check = NO_CHECK
   await update($, setupA, () => ({ rev: 0, field: 'token', result: null, confirmClear: false }))
   await $.ui.open({ id: 'ops-board', title: 'ops board', closeOnEscape: true })
   void $.ui.focus({ requestId: 'ops-board', key: 'setup:token' }).catch(() => {})
@@ -100,6 +107,7 @@ export async function isSetupUp($: EngineInterface): Promise<boolean> {
 export async function closeSetup($: EngineInterface) {
   draft = null
   touched = false
+  check = NO_CHECK
   await update($, setupA, () => null)
 }
 
@@ -121,6 +129,17 @@ async function clearSaved($: EngineInterface) {
   $.ui.toast([`✓ Teams settings cleared - ${r.out.trim().split(/\r?\n/)[0] ?? ''}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeSetup($)
   await refreshCfg($, false)
+}
+
+// F98: the check pass, confirmed. Exit 1 (something missing) is still the table; only a child
+// that could not start or run (code -1 / 127) is an error.
+async function runSetupCheck($: EngineInterface) {
+  check = NO_CHECK
+  await bump($, { result: null })
+  const r = await runCall($, 'team-setup-check', [])
+  if (r.code < 0 || r.code === 127) { await bump($, { result: why(r) }); return }
+  check = { confirm: false, out: r.out.trim() || r.err.trim() || `setup exited ${r.code}`, walk: r.argv.filter(a => a !== '--check').map(quote).join(' ') }
+  await bump($)
 }
 
 async function markRead($: EngineInterface) {
@@ -206,10 +225,20 @@ export async function renderSetup($: EngineInterface, e: RenderInput<'Pane'>): P
           <Button key="setup:clear-no" onPress={() => { void bump($, { confirmClear: false }) }}>No</Button>
         </Box>
       )}
+      {check.out && <Box key="setup:checked"><Text wrap="wrap">{check.out}</Text></Box>}
+      {check.walk && <Box key="setup:walk"><Text dimColor wrap="wrap">{`The walk itself (installs, sign-in, arming) runs in your terminal: ${check.walk}`}</Text></Box>}
+      {check.confirm && (
+        <Box key="setup:run-confirm" flexDirection="row" gap={2}>
+          <Text color="warning" wrap="wrap">{"run teams-uhura's first-time setup check now? (setup --check: reads node, winget/brew, devtunnel, the tunnel and the listener; changes nothing)"}</Text>
+          <Button key="setup:run-yes" onPress={() => { void runSetupCheck($) }}>Yes, run</Button>
+          <Button key="setup:run-no" onPress={() => { check = NO_CHECK; void bump($) }}>No</Button>
+        </Box>
+      )}
       <Text> </Text>
       <Box flexDirection="row" gap={4}>
         <Button key="setup:save" variant="primary" onPress={() => { void saveSetup($) }}>Save</Button>
-        <Button key="setup:clear" onPress={() => { void bump($, { confirmClear: true, result: null }) }}>Clear saved</Button>
+        <Button key="setup:clear" onPress={() => { check = NO_CHECK; void bump($, { confirmClear: true, result: null }) }}>Clear saved</Button>
+        <Button key="setup:run" onPress={() => { check = { confirm: true, out: null, walk: null }; void bump($, { confirmClear: false, result: null }) }}>Run first-time setup</Button>
         <Button key="setup:cancel" onPress={() => { void closeSetup($).then(() => $.ui.open({ id: 'ops-board', title: 'ops board' })) }}>Cancel</Button>
       </Box>
     </Box>
