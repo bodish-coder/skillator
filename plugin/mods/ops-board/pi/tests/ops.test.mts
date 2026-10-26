@@ -152,9 +152,9 @@ test('/ops --once notifies one plain frame of the repo it is run in, and opens n
 test('/ops with a wrong flag says so with the usage, as an error', async () => {
   const f = fakePi()
   registerOps(f.pi, opts)
-  await f.cmd.handler('--tab agents', f.ctx(repo()))
+  await f.cmd.handler('--tab bogus', f.ctx(repo()))
   assert.equal(f.notes[0]!.type, 'error')
-  assert.match(f.notes[0]!.msg, /--tab is one of tickets, workflows, health, messages, explorer, run, got agents/)
+  assert.match(f.notes[0]!.msg, /--tab is one of tickets, workflows, health, messages, explorer, build, got bogus/)
   assert.match(f.notes[0]!.msg, /^usage: \/ops /m)
 })
 

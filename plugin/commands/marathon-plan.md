@@ -1,5 +1,5 @@
 ---
-description: "Plan a Workflow marathon over the open tickets, or the IDs given: a relay-morpheus run file plus a saved Workflow script (one agent per ticket, phases, serial where tickets share files, a verify phase), shown with its agent count; no agents run (relay-morpheus)"
+description: "Plan a Workflow marathon over the open tickets, or the IDs given: a relay-morpheus run file plus a saved Workflow script (one agent per ticket, phases, serial where tickets share files, each ticket verified in its own phase), shown with its agent count; no agents run (relay-morpheus)"
 argument-hint: "[ticket ids, e.g. F12 F14]"
 ---
 

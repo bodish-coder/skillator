@@ -4,6 +4,7 @@
 # F89: -Open (or --open) starts the board in a new tab of the current Windows Terminal
 # window when wt is on PATH (the 'skillator ops' profile when its fragment is installed),
 # else runs it here as without it.
+# F94: --status prints one quota row per CLI profile and exits 0, from any folder.
 # Pure ASCII: Windows PowerShell 5.1 reads a BOM-less script in the ANSI code page.
 param(
   [string]$Repo = '.',

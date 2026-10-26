@@ -1,7 +1,9 @@
 # ops-board
 
 The skillator ops board: the `TICKETS.md` board, workflows, health, messages, explorer
-and run tabs. One data layer, drawn four ways. Needs node 22.18 or newer.
+and build tabs (in the Claude Code pane, Workflows also lists the session's agents;
+`build` is the Build tab's word, `run` an alias). One data layer, drawn four ways.
+Needs node 22.18 or newer.
 
 ## Launch it, per host
 

@@ -28,7 +28,7 @@ for (const surface of SURFACES) {
     expect(await text('wfc:wf_r1')).toBe('    1 done · 1 running · 2 failed  wf_r1')
     expect(JSON.stringify(await ui.find({ key: 'wfc:wf_r1' }))).toContain('"color":"error"')
     expect(await text('wf:phase')).toBe('phase: not shown - the engine reports no workflow phase')
-    expect(w.lists).toBe(0)                                // the Workflows tab never reads $.agent.list()
+    expect(w.lists).toBe(1)                                // F93: read once on entering, for its Agents section
     await ui.unmount()
   })
 }
@@ -143,7 +143,7 @@ test('no workflow run yet: the tab says so, and no phase line', async ($, on) =>
 
 // F76: the one Workflows tab (id runs) holds a Runs and a Workflows section; /ops workflows opens it with
 // the section open (a section closed before opens again).
-test('/ops workflows opens the pane on Workflows, its Workflows section open; the agents list is not read for it', async ($, on) => {
+test('/ops workflows opens the pane on Workflows, its Workflows section open', async ($, on) => {
   const [w, clock] = agentWorld(on)
   await start($, clock)
   await $.tool.call({ tool: 'Workflow', name: 'deep-review', tool_use_id: 'tu-wf' })
@@ -157,7 +157,5 @@ test('/ops workflows opens the pane on Workflows, its Workflows section open; th
   expect((await ui.find({ key: 'tab:runs' }))?.props.variant).toBe('primary')
   expect((await ui.find({ key: 'sect:workflows' }))?.text).toBe('▾ Workflows (1)')
   expect((await ui.find({ key: 'wf:wf_r1' }))?.text).toBe('● deep-review  started 14:02:11')
-  await clock.advance(20_000)
-  expect(w.lists).toBe(0)
   await ui.unmount()
 })

@@ -13,9 +13,10 @@ export type RunLine = Line
 // F76: the Workflows tab (id 'runs') holds two sections, Runs (relay runs) and Workflows (the Workflow
 // tool's runs), each a header with its count that opens and closes as F61's groups.
 // Both start open, so the merged tab first shows every row the two old tabs did.
-export type RunsSection = 'runs' | 'workflows'
+// F93: the pane adds Agents (the old Agents tab); the ops app has no agent source.
+export type RunsSection = 'runs' | 'workflows' | 'agents'
 export const RUNS_SECTIONS: RunsSection[] = ['runs', 'workflows']
-const SECTION_WORD: Record<RunsSection, string> = { runs: 'Runs', workflows: 'Workflows' }
+const SECTION_WORD: Record<RunsSection, string> = { runs: 'Runs', workflows: 'Workflows', agents: 'Agents' }
 // '▾ Runs (2)' / '▸ Workflows (1)'; n null: no count is known (none read yet, or not observable).
 export const sectionHead = (sec: RunsSection, open: boolean, n: number | null) =>
   `${open ? '▾' : '▸'} ${SECTION_WORD[sec]}${n === null ? '' : ` (${n})`}`

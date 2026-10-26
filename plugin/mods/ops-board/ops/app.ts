@@ -2,8 +2,9 @@
 // ops/ that touches the terminal: state.ts decides, draw.ts draws, engine.ts runs the
 // polls and effects (through nodehost's run), this wires them to the terminal.
 //   node --import ./loader.mjs app.ts [--once] [--cols N] [--rows N] [--no-color] [--ascii]
-//                                     [--skills <dir>] [--tab tickets|workflows|health|messages|explorer|run]
+//                                     [--skills <dir>] [--tab tickets|workflows|health|messages|explorer|build]
 // F76: --tab workflows is the Workflows tab (state id 'runs'); --tab runs stays an alias.
+// F93: --tab build is the Build tab (state id 'run'); --tab run stays an alias, --tab agents opens Workflows.
 // --once draws one frame to stdout and exits 0, without raw mode - the smoke test and the
 // screenshot helper. It reads only: of the effects the polls ask for it runs relay's
 // decision (a read) and nothing else, so it never sets or releases the watchdog hold.
@@ -18,19 +19,21 @@ import { makeHost } from './nodehost'
 import { initial } from './state'
 import { frame, paintScreen } from './draw'
 import { makeEngine } from './engine'
+import { status } from './status'
 
 export type Opts = {
   once: boolean; cols: number | null; rows: number | null; color: boolean; ascii: boolean
   skills: string | null; tab: Tab; error: string | null
 }
 
-export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no-color] [--ascii] [--skills <dir>] [--tab tickets|workflows|health|messages|explorer|run]'
+export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no-color] [--ascii] [--skills <dir>] [--tab tickets|workflows|health|messages|explorer|build]'
 // F89: --help prints this and exits 0. --open is the launchers' (ops.sh / ops.ps1), never the app's.
 export const HELP = USAGE + '\n'
   + '  launcher: ops [repo-dir] --open   (ops.ps1: -Open) the board in a new tab of the current\n'
   + '            Windows Terminal window when wt.exe is on PATH, else here as without it\n'
+  + '  ops --status   one row per CLI profile (5h / 7d % used, or why not), then exits\n'
   + '  NO_COLOR or --no-color drops the colours only; bold, inverse and the › marker stay'
-const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', health: 'health', messages: 'messages', explorer: 'explorer', run: 'run' }
+const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', agents: 'runs', health: 'health', messages: 'messages', explorer: 'explorer', build: 'run', run: 'run' }
 
 // The flags; the first wrong one is `error` (the launcher has taken the repo dir already).
 // NO_COLOR (any non-empty value) turns colour off as --no-color does.
@@ -61,7 +64,7 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         const v = value()
         const tab = v && Object.hasOwn(TAB_WORDS, v) ? TAB_WORDS[v] : undefined
         if (tab) o.tab = tab
-        else o.error = `ops: --tab is one of tickets, workflows, health, messages, explorer, run, got ${v ?? 'nothing'}`
+        else o.error = `ops: --tab is one of tickets, workflows, health, messages, explorer, build, got ${v ?? 'nothing'}`
         break
       }
       default: o.error = `ops: unknown flag ${a}`
@@ -89,6 +92,7 @@ export const repoName = (root: string): string | null => root.split('/').filter(
 
 export async function main(argv: string[]): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write(HELP + '\n'); return 0 }
+  if (argv.includes('--status')) { process.stdout.write(await status(process.env, import.meta.dirname)); return 0 }
   const opts = parseArgs(argv)
   if (opts.error) { process.stderr.write(`${opts.error}\n${USAGE}\n`); return 2 }
   const out = process.stdout

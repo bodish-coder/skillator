@@ -14,6 +14,7 @@ import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
 import { EngageConfirm, openRuns, pollRuns, readRuns, RunsTab } from './runstab'
 import { runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, statusColor } from './lib/runlines'
+import type { RunsSection } from './lib/runlines'
 import { workflowStatus } from './lib/agents'
 import { AgentsTab, pollAgents, readAgents, WorkflowsTab } from './agentstab'
 import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab'
@@ -28,7 +29,8 @@ export const PANE_TITLE = 'ops board'
 
 // F76: one tab, id 'runs', labelled Workflows (owner: relay runs and workflows are one thing):
 // a Runs section and a Workflows section. /ops workflows opens it; /ops runs is an alias.
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'agents' | 'explorer' | 'run'
+// F93: its Agents section is the old Agents tab; tab 'run' is labelled Build.
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run'
 // Each file names the atoms it reads or writes as its own consts: the engine's scan
 // lists state access from those, not from an import (register.tsx repeats them).
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
@@ -43,8 +45,8 @@ const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 // F61: the boxes of the open groups, this session; empty = every group collapsed. Only
 // the set is held, never rows: the board's own value stays within $.state's cap (B4).
 const openA = atom({ plugin: 'ops-board', key: 'openGroups' } as const, [])
-// F76: the Workflows tab's open sections (Runs, Workflows), this session; both start open.
-const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows'])
+// F76: the Workflows tab's open sections (Runs, Workflows, F93 Agents), this session; all start open.
+const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows', 'agents'])
 
 const CHIP_KEY: Color = 'permission'
 const CHIP_VALUE: Color = 'suggestion'
@@ -191,9 +193,9 @@ export async function readView($: EngineInterface, cols: number): Promise<View> 
 }
 
 const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Workflows' },
-  { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' }, { id: 'agents', label: 'Agents' },
+  { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' },
   { id: 'explorer', label: 'Explorer' },   // F75: git-tracked files and recent commits (explorertab.tsx)
-  { id: 'run', label: 'Run' }]   // F79: the repo's entry points (runtab.tsx) - not Workflows (id 'runs')
+  { id: 'run', label: 'Build' }]   // F79: the repo's entry points (runtab.tsx) - not Workflows (id 'runs')
 
 // F76: the Workflows tab (id 'runs') - a Runs section (relay runs, F50) and a Workflows section (F53),
 // each a header Button with its count that Enter or a click opens and closes, as F61's
@@ -205,18 +207,21 @@ async function RunsAndWorkflows($: EngineInterface, els: Els, cols: number): Pro
   const agents = await readAgents($, cols)
   const shown = openRuns(runs.runs)
   const out: RenderElement[] = []
-  for (const sec of RUNS_SECTIONS) {
+  for (const sec of [...RUNS_SECTIONS, 'agents'] as RunsSection[]) {   // F93: the pane's agents last
     const on = open.includes(sec)
-    const n = sec === 'runs' ? shown.length : agents.workflows.length
+    const n = sec === 'runs' ? shown.length : sec === 'workflows' ? agents.workflows.length : agents.agents.length
     // F76: the header in the colour of the most pressing status under it, as a ticket group's
-    const st = sectionStatus(sec === 'runs' ? shown.map(runStatus) : agents.workflows.map(r => workflowStatus(agents.agents, r)))
+    // (F93: Agents uncoloured - each agent row carries its own status colour)
+    const st = sec === 'agents' ? null
+      : sectionStatus(sec === 'runs' ? shown.map(runStatus) : agents.workflows.map(r => workflowStatus(agents.agents, r)))
     if (sec !== RUNS_SECTIONS[0]) out.push(<Text> </Text>)
     out.push(
       <Button key={'sect:' + sec} plain onPress={() => { void update($, runsOpenA, x => toggleGroup(x, sec)) }}>
         <Text bold color={st ? statusColor(st) : undefined}>{cut(sectionHead(sec, on, n), cols - 1)}</Text>
       </Button>,
     )
-    if (on) out.push(...(sec === 'runs' ? RunsTab($, els, runs, agents) : WorkflowsTab(els, agents)))
+    if (on) out.push(...(sec === 'runs' ? RunsTab($, els, runs, agents) : sec === 'workflows' ? WorkflowsTab(els, agents)
+      : AgentsTab(els, { ...agents, runs: shown, board: runs.board })))
   }
   return out
 }
@@ -236,8 +241,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
           onPress={() => {
             void update($, tabA, () => x.id)
             if (x.id === 'runs') void pollRuns($).catch(() => {})       // read on entering the tab
-            if (x.id === 'agents') void pollAgents($).catch(() => {})   // read on entering the tab
-            if (x.id === 'agents') void pollRuns($).catch(() => {})     // F85: the runs its lead column names
+            if (x.id === 'runs') void pollAgents($).catch(() => {})     // F93: its Agents section likewise
             if (x.id === 'messages' && tab !== 'messages') void enterMessages($).catch(() => {})
             if (x.id === 'explorer') void enterExplorer($).catch(() => {})        // F75: read on entering the tab
             if (x.id === 'run') void enterRun($).catch(() => {})            // F79: first open scans
@@ -268,15 +272,6 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         <Box key="keys" flexDirection="row" gap={2}>
           <Button key="key:force" plain dimColor hotkey="f" onPress={() => {}}>force resume (whatever the reading; mutes memory red)</Button>
         </Box>
-      </Box>
-    )
-  }
-  if (tab === 'agents') {
-    return (
-      <Box flexDirection="column">
-        {bar}
-        <Text> </Text>
-        {AgentsTab(els, { ...await readAgents($, cols), runs: openRuns((await readRuns($, cols)).runs), board: await read($, boardA) })}
       </Box>
     )
   }

@@ -110,7 +110,7 @@ const runTitle = (v: AgentsView, runId: string) => v.workflows.find(w => w.runId
 
 export function agentLines(v: AgentsView): Line[] {
   if (!v.agents.length) {
-    return [{ key: 'none', segs: [{ text: 'no agents in this session yet - subagents, teammates and workflow agents show here as they start', dim: true }] }]
+    return [{ key: 'agents:none', segs: [{ text: 'no agents in this session yet - subagents, teammates and workflow agents show here as they start', dim: true }] }]
   }
   const n = (s: AgentStatus | null) => v.agents.filter(r => r.status === s).length
   const words = [...STATUS_ORDER.map(s => [n(s), s] as const), [n(null), 'not listed'] as const]
