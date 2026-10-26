@@ -32,6 +32,7 @@ const PANE_NAME = 'ops board'     // pane.tsx's PANE_TITLE
 export const RUNS_POLL_MS = 30_000
 const CHAIN_STATUS_AT_ONCE = 2
 let polling = false
+let closing = false   // F99: Diagnose's Close running
 
 // One read of relay: the list, then each open run's file and its script. A failed list keeps what was shown.
 export async function pollRuns($: EngineInterface): Promise<void> {
@@ -145,7 +146,8 @@ export async function openDiagnose($: EngineInterface, id: string): Promise<void
   }
   const shas = new Map<string, ShaState>()
   for (const s of run.stages) {
-    if (!s.landed || shas.has(s.landed)) continue
+    // a sha only: relay also takes a path, and a > row's cell names a stage - neither is git's
+    if (!s.landed || shas.has(s.landed) || !/^[0-9a-f]{4,40}$/i.test(s.landed)) continue
     const r = await ask(['merge-base', '--is-ancestor', s.landed, 'HEAD'])
     if (r) shas.set(s.landed, r.exitCode === 0 ? 'head' : r.exitCode === 1 ? 'off' : 'none')
   }
@@ -157,6 +159,7 @@ export async function openDiagnose($: EngineInterface, id: string): Promise<void
     if (sha) closes.push({ n: c.n, sha })
     else d.lines.push(`stage ${c.n}: no commit "${c.ticket}: ..." on HEAD to mark it landed with - by hand: relay-morpheus.sh ${id} stage ${c.n} x <owner> <sha>`)
   }
+  if ((await read($, tabA)) !== 'runs') return              // the tab left while git answered: no stale view
   await update($, diagnoseA, () => ({ id, verdict: d.verdict, lines: d.lines, closes, confirm: false }))
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
   void $.ui.focus({ requestId: PANE, key: closes.length ? 'diag:close' : 'diag:back' }).catch(() => {})
@@ -165,20 +168,26 @@ export async function openDiagnose($: EngineInterface, id: string): Promise<void
 // Close confirmed: each lagging stage marked landed through relay-morpheus (never a hand edit);
 // the first refusal stops it and is said with what ran.
 async function closeRun($: EngineInterface): Promise<void> {
-  const d = await read($, diagnoseA)
-  if (!d) return
-  const done: number[] = []
-  for (const c of d.closes) {
-    const r = await runCall($, 'relay-stage-landed', [d.id, String(c.n), c.sha])
-    if (r.code !== 0) {
-      $.ui.toast(`■ ${d.id} stage ${c.n} not closed: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}${r.argv.length ? `\nran: ${r.argv.join(' ')}` : ''}`)
-      break
+  if (closing) return                                       // a second Yes while the first runs closes nothing
+  closing = true
+  try {
+    const d = await read($, diagnoseA)
+    if (!d) return
+    await closeEngage($)
+    const done: number[] = []
+    for (const c of d.closes) {
+      const r = await runCall($, 'relay-stage-landed', [d.id, String(c.n), c.sha])
+      if (r.code !== 0) {
+        $.ui.toast(`■ ${d.id} stage ${c.n} not closed: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}${r.argv.length ? `\nran: ${r.argv.join(' ')}` : ''}`)
+        break
+      }
+      done.push(c.n)
     }
-    done.push(c.n)
+    if (done.length) $.ui.toast(`✓ ${d.id}: stage${done.length === 1 ? '' : 's'} ${done.join(', ')} marked landed`)
+    void pollRuns($).catch(() => {})
+  } finally {
+    closing = false
   }
-  if (done.length) $.ui.toast(`✓ ${d.id}: stage${done.length === 1 ? '' : 's'} ${done.join(', ')} marked landed`)
-  await closeEngage($)
-  void pollRuns($).catch(() => {})
 }
 
 export async function readDiagnose($: EngineInterface): Promise<Diagnose | null> {

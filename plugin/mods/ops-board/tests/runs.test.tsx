@@ -391,7 +391,7 @@ const STAGES = (rows: string[]) => ['## Stages', '| # | stage | state | owner | 
 const WF_RUN = (driver: string, b10: string, flight: string[] = []) => [
   '# Resuming .skillator/run-0020-marathon.md', '# Read the plan named below', '',
   '# RUN-0020 - marathon', 'plan: TICKETS.md', '',
-  ...STAGES(['| 136 | AAA8 A155 code-yoda | x | workflow | - | abc |', `| 137 | AAA9 B10 muse | ${b10} | - | - | - |`, '| 138 | AABA F81 reconcile |   | - | - | - |']),
+  ...STAGES(['| 136 | AAA8 A155 code-yoda | x | workflow | - | abc1 |', `| 137 | AAA9 B10 muse | ${b10} | - | - | - |`, '| 138 | AABA F81 reconcile |   | - | - | - |']),
   '## In flight', ...flight, '',
   '## Chain', `driver: ${driver}${SEP}hold: -${SEP}mode: workflow`,
   '### AAA8 - stage 136 - A155 code-yoda', 'tickets: A155', 'prompt: |', '  x',
@@ -492,7 +492,7 @@ test('F99 Diagnose: inconsistent - a stage in flight whose ticket is [x]; Close 
   // stage 137 in flight under a driver 3 h gone; B10 is [x] on the board; no landed cell, so the sha comes from git log
   const [w, clock] = f85World(on, WF_RUN(`@cc-gone ${stampAgo(183)}`, '~', ['### stage 137 - B10 muse  (dispatched 09:00Z, @cc-gone)', 'run: -']))
   w.files['/r/TICKETS.md'] = BOARD.replace('- [ ] B2 — cart', '- [ ] B2 — cart\n- [x] B10 — muse\n- [x] A155 — yoda')
-  w.git = { abc: 0 }
+  w.git = { abc1: 0 }
   w.logs = { B10: 'f00d1e5\n' }
   await start($, clock)
   const ui = await runsTab($, 'terminal')
@@ -505,7 +505,7 @@ test('F99 Diagnose: inconsistent - a stage in flight whose ticket is [x]; Close 
   expect((await ui.find({ key: 'diag:line:1' }))?.text).toBe('driver @cc-gone: last heartbeat 183m ago, stale at 20m - a stage is still marked in flight')
   expect((await ui.find({ key: 'diag:close-what' }))?.text).toContain('137 (f00d1e5)')
   expect(w.runs.slice(before).map(a => a.slice(0, 2).join(' '))).toEqual([`/bin/sh ${RELAY}.sh`, 'git merge-base', 'git log'])   // resume, one sha check, one log
-  expect(w.runs.slice(before)[1]).toEqual(['git', 'merge-base', '--is-ancestor', 'abc', 'HEAD'])
+  expect(w.runs.slice(before)[1]).toEqual(['git', 'merge-base', '--is-ancestor', 'abc1', 'HEAD'])
   expect(w.runs.slice(before)[2]).toEqual(['git', 'log', '-1', '--format=%h', '--grep=^B10:', 'HEAD'])
   expect(w.runs.some(a => a[3] === 'stage')).toBe(false)                     // read-only so far
   await ui.press({ key: 'diag:close' })
@@ -514,8 +514,10 @@ test('F99 Diagnose: inconsistent - a stage in flight whose ticket is [x]; Close 
   expect(await ui.find({ key: 'diag:confirm' })).toBeUndefined()
   expect(w.runs.some(a => a[3] === 'stage')).toBe(false)                     // No ran nothing
   await ui.press({ key: 'diag:close' })
-  await ui.press({ key: 'diag:close-yes' })
+  // review fix: a double press of Yes closes once
+  await Promise.all([ui.press({ key: 'diag:close-yes' }), ui.press({ key: 'diag:close-yes' }).catch(() => {})])
   await clock.settle()
+  expect(w.runs.filter(a => a[3] === 'stage')).toHaveLength(1)
   expect(w.runs.find(a => a[3] === 'stage')).toEqual(['/bin/sh', RELAY + '.sh', 'RUN-0020', 'stage', '137', 'x', '', 'f00d1e5'])
   expect(w.toasts.at(-1)).toBe('✓ RUN-0020: stage 137 marked landed')
   expect(await ui.find({ key: 'diag:title' })).toBeUndefined()               // the view closed, the tab back
@@ -524,7 +526,7 @@ test('F99 Diagnose: inconsistent - a stage in flight whose ticket is [x]; Close 
 })
 test('F99 Diagnose: finished and still running draw their verdict with no Close; Back runs nothing', async ($, on) => {
   const [w, clock] = f85World(on, WF_RUN(`@cc-live ${stampAgo(5)}`, '~'))
-  w.git = { abc: 1 }                                                        // off HEAD: the run branch, no disagreement while running
+  w.git = { abc1: 1 }                                                        // off HEAD: the run branch, no disagreement while running
   await start($, clock)
   const ui = await runsTab($, 'terminal')
   await clock.settle()
@@ -537,14 +539,32 @@ test('F99 Diagnose: finished and still running draw their verdict with no Close;
   expect(await ui.find({ key: 'diag:title' })).toBeUndefined()
   // a finished run (RUN-0011, 3/3 in LIST) diagnosed: its file read fresh
   w.list = [row('0020', 'marathon', 1, 3), row('0011', 'done before', 1, 1), ''].join('\n')
-  w.resume['RUN-0011'] = ['# Resuming .skillator/run-0011-done.md', '', ...STAGES(['| 1 | AA01 A155 yoda | x | build | - | abc |']), '## Chain', `driver: -${SEP}hold: -${SEP}mode: agents`, '### AA01 - stage 1 - A155 yoda', 'tickets: A155', 'prompt: |', '  x', ''].join('\n')
-  w.git = { abc: 0 }
+  // review fix: a landed path (relay takes a sha or a path) is never asked of git, nor a disagreement
+  w.resume['RUN-0011'] = ['# Resuming .skillator/run-0011-done.md', '', ...STAGES(['| 1 | AA01 A155 yoda | x | build | - | abc1 |', '| 2 | AA02 A156 docs | x | build | - | docs/out.md |']),
+    '## Chain', `driver: -${SEP}hold: -${SEP}mode: agents`, '### AA01 - stage 1 - A155 yoda', 'tickets: A155', 'prompt: |', '  x',
+    '### AA02 - stage 2 - A156 docs', 'tickets: A156', 'prompt: |', '  x', ''].join('\n')
+  w.git = { abc1: 0 }
   await clock.advance(30_000)                                               // the poll re-reads the list
   await clock.settle()
   await ui.press({ key: 'diagnose:RUN-0011' })
   await clock.settle()
   expect((await ui.find({ key: 'diag:title' }))?.text).toBe('Diagnose RUN-0011: finished  Esc back')
   expect(w.runs.some(a => a[3] === 'stage')).toBe(false)
+  expect(w.runs.some(a => a[1] === 'merge-base' && a[3] === 'docs/out.md')).toBe(false)
+  await ui.unmount()
+})
+test('F99 Diagnose: a tab switch while it reads leaves no stale view behind', async ($, on) => {
+  const [, clock] = f85World(on, WF_RUN(`@cc-live ${stampAgo(5)}`, '~'))
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+  await clock.settle()
+  const p = ui.press({ key: 'diagnose:RUN-0020' })
+  await ui.press({ key: 'tab:tickets' })                                    // before the resume answers
+  await p
+  await clock.settle()
+  await ui.press({ key: 'tab:runs' })
+  expect(await ui.find({ key: 'diag:title' })).toBeUndefined()
+  expect(await ui.find({ key: 'sect:runs' })).toBeDefined()
   await ui.unmount()
 })
 
