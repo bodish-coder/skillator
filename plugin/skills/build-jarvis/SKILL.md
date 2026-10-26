@@ -2,12 +2,12 @@
 name: build-jarvis
 description: >-
   Use whenever a feature is to be added, built, implemented or changed, any
-  size - "add an import command", "implement F12", "support dark mode", "log
-  a feature and work it" - or an F ticket is about to be worked, from the
-  board or headless. Style words switch tiers inside it: "use fable",
-  "cheap", "opus only", "full ceremony". NOT for a non-feature one-line edit
-  (typo, comment, rename, formatting), an unexplained bug, UI craft
-  (design-arwen) or design with no code.
+  size - "add an import command", "implement F12", "add a settings screen",
+  a dashboard, a TUI - or an F ticket is about to be worked, from the board
+  or headless. Style words switch tiers: "use fable", "cheap", "opus only",
+  "full ceremony". NOT for a non-feature one-line edit (typo, comment,
+  rename, formatting), an unexplained bug, UI-only polish or critique
+  (design-arwen, tui-tron) or design with no code.
 ---
 
 # build-jarvis — every feature, graded, designed, built
@@ -25,6 +25,14 @@ and review. Everything below assumes it.
 
 ## Step 0 — GRADE, before anything is spent
 
+0. **Not a build after all?** A request that only changes how an existing
+   screen looks or reads - polish, redesign, critique, fonts/colours/spacing/
+   contrast, "less generic", UX copy, an a11y pass, a frame that draws wrong -
+   with no new behaviour, or one that names design-arwen / tui-tron, is handed
+   straight to that skill: one line `ui-only -> design-arwen` (or `tui-tron`),
+   load it, no grade line, no design file. This is the one Step 0 exit that
+   prints no `grade:` line (the grade gate guards Write and Agent only; a Skill
+   call is not gated, so the hand-off passes).
 1. **Classify** spike / bounded / architectural (PRACTICE §1).
 2. **Criticality.** The work is **critical** when it touches auth, money,
    concurrency, or a contract others depend on (a shared API, a file format, a
@@ -46,6 +54,10 @@ and review. Everything below assumes it.
    `—` = no design pass: the request or ticket *is* the spec, and you write it
    into the design file as its one task. **build is the floor** for every verify
    seat and for a build seat working from prose rather than named code.
+
+   **ui** - `arwen` (web/native surface), `tron` (terminal UI), `none`; the
+   field sits between ceremony and mode
+   ([references/grade.md § The ui field](references/grade.md#the-ui-field)).
 4. **Tier → model:** read `.skillator/tiers.local.md` (written by
    `grayskull-power`'s `tiers` arm step). Missing → the first slug in your
    host's column of `PLATFORMS.md` § Role tiers, and say `tiers: defaults`.
@@ -69,7 +81,7 @@ and review. Everything below assumes it.
    user can overrule before the first token is spent:
 
    ```
-   grade: bounded · critical no · design - · build cheap=sonnet · verify build=opus · ceremony lean · mode ask (single) · usage 5h 41%
+   grade: bounded · critical no · design - · build cheap=sonnet · verify build=opus · ceremony lean · ui none · mode ask (single) · usage 5h 41%
    ```
 
    **Printed means reply text the user sees**, starting `grade:`, before the
@@ -158,9 +170,31 @@ VERIFICATION: <the exact end-to-end command and its expected output>
 
 Lean: `design-<YYYY-MM-DD>-<slug>.md` in the scratchpad. Full:
 `docs/sessions/session-<YYYY-MM-DD>-<slug>.md`, plus the REQUIREMENTS / TRACE
-slots in [references/ceremony.md](references/ceremony.md). Then self-review it
-(PRACTICE §3) and fix inline. A **spike** stops at Phase 1: the probe and a
-recommendation, nothing kept.
+slots in [references/ceremony.md](references/ceremony.md).
+
+This core design is architecture, interfaces and workflow - no UI craft; a UI
+task block says only what the surface must do (states, data, keys), not how it
+looks.
+
+**UI design pass** (`ui` not `none`) — after the core file is written: one
+agent on the design seat's model (a `—` seat: the build seat's) with this
+prompt:
+
+```
+<grade line verbatim>
+Load skillator:design-arwen (mode build for a new surface, improve for a change to one) and read the design file at <path> first. Design the UI for the TASKS that touch a surface, on top of the core design - never change DESIGN, CONSTRAINTS or the interfaces. Append a section `## UI design` (the signature, screens/states, hierarchy, platform notes, the a11y floor) and rewrite each UI task block's steps so an implementer builds that design (real code, test-first). Return the file path and the section's first line.
+```
+
+`ui tron`: the same prompt with `Load skillator:tui-tron`, and the section holds
+the width matrix (the widths the app must draw at), the capture command per
+width and the frame each must show; those captures go into VERIFICATION as the
+render proof. Ops-board pane work: its `claude plugin test` frame assertions
+are the render proof; a width matrix only for the standalone ops app.
+`ui arwen+tron`: two passes, arwen first.
+
+Then self-review once (PRACTICE §3), both sections, and fix inline. A
+`ui tron` VERIFICATION without the captured frames is unmet (Phase 3). A
+**spike** stops at Phase 1: the probe and a recommendation, nothing kept.
 
 ## Phase 2 — Build
 

@@ -32,6 +32,12 @@ request: in F39's GREEN the description plus `tickets-zordon`'s hand-off routed
 4/4 board and headless-ticket prompts to build-jarvis, but 0/2 direct "add X"
 prompts loaded any skill (`practice/baselines/green-build-jarvis-f39.txt`).
 
+A UI feature ("add a settings screen", "build a dashboard", "implement the TUI
+status footer") is routed here like any feature; build-jarvis's Step 0.0 hands
+pure polish on to design-arwen or tui-tron. A UI-only prompt ("redesign the
+dashboard", "the footer wraps at 80 columns") matches no build verb, prints
+nothing, and the descriptions route it.
+
 ## Install
 
 Nothing installs it for you; `grayskull-power`'s arming checks it on Claude Code
@@ -60,8 +66,8 @@ sh <SKILL>/hooks/feature-route.sh selftest
 powershell -NoProfile -ExecutionPolicy Bypass -File <SKILL>/hooks/feature-route.ps1 -Mode selftest
 ```
 
-Both print `ok`. They run the same table of prompts (fourteen feature-shaped,
-eighteen not, plus a two-line prompt), feed event JSON through the hook path
+Both print `ok`. They run the same table of prompts (seventeen feature-shaped,
+twenty-one not, plus a two-line prompt), feed event JSON through the hook path
 (escaped quotes, an escaped newline, a nested `prompt` key that must not be
 read, a `cwd` full of build words that must not match, bad and empty stdin),
 check the route text

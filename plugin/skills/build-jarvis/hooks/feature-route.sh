@@ -115,6 +115,9 @@ feature|add error handling to the upload API
 feature|support push notifications
 feature|build a deploy button
 feature|add release notes page
+feature|add a settings screen to the app
+feature|build a dashboard for the run metrics
+feature|implement the TUI status footer
 -|fix the failing login test
 -|commit this and open a pull request
 -|what does report.py do?
@@ -133,6 +136,9 @@ feature|add release notes page
 -|undo the F2 change
 -|how do I refresh, F5?
 -|Work F3: the export crashes on empty input
+-|make the settings page less generic
+-|redesign the dashboard
+-|the footer wraps at 80 columns
 EOF
   [ "$(classify "$(printf 'fix it\nadd a flag')")" = feature ] || die "classify: a newline is not a sentence break"
   h="$0"
