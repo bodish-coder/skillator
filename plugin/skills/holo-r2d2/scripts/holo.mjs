@@ -7,6 +7,10 @@
 //   node holo.mjs [run] [--design <file>] --html [--out <path>]
 //        -> a standalone page with its own doctype, for hosts without the
 //           Artifact tool; default .skillator/holo/<RUN-n>.html
+//   node holo.mjs [run] [--design <file>] --md [--out <path>]
+//        -> Markdown with a Mermaid stage graph; default .skillator/holo/<RUN-n>.md
+//   node holo.mjs [run] [--design <file>] --svg [--out <path>]
+//        -> one standalone SVG of the same content; default .skillator/holo/<RUN-n>.svg
 //   node holo.mjs [run] [--design <file>] --ascii      -> the same, for a terminal
 //   node holo.mjs --design <file> [--html|--ascii]     -> design components only
 //   node holo.mjs [run] --anatomy [--html]             -> + the run as a bench machine (F83),
@@ -688,6 +692,49 @@ export function renderAscii(run, opts = {}) {
   return toAscii(out.join("\n")) + "\n";
 }
 
+// ------------------------------------------------------------ markdown ----
+const MERMAID_STROKE = { landed: "#2f7d4f", inflight: "#1f63b8", parked: "#7a4bb3", failed: "#b3261e", replanned: "#7b7f7b", pending: "#5a615a", unknown: "#b3261e" };
+const mlabel = (s) => String(s).replace(/"/g, "#quot;").replace(/</g, "#lt;").replace(/>/g, "#gt;");
+const mdTable = (head, rows) => {
+  const w = Math.max(head.length, ...rows.map((r) => r.length), 1);
+  const row = (r) => "| " + Array.from({ length: w }, (_, i) => (r[i] ?? "").replace(/\|/g, "\\|")).join(" | ") + " |";
+  return [row(head.length ? head : Array(w).fill("")), "|" + " --- |".repeat(w), ...rows.map(row)].join("\n");
+};
+export function renderMarkdown(run, opts = {}) {
+  const out = [];
+  if (run) {
+    out.push(`# Holo ${run.id} - ${run.title}`, "");
+    const ch = run.chain;
+    out.push([run.plan && `plan ${run.plan}`, run.updated && `updated ${run.updated}`, ch && `driver ${ch.driver}`, ch && `hold ${ch.hold}`, ch && `mode ${ch.mode}`].filter(Boolean).join(" · "), "");
+    out.push("## Counts", "", mdTable(["state", "stages"], ORDER.filter((s) => s !== "unknown" || run.stages.some((x) => x.state === s)).map((s) => [LABEL[s], String(run.stages.filter((x) => x.state === s).length)])), "");
+    const askable = run.qs.filter((q) => ASKABLE.has(q.state));
+    out.push(`## Decisions waiting on you (${askable.length})`, "");
+    if (!askable.length) out.push(`No open decisions in ${run.id}.`, "");
+    for (const q of askable) {
+      out.push(`### ${q.id} - ${q.f.header || q.id} (${q.state})`, "", q.f.question || "(no question text)", "");
+      for (const [k, v] of [["ticket", q.f.ticket], ["reason", q.f.reason], ["blocks", q.blocks.join(", ")], ["holds stages", q.holds.join(", ")], ["files", q.files.join(", ")], ["default", q.f.default]]) if (v) out.push(`- ${k}: ${v}`);
+      out.push("", mdTable(["#", "option", "does", "hurts"], q.options.map((o, i) => [String(i + 1), o.label + (o.rec ? " (recommended)" : ""), o.does || "-", o.hurts || "-"])), "");
+    }
+    out.push("## Stage graph", "", "```mermaid", "flowchart LR");
+    for (const s of run.stages) out.push(`  S${s.n}["#${s.n}${s.code ? " · " + mlabel(s.code) : ""} ${mlabel(s.name)}"]:::${s.state}`);
+    for (const e of layout(run).edges) out.push(e.kind === "after" ? `  S${e.from} --> S${e.to}` : e.kind === "implicit" ? `  S${e.from} -.-> S${e.to}` : `  S${e.from} -. replaced .-> S${e.to}`);
+    for (const s of Object.keys(MERMAID_STROKE)) out.push(`  classDef ${s} stroke:${MERMAID_STROKE[s]},stroke-width:2px`);
+    out.push("```", "", "## Stages", "", mdTable(["#", "stage", "state", "owner", "landed", "files"], run.stages.map((s) => [String(s.n), (s.code ? s.code + " " : "") + s.name, LABEL[s.state], s.owner, s.landed, s.files.join(", ") || "-"])), "");
+  }
+  if (opts.design) {
+    const d = opts.design;
+    out.push(`## Design - ${d.title} (${d.parts.length} sections)`, "", opts.designPath ? `Source: ${opts.designPath}` : "", "");
+    d.parts.forEach((p, i) => {
+      out.push(`### ${i + 1}. ${p.name}`, "");
+      if (p.lead) out.push(p.lead, "");
+      if (p.subs.length) out.push(...p.subs.map((s) => `- ${s}`), "");
+      for (const t of p.tables) out.push(mdTable(t.head, t.rows), "");
+      out.push(`${p.subs.length} part${p.subs.length === 1 ? "" : "s"} · ${p.bullets} point${p.bullets === 1 ? "" : "s"}${p.code ? ` · ${p.code} code block${p.code > 1 ? "s" : ""}` : ""}${p.tables.length ? ` · ${p.tables.length} table${p.tables.length > 1 ? "s" : ""}` : ""}`, "");
+    });
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n") + "\n";
+}
+
 // ----------------------------------------------------------------- cli ----
 function findRoot(start) {
   let d = resolve(start);
@@ -765,6 +812,7 @@ function parseArgs(argv) {
     const val = () => { if (i + 1 >= argv.length || argv[i + 1].startsWith("--")) throw new Error(`${a} needs a value`); return argv[++i]; };
     if (a === "--ascii") o.mode = "ascii";
     else if (a === "--html") o.mode = "html";
+    else if (a === "--md") o.mode = "md";
     else if (a === "--wizard") o.mode = "wizard";
     else if (a === "--batch") o.mode = "batch";
     else if (a === "--anatomy") o.anatomy = true;
@@ -820,7 +868,7 @@ function relayHolds(md, runPath, root) {
 
 async function main(argv) {
   const o = parseArgs(argv);
-  if (o.help) { console.log((await readFile(fileURLToPath(import.meta.url), "utf8")).split("\n").slice(1, 17).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); return; }
+  if (o.help) { console.log((await readFile(fileURLToPath(import.meta.url), "utf8")).split("\n").slice(1, 21).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); return; }
   if (o.selftest) return selftest();
   if (o.fixture) { console.log(await buildFixture(o.fixture)); return; }
   if (o.answers) {
@@ -876,8 +924,15 @@ async function main(argv) {
     if (wiz) console.log(`answer all ${set.decisions.length} in the decision wizard: ${rel(wiz)}`);
     return;
   }
-  const r = render(run, opts);
+  if ((o.mode === "md" || o.mode === "svg") && o.anatomy) throw new Error("--anatomy draws the page: use it with the Artifact or --html output");
   const stem = run ? run.id : basename(o.design).replace(/\.md$/i, "");
+  if (o.mode === "md") {
+    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}.md`));
+    await writeGenerated(root, out, renderMarkdown(run, opts));
+    console.log(`holo: ${run ? `${run.id} ${run.stages.length} stages` : "design only"}${design ? `, ${design.parts.length} design sections` : ""} -> ${out} (Markdown with a Mermaid stage graph)`);
+    return;
+  }
+  const r = render(run, opts);
   const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}${o.mode === "html" ? "" : ".artifact"}.html`));
   await writeGenerated(root, out, o.mode === "html" ? standalonePage(r) : artifactPage(r));
   const nq = run ? run.qs.filter((q) => ASKABLE.has(q.state)).length : 0;
@@ -964,6 +1019,14 @@ function selftest() {
   ok(d.parts[2].tables.length === 1 && d.parts[2].tables[0].head.length === 0 && d.parts[2].tables[0].rows[0][1] === "3 cases", "design: a one-line table has no head", d.parts[2].tables);
   ok((dp.match(/<table>/g) || []).length === 2 && dp.includes("<th>flag</th>") && dp.includes("<td>every book</td>"), "design: tables drawn in the page");
   ok(renderAscii(null, { design: d, designPath: "fixture-design.md" }).includes("| `--author` | filters by author |"), "design: tables in the ascii");
+  const mdOut = renderMarkdown(run, { runPath: "fixture-all-states.md", design: d, designPath: "fixture-design.md" });
+  ok(/^# Holo RUN-9 - /.test(mdOut), "md: title line");
+  ok(mdOut.includes("```mermaid\nflowchart LR\n"), "md: a mermaid flowchart");
+  for (const [n, st] of rows) ok(new RegExp(`^  S${n}\\[".*"\\]:::${st}$`, "m").test(mdOut), `md: stage ${n} node as ${st}`);
+  ok(mdOut.includes("  S1 --> S2") && mdOut.includes("  S2 --> S4") && mdOut.includes("  S1 -.-> S8") && mdOut.includes("  S5 -. replaced .-> S6"), "md: after, implicit and replaced edges");
+  ok((mdOut.match(/^### Q\d+ /gm) || []).length === 2, "md: one block per open/asked Q");
+  ok(mdOut.includes("| flag | does |") && mdOut.includes("| `--all` | every book |"), "md: design tables reproduced");
+  ok(parseArgs(["RUN-12", "--md"]).mode === "md", "--md is a mode");
 
   // 5. a run that decided something odd still draws: unknown state, cycle
   const odd = parseRun("# RUN-4 - odd\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 1 | a | z | - | - | - |\n| 2 | b |   | - | - | - |\n\n## Chain\ndriver: -     hold: -     mode: agents\n### AAAA - stage 1 - a\nafter: 2\nprompt: |\n  x\n### AAAB - stage 2 - b\nafter: 1\nprompt: |\n  y\n");
