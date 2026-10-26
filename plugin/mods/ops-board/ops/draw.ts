@@ -14,7 +14,7 @@ import type { State } from './state'
 import { dialogLines, engageLines, formLines, reconcileLines, runsCursor, setupLines, teamRow, viewOf } from './state'
 import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, isDecidable, isHead, offsetFor } from '../hooks/lib/ticketsmodel'
-import { modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
+import { isFinished, modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM, MUTED_HOW, mutedWords } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
@@ -391,7 +391,7 @@ function runRows(s: State, sel: string): Keyed[] {
     const text = body + ' '.repeat(Math.max(2, avail - cells(body) - right.length)) + right
     return { key: 'row:' + run.id, segs: isSel
       ? [{ text: '› ' }, dot, { text: text.padEnd(avail), inverse: true }]
-      : [{ text: '  ' }, dot, { text: body }, dim(text.slice(body.length))] }
+      : [{ text: '  ' }, dot, { text: body, dim: isFinished(run) }, dim(text.slice(body.length))] }   // F99: a finished run dim whole
   })
   const ex = s.runs.find(r => r.id === s.runsExpanded)
   if (ex) {

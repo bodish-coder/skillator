@@ -270,6 +270,14 @@ test('runs: onRuns sets the runs and the relay text; up/down move; Enter expands
   assert.deepEqual(q.effects, [{ kind: 'poll', what: 'runs' }])
   assert.match(settle(r.effects[0]!.then({ code: 1, out: '', err: 'busy', argv: ['sh'] })(r.state)).state.toast ?? '', /^■ RUN-0012 not queued: busy/)
 })
+// F99: e on a finished run is refused - nothing left to drive.
+test('runs: e on a finished run is refused with a toast, no confirm', () => {
+  const s = onRuns(reduce(s0, key('2')).state, 'RUN-0012  two  0/2 done\nRUN-0011  done before  3/3 done\n', {})
+  assert.deepEqual(s.runs.map(r => r.id), ['RUN-0012', 'RUN-0011'])
+  const r = reduce(press(s, 'down'), key('e'))
+  assert.equal(r.state.engage, null)
+  assert.equal(r.state.toast, '■ RUN-0011 not engaged: all 3 stages landed - nothing left to drive')
+})
 
 // F76: the Runs tab holds a Runs and a Workflows section that open and close as F61's
 // groups: up/down walk the headers and the rows of an open section, Enter on a header
