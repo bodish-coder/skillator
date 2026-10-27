@@ -28,6 +28,7 @@ import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, 
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
 const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
+const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)
 const tabA = atom({ plugin: 'ops-board', key: 'tab' } as const, 'tickets')
 const selectedA = atom({ plugin: 'ops-board', key: 'selected' } as const, null)
 const narrowA = atom({ plugin: 'ops-board', key: 'narrow' } as const, false)
@@ -107,8 +108,9 @@ async function poll($: EngineInterface, force = false) {
   try { const st = await $.fs.stat(teamPath); seen = `${st.mtimeMs}:${st.size}` } catch { /* no team file */ }
   // F97: the F92 session owner file - ticket-meta iam writes it after the mod armed, so it
   // is stat'ed each poll; the tag follows a /clear (a new session id, no session.start).
-  let tag: string | null = null
-  try { tag = sessionTag(await $.env.get('SKILLATOR_SESSION'), await $.session.id()) } catch { tag = null }
+  let tag: string | null = null, sid: string | null = null
+  try { sid = await $.session.id(); tag = sessionTag(await $.env.get('SKILLATOR_SESSION'), sid) } catch { tag = null }
+  await update($, sessionA, () => tag)        // F109: the band shows it
   const ownerPath = tag ? `${root}/.skillator/sessions/${tag}.owner` : null
   let oseen = 'none'
   if (ownerPath) { try { const st = await $.fs.stat(ownerPath); oseen = `${st.mtimeMs}:${st.size}` } catch { /* no owner */ } }
@@ -119,7 +121,11 @@ async function poll($: EngineInterface, force = false) {
     if (seen !== 'none') { try { t = parseTeam(await $.fs.read(teamPath)) } catch { t = [] } }
     let owner: string | null = null
     if (ownerPath && oseen !== 'none') {
-      try { owner = clean((await $.fs.read(ownerPath)).split('\n')[0] ?? '') } catch { owner = null }
+      // F109: line 2 naming another session (a colliding code) makes the file nobody's
+      try {
+        const rows = (await $.fs.read(ownerPath)).split(/\r?\n/)
+        owner = rows[1] && rows[1] !== `session: ${sid ?? tag}` ? null : clean(rows[0] ?? '')
+      } catch { owner = null }
     }
     await update($, teamA, () => t)
     await update($, meA, () => meOf(t, email ?? '', envMe, owner))

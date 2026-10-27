@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { meOf, parseTeam, sessionTag } from '../hooks/lib/team'
+import { meOf, parseTeam, sessionCode, sessionTag } from '../hooks/lib/team'
 
 // team.md as ticket-meta `team add` writes it: the member line, then an indented
 // `  name:` line straight under it (T2b). The old shape, with no name, still reads.
@@ -52,13 +52,15 @@ test('team: F80 SKILLATOR_ME overrides the email for me', () => {
 })
 
 // F97: the session tag as ticket-meta session_tag - SKILLATOR_SESSION (one leading @ off,
-// lower-cased), else cc-<last 6 alnum of the session id, lower-cased>; must be [a-z0-9_-]+.
+// lower-cased), else cc-<F109 4-char code of the raw id>; must be [a-z0-9_-]+.
 test('team: F97 sessionTag as ticket-meta session_tag', () => {
   expect(sessionTag('@Sher-1', 'x')).toBe('sher-1')
   expect(sessionTag('@@bad', 'x')).toBe(null)                         // one @ stripped; '@bad' fails the charset
-  expect(sessionTag('', '982c2a-ab12-cd34-EF56')).toBe('cc-34ef56')
-  expect(sessionTag(null, 'sid-1')).toBe('cc-sid1')
-  expect(sessionTag(undefined, 'ab')).toBe('cc-ab')
+  expect(sessionTag('', '982c2a-ab12-cd34-EF56')).toBe('cc-baru')
+  expect(sessionTag(null, 'sid-1')).toBe('cc-icym')
+  expect(sessionTag(undefined, 'ab')).toBe('cc-02jn')
+  // F109: the vectors ticket-meta.sh and .ps1 pin too
+  expect(['0a1b-4c5d-AB12CD', 'x-ab12cd', 'x-ffffff', '147ee797-591f-4b4f-98fa-687ea69de7d9'].map(sessionCode)).toEqual(['o0kb', 'nzua', '5qtl', 'im79'])
   expect(sessionTag('', '')).toBe(null)
   expect(sessionTag('a b', 'sid-1')).toBe(null)                       // a space: not a file name
 })

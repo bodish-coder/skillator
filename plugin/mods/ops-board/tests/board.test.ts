@@ -34,6 +34,14 @@ test('tags parsed, title kept', () => {
   const t = parseBoard('- [?] F3 — Pick the chart library [app: web, api] [decide: @asha] (@cc-a4f1c9)\n', 'T', 0, 0).tickets[0]!
   expect([t.box, t.title, t.apps, t.decide, t.session]).toEqual(['?', 'Pick the chart library', ['web', 'api'], '@asha', '@cc-a4f1c9'])
 })
+// F109: the (@sid:owner:mode) tag is the session too - off the title and the list line
+test('F109: the new session tag shape parsed, left off the title', () => {
+  const b = parseBoard('- [~] F9 — Wip [owner: @asha] (@cc-k7q2:asha:run)\n', 'T', 0, 0)
+  const t = b.tickets[0]!
+  expect([t.title, t.session, t.owner]).toEqual(['Wip', '@cc-k7q2:asha:run', '@asha'])
+  expect(listView(b, 'F9')).toContain('F9 — Wip [owner: @asha]')
+  expect(listView(b, 'F9')).not.toContain('k7q2')
+})
 test('parent, section, and non-tickets', () => {
   const b = parseBoard('## Bugs\n- [~] B2 — x\n  - [ ] B2b — y\n- [ ] no dash here\n', 'T', 1, 2)
   expect(b.tickets.map(t => [t.id, t.parent, t.indent, t.section])).toEqual([['B2', null, 0, 'Bugs'], ['B2b', 'B2', 2, 'Bugs']])

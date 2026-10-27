@@ -120,6 +120,15 @@ test('band: F97 the session owner after ops on the wide and the narrow line', ()
   expect(bandLines(input(RED_KV, { me: '@sher' }))).toEqual(bandLines(input(RED_KV)))   // red: the HOLD line, no handle
 })
 
+// F109: the session's sid rides in the lead, after the handle - on line one when narrow too.
+test('band: F109 the session sid after the handle', () => {
+  expect(bandLines(input(GREEN_KV, { me: '@sher', session: 'cc-k7q2' }))).toEqual(
+    ['● ops @sher cc-k7q2  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok'])
+  expect(bandLines(input(GREEN_KV, { session: 'cc-k7q2' }))[0]!.startsWith('● ops cc-k7q2  disk')).toBe(true)
+  expect(bandLines(input(GREEN_KV, { me: '@sher', session: 'cc-k7q2', narrow: true, cols: 96 }))[0]).toBe(
+    '● ops @sher cc-k7q2  5 open ●1 ●1 ●1  RUN-0012 2/4  disk 17 GB  mem 3.2 GB')
+})
+
 test('countsOf: open excludes deferred and closed', () => {
   expect(COUNTS).toEqual({ open: 5, progress: 1, testing: 0, blocked: 1, decision: 1 })
   expect(countsOf(null)).toBeNull()
@@ -236,7 +245,7 @@ for (const surface of SURFACES) {
     await start($, clock)
     const ui = await mountBand($, surface)
     expect((await ui.find({ key: 'line:0' }))?.text).toBe(
-      '● ops  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok')
+      '● ops cc-icym  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok')
     await ui.unmount()
   })
 
@@ -244,7 +253,7 @@ for (const surface of SURFACES) {
     const [, clock] = world(on)
     await start($, clock)
     const ui = await mountBand($, surface, 100)
-    expect((await ui.find({ key: 'line:0' }))?.text).toBe('● ops  5 open ●1 ●1 ●1  RUN-0012 2/4  disk 17 GB  mem 3.2 GB')
+    expect((await ui.find({ key: 'line:0' }))?.text).toBe('● ops cc-icym  5 open ●1 ●1 ●1  RUN-0012 2/4  disk 17 GB  mem 3.2 GB')
     expect((await ui.find({ key: 'line:1' }))?.text).toBe('  5h 41%  7d 55%  /pending  /list-tickets  /ops opens the pane')
     await ui.unmount()
   })
@@ -412,7 +421,7 @@ test('stale locks: listed in a note, never deleted; ok dismisses it', WITH, asyn
   w.machine = AMBER_KV
   await start($, clock)
   const ui = await mountBand($, 'terminal')
-  expect((await ui.find({ key: 'line:0' }))?.text).toBe('▲ ops  disk 4.1 GB low  mem 3.2 GB  5h 41%  7d 55%  relay RUN-0012 2/4  locks 2 stale')
+  expect((await ui.find({ key: 'line:0' }))?.text).toBe('▲ ops cc-icym  disk 4.1 GB low  mem 3.2 GB  5h 41%  7d 55%  relay RUN-0012 2/4  locks 2 stale')
   const note = (await ui.find({ key: 'note:0' }))?.text ?? ''
   expect(note).toContain('▲ 2 stale locks, not deleted:')
   expect(note).toContain('.skillator/run.md.lock        34 min')
@@ -447,19 +456,35 @@ test('status line and band: F97 the session owner file is polled and wins over t
   w.files['/r/.skillator/team.md'] = '# Team\n\n- @vidul: vidul@ikran.in\n- @sher: s@x\n'
   await start($, clock)
   expect(w.statuses.at(-1)).toBe('ops @vidul 2 pending | 1 in progress | 5 total · 5h 41%')
-  w.files['/r/.skillator/sessions/cc-sid1.owner'] = '@sher\r\n'          // session.id is 'sid-1' -> cc-sid1
+  w.files['/r/.skillator/sessions/cc-icym.owner'] = '@sher\r\n'          // session.id is 'sid-1' -> cc-icym (F109)
   await clock.advance(2000)
   expect(w.statuses.at(-1)).toBe('ops @sher 2 pending | 1 in progress | 5 total · 5h 41%')
   const ui = await mountBand($, 'terminal')
   expect((await ui.find({ key: 'line:0' }))?.text).toBe(
-    '● ops @sher  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok')
+    '● ops @sher cc-icym  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok')
   await ui.unmount()
-  w.files['/r/.skillator/sessions/cc-sid1.owner'] = '@ghost\r\n'          // not on the team: nobody, no fall back (8 bytes: the mock's mtime is fixed, the size must move)
+  w.files['/r/.skillator/sessions/cc-icym.owner'] = '@ghost\r\n'          // not on the team: nobody, no fall back (8 bytes: the mock's mtime is fixed, the size must move)
   await clock.advance(2000)
   expect(w.statuses.at(-1)).toBe('ops 2 pending | 1 in progress | 5 total · 5h 41% · 7d 55%')
-  delete w.files['/r/.skillator/sessions/cc-sid1.owner']
+  delete w.files['/r/.skillator/sessions/cc-icym.owner']
   await clock.advance(2000)
   expect(w.statuses.at(-1)).toBe('ops @vidul 2 pending | 1 in progress | 5 total · 5h 41%')
+})
+
+// F109: an owner file whose line 2 names another session is nobody's (a colliding code);
+// one naming this session, or a one-line pre-F109 file, is honoured.
+test('status line: F109 the owner file is guarded by its session line', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  w.files['/r/.skillator/team.md'] = '# Team\n\n- @vidul: vidul@ikran.in\n- @asha: a@x\n'
+  w.files['/r/.skillator/sessions/cc-icym.owner'] = '@asha\nsession: other-id\n'
+  await start($, clock)
+  expect(w.statuses.at(-1)).toBe('ops @vidul 2 pending | 1 in progress | 5 total · 5h 41%')
+  w.files['/r/.skillator/sessions/cc-icym.owner'] = '@asha\nsession: sid-1\n'
+  await clock.advance(2000)
+  expect(w.statuses.at(-1)).toBe('ops @asha 2 pending | 1 in progress | 5 total · 5h 41%')
+  w.files['/r/.skillator/sessions/cc-icym.owner'] = '@asha\n'
+  await clock.advance(2000)
+  expect(w.statuses.at(-1)).toBe('ops @asha 2 pending | 1 in progress | 5 total · 5h 41%')
 })
 
 test('status line: F97 SKILLATOR_SESSION names the owner file', WITH, async ($, on) => {

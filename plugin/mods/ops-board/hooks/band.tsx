@@ -16,6 +16,7 @@ const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const narrowA = atom({ plugin: 'ops-board', key: 'narrow' } as const, false)
 const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
+const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)
 
 // The AbovePrompt hook's body: the band, then the notes, each with its own [ ok ].
 export async function renderBand($: EngineInterface, e: RenderInput<'AbovePrompt'>): Promise<RenderElement> {
@@ -25,7 +26,7 @@ export async function renderBand($: EngineInterface, e: RenderInput<'AbovePrompt
   const v: BandInput = {
     watch: await read($, watchA), machine: await read($, machineA), usage: await read($, usageA),
     relay: await read($, relayA), counts: countsOf(await read($, boardA)), narrow, cols, now: await $.clock.now(),
-    me: await read($, meA),
+    me: await read($, meA), session: await read($, sessionA),
   }
   const notes = await read($, notesA)
   const seg = (s: Seg) => <Text color={s.color} dimColor={s.dim} inverse={s.inverse}>{s.text}</Text>

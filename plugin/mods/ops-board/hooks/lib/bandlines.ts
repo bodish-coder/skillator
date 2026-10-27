@@ -15,6 +15,7 @@ export type BandInput = {
   relay: string | null              // "RUN-0012 2/4": the first run not all done
   counts: Counts | null; narrow: boolean; cols: number; now: number
   me?: string | null                // F97: the session owner's @handle (team.ts meOf), none null
+  session?: string | null           // F109: this session's sid (team.ts sessionTag), none null
 }
 // One Seg for band, health and runs lines: bold is health's headings, drop the band's fold order.
 export type Seg = { text: string; color?: Color; dim?: boolean; inverse?: boolean; bold?: boolean; drop?: 1 | 2 }
@@ -85,7 +86,7 @@ export function bandSegs(v: BandInput): Seg[][] {
   if (w.level === 'red') return [redLine(w)]
   const held = (u?.decision ?? '').startsWith('HOLD')
   const held7 = held && / 7d$/.test(u?.decision ?? '')
-  const lead: Seg[] = [{ text: GLYPH[w.level], color: LEVEL_COLOR[w.level] }, { text: v.me ? ` ops ${v.me}` : ' ops' }]
+  const lead: Seg[] = [{ text: GLYPH[w.level], color: LEVEL_COLOR[w.level] }, { text: ' ops' + (v.me ? ' ' + v.me : '') + (v.session ? ' ' + v.session : '') }]
   const disk = figSegs('disk', m?.diskFree, DISK), mem = figSegs('mem', m?.memFree, MEM)
   const five = windowSegs('5h', u?.five ?? null, now, held && !held7)
   const seven = windowSegs('7d', u?.seven ?? null, now, held7)

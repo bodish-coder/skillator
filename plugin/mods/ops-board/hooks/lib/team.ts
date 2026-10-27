@@ -36,12 +36,20 @@ export function parseTeam(text: string): Member[] {
 export const sameHandle = (a: string | null | undefined, b: string | null | undefined) =>
   !!a && !!b && a.toLowerCase() === b.toLowerCase()
 
+// F109: the 4-character session code - ticket-meta session_code: h = (h*33 + b) mod 36^4
+// over the raw id's UTF-8 bytes, base36, zero-padded. Vectors in team.test and ticket-meta's selftests.
+export function sessionCode(id: string): string {
+  let h = 0
+  for (const b of new TextEncoder().encode(id)) h = (h * 33 + b) % 1679616
+  return h.toString(36).padStart(4, '0')
+}
+
 // F97: this session's tag as ticket-meta session_tag: SKILLATOR_SESSION (one leading @
-// off, lower-cased), else cc-<last 6 of the session id's [A-Za-z0-9], lower-cased>; a
-// file name, so it must be [a-z0-9_-]+, else there is no tag.
+// off, lower-cased), else cc-<F109 code of the session id>; a file name, so it must be
+// [a-z0-9_-]+, else there is no tag.
 export function sessionTag(envSession: string | null | undefined, sessionId: string | null | undefined): string | null {
   let tag = (envSession ?? '').replace(/^@/, '').toLowerCase()
-  if (!tag && sessionId) tag = 'cc-' + sessionId.replace(/[^A-Za-z0-9]/g, '').toLowerCase().slice(-6)
+  if (!tag && sessionId) tag = 'cc-' + sessionCode(sessionId)
   return /^[a-z0-9_-]+$/.test(tag) ? tag : null
 }
 
