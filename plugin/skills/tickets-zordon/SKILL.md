@@ -134,7 +134,7 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh claim F12       # F80: [owner:
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh team lead @asha # F80: set / hand over the lead
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh reconcile       # F81: read-only, `ID [now] -> [proposed]  reason`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh unblock F12     # F81: [!] -> [ ], the blocked note dropped
-sh <skills>/tickets-zordon/scripts/ticket-meta.sh start F12       # F81: [ ] -> [~]
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh start F12       # F81: [ ] -> [~]; F106: claims an unowned ticket to me, says when another owns it
 ```
 
 The team file is kept with `ticket-meta team add @h "Name" email[,email]`,
@@ -328,7 +328,7 @@ write the ticket.**
 
 ## Working a ticket
 
-- Starting → flip to `[~]` and stamp your session tag — see **Who touched it**.
+- Starting → `ticket-meta start <ID>`: `[~]`, an unowned ticket claimed to you (F106) - and stamp your session tag, see **Who touched it**.
 - Finished *and verified* (tests/build/manual check actually run) → `[x]`,
   via `ticket-meta done <ID> [evidence]`: the box `[x]`, the `tag` a close owes,
   and, when evidence is given, ` **Done <YYYY-MM-DD>: <evidence>**` before the

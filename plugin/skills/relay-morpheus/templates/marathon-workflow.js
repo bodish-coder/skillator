@@ -9,6 +9,8 @@
 //                when another stage was in flight); missing = PLAN.runWorktree.
 // Returns one row per ticket: {stage, code, ticket, worktree, verdict}; verdict null = the agent died.
 // Agents: one implementer and one read-and-run-only verifier per ticket, both under its phase. Pure ASCII.
+// The agents never touch the board: each ticket is [~] and claimed before its phase runs - chain dispatch
+// claims it (F80), and RM board <ID> '~' claims an unowned one again on the flip, as ticket-meta start does (F106).
 // Hosts with no Workflow tool read meta and PLAN as data and never execute this file -
 // relay-morpheus references/marathon.md, "Run without the Workflow tool".
 

@@ -386,6 +386,18 @@ function Edit-Line([string]$id, [hashtable]$o) {
         }
       }
     }
+    # F106: a start claims an unowned ticket to me; another's is left alone and said.
+    $claimNote = ''
+    if ($o.claimfree) {
+      $ow = ''; $om = [regex]::Match($line, '\[owner:[ \t]*([^\]]*)\]'); if ($om.Success) { $ow = $om.Groups[1].Value.Trim() }
+      if ($ow -eq '' -and $o.me) { $o.owner = $o.me }
+      elseif ($ow -eq '') { $claimNote = "note: $id not claimed - $($o.mewhy)" }
+      elseif ($ow.ToLowerInvariant() -cne ([string]$o.me).ToLowerInvariant()) {
+        $you = $o.me
+        if (-not $you) { $you = $o.mewhy }
+        $claimNote = "note: $id is owned by $ow - not claimed (you: $you)"
+      }
+    }
     # Moving a line out of [~] keeps the working session's trailing (@agent-id)
     # tag (A143: the session tag and [owner:] are different facts) and names
     # that session afterwards, so it can be told its ticket moved.
@@ -432,8 +444,10 @@ function Edit-Line([string]$id, [hashtable]$o) {
   } finally {
     Unlock-Board
   }
-  if ($warn) { return @($line, $warn) }
-  return $line
+  $out = @($line)
+  if ($claimNote) { $out += $claimNote }
+  if ($warn) { $out += $warn }
+  return $out
 }
 
 # <ID> @handle -> @(id, handle); the handle must be in the team file.
@@ -729,7 +743,10 @@ function Do-Unblock([string[]]$a) {
 function Do-Start([string[]]$a) {
   if ($a.Count -ne 1) { Fail 'usage: start <ID>' }
   $id = Get-NormId $a[0]
-  return (Edit-Line $id @{ mark = '~'; need = ' ' })
+  # F106: an unowned ticket is claimed to me on the way; another's is left alone and said.
+  $opt = @{ mark = '~'; need = ' ' }
+  if ($null -ne (Get-TeamFile)) { $me = Get-Me; $opt.claimfree = $true; $opt.me = $me.me; $opt.mewhy = $me.why }
+  return (Edit-Line $id $opt)
 }
 
 # F81: read-only - the status each open row really has, from evidence. The rules
@@ -1652,6 +1669,16 @@ function Invoke-Selftest {
     # claim (plan / dispatch): [owner: me], the box kept; mine again is no change; another's refused
     Eq 'claim F1' (Run claim F1) "- [ ] F1 $dash Free [owner: @asha]"
     Eq 'claim keeps [~]' (Run claim F7) "- [~] F7 $dash Working [owner: @asha] (@cc-bbbbbb)"
+    # F106: start claims an unowned ticket to me; another's is left alone and said; mine is quiet
+    W $board ([System.IO.File]::ReadAllText($board, $Utf8) + "- [ ] F9 $dash Fresh`n- [ ] F10 $dash Theirs too [owner: @vidul]`n- [ ] F11 $dash Mine too [owner: @asha]`n- [ ] F13 $dash Nobody`n")
+    Commit 'asha@x.com' 'board: f106 rows'
+    Eq 'F106 start claims' (Run start F9) "- [~] F9 $dash Fresh [owner: @asha]"
+    Eq "F106 start, another's" (Run start F10) "- [~] F10 $dash Theirs too [owner: @vidul] note: F10 is owned by @vidul - not claimed (you: @asha)"
+    Eq 'F106 start, mine' (Run start F11) "- [~] F11 $dash Mine too [owner: @asha]"
+    Eq 'F106 one commit per start' (& git log -1 --format=%s) 'board: start F11'
+    & git config user.email ghost@x.com
+    Eq 'F106 start, not on the team' (Run start F13) "- [~] F13 $dash Nobody note: F13 not claimed - not on the team: add ghost@x.com to .skillator/team.md"
+    & git config user.email asha@x.com
     # review: a closed ticket is not claimed
     if (-not (Refused claim F8)) { Write-Output 'FAIL: claim of a closed ticket succeeded'; $script:fail = 1 }
     if ([System.IO.File]::ReadAllText($board, $Utf8) -cnotmatch "(?m)^- \[-\] F8 $dash Dropped`$") { Write-Output 'FAIL: claim wrote onto a closed ticket'; $script:fail = 1 }
@@ -1767,7 +1794,8 @@ function Invoke-Selftest {
     Eq 'solo pick' (Run pick) 'you: - (no .skillator/team.md: every ticket) pick F1'
     Eq 'solo claim' (Run claim F1) 'no change: no .skillator/team.md - nothing to claim'
     if (-not (Refused whoami)) { Write-Output 'FAIL: whoami answered with no team.md'; $script:fail = 1 }
-    Eq 'solo tag' (Run tag F1) "- [ ] F1 $dash Thing (@cc-dddddd)"
+    Eq 'F106 solo start, no owner' (Run start F1) "- [~] F1 $dash Thing (@cc-dddddd)"
+    Eq 'solo tag' (Run tag F1) "- [~] F1 $dash Thing (@cc-dddddd)"
 
     # --- F66: the opt-in Teams status post runs after a successful edit and never
     # fails it; off (the default) it never runs. The Workflows URL is loopback port 1:

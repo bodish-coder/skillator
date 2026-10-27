@@ -302,6 +302,16 @@ edit_line() {
       die "$ID is owned by $ow - $who (you: ${ME:-$ME_WHY})"
     fi
   fi
+  # F106: a start claims an unowned ticket to me; another's is left alone and said.
+  CLAIM_NOTE=''
+  if [ -n "${CLAIM_FREE:-}" ]; then
+    ow=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\[owner:[ \t]*[^]]*\]/)) { v = substr($0, RSTART + 7, RLENGTH - 8); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }')
+    if [ -z "$ow" ] && [ -n "$ME" ]; then SET_OWNER=$ME
+    elif [ -z "$ow" ]; then CLAIM_NOTE="note: $ID not claimed - $ME_WHY"
+    elif [ "$(lc "$ow")" != "$(lc "$ME")" ]; then CLAIM_NOTE="note: $ID is owned by $ow - not claimed (you: ${ME:-$ME_WHY})"
+    fi
+    export SET_OWNER
+  fi
   # Moving a line out of [~] keeps the working session's trailing (@agent-id)
   # tag (A143: the session tag and [owner:] are different facts) and names
   # that session afterwards, so it can be told its ticket moved.
@@ -385,6 +395,7 @@ edit_line() {
   board_commit "$f" "board: $SUB $ID"
   board_unlock
   RE=$re awk '$0 ~ ENVIRON["RE"]' "$f"
+  [ -z "$CLAIM_NOTE" ] || echo "$CLAIM_NOTE"
   if [ "$moved" = 1 ]; then
     if [ -n "$sess" ]; then
       echo "warning: $ID was in progress under $sess - its box left [~], the session tag stays; tell that session"
@@ -663,11 +674,14 @@ cmd_unblock() {
   SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' DROP_BLOCKED=1 SAME_KEY='' NEED_MARK='!' edit_line
 }
 
-# F81: work on it has begun: [ ] -> [~]. Only from [ ].
+# F81: work on it has begun: [ ] -> [~]. Only from [ ]. F106: an unowned ticket is claimed
+# to me on the way (a team file and a known me); another's is left alone and said.
 cmd_start() {
   [ $# -eq 1 ] || die "usage: start <ID>"
   norm_id "$1"
-  SET_MARK='~' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' SAME_KEY='' NEED_MARK=' ' edit_line
+  cf=''
+  if team_file > /dev/null; then cf=1; me_of || :; fi
+  SET_MARK='~' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' SAME_KEY='' NEED_MARK=' ' CLAIM_FREE=$cf edit_line
 }
 
 # F81: read-only - the status each open row really has, from evidence. One line per
@@ -1450,6 +1464,16 @@ selftest() {
   # claim (plan / dispatch): [owner: me], the box kept; mine again is no change; another's refused
   eq "claim F1" "$(run claim F1)" "- [ ] F1 $D Free [owner: @asha]"
   eq "claim keeps [~]" "$(run claim F7)" "- [~] F7 $D Working [owner: @asha] (@cc-bbbbbb)"
+  # F106: start claims an unowned ticket to me; another's is left alone and said; mine is quiet
+  printf -- '- [ ] F9 %s Fresh\n- [ ] F10 %s Theirs too [owner: @vidul]\n- [ ] F11 %s Mine too [owner: @asha]\n- [ ] F13 %s Nobody\n' "$D" "$D" "$D" "$D" >> TICKETS.md
+  commit asha@x.com "board: f106 rows"
+  eq "F106 start claims" "$(run start F9)" "- [~] F9 $D Fresh [owner: @asha]"
+  eq "F106 start, another's" "$(run start F10)" "- [~] F10 $D Theirs too [owner: @vidul] note: F10 is owned by @vidul - not claimed (you: @asha)"
+  eq "F106 start, mine" "$(run start F11)" "- [~] F11 $D Mine too [owner: @asha]"
+  eq "F106 one commit per start" "$(git log -1 --format=%s)" "board: start F11"
+  git config user.email ghost@x.com
+  eq "F106 start, not on the team" "$(run start F13)" "- [~] F13 $D Nobody note: F13 not claimed - not on the team: add ghost@x.com to .skillator/team.md"
+  git config user.email asha@x.com
   # review: a closed ticket is not claimed
   sh "$self" claim F8 > /dev/null 2>&1 && { echo "FAIL: claim of a closed ticket succeeded"; fail=1; }
   grep -q "^- \[-\] F8 $D Dropped\$" TICKETS.md || { echo "FAIL: claim wrote onto a closed ticket: $(grep F8 TICKETS.md)"; fail=1; }
@@ -1575,7 +1599,8 @@ selftest() {
   eq "solo pick" "$(run pick)" "you: - (no .skillator/team.md: every ticket) pick F1"
   eq "solo claim" "$(run claim F1)" "no change: no .skillator/team.md - nothing to claim"
   sh "$self" whoami > /dev/null 2>&1 && { echo "FAIL: whoami answered with no team.md"; fail=1; }
-  eq "solo tag" "$(run tag F1)" "- [ ] F1 $D Thing (@cc-dddddd)"
+  eq "F106 solo start, no owner" "$(run start F1)" "- [~] F1 $D Thing (@cc-dddddd)"
+  eq "solo tag" "$(run tag F1)" "- [~] F1 $D Thing (@cc-dddddd)"
 
   # --- F66: the opt-in Teams status post runs after a successful edit and never
   # fails it; off (the default) it never runs. The Workflows URL is loopback port 1:

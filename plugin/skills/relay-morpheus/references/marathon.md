@@ -292,7 +292,8 @@ Claude Code runs it with the Workflow tool, the other hosts with their delegate
    @cc-<6> --owner workflow` - the row goes `~` and the prompt into the run
    file **before** the agent exists. Note the worktree each names (stderr
    `stage <n> works and commits in: <path>`; none = the run worktree), flip
-   its ticket `[~]` (`RM board <ID> '~'`), then one call:
+   its ticket `[~]` (`RM board <ID> '~'` - it claims an unowned ticket to
+   you, as `ticket-meta start` does (F106)), then one call:
    `Workflow({scriptPath, args: {phase: <k>, worktrees: {"<n>": "<path>"}}})`.
    Write the returned `runId` into each In-flight block's `run:` line.
 3. Land each returned row as chain.md Step 3 (a `parked` verdict → Park first,

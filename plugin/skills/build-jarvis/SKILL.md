@@ -120,6 +120,8 @@ and review. Everything below assumes it.
    Recommend from the grade row and how coupled the work reads. **Never
    workflow without the user's opt-in**: unasked, the most you pick is per-task.
 
+**Start the ticket.** An F ticket worked from the board is started with tickets-zordon's `ticket-meta start <ID>` (`scripts/ticket-meta.sh`, Windows `.ps1`) before the first edit: it flips `[~]`, claims an unowned ticket to the session owner (`whoami`) and prints `note: .. is owned by` when someone else holds it - that note is a stop-and-ask, not a build. A subagent starting a ticket runs the same command.
+
 **Ceremony** is `full` when the work is architectural, has 4+ tasks, runs
 inside a relay run, or is said to outlive this session ("keep going after",
 "hand it over", "full ceremony"); otherwise `lean`. Full adds the session
