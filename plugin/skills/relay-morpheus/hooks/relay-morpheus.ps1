@@ -1502,10 +1502,10 @@ function DoBoard {
       if ($LASTEXITCODE -eq 2) { throw "REFUSED: board: $Ticket not flipped - see board-fresh's report above" }
     }
     $raw = [IO.File]::ReadAllText($f); $nl = if ($raw.Contains("`r`n")) { "`r`n" } else { "`n" }
-    $lines = $raw -split "`r?`n"; $hit = $false
+    $lines = $raw -split "`r?`n"; $hit = $false; $old = ''
     for ($i = 0; $i -lt $lines.Count; $i++) {
       $l = $lines[$i]
-      if (-not $hit -and $l.Length -ge 7 -and $l.StartsWith('- [') -and $l.Substring(4, 2) -ceq '] ' -and $l.Substring(6).StartsWith("$Ticket ", [StringComparison]::Ordinal)) { $lines[$i] = '- [' + $Mark + $l.Substring(4); $hit = $true }
+      if (-not $hit -and $l.Length -ge 7 -and $l.StartsWith('- [') -and $l.Substring(4, 2) -ceq '] ' -and $l.Substring(6).StartsWith("$Ticket ", [StringComparison]::Ordinal)) { $old = $l.Substring(3, 1); $lines[$i] = '- [' + $Mark + $l.Substring(4); $hit = $true }
     }
     if (-not $hit) { Die "board: no ticket $Ticket in $f" }
     [IO.File]::WriteAllText("$f.tmp.$PID", ($lines -join $nl), (New-Object Text.UTF8Encoding($false)))
@@ -1529,6 +1529,15 @@ function DoBoard {
   if ($Mark -ceq '~') {
     $r = TMetaAt $m (@('claim', $Ticket))
     if ($r -and $r.code -ne 0) { foreach ($l in @($r.err -split "`r?`n" | Where-Object { $_ })) { [Console]::Error.WriteLine("note: claim refused - $l") } }
+  }
+  # F109: the flip is a touch - (@sid:owner:mode), mode workflow when this run's chain says so, else run;
+  # a move out of [~] keeps the worker's tag (A143)
+  if ($old -cne '~' -or $Mark -ceq '~' -or $Mark -ceq '%') {
+    $md = 'run'
+    if ($Run -and (Test-Path -LiteralPath $Run)) { $hp = $null; try { $hp = HdrParts } catch { }; if ($hp -and $hp[2] -ceq 'workflow') { $md = 'workflow' } }
+    $pm = $env:SKILLATOR_MODE; $env:SKILLATOR_MODE = $md
+    try { $r = TMetaAt $m (@('stamp', $Ticket)) } finally { $env:SKILLATOR_MODE = $pm }
+    if ($r -and $r.code -ne 0) { foreach ($l in @($r.err -split "`r?`n" | Where-Object { $_ })) { [Console]::Error.WriteLine("note: stamp failed - $l") } }
   }
   "$Ticket [$Mark]"
 }
@@ -3165,6 +3174,8 @@ function MarathonSelftest($d) {
 
 function DoSelftest {
   $env:RELAY_WORKTREE = 'off'; $env:RELAY_DIR = $null; $env:RELAY_RUN = $null
+  # F109: no stamps unless a check sets a session (the selftest runs in its own process)
+  $env:CLAUDE_CODE_SESSION_ID = $null; $env:SKILLATOR_SESSION = $null; $env:SKILLATOR_MODE = $null
   $d = Join-Path ([IO.Path]::GetTempPath()) ("relay-" + [guid]::NewGuid())
   New-Item -ItemType Directory -Force $d | Out-Null
   # F80: no ticket-meta (no claims, no owner skips) unless a check turns it on
@@ -3723,6 +3734,23 @@ function F80Selftest($d) {
     if ($board -notmatch "(?m)^- \[~\] F4 $em unowned \[owner: @asha\]$") { Die "F106: board ~ did not claim F4: $board" }
     if ($board -notmatch "(?m)^- \[~\] F3 $em theirs \[owner: @vidul\]$") { Die "F106: board ~ took another's ticket: $board" }
     if ("$sw" -notmatch 'note: claim refused') { Die "F106: board ~ on another's ticket did not note the refusal: $sw" }
+    # F109: a board flip stamps (@sid:owner:mode) - mode run, or workflow when this run's chain header says so
+    $sr = $script:Run
+    Push-Location -LiteralPath $d8; $env:SKILLATOR_ME = '@asha'; $env:CLAUDE_CODE_SESSION_ID = '0a1b-4c5d-AB12CD'; $script:Ticket = 'F4'
+    try {
+      $script:Run = ''; $script:Mark = '%'; DoBoard | Out-Null
+      $board = [IO.File]::ReadAllText($tb, $u8)
+      if ($board -notmatch "(?m)^- \[%\] F4 $em unowned \[owner: @asha\] \(@cc-o0kb:asha:run\)$") { Die "F109: board flip not stamped: $board" }
+      $script:Run = $sr
+      if ((HdrParts)[2] -cne 'workflow') { Die 'F109: the f80 chain header is not mode: workflow' }
+      $script:Mark = '!'; DoBoard | Out-Null
+      $board = [IO.File]::ReadAllText($tb, $u8)
+      if ($board -notmatch "(?m)^- \[!\] F4 $em unowned \[owner: @asha\] \(@cc-o0kb:asha:workflow\)$") { Die "F109: workflow flip not stamped: $board" }
+      [IO.File]::AppendAllText($tb, "- [~] F5 $em worked (@cc-zzzzzz)`n", $u8)
+      $script:Ticket = 'F5'; $script:Mark = '!'; DoBoard | Out-Null
+      $board = [IO.File]::ReadAllText($tb, $u8)
+      if ($board -notmatch "(?m)^- \[!\] F5 $em worked \(@cc-zzzzzz\)$") { Die "F109: a flip out of [~] replaced the worker's tag (A143): $board" }
+    } finally { Pop-Location; $script:Run = $sr; $env:SKILLATOR_ME = $null; $env:CLAUDE_CODE_SESSION_ID = $null; $script:Ticket = ''; $script:Mark = $null }
     $env:RELAY_CHAIN_PARALLEL = '3'; $script:All = $true
     try { $out = @(DoChainNext) } finally { $script:All = $false; $env:RELAY_CHAIN_PARALLEL = $null }
     if ($out -cnotcontains "NEXT $t1 $(CodeOf $t1)" -or $out -cnotcontains "NEXT $t2 $(CodeOf $t2)") { Die "F80: chain next -All did not pick the unassigned and my own: $($out -join ' | ')" }

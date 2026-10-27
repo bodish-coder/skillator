@@ -875,6 +875,8 @@ cmd_board() {
     echo "REFUSED: board: $bid not flipped - see board-fresh's report above" >&2
     exit 2
   fi
+  # F109: the box before the flip - a move out of [~] keeps the worker's session tag (A143)
+  _bo=$(awk -v id="$bid" 'substr($0, 1, 3) == "- [" && substr($0, 5, 2) == "] " && substr($0, 7, length(id) + 1) == id " " { print substr($0, 4, 1); exit }' "$_bf")
   if awk -v id="$bid" -v mk="$mk" '!f && substr($0, 1, 3) == "- [" && substr($0, 5, 2) == "] " && substr($0, 7, length(id) + 1) == id " " { $0 = "- [" mk substr($0, 5); f = 1 } { print } END { exit !f }' "$_bf" > "$_bf.tmp.$$"; then
     mv "$_bf.tmp.$$" "$_bf"
     if git -C "$_bm" ls-files --error-unmatch -- "$_bf" > /dev/null 2>&1 && ! git -C "$_bm" diff --quiet HEAD -- "$_bf" 2> /dev/null &&
@@ -890,6 +892,13 @@ cmd_board() {
     tmeta_at "$_bm" claim "$bid" >/dev/null 2>"$_bf.claim.$$" || sed 's/^/note: claim refused - /' "$_bf.claim.$$" >&2
     rm -f "$_bf.claim.$$"
   fi
+  # F109: the flip is a touch - (@sid:owner:mode), mode workflow when this run's chain says so, else run
+  case "$_bo$mk" in '~~'|'~%'|[!~]?)
+    _md=run; [ -n "${RUN:-}" ] && [ -f "$RUN" ] && [ "$(hdr_mode 2>/dev/null)" = workflow ] && _md=workflow
+    ( SKILLATOR_MODE=$_md; export SKILLATOR_MODE; tmeta_at "$_bm" stamp "$bid" ) >/dev/null 2>"$_bf.stamp.$$" ||
+      sed 's/^/note: stamp failed - /' "$_bf.stamp.$$" >&2
+    rm -f "$_bf.stamp.$$" ;;
+  esac
   echo "$bid [$mk]"
 }
 
@@ -2269,6 +2278,7 @@ chain_decide_cmd() {
 
 cmd_selftest() {
   RELAY_WORKTREE=off; export RELAY_WORKTREE; unset RELAY_DIR RELAY_RUN
+  unset CLAUDE_CODE_SESSION_ID SKILLATOR_SESSION SKILLATOR_MODE   # F109: no stamps unless a check sets a session
   d=$(mktemp -d); d5=; trap 'rm -rf "$d" ${d5:+"$d5"}' EXIT
   # F80: no ticket-meta (no claims, no owner skips) unless a check turns it on
   RELAY_TICKET_META="$d/nope.sh"; export RELAY_TICKET_META
@@ -2540,6 +2550,15 @@ f80_selftest() {
   ( cd "$d8" && SKILLATOR_ME=@asha cmd_board F3 '~' >/dev/null 2>"$d8/berr" ) || die "F106: board ~ on another's failed: $(cat "$d8/berr")"
   grep -q "^- \[~\] F3 $em theirs \[owner: @vidul\]\$" "$d8/TICKETS.md" || die "F106: board ~ took another's ticket"
   grep -q 'note: claim refused' "$d8/berr" || die "F106: board ~ on another's ticket did not note the refusal"
+  # F109: a board flip stamps (@sid:owner:mode) - mode run, or workflow when this run's chain header says so
+  ( cd "$d8" && RUN= && CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_ME=@asha cmd_board F4 '%' >/dev/null 2>&1 ) || die "F109: board % failed"
+  grep -q "^- \[%\] F4 $em unowned \[owner: @asha\] (@cc-o0kb:asha:run)\$" "$d8/TICKETS.md" || die "F109: board flip not stamped: $(grep F4 "$d8/TICKETS.md")"
+  [ "$(hdr_mode)" = workflow ] || die "F109: the f80 chain header is not mode: workflow"
+  ( cd "$d8" && CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_ME=@asha cmd_board F4 '!' >/dev/null 2>&1 ) || die "F109: board ! failed"
+  grep -q "^- \[!\] F4 $em unowned \[owner: @asha\] (@cc-o0kb:asha:workflow)\$" "$d8/TICKETS.md" || die "F109: workflow flip not stamped: $(grep F4 "$d8/TICKETS.md")"
+  printf -- '%s\n' "- [~] F5 $em worked (@cc-zzzzzz)" >> "$d8/TICKETS.md"
+  ( cd "$d8" && CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_ME=@asha cmd_board F5 '!' >/dev/null 2>&1 ) || die "F109: board ! of a [~] failed"
+  grep -q "^- \[!\] F5 $em worked (@cc-zzzzzz)\$" "$d8/TICKETS.md" || die "F109: a flip out of [~] replaced the worker's tag (A143): $(grep F5 "$d8/TICKETS.md")"
   grep -q 'F3 is owned by @vidul' "$d8/err" || die "F80: chain plan of another's ticket did not say so: $(cat "$d8/err")"
   out=$(RELAY_CHAIN_PARALLEL=3 chain_next --all)
   printf '%s\n' "$out" | grep -qx "NEXT $t1 $(code_of "$t1")" && printf '%s\n' "$out" | grep -qx "NEXT $t2 $(code_of "$t2")" ||
