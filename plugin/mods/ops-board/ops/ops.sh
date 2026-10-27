@@ -18,8 +18,8 @@ fs=; want=
 for a in "$@"; do if [ -n "$want" ]; then fs=$a; want=; elif [ "$a" = --font-size ]; then fs=none; want=1; fi; done
 if [ -n "$fs" ]; then
   case $(uname -s 2>/dev/null) in MINGW*|MSYS*|CYGWIN*) ;; *) echo "ops: --font-size sets the Windows Terminal profile only - zoom this terminal with its own keys" >&2; exit 2 ;; esac
-  case $fs in ''|*[!0-9]*) fs=0 ;; esac
-  if [ "$fs" -lt 6 ] || [ "$fs" -gt 72 ]; then echo "ops: font size must be 6..72" >&2; exit 2; fi
+  fs=$(printf '%s' "$fs" | sed 's/^0*//')
+  case $fs in [6-9]|[1-6][0-9]|7[0-2]) ;; *) echo "ops: font size must be 6..72" >&2; exit 2 ;; esac
   frag=
   [ -n "${LOCALAPPDATA:-}" ] && frag="$(cygpath -u "$LOCALAPPDATA")/Microsoft/Windows Terminal/Fragments/skillator/ops.json"
   if [ -z "$frag" ] || [ ! -f "$frag" ]; then echo "ops: no 'skillator ops' profile installed - run install.ps1 first" >&2; exit 2; fi
