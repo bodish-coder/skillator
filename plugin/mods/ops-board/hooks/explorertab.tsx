@@ -2,10 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, TextProps } from 'claude-code'
 import { clean } from './lib/bandlines'
 import { gitBin } from './lib/host'
-import { ACTION_ARGS, BRANCH_ARGS, BRANCHES_ARGS, changeArgs, COUNT_ARGS, DIRTY_ARGS, EMPTY, explorerLines, explorerOffset, INCOMING_ARGS,
-  LOG_ARGS, LS_ARGS, moveSel, NO_GIT, parseFiles, pickBranch, planAction, selectedOf, toggle, UPSTREAM_ARGS,
-  withChanges, withError, withFiles, withIncoming, withLog, withUpstream } from './lib/explorer'
-import type { Action, ActionKind, Explorer, Need } from './lib/explorer'
+import { BRANCH_ARGS, BRANCHES_ARGS, changeArgs, COUNT_ARGS, DIRTY_ARGS, EMPTY, explorerLines, explorerOffset, GIT_DIR_ARGS, HEAD_ARGS,
+  IN_PROGRESS, INCOMING_ARGS, LOG_ARGS, LS_ARGS, moveSel, NO_GIT, parseFiles, pickBranch, planAction, pushToArgs, selectedOf, staleAction, toggle,
+  UPSTREAM_ARGS, withChanges, withError, withFiles, withIncoming, withLog, withUpstream } from './lib/explorer'
+import type { Action, ActionKind, Explorer, Here, Need } from './lib/explorer'
 
 // F75: the Explorer tab - the git-tracked files as a tree, the newest commits each
 // opening to what it changed (lib/explorer.ts). git ls-files and git log, run by the
@@ -24,21 +24,28 @@ let files: string[] | null = null          // the last git ls-files, this load
 
 type Git = { ok: true; out: string; said: string; cut: boolean } | { ok: false; err: string; code: number | null }
 
-async function git($: EngineInterface, name: string, args: string[], timeoutMs = 15000): Promise<Git> {
+async function git($: EngineInterface, name: string, args: string[], timeoutMs = 15000, env?: Record<string, string>): Promise<Git> {
   const repo = await $.session.repo()
   if (!repo) return { ok: false, err: 'not a git repo - nothing to explore', code: null }
   const bin = await gitBin($)
   if (!bin) return { ok: false, err: NO_GIT, code: null }
+  const t0 = Date.now()
   try {
-    const r = await $.process.run([bin, ...args], { cwd: repo.root, timeoutMs })
+    const r = await $.process.run([bin, ...args], { cwd: repo.root, timeoutMs, env })
     // both streams: git says CONFLICT on stdout, hints and fatals on stderr
     const said = [r.stderr.trim(), r.stdout.trim()].filter(Boolean).join('\n') || 'exit ' + r.exitCode
     if (r.exitCode !== 0) return { ok: false, err: `git ${name} failed: ${said}`, code: r.exitCode }
     return { ok: true, out: r.stdout, said: r.stderr, cut: r.isStdoutTruncated }
   } catch (e) {
-    return { ok: false, err: `git ${name} failed: ${e instanceof Error ? e.message : String(e)}`, code: null }
+    const said = errText(e)
+    // the host kills git at the timeout: a write it was making can leave the index lock behind
+    if (Date.now() - t0 >= timeoutMs || /timed? ?out/i.test(said))
+      return { ok: false, err: `git ${name} timed out after ${timeoutMs / 1000}s - .git/index.lock may be left; remove it once no git runs`, code: null }
+    return { ok: false, err: `git ${name} failed: ${said}`, code: null }
   }
 }
+
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 // The file list; a list the host cut short loses its last (partial) name and says so.
 async function readFiles($: EngineInterface): Promise<{ list: string[] | null; err: string | null }> {
@@ -65,6 +72,7 @@ export async function enterExplorer($: EngineInterface): Promise<void> {
     if (log.ok) y = withLog(y, log.out)
     if (up.ok) y = withUpstream(y, up.out.trim(), count?.ok ? count.out : null)
     else if (up.code === 128) y = withUpstream(y, null, null)
+    else y = { ...y, upstream: null, incoming: null }             // unread: no stale arrows drawn
     if (inc?.ok) y = withIncoming(y, inc.out)
     return withError(y, [...new Set(errs)].join('; ') || null)   // git missing: said once
   })
@@ -112,22 +120,39 @@ export async function readExplorer($: EngineInterface): Promise<Explorer> {
 
 // --- F103: the git actions, each behind its confirm ---
 
-// A key: what the plan needs read now (branch, tracked changes, branches, root), then the
-// plan - refused in a toast, or the confirm up, Esc its Cancel.
+const lines = (r: Git | null) => (r?.ok ? r.out.split(/\r?\n/).filter(Boolean) : [])
+
+// What a plan stands on: the branch ('HEAD': detached), HEAD's sha ('' before the first commit), tracked changes.
+async function readHere($: EngineInterface): Promise<Here | { err: string }> {
+  const branch = await git($, 'rev-parse', BRANCH_ARGS)
+  const head = await git($, 'rev-parse', HEAD_ARGS)
+  const dirty = await git($, 'status', DIRTY_ARGS)
+  const failed = [branch, dirty].find(r => !r.ok)
+  if (failed && !failed.ok) return { err: failed.err }
+  return { branch: lines(branch)[0] ?? 'HEAD', head: lines(head)[0] ?? '', dirty: lines(dirty).length }
+}
+
+// A key: what the plan needs read now (branch, HEAD, tracked changes, branches, upstream,
+// git-dir markers, root), then the plan - refused in a toast, or the confirm up, Esc its Cancel.
 export async function openAction($: EngineInterface, kind: ActionKind): Promise<void> {
   if (running) { $.ui.toast(`■ git ${running} is still running`); return }
-  const branch = await git($, 'rev-parse', BRANCH_ARGS)
-  const dirty = await git($, 'status', DIRTY_ARGS)
+  const here = await readHere($)
+  if ('err' in here) { $.ui.toast('■ ' + here.err); return }
   const branches = kind === 'merge' ? await git($, 'branch', BRANCHES_ARGS) : null
   // push/pull: the upstream read now, not as last drawn (one set by hand since counts)
   const up = kind === 'push' || kind === 'pull' ? await git($, 'rev-parse', UPSTREAM_ARGS) : null
-  const failed = [branch, dirty, branches].find(r => r && !r.ok)
+  const to = kind === 'push' && here.branch !== 'HEAD' ? await git($, 'for-each-ref', pushToArgs(here.branch)) : null
+  const gitDir = kind !== 'fetch' ? await git($, 'rev-parse', GIT_DIR_ARGS) : null
+  const failed = [branches, to, gitDir].find(r => r && !r.ok)
   if (failed && !failed.ok) { $.ui.toast('■ ' + failed.err); return }
-  const lines = (r: typeof branch | null) => (r?.ok ? r.out.split(/\r?\n/).filter(Boolean) : [])
+  let inProgress: string | null = null
+  const dir = lines(gitDir)[0]
+  for (const m of IN_PROGRESS) if (dir && !inProgress && await $.fs.exists(dir + '/' + m)) inProgress = m
+  const [remote = '', ref = ''] = to?.ok ? to.out.trim().split('\t') : []
   const x = await read($, explorerA)
   const upstream = up && !up.ok && up.code === 128 ? 'none' as const : up ? null : x.upstream
   const p = planAction({ ...x, upstream, selected: selectedOf(x) }, kind, {
-    branch: lines(branch)[0] ?? 'HEAD', root: (await $.session.repo())?.root ?? '', dirty: lines(dirty).length, branches: lines(branches) })
+    ...here, root: (await $.session.repo())?.root ?? '', branches: lines(branches), inProgress, pushTo: { remote, ref } })
   if ('refused' in p) { $.ui.toast('■ ' + p.refused); return }
   await update($, actionA, () => p.action)
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
@@ -150,9 +175,14 @@ export async function actionGo($: EngineInterface): Promise<void> {
     const a = await read($, actionA)
     if (!a || !a.args.length) return
     await cancelAction($)
+    // the plan as shown still stands: nothing moved while the confirm was up
+    const here = await readHere($)
+    const why = 'err' in here ? here.err : staleAction(a, here)
+    if (why) { $.ui.toast(`■ ${why} - nothing run`); return }
     const cmd = a.args.join(' ')
     running = cmd
-    const r = await git($, cmd, a.args, 120000)    // fetch/pull/push talk to a remote
+    // fetch/pull/push talk to a remote; a credential prompt would wait unseen until the timeout
+    const r = await git($, cmd, a.args, 120000, { GIT_TERMINAL_PROMPT: '0' })
     if (r.ok) $.ui.toast(`✓ git ${cmd}: ${(r.out.trim() || r.said.trim()).split(/\r?\n/)[0] || 'done'}`)
     else {
       const stopped = (a.kind === 'merge' || a.kind === 'revert') && /CONFLICT/.test(r.err)
@@ -196,12 +226,13 @@ export function ActionConfirm($: EngineInterface, els: Els, a: Action): RenderEl
     a.args.length
       ? <Box key="xa:argv" flexDirection="row"><Text dimColor>{'runs    '}</Text><Text wrap="wrap">{'git ' + a.args.join(' ')}</Text></Box>
       : <Text key="xa:pickhead" dimColor>{a.pick?.length ? 'merge which branch into this one?' : 'no other branch to merge'}</Text>,
+    <Box key="xa:on" flexDirection="row"><Text dimColor>{'on      '}</Text><Text>{clean(a.branch)}</Text></Box>,
     ...a.warn.map((w, i) => <Box key={'xa:warn:' + i}><Text color="warning" wrap="wrap">{clean(w)}</Text></Box>),
-    ...(a.pick ?? []).map(name => <Button key={'xb:' + name} plain onPress={() => { void pickAction($, name) }}>{'  ' + clean(name)}</Button>),
+    ...(a.pick ?? []).map(name => <Button key={'xb:' + name} plain onPress={() => { void pickAction($, name).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>{'  ' + clean(name)}</Button>),
     <Text> </Text>,
     <Box flexDirection="row" gap={4}>
-      {a.args.length ? <Button key="xa:go" variant="primary" onPress={() => { void actionGo($) }}>Run</Button> : null}
-      <Button key="xa:cancel" onPress={() => { void cancelAction($) }}>Cancel</Button>
+      {a.args.length ? <Button key="xa:go" variant="primary" onPress={() => { void actionGo($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Run</Button> : null}
+      <Button key="xa:cancel" onPress={() => { void cancelAction($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Cancel</Button>
     </Box>,
   ]
 }

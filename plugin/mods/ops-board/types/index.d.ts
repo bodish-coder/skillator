@@ -114,7 +114,8 @@ export type Explorer = {
 }
 // F103: a git action planned - its argv (empty: a merge with no branch picked yet), warnings, the branches to pick from
 export type ActionKind = 'fetch' | 'pull' | 'push' | 'revert' | 'merge'
-export type Action = { kind: ActionKind; args: string[]; warn: string[]; pick: string[] | null; result: string | null }
+// branch, head: what the plan stood on when the confirm opened - Run refuses if either moved
+export type Action = { kind: ActionKind; args: string[]; warn: string[]; pick: string[] | null; result: string | null; branch: string; head: string }
 declare module 'claude-code' {
   interface PluginState {
     'ops-board': {

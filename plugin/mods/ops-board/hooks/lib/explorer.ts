@@ -46,33 +46,57 @@ export const INCOMING_ARGS = [...LOG_ARGS, 'HEAD..@{upstream}']
 export const BRANCH_ARGS = ['rev-parse', '--abbrev-ref', 'HEAD']
 export const DIRTY_ARGS = ['status', '--porcelain', '--untracked-files=no']
 export const BRANCHES_ARGS = ['branch', '--format=%(refname:short)']
+export const HEAD_ARGS = ['rev-parse', 'HEAD']
+export const GIT_DIR_ARGS = ['rev-parse', '--absolute-git-dir']
+// the branch's upstream remote and its ref there ("origin\trefs/heads/main"; "\t": none)
+export const pushToArgs = (branch: string) => ['for-each-ref', '--format=%(upstream:remotename)%09%(upstream:remoteref)', 'refs/heads/' + branch]
+// in the git dir while a merge, revert, cherry-pick or rebase is stopped (a rebase at an edit step has a clean tree)
+export const IN_PROGRESS = ['MERGE_HEAD', 'REVERT_HEAD', 'CHERRY_PICK_HEAD', 'rebase-merge', 'rebase-apply']
 
 // F103: the actions. The only source of their argv: never a force flag of any kind.
-export const ACTION_ARGS: Record<ActionKind, (target: string) => string[]> = {
+export const ACTION_ARGS: Record<ActionKind, (target: string, branch?: string) => string[]> = {
   fetch: () => ['fetch', '--prune'],
-  pull: () => ['pull', '--ff-only'],
-  push: () => ['push'],
+  pull: () => ['pull', '--ff-only', '--no-rebase'],
+  // an explicit refspec: remote.*.push and remote.*.mirror never widen it (git refuses one with mirror)
+  push: (remote, branch = '') => ['push', remote, 'HEAD:refs/heads/' + branch],
   revert: sha => ['revert', '--no-edit', sha],
-  merge: branch => ['merge', '--no-edit', branch],
+  merge: branch => ['merge', '--no-edit', '--', branch],     // --: a branch named -n is no option
 }
 const NEEDS_CLEAN: ActionKind[] = ['pull', 'merge', 'revert']
 export const isRunRef = (ref: string) => /^run\/RUN-\d+/.test(ref) || /\/\.skillator\/worktrees\//.test(ref.replace(/\\/g, '/'))
 
-// The plan: the action with its argv and warnings, or why it is refused. ctx: read just before.
-export function planAction(x: Explorer, kind: ActionKind, ctx: { branch: string; root: string; dirty: number; branches?: string[] }):
-  { action: Action } | { refused: string } {
+export type Here = { branch: string; head: string; dirty: number }
+
+// The plan: the action with its argv and warnings, or why it is refused. ctx: read just before
+// (branch 'HEAD': detached; inProgress: the IN_PROGRESS marker found; pushTo: pushToArgs read).
+export function planAction(x: Explorer, kind: ActionKind, ctx: Here & { root: string; branches?: string[]; inProgress?: string | null
+  pushTo?: { remote: string; ref: string } }): { action: Action } | { refused: string } {
   const sel = x.selected ?? ''
   // a local commit only: an incoming one is not in HEAD's history, there is nothing to revert
   if (kind === 'revert' && !sel.startsWith('xc:')) return { refused: 'select a commit first' }
+  if (kind !== 'fetch' && ctx.branch === 'HEAD') return { refused: `HEAD is detached - git ${kind} needs a branch; check one out first` }
+  if (kind !== 'fetch' && ctx.inProgress)
+    return { refused: `${ctx.inProgress} exists in the git dir - a merge, revert, cherry-pick or rebase is in progress; finish it or --abort it first` }
   if (NEEDS_CLEAN.includes(kind) && ctx.dirty > 0)
     return { refused: `working tree has ${ctx.dirty} uncommitted changes - git would refuse or stop half way; commit or stash first` }
-  if ((kind === 'push' || kind === 'pull') && x.upstream === 'none')
+  const to = ctx.pushTo
+  if (((kind === 'push' || kind === 'pull') && x.upstream === 'none') || (kind === 'push' && !(to?.remote && to.ref.startsWith('refs/heads/'))))
     return { refused: `no upstream for ${ctx.branch} - git push -u origin ${ctx.branch} by hand sets one` }
   const warn: string[] = []
   if (isRunRef(ctx.branch)) warn.push(`on relay run branch ${ctx.branch} - runs land through relay-morpheus; continue only if you mean it`)
   if (isRunRef(ctx.root)) warn.push(`this checkout is a run worktree (${ctx.root})`)
-  if (kind === 'merge') return { action: { kind, args: [], warn, pick: (ctx.branches ?? []).filter(b => b !== ctx.branch && !b.startsWith('(')), result: null } }   // '(HEAD detached at …)' is no branch
-  return { action: { kind, args: ACTION_ARGS[kind](sel.slice(3)), warn, pick: null, result: null } }
+  const on = { result: null, branch: ctx.branch, head: ctx.head }
+  if (kind === 'merge') return { action: { kind, args: [], warn, pick: (ctx.branches ?? []).filter(b => b !== ctx.branch && !b.startsWith('(')), ...on } }   // '(HEAD detached at …)' is no branch
+  const args = kind === 'push' ? ACTION_ARGS.push(to!.remote, to!.ref.slice('refs/heads/'.length)) : ACTION_ARGS[kind](sel.slice(3))
+  return { action: { kind, args, warn, pick: null, ...on } }
+}
+
+// Run: why the plan no longer stands (the branch or HEAD moved, or the tree turned dirty since the confirm opened), or null.
+export function staleAction(a: Action, now: Here): string | null {
+  if (now.branch !== a.branch) return `the branch changed (${a.branch} → ${now.branch}) since the confirm opened`
+  if (now.head !== a.head) return 'HEAD moved since the confirm opened'
+  if (NEEDS_CLEAN.includes(a.kind) && now.dirty > 0) return `working tree has ${now.dirty} uncommitted changes now`
+  return null
 }
 
 // Merge: the branch picked fills the argv; a run branch is warned.

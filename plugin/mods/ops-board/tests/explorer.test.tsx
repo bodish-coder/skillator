@@ -19,8 +19,9 @@ const CH2 = ':100644 100644 eee eee R100\tsrc/old.ts\tsrc/new.ts\n:100644 100644
 const SHA3 = 'fedcba9' + 'c'.repeat(33)          // F103: the upstream's commit HEAD has not
 
 // F103: `actions` records the argv of every fetch/pull/push/revert/merge run; each answers `actionResult`.
-type World = { runs: { argv: readonly string[]; cwd?: string }[]; git: (args: readonly string[]) => ProcessRunResult; exes: string[]
-  actions: string[][]; actionResult: ProcessRunResult; dirty: string; branch: string; root: string; toasts: string[] }
+type World = { runs: { argv: readonly string[]; cwd?: string; env?: Record<string, string> }[]; git: (args: readonly string[]) => ProcessRunResult
+  exes: string[]; actions: string[][]; actionResult: ProcessRunResult | string; dirty: string; branch: string; head: string; pushTo: string
+  root: string; toasts: string[]; repoFails: boolean }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
@@ -40,12 +41,17 @@ const answer = (args: readonly string[]): ProcessRunResult => {
 const ACTION = /^(fetch|pull|push|revert|merge)$/
 
 function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
-  const w: World = { runs: [], git: answer, exes: [], actions: [], actionResult: ran('Already up to date.\n'), dirty: '', branch: 'main', root: '/r', toasts: [] }
+  const w: World = { runs: [], git: answer, exes: [], actions: [], actionResult: ran('Already up to date.\n'), dirty: '', branch: 'main', head: SHA1,
+    pushTo: 'origin\trefs/heads/main', root: '/r', toasts: [], repoFails: false }
   // the reads an action plan needs, from the world; the actions themselves recorded, never run
-  const local = (args: readonly string[]): ProcessRunResult => {
+  // a string: the host rejecting the run (a timeout)
+  const local = (args: readonly string[]): ProcessRunResult | string => {
     const a = args.join(' ')
     if (ACTION.test(args[0] ?? '')) { w.actions.push([...args]); return w.actionResult }
     if (a === 'rev-parse --abbrev-ref HEAD') return ran(w.branch + '\n')
+    if (a === 'rev-parse HEAD') return ran(w.head + '\n')
+    if (a === 'rev-parse --absolute-git-dir') return ran('/r/.git\n')
+    if (a.startsWith('for-each-ref')) return ran(w.pushTo + '\n')
     if (a.startsWith('status --porcelain')) return ran(w.dirty)
     if (a.startsWith('branch --format')) return ran('main\nfeature/x\nrun/RUN-0021-y\n')
     return w.git(args)
@@ -56,21 +62,23 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   mock.env(on, env)
   mock.store(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('session.repo', () => ({ value: { root: w.root, remote: null, internal: false, name: 'r' } }))
+  on('session.repo', () => (w.repoFails ? { deny: 'repo read failed' } : { value: { root: w.root, remote: null, internal: false, name: 'r' } }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('fs.stat', ($, e) => {
     const f = at(e.path)
     return f !== undefined ? { value: { kind: 'file' as const, size: f.length, mtimeMs: 1000, isLink: false } } : { deny: 'ENOENT ' + e.path }
   })
-  on('fs.exists', ($, e) => ({ value: at(e.path) !== undefined || w.exes.includes(e.path.replace(/\\/g, '/')) }))
+  on('fs.exists', ($, e) => ({ value: at(e.path) !== undefined || w.exes.includes(e.path.replace(/\\/g, '/'))
+    || w.exes.includes(e.path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')) }))
   on('fs.read', ($, e) => {
     const f = at(e.path)
     return f !== undefined ? { value: f } : { deny: 'ENOENT ' + e.path }
   })
   on('fs.list', ($, e) => ({ deny: 'ENOENT ' + e.path }))
   on('process.run', ($, e) => {
-    w.runs.push({ argv: e.argv, cwd: e.init?.cwd })
-    return { value: /(^|\/)git(\.exe)?$/.test(e.argv[0] ?? '') ? local(e.argv.slice(1)) : ran('', 1, 'not in this test') }
+    w.runs.push({ argv: e.argv, cwd: e.init?.cwd, env: e.init?.env })
+    const v = /(^|\/)git(\.exe)?$/.test(e.argv[0] ?? '') ? local(e.argv.slice(1)) : ran('', 1, 'not in this test')
+    return typeof v === 'string' ? { deny: v } : { value: v }
   })
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('ui.close', () => ({ value: undefined }))
@@ -281,25 +289,29 @@ test('a long file name with an ESC and a CR lines up with any other long name', 
 
 // F103: the git actions - the argv is fixed per action, a plan refuses what git would refuse
 // or stop half way on, and run branches / worktrees are warned before anything runs.
-test('F103 argv per action is fixed: ff-only pull, plain push, no-edit revert and merge', () => {
+test('F103 argv per action is fixed: ff-only no-rebase pull, push by explicit refspec, no-edit revert, merge with --', () => {
   expect(ACTION_ARGS.fetch('')).toEqual(['fetch', '--prune'])
-  expect(ACTION_ARGS.pull('')).toEqual(['pull', '--ff-only'])
-  expect(ACTION_ARGS.push('')).toEqual(['push'])
+  expect(ACTION_ARGS.pull('')).toEqual(['pull', '--ff-only', '--no-rebase'])
+  expect(ACTION_ARGS.push('origin', 'main')).toEqual(['push', 'origin', 'HEAD:refs/heads/main'])
   expect(ACTION_ARGS.revert('abc1')).toEqual(['revert', '--no-edit', 'abc1'])
-  expect(ACTION_ARGS.merge('feature/x')).toEqual(['merge', '--no-edit', 'feature/x'])
+  expect(ACTION_ARGS.merge('feature/x')).toEqual(['merge', '--no-edit', '--', 'feature/x'])
+  expect(ACTION_ARGS.merge('-n')).toEqual(['merge', '--no-edit', '--', '-n'])   // a branch named -n is no option
   for (const k of Object.keys(ACTION_ARGS) as (keyof typeof ACTION_ARGS)[]) expect(ACTION_ARGS[k]('t').some(a => /force/.test(a))).toBe(false)
 })
 
 test('F103 planAction: dirty tree refuses pull/merge/revert, push needs an upstream, revert needs a selected commit, run refs warn', () => {
   const x = { ...withUpstream(EMPTY, 'origin/main', '2\t3'), selected: 'xc:' + SHA1 }
-  expect(planAction(x, 'pull', { branch: 'main', root: '/r', dirty: 2 })).toEqual({ refused: 'working tree has 2 uncommitted changes - git would refuse or stop half way; commit or stash first' })
-  expect(planAction(x, 'push', { branch: 'main', root: '/r', dirty: 2 })).toEqual({ action: { kind: 'push', args: ['push'], warn: [], pick: null, result: null } })
-  expect(planAction(withUpstream(EMPTY, null, null), 'push', { branch: 'main', root: '/r', dirty: 0 })).toEqual({ refused: 'no upstream for main - git push -u origin main by hand sets one' })
-  expect(planAction({ ...x, selected: 'xs:files' }, 'revert', { branch: 'main', root: '/r', dirty: 0 })).toEqual({ refused: 'select a commit first' })
-  const r = planAction(x, 'revert', { branch: 'run/RUN-0022-x', root: '/r/.skillator/worktrees/RUN-0022-x', dirty: 0 })
-  expect(r).toEqual({ action: { kind: 'revert', args: ['revert', '--no-edit', SHA1], warn: ['on relay run branch run/RUN-0022-x - runs land through relay-morpheus; continue only if you mean it', 'this checkout is a run worktree (/r/.skillator/worktrees/RUN-0022-x)'], pick: null, result: null } })
-  const m = planAction(x, 'merge', { branch: 'main', root: '/r', dirty: 0, branches: ['main', 'feature/x', 'run/RUN-0021-y'] })
-  expect(m).toEqual({ action: { kind: 'merge', args: [], warn: [], pick: ['feature/x', 'run/RUN-0021-y'], result: null } })
+  const at = { branch: 'main', head: SHA1, root: '/r', dirty: 0 }
+  expect(planAction(x, 'pull', { ...at, dirty: 2 })).toEqual({ refused: 'working tree has 2 uncommitted changes - git would refuse or stop half way; commit or stash first' })
+  expect(planAction(x, 'push', { ...at, dirty: 2, pushTo: { remote: 'origin', ref: 'refs/heads/main' } }))
+    .toEqual({ action: { kind: 'push', args: ['push', 'origin', 'HEAD:refs/heads/main'], warn: [], pick: null, result: null, branch: 'main', head: SHA1 } })
+  expect(planAction(x, 'push', at)).toEqual({ refused: 'no upstream for main - git push -u origin main by hand sets one' })   // none read: refused
+  expect(planAction(withUpstream(EMPTY, null, null), 'push', at)).toEqual({ refused: 'no upstream for main - git push -u origin main by hand sets one' })
+  expect(planAction({ ...x, selected: 'xs:files' }, 'revert', at)).toEqual({ refused: 'select a commit first' })
+  const r = planAction(x, 'revert', { ...at, branch: 'run/RUN-0022-x', root: '/r/.skillator/worktrees/RUN-0022-x' })
+  expect(r).toEqual({ action: { kind: 'revert', args: ['revert', '--no-edit', SHA1], warn: ['on relay run branch run/RUN-0022-x - runs land through relay-morpheus; continue only if you mean it', 'this checkout is a run worktree (/r/.skillator/worktrees/RUN-0022-x)'], pick: null, result: null, branch: 'run/RUN-0022-x', head: SHA1 } })
+  const m = planAction(x, 'merge', { ...at, branches: ['main', 'feature/x', 'run/RUN-0021-y'] })
+  expect(m).toEqual({ action: { kind: 'merge', args: [], warn: [], pick: ['feature/x', 'run/RUN-0021-y'], result: null, branch: 'main', head: SHA1 } })
 })
 
 test('F103 upstream and incoming: the count line, the Incoming section only when behind, its items open like commits', () => {
@@ -323,7 +335,8 @@ test('F103 pull: the confirm names the exact argv; Run runs it once; Cancel and 
   const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
   await ui.press({ key: 'key:pull' }); await clock.settle()
   expect((await ui.find({ key: 'xa:title' }))?.text).toBe('git pull?  Esc cancels')
-  expect((await ui.find({ key: 'xa:argv' }))?.text).toBe('runs    git pull --ff-only')
+  expect((await ui.find({ key: 'xa:argv' }))?.text).toBe('runs    git pull --ff-only --no-rebase')
+  expect((await ui.find({ key: 'xa:on' }))?.text).toBe('on      main')
   await ui.press({ key: 'xa:cancel' }); await clock.settle()
   expect(w.actions).toEqual([])                                     // cancel does not run
   expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
@@ -332,25 +345,25 @@ test('F103 pull: the confirm names the exact argv; Run runs it once; Cancel and 
   expect(w.actions).toEqual([])                                     // Esc does not run
   expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
   await go(ui, clock, 'key:pull')
-  expect(w.actions).toEqual([['pull', '--ff-only']])                // confirm runs, once
+  expect(w.actions).toEqual([['pull', '--ff-only', '--no-rebase']])  // confirm runs, once
   expect(w.actions.flat().some(a => /force/.test(a))).toBe(false)
-  expect(w.toasts.at(-1)).toBe('✓ git pull --ff-only: Already up to date.')
+  expect(w.toasts.at(-1)).toBe('✓ git pull --ff-only --no-rebase: Already up to date.')
   await ui.unmount()
 })
 
 test('F103 every action: fetch, push, revert of the selected commit, merge of a picked branch - argv pinned; a dirty tree refuses pull/merge/revert with a toast', WITH, async ($, on) => {
   const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
   await go(ui, clock, 'key:fetch'); expect(w.actions).toEqual([['fetch', '--prune']]); w.actions = []
-  await go(ui, clock, 'key:push'); expect(w.actions).toEqual([['push']]); w.actions = []
+  await go(ui, clock, 'key:push'); expect(w.actions).toEqual([['push', 'origin', 'HEAD:refs/heads/main']]); w.actions = []
   await ui.press({ key: 'xs:commits' }); await ui.press({ key: 'xc:' + SHA1 }); await clock.settle()
   await go(ui, clock, 'key:revert'); expect(w.actions).toEqual([['revert', '--no-edit', SHA1]]); w.actions = []
   await ui.press({ key: 'key:merge' }); await clock.settle()
   expect(await ui.find({ key: 'xb:main' })).toBeUndefined()        // the current branch is no merge source
   expect((await ui.find({ key: 'xa:go' }))).toBeUndefined()         // nothing to run until a branch is picked
   await ui.press({ key: 'xb:feature/x' }); await clock.settle()
-  expect((await ui.find({ key: 'xa:argv' }))?.text).toBe('runs    git merge --no-edit feature/x')
+  expect((await ui.find({ key: 'xa:argv' }))?.text).toBe('runs    git merge --no-edit -- feature/x')
   await ui.press({ key: 'xa:go' }); await clock.settle()
-  expect(w.actions).toEqual([['merge', '--no-edit', 'feature/x']]); w.actions = []
+  expect(w.actions).toEqual([['merge', '--no-edit', '--', 'feature/x']]); w.actions = []
   w.dirty = ' M a.ts\n'
   for (const k of ['key:pull', 'key:merge', 'key:revert']) {
     await ui.press({ key: k }); await clock.settle()
@@ -367,11 +380,11 @@ test('F103 a failed command shows git\'s message; a merge conflict says the merg
   await ui.press({ key: 'key:merge' }); await clock.settle(); await ui.press({ key: 'xb:feature/x' }); await clock.settle()
   await ui.press({ key: 'xa:go' }); await clock.settle()
   const t = w.toasts.at(-1)!
-  expect(t.startsWith('■ git merge --no-edit feature/x failed: CONFLICT')).toBe(true)
+  expect(t.startsWith('■ git merge --no-edit -- feature/x failed: CONFLICT')).toBe(true)
   expect(t.endsWith('- merge stopped on conflict: resolve by hand, or git merge --abort')).toBe(true)
   w.actionResult = ran('', 1, 'fatal: Not possible to fast-forward, aborting.\n')
   await go(ui, clock, 'key:pull')
-  expect(w.toasts.at(-1)).toBe('■ git pull --ff-only failed: fatal: Not possible to fast-forward, aborting.')
+  expect(w.toasts.at(-1)).toBe('■ git pull --ff-only --no-rebase failed: fatal: Not possible to fast-forward, aborting.')
   // a revert conflict: git says CONFLICT on stdout, a hint on stderr - both read, the stop said
   w.actionResult = ran('CONFLICT (content): Merge conflict in a.ts\n', 1, 'error: could not revert 1234567... F75\n')
   await ui.press({ key: 'xs:commits' }); await ui.press({ key: 'xc:' + SHA1 }); await clock.settle()
@@ -384,9 +397,9 @@ test('F103 Run pressed twice runs git once; a detached HEAD is no merge source',
   const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
   await ui.press({ key: 'key:push' }); await clock.settle()
   const run = ui.press({ key: 'xa:go' }); await ui.press({ key: 'xa:go' }).catch(() => {}); await run; await clock.settle()
-  expect(w.actions).toEqual([['push']])
-  expect(planAction(EMPTY, 'merge', { branch: 'HEAD', root: '/r', dirty: 0, branches: ['(HEAD detached at abc1234)', 'main'] }))
-    .toEqual({ action: { kind: 'merge', args: [], warn: [], pick: ['main'], result: null } })
+  expect(w.actions).toEqual([['push', 'origin', 'HEAD:refs/heads/main']])
+  expect(planAction(EMPTY, 'merge', { branch: 'main', head: SHA1, root: '/r', dirty: 0, branches: ['(HEAD detached at abc1234)', 'main', 'x'] }))
+    .toEqual({ action: { kind: 'merge', args: [], warn: [], pick: ['x'], result: null, branch: 'main', head: SHA1 } })
   await ui.unmount()
 })
 
@@ -411,5 +424,86 @@ test('F103 after a fetch the Commits head shows ↑1 ↓1 vs origin/main and Inc
   expect((await ui.find({ key: 'xi:' + SHA3 }))?.text).toBe('  ▸ fedcba9  2026-10-26  F100: incoming')
   await ui.press({ key: 'xi:' + SHA3 }); await clock.settle()
   expect((await ui.find({ key: `xch:${SHA3}:0` }))?.text).toBe('      M  mods/a/x.ts  +3 -1')
+  await ui.unmount()
+})
+
+// F103 review round 1.
+test('F103 push: the argv names the upstream remote and branch as an explicit refspec, the confirm shows it, git asks no password', WITH, async ($, on) => {
+  const [w, clock] = world(on); w.branch = 'feature/x'; w.pushTo = 'up/stream\trefs/heads/team/x'
+  await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  await ui.press({ key: 'key:push' }); await clock.settle()
+  expect((await ui.find({ key: 'xa:argv' }))?.text).toBe('runs    git push up/stream HEAD:refs/heads/team/x')
+  expect((await ui.find({ key: 'xa:on' }))?.text).toBe('on      feature/x')
+  await ui.press({ key: 'xa:go' }); await clock.settle()
+  expect(w.actions).toEqual([['push', 'up/stream', 'HEAD:refs/heads/team/x']])
+  expect(w.runs.find(r => r.argv[1] === 'push')?.env).toEqual({ GIT_TERMINAL_PROMPT: '0' })
+  w.actions = []; w.pushTo = '\t'                                   // no upstream remote read: refused, nothing run
+  await ui.press({ key: 'key:push' }); await clock.settle()
+  expect(w.toasts.at(-1)).toBe('■ no upstream for feature/x - git push -u origin feature/x by hand sets one')
+  expect(w.actions).toEqual([])
+  await ui.unmount()
+})
+
+test('F103 a plan gone stale between the confirm and Run runs nothing: branch changed, HEAD moved, tree dirtied', WITH, async ($, on) => {
+  const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  const cases: [() => void, string][] = [
+    [() => { w.branch = 'other' }, '■ the branch changed (main → other) since the confirm opened - nothing run'],
+    [() => { w.head = SHA2 }, '■ HEAD moved since the confirm opened - nothing run'],
+    [() => { w.dirty = ' M a.ts\n' }, '■ working tree has 1 uncommitted changes now - nothing run'],
+  ]
+  for (const [change, said] of cases) {
+    w.branch = 'main'; w.head = SHA1; w.dirty = ''
+    await ui.press({ key: 'key:pull' }); await clock.settle()
+    change()
+    await ui.press({ key: 'xa:go' }); await clock.settle()
+    expect(w.toasts.at(-1)).toBe(said)
+    expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
+  }
+  expect(w.actions).toEqual([])
+  await ui.unmount()
+})
+
+test('F103 a detached HEAD and a merge/revert/cherry-pick/rebase in progress refuse pull, push, merge and revert', WITH, async ($, on) => {
+  const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  await ui.press({ key: 'xs:commits' }); await ui.press({ key: 'xc:' + SHA1 }); await clock.settle()
+  w.branch = 'HEAD'
+  for (const k of ['pull', 'push', 'merge', 'revert']) {
+    await ui.press({ key: 'key:' + k }); await clock.settle()
+    expect(w.toasts.at(-1)).toBe(`■ HEAD is detached - git ${k} needs a branch; check one out first`)
+  }
+  w.branch = 'main'
+  for (const m of ['MERGE_HEAD', 'REVERT_HEAD', 'CHERRY_PICK_HEAD', 'rebase-merge', 'rebase-apply']) {
+    w.exes = ['/r/.git/' + m]
+    for (const k of ['pull', 'push', 'merge', 'revert']) {
+      await ui.press({ key: 'key:' + k }); await clock.settle()
+      expect(w.toasts.at(-1)).toBe(`■ ${m} exists in the git dir - a merge, revert, cherry-pick or rebase is in progress; finish it or --abort it first`)
+    }
+  }
+  expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
+  expect(w.actions).toEqual([])
+  await ui.unmount()
+})
+
+test('F103 an upstream read failing (not "no upstream") clears the counts and Incoming', WITH, async ($, on) => {
+  const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  expect((await ui.find({ key: 'xs:commits' }))?.text).toBe('▸ Commits (2)  ↑1 ↓1 vs origin/main')
+  w.git = args => (args.join(' ') === 'rev-parse --abbrev-ref @{upstream}' ? ran('', 1, 'fatal: something else') : answer(args))
+  await ui.press({ key: 'key:reload' }); await clock.settle()
+  expect((await ui.find({ key: 'xs:commits' }))?.text).toBe('▸ Commits (2)')
+  expect(await ui.find({ key: 'xs:incoming' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('F103 an action that throws toasts the error and frees the next action; a timeout says index.lock may be left', WITH, async ($, on) => {
+  const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  await ui.press({ key: 'key:fetch' }); await clock.settle()
+  w.repoFails = true
+  await ui.press({ key: 'xa:go' }); await clock.settle()
+  expect(w.toasts.at(-1)).toMatch(/^■ .*repo read failed/)
+  w.repoFails = false
+  w.actionResult = 'timed out'
+  await go(ui, clock, 'key:fetch')                                  // not "still running": the throw freed it
+  expect(w.actions).toEqual([['fetch', '--prune']])
+  expect(w.toasts.at(-1)).toBe('■ git fetch --prune timed out after 120s - .git/index.lock may be left; remove it once no git runs')
   await ui.unmount()
 })
