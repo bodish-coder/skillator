@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T01:47Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T02:05Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -10,10 +10,10 @@ branch: run/RUN-0023-pending-f100-f104
 | 167 | AABZ F100 build-jarvis UI entry | x | build:opus | 2026-10-26T15:47Z | f39b942 |
 | 168 | AAB0 F102 ops font size | x | build:opus | 2026-10-26T16:22Z | c297369 |
 | 169 | AAB1 F101 marathon without Workflow | x | subagent | 2026-10-27T01:47Z | f06d0fc |
-| 170 | AAB2 F103 explorer git actions |   | - | - | - |
+| 170 | AAB2 F103 explorer git actions | ~ | subagent | 2026-10-27T02:05Z | - |
 | 171 | AAB3 F104 diagnose close |   | - | - | - |
 | 172 | verify review bump commit |   | - | - | - |
-| 173 | AAB4 F105 codex $ops opens the board |   | - | - | - |
+| 173 | AAB4 F105 codex $ops opens the board | ~ | subagent | 2026-10-27T02:05Z | - |
 | 174 | merge origin/ccr-0af663c7-2ecnqn (F97 clone-odo) INTO main | x | main:opus | 2026-10-26T18:55Z | ca1f9e3 |
 | 178 | AAB7 F106 start claims the owner |   | - | - | - |
 | 179 | AAB8 F109 session code and mode |   | - | - | - |
@@ -21,8 +21,45 @@ branch: run/RUN-0023-pending-f100-f104
 | 181 | AACA F110 rename skill-smith to skill-prometheus |   | - | - | - |
 
 ## In flight
+### stage 170 - AAB2 F103 explorer git actions  (dispatched 2026-10-27T02:05Z, @sher)
+run: -
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket F103 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/66a4199e-bee7-472b-9aaa-61fc26982c2a/scratchpad/design-2026-10-26-f103-explorer-git-actions.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths name the main checkout C:/tools/Projects/skillator2/...; use the same relative paths under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 instead. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. CRITICAL: every git action shows its exact argv and runs only after a confirm; never --force; pull --ff-only; merge stops on conflict. Tests pin argv, confirm-runs and cancel-does-not.
+
+  The ticket line, verbatim:
+  - [ ] F103 — Explorer: incoming commits and git actions. Owner 2026-10-26: 'in explorer have option to pull items in commits which are not local / options of reverse merge push like any git app'. Today the Explorer tab (F75, plugin/mods/ops-board/hooks/explorertab.tsx, lib/explorer.ts) is read-only: git ls-files and git log of local HEAD only. Done when: the Commits section shows ahead/behind against the upstream after a fetch the owner starts (f), the incoming commits listed apart and opening to their changes like local ones; actions on keys, each naming the exact git command and asking a confirm before it runs - pull (fast-forward only by default), push (never --force), revert a selected commit (git revert, a new commit), merge a chosen branch into the current one (stops on conflict, says so, never auto-resolves); no action on a dirty tree that git itself would refuse; a failed command shows git's message; run worktrees and run/ branches are named as such and warned before any action on them; tests pin confirm-runs, cancel-does-not, and the exact argv per action; the ops app twin gets the read-only ahead/behind view or a ruling why not.
+
+  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F103: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### stage 173 - AAB4 F105 codex $ops opens the board  (dispatched 2026-10-27T02:05Z, @sher)
+run: -
+worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s173
+branch: run/RUN-0023-pending-f100-f104-s173
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket F105 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/66a4199e-bee7-472b-9aaa-61fc26982c2a/scratchpad/design-2026-10-26-f105-codex-ops.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths name the main checkout C:/tools/Projects/skillator2/...; use the same relative paths under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 instead. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why.
+
+  The ticket line, verbatim:
+  - [ ] F105 — Codex: one-word $ops opens the ops board. Owner 2026-10-26: 'in skillator we should have a first run for codex which has a one word command to run ops board'. Codex has no pane; today the board there is the terminal app (ops --open, or the full ops.ps1 -Repo <repo> -Open line), which a Codex user has to know. Codex runs skillator's commands as skills ($<name>) from plugin/host-commands/antigravity/<name>/SKILL.md, written by install.ps1 / install.sh (F90). Done when: an ops command skill there makes `$ops` in Codex (and agy, which reads the same dir) open the board for the current repo with `ops --open` (falling back to the installed ops.ps1 / ops.sh path when the ops function or shim is missing), never a bare console window; install.ps1 and install.sh write it like the other command skills and their selftests list it; the install summary's first-run lines say `Codex: $ops opens the board`; README's host table says so; PLATFORMS marks it verified only after a real Codex run.
+
+  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F105: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+
 ## Chain
-driver: @cc-9de7d9 2026-10-26T18:44Z     hold: -     mode: agents
+driver: @sher 2026-10-27T02:05Z     hold: -     mode: agents
 ### AABZ - stage 167 - F100 build-jarvis UI entry
 tickets: F100 build/build
 files: plugin/skills/build-jarvis/SKILL.md,plugin/skills/build-jarvis/references/grade.md,plugin/skills/build-jarvis/references/route-hook.md,plugin/skills/build-jarvis/hooks/feature-route.sh,plugin/skills/build-jarvis/hooks/feature-route.ps1,plugin/skills/grayskull-power/SKILL.md,plugin/skills/grayskull-power/references/routing.md,plugin/skills/design-arwen/SKILL.md,plugin/skills/tui-tron/SKILL.md,plugin/practice/baselines/scenario-build-ui-feature.txt,plugin/practice/baselines/scenario-build-ui-only.txt,plugin/practice/baselines/green-build-ui-f100.txt
@@ -233,3 +270,5 @@ prompt: |
 - 19:55Z - 169 fix round 1 2c53043: separate review (read-only agent, diff read in the worktree) confirmed all 6 and found 4: Gemini CLI's ~/.gemini/skills gets the agy text and the selftest locks --owner subagent there (verified, install.sh 54-58/396-400); no-delegate BLOCKED retry not dispatched first; README says every host has the command and puts muse under subagents; RELAY_CHAIN_PARALLEL unguarded. Fix round 2 (of 3) opus, prompt .skillator/prompts/run-0023-s169-fix2.txt - cost if wrong: one more round.
 - 20:05Z - /pending-subagent parallel (owner @sher): stages 178 F106 (after 169), 179 F109 (after 178,171), 180 F111 (after 179,170,171), 181 F110 (after 180,173) added; designs by one fable pass (scratchpad design-2026-10-26-F10{6,9}/F11{0,1}-*.md), tiers build/deep (F109 critical: TICKETS.md line format). Before 178: merge main into this run branch (main has the F107 clone-odo merge that F110 renames inside). Before 181: RUN-0024 (F108 shares manifests and routing.md) lands on main and main is merged here again - the lease already holds 181. Parked for the end batch, built on defaults: Q-F106-1 yes, Q-F109-1 no, Q-F109-2 whole token, Q-F111-1 no, Q-F111-2 no tab number hotkeys (the picked mock shows them), Q-F110-1 extend README l.163; Q-F110-2 settled by the owner (skill-prometheus) - cost if wrong: a follow-up edit per Q.
 - Ruling: stage 169 F101 landed at f06d0fc after the orchestrator re-ran relay, install.sh and install.ps1 selftests (all ok, run one at a time at 0.86 GB free); main (clone-odo F107, RUN-0024) merged into the run branch at d186426 - manifests and the grayskull routing rows kept both sides; every selftest ok on the merged tree - cost if wrong: a later stage builds on a bad merge.
+- Ruling: watchdog hold (0.6 GB, a transient dip) released by the driver - free memory read 3.19 GB a minute later; 170 F103 and 173 F105 dispatched, 2 agents, 178 waits for a slot - cost if wrong: the reaper stops an agent mid-stage and it is re-dispatched.
+- Ruling: 173 runs beside 170, so dispatch gave it the stage worktree .s173; its agent gets the stored prompt with that worktree substituted (.skillator/prompts/run-0023-s173-wt.txt) - cost if wrong: none.
