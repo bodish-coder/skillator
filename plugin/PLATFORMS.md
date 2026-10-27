@@ -232,10 +232,12 @@ dated **Verified** note (`ticket-meta verify <ID> pass`), FAIL leaves it `[%]` w
 failed appended (`verify <ID> fail`), OWNER (the Done line needs the owner's own eyes)
 is never flipped. A host with no subagents runs the checks itself, one at a time.
 
-`/marathon-plan [IDs]` and `/marathon-run [RUN id]` (F73, `relay-morpheus`) are a
-marathon saved, then run: the plan is a run file plus a Workflow script beside it
+`/marathon-run [sequential|parallel] [N|max] [IDs]` (F112) plans and runs a marathon in one go,
+`/marathon-plan` with the same words saves the plan and `/marathon-run [RUN id]` runs a saved one
+(F73, `relay-morpheus`): the plan is a run file plus a Workflow script beside it
 (`run-<0000>-<slug>.workflow.js`, from relay-morpheus `templates/marathon-workflow.js`:
-one implementer and one verifier per ticket, phases serial where tickets share files),
+one implementer and one verifier per ticket, phases serial where tickets share files,
+one ticket per phase under sequential (the default), at most N under parallel N - PLAN.mode),
 shown with its agent count and no agent run; `/marathon-run` runs it one phase per
 Workflow call, every stage `chain dispatch`ed first, then landing and the end batch.
 Every other host writes the same plan and `/marathon-run` reads it as data, running each

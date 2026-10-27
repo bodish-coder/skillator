@@ -273,14 +273,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   tickets as such a run: one fresh implementer per ticket, each diff reviewed and
   landed, the run merged, the push asked; 1 agent at a time unless a count is given,
   and tickets that share files never together.
-  `/marathon-plan [IDs]` (every host with commands; on muse, the plain words
-  "plan a marathon" load relay-morpheus) writes the same run as a saved plan - an
-  implementer and a verifier per ticket, both in the ticket's phase (fix then
-  verify, no separate verify phase), phases serial where tickets share files - and
-  shows it with its agent count; `/marathon-run [RUN id]` runs it, each stage on
-  disk before its dispatch: with the Workflow tool on Claude Code, with the host's
-  delegate elsewhere (cursor Task, agy/codex subagents, muse child agents,
-  pi's subagent extension), in-session where there is none (opencode, gemini, pi without it).
+  `/marathon-run [sequential|parallel] [N|max] [IDs]` (every host with commands; on muse, the plain words "run a marathon" load relay-morpheus) plans a marathon and runs it in one go with `/pending-subagent`'s words - no mode = sequential (one ticket per phase, one agent at a time), `parallel` = file-disjoint tickets side by side in a phase, a count caps a phase, IDs limit the tickets - an implementer and a verifier per ticket, both in the ticket's phase (fix then verify, no separate verify phase); `/marathon-plan [sequential|parallel] [N|max] [IDs]` writes the same plan without running it, `/marathon-run RUN-<id>` runs a saved plan as saved. Each stage is on disk before its dispatch: with the Workflow tool on Claude Code, with the host's delegate elsewhere (cursor Task, agy/codex subagents, muse child agents, pi's subagent extension), in-session where there is none (opencode, gemini, pi without it - a parallel plan runs serial there).
 - **tickets-zordon** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with

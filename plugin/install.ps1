@@ -525,6 +525,34 @@ function Invoke-SelfTest([string]$T) {
       if (-not $ct.Contains($r)) { return "$f has no mode row '$r' (F88)" }
     }
   }
+  # F112: one marathon command - the mode is a plan shape (template PLAN.mode + check; marathon.md mode table)
+  $mw = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'skills\relay-morpheus\templates\marathon-workflow.js'))
+  if (-not $mw.Contains("mode: 'sequential',")) { return 'marathon-workflow.js PLAN has no mode line (F112)' }
+  if (-not $mw.Contains("PLAN.mode must be 'sequential', 'parallel' or 'parallel <N>'")) { return 'marathon-workflow.js does not check PLAN.mode (F112)' }
+  if (Get-Command node -ErrorAction SilentlyContinue) {
+    $mwt = Join-Path $T 'mw.mjs'
+    [IO.File]::WriteAllText($mwt, (($mw -replace '(?m)^return ', 'export default ') -replace "(?m)^(      \{ stage: 0, code: 'XXXX', ticket: 'F0'.*)$", "`$1`n      { stage: 1, code: 'YYYY', ticket: 'F1', files: ['b'], done: 'd', prompt: 'p' },"))
+    $o = & { $ErrorActionPreference = 'Continue'; & node --input-type=module -e "import {pathToFileURL} from 'node:url'; globalThis.args={phase:1}; await import(pathToFileURL(process.argv[1]).href)" -- $mwt 2>&1 | Out-String }
+    if ($o -notmatch [regex]::Escape('PLAN.mode sequential needs one ticket per phase - phase 1 holds 2')) { return "marathon-workflow.js runs a two-ticket phase under mode sequential (F112): $o" }
+  }
+  $mm = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'skills\relay-morpheus\references\marathon.md'))
+  foreach ($r in '| nothing, `sequential`, `1` | sequential | one ticket | unset |', '| `parallel`, `max`, `parallel max` | parallel | every file-disjoint ticket that fits | the number of stages in the phase |', '| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |') {
+    if (-not $mm.Contains($r)) { return "marathon.md has no mode row '$r' (F112)" }
+  }
+  if (-not $mm.Contains('### Mode - sequential or parallel (F112)')) { return 'marathon.md has no Mode section (F112)' }
+  foreach ($n in 'marathon-plan', 'marathon-run') {
+    foreach ($f in "commands\$n.md", "host-commands\cursor\$n.md", "host-commands\pi\$n.md", "host-commands\opencode\$n.md", "host-commands\antigravity\$n\SKILL.md", "host-commands\gemini\$n.toml") {
+      $ct = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))
+      foreach ($r in '| nothing, `sequential`, `1` | sequential | one ticket | unset |', '| `parallel`, `max`, `parallel max` | parallel | every file-disjoint ticket that fits | the number of stages in the phase |', '| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |') {
+        if (-not $ct.Contains($r)) { return "$f has no mode row '$r' (F112)" }
+      }
+      if (-not $ct.Contains('say it is not an option and stop')) { return "$f has no bad-first-word refusal (F112)" }
+      if (($f -like 'commands\*' -or $f -like 'host-commands\pi\*') -and $ct -cnotmatch '(?m)^argument-hint: "\[sequential\|parallel\] \[N\|max\]') { return "$f argument-hint has no mode (F112)" }
+    }
+  }
+  $ct = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'commands\marathon-run.md'))
+  if (-not $ct.Contains('plans the marathon')) { return 'commands\marathon-run.md does not plan and run in one go (F112)' }
+  if (-not $ct.Contains('the saved plan fixes its shape')) { return 'commands\marathon-run.md has no RUN-id mode refusal (F112)' }
   $cmds = @('.codex\skills\pending\SKILL.md', '.codex\skills\list-tickets\SKILL.md',
             '.gemini\commands\pending.toml', '.gemini\commands\list-tickets.toml',
             '.cursor\commands\pending.md', '.cursor\commands\list-tickets.md',
@@ -654,6 +682,7 @@ function Invoke-SelfTest([string]$T) {
                      @(".gemini\config\skills\$n\SKILL.md", '.gemini\config\skills'), @(".gemini\skills\$n\SKILL.md", '.gemini\skills'),
                      @(".gemini\antigravity-cli\skills\$n\SKILL.md", '.gemini\antigravity-cli\skills'),
                      @(".config\opencode\commands\$n.md", '.config\opencode\skills'))) {
+      if (-not (& $has $p[0] '| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |')) { return "$n has no mode table in $($p[0]) (F112)" }
       if (-not (& $has $p[0] "$T\$($p[1])/relay-morpheus/SKILL.md")) { return "$n not substituted in $($p[0])" }
       if (-not ((& $has $p[0] 'chain dispatch') -and (& $has $p[0] '.workflow.js') -and (& $has $p[0] 'Run without the Workflow tool'))) { return "$n does not run the plan with this host's delegate in $($p[0])" }
       if (& $has $p[0] 'pending-subagent') { return "$n still points at /pending-subagent in $($p[0])" }

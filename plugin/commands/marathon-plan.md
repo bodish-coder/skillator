@@ -1,17 +1,26 @@
 ---
-description: "Plan a Workflow marathon over the open tickets, or the IDs given: a relay-morpheus run file plus a saved Workflow script (one agent per ticket, phases, serial where tickets share files, each ticket verified in its own phase), shown with its agent count; no agents run (relay-morpheus)"
-argument-hint: "[ticket ids, e.g. F12 F14]"
+description: "Plan a Workflow marathon over the open tickets, or the IDs given: a relay-morpheus run file plus a saved Workflow script (one agent per ticket, phases, serial where tickets share files, each ticket verified in its own phase), shown with its agent count; no agents run (relay-morpheus), sequential by default or parallel with an optional cap"
+argument-hint: "[sequential|parallel] [N|max] [ticket ids, e.g. parallel 2 F12 F14]"
 ---
 
 Load `skillator:relay-morpheus` (run file, chain, marathon), `skillator:tickets-zordon` (the board)
 and `workflow-authoring` (the Workflow script API), and write a Workflow marathon's plan as
-relay-morpheus `references/marathon.md`, "A saved Workflow marathon", Plan, says. Tickets: `$ARGUMENTS`
-(none = every open ticket on TICKETS.md).
+relay-morpheus `references/marathon.md`, "A saved Workflow marathon", Plan, says. Arguments: `$ARGUMENTS` - an optional mode first (`sequential` or `parallel`), then an optional count (a whole number of at least 1 or `max`), then ticket IDs (none = every open ticket on TICKETS.md; only the unassigned and yours, F80). No mode and no count = `sequential`; `sequential` takes no count (`sequential 2`: say so and stop); `parallel 1` runs as `1`. A first word that is neither a mode, a count nor a ticket ID (`0`, `two`) - say it is not an option and stop.
+
+| Typed | Runs | A phase holds | `RELAY_CHAIN_PARALLEL` on `chain dispatch` |
+|---|---|---|---|
+| nothing, `sequential`, `1` | sequential | one ticket | unset |
+| `parallel`, `max`, `parallel max` | parallel | every file-disjoint ticket that fits | the number of stages in the phase |
+| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |
+
+- `sequential` (the default): one ticket per phase, in board order, each stage planned `--after` the one before - one agent at a time (the implementer, then its verifier).
+- `parallel`: file-disjoint tickets side by side in one phase, each stage in its own worktree, merged on landing; a count caps a phase. Tickets whose files overlap never share a phase, whatever the mode.
 
 - Pick first (F80): `ticket-meta pick [IDs]` (tickets-zordon) - only its `pick` tickets are
   planned (unassigned, or yours); each `skip <ID> <owner>` is shown as skipped with its owner.
   `chain plan` claims every planned ticket for you (`ticket-meta claim`); say a refused claim.
 - The run file is relay-morpheus's (`init`, `add`, `chain plan`) - never a hand-numbered row.
+- Phases follow the mode (marathon.md, Mode): sequential - one ticket per phase in pick order, each stage `--after` the previous; parallel - file-disjoint tickets per phase, a count splitting a phase at N; `PLAN.mode` records the normalized mode (`1` and `parallel 1` become `sequential`). A ticket already a stage of an open run with a `.workflow.js` is listed as `planned in RUN-<id>`, not planned again.
 - The Workflow script is its `templates/marathon-workflow.js`, filled and saved beside the run file.
 - With grayskull-power on (`.skillator/grayskull.md` present) every stage prompt opens with this line, and without it does not: `Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.`
 - This command only plans: no Workflow call, no `chain dispatch`, no agent. End by showing the

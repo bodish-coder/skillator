@@ -493,6 +493,33 @@ if [ -n "$selftest" ]; then
       grep -qF -- "$_r" "$root/$f" || { echo "FAIL: $f has no mode row '$_r' (F88)"; exit 1; }
     done
   done
+  # F112: one marathon command - the mode is a plan shape: the template carries PLAN.mode and refuses a
+  # phase wider than the mode allows; marathon.md carries the mode table
+  _mw="$root/skills/relay-morpheus/templates/marathon-workflow.js"
+  grep -qF "mode: 'sequential'," "$_mw" || { echo "FAIL: marathon-workflow.js PLAN has no mode line (F112)"; exit 1; }
+  grep -qF "PLAN.mode must be 'sequential', 'parallel' or 'parallel <N>'" "$_mw" || { echo "FAIL: marathon-workflow.js does not check PLAN.mode (F112)"; exit 1; }
+  if command -v node >/dev/null 2>&1; then
+    awk '{sub(/^return /, "export default "); print} /code: .XXXX., ticket: .F0./ {print "      { stage: 1, code: \047YYYY\047, ticket: \047F1\047, files: [\047b\047], done: \047d\047, prompt: \047p\047 },"}' "$_mw" > "$T/mw.mjs"
+    _o=$(node --input-type=module -e "import {pathToFileURL} from 'node:url'; globalThis.args={phase:1}; await import(pathToFileURL(process.argv[1]).href)" -- "$T/mw.mjs" 2>&1) || :
+    printf '%s' "$_o" | grep -qF 'PLAN.mode sequential needs one ticket per phase - phase 1 holds 2' || { echo "FAIL: marathon-workflow.js runs a two-ticket phase under mode sequential (F112): $_o"; exit 1; }
+  fi
+  for _r in '| nothing, `sequential`, `1` | sequential | one ticket | unset |' '| `parallel`, `max`, `parallel max` | parallel | every file-disjoint ticket that fits | the number of stages in the phase |' '| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |'; do
+    grep -qF -- "$_r" "$root/skills/relay-morpheus/references/marathon.md" || { echo "FAIL: marathon.md has no mode row '$_r' (F112)"; exit 1; }
+  done
+  grep -qF '### Mode - sequential or parallel (F112)' "$root/skills/relay-morpheus/references/marathon.md" || { echo "FAIL: marathon.md has no Mode section (F112)"; exit 1; }
+  for _n in marathon-plan marathon-run; do
+    for f in commands/$_n.md host-commands/cursor/$_n.md host-commands/pi/$_n.md host-commands/opencode/$_n.md host-commands/antigravity/$_n/SKILL.md host-commands/gemini/$_n.toml; do
+      for _r in '| nothing, `sequential`, `1` | sequential | one ticket | unset |' '| `parallel`, `max`, `parallel max` | parallel | every file-disjoint ticket that fits | the number of stages in the phase |' '| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |'; do
+        grep -qF -- "$_r" "$root/$f" || { echo "FAIL: $f has no mode row '$_r' (F112)"; exit 1; }
+      done
+      grep -qF 'say it is not an option and stop' "$root/$f" || { echo "FAIL: $f has no bad-first-word refusal (F112)"; exit 1; }
+      case "$f" in commands/*|host-commands/pi/*)
+      grep -q '^argument-hint: "\[sequential|parallel\] \[N|max\]' "$root/$f" || { echo "FAIL: $f argument-hint has no mode (F112)"; exit 1; }
+        ;; esac
+    done
+  done
+  grep -qF 'plans the marathon' "$root/commands/marathon-run.md" || { echo "FAIL: commands/marathon-run.md does not plan and run in one go (F112)"; exit 1; }
+  grep -qF 'the saved plan fixes its shape' "$root/commands/marathon-run.md" || { echo "FAIL: commands/marathon-run.md has no RUN-id mode refusal (F112)"; exit 1; }
   [ -z "$_bad" ] || { echo "FAIL: frontmatter has an unquoted \": \" (invalid YAML, pi will not register the command): $_bad"; exit 1; }
   # F68: the Muse manifest lists every skill and carries the release version
   sh "$root/practice/scripts/check-muse-manifest.sh" "$root" > /dev/null || { echo "FAIL: .muse-plugin out of step (sh practice/scripts/check-muse-manifest.sh)"; exit 1; }
@@ -622,6 +649,7 @@ if [ -n "$selftest" ]; then
              .gemini/config/skills/$_n/SKILL.md:.gemini/config/skills .gemini/skills/$_n/SKILL.md:.gemini/skills \
              .gemini/antigravity-cli/skills/$_n/SKILL.md:.gemini/antigravity-cli/skills \
              .config/opencode/commands/$_n.md:.config/opencode/skills; do
+      grep -qF -- '| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |' "$T/${f%%:*}" || { echo "FAIL: $_n has no mode table in ${f%%:*} (F112)"; exit 1; }
       grep -qF "$N/${f#*:}/relay-morpheus/SKILL.md" "$T/${f%%:*}" || { echo "FAIL: $_n not substituted in ${f%%:*}"; exit 1; }
       { grep -qF 'chain dispatch' "$T/${f%%:*}" && grep -qF '.workflow.js' "$T/${f%%:*}" && grep -qF 'Run without the Workflow tool' "$T/${f%%:*}"; } || { echo "FAIL: $_n does not run the plan with this host's delegate in ${f%%:*}"; exit 1; }
       grep -qF 'pending-subagent' "$T/${f%%:*}" && { echo "FAIL: $_n still points at /pending-subagent in ${f%%:*}"; exit 1; }

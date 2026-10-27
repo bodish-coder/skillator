@@ -245,20 +245,61 @@ asking; `ASK` asks (that is the one question a resume may ask).
 
 ## A saved Workflow marathon - /marathon-plan, /marathon-run (F73)
 
-The plan is written first and run later, by a second command, on every host;
+The plan is written by `/marathon-plan [sequential|parallel] [N|max] [IDs]`, or
+planned and run in one go by `/marathon-run` with the same words, on every host;
 Claude Code runs it with the Workflow tool, the other hosts with their delegate
 (below) or in-session. Typing `/marathon-run` is the explicit opt-in to run it.
 
-**Plan** (`/marathon-plan [ids]`) - no agent runs, no `chain dispatch`, no Workflow call:
+### Mode - sequential or parallel (F112)
+
+`/marathon-run [sequential|parallel] [N|max] [IDs]` **or** `/marathon-run [RUN id]`.
+
+- Mode first (optional): `sequential` or `parallel`. Then an optional count: a whole number ≥ 1 or `max`. Then optional ticket IDs. No mode and no count = `sequential`. A bare count still works (`2 F12`); `sequential` takes no count (`sequential 2`: say so and stop); `parallel 1` runs as `1`. No IDs = every open ticket on TICKETS.md (`[ ]`, `[~]`, `[!]` re-checked), picked through `ticket-meta pick` (F80).
+- A RUN id alone (`RUN-0019`) runs the plan `/marathon-plan` saved for it, as saved (today's behaviour). A mode or count beside a RUN id → say the saved plan fixes its shape (`/marathon-plan <mode> <IDs>` plans again) and stop.
+- Nothing typed: the one open run with a `.workflow.js` beside it and an unlanded stage → run it (today); two or more → list them and stop (today); none → plan over every open ticket, `sequential`, and run.
+- A first word that is neither a mode, a count, a ticket ID nor a RUN id (`0`, `two`) → say it is not an option and stop.
+
+| Typed | Runs | A phase holds | `RELAY_CHAIN_PARALLEL` on `chain dispatch` |
+|---|---|---|---|
+| nothing, `sequential`, `1` | sequential | one ticket | unset |
+| `parallel`, `max`, `parallel max` | parallel | every file-disjoint ticket that fits | the number of stages in the phase |
+| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |
+
+- `sequential` (the default): one ticket per phase, in board order, each stage planned `--after` the one before - one agent at a time (the implementer, then its verifier).
+- `parallel`: file-disjoint tickets side by side in one phase, each stage in its own worktree, merged on landing; a count caps a phase. Tickets whose files overlap never share a phase, whatever the mode.
+
+| Mode | Phase shape (marathon.md Plan step 3) | `chain plan` edges | Agents at once |
+|---|---|---|---|
+| sequential | one ticket per phase, board order (pick order) | every stage `--after` the previous ticket stage | 1 (pipeline runs the implementer, then the verifier) |
+| parallel / max | today's F96/F101 rule: a ticket goes in the first phase after every phase holding a ticket that shares one of its files | `--after` the stages it shares files with | the phase's ticket count |
+| parallel N | the parallel grouping, then each group split into chunks of at most N in board order; chunk k+1 is a new phase after chunk k | `--after` the shared-file stages **and** the last stage of the previous chunk | at most N |
+
+At dispatch: sequential leaves `RELAY_CHAIN_PARALLEL` unset; parallel/max uses
+`RELAY_CHAIN_PARALLEL=<stages in the phase>`; parallel N uses `RELAY_CHAIN_PARALLEL=<N>`.
+Record the normalized mode in `PLAN.mode` and `meta.description`: `sequential`, `parallel`,
+or `parallel <N>` (N >= 2); `1` and `parallel 1` normalize to `sequential`.
+
+Planning (no RUN id) runs `ticket-meta pick`, then:
+
+1. A picked ticket that is already a stage of an open run with a `.workflow.js` beside it is **skipped**, listed as `planned in RUN-<id>` — never two open runs over one ticket.
+2. For `/marathon-run` only: if every picked ticket sits in one such run and no mode or count was typed → run that run instead (`using RUN-<id>'s plan`); a mode or count typed → the RUN-id refusal above (the saved plan fixes its shape).
+3. Nothing left to plan → say so and stop (the `planned in` lines name what to run).
+
+On an in-session host a parallel plan runs serial; say so in the first line.
+
+**Plan** (`/marathon-plan [sequential|parallel] [N|max] [IDs]`) - no agent runs, no `chain dispatch`, no Workflow call:
 
 1. Pick the tickets as [chain.md](chain.md) Step 1 (ids given: only those) and
    name each one's files. No ticket left → say so, stop.
 2. `RM init TICKETS.md "<title>" "<ID>: <what>" ... "verify review bump commit
    push"` - one stage per ticket, then the main session's final stage. Numbers
    come from `init` (and `RM add` for a ticket found later), never by hand.
-3. Phases: a ticket goes in the first phase after every phase holding a ticket
+3. Phases follow the mode: sequential - one ticket per phase in pick order,
+   each stage `--after` the previous; parallel - a ticket goes in the first phase after every phase holding a ticket
    that shares one of its files; one phase = file-disjoint tickets. Its stage
-   is planned `--after` those earlier stages.
+   is planned `--after` those earlier stages. For parallel N, split each group
+   into chunks of at most N in board order; the next chunk is a new phase,
+   with `--after` the shared-file stages and the last stage of the previous chunk.
 4. Per ticket stage: its prompt file `.skillator/prompts/run-<0000>-s<n>.txt`
    (chain.md Step 1: the worktree paragraph, the Park paste-in above, an F
    ticket opens with "Load skillator:build-jarvis"; it commits as
@@ -269,7 +310,7 @@ Claude Code runs it with the Workflow tool, the other hosts with their delegate
    file's own name with `.workflow.js` for `.md`, beside it; fill `meta` (name
    `marathon-RUN-<0000>`, one `Phase <k>` entry per phase - a ticket's
    implementer and verifier both run under it, no separate Verify phase) and
-   `PLAN` (`runWorktree` = what `init` printed; per ticket: stage, code from
+   `PLAN` (mode normalized as above, `sequential` when none; `runWorktree` = what `init` printed; per ticket: stage, code from
    `chain plan`, ID, files, Done line, the prompt file's text verbatim as a
    JS string). Nothing below `PLAN` is edited.
 6. Show it: the run file's stages, each phase with its tickets, codes and files,
@@ -281,14 +322,21 @@ Claude Code runs it with the Workflow tool, the other hosts with their delegate
    muse `(child agents)`; pi, opencode, gemini `(in-session, phases in order;
    pi with the subagent extension: that)`. The script is written on every host.
 
-**Run** (`/marathon-run [RUN id]`; none = the one open run with a
-`.workflow.js` beside it, two or more → list them and stop):
+**Run** (`/marathon-run [RUN id] | [sequential|parallel] [N|max] [IDs]`):
+a RUN id runs as saved; mode/count/IDs plan as Plan above, show it, then run
+without a pause. A mode or count beside a RUN id: the saved plan fixes its
+shape, stop. Nothing typed: one open planned run runs; two or more are listed
+and stop; none plans every open ticket sequentially and runs.
 
 1. `RM resume <id>`; the script is the run file's name with `.workflow.js`.
-   A missing script → say `/marathon-plan` writes it, stop.
+   A missing script → say `/marathon-plan` writes it, stop. Read PLAN as text
+   first: no `mode:` line means a pre-F112 plan; say re-plan with `/marathon-plan`
+   and stop before any dispatch.
 2. Phase by phase, in order, skipping a phase whose stages are all `x`:
-   `RM chain decide`; then for each of its stages
-   `RELAY_CHAIN_PARALLEL=<stages in the phase> RM chain dispatch <n> --driver
+   `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,
+   `RELAY_CHAIN_PARALLEL=<stages in the phase>` for parallel,
+   `RELAY_CHAIN_PARALLEL=<N>` for parallel N; then for each of its stages
+   `RM chain dispatch <n> --driver
    @<sid> --owner workflow` (`ticket-meta session`) - the row goes `~` and the prompt into the run
    file **before** the agent exists. Note the worktree each names (stderr
    `stage <n> works and commits in: <path>`; none = the run worktree), flip
@@ -329,10 +377,14 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
 
 1. `RM resume <id>`; read the `.workflow.js` beside the run file **as data**:
    `meta.phases` and `PLAN`. Never execute it (its tail throws without `args`).
-   A missing script → say `/marathon-plan` writes it, stop.
+   A missing script → say `/marathon-plan` writes it, stop. Read PLAN as text
+   first: no `mode:` line means a pre-F112 plan; say re-plan with `/marathon-plan`
+   and stop before any dispatch.
 2. Phase by phase, in order, skipping a phase whose stages are all `x`:
-   `RM chain decide`; then for each of its stages
-   `RELAY_CHAIN_PARALLEL=<stages in the phase> RM chain dispatch <n> --driver
+   `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,
+   `RELAY_CHAIN_PARALLEL=<stages in the phase>` for parallel,
+   `RELAY_CHAIN_PARALLEL=<N>` for parallel N; then for each of its stages
+   `RM chain dispatch <n> --driver
    <the Driver tag from the table> --owner <delegate>` - the row goes `~` and
    the prompt into the run file **before** any agent exists. Note the worktree each names, flip its
    ticket `[~]` (`RM board <ID> '~'`).
@@ -347,7 +399,9 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
    at once (cursor: several Task calls in one turn; agy/codex/muse: one
    subagent per ticket); phases stay serial everywhere. Write the delegate's id
    (Task id, subagent name, child id) into each In-flight block's `run:` line;
-   none → `run: <delegate>`.
+   none → `run: <delegate>`. The mode is the phase shape: a delegate host runs
+   a phase's tickets at once; an in-session host runs them one after another
+   and says so in the first line when the plan is parallel.
 4. **No delegate** (pi without its extension, opencode, gemini): the session is
    the implementer, then the verifier, ticket by ticket in phase order - the
    stored prompt read and done, then the verify text done as a second pass that
