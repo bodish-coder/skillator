@@ -21,7 +21,7 @@ const SHA3 = 'fedcba9' + 'c'.repeat(33)          // F103: the upstream's commit 
 // F103: `actions` records the argv of every fetch/pull/push/revert/merge run; each answers `actionResult`.
 type World = { runs: { argv: readonly string[]; cwd?: string; env?: Record<string, string> }[]; git: (args: readonly string[]) => ProcessRunResult
   exes: string[]; actions: string[][]; actionResult: ProcessRunResult | string; dirty: string; branch: string; head: string; pushTo: string
-  root: string; toasts: string[]; repoFails: boolean; existsFails: boolean }
+  root: string; toasts: string[]; repoFails: boolean; existsFails: boolean; branchError?: ProcessRunResult }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
@@ -48,8 +48,9 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   const local = (args: readonly string[]): ProcessRunResult | string => {
     const a = args.join(' ')
     if (ACTION.test(args[0] ?? '')) { w.actions.push([...args]); return w.actionResult }
-    if (a === 'rev-parse --abbrev-ref HEAD') return ran(w.branch + '\n')
-    if (a === 'rev-parse HEAD') return ran(w.head + '\n')
+    if (a === 'rev-parse --abbrev-ref HEAD') return w.head ? ran(w.branch + '\n') : ran('HEAD\n', 128, 'fatal: ambiguous argument HEAD')
+    if (a === 'branch --show-current') return w.branchError ?? ran(w.branch === 'HEAD' ? '' : w.branch + '\n')
+    if (a === 'rev-parse HEAD') return w.head ? ran(w.head + '\n') : ran('HEAD\n', 128, 'fatal: ambiguous argument HEAD')
     if (a === 'rev-parse --absolute-git-dir') return ran('/r/.git\n')
     if (a.startsWith('for-each-ref')) return ran(w.pushTo + '\n')
     if (a.startsWith('status --porcelain')) return ran(w.dirty)
@@ -520,6 +521,32 @@ test('A159 an action key whose plan read throws (fs.exists rejecting) toasts the
   w.existsFails = true
   await ui.press({ key: 'key:pull' }); await clock.settle()
   expect(w.toasts.at(-1)).toMatch(/^■ .*EIO/)
+  expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
+  expect(w.actions).toEqual([])
+  await ui.unmount()
+})
+
+test('A164 fetch confirms and runs before the first commit; a newly created HEAD invalidates the confirm', WITH, async ($, on) => {
+  const [w, clock] = world(on); w.head = ''
+  await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  await ui.press({ key: 'key:fetch' }); await clock.settle()
+  expect((await ui.find({ key: 'xa:on' }))?.text).toBe('on      main')
+  await ui.press({ key: 'xa:go' }); await clock.settle()
+  expect(w.actions).toEqual([['fetch', '--prune']]); w.actions = []
+  await ui.press({ key: 'key:fetch' }); await clock.settle()
+  w.head = SHA1
+  await ui.press({ key: 'xa:go' }); await clock.settle()
+  expect(w.toasts.at(-1)).toContain('HEAD moved since the confirm opened')
+  expect(w.actions).toEqual([])
+  await ui.unmount()
+})
+
+test('A164 a branch query failure refuses fetch without a confirm or action', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  w.branchError = ran('', 128, 'fatal: not a git repository')
+  await ui.press({ key: 'key:fetch' }); await clock.settle()
+  expect(w.toasts.at(-1)).toContain('fatal: not a git repository')
   expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
   expect(w.actions).toEqual([])
   await ui.unmount()

@@ -124,7 +124,7 @@ const lines = (r: Git | null) => (r?.ok ? r.out.split(/\r?\n/).filter(Boolean) :
 
 // What a plan stands on: the branch ('HEAD': detached), HEAD's sha ('' before the first commit), tracked changes.
 async function readHere($: EngineInterface): Promise<Here | { err: string }> {
-  const branch = await git($, 'rev-parse', BRANCH_ARGS)
+  const branch = await git($, 'branch', BRANCH_ARGS)
   const head = await git($, 'rev-parse', HEAD_ARGS)
   const dirty = await git($, 'status', DIRTY_ARGS)
   const failed = [branch, dirty].find(r => !r.ok)
