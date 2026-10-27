@@ -1,0 +1,25 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+Ticket F103 (ops-board Explorer git actions) - review fix round 1. You are a FIX seat: fix exactly the findings below, made by a review of d186426..f65dc0a (commits 727ac63, eb012a7, c8ae00b, f65dc0a). Nothing else. Do not load build-jarvis, do not redesign.
+
+Worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104). Files: plugin/mods/ops-board/hooks/lib/explorer.ts, hooks/explorertab.tsx, types/index.d.ts, tests/explorer.test.tsx (and ops/tests only if an assertion there must follow). The terminal ops app stays read-only.
+
+Findings (the reviewer verified 1, 3 and 4 with git 2.56 in a scratch repo):
+1. HIGH - explorer.ts:54 `push: () => ['push']`: a bare git push takes its refspec from config, so remote.origin.mirror=true deletes remote branches and remote.origin.push=+refs/heads/main:refs/heads/main force-pushes, behind a confirm showing plain "git push". Build the push argv from the upstream read: ['push', '<remote>', 'HEAD:refs/heads/<upstream branch>'] (an explicit refspec overrides remote.*.push, and git refuses it with --mirror) and show that argv in the confirm. No upstream -> refused, as now.
+2. MEDIUM-HIGH - explorertab.tsx:146-155 actionGo runs the plan made at openAction (119-130) without re-checking: the tree can turn dirty or the branch change while the confirm is up. Store the branch and the HEAD sha in the Action, show "on <branch>" in the confirm, and in actionGo re-read branch, HEAD and dirty count and refuse (toast, run nothing) if branch or HEAD changed, or dirty > 0 for pull/merge/revert.
+3. MEDIUM - explorer.ts:58-76: refuse when the branch reads HEAD (detached) for pull/push/merge/revert, and when any of MERGE_HEAD, REVERT_HEAD, CHERRY_PICK_HEAD, rebase-merge, rebase-apply exists under `git rev-parse --git-dir` (a rebase stopped at an edit step has a clean tree, so the dirty check misses it).
+4. LOW - explorer.ts:56 merge argv has no `--`, so a branch named "-n" (git update-ref can make one) is read as an option and git merges the upstream instead. Use ['merge', '--no-edit', '--', branch] (the reviewer verified git then merges the "-n" branch).
+5. LOW - explorertab.tsx:27-41/155: pass GIT_TERMINAL_PROMPT=0 in the action's env if $.process.run accepts env (read its type first; if it does not, say so in the report and skip); on a timeout the toast says it timed out and that .git/index.lock may be left.
+6. LOW - explorer.ts:53: pull argv ['pull', '--ff-only', '--no-rebase'].
+7. LOW - explorertab.tsx:200, 203, 204: `void pickAction` / `void actionGo` / `void cancelAction` get a .catch that toasts the error, as the tab's own buttons do (219, 228-229).
+8. LOW - explorertab.tsx:66-67: on any upstream-read failure other than "no upstream" (exit 128), set upstream and the counts to null so stale arrows are not drawn.
+
+Tests, each red first then green: push argv from the upstream (and the confirm shows it); a plan going stale (branch changed, HEAD moved, tree dirtied between open and Run) runs nothing; detached HEAD and each in-progress marker refused; the merge argv carries `--` before the branch; pull argv; upstream read failure clears the counts; a thrown process.run during an action toasts and leaves running=false.
+
+Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board (all pass), npm --prefix C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board/ops test (all pass), tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f103.json (no output). Run the two suites one at a time. Commit messages start with "F103: ".
+
+Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never run any of the Explorer's git actions against a real repo - tests use mocks. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+Report back: the commit sha(s), files changed, the red then green output per finding, anything you could not verify, any unrelated problem (one line each).
