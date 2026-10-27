@@ -64,22 +64,27 @@ Bad: `- [ ] F12 — The table view gets an Export button that writes the filtere
 ## Who touched it
 
 Several agent sessions edit one board, so every line says which one last moved
-it. Reuse the `@owner` slot — no new syntax: ` (@cc-a4f1c9)`.
+it, for whom, and how (F109): ` (@cc-k7q2:asha:direct)` - `(@<sid>:<owner>:<mode>)`.
 
-Your tag is `@<agent>-<id>`, lowest available rung wins:
-
-1. **Session id** — last 6 hex chars of your own session id, the one in your
-   session URL / transcript filename (`…/session_01NBCBMW9fDHDn7WJtAALBGT` →
-   `@cc-aalbgt`). Unique per session, free, no state to keep.
-2. No session id in your harness → the branch: ` (branch: fix/upload)`.
-3. Both the same across your sessions → ask the user once for a name
-   (`@cc-ui`, `@codex-api`) and use it for the rest of the session.
+- `<sid>` is `<agent>-<code>`, the code 4 characters from your session id -
+  `ticket-meta session` prints it. Lowest available rung wins:
+  1. **Session id** — Claude Code's (`CLAUDE_CODE_SESSION_ID`) → `cc-<code>`.
+     Stable for the session, free, no state to keep.
+  2. No session id in your harness → `SKILLATOR_SESSION=@<agent>-<4 chars>` for
+     the session, or the branch: ` (branch: fix/upload)`.
+  3. Both the same across your sessions → ask the user once for a name
+     (`@cc-ui`, `@codex-api`) and use it for the rest of the session.
+- `<owner>` is `whoami` without `@`, or `-` with no team / me unknown.
+- `<mode>` is how the work ran: `direct` (you, at the prompt), `agent` (a
+  subagent - say `SKILLATOR_MODE=agent` on its ticket-meta calls), `run`
+  (relay-morpheus flipped it), `workflow` (a marathon / Workflow script's run).
 
 Agent prefix: `cc` Claude Code, `cx` Codex, `ag` Antigravity, `pi` Pi, `cu` Cursor.
 
-Stamp it when you **create** a ticket and when you **flip its status** — replace
-the previous tag, don't accumulate them; the line says who moved it last, not
-its whole history. Leave a human `@owner` the user set alone.
+ticket-meta stamps it on every write when it knows your session; a line you
+create or flip by hand gets the same tag — replace the previous one, don't
+accumulate them; the line says who moved it last, not its whole history. Old
+`(@cc-a4f1c9)` tags stay valid: the session alone. Leave a human `@owner` alone.
 
 Two sessions want the same `[ ]` ticket: the one whose tag is already on a `[~]`
 row owns it. If a row you are working flips under you, stop and tell the user —
@@ -92,7 +97,7 @@ and who built it — trailing tags on its one line, in this order, before the
 session tag:
 
 ```
-- [ ] F12 — Bulk delete [app: web, api] [decide: @vidul] [owner: @asha] [by: @vidul, @asha] (@cc-a4f1c9)
+- [ ] F12 — Bulk delete [app: web, api] [decide: @vidul] [owner: @asha] [by: @vidul, @asha] (@cc-k7q2:asha:direct)
 ```
 
 Every tag is optional and lines without them stay valid; never add an empty one.
@@ -127,8 +132,10 @@ sh <skills>/tickets-zordon/scripts/ticket-meta.sh done F12 RED/GREEN 3/3, abc123
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh block F12 S3 creds from ops     # [!] ` (blocked: ..)`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh defer F12 after the parser rewrite  # [>] ` (deferred: ..)`
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh tag F12         # write app + by
-sh <skills>/tickets-zordon/scripts/ticket-meta.sh whoami          # F80: my @handle
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh whoami          # F80: my @handle; F109: + session: @<sid>  mode:
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh iam @asha       # F92: this session's owner
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh stamp F12       # F109: the (@sid:owner:mode) tag only
+sh <skills>/tickets-zordon/scripts/ticket-meta.sh session         # F109: <sid> <mode>
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh pick F12 F14    # F80: pick / skip <ID> <owner>
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh claim F12       # F80: [owner: <me>], box kept
 sh <skills>/tickets-zordon/scripts/ticket-meta.sh team lead @asha # F80: set / hand over the lead
@@ -160,8 +167,9 @@ lead: @vidul
   `team list` marks ` [lead]` and ` (you)`.
 - **Me**: `ticket-meta whoami` reads, in order, this session's owner (F92:
   `ticket-meta iam @handle`, asked at session start by grayskull-power's arm,
-  kept in git-ignored `.skillator/sessions/<session tag>.owner`; the tag from
-  `SKILLATOR_SESSION`, else Claude Code's session id → `cc-<last 6>`), then
+  kept in git-ignored `.skillator/sessions/<sid>.owner` - line 1 the handle,
+  line 2 `session: <id>`, a file naming another session ignored; the sid from
+  `SKILLATOR_SESSION`, else Claude Code's session id → `cc-<4-char code>`), then
   `SKILLATOR_ME=@handle`, then this repo's git `user.email` through the team
   emails. A handle not on the team is refused. No match → `not on the team: add
   <email> to .skillator/team.md`.
@@ -192,7 +200,7 @@ closed, deferred or in someone else's progress:
 - The same handle again for the same kind, with the box already `[ ]` (assign)
   or `[?]` (decide), changes nothing and says `no change`; any other box still
   moves.
-- Moving a `[~]` ticket keeps its trailing session tag `(@cc-…)` beside the new
+- Moving a `[~]` ticket keeps its trailing session tag `(@cc-…)` or `(@cc-…:…:…)` beside the new
   `[owner:]`/`[decide:]` — which session works it and who owns it are different
   facts — and warns which session was working it; tell that session its box
   moved. A relay lease is per stage and is released when that stage lands or fails.
@@ -328,7 +336,7 @@ write the ticket.**
 
 ## Working a ticket
 
-- Starting → `ticket-meta start <ID>`: `[~]`, an unowned ticket claimed to you (F106) - and stamp your session tag, see **Who touched it**.
+- Starting → `ticket-meta start <ID>`: `[~]`, an unowned ticket claimed to you (F106), your session tag stamped (F109; a subagent prefixes `SKILLATOR_MODE=agent`), see **Who touched it**.
 - Finished *and verified* (tests/build/manual check actually run) → `[x]`,
   via `ticket-meta done <ID> [evidence]`: the box `[x]`, the `tag` a close owes,
   and, when evidence is given, ` **Done <YYYY-MM-DD>: <evidence>**` before the
@@ -476,7 +484,7 @@ or only the IDs given as arguments — and propose the status it really has.
    | `[!]` blocked | it cannot proceed until something outside it lands — ` (blocked: <on what>)` |
    | `[>]` deferred | postponed by choice until a condition — ` (deferred: <until what>)` |
    | `[?]` decision | it waits on a person's choice — name who decides |
-   | stays `[~]` | still being worked: a session tag on the line (`(@cc-a4f1c9)`, any agent prefix — reason "worked by @cc-a4f1c9"), a commit naming it in the last 24 hours, or a run stage on it dispatched and not done |
+   | stays `[~]` | still being worked: a session tag on the line (`(@cc-a4f1c9)` or `(@cc-k7q2:asha:run)`, any agent prefix, any shape — reason "worked by @cc-a4f1c9"), a commit naming it in the last 24 hours, or a run stage on it dispatched and not done |
    | stays `[~]`, "evidence unclear" | anything else. Unsure is not done. |
 
    A `[~]` row carrying a session tag is held by that session: it stays `[~]`
@@ -502,7 +510,7 @@ or only the IDs given as arguments — and propose the status it really has.
    - `[!]` → `[ ]` → `ticket-meta unblock <ID>`; `[ ]` → `[~]` → `ticket-meta start <ID>`.
    - `[>]` → `ticket-meta defer <ID> <until what>`.
    - Never hand-edit a box ticket-meta has a subcommand for.
-   - Stamp your session tag on every flipped row (**Who touched it**).
+   - Stamp your session tag on every flipped row (**Who touched it**) - ticket-meta does it when it knows your session.
 5. Read the board back — `grep -n '<ID>' TICKETS.md` for every applied ID —
    run `sh "$PRACTICE/scripts/check-tickets.sh"`, and report from that output: `in progress 14 -> 6
    (3 done, 2 testing, 1 blocked, 1 deferred, 1 decision)`.

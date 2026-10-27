@@ -289,7 +289,7 @@ Claude Code runs it with the Workflow tool, the other hosts with their delegate
 2. Phase by phase, in order, skipping a phase whose stages are all `x`:
    `RM chain decide`; then for each of its stages
    `RELAY_CHAIN_PARALLEL=<stages in the phase> RM chain dispatch <n> --driver
-   @cc-<6> --owner workflow` - the row goes `~` and the prompt into the run
+   @<sid> --owner workflow` (`ticket-meta session`) - the row goes `~` and the prompt into the run
    file **before** the agent exists. Note the worktree each names (stderr
    `stage <n> works and commits in: <path>`; none = the run worktree), flip
    its ticket `[~]` (`RM board <ID> '~'` - it claims an unowned ticket to

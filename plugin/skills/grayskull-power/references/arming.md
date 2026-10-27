@@ -112,10 +112,10 @@ percentage to give them — see `PLATFORMS.md`), so run
   (`@handle - name`) plus "someone else" — `AskUserQuestion` on Claude Code, the
   host's question tool or one plain line elsewhere. Then
   `ticket-meta.sh iam @handle`: kept for this session only, in git-ignored
-  `.skillator/sessions/<session tag>.owner`, never `team.md` or git config;
+  `.skillator/sessions/<sid>.owner` (two lines: the handle, `session: <id>`), never `team.md` or git config;
   `whoami` reads it first. "Someone else" → record nothing (offer `team add`).
   No session tag (no Claude Code session id) → prefix `iam` and every later
-  `ticket-meta` call with `SKILLATOR_SESSION=@<agent>-<id>`, your tickets-zordon tag. Headless (`-p`,
+  `ticket-meta` call with `SKILLATOR_SESSION=@<agent>-<4 chars>`, your tickets-zordon sid. Headless (`-p`,
   chained, no one to answer) → no question, the old rule. On Claude Code the
   plugin's `SessionStart` hook (`hooks/session-owner.sh`) has already put the
   team list and this ask in context; a hook cannot ask, so the ask is still

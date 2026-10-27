@@ -94,7 +94,7 @@ reading the user gave in the prompt counts too; the higher of the two wins:
 
 ```sh
 RM chain decide   # HOLD <pct> → step 4 now, dispatch nothing; RELEASE → go on
-RM chain dispatch 66 --driver @cc-<6 chars of this session id> --owner build:opus
+RM chain dispatch 66 --driver @<sid> (ticket-meta session) --owner build:opus
 ```
 
 `dispatch` reads usage itself too. It refuses (exit 2) while `hold:` is set,
