@@ -177,6 +177,23 @@ EOF
     echo "SELFTEST FAIL: a closed line or a short cut title was warned" >&2; cat "$stmp/title.out" >&2; exit 1
   fi
 
+  # F109: both session tag shapes - the old (@cc-xxxxxx) and (@sid:owner:mode) - are a tag, not
+  # title text (the title cut), and a bare Plan pointer followed only by either is still bare.
+  printf '%s\n' '# Board' '' "- [x] A3 - closed. Plan: S3 (@cc-k7q2:asha:workflow)" > "$stmp/tags-bare.md"
+  if sh "$0" "$stmp/tags-bare.md" >"$stmp/tags.out" 2>&1; then
+    echo "SELFTEST FAIL: a bare Plan pointer followed only by a new-shape tag passed" >&2; cat "$stmp/tags.out" >&2; exit 1
+  fi
+  t50=$(printf '%050d' 0 | tr 0 x)
+  printf '%s\n' '# Board' '' "- [ ] A1 - short one [owner: @asha] (@cc-a4f1c9)" "- [~] A2 - short two [owner: @asha] (@cc-k7q2:asha:run)" \
+    "- [ ] A4 - $t50 (@cc-k7q2:asha:direct)" "- [ ] A5 - (@cc-k7q2:asha:run)" "- [ ] A6 - (@cc-a4f1c9)" > "$stmp/tags.md"
+  sh "$0" "$stmp/tags.md" >"$stmp/tags.out" 2>&1 || { echo "SELFTEST FAIL: both tag shapes rejected" >&2; cat "$stmp/tags.out" >&2; exit 1; }
+  grep -q '5 ticket IDs' "$stmp/tags.out" || { echo "SELFTEST FAIL: tagged lines not counted" >&2; cat "$stmp/tags.out" >&2; exit 1; }
+  # a line that is only a tag has an empty title - the tag is cut, never counted as title text
+  if [ "$(grep -c 'WARN' "$stmp/tags.out")" != 2 ] || ! grep -q 'WARN: A5 title is 0 characters' "$stmp/tags.out" ||
+     ! grep -q 'WARN: A6 title is 0 characters' "$stmp/tags.out"; then
+    echo "SELFTEST FAIL: a tag counted as title text" >&2; cat "$stmp/tags.out" >&2; exit 1
+  fi
+
   echo "ok - check-tickets.sh selftest passed"
 }
 
@@ -239,7 +256,8 @@ fi
 
 # A78: a closed ([x]) row whose line still ends in a bare "Plan: S<n>" pointer
 # with nothing said about what happened when that stage ran. A trailing
-# " (...)" attribution/session tag is allowed after the pointer, but real
+# " (...)" attribution/session tag - (@cc-xxxxxx) or F109's (@sid:owner:mode) -
+# is allowed after the pointer, but real
 # outcome text (RED/GREEN, what shipped, what changed) is not - that's what
 # makes it "bare".
 if grep -nE '^[[:space:]]*- \[x\][[:space:]].*Plan: S[0-9][0-9]*\.?([[:space:]]*\([^()]*\))*[[:space:]]*$' \

@@ -276,6 +276,9 @@ not a ticket line
   ok((dh.match(/class="tag tag-decide"/g) || []).length === 1 && dh.includes('<span class="tag tag-decide"><b>decide</b> @asha</span>'), "one decide chip");
   const three = parse("- [ ] F33 — Split [app: web] [decide: @vidul] [owner: @asha] (@cc-1)")[0];
   ok(three.title === "Split (@cc-1)" && JSON.stringify(three.tags) === JSON.stringify([["app", "web"], ["decide", "@vidul"], ["owner", "@asha"]]), "app + decide + owner split cleanly", three);
+  // F109: the (@sid:owner:mode) session tag stays in the title, as the old (@cc-..) shape does
+  const f109 = parse("- [ ] F34 — Split [owner: @asha] (@cc-k7q2:asha:run)")[0];
+  ok(f109.title === "Split (@cc-k7q2:asha:run)" && JSON.stringify(f109.tags) === JSON.stringify([["owner", "@asha"]]), "new-shape session tag kept in the title", f109);
   // F62: [%] is "testing" - built, waiting on a test result; open, its own row and chip.
   const tmd = `## Features
 - [%] F40 — Built thing (testing: owner live check)
