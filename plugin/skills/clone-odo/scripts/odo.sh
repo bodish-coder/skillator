@@ -2,8 +2,8 @@
 # clone-odo tool runner. One entry point for the six stdlib-Python tools, so the
 # python check lives once and a missing python is one line, never a traceback.
 #
-#   odo.sh parity   <features.csv> [--visual <diffs/*.json>] [--markdown] [--fail-under N]
-#   odo.sh imgdiff  <original.png> <clone.png> [--out diff.png] [--json] [--mode layout|pixel]
+#   odo.sh parity   <features.csv> [--visual <diffs/*.json>] [--markdown] [--fail-under N] [--platform web|android|ios|windows]
+#   odo.sh imgdiff  <original.png> <clone.png> [--out diff.png] [--json] [--mode layout|pixel] [--platform web|android|ios|windows]
 #   odo.sh reviews  <reviews.csv> [--out feedback.md] [--json] [--themes <themes.json>]
 #   odo.sh sweep    [<dir>] --avoid "Name,Co" [--domains d.com] [--colors "#hex"] | --config brand.json
 #   odo.sh listing  <listing.json> [--avoid "Name"]

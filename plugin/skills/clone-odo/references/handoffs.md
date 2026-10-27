@@ -19,6 +19,19 @@ back. The guard (SKILL.md §0, `clean-room.md`) travels with every hand-off.
   tokens; nothing from the original's source, words or assets; run the sweep
   before calling a screen done.
 
+- the platform's stack default, unless the user already has a stack - then theirs:
+
+| platform | default | swap for |
+|---|---|---|
+| web | Next.js (App Router) + TypeScript, Tailwind on the clone's own tokens | Remix, SvelteKit, Rails |
+| Android | Expo (React Native) — one codebase with iOS | Kotlin + Jetpack Compose |
+| iOS | Expo (React Native) — one codebase with Android | SwiftUI |
+| Windows | the web clone in a Tauri shell (Q-F114-1) | Electron, WinUI 3, a PWA |
+| data, auth, payments, email (all platforms) | Postgres on Supabase or Neon with Drizzle or Prisma; Supabase Auth or Auth.js; Stripe; Resend or Postmark | PlanetScale or Turso; Clerk; Lemon Squeezy or Paddle; SES |
+
+One database, no microservices; the clone needs the original's features, not
+its architecture. Schema, API, migrations and build order are build-jarvis's.
+
 **Owns**: the stack, the schema, migrations and access rules, the API, auth,
 payments, email, integrations through official APIs with the user's own keys,
 and every screen's code.

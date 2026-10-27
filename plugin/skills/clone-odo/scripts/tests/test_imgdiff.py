@@ -182,6 +182,42 @@ class Compare(unittest.TestCase):
         self.assertIn("taller", imgdiff.render_text(rep, "a", "b"))
 
 
+    def test_platform_orientation_and_metadata(self):
+        for name in ("android", "ios", "windows"):
+            with self.subTest(platform=name):
+                rep, _ = imgdiff.compare(page(36, 24), page(24, 36), platform=name)
+                self.assertEqual(rep["platform"]["name"], name)
+                self.assertEqual(rep["platform"]["viewport"], {
+                    "android": "1080x2400", "ios": "1179x2556", "windows": "1280x800"}[name])
+                self.assertEqual(rep["platform"]["capture"], imgdiff.PLATFORMS[name][1])
+                self.assertEqual(rep["orientation_mismatch"],
+                                 ["clone"] if name == "windows" else ["original"])
+                self.assertIn("wrong way", imgdiff.render_text(rep, "a", "b"))
+                _, wrong = imgdiff.platform_report(name, (24, 24, []), (24, 24, []))
+                self.assertEqual(wrong, [])
+
+    def test_web_full_page_mobile_and_retina_have_no_orientation_warning(self):
+        for size in ((1440, 3000), (390, 844), (2880, 1800)):
+            with self.subTest(size=size):
+                meta, wrong = imgdiff.platform_report("web", (*size, []), (*size, []))
+                self.assertEqual(meta["viewport"], "1440x900")
+                self.assertEqual(wrong, [])
+        rep, _ = imgdiff.compare(page(24, 36), page(24, 36), platform="web")
+        self.assertEqual(rep["orientation_mismatch"], [])
+        self.assertNotIn("wrong way", imgdiff.render_text(rep, "a", "b"))
+
+    def test_legacy_report_and_text_are_exact(self):
+        img = (12, 12, [[(255, 255, 255)] * 12 for _ in range(12)])
+        rep, _ = imgdiff.compare(img, img)
+        self.assertEqual(rep, {"mode": "layout", "original": {"width": 12, "height": 12},
+                              "clone": {"width": 12, "height": 12},
+                              "compared_at": {"width": 12, "height": 12},
+                              "height_delta_pct": 0.0, "score": 100.0,
+                              "verdict": "matches", "regions": []})
+        self.assertEqual(imgdiff.render_text(rep, "a", "b"),
+                         "  a vs b\n  LAYOUT ########################  100.0  MATCHES\n  no differing regions")
+
+
 class Cli(unittest.TestCase):
     def test_json_out_and_fail_under(self):
         with tempfile.TemporaryDirectory() as d:
@@ -204,6 +240,22 @@ class Cli(unittest.TestCase):
     def test_bad_file_exits_2(self):
         with redirect_stderr(io.StringIO()):
             self.assertEqual(imgdiff.main(["/nope/a.png", "/nope/b.png"]), 2)
+
+
+    def test_platform_cli_and_invalid_choice(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = os.path.join(d, "a.png")
+            imgdiff.write_png(a, *page(36, 24))
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                self.assertEqual(imgdiff.main([a, a, "--json", "--platform", "ios",
+                                              "--fail-under", "99"]), 0)
+            rep = json.loads(buf.getvalue())
+            self.assertEqual(rep["platform"]["name"], "ios")
+            self.assertEqual(rep["orientation_mismatch"], ["original", "clone"])
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as ctx:
+                imgdiff.main([a, a, "--platform", "mac"])
+            self.assertEqual(ctx.exception.code, 2)
 
 
 if __name__ == "__main__":

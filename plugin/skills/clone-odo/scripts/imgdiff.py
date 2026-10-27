@@ -40,6 +40,24 @@ import zlib
 
 SIG = b"\x89PNG\r\n\x1a\n"
 
+# Default capture viewports; recon.md quotes this table. Comparison width is separate.
+PLATFORMS = {
+    "web": ((1440, 900), "browser screenshot with the window at the viewport"),
+    "android": ((1080, 2400), "adb exec-out screencap -p (emulator or the user's device)"),
+    "ios": ((1179, 2556), "xcrun simctl io booted screenshot (macOS), or supplied iPhone/listing screenshots"),
+    "windows": ((1280, 800), "the running app's window, captured by Snipping Tool"),
+}
+
+
+def platform_report(name, img_a, img_b):
+    """Suggested capture route and advisory native orientation mismatches."""
+    (vw, vh), route = PLATFORMS[name]
+    # PNG dimensions cannot reveal the viewport of full-page or mobile web captures.
+    wrong = [label for label, (w, h, _) in (("original", img_a), ("clone", img_b))
+             if name != "web" and w != h and (h > w) != (vh > vw)]
+    return {"name": name, "viewport": "%dx%d" % (vw, vh), "capture": route}, wrong
+
+
 
 class PngError(Exception):
     pass
@@ -277,7 +295,7 @@ def _regions(flags, n_rows, n_cols):
 
 
 def compare(img_a, img_b, mode="layout", width=480, cols=12, tolerance=24,
-            edge_threshold=40):
+            edge_threshold=40, platform=None):
     """Compare two decoded images. Returns (report dict, diff rows)."""
     wa, ha, _ = img_a
     wb, hb, _ = img_b
@@ -300,6 +318,10 @@ def compare(img_a, img_b, mode="layout", width=480, cols=12, tolerance=24,
         "compared_at": {"width": w, "height": h},
         "height_delta_pct": round(height_delta, 1),
     }
+
+    if platform:
+        report["platform"], report["orientation_mismatch"] = platform_report(
+            platform, img_a, img_b)
 
     if mode == "pixel":
         changed = 0
@@ -407,6 +429,10 @@ def render_text(report, a_name, b_name):
     if abs(hd) >= 5:
         lines.append("  height: the clone is %.0f%% %s than the original"
                      % (abs(hd), "taller" if hd > 0 else "shorter"))
+    wrong = report.get("orientation_mismatch")
+    if wrong:
+        lines.append("  viewport: the %s screenshot faces the wrong way for %s (%s)" % (
+            " and ".join(wrong), report["platform"]["name"], report["platform"]["viewport"]))
     if report["regions"]:
         lines.append("  where they differ (original's pixels, biggest first):")
         for reg in report["regions"][:8]:
@@ -427,6 +453,8 @@ def main(argv=None):
     ap.add_argument("--cols", type=int, default=12, help="grid columns (default 12)")
     ap.add_argument("--tolerance", type=int, default=24,
                     help="pixel mode: per-channel difference ignored (default 24)")
+    ap.add_argument("--platform", choices=sorted(PLATFORMS),
+                    help="capture platform (recon.md section Capture); native orientation checked, web exempt")
     ap.add_argument("--out", help="write a diff image here (PNG)")
     ap.add_argument("--json", action="store_true", help="print JSON instead of text")
     ap.add_argument("--fail-under", type=float,
@@ -439,7 +467,7 @@ def main(argv=None):
         print("imgdiff: %s" % exc, file=sys.stderr)
         return 2
     report, diff = compare(a, b, mode=args.mode, width=args.width, cols=args.cols,
-                           tolerance=args.tolerance)
+                           tolerance=args.tolerance, platform=args.platform)
     report["files"] = {"original": args.original, "clone": args.clone}
     if args.out:
         write_png(args.out, report["compared_at"]["width"],

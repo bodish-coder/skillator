@@ -40,6 +40,7 @@ import sys
 WEIGHT = {"must": 3, "should": 2, "could": 1, "p0": 3, "p1": 2, "p2": 1}
 CREDIT = {"yes": 1.0, "done": 1.0, "partial": 0.5, "no": 0.0, "": 0.0, "todo": 0.0}
 PRIORITY_NAME = {3: "must", 2: "should", 1: "could"}
+PLATFORMS = ("android", "ios", "web", "windows")  # imgdiff.PLATFORMS keys
 
 
 class MatrixError(Exception):
@@ -141,10 +142,21 @@ def visual_scores(paths):
         name = data.get("files", {}).get("clone", p)
         scores.append({"file": name, "score": float(data["score"]),
                        "mode": data.get("mode", "layout")})
+        platform = (data.get("platform") or {}).get("name")
+        if platform:
+            scores[-1]["platform"] = platform
     return scores
 
 
-def combine(result, visuals):
+def combine(result, visuals, platform=None):
+    if platform:
+        result["platform"] = platform
+    seen = sorted({v["platform"] for v in visuals if v.get("platform")})
+    if len(seen) > 1 or (platform and seen and seen != [platform]):
+        result["problems"].append(
+            "screens were compared on %s but this report is %s - one platform per "
+            "parity report; recapture at that platform's viewport (recon.md section Capture)"
+            % (", ".join(seen), platform or "no platform"))
     if visuals:
         layout = sum(v["score"] for v in visuals) / len(visuals)
         result["visual"] = visuals
@@ -158,7 +170,8 @@ def combine(result, visuals):
 def render(result, markdown=False):
     out = []
     h = "## " if markdown else ""
-    out.append("%sParity: %.1f / 100" % (h, result["overall"]))
+    out.append("%sParity: %.1f / 100%s" % (h, result["overall"],
+               "  (%s)" % result["platform"] if result.get("platform") else ""))
     out.append("")
     out.append("features %.1f  (%d counted, must-haves %d of %d done)" % (
         result["feature_score"], result["counted"], result["must_have_done"],
@@ -196,7 +209,8 @@ def render(result, markdown=False):
         out.append("")
         out.append("%sScreens" % h)
         for v in sorted(result["visual"], key=lambda d: d["score"]):
-            out.append("- %-40s %5.1f" % (v["file"], v["score"]))
+            out.append("- %-40s %5.1f%s" % (v["file"], v["score"],
+                       "  " + v["platform"] if v.get("platform") else ""))
     if result["problems"]:
         out.append("")
         out.append("%sFix in the matrix" % h)
@@ -215,9 +229,11 @@ def main(argv=None):
     ap.add_argument("--fail-under", type=float, metavar="N",
                     help="exit 1 if the feature score is under N or any "
                          "must-have is not done (layout never counts here)")
+    ap.add_argument("--platform", choices=PLATFORMS,
+                    help="report platform (recon.md section Capture); checked against --visual")
     args = ap.parse_args(argv)
     try:
-        result = combine(score(load(args.matrix)), visual_scores(args.visual))
+        result = combine(score(load(args.matrix)), visual_scores(args.visual), args.platform)
     except (MatrixError, OSError, ValueError) as exc:
         print("parity: %s" % exc, file=sys.stderr)
         return 2

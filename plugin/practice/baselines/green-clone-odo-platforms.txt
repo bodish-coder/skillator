@@ -1,0 +1,32 @@
+# GREEN - clone-odo description D platform loads (F114)
+# Rule under test (ONE): web, Android, iOS and Windows clone requests with
+# their URL/store link load Skill(skillator:clone-odo) unprompted, at least
+# 1/2 per platform. scenario-clone-odo-platform-{web,android,ios,windows}.txt
+# are run unprefixed; the prompt never names the skill. Fictional links mean
+# successful loading does not establish navigation/capture success.
+#
+# Fixture: odo, fresh per run. Controller runs five sequential baselines:
+# web, android, ios, windows, then scenario-clone-odo-reviews.txt with D.
+# Host: isolated local profile under .skillator/baselines/F114, explicit
+# settings/plugin prefix/MCP isolation; BASELINE_ISOLATE=off, model sonnet,
+# 900 seconds. Live skills junction and user CLAUDE.md are never moved.
+# Record CLI/configuration, inventory differences from historical A157,
+# prefix commit, fixture SHA, first call, turns, raw cost and route/viewport.
+# Exact historical 62-skill host equivalence is unproved, not assumed.
+# Each valid run requires real rc=0, one init, non-error result, no timeout,
+# unchanged prefix, fewer than 100 init skills and clone-odo present.
+# A second fresh attempt is allowed only after a valid completed load failure;
+# infrastructure/auth/discovery errors stop the queue, not count as failures.
+# Grading: jq -r 'select(.type=="assistant") | .message.content[]? |
+#   select(.type=="tool_use" and .name=="Skill") | .input.skill' <run>.jsonl
+# Capture route is secondary. Reviews must load too; no A157 closure before
+# actual passing D reviews and platform evidence. See design Resume rulings
+# and .skillator/reports/F114-preflight.md for the controller's run protocol.
+#
+# ---------------------------------------------------------------- VERDICT ----
+# pending - controller baseline execution and Task 6 have not run.
+# web: pending
+# android: pending
+# ios: pending
+# windows: pending
+# description-D reviews: pending

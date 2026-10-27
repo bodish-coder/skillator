@@ -132,5 +132,59 @@ class Score(unittest.TestCase):
         self.assertEqual(r["problems"], [])
 
 
+    def test_tagged_visuals_and_mixed_platforms(self):
+        paths = [write(self.tmp.name, name + ".json", json.dumps({
+            "score": 80, "platform": {"name": name}})) for name in ("android", "ios")]
+        visuals = parity.visual_scores(paths)
+        for report_platform, selected, warnings in (("android", visuals[:1], 0),
+                ("web", visuals[:1], 1), (None, visuals, 1), (None, visuals[:1], 0)):
+            with self.subTest(platform=report_platform, count=len(selected)):
+                r = parity.combine(parity.score(parity.load(self.path)), selected, report_platform)
+                self.assertEqual(len(r["problems"]), warnings)
+                self.assertIn("android", parity.render(r).split("Screens")[1])
+                if report_platform:
+                    self.assertEqual(r["platform"], report_platform)
+                    self.assertIn("  (" + report_platform + ")", parity.render(r).splitlines()[0])
+                else:
+                    self.assertNotIn("platform", r)
+
+    def test_legacy_visual_json_and_text_are_exact(self):
+        m = write(self.tmp.name, "done.csv", "feature,area,priority,original,clone,notes\nSlot,booking,must,yes,yes,\n")
+        expected = {"feature_score": 100.0, "counted": 1, "must_have_done": 1,
+                    "must_have_total": 1, "by_area": [{"area": "booking", "score": 100.0, "features": 1}],
+                    "missing": [], "skipped": [], "extras": [], "problems": [],
+                    "visual": [{"file": "home.png", "score": 80.0, "mode": "layout"}],
+                    "layout_score": 80.0, "overall": 96.0}
+        expected_text = ("Parity: 96.0 / 100\n\nfeatures 100.0  (1 counted, must-haves 1 of 1 done)\n"
+                         "layout   80.0  (1 screens compared)\n\nBy area, weakest first\n"
+                         "- booking                      100.0  (1 features)\n\nMissing, in build order\n"
+                         "- nothing. Every counted feature is done.\n\nScreens\n"
+                         "- home.png                                  80.0")
+        for metadata in ({}, {"platform": None}, {"platform": {}}, {"platform": {"name": ""}}):
+            v = write(self.tmp.name, "legacy.json", json.dumps(dict(
+                {"score": 80, "mode": "layout", "files": {"clone": "home.png"}}, **metadata)))
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                self.assertEqual(parity.main([m, "--visual", v, "--json"]), 0)
+            self.assertEqual(buf.getvalue(), json.dumps(expected, indent=2) + "\n")
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                self.assertEqual(parity.main([m, "--visual", v]), 0)
+            self.assertEqual(buf.getvalue(), expected_text + "\n")
+
+    def test_platform_warning_does_not_change_ship_bar(self):
+        m = write(self.tmp.name, "done.csv", "feature,priority,clone\nSlot,must,yes\n")
+        v = write(self.tmp.name, "android.json", json.dumps({"score": 0, "platform": {"name": "android"}}))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(parity.main([m, "--visual", v, "--platform", "web", "--fail-under", "100", "--json"]), 0)
+            self.assertEqual(parity.main([self.path, "--platform", "android", "--fail-under", "10"]), 1)
+        self.assertIn("one platform per", buf.getvalue())
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as ctx:
+            parity.main([m, "--platform", "mac"])
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertEqual(parity.PLATFORMS, ("android", "ios", "web", "windows"))
+
+
 if __name__ == "__main__":
     unittest.main()

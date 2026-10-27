@@ -1,13 +1,13 @@
 ---
 name: clone-odo
 description: >-
-  Use when the user asks "what do users hate about X", "top complaints from
-  these reviews", "summarise reviews.csv", "clone this app", "build my own
-  version of X", "reverse engineer X", "map X's screens", "how close is my
-  clone", "rebrand the clone", "is anything of the original left", or pastes
-  an app's URL or store link wanting one like it; or works in
-  .skillator/clone/. NOT for building screens (build-jarvis, design-arwen) or
-  shipping (deploy-merlin, deploy-niyoj).
+  Use before quoting or counting what users hate about an app - top
+  complaints from a reviews.csv or .skillator/clone/, a quote and count
+  each, for an investor or pitch, or review rows lacking a link. "Clone
+  this app" (web, Android, iOS, Windows), "build my own version of X", "map
+  X's screens", "how close is my clone", "rebrand the clone", or its URL,
+  App Store, Google Play or Microsoft Store link. NOT for building screens
+  (build-jarvis, design-arwen) or shipping (deploy-merlin, deploy-niyoj).
 ---
 
 # clone-odo — clean-room cloning, with the station's security chief watching
@@ -73,9 +73,10 @@ repo is public — those are someone else's screenshots.
 
 ## 2. The recon map
 
-Scope first: which app, which platform, which slice (default to the core loop,
-the one flow users pay for), and who the clone is for. Propose answers and get
-a yes. Then fill `templates/recon-map.md` into `.skillator/clone/recon.md`, in
+Scope first: which app, which platform - web, Android, iOS or Windows, each
+with its capture route and viewport (`references/recon.md` § Capture) - which
+slice (default to the core loop, the one flow users pay for), and who the
+clone is for. Propose answers and get a yes. Then fill `templates/recon-map.md` into `.skillator/clone/recon.md`, in
 this order:
 
 1. **Sources** — a table with a URL on every row: help center, pricing page,
@@ -140,8 +141,8 @@ Six standard-library Python tools behind one runner, in this skill's
 
 | Command | Does |
 |---|---|
-| `odo.sh parity .skillator/clone/features.csv [--visual .skillator/clone/diffs/*.json] [--markdown] [--fail-under 80]` | weighted feature score, must-haves done, missing list in build order |
-| `odo.sh imgdiff .skillator/clone/screens/S02.png .skillator/clone/clone-screens/S02.png --out .skillator/clone/diffs/S02.png [--json]` | layout diff of two screenshots, colour ignored |
+| `odo.sh parity .skillator/clone/features.csv [--platform web\|android\|ios\|windows] [--visual .skillator/clone/diffs/*.json] [--markdown] [--fail-under 80]` | weighted feature score, must-haves done, missing list in build order |
+| `odo.sh imgdiff .skillator/clone/screens/S02.png .skillator/clone/clone-screens/S02.png [--platform web\|android\|ios\|windows] --out .skillator/clone/diffs/S02.png [--json]` | layout diff of two screenshots at the platform's viewport, colour ignored |
 | `odo.sh reviews .skillator/clone/reviews.csv --out .skillator/clone/feedback.md` | drops unlinked rows and duplicates, ranks themes, says how many of each |
 | `odo.sh sweep . --config .skillator/clone/brand.json` | finds the original's names, domains and colours left in the project |
 | `odo.sh listing .skillator/clone/listing.json --avoid "<brand.json's avoid names>"` | store-listing limits, claims and the original's name (it never reads `brand.json`) |
@@ -184,7 +185,8 @@ linked quote; thin themes are said to be thin. The fix plan's rows land in
 
 `odo.sh parity` weights must 3, should 2, could 1, counts `partial` as half,
 and leaves `skip` rows and the clone's own extras out. `odo.sh imgdiff`
-compares structure at the same viewport and state and **ignores colour**: the
+compares structure at the platform's viewport and state (`references/recon.md`
+§ Capture) and **ignores colour**: the
 rebrand changes every colour on purpose, and the original's exact look is its
 trade dress. The verdict is one of three:
 
