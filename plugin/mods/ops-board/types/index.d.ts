@@ -108,6 +108,9 @@ export type Explorer = {
   commits: Commit[] | null
   changes: Record<string, { list: Change[]; more: number }>   // open commits only
   error: string | null
+  // F103: the branch's upstream (null: not read yet) and the commits it has that HEAD has not
+  upstream: { name: string; ahead: number; behind: number } | 'none' | null
+  incoming: Commit[] | null
 }
 declare module 'claude-code' {
   interface PluginState {

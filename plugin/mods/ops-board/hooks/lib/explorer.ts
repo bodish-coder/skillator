@@ -13,16 +13,20 @@ import { offsetFor, toggleGroup } from './ticketsmodel'
 // changes of open commits (B4 - the pane's $.state caps a value at 4,194,304 chars).
 // Items (what up/down walk, and the drawn line's key): 'xs:files', 'xs:commits',
 // 'xd:<folder>', 'xf:<file>', 'xc:<sha>'. A commit's changes are lines, not items.
+// F103: 'xs:incoming' and 'xi:<sha>' - the upstream's commits HEAD has not (after a fetch
+// the objects are local, so they open to their changes as local commits do).
 
 export const FILES = 'xs:files'
 export const COMMITS = 'xs:commits'
+export const INCOMING = 'xs:incoming'
 export const LOG_N = 40                 // the commits listed: the newest LOG_N
 export const MAX_TREE = 2000            // tree rows drawn at most (a folder of 50k files)
 export const MAX_CHANGES = 300          // a commit's files drawn at most
 export const NO_GIT = 'git not found on PATH (absolute entries only)'
 
 export type { Change, Commit, Explorer, TreeRow } from '../../types'
-export const EMPTY: Explorer = { open: [], selected: null, files: null, tree: [], treeMore: 0, commits: null, changes: {}, error: null }
+export const EMPTY: Explorer = { open: [], selected: null, files: null, tree: [], treeMore: 0, commits: null, changes: {}, error: null,
+  upstream: null, incoming: null }
 
 // --- git's words: argv after the git binary. No shell; paths never quoted (-z, quotePath off). ---
 
@@ -34,6 +38,47 @@ export const LOG_ARGS = ['-c', 'core.quotePath=false', 'log', `-n${LOG_N}`, '--d
 export const isSha = (s: string) => /^[0-9a-f]{7,64}$/.test(s)
 export const changeArgs = (sha: string) =>
   ['-c', 'core.quotePath=false', 'log', '-1', '-m', '--first-parent', '--format=', '--raw', '--numstat', '-M', sha]
+
+// F103: read-only - the upstream's name (exit 128: none), ahead/behind, the incoming log.
+export const UPSTREAM_ARGS = ['rev-parse', '--abbrev-ref', '@{upstream}']
+export const COUNT_ARGS = ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}']   // "A\tB": ahead A, behind B
+export const INCOMING_ARGS = [...LOG_ARGS, 'HEAD..@{upstream}']
+export const BRANCH_ARGS = ['rev-parse', '--abbrev-ref', 'HEAD']
+export const DIRTY_ARGS = ['status', '--porcelain', '--untracked-files=no']
+export const BRANCHES_ARGS = ['branch', '--format=%(refname:short)']
+
+// F103: the actions. The only source of their argv: never a force flag of any kind.
+export type ActionKind = 'fetch' | 'pull' | 'push' | 'revert' | 'merge'
+export type Action = { kind: ActionKind; args: string[]; warn: string[]; pick: string[] | null; result: string | null }
+export const ACTION_ARGS: Record<ActionKind, (target: string) => string[]> = {
+  fetch: () => ['fetch', '--prune'],
+  pull: () => ['pull', '--ff-only'],
+  push: () => ['push'],
+  revert: sha => ['revert', '--no-edit', sha],
+  merge: branch => ['merge', '--no-edit', branch],
+}
+const NEEDS_CLEAN: ActionKind[] = ['pull', 'merge', 'revert']
+export const isRunRef = (ref: string) => /^run\/RUN-\d+/.test(ref) || /\/\.skillator\/worktrees\//.test(ref.replace(/\\/g, '/'))
+
+// The plan: the action with its argv and warnings, or why it is refused. ctx: read just before.
+export function planAction(x: Explorer, kind: ActionKind, ctx: { branch: string; root: string; dirty: number; branches?: string[] }):
+  { action: Action } | { refused: string } {
+  const sel = x.selected ?? ''
+  if (kind === 'revert' && !/^x[ci]:/.test(sel)) return { refused: 'select a commit first' }
+  if (NEEDS_CLEAN.includes(kind) && ctx.dirty > 0)
+    return { refused: `working tree has ${ctx.dirty} uncommitted changes - git would refuse or stop half way; commit or stash first` }
+  if ((kind === 'push' || kind === 'pull') && x.upstream === 'none')
+    return { refused: `no upstream for ${ctx.branch} - git push -u origin ${ctx.branch} by hand sets one` }
+  const warn: string[] = []
+  if (isRunRef(ctx.branch)) warn.push(`on relay run branch ${ctx.branch} - runs land through relay-morpheus; continue only if you mean it`)
+  if (isRunRef(ctx.root)) warn.push(`this checkout is a run worktree (${ctx.root})`)
+  if (kind === 'merge') return { action: { kind, args: [], warn, pick: (ctx.branches ?? []).filter(b => b !== ctx.branch), result: null } }
+  return { action: { kind, args: ACTION_ARGS[kind](sel.slice(3)), warn, pick: null, result: null } }
+}
+
+// Merge: the branch picked fills the argv; a run branch is warned.
+export const pickBranch = (a: Action, name: string): Action =>
+  ({ ...a, args: ACTION_ARGS.merge(name), pick: null, warn: isRunRef(name) ? [...a.warn, `${name} is a run branch`] : a.warn })
 
 // A154: names and subjects clean()ed as they are parsed, so what explorerLines() measures
 // and cuts is what is drawn.
@@ -106,15 +151,30 @@ export function withFiles(x: Explorer, files: string[]): Explorer {
   return { ...x, files: files.length, tree: t.rows, treeMore: t.more }
 }
 
-export const withLog = (x: Explorer, out: string): Explorer => {
-  const commits = parseLog(out)
-  const keep = new Set(commits.map(c => c.sha))
-  const changes = Object.fromEntries(Object.entries(x.changes).filter(([k]) => keep.has(k)))
-  return { ...x, commits, changes }
+// Only the changes of listed commits are held: local and incoming share the map.
+const held = (x: Explorer): Explorer => {
+  const keep = new Set([...(x.commits ?? []), ...(x.incoming ?? [])].map(c => c.sha))
+  return { ...x, changes: Object.fromEntries(Object.entries(x.changes).filter(([k]) => keep.has(k))) }
 }
 
+export const withLog = (x: Explorer, out: string): Explorer => held({ ...x, commits: parseLog(out) })
+
+export const parseCount = (out: string): { ahead: number; behind: number } | null => {
+  const m = /^(\d+)\t(\d+)\s*$/.exec(out)
+  return m ? { ahead: Number(m[1]), behind: Number(m[2]) } : null
+}
+
+// name null: no upstream. Not behind: nothing incoming is held.
+export function withUpstream(x: Explorer, name: string | null, count: string | null): Explorer {
+  const c = name === null ? null : parseCount(count ?? '')
+  const upstream = name === null ? 'none' as const : c ? { name, ...c } : null
+  return typeof upstream === 'object' && upstream && upstream.behind > 0 ? { ...x, upstream } : held({ ...x, upstream, incoming: null })
+}
+
+export const withIncoming = (x: Explorer, out: string): Explorer => held({ ...x, incoming: parseLog(out).slice(0, LOG_N) })
+
 export function withChanges(x: Explorer, sha: string, out: string): Explorer {
-  if (!x.open.includes('xc:' + sha)) return x               // closed meanwhile: not held
+  if (!x.open.includes('xc:' + sha) && !x.open.includes('xi:' + sha)) return x   // closed meanwhile: not held
   const all = parseChanges(out)
   return { ...x, changes: { ...x.changes, [sha]: { list: all.slice(0, MAX_CHANGES), more: Math.max(0, all.length - MAX_CHANGES) } } }
 }
@@ -136,7 +196,7 @@ export function toggle(x: Explorer, item: string): { x: Explorer; need: Need } {
     if (item === FILES && !opened) y = { ...y, tree: [], treeMore: 0 }
     return { x: y, need: { files: opened || item !== FILES, sha: null } }
   }
-  if (item.startsWith('xc:')) {
+  if (item.startsWith('xc:') || item.startsWith('xi:')) {
     const sha = item.slice(3)
     if (!opened) {
       const { [sha]: _gone, ...rest } = y.changes
@@ -154,11 +214,17 @@ export type ExLine = { key: string; item: string | null; segs: Seg[] }
 const cut = (s: string, room: number) => (s.length <= room ? s : s.slice(0, Math.max(1, room - 1)) + '…')
 const STATUS_COLOR: Record<string, Color> = { A: 'success', M: 'warning', D: 'error', R: 'suggestion', C: 'suggestion' }
 
+const hasIncoming = (x: Explorer) => typeof x.upstream === 'object' && !!x.upstream && x.upstream.behind > 0
+
 function itemsOf(x: Explorer): string[] {
   const out = [FILES]
   if (x.open.includes(FILES)) out.push(...x.tree.map(r => (r.dir ? 'xd:' : 'xf:') + r.path))
   out.push(COMMITS)
   if (x.open.includes(COMMITS)) out.push(...(x.commits ?? []).map(c => 'xc:' + c.sha))
+  if (hasIncoming(x)) {
+    out.push(INCOMING)
+    if (x.open.includes(INCOMING)) out.push(...(x.incoming ?? []).map(c => 'xi:' + c.sha))
+  }
   return out
 }
 
@@ -175,32 +241,17 @@ export function explorerLines(x: Explorer, cols: number): ExLine[] {
     const on = item === sel
     out.push({ key: item, item, segs: [{ text: lead }, ...segs.map(s => (on ? { ...s, inverse: true } : s))] })
   }
-  const head = (item: string, title: string, n: number | null) =>
-    line(item, '', [{ text: cut(`${x.open.includes(item) ? '▾' : '▸'} ${title}${n === null ? '' : ` (${n})`}`, cols - 1), bold: true }])
-
-  if (x.error) out.push({ key: 'xerr', item: null, segs: [{ text: cut(x.error, cols - 1), color: 'error' }] })
-  head(FILES, 'Files', x.files)
-  if (x.open.includes(FILES)) {
-    if (x.files === null) out.push({ key: 'xtree:none', item: null, segs: [{ text: '  reading git ls-files…', dim: true }] })
-    else if (!x.files) out.push({ key: 'xtree:none', item: null, segs: [{ text: '  no tracked files', dim: true }] })
-    for (const r of x.tree) {
-      const lead = '  ' + '  '.repeat(r.depth)
-      if (r.dir) line('xd:' + r.path, lead, [{ text: cut(`${x.open.includes('xd:' + r.path) ? '▾' : '▸'} ${r.name}/ (${r.count})`, cols - lead.length - 1) }])
-      else line('xf:' + r.path, lead + '  ', [{ text: cut(r.name, cols - lead.length - 3) }])
-    }
-    if (x.treeMore) out.push({ key: 'xtree:more', item: null, segs: [{ text: `  … ${x.treeMore} more rows - close a folder`, dim: true }] })
-  }
-  head(COMMITS, 'Commits', x.commits ? x.commits.length : null)
-  if (x.open.includes(COMMITS)) {
-    if (!x.commits) out.push({ key: 'xlog:none', item: null, segs: [{ text: '  reading git log…', dim: true }] })
-    else if (!x.commits.length) out.push({ key: 'xlog:none', item: null, segs: [{ text: '  no commits yet', dim: true }] })
-    for (const c of x.commits ?? []) {
-      const glyph = x.open.includes('xc:' + c.sha) ? '▾' : '▸'
+  const head = (item: string, title: string, n: number | null, tail = '') =>
+    line(item, '', [{ text: cut(`${x.open.includes(item) ? '▾' : '▸'} ${title}${n === null ? '' : ` (${n})`}`, cols - 1), bold: true },
+      ...(tail ? [{ text: tail, dim: true }] : [])])
+  const commitRows = (pre: string, list: Commit[]) => {
+    for (const c of list) {
+      const glyph = x.open.includes(pre + c.sha) ? '▾' : '▸'
       const fixed = `${glyph} ${c.short}  ${c.date}  `
-      line('xc:' + c.sha, '  ', [{ text: `${glyph} ` }, { text: c.short, color: 'warning' }, { text: `  ${c.date}  `, dim: true },
+      line(pre + c.sha, '  ', [{ text: `${glyph} ` }, { text: c.short, color: 'warning' }, { text: `  ${c.date}  `, dim: true },
         { text: cut(c.subject, Math.max(4, cols - 3 - fixed.length)) }])
       const ch = x.changes[c.sha]
-      if (!x.open.includes('xc:' + c.sha)) continue
+      if (!x.open.includes(pre + c.sha)) continue
       if (!ch) { out.push({ key: `xch:${c.sha}:none`, item: null, segs: [{ text: '      reading…', dim: true }] }); continue }
       if (!ch.list.length) out.push({ key: `xch:${c.sha}:none`, item: null, segs: [{ text: '      no files changed', dim: true }] })
       ch.list.forEach((f, i) => {
@@ -214,6 +265,31 @@ export function explorerLines(x: Explorer, cols: number): ExLine[] {
       })
       if (ch.more) out.push({ key: `xch:${c.sha}:more`, item: null, segs: [{ text: `      … ${ch.more} more files`, dim: true }] })
     }
+  }
+
+  if (x.error) out.push({ key: 'xerr', item: null, segs: [{ text: cut(x.error, cols - 1), color: 'error' }] })
+  head(FILES, 'Files', x.files)
+  if (x.open.includes(FILES)) {
+    if (x.files === null) out.push({ key: 'xtree:none', item: null, segs: [{ text: '  reading git ls-files…', dim: true }] })
+    else if (!x.files) out.push({ key: 'xtree:none', item: null, segs: [{ text: '  no tracked files', dim: true }] })
+    for (const r of x.tree) {
+      const lead = '  ' + '  '.repeat(r.depth)
+      if (r.dir) line('xd:' + r.path, lead, [{ text: cut(`${x.open.includes('xd:' + r.path) ? '▾' : '▸'} ${r.name}/ (${r.count})`, cols - lead.length - 1) }])
+      else line('xf:' + r.path, lead + '  ', [{ text: cut(r.name, cols - lead.length - 3) }])
+    }
+    if (x.treeMore) out.push({ key: 'xtree:more', item: null, segs: [{ text: `  … ${x.treeMore} more rows - close a folder`, dim: true }] })
+  }
+  const up = x.upstream
+  head(COMMITS, 'Commits', x.commits ? x.commits.length : null,
+    up === 'none' ? '  no upstream' : up ? `  ↑${up.ahead} ↓${up.behind} vs ${up.name}` : '')
+  if (x.open.includes(COMMITS)) {
+    if (!x.commits) out.push({ key: 'xlog:none', item: null, segs: [{ text: '  reading git log…', dim: true }] })
+    else if (!x.commits.length) out.push({ key: 'xlog:none', item: null, segs: [{ text: '  no commits yet', dim: true }] })
+    commitRows('xc:', x.commits ?? [])
+  }
+  if (hasIncoming(x)) {
+    head(INCOMING, 'Incoming', x.incoming ? x.incoming.length : null)
+    if (x.open.includes(INCOMING)) commitRows('xi:', x.incoming ?? [])
   }
   return out
 }

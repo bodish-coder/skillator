@@ -1,6 +1,8 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On, ProcessRunResult } from 'claude-code'
 import type { Engine, MockClock, Plugin } from 'claude-code/testing'
+import { ACTION_ARGS, COMMITS, EMPTY, explorerLines, INCOMING, isRunRef, parseCount, planAction, toggle, withIncoming, withLog,
+  withUpstream } from '../hooks/lib/explorer'
 
 // F75: the Explorer tab - the project's git-tracked files as a tree and the recent
 // commits, each opening to the files it changed. Read-only; git by the mod's own
@@ -255,4 +257,39 @@ test('a long file name with an ESC and a CR lines up with any other long name', 
   expect(rows).toHaveLength(2)
   expect(rows[1]!.length).toBe(rows[0]!.length)
   await ui.unmount()
+})
+
+// F103: the git actions - the argv is fixed per action, a plan refuses what git would refuse
+// or stop half way on, and run branches / worktrees are warned before anything runs.
+test('F103 argv per action is fixed: ff-only pull, plain push, no-edit revert and merge', () => {
+  expect(ACTION_ARGS.fetch('')).toEqual(['fetch', '--prune'])
+  expect(ACTION_ARGS.pull('')).toEqual(['pull', '--ff-only'])
+  expect(ACTION_ARGS.push('')).toEqual(['push'])
+  expect(ACTION_ARGS.revert('abc1')).toEqual(['revert', '--no-edit', 'abc1'])
+  expect(ACTION_ARGS.merge('feature/x')).toEqual(['merge', '--no-edit', 'feature/x'])
+  for (const k of Object.keys(ACTION_ARGS) as (keyof typeof ACTION_ARGS)[]) expect(ACTION_ARGS[k]('t').some(a => /force/.test(a))).toBe(false)
+})
+
+test('F103 planAction: dirty tree refuses pull/merge/revert, push needs an upstream, revert needs a selected commit, run refs warn', () => {
+  const x = { ...withUpstream(EMPTY, 'origin/main', '2\t3'), selected: 'xc:' + SHA1 }
+  expect(planAction(x, 'pull', { branch: 'main', root: '/r', dirty: 2 })).toEqual({ refused: 'working tree has 2 uncommitted changes - git would refuse or stop half way; commit or stash first' })
+  expect(planAction(x, 'push', { branch: 'main', root: '/r', dirty: 2 })).toEqual({ action: { kind: 'push', args: ['push'], warn: [], pick: null, result: null } })
+  expect(planAction(withUpstream(EMPTY, null, null), 'push', { branch: 'main', root: '/r', dirty: 0 })).toEqual({ refused: 'no upstream for main - git push -u origin main by hand sets one' })
+  expect(planAction({ ...x, selected: 'xs:files' }, 'revert', { branch: 'main', root: '/r', dirty: 0 })).toEqual({ refused: 'select a commit first' })
+  const r = planAction(x, 'revert', { branch: 'run/RUN-0022-x', root: '/r/.skillator/worktrees/RUN-0022-x', dirty: 0 })
+  expect(r).toEqual({ action: { kind: 'revert', args: ['revert', '--no-edit', SHA1], warn: ['on relay run branch run/RUN-0022-x - runs land through relay-morpheus; continue only if you mean it', 'this checkout is a run worktree (/r/.skillator/worktrees/RUN-0022-x)'], pick: null, result: null } })
+  const m = planAction(x, 'merge', { branch: 'main', root: '/r', dirty: 0, branches: ['main', 'feature/x', 'run/RUN-0021-y'] })
+  expect(m).toEqual({ action: { kind: 'merge', args: [], warn: [], pick: ['feature/x', 'run/RUN-0021-y'], result: null } })
+})
+
+test('F103 upstream and incoming: the count line, the Incoming section only when behind, its items open like commits', () => {
+  expect(parseCount('2\t3\n')).toEqual({ ahead: 2, behind: 3 }); expect(parseCount('junk')).toBeNull()
+  let x = withUpstream({ ...EMPTY, open: [COMMITS] }, 'origin/main', '0\t0'); x = withLog(x, LOG)
+  expect(explorerLines(x, 60).find(l => l.key === COMMITS)!.segs.map(s => s.text).join('')).toBe('▾ Commits (2)  ↑0 ↓0 vs origin/main')
+  expect(explorerLines(x, 60).some(l => l.key === INCOMING)).toBe(false)
+  x = withIncoming(withUpstream(x, 'origin/main', '0\t1'), `${SHA2}\x1f89abcde\x1f2026-10-25\x1fAsha\x1fF99: diagnose\n`)
+  expect(explorerLines({ ...x, open: [COMMITS, INCOMING] }, 60).find(l => l.key === 'xi:' + SHA2)!.segs.map(s => s.text).join('')).toBe('  ▸ 89abcde  2026-10-25  F99: diagnose')
+  expect(toggle(x, 'xi:' + SHA2).need).toEqual({ files: false, sha: SHA2 })
+  expect(explorerLines(withUpstream(x, null, null), 60).find(l => l.key === COMMITS)!.segs.map(s => s.text).join('')).toBe('▾ Commits (2)  no upstream')
+  expect(isRunRef('run/RUN-0022-x')).toBe(true); expect(isRunRef('C:/r/.skillator/worktrees/RUN-1-a')).toBe(true); expect(isRunRef('main')).toBe(false)
 })
