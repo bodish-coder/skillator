@@ -6,7 +6,7 @@ import { frame, cells } from '../draw'
 import { makeEngine } from '../engine'
 import { parseArgs } from '../app'
 import type { Host, RunResult } from '../nodehost'
-import { changeArgs, LOG_ARGS, LS_ARGS, NO_GIT } from '../../hooks/lib/explorer'
+import { changeArgs, COUNT_ARGS, INCOMING_ARGS, LOG_ARGS, LS_ARGS, NO_GIT, UPSTREAM_ARGS } from '../../hooks/lib/explorer'
 
 // F75: the standalone app's Explorer tab (5) - the same model as the pane's
 // (hooks/lib/explorer.ts): git-tracked files as a tree, the newest commits opening to
@@ -18,11 +18,15 @@ const FILES = ['README.md', 'mods/a/x.ts', 'mods/a/y.ts', 'mods/b.ts'].join('\0'
 const LOG = `${SHA1}\x1f1234567\x1f2026-10-24\x1fVidul\x1fF75: explorer\n${SHA2}\x1f89abcde\x1f2026-10-23\x1fAsha\x1fF74: rename\n`
 const CH1 = ':100644 100644 aaa bbb M\tmods/a/x.ts\n:000000 100644 000 ccc A\tmods/b.ts\n:100644 000000 ddd 000 D\told.md\n\n3\t1\tmods/a/x.ts\n10\t0\tmods/b.ts\n0\t4\told.md\n'
 
+const SHA3 = 'fedcba9' + 'c'.repeat(33)      // F103: the upstream's commit HEAD has not
 const ok = (out: string): RunResult => ({ code: 0, out, err: '', argv: ['git'] })
 const gitOut = (args: string[]): RunResult => {
   const a = args.join(' ')
   if (a === LS_ARGS.join(' ')) return ok(FILES)
   if (a === LOG_ARGS.join(' ')) return ok(LOG)
+  if (a === UPSTREAM_ARGS.join(' ')) return ok('origin/main\n')
+  if (a === COUNT_ARGS.join(' ')) return ok('1\t1\n')
+  if (a === INCOMING_ARGS.join(' ')) return ok(`${SHA3}\x1ffedcba9\x1f2026-10-26\x1fAsha\x1fF100: incoming\n`)
   if (a === changeArgs(SHA1).join(' ')) return ok(CH1)
   return { code: 128, out: '', err: 'fatal: bad revision', argv: ['git', ...args] }
 }
@@ -48,7 +52,7 @@ const text = (s: State) => frame(s, P).join('\n')
 test('5 opens Explorer: git ls-files and git log asked as git effects, nothing run through the scripts table', () => {
   const st = reduce(initial(80, 24, 0), { name: '5' })
   assert.equal(st.state.tab, 'explorer')
-  assert.deepEqual(gits(st.effects).map(e => e.args), [LS_ARGS, LOG_ARGS])
+  assert.deepEqual(gits(st.effects).map(e => e.args), [LS_ARGS, LOG_ARGS, UPSTREAM_ARGS])
   assert.equal(st.effects.filter(e => e.kind === 'run').length, 0)
   assert.match(frame(st.state, P)[0]!, /5 Explorer/)
 })
@@ -56,7 +60,7 @@ test('5 opens Explorer: git ls-files and git log asked as git effects, nothing r
 test('the tree: sections start collapsed; enter opens Files, then a folder; counts on every folder', () => {
   let s = press(initial(80, 24, 0), '5')
   assert.match(text(s), /^▸ Files \(4\)$/m)
-  assert.match(text(s), /^▸ Commits \(2\)$/m)
+  assert.match(text(s), /^▸ Commits \(2\) {2}↑1 ↓1 vs origin\/main$/m)
   s = press(s, 'return')
   assert.match(text(s), /^▾ Files \(4\)$/m)
   assert.match(text(s), /^ {2}▸ mods\/ \(3\)$/m)
@@ -86,7 +90,7 @@ test('git failing is said in the tab; r reads again with the board', () => {
   s = { ...s, tab: 'explorer' }
   const st = reduce(s, { name: 'r' })
   assert.deepEqual(st.effects.filter(e => e.kind === 'poll').map(e => (e as { what: string }).what), ['board', 'slow'])
-  assert.deepEqual(gits(st.effects).map(e => e.args), [LS_ARGS, LOG_ARGS])
+  assert.deepEqual(gits(st.effects).map(e => e.args), [LS_ARGS, LOG_ARGS, UPSTREAM_ARGS])
   const failed = afterRun(gits(st.effects)[0]!, { code: 128, out: '', err: 'fatal: not a git repository\n', argv: [] }, s, 0).state
   assert.match(text(failed), /git ls-files failed: fatal: not a git repository/)
 })
@@ -134,11 +138,28 @@ test('the engine runs git effects through the host (--once too: git only reads)'
   const host = hostOf(async args => { asked.push(args); return gitOut(args) })
   const engine = makeEngine({ host, email: null, once: true, state: { ...initial(80, 24, 0), tab: 'explorer' }, onChange: () => {}, onQuit: () => {} })
   await engine.readAll()
-  assert.deepEqual(asked, [LS_ARGS, LOG_ARGS])
+  assert.deepEqual(asked, [LS_ARGS, LOG_ARGS, UPSTREAM_ARGS, COUNT_ARGS, INCOMING_ARGS])
   assert.match(text(engine.state), /▸ Files \(4\)/)
   const none = makeEngine({ host: hostOf(), email: null, once: true, state: { ...initial(80, 24, 0), tab: 'explorer' }, onChange: () => {}, onQuit: () => {} })
   await none.readAll()
   assert.match(text(none.state), new RegExp(NO_GIT.replace(/[()]/g, '\\$&')))
+})
+
+// F103: read-only here - the upstream's ahead/behind and the incoming commits, no actions.
+test('F103 ahead/behind vs the upstream and the incoming commits, read-only; no upstream said', () => {
+  let s = settle(reduce(initial(80, 24, 0), { name: '5' }))
+  assert.match(text(s), /↑1 ↓1 vs origin\/main/)
+  assert.match(text(s), /^▸ Incoming \(1\)$/m)
+  s = press(s, 'down', 'down', 'return')                          // Files, Commits, Incoming
+  assert.match(text(s), /^ {2}▸ fedcba9 {2}2026-10-26 {2}F100: incoming$/m)
+  assert.match(text(s), /↑↓ move · enter open\/close · r reload · q quit/)
+  const st = reduce(initial(80, 24, 0), { name: '5' })
+  let n = st.state
+  for (const e of gits(st.effects)) {
+    n = afterRun(e, e.args === UPSTREAM_ARGS ? { code: 128, out: '', err: 'fatal: no upstream configured\n', argv: [] } : gitOut(e.args), n, 0).state
+  }
+  assert.match(text(n), /^▸ Commits \(2\) {2}no upstream$/m)
+  assert.doesNotMatch(text(n), /git rev-parse failed/)
 })
 
 test('--tab explorer is a tab the app opens on', () => {

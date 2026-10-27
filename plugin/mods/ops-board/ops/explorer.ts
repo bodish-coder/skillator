@@ -6,8 +6,8 @@ import { clean } from '../hooks/lib/bandlines'
 import type { Explorer } from '../hooks/lib/explorer'
 import type { RunResult } from './nodehost'
 import type { Effect, Key, State, Step, Then } from './state'
-import { changeArgs, EMPTY, explorerLines, explorerOffset, isSha, LOG_ARGS, LS_ARGS, moveSel, NO_GIT, parseFiles, selectedOf,
-  toggle, withChanges, withError, withFiles, withLog } from '../hooks/lib/explorer'
+import { changeArgs, COUNT_ARGS, EMPTY, explorerLines, explorerOffset, INCOMING_ARGS, isSha, LOG_ARGS, LS_ARGS, moveSel, NO_GIT,
+  parseFiles, selectedOf, toggle, UPSTREAM_ARGS, withChanges, withError, withFiles, withIncoming, withLog, withUpstream } from '../hooks/lib/explorer'
 
 // The model, and the file list it was drawn from (no state cap here: kept for folder toggles).
 export type ExState = { x: Explorer; files: string[] | null }
@@ -28,10 +28,21 @@ const filesThen: Then = r => s => {
 const logThen: Then = r => s => setX(s, x => (r.code !== 0 ? addError(x, why('log', r)) : withLog(x, r.out)))
 const changesThen = (sha: string): Then => r => s => setX(s, x => (r.code !== 0 ? addError(x, why('log', r)) : withChanges(x, sha, r.out)))
 
+// F103: the upstream, read-only (the pane alone runs actions - a ruling): exit 128 is none,
+// another failure leaves it unread; known, its ahead/behind and incoming commits follow.
+const countThen = (name: string): Then => r => s => setX(s, x => withUpstream(x, name, r.code === 0 ? r.out : null))
+const incomingThen: Then = r => s => (r.code === 0 ? setX(s, x => withIncoming(x, r.out)) : s)
+const upstreamThen: Then = r => s => {
+  if (r.code === 128) return setX(s, x => withUpstream(x, null, null))
+  if (r.code !== 0) return s
+  return { state: s, effects: [git(COUNT_ARGS, countThen(r.out.trim())), git(INCOMING_ARGS, incomingThen)] }
+}
+
 // Entering the tab and r: the file list and the log read again; open commits' files too.
 export function enterExplorer(s: State): Step {
   const shas = Object.keys(s.explorer.x.changes).filter(isSha)
-  return { state: s, effects: [git(LS_ARGS, filesThen), git(LOG_ARGS, logThen), ...shas.map(sha => git(changeArgs(sha), changesThen(sha)))] }
+  return { state: s, effects: [git(LS_ARGS, filesThen), git(LOG_ARGS, logThen), git(UPSTREAM_ARGS, upstreamThen),
+    ...shas.map(sha => git(changeArgs(sha), changesThen(sha)))] }
 }
 
 export function explorerKey(s: State, k: Key): Step {
