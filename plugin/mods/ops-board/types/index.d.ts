@@ -35,9 +35,10 @@ export type PlanItem = { n: number; ticket: string }
 // F85: the engage confirm in the pane - what goes, and whether relay queue-run add goes first.
 export type Engage = { id: string; text: string; queue: boolean }
 // F99: the Diagnose view in the pane - the verdict, one line per disagreement and, per closable
-// stage, the relay-morpheus command that closes it by hand (read-only; Close is F104).
+// stage, the relay-morpheus command that closes it by hand. F104: close = the closable stages
+// with a derived sha (runs: the command Close runs, shown in its confirm); confirm = the stage asked.
 export type Diagnose = { id: string; verdict: 'finished' | 'still running' | 'stalled' | 'inconsistent'; lines: string[]
-                         byHand: string[] }
+                         byHand: string[]; close: { n: number; sha: string; why: string; runs: string }[]; confirm: number | null }
 // F77: id = the form's Ticket field as typed ('' when opened with no ticket selected),
 // resolved against the board case-insensitively (ticketById); ticket-meta gets the board's ID.
 export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string | null; result: string | null }
