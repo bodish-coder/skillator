@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T03:49Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T04:02Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -15,34 +15,13 @@ branch: run/RUN-0023-pending-f100-f104
 | 172 | verify review bump commit |   | - | - | - |
 | 173 | AAB4 F105 codex $ops opens the board | x | subagent | 2026-10-27T02:37Z | 1264371 |
 | 174 | merge origin/ccr-0af663c7-2ecnqn (F97 clone-odo) INTO main | x | main:opus | 2026-10-26T18:55Z | ca1f9e3 |
-| 178 | AAB7 F106 start claims the owner | ~ | subagent | 2026-10-27T02:38Z | - |
+| 178 | AAB7 F106 start claims the owner | x | subagent | 2026-10-27T04:02Z | ed27f65 |
 | 179 | AAB8 F109 session code and mode |   | - | - | - |
 | 180 | AAB9 F111 ops pane layout B rails |   | - | - | - |
 | 181 | AACA F110 rename skill-smith to skill-prometheus |   | - | - | - |
 | 183 | AACC A159 explorer review leftovers | x | subagent | 2026-10-27T03:49Z | 72a17cd |
 
 ## In flight
-### stage 178 - AAB7 F106 start claims the owner  (dispatched 2026-10-27T02:38Z, @sher)
-run: -
-worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s178
-branch: run/RUN-0023-pending-f100-f104-s178
-prompt: |
-  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
-
-  grade: architectural · critical yes (F109 changes the TICKETS.md line format, a contract check-tickets, ticket-meta and the ops board all parse) · design deep=fable · build build=opus · verify deep=fable, held · ceremony full (relay run, 5 tickets) · mode per-task (ruled: inside a relay run, /pending-subagent parallel) · usage unobservable · tiers: defaults
-
-  Ticket F106 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/design-2026-10-26-F106-start-claims-owner.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths are repo-relative; use them under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. Q-F106-1 is parked for the owner: build on its default (yes). 
-
-  The ticket line, verbatim:
-  - [ ] F106 — Unowned ticket goes to the session owner on start. When work starts on a ticket with no [owner:] through any path - ticket-meta start, build-jarvis, a plain subagent, a Workflow/marathon script - it gets [owner: <whoami>] as relay chain plan/dispatch already do via claim; a ticket owned by someone else is left alone and the start says so; no team file = no owner, as now. Done when ticket-meta start .sh/.ps1 selftests pin the claim and build-jarvis/marathon-workflow.js call it [owner: @sher] (@cc-982c2a)
-
-  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F106: ".
-
-  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
-
-  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
-
-  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
 ### stage 171 - AAB3 F104 diagnose close  (dispatched 2026-10-27T02:54Z, @sher)
 run: -
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s171
@@ -308,3 +287,4 @@ prompt: |
 - Ruling: /pending-subagent parallel (owner, after a bare re-run) - RELAY_CHAIN_PARALLEL=7 (the open ticket stages 171 178 179 180 181 183, plus room for fix seats); the pick is unchanged (A157 still [!]); stages still wait on their after: lines - cost if wrong: a watchdog hold.
 - Ruling: 183 A159 in stage worktree .s183, prompt with that worktree substituted (run-0023-s183-wt.txt) - cost if wrong: none.
 - Ruling: F104 fix seat opus->fable - reviews 1 and 2 failed: 1 found merge and main board commits picked as the landed sha; 2 found the round-1 first-parent rule still admits side-branch commits merged via main (real F97 -> 0b47677) and hides the run's own commit after a fast-forward or with HEAD on the run branch - the git-history rule is design judgement, not mechanics - cost if wrong: a dearer seat (prompt run-0023-s171-fix2.txt).
+- Ruling: stage 178 F106 landed - diff read by the orchestrator, all four selftests ok on the merged branch (ticket-meta sh/ps1, relay-morpheus sh/ps1); the no-Workflow board flip in marathon.md l.337 carries no F106 note (the claim itself is in RM board, so it applies there too) - cost if wrong: a doc nit.
