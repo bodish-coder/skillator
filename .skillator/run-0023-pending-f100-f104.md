@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T03:12Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T03:39Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -19,7 +19,7 @@ branch: run/RUN-0023-pending-f100-f104
 | 179 | AAB8 F109 session code and mode |   | - | - | - |
 | 180 | AAB9 F111 ops pane layout B rails |   | - | - | - |
 | 181 | AACA F110 rename skill-smith to skill-prometheus |   | - | - | - |
-| 183 | AACC A159 explorer review leftovers |   | - | - | - |
+| 183 | AACC A159 explorer review leftovers | ~ | subagent | 2026-10-27T03:39Z | - |
 
 ## In flight
 ### stage 178 - AAB7 F106 start claims the owner  (dispatched 2026-10-27T02:38Z, @sher)
@@ -62,9 +62,32 @@ prompt: |
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### stage 183 - AACC A159 explorer review leftovers  (dispatched 2026-10-27T03:39Z, @sher)
+run: -
+worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s183
+branch: run/RUN-0023-pending-f100-f104-s183
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket A159 (agent-found) - fix seat, tier build. No design file: the ticket line is the spec; the four changes are named.
+
+  The ticket line, verbatim:
+  - [ ] A159 — Explorer git actions: four review leftovers. Found by the F103 re-review (RUN-0023 stage 170, 7fc77ff). Someone should: refuse a remote name starting with - in planAction (git push -f HEAD:... reads it as an option); toast openAction errors from the tab hotkeys (they .catch to nothing, so a network-path repo whose fs.exists rejects does nothing silently); set GCM_INTERACTIVE=never beside GIT_TERMINAL_PROMPT=0 so Git Credential Manager opens no window; and make ops/explorer.ts clear upstream and counts on a non-128 upstream failure as the pane now does. Done when each has a test, red then green, in plugin/mods/ops-board. [owner: @sher] (@cc-9de7d9)
+
+  Context: F103 (commits 727ac63..7fc77ff on this branch) built the Explorer git actions; read hooks/lib/explorer.ts (planAction, ACTION_ARGS), hooks/explorertab.tsx (openAction, the keys row, the action env with GIT_TERMINAL_PROMPT=0, the upstream read and its exit-128 handling) and ops/explorer.ts (the read-only terminal app's upstream read) first. The ops app stays read-only.
+
+  Files you may touch: plugin/mods/ops-board/hooks/lib/explorer.ts, hooks/explorertab.tsx, ops/explorer.ts, tests/explorer.test.tsx, ops/tests/explorer.test.mts. Anything else -> stop and report.
+
+  Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board (all pass), then npm --prefix C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board/ops test (all pass) - one at a time; tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f103.json (no output). Each of the four tests red first, then green. Never run an Explorer git action against a real repo - tests use mocks. Commit messages start with "A159: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), anything you could not verify, any unrelated problem (one line each).
 
 ## Chain
-driver: @sher 2026-10-27T02:54Z     hold: -     mode: agents
+driver: @sher 2026-10-27T03:39Z     hold: -     mode: agents
 ### AABZ - stage 167 - F100 build-jarvis UI entry
 tickets: F100 build/build
 files: plugin/skills/build-jarvis/SKILL.md,plugin/skills/build-jarvis/references/grade.md,plugin/skills/build-jarvis/references/route-hook.md,plugin/skills/build-jarvis/hooks/feature-route.sh,plugin/skills/build-jarvis/hooks/feature-route.ps1,plugin/skills/grayskull-power/SKILL.md,plugin/skills/grayskull-power/references/routing.md,plugin/skills/design-arwen/SKILL.md,plugin/skills/tui-tron/SKILL.md,plugin/practice/baselines/scenario-build-ui-feature.txt,plugin/practice/baselines/scenario-build-ui-only.txt,plugin/practice/baselines/green-build-ui-f100.txt
@@ -306,3 +329,5 @@ prompt: |
 - Ruling: 171 F104 got stage worktree .s171 (178 is in flight beside it); prompt with that worktree substituted (.skillator/prompts/run-0023-s171-wt.txt) - cost if wrong: none.
 - Ruling: /pending-subagent (no mode = sequential, owner 02:5xZ) - pick gave F104 F106 F109 F110 F111 (already RUN-0023 stages), A157 (skipped: [!], needs a host with under 100 skills) and A159 (new); A159 joins RUN-0023 as stage 183 after 170, files the Explorer ones; 178 and 171 already in flight finish, then RELAY_CHAIN_PARALLEL is unset - one stage at a time - cost if wrong: slower run.
 - Ruling: stage 171 F104 review (read-only, opus, ran shaFor against the real branch) said FIX-FIRST: merge commits and main board commits merged into the run branch are picked as the landed sha (would mark 168 landed while the run is unmerged); one fix seat takes findings 1-6 (prompt run-0023-s171-fix1.txt, opus) - cost if wrong: one more review round.
+- Ruling: /pending-subagent parallel (owner, after a bare re-run) - RELAY_CHAIN_PARALLEL=7 (the open ticket stages 171 178 179 180 181 183, plus room for fix seats); the pick is unchanged (A157 still [!]); stages still wait on their after: lines - cost if wrong: a watchdog hold.
+- Ruling: 183 A159 in stage worktree .s183, prompt with that worktree substituted (run-0023-s183-wt.txt) - cost if wrong: none.
