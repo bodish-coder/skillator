@@ -3,6 +3,8 @@ import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, Proces
 import type { Board, Diagnose, Engage, RunView, Stage } from '../types'
 import type { AgentsView } from './agentstab'
 import { gitBin, runCall } from './lib/host'
+import { parseBoard } from './lib/board'
+import { norm } from './lib/calls'
 import { parseRuns, scriptPathOf } from './lib/runs'
 import { continuePrompt, engageOf, finishedLine, isFinished, runLines, stageTickets as ticketsOf } from './lib/runlines'
 import type { RunLine } from './lib/runlines'
@@ -148,11 +150,19 @@ async function gitAsker($: EngineInterface): Promise<{ ask: Ask; why: () => stri
 
 // F99: the run read fresh (list and resume, read-only), every landed sha asked of git (on HEAD /
 // elsewhere / unknown), the board and the driver stamp; diagnose() judges.
-async function readDiagnosis($: EngineInterface, id: string) {
+async function readDiagnosis($: EngineInterface, id: string, fresh = false) {
   const l = await runCall($, 'relay-list', [])
   const c = l.code === 0 ? await runCall($, 'relay-resume', [id]) : l
   const run = c.code === 0 ? parseRuns(l.out, { [id]: c.out }).find(r => r.id === id) : undefined
   if (!run) return { refused: c.code === 0 ? 'not in relay-morpheus list' : c.err.trim() || c.out.trim() || `exit ${c.code}` }
+  // fresh (Close's re-check): TICKETS.md read now, never the board as last polled
+  let board = await read($, boardA)
+  if (fresh) {
+    const root = (await $.session.repo())?.root
+    if (!root) return { refused: 'not in a git repo - no TICKETS.md to check' }
+    const path = norm(root) + '/TICKETS.md'
+    try { board = parseBoard(await $.fs.read(path), path, 0, 0) } catch (e) { return { refused: `TICKETS.md not read: ${e instanceof Error ? e.message : String(e)}` } }
+  }
   const g = await gitAsker($)
   const shas = new Map<string, ShaState>()
   for (const s of run.stages) {
@@ -161,7 +171,7 @@ async function readDiagnosis($: EngineInterface, id: string) {
     const r = await g.ask(['merge-base', '--is-ancestor', s.landed, 'HEAD'])
     if (r) shas.set(s.landed, r.exitCode === 0 ? 'head' : r.exitCode === 1 ? 'off' : 'none')
   }
-  const d = diagnose(run, await read($, boardA), shas, await $.clock.now())
+  const d = diagnose(run, board, shas, await $.clock.now())
   return { l, resume: c.out, run, shas, d, g }
 }
 
@@ -181,6 +191,7 @@ async function shaFor(s: Stage, resume: string, g: { ask: Ask; why: () => string
     if (s.landed && IS_SHA.test(s.landed) && await onHead(s.landed)) return { sha: s.landed, why: 'landed cell on HEAD' }
     const branch = /^branch: (\S+)$/m.exec(resume)?.[1]
     if (!branch) return { none: 'no run branch in the run file and no landed sha on HEAD' }
+    if (branch.startsWith('-')) return { none: `run branch "${branch}" starts with - - not asked of git` }
     if ((await git(['rev-parse', '--verify', '--quiet', branch])).exitCode) return { none: `${branch} is gone (landed and removed?) and no landed sha on HEAD` }
     // the fork point: the branch's own oldest reflog entry (where it was created) - after a merge into
     // HEAD, merge-base (even --fork-point) answers the branch tip, an empty range
@@ -194,9 +205,12 @@ async function shaFor(s: Stage, resume: string, g: { ask: Ask; why: () => string
       fork = base.stdout.trim()
     }
     const ids = ticketsOf(s)
-    const words = ids.map(id => new RegExp('(^|[^A-Za-z0-9])' + id + '(?![A-Za-z0-9])', 'i'))
-    const hit = (await git(['log', '--format=%H%x1f%s', `${fork}..${branch}`], [0])).stdout.split('\n')
-      .map(l => l.split('\x1f')).find(([h, subj]) => h && words.some(w => w.test(subj ?? '')))
+    // the subject leads with the id: never a stage merge or a "board: testing F1" naming it
+    const words = ids.map(id => new RegExp('^\\s*' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9])', 'i'))
+    // HEAD's own line since the fork is never the run's: a fork before the run, main merged into it
+    const mainline = new Set((await git(['rev-list', '--first-parent', `${fork}..HEAD`], [0])).stdout.split('\n'))
+    const hit = (await git(['log', '--no-merges', '--format=%H%x1f%s', `${fork}..${branch}`], [0])).stdout.split('\n')
+      .map(l => l.split('\x1f')).find(([h, subj]) => h && !mainline.has(h) && words.some(w => w.test(subj ?? '')))
     if (!hit) return { none: `no commit for ${ids.join(' ')} between ${fork.slice(0, 7)}..${branch}` }
     const [sha, subj] = [hit[0]!, hit[1] ?? '']
     const said = `${sha.slice(0, 7)} "${subj}"`
@@ -259,7 +273,7 @@ async function closeOnce($: EngineInterface): Promise<void> {
   await closeConfirm($, null)
   const n = want.n
   const no = (why: string) => { $.ui.toast(`■ stage ${n} of ${v.id} not closed: ${why}`) }
-  const r = await readDiagnosis($, v.id)
+  const r = await readDiagnosis($, v.id, true)
   if (r.refused !== undefined) { no(r.refused); return }
   const s = r.run.stages.find(x => x.n === n)
   if (!s || !r.d.closable.some(c => c.n === n)) {

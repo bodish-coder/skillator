@@ -104,6 +104,8 @@ type World = {
   fork?: string                           // merge-base --fork-point HEAD <b>; unset: exit 1
   base?: string                           // merge-base HEAD <b>
   log: string                             // log --format=%H%x1f%s <range>
+  merges?: string                         // the merge commits log prints before w.log unless --no-merges
+  mainline?: string                       // rev-list --first-parent <fork>..HEAD: HEAD's own line since the fork
   reflog?: string                         // the run branch's reflog, newest first; unset: no reflog
   stageWrites: (readonly string[])[]      // relay-morpheus ... stage argv
   stageResult?: ProcessRunResult
@@ -158,7 +160,8 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
     if (isGit && a[1] === 'rev-parse') return { value: w.branches[a[4]!] ? ran('9a9a\n') : ran('', 1) }
     if (isGit && a[1] === 'merge-base' && a[2] === '--fork-point') return { value: w.fork ? ran(w.fork + '\n') : ran('', 1) }
     if (isGit && a[1] === 'merge-base' && a[2] === 'HEAD') return { value: w.base ? ran(w.base + '\n') : ran('', 1) }
-    if (isGit && a[1] === 'log') return { value: ran(w.log) }
+    if (isGit && a[1] === 'log') return { value: ran((a.includes('--no-merges') ? '' : w.merges ?? '') + w.log) }
+    if (isGit && a[1] === 'rev-list' && a[2] === '--first-parent') return { value: ran(w.mainline ?? '') }
     if (isGit && a[1] === 'reflog' && a[2] === 'exists') return { value: ran('', w.reflog ? 0 : 1) }
     if (isGit && a[1] === 'rev-list' && a[2] === '--walk-reflogs') return { value: ran(w.reflog ?? '') }
     if (isGit && a[1] === 'merge-base') return { value: ran('', w.git[a[3]!] ?? 128) }
@@ -711,7 +714,7 @@ test('F104 the sha from the run branch\'s own range, ticket id matched case-inse
   expect((await ui.find({ key: 'diag:close:why:137' }))?.text).toBe(`c0ffee0 "b10: muse pane" on ${BRANCH}`)
   expect(w.runs).toContainEqual(['git', 'rev-parse', '--verify', '--quiet', BRANCH])
   expect(w.runs).toContainEqual(['git', 'merge-base', '--fork-point', 'HEAD', BRANCH])
-  expect(w.runs).toContainEqual(['git', 'log', '--format=%H%x1f%s', 'f0f0..' + BRANCH])
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'f0f0..' + BRANCH])
   expect(w.runs).toContainEqual(['git', 'merge-base', '--is-ancestor', SHA_C, 'HEAD'])
   await ui.press({ key: 'diag:close:137' })
   await ui.press({ key: 'diag:close:go' })
@@ -722,7 +725,7 @@ test('F104 the sha from the run branch\'s own range, ticket id matched case-inse
   w.base = 'b0b0'
   await again(ui, clock)
   expect(w.runs).toContainEqual(['git', 'merge-base', 'HEAD', BRANCH])
-  expect(w.runs).toContainEqual(['git', 'log', '--format=%H%x1f%s', 'b0b0..' + BRANCH])
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'b0b0..' + BRANCH])
   expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
   // merged into HEAD: merge-base answers the tip (an empty range); the branch's oldest reflog entry is its fork
   w.base = 'a7a7'
@@ -730,8 +733,49 @@ test('F104 the sha from the run branch\'s own range, ticket id matched case-inse
   await again(ui, clock)
   expect(w.runs).toContainEqual(['git', 'reflog', 'exists', 'refs/heads/' + BRANCH])
   expect(w.runs).toContainEqual(['git', 'rev-list', '--walk-reflogs', 'refs/heads/' + BRANCH])
-  expect(w.runs).toContainEqual(['git', 'log', '--format=%H%x1f%s', 'f1f1..' + BRANCH])
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'f1f1..' + BRANCH])
   expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
+  await ui.unmount()
+})
+
+test('F104 a stage merge or a board commit naming the ticket, newer than its own commit, is never the sha', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~'))
+  const [SHA_M, SHA_B] = ['m1'.padEnd(40, '1'), 'b0a4d'.padEnd(40, '2')]
+  w.branches = { [BRANCH]: true }
+  w.fork = 'f0f0'
+  w.merges = `${SHA_M}\x1fmerge stage 140 (run/RUN-0020-marathon-b10-s140)\n`
+  // main merged into the run branch: its board commit falls in the range, newer, and on HEAD
+  w.log = `${SHA_B}\x1fboard: testing B10\n${SHA_C}\x1fB10: muse pane\n`
+  w.git = { ...w.git, [SHA_M]: 0, [SHA_B]: 0, [SHA_C]: 0 }
+  const ui = await diagnoseOpen($, clock)
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'f0f0..' + BRANCH])
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
+  await ui.unmount()
+})
+
+test('F104 a fork before the run (branch -f from main~3, reset forward): HEAD\'s own line since the fork is never the sha', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~'))
+  w.branches = { [BRANCH]: true }
+  w.reflog = 'a7a7\nf1f1\n'
+  w.log = `${SHA_E}\x1fB10: old main work on B10\n`
+  w.mainline = `9a9a\n${SHA_E}\n`
+  w.git[SHA_E] = 0
+  const ui = await diagnoseOpen($, clock)
+  expect(w.runs).toContainEqual(['git', 'rev-list', '--first-parent', 'f1f1..HEAD'])
+  expect(await closeKeys(ui)).toEqual([])
+  expect(await diagLines(ui)).toContain(`stage 137: no commit for B10 between f1f1..${BRANCH} - close by hand`)
+  w.log = `${SHA_C}\x1fB10: muse pane\n${SHA_E}\x1fB10: old main work on B10\n`
+  w.git[SHA_C] = 0
+  await again(ui, clock)
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
+  await ui.unmount()
+})
+
+test('F104 a run-file branch starting with - never reaches git', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~').replace('branch: run/RUN-0020-marathon', 'branch: --output=x'))
+  const ui = await diagnoseOpen($, clock)
+  expect(w.runs.some(a => a[0] === 'git' && a.some(x => x.startsWith('--output')))).toBe(false)
+  expect(await diagLines(ui)).toContain('stage 137: run branch "--output=x" starts with - - not asked of git - close by hand')
   await ui.unmount()
 })
 
@@ -801,6 +845,16 @@ test('F104 the confirm re-checks: a driver alive since, or a stage no longer ope
   await clock.settle()
   expect(w.toasts.at(-1)).toBe('■ stage 137 of RUN-0020 not closed: stage 137 is no longer open')
   expect(w.stageWrites).toEqual([])
+  // its ticket moved [x] -> [~] on the board since the last poll: TICKETS.md is read again, refused
+  w.resume['RUN-0020'] = WITH_CELL('~', 'beef01')
+  await again(ui, clock)
+  await ui.press({ key: 'diag:close:137' })
+  w.files['/r/TICKETS.md'] = B10_BUILT.replace('- [x] B10 — muse', '- [~] B10 — muse')
+  await ui.press({ key: 'diag:close:go' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toBe('■ stage 137 of RUN-0020 not closed: stage 137 is no longer closable')
+  expect(w.stageWrites).toEqual([])
+  w.files['/r/TICKETS.md'] = B10_BUILT
   // the sha moved since the confirm: refused too
   w.resume['RUN-0020'] = WF_RUN(STALE, '~')
   w.branches = { [BRANCH]: true }
