@@ -502,8 +502,8 @@ function Get-Mode {
 # F109: "@sid:owner:mode", or '' when this session has no tag.
 function Get-TagText([string]$me) {
   $tag = Get-SessionTag
-  $m = Get-Mode
   if ($tag -eq '') { return '' }
+  $m = Get-Mode
   if ($me -eq '') { $me = [string](Get-Me).me }
   $o = $me.TrimStart('@'); if ($o -eq '') { $o = '-' }
   return "@${tag}:${o}:$m"
@@ -608,9 +608,9 @@ function Do-Whoami([string[]]$a) {
   if ($a.Count -ne 0) { Fail 'usage: whoami' }
   $me = Get-Me
   if (-not $me.me) { Fail $me.why }
-  $tag = Get-SessionTag; $m = Get-Mode
+  $tag = Get-SessionTag
   if ($tag -eq '') { return $me.me }
-  return @($me.me, "session: @$tag  mode: $m")
+  return @($me.me, "session: @$tag  mode: $(Get-Mode)")
 }
 
 # F109: the trailing tag only - relay-morpheus's board flip stamps through this.
@@ -1889,6 +1889,7 @@ function Invoke-Selftest {
     Eq 'F106 solo start, no owner' (Run start F1) "- [~] F1 $dash Thing (@cc-dddddd)"
     Eq 'stamp with no team' (AsSess '0a1b-4c5d-AB12CD' '' { Run stamp F1 }) "- [~] F1 $dash Thing (@cc-o0kb:-:direct)"
     Eq 'solo tag' (Run tag F1) "- [~] F1 $dash Thing (@cc-o0kb:-:direct)"
+    Eq 'bad mode, no session: nothing stamped, nothing refused' (AsMode 'bogus' { Run tag F1 }) "- [~] F1 $dash Thing (@cc-o0kb:-:direct)"
 
     # --- F66: the opt-in Teams status post runs after a successful edit and never
     # fails it; off (the default) it never runs. The Workflows URL is loopback port 1:

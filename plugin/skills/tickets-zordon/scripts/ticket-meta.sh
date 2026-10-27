@@ -461,8 +461,9 @@ mode_of() {
 # F109: SET_TAG <- "@sid:owner:mode", or '' when this session has no tag.
 tag_text() {
   SET_TAG=''
-  session_tag; mode_of
+  session_tag
   [ -n "$STAG" ] || return 0
+  mode_of
   [ -n "${ME:-}" ] || me_of || :
   o=${ME#@}; SET_TAG="@$STAG:${o:--}:$MODE"
 }
@@ -546,8 +547,8 @@ cmd_whoami() {
   [ $# -eq 0 ] || die "usage: whoami"
   me_of || die "$ME_WHY"
   echo "$ME"
-  session_tag; mode_of
-  [ -z "$STAG" ] || echo "session: @$STAG  mode: $MODE"
+  session_tag
+  [ -z "$STAG" ] || { mode_of; echo "session: @$STAG  mode: $MODE"; }
 }
 
 # F109: the trailing tag only - relay-morpheus's board flip stamps through this.
@@ -1683,6 +1684,7 @@ selftest() {
   eq "F106 solo start, no owner" "$(run start F1)" "- [~] F1 $D Thing (@cc-dddddd)"
   eq "stamp with no team" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD sh "$self" stamp F1 2>/dev/null | tr -d '\r')" "- [~] F1 $D Thing (@cc-o0kb:-:direct)"
   eq "solo tag" "$(run tag F1)" "- [~] F1 $D Thing (@cc-o0kb:-:direct)"
+  eq "bad mode, no session: nothing stamped, nothing refused" "$(SKILLATOR_MODE=bogus sh "$self" tag F1 2>&1 | tr -d '\r')" "- [~] F1 $D Thing (@cc-o0kb:-:direct)"
 
   # --- F66: the opt-in Teams status post runs after a successful edit and never
   # fails it; off (the default) it never runs. The Workflows URL is loopback port 1:
