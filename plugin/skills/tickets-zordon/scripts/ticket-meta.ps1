@@ -9,6 +9,7 @@
 #   ticket-meta.ps1 team add @handle "Name" email[,email...] | team remove @handle | team list
 #   ticket-meta.ps1 team lead @handle|- | whoami | claim <ID>... | pick [ID...]   (F80)
 #   ticket-meta.ps1 iam @handle   (F92: this session's owner; whoami reads it first)
+#   ticket-meta.ps1 stamp <ID> | session   (F109: the (@sid:owner:mode) tag; `<sid> <mode>`)
 #   ticket-meta.ps1 reconcile [ID...] | unblock <ID> | start <ID>   (F81)
 #
 # F82: every board write runs board-fresh.ps1 first (a refusal: its report, exit 2)
@@ -294,7 +295,7 @@ function Set-Tag([string]$line, [string]$key, [string]$val) {
 function Set-Note([string]$line, [string]$note, [string]$pat) {
   $m = [regex]::Match($line, $pat)
   if ($m.Success) { return $line.Substring(0, $m.Index) + $note + $line.Substring($m.Index + $m.Length) }
-  $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$')
+  $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z0-9_.:-]+\)[ \t]*$')
   if ($sm.Success) { return $line.Substring(0, $sm.Index) + $note + $line.Substring($sm.Index) }
   return $line.TrimEnd(' ', "`t") + $note
 }
@@ -403,8 +404,12 @@ function Edit-Line([string]$id, [hashtable]$o) {
     # that session afterwards, so it can be told its ticket moved.
     $warn = $null
     # F62: [~] -> [%] is the working session's own next step, not a move away from it.
-    if ($mk -ceq '~' -and $o.mark -and $o.mark -cne '~' -and $o.mark -cne '%') {
-      $sm = [regex]::Match($line, '[ \t]*\((@[A-Za-z]+-[A-Za-z0-9]+)\)[ \t]*$')
+    $moved = $mk -ceq '~' -and $o.mark -and $o.mark -cne '~' -and $o.mark -cne '%'
+    # F109: every write stamps this session's tag - not a move out of [~] (A143)
+    $tagText = ''
+    if (-not $moved) { $tagText = Get-TagText ([string]$o.me) }
+    if ($moved) {
+      $sm = [regex]::Match($line, '[ \t]*\((@[A-Za-z0-9_.:-]+)\)[ \t]*$')
       if ($sm.Success) {
         $warn = "warning: $id was in progress under $($sm.Groups[1].Value) - its box left [~], the session tag stays; tell that session"
       } else {
@@ -431,6 +436,11 @@ function Edit-Line([string]$id, [hashtable]$o) {
     if ($o.verified) { $line = ([regex]'[ \t]*\(verify failed \d{4}-\d{2}-\d{2}: [^()]*\)').Replace($line, '') }   # every dated one
     if ($o.verified) { $line = Set-Note $line (' **Verified ' + $o.verified + '**') '[ \t]*\*\*Verified [^*]*\*\*' }
     if ($o.vfail) { $line = Set-Note $line (' (verify failed ' + $o.vfail + ')') '[ \t]*\(verify failed [^()]*\)' }
+    # F109: the trailing session tag - replaced (old or new shape) or appended
+    if ($tagText -ne '') {
+      $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z0-9_.:-]+\)[ \t]*$')
+      if ($sm.Success) { $line = $line.Substring(0, $sm.Index) + " ($tagText)" } else { $line = $line.TrimEnd(' ', "`t") + " ($tagText)" }
+    }
     $lines[$i] = $line + $cr
     $tmp = "$f.ticket-meta.$PID"
     [System.IO.File]::WriteAllBytes($tmp, $Utf8.GetBytes([string]::Join([string][char]10, $lines)))
@@ -465,15 +475,44 @@ function Get-IdAndHandle([string]$cmd, [string[]]$a) {
 }
 
 # F92: this session's tag as tickets-zordon "Who touched it" names it, no @:
-# SKILLATOR_SESSION (any host), else Claude Code's session id -> cc-<last 6>; else ''.
+# SKILLATOR_SESSION (any host), else Claude Code's session id -> cc-<code> (F109); else ''.
 function Get-SessionTag {
   $t = "$env:SKILLATOR_SESSION".TrimStart('@').ToLowerInvariant()
-  if ($t -eq '' -and "$env:CLAUDE_CODE_SESSION_ID" -ne '') {
-    $s = ("$env:CLAUDE_CODE_SESSION_ID" -replace '[^A-Za-z0-9]', '').ToLowerInvariant()
-    $t = 'cc-' + $s.Substring([Math]::Max(0, $s.Length - 6))
-  }
+  if ($t -eq '' -and "$env:CLAUDE_CODE_SESSION_ID" -ne '') { $t = 'cc-' + (Get-SessionCode "$env:CLAUDE_CODE_SESSION_ID") }
   if ($t -cnotmatch '\A[a-z0-9_-]+\z') { return '' }   # a file name: no / or ..
   return $t
+}
+
+# F109: the 4-character session code - the same fold as ticket-meta.sh session_code.
+function Get-SessionCode([string]$id) {
+  $h = 0
+  foreach ($b in $Utf8.GetBytes($id)) { $h = ($h * 33 + $b) % 1679616 }
+  $d = '0123456789abcdefghijklmnopqrstuvwxyz'; $s = ''
+  for ($i = 0; $i -lt 4; $i++) { $s = [string]$d[$h % 36] + $s; $h = [math]::Floor($h / 36) }
+  return $s
+}
+
+# F109: SKILLATOR_MODE, one of direct|agent|run|workflow (default direct).
+function Get-Mode {
+  $m = "$env:SKILLATOR_MODE"; if ($m -eq '') { $m = 'direct' }
+  if (@('direct', 'agent', 'run', 'workflow') -cnotcontains $m) { Fail "SKILLATOR_MODE must be direct|agent|run|workflow, not '$m'" }
+  return $m
+}
+
+# F109: "@sid:owner:mode", or '' when this session has no tag.
+function Get-TagText([string]$me) {
+  $tag = Get-SessionTag
+  $m = Get-Mode
+  if ($tag -eq '') { return '' }
+  if ($me -eq '') { $me = [string](Get-Me).me }
+  $o = $me.TrimStart('@'); if ($o -eq '') { $o = '-' }
+  return "@${tag}:${o}:$m"
+}
+
+# The id an .owner file's line 2 must name: the session id, else (SKILLATOR_SESSION alone) the tag.
+function Get-SessionId([string]$tag) {
+  if ("$env:CLAUDE_CODE_SESSION_ID" -ne '') { return "$env:CLAUDE_CODE_SESSION_ID" }
+  return $tag
 }
 
 # F92: iam @handle - this session's owner, asked at session start (grayskull-power's
@@ -493,7 +532,8 @@ function Do-Iam([string[]]$a) {
   $sd = (Get-MainRoot) + '/.skillator/sessions'
   New-Item -ItemType Directory -Force -Path $sd | Out-Null
   if (-not (Test-Path -LiteralPath "$sd/.gitignore" -PathType Leaf)) { [System.IO.File]::WriteAllText("$sd/.gitignore", "*`n") }
-  [System.IO.File]::WriteAllText("$sd/$tag.owner", "$h`n")
+  # F109: line 2 names the session, so a colliding code's file is not taken for this one's
+  [System.IO.File]::WriteAllText("$sd/$tag.owner", "$h`nsession: $(Get-SessionId $tag)`n")
   return "$h owns session @$tag"
 }
 
@@ -508,8 +548,11 @@ function Get-Me {
   $tag = Get-SessionTag
   if ($tag -ne '') {
     $sf = (Get-MainRoot) + "/.skillator/sessions/$tag.owner"
-    if (Test-Path -LiteralPath $sf -PathType Leaf) {
-      $h = ([System.IO.File]::ReadAllText($sf).Replace("`r", '').Split([char]10))[0]
+    $fl = @()
+    if (Test-Path -LiteralPath $sf -PathType Leaf) { $fl = [System.IO.File]::ReadAllText($sf).Replace("`r", '').Split([char]10) }
+    # F109: a file whose line 2 names another session is not this one's (a one-line file is)
+    if ($fl.Count -gt 0 -and ($fl.Count -lt 2 -or $fl[1] -eq '' -or $fl[1] -ceq "session: $(Get-SessionId $tag)")) {
+      $h = $fl[0]
       foreach ($t in $rows) { if ($t.h -ceq $h) { return @{ me = $h; why = '' } } }
       return @{ me = ''; why = "session owner $h ($sf) is not in .skillator/team.md - iam @handle" }
     }
@@ -565,7 +608,24 @@ function Do-Whoami([string[]]$a) {
   if ($a.Count -ne 0) { Fail 'usage: whoami' }
   $me = Get-Me
   if (-not $me.me) { Fail $me.why }
-  return $me.me
+  $tag = Get-SessionTag; $m = Get-Mode
+  if ($tag -eq '') { return $me.me }
+  return @($me.me, "session: @$tag  mode: $m")
+}
+
+# F109: the trailing tag only - relay-morpheus's board flip stamps through this.
+function Do-Stamp([string[]]$a) {
+  if ($a.Count -ne 1) { Fail 'usage: stamp <ID>' }
+  $id = Get-NormId $a[0]
+  if ((Get-SessionTag) -eq '') { return 'no change: no session tag' }
+  return (Edit-Line $id @{ cmd = 'stamp' })
+}
+
+function Do-Session([string[]]$a) {
+  if ($a.Count -ne 0) { Fail 'usage: session' }
+  $tag = Get-SessionTag; $m = Get-Mode
+  if ($tag -eq '') { $tag = '-' }
+  return "$tag $m"
 }
 
 # F80: planning or dispatching a ticket claims it: [owner: <me>], the box kept.
@@ -826,7 +886,7 @@ function Do-Reconcile([string[]]$a) {
     $k = $mk[$id]; $line = $text[$id]
     if ($want.Count -gt 0 -and -not $want.ContainsKey($id)) { continue }
     if (@(' ', '~', '!') -cnotcontains $k) { continue }
-    if ($k -ceq '~' -and $line -cmatch '\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$') { continue }
+    if ($k -ceq '~' -and $line -cmatch '\(@[A-Za-z0-9_.:-]+\)[ \t]*$') { continue }
     $s = $null; $sn = ''
     if ($st.ContainsKey($id)) { $s = $st[$id]; $sn = 'RUN-{0:D4} stage {1}' -f $s.run, $s.num }
     # landed: a run stage on it decides (only x is), else a commit on main
@@ -1171,6 +1231,8 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'team' { return (Do-Team $a) }
     'whoami' { return (Do-Whoami $a) }
     'iam' { return (Do-Iam $a) }
+    'stamp' { return (Do-Stamp $a) }
+    'session' { return (Do-Session $a) }
     'claim' { return (Do-Claim $a) }
     'pick' { return (Do-Pick $a) }
     'reconcile' { return (Do-Reconcile $a) }
@@ -1228,13 +1290,14 @@ function Invoke-Selftest {
   $dash = [string][char]0x2014
   $here = Get-Location
   # F80: who "me" is comes from git's user.email - never this machine's global one
-  $savedMe = @($env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME, $env:EMAIL, $env:SKILLATOR_SESSION, $env:CLAUDE_CODE_SESSION_ID)
+  $savedMe = @($env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME, $env:EMAIL, $env:SKILLATOR_SESSION, $env:CLAUDE_CODE_SESSION_ID, $env:SKILLATOR_MODE)
   # F82: board writes commit; EMAIL is git's last fallback, so user.email (whoami) stays unset
   [System.IO.File]::WriteAllText("$T/gitconfig", "[user]`n`tname = t`n")
   $env:EMAIL = 'board@selftest.invalid'
   $env:GIT_CONFIG_GLOBAL = "$T/gitconfig"
   Remove-Item Env:\SKILLATOR_ME -ErrorAction SilentlyContinue
   Remove-Item Env:\SKILLATOR_SESSION -ErrorAction SilentlyContinue
+  Remove-Item Env:\SKILLATOR_MODE -ErrorAction SilentlyContinue
   Remove-Item Env:\CLAUDE_CODE_SESSION_ID -ErrorAction SilentlyContinue
   function Eq([string]$name, $got, [string]$want) {
     $g = [string]::Join(' ', @($got))
@@ -1646,15 +1709,33 @@ function Invoke-Selftest {
     }
     $msg = ErrOf iam '@vidul'
     if ($msg -notmatch 'no session tag') { Write-Output "FAIL: iam with no session tag: [$msg]"; $script:fail = 1 }
-    Eq 'iam' (AsSess '0a1b-4c5d-AB12CD' '' { Run iam 'vidul' }) '@vidul owns session @cc-ab12cd'
-    if (-not (Test-Path -LiteralPath "$R/.skillator/sessions/cc-ab12cd.owner")) { Write-Output 'FAIL: iam wrote no .skillator/sessions/cc-ab12cd.owner'; $script:fail = 1 }
+    # F109: the sid is cc-<4-char code of the raw session id>; iam records the id on line 2
+    function AsMode([string]$m, [scriptblock]$b) { $p = $env:SKILLATOR_MODE; $env:SKILLATOR_MODE = $m; try { return (& $b) } finally { $env:SKILLATOR_MODE = $p } }
+    $sof = "$R/.skillator/sessions/cc-o0kb.owner"
+    Eq 'iam' (AsSess '0a1b-4c5d-AB12CD' '' { Run iam 'vidul' }) '@vidul owns session @cc-o0kb'
+    if (-not (Test-Path -LiteralPath $sof)) { Write-Output 'FAIL: iam wrote no .skillator/sessions/cc-o0kb.owner'; $script:fail = 1 }
+    if (Test-Path -LiteralPath $sof) { Eq 'owner file names the session' ([System.IO.File]::ReadAllText($sof).Split([char]10)[1]) 'session: 0a1b-4c5d-AB12CD' }
     if (@(& git status --porcelain -- .skillator).Count -ne 0) { Write-Output 'FAIL: the session file is not git-ignored'; $script:fail = 1 }
-    Eq 'whoami by session file' (AsSess 'x-ab12cd' '' { AsMe 'neo' { Run whoami } }) '@vidul'
-    Eq 'whoami by SKILLATOR_SESSION' (AsSess '' '@cc-ab12cd' { Run whoami }) '@vidul'
-    Eq 'another session falls back' (AsSess 'x-ffffff' '' { AsMe 'neo' { Run whoami } }) '@neo'
+    Eq 'whoami by session file' (AsSess '0a1b-4c5d-AB12CD' '' { AsMe 'neo' { Run whoami } }) '@vidul session: @cc-o0kb  mode: direct'
+    Eq 'iam by SKILLATOR_SESSION' (AsSess '' '@pi-ab12' { Run iam 'asha' }) '@asha owns session @pi-ab12'
+    Eq 'whoami by SKILLATOR_SESSION' (AsSess '' '@pi-ab12' { Run whoami }) '@asha session: @pi-ab12  mode: direct'
+    Eq 'another session falls back' (AsSess 'x-ffffff' '' { AsMe 'neo' { Run whoami } }) '@neo session: @cc-5qtl  mode: direct'
+    # a colliding code (same file name, another id on line 2) is nobody's: falls back, never the other's owner
+    W $sof "@vidul`nsession: some-other-id`n"
+    Eq 'collision falls back' (AsSess '0a1b-4c5d-AB12CD' '' { AsMe 'neo' { Run whoami } }) '@neo session: @cc-o0kb  mode: direct'
+    W $sof "@vidul`n"   # a pre-F109 one-line file is honoured
+    Eq 'one-line owner file' (AsSess '0a1b-4c5d-AB12CD' '' { Run whoami }) '@vidul session: @cc-o0kb  mode: direct'
+    Eq 'session' (AsSess '0a1b-4c5d-AB12CD' '' { AsMode 'run' { Run session } }) 'cc-o0kb run'
+    Eq 'session, none' (Run session) '- direct'
+    $msg = AsMode 'bogus' { ErrOf session }
+    if ($msg -notmatch [regex]::Escape("SKILLATOR_MODE must be direct|agent|run|workflow, not 'bogus'")) { Write-Output "FAIL: bad mode message: [$msg]"; $script:fail = 1 }
+    # the code vectors (ps1 must match sh and team.ts)
+    foreach ($v in @('0a1b-4c5d-AB12CD o0kb', 'x-ab12cd nzua', 'x-ffffff 5qtl', '982c2a-ab12-cd34-EF56 baru', 'sid-1 icym', 'ab 02jn', '147ee797-591f-4b4f-98fa-687ea69de7d9 im79')) {
+      $vv = $v.Split(' '); Eq "code $($vv[0])" (AsSess $vv[0] '' { Run session }) "cc-$($vv[1]) direct"
+    }
     if (-not (AsSess 'x-ab12cd' '' { Refused iam '@nobody' })) { Write-Output 'FAIL: iam took a handle not on the team'; $script:fail = 1 }
-    W "$R/.skillator/sessions/cc-ab12cd.owner" "@nobody`n"
-    $msg = AsSess 'x-ab12cd' '' { ErrOf whoami }
+    W $sof "@nobody`n"
+    $msg = AsSess '0a1b-4c5d-AB12CD' '' { ErrOf whoami }
     if ($msg -notmatch 'session owner @nobody') { Write-Output "FAIL: session owner refusal: [$msg]"; $script:fail = 1 }
     Remove-Item -LiteralPath "$R/.skillator/sessions" -Recurse -Force
     # pick: unassigned and mine picked, another's skipped with its owner; not on the team -> only unassigned
@@ -1679,6 +1760,17 @@ function Invoke-Selftest {
     & git config user.email ghost@x.com
     Eq 'F106 start, not on the team' (Run start F13) "- [~] F13 $dash Nobody note: F13 not claimed - not on the team: add ghost@x.com to .skillator/team.md"
     & git config user.email asha@x.com
+    # F109: with a session id every write stamps (@sid:owner:mode); a move out of [~] keeps the worker's tag (A143)
+    W $board ([System.IO.File]::ReadAllText($board, $Utf8) + "- [ ] F14 $dash Fresh two`n")
+    Commit 'asha@x.com' 'board: f109 row'
+    Eq 'stamp on start' @(AsSess '0a1b-4c5d-AB12CD' '' { Run start F14 })[0] "- [~] F14 $dash Fresh two [owner: @asha] (@cc-o0kb:asha:direct)"
+    Eq 'stamp replaces, mode run' @(AsSess '0a1b-4c5d-AB12CD' '' { AsMode 'run' { Run testing F14 live look } })[0] "- [%] F14 $dash Fresh two [owner: @asha] (testing: live look) (@cc-o0kb:asha:run)"
+    Eq 'stamp replaces an old-shape tag' @(AsSess '0a1b-4c5d-AB12CD' '' { AsMode 'agent' { Run tag F7 } })[0] "- [~] F7 $dash Working [owner: @asha] (@cc-o0kb:asha:agent)"
+    $o = @(AsSess 'x-ffffff' '' { AsMe 'asha' { Run assign F7 '@neo' } })
+    Eq "A143: a move out of [~] keeps the worker's tag" $o[0] "- [ ] F7 $dash Working [owner: @neo] (@cc-o0kb:asha:agent)"
+    if ([string]::Join(' ', $o) -notmatch 'F7 was in progress under @cc-o0kb:asha:agent') { Write-Output "FAIL: the warning names the new-shape tag: [$o]"; $script:fail = 1 }
+    Eq 'stamp' (AsSess 'x-ffffff' '' { AsMe 'neo' { AsMode 'workflow' { Run stamp F7 } } }) "- [ ] F7 $dash Working [owner: @neo] (@cc-5qtl:neo:workflow)"
+    Eq 'stamp, no session' (Run stamp F7) 'no change: no session tag'
     # review: a closed ticket is not claimed
     if (-not (Refused claim F8)) { Write-Output 'FAIL: claim of a closed ticket succeeded'; $script:fail = 1 }
     if ([System.IO.File]::ReadAllText($board, $Utf8) -cnotmatch "(?m)^- \[-\] F8 $dash Dropped`$") { Write-Output 'FAIL: claim wrote onto a closed ticket'; $script:fail = 1 }
@@ -1795,7 +1887,8 @@ function Invoke-Selftest {
     Eq 'solo claim' (Run claim F1) 'no change: no .skillator/team.md - nothing to claim'
     if (-not (Refused whoami)) { Write-Output 'FAIL: whoami answered with no team.md'; $script:fail = 1 }
     Eq 'F106 solo start, no owner' (Run start F1) "- [~] F1 $dash Thing (@cc-dddddd)"
-    Eq 'solo tag' (Run tag F1) "- [~] F1 $dash Thing (@cc-dddddd)"
+    Eq 'stamp with no team' (AsSess '0a1b-4c5d-AB12CD' '' { Run stamp F1 }) "- [~] F1 $dash Thing (@cc-o0kb:-:direct)"
+    Eq 'solo tag' (Run tag F1) "- [~] F1 $dash Thing (@cc-o0kb:-:direct)"
 
     # --- F66: the opt-in Teams status post runs after a successful edit and never
     # fails it; off (the default) it never runs. The Workflows URL is loopback port 1:
@@ -1895,7 +1988,7 @@ function Invoke-Selftest {
   } finally {
     Set-Location -LiteralPath $here
     $env:GIT_CONFIG_GLOBAL = $savedMe[0]; $env:SKILLATOR_ME = $savedMe[1]; $env:EMAIL = $savedMe[2]
-    $env:SKILLATOR_SESSION = $savedMe[3]; $env:CLAUDE_CODE_SESSION_ID = $savedMe[4]
+    $env:SKILLATOR_SESSION = $savedMe[3]; $env:CLAUDE_CODE_SESSION_ID = $savedMe[4]; $env:SKILLATOR_MODE = $savedMe[5]
     Remove-Item -LiteralPath $T -Recurse -Force -ErrorAction SilentlyContinue
   }
   if ($script:fail -ne 0) { exit 1 }
@@ -1903,7 +1996,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|claim|pick|reconcile|unblock|start|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest')
   exit 1
 }
 $cmd = [string]$args[0]

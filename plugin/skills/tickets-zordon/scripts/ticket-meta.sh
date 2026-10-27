@@ -1053,7 +1053,7 @@ selftest() {
   T=$(mktemp -d 2>/dev/null || mktemp -d -t ticketmeta)
   trap 'rm -rf "$T"' EXIT
   # F80: who "me" is comes from git's user.email - never this machine's global one
-  : > "$T/gitconfig"; GIT_CONFIG_GLOBAL="$T/gitconfig"; export GIT_CONFIG_GLOBAL; unset SKILLATOR_ME SKILLATOR_SESSION CLAUDE_CODE_SESSION_ID
+  : > "$T/gitconfig"; GIT_CONFIG_GLOBAL="$T/gitconfig"; export GIT_CONFIG_GLOBAL; unset SKILLATOR_ME SKILLATOR_SESSION CLAUDE_CODE_SESSION_ID SKILLATOR_MODE
   # F82: board writes commit; EMAIL is git's last fallback, so user.email (whoami) stays unset
   printf '[user]\n\tname = t\n' > "$T/gitconfig"; EMAIL=board@selftest.invalid; export EMAIL
   fail=0
