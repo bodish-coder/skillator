@@ -176,7 +176,7 @@ async function readDiagnosis($: EngineInterface, id: string, fresh = false) {
 }
 
 // F104: the sha Close lands for stage s - its landed cell when HEAD has it, else the newest commit
-// on the run branch's own range (fork point..branch) naming one of its tickets, when HEAD has it.
+// on the run branch's own range (fork point..branch, less what main merged in) naming one of its tickets, when HEAD has it.
 // A git exit other than 0/1 (or git not askable) is `unchecked`, never a missing commit.
 type ShaFor = { sha: string; why: string } | { none: string } | { unchecked: string }
 async function shaFor(s: Stage, resume: string, g: { ask: Ask; why: () => string }): Promise<ShaFor> {
@@ -207,10 +207,15 @@ async function shaFor(s: Stage, resume: string, g: { ask: Ask; why: () => string
     const ids = ticketsOf(s)
     // the subject leads with the id: never a stage merge or a "board: testing F1" naming it
     const words = ids.map(id => new RegExp('^\\s*' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9])', 'i'))
-    // HEAD's own line since the fork is never the run's: a fork before the run, main merged into it
-    const mainline = new Set((await git(['rev-list', '--first-parent', `${fork}..HEAD`], [0])).stdout.split('\n'))
-    const hit = (await git(['log', '--no-merges', '--format=%H%x1f%s', `${fork}..${branch}`], [0])).stdout.split('\n')
-      .map(l => l.split('\x1f')).find(([h, subj]) => h && !mainline.has(h) && words.some(w => w.test(subj ?? '')))
+    // what main brought into the run is never the run's: on the run's own first-parent line, a merge whose
+    // second parent did not grow from the run's first own commit is main merged in (a stage branch forks
+    // off the run line, so its merge stays); the log hides each one's second parent
+    const line = (await git(['rev-list', '--first-parent', '--parents', `${fork}..${branch}`], [0])).stdout.trim().split('\n').filter(Boolean).map(l => l.split(' '))
+    const own = line.at(-1)?.[0]
+    const hide: string[] = []
+    for (const [, , p2] of line) if (p2 && !(own && (await git(['merge-base', '--is-ancestor', own, p2])).exitCode === 0)) hide.push('^' + p2)
+    const hit = (await git(['log', '--no-merges', '--format=%H%x1f%s', `${fork}..${branch}`, ...hide], [0])).stdout.split('\n')
+      .map(l => l.split('\x1f')).find(([h, subj]) => h && words.some(w => w.test(subj ?? '')))
     if (!hit) return { none: `no commit for ${ids.join(' ')} between ${fork.slice(0, 7)}..${branch}` }
     const [sha, subj] = [hit[0]!, hit[1] ?? '']
     const said = `${sha.slice(0, 7)} "${subj}"`
