@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T02:53Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T02:54Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -11,7 +11,7 @@ branch: run/RUN-0023-pending-f100-f104
 | 168 | AAB0 F102 ops font size | x | build:opus | 2026-10-26T16:22Z | c297369 |
 | 169 | AAB1 F101 marathon without Workflow | x | subagent | 2026-10-27T01:47Z | f06d0fc |
 | 170 | AAB2 F103 explorer git actions | x | subagent | 2026-10-27T02:53Z | 7fc77ff |
-| 171 | AAB3 F104 diagnose close |   | - | - | - |
+| 171 | AAB3 F104 diagnose close | ~ | subagent | 2026-10-27T02:54Z | - |
 | 172 | verify review bump commit |   | - | - | - |
 | 173 | AAB4 F105 codex $ops opens the board | x | subagent | 2026-10-27T02:37Z | 1264371 |
 | 174 | merge origin/ccr-0af663c7-2ecnqn (F97 clone-odo) INTO main | x | main:opus | 2026-10-26T18:55Z | ca1f9e3 |
@@ -42,9 +42,28 @@ prompt: |
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### stage 171 - AAB3 F104 diagnose close  (dispatched 2026-10-27T02:54Z, @sher)
+run: -
+worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s171
+branch: run/RUN-0023-pending-f100-f104-s171
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket F104 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/66a4199e-bee7-472b-9aaa-61fc26982c2a/scratchpad/design-2026-10-26-f104-diagnose-close.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths name the main checkout C:/tools/Projects/skillator2/...; use the same relative paths under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 instead. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. CRITICAL: Close writes the run file only through relay-morpheus, after a confirm, with the driver re-checked after the confirm; every refusal in the ticket's Done line pinned by a test.
+
+  The ticket line, verbatim:
+  - [ ] F104 — Diagnose: close a finished run from the board. Split from F99 2026-10-26 (RUN-0022 stage 165): two whole-diff reviews of a Close button found it could land a stage under a live driver, on a parked or failed stage, or on a commit from main older than the run; F99 ships Diagnose read-only with the by-hand command instead. Done when: Close is offered only for pending/~ stages with no live driver, re-checked after the confirm as engageGo does; the sha is a commit on the run branch's own range (fork point..branch, ticket IDs matched case-insensitively) that HEAD contains, or the landed cell's sha when HEAD contains it; a git failure says not checked, never missing; tests pin each refusal and the argv; writes only through relay-morpheus.
+
+  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F104: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
 
 ## Chain
-driver: @sher 2026-10-27T02:38Z     hold: -     mode: agents
+driver: @sher 2026-10-27T02:54Z     hold: -     mode: agents
 ### AABZ - stage 167 - F100 build-jarvis UI entry
 tickets: F100 build/build
 files: plugin/skills/build-jarvis/SKILL.md,plugin/skills/build-jarvis/references/grade.md,plugin/skills/build-jarvis/references/route-hook.md,plugin/skills/build-jarvis/hooks/feature-route.sh,plugin/skills/build-jarvis/hooks/feature-route.ps1,plugin/skills/grayskull-power/SKILL.md,plugin/skills/grayskull-power/references/routing.md,plugin/skills/design-arwen/SKILL.md,plugin/skills/tui-tron/SKILL.md,plugin/practice/baselines/scenario-build-ui-feature.txt,plugin/practice/baselines/scenario-build-ui-only.txt,plugin/practice/baselines/green-build-ui-f100.txt
