@@ -1,9 +1,19 @@
 ---
-description: "Plan a marathon over the open tickets, or the IDs given: a relay-morpheus run file plus the saved plan (one implementer and one verifier per ticket, phases serial where tickets share files), shown with its agent count; no agents run (relay-morpheus)"
+description: "Plan a marathon over the open tickets, or the IDs given: a relay-morpheus run file plus the saved plan (one implementer and one verifier per ticket, phases serial where tickets share files), shown with its agent count; no agents run (relay-morpheus), sequential by default or parallel with an optional cap"
 ---
-Load the `relay-morpheus` skill ({{SKILLS}}/relay-morpheus/SKILL.md) and its references/marathon.md, "A saved Workflow marathon", Plan. Tickets: the words typed after the command (none = every open ticket on TICKETS.md; only the unassigned and yours, F80).
+Load the `relay-morpheus` skill ({{SKILLS}}/relay-morpheus/SKILL.md) and its references/marathon.md, "A saved Workflow marathon", Plan. Arguments: the words typed after the command - an optional mode first (`sequential` or `parallel`), then an optional count (a whole number of at least 1 or `max`), then ticket IDs (none = every open ticket on TICKETS.md; only the unassigned and yours, F80). No mode and no count = `sequential`; `sequential` takes no count (`sequential 2`: say so and stop); `parallel 1` runs as `1`. A first word that is neither a mode, a count nor a ticket ID (`0`, `two`) - say it is not an option and stop.
+
+| Typed | Runs | A phase holds | `RELAY_CHAIN_PARALLEL` on `chain dispatch` |
+|---|---|---|---|
+| nothing, `sequential`, `1` | sequential | one ticket | unset |
+| `parallel`, `max`, `parallel max` | parallel | every file-disjoint ticket that fits | the number of stages in the phase |
+| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |
+
+- `sequential` (the default): one ticket per phase, in board order, each stage planned `--after` the one before - one agent at a time (the implementer, then its verifier).
+- `parallel`: file-disjoint tickets side by side in one phase, each stage in its own worktree, merged on landing; a count caps a phase. Tickets whose files overlap never share a phase, whatever the mode.
 
 1. The run file is relay-morpheus's (`init`, `chain plan`) - never a hand-numbered row.
-2. The plan is `templates/marathon-workflow.js` copied beside the run file as `run-<0000>-<slug>.workflow.js`, `meta` and `PLAN` filled, nothing below PLAN edited. On this host /marathon-run reads it as data ("Run without the Workflow tool"), never executes it.
-3. With grayskull-power on (`.skillator/grayskull.md` present) every stage prompt opens with this line, and without it does not: `Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.`
-4. Plan only: no `chain dispatch`, no agent. End with the stages, the phases, the agent count, the plan's path and `run it: /marathon-run RUN-<0000>` - on this host with the Task tool, one Task per agent.
+2. Phases follow the mode (marathon.md, Mode): sequential - one ticket per phase in pick order, each stage `--after` the previous; parallel - file-disjoint tickets per phase, a count splitting a phase at N; `PLAN.mode` records the normalized mode (`1` and `parallel 1` become `sequential`). A ticket already a stage of an open run with a `.workflow.js` is listed as `planned in RUN-<id>`, not planned again.
+3. The plan is `templates/marathon-workflow.js` copied beside the run file as `run-<0000>-<slug>.workflow.js`, `meta` and `PLAN` filled, nothing below PLAN edited. On this host /marathon-run reads it as data ("Run without the Workflow tool"), never executes it.
+4. With grayskull-power on (`.skillator/grayskull.md` present) every stage prompt opens with this line, and without it does not: `Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.`
+5. Plan only: no `chain dispatch`, no agent. End with the stages, the phases, the agent count, the plan's path and `run it: /marathon-run RUN-<0000>` - on this host with the Task tool, one Task per agent.

@@ -7,6 +7,7 @@
 //                in it is on disk (`~`, its prompt in the In-flight block) before its agent exists.
 // args.worktrees - stage number -> the worktree `chain dispatch` named for it (a stage worktree
 //                when another stage was in flight); missing = PLAN.runWorktree.
+// PLAN.mode (F112) is the plan shape: 'sequential' = one ticket per phase, 'parallel' = file-disjoint tickets, 'parallel <N>' = at most N; the check below refuses a wider phase.
 // Returns one row per ticket: {stage, code, ticket, worktree, verdict}; verdict null = the agent died.
 // Agents: one implementer and one read-and-run-only verifier per ticket, both under its phase. Pure ASCII.
 // The agents never touch the board: each ticket is [~] and claimed before its phase runs - chain dispatch
@@ -16,7 +17,7 @@
 
 export const meta = {
   name: 'marathon-RUN-0000',
-  description: 'RUN-0000 <title>: one implementer per ticket, phases serial where tickets share files, one verifier per ticket in its phase',
+  description: 'RUN-0000 <title> (<mode>): one implementer per ticket, phases serial where tickets share files, one verifier per ticket in its phase',
   phases: [
     { title: 'Phase 1', detail: '<tickets in phase 1, e.g. F1 F2>' },
   ],
@@ -30,6 +31,7 @@ export const meta = {
 const PLAN = {
   run: 'RUN-0000',
   runWorktree: '<the run worktree init printed>',
+  mode: 'sequential', // 'sequential' | 'parallel' | 'parallel <N>' - the mode /marathon-plan or /marathon-run was given (F112)
   phases: [
     [
       { stage: 0, code: 'XXXX', ticket: 'F0', files: ['<path>'], done: '<the ticket Done line>', prompt: '<prompt file text>' },
@@ -61,6 +63,12 @@ const VERDICT = {
   },
   required: ['ticket', 'passed', 'sha', 'evidence'],
 }
+
+const cap = PLAN.mode === 'sequential' ? 1 : /^parallel \d+$/.test(PLAN.mode) ? Number(PLAN.mode.slice(9)) : PLAN.mode === 'parallel' ? Infinity : NaN
+if (Number.isNaN(cap) || (PLAN.mode !== 'sequential' && PLAN.mode !== 'parallel' && (!Number.isSafeInteger(cap) || cap < 2))) throw new Error(`PLAN.mode must be 'sequential', 'parallel' or 'parallel <N>' - got ${JSON.stringify(PLAN.mode)}`)
+PLAN.phases.forEach((p, i) => {
+  if (p.length > cap) throw new Error(`PLAN.mode ${PLAN.mode} needs ${cap === 1 ? 'one ticket per phase' : `at most ${cap} tickets per phase`} - phase ${i + 1} holds ${p.length}`)
+})
 
 const k = args && args.phase
 if (!Number.isInteger(k) || k < 1 || k > PLAN.phases.length) {
