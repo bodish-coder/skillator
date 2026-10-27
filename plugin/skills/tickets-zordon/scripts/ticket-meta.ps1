@@ -295,7 +295,7 @@ function Set-Tag([string]$line, [string]$key, [string]$val) {
 function Set-Note([string]$line, [string]$note, [string]$pat) {
   $m = [regex]::Match($line, $pat)
   if ($m.Success) { return $line.Substring(0, $m.Index) + $note + $line.Substring($m.Index + $m.Length) }
-  $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z0-9_.:-]+\)[ \t]*$')
+  $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$')
   if ($sm.Success) { return $line.Substring(0, $sm.Index) + $note + $line.Substring($sm.Index) }
   return $line.TrimEnd(' ', "`t") + $note
 }
@@ -409,7 +409,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
     $tagText = ''
     if (-not $moved) { $tagText = Get-TagText ([string]$o.me) }
     if ($moved) {
-      $sm = [regex]::Match($line, '[ \t]*\((@[A-Za-z0-9_.:-]+)\)[ \t]*$')
+      $sm = [regex]::Match($line, '[ \t]*\((@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+)\)[ \t]*$')
       if ($sm.Success) {
         $warn = "warning: $id was in progress under $($sm.Groups[1].Value) - its box left [~], the session tag stays; tell that session"
       } else {
@@ -438,7 +438,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
     if ($o.vfail) { $line = Set-Note $line (' (verify failed ' + $o.vfail + ')') '[ \t]*\(verify failed [^()]*\)' }
     # F109: the trailing session tag - replaced (old or new shape) or appended
     if ($tagText -ne '') {
-      $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z0-9_.:-]+\)[ \t]*$')
+      $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$')
       if ($sm.Success) { $line = $line.Substring(0, $sm.Index) + " ($tagText)" } else { $line = $line.TrimEnd(' ', "`t") + " ($tagText)" }
     }
     $lines[$i] = $line + $cr
@@ -480,6 +480,8 @@ function Get-SessionTag {
   $t = "$env:SKILLATOR_SESSION".TrimStart('@').ToLowerInvariant()
   if ($t -eq '' -and "$env:CLAUDE_CODE_SESSION_ID" -ne '') { $t = 'cc-' + (Get-SessionCode "$env:CLAUDE_CODE_SESSION_ID") }
   if ($t -cnotmatch '\A[a-z0-9_-]+\z') { return '' }   # a file name: no / or ..
+  # the dash is what tells a session tag from a title's own (@handle)
+  if ($t -notmatch '.-.') { Fail "SKILLATOR_SESSION must be @<agent>-<id>, not '$env:SKILLATOR_SESSION'" }
   return $t
 }
 
@@ -886,7 +888,7 @@ function Do-Reconcile([string[]]$a) {
     $k = $mk[$id]; $line = $text[$id]
     if ($want.Count -gt 0 -and -not $want.ContainsKey($id)) { continue }
     if (@(' ', '~', '!') -cnotcontains $k) { continue }
-    if ($k -ceq '~' -and $line -cmatch '\(@[A-Za-z0-9_.:-]+\)[ \t]*$') { continue }
+    if ($k -ceq '~' -and $line -cmatch '\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$') { continue }
     $s = $null; $sn = ''
     if ($st.ContainsKey($id)) { $s = $st[$id]; $sn = 'RUN-{0:D4} stage {1}' -f $s.run, $s.num }
     # landed: a run stage on it decides (only x is), else a commit on main
@@ -1730,7 +1732,7 @@ function Invoke-Selftest {
     $msg = AsMode 'bogus' { ErrOf session }
     if ($msg -notmatch [regex]::Escape("SKILLATOR_MODE must be direct|agent|run|workflow, not 'bogus'")) { Write-Output "FAIL: bad mode message: [$msg]"; $script:fail = 1 }
     # the code vectors (ps1 must match sh and team.ts)
-    foreach ($v in @('0a1b-4c5d-AB12CD o0kb', 'x-ab12cd nzua', 'x-ffffff 5qtl', '982c2a-ab12-cd34-EF56 baru', 'sid-1 icym', 'ab 02jn', '147ee797-591f-4b4f-98fa-687ea69de7d9 im79')) {
+    foreach ($v in @('0a1b-4c5d-AB12CD o0kb', 'x-ab12cd nzua', 'x-ffffff 5qtl', '982c2a-ab12-cd34-EF56 baru', 'sid-1 icym', 'ab 02jn', '147ee797-591f-4b4f-98fa-687ea69de7d9 im79', '000000000000000000000000000000000000 bglc')) {
       $vv = $v.Split(' '); Eq "code $($vv[0])" (AsSess $vv[0] '' { Run session }) "cc-$($vv[1]) direct"
     }
     if (-not (AsSess 'x-ab12cd' '' { Refused iam '@nobody' })) { Write-Output 'FAIL: iam took a handle not on the team'; $script:fail = 1 }
@@ -1771,6 +1773,12 @@ function Invoke-Selftest {
     if ([string]::Join(' ', $o) -notmatch 'F7 was in progress under @cc-o0kb:asha:agent') { Write-Output "FAIL: the warning names the new-shape tag: [$o]"; $script:fail = 1 }
     Eq 'stamp' (AsSess 'x-ffffff' '' { AsMe 'neo' { AsMode 'workflow' { Run stamp F7 } } }) "- [ ] F7 $dash Working [owner: @neo] (@cc-5qtl:neo:workflow)"
     Eq 'stamp, no session' (Run stamp F7) 'no change: no session tag'
+    # review: a title ending in a dashless (@handle) is user text - kept, the stamp appended after it
+    W $board ([System.IO.File]::ReadAllText($board, $Utf8) + "- [ ] F15 $dash Ask (@asha)`n")
+    Commit 'asha@x.com' 'board: f109 dashless row'
+    Eq 'dashless (@asha) title kept' (AsSess 'x-ffffff' '' { AsMe 'neo' { Run stamp F15 } }) "- [ ] F15 $dash Ask (@asha) (@cc-5qtl:neo:direct)"
+    $msg = AsSess '' '@sher' { ErrOf session }
+    if ($msg -notmatch [regex]::Escape("SKILLATOR_SESSION must be @<agent>-<id>, not '@sher'")) { Write-Output "FAIL: dashless SKILLATOR_SESSION message: [$msg]"; $script:fail = 1 }
     # review: a closed ticket is not claimed
     if (-not (Refused claim F8)) { Write-Output 'FAIL: claim of a closed ticket succeeded'; $script:fail = 1 }
     if ([System.IO.File]::ReadAllText($board, $Utf8) -cnotmatch "(?m)^- \[-\] F8 $dash Dropped`$") { Write-Output 'FAIL: claim wrote onto a closed ticket'; $script:fail = 1 }

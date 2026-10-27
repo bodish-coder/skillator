@@ -1526,15 +1526,17 @@ function DoBoard {
   } finally { Unlock; $script:Lock = $sv }
   # F106: a flip to ~ is a start - an unowned ticket goes to this session's person (ticket-meta
   # claim, the same call plan/dispatch make); a refusal is a note, the flip stands.
+  # F109: the flip is a touch - (@sid:owner:mode), mode workflow when this run's chain says so, else run;
+  # the claim stamps with it too, so the stamp below is a no-op, not a second commit
+  $md = 'run'
+  if ($Run -and (Test-Path -LiteralPath $Run)) { $hp = $null; try { $hp = HdrParts } catch { }; if ($hp -and $hp[2] -ceq 'workflow') { $md = 'workflow' } }
   if ($Mark -ceq '~') {
-    $r = TMetaAt $m (@('claim', $Ticket))
+    $pm = $env:SKILLATOR_MODE; $env:SKILLATOR_MODE = $md
+    try { $r = TMetaAt $m (@('claim', $Ticket)) } finally { $env:SKILLATOR_MODE = $pm }
     if ($r -and $r.code -ne 0) { foreach ($l in @($r.err -split "`r?`n" | Where-Object { $_ })) { [Console]::Error.WriteLine("note: claim refused - $l") } }
   }
-  # F109: the flip is a touch - (@sid:owner:mode), mode workflow when this run's chain says so, else run;
   # a move out of [~] keeps the worker's tag (A143)
   if ($old -cne '~' -or $Mark -ceq '~' -or $Mark -ceq '%') {
-    $md = 'run'
-    if ($Run -and (Test-Path -LiteralPath $Run)) { $hp = $null; try { $hp = HdrParts } catch { }; if ($hp -and $hp[2] -ceq 'workflow') { $md = 'workflow' } }
     $pm = $env:SKILLATOR_MODE; $env:SKILLATOR_MODE = $md
     try { $r = TMetaAt $m (@('stamp', $Ticket)) } finally { $env:SKILLATOR_MODE = $pm }
     if ($r -and $r.code -ne 0) { foreach ($l in @($r.err -split "`r?`n" | Where-Object { $_ })) { [Console]::Error.WriteLine("note: stamp failed - $l") } }
@@ -3751,6 +3753,19 @@ function F80Selftest($d) {
       $board = [IO.File]::ReadAllText($tb, $u8)
       if ($board -notmatch "(?m)^- \[!\] F5 $em worked \(@cc-zzzzzz\)$") { Die "F109: a flip out of [~] replaced the worker's tag (A143): $board" }
     } finally { Pop-Location; $script:Run = $sr; $env:SKILLATOR_ME = $null; $env:CLAUDE_CODE_SESSION_ID = $null; $script:Ticket = ''; $script:Mark = $null }
+    # F109 review: board ~ on a committed board is two commits - the flip, then the claim carrying
+    # the run-mode stamp; the stamp after it is a no-op, never a third commit rewriting direct -> run
+    $d9 = Join-Path $d 'f109'; New-Item -ItemType Directory -Force (Join-Path $d9 '.skillator') | Out-Null; G init -q $d9
+    G -C $d9 config user.name t; G -C $d9 config user.email asha@x.com
+    Copy-Item -LiteralPath (Join-Path $d8 '.skillator/team.md') -Destination (Join-Path $d9 '.skillator/team.md')
+    $tb9 = Join-Path $d9 'TICKETS.md'; [IO.File]::WriteAllText($tb9, "# TICKETS`n- [ ] F6 $em fresh`n", $u8)
+    G -C $d9 add TICKETS.md; G -C $d9 commit -qm init
+    Push-Location -LiteralPath $d9; $env:SKILLATOR_ME = '@asha'; $env:CLAUDE_CODE_SESSION_ID = '0a1b-4c5d-AB12CD'; $script:Ticket = 'F6'; $script:Mark = '~'
+    try { $script:Run = ''; DoBoard | Out-Null } finally { Pop-Location; $script:Run = $sr; $env:SKILLATOR_ME = $null; $env:CLAUDE_CODE_SESSION_ID = $null; $script:Ticket = ''; $script:Mark = $null }
+    $board = [IO.File]::ReadAllText($tb9, $u8)
+    if ($board -notmatch "(?m)^- \[~\] F6 $em fresh \[owner: @asha\] \(@cc-o0kb:asha:run\)$") { Die "F109: board ~ not stamped run: $board" }
+    $nc = @(GitOut @('-C', $d9, 'rev-list', '--count', 'HEAD'))[0]
+    if ("$nc".Trim() -ne '3') { Die "F109: board ~ is not flip + claim (2 commits): $(@(GitOut @('-C', $d9, 'log', '--format=%s')) -join ' | ')" }
     $env:RELAY_CHAIN_PARALLEL = '3'; $script:All = $true
     try { $out = @(DoChainNext) } finally { $script:All = $false; $env:RELAY_CHAIN_PARALLEL = $null }
     if ($out -cnotcontains "NEXT $t1 $(CodeOf $t1)" -or $out -cnotcontains "NEXT $t2 $(CodeOf $t2)") { Die "F80: chain next -All did not pick the unassigned and my own: $($out -join ' | ')" }

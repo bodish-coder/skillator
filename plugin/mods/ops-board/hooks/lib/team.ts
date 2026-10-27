@@ -50,7 +50,10 @@ export function sessionCode(id: string): string {
 export function sessionTag(envSession: string | null | undefined, sessionId: string | null | undefined): string | null {
   let tag = (envSession ?? '').replace(/^@/, '').toLowerCase()
   if (!tag && sessionId) tag = 'cc-' + sessionCode(sessionId)
-  return /^[a-z0-9_-]+$/.test(tag) ? tag : null
+  if (!/^[a-z0-9_-]+$/.test(tag)) return null
+  // the dash is what tells a session tag from a title's own (@handle)
+  if (!/.-./.test(tag)) throw new Error(`SKILLATOR_SESSION must be @<agent>-<id>, not '${envSession}'`)
+  return tag
 }
 
 // F80: as ticket-meta whoami / me_of - F97: the F92 session owner file first (its one

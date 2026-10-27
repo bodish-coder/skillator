@@ -327,7 +327,7 @@ edit_line() {
   # F62: [~] -> [%] is the working session's own next step, not a move away from it.
   if [ "$mk" = '~' ] && [ -n "${SET_MARK:-}" ] && [ "$SET_MARK" != '~' ] && [ "$SET_MARK" != '%' ]; then
     moved=1
-    sess=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\(@[A-Za-z0-9_.:-]+\)[ \t]*$/)) {
+    sess=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$/)) {
           s = substr($0, RSTART + 1); sub(/\).*/, "", s); print s } }')
   fi
   tag_text
@@ -363,7 +363,7 @@ edit_line() {
     function setnote(line, note, pat) {
       if (match(line, pat))
         return substr(line, 1, RSTART - 1) note substr(line, RSTART + RLENGTH)
-      if (match(line, /[ \t]*\(@[A-Za-z0-9_.:-]+\)[ \t]*$/))
+      if (match(line, /[ \t]*\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$/))
         return substr(line, 1, RSTART - 1) note substr(line, RSTART)
       sub(/[ \t]+$/, "", line)
       return line note
@@ -400,7 +400,7 @@ edit_line() {
           line = setnote(line, " (verify failed " ENVIRON["VFAIL_NOTE"] ")", "[ \t]*\\(verify failed [^()]*\\)")
         # F109: the trailing session tag - replaced (old or new shape) or appended
         if (ENVIRON["SET_TAG"] != "") {
-          if (match(line, /[ \t]*\(@[A-Za-z0-9_.:-]+\)[ \t]*$/)) line = substr(line, 1, RSTART - 1) " (" ENVIRON["SET_TAG"] ")"
+          if (match(line, /[ \t]*\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$/)) line = substr(line, 1, RSTART - 1) " (" ENVIRON["SET_TAG"] ")"
           else { sub(/[ \t]+$/, "", line); line = line " (" ENVIRON["SET_TAG"] ")" }
         }
       }
@@ -437,7 +437,7 @@ lc() { printf '%s' "$1" | tr 'A-Z' 'a-z'; }
 # F109: the 4-character session code - h = (h*33 + byte) mod 36^4 over the raw id's
 # bytes, base36. The same fold in ticket-meta.ps1 and ops-board's team.ts; vectors in the selftest.
 session_code() {
-  printf '%s' "$1" | od -An -tu1 | awk '{ for (i = 1; i <= NF; i++) h = (h * 33 + $i) % 1679616 }
+  printf '%s' "$1" | od -An -v -tu1 | awk '{ for (i = 1; i <= NF; i++) h = (h * 33 + $i) % 1679616 }
     END { d = "0123456789abcdefghijklmnopqrstuvwxyz"; s = ""
       for (i = 0; i < 4; i++) { s = substr(d, h % 36 + 1, 1) s; h = int(h / 36) }
       print s }'
@@ -450,6 +450,8 @@ session_tag() {
   STAG=$(printf '%s' "${STAG#@}" | tr 'A-Z' 'a-z')
   if [ -z "$STAG" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then STAG=cc-$(session_code "$CLAUDE_CODE_SESSION_ID"); fi
   printf '%s' "$STAG" | grep -Eqx '[a-z0-9_-]+' || STAG=''   # a file name: no / or ..
+  # the dash is what tells a session tag from a title's own (@handle)
+  case $STAG in ''|*?-?*) ;; *) die "SKILLATOR_SESSION must be @<agent>-<id>, not '$SKILLATOR_SESSION'" ;; esac
 }
 
 # F109: MODE <- SKILLATOR_MODE, one of direct|agent|run|workflow (default direct).
@@ -828,7 +830,7 @@ cmd_reconcile() {
         id = ord[i]; k = mk[id]; line = text[id]
         if (m > 0 && !(id in want)) continue
         if (k != " " && k != "~" && k != "!") continue
-        if (k == "~" && line ~ /\(@[A-Za-z0-9_.:-]+\)[ \t]*$/) continue
+        if (k == "~" && line ~ /\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$/) continue
         # landed: a run stage on it decides (only x is), else a commit on main
         ev = (id in st) ? (st[id] == "x" ? stage(id) " " sland[id] : "") : (id in cn) ? cs[id] : ""
         o = owed(line); open = ""
@@ -1514,7 +1516,7 @@ selftest() {
   SKILLATOR_MODE=bogus sh "$self" session > /dev/null 2> "$T/err" && { echo "FAIL: a bad mode was accepted"; fail=1; }
   grep -q "SKILLATOR_MODE must be direct|agent|run|workflow, not 'bogus'" "$T/err" || { echo "FAIL: bad mode message: $(cat "$T/err")"; fail=1; }
   # the code vectors (sh must match ps1 and team.ts)
-  for v in '0a1b-4c5d-AB12CD o0kb' 'x-ab12cd nzua' 'x-ffffff 5qtl' '982c2a-ab12-cd34-EF56 baru' 'sid-1 icym' 'ab 02jn' '147ee797-591f-4b4f-98fa-687ea69de7d9 im79'; do
+  for v in '0a1b-4c5d-AB12CD o0kb' 'x-ab12cd nzua' 'x-ffffff 5qtl' '982c2a-ab12-cd34-EF56 baru' 'sid-1 icym' 'ab 02jn' '147ee797-591f-4b4f-98fa-687ea69de7d9 im79' '000000000000000000000000000000000000 bglc'; do
     set -- $v; eq "code $1" "$(CLAUDE_CODE_SESSION_ID=$1 sh "$self" session)" "cc-$2 direct"
   done
   CLAUDE_CODE_SESSION_ID=x-ab12cd sh "$self" iam @nobody > /dev/null 2>&1 && { echo "FAIL: iam took a handle not on the team"; fail=1; }
@@ -1556,6 +1558,12 @@ selftest() {
   grep -q 'F7 was in progress under @cc-o0kb:asha:agent' "$T/out" || { echo "FAIL: the warning names the new-shape tag: $(cat "$T/out")"; fail=1; }
   eq "stamp" "$(CLAUDE_CODE_SESSION_ID=x-ffffff SKILLATOR_ME=neo SKILLATOR_MODE=workflow sh "$self" stamp F7 2>/dev/null | tr -d '\r')" "- [ ] F7 $D Working [owner: @neo] (@cc-5qtl:neo:workflow)"
   eq "stamp, no session" "$(run stamp F7)" "no change: no session tag"
+  # review: a title ending in a dashless (@handle) is user text - kept, the stamp appended after it
+  printf -- '- [ ] F15 %s Ask (@asha)\n' "$D" >> TICKETS.md
+  commit asha@x.com "board: f109 dashless row"
+  eq "dashless (@asha) title kept" "$(CLAUDE_CODE_SESSION_ID=x-ffffff SKILLATOR_ME=neo sh "$self" stamp F15 2>/dev/null | tr -d '\r')" "- [ ] F15 $D Ask (@asha) (@cc-5qtl:neo:direct)"
+  SKILLATOR_SESSION=@sher sh "$self" session > /dev/null 2> "$T/err" && { echo "FAIL: a dashless SKILLATOR_SESSION was accepted"; fail=1; }
+  grep -q "SKILLATOR_SESSION must be @<agent>-<id>, not '@sher'" "$T/err" || { echo "FAIL: dashless SKILLATOR_SESSION message: $(cat "$T/err")"; fail=1; }
   # review: a closed ticket is not claimed
   sh "$self" claim F8 > /dev/null 2>&1 && { echo "FAIL: claim of a closed ticket succeeded"; fail=1; }
   grep -q "^- \[-\] F8 $D Dropped\$" TICKETS.md || { echo "FAIL: claim wrote onto a closed ticket: $(grep F8 TICKETS.md)"; fail=1; }

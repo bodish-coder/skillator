@@ -60,7 +60,9 @@ test('team: F97 sessionTag as ticket-meta session_tag', () => {
   expect(sessionTag(null, 'sid-1')).toBe('cc-icym')
   expect(sessionTag(undefined, 'ab')).toBe('cc-02jn')
   // F109: the vectors ticket-meta.sh and .ps1 pin too
-  expect(['0a1b-4c5d-AB12CD', 'x-ab12cd', 'x-ffffff', '147ee797-591f-4b4f-98fa-687ea69de7d9'].map(sessionCode)).toEqual(['o0kb', 'nzua', '5qtl', 'im79'])
+  expect(['0a1b-4c5d-AB12CD', 'x-ab12cd', 'x-ffffff', '147ee797-591f-4b4f-98fa-687ea69de7d9', '000000000000000000000000000000000000'].map(sessionCode)).toEqual(['o0kb', 'nzua', '5qtl', 'im79', 'bglc'])
+  // review: a dashless SKILLATOR_SESSION is refused - the dash tells a tag from a title's (@handle)
+  expect(() => sessionTag('@sher', 'x')).toThrow("SKILLATOR_SESSION must be @<agent>-<id>, not '@sher'")
   expect(sessionTag('', '')).toBe(null)
   expect(sessionTag('a b', 'sid-1')).toBe(null)                       // a space: not a file name
 })

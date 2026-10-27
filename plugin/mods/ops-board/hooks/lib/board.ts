@@ -36,7 +36,7 @@ const TICKET = /^([ \t]*)- \[([ ~%!?>x-])\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)[ \t]*(
 const ID_DASH = /^[A-Z]{1,3}[0-9]+[a-z]?[ \t]*(?:—|–|-)[ \t]*/
 const handles = (s: string) => s.split(',').map(x => x.trim().toLowerCase()).filter(Boolean)
 const tag = (s: string, name: string) => new RegExp('\\[' + name + ':\\s*([^\\]]*)\\]').exec(s)?.[1]?.trim() ?? null
-const SESSION_TAIL = /\s\((@[\w.:-]+)\)\s*$/      // (@cc-4ae496), F109 (@cc-k7q2:asha:run)
+const SESSION_TAIL = /\s\((@[\w.]+-[\w.:-]+)\)\s*$/      // (@cc-4ae496), F109 (@cc-k7q2:asha:run); a dashless (@asha) is title text
 
 export function parseBoard(text: string, path: string, mtimeMs: number, size: number): Board {
   const tickets: Ticket[] = []

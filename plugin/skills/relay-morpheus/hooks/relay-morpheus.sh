@@ -888,13 +888,14 @@ cmd_board() {
   else rm -f "$_bf.tmp.$$"; unlock; LOCK=$_bsv; die "board: no ticket $bid in $_bf"; fi
   # F106: a flip to ~ is a start - an unowned ticket goes to this session's person (ticket-meta
   # claim, the same call plan/dispatch make); a refusal is a note, the flip stands.
+  # F109: the flip is a touch - (@sid:owner:mode), mode workflow when this run's chain says so, else run;
+  # the claim stamps with it too, so the stamp below is a no-op, not a second commit
+  _md=run; [ -n "${RUN:-}" ] && [ -f "$RUN" ] && [ "$(hdr_mode 2>/dev/null)" = workflow ] && _md=workflow
   if [ "$mk" = '~' ]; then
-    tmeta_at "$_bm" claim "$bid" >/dev/null 2>"$_bf.claim.$$" || sed 's/^/note: claim refused - /' "$_bf.claim.$$" >&2
+    ( SKILLATOR_MODE=$_md; export SKILLATOR_MODE; tmeta_at "$_bm" claim "$bid" ) >/dev/null 2>"$_bf.claim.$$" || sed 's/^/note: claim refused - /' "$_bf.claim.$$" >&2
     rm -f "$_bf.claim.$$"
   fi
-  # F109: the flip is a touch - (@sid:owner:mode), mode workflow when this run's chain says so, else run
   case "$_bo$mk" in '~~'|'~%'|[!~]?)
-    _md=run; [ -n "${RUN:-}" ] && [ -f "$RUN" ] && [ "$(hdr_mode 2>/dev/null)" = workflow ] && _md=workflow
     ( SKILLATOR_MODE=$_md; export SKILLATOR_MODE; tmeta_at "$_bm" stamp "$bid" ) >/dev/null 2>"$_bf.stamp.$$" ||
       sed 's/^/note: stamp failed - /' "$_bf.stamp.$$" >&2
     rm -f "$_bf.stamp.$$" ;;
@@ -2559,6 +2560,14 @@ f80_selftest() {
   printf -- '%s\n' "- [~] F5 $em worked (@cc-zzzzzz)" >> "$d8/TICKETS.md"
   ( cd "$d8" && CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_ME=@asha cmd_board F5 '!' >/dev/null 2>&1 ) || die "F109: board ! of a [~] failed"
   grep -q "^- \[!\] F5 $em worked (@cc-zzzzzz)\$" "$d8/TICKETS.md" || die "F109: a flip out of [~] replaced the worker's tag (A143): $(grep F5 "$d8/TICKETS.md")"
+  # F109 review: board ~ on a committed board is two commits - the flip, then the claim carrying
+  # the run-mode stamp; the stamp after it is a no-op, never a third commit rewriting direct -> run
+  d9="$d/f109"; mkdir -p "$d9/.skillator"; git init -q "$d9"; git -C "$d9" config user.name t; git -C "$d9" config user.email asha@x.com
+  cp "$d8/.skillator/team.md" "$d9/.skillator/team.md"; printf -- '%s\n' '# TICKETS' "- [ ] F6 $em fresh" > "$d9/TICKETS.md"
+  git -C "$d9" add TICKETS.md; git -C "$d9" commit -qm init
+  ( cd "$d9" && RUN= && CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_ME=@asha cmd_board F6 '~' >/dev/null 2>&1 ) || die "F109: board ~ on a committed board failed"
+  grep -q "^- \[~\] F6 $em fresh \[owner: @asha\] (@cc-o0kb:asha:run)\$" "$d9/TICKETS.md" || die "F109: board ~ not stamped run: $(grep F6 "$d9/TICKETS.md")"
+  [ "$(git -C "$d9" rev-list --count HEAD)" = 3 ] || die "F109: board ~ is not flip + claim (2 commits): $(git -C "$d9" log --format=%s)"
   grep -q 'F3 is owned by @vidul' "$d8/err" || die "F80: chain plan of another's ticket did not say so: $(cat "$d8/err")"
   out=$(RELAY_CHAIN_PARALLEL=3 chain_next --all)
   printf '%s\n' "$out" | grep -qx "NEXT $t1 $(code_of "$t1")" && printf '%s\n' "$out" | grep -qx "NEXT $t2 $(code_of "$t2")" ||

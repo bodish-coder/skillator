@@ -42,6 +42,12 @@ test('F109: the new session tag shape parsed, left off the title', () => {
   expect(listView(b, 'F9')).toContain('F9 — Wip [owner: @asha]')
   expect(listView(b, 'F9')).not.toContain('k7q2')
 })
+// review: a dashless (@handle) at the end is the title's own text, not a session tag
+test('F109: a dashless (@asha) tail is not a session', () => {
+  const b = parseBoard('- [ ] F8 — Ask (@asha)\n', 'T', 0, 0)
+  expect(b.tickets[0]!.session).toBe(null)
+  expect(listView(b, 'F8')).toContain('F8 — Ask (@asha)')
+})
 test('parent, section, and non-tickets', () => {
   const b = parseBoard('## Bugs\n- [~] B2 — x\n  - [ ] B2b — y\n- [ ] no dash here\n', 'T', 1, 2)
   expect(b.tickets.map(t => [t.id, t.parent, t.indent, t.section])).toEqual([['B2', null, 0, 'Bugs'], ['B2b', 'B2', 2, 'Bugs']])
