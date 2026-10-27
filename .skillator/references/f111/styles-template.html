@@ -1,0 +1,64 @@
+<title>Ops Pane Styles</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Instrument+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: a spec sheet - one band per option, its frames laid left to right from narrow to wide, each frame
+   exactly its column count wide in a fixed terminal ground. Page follows the viewer's theme; frames stay terminal. */
+:root {
+  --bg: #eef0f2; --fg: #1c2127; --muted: #5d6670; --line: #d3d8dd; --card: #f8f9fa; --accent: #2b6cb0;
+  --term: #15191e; --term-fg: #c9d1d9; --term-dim: #6e7781; --term-grp: #9fb4c8; --term-sel: #233243;
+  --s-wip: #e3b341; --s-test: #56b6c2; --s-dec: #c678dd; --s-blk: #f47067; --s-pend: #8b949e; --t-key: #79c0ff;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1116; --fg: #dde3ea; --muted: #8b96a3; --line: #262d36; --card: #151a21; --accent: #6ea8fe; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #0e1116; --fg: #dde3ea; --muted: #8b96a3; --line: #262d36; --card: #151a21; --accent: #6ea8fe; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 40px }
+.intro { display: grid; gap: 10px; max-width: 70ch }
+.intro h1 { font: 600 28px/1.2 var(--sans); margin: 0; text-wrap: balance }
+.intro p { margin: 0; color: var(--muted) }
+.rules { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 4px 0 0; list-style: none }
+.rules li { font: 12.5px/1 var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; background: var(--card) }
+.opt { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 24px; min-width: 0 }
+.opt header { display: flex; align-items: baseline; gap: 12px }
+.code { font: 600 13px/1 var(--mono); color: var(--bg); background: var(--fg); border-radius: 3px; padding: 4px 7px }
+.opt h2 { margin: 0; font: 600 21px/1.2 var(--sans) }
+.how, .trade { margin: 0; max-width: 75ch }
+.trade { color: var(--muted); font-size: 14px }
+.frames { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; margin-top: 8px; min-width: 0 }
+.frame { margin: 0; display: grid; gap: 6px; min-width: 0; max-width: 100% }
+figcaption { display: flex; justify-content: space-between; gap: 12px; font: 12px/1.3 var(--mono); color: var(--muted) }
+figcaption span:first-child { color: var(--fg); font-weight: 600 }
+.scroll { overflow-x: auto; max-width: 100%; border-radius: 6px; background: var(--term) }
+pre { margin: 0; padding: 10px 12px; font: 12.5px/1.45 var(--mono); color: var(--term-fg); width: calc(var(--cols) * 1ch);
+  box-sizing: content-box; white-space: pre; outline: 1px dashed #3a4450; outline-offset: -1px;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(10ch - 1px), rgba(255,255,255,.035) calc(10ch - 1px) 10ch) }
+pre .dim { color: var(--term-dim) } pre .grp { color: var(--term-grp); font-weight: 600 } pre .id { color: var(--term-fg); font-weight: 600 }
+pre .sel { background: var(--term-sel); color: #fff } pre .key { color: var(--t-key); font-weight: 600 } pre .rule { color: #3a4450 }
+pre .tab { color: var(--term-dim) } pre .tabon { background: var(--term-fg); color: var(--term) } pre .badge { color: var(--s-dec) }
+pre .s\~ { color: var(--s-wip) } pre .s\% { color: var(--s-test) } pre .s\? { color: var(--s-dec) } pre .s\! { color: var(--s-blk) } pre .s\  { color: var(--s-pend) }
+.pick { border-top: 1px solid var(--line); padding-top: 24px; max-width: 75ch; display: grid; gap: 8px }
+.pick h2 { margin: 0; font: 600 19px/1.2 var(--sans) }
+.pick p { margin: 0 }
+.pick code { font: 13px var(--mono) }
+pre .acc { color: var(--t-key); font-weight: 600 } pre .grpb { font-weight: 600 } pre .selbar { background: #2b3f57; color: #fff }
+pre .tabon2 { color: #fff; font-weight: 600 } pre .cap { color: var(--term-fg); background: #262e38; font-weight: 600 }
+pre .inv { background: var(--term-fg); color: var(--term) } pre .b { font-weight: 600; color: #fff }
+</style>
+<div class="wrap">
+  <div class="intro">
+    <h1>Ops pane styles for layout B</h1>
+    <p>Layout B is picked: tabs, keys and the count line wrap whole words and are never shortened, and the list gives up rows first. These are four visual treatments of that same layout, built by the same checks: no line past its width, 14 rows, all eight actions on screen at every width. Style 4 is also checked to contain no character above ASCII 127.</p>
+    <ul class="rules"><li>layout B</li><li>no line &gt; cols</li><li>14 rows max</li><li>all 8 actions on screen</li><li>style 4: ASCII only</li></ul>
+  </div>
+%%OPTIONS%%
+  <div class="pick">
+    <h2>How to choose</h2>
+    <p>Reply with a number, or a mix such as "2, with 3's keycaps". Whatever you pick, style 4 ships as the ASCII fallback the pane switches to when the console cannot draw Unicode.</p>
+    <p>These are mocks built from the layout rules, not frames captured from the pane.</p>
+  </div>
+</div>
