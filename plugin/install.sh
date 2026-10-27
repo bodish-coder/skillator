@@ -40,8 +40,8 @@ done
 [ -n "$_want_font" ] && font=none
 case "$font" in
   '') ;;
-  *[!0-9]*) font_bad=1 ;;
-  *) [ "$font" -ge 6 ] && [ "$font" -le 72 ] || font_bad=1 ;;
+  *) font=$(printf '%s' "$font" | sed 's/^0*//')
+     case $font in [6-9]|[1-6][0-9]|7[0-2]) ;; *) font_bad=1 ;; esac ;;
 esac
 [ -n "${font_bad:-}" ] && { printf 'ops font size must be 6..72, got %s\n%s\n' "$font" "$usage" >&2; exit 2; }
 
@@ -727,6 +727,27 @@ if [ -n "$selftest" ]; then
     grep -qF '"name": "skillator ops"' "$_frag" || { echo "FAIL: fragment profile name"; exit 1; }
     # F102: the font size the user picks, written and kept across runs; 11 = the shipped bytes
     # (no IDE for these runs, so the ide-calls count below still sees two installs)
+    check_font_json() {
+      node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(j.profiles[0].font.size!==Number(process.argv[2])) process.exit(1)' "$(cygpath -w "$_frag")" "$1" || { echo "FAIL: font JSON $1"; exit 1; }
+    }
+    for _font in 06 09 072 00000000000000000000000000009; do
+      sh "$root/mods/ops-board/ops/ops.sh" --font-size "$_font" >/dev/null
+      check_font_json "$_font"
+      HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --ops-font-size "$_font" >/dev/null
+      check_font_json "$_font"
+    done
+    for _font in 000 05 073 9999999999999999999999999999; do
+      _rc=0; sh "$root/mods/ops-board/ops/ops.sh" --font-size "$_font" >/dev/null 2>&1 || _rc=$?
+      [ "$_rc" = 2 ] || { echo "FAIL: ops accepted font $_font"; exit 1; }
+      _rc=0; HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --ops-font-size "$_font" >/dev/null 2>&1 || _rc=$?
+      [ "$_rc" = 2 ] || { echo "FAIL: installer accepted font $_font"; exit 1; }
+      check_font_json 9
+    done
+    for _font in 09 72 073; do
+      sed "s/\"size\": [0-9]*/\"size\": $_font/" "$root/mods/ops-board/ops/wt-fragment.json" > "$_frag"
+      HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" >/dev/null
+      case $_font in 073) check_font_json 11 ;; *) check_font_json "$_font" ;; esac
+    done
     HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" --ops-font-size 9 >/dev/null || { echo "FAIL: font run exited $?"; exit 1; }
     grep -qF '"size": 9' "$_frag" || { echo "FAIL: font size 9 not written"; exit 1; }
     HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0" >/dev/null || { echo "FAIL: plain font run exited $?"; exit 1; }
@@ -924,7 +945,8 @@ if [ -n "$shim_src" ] && [ -n "${LOCALAPPDATA:-}" ] && command -v cygpath >/dev/
     # F102: --ops-font-size, else the size an earlier run wrote, else the shipped 11
     _size=$font
     [ -z "$_size" ] && [ -f "$_wt/ops.json" ] && _size=$(sed -n 's/.*"size": \([0-9]*\).*/\1/p' "$_wt/ops.json")
-    _size=${_size:-11}
+    _size=$(printf '%s' "$_size" | sed 's/^0*//')
+    case $_size in [6-9]|[1-6][0-9]|7[0-2]) ;; *) _size=11 ;; esac
     sed "s/\"size\": [0-9]*/\"size\": $_size/" "$root/mods/ops-board/ops/wt-fragment.json" > "$_wt/ops.json"
     _note=""; [ "$_size" = 11 ] || _note=" (font $_size)"
     echo "ops   Windows Terminal profile 'skillator ops' -> $_wt/ops.json$_note"
