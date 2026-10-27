@@ -130,3 +130,23 @@
 # Cost (sum of per-run total_cost_usd from the transcripts, unrounded, rounded
 # once): 8 claude -p runs, $1.20 total (control $0.43, descriptions $0.59,
 # probes $0.19).
+
+# ---- 2026-10-27 re-run on a trimmed host (owner-approved) ----
+# Setup as above, plus: ~/.claude-bodish/skills (149 user skills) set aside for
+# the runs and restored after (149 back, checked), every other user plugin
+# off via --settings enabledPlugins (scratchpad drive2.sh, harness from the
+# main checkout). init skills = 62 in all 4 (under 100: the owed host).
+# Fresh fixture per run, strictly sequential, all exit 0, limit hit: none.
+#    t0 CONTROL code-yoda, scenario-code-yoda-debt.txt, prefix0: loaded YES
+#       (Skill(skillator:code-yoda) first call). 5 turns, $0.16.
+#    t1 reviews, prefix0 (original description): loaded NO - Bash + Read,
+#       answered unaided. 3 turns, $0.13.
+#    t2 reviews, prefix0 (original description): loaded NO. 3 turns, $0.13.
+#    t3 reviews, prefix1 (DESCRIPTION A): loaded YES - Skill(skillator:
+#       clone-odo) first call, ran its script, dropped 2 link-less rows and
+#       the duplicate, wrote .skillator/clone/feedback.md. 5 turns, $0.17.
+# VERDICT (measured): on a 62-skill host the original description is 0/2 and
+# description A is 1/1 - A meets the Done line's ">= 1/2"; the 0/4 above was
+# the 200+-skill listing, not the wording alone. n is small (1 run of A).
+# Next: put description A into skills/clone-odo/SKILL.md (a code change,
+# its own stage), then A157 [x].
