@@ -206,3 +206,17 @@ on an investigator's word.
   Note this is the second time this release a rule inherited from superpowers
   failed against the actual repo — the word-budget table was already rewritten
   for the same reason.
+
+## 2026-10-27 — RUN-0023 final diff review
+
+Scope: source diff5a3c637..b7b2451 and affected callers; three read-only deep investigators covering UI/errors/tests/history, automation/config/contracts/conventions/architecture, and Git/Python boundaries/data/dependencies. Not a claim to have audited unchanged whole-app internals. No live native UI, old2.1.310 host or new paid baselines exercised. B15 and A160 remain known separately.
+
+Five symptoms deduplicated into four verified tickets (confidence90–100); two tentative suspicions discarded (unconditional child ticket-start prompt precedence, push followTags behavior) for insufficient supported failure evidence. No critical/high finding.
+
+- **A161 — P2,100:** `plugin/mods/ops-board/hooks/lib/ticketsmodel.ts:90`, `hooks/pane.tsx:164`, `hooks/register.tsx:584`: expanded raw text taller than list budget is omitted wholesale; host wheel/PageDown does not advance selection-based virtualization because scroll.offset is discarded. Executed actual model yields16raw rows excluded at40cols/14rows; thirtyticketsleave26unreachable bywheel. Preserve fixed chrome and keyboard selection while allowing all detail/rows to be reached. One UI defect cluster, not two tickets. — fixed 024351a
+- **A162 — P2,97:** `plugin/skills/relay-morpheus/references/marathon.md:284,333,381`: old plan without mode is refused and sent to planner, which skips its tickets as already planned and cannot recover. Provide explicit legacy replacement without weakening valid-plan duplicate guards across hosts. — fixed ba58785
+- **A163 — P3,100:** `plugin/mods/ops-board/ops/ops.sh:26`, `plugin/install.sh:928`: accepted09 remains raw in JSON, yielding invalid size09; PS mirrors cast toint. Exact shell validation/substitution plus JSON.parse reproduced failure. Canonicalize decimal validated/preserved values and test both paths. — fixed 62673a1
+- **A164 — P2,100:** `plugin/mods/ops-board/hooks/explorertab.tsx:130` via sharedBRANCH_ARGS: fresh Git repository branch query exits128 and blocks Fetch although Gitfetch succeeds. Root scratch `.skillator/reports/final-unborn-proof`: rev-parse --abbrev-ref HEAD128; local fetch--prune0; branch--show-current0. Preserve detached and destructive-action guards. — fixed 0557ec8
+
+No architectural rewrite proposed. Final-stage corrections remain inside requested run behavior. Each fix is test-first in an isolated worktree, then independently reviewed; final172 still in progress, B15 visibly blocked, no push/profile writes.
+Final-review corrections A161–A164 are independently reviewed and integrated in RUN-0023 at4139f6a. F115 alphabet actions committedf02ad36 with403plugin/165standalone tests and116mounted-tree frames. Additional requested F116 guarded status/holo feature committed f3c71d9 after held deep LAND, both full writer suites, 420 plugin tests and 165 standalone tests. B15/B17 physical-session reports remain unverified and visibly blocked; this audit does not claim those bugs fixed. Final shared installer validation and release metadata remain pending.
