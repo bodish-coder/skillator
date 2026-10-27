@@ -1,6 +1,7 @@
 # Recon map: {{app}} ({{platform}})
 
 Scope: {{the slice being cloned}}
+Platform: {{web | Android | iOS | Windows}}  Capture: {{route and viewport - recon.md § Capture}}
 For: {{who the clone is for}}
 Date: {{YYYY-MM-DD}}
 
@@ -16,7 +17,7 @@ Date: {{YYYY-MM-DD}}
 
 ## Screens
 
-| ID | screen | route / how to reach | purpose | key components | states seen |
+| ID | screen | route / tap path | purpose | key components | states seen |
 | --- | --- | --- | --- | --- | --- |
 | S01 | | | | | empty, filled, error |
 

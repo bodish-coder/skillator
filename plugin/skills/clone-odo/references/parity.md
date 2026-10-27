@@ -9,10 +9,10 @@ and the original's exact look is its trade dress. Never chase pixel parity
 with the original.
 
 ```sh
-sh <this skill>/scripts/odo.sh parity .skillator/clone/features.csv
-sh <this skill>/scripts/odo.sh imgdiff .skillator/clone/screens/S02.png .skillator/clone/clone-screens/S02.png --out .skillator/clone/diffs/S02.png
-sh <this skill>/scripts/odo.sh imgdiff .skillator/clone/screens/S02.png .skillator/clone/clone-screens/S02.png --json > .skillator/clone/diffs/S02.json
-sh <this skill>/scripts/odo.sh parity .skillator/clone/features.csv --visual .skillator/clone/diffs/*.json --markdown > .skillator/clone/parity.md
+sh <this skill>/scripts/odo.sh parity .skillator/clone/features.csv --platform web
+sh <this skill>/scripts/odo.sh imgdiff .skillator/clone/screens/S02.png .skillator/clone/clone-screens/S02.png --platform web --out .skillator/clone/diffs/S02.png
+sh <this skill>/scripts/odo.sh imgdiff .skillator/clone/screens/S02.png .skillator/clone/clone-screens/S02.png --platform web --json > .skillator/clone/diffs/S02.json
+sh <this skill>/scripts/odo.sh parity .skillator/clone/features.csv --platform web --visual .skillator/clone/diffs/*.json --markdown > .skillator/clone/parity.md
 ```
 
 ## Step 1: feature parity
@@ -32,8 +32,9 @@ not done; the layout score never lifts it.
 
 ## Step 2: layout diff
 
-For each key screen, two screenshots at the **same viewport** (1440x900
-desktop, 390x844 mobile) in the **same state** (same data shape, same tab,
+For each key screen, two screenshots at the **platform's viewport** (`recon.md`
+§ Capture: web 1440x900 or 390x844 mobile web, Android 1080x2400,
+iOS 1179x2556, Windows 1280x800) in the **same state** (same data shape, same tab,
 same login). The original's come from public pages or the user's own account
 and live in `.skillator/clone/screens/`; the clone's in
 `.skillator/clone/clone-screens/`, same `S<nn>` name.

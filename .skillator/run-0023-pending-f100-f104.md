@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-26T20:00Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T10:14Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -9,38 +9,68 @@ branch: run/RUN-0023-pending-f100-f104
 |---|-------|-------|-------|-----------|--------|
 | 167 | AABZ F100 build-jarvis UI entry | x | build:opus | 2026-10-26T15:47Z | f39b942 |
 | 168 | AAB0 F102 ops font size | x | build:opus | 2026-10-26T16:22Z | c297369 |
-| 169 | AAB1 F101 marathon without Workflow | ~ | build:opus | 2026-10-26T19:33Z | - |
-| 170 | AAB2 F103 explorer git actions |   | - | - | - |
-| 171 | AAB3 F104 diagnose close |   | - | - | - |
+| 169 | AAB1 F101 marathon without Workflow | x | subagent | 2026-10-27T01:47Z | f06d0fc |
+| 170 | AAB2 F103 explorer git actions | x | subagent | 2026-10-27T02:53Z | 7fc77ff |
+| 171 | AAB3 F104 diagnose close | x | subagent | 2026-10-27T04:07Z | 9570946 |
 | 172 | verify review bump commit |   | - | - | - |
-| 173 | AAB4 F105 codex $ops opens the board |   | - | - | - |
+| 173 | AAB4 F105 codex $ops opens the board | x | subagent | 2026-10-27T02:37Z | 1264371 |
 | 174 | merge origin/ccr-0af663c7-2ecnqn (F97 clone-odo) INTO main | x | main:opus | 2026-10-26T18:55Z | ca1f9e3 |
-| 178 | AAB7 F106 start claims the owner |   | - | - | - |
-| 179 | AAB8 F109 session code and mode |   | - | - | - |
+| 178 | AAB7 F106 start claims the owner | x | subagent | 2026-10-27T04:02Z | ed27f65 |
+| 179 | AAB8 F109 session code and mode | ~ | subagent | 2026-10-27T04:07Z | - |
 | 180 | AAB9 F111 ops pane layout B rails |   | - | - | - |
-| 181 | AACA F110 rename skill-smith to skill-prometheus |   | - | - | - |
+| 181 | AACA F110 rename skill-smith to skill-prometheus | x | subagent | 2026-10-27T08:47Z | d79cce6 |
+| 183 | AACC A159 explorer review leftovers | x | subagent | 2026-10-27T03:49Z | 72a17cd |
+| 184 | AACD F112 one marathon command, sequential or parallel |   | - | - | - |
+| 185 | AACE B15 Workflows agents missing |   | - | - | - |
+| 186 | AACF AACF B16 reconcile form with nothing pressable | ~ | subagent | 2026-10-27T10:14Z | - |
+| 187 | AACG F114 clone-odo for web Android iOS Windows |   | - | - | - |
 
 ## In flight
-### stage 169 - AAB1 F101 marathon without Workflow  (dispatched 2026-10-26T18:44Z, @cc-9de7d9)
+### stage 179 - AAB8 F109 session code and mode  (dispatched 2026-10-27T04:07Z, @sher)
 run: -
 prompt: |
   Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
 
-  Ticket F101 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/66a4199e-bee7-472b-9aaa-61fc26982c2a/scratchpad/design-2026-10-26-f101-marathon-no-workflow.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths name the main checkout C:/tools/Projects/skillator2/...; use the same relative paths under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 instead. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. Owner rulings 2026-10-26: approach 1 approved (arch gate passed); Q-F101-1 answered: no live host probes - tag cursor, agy, muse and pi `inferred` in PLATFORMS.md.
+  grade: architectural · critical yes (F109 changes the TICKETS.md line format, a contract check-tickets, ticket-meta and the ops board all parse) · design deep=fable · build build=opus · verify deep=fable, held · ceremony full (relay run, 5 tickets) · mode per-task (ruled: inside a relay run, /pending-subagent parallel) · usage unobservable · tiers: defaults
+
+  Ticket F109 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/design-2026-10-26-F109-session-code-and-mode.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths are repo-relative; use them under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. Q-F109-1 and Q-F109-2 are parked for the owner: build on their defaults (band shows no mode; pending shows the whole token). CRITICAL: this changes the TICKETS.md line format - old @cc- tags must stay valid everywhere, and every parser the design lists gets its test.
 
   The ticket line, verbatim:
-  - [ ] F101 — Marathon on hosts with no Workflow tool. Owner 2026-10-26, quoting a Cursor session: 'Cursor has no Workflow tool, so I haven't written a marathon script or opened a run. can we build one for it based on claude workflow, check same for agy and muse'. Today /marathon-plan and /marathon-run save and run templates/marathon-workflow.js through Claude Code's Workflow tool only; WORKFLOW.md row 38 and marathon.md line 250 tell cursor, antigravity and pi to drop back to /pending-subagent, and muse is not named. Done when: /marathon-plan on cursor (Task tool), agy (background subagents) and muse (rlm child agents) writes the same run file and a host-native marathon plan - the same phases, serial where tickets share files, fix then verify in one phase (F96) - and /marathon-run executes it with that host's delegate, each stage written to the run file before dispatch; a host with no delegate (pi without its extension) runs the phases in order in-session; WORKFLOW.md, marathon.md, PLATFORMS.md and the host-commands texts say per host what runs; each host's command text is probed or marked unverified per PLATFORMS's tags.
+  - [ ] F109 — 4-character session code on every ticket touch. Owner 2026-10-26: 'every session of claude should have a 4character alpha numeric code so along with owner u can tag which session is handling the tickets via direct|agent|run|workflow'. Today the session tag is @cc-<6 hex> from the session id, with no record of how the work ran. Done when: every session gets a 4-character alphanumeric code (stable for the session, shown by ticket-meta whoami and in the ops band), and every board write by ticket-meta and relay-morpheus stamps owner + code + mode, mode one of direct|agent|run|workflow; old @cc- tags stay valid; check-tickets.sh accepts both; selftests pin the format. (@cc-9de7d9)
 
-  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F101: ".
+  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F109: ".
 
   Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
 
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### stage 186 - AACF AACF B16 reconcile form with nothing pressable  (dispatched 2026-10-27T10:14Z, @sher)
+run: -
+worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s186
+branch: run/RUN-0023-pending-f100-f104-s186
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket B16 (bug) - you are its fix seat. The cause is reproduced and named; fix it test-first.
+
+  The ticket line, verbatim:
+  - [ ] B16 — Reconcile form opens with nothing pressable. Owner 2026-10-27: the reconcile buttons do nothing. Repro: ticket-meta reconcile prints one row, A157 [!] -> [!] evidence unclear; openReconcile in plugin/mods/ops-board/hooks/reconcile.tsx:26 tests rows.length, not the applicable rows, so the form opens with the row as plain text, no Accept all, no Apply picked - only None. Done when: a result with no applicable row toasts what reconcile said, each stays row with its reason, instead of a dead form; a test pins it red then green; claude plugin test and tsc clean. [owner: @sher]
+
+  Repro (verified by the orchestrator): `sh plugin/skills/tickets-zordon/scripts/ticket-meta.sh reconcile` on the main board prints exactly `A157 [!] -> [!]  evidence unclear: blocked on '...', no ticket to check`; canApply is false for it, so renderReconcile draws n=0. Fix in openReconcile only: when no row passes canApply, toast instead of opening the form - the existing all-match text when there are no rows, else one line per stays row (`<ID> stays - <why>`) under a head such as `ops board: reconcile - nothing to change`. Keep the form, Accept all, Apply picked and None as they are for the case with applicable rows.
+
+  Files you may touch: plugin/mods/ops-board/hooks/reconcile.tsx, plugin/mods/ops-board/tests/reconcile.test.tsx (and lib/ticketsmodel.ts only if a pure helper for the toast text is the smallest way). Anything else -> stop and report. Test: a stays-only reconcile output toasts and leaves the reconcile atom null (red first, then green); the mixed case still opens the form.
+
+  Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board (all pass); tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f104.json pointed at this worktree if it already is, else say how you ran tsc. Commit messages start with "B16: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), or the stage worktree the dispatch names, never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha, files changed, the red then green test output (command and result), anything you could not verify (one line each).
 
 ## Chain
-driver: @cc-9de7d9 2026-10-26T18:44Z     hold: -     mode: agents
+driver: @sher 2026-10-27T10:14Z     hold: -     mode: agents
 ### AABZ - stage 167 - F100 build-jarvis UI entry
 tickets: F100 build/build
 files: plugin/skills/build-jarvis/SKILL.md,plugin/skills/build-jarvis/references/grade.md,plugin/skills/build-jarvis/references/route-hook.md,plugin/skills/build-jarvis/hooks/feature-route.sh,plugin/skills/build-jarvis/hooks/feature-route.ps1,plugin/skills/grayskull-power/SKILL.md,plugin/skills/grayskull-power/references/routing.md,plugin/skills/design-arwen/SKILL.md,plugin/skills/tui-tron/SKILL.md,plugin/practice/baselines/scenario-build-ui-feature.txt,plugin/practice/baselines/scenario-build-ui-only.txt,plugin/practice/baselines/green-build-ui-f100.txt
@@ -220,7 +250,7 @@ prompt: |
 ### AACA - stage 181 - F110 rename skill-smith to skill-prometheus
 tickets: F110 build/deep
 files: plugin/skills/skill-prometheus/SKILL.md,plugin/skills/skill-prometheus/references/testing.md,plugin/skills/skill-smith/SKILL.md,plugin/.muse-plugin/plugin.json,plugin/skills/grayskull-power/SKILL.md,plugin/skills/grayskull-power/references/routing.md,plugin/PRACTICE.md,README.md,plugin/skills/clone-odo/UPSTREAM.md,plugin/skills/code-yoda/UPSTREAM.md,plugin/skills/design-arwen/UPSTREAM.md,plugin/practice/baselines/README.md,plugin/practice/scripts/baseline-harness.sh,plugin/practice/scripts/context-audit.sh,plugin/practice/scripts/check-routing.sh,plugin/install.sh,plugin/install.ps1
-after: 180, 173
+after: 173
 prompt: |
   Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
 
@@ -238,6 +268,97 @@ prompt: |
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### AACC - stage 183 - A159 explorer review leftovers
+tickets: A159
+files: plugin/mods/ops-board/hooks/lib/explorer.ts,plugin/mods/ops-board/hooks/explorertab.tsx,plugin/mods/ops-board/ops/explorer.ts,plugin/mods/ops-board/tests/explorer.test.tsx,plugin/mods/ops-board/ops/tests/explorer.test.mts
+after: 170
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket A159 (agent-found) - fix seat, tier build. No design file: the ticket line is the spec; the four changes are named.
+
+  The ticket line, verbatim:
+  - [ ] A159 — Explorer git actions: four review leftovers. Found by the F103 re-review (RUN-0023 stage 170, 7fc77ff). Someone should: refuse a remote name starting with - in planAction (git push -f HEAD:... reads it as an option); toast openAction errors from the tab hotkeys (they .catch to nothing, so a network-path repo whose fs.exists rejects does nothing silently); set GCM_INTERACTIVE=never beside GIT_TERMINAL_PROMPT=0 so Git Credential Manager opens no window; and make ops/explorer.ts clear upstream and counts on a non-128 upstream failure as the pane now does. Done when each has a test, red then green, in plugin/mods/ops-board. [owner: @sher] (@cc-9de7d9)
+
+  Context: F103 (commits 727ac63..7fc77ff on this branch) built the Explorer git actions; read hooks/lib/explorer.ts (planAction, ACTION_ARGS), hooks/explorertab.tsx (openAction, the keys row, the action env with GIT_TERMINAL_PROMPT=0, the upstream read and its exit-128 handling) and ops/explorer.ts (the read-only terminal app's upstream read) first. The ops app stays read-only.
+
+  Files you may touch: plugin/mods/ops-board/hooks/lib/explorer.ts, hooks/explorertab.tsx, ops/explorer.ts, tests/explorer.test.tsx, ops/tests/explorer.test.mts. Anything else -> stop and report.
+
+  Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board (all pass), then npm --prefix C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board/ops test (all pass) - one at a time; tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f103.json (no output). Each of the four tests red first, then green. Never run an Explorer git action against a real repo - tests use mocks. Commit messages start with "A159: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), anything you could not verify, any unrelated problem (one line each).
+### AACD - stage 184 - F112 one marathon command, sequential or parallel
+tickets: F112
+files: README.md,plugin/PLATFORMS.md,plugin/WORKFLOW.md,plugin/commands/marathon-plan.md,plugin/commands/marathon-run.md,plugin/host-commands/antigravity/marathon-plan/SKILL.md,plugin/host-commands/antigravity/marathon-run/SKILL.md,plugin/host-commands/cursor/marathon-plan.md,plugin/host-commands/cursor/marathon-run.md,plugin/host-commands/gemini/marathon-plan.toml,plugin/host-commands/gemini/marathon-run.toml,plugin/host-commands/opencode/marathon-plan.md,plugin/host-commands/opencode/marathon-run.md,plugin/host-commands/pi/marathon-plan.md,plugin/host-commands/pi/marathon-run.md,plugin/install.ps1,plugin/install.sh,plugin/skills/relay-morpheus/references/marathon.md,plugin/skills/relay-morpheus/templates/marathon-workflow.js
+after: 179, 181
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  grade: bounded · critical no · design deep=fable · build build=opus · verify build=opus · ceremony full (inside RUN-0023) · mode single (ruled: one relay stage) · usage unobservable
+
+  Ticket F112 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/design-2026-10-27-F112-marathon-one-command.md - read it whole, then build its TASKS in order, test-first as each task says. Do not load build-jarvis, do not regrade, do not redesign; a design step that turns out wrong against the code is a deviation you report with why. Q-F112-1 and Q-F112-2 are parked for the owner: build on their defaults.
+
+  The ticket line, verbatim:
+  - [ ] F112 — Marathon: one command, sequential or parallel. Owner 2026-10-27: 'add marathon run one command foe sequential and parallel like pending agent'. Today a Workflow marathon is two commands, /marathon-plan then /marathon-run, and neither takes a mode; /pending-subagent takes [sequential|parallel] [count|max] [IDs] (F88). Done when: one marathon command plans and runs in one go and takes the same arguments as /pending-subagent - no mode = sequential (one stage per phase, one agent at a time), parallel = file-disjoint stages side by side in a phase, a count caps them, IDs limit the tickets - with the same refusals for a bad first word; /marathon-plan and /marathon-run keep working; the host command texts and README say so on every host that has commands; the installer selftests pin it. [owner: @sher] (@cc-9de7d9)
+
+  F109 (marathon.md, relay-morpheus) and F110 (install.sh/ps1, README, the skill-smith to skill-prometheus rename) landed on this branch before you: re-read every file before editing and keep their changes.
+
+  Files you may touch: the design's FILES list only. Anything else -> stop and report. Verify: the design's VERIFICATION, every command, exit codes read directly (the installer selftests are slow - long timeout, not through a pipe). Commit messages start with "F112: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and result), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### AACE - stage 185 - B15 Workflows agents missing
+tickets: B15
+files: plugin/mods/ops-board/hooks/agentstab.tsx,plugin/mods/ops-board/hooks/lib/agents.ts,plugin/mods/ops-board/hooks/register.tsx,plugin/mods/ops-board/types/index.d.ts,plugin/mods/ops-board/tests/agents.test.tsx
+after: 180, 179
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket B15 (bug) - fix seat, tier deep: the cause is unknown. No design file: the ticket line is the spec. Follow root-cause-first (plugin/PRACTICE.md §7): reproduce, then find and name the cause with evidence, and only then fix it.
+
+  The ticket line, verbatim:
+  - [ ] B15 — Workflows tab does not show the run's agents. Owner 2026-10-27, while RUN-0023 ran F109, F110 and a design agent from this session: the agents section of the ops board's Workflows tab (F93) does not list them. The section is fed by pollAgents ($.agent.list, every 5 s while Workflows is shown) and noteSpawn on each Agent call (register.tsx ~508), so they should show; cause unknown - reproduce first (installed skillator 4.19.0 on Claude Code 2.1.310, background agents started with the Agent tool and resumed with SendMessage). Done when: the cause is named with evidence, a test reproduces it red, and the section lists every running and finished agent of the session green. [owner: @sher] (@cc-9de7d9)
+
+  Read first: plugin/mods/ops-board/hooks/agentstab.tsx (pollAgents, noteSpawn, readAgents, WorkflowsTab's agents section), hooks/lib/agents.ts (listed, kindOf, capAgents, agentOrder), hooks/register.tsx (the 5 s poll while Workflows is shown, the PostToolUse hooks around lines 500-530), hooks/pane.tsx, the existing tests (tests/agents*.test.tsx), and the host API types the plugin-authoring skill points to (types/claude-code.d.ts: $.agent.list's AgentInfo, the tool hook event shapes for an Agent call with run_in_background and for SendMessage). Questions to settle with evidence: does $.agent.list return background agents started by this session (and resumed ones)? does noteSpawn see a background Agent call's result (async launch: the result carries an agentId, not the agent's output)? does kindOf/capAgents/a filter drop them? is the section drawn at all when relay runs are listed? If the installed 4.19.0 mod differs from this branch in this code, say so - the owner runs 4.19.0.
+
+  If you cannot reproduce it in the test world from the types, STOP and report what you checked (a failed repro is a stop - do not guess a fix).
+
+  Files you may touch: plugin/mods/ops-board/hooks/agentstab.tsx, hooks/lib/agents.ts, hooks/register.tsx, types/index.d.ts, tests/agents*.test.tsx. Anything else -> stop and report. Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board (all pass), the repro test red first then green; tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f103.json (no output). Commit messages start with "B15: " and state the cause.
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the root cause (with the line that causes it), the commit sha(s), files changed, the red then green test output, anything you could not verify, any unrelated problem (one line each).
+### AACF - stage 186 - AACF B16 reconcile form with nothing pressable
+tickets: B16
+files: plugin/mods/ops-board/hooks/reconcile.tsx,plugin/mods/ops-board/tests/reconcile.test.tsx
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket B16 (bug) - you are its fix seat. The cause is reproduced and named; fix it test-first.
+
+  The ticket line, verbatim:
+  - [ ] B16 — Reconcile form opens with nothing pressable. Owner 2026-10-27: the reconcile buttons do nothing. Repro: ticket-meta reconcile prints one row, A157 [!] -> [!] evidence unclear; openReconcile in plugin/mods/ops-board/hooks/reconcile.tsx:26 tests rows.length, not the applicable rows, so the form opens with the row as plain text, no Accept all, no Apply picked - only None. Done when: a result with no applicable row toasts what reconcile said, each stays row with its reason, instead of a dead form; a test pins it red then green; claude plugin test and tsc clean. [owner: @sher]
+
+  Repro (verified by the orchestrator): `sh plugin/skills/tickets-zordon/scripts/ticket-meta.sh reconcile` on the main board prints exactly `A157 [!] -> [!]  evidence unclear: blocked on '...', no ticket to check`; canApply is false for it, so renderReconcile draws n=0. Fix in openReconcile only: when no row passes canApply, toast instead of opening the form - the existing all-match text when there are no rows, else one line per stays row (`<ID> stays - <why>`) under a head such as `ops board: reconcile - nothing to change`. Keep the form, Accept all, Apply picked and None as they are for the case with applicable rows.
+
+  Files you may touch: plugin/mods/ops-board/hooks/reconcile.tsx, plugin/mods/ops-board/tests/reconcile.test.tsx (and lib/ticketsmodel.ts only if a pure helper for the toast text is the smallest way). Anything else -> stop and report. Test: a stays-only reconcile output toasts and leaves the reconcile atom null (red first, then green); the mixed case still opens the form.
+
+  Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board (all pass); tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f104.json pointed at this worktree if it already is, else say how you ran tsc. Commit messages start with "B16: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), or the stage worktree the dispatch names, never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha, files changed, the red then green test output (command and result), anything you could not verify (one line each).
 
 ## Rulings
 - 13:00Z - designs by one fable pass (scratchpad design-2026-10-26-f10*.md). Owner, asked: F100 approach 1 approved, F101 approach 1 approved (both arch gates passed); Q-F100-1 plugin-test frames are the pane render proof; Q-F101-1 no live host probes, hosts tagged inferred.
@@ -250,3 +371,23 @@ prompt: |
 - 19:30Z - 169 F101 built (9781ef7 94b36a2); medium review (main-session-dispatched, run on the worktree range by hand after the skill forked into main) found 6, 4 verified by reading: no-Workflow retry inherits an Agent call, landing owner hard-coded workflow, driver tag doubled, README stale; plus vacuous installer assertion, RELAY_CHAIN_PARALLEL missing from host texts. Fix agent opus, prompt .skillator/prompts/run-0023-s169-fix1.txt; README.md ruled inside F101's contract (docs say per host what runs) - cost if wrong: one extra file in the stage. Review's 10 findings on main's clone-odo (F107) are out of this stage: noted for the F107 owner check.
 - 19:55Z - 169 fix round 1 2c53043: separate review (read-only agent, diff read in the worktree) confirmed all 6 and found 4: Gemini CLI's ~/.gemini/skills gets the agy text and the selftest locks --owner subagent there (verified, install.sh 54-58/396-400); no-delegate BLOCKED retry not dispatched first; README says every host has the command and puts muse under subagents; RELAY_CHAIN_PARALLEL unguarded. Fix round 2 (of 3) opus, prompt .skillator/prompts/run-0023-s169-fix2.txt - cost if wrong: one more round.
 - 20:05Z - /pending-subagent parallel (owner @sher): stages 178 F106 (after 169), 179 F109 (after 178,171), 180 F111 (after 179,170,171), 181 F110 (after 180,173) added; designs by one fable pass (scratchpad design-2026-10-26-F10{6,9}/F11{0,1}-*.md), tiers build/deep (F109 critical: TICKETS.md line format). Before 178: merge main into this run branch (main has the F107 clone-odo merge that F110 renames inside). Before 181: RUN-0024 (F108 shares manifests and routing.md) lands on main and main is merged here again - the lease already holds 181. Parked for the end batch, built on defaults: Q-F106-1 yes, Q-F109-1 no, Q-F109-2 whole token, Q-F111-1 no, Q-F111-2 no tab number hotkeys (the picked mock shows them), Q-F110-1 extend README l.163; Q-F110-2 settled by the owner (skill-prometheus) - cost if wrong: a follow-up edit per Q.
+- Ruling: stage 169 F101 landed at f06d0fc after the orchestrator re-ran relay, install.sh and install.ps1 selftests (all ok, run one at a time at 0.86 GB free); main (clone-odo F107, RUN-0024) merged into the run branch at d186426 - manifests and the grayskull routing rows kept both sides; every selftest ok on the merged tree - cost if wrong: a later stage builds on a bad merge.
+- Ruling: watchdog hold (0.6 GB, a transient dip) released by the driver - free memory read 3.19 GB a minute later; 170 F103 and 173 F105 dispatched, 2 agents, 178 waits for a slot - cost if wrong: the reaper stops an agent mid-stage and it is re-dispatched.
+- Ruling: 173 runs beside 170, so dispatch gave it the stage worktree .s173; its agent gets the stored prompt with that worktree substituted (.skillator/prompts/run-0023-s173-wt.txt) - cost if wrong: none.
+- Ruling: stage 173 F105 merged into the run branch at 1264371, both installer selftests ok on it; lands with 170. Stage 170 F103 review (read-only, opus) said FIX-FIRST: bare git push follows remote.*.push / mirror config (verified force and delete), plan not re-checked at Run, in-progress ops and detached HEAD not refused, merge argv lacks --; one fix seat takes all 8 findings (prompt run-0023-s170-fix1.txt, opus) - cost if wrong: one more review round.
+- Ruling: 178 F106 runs beside the 170 fix seat in stage worktree .s178; prompt with that worktree substituted (.skillator/prompts/run-0023-s178-wt.txt) - cost if wrong: none.
+- Ruling: stage 170 F103 landed at 7fc77ff after re-review LAND (all 8 findings closed, mirror and +refspec re-tested); four non-blocking leftovers logged as A159 - cost if wrong: a follow-up ticket.
+- Ruling: 171 F104 got stage worktree .s171 (178 is in flight beside it); prompt with that worktree substituted (.skillator/prompts/run-0023-s171-wt.txt) - cost if wrong: none.
+- Ruling: /pending-subagent (no mode = sequential, owner 02:5xZ) - pick gave F104 F106 F109 F110 F111 (already RUN-0023 stages), A157 (skipped: [!], needs a host with under 100 skills) and A159 (new); A159 joins RUN-0023 as stage 183 after 170, files the Explorer ones; 178 and 171 already in flight finish, then RELAY_CHAIN_PARALLEL is unset - one stage at a time - cost if wrong: slower run.
+- Ruling: stage 171 F104 review (read-only, opus, ran shaFor against the real branch) said FIX-FIRST: merge commits and main board commits merged into the run branch are picked as the landed sha (would mark 168 landed while the run is unmerged); one fix seat takes findings 1-6 (prompt run-0023-s171-fix1.txt, opus) - cost if wrong: one more review round.
+- Ruling: /pending-subagent parallel (owner, after a bare re-run) - RELAY_CHAIN_PARALLEL=7 (the open ticket stages 171 178 179 180 181 183, plus room for fix seats); the pick is unchanged (A157 still [!]); stages still wait on their after: lines - cost if wrong: a watchdog hold.
+- Ruling: 183 A159 in stage worktree .s183, prompt with that worktree substituted (run-0023-s183-wt.txt) - cost if wrong: none.
+- Ruling: F104 fix seat opus->fable - reviews 1 and 2 failed: 1 found merge and main board commits picked as the landed sha; 2 found the round-1 first-parent rule still admits side-branch commits merged via main (real F97 -> 0b47677) and hides the run's own commit after a fast-forward or with HEAD on the run branch - the git-history rule is design judgement, not mechanics - cost if wrong: a dearer seat (prompt run-0023-s171-fix2.txt).
+- Ruling: stage 178 F106 landed - diff read by the orchestrator, all four selftests ok on the merged branch (ticket-meta sh/ps1, relay-morpheus sh/ps1); the no-Workflow board flip in marathon.md l.337 carries no F106 note (the claim itself is in RM board, so it applies there too) - cost if wrong: a doc nit.
+- Ruling: stage 171 F104 landed at 9570946 after review round 3 LAND (real-repo mapping and all earlier scenarios right; ops-board 360/0 on the merged tree); three narrow wrong-sha shapes left, each needing a main commit whose subject leads with an open stage's ID and shown in the confirm, logged as A160 rather than a fourth round - cost if wrong: a Close on a partly-landed run offers a main commit the owner must reject.
+- Ruling: stage 181 F110 now after 173 only (owner asked for parallel; F110's files and every skill-smith mention are disjoint from F109 and F111, checked by grep) - chain edge only adds an after: line, so the 180 edge was removed by hand - cost if wrong: a merge conflict on the rename, caught at chain merge.
+- Ruling: 181 F110 in stage worktree .s181 beside 179 (prompt run-0023-s181-wt.txt); 179 F109 agent died on a network error (ENOTFOUND) mid-green with an uncommitted ticket-meta.sh edit - resumed with its context, not re-dispatched - cost if wrong: none.
+- Ruling: F112 (owner 2026-10-27: one marathon command, sequential or parallel) joins RUN-0023 as stage 184, after 179 (marathon.md) and 181 (install.sh/ps1, README); design by fable, scratchpad design-2026-10-27-F112-marathon-one-command.md: /marathon-run [sequential|parallel] [N|max] [IDs] plans and runs in one go, the mode lives in the plan (PLAN.mode); Q-F112-1 (marathon-plan default) and Q-F112-2 (cap on bare parallel) parked for the end batch, built on their defaults - cost if wrong: a re-plan.
+- Ruling: owner 2026-10-27 picked 1 and 3: B15 (Workflows agents section misses this session's agents; repro owed) joins as stage 185 after 180 and 179 (register.tsx, types); F113 (start a run from the Workflows tab) is logged and gets a design pass, then a stage after B15 - cost if wrong: a longer run.
+- Ruling: stage 181 F110 landed - remaining skill-smith mentions are the one-release pointer stub, its muse entry, the installer selftest rows, baselines and history (CASEFILE.md, the board page's old ticket text); both installer selftests ok on the merged branch - cost if wrong: a stale mention in a live doc.
+- Ruling: stage 179 F109 deep review (fable, held) said LAND with od -v strongly recommended; one fix seat folds in 1 (od -v + a repeated-byte vector in all three), 2 (require the dash in the session tag so a title ending in (@asha) is never edited - user text is not ours to rewrite) and 3 (one stamp per relay ~ flip); 4-5 are notes - prompt run-0023-s179-fix1.txt, opus - cost if wrong: one more short round.

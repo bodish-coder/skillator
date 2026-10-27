@@ -1,0 +1,50 @@
+# GREEN - clone-odo description D platform loads (F114)
+# Rule under test (ONE): web, Android, iOS and Windows clone requests with
+# their URL/store link load Skill(skillator:clone-odo) unprompted, at least
+# 1/2 per platform. scenario-clone-odo-platform-{web,android,ios,windows}.txt
+# are run unprefixed; the prompt never names the skill. Fictional links mean
+# successful loading does not establish navigation/capture success.
+#
+# Fixture: odo, fresh per run. Controller runs five sequential baselines:
+# web, android, ios, windows, then scenario-clone-odo-reviews.txt with D.
+# Host: isolated local profile under .skillator/baselines/F114, explicit
+# settings/plugin prefix/MCP isolation; BASELINE_ISOLATE=off, model sonnet,
+# 900 seconds. Live skills junction and user CLAUDE.md are never moved.
+# Record CLI/configuration, inventory differences from historical A157,
+# prefix commit, fixture SHA, first call, turns, raw cost and route/viewport.
+# Exact historical 62-skill host equivalence is unproved, not assumed.
+# Each valid run requires real rc=0, one init, non-error result, no timeout,
+# unchanged prefix, fewer than 100 init skills and clone-odo present.
+# A second fresh attempt is allowed only after a valid completed load failure;
+# infrastructure/auth/discovery errors stop the queue, not count as failures.
+# Grading: jq -r 'select(.type=="assistant") | .message.content[]? |
+#   select(.type=="tool_use" and .name=="Skill") | .input.skill' <run>.jsonl
+# Capture route is secondary. Reviews must load too; no A157 closure before
+# actual passing D reviews and platform evidence. See design Resume rulings
+# and .skillator/reports/F114-preflight.md for the controller's run protocol.
+#
+# ---------------------------------------------------------------- VERDICT ----
+# ---- 2026-10-27 controller measured results ----
+# Source prefix: 8093d1c373621884c2b93009fcbb13930ca95598; immutable manifest verified before/after every run.
+# Host: Claude Code 2.1.311; isolated local profile; 50 init skills per run, clone-odo present; model follows init below.
+# Explicit settings exclude instruction discovery, user/project setting sources and external MCP; BASELINE_ISOLATE=off is the harness label.
+# No live skills junction or user CLAUDE.md moves; before/after target/hash/hidden-marker checks passed.
+# Different configuration from historical A157 t3: 62 -> 50 skills, 14 inventory differences; exact host equivalence is not claimed.
+# Raw JSONL/exit/error logs, fixture revisions, inventory comparison and source hashes: .skillator/baselines/F114 (local ignored).
+# Reproduction helpers: .skillator/reports/F114-baselines.ps1, F114-drive-local.sh and F114-shell-bridge.sh.
+# CLI init/result schema, rc0, no timeout, <100 skills and prefix invariants checked per run; one attempt each, no retries.
+# p-web: loaded YES 1/1; first tool Skill; 15 turns; raw cost 0.16134540000000003; model claude-sonnet-5-5; rc 0
+#   fixture 7167b95193dd9e567ff21deecb9baf927df8b517; assistant viewport mention False; capture mention True
+# p-android: loaded YES 1/1; first tool Skill; 13 turns; raw cost 0.1660466; model claude-sonnet-5-5; rc 0
+#   fixture 7167b95193dd9e567ff21deecb9baf927df8b517; assistant viewport mention False; capture mention True
+# p-ios: loaded YES 1/1; first tool Skill; 14 turns; raw cost 0.16918429999999998; model claude-sonnet-5-5; rc 0
+#   fixture 7167b95193dd9e567ff21deecb9baf927df8b517; assistant viewport mention False; capture mention True
+# p-windows: loaded YES 1/1; first tool Skill; 14 turns; raw cost 0.1734511; model claude-sonnet-5-5; rc 0
+#   fixture 7167b95193dd9e567ff21deecb9baf927df8b517; assistant viewport mention True; capture mention True
+# r-reviews: loaded YES 1/1; first tool Skill; 10 turns; raw cost 0.1171472; model claude-sonnet-5-5; rc 0
+#   fixture 7167b95193dd9e567ff21deecb9baf927df8b517; assistant viewport mention False; capture mention False
+# Total raw cost USD: 0.7871746 (rounded once: 0.79).
+# VERDICT: PASS - web/android/ios/windows each 1/1; description-D reviews 1/1. A157 load criterion met on an explicitly documented under-100-skill host.
+# Loading does not establish successful navigation, capture, native app execution or parity against the fictional store links.
+# Deterministic source checks: 63 tests, sh/ps1 runner selftests, routing/grayskull/manifest checks pass; harness selftest fresh rc0 (receipt .skillator/reports/F114-harness-selftest.exit).
+# Upstream latest-commit check failed to read remote; no claim of unchanged upstream.

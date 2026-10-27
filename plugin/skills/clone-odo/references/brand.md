@@ -110,6 +110,9 @@ description 80, full 4000), counting characters the way a person does; flags
 ranking and price claims in short fields, emoji, wasted keyword characters,
 and any name from `avoid` anywhere in the listing. Exit 1 on an error.
 
+It knows the App Store and Google Play; a Microsoft Store listing is checked
+by eye against that store's own limits (not linted), and the same `avoid` names apply.
+
 Apple's App Review Guideline 4.1 (Copycats) rejects an app that copies a
 popular one or makes minor changes to its name or UI: the fixes and the
 clone's own brand are what get it through, so they show in the screenshots

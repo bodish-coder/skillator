@@ -2,8 +2,8 @@
 # keep the two in step. One entry point for the six stdlib-Python tools, so the
 # python check lives once and a missing python is one line, never a traceback.
 #
-#   odo.ps1 parity   <features.csv> [--visual <diffs/*.json>] [--markdown] [--fail-under N]
-#   odo.ps1 imgdiff  <original.png> <clone.png> [--out diff.png] [--json] [--mode layout|pixel]
+#   odo.ps1 parity   <features.csv> [--visual <diffs/*.json>] [--markdown] [--fail-under N] [--platform web|android|ios|windows]
+#   odo.ps1 imgdiff  <original.png> <clone.png> [--out diff.png] [--json] [--mode layout|pixel] [--platform web|android|ios|windows]
 #   odo.ps1 reviews  <reviews.csv> [--out feedback.md] [--json] [--themes <themes.json>]
 #   odo.ps1 sweep    [<dir>] --avoid "Name,Co" [--domains d.com] [--colors "#hex"] | --config brand.json
 #   odo.ps1 listing  <listing.json> [--avoid "Name"]

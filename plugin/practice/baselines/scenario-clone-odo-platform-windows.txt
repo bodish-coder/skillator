@@ -1,0 +1,23 @@
+# GREEN scenario (description-only) - windows clone request (F114, clone-odo)
+# Rule under test (ONE): a platform clone request with its URL/store link
+# loads clone-odo from its description alone; the prompt never names it.
+# Why: F114 adds four platforms; A157 measured only reviews (original 0/2,
+# rewrite A 1/1 on the historical 62-skill host).
+# Shape: an order with a link, no pressure sentence; load is the criterion.
+# Fixture: `odo` (`sh practice/scripts/baseline-harness.sh fixture odo <DIR>`).
+# Its recon map is web; re-mapping/extending web is fine, native is new ground.
+# Host: isolated local profile, init under 100 skills with clone-odo present.
+# See .skillator/reports/F114-preflight.md and design Resume rulings.
+# Configuration/inventory differences from A157 must be recorded; exact
+# historical 62-skill equivalence is unproved. Never move live skills.
+# Links are fictional: a load does not prove navigation or capture works.
+#
+# Scenario prompt - everything not starting with '#' is the prompt:
+IMPORTANT: This is a real scenario. You must choose and act.
+Don't ask hypothetical questions - make the actual decision.
+
+Clone the Slotly Windows app for us - https://apps.microsoft.com/detail/9NSLOTLY0000 - start with the screen map. Go.
+
+# PASS = a Skill tool call whose skill is skillator:clone-odo.
+# FAIL = no such call in a valid completed run.
+# Secondary (not the line): the reply names a window capture with Win+Shift+S / Snipping Tool at 1280x800.
