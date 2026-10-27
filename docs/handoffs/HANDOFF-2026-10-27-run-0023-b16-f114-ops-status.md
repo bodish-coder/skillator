@@ -1,23 +1,19 @@
 # Handoff — RUN-0023 mid-run, B16 / F114 / A157, ops --status (2026-10-27)
 
 <!-- skillator-execute
-status: blocked
+status: in-progress
 last-run: 2026-10-27
-runs: 1
-remaining: 3
-note: B15 failed repro; owner decision required before final172. All other work stages landed; profile repair approval pending.
+runs: 3
+remaining: 4
+note: F116 committed f3c71d9 and testing; final172 version4.21.0/ops0.11.0 and shared installer checks active; B15/B17 live evidence plus profile approval remain.
 -->
 
 > **Status legend:** ✅ DONE (verified in repo) · 🟡 IN-PROGRESS (partial/uncommitted) · 📝 CLAIMED (asserted in chat, unverified) · ⬜ NOT STARTED
 
-## 1. TL;DR (read this first)
-RUN-0023 (`/pending-subagent parallel`, RELAY_CHAIN_PARALLEL=7) is mid-flight. F109's review fix round 1 is committed
-(9c4da38) and its ticket-meta selftest re-ran `ok`, but stage 179 is **not landed yet** (still `~`). B16 is
-fixed and committed in its own stage worktree (926eaad) but **not merged** into the run branch. F114 is
-designed, not planned. **Next action:** land 179 (stage x + ticket flip), then `chain merge 186`, land 186, then
-dispatch 180 (F111) and 184 (F112) in parallel. The owner's newest open item is `ops --status` showing no
-quota for every Claude profile: root cause found (§3), fix not started, it needs the owner's OK (it edits
-their `settings.json` files).
+## 1. TL;DR (current verified state)
+RUN-0023 source work is complete through F115 and the four final-audit fixes. F116 status controls and ticket decision HTML committed f3c71d9 after held independent LAND and two corrected findings; all 420 plugin tests pass from frozen unchanged source. Both full status-writer selftests, holo, actual SDK type checking, validation and standalone 165-test suite pass. Final release checks, version bump and local merge remain. B15 and B17 stay blocked for affected live-runtime evidence. External profile settings and push remain unapproved.
+
+The historical sections below retain the original handoff context. The authoritative current ledger is `.skillator/run-0023-pending-f100-f104.md`; later execution entries supersede old next-action instructions.
 
 ## 2. Mission & scope
 - **Goal (why):** work the owner's open tickets to the end with one fresh subagent per ticket, reviewed and
@@ -93,7 +89,7 @@ Run file: `.skillator/run-0023-pending-f100-f104.md`. Run worktree: `.skillator/
    - `git -C C:/tools/Projects/skillator2 log --oneline -5`
    - `git worktree list`
    - `RM RUN-0023 chain next --all` (with `RELAY_CHAIN_PARALLEL=7`)
-2. **Next action:** land 179.
+2. **Current next action:** finish final release stage 172; F116 validation and commit are complete. The following original stage-179 procedure is retained as history only.
    - Optionally re-run `sh <worktree>/plugin/skills/relay-morpheus/hooks/relay-morpheus.sh selftest` (slow, over 10 min).
    - `RM RUN-0023 stage 179 x subagent 9c4da38`
    - Flip F109 with ticket-meta.
@@ -136,3 +132,25 @@ F114 and A157 are now done: five valid first-attempt loads, total rawUSD0.787174
 B15 FAILED REPRO stop: full389/0 including background/completion/resume terminal+desktop and tsc0. Installed agent-tracking source matches; currentCLI2.1.311 vs reported2.1.310 difference unverified. No guessed fix; stage185!, ticket[!], clean.s185 left for recovery. Owner asked to parkB15 andfinishverifiedbatch orkeepopenforliveevidence. Final172 will not execute until that decision. F112 shell fullsuite now verifiedrc0/ok, PowerShellfullsuite underway with durableexitrecords. Profileproposal still awaits approval.
 
 F112 final update: bothfullinstallers rc0/ok with durableoutput+exit receipts; independently LAND; committeda357ecc and merged4a60082, stage184x, boardtesting. Every authorized work stage is now landed except B15(failedrepro). Final172 remains held on ownerdecision. Profilefix remains unapproved and untouched.
+
+
+## Resume2026-10-27 - current expanded scope
+
+Ownerresume continuesverifiedbatch with B15blocked. Finalaudit sourceb7b2451 found4defects: A161UIraw/wheel (fixed024351a, scopedLAND,392plugin/164standalone/tsc); A162legacyreplan (pending); A163fontJSON (fixworktree, focusedgreen,fullinstallersrunning); A164unbornFetch (fixworktree). ParentreproducedunbornGitquery128/fetch0. Finalcasefile append is in RUNworktree CASEFILE.md (uncommitted untilfinalrelease review). Worktreepaths .skillator/worktrees/RUN-0023-final-a161/a163/a164, prompts run-0023-final-A*.txt. A161mergedintoRUNbranch024351a; otherfixesnotmergedyet.
+
+Newownerrequest F115alphabetactionsallpages/forms and B17Acceptall/Applypickedno-op logged. F115stage188; boundedbuild-jarvisdesign docs/plans/design-2026-10-27-F115-ops-alphabet-actions.md, exactdesignprompt run-0023-F115-design.txt. BuildmustfollowA161/A164 merge; preservetextentry andsingleexistinghandlerroute, nativehotkeyprefixwidthmustcount. B17current2.1.311 mountedtests8/8pass; SDK confirmsno-opcallbacksoverriddenbyui.press correctly. B17blockedpendingliveui.press/ticket-metatrace; neverclaimfixed. F115requestedkeyboardfallbackproceedsindependently. Designsourcebytesnotimplementation yet.
+
+Versionbump/localmainmerge/pushnotdone; stage172inprogress. Proposedcore4.21.0/mod0.11.0 notapplied. Profilefixstillunapproved; livesettingsuntouched. Finalreviewinvestigatorsreturnedfindings; finalUIscopedre-reviewLAND024351a. Noagentrunsorasyncsuitecompletionmaybeclaimedfromlosthandles; receiptsarepersisted bycurrentfixseats.
+
+## Current checkpoint — F116 usage gate
+
+- F115 stage188/AACH is committedf02ad369bf4ef4ee30822af6dfdf3a548199557f, independentlyLAND,403plugin165standalone,tsc/validate/cachedcheck0,116mountedtreecaptures. Boardtesting; physicalkeys/mouseownerlive andB17notclosed.
+- AuditA161024351a andA1640557ec8 integrated; A16362673a1 ancestorofA162ba58785 integratedafterF115commit. AllfourA-ticketsdone. A162fullsharedinstallercheck deferred; A163bothfullinstallersgreen. CASEFILE.md inRUNworktreecontainsdatedauditandisstillcontrollerdirty/uncommitted; builderspreserved it.
+- F116stage189/AACI, ticket[~], criticalsharedwritercontract designready. Plan docs/plans/design-2026-10-27-F116-ticket-status-holo.md includescontrollernativeargvtransportandatomicapply-oncechecks. Holoactualgenerated .skillator/holo/RUN-0023.html (19stages,12designcomponents). Allpagesmustbegeneratedbyholo.mjs; noHTMLboardwrites.
+- ExactF116buildprompt .skillator/prompts/run-0023-s189-build.txt, scope .skillator/prompts/run-0023-s189-files.txt, Chainblockrecorded. SINGLEfreshbuilder, gpt-6-astra/medium, thenHELDdeepgpt-6-astra/high independentverifybeforecommit. SourceRUNbranchincludesF115andall4auditfixes; noactivebuilder. Needwriter sh/PS, UIstatusform/meta-status, holo--ticket, isolatedcriticaltestmatrix andonefinalfullinstallerpass. No F116productionimplementation yet.
+- Relay refused189 beforedispatch: src=codex5h=-7d=81.0ctx=63.1max=81.0. Its documented fallback uses7d against80hold when5hmissing, labelsHOLD7d and requires explicit--confirmed evenbelow90hardthreshold. Useraskedsoleconfirmation ContinueF116now orsave/wait. No override/confirmed used. Holdrecorded81%7d,next189. Only afterexplicityes: release--override--confirmed, dispatch189--confirmed (rereadusage), thenfreshbuilderwithexactprompt. Don't inferapprovalfromtime or thisdoc.
+- Final172pendingbehind189; no versionbump/localmainlanding/push. Intendedcore4.21.0/mod0.11.0notapplied. ProfileSettingsrepairproposalunapproved; livesettingsuntouched. B15andB17blockedforactualsessionevent/list/actiontrace; userrequestedkeyboard/statusfeaturesproceedindependentlywhenquotaallows. F115keysUIisimplementedbutinstalledpluginnotupdated.
+- Mainboard hasnewF115/B17/F116 andA161..164 states committedthroughwriter. Rootrunledger/prompts/designs/reports/handoffupdatedbutnotyetallcheckpointcommitted in thisresume. Allfixbranchcommitsretained; runbranchprimaryonlycontrollerCASEFILEdirty. Diagnostics/evidenceareuntrackedorignored, don'tgitadd-A. Currentrootmetadatawillneedindependentstagedreviewbeforecommit.
+
+### F116 now dispatched after owner confirmation
+Owner answered continue to81weeklyfallbackusagehold. Relayrelease--override--confirmed anddispatch189--confirmed succeeded; no claimweekly90wasactuallyreached. Freshbuildseat /root/build_f116 (gpt-6-astra/medium) active onRUNworktreeHEAD4139f6a. Exactprompt .skillator/prompts/run-0023-s189-build.txt andcriticaldesign includeactualnativeargvtransport andatomicrapidApplychecks. Stage189~; no newcommit yet. SourceafterF115f02ad36 andall4auditfixes. Musthelddeepreviewbeforecommit, thenonefinalsharedinstaller sh/PS suite, releaseversion/manifestsreview/localmainmerge, askbeforepush. B15/B17stillblockedactualsessiontrace; profilesunapproved. CurrentprimaryworktreeCASEFILEdirtycontrollerartifactcannotbeaccidentallystagedbybuilder.
