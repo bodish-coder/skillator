@@ -995,3 +995,17 @@ is what makes truncating the list safe.
 - **The board must drain.** A ticket is a named change, never a finding — see
   the gate. If pending only ever grows, the bookkeeping has become the work:
   stop logging and run the drain.
+
+## Guarded individual status (F116)
+
+`ticket-meta.sh status <ID> <pending|blocked|deferred> <expected-row> [reason]`
+(the `.ps1` twin takes the same positional arguments). Pass the exact displayed
+`[box] ID - title ...` row token, preserving its dash, metadata and trailing spaces,
+as one argv value. Pending accepts only Blocked/Deferred and no reason; the two
+wait states require exactly one nonempty, single-line reason without parentheses.
+The shared lock checks freshness, the snapshot, source state and current owner/lead
+before even a no-op. Unowned tickets remain unowned. Existing session claims stay;
+Pending removes managed wait notes, while a wait target retains one current note.
+Nested/unrecognized parentheses and unrelated metadata remain. A stale snapshot
+requires rereading and explicitly choosing again. Legacy block/defer/unblock stay
+unchanged; this command posts no Teams notification.

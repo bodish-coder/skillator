@@ -312,3 +312,14 @@ test('readUsage: no flag dir at all is not observed', async () => {
   const u = await readUsage($, NOW)
   expect([u.five, u.seven]).toEqual([null, null])
 })
+
+
+test('F116 guarded status argv stays literal on both shells and holo has its own Node script', () => {
+  const row = String.raw`[>] F91 - "quoted" 'single' \new\test (deferred: wait)`
+  for (const target of ['pending','blocked','deferred']) {
+    const args = ['F91',target,row,...(target === 'pending' ? [] : ['reason "quoted" --flag'])]
+    expect(argvFor('meta-status',false,'/skills path',args,SH)).toEqual([SH,'/skills path/'+TM+'.sh','status',...args])
+    expect(argvFor('meta-status',true,'C:/skills path',args,PWSH)).toEqual([...PS,'C:/skills path/'+TM+'.ps1','status',...args])
+  }
+  expect(argvFor('holo-ticket',false,'/skills path',['F91'],'/node path/node')).toEqual(['/node path/node','/skills path/holo-r2d2/scripts/holo.mjs','--ticket','F91','--html'])
+})

@@ -161,3 +161,12 @@ test('F115 native prefix reserves three cells without moving the 56-column owner
     expect(row.owner).toBe(cols >= 56 ? '@owner' : null)
   }
 })
+
+
+test('F116 status/help native prefixes occupy the Tickets chrome budget', () => {
+  for (const [cols,keys] of [[40,3],[60,2],[80,2],[120,1]]) {
+    const v = view({cols}), m = buildModel(v)
+    expect(chromeRows(v,m,UNI).keys).toBe(keys)
+    expect(chromeRows(v,m,ASCII).keys).toBe(keys)
+  }
+})

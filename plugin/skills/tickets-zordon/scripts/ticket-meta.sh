@@ -69,6 +69,8 @@ TOP=''
 MAIN=''
 LOCKF=''
 LOCK_ME=''
+# Guarded options never come from the inherited environment.
+GUARDED_STATUS='' EXPECT_ROW='' DROP_WAIT='' KEEP_SESSION=''
 
 die() { board_unlock; echo "ticket-meta: $*" >&2; exit 1; }
 
@@ -254,6 +256,19 @@ board_unlock() {
   trap - HUP INT TERM
 }
 
+# Reserved waits only at the top parenthesis level; nested prose is data.
+managed_wait_notes() {
+  printf '%s\n' "$1" | awk '{
+    depth=0
+    for (i=1; i<=length($0); i++) {
+      rest=substr($0,i)
+      if (depth==0 && match(rest, /^[ \t]+\((blocked|deferred):[^()]*\)/)) {
+        note=substr(rest,1,RLENGTH); sub(/^[ \t]+/, "", note); print note; i+=RLENGTH-1
+      } else { c=substr($0,i,1); if(c=="(") depth++; else if(c==")" && depth>0) depth-- }
+    }
+  }'
+}
+
 # Rewrite the one line of $ID in the board, under the board lock. SET_APP /
 # SET_DECIDE / SET_OWNER / SET_BY from the environment; an empty one leaves that
 # tag as is. SET_MARK sets the box; NEED_MARK refuses a line whose box is not
@@ -271,6 +286,15 @@ edit_line() {
   [ "$n" = 1 ] || die "$ID: $n matching lines in $f, need exactly 1"
   cur=$(RE=$re awk '$0 ~ ENVIRON["RE"]' "$f" | tr -d '\r')
   mk=$(printf '%s\n' "$cur" | awk '{ match($0, /- \[/); print substr($0, RSTART + 3, 1) }')
+  if [ -n "$GUARDED_STATUS" ]; then
+    # Match parseBoard's token: only indentation and separator spaces are removed.
+    body=$(printf '%s\n' "$cur" | sed 's/^[ \t]*- \[.\][ \t]*//')
+    [ "[$mk] $body" = "$EXPECT_ROW" ] || die "$ID: board changed since displayed; reopen status and reselect the change"
+    case "$mk:$SET_MARK" in '!:'*|'>:'*) ;; ' :!'|' :>') ;; *) die "$ID is [$mk] - status only changes Pending, Blocked or Deferred" ;; esac
+    me_of || :; lead_of
+    ow=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\[owner:[ \t]*[^]]*\]/)) { v = substr($0, RSTART + 7, RLENGTH - 8); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }')
+    [ -z "$ow" ] || may_take "$ow" || die "$ID is owned by $ow - only its owner or lead may change status (you: ${ME:-$ME_WHY})"
+  fi
   if [ -n "${NEED_MARK:-}" ] && [ "$mk" != "$NEED_MARK" ]; then
     die "$ID is [$mk], not [$NEED_MARK] - nothing to change"
   fi
@@ -280,7 +304,7 @@ edit_line() {
   esac
   # F62/F64: the same note on a line already in that box is a no-op, like a
   # same-handle assignment. NOTE_KEY + NOTE_VAL is ` (<key>: <val>)`.
-  if [ -n "${NOTE_VAL:-}" ] && [ "$mk" = "${SET_MARK:-}" ]; then
+  if [ -z "$GUARDED_STATUS" ] && [ -n "${NOTE_VAL:-}" ] && [ "$mk" = "${SET_MARK:-}" ]; then
     v=$(printf '%s\n' "$cur" | K=$NOTE_KEY awk '{ k = ENVIRON["K"]; if (match($0, "\\(" k ":[^()]*\\)")) {
           v = substr($0, RSTART + length(k) + 2, RLENGTH - length(k) - 3); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }')
     if [ "$v" = "$NOTE_VAL" ]; then
@@ -289,6 +313,9 @@ edit_line() {
       echo "no change: $ID is already [$mk] ($NOTE_KEY: $v)"
       return 0
     fi
+  fi
+  if [ -n "$GUARDED_STATUS" ] && [ -n "${NOTE_VAL:-}" ] && [ "$mk" = "$SET_MARK" ] && [ "$(managed_wait_notes "$cur")" = "($NOTE_KEY: $NOTE_VAL)" ]; then
+    board_unlock; printf '%s\n' "$cur"; echo "no change: $ID is already [$mk] ($NOTE_KEY: $NOTE_VAL)"; return 0
   fi
   if [ -n "${SAME_KEY:-}" ]; then
     v=$(printf '%s\n' "$cur" | K=$SAME_KEY awk '{ if (match($0, "\\[" ENVIRON["K"] ":[ \t]*[^]]*\\]")) {
@@ -332,6 +359,7 @@ edit_line() {
   fi
   tag_text
   [ "$moved" = 0 ] || SET_TAG=''
+  if [ -n "$KEEP_SESSION" ] && printf '%s\n' "$cur" | grep -Eq '\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$'; then SET_TAG=''; fi
   export SET_TAG
   eol=0
   [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ] && eol=1
@@ -339,6 +367,15 @@ edit_line() {
   # BINMODE=3: Windows gawk would otherwise drop each line's \r on the way in
   # (B3); elsewhere it is ignored and the \r arrives in $0 as is.
   RE=$re EOL=$eol awk -v BINMODE=3 '
+    function dropwait(line,    i,depth,rest,c,out) {
+      depth=0; out=""
+      for(i=1;i<=length(line);i++) {
+        rest=substr(line,i)
+        if(depth==0 && match(rest, /^[ \t]+\((blocked|deferred):[^()]*\)/)) i+=RLENGTH-1
+        else { c=substr(line,i,1); out=out c; if(c=="(") depth++; else if(c==")" && depth>0) depth-- }
+      }
+      return out
+    }
     function find(line, key) { return match(line, "[ \t]*\\[" key ":[ \t]*[^]]*\\]") }
     # A tag goes where it is, else before the next tag in app/decide/owner/by order,
     # else before the trailing (..) groups and a bare "Plan: S<n>" before them
@@ -361,10 +398,13 @@ edit_line() {
     # F62/F64: a note replaces the one matching pat, else goes before a trailing
     # (@agent-id) session tag, else at the end of the line.
     function setnote(line, note, pat) {
-      if (match(line, pat))
+      if (ENVIRON["GUARDED_STATUS"] == "" && match(line, pat))
         return substr(line, 1, RSTART - 1) note substr(line, RSTART + RLENGTH)
       if (match(line, /[ \t]*\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$/))
         return substr(line, 1, RSTART - 1) note substr(line, RSTART)
+      if (ENVIRON["GUARDED_STATUS"] != "") {
+        match(line, /[ \t]*$/); return substr(line, 1, RSTART - 1) note substr(line, RSTART)
+      }
       sub(/[ \t]+$/, "", line)
       return line note
     }
@@ -381,6 +421,7 @@ edit_line() {
         if (ENVIRON["SET_BY"] != "") line = settag(line, "by", ENVIRON["SET_BY"])
         # (testing: ..) replaces only itself; (blocked: ..) and (deferred: ..)
         # replace either - the line says only the current wait (F64).
+        if (ENVIRON["DROP_WAIT"] != "") line = dropwait(line)
         if (ENVIRON["NOTE_VAL"] != "") {
           k = ENVIRON["NOTE_KEY"]; p = (k == "testing") ? "testing" : "(blocked|deferred)"
           line = setnote(line, " (" k ": " ENVIRON["NOTE_VAL"] ")", "[ \t]*\\(" p ":[^()]*\\)")
@@ -721,6 +762,24 @@ cmd_defer() {
   norm_id "$1"; shift
   note_text 'until what' 0 "$@"
   SET_MARK='>' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_KEY=deferred NOTE_VAL=$NOTE REFUSE_MARKS='x-' SAME_KEY='' NEED_MARK='' edit_line
+}
+
+# F116: one snapshot-guarded status operation; no notification or ownership claim.
+cmd_status() {
+  CMD=status
+  [ $# -ge 3 ] || die "usage: status <ID> <pending|blocked|deferred> <expected-row> [reason]"
+  norm_id "$1"; target=$2; expected=$3
+  one_line "$expected" && [ -n "$expected" ] || die "expected-row must be one nonempty line"
+  key='' note='' mark=' '
+  case $target in
+    pending) [ $# -eq 3 ] || die "pending takes no reason" ;;
+    blocked|deferred)
+      [ $# -eq 4 ] || die "wait status requires exactly one reason argument"
+      note_text reason 0 "$4"; note=$NOTE; key=$target
+      if [ "$target" = blocked ]; then mark='!'; else mark='>'; fi ;;
+    *) die "unknown status target: $target" ;;
+  esac
+  GUARDED_STATUS=1 EXPECT_ROW=$expected DROP_WAIT=1 KEEP_SESSION=1 OWN_CHECK='' CLAIM_FREE='' DROP_BLOCKED='' DONE_NOTE='' VERIFIED_NOTE='' VFAIL_NOTE='' SET_MARK=$mark SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_KEY=$key NOTE_VAL=$note SAME_KEY='' NEED_MARK='' REFUSE_MARKS='' edit_line
 }
 
 # F81: the wait is over: [!] -> [ ], its (blocked: ..) note dropped. Only from [!].
@@ -1070,6 +1129,26 @@ selftest() {
     git add -A && git -c user.name=t -c user.email="$em" -c commit.gpgsign=false \
       -c core.hooksPath="$T/hooks" commit -q -m "$msg" > /dev/null
   }
+
+  # F116: guarded waiting-state recovery, isolated from the real board.
+  mkdir -p "$T/f116/.skillator" && cd "$T/f116" && git init -q .
+  printf -- '- @asha: asha@x.com\n' > .skillator/team.md
+  snap="[>] F91 $D Later [owner: @asha] (testing: owner check) (deferred: after release) (@cc-old:asha:run)"
+  printf -- '- %s\n' "$snap" > TICKETS.md
+  eq "F116 pending preserves claim" "$(SKILLATOR_ME=@asha run status F91 pending "$snap")" "- [ ] F91 $D Later [owner: @asha] (testing: owner check) (@cc-old:asha:run)"
+
+  snap="[!] F92 $D Wait (user note) (blocked: F3) (deferred: old) Plan: S12"
+  printf -- '- %s\n' "$snap" > TICKETS.md
+  eq "F116 clears all reserved waits" "$(run status F92 pending "$snap")" "- [ ] F92 $D Wait (user note) Plan: S12"
+  snap="[ ] F92 $D Wait (outer (blocked: nested))  "
+  printf -- '- %s\n' "$snap" > TICKETS.md
+  eq "F116 guarded reason and nested prose" "$(run status F92 blocked "$snap" 'new reason')" "- [!] F92 $D Wait (outer (blocked: nested)) (blocked: new reason)  "
+  cp TICKETS.md "$T/f116-before"
+  sh "$self" status F92 pending "$snap" > /dev/null 2>&1 && { echo "FAIL: F116 stale snapshot accepted"; fail=1; }
+  cmp -s TICKETS.md "$T/f116-before" || { echo "FAIL: F116 refusal changed bytes"; fail=1; }
+  snap="[!] F92 $D Wait (outer (blocked: nested)) (blocked: new reason)  "
+  run status F92 blocked "$snap" 'new reason' > /dev/null
+  cmp -s TICKETS.md "$T/f116-before" || { echo "FAIL: F116 noop changed bytes"; fail=1; }
 
   # --- monorepo fixture: three app roots, a package.json workspace, a pnpm one
   M="$T/mono"
@@ -1831,6 +1910,7 @@ case $c in
   claim) cmd_claim "$@" ;;
   pick) cmd_pick "$@" ;;
   reconcile) cmd_reconcile "$@" ;;
+  status) cmd_status "$@" ;;
   unblock) cmd_unblock "$@" ;;
   start) cmd_start "$@" ;;
   *) die "unknown subcommand: $c" ;;

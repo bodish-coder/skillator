@@ -331,6 +331,18 @@ function Unlock-Board {
   $script:LockF = $null
 }
 
+# Only top-level reserved groups are managed; nested prose remains byte-identical.
+function Get-WaitMatches([string]$line) {
+  foreach ($m in [regex]::Matches($line, '[ \t]+\((blocked|deferred):[^()]*\)')) {
+    $depth = 0
+    for ($j = 0; $j -lt $m.Index; $j++) {
+      if ($line[$j] -ceq '(') { $depth++ }
+      elseif ($line[$j] -ceq ')' -and $depth -gt 0) { $depth-- }
+    }
+    if ($depth -eq 0) { $m }
+  }
+}
+
 # Rewrite the one line of $id under the board lock. $o: app / decide / owner /
 # by (an empty or missing value leaves that tag as it is), mark (sets the box),
 # need (refuses a line whose box is not that), samekey + sameval (a line
@@ -354,14 +366,30 @@ function Edit-Line([string]$id, [hashtable]$o) {
     if ($line.EndsWith("`r")) { $cr = "`r"; $line = $line.Substring(0, $line.Length - 1) }
     $b = $line.IndexOf('- [') + 3
     $mk = $line.Substring($b, 1)
+    if ($o.guarded) {
+      $body = [regex]::Replace($line, '^[ \t]*- \[.\][ \t]+', '')
+      if (-not [string]::Equals("[$mk] $body", [string]$o.expected, [StringComparison]::Ordinal)) { Fail "${id}: board changed since displayed; reopen status and reselect the change" }
+      if (@(' ', '!', '>') -cnotcontains $mk -or ($o.mark -ceq ' ' -and $mk -ceq ' ')) { Fail "$id is [$mk] - status only changes Pending, Blocked or Deferred" }
+      $me = Get-Me; $o.me = $me.me; $o.mewhy = $me.why; $o.lead = Get-Lead
+      $om = [regex]::Match($line, '\[owner:[ \t]*([^\]]*?)[ \t]*\]')
+      if ($om.Success -and $om.Groups[1].Value -ne '' -and -not (Test-MayTake $om.Groups[1].Value $o.me $o.lead)) {
+        Fail "$id is owned by $($om.Groups[1].Value) - only its owner or lead may change status (you: $($o.me))"
+      }
+    }
     if ($o.need -and $mk -cne $o.need) { Fail "$id is [$mk], not [$($o.need)] - nothing to change" }
     # F64: refuse lists the boxes this change may not start from.
     if ($o.refuse -and $o.refuse.Contains($mk)) { Fail "$id is [$mk] (closed) - reopen it first (assign), then $($o.cmd)" }
     # F62/F64: the same note on a line already in that box is a no-op, like a
     # same-handle assignment. notekey + noteval is ` (<key>: <val>)`.
-    if ($o.noteval -and $mk -ceq $o.mark) {
+    if (-not $o.guarded -and $o.noteval -and $mk -ceq $o.mark) {
       $m = [regex]::Match($line, '\(' + $o.notekey + ':([^()]*)\)')
       if ($m.Success -and $m.Groups[1].Value.Trim() -ceq $o.noteval) {
+        return @($line, "no change: $id is already [$mk] ($($o.notekey): $($o.noteval))")
+      }
+    }
+    if ($o.guarded) {
+      $waits = @(Get-WaitMatches $line)
+      if ($o.noteval -and $mk -ceq $o.mark -and $waits.Count -eq 1 -and [string]::Equals($waits[0].Value.TrimStart(' ', "`t"), "($($o.notekey): $($o.noteval))", [StringComparison]::Ordinal)) {
         return @($line, "no change: $id is already [$mk] ($($o.notekey): $($o.noteval))")
       }
     }
@@ -408,6 +436,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
     # F109: every write stamps this session's tag - not a move out of [~] (A143)
     $tagText = ''
     if (-not $moved) { $tagText = Get-TagText ([string]$o.me) }
+    if ($o.keepsession -and $line -cmatch '\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$') { $tagText = '' }
     if ($moved) {
       $sm = [regex]::Match($line, '[ \t]*\((@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+)\)[ \t]*$')
       if ($sm.Success) {
@@ -424,10 +453,19 @@ function Edit-Line([string]$id, [hashtable]$o) {
     # trailing (@agent-id) session tag, else at the end of the line. (testing: ..)
     # replaces only itself; (blocked: ..) and (deferred: ..) replace either - the
     # line says only the current wait.
+    if ($o.dropwait) {
+      $waits = @(Get-WaitMatches $line)
+      for ($j = $waits.Count - 1; $j -ge 0; $j--) { $line = $line.Remove($waits[$j].Index, $waits[$j].Length) }
+    }
     if ($o.noteval) {
       $p = 'testing'
       if ($o.notekey -cne 'testing') { $p = '(blocked|deferred)' }
-      $line = Set-Note $line (' (' + $o.notekey + ': ' + $o.noteval + ')') ('[ \t]*\(' + $p + ':[^()]*\)')
+      $note = ' (' + $o.notekey + ': ' + $o.noteval + ')'
+      if ($o.guarded) {
+        $at = [regex]::Match($line, '[ \t]*\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$')
+        if (-not $at.Success) { $at = [regex]::Match($line, '[ \t]*$') }
+        $line = $line.Substring(0, $at.Index) + $note + $line.Substring($at.Index)
+      } else { $line = Set-Note $line $note ('[ \t]*\(' + $p + ':[^()]*\)') }
     }
     if ($o.unblock) { $line = ([regex]'[ \t]*\(blocked:[^()]*\)').Replace($line, '', 1) }   # F81 unblock
     if ($o.done) { $line = Set-Note $line (' **Done ' + $o.done + '**') '[ \t]*\*\*Done [^*]*\*\*' }
@@ -795,6 +833,23 @@ function Do-Verify([string[]]$a) {
 }
 
 # F81: the wait is over: [!] -> [ ], its (blocked: ..) note dropped. Only from [!].
+function Do-Status([string[]]$a) {
+  if ($a.Count -lt 3) { Fail 'usage: status <ID> <pending|blocked|deferred> <expected-row> [reason]' }
+  $id = Get-NormId $a[0]; $target = $a[1]
+  if (-not (Test-OneLine $a[2]) -or $a[2] -eq '') { Fail 'expected-row must be one nonempty line' }
+  $o = @{ guarded = $true; expected = $a[2]; dropwait = $true; keepsession = $true; mark = ' ' }
+  switch -CaseSensitive ($target) {
+    { [string]::Equals($_, 'pending', [StringComparison]::Ordinal) } { if ($a.Count -ne 3) { Fail 'pending takes no reason' } }
+    { [string]::Equals($_, 'blocked', [StringComparison]::Ordinal) -or [string]::Equals($_, 'deferred', [StringComparison]::Ordinal) } {
+      if ($a.Count -ne 4) { Fail 'wait status requires exactly one reason argument' }
+      $o.notekey = $target; $o.noteval = Get-NoteText status reason $false @($id, $a[3])
+      if ($target -ceq 'blocked') { $o.mark = '!' } else { $o.mark = '>' }
+    }
+    default { Fail "unknown status target: $target" }
+  }
+  return (Edit-Line $id $o)
+}
+
 function Do-Unblock([string[]]$a) {
   if ($a.Count -ne 1) { Fail 'usage: unblock <ID>' }
   $id = Get-NormId $a[0]
@@ -1238,6 +1293,7 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'claim' { return (Do-Claim $a) }
     'pick' { return (Do-Pick $a) }
     'reconcile' { return (Do-Reconcile $a) }
+    'status' { return (Do-Status $a) }
     'unblock' { return (Do-Unblock $a) }
     'start' { return (Do-Start $a) }
     default { Fail "unknown subcommand: $c" }
@@ -1336,6 +1392,34 @@ function Invoke-Selftest {
     & git config core.autocrlf false
   }
   try {
+    # F116: isolated guarded waiting-state recovery.
+    Init-Repo "$T/f116"
+    W "$T/f116/.skillator/team.md" "- @asha: asha@x.com`n"
+    $snapshot = "[>] F91 $dash Later [owner: @asha] (testing: owner check) (deferred: after release) (@cc-old:asha:run)"
+    W "$T/f116/TICKETS.md" "- $snapshot`n"
+    $env:SKILLATOR_ME = '@asha'
+    Eq 'F116 pending preserves claim' (Run status F91 pending $snapshot) "- [ ] F91 $dash Later [owner: @asha] (testing: owner check) (@cc-old:asha:run)"
+    Remove-Item Env:\SKILLATOR_ME -ErrorAction SilentlyContinue
+
+    $snapshot = "[!] F92 $dash Wait (user note) (blocked: F3) (deferred: old) Plan: S12"
+    W "$T/f116/TICKETS.md" "- $snapshot`n"
+    Eq 'F116 clears all reserved waits' (Run status F92 pending $snapshot) "- [ ] F92 $dash Wait (user note) Plan: S12"
+    $snapshot = "[ ] F92 $dash Wait (outer (blocked: nested))  "
+    W "$T/f116/TICKETS.md" "- $snapshot`n"
+    Eq 'F116 guarded reason and nested prose' (Run status F92 blocked $snapshot 'new reason') "- [!] F92 $dash Wait (outer (blocked: nested)) (blocked: new reason)  "
+    $beforeStatus = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$T/f116/TICKETS.md"))
+    Eq 'F116 stale refused' (Refused status F92 pending $snapshot) 'True'
+    Eq 'F116 refusal preserves bytes' ([Convert]::ToBase64String([IO.File]::ReadAllBytes("$T/f116/TICKETS.md"))) $beforeStatus
+    $snapshot = "[!] F92 $dash Wait (outer (blocked: nested)) (blocked: new reason)  "
+    Run status F92 blocked $snapshot 'new reason' | Out-Null
+    Eq 'F116 noop preserves bytes' ([Convert]::ToBase64String([IO.File]::ReadAllBytes("$T/f116/TICKETS.md"))) $beforeStatus
+
+    $composed = "[!] F93 - caf$([char]0x00e9) (blocked: wait)"
+    $decomposed = "[!] F93 - cafe$([char]0x0301) (blocked: wait)"
+    W "$T/f116/TICKETS.md" "- $decomposed`n"
+    Eq 'F116 ordinal Unicode snapshot refuses normalization' (Refused status F93 pending $composed) 'True'
+    Eq 'F116 Unicode refusal preserves bytes' ([Convert]::ToBase64String([IO.File]::ReadAllBytes("$T/f116/TICKETS.md"))) ([Convert]::ToBase64String($Utf8.GetBytes("- $decomposed`n")))
+
     # --- monorepo fixture
     $M = "$T/mono"
     Init-Repo $M

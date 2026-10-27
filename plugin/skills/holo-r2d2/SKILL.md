@@ -239,3 +239,15 @@ row of the table - read by a regex of its own, not by the parser - appears in
 the graph, the list and the ASCII with its state. `--fixture <DIR>` builds the
 RED/GREEN repo (`practice/baselines/scenario-holo-f41.txt`). Run the selftest
 after touching the script.
+
+## Individual ticket evidence (F116)
+
+Run `node <skills>/holo-r2d2/scripts/holo.mjs --ticket F12 --html` from the
+repository (or provide `--root`). It reads the unique ticket and all matching run
+stage/decision evidence and writes the ignored `.skillator/holo/ticket-F12.html`;
+stdout gives the absolute path. `--ascii` is also supported. An explicit `--design`
+can add that supplied document; no plan is inferred from a mention. Ticket mode
+rejects answers, wizard, anatomy, positional runs and custom output paths.
+The page explains Pending/Blocked/Deferred, shows source lines, ownership and wait
+notes, and draws every stage of every matching run. It never decides that a wait
+is resolved, changes the board, imports answers or opens a browser.

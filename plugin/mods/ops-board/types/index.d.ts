@@ -41,6 +41,7 @@ export type Diagnose = { id: string; verdict: 'finished' | 'still running' | 'st
                          byHand: string[]; close: { n: number; sha: string; why: string; runs: string }[]; confirm: number | null }
 // F77: id = the form's Ticket field as typed ('' when opened with no ticket selected),
 // resolved against the board case-insensitively (ticketById); ticket-meta gets the board's ID.
+export type StatusDraft = { generation: number; id: string; target: 'pending' | 'blocked' | 'deferred' | null; reason: string; expectedRow: string | null; result: string | null; busy: boolean; helpPath: string | null; mode: 'status' | 'help' }
 export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string | null; result: string | null }
 // F47 team management (T6): the Team view in the Tickets tab, and the Add person form
 // (drawn as a form in the ops-board pane; `back` = where a finished add returns).
@@ -135,6 +136,8 @@ declare module 'claude-code' {
       diagnose: Diagnose | null         // F99: the Diagnose view up in the Workflows tab
       relay: string | null   // F48 band: "RUN-0012 2/4", the first relay run not all done
       teamView: TeamView | null; person: PersonDraft | null
+      statusFlight: number | null
+      status: StatusDraft | null
       reconcile: Reconcile | null   // F81: the reconcile form up in the Tickets tab
       agents: AgentRow[]; workflows: WorkflowRow[]   // F53: the Agents and Workflows tabs
       // F66: the Messages tab - the inbox (newest MSG_MAX), the read marker's id, the

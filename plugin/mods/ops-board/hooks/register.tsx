@@ -13,6 +13,7 @@ import { buildModel, lineKey, PANE_ID, PANE_TITLE, readView, renderPane } from '
 import type { Tab } from './pane'
 import { ASCII, UNI, chromeRows, windowOf } from './lib/ticketsmodel'
 import { cancelPerson, clearForm, isFormUp } from './assign'
+import { applyStatus } from './status'
 import { applyReconcile } from './reconcile'
 import { closeEngage, dropEngage, isEngageUp, pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
@@ -26,6 +27,7 @@ import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, 
 
 // The engine lists what a module reads and writes from consts of the file itself,
 // so each file names its own atoms (same literal refs as pane.tsx).
+const statusA = atom({ plugin: 'ops-board', key: 'status' } as const, null)
 const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
@@ -624,6 +626,14 @@ export const register: Register = on => {
   // F87: the Health tab's `f` - /ops resume force, answered in a toast.
   on('ui.press', { plugin: 'ops-board', element: 'key:force' }, async ($, e) => {
     $.ui.toast(await forceResume($))
+    return { element: e.element }
+  })
+
+  on('ui.press', { plugin: 'ops-board', element: 'status:apply' }, async ($, e) => {
+    const before = await read($, statusA)
+    const changed = await applyStatus($)
+    const after = await read($, statusA)
+    if (changed || (before && !before.busy && after?.generation === before.generation && /board changed|check the board/i.test(after.result ?? ''))) await poll($, true)
     return { element: e.element }
   })
 

@@ -7,7 +7,8 @@ import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, UNI, ASCII, cut
 import type { Model, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
-import { openAssign, renderForm, runDecided } from './assign'
+import { clearForm, openAssign, renderForm, runDecided } from './assign'
+import { openStatus, renderStatus } from './status'
 import { openReconcile, renderReconcile } from './reconcile'
 import { paint } from './paint'
 import { TeamTab } from './teamview'
@@ -194,7 +195,9 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       <Button key="key:filter" plain dimColor hotkey="f" onPress={() => { void update($, filterOpenA, x => !x) }}>filter</Button>
       <Button key="key:done" plain dimColor hotkey="x" onPress={() => setFilter(x => ({ ...x, showDone: !x.showDone }))}>done</Button>
       <Button key="key:team" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => ({ selected: null, confirm: false })) }}>team</Button>
-      <Button key="key:reconcile" plain dimColor hotkey="c" onPress={() => { void openReconcile($) }}>reconcile</Button>
+      <Button key="key:reconcile" plain dimColor hotkey="c" onPress={() => { void clearForm($).then(() => openReconcile($)) }}>reconcile</Button>
+      <Button key="key:status" plain dimColor hotkey="s" onPress={() => { void openStatus($, m.ticket, els.canType, 'status') }}>status</Button>
+      <Button key="key:help" plain dimColor hotkey="h" onPress={() => { void openStatus($, m.ticket, els.canType, 'help') }}>help</Button>
       {/* F78: register.tsx takes this press (ui.press) - the forced poll lives there */}
       <Button key="key:refresh" plain dimColor hotkey="r" onPress={() => {}}>refresh</Button>
     </Box>,
@@ -336,7 +339,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   }
   // B5: an assign / decide / add person form up draws in place of the view it came
   // from (Tickets or Team); Esc or Cancel brings that view back.
-  const form = (await renderForm($, e)) ?? (await renderReconcile($, e))   // F81: the reconcile form likewise
+  const form = (await renderStatus($, e)) ?? (await renderForm($, e)) ?? (await renderReconcile($, e))   // F81: the reconcile form likewise
   if (form) return form
   const v = await readView($, cols, e.props.scroll?.bodyRows ?? null, unread)
   const tv = await read($, teamViewA)

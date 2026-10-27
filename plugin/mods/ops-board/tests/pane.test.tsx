@@ -330,7 +330,7 @@ for (const surface of SURFACES) {
     expect(await ui.find({ key: 'decided:F2' })).toBeDefined()
     expect(await ui.find({ key: 'decided:F1' })).toBeUndefined()
     expect((await ui.find({ key: 'count' }))?.text).toBe('5 open●1●1●1●2●1· 7 done hidden')
-    for (const k of ['key:assign', 'key:decide', 'key:filter', 'key:done', 'tab:tickets', 'tab:runs', 'tab:health'])
+    for (const k of ['key:assign', 'key:decide', 'key:filter', 'key:done', 'key:status', 'key:help', 'tab:tickets', 'tab:runs', 'tab:health'])
       expect(await ui.find({ key: k }), k).toBeDefined()
     expect(await ui.find({ key: 'tab:workflows' })).toBeUndefined()      // F76: a section of Runs now
     expect((await ui.find({ key: 'key:filter' }))?.props.hotkey).toBe('f')

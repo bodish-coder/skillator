@@ -140,7 +140,7 @@ for (const cols of [40, 60, 80, 120]) test(`F115 alphabet contexts and mounted f
   await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true }); await clock.settle()
   const ui = await $.ui.mount({ plugin: 'ops-board', surface: 'terminal', component: 'Pane', requestId: 'ops-board',
     props: { title: 'ops board', isFocused: true, bodyColumns: cols, placement: 'dock', scroll: { offset: 0, bodyRows: 80 }, view: {} } })
-  await bindings(ui, { 'key:assign':'a','key:decide':'d','key:filter':'f','key:done':'x','key:team':'t','key:reconcile':'c','key:refresh':'r' }, cols, 'Tickets')
+  await bindings(ui, { 'key:assign':'a','key:decide':'d','key:filter':'f','key:done':'x','key:team':'t','key:reconcile':'c','key:refresh':'r','key:status':'s','key:help':'h' }, cols, 'Tickets')
   await ui.press({ key: 'key:filter' }); await bindings(ui, {'key:mine':'m'}, cols, 'Filters')
   await ui.select({ key: 'sel:app', value: 'web' })
   await ui.press({ key:'key:filter' })

@@ -5,7 +5,7 @@
 
 export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-decide' | 'meta-decided'
   | 'meta-team-add' | 'meta-team-remove' | 'meta-team-lead'
-  | 'meta-reconcile' | 'meta-unblock' | 'meta-start' | 'meta-testing' | 'meta-block'
+  | 'meta-status' | 'holo-ticket' | 'meta-reconcile' | 'meta-unblock' | 'meta-start' | 'meta-testing' | 'meta-block'
   | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
   | 'relay-stage-landed'
   | 'usage-level'
@@ -37,7 +37,7 @@ export const up = (p: string, n: number) => {
 // [@handle, name, emails comma-joined]; meta-team-remove / meta-team-lead [@handle]; relay-resume and
 // relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; relay-stage-landed [RUN-id, n, sha];
 // run-rename [id, name]; team-setup-check none; others none.
-type ScriptCall = Exclude<Call, 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'>
+type ScriptCall = Exclude<Call, 'holo-ticket' | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
   'pending':            { script: PENDING, sh: a => a, ps: a => a },
   'pending-kv':         { script: PENDING, sh: a => ['--kv', ...a], ps: a => ['--kv', ...a] },
@@ -52,6 +52,7 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'meta-unblock':       { script: META, sh: a => ['unblock', ...a], ps: a => ['unblock', ...a] },
   'meta-start':         { script: META, sh: a => ['start', ...a], ps: a => ['start', ...a] },
   'meta-testing':       { script: META, sh: a => ['testing', ...a], ps: a => ['testing', ...a] },
+  'meta-status':       { script: META, sh: a => ['status', ...a], ps: a => ['status', ...a] },
   'meta-block':         { script: META, sh: a => ['block', ...a], ps: a => ['block', ...a] },
   'relay-list':         { script: RELAY, sh: () => ['list'], ps: () => ['-Mode', 'list'] },
   // read-only: a poll must never recreate a run worktree its owner removed
@@ -75,16 +76,17 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
 // the setup form's values on stdin (runCall / Host.run's stdin) - never argv, where
 // another process could read them; the others no args.
 const TEAM_JS = 'teams-uhura/scripts/team.mjs'
-const NODE: Partial<Record<Call, (a: string[]) => string[]>> = {
-  'team-mark-read': a => ['inbox', 'mark-read', '--upto', a[0] ?? ''],
-  'team-config-show': () => ['config', 'show'],
-  'team-config-save': () => ['config', 'save'],
-  'team-config-clear': () => ['config', 'clear'],
-  'team-inbox-tail': () => ['inbox', 'tail'],     // the newest 200 records of an inbox too big to read whole
+const NODE: Partial<Record<Call, { script: string; args: (a: string[]) => string[] }>> = {
+  'team-mark-read': { script: TEAM_JS, args: a => ['inbox', 'mark-read', '--upto', a[0] ?? ''] },
+  'team-config-show': { script: TEAM_JS, args: () => ['config', 'show'] },
+  'team-config-save': { script: TEAM_JS, args: () => ['config', 'save'] },
+  'team-config-clear': { script: TEAM_JS, args: () => ['config', 'clear'] },
+  'team-inbox-tail': { script: TEAM_JS, args: () => ['inbox', 'tail'] },     // the newest 200 records of an inbox too big to read whole
+  'holo-ticket': { script: 'holo-r2d2/scripts/holo.mjs', args: a => ['--ticket', a[0] ?? '', '--html'] },
 }
 
 export const isNodeCall = (call: Call) => NODE[call] !== undefined
-export const NO_NODE = 'node not found on PATH (absolute entries only) - teams-uhura needs Node'
+export const NO_NODE = 'node not found on PATH (absolute entries only) - this script needs Node'
 
 // The node binary for a node call, by absolute path. Never a bare `node`: on Windows
 // libuv looks in the child's cwd (the repo) before PATH, so a node.exe committed to a
@@ -131,7 +133,7 @@ export async function shellFor(scriptsWin: boolean, platformWin: boolean, env: {
 // host's own node), else the shell (shellFor).
 export function argvFor(call: Call, win: boolean, skillsDir: string, args: string[], bin: string): string[] {
   const n = NODE[call]
-  if (n) return [bin, norm(skillsDir) + '/' + TEAM_JS, ...n(args)]
+  if (n) return [bin, norm(skillsDir) + '/' + n.script, ...n.args(args)]
   const t = TABLE[call as ScriptCall]
   const base = norm(skillsDir) + '/' + t.script
   return win

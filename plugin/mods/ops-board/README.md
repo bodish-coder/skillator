@@ -76,3 +76,20 @@ Forms with text fields say `Tab to actions; letters there`: their shortcuts are
 absent while typing and become available on a current non-text form control.
 Returning to an Input disables them. Filters keep native Select arrows/Enter.
 Confirmations still require their own action; a branch choice never runs Git.
+
+### Individual status and decision help
+
+Tickets adds `s: status` and `h: help` for the visible selected ticket, or an ID
+field when a header is selected. Status offers Pending, Blocked and Deferred;
+`p`/`b`/`d` choose only, Apply writes once, and `c`/Esc cancels. Letters arm only
+on action focus; Ticket/Reason input keeps typed letters. Wait reasons require a
+keyboard surface, one nonempty line and no parentheses. Other states use their
+existing worker, verification, decision or reopen workflows.
+
+Each Apply passes the displayed row snapshot to the locked writer, which checks
+freshness and owner/lead permissions while preserving existing session claims.
+Refusal leaves the form usable. After a stale row or timeout, inspect the board
+and reopen/reselect before retrying. Help generates read-only holo evidence and
+keeps its actual local HTML path in the form; it never applies a status or answer.
+Mounted tests cover event chains and widths, not physical keyboard/mouse delivery;
+owner-live B15/B17 remain unresolved.

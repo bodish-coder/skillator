@@ -880,6 +880,7 @@ function parseArgs(argv) {
     else if (a === "--decisions") { o.mode = "wizard"; o.decisions = val(); }
     else if (a === "--answers") o.answers = val();
     else if (a === "--out") o.out = val();
+    else if (a === "--ticket") o.ticket = val();
     else if (a === "--design") o.design = val();
     else if (a === "--root") o.root = val();
     else if (a === "--fixture") o.fixture = val();
@@ -889,6 +890,11 @@ function parseArgs(argv) {
     else o.pos.push(a);
   }
   if (o.pos.length > 1) throw new Error(`one run at a time, got: ${o.pos.join(" ")}`);
+  if (o.ticket !== undefined) {
+    if (!/^[A-Za-z]{1,3}[0-9]+[a-z]?$/.test(o.ticket)) throw new Error("invalid ticket ID");
+    o.ticket = o.ticket.replace(/^[A-Za-z]+/, x => x.toUpperCase());
+    if (!["html", "ascii"].includes(o.mode) || o.pos.length || o.answers || o.decisions || o.anatomy || o.fixture || o.out) throw new Error("--ticket requires --html or --ascii; no run, answers, wizard, anatomy, fixture or custom output");
+  }
   return o;
 }
 
@@ -927,6 +933,52 @@ function relayHolds(md, runPath, root) {
   return null;
 }
 
+// F116: source facts become ordinary renderer components, never HTML or commands.
+export function ticketModel(md, id) {
+  const rows = md.split(/\r?\n/).flatMap((line, i) => {
+    const m = /^[ \t]*- \[([ ~%!? >x-])\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)[ \t]*[\u2014\u2013-][ \t]*(.*)$/.exec(line);
+    return m ? [{ id: m[2], mark: m[1], title: m[3], line, n: i + 1 }] : [];
+  });
+  const hits = rows.filter(t => t.id === id);
+  if (hits.length !== 1) throw new Error(`${id}: ${hits.length} matching rows; need exactly one`);
+  const t = hits[0], names = { ' ': 'Pending', '!': 'Blocked', '>': 'Deferred', '~': 'In progress', '%': 'Testing', '?': 'Decision', x: 'Done', '-': 'Cancelled' };
+  const notes = [...t.title.matchAll(/\((blocked|deferred|testing): ([^()]*)\)/g)].map(m => m[0]);
+  const linked = [...new Set(notes.flatMap(ids))].filter(x => x !== id).map(x => {
+    const hits = rows.filter(r => r.id === x);
+    return hits.length === 1 ? `${x}: ${names[hits[0].mark]}` : `${x}: evidence missing or duplicate`;
+  });
+  const part = (name, lead, subs = []) => ({ name, lead, subs, tables: [], bullets: 0, code: 0 });
+  return { title: `Ticket ${id} decision support`, parts: [
+    part('Source and current state', `TICKETS.md:${t.n} - ${names[t.mark]}`, [t.line, `Owner: ${/\[owner:([^\]]*)\]/.exec(t.title)?.[1]?.trim() || 'unowned'}`]),
+    part('Current wait and testing notes', notes.join(' ; ') || 'No managed wait or testing notes.', linked),
+    part('Status choices', [' ', '!', '>'].includes(t.mark) ? 'Eligible for guarded Pending / Blocked / Deferred changes.' : 'Use the existing worker, verification, decision or reopen workflow.', [
+      'Pending: the blocker or deferral is resolved', 'Blocked: work cannot continue; record what is needed', 'Deferred: intentionally postponed; record when to revisit.',
+      'Wait resolution is unknown. Linked completed work does not establish that human conditions are resolved. This page never edits status or answers decisions.'
+    ]),
+    part('Plan evidence', /\bPlan: S[0-9]+/.exec(t.title)?.[0] || 'No explicit plan pointer. No plan inferred from mentions.')
+  ] };
+}
+async function ticketPage(root, o) {
+  const design = ticketModel(await readFile(join(root, 'TICKETS.md'), 'utf8'), o.ticket);
+  const matches = [];
+  for (const path of (await runFiles(root)).sort()) {
+    const run = parseRun(await readFile(path, 'utf8'));
+    if (run.stages.some(s => [...s.tickets, ...ids(s.raw)].includes(o.ticket)) || run.qs.some(q => Object.values(q.f).some(v => ids(v).includes(o.ticket)))) matches.push({ run, path });
+  }
+  design.parts.push({ name: 'Run evidence', lead: matches.length ? `${matches.length} matching runs; none selected as authoritative.` : 'No matching run evidence.', subs: matches.map(({run, path}) => `${relative(root, path)}: ${run.id}; stages ${run.stages.map(s => s.n).join(', ')}; decisions ${run.qs.map(q => q.id).join(', ') || 'none'}`), tables: [], bullets: 0, code: 0 });
+  const rendered = render(null, { design, designPath: 'TICKETS.md' });
+  for (const {run, path} of matches) rendered.body += render(run, { runPath: relative(root, path) }).body;
+  if (o.design) rendered.body += render(null, { design: parseDesign(await readFile(o.design, 'utf8')), designPath: o.design }).body;
+  if (o.mode === 'ascii') {
+    process.stdout.write(renderAscii(null, { design, designPath: 'TICKETS.md' }));
+    for (const {run, path} of matches) process.stdout.write(renderAscii(run, { runPath: relative(root, path) }));
+    return;
+  }
+  const out = join(root, '.skillator', 'holo', `ticket-${o.ticket}.html`);
+  await writeGenerated(root, out, standalonePage(rendered));
+  console.log(`holo: ticket ${o.ticket}, ${matches.length} matching runs -> ${out}`);
+}
+
 async function main(argv) {
   const o = parseArgs(argv);
   if (o.help) { console.log((await readFile(fileURLToPath(import.meta.url), "utf8")).split("\n").slice(1, 21).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); return; }
@@ -941,6 +993,7 @@ async function main(argv) {
     return;
   }
   const root = findRoot(o.root ?? process.cwd());
+  if (o.ticket) return ticketPage(root, o);
   if (o.mode === "wizard") {
     let set, stem;
     if (o.decisions) { set = JSON.parse(await readFile(o.decisions, "utf8")); stem = String(set && set.id || "decisions"); }
@@ -1011,6 +1064,18 @@ function selftest() {
   const ok = (c, msg, got) => { if (!c) { fails++; console.error(`selftest FAIL: ${msg}`, got === undefined ? "" : got); } };
   const fx = (n) => readFileSyncText(join(HERE, "fixtures", n));
   const rowsOf = (md) => [...md.matchAll(/^\|\s*(\d+)\s*\|[^|]*\|([^|]*)\|/gm)].map((m) => [Number(m[1]), STATE[m[2].trim()] ?? "unknown"]);
+
+  // F116: ticket facts reuse every design component and escape source data.
+  ok(parseArgs(['--ticket', 'f91', '--html']).ticket === 'F91', 'ticket canonical args');
+  for (const args of [['--ticket','../bad','--html'], ['--ticket','F91','--wizard'], ['--ticket','F91','--html','--answers','x'], ['--ticket','F91','--html','--out','TICKETS.md']]) {
+    let refused = false; try { parseArgs(args); } catch { refused = true; } ok(refused, 'ticket incompatible args refused');
+  }
+  const ticket = ticketModel('- [>] F91 - </script><img src=x onerror=1> & "quotes" `ticks` [owner: @asha] (deferred: F9 and owner review)\n- [x] F9 - done\n- [ ] F910 - other', 'F91');
+  const ticketHtml = standalonePage(render(null, {design: ticket, designPath: 'TICKETS.md'}));
+  ok(ticketHtml.includes('&lt;/script&gt;&lt;img') && !ticketHtml.includes('<img src=x'), 'ticket source escaped');
+  ok(ticketHtml.includes('Deferred') && ticketHtml.includes('F9: Done') && ticketHtml.includes('Owner: @asha') && ticketHtml.includes('TICKETS.md:1'), 'ticket facts and exact linked ID');
+  for (let i = 1; i <= ticket.parts.length; i++) ok(ticketHtml.includes(`data-component="${i}"`), `ticket component ${i} rendered`);
+  let duplicate = false; try { ticketModel('- [ ] F91 - one\n- [ ] F91 - two', 'F91'); } catch { duplicate = true; } ok(duplicate, 'duplicate ticket refused');
 
   // 1. every state, every Q state, a chain with after:, files, a replan
   const md = fx("fixture-all-states.md");

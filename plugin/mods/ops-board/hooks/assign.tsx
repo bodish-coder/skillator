@@ -6,6 +6,7 @@ export { isOpen } from './lib/board'
 import { runCall } from './lib/host'
 import { sameHandle } from './lib/team'
 import type { Call } from './lib/host'
+import { clearStatus } from './status'
 import { paint } from './paint'
 
 // F47: the assign / decide form, the Decided button's call and the Add person
@@ -36,6 +37,7 @@ const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
 const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
 const assignA = atom({ plugin: 'ops-board', key: 'assign' } as const, null)
 const personA = atom({ plugin: 'ops-board', key: 'person' } as const, null)
+const statusA = atom({ plugin: 'ops-board', key: 'status' } as const, null)
 const reconcileA = atom({ plugin: 'ops-board', key: 'reconcile' } as const, null)   // F81: reconcile.tsx's form
 
 const HANDLE = /^@[a-z0-9_-]+$/
@@ -75,6 +77,7 @@ export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], 
   const t = shown ? ((await read($, boardA))?.tickets.find(x => x.id === shown) ?? null) : null
   if (!t && !canType) { $.ui.toast('ops board: select a ticket first'); return }
   const draft: AssignDraft = { id: t?.id ?? '', kind, handle: startHandle(t, kind, await read($, teamA), await read($, meA)), result: null }
+  await clearStatus($)
   await update($, personA, () => null)
   await update($, assignA, () => draft)
   await showForm($, t ? whoKey(draft) : 'ticket')
@@ -83,10 +86,11 @@ export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], 
 const whoKey = (d: AssignDraft) => (d.handle ? 'who:' + d.handle : 'who:+add')
 
 export async function isFormUp($: EngineInterface): Promise<boolean> {
-  return (await read($, assignA)) !== null || (await read($, personA)) !== null || (await read($, reconcileA)) !== null
+  return (await read($, statusA)) !== null || (await read($, assignA)) !== null || (await read($, personA)) !== null || (await read($, reconcileA)) !== null
 }
 
 export async function clearForm($: EngineInterface) {
+  await clearStatus($)
   await update($, actionFocusA, () => null)
   await update($, assignA, () => null)
   await update($, personA, () => null)
