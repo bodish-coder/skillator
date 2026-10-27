@@ -13,10 +13,18 @@ relay-morpheus `references/marathon.md`, "A saved Workflow marathon", says. Argu
 one go. No mode and no count = `sequential`. The count is a whole number of at least 1 or `max`; a bare
 count still works, `sequential` takes none (`sequential 2`: say so and stop) and `parallel 1` runs as `1`.
 No IDs = every open ticket on TICKETS.md (`[ ]`, `[~]`, `[!]` re-checked). A RUN id alone (`RUN-0019`)
-runs the plan `/marathon-plan` saved for it, as saved; a mode or count beside a RUN id → say the saved plan fixes its shape (`/marathon-plan <mode> <IDs>` plans again) and stop. Nothing typed = the one open
+runs the plan `/marathon-plan` saved for it, as saved; a mode or count beside a RUN id → say the saved plan fixes its shape (Legacy recovery below applies only to pre-F112 plans) and stop. Nothing typed = the one open
 run with a `.workflow.js` beside it (two or more → list them and stop; none → plan every open ticket,
 `sequential`, and run). A first word that is neither a mode, a count, a ticket ID nor a RUN id (`0`,
 `two`) → say it is not an option and stop.
+
+**Legacy recovery (A162)** - read PLAN as data before any execution. A missing
+`mode` property (including quoted JSON keys) is legacy: stop before dispatch and
+print `/marathon-plan <mode> <IDs>` with the actual remaining ticket IDs of that
+run and a supported mode (default `sequential`). That separate planning-only
+command regenerates the legacy script in place under marathon.md's Legacy
+recovery guards; it never replaces a modern `PLAN.mode` plan. Keep the
+`planned in RUN-<id>` guard for ordinary planning. A RUN id never changes mode.
 
 | Typed | Runs | A phase holds | `RELAY_CHAIN_PARALLEL` on `chain dispatch` |
 |---|---|---|---|
@@ -35,8 +43,8 @@ run with a `.workflow.js` beside it (two or more → list them and stop; none �
    stop), `init`, `chain plan` (it claims the tickets; a refused claim is said), the script beside the run
    file with `PLAN.mode`. Show the stages, the phases, the agent count and the script's path, then run -
    no pause: typing this command is the opt-in to run the script with the Workflow tool.
-2. **Run** (marathon.md Run): a script with no `mode:` line was written before this release - say
-   `/marathon-plan` writes it and stop before any dispatch. Phase by phase: `chain decide`, then every
+2. **Run** (marathon.md Run): a legacy script takes the Legacy recovery (A162) refusal above;
+   print the concrete planning command and stop before any dispatch. Phase by phase: `chain decide`, then every
    stage `chain dispatch`ed (row `~`, prompt on disk) before the Workflow call that runs it - sequential:
    plain; parallel: `RELAY_CHAIN_PARALLEL=<stages in the phase>`; `parallel N`: `RELAY_CHAIN_PARALLEL=<N>`.
    With grayskull-power on (`.skillator/grayskull.md` present) every stage prompt opens with this line, and without it does not: `Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.`

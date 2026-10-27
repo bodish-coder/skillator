@@ -255,7 +255,7 @@ Claude Code runs it with the Workflow tool, the other hosts with their delegate
 `/marathon-run [sequential|parallel] [N|max] [IDs]` **or** `/marathon-run [RUN id]`.
 
 - Mode first (optional): `sequential` or `parallel`. Then an optional count: a whole number ≥ 1 or `max`. Then optional ticket IDs. No mode and no count = `sequential`. A bare count still works (`2 F12`); `sequential` takes no count (`sequential 2`: say so and stop); `parallel 1` runs as `1`. No IDs = every open ticket on TICKETS.md (`[ ]`, `[~]`, `[!]` re-checked), picked through `ticket-meta pick` (F80).
-- A RUN id alone (`RUN-0019`) runs the plan `/marathon-plan` saved for it, as saved (today's behaviour). A mode or count beside a RUN id → say the saved plan fixes its shape (`/marathon-plan <mode> <IDs>` plans again) and stop.
+- A RUN id alone (`RUN-0019`) runs the plan `/marathon-plan` saved for it, as saved (today's behaviour). A mode or count beside a RUN id → say the saved plan fixes its shape (Legacy recovery below applies only to pre-F112 plans) and stop.
 - Nothing typed: the one open run with a `.workflow.js` beside it and an unlanded stage → run it (today); two or more → list them and stop (today); none → plan over every open ticket, `sequential`, and run.
 - A first word that is neither a mode, a count, a ticket ID nor a RUN id (`0`, `two`) → say it is not an option and stop.
 
@@ -279,7 +279,8 @@ At dispatch: sequential leaves `RELAY_CHAIN_PARALLEL` unset; parallel/max uses
 Record the normalized mode in `PLAN.mode` and `meta.description`: `sequential`, `parallel`,
 or `parallel <N>` (N >= 2); `1` and `parallel 1` normalize to `sequential`.
 
-Planning (no RUN id) runs `ticket-meta pick`, then:
+Planning (no RUN id) checks Legacy recovery below first for an explicit
+`/marathon-plan` selection; otherwise it runs `ticket-meta pick`, then:
 
 1. A picked ticket that is already a stage of an open run with a `.workflow.js` beside it is **skipped**, listed as `planned in RUN-<id>` — never two open runs over one ticket.
 2. For `/marathon-run` only: if every picked ticket sits in one such run and no mode or count was typed → run that run instead (`using RUN-<id>'s plan`); a mode or count typed → the RUN-id refusal above (the saved plan fixes its shape).
@@ -287,7 +288,64 @@ Planning (no RUN id) runs `ticket-meta pick`, then:
 
 On an in-session host a parallel plan runs serial; say so in the first line.
 
+### Legacy recovery (A162)
+
+Read the saved `PLAN` as data, never execute the old script. Legacy means its
+`mode` property is absent, whether its keys are bare or quoted JSON keys.
+Only `/marathon-plan <mode> <IDs>` with explicit IDs can select recovery; the
+existing mode/count grammar and default apply, with no new flag or RUN argument.
+Before ordinary duplicate filtering, locate the one own open legacy run whose
+remaining ticket IDs exactly match the selection. All selected tickets must pass
+`ticket-meta pick`; show refused ownership and stop, never silently shrink the
+selection. Keep the ordinary `planned in RUN-<id>` guard for modern plans.
+
+| Recovery case | Decision |
+|---|---|
+| Explicit own legacy; pending and landed only | regenerate in place |
+| Modern PLAN.mode present | skip; keep saved plan |
+| Any active worker or in-flight stage | refuse; wait for completion |
+| Implicit, ambiguous or mixed target | refuse; print explicit target command |
+| Failed stage needing retry | refuse; existing retry flow first |
+| Parked or unresolved replacement stage | refuse; resolve existing hold first |
+
+Check the run ledger, chain records and worker state before writing: any `~`
+stage, live worker, or uncertain liveness refuses recovery even with a stale
+heartbeat. No worker is cancelled or replaced. A `!` stage needs the existing
+documented retry flow (`RM add`, `chain plan`, old row linked to its retry),
+outside this planning-only recovery; then rerun the planner with the pending
+retry ticket IDs. Do not reset a failed row or replay it here. Preserve `?`
+holds and `>` replacement history; unresolved holds/replacements refuse, while
+a resolved replacement is followed to its existing pending successor exactly
+once. Completed `x` stages are never included in the regenerated phases.
+
+For ambiguous/mixed selections, list candidate runs and print one concrete
+`/marathon-plan sequential <IDs>` per candidate using that run's actual remaining
+ticket IDs (including any pending successor), not literal placeholders. No IDs
+never opts into recovery. A failed/held/active target also gets that command plus
+the blocker that must be settled first; do not imply rerunning it clears a hold.
+If nothing remains, say so and leave the saved script untouched.
+
+After the guards pass, back up the exact old `.workflow.js` beside it under an
+unused backup name before replacing it. Keep the existing run file, worktree,
+branch, stage IDs, codes, prompts, files, dependencies and landed history.
+No `init`, `add`, `chain plan`, state reset, agent or dispatch in recovery.
+Build remaining phases only from the existing pending stages, using the current
+argument mode and existing dependency order; sequential holds one ticket,
+parallel phases hold only file-disjoint stages and honor the cap. Preserve all
+existing edges even when they force a narrower phase; refuse inconsistent or
+cyclic records rather than inventing edges or missing stage codes/prompts.
+Use the current template, fill only `meta` and `PLAN` (including normalized
+`PLAN.mode`) from those records, and keep its compiled driver unchanged.
+Validate the regenerated plan against the ledger and recheck liveness before
+replacing the script; a changed ledger/worker state aborts without replacement.
+Show the retained stages, phases, backup/script paths and `run it: /marathon-run
+RUN-<id>` with the actual run ID. Planning ends here, with no dispatch. A second
+call now sees a modern plan and skips it; it cannot repeatedly replace it.
+
 **Plan** (`/marathon-plan [sequential|parallel] [N|max] [IDs]`) - no agent runs, no `chain dispatch`, no Workflow call:
+
+For an eligible legacy selection, use Legacy recovery above and stop; steps
+1-6 below create a new plan only.
 
 1. Pick the tickets as [chain.md](chain.md) Step 1 (ids given: only those) and
    name each one's files. No ticket left → say so, stop.
@@ -330,8 +388,9 @@ and stop; none plans every open ticket sequentially and runs.
 
 1. `RM resume <id>`; the script is the run file's name with `.workflow.js`.
    A missing script → say `/marathon-plan` writes it, stop. Read PLAN as text
-   first: no `mode:` line means a pre-F112 plan; say re-plan with `/marathon-plan`
-   and stop before any dispatch.
+   first: a missing `mode` property means a pre-F112 plan; follow Legacy recovery
+   (A162), printing a concrete `/marathon-plan <mode> <IDs>` command for its
+   remaining tickets, and stop before any dispatch. Quoted keys count too.
 2. Phase by phase, in order, skipping a phase whose stages are all `x`:
    `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,
    `RELAY_CHAIN_PARALLEL=<stages in the phase>` for parallel,
@@ -378,8 +437,9 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
 1. `RM resume <id>`; read the `.workflow.js` beside the run file **as data**:
    `meta.phases` and `PLAN`. Never execute it (its tail throws without `args`).
    A missing script → say `/marathon-plan` writes it, stop. Read PLAN as text
-   first: no `mode:` line means a pre-F112 plan; say re-plan with `/marathon-plan`
-   and stop before any dispatch.
+   first: a missing `mode` property means a pre-F112 plan; follow Legacy recovery
+   (A162), printing a concrete `/marathon-plan <mode> <IDs>` command for its
+   remaining tickets, and stop before any dispatch. Quoted keys count too.
 2. Phase by phase, in order, skipping a phase whose stages are all `x`:
    `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,
    `RELAY_CHAIN_PARALLEL=<stages in the phase>` for parallel,

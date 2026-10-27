@@ -540,11 +540,18 @@ function Invoke-SelfTest([string]$T) {
     if (-not $mm.Contains($r)) { return "marathon.md has no mode row '$r' (F112)" }
   }
   if (-not $mm.Contains('### Mode - sequential or parallel (F112)')) { return 'marathon.md has no Mode section (F112)' }
+  foreach ($r in '| Explicit own legacy; pending and landed only | regenerate in place |', '| Modern PLAN.mode present | skip; keep saved plan |', '| Any active worker or in-flight stage | refuse; wait for completion |', '| Implicit, ambiguous or mixed target | refuse; print explicit target command |', '| Failed stage needing retry | refuse; existing retry flow first |', '| Parked or unresolved replacement stage | refuse; resolve existing hold first |') {
+    if (-not $mm.Contains($r)) { return "marathon.md has no recovery decision '$r' (A162)" }
+  }
   foreach ($n in 'marathon-plan', 'marathon-run') {
     foreach ($f in "commands\$n.md", "host-commands\cursor\$n.md", "host-commands\pi\$n.md", "host-commands\opencode\$n.md", "host-commands\antigravity\$n\SKILL.md", "host-commands\gemini\$n.toml") {
       $ct = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))
       foreach ($r in '| nothing, `sequential`, `1` | sequential | one ticket | unset |', '| `parallel`, `max`, `parallel max` | parallel | every file-disjoint ticket that fits | the number of stages in the phase |', '| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |') {
         if (-not $ct.Contains($r)) { return "$f has no mode row '$r' (F112)" }
+      }
+      # A162: every host routes a legacy refusal to the guarded in-place recovery.
+      foreach ($r in 'Legacy recovery (A162)', '/marathon-plan <mode> <IDs>', 'PLAN.mode', 'planned in RUN-<id>') {
+        if (-not $ct.Contains($r)) { return "$f has no legacy recovery pin '$r' (A162)" }
       }
       if (-not $ct.Contains('say it is not an option and stop')) { return "$f has no bad-first-word refusal (F112)" }
       if (($f -like 'commands\*' -or $f -like 'host-commands\pi\*') -and $ct -cnotmatch '(?m)^argument-hint: "\[sequential\|parallel\] \[N\|max\]') { return "$f argument-hint has no mode (F112)" }

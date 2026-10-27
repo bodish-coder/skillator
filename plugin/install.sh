@@ -507,10 +507,17 @@ if [ -n "$selftest" ]; then
     grep -qF -- "$_r" "$root/skills/relay-morpheus/references/marathon.md" || { echo "FAIL: marathon.md has no mode row '$_r' (F112)"; exit 1; }
   done
   grep -qF '### Mode - sequential or parallel (F112)' "$root/skills/relay-morpheus/references/marathon.md" || { echo "FAIL: marathon.md has no Mode section (F112)"; exit 1; }
+  for _r in '| Explicit own legacy; pending and landed only | regenerate in place |' '| Modern PLAN.mode present | skip; keep saved plan |' '| Any active worker or in-flight stage | refuse; wait for completion |' '| Implicit, ambiguous or mixed target | refuse; print explicit target command |' '| Failed stage needing retry | refuse; existing retry flow first |' '| Parked or unresolved replacement stage | refuse; resolve existing hold first |'; do
+    grep -qF -- "$_r" "$root/skills/relay-morpheus/references/marathon.md" || { echo "FAIL: marathon.md has no recovery decision '$_r' (A162)"; exit 1; }
+  done
   for _n in marathon-plan marathon-run; do
     for f in commands/$_n.md host-commands/cursor/$_n.md host-commands/pi/$_n.md host-commands/opencode/$_n.md host-commands/antigravity/$_n/SKILL.md host-commands/gemini/$_n.toml; do
       for _r in '| nothing, `sequential`, `1` | sequential | one ticket | unset |' '| `parallel`, `max`, `parallel max` | parallel | every file-disjoint ticket that fits | the number of stages in the phase |' '| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |'; do
         grep -qF -- "$_r" "$root/$f" || { echo "FAIL: $f has no mode row '$_r' (F112)"; exit 1; }
+      done
+      # A162: every host routes a legacy refusal to the guarded in-place recovery.
+      for _r in 'Legacy recovery (A162)' '/marathon-plan <mode> <IDs>' 'PLAN.mode' 'planned in RUN-<id>'; do
+        grep -qF -- "$_r" "$root/$f" || { echo "FAIL: $f has no legacy recovery pin '$_r' (A162)"; exit 1; }
       done
       grep -qF 'say it is not an option and stop' "$root/$f" || { echo "FAIL: $f has no bad-first-word refusal (F112)"; exit 1; }
       case "$f" in commands/*|host-commands/pi/*)
