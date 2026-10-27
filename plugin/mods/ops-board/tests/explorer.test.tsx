@@ -16,7 +16,11 @@ const LOG = `${SHA1}\x1f1234567\x1f2026-10-24\x1fVidul\x1fF75: explorer\n${SHA2}
 const CH1 = ':100644 100644 aaa bbb M\tmods/a/x.ts\n:000000 100644 000 ccc A\tmods/b.ts\n:100644 000000 ddd 000 D\told.md\n\n3\t1\tmods/a/x.ts\n10\t0\tmods/b.ts\n0\t4\told.md\n'
 const CH2 = ':100644 100644 eee eee R100\tsrc/old.ts\tsrc/new.ts\n:100644 100644 fff 111 M\tlogo.png\n\n0\t0\tsrc/{old.ts => new.ts}\n-\t-\tlogo.png\n'
 
-type World = { runs: { argv: readonly string[]; cwd?: string }[]; git: (args: readonly string[]) => ProcessRunResult; exes: string[] }
+const SHA3 = 'fedcba9' + 'c'.repeat(33)          // F103: the upstream's commit HEAD has not
+
+// F103: `actions` records the argv of every fetch/pull/push/revert/merge run; each answers `actionResult`.
+type World = { runs: { argv: readonly string[]; cwd?: string }[]; git: (args: readonly string[]) => ProcessRunResult; exes: string[]
+  actions: string[][]; actionResult: ProcessRunResult; dirty: string; branch: string; root: string; toasts: string[] }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
@@ -24,21 +28,35 @@ const answer = (args: readonly string[]): ProcessRunResult => {
   const a = args.join(' ')
   if (a === 'config user.email') return ran('vidul@ikran.in\n')
   if (a.includes('ls-files')) return ran(FILES)
+  if (a === 'rev-parse --abbrev-ref @{upstream}') return ran('origin/main\n')
+  if (a.startsWith('rev-list --left-right --count')) return ran('1\t1\n')
+  if (a.includes('HEAD..@{upstream}')) return ran(`${SHA3}\x1ffedcba9\x1f2026-10-26\x1fAsha\x1fF100: incoming\n`)
   if (a.includes(SHA1)) return ran(CH1)
   if (a.includes(SHA2)) return ran(CH2)
+  if (a.includes(SHA3)) return ran(CH1)
   if (a.includes(' log ')) return ran(LOG)
   return ran('', 1, 'not in this test')
 }
+const ACTION = /^(fetch|pull|push|revert|merge)$/
 
 function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
-  const w: World = { runs: [], git: answer, exes: [] }
+  const w: World = { runs: [], git: answer, exes: [], actions: [], actionResult: ran('Already up to date.\n'), dirty: '', branch: 'main', root: '/r', toasts: [] }
+  // the reads an action plan needs, from the world; the actions themselves recorded, never run
+  const local = (args: readonly string[]): ProcessRunResult => {
+    const a = args.join(' ')
+    if (ACTION.test(args[0] ?? '')) { w.actions.push([...args]); return w.actionResult }
+    if (a === 'rev-parse --abbrev-ref HEAD') return ran(w.branch + '\n')
+    if (a.startsWith('status --porcelain')) return ran(w.dirty)
+    if (a.startsWith('branch --format')) return ran('main\nfeature/x\nrun/RUN-0021-y\n')
+    return w.git(args)
+  }
   const files: Record<string, string> = { '/r/TICKETS.md': '# Tickets\n\n## Open\n\n- [ ] F1 — one\n' }
   const at = (p: string) => files[p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')]
   const clock = mock.clock(on, { now: 1_000_000 })
   mock.env(on, env)
   mock.store(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('session.repo', () => ({ value: { root: '/r', remote: null, internal: false, name: 'r' } }))
+  on('session.repo', () => ({ value: { root: w.root, remote: null, internal: false, name: 'r' } }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('fs.stat', ($, e) => {
     const f = at(e.path)
@@ -52,10 +70,11 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   on('fs.list', ($, e) => ({ deny: 'ENOENT ' + e.path }))
   on('process.run', ($, e) => {
     w.runs.push({ argv: e.argv, cwd: e.init?.cwd })
-    return { value: /(^|\/)git(\.exe)?$/.test(e.argv[0] ?? '') ? w.git(e.argv.slice(1)) : ran('', 1, 'not in this test') }
+    return { value: /(^|\/)git(\.exe)?$/.test(e.argv[0] ?? '') ? local(e.argv.slice(1)) : ran('', 1, 'not in this test') }
   })
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.close', () => ({ value: undefined }))
+  on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.status', () => ({ value: undefined }))
   on('ui.scroll', () => ({}))
   on('ui.focus', () => ({}))
@@ -65,6 +84,7 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
 const PEEK: Plugin = {
   name: 'peek',
   register(on) {
+    on('command.run', { command: 'close' }, async ($, e) => { await $.ui.close({ id: e.args }); return { text: 'closed' } })
     on('command.run', { command: 'peek' }, async ($, e) => {
       const v = e.args === 'explorer' ? await $.state.get({ plugin: 'ops-board', key: 'explorer' })
         : e.args === 'tab' ? await $.state.get({ plugin: 'ops-board', key: 'tab' })
@@ -98,7 +118,7 @@ for (const surface of SURFACES) {
     const ui = await mountExplorer($, clock, surface)
     const text = async (key: string) => (await ui.find({ key }))?.text
     expect(await text('xs:files')).toBe('▸ Files (4)')
-    expect(await text('xs:commits')).toBe('▸ Commits (2)')
+    expect(await text('xs:commits')).toBe('▸ Commits (2)  ↑1 ↓1 vs origin/main')
     expect(await ui.find({ key: 'xd:mods' })).toBeUndefined()
     await ui.press({ key: 'xs:files' })
     await clock.settle()
@@ -203,7 +223,7 @@ test('git refusing (not a repo, a broken index) shows what it said, not an empty
   await start($, clock)
   const ui = await mountExplorer($, clock, 'terminal')
   expect((await ui.find({ key: 'xerr' }))?.text).toBe('git ls-files failed: fatal: index file corrupt')
-  expect((await ui.find({ key: 'xs:commits' }))?.text).toBe('▸ Commits (2)')
+  expect((await ui.find({ key: 'xs:commits' }))?.text).toBe('▸ Commits (2)  ↑1 ↓1 vs origin/main')
   await ui.unmount()
 })
 
@@ -292,4 +312,89 @@ test('F103 upstream and incoming: the count line, the Incoming section only when
   expect(toggle(x, 'xi:' + SHA2).need).toEqual({ files: false, sha: SHA2 })
   expect(explorerLines(withUpstream(x, null, null), 60).find(l => l.key === COMMITS)!.segs.map(s => s.text).join('')).toBe('▾ Commits (2)  no upstream')
   expect(isRunRef('run/RUN-0022-x')).toBe(true); expect(isRunRef('C:/r/.skillator/worktrees/RUN-1-a')).toBe(true); expect(isRunRef('main')).toBe(false)
+})
+
+// F103 in the pane: each action behind a confirm that names its argv; only Run runs it.
+const go = async (ui: Awaited<ReturnType<typeof mountExplorer>>, clock: MockClock, key: string) => {
+  await ui.press({ key }); await clock.settle(); await ui.press({ key: 'xa:go' }); await clock.settle()
+}
+
+test('F103 pull: the confirm names the exact argv; Run runs it once; Cancel and Esc run nothing', WITH, async ($, on) => {
+  const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  await ui.press({ key: 'key:pull' }); await clock.settle()
+  expect((await ui.find({ key: 'xa:title' }))?.text).toBe('git pull?  Esc cancels')
+  expect((await ui.find({ key: 'xa:argv' }))?.text).toBe('runs    git pull --ff-only')
+  await ui.press({ key: 'xa:cancel' }); await clock.settle()
+  expect(w.actions).toEqual([])                                     // cancel does not run
+  expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
+  await ui.press({ key: 'key:pull' }); await clock.settle()
+  await $.command.run({ command: 'close', args: 'ops-board', ...RUN }); await clock.settle()   // Esc
+  expect(w.actions).toEqual([])                                     // Esc does not run
+  expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
+  await go(ui, clock, 'key:pull')
+  expect(w.actions).toEqual([['pull', '--ff-only']])                // confirm runs, once
+  expect(w.actions.flat().some(a => /force/.test(a))).toBe(false)
+  expect(w.toasts.at(-1)).toBe('✓ git pull --ff-only: Already up to date.')
+  await ui.unmount()
+})
+
+test('F103 every action: fetch, push, revert of the selected commit, merge of a picked branch - argv pinned; a dirty tree refuses pull/merge/revert with a toast', WITH, async ($, on) => {
+  const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  await go(ui, clock, 'key:fetch'); expect(w.actions).toEqual([['fetch', '--prune']]); w.actions = []
+  await go(ui, clock, 'key:push'); expect(w.actions).toEqual([['push']]); w.actions = []
+  await ui.press({ key: 'xs:commits' }); await ui.press({ key: 'xc:' + SHA1 }); await clock.settle()
+  await go(ui, clock, 'key:revert'); expect(w.actions).toEqual([['revert', '--no-edit', SHA1]]); w.actions = []
+  await ui.press({ key: 'key:merge' }); await clock.settle()
+  expect(await ui.find({ key: 'xb:main' })).toBeUndefined()        // the current branch is no merge source
+  expect((await ui.find({ key: 'xa:go' }))).toBeUndefined()         // nothing to run until a branch is picked
+  await ui.press({ key: 'xb:feature/x' }); await clock.settle()
+  expect((await ui.find({ key: 'xa:argv' }))?.text).toBe('runs    git merge --no-edit feature/x')
+  await ui.press({ key: 'xa:go' }); await clock.settle()
+  expect(w.actions).toEqual([['merge', '--no-edit', 'feature/x']]); w.actions = []
+  w.dirty = ' M a.ts\n'
+  for (const k of ['key:pull', 'key:merge', 'key:revert']) {
+    await ui.press({ key: k }); await clock.settle()
+    expect(w.toasts.at(-1)).toBe('■ working tree has 1 uncommitted changes - git would refuse or stop half way; commit or stash first')
+    expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
+  }
+  expect(w.actions).toEqual([])
+  await ui.unmount()
+})
+
+test('F103 a failed command shows git\'s message; a merge conflict says the merge stopped', WITH, async ($, on) => {
+  const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  w.actionResult = ran('', 1, 'CONFLICT (content): Merge conflict in a.ts\nAutomatic merge failed; fix conflicts and then commit the result.\n')
+  await ui.press({ key: 'key:merge' }); await clock.settle(); await ui.press({ key: 'xb:feature/x' }); await clock.settle()
+  await ui.press({ key: 'xa:go' }); await clock.settle()
+  const t = w.toasts.at(-1)!
+  expect(t.startsWith('■ git merge --no-edit feature/x failed: CONFLICT')).toBe(true)
+  expect(t.endsWith('- merge stopped on conflict: resolve by hand, or git merge --abort')).toBe(true)
+  w.actionResult = ran('', 1, 'fatal: Not possible to fast-forward, aborting.\n')
+  await go(ui, clock, 'key:pull')
+  expect(w.toasts.at(-1)).toBe('■ git pull --ff-only failed: fatal: Not possible to fast-forward, aborting.')
+  await ui.unmount()
+})
+
+test('F103 a run branch and a run worktree are warned in the confirm; the keys line names f p u v m', WITH, async ($, on) => {
+  const [w, clock] = world(on); w.branch = 'run/RUN-0022-x'; w.root = '/r/.skillator/worktrees/RUN-0022-x'
+  await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  for (const [k, h] of [['fetch', 'f'], ['pull', 'p'], ['push', 'u'], ['revert', 'v'], ['merge', 'm']])
+    expect((await ui.find({ key: 'key:' + k }))?.props.hotkey).toBe(h)
+  await ui.press({ key: 'key:push' }); await clock.settle()
+  expect((await ui.find({ key: 'xa:warn:0' }))?.text).toBe('on relay run branch run/RUN-0022-x - runs land through relay-morpheus; continue only if you mean it')
+  expect((await ui.find({ key: 'xa:warn:1' }))?.text).toBe('this checkout is a run worktree (/r/.skillator/worktrees/RUN-0022-x)')
+  await ui.unmount()
+})
+
+test('F103 after a fetch the Commits head shows ↑1 ↓1 vs origin/main and Incoming (1) opens to its files', WITH, async ($, on) => {
+  const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  await go(ui, clock, 'key:fetch')
+  expect(w.actions).toEqual([['fetch', '--prune']])
+  expect((await ui.find({ key: 'xs:commits' }))?.text).toBe('▸ Commits (2)  ↑1 ↓1 vs origin/main')
+  expect((await ui.find({ key: 'xs:incoming' }))?.text).toBe('▸ Incoming (1)')
+  await ui.press({ key: 'xs:incoming' }); await clock.settle()
+  expect((await ui.find({ key: 'xi:' + SHA3 }))?.text).toBe('  ▸ fedcba9  2026-10-26  F100: incoming')
+  await ui.press({ key: 'xi:' + SHA3 }); await clock.settle()
+  expect((await ui.find({ key: `xch:${SHA3}:0` }))?.text).toBe('      M  mods/a/x.ts  +3 -1')
+  await ui.unmount()
 })

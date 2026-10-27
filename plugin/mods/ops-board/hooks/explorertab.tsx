@@ -2,33 +2,39 @@ import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, TextProps } from 'claude-code'
 import { clean } from './lib/bandlines'
 import { gitBin } from './lib/host'
-import { changeArgs, EMPTY, explorerLines, explorerOffset, LOG_ARGS, LS_ARGS, moveSel, NO_GIT, parseFiles, selectedOf, toggle,
-  withChanges, withError, withFiles, withLog } from './lib/explorer'
-import type { Explorer, Need } from './lib/explorer'
+import { ACTION_ARGS, BRANCH_ARGS, BRANCHES_ARGS, changeArgs, COUNT_ARGS, DIRTY_ARGS, EMPTY, explorerLines, explorerOffset, INCOMING_ARGS,
+  LOG_ARGS, LS_ARGS, moveSel, NO_GIT, parseFiles, pickBranch, planAction, selectedOf, toggle, UPSTREAM_ARGS,
+  withChanges, withError, withFiles, withIncoming, withLog, withUpstream } from './lib/explorer'
+import type { Action, ActionKind, Explorer, Need } from './lib/explorer'
 
 // F75: the Explorer tab - the git-tracked files as a tree, the newest commits each
-// opening to what it changed (lib/explorer.ts). Read-only: git ls-files and git log, run
-// by the mod's absolute git (A150, host.ts gitBin) in the repo. $.state holds only what
-// is drawn (B4); the file list itself stays in this module, read again on entering the
-// tab and on r.
+// opening to what it changed (lib/explorer.ts). git ls-files and git log, run by the
+// mod's absolute git (A150, host.ts gitBin) in the repo. $.state holds only what is
+// drawn (B4); the file list itself stays in this module, read again on entering the
+// tab and on r. F103: fetch/pull/push/revert/merge, each only after a confirm drawn in
+// place of the tab that names the exact argv run (ACTION_ARGS).
 
 const explorerA = atom({ plugin: 'ops-board', key: 'explorer' } as const, EMPTY)
+const actionA = atom({ plugin: 'ops-board', key: 'explorer-action' } as const, null)
+const tabA = atom({ plugin: 'ops-board', key: 'tab' } as const, 'tickets')
+const PANE = 'ops-board'          // pane.tsx's PANE_ID (it imports this file)
+const PANE_NAME = 'ops board'     // pane.tsx's PANE_TITLE
 
 let files: string[] | null = null          // the last git ls-files, this load
 
-type Git = { ok: true; out: string; cut: boolean } | { ok: false; err: string }
+type Git = { ok: true; out: string; said: string; cut: boolean } | { ok: false; err: string; code: number | null }
 
-async function git($: EngineInterface, name: string, args: string[]): Promise<Git> {
+async function git($: EngineInterface, name: string, args: string[], timeoutMs = 15000): Promise<Git> {
   const repo = await $.session.repo()
-  if (!repo) return { ok: false, err: 'not a git repo - nothing to explore' }
+  if (!repo) return { ok: false, err: 'not a git repo - nothing to explore', code: null }
   const bin = await gitBin($)
-  if (!bin) return { ok: false, err: NO_GIT }
+  if (!bin) return { ok: false, err: NO_GIT, code: null }
   try {
-    const r = await $.process.run([bin, ...args], { cwd: repo.root, timeoutMs: 15000 })
-    if (r.exitCode !== 0) return { ok: false, err: `git ${name} failed: ${r.stderr.trim() || r.stdout.trim() || 'exit ' + r.exitCode}` }
-    return { ok: true, out: r.stdout, cut: r.isStdoutTruncated }
+    const r = await $.process.run([bin, ...args], { cwd: repo.root, timeoutMs })
+    if (r.exitCode !== 0) return { ok: false, err: `git ${name} failed: ${r.stderr.trim() || r.stdout.trim() || 'exit ' + r.exitCode}`, code: r.exitCode }
+    return { ok: true, out: r.stdout, said: r.stderr, cut: r.isStdoutTruncated }
   } catch (e) {
-    return { ok: false, err: `git ${name} failed: ${e instanceof Error ? e.message : String(e)}` }
+    return { ok: false, err: `git ${name} failed: ${e instanceof Error ? e.message : String(e)}`, code: null }
   }
 }
 
@@ -47,10 +53,17 @@ async function readFiles($: EngineInterface): Promise<{ list: string[] | null; e
 export async function enterExplorer($: EngineInterface): Promise<void> {
   const f = await readFiles($)
   const log = await git($, 'log', LOG_ARGS)
+  // F103: the upstream, read-only (no fetch): exit 128 is no upstream, any other failure leaves it unread
+  const up = await git($, 'rev-parse', UPSTREAM_ARGS)
+  const count = up.ok ? await git($, 'rev-list', COUNT_ARGS) : null
+  const inc = up.ok ? await git($, 'log', INCOMING_ARGS) : null
   const errs = [f.err, log.ok ? null : log.err].filter((e): e is string => !!e)
   await update($, explorerA, x => {
     let y = f.list ? withFiles(x, f.list) : x
     if (log.ok) y = withLog(y, log.out)
+    if (up.ok) y = withUpstream(y, up.out.trim(), count?.ok ? count.out : null)
+    else if (up.code === 128) y = withUpstream(y, null, null)
+    if (inc?.ok) y = withIncoming(y, inc.out)
     return withError(y, [...new Set(errs)].join('; ') || null)   // git missing: said once
   })
   const x = await read($, explorerA)
@@ -73,7 +86,7 @@ export async function toggleExplorer($: EngineInterface, item: string): Promise<
   if (need.sha) await readChanges($, need.sha)
 }
 
-export const isExplorerItem = (el: string) => /^x[sdfc]:/.test(el)
+export const isExplorerItem = (el: string) => /^x[sdfci]:/.test(el)
 
 // The focus ring landing on an item selects it (Tab / shift-Tab).
 export async function focusExplorer($: EngineInterface, el: string): Promise<void> {
@@ -95,7 +108,89 @@ export async function readExplorer($: EngineInterface): Promise<Explorer> {
   return read($, explorerA)
 }
 
+// --- F103: the git actions, each behind its confirm ---
+
+// A key: what the plan needs read now (branch, tracked changes, branches, root), then the
+// plan - refused in a toast, or the confirm up, Esc its Cancel.
+export async function openAction($: EngineInterface, kind: ActionKind): Promise<void> {
+  const branch = await git($, 'rev-parse', BRANCH_ARGS)
+  const dirty = await git($, 'status', DIRTY_ARGS)
+  const branches = kind === 'merge' ? await git($, 'branch', BRANCHES_ARGS) : null
+  const failed = [branch, dirty, branches].find(r => r && !r.ok)
+  if (failed && !failed.ok) { $.ui.toast('■ ' + failed.err); return }
+  const lines = (r: typeof branch | null) => (r?.ok ? r.out.split(/\r?\n/).filter(Boolean) : [])
+  const x = await read($, explorerA)
+  const p = planAction({ ...x, selected: selectedOf(x) }, kind, {
+    branch: lines(branch)[0] ?? 'HEAD', root: (await $.session.repo())?.root ?? '', dirty: lines(dirty).length, branches: lines(branches) })
+  if ('refused' in p) { $.ui.toast('■ ' + p.refused); return }
+  await update($, actionA, () => p.action)
+  await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
+  void $.ui.focus({ requestId: PANE, key: p.action.pick ? 'xb:' + (p.action.pick[0] ?? '') : 'xa:go' }).catch(() => {})
+}
+
+async function pickAction($: EngineInterface, name: string): Promise<void> {
+  await update($, actionA, a => (a ? pickBranch(a, name) : a))
+  void $.ui.focus({ requestId: PANE, key: 'xa:go' }).catch(() => {})
+}
+
+// Run: the argv shown is the argv run (bin aside); git's own words said, a conflict left as git left it.
+export async function actionGo($: EngineInterface): Promise<void> {
+  const a = await read($, actionA)
+  if (!a || !a.args.length) return
+  await cancelAction($)
+  const cmd = a.args.join(' ')
+  const r = await git($, cmd, a.args, 120000)    // fetch/pull/push talk to a remote
+  if (r.ok) $.ui.toast(`✓ git ${cmd}: ${(r.out.trim() || r.said.trim()).split(/\r?\n/)[0] || 'done'}`)
+  else {
+    const conflict = a.kind === 'merge' && /CONFLICT/.test(r.err) ? ' - merge stopped on conflict: resolve by hand, or git merge --abort' : ''
+    $.ui.toast(`■ ${r.err.split(/\r?\n/).slice(0, 3).join(' ')}${conflict}`)
+  }
+  await enterExplorer($)
+}
+
+// Cancel, Esc: nothing run, the tab back and Esc the pane's own again.
+export async function cancelAction($: EngineInterface): Promise<void> {
+  if ((await read($, actionA)) === null) return
+  await update($, actionA, () => null)
+  await $.ui.open({ id: PANE, title: PANE_NAME })
+}
+
+// /ops to another tab and an unload: the confirm just goes.
+export async function dropAction($: EngineInterface): Promise<void> {
+  if ((await read($, actionA)) !== null) await update($, actionA, () => null)
+}
+
+export async function isActionUp($: EngineInterface): Promise<boolean> {
+  return (await read($, tabA)) === 'explorer' && (await read($, actionA)) !== null
+}
+
+export async function readExplorerAction($: EngineInterface): Promise<Action | null> {
+  return read($, actionA)
+}
+
 type Els = { Box: ElementConstructor<BoxProps>; Text: ElementConstructor<TextProps>; Button: ElementConstructor<ButtonProps> }
+
+// The confirm, drawn in place of the tab (B5: never a second pane).
+export function ActionConfirm($: EngineInterface, els: Els, a: Action): RenderElement[] {
+  const { Box, Text, Button } = els
+  return [
+    <Box key="xa:title"><Text bold>{`git ${a.kind}?`}</Text><Text dimColor>{'  Esc cancels'}</Text></Box>,
+    <Text> </Text>,
+    a.args.length
+      ? <Box key="xa:argv" flexDirection="row"><Text dimColor>{'runs    '}</Text><Text wrap="wrap">{'git ' + a.args.join(' ')}</Text></Box>
+      : <Text key="xa:pickhead" dimColor>{a.pick?.length ? 'merge which branch into this one?' : 'no other branch to merge'}</Text>,
+    ...a.warn.map((w, i) => <Box key={'xa:warn:' + i}><Text color="warning" wrap="wrap">{clean(w)}</Text></Box>),
+    ...(a.pick ?? []).map(name => <Button key={'xb:' + name} plain onPress={() => { void pickAction($, name) }}>{'  ' + clean(name)}</Button>),
+    <Text> </Text>,
+    <Box flexDirection="row" gap={4}>
+      {a.args.length ? <Button key="xa:go" variant="primary" onPress={() => { void actionGo($) }}>Run</Button> : null}
+      <Button key="xa:cancel" onPress={() => { void cancelAction($) }}>Cancel</Button>
+    </Box>,
+  ]
+}
+
+// u = upload (push), v = revert: p/P would differ by Shift alone
+const ACTION_KEYS: [ActionKind, string, string][] = [['fetch', 'f', 'fetch'], ['pull', 'p', 'pull'], ['push', 'u', 'push'], ['revert', 'v', 'revert'], ['merge', 'm', 'merge']]
 
 export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: number): RenderElement[] {
   const { Box, Text, Button } = els
@@ -112,6 +207,8 @@ export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: num
   out.push(
     <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
       <Text dimColor>{sel.startsWith('xf:') ? '↑↓ move' : '↑↓ move · enter open/close'}</Text>
+      {ACTION_KEYS.map(([kind, hotkey, label]) =>
+        <Button key={'key:' + kind} plain dimColor hotkey={hotkey} onPress={() => { void openAction($, kind).catch(() => {}) }}>{label}</Button>)}
       <Button key="key:reload" plain dimColor hotkey="r" onPress={() => { void enterExplorer($).catch(() => {}) }}>reload</Button>
     </Box>,
   )

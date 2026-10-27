@@ -1,5 +1,5 @@
 import type { Color } from 'claude-code'
-import type { Change, Commit, Explorer, TreeRow } from '../../types'
+import type { Action, ActionKind, Change, Commit, Explorer, TreeRow } from '../../types'
 import type { Seg } from './bandlines'
 import { clean } from './bandlines'
 import type { Model } from './ticketsmodel'
@@ -24,7 +24,7 @@ export const MAX_TREE = 2000            // tree rows drawn at most (a folder of 
 export const MAX_CHANGES = 300          // a commit's files drawn at most
 export const NO_GIT = 'git not found on PATH (absolute entries only)'
 
-export type { Change, Commit, Explorer, TreeRow } from '../../types'
+export type { Action, ActionKind, Change, Commit, Explorer, TreeRow } from '../../types'
 export const EMPTY: Explorer = { open: [], selected: null, files: null, tree: [], treeMore: 0, commits: null, changes: {}, error: null,
   upstream: null, incoming: null }
 
@@ -48,8 +48,6 @@ export const DIRTY_ARGS = ['status', '--porcelain', '--untracked-files=no']
 export const BRANCHES_ARGS = ['branch', '--format=%(refname:short)']
 
 // F103: the actions. The only source of their argv: never a force flag of any kind.
-export type ActionKind = 'fetch' | 'pull' | 'push' | 'revert' | 'merge'
-export type Action = { kind: ActionKind; args: string[]; warn: string[]; pick: string[] | null; result: string | null }
 export const ACTION_ARGS: Record<ActionKind, (target: string) => string[]> = {
   fetch: () => ['fetch', '--prune'],
   pull: () => ['pull', '--ff-only'],
@@ -64,7 +62,8 @@ export const isRunRef = (ref: string) => /^run\/RUN-\d+/.test(ref) || /\/\.skill
 export function planAction(x: Explorer, kind: ActionKind, ctx: { branch: string; root: string; dirty: number; branches?: string[] }):
   { action: Action } | { refused: string } {
   const sel = x.selected ?? ''
-  if (kind === 'revert' && !/^x[ci]:/.test(sel)) return { refused: 'select a commit first' }
+  // a local commit only: an incoming one is not in HEAD's history, there is nothing to revert
+  if (kind === 'revert' && !sel.startsWith('xc:')) return { refused: 'select a commit first' }
   if (NEEDS_CLEAN.includes(kind) && ctx.dirty > 0)
     return { refused: `working tree has ${ctx.dirty} uncommitted changes - git would refuse or stop half way; commit or stash first` }
   if ((kind === 'push' || kind === 'pull') && x.upstream === 'none')

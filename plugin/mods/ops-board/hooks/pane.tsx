@@ -19,7 +19,7 @@ import { workflowStatus } from './lib/agents'
 import { AgentsTab, pollAgents, readAgents, WorkflowsTab } from './agentstab'
 import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab'
 import { enterRun, isRunFormUp, RunTab } from './runtab'
-import { enterExplorer, ExplorerTab, readExplorer } from './explorertab'
+import { ActionConfirm, enterExplorer, ExplorerTab, readExplorer, readExplorerAction } from './explorertab'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
 // state shown by colour (a `●` per row, headings in the same colour), footer keys.
@@ -288,6 +288,8 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
     )
   }
   if (tab === 'explorer') {
+    const a = await readExplorerAction($)      // F103: the git action confirm, without the tab bar
+    if (a) return <Box flexDirection="column">{ActionConfirm($, els, a)}</Box>
     return (
       <Box flexDirection="column">
         {bar}

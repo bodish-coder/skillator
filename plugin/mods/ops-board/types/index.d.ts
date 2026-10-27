@@ -112,6 +112,9 @@ export type Explorer = {
   upstream: { name: string; ahead: number; behind: number } | 'none' | null
   incoming: Commit[] | null
 }
+// F103: a git action planned - its argv (empty: a merge with no branch picked yet), warnings, the branches to pick from
+export type ActionKind = 'fetch' | 'pull' | 'push' | 'revert' | 'merge'
+export type Action = { kind: ActionKind; args: string[]; warn: string[]; pick: string[] | null; result: string | null }
 declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
@@ -135,6 +138,7 @@ declare module 'claude-code' {
       // F79: the Run tab - .skillator/run.json as read, the confirm / rename form, the one job (its output's tail)
       runFile: RunFile | null; runForm: RunForm | null; runJob: Job | null
       explorer: Explorer     // F75: what the Explorer tab draws, no more (B4)
+      'explorer-action': Action | null   // F103: the git action confirm up in the Explorer tab
     }
   }
 }

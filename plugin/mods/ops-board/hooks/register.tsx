@@ -17,7 +17,7 @@ import { closeEngage, dropEngage, isEngageUp, pollRuns, RUNS_POLL_MS } from './r
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 import { closeSetup, enterMessages, isSetupUp, pollInbox } from './messagestab'
 import { closeRunForm, dropRunForm, enterRun, isRunFormUp } from './runtab'
-import { arrowExplorer, enterExplorer, focusExplorer, isExplorerItem } from './explorertab'
+import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, isActionUp, isExplorerItem } from './explorertab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -378,7 +378,7 @@ async function arm($: EngineInterface) {
 // closeOnEscape is set anew by every ui.open: while a form is up it stays, so Esc is
 // still the form's Cancel after a re-open.
 async function openPane($: EngineInterface, asked: boolean) {
-  const esc = (await isFormUp($)) || (await isRunFormUp($)) || (await isEngageUp($)) ? { closeOnEscape: true as const } : {}
+  const esc = (await isFormUp($)) || (await isRunFormUp($)) || (await isEngageUp($)) || (await isActionUp($)) ? { closeOnEscape: true as const } : {}
   const r = await $.ui.open(asked ? { id: PANE_ID, title: PANE_TITLE, focus: true, ...esc } : { id: PANE_ID, title: PANE_TITLE, ...esc })
   await update($, narrowA, () => !r.isPlaced)
   return r
@@ -448,6 +448,7 @@ export const register: Register = on => {
     if (tab && tab !== 'tickets') await clearForm($)
     if (tab && tab !== 'run') await dropRunForm($)
     if (tab && tab !== 'runs') await dropEngage($)        // F85: the engage confirm likewise
+    if (tab && tab !== 'explorer') await dropAction($)    // F103: the git action confirm likewise
     if (tab) await update($, tabA, () => tab)
     if (sec) await update($, runsOpenA, x => (x.includes(sec) ? x : [...x, sec]))
     if (tab === 'runs') void pollRuns($).catch(() => {})
@@ -542,6 +543,12 @@ export const register: Register = on => {
     if (e.id === PANE_ID && e.origin.kind === 'unload') await dropEngage($)
     if (e.id === PANE_ID && (await isEngageUp($))) {
       await closeEngage($)
+      return { value: undefined }
+    }
+    // F103: the git action confirm up - Esc is its Cancel, nothing run
+    if (e.id === PANE_ID && e.origin.kind === 'unload') await dropAction($)
+    if (e.id === PANE_ID && (await isActionUp($))) {
+      await cancelAction($)
       return { value: undefined }
     }
     if (e.id !== PANE_ID || !(await isFormUp($))) return next(e)
