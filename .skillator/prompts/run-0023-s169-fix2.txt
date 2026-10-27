@@ -1,0 +1,19 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+Ticket F101 (Marathon on hosts with no Workflow tool) - review fix round 2. You are a FIX seat: fix exactly the four findings below, made by a review of commit 2c53043 (fix round 1). Nothing else. Do not load build-jarvis, do not redesign.
+
+Worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104). Paths relative to it.
+
+Findings (the orchestrator verified 1 against install.sh lines 54-58 and 396-400 and PLATFORMS.md lines 251 and 275):
+1. Gemini CLI reads ~/.gemini/skills, and install.sh / install.ps1 put the antigravity marathon-run/SKILL.md text there (the same text agy and codex get), which says background subagents, `--owner subagent`, driver `@agy-`/`@cx-`. Gemini runs in-session (`--owner session`, `@gm-<6>`), as marathon.md's table and gemini/marathon-run.toml say. And the selftest's default branch (install.sh:624, install.ps1:653) now requires `--owner subagent` in .gemini/skills/marathon-run/SKILL.md, locking the wrong owner in. Fix with the smallest change: the shared antigravity marathon-run text (and marathon-plan if it names the delegate) states the per-host line for every host that reads it - agy, codex AND Gemini CLI (in-session, `--owner session`, `@gm-<6>`) - and the selftest asserts, for .gemini/skills, `--owner session` as well as the agy/codex `--owner subagent` (both present in the shared text), mirrored in both installers. Red first: show the current selftest passes while .gemini/skills carries no gemini line, or make it fail on the new assertion before the text change.
+2. plugin/skills/relay-morpheus/references/marathon.md step 6 (lines ~357-360): on a host with no delegate the BLOCKED retry is "done in-session" without first `RM chain dispatch <n> --owner session` - the retry stage must be dispatched (row `~`, prompt on disk) before its work starts, exactly as the delegate case. Say so.
+3. README.md lines ~276 and ~281: it says /marathon-plan exists on "every host" and groups muse under subagents. PLATFORMS.md says muse has no command (`commands: []`, plain words "plan a marathon" load relay-morpheus) and its delegate is child agents. Make README say: the command on every host that has commands; on muse, plain words load relay-morpheus; muse's delegate is child agents.
+4. The installer selftests do not guard RELAY_CHAIN_PARALLEL: add a check, mirrored in install.sh and install.ps1, that every marathon-run copy contains `RELAY_CHAIN_PARALLEL=`.
+
+Verify: `sh plugin/install.sh --selftest` and `powershell -NoProfile -ExecutionPolicy Bypass -File plugin/install.ps1 -SelfTest` both print ok, exit 0 (slow - several minutes each, use a long timeout, and read the exit code directly, not through a pipe); `sh plugin/skills/relay-morpheus/hooks/relay-morpheus.sh selftest`. Re-run the selftests after your LAST edit. Commit messages start with "F101: ".
+
+Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+Report back: the commit sha(s), files changed, the red then green output per finding, anything you could not verify, any unrelated problem (one line each).

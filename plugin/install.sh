@@ -495,6 +495,7 @@ if [ -n "$selftest" ]; then
   [ -z "$_bad" ] || { echo "FAIL: frontmatter has an unquoted \": \" (invalid YAML, pi will not register the command): $_bad"; exit 1; }
   # F68: the Muse manifest lists every skill and carries the release version
   sh "$root/practice/scripts/check-muse-manifest.sh" "$root" > /dev/null || { echo "FAIL: .muse-plugin out of step (sh practice/scripts/check-muse-manifest.sh)"; exit 1; }
+  sh "$root/skills/clone-odo/scripts/odo.sh" selftest > /dev/null || { echo "FAIL: clone-odo tools (sh skills/clone-odo/scripts/odo.sh selftest)"; exit 1; }
   for f in .codex/skills/pending/SKILL.md .codex/skills/list-tickets/SKILL.md .gemini/commands/pending.toml .gemini/commands/list-tickets.toml \
            .cursor/commands/pending.md .cursor/commands/list-tickets.md .pi/agent/prompts/pending.md .pi/agent/prompts/list-tickets.md \
            .gemini/config/skills/pending/SKILL.md .gemini/config/skills/list-tickets/SKILL.md \
@@ -527,7 +528,8 @@ if [ -n "$selftest" ]; then
            .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json \
            .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
            .pi/agent/extensions/skillator-ops.ts .config/opencode/skills/tickets-zordon/SKILL.md \
-           .config/opencode/skills/teams-uhura/scripts/team.mjs .config/opencode/skills/ops-board/ops/ops.sh; do
+           .config/opencode/skills/teams-uhura/scripts/team.mjs .config/opencode/skills/ops-board/ops/ops.sh \
+           .codex/skills/clone-odo/scripts/odo.sh .codex/skills/clone-odo/scripts/parity.py .config/opencode/skills/clone-odo/templates/features.csv; do
     [ -f "$T/$f" ] || { echo "FAIL: missing $f"; exit 1; }
   done
   N=$(native "$T")

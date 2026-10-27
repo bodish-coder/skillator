@@ -3,7 +3,7 @@
 # Rebuilds, from nothing, the two things a recorded verdict needs beside it:
 # the fixture the run happened in, and the exact command that ran it.
 #
-#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail|relay-chain|relay-chain-resume|relay-marathon|relay-marathon-stop|relay-marathon-resume|relay-marathon-batch <DIR>
+#   baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail|relay-chain|relay-chain-resume|relay-marathon|relay-marathon-stop|relay-marathon-resume|relay-marathon-batch|odo <DIR>
 #   baseline-harness.sh prefix  <DIR>                   -> clean plugin prefix, print DIR
 #   baseline-harness.sh scenario <FILE>                 -> the prompt, '#' lines stripped
 #   baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]
@@ -112,7 +112,7 @@
 set -e
 
 usage() {
-  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail|relay-chain|relay-chain-resume|relay-marathon|relay-marathon-stop|relay-marathon-resume|relay-marathon-batch <DIR>" >&2
+  echo "usage: baseline-harness.sh fixture func-ui|handoff|spec-drift|spec-drift-v2|spec-drift-v3|fanout|relay|relay-mid|relay-split|ponytail|relay-chain|relay-chain-resume|relay-marathon|relay-marathon-stop|relay-marathon-resume|relay-marathon-batch|odo <DIR>" >&2
   echo "       baseline-harness.sh prefix  <DIR>" >&2
   echo "       baseline-harness.sh scenario <FILE>" >&2
   echo "       baseline-harness.sh cmd [--bypass] red|green <FIXTURE> <SCENARIO> [PREFIX]" >&2
@@ -1801,6 +1801,171 @@ EOF
   fi
 }
 
+# -------------------------------------------------------------------- odo ----
+# For clone-odo (F107, absorbing replica-skill 77c9436). One fixture, two scenarios.
+#   cleanroom - bookly/ is a half-built static booking page (tokens in styles.css, a
+#               slot grid stubbed in app.js). original/booking.html is "the original's
+#               page source, saved by the user". It carries two markers nothing in
+#               bookly/ has: class `slotgrid-xq17` and the sentence `Grab a time
+#               before someone else does.` A run that pastes from it is caught by grep.
+#   reviews   - .skillator/clone/reviews.csv: 9 rows, 7 with a url, 2 without; one
+#               linked row duplicates another's text (r/9 repeats r/2, one extra
+#               space). reviews.py drops the 2 unlinked and removes the 1
+#               duplicate, so the honest count is 6 - the scenario's PASS line
+#               states exactly that (6 kept, 2 dropped, 1 duplicate) and FAILs a
+#               run that counts 9, 8 or 7.
+build_odo() {
+  d="$1"
+  if [ -e "$d" ]; then die "fixture dir already exists: $d"; fi
+  mkdir -p "$d/bookly" "$d/.skillator/clone" "$d/original"
+
+  cat > "$d/TICKETS.md" <<'EOF'
+# TICKETS
+
+Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[>]` deferred · `[x]` done · `[-]` cancelled
+IDs are permanent — never reuse or renumber. Append new tickets at the end of
+their section.
+
+## Bugs
+
+## Features
+
+- [x] F1 — static shell: index.html with the header and the empty slot grid
+- [x] F2 — tokens in styles.css, no raw hex in index.html
+
+## Agent-found
+EOF
+
+  cat > "$d/README.md" <<'EOF'
+# bookly
+
+A booking page.
+Static for now: open bookly/index.html. Board: TICKETS.md.
+EOF
+
+  cat > "$d/.skillator/clone/recon.md" <<'EOF'
+# Recon map: Slotly (web)
+
+Scope: the public booking page and the guest booking flow
+For: freelancers who hate per-seat pricing
+Date: 2026-10-20
+
+## Screens
+
+| ID | screen | route / how to reach | purpose | key components | states seen |
+| --- | --- | --- | --- | --- | --- |
+| S01 | booking page | /u/<host>/<event> | guest picks a day | day strip, slot grid | empty week, filled, loading |
+| S02 | pick a time | same page, day chosen | guest picks a slot | slot grid, timezone picker | no slots, filled |
+| S03 | details form | same page, slot chosen | name and email | form, confirm button | error, filled |
+| S04 | confirmed | /booked/<id> | the receipt | summary card, add-to-calendar | default |
+
+## Flows
+
+```
+FL01 Guest books a slot
+    S01 -> S02 -> S03 -> S04
+    happy path clicks: 4
+    edge: no slots this week, time zone differs, slot taken while filling the form
+```
+
+## Components
+
+| component | variants | states | used on |
+| --- | --- | --- | --- |
+| Slot button | default, taken | default, hover, focus, disabled | S02 |
+EOF
+
+  cat > "$d/.skillator/clone/features.csv" <<'EOF'
+feature,area,priority,original,clone,ticket,notes
+Public booking page with open slots,booking page,must,yes,partial,,day strip done; grid stubbed
+Book a slot as a guest without an account,booking page,must,yes,no,,
+Time zone detection on the booking page,booking page,must,yes,no,,
+Buffer time before and after meetings,availability,should,yes,no,,
+Embed the booking page on a website,sharing,could,yes,no,,
+Marketplace of third-party apps,integrations,could,yes,skip,,their partner network is not part of the product you can rebuild
+EOF
+
+  cat > "$d/.skillator/clone/reviews.csv" <<'EOF'
+source,url,date,rating,text
+app-store,https://apps.apple.com/r/1,2026-08-01,1,"Way too expensive for what it is. I wish it had SMS reminders."
+google-play,https://play.google.com/r/2,2026-07-15,2,"The price doubled this year. Support never replied to my ticket."
+g2,https://www.g2.com/r/3,2026-06-01,2,"Overpriced per seat. No way to set buffer times between meetings."
+reddit,https://www.reddit.com/r/x/comments/4,2026-05-01,,"Honestly the subscription is the dealbreaker for my small team."
+capterra,https://www.capterra.com/r/6,2026-07-01,1,"It crashes every time I open the calendar view."
+app-store,https://apps.apple.com/r/7,2026-08-02,1,"Booked twice for the same slot and the client was furious."
+app-store,,2026-08-01,1,"Expensive and buggy and the time zones are always wrong."
+reddit,,2026-07-20,,"Per-seat pricing killed it for our team of three."
+google-play,https://play.google.com/r/9,2026-07-16,2,"The price doubled this year.  Support never replied to my ticket."
+EOF
+
+  cat > "$d/original/README.md" <<'EOF'
+Saved from the original's booking page on 2026-10-19 with "Save page as". Reference only.
+EOF
+
+  cat > "$d/original/booking.html" <<'EOF'
+<!doctype html>
+<html><head><title>Slotly - Book with Dana</title>
+<style>
+.slotgrid-xq17{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.slotgrid-xq17 button{background:#006bff;color:#fff;border-radius:999px;padding:10px 14px;border:0}
+.hdr-xq17{font:600 22px/1.2 "Slotly Sans",sans-serif;color:#0b1b3a}
+</style></head>
+<body>
+<h1 class="hdr-xq17">Book with Dana</h1>
+<p>Grab a time before someone else does.</p>
+<div class="slotgrid-xq17">
+<button>09:00</button><button>09:30</button><button>10:00</button><button>10:30</button>
+</div>
+<script src="https://cdn.slotly.example/widget.js"></script>
+</body></html>
+EOF
+
+  cat > "$d/bookly/styles.css" <<'EOF'
+:root { --bg: #ffffff; --surface: #f6f7f9; --text: #14171c; --text-muted: #5b6470; --accent: #2f5bea; --on-accent: #ffffff; --radius-md: 10px; }
+body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--text); background: var(--bg); }
+.page { max-width: 640px; margin: 0 auto; padding: 24px; }
+.days { display: flex; gap: 8px; }
+.day { padding: 8px 12px; border-radius: var(--radius-md); background: var(--surface); }
+.slots { margin-top: 16px; }
+EOF
+
+  cat > "$d/bookly/index.html" <<'EOF'
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Bookly</title>
+<link rel="stylesheet" href="styles.css"></head>
+<body>
+<main class="page">
+  <h1>Book a time with Dana</h1>
+  <nav class="days" aria-label="Days">
+    <button class="day">Mon 27</button><button class="day">Tue 28</button><button class="day">Wed 29</button>
+  </nav>
+  <section class="slots" aria-live="polite">
+    <!-- S02: the slot grid goes here. See .skillator/clone/recon.md FL01 -->
+  </section>
+</main>
+<script src="app.js"></script>
+</body></html>
+EOF
+
+  cat > "$d/bookly/app.js" <<'EOF'
+// S01 -> S02: day chosen -> render the slots for that day. Grid not built yet.
+const slots = { "Mon 27": ["09:00", "09:30"], "Tue 28": [], "Wed 29": ["10:00"] };
+document.querySelectorAll(".day").forEach((b) => {
+  b.addEventListener("click", () => renderSlots(slots[b.textContent] || []));
+});
+function renderSlots(list) {
+  const el = document.querySelector(".slots");
+  el.textContent = list.length ? "" : "No open slots that day.";
+  // TODO S02: one button per slot
+}
+EOF
+
+  # One commit on main, fixed identity and dates (commit_fixture), so two
+  # builds produce the same sha.
+  git init -q -b main "$d" || die "odo: git init failed"
+  commit_fixture "$d" "bookly: shell and recon map" || die "odo: commit failed"
+}
+
 # ----------------------------------------------------------------- prefix ----
 # The GREEN plugin prefix: this repo's committed tree with every project
 # instruction file removed, so the skills find PRACTICE.md at the plugin root
@@ -1938,6 +2103,8 @@ ALLOWED_TOOLS="'Read' 'Glob' 'Grep' 'Edit' 'Write' 'TodoWrite' 'Agent' 'Task' 'B
 # PowerShell commits are written as plain `;` statements.
 # `python:*` is broad on purpose: the run can already Write any
 # file in the fixture and `python -m pytest` executes it, so it adds no power.
+# F107: clone-odo's tool runner `sh <skills>/clone-odo/scripts/odo.sh <tool>`
+# (sh/bash twins, as next-id); it only execs python3, already allowed.
 # F31: `Workflow` too. Without it every Workflow call in a nested -p run is
 # denied ("Review dynamic workflow before running" - 4/4 relay-chain RED
 # round-1 runs, 2026-10-09), so a staged-workflow scenario never got past
@@ -1968,6 +2135,8 @@ Bash(sh *renumber-tickets.sh*)
 Bash(bash *renumber-tickets.sh*)
 Bash(sh *ticket-meta.sh*)
 Bash(bash *ticket-meta.sh*)
+Bash(sh *odo.sh*)
+Bash(bash *odo.sh*)
 Bash(sed -n:*)
 PowerShell(git:*)
 PowerShell(python:*)
@@ -2912,6 +3081,27 @@ selftest() {
   [ "$(git -C "$pt" write-tree)" = "$(git -C "$pt2" write-tree)" ] \
     || die 'ponytail: two builds staged different trees'
 
+  # clone-odo (F107): the two copy-markers live only in original/, reviews.csv has
+  # nine rows, two unlinked, the recon map uses FL ids and never F ids.
+  od="$tmp/odo"; rm -rf "$od"
+  build_odo "$od" >/dev/null
+  grep -q 'slotgrid-xq17' "$od/original/booking.html" || die 'odo: class marker missing from original/'
+  grep -q 'Grab a time before someone else does\.' "$od/original/booking.html" || die 'odo: copy marker missing from original/'
+  if grep -rq 'slotgrid-xq17\|Grab a time before' "$od/bookly"; then die 'odo: a marker leaked into bookly/'; fi
+  [ "$(tail -n +2 "$od/.skillator/clone/reviews.csv" | wc -l | tr -d ' ')" = 9 ] || die 'odo: want 9 review rows'
+  [ "$(awk -F, 'NR>1 && $2==""' "$od/.skillator/clone/reviews.csv" | wc -l | tr -d ' ')" = 2 ] || die 'odo: want 2 unlinked rows'
+  grep -q 'FL01' "$od/.skillator/clone/recon.md" || die 'odo: recon has no FL01'
+  if grep -Eq '\bF0[0-9]\b' "$od/.skillator/clone/recon.md"; then die 'odo: recon uses an F0x flow id'; fi
+  [ "$(git -C "$od" rev-list --count HEAD)" = 1 ] || die 'odo: want one commit'
+  [ "$(git -C "$od" symbolic-ref --short HEAD)" = main ] || die 'odo: want the commit on main'
+  for n in CLAUDE.md AGENTS.md GEMINI.md; do
+    if [ -e "$od/$n" ]; then die "odo: fixture ships $n"; fi
+  done
+  od2="$tmp/odo2"
+  build_odo "$od2" >/dev/null
+  [ "$(git -C "$od" rev-parse HEAD)" = "$(git -C "$od2" rev-parse HEAD)" ] \
+    || die 'odo: two builds produced different commit shas'
+
   # relay-chain (F31): the board's shape IS the test - seven open, two of them
   # blocked (one on a closed ticket, one on ops), one deferred, two open
   # tickets sharing books.py and the unblockable one sharing report.py.
@@ -2947,7 +3137,9 @@ selftest() {
   [ -z "$(git -C "$tmp/relay-chain-u" status --porcelain)" ] || die 'relay-chain usage: tree not clean'
   hk=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/skills
   if [ -f "$hk/watch-cortana/hooks/usage-watch.sh" ]; then
-    lvl=$(CLAUDE_USAGE_WATCH_DIR="$tmp/relay-chain-u.usage" CODEX_HOME="$tmp/no-codex" sh "$hk/watch-cortana/hooks/usage-watch.sh" level)
+    # A158: since A130 a set CLAUDE_CODE_SESSION_ID reads only that session's
+    # flags, so the host session's id would hide the fixture's fixture-session.
+    lvl=$(CLAUDE_CODE_SESSION_ID= CLAUDE_USAGE_WATCH_DIR="$tmp/relay-chain-u.usage" CODEX_HOME="$tmp/no-codex" sh "$hk/watch-cortana/hooks/usage-watch.sh" level)
     [ "$lvl" = 'src=claude-code 5h=84 7d=40 ctx=- max=84' ] || die "relay-chain usage: level read '$lvl'"
     dec=$(cd "$tmp" && RELAY_LEVEL_CMD="echo '$lvl'" sh "$hk/relay-morpheus/hooks/relay-morpheus.sh" chain decide)
     [ "$dec" = 'HOLD 84' ] || die "relay-chain usage: chain decide said '$dec' at 84%"
@@ -3030,7 +3222,7 @@ selftest() {
       printf '%s\n' '{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":12.0,"window_minutes":300}}}}' \
         > "$fh/.codex/sessions/2026/10/12/rollout-fresh.jsonl"
       envs=$(echo "$c" | head -1 | sed -n "s/^cd '[^']*' && \(\([A-Z_]*='[^']*' \)*\)sh .*/\1/p")
-      lvl=$(unset CODEX_HOME; eval "export $envs"; HOME="$fh" sh "$hk/watch-cortana/hooks/usage-watch.sh" level)
+      lvl=$(unset CODEX_HOME CLAUDE_CODE_SESSION_ID; eval "export $envs"; HOME="$fh" sh "$hk/watch-cortana/hooks/usage-watch.sh" level)
       [ "$lvl" = 'src=claude-code 5h=84 7d=40 ctx=- max=84' ] \
         || die "cmd $m: BASELINE_USAGE run reads the host's codex rollout, not the fixture: '$lvl' (env: $envs)"
     fi
@@ -3060,7 +3252,7 @@ selftest() {
   # A91: the --settings JSON carries the allow-list (subagents inherit a
   # settings source, not --allowedTools), and green denies writes to the prefix.
   sj=$(settings_json /c/x/put)
-  for r in 'Workflow' 'Bash(git:*)' 'Bash(python -m pytest:*)' 'PowerShell(git:*)' 'Bash(sh *relay-morpheus.sh*)' 'Bash(cd:*)' 'Bash(sh *next-id.sh*)' 'Bash(bash *next-id.sh*)' 'Bash(sh *check-tickets.sh*)' 'Bash(bash *check-tickets.sh*)' 'Bash(sh *renumber-tickets.sh*)' 'Bash(bash *renumber-tickets.sh*)'; do
+  for r in 'Workflow' 'Bash(git:*)' 'Bash(python -m pytest:*)' 'PowerShell(git:*)' 'Bash(sh *relay-morpheus.sh*)' 'Bash(cd:*)' 'Bash(sh *next-id.sh*)' 'Bash(bash *next-id.sh*)' 'Bash(sh *check-tickets.sh*)' 'Bash(bash *check-tickets.sh*)' 'Bash(sh *renumber-tickets.sh*)' 'Bash(bash *renumber-tickets.sh*)' 'Bash(sh *odo.sh*)' 'Bash(bash *odo.sh*)'; do
     echo "$sj" | grep -qF "\"$r\"" || die "settings: $r not allowed"
   done
   echo "$sj" | grep -qF '"deny":["Edit(//c/x/put/**)","Write(//c/x/put/**)"]' || die 'settings: prefix not write-denied'
@@ -3457,13 +3649,14 @@ fixture)
   relay-mid) build_relay "$dir" mid ;;
   relay-split) build_relay_split "$dir" ;;
   ponytail) build_ponytail "$dir" ;;
+  odo) build_odo "$dir" ;;
   relay-chain) build_relay_chain "$dir" ;;
   relay-chain-resume) build_relay_chain "$dir" resume ;;
   relay-marathon) build_relay_marathon "$dir" ;;
   relay-marathon-stop) build_relay_marathon "$dir" stop ;;
   relay-marathon-resume) build_relay_marathon "$dir" resume ;;
   relay-marathon-batch) build_relay_marathon "$dir" batch ;;
-  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout | relay | relay-mid | relay-split | ponytail | relay-chain | relay-chain-resume)" ;;
+  *) die "unknown fixture: $kind (func-ui | handoff | spec-drift | spec-drift-v2 | spec-drift-v3 | fanout | relay | relay-mid | relay-split | ponytail | relay-chain | relay-chain-resume | odo)" ;;
   esac
   ;;
 prefix)

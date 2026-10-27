@@ -7,6 +7,10 @@
 //   node holo.mjs [run] [--design <file>] --html [--out <path>]
 //        -> a standalone page with its own doctype, for hosts without the
 //           Artifact tool; default .skillator/holo/<RUN-n>.html
+//   node holo.mjs [run] [--design <file>] --md [--out <path>]
+//        -> Markdown with a Mermaid stage graph; default .skillator/holo/<RUN-n>.md
+//   node holo.mjs [run] [--design <file>] --svg [--out <path>]
+//        -> one standalone SVG of the same content; default .skillator/holo/<RUN-n>.svg
 //   node holo.mjs [run] [--design <file>] --ascii      -> the same, for a terminal
 //   node holo.mjs --design <file> [--html|--ascii]     -> design components only
 //   node holo.mjs [run] --anatomy [--html]             -> + the run as a bench machine (F83),
@@ -243,18 +247,27 @@ function derive(run, holds = null) {
 
 export function parseDesign(md) {
   const out = { title: "", parts: [] };
-  let cur = null, para = [], inFence = false;
+  let cur = null, para = [], inFence = false, tbl = null;
   const flush = () => { if (cur && !cur.lead && para.length) cur.lead = para.join(" "); para = []; };
   for (const l of md.replace(/\r/g, "").split("\n")) {
+    if (!/^\s*\|/.test(l)) tbl = null; // a table is one run of consecutive | lines
     if (/^```/.test(l)) { inFence = !inFence; if (cur) cur.code++; continue; }
     if (inFence) continue;
     let m;
     if (!out.title && (m = /^# (.*)$/.exec(l))) { out.title = m[1].trim(); continue; }
-    if ((m = /^## (.*)$/.exec(l))) { flush(); cur = { name: m[1].trim(), lead: "", subs: [], bullets: 0, code: 0 }; out.parts.push(cur); continue; }
+    if ((m = /^## (.*)$/.exec(l))) { flush(); cur = { name: m[1].trim(), lead: "", subs: [], bullets: 0, code: 0, tables: [] }; out.parts.push(cur); continue; }
     if (!cur) continue;
     if ((m = /^### (.*)$/.exec(l))) { flush(); cur.subs.push(m[1].trim()); continue; }
     if (/^\s*([-*]|\d+\.)\s/.test(l)) { flush(); cur.bullets++; continue; }
-    if (l.trim() === "" || /^\|/.test(l)) { flush(); continue; }
+    if (/^\s*\|/.test(l)) {
+      flush();
+      const cells = l.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
+      if (cells.every((c) => /^:?-+:?$/.test(c))) { if (tbl && tbl.rows.length === 1 && !tbl.head.length) tbl.head = tbl.rows.pop(); continue; }
+      if (!tbl) { tbl = { head: [], rows: [] }; cur.tables.push(tbl); }
+      tbl.rows.push(cells);
+      continue;
+    }
+    if (l.trim() === "") { flush(); continue; }
     if (!cur.lead) para.push(l.trim());
   }
   flush();
@@ -294,25 +307,28 @@ export function layout(run) {
 }
 
 // ---------------------------------------------------------------- html ----
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = (s) => String(s ?? "").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "\u2026" : s);
 function wrap(text, width) {
+  const ind = /^\s*/.exec(String(text))[0], cont = ind + "  ";
   const out = [];
-  let line = "";
+  let line = "", pre = ind;
+  const push = (l) => { out.push(pre + l); pre = cont; };
   for (let w of String(text).split(/\s+/).filter(Boolean)) {
-    while (w.length > width) { if (line) { out.push(line); line = ""; } out.push(w.slice(0, width)); w = w.slice(width); }
+    const room = () => width - pre.length;
+    while (w.length > room()) { if (line) { push(line); line = ""; } const r = Math.max(room(), 1); push(w.slice(0, r)); w = w.slice(r); }
     if (!line) line = w;
-    else if (line.length + 1 + w.length <= width) line += " " + w;
-    else { out.push(line); line = w; }
+    else if (line.length + 1 + w.length <= room()) line += " " + w;
+    else { push(line); line = w; }
   }
-  if (line) out.push(line);
+  if (line) push(line);
   return out.length ? out : [""];
 }
 const tspans = (lines, x, y, lh) =>
   lines.map((t, i) => `<tspan x="${x}" y="${y + i * lh}">${esc(t)}</tspan>`).join("");
 
-function stageGraph(run) {
-  if (!run.stages.length) return `<p class="empty">No stage rows in this run file.</p>`;
+// The graph's inner markup, shared by the page (stageGraph) and the SVG output (renderSvg).
+function stageGraphParts(run) {
   const { cols, pos, edges } = layout(run);
   const NW = 208, NH = 70, CW = 252, RH = 86, PX = 14, PY = 30;
   const lanes = Math.max(...cols.map((c) => c.length));
@@ -347,9 +363,16 @@ function stageGraph(run) {
       `<text class="nname" x="10" y="39">${esc(clip(s.name, 29))}</text>` +
       `<text class="nmeta${s.waits.length ? " held" : ""}" x="10" y="58">${esc(clip(third, 32))}</text></g>`;
   }).join("");
+  return { W, H, inner: bands + heads + arrows + nodes, cols };
+}
+
+const ARROW_DEFS = `<defs><marker id="holo-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>`;
+
+function stageGraph(run) {
+  if (!run.stages.length) return `<p class="empty">No stage rows in this run file.</p>`;
+  const { W, H, inner, cols } = stageGraphParts(run);
   return `<div class="scroll"><svg class="graph" role="img" aria-label="Stage graph of ${esc(run.id)}: ${run.stages.length} stages in ${cols.length} step(s)" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="min-width:${Math.min(W, 560)}px">` +
-    `<defs><marker id="holo-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>` +
-    bands + heads + arrows + nodes + `</svg></div>`;
+    ARROW_DEFS + inner + `</svg></div>`;
 }
 
 function stageList(run) {
@@ -433,7 +456,8 @@ function designBlock(d, src) {
     `<article class="comp" data-component="${i + 1}"><h3><span class="cn">${i + 1}</span>${esc(p.name)}</h3>` +
     (p.lead ? `<p>${esc(p.lead)}</p>` : "") +
     (p.subs.length ? `<ul>${p.subs.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : "") +
-    `<p class="cm">${p.subs.length} part${p.subs.length === 1 ? "" : "s"} \u00b7 ${p.bullets} point${p.bullets === 1 ? "" : "s"}${p.code ? " \u00b7 " + p.code + " code block" + (p.code > 1 ? "s" : "") : ""}</p></article>`).join("");
+    p.tables.map((t) => `<table>${t.head.length ? `<thead><tr>${t.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>` : ""}<tbody>${t.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`).join("") +
+    `<p class="cm">${p.subs.length} part${p.subs.length === 1 ? "" : "s"} \u00b7 ${p.bullets} point${p.bullets === 1 ? "" : "s"}${p.code ? " \u00b7 " + p.code + " code block" + (p.code > 1 ? "s" : "") : ""}${p.tables.length ? " \u00b7 " + p.tables.length + " table" + (p.tables.length > 1 ? "s" : "") : ""}</p></article>`).join("");
   return `<section class="design"><h2>Design \u00b7 ${esc(d.title || basename(src))}<span class="n">${d.parts.length} sections</span></h2>` +
     `<p class="src">${esc(src)}</p><div class="comps">${cards}</div></section>`;
 }
@@ -530,6 +554,7 @@ summary{cursor:pointer;font-family:var(--mono);font-size:.6875rem;text-transform
 .comp h3{display:flex;gap:.5rem;align-items:baseline;font-size:.9375rem;margin:0 0 .4rem}
 .cn{font-family:var(--mono);font-size:.75rem;color:var(--accent)}
 .comp p{margin:0 0 .4rem;font-size:.8125rem} .comp li{font-size:.8125rem;padding:.1rem 0;border-top:1px solid var(--rule)}
+.comp table{border-collapse:collapse;font-size:.75rem;margin:.4rem 0;width:100%} .comp th,.comp td{border:1px solid var(--rule);padding:.2rem .4rem;text-align:left;vertical-align:top}
 .cm,.src{font-family:var(--mono);font-size:.6875rem;color:var(--faint)}
 .empty{color:var(--mid)}
 .foot{margin-top:2.5rem;font-size:.75rem;color:var(--faint)}
@@ -671,9 +696,103 @@ export function renderAscii(run, opts = {}) {
     d.parts.forEach((p, i) => {
       out.push(`  ${i + 1}. ${p.name}  [${p.subs.length} parts, ${p.bullets} points]`);
       for (const s of p.subs) out.push(`       - ${s}`);
+      for (const t of p.tables) for (const r of (t.head.length ? [t.head, ...t.rows] : t.rows)) out.push("       | " + r.join(" | ") + " |");
     });
   }
   return toAscii(out.join("\n")) + "\n";
+}
+
+// ------------------------------------------------------------ markdown ----
+const MERMAID_STROKE = { landed: "#2f7d4f", inflight: "#1f63b8", parked: "#7a4bb3", failed: "#b3261e", replanned: "#7b7f7b", pending: "#5a615a", unknown: "#b3261e" };
+const mlabel = (s) => String(s).replace(/"/g, "#quot;").replace(/</g, "#lt;").replace(/>/g, "#gt;");
+// Run-file and design text is data: no raw HTML, and a line standing alone opens no fence, heading, list or quote.
+const mdx = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const mdLine = (s) => mdx(s).replace(/^(\s*)(`{3}|~{3}|#|[-*+](?=\s))/, "$1\\$2").replace(/^(\s*\d+)([.)](?=\s))/, "$1\\$2");
+const mdTable = (head, rows) => {
+  const w = Math.max(head.length, ...rows.map((r) => r.length), 1);
+  const row = (r) => "| " + Array.from({ length: w }, (_, i) => mdx(r[i]).replace(/\|/g, "\\|")).join(" | ") + " |";
+  return [row(head.length ? head : Array(w).fill("")), "|" + " --- |".repeat(w), ...rows.map(row)].join("\n");
+};
+export function renderMarkdown(run, opts = {}) {
+  const out = [];
+  if (run) {
+    out.push(`# Holo ${mdx(run.id)} - ${mdx(run.title)}`, "");
+    const ch = run.chain;
+    out.push(mdx([run.plan && `plan ${run.plan}`, run.updated && `updated ${run.updated}`, ch && `driver ${ch.driver}`, ch && `hold ${ch.hold}`, ch && `mode ${ch.mode}`].filter(Boolean).join(" · ")), "");
+    out.push("## Counts", "", mdTable(["state", "stages"], ORDER.filter((s) => s !== "unknown" || run.stages.some((x) => x.state === s)).map((s) => [LABEL[s], String(run.stages.filter((x) => x.state === s).length)])), "");
+    const askable = run.qs.filter((q) => ASKABLE.has(q.state));
+    out.push(`## Decisions waiting on you (${askable.length})`, "");
+    if (!askable.length) out.push(`No open decisions in ${run.id}.`, "");
+    for (const q of askable) {
+      out.push(`### ${q.id} - ${mdx(q.f.header || q.id)} (${q.state})`, "", q.f.question ? mdLine(q.f.question) : "(no question text)", "");
+      for (const [k, v] of [["ticket", q.f.ticket], ["reason", q.f.reason], ["blocks", q.blocks.join(", ")], ["holds stages", q.holds.join(", ")], ["files", q.files.join(", ")], ["default", q.f.default]]) if (v) out.push(`- ${k}: ${mdx(v)}`);
+      out.push("", mdTable(["#", "option", "does", "hurts"], q.options.map((o, i) => [String(i + 1), o.label + (o.rec ? " (recommended)" : ""), o.does || "-", o.hurts || "-"])), "");
+    }
+    out.push("## Stage graph", "", "```mermaid", "flowchart LR");
+    for (const s of run.stages) out.push(`  S${s.n}["#${s.n}${s.code ? " · " + mlabel(s.code) : ""} ${mlabel(s.name)}"]:::${s.state}`);
+    for (const e of layout(run).edges) out.push(e.kind === "after" ? `  S${e.from} --> S${e.to}` : e.kind === "implicit" ? `  S${e.from} -.-> S${e.to}` : `  S${e.from} -. replaced .-> S${e.to}`);
+    for (const s of Object.keys(MERMAID_STROKE)) out.push(`  classDef ${s} stroke:${MERMAID_STROKE[s]},stroke-width:2px`);
+    out.push("```", "", "## Stages", "", mdTable(["#", "stage", "state", "owner", "landed", "files"], run.stages.map((s) => [String(s.n), (s.code ? s.code + " " : "") + s.name, LABEL[s.state] + (s.state === "unknown" ? ` (${s.st})` : ""), s.owner, s.landed, s.files.join(", ") || "-"])), "");
+  }
+  if (opts.design) {
+    const d = opts.design;
+    out.push(`## Design - ${mdx(d.title)} (${d.parts.length} sections)`, "", opts.designPath ? `Source: ${mdx(opts.designPath)}` : "", "");
+    d.parts.forEach((p, i) => {
+      out.push(`### ${i + 1}. ${mdx(p.name)}`, "");
+      if (p.lead) out.push(mdLine(p.lead), "");
+      if (p.subs.length) out.push(...p.subs.map((s) => `- ${mdx(s)}`), "");
+      for (const t of p.tables) out.push(mdTable(t.head, t.rows), "");
+      out.push(`${p.subs.length} part${p.subs.length === 1 ? "" : "s"} · ${p.bullets} point${p.bullets === 1 ? "" : "s"}${p.code ? ` · ${p.code} code block${p.code > 1 ? "s" : ""}` : ""}${p.tables.length ? ` · ${p.tables.length} table${p.tables.length > 1 ? "s" : ""}` : ""}`, "");
+    });
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n") + "\n";
+}
+
+// ----------------------------------------------------------------- svg ----
+// Light theme, literal colours: a standalone image cannot rely on prefers-color-scheme.
+const SVG_INK = MERMAID_STROKE; // the light CSS state colours, literal
+const SVG_BG = { landed: "#e3f1e8", inflight: "#e2ecf9", parked: "#efe7f8", failed: "#f8e3e1", replanned: "#eceeeb", pending: "#fbfbf9", unknown: "#f8e3e1" };
+export function renderSvg(run, opts = {}) {
+  const lines = [];
+  if (run) {
+    const ch = run.chain;
+    lines.push(`${run.id} - ${run.title}`, [run.plan && `plan ${run.plan}`, run.updated && `updated ${run.updated}`, ch && `driver ${ch.driver}  hold ${ch.hold}  mode ${ch.mode}`].filter(Boolean).join("   "));
+    lines.push(ORDER.map((s) => `${LABEL[s]} ${run.stages.filter((x) => x.state === s).length}`).join("   "), "");
+    const askable = run.qs.filter((q) => ASKABLE.has(q.state));
+    lines.push(`DECISIONS (${askable.length})`);
+    if (!askable.length) lines.push("  none");
+    for (const q of askable) {
+      lines.push(`  ${q.id} [${q.f.header || q.id}] ${q.f.question || ""}`, `    ticket ${q.f.ticket || "-"} | blocks ${q.blocks.join(", ") || "-"} | holds stage ${q.holds.join(", ") || "-"} | default ${q.f.default || "-"}` +
+        `${q.f.reason ? " | reason " + q.f.reason : ""}${q.files.length ? " | files " + q.files.join(", ") : ""}`);
+      q.options.forEach((o, i) => lines.push(`    ${i + 1}. ${o.label}${o.rec ? " (recommended)" : ""} - does: ${o.does || "-"} - hurts: ${o.hurts || "-"}`));
+    }
+    lines.push("", "STAGES");
+    if (!run.stages.length) lines.push("  No stage rows in this run file.");
+    for (const s of run.stages) lines.push(`  #${s.n} ${s.code ? s.code + " " : ""}${s.name} - ${LABEL[s.state]}${s.landed !== "-" ? " " + s.landed : ""} - ${s.owner}${s.files.length ? " - " + s.files.join(", ") : ""}`);
+  }
+  if (opts.design) {
+    const d = opts.design;
+    lines.push("", `DESIGN ${d.title}${opts.designPath ? " (" + opts.designPath + ")" : ""} - ${d.parts.length} sections`);
+    d.parts.forEach((p, i) => {
+      lines.push(`  ${i + 1}. ${p.name}  [${p.subs.length} parts, ${p.bullets} points, ${p.tables.length} tables]`);
+      for (const s of p.subs) lines.push(`       - ${s}`);
+      for (const t of p.tables) for (const r of (t.head.length ? [t.head, ...t.rows] : t.rows)) lines.push(`       | ${r.join(" | ")} |`);
+    });
+  }
+  const rows = lines.flatMap((l) => l === "" ? [""] : wrap(l, 110));
+  const g = run && run.stages.length ? stageGraphParts(run) : null;
+  const LH = 18, PAD = 16;
+  const W = Math.max(g ? g.W : 0, 720), gy = PAD, ty = (g ? g.H + PAD : 0) + PAD;
+  const H = ty + rows.length * LH + PAD;
+  const style = `text{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;fill:#1a1d1a}.row{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}` +
+    `.band{fill:#f3f4f1;opacity:.55}.lane,.colh{font-size:10px;fill:#8a908a}.edge{fill:none;stroke:#8a908a;stroke-width:1.5}.e-implicit{stroke-dasharray:5 4}.e-replaced{stroke-dasharray:2 3;stroke:#7b7f7b}.arrowhead{fill:#8a908a}` +
+    `.node rect{stroke-width:1.6}.nid{font-size:11.5px;font-weight:700}.nst{font-size:10.5px}.nname{font-size:12.5px}.nmeta{font-size:11px;fill:#5a615a}.nmeta.held{fill:${SVG_INK.parked}}` +
+    Object.keys(SVG_INK).map((s) => `.s-${s} rect{fill:${SVG_BG[s]};stroke:${SVG_INK[s]}}.s-${s} .nst{fill:${SVG_INK[s]}}`).join("") + `.s-pending rect{stroke-dasharray:4 3}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Holo ${esc(run ? run.id : "design")}">` +
+    `<style>${style}</style>${ARROW_DEFS}` +
+    `<rect width="${W}" height="${H}" fill="#fbfbf9"/>` +
+    (g ? `<g transform="translate(0,${gy})">${g.inner}</g>` : "") +
+    rows.map((r, i) => `<text class="row" x="${PAD}" y="${ty + (i + 1) * LH - 4}" xml:space="preserve">${esc(r)}</text>`).join("") + `</svg>\n`;
 }
 
 // ----------------------------------------------------------------- cli ----
@@ -753,6 +872,8 @@ function parseArgs(argv) {
     const val = () => { if (i + 1 >= argv.length || argv[i + 1].startsWith("--")) throw new Error(`${a} needs a value`); return argv[++i]; };
     if (a === "--ascii") o.mode = "ascii";
     else if (a === "--html") o.mode = "html";
+    else if (a === "--md") o.mode = "md";
+    else if (a === "--svg") o.mode = "svg";
     else if (a === "--wizard") o.mode = "wizard";
     else if (a === "--batch") o.mode = "batch";
     else if (a === "--anatomy") o.anatomy = true;
@@ -808,7 +929,7 @@ function relayHolds(md, runPath, root) {
 
 async function main(argv) {
   const o = parseArgs(argv);
-  if (o.help) { console.log((await readFile(fileURLToPath(import.meta.url), "utf8")).split("\n").slice(1, 17).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); return; }
+  if (o.help) { console.log((await readFile(fileURLToPath(import.meta.url), "utf8")).split("\n").slice(1, 21).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); return; }
   if (o.selftest) return selftest();
   if (o.fixture) { console.log(await buildFixture(o.fixture)); return; }
   if (o.answers) {
@@ -864,8 +985,16 @@ async function main(argv) {
     if (wiz) console.log(`answer all ${set.decisions.length} in the decision wizard: ${rel(wiz)}`);
     return;
   }
-  const r = render(run, opts);
+  if ((o.mode === "md" || o.mode === "svg") && o.anatomy) throw new Error("--anatomy draws the page: use it with the Artifact or --html output");
   const stem = run ? run.id : basename(o.design).replace(/\.md$/i, "");
+  if (o.mode === "md" || o.mode === "svg") {
+    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}.${o.mode}`));
+    await writeGenerated(root, out, o.mode === "md" ? renderMarkdown(run, opts) : renderSvg(run, opts));
+    console.log(`holo: ${run ? `${run.id} ${run.stages.length} stages` : "design only"}${design ? `, ${design.parts.length} design sections` : ""} -> ${out}` +
+      (o.mode === "md" ? " (Markdown with a Mermaid stage graph)" : " (standalone SVG)"));
+    return;
+  }
+  const r = render(run, opts);
   const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}${o.mode === "html" ? "" : ".artifact"}.html`));
   await writeGenerated(root, out, o.mode === "html" ? standalonePage(r) : artifactPage(r));
   const nq = run ? run.qs.filter((q) => ASKABLE.has(q.state)).length : 0;
@@ -948,6 +1077,45 @@ function selftest() {
   ok(d.parts.length === 3 && (dp.match(/class="comp"/g) || []).length === 3, "design: one component per ## section", d.parts.length);
   ok(d.parts[1].subs.length === 2, "design: ### parts listed", d.parts[1].subs);
   ok(!d.parts.some((p) => p.name.includes("not a heading")), "design: fenced code is skipped");
+  ok(d.parts[1].tables.length === 1 && d.parts[1].tables[0].head.join("|") === "flag|does" && d.parts[1].tables[0].rows.length === 2 && d.parts[1].tables[0].rows[1][1] === "every book", "design: a pipe table is head + rows, separator dropped", d.parts[1].tables);
+  ok(d.parts[2].tables.length === 1 && d.parts[2].tables[0].head.length === 0 && d.parts[2].tables[0].rows[0][1] === "3 cases", "design: a one-line table has no head", d.parts[2].tables);
+  ok((dp.match(/<table>/g) || []).length === 2 && dp.includes("<th>flag</th>") && dp.includes("<td>every book</td>"), "design: tables drawn in the page");
+  ok(renderAscii(null, { design: d, designPath: "fixture-design.md" }).includes("| `--author` | filters by author |"), "design: tables in the ascii");
+  const mdOut = renderMarkdown(run, { runPath: "fixture-all-states.md", design: d, designPath: "fixture-design.md" });
+  ok(/^# Holo RUN-9 - /.test(mdOut), "md: title line");
+  ok(mdOut.includes("```mermaid\nflowchart LR\n"), "md: a mermaid flowchart");
+  for (const [n, st] of rows) ok(new RegExp(`^  S${n}\\[".*"\\]:::${st}$`, "m").test(mdOut), `md: stage ${n} node as ${st}`);
+  ok(mdOut.includes("  S1 --> S2") && mdOut.includes("  S2 --> S4") && mdOut.includes("  S1 -.-> S8") && mdOut.includes("  S5 -. replaced .-> S6"), "md: after, implicit and replaced edges");
+  ok((mdOut.match(/^### Q\d+ /gm) || []).length === 2, "md: one block per open/asked Q");
+  ok(mdOut.includes("| flag | does |") && mdOut.includes("| `--all` | every book |"), "md: design tables reproduced");
+  ok(parseArgs(["RUN-12", "--md"]).mode === "md", "--md is a mode");
+  const svgOut = renderSvg(run, { runPath: "fixture-all-states.md", design: d, designPath: "fixture-design.md" });
+  ok(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/.test(svgOut) && svgOut.trim().endsWith("</svg>"), "svg: one standalone svg element");
+  for (const [n, st] of rows) ok(svgOut.includes(`data-stage="${n}" data-state="${st}"`), `svg: stage ${n} drawn as ${st}`);
+  ok((svgOut.match(/data-edge="/g) || []).length === 10, "svg: the same 10 edges");
+  ok(!/<script|var\(--|https?:\/\//.test(svgOut.replace('xmlns="http://www.w3.org/2000/svg"', "")), "svg: no script, no css variable, no external url");
+  ok(svgOut.includes("DECISIONS (2)") && svgOut.includes("| flag | does |"), "svg: decisions and design tables as text");
+  ok(artifactPage(render(run, { runPath: "x" })).includes('data-edge="1-2" data-kind="after"'), "svg split: the page still draws the graph");
+  ok(parseArgs(["RUN-12", "--svg"]).mode === "svg", "--svg is a mode");
+  const mdEsc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  for (const q of qOpen) for (const o of q.options) ok(mdOut.includes(mdEsc(o.label)) && svgOut.includes(esc(o.label)), `md/svg: ${q.id} option ${o.label} carried`);
+  ok(svgOut.includes("reason taste") && svgOut.includes("files src/export.py"), "svg: a decision's reason and files, as the page and .md");
+  ok(svgOut.includes(".held{"), "svg: a .held rule, as the page");
+  ok(mdOut.includes("| unknown (z) |"), "md: an unknown state shows its raw cell");
+  ok(wrap("    aaa bbb ccc", 11).join("|") === "    aaa bbb|      ccc", "svg: wrap keeps the indent, continuations two more", wrap("    aaa bbb ccc", 11));
+  // Hostile run-file and design text: the .md stays one document, the .svg well-formed XML.
+  const nasty = parseRun("# RUN-5 - nasty <b>\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 1 | say <hi> \"q\" | ~ | - | - | - |\n| 2 | c\x01d | | - | - | - |\n\n" +
+    "## Decisions\n### Q1 open\nheader: <friends>\nquestion: ```\noptions:\n  - <b>yes</b> (Recommended) | a & b | -\n  - no | - | -\n### Q2 open\nquestion: ## not a heading\noptions:\n  - ok | - | -\n");
+  const nd = parseDesign("# T\n\n## A\n| a \\| b | c |\n|---|---|\n| --- | --- |\n| x | y |\n\n## B\n|---|---|\n| p | q |\n");
+  const nmd = renderMarkdown(nasty, { design: nd }), nsvg = renderSvg(nasty, { design: nd });
+  ok(nmd.includes('S1["#1 say #lt;hi#gt; #quot;q#quot;"]'), "md: < and \" in a stage name become #lt; and #quot; in the Mermaid label");
+  ok((nmd.match(/^```/gm) || []).length === 2 && nmd.includes("\n\\```\n"), "md: a lone ``` question is not a fence", nmd);
+  ok(!/^## not a heading/m.test(nmd) && nmd.includes("\\## not a heading"), "md: a ## question is not a heading");
+  ok(nmd.includes("# Holo RUN-5 - nasty &lt;b&gt;") && nmd.includes("&lt;friends&gt;") && nmd.includes("&lt;b&gt;yes&lt;/b&gt;") && nmd.includes("a &amp; b") && !/<(b|friends)>/.test(nmd), "md: no raw HTML from the run file");
+  ok(nd.parts[0].tables[0].head.join("~") === "a | b~c" && nd.parts[0].tables[0].rows.length === 1, "design: an escaped pipe is one cell; a stray separator row is dropped", nd.parts[0].tables[0]);
+  ok(nd.parts[1].tables[0].rows.length === 1 && nd.parts[1].tables[0].rows[0].join("~") === "p~q", "design: a separator-first table keeps no --- row", nd.parts[1].tables[0]);
+  ok(nmd.includes("| a \\| b | c |"), "md: the escaped pipe re-escaped on output");
+  ok(!/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(nsvg), "svg: a control character in a stage name is stripped (well-formed XML)");
 
   // 5. a run that decided something odd still draws: unknown state, cycle
   const odd = parseRun("# RUN-4 - odd\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 1 | a | z | - | - | - |\n| 2 | b |   | - | - | - |\n\n## Chain\ndriver: -     hold: -     mode: agents\n### AAAA - stage 1 - a\nafter: 2\nprompt: |\n  x\n### AAAB - stage 2 - b\nafter: 1\nprompt: |\n  y\n");

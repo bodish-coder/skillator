@@ -6,6 +6,11 @@
 ## CLI
 The `export` subcommand prints `dump()`.
 
+| flag | does |
+|---|---|
+| `--author` | filters by author |
+| `--all` | every book |
+
 ### Flags
 - `--author`
 
@@ -17,5 +22,7 @@ The `export` subcommand prints `dump()`.
 ```
 
 ## Tests
+| tests/test_export.py | 3 cases |
+
 - tests/test_export.py
 - tests/test_books.py

@@ -26,8 +26,7 @@ request — under §3.
 
 Read `PLATFORMS.md` (host mechanics) and `PRACTICE.md` (process canon, cited by
 section below). Both sit **beside the installed skills**: try `../` first (the
-`install.sh` layout), then `../../` (git
-checkout, Claude Code plugin cache). Neither resolves → say so, continue, detect
+`install.sh` layout), then `../../` (checkout, plugin cache). Neither resolves → say so, continue, detect
 the host from its tools, never assume `claude-code`.
 
 **Load [`references/hosts.md`](references/hosts.md)** — the per-host translation
@@ -65,15 +64,14 @@ One skill at a time; chaining "to be safe" is the failure.
 | Whole-app audit · a staged diff | `audit-sherlock` · `code-review:code-review` |
 | Over-engineering · repo bloat · the shortcut ledger | `code-yoda` (review · audit · debt) |
 | UI-only polish · TUI rendering · watch it live | `design-arwen` (never `frontend-design`) · `tui-tron` · `live-friday` |
-| A mock UI to make real · a spec only in chat | `designui-galadriel` · `spec-watson` |
+| A mock UI to make real · a spec only in chat · clone an app | `designui-galadriel` · `spec-watson` · `clone-odo` |
 | Screenshots · auth/secrets · a skill | `screenshot-argus` · `security-review` · `skill-smith` |
 | Merge · deploy · ending · resuming | `mergeprep-oracle`→`merge-smith` · `deploy-merlin`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |
 | A staged run, marathon · written tasks · Obi-Wan | `relay-morpheus` · `tasks-sentinels` · `holo-r2d2` |
 | Own a long goal | `chief-fury` |
 | Tricky analysis | Parallel Fable subagents; you reconcile |
 
-**Nothing matches?** Do it directly — a one-line edit needs no skill, but still
-obeys §3: "one line" is the diff, never the thinking.
+**Nothing matches?** Do it directly — a one-line edit needs no skill, and obeys §3: "one line" is the diff, never the thinking.
 
 **Load [`references/routing.md`](references/routing.md)** — every row,
 the long tail.

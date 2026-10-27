@@ -212,3 +212,7 @@ and is still a defect), the focus ring against the page, and on-accent / on-dang
 Ring-vs-filled-button is not required: WCAG 1.4.11 measures the ring against the adjacent
 background, so a 2px `outline-offset` that keeps the ring on the page background is the
 correct construction, not a dodge.
+
+Tokens already in hex (a clone's `.skillator/clone/design/tokens.json`) →
+`sh <skills>/clone-odo/scripts/odo.sh contrast <tokens.json>` prints every pair's ratio and
+exits 1 on an AA failure; it does not read OKLCH.
