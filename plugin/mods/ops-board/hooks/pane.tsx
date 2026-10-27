@@ -3,7 +3,7 @@ import type { BoxProps, ButtonProps, Color, ElementConstructor, EngineInterface,
   SelectProps, TextProps } from 'claude-code'
 import type { Filter } from '../types'
 import { STATE_COLOR } from './lib/board'
-import { buildModel, chipsOf, headKey, isDecidable, toggleGroup } from './lib/ticketsmodel'
+import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, UNI, ASCII, cutTo, headText, rowText, chromeRows, windowOf } from './lib/ticketsmodel'
 import type { Model, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
@@ -22,7 +22,7 @@ import { enterRun, isRunFormUp, RunTab } from './runtab'
 import { ActionConfirm, enterExplorer, ExplorerTab, readExplorer, readExplorerAction } from './explorertab'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
-// state shown by colour (a `●` per row, headings in the same colour), footer keys.
+// status rails, a yielding list, and wrapping footer keys.
 
 export const PANE_ID = 'ops-board'
 export const PANE_TITLE = 'ops board'
@@ -37,6 +37,7 @@ const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
 const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
 const tabA = atom({ plugin: 'ops-board', key: 'tab' } as const, 'tickets')
+const asciiA = atom({ plugin: 'ops-board', key: 'ascii' } as const, false)
 const selectedA = atom({ plugin: 'ops-board', key: 'selected' } as const, null)
 const expandedA = atom({ plugin: 'ops-board', key: 'expanded' } as const, null)
 const filterA = atom({ plugin: 'ops-board', key: 'filter' } as const, { app: null, who: null, mine: false, showDone: false })
@@ -51,7 +52,7 @@ const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs
 const CHIP_KEY: Color = 'permission'
 const CHIP_VALUE: Color = 'suggestion'
 
-const cut = (s: string, room: number) => s.length <= room ? s : s.slice(0, Math.max(1, room - 1)) + '…'
+const cut = (s: string, room: number) => cutTo(s, room, UNI.cut)
 
 type Els = {
   Box: ElementConstructor<BoxProps>
@@ -65,6 +66,8 @@ type Els = {
 export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): RenderElement[] {
   const { Box, Text, Button, Select } = els
   const out: RenderElement[] = []
+  const glyphs = v.ascii ? ASCII : UNI
+  const entries: RenderElement[] = []
   const f = v.filter
   const hasTeam = v.team.length > 0
   const setFilter = (fn: (f: Filter) => Filter) => { void update($, filterA, fn) }
@@ -87,64 +90,64 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   } else {
     out.push(
       <Box key="filters"><Text wrap="truncate-end">
-        <Text dimColor>app</Text>{` ${f.app ?? 'all'} ▾  `}
-        {hasTeam && <Text dimColor>who</Text>}{hasTeam ? ` ${f.mine ? 'me' : f.who ?? 'all'} ▾  ${f.mine ? '[x]' : '[ ]'} mine  ` : ''}
-        {`${f.showDone ? '[x]' : '[ ]'} done`}
+        {cutTo(`app ${f.app ?? 'all'} ${glyphs.open}  ` + (hasTeam ? `who ${f.mine ? 'me' : f.who ?? 'all'} ${glyphs.open}  ${f.mine ? '[x]' : '[ ]'} mine  ` : '') + `${f.showDone ? '[x]' : '[ ]'} done`, v.cols, glyphs.cut)}
       </Text></Box>,
     )
   }
-  out.push(<Text> </Text>)
+  out.push(<Text key="gap"> </Text>)
 
   if (!v.board || v.board.error) {
-    out.push(<Text dimColor>{v.board?.error ?? 'reading TICKETS.md…'}</Text>)
+    entries.push(<Text dimColor>{v.board?.error ?? `reading TICKETS.md${glyphs.more}`}</Text>)
   } else if (!m.groups.length) {   // F61: m.rows holds only open groups' rows; test the groups
-    out.push(<Text dimColor>{m.filterActive ? 'no ticket matches the filter' : 'no open tickets'}</Text>)
+    entries.push(<Text dimColor>{m.filterActive ? 'no ticket matches the filter' : 'no open tickets'}</Text>)
   }
 
   const shownIds = new Set(m.rows.map(t => t.id))
   for (const g of m.groups) {
     // F61: a header is a Button - Enter under the focus or a click opens or closes it.
     const hk = headKey(g.box)
-    const head = cut(`${g.open ? '▾' : '▸'} ${g.title} (${g.tickets.length})`, v.cols - 1)
-    out.push(
+    const head = cutTo(headText(g, glyphs, !!v.ascii), v.cols - (v.ascii ? 0 : 2), glyphs.cut)
+    entries.push(
       <Button key={hk} plain onPress={() => {
         // the header stands for a ticket hidden in it (moved there by an edit): opening lands on it
         void update($, selectedA, x => (hk === m.selected && x && !x.startsWith('head:') && g.tickets.some(t => t.id === x) ? x : hk))
         void update($, openA, x => toggleGroup(x, g.box))
       }}>
-        <Text color={paint(g.box)} bold inverse={hk === m.selected}>{head}</Text>
+        {!v.ascii && <Text color={g.open ? paint(g.box) : undefined} dimColor={!g.open} inverse={hk === m.selected}>{g.open ? glyphs.rail : glyphs.railDim}</Text>}
+        <Text color={v.ascii ? undefined : paint(g.box)} bold inverse={hk === m.selected}>{head}</Text>
       </Button>,
     )
     if (!g.open) continue
     for (const t of g.tickets) {
       const nested = !!t.parent && shownIds.has(t.parent) && g.tickets.some(p => p.id === t.parent)
-      const lead = nested ? '  ' : ''
-      const tail = t.parent && !nested ? ` (${t.parent})` : ''
-      const room = v.cols - lead.length - 2 - t.id.length - 2 - tail.length
-      const body = ` ${t.id}  ${cut(t.title, Math.max(4, room))}${tail}`
+      const row = rowText(t, v.cols, glyphs, !!v.ascii, nested)
       const isSel = t.id === m.selected
-      out.push(
+      const body = v.ascii && isSel ? '> ' + row.text.slice(2) : row.text
+      entries.push(
         <Button key={'row:' + t.id} plain onPress={() => {
           void update($, selectedA, () => t.id)
           void update($, expandedA, x => (x === t.id ? null : t.id))
         }}>
-          {lead}
-          <Text color={paint(t.box)}>●</Text>
-          {isSel ? <Text inverse>{body.padEnd(Math.max(body.length, v.cols - lead.length - 1))}</Text>
-            : <Text dimColor={STATE_COLOR[t.box] === 'dim'}>{body}</Text>}
+          {!v.ascii && <Text color={paint(t.box)}>{glyphs.rail}</Text>}
+          {isSel ? <Text inverse>{body.padEnd(v.cols - (v.ascii ? 0 : 2))}</Text>
+            : <Text dimColor={STATE_COLOR[t.box] === 'dim'}>{row.owner && body.endsWith(row.owner)
+              ? [body.slice(0, -row.owner.length), <Text dimColor>{row.owner}</Text>] : body}</Text>}
         </Button>,
       )
       if (chipsOf(t)) {
         const parts: (RenderElement | string)[] = ['    ']
-        const chip = (k: string, val: string) => [<Text color={CHIP_KEY}>{k + ':'}</Text>, <Text color={CHIP_VALUE}>{val}</Text>]
+        const groupCount = [t.apps.length, t.owner, t.decide, t.by.length, t.session].filter(Boolean).length
+        let room = v.cols - 4 - (isDecidable(t) ? 10 : 0) - Math.max(0, groupCount - 1) * 2
+        const take = (s: string) => { const text = cutTo(s, Math.max(0, room), glyphs.cut); room -= text.length; return text }
+        const chip = (k: string, val: string) => [<Text color={CHIP_KEY}>{take(k + ':')}</Text>, <Text color={CHIP_VALUE}>{take(val)}</Text>]
         const groupsOf: (RenderElement | string)[][] = []
-        if (t.apps.length) groupsOf.push(t.apps.flatMap((a, i) => [...(i ? [' '] : []), ...chip('app', a)]))
+        if (t.apps.length) groupsOf.push(t.apps.flatMap((a, i) => [...(i ? [take(' ')] : []), ...chip('app', a)]))
         if (t.owner) groupsOf.push(chip('owner', t.owner))
         if (t.decide) groupsOf.push(chip('decide', t.decide))
         if (t.by.length) groupsOf.push(chip('by', t.by.join(' ')))
-        if (t.session) groupsOf.push([<Text dimColor>{t.session}</Text>])
+        if (t.session) groupsOf.push([<Text dimColor>{take(t.session)}</Text>])
         groupsOf.forEach((gr, i) => { if (i) parts.push('  '); parts.push(...gr) })
-        out.push(
+        entries.push(
           <Box key={'chips:' + t.id} flexDirection="row" gap={3}>
             <Text wrap="truncate-end">{parts}</Text>
             {isDecidable(t) && <Button key={'decided:' + t.id} onPress={() => { void runDecided($, t.id) }}>Decided</Button>}
@@ -152,25 +155,30 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
         )
       }
       if (v.expanded === t.id) {
-        out.push(<Box key={'raw:' + t.id}><Text dimColor>{`    - [${t.box}] ${t.line}`}</Text></Box>)
+        const raw = `    - [${t.box}] ${t.line}`
+        entries.push(<Box key={'raw:' + t.id} flexDirection="column">{Array.from({ length: Math.ceil(raw.length / v.cols) }, (_, i) => <Text dimColor>{raw.slice(i * v.cols, (i + 1) * v.cols)}</Text>)}</Box>)
       }
     }
   }
 
-  out.push(<Text> </Text>)
+  const w = windowOf(m, v.rows ? Math.max(1, v.rows - chromeRows(v, m, glyphs).total) : null)
+  if (w.above) out.push(<Box key="more:up"><Text dimColor>{`  ${glyphs.more} ${w.above} rows above ${glyphs.up}`}</Text></Box>)
+  out.push(...(m.groups.length ? entries.slice(w.start, w.end) : entries))
+  if (w.below) out.push(<Box key="more:down"><Text dimColor>{`  ${glyphs.more} ${w.below} more rows ${glyphs.down}`}</Text></Box>)
+  out.push(<Text key="gap2"> </Text>)
   const c = m.count
-  out.push(m.filterActive
-    ? <Box key="count"><Text dimColor>{c.text}</Text></Box>
-    : <Box key="count"><Text>
-        <Text dimColor>{`${c.open} open`}</Text>
-        {c.dots.flatMap(d => [' ', <Text color={paint(d.box)}>{'●' + d.n}</Text>])}
-        {f.showDone
-          ? (c.closed.length ? [<Text dimColor> ·</Text>, ...c.closed.flatMap(d => [' ', <Text color={paint(d.box)}>{'●' + d.n}</Text>]), <Text dimColor> closed</Text>] : [])
-          : (c.closed.length ? [<Text dimColor>{` · ${c.closed.reduce((s, d) => s + d.n, 0)} done hidden`}</Text>] : [])}
-      </Text></Box>)
+  out.push(<Box key="count" flexDirection="row" flexWrap="wrap" gap={1}>{m.filterActive
+    ? <Text dimColor>{c.text.replace(UNI.sep, glyphs.sep)}</Text>
+    : [
+        <Text dimColor>{`${c.open} open`}</Text>,
+        ...c.dots.map(d => <Text color={paint(d.box)}>{glyphs.dot + d.n}</Text>),
+        ...(f.showDone
+          ? (c.closed.length ? [<Text dimColor>{glyphs.sep}</Text>, ...c.closed.map(d => <Text color={paint(d.box)}>{glyphs.dot + d.n}</Text>), <Text dimColor>closed</Text>] : [])
+          : (c.closed.length ? [<Text dimColor>{`${glyphs.sep} ${c.closed.reduce((s, d) => s + d.n, 0)} done hidden`}</Text>] : []))
+      ]}</Box>)
   out.push(
     <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
-      <Text dimColor>↑↓ move</Text>
+      <Text dimColor>{glyphs.move + ' move'}</Text>
       <Button key="key:assign" plain dimColor hotkey="a" onPress={() => { void openAssign($, 'owner', m.ticket, els.canType) }}>assign</Button>
       <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openAssign($, 'decide', m.ticket, els.canType) }}>decide</Button>
       <Button key="key:filter" plain dimColor hotkey="f" onPress={() => { void update($, filterOpenA, x => !x) }}>filter</Button>
@@ -184,11 +192,12 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   return out
 }
 
-export async function readView($: EngineInterface, cols: number): Promise<View> {
+export async function readView($: EngineInterface, cols: number, rows: number | null = null, unread = 0): Promise<View> {
   return {
     board: await read($, boardA), team: await read($, teamA), me: await read($, meA),
     filter: await read($, filterA), filterOpen: await read($, filterOpenA),
     selected: await read($, selectedA), expanded: await read($, expandedA), open: await read($, openA), cols,
+    ascii: await read($, asciiA), rows, unread,
   }
 }
 
@@ -233,6 +242,8 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const { Box, Text, Button } = els
   const cols = Math.max(20, e.props.bodyColumns)
   const tab = await read($, tabA)
+  const ascii = await read($, asciiA)
+  const glyphs = ascii ? ASCII : UNI
   const unread = await unreadOf($)          // F66: the unread count rides on the Messages tab
   const bar = (   // B14: whole tabs wrap to a second row in a narrow pane, never cut mid-word
     <Box key="tabs" flexDirection="row" flexWrap="wrap" gap={1}>
@@ -245,7 +256,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
             if (x.id === 'messages' && tab !== 'messages') void enterMessages($).catch(() => {})
             if (x.id === 'explorer') void enterExplorer($).catch(() => {})        // F75: read on entering the tab
             if (x.id === 'run') void enterRun($).catch(() => {})            // F79: first open scans
-          }}>{x.id === 'messages' && unread ? `${x.label} ${unread}` : x.label}</Button>
+          }}>{ascii ? (x.id === tab ? '[' : ' ') : x.id === tab ? glyphs.active : ''}{x.id === 'messages' && unread ? `${x.label} ${unread}` : x.label}{ascii ? (x.id === tab ? ']' : ' ') : ''}</Button>
       ))}
     </Box>
   )
@@ -316,7 +327,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   // from (Tickets or Team); Esc or Cancel brings that view back.
   const form = (await renderForm($, e)) ?? (await renderReconcile($, e))   // F81: the reconcile form likewise
   if (form) return form
-  const v = await readView($, cols)
+  const v = await readView($, cols, e.props.scroll?.bodyRows ?? null, unread)
   const tv = await read($, teamViewA)
   if (tv) {
     return (

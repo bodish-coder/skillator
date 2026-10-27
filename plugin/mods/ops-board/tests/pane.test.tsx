@@ -47,13 +47,13 @@ const ran = (stdout: string, exitCode = 0): ProcessRunResult =>
 
 // The engine beneath the plugin: a repo at /r, its files, git's email, the pane opener.
 // readErr: TICKETS.md is there (stat answers) but the engine refuses its read.
-function world(on: On, files: Record<string, string>, placed = true, readErr?: string): [World, MockClock] {
+function world(on: On, files: Record<string, string>, placed = true, readErr?: string, env: Record<string, string> = {}): [World, MockClock] {
   const w: World = { files: {}, placed, opens: [], scrolls: 0, offsets: [], runs: [], commands: [] }
   for (const [p, text] of Object.entries(files)) w.files[p] = { text, mtimeMs: 1000 }
   // The engine hands a hook the path resolved for this machine (C:\r\TICKETS.md on Windows).
   const at = (p: string) => w.files[p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')]
   const clock = mock.clock(on, { now: 1_000_000 })
-  mock.env(on, {})
+  mock.env(on, env)
   mock.store(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.repo', () => ({ value: { root: '/r', remote: null, internal: false, name: 'r' } }))
@@ -117,12 +117,130 @@ const texts = async (ui: { findAll: (q: { type?: string; key?: string }) => Prom
 // F61: every group starts collapsed. The group headers, as drawn; openAll presses each
 // collapsed one open, as a person clicking down the list would.
 type Ui = { findAll: (q: { type?: string }) => Promise<{ key: string | undefined; text: string }[]>; press: (q: { key: string }) => Promise<unknown> }
-const heads = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('head:')).map(b => b.text)
+const heads = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('head:')).map(b => b.text.replace(/^[▌▏] /, ''))
 async function openAll(ui: Ui) {
-  for (const b of (await ui.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && x.text.startsWith('▸')))
+  for (const b of (await ui.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && / (▸|\+)$/.test(x.text)))
     await ui.press({ key: b.key! })
 }
 const rowKeys = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('row:')).map(b => b.key)
+
+const everyText = async (ui: Ui) => [...await ui.findAll({ type: 'Text' }), ...await ui.findAll({ type: 'Button' })]
+// Measure the mounted primitives, including hotkey labels and Box gaps, not the model.
+type Drawn = { type?: string; props?: { label?: string; hotkey?: string }; children?: unknown[] }
+const labelOf = (el: unknown): string => typeof el === 'string' ? el : el && typeof el === 'object'
+  ? (el as Drawn).props?.label ?? ((el as Drawn).children ?? []).map(labelOf).join('') : ''
+async function frameRows(ui: Awaited<ReturnType<typeof mountPane>>, cols: number) {
+  let height = 3 // filters and the two gaps
+  for (const key of ['tabs', 'count', 'keys']) {
+    const box = (await ui.find({ key }))!
+    let used = 0, rows = 1
+    for (const child of box.children) {
+      const width = labelOf(child).length + ((child as Drawn).props?.hotkey ? 2 : 0)
+      const gap = used ? Number(box.props.gap ?? 0) : 0
+      if (used && used + gap + width > cols) { rows++; used = width }
+      else used += gap + width
+    }
+    height += rows
+  }
+  height += (await ui.findAll({ type: 'Button' })).filter(b => /^(head|row):/.test(b.key ?? '')).length
+  for (const box of await ui.findAll({ type: 'Box' })) {
+    if (/^(chips|more):/.test(box.key ?? '')) height++
+    if (box.key?.startsWith('raw:')) height += box.children.length
+  }
+  return height
+}
+for (const cols of [40, 60, 80, 120]) {
+  for (const ascii of [false, true]) {
+    test(`F111: frame ${cols} columns, ASCII ${ascii}: labels fit, actions remain, list yields`, WITH, async ($, on) => {
+      const many = OPEN + Array.from({ length: 40 }, (_, i) => `- [ ] F${i + 10} — pending ticket number ${i + 10}`).join('\n') + CLOSED
+      const [, clock] = world(on, { '/r/TICKETS.md': many, '/r/.skillator/team.md': TEAM }, true, undefined, ascii ? { SKILLATOR_ASCII: '1' } : {})
+      await start($, clock)
+      const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: cols, scroll: { offset: 0, bodyRows: 14 } })
+      await ui.press({ key: 'head:~' })
+      for (const el of await everyText(ui)) {
+        expect(el.text.length, el.key ?? el.text).toBeLessThanOrEqual(cols)
+        if (ascii) expect([...el.text].filter(c => c.charCodeAt(0) > 127), el.key ?? el.text).toEqual([])
+      }
+      const all = (await everyText(ui)).map(e => e.text).join('\n')
+      for (const label of ['move', 'assign', 'decide', 'filter', 'done', 'team', 'reconcile', 'refresh']) expect(all).toContain(label)
+      for (const id of ['tickets', 'runs', 'health', 'messages', 'explorer', 'run']) expect(await ui.find({ key: 'tab:' + id })).toBeDefined()
+      expect((await ui.find({ key: 'count' }))?.props.flexWrap).toBe('wrap')
+      expect((await ui.find({ key: 'tab:tickets' }))?.text).toBe(ascii ? '[Tickets]' : '● Tickets')
+      expect((await ui.find({ key: 'row:F3' }))?.text).toMatch(ascii ? /^  wip  F3 / : /^▌  F3 /)
+      expect((await heads(ui))[0]).toBe(ascii ? 'IN PROGRESS (1)' : 'IN PROGRESS  1')
+      // Move to Pending, then open it: a long list must reserve the footer at every width.
+      await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'head: ', origin: { kind: 'person' } })
+      expect(await state($, 'selected')).toBe('head: ')
+      expect(await ui.find({ key: 'head: ' })).toBeDefined()
+      await ui.press({ key: 'head: ' })
+      expect(await state($, 'openGroups')).toContain(' ')
+      expect((await ui.find({ key: 'more:down' }))?.text).toMatch(ascii ? /^  \.\.\. \d+ more rows v$/ : /^  … \d+ more rows ↓$/)
+      expect((await rowKeys(ui)).length).toBeLessThanOrEqual(14)
+      expect(await frameRows(ui, cols)).toBeLessThanOrEqual(14)
+      await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:F20', origin: { kind: 'person' } })
+      expect(await ui.find({ key: 'row:F20' })).toBeDefined()
+      expect(await ui.find({ key: 'more:up' })).toBeDefined()
+      await ui.press({ key: 'row:F20' })
+      expect(await frameRows(ui, cols)).toBeLessThanOrEqual(14)
+      expect(await ui.find({ key: 'row:F20' })).toBeDefined()
+      await ui.unmount()
+    })
+  }
+}
+test('F111: selected full-width bar and owner from 56 columns', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  await start($, clock)
+  for (const cols of [40, 60]) {
+    const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: cols })
+    if (!(await ui.find({ key: 'row:F3' }))) await ui.press({ key: 'head:~' })
+    await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'head:~', origin: { kind: 'person' } })
+    if (cols >= 56) {
+      const unselected = (await ui.find({ key: 'row:F3' }))!
+      expect(unselected.text.length).toBe(cols)
+      expect(unselected.text.endsWith('@vidul')).toBe(true)
+      expect((await ui.findAll({ type: 'Text' })).some(t => t.text === '@vidul' && t.props.dimColor === true)).toBe(true)
+    }
+    await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:F3', origin: { kind: 'person' } })
+    const row = await ui.find({ key: 'row:F3' })
+    expect(row?.text.length).toBe(cols)
+    expect(row?.text.includes('@vidul')).toBe(cols >= 56)
+    expect(row?.children.some(c => (c as { props?: { inverse?: boolean } }).props?.inverse)).toBe(true)
+    await ui.unmount()
+  }
+})
+for (const cols of [60, 80, 120]) {
+  for (const ascii of [false, true]) {
+    test(`F111: long owner stays within ${cols} columns, ASCII ${ascii}, selected and unselected`, WITH, async ($, on) => {
+      const owner = '@' + 'a'.repeat(80)
+      const [, clock] = world(on, { '/r/TICKETS.md': `- [~] F1 — bounded title [owner: ${owner}]\n` }, true, undefined, ascii ? { SKILLATOR_ASCII: '1' } : {})
+      await start($, clock)
+      const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: cols })
+      await ui.press({ key: 'head:~' })
+      for (const selected of [false, true, false]) {
+        await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: selected ? 'row:F1' : 'head:~', origin: { kind: 'person' } })
+        const row = (await ui.find({ key: 'row:F1' }))!
+        expect(row.text.length).toBeLessThanOrEqual(cols)
+        expect(row.text).toContain('F1')
+        if (selected) expect(row.text.length).toBe(cols)
+        for (const el of await everyText(ui)) expect(el.text.length, el.key ?? el.text).toBeLessThanOrEqual(cols)
+      }
+      await ui.unmount()
+    })
+  }
+}
+test('F111: /ops ascii toggles, stores and restores the glyph set', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  await start($, clock)
+  await $.command.run({ command: 'ops', args: 'ascii', ...RUN })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  expect((await ui.find({ key: 'tab:tickets' }))?.text).toBe('[Tickets]')
+  await $.command.run({ command: 'ops', args: 'ascii', ...RUN })
+  expect((await ui.find({ key: 'tab:tickets' }))?.text).toBe('● Tickets')
+  await start($, clock)
+  expect((await ui.find({ key: 'tab:tickets' }))?.text).toBe('● Tickets')
+  await ui.unmount()
+})
 
 for (const surface of SURFACES) {
   test(`${surface}: rows grouped by state, coloured dots, chips and the count line`, WITH, async ($, on) => {
@@ -131,12 +249,12 @@ for (const surface of SURFACES) {
     const ui = await mountPane($, surface)
     await openAll(ui)
 
-    expect((await ui.find({ key: 'row:F3' }))?.text).toMatch(/^● F3  cart drawer/)
-    expect(await heads(ui)).toEqual(['▾ IN PROGRESS (1)', '▾ BLOCKED (1)', '▾ PENDING DECISION (1)', '▾ PENDING (2)', '▾ DEFERRED (1)'])
+    expect((await ui.find({ key: 'row:F3' }))?.text).toMatch(/^▌  F3  cart drawer/)
+    expect(await heads(ui)).toEqual(['IN PROGRESS  1', 'BLOCKED  1', 'PENDING DECISION  1', 'PENDING  2', 'DEFERRED  1'])
     expect(await rowKeys(ui)).toEqual(['row:F3', 'row:B2', 'row:F2', 'row:F1', 'row:B1', 'row:A4'])
     // State is colour, not a bracket code: the head and the dot share it.
     const dot = async (id: string) => ((await ui.find({ key: 'row:' + id }))!.children
-      .find(c => (c as { children?: unknown[] }).children?.[0] === '●') as { props: { color?: string } }).props.color
+      .find(c => (c as { children?: unknown[] }).children?.[0] === '▌ ') as { props: { color?: string } }).props.color
     const head = async (box: string) => ((await ui.find({ key: 'head:' + box }))!.children[0] as { props: { color?: string } }).props.color
     expect(await dot('F3')).toBeDefined()
     expect(await head('~')).toBe(await dot('F3'))
@@ -148,7 +266,7 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'chips:F1' }))?.text).toBe('    app:web app:ui  by:@vidul @asha')
     expect(await ui.find({ key: 'decided:F2' })).toBeDefined()
     expect(await ui.find({ key: 'decided:F1' })).toBeUndefined()
-    expect((await ui.find({ key: 'count' }))?.text).toBe('5 open ●1 ●1 ●1 ●2 ●1 · 7 done hidden')
+    expect((await ui.find({ key: 'count' }))?.text).toBe('5 open●1●1●1●2●1· 7 done hidden')
     for (const k of ['key:assign', 'key:decide', 'key:filter', 'key:done', 'tab:tickets', 'tab:runs', 'tab:health'])
       expect(await ui.find({ key: k }), k).toBeDefined()
     expect(await ui.find({ key: 'tab:workflows' })).toBeUndefined()      // F76: a section of Runs now
@@ -175,9 +293,9 @@ for (const surface of SURFACES) {
 
     await openAll(ui)
     await ui.press({ key: 'key:done' })
-    expect((await ui.find({ key: 'head:x' }))?.text).toBe('▸ DONE (6)')
-    expect((await ui.find({ key: 'head:-' }))?.text).toBe('▸ CANCELLED (1)')
-    expect((await ui.find({ key: 'count' }))?.text).toBe('5 open ●1 ●1 ●1 ●2 ●1 · ●6 ●1 closed')
+    expect((await ui.find({ key: 'head:x' }))?.text).toBe('▏ DONE  6  ▸')
+    expect((await ui.find({ key: 'head:-' }))?.text).toBe('▏ CANCELLED  1  ▸')
+    expect((await ui.find({ key: 'count' }))?.text).toBe('5 open●1●1●1●2●1·●6●1closed')
     await ui.press({ key: 'key:done' })
     expect(await ui.find({ key: 'head:x' })).toBeUndefined()
 
@@ -247,8 +365,10 @@ for (const surface of SURFACES) {
   test(`${surface}: an arrow past the window moves it to keep the selection in view`, WITH, async ($, on) => {
     const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })
     await start($, clock)
+    const setup = await mountPane($, surface)
+    await openAll(setup)
+    await setup.unmount()
     const ui = await mountPane($, surface, { ...PANE, scroll: { offset: 0, bodyRows: 6 } })
-    await openAll(ui)
     await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:F3', origin: { kind: 'person' } })
     const arrow = (by: number) => $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 1, by,
       bodyRows: 6, contentRows: 20, origin: { kind: 'person' } })
@@ -272,7 +392,7 @@ for (const surface of SURFACES) {
     expect(await ui.find({ key: 'row:F9' })).toBeUndefined()
     w.files['/r/TICKETS.md'] = { text: OPEN + '- [ ] F9 — a new ticket\n' + CLOSED, mtimeMs: 5000 }
     await clock.advance(2000)
-    expect((await ui.find({ key: 'row:F9' }))?.text).toMatch(/^● F9  a new ticket/)
+    expect((await ui.find({ key: 'row:F9' }))?.text).toMatch(/^▌  F9  a new ticket/)
     await ui.unmount()
   })
 
@@ -301,7 +421,7 @@ test('open counts [ ] [~] [%] [!] [?] only; deferred keeps its own dim dot after
   await start($, clock)
   const ui = await mountPane($, 'terminal')
   const count = (await ui.find({ key: 'count' }))!
-  expect(count.text).toBe('1 open ●1 ●2')
+  expect(count.text).toBe('1 open●1●2')
   type El = { props?: { color?: string }; children?: unknown[] }
   const all = (c: unknown): El[] => (c && typeof c === 'object' ? [c as El, ...((c as El).children ?? []).flatMap(all)] : [])
   const dots = count.children.flatMap(all).filter(c => typeof c.children?.[0] === 'string'
@@ -318,10 +438,10 @@ test('[%] testing: its own group after in progress, counted open, its own colour
   await start($, clock)
   const ui = await mountPane($, 'terminal')
   await openAll(ui)
-  expect(await heads(ui)).toEqual(['▾ IN PROGRESS (1)', '▾ TESTING (1)', '▾ BLOCKED (1)', '▾ PENDING (1)'])
-  expect((await ui.find({ key: 'row:F7' }))?.text).toMatch(/^● F7  built thing/)
+  expect(await heads(ui)).toEqual(['IN PROGRESS  1', 'TESTING  1', 'BLOCKED  1', 'PENDING  1'])
+  expect((await ui.find({ key: 'row:F7' }))?.text).toMatch(/^▌  F7  built thing/)
   expect(((await ui.find({ key: 'head:%' }))!.children[0] as { props: { color?: string } }).props.color).toBe('suggestion')
-  expect((await ui.find({ key: 'count' }))!.text).toBe('4 open ●1 ●1 ●1 ●1')
+  expect((await ui.find({ key: 'count' }))!.text).toBe('4 open●1●1●1●1')
   await ui.unmount()
 })
 
@@ -391,7 +511,7 @@ test('the first render arms the poll when session.start never ran (a hot reload)
   const ui = await mountPane($, 'terminal')
   await clock.settle()
   await openAll(ui)
-  expect((await ui.find({ key: 'row:F3' }))?.text).toMatch(/^● F3/)
+  expect((await ui.find({ key: 'row:F3' }))?.text).toMatch(/^▌  F3/)
   w.files['/r/TICKETS.md'] = { text: OPEN + '- [ ] F9 — later\n', mtimeMs: 9000 }
   await clock.advance(2000)
   expect(await ui.find({ key: 'row:F9' })).toBeDefined()
@@ -423,12 +543,12 @@ test('a 3.8 MB board of long lines loads in the pane (B4)', WITH, async ($, on) 
   const all = (await texts(ui)).join('\n')
   expect(all).not.toContain('not loaded')
   // F61: headers only at first; the open set held is a few boxes, never rows.
-  expect(await heads(ui)).toEqual(['▸ IN PROGRESS (200)', '▸ BLOCKED (109)'])
+  expect(await heads(ui)).toEqual(['IN PROGRESS  200  ▸', 'BLOCKED  109  ▸'])
   expect(await ui.find({ key: 'row:F7' })).toBeUndefined()
   await ui.press({ key: 'head:~' })
   expect(await ui.find({ key: 'row:F7' })).toBeDefined()
   expect(JSON.stringify(await state($, 'openGroups'))).toBe('["~"]')
-  expect((await ui.find({ key: 'count' }))?.text).toBe('309 open ●200 ●109 · 1091 done hidden')
+  expect((await ui.find({ key: 'count' }))?.text).toBe('309 open●200●109· 1091 done hidden')
   await ui.unmount()
 })
 
@@ -438,7 +558,7 @@ test('F61: every group starts collapsed - headers with counts, no rows; a click 
   const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
   await start($, clock)
   const ui = await mountPane($, 'terminal')
-  expect(await heads(ui)).toEqual(['▸ IN PROGRESS (1)', '▸ BLOCKED (1)', '▸ PENDING DECISION (1)', '▸ PENDING (2)', '▸ DEFERRED (1)'])
+  expect(await heads(ui)).toEqual(['IN PROGRESS  1  ▸', 'BLOCKED  1  ▸', 'PENDING DECISION  1  ▸', 'PENDING  2  ▸', 'DEFERRED  1  ▸'])
   expect(await rowKeys(ui)).toEqual([])
   // collapsed groups are not an empty board: no "no open tickets" over the headers
   expect((await texts(ui)).join('\n')).not.toMatch(/no open tickets|no ticket matches/)
@@ -447,16 +567,16 @@ test('F61: every group starts collapsed - headers with counts, no rows; a click 
   const inv = async (k: string) => ((await ui.find({ key: k }))!.children[0] as { props: { inverse?: boolean } }).props.inverse
   expect(await inv('head:~')).toBe(true)
   expect(await inv('head:!')).toBe(false)
-  expect((await ui.find({ key: 'count' }))?.text).toBe('5 open ●1 ●1 ●1 ●2 ●1 · 7 done hidden')
+  expect((await ui.find({ key: 'count' }))?.text).toBe('5 open●1●1●1●2●1· 7 done hidden')
 
   await ui.press({ key: 'head: ' })
   expect(await state($, 'openGroups')).toEqual([' '])
   expect(await state($, 'selected')).toBe('head: ')
-  expect((await ui.find({ key: 'head: ' }))?.text).toBe('▾ PENDING (2)')
+  expect((await ui.find({ key: 'head: ' }))?.text).toBe('▌ PENDING  2')
   expect(await rowKeys(ui)).toEqual(['row:F1', 'row:B1'])
   await ui.press({ key: 'head: ' })
   expect(await rowKeys(ui)).toEqual([])
-  expect((await ui.find({ key: 'head: ' }))?.text).toBe('▸ PENDING (2)')
+  expect((await ui.find({ key: 'head: ' }))?.text).toBe('▏ PENDING  2  ▸')
   await ui.unmount()
 })
 
@@ -533,11 +653,11 @@ test('F61: a filter shows the matching groups with their filtered counts; x adds
   const ui = await mountPane($, 'terminal')
   await ui.press({ key: 'key:filter' })
   await ui.select({ key: 'sel:app', value: 'web' })
-  expect(await heads(ui)).toEqual(['▸ IN PROGRESS (1)', '▸ PENDING (1)'])
+  expect(await heads(ui)).toEqual(['IN PROGRESS  1  ▸', 'PENDING  1  ▸'])
   expect((await texts(ui)).join('\n')).not.toContain('no ticket matches the filter')
   await ui.select({ key: 'sel:app', value: 'all' })
   await ui.press({ key: 'key:done' })
-  expect(await heads(ui)).toEqual(['▸ IN PROGRESS (1)', '▸ BLOCKED (1)', '▸ PENDING DECISION (1)', '▸ PENDING (2)', '▸ DEFERRED (1)', '▸ DONE (6)', '▸ CANCELLED (1)'])
+  expect(await heads(ui)).toEqual(['IN PROGRESS  1  ▸', 'BLOCKED  1  ▸', 'PENDING DECISION  1  ▸', 'PENDING  2  ▸', 'DEFERRED  1  ▸', 'DONE  6  ▸', 'CANCELLED  1  ▸'])
   await ui.unmount()
 })
 
@@ -547,7 +667,7 @@ for (const cols of [80, 60, 40]) {
     const [, clock] = world(on, { '/r/TICKETS.md': many })
     await start($, clock)
     const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: cols })
-    expect(await heads(ui)).toEqual(['▸ PENDING DECISION (1)', '▸ PENDING (240)'])
+    expect(await heads(ui)).toEqual(['PENDING DECISION  1  ▸', 'PENDING  240  ▸'])
     await openAll(ui)
     for (const b of (await ui.findAll({ type: 'Button' })).filter(x => /^(head|row):/.test(x.key ?? '')))
       expect(b.text.length, b.key).toBeLessThanOrEqual(cols)

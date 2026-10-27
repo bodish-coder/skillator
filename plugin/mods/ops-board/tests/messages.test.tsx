@@ -96,7 +96,7 @@ test('the Messages tab: unread count on the tab, newest first, a read marker; ma
   await clock.settle()
   expect(w.runs.find(r => r.argv[2] === 'inbox')?.argv).toEqual([NODE, TEAM_JS, 'inbox', 'mark-read', '--upto', '3'])
   await clock.advance(2100)
-  expect((await ui.find({ key: 'tab:messages' }))?.text).toBe('Messages')
+  expect((await ui.find({ key: 'tab:messages' }))?.text).toBe('● Messages')
   await ui.unmount()
 })
 

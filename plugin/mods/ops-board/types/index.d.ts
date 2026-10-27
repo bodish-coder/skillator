@@ -124,6 +124,7 @@ declare module 'claude-code' {
       session: string | null   // F109: this session's sid (team.ts sessionTag), the band's
       tab: 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
+      ascii: boolean
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
       runsOpen: ('runs' | 'workflows' | 'agents')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]

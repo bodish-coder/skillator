@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { buildModel, lineKey, offsetFor, toggleGroup } from '../hooks/lib/ticketsmodel'
+import { buildModel, lineKey, offsetFor, toggleGroup, packRows, chromeRows, windowOf, headText, rowText, UNI, ASCII } from '../hooks/lib/ticketsmodel'
 import type { View } from '../hooks/lib/ticketsmodel'
 import type { Box } from '../types'
 import { bandLines, countsOf, NARROW_COLUMNS } from '../hooks/lib/bandlines'
@@ -12,7 +12,66 @@ import { BOARD } from './fixtures'
 const board = parseBoard(BOARD, 'T', 0, 0)
 const ALL: Box[] = ['~', '%', '!', '?', ' ', '>', 'x', '-']
 const view = (over: Partial<View> = {}): View => ({ board, team: [], me: null, filter: { app: null, who: null, mine: false, showDone: false },
-  filterOpen: false, selected: null, expanded: null, open: [], cols: 80, ...over })
+  filterOpen: false, selected: null, expanded: null, open: [], cols: 80, ascii: false, rows: null, ...over })
+
+test('F111 packRows: whole items and gaps', () => {
+  expect(packRows([7, 9, 6, 10, 8, 5], 40, 1)).toBe(2)
+  expect(packRows([7, 9, 6, 10, 8, 5], 120, 1)).toBe(1)
+  expect(packRows([7, 9, 6, 10, 8, 5], 20, 1)).toBe(3)
+  expect(packRows([50], 40, 1)).toBe(1)
+  expect(packRows([], 40, 1)).toBe(0)
+})
+test('F111 windowOf: list yields rows and keeps selection visible', () => {
+  const board = parseBoard(Array.from({ length: 30 }, (_, i) => `- [ ] F${i + 1} — t${i + 1}`).join('\n'), '/r/T', 1, 1)
+  const v = view({ board, selected: 'F1', open: [' '], rows: 14 })
+  const m = buildModel(v)
+  expect(windowOf(m, null)).toEqual({ start: 0, end: 31, above: 0, below: 0 })
+  expect(windowOf(m, 6)).toEqual({ start: 0, end: 5, above: 0, below: 26 })
+  const w = windowOf(buildModel({ ...v, selected: 'F20' }), 6)
+  expect(w.start).toBeGreaterThan(0)
+  expect(w.end - w.start).toBe(4)
+  expect(w.above + w.below + 4).toBe(31)
+  expect(w.start <= 20 && 20 < w.end).toBe(true)
+  expect(windowOf(buildModel({ ...v, selected: 'F30' }), 6)).toEqual({ start: 26, end: 31, above: 26, below: 0 })
+})
+test('F111 headText and rowText: Rails, Mono and owner threshold', () => {
+  const g = { box: '~' as const, title: 'IN PROGRESS', tickets: [], open: true }
+  expect(headText(g, UNI, false)).toBe('IN PROGRESS  0')
+  expect(headText({ ...g, open: false, title: 'PENDING' }, UNI, false)).toBe('PENDING  0  ▸')
+  expect(headText(g, ASCII, true)).toBe('IN PROGRESS (0)')
+  expect(headText({ ...g, open: false, title: 'PENDING' }, ASCII, true)).toBe('PENDING (0) +')
+  const t = parseBoard('- [~] F101 — Marathon on hosts with no Workflow tool [owner: @sher]', '/r/T', 1, 1).tickets[0]!
+  expect(rowText(t, 40, UNI, false, false)).toEqual({ text: ' F101  Marathon on hosts with no Work…', owner: null })
+  expect(rowText(t, 60, UNI, false, false).owner).toBe('@sher')
+  expect(rowText(t, 60, UNI, false, false).text.length).toBe(58)
+  expect(rowText(t, 40, ASCII, true, false).text).toMatch(/^  wip  F101 /)
+  expect([...rowText(t, 40, ASCII, true, false).text].every(c => c.charCodeAt(0) < 128)).toBe(true)
+})
+test('F111 chromeRows at 40 and 120 columns', () => {
+  const v = view({ board: null, cols: 40, rows: 14 })
+  const m = buildModel(v)
+  expect(chromeRows(v, m, UNI).tabs).toBe(2)
+  expect(chromeRows(v, m, UNI).keys).toBe(2)
+  expect(chromeRows({ ...v, cols: 120 }, m, UNI).total).toBe(6)
+})
+
+test('F111 weighted raw lines fit the window; chips never start without their row', () => {
+  const board = parseBoard(Array.from({ length: 12 }, (_, i) => `- [ ] F${i + 1} — ${'long title '.repeat(6)} [owner: @sher]`).join('\n'), '/r/T', 1, 1)
+  for (const selected of ['F1', 'F3', 'F8', 'F12']) {
+    const m = buildModel(view({ board, selected, expanded: 'F3', open: [' '], cols: 40 }))
+    const list = m.lines.slice(3, -3)
+    const w = windowOf(m, 6)
+    const drawn = list.slice(w.start, w.end)
+    expect(drawn.some(l => l.key === 'row:' + selected)).toBe(true)
+    expect(drawn[0]!.key).toMatch(/^(row|head):/)
+    expect(drawn.reduce((n, l) => n + l.rows, 0) + (w.above ? 1 : 0) + (w.below ? 1 : 0)).toBeLessThanOrEqual(6)
+    expect(w.above + w.below + drawn.reduce((n, l) => n + l.rows, 0)).toBe(list.reduce((n, l) => n + l.rows, 0))
+  }
+})
+test('F111 unread count participates in tab wrapping', () => {
+  const v = view({ cols: 60, ascii: true, unread: 3 })
+  expect(chromeRows(v, buildModel(v), ASCII).tabs).toBe(2)
+})
 test('tickets model lives in lib', () => {
   const m = buildModel(view({ open: ALL }))
   expect(m.rows.map(t => t.id)).toEqual(['B2', 'B3', 'F3', 'B2b', 'F1', 'F2', 'A1', 'A2'])

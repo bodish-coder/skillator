@@ -110,7 +110,7 @@ const props = (title: string) => ({ title, isFocused: true, bodyColumns: 54, pla
   scroll: { offset: 0, bodyRows: 40 }, view: {} })
 // F61: groups start collapsed; these tests act on rows, so every group is opened first.
 async function openAll(pane: Mounted<Surface, 'Pane'>) {
-  for (const b of (await pane.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && x.text.startsWith('▸')))
+  for (const b of (await pane.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && x.text.endsWith(' ▸')))
     await pane.press({ key: b.key! })
 }
 const mountPane = async ($: Engine, surface: Surface) => {

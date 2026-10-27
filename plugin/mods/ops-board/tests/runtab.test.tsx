@@ -135,7 +135,7 @@ for (const surface of SURFACES) {
   test(`${surface}: the Run tab's first open scans and saves .skillator/run.json through run-entries; the next open reads it`, WITH, async ($, on) => {
     const [w, clock] = world(on, { '/r/TICKETS.md': '# Tickets\n' })
     const pane = await openRun($, clock, surface)
-    expect((await pane.find({ key: 'tab:run' }))?.text).toBe('Build')
+    expect((await pane.find({ key: 'tab:run' }))?.text).toBe('● Build')
     expect((await pane.find({ key: 'tab:runs' }))?.text).toBe('Workflows')         // F76's tab stays itself
     expect(scans(w)).toHaveLength(1)
     expect(scans(w)[0]!.argv).toEqual(['/bin/sh', SCRIPT + '.sh', 'scan'])
@@ -303,7 +303,7 @@ test('F93: /ops build opens the Build tab; run is an alias', WITH, async ($, on)
   expect((await $.command.run({ command: 'ops', args: 'build', ...RUN })).text).toBe('ops board opened on Build.')
   await clock.settle()
   const pane = await $.ui.mount({ plugin: 'ops-board', surface: 'terminal', component: 'Pane', requestId: 'ops-board', props })
-  expect((await pane.find({ key: 'tab:run' }))?.text).toBe('Build')
+  expect((await pane.find({ key: 'tab:run' }))?.text).toBe('● Build')
   expect((await pane.find({ key: 'tab:run' }))?.props.variant).toBe('primary')
   expect(await text(pane, 'entry:ps1:install.ps1')).toBeDefined()
   await pane.press({ key: 'tab:tickets' })

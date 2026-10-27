@@ -112,7 +112,7 @@ for (const surface of SURFACES) {
     }
     const pane = await start($, clock, surface)
     expect((await pane.find({ key: 'key:reconcile' }))?.props.hotkey).toBe('c')
-    expect(await head(pane, '!')).toMatch(/\(2\)$/)
+    expect(await head(pane, '!')).toMatch(/  2  ▸$/)
     await pane.press({ key: 'key:reconcile' })
 
     expect(w.runs).toEqual([sh('reconcile')])
@@ -136,7 +136,7 @@ for (const surface of SURFACES) {
     expect(await pane.find({ key: 'form:title' })).toBeUndefined()
     expect(w.closes).toEqual([])
     // the board read again at once: B2 left the blocked group
-    expect(await head(pane, '!')).toMatch(/\(1\)$/)
+    expect(await head(pane, '!')).toMatch(/  1  ▸$/)
     expect(w.writes).toEqual([])
     await pane.unmount()
   })

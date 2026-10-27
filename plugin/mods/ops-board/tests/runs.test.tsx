@@ -295,7 +295,7 @@ for (const surface of SURFACES) {
     const ui = await runsTab($, surface)
     const text = async (key: string) => (await ui.find({ key }))?.text
     expect(await ui.find({ key: 'tab:workflows' })).toBeUndefined()
-    expect(await text('tab:runs')).toBe('Workflows')            // owner: the merged tab is labelled Workflows
+    expect(await text('tab:runs')).toBe('● Workflows')            // owner: the merged tab is labelled Workflows
     expect(await text('sect:runs')).toBe('▾ Runs (3)')   // F99: the finished run counts
     expect(await text('sect:workflows')).toBe('▾ Workflows (0)')
     expect(await text('run:RUN-0014')).toBe('● RUN-0014  plan from /plan-runs  owner @vidul  workflow · planned · 3 tickets → 3 stages')

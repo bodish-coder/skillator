@@ -5,6 +5,14 @@ and build tabs (in the Claude Code pane, Workflows also lists the session's agen
 `build` is the Build tab's word, `run` an alias). One data layer, drawn four ways.
 Needs node 22.18 or newer.
 
+The Claude Code Tickets pane uses layout B: whole tabs, counts and action labels
+wrap, while the list yields rows and reports rows hidden above or below. Status
+rails colour each group and the selected row is a full-width bar. `/ops ascii`
+switches to Mono ASCII and saves that preference; `SKILLATOR_ASCII=1` (also `true`
+or `yes`, case-insensitive) forces ASCII at session start. Ticket titles remain
+the author's text, including any Unicode they contain. Other tabs and the
+standalone terminal app keep their own layouts.
+
 ## Launch it, per host
 
 | Host | How |

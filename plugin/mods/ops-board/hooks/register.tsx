@@ -28,6 +28,7 @@ import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, 
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
 const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
+const asciiA = atom({ plugin: 'ops-board', key: 'ascii' } as const, false)
 const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)
 const tabA = atom({ plugin: 'ops-board', key: 'tab' } as const, 'tickets')
 const selectedA = atom({ plugin: 'ops-board', key: 'selected' } as const, null)
@@ -401,6 +402,9 @@ const USAGE = 'usage: /ops [tickets|workflows|health|messages|explorer|build|res
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    const env = ((await $.env.get('SKILLATOR_ASCII')) ?? '').toLowerCase()
+    const stored = await $.store.get('ascii')
+    await update($, asciiA, () => ['1', 'true', 'yes'].includes(env) || stored === true)
     await $.command.register({
       name: 'ops',
       description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs, Workflow runs and agents), health, Teams messages, the explorer and the build entries',
@@ -443,6 +447,14 @@ export const register: Register = on => {
   on('command.run', { command: 'ops' }, async ($, e) => {
     void arm($).catch(() => {})
     const word = e.args.trim().toLowerCase().split(/\s+/).join(' ')
+    if (word === 'ascii') {
+      const value = !await read($, asciiA)
+      await update($, asciiA, () => value)
+      await $.store.set('ascii', value)
+      const text = value ? 'ops board: ASCII glyphs on - /ops ascii again for Unicode' : 'ops board: Unicode glyphs on'
+      await $.ui.toast(text)
+      return { text }
+    }
     if (word === 'resume') return { text: await resume($) }
     if (word === 'resume force') return { text: await forceResume($) }       // F87
     if (word === 'watchdog on') return { text: await watchdogOn($) }

@@ -25,6 +25,76 @@ export type Model = {
 export type View = {
   board: Board | null; team: Member[]; me: string | null; filter: Filter; filterOpen: boolean
   selected: string | null; expanded: string | null; open: State[]; cols: number
+  ascii?: boolean; rows?: number | null // omitted by the standalone ops app
+  unread?: number
+}
+
+export type Glyphs = { open: string; closed: string; rail: string; railDim: string; dot: string;
+  more: string; down: string; up: string; move: string; sep: string; active: string; cut: string }
+export const UNI: Glyphs = { open: '▾', closed: '▸', rail: '▌ ', railDim: '▏ ', dot: '●', more: '…', down: '↓', up: '↑', move: '↑↓', sep: '·', active: '● ', cut: '…' }
+export const ASCII: Glyphs = { open: 'v', closed: '>', rail: '| ', railDim: ': ', dot: '*', more: '...', down: 'v', up: '^', move: '^v', sep: '-', active: '', cut: '...' }
+export const STATE_WORD: Record<State, string> = { ' ': 'open', '~': 'wip ', '%': 'test', '!': 'blkd', '?': 'dec ', '>': 'defr', x: 'done', '-': 'canc' }
+export const TAB_LABELS = ['Tickets', 'Workflows', 'Health', 'Messages', 'Explorer', 'Build']
+export const KEY_LABELS = ['move', 'a assign', 'd decide', 'f filter', 'x done', 't team', 'c reconcile', 'r refresh']
+
+export function packRows(widths: number[], cols: number, gap: number): number {
+  let rows = 0, used = -1
+  for (const w of widths) {
+    if (used < 0 || used + gap + w > cols) { rows++; used = w }
+    else used += gap + w
+  }
+  return rows
+}
+
+export function headText(g: Group, glyphs: Glyphs, ascii: boolean): string {
+  if (ascii) return `${g.title} (${g.tickets.length})${g.open ? '' : ' +'}`
+  return `${g.title}  ${g.tickets.length}${g.open ? '' : '  ' + glyphs.closed}`
+}
+
+export const cutTo = (s: string, room: number, cut: string) => s.length <= room ? s : s.slice(0, Math.max(0, room - cut.length)) + cut.slice(0, room)
+
+export function rowText(t: Ticket, cols: number, glyphs: Glyphs, ascii: boolean, nested: boolean): { text: string; owner: string | null } {
+  const width = ascii ? cols : cols - 2
+  const owner = cols >= 56 ? t.owner : null
+  const lead = ascii ? `  ${STATE_WORD[t.box]} ` : nested ? '   ' : ' '
+  const tail = t.parent && !nested ? ` (${t.parent})` : ''
+  const fixed = lead.length + t.id.length + 2 + tail.length + (owner ? owner.length + 1 : 0)
+  const title = cutTo(t.title, Math.max(0, width - fixed), glyphs.cut)
+  let text = `${lead}${t.id}  ${title}${tail}`
+  if (owner) text = text.padEnd(Math.max(0, width - owner.length - 1)) + ' ' + owner
+  return { text: cutTo(text, width, glyphs.cut), owner }
+}
+
+export function chromeRows(v: View, m: Model, g: Glyphs) {
+  const tabs = packRows(TAB_LABELS.map((l, i) => l.length + (v.ascii ? 2 : i === 0 ? g.active.length : 0)
+    + (i === 3 && v.unread ? String(v.unread).length + 1 : 0)), v.cols, 1)
+  const c = m.count
+  const countItems = m.filterActive ? [c.text.length] : [`${c.open} open`.length, ...c.dots.map(d => (g.dot + d.n).length),
+    ...(c.closed.length ? v.filter.showDone ? [g.sep.length, ...c.closed.map(d => (g.dot + d.n).length), 6]
+      : [`${g.sep} ${c.closed.reduce((s, d) => s + d.n, 0)} done hidden`.length] : [])]
+  const count = packRows(countItems, v.cols, 1)
+  const keys = packRows([g.move.length + 5, ...KEY_LABELS.slice(1).map(l => l.length)], v.cols, 2)
+  return { tabs, count, keys, total: tabs + 3 + count + keys }
+}
+
+export function windowOf(m: Model, avail: number | null) {
+  const list = m.lines.slice(m.lines.findIndex(l => l.key === 'gap') + 1, m.lines.findIndex(l => l.key === 'gap2'))
+  const heights = [0]
+  for (const l of list) heights.push(heights[heights.length - 1]! + l.rows)
+  const n = list.length, total = heights[n]!
+  if (avail === null || total <= avail) return { start: 0, end: n, above: 0, below: 0 }
+  const sel = Math.max(0, list.findIndex(l => l.key === lineKey(m.selected ?? '')))
+  const a = Math.max(1, avail)
+  let start = 0, end = 0
+  // Include the selected row first, then spend the remaining height on its neighbours.
+  while (end < n && heights[end + 1]! + (end + 1 < n ? 1 : 0) <= a) end++
+  if (sel >= end) {
+    start = sel; end = sel + 1
+    while (start > 0 && heights[end]! - heights[start - 1]! + (start > 1 ? 1 : 0) + (end < n ? 1 : 0) <= a) start--
+    while (start < sel && /^(chips|raw):/.test(list[start]!.key)) start++
+    while (end < n && heights[end + 1]! - heights[start]! + (start > 0 ? 1 : 0) + (end + 1 < n ? 1 : 0) <= a) end++
+  }
+  return { start, end, above: heights[start]!, below: total - heights[end]! }
 }
 
 export const HEAD = 'head:'
@@ -86,7 +156,12 @@ export function buildModel(v: View): Model {
     : `${openT.length} open` + dots.map(d => ` ●${d.n}`).join('') +
       (v.filter.showDone ? (closedN ? ' ·' + closed.map(d => ` ●${d.n}`).join('') + ' closed' : '')
         : (closedN ? ` · ${closedN} done hidden` : ''))
-  return { groups, rows, items, selected, ticket, lines, count: { open: openT.length, dots, closed, text }, filterActive }
+  const model = { groups, rows, items, selected, ticket, lines, count: { open: openT.length, dots, closed, text }, filterActive }
+  if (v.ascii !== undefined) {
+    const chrome = chromeRows(v, model, v.ascii ? ASCII : UNI)
+    for (const key of ['tabs', 'count', 'keys'] as const) lines.find(l => l.key === key)!.rows = chrome[key]
+  }
+  return model
 }
 
 // F81: `ticket-meta reconcile`'s proposals, `<ID> [<now>] -> [<proposed>]  <reason>`; any
