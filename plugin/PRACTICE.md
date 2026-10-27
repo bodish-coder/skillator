@@ -16,7 +16,7 @@ in front of itself.
 | §7 Debugging | `systematic-debugging` |
 | §8 Branch lifecycle | `using-git-worktrees`, `finishing-a-development-branch` |
 
-The thirteenth, `writing-skills`, is merged into `skillator:skill-smith` rather
+The thirteenth, `writing-skills`, is merged into `skillator:skill-prometheus` rather
 than here — it is a surface with its own workflow, not a rule the other skills
 obey.
 
@@ -482,7 +482,7 @@ and `grayskull-power` still routes to those:
 | `skillator:tickets-zordon` | `TICKETS.md`, the board |
 | `skillator:mergeprep-oracle` / `merge-smith` | Conflicts and merge execution |
 | `skillator:handoff-cortana` / `watch-cortana` | Continuity across context loss |
-| `skillator:skill-smith` | Authoring or fixing a skill — `writing-skills` merged in: the description rules, form-to-failure, bulletproofing, and subagent testing |
+| `skillator:skill-prometheus` | Authoring or fixing a skill — `writing-skills` merged in: the description rules, form-to-failure, bulletproofing, and subagent testing |
 
 `dataviz` and `claude-api` are read-before-you-write references, not processes:
 load them inside the design phase, never in front of it.

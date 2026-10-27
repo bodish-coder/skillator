@@ -530,7 +530,8 @@ if [ -n "$selftest" ]; then
            .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
            .pi/agent/extensions/skillator-ops.ts .config/opencode/skills/tickets-zordon/SKILL.md \
            .config/opencode/skills/teams-uhura/scripts/team.mjs .config/opencode/skills/ops-board/ops/ops.sh \
-           .codex/skills/clone-odo/scripts/odo.sh .codex/skills/clone-odo/scripts/parity.py .config/opencode/skills/clone-odo/templates/features.csv; do
+           .codex/skills/clone-odo/scripts/odo.sh .codex/skills/clone-odo/scripts/parity.py .config/opencode/skills/clone-odo/templates/features.csv \
+           .codex/skills/skill-prometheus/SKILL.md .codex/skills/skill-prometheus/references/testing.md .codex/skills/skill-smith/SKILL.md; do
     [ -f "$T/$f" ] || { echo "FAIL: missing $f"; exit 1; }
   done
   N=$(native "$T")

@@ -6,7 +6,7 @@
 #
 #   sh practice/scripts/context-audit.sh [repo-root]
 #
-# Budgets are skill-smith section 7: always-on file 200 words, router skill 800,
+# Budgets are skill-prometheus section 7: always-on file 200 words, router skill 800,
 # description ~80. Exit 1 if anything is over, so it works as a pre-commit gate.
 #
 # NOT yet wired in as one, deliberately: this repo is over on five counts today

@@ -1,7 +1,7 @@
 # RED baselines
 
 Verbatim scenarios and recorded verdicts for skill testing
-(`skill-smith/references/testing.md`). A51 exists because the first pass wrote
+(`skill-prometheus/references/testing.md`). A51 exists because the first pass wrote
 none of this down and sherlock's scenario had to be reconstructed from memory.
 
 **Record every run here.** A verdict with no scenario file beside it is not
@@ -37,7 +37,7 @@ took the worse of two named options — relay's does, because its claim was
 `practice/baselines/green-relay-morpheus.txt` §2 vs §3 — the same description
 and fixture fails to invoke 2/2 with that sentence present and invokes
 unprompted with it deleted. Full procedure in
-`skill-smith/references/testing.md`.
+`skill-prometheus/references/testing.md`.
 
 A57 is the worked example. One non-firing run in A55 was written up as a
 property — "skills do not auto-invoke in a bare `claude -p`" — the campaign's

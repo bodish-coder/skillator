@@ -568,7 +568,8 @@ function Invoke-SelfTest([string]$T) {
                            '.pi\agent\extensions\skillator-ops.ts', '.config\opencode\skills\tickets-zordon\SKILL.md',
                            '.config\opencode\skills\teams-uhura\scripts\team.mjs', '.config\opencode\skills\ops-board\ops\ops.ps1',
                            '.codex\skills\clone-odo\scripts\odo.ps1', '.codex\skills\clone-odo\scripts\parity.py',
-                           '.config\opencode\skills\clone-odo\templates\features.csv')) {
+                           '.config\opencode\skills\clone-odo\templates\features.csv',
+                           '.codex\skills\skill-prometheus\SKILL.md', '.codex\skills\skill-prometheus\references\testing.md', '.codex\skills\skill-smith\SKILL.md')) {
     if (-not (Test-Path -LiteralPath (Join-Path $T $f) -PathType Leaf)) { return "missing $f" }
   }
   & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'skills\clone-odo\scripts\odo.ps1') selftest *> $null; if ($LASTEXITCODE -ne 0) { return 'clone-odo tools selftest failed (skills\clone-odo\scripts\odo.ps1 selftest)' }

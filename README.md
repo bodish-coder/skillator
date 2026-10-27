@@ -161,7 +161,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   session. "use fable", "opus only", "cheap", "full ceremony" are settings, not
   other skills. An optional Claude Code `UserPromptSubmit` hook routes
   feature-shaped prompts to it. `build-vision` and `build-ultron` are retired
-  names that redirect to it for one release.
+  names that redirect to it for one release; `skill-smith` is `skill-prometheus`.
 - **deploy-merlin** — step-by-step wizard that preps a project for the
   standard single-VPS deployment (Docker Compose + nginx + GitHub Actions): it
   interviews you for the specifics (domain, IP, SSH user, app slug, repo, ports),
@@ -347,14 +347,14 @@ Deactivating is deleting `.skillator/grayskull.md`.
   discipline turned out to have no failure to prevent across three fixtures, so
   none was written. Invoke with `/spec-watson`.
 
-- **skill-smith** — writing a skill, fixing one that never triggers, or working
+- **skill-prometheus** — writing a skill, fixing one that never triggers, or working
   out why a rule keeps getting rationalized away. The description field decides
   whether a skill is ever loaded, so it carries triggering conditions only and
   never a workflow summary; the form of the guidance is matched to the kind of
   failure it must prevent (a prohibition bulletproofs a discipline rule and
   actively backfires on a wrong-shaped output, which wants a positive recipe);
   and nothing ships until a fresh subagent has failed the scenario without it
-  and passed with it. Invoke with `/skill-smith`.
+  and passed with it. Invoke with `/skill-prometheus`.
 
 - **a11y-toph** — accessibility as a subject rather than a side-effect: an audit of
   code nobody is redesigning, a filed a11y bug ("can't tab to it", "the toast never
@@ -451,7 +451,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
 
 ## Add a new skill
 
-`skillator:skill-smith` is the skill for this — read it before authoring.
+`skillator:skill-prometheus` is the skill for this — read it before authoring.
 
 
 ```bash
