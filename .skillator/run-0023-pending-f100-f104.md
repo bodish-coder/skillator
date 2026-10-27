@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T08:33Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T08:47Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -18,7 +18,7 @@ branch: run/RUN-0023-pending-f100-f104
 | 178 | AAB7 F106 start claims the owner | x | subagent | 2026-10-27T04:02Z | ed27f65 |
 | 179 | AAB8 F109 session code and mode | ~ | subagent | 2026-10-27T04:07Z | - |
 | 180 | AAB9 F111 ops pane layout B rails |   | - | - | - |
-| 181 | AACA F110 rename skill-smith to skill-prometheus | ~ | subagent | 2026-10-27T05:57Z | - |
+| 181 | AACA F110 rename skill-smith to skill-prometheus | x | subagent | 2026-10-27T08:47Z | d79cce6 |
 | 183 | AACC A159 explorer review leftovers | x | subagent | 2026-10-27T03:49Z | 72a17cd |
 | 184 | AACD F112 one marathon command, sequential or parallel |   | - | - | - |
 | 185 | AACE B15 Workflows agents missing |   | - | - | - |
@@ -43,28 +43,6 @@ prompt: |
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
-### stage 181 - AACA F110 rename skill-smith to skill-prometheus  (dispatched 2026-10-27T05:57Z, @sher)
-run: -
-worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s181
-branch: run/RUN-0023-pending-f100-f104-s181
-prompt: |
-  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
-
-  grade: architectural · critical yes (F109 changes the TICKETS.md line format, a contract check-tickets, ticket-meta and the ops board all parse) · design deep=fable · build build=opus · verify deep=fable, held · ceremony full (relay run, 5 tickets) · mode per-task (ruled: inside a relay run, /pending-subagent parallel) · usage unobservable · tiers: defaults
-
-  Ticket F110 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/design-2026-10-26-F110-rename-skill-smith-skill-prometheus.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths are repo-relative; use them under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. Owner rulings: the name is skill-prometheus (Q-F110-2 settled by the owner: 'correct the name'); Q-F110-1 is parked: build on its default (extend README.md's retired-names sentence). Before starting, confirm with git log that the run branch contains main's clone-odo merge (plugin/skills/clone-odo/UPSTREAM.md exists in the worktree); if it does not, stop and report - do not create it.
-
-  The ticket line, verbatim:
-  - [ ] F110 — Rename skill-smith. Owner 2026-10-26: 'rename skill-smith can u suggest some new names'. Suggested: skill-q, skill-hermione, skill-geordi, skill-doc; owner pick 2026-10-26: skill-prometheus ('skill-promethus correct the name'). Done when: skill-prometheus replaces skill-smith in the skill dir, manifests, routing, host commands, install selftests and docs; skill-smith stays one release as a pointer, as build-ultron does for build-jarvis; check-routing.sh and the selftests green. [decide: @sher] (@cc-9de7d9)
-
-  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F110: ".
-
-  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
-
-  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
-
-  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
-
 ## Chain
 driver: @sher 2026-10-27T05:57Z     hold: -     mode: agents
 ### AABZ - stage 167 - F100 build-jarvis UI entry
@@ -363,3 +341,4 @@ prompt: |
 - Ruling: 181 F110 in stage worktree .s181 beside 179 (prompt run-0023-s181-wt.txt); 179 F109 agent died on a network error (ENOTFOUND) mid-green with an uncommitted ticket-meta.sh edit - resumed with its context, not re-dispatched - cost if wrong: none.
 - Ruling: F112 (owner 2026-10-27: one marathon command, sequential or parallel) joins RUN-0023 as stage 184, after 179 (marathon.md) and 181 (install.sh/ps1, README); design by fable, scratchpad design-2026-10-27-F112-marathon-one-command.md: /marathon-run [sequential|parallel] [N|max] [IDs] plans and runs in one go, the mode lives in the plan (PLAN.mode); Q-F112-1 (marathon-plan default) and Q-F112-2 (cap on bare parallel) parked for the end batch, built on their defaults - cost if wrong: a re-plan.
 - Ruling: owner 2026-10-27 picked 1 and 3: B15 (Workflows agents section misses this session's agents; repro owed) joins as stage 185 after 180 and 179 (register.tsx, types); F113 (start a run from the Workflows tab) is logged and gets a design pass, then a stage after B15 - cost if wrong: a longer run.
+- Ruling: stage 181 F110 landed - remaining skill-smith mentions are the one-release pointer stub, its muse entry, the installer selftest rows, baselines and history (CASEFILE.md, the board page's old ticket text); both installer selftests ok on the merged branch - cost if wrong: a stale mention in a live doc.
