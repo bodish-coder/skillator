@@ -71,7 +71,7 @@ export function planAction(x: Explorer, kind: ActionKind, ctx: { branch: string;
   const warn: string[] = []
   if (isRunRef(ctx.branch)) warn.push(`on relay run branch ${ctx.branch} - runs land through relay-morpheus; continue only if you mean it`)
   if (isRunRef(ctx.root)) warn.push(`this checkout is a run worktree (${ctx.root})`)
-  if (kind === 'merge') return { action: { kind, args: [], warn, pick: (ctx.branches ?? []).filter(b => b !== ctx.branch), result: null } }
+  if (kind === 'merge') return { action: { kind, args: [], warn, pick: (ctx.branches ?? []).filter(b => b !== ctx.branch && !b.startsWith('(')), result: null } }   // '(HEAD detached at …)' is no branch
   return { action: { kind, args: ACTION_ARGS[kind](sel.slice(3)), warn, pick: null, result: null } }
 }
 
@@ -166,8 +166,8 @@ export const parseCount = (out: string): { ahead: number; behind: number } | nul
 // name null: no upstream. Not behind: nothing incoming is held.
 export function withUpstream(x: Explorer, name: string | null, count: string | null): Explorer {
   const c = name === null ? null : parseCount(count ?? '')
-  const upstream = name === null ? 'none' as const : c ? { name, ...c } : null
-  return typeof upstream === 'object' && upstream && upstream.behind > 0 ? { ...x, upstream } : held({ ...x, upstream, incoming: null })
+  const y = { ...x, upstream: name === null ? 'none' as const : c ? { name, ...c } : null }
+  return hasIncoming(y) ? y : held({ ...y, incoming: null })
 }
 
 export const withIncoming = (x: Explorer, out: string): Explorer => held({ ...x, incoming: parseLog(out).slice(0, LOG_N) })

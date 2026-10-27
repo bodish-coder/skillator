@@ -372,6 +372,21 @@ test('F103 a failed command shows git\'s message; a merge conflict says the merg
   w.actionResult = ran('', 1, 'fatal: Not possible to fast-forward, aborting.\n')
   await go(ui, clock, 'key:pull')
   expect(w.toasts.at(-1)).toBe('■ git pull --ff-only failed: fatal: Not possible to fast-forward, aborting.')
+  // a revert conflict: git says CONFLICT on stdout, a hint on stderr - both read, the stop said
+  w.actionResult = ran('CONFLICT (content): Merge conflict in a.ts\n', 1, 'error: could not revert 1234567... F75\n')
+  await ui.press({ key: 'xs:commits' }); await ui.press({ key: 'xc:' + SHA1 }); await clock.settle()
+  await go(ui, clock, 'key:revert')
+  expect(w.toasts.at(-1)!.endsWith('- revert stopped on conflict: resolve by hand, or git revert --abort')).toBe(true)
+  await ui.unmount()
+})
+
+test('F103 Run pressed twice runs git once; a detached HEAD is no merge source', WITH, async ($, on) => {
+  const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  await ui.press({ key: 'key:push' }); await clock.settle()
+  const run = ui.press({ key: 'xa:go' }); await ui.press({ key: 'xa:go' }).catch(() => {}); await run; await clock.settle()
+  expect(w.actions).toEqual([['push']])
+  expect(planAction(EMPTY, 'merge', { branch: 'HEAD', root: '/r', dirty: 0, branches: ['(HEAD detached at abc1234)', 'main'] }))
+    .toEqual({ action: { kind: 'merge', args: [], warn: [], pick: ['main'], result: null } })
   await ui.unmount()
 })
 

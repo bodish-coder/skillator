@@ -565,6 +565,7 @@ export const register: Register = on => {
   on('ui.scroll', { requestId: 'ops-board' }, async ($, e, next) => {
     if (e.pointer || e.origin.kind !== 'person' || Math.abs(e.by) !== 1) return next(e)
     if ((await read($, tabA)) === 'explorer') {           // F75: the Explorer's own items
+      if (await isActionUp($)) return next(e)             // F103: the confirm scrolls as itself
       const o = await arrowExplorer($, e.by, lastScroll.offset, e.bodyRows, lastCols)
       return o === undefined ? next(e) : o === null || e.contentRows <= e.bodyRows ? {} : next({ ...e, offset: o })
     }

@@ -31,7 +31,9 @@ async function git($: EngineInterface, name: string, args: string[], timeoutMs =
   if (!bin) return { ok: false, err: NO_GIT, code: null }
   try {
     const r = await $.process.run([bin, ...args], { cwd: repo.root, timeoutMs })
-    if (r.exitCode !== 0) return { ok: false, err: `git ${name} failed: ${r.stderr.trim() || r.stdout.trim() || 'exit ' + r.exitCode}`, code: r.exitCode }
+    // both streams: git says CONFLICT on stdout, hints and fatals on stderr
+    const said = [r.stderr.trim(), r.stdout.trim()].filter(Boolean).join('\n') || 'exit ' + r.exitCode
+    if (r.exitCode !== 0) return { ok: false, err: `git ${name} failed: ${said}`, code: r.exitCode }
     return { ok: true, out: r.stdout, said: r.stderr, cut: r.isStdoutTruncated }
   } catch (e) {
     return { ok: false, err: `git ${name} failed: ${e instanceof Error ? e.message : String(e)}`, code: null }
@@ -113,20 +115,27 @@ export async function readExplorer($: EngineInterface): Promise<Explorer> {
 // A key: what the plan needs read now (branch, tracked changes, branches, root), then the
 // plan - refused in a toast, or the confirm up, Esc its Cancel.
 export async function openAction($: EngineInterface, kind: ActionKind): Promise<void> {
+  if (running) { $.ui.toast(`■ git ${running} is still running`); return }
   const branch = await git($, 'rev-parse', BRANCH_ARGS)
   const dirty = await git($, 'status', DIRTY_ARGS)
   const branches = kind === 'merge' ? await git($, 'branch', BRANCHES_ARGS) : null
+  // push/pull: the upstream read now, not as last drawn (one set by hand since counts)
+  const up = kind === 'push' || kind === 'pull' ? await git($, 'rev-parse', UPSTREAM_ARGS) : null
   const failed = [branch, dirty, branches].find(r => r && !r.ok)
   if (failed && !failed.ok) { $.ui.toast('■ ' + failed.err); return }
   const lines = (r: typeof branch | null) => (r?.ok ? r.out.split(/\r?\n/).filter(Boolean) : [])
   const x = await read($, explorerA)
-  const p = planAction({ ...x, selected: selectedOf(x) }, kind, {
+  const upstream = up && !up.ok && up.code === 128 ? 'none' as const : up ? null : x.upstream
+  const p = planAction({ ...x, upstream, selected: selectedOf(x) }, kind, {
     branch: lines(branch)[0] ?? 'HEAD', root: (await $.session.repo())?.root ?? '', dirty: lines(dirty).length, branches: lines(branches) })
   if ('refused' in p) { $.ui.toast('■ ' + p.refused); return }
   await update($, actionA, () => p.action)
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
-  void $.ui.focus({ requestId: PANE, key: p.action.pick ? 'xb:' + (p.action.pick[0] ?? '') : 'xa:go' }).catch(() => {})
+  const first = p.action.pick?.[0]
+  void $.ui.focus({ requestId: PANE, key: first ? 'xb:' + first : p.action.args.length ? 'xa:go' : 'xa:cancel' }).catch(() => {})
 }
+
+let running: string | null = null          // the action's argv while git runs: one at a time
 
 async function pickAction($: EngineInterface, name: string): Promise<void> {
   await update($, actionA, a => (a ? pickBranch(a, name) : a))
@@ -135,15 +144,23 @@ async function pickAction($: EngineInterface, name: string): Promise<void> {
 
 // Run: the argv shown is the argv run (bin aside); git's own words said, a conflict left as git left it.
 export async function actionGo($: EngineInterface): Promise<void> {
-  const a = await read($, actionA)
-  if (!a || !a.args.length) return
-  await cancelAction($)
-  const cmd = a.args.join(' ')
-  const r = await git($, cmd, a.args, 120000)    // fetch/pull/push talk to a remote
-  if (r.ok) $.ui.toast(`✓ git ${cmd}: ${(r.out.trim() || r.said.trim()).split(/\r?\n/)[0] || 'done'}`)
-  else {
-    const conflict = a.kind === 'merge' && /CONFLICT/.test(r.err) ? ' - merge stopped on conflict: resolve by hand, or git merge --abort' : ''
-    $.ui.toast(`■ ${r.err.split(/\r?\n/).slice(0, 3).join(' ')}${conflict}`)
+  if (running) return                       // a second Run press, or one while git runs
+  running = '…'
+  try {
+    const a = await read($, actionA)
+    if (!a || !a.args.length) return
+    await cancelAction($)
+    const cmd = a.args.join(' ')
+    running = cmd
+    const r = await git($, cmd, a.args, 120000)    // fetch/pull/push talk to a remote
+    if (r.ok) $.ui.toast(`✓ git ${cmd}: ${(r.out.trim() || r.said.trim()).split(/\r?\n/)[0] || 'done'}`)
+    else {
+      const stopped = (a.kind === 'merge' || a.kind === 'revert') && /CONFLICT/.test(r.err)
+        ? ` - ${a.kind} stopped on conflict: resolve by hand, or git ${a.kind} --abort` : ''
+      $.ui.toast(`■ ${r.err.split(/\r?\n/).slice(0, 3).join(' ')}${stopped}`)
+    }
+  } finally {
+    running = null
   }
   await enterExplorer($)
 }
