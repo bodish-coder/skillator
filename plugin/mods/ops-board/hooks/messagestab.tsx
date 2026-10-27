@@ -16,6 +16,7 @@ import type { SetupValues } from './lib/teamsconfig'
 // typed, and unmask() rebuilds the token. A saved token is only "set"; saving sends the
 // values to `team.mjs config save` on stdin, never argv.
 
+const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
 const messagesA = atom({ plugin: 'ops-board', key: 'messages' } as const, [])
 const msgReadA = atom({ plugin: 'ops-board', key: 'msgRead' } as const, null)
 const msgSelectedA = atom({ plugin: 'ops-board', key: 'msgSelected' } as const, null)
@@ -92,6 +93,7 @@ async function bump($: EngineInterface, patch: Partial<SetupView> = {}) {
 }
 
 export async function openSetup($: EngineInterface) {
+  await update($, actionFocusA, () => null)
   draft = freshSetup(await read($, teamsCfgA))
   touched = false
   check = NO_CHECK
@@ -143,6 +145,7 @@ async function runSetupCheck($: EngineInterface) {
 }
 
 async function markRead($: EngineInterface) {
+  const focus = await read($, actionFocusA)
   const msgs = await read($, messagesA)
   const id = msgs.at(-1)?.id
   if (!id) { $.ui.toast('no team messages to mark read'); return }
@@ -157,15 +160,17 @@ type Els = { Box: ElementConstructor<BoxProps>; Text: ElementConstructor<TextPro
 
 export async function MessagesTab($: EngineInterface, els: Els, cols: number): Promise<RenderElement[]> {
   const { Box, Text, Button } = els
+  const focus = await read($, actionFocusA)
   const msgs = await read($, messagesA)
   const view = { msgs, readId: await read($, msgReadA), selected: await read($, msgSelectedA), expanded: await read($, msgExpandedA), cols }
+  const current = msgs.find(m => 'row:' + m.id === focus)?.id ?? (msgs.some(m => m.id === view.selected) ? view.selected : msgs.at(-1)?.id)
   const out: RenderElement[] = []
-  for (const l of messageLines(view)) {
+  for (const l of messageLines({ ...view, cols: cols - 3 })) {
     const segs = l.segs.map(s => <Text color={s.color} dimColor={s.dim} bold={s.bold} inverse={s.inverse}>{plainText(s.text)}</Text>)
     if (l.key.startsWith('row:')) {
       const id = l.key.slice(4)
       out.push(
-        <Button key={l.key} plain onPress={() => {
+        <Button key={l.key} hotkey={id === current ? 'o' : undefined} plain onPress={() => {
           void update($, msgSelectedA, () => id)
           void update($, msgExpandedA, x => (x === id ? null : id))
         }}>{segs}</Button>,
@@ -191,6 +196,9 @@ export async function renderSetup($: EngineInterface, e: RenderInput<'Pane'>): P
   const { Box, Text, Button } = t
   const Input = e.surface !== 'mobile' && 'Input' in t ? t.Input : null
   const cfg: TeamsCfgView | null = await read($, teamsCfgA)
+  const focus = await read($, actionFocusA)
+  const confirming = sv.confirmClear || check.confirm
+  const armed = !!focus && (sv.confirmClear ? ['setup:clear-yes', 'setup:clear-no'] : check.confirm ? ['setup:run-yes', 'setup:run-no'] : ['setup:posts', 'setup:save', 'setup:clear', 'setup:run', 'setup:cancel']).includes(focus)
   const d = draft
   const edit = (k: 'token' | 'url' | 'port') => (v: string) => {
     if (!draft) return
@@ -203,6 +211,7 @@ export async function renderSetup($: EngineInterface, e: RenderInput<'Pane'>): P
     <Box flexDirection="column">
       <Box key="form:title"><Text bold>Teams setup</Text><Text dimColor>{'  Esc cancels'}</Text></Box>
       <Text> </Text>
+      <Text dimColor>Tab to actions; letters there</Text>
       {Input
         ? [
             <Input key="setup:token" label="Token         " placeholder={d.token ? '' : cfg?.token ? '(set - type to replace)' : '(not set)'}
@@ -211,35 +220,35 @@ export async function renderSetup($: EngineInterface, e: RenderInput<'Pane'>): P
             <Input key="setup:port" label="Port          " placeholder="3978" value={d.port} onInput={edit('port')} onSubmit={edit('port')} />,
           ]
         : <Text dimColor>The Teams setup needs a keyboard surface (terminal or desktop).</Text>}
-      <Box key="posts" flexDirection="row">{label('Status posts  ')}
-        <Button key="setup:posts" plain onPress={() => { if (draft) { draft = { ...draft, posts: !draft.posts }; touched = true; void bump($, { result: null }) } }}>
+      <Box key="posts" flexDirection="row" flexWrap="wrap">{label('Status posts  ')}
+        <Button key="setup:posts" hotkey={armed && !confirming ? 'p' : undefined} plain onPress={() => { if (draft) { draft = { ...draft, posts: !draft.posts }; touched = true; void bump($, { result: null }) } }}>
           {d.posts ? '[x] on' : '[ ] off'}</Button>
       </Box>
       <Text> </Text>
       <Box key="saves"><Text dimColor wrap="wrap">{`Saves ${cfg?.path || '~/.skillator/teams.json'} - this user only, outside every repo (teams-uhura config save)`}</Text></Box>
       {sv.result && <Box key="setup:result"><Text color="error" wrap="wrap">{sv.result}</Text></Box>}
       {sv.confirmClear && (
-        <Box key="setup:confirm" flexDirection="row" gap={2}>
+        <Box key="setup:confirm" flexDirection="row" flexWrap="wrap" gap={2}>
           <Text color="warning">clear the saved Teams settings?</Text>
-          <Button key="setup:clear-yes" onPress={() => { void clearSaved($) }}>Yes, clear</Button>
-          <Button key="setup:clear-no" onPress={() => { void bump($, { confirmClear: false }) }}>No</Button>
+          <Button key="setup:clear-yes" plain hotkey={armed ? 'y' : undefined} onPress={() => { void clearSaved($) }}>Yes, clear</Button>
+          <Button key="setup:clear-no" plain hotkey={armed ? 'n' : undefined} onPress={() => { void bump($, { confirmClear: false }) }}>No</Button>
         </Box>
       )}
       {check.out && <Box key="setup:checked"><Text wrap="wrap">{check.out}</Text></Box>}
       {check.walk && <Box key="setup:walk"><Text dimColor wrap="wrap">{`The walk itself (installs, sign-in, arming) runs in your terminal: ${check.walk}`}</Text></Box>}
       {check.confirm && (
-        <Box key="setup:run-confirm" flexDirection="row" gap={2}>
+        <Box key="setup:run-confirm" flexDirection="row" flexWrap="wrap" gap={2}>
           <Text color="warning" wrap="wrap">{"run teams-uhura's first-time setup check now? (setup --check: reads node, winget/brew, devtunnel, the tunnel and the listener; changes nothing)"}</Text>
-          <Button key="setup:run-yes" onPress={() => { void runSetupCheck($) }}>Yes, run</Button>
-          <Button key="setup:run-no" onPress={() => { check = NO_CHECK; void bump($) }}>No</Button>
+          <Button key="setup:run-yes" plain hotkey={armed ? 'y' : undefined} onPress={() => { void runSetupCheck($) }}>Yes, run</Button>
+          <Button key="setup:run-no" plain hotkey={armed ? 'n' : undefined} onPress={() => { check = NO_CHECK; void bump($) }}>No</Button>
         </Box>
       )}
       <Text> </Text>
-      <Box flexDirection="row" gap={4}>
-        <Button key="setup:save" variant="primary" onPress={() => { void saveSetup($) }}>Save</Button>
-        <Button key="setup:clear" onPress={() => { check = NO_CHECK; void bump($, { confirmClear: true, result: null }) }}>Clear saved</Button>
-        <Button key="setup:run" onPress={() => { check = { confirm: true, out: null, walk: null }; void bump($, { confirmClear: false, result: null }) }}>Run first-time setup</Button>
-        <Button key="setup:cancel" onPress={() => { void closeSetup($).then(() => $.ui.open({ id: 'ops-board', title: 'ops board' })) }}>Cancel</Button>
+      <Box flexDirection="row" flexWrap="wrap" gap={4}>
+        <Button key="setup:save" plain hotkey={armed && !confirming ? 's' : undefined} variant="primary" onPress={() => { void saveSetup($) }}>Save</Button>
+        <Button key="setup:clear" plain hotkey={armed && !confirming ? 'd' : undefined} onPress={() => { check = NO_CHECK; void bump($, { confirmClear: true, result: null }) }}>Clear saved</Button>
+        <Button key="setup:run" plain hotkey={armed && !confirming ? 'r' : undefined} onPress={() => { check = { confirm: true, out: null, walk: null }; void bump($, { confirmClear: false, result: null }) }}>Setup check</Button>
+        <Button key="setup:cancel" plain hotkey={armed && !confirming ? 'c' : undefined} onPress={() => { void closeSetup($).then(() => $.ui.open({ id: 'ops-board', title: 'ops board' })) }}>Cancel</Button>
       </Box>
     </Box>
   )

@@ -127,6 +127,10 @@ for (const surface of SURFACES) {
     expect((await pane.find({ key: 'rec:B9' }))?.text).toBe("    B9  ● blocked  stays - evidence unclear: blocked on 'the vendor fix', no ticket to check")
     expect(await pane.find({ key: 'reconcile:picked' })).toBeUndefined()
 
+    expect((await pane.find({ key: 'reconcile:all' }))?.props.hotkey).toBe('a')
+    expect((await pane.find({ key: 'reconcile:none' }))?.props.hotkey).toBe('n')
+    await pane.press({ key: 'rec:B1' })
+    expect((await pane.find({ key: 'reconcile:picked' }))?.props.hotkey).toBe('p')
     await pane.press({ key: 'reconcile:all' })
     await clock.settle()
     expect(w.runs.slice(1)).toEqual([sh('unblock', 'B2'), sh('start', 'B1'),
@@ -203,5 +207,27 @@ test('F81 nothing to reconcile, or reconcile refused: a toast, no form',WITH, as
   await pane.press({ key: 'key:reconcile' })
   expect(w.toasts.at(-1)).toBe('✗ ticket-meta reconcile refused: ticket-meta: no TICKETS.md at /r/TICKETS.md')
   expect(await pane.find({ key: 'form:title' })).toBeUndefined()
+  await pane.unmount()
+})
+
+for (const surface of SURFACES) test(`${surface}: F115 picked success applies once and refreshes immediately`, WITH, async ($, on) => {
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  w.answer = argv => {
+    if (argv[2] === 'reconcile') return ran(PROPOSALS)
+    if (argv[2] === 'unblock') {
+      w.files['/r/TICKETS.md'] = BOARD.replace('- [!] B2', '- [ ] B2')
+      return ran('unblocked B2')
+    }
+    return null
+  }
+  const pane = await start($, clock, surface)
+  await pane.press({ key: 'key:reconcile' })
+  await pane.press({ key: 'rec:B2' })
+  expect((await pane.find({ key: 'reconcile:picked' }))?.props.hotkey).toBe('p')
+  await pane.press({ key: 'reconcile:picked' })
+  expect(w.runs).toEqual([sh('reconcile'), sh('unblock', 'B2')])
+  expect(w.toasts.at(-1)).toBe('\u2713 reconcile: 1 of 1 applied\n\u2713 B2 now pending')
+  expect(await form($)).toBeNull()
+  expect(await head(pane, '!')).toMatch(/  1  \u25b8$/)
   await pane.unmount()
 })

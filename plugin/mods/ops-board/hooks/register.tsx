@@ -26,6 +26,7 @@ import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, 
 
 // The engine lists what a module reads and writes from consts of the file itself,
 // so each file names its own atoms (same literal refs as pane.tsx).
+const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
 const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
@@ -642,6 +643,9 @@ export const register: Register = on => {
   // Tab and shift-Tab walk the row and header buttons: the ring landing on one selects it.
   on('ui.focus', { requestId: 'ops-board' }, async ($, e, next) => {
     const el = e.element
+    // F115: only the element key; form renderers validate membership and entries reset it.
+    // Await this before the host continues focus, so Input focus disarms letters first.
+    await update($, actionFocusA, () => el ?? null)
     if (el?.startsWith('row:') || el?.startsWith('head:')) await update($, ticketOffsetA, () => null)
     if (el?.startsWith('row:')) await update($, selectedA, () => el.slice(4))
     else if (el?.startsWith('head:')) await update($, selectedA, () => el)

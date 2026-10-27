@@ -86,7 +86,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
         {hasTeam && <Select key="sel:who" label="who" value={f.who ?? 'all'}
           options={[{ value: 'all', label: 'all' }, ...v.team.map(p => ({ value: p.handle, label: p.handle }))]}
           onSelect={val => setFilter(x => ({ ...x, who: val === 'all' ? null : val, mine: false }))} />}
-        {hasTeam && v.me && <Button key="key:mine" plain onPress={() => setFilter(x => ({ ...x, mine: !x.mine, who: null }))}>
+        {hasTeam && v.me && <Button key="key:mine" hotkey="m" plain onPress={() => setFilter(x => ({ ...x, mine: !x.mine, who: null }))}>
           {(f.mine ? '[x]' : '[ ]') + ' mine'}</Button>}
       </Box>,
     )
@@ -109,9 +109,9 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   for (const g of m.groups) {
     // F61: a header is a Button - Enter under the focus or a click opens or closes it.
     const hk = headKey(g.box)
-    const head = cutTo(headText(g, glyphs, !!v.ascii), v.cols - (v.ascii ? 0 : 2), glyphs.cut)
+    const head = cutTo(headText(g, glyphs, !!v.ascii), v.cols - (v.ascii ? 0 : 2) - (hk === m.selected ? 3 : 0), glyphs.cut)
     entries.push(
-      <Button key={hk} plain onPress={() => {
+      <Button key={hk} hotkey={hk === m.selected ? 'o' : undefined} plain onPress={() => {
         void update($, ticketOffsetA, () => null)
         // the header stands for a ticket hidden in it (moved there by an edit): opening lands on it
         void update($, selectedA, x => (hk === m.selected && x && !x.startsWith('head:') && g.tickets.some(t => t.id === x) ? x : hk))
@@ -124,17 +124,17 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
     if (!g.open) continue
     for (const t of g.tickets) {
       const nested = !!t.parent && shownIds.has(t.parent) && g.tickets.some(p => p.id === t.parent)
-      const row = rowText(t, v.cols, glyphs, !!v.ascii, nested)
+      const row = rowText(t, v.cols, glyphs, !!v.ascii, nested, t.id === m.selected ? 3 : 0)
       const isSel = t.id === m.selected
       const body = v.ascii && isSel ? '> ' + row.text.slice(2) : row.text
       entries.push(
-        <Button key={'row:' + t.id} plain onPress={() => {
+        <Button key={'row:' + t.id} hotkey={isSel ? 'o' : undefined} plain onPress={() => {
           void update($, ticketOffsetA, () => null)
           void update($, selectedA, () => t.id)
           void update($, expandedA, x => (x === t.id ? null : t.id))
         }}>
           {!v.ascii && <Text color={paint(t.box)}>{glyphs.rail}</Text>}
-          {isSel ? <Text inverse>{body.padEnd(v.cols - (v.ascii ? 0 : 2))}</Text>
+          {isSel ? <Text inverse>{body.padEnd(v.cols - (v.ascii ? 0 : 2) - 3)}</Text>
             : <Text dimColor={STATE_COLOR[t.box] === 'dim'}>{row.owner && body.endsWith(row.owner)
               ? [body.slice(0, -row.owner.length), <Text dimColor>{row.owner}</Text>] : body}</Text>}
         </Button>,
@@ -142,7 +142,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       if (chipsOf(t)) {
         const parts: (RenderElement | string)[] = ['    ']
         const groupCount = [t.apps.length, t.owner, t.decide, t.by.length, t.session].filter(Boolean).length
-        let room = v.cols - 4 - (isDecidable(t) ? 10 : 0) - Math.max(0, groupCount - 1) * 2
+        let room = v.cols - 4 - (isDecidable(t) ? (isSel ? 13 : 10) : 0) - Math.max(0, groupCount - 1) * 2
         const take = (s: string) => { const text = cutTo(s, Math.max(0, room), glyphs.cut); room -= text.length; return text }
         const chip = (k: string, val: string) => [<Text color={CHIP_KEY}>{take(k + ':')}</Text>, <Text color={CHIP_VALUE}>{take(val)}</Text>]
         const groupsOf: (RenderElement | string)[][] = []
@@ -155,7 +155,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
         entries.push(
           <Box key={'chips:' + t.id} flexDirection="row" gap={3}>
             <Text wrap="truncate-end">{parts}</Text>
-            {isDecidable(t) && <Button key={'decided:' + t.id} onPress={() => { void runDecided($, t.id) }}>Decided</Button>}
+            {isDecidable(t) && <Button key={'decided:' + t.id} plain hotkey={isSel ? 'v' : undefined} onPress={() => { void runDecided($, t.id) }}>Decided</Button>}
           </Box>,
         )
       }
@@ -235,11 +235,11 @@ async function RunsAndWorkflows($: EngineInterface, els: Els, cols: number): Pro
       : sectionStatus(sec === 'runs' ? runs.runs.map(runStatus) : agents.workflows.map(r => workflowStatus(agents.agents, r)))
     if (sec !== RUNS_SECTIONS[0]) out.push(<Text> </Text>)
     out.push(
-      <Button key={'sect:' + sec} plain onPress={() => { void update($, runsOpenA, x => toggleGroup(x, sec)) }}>
-        <Text bold color={st ? statusColor(st) : undefined}>{cut(sectionHead(sec, on, n), cols - 1)}</Text>
+      <Button key={'sect:' + sec} hotkey={sec === 'runs' ? 'r' : sec === 'workflows' ? 'w' : 'g'} plain onPress={() => { void update($, runsOpenA, x => toggleGroup(x, sec)) }}>
+        <Text bold color={st ? statusColor(st) : undefined}>{cut(sectionHead(sec, on, n), cols - 4)}</Text>
       </Button>,
     )
-    if (on) out.push(...(sec === 'runs' ? RunsTab($, els, runs, agents) : sec === 'workflows' ? WorkflowsTab(els, agents)
+    if (on) out.push(...(sec === 'runs' ? await RunsTab($, els, runs, agents) : sec === 'workflows' ? WorkflowsTab(els, agents)
       : AgentsTab(els, { ...agents, runs: active, board: runs.board })))
   }
   return out
@@ -291,7 +291,8 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         <Text> </Text>
         {/* F87: register.tsx takes this press (ui.press) - /ops resume force */}
         <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
-          <Button key="key:force" plain dimColor hotkey="f" onPress={() => {}}>force resume (whatever the reading; mutes memory red)</Button>
+          <Button key="key:force" plain dimColor hotkey="f" onPress={() => {}}>force resume</Button>
+          <Text dimColor wrap="wrap">whatever the reading; mutes memory red</Text>
         </Box>
       </Box>
     )
@@ -310,7 +311,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   }
   if (tab === 'explorer') {
     const a = await readExplorerAction($)      // F103: the git action confirm, without the tab bar
-    if (a) return <Box flexDirection="column">{ActionConfirm($, els, a)}</Box>
+    if (a) return <Box flexDirection="column">{await ActionConfirm($, els, a)}</Box>
     return (
       <Box flexDirection="column">
         {bar}
@@ -324,7 +325,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
     const g = (await readRuns($, cols)).engage
     if (g) return <Box flexDirection="column">{EngageConfirm($, els, g)}</Box>
     const d = await readDiagnose($)
-    if (d) return <Box flexDirection="column">{DiagnoseView($, els, d)}</Box>   // F99: the Diagnose view likewise
+    if (d) return <Box flexDirection="column">{await DiagnoseView($, els, d)}</Box>   // F99: the Diagnose view likewise
     return (
       <Box flexDirection="column">
         {bar}

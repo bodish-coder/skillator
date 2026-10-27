@@ -198,7 +198,7 @@ async function frameRows(ui: Awaited<ReturnType<typeof mountPane>>, cols: number
     const box = (await ui.find({ key }))!
     let used = 0, rows = 1
     for (const child of box.children) {
-      const width = labelOf(child).length + ((child as Drawn).props?.hotkey ? 2 : 0)
+      const width = labelOf(child).length + ((child as Drawn).props?.hotkey ? 3 : 0)
       const gap = used ? Number(box.props.gap ?? 0) : 0
       if (used && used + gap + width > cols) { rows++; used = width }
       else used += gap + width
@@ -265,13 +265,13 @@ test('F111: selected full-width bar and owner from 56 columns', WITH, async ($, 
     }
     await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:F3', origin: { kind: 'person' } })
     const row = await ui.find({ key: 'row:F3' })
-    expect(row?.text.length).toBe(cols)
+    expect((row?.text.length ?? 0) + 3).toBe(cols)
     expect(row?.text.includes('@vidul')).toBe(cols >= 56)
     expect(row?.children.some(c => (c as { props?: { inverse?: boolean } }).props?.inverse)).toBe(true)
     await ui.unmount()
   }
 })
-for (const cols of [60, 80, 120]) {
+for (const cols of [40, 60, 80, 120]) {
   for (const ascii of [false, true]) {
     test(`F111: long owner stays within ${cols} columns, ASCII ${ascii}, selected and unselected`, WITH, async ($, on) => {
       const owner = '@' + 'a'.repeat(80)
@@ -284,7 +284,7 @@ for (const cols of [60, 80, 120]) {
         const row = (await ui.find({ key: 'row:F1' }))!
         expect(row.text.length).toBeLessThanOrEqual(cols)
         expect(row.text).toContain('F1')
-        if (selected) expect(row.text.length).toBe(cols)
+        if (selected) expect(row.text.length + 3).toBe(cols)
         for (const el of await everyText(ui)) expect(el.text.length, el.key ?? el.text).toBeLessThanOrEqual(cols)
       }
       await ui.unmount()

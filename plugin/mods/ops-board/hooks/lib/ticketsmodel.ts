@@ -54,8 +54,8 @@ export function headText(g: Group, glyphs: Glyphs, ascii: boolean): string {
 
 export const cutTo = (s: string, room: number, cut: string) => s.length <= room ? s : s.slice(0, Math.max(0, room - cut.length)) + cut.slice(0, room)
 
-export function rowText(t: Ticket, cols: number, glyphs: Glyphs, ascii: boolean, nested: boolean): { text: string; owner: string | null } {
-  const width = ascii ? cols : cols - 2
+export function rowText(t: Ticket, cols: number, glyphs: Glyphs, ascii: boolean, nested: boolean, prefix = 0): { text: string; owner: string | null } {
+  const width = cols - (ascii ? 0 : 2) - prefix
   const owner = cols >= 56 ? t.owner : null
   const lead = ascii ? `  ${STATE_WORD[t.box]} ` : nested ? '   ' : ' '
   const tail = t.parent && !nested ? ` (${t.parent})` : ''
@@ -74,7 +74,7 @@ export function chromeRows(v: View, m: Model, g: Glyphs) {
     ...(c.closed.length ? v.filter.showDone ? [g.sep.length, ...c.closed.map(d => (g.dot + d.n).length), 6]
       : [`${g.sep} ${c.closed.reduce((s, d) => s + d.n, 0)} done hidden`.length] : [])]
   const count = packRows(countItems, v.cols, 1)
-  const keys = packRows([g.move.length + 5, ...KEY_LABELS.slice(1).map(l => l.length)], v.cols, 2)
+  const keys = packRows([g.move.length + 5, ...KEY_LABELS.slice(1).map(l => l.length + 1)], v.cols, 2)
   return { tabs, count, keys, total: tabs + 3 + count + keys }
 }
 

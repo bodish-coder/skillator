@@ -17,6 +17,7 @@ import { paint } from './paint'
 // unshown tab behind it, so the press showed nothing. A form up is the assign or
 // person atom set; renderPane draws it in place of the view it came from.
 
+const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
 const PANE = 'ops-board'          // pane.tsx's PANE_ID (it imports this file)
 const PANE_NAME = 'ops board'     // pane.tsx's PANE_TITLE
 
@@ -24,6 +25,7 @@ const PANE_NAME = 'ops board'     // pane.tsx's PANE_TITLE
 // register hook refuses and turns into Cancel; the ring goes to the form's first
 // element. A deny (the pane does not hold the keys) leaves the ring to the person.
 async function showForm($: EngineInterface, ring: string) {
+  await update($, actionFocusA, () => null)
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
   void $.ui.focus({ requestId: PANE, key: ring }).catch(() => {})
 }
@@ -69,6 +71,7 @@ function startHandle(t: Ticket | null, kind: AssignDraft['kind'], team: Member[]
 // the field is prefilled with its ID and can still be changed. A surface with no Input
 // (mobile, `canType` false) cannot fill the field: there the old refusal stands.
 export async function openAssign($: EngineInterface, kind: AssignDraft['kind'], shown: string | null, canType = true) {
+  await update($, actionFocusA, () => null)
   const t = shown ? ((await read($, boardA))?.tickets.find(x => x.id === shown) ?? null) : null
   if (!t && !canType) { $.ui.toast('ops board: select a ticket first'); return }
   const draft: AssignDraft = { id: t?.id ?? '', kind, handle: startHandle(t, kind, await read($, teamA), await read($, meA)), result: null }
@@ -84,6 +87,7 @@ export async function isFormUp($: EngineInterface): Promise<boolean> {
 }
 
 export async function clearForm($: EngineInterface) {
+  await update($, actionFocusA, () => null)
   await update($, assignA, () => null)
   await update($, personA, () => null)
   await update($, reconcileA, () => null)
@@ -135,6 +139,7 @@ export async function runDecided($: EngineInterface, id: string) {
 // --- team: Add person (a form in the pane) and remove (from the Team view) ---
 
 export async function openAddPerson($: EngineInterface, back: PersonDraft['back']) {
+  await update($, actionFocusA, () => null)
   if (back === 'team') await update($, assignA, () => null)
   await update($, personA, () => ({ handle: '', name: '', emails: '', result: null, back }))
   await showForm($, 'handle')
@@ -163,6 +168,7 @@ async function addPerson($: EngineInterface) {
   if (p.back === 'assign' && d) {
     // Back on the assign form, the new person picked; the 2 s poll lists them.
     const next = { ...d, handle: h, result: `✓ ${h} added to .skillator/team.md` }
+    await update($, actionFocusA, () => null)
     await update($, personA, () => null)
     await update($, assignA, () => next)
     await showForm($, whoKey(next))
@@ -177,6 +183,7 @@ export async function cancelPerson($: EngineInterface) {
   const p = await read($, personA)
   const d = await read($, assignA)
   if (p?.back === 'assign' && d) {
+    await update($, actionFocusA, () => null)
     await update($, personA, () => null)
     await showForm($, whoKey(d))
     return
@@ -218,16 +225,19 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const { Box, Text, Button } = t
   const Input = e.surface !== 'mobile' && 'Input' in t ? t.Input : null
   const cols = Math.max(20, e.props.bodyColumns)
+  const focus = await read($, actionFocusA)
   const team = await read($, teamA)
   const label = (s: string) => <Text dimColor>{s}</Text>
   const heading = (s: string) => <Box key="form:title"><Text bold>{s}</Text><Text dimColor>{'  Esc cancels'}</Text></Box>
 
   if (p) {
+    const armed = focus === 'add' || focus === 'cancel'
     const [who, name, emails] = addArgs(p) as [string, string, string]   // never `h`: the JSX factory
     const set = (k: 'handle' | 'name' | 'emails') => (v: string) => { void update($, personA, x => (x ? { ...x, [k]: v, result: null } : x)) }
     return (
       <Box flexDirection="column">
         {heading('Add person')}
+        <Text dimColor>Tab to actions; letters there</Text>
         <Text> </Text>
         {Input
           ? [
@@ -237,13 +247,13 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
             ]
           : <Text dimColor>Adding a person needs a keyboard surface (terminal or desktop).</Text>}
         <Text> </Text>
-        <Box key="writes" flexDirection="row">{label('Writes  ')}<Text>.skillator/team.md</Text>{label(' (committed later)')}</Box>
-        <Box key="runs" flexDirection="row">{label('Runs')}<Text wrap="wrap">{`    ticket-meta team add ${who} ${quote(name)} ${emails}`}</Text></Box>
+        <Box key="writes" flexDirection="row" flexWrap="wrap">{label('Writes  ')}<Text>.skillator/team.md</Text>{label(' (committed later)')}</Box>
+        <Box key="runs" flexDirection="row" flexWrap="wrap">{label('Runs')}<Text wrap="wrap">{`    ticket-meta team add ${who} ${quote(name)} ${emails}`}</Text></Box>
         {p.result && <Box key="result"><Text color="error" wrap="wrap">{p.result}</Text></Box>}
         <Text> </Text>
-        <Box flexDirection="row" gap={4}>
-          <Button key="add" variant="primary" onPress={() => { void addPerson($) }}>Add</Button>
-          <Button key="cancel" onPress={() => { void cancelPerson($) }}>Cancel</Button>
+        <Box flexDirection="row" flexWrap="wrap" gap={4}>
+          <Button key="add" plain hotkey={armed ? 'a' : undefined} variant="primary" onPress={() => { void addPerson($) }}>Add</Button>
+          <Button key="cancel" plain hotkey={armed ? 'c' : undefined} onPress={() => { void cancelPerson($) }}>Cancel</Button>
         </Box>
       </Box>
     )
@@ -251,22 +261,23 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
 
   if (!d) return null
   const tk = await findTicket($, d.id)
+  const people = [...team]
+  if (d.handle && !people.some(m => m.handle === d.handle)) people.push({ handle: d.handle, emails: [] })
+  const armed = !!focus && (['kind:implementation', 'kind:decision', 'who:+add', 'cancel', ...(tk && d.handle ? ['go'] : [])].includes(focus) || people.some(m => focus === 'who:' + m.handle))
   const from: State = tk?.box ?? ' '
   const to: State = d.kind === 'decide' ? '?' : ' '
   const set = (fn: (x: AssignDraft) => AssignDraft) => { void update($, assignA, x => (x ? fn({ ...x, result: null }) : x)) }
   const radio = (kind: AssignDraft['kind'], text: string) => (
-    <Button key={kind === 'owner' ? 'kind:implementation' : 'kind:decision'} plain onPress={() => set(x => ({ ...x, kind }))}>
+    <Button key={kind === 'owner' ? 'kind:implementation' : 'kind:decision'} hotkey={armed ? kind === 'owner' ? 'a' : 'd' : undefined} plain onPress={() => set(x => ({ ...x, kind }))}>
       <Text color={d.kind === kind ? 'success' : undefined}>{d.kind === kind ? '(•)' : '( )'}</Text>{' ' + text}
     </Button>
   )
-  const people = [...team]
-  if (d.handle && !people.some(m => m.handle === d.handle)) people.push({ handle: d.handle, emails: [] })
   const who = people.map(m => {
     const isSel = m.handle === d.handle
     const body = `${isSel ? '› ' : '  '}${m.handle.padEnd(9)}${m.name ?? ''}`
     return (
-      <Button key={'who:' + m.handle} plain onPress={() => set(x => ({ ...x, handle: m.handle }))}>
-        {isSel ? <Text inverse>{body.padEnd(Math.max(body.length, 24))}</Text> : body}
+      <Button key={'who:' + m.handle} hotkey={armed && m.handle === (people.find(p => 'who:' + p.handle === focus)?.handle ?? d.handle ?? people[0]?.handle) ? 'o' : undefined} plain onPress={() => set(x => ({ ...x, handle: m.handle }))}>
+        {isSel ? <Text inverse wrap="wrap">{body.padEnd(Math.max(body.length, 24))}</Text> : <Text wrap="wrap">{body}</Text>}
       </Button>
     )
   })
@@ -276,9 +287,9 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const ticketField = Input
     ? <Input key="ticket" label="Ticket  " placeholder="F12" value={d.id}
         onInput={v => set(x => ({ ...x, id: v }))} onSubmit={v => set(x => ({ ...x, id: v }))} />
-    : <Box key="ticket" flexDirection="row">{label('Ticket  ')}<Text>{typed || '(none - needs a keyboard surface)'}</Text></Box>
+    : <Box key="ticket" flexDirection="row" flexWrap="wrap">{label('Ticket  ')}<Text>{typed || '(none - needs a keyboard surface)'}</Text></Box>
   const said = tk
-    ? <Box key="title" flexDirection="row">
+    ? <Box key="title" flexDirection="row" flexWrap="wrap">
         <Text color={paint(tk.box)}>{'● ' + STATE_NAME[tk.box]}</Text>
         <Text dimColor wrap="truncate-end">{'  ' + cut(tk.title, Math.max(4, cols - STATE_NAME[tk.box].length - 4))}</Text>
       </Box>
@@ -292,19 +303,20 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   return (
     <Box flexDirection="column">
       {heading(titleOf(d, tk))}
+      <Text dimColor>Tab to actions; letters there</Text>
       {ticketField}
       {said}
       <Text> </Text>
-      <Box key="for" flexDirection="row" gap={3}>{label('For')}{radio('owner', 'implementation')}{radio('decide', 'decision')}</Box>
-      <Box key="who" flexDirection="row">
+      <Box key="for" flexDirection="row" flexWrap="wrap" gap={3}>{label('For')}{radio('owner', 'implementation')}{radio('decide', 'decision')}</Box>
+      <Box key="who" flexDirection="row" flexWrap="wrap">
         {label('Who   ')}
         <Box flexDirection="column">
           {team.length === 0 && <Box key="noteam"><Text color="warning">no .skillator/team.md yet - add a person first</Text></Box>}
           {who}
-          <Button key="who:+add" plain dimColor onPress={() => { void openAddPerson($, 'assign') }}>{'  + add person'}</Button>
+          <Button key="who:+add" hotkey={armed ? 'n' : undefined} plain dimColor onPress={() => { void openAddPerson($, 'assign') }}>{'  + add person'}</Button>
         </Box>
       </Box>
-      {tk && <Box key="change" flexDirection="row">
+      {tk && <Box key="change" flexDirection="row" flexWrap="wrap">
         <Text dimColor>Change  </Text>
         <Text color={paint(from)}>{'● ' + word(from)}</Text>
         <Text>{' -> '}</Text>
@@ -312,12 +324,12 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
         <Text>{`  ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`}</Text>
       </Box>}
       {warn && <Box key="warn"><Text color="warning" wrap="wrap">{warn}</Text></Box>}
-      <Box key="runs" flexDirection="row">{label('Runs')}<Text>{`    ticket-meta ${verb} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`}</Text></Box>
+      <Box key="runs" flexDirection="row" flexWrap="wrap">{label('Runs')}<Text>{`    ticket-meta ${verb} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`}</Text></Box>
       {d.result && <Box key="result"><Text color={isGood ? 'success' : 'error'} wrap="wrap">{d.result}</Text></Box>}
       <Text> </Text>
-      <Box flexDirection="row" gap={4}>
-        {tk && d.handle && <Button key="go" variant="primary" onPress={() => { void confirm($) }}>Assign</Button>}
-        <Button key="cancel" onPress={() => { void closeForm($) }}>Cancel</Button>
+      <Box flexDirection="row" flexWrap="wrap" gap={4}>
+        {tk && d.handle && <Button key="go" plain hotkey={armed ? 's' : undefined} variant="primary" onPress={() => { void confirm($) }}>Assign</Button>}
+        <Button key="cancel" plain hotkey={armed ? 'c' : undefined} onPress={() => { void closeForm($) }}>Cancel</Button>
       </Box>
     </Box>
   )

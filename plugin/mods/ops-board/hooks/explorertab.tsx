@@ -14,6 +14,7 @@ import type { Action, ActionKind, Explorer, Here, Need } from './lib/explorer'
 // tab and on r. F103: fetch/pull/push/revert/merge, each only after a confirm drawn in
 // place of the tab that names the exact argv run (ACTION_ARGS).
 
+const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
 const explorerA = atom({ plugin: 'ops-board', key: 'explorer' } as const, EMPTY)
 const actionA = atom({ plugin: 'ops-board', key: 'explorer-action' } as const, null)
 const tabA = atom({ plugin: 'ops-board', key: 'tab' } as const, 'tickets')
@@ -218,21 +219,23 @@ export async function readExplorerAction($: EngineInterface): Promise<Action | n
 type Els = { Box: ElementConstructor<BoxProps>; Text: ElementConstructor<TextProps>; Button: ElementConstructor<ButtonProps> }
 
 // The confirm, drawn in place of the tab (B5: never a second pane).
-export function ActionConfirm($: EngineInterface, els: Els, a: Action): RenderElement[] {
+export async function ActionConfirm($: EngineInterface, els: Els, a: Action): Promise<RenderElement[]> {
   const { Box, Text, Button } = els
+  const focus = await read($, actionFocusA)
+  const current = a.pick?.find(name => 'xb:' + name === focus) ?? a.pick?.[0]
   return [
     <Box key="xa:title"><Text bold>{`git ${a.kind}?`}</Text><Text dimColor>{'  Esc cancels'}</Text></Box>,
     <Text> </Text>,
     a.args.length
-      ? <Box key="xa:argv" flexDirection="row"><Text dimColor>{'runs    '}</Text><Text wrap="wrap">{'git ' + a.args.join(' ')}</Text></Box>
+      ? <Box key="xa:argv" flexDirection="row" flexWrap="wrap"><Text dimColor>{'runs    '}</Text><Text wrap="wrap">{'git ' + a.args.join(' ')}</Text></Box>
       : <Text key="xa:pickhead" dimColor>{a.pick?.length ? 'merge which branch into this one?' : 'no other branch to merge'}</Text>,
-    <Box key="xa:on" flexDirection="row"><Text dimColor>{'on      '}</Text><Text>{clean(a.branch)}</Text></Box>,
+    <Box key="xa:on" flexDirection="row" flexWrap="wrap"><Text dimColor>{'on      '}</Text><Text>{clean(a.branch)}</Text></Box>,
     ...a.warn.map((w, i) => <Box key={'xa:warn:' + i}><Text color="warning" wrap="wrap">{clean(w)}</Text></Box>),
-    ...(a.pick ?? []).map(name => <Button key={'xb:' + name} plain onPress={() => { void pickAction($, name).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>{'  ' + clean(name)}</Button>),
+    ...(a.pick ?? []).map(name => <Button key={'xb:' + name} hotkey={name === current ? 'o' : undefined} plain onPress={() => { void pickAction($, name).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>{'  ' + clean(name)}</Button>),
     <Text> </Text>,
-    <Box flexDirection="row" gap={4}>
-      {a.args.length ? <Button key="xa:go" variant="primary" onPress={() => { void actionGo($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Run</Button> : null}
-      <Button key="xa:cancel" onPress={() => { void cancelAction($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Cancel</Button>
+    <Box flexDirection="row" flexWrap="wrap" gap={4}>
+      {a.args.length ? <Button key="xa:go" plain hotkey={'y'} variant="primary" onPress={() => { void actionGo($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Run</Button> : null}
+      <Button key="xa:cancel" plain hotkey={'n'} onPress={() => { void cancelAction($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Cancel</Button>
     </Box>,
   ]
 }
@@ -243,11 +246,11 @@ const ACTION_KEYS: [ActionKind, string, string][] = [['fetch', 'f', 'fetch'], ['
 export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: number): RenderElement[] {
   const { Box, Text, Button } = els
   const out: RenderElement[] = []
-  for (const l of explorerLines(x, cols)) {
+  for (const l of explorerLines(x, cols - 3)) {
     const body = <Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim} bold={s.bold} inverse={s.inverse}>{clean(s.text)}</Text>)}</Text>
     const item = l.item
     out.push(item
-      ? <Button key={item} plain onPress={() => { void toggleExplorer($, item).catch(() => {}) }}>{body}</Button>
+      ? <Button key={item} hotkey={item === selectedOf(x) ? 'o' : undefined} plain onPress={() => { void toggleExplorer($, item).catch(() => {}) }}>{body}</Button>
       : <Box key={l.key}>{body}</Box>)
   }
   const sel = selectedOf(x)

@@ -14,6 +14,7 @@ import type { Bins, Job, RunEntry, RunFile, RunForm } from './lib/runentries'
 // absolute path. B5: the confirm and rename forms draw in this pane, never a second one.
 // B4: one job at a time, only the tail of its output held.
 
+const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
 const PANE = 'ops-board'          // pane.tsx's PANE_ID (it imports this file)
 const PANE_NAME = 'ops board'     // pane.tsx's PANE_TITLE
 
@@ -85,6 +86,7 @@ export async function isRunFormUp($: EngineInterface): Promise<boolean> {
 }
 
 async function showForm($: EngineInterface, ring: string) {
+  await update($, actionFocusA, () => null)
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
   void $.ui.focus({ requestId: PANE, key: ring }).catch(() => {})
 }
@@ -214,19 +216,21 @@ async function formBody($: EngineInterface, e: RenderInput<'Pane'>, els: Els, f:
   const entry = await entryOf($, f.id)
   const label = (s: string) => <Text dimColor>{s}</Text>
   const result = f.result ? <Box key="run:result"><Text color="error" wrap="wrap">{f.result}</Text></Box> : null
+  const focus = await read($, actionFocusA)
+  const armed = f.mode !== 'rename' || focus === 'run:save' || focus === 'run:cancel'
   if (f.mode === 'rename') {
     const set = (v: string) => { void update($, runFormA, x => (x ? { ...x, name: v, result: null } : x)) }
     return [
       <Box key="form:title"><Text bold>{`Rename ${clean(entry?.name ?? f.id)}`}</Text><Text dimColor>{'  Esc cancels'}</Text></Box>,
-      <Text> </Text>,
+      <Text dimColor>Tab to actions; letters there</Text>,
       Input ? <Input key="run:name" label="Name  " placeholder="a short name" value={f.name} autoFocus onInput={set} onSubmit={set} />
         : <Text dimColor>Renaming needs a keyboard surface (terminal or desktop).</Text>,
-      <Box key="run:writes" flexDirection="row">{label('Runs  ')}<Text wrap="wrap">{clean(`run-entries rename ${f.id} ${f.name.trim()}`)}</Text></Box>,
+      <Box key="run:writes" flexDirection="row" flexWrap="wrap">{label('Runs  ')}<Text wrap="wrap">{clean(`run-entries rename ${f.id} ${f.name.trim()}`)}</Text></Box>,
       ...(result ? [result] : []),
       <Text> </Text>,
-      <Box flexDirection="row" gap={4}>
-        <Button key="run:save" variant="primary" onPress={() => { void saveName($) }}>Save</Button>
-        <Button key="run:cancel" onPress={() => { void closeRunForm($) }}>Cancel</Button>
+      <Box flexDirection="row" flexWrap="wrap" gap={4}>
+        <Button key="run:save" plain hotkey={armed ? 's' : undefined} variant="primary" onPress={() => { void saveName($) }}>Save</Button>
+        <Button key="run:cancel" plain hotkey={armed ? 'c' : undefined} onPress={() => { void closeRunForm($) }}>Cancel</Button>
       </Box>,
     ]
   }
@@ -237,21 +241,22 @@ async function formBody($: EngineInterface, e: RenderInput<'Pane'>, els: Els, f:
     ...('error' in p
       ? [<Box key="run:error"><Text color="error" wrap="wrap">{clean(p.error)}</Text></Box>]
       : [
-          <Box key="run:command" flexDirection="row">{label('Command  ')}<Text wrap="wrap">{clean(argvText(p.argv))}</Text></Box>,
-          <Box key="run:cwd" flexDirection="row">{label('In       ')}<Text wrap="wrap">{clean(p.cwd)}</Text></Box>,
+          <Box key="run:command" flexDirection="row" flexWrap="wrap">{label('Command  ')}<Text wrap="wrap">{clean(argvText(p.argv))}</Text></Box>,
+          <Box key="run:cwd" flexDirection="row" flexWrap="wrap">{label('In       ')}<Text wrap="wrap">{clean(p.cwd)}</Text></Box>,
           <Box key="run:warn"><Text color="warning" wrap="wrap">{cut('This runs the repo\'s own code on this machine.', cols)}</Text></Box>,
         ]),
     ...(result ? [result] : []),
     <Text> </Text>,
-    <Box flexDirection="row" gap={4}>
-      {!('error' in p) && <Button key="run:go" variant="primary" onPress={() => { void start($) }}>Run</Button>}
-      <Button key="run:rename" onPress={() => {
+    <Box flexDirection="row" flexWrap="wrap" gap={4}>
+      {!('error' in p) && <Button key="run:go" plain hotkey={'y'} variant="primary" onPress={() => { void start($) }}>Run</Button>}
+      <Button key="run:rename" plain hotkey={'n'} onPress={() => {
         void (async () => {
+          await update($, actionFocusA, () => null)
           await update($, runFormA, x => (x ? { ...x, mode: 'rename' as const, result: null } : x))
           await showForm($, 'run:name')
         })()
       }}>Rename</Button>
-      <Button key="run:cancel" onPress={() => { void closeRunForm($) }}>Cancel</Button>
+      <Button key="run:cancel" plain hotkey={armed ? 'c' : undefined} onPress={() => { void closeRunForm($) }}>Cancel</Button>
     </Box>,
   ]
 }
@@ -262,6 +267,8 @@ export async function RunTab($: EngineInterface, e: RenderInput<'Pane'>, els: El
   if (form) return formBody($, e, els, form, cols)
   const f = await read($, runFileA)
   const job = await jobOf($)
+  const focus = await read($, actionFocusA)
+  const current = f?.entries.find(x => 'entry:' + x.id === focus)?.id ?? f?.entries[0]?.id
   const out: RenderElement[] = []
   if (!f) out.push(<Text dimColor>{`reading ${RUN_FILE}…`}</Text>)
   else if (f.error) out.push(<Box key="run:file-error"><Text color="error" wrap="wrap">{f.error}</Text></Box>)
@@ -272,10 +279,10 @@ export async function RunTab($: EngineInterface, e: RenderInput<'Pane'>, els: El
       const note = clean(entryNote(x))
       const isJob = job && job.id === x.id && job.ended === null
       out.push(
-        <Button key={'entry:' + x.id} plain onPress={() => { void openConfirm($, x) }}>
+        <Button key={'entry:' + x.id} hotkey={x.id === current ? 'o' : undefined} plain onPress={() => { void openConfirm($, x) }}>
           <Text color={isJob ? 'warning' : x.missing ? 'error' : 'success'}>●</Text>
           <Text dimColor={x.missing}>{' ' + cut(clean(x.name), nameW).padEnd(nameW)}</Text>
-          <Text dimColor>{cut(note, Math.max(4, cols - nameW - 3))}</Text>
+          <Text dimColor>{cut(note, Math.max(4, cols - nameW - 6))}</Text>
         </Button>,
       )
     }

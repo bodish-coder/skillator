@@ -62,3 +62,17 @@ macOS and Linux terminals get no new tab: run `ops` in a tab of your own.
   pane draws in the host terminal's font, which the pane cannot change. A dark scheme of the same name keeps the highlight
   blue readable. `--open` opens its tab in that profile once installed (Windows Terminal
   reads fragments when it starts). Remove it by deleting that `skillator` folder.
+
+## Alphabet actions in the plugin pane
+
+Page and form buttons show their alphabet shortcut (for example `a: Accept all`,
+`p: Apply picked`, `n: None`). `o` acts on one current row. Team uses the selected
+member (press a member to select them); elsewhere, moving focus to another eligible
+row moves the shortcut. Where no row is selected, the first eligible row is current
+(Messages starts with the newest). Workflows uses `e` and `d` for
+one current run. Existing Tickets and page keys, Tab, Enter and Esc stay available.
+
+Forms with text fields say `Tab to actions; letters there`: their shortcuts are
+absent while typing and become available on a current non-text form control.
+Returning to an Input disables them. Filters keep native Select arrows/Enter.
+Confirmations still require their own action; a branch choice never runs Git.

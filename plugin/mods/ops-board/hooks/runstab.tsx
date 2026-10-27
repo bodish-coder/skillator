@@ -21,6 +21,7 @@ export { continuePrompt, runLines, waves } from './lib/runlines'
 // /skillator:marathon-run (a script) or queues the run and submits its continue prompt.
 // Ticket state is a coloured dot from the board, never a bracket code.
 
+const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
 const runsA = atom({ plugin: 'ops-board', key: 'runs' } as const, [])
 const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
@@ -318,32 +319,34 @@ export function EngageConfirm($: EngineInterface, els: Els, g: Engage): RenderEl
   return [
     <Box key="engage:title"><Text bold>{`Engage ${g.id}?`}</Text><Text dimColor>{'  Esc cancels'}</Text></Box>,
     <Text> </Text>,
-    ...(g.queue ? [<Box key="engage:queue" flexDirection="row"><Text dimColor>{'First    '}</Text><Text wrap="wrap">{`relay-morpheus queue-run add ${g.id}`}</Text></Box>] : []),
-    <Box key="engage:submits" flexDirection="row"><Text dimColor>{'Submits  '}</Text><Text wrap="wrap">{g.text}</Text></Box>,
+    ...(g.queue ? [<Box key="engage:queue" flexDirection="row" flexWrap="wrap"><Text dimColor>{'First    '}</Text><Text wrap="wrap">{`relay-morpheus queue-run add ${g.id}`}</Text></Box>] : []),
+    <Box key="engage:submits" flexDirection="row" flexWrap="wrap"><Text dimColor>{'Submits  '}</Text><Text wrap="wrap">{g.text}</Text></Box>,
     <Text> </Text>,
-    <Box flexDirection="row" gap={4}>
-      <Button key="engage:go" variant="primary" onPress={() => { void engageGo($) }}>Engage</Button>
-      <Button key="engage:cancel" onPress={() => { void closeEngage($) }}>Cancel</Button>
+    <Box flexDirection="row" flexWrap="wrap" gap={4}>
+      <Button key="engage:go" plain hotkey={'e'} variant="primary" onPress={() => { void engageGo($) }}>Engage</Button>
+      <Button key="engage:cancel" plain hotkey={'c'} onPress={() => { void closeEngage($) }}>Cancel</Button>
     </Box>,
   ]
 }
 
 // F99: the Diagnose view, in place of the tab (B5). F104: a Close per stage with a derived sha, and its confirm.
-export function DiagnoseView($: EngineInterface, els: Els, d: Diagnose): RenderElement[] {
+export async function DiagnoseView($: EngineInterface, els: Els, d: Diagnose): Promise<RenderElement[]> {
   const { Box, Text, Button } = els
   const color = d.verdict === 'finished' ? 'success' : d.verdict === 'still running' ? 'warning' : 'error'
+  const focus = await read($, actionFocusA)
   const close = d.close ?? []   // a view stored before F104 has none
+  const current = close.find(x => `diag:close:${x.n}` === focus)?.n ?? close[0]?.n
   const c = close.find(x => x.n === d.confirm)
   return [
     <Box key="diag:title"><Text bold>{`Diagnose ${d.id}: `}</Text><Text bold color={color}>{d.verdict}</Text><Text dimColor>{'  Esc back'}</Text></Box>,
     <Text> </Text>,
     ...(c ? [
       <Box key="diag:confirm"><Text bold>{`Close stage ${c.n} of ${d.id}?`}</Text></Box>,
-      <Box key="diag:confirm:runs" flexDirection="row"><Text dimColor>{'runs    '}</Text><Text wrap="wrap">{c.runs}</Text></Box>,
-      <Box key="diag:confirm:landed" flexDirection="row"><Text dimColor>{'landed  '}</Text><Text wrap="wrap">{`${c.sha}  (${c.why})`}</Text></Box>,
-      <Box flexDirection="row" gap={4}>
-        <Button key="diag:close:go" variant="primary" onPress={() => { void closeGo($) }}>Close</Button>
-        <Button key="diag:close:cancel" onPress={() => { void closeConfirm($, null) }}>Cancel</Button>
+      <Box key="diag:confirm:runs" flexDirection="row" flexWrap="wrap"><Text dimColor>{'runs    '}</Text><Text wrap="wrap">{c.runs}</Text></Box>,
+      <Box key="diag:confirm:landed" flexDirection="row" flexWrap="wrap"><Text dimColor>{'landed  '}</Text><Text wrap="wrap">{`${c.sha}  (${c.why})`}</Text></Box>,
+      <Box flexDirection="row" flexWrap="wrap" gap={4}>
+        <Button key="diag:close:go" plain hotkey={'y'} variant="primary" onPress={() => { void closeGo($) }}>Close</Button>
+        <Button key="diag:close:cancel" plain hotkey={'n'} onPress={() => { void closeConfirm($, null) }}>Cancel</Button>
       </Box>,
       <Text> </Text>,
     ] : []),
@@ -353,19 +356,21 @@ export function DiagnoseView($: EngineInterface, els: Els, d: Diagnose): RenderE
     <Text> </Text>,
     ...(d.byHand ?? []).map((l, i) => <Box key={`diag:byhand:${i}`}><Text dimColor wrap="wrap">{l}</Text></Box>),
     ...(c ? [] : close.map(x =>
-      <Box key={`diag:closerow:${x.n}`} flexDirection="row" gap={2}>
-        <Button key={`diag:close:${x.n}`} onPress={() => { void closeConfirm($, x.n) }}>{`Close stage ${x.n} with ${x.sha.slice(0, 7)}`}</Button>
+      <Box key={`diag:closerow:${x.n}`} flexDirection="row" flexWrap="wrap" gap={2}>
+        <Button key={`diag:close:${x.n}`} plain hotkey={x.n === current ? 'o' : undefined} onPress={() => { void closeConfirm($, x.n) }}>{`Close stage ${x.n} with ${x.sha.slice(0, 7)}`}</Button>
         <Box key={`diag:close:why:${x.n}`}><Text dimColor wrap="wrap">{x.why}</Text></Box>
       </Box>)),
-    <Button key="diag:back" onPress={() => { void closeEngage($) }}>Back</Button>,
+    <Button key="diag:back" plain hotkey={'b'} onPress={() => { void closeEngage($) }}>Back</Button>,
   ]
 }
 
-export function RunsTab($: EngineInterface, els: Els, v: RunsView, a: AgentsView): RenderElement[] {
+export async function RunsTab($: EngineInterface, els: Els, v: RunsView, a: AgentsView): Promise<RenderElement[]> {
   const { Box, Text, Button } = els
   const out: RenderElement[] = []
   const draw = (l: RunLine) =>
     <Box key={l.key}><Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim}>{s.text}</Text>)}</Text></Box>
+  const focus = await read($, actionFocusA)
+  const current = v.runs.find(r => focus === 'engage:' + r.id || focus === 'diagnose:' + r.id)?.id ?? openRuns(v.runs)[0]?.id ?? v.runs[0]?.id
   const open = openRuns(v.runs)
   if (!open.length) out.push(<Box key="none"><Text dimColor>{'no relay run open - /skillator:plan-runs <tickets> plans one'}</Text></Box>)
   open.forEach((run, i) => {
@@ -374,9 +379,9 @@ export function RunsTab($: EngineInterface, els: Els, v: RunsView, a: AgentsView
     out.push(...treeLines(run, open, a.agents, a.workflows, v.board).map(draw))
     const ids = [...new Set(run.stages.flatMap(ticketsOf))]
     out.push(
-      <Box flexDirection="row" gap={3}>
-        <Button key={'engage:' + run.id} variant="primary" onPress={() => { void openEngage($, run.id) }}>Engage</Button>
-        <Button key={'diagnose:' + run.id} onPress={() => { void openDiagnose($, run.id) }}>Diagnose</Button>
+      <Box flexDirection="row" flexWrap="wrap" gap={3}>
+        <Button key={'engage:' + run.id} plain hotkey={run.id === current ? 'e' : undefined} variant="primary" onPress={() => { void openEngage($, run.id) }}>Engage</Button>
+        <Button key={'diagnose:' + run.id} plain hotkey={run.id === current ? 'd' : undefined} onPress={() => { void openDiagnose($, run.id) }}>Diagnose</Button>
         {run.planned && <Box key={'edit:' + run.id}><Text dimColor>{`Edit in chat: /skillator:plan-runs ${ids.join(' ')}`}</Text></Box>}
       </Box>,
     )
@@ -390,9 +395,9 @@ export function RunsTab($: EngineInterface, els: Els, v: RunsView, a: AgentsView
     out.push(<Text> </Text>)                                // after a run, the no-run tree or 'no relay run open'
     const l = finishedLine(run)
     out.push(
-      <Box key={l.key} flexDirection="row" gap={2}>
+      <Box key={l.key} flexDirection="row" flexWrap="wrap" gap={2}>
         <Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim}>{s.text}</Text>)}</Text>
-        <Button key={'diagnose:' + run.id} plain dimColor onPress={() => { void openDiagnose($, run.id) }}>diagnose</Button>
+        <Button key={'diagnose:' + run.id} hotkey={run.id === current ? 'd' : undefined} plain dimColor onPress={() => { void openDiagnose($, run.id) }}>diagnose</Button>
       </Box>,
     )
   })

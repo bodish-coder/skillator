@@ -51,7 +51,7 @@ test('F111 chromeRows at 40 and 120 columns', () => {
   const v = view({ board: null, cols: 40, rows: 14 })
   const m = buildModel(v)
   expect(chromeRows(v, m, UNI).tabs).toBe(2)
-  expect(chromeRows(v, m, UNI).keys).toBe(2)
+  expect(chromeRows(v, m, UNI).keys).toBe(3)
   expect(chromeRows({ ...v, cols: 120 }, m, UNI).total).toBe(6)
 })
 
@@ -150,4 +150,14 @@ test('band, health, runs line builders live in lib', () => {
     mode: null, driver: null, flights: [], phases: null }, board)[0]!.key).toBe('run:RUN-0001')
   expect(isOpen(board.tickets[0]!)).toBe(true)
   expect(ticketsOf({ handle: '@asha', emails: [] }, board, null)).toBe('1 decide')
+})
+
+test('F115 native prefix reserves three cells without moving the 56-column owner threshold', () => {
+  const t = parseBoard('- [~] F1 \u2014 a long title for the selected row [owner: @owner]', 'T', 0, 0).tickets[0]!
+  for (const cols of [40, 56, 60, 80, 120]) for (const ascii of [false, true]) {
+    const g = ascii ? ASCII : UNI
+    const row = rowText(t, cols, g, ascii, false, 3)
+    expect(row.text.length + 3 + (ascii ? 0 : 2)).toBeLessThanOrEqual(cols)
+    expect(row.owner).toBe(cols >= 56 ? '@owner' : null)
+  }
 })

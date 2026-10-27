@@ -120,6 +120,7 @@ export type Action = { kind: ActionKind; args: string[]; warn: string[]; pick: s
 declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
+      actionFocus: string | null // F115: element key only, never input content
       board: Board | null; team: Member[]; me: string | null
       session: string | null   // F109: this session's sid (team.ts sessionTag), the band's
       tab: 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run'; selected: string | null; expanded: string | null

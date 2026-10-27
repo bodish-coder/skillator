@@ -13,6 +13,7 @@ import { paint } from './paint'
 // form's close go through assign.tsx's form handling (isFormUp / clearForm see it);
 // the two apply buttons are taken in register.tsx, which re-reads the board after.
 
+const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
 const PANE = 'ops-board'
 const PANE_NAME = 'ops board'
 const reconcileA = atom({ plugin: 'ops-board', key: 'reconcile' } as const, null)   // assign.tsx's twin: the hooks scan reads only this file's consts
@@ -54,16 +55,18 @@ export async function renderReconcile($: EngineInterface, e: RenderInput<'Pane'>
   const v = await read($, reconcileA)
   if (!v) return null
   const { Box, Text, Button } = $.ui.resolve(e)
+  const focus = await read($, actionFocusA)
+  const current = v.rows.find(p => canApply(p) && 'rec:' + p.id === focus)?.id ?? v.rows.find(canApply)?.id
   const n = v.rows.filter(canApply).length
   const dot = (b: Proposal['to']) => <Text color={paint(b)}>{'● ' + STATE_NAME[b]}</Text>
   const rows = v.rows.map(p => {
     if (!canApply(p)) {
-      return <Box key={'rec:' + p.id} flexDirection="row"><Text dimColor>{`    ${p.id}  `}</Text>{dot(p.from)}<Text dimColor wrap="wrap">{'  stays - ' + p.why}</Text></Box>
+      return <Box key={'rec:' + p.id} flexDirection="row" flexWrap="wrap"><Text dimColor>{`    ${p.id}  `}</Text>{dot(p.from)}<Text dimColor wrap="wrap">{'  stays - ' + p.why}</Text></Box>
     }
     const on = v.picked.includes(p.id)
     const toggle = () => { void update($, reconcileA, x => (x ? { ...x, picked: on ? x.picked.filter(i => i !== p.id) : [...x.picked, p.id] } : x)) }
     return (
-      <Button key={'rec:' + p.id} plain onPress={toggle}>
+      <Button key={'rec:' + p.id} hotkey={p.id === current ? 'o' : undefined} plain onPress={toggle}>
         <Text color={on ? 'success' : undefined}>{on ? '[x]' : '[ ]'}</Text>{` ${p.id}  `}{dot(p.from)}{' -> '}{dot(p.to)}<Text dimColor wrap="wrap">{'  ' + p.why}</Text>
       </Button>
     )
@@ -75,10 +78,10 @@ export async function renderReconcile($: EngineInterface, e: RenderInput<'Pane'>
       <Text> </Text>
       {rows}
       <Text> </Text>
-      <Box flexDirection="row" gap={4}>
-        {n > 0 && <Button key="reconcile:all" variant="primary" onPress={() => {}}>Accept all</Button>}
-        {v.picked.length > 0 && <Button key="reconcile:picked" onPress={() => {}}>{`Apply picked (${v.picked.length})`}</Button>}
-        <Button key="reconcile:none" onPress={() => { void closeForm($) }}>None</Button>
+      <Box flexDirection="row" flexWrap="wrap" gap={4}>
+        {n > 0 && <Button key="reconcile:all" plain hotkey={'a'} variant="primary" onPress={() => {}}>Accept all</Button>}
+        {v.picked.length > 0 && <Button key="reconcile:picked" plain hotkey={'p'} onPress={() => {}}>{`Apply picked (${v.picked.length})`}</Button>}
+        <Button key="reconcile:none" plain hotkey={'n'} onPress={() => { void closeForm($) }}>None</Button>
       </Box>
     </Box>
   )

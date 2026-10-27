@@ -27,8 +27,8 @@ export function TeamTab($: EngineInterface, els: Els, tv: TeamView, team: Member
     const body = line(m.handle + ' ', (m.name ?? '') + ' ', m.emails.join(', ') + ' ', ticketsOf(m, board, me))
     const isSel = m.handle === sel
     out.push(
-      <Button key={'member:' + m.handle} plain onPress={() => setTv(x => ({ ...x, selected: m.handle, confirm: false }))}>
-        {isSel ? <Text inverse>{body.padEnd(Math.max(body.length, cols - 1))}</Text> : body}
+      <Button key={'member:' + m.handle} hotkey={!tv.confirm && isSel ? 'o' : undefined} plain onPress={() => setTv(x => ({ ...x, selected: m.handle, confirm: false }))}>
+        {isSel ? <Text inverse wrap="wrap">{body}</Text> : <Text wrap="wrap">{body}</Text>}
       </Button>,
     )
   }
@@ -36,23 +36,23 @@ export function TeamTab($: EngineInterface, els: Els, tv: TeamView, team: Member
   out.push(<Button key="team:add-row" plain onPress={() => { void openAddPerson($, 'team') }}><Text color="success">+ add person</Text></Button>)
   if (tv.confirm && sel) {
     out.push(
-      <Box key="confirm" flexDirection="row" gap={2}>
+      <Box key="confirm" flexDirection="row" flexWrap="wrap" gap={2}>
         <Text color="warning">{`remove ${sel} from .skillator/team.md?`}</Text>
-        <Button key="team:remove-yes" onPress={() => {
+        <Button key="team:remove-yes" plain hotkey={'y'} onPress={() => {
           setTv(x => ({ ...x, confirm: false }))
           void removeMember($, sel)
         }}>Remove</Button>
-        <Button key="team:remove-no" onPress={() => setTv(x => ({ ...x, confirm: false }))}>Keep</Button>
+        <Button key="team:remove-no" plain hotkey={'n'} onPress={() => setTv(x => ({ ...x, confirm: false }))}>Keep</Button>
       </Box>,
     )
   }
   out.push(<Text> </Text>)
   out.push(
-    <Box key="team:keys" flexDirection="row" gap={2}>
-      <Button key="team:add" plain dimColor hotkey="a" onPress={() => { void openAddPerson($, 'team') }}>add</Button>
-      {sel && <Button key="team:remove" plain dimColor hotkey="r" onPress={() => setTv(x => ({ ...x, selected: sel, confirm: true }))}>remove</Button>}
-      {sel && <Button key="team:lead" plain dimColor hotkey="l" onPress={() => { void makeLead($, sel) }}>make lead</Button>}
-      <Button key="team:back" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => null) }}>back to tickets</Button>
+    <Box key="team:keys" flexDirection="row" flexWrap="wrap" gap={2}>
+      <Button key="team:add" plain dimColor hotkey={!tv.confirm ? 'a' : undefined} onPress={() => { void openAddPerson($, 'team') }}>add</Button>
+      {sel && <Button key="team:remove" plain dimColor hotkey={!tv.confirm ? 'r' : undefined} onPress={() => setTv(x => ({ ...x, selected: sel, confirm: true }))}>remove</Button>}
+      {sel && <Button key="team:lead" plain dimColor hotkey={!tv.confirm ? 'l' : undefined} onPress={() => { void makeLead($, sel) }}>make lead</Button>}
+      <Button key="team:back" plain dimColor hotkey={!tv.confirm ? 't' : undefined} onPress={() => { void update($, teamViewA, () => null) }}>back to tickets</Button>
       <Text dimColor>.skillator/team.md</Text>
     </Box>,
   )
