@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T05:57Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T06:12Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -20,6 +20,7 @@ branch: run/RUN-0023-pending-f100-f104
 | 180 | AAB9 F111 ops pane layout B rails |   | - | - | - |
 | 181 | AACA F110 rename skill-smith to skill-prometheus | ~ | subagent | 2026-10-27T05:57Z | - |
 | 183 | AACC A159 explorer review leftovers | x | subagent | 2026-10-27T03:49Z | 72a17cd |
+| 184 | AACD F112 one marathon command, sequential or parallel |   | - | - | - |
 
 ## In flight
 ### stage 179 - AAB8 F109 session code and mode  (dispatched 2026-10-27T04:07Z, @sher)
@@ -285,6 +286,29 @@ prompt: |
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), anything you could not verify, any unrelated problem (one line each).
+### AACD - stage 184 - F112 one marathon command, sequential or parallel
+tickets: F112
+files: README.md,plugin/PLATFORMS.md,plugin/WORKFLOW.md,plugin/commands/marathon-plan.md,plugin/commands/marathon-run.md,plugin/host-commands/antigravity/marathon-plan/SKILL.md,plugin/host-commands/antigravity/marathon-run/SKILL.md,plugin/host-commands/cursor/marathon-plan.md,plugin/host-commands/cursor/marathon-run.md,plugin/host-commands/gemini/marathon-plan.toml,plugin/host-commands/gemini/marathon-run.toml,plugin/host-commands/opencode/marathon-plan.md,plugin/host-commands/opencode/marathon-run.md,plugin/host-commands/pi/marathon-plan.md,plugin/host-commands/pi/marathon-run.md,plugin/install.ps1,plugin/install.sh,plugin/skills/relay-morpheus/references/marathon.md,plugin/skills/relay-morpheus/templates/marathon-workflow.js
+after: 179, 181
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  grade: bounded · critical no · design deep=fable · build build=opus · verify build=opus · ceremony full (inside RUN-0023) · mode single (ruled: one relay stage) · usage unobservable
+
+  Ticket F112 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/design-2026-10-27-F112-marathon-one-command.md - read it whole, then build its TASKS in order, test-first as each task says. Do not load build-jarvis, do not regrade, do not redesign; a design step that turns out wrong against the code is a deviation you report with why. Q-F112-1 and Q-F112-2 are parked for the owner: build on their defaults.
+
+  The ticket line, verbatim:
+  - [ ] F112 — Marathon: one command, sequential or parallel. Owner 2026-10-27: 'add marathon run one command foe sequential and parallel like pending agent'. Today a Workflow marathon is two commands, /marathon-plan then /marathon-run, and neither takes a mode; /pending-subagent takes [sequential|parallel] [count|max] [IDs] (F88). Done when: one marathon command plans and runs in one go and takes the same arguments as /pending-subagent - no mode = sequential (one stage per phase, one agent at a time), parallel = file-disjoint stages side by side in a phase, a count caps them, IDs limit the tickets - with the same refusals for a bad first word; /marathon-plan and /marathon-run keep working; the host command texts and README say so on every host that has commands; the installer selftests pin it. [owner: @sher] (@cc-9de7d9)
+
+  F109 (marathon.md, relay-morpheus) and F110 (install.sh/ps1, README, the skill-smith to skill-prometheus rename) landed on this branch before you: re-read every file before editing and keep their changes.
+
+  Files you may touch: the design's FILES list only. Anything else -> stop and report. Verify: the design's VERIFICATION, every command, exit codes read directly (the installer selftests are slow - long timeout, not through a pipe). Commit messages start with "F112: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha(s), files changed, the red then green test output (command and result), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
 
 ## Rulings
 - 13:00Z - designs by one fable pass (scratchpad design-2026-10-26-f10*.md). Owner, asked: F100 approach 1 approved, F101 approach 1 approved (both arch gates passed); Q-F100-1 plugin-test frames are the pane render proof; Q-F101-1 no live host probes, hosts tagged inferred.
@@ -313,3 +337,4 @@ prompt: |
 - Ruling: stage 171 F104 landed at 9570946 after review round 3 LAND (real-repo mapping and all earlier scenarios right; ops-board 360/0 on the merged tree); three narrow wrong-sha shapes left, each needing a main commit whose subject leads with an open stage's ID and shown in the confirm, logged as A160 rather than a fourth round - cost if wrong: a Close on a partly-landed run offers a main commit the owner must reject.
 - Ruling: stage 181 F110 now after 173 only (owner asked for parallel; F110's files and every skill-smith mention are disjoint from F109 and F111, checked by grep) - chain edge only adds an after: line, so the 180 edge was removed by hand - cost if wrong: a merge conflict on the rename, caught at chain merge.
 - Ruling: 181 F110 in stage worktree .s181 beside 179 (prompt run-0023-s181-wt.txt); 179 F109 agent died on a network error (ENOTFOUND) mid-green with an uncommitted ticket-meta.sh edit - resumed with its context, not re-dispatched - cost if wrong: none.
+- Ruling: F112 (owner 2026-10-27: one marathon command, sequential or parallel) joins RUN-0023 as stage 184, after 179 (marathon.md) and 181 (install.sh/ps1, README); design by fable, scratchpad design-2026-10-27-F112-marathon-one-command.md: /marathon-run [sequential|parallel] [N|max] [IDs] plans and runs in one go, the mode lives in the plan (PLAN.mode); Q-F112-1 (marathon-plan default) and Q-F112-2 (cap on bare parallel) parked for the end batch, built on their defaults - cost if wrong: a re-plan.
