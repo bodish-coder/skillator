@@ -4,14 +4,16 @@
 status: in-progress
 last-run: 2026-10-27
 runs: 3
-remaining: 4
-note: F116 committed f3c71d9 and testing; final172 version4.21.0/ops0.11.0 and shared installer checks active; B15/B17 live evidence plus profile approval remain.
+remaining: 3
+note: Verified release4.21.0/ops0.11.0 merged locally atace0d7f; final172done, both installer twins0. B15/B17 need live evidence, profile repair needs approval. Push unapproved.
 -->
 
 > **Status legend:** ✅ DONE (verified in repo) · 🟡 IN-PROGRESS (partial/uncommitted) · 📝 CLAIMED (asserted in chat, unverified) · ⬜ NOT STARTED
 
 ## 1. TL;DR (current verified state)
-RUN-0023 source work is complete through F115 and the four final-audit fixes. F116 status controls and ticket decision HTML committed f3c71d9 after held independent LAND and two corrected findings; all 420 plugin tests pass from frozen unchanged source. Both full status-writer selftests, holo, actual SDK type checking, validation and standalone 165-test suite pass. Final release checks, version bump and local merge remain. B15 and B17 stay blocked for affected live-runtime evidence. External profile settings and push remain unapproved.
+The verified RUN-0023 release is merged to local main at ace0d7f: skillator4.21.0 and ops-board0.11.0. F115 alphabet actions and F116 individual ticket status/decision HTML are committed and testing for owner physical keyboard/mouse use. Independent review passed; 420 unchanged SDK plugin tests,165 standalone tests, both full status writers, holo, SDK type checking, plugin validation and both full installer suites pass. The integration changed no runtime/release files after final installer validation.
+
+Remaining: B15 missing workflow agents and B17 live reconcile no-op need affected runtime traces; profile statusLine repair requires approval. F113 and A160 remain separate backlog. Nothing pushed and no external settings changed. Ask before push (bodish-coder, then switch back to IkranActual).
 
 The historical sections below retain the original handoff context. The authoritative current ledger is `.skillator/run-0023-pending-f100-f104.md`; later execution entries supersede old next-action instructions.
 
@@ -89,7 +91,7 @@ Run file: `.skillator/run-0023-pending-f100-f104.md`. Run worktree: `.skillator/
    - `git -C C:/tools/Projects/skillator2 log --oneline -5`
    - `git worktree list`
    - `RM RUN-0023 chain next --all` (with `RELAY_CHAIN_PARALLEL=7`)
-2. **Current next action:** finish final release stage 172; F116 validation and commit are complete. The following original stage-179 procedure is retained as history only.
+2. **Current next action:** await owner push/profile approval or collect affected B15/B17 live traces; local release stage172 is complete. The following original stage-179 procedure is retained as history only.
    - Optionally re-run `sh <worktree>/plugin/skills/relay-morpheus/hooks/relay-morpheus.sh selftest` (slow, over 10 min).
    - `RM RUN-0023 stage 179 x subagent 9c4da38`
    - Flip F109 with ticket-meta.

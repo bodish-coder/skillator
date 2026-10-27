@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T16:57Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T17:20Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -12,7 +12,7 @@ branch: run/RUN-0023-pending-f100-f104
 | 169 | AAB1 F101 marathon without Workflow | x | subagent | 2026-10-27T01:47Z | f06d0fc |
 | 170 | AAB2 F103 explorer git actions | x | subagent | 2026-10-27T02:53Z | 7fc77ff |
 | 171 | AAB3 F104 diagnose close | x | subagent | 2026-10-27T04:07Z | 9570946 |
-| 172 | verify review bump commit | ~ | main:codex | 2026-10-27T16:57Z | - |
+| 172 | verify review bump commit | x | main:codex | 2026-10-27T17:20Z | e5c841a |
 | 173 | AAB4 F105 codex $ops opens the board | x | subagent | 2026-10-27T02:37Z | 1264371 |
 | 174 | merge origin/ccr-0af663c7-2ecnqn (F97 clone-odo) INTO main | x | main:opus | 2026-10-26T18:55Z | ca1f9e3 |
 | 178 | AAB7 F106 start claims the owner | x | subagent | 2026-10-27T04:02Z | ed27f65 |
@@ -462,3 +462,5 @@ prompt: |
 - Ruling: final172 release metadata task prepared before dispatch at .skillator/prompts/run-0023-s172-release.txt; five existing manifests only, core4.21.0/ops0.11.0 for requested minor features, source frozen after F116 commit. Separate peer review and shared full installer twins before release commit; no push/profile writes.
 
 - Ruling: controller frozen-suite complete: 21 unchanged original SDK test files, 420pass/0fail, exit0. SHA256 before/after working source and frozen fixture equal (F116-sequential-source.json); every per-file child receipt persisted. Broad concurrent timeout run remains honestly exit1. Held F116 LAND + full writer twins/remaining checks satisfied; scoped feature commit authorized.
+
+- Ruling: final172 complete locally. Reviewed release e5c841a (core4.21.0/ops0.11.0) after full installer sh0/ok and PS0/ok on identical source; metadata integration ace0d7f changes no runtime/release files relative e5c841a. Local main fast-forwarded ace0d7f. F115/F116 remain testing for owner physical input; B15stage185! and B17 blocked for live evidence. No push or external profile edits; ask before either. CodeGraph sync retry pending live index lock, no lock removal.
