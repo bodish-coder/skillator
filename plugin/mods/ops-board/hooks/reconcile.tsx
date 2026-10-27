@@ -24,6 +24,10 @@ export async function openReconcile($: EngineInterface) {
   if (r.code !== 0) { $.ui.toast(`✗ ticket-meta reconcile refused: ${why(r)}`, { timeoutMs: 8000 }); return }
   const rows = parseReconcile(r.out)
   if (!rows.length) { $.ui.toast('ops board: reconcile - every [!] [ ] [~] row matches its evidence'); return }
+  if (!rows.some(canApply)) {   // B16: nothing pressable - say what reconcile said instead of a dead form
+    $.ui.toast(['ops board: reconcile - nothing to change', ...rows.map(p => `${p.id} stays - ${p.why}`)].join('\n'), { timeoutMs: 10000 })
+    return
+  }
   await update($, reconcileA, () => ({ rows, picked: [] }))
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
   const first = rows.find(canApply)

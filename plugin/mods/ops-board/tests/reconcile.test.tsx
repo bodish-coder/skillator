@@ -180,7 +180,18 @@ for (const surface of SURFACES) {
   })
 }
 
-test('F81 nothing to reconcile, or reconcile refused: a toast, no form', WITH, async ($, on) => {
+test('B16 reconcile with only stays rows: a toast naming each row and why, no dead form', WITH, async ($, on) => {
+  const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  w.answer = () => ran("A157 [!] -> [!]  evidence unclear: blocked on 'x', no ticket to check\n")
+  const pane = await start($, clock, 'terminal')
+  await pane.press({ key: 'key:reconcile' })
+  expect(w.toasts.at(-1)).toBe("ops board: reconcile - nothing to change\nA157 stays - evidence unclear: blocked on 'x', no ticket to check")
+  expect(await form($)).toBeNull()
+  expect(await pane.find({ key: 'form:title' })).toBeUndefined()
+  await pane.unmount()
+})
+
+test('F81 nothing to reconcile, or reconcile refused: a toast, no form',WITH, async ($, on) => {
   const [w, clock] = world(on, { '/r/TICKETS.md': BOARD })
   let out = ran('no change: nothing to reconcile\n')
   w.answer = () => out
