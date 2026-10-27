@@ -108,6 +108,10 @@ test('argvFor: both spellings of every call', () => {
     [PWSH, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'C:/s/skills/tickets-zordon/scripts/ticket-meta.ps1', 'assign', 'F1', '@vidul'])
   expect(argvFor('meta-assign', false, '/s/skills', ['F1', '@vidul'], SH)).toEqual(
     [SH, '/s/skills/tickets-zordon/scripts/ticket-meta.sh', 'assign', 'F1', '@vidul'])
+  // F104: Diagnose's Close - stage <n> x with the owner cell kept ('' / no -Owner)
+  expect(argvFor('relay-stage-landed', false, '/s/skills', ['RUN-0020', '137', 'beef01'], SH)).toEqual([SH, '/s/skills/' + RM + '.sh', 'RUN-0020', 'stage', '137', 'x', '', 'beef01'])
+  expect(argvFor('relay-stage-landed', true, 'C:/s/skills', ['RUN-0020', '137', 'beef01'], PWSH)).toEqual([...PS, 'C:/s/skills/' + RM + '.ps1', '-Mode', 'stage', '-Id', 'RUN-0020', '-N', '137', '-State', 'x', '-Landed', 'beef01'])
+  expect(argvFor('relay-stage-landed', true, 'C:/s/skills', ['RUN-0020', '137', 'beef01'], PWSH)).not.toContain('-Owner')
 })
 
 test('argvFor: F66 teams-uhura calls run the node binary given, by absolute path; the config never rides argv', () => {
