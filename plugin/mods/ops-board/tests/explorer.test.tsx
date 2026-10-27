@@ -21,7 +21,7 @@ const SHA3 = 'fedcba9' + 'c'.repeat(33)          // F103: the upstream's commit 
 // F103: `actions` records the argv of every fetch/pull/push/revert/merge run; each answers `actionResult`.
 type World = { runs: { argv: readonly string[]; cwd?: string; env?: Record<string, string> }[]; git: (args: readonly string[]) => ProcessRunResult
   exes: string[]; actions: string[][]; actionResult: ProcessRunResult | string; dirty: string; branch: string; head: string; pushTo: string
-  root: string; toasts: string[]; repoFails: boolean }
+  root: string; toasts: string[]; repoFails: boolean; existsFails: boolean }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
@@ -42,7 +42,7 @@ const ACTION = /^(fetch|pull|push|revert|merge)$/
 
 function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   const w: World = { runs: [], git: answer, exes: [], actions: [], actionResult: ran('Already up to date.\n'), dirty: '', branch: 'main', head: SHA1,
-    pushTo: 'origin\trefs/heads/main', root: '/r', toasts: [], repoFails: false }
+    pushTo: 'origin\trefs/heads/main', root: '/r', toasts: [], repoFails: false, existsFails: false }
   // the reads an action plan needs, from the world; the actions themselves recorded, never run
   // a string: the host rejecting the run (a timeout)
   const local = (args: readonly string[]): ProcessRunResult | string => {
@@ -68,7 +68,7 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
     const f = at(e.path)
     return f !== undefined ? { value: { kind: 'file' as const, size: f.length, mtimeMs: 1000, isLink: false } } : { deny: 'ENOENT ' + e.path }
   })
-  on('fs.exists', ($, e) => ({ value: at(e.path) !== undefined || w.exes.includes(e.path.replace(/\\/g, '/'))
+  on('fs.exists', ($, e) => w.existsFails ? { deny: 'EIO ' + e.path } : ({ value:at(e.path) !== undefined || w.exes.includes(e.path.replace(/\\/g, '/'))
     || w.exes.includes(e.path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')) }))
   on('fs.read', ($, e) => {
     const f = at(e.path)
@@ -436,7 +436,7 @@ test('F103 push: the argv names the upstream remote and branch as an explicit re
   expect((await ui.find({ key: 'xa:on' }))?.text).toBe('on      feature/x')
   await ui.press({ key: 'xa:go' }); await clock.settle()
   expect(w.actions).toEqual([['push', 'up/stream', 'HEAD:refs/heads/team/x']])
-  expect(w.runs.find(r => r.argv[1] === 'push')?.env).toEqual({ GIT_TERMINAL_PROMPT: '0' })
+  expect(w.runs.find(r => r.argv[1] === 'push')?.env).toEqual({ GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' })   // A159: no GCM window either
   w.actions = []; w.pushTo = '\t'                                   // no upstream remote read: refused, nothing run
   await ui.press({ key: 'key:push' }); await clock.settle()
   expect(w.toasts.at(-1)).toBe('■ no upstream for feature/x - git push -u origin feature/x by hand sets one')
@@ -505,5 +505,22 @@ test('F103 an action that throws toasts the error and frees the next action; a t
   await go(ui, clock, 'key:fetch')                                  // not "still running": the throw freed it
   expect(w.actions).toEqual([['fetch', '--prune']])
   expect(w.toasts.at(-1)).toBe('■ git fetch --prune timed out after 120s - .git/index.lock may be left; remove it once no git runs')
+  await ui.unmount()
+})
+
+// A159: the F103 re-review leftovers.
+test('A159 a push remote named like an option (-f) is refused, never put in the argv', () => {
+  const at = { branch: 'main', head: SHA1, root: '/r', dirty: 0 }
+  expect(planAction(withUpstream(EMPTY, 'origin/main', '0\t0'), 'push', { ...at, pushTo: { remote: '-f', ref: 'refs/heads/main' } }))
+    .toEqual({ refused: 'remote -f starts with - - git push would read it as an option; rename the remote' })
+})
+
+test('A159 an action key whose plan read throws (fs.exists rejecting) toasts the error, no confirm drawn', WITH, async ($, on) => {
+  const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  w.existsFails = true
+  await ui.press({ key: 'key:pull' }); await clock.settle()
+  expect(w.toasts.at(-1)).toMatch(/^■ .*EIO/)
+  expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
+  expect(w.actions).toEqual([])
   await ui.unmount()
 })

@@ -181,8 +181,8 @@ export async function actionGo($: EngineInterface): Promise<void> {
     if (why) { $.ui.toast(`■ ${why} - nothing run`); return }
     const cmd = a.args.join(' ')
     running = cmd
-    // fetch/pull/push talk to a remote; a credential prompt would wait unseen until the timeout
-    const r = await git($, cmd, a.args, 120000, { GIT_TERMINAL_PROMPT: '0' })
+    // fetch/pull/push talk to a remote; a credential prompt (terminal or GCM window) would wait unseen until the timeout
+    const r = await git($, cmd, a.args, 120000, { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' })
     if (r.ok) $.ui.toast(`✓ git ${cmd}: ${(r.out.trim() || r.said.trim()).split(/\r?\n/)[0] || 'done'}`)
     else {
       const stopped = (a.kind === 'merge' || a.kind === 'revert') && /CONFLICT/.test(r.err)
@@ -256,7 +256,7 @@ export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: num
     <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
       <Text dimColor>{sel.startsWith('xf:') ? '↑↓ move' : '↑↓ move · enter open/close'}</Text>
       {ACTION_KEYS.map(([kind, hotkey, label]) =>
-        <Button key={'key:' + kind} plain dimColor hotkey={hotkey} onPress={() => { void openAction($, kind).catch(() => {}) }}>{label}</Button>)}
+        <Button key={'key:' + kind} plain dimColor hotkey={hotkey} onPress={() => { void openAction($, kind).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>{label}</Button>)}
       <Button key="key:reload" plain dimColor hotkey="r" onPress={() => { void enterExplorer($).catch(() => {}) }}>reload</Button>
     </Box>,
   )

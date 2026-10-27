@@ -162,6 +162,19 @@ test('F103 ahead/behind vs the upstream and the incoming commits, read-only; no 
   assert.doesNotMatch(text(n), /git rev-parse failed/)
 })
 
+// A159: as the pane - an upstream read failing other than 128 leaves no stale counts or Incoming.
+test('A159 an upstream read failing (not 128) clears the counts and Incoming', () => {
+  const s = settle(reduce(initial(80, 24, 0), { name: '5' }))
+  assert.match(text(s), /↑1 ↓1 vs origin\/main/)
+  const st = reduce(s, { name: 'r' })
+  let n = st.state
+  for (const e of gits(st.effects)) {
+    n = afterRun(e, e.args === UPSTREAM_ARGS ? { code: 1, out: '', err: 'fatal: something else\n', argv: [] } : gitOut(e.args), n, 0).state
+  }
+  assert.match(text(n), /^▸ Commits \(2\)$/m)
+  assert.doesNotMatch(text(n), /Incoming/)
+})
+
 test('--tab explorer is a tab the app opens on', () => {
   assert.equal(parseArgs(['--tab', 'explorer'], {}).tab, 'explorer')
 })
