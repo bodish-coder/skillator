@@ -103,6 +103,10 @@
         "path": "skills/screenshot-argus/SKILL.md"
       },
       {
+        "id": "skill-prometheus",
+        "path": "skills/skill-prometheus/SKILL.md"
+      },
+      {
         "id": "skill-smith",
         "path": "skills/skill-smith/SKILL.md"
       },

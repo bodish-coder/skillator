@@ -71,7 +71,7 @@ A110 sections).
 | Core: end the reply with what was skipped or not checked and any risk the user must know | adapt | SKILL.md §4 — a third line in the existing three-line budget |
 | Core: marker renamed `ponytail:` → `shortcut:` | adapt | SKILL.md §3 The marker: `shortcut:` is the spelling, `ponytail:` stays honoured — existing markers in this repo (`taskwork.sh`, the hooks, `upstream-check.sh`) and in user repos are not rewritten; `debt.md` harvests both |
 | Core: `b6c0448` marker only for a shortcut with a known ceiling, not every simplification | already held | SKILL.md §3 The marker said so since F29 |
-| Core: description "use on any coding task", `0e3fd0c` | reject | skill-smith §2: triggers only, and grayskull-power already arms code-yoda every session; a catch-all description steals every neighbour's traffic |
+| Core: description "use on any coding task", `0e3fd0c` | reject | skill-prometheus §2: triggers only, and grayskull-power already arms code-yoda every session; a catch-all description steals every neighbour's traffic |
 | Core: ultra becomes "push back before building" | reject | code-yoda's ultra ships the one-liner and challenges the rest in the same breath (§3, §5); stalling on a question the run can default is the thing §3 forbids |
 | Core: cache example, "Persistence" block, Caveman pairing removed | reject | the cache example teaches the three levels in one line each and stays; the persistence hype and the Caveman plug were never taken |
 | Review: target default — what the user names, else uncommitted changes, else the last commit | adopt | review.md § The target |
@@ -102,7 +102,7 @@ grayskull-power's arming turns that into one `A` ticket,
 `absorb ponytail <old>..<new> into code-yoda`. The procedure is the one in
 `skills/design-arwen/UPSTREAM.md` §When the check reports a change, with
 `code-yoda` for `arwen`: read the diff, map each changed rule to a section here
-or say why it does not land, RED then GREEN with `skill-smith`, then bump the
+or say why it does not land, RED then GREEN with `skill-prometheus`, then bump the
 row's commit and date and rerun until it prints `unchanged`.
 
 ## License

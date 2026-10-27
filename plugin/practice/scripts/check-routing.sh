@@ -39,6 +39,7 @@ clone-odo|clone this app
 clone-odo|how close is my clone
 clone-odo|what do X's users hate
 clone-odo|is anything of the original left
+skill-prometheus|a skill isn't triggering
 EOF
 grep -q 'relay-morpheus' "$root/commands/marathon.md" 2>/dev/null || { echo "FAIL: commands/marathon.md missing or does not load relay-morpheus" >&2; fails=$((fails + 1)); }
 [ "$fails" = 0 ] || exit 1

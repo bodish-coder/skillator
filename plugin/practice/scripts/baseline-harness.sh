@@ -1,5 +1,5 @@
 #!/bin/sh
-# Baseline harness for skill testing (skills/skill-smith/references/testing.md).
+# Baseline harness for skill testing (skills/skill-prometheus/references/testing.md).
 # Rebuilds, from nothing, the two things a recorded verdict needs beside it:
 # the fixture the run happened in, and the exact command that ran it.
 #

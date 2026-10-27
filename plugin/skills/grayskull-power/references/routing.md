@@ -20,6 +20,7 @@ any of them in front re-runs the same work and burns the budget the build needs.
 `build-vision` and `build-ultron` are retired names that redirect here; style
 words ("use fable", "opus only", "cheap", "full ceremony") are settings of
 build-jarvis's grade, not other skills.
+`skill-smith` is the retired name of `skill-prometheus`; it redirects there.
 
 **"Build X" → `build-jarvis` directly**, every time: a direct request, a
 feature `tickets-zordon` has just logged, an F ticket picked off the board or
@@ -51,7 +52,7 @@ that backwards is how a session produces confident wrong work.
 | Auth, secrets, input handling, anything user-facing | `security-review` |
 | Accessibility as the subject — an a11y/WCAG audit, "can't tab to it", "screen reader reads nothing", contrast failures, AT or CI wiring | `a11y-toph` (inside a design task it stays arwen's gate) |
 | A terminal UI's rendering as the subject, no feature behind it — a TUI/curses/Textual/Rich screen that must be proven to draw, "wrong in a narrow terminal", "the footer wraps", mojibake box characters, or no pty to drive it | `tui-tron` (a TUI feature to build is `build-jarvis`, which runs tui-tron as its UI design step and render proof) |
-| The deliverable is itself a skill, or a skill isn't triggering | `skill-smith` |
+| The deliverable is itself a skill, or a skill isn't triggering | `skill-prometheus` |
 | Branch lifecycle | PRACTICE §8 — isolation, then the finish menu |
 
 ## The loop — see it actually work

@@ -68,7 +68,7 @@ grayskull-power's arming turns that into one `A` ticket,
 2. **Map it.** For each changed rule or tool, name the clone-odo file and
    section it lands in, or say why it does not land (another skill owns it, it
    is outside the clean-room scope, it is a hand-off line already).
-3. **RED, then GREEN, with `skill-smith`.** Write a scenario today's clone-odo
+3. **RED, then GREEN, with `skill-prometheus`.** Write a scenario today's clone-odo
    fails because the new rule is missing. Run it and keep the failing
    transcript. Then edit clone-odo in its own voice (depth in `references/`,
    SKILL.md within its budget) and rerun until it passes. A tool change ports

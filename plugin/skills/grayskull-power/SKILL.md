@@ -65,7 +65,7 @@ One skill at a time; chaining "to be safe" is the failure.
 | Over-engineering · repo bloat · the shortcut ledger | `code-yoda` (review · audit · debt) |
 | UI-only polish · TUI rendering · watch it live | `design-arwen` (never `frontend-design`) · `tui-tron` · `live-friday` |
 | A mock UI to make real · a spec only in chat · clone an app | `designui-galadriel` · `spec-watson` · `clone-odo` |
-| Screenshots · auth/secrets · a skill | `screenshot-argus` · `security-review` · `skill-smith` |
+| Screenshots · auth/secrets · a skill | `screenshot-argus` · `security-review` · `skill-prometheus` |
 | Merge · deploy · ending · resuming | `mergeprep-oracle`→`merge-smith` · `deploy-merlin`→`deploy-niyoj` · `handoff-cortana` · `resume-cortana` |
 | A staged run, marathon · written tasks · Obi-Wan | `relay-morpheus` · `tasks-sentinels` · `holo-r2d2` |
 | Own a long goal | `chief-fury` |

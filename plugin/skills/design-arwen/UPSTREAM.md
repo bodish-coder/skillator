@@ -55,7 +55,7 @@ automatically. Whoever takes that ticket:
    or say why it does not land (another skill owns it, it is a category default
    arwen refuses, it is a polish number). Use the F23a report's table as the
    template, and append the new rows to that report.
-3. **RED, then GREEN, with `skill-smith`.** Write a scenario that today's arwen
+3. **RED, then GREEN, with `skill-prometheus`.** Write a scenario that today's arwen
    fails because the new rule is missing. Run it and keep the failing transcript.
    Then edit arwen in its own voice (depth in `references/`, SKILL.md within its
    budget) and rerun until it passes. The existing arwen GREENs are the
