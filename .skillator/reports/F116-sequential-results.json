@@ -1,0 +1,86 @@
+[
+  {
+    "test": "tests\\agents.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\alphabet.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\assign.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\band.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\board.test.ts",
+    "exit": 0
+  },
+  {
+    "test": "tests\\commands.test.ts",
+    "exit": 0
+  },
+  {
+    "test": "tests\\diagnose.test.ts",
+    "exit": 0
+  },
+  {
+    "test": "tests\\explorer.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\facts.test.ts",
+    "exit": 0
+  },
+  {
+    "test": "tests\\health.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\host.test.ts",
+    "exit": 0
+  },
+  {
+    "test": "tests\\messages.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\model.test.ts",
+    "exit": 0
+  },
+  {
+    "test": "tests\\pane.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\reconcile.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\restore.test.ts",
+    "exit": 0
+  },
+  {
+    "test": "tests\\runs.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\runtab.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\status.test.tsx",
+    "exit": 0
+  },
+  {
+    "test": "tests\\team.test.ts",
+    "exit": 0
+  },
+  {
+    "test": "tests\\workflows.test.tsx",
+    "exit": 0
+  }
+]
