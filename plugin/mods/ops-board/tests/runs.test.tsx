@@ -99,6 +99,18 @@ type World = {
   resume: Record<string, string>          // F85: a run's resume text, over the CHAIN_* ones
   git: Record<string, number>             // F99: merge-base --is-ancestor <sha> HEAD's exit code per sha
   gitDown?: string                        // F99: git cannot be asked - every git call refused with this
+  // F104: Close's run-branch reads and its one write
+  branches: Record<string, boolean>       // rev-parse --verify --quiet <b>: 0 when true, else 1
+  fork?: string                           // merge-base --fork-point HEAD <b>; unset: exit 1
+  base?: string                           // merge-base HEAD <b>
+  log: string                             // log --format=%H%x1f%s <range>
+  merges?: string                         // the merge commits log prints before w.log unless --no-merges
+  line?: string                           // rev-list --first-parent --parents <fork>..<b>: the run's own line, "sha p1 [p2]" newest first
+  stages?: string[]                       // second parents grown from the run line (merge-base --is-ancestor <own> <p2> exit 0)
+  under?: Record<string, string>          // what a ^<sha> on git log hides: its lines of w.log
+  reflog?: string                         // the run branch's reflog, newest first; unset: no reflog
+  stageWrites: (readonly string[])[]      // relay-morpheus ... stage argv
+  stageResult?: ProcessRunResult
 }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
@@ -107,7 +119,7 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   const w: World = {
     files: { '/r/TICKETS.md': BOARD, [ROOT + '/skills/tickets-zordon/scripts/ticket-meta.sh']: '#!/bin/sh\n' },
     list: LIST, queue: ran('queued: RUN-0014\n'), runs: [], submits: [], toasts: [], inFlight: 0, maxInFlight: 0, resume: {},
-    git: {},
+    git: {}, branches: {}, log: '', stageWrites: [],
   }
   const at = (p: string) => p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')
   const clock = mock.clock(on, { now: new Date(2026, 9, 18, 12, 0).getTime() })
@@ -142,9 +154,24 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
       return { value: w.resume[id!] !== undefined ? ran(w.resume[id!]!) : id === 'RUN-0014' ? ran(CHAIN_14) : id === 'RUN-0012' ? ran(CHAIN_12) : id === 'RUN-0013' ? ran(CHAIN_13) : ran('', 1, 'no such run') }
     }
     if (a[1] === RELAY + '.sh' && a[2] === 'queue-run') return { value: w.queue }
-    // F99: Diagnose's git reads
-    if (a[0] === 'git' && w.gitDown) return { deny: w.gitDown }
-    if (a[0] === 'git' && a[1] === 'merge-base') return { value: ran('', w.git[a[3]!] ?? 128) }
+    // F104: Close's one write, either spelling
+    if ((a[1] === RELAY + '.sh' && a[3] === 'stage') || (win && a[7] === 'stage')) { w.stageWrites.push(a); return { value: w.stageResult ?? ran('') } }
+    // F99: Diagnose's git reads (F104: git by absolute path on Windows)
+    const isGit = a[0] === 'git' || a[0]!.endsWith('/git.exe')
+    if (isGit && w.gitDown) return { deny: w.gitDown }
+    if (isGit && a[1] === 'rev-parse') return { value: w.branches[a[4]!] ? ran('9a9a\n') : ran('', 1) }
+    if (isGit && a[1] === 'merge-base' && a[2] === '--fork-point') return { value: w.fork ? ran(w.fork + '\n') : ran('', 1) }
+    if (isGit && a[1] === 'merge-base' && a[2] === 'HEAD') return { value: w.base ? ran(w.base + '\n') : ran('', 1) }
+    if (isGit && a[1] === 'log') {
+      let log = w.log
+      for (const x of a.filter(x => x.startsWith('^'))) log = log.replace(w.under?.[x.slice(1)] ?? '\0', '')
+      return { value: ran((a.includes('--no-merges') ? '' : w.merges ?? '') + log) }
+    }
+    if (isGit && a[1] === 'rev-list' && a[2] === '--first-parent') return { value: ran(w.line ?? '') }
+    if (isGit && a[1] === 'merge-base' && a[2] === '--is-ancestor' && a[4] !== 'HEAD') return { value: ran('', w.stages?.includes(a[4]!) ? 0 : 1) }
+    if (isGit && a[1] === 'reflog' && a[2] === 'exists') return { value: ran('', w.reflog ? 0 : 1) }
+    if (isGit && a[1] === 'rev-list' && a[2] === '--walk-reflogs') return { value: ran(w.reflog ?? '') }
+    if (isGit && a[1] === 'merge-base') return { value: ran('', w.git[a[3]!] ?? 128) }
     if (a.includes('decide')) return { value: ran('UNOBSERVABLE\n') }
     return { value: ran('', 1, 'not in this test') }
   })
@@ -506,8 +533,9 @@ test('F99 Diagnose: inconsistent - a stage in flight whose ticket is [x]; the by
   expect((await ui.find({ key: 'diag:line:1' }))?.text).toBe('driver @cc-gone: last heartbeat 183m ago, stale at 20m - a stage is still marked in flight')
   expect((await ui.find({ key: 'diag:byhand:0' }))?.text).toBe(`${BY_HAND} <sha>`)
   expect(await ui.find({ key: 'diag:close' })).toBeUndefined()
-  // list and resume read fresh, then only the landed sha asked of git
-  expect(w.runs.slice(before).map(a => a[0] === 'git' ? a.join(' ') : a[2])).toEqual(['list', 'resume', 'git merge-base --is-ancestor abc1 HEAD'])
+  // list and resume read fresh, then only the landed sha asked of git (F104: and the run branch, read-only, for Close)
+  expect(w.runs.slice(before).map(a => a[0] === 'git' ? a.join(' ') : a[2])).toEqual(['list', 'resume', 'git merge-base --is-ancestor abc1 HEAD',
+    'git rev-parse --verify --quiet run/RUN-0020-marathon'])
   await ui.press({ key: 'diag:back' })
   // the stage's own landed cell: its sha when on HEAD, else the placeholder
   const cell = WF_RUN(`@cc-gone ${stampAgo(183)}`, '~').replace('| 137 | AAA9 B10 muse | ~ | - | - | - |', '| 137 | AAA9 B10 muse | ~ | - | - | beef01 |')
@@ -627,6 +655,296 @@ test('F99: only finished runs - a blank row between "no relay run open" and the 
   const [i, j] = [nodes.findIndex(x => x.key === 'none'), nodes.findIndex(x => x.key === 'run:RUN-0011')]
   expect(i >= 0 && j > i).toBe(true)
   expect(nodes.slice(i + 1, j).some(x => !x.key && x.text === ' ')).toBe(true)
+  await ui.unmount()
+})
+
+// F104: Diagnose's Close - a closable stage (pending / ~ / open, its tickets built, no live driver)
+// lands a derived sha through relay-morpheus after a confirm that re-reads everything.
+const STALE = `@cc-gone ${stampAgo(183)}`
+const B10_BUILT = BOARD.replace('- [ ] B2 — cart', '- [ ] B2 — cart\n- [x] B10 — muse\n- [x] A155 — yoda')
+const WITH_CELL = (state: string, cell: string, driver = STALE) =>
+  WF_RUN(driver, state).replace(`| 137 | AAA9 B10 muse | ${state} | - | - | - |`, `| 137 | AAA9 B10 muse | ${state} | - | - | ${cell} |`)
+const BRANCH = 'run/RUN-0020-marathon'
+const [SHA_A, SHA_C, SHA_D, SHA_E] = ['a1'.padEnd(40, 'a'), 'c0ffee'.padEnd(40, '0'), 'd00d'.padEnd(40, 'd'), 'e1'.padEnd(40, 'e')]
+const SH_WRITE = (sha: string) => ['/bin/sh', RELAY + '.sh', 'RUN-0020', 'stage', '137', 'x', '', sha]
+const closeWorld = (on: On, run: string, env: Record<string, string> = {}) => {
+  const [w, clock] = f85World(on, run, env)
+  w.files['/r/TICKETS.md'] = B10_BUILT
+  w.git = { abc1: 0 }
+  return [w, clock] as const
+}
+type UI = Awaited<ReturnType<typeof runsTab>>
+async function diagnoseOpen($: Engine, clock: MockClock): Promise<UI> {
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+  await clock.settle()
+  await ui.press({ key: 'diagnose:RUN-0020' })
+  await clock.settle()
+  return ui
+}
+const again = async (ui: UI, clock: MockClock) => {
+  await ui.press({ key: 'diag:back' })
+  await ui.press({ key: 'diagnose:RUN-0020' })
+  await clock.settle()
+}
+const closeKeys = async (ui: UI) => (await ui.findAll({})).map(x => x.key).filter((k): k is string => !!k && k.startsWith('diag:close:'))
+const diagLines = async (ui: UI) => (await ui.findAll({})).filter(x => x.key?.startsWith('diag:line:')).map(x => x.text)
+
+test('F104 Close offered for a stage whose landed cell is on HEAD; confirm names the argv; Close runs relay-morpheus stage x with the owner cell kept', async ($, on) => {
+  const [w, clock] = closeWorld(on, WITH_CELL('~', 'beef01'))
+  w.git.beef01 = 0
+  const ui = await diagnoseOpen($, clock)
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with beef01')
+  expect((await ui.find({ key: 'diag:close:why:137' }))?.text).toBe('landed cell on HEAD')
+  expect(w.stageWrites).toEqual([])
+  await ui.press({ key: 'diag:close:137' })
+  expect((await ui.find({ key: 'diag:confirm' }))?.text).toBe('Close stage 137 of RUN-0020?')
+  expect((await ui.find({ key: 'diag:confirm:runs' }))?.text).toBe(`runs    sh "${RELAY}.sh" RUN-0020 stage 137 x '' beef01`)
+  expect((await ui.find({ key: 'diag:confirm:landed' }))?.text).toBe('landed  beef01  (landed cell on HEAD)')
+  expect(w.stageWrites).toEqual([])
+  await ui.press({ key: 'diag:close:go' })
+  await clock.settle()
+  expect(w.stageWrites).toEqual([SH_WRITE('beef01')])
+  const t = w.toasts.find(x => x.startsWith('✓ stage 137 of RUN-0020 landed beef01'))
+  expect(t).toContain(`ran: /bin/sh ${RELAY}.sh RUN-0020 stage 137 x  beef01`)
+  await ui.unmount()
+})
+
+test('F104 the sha from the run branch\'s own range, ticket id matched case-insensitively, newest first', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~'))
+  w.branches = { [BRANCH]: true }
+  w.fork = 'f0f0'
+  w.log = `${SHA_E}\x1fAB10 not a whole word\n${SHA_C}\x1fb10: muse pane\n${SHA_D}\x1fF81 reconcile\n${SHA_A}\x1fB10 first try\n`
+  w.git[SHA_C] = 0
+  const ui = await diagnoseOpen($, clock)
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
+  expect((await ui.find({ key: 'diag:close:why:137' }))?.text).toBe(`c0ffee0 "b10: muse pane" on ${BRANCH}`)
+  expect(w.runs).toContainEqual(['git', 'rev-parse', '--verify', '--quiet', BRANCH])
+  expect(w.runs).toContainEqual(['git', 'merge-base', '--fork-point', 'HEAD', BRANCH])
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'f0f0..' + BRANCH])
+  expect(w.runs).toContainEqual(['git', 'merge-base', '--is-ancestor', SHA_C, 'HEAD'])
+  await ui.press({ key: 'diag:close:137' })
+  await ui.press({ key: 'diag:close:go' })
+  await clock.settle()
+  expect(w.stageWrites).toEqual([SH_WRITE(SHA_C)])
+  // no fork point in the reflog: the plain merge-base is the range's start
+  w.fork = undefined
+  w.base = 'b0b0'
+  await again(ui, clock)
+  expect(w.runs).toContainEqual(['git', 'merge-base', 'HEAD', BRANCH])
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'b0b0..' + BRANCH])
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
+  // merged into HEAD: merge-base answers the tip (an empty range); the branch's oldest reflog entry is its fork
+  w.base = 'a7a7'
+  w.reflog = 'a7a7\n5e5e\nf1f1\n'
+  await again(ui, clock)
+  expect(w.runs).toContainEqual(['git', 'reflog', 'exists', 'refs/heads/' + BRANCH])
+  expect(w.runs).toContainEqual(['git', 'rev-list', '--walk-reflogs', 'refs/heads/' + BRANCH])
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'f1f1..' + BRANCH])
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
+  await ui.unmount()
+})
+
+test('F104 a stage merge or a board commit naming the ticket, newer than its own commit, is never the sha', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~'))
+  const [SHA_M, SHA_B] = ['m1'.padEnd(40, '1'), 'b0a4d'.padEnd(40, '2')]
+  w.branches = { [BRANCH]: true }
+  w.fork = 'f0f0'
+  w.merges = `${SHA_M}\x1fmerge stage 140 (run/RUN-0020-marathon-b10-s140)\n`
+  // main merged into the run branch: its board commit falls in the range, newer, and on HEAD
+  w.log = `${SHA_B}\x1fboard: testing B10\n${SHA_C}\x1fB10: muse pane\n`
+  w.git = { ...w.git, [SHA_M]: 0, [SHA_B]: 0, [SHA_C]: 0 }
+  const ui = await diagnoseOpen($, clock)
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'f0f0..' + BRANCH])
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
+  await ui.unmount()
+})
+
+test('F104 what a merge of main into the run brought (a side branch merged into main too) is never the sha; a stage merge\'s commits stay', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~'))
+  const [SHA_MM, SHA_MS, SHA_T, SHA_ST, SHA_S, SHA_H] = ['a1'.padEnd(40, 'a'), 'a2'.padEnd(40, 'a'), 'a3'.padEnd(40, 'a'), 'a4'.padEnd(40, 'a'), 'a5'.padEnd(40, 'a'), 'a6'.padEnd(40, 'a')]
+  w.branches = { [BRANCH]: true }
+  w.reflog = `${SHA_MS}\n${SHA_MM}\n${SHA_C}\nf1f1\n`
+  // the run line newest first: merge stage (p2 SHA_ST, forked off the run line), merge main (p2 SHA_T), B10: muse pane
+  w.line = `${SHA_MS} ${SHA_MM} ${SHA_ST}\n${SHA_MM} ${SHA_C} ${SHA_T}\n${SHA_C} f1f1\n`
+  w.stages = [SHA_ST]
+  w.under = { [SHA_T]: `${SHA_S}\x1fB10: side branch work\n${SHA_H}\x1fB10: main hotfix\n` }
+  w.log = `${SHA_D}\x1fF81 reconcile\n${SHA_S}\x1fB10: side branch work\n${SHA_H}\x1fB10: main hotfix\n${SHA_C}\x1fB10: muse pane\n`
+  // HEAD = main, the run not landed: main's commits are on HEAD, the run's is not
+  w.git = { ...w.git, [SHA_S]: 0, [SHA_H]: 0, [SHA_C]: 1, [SHA_D]: 1 }
+  const ui = await diagnoseOpen($, clock)
+  expect(w.runs).toContainEqual(['git', 'rev-list', '--first-parent', '--parents', 'f1f1..' + BRANCH])
+  expect(w.runs).toContainEqual(['git', 'merge-base', '--is-ancestor', SHA_C, SHA_T])
+  expect(w.runs).toContainEqual(['git', 'merge-base', '--is-ancestor', SHA_C, SHA_ST])
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'f1f1..' + BRANCH, '^' + SHA_T])
+  expect(w.runs.some(a => a[0] === 'git' && a[1] === 'rev-list' && a.includes('f1f1..HEAD'))).toBe(false)
+  expect(await closeKeys(ui)).toEqual([])
+  expect(await diagLines(ui)).toContain(`stage 137: c0ffee0 "B10: muse pane" is on ${BRANCH} but not on HEAD - land the run first - close by hand`)
+  // the run landed (merged into main, or main fast-forwarded to it, or HEAD on the run branch): every sha on HEAD
+  w.git = { ...w.git, [SHA_C]: 0, [SHA_D]: 0 }
+  await again(ui, clock)
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
+  expect((await ui.find({ key: 'diag:close:why:137' }))?.text).toBe(`c0ffee0 "B10: muse pane" on ${BRANCH}`)
+  await ui.unmount()
+})
+
+test('F104 a run-file branch starting with - never reaches git', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~').replace('branch: run/RUN-0020-marathon', 'branch: --output=x'))
+  const ui = await diagnoseOpen($, clock)
+  expect(w.runs.some(a => a[0] === 'git' && a.some(x => x.startsWith('--output')))).toBe(false)
+  expect(await diagLines(ui)).toContain('stage 137: run branch "--output=x" starts with - - not asked of git - close by hand')
+  await ui.unmount()
+})
+
+test('F104 a double press on Close writes once', async ($, on) => {
+  const [w, clock] = closeWorld(on, WITH_CELL('~', 'beef01'))
+  w.git.beef01 = 0
+  const ui = await diagnoseOpen($, clock)
+  await ui.press({ key: 'diag:close:137' })
+  await Promise.all([ui.press({ key: 'diag:close:go' }), ui.press({ key: 'diag:close:go' }).catch(() => {})])
+  await clock.settle()
+  expect(w.stageWrites).toEqual([SH_WRITE('beef01')])
+  await ui.unmount()
+})
+
+test('F104 a matching commit not on HEAD, or none in the range, or the branch gone: no Close, the by-hand line, said why', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~'))
+  w.branches = { [BRANCH]: true }
+  w.fork = 'f0f0'
+  w.log = `${SHA_C}\x1fB10 muse\n`
+  w.git[SHA_C] = 1
+  const ui = await diagnoseOpen($, clock)
+  expect(await closeKeys(ui)).toEqual([])
+  expect(await diagLines(ui)).toContain(`stage 137: c0ffee0 "B10 muse" is on ${BRANCH} but not on HEAD - land the run first - close by hand`)
+  expect((await ui.find({ key: 'diag:byhand:0' }))?.text).toBe(`${BY_HAND} <sha>`)
+  w.log = `${SHA_D}\x1fF81 reconcile\n`
+  await again(ui, clock)
+  expect(await closeKeys(ui)).toEqual([])
+  expect(await diagLines(ui)).toContain(`stage 137: no commit for B10 between f0f0..${BRANCH} - close by hand`)
+  w.branches = {}
+  await again(ui, clock)
+  expect(await closeKeys(ui)).toEqual([])
+  expect(await diagLines(ui)).toContain(`stage 137: ${BRANCH} is gone (landed and removed?) and no landed sha on HEAD - close by hand`)
+  expect(w.stageWrites).toEqual([])
+  await ui.unmount()
+})
+
+test('F104 git that cannot be asked says not checked, never missing', async ($, on) => {
+  const [w, clock] = closeWorld(on, WITH_CELL('~', 'beef01'))
+  w.gitDown = 'EACCES'
+  const ui = await diagnoseOpen($, clock)
+  expect(await closeKeys(ui)).toEqual([])
+  expect((await diagLines(ui)).some(l => /^stage 137: close not checked - git merge-base: .*EACCES$/.test(l ?? ''))).toBe(true)
+  expect((await diagLines(ui)).some(l => /missing|is gone|no commit/.test(l ?? ''))).toBe(false)
+  w.gitDown = undefined
+  w.git.beef01 = 128
+  await again(ui, clock)
+  expect(await closeKeys(ui)).toEqual([])
+  expect(await diagLines(ui)).toContain('stage 137: close not checked - git merge-base exit 128')
+  expect(w.stageWrites).toEqual([])
+  await ui.unmount()
+})
+
+test('F104 the confirm re-checks: a driver alive since, or a stage no longer open, refuses and writes nothing', async ($, on) => {
+  const [w, clock] = closeWorld(on, WITH_CELL('~', 'beef01'))
+  w.git.beef01 = 0
+  const ui = await diagnoseOpen($, clock)
+  await ui.press({ key: 'diag:close:137' })
+  w.resume['RUN-0020'] = WITH_CELL('~', 'beef01', `@cc-2 ${stampAgo(1)}`)
+  await ui.press({ key: 'diag:close:go' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toBe('■ stage 137 of RUN-0020 not closed: stage 137 driven by @cc-2 1m ago - not closable')
+  expect(w.stageWrites).toEqual([])
+  expect(await ui.find({ key: 'diag:confirm' })).toBeUndefined()
+  await ui.press({ key: 'diag:close:137' })
+  w.resume['RUN-0020'] = WITH_CELL('x', 'beef01')
+  await ui.press({ key: 'diag:close:go' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toBe('■ stage 137 of RUN-0020 not closed: stage 137 is no longer open')
+  expect(w.stageWrites).toEqual([])
+  // its ticket moved [x] -> [~] on the board since the last poll: TICKETS.md is read again, refused
+  w.resume['RUN-0020'] = WITH_CELL('~', 'beef01')
+  await again(ui, clock)
+  await ui.press({ key: 'diag:close:137' })
+  w.files['/r/TICKETS.md'] = B10_BUILT.replace('- [x] B10 — muse', '- [~] B10 — muse')
+  await ui.press({ key: 'diag:close:go' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toBe('■ stage 137 of RUN-0020 not closed: stage 137 is no longer closable')
+  expect(w.stageWrites).toEqual([])
+  w.files['/r/TICKETS.md'] = B10_BUILT
+  // the sha moved since the confirm: refused too
+  w.resume['RUN-0020'] = WF_RUN(STALE, '~')
+  w.branches = { [BRANCH]: true }
+  w.fork = 'f0f0'
+  w.log = `${SHA_C}\x1fB10 muse\n`
+  w.git[SHA_C] = 0
+  await again(ui, clock)
+  await ui.press({ key: 'diag:close:137' })
+  w.log = `${SHA_D}\x1fB10 muse again\n${SHA_C}\x1fB10 muse\n`
+  w.git[SHA_D] = 0
+  await ui.press({ key: 'diag:close:go' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toBe('■ stage 137 of RUN-0020 not closed: the commit changed since the confirm - look again')
+  expect(w.stageWrites).toEqual([])
+  await ui.unmount()
+})
+
+test('F104 cancel, Esc and Back run nothing', async ($, on) => {
+  const [w, clock] = closeWorld(on, WITH_CELL('~', 'beef01'))
+  w.git.beef01 = 0
+  const ui = await diagnoseOpen($, clock)
+  await ui.press({ key: 'diag:close:137' })
+  await ui.press({ key: 'diag:close:cancel' })
+  expect(await ui.find({ key: 'diag:confirm' })).toBeUndefined()
+  expect(await ui.find({ key: 'diag:close:137' })).toBeDefined()
+  await ui.press({ key: 'diag:close:137' })
+  await ui.press({ key: 'diag:back' })
+  await clock.settle()
+  expect(await ui.find({ key: 'diag:title' })).toBeUndefined()
+  expect(w.stageWrites).toEqual([])
+  expect(w.runs.some(a => a.includes('stage'))).toBe(false)
+  await ui.unmount()
+})
+
+for (const state of ['?', '!']) {
+  test(`F104 parked and failed stages never get Close (${state})`, async ($, on) => {
+    const [w, clock] = closeWorld(on, WITH_CELL(state, 'beef01'))
+    w.git.beef01 = 0
+    const ui = await diagnoseOpen($, clock)
+    expect((await ui.find({ key: 'diag:title' }))?.text).toContain('Diagnose RUN-0020')
+    expect(await closeKeys(ui)).toEqual([])
+    expect(w.stageWrites).toEqual([])
+    await ui.unmount()
+  })
+}
+
+test('F104 on Windows the write is the ps1 form with no -Owner', async ($, on) => {
+  const [w, clock] = closeWorld(on, WITH_CELL('~', 'beef01'), { OS: 'Windows_NT', PATH: 'C:/git/cmd' })
+  w.files['/git/cmd/git.exe'] = ''
+  w.git.beef01 = 0
+  const ui = await diagnoseOpen($, clock)
+  expect((await ui.find({ key: 'diag:confirm:runs' }))).toBeUndefined()
+  await ui.press({ key: 'diag:close:137' })
+  expect((await ui.find({ key: 'diag:confirm:runs' }))?.text)
+    .toBe(`runs    powershell -NoProfile -ExecutionPolicy Bypass -File "${RELAY}.ps1" -Mode stage -Id RUN-0020 -N 137 -State x -Landed beef01`)
+  await ui.press({ key: 'diag:close:go' })
+  await clock.settle()
+  expect(w.stageWrites).toEqual([['C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', RELAY + '.ps1',
+    '-Mode', 'stage', '-Id', 'RUN-0020', '-N', '137', '-State', 'x', '-Landed', 'beef01']])
+  expect(w.stageWrites[0]).not.toContain('-Owner')
+  await ui.unmount()
+})
+
+test('F104 a relay failure is shown with what ran', async ($, on) => {
+  const [w, clock] = closeWorld(on, WITH_CELL('~', 'beef01'))
+  w.git.beef01 = 0
+  w.stageResult = ran('', 2, 'no stage 137 in .skillator/run-0020-marathon.md\n')
+  const ui = await diagnoseOpen($, clock)
+  await ui.press({ key: 'diag:close:137' })
+  await ui.press({ key: 'diag:close:go' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toBe(`■ stage 137 of RUN-0020 not closed: no stage 137 in .skillator/run-0020-marathon.md\nran: /bin/sh ${RELAY}.sh RUN-0020 stage 137 x  beef01`)
+  expect(w.toasts.some(x => x.startsWith('✓ stage 137'))).toBe(false)
   await ui.unmount()
 })
 
