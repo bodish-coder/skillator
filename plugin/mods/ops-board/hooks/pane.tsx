@@ -39,6 +39,7 @@ const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
 const tabA = atom({ plugin: 'ops-board', key: 'tab' } as const, 'tickets')
 const asciiA = atom({ plugin: 'ops-board', key: 'ascii' } as const, false)
 const selectedA = atom({ plugin: 'ops-board', key: 'selected' } as const, null)
+const ticketOffsetA = atom({ plugin: 'ops-board', key: 'ticketOffset' } as const, null)
 const expandedA = atom({ plugin: 'ops-board', key: 'expanded' } as const, null)
 const filterA = atom({ plugin: 'ops-board', key: 'filter' } as const, { app: null, who: null, mine: false, showDone: false })
 const filterOpenA = atom({ plugin: 'ops-board', key: 'filterOpen' } as const, false)
@@ -68,9 +69,11 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
   const out: RenderElement[] = []
   const glyphs = v.ascii ? ASCII : UNI
   const entries: RenderElement[] = []
+  const list = m.lines.slice(m.lines.findIndex(l => l.key === 'gap') + 1, m.lines.findIndex(l => l.key === 'gap2'))
+  const w = windowOf(m, v.rows ? Math.max(1, v.rows - chromeRows(v, m, glyphs).total) : null, v.offset)
   const f = v.filter
   const hasTeam = v.team.length > 0
-  const setFilter = (fn: (f: Filter) => Filter) => { void update($, filterA, fn) }
+  const setFilter = (fn: (f: Filter) => Filter) => { void update($, ticketOffsetA, () => null); void update($, filterA, fn) }
 
   // filter row
   if (v.filterOpen && Select) {
@@ -109,6 +112,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
     const head = cutTo(headText(g, glyphs, !!v.ascii), v.cols - (v.ascii ? 0 : 2), glyphs.cut)
     entries.push(
       <Button key={hk} plain onPress={() => {
+        void update($, ticketOffsetA, () => null)
         // the header stands for a ticket hidden in it (moved there by an edit): opening lands on it
         void update($, selectedA, x => (hk === m.selected && x && !x.startsWith('head:') && g.tickets.some(t => t.id === x) ? x : hk))
         void update($, openA, x => toggleGroup(x, g.box))
@@ -125,6 +129,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       const body = v.ascii && isSel ? '> ' + row.text.slice(2) : row.text
       entries.push(
         <Button key={'row:' + t.id} plain onPress={() => {
+          void update($, ticketOffsetA, () => null)
           void update($, selectedA, () => t.id)
           void update($, expandedA, x => (x === t.id ? null : t.id))
         }}>
@@ -156,14 +161,19 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       }
       if (v.expanded === t.id) {
         const raw = `    - [${t.box}] ${t.line}`
-        entries.push(<Box key={'raw:' + t.id} flexDirection="column">{Array.from({ length: Math.ceil(raw.length / v.cols) }, (_, i) => <Text dimColor>{raw.slice(i * v.cols, (i + 1) * v.cols)}</Text>)}</Box>)
+        const at = list.slice(0, entries.length).reduce((n, l) => n + l.rows, 0)
+        const from = Math.max(0, w.start - at), to = Math.min(Math.ceil(raw.length / v.cols), w.end - at)
+        entries.push(<Box key={'raw:' + t.id} flexDirection="column">{Array.from({ length: Math.max(0, to - from) }, (_, i) => <Text dimColor>{raw.slice((from + i) * v.cols, (from + i + 1) * v.cols)}</Text>)}</Box>)
       }
     }
   }
 
-  const w = windowOf(m, v.rows ? Math.max(1, v.rows - chromeRows(v, m, glyphs).total) : null)
   if (w.above) out.push(<Box key="more:up"><Text dimColor>{`  ${glyphs.more} ${w.above} rows above ${glyphs.up}`}</Text></Box>)
-  out.push(...(m.groups.length ? entries.slice(w.start, w.end) : entries))
+  let at = 0
+  out.push(...(m.groups.length ? entries.filter((_, i) => {
+    const start = at; at += list[i]!.rows
+    return start < w.end && at > w.start
+  }) : entries))
   if (w.below) out.push(<Box key="more:down"><Text dimColor>{`  ${glyphs.more} ${w.below} more rows ${glyphs.down}`}</Text></Box>)
   out.push(<Text key="gap2"> </Text>)
   const c = m.count
@@ -197,7 +207,7 @@ export async function readView($: EngineInterface, cols: number, rows: number | 
     board: await read($, boardA), team: await read($, teamA), me: await read($, meA),
     filter: await read($, filterA), filterOpen: await read($, filterOpenA),
     selected: await read($, selectedA), expanded: await read($, expandedA), open: await read($, openA), cols,
-    ascii: await read($, asciiA), rows, unread,
+    ascii: await read($, asciiA), rows, unread, offset: await read($, ticketOffsetA),
   }
 }
 

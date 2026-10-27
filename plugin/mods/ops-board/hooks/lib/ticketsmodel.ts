@@ -26,6 +26,7 @@ export type View = {
   board: Board | null; team: Member[]; me: string | null; filter: Filter; filterOpen: boolean
   selected: string | null; expanded: string | null; open: State[]; cols: number
   ascii?: boolean; rows?: number | null // omitted by the standalone ops app
+  offset?: number | null              // list rows; null follows the selection
   unread?: number
 }
 
@@ -77,12 +78,12 @@ export function chromeRows(v: View, m: Model, g: Glyphs) {
   return { tabs, count, keys, total: tabs + 3 + count + keys }
 }
 
-export function windowOf(m: Model, avail: number | null) {
+export function windowOf(m: Model, avail: number | null, offset: number | null = null) {
   const list = m.lines.slice(m.lines.findIndex(l => l.key === 'gap') + 1, m.lines.findIndex(l => l.key === 'gap2'))
   const heights = [0]
   for (const l of list) heights.push(heights[heights.length - 1]! + l.rows)
   const n = list.length, total = heights[n]!
-  if (avail === null || total <= avail) return { start: 0, end: n, above: 0, below: 0 }
+  if (avail === null || total <= avail) return { start: 0, end: total, above: 0, below: 0 }
   const sel = Math.max(0, list.findIndex(l => l.key === lineKey(m.selected ?? '')))
   const a = Math.max(1, avail)
   let start = 0, end = 0
@@ -94,7 +95,11 @@ export function windowOf(m: Model, avail: number | null) {
     while (start < sel && /^(chips|raw):/.test(list[start]!.key)) start++
     while (end < n && heights[end + 1]! - heights[start]! + (start > 0 ? 1 : 0) + (end + 1 < n ? 1 : 0) <= a) end++
   }
-  return { start, end, above: heights[start]!, below: total - heights[end]! }
+  // Window physical rows, including a slice of an expanded block taller than the list.
+  const top = offset === null ? heights[start]! : Math.max(0, Math.min(offset, total - Math.max(1, a - 1)))
+  const room = a - (top > 0 && a > 1 ? 1 : 0)
+  const bottom = Math.min(total, top + room - (top + room < total && room > 1 ? 1 : 0))
+  return { start: top, end: bottom, above: top, below: total - bottom }
 }
 
 export const HEAD = 'head:'

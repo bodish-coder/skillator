@@ -125,6 +125,7 @@ declare module 'claude-code' {
       tab: 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
       ascii: boolean
+      ticketOffset: number | null    // pinned Tickets list; null follows selection
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
       runsOpen: ('runs' | 'workflows' | 'agents')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]

@@ -9,13 +9,14 @@ import { gitBin, NO_SCRIPTS, readUsage, runCall } from './lib/host'
 import { parseRuns } from './lib/runs'
 import { HIDDEN, restoreClaudeMd, RESTORE_NOTE } from './lib/restore'
 import { countsOf, renderBand, statusText } from './band'
-import { buildModel, lineKey, offsetFor, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
+import { buildModel, lineKey, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
 import type { Tab } from './pane'
+import { ASCII, UNI, chromeRows, windowOf } from './lib/ticketsmodel'
 import { cancelPerson, clearForm, isFormUp } from './assign'
 import { applyReconcile } from './reconcile'
 import { closeEngage, dropEngage, isEngageUp, pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
-import { closeSetup, enterMessages, isSetupUp, pollInbox } from './messagestab'
+import { closeSetup, enterMessages, isSetupUp, pollInbox, unreadOf } from './messagestab'
 import { closeRunForm, dropRunForm, enterRun, isRunFormUp } from './runtab'
 import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, isActionUp, isExplorerItem } from './explorertab'
 
@@ -32,6 +33,8 @@ const asciiA = atom({ plugin: 'ops-board', key: 'ascii' } as const, false)
 const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)
 const tabA = atom({ plugin: 'ops-board', key: 'tab' } as const, 'tickets')
 const selectedA = atom({ plugin: 'ops-board', key: 'selected' } as const, null)
+const ticketOffsetA = atom({ plugin: 'ops-board', key: 'ticketOffset' } as const, null)
+const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 const narrowA = atom({ plugin: 'ops-board', key: 'narrow' } as const, false)
 const machineA = atom({ plugin: 'ops-board', key: 'machine' } as const, null)
 const usageA = atom({ plugin: 'ops-board', key: 'usage' } as const, null)
@@ -577,26 +580,38 @@ export const register: Register = on => {
 
   // Up/down: the arrows on a focused pane arrive as scrolls with no pointer. One
   // row moves the selection instead of the window; the window follows only when
-  // the selection would leave it. Wheel ticks and page keys scroll as ever.
+  // the selection would leave it. Wheel/page input moves the pinned list's own window.
   // F61: the selection walks the group headers and the rows of open groups, and the
   // focus ring follows it, so Enter opens or closes the header shown selected.
   on('ui.scroll', { requestId: 'ops-board' }, async ($, e, next) => {
+    if ((await read($, tabA)) === 'tickets' && !(await isFormUp($)) && !(await isSetupUp($)) && !(await read($, teamViewA))) {
+      if (e.origin.kind !== 'person') return next(e)
+      const v = await readView($, lastCols, e.bodyRows, await unreadOf($))
+      const m = buildModel(v)
+      const room = Math.max(1, e.bodyRows - chromeRows(v, m, v.ascii ? ASCII : UNI).total)
+      if (e.pointer || Math.abs(e.by) !== 1) {
+        const w = windowOf(m, room, v.offset)
+        // offset is already clamped to the rendered tree. by retains the input distance.
+        const by = e.pointer ? e.by : Math.sign(e.by) * Math.min(Math.abs(e.by), Math.max(1, room - 2))
+        await update($, ticketOffsetA, () => windowOf(m, room, w.start + by).start)
+      } else {
+        const at = m.selected === null ? -1 : m.items.indexOf(m.selected)
+        const to = m.items[at + e.by]
+        await update($, ticketOffsetA, () => null)
+        if (to) {
+          await update($, selectedA, () => to)
+          void $.ui.focus({ requestId: PANE_ID, key: lineKey(to) }).catch(() => {})
+        }
+      }
+      return lastScroll.offset ? next({ ...e, offset: 0 }) : {}
+    }
     if (e.pointer || e.origin.kind !== 'person' || Math.abs(e.by) !== 1) return next(e)
     if ((await read($, tabA)) === 'explorer') {           // F75: the Explorer's own items
       if (await isActionUp($)) return next(e)             // F103: the confirm scrolls as itself
       const o = await arrowExplorer($, e.by, lastScroll.offset, e.bodyRows, lastCols)
       return o === undefined ? next(e) : o === null || e.contentRows <= e.bodyRows ? {} : next({ ...e, offset: o })
     }
-    if ((await read($, tabA)) !== 'tickets' || (await isFormUp($))) return next(e)   // a form scrolls as itself
-    const m = buildModel(await readView($, lastCols))
-    const at = m.selected === null ? -1 : m.items.indexOf(m.selected)
-    const to = m.items[at + e.by]
-    if (at < 0 || !to) return next(e)
-    await update($, selectedA, () => to)
-    void $.ui.focus({ requestId: PANE_ID, key: lineKey(to) }).catch(() => {})   // a site not holding the keys: no ring to move
-    if (e.contentRows <= e.bodyRows) return {}
-    const offset = offsetFor(m, to, lastScroll.offset, e.bodyRows)
-    return offset === null ? {} : next({ ...e, offset })
+    return next(e)   // other tabs and forms keep the host's scrolling
   }).catch(($, e, next) => next(e))   // failing, the arrow scrolls as the engine would
 
   // F78: the Tickets tab's `r` - a forced poll here, where the poll lives.
@@ -627,6 +642,7 @@ export const register: Register = on => {
   // Tab and shift-Tab walk the row and header buttons: the ring landing on one selects it.
   on('ui.focus', { requestId: 'ops-board' }, async ($, e, next) => {
     const el = e.element
+    if (el?.startsWith('row:') || el?.startsWith('head:')) await update($, ticketOffsetA, () => null)
     if (el?.startsWith('row:')) await update($, selectedA, () => el.slice(4))
     else if (el?.startsWith('head:')) await update($, selectedA, () => el)
     else if (el && isExplorerItem(el)) await focusExplorer($, el)          // F75

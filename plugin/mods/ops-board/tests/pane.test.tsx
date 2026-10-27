@@ -108,6 +108,69 @@ const state = async ($: Engine, key: 'selected' | 'expanded' | 'narrow' | 'tab' 
 
 const SURFACES = ['terminal', 'desktop'] as const
 
+for (const ascii of [false, true]) {
+  test(`A161: wheel and page keys reach every expanded row with fixed chrome, ASCII ${ascii}`, WITH, async ($, on) => {
+    const raw = 'long detail '.repeat(50) + 'LAST-DETAIL'
+    const [, clock] = world(on, { '/r/TICKETS.md': `- [ ] F1 — ${raw}\n` }, true, undefined, ascii ? { SKILLATOR_ASCII: '1' } : {})
+    await start($, clock)
+    const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: 40, scroll: { offset: 0, bodyRows: 14 } })
+    await ui.press({ key: 'head: ' })
+    await ui.press({ key: 'row:F1' })
+    expect(await ui.find({ key: 'raw:F1' })).toBeDefined()
+    const seen = new Set<string>()
+    const collect = async () => {
+      const detail = await ui.find({ key: 'raw:F1' })
+      for (const child of detail?.children ?? []) seen.add(labelOf(child))
+      expect(await frameRows(ui, 40)).toBeLessThanOrEqual(14)
+      for (const key of ['tabs', 'filters', 'count', 'keys']) expect(await ui.find({ key })).toBeDefined()
+    }
+    await collect()
+    // The host clamps offset to zero because our rendered frame fits. by still carries the wheel distance.
+    for (let i = 0; i < 25; i++) {
+      await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 0, by: 1, bodyRows: 14, contentRows: 14,
+        origin: { kind: 'person' }, pointer: { column: 3, row: 6 } })
+      await collect()
+    }
+    const full = `    - [ ] F1 — ${raw}`
+    for (let i = 0; i < full.length; i += 40) expect(seen.has(full.slice(i, i + 40)), full.slice(i, i + 40)).toBe(true)
+    expect((await ui.find({ key: 'raw:F1' }))?.text).toContain('LAST-DETAIL')
+    for (let i = 0; i < 8; i++) await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 0, by: -14, bodyRows: 14, contentRows: 14, origin: { kind: 'person' } })
+    expect(await ui.find({ key: 'row:F1' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test(`A161: PageDown reaches the last ticket without moving selection, ASCII ${ascii}`, WITH, async ($, on) => {
+    const many = Array.from({ length: 30 }, (_, i) => `- [ ] F${i + 1} — ticket ${i + 1}`).join('\n')
+    const [w, clock] = world(on, { '/r/TICKETS.md': many }, true, undefined, ascii ? { SKILLATOR_ASCII: '1' } : {})
+    await start($, clock)
+    const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: 40, scroll: { offset: 0, bodyRows: 14 } })
+    await ui.press({ key: 'head: ' })
+    await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:F1', origin: { kind: 'person' } })
+    const seen = new Set(await rowKeys(ui))
+    for (let i = 0; i < 12; i++) {
+      await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 0, by: 14, bodyRows: 14, contentRows: 14, origin: { kind: 'person' } })
+      for (const key of await rowKeys(ui)) seen.add(key)
+      expect(await frameRows(ui, 40)).toBeLessThanOrEqual(14)
+    }
+    expect(await ui.find({ key: 'row:F30' })).toBeDefined()
+    expect(seen.size).toBe(30)
+    expect(await state($, 'selected')).toBe('F1')
+    expect(w.offsets.every(offset => offset === 0)).toBe(true)
+    await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 0, by: 1, bodyRows: 14, contentRows: 14, origin: { kind: 'person' } })
+    expect(await state($, 'selected')).toBe('F2')
+    expect(await ui.find({ key: 'row:F2' })).toBeDefined()
+    await ui.press({ key: 'key:assign' })
+    expect((await ui.find({ key: 'form:title' }))?.text).toContain('Assign F2')
+    const before = w.scrolls
+    await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 2, by: 14, bodyRows: 14, contentRows: 16, origin: { kind: 'person' } })
+    expect(w.scrolls).toBe(before + 1)
+    expect(w.offsets.at(-1)).toBe(2)
+    await ui.press({ key: 'cancel' })
+    expect(await ui.find({ key: 'row:F2' })).toBeDefined()
+    await ui.unmount()
+  })
+}
+
 const mountPane = ($: Engine, surface: (typeof SURFACES)[number], props = PANE) =>
   $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: PANE_ID, props })
 
@@ -346,10 +409,10 @@ for (const surface of SURFACES) {
     expect(w.scrolls).toBe(0)
     // the selected row is drawn inverted
     expect((await ui.find({ key: 'row:B2' }))?.children.some(c => (c as { props?: { inverse?: boolean } }).props?.inverse)).toBe(true)
-    // a wheel tick (pointer present) scrolls as the engine does
+    // a wheel tick moves the list without moving the fixed chrome
     await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 1, by: 1, bodyRows: 10, contentRows: 30,
       origin: { kind: 'person' }, pointer: { column: 3, row: 2 } })
-    expect(w.scrolls).toBe(1)
+    expect(w.scrolls).toBe(0)
 
     await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:F1', origin: { kind: 'person' } })
     expect(await state($, 'selected')).toBe('F1')
@@ -368,19 +431,22 @@ for (const surface of SURFACES) {
     const setup = await mountPane($, surface)
     await openAll(setup)
     await setup.unmount()
-    const ui = await mountPane($, surface, { ...PANE, scroll: { offset: 0, bodyRows: 6 } })
+    const ui = await mountPane($, surface, { ...PANE, scroll: { offset: 0, bodyRows: 14 } })
     await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:F3', origin: { kind: 'person' } })
     const arrow = (by: number) => $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 1, by,
-      bodyRows: 6, contentRows: 20, origin: { kind: 'person' } })
+      bodyRows: 14, contentRows: 14, origin: { kind: 'person' } })
     await arrow(1)
     await arrow(1)
-    // B2 and its chips are lines 7-8 (tabs, filters, gap, IN PROGRESS, F3, chips, BLOCKED): the window moves to 3.
+    // The list follows the selection while the host window remains on its chrome.
     expect(await state($, 'selected')).toBe('B2')
-    expect(w.offsets.at(-1)).toBe(3)
+    expect(await ui.find({ key: 'row:B2' })).toBeDefined()
+    expect(w.scrolls).toBe(0)
     const before = w.scrolls
     for (let i = 0; i < 5; i++) await arrow(1)            // the PENDING DECISION header, F2, the PENDING header, F1, B1
     expect(await state($, 'selected')).toBe('B1')
-    expect(w.scrolls).toBe(before + 5)
+    expect(w.scrolls).toBe(before)
+    expect(await ui.find({ key: 'row:B1' })).toBeDefined()
+    expect(await frameRows(ui, PANE.bodyColumns)).toBeLessThanOrEqual(14)
     await ui.unmount()
   })
 

@@ -59,7 +59,7 @@ test('F111 weighted raw lines fit the window; chips never start without their ro
   const board = parseBoard(Array.from({ length: 12 }, (_, i) => `- [ ] F${i + 1} — ${'long title '.repeat(6)} [owner: @sher]`).join('\n'), '/r/T', 1, 1)
   for (const selected of ['F1', 'F3', 'F8', 'F12']) {
     const m = buildModel(view({ board, selected, expanded: 'F3', open: [' '], cols: 40 }))
-    const list = m.lines.slice(3, -3)
+    const list = m.lines.slice(3, -3).flatMap(l => Array.from({ length: l.rows }, () => ({ key: l.key, rows: 1 })))
     const w = windowOf(m, 6)
     const drawn = list.slice(w.start, w.end)
     expect(drawn.some(l => l.key === 'row:' + selected)).toBe(true)
@@ -67,6 +67,21 @@ test('F111 weighted raw lines fit the window; chips never start without their ro
     expect(drawn.reduce((n, l) => n + l.rows, 0) + (w.above ? 1 : 0) + (w.below ? 1 : 0)).toBeLessThanOrEqual(6)
     expect(w.above + w.below + drawn.reduce((n, l) => n + l.rows, 0)).toBe(list.reduce((n, l) => n + l.rows, 0))
   }
+})
+
+test('A161: physical-row windows include every slice of oversized raw text', () => {
+  const board = parseBoard('- [ ] F1 — ' + 'long detail '.repeat(50), '/r/T', 1, 1)
+  const m = buildModel(view({ board, selected: 'F1', expanded: 'F1', open: [' '], cols: 40, rows: 14 }))
+  const list = m.lines.slice(3, -3).flatMap(l => Array.from({ length: l.rows }, () => l.key))
+  expect(list.filter(k => k === 'raw:F1').length).toBeGreaterThan(6)
+  const seen = new Set<number>()
+  for (let offset = 0; offset < list.length; offset++) {
+    const w = windowOf(m, 6, offset)
+    expect(w.end - w.start + Number(w.above > 0) + Number(w.below > 0)).toBeLessThanOrEqual(6)
+    for (let row = w.start; row < w.end; row++) seen.add(row)
+  }
+  expect(seen.size).toBe(list.length)
+  expect(windowOf(m, null).end).toBe(list.length)
 })
 test('F111 unread count participates in tab wrapping', () => {
   const v = view({ cols: 60, ascii: true, unread: 3 })
