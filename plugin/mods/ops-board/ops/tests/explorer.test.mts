@@ -178,3 +178,26 @@ test('A159 an upstream read failing (not 128) clears the counts and Incoming', (
 test('--tab explorer is a tab the app opens on', () => {
   assert.equal(parseArgs(['--tab', 'explorer'], {}).tab, 'explorer')
 })
+
+// A164: use real Git to distinguish an unborn branch from detached HEAD.
+test('A164 shared branch query works before the first commit and identifies detached HEAD safely', async () => {
+  const { mkdtempSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { spawnSync } = await import('node:child_process')
+  const { BRANCH_ARGS, EMPTY, planAction } = await import('../../hooks/lib/explorer')
+  const repo = mkdtempSync(join(tmpdir(), 'ops-a164-'))
+  const run = (...args: string[]) => spawnSync('git', args, { cwd: repo, encoding: 'utf8' })
+  try {
+    assert.equal(run('init', '-b', 'main').status, 0)
+    const unborn = run(...BRANCH_ARGS)
+    assert.equal(unborn.status, 0, unborn.stderr)
+    assert.equal(unborn.stdout.trim(), 'main')
+    assert.equal(run('-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--allow-empty', '-m', 'initial').status, 0)
+    assert.equal(run('checkout', '--detach').status, 0)
+    const detached = run(...BRANCH_ARGS)
+    assert.equal(detached.status, 0, detached.stderr)
+    assert.equal(detached.stdout.trim(), '')
+    assert.match((planAction(EMPTY, 'push', { branch: detached.stdout.trim() || 'HEAD', head: '', root: repo, dirty: 0 }) as { refused: string }).refused, /HEAD is detached/)
+  } finally { rmSync(repo, { recursive: true, force: true }) }
+})

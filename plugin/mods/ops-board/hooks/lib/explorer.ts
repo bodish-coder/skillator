@@ -43,7 +43,7 @@ export const changeArgs = (sha: string) =>
 export const UPSTREAM_ARGS = ['rev-parse', '--abbrev-ref', '@{upstream}']
 export const COUNT_ARGS = ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}']   // "A\tB": ahead A, behind B
 export const INCOMING_ARGS = [...LOG_ARGS, 'HEAD..@{upstream}']
-export const BRANCH_ARGS = ['rev-parse', '--abbrev-ref', 'HEAD']
+export const BRANCH_ARGS = ['branch', '--show-current']   // unborn: branch name; detached: empty
 export const DIRTY_ARGS = ['status', '--porcelain', '--untracked-files=no']
 export const BRANCHES_ARGS = ['branch', '--format=%(refname:short)']
 export const HEAD_ARGS = ['rev-parse', 'HEAD']
