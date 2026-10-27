@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T02:38Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T02:53Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -10,7 +10,7 @@ branch: run/RUN-0023-pending-f100-f104
 | 167 | AABZ F100 build-jarvis UI entry | x | build:opus | 2026-10-26T15:47Z | f39b942 |
 | 168 | AAB0 F102 ops font size | x | build:opus | 2026-10-26T16:22Z | c297369 |
 | 169 | AAB1 F101 marathon without Workflow | x | subagent | 2026-10-27T01:47Z | f06d0fc |
-| 170 | AAB2 F103 explorer git actions | ~ | subagent | 2026-10-27T02:05Z | - |
+| 170 | AAB2 F103 explorer git actions | x | subagent | 2026-10-27T02:53Z | 7fc77ff |
 | 171 | AAB3 F104 diagnose close |   | - | - | - |
 | 172 | verify review bump commit |   | - | - | - |
 | 173 | AAB4 F105 codex $ops opens the board | x | subagent | 2026-10-27T02:37Z | 1264371 |
@@ -21,23 +21,6 @@ branch: run/RUN-0023-pending-f100-f104
 | 181 | AACA F110 rename skill-smith to skill-prometheus |   | - | - | - |
 
 ## In flight
-### stage 170 - AAB2 F103 explorer git actions  (dispatched 2026-10-27T02:05Z, @sher)
-run: -
-prompt: |
-  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
-
-  Ticket F103 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/66a4199e-bee7-472b-9aaa-61fc26982c2a/scratchpad/design-2026-10-26-f103-explorer-git-actions.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths name the main checkout C:/tools/Projects/skillator2/...; use the same relative paths under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 instead. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. CRITICAL: every git action shows its exact argv and runs only after a confirm; never --force; pull --ff-only; merge stops on conflict. Tests pin argv, confirm-runs and cancel-does-not.
-
-  The ticket line, verbatim:
-  - [ ] F103 — Explorer: incoming commits and git actions. Owner 2026-10-26: 'in explorer have option to pull items in commits which are not local / options of reverse merge push like any git app'. Today the Explorer tab (F75, plugin/mods/ops-board/hooks/explorertab.tsx, lib/explorer.ts) is read-only: git ls-files and git log of local HEAD only. Done when: the Commits section shows ahead/behind against the upstream after a fetch the owner starts (f), the incoming commits listed apart and opening to their changes like local ones; actions on keys, each naming the exact git command and asking a confirm before it runs - pull (fast-forward only by default), push (never --force), revert a selected commit (git revert, a new commit), merge a chosen branch into the current one (stops on conflict, says so, never auto-resolves); no action on a dirty tree that git itself would refuse; a failed command shows git's message; run worktrees and run/ branches are named as such and warned before any action on them; tests pin confirm-runs, cancel-does-not, and the exact argv per action; the ops app twin gets the read-only ahead/behind view or a ruling why not.
-
-  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F103: ".
-
-  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
-
-  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
-
-  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
 ### stage 178 - AAB7 F106 start claims the owner  (dispatched 2026-10-27T02:38Z, @sher)
 run: -
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s178
@@ -276,3 +259,4 @@ prompt: |
 - Ruling: 173 runs beside 170, so dispatch gave it the stage worktree .s173; its agent gets the stored prompt with that worktree substituted (.skillator/prompts/run-0023-s173-wt.txt) - cost if wrong: none.
 - Ruling: stage 173 F105 merged into the run branch at 1264371, both installer selftests ok on it; lands with 170. Stage 170 F103 review (read-only, opus) said FIX-FIRST: bare git push follows remote.*.push / mirror config (verified force and delete), plan not re-checked at Run, in-progress ops and detached HEAD not refused, merge argv lacks --; one fix seat takes all 8 findings (prompt run-0023-s170-fix1.txt, opus) - cost if wrong: one more review round.
 - Ruling: 178 F106 runs beside the 170 fix seat in stage worktree .s178; prompt with that worktree substituted (.skillator/prompts/run-0023-s178-wt.txt) - cost if wrong: none.
+- Ruling: stage 170 F103 landed at 7fc77ff after re-review LAND (all 8 findings closed, mirror and +refspec re-tested); four non-blocking leftovers logged as 159 - cost if wrong: a follow-up ticket.
