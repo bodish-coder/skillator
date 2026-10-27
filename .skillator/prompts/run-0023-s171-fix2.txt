@@ -1,0 +1,25 @@
+Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+Ticket F104 (Diagnose Close) - review fix round 2. You are a FIX seat: fix the one finding below in shaFor (plugin/mods/ops-board/hooks/runstab.tsx) and its tests (plugin/mods/ops-board/tests/runs.test.tsx). Nothing else; keep every round-1 fix. Do not load build-jarvis.
+
+Worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s171 (branch run/RUN-0023-pending-f100-f104-s171). Round 1 is f968db8. The reviewer's copy of the current logic is C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/f104/shafor-fix1.mjs and its scratch repo is .../scratchpad/f104/r2 - read both.
+
+Finding (HIGH, verified on the real repo and r2): the round-1 rule excludes `git rev-list --first-parent <fork>..HEAD`, i.e. only main's first-parent commits. A commit that reached main through a merge (main's second parent) and then came into the run through "merge main into RUN" stays in the range: on the real repo F97 picks 0b47677 (clone-odo branch, via d186426) with onHead true. Worse, after a fast-forward of main to the run, or with HEAD on the run branch, the run's own commit sits on HEAD's first-parent line and is hidden, and a side-branch commit for the same ticket is offered instead (r2: 709eee5 "F9: side branch work").
+
+Fix (the reviewer's): exclude what main brought into the run, not HEAD's first-parent line. Walk the merges on the run branch's own first-parent line from the fork; for each merge whose second parent is a main commit - not a stage branch forked off the run line (stage merges "merge stage N (...)" stay included) - add `^<merge>^2` to the git log. A simple test for "main commit": the second parent is not a descendant of the fork's run-line... choose the smallest rule that is right in all four r2 cases below and the real repo, and say it in the report. Drop the round-1 first-parent-of-HEAD exclusion if the new rule makes it unnecessary.
+
+Must hold (red first, then green, as tests with an r2-shaped git mock, plus a read-only run of your updated logic against the real repo and against r2):
+- r2: HEAD=main, run unmerged -> the run's "F9: implement", onHead false (refuse "land the run first").
+- r2: run merged into main non-ff -> "F9: implement", onHead true.
+- r2: main fast-forwarded to the run -> "F9: implement" (not the side branch), onHead true.
+- r2: HEAD on the run branch -> "F9: implement", never "F9: side branch work".
+- real repo run/RUN-0023-pending-f100-f104, HEAD=main: F100-F103 -> f39b942 f06d0fc c297369 7fc77ff, F105 -> 2326b57, F104 none, F97/F106/A157/A158 none (they came in through merge main).
+- every round-1 test still passes.
+
+Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s171/plugin/mods/ops-board (all pass); tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f104.json (no output). Write your updated logic copy as scratchpad/f104/shafor-fix2.mjs. Never run a relay write or Close against the real repo; real-repo git calls read-only. Commit messages start with "F104: ".
+
+Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s171 (branch run/RUN-0023-pending-f100-f104-s171), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+Report back: the commit sha, the rule chosen and why it is right in each case, the r2 and real-repo outputs, red then green, anything you could not verify (one line each).
