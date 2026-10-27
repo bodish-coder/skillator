@@ -236,11 +236,13 @@ team_file() {
 # F80: tickets-zordon's ticket-meta.sh - who may take a chain's tickets (pick) and
 # the claim a plan or dispatch makes (claim). RELAY_TICKET_META overrides (a
 # missing file = off: no skips, no claims). Run from the run file's repo.
-tmeta() {   # <args...>
+tmeta_at() {   # <dir> <args...>: ticket-meta run from <dir>; a missing file = off
+  _td=$1; shift
   _tmp=${RELAY_TICKET_META-$HERE/../../tickets-zordon/scripts/ticket-meta.sh}
   [ -f "$_tmp" ] || return 0
-  ( cd "$(dirname "$RUN")" && sh "$_tmp" "$@" )
+  ( cd "$_td" && sh "$_tmp" "$@" )
 }
+tmeta() { tmeta_at "$(dirname "$RUN")" "$@"; }
 chain_tickets() {   # [n]: the ticket ids of stage n's chain block (all stages when none)
   awk -v n="${1:-}" '/^## /{sec=$0; b=0; next}
     sec == "## Chain" && /^### / { b = (n == "" || $0 ~ ("^### [A-Z0-9]+ - stage " n " - ")); next }
@@ -882,6 +884,12 @@ cmd_board() {
     fi
     unlock; LOCK=$_bsv
   else rm -f "$_bf.tmp.$$"; unlock; LOCK=$_bsv; die "board: no ticket $bid in $_bf"; fi
+  # F106: a flip to ~ is a start - an unowned ticket goes to this session's person (ticket-meta
+  # claim, the same call plan/dispatch make); a refusal is a note, the flip stands.
+  if [ "$mk" = '~' ]; then
+    tmeta_at "$_bm" claim "$bid" >/dev/null 2>"$_bf.claim.$$" || sed 's/^/note: claim refused - /' "$_bf.claim.$$" >&2
+    rm -f "$_bf.claim.$$"
+  fi
   echo "$bid [$mk]"
 }
 
@@ -2525,6 +2533,13 @@ f80_selftest() {
   chain_plan "$t3" --prompt-file "$d8/p" --tickets F3 --files c.py >/dev/null 2>"$d8/err"
   grep -q "^- \[ \] F1 $em free \[owner: @asha\]\$" "$d8/TICKETS.md" || die "F80: chain plan did not claim F1: $(cat "$d8/TICKETS.md")"
   grep -q "^- \[ \] F3 $em theirs \[owner: @vidul\]\$" "$d8/TICKETS.md" || die "F80: chain plan took another's ticket"
+  # F106: a board flip to ~ claims an unowned ticket (the marathon's start path); another's is a note only
+  printf -- '%s\n' "- [ ] F4 $em unowned" >> "$d8/TICKETS.md"
+  ( cd "$d8" && SKILLATOR_ME=@asha cmd_board F4 '~' >/dev/null 2>"$d8/berr" ) || die "F106: board ~ failed: $(cat "$d8/berr")"
+  grep -q "^- \[~\] F4 $em unowned \[owner: @asha\]\$" "$d8/TICKETS.md" || die "F106: board ~ did not claim F4: $(grep F4 "$d8/TICKETS.md")"
+  ( cd "$d8" && SKILLATOR_ME=@asha cmd_board F3 '~' >/dev/null 2>"$d8/berr" ) || die "F106: board ~ on another's failed: $(cat "$d8/berr")"
+  grep -q "^- \[~\] F3 $em theirs \[owner: @vidul\]\$" "$d8/TICKETS.md" || die "F106: board ~ took another's ticket"
+  grep -q 'note: claim refused' "$d8/berr" || die "F106: board ~ on another's ticket did not note the refusal"
   grep -q 'F3 is owned by @vidul' "$d8/err" || die "F80: chain plan of another's ticket did not say so: $(cat "$d8/err")"
   out=$(RELAY_CHAIN_PARALLEL=3 chain_next --all)
   printf '%s\n' "$out" | grep -qx "NEXT $t1 $(code_of "$t1")" && printf '%s\n' "$out" | grep -qx "NEXT $t2 $(code_of "$t2")" ||

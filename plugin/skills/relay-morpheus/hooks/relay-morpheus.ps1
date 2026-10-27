@@ -995,13 +995,14 @@ function AllocCode($dir) {
 # F80: tickets-zordon's ticket-meta.ps1 - who may take a chain's tickets (pick) and
 # the claim a plan or dispatch makes (claim). RELAY_TICKET_META overrides (a missing
 # file = off: no skips, no claims). A child process, in the run file's directory.
-function TMeta([string[]]$a) {
+function TMeta([string[]]$a) { TMetaAt (Split-Path -Parent (Resolve-Path -LiteralPath $Run).Path) $a }
+function TMetaAt($dir, [string[]]$a) {   # ticket-meta run from $dir; a missing file = off
   $tm = $env:RELAY_TICKET_META
   if (-not $tm) { $tm = Join-Path $PSScriptRoot '..\..\tickets-zordon\scripts\ticket-meta.ps1' }
   if (-not (Test-Path -LiteralPath $tm -PathType Leaf)) { return $null }
   $psi = New-Object Diagnostics.ProcessStartInfo 'powershell'
   $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$tm`" " + (@($a | ForEach-Object { "`"$_`"" }) -join ' ')
-  $psi.WorkingDirectory = Split-Path -Parent (Resolve-Path -LiteralPath $Run).Path
+  $psi.WorkingDirectory = $dir
   $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
   $psi.StandardOutputEncoding = New-Object Text.UTF8Encoding($false)
   # no host to start = a failed call (OwnedMap fails closed on it); stderr read
@@ -1523,6 +1524,12 @@ function DoBoard {
       }
     }
   } finally { Unlock; $script:Lock = $sv }
+  # F106: a flip to ~ is a start - an unowned ticket goes to this session's person (ticket-meta
+  # claim, the same call plan/dispatch make); a refusal is a note, the flip stands.
+  if ($Mark -ceq '~') {
+    $r = TMetaAt $m (@('claim', $Ticket))
+    if ($r -and $r.code -ne 0) { foreach ($l in @($r.err -split "`r?`n" | Where-Object { $_ })) { [Console]::Error.WriteLine("note: claim refused - $l") } }
+  }
   "$Ticket [$Mark]"
 }
 
@@ -3704,6 +3711,18 @@ function F80Selftest($d) {
     $board = [IO.File]::ReadAllText($tb, $u8)
     if ($board -notmatch "(?m)^- \[ \] F1 $em free \[owner: @asha\]$") { Die "F80: chain plan did not claim F1: $board" }
     if ($board -notmatch "(?m)^- \[ \] F3 $em theirs \[owner: @vidul\]$") { Die "F80: chain plan took another's ticket: $board" }
+    # F106: a board flip to ~ claims an unowned ticket (the marathon's start path); another's is a note only
+    [IO.File]::AppendAllText($tb, "- [ ] F4 $em unowned`n", $u8)
+    $sw = New-Object IO.StringWriter; $olderr = [Console]::Error
+    Push-Location -LiteralPath $d8; $env:SKILLATOR_ME = '@asha'; $script:Mark = '~'
+    try {
+      $script:Ticket = 'F4'; DoBoard | Out-Null
+      [Console]::SetError($sw); $script:Ticket = 'F3'; DoBoard | Out-Null
+    } finally { [Console]::SetError($olderr); Pop-Location; $env:SKILLATOR_ME = $null; $script:Ticket = ''; $script:Mark = $null }
+    $board = [IO.File]::ReadAllText($tb, $u8)
+    if ($board -notmatch "(?m)^- \[~\] F4 $em unowned \[owner: @asha\]$") { Die "F106: board ~ did not claim F4: $board" }
+    if ($board -notmatch "(?m)^- \[~\] F3 $em theirs \[owner: @vidul\]$") { Die "F106: board ~ took another's ticket: $board" }
+    if ("$sw" -notmatch 'note: claim refused') { Die "F106: board ~ on another's ticket did not note the refusal: $sw" }
     $env:RELAY_CHAIN_PARALLEL = '3'; $script:All = $true
     try { $out = @(DoChainNext) } finally { $script:All = $false; $env:RELAY_CHAIN_PARALLEL = $null }
     if ($out -cnotcontains "NEXT $t1 $(CodeOf $t1)" -or $out -cnotcontains "NEXT $t2 $(CodeOf $t2)") { Die "F80: chain next -All did not pick the unassigned and my own: $($out -join ' | ')" }
