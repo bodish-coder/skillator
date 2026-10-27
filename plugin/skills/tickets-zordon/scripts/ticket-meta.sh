@@ -21,8 +21,11 @@
 #   ticket-meta.sh team remove @handle  that member out (warns on open tickets)
 #   ticket-meta.sh team list            "@handle: emails (Name)" per member, [lead] and (you) marked
 #   ticket-meta.sh team lead @handle|-  F80: set / hand over the one lead (no lead, or me is it); - clears
-#   ticket-meta.sh whoami               F80: my @handle (F92 session owner, SKILLATOR_ME, else git user.email via the team)
+#   ticket-meta.sh whoami               F80: my @handle (F92 session owner, SKILLATOR_ME, else git user.email via the team);
+#                                       F109: + `session: @<sid>  mode: <mode>` when there is a session
 #   ticket-meta.sh iam @handle          F92: this session's owner (.skillator/sessions/<tag>.owner)
+#   ticket-meta.sh stamp <ID>           F109: the trailing (@sid:owner:mode) tag only
+#   ticket-meta.sh session              F109: `<sid> <mode>` (`- <mode>` with no session)
 #   ticket-meta.sh claim <ID>...        F80: [owner: <me>], the box kept (plan / dispatch)
 #   ticket-meta.sh pick [ID...]         F80: `you: ..`, then `pick <ID>` / `skip <ID> <owner>`
 #   ticket-meta.sh reconcile [ID...]    F81: read-only, `ID [now] -> [proposed]  reason` per open row
@@ -47,6 +50,11 @@
 # A ticket's commits are the commits on HEAD whose subject names its ID as a
 # word (F1 never matches F12 or F1a). The board edited is the main checkout's
 # TICKETS.md; only the one ticket line changes, every other byte is kept.
+#
+# F109: with a session (SKILLATOR_SESSION, else CLAUDE_CODE_SESSION_ID -> cc-<4-char
+# code>) every write stamps the line's trailing tag `(@<sid>:<owner or ->:<mode>)`, mode
+# from SKILLATOR_MODE (direct|agent|run|workflow, default direct); the old one-field
+# `(@cc-xxxxxx)` stays valid and is replaced. A move out of [~] keeps the tag (A143).
 set -u
 LC_ALL=C
 export LC_ALL
@@ -319,9 +327,12 @@ edit_line() {
   # F62: [~] -> [%] is the working session's own next step, not a move away from it.
   if [ "$mk" = '~' ] && [ -n "${SET_MARK:-}" ] && [ "$SET_MARK" != '~' ] && [ "$SET_MARK" != '%' ]; then
     moved=1
-    sess=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/)) {
+    sess=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\(@[A-Za-z0-9_.:-]+\)[ \t]*$/)) {
           s = substr($0, RSTART + 1); sub(/\).*/, "", s); print s } }')
   fi
+  tag_text
+  [ "$moved" = 0 ] || SET_TAG=''
+  export SET_TAG
   eol=0
   [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ] && eol=1
   tmp="$f.ticket-meta.$$"
@@ -352,7 +363,7 @@ edit_line() {
     function setnote(line, note, pat) {
       if (match(line, pat))
         return substr(line, 1, RSTART - 1) note substr(line, RSTART + RLENGTH)
-      if (match(line, /[ \t]*\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/))
+      if (match(line, /[ \t]*\(@[A-Za-z0-9_.:-]+\)[ \t]*$/))
         return substr(line, 1, RSTART - 1) note substr(line, RSTART)
       sub(/[ \t]+$/, "", line)
       return line note
@@ -387,6 +398,11 @@ edit_line() {
         }
         if (ENVIRON["VFAIL_NOTE"] != "")
           line = setnote(line, " (verify failed " ENVIRON["VFAIL_NOTE"] ")", "[ \t]*\\(verify failed [^()]*\\)")
+        # F109: the trailing session tag - replaced (old or new shape) or appended
+        if (ENVIRON["SET_TAG"] != "") {
+          if (match(line, /[ \t]*\(@[A-Za-z0-9_.:-]+\)[ \t]*$/)) line = substr(line, 1, RSTART - 1) " (" ENVIRON["SET_TAG"] ")"
+          else { sub(/[ \t]+$/, "", line); line = line " (" ENVIRON["SET_TAG"] ")" }
+        }
       }
       if (NR > 1) printf "\n"
       printf "%s%s", line, cr }
@@ -418,15 +434,37 @@ id_and_handle() {
 
 lc() { printf '%s' "$1" | tr 'A-Z' 'a-z'; }
 
+# F109: the 4-character session code - h = (h*33 + byte) mod 36^4 over the raw id's
+# bytes, base36. The same fold in ticket-meta.ps1 and ops-board's team.ts; vectors in the selftest.
+session_code() {
+  printf '%s' "$1" | od -An -tu1 | awk '{ for (i = 1; i <= NF; i++) h = (h * 33 + $i) % 1679616 }
+    END { d = "0123456789abcdefghijklmnopqrstuvwxyz"; s = ""
+      for (i = 0; i < 4; i++) { s = substr(d, h % 36 + 1, 1) s; h = int(h / 36) }
+      print s }'
+}
+
 # F92: STAG <- this session's tag as tickets-zordon "Who touched it" names it, no @:
-# SKILLATOR_SESSION (any host), else Claude Code's session id -> cc-<last 6>; else ''.
+# SKILLATOR_SESSION (any host), else Claude Code's session id -> cc-<code> (F109); else ''.
 session_tag() {
   STAG=${SKILLATOR_SESSION:-}
   STAG=$(printf '%s' "${STAG#@}" | tr 'A-Z' 'a-z')
-  if [ -z "$STAG" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
-    STAG=cc-$(printf '%s' "$CLAUDE_CODE_SESSION_ID" | tr -cd 'A-Za-z0-9' | tr 'A-Z' 'a-z' | tail -c 6)
-  fi
+  if [ -z "$STAG" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then STAG=cc-$(session_code "$CLAUDE_CODE_SESSION_ID"); fi
   printf '%s' "$STAG" | grep -Eqx '[a-z0-9_-]+' || STAG=''   # a file name: no / or ..
+}
+
+# F109: MODE <- SKILLATOR_MODE, one of direct|agent|run|workflow (default direct).
+mode_of() {
+  MODE=${SKILLATOR_MODE:-direct}
+  case $MODE in direct|agent|run|workflow) ;; *) die "SKILLATOR_MODE must be direct|agent|run|workflow, not '$MODE'" ;; esac
+}
+
+# F109: SET_TAG <- "@sid:owner:mode", or '' when this session has no tag.
+tag_text() {
+  SET_TAG=''
+  session_tag; mode_of
+  [ -n "$STAG" ] || return 0
+  [ -n "${ME:-}" ] || me_of || :
+  o=${ME#@}; SET_TAG="@$STAG:${o:--}:$MODE"
 }
 
 # F92: iam @handle - this session's owner, asked at session start (grayskull-power's
@@ -443,7 +481,8 @@ cmd_iam() {
   sd="$MAIN/.skillator/sessions"
   mkdir -p "$sd" || die "cannot create $sd"
   [ -f "$sd/.gitignore" ] || printf '*\n' > "$sd/.gitignore" || die "cannot write $sd/.gitignore"
-  printf '%s\n' "$h" > "$sd/$STAG.owner" || die "cannot write $sd/$STAG.owner"
+  # F109: line 2 names the session, so a colliding code's file is not taken for this one's
+  printf '%s\nsession: %s\n' "$h" "${CLAUDE_CODE_SESSION_ID:-$STAG}" > "$sd/$STAG.owner" || die "cannot write $sd/$STAG.owner"
   echo "$h owns session @$STAG"
 }
 
@@ -457,9 +496,10 @@ me_of() {
   team_file > /dev/null || { ME_WHY='no .skillator/team.md'; return 1; }
   session_tag
   sf="$MAIN/.skillator/sessions/$STAG.owner"
-  if [ -n "$STAG" ] && [ -f "$sf" ]; then
-    mh=''; IFS= read -r mh < "$sf" || :
-    mh=${mh%"$CR"}
+  mh='' l2=''
+  if [ -n "$STAG" ] && [ -f "$sf" ]; then { IFS= read -r mh; IFS= read -r l2; } < "$sf" || :; mh=${mh%"$CR"} l2=${l2%"$CR"}; fi
+  # F109: a file whose line 2 names another session is not this one's (a one-line file is)
+  if [ -n "$STAG" ] && [ -f "$sf" ] && { [ -z "$l2" ] || [ "$l2" = "session: ${CLAUDE_CODE_SESSION_ID:-$STAG}" ]; }; then
     if one_line "$mh" && team_rows | awk '{ print $1 }' | grep -qxF -- "$mh"; then ME=$mh; return 0; fi
     ME_WHY="session owner $mh ($sf) is not in .skillator/team.md - iam @handle"; return 1
   fi
@@ -506,7 +546,20 @@ cmd_whoami() {
   [ $# -eq 0 ] || die "usage: whoami"
   me_of || die "$ME_WHY"
   echo "$ME"
+  session_tag; mode_of
+  [ -z "$STAG" ] || echo "session: @$STAG  mode: $MODE"
 }
+
+# F109: the trailing tag only - relay-morpheus's board flip stamps through this.
+cmd_stamp() {
+  [ $# -eq 1 ] || die "usage: stamp <ID>"
+  norm_id "$1"
+  session_tag
+  [ -n "$STAG" ] || { echo "no change: no session tag"; return 0; }
+  SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' SAME_KEY='' NEED_MARK='' edit_line
+}
+
+cmd_session() { [ $# -eq 0 ] || die "usage: session"; session_tag; mode_of; echo "${STAG:--} $MODE"; }
 
 # F80: planning or dispatching a ticket claims it: [owner: <me>], the box kept.
 # Mine already: no change. Another's: refused as a reassign is. No team file:
@@ -774,7 +827,7 @@ cmd_reconcile() {
         id = ord[i]; k = mk[id]; line = text[id]
         if (m > 0 && !(id in want)) continue
         if (k != " " && k != "~" && k != "!") continue
-        if (k == "~" && line ~ /\(@[A-Za-z]+-[A-Za-z0-9]+\)[ \t]*$/) continue
+        if (k == "~" && line ~ /\(@[A-Za-z0-9_.:-]+\)[ \t]*$/) continue
         # landed: a run stage on it decides (only x is), else a commit on main
         ev = (id in st) ? (st[id] == "x" ? stage(id) " " sland[id] : "") : (id in cn) ? cs[id] : ""
         o = owed(line); open = ""
@@ -1440,15 +1493,32 @@ selftest() {
   # F92: the session owner file (iam) wins over SKILLATOR_ME and git's email; not on the team: refused
   sh "$self" iam @vidul > /dev/null 2> "$T/err" && { echo "FAIL: iam with no session tag"; fail=1; }
   grep -q 'no session tag' "$T/err" || { echo "FAIL: iam with no session tag: $(cat "$T/err")"; fail=1; }
-  eq "iam" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD sh "$self" iam vidul 2>&1)" "@vidul owns session @cc-ab12cd"
-  [ -f .skillator/sessions/cc-ab12cd.owner ] || { echo "FAIL: iam wrote no .skillator/sessions/cc-ab12cd.owner"; fail=1; }
+  # F109: the sid is cc-<4-char code of the raw session id>; iam records the id on line 2
+  j() { tr -d '\r' | tr '\n' ' ' | sed 's/ $//'; }
+  eq "iam" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD sh "$self" iam vidul 2>&1)" "@vidul owns session @cc-o0kb"
+  [ -f .skillator/sessions/cc-o0kb.owner ] || { echo "FAIL: iam wrote no .skillator/sessions/cc-o0kb.owner"; fail=1; }
+  eq "owner file names the session" "$(sed -n 2p .skillator/sessions/cc-o0kb.owner)" "session: 0a1b-4c5d-AB12CD"
   [ -z "$(git status --porcelain -- .skillator)" ] || { echo "FAIL: the session file is not git-ignored"; fail=1; }
-  eq "whoami by session file" "$(CLAUDE_CODE_SESSION_ID=x-ab12cd SKILLATOR_ME=neo sh "$self" whoami 2>&1)" "@vidul"
-  eq "whoami by SKILLATOR_SESSION" "$(SKILLATOR_SESSION=@cc-ab12cd sh "$self" whoami 2>&1)" "@vidul"
-  eq "another session falls back" "$(CLAUDE_CODE_SESSION_ID=x-ffffff SKILLATOR_ME=neo sh "$self" whoami 2>&1)" "@neo"
+  eq "whoami by session file" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_ME=neo sh "$self" whoami 2>&1 | j)" "@vidul session: @cc-o0kb  mode: direct"
+  eq "iam by SKILLATOR_SESSION" "$(SKILLATOR_SESSION=@pi-ab12 sh "$self" iam asha 2>&1)" "@asha owns session @pi-ab12"
+  eq "whoami by SKILLATOR_SESSION" "$(SKILLATOR_SESSION=@pi-ab12 sh "$self" whoami 2>&1 | j)" "@asha session: @pi-ab12  mode: direct"
+  eq "another session falls back" "$(CLAUDE_CODE_SESSION_ID=x-ffffff SKILLATOR_ME=neo sh "$self" whoami 2>&1 | j)" "@neo session: @cc-5qtl  mode: direct"
+  # a colliding code (same file name, another id on line 2) is nobody's: falls back, never the other's owner
+  printf '@vidul\nsession: some-other-id\n' > .skillator/sessions/cc-o0kb.owner
+  eq "collision falls back" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_ME=neo sh "$self" whoami 2>&1 | j)" "@neo session: @cc-o0kb  mode: direct"
+  printf '@vidul\n' > .skillator/sessions/cc-o0kb.owner   # a pre-F109 one-line file is honoured
+  eq "one-line owner file" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD sh "$self" whoami 2>&1 | j)" "@vidul session: @cc-o0kb  mode: direct"
+  eq "session" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_MODE=run sh "$self" session 2>&1)" "cc-o0kb run"
+  eq "session, none" "$(run session)" "- direct"
+  SKILLATOR_MODE=bogus sh "$self" session > /dev/null 2> "$T/err" && { echo "FAIL: a bad mode was accepted"; fail=1; }
+  grep -q "SKILLATOR_MODE must be direct|agent|run|workflow, not 'bogus'" "$T/err" || { echo "FAIL: bad mode message: $(cat "$T/err")"; fail=1; }
+  # the code vectors (sh must match ps1 and team.ts)
+  for v in '0a1b-4c5d-AB12CD o0kb' 'x-ab12cd nzua' 'x-ffffff 5qtl' '982c2a-ab12-cd34-EF56 baru' 'sid-1 icym' 'ab 02jn' '147ee797-591f-4b4f-98fa-687ea69de7d9 im79'; do
+    set -- $v; eq "code $1" "$(CLAUDE_CODE_SESSION_ID=$1 sh "$self" session)" "cc-$2 direct"
+  done
   CLAUDE_CODE_SESSION_ID=x-ab12cd sh "$self" iam @nobody > /dev/null 2>&1 && { echo "FAIL: iam took a handle not on the team"; fail=1; }
-  printf '@nobody\n' > .skillator/sessions/cc-ab12cd.owner
-  CLAUDE_CODE_SESSION_ID=x-ab12cd sh "$self" whoami > /dev/null 2> "$T/err" && { echo "FAIL: whoami took a session owner not on the team"; fail=1; }
+  printf '@nobody\n' > .skillator/sessions/cc-o0kb.owner
+  CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD sh "$self" whoami > /dev/null 2> "$T/err" && { echo "FAIL: whoami took a session owner not on the team"; fail=1; }
   grep -q 'session owner @nobody' "$T/err" || { echo "FAIL: session owner refusal: $(cat "$T/err")"; fail=1; }
   rm -rf .skillator/sessions
   # pick: unassigned and mine picked, another's skipped with its owner; not on the team -> only unassigned
@@ -1474,6 +1544,17 @@ selftest() {
   git config user.email ghost@x.com
   eq "F106 start, not on the team" "$(run start F13)" "- [~] F13 $D Nobody note: F13 not claimed - not on the team: add ghost@x.com to .skillator/team.md"
   git config user.email asha@x.com
+  # F109: with a session id every write stamps (@sid:owner:mode); a move out of [~] keeps the worker's tag (A143)
+  printf -- '- [ ] F14 %s Fresh two\n' "$D" >> TICKETS.md
+  commit asha@x.com "board: f109 row"
+  eq "stamp on start" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD sh "$self" start F14 2>/dev/null | head -n 1 | tr -d '\r')" "- [~] F14 $D Fresh two [owner: @asha] (@cc-o0kb:asha:direct)"
+  eq "stamp replaces, mode run" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_MODE=run sh "$self" testing F14 live look 2>/dev/null | head -n 1 | tr -d '\r')" "- [%] F14 $D Fresh two [owner: @asha] (testing: live look) (@cc-o0kb:asha:run)"
+  eq "stamp replaces an old-shape tag" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD SKILLATOR_MODE=agent sh "$self" tag F7 2>/dev/null | head -n 1 | tr -d '\r')" "- [~] F7 $D Working [owner: @asha] (@cc-o0kb:asha:agent)"
+  CLAUDE_CODE_SESSION_ID=x-ffffff SKILLATOR_ME=asha sh "$self" assign F7 @neo > "$T/out" 2>&1
+  eq "A143: a move out of [~] keeps the worker's tag" "$(head -n 1 "$T/out" | tr -d '\r')" "- [ ] F7 $D Working [owner: @neo] (@cc-o0kb:asha:agent)"
+  grep -q 'F7 was in progress under @cc-o0kb:asha:agent' "$T/out" || { echo "FAIL: the warning names the new-shape tag: $(cat "$T/out")"; fail=1; }
+  eq "stamp" "$(CLAUDE_CODE_SESSION_ID=x-ffffff SKILLATOR_ME=neo SKILLATOR_MODE=workflow sh "$self" stamp F7 2>/dev/null | tr -d '\r')" "- [ ] F7 $D Working [owner: @neo] (@cc-5qtl:neo:workflow)"
+  eq "stamp, no session" "$(run stamp F7)" "no change: no session tag"
   # review: a closed ticket is not claimed
   sh "$self" claim F8 > /dev/null 2>&1 && { echo "FAIL: claim of a closed ticket succeeded"; fail=1; }
   grep -q "^- \[-\] F8 $D Dropped\$" TICKETS.md || { echo "FAIL: claim wrote onto a closed ticket: $(grep F8 TICKETS.md)"; fail=1; }
@@ -1600,7 +1681,8 @@ selftest() {
   eq "solo claim" "$(run claim F1)" "no change: no .skillator/team.md - nothing to claim"
   sh "$self" whoami > /dev/null 2>&1 && { echo "FAIL: whoami answered with no team.md"; fail=1; }
   eq "F106 solo start, no owner" "$(run start F1)" "- [~] F1 $D Thing (@cc-dddddd)"
-  eq "solo tag" "$(run tag F1)" "- [~] F1 $D Thing (@cc-dddddd)"
+  eq "stamp with no team" "$(CLAUDE_CODE_SESSION_ID=0a1b-4c5d-AB12CD sh "$self" stamp F1 2>/dev/null | tr -d '\r')" "- [~] F1 $D Thing (@cc-o0kb:-:direct)"
+  eq "solo tag" "$(run tag F1)" "- [~] F1 $D Thing (@cc-o0kb:-:direct)"
 
   # --- F66: the opt-in Teams status post runs after a successful edit and never
   # fails it; off (the default) it never runs. The Workflows URL is loopback port 1:
@@ -1709,7 +1791,7 @@ teams_post() {
   return 0
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|claim|pick|reconcile|unblock|start|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest"
 c=$1; shift
 SUB=$c
 [ "$c" = selftest ] && { selftest; exit 0; }
@@ -1734,6 +1816,8 @@ case $c in
   team) cmd_team "$@" ;;
   whoami) cmd_whoami "$@" ;;
   iam) cmd_iam "$@" ;;
+  stamp) cmd_stamp "$@" ;;
+  session) cmd_session "$@" ;;
   claim) cmd_claim "$@" ;;
   pick) cmd_pick "$@" ;;
   reconcile) cmd_reconcile "$@" ;;
