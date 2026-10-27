@@ -34,7 +34,7 @@ const countThen = (name: string): Then => r => s => setX(s, x => withUpstream(x,
 const incomingThen: Then = r => s => (r.code === 0 ? setX(s, x => withIncoming(x, r.out)) : s)
 const upstreamThen: Then = r => s => {
   if (r.code === 128) return setX(s, x => withUpstream(x, null, null))
-  if (r.code !== 0) return s
+  if (r.code !== 0) return setX(s, x => ({ ...x, upstream: null, incoming: null }))   // unread: no stale arrows drawn
   return { state: s, effects: [git(COUNT_ARGS, countThen(r.out.trim())), git(INCOMING_ARGS, incomingThen)] }
 }
 

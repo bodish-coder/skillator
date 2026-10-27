@@ -82,6 +82,8 @@ export function planAction(x: Explorer, kind: ActionKind, ctx: Here & { root: st
   const to = ctx.pushTo
   if (((kind === 'push' || kind === 'pull') && x.upstream === 'none') || (kind === 'push' && !(to?.remote && to.ref.startsWith('refs/heads/'))))
     return { refused: `no upstream for ${ctx.branch} - git push -u origin ${ctx.branch} by hand sets one` }
+  if (kind === 'push' && to!.remote.startsWith('-'))
+    return { refused: `remote ${to!.remote} starts with - - git push would read it as an option; rename the remote` }
   const warn: string[] = []
   if (isRunRef(ctx.branch)) warn.push(`on relay run branch ${ctx.branch} - runs land through relay-morpheus; continue only if you mean it`)
   if (isRunRef(ctx.root)) warn.push(`this checkout is a run worktree (${ctx.root})`)
