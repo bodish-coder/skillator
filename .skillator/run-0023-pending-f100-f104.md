@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T08:47Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T10:14Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -22,6 +22,8 @@ branch: run/RUN-0023-pending-f100-f104
 | 183 | AACC A159 explorer review leftovers | x | subagent | 2026-10-27T03:49Z | 72a17cd |
 | 184 | AACD F112 one marathon command, sequential or parallel |   | - | - | - |
 | 185 | AACE B15 Workflows agents missing |   | - | - | - |
+| 186 | AACF AACF B16 reconcile form with nothing pressable | ~ | subagent | 2026-10-27T10:14Z | - |
+| 187 | AACG F114 clone-odo for web Android iOS Windows |   | - | - | - |
 
 ## In flight
 ### stage 179 - AAB8 F109 session code and mode  (dispatched 2026-10-27T04:07Z, @sher)
@@ -43,8 +45,32 @@ prompt: |
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### stage 186 - AACF AACF B16 reconcile form with nothing pressable  (dispatched 2026-10-27T10:14Z, @sher)
+run: -
+worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s186
+branch: run/RUN-0023-pending-f100-f104-s186
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket B16 (bug) - you are its fix seat. The cause is reproduced and named; fix it test-first.
+
+  The ticket line, verbatim:
+  - [ ] B16 — Reconcile form opens with nothing pressable. Owner 2026-10-27: the reconcile buttons do nothing. Repro: ticket-meta reconcile prints one row, A157 [!] -> [!] evidence unclear; openReconcile in plugin/mods/ops-board/hooks/reconcile.tsx:26 tests rows.length, not the applicable rows, so the form opens with the row as plain text, no Accept all, no Apply picked - only None. Done when: a result with no applicable row toasts what reconcile said, each stays row with its reason, instead of a dead form; a test pins it red then green; claude plugin test and tsc clean. [owner: @sher]
+
+  Repro (verified by the orchestrator): `sh plugin/skills/tickets-zordon/scripts/ticket-meta.sh reconcile` on the main board prints exactly `A157 [!] -> [!]  evidence unclear: blocked on '...', no ticket to check`; canApply is false for it, so renderReconcile draws n=0. Fix in openReconcile only: when no row passes canApply, toast instead of opening the form - the existing all-match text when there are no rows, else one line per stays row (`<ID> stays - <why>`) under a head such as `ops board: reconcile - nothing to change`. Keep the form, Accept all, Apply picked and None as they are for the case with applicable rows.
+
+  Files you may touch: plugin/mods/ops-board/hooks/reconcile.tsx, plugin/mods/ops-board/tests/reconcile.test.tsx (and lib/ticketsmodel.ts only if a pure helper for the toast text is the smallest way). Anything else -> stop and report. Test: a stays-only reconcile output toasts and leaves the reconcile atom null (red first, then green); the mixed case still opens the form.
+
+  Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board (all pass); tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f104.json pointed at this worktree if it already is, else say how you ran tsc. Commit messages start with "B16: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), or the stage worktree the dispatch names, never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha, files changed, the red then green test output (command and result), anything you could not verify (one line each).
+
 ## Chain
-driver: @sher 2026-10-27T05:57Z     hold: -     mode: agents
+driver: @sher 2026-10-27T10:14Z     hold: -     mode: agents
 ### AABZ - stage 167 - F100 build-jarvis UI entry
 tickets: F100 build/build
 files: plugin/skills/build-jarvis/SKILL.md,plugin/skills/build-jarvis/references/grade.md,plugin/skills/build-jarvis/references/route-hook.md,plugin/skills/build-jarvis/hooks/feature-route.sh,plugin/skills/build-jarvis/hooks/feature-route.ps1,plugin/skills/grayskull-power/SKILL.md,plugin/skills/grayskull-power/references/routing.md,plugin/skills/design-arwen/SKILL.md,plugin/skills/tui-tron/SKILL.md,plugin/practice/baselines/scenario-build-ui-feature.txt,plugin/practice/baselines/scenario-build-ui-only.txt,plugin/practice/baselines/green-build-ui-f100.txt
@@ -311,6 +337,28 @@ prompt: |
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the root cause (with the line that causes it), the commit sha(s), files changed, the red then green test output, anything you could not verify, any unrelated problem (one line each).
+### AACF - stage 186 - AACF B16 reconcile form with nothing pressable
+tickets: B16
+files: plugin/mods/ops-board/hooks/reconcile.tsx,plugin/mods/ops-board/tests/reconcile.test.tsx
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket B16 (bug) - you are its fix seat. The cause is reproduced and named; fix it test-first.
+
+  The ticket line, verbatim:
+  - [ ] B16 — Reconcile form opens with nothing pressable. Owner 2026-10-27: the reconcile buttons do nothing. Repro: ticket-meta reconcile prints one row, A157 [!] -> [!] evidence unclear; openReconcile in plugin/mods/ops-board/hooks/reconcile.tsx:26 tests rows.length, not the applicable rows, so the form opens with the row as plain text, no Accept all, no Apply picked - only None. Done when: a result with no applicable row toasts what reconcile said, each stays row with its reason, instead of a dead form; a test pins it red then green; claude plugin test and tsc clean. [owner: @sher]
+
+  Repro (verified by the orchestrator): `sh plugin/skills/tickets-zordon/scripts/ticket-meta.sh reconcile` on the main board prints exactly `A157 [!] -> [!]  evidence unclear: blocked on '...', no ticket to check`; canApply is false for it, so renderReconcile draws n=0. Fix in openReconcile only: when no row passes canApply, toast instead of opening the form - the existing all-match text when there are no rows, else one line per stays row (`<ID> stays - <why>`) under a head such as `ops board: reconcile - nothing to change`. Keep the form, Accept all, Apply picked and None as they are for the case with applicable rows.
+
+  Files you may touch: plugin/mods/ops-board/hooks/reconcile.tsx, plugin/mods/ops-board/tests/reconcile.test.tsx (and lib/ticketsmodel.ts only if a pure helper for the toast text is the smallest way). Anything else -> stop and report. Test: a stays-only reconcile output toasts and leaves the reconcile atom null (red first, then green); the mixed case still opens the form.
+
+  Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board (all pass); tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f104.json pointed at this worktree if it already is, else say how you ran tsc. Commit messages start with "B16: ".
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), or the stage worktree the dispatch names, never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the commit sha, files changed, the red then green test output (command and result), anything you could not verify (one line each).
 
 ## Rulings
 - 13:00Z - designs by one fable pass (scratchpad design-2026-10-26-f10*.md). Owner, asked: F100 approach 1 approved, F101 approach 1 approved (both arch gates passed); Q-F100-1 plugin-test frames are the pane render proof; Q-F101-1 no live host probes, hosts tagged inferred.
