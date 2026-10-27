@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-26T20:00Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T01:47Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -9,7 +9,7 @@ branch: run/RUN-0023-pending-f100-f104
 |---|-------|-------|-------|-----------|--------|
 | 167 | AABZ F100 build-jarvis UI entry | x | build:opus | 2026-10-26T15:47Z | f39b942 |
 | 168 | AAB0 F102 ops font size | x | build:opus | 2026-10-26T16:22Z | c297369 |
-| 169 | AAB1 F101 marathon without Workflow | ~ | build:opus | 2026-10-26T19:33Z | - |
+| 169 | AAB1 F101 marathon without Workflow | x | subagent | 2026-10-27T01:47Z | f06d0fc |
 | 170 | AAB2 F103 explorer git actions |   | - | - | - |
 | 171 | AAB3 F104 diagnose close |   | - | - | - |
 | 172 | verify review bump commit |   | - | - | - |
@@ -21,24 +21,6 @@ branch: run/RUN-0023-pending-f100-f104
 | 181 | AACA F110 rename skill-smith to skill-prometheus |   | - | - | - |
 
 ## In flight
-### stage 169 - AAB1 F101 marathon without Workflow  (dispatched 2026-10-26T18:44Z, @cc-9de7d9)
-run: -
-prompt: |
-  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
-
-  Ticket F101 (feature) - you are its BUILD seat only. The design is written: C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/66a4199e-bee7-472b-9aaa-61fc26982c2a/scratchpad/design-2026-10-26-f101-marathon-no-workflow.md - read it in full and implement its TASKS in order exactly, test-first as written. Its paths name the main checkout C:/tools/Projects/skillator2/...; use the same relative paths under the worktree C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 instead. Do not load build-jarvis, do not regrade, do not redesign; if the design is wrong somewhere, do the smallest correct thing and report it as a deviation with why. Owner rulings 2026-10-26: approach 1 approved (arch gate passed); Q-F101-1 answered: no live host probes - tag cursor, agy, muse and pi `inferred` in PLATFORMS.md.
-
-  The ticket line, verbatim:
-  - [ ] F101 — Marathon on hosts with no Workflow tool. Owner 2026-10-26, quoting a Cursor session: 'Cursor has no Workflow tool, so I haven't written a marathon script or opened a run. can we build one for it based on claude workflow, check same for agy and muse'. Today /marathon-plan and /marathon-run save and run templates/marathon-workflow.js through Claude Code's Workflow tool only; WORKFLOW.md row 38 and marathon.md line 250 tell cursor, antigravity and pi to drop back to /pending-subagent, and muse is not named. Done when: /marathon-plan on cursor (Task tool), agy (background subagents) and muse (rlm child agents) writes the same run file and a host-native marathon plan - the same phases, serial where tickets share files, fix then verify in one phase (F96) - and /marathon-run executes it with that host's delegate, each stage written to the run file before dispatch; a host with no delegate (pi without its extension) runs the phases in order in-session; WORKFLOW.md, marathon.md, PLATFORMS.md and the host-commands texts say per host what runs; each host's command text is probed or marked unverified per PLATFORMS's tags.
-
-  Files you may touch: exactly the FILES list in the design file. Verify with the design's VERIFICATION, run against the worktree. Note: plugin/mods/ops-board/.claude-plugin/types is git-ignored and exists only in the main checkout; for tsc use a scratchpad tsconfig that extends the worktree one and adds C:/tools/Projects/skillator2/plugin/mods/ops-board/.claude-plugin/types. Commit messages start with "F101: ".
-
-  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
-
-  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
-
-  Report back: the commit sha(s), files changed, the red then green test output (command and pass/fail counts), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
-
 ## Chain
 driver: @cc-9de7d9 2026-10-26T18:44Z     hold: -     mode: agents
 ### AABZ - stage 167 - F100 build-jarvis UI entry
@@ -250,3 +232,4 @@ prompt: |
 - 19:30Z - 169 F101 built (9781ef7 94b36a2); medium review (main-session-dispatched, run on the worktree range by hand after the skill forked into main) found 6, 4 verified by reading: no-Workflow retry inherits an Agent call, landing owner hard-coded workflow, driver tag doubled, README stale; plus vacuous installer assertion, RELAY_CHAIN_PARALLEL missing from host texts. Fix agent opus, prompt .skillator/prompts/run-0023-s169-fix1.txt; README.md ruled inside F101's contract (docs say per host what runs) - cost if wrong: one extra file in the stage. Review's 10 findings on main's clone-odo (F107) are out of this stage: noted for the F107 owner check.
 - 19:55Z - 169 fix round 1 2c53043: separate review (read-only agent, diff read in the worktree) confirmed all 6 and found 4: Gemini CLI's ~/.gemini/skills gets the agy text and the selftest locks --owner subagent there (verified, install.sh 54-58/396-400); no-delegate BLOCKED retry not dispatched first; README says every host has the command and puts muse under subagents; RELAY_CHAIN_PARALLEL unguarded. Fix round 2 (of 3) opus, prompt .skillator/prompts/run-0023-s169-fix2.txt - cost if wrong: one more round.
 - 20:05Z - /pending-subagent parallel (owner @sher): stages 178 F106 (after 169), 179 F109 (after 178,171), 180 F111 (after 179,170,171), 181 F110 (after 180,173) added; designs by one fable pass (scratchpad design-2026-10-26-F10{6,9}/F11{0,1}-*.md), tiers build/deep (F109 critical: TICKETS.md line format). Before 178: merge main into this run branch (main has the F107 clone-odo merge that F110 renames inside). Before 181: RUN-0024 (F108 shares manifests and routing.md) lands on main and main is merged here again - the lease already holds 181. Parked for the end batch, built on defaults: Q-F106-1 yes, Q-F109-1 no, Q-F109-2 whole token, Q-F111-1 no, Q-F111-2 no tab number hotkeys (the picked mock shows them), Q-F110-1 extend README l.163; Q-F110-2 settled by the owner (skill-prometheus) - cost if wrong: a follow-up edit per Q.
+- Ruling: stage 169 F101 landed at f06d0fc after the orchestrator re-ran relay, install.sh and install.ps1 selftests (all ok, run one at a time at 0.86 GB free); main (clone-odo F107, RUN-0024) merged into the run branch at d186426 - manifests and the grayskull routing rows kept both sides; every selftest ok on the merged tree - cost if wrong: a later stage builds on a bad merge.
