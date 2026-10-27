@@ -358,7 +358,8 @@ function Write-Commands([string]$cli, [string]$dest) {
     # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
     # prompt an older run wrote under that name goes, nothing else in prompts\
     'codex' {
-      foreach ($n in $names) {
+      # F105: $ops - skill hosts only; pi and Claude Code have their own /ops
+      foreach ($n in $names + 'ops') {
         Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
         if (-not $DryRun) { Remove-Item -LiteralPath "$codexHome\prompts\$n.md" -Force -ErrorAction SilentlyContinue }
       }
@@ -372,7 +373,7 @@ function Write-Commands([string]$cli, [string]$dest) {
     # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode
     'opencode' { foreach ($n in $names) { Write-Cmd "$c\opencode\$n.md" $dest "$ocConfig\commands\$n.md" } }
     'antigravity' {
-      foreach ($n in $names) {
+      foreach ($n in $names + 'ops') {
         Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
         if (-not $DryRun) { Remove-Item -LiteralPath "$dest\$n\$owned" -Force -ErrorAction SilentlyContinue }
@@ -451,6 +452,7 @@ function Invoke-SelfTest([string]$T) {
 
   $out = & $run @()
   if ($script:selfCode -ne 0) { return "install exited $script:selfCode" }
+  if (-not $out.Contains('Codex: $ops opens the board')) { return 'install summary has no Codex $ops line (F105)' }
   # F89: the ops tab's Windows Terminal profile, the shipped fragment byte for byte, and how to remove it
   if (-not (Test-Path -LiteralPath $frag -PathType Leaf)) { return 'Windows Terminal fragment not written' }
   if ([IO.File]::ReadAllText($frag) -cne [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'mods\ops-board\ops\wt-fragment.json'))) { return 'Windows Terminal fragment differs from the shipped one' }
@@ -558,7 +560,8 @@ function Invoke-SelfTest([string]$T) {
             '.config\opencode\commands\marathon-plan.md',
             '.codex\skills\marathon-run\SKILL.md', '.gemini\commands\marathon-run.toml', '.cursor\commands\marathon-run.md', '.pi\agent\prompts\marathon-run.md',
             '.gemini\config\skills\marathon-run\SKILL.md', '.gemini\skills\marathon-run\SKILL.md', '.gemini\antigravity-cli\skills\marathon-run\SKILL.md',
-            '.config\opencode\commands\marathon-run.md')
+            '.config\opencode\commands\marathon-run.md',
+            '.codex\skills\ops\SKILL.md', '.gemini\config\skills\ops\SKILL.md', '.gemini\skills\ops\SKILL.md', '.gemini\antigravity-cli\skills\ops\SKILL.md')
   foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
@@ -700,6 +703,16 @@ function Invoke-SelfTest([string]$T) {
     if (-not $ct.StartsWith("---`n") -or $ct -cnotmatch "(?m)^name: $n`$" -or $ct -cnotmatch '(?m)^description: ') { return "codex skill $n frontmatter" }
     if (Test-Path -LiteralPath (Join-Path $T ".codex\prompts\$n.md")) { return "codex prompt $n.md written" }
   }
+  # F105: $ops - a skill on the skill-command hosts only (codex, agy), the board by its own
+  # dest's script, always -Open / --open; no ops command where pi and Claude Code have /ops
+  foreach ($d in '.codex\skills', '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
+    $ct = & $read "$d\ops\SKILL.md"
+    if ($ct -cnotmatch '(?m)^name: ops$' -or $ct -cnotmatch '(?m)^description: ') { return "ops skill frontmatter in $d" }
+    if (-not ($ct.Contains("`"$T\$d/ops-board/ops/ops.ps1`" -Repo <repo root> -Open") -and $ct.Contains("`"$T\$d/ops-board/ops/ops.sh`" <repo root> --open") -and $ct.Contains('ops --open'))) { return "ops skill not substituted or not --open in $d" }
+  }
+  foreach ($f in '.cursor\commands\ops.md', '.gemini\commands\ops.toml', '.config\opencode\commands\ops.md', '.pi\agent\prompts\ops.md') {
+    if (Test-Path -LiteralPath (Join-Path $T $f)) { return "ops command written to $f" }
+  }
   if ((& $read '.gemini\config\skills\pending\SKILL.md') -cnotmatch '(?m)^name: pending$') { return 'agy skill name' }
   if ((& $read '.gemini\skills\list-tickets\SKILL.md') -cnotmatch '(?m)^name: list-tickets$') { return 'agy skill name' }
   if ([IO.File]::ReadAllBytes((Join-Path $T '.pi\agent\prompts\pending.md'))[0] -ne 0x2D) { return 'pi prompt does not start with - (BOM?)' }
@@ -711,7 +724,7 @@ function Invoke-SelfTest([string]$T) {
   }
   foreach ($d in '.codex\skills', '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
     $mf =@([IO.File]::ReadAllLines((Join-Path $T "$d\.skillator-installed")))
-    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets' -or $mf -ccontains 'skillator-update' -or $mf -ccontains 'team-messages' -or $mf -ccontains 'pending-subagent' -or $mf -ccontains 'verify-subagent' -or $mf -ccontains 'marathon-plan' -or $mf -ccontains 'marathon-run') { return "command skill in manifest $d" }
+    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets' -or $mf -ccontains 'skillator-update' -or $mf -ccontains 'team-messages' -or $mf -ccontains 'pending-subagent' -or $mf -ccontains 'verify-subagent' -or $mf -ccontains 'marathon-plan' -or $mf -ccontains 'marathon-run' -or $mf -ccontains 'ops') { return "command skill in manifest $d" }
     if (Test-Path -LiteralPath (Join-Path $T "$d\pending\.skillator-owned")) { return "command skill carries an ownership marker in $d" }
   }
   $opsLine = "-File '$T\.cursor\skills\ops-board\ops\ops.ps1' @args"
@@ -979,6 +992,7 @@ if ($shimSrc) { Write-Host "" }
 foreach ($d in $writtenDests) {
   Write-Host "ops   sh $($d.Replace('\', '/'))/ops-board/ops/ops.sh <repo>   (Windows: powershell -NoProfile -ExecutionPolicy Bypass -File $d\ops-board\ops\ops.ps1 -Repo <repo>)"
 }
+if ($writtenDests -contains "$codexHome\skills") { Write-Host 'ops   Codex: $ops opens the board' }
 # B9: the default profile follows the Documents folder, not HOME - with no -Profile and a
 # USERPROFILE that is not the real user profile dir (a scratch install) it is skipped. Only
 # USERPROFILE: every dest is under $HOME, which PowerShell takes from it - a HOME of the

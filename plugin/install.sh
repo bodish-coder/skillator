@@ -373,8 +373,9 @@ write_commands() {
   case "$1" in
     codex)
       # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
-      # prompt an older run wrote under that name goes, nothing else in prompts/
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do
+      # prompt an older run wrote under that name goes, nothing else in prompts/. F105: $ops -
+      # skill hosts only; pi and Claude Code have their own /ops
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run ops; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
         [ -n "$dry" ] || rm -f "$codex_home/prompts/$_n.md"
       done ;;
@@ -388,7 +389,7 @@ write_commands() {
       # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode
       for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
     antigravity)
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do
+      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run ops; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
         [ -n "$dry" ] || rm -f "$2/$_n/$owned"
@@ -665,6 +666,18 @@ if [ -n "$selftest" ]; then
     grep -qF '{{SKILLS}}' "$_f" && { echo "FAIL: placeholder left in .codex/skills/$_n"; exit 1; }
     [ -e "$T/.codex/prompts/$_n.md" ] && { echo "FAIL: codex prompt $_n.md written"; exit 1; }
   done
+  # F105: $ops - a skill on the skill-command hosts only (codex, agy), the board by its own
+  # dest's script, always -Open / --open; no ops command where pi and Claude Code have /ops
+  for d in .codex/skills .gemini/config/skills .gemini/skills .gemini/antigravity-cli/skills; do
+    _f=$T/$d/ops/SKILL.md
+    [ -f "$_f" ] || { echo "FAIL: missing $d/ops/SKILL.md"; exit 1; }
+    { grep -qx 'name: ops' "$_f" && grep -q '^description: ' "$_f"; } || { echo "FAIL: ops skill frontmatter in $d"; exit 1; }
+    { grep -qF "\"$N/$d/ops-board/ops/ops.ps1\" -Repo <repo root> -Open" "$_f" && grep -qF "\"$N/$d/ops-board/ops/ops.sh\" <repo root> --open" "$_f" && grep -qF 'ops --open' "$_f"; } || { echo "FAIL: ops skill not substituted or not --open in $d"; exit 1; }
+    grep -qF '{{SKILLS}}' "$_f" && { echo "FAIL: placeholder left in $d/ops"; exit 1; }
+  done
+  for f in .cursor/commands/ops.md .gemini/commands/ops.toml .config/opencode/commands/ops.md .pi/agent/prompts/ops.md; do
+    [ -e "$T/$f" ] && { echo "FAIL: ops command written to $f"; exit 1; }
+  done
   grep -q '^name: pending$' "$T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
   grep -q '^name: list-tickets$' "$T/.gemini/skills/list-tickets/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
   for f in .gemini/commands .cursor/commands .pi/agent/prompts \
@@ -673,7 +686,7 @@ if [ -n "$selftest" ]; then
     grep -rqF '{{SKILLS}}' "$T/$f" && { echo "FAIL: placeholder left in $f"; exit 1; }
   done
   for d in .codex/skills .gemini/config/skills .gemini/skills .gemini/antigravity-cli/skills; do
-    grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent|marathon-plan|marathon-run' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
+    grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent|marathon-plan|marathon-run|ops' "$T/$d/.skillator-installed" && { echo "FAIL: command skill in manifest $d"; exit 1; }
     [ -e "$T/$d/pending/.skillator-owned" ] && { echo "FAIL: command skill carries an ownership marker in $d"; exit 1; }
   done
   [ -x "$T/.local/bin/ops" ] || { echo "FAIL: missing .local/bin/ops"; exit 1; }
@@ -715,6 +728,7 @@ if [ -n "$selftest" ]; then
   grep -qx 'my-own-line' "$T/.pi/agent/skills/.ignore" || { echo "FAIL: pi .ignore lost a user line"; exit 1; }
   [ "$(grep -cxF /PLATFORMS.md "$T/.pi/agent/skills/.ignore")" = 1 ] || { echo "FAIL: pi .ignore lines duplicated on the second run"; exit 1; }
   printf '%s\n' "$out" | grep -q "not on your PATH" || { echo "FAIL: PATH note"; exit 1; }
+  printf '%s\n' "$out" | grep -qF 'Codex: $ops opens the board' || { echo "FAIL: install summary has no Codex \$ops line (F105)"; exit 1; }
   if command -v cygpath >/dev/null 2>&1; then
     printf '%s\n' "$out" | grep -qF "remove: rm -r \"$(cygpath -u "$T/lad")/Microsoft/Windows Terminal/Fragments/skillator\"" || { echo "FAIL: fragment remove line"; exit 1; }
   fi
@@ -853,6 +867,7 @@ while IFS= read -r d; do
   if command -v cygpath >/dev/null 2>&1; then _ps1="\"$(cygpath -w "$d")\\ops-board\\ops\\ops.ps1\""; else _ps1="$d/ops-board/ops/ops.ps1"; fi
   echo "ops   sh $d/ops-board/ops/ops.sh <repo>   (Windows: powershell -NoProfile -ExecutionPolicy Bypass -File $_ps1 -Repo <repo>)"
 done < "$tmpdests"
+if grep -qxF "$codex_home/skills" "$tmpdests"; then echo 'ops   Codex: $ops opens the board'; fi
 if [ -n "$shim_src" ]; then
   if [ -n "$dry" ]; then
     echo "        would write $HOME/.local/bin/ops -> $shim_src/ops.sh"

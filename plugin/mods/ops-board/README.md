@@ -12,7 +12,8 @@ Needs node 22.18 or newer.
 | Claude Code | The plugin: its pane, the band above the prompt, and `/ops`. |
 | pi | `/ops` (the installer's extension); `/ops --once` for one frame. |
 | Antigravity IDE | Command palette: `skillator: Ops board`. |
-| Codex, Cursor, Gemini CLI, opencode, any shell | The terminal app, below. |
+| Codex | `$ops` (a skill the installer writes; `/ops` in agy too); or the terminal app, below. |
+| Cursor, Gemini CLI, opencode, any shell | The terminal app, below. |
 
 The terminal app, after `install.sh` / `install.ps1` put `ops` on PATH (a
 `~/.local/bin/ops` shim, or `function ops` in the PowerShell profile):
