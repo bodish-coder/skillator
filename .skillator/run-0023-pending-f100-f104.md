@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T06:12Z
+started: 2026-10-26T14:56Z   updated: 2026-10-27T08:33Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -21,6 +21,7 @@ branch: run/RUN-0023-pending-f100-f104
 | 181 | AACA F110 rename skill-smith to skill-prometheus | ~ | subagent | 2026-10-27T05:57Z | - |
 | 183 | AACC A159 explorer review leftovers | x | subagent | 2026-10-27T03:49Z | 72a17cd |
 | 184 | AACD F112 one marathon command, sequential or parallel |   | - | - | - |
+| 185 | AACE B15 Workflows agents missing |   | - | - | - |
 
 ## In flight
 ### stage 179 - AAB8 F109 session code and mode  (dispatched 2026-10-27T04:07Z, @sher)
@@ -309,6 +310,29 @@ prompt: |
   In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
 
   Report back: the commit sha(s), files changed, the red then green test output (command and result), deviations from the design with why, anything you could not verify, any unrelated problem (one line each).
+### AACE - stage 185 - B15 Workflows agents missing
+tickets: B15
+files: plugin/mods/ops-board/hooks/agentstab.tsx,plugin/mods/ops-board/hooks/lib/agents.ts,plugin/mods/ops-board/hooks/register.tsx,plugin/mods/ops-board/types/index.d.ts,plugin/mods/ops-board/tests/agents.test.tsx
+after: 180, 179
+prompt: |
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+
+  Ticket B15 (bug) - fix seat, tier deep: the cause is unknown. No design file: the ticket line is the spec. Follow root-cause-first (plugin/PRACTICE.md §7): reproduce, then find and name the cause with evidence, and only then fix it.
+
+  The ticket line, verbatim:
+  - [ ] B15 — Workflows tab does not show the run's agents. Owner 2026-10-27, while RUN-0023 ran F109, F110 and a design agent from this session: the agents section of the ops board's Workflows tab (F93) does not list them. The section is fed by pollAgents ($.agent.list, every 5 s while Workflows is shown) and noteSpawn on each Agent call (register.tsx ~508), so they should show; cause unknown - reproduce first (installed skillator 4.19.0 on Claude Code 2.1.310, background agents started with the Agent tool and resumed with SendMessage). Done when: the cause is named with evidence, a test reproduces it red, and the section lists every running and finished agent of the session green. [owner: @sher] (@cc-9de7d9)
+
+  Read first: plugin/mods/ops-board/hooks/agentstab.tsx (pollAgents, noteSpawn, readAgents, WorkflowsTab's agents section), hooks/lib/agents.ts (listed, kindOf, capAgents, agentOrder), hooks/register.tsx (the 5 s poll while Workflows is shown, the PostToolUse hooks around lines 500-530), hooks/pane.tsx, the existing tests (tests/agents*.test.tsx), and the host API types the plugin-authoring skill points to (types/claude-code.d.ts: $.agent.list's AgentInfo, the tool hook event shapes for an Agent call with run_in_background and for SendMessage). Questions to settle with evidence: does $.agent.list return background agents started by this session (and resumed ones)? does noteSpawn see a background Agent call's result (async launch: the result carries an agentId, not the agent's output)? does kindOf/capAgents/a filter drop them? is the section drawn at all when relay runs are listed? If the installed 4.19.0 mod differs from this branch in this code, say so - the owner runs 4.19.0.
+
+  If you cannot reproduce it in the test world from the types, STOP and report what you checked (a failed repro is a stop - do not guess a fix).
+
+  Files you may touch: plugin/mods/ops-board/hooks/agentstab.tsx, hooks/lib/agents.ts, hooks/register.tsx, types/index.d.ts, tests/agents*.test.tsx. Anything else -> stop and report. Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104/plugin/mods/ops-board (all pass), the repro test red first then green; tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f103.json (no output). Commit messages start with "B15: " and state the cause.
+
+  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
+
+  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
+
+  Report back: the root cause (with the line that causes it), the commit sha(s), files changed, the red then green test output, anything you could not verify, any unrelated problem (one line each).
 
 ## Rulings
 - 13:00Z - designs by one fable pass (scratchpad design-2026-10-26-f10*.md). Owner, asked: F100 approach 1 approved, F101 approach 1 approved (both arch gates passed); Q-F100-1 plugin-test frames are the pane render proof; Q-F101-1 no live host probes, hosts tagged inferred.
@@ -338,3 +362,4 @@ prompt: |
 - Ruling: stage 181 F110 now after 173 only (owner asked for parallel; F110's files and every skill-smith mention are disjoint from F109 and F111, checked by grep) - chain edge only adds an after: line, so the 180 edge was removed by hand - cost if wrong: a merge conflict on the rename, caught at chain merge.
 - Ruling: 181 F110 in stage worktree .s181 beside 179 (prompt run-0023-s181-wt.txt); 179 F109 agent died on a network error (ENOTFOUND) mid-green with an uncommitted ticket-meta.sh edit - resumed with its context, not re-dispatched - cost if wrong: none.
 - Ruling: F112 (owner 2026-10-27: one marathon command, sequential or parallel) joins RUN-0023 as stage 184, after 179 (marathon.md) and 181 (install.sh/ps1, README); design by fable, scratchpad design-2026-10-27-F112-marathon-one-command.md: /marathon-run [sequential|parallel] [N|max] [IDs] plans and runs in one go, the mode lives in the plan (PLAN.mode); Q-F112-1 (marathon-plan default) and Q-F112-2 (cap on bare parallel) parked for the end batch, built on their defaults - cost if wrong: a re-plan.
+- Ruling: owner 2026-10-27 picked 1 and 3: B15 (Workflows agents section misses this session's agents; repro owed) joins as stage 185 after 180 and 179 (register.tsx, types); F113 (start a run from the Workflows tab) is logged and gets a design pass, then a stage after B15 - cost if wrong: a longer run.
