@@ -6,12 +6,12 @@
 // segment ends in '…'. No Claude Code-only words: this runs beside any CLI. app.ts
 // writes what frame() returns; tests read it as text.
 import type { Color } from 'claude-code'
-import type { Seg } from '../hooks/lib/bandlines'
+import type { Seg as BaseSeg } from '../hooks/lib/bandlines'
 import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
-import type { State } from './state'
-import { dialogLines, engageLines, formLines, reconcileLines, runsCursor, setupLines, teamRow, viewOf } from './state'
+import type { State, PointerAction } from './state'
+import { pointerModal, dialogLines, engageLines, formLines, reconcileLines, runsCursor, setupLines, teamRow, viewOf } from './state'
 import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { buildModel, chipsOf, headKey, isDecidable, isHead, offsetFor } from '../hooks/lib/ticketsmodel'
 import { isFinished, modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
@@ -19,10 +19,14 @@ import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM, MUTED_HOW, mutedWords } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
 import { ticketsOf } from '../hooks/lib/team'
-import { runKeys, runLines as runTabLines } from './runtab'
+import { runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
 
-// `plain`: text only, no SGR at all - for readers of text (--once without colour, a host's
+export type Seg = BaseSeg & { action?: PointerAction }
+const hot = (text: string, name: string, shift = false): Seg => ({ text, dim: true, action: { kind: 'key', key: { name, shift } } })
+const actionLine = (line: Seg[], action: PointerAction): Seg[] => line.map(s => ({ ...s, action: s.action ?? action }))
+
+// plain: text only, no SGR at all - for readers of text (--once without colour, a host's
 // notification, tests). Colour off alone drops only the colours (F89: NO_COLOR asks no more).
 export type Paint = { color: boolean; ascii: boolean; plain?: boolean }
 // A seg whose meaning rides on its colour: `mono` is what it reads with colour off or --ascii.
@@ -45,13 +49,21 @@ export function glyph(s: string, ascii: boolean): string {
   return ascii ? s.replace(ASCII_RE, c => ASCII[c] ?? c) : s
 }
 
-export function cells(s: string): number {
-  return [...s].length
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+const parts = (s: string) => [...graphemes.segment(s)].map(x => x.segment)
+const cellWidth = (s: string): number => {
+  if (/^[\p{Mark}\u200d\ufe0e\ufe0f]+$/u.test(s)) return 0
+  const c = s.codePointAt(0) ?? 0
+  return /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u.test(s) || c >= 0x1100 && (c <= 0x115f || c >= 0x2329 && c <= 0x232a || c >= 0x2e80 && c <= 0xa4cf || c >= 0xac00 && c <= 0xd7a3 || c >= 0xf900 && c <= 0xfaff || c >= 0xfe10 && c <= 0xfe19 || c >= 0xfe30 && c <= 0xfe6f || c >= 0xff01 && c <= 0xff60 || c >= 0xffe0 && c <= 0xffe6 || c >= 0x20000) ? 2 : 1
 }
-
+export const cells = (s: string): number => parts(s).reduce((n, g) => n + cellWidth(g), 0)
+const prefix = (s: string, room: number): string => {
+  let out = '', n = 0
+  for (const g of parts(s)) { n += cellWidth(g); if (n > room) break; out += g }
+  return out
+}
 export function fit(s: string, cols: number): string {
-  if (cells(s) <= cols) return s
-  return cols <= 0 ? '' : [...s].slice(0, cols - 1).join('') + '…'
+  return cells(s) <= cols ? s : cols <= 0 ? '' : prefix(s, cols - 1) + '…'
 }
 
 export function plain(segs: Seg[]): string {
@@ -77,6 +89,7 @@ export function ansi(segs: Seg[], p: Paint): string {
   }).join('')
 }
 
+
 export function paintScreen(lines: string[]): string {
   return '\x1b[H' + lines.join('\x1b[K\r\n') + '\x1b[K'
 }
@@ -87,19 +100,19 @@ function fitSegs(line: Seg[], cols: number, ell = '…'): Seg[] {
   const segs = line.map(s => ({ ...s, text: clean(s.text) }))
   if (segs.reduce((n, s) => n + cells(s.text), 0) <= cols) return segs
   let room = cols - cells(ell)
-  if (room < 0) return [{ text: [...ell].slice(0, Math.max(0, cols)).join('') }]
+  if (room < 0) return [{ text: prefix(ell, Math.max(0, cols)) }]
   const out: Seg[] = []
   for (const s of segs) {
     const n = cells(s.text)
     if (n < room) { out.push(s); room -= n; continue }
-    out.push({ ...s, text: [...s.text].slice(0, room).join('') + ell })
+    out.push({ ...s, text: prefix(s.text, room) }, { text: ell })
     return out
   }
   return out
 }
 
 const width = (line: Seg[]) => line.reduce((n, s) => n + cells(s.text), 0)
-const cut = (s: string, room: number) => (cells(s) <= room ? s : [...s].slice(0, Math.max(1, room - 1)).join('') + '…')
+const cut = (s: string, room: number) => (cells(s) <= room ? s : prefix(s, Math.max(0, room - 1)) + '…')
 const dim = (text: string): Seg => ({ text, dim: true })
 const join = (parts: Seg[][], sep: string): Seg[] => parts.flatMap((p, i) => (i ? [{ text: sep }, ...p] : p))
 const LEVEL_COLOR: Record<Level, Color> = { green: 'success', amber: 'warning', red: 'error' }
@@ -114,7 +127,8 @@ type Keyed = { key: string; segs: Seg[] }
 
 // The window of `h` lines that keeps item `id` (line 'row:'+id and its chips, or a header) in view;
 // when lines are left below it, the last line says so.
-function windowOf(lines: Keyed[], id: string | null, h: number): Seg[][] {
+function windowOf(lines: Keyed[], id: string | null, h: number, area?: 'tickets' | 'runs' | 'messages' | 'run'): Seg[][] {
+  if (area) lines = lines.map(l => ({ ...l, segs: /^(row:|head:)/.test(l.key) ? actionLine(l.segs, { kind: 'row', area, id: l.key.startsWith('row:') ? l.key.slice(4) : l.key }) : l.segs }))
   if (lines.length <= h) return lines.map(l => l.segs)
   if (h <= 1) return h ? [lines[0]!.segs] : []
   const m = { lines: lines.map(l => ({ key: l.key, rows: 1 })) } as Pick<Model, 'lines'> as Model
@@ -131,8 +145,8 @@ function tabsLine(s: State): Seg[] {
   // F66: the unread count rides on the Messages label
   const unread = unreadCount(s.messages, s.msgRead)
   const label = (id: State['tab'], l: string) => (id === 'messages' && unread ? `${l} (${unread})` : l)
-  const tabs = join(TABS.map(([id, l]): Seg[] => [id === s.tab ? { text: label(id, l), inverse: true, bold: true }
-    : id === 'messages' && unread ? { text: label(id, l), color: 'suggestion' } : dim(l)]), '   ')
+  const tabs = join(TABS.map(([id, l]): Seg[] => actionLine([id === s.tab ? { text: label(id, l), inverse: true, bold: true }
+    : id === 'messages' && unread ? { text: label(id, l), color: 'suggestion' } : dim(l)], { kind: 'tab', tab: id })), '   ')
   return spread([{ text: ' ' }, ...tabs], [dim(s.repo ? `ops · ${s.repo}` : 'ops')], s.cols)
 }
 
@@ -153,43 +167,48 @@ function countLine(s: State, m: Model): Seg[] {
   return [dim(s.filter.showDone && n('x') + n('-') && cells(head + closed) <= s.cols ? head + closed : head)]
 }
 
-function keysOf(s: State, m: Model): string[] {
-  if (s.setup) return ['tab / shift-tab field', 'space on/off', 'enter save', 'esc cancel']
-  if (s.person) return ['tab / shift-tab field', 'enter add', 'esc cancel']
-  if (s.dialog) return s.dialogField === 'ticket' ? ['type the ID', 'tab person', 'enter confirm', 'esc cancel']
-    : ['↑↓ person', 'a / d kind', 'tab ticket', 'enter confirm', 'esc cancel']
-  if (s.reconcile) return ['↑↓ move', 'space pick', 'enter apply picked', 'a accept all', 'esc none']   // F81
-  if (s.engage) return ['enter engage', 'esc cancel']        // F85
-  if (s.filterField) return ['←→ field', '↑↓ value', 'enter/esc leave']
-  if (s.tab === 'run') return runKeys(s)                     // F79
+function keysOf(s: State, m: Model): Seg[][] {
+  const h = (text: string, key: string) => [hot(text, key)]
+  const move = [hot('↑', 'up'), hot('↓ move', 'down')]
+  const cancel = h('esc cancel', 'escape'), quit = h('q quit', 'q')
+  const field = [hot('tab', 'tab'), dim(' / '), hot('shift-tab field', 'tab', true)]
+  if (s.setup?.confirmClear) return [h('y clear', 'y'), h('n cancel', 'n')]
+  if (s.setup) return [field, h('space on/off', 'space'), h('enter save', 'return'), cancel]
+  if (s.person) return [field, h('enter add', 'return'), cancel]
+  if (s.dialog) return s.dialogField === 'ticket' ? [[dim('type the ID')], h('tab person', 'tab'), h('enter confirm', 'return'), cancel]
+    : [[hot('↑', 'up'), hot('↓ person', 'down')], [hot('a', 'a'), dim(' / '), hot('d kind', 'd')], h('tab ticket', 'tab'), h('enter confirm', 'return'), cancel]
+  if (s.reconcile) return [move, h('space pick', 'space'), h('enter apply picked', 'return'), h('a accept all', 'a'), h('esc none', 'escape')]
+  if (s.engage) return [h('enter engage', 'return'), cancel]
+  if (s.filterField) return [[hot('←', 'left'), hot('→ field', 'right')], [hot('↑', 'up'), hot('↓ value', 'down')], h('enter/esc leave', 'escape')]
+  if (s.tab === 'run') {
+    if (s.runForm?.mode === 'confirm') return [h('enter run', 'return'), h('n rename', 'n'), cancel]
+    if (s.runForm) return [[dim('type the name')], h('enter save', 'return'), cancel]
+    return [move, h('enter run', 'return'), h('n rename', 'n'), h('r rescan', 'r'), ...(s.runJob && s.runJob.ended === null ? [h('s stop', 's')] : []), quit]
+  }
   if (s.tab === 'runs') {
-    // F76: on a section header Enter opens or closes it
     const cur = runsCursor(s)
     const enter = isHead(cur) ? (s.runsOpen.some(x => headKey(x) === cur) ? 'enter close' : 'enter open') : 'enter stages'
-    return ['↑↓ move', enter, 'e engage', 'r reload', 'q quit']
+    return [move, h(enter, 'return'), h('e engage', 'e'), h('r reload', 'r'), quit]
   }
-  if (s.tab === 'health') return ['R resume (on a fresh non-red reading)', 'F force resume', 'r reload', 'q quit']
-  if (s.tab === 'messages') return ['↑↓ move', 'enter open', 'm mark all read', 's setup', 'q quit']
-  if (s.tab === 'explorer') return ['↑↓ move', 'enter open/close', 'r reload', 'q quit']
-  if (s.showTeam) return ['n add', 'del remove (asks first)', 'l make lead', 'esc back', 'q quit']   // A146: q closes the board here too
+  if (s.tab === 'health') return [h('R resume (on a fresh non-red reading)', 'R'), h('F force resume', 'F'), h('r reload', 'r'), quit]
+  if (s.tab === 'messages') return [move, h('enter open', 'return'), h('m mark all read', 'm'), h('s setup', 's'), quit]
+  if (s.tab === 'explorer') return [move, h('enter open/close', 'return'), h('r reload', 'r'), quit]
+  if (s.showTeam) return [h('n add', 'n'), h('del remove (asks first)', 'delete'), h('l make lead', 'l'), h('esc back', 'escape'), quit]
   const sel = m.rows.find(t => t.id === m.ticket)
-  // F61: on a header Enter opens or closes its group
   const head = isHead(m.selected) ? m.groups.find(g => headKey(g.box) === m.selected) : undefined
   const enter = head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
-  return ['↑↓ move', enter, 'a assign', 'd decide', ...(sel && isDecidable(sel) ? ['D decided'] : []), 't team', 'c reconcile', 'r reload', 'q quit']
+  return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), h('r reload', 'r'), quit]
 }
 
 function keysLine(s: State, m: Model): Seg[] {
-  // The Team view asking before a remove: the question takes the keys line's place.
-  if (s.teamConfirm && !s.person && !s.dialog) return [{ text: `remove ${s.teamConfirm} from .skillator/team.md? (y/n)`, color: 'warning' }]
-  // A144: one separator throughout. Too wide: drop the arrow hints, then the first hint,
-  // until it fits - never the last (quit / leave / cancel).
+  if (s.teamConfirm && !s.person && !s.dialog) return [{ text: `remove ${s.teamConfirm} from .skillator/team.md? (y/n)`, color: 'warning', action: { kind: 'key', key: { name: 'y' } } }]
   const ks = keysOf(s, m)
-  while (ks.length > 1 && cells(ks.join(' · ')) > s.cols) {
-    const arrow = ks.findIndex(k => /^[↑↓←→]/.test(k))
+
+  while (ks.length > 1 && width(join(ks, ' · ')) > s.cols) {
+    const arrow = ks.findIndex(k => /^[↑↓←→]/.test(plain(k)))
     ks.splice(arrow >= 0 && arrow < ks.length - 1 ? arrow : 0, 1)
   }
-  return [dim(ks.join(' · '))]
+  return join(ks, ' · ')
 }
 
 // --- the band: one line from 80 columns, as the mock ---
@@ -222,7 +241,7 @@ const heldOf = (u: Usage | null) => {
 function bandSegs(s: State): Seg[][] {
   const { machine: m, usage: u, watch: w, now, cols } = s
   const red = w.level === 'red'
-  const right: Seg[] = m?.hold || red ? [dim('R resume')] : []
+  const right: Seg[] = m?.hold || red ? [hot('R resume', 'R')] : []
   const lead: Seg[] = m?.hold || red
     ? [{ text: `${red ? '■' : '▲'} HOLD ${m?.hold ? holdShort(m.hold) : w.reasons.join('; ')}`, color: red ? 'error' : 'warning' }]
     : [{ text: '●', color: LEVEL_COLOR[w.level] }, { text: ' ops' }]
@@ -257,13 +276,13 @@ const GROUP_WORD: Record<Box, string> = {
 
 function filterLine(s: State): Seg[] {
   const f = s.filter, ff = s.filterField
-  const val = (field: string, text: string): Seg => ({ text, inverse: ff === field })
+  const val = (field: State['filterField'] & string, text: string): Seg => ({ text, inverse: ff === field, action: { kind: 'filter-field', field } })
   const left: Seg[] = [dim('filter  '), { text: 'app: ' }, val('app', f.app ?? 'all')]
   if (s.team.length) {
     left.push({ text: ' · who: ' }, val('who', f.mine ? 'me' : f.who ?? 'all'), { text: ' · mine: ' }, val('mine', f.mine ? 'on' : 'off'))
   }
   if (f.showDone) left.push({ text: ' · done: shown' })
-  return spread(left, [dim(`f filter · x ${f.showDone ? 'hide' : 'show'} done`)], s.cols)
+  return spread(left, [hot('f filter', 'f'), dim(' · '), hot(`x ${f.showDone ? 'hide' : 'show'} done`, 'x')], s.cols)
 }
 
 function chipLine(t: Ticket): Seg[] {
@@ -276,7 +295,7 @@ function chipLine(t: Ticket): Seg[] {
   if (t.session) groups.push([dim(t.session)])
   const out: Seg[] = [{ text: '      ' }]
   groups.forEach((g, i) => { if (i) out.push({ text: '  ' }); out.push(...g) })
-  if (isDecidable(t)) out.push(dim('   D decided'))
+  if (isDecidable(t)) out.push(hot('   D decided', 'D'))
   return out
 }
 
@@ -334,14 +353,14 @@ function teamLines(s: State): Seg[][] {
   const sel = teamRow(s)
   for (const m of s.team) {
     const text = line(m.handle + ' ', (m.name ?? '') + ' ', m.emails.join(', ') + ' ', ticketsOf(m, s.board, s.me))
-    out.push(m.handle === sel ? [{ text: '› ' }, { text: text.padEnd(Math.max(0, s.cols - 2)), inverse: true }] : [{ text: '  ' + text }])
+    out.push(actionLine(m.handle === sel ? [{ text: '› ' }, { text: text.padEnd(Math.max(0, s.cols - 2)), inverse: true }] : [{ text: '  ' + text }], { kind: 'row', area: 'team', id: m.handle }))
   }
   return out
 }
 
 function ticketsBody(s: State, m: Model, h: number): Seg[][] {
   if (s.showTeam) return teamLines(s)
-  return [filterLine(s), [], ...windowOf(ticketLines(s, m), m.selected, Math.max(0, h - 2))]
+  return [filterLine(s), [], ...windowOf(ticketLines(s, m), m.selected, Math.max(0, h - 2), 'tickets')]
 }
 
 // --- the Runs tab, as the mock ---
@@ -376,7 +395,7 @@ function runsBody(s: State, h: number): Seg[][] {
     if (sec === 'workflows') out.push({ key: 'wf:none', segs: [dim('    not observable here - only the host that runs a workflow sees it')] })
     else out.push(...runRows(s, sel))
   }
-  return windowOf(out, sel, h)
+  return windowOf(out, sel, h, 'runs')
 }
 
 function runRows(s: State, sel: string): Keyed[] {
@@ -401,7 +420,7 @@ function runRows(s: State, sel: string): Keyed[] {
     for (const l of runLines(ex, s.board)) {
       if (/^(par|dec|phase):/.test(l.key)) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
     }
-    out.push({ key: 'start', segs: [dim('    e engages it; the command is then shown to paste into your CLI')] })
+    out.push({ key: 'start', segs: [hot('    e engages it; the command is then shown to paste into your CLI', 'e')] })
   }
   return out
 }
@@ -479,14 +498,17 @@ function healthBody(s: State): Seg[][] {
 
 // A box as the mock draws it: `title` in the top edge, then `rows` (the line a script
 // refused with drawn in red) inside, two cells in from the left edge when there is room.
-type Boxed = { title: string; rows: { text: string; color?: Color }[] }
+type Boxed = { title: string; rows: { text: string; color?: Color; action?: PointerAction; segs?: Seg[] }[] }
 const innerOf = (s: State) => Math.max(4, Math.min(s.cols - 2, 67)) - 2
 function boxBody(s: State, b: Boxed): Seg[][] {
   const inner = innerOf(s)
   const pad = s.cols - inner - 2 >= 2 ? '  ' : ''
   const title = cut(clean(b.title), Math.max(1, inner - 4))
   const out: Seg[][] = [[{ text: pad + '┌─ ' }, { text: title, bold: true }, { text: ' ' + '─'.repeat(Math.max(0, inner - cells(title) - 3)) + '┐' }]]
-  for (const r of b.rows) out.push([{ text: pad + '│' }, { text: fit(clean(r.text), inner).padEnd(inner), color: r.color }, { text: '│' }])
+  for (const r of b.rows) {
+    const content = r.segs ? fitSegs(r.segs, inner) : fitSegs([{ text: r.text, color: r.color, action: r.action }], inner)
+    out.push([{ text: pad + '│' }, ...content, { text: ' '.repeat(Math.max(0, inner - width(content))) + '│' }])
+  }
   out.push([{ text: pad + '└' + '─'.repeat(inner) + '┘' }])
   return out
 }
@@ -496,9 +518,16 @@ function dialogBody(s: State): Seg[][] {
   const ls = dialogLines(s)
   const rows: Boxed['rows'] = []
   ls.slice(1).forEach((l, i, all) => {
+    const people = s.dialog?.handle && !s.team.some(m => m.handle === s.dialog!.handle) ? [...s.team, { handle: s.dialog.handle }] : s.team
+    const start = 2 + (s.team.length ? 0 : 1)
+    const action: PointerAction | undefined = i === 0 ? { kind: 'ticket-field' }
+      : i >= start && i < start + people.length ? { kind: 'person', index: i - start }
+      : i === start + people.length ? { kind: 'person', index: -1 } : undefined
     const last = i === all.length - 1
     if (last || /^ {2}Change /.test(l)) rows.push({ text: '' })
-    for (const part of l.split(/\r?\n/)) rows.push({ text: part, color: l === r ? 'error' : undefined })
+    for (const part of l.split(/\r?\n/)) rows.push({ text: part, color: l === r ? 'error' : undefined, action,
+      segs: last ? [dim('  '), hot('Enter confirm', 'return'), dim(' · '), hot('Esc cancel', 'escape')]
+        : i === 1 ? [{ text: part.slice(0, 23), action: { kind: 'dialog-kind', value: 'owner' } }, { text: part.slice(23), action: { kind: 'dialog-kind', value: 'decide' } }] : undefined })
     if (i === 1) rows.push({ text: '' })   // F77: after the Ticket line and the kind
   })
   return boxBody(s, { title: ls[0] ?? '', rows })
@@ -512,13 +541,14 @@ function formBody(s: State): Seg[][] {
   const ls = formLines(s)
   const inner = innerOf(s)
   const rows: Boxed['rows'] = []
-  for (const l of ls.slice(1)) {
+  for (const [i, l] of ls.slice(1).entries()) {
     const runs = /^( {2}Runs {4})(.* )(\S+)$/.exec(l)
     if (runs && cells(l) > inner) {
       rows.push({ text: (runs[1]! + runs[2]!).trimEnd() }, { text: ' '.repeat(runs[1]!.length) + runs[3]! })
       continue
     }
-    if (l !== r) { rows.push({ text: l }); continue }
+    if (l !== r) { rows.push({ text: l, action: i < 3 ? { kind: 'person-field', field: (['handle', 'name', 'emails'] as const)[i]! } : undefined,
+      segs: i === ls.length - 2 ? [dim('  '), hot('tab next field', 'tab'), dim(' · '), hot('enter add', 'return'), dim(' · '), hot('esc cancel', 'escape')] : undefined }); continue }
     const room = Math.max(1, inner - 2)
     const chars = [...clean(r.slice(2).replace(/\r?\n/g, ' '))]
     for (let i = 0; i < chars.length && i < room * 3; i += room) rows.push({ text: '  ' + chars.slice(i, i + room).join(''), color: 'error' })
@@ -531,7 +561,7 @@ function formBody(s: State): Seg[][] {
 function messagesBody(s: State, h: number): Seg[][] {
   const lines = messageLines({ msgs: s.messages, readId: s.msgRead, selected: s.msgSelected, expanded: s.msgExpanded, cols: s.cols })
   const sel = selectedOf(s.messages, s.msgSelected)
-  return windowOf(lines.map(l => ({ key: l.key, segs: l.segs.map(x => ({ ...x, text: clean(x.text) })) })), sel, h)
+  return windowOf(lines.map(l => ({ key: l.key, segs: l.segs.map(x => ({ ...x, text: clean(x.text) })) })), sel, h, 'messages')
 }
 
 // The setup form, boxed like Add person; its result line (a check or teams-uhura's
@@ -539,7 +569,10 @@ function messagesBody(s: State, h: number): Seg[][] {
 function setupBody(s: State): Seg[][] {
   const ls = setupLines(s)
   const res = s.setup?.result ? '  ' + s.setup.result : null
-  const rows: Boxed['rows'] = ls.slice(1).map(l => ({ text: l, color: l === res ? 'error' : /\(y\/n\)$/.test(l) ? 'warning' : undefined }))
+  const rows: Boxed['rows'] = ls.slice(1).map((l, i) => ({ text: l, color: l === res ? 'error' : undefined,
+    action: i < 5 ? { kind: 'setup-field', field: (['token', 'url', 'port', 'posts', 'clear'] as const)[i]! } : undefined,
+    segs: s.setup?.confirmClear && i === 7 ? [dim('  clear the saved Teams settings? ('), hot('y', 'y'), dim('/'), hot('n', 'n'), dim(')')]
+      : i === ls.length - 2 ? [dim('  '), hot('tab next field', 'tab'), dim(' · '), hot('space on/off', 'space'), dim(' · '), hot('enter save', 'return'), dim(' · '), hot('esc cancel', 'escape')] : undefined }))
   return boxBody(s, { title: ls[0] ?? '', rows })
 }
 
@@ -564,13 +597,13 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
   const main = s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
-    : s.reconcile ? boxBody(s, { title: recTitle, rows: recRows.map(text => ({ text })) })   // F81
+    : s.reconcile ? boxBody(s, { title: recTitle, rows: recRows.map((text, index) => ({ text, action: { kind: 'reconcile' as const, index } })) })   // F81
     : s.engage ? boxBody(s, { title: engTitle, rows: engRows.map(text => ({ text })) })      // F85
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s)
     : s.tab === 'messages' ? messagesBody(s, room)
     : s.tab === 'explorer' ? explorerBody(s, room)
-    : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room)
+    : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room, 'run')
     : ticketsBody(s, m, room)
   const top = main.slice(0, room)
   while (top.length < room) top.push([])
@@ -588,9 +621,19 @@ export function frameSegs(s: State): Seg[][] {
   return lines.map(l => fitSegs(l, cols))
 }
 
-export function frame(s: State, p: Paint): string[] {
+export type Hit = { x: number; y: number; width: number; action: PointerAction }
+export function screen(s: State, p: Paint): { lines: string[]; hits: Hit[] } {
   const cols = Math.max(0, s.cols)
-  return frameSegs(s).map(l => p.ascii
-    ? ansi(fitSegs(l.map((x: Mono) => ({ ...x, text: glyph(x.mono ?? x.text, true), mono: undefined })), cols, '...'), { ...p, ascii: false })
-    : ansi(l, p))
+  const segs = frameSegs(s).map(l => fitSegs(l.map((x: Mono & Seg) => ({ ...x, text: glyph((!p.color || p.ascii ? x.mono : undefined) ?? x.text, p.ascii), mono: undefined })), cols, p.ascii ? '...' : '…'))
+  const hits: Hit[] = []
+  segs.forEach((line, row) => {
+    let x = 1
+    for (const g of line) {
+      const width = cells(g.text)
+      if (g.action && width && !(pointerModal(s) && (row === 0 || row >= s.rows - (s.cols < 80 ? 2 : 1)))) hits.push({ x, y: row + 1, width, action: g.action })
+      x += width
+    }
+  })
+  return { lines: segs.map(l => ansi(l, { ...p, ascii: false })), hits }
 }
+export const frame = (s: State, p: Paint): string[] => screen(s, p).lines
