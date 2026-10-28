@@ -89,7 +89,7 @@ now_epoch() {
   printf '%s' "$n"
 }
 
-# Newest rollout under $1, but ONLY if it was written inside the freshness
+# Newest rollout with a usage event under $1, ONLY inside the freshness
 # window - same rule, same window, as the PowerShell twin. Prints nothing when
 # there is none, when the newest is stale, or when this host offers no way to
 # read an mtime at all. That last case is a deliberate decline: a rollout we
@@ -111,8 +111,15 @@ codex_newest_fresh() {
   [ "$#" -gt 0 ] || return 0
   mtime_list "$@" | awk -v now="$(now_epoch)" -v w="$stale_secs" '
     { t = $1 + 0; sub(/^[^ ]* /, "")
-      if (t > m) { m = t; p = $0 } }
-    END { if (p != "" && now - m < w) print p }'
+      if (now - t < w) { times[++n] = t; paths[n] = $0 } }
+    END { for (j=1; j<=n; j++) {
+      k=0; for (i=1; i<=n; i++) if (paths[i]!="" && (!k || times[i]>times[k])) k=i
+      print paths[k]; paths[k]="" } }' |
+    while IFS= read -r candidate; do
+      # A starting child must not hide an older, still-fresh usage event.
+      # Same test as codex_last_tc, two forks fewer per candidate (5s budget).
+      if tail -400 "$candidate" | grep -q '"token_count"'; then printf '%s\n' "$candidate"; break; fi
+    done
 }
 
 # True when file $1 exists and was written inside the freshness window. A file

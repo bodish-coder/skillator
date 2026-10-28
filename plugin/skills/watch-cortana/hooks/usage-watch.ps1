@@ -72,6 +72,16 @@ function Get-CodexLastTc($path) {
   Get-Content -LiteralPath $path -Tail 400 | Where-Object { $_ -match '"token_count"' } | Select-Object -Last 1
 }
 
+# A starting child has no usage event yet; it must not hide a fresh reading.
+function Get-CodexRollout($codexHome) {
+  $rolls = Get-ChildItem (Join-Path $codexHome 'sessions') -Recurse -File -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
+           Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-$staleHours) } | Sort-Object LastWriteTime -Descending
+  foreach ($roll in $rolls) {
+    if (Get-CodexLastTc $roll.FullName) { return $roll }
+  }
+  return $null
+}
+
 # Usage % from one codex rollout: the max of every rate_limits used_percent
 # whose window is NOT the 7-day one (A98: window_minutes 10080), plus the
 # live context on its last token_count line; $null when there is none.
@@ -177,8 +187,7 @@ function Get-CodexLevel($path) {
 if ($Mode -eq 'level') {
   $src = 'none'; $h = '-'; $wk = '-'; $cx = '-'; $mx = '-'
   $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
-  $roll = Get-ChildItem (Join-Path $codexHome 'sessions') -Recurse -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
-          Sort-Object LastWriteTime | Select-Object -Last 1
+  $roll = Get-CodexRollout $codexHome
   if ($roll -and $roll.LastWriteTime -gt (Get-Date).AddHours(-$staleHours)) {
     $l = @(Get-CodexLevel $roll.FullName)
     if ($l.Count -eq 3 -and ($l | Where-Object { $_ -ne '-' })) {
@@ -208,8 +217,7 @@ if ($Mode -eq 'check') {
   # Codex: the rollout JSONL carries rate_limits.*.used_percent and the context total.
   # CODEX_HOME, same as install.ps1 - a relocated codex home must still be watched.
   $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
-  $roll = Get-ChildItem (Join-Path $codexHome 'sessions') -Recurse -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
-          Sort-Object LastWriteTime | Select-Object -Last 1
+  $roll = Get-CodexRollout $codexHome
   $pct = $null; $wk = $null; $src = 'none'; $key = 'none'
   if ($roll -and $roll.LastWriteTime -gt (Get-Date).AddHours(-$staleHours)) {
     $pct = Get-CodexPct $roll.FullName
