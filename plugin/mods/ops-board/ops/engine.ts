@@ -5,8 +5,8 @@
 import type { Board, Member } from '../types'
 import type { Host, RunResult } from './nodehost'
 import { MUTE_FILE, muteKv } from '../hooks/lib/facts'
-import type { Effect, Key, State, Step } from './state'
-import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun } from './state'
+import type { Effect, Key, PointerAction, State, Step } from './state'
+import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun, point } from './state'
 import { inboxDirOf, INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
 import { parseBoard } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
@@ -22,6 +22,7 @@ export type Engine = {
   readonly state: State
   resize(cols: number, rows: number): void
   key(k: Key): Promise<void>
+  point(action: PointerAction): Promise<void>
   readAll(): Promise<void>        // one read of each poll: the --once frame's facts
   start(): Promise<void>          // the first board read, then every poll on its timer
   stop(): void                    // the timers off; nothing runs after
@@ -241,6 +242,7 @@ export function makeEngine(o: EngineOpts): Engine {
     get state() { return state },
     resize(cols, rows) { if (cols !== state.cols || rows !== state.rows) state = { ...state, cols, rows } },
     key: k => apply(reduce(state, k)),
+    point: action => apply(point(state, action)),
     async readAll() {
       await pollBoard()
       await pollSlow()

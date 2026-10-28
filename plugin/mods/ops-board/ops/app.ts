@@ -9,6 +9,7 @@
 // screenshot helper. It reads only: of the effects the polls ask for it runs relay's
 // decision (a read) and nothing else, so it never sets or releases the watchdog hold.
 import { emitKeypressEvents } from 'node:readline'
+import { PassThrough } from 'node:stream'
 import { writeSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
@@ -17,7 +18,9 @@ import type { Key, State, Tab } from './state'
 import type { Paint } from './draw'
 import { makeHost } from './nodehost'
 import { initial } from './state'
-import { frame, paintScreen } from './draw'
+import { frame, paintScreen, screen } from './draw'
+import type { Hit } from './draw'
+import { mouseInput, mouseTarget, MOUSE_ON, MOUSE_OFF } from './mouse'
 import { makeEngine } from './engine'
 import { status } from './status'
 
@@ -118,7 +121,13 @@ export async function main(argv: string[]): Promise<number> {
   const email = await host.gitEmail()
 
   let live = false
-  const draw = () => { if (live) out.write(paintScreen(frame({ ...engine.state, now: Date.now() }, paint))) }
+  let hits: Hit[] = []
+  const draw = () => {
+    if (!live) return
+    const next = screen({ ...engine.state, now: Date.now() }, paint)
+    hits = next.hits
+    out.write(paintScreen(next.lines))
+  }
   const engine = makeEngine({ host, email, envMe: process.env.SKILLATOR_ME ?? null, once, state, onChange: draw, onQuit: () => quit(0) })
 
   if (!stdin) {
@@ -129,12 +138,21 @@ export async function main(argv: string[]): Promise<number> {
 
   // --- the terminal: alt screen, hidden cursor, raw keys; restored on every way out ---
   let restored = false
+  const keyboard = new PassThrough()
+  emitKeypressEvents(keyboard)
+  const input = mouseInput(text => keyboard.write(text), event => {
+    const action = mouseTarget(event, hits, engine.state.cols, engine.state.rows)
+    if (action) void engine.point(action)
+  })
   const restore = () => {
     if (restored) return
     restored = true
+    input.close()
+    keyboard.destroy()
+    engine.stop()
     try { stdin.setRawMode(false) } catch { /* already gone */ }
     // Sync: a TTY write is asynchronous on Windows and would be lost at exit.
-    try { writeSync(out.fd, '\x1b[0m\x1b[?25h\x1b[?1049l') } catch { /* no terminal left */ }
+    try { writeSync(out.fd, MOUSE_OFF + '\x1b[0m\x1b[?25h\x1b[?1049l') } catch { /* no terminal left */ }
   }
   const quit = (code: number): never => { restore(); process.exit(code) }
   process.on('exit', restore)
@@ -144,13 +162,13 @@ export async function main(argv: string[]): Promise<number> {
   process.on('SIGTERM', () => quit(143))
   process.on('SIGHUP', () => quit(129))
 
-  writeSync(out.fd, '\x1b[?1049h\x1b[?25l\x1b[2J')
+  writeSync(out.fd, '\x1b[?1049h\x1b[?25l\x1b[2J' + MOUSE_ON)
   live = true
-  emitKeypressEvents(stdin)
   stdin.setRawMode(true)
   stdin.setEncoding('utf8')
   stdin.resume()
-  stdin.on('keypress', (str: string | undefined, key: RawKey) => {
+  stdin.on('data', (text: string) => input.write(text))
+  keyboard.on('keypress', (str: string | undefined, key: RawKey) => {
     const k = keyOf(str, key)
     if (k) void engine.key(k)
   })

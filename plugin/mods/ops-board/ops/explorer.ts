@@ -1,7 +1,7 @@
 // F75: the standalone app's Explorer tab - the pane's model (hooks/lib/explorer.ts) on
 // the app's state: git ls-files and git log asked as `git` effects (engine.ts runs them
 // through the host's absolute git, A150), folded back by their `then`. Pure, as state.ts.
-import type { Seg } from '../hooks/lib/bandlines'
+import type { Seg } from './draw'
 import { clean } from '../hooks/lib/bandlines'
 import type { Explorer } from '../hooks/lib/explorer'
 import type { RunResult } from './nodehost'
@@ -79,7 +79,7 @@ export function explorerKey(s: State, k: Key): Step {
 // in view and says when lines are left below it.
 export function explorerBody(s: State, h: number): Seg[][] {
   const x = s.explorer.x
-  const lines = explorerLines(x, s.cols).map(l => ({ ...l, segs: l.segs.map(g => ({ ...g, text: clean(g.text) })) }))
+  const lines = explorerLines(x, s.cols).map(l => ({ ...l, segs: l.segs.map(g => ({ ...g, text: clean(g.text), ...(l.item ? { action: { kind: 'row' as const, area: 'explorer' as const, id: l.item } } : {}) })) }))
   if (lines.length <= h) return lines.map(l => l.segs)
   if (h <= 1) return h ? [lines[0]!.segs] : []
   const top = explorerOffset(lines, selectedOf(x), 0, h - 1) ?? 0

@@ -31,6 +31,55 @@ export type FilterField = 'app' | 'who' | 'mine'
 export type Key = { name: string; sequence?: string; shift?: boolean; ctrl?: boolean }
 export type PersonField = 'handle' | 'name' | 'emails'
 export type DialogField = 'ticket' | 'who'
+export type PointerAction =
+  | { kind: 'key'; key: Key }
+  | { kind: 'tab'; tab: Tab }
+  | { kind: 'row'; area: 'tickets' | 'runs' | 'messages' | 'explorer' | 'run' | 'team'; id: string }
+  | { kind: 'person'; index: number }
+  | { kind: 'reconcile'; index: number }
+  | { kind: 'person-field'; field: PersonField }
+  | { kind: 'setup-field'; field: SetupField }
+  | { kind: 'filter-field'; field: FilterField }
+  | { kind: 'ticket-field' }
+  | { kind: 'dialog-kind'; value: 'owner' | 'decide' }
+
+export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.reconcile || s.teamConfirm || s.engage || s.filterField || s.runForm)
+
+// Targets come only from the rendered frame, never from labels or terminal payloads.
+export function point(s: State, a: PointerAction): Step {
+  const same = { state: s, effects: [] }
+  if (a.kind === 'key') return reduce(s, a.key)
+  if (a.kind === 'person-field') return s.person ? { state: { ...s, personField: a.field }, effects: [] } : same
+  if (a.kind === 'setup-field') {
+    if (!s.setup || s.setup.confirmClear) return same
+    const next = { ...s, setupField: a.field }
+    return a.field === 'posts' ? reduce(next, { name: 'space' }) : a.field === 'clear' ? reduce(next, { name: 'return' }) : { state: next, effects: [] }
+  }
+  if (s.person || s.setup) return same
+  if (a.kind === 'ticket-field') return s.dialog ? { state: { ...s, dialogField: 'ticket' }, effects: [] } : same
+  if (a.kind === 'dialog-kind') return s.dialog ? reduce({ ...s, dialogField: 'who' }, { name: a.value === 'owner' ? 'a' : 'd' }) : same
+  if (a.kind === 'person') {
+    if (!s.dialog) return same
+    const people = peopleOf(s), member = people[a.index]
+    if (a.index !== -1 && !member) return same
+    const next: State = { ...s, dialogField: 'who', dialogIndex: a.index, dialog: { ...s.dialog, handle: member?.handle ?? s.dialog.handle } }
+    return a.index === -1 ? reduce(next, { name: 'return' }) : { state: next, effects: [] }
+  }
+  if (a.kind === 'reconcile') return s.reconcile?.rows[a.index]
+    ? reduce({ ...s, reconcile: { ...s.reconcile, index: a.index } }, { name: 'space' }) : same
+  if (a.kind === 'filter-field') return !pointerModal(s) || s.filterField ? { state: { ...s, filterField: a.field }, effects: [] } : same
+  if (pointerModal(s)) return same
+  if (a.kind === 'tab') return toTab(s, a.tab)
+  if (a.kind !== 'row') return same
+  let next = s
+  if (a.area === 'tickets' && s.tab === 'tickets' && !s.showTeam && buildModel(viewOf(s)).items.includes(a.id)) next = { ...s, selected: a.id }
+  else if (a.area === 'team' && s.tab === 'tickets' && s.showTeam && s.team.some(m => m.handle === a.id)) return { state: { ...s, teamSelected: a.id }, effects: [] }
+  else if (a.area === 'runs' && s.tab === 'runs' && runsItems(s).includes(a.id)) next = { ...s, runsSelected: a.id }
+  else if (a.area === 'messages' && s.tab === 'messages' && s.messages.some(m => m.id === a.id)) next = { ...s, msgSelected: a.id }
+  else if (a.area === 'explorer' && s.tab === 'explorer') next = { ...s, explorer: { ...s.explorer, x: { ...s.explorer.x, selected: a.id } } }
+  else if (a.area === 'run' && s.tab === 'run' && s.runFile?.entries.some(e => e.id === a.id)) next = { ...s, runSel: a.id }
+  return next === s ? same : reduce(next, { name: 'return' })
+}
 
 export type State = {
   tab: Tab
