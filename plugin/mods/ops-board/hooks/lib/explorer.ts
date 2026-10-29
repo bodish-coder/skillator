@@ -1,5 +1,5 @@
 import type { Color } from 'claude-code'
-import type { Action, ActionKind, Change, Commit, Explorer, TreeRow } from '../../types'
+import type { Action, ActionKind, Change, Commit, Explorer, StatusBadge, TreeRow, WorkTreeFile } from '../../types'
 import type { Seg } from './bandlines'
 import { clean } from './bandlines'
 import type { Model } from './ticketsmodel'
@@ -19,18 +19,22 @@ import { offsetFor, toggleGroup } from './ticketsmodel'
 export const FILES = 'xs:files'
 export const COMMITS = 'xs:commits'
 export const INCOMING = 'xs:incoming'
+export const CHANGES = 'xs:changes'
+export const xwItem = (path: string) => 'xw:' + path
 export const LOG_N = 40                 // the commits listed: the newest LOG_N
 export const MAX_TREE = 2000            // tree rows drawn at most (a folder of 50k files)
 export const MAX_CHANGES = 300          // a commit's files drawn at most
 export const NO_GIT = 'git not found on PATH (absolute entries only)'
 
-export type { Action, ActionKind, Change, Commit, Explorer, TreeRow } from '../../types'
+export type { Action, ActionKind, Change, Commit, Explorer, StatusBadge, TreeRow, WorkTreeFile } from '../../types'
 export const EMPTY: Explorer = { open: [], selected: null, files: null, tree: [], treeMore: 0, commits: null, changes: {}, error: null,
-  upstream: null, incoming: null }
+  upstream: null, incoming: null, worktree: null }
 
 // --- git's words: argv after the git binary. No shell; paths never quoted (-z, quotePath off). ---
 
 export const LS_ARGS = ['ls-files', '-z']
+export const STATUS_ARGS = ['-c', 'core.quotePath=false', 'status', '--porcelain=v1', '-uall']
+export const OUTGOING_ARGS = ['log', '@{upstream}..HEAD', '--oneline']
 export const LOG_ARGS = ['-c', 'core.quotePath=false', 'log', `-n${LOG_N}`, '--date=short', '--format=%H%x1f%h%x1f%ad%x1f%an%x1f%s']
 // With both, --name-status wins and --numstat is dropped: --raw carries the same A/M/D/R
 // status and comes first, the numstat lines follow in the same order. A merge: against
@@ -50,27 +54,121 @@ export const HEAD_ARGS = ['rev-parse', 'HEAD']
 export const GIT_DIR_ARGS = ['rev-parse', '--absolute-git-dir']
 // the branch's upstream remote and its ref there ("origin\trefs/heads/main"; "\t": none)
 export const pushToArgs = (branch: string) => ['for-each-ref', '--format=%(upstream:remotename)%09%(upstream:remoteref)', 'refs/heads/' + branch]
+export const stageArgs = (path: string) => ['add', '--', path]
+export const unstageArgs = (path: string) => ['reset', 'HEAD', '--', path]
 // in the git dir while a merge, revert, cherry-pick or rebase is stopped (a rebase at an edit step has a clean tree)
 export const IN_PROGRESS = ['MERGE_HEAD', 'REVERT_HEAD', 'CHERRY_PICK_HEAD', 'rebase-merge', 'rebase-apply']
 
-// F103: the actions. The only source of their argv: never a force flag of any kind.
+// F103 & F133: the actions. The only source of their argv: never a force flag of any kind.
 export const ACTION_ARGS: Record<ActionKind, (target: string, branch?: string) => string[]> = {
   fetch: () => ['fetch', '--prune'],
   pull: () => ['pull', '--ff-only', '--no-rebase'],
+  sync: () => ['pull', '--ff-only', '--no-rebase'],
   // an explicit refspec: remote.*.push and remote.*.mirror never widen it (git refuses one with mirror)
   push: (remote, branch = '') => ['push', remote, 'HEAD:refs/heads/' + branch],
   revert: sha => ['revert', '--no-edit', sha],
   merge: branch => ['merge', '--no-edit', '--', branch],     // --: a branch named -n is no option
+  commit: msg => ['commit', '-m', msg],
 }
-const NEEDS_CLEAN: ActionKind[] = ['pull', 'merge', 'revert']
+const NEEDS_CLEAN: ActionKind[] = ['pull', 'sync', 'merge', 'revert']
 export const isRunRef = (ref: string) => /^run\/RUN-\d+/.test(ref) || /\/\.skillator\/worktrees\//.test(ref.replace(/\\/g, '/'))
 
 export type Here = { branch: string; head: string; dirty: number }
 
+// Detect potentially sensitive or unwanted files staged/untracked
+export function detectUnwanted(path: string): string | undefined {
+  const norm = path.replace(/\\/g, '/')
+  const base = norm.split('/').pop() ?? ''
+  if (/^\.env(\..+)?$/i.test(base)) return 'environment file (.env)'
+  if (/(id_rsa|id_ed25519|\.pem|\.key|\.pfx|\.p12)$/i.test(base)) return 'credential/private key'
+  if (/(token|secret|credential|password).*\.(json|txt|ya?ml)$/i.test(base)) return 'possible secret file'
+  if (/(^|\/)(scratch|\.tmp|tmp)\//i.test(norm) || /\.(tmp|bak|swp|log)$/i.test(base)) return 'temporary scratch file'
+  if (/(^|\/)(dist|build|out|\.next|node_modules)\//i.test(norm) && !norm.startsWith('scripts/build/')) return 'build artifact directory'
+  return undefined
+}
+
+// Parse git status --porcelain=v1 -uall
+export function parseStatus(out: string): import('../../types').WorkTreeFile[] {
+  const list: import('../../types').WorkTreeFile[] = []
+  for (const line of out.split(/\r?\n/)) {
+    if (line.length < 3) continue
+    const x = line.charAt(0)
+    const y = line.charAt(1)
+    let rawPath = line.slice(3).trim()
+    if (rawPath.includes(' -> ')) {
+      rawPath = rawPath.split(' -> ').pop()!.trim()
+    }
+    const path = clean(rawPath)
+    if (!path) continue
+    const isUntracked = x === '?' && y === '?'
+    const staged = isUntracked ? null : (x !== ' ' && x !== '?' ? (x as import('../../types').StatusBadge) : null)
+    const unstaged = isUntracked ? '?' as const : (y !== ' ' ? (y as import('../../types').StatusBadge) : null)
+    const warning = detectUnwanted(path)
+    list.push({ path, staged, unstaged, isUntracked, warning })
+  }
+  return list
+}
+
+// AI commit message drafting helper
+export function draftCommitMessage(files: import('../../types').WorkTreeFile[], activeTicket?: string): string {
+  const staged = files.filter(f => f.staged !== null)
+  const target = staged.length > 0 ? staged : files
+  if (target.length === 0) return 'chore: working tree changes'
+
+  const paths = target.map(f => f.path)
+  let prefix = 'feat'
+  if (paths.every(p => p.startsWith('test') || p.includes('.test.') || p.includes('.spec.'))) {
+    prefix = 'test'
+  } else if (paths.every(p => p.endsWith('.md') || p.startsWith('docs/'))) {
+    prefix = 'docs'
+  } else if (paths.some(p => p.includes('ticket') || p === 'TICKETS.md')) {
+    prefix = 'board'
+  } else if (paths.every(p => p.startsWith('scripts/') || p.includes('install.'))) {
+    prefix = 'build'
+  }
+
+  const first = paths[0]!
+  const baseName = first.split('/').pop()?.replace(/\.[^.]+$/, '') ?? first
+  const desc = paths.length === 1 ? `update ${baseName}` : `update ${baseName} and ${paths.length - 1} other files`
+  if (activeTicket) return `${activeTicket}: ${desc}`
+  return `${prefix}: ${desc}`
+}
+
+// AI change digest on incoming commits
+export function summarizeIncoming(commits: Commit[]): string[] {
+  if (commits.length === 0) return ['Up to date with upstream.']
+  const digest: string[] = []
+  const count = commits.length
+  digest.push(`${count} new commit${count === 1 ? '' : 's'} from upstream:`)
+  for (const c of commits.slice(0, 3)) {
+    digest.push(`• ${c.short} ${c.subject} (${c.author})`)
+  }
+  if (count > 3) {
+    digest.push(`• … and ${count - 3} more commits`)
+  }
+  return digest
+}
+
+// AI pre-push audit
+export function auditOutgoing(out: string): { count: number; warnings: string[] } {
+  const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  const warnings: string[] = []
+  if (lines.length === 0) return { count: 0, warnings: ['No outgoing commits to push.'] }
+  for (const l of lines) {
+    if (/wip|temp|test\s*commit|scratch/i.test(l)) {
+      warnings.push(`Commit "${l}" appears to be a temporary or WIP commit`)
+    }
+    if (/fixup!|squash!/i.test(l)) {
+      warnings.push(`Commit "${l}" is a fixup/squash marker`)
+    }
+  }
+  return { count: lines.length, warnings }
+}
+
 // The plan: the action with its argv and warnings, or why it is refused. ctx: read just before
 // (branch 'HEAD': detached; inProgress: the IN_PROGRESS marker found; pushTo: pushToArgs read).
 export function planAction(x: Explorer, kind: ActionKind, ctx: Here & { root: string; branches?: string[]; inProgress?: string | null
-  pushTo?: { remote: string; ref: string } }): { action: Action } | { refused: string } {
+  pushTo?: { remote: string; ref: string }; activeTicket?: string; outgoing?: string; warn?: string[] }): { action: Action } | { refused: string } {
   const sel = x.selected ?? ''
   // a local commit only: an incoming one is not in HEAD's history, there is nothing to revert
   if (kind === 'revert' && !sel.startsWith('xc:')) return { refused: 'select a commit first' }
@@ -79,17 +177,48 @@ export function planAction(x: Explorer, kind: ActionKind, ctx: Here & { root: st
     return { refused: `${ctx.inProgress} exists in the git dir - a merge, revert, cherry-pick or rebase is in progress; finish it or --abort it first` }
   if (NEEDS_CLEAN.includes(kind) && ctx.dirty > 0)
     return { refused: `working tree has ${ctx.dirty} uncommitted changes - git would refuse or stop half way; commit or stash first` }
+
+  const on = { result: null, branch: ctx.branch, head: ctx.head }
+
+  if (kind === 'commit') {
+    const staged = (x.worktree ?? []).filter(f => f.staged !== null)
+    if (staged.length === 0) return { refused: 'nothing staged to commit - toggle files with Space first' }
+    const draft = draftCommitMessage(x.worktree ?? [], ctx.activeTicket)
+    const warned = staged.filter(f => !!f.warning).map(f => `${f.path} (${f.warning})`)
+    const warn = [...(ctx.warn ?? [])]
+    if (warned.length > 0) warn.push(`⚠ staging ${warned.length} sensitive/unwanted file(s): ${warned.join(', ')}`)
+    return { action: { kind, args: ACTION_ARGS.commit(draft), warn, pick: null, message: draft, files: staged, ...on } }
+  }
+
+  if (kind === 'sync' || kind === 'pull') {
+    const digest = summarizeIncoming(x.incoming ?? [])
+    const warn = [...(ctx.warn ?? [])]
+    if (x.upstream && typeof x.upstream === 'object' && x.upstream.ahead > 0 && x.upstream.behind > 0) {
+      warn.push(`diverged from upstream: ↑${x.upstream.ahead} ↓${x.upstream.behind} - fast-forward will fail; merge or rebase required`)
+    }
+    return { action: { kind, args: ACTION_ARGS[kind](''), warn, pick: null, digest, ...on } }
+  }
+
   const to = ctx.pushTo
-  if (((kind === 'push' || kind === 'pull') && x.upstream === 'none') || (kind === 'push' && !(to?.remote && to.ref.startsWith('refs/heads/'))))
+  if (((kind === 'push') && x.upstream === 'none') || (kind === 'push' && !(to?.remote && to.ref.startsWith('refs/heads/'))))
     return { refused: `no upstream for ${ctx.branch} - git push -u origin ${ctx.branch} by hand sets one` }
   if (kind === 'push' && to!.remote.startsWith('-'))
     return { refused: `remote ${to!.remote} starts with - - git push would read it as an option; rename the remote` }
-  const warn: string[] = []
+
+  const warn: string[] = [...(ctx.warn ?? [])]
   if (isRunRef(ctx.branch)) warn.push(`on relay run branch ${ctx.branch} - runs land through relay-morpheus; continue only if you mean it`)
   if (isRunRef(ctx.root)) warn.push(`this checkout is a run worktree (${ctx.root})`)
-  const on = { result: null, branch: ctx.branch, head: ctx.head }
-  if (kind === 'merge') return { action: { kind, args: [], warn, pick: (ctx.branches ?? []).filter(b => b !== ctx.branch && !b.startsWith('(')), ...on } }   // '(HEAD detached at …)' is no branch
-  const args = kind === 'push' ? ACTION_ARGS.push(to!.remote, to!.ref.slice('refs/heads/'.length)) : ACTION_ARGS[kind](sel.slice(3))
+
+  if (kind === 'push') {
+    const audit = ctx.outgoing ? auditOutgoing(ctx.outgoing) : null
+    if (audit?.warnings?.length) warn.push(...audit.warnings)
+    return { action: { kind, args: ACTION_ARGS.push(to!.remote, to!.ref.slice('refs/heads/'.length)), warn, pick: null, auditWarning: audit?.warnings?.join('; '), ...on } }
+  }
+
+  if (kind === 'merge') {
+    return { action: { kind, args: [], warn, pick: (ctx.branches ?? []).filter(b => b !== ctx.branch && !b.startsWith('(')), conflictAi: true, ...on } }
+  }
+  const args = ACTION_ARGS[kind](sel.slice(3))
   return { action: { kind, args, warn, pick: null, ...on } }
 }
 
@@ -205,12 +334,21 @@ export function withChanges(x: Explorer, sha: string, out: string): Explorer {
 }
 
 export const withError = (x: Explorer, error: string | null): Explorer => ({ ...x, error })
+export const withWorktree = (x: Explorer, worktree: WorkTreeFile[]): Explorer => ({ ...x, worktree })
 
 // What toggling an item needs read next: the file list (the tree's rows), a commit's
 // changes, or nothing. A file is no group: it only selects.
-export type Need = { files: boolean; sha: string | null }
+export type Need = { files: boolean; sha: string | null; stagePath?: string | null }
 export function toggle(x: Explorer, item: string): { x: Explorer; need: Need } {
   const none: Need = { files: false, sha: null }
+  if (item === CHANGES) {
+    const open = toggleGroup(x.open, CHANGES)
+    return { x: { ...x, open, selected: item }, need: none }
+  }
+  if (item.startsWith('xw:')) {
+    const stagePath = item.slice(3)
+    return { x: { ...x, selected: item }, need: { files: false, sha: null, stagePath } }
+  }
   if (item.startsWith('xf:')) return { x: { ...x, selected: item }, need: none }
   const open = toggleGroup(x.open, item)
   const opened = open.includes(item)
@@ -237,12 +375,20 @@ export function toggle(x: Explorer, item: string): { x: Explorer; need: Need } {
 export type ExLine = { key: string; item: string | null; segs: Seg[] }
 
 const cut = (s: string, room: number) => (s.length <= room ? s : s.slice(0, Math.max(1, room - 1)) + '…')
-const STATUS_COLOR: Record<string, Color> = { A: 'success', M: 'warning', D: 'error', R: 'suggestion', C: 'suggestion' }
+const STATUS_COLOR: Record<string, Color> = { A: 'success', M: 'warning', D: 'error', R: 'suggestion', C: 'suggestion', '?': 'inactive', U: 'error' }
 
 const hasIncoming = (x: Explorer) => typeof x.upstream === 'object' && !!x.upstream && x.upstream.behind > 0
+export const hasChanges = (x: Explorer) => !!(x.worktree && x.worktree.length > 0)
 
 function itemsOf(x: Explorer): string[] {
-  const out = [FILES]
+  const out: string[] = []
+  if (hasChanges(x)) {
+    out.push(CHANGES)
+    if (x.open.includes(CHANGES)) {
+      out.push(...x.worktree!.map(w => xwItem(w.path)))
+    }
+  }
+  out.push(FILES)
   if (x.open.includes(FILES)) out.push(...x.tree.map(r => (r.dir ? 'xd:' : 'xf:') + r.path))
   out.push(COMMITS)
   if (x.open.includes(COMMITS)) out.push(...(x.commits ?? []).map(c => 'xc:' + c.sha))
@@ -293,6 +439,34 @@ export function explorerLines(x: Explorer, cols: number): ExLine[] {
   }
 
   if (x.error) out.push({ key: 'xerr', item: null, segs: [{ text: cut(x.error, cols - 1), color: 'error' }] })
+  if (hasChanges(x)) {
+    const stagedCount = x.worktree!.filter(f => f.staged !== null).length
+    const unstagedCount = x.worktree!.filter(f => f.unstaged !== null).length
+    const tail = `  staged ${stagedCount} · unstaged ${unstagedCount}`
+    head(CHANGES, 'Changes', x.worktree!.length, tail)
+    if (x.open.includes(CHANGES)) {
+      for (const f of x.worktree!) {
+        const itemKey = xwItem(f.path)
+        const isStaged = f.staged !== null
+        const isPartiallyStaged = f.staged !== null && f.unstaged !== null
+        const dot = isPartiallyStaged ? '◑' : (isStaged ? '●' : '○')
+        const badge = f.staged && f.unstaged ? `${f.staged}/${f.unstaged}` : (f.staged ?? f.unstaged ?? '?')
+        const badgeColor = STATUS_COLOR[f.staged ?? f.unstaged ?? '?'] ?? 'inactive'
+        const warnIcon = f.warning ? ' ⚠' : ''
+        const room = Math.max(4, cols - 1 - 10 - warnIcon.length)
+        const segs: Seg[] = [
+          { text: `${dot} [` },
+          { text: badge, color: badgeColor, bold: true },
+          { text: '] ' },
+          { text: cut(f.path, room) },
+        ]
+        if (f.warning) {
+          segs.push({ text: warnIcon, color: 'warning' })
+        }
+        line(itemKey, '  ', segs)
+      }
+    }
+  }
   head(FILES, 'Files', x.files)
   if (x.open.includes(FILES)) {
     if (x.files === null) out.push({ key: 'xtree:none', item: null, segs: [{ text: '  reading git ls-files…', dim: true }] })

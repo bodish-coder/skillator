@@ -103,6 +103,8 @@ export type Job = {
 export type Commit = { sha: string; short: string; date: string; author: string; subject: string }
 export type Change = { status: string; path: string; from: string | null; add: number | null; del: number | null }
 export type TreeRow = { path: string; name: string; depth: number; dir: boolean; count: number }
+export type StatusBadge = 'M' | 'A' | 'D' | 'R' | 'C' | '?' | 'U'
+export type WorkTreeFile = { path: string; staged: StatusBadge | null; unstaged: StatusBadge | null; isUntracked: boolean; warning?: string }
 export type Explorer = {
   open: string[]; selected: string | null
   files: number | null                  // tracked files; null: not read yet
@@ -113,11 +115,25 @@ export type Explorer = {
   // F103: the branch's upstream (null: not read yet) and the commits it has that HEAD has not
   upstream: { name: string; ahead: number; behind: number } | 'none' | null
   incoming: Commit[] | null
+  worktree: WorkTreeFile[] | null       // F133: working tree staged and unstaged files
 }
-// F103: a git action planned - its argv (empty: a merge with no branch picked yet), warnings, the branches to pick from
-export type ActionKind = 'fetch' | 'pull' | 'push' | 'revert' | 'merge'
+// F103 & F133: a git action planned - its argv (empty: a merge with no branch picked yet), warnings, the branches to pick from
+export type ActionKind = 'fetch' | 'pull' | 'push' | 'revert' | 'merge' | 'commit' | 'sync'
 // branch, head: what the plan stood on when the confirm opened - Run refuses if either moved
-export type Action = { kind: ActionKind; args: string[]; warn: string[]; pick: string[] | null; result: string | null; branch: string; head: string }
+export type Action = {
+  kind: ActionKind
+  args: string[]
+  warn: string[]
+  pick: string[] | null
+  result: string | null
+  branch: string
+  head: string
+  message?: string
+  files?: WorkTreeFile[]
+  digest?: string[]
+  auditWarning?: string
+  conflictAi?: boolean
+}
 declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
