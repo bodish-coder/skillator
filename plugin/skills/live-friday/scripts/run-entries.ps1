@@ -10,7 +10,7 @@ $FILE = '.skillator/run.json'
 $S = [string][char]0x1c
 # Case-sensitive tables, as the sh twin's awk arrays are (@{} is case-blind).
 function New-Table { return ,(New-Object System.Collections.Hashtable ([StringComparer]::Ordinal)) }
-$SCRIPT_RE = '^(install|build|run|setup|start|dev)([._-][A-Za-z0-9._-]*)?\.(sh|ps1)$'
+$SCRIPT_RE = '^(installer|install|build|run|setup|start|dev|package|pkg|compile|bundle|release|deploy)([._-][A-Za-z0-9._-]*)?\.(sh|ps1)$'
 
 function Fail([string]$msg) { throw "run-entries: $msg" }
 
@@ -93,6 +93,15 @@ function Get-FilesIn([string]$dir) {
   return $names
 }
 
+# The directories of a dir, ordinal order.
+function Get-DirsIn([string]$dir) {
+  $full = Join-Path (Get-Location).Path $dir
+  if (-not [IO.Directory]::Exists($full)) { return @() }
+  $names = @([IO.Directory]::GetDirectories($full) | ForEach-Object { [IO.Path]::GetFileName($_) })
+  [Array]::Sort($names, [StringComparer]::Ordinal)
+  return $names
+}
+
 # @{ K; T; Src } in the order the header names.
 function Get-Found {
   $found = New-Object System.Collections.ArrayList
@@ -124,6 +133,16 @@ function Get-Found {
   }
   foreach ($f in $root) { if ($f -cmatch $SCRIPT_RE) { [void]$found.Add(@{ K = $f.Substring($f.LastIndexOf('.') + 1); T = $f; Src = $f }) } }
   foreach ($f in @(Get-FilesIn 'scripts')) { if ($f -cmatch $SCRIPT_RE) { [void]$found.Add(@{ K = $f.Substring($f.LastIndexOf('.') + 1); T = "scripts/$f"; Src = "scripts/$f" }) } }
+  foreach ($d in @(Get-DirsIn 'scripts')) {
+    foreach ($f in @(Get-FilesIn "scripts/$d")) {
+      if ($f -cmatch $SCRIPT_RE) { [void]$found.Add(@{ K = $f.Substring($f.LastIndexOf('.') + 1); T = "scripts/$d/$f"; Src = "scripts/$d/$f" }) }
+    }
+  }
+  foreach ($d in 'build', 'installer', 'install', 'run', 'setup') {
+    foreach ($f in @(Get-FilesIn $d)) {
+      if ($f -cmatch $SCRIPT_RE) { [void]$found.Add(@{ K = $f.Substring($f.LastIndexOf('.') + 1); T = "$d/$f"; Src = "$d/$f" }) }
+    }
+  }
   return ,$found
 }
 
@@ -172,6 +191,7 @@ function Invoke-Merge([string]$mode, [string]$rid, [string]$rname) {
   }
   $rows = New-Object System.Collections.ArrayList
   $used = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  $usedTarget = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
   $st = @{ miss = 0; new = 0; renamed = 0 }
   $row = {
     param($id, $name, $k, $t, $aj, $as, $cwd, $src, $miss)
@@ -187,6 +207,7 @@ function Invoke-Merge([string]$mode, [string]$rid, [string]$rname) {
     if ($used.Contains($id)) { $c = 2; while ($used.Contains($id + '-' + $c)) { $c++ }; $id = $id + '-' + $c }
     [void]$used.Add($id)
     $k = & $get $en.v 'kind'; $t = & $get $en.v 'target'
+    if ($en.a.Count -eq 0 -and $k -ne '' -and $t -ne '') { [void]$usedTarget.Add($k + ':' + $t) }
     $cwd = & $get $en.v 'cwd'; if ($cwd -eq '') { $cwd = '.' }
     $aj = '['; $as = ''; $j = 0
     foreach ($a in $en.a) { if ($j -gt 0) { $aj += ', ' }; $aj += '"' + $a + '"'; $as += ' ' + $a; $j++ }
@@ -207,7 +228,7 @@ function Invoke-Merge([string]$mode, [string]$rid, [string]$rname) {
   }
   foreach ($d in $dlist) {
     $key = $d.K + ':' + $d.T
-    if ($used.Contains($key)) { continue }
+    if ($used.Contains($key) -or $usedTarget.Contains($key)) { continue }
     [void]$used.Add($key); $st.new++
     & $row $key (Get-DefName $d.K $d.T) $d.K $d.T '[]' '' '.' $d.Src $false
   }
