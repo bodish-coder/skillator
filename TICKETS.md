@@ -232,7 +232,7 @@ their section.
       2. Restraint & Anti-Bloat Lens (Ponytail / `code-yoda` replication): audits over-engineering, unnecessary abstractions, duplicate utilities (`reuse:`), stdlib replacements (`stdlib:`), YAGNI violations (`yagni:`), and tracks shortcut/ponytail debt markers with net line count estimates.
       Runs on `git diff --cached` (or unstaged diff) before commits across all non-Claude hosts (Antigravity, Codex, Cursor, Pi, OpenCode), outputting ranked findings by severity and file:line, ending in a definitive binary verdict: `READY-TO-COMMIT: YES` or `CHANGES-REQUESTED`. [owner: @sher]
 
-- [ ] F126 — Command naming harmonization across skillator hosts. Owner 2026-10-28 ("verify-shifu", "gauntlet", "message-uhura", etc.). Systematically harmonize all slash command and skill-command names with backward-compatible aliases:
+- [ ] F126 — Command naming harmonization across skillator hosts. Owner 2026-10-28 ("verify-shifu", "gauntlet", "message-uhura", etc.). Systematically harmonize all slash command and skill-command names with backward-compatible aliases: [owner: @sher]
       • `/pending` -> `/skillator-pending`
       • `/ops` -> `/skillator-ops`
       • `/engage` -> `/engage-picard`
