@@ -1,5 +1,6 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { mkdtempSync, existsSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { basename, isAbsolute, join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -217,3 +218,19 @@ test('repoRoot: inside a git checkout is the main checkout, from a subdirectory 
   assert.ok(existsSync(join(h.repoRoot, '.git')), h.repoRoot)
   assert.ok(!h.repoRoot.endsWith('/.git'))
 })
+
+test('B20 repoRoot: inside a worktree with TICKETS.md resolves to the worktree toplevel', async () => {
+  const t = mkTmp(join(tmpdir(), 'ops-main-'))
+  execFileSync('git', ['init', '-q'], { cwd: t })
+  execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: t })
+  execFileSync('git', ['config', 'user.name', 'test'], { cwd: t })
+  writeFileSync(join(t, 'TICKETS.md'), '# Main Tickets\n')
+  execFileSync('git', ['add', 'TICKETS.md'], { cwd: t })
+  execFileSync('git', ['commit', '-m', 'initial'], { cwd: t })
+  const wt = join(t, 'wt-branch')
+  execFileSync('git', ['worktree', 'add', '-b', 'feat-test', wt], { cwd: t })
+  writeFileSync(join(wt, 'TICKETS.md'), '# Worktree Tickets\n')
+  const h = await makeHost({ appDir: wt, cwd: wt })
+  assert.equal(h.repoRoot, fwd(wt))
+})
+

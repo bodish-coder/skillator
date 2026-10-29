@@ -75,12 +75,16 @@ async function git(args: string[], cwd: string): Promise<string | null> {
   })
 }
 
-// The main checkout from any worktree (as pending.sh's find_main): git-common-dir's
-// parent; else the toplevel; else the cwd.
+// The repo root: if this worktree/checkout has TICKETS.md, prefer its toplevel;
+// else the main checkout (git-common-dir's parent); else toplevel; else cwd.
 async function findRepoRoot(cwd: string): Promise<string> {
+  const top = await git(['rev-parse', '--show-toplevel'], cwd)
+  if (top) {
+    const topPath = norm(top)
+    if (existsSync(join(topPath, 'TICKETS.md'))) return topPath
+  }
   const common = await git(['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd)
   if (common && /\/\.git$/.test(norm(common))) return norm(common).replace(/\/\.git$/, '')
-  const top = await git(['rev-parse', '--show-toplevel'], cwd)
   return norm(top ?? cwd)
 }
 

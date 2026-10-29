@@ -151,7 +151,11 @@ export const viewOf = (s: State): View => ({
 })
 
 export function onBoard(s: State, board: Board, team: Member[], me: string | null): State {
-  return { ...s, board, team, me }
+  const next: State = { ...s, board, team, me }
+  const m = buildModel(viewOf(next))
+  const selected = m.items.includes(s.selected ?? '') ? s.selected : (m.items[0] ?? null)
+  const expanded = s.expanded && board.tickets.some(t => t.id === s.expanded) ? s.expanded : null
+  return { ...next, selected, expanded }
 }
 
 // --- words, as the mod says them (assign.tsx, register.tsx, runstab.tsx) ---
@@ -931,7 +935,7 @@ export function reduce(s: State, k: Key): Step {
       const at = TABS.indexOf(s.tab)
       return toTab(s, TABS[(at + (k.shift ? TABS.length - 1 : 1)) % TABS.length]!)
     }
-    case 'r': return { state: s, effects: [{ kind: 'poll', what: 'board' }, { kind: 'poll', what: 'slow' }] }
+    case 'r': return { state: { ...s, toast: '↻ TICKETS.md reloaded' }, effects: [{ kind: 'poll', what: 'board' }, { kind: 'poll', what: 'slow' }] }
     case 'R': return resume(s)
   }
   if (s.tab === 'health' && k.name === 'F') return forceResume(s)     // F87

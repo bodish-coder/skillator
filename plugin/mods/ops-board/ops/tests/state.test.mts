@@ -712,3 +712,19 @@ test('F85: a workflow run - mode, phases, next phase; e then Enter prints /skill
   const stale = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-old 2026-10-18T11:15Z') }, { 'RUN-0020': script })
   assert.equal(reduce(stale, key('e')).state.engage?.text, '/skillator:marathon-run RUN-0020')
 })
+
+test('B20: r key triggers poll effects and sets reload toast; onBoard reconciles selected/expanded', () => {
+  const r = reduce(s0, key('r'))
+  assert.equal(r.state.toast, '↻ TICKETS.md reloaded')
+  assert.deepEqual(r.effects, [{ kind: 'poll', what: 'board' }, { kind: 'poll', what: 'slow' }])
+
+  const b1 = parseBoard('- [ ] F1 — a\n- [ ] F2 — b\n', 'T', 0, 0)
+  const st1 = onBoard({ ...s0, open: [' '], selected: 'F1' }, b1, [], null)
+  assert.equal(st1.selected, 'F1')
+
+  const b2 = parseBoard('- [ ] F3 — c\n', 'T', 0, 0)
+  const st2 = onBoard({ ...st1, selected: 'F2', expanded: 'F2' }, b2, [], null)
+  assert.equal(st2.selected, 'head: ')
+  assert.equal(st2.expanded, null)
+})
+
