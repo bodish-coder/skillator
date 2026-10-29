@@ -402,16 +402,24 @@ function Edit-Line([string]$id, [hashtable]$o) {
     }
     # F80: a ticket owned by someone else moves only by its owner's or the lead's
     # hand ($o.me, $o.lead from the caller). A team convention, not security.
+    # F131: once a lead is assigned, only the lead can change the assignment.
     if ($o.owncheck) {
       $om = [regex]::Match($line, '\[owner:[ \t]*([^\]]*?)[ \t]*\]')
-      if ($om.Success) {
-        $ow = $om.Groups[1].Value
-        if ($ow -ne '' -and -not (Test-MayTake $ow $o.me $o.lead)) {
-          $who = "only $ow may reassign it (no lead set)"
-          if ($o.lead) { $who = "only $ow or the lead $($o.lead) may reassign it" }
-          $you = $o.me
-          if (-not $you) { $you = $o.mewhy }
-          Fail "$id is owned by $ow - $who (you: $you)"
+      $ow = ''
+      if ($om.Success) { $ow = $om.Groups[1].Value.Trim() }
+      $you = $o.me
+      if (-not $you) { $you = $o.mewhy }
+      if ($ow -ne '') {
+        if ($o.lead -ne '') {
+          if ($o.me -ine $o.lead) {
+            Fail "$id is owned by $ow - only the lead $($o.lead) may reassign it (you: $you)"
+          }
+        } elseif (-not (Test-MayTake $ow $o.me $o.lead)) {
+          Fail "$id is owned by $ow - only $ow may reassign it (no lead set) (you: $you)"
+        }
+      } elseif ($o.lead -ne '' -and $o.requireleadassign) {
+        if ($o.me -ine $o.lead) {
+          Fail "lead $($o.lead) is assigned - only the lead may assign tickets (you: $you)"
         }
       }
     }
@@ -641,7 +649,7 @@ function Test-MayTake([string]$owner, [string]$me, [string]$lead) {
 function Do-Assign([string[]]$a) {
   $x = Get-IdAndHandle 'assign' $a
   $me = Get-Me
-  return (Edit-Line $x[0] @{ mark = ' '; owner = $x[1]; samekey = 'owner'; sameval = $x[1]; owncheck = $true; me = $me.me; mewhy = $me.why; lead = (Get-Lead) })
+  return (Edit-Line $x[0] @{ mark = ' '; owner = $x[1]; samekey = 'owner'; sameval = $x[1]; owncheck = $true; requireleadassign = $true; me = $me.me; mewhy = $me.why; lead = (Get-Lead) })
 }
 
 function Do-Whoami([string[]]$a) {
@@ -1350,7 +1358,7 @@ function Invoke-Selftest {
   # F80: who "me" is comes from git's user.email - never this machine's global one
   $savedMe = @($env:GIT_CONFIG_GLOBAL, $env:SKILLATOR_ME, $env:EMAIL, $env:SKILLATOR_SESSION, $env:CLAUDE_CODE_SESSION_ID, $env:SKILLATOR_MODE)
   # F82: board writes commit; EMAIL is git's last fallback, so user.email (whoami) stays unset
-  [System.IO.File]::WriteAllText("$T/gitconfig", "[user]`n`tname = t`n")
+  [System.IO.File]::WriteAllText("$T/gitconfig", "[user]`n`tname = t`n[safe]`n`tdirectory = *`n")
   $env:EMAIL = 'board@selftest.invalid'
   $env:GIT_CONFIG_GLOBAL = "$T/gitconfig"
   Remove-Item Env:\SKILLATOR_ME -ErrorAction SilentlyContinue
@@ -1896,7 +1904,13 @@ function Invoke-Selftest {
     if ($msg -notmatch 'is the lead - hand the lead over first') { Write-Output "FAIL: lead removal refusal: [$msg]"; $script:fail = 1 }
     if (-not (& $teamIs $lead1)) { Write-Output 'FAIL: a refused lead change changed team.md'; $script:fail = 1 }
     $msg = ErrOf claim F6
-    if ($msg -notmatch 'F6 is owned by @neo - only @neo or the lead @vidul may reassign it \(you: @asha\)') { Write-Output "FAIL: refusal does not name both: [$msg]"; $script:fail = 1 }
+    if ($msg -notmatch 'F6 is owned by @neo - only the lead @vidul may reassign it \(you: @asha\)') { Write-Output "FAIL: refusal does not name lead: [$msg]"; $script:fail = 1 }
+    # F131: once a lead is assigned, an owner cannot reassign their own ticket - only the lead may reassign
+    $msg = AsMe '@neo' { ErrOf assign F6 '@asha' }
+    if ($msg -notmatch 'F6 is owned by @neo - only the lead @vidul may reassign it \(you: @neo\)') { Write-Output "FAIL: lead-only reassign refusal on owner: [$msg]"; $script:fail = 1 }
+    # F131: non-lead cannot assign an unowned ticket when lead is assigned
+    $msg = AsMe '@neo' { ErrOf assign F1 '@asha' }
+    if ($msg -notmatch 'lead @vidul is assigned - only the lead may assign tickets \(you: @neo\)') { Write-Output "FAIL: lead-only assign refusal on unowned: [$msg]"; $script:fail = 1 }
     Eq 'the lead reassigns' (AsMe '@vidul' { Run assign F6 '@asha' }) "- [ ] F6 $dash Neos [owner: @asha]"
     Eq 'hand-over' (AsMe '@vidul' { Run team lead 'asha' }) 'lead: @asha'
     Eq 'one lead line' @(([System.IO.File]::ReadAllText($tf)) -split "`n" | Where-Object { $_ -match '^lead:' }).Count '1'

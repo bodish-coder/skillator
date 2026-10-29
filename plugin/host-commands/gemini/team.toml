@@ -1,0 +1,11 @@
+description = "Team management and ticket assignment: add, remove, list members, set/change lead, and assign tickets to team members"
+prompt = '''
+Load `tickets-zordon` ({{SKILLS}}/tickets-zordon/SKILL.md) and run the team action. Arguments: `{{args}}`
+
+- `add @handle "Name" email`: `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team add @handle "Name" email`
+- `remove @handle`: `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team remove @handle`
+- `lead @handle|-`: `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team lead @handle`
+- `assign <ID> @handle` or `<ID> @handle`: `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign <ID> @handle`
+  Once a lead is assigned, only the lead can assign or reassign tickets.
+- `list` or empty: `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team list`
+'''
