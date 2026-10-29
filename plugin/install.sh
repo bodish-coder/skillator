@@ -334,10 +334,57 @@ agy_ide() {
   if [ -n "${SKILLATOR_AGY_IDE:-}" ]; then [ -x "$SKILLATOR_AGY_IDE" ] && echo "$SKILLATOR_AGY_IDE"; return 0; fi
   if command -v antigravity-ide >/dev/null 2>&1; then command -v antigravity-ide; return 0; fi
   for _i in "${LOCALAPPDATA:-}/Programs/Antigravity IDE/bin/antigravity-ide" \
-            "/Applications/Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide"; do
+            "${LOCALAPPDATA:-}/Programs/Antigravity IDE/bin/antigravity-ide.cmd" \
+            "${LOCALAPPDATA:-}/Programs/antigravity/bin/antigravity-ide" \
+            "${LOCALAPPDATA:-}/Programs/antigravity/bin/antigravity-ide.cmd" \
+            "${ProgramFiles:-}/Antigravity IDE/bin/antigravity-ide.cmd" \
+            "${ProgramFiles:-}/Antigravity IDE/bin/antigravity-ide" \
+            "/Applications/Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide" \
+            "/Applications/Antigravity.app/Contents/Resources/app/bin/antigravity"; do
     case $_i in /*|[A-Za-z]:*) [ -x "$_i" ] && { echo "$_i"; return 0; } ;; esac
   done
   return 0
+}
+
+# put_muse: F134 - install or update the skillator plugin for Muse Code CLI when muse is available
+put_muse() {
+  _muse=""
+  if [ -n "${SKILLATOR_MUSE:-}" ] && [ -x "$SKILLATOR_MUSE" ]; then
+    _muse="$SKILLATOR_MUSE"
+  elif command -v muse >/dev/null 2>&1; then
+    _muse=$(command -v muse)
+  fi
+  [ -z "$_muse" ] && return 0
+
+  _plug_dir="$root"
+  if [ ! -f "$_plug_dir/.muse-plugin/plugin.json" ]; then
+    if [ -f "$_plug_dir/plugin/.muse-plugin/plugin.json" ]; then
+      _plug_dir="$_plug_dir/plugin"
+    else
+      return 0
+    fi
+  fi
+
+  echo "Muse ($_muse):"
+  if [ -n "$dry" ]; then
+    echo "        would install or update Muse plugin skillator from $_plug_dir"
+    return 0
+  fi
+
+  _list=$(MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins list --json 2>/dev/null || true)
+  if echo "$_list" | grep -q '"id":[[:space:]]*"skillator"'; then
+    if MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins update skillator --json >/dev/null 2>&1; then
+      echo "        * Muse plugin skillator updated"
+    else
+      echo "warn  Muse plugin update failed" >&2
+    fi
+  else
+    if MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins install "$_plug_dir" --json >/dev/null 2>&1; then
+      echo "        * Muse plugin skillator installed ($_plug_dir)"
+    else
+      echo "warn  Muse plugin install failed" >&2
+    fi
+  fi
 }
 
 # put_agy_ext <skills-dir>: F57 - the ops board in the Antigravity IDE (command "skillator:
@@ -433,6 +480,7 @@ if [ -n "$selftest" ]; then
   # it, so the selftest never installs into the real IDE
   printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/ide-calls"\n' "$T" > "$T/fake-ide"; chmod 755 "$T/fake-ide"
   export SKILLATOR_AGY_IDE="$T/fake-ide"
+  export SKILLATOR_MUSE="$T/none"
   # F89: the Windows Terminal fragment goes under a temp LOCALAPPDATA, never the real one
   export LOCALAPPDATA="$T/lad"
   # B12: an unknown flag is an error - exit 2, the usage line, nothing written
@@ -860,6 +908,9 @@ echo "$targets" | while IFS='|' read -r cli marker dests; do
   done
   IFS=$oifs
 done
+
+# F134: Muse Code CLI plugin install/update
+put_muse
 
 # A62a: codex builds before 0.155.0 read only ~/.agents/skills, not $codex_home/skills
 # (this installer's codex row). On such a build a fresh install here is silently
