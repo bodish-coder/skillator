@@ -330,11 +330,21 @@ edit_line() {
   fi
   # F80: a ticket owned by someone else moves only by its owner's or the lead's
   # hand (ME, LEAD from the caller). A team convention, not security.
+  # F131: once a lead is assigned, only the lead can change the assignment.
   if [ -n "${OWN_CHECK:-}" ]; then
     ow=$(printf '%s\n' "$cur" | awk '{ if (match($0, /\[owner:[ \t]*[^]]*\]/)) { v = substr($0, RSTART + 7, RLENGTH - 8); gsub(/^[ \t]+|[ \t]+$/, "", v); print v } }')
-    if [ -n "$ow" ] && ! may_take "$ow"; then
-      if [ -n "$LEAD" ]; then who="only $ow or the lead $LEAD may reassign it"; else who="only $ow may reassign it (no lead set)"; fi
-      die "$ID is owned by $ow - $who (you: ${ME:-$ME_WHY})"
+    if [ -n "$ow" ]; then
+      if [ -n "$LEAD" ]; then
+        if [ "$(lc "$LEAD")" != "$(lc "$ME")" ]; then
+          die "$ID is owned by $ow - only the lead $LEAD may reassign it (you: ${ME:-$ME_WHY})"
+        fi
+      elif [ "$(lc "$ow")" != "$(lc "$ME")" ]; then
+        die "$ID is owned by $ow - only $ow may reassign it (no lead set) (you: ${ME:-$ME_WHY})"
+      fi
+    elif [ -n "$LEAD" ] && [ -n "${REQUIRE_LEAD_ASSIGN:-}" ]; then
+      if [ "$(lc "$LEAD")" != "$(lc "$ME")" ]; then
+        die "lead $LEAD is assigned - only the lead may assign tickets (you: ${ME:-$ME_WHY})"
+      fi
     fi
   fi
   # F106: a start claims an unowned ticket to me; another's is left alone and said.
@@ -583,7 +593,7 @@ may_take() {
 cmd_assign() {
   CMD=assign; id_and_handle "$@"
   me_of || :; lead_of
-  SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER=$HANDLE SET_BY='' SAME_KEY=owner SAME_VAL=$HANDLE NEED_MARK='' OWN_CHECK=1 edit_line
+  SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER=$HANDLE SET_BY='' SAME_KEY=owner SAME_VAL=$HANDLE NEED_MARK='' OWN_CHECK=1 REQUIRE_LEAD_ASSIGN=1 edit_line
 }
 
 cmd_whoami() {
@@ -1117,7 +1127,7 @@ selftest() {
   # F80: who "me" is comes from git's user.email - never this machine's global one
   : > "$T/gitconfig"; GIT_CONFIG_GLOBAL="$T/gitconfig"; export GIT_CONFIG_GLOBAL; unset SKILLATOR_ME SKILLATOR_SESSION CLAUDE_CODE_SESSION_ID SKILLATOR_MODE
   # F82: board writes commit; EMAIL is git's last fallback, so user.email (whoami) stays unset
-  printf '[user]\n\tname = t\n' > "$T/gitconfig"; EMAIL=board@selftest.invalid; export EMAIL
+  printf '[user]\n\tname = t\n[safe]\n\tdirectory = *\n' > "$T/gitconfig"; EMAIL=board@selftest.invalid; export EMAIL
   fail=0
   D=$(printf '\342\200\224')
   eq() { [ "$2" = "$3" ] || { echo "FAIL: $1: expected [$3] got [$2]"; fail=1; }; }
@@ -1674,7 +1684,13 @@ selftest() {
   grep -q 'is the lead - hand the lead over first' "$T/err" || { echo "FAIL: lead removal refusal: $(cat "$T/err")"; fail=1; }
   cmp -s .skillator/team.md "$T/lead1.md" || { echo "FAIL: a refused lead change changed team.md"; diff "$T/lead1.md" .skillator/team.md; fail=1; }
   sh "$self" claim F6 > /dev/null 2> "$T/err" && { echo "FAIL: claim took another's ticket"; fail=1; }
-  grep -q 'F6 is owned by @neo - only @neo or the lead @vidul may reassign it (you: @asha)' "$T/err" || { echo "FAIL: refusal does not name both: $(cat "$T/err")"; fail=1; }
+  grep -q 'F6 is owned by @neo - only the lead @vidul may reassign it (you: @asha)' "$T/err" || { echo "FAIL: refusal does not name lead: $(cat "$T/err")"; fail=1; }
+  # F131: once a lead is assigned, an owner cannot reassign their own ticket - only the lead may reassign
+  SKILLATOR_ME=@neo sh "$self" assign F6 @asha > /dev/null 2> "$T/err" && { echo "FAIL: owner reassigned when lead assigned"; fail=1; }
+  grep -q 'F6 is owned by @neo - only the lead @vidul may reassign it (you: @neo)' "$T/err" || { echo "FAIL: owner refusal does not name lead: $(cat "$T/err")"; fail=1; }
+  # F131: non-lead cannot assign an unowned ticket when lead is assigned
+  SKILLATOR_ME=@neo sh "$self" assign F1 @asha > /dev/null 2> "$T/err" && { echo "FAIL: non-lead assigned unowned ticket"; fail=1; }
+  grep -q 'lead @vidul is assigned - only the lead may assign tickets (you: @neo)' "$T/err" || { echo "FAIL: unowned refusal does not name lead: $(cat "$T/err")"; fail=1; }
   eq "the lead reassigns" "$(SKILLATOR_ME=@vidul sh "$self" assign F6 @asha 2>&1)" "- [ ] F6 $D Neos [owner: @asha]"
   eq "hand-over" "$(SKILLATOR_ME=@vidul sh "$self" team lead asha 2>&1)" "lead: @asha"
   eq "one lead line" "$(grep -c '^lead:' .skillator/team.md)" "1"

@@ -353,7 +353,7 @@ function Write-AgyExt([string]$skillsDir) {
 # Same as install.sh write_commands.
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
-  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run'
+  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run', 'team'
   switch ($cli) {
     # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
     # prompt an older run wrote under that name goes, nothing else in prompts\
