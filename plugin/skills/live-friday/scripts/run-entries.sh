@@ -132,6 +132,7 @@ END {
     if (id in used) { c = 2; while ((id "-" c) in used) c++; id = id "-" c }
     used[id] = 1
     k = v[ix, "kind"]; t = v[ix, "target"]
+    if (!(ix in na) || na[ix] == 0) used_target[k ":" t] = 1
     cwd = v[ix, "cwd"]; if (cwd == "") cwd = "."
     aj = "["; as = ""
     for (j = 1; j <= na[ix]; j++) { aj = aj (j > 1 ? ", " : "") "\"" av[ix, j] "\""; as = as " " av[ix, j] }
@@ -146,7 +147,7 @@ END {
     row(id, name, k, t, aj, as, cwd, src, miss)
   }
   if (mode == "scan") for (d = 1; d <= nd; d++) {
-    if (dk[d] in used) continue
+    if (dk[d] in used || dk[d] in used_target) continue
     used[dk[d]] = 1; nnew++
     row(dk[d], defname(dkind[d], dtgt[d]), dkind[d], dtgt[d], "[]", "", ".", dsrc[dk[d]], 0)
   }
@@ -162,11 +163,16 @@ END {
   print nr + 0, nnew + 0, nmiss + 0, renamed + 0 > ENVIRON["RE_SUM"]
 }'
 
-SCRIPT_RE='^(install|build|run|setup|start|dev)([._-][A-Za-z0-9._-]*)?\.(sh|ps1)$'
+SCRIPT_RE='^(installer|install|build|run|setup|start|dev|package|pkg|compile|bundle|release|deploy)([._-][A-Za-z0-9._-]*)?\.(sh|ps1)$'
 
 # The files of a dir, one per line, byte order (LC_ALL=C globs sort so).
 files_in() {
   for f in "$1"/*; do [ -f "$f" ] && printf '%s\n' "${f##*/}"; done
+}
+
+# The directories of a dir, one per line, byte order.
+dirs_in() {
+  for d in "$1"/*; do [ -d "$d" ] && printf '%s\n' "${d##*/}"; done
 }
 
 # kind TAB target TAB source, in the order the header names.
@@ -197,7 +203,20 @@ discover() {
     files_in scripts | grep -E "$SCRIPT_RE" | while IFS= read -r f; do
       printf '%s\t%s\t%s\n' "${f##*.}" "scripts/$f" "scripts/$f"
     done
+    dirs_in scripts | while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      files_in "scripts/$d" | grep -E "$SCRIPT_RE" | while IFS= read -r f; do
+        printf '%s\t%s\t%s\n' "${f##*.}" "scripts/$d/$f" "scripts/$d/$f"
+      done
+    done
   fi
+  for d in build installer install run setup; do
+    if [ -d "$d" ]; then
+      files_in "$d" | grep -E "$SCRIPT_RE" | while IFS= read -r f; do
+        printf '%s\t%s\t%s\n' "${f##*.}" "$d/$f" "$d/$f"
+      done
+    fi
+  done
 }
 
 # The entries of run.json as JFLAT lines (nothing when absent). A file that is not JSON
