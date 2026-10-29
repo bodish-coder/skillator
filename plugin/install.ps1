@@ -319,9 +319,82 @@ function Get-AgyIde {
   if ($env:SKILLATOR_AGY_IDE) { if (Test-Path -LiteralPath $env:SKILLATOR_AGY_IDE -PathType Leaf) { return $env:SKILLATOR_AGY_IDE } else { return '' } }
   $c = Get-Command antigravity-ide -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($c) { return $c.Source }
-  $d = "$env:LOCALAPPDATA\Programs\Antigravity IDE\bin\antigravity-ide.cmd"
-  if ($env:LOCALAPPDATA -and (Test-Path -LiteralPath $d -PathType Leaf)) { return $d }
+  $candidates = @(
+    "$env:LOCALAPPDATA\Programs\Antigravity IDE\bin\antigravity-ide.cmd",
+    "$env:LOCALAPPDATA\Programs\antigravity\bin\antigravity-ide.cmd",
+    "$env:ProgramFiles\Antigravity IDE\bin\antigravity-ide.cmd",
+    "${env:ProgramFiles(x86)}\Antigravity IDE\bin\antigravity-ide.cmd"
+  )
+  foreach ($d in $candidates) {
+    if ($d -and (Test-Path -LiteralPath $d -PathType Leaf)) { return $d }
+  }
   return ''
+}
+
+# Write-Muse: F134 - install or update the skillator plugin for Muse Code CLI when muse is available
+function Write-Muse {
+  $muse = ''
+  if ($env:SKILLATOR_MUSE) {
+    if (Test-Path -LiteralPath $env:SKILLATOR_MUSE -PathType Leaf) { $muse = $env:SKILLATOR_MUSE }
+    else { return }
+  } else {
+    $c = Get-Command muse -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($c) { $muse = $c.Source }
+  }
+  if (-not $muse) { return }
+
+  $pluginPath = $PSScriptRoot
+  if (-not (Test-Path (Join-Path $pluginPath '.muse-plugin\plugin.json'))) {
+    if (Test-Path (Join-Path $pluginPath 'plugin\.muse-plugin\plugin.json')) {
+      $pluginPath = Join-Path $pluginPath 'plugin'
+    } else {
+      return
+    }
+  }
+
+  Write-Host "Muse ($muse):"
+  if ($DryRun) {
+    Write-Host "        would install or update Muse plugin skillator from $pluginPath"
+    return
+  }
+
+  $prevNoAuto = $env:MUSE_NO_AUTO_UPDATE
+  $env:MUSE_NO_AUTO_UPDATE = '1'
+  try {
+    $listJson = & $muse plugins list --json 2>$null | Out-String
+    $hasSkillator = $false
+    if ($LASTEXITCODE -eq 0 -and $listJson) {
+      try {
+        $parsed = ConvertFrom-Json $listJson -ErrorAction SilentlyContinue
+        if ($parsed.plugins) {
+          foreach ($p in $parsed.plugins) {
+            if ($p.record.id -eq 'skillator' -or $p.plugin.id -eq 'skillator') {
+              $hasSkillator = $true
+              break
+            }
+          }
+        }
+      } catch { }
+    }
+
+    if ($hasSkillator) {
+      $o = & $muse plugins update skillator --json 2>&1 | Out-String
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "        * Muse plugin skillator updated"
+      } else {
+        Write-Host "warn  Muse plugin update failed: $o" -ForegroundColor Yellow
+      }
+    } else {
+      $o = & $muse plugins install "$pluginPath" --json 2>&1 | Out-String
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "        * Muse plugin skillator installed ($pluginPath)"
+      } else {
+        Write-Host "warn  Muse plugin install failed: $o" -ForegroundColor Yellow
+      }
+    }
+  } finally {
+    $env:MUSE_NO_AUTO_UPDATE = $prevNoAuto
+  }
 }
 
 # Write-AgyExt <skills-dir>: F57 - the ops board in the Antigravity IDE (command "skillator:
@@ -405,6 +478,7 @@ function Invoke-SelfTest([string]$T) {
   $calls = Join-Path $T 'ide-calls'
   [IO.File]::WriteAllText((Join-Path $T 'fake-ide.ps1'), "Add-Content -LiteralPath '$calls' -Value (`$args -join ' ')`nexit 0`n")
   $env:SKILLATOR_AGY_IDE = Join-Path $T 'fake-ide.ps1'
+  $env:SKILLATOR_MUSE = Join-Path $T 'none-muse.ps1'
   # F89: the Windows Terminal fragment goes under a temp LOCALAPPDATA, never the real one
   $env:LOCALAPPDATA = Join-Path $T 'lad'
   $frag = Join-Path $T 'lad\Microsoft\Windows Terminal\Fragments\skillator\ops.json'
@@ -973,6 +1047,9 @@ foreach ($cli in $targets.Keys) {
     Write-Commands $cli $dest
   }
 }
+
+# F134: Muse Code CLI plugin install/update
+Write-Muse
 
 # A62a: codex builds before 0.155.0 read only ~\.agents\skills, not $codexHome\skills
 # (this installer's codex row). On such a build a fresh install here is silently

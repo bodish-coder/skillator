@@ -28,7 +28,10 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
    Antigravity IDE's ops board: on Windows
    `powershell -NoProfile -ExecutionPolicy Bypass -File "<src>/install.ps1" -Force`, elsewhere
    `sh "<src>/install.sh" --force`. A non-zero exit → show the last lines of its output and stop.
-4. **Muse** - only when `muse` is on PATH and `muse plugins list --json` lists `skillator`.
+4. **Muse** - only when `muse` is on PATH.
+   If `muse plugins list --json` does not list `skillator`:
+   Install it via `muse plugins install <src>/plugin` (or `<src>` if `<src>` has `.muse-plugin/plugin.json`).
+   If `muse plugins list --json` lists `skillator`:
    Its `source.provenance` is `marketplace-user-added` → `muse plugins marketplace update <name>`
    (`<name>`: the dir after `marketplaces\` in `source.path`), then `muse plugins remove skillator`
    and `muse plugins install skillator@<name>` - a plain `update` re-reads the old snapshot and
