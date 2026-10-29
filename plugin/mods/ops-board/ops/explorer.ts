@@ -7,7 +7,7 @@ import type { Explorer } from '../hooks/lib/explorer'
 import type { RunResult } from './nodehost'
 import type { Effect, Key, State, Step, Then } from './state'
 import { changeArgs, COUNT_ARGS, EMPTY, explorerLines, explorerOffset, INCOMING_ARGS, isSha, LOG_ARGS, LS_ARGS, moveSel, NO_GIT,
-  parseFiles, selectedOf, toggle, UPSTREAM_ARGS, withChanges, withError, withFiles, withIncoming, withLog, withUpstream } from '../hooks/lib/explorer'
+  parseFiles, parseStatus, selectedOf, stageArgs, STATUS_ARGS, toggle, unstageArgs, UPSTREAM_ARGS, withChanges, withError, withFiles, withIncoming, withLog, withUpstream, withWorktree } from '../hooks/lib/explorer'
 
 // The model, and the file list it was drawn from (no state cap here: kept for folder toggles).
 export type ExState = { x: Explorer; files: string[] | null }
@@ -19,6 +19,9 @@ const why = (name: string, r: RunResult) =>
   (r.err === NO_GIT ? NO_GIT : `git ${name} failed: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`)
 // A second failure joins the first, said once.
 const addError = (x: Explorer, e: string) => withError(x, x.error && x.error !== e ? `${x.error}; ${e}` : e)
+
+const statusThen: Then = r => s => setX(s, x => (r.code !== 0 ? addError(x, why('status', r)) : withWorktree(x, parseStatus(r.out))))
+const stageThen: Then = _r => step => ({ state: step, effects: [git(STATUS_ARGS, statusThen)] })
 
 const filesThen: Then = r => s => {
   if (r.code !== 0) return setX(s, x => withError(x, why('ls-files', r)))
@@ -41,7 +44,7 @@ const upstreamThen: Then = r => s => {
 // Entering the tab and r: the file list and the log read again; open commits' files too.
 export function enterExplorer(s: State): Step {
   const shas = Object.keys(s.explorer.x.changes).filter(isSha)
-  return { state: s, effects: [git(LS_ARGS, filesThen), git(LOG_ARGS, logThen), git(UPSTREAM_ARGS, upstreamThen),
+  return { state: s, effects: [git(STATUS_ARGS, statusThen), git(LS_ARGS, filesThen), git(LOG_ARGS, logThen), git(UPSTREAM_ARGS, upstreamThen),
     ...shas.map(sha => git(changeArgs(sha), changesThen(sha)))] }
 }
 
@@ -54,10 +57,28 @@ export function explorerKey(s: State, k: Key): Step {
   switch (k.name) {
     case 'up': case 'k': return move(-1)
     case 'down': case 'j': return move(1)
+    case 'space': {
+      const sel = selectedOf(x)
+      if (sel.startsWith('xw:')) {
+        const path = sel.slice(3)
+        const f = (x.worktree ?? []).find(w => w.path === path)
+        const isStaged = f && f.staged !== null
+        const args = isStaged ? unstageArgs(path) : stageArgs(path)
+        return { state: s, effects: [git(args, stageThen)] }
+      }
+      return { state: s, effects: [] }
+    }
     case 'return': case 'enter': {
       const t = toggle(x, selectedOf(x))
       let state = setX(s, () => t.x)
       const effects: Effect[] = []
+      if (t.need.stagePath) {
+        const path = t.need.stagePath
+        const f = (x.worktree ?? []).find(w => w.path === path)
+        const isStaged = f && f.staged !== null
+        const args = isStaged ? unstageArgs(path) : stageArgs(path)
+        effects.push(git(args, stageThen))
+      }
       const files = s.explorer.files
       if (t.need.files) {
         if (files) state = setX(state, y => withFiles(y, files))

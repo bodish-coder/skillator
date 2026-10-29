@@ -6,7 +6,8 @@ import { frame, cells } from '../draw'
 import { makeEngine } from '../engine'
 import { parseArgs } from '../app'
 import type { Host, RunResult } from '../nodehost'
-import { changeArgs, COUNT_ARGS, INCOMING_ARGS, LOG_ARGS, LS_ARGS, NO_GIT, UPSTREAM_ARGS } from '../../hooks/lib/explorer'
+import { changeArgs, COUNT_ARGS, detectUnwanted, draftCommitMessage, INCOMING_ARGS, LOG_ARGS, LS_ARGS, NO_GIT,
+  parseStatus, stageArgs, STATUS_ARGS, summarizeIncoming, auditOutgoing, unstageArgs, UPSTREAM_ARGS } from '../../hooks/lib/explorer'
 
 // F75: the standalone app's Explorer tab (5) - the same model as the pane's
 // (hooks/lib/explorer.ts): git-tracked files as a tree, the newest commits opening to
@@ -22,6 +23,7 @@ const SHA3 = 'fedcba9' + 'c'.repeat(33)      // F103: the upstream's commit HEAD
 const ok = (out: string): RunResult => ({ code: 0, out, err: '', argv: ['git'] })
 const gitOut = (args: string[]): RunResult => {
   const a = args.join(' ')
+  if (a === STATUS_ARGS.join(' ')) return ok('')
   if (a === LS_ARGS.join(' ')) return ok(FILES)
   if (a === LOG_ARGS.join(' ')) return ok(LOG)
   if (a === UPSTREAM_ARGS.join(' ')) return ok('origin/main\n')
@@ -52,7 +54,7 @@ const text = (s: State) => frame(s, P).join('\n')
 test('5 opens Explorer: git ls-files and git log asked as git effects, nothing run through the scripts table', () => {
   const st = reduce(initial(80, 24, 0), { name: '5' })
   assert.equal(st.state.tab, 'explorer')
-  assert.deepEqual(gits(st.effects).map(e => e.args), [LS_ARGS, LOG_ARGS, UPSTREAM_ARGS])
+  assert.deepEqual(gits(st.effects).map(e => e.args), [STATUS_ARGS, LS_ARGS, LOG_ARGS, UPSTREAM_ARGS])
   assert.equal(st.effects.filter(e => e.kind === 'run').length, 0)
   assert.match(frame(st.state, P)[0]!, /5 Explorer/)
 })
@@ -90,8 +92,8 @@ test('git failing is said in the tab; r reads again with the board', () => {
   s = { ...s, tab: 'explorer' }
   const st = reduce(s, { name: 'r' })
   assert.deepEqual(st.effects.filter(e => e.kind === 'poll').map(e => (e as { what: string }).what), ['board', 'slow'])
-  assert.deepEqual(gits(st.effects).map(e => e.args), [LS_ARGS, LOG_ARGS, UPSTREAM_ARGS])
-  const failed = afterRun(gits(st.effects)[0]!, { code: 128, out: '', err: 'fatal: not a git repository\n', argv: [] }, s, 0).state
+  assert.deepEqual(gits(st.effects).map(e => e.args), [STATUS_ARGS, LS_ARGS, LOG_ARGS, UPSTREAM_ARGS])
+  const failed = afterRun(gits(st.effects)[1]!, { code: 128, out: '', err: 'fatal: not a git repository\n', argv: [] }, s, 0).state
   assert.match(text(failed), /git ls-files failed: fatal: not a git repository/)
 })
 
@@ -138,7 +140,7 @@ test('the engine runs git effects through the host (--once too: git only reads)'
   const host = hostOf(async args => { asked.push(args); return gitOut(args) })
   const engine = makeEngine({ host, email: null, once: true, state: { ...initial(80, 24, 0), tab: 'explorer' }, onChange: () => {}, onQuit: () => {} })
   await engine.readAll()
-  assert.deepEqual(asked, [LS_ARGS, LOG_ARGS, UPSTREAM_ARGS, COUNT_ARGS, INCOMING_ARGS])
+  assert.deepEqual(asked, [STATUS_ARGS, LS_ARGS, LOG_ARGS, UPSTREAM_ARGS, COUNT_ARGS, INCOMING_ARGS])
   assert.match(text(engine.state), /▸ Files \(4\)/)
   const none = makeEngine({ host: hostOf(), email: null, once: true, state: { ...initial(80, 24, 0), tab: 'explorer' }, onChange: () => {}, onQuit: () => {} })
   await none.readAll()
@@ -200,4 +202,58 @@ test('A164 shared branch query works before the first commit and identifies deta
     assert.equal(detached.stdout.trim(), '')
     assert.match((planAction(EMPTY, 'push', { branch: detached.stdout.trim() || 'HEAD', head: '', root: repo, dirty: 0 }) as { refused: string }).refused, /HEAD is detached/)
   } finally { rmSync(repo, { recursive: true, force: true }) }
+})
+
+// F133: Working tree changes, staging, and AI commit / digest helpers
+test('F133: changes section shows staged and unstaged files with warnings, space toggles staging', () => {
+  const STATUS_SAMPLE = 'M  staged-file.ts\n M unstaged-file.ts\n?? .env.local\n'
+  const gitOutWithStatus = (args: string[]): RunResult => {
+    const a = args.join(' ')
+    if (a === STATUS_ARGS.join(' ')) return ok(STATUS_SAMPLE)
+    return gitOut(args)
+  }
+  const customSettle = (step: Step): State => {
+    let s = step.state
+    const queue = [...step.effects]
+    while (queue.length) {
+      const e = queue.shift()!
+      if (e.kind !== 'git') continue
+      const next = afterRun(e, gitOutWithStatus(e.args), s, 0)
+      s = next.state
+      queue.push(...next.effects)
+    }
+    return s
+  }
+  let s = customSettle(reduce(initial(80, 24, 0), { name: '5' }))
+  assert.match(text(s), /^▸ Changes \(3\)  staged 1 · unstaged 2$/m)
+  s = customSettle(reduce(s, { name: 'return' }))
+  assert.match(text(s), /^▾ Changes \(3\)  staged 1 · unstaged 2$/m)
+  assert.match(text(s), /● \[M\] staged-file\.ts/)
+  assert.match(text(s), /○ \[M\] unstaged-file\.ts/)
+  assert.match(text(s), /○ \[\?\] \.env\.local ⚠/)
+
+  // Move down to staged-file.ts and press space to unstage
+  const s2 = reduce(s, { name: 'down' })
+  const stageStep = reduce(s2.state, { name: 'space' })
+  assert.deepEqual(gits(stageStep.effects).map(e => e.args), [unstageArgs('staged-file.ts')])
+})
+
+test('F133 AI commit message drafting and change digest helpers', () => {
+  const files = parseStatus('M  plugin/mods/ops-board/hooks/explorertab.tsx\n?? .env\n')
+  assert.equal(detectUnwanted('.env'), 'environment file (.env)')
+  assert.equal(detectUnwanted('id_rsa'), 'credential/private key')
+  assert.equal(detectUnwanted('scratch/test.tmp'), 'temporary scratch file')
+
+  const draftWithTicket = draftCommitMessage(files, 'F133')
+  assert.match(draftWithTicket, /^F133: update explorertab/)
+
+  const digest = summarizeIncoming([{ sha: SHA1, short: '1234567', date: '2026-10-24', author: 'Vidul', subject: 'feat: add git workbench' }])
+  assert.match(digest[0]!, /1 new commit from upstream/)
+  assert.match(digest[1]!, /• 1234567 feat: add git workbench \(Vidul\)/)
+
+  const audit = auditOutgoing('1234567 wip: temp fix\n89abcde fixup! prev commit\n')
+  assert.equal(audit.count, 2)
+  assert.equal(audit.warnings.length, 2)
+  assert.match(audit.warnings[0]!, /temporary or WIP/)
+  assert.match(audit.warnings[1]!, /fixup\/squash/)
 })

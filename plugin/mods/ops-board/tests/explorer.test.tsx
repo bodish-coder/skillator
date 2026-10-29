@@ -38,7 +38,7 @@ const answer = (args: readonly string[]): ProcessRunResult => {
   if (a.includes(' log ')) return ran(LOG)
   return ran('', 1, 'not in this test')
 }
-const ACTION = /^(fetch|pull|push|revert|merge)$/
+const ACTION = /^(fetch|pull|push|revert|merge|commit|sync)$/
 
 function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   const w: World = { runs: [], git: answer, exes: [], actions: [], actionResult: ran('Already up to date.\n'), dirty: '', branch: 'main', head: SHA1,
@@ -400,7 +400,7 @@ test('F103 Run pressed twice runs git once; a detached HEAD is no merge source',
   const run = ui.press({ key: 'xa:go' }); await ui.press({ key: 'xa:go' }).catch(() => {}); await run; await clock.settle()
   expect(w.actions).toEqual([['push', 'origin', 'HEAD:refs/heads/main']])
   expect(planAction(EMPTY, 'merge', { branch: 'main', head: SHA1, root: '/r', dirty: 0, branches: ['(HEAD detached at abc1234)', 'main', 'x'] }))
-    .toEqual({ action: { kind: 'merge', args: [], warn: [], pick: ['x'], result: null, branch: 'main', head: SHA1 } })
+    .toEqual({ action: { kind: 'merge', args: [], warn: [], pick: ['x'], result: null, branch: 'main', head: SHA1, conflictAi: true } })
   await ui.unmount()
 })
 
@@ -549,5 +549,19 @@ test('A164 a branch query failure refuses fetch without a confirm or action', WI
   expect(w.toasts.at(-1)).toContain('fatal: not a git repository')
   expect(await ui.find({ key: 'xa:title' })).toBeUndefined()
   expect(w.actions).toEqual([])
+  await ui.unmount()
+})
+
+test('F133 commit: staging and committing working tree files with drafted message', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  w.dirty = 'M  src/app.ts\n?? .env\n'
+  await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
+  expect(await ui.find({ key: 'key:commit' })).toBeDefined()
+  await ui.press({ key: 'key:commit' }); await clock.settle()
+  expect((await ui.find({ key: 'xa:title' }))?.text).toBe('git commit?  Esc cancels')
+  expect((await ui.find({ key: 'xa:msg' }))?.text).toContain('message feat: update app')
+  expect((await ui.find({ key: 'xa:warn:0' }))?.text).toContain('staging 1 sensitive/unwanted file(s): .env')
+  await go(ui, clock, 'key:commit')
+  expect(w.actions.some(a => a[0] === 'commit')).toBe(true)
   await ui.unmount()
 })

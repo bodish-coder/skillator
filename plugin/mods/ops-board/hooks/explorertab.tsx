@@ -2,9 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, TextProps } from 'claude-code'
 import { clean } from './lib/bandlines'
 import { gitBin } from './lib/host'
-import { BRANCH_ARGS, BRANCHES_ARGS, changeArgs, COUNT_ARGS, DIRTY_ARGS, EMPTY, explorerLines, explorerOffset, GIT_DIR_ARGS, HEAD_ARGS,
-  IN_PROGRESS, INCOMING_ARGS, LOG_ARGS, LS_ARGS, moveSel, NO_GIT, parseFiles, pickBranch, planAction, pushToArgs, selectedOf, staleAction, toggle,
-  UPSTREAM_ARGS, withChanges, withError, withFiles, withIncoming, withLog, withUpstream } from './lib/explorer'
+import { BRANCH_ARGS, BRANCHES_ARGS, changeArgs, CHANGES, COUNT_ARGS, DIRTY_ARGS, EMPTY, explorerLines, explorerOffset, GIT_DIR_ARGS, HEAD_ARGS,
+  IN_PROGRESS, INCOMING_ARGS, LOG_ARGS, LS_ARGS, moveSel, NO_GIT, OUTGOING_ARGS, parseFiles, parseStatus, pickBranch, planAction, pushToArgs,
+  selectedOf, stageArgs, staleAction, STATUS_ARGS, toggle, unstageArgs, UPSTREAM_ARGS, withChanges, withError, withFiles, withIncoming, withLog,
+  withUpstream, withWorktree, xwItem } from './lib/explorer'
 import type { Action, ActionKind, Explorer, Here, Need } from './lib/explorer'
 
 // F75: the Explorer tab - the git-tracked files as a tree, the newest commits each
@@ -63,14 +64,16 @@ async function readFiles($: EngineInterface): Promise<{ list: string[] | null; e
 export async function enterExplorer($: EngineInterface): Promise<void> {
   const f = await readFiles($)
   const log = await git($, 'log', LOG_ARGS)
+  const st = await git($, 'status', STATUS_ARGS)
   // F103: the upstream, read-only (no fetch): exit 128 is no upstream, any other failure leaves it unread
   const up = await git($, 'rev-parse', UPSTREAM_ARGS)
   const count = up.ok ? await git($, 'rev-list', COUNT_ARGS) : null
   const inc = up.ok ? await git($, 'log', INCOMING_ARGS) : null
-  const errs = [f.err, log.ok ? null : log.err].filter((e): e is string => !!e)
+  const errs = [f.err, log.ok ? null : log.err, st.ok ? null : st.err].filter((e): e is string => !!e)
   await update($, explorerA, x => {
     let y = f.list ? withFiles(x, f.list) : x
     if (log.ok) y = withLog(y, log.out)
+    if (st.ok) y = withWorktree(y, parseStatus(st.out))
     if (up.ok) y = withUpstream(y, up.out.trim(), count?.ok ? count.out : null)
     else if (up.code === 128) y = withUpstream(y, null, null)
     else y = { ...y, upstream: null, incoming: null }             // unread: no stale arrows drawn
@@ -90,6 +93,15 @@ async function readChanges($: EngineInterface, sha: string) {
 export async function toggleExplorer($: EngineInterface, item: string): Promise<void> {
   let need: Need = { files: false, sha: null }
   await update($, explorerA, x => { const t = toggle(x, item); need = t.need; return t.x })
+  if (need.stagePath) {
+    const x = await read($, explorerA)
+    const f = (x.worktree ?? []).find(w => w.path === need.stagePath)
+    const isStaged = f && f.staged !== null
+    const args = isStaged ? unstageArgs(need.stagePath) : stageArgs(need.stagePath)
+    await git($, isStaged ? 'reset' : 'add', args)
+    const st = await git($, 'status', STATUS_ARGS)
+    if (st.ok) await update($, explorerA, cur => withWorktree(cur, parseStatus(st.out)))
+  }
   if (need.files) {
     const list = files ?? (await readFiles($)).list
     if (list) await update($, explorerA, x => withFiles(x, list))
@@ -97,7 +109,7 @@ export async function toggleExplorer($: EngineInterface, item: string): Promise<
   if (need.sha) await readChanges($, need.sha)
 }
 
-export const isExplorerItem = (el: string) => /^x[sdfci]:/.test(el)
+export const isExplorerItem = (el: string) => /^x[sdfciw]:/.test(el)
 
 // The focus ring landing on an item selects it (Tab / shift-Tab).
 export async function focusExplorer($: EngineInterface, el: string): Promise<void> {
@@ -140,11 +152,12 @@ export async function openAction($: EngineInterface, kind: ActionKind): Promise<
   const here = await readHere($)
   if ('err' in here) { $.ui.toast('■ ' + here.err); return }
   const branches = kind === 'merge' ? await git($, 'branch', BRANCHES_ARGS) : null
-  // push/pull: the upstream read now, not as last drawn (one set by hand since counts)
-  const up = kind === 'push' || kind === 'pull' ? await git($, 'rev-parse', UPSTREAM_ARGS) : null
+  // push/pull/sync: the upstream read now, not as last drawn (one set by hand since counts)
+  const up = kind === 'push' || kind === 'pull' || kind === 'sync' ? await git($, 'rev-parse', UPSTREAM_ARGS) : null
   const to = kind === 'push' && here.branch !== 'HEAD' ? await git($, 'for-each-ref', pushToArgs(here.branch)) : null
   const gitDir = kind !== 'fetch' ? await git($, 'rev-parse', GIT_DIR_ARGS) : null
-  const failed = [branches, to, gitDir].find(r => r && !r.ok)
+  const outgoing = kind === 'push' ? await git($, 'log', OUTGOING_ARGS) : null
+  const failed = [branches, to, gitDir, outgoing].find(r => r && !r.ok)
   if (failed && !failed.ok) { $.ui.toast('■ ' + failed.err); return }
   let inProgress: string | null = null
   const dir = lines(gitDir)[0]
@@ -152,8 +165,10 @@ export async function openAction($: EngineInterface, kind: ActionKind): Promise<
   const [remote = '', ref = ''] = to?.ok ? to.out.trim().split('\t') : []
   const x = await read($, explorerA)
   const upstream = up && !up.ok && up.code === 128 ? 'none' as const : up ? null : x.upstream
+  const activeTicket = here.branch.match(/run\/RUN-\d+-([a-z0-9]+)/i)?.[1]?.toUpperCase()
   const p = planAction({ ...x, upstream, selected: selectedOf(x) }, kind, {
-    ...here, root: (await $.session.repo())?.root ?? '', branches: lines(branches), inProgress, pushTo: { remote, ref } })
+    ...here, root: (await $.session.repo())?.root ?? '', branches: lines(branches), inProgress, pushTo: { remote, ref },
+    activeTicket, outgoing: outgoing?.ok ? outgoing.out : undefined })
   if ('refused' in p) { $.ui.toast('■ ' + p.refused); return }
   await update($, actionA, () => p.action)
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
@@ -230,6 +245,14 @@ export async function ActionConfirm($: EngineInterface, els: Els, a: Action): Pr
       ? <Box key="xa:argv" flexDirection="row" flexWrap="wrap"><Text dimColor>{'runs    '}</Text><Text wrap="wrap">{'git ' + a.args.join(' ')}</Text></Box>
       : <Text key="xa:pickhead" dimColor>{a.pick?.length ? 'merge which branch into this one?' : 'no other branch to merge'}</Text>,
     <Box key="xa:on" flexDirection="row" flexWrap="wrap"><Text dimColor>{'on      '}</Text><Text>{clean(a.branch)}</Text></Box>,
+    ...(a.message ? [<Box key="xa:msg" flexDirection="row" flexWrap="wrap"><Text dimColor>{'message '}</Text><Text bold>{clean(a.message)}</Text></Box>] : []),
+    ...(a.files ? a.files.slice(0, 8).map((f, i) =>
+      <Box key={'xa:staged:' + i}><Text color="success">{'  ● '}</Text><Text color={f.staged === 'A' ? 'success' : 'warning'}>{`[${f.staged}] `}</Text><Text>{clean(f.path)}</Text>{f.warning ? <Text color="warning">{' ⚠ ' + f.warning}</Text> : null}</Box>) : []),
+    ...(a.digest ? [
+      <Box key="xa:digest_head"><Text bold dimColor>{'AI Change Digest:'}</Text></Box>,
+      ...a.digest.map((d, i) => <Box key={'xa:digest:' + i}><Text dimColor>{'  ' + clean(d)}</Text></Box>),
+    ] : []),
+    ...(a.conflictAi && !a.args.length ? [<Box key="xa:ai_note"><Text dimColor>{'AI autonomous conflict resolution available if conflicts occur.'}</Text></Box>] : []),
     ...a.warn.map((w, i) => <Box key={'xa:warn:' + i}><Text color="warning" wrap="wrap">{clean(w)}</Text></Box>),
     ...(a.pick ?? []).map(name => <Button key={'xb:' + name} hotkey={name === current ? 'o' : undefined} plain onPress={() => { void pickAction($, name).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>{'  ' + clean(name)}</Button>),
     <Text> </Text>,
@@ -240,8 +263,14 @@ export async function ActionConfirm($: EngineInterface, els: Els, a: Action): Pr
   ]
 }
 
-// u = upload (push), v = revert: p/P would differ by Shift alone
-const ACTION_KEYS: [ActionKind, string, string][] = [['fetch', 'f', 'fetch'], ['pull', 'p', 'pull'], ['push', 'u', 'push'], ['revert', 'v', 'revert'], ['merge', 'm', 'merge']]
+const ACTION_KEYS: [ActionKind, string, string][] = [
+  ['commit', 'c', 'commit'],
+  ['pull', 'p', 'pull/sync'],
+  ['push', 'u', 'push'],
+  ['merge', 'm', 'merge'],
+  ['fetch', 'f', 'fetch'],
+  ['revert', 'v', 'revert'],
+]
 
 export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: number): RenderElement[] {
   const { Box, Text, Button } = els
@@ -257,7 +286,7 @@ export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: num
   out.push(<Text> </Text>)
   out.push(
     <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
-      <Text dimColor>{sel.startsWith('xf:') ? '↑↓ move' : '↑↓ move · enter open/close'}</Text>
+      <Text dimColor>{sel.startsWith('xf:') ? '↑↓ move' : sel.startsWith('xw:') ? '↑↓ move · enter/space stage/unstage' : '↑↓ move · enter open/close'}</Text>
       {ACTION_KEYS.map(([kind, hotkey, label]) =>
         <Button key={'key:' + kind} plain dimColor hotkey={hotkey} onPress={() => { void openAction($, kind).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>{label}</Button>)}
       <Button key="key:reload" plain dimColor hotkey="r" onPress={() => { void enterExplorer($).catch(() => {}) }}>reload</Button>
