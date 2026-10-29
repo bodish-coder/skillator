@@ -288,6 +288,23 @@ Planning (no RUN id) checks Legacy recovery below first for an explicit
 
 On an in-session host a parallel plan runs serial; say so in the first line.
 
+### Adaptive marathon-plan (F121)
+
+When `/marathon-plan` is invoked without arguments (no mode, no count, no IDs), instead
+of silently defaulting to `sequential`, analyze open eligible tickets:
+1. `ticket-meta pick` finds open tickets (unassigned, or yours; skipping those already planned in an open run). Nothing left → say so, stop.
+2. Compute file disjointness from ticket bodies and git history: extract the files/directories each ticket touches or names in its body, or from recent commits/runs for related tickets.
+3. Identify which tickets can run in parallel worktrees without file conflicts (mutually disjoint file sets).
+4. Suggest a recommended parallel grouping (or sequential) with a confirmation choice before generating the plan:
+   - If two or more tickets are file-disjoint: recommend a parallel grouping (e.g. `parallel` or `parallel <N>`), list the proposed phases and tickets in each phase, and ask:
+     - Parallel (recommended): generate the parallel plan with the suggested grouping
+     - Sequential: plan one ticket per phase in board order
+   - If tickets cannot run in parallel (only 1 eligible ticket, or tickets share files): recommend `sequential`, explain the file conflict or single-ticket constraint, and ask to confirm sequential planning.
+   - Headless, chained or relay (or no interactive response): proceed with the recommendation without blocking.
+   - Once confirmed, proceed with Plan below using the selected mode.
+
+When `/marathon-plan` is invoked with explicit arguments (mode, count, or ticket IDs), adaptive suggestion is bypassed and the specified arguments are used directly.
+
 ### Legacy recovery (A162)
 
 Read the saved `PLAN` as data, never execute the old script. Legacy means its
@@ -347,8 +364,7 @@ call now sees a modern plan and skips it; it cannot repeatedly replace it.
 For an eligible legacy selection, use Legacy recovery above and stop; steps
 1-6 below create a new plan only.
 
-1. Pick the tickets as [chain.md](chain.md) Step 1 (ids given: only those) and
-   name each one's files. No ticket left → say so, stop.
+1. When invoked without arguments, run Adaptive marathon-plan (F121) above: analyze eligible tickets from `ticket-meta pick`, compute file disjointness from ticket bodies and git history, identify tickets that can run in parallel worktrees without file conflicts, and suggest the recommended parallel grouping (or sequential) with a confirmation choice before generating the plan. When arguments are given, pick the tickets as [chain.md](chain.md) Step 1 (ids given: only those) and name each one's files. No ticket left → say so, stop.
 2. `RM init TICKETS.md "<title>" "<ID>: <what>" ... "verify review bump commit
    push"` - one stage per ticket, then the main session's final stage. Numbers
    come from `init` (and `RM add` for a ticket found later), never by hand.
