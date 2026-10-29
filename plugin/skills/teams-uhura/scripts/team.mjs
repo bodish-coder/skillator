@@ -8,6 +8,7 @@
 //   node team.mjs say --file <path>         posts the file's text through the Workflows webhook
 //   node team.mjs say --stdin               the same from stdin (for scripts). Text on argv is
 //                                           refused: a reply in shell source could run as a command
+//   node team.mjs message <@handle> --file <path>   hand an issue/message to a teammate's inbox
 //   node team.mjs post-status <sub> <ID> [args...]   ticket-meta's opt-in status post
 //   node team.mjs link <aadObjectId> <email>         names a Teams sender (email must be on team.md)
 //   node team.mjs inbox [--unread] [--mark-read]     lists messages (framed as data)
@@ -29,12 +30,12 @@
 // in environment variables of the same names, and are never printed or logged.
 import { createServer } from 'node:http'
 import { createHmac, timingSafeEqual, randomBytes } from 'node:crypto'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, rmSync, openSync, statSync, renameSync, chmodSync, mkdtempSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, rmSync, openSync, statSync, renameSync, chmodSync, mkdtempSync, readdirSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve, isAbsolute } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { mainRoot, inboxDir, readInbox, after, readMarker, writeMarker, appendRecord, frameMessages, linesOf, ID_RE, INBOX, READ, TEAM, IDS } from './inbox.mjs'
+import { mainRoot, inboxDir, readInbox, after, readMarker, writeMarker, appendRecord, frameMessages, linesOf, HANDLE_RE, ID_RE, INBOX, READ, TEAM, IDS } from './inbox.mjs'
 
 export const BODY_MAX = 64 * 1024
 export const MSG_TEXT_MAX = 8000
@@ -558,6 +559,116 @@ async function cmdInbox(argv) {
   return 0
 }
 
+export function resolveSender(root, teamMembers, env = process.env) {
+  if (env.SKILLATOR_ME) {
+    const h = env.SKILLATOR_ME.startsWith('@') ? env.SKILLATOR_ME : '@' + env.SKILLATOR_ME
+    const m = teamMembers.find(t => t.handle.toLowerCase() === h.toLowerCase())
+    if (m) return { handle: m.handle, email: m.emails[0] || '' }
+  }
+  try {
+    const sessDir = join(root, '.skillator', 'sessions')
+    if (existsSync(sessDir)) {
+      const files = readdirSync(sessDir).filter(f => f.endsWith('.owner'))
+      if (files.length > 0) {
+        const owner = readFileSync(join(sessDir, files[0]), 'utf8').trim()
+        const h = owner.startsWith('@') ? owner : '@' + owner
+        const m = teamMembers.find(t => t.handle.toLowerCase() === h.toLowerCase())
+        if (m) return { handle: m.handle, email: m.emails[0] || '' }
+      }
+    }
+  } catch { /* ignore */ }
+  try {
+    const gitEmail = spawnSync('git', ['config', 'user.email'], { encoding: 'utf8', cwd: root }).stdout?.trim()?.toLowerCase()
+    if (gitEmail) {
+      const m = teamMembers.find(t => t.emails.includes(gitEmail))
+      if (m) return { handle: m.handle, email: gitEmail }
+    }
+  } catch { /* ignore */ }
+  return { handle: teamMembers.length === 1 ? teamMembers[0].handle : '@owner', email: '' }
+}
+
+async function cmdMessage(argv, cfg) {
+  const fileArg = flag(argv, '--file')
+  const fromArg = flag(argv, '--from')
+  const stdinFlag = has(argv, '--stdin')
+  const [handle, ...extra] = argv
+
+  if (!handle || (!fileArg && !stdinFlag) || extra.length > 0) {
+    err('usage: message <@handle> --file <path> | --stdin [--from <@sender>] (text on the command line is refused)')
+    return 2
+  }
+
+  const h = handle.startsWith('@') ? handle : '@' + handle
+  if (!HANDLE_RE.test(h)) { err(`not a handle (@name): ${handle}`); return 2 }
+
+  const root = rootOrDie()
+  let teamText = ''
+  try { teamText = readFileSync(join(root, TEAM), 'utf8') } catch { /* none */ }
+  const members = parseTeam(teamText)
+  const member = members.find(m => m.handle.toLowerCase() === h.toLowerCase())
+  if (!member) {
+    err(`${h} is not on .skillator/team.md - add <email> to .skillator/team.md (ticket-meta team add ${h} "Name" email)`)
+    return 1
+  }
+
+  let text = ''
+  if (fileArg) {
+    let st
+    try { st = statSync(fileArg) } catch { err(`message: no file at ${fileArg}`); return 1 }
+    if (!st.isFile()) { err(`message: not a file: ${fileArg}`); return 1 }
+    if (st.size > BODY_MAX) { err(`message: file too big (over ${BODY_MAX} bytes)`); return 2 }
+    text = readFileSync(fileArg, 'utf8').replace(/^\uFEFF/, '')
+  } else if (stdinFlag) {
+    text = await stdinText()
+  }
+
+  text = text.replace(/\r?\n$/, '')
+  if (!text.trim()) { err('message: no text in message'); return 2 }
+
+  if (cfg?.TEAMS_HMAC_TOKEN && text.includes(cfg.TEAMS_HMAC_TOKEN)) {
+    err('refused: message contains the Teams HMAC security token')
+    return 2
+  }
+  if (cfg?.TEAMS_WORKFLOW_URL && text.includes(cfg.TEAMS_WORKFLOW_URL)) {
+    err('refused: message contains the Teams workflow URL')
+    return 2
+  }
+
+  let senderHandle = fromArg
+  let senderEmail = ''
+  if (senderHandle) {
+    if (!senderHandle.startsWith('@')) senderHandle = '@' + senderHandle
+    const sm = members.find(m => m.handle.toLowerCase() === senderHandle.toLowerCase())
+    if (sm) senderEmail = sm.emails[0] || ''
+  } else {
+    const resolved = resolveSender(root, members)
+    senderHandle = resolved.handle
+    senderEmail = resolved.email
+  }
+
+  const box = inboxDir(root)
+  if (!box) throw new Error('no git dir - the inbox lives in it')
+
+  const id = `${Date.now()}`
+  const rec = {
+    ts: new Date().toISOString(),
+    from: senderHandle,
+    to: member.handle,
+    email: senderEmail,
+    text: text.trim(),
+    id,
+  }
+  appendRecord(box, rec)
+
+  if (cfg?.TEAMS_WORKFLOW_URL) {
+    const sayRes = await say(text.trim(), cfg)
+    if (!sayRes.ok) err(`channel post failed: ${sayRes.error}`)
+  }
+
+  out(`delivered message to ${member.handle}'s inbox (id ${id})`)
+  return 0
+}
+
 async function cmdPostStatus(argv, cfg) {
   if (cfg.TEAMS_STATUS_POSTS !== 'on') return 0
   const [sub, ...args] = argv
@@ -612,6 +723,8 @@ export async function main(argv) {
       case 'status': return await cmdStatus(rest, cfg)
       case 'link': return await cmdLink(rest)
       case 'inbox': return await cmdInbox(rest)
+      case 'message':
+      case 'message-uhura': return await cmdMessage(rest, cfg)
       case 'post-status': return await cmdPostStatus(rest, cfg)
       case 'say': {
         // The text comes on stdin only, never argv: a reply often quotes a teammate,
@@ -643,7 +756,7 @@ export async function main(argv) {
         return r.status ?? 1
       }
       default:
-        err('usage: team.mjs start|listen|stop|status|say|post-status|link|inbox|selftest')
+        err('usage: team.mjs start|listen|stop|status|say|message|post-status|link|inbox|selftest')
         return 2
     }
   } catch (e) {

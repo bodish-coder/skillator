@@ -81,13 +81,19 @@ export const linesOf = s => String(s).split(/\r\n|[\r\n\u000b\u000c\u0085\u2028\
 // message is dropped: it did not come from the listener, or it was edited).
 export function cleanRecord(x) {
   if (!x || typeof x !== 'object') return null
-  const { ts, from, email, text, id } = x
+  const { ts, from, to, email, text, id } = x
   if (typeof from !== 'string' || !HANDLE_RE.test(from)) return null
+  if (to !== undefined && (typeof to !== 'string' || !HANDLE_RE.test(to))) return null
   if (typeof id !== 'string' || !ID_RE.test(id)) return null
   if (typeof ts !== 'string' || !TS_RE.test(ts)) return null
   if (typeof text !== 'string') return null
   const e = typeof email === 'string' && EMAIL_RE.test(email) ? email : ''
-  return { ts, from, email: e, text, id }
+  const r = { ts, from }
+  if (to) r.to = to
+  r.email = e
+  r.text = text
+  r.id = id
+  return r
 }
 
 // Every well-formed line, in file order; anything else is skipped.
