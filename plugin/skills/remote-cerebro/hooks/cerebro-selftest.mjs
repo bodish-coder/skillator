@@ -1308,6 +1308,91 @@ export async function run() {
     assert(keys <= 1, `env secret spellings rebuilt ${keys} times for 5 messages`);
   });
 
+  // A170: thread/turn ownership, with real JSONL requests to an offline stub.
+  const rpcLog = (f) => fs.existsSync(f) ? fs.readFileSync(f, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse) : [];
+  for (const awaiting of [false, true]) await t(`A170-switch-${awaiting}`, "codex refuses /new throughout an active or awaiting-start turn", async () => {
+    const log = path.join(root, `a170-switch-${awaiting}.jsonl`);
+    const c = await armed("codex", { env: { STUB_RPC_LOG: log, STUB_START_DELAY_MS: awaiting ? "400" : "0" } });
+    c.phone.msg("SLOW original");
+    assert(await drive(c.b, () => awaiting ? c.b.adapter.busy : c.b.adapter.turnId), "turn not started");
+    c.phone.msg("/new"); await drive(c.b, () => false, 550);
+    assert(rpcLog(log).filter((m) => m.method === "thread/start").length === 1, "busy /new sent a second thread/start");
+    assert(c.phone.sent(/new thread.*refused.*busy/i), "no actionable busy refusal");
+    c.phone.msg("/abort"); assert(await drive(c.b, () => c.phone.sent(/^interrupted$/)), "original turn not interrupted");
+    assert(!c.phone.sent(/mismatched thread\/turn/), "invalid interrupt pair");
+  });
+  await t("A170-transition", "codex serializes thread/start and returns refused prompts visibly", async () => {
+    const log = path.join(root, "a170-transition.jsonl");
+    const c = await armed("codex", { env: { STUB_RPC_LOG: log, STUB_THREAD_DELAY_MS: "300" } });
+    c.phone.msg("/new"); c.phone.msg("/new"); c.phone.msg("during switch");
+    await drive(c.b, () => false, 600);
+    const msgs = rpcLog(log);
+    assert(msgs.filter((m) => m.method === "thread/start").length === 2, "concurrent /new issued overlapping thread/start");
+    assert(!msgs.some((m) => m.method === "turn/start"), "prompt targeted an indeterminate thread");
+    assert(c.phone.sent(/not sent.*during switch/s), "refused prompt text not returned");
+    c.phone.msg("after switch"); assert(await drive(c.b, () => c.phone.sent(/^echo: after switch$/)), "new thread unusable");
+  });
+  for (const switchThread of [false, true]) await t(`A170-stale-${switchThread}`, "codex ignores delayed old-turn completion while a new turn is running", async () => {
+    const c = await armed("codex", { env: { STUB_OLD_COMPLETION_MS: "700" } });
+    c.phone.msg("first"); assert(await drive(c.b, () => c.phone.sent(/^echo: first$/)), "no first reply");
+    if (switchThread) { c.phone.msg("/new"); assert(await drive(c.b, () => c.b.adapter.threadId === "t2"), "no second thread"); }
+    c.phone.msg("SLOW second"); assert(await drive(c.b, () => c.b.adapter.turnId), "second turn not started");
+    const id = c.b.adapter.turnId; await drive(c.b, () => false, 900);
+    assert(c.b.adapter.busy && c.b.adapter.turnId === id, "old completion cleared the new turn");
+    c.phone.msg("/abort"); assert(await drive(c.b, () => c.phone.sent(/^interrupted$/)), "new turn not interrupted");
+  });
+  await t("A170-early-complete", "codex completion before start response cannot move held text into another turn", async () => {
+    const log = path.join(root, "a170-early.jsonl");
+    const c = await armed("codex", { env: { STUB_RPC_LOG: log, STUB_START_DELAY_MS: "350" } });
+    c.phone.msg("first"); c.phone.msg("held text");
+    await drive(c.b, () => false, 700);
+    assert(rpcLog(log).filter((m) => m.method === "turn/start").length === 1, "held text escaped into a second turn/start");
+    assert(c.phone.sent(/not sent.*held text/s), "held text lost without visible failure");
+    assert(!c.b.adapter.busy && !c.b.adapter.turnId, "late response resurrected completed turn");
+  });
+  await t("A170-reject", "codex reports rejected steer/interrupt with original IDs and prompt text", async () => {
+    const c = await armed("codex", { env: { STUB_REJECT_STEER: "1", STUB_REJECT_INTERRUPT: "1", STUB_START_DELAY_MS: "200" } });
+    c.phone.msg("SLOW first"); c.phone.msg("held steer");
+    assert(await drive(c.b, () => c.phone.sent(/turn\/steer.*failed.*held steer/s)), "held steer failure not visible");
+    assert(!c.phone.sent(/^steered into/), "false steering success before acknowledgement");
+    c.phone.msg("live steer"); assert(await drive(c.b, () => c.phone.sent(/turn\/steer.*failed.*live steer/s)), "active steer failure not visible");
+    c.phone.msg("/abort"); assert(await drive(c.b, () => c.phone.sent(/turn\/interrupt.*t1.*turn-1.*failed/s)), "interrupt failure lacks context");
+    assert(c.b.adapter.busy && c.b.adapter.turnId === "turn-1", "rejected interrupt cleared live turn");
+  });
+  await t("A170-start-failure", "codex returns held prompt text when turn/start fails after abort", async () => {
+    const c = await armed("codex", { env: { STUB_TURN_FAIL_FIRST: "300" } });
+    c.phone.msg("first failed prompt"); c.phone.msg("held failed prompt"); c.phone.msg("/abort");
+    assert(await drive(c.b, () => c.phone.sent(/turn failed/)), "missing turn failure");
+    assert(c.phone.sent(/not sent.*held failed prompt/s), "held prompt silently dropped by abort");
+    assert(c.phone.sent(/first failed prompt/), "failed initial text not returned");
+  });
+  await t("A170-ack-timeout", "accepted steer with delayed acknowledgement reports uncertainty without duplicate delivery", async () => {
+    const log = path.join(root, "a170-ack-timeout.jsonl");
+    const c = await armed("codex", { env: { STUB_RPC_LOG: log, STUB_STEER_ACK_DELAY_MS: "600" } });
+    c.phone.msg("SLOW original"); assert(await drive(c.b, () => c.b.adapter.turnId), "no original turn");
+    const timeout = c.b.adapter.rpcTimeoutMs; c.b.adapter.rpcTimeoutMs = 100;
+    c.phone.msg("accepted edit");
+    assert(await drive(c.b, () => c.phone.sent(/^steered: SLOW original \+ accepted edit$/)), "stub did not accept the steer");
+    assert(await drive(c.b, () => c.phone.sent(/turn\/steer.*timed out/s)), "missing acknowledgement timeout");
+    const failure = sends(c).find((s) => /turn\/steer.*timed out/s.test(s));
+    assert(/outcome unconfirmed.*check.*before retrying.*accepted edit/s.test(failure), `misleading delivery report: ${failure}`);
+    assert(!/not sent|resend/i.test(failure), "accepted work reported as undelivered or safe to resend");
+    c.b.adapter.rpcTimeoutMs = timeout;
+    c.phone.msg("/new"); assert(await drive(c.b, () => c.b.adapter.threadId === "t2"), "no new thread");
+    c.phone.msg("SLOW next"); assert(await drive(c.b, () => c.b.adapter.turnId), "no next turn");
+    const id = c.b.adapter.turnId; await drive(c.b, () => false, 750);
+    assert(c.b.adapter.busy && c.b.adapter.turnId === id && c.b.adapter.threadId === "t2", "late acknowledgement changed turn ownership");
+    const steers = rpcLog(log).filter((m) => m.method === "turn/steer");
+    assert(steers.length === 1 && steers[0].params.threadId === "t1" && steers[0].params.expectedTurnId === "turn-1", "steer duplicated or sent to wrong turn");
+    assert(!c.phone.sent(/^steered into/), "timed-out acknowledgement reported as success");
+  });
+  await t("A170-thread-failure", "failed thread/start preserves the previous thread and permits retry", async () => {
+    const c = await armed("codex", { env: { STUB_THREAD_FAIL_NEW: "1" } });
+    c.phone.msg("/new"); assert(await drive(c.b, () => c.phone.sent(/thread\/start.*failed/)), "thread failure not visible");
+    assert(c.b.adapter.threadId === "t1", "failed transition replaced previous thread");
+    c.phone.msg("retry prompt"); assert(await drive(c.b, () => c.phone.sent(/^echo: retry prompt$/)), "failed transition blocked later prompt");
+  });
+
   // ---------------------------------------------------------------- report --
   for (const k of Object.keys(process.env)) if (/^CEREBRO_/.test(k)) delete process.env[k];
   try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* a dying child may still hold a file */ }

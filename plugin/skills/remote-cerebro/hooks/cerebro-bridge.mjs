@@ -459,49 +459,93 @@ export class AcpAdapter extends ProcAdapter {
 /** codex app-server over stdio (v2 protocol, no "jsonrpc" field). */
 export class CodexAppAdapter extends ProcAdapter {
   async start() {
-    this.files = {}; this.held = [];
+    this.files = {};
     this.spawnChild(hostSpawn("codex", { profile: this.profile }));
     await this.request("initialize", { clientInfo: { name: "remote-cerebro", title: "remote-cerebro", version: VERSION } }, false);
     this.notify("initialized", undefined, false);
     await this.#thread(); this.ready = true;
   }
   async #thread() {
-    const r = await this.request("thread/start", { cwd: this.cwd, approvalPolicy: "on-request", sandbox: this.profile === "write" ? "workspace-write" : "read-only" }, false);
-    this.threadId = r.thread.id;
+    this.switching = true;
+    try {
+      const r = await this.request("thread/start", { cwd: this.cwd, approvalPolicy: "on-request", sandbox: this.profile === "write" ? "workspace-write" : "read-only" }, false);
+      if (!r?.thread?.id) throw new Error("missing thread ID");
+      this.threadId = r.thread.id;
+    } finally { this.switching = false; }
+  }
+  #failed(operation, turn, error, texts = [], withheld = false) {
+    const detail = redact(error?.message || String(error), this.redactCtx || { env: this.env });
+    const outcome = withheld ? "not sent, resend" : "outcome unconfirmed; check the thread/turn before retrying";
+    this.emit("reply", `(${operation} [thread ${turn?.threadId || this.threadId || "pending"}, turn ${turn?.id || "pending"}] failed: ${detail}; ${outcome}${texts.length ? `: ${texts.join("\n")}` : ""})`);
+  }
+  #returnHeld(turn, reason) {
+    const held = turn.held.splice(0);
+    if (held.length) this.#failed("turn/steer", turn, reason, held, true);
+  }
+  #steer(turn, text) {
+    this.request("turn/steer", { threadId: turn.threadId, expectedTurnId: turn.id, input: [{ type: "text", text, text_elements: [] }] }, false).then(
+      () => this.emit("status", `steered into the running turn [thread ${turn.threadId}, turn ${turn.id}]`),
+      (e) => this.#failed("turn/steer", turn, e, [text]));
   }
   prompt(text) {
+    if (this.switching) return this.#failed("prompt", null, "thread switch in progress; wait for new thread", [text], true);
     const input = [{ type: "text", text, text_elements: [] }];
     // turn/start sent, its id not back yet: hold the prompt and steer it in once the id
     // arrives. A second turn/start on the thread would race the first one.
-    if (this.busy && !this.turnId) { this.held.push(text); this.emit("status", "held until the turn starts, then steered in"); return; }
-    if (this.busy) { this.request("turn/steer", { threadId: this.threadId, expectedTurnId: this.turnId, input }, false).catch(() => {}); this.emit("status", "steered into the running turn"); return; }
-    this.busy = true; this.acc = ""; this.last = null; this.turnId = null; this.abortPending = false;
-    this.request("turn/start", { threadId: this.threadId, input }, false).then((r) => {
-      if (this.busy) this.turnId = r?.turn?.id ?? null; // turn/completed may already have been read
-      if (this.abortPending) { this.abortPending = false; this.held = []; if (this.turnId) this.abort(); return; }
-      for (const t of this.held.splice(0)) this.prompt(t);
-    }, (e) => {
-      // No turn: nothing to interrupt later, so a pending /abort dies with it.
-      const aborted = this.abortPending; this.busy = false; this.turnId = null; this.abortPending = false;
-      const held = this.held.splice(0);
-      this.emit("reply", `(turn failed: ${e.message})`);
-      if (!aborted) { for (const t of held) this.prompt(t); }
+    if (this.active?.abortPending) return this.#failed("prompt", this.active, "abort pending; wait for turn completion", [text], true);
+    if (this.busy && !this.turnId) { this.active.held.push(text); this.emit("status", "held until the turn starts, then steered in"); return; }
+    if (this.busy) { this.#steer(this.active, text); return; }
+    const turn = { threadId: this.threadId, id: null, held: [], messages: [], abortPending: false };
+    this.active = turn; this.busy = true; this.acc = ""; this.last = null; this.turnId = null; this.files = {};
+    this.request("turn/start", { threadId: turn.threadId, input }, false).then((r) => {
+      if (this.active !== turn) return;
+      if (!r?.turn?.id) throw new Error("missing turn ID");
+      this.turnId = turn.id = r.turn.id;
+      // Messages can arrive before the response, including completion. Replay only
+      // after the originating turn ID is known, before releasing any held prompts.
+      for (const m of turn.messages.splice(0)) this.onMsg(m);
+      if (this.active !== turn) return;
+      if (turn.abortPending) { this.abort(); return; }
+      for (const t of turn.held.splice(0)) this.#steer(turn, t);
+    }).catch((e) => {
+      if (this.active !== turn) return;
+      this.active = null; this.busy = false; this.turnId = null;
+      this.#failed("turn/start (turn failed)", turn, e, [text, ...turn.held.splice(0)]);
     });
   }
   abort() {
-    if (this.turnId) this.request("turn/interrupt", { threadId: this.threadId, turnId: this.turnId }, false).catch(() => {});
-    else if (this.busy) { this.abortPending = true; this.held = []; } // turn/start not answered yet: interrupt as soon as the id arrives
+    const turn = this.active; if (!turn) return;
+    this.#returnHeld(turn, "abort requested before held prompts were sent");
+    if (!turn.id) { turn.abortPending = true; return; }
+    turn.abortPending = false;
+    this.request("turn/interrupt", { threadId: turn.threadId, turnId: turn.id }, false).catch((e) => this.#failed("turn/interrupt", turn, e));
   }
-  async newSession() { await this.#thread(); this.emit("status", "new thread"); }
+  async newSession() {
+    if (this.busy || this.switching) { this.emit("status", "new thread refused: busy; wait for completion or /abort, then retry /new"); return; }
+    try { await this.#thread(); this.emit("status", "new thread"); }
+    catch (e) { this.#failed("thread/start", null, e); }
+  }
   onMsg(m) {
     if (this.settle(m)) return;
     const p = m.params || {};
+    const turn = this.active;
+    if (m.method && (p.threadId != null || p.turnId != null || /^(item|turn)\//.test(m.method))) {
+      if (!turn || p.threadId !== turn.threadId || (turn.id && (p.turnId || p.turn?.id) !== turn.id)) {
+        if (m.id != null) this.respondError(m.id, "request does not belong to the active turn", false);
+        return;
+      }
+      if (!turn.id) { turn.messages.push(m); return; }
+    }
     if (m.method && m.id == null) {
       if (m.method === "item/agentMessage/delta") this.acc += p.delta || "";
       else if (m.method === "item/started" && p.item?.type === "commandExecution") this.emit("status", `command: ${p.item.command}`);
       else if (m.method === "item/started" && p.item?.type === "fileChange") { this.files[p.item.id] = (p.item.changes || []).map((c) => c.path).filter(Boolean); this.emit("status", `file change: ${this.files[p.item.id].join(", ")}`); }
       else if (m.method === "item/completed" && p.item?.type === "agentMessage") this.last = p.item.text;
-      else if (m.method === "turn/completed") { this.busy = false; this.turnId = null; this.emit("reply", this.last ?? (this.acc || "(no text)")); }
+      else if (m.method === "turn/completed") {
+        this.active = null; this.busy = false; this.turnId = null;
+        this.emit("reply", this.last ?? (this.acc || "(no text)"));
+        this.#returnHeld(turn, "originating turn completed before held prompts were sent");
+      }
       return;
     }
     if (m.id == null) return;

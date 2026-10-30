@@ -11,44 +11,58 @@ if (args.includes("--version")) { console.log("codex-cli 0.0.0-stub"); process.e
 if (process.env.STUB_ARGVFILE) fs.writeFileSync(process.env.STUB_ARGVFILE, JSON.stringify(args));
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 let failedOnce = false;
-let seq = 5000, turnN = 0; const waiting = new Map(); let slow = null; let threadReq = null;
+let seq = 5000, turnN = 0, threadN = 0; const waiting = new Map(), turns = new Map(); let slow = null; let threadReq = null;
 let buf = "";
 process.stdin.on("data", (d) => {
   buf += d.toString("utf8"); let i;
   while ((i = buf.indexOf("\n")) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); if (line.trim()) handle(JSON.parse(line)); }
 });
 function complete(turnId, text) {
-  out({ method: "item/agentMessage/delta", params: { threadId: "t1", turnId, itemId: "m1", delta: text } });
-  out({ method: "item/completed", params: { threadId: "t1", turnId, item: { type: "agentMessage", id: "m1", text } } });
-  out({ method: "turn/completed", params: { threadId: "t1", turn: { id: turnId, items: [], status: "completed" } } });
+  const threadId = turns.get(turnId);
+  out({ method: "item/agentMessage/delta", params: { threadId, turnId, itemId: "m1", delta: text } });
+  out({ method: "item/completed", params: { threadId, turnId, item: { type: "agentMessage", id: "m1", text } } });
+  out({ method: "turn/completed", params: { threadId, turn: { id: turnId, items: [], status: "completed" } } });
+  if (process.env.STUB_OLD_COMPLETION_MS) setTimeout(() => out({ method: "turn/completed", params: { threadId, turn: { id: turnId, status: "completed" } } }), Number(process.env.STUB_OLD_COMPLETION_MS));
 }
 function approval(turnId, command, then) {
+  const threadId = turns.get(turnId);
   const id = ++seq;
-  out({ method: "item/started", params: { threadId: "t1", turnId, item: { type: "commandExecution", id: "c1", command } } });
-  out({ id, method: "item/commandExecution/requestApproval", params: { threadId: "t1", turnId, itemId: "c1", startedAtMs: Date.now(), command, commandActions: [] } });
+  out({ method: "item/started", params: { threadId, turnId, item: { type: "commandExecution", id: "c1", command } } });
+  out({ id, method: "item/commandExecution/requestApproval", params: { threadId, turnId, itemId: "c1", startedAtMs: Date.now(), command, commandActions: [] } });
   waiting.set(id, then);
 }
 function handle(m) {
+  if (process.env.STUB_RPC_LOG && m.method) fs.appendFileSync(process.env.STUB_RPC_LOG, JSON.stringify(m) + "\n");
   if (m.id != null && !m.method) { const w = waiting.get(m.id); if (w) { waiting.delete(m.id); w(m.result); } return; }
   if (m.method === "initialize") return out({ id: m.id, result: { userAgent: "stub" } });
   if (m.method === "initialized") return;
-  if (m.method === "thread/start") { threadReq = m.params; if (process.env.STUB_THREADFILE) fs.writeFileSync(process.env.STUB_THREADFILE, JSON.stringify(m.params)); return out({ id: m.id, result: { thread: { id: "t1" }, approvalPolicy: m.params.approvalPolicy, sandbox: m.params.sandbox, cwd: m.params.cwd } }); }
+  if (m.method === "thread/start") {
+    const threadId = `t${++threadN}`; threadReq = m.params;
+    if (process.env.STUB_THREADFILE) fs.writeFileSync(process.env.STUB_THREADFILE, JSON.stringify(m.params));
+    const reply = () => out(process.env.STUB_THREAD_FAIL_NEW && threadN > 1 ? { id: m.id, error: { code: -32000, message: "thread rejected" } } : { id: m.id, result: { thread: { id: threadId }, approvalPolicy: m.params.approvalPolicy, sandbox: m.params.sandbox, cwd: m.params.cwd } });
+    return setTimeout(reply, Number(process.env.STUB_THREAD_DELAY_MS) || 0);
+  }
+  if (["turn/steer", "turn/interrupt"].includes(m.method) && turns.get(m.params.expectedTurnId || m.params.turnId) !== m.params.threadId)
+    return out({ id: m.id, error: { code: -32000, message: "mismatched thread/turn" } });
+  if ((m.method === "turn/steer" && process.env.STUB_REJECT_STEER) || (m.method === "turn/interrupt" && process.env.STUB_REJECT_INTERRUPT))
+    return setTimeout(() => out({ id: m.id, error: { code: -32000, message: "operation rejected" } }), 100);
   if (m.method === "turn/start" && process.env.STUB_TURN_FAIL_FIRST && !failedOnce) {
     failedOnce = true; setTimeout(() => out({ id: m.id, error: { code: -32000, message: "turn rejected" } }), Number(process.env.STUB_TURN_FAIL_FIRST) || 0); return;
   }
   if (m.method === "turn/start") {
     const turnId = `turn-${++turnN}`; const text = m.params.input.map((i) => i.text).join("");
-    out({ id: m.id, result: { turn: { id: turnId, items: [], status: "inProgress" } } });
+    const threadId = m.params.threadId; turns.set(turnId, threadId);
+    setTimeout(() => out({ id: m.id, result: { turn: { id: turnId, items: [], status: "inProgress" } } }), Number(process.env.STUB_START_DELAY_MS) || 0);
     if (/APPROVAL/.test(text)) return approval(turnId, "rm -rf build", (r) => complete(turnId, `decision: ${r.decision}`));
     if (/GRANT/.test(text)) { // a file change that also asks for a session-wide write root (STUB_GRANT_ROOT)
       const id = ++seq; const file = `${threadReq?.cwd || "."}/index.js`;
-      out({ method: "item/started", params: { threadId: "t1", turnId, item: { type: "fileChange", id: "f1", changes: [{ path: file, kind: "update" }] } } });
-      out({ id, method: "item/fileChange/requestApproval", params: { threadId: "t1", turnId, itemId: "f1", reason: "edit index.js", grantRoot: process.env.STUB_GRANT_ROOT || null } });
+      out({ method: "item/started", params: { threadId, turnId, item: { type: "fileChange", id: "f1", changes: [{ path: file, kind: "update" }] } } });
+      out({ id, method: "item/fileChange/requestApproval", params: { threadId, turnId, itemId: "f1", reason: "edit index.js", grantRoot: process.env.STUB_GRANT_ROOT || null } });
       waiting.set(id, (r) => complete(turnId, `decision: ${r.decision}`)); return;
     }
     if (/PERMS/.test(text)) { // extra permissions: a folder read grant plus a network grant
       const id = ++seq; const dir = `${threadReq?.cwd || "."}/sub`;
-      out({ id, method: "item/permissions/requestApproval", params: { threadId: "t1", turnId, itemId: "p1", reason: "need a look", permissions: { fileSystem: { read: [dir] }, network: { enabled: true } } } });
+      out({ id, method: "item/permissions/requestApproval", params: { threadId, turnId, itemId: "p1", reason: "need a look", permissions: { fileSystem: { read: [dir] }, network: { enabled: true } } } });
       waiting.set(id, (r) => complete(turnId, `perms: ${JSON.stringify(r)}`)); return;
     }
     if (/SECRET/.test(text)) return approval(turnId, "cat ~/.ssh/id_ed25519", (r) => complete(turnId, `decision: ${r.decision}`));
@@ -56,7 +70,9 @@ function handle(m) {
     return complete(turnId, `echo: ${text}`);
   }
   if (m.method === "turn/steer") {
-    out({ id: m.id, result: { turnId: m.params.expectedTurnId } });
+    const acknowledge = () => out({ id: m.id, result: { turnId: m.params.expectedTurnId } });
+    if (process.env.STUB_STEER_ACK_DELAY_MS) setTimeout(acknowledge, Number(process.env.STUB_STEER_ACK_DELAY_MS));
+    else acknowledge();
     if (slow && slow.turnId === m.params.expectedTurnId) { const s = slow; slow = null; complete(s.turnId, `steered: ${s.text} + ${m.params.input.map((i) => i.text).join("")}`); }
     return;
   }
