@@ -1,7 +1,7 @@
 ---
 name: a11y-toph
 description: >-
-  Use when accessibility is the subject: an a11y or WCAG audit of existing
+  Use for accessibility: an a11y or WCAG audit of existing
   code, a VPAT or compliance question, or a reported bug — "can't tab to it",
   "focus ring invisible", "screen reader reads nothing", "the toast never
   announces", "fails contrast", "no reduced-motion", "tap target too small",

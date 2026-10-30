@@ -5,8 +5,7 @@ description: >-
   through the handoffs", "pick up the pending tasks", "resume from the handoff
   doc(s)", "do the next tasks in the handout", "process docs/handoffs", or
   wants a repeatable pass — safe to re-run or /loop — that picks up where a
-  handoff left off. The execution counterpart to handoff, which writes the
-  doc. NOT for writing a handoff (use handoff), and not for arbitrary tasks
+  handoff left off. NOT for writing a handoff (use handoff), and not for arbitrary tasks
   that live outside a handoff document.
 ---
 

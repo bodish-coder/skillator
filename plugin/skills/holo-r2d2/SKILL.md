@@ -2,10 +2,10 @@
 name: holo-r2d2
 description: >-
   Use when the user says "Help me, Obi-Wan", "help me obiwan" or "help me obi
-  wan kenobi" - alone, with a run (RUN-12) or a ticket (F39): it means
-  "draw it". Also to show a run, its decisions, a
-  plan or a design as a diagram - as an Artifact, an HTML file, Markdown with
-  Mermaid or an SVG, named or asked once - and when several owner decisions
+  wan kenobi" - alone, with a run (RUN-12) or ticket (F39); "draw it";
+  or to show a run, its decisions, a
+  plan or design diagram: Artifact, HTML file, Markdown with
+  Mermaid or an SVG - or when several owner decisions
   need answering - the decision wizard. NOT for answering or ruling decisions (`relay-morpheus`), NOT the
   ticket board (`tickets-zordon`).
 ---

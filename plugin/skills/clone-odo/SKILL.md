@@ -2,8 +2,8 @@
 name: clone-odo
 description: >-
   Use before quoting or counting what users hate about an app - top
-  complaints from a reviews.csv or .skillator/clone/, a quote and count
-  each, for an investor or pitch, or review rows lacking a link. "Clone
+  complaints from reviews.csv or .skillator/clone/, quotes and counts
+  for an investor or pitch, or review rows lacking a link. "Clone
   this app" (web, Android, iOS, Windows), "build my own version of X", "map
   X's screens", "how close is my clone", "rebrand the clone", or its URL,
   App Store, Google Play or Microsoft Store link. NOT for building screens

@@ -4,9 +4,8 @@ description: >-
   Use when the user says "dev mode", "activate the programming skills", "turn
   on the skillator workflow", "use our skills", "by the power of grayskull",
   "grayskull", "check screenshot", "set up for coding", or starts real
-  development work in a repo with no skillator skill active. The single entry
-  point that routes each request to the right skillator skill; it does not do
-  the work itself. NOT for enabling/disabling skills on disk.
+  development work in a repo with no skillator skill active.
+  NOT for enabling/disabling skills on disk.
 ---
 
 # Grayskull Power (activate the skillator workflow)
@@ -17,7 +16,7 @@ description: >-
 ## ⚔️ I HAVE THE POWER!!
 ```
 
-The receipt it loaded. Once a session.
+Once per session.
 
 One call: **arm** the standing skills, **announce** the state, **route** each
 request — under §3.
@@ -34,14 +33,11 @@ of "invoke a skill", "Fable subagents", `AskUserQuestion` and the watch hooks.
 
 ## 1. Arm (once, on invoke)
 
-`tickets-zordon` (read `TICKETS.md`, report the open set) · `code-yoda` (restraint
-level; skips its core when `PONYTAIL MODE ACTIVE` is in context) · `codegraph` (indexed/tracked, else init once) · `live-friday` (if the
-repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
-`usage-watch … check` elsewhere) · `relay-morpheus` (an unfinished `.skillator/run.md`
-is the first thing you say) · `rules-orko` (rules read, clashes asked) · `tiers`
-(`.skillator/tiers.local.md`) · `owner` (ask who drives).
+Arm `tickets-zordon` · `code-yoda` · `codegraph` · `live-friday` · `watch-cortana` ·
+`relay-morpheus` · `rules-orko` · `tiers` · `owner` per `references/arming.md`.
+An unfinished `.skillator/run.md` is the first thing you say.
 
-Then one line:
+Announce:
 
 ```
 grayskull-power: board 3 open (B2, F7, A1) · codegraph 22/952 partial (js/py/ts only) · code-yoda full · live-friday armed (npm run dev) · watch-cortana 92%/90wk · relay r7 stage 2 of 4 · tiers deep=fable build=opus cheap=sonnet

@@ -5,7 +5,7 @@ description: >-
   make me wait", "live preview", "run it while you build", "stream the build",
   or whenever a change is about to be made to a project that has a runnable
   surface — JS/web dev server, Rust, C++, Python, Go, Electron, mobile or a
-  plain CLI. Armed as standard by grayskull-power. NOT for taking screenshots
+  plain CLI. NOT for taking screenshots
   (screenshot-argus) and NOT a substitute for tests — it is exposure, not
   verification.
 ---

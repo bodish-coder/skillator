@@ -2,7 +2,7 @@
 name: tasks-sentinels
 description: >-
   Use when a plan's tasks are written down — a TASKS list, milestone task
-  blocks, a checklist of independent changes — and enough of them that
+  blocks, independent-change checklists — and enough tasks that
   building it all here would crowd out coordination.
   Also when the user says "work the plan", "execute the plan", "one agent per
   task", "subagent-driven", "fan out the tasks", or asks why an implementer

@@ -1,7 +1,7 @@
 ---
 name: relay-morpheus
 description: >-
-  Use when work runs in stages and the session may not survive to their end —
+  Use when staged work may outlast the session —
   a multi-stage plan, fan-out, a sleeping laptop, a dropping link, a usage
   limit. Also on "marathon", "May the Force be with you",
   "Use the Force on F35 F36", "work the board", "keep going",

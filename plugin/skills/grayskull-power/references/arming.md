@@ -1,7 +1,13 @@
 # Arming the standing skills — the detail behind SKILL.md §1
 
-Run once, on invoke. SKILL.md carries the one-line summary of each; this is what
-each one actually means.
+Run once, on invoke. These are the standing checks named in SKILL.md §1:
+
+`tickets-zordon` (read `TICKETS.md`, report the open set) · `code-yoda` (restraint
+level; skips its core when `PONYTAIL MODE ACTIVE` is in context) · `codegraph` (indexed/tracked, else init once) · `live-friday` (if the
+repo has a runnable surface) · `watch-cortana` (hooks on Claude Code, a manual
+`usage-watch … check` elsewhere) · `relay-morpheus` (an unfinished `.skillator/run.md`
+is the first thing you say) · `rules-orko` (rules read, clashes asked) · `tiers`
+(`.skillator/tiers.local.md`) · `owner` (ask who drives).
 
 - **`tickets-zordon`** — first the stale-board guard (F82), run on the repo:
   `sh <practice>/scripts/board-fresh.sh` (Windows: `powershell -NoProfile

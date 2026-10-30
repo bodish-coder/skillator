@@ -5,7 +5,7 @@ description: >-
   "what's pending", "ticket", "B3", "F12", "A4", "next ticket number", "mark
   it done", "block it", "defer it", "cancel it", "list tickets", "list tickets
   status", "sync tickets", "assign F12 to @asha", "ultracode", "use a workflow",
-  mentions TICKETS.md, or when starting work and you need the open set. Also
+  mentions TICKETS.md, or when starting work needing the open set. Also
   at session end, to sync statuses. NOT an issue tracker or Jira/GitHub sync;
   NOT for harvesting `ponytail:` markers (`code-yoda`).
 ---

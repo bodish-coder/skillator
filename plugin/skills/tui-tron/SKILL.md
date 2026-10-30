@@ -1,7 +1,7 @@
 ---
 name: tui-tron
 description: >-
-  Use when a terminal UI's rendering is the subject: a TUI, curses, Textual,
+  Use for terminal UI rendering: a TUI, curses, Textual,
   Rich, Ink or bare-ANSI screen that must be proven to draw — "wrong in a
   narrow terminal", "the footer wraps", "columns stop lining up at 80", "it
   redraws garbage", "the box characters are mojibake", "ΓöÇ" — or there is no
