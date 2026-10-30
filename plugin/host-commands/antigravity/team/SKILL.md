@@ -16,6 +16,8 @@ Arguments: whatever followed the command (`add @handle "Name" email`, `remove @h
    - `assign <ID> @handle` or `<ID> @handle` -> Assign ticket:
      Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign <ID> @handle`
      **Lead Rule**: Once a lead is assigned, only the lead can assign or reassign tickets.
+   - `assign-app <ID> <app,...>` or `<ID> app <app>` -> Explicitly assign monorepo app(s):
+     Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign-app <ID> <app>`
    - `assign-tester <ID> @handle` or `<ID> tester @handle` -> Assign tester:
      Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign-tester <ID> @handle`
      Open to all teammates at any time (leaves ticket mark as-is).

@@ -2,7 +2,7 @@
 # ticket-meta.sh, which carries the full reasoning; same output, keep in step.
 #
 #   ticket-meta.ps1 apps | app-of <path>... | by <ID> | apps-of <ID>
-#   ticket-meta.ps1 assign <ID> @handle | assign-tester <ID> @handle | decide <ID> @handle | decided <ID>
+#   ticket-meta.ps1 assign <ID> @handle | assign-app <ID> <app,...> | assign-tester <ID> @handle | decide <ID> @handle | decided <ID>
 #   ticket-meta.ps1 testing <ID> <what test> | tested <ID> pass|fail | verify <ID> pass|fail <evidence>
 #   ticket-meta.ps1 done <ID> [evidence] | block <ID> <on what> | defer <ID> <until what>
 #   ticket-meta.ps1 tag <ID> | selftest
@@ -146,6 +146,62 @@ function Get-Patterns([string]$r) {
         $x = ($x -replace "[`"']", '') -replace '[ \t]+$', ''
         [void]$p.Add($x)
       }
+    }
+  }
+  # F136: Lerna / Nx
+  $lj = "$r/lerna.json"
+  if (Test-Path -LiteralPath $lj -PathType Leaf) {
+    $t = ([System.IO.File]::ReadAllText($lj, $Utf8) -replace "`r", '') -replace "[`n`t]", ' '
+    $m = [regex]::Match($t, '"packages"\s*:\s*\[([^\]]*)\]')
+    if ($m.Success) {
+      foreach ($q in [regex]::Matches($m.Groups[1].Value, '"([^"]*)"')) { [void]$p.Add($q.Groups[1].Value) }
+    }
+  }
+  # F136: Cargo workspaces (Cargo.toml [workspace] members = [...])
+  $cg = "$r/Cargo.toml"
+  if (Test-Path -LiteralPath $cg -PathType Leaf) {
+    $t = ([System.IO.File]::ReadAllText($cg, $Utf8) -replace "`r", '')
+    if ($t -match '(?ms)\[workspace\].*?members\s*=\s*\[([^\]]*)\]') {
+      foreach ($q in [regex]::Matches($Matches[1], '["'']([^"'']*)["'']')) { [void]$p.Add($q.Groups[1].Value) }
+    }
+  }
+  # F136: Go multi-module (go.work use ( ... ) or use path)
+  $gw = "$r/go.work"
+  if (Test-Path -LiteralPath $gw -PathType Leaf) {
+    $in = $false
+    foreach ($line in ([System.IO.File]::ReadAllText($gw, $Utf8) -split "`r?`n")) {
+      if ($line -match '^use\s*\(') { $in = $true; continue }
+      if ($in -and $line -match '^\)') { $in = $false; continue }
+      if ($in -and $line -match '^\s*([^\s#]+)') {
+        $x = $Matches[1] -replace '^[./]+', ''
+        if ($x) { [void]$p.Add($x) }
+      } elseif ($line -match '^use\s+([^\s#]+)') {
+        $x = $Matches[1] -replace '^[./]+', ''
+        if ($x) { [void]$p.Add($x) }
+      }
+    }
+  }
+  # F136: Gradle settings (settings.gradle / settings.gradle.kts include '...', include("..."))
+  foreach ($sg in @("$r/settings.gradle", "$r/settings.gradle.kts")) {
+    if (Test-Path -LiteralPath $sg -PathType Leaf) {
+      $t = [System.IO.File]::ReadAllText($sg, $Utf8)
+      foreach ($m in [regex]::Matches($t, 'include\s*\(?\s*([^()\r\n]+)\)?')) {
+        foreach ($q in [regex]::Matches($m.Groups[1].Value, '["'']:?([^"'']+)["'']')) {
+          $val = $q.Groups[1].Value -replace '^:', '' -replace ':', '/'
+          if ($val) { [void]$p.Add($val) }
+        }
+      }
+    }
+  }
+  # F136: Python workspaces (pyproject.toml [tool.uv.workspace] members or [tool.poetry.packages])
+  $pt = "$r/pyproject.toml"
+  if (Test-Path -LiteralPath $pt -PathType Leaf) {
+    $t = ([System.IO.File]::ReadAllText($pt, $Utf8) -replace "`r", '')
+    if ($t -match '(?ms)\[tool\.uv\.workspace\].*?members\s*=\s*\[([^\]]*)\]') {
+      foreach ($q in [regex]::Matches($Matches[1], '["'']([^"'']*)["'']')) { [void]$p.Add($q.Groups[1].Value) }
+    }
+    foreach ($m in [regex]::Matches($t, 'include\s*=\s*["'']([^"'']+)["'']')) {
+      [void]$p.Add($m.Groups[1].Value)
     }
   }
   return ,$p
@@ -656,6 +712,23 @@ function Do-Assign([string[]]$a) {
 function Do-AssignTester([string[]]$a) {
   $x = Get-IdAndHandle 'assign-tester' $a
   return (Edit-Line $x[0] @{ tester = $x[1]; samekey = 'tester'; sameval = $x[1]; owncheck = $false; requireleadassign = $false })
+}
+
+# F136: assign-app <ID> <app,...> - explicitly set/assign apps ahead of commits
+function Do-AssignApp([string[]]$a) {
+  if ($a.Count -lt 2) { Fail 'usage: assign-app <ID> <app,...>' }
+  $id = Get-NormId $a[0]
+  $raw = [string]::Join(' ', @($a[1..($a.Count - 1)]))
+  if (-not (Test-OneLine $raw)) { Fail 'the app is one line' }
+  if ($raw.Contains('[') -or $raw.Contains(']')) { Fail 'the app cannot hold [ or ]' }
+  $tokens = New-Object System.Collections.ArrayList
+  foreach ($part in ($raw -split '[, ]+')) {
+    $x = $part.Trim()
+    if ($x -ne '' -and -not $tokens.Contains($x)) { [void]$tokens.Add($x) }
+  }
+  if ($tokens.Count -eq 0) { Fail 'usage: assign-app <ID> <app,...> - no apps given' }
+  $apps = [string]::Join(', ', $tokens)
+  return (Edit-Line $id @{ app = $apps; samekey = 'app'; sameval = $apps; owncheck = $false; requireleadassign = $false; cmd = 'assign-app' })
 }
 
 function Do-Whoami([string[]]$a) {
@@ -1290,6 +1363,7 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'by' { if ($a.Count -ne 1) { Fail 'usage: by <ID>' }; return (Get-ByFrom (Get-Info (Get-NormId $a[0]))) }
     'apps-of' { if ($a.Count -ne 1) { Fail 'usage: apps-of <ID>' }; return (Get-AppsFrom (Get-Info (Get-NormId $a[0]))) }
     'assign' { return (Do-Assign $a) }
+    'assign-app' { return (Do-AssignApp $a) }
     'assign-tester' { return (Do-AssignTester $a) }
     'decide' { return (Do-Decide $a) }
     'decided' { return (Do-Decided $a) }
@@ -1461,6 +1535,11 @@ function Invoke-Selftest {
     Eq 'apps-of F1' (Run apps-of F1) 'ui web'
     Eq 'apps-of F12' (Run apps-of F12) 'api'
     Eq 'apps-of F3 none' (Run apps-of F3) ''
+
+    # F136: explicit app assignment
+    Eq 'assign-app explicit' (Run assign-app F12 web, api) "- [ ] F12 $dash Bulk delete [app: web, api]"
+    $o = [string]::Join(' ', @(Run assign-app F12 web, api))
+    if ($o -notmatch 'no change') { Write-Output "FAIL: same assign-app did not say no change: [$o]"; $script:fail = 1 }
 
     if (-not (Refused assign F1 '@nobody')) { Write-Output 'FAIL: assign accepted an unknown handle'; $script:fail = 1 }
     $now = [System.IO.File]::ReadAllBytes("$M/TICKETS.md")
@@ -2118,7 +2197,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|assign-tester|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|assign-app|assign-tester|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest')
   exit 1
 }
 $cmd = [string]$args[0]
@@ -2137,5 +2216,5 @@ $stdout = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput(), $Ut
 $stdout.NewLine = "`n"
 foreach ($o in @($out)) { if ($null -ne $o) { $stdout.WriteLine([string]$o) } }
 $stdout.Flush()
-if (@('assign', 'assign-tester', 'testing', 'tested', 'verify', 'done', 'block', 'defer') -ccontains $cmd) { Invoke-TeamsPost $cmd $rest }
+if (@('assign', 'assign-app', 'assign-tester', 'testing', 'tested', 'verify', 'done', 'block', 'defer') -ccontains $cmd) { Invoke-TeamsPost $cmd $rest }
 exit 0

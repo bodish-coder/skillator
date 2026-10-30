@@ -7,6 +7,7 @@
 #   ticket-meta.sh by <ID>              @handles (or emails) of the ticket's committers
 #   ticket-meta.sh apps-of <ID>         apps the ticket's commits touched
 #   ticket-meta.sh assign <ID> @handle  [owner: @handle] (implements it), box -> [ ]
+#   ticket-meta.sh assign-app <ID> <app,...> [app: <app,...>], box kept
 #   ticket-meta.sh assign-tester <ID> @handle [tester: @handle], box kept
 #   ticket-meta.sh decide <ID> @handle  [decide: @handle] (must decide), box -> [?]
 #   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
@@ -168,6 +169,77 @@ patterns() {
       f && /^[^ \t#-]/ { f = 0 }
       f && /^[ \t]*-/ { x = $0; sub(/^[ \t]*-[ \t]*/, "", x); sub(/[ \t]+#.*/, "", x)
                         gsub(/["\047]/, "", x); sub(/[ \t]+$/, "", x); print x }'
+  fi
+  # F136: Lerna / Nx
+  if [ -f "$r/lerna.json" ]; then
+    tr -d '\r' < "$r/lerna.json" | tr '\n\t' '  ' |
+      sed -n 's/.*"packages"[[:space:]]*:[[:space:]]*\[\([^]]*\)\].*/\1/p' |
+      grep -o '"[^"]*"' | tr -d '"'
+  fi
+  # F136: Cargo workspace
+  if [ -f "$r/Cargo.toml" ]; then
+    tr -d '\r' < "$r/Cargo.toml" | awk '
+      /^\[workspace\]/ { w = 1; next }
+      w && /^\[/ { w = 0 }
+      w && /members[ \t]*=[ \t]*\[/ { m = 1 }
+      m {
+        s = $0
+        while (match(s, /["\047][^"\047]+["\047]/)) {
+          val = substr(s, RSTART + 1, RLENGTH - 2)
+          print val
+          s = substr(s, RSTART + RLENGTH)
+        }
+        if ($0 ~ /\]/) m = 0
+      }'
+  fi
+  # F136: Go multi-module
+  if [ -f "$r/go.work" ]; then
+    tr -d '\r' < "$r/go.work" | awk '
+      /^use[ \t]*\(/ { u = 1; next }
+      u && /^\)/ { u = 0; next }
+      u && /^[ \t]*[^ \t#]/ {
+        x = $1; sub(/^\.\//, "", x); print x
+      }
+      !u && /^use[ \t]+[^ \t#]/ {
+        x = $2; sub(/^\.\//, "", x); print x
+      }'
+  fi
+  # F136: Gradle settings
+  for sg in "$r/settings.gradle" "$r/settings.gradle.kts"; do
+    if [ -f "$sg" ]; then
+      tr -d '\r' < "$sg" | awk '
+        /include/ {
+          s = $0
+          while (match(s, /["\047]:?([^"\047]+)["\047]/)) {
+            val = substr(s, RSTART + 1, RLENGTH - 2)
+            sub(/^:/, "", val); gsub(/:/, "/", val)
+            print val
+            s = substr(s, RSTART + RLENGTH)
+          }
+        }'
+    fi
+  done
+  # F136: Python pyproject.toml
+  if [ -f "$r/pyproject.toml" ]; then
+    tr -d '\r' < "$r/pyproject.toml" | awk '
+      /\[tool\.uv\.workspace\]/ { w = 1; next }
+      w && /^\[/ { w = 0 }
+      w && /members[ \t]*=[ \t]*\[/ { m = 1 }
+      m {
+        s = $0
+        while (match(s, /["\047][^"\047]+["\047]/)) {
+          print substr(s, RSTART + 1, RLENGTH - 2)
+          s = substr(s, RSTART + RLENGTH)
+        }
+        if ($0 ~ /\]/) m = 0
+      }
+      /include[ \t]*=[ \t]*["\047][^"\047]+["\047]/ {
+        match($0, /include[ \t]*=[ \t]*["\047][^"\047]+["\047]/)
+        val = substr($0, RSTART, RLENGTH)
+        sub(/^include[ \t]*=[ \t]*["\047]/, "", val)
+        sub(/["\047]$/, "", val)
+        print val
+      }'
   fi
 }
 
@@ -602,6 +674,26 @@ cmd_assign() {
 cmd_assign_tester() {
   CMD=assign-tester; id_and_handle "$@"
   SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_TESTER=$HANDLE SET_BY='' SAME_KEY=tester SAME_VAL=$HANDLE NEED_MARK='' edit_line
+}
+
+# F136: assign-app <ID> <app,...> - explicitly set/assign apps ahead of commits
+cmd_assign_app() {
+  CMD=assign-app
+  [ $# -ge 2 ] || die "usage: assign-app <ID> <app,...>"
+  ID=$(norm_id "$1"); shift
+  raw="$*"
+  case "$raw" in *"$NL"*|*\[*|*\]*) die "the app cannot hold brackets or line breaks" ;; esac
+  apps=$(printf '%s' "$raw" | tr ',' ' ' | awk '{
+    for (i = 1; i <= NF; i++) {
+      if ($i != "" && !seen[$i]++) {
+        if (out != "") out = out ", " $i
+        else out = $i
+      }
+    }
+    print out
+  }')
+  [ -n "$apps" ] || die "usage: assign-app <ID> <app,...> - no apps given"
+  SET_MARK='' SET_APP=$apps SET_DECIDE='' SET_OWNER='' SET_TESTER='' SET_BY='' SAME_KEY=app SAME_VAL=$apps NEED_MARK='' edit_line
 }
 
 cmd_whoami() {
@@ -1194,6 +1286,11 @@ selftest() {
   eq "apps-of F1" "$(run apps-of F1)" "ui web"
   eq "apps-of F12" "$(run apps-of F12)" "api"
   eq "apps-of F3 none" "$(run apps-of F3)" ""
+
+  # F136: explicit app assignment
+  eq "assign-app explicit" "$(run assign-app F12 web, api)" "- [ ] F12 $D Bulk delete [app: web, api]"
+  out=$(run assign-app F12 web, api)
+  printf '%s' "$out" | grep -q 'no change' || { echo "FAIL: same assign-app did not say no change: $out"; fail=1; }
 
   sh "$self" assign F1 @nobody > /dev/null 2>&1 && { echo "FAIL: assign accepted an unknown handle"; fail=1; }
   cmp -s TICKETS.md "$T/before.md" || { echo "FAIL: refused assign changed the board"; fail=1; }
@@ -1912,7 +2009,7 @@ teams_post() {
   return 0
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|assign-tester|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|assign-app|assign-tester|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest"
 c=$1; shift
 SUB=$c
 [ "$c" = selftest ] && { selftest; exit 0; }
@@ -1925,6 +2022,7 @@ case $c in
   by) [ $# -eq 1 ] || die "usage: by <ID>"; norm_id "$1"; commits_info "$ID" | by_from ;;
   apps-of) [ $# -eq 1 ] || die "usage: apps-of <ID>"; norm_id "$1"; commits_info "$ID" | apps_from ;;
   assign) cmd_assign "$@" && teams_post assign "$@" ;;
+  assign-app) cmd_assign_app "$@" && teams_post assign-app "$@" ;;
   assign-tester) cmd_assign_tester "$@" && teams_post assign-tester "$@" ;;
   decide) cmd_decide "$@" ;;
   decided) cmd_decided "$@" ;;
