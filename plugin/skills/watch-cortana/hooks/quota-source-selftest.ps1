@@ -97,6 +97,61 @@ try {
     Expect $port level '^src=claude-code 5h=0 7d=0 ctx=- max=0$'
     Expect $port check '^watch-cortana: claude-code 0%.*ok$'
     $env:CLAUDE_CODE_SESSION_ID = $null
+    # A171: caches are JSON records; artifacts and partial flags are not sessions.
+    $env:SKILLATOR_PROFILE_DIR = "$base/schema"
+    $cache = "$base/schema/handoff-watch/quota-cache.json"
+    Put $cache '{"src":"claude-code","5h":95,"7d":91}'
+    Expect $port level '^src=claude-code 5h=95.0 7d=91.0 ctx=- max=95.0$'
+    Expect $port check '^HANDOFF NOW \(claude-code 7-day 91(\.0)?%\)'
+    Put $cache '[{"src":"claude-code","five":95,"weekly":91}]'
+    Expect $port level '^src=none 5h=- 7d=- ctx=- max=-$'
+    Expect $port check '^watch-cortana: no usage signal'
+    Put $cache '{"SRC":"claude-code","FIVE":95}'
+    Expect $port level '^src=none 5h=- 7d=- ctx=- max=-$'
+    Expect $port check '^watch-cortana: no usage signal'
+    Put $cache '{"src":"claude-code","FIVE":95,"WEEKLY":91,"NOTE":"ignored","MAX":95}'
+    Expect $port level '^src=claude-code 5h=- 7d=- ctx=- max=-$'
+    Expect $port check '^watch-cortana: no usage signal'
+    Put $cache '{"src":"claude-code","5h":95,"7d":91}'
+    if ($port -eq 'sh') {
+      $savedPath = $env:PATH
+      try {
+        # Keep the shell utilities, deliberately exclude the optional JSON runtime.
+        $env:PATH = Split-Path $sh.Source -Parent
+        Expect $port level '^src=none 5h=- 7d=- ctx=- max=-$'
+        Expect $port check '^watch-cortana: no usage signal'
+      } finally { $env:PATH = $savedPath }
+    }
+    foreach ($bad in @('', '{"src":"claude-code","5h":95', '{"src":"claude-code","5h":"95"}', '{"src":"claude-code","5h":-1}', '{"src":"claude-code","5h":101}', '{"src":"claude-code","5h":true}', '{"src":"claude-code","5h":1e999}', '{"src":"claude-code","5h":{}}', '{"src":"claude-code","7d":"91"}', '{"src":"claude-code","max":101}', '{"src":"claude-code","note":5}')) {
+      Put $cache $bad
+      Expect $port level '^src=none 5h=- 7d=- ctx=- max=-$'
+      Expect $port check '^watch-cortana: no usage signal'
+    }
+    Put $cache '{"src":"claude-code","5h":null,"7d":0}'
+    Expect $port level '^src=claude-code 5h=- 7d=0.0 ctx=- max=0.0$'
+    Put $cache '{"src":"claude-code","five":0,"weekly":91}'
+    Expect $port level '^src=claude-code 5h=0.0 7d=91.0 ctx=- max=91.0$'
+    (Get-Item $cache).LastWriteTime = (Get-Date).AddHours(-4)
+    Expect $port level '^src=none '
+    Put "$base/schema/handoff-watch/quota-cache.json.refreshing" '95'
+    Put "$base/schema/handoff-watch/refresh.lock" '95'
+    Put "$base/schema/handoff-watch/garbage" 'partial 95'
+    Put "$base/schema/handoff-watch/bad.weekly" '91 trailing'
+    Expect $port level '^src=none '
+    Put "$base/schema/handoff-watch/good" '12.0'
+    Put "$base/schema/handoff-watch/garbage" 'partial 95'
+    Expect $port level '^src=claude-code 5h=- 7d=- ctx=- max=12.0$'
+    Put "$base/schema/handoff-watch/good" ('9' * 400)
+    Expect $port level '^src=none '
+    Put "$base/schema/handoff-watch/good.weekly" ([string][char]0xfeff + " 91.0`r`n")
+    Expect $port level '^src=claude-code 5h=- 7d=91.0 ctx=- max=-$'
+    $env:CLAUDE_CODE_SESSION_ID = 'garbage'
+    Expect $port level '^src=none '
+    $env:CLAUDE_CODE_SESSION_ID = $null
+    $env:SKILLATOR_CLI = $null; $env:CLAUDE_CONFIG_DIR = $null
+    $env:SKILLATOR_PROFILE_DIR = "$base/unknown-source"
+    Put "$base/unknown-source/quota-cache.json" '{"src":"host95","5h":95,"7d":91}'
+    Expect $port level '^src=none '
     # Retain B18's weekly-only zero/context case and the agy/muse cache checks.
     $env:SKILLATOR_CLI = 'codex'; $env:SKILLATOR_PROFILE_DIR = "$base/weekly-only"
     Put "$base/weekly-only/sessions/rollout-reading.jsonl" '{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"total_tokens":10},"model_context_window":100},"rate_limits":{"primary":{"used_percent":0,"window_minutes":10080}}}}'

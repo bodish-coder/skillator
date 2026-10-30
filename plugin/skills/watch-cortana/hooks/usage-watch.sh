@@ -31,11 +31,15 @@ wk_step4=' (4) This is the 7-DAY window, which does not refill for days - the wo
 
 # The flag file is shared with the PowerShell twin, which used to write it with
 # a UTF-8 BOM and CRLF. A BOM makes awk string-compare (0xEF > '9'), so "12.0"
-# read as ">= 92" and the one-shot handoff was burned at 12%. Take the first
-# numeric token in the file and nothing else: no BOM, CR or stray space survives.
+# read as ">= 92" and the one-shot handoff was burned at 12%. Accept only a
+# complete numeric payload after trimming legacy BOM/whitespace.
 read_pct() {
   [ -f "$1" ] || return 0
-  awk '{ if (match($0, /[0-9]+([.][0-9]+)?/)) { print substr($0, RSTART, RLENGTH); exit } }' "$1"
+  awk -v bom="$(printf '\357\273\277')" '
+    { t=t $0 "\n" }
+    END { sub(/^[[:space:]]*/, "", t); if (index(t,bom)==1) t=substr(t,length(bom)+1)
+      sub(/^[[:space:]]*/, "", t); sub(/[[:space:]]*$/, "", t)
+      if (t ~ /^[0-9]+([.][0-9]+)?$/ && t+0<=100) print t }' "$1"
 }
 # Numeric compare, forced numeric on both sides.
 over_limit() { [ "$(awk -v a="$1" -v b="$2" 'BEGIN{print (a+0 >= b+0)}')" = 1 ]; }
@@ -185,8 +189,10 @@ codex_wk_pct() {
 # .done) are written after it, so picking by mtime alone would read one of
 # them as the max and compare it against the wrong threshold.
 main_flag() {
-  ls -t "$dir" 2>/dev/null | grep -v '\.done$' | grep -v '\.weekly$' \
-    | grep -v '\.fivehour$' | grep -v '\.ctx$' | grep -v '^quota-cache\.json' | head -1
+  ls -t "$dir" 2>/dev/null | grep -E '^[a-zA-Z0-9_-]+$' |
+    while IFS= read -r k; do
+      if [ -n "$(read_pct "$dir/$k")" ]; then printf '%s' "$k"; break; fi
+    done
 }
 
 # A130: the flag key check/level may read, or nothing. Inside Claude Code
@@ -197,12 +203,16 @@ main_flag() {
 flag_key() {
   if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
     k=$CLAUDE_CODE_SESSION_ID
-    if fresh_file "$dir/$k" || fresh_file "$dir/$k.weekly"; then printf '%s' "$k"; fi
+    case $k in *[!a-zA-Z0-9_-]*) return 0 ;; esac
+    if [ -n "$(read_fresh "$dir/$k")$(read_fresh "$dir/$k.weekly")" ]; then printf '%s' "$k"; fi
     return 0
   fi
   k=$(main_flag)
   if [ -n "$k" ]; then fresh_file "$dir/$k" && printf '%s' "$k"; return 0; fi
-  k=$(ls -t "$dir" 2>/dev/null | grep '\.weekly$' | head -1)
+  k=$(ls -t "$dir" 2>/dev/null | grep -E '^[a-zA-Z0-9_-]+\.weekly$' |
+    while IFS= read -r f; do
+      if [ -n "$(read_pct "$dir/$f")" ]; then printf '%s' "$f"; break; fi
+    done)
   [ -n "$k" ] && fresh_file "$dir/$k" && printf '%s' "${k%.weekly}"
   return 0
 }
@@ -239,28 +249,28 @@ read_cache() {
   elif [ "$selected_host" = claude-code ] && fresh_file "$dir/quota-cache.json"; then cp="$dir/quota-cache.json"; fi
   [ -n "$cp" ] || return 0
   fresh_file "$cp" || return 0
-  awk -v selected="$selected_host" '
-    match($0,/"src"[[:space:]]*:[[:space:]]*"[^"]*"/){
-      s=substr($0,RSTART,RLENGTH); sub(/^[^:]*:[[:space:]]*"/,"",s); sub(/"$/,"",s); src=s }
-    match($0,/"(5h|five)"[[:space:]]*:[[:space:]]*[0-9.]+/){
-      h=substr($0,RSTART,RLENGTH); sub(/.*:[[:space:]]*/,"",h) }
-    match($0,/"(7d|weekly)"[[:space:]]*:[[:space:]]*[0-9.]+/){
-      w=substr($0,RSTART,RLENGTH); sub(/.*:[[:space:]]*/,"",w) }
-    match($0,/"note"[[:space:]]*:[[:space:]]*"[^"]*"/){
-      n=substr($0,RSTART,RLENGTH); sub(/^[^:]*:[[:space:]]*"/,"",n); sub(/"$/,"",n); gsub(/[[:space:]]/,"_",n); note=n }
-    END {
-      if (src=="") src="none"
-      if (selected!="profile" && src!=selected) exit
-      if (h=="") h="-"
-      if (w=="") w="-"
-      mx="-"
-      if (h!="-" && w!="-") { mx = (h+0 > w+0 ? sprintf("%.1f", h+0) : sprintf("%.1f", w+0)) }
-      else if (h!="-") { mx = sprintf("%.1f", h+0) }
-      else if (w!="-") { mx = sprintf("%.1f", w+0) }
-      if (h!="-") h=sprintf("%.1f", h+0)
-      if (w!="-") w=sprintf("%.1f", w+0)
-      printf "%s %s %s %s %s", src, h, w, mx, note
-    }' "$cp"
+  # Node is optional: without a JSON parser, this cache is unavailable.
+  command -v node >/dev/null 2>&1 || return 0
+  node -e '
+    try {
+      const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8").replace(/^\uFEFF/, ""));
+      const selected = process.argv[2];
+      if (!r || typeof r !== "object" || Array.isArray(r) ||
+          !["claude-code","codex","agy","muse","cursor"].includes(r.src) ||
+          (selected !== "profile" && r.src !== selected)) process.exit(0);
+      for (const key of ["5h","five","7d","weekly","max"]) {
+        const v = r[key];
+        if (v != null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 100)) process.exit(0);
+      }
+      if (r.note != null && typeof r.note !== "string") process.exit(0);
+      const h = Object.hasOwn(r,"5h") ? r["5h"] : r.five;
+      const w = Object.hasOwn(r,"7d") ? r["7d"] : r.weekly;
+      const values = [h,w].filter(v => v != null);
+      const fmt = v => v == null ? "-" : v.toFixed(1);
+      process.stdout.write([r.src,fmt(h),fmt(w),fmt(values.length ? Math.max(...values) : null),
+        (r.note || "").replace(/\s+/g,"_")].join(" "));
+    } catch (_) { /* Malformed caches are unavailable. */ }
+  ' "$cp" "$selected_host"
 }
 
 # Resolve once for level/check; an explicit identity cannot fall through.

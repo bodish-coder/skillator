@@ -50,12 +50,10 @@ function Write-Flag($path, $value) {
   [IO.File]::WriteAllText($abs, ([double]$value).ToString($inv))
 }
 
-# Read a percentage defensively: first numeric token in the file, so a BOM, a
-# CR, stray whitespace or a half-written line can never become a bogus number.
+# Flags contain one complete number, with optional legacy BOM/whitespace.
 function Read-Flag($path) {
-  if (-not (Test-Path $path)) { return $null }
-  try { $t = [IO.File]::ReadAllText((Convert-Path $path)) } catch { return $null }
-  if ($t -match '[0-9]+(\.[0-9]+)?') { return [double]::Parse($Matches[0], $inv) }
+  $t = Read-Token $path
+  if ($null -ne $t) { return [double]::Parse($t, $inv) }
   return $null
 }
 
@@ -129,12 +127,14 @@ function Get-CodexWeeklyPct($path) {
   return $null
 }
 
-# F31: the first numeric token of a flag file AS WRITTEN ('12.0' stays '12.0'),
+# F31: the validated numeric token AS WRITTEN ('12.0' stays '12.0'),
 # so `level` prints the same bytes as the sh twin's read_pct; $null if none.
 function Read-Token($path) {
   if (-not (Test-Path -LiteralPath $path)) { return $null }
   try { $t = [IO.File]::ReadAllText((Convert-Path -LiteralPath $path)) } catch { return $null }
-  if ($t -match '[0-9]+(\.[0-9]+)?') { return $Matches[0] }
+  $t = $t.Trim().TrimStart([char]0xfeff).Trim()
+  $value = 0.0
+  if ($t -match '\A[0-9]+(\.[0-9]+)?\z' -and [double]::TryParse($t, [Globalization.NumberStyles]::AllowDecimalPoint, $inv, [ref]$value) -and $value -le 100) { return $t }
   return $null
 }
 function Fmt1($v) { ([double]$v).ToString('0.0', $inv) }
@@ -154,17 +154,18 @@ function Test-Fresh($path) {
 function Get-FlagKey {
   if ($env:CLAUDE_CODE_SESSION_ID) {
     $k = $env:CLAUDE_CODE_SESSION_ID
-    if ((Test-Fresh (Join-Path $dir $k)) -or (Test-Fresh (Join-Path $dir "$k.weekly"))) { return $k }
+    if ($k -notmatch '\A[a-zA-Z0-9_-]+\z') { return $null }
+    if ($null -ne (Read-Fresh (Join-Path $dir $k) 'Read-Token') -or $null -ne (Read-Fresh (Join-Path $dir "$k.weekly") 'Read-Token')) { return $k }
     return $null
   }
   # `.weekly` is written after the main flag, so it is always the newest -
   # the main flag is picked first, by name, never by mtime alone.
   $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
-       Where-Object { $_.Name -notlike 'quota-cache.json*' -and $_.Extension -notin @('.done', '.weekly', '.fivehour', '.ctx') } | Sort-Object LastWriteTime | Select-Object -Last 1
+       Where-Object { $_.Name -cmatch '\A[a-zA-Z0-9_-]+\z' -and $null -ne (Read-Token $_.FullName) } | Sort-Object LastWriteTime | Select-Object -Last 1
   if ($f) { if (Test-Fresh $f.FullName) { return $f.Name }; return $null }
   # A101: a weekly flag with no main flag beside it is a real state.
   $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
-       Where-Object { $_.Extension -eq '.weekly' } | Sort-Object LastWriteTime | Select-Object -Last 1
+       Where-Object { $_.Name -cmatch '\A[a-zA-Z0-9_-]+\.weekly\z' -and $null -ne (Read-Token $_.FullName) } | Sort-Object LastWriteTime | Select-Object -Last 1
   if ($f -and (Test-Fresh $f.FullName)) { return $f.BaseName }
   $null
 }
@@ -200,14 +201,27 @@ function Get-CachedQuota {
     if (Test-Fresh $cp) {
       try {
         $raw = [IO.File]::ReadAllText((Convert-Path -LiteralPath $cp))
-        $s = if ($raw -match '"src"\s*:\s*"([^"]+)"') { $Matches[1] } else { 'none' }
-        if ($selectedHost -ne 'profile' -and $s -ne $selectedHost) { return $null }
-        $h = if ($raw -match '"(?:5h|five)"\s*:\s*([0-9.]+)') { $Matches[1] } else { $null }
-        $w = if ($raw -match '"(?:7d|weekly)"\s*:\s*([0-9.]+)') { $Matches[1] } else { $null }
-        $n = if ($raw -match '"note"\s*:\s*"([^"]+)"') { $Matches[1] } else { $null }
-        $m = if ($raw -match '"max"\s*:\s*([0-9.]+)') { $Matches[1] } else { $null }
+        $record = ConvertFrom-Json -InputObject $raw -ErrorAction Stop
+        if ($null -eq $record -or $record.GetType() -ne [System.Management.Automation.PSCustomObject]) { return $null }
+        # PowerShell member lookup ignores case; admit only exact JSON schema keys.
+        $fields = @{}
+        foreach ($property in $record.PSObject.Properties) {
+          if ($property.Name -cin @('src','5h','five','7d','weekly','max','note')) { $fields[$property.Name] = $property.Value }
+        }
+        $record = $fields
+        $s = $record.src
+        if ($s -cnotin @('claude-code','codex','agy','muse','cursor') -or ($selectedHost -ne 'profile' -and $s -cne $selectedHost)) { return $null }
+        foreach ($name in @('5h','five','7d','weekly','max')) {
+          $v = $record.$name
+          if ($null -ne $v -and (($v -isnot [int] -and $v -isnot [long] -and $v -isnot [double] -and $v -isnot [decimal]) -or [double]::IsNaN($v) -or $v -lt 0 -or $v -gt 100)) { return $null }
+        }
+        if ($null -ne $record.note -and $record.note -isnot [string]) { return $null }
+        $h = if ($record.ContainsKey('5h')) { $record.'5h' } else { $record.five }
+        $w = if ($record.ContainsKey('7d')) { $record.'7d' } else { $record.weekly }
+        $n = $record.note
+        $m = $null # Derive max from the validated windows, as the shell reader does.
         return @{ src = $s; '5h' = $h; '7d' = $w; max = $m; note = $n; path = $cp }
-      } catch { }
+      } catch { return $null }
     }
   }
   return $null
@@ -411,8 +425,8 @@ if ($Mode -eq 'check') {
   if ($null -eq $pct -and $null -eq $wk) {
     $cq = Get-CachedQuota
     if ($cq) {
-      if ($null -ne $cq['5h']) { $pct = [double]::Parse($cq['5h'], $inv) }
-      if ($null -ne $cq['7d']) { $wk  = [double]::Parse($cq['7d'], $inv) }
+      if ($null -ne $cq['5h']) { $pct = [double]$cq['5h'] }
+      if ($null -ne $cq['7d']) { $wk  = [double]$cq['7d'] }
       if ($null -ne $pct -or $null -ne $wk) {
         $src = $cq.src
         $key = "$($cq.src)-cache"
