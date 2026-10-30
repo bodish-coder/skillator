@@ -129,6 +129,28 @@ test('band: F109 the session sid after the handle', () => {
     '● ops @sher cc-k7q2  5 open ●1 ●1 ●1  RUN-0012 2/4  disk 17 GB  mem 3.2 GB')
 })
 
+// F130: status band shows the addressee of a pending handoff
+test('status line & band: F130 pending handoff to teammate ends with → @handle', () => {
+  const big = { open: 258, progress: 1, testing: 0, blocked: 0, decision: 0 }
+  const u = usageFrom([{ kind: 'five_hour', percentUsed: 1 }, { kind: 'seven_day', percentUsed: 33 }], null, NOW)
+  expect(statusText(big, u, NOW, null, '@vidul')).toBe('ops 257 pending | 1 in progress | 258 total · 5h 1% · 7d 33% → @vidul')
+  expect(statusText(big, u, NOW, null, null)).toBe('ops 257 pending | 1 in progress | 258 total · 5h 1% · 7d 33%')
+
+  // 120 columns: fits with handoff
+  const l120 = bandLines(input(GREEN_KV, { handoff: '@vidul', cols: 120 }))[0]!
+  expect(l120.endsWith('→ @vidul')).toBe(true)
+
+  // 80 columns: fits with handoff (relay drops)
+  const l80 = bandLines(input(GREEN_KV, { handoff: '@vidul', cols: 80 }))[0]!
+  expect(l80.endsWith('→ @vidul')).toBe(true)
+  expect(l80.length <= 80).toBe(true)
+
+  // 60 columns: handoff cut before usage figures are
+  const l60 = bandLines(input(GREEN_KV, { handoff: '@vidul', cols: 60 }))[0]!
+  expect(l60.includes('→ @vidul')).toBe(false)
+  expect(l60.includes('5h 41%')).toBe(true)
+})
+
 test('countsOf: open excludes deferred and closed', () => {
   expect(COUNTS).toEqual({ open: 5, progress: 1, testing: 0, blocked: 1, decision: 1 })
   expect(countsOf(null)).toBeNull()

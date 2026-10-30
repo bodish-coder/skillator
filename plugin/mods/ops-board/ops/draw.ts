@@ -320,8 +320,31 @@ function bandSegs(s: State): Seg[][] {
     if (width(line()) > limit) facts[1] = [facts[1]![0]!, figSeg(m?.diskFree, DISK, '')]
     return line()
   }
-  if (cols >= 80) return [edge(tight(() => join([lead, ...facts, ...usage], ' · '), room))]
+  const handoff = (s as any).handoff ?? pendingHandoffOf(s.messages, s.msgRead)
+  const ho: Seg[] = handoff ? [{ text: `→ ${handoff}`, color: 'suggestion' }] : []
+  if (cols >= 80) {
+    if (ho.length) {
+      const withHo = () => join([lead, ...facts, ...usage, ho], ' · ')
+      if (width(withHo()) <= room) return [edge(tight(withHo, room))]
+    }
+    return [edge(tight(() => join([lead, ...facts, ...usage], ' · '), room))]
+  }
+  if (ho.length) {
+    const line2 = join([...usage, ho], ' · ')
+    if (width(line2) <= cols) return [tight(() => join([lead, ...facts], ' · '), cols), edge(line2)]
+  }
   return [tight(() => join([lead, ...facts], ' · '), cols), edge(join(usage, ' · '))]
+}
+
+function pendingHandoffOf(msgs: Msg[] | undefined | null, readId: string | null): string | null {
+  if (!msgs || !msgs.length) return null
+  const unreadIdx = readId ? msgs.findLastIndex(m => m.id === readId) : -1
+  const unread = unreadIdx >= 0 ? msgs.slice(unreadIdx + 1) : msgs
+  for (let i = unread.length - 1; i >= 0; i--) {
+    const to = (unread[i] as any)?.to
+    if (typeof to === 'string' && to.startsWith('@')) return to
+  }
+  return null
 }
 
 // --- the Tickets tab, as the mock ---

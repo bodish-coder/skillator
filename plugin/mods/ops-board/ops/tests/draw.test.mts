@@ -7,6 +7,7 @@ import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
 import { headKey } from '../../hooks/lib/ticketsmodel'
 import { BOARD } from '../../tests/fixtures'
+import { bandLines, statusText } from '../../hooks/lib/bandlines'
 // The block's excerpt, with the layout the owner approved in the mock (controller ruling
 // 2026-10-20: where the mock and the excerpt differ on what the user sees, the mock wins).
 // F61: groups start collapsed; the row tests run with every group open, the first row selected.
@@ -703,6 +704,63 @@ test('F113: Start run modal drawing and responsive layout across columns', () =>
   assert.ok(runnerHit, 'Hitbox found for runner field')
   assert.ok(modeHit, 'Hitbox found for mode field')
   assert.ok(ticketsHit, 'Hitbox found for tickets field')
+})
+
+test('F130: Ops band shows the addressee of a pending handoff', () => {
+  // 1. statusText ends with ' → @vidul' when pending handoff is present, unchanged when none
+  const counts = { open: 258, progress: 1, testing: 0, blocked: 0, decision: 0 }
+  const usage = {
+    five: { pct: 1, resetsAt: null, source: 'host' as const, at: 0 },
+    seven: { pct: 33, resetsAt: null, source: 'host' as const, at: 0 },
+    spendLimitPct: null, costUsd: null, decision: null,
+  }
+  const stWithHandoff = statusText(counts, usage, 0, null, '@vidul')
+  assert.equal(stWithHandoff, 'ops 257 pending | 1 in progress | 258 total · 5h 1% · 7d 33% → @vidul')
+  assert.ok(stWithHandoff.length <= 80)
+  assert.match(stWithHandoff, /→ @vidul$/)
+
+  const stNoHandoff = statusText(counts, usage, 0, null)
+  assert.equal(stNoHandoff, 'ops 257 pending | 1 in progress | 258 total · 5h 1% · 7d 33%')
+
+  // 2. bandLines across 40, 80, 120 columns
+  const baseInput = {
+    watch: { level: 'green' as const, reasons: [] },
+    machine: { at: 0, drive: 'C:', diskFree: 17 * 1073741824, diskTotal: 1000 * 1073741824, memFree: 3 * 1073741824, locks: [], hold: null },
+    usage,
+    relay: 'RUN-0012 2/4',
+    counts,
+    narrow: false,
+    cols: 120,
+    now: 0,
+    me: null,
+    handoff: '@vidul',
+  }
+
+  // 120 columns
+  const lines120 = bandLines({ ...baseInput, cols: 120 })
+  assert.match(lines120[0]!, /→ @vidul$/)
+  assert.ok(cells(lines120[0]!) <= 120)
+
+  // 80 columns: fits at 80 cols, relay drops so → @vidul fits
+  const lines80 = bandLines({ ...baseInput, cols: 80 })
+  assert.match(lines80[0]!, /→ @vidul$/)
+  assert.ok(cells(lines80[0]!) <= 80)
+
+  // 40 columns: cut before usage figures are cut (handoff drops)
+  const lines40 = bandLines({ ...baseInput, cols: 40 })
+  assert.doesNotMatch(lines40[0]!, /→ @vidul/)
+  assert.match(lines40[0]!, /5h 1%/)
+
+  // 3. Ops board TUI frame with handoff
+  const sWithHandoff = { ...s, handoff: '@vidul' }
+  const f80 = sized({ ...sWithHandoff, cols: 80, rows: 24 })
+  assert.match(f80.at(-1)!, /→ @vidul/)
+
+  const f120 = sized({ ...sWithHandoff, cols: 120, rows: 24 })
+  assert.match(f120.at(-1)!, /→ @vidul/)
+
+  const fNoHandoff = sized({ ...s, cols: 80, rows: 24 })
+  assert.doesNotMatch(fNoHandoff.at(-1)!, /→ @vidul/)
 })
 
 
