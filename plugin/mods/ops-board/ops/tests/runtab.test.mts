@@ -124,7 +124,7 @@ test('the Run tab: Enter asks first - the exact argv and cwd - and Esc runs noth
   assert.match(t, /Command {2}\/bin\/sh \/r\/install\.sh/)
   assert.match(t, /In {7}\/r/)
   assert.match(t, /runs the repo's own code/)
-  assert.match(t, /enter run · n rename · esc cancel/)
+  assert.match(t, /\[enter run\] · \[n rename\] · \[esc cancel\]/)
   await keys(e, 'escape')
   assert.equal(e.state.runForm, null)
   assert.deepEqual(f.spawns, [])

@@ -61,11 +61,13 @@ export function makeEngine(o: EngineOpts): Engine {
   // --- effects: state.ts asks, this runs; a run's result is folded into the state as it
   // then is, and may ask for more ---
   const apply = async (step: Step): Promise<void> => {
+    if (stopped) return
     state = step.state
     draw()
     for (const e of step.effects) await runEffect(e)
   }
   const runEffect = async (e: Effect): Promise<void> => {
+    if (stopped) return
     if (e.kind === 'quit') { o.onQuit(); return }
     if (e.kind === 'poll') return e.what === 'board' ? guarded('board', () => pollBoard(true)) : guarded(e.what, e.what === 'slow' ? pollSlow : pollRuns)
     if (e.kind === 'runfile') return readRunFile(e.scanIfMissing && !once)
@@ -73,6 +75,7 @@ export function makeEngine(o: EngineOpts): Engine {
     if (e.kind === 'stop') { job?.stop(); return }
     if (e.kind === 'git') {                     // F75: read-only, so --once runs it too
       const g = host.git ? await host.git(e.args) : { code: 127, out: '', err: NO_GIT, argv: [] }
+      if (stopped) return
       return apply(afterRun(e, g, state, Date.now()))
     }
     if (e.kind === 'mute') {                    // F87: a write, so never in --once
@@ -82,48 +85,61 @@ export function makeEngine(o: EngineOpts): Engine {
         if (!host.write) throw new Error('this host cannot write files')
         await host.write(host.repoRoot + '/' + MUTE_FILE, e.text ? e.text + '\n' : '')
       } catch (err) { r = { ...r, code: 1, err: String((err as Error)?.message ?? err) } }
+      if (stopped) return
       if (e.then) await apply(afterRun({ then: e.then }, r, state, Date.now()))
       return
     }
     if (once && e.call !== 'relay-decide') return
     const r = await host.run(e.call, e.args, e.stdin)
-    await apply(afterRun(e, e.call === 'pending-machine' ? await withMute(r) : r, state, Date.now()))
+    if (stopped) return
+    const result = e.call === 'pending-machine' ? await withMute(r) : r
+    if (stopped) return
+    await apply(afterRun(e, result, state, Date.now()))
   }
 
   // F87: pending --machine's facts with the mute file's line appended (MUTE=), as the mod does.
   const withMute = async (r: RunResult): Promise<RunResult> => {
-    if (r.code !== 0 || !r.out.trim()) return r
+    if (stopped || r.code !== 0 || !r.out.trim()) return r
     const path = host.repoRoot + '/' + MUTE_FILE
     let text: string | null = null
-    try { if (await host.stat(path)) text = await host.read(path) } catch { text = null }
+    try { if (await host.stat(path) && !stopped) text = await host.read(path) } catch { text = null }
     return { ...r, out: r.out + muteKv(text) }
   }
 
   // --- F79: the Run tab - run.json read (scanned when absent, through run-entries), one job ---
   let bins: Bins | null = null
   let job: { stop(): void } | null = null
+  let jobTick: ReturnType<typeof setInterval> | null = null
   const readRunFile = async (scanIfMissing: boolean): Promise<void> => {
+    if (stopped) return
     const path = host.repoRoot + '/' + RUN_FILE
     let st: Awaited<ReturnType<typeof host.stat>>
     try { st = await host.stat(path) } catch (err) {   // an unreadable .skillator: said on the tab, never a dropped rejection
+      if (stopped) return
       state = onRunFile(state, { path, entries: [], error: `${RUN_FILE} not read: ${String((err as Error)?.message ?? err)}` }, bins, host.repoRoot)
       draw()
       return
     }
+    if (stopped) return
     if (!st && scanIfMissing) return apply(rescan(state))
     if (!bins && host.bins) { try { bins = await host.bins() } catch { bins = null } }
+    if (stopped) return
     let f = { path, entries: [], error: `no ${RUN_FILE} - r scans the repo for its entry points` } as ReturnType<typeof parseRunFile>
     if (st && st.size > 1024 * 1024) f = { ...f, error: `${RUN_FILE} is over 1 MiB - not read` }
     else if (st) { try { f = parseRunFile(await host.read(path), path) } catch (err) { f = { ...f, error: `${RUN_FILE} not read: ${String((err as Error)?.message ?? err)}` } } }
+    if (stopped) return
     state = onRunFile(state, f, bins, host.repoRoot)
     draw()
   }
   const startJob = async (argv: string[], cwd: string): Promise<void> => {
+    if (stopped) return
     if (state.runJob) state = { ...state, runJob: { ...state.runJob, started: Date.now() } }
     if (!host.spawn) { state = onJobEnd(state, null, 'this host cannot run commands', Date.now()); draw(); return }
-    const tick = setInterval(draw, 1000)
-    job = host.spawn(argv, cwd, text => { state = onJobOut(state, text); draw() }, (code, err) => {
-      clearInterval(tick)
+    jobTick = setInterval(draw, 1000)
+    job = host.spawn(argv, cwd, text => { if (stopped) return; state = onJobOut(state, text); draw() }, (code, err) => {
+      if (stopped) return
+      if (jobTick !== null) clearInterval(jobTick)
+      jobTick = null
       job = null
       state = onJobEnd(state, code, err, Date.now())
       draw()
@@ -143,9 +159,11 @@ export function makeEngine(o: EngineOpts): Engine {
   let boardSig = '', teamSig = ''
   let team: Member[] = []
   const pollBoard = async (force = false) => {
+    if (stopped) return
     const root = host.repoRoot
     const path = root + '/TICKETS.md'
     const st = await host.stat(path)
+    if (stopped) return
     const sig = st ? `${st.mtimeMs}:${st.size}` : 'none'
     let board = state.board
     let moved = false
@@ -160,8 +178,10 @@ export function makeEngine(o: EngineOpts): Engine {
         catch (e) { board = failed(path, `TICKETS.md not loaded: ${String((e as Error)?.message ?? e)} - /archive-tickets moves the closed rows out`) }
       }
     }
+    if (stopped) return
     const teamPath = root + '/.skillator/team.md'
     const tst = await host.stat(teamPath)
+    if (stopped) return
     const tsig = tst ? `${tst.mtimeMs}:${tst.size}` : 'none'
     if (force || tsig !== teamSig) {
       teamSig = tsig
@@ -169,6 +189,7 @@ export function makeEngine(o: EngineOpts): Engine {
       team = []
       if (tst) { try { team = parseTeam(await host.read(teamPath)) } catch { team = [] } }
     }
+    if (stopped) return
     if (moved && board) state = onBoard(state, board, team, meOf(team, email ?? '', o.envMe))
     await pollInbox()
     draw()
@@ -178,9 +199,11 @@ export function makeEngine(o: EngineOpts): Engine {
   let inboxSig = ''
   const pollInbox = async () => {
     const dir = host.inboxDir
-    if (!dir) return
+    if (stopped || !dir) return
     const ist = await host.stat(dir + '/' + INBOX_FILE)
+    if (stopped) return
     const rst = await host.stat(dir + '/' + READ_FILE)
+    if (stopped) return
     const sig = `${ist ? `${ist.mtimeMs}:${ist.size}` : 'none'}|${rst ? `${rst.mtimeMs}:${rst.size}` : 'none'}`
     if (sig === inboxSig) return
     inboxSig = sig
@@ -191,7 +214,9 @@ export function makeEngine(o: EngineOpts): Engine {
       const r = await host.run('team-inbox-tail', [])
       text = r.code === 0 ? r.out : ''
     }
+    if (stopped) return
     if (rst) { try { readId = (await host.read(dir + '/' + READ_FILE)).trim() || null } catch { readId = null } }
+    if (stopped) return
     state = onInbox(state, text, readId)
   }
 
@@ -203,21 +228,25 @@ export function makeEngine(o: EngineOpts): Engine {
   }
 
   const pollRuns = async () => {
+    if (stopped) return
     const r = await host.run('relay-list', [])
+    if (stopped) return
     if (r.code !== 0) { relayFailed(r); draw(); return }
     setNote(isRelayNote, null)
     const open = parseRuns(r.out, {}).filter(x => x.done < x.total)
     const next: Record<string, string> = {}
     const js: Record<string, string> = {}
     for (let i = 0; i < open.length; i += 2) {
+      if (stopped) return
       await Promise.all(open.slice(i, i + 2).map(async run => {
         const c = await host.run('relay-resume', [run.id])
-        if (c.code !== 0) return
+        if (stopped || c.code !== 0) return
         next[run.id] = c.out
         const path = scriptPathOf(c.out, host.repoRoot)
         if (path) { try { js[run.id] = await host.read(path) } catch { /* no script: an agents run */ } }
       }))
     }
+    if (stopped) return
     chains = next
     scripts = js
     state = onRuns(state, r.out, chains, scripts)
@@ -227,28 +256,39 @@ export function makeEngine(o: EngineOpts): Engine {
   // Machine facts (and the red → hold rule), relay's first open run for the band, usage
   // (and relay's decision on it). On Runs its own poll reads relay.
   const pollSlow = async () => {
+    if (stopped) return
     const m = await withMute(await host.run('pending-machine', []))
+    if (stopped) return
     if (m.code === 0 && m.out.trim()) await apply(onMachine(state, m.out, Date.now()))
     else if (m.err === NO_SCRIPTS) { setNote(isScriptsNote, `▲ ${NO_SCRIPTS} - no disk, memory, lock, run or usage facts`); draw() }
+    if (stopped) return
     if (state.tab !== 'runs') {
       const r = await host.run('relay-list', [])
+      if (stopped) return
       if (r.code === 0) { setNote(isRelayNote, null); state = onRuns(state, r.out, chains, scripts) } else relayFailed(r)
       draw()
     }
+    if (stopped) return
     const u = await host.run('usage-level', [])
+    if (stopped) return
     if (u.code === 0 && u.out.trim()) await apply(onUsage(state, u.out, Date.now()))
   }
 
   return {
     get state() { return state },
-    resize(cols, rows) { if (cols !== state.cols || rows !== state.rows) state = { ...state, cols, rows } },
-    key: k => apply(reduce(state, k)),
-    point: action => apply(point(state, action)),
+    resize(cols, rows) { if (!stopped && (cols !== state.cols || rows !== state.rows)) state = { ...state, cols, rows } },
+    async key(k) { if (!stopped) await apply(reduce(state, k)) },
+    async point(action) { if (!stopped) await apply(point(state, action)) },
     async readAll() {
+      if (stopped) return
       await pollBoard()
+      if (stopped) return
       await pollSlow()
+      if (stopped) return
       if (state.tab === 'runs') await pollRuns()
+      if (stopped) return
       if (state.tab === 'explorer') await apply(enterExplorer(state))
+      if (stopped) return
       if (state.tab === 'run') await runEffect(enterRunEffect())    // --tab run: read run.json (never scanned in --once)
     },
     async start() {
@@ -259,14 +299,20 @@ export function makeEngine(o: EngineOpts): Engine {
       if (state.tab === 'runs') void guarded('runs', pollRuns)
       if (state.tab === 'explorer') void apply(enterExplorer(state))
       if (state.tab === 'run') void runEffect(enterRunEffect())
+      if (stopped) return
       timers.push(setInterval(() => { void guarded('board', () => pollBoard()) }, BOARD_MS))
       timers.push(setInterval(() => { void guarded('slow', pollSlow) }, SLOW_MS))
       timers.push(setInterval(() => { if (state.tab === 'runs') void guarded('runs', pollRuns) }, RUNS_MS))
     },
     stop() {
+      if (stopped) return
       stopped = true
-      job?.stop()
+      if (jobTick !== null) clearInterval(jobTick)
+      jobTick = null
       for (const t of timers.splice(0)) clearInterval(t)
+      const ownedJob = job
+      job = null
+      ownedJob?.stop()
     },
   }
 }
