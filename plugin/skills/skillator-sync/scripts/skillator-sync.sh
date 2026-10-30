@@ -162,6 +162,7 @@ $1"
 
   manifest="$skills_dir/$skill/UPSTREAM.md"
   [ -f "$manifest" ] || die "absorb: manifest not found: $manifest" 2
+  [ -w "$manifest" ] || die "absorb: manifest is not writable: $manifest" 2
 
   tmpf="$manifest.tmp.$$"
   awk -v target="$upname" -v sha="$newsha" -v dt="$day" '
@@ -247,6 +248,29 @@ EOF
 EOF
 
   me="$here/$prog"
+
+  # Check real permissions; privileged/Windows runtimes may ignore chmod.
+  manifest="$st/skills/skill-two/UPSTREAM.md"
+  cp "$manifest" "$st/original"
+  for denied in file directory; do
+    target=$manifest
+    [ "$denied" = directory ] && target="$st/skills/skill-two"
+    chmod a-w "$target"
+    if [ ! -w "$target" ]; then
+      out=$(sh "$me" absorb skill-two beta "$B" --skills-dir "$st/skills" 2>&1); rc=$?
+      assert_ok "$([ "$rc" = 2 ] && echo 0 || echo 1)" "$denied write denial exits 2: $out"
+      if printf '%s\n' "$out" | grep -q '^absorbed '; then result=1; else result=0; fi
+      assert_ok "$result" "$denied write denial has no success output"
+      cmp -s "$manifest" "$st/original"
+      assert_ok $? "$denied write denial preserves bytes"
+      set -- "$manifest".tmp.*
+      assert_ok "$([ ! -e "$1" ] && echo 0 || echo 1)" "$denied write denial cleans temporary files"
+    else
+      echo "skipped: $denied write denial not enforced by this runtime/user"
+    fi
+    chmod u+w "$target"
+  done
+  echo 'skipped: Windows FileStream sharing lock is tested by the PowerShell selftest'
 
   # 1. Sweep detects 1 unchanged (alpha) and 1 behind/changed (beta) with compare URL
   out=$(sh "$me" check --skills-dir "$st/skills" 2>&1); rc=$?

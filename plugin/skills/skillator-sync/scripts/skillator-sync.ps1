@@ -164,7 +164,20 @@ function Invoke-Absorb([string[]]$rest) {
 
   if (-not $found) { Fail-Die "absorb: upstream '$upname' not found under '## Upstreams' in $manifest" 2 }
   $enc = New-Object Text.UTF8Encoding($false)
-  [IO.File]::WriteAllText($manifest, (($outLines -join "`n") + "`n"), $enc)
+  $temp = "$manifest.tmp.$([guid]::NewGuid().ToString('N'))"
+  $writeError = $null
+  try {
+    if ([IO.File]::GetAttributes($manifest) -band [IO.FileAttributes]::ReadOnly) {
+      throw 'manifest is read-only'
+    }
+    # Check file write access as replacement can otherwise bypass a file ACL.
+    $access = [IO.File]::Open($manifest, [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::Read)
+    $access.Dispose()
+    [IO.File]::WriteAllText($temp, (($outLines -join "`n") + "`n"), $enc)
+    [IO.File]::Replace($temp, $manifest, [NullString]::Value)
+  } catch { $writeError = $_.Exception.Message }
+  finally { if ([IO.File]::Exists($temp)) { [IO.File]::Delete($temp) } }
+  if ($writeError) { Fail-Die "absorb: could not write ${manifest}: $writeError" 2 }
   Write-Output "absorbed $skill $upname $($newsha.Substring(0, 7)) ($day)"
   exit 0
 }
@@ -222,6 +235,42 @@ exit 2
 
     $skillsRoot = Join-Path $st 'skills'
 
+    # Persistence failures must preserve every original byte and leave no temp.
+    $manifest = Join-Path $sk2 'UPSTREAM.md'
+    $original = [Convert]::ToBase64String([IO.File]::ReadAllBytes($manifest))
+    function Assert-AbsorbFailure([string]$label) {
+      $r = Run-Sync @('absorb', 'skill-two', 'beta', $B, '-SkillsDir', $skillsRoot)
+      Assert-Ok ($r.Rc -eq 2) "$label exits 2, got $($r.Rc): $($r.Out)"
+      Assert-Ok ($r.Out -notmatch '(?m)^absorbed ') "$label has no success output"
+      Assert-Ok ([Convert]::ToBase64String([IO.File]::ReadAllBytes($manifest)) -ceq $original) "$label preserves bytes"
+      Assert-Ok (@(Get-ChildItem -LiteralPath $sk2 -Filter 'UPSTREAM.md.tmp.*').Count -eq 0) "$label cleans temporary files"
+    }
+    try {
+      [IO.File]::SetAttributes($manifest, [IO.FileAttributes]::ReadOnly)
+      Assert-AbsorbFailure 'read-only manifest'
+    } finally { [IO.File]::SetAttributes($manifest, [IO.FileAttributes]::Normal) }
+    $lock = [IO.File]::Open($manifest, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try { Assert-AbsorbFailure 'locked manifest' } finally { $lock.Dispose() }
+    $lock = [IO.File]::Open($manifest, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+    try { Assert-AbsorbFailure 'replacement-locked manifest' } finally { $lock.Dispose() }
+
+    $acl = Get-Acl -LiteralPath $sk2
+    $deny = New-Object Security.AccessControl.FileSystemAccessRule(
+      [Security.Principal.WindowsIdentity]::GetCurrent().User, 'CreateFiles', 'Deny')
+    try {
+      $restricted = Get-Acl -LiteralPath $sk2
+      $restricted.AddAccessRule($deny)
+      $denied = $false
+      try {
+        Set-Acl -LiteralPath $sk2 -AclObject $restricted -ErrorAction Stop
+        try { [IO.File]::WriteAllText((Join-Path $sk2 'write-probe'), 'probe') }
+        catch [UnauthorizedAccessException] { $denied = $true }
+      } catch { Write-Output "skipped: directory write denial unavailable: $($_.Exception.Message)" }
+      if ($denied) { Assert-AbsorbFailure 'unwritable directory' }
+      else { Write-Output 'skipped: runtime did not enforce directory write denial' }
+    } finally { Set-Acl -LiteralPath $sk2 -AclObject $acl -ErrorAction Stop }
+    [IO.File]::WriteAllText($manifest, "$m2Body`n", $enc)
+
     # 1. Sweep detects 1 unchanged and 1 behind with compare link
     $r = Run-Sync @('check', '-SkillsDir', $skillsRoot)
     Assert-Ok ($r.Rc -eq 1) "sweep exit code should be 1 when behind, got $($r.Rc): $($r.Out)"
@@ -238,6 +287,7 @@ exit 2
     Assert-Ok ($r.Rc -eq 0) "absorb should exit 0, got $($r.Rc): $($r.Out)"
     Assert-Ok ($r.Out -match '(?m)^absorbed skill-two beta bbbbbbb \(2026-10-30\)$') "absorb output line format: $($r.Out)"
     $updated = [IO.File]::ReadAllText((Join-Path $sk2 'UPSTREAM.md'))
+    Assert-Ok ($updated -ceq (($m2Body.Replace($A, $B).Replace('2026-10-01', '2026-10-30')) + "`n")) 'writable manifest changes only SHA/date'
     Assert-Ok ($updated.Contains("| beta | ``org/beta`` | ``SKILL.md`` | ``$B`` | 2026-10-30 | s2 |")) "UPSTREAM.md row updated after absorb"
 
     # 4. Re-sweep after absorb exits 0 with all unchanged
