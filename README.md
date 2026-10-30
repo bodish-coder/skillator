@@ -442,6 +442,34 @@ Deactivating is deleting `.skillator/grayskull.md`.
   `~/.skillator/teams.json`, this user only. Setup and threat model:
   [`plugin/skills/teams-uhura/references/setup.md`](plugin/skills/teams-uhura/references/setup.md).
 
+## Reliability regression parity
+
+From the repository root, run `node plugin/practice/scripts/reliability-parity.mjs --report <report.json>`.
+The offline Node stdlib entry point reuses focused A166–A176 fixtures, including
+ownership marker bytes and edited helpers, updater source directories, quota
+selection/cache validation, protected manifests, Unicode task briefs, and Git
+worktree inboxes. A170/A174/A175/A176 are shared application checks run once.
+It does not run the full installer selftest or start a live coding host.
+
+Use `node plugin/practice/scripts/reliability-parity.mjs --selftest` to verify
+independent output, exit-status and file divergence detection. Brief files and
+ownership markers compare exact bytes; console comparison normalizes only
+temporary roots, path separators and CRLF transport. Quota level observations
+compare exactly across both ports; host-specific human check messages retain
+their existing fixture assertions.
+
+Requires Node with TypeScript support for the existing ops fixtures, Git, `sh`,
+and Windows PowerShell 5.1 or `pwsh`. Windows ownership and ACL/FileStream
+fixtures are explicitly skipped on other operating systems. Each command has a
+three-minute bound. Reports contain `entries` with `id`, `status`, `reason`,
+`command` (argv), `code` (child exit status or null) and `evidence` paths;
+stdout/stderr and direct parity observations remain in the printed temporary
+evidence directory. Status is `passed`, `failed`, `skipped` or `blocked`.
+Unsupported permission semantics and missing executables are disclosed as
+skips; missing required runtimes also block complete coverage. Exit codes are
+1 for a failure, 2 for blocked/incomplete required checks (including all skipped),
+and 0 when available checks pass with any disclosed platform skips.
+
 ## Add a new skill
 
 `skillator:skill-prometheus` is the skill for this — read it before authoring.

@@ -80,6 +80,20 @@ fi
     if ($lines[$i + 1] -cnotmatch ('^file [0-9a-f]{64} ' + [regex]::Escape($paths[$i]) + '$')) { throw 'Incorrect file entry or ordering' }
   }
   'PASS: unchanged multifile ownership; three sorted entries; LF/no BOM; byte-identical ports'
+  # A166: a valid marker must not authorize deleting a subsequently edited helper.
+  foreach ($copy in $psCopy, $shCopy) {
+    [IO.File]::WriteAllText((Join-Path $copy 'helper.ps1'), "user edit`n", $utf8)
+  }
+  [IO.File]::WriteAllText((Join-Path $dest $manifest), "powershell`nshell`n", $utf8)
+  if (Test-OwnedIntact $psCopy) { throw 'Valid marker accepted an edited helper' }
+  foreach ($DryRun in @($true, $false)) {
+    $output = Remove-Unshipped $dest 6>&1 | Out-String
+    if (-not $output.Contains('kept powershell (modified or unverifiable')) { throw 'Missing edited-helper retention explanation' }
+    if ([IO.File]::ReadAllText((Join-Path $psCopy 'helper.ps1'), $utf8) -cne "user edit`n") { throw 'Edited helper was removed or changed' }
+  }
+  Invoke-ShellCheck modified
+  if ([IO.File]::ReadAllText((Join-Path $shCopy 'helper.ps1'), $utf8) -cne "user edit`n") { throw 'Shell edited helper was removed or changed' }
+  'PASS: valid marker retains edited helper through dry-run and actual cleanup in both ports'
   foreach ($copy in $psCopy, $shCopy) {
     [IO.File]::WriteAllText((Join-Path $copy $owned), "file SKILL.md helper.ps1`n", $utf8)
     [IO.File]::WriteAllText((Join-Path $copy 'helper.ps1'), "user edit`n", $utf8)

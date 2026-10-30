@@ -4,6 +4,8 @@ $tmp = Join-Path $PSScriptRoot ('.quota-source-' + [guid]::NewGuid())
 $names = @('HOME','USERPROFILE','CODEX_HOME','CODEX_THREAD_ID','CODEX_SESSION_ID','CLAUDE_CODE_SESSION_ID','CLAUDE_CONFIG_DIR','CLAUDE_USAGE_WATCH_DIR','SKILLATOR_CLI','SKILLATOR_PROFILE_DIR','AGY_CONFIG_DIR','MUSE_CONFIG_DIR','ANTIGRAVITY_APP_DATA_DIR','CURSOR_LEDGER_PATH','SKILLATOR_CONFIG_DIR','CLAUDE_USAGE_HANDOFF_PCT','CLAUDE_USAGE_HANDOFF_WEEKLY_PCT')
 $keep = @{}; foreach ($n in $names) { $keep[$n] = [Environment]::GetEnvironmentVariable($n) }
 $sh = Get-Command sh -ErrorAction SilentlyContinue
+$ps = (Get-Process -Id $PID).Path
+$observations = @{}
 $count = 0
 function Put($path, $value) {
   New-Item (Split-Path $path -Parent) -ItemType Directory -Force | Out-Null
@@ -15,7 +17,7 @@ function Roll($profile, $id, $h, $w) {
   $p
 }
 function ReadUsage($port, $mode) {
-  if ($port -eq 'ps') { $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tmp 'usage-watch.ps1') -Mode $mode) -join "`n" }
+  if ($port -eq 'ps') { $out = (& $ps -NoProfile -ExecutionPolicy Bypass -File (Join-Path $tmp 'usage-watch.ps1') -Mode $mode) -join "`n" }
   else { $out = (& $sh.Source (Join-Path $tmp 'usage-watch.sh') $mode) -join "`n" }
   if ($LASTEXITCODE -ne 0) { throw "$port $mode failed: $out" }
   $out
@@ -23,6 +25,7 @@ function ReadUsage($port, $mode) {
 function Expect($port, $mode, $pattern) {
   $out = ReadUsage $port $mode
   if ($out -notmatch $pattern) { throw "$port $mode expected $pattern; got $out" }
+  if ($mode -eq 'level' -and -not $script:optionalRuntimeProbe) { $observations[$port] += ,$out }
   $script:count++
 }
 try {
@@ -32,6 +35,7 @@ try {
   foreach ($n in $names) { [Environment]::SetEnvironmentVariable($n, $null) }
   $ports = @('ps'); if ($sh) { $ports += 'sh' } else { Write-Output 'UNAVAILABLE: shell port (sh not on PATH)' }
   foreach ($port in $ports) {
+    $observations[$port] = @()
     $base = (Join-Path $tmp $port).Replace('\','/')
     $env:HOME = "$base/home"; $env:USERPROFILE = $env:HOME
     $env:CODEX_HOME = "$base/codex-a"; $env:CLAUDE_CONFIG_DIR = "$base/claude"
@@ -116,11 +120,12 @@ try {
     if ($port -eq 'sh') {
       $savedPath = $env:PATH
       try {
+        $script:optionalRuntimeProbe = $true
         # Keep the shell utilities, deliberately exclude the optional JSON runtime.
         $env:PATH = Split-Path $sh.Source -Parent
         Expect $port level '^src=none 5h=- 7d=- ctx=- max=-$'
         Expect $port check '^watch-cortana: no usage signal'
-      } finally { $env:PATH = $savedPath }
+      } finally { $env:PATH = $savedPath; $script:optionalRuntimeProbe = $false }
     }
     foreach ($bad in @('', '{"src":"claude-code","5h":95', '{"src":"claude-code","5h":"95"}', '{"src":"claude-code","5h":-1}', '{"src":"claude-code","5h":101}', '{"src":"claude-code","5h":true}', '{"src":"claude-code","5h":1e999}', '{"src":"claude-code","5h":{}}', '{"src":"claude-code","7d":"91"}', '{"src":"claude-code","max":101}', '{"src":"claude-code","note":5}')) {
       Put $cache $bad
@@ -169,6 +174,10 @@ try {
     # A different host's cache in the selected profile is unavailable.
     $env:SKILLATOR_CLI = 'agy'
     Expect $port level '^src=none '
+  }
+  if ($sh) {
+    if (($observations.ps -join "`n") -cne ($observations.sh -join "`n")) { throw 'Quota level output differs across ports' }
+    "ok: $($observations.ps.Count) byte-equal quota level observations across ports"
   }
   "ok: $count source-selection assertions"
 } finally {

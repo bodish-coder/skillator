@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const plugin = fileURLToPath(new URL('../', import.meta.url));
+const available = (exe, args) => spawnSync(exe, args, { windowsHide: true, timeout: 10000 }).status === 0;
+const ps = ['powershell', 'pwsh'].find(exe => available(exe, ['-NoProfile', '-Command', 'exit 0']));
+const hasSh = available('sh', ['-c', 'exit 0']);
 const commands = ['commands/skillator-update.md', 'host-commands/antigravity/skillator-update/SKILL.md',
   ...['cursor', 'pi', 'opencode'].map(h => `host-commands/${h}/skillator-update.md`),
   'host-commands/gemini/skillator-update.toml'];
@@ -69,7 +72,7 @@ function update(source, body) {
   }
   if (!installers(dir)) return { dir, calls, installs: installs() };
   const windows = process.platform === 'win32';
-  const install = spawnSync(windows ? 'powershell' : 'sh', windows
+  const install = spawnSync(windows ? (ps || 'powershell') : 'sh', windows
     ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(dir, 'install.ps1'), '-Force']
     : [join(dir, 'install.sh'), '--force'],
   { env: { ...env, A168_INSTALL_LOG: log }, encoding: 'utf8', timeout: 15000, windowsHide: true });
@@ -87,7 +90,7 @@ test('every updater carries membership, retained-directory and failure guards', 
     assert.ok(!text.includes('it has `.git`'), path);
   }
 });
-test('both installer writers preserve updater instructions in every host template', () => {
+test('both installer writers preserve updater instructions in every host template', { skip: !ps || !hasSh ? 'Missing executable: ' + [!ps && 'powershell/pwsh', !hasSh && 'sh'].filter(Boolean).join(', ') : false }, () => {
   const shell = readFileSync(join(plugin, 'install.sh'), 'utf8').replaceAll('\r', '');
   const functions = ['native', 'subst', 'put_cmd'].map(name => {
     const match = shell.match(new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?^\\}`, 'm'));
@@ -110,7 +113,7 @@ Write-Cmd $Template $Skills $Target
   for (const [i, path] of commands.slice(1).entries()) {
     const template = join(plugin, path);
     const expected = readFileSync(template, 'utf8').replaceAll('\r', '').replaceAll('{{SKILLS}}', skills);
-    for (const port of ['sh', 'powershell']) {
+    for (const port of ['sh', ps]) {
       const output = join(root, `generated-${i}-${port}`);
       const args = port === 'sh' ? [shellDriver, template, skills, `generated-${i}-${port}`].map(p => p.replaceAll('\\', '/'))
         : ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psDriver, join(plugin, 'install.ps1'), template, skills, output];
