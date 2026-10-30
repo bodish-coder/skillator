@@ -455,3 +455,30 @@ test('F76: with colour off or --ascii a stage row keeps its state glyph', () => 
   assert.match(col, /^    \x1b\[32m●\x1b\[0m  1  /m)
   assert.match(col, /^    \x1b\[31m●\x1b\[0m  2  /m)
 })
+
+// F128: Ops board Tickets: collapsible Assigned and Decide sections draw
+test('F128 draw: Assigned and Decide sections render with fold indicators and adapt to folding and ascii', () => {
+  const b = parseBoard(
+    '- [ ] F1 — Dark mode [owner: @asha]\n- [?] F3 — Pick chart [decide: @asha]\n',
+    'T', 1, 1
+  )
+  const tm = [{ handle: '@asha', emails: [] }]
+  let sUser = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  let f = frame(sUser, P).join('\n')
+  assert.match(f, /▾ Assigned \(1\)/)
+  assert.match(f, /F1  Dark mode/)
+  assert.match(f, /▾ Decide \(1\)/)
+  assert.match(f, /F3  Pick chart/)
+
+  // Fold assigned section
+  sUser = { ...sUser, open: [...sUser.open, 'fold:assigned' as any] }
+  f = frame(sUser, P).join('\n')
+  assert.match(f, /▸ Assigned \(1\)/)
+  assert.match(f, /▸ Assigned \(1\)\n  ▾ Decide \(1\)/)
+
+  // In ASCII mode, ▾ / ▸ become v / >
+  const fAscii = frame(sUser, { color: false, ascii: true, plain: true }).join('\n')
+  assert.match(fAscii, /> Assigned \(1\)/)
+  assert.match(fAscii, /v Decide \(1\)/)
+})
+

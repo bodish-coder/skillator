@@ -1,6 +1,29 @@
 import type { Board, Box as State, Filter, Member, Proposal, Ticket } from '../../types'
 import type { Call } from './calls'
 import { GROUPS, isOpen, STATE_NAME, visible } from './board'
+import { sameHandle } from './team'
+
+// F128: dedicated collapsible sections personalized to the active user
+export type UserSection = 'assigned' | 'decide'
+export const USER_SECTIONS: UserSection[] = ['assigned', 'decide']
+
+export const assignedTickets = (tickets: readonly Ticket[], user: string | null): Ticket[] =>
+  user ? tickets.filter(t => isOpen(t) && sameHandle(t.owner, user)) : []
+
+export const decideTickets = (tickets: readonly Ticket[], user: string | null): Ticket[] =>
+  user ? tickets.filter(t => isOpen(t) && (sameHandle(t.decide, user) || (t.box === '?' && !t.decide))) : []
+
+export const isUserSectionOpen = (open: readonly string[], sec: UserSection): boolean =>
+  !open.includes('fold:' + sec)
+
+export const toggleUserSection = (open: readonly string[], sec: UserSection): string[] =>
+  toggleGroup(open, 'fold:' + sec)
+
+export const isUserHead = (item: string | null): item is 'head:assigned' | 'head:decide' =>
+  item === 'head:assigned' || item === 'head:decide'
+
+export const rawTicketId = (item: string | null): string | null =>
+  item ? item.replace(/^(assigned|decide):/, '') : null
 
 // The Tickets tab's model (design §5): groups, drawn rows, line keys for keeping a
 // row in view, the count line. Pure; pane.tsx draws it, the ops app frames it.

@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun } from '../state'
+import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
-import { buildModel } from '../../hooks/lib/ticketsmodel'
+import { buildModel, isUserSectionOpen } from '../../hooks/lib/ticketsmodel'
 import { continuePrompt } from '../../hooks/lib/runlines'
 
 // The board's groups run IN PROGRESS, BLOCKED, PENDING DECISION, PENDING (buildModel):
@@ -727,4 +727,93 @@ test('B20: r key triggers poll effects and sets reload toast; onBoard reconciles
   assert.equal(st2.selected, 'head: ')
   assert.equal(st2.expanded, null)
 })
+
+// F128: Ops board Tickets: collapsible Assigned and Decide sections
+test('F128: Assigned (N) and Decide (N) sections personalized to active user', () => {
+  const b = parseBoard(
+    '- [ ] F1 — Dark mode [owner: @asha]\n- [?] F3 — Pick chart [decide: @asha]\n- [ ] F5 — Other task [owner: @vidul]\n',
+    'T', 1, 1
+  )
+  const tm = [{ handle: '@asha', emails: [] }, { handle: '@vidul', emails: [] }]
+  const sAsha = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  const mAsha = buildModel(viewOf(sAsha))
+  const itemsAsha = ticketsItems(sAsha, mAsha)
+  assert.equal(itemsAsha[0], 'head:assigned')
+  assert.equal(itemsAsha[1], 'assigned:F1')
+  assert.equal(itemsAsha[2], 'head:decide')
+  assert.equal(itemsAsha[3], 'decide:F3')
+
+  const sVidul = onBoard(initial(80, 24, 0), b, tm, '@vidul')
+  const mVidul = buildModel(viewOf(sVidul))
+  const itemsVidul = ticketsItems(sVidul, mVidul)
+  assert.equal(itemsVidul[0], 'head:assigned')
+  assert.equal(itemsVidul[1], 'assigned:F5')
+  assert.equal(itemsVidul[2], 'head:decide')
+  assert.equal(itemsVidul[3], 'head:?')
+})
+
+test('F128: Enter, Space, and mouse click toggle expansion/folding of Assigned and Decide', () => {
+  const b = parseBoard(
+    '- [ ] F1 — Dark mode [owner: @asha]\n- [?] F3 — Pick chart [decide: @asha]\n',
+    'T', 1, 1
+  )
+  const tm = [{ handle: '@asha', emails: [] }]
+  let s = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  s.selected = 'head:assigned'
+  assert.ok(isUserSectionOpen(s.open, 'assigned'))
+
+  // Enter toggles folding
+  s = reduce(s, key('return')).state
+  assert.ok(!isUserSectionOpen(s.open, 'assigned'))
+  let items = ticketsItems(s, buildModel(viewOf(s)))
+  assert.ok(!items.includes('assigned:F1'))
+
+  // Space toggles it back open
+  s = reduce(s, key('space')).state
+  assert.ok(isUserSectionOpen(s.open, 'assigned'))
+  items = ticketsItems(s, buildModel(viewOf(s)))
+  assert.ok(items.includes('assigned:F1'))
+
+  // Mouse click via point toggles decide
+  s.selected = 'head:decide'
+  assert.ok(isUserSectionOpen(s.open, 'decide'))
+  s = point(s, { kind: 'row', area: 'tickets', id: 'head:decide' }).state
+  assert.ok(!isUserSectionOpen(s.open, 'decide'))
+  assert.ok(!ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+
+  // Click again unfolds decide
+  s = point(s, { kind: 'row', area: 'tickets', id: 'head:decide' }).state
+  assert.ok(isUserSectionOpen(s.open, 'decide'))
+  assert.ok(ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+})
+
+test('F128: dynamically adapts when switching users in Team view (t)', () => {
+  const b = parseBoard(
+    '- [ ] F1 — Dark mode [owner: @asha]\n- [?] F3 — Pick chart [decide: @vidul]\n',
+    'T', 1, 1
+  )
+  const tm = [{ handle: '@asha', emails: [] }, { handle: '@vidul', emails: [] }]
+  let s = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  assert.equal(activeUser(s), '@asha')
+  assert.ok(ticketsItems(s, buildModel(viewOf(s))).includes('assigned:F1'))
+  assert.ok(!ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+
+  // Open team view with 't'
+  s = reduce(s, key('t')).state
+  assert.equal(s.showTeam, true)
+
+  // Navigate to @vidul and press Enter to select
+  s = reduce(s, key('down')).state
+  assert.equal(s.teamSelected, '@vidul')
+  s = reduce(s, key('return')).state
+  assert.equal(s.showTeam, false)
+  assert.equal(activeUser(s), '@vidul')
+  assert.equal(s.me, '@vidul')
+
+  // Tickets tab now adapts to @vidul
+  const items = ticketsItems(s, buildModel(viewOf(s)))
+  assert.ok(!items.includes('assigned:F1'))
+  assert.ok(items.includes('decide:F3'))
+})
+
 

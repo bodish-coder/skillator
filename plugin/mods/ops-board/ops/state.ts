@@ -5,11 +5,12 @@
 // it as is.
 import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
-import type { View } from '../hooks/lib/ticketsmodel'
+import type { Model, View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
-import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, parseReconcile, toggleGroup } from '../hooks/lib/ticketsmodel'
-import { STATE_NAME, ticketById } from '../hooks/lib/board'
+import { appliedHead, appliedLine, applyOf, assignedTickets, buildModel, canApply, decideTickets, HEAD, headKey, isHead, isUserHead, isUserSectionOpen, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
+import type { UserSection } from '../hooks/lib/ticketsmodel'
+import { STATE_NAME, ticketById, visible } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
@@ -72,12 +73,13 @@ export function point(s: State, a: PointerAction): Step {
   if (a.kind === 'tab') return toTab(s, a.tab)
   if (a.kind !== 'row') return same
   let next = s
-  if (a.area === 'tickets' && s.tab === 'tickets' && !s.showTeam && buildModel(viewOf(s)).items.includes(a.id)) next = { ...s, selected: a.id }
-  else if (a.area === 'team' && s.tab === 'tickets' && s.showTeam && s.team.some(m => m.handle === a.id)) return { state: { ...s, teamSelected: a.id }, effects: [] }
+  if (a.area === 'tickets' && s.tab === 'tickets' && !s.showTeam && ticketsItems(s, buildModel(viewOf(s))).includes(a.id)) next = { ...s, selected: a.id }
+  else if (a.area === 'team' && s.tab === 'tickets' && s.showTeam && s.team.some(m => m.handle === a.id)) return { state: { ...s, teamSelected: a.id, me: a.id }, effects: [] }
   else if (a.area === 'runs' && s.tab === 'runs' && runsItems(s).includes(a.id)) next = { ...s, runsSelected: a.id }
   else if (a.area === 'messages' && s.tab === 'messages' && s.messages.some(m => m.id === a.id)) next = { ...s, msgSelected: a.id }
   else if (a.area === 'explorer' && s.tab === 'explorer') next = { ...s, explorer: { ...s.explorer, x: { ...s.explorer.x, selected: a.id } } }
   else if (a.area === 'run' && s.tab === 'run' && s.runFile?.entries.some(e => e.id === a.id)) next = { ...s, runSel: a.id }
+  if (a.area === 'tickets' && isHead(a.id)) return reduce({ ...s, selected: a.id }, { name: 'return' })
   return next === s ? same : reduce(next, { name: 'return' })
 }
 
@@ -150,10 +152,30 @@ export const viewOf = (s: State): View => ({
   selected: s.selected, expanded: s.expanded, open: s.open, cols: s.cols,
 })
 
+export const activeUser = (s: State): string | null => s.me ?? s.teamSelected ?? null
+
+export function ticketsItems(s: State, m: Model): string[] {
+  const user = activeUser(s)
+  if (!user || !s.board) return m.items
+  const tickets = visible(s.board, s.filter, s.me)
+  const assigned = assignedTickets(tickets, user)
+  const decide = decideTickets(tickets, user)
+  const assignedOpen = isUserSectionOpen(s.open as string[], 'assigned')
+  const decideOpen = isUserSectionOpen(s.open as string[], 'decide')
+  return [
+    'head:assigned',
+    ...(assignedOpen ? assigned.map(t => 'assigned:' + t.id) : []),
+    'head:decide',
+    ...(decideOpen ? decide.map(t => 'decide:' + t.id) : []),
+    ...m.items,
+  ]
+}
+
 export function onBoard(s: State, board: Board, team: Member[], me: string | null): State {
   const next: State = { ...s, board, team, me }
   const m = buildModel(viewOf(next))
-  const selected = m.items.includes(s.selected ?? '') ? s.selected : (m.items[0] ?? null)
+  const items = ticketsItems(next, m)
+  const selected = items.includes(s.selected ?? '') ? s.selected : (m.items[0] ?? items[0] ?? null)
   const expanded = s.expanded && board.tickets.some(t => t.id === s.expanded) ? s.expanded : null
   return { ...next, selected, expanded }
 }
@@ -229,7 +251,8 @@ export function dialogLines(s: State): string[] {
 // the same, the keys on its empty Ticket field for the ID to be typed; with a ticket the
 // field is prefilled (tab reaches it to change it) and the keys start on the people.
 function openDialog(s: State, kind: AssignDraft['kind']): State {
-  const id = buildModel(viewOf(s)).ticket
+  const raw = rawTicketId(s.selected)
+  const id = raw && !isHead(raw) ? raw : buildModel(viewOf(s)).ticket
   const t = id ? ticketOf(s, id) : null
   const handle = startHandle(t, kind, s.team, s.me)
   const dialog: AssignDraft = { id: t?.id ?? '', kind, handle, result: null }
@@ -433,19 +456,23 @@ function teamKey(s: State, k: Key): Step {
     return { state: to ? { ...s, teamSelected: to } : s, effects: [] }
   }
   switch (k.name) {
-    case 't': case 'escape': return { state: { ...s, showTeam: false }, effects: [] }
+    case 't': return { state: { ...s, showTeam: false, me: cur ?? s.me }, effects: [] }
+    case 'escape': return { state: { ...s, showTeam: false }, effects: [] }
     case 'up': case 'k': return move(-1)
     case 'down': case 'j': return move(1)
     case 'n': return { state: openPerson(s, 'team'), effects: [] }
     case 'delete': case 'backspace': return cur ? { state: { ...s, teamConfirm: cur }, effects: [] } : same
     case 'l': return cur ? makeLead(s, cur) : same
+    case 'return': case 'enter': return cur ? { state: { ...s, showTeam: false, me: cur, teamSelected: cur }, effects: [] } : same
+    case 'space': return cur ? { state: { ...s, me: cur, teamSelected: cur }, effects: [] } : same
     default: return same
   }
 }
 
 // D: ticket-meta decided <ID> ([?] -> [ ], the [decide:] tag kept).
 function decided(s: State): Step {
-  const id = buildModel(viewOf(s)).ticket
+  const raw = rawTicketId(s.selected)
+  const id = raw && !isHead(raw) ? raw : buildModel(viewOf(s)).ticket
   const t = id ? ticketOf(s, id) : null
   if (!t || t.box !== '?' || !t.decide) {
     return { state: toast(s, 'D marks a decision taken: only on a [?] row with a [decide:] tag'), effects: [] }
@@ -743,25 +770,38 @@ function ticketsKey(s: State, k: Key): Step {
   const same = { state: s, effects: [] }
   if (s.showTeam) return teamKey(s, k)
   const m = buildModel(viewOf(s))
+  const items = ticketsItems(s, m)
   // F61: up/down walk the group headers and the rows of open groups (the model's items).
   const move = (by: number): Step => {
-    const at = m.selected === null ? -1 : m.items.indexOf(m.selected)
-    const to = at < 0 ? undefined : m.items[at + by]
+    const cur = items.includes(s.selected ?? '') ? s.selected : m.selected
+    const at = cur === null ? -1 : items.indexOf(cur)
+    const to = at < 0 ? undefined : items[at + by]
     return { state: to ? { ...s, selected: to } : s, effects: [] }
+  }
+  const toggleHeader = (id: string): Step => {
+    if (id === 'head:assigned') {
+      return { state: { ...s, open: toggleUserSection(s.open as string[], 'assigned') as any }, effects: [] }
+    }
+    if (id === 'head:decide') {
+      return { state: { ...s, open: toggleUserSection(s.open as string[], 'decide') as any }, effects: [] }
+    }
+    const g = m.groups.find(x => headKey(x.box) === id)
+    const keep = s.selected && !isHead(s.selected) && g?.tickets.some(t => t.id === s.selected)
+    return { state: g ? { ...s, selected: keep ? s.selected : id, open: toggleGroup(s.open, g.box) } : s, effects: [] }
   }
   switch (k.name) {
     case 'up': case 'k': return move(-1)
     case 'down': case 'j': return move(1)
     case 'return': case 'enter': {
-      const id = m.selected
-      // on a header: open or close its group, the header stays selected - unless it stands
-      // for a ticket hidden in it (the stored selection), which opening lands back on
-      if (isHead(id)) {
-        const g = m.groups.find(x => headKey(x.box) === id)
-        const keep = s.selected && !isHead(s.selected) && g?.tickets.some(t => t.id === s.selected)
-        return { state: g ? { ...s, selected: keep ? s.selected : id, open: toggleGroup(s.open, g.box) } : s, effects: [] }
-      }
-      return { state: { ...s, expanded: id && s.expanded !== id ? id : null }, effects: [] }
+      const cur = items.includes(s.selected ?? '') ? s.selected : m.selected
+      if (cur && isHead(cur)) return toggleHeader(cur)
+      const rawId = rawTicketId(cur)
+      return { state: { ...s, expanded: rawId && s.expanded !== rawId ? rawId : null }, effects: [] }
+    }
+    case 'space': {
+      const cur = items.includes(s.selected ?? '') ? s.selected : m.selected
+      if (cur && isHead(cur)) return toggleHeader(cur)
+      return same
     }
     case 'a': return { state: openDialog(s, 'owner'), effects: [] }
     case 'd': return { state: openDialog(s, 'decide'), effects: [] }

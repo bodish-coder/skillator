@@ -11,9 +11,10 @@ import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State, PointerAction } from './state'
-import { pointerModal, dialogLines, engageLines, formLines, reconcileLines, runsCursor, setupLines, teamRow, viewOf } from './state'
+import { activeUser, pointerModal, dialogLines, engageLines, formLines, reconcileLines, runsCursor, setupLines, teamRow, viewOf } from './state'
 import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
-import { buildModel, chipsOf, headKey, isDecidable, isHead, offsetFor } from '../hooks/lib/ticketsmodel'
+import { assignedTickets, buildModel, chipsOf, decideTickets, headKey, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
+import type { UserSection } from '../hooks/lib/ticketsmodel'
 import { isFinished, modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM, MUTED_HOW, mutedWords } from '../hooks/lib/facts'
@@ -195,8 +196,10 @@ function keysOf(s: State, m: Model): Seg[][] {
   if (s.tab === 'explorer') return [move, h('enter open/close', 'return'), h('r reload', 'r'), quit]
   if (s.showTeam) return [h('n add', 'n'), h('del remove (asks first)', 'delete'), h('l make lead', 'l'), h('esc back', 'escape'), quit]
   const sel = m.rows.find(t => t.id === m.ticket)
-  const head = isHead(m.selected) ? m.groups.find(g => headKey(g.box) === m.selected) : undefined
-  const enter = head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
+  const isUsrHead = isUserHead(s.selected)
+  const userOpen = isUsrHead ? isUserSectionOpen(s.open as string[], s.selected === 'head:assigned' ? 'assigned' : 'decide') : false
+  const head = isHead(s.selected ?? m.selected) ? m.groups.find(g => headKey(g.box) === (s.selected ?? m.selected)) : undefined
+  const enter = isUsrHead ? (userOpen ? 'enter close' : 'enter open') : head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
   return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), h('r reload', 'r'), quit]
 }
 
@@ -310,19 +313,54 @@ const tagOf = (t: Ticket) => (t.box === '~' || t.box === '%' ? t.session : null)
 function ticketLines(s: State, m: Model): Keyed[] {
   const b = s.board
   if (!b || b.error) return [{ key: 'msg', segs: [dim(b?.error ?? 'reading TICKETS.md…')] }]
-  if (!m.groups.length) return [{ key: 'msg', segs: [dim(m.filterActive ? 'no ticket matches the filter' : 'no open tickets')] }]
+  const user = activeUser(s)
+  const pool = visible(b, s.filter, s.me)
+  const userSecs: { id: UserSection; title: string; tickets: Ticket[]; color: Color }[] = user ? [
+    { id: 'assigned', title: 'Assigned', tickets: assignedTickets(pool, user), color: 'suggestion' },
+    { id: 'decide', title: 'Decide', tickets: decideTickets(pool, user), color: 'permission' },
+  ] : []
+  if (!m.groups.length && !userSecs.length) return [{ key: 'msg', segs: [dim(m.filterActive ? 'no ticket matches the filter' : 'no open tickets')] }]
   const out: Keyed[] = []
   const shown = new Set(m.rows.map(t => t.id))
-  const idW = Math.max(4, ...m.rows.map(t => t.id.length + 1))
+  const idW = Math.max(4, ...m.rows.map(t => t.id.length + 1), ...userSecs.flatMap(sec => sec.tickets.map(t => t.id.length + 1)))
+
+  for (const sec of userSecs) {
+    const hk = headKey(sec.id)
+    const on = hk === s.selected
+    const open = isUserSectionOpen(s.open as string[], sec.id)
+    out.push({ key: hk, segs: [{ text: on ? '› ' : '  ' },
+      { text: `${open ? '▾' : '▸'} ${sec.title} (${sec.tickets.length})`, color: sec.color, bold: true, inverse: on }] })
+    if (!open) continue
+    for (const t of sec.tickets) {
+      const itemKey = sec.id + ':' + t.id
+      const sel = itemKey === s.selected || t.id === s.selected
+      const lead = sel ? '› ' : '  '
+      const avail = s.cols - cells(lead) - 1
+      let tag = tagOf(t)
+      let room = avail - 1 - idW - (tag ? cells(tag) + 2 : 0)
+      if (tag && room < 12) { tag = null; room = avail - 1 - idW }
+      const body = ` ${t.id.padEnd(idW)}${cut(clean(t.title), Math.max(4, room))}`
+      const tagText = tag ? ' '.repeat(Math.max(2, avail - cells(body) - cells(tag))) + tag : ''
+      const dot: Seg = { text: '●', color: paint(t.box) }
+      out.push({ key: 'row:' + itemKey, segs: sel
+        ? [{ text: lead }, dot, { text: (body + tagText).padEnd(Math.max(0, avail)), inverse: true }]
+        : [{ text: lead }, dot, { text: body, dim: STATE_COLOR[t.box] === 'dim' }, dim(tagText)] })
+      if (s.expanded === itemKey || s.expanded === t.id) {
+        if (chipsOf(t)) out.push({ key: 'chips:' + itemKey, segs: chipLine(t) })
+        out.push({ key: 'raw:' + itemKey, segs: [dim(`      - [${t.box}] ${t.line}`)] })
+      }
+    }
+  }
+
   for (const g of m.groups) {
     const hk = headKey(g.box)
-    const on = hk === m.selected
+    const on = hk === s.selected
     out.push({ key: hk, segs: [{ text: on ? '› ' : '  ' },
       { text: `${g.open ? '▾' : '▸'} ${GROUP_WORD[g.box]} (${g.tickets.length})`, color: paint(g.box), bold: true, inverse: on }] })
     if (!g.open) continue
     for (const t of g.tickets) {
       const nested = !!t.parent && shown.has(t.parent) && g.tickets.some(p => p.id === t.parent)
-      const sel = t.id === m.selected
+      const sel = t.id === s.selected
       const lead = (sel ? '› ' : '  ') + (nested ? '  ' : '')
       const tail = t.parent && !nested ? ` (${t.parent})` : ''
       const avail = s.cols - cells(lead) - 1                    // after the dot
@@ -360,7 +398,7 @@ function teamLines(s: State): Seg[][] {
 
 function ticketsBody(s: State, m: Model, h: number): Seg[][] {
   if (s.showTeam) return teamLines(s)
-  return [filterLine(s), [], ...windowOf(ticketLines(s, m), m.selected, Math.max(0, h - 2), 'tickets')]
+  return [filterLine(s), [], ...windowOf(ticketLines(s, m), s.selected ?? m.selected, Math.max(0, h - 2), 'tickets')]
 }
 
 // --- the Runs tab, as the mock ---
