@@ -9,13 +9,15 @@ import { argvFor, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO
 import { findBins } from '../hooks/lib/runentries'
 import type { Bins } from '../hooks/lib/runentries'
 import type { Call } from '../hooks/lib/calls'
+import { inboxDirOfCommonGitDir } from '../hooks/lib/inbox'
 import { NO_GIT } from '../hooks/lib/explorer'
 
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
 export type Host = {
   win: boolean
   skillsDir: string | null
-  repoRoot: string                                   // main checkout (git-common-dir's parent), else toplevel, else cwd
+  repoRoot: string                                   // board root: local TICKETS.md wins
+  inboxDir?: string | null                          // common Git storage; absent/null = unavailable
   run(call: Call, args: string[], stdin?: string): Promise<RunResult> // never rejects; 30 s / 15 s budgets; cwd = repoRoot; stdin (F66) written then closed
   stat(path: string): Promise<{ mtimeMs: number; size: number } | null>
   read(path: string): Promise<string>
@@ -172,9 +174,11 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
     ? [norm(opts.skills), norm(opts.skills) + '/skills'].find(has) ?? null
     : findSkillsDir(opts.appDir, process.env, existsSync, readJsonFile)
   const repoRoot = await findRepoRoot(opts.cwd)
+  const commonGitDir = await git(['rev-parse', '--path-format=absolute', '--git-common-dir'], opts.cwd)
+  const inboxDir = commonGitDir ? inboxDirOfCommonGitDir(commonGitDir) : null
   const abs = (p: string) => (isAbsolute(p) ? p : join(repoRoot, p))
   return {
-    win, skillsDir, repoRoot,
+    win, skillsDir, repoRoot, inboxDir,
     async run(call, args, stdin) {
       if (!skillsDir) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
       // F66 / A150: node, sh and powershell all by absolute path - never from the repo.

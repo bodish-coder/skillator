@@ -17,13 +17,14 @@ const TOKEN = 'YS0zMi1ieXRlLXNlY3VyaXR5LXRva2VuLWZvci10c3Q='
 const CFG_NONE = '{"path":"/h/.skillator/teams.json","token":false,"workflowUrl":null,"port":3978,"statusPosts":false}\n'
 const CFG_SET = '{"path":"/h/.skillator/teams.json","token":true,"workflowUrl":"prod.example","port":4000,"statusPosts":true}\n'
 
-type World = { files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult }
+type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
-function world(on: On, cfg = CFG_SET): [World, MockClock] {
+function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | null = '/r/.git'): [World, MockClock] {
   const w: World = {
-    files: { '/r/TICKETS.md': '# Tickets\n\n- [ ] F1 — one\n', [ROOT + '/skills/tickets-zordon/scripts/ticket-meta.sh']: '#!/bin/sh\n',
+    repoRoot, gitResult: commonGitDir ? ran(commonGitDir + '\r\n') : ran('', 128, 'not a git repository'),
+    files: { [repoRoot + '/TICKETS.md']: '# Tickets\n\n- [ ] F1 — one\n', [ROOT + '/skills/tickets-zordon/scripts/ticket-meta.sh']: '#!/bin/sh\n',
       [BOX + '/team-inbox.jsonl']: INBOX, [BOX + '/team-inbox.read']: '1\n',
       // a node planted in the repo (the cwd, and the '.' PATH entry) - never what runs
       [NODE]: 'ELF', './node': 'PLANTED', '/r/node': 'PLANTED' },
@@ -34,7 +35,7 @@ function world(on: On, cfg = CFG_SET): [World, MockClock] {
   mock.env(on, { SKILLATOR_ROOT: ROOT, HOME: '/h', PATH: '.:/usr/bin' })
   mock.store(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('session.repo', () => ({ value: { root: '/r', remote: null, internal: false, name: 'r' } }))
+  on('session.repo', () => ({ value: { root: w.repoRoot, remote: null, internal: false, name: 'r' } }))
   on('session.id', () => ({ value: 'sid-1' }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000 }, rateLimits: [] } }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -51,6 +52,10 @@ function world(on: On, cfg = CFG_SET): [World, MockClock] {
   on('fs.write', ($, e) => ({ deny: 'the mod must not write files: ' + e.path }))
   on('process.run', async ($, e) => {
     const a = e.argv
+    if (a.join(' ') === 'git rev-parse --path-format=absolute --git-common-dir') {
+      if (w.gitResult instanceof Error) throw w.gitResult
+      return { value: w.gitResult }
+    }
     if (a.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
     w.runs.push({ argv: a, stdin: e.init?.stdin })
     if (a[0] === NODE && a[1] === TEAM_JS) {
@@ -58,7 +63,7 @@ function world(on: On, cfg = CFG_SET): [World, MockClock] {
       if (a[2] === 'config' && a[3] === 'save') return { value: w.save }
       if (a[2] === 'config' && a[3] === 'clear') return { value: ran('cleared: /h/.skillator/teams.json\n') }
       if (a[2] === 'inbox' && a[3] === 'tail') return { value: ran(INBOX) }
-      if (a[2] === 'inbox' && a[3] === 'mark-read') { w.files[BOX + '/team-inbox.read'] = a[5] + '\n'; return { value: ran(`read up to ${a[5]}\n`) } }
+      if (a[2] === 'inbox' && a[3] === 'mark-read') { w.files[commonGitDir + '/skillator/team-inbox.read'] = a[5] + '\n'; return { value: ran(`read up to ${a[5]}\n`) } }
     }
     // F98: the setup script's --check pass (sh here: no OS=Windows_NT in this world)
     if (a[0] === '/bin/sh' && a[1] === ROOT + '/skills/teams-uhura/scripts/setup.sh' && a[2] === '--check') return { value: ran('node: v22.11.0\ndevtunnel: missing - the walk installs it\n\n  node        v22.11.0\n  devtunnel   missing\n', 1) }
@@ -218,3 +223,55 @@ test('a message with control characters draws as plain text', async ($, on) => {
   expect(JSON.stringify(await ui.drawn())).not.toContain('\\u001b')
   await ui.unmount()
 })
+
+
+test('A175: linked board reads common Git inbox and marker, including spaces', async ($, on) => {
+  const common = '/main checkout/.git'
+  const [w, clock] = world(on, CFG_SET, '/linked checkout', common)
+  w.files[common + '/skillator/team-inbox.jsonl'] = INBOX
+  w.files[common + '/skillator/team-inbox.read'] = '1\r\n'
+  delete w.files[BOX + '/team-inbox.jsonl']
+  delete w.files[BOX + '/team-inbox.read']
+  await start($, clock)
+  const ui = await mount($)
+  expect((await ui.find({ key: 'tab:messages' }))?.text).toBe('Messages 2')
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  expect((await ui.find({ key: 'head' }))?.text).toContain('2 unread \u00b7 3 messages')
+  await ui.press({ key: 'key:markread' })
+  await clock.settle()
+  expect(w.files[common + '/skillator/team-inbox.read']).toBe('3\n')
+  await clock.advance(2100)
+  expect((await ui.find({ key: 'head' }))?.text).toContain('0 unread \u00b7 3 messages')
+  await ui.unmount()
+})
+
+test('A175: failed Git resolution never reads a guessed inbox', async ($, on) => {
+  const [, clock] = world(on, CFG_SET, '/r', null)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  expect((await ui.find({ key: 'head' }))?.text).toContain('no team messages yet')
+  await ui.unmount()
+})
+
+
+for (const failure of ['nonzero', 'empty', 'throws', 'changed-root'] as const) {
+  test('A175: loaded inbox becomes unavailable and recovers with unchanged stats: ' + failure, async ($, on) => {
+    const [w, clock] = world(on)
+    await start($, clock)
+    const ui = await mount($)
+    await ui.press({ key: 'tab:messages' })
+    await clock.settle()
+    expect((await ui.find({ key: 'head' }))?.text).toContain('2 unread \u00b7 3 messages')
+    w.gitResult = failure === 'throws' ? new Error('resolution failed') : failure === 'empty' ? ran('') : ran('', 128)
+    if (failure === 'changed-root') w.repoRoot = '/other checkout'
+    await clock.advance(2100)
+    expect((await ui.find({ key: 'head' }))?.text).toContain('no team messages yet')
+    w.gitResult = ran('/r/.git\r\n')
+    await clock.advance(2100)
+    expect((await ui.find({ key: 'head' }))?.text).toContain('2 unread \u00b7 3 messages')
+    await ui.unmount()
+  })
+}

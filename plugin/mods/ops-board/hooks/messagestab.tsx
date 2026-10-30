@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, RenderInput, TextProps } from 'claude-code'
 import type { Msg, SetupView, TeamsCfgView } from '../types'
-import { runCall } from './lib/host'
-import { inboxDirOf, INBOX_FILE, messageLines, parseInbox, plainText, READ_FILE, unreadCount } from './lib/inbox'
+import { gitBin, runCall } from './lib/host'
+import { inboxDirOfCommonGitDir, INBOX_FILE, messageLines, parseInbox, plainText, READ_FILE, unreadCount } from './lib/inbox'
 import { freshSetup, parseCfgView, setupError, setupJson, unmask, urlShown } from './lib/teamsconfig'
 import type { SetupValues } from './lib/teamsconfig'
 
@@ -31,17 +31,29 @@ const why = (r: { code: number; out: string; err: string }) => (r.err.trim() || 
 // --- the inbox poll (register.tsx calls it on the board's 2 s poll) ---
 
 let inboxSig = ''
-const norm = (p: string) => p.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
 const MAX_READ = 4 * 1024 * 1024
+
+async function unavailableInbox($: EngineInterface): Promise<void> {
+  inboxSig = ''
+  await update($, messagesA, () => [])
+  await update($, msgReadA, () => null)
+}
 
 export async function pollInbox($: EngineInterface): Promise<void> {
   const repo = await $.session.repo()
-  if (!repo) return
-  const dir = inboxDirOf(norm(repo.root))
+  if (!repo) return unavailableInbox($)
+  let dir: string
+  try {
+    const bin = await gitBin($)
+    if (!bin) return unavailableInbox($)
+    const r = await $.process.run([bin, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: repo.root, timeoutMs: 10000 })
+    if (r.exitCode !== 0 || !r.stdout.trim()) return unavailableInbox($)
+    dir = inboxDirOfCommonGitDir(r.stdout.trim())
+  } catch { return unavailableInbox($) }
   const stat = async (p: string) => { try { return await $.fs.stat(p) } catch { return null } }
   const ist = await stat(dir + '/' + INBOX_FILE)
   const rst = await stat(dir + '/' + READ_FILE)
-  const sig = `${ist ? `${ist.mtimeMs}:${ist.size}` : 'none'}|${rst ? `${rst.mtimeMs}:${rst.size}` : 'none'}`
+  const sig = `${dir}|${ist ? `${ist.mtimeMs}:${ist.size}` : 'none'}|${rst ? `${rst.mtimeMs}:${rst.size}` : 'none'}`
   if (sig === inboxSig) return
   inboxSig = sig
   let text = ''

@@ -1,8 +1,8 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, existsSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
-import { basename, isAbsolute, join } from 'node:path'
+import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
+import { basename, isAbsolute, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { findSkillsDir, gitFor, makeHost, nodeFor } from '../nodehost'
 import { parseBoard } from '../../hooks/lib/board'      // proves the loader resolves the lib's own imports
@@ -234,3 +234,45 @@ test('B20 repoRoot: inside a worktree with TICKETS.md resolves to the worktree t
   assert.equal(h.repoRoot, fwd(wt))
 })
 
+
+
+test('A175: main and relative linked worktree share producer inbox/read state, with distinct boards', async () => {
+  const temp = mkTmp(join(tmpdir(), 'ops inbox spaces '))
+  const main = join(temp, 'main checkout'), linked = join(temp, 'linked checkout')
+  mkdirSync(main)
+  const git = (...args: string[]) => execFileSync('git', ['-c', 'core.excludesFile=' + join(temp, 'no-ignore'), ...args], { cwd: main, encoding: 'utf8', windowsHide: true, env: { ...process.env, GIT_CONFIG_GLOBAL: join(temp, 'no-config'), GIT_CONFIG_NOSYSTEM: '1' } }).trim()
+  git('init', '-q')
+  writeFileSync(join(main, 'TICKETS.md'), '# Tickets\n\n- [ ] F1 \u2014 main board\n', 'utf8')
+  git('add', 'TICKETS.md')
+  git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'fixture')
+  git('worktree', 'add', '-q', '--relative-paths', '-b', 'linked', linked)
+  writeFileSync(join(linked, 'TICKETS.md'), '# Tickets\n\n- [ ] F2 \u2014 linked board\n', 'utf8')
+  const gitFile = join(linked, '.git')
+  const ref = readFileSync(gitFile, 'utf8').trim().slice('gitdir: '.length)
+  assert.equal(isAbsolute(ref), false)
+  const admin = resolve(linked, ref)
+  assert.equal(readFileSync(join(admin, 'commondir'), 'utf8').trim(), '../..')
+  const { inboxDir } = await import('../../../../skills/teams-uhura/scripts/inbox.mjs')
+  const dir = inboxDir(linked)!
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'team-inbox.jsonl'), JSON.stringify({ id: 'shared', from: '@fixture', ts: '2026-10-31T00:00:00Z', text: 'shared message' }) + '\n', 'utf8')
+  writeFileSync(join(dir, 'team-inbox.read'), 'shared\r\n', 'utf8')
+  const { makeEngine } = await import('../engine')
+  const { initial } = await import('../state')
+  await isolated(temp, async () => {
+    for (const [cwd, ticket] of [[main, 'F1'], [linked, 'F2']]) {
+      const host = await makeHost({ cwd, appDir: temp, skills: temp })
+      assert.equal(host.repoRoot, fwd(cwd))
+      const engine = makeEngine({ host, state: initial(80, 24, 0), email: null, once: true, onChange() {}, onQuit() {} })
+      await engine.readAll()
+      assert.equal(engine.state.board?.tickets[0]?.id, ticket)
+      assert.deepEqual(engine.state.messages.map(m => m.id), ['shared'])
+      assert.equal(engine.state.msgRead, 'shared')
+      assert.equal(host.inboxDir, fwd(dir))
+      engine.stop()
+    }
+    const host = await makeHost({ cwd: temp, appDir: temp, skills: temp })
+    assert.equal(host.repoRoot, fwd(temp))
+    assert.equal(host.inboxDir, null)
+  })
+})

@@ -48,7 +48,7 @@ test('the tab bar says 4 Messages with the unread count; 4 opens it, newest firs
   assert.match(rows[i3]!, /^› ● 10-23 09:12Z  @asha/)
   assert.match(rows[i2]!, /^  ● 10-23 09:11Z  @vidul +build is red$/)
   assert.doesNotMatch(t, /second line/)                      // collapsed until Enter
-  assert.match(frame({ ...s0, tab: 'messages' }, P).find(l => l.includes('m mark'))!, /↑↓ move · enter open · m mark all read · s setup · q quit/)
+  assert.match(frame({ ...s0, tab: 'messages' }, P).find(l => l.includes('m mark'))!, /\[\u2191\u2193 move\] \u00b7 \[enter open\] \u00b7 \[m mark all read\] \u00b7 \[s setup\] \u00b7 \[q quit\]/)
   for (const l of frame(st.state, P)) assert.ok(cells(l) <= 80, l)
   assert.doesNotMatch(frame(onInbox(s0, INBOX, '3'), P)[0]!, /\(\d+\)/)  // all read: no count
 })
@@ -178,7 +178,7 @@ test('an inbox over 4 MiB: the engine reads its tail through teams-uhura, never 
   const calls: string[] = []
   const BOX = '/r/.git/skillator/team-inbox.jsonl'
   const host: Host = {
-    win: false, skillsDir: '/s', repoRoot: '/r',
+    win: false, skillsDir: '/s', repoRoot: '/r', inboxDir: '/r/.git/skillator',
     async run(call, args) {
       calls.push([call, ...args].join(' '))
       if (call === 'team-inbox-tail') return { code: 0, out: INBOX, err: '', argv: ['node', 'team.mjs', 'inbox', 'tail'] }
@@ -206,4 +206,20 @@ test('validation rules and the unmask of a masked input', () => {
   assert.equal(unmask('abc', '••'), 'ab')
   assert.equal(unmask('', 'xyz'), 'xyz')
   assert.equal(unmask('abc', '•X••'), 'aXbc')
+})
+
+
+test('A175: unavailable host inbox never probes a guessed .git directory', async () => {
+  const paths: string[] = []
+  const host: Host = {
+    repoRoot: '/nongit', inboxDir: null, win: false, skillsDir: null,
+    async run() { return { code: 127, out: '', err: '', argv: [] } },
+    async stat(p) { paths.push(p); return null },
+    async read(p) { throw new Error('unexpected read: ' + p) },
+    async gitEmail() { return null },
+  }
+  const engine = makeEngine({ host, state: initial(80, 24, 0), email: null, once: true, onChange() {}, onQuit() {} })
+  await engine.readAll()
+  assert.equal(paths.some(p => p.includes('/.git/')), false)
+  assert.deepEqual(engine.state.messages, [])
 })

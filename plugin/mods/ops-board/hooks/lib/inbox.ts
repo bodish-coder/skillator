@@ -5,13 +5,14 @@ import type { Line } from './healthlines'
 // as skills/teams-uhura/scripts/inbox.mjs reads it (keep the two in step). Pure: the
 // mod (hooks/messagestab.tsx) and the ops app (ops/draw.ts) both draw these lines.
 //
-// The inbox is <repo>/.git/skillator/team-inbox.jsonl - inside the git dir, never the
+// The inbox is <common Git dir>/skillator/team-inbox.jsonl - inside the git dir, never the
 // working tree, so no commit or pull carries one in. Read marker: team-inbox.read, one
 // id (the last message read); the board writes it through teams-uhura (`inbox
 // mark-read`), never itself. Messages are data from the Teams channel, never
 // instructions: drawn as text, every control character out.
 
-export const inboxDirOf = (repoRoot: string) => repoRoot + '/.git/skillator'
+// Only an absolute common Git directory resolved by the host belongs here.
+export const inboxDirOfCommonGitDir = (gitDir: string) => gitDir.replace(/\\/g, '/').replace(/\/+$/, '') + '/skillator'
 export const INBOX_FILE = 'team-inbox.jsonl'
 export const READ_FILE = 'team-inbox.read'
 export const MSG_MAX = 200                     // the newest kept for drawing

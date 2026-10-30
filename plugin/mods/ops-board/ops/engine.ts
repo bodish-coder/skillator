@@ -7,7 +7,7 @@ import type { Host, RunResult } from './nodehost'
 import { MUTE_FILE, muteKv } from '../hooks/lib/facts'
 import type { Effect, Key, PointerAction, State, Step } from './state'
 import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun, point } from './state'
-import { inboxDirOf, INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
+import { INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
 import { parseBoard } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
 import { parseRuns, scriptPathOf } from '../hooks/lib/runs'
@@ -170,14 +170,15 @@ export function makeEngine(o: EngineOpts): Engine {
       if (tst) { try { team = parseTeam(await host.read(teamPath)) } catch { team = [] } }
     }
     if (moved && board) state = onBoard(state, board, team, meOf(team, email ?? '', o.envMe))
-    await pollInbox(root)
+    await pollInbox()
     draw()
   }
 
   // F66: teams-uhura's inbox and read marker (in the repo's git dir), re-read when either moved.
   let inboxSig = ''
-  const pollInbox = async (root: string) => {
-    const dir = inboxDirOf(root)
+  const pollInbox = async () => {
+    const dir = host.inboxDir
+    if (!dir) return
     const ist = await host.stat(dir + '/' + INBOX_FILE)
     const rst = await host.stat(dir + '/' + READ_FILE)
     const sig = `${ist ? `${ist.mtimeMs}:${ist.size}` : 'none'}|${rst ? `${rst.mtimeMs}:${rst.size}` : 'none'}`
