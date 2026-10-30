@@ -1,0 +1,8 @@
+{
+  "exclude": [
+    ".skillator/reports/**",
+    ".skillator/worktrees/**",
+    ".taskwork/**",
+    "docs/plans/.taskwork/**"
+  ]
+}

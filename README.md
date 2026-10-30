@@ -545,6 +545,36 @@ containment and instruction/command/hook bytes before launching. F90, F105 and
 A149 still require their owner checks. See
 [evidence limits](plugin/practice/baselines/README.md#isolated-codex-integration-f139).
 
+## CodeGraph source indexing
+
+The repository's root [`codegraph.json`](codegraph.json) excludes generated
+reports and frozen copies under `.skillator/reports/`, nested run worktrees under
+`.skillator/worktrees/`, and task scratch directories `.taskwork/` and
+`docs/plans/.taskwork/`. It does not exclude `plugin/`, tests, or intentional
+fixtures. These are project-root-relative, gitignore-style `exclude` patterns;
+they apply even to tracked files and take precedence over explicit includes.
+Do not put this configuration in `.codegraph/config.json`.
+
+The installed CLI package inspected for this change was
+`@colbymchenry/codegraph` **1.4.1**: its `dist/project-config.js` exposes
+`loadExcludePatterns` and its `index --help` documents a full rebuild. Check
+the installed loader if using another distribution; version numbers alone do
+not establish support. Changing exclusions requires rebuilding the existing
+index so previously indexed copies disappear. From the repository root:
+
+```sh
+codegraph index .
+codegraph explore "inboxDirOfCommonGitDir makeEngine"
+codegraph explore "plugin/mods/ops-board/ops/tests/fixtures.ts"
+```
+
+Verify returned paths include `plugin/mods/ops-board/hooks/lib/inbox.ts` and
+`plugin/mods/ops-board/ops/engine.ts`, retain the test fixture, and contain no
+excluded copies. During a coordinated run, the controller owns the shared
+rebuild. If it reports `database is locked`, retain the failure evidence and
+coordinate access with the index owner; do not delete database/lock files or
+stop shared services. A failed rebuild leaves verification pending.
+
 ## Add a new skill
 
 `skillator:skill-prometheus` is the skill for this — read it before authoring.
