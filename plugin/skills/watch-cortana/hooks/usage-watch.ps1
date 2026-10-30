@@ -377,6 +377,69 @@ if ($Mode -eq 'check') {
       }
     }
   }
+  if ($null -eq $pct -and $null -eq $wk) {
+    # Check cursor estimated usage ledger
+    $cands = @(
+      if ($env:CURSOR_LEDGER_PATH) { $env:CURSOR_LEDGER_PATH }
+      if ($env:SKILLATOR_PROFILE_DIR) { Join-Path $env:SKILLATOR_PROFILE_DIR 'cursor-ledger.json' }
+      if ($env:SKILLATOR_CONFIG_DIR) { Join-Path $env:SKILLATOR_CONFIG_DIR 'cursor-ledger.json' }
+      Join-Path $HOME '.skillator\cursor-ledger.json'
+      Join-Path $HOME '.cursor\cursor-ledger.json'
+      '.skillator\cursor-ledger.json'
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+
+    foreach ($clp in $cands) {
+      try {
+        $rawLedger = [IO.File]::ReadAllText((Convert-Path -LiteralPath $clp))
+        $json = ConvertFrom-Json $rawLedger -ErrorAction SilentlyContinue
+        $budget = if ($json.budget_tokens) { [double]$json.budget_tokens }
+                  elseif ($json.budget_cost) { [double]$json.budget_cost }
+                  elseif ($json.budget) { [double]$json.budget }
+                  else { $null }
+        if ($null -ne $budget -and $budget -gt 0) {
+          $bDay = if ($json.billing_day) { [int]$json.billing_day } else { 1 }
+          $now = if ($env:SKILLATOR_NOW) { [DateTime]::Parse($env:SKILLATOR_NOW).ToUniversalTime() } else { (Get-Date).ToUniversalTime() }
+          $cycleYear = $now.Year
+          $cycleMonth = $now.Month
+          if ($now.Day -lt $bDay) {
+            $cycleMonth--
+            if ($cycleMonth -lt 1) { $cycleMonth = 12; $cycleYear-- }
+          }
+          $daysInMonth = [DateTime]::DaysInMonth($cycleYear, $cycleMonth)
+          $clampedDay = [Math]::Min($bDay, $daysInMonth)
+          $cycleStart = [DateTime]::new($cycleYear, $cycleMonth, $clampedDay, 0, 0, 0, [DateTimeKind]::Utc)
+
+          $tot = 0.0
+          if ($json.runs) {
+            foreach ($r in $json.runs) {
+              if ($r.timestamp) {
+                try {
+                  $ts = [DateTime]::Parse($r.timestamp).ToUniversalTime()
+                  if ($ts -lt $cycleStart) { continue }
+                } catch { }
+              }
+              if ($json.budget_cost) {
+                $c = if ($null -ne $r.cost) { $r.cost } elseif ($null -ne $r.cost_usd) { $r.cost_usd } elseif ($r.usage -and $null -ne $r.usage.cost) { $r.usage.cost } elseif ($r.usage -and $null -ne $r.usage.cost_usd) { $r.usage.cost_usd } else { 0 }
+                $tot += [double]$c
+              } else {
+                $tok = if ($null -ne $r.tokens) { $r.tokens } elseif ($r.usage -and $null -ne $r.usage.total_tokens) { $r.usage.total_tokens } else {
+                  $inT = if ($r.usage -and $r.usage.inputTokens) { $r.usage.inputTokens } elseif ($r.usage -and $r.usage.prompt_tokens) { $r.usage.prompt_tokens } else { 0 }
+                  $outT = if ($r.usage -and $r.usage.outputTokens) { $r.usage.outputTokens } elseif ($r.usage -and $r.usage.completion_tokens) { $r.usage.completion_tokens } else { 0 }
+                  $cR = if ($r.usage -and $r.usage.cacheReadTokens) { $r.usage.cacheReadTokens } else { 0 }
+                  $cW = if ($r.usage -and $r.usage.cacheWriteTokens) { $r.usage.cacheWriteTokens } else { 0 }
+                  [double]$inT + [double]$outT + [double]$cR + [double]$cW
+                }
+                $tot += [double]$tok
+              }
+            }
+          }
+          $estPct = [Math]::Round(($tot / $budget) * 100)
+          "watch-cortana: cursor est $estPct% of budget (skillator runs only) - check cursor.com/settings"
+          exit 0
+        }
+      } catch { }
+    }
+  }
   # ponytail: cursor and antigravity expose no usage anywhere on disk - say so
   # rather than invent a number. Upgrade here if either ever writes one.
   if ($null -eq $pct -and $null -eq $wk) { "watch-cortana: no usage signal on this host - run skillator:handoff-cortana manually before you run out"; exit 0 }

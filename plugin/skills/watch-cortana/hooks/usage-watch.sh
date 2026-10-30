@@ -400,6 +400,53 @@ if [ "$mode" = check ]; then
     fi
   fi
   if [ -z "$pct" ] && [ -z "$wk" ]; then
+    clp=""
+    for cand in "${CURSOR_LEDGER_PATH:-}" \
+                "${SKILLATOR_PROFILE_DIR:-}/cursor-ledger.json" \
+                "${SKILLATOR_CONFIG_DIR:-}/cursor-ledger.json" \
+                "$HOME/.skillator/cursor-ledger.json" \
+                "$HOME/.cursor/cursor-ledger.json" \
+                ".skillator/cursor-ledger.json"; do
+      if [ -n "$cand" ] && [ -f "$cand" ]; then clp="$cand"; break; fi
+    done
+    if [ -n "$clp" ]; then
+      est=$(node -e '
+        const fs = require("fs");
+        try {
+          const json = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          const budget = json.budget_tokens ?? json.budget_cost ?? json.budget;
+          if (!budget || budget <= 0) process.exit(1);
+          const bDay = json.billing_day || 1;
+          const now = process.env.SKILLATOR_NOW ? new Date(process.env.SKILLATOR_NOW) : new Date();
+          let cYear = now.getUTCFullYear();
+          let cMonth = now.getUTCMonth();
+          if (now.getUTCDate() < bDay) { cMonth--; if (cMonth < 0) { cMonth = 11; cYear--; } }
+          const maxDays = new Date(Date.UTC(cYear, cMonth + 1, 0)).getUTCDate();
+          const cStart = new Date(Date.UTC(cYear, cMonth, Math.min(bDay, maxDays), 0, 0, 0));
+          let tot = 0;
+          for (const r of json.runs || []) {
+            if (r.timestamp && new Date(r.timestamp) < cStart) continue;
+            if (json.budget_cost) {
+              tot += Number(r.cost ?? r.cost_usd ?? r.usage?.cost ?? r.usage?.cost_usd ?? 0);
+            } else {
+              tot += Number(r.tokens ?? r.usage?.total_tokens ?? (
+                (r.usage?.inputTokens ?? r.usage?.prompt_tokens ?? 0) +
+                (r.usage?.outputTokens ?? r.usage?.completion_tokens ?? 0) +
+                (r.usage?.cacheReadTokens ?? 0) +
+                (r.usage?.cacheWriteTokens ?? 0)
+              ));
+            }
+          }
+          console.log(Math.round((tot / budget) * 100));
+        } catch { process.exit(1); }
+      ' "$clp" 2>/dev/null)
+      if [ -n "$est" ]; then
+        echo "watch-cortana: cursor est $est% of budget (skillator runs only) - check cursor.com/settings"
+        exit 0
+      fi
+    fi
+  fi
+  if [ -z "$pct" ] && [ -z "$wk" ]; then
     echo "watch-cortana: no usage signal on this host - run skillator:handoff-cortana manually before you run out"; exit 0
   fi
   # The weekly gate applies on every host, not just the one with a Stop hook.
