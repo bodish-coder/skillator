@@ -4,7 +4,7 @@ description: "Team management and ticket assignment: add, remove, list members, 
 ---
 
 Load the `tickets-zordon` skill ({{SKILLS}}/tickets-zordon/SKILL.md) and run the team or ticket assignment action for this repo.
-Arguments: whatever followed the command (`add @handle "Name" email`, `remove @handle`, `lead @handle|-`, `assign <ID> @handle`, or `list`).
+Arguments: whatever followed the command (`add @handle "Name" email`, `remove @handle`, `lead @handle|-`, `assign <ID> @handle`, `assign-tester <ID> @handle`, or `list`).
 
 1. **Action Routing**:
    - `add @handle "Name" email[,email...]` -> Add teammate:
@@ -16,6 +16,9 @@ Arguments: whatever followed the command (`add @handle "Name" email`, `remove @h
    - `assign <ID> @handle` or `<ID> @handle` -> Assign ticket:
      Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign <ID> @handle`
      **Lead Rule**: Once a lead is assigned, only the lead can assign or reassign tickets.
+   - `assign-tester <ID> @handle` or `<ID> tester @handle` -> Assign tester:
+     Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign-tester <ID> @handle`
+     Open to all teammates at any time (leaves ticket mark as-is).
    - `list` or empty -> List team:
      Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team list`
 

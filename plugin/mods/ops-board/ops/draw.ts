@@ -370,6 +370,7 @@ function chipLine(t: Ticket): Seg[] {
   if (t.apps.length) groups.push(t.apps.flatMap((a, i) => [...(i ? [{ text: ' ' }] : []), ...chip('app', a)]))
   if (t.owner) groups.push(chip('owner', t.owner))
   if (t.decide) groups.push(chip('decide', t.decide))
+  if (t.tester) groups.push(chip('tester', t.tester))
   if (t.by.length) groups.push(chip('by', t.by.join(' ')))
   if (t.session) groups.push([dim(t.session)])
   const out: Seg[] = [{ text: '      ' }]
@@ -380,7 +381,7 @@ function chipLine(t: Ticket): Seg[] {
 
 // The tag a row carries at its right: the session working it (only while [~] or [%] - A143
 // keeps the tag after the box moves on), else its owner or decider.
-const tagOf = (t: Ticket) => (t.box === '~' || t.box === '%' ? t.session : null) ?? t.owner ?? (t.decide ? 'decide ' + t.decide : null)
+const tagOf = (t: Ticket) => (t.box === '~' || t.box === '%' ? t.session : null) ?? t.owner ?? (t.decide ? 'decide ' + t.decide : null) ?? (t.tester ? 'test ' + t.tester : null)
 
 // F61: groups as headers `  ▸ In progress (1)` (open: `▾`) in the state's colour, every one
 // collapsed at first; Enter on a header opens or closes it. The selected header or row is
@@ -641,7 +642,11 @@ function dialogBody(s: State): Seg[][] {
     if (last || /^ {2}Change /.test(l)) rows.push({ text: '' })
     for (const part of l.split(/\r?\n/)) rows.push({ text: part, color: l === r ? 'error' : undefined, action,
       segs: last ? [dim('  '), hot('Enter confirm', 'return'), dim(' · '), hot('Esc cancel', 'escape')]
-        : i === 1 ? [{ text: part.slice(0, 23), action: { kind: 'dialog-kind', value: 'owner' } }, { text: part.slice(23), action: { kind: 'dialog-kind', value: 'decide' } }] : undefined })
+        : i === 1 ? [
+            { text: part.slice(0, 23), action: { kind: 'dialog-kind', value: 'owner' } },
+            { text: part.slice(23, 38), action: { kind: 'dialog-kind', value: 'decide' } },
+            { text: part.slice(38), action: { kind: 'dialog-kind', value: 'tester' } },
+          ] : undefined })
     if (i === 1) rows.push({ text: '' })   // F77: after the Ticket line and the kind
   })
   return boxBody(s, { title: ls[0] ?? '', rows })

@@ -72,7 +72,7 @@ export type PointerAction =
   | { kind: 'setup-field'; field: SetupField }
   | { kind: 'filter-field'; field: FilterField }
   | { kind: 'ticket-field' }
-  | { kind: 'dialog-kind'; value: 'owner' | 'decide' }
+  | { kind: 'dialog-kind'; value: 'owner' | 'decide' | 'tester' }
   | { kind: 'help' }
   | { kind: 'help-skill'; id: string }
   | { kind: 'help-close' }
@@ -102,7 +102,7 @@ export function point(s: State, a: PointerAction): Step {
   }
   if (s.person || s.setup) return same
   if (a.kind === 'ticket-field') return s.dialog ? { state: { ...s, dialogField: 'ticket' }, effects: [] } : same
-  if (a.kind === 'dialog-kind') return s.dialog ? reduce({ ...s, dialogField: 'who' }, { name: a.value === 'owner' ? 'a' : 'd' }) : same
+  if (a.kind === 'dialog-kind') return s.dialog ? reduce({ ...s, dialogField: 'who' }, { name: a.value === 'owner' ? 'a' : a.value === 'decide' ? 'd' : 't' }) : same
   if (a.kind === 'person') {
     if (!s.dialog) return same
     const people = peopleOf(s), member = people[a.index]
@@ -251,9 +251,9 @@ function addNotes(xs: string[], add: string[], drop: (n: string) => boolean = ()
 // The handle a fresh dialog starts on: the ticket's own (owner or decider) when on the
 // team, else me, else the first member - as team.md writes it (moved verbatim from assign.tsx).
 // F77: no ticket yet (its ID still to be typed) - me, else the first member.
-export function startHandle(t: Ticket | null, kind: 'owner' | 'decide', team: Member[], me: string | null): string | null {
+export function startHandle(t: Ticket | null, kind: 'owner' | 'decide' | 'tester', team: Member[], me: string | null): string | null {
   const on = (h: string | null) => team.find(m => sameHandle(m.handle, h))?.handle ?? null
-  return on(t ? (kind === 'owner' ? t.owner : t.decide) : null) ?? on(me) ?? team[0]?.handle ?? null
+  return on(t ? (kind === 'owner' ? t.owner : kind === 'decide' ? t.decide : t.tester) : null) ?? on(me) ?? team[0]?.handle ?? null
 }
 
 // The people the dialog lists: the team, plus the draft's handle when it is not on it.
@@ -263,7 +263,8 @@ function peopleOf(s: State): Member[] {
 }
 
 // F77: the heading names the ticket the Ticket field resolves to, else "a ticket".
-const titleOf = (d: AssignDraft, t: Ticket | null) => `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : ''}`
+const titleOf = (d: AssignDraft, t: Ticket | null) =>
+  `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : d.kind === 'tester' ? ' for testing' : ''}`
 // The ticket the dialog's Ticket field names (typed in any case), or null.
 const dialogTicket = (s: State): Ticket | null => (s.dialog ? ticketById(s.board?.tickets, s.dialog.id) : null)
 
@@ -278,18 +279,25 @@ export function dialogLines(s: State): string[] {
   // then what it resolves to.
   const said = tk ? `[${tk.box}] ${STATE_NAME[tk.box]} · ${tk.title}` : d.id.trim() ? 'no such ticket' : 'type a ticket ID, e.g. F12'
   const out = [titleOf(d, tk), `  Ticket  ${d.id}${s.dialogField === 'ticket' ? '_' : ''} · ${said}`,
-    `  ${radio('owner')} implementation   ${radio('decide')} decision          a / d`]
+    `  ${radio('owner')} implementation   ${radio('decide')} decision   ${radio('tester')} tester   a / d / t`]
   const onAdd = s.dialogIndex === -1
   if (!s.team.length) out.push('  no .skillator/team.md yet - + add person creates it')
   for (const m of peopleOf(s)) out.push(`  ${!onAdd && m.handle === d.handle ? '› ' : '  '}${m.handle.padEnd(10)}${m.name ?? ''}`.trimEnd())
   out.push(`  ${onAdd ? '› ' : '  '}+ add person`)
-  if (tk) out.push(`  Change  [${from}] ${word(from)} → [${to}] ${word(to)}, ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`)
-  if (tk?.box === '~') {
+  if (tk) {
+    if (d.kind === 'tester') {
+      out.push(`  Change  [${from}] ${word(from)}, tester ${d.handle ?? '(pick someone)'}`)
+    } else {
+      out.push(`  Change  [${from}] ${word(from)} → [${to}] ${word(to)}, ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`)
+    }
+  }
+  if (tk?.box === '~' && d.kind !== 'tester') {
     out.push(tk.session
       ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${word(to)}; the tag stays - tell that session`
       : `  ! ${tk.id} is in progress - this moves it to ${word(to)}; tell whoever is working it`)
   }
-  out.push(`  Runs    ticket-meta ${d.kind === 'decide' ? 'decide' : 'assign'} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`)
+  const metaCmd = d.kind === 'decide' ? 'decide' : d.kind === 'tester' ? 'assign-tester' : 'assign'
+  out.push(`  Runs    ticket-meta ${metaCmd} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`)
   if (d.result) out.push(`  ${d.result}`)
   out.push('  Enter confirm · Esc cancel')
   return out
@@ -329,11 +337,12 @@ function confirmAssign(s: State): Step {
     const t = ticketOf(x, id)
     const closed = !t || t.box === 'x' || t.box === '-'
     const state = d.kind === 'decide' ? 'pending decision' : 'pending'
-    const role = d.kind === 'decide' ? `for ${handle} to decide` : `owned by ${handle}`
-    const head = `✓ ${id} ${closed ? 'reopened as' : 'now'} ${state}, ${role}${t ? ': ' + t.title : ''}`
+    const role = d.kind === 'decide' ? `for ${handle} to decide` : d.kind === 'tester' ? `tester ${handle}` : `owned by ${handle}`
+    const head = `✓ ${id} ${d.kind === 'tester' ? 'tester assigned ' : closed ? 'reopened as ' + state + ', ' : 'now ' + state + ', '}${role}${t ? ': ' + t.title : ''}`
     return { ...x, dialog: null, toast: [head, ...notesOf(r.out), ran(r.argv)].join('\n') }
   }
-  return { state: s, effects: [run(d.kind === 'decide' ? 'meta-decide' : 'meta-assign', [id, handle], then)] }
+  const call = d.kind === 'decide' ? 'meta-decide' : d.kind === 'tester' ? 'meta-assign-tester' : 'meta-assign'
+  return { state: s, effects: [run(call, [id, handle], then)] }
 }
 
 // F77: the keys on the Ticket field - a printable character is text there (a / d / j
@@ -371,6 +380,7 @@ function dialogKey(s: State, k: Key): Step {
     case 'down': case 'j': return move(1)
     case 'a': return { state: { ...s, dialog: { ...d, kind: 'owner', result: null } }, effects: [] }
     case 'd': return { state: { ...s, dialog: { ...d, kind: 'decide', result: null } }, effects: [] }
+    case 't': return { state: { ...s, dialog: { ...d, kind: 'tester', result: null } }, effects: [] }
     case 'n': return onAdd ? { state: openPerson(s, 'assign'), effects: [] } : same
     case 'tab': return { state: { ...s, dialogField: 'ticket' }, effects: [] }
     case 'return': case 'enter': return onAdd ? { state: openPerson(s, 'assign'), effects: [] } : confirmAssign(s)

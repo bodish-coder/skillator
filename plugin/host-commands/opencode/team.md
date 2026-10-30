@@ -8,4 +8,5 @@ Load `tickets-zordon` and run the team action. Arguments: `$ARGUMENTS`
 - `remove @handle`: `ticket-meta team remove @handle`
 - `lead @handle|-`: `ticket-meta team lead @handle`
 - `assign <ID> @handle` or `<ID> @handle`: `ticket-meta assign <ID> @handle` (lead-only if lead set)
+- `assign-tester <ID> @handle` or `<ID> tester @handle`: `ticket-meta assign-tester <ID> @handle` (open to all teammates)
 - `list` or empty: `ticket-meta team list`

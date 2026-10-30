@@ -63,7 +63,7 @@ test('a opens the assign dialog on the selected row, starts on the owner, Enter 
   assert.deepEqual(dialogLines(state), [
     'Assign F1',
     '  Ticket  F1 · [ ] pending · Dark mode',
-    '  (•) implementation   ( ) decision          a / d',
+    '  (•) implementation   ( ) decision   ( ) tester   a / d / t',
     '  › @asha     Asha',
     '    @vidul',
     '    + add person',
@@ -100,10 +100,16 @@ test('d on a row opens a decision; a / d in the dialog switch kind; D on a [?] r
   assert.equal(state.dialog?.kind, 'decide'); assert.equal(state.dialog?.handle, '@asha')
   assert.equal(dialogLines(state)[0], 'Assign F3 for a decision')
   assert.equal(dialogLines(state)[1], '  Ticket  F3 · [?] pending decision · Pick chart')
-  assert.equal(dialogLines(state)[2], '  ( ) implementation   (•) decision          a / d')
+  assert.equal(dialogLines(state)[2], '  ( ) implementation   (•) decision   ( ) tester   a / d / t')
   assert.ok(dialogLines(state).includes('  Change  [?] decision → [?] decision, decide @asha'))
   const flipped = reduce(state, key('a')).state
   assert.equal(flipped.dialog?.kind, 'owner'); assert.equal(dialogLines(flipped)[0], 'Assign F3')
+  const toTester = reduce(state, key('t')).state
+  assert.equal(toTester.dialog?.kind, 'tester')
+  assert.equal(dialogLines(toTester)[0], 'Assign F3 for testing')
+  assert.equal(dialogLines(toTester)[2], '  ( ) implementation   ( ) decision   (•) tester   a / d / t')
+  const rTester = reduce(toTester, key('return'))
+  assert.deepEqual([rTester.effects[0]!.call, rTester.effects[0]!.args], ['meta-assign-tester', ['F3', '@asha']])
   const r = reduce(reduce(flipped, key('d')).state, key('return'))
   assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-decide', ['F3', '@asha']])
   assert.match(settle(r.effects[0]!.then(ok(''))(r.state)).state.toast ?? '', /^✓ F3 now pending decision, for @asha to decide: Pick chart/)

@@ -136,7 +136,7 @@ export const toggleGroup = <T>(open: readonly T[], b: T): T[] =>
   open.includes(b) ? open.filter(x => x !== b) : [...open, b]
 
 export const chipsOf = (t: Ticket) =>
-  t.apps.length > 0 || !!t.owner || !!t.decide || t.by.length > 0 || !!t.session || isDecidable(t)
+  t.apps.length > 0 || !!t.owner || !!t.decide || !!t.tester || t.by.length > 0 || !!t.session || isDecidable(t)
 export const isDecidable = (t: Ticket) => t.box === '?' && !!t.decide
 
 export function buildModel(v: View): Model {

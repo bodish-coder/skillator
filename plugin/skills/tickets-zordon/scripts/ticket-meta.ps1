@@ -2,7 +2,7 @@
 # ticket-meta.sh, which carries the full reasoning; same output, keep in step.
 #
 #   ticket-meta.ps1 apps | app-of <path>... | by <ID> | apps-of <ID>
-#   ticket-meta.ps1 assign <ID> @handle | decide <ID> @handle | decided <ID>
+#   ticket-meta.ps1 assign <ID> @handle | assign-tester <ID> @handle | decide <ID> @handle | decided <ID>
 #   ticket-meta.ps1 testing <ID> <what test> | tested <ID> pass|fail | verify <ID> pass|fail <evidence>
 #   ticket-meta.ps1 done <ID> [evidence] | block <ID> <on what> | defer <ID> <until what>
 #   ticket-meta.ps1 tag <ID> | selftest
@@ -269,16 +269,16 @@ function Find-Tag([string]$line, [string]$key) {
   return [regex]::Match($line, '[ \t]*\[' + $key + ':[ \t]*[^\]]*\]')
 }
 
-# A tag goes where it is, else before the next tag in app/decide/owner/by order, else
+# A tag goes where it is, else before the next tag in app/decide/owner/tester/by order, else
 # before the trailing (..) groups and a bare "Plan: S<n>" before them
 # (check-tickets must still see that pointer as bare).
 function Set-Tag([string]$line, [string]$key, [string]$val) {
   $tag = " [$key" + ": $val]"
   $m = Find-Tag $line $key
   if ($m.Success) { return $line.Substring(0, $m.Index) + $tag + $line.Substring($m.Index + $m.Length) }
-  $ord = @('app', 'decide', 'owner', 'by')
+  $ord = @('app', 'decide', 'owner', 'tester', 'by')
   $pos = -1
-  for ($i = [array]::IndexOf($ord, $key) + 1; $i -lt 4; $i++) {
+  for ($i = [array]::IndexOf($ord, $key) + 1; $i -lt $ord.Length; $i++) {
     $m = Find-Tag $line $ord[$i]
     if ($m.Success -and ($pos -lt 0 -or $m.Index -lt $pos)) { $pos = $m.Index }
   }
@@ -454,7 +454,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
       }
     }
     if ($o.mark) { $line = $line.Substring(0, $b) + $o.mark + $line.Substring($b + 1) }
-    foreach ($k in @('app', 'decide', 'owner', 'by')) {
+    foreach ($k in @('app', 'decide', 'owner', 'tester', 'by')) {
       if ($o[$k]) { $line = Set-Tag $line $k $o[$k] }
     }
     # F62/F64: a note replaces the one matching its pattern, else goes before a
@@ -650,6 +650,12 @@ function Do-Assign([string[]]$a) {
   $x = Get-IdAndHandle 'assign' $a
   $me = Get-Me
   return (Edit-Line $x[0] @{ mark = ' '; owner = $x[1]; samekey = 'owner'; sameval = $x[1]; owncheck = $true; requireleadassign = $true; me = $me.me; mewhy = $me.why; lead = (Get-Lead) })
+}
+
+# F135: tester assignment open to all users at any time (leaves box mark as-is).
+function Do-AssignTester([string[]]$a) {
+  $x = Get-IdAndHandle 'assign-tester' $a
+  return (Edit-Line $x[0] @{ tester = $x[1]; samekey = 'tester'; sameval = $x[1]; owncheck = $false; requireleadassign = $false })
 }
 
 function Do-Whoami([string[]]$a) {
@@ -1157,7 +1163,7 @@ function Do-TeamRemove([string[]]$a) {
     if (-not $m.Success) { continue }
     if (@(' ', '~', '!', '?', '%') -cnotcontains $m.Groups[1].Value) { continue }   # open: [ ] [~] [!] [?] [%]
     $hit = $false
-    foreach ($tg in [regex]::Matches($bl, '\[(owner|decide|by):([^\]]*)\]')) {
+    foreach ($tg in [regex]::Matches($bl, '\[(owner|decide|tester|by):([^\]]*)\]')) {
       foreach ($x in ($tg.Groups[2].Value -split ',')) { if ($x.Trim(" `t") -ceq $h) { $hit = $true } }
     }
     if ($hit) { [void]$ids.Add($m.Groups[2].Value) }
@@ -1284,6 +1290,7 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'by' { if ($a.Count -ne 1) { Fail 'usage: by <ID>' }; return (Get-ByFrom (Get-Info (Get-NormId $a[0]))) }
     'apps-of' { if ($a.Count -ne 1) { Fail 'usage: apps-of <ID>' }; return (Get-AppsFrom (Get-Info (Get-NormId $a[0]))) }
     'assign' { return (Do-Assign $a) }
+    'assign-tester' { return (Do-AssignTester $a) }
     'decide' { return (Do-Decide $a) }
     'decided' { return (Do-Decided $a) }
     'testing' { return (Do-Testing $a) }
@@ -1912,6 +1919,14 @@ function Invoke-Selftest {
     $msg = AsMe '@neo' { ErrOf assign F1 '@asha' }
     if ($msg -notmatch 'lead @vidul is assigned - only the lead may assign tickets \(you: @neo\)') { Write-Output "FAIL: lead-only assign refusal on unowned: [$msg]"; $script:fail = 1 }
     Eq 'the lead reassigns' (AsMe '@vidul' { Run assign F6 '@asha' }) "- [ ] F6 $dash Neos [owner: @asha]"
+    # --- F135: tester tag & assign-tester open to all users (even with lead assigned)
+    Eq 'non-lead assigns tester' (AsMe '@neo' { Run assign-tester F6 '@asha' }) "- [ ] F6 $dash Neos [owner: @asha] [tester: @asha]"
+    Eq 'non-lead reassigns tester' (AsMe '@neo' { Run assign-tester F6 '@vidul' }) "- [ ] F6 $dash Neos [owner: @asha] [tester: @vidul]"
+    $sameTester = [string]::Join(' ', @(AsMe '@neo' { Run assign-tester F6 '@vidul' }))
+    if ($sameTester -notmatch 'no change') { Write-Output "FAIL: same-tester did not say no change: [$sameTester]"; $script:fail = 1 }
+    if (-not (Refused assign-tester F6 '@nobody')) { Write-Output 'FAIL: assign-tester accepted an unknown handle'; $script:fail = 1 }
+    W $board "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]`n"
+    Eq 'tester tag order' (Run assign-tester F70 '@neo') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul]"
     Eq 'hand-over' (AsMe '@vidul' { Run team lead 'asha' }) 'lead: @asha'
     Eq 'one lead line' @(([System.IO.File]::ReadAllText($tf)) -split "`n" | Where-Object { $_ -match '^lead:' }).Count '1'
     Eq 'team lead same' (Run team lead '@asha') 'no change: @asha is already the lead'
@@ -2103,7 +2118,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|assign-tester|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest')
   exit 1
 }
 $cmd = [string]$args[0]
@@ -2122,5 +2137,5 @@ $stdout = New-Object System.IO.StreamWriter([Console]::OpenStandardOutput(), $Ut
 $stdout.NewLine = "`n"
 foreach ($o in @($out)) { if ($null -ne $o) { $stdout.WriteLine([string]$o) } }
 $stdout.Flush()
-if (@('assign', 'testing', 'tested', 'verify', 'done', 'block', 'defer') -ccontains $cmd) { Invoke-TeamsPost $cmd $rest }
+if (@('assign', 'assign-tester', 'testing', 'tested', 'verify', 'done', 'block', 'defer') -ccontains $cmd) { Invoke-TeamsPost $cmd $rest }
 exit 0

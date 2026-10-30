@@ -61,7 +61,7 @@ test('runs and health tabs as the mock; the assign box overlays the body', () =>
   assert.match(text(reduce(s, { name: '2' }).state), /reading runs…/)
   assert.match(text(reduce(onRuns(s, '', {}), { name: '2' }).state), /no open runs - plan one with relay-morpheus \(plan-runs\)/)
   const d = text(reduce(s, { name: 'a' }).state)
-  assert.match(d, /  ┌─ Assign B2 ─+┐\n  │  Ticket  B2 · \[~\] in progress · CSV export drops the last row +│\n  │  \(•\) implementation   \( \) decision          a \/ d +│\n  │ +│/)
+  assert.match(d, /  ┌─ Assign B2 ─+┐\n  │  Ticket  B2 · \[~\] in progress · CSV export drops the last row +│\n  │  \(•\) implementation   \( \) decision   \( \) tester   a \/ d \/ t +│\n  │ +│/)
   assert.match(d, /  │  › @asha +│/)
   assert.match(d, /  │  Change  \[~\] in progress → \[ \] pending, owner @asha +│/)
   assert.match(d, /  └─+┘/)
@@ -761,6 +761,15 @@ test('F130: Ops band shows the addressee of a pending handoff', () => {
 
   const fNoHandoff = sized({ ...s, cols: 80, rows: 24 })
   assert.doesNotMatch(fNoHandoff.at(-1)!, /→ @vidul/)
+})
+
+test('F135: tester badge in expanded chips and board parsing', () => {
+  const board = parseBoard('- [ ] F88 — Ticket with tester [owner: @asha] [tester: @vidul]\n', 'T', 1, 1)
+  assert.equal(board.tickets[0]?.tester, '@vidul')
+  assert.equal(board.tickets[0]?.owner, '@asha')
+  const st = opened(onBoard(initial(80, 24, 0), board, [{ handle: '@asha', emails: [] }, { handle: '@vidul', emails: [] }], null))
+  const ex = text(reduce({ ...st, selected: 'F88' }, { name: 'return' }).state)
+  assert.match(ex, /owner:@asha +tester:@vidul/)
 })
 
 

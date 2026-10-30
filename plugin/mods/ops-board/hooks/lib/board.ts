@@ -53,7 +53,7 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
     let session: string | null = null
     const s = SESSION_TAIL.exec(body)
     if (s) { session = s[1]!; body = body.slice(0, s.index) }
-    let cut = body.search(/ \[(?:app|decide|owner|by):/)
+    let cut = body.search(/ \[(?:app|decide|owner|tester|by):/)
     if (cut < 0) cut = body.search(/ \([^()]*\)\s*$/)
     const title = (cut < 0 ? body : body.slice(0, cut)).trim()
     while (stack.length && stack[stack.length - 1]!.indent >= indent) stack.pop()
@@ -61,7 +61,7 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
       id: m[3]!, box: m[2] as Box, title, line, parent: stack.length ? stack[stack.length - 1]!.id : null,
       indent, section,
       apps: handles(tag(body, 'app') ?? ''), decide: tag(body, 'decide')?.toLowerCase() ?? null,
-      owner: tag(body, 'owner')?.toLowerCase() ?? null, by: handles(tag(body, 'by') ?? ''), session,
+      owner: tag(body, 'owner')?.toLowerCase() ?? null, tester: tag(body, 'tester')?.toLowerCase() ?? null, by: handles(tag(body, 'by') ?? ''), session,
     }
     tickets.push(t)
     stack.push(t)
@@ -76,7 +76,7 @@ export function visible(b: Board, f: Filter, me: string | null): Ticket[] {
     if (!f.showDone && (t.box === 'x' || t.box === '-')) return false
     if (app && !t.apps.includes(app)) return false
     if (f.mine && !me) return false
-    if (who && t.owner !== who && t.decide !== who && !t.by.includes(who)) return false
+    if (who && t.owner !== who && t.decide !== who && t.tester !== who && !t.by.includes(who)) return false
     return true
   })
 }

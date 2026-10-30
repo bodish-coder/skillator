@@ -7,6 +7,7 @@
 #   ticket-meta.sh by <ID>              @handles (or emails) of the ticket's committers
 #   ticket-meta.sh apps-of <ID>         apps the ticket's commits touched
 #   ticket-meta.sh assign <ID> @handle  [owner: @handle] (implements it), box -> [ ]
+#   ticket-meta.sh assign-tester <ID> @handle [tester: @handle], box kept
 #   ticket-meta.sh decide <ID> @handle  [decide: @handle] (must decide), box -> [?]
 #   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
 #   ticket-meta.sh testing <ID> <test>  box -> [%] testing, the line says ` (testing: <test>)`
@@ -387,15 +388,15 @@ edit_line() {
       return out
     }
     function find(line, key) { return match(line, "[ \t]*\\[" key ":[ \t]*[^]]*\\]") }
-    # A tag goes where it is, else before the next tag in app/decide/owner/by order,
+    # A tag goes where it is, else before the next tag in app/decide/owner/tester/by order,
     # else before the trailing (..) groups and a bare "Plan: S<n>" before them
     # (check-tickets must still see that pointer as bare).
     function settag(line, key, val,    i, pos, head) {
       if (find(line, key))
         return substr(line, 1, RSTART - 1) " [" key ": " val "]" substr(line, RSTART + RLENGTH)
       pos = 0
-      for (i = 1; i <= 4; i++) if (ORD[i] == key) break
-      for (i = i + 1; i <= 4; i++)
+      for (i = 1; i <= 5; i++) if (ORD[i] == key) break
+      for (i = i + 1; i <= 5; i++)
         if (find(line, ORD[i]) && (pos == 0 || RSTART < pos)) pos = RSTART
       if (pos == 0) {
         pos = length(line) + 1
@@ -418,7 +419,7 @@ edit_line() {
       sub(/[ \t]+$/, "", line)
       return line note
     }
-    BEGIN { ORD[1] = "app"; ORD[2] = "decide"; ORD[3] = "owner"; ORD[4] = "by"; re = ENVIRON["RE"] }
+    BEGIN { ORD[1] = "app"; ORD[2] = "decide"; ORD[3] = "owner"; ORD[4] = "tester"; ORD[5] = "by"; re = ENVIRON["RE"] }
     { line = $0; cr = ""
       if (sub(/\r$/, "", line)) cr = "\r"
       if (line ~ re) {
@@ -428,6 +429,7 @@ edit_line() {
         if (ENVIRON["SET_APP"] != "") line = settag(line, "app", ENVIRON["SET_APP"])
         if (ENVIRON["SET_DECIDE"] != "") line = settag(line, "decide", ENVIRON["SET_DECIDE"])
         if (ENVIRON["SET_OWNER"] != "") line = settag(line, "owner", ENVIRON["SET_OWNER"])
+        if (ENVIRON["SET_TESTER"] != "") line = settag(line, "tester", ENVIRON["SET_TESTER"])
         if (ENVIRON["SET_BY"] != "") line = settag(line, "by", ENVIRON["SET_BY"])
         # (testing: ..) replaces only itself; (blocked: ..) and (deferred: ..)
         # replace either - the line says only the current wait (F64).
@@ -594,6 +596,12 @@ cmd_assign() {
   CMD=assign; id_and_handle "$@"
   me_of || :; lead_of
   SET_MARK=' ' SET_APP='' SET_DECIDE='' SET_OWNER=$HANDLE SET_BY='' SAME_KEY=owner SAME_VAL=$HANDLE NEED_MARK='' OWN_CHECK=1 REQUIRE_LEAD_ASSIGN=1 edit_line
+}
+
+# F135: tester assignment open to all users at any time (leaves box mark as-is).
+cmd_assign_tester() {
+  CMD=assign-tester; id_and_handle "$@"
+  SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_TESTER=$HANDLE SET_BY='' SAME_KEY=tester SAME_VAL=$HANDLE NEED_MARK='' edit_line
 }
 
 cmd_whoami() {
@@ -1046,7 +1054,7 @@ team_remove() {
       mk = substr($0, index($0, "- [") + 3, 1)
       if (mk != " " && mk != "~" && mk != "!" && mk != "?" && mk != "%") next   # open: [ ] [~] [!] [?] [%]
       s = $0; hit = 0
-      while (match(s, /\[(owner|decide|by):[^]]*\]/)) {
+      while (match(s, /\[(owner|decide|tester|by):[^]]*\]/)) {
         t = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
         sub(/^\[[a-z]+:/, "", t); sub(/\]$/, "", t)
         n = split(t, p, ",")
@@ -1692,6 +1700,14 @@ selftest() {
   SKILLATOR_ME=@neo sh "$self" assign F1 @asha > /dev/null 2> "$T/err" && { echo "FAIL: non-lead assigned unowned ticket"; fail=1; }
   grep -q 'lead @vidul is assigned - only the lead may assign tickets (you: @neo)' "$T/err" || { echo "FAIL: unowned refusal does not name lead: $(cat "$T/err")"; fail=1; }
   eq "the lead reassigns" "$(SKILLATOR_ME=@vidul sh "$self" assign F6 @asha 2>&1)" "- [ ] F6 $D Neos [owner: @asha]"
+  # --- F135: tester tag & assign-tester open to all users (even with lead assigned)
+  eq "non-lead assigns tester" "$(SKILLATOR_ME=@neo sh "$self" assign-tester F6 @asha 2>&1)" "- [ ] F6 $D Neos [owner: @asha] [tester: @asha]"
+  eq "non-lead reassigns tester" "$(SKILLATOR_ME=@neo sh "$self" assign-tester F6 @vidul 2>&1)" "- [ ] F6 $D Neos [owner: @asha] [tester: @vidul]"
+  sh "$self" assign-tester F6 @vidul > "$T/out" 2>&1 || { echo "FAIL: same-tester failed: $(cat "$T/out")"; fail=1; }
+  grep -q 'no change' "$T/out" || { echo "FAIL: same-tester did not say no change: $(cat "$T/out")"; fail=1; }
+  sh "$self" assign-tester F6 @nobody > /dev/null 2>&1 && { echo "FAIL: assign-tester accepted an unknown handle"; fail=1; }
+  printf -- "- [ ] F70 %s Tag order [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]\n" "$D" > TICKETS.md
+  eq "tester tag order" "$(run assign-tester F70 @neo)" "- [ ] F70 $D Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul]"
   eq "hand-over" "$(SKILLATOR_ME=@vidul sh "$self" team lead asha 2>&1)" "lead: @asha"
   eq "one lead line" "$(grep -c '^lead:' .skillator/team.md)" "1"
   eq "team lead same" "$(run team lead @asha)" "no change: @asha is already the lead"
@@ -1896,7 +1912,7 @@ teams_post() {
   return 0
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|assign-tester|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest"
 c=$1; shift
 SUB=$c
 [ "$c" = selftest ] && { selftest; exit 0; }
@@ -1909,6 +1925,7 @@ case $c in
   by) [ $# -eq 1 ] || die "usage: by <ID>"; norm_id "$1"; commits_info "$ID" | by_from ;;
   apps-of) [ $# -eq 1 ] || die "usage: apps-of <ID>"; norm_id "$1"; commits_info "$ID" | apps_from ;;
   assign) cmd_assign "$@" && teams_post assign "$@" ;;
+  assign-tester) cmd_assign_tester "$@" && teams_post assign-tester "$@" ;;
   decide) cmd_decide "$@" ;;
   decided) cmd_decided "$@" ;;
   testing) cmd_testing "$@" && teams_post testing "$@" ;;

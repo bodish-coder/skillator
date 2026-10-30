@@ -1,6 +1,6 @@
 ---
 description: "Team management and ticket assignment: add, remove, list members, set/change lead, and assign tickets to team members"
-argument-hint: "[add @handle \"Name\" email | remove @handle | lead @handle|- | assign <ID> @handle | list]"
+argument-hint: "[add @handle \"Name\" email | remove @handle | lead @handle|- | assign <ID> @handle | assign-tester <ID> @handle | list]"
 ---
 
 Load the `tickets-zordon` skill (skillator:tickets-zordon) and run the team or ticket assignment action for this repo.
@@ -17,6 +17,9 @@ Arguments: `$ARGUMENTS`
    - `assign <ID> @handle` or `<ID> @handle` -> Assign ticket to team member:
      Run `ticket-meta assign <ID> @handle` (reopens ticket to `[ ]`).
      **Lead Rule**: Once a lead is assigned, ONLY the lead may assign or reassign tickets. Non-lead assignments are refused.
+   - `assign-tester <ID> @handle` or `<ID> tester @handle` -> Assign tester to ticket:
+     Run `ticket-meta assign-tester <ID> @handle` (leaves ticket mark as-is).
+     Unlike implementer assignment, tester assignment is open to any teammate at any time (even if a tester is already assigned).
    - `list` or no arguments -> List all team members, emails, active lead `[lead]`, and current session user `(you)`:
      Run `ticket-meta team list`
 

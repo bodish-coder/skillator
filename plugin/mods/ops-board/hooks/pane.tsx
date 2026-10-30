@@ -142,7 +142,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       )
       if (chipsOf(t)) {
         const parts: (RenderElement | string)[] = ['    ']
-        const groupCount = [t.apps.length, t.owner, t.decide, t.by.length, t.session].filter(Boolean).length
+        const groupCount = [t.apps.length, t.owner, t.decide, t.tester, t.by.length, t.session].filter(Boolean).length
         let room = v.cols - 4 - (isDecidable(t) ? (isSel ? 13 : 10) : 0) - Math.max(0, groupCount - 1) * 2
         const take = (s: string) => { const text = cutTo(s, Math.max(0, room), glyphs.cut); room -= text.length; return text }
         const chip = (k: string, val: string) => [<Text color={CHIP_KEY}>{take(k + ':')}</Text>, <Text color={CHIP_VALUE}>{take(val)}</Text>]
@@ -150,6 +150,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
         if (t.apps.length) groupsOf.push(t.apps.flatMap((a, i) => [...(i ? [take(' ')] : []), ...chip('app', a)]))
         if (t.owner) groupsOf.push(chip('owner', t.owner))
         if (t.decide) groupsOf.push(chip('decide', t.decide))
+        if (t.tester) groupsOf.push(chip('tester', t.tester))
         if (t.by.length) groupsOf.push(chip('by', t.by.join(' ')))
         if (t.session) groupsOf.push([<Text dimColor>{take(t.session)}</Text>])
         groupsOf.forEach((gr, i) => { if (i) parts.push('  '); parts.push(...gr) })

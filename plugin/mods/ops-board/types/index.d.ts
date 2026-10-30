@@ -2,7 +2,7 @@ export type Box = ' ' | '~' | '%' | '!' | '?' | '>' | 'x' | '-'
 export type Ticket = {
   id: string; box: Box; title: string; line: string      // line = exact text after "- [b] "
   parent: string | null; indent: number; section: string // heading it sits under
-  apps: string[]; decide: string | null; owner: string | null; by: string[]
+  apps: string[]; decide: string | null; owner: string | null; tester: string | null; by: string[]
   session: string | null                                 // "(@cc-4ae496)" or F109 "(@cc-k7q2:asha:run)" tag, without parens
 }
 export type Board = { path: string; mtimeMs: number; size: number; tickets: Ticket[]; error: string | null }
@@ -42,7 +42,7 @@ export type Diagnose = { id: string; verdict: 'finished' | 'still running' | 'st
 // F77: id = the form's Ticket field as typed ('' when opened with no ticket selected),
 // resolved against the board case-insensitively (ticketById); ticket-meta gets the board's ID.
 export type StatusDraft = { generation: number; id: string; target: 'pending' | 'blocked' | 'deferred' | null; reason: string; expectedRow: string | null; result: string | null; busy: boolean; helpPath: string | null; mode: 'status' | 'help' }
-export type AssignDraft = { id: string; kind: 'owner' | 'decide'; handle: string | null; result: string | null }
+export type AssignDraft = { id: string; kind: 'owner' | 'decide' | 'tester'; handle: string | null; result: string | null }
 // F47 team management (T6): the Team view in the Tickets tab, and the Add person form
 // (drawn as a form in the ops-board pane; `back` = where a finished add returns).
 export type TeamView = { selected: string | null; confirm: boolean }

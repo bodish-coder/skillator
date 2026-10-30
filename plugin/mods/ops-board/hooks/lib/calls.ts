@@ -3,7 +3,7 @@
 // Paths are relative to the *skills dir* - the directory that contains tickets-zordon/
 // (<repo>/skills, <plugin cache>/skills, or an install.sh dest) - so no skills/ segment.
 
-export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-decide' | 'meta-decided'
+export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-assign-tester' | 'meta-decide' | 'meta-decided'
   | 'meta-team-add' | 'meta-team-remove' | 'meta-team-lead'
   | 'meta-status' | 'holo-ticket' | 'meta-reconcile' | 'meta-unblock' | 'meta-start' | 'meta-testing' | 'meta-block'
   | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
@@ -43,6 +43,7 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'pending-kv':         { script: PENDING, sh: a => ['--kv', ...a], ps: a => ['--kv', ...a] },
   'pending-machine':    { script: PENDING, sh: a => ['--machine', ...a], ps: a => ['--machine', ...a] },
   'meta-assign':        { script: META, sh: a => ['assign', ...a], ps: a => ['assign', ...a] },
+  'meta-assign-tester': { script: META, sh: a => ['assign-tester', ...a], ps: a => ['assign-tester', ...a] },
   'meta-decide':        { script: META, sh: a => ['decide', ...a], ps: a => ['decide', ...a] },
   'meta-decided':       { script: META, sh: a => ['decided', ...a], ps: a => ['decided', ...a] },
   'meta-team-add':      { script: META, sh: a => ['team', 'add', ...a], ps: a => ['team', 'add', ...a] },

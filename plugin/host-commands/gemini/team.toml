@@ -7,5 +7,7 @@ Load `tickets-zordon` ({{SKILLS}}/tickets-zordon/SKILL.md) and run the team acti
 - `lead @handle|-`: `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team lead @handle`
 - `assign <ID> @handle` or `<ID> @handle`: `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign <ID> @handle`
   Once a lead is assigned, only the lead can assign or reassign tickets.
+- `assign-tester <ID> @handle` or `<ID> tester @handle`: `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign-tester <ID> @handle`
+  Open to all teammates at any time.
 - `list` or empty: `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team list`
 '''
