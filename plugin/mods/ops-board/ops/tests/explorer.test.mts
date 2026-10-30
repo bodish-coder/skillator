@@ -70,7 +70,7 @@ test('the tree: sections start collapsed; enter opens Files, then a folder; coun
   s = press(s, 'down', 'return')                               // mods/
   assert.match(text(s), /^ {4}▸ a\/ \(2\)$/m)
   assert.match(text(s), /^ {6}b\.ts$/m)
-  assert.match(text(s), /↑↓ move · enter open\/close · r reload · q quit/)
+  assert.match(text(s), /^\[↑↓ move\] · \[enter open\/close\] · \[r reload\] · \[q quit\]$/m)
 })
 
 test('the commits: one opens to its files with A/M/D and +/- counts, read only when opened; closing drops them', () => {
@@ -154,7 +154,7 @@ test('F103 ahead/behind vs the upstream and the incoming commits, read-only; no 
   assert.match(text(s), /^▸ Incoming \(1\)$/m)
   s = press(s, 'down', 'down', 'return')                          // Files, Commits, Incoming
   assert.match(text(s), /^ {2}▸ fedcba9 {2}2026-10-26 {2}F100: incoming$/m)
-  assert.match(text(s), /↑↓ move · enter open\/close · r reload · q quit/)
+  assert.match(text(s), /^\[↑↓ move\] · \[enter open\/close\] · \[r reload\] · \[q quit\]$/m)
   const st = reduce(initial(80, 24, 0), { name: '5' })
   let n = st.state
   for (const e of gits(st.effects)) {
