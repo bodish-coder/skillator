@@ -203,15 +203,53 @@ function keysOf(s: State, m: Model): Seg[][] {
   return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), h('r reload', 'r'), quit]
 }
 
-function keysLine(s: State, m: Model): Seg[] {
-  if (s.teamConfirm && !s.person && !s.dialog) return [{ text: `remove ${s.teamConfirm} from .skillator/team.md? (y/n)`, color: 'warning', action: { kind: 'key', key: { name: 'y' } } }]
-  const ks = keysOf(s, m)
-
-  while (ks.length > 1 && width(join(ks, ' · ')) > s.cols) {
-    const arrow = ks.findIndex(k => /^[↑↓←→]/.test(plain(k)))
-    ks.splice(arrow >= 0 && arrow < ks.length - 1 ? arrow : 0, 1)
+export function keysLines(s: State, m: Model): Seg[][] {
+  if (s.teamConfirm && !s.person && !s.dialog) {
+    return [[{ text: `remove ${s.teamConfirm} from .skillator/team.md? (y/n)`, color: 'warning', action: { kind: 'key', key: { name: 'y' } } }]]
   }
-  return join(ks, ' · ')
+  const ks = keysOf(s, m)
+  if (!ks.length) return []
+  const full = join(ks, ' · ')
+  if (width(full) <= s.cols) return [full]
+
+  // If terminal height is too constrained to permit wrapping without breaking body viewport
+  if (s.rows < 8) return [fitSegs(full, s.cols)]
+
+  // Try 2 lines: balanced split where both fit in s.cols
+  let best2: Seg[][] | null = null
+  for (let i = 1; i < ks.length; i++) {
+    const l1 = join(ks.slice(0, i), ' · ')
+    const l2 = join(ks.slice(i), ' · ')
+    if (width(l1) <= s.cols && width(l2) <= s.cols) {
+      if (!best2 || Math.abs(width(l1) - width(l2)) < Math.abs(width(best2[0]!) - width(best2[1]!))) {
+        best2 = [l1, l2]
+      }
+    }
+  }
+  if (best2) return best2
+
+  // Multiple lines (e.g. 3 lines on narrow viewports like 40 cols):
+  const lines: Seg[][] = []
+  let cur: Seg[][] = []
+  let curWidth = 0
+  for (const k of ks) {
+    const kw = width(k)
+    const sep = cur.length ? 3 : 0
+    if (cur.length && curWidth + sep + kw > s.cols) {
+      lines.push(join(cur, ' · '))
+      cur = [k]
+      curWidth = kw
+    } else {
+      cur.push(k)
+      curWidth += sep + kw
+    }
+  }
+  if (cur.length) lines.push(join(cur, ' · '))
+  return lines
+}
+
+export function keysLine(s: State, m: Model): Seg[] {
+  return keysLines(s, m)[0] ?? []
 }
 
 // --- the band: one line from 80 columns, as the mock ---
@@ -652,9 +690,10 @@ export function frameSegs(s: State): Seg[][] {
   const cols = Math.max(0, s.cols), rows = Math.max(0, s.rows)
   const m = buildModel(viewOf(s))
   const band = bandSegs(s)
-  const fixed = 2 + 3 + band.length                 // tabs, blank | blank, count, keys | band
+  const kLines = keysLines(s, m)
+  const fixed = 2 + 2 + kLines.length + band.length // tabs, blank | blank, count, ...keys | band
   const body = bodyOf(s, m, Math.max(0, rows - fixed))
-  let lines: Seg[][] = [tabsLine(s), [], ...body, [], countLine(s, m), keysLine(s, m), ...band]
+  let lines: Seg[][] = [tabsLine(s), [], ...body, [], countLine(s, m), ...kLines, ...band]
   if (lines.length > rows) lines = rows ? [lines[0]!, ...lines.slice(lines.length - (rows - 1))] : []
   return lines.map(l => fitSegs(l, cols))
 }

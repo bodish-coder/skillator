@@ -482,3 +482,42 @@ test('F128 draw: Assigned and Decide sections render with fold indicators and ad
   assert.match(fAscii, /v Decide \(1\)/)
 })
 
+test('F120: responsive footer actions and wrapping across 40, 60, 80, 100, 120 columns without dropping keys', () => {
+  const expectedKeys = ['↑↓ move', 'enter line', 'a assign', 'd decide', 't team', 'c reconcile', 'r reload', 'q quit']
+  for (const cols of [40, 60, 80, 100, 120]) {
+    const f = frame({ ...s, cols }, P)
+    assert.equal(f.length, s.rows)
+    for (const l of f) assert.ok(cells(l) <= cols, `${cells(l)} > ${cols}: ${l}`)
+    const full = f.join('\n')
+    for (const k of expectedKeys) {
+      assert.ok(full.includes(k), `cols ${cols}: missing shortcut "${k}"\n${full}`)
+    }
+
+    // Decidable row adds D decided; none of the keys are dropped
+    const f3: State = { ...s, selected: 'F3', cols }
+    const f3Frame = frame(f3, P)
+    assert.equal(f3Frame.length, f3.rows)
+    for (const l of f3Frame) assert.ok(cells(l) <= cols, `${cells(l)} > ${cols}: ${l}`)
+    const f3Full = f3Frame.join('\n')
+    for (const k of [...expectedKeys, 'D decided']) {
+      assert.ok(f3Full.includes(k), `cols ${cols} (decidable): missing shortcut "${k}"\n${f3Full}`)
+    }
+
+    // Health tab shortcuts preserved across all widths
+    const h = reduce({ ...s, cols }, { name: '3' }).state
+    const hFrame = frame(h, P)
+    assert.equal(hFrame.length, h.rows)
+    for (const l of hFrame) assert.ok(cells(l) <= cols, `${cells(l)} > ${cols}: ${l}`)
+    const hFull = hFrame.join('\n')
+    for (const k of ['R resume', 'F force resume', 'r reload', 'q quit']) {
+      assert.ok(hFull.includes(k), `cols ${cols} (health): missing shortcut "${k}"\n${hFull}`)
+    }
+  }
+
+  // Body layout budget intact across narrow terminals
+  const narrow12 = frame({ ...s, cols: 40, rows: 12 }, P)
+  assert.equal(narrow12.length, 12)
+  for (const l of narrow12) assert.ok(cells(l) <= 40, `${cells(l)} > 40: ${l}`)
+  assert.ok(narrow12.some(l => l.includes('In progress') || l.includes('B2')))
+})
+
