@@ -9,6 +9,15 @@ import type { Host, RunResult } from '../../ops/nodehost'
 import { makeEngine } from '../../ops/engine'
 import { initial } from '../../ops/state'
 import { NO_SCRIPTS } from '../../hooks/lib/calls'
+import { checkSpace } from './space-fixture.mts'
+
+for (const [label, data, id, kitty] of [
+  ['named', ' ', 'space', undefined],
+  ['Kitty', '\x1b[32u', 'space', ' '],
+  ['unnamed', ' ', undefined, undefined],
+] as const) {
+  test(`Space actions: Pi ${label} matches standalone selection, toggles and text`, () => checkSpace(keyFromPi(data, id, kitty), keyFromPi('\x1b[32;5u', 'ctrl+space', ' ')))
+}
 
 // F56: the pi adapter under plain node - no pi here. pi-tui's parseKey is stood in for by
 // the names it gave, read from the installed @earendil-works/pi-tui 0.74.2 (2026-10-22).
@@ -39,7 +48,7 @@ test('keys: pi-tui names become the reducer keys (capitals keep their letter, Ki
   assert.deepEqual(k('D'), { name: 'D', sequence: 'D', shift: false, ctrl: false })
   assert.deepEqual(k('\x1b[68;2u'), { name: 'D', sequence: 'D', shift: true, ctrl: false })
   assert.deepEqual(k('\x1b[97u'), { name: 'a', sequence: 'a', shift: false, ctrl: false })
-  assert.deepEqual(k(' '), { name: ' ', sequence: ' ', shift: false, ctrl: false })
+  assert.deepEqual(k(' '), { name: 'space', sequence: ' ', shift: false, ctrl: false })
   assert.deepEqual(k('@'), { name: '@', sequence: '@', shift: false, ctrl: false })
   assert.deepEqual(k('\x7f'), { name: 'backspace', shift: false, ctrl: false })
   assert.deepEqual(k('\x1b[3~'), { name: 'delete', shift: false, ctrl: false })
@@ -50,6 +59,12 @@ test('keys: pi-tui names become the reducer keys (capitals keep their letter, Ki
   assert.deepEqual(keyFromPi('\x1b[99;5u', 'ctrl+c', undefined), { name: 'c', shift: false, ctrl: true })
   assert.equal(keyFromPi('\x1b[1;3A', 'alt+up'), null)
   assert.equal(keyFromPi('\x1b[999~', undefined), null)
+  assert.deepEqual(keyFromPi(' ', 'shift+space'), { name: 'space', sequence: ' ', shift: true, ctrl: false })
+  assert.deepEqual(keyFromPi('\x1b[32;2u', 'shift+space', ' '), { name: 'space', sequence: ' ', shift: true, ctrl: false })
+  assert.deepEqual(keyFromPi('\x1b[32;5u', 'ctrl+space', ' '), { name: 'space', shift: false, ctrl: true })
+  assert.equal(keyFromPi(' ', 'alt+space', ' '), null)
+  assert.equal(keyFromPi(' ', 'super+space', ' '), null)
+  assert.deepEqual(keyFromPi('😀', undefined), { name: '😀', sequence: '😀', shift: false, ctrl: false })
 })
 
 test('args: whitespace-split, double quotes keep a path with spaces', () => {
@@ -101,7 +116,7 @@ test('view: the frame at pi\'s width and the terminal\'s rows, each line within 
   assert.equal(engine.state.dialog, null)
   // A146: the Team view's footer lists q; ctrl+c in a half-typed Add person cancels the form, the board stays
   view.handleInput('t')
-  assert.match(view.render(70).map(strip).join('\n'), /esc back · q quit/)
+  assert.match(view.render(70).map(strip).join('\n'), /\[esc back\] · \[q quit\]/)
   view.handleInput('n'); view.handleInput('a')
   assert.equal(engine.state.person?.handle, 'a')
   view.handleInput('\x03')

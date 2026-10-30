@@ -62,8 +62,9 @@ export function keyFromDom(e: DomKey): Key | null {
   const named = NAMED[e.key]
   if (named) return { name: named, shift, ctrl }
   if ([...e.key].length !== 1 || e.key < ' ' || e.key === '\x7f') return null
-  if (ctrl) return { name: e.key.toLowerCase(), shift, ctrl: true }
-  return { name: e.key, sequence: e.key, shift, ctrl: false }
+  const name = e.key === ' ' ? 'space' : e.key
+  if (ctrl) return { name: name.toLowerCase(), shift, ctrl: true }
+  return { name, sequence: e.key, shift, ctrl: false }
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

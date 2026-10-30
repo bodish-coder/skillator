@@ -47,15 +47,16 @@ export function keyFromPi(data: string, id: string | undefined, kitty?: string):
   const mods = new Set(parts)
   const shift = mods.has('shift'), ctrl = mods.has('ctrl')
   if (mods.has('alt') || mods.has('super')) return null
-  if (kitty && !ctrl && [...kitty].length === 1 && kitty >= ' ') return { name: kitty, sequence: kitty, shift, ctrl: false }
+  if (kitty && !ctrl && [...kitty].length === 1 && kitty >= ' ') return { name: kitty === ' ' ? 'space' : kitty, sequence: kitty, shift, ctrl: false }
   let name = base === 'space' ? ' ' : base
   if (shift && /^[a-z]$/.test(name)) name = name.toUpperCase()
   // a character pi-tui does not name (é, ü): itself
   if (!name) {
     const one = [...data].length === 1 && data >= ' ' && data !== '\x7f' ? data : null
-    return one ? { name: one, sequence: one, shift: false, ctrl: false } : null
+    return one ? { name: one === ' ' ? 'space' : one, sequence: one, shift: false, ctrl: false } : null
   }
   const printable = !ctrl && [...name].length === 1 ? name : null
+  if (name === ' ') name = 'space'
   return printable ? { name, sequence: printable, shift, ctrl } : { name, shift, ctrl }
 }
 

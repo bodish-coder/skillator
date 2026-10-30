@@ -6,6 +6,9 @@ import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { argvOf, htmlOf, keyFromDom, ONCE, OPEN, pageHtml, registerOps } from '../ops'
 import type { Disposable, VsApi, VsPanel } from '../ops'
+import { checkSpace } from '../../pi/tests/space-fixture.mts'
+
+test('Space actions: DOM matches standalone selection, toggles and text', () => checkSpace(keyFromDom({ key: ' ' }), keyFromDom({ key: ' ', ctrl: true })))
 // @ts-ignore - plain .mjs, no types
 import { vsixEntries, zip } from '../pack.mjs'
 
@@ -33,12 +36,17 @@ test('keys: DOM keydowns become the reducer keys (capitals keep their letter, ct
   assert.deepEqual(keyFromDom({ key: 'a' }), { name: 'a', sequence: 'a', shift: false, ctrl: false })
   assert.deepEqual(keyFromDom({ key: '@', shift: true }), { name: '@', sequence: '@', shift: true, ctrl: false })
   assert.deepEqual(keyFromDom({ key: 'é' }), { name: 'é', sequence: 'é', shift: false, ctrl: false })
-  assert.deepEqual(keyFromDom({ key: ' ' }), { name: ' ', sequence: ' ', shift: false, ctrl: false })
+  assert.deepEqual(keyFromDom({ key: ' ' }), { name: 'space', sequence: ' ', shift: false, ctrl: false })
   assert.deepEqual(keyFromDom({ key: 'C', ctrl: true, shift: true }), { name: 'c', shift: true, ctrl: true })
   assert.equal(keyFromDom({ key: 'ArrowUp', alt: true }), null)
   assert.equal(keyFromDom({ key: 'a', meta: true }), null)
   assert.equal(keyFromDom({ key: 'Shift', shift: true }), null)
   assert.equal(keyFromDom({ key: 'F5' }), null)
+  assert.deepEqual(keyFromDom({ key: ' ', shift: true }), { name: 'space', sequence: ' ', shift: true, ctrl: false })
+  assert.deepEqual(keyFromDom({ key: ' ', ctrl: true }), { name: 'space', shift: false, ctrl: true })
+  assert.equal(keyFromDom({ key: ' ', alt: true }), null)
+  assert.equal(keyFromDom({ key: ' ', meta: true }), null)
+  assert.deepEqual(keyFromDom({ key: '😀' }), { name: '😀', sequence: '😀', shift: false, ctrl: false })
 })
 
 test('html: SGR runs become classed spans, text is escaped, other escapes are dropped', () => {
