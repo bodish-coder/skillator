@@ -62,10 +62,9 @@ $skills = @(Get-ChildItem $src -Directory)
 $skills = @($skillArr)
 
 # A96: a skill dir this script copies gets an ownership marker (.skillator-owned), and
-# each skills dir a manifest (.skillator-installed). The marker records the SKILL.md
-# hash and every file placed; the next run removes a folder the manifest lists that the
-# repo no longer ships only if it is still exactly that (or is a link into this repo). A dir with no manifest yet loses only a legacy name whose
-# SKILL.md is byte-for-byte a version this repo once shipped. See install.sh.
+# each skills dir a manifest (.skillator-installed). The v2 marker hashes every file.
+# Retired copies are removed only while every byte and filename matches, or when
+# they are verified links into this repo. Unverifiable legacy copies are retained.
 $manifest = '.skillator-installed'
 $owned = '.skillator-owned'
 # Every name this repo shipped and has since dropped - keep in sync with install.sh.
@@ -120,35 +119,56 @@ function Get-FmName([string]$file) {
   return ''
 }
 
-# files under $dir, relative, '/'-separated, ordinal order - as install.sh's find
+# Enumerate without following any reparse point, including the root and marker.
 function Get-RelFiles([string]$dir) {
-  $full = (Get-Item -LiteralPath $dir -Force).FullName.TrimEnd('\')
-  [string[]]$r = @(Get-ChildItem -LiteralPath $dir -Recurse -Force |
-    Where-Object { -not $_.PSIsContainer } |
-    ForEach-Object { $_.FullName.Substring($full.Length + 1).Replace('\', '/') })
-  [Array]::Sort($r, [StringComparer]::Ordinal)
-  return ,$r
-}
-
-# the ownership marker - SKILL.md hash + files placed; LF, no BOM, same bytes as install.sh
-function Write-Owned([string]$dir, [string]$srcDir) {
-  $lines = @("sha256 $(Get-SkillHash (Join-Path $srcDir 'SKILL.md'))") +
-           @(Get-RelFiles $srcDir | ForEach-Object { "file $_" })
-  [IO.File]::WriteAllText((Join-Path $dir $owned), (($lines -join "`n") + "`n"))
-}
-
-# true only if SKILL.md still matches the marker's hash and no file exists that the
-# installer did not place. A marker with no hash never passes.
-function Test-OwnedIntact([string]$dir) {
-  $o = Join-Path $dir $owned
-  if (-not (Test-Path -LiteralPath $o -PathType Leaf)) { return $false }
-  $lines = @([IO.File]::ReadAllLines($o) | ForEach-Object { $_.TrimEnd("`r") })
-  if ($lines.Count -eq 0 -or $lines[0] -cne "sha256 $(Get-SkillHash (Join-Path $dir 'SKILL.md'))") { return $false }
-  foreach ($f in (Get-RelFiles $dir)) {
-    if ($f -ceq $owned) { continue }
-    if ($lines -cnotcontains "file $f") { return $false }
+  $rootItem = Get-Item -LiteralPath $dir -Force -ErrorAction Stop
+  if ($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'linked skill' }
+  $full = $rootItem.FullName.TrimEnd('\')
+  $pending = New-Object 'Collections.Generic.Stack[string]'
+  $pending.Push($full)
+  $files = New-Object 'Collections.Generic.List[string]'
+  while ($pending.Count) {
+    foreach ($item in Get-ChildItem -LiteralPath $pending.Pop() -Force -ErrorAction Stop) {
+      if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'linked content' }
+      $rel = $item.FullName.Substring($full.Length + 1).Replace('\', '/')
+      if ($rel -match '[\r\n:]') { throw 'unsupported filename' }
+      if ($item.PSIsContainer) { $pending.Push($item.FullName) }
+      elseif ($rel -cne $owned) { $files.Add($rel) }
+    }
   }
-  return $true
+  $files.Sort([StringComparer]::Ordinal)
+  return $files.ToArray()
+}
+
+function Get-OwnershipManifest([string]$dir) {
+  $lines = @('skillator-owned 2')
+  foreach ($f in (Get-RelFiles $dir)) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $hash = -join ($sha.ComputeHash([IO.File]::ReadAllBytes((Join-Path $dir $f))) | ForEach-Object { $_.ToString('x2') }) }
+    finally { $sha.Dispose() }
+    $lines += "file $hash $f"
+  }
+  return (($lines -join "`n") + "`n")
+}
+
+function Write-Owned([string]$dir, [string]$srcDir) {
+  try { $text = Get-OwnershipManifest $srcDir }
+  catch { Write-Host "        left $dir unowned (unverifiable contents)"; return }
+  [IO.File]::WriteAllText((Join-Path $dir $owned), $text, (New-Object Text.UTF8Encoding $false))
+}
+
+function Test-OwnedIntact([string]$dir) {
+  try {
+    $actual = Get-OwnershipManifest $dir
+    $utf8 = New-Object Text.UTF8Encoding $false, $true
+    $recorded = $utf8.GetString([IO.File]::ReadAllBytes((Join-Path $dir $owned))).Replace("`r`n", "`n")
+    return [string]::Equals($actual, $recorded, [StringComparison]::Ordinal)
+  } catch { return $false }
+}
+
+function Test-SameContents([string]$left, [string]$right) {
+  try { return [string]::Equals((Get-OwnershipManifest $left), (Get-OwnershipManifest $right), [StringComparison]::Ordinal) }
+  catch { return $false }
 }
 
 function Remove-Unshipped([string]$dest) {
@@ -175,14 +195,13 @@ function Remove-Unshipped([string]$dest) {
     } elseif (-not (Test-Path -LiteralPath $md -PathType Leaf)) {
       continue
     } elseif ($mode -eq 'manifest') {
-      if (-not (Test-Path -LiteralPath (Join-Path $p $owned) -PathType Leaf)) { continue }
       if (-not (Test-OwnedIntact $p)) {
-        Write-Host "        kept $nm (modified since install) in $dest" -ForegroundColor Yellow
+        Write-Host "        kept $nm (modified or unverifiable since install) in $dest" -ForegroundColor Yellow
         continue
       }
     } else {
-      if ((Get-FmName $md) -cne $nm) { continue }
-      if ($legacyHashes -notcontains (Get-SkillHash $md)) { continue }
+      Write-Host "        kept $nm (modified or unverifiable legacy install) in $dest" -ForegroundColor Yellow
+      continue
     }
     if ($DryRun) {
       Write-Host "        would remove $nm ($why) from $dest"
@@ -471,6 +490,61 @@ function Write-Commands([string]$cli, [string]$dest) {
 # through a fake IDE CLI (F57), opencode's skills and commands (F67). Never touches the real HOME, profile or IDE. Costs one full
 # install per host dest on disk until it returns. Returns '' or the failure.
 function Invoke-SelfTest([string]$T) {
+  # A166: cleanup is confined to the isolated fixture root.
+  $fixture = Join-Path $T 'ownership'
+  $source = Join-Path $fixture 'source'
+  $dest = Join-Path $fixture 'dest'
+  New-Item -ItemType Directory -Force $source, $dest | Out-Null
+  [IO.File]::WriteAllText((Join-Path $source 'SKILL.md'), "skill`r`n")
+  [IO.File]::WriteAllText((Join-Path $source 'helper file'), "helper`n")
+  $names = @('edited', 'extra', 'missing', 'old', 'malformed', 'nul-marker', 'renamed', 'duplicate', 'traversal', 'untouched')
+  foreach ($name in $names) {
+    $copy = Join-Path $dest $name
+    if (-not ([IO.Path]::GetFullPath($copy).StartsWith($T + '\', [StringComparison]::OrdinalIgnoreCase))) { return 'unsafe A166 target' }
+    Copy-Item $source $copy -Recurse
+    Write-Owned $copy $source
+    if (-not (Test-SameContents $copy $source)) { return 'A166 identical copy mismatch' }
+    $marker = Join-Path $copy $owned
+    switch ($name) {
+      edited { [IO.File]::WriteAllText((Join-Path $copy 'helper file'), "edited`n") }
+      extra { [IO.File]::WriteAllText((Join-Path $copy 'user file'), '') }
+      missing { Remove-Item -LiteralPath (Join-Path $copy 'helper file') }
+      old { [IO.File]::WriteAllText($marker, "sha256 $(Get-SkillHash (Join-Path $copy 'SKILL.md'))`nfile SKILL.md`nfile helper file`n") }
+      malformed { [IO.File]::WriteAllText($marker, "skillator-owned 2`ninvalid`n") }
+      'nul-marker' { [IO.File]::WriteAllText($marker, [IO.File]::ReadAllText($marker).Replace('skillator-owned', ('skillator-owned' + [char]0)), (New-Object Text.UTF8Encoding $false)) }
+      renamed { Rename-Item -LiteralPath (Join-Path $copy 'helper file') -NewName ('hel' + [char]0xad + 'per file') }
+      untouched { [IO.File]::WriteAllText($marker, [IO.File]::ReadAllText($marker).Replace("`n", "`r`n"), (New-Object Text.UTF8Encoding $false)) }
+      duplicate { [IO.File]::AppendAllText($marker, ([IO.File]::ReadAllLines($marker)[-1] + "`n")) }
+      traversal { [IO.File]::AppendAllText($marker, ('file ' + ('0' * 64) + " ../outside`n")) }
+    }
+  }
+  if (Test-SameContents (Join-Path $dest 'edited') $source) { return 'A166 adopted edited helper' }
+  if (Test-SameContents (Join-Path $dest 'extra') $source) { return 'A166 adopted extra file' }
+  if (Test-SameContents (Join-Path $dest 'renamed') $source) { return 'A166 adopted renamed helper' }
+  [IO.File]::WriteAllText((Join-Path $dest $manifest), (($names -join "`n") + "`n"))
+  $shipped = @(); $DryRun = $true
+  $output = Remove-Unshipped $dest 6>&1 | Out-String
+  if ($output -notmatch 'would remove untouched ' -or ([regex]::Matches($output, 'would remove')).Count -ne 1) { return 'A166 dry-run ownership cleanup' }
+  foreach ($name in $names | Where-Object { $_ -ne 'untouched' }) {
+    if (-not (Test-Path -LiteralPath (Join-Path $dest $name)) -or -not $output.Contains("kept $name (modified or unverifiable")) { return "A166 dry-run retention for $name" }
+  }
+  $DryRun = $false
+  $output = Remove-Unshipped $dest 6>&1 | Out-String
+  if (Test-Path -LiteralPath (Join-Path $dest 'untouched')) { return 'A166 untouched copy kept' }
+  foreach ($name in $names | Where-Object { $_ -ne 'untouched' }) {
+    if (-not (Test-Path -LiteralPath (Join-Path $dest $name))) { return "A166 removed $name" }
+    if (-not $output.Contains("kept $name (modified or unverifiable")) { return "A166 missing explanation for $name" }
+  }
+  $legacy = @('legacy'); $dest = Join-Path $fixture 'legacy'
+  New-Item -ItemType Directory -Force $dest | Out-Null
+  Copy-Item $source (Join-Path $dest 'legacy') -Recurse
+  [IO.File]::WriteAllText((Join-Path $dest 'PLATFORMS.md'), '')
+  foreach ($DryRun in @($true, $false)) {
+    $output = Remove-Unshipped $dest 6>&1 | Out-String
+    if (-not $output.Contains('kept legacy')) { return 'A166 legacy explanation' }
+    if (-not (Test-Path -LiteralPath (Join-Path $dest 'legacy'))) { return 'A166 legacy removed' }
+  }
+  Remove-Item -LiteralPath $fixture -Recurse -Force
   $prof = Join-Path $T 'profile.ps1'
   foreach ($m in '.codex','.cursor','.gemini','.pi','.config\opencode') { New-Item -ItemType Directory -Force (Join-Path $T $m) | Out-Null }
   $env:HOME = $T; $env:USERPROFILE = $T; $env:CODEX_HOME = Join-Path $T '.codex'
@@ -989,7 +1063,7 @@ foreach ($cli in $targets.Keys) {
         if ($s.Name -in $linked -or $missing -contains $s) { continue }
         if (-not (Test-Path -LiteralPath (Join-Path $t 'SKILL.md') -PathType Leaf)) { continue }
         if (Test-Path -LiteralPath (Join-Path $t $owned)) { continue }
-        if ((Get-SkillHash (Join-Path $t 'SKILL.md')) -eq (Get-SkillHash (Join-Path $s.FullName 'SKILL.md'))) {
+        if (Test-SameContents $t $s.FullName) {
           Write-Owned $t $s.FullName
         }
       }

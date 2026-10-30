@@ -11,12 +11,11 @@
 # Antigravity skill-commands) from host-commands/<host>/, rewritten every run - see write_commands.
 # A96: a skill dir this script copies gets an ownership marker (.skillator-owned),
 # and each skills dir a manifest (.skillator-installed) of the skillator skills in it.
-# The marker records the SKILL.md hash and every file the installer placed. The next
+# The v2 marker records byte hashes for every installed file. The next
 # run removes a folder the manifest lists that the repo no longer ships - the fix for
 # renamed skills whose stale copies outrank the new ones - but only if it is still
 # exactly what was installed (or is a link into this repo); an edited one is kept. A dir with no manifest yet
-# (installed before A96) loses only an old skillator name (legacy below) whose
-# SKILL.md is byte-for-byte a version this repo once shipped. Nothing else is removed.
+# (installed before A96) is retained: a SKILL.md hash cannot prove helper contents.
 # Claude Code is left to its plugin install whenever one exists, --force included.
 # Skills already symlinked to this repo are left alone - they are always current.
 set -eu
@@ -143,25 +142,55 @@ fm_name() {
   tr -d '\r' < "$1" | sed -n '/^name:/{s/^name:[[:space:]]*//;s/[[:space:]]*$//;p;q;}'
 }
 
-# write_owned <dir> <srcdir>: the ownership marker - SKILL.md hash + files placed
+# Canonical byte hashes; reject links and names the line-based marker cannot represent.
+ownership_manifest() (
+  [ ! -L "$1" ] && [ -d "$1" ] || exit 1
+  cd "$1" || exit 1
+  _bad=$(find . -exec sh -c '
+    for f do
+      case "$f" in *"
+"*|*"$(printf "\r")"*|*\\*|*:*) echo invalid ;; esac
+      if [ -L "$f" ] || { [ ! -f "$f" ] && [ ! -d "$f" ]; }; then echo invalid; fi
+    done
+  ' sh {} +) || exit 1
+  [ -z "$_bad" ] || exit 1
+  _files=$(find . -type f ! -path "./$owned" | LC_ALL=C sort) || exit 1
+  printf 'skillator-owned 2\n'
+  printf '%s\n' "$_files" | while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    if command -v sha256sum >/dev/null 2>&1; then
+      _hash=$(sha256sum < "$_f") || exit 1
+    else
+      _hash=$(shasum -a 256 < "$_f") || exit 1
+    fi
+    _hash=${_hash%% *}
+    printf 'file %s %s\n' "$_hash" "${_f#./}"
+  done
+)
+
 write_owned() {
-  {
-    echo "sha256 $(skill_hash "$2/SKILL.md")"
-    (cd "$2" && find . ! -type d | sed 's#^\./##' | LC_ALL=C sort | sed 's#^#file #')
-  } > "$1/$owned"
+  if _marker=$(ownership_manifest "$2"); then
+    printf '%s\n' "$_marker" > "$1/$owned"
+  else
+    echo "        left $1 unowned (unverifiable contents)"
+  fi
 }
 
-# owned_intact <dir>: true only if SKILL.md still matches the marker's hash and no
-# file exists that the installer did not place. A marker with no hash never passes.
+# Comparing to a regenerated manifest rejects missing/extra files and malformed,
+# duplicate or unsafe records without ever opening a path supplied by the marker.
 owned_intact() {
-  _o="$1/$owned"
-  [ -f "$_o" ] || return 1
-  [ "$(sed -n 1p "$_o" | tr -d '\r')" = "sha256 $(skill_hash "$1/SKILL.md")" ] || return 1
-  _extra=$(cd "$1" && find . ! -type d | sed 's#^\./##' | while IFS= read -r _f; do
-    [ "$_f" = "$owned" ] && continue
-    tr -d '\r' < "$_o" | grep -qxF -- "file $_f" || echo "$_f"
-  done)
-  [ -z "$_extra" ]
+  [ -f "$1/$owned" ] && [ ! -L "$1/$owned" ] || return 1
+  _actual=$(ownership_manifest "$1" && printf '.') || return 1
+  # Shell variables cannot preserve NUL bytes; reject them before capture.
+  tr -d '\000' < "$1/$owned" | cmp -s "$1/$owned" - || return 1
+  _recorded=$(sed 's/\r$//' "$1/$owned" && printf '.') || return 1
+  [ "$_actual" = "$_recorded" ]
+}
+
+same_contents() {
+  _left=$(ownership_manifest "$1") || return 1
+  _right=$(ownership_manifest "$2") || return 1
+  [ "$_left" = "$_right" ]
 }
 
 # prune_dest <dest>: remove skillator skills this repo no longer ships (A96).
@@ -186,14 +215,13 @@ prune_dest() {
     elif [ ! -f "$_p/SKILL.md" ]; then
       continue
     elif [ "$_mode" = manifest ]; then
-      [ -f "$_p/$owned" ] || continue
       if ! owned_intact "$_p"; then
-        echo "        kept $_nm (modified since install) in $_pd"
+        echo "        kept $_nm (modified or unverifiable since install) in $_pd"
         continue
       fi
     else
-      [ "$(fm_name "$_p/SKILL.md")" = "$_nm" ] || continue
-      printf '%s\n' $legacy_hashes | grep -qxF -- "$(skill_hash "$_p/SKILL.md")" || continue
+      echo "        kept $_nm (modified or unverifiable legacy install) in $_pd"
+      continue
     fi
     if [ -n "$dry" ]; then
       echo "        would remove $_nm ($_why) from $_pd"
@@ -234,7 +262,7 @@ install_into() {
     if [ -f "$_dest/$_name/SKILL.md" ] && [ -z "$force" ]; then
       # adopt an unmarked copy that is exactly this repo's current skill
       if [ -z "$dry" ] && [ ! -f "$_dest/$_name/$owned" ] &&
-         [ "$(skill_hash "$_dest/$_name/SKILL.md")" = "$(skill_hash "$_s/SKILL.md")" ]; then
+         same_contents "$_dest/$_name" "${_s%/}"; then
         write_owned "$_dest/$_name" "${_s%/}"
       fi
       continue
@@ -474,6 +502,55 @@ native() {
 # the Antigravity IDE extension through a fake IDE CLI (F57), opencode (F67). Never touches the real HOME or IDE. Costs one full install per host dest on disk until it exits.
 if [ -n "$selftest" ]; then
   T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+  # A166: exercise cleanup only below this fixture, never a live profile.
+  (
+    fixture="$T/ownership"; src="$fixture/source"; dest="$fixture/dest"
+    mkdir -p "$src/two-file" "$dest"
+    printf 'skill\r\n' > "$src/two-file/SKILL.md"
+    printf 'helper\n' > "$src/two-file/helper file"
+    for name in edited extra missing old malformed nul-marker duplicate traversal untouched; do
+      target="$dest/$name"
+      case "$target" in "$T/ownership/"*) ;; *) exit 1 ;; esac
+      cp -R "$src/two-file" "$target"
+      write_owned "$target" "$src/two-file"
+      same_contents "$target" "$src/two-file" || exit 1
+      case "$name" in
+        edited) printf 'edited\n' > "$target/helper file" ;;
+        extra) touch "$target/user file" ;;
+        missing) rm "$target/helper file" ;;
+        old) printf 'sha256 %s\nfile SKILL.md\nfile helper file\n' "$(skill_hash "$target/SKILL.md")" > "$target/$owned" ;;
+        malformed) printf 'skillator-owned 2\ninvalid\n' > "$target/$owned" ;;
+        nul-marker) { printf 'skillator-owned\000 2\n'; tail -n +2 "$target/$owned"; } > "$fixture/nul-marker"; mv "$fixture/nul-marker" "$target/$owned" ;;
+        untouched) sed "s/$/$(printf '\r')/" "$target/$owned" > "$fixture/crlf-marker"; mv "$fixture/crlf-marker" "$target/$owned" ;;
+        duplicate) last=$(tail -1 "$target/$owned"); printf '%s\n' "$last" >> "$target/$owned" ;;
+        traversal) printf 'file %064d ../outside\n' 0 >> "$target/$owned" ;;
+      esac
+      printf '%s\n' "$name" >> "$dest/$manifest"
+    done
+    same_contents "$dest/edited" "$src/two-file" && exit 1
+    same_contents "$dest/extra" "$src/two-file" && exit 1
+    shipped=''
+    dry=1; output=$(prune_dest "$dest")
+    printf '%s\n' "$output" | grep -q 'would remove untouched ' || exit 1
+    [ "$(printf '%s\n' "$output" | grep -c 'would remove')" = 1 ] || exit 1
+    for name in edited extra missing old malformed nul-marker duplicate traversal; do
+      [ -d "$dest/$name" ] || exit 1
+      printf '%s\n' "$output" | grep -q "kept $name (modified or unverifiable" || exit 1
+    done
+    dry=''; prune_dest "$dest" > "$fixture/cleanup"
+    [ ! -e "$dest/untouched" ] || exit 1
+    for name in edited extra missing old malformed nul-marker duplicate traversal; do
+      [ -d "$dest/$name" ] || exit 1
+      grep -q "kept $name (modified or unverifiable" "$fixture/cleanup" || exit 1
+    done
+    legacy=legacy; mkdir -p "$fixture/legacy/legacy"
+    cp "$src/two-file/SKILL.md" "$fixture/legacy/legacy/SKILL.md"
+    touch "$fixture/legacy/PLATFORMS.md"
+    dry=1; prune_dest "$fixture/legacy" | grep -q 'kept legacy' || exit 1
+    dry=''; prune_dest "$fixture/legacy" | grep -q 'kept legacy' || exit 1
+    [ -d "$fixture/legacy/legacy" ] || exit 1
+  ) || { echo 'FAIL: A166 ownership cleanup'; exit 1; }
+  rm -rf "$T/ownership"
   mkdir -p "$T/.codex" "$T/.cursor" "$T/.gemini" "$T/.pi" "$T/.config/opencode"
   # F67: opencode's config dir is $XDG_CONFIG_HOME/opencode when that is set - never let
   # the selftest follow it out of the temp HOME
