@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ansi, frame, frameSegs, fit, cells, glyph, plain, paintScreen, screen } from '../draw'
-import { initial, onBoard, onMachine, onRuns, onUsage, reduce } from '../state'
+import { initial, onBoard, onMachine, onRuns, onUsage, openHelp, reduce } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
@@ -576,5 +576,93 @@ test('F122: Workflows tab action bar with compact action buttons and responsive 
     assert.ok(hit, `Hitbox found for key ${key}`)
   }
 })
+
+// ---- F127: Help & Skills Guide Viewer Drawing Tests ----
+
+test('F127: Help modal frame renders cleanly across 80, 60, 40 columns without breaking layout budget', () => {
+  const hState = openHelp(s).state
+  assert.ok(hState.help)
+
+  for (const cols of [80, 60, 40]) {
+    for (const rows of [24, 18, 12]) {
+      const f = sized({ ...hState, cols, rows })
+      assert.equal(f.length, rows)
+      for (const l of f) {
+        assert.ok(cells(l) <= cols, `Line exceeded ${cols} cells in ${cols}x${rows}: ${l}`)
+      }
+      const full = f.join('\n')
+      assert.match(full, /┌─ Help & Skills Guide/)
+      assert.match(full, /└─+┘/)
+    }
+  }
+
+  // 80 columns: check content formatting
+  const f80 = sized({ ...hState, cols: 80, rows: 24 })
+  const t80 = f80.join('\n')
+  assert.match(t80, /Filter: all \(\d+\)/)
+  assert.match(t80, /a11y-toph/)
+  assert.match(t80, /\[UI & Accessibility\]/)
+
+  // Selected skill in view
+  const fZordon = sized(openHelp(s, 'tickets-zordon').state)
+  assert.match(fZordon.join('\n'), /tickets-zordon/)
+  assert.match(fZordon.join('\n'), /\[Board & Tickets\]/)
+
+  // Keys line in list view
+  const keysLine = f80.find(l => l.includes('[enter doc]'))
+  assert.ok(keysLine, 'Found keys line with enter doc')
+  assert.match(keysLine!, /\[↑↓ move\] · \[enter doc\] · \[\/ filter\] · \[c copy ref\] · \[esc cancel\]/)
+})
+
+test('F127: Help documentation viewer rendering, setup.ps1 instructions, and scrolling', () => {
+  const hDoc = {
+    ...s,
+    cols: 80,
+    rows: 24,
+    help: {
+      selected: 'teams-uhura',
+      filter: '',
+      filtering: false,
+      expanded: true,
+      scroll: 0,
+    },
+  }
+
+  const f = sized(hDoc)
+  const full = f.join('\n')
+  assert.match(full, /┌─ Help · teams-uhura/)
+  assert.match(full, /Skill: +teams-uhura +\[Collaboration & Messages\]/)
+  assert.match(full, /Summary: +Microsoft Teams incoming\/outgoing webhook bridge/)
+  assert.match(full, /Usage Guide:/)
+  assert.match(full, /setup\.ps1/)
+
+  // At rows: 35 and cols: 80, the powershell launch command is in view cut cleanly with ellipsis
+  const fTall = sized({ ...hDoc, rows: 35 })
+  assert.match(fTall.join('\n'), /powershell -NoProfile -ExecutionPolicy Bypass -File plugin\/skills\/teams-u/)
+
+  // At cols: 120, the full powershell command fits without ellipsis
+  const fWide = sized({ ...hDoc, cols: 120, rows: 35 })
+  assert.match(fWide.join('\n'), /powershell -NoProfile -ExecutionPolicy Bypass -File plugin\/skills\/teams-uhura\/scripts\/setup\.ps1/)
+
+  // With scroll > 0, shows scroll indicator
+  const scrolled = sized({ ...hDoc, help: { ...hDoc.help!, scroll: 4 } })
+  assert.match(scrolled.join('\n'), /▲ \(4 lines above\)/)
+
+  // Keys line in doc view
+  const kLine = f.find(l => l.includes('[enter/esc back]'))
+  assert.ok(kLine, 'Found keys line with enter/esc back')
+  assert.match(kLine!, /\[enter\/esc back\]/)
+})
+
+test('F127: Mouse hitboxes in Help modal for skill rows', () => {
+  const hState = openHelp({ ...s, cols: 80, rows: 24 }).state
+  const sc = screen(hState, P)
+
+  // Find hitboxes for help-skill
+  const skillHits = sc.hits.filter(h => h.action.kind === 'help-skill')
+  assert.ok(skillHits.length > 0, 'Expected mouse hitboxes on skills in Help modal')
+  assert.ok(skillHits.some(h => (h.action as any).id === hState.help!.selected))
+})
+
 
 

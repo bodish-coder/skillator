@@ -10,8 +10,8 @@ import type { Seg as BaseSeg } from '../hooks/lib/bandlines'
 import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
-import type { State, PointerAction } from './state'
-import { activeUser, pointerModal, dialogLines, engageLines, formLines, reconcileLines, runsCursor, setupLines, teamRow, viewOf } from './state'
+import type { State, PointerAction, SkillGuide } from './state'
+import { activeUser, pointerModal, dialogLines, engageLines, filteredSkills, formLines, reconcileLines, runsCursor, setupLines, SKILLS, teamRow, viewOf } from './state'
 import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { assignedTickets, buildModel, chipsOf, decideTickets, headKey, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -184,6 +184,9 @@ function keysOf(s: State, m: Model): Seg[][] {
     dim(' / '),
     { text: 'shift-tab field]', dim: true, action: { kind: 'key', key: { name: 'tab', shift: true } } },
   ]
+  if (s.help?.filtering) return [[dim('type filter')], h('enter apply', 'return'), cancel]
+  if (s.help?.expanded) return [move, h('enter/esc back', 'return'), h('/ filter', '/'), h('c copy ref', 'c'), cancel]
+  if (s.help) return [move, h('enter doc', 'return'), h('/ filter', '/'), h('c copy ref', 'c'), cancel]
   if (s.setup?.confirmClear) return [h('y clear', 'y'), h('n cancel', 'n')]
   if (s.setup) return [field, h('space on/off', 'space'), h('enter save', 'return'), cancel]
   if (s.person) return [field, h('enter add', 'return'), cancel]
@@ -675,13 +678,136 @@ function tailLines(s: State): Seg[][] {
   return out
 }
 
+// --- F127: Help & Skills Guide Viewer ---
+
+export function skillDocLines(sk: SkillGuide, inner: number): { text: string; segs?: Seg[] }[] {
+  const lines: { text: string; segs?: Seg[] }[] = []
+  lines.push({ text: `Skill: ${sk.id} [${sk.category}]`, segs: [{ text: 'Skill: ', dim: true }, { text: sk.id, bold: true }, { text: `  [${sk.category}]`, color: 'suggestion' }] })
+  if (sk.aliases.length) {
+    lines.push({ text: `Aliases: ${sk.aliases.join(', ')}`, segs: [{ text: 'Aliases: ', dim: true }, { text: sk.aliases.join(', ') }] })
+  }
+  lines.push({ text: `Summary: ${sk.summary}`, segs: [{ text: 'Summary: ', dim: true }, { text: sk.summary }] })
+  lines.push({ text: '─'.repeat(Math.max(4, Math.min(inner, 48))) })
+  lines.push({ text: 'Triggers (when to use):', segs: [{ text: 'Triggers:', bold: true }] })
+  for (const tr of sk.triggers) {
+    lines.push({ text: `  • ${tr}`, segs: [{ text: '  • ', dim: true }, { text: tr }] })
+  }
+  lines.push({ text: '' })
+  lines.push({ text: 'Usage Guide:', segs: [{ text: 'Usage Guide:', bold: true }] })
+  for (const u of sk.usage.split('\n')) {
+    lines.push({ text: `  ${u}` })
+  }
+  if (sk.examples.length) {
+    lines.push({ text: '' })
+    lines.push({ text: 'Examples & Invocations:', segs: [{ text: 'Examples & Invocations:', bold: true }] })
+    for (const ex of sk.examples) {
+      lines.push({ text: `  ${ex}`, segs: [{ text: '  ', dim: true }, { text: ex, color: 'success' }] })
+    }
+  }
+  return lines
+}
+
+export function helpBody(s: State, room: number): Seg[][] {
+  const h = s.help
+  if (!h || room <= 0) return []
+  if (room <= 2) return [[{ text: 'Help & Skills Guide', bold: true }]]
+  const inner = Math.max(4, s.cols <= 40 ? s.cols - 2 : Math.min(s.cols - 4, 116))
+  const pad = s.cols - inner - 2 >= 2 ? '  ' : s.cols - inner - 2 >= 1 ? ' ' : ''
+  const skills = filteredSkills(h.filter)
+  const avail = Math.max(0, room - 2)
+
+  const topTitle = cut(h.expanded ? `Help · ${h.selected}` : `Help & Skills Guide (${skills.length} skills)`, Math.max(1, inner - 4))
+  const topSegs: Seg[] = [
+    { text: pad + '┌─ ' },
+    { text: topTitle, bold: true },
+    { text: ' ' + '─'.repeat(Math.max(0, inner - cells(topTitle) - 3)) + '┐' },
+  ]
+  const botSegs: Seg[] = [{ text: pad + '└' + '─'.repeat(inner) + '┘' }]
+
+  const contentRows: { segs: Seg[] }[] = []
+
+  if (h.expanded) {
+    const sk = skills.find(x => x.id === h.selected) ?? SKILLS.find(x => x.id === h.selected)
+    if (!sk) {
+      contentRows.push({ segs: [{ text: `Skill not found: ${h.selected}`, color: 'error' }] })
+    } else {
+      const doc = skillDocLines(sk, inner)
+      const maxScroll = Math.max(0, doc.length - avail)
+      const scroll = Math.min(h.scroll, maxScroll)
+      const windowed = doc.slice(scroll, scroll + avail)
+      windowed.forEach((row, i) => {
+        if (i === 0 && scroll > 0) {
+          contentRows.push({ segs: [dim(`▲ (${scroll} lines above)`)] })
+        } else if (i === windowed.length - 1 && scroll + avail < doc.length) {
+          contentRows.push({ segs: [dim(`▼ (${doc.length - scroll - avail} lines below · use ↑/↓ to scroll)`)] })
+        } else {
+          contentRows.push({ segs: row.segs ?? [{ text: row.text }] })
+        }
+      })
+    }
+  } else {
+    // List view
+    const filterText = h.filtering
+      ? `Filter: ${h.filter}_`
+      : h.filter
+      ? `Filter: "${h.filter}" (${skills.length})`
+      : `Filter: all (${skills.length})`
+    const hintText = h.filtering ? 'Enter apply · Esc cancel' : '/ filter · Enter doc'
+    const filterSegs: Seg[] = spread(
+      [{ text: filterText, bold: h.filtering, color: h.filtering ? 'suggestion' : undefined, action: { kind: 'help-skill', id: h.selected } }],
+      [dim(hintText)],
+      inner
+    )
+    contentRows.push({ segs: filterSegs })
+
+    const listRoom = Math.max(0, avail - 1)
+    if (!skills.length) {
+      contentRows.push({ segs: [{ text: `  No skills matching "${h.filter}"`, color: 'warning' }] })
+    } else {
+      const selIdx = Math.max(0, skills.findIndex(x => x.id === h.selected))
+      const top = Math.max(0, Math.min(skills.length - listRoom, selIdx - Math.floor(listRoom / 2)))
+      const slice = skills.slice(top, top + listRoom)
+      slice.forEach(sk => {
+        const isSel = sk.id === h.selected
+        const catStr = `[${sk.category}]`
+        const aliasStr = sk.aliases.length ? `(${sk.aliases[0]})` : ''
+        const lead = `${isSel ? '› ' : '  '}${sk.id.padEnd(17)} `
+        const meta = `${catStr.padEnd(20)} ${aliasStr.padEnd(10)} `
+        const rem = inner - cells(lead) - cells(meta)
+        const summary = rem > 5 ? cut(sk.summary, rem) : ''
+        const rowSegs: Seg[] = [
+          { text: lead, bold: isSel, inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+          { text: catStr.padEnd(20), color: 'suggestion', inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+          { text: (aliasStr.padEnd(10) + ' ' + summary).trimEnd(), dim: !isSel, inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+        ]
+        contentRows.push({ segs: rowSegs })
+      })
+    }
+  }
+
+  const out: Seg[][] = [topSegs]
+  for (let i = 0; i < avail; i++) {
+    const row = contentRows[i]
+    if (row) {
+      const content = fitSegs(row.segs, inner)
+      const w = width(content)
+      out.push([{ text: pad + '│' }, ...content, { text: ' '.repeat(Math.max(0, inner - w)) + '│' }])
+    } else {
+      out.push([{ text: pad + '│' + ' '.repeat(inner) + '│' }])
+    }
+  }
+  out.push(botSegs)
+  return out
+}
+
 function bodyOf(s: State, m: Model, h: number): Seg[][] {
   const tail = tailLines(s).slice(0, Math.floor(h / 2))
   const block = tail.length && h - tail.length >= 2 ? [[], ...tail] : tail
   const room = h - block.length
   const [recTitle = '', ...recRows] = reconcileLines(s)    // F81: [] with no reconcile box up
   const [engTitle = '', ...engRows] = engageLines(s)       // F85: [] with no engage box up
-  const main = s.setup ? setupBody(s)
+  const main = s.help ? helpBody(s, room)
+    : s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
     : s.reconcile ? boxBody(s, { title: recTitle, rows: recRows.map((text, index) => ({ text, action: { kind: 'reconcile' as const, index } })) })   // F81

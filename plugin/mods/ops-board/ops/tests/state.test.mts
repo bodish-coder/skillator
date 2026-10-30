@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser } from '../state'
+import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser, openHelp, filteredSkills, SKILLS } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
@@ -863,6 +863,141 @@ test('F122: Workflows tab action bar operations (m mode, r rerun, p push pending
   const ptMode = point(s, { kind: 'key', key: { name: 'm' } })
   assert.equal(ptMode.state.runMode, 'sequential')
 })
+
+// ---- F127: Help & Skills Guide Viewer ----
+
+test('F127: ? and 7 keys open Help modal with 31+ installed skills; Esc dismisses it', () => {
+  assert.equal(s0.help, null)
+  assert.ok(SKILLS.length >= 31, `Expected at least 31 skills, got ${SKILLS.length}`)
+
+  // ? key opens help
+  const sHelp = reduce(s0, { name: '?' }).state
+  assert.ok(sHelp.help)
+  assert.equal(sHelp.help!.selected, SKILLS[0]!.id)
+  assert.equal(sHelp.help!.expanded, false)
+  assert.equal(sHelp.help!.filter, '')
+
+  // Esc dismisses help
+  const sEsc = reduce(sHelp, { name: 'escape' }).state
+  assert.equal(sEsc.help, null)
+
+  // 7 key opens help
+  const s7 = reduce(s0, { name: '7' }).state
+  assert.ok(s7.help)
+
+  // ? sequence opens help
+  const sSeq = reduce(s0, { name: '', sequence: '?' }).state
+  assert.ok(sSeq.help)
+})
+
+test('F127: list navigation with up/down/j/k and Enter to expand doc viewer', () => {
+  let s = reduce(s0, { name: '?' }).state
+  assert.ok(s.help)
+  assert.equal(s.help!.selected, SKILLS[0]!.id)
+
+  // j / down moves down
+  s = reduce(s, { name: 'j' }).state
+  assert.equal(s.help!.selected, SKILLS[1]!.id)
+  s = reduce(s, { name: 'down' }).state
+  assert.equal(s.help!.selected, SKILLS[2]!.id)
+
+  // k / up moves up
+  s = reduce(s, { name: 'k' }).state
+  assert.equal(s.help!.selected, SKILLS[1]!.id)
+  s = reduce(s, { name: 'up' }).state
+  assert.equal(s.help!.selected, SKILLS[0]!.id)
+
+  // Enter expands doc viewer
+  s = reduce(s, { name: 'return' }).state
+  assert.equal(s.help!.expanded, true)
+  assert.equal(s.help!.scroll, 0)
+
+  // Scrolling in doc viewer
+  s = reduce(s, { name: 'down' }).state
+  assert.equal(s.help!.scroll, 1)
+  s = reduce(s, { name: 'j' }).state
+  assert.equal(s.help!.scroll, 2)
+  s = reduce(s, { name: 'k' }).state
+  assert.equal(s.help!.scroll, 1)
+
+  // Enter or Esc in doc viewer collapses back to list
+  s = reduce(s, { name: 'return' }).state
+  assert.equal(s.help!.expanded, false)
+  assert.equal(s.help!.scroll, 0)
+})
+
+test('F127: fast keyboard filtering (/) searches skills, backspace edits, Enter finishes filter', () => {
+  let s = reduce(s0, { name: '?' }).state
+  assert.ok(s.help)
+
+  // / starts filtering mode
+  s = reduce(s, { name: '/' }).state
+  assert.equal(s.help!.filtering, true)
+
+  // Type 'zordon'
+  for (const ch of 'zordon') {
+    s = reduce(s, { name: ch, sequence: ch }).state
+  }
+  assert.equal(s.help!.filter, 'zordon')
+  assert.equal(s.help!.selected, 'tickets-zordon')
+  const filtered = filteredSkills(s.help!.filter)
+  assert.equal(filtered.length, 1)
+  assert.equal(filtered[0]!.id, 'tickets-zordon')
+
+  // Backspace removes character
+  s = reduce(s, { name: 'backspace' }).state
+  assert.equal(s.help!.filter, 'zordo')
+
+  // Enter finishes filtering mode and leaves filter active
+  s = reduce(s, { name: 'return' }).state
+  assert.equal(s.help!.filtering, false)
+  assert.equal(s.help!.filter, 'zordo')
+
+  // Enter again expands the selected skill's doc
+  s = reduce(s, { name: 'return' }).state
+  assert.equal(s.help!.expanded, true)
+
+  // c copies quick reference toast
+  s = reduce(s, { name: 'c' }).state
+  assert.match(s.toast ?? '', /Copied reference: skillator:tickets-zordon/)
+
+  // Esc in doc view goes back to list
+  s = reduce(s, { name: 'escape' }).state
+  assert.equal(s.help!.expanded, false)
+
+  // Next Esc closes help
+  s = reduce(s, { name: 'escape' }).state
+  assert.equal(s.help, null)
+})
+
+test('F127: teams-uhura doc includes setup.ps1 wizard launch instructions', () => {
+  let s = openHelp(s0, 'teams-uhura').state
+  assert.equal(s.help!.selected, 'teams-uhura')
+  const sk = SKILLS.find(x => x.id === 'teams-uhura')!
+  assert.ok(sk.usage.includes('setup.ps1'))
+  assert.ok(sk.examples.some(e => e.includes('setup.ps1')))
+  assert.ok(sk.examples.some(e => e.includes('--check')))
+})
+
+test('F127: mouse point actions (help, help-skill, help-close)', () => {
+  // Click 'help' toggles open
+  let s = point(s0, { kind: 'help' }).state
+  assert.ok(s.help)
+
+  // Click on a skill selects it
+  s = point(s, { kind: 'help-skill', id: 'relay-morpheus' }).state
+  assert.equal(s.help!.selected, 'relay-morpheus')
+  assert.equal(s.help!.expanded, false)
+
+  // Clicking the same skill again expands it
+  s = point(s, { kind: 'help-skill', id: 'relay-morpheus' }).state
+  assert.equal(s.help!.expanded, true)
+
+  // Click 'help-close' closes help
+  s = point(s, { kind: 'help-close' }).state
+  assert.equal(s.help, null)
+})
+
 
 
 
