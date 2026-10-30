@@ -1213,40 +1213,6 @@ export const SKILLS: SkillGuide[] = [
     ]
   },
   {
-    "id": "build-ultron",
-    "name": "build-ultron",
-    "category": "Build & Feature",
-    "aliases": [
-      "ultron (retired, -> jarvis)"
-    ],
-    "summary": "Retired build skill; redirects to build-jarvis with opus-only mode",
-    "triggers": [
-      "build-ultron"
-    ],
-    "usage": "Use only when the user names \"build-ultron\" itself. A retired name, kept for one release so old prompts and docs still resolve; it points at build-jarvis.",
-    "examples": [
-      "/skillator:build-ultron",
-      "/skillator:ultron (retired, -> jarvis)"
-    ]
-  },
-  {
-    "id": "build-vision",
-    "name": "build-vision",
-    "category": "Build & Feature",
-    "aliases": [
-      "vision (retired, -> jarvis)"
-    ],
-    "summary": "Retired build skill; redirects to build-jarvis with full ceremony",
-    "triggers": [
-      "build-vision"
-    ],
-    "usage": "Use only when the user names \"build-vision\" itself. A retired name, kept for one release so old prompts and docs still resolve; it points at build-jarvis.",
-    "examples": [
-      "/skillator:build-vision",
-      "/skillator:vision (retired, -> jarvis)"
-    ]
-  },
-  {
     "id": "chief-fury",
     "name": "chief-fury",
     "category": "Workflow & Orchestration",
