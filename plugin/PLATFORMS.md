@@ -8,6 +8,150 @@ default; translate through the row for your host.
 **If this file isn't reachable** (skill copied out on its own), assume the
 `claude-code` row and say so once.
 
+## Capability evidence
+
+This is the canonical support ledger, reviewed **2026-10-31**. The mechanics
+below describe intended routes, not a blanket support guarantee. A level applies
+only to its row, version and observation:
+
+- **implemented**: committed adapter/template exists; host execution is unverified.
+- **tested with stubs**: offline fixtures exercise that implementation; no real
+  host, phone pairing, model loading or hook trust is implied.
+- **verified live**: a recorded real-host observation, including headless or
+  scripted PTY runs, limited to the capability named. It is historical evidence,
+  not a claim about today's installed version.
+- **unverified gap / not implemented**: no qualifying evidence or no adapter.
+
+Dates on implemented/stub rows are this source review date, not a new test run.
+`unknown` means the host CLI version was not recorded for that evidence. Local
+tests, schema/help inspection and model self-reports cannot establish live support.
+Windows Git sh evidence is not native Linux/macOS evidence. F137 inventory,
+F138 parity fixtures and F141's validation runner test repository behavior;
+they do not upgrade any host row. F140's shared-source generator is still pending
+Q1 and is not implemented. The RUN-0027 full registry on detached `c4dd648` was
+still running at this review; no full-suite pass is claimed here.
+
+### Skill discovery and loading
+
+Implementation: [skills](skills/), [shell installer](install.sh),
+[PowerShell installer](install.ps1). Discovery means inventory/path visibility;
+loading means an observed read/use of a skill body. Neither proves commands,
+delegation, remote pairing, or hooks.
+
+| Host / capability | Level | CLI version; evidence date | Evidence and limitation |
+|---|---|---|---|
+| Claude Code / description-triggered loading | verified live | 2.1.261; 2026-09-06 | [A57 record](practice/baselines/README.md): seven headless loads; not every skill or newer version. |
+| Codex / description-triggered loading | verified live | 0.153.2; 2026-09-06 | [actual skill read](practice/baselines/transcripts/a62-codex-grayskull2.jsonl), from `~/.agents/skills`; does not prove today's installer destination. |
+| Cursor / description-triggered loading | verified live | 2026.09.18; 2026-09-23 | [actual skill read](practice/baselines/transcripts/a62b-cursor-grayskull.jsonl), user-level skills; project discovery remained unconfirmed. |
+| agy / description-triggered loading | verified live | 1.2.9; 2026-09-24 | [actual skill read](practice/baselines/transcripts/a62c-agy-grayskull.jsonl), project `.agents/skills`; stale user copies affected other probes. |
+| Pi / description-triggered loading | verified live | 0.74.2; 2026-09-23 | [actual skill read](practice/baselines/transcripts/a62b-pi-grayskull.jsonl), isolated project `.pi/skills`; other discovery paths not exercised. |
+| Gemini CLI / discovery and loading | implemented | unknown; 2026-10-31 | Installers write Gemini paths; no committed model-loading observation identified. agy evidence does not apply. |
+| Muse / plugin discovery | implemented; unverified live evidence gap | 1.4.12 / 1.4.13 reported; 2026-10-24 / 26 | [manifest](.muse-plugin/plugin.json); historical scratch-install observations below have no linked raw run record. Auto-loading unverified. |
+| OpenCode / skill discovery | implemented; unverified live evidence gap | 1.19.4 reported; 2026-10-24 | Installers and historical `debug skill` observation below; no linked raw run record or model-loading evidence. |
+| Prime Agent / manual skill reading | unverified gap | unknown; 2026-10-31 | [router instructions](skills/grayskull-power/SKILL.md); no markdown loader adapter or recorded host run. |
+| Claude Code / always-on router | verified live | 2.1.261; 2026-09-06 | [A57 record](practice/baselines/README.md), fixture pointer loaded router first. |
+| Cursor / always-on router | implemented | unknown; 2026-10-31 | [router](skills/grayskull-power/SKILL.md); no separate startup-loading probe. |
+| Codex / always-on router | implemented | unknown; 2026-10-31 | [router](skills/grayskull-power/SKILL.md); no separate startup-loading probe. |
+| agy / always-on router | implemented | unknown; 2026-10-31 | [router](skills/grayskull-power/SKILL.md); no separate startup-loading probe. |
+| Gemini CLI / always-on router | implemented | unknown; 2026-10-31 | [router](skills/grayskull-power/SKILL.md); no separate startup-loading probe. |
+| Pi / always-on router | implemented | unknown; 2026-10-31 | [router](skills/grayskull-power/SKILL.md); no separate startup-loading probe. |
+| Muse / always-on router | unverified gap | unknown; 2026-10-31 | No startup-loading evidence identified. |
+| OpenCode / always-on router | unverified gap | unknown; 2026-10-31 | No startup-loading evidence identified. |
+| Prime Agent / always-on router | unverified gap | unknown; 2026-10-31 | Manual `AGENTS.md` route only; never exercised here. |
+
+### Generated commands and execution
+
+Implementation is [commands](commands/), [host templates](host-commands/) and
+the two installers above. Offline generation/substitution does not prove host
+expansion or correct model output. The command list below remains the interface;
+unlisted commands in a tested host are **implemented, live unverified**.
+
+| Host / capability | Level | CLI version; evidence date | Evidence and limitation |
+|---|---|---|---|
+| Claude Code / namespaced command expansion | verified live | 2.1.308; 2026-10-22 | [host-command record](practice/baselines/green-host-commands-f54-f58-f59.txt): engage/archive expand; bare engage did not in headless mode, and expansion did not guarantee the expected engage output. |
+| Cursor / pending, engage, archive expansion | verified live | 2026.10.19-6bbf2c4; 2026-10-22 | [host-command record](practice/baselines/green-host-commands-f54-f58-f59.txt): pending used user-level command; engage/archive used project commands. Picker still unverified. |
+| Pi / pending and engage expansion | verified live | 0.74.2; 2026-10-22 | [host-command record](practice/baselines/green-host-commands-f54-f58-f59.txt): prompt-template expansion; archive failed that run, so no blanket command pass. |
+| agy / engage, bare engage and routing | verified live | 1.4.7; 2026-10-26 | [A149 r6-r10](practice/baselines/green-agy-engage-skills.txt); pending required sandbox bypass, later local fix not re-run inside agy; polluted r12/r13 excluded. A149 remains testing. |
+| Codex / project-local engage and pending skills | verified live | 0.164.0; 2026-10-26 | [A149 c2/c3/c5](practice/baselines/green-agy-engage-skills.txt), `.agents/skills` only; not installed `$CODEX_HOME/skills`. Historical sandbox writes occurred despite read-only mode. |
+| Codex / installed command discovery and loading protocol | tested with stubs | unknown (stub executable); 2026-10-31 | [F139 harness](practice/scripts/codex-isolation.mjs), [tests](practice/scripts/codex-isolation.test.mjs): isolated install/native-protocol checks, not actual Codex. F90 and A149 live owner checks remain. |
+| Gemini CLI / generated TOML expansion | implemented | 0.57.0 attempted; 2026-10-22 | [host-command record](practice/baselines/green-host-commands-f54-f58-f59.txt): authentication blocked execution; syntax/help inspection is not live expansion. |
+| OpenCode / generated Markdown commands | implemented | 1.19.4 reported; 2026-10-24 | [templates](host-commands/opencode/); debug-config inventory described below, no model execution or picker evidence. |
+| Muse / commands | not implemented | unknown; 2026-10-31 | [manifest](.muse-plugin/plugin.json) has no commands; use skills, with loading gap above. |
+| Prime Agent / commands | not implemented | unknown; 2026-10-31 | No command adapter; manual skill route only. |
+
+### Usage hooks and trust
+
+Implementation: [watch-cortana hooks](skills/watch-cortana/hooks/). Installing a
+hook, discovering its config, trusting it, executing it and seeing a continuation
+are separate observations. No remote-pairing result proves any of these.
+
+| Host / capability | Level | CLI version; evidence date | Evidence and limitation |
+|---|---|---|---|
+| Claude Code / usage reader and Stop gate | implemented | unknown; 2026-10-31 | [PowerShell selftest](skills/watch-cortana/hooks/selftest.ps1); local fixtures do not establish current host hook execution/trust. |
+| Codex / usage reader and Stop continuation | verified live | 0.156.1; 2026-09-24 | [A83](practice/baselines/green-codex-stop-gate.txt): real rollout, silent default, forced block and loop guard. Historical run bypassed hook trust; it does **not** verify normal trust onboarding. |
+| Codex / installed hook inventory and trust reporting | tested with stubs | unknown (stub executable); 2026-10-31 | [F139 tests](practice/scripts/codex-isolation.test.mjs), [native probe](practice/scripts/codex-native-probe.mjs); actual trusted discovery/execution remains unverified. |
+| Cursor / turn-end injection and quota | unverified gap | unknown; 2026-10-31 | Manual watch `check` fallback; no readable quota source or live injection evidence identified. |
+| agy / turn-end injection and quota | unverified gap | unknown; 2026-10-31 | Manual watch `check` fallback; Gemini hook documentation is not agy evidence. |
+| Gemini CLI / AfterAgent injection and quota | unverified gap | unknown; 2026-10-31 | Remote attach hook below is separate from usage monitoring; no live usage/trust evidence. |
+| Pi / usage injection and quota | not implemented | unknown; 2026-10-31 | No usage adapter; manual checks cannot manufacture quota data. |
+| Muse / usage injection and quota | not implemented | unknown; 2026-10-31 | Claude ops-board hook format is not a Muse hook adapter. |
+| OpenCode / usage injection and quota | unverified gap | unknown; 2026-10-31 | No tested usage/trust adapter identified. |
+| Prime Agent / usage injection and quota | not implemented | unknown; 2026-10-31 | No usage adapter or host run. |
+
+### Board rendering and launching
+
+| Host / capability | Level | CLI/runtime version; evidence date | Implementation, evidence and limitation |
+|---|---|---|---|
+| Claude Code / pane, band and actions | tested with stubs | unknown; 2026-10-31 | [mod hooks](mods/ops-board/hooks/), [mounted tests](mods/ops-board/tests/); mocked host/event chains, not physical keyboard/mouse. B15/B17 owner checks remain. |
+| Pi / ops overlay | verified live | 0.74.2; 2026-10-22 | [extension](mods/ops-board/pi/index.ts), [scripted ConPTY record](practice/baselines/green-pi-ops-f56.txt); real Pi UI, no model call or human visual inspection. |
+| Antigravity IDE / webview and one-frame command | tested with stubs | IDE 1.107.0 reported; run date unknown | [extension](mods/ops-board/antigravity/extension.cjs), [tests](mods/ops-board/antigravity/tests/ops.test.mts); historical headless activation below has no linked run record. Live owner panel check remains. |
+| Codex / `$ops` launch | implemented | unknown; 2026-10-31 | [ops skill template](host-commands/antigravity/ops/SKILL.md), F139 installer fixture; F105 real-session board opening remains unverified. |
+| agy / `/ops` launch | implemented | unknown; 2026-10-31 | [ops skill template](host-commands/antigravity/ops/SKILL.md); no recorded real-session launch. |
+| Standalone Windows terminal / rendering and launcher | verified live | Node 22.23.2, PowerShell 5.1, Git sh version unknown; 2026-10-22 | [app](mods/ops-board/ops/), [scripted ConPTY record](practice/baselines/green-ops-standalone-f55.txt); no human window inspection, native POSIX or `--open` tab verification implied. |
+| Cursor / external board | implemented | unknown; 2026-10-31 | [launchers](mods/ops-board/ops/); standalone evidence above, no Cursor pane or host-triggered launch proof. |
+| Gemini CLI / external board | implemented | unknown; 2026-10-31 | [launchers](mods/ops-board/ops/); no host-integrated rendering proof. |
+| OpenCode / external board | implemented | unknown; 2026-10-31 | [launchers](mods/ops-board/ops/); no native pane. |
+| Muse / external board | implemented | unknown; 2026-10-31 | [launchers](mods/ops-board/ops/); Claude mod skipped, no native pane. |
+| Prime Agent / external board | unverified gap | unknown; 2026-10-31 | Standalone app exists; no Prime Agent install/launch run. |
+| Standalone / profile quota status | implemented | unknown; 2026-10-31 | [status reader](mods/ops-board/ops/status.ts), [fixtures](mods/ops-board/ops/tests/quota-profile.test.mts); Claude/Codex sources only, unavailable values stay unavailable. |
+
+### Remote routes
+
+Implementation: [bridge/supervisor](skills/remote-cerebro/hooks/cerebro-bridge.mjs),
+[core](skills/remote-cerebro/hooks/cerebro-core.mjs). Evidence:
+[offline selftests](skills/remote-cerebro/hooks/cerebro-selftest.mjs) and
+[stub executables](skills/remote-cerebro/hooks/stubs/). All stub rows below are
+reviewed 2026-10-31 with real CLI version **unknown**. The older surface versions
+in the [route notes](skills/remote-cerebro/references/hosts.md) are help/schema
+observations, not versions verified by these tests. [F34](practice/baselines/green-cerebro.txt)
+tests the skill's decisions with restrictions/stubs, not real phone pairing.
+
+| Host / capability | Level | Evidence and limitation |
+|---|---|---|
+| Codex / native remote supervisor | tested with stubs | Native lifecycle fixtures; Windows QR/pairing and enforcement on phone-created threads remain unverified. |
+| Codex / app-server bridge | tested with stubs | Protocol/approval fixtures; no real host round trip or phone pairing. |
+| Cursor / native worker supervisor | tested with stubs | Native lifecycle fixtures; Windows worker, plan entitlement and mobile selection unverified. |
+| Cursor / ACP bridge | tested with stubs | ACP fixtures; real permission/read-gating proof required before arm. |
+| Cursor / attach followup hook | unverified gap | v2 route note only; no live CLI hook support established. |
+| Pi / RPC bridge | tested with stubs | RPC fixtures; real session/phone integration unverified. |
+| Pi / launched-session attach | tested with stubs | [extension](skills/remote-cerebro/hooks/pi-cerebro.ts), mock Pi API; cannot adopt an arbitrary existing session. |
+| Gemini CLI / ACP bridge | tested with stubs | ACP fixtures; real permission/read-gating proof required before arm. |
+| Gemini CLI / AfterAgent attach | implemented | [hook](skills/remote-cerebro/hooks/gemini-afteragent.mjs); disabled v2 route, real feed unverified; cannot answer approvals from phone. |
+| Gemini CLI / native remote | not implemented | No native route in this adapter; no claim about later vendor releases. |
+| agy / native remote supervisor | tested with stubs | Native lifecycle fixtures. Route notes report arm/teardown on 1.4.2, 2026-10-19, but no linked durable live record; pairing and phone-side mode enforcement remain gaps. |
+| Claude Code / remote | not implemented here | Vendor Remote Control is outside remote-cerebro; no support claim from this repo. |
+| Muse / remote | not implemented | No adapter or recorded run. |
+| OpenCode / remote | not implemented | No adapter or recorded run. |
+| Prime Agent / remote | not implemented | No adapter or recorded run. |
+
+Tier selection, delegation, context checkpoint and memory rows below are
+translation guidance. For **each host**, these additional mechanics have an
+**unverified gap** (CLI version unknown, reviewed 2026-10-31) unless a specific
+run is cited: there is no general compatibility test behind that table. A skill
+read does not prove that its later delegation/workflow ran. Keep F90, F105 and
+A149 in testing until their remaining owner checks pass; historical A149
+project-local success and F139 stubs do not close installed-profile gaps.
+
 ## Role tiers
 
 These four names are the **only** tier vocabulary skillator uses. `PRACTICE.md`
@@ -58,6 +202,11 @@ Ambiguous → ask once. The user can override with `platform: <host>`.
 
 ## The table
 
+Mechanics reference only: consult the [capability evidence](#capability-evidence)
+above for support. Historical `verified` tags below may mean path/schema
+inspection or an old headless probe; they are not the `verified live` level.
+Where a historical summary differs, the capability ledger takes precedence.
+
 | | claude-code | cursor | codex | antigravity | pi | prime-agent |
 |---|---|---|---|---|---|---|
 | **Skill install path** | `~/.claude/skills/<n>/` or plugin cache | `.cursor/skills/<n>/`, `.agents/skills/<n>/`, global `~/.cursor/skills/`, `~/.agents/skills/` (nested dirs too) | `$CODEX_HOME/skills/<n>/`, `~/.agents/skills/<n>/` (both load with no dedupe on 0.155.1, probed 2026-09-23; 0.153.2 read only `~/.agents/skills` (A62a); the installer writes only `$CODEX_HOME/skills`) | `<ws>/.agents/skills/<n>/`, global `~/.gemini/skills/<n>/` (read by Gemini CLI 0.57; also reads `~/.agents/skills/`, where a same-named copy wins; `~/.gemini/config/skills/` is not read by the CLI, probed 2026-09-23); the installer also writes `~/.gemini/config/skills/<n>/` for Antigravity's own docs, and `~/.gemini/antigravity-cli/skills/<n>/`, the global dir `agy` 1.4.5 reads (B8, 2026-10-23) | `~/.pi/agent/skills/<n>/`, `~/.agents/skills/<n>/`, `.pi/skills/<n>/` (project-level only; the global `~/.pi/skills/` is not read, probed on pi 0.74) | no markdown-skill loader — see below |
@@ -80,7 +229,8 @@ harmless, never load-bearing.
 
 The "Load another skill" row says how a skill *can* be loaded. Whether the host
 loads one **unprompted**, from the description alone, is a separate question.
-Five rows have now been tested; prime-agent has no loader to test.
+Five hosts have historical loading probes; use the ledger for each path/version
+and the explicit gaps for other hosts.
 
 | Host | Fires on description alone? |
 |---|---|
@@ -270,11 +420,11 @@ updated with `git pull --ff-only` only.
 | gemini CLI | `~/.gemini/commands/<n>.toml`, `!{...}` shell injection, `{{args}}` | verified (dir, `!{`, `{{args}}`) |
 | antigravity | skills, `/<n>` in `agy`; all three dests `~/.gemini/config/skills/`, `~/.gemini/skills/` and `~/.gemini/antigravity-cli/skills/` (agy 1.4.5's global dir, B8) | verified (a skill is a slash command) |
 | pi | `~/.pi/agent/prompts/<n>.md`, `$ARGUMENTS` | verified |
-| pi `/ops` (F56) | the ops board as a pi extension: `~/.pi/agent/extensions/skillator-ops.ts` re-exports `~/.pi/agent/skills/ops-board/pi/index.ts`; full-screen overlay, Tickets / Runs / Health, assign / decide, the standalone app's keys; `/ops --once` notifies one frame | verified headless (pi 0.74.2 `--mode rpc`: `get_commands` lists it, `/ops --once` draws); the live overlay is the owner's check |
+| pi `/ops` (F56) | the ops board as a pi extension: `~/.pi/agent/extensions/skillator-ops.ts` re-exports `~/.pi/agent/skills/ops-board/pi/index.ts`; full-screen overlay, Tickets / Runs / Health, assign / decide, the standalone app's keys; `/ops --once` notifies one frame | historical RPC discovery/one-frame probe; later scripted ConPTY overlay evidence and remaining visual limits are in the capability ledger |
 | Antigravity IDE ops board (F57) | the ops board as an extension of the Antigravity IDE (the VS Code fork, `antigravity-ide`; not `agy`): `ops-board/antigravity/pack.mjs` writes a VSIX whose entry requires `~/.gemini/config/skills/ops-board/antigravity/extension.cjs`, installed with `antigravity-ide --install-extension <vsix> --force` (a folder dropped beside `~/.antigravity-ide/extensions/extensions.json` is ignored); command "skillator: Ops board" opens a webview panel - Tickets / Runs / Health, assign / decide, the standalone app's keys; "skillator: Ops board - one frame" writes one frame to the "skillator ops" output channel | verified headless (Antigravity IDE 1.107.0, Electron 39 / node 22.21: `--extensionTestsPath` run activates `skillator.skillator-ops`, both commands listed, the one-frame command draws, the panel opens); the live panel is the owner's check |
 | codex | a skill (F90): `$CODEX_HOME/skills/<n>/SKILL.md`, written from `host-commands/antigravity/<n>/SKILL.md` (name + description frontmatter, `{{SKILLS}}` filled with that dest) → `$<n>` in the prompt, or pick it in `/skills`; the installer removes the `$CODEX_HOME/prompts/<n>.md` an older run wrote (those names only) | inferred (docs) until the owner runs one as a skill |
 | codex `$ops` (F105) | the ops board from Codex (and `/ops` in agy, same template): `host-commands/antigravity/ops/SKILL.md`, written to the codex and antigravity dests only (pi and Claude Code have their own `/ops`; none for cursor, gemini CLI, opencode); runs `ops --open`, else that dest's `ops-board/ops/ops.ps1 -Repo <repo root> -Open` / `ops.sh <repo root> --open`, never a bare console window | inferred until a real Codex run opens the board |
-| cursor | user `~/.cursor/commands/<n>.md` | project dir verified; user dir inferred until the picker check |
+| cursor | user `~/.cursor/commands/<n>.md` | historical project/user expansion recorded in the capability ledger; picker unverified |
 | muse (F68) | none: `.muse-plugin/plugin.json` lists `commands: []` (the command schema is unprobed - superpowers ships none either); the skill route stays | inferred |
 | opencode (F67) | `~/.config/opencode/commands/<n>.md` (`$XDG_CONFIG_HOME/opencode/commands/` when that is set) → `/<n>`; markdown, frontmatter `description` (also `agent`, `model`, `subtask`), body = the template, `$ARGUMENTS` / `$1`… for arguments | verified (opencode 1.19.4: `opencode debug config` lists a command from `<config>/commands/` and from `.opencode/command/` + `.opencode/commands/`, `$ARGUMENTS` kept in the template; the binary globs `{command,commands}/**/*.md` in every config dir); the TUI picker is the owner's check |
 | prime-agent | none; the skill route stays | verified (no loader) |
@@ -327,8 +477,8 @@ output field with a per-hook `additionalContextLimit`, and a warning string
 `ignoring additionalContextLimit for <event> hook in <file>: this event cannot
 emit additionalContext` — the binary does not spell out which events those are.
 
-**What is verified.** Two Codex builds are installed on this machine and they
-differ, so cite the one you actually run:
+**Historical binary inspection, not live execution or current installation
+inventory.** These builds differed; cite the one actually exercised:
 
 | | on `PATH` (npm shim, `codex-cli 0.153.2`) | `~/AppData/Local/OpenAI/Codex/bin/<hash>/codex.exe` | `codex-cli 0.155.1` (`codex exec`) |
 |---|---|---|---|
@@ -348,8 +498,8 @@ portable between them.
 `command` handler in
 `{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":…,"timeout":30}]}]}}`
 ran from both `$CODEX_HOME/hooks.json` and a per-repo `.codex/hooks.json`. The
-per-repo file needs a trusted project. Both need hook trust:
-`--dangerously-bypass-hook-trust`, or trust persisted by the interactive review.
+per-repo file needs a trusted project. Both need hook trust. The historical probe bypassed that gate; it did not
+verify the normal interactive trust onboarding path.
 Untrusted hooks are skipped silently. Stdin carries `stop_hook_active` and
 `last_assistant_message`. **Exit 2 + stderr does not continue the turn**
 (reported `Stop Failed`). **stdout `{"decision":"block","reason":…}` does:** the

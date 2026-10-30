@@ -53,6 +53,8 @@ the two `/plugin` commands yourself.
 
 ## Install (other agents)
 
+Support is capability-specific. The canonical [capability evidence ledger](plugin/PLATFORMS.md#capability-evidence) records implementation, stub tests and historical live observations with versions, dates and limitations. Installing files does not prove skill loading, command expansion, hook trust, remote pairing or board launch.
+
 The skills are plain `SKILL.md` folders, so any host that reads the Agent Skills
 format can run them. Clone the repo and run the installer — it detects which
 agent CLIs are present and copies every skill (plus `PLATFORMS.md`) into each
@@ -113,21 +115,20 @@ both alongside `skills/` — the skills refer to them.
 
 ## Making the skills actually fire
 
-Every host is supposed to match a request against each skill's `description` and
-load the winner without being asked. On **Claude Code** that works, including
-headless: seven `claude -p` runs on 2.1.261 / Opus 5, from a throwaway fixture with
-no project instruction file, each loaded the right skill unprompted —
-`designui-galadriel` ×5 from *"just a mockup … make it real"*, `resume-cortana` from
-*"pick up the pending tasks from the handoffs"*, and `grayskull-power` from
-*"set me up for coding"*. On the other hosts the reflex is **unverified** from
-here; `PLATFORMS.md` says which.
+Description-triggered skill loading has historical real-host evidence for Claude
+Code, Codex, Cursor, agy and Pi, each limited to the versions and paths in the
+[loading table](plugin/PLATFORMS.md#skill-discovery-and-loading). Gemini CLI,
+Muse, OpenCode and Prime Agent have explicit gaps. Those load observations do
+not establish generated command execution or hook trust. In particular, Codex
+F90 installed commands, F105 `$ops`, and A149's remaining owner checks stay in
+testing; offline F139 fixtures do not close them.
 
 If you want activation to be deterministic rather than a reflex, either name the
 skill (`/designui-galadriel`, or "use skillator's designui-galadriel") or switch the router on for the
 repo — invoke `grayskull-power` once and it writes `.skillator/grayskull.md`
-plus a one-line pointer in `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`. Those files
-are read at session start by every host that has them, so from then on the
-router loads first and routes everything else. Verified headless: the same bare
+plus a one-line pointer in `CLAUDE.md` / `AGENTS.md` / `GEMINI.md`. That is the
+intended startup route; per-host startup verification is recorded separately
+in the ledger. Verified headless: the same bare
 `claude -p` in a fixture carrying those two files loaded `grayskull-power`
 first, then `designui-galadriel` from its routing table.
 

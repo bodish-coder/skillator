@@ -1,39 +1,48 @@
 # remote-cerebro hosts: what can be driven from a phone, and how
 
-Tags: `verified` = run on the build machine or read in the tool's shipped docs or
-binary · `inferred` = follows from what was read, not exercised · `guessed` =
-neither · **must-verify** = blocks a claim until run. Versions probed 2026-10-11:
-`codex-cli 0.162.1`, `cursor-agent 2026.10.01-e373342`, `pi 0.74.2`, `gemini
-0.57.0`, `agy 1.3.1`. `cerebro doctor` prints what is installed today; when a
-version moves, re-read the row before trusting it.
+Support levels and evidence live in the canonical [remote-route ledger](../../../PLATFORMS.md#remote-routes).
+This file describes routes and risks. **Surface inspected** means help, schema,
+shipped docs or binary text was inspected; it never means a live remote session.
+**Tested with stubs** means offline protocol/lifecycle behavior only. A live
+claim needs a real host/version, date and durable record of the named capability;
+pairing, skill loading and hook trust are independent.
+
+Historical surface probes, 2026-10-11: `codex-cli 0.162.1`,
+`cursor-agent 2026.10.01-e373342`, `pi 0.74.2`, `gemini 0.57.0`, `agy 1.3.1`.
+These are not live-pairing versions. `cerebro doctor` reports the installed
+version; changed versions need new evidence.
 
 "Own" = the bridge starts the CLI in its protocol mode. "Attach" = drive a session
 already open at the desk. "Native" = the vendor's own remote, run under the
 cerebro supervisor (TTL, teardown, checklist).
 
-| Host | Route | Verdict | Evidence |
-|---|---|---|---|
-| codex | native: `codex remote-control --no-daemon --json` (embedded, preferred) or `remote-control start` (shared daemon) + ChatGPT app | **unknown until risk 1**: experimental; OpenAI's page says setup starts in the ChatGPT desktop app by QR and "you can't set it up from the Codex CLI"; Windows pairing unproven | surface `verified`; end to end **must-verify** |
-| codex | own: bridge to `codex app-server --listen stdio://`, `approval_policy=on-request`, sandbox `read-only` / `workspace-write` | works offline against the stub; approvals are structured (`item/*/requestApproval`) | protocol `verified` (generated v2 schema); live run **must-verify** |
-| cursor-agent | native: `agent worker start --worker-dir <cwd> --idle-release-timeout 1800`, Cloud Agent from Cursor mobile/web | **works, caveat**: a cloud agent loop whose tool calls run here, not the local TUI; Windows worker and plan requirements unproven (risk 2) | surface `verified`; behaviour `inferred` |
-| cursor-agent | own: bridge to `agent acp` | **unknown until risk 3**; ships, but `arm` refuses until `doctor --acp-proof cursor` records the proof | exists `verified` |
-| cursor-agent | attach: `stop` hook `followup_message` | v2; CLI support not documented, `loop_limit` 5 | **must-verify** (risk 5) |
-| pi | own: bridge to `pi --mode rpc --no-extensions -e pi-cerebro.ts --tools ...` | **works** (offline, stub): steer, abort, dialogs as `extension_ui_request` | `verified` docs (`rpc.md`); live **must-verify** |
-| pi | attach: `cerebro arm pi --mode attach` launches the interactive pi with the extension | **works** (offline, mock pi API): the closest to Claude Remote Control; only a pi that cerebro launched | `verified` docs (`extensions.md`); live **must-verify** |
-| gemini | own: bridge to `gemini --acp --approval-mode default --policy cerebro-gemini.toml` | **unknown until risk 3**; ships, `arm` refuses until `doctor --acp-proof gemini` | docs `verified`; `ask_user` reaching ACP `inferred` |
-| gemini | attach: `AfterAgent` hook, `decision:"deny"` + `reason` as the next prompt | v2, shipped disabled; turn-end only, **approvals cannot be answered from the phone**, blocks the desk while waiting | docs `verified`; behaviour **must-verify** (risk 4) |
-| gemini | native | **not possible**: no remote, server or daemon option in 0.57.0 | `verified` |
-| agy | native: session-scoped `agy --remote-control --mode plan`; `agy remote-control stop` at teardown | works (outside the ticket's list); run live 2026-10-19. Without `--mode` agy 1.4.2 started in accept-edits (file edits auto-approved); `--mode` takes only accept-edits / auto / plan, and the phone can still switch it (A134) | surface `verified`; live arm + teardown `verified` |
+| Host | Route | Support and limitation |
+|---|---|---|
+| codex | native: `codex remote-control --no-daemon --json` or `remote-control start` + ChatGPT app | **tested with stubs**: supervisor lifecycle only; Windows QR/pairing and phone-thread restrictions unverified. |
+| codex | own: `codex app-server --listen stdio://` | **tested with stubs**: structured approvals; real protocol round trip and phone pairing unverified. |
+| cursor-agent | native: `agent worker start` (options before `start`) | **tested with stubs**: lifecycle; Windows worker, plan requirements and mobile selection unverified. Intended cloud worker route, not local TUI attachment. |
+| cursor-agent | own: `agent acp` | **tested with stubs**; `arm` requires real permission/read-gating proof from `doctor --acp-proof cursor`. |
+| cursor-agent | attach: `stop` hook `followup_message` | **unverified gap**: v2 proposal; CLI support not established, documented loop limit 5. |
+| pi | own: `pi --mode rpc --no-extensions -e pi-cerebro.ts --tools ...` | **tested with stubs**: steer, abort and dialogs; real Pi/phone round trip unverified. |
+| pi | attach: `cerebro arm pi --mode attach` | **tested with stubs** (mock Pi API); only a Pi session cerebro launched, real attach unverified. |
+| gemini | own: `gemini --acp --approval-mode default --policy cerebro-gemini.toml` | **tested with stubs**; `arm` requires real permission/read-gating proof from `doctor --acp-proof gemini`. |
+| gemini | attach: `AfterAgent` deny + reason | **implemented**, disabled v2 route; real feed unverified, turn-end only, approvals cannot be answered from phone. |
+| gemini | native | **not implemented** in this adapter; historical 0.57.0 help had no native remote option. |
+| agy | native: `agy --remote-control --mode plan`; `agy remote-control stop` | **tested with stubs**. Historical 1.4.2 arm/teardown was reported 2026-10-19, without a linked durable live record. Phone pairing/mode enforcement remains unverified; phone may switch mode (A134). |
+
+The canonical ledger links the committed bridge, supervisor, extension and test
+sources. A reported arm/teardown alone would not prove phone pairing even with
+a durable record. No live run was performed for this documentation review.
 
 ## Where it cannot be done
 
-1. gemini has no native remote. Only the bridge drives it.
+1. This adapter implements no Gemini native remote; use its bridge route, subject to the proof gate.
 2. Attaching to a pi, gemini or cursor session started before cerebro was armed:
    none has an IPC endpoint to adopt (`inferred`). For pi it is also refused by
    design: the extension needs a fresh arm token and the nonce `arm` put in its
    own environment.
 3. Answering gemini approvals from the phone in attach mode: the Notification hook
-   is observe-only (`verified`).
+   is observe-only (`surface inspected`).
 4. Cursor's local TUI session, natively: the native route is a cloud agent.
 5. A pty/TUI mirror on Windows: no tmux; winpty is fragile.
 6. prime-agent: not installed, not probed, not claimed.
@@ -42,10 +51,10 @@ cerebro supervisor (TTL, teardown, checklist).
 
 - **cursor on Windows:** every `cursor-agent.exe` / `agent.exe` in
   `%LOCALAPPDATA%\cursor-agent` is the bundled Node (prints `v24.5.0`); only
-  `cursor-agent.cmd` is the CLI (`verified`, 2026.10.12-d47ca18). cerebro looks up
+  `cursor-agent.cmd` is the CLI (`surface inspected`, 2026.10.12-d47ca18). cerebro looks up
   `cursor-agent.cmd` only, has no bare `agent` fallback (`~/.grok/bin/agent.exe`
   is another CLI), and refuses an arm whose binary reports a Node version.
-  `worker` options go before `start` (`agent worker [options] start`, `verified`
+  `worker` options go before `start` (`agent worker [options] start`, `surface inspected`
   from help; A133).
 - **`.cmd` shims** (codex, pi, gemini, cursor npm installs) run through `cmd.exe
   /d /s /c`; arguments carrying `% ^ & | < > "` are refused, not quoted. Prompts
@@ -70,7 +79,7 @@ cerebro supervisor (TTL, teardown, checklist).
 - **codex `agents --json`** output format is `guessed`; the supervisor falls back
   to counting lines.
 - **pi tools:** `read`, `grep`, `find`, `ls`, `edit`, `write` all take `path`
-  (`verified` from the shipped tool schemas); `bash` takes `command`.
+  (`surface inspected` from the shipped tool schemas); `bash` takes `command`.
 - **gemini tools** (`reference/tools.md`): reads `read_file`, `read_many_files`,
   `glob`, `grep_search`, `list_directory`; writes `run_shell_command`,
   `write_file`, `replace`; plus `web_fetch`. Which policy tier `--policy` loads

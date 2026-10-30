@@ -15,6 +15,13 @@ standalone terminal app keep their own layouts.
 
 ## Launch it, per host
 
+These are implemented launch routes. See the canonical [board support evidence](../../PLATFORMS.md#board-rendering-and-launching)
+for levels, versions, dates and source/test links. Mounted Claude pane tests use
+host fixtures, while historical Pi and standalone Windows checks used real
+scripted ConPTY sessions. Neither proves physical keyboard/mouse delivery or
+current-version behavior. Codex `$ops` remains F105's owner-live check; installing
+its skill and testing the standalone renderer do not verify a Codex launch.
+
 | Host | How |
 |---|---|
 | Claude Code | The plugin: its pane, the band above the prompt, and `/ops`. |
