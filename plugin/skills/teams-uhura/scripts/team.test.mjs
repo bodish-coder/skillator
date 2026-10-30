@@ -12,7 +12,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { verifyHmac, cleanText, senderOf, parseTeam, startListener, cardPayload, say, statusText, loadConfig, BODY_MAX,
   configPath, validateConfig, saveConfig, clearConfig, sidOfWhoami, aceSids, aclSids } from './team.mjs'
-import { mainRoot, parseInbox, after, INBOX, READ, DELIVERED, frameMessages, inboxDir } from './inbox.mjs'
+import { mainRoot, parseInbox, after, INBOX, READ, DELIVERED, frameMessages, inboxDir, cleanRecord } from './inbox.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const TOKEN = Buffer.from('a-32-byte-security-token-for-tst').toString('base64')
@@ -641,3 +641,127 @@ test('config show/save/clear through the CLI: the token over stdin, never printe
   assert.equal(run(['clear']).status, 0)
   assert.equal(existsSync(env.SKILLATOR_TEAMS_CONFIG), false)
 })
+
+test('cleanRecord: preserves optional to handle; rejects invalid to', () => {
+  const r1 = cleanRecord({ ts: '2026-10-23T09:20:00.000Z', from: '@sher', to: '@vidul', email: 'sher@x.com', text: 'hi', id: '123' })
+  assert.equal(r1.to, '@vidul')
+  assert.equal(r1.from, '@sher')
+  const r2 = cleanRecord({ ts: '2026-10-23T09:20:00.000Z', from: '@sher', to: 'not-a-handle', email: 'sher@x.com', text: 'hi', id: '123' })
+  assert.equal(r2, null)
+  const r3 = cleanRecord({ ts: '2026-10-23T09:20:00.000Z', from: '@sher', email: 'sher@x.com', text: 'hi', id: '123' })
+  assert.equal(r3.to, undefined)
+  assert.deepEqual(Object.keys(r3), ['ts', 'from', 'email', 'text', 'id'])
+})
+
+test('message: refused when handle is not on team.md with add <email> hint', () => {
+  const r = repo()
+  const msgFile = join(r, 'msg.txt')
+  writeFileSync(msgFile, '1 Issue\nx\n\n2 What was seen\ny\n\n3 Evidence\nz\n\n4 Repro steps\nw\n\n5 Suspected cause marked unverified\nv\n\n6 Ask\nu\n')
+  const res = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@nobody', '--file', msgFile], { encoding: 'utf8', cwd: r })
+  assert.equal(res.status, 1)
+  assert.match(res.stderr, /add <email> to \.skillator\/team\.md/)
+  assert.match(res.stderr, /@nobody is not on \.skillator\/team\.md/)
+})
+
+test('message: text on argv is refused, missing file is refused, empty file is refused', () => {
+  const r = repo()
+  const res1 = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', 'direct text here'], { encoding: 'utf8', cwd: r })
+  assert.equal(res1.status, 2)
+  const res2 = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--file', join(r, 'nonexistent.txt')], { encoding: 'utf8', cwd: r })
+  assert.equal(res2.status, 1)
+  const emptyFile = join(r, 'empty.txt')
+  writeFileSync(emptyFile, '   \n')
+  const res3 = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--file', emptyFile], { encoding: 'utf8', cwd: r })
+  assert.equal(res3.status, 2)
+})
+
+test('message: delivers six-section message to @vidul inbox', () => {
+  const r = repo()
+  const sixSection = [
+    '1 Issue',
+    'Installer crashes on an unreadable profile',
+    '',
+    '2 What was seen',
+    'Error: EACCES: permission denied, open /home/user/.claude/settings.json',
+    '',
+    '3 Evidence',
+    'plugin/install.ps1:698, commit 5b6b3dd, session log error at turn 4',
+    '',
+    '4 Repro steps',
+    'Run install.ps1 with read-only profile directory',
+    '',
+    '5 Suspected cause marked unverified',
+    'Unverified: permissions check assumes directory is writable by default',
+    '',
+    '6 Ask',
+    '@vidul please inspect ACL checks in installer',
+  ].join('\n')
+  const msgFile = join(r, 'issue.txt')
+  writeFileSync(msgFile, sixSection)
+  const res = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--file', msgFile, '--from', '@sher'], { encoding: 'utf8', cwd: r })
+  assert.equal(res.status, 0, res.stderr)
+  assert.match(res.stdout, /delivered message to @vidul's inbox/)
+  const recs = parseInbox(inboxOf(r))
+  assert.equal(recs.length, 1)
+  const rec = recs[0]
+  assert.equal(rec.to, '@vidul')
+  assert.equal(rec.from, '@sher')
+  assert.match(rec.text, /1 Issue/)
+  assert.match(rec.text, /2 What was seen/)
+  assert.match(rec.text, /3 Evidence/)
+  assert.match(rec.text, /4 Repro steps/)
+  assert.match(rec.text, /5 Suspected cause marked unverified/)
+  assert.match(rec.text, /6 Ask/)
+})
+
+test('message: message containing Teams HMAC token or workflow URL is refused', () => {
+  const r = repo()
+  const secretMsg = join(r, 'secret.txt')
+  writeFileSync(secretMsg, `here is token: ${TOKEN}`)
+  const env = { ...process.env, TEAMS_HMAC_TOKEN: TOKEN }
+  const res = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--file', secretMsg], { encoding: 'utf8', cwd: r, env })
+  assert.equal(res.status, 2)
+  assert.match(res.stderr, /refused: message contains/)
+})
+
+test('fixture: /message-uhura @vidul <issue> writes a six-section message to @vidul inbox and @nobody is refused with the hint', () => {
+  const r = repo()
+  // 1. @nobody is refused with the hint
+  const issueFile = join(r, 'handoff.txt')
+  writeFileSync(issueFile, [
+    '1 Issue: crash on startup with missing cache dir',
+    '2 What was seen: exit code 1, uncaught exception ENOENT',
+    '3 Evidence: index.js:42, commit 1234abc, logs in session',
+    '4 Repro steps: rm -rf cache && node index.js',
+    '5 Suspected cause marked unverified: unverified - cache directory is not ensured on init',
+    '6 Ask: @vidul please add mkdirSync for cache dir',
+  ].join('\n'))
+
+  const resNobody = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@nobody', '--file', issueFile], { encoding: 'utf8', cwd: r })
+  assert.equal(resNobody.status, 1)
+  assert.match(resNobody.stderr, /add <email> to \.skillator\/team\.md/)
+  assert.equal(inboxOf(r), '')
+
+  // 2. @vidul succeeds and writes six-section message to @vidul's inbox
+  const resVidul = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--file', issueFile, '--from', '@sher'], { encoding: 'utf8', cwd: r })
+  assert.equal(resVidul.status, 0, resVidul.stderr)
+  assert.match(resVidul.stdout, /delivered message to @vidul's inbox/)
+
+  const recs = parseInbox(inboxOf(r))
+  assert.equal(recs.length, 1)
+  assert.equal(recs[0].to, '@vidul')
+  assert.equal(recs[0].from, '@sher')
+  assert.match(recs[0].text, /1 Issue/)
+  assert.match(recs[0].text, /2 What was seen/)
+  assert.match(recs[0].text, /3 Evidence/)
+  assert.match(recs[0].text, /4 Repro steps/)
+  assert.match(recs[0].text, /5 Suspected cause marked unverified/)
+  assert.match(recs[0].text, /6 Ask/)
+
+  // Inbox check: team.mjs inbox displays the framed message
+  const inboxRun = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'inbox'], { encoding: 'utf8', cwd: r })
+  assert.equal(inboxRun.status, 0)
+  assert.match(inboxRun.stdout, /> 1 Issue/)
+  assert.match(inboxRun.stdout, /> 6 Ask/)
+})
+

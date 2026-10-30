@@ -106,6 +106,8 @@ type World = {
   log: string                             // log --format=%H%x1f%s <range>
   merges?: string                         // the merge commits log prints before w.log unless --no-merges
   line?: string                           // rev-list --first-parent --parents <fork>..<b>: the run's own line, "sha p1 [p2]" newest first
+  lines?: Record<string, string>          // rev-list --first-parent --parents <fork>..<tip> per tip
+  main?: string                           // rev-list --first-parent HEAD
   stages?: string[]                       // second parents grown from the run line (merge-base --is-ancestor <own> <p2> exit 0)
   under?: Record<string, string>          // what a ^<sha> on git log hides: its lines of w.log
   reflog?: string                         // the run branch's reflog, newest first; unset: no reflog
@@ -167,7 +169,11 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
       for (const x of a.filter(x => x.startsWith('^'))) log = log.replace(w.under?.[x.slice(1)] ?? '\0', '')
       return { value: ran((a.includes('--no-merges') ? '' : w.merges ?? '') + log) }
     }
-    if (isGit && a[1] === 'rev-list' && a[2] === '--first-parent') return { value: ran(w.line ?? '') }
+    if (isGit && a[1] === 'rev-list' && a[2] === '--first-parent' && a[3] === 'HEAD') return { value: ran(w.main ?? '') }
+    if (isGit && a[1] === 'rev-list' && a[2] === '--first-parent') {
+      const target = a[4]?.split('..')[1] ?? a[3]?.split('..')[1]
+      return { value: ran(target && w.lines?.[target] !== undefined ? w.lines[target]! : w.line ?? '') }
+    }
     if (isGit && a[1] === 'merge-base' && a[2] === '--is-ancestor' && a[4] !== 'HEAD') return { value: ran('', w.stages?.includes(a[4]!) ? 0 : 1) }
     if (isGit && a[1] === 'reflog' && a[2] === 'exists') return { value: ran('', w.reflog ? 0 : 1) }
     if (isGit && a[1] === 'rev-list' && a[2] === '--walk-reflogs') return { value: ran(w.reflog ?? '') }
@@ -774,8 +780,6 @@ test('F104 what a merge of main into the run brought (a side branch merged into 
   w.git = { ...w.git, [SHA_S]: 0, [SHA_H]: 0, [SHA_C]: 1, [SHA_D]: 1 }
   const ui = await diagnoseOpen($, clock)
   expect(w.runs).toContainEqual(['git', 'rev-list', '--first-parent', '--parents', 'f1f1..' + BRANCH])
-  expect(w.runs).toContainEqual(['git', 'merge-base', '--is-ancestor', SHA_C, SHA_T])
-  expect(w.runs).toContainEqual(['git', 'merge-base', '--is-ancestor', SHA_C, SHA_ST])
   expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'f1f1..' + BRANCH, '^' + SHA_T])
   expect(w.runs.some(a => a[0] === 'git' && a[1] === 'rev-list' && a.includes('f1f1..HEAD'))).toBe(false)
   expect(await closeKeys(ui)).toEqual([])
@@ -785,6 +789,56 @@ test('F104 what a merge of main into the run brought (a side branch merged into 
   await again(ui, clock)
   expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
   expect((await ui.find({ key: 'diag:close:why:137' }))?.text).toBe(`c0ffee0 "B10: muse pane" on ${BRANCH}`)
+  await ui.unmount()
+})
+
+test('A160 (1) merge on run line counts as main merged in when rev-list --first-parent fork..p2 shares no commit with run line', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~'))
+  const [SHA_M, SHA_T, SHA_S] = ['b1'.padEnd(40, 'b'), 'b2'.padEnd(40, 'b'), 'b3'.padEnd(40, 'b')]
+  w.branches = { [BRANCH]: true }
+  w.reflog = `${SHA_M}\n${SHA_C}\nf1f1\n`
+  w.line = `${SHA_M} ${SHA_C} ${SHA_T}\n${SHA_C} f1f1\n`
+  w.lines = { [SHA_T]: `${SHA_S} f0f0\n` }
+  w.under = { [SHA_T]: `${SHA_S}\x1fB10: leaked commit from main\n` }
+  w.log = `${SHA_S}\x1fB10: leaked commit from main\n${SHA_C}\x1fB10: muse pane\n`
+  w.git = { ...w.git, [SHA_S]: 0, [SHA_C]: 0 }
+  const ui = await diagnoseOpen($, clock)
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'f1f1..' + BRANCH, '^' + SHA_T])
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
+  await ui.unmount()
+})
+
+test('A160 (2) fork point from reflog excludes main first-parent commits', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~'))
+  w.branches = { [BRANCH]: true }
+  w.main = '9a9a\ne0e0\n'
+  w.reflog = `${SHA_C}\nf1f1\ne0e0\n`
+  w.line = `${SHA_C} f1f1\n`
+  w.log = `${SHA_C}\x1fB10: muse pane\n`
+  w.git = { ...w.git, [SHA_C]: 0 }
+  const ui = await diagnoseOpen($, clock)
+  expect(w.runs).toContainEqual(['git', 'rev-list', '--walk-reflogs', 'refs/heads/' + BRANCH])
+  expect(w.runs).toContainEqual(['git', 'rev-list', '--first-parent', '--parents', 'f1f1..' + BRANCH])
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
+  await ui.unmount()
+})
+
+test('A160 (3) merges on kept stage branch own line hide main merges into the stage', async ($, on) => {
+  const [w, clock] = closeWorld(on, WF_RUN(STALE, '~'))
+  const [SHA_MS, SHA_ST, SHA_SM, SHA_MT, SHA_S] = ['c1'.padEnd(40, 'c'), 'c2'.padEnd(40, 'c'), 'c3'.padEnd(40, 'c'), 'c4'.padEnd(40, 'c'), 'c5'.padEnd(40, 'c')]
+  w.branches = { [BRANCH]: true }
+  w.reflog = `${SHA_MS}\n${SHA_C}\nf1f1\n`
+  w.line = `${SHA_MS} ${SHA_C} ${SHA_ST}\n${SHA_C} f1f1\n`
+  w.lines = {
+    [SHA_ST]: `${SHA_SM} ${SHA_C} ${SHA_MT}\n`,
+    [SHA_MT]: `${SHA_S} f0f0\n`
+  }
+  w.under = { [SHA_MT]: `${SHA_S}\x1fB10: main commit into stage\n` }
+  w.log = `${SHA_S}\x1fB10: main commit into stage\n${SHA_C}\x1fB10: muse pane\n`
+  w.git = { ...w.git, [SHA_S]: 0, [SHA_C]: 0 }
+  const ui = await diagnoseOpen($, clock)
+  expect(w.runs).toContainEqual(['git', 'log', '--no-merges', '--format=%H%x1f%s', 'f1f1..' + BRANCH, '^' + SHA_MT])
+  expect((await ui.find({ key: 'diag:close:137' }))?.text).toBe('Close stage 137 with c0ffee0')
   await ui.unmount()
 })
 

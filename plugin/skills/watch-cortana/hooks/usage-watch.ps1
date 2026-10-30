@@ -12,7 +12,12 @@
 # have a Stop hook that can inject. Cursor/Antigravity get `check`, which reads
 # whatever the host leaves on disk and prints the order for the agent to follow.
 # Wired by the always-on project file grayskull-power writes, not by a hook.
-param([ValidateSet('probe','gate','check','level')][string]$Mode = 'probe', [string]$Then)
+param(
+  [ValidateSet('probe','gate','check','level','refresh')][string]$Mode = 'probe',
+  [string]$Then,
+  [string]$Cli,
+  [string]$Dir
+)
 
 # The state dir keeps its original name on purpose - see the sh twin.
 # A130: a CLAUDE_CONFIG_DIR profile keeps its flags in its own config dir - the
@@ -74,7 +79,9 @@ function Get-CodexLastTc($path) {
 
 # A starting child has no usage event yet; it must not hide a fresh reading.
 function Get-CodexRollout($codexHome) {
-  $rolls = Get-ChildItem (Join-Path $codexHome 'sessions') -Recurse -File -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
+  $sess = Join-Path $codexHome 'sessions'
+  if (-not (Test-Path -LiteralPath $sess)) { return $null }
+  $rolls = Get-ChildItem $sess -Recurse -File -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
            Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-$staleHours) } | Sort-Object LastWriteTime -Descending
   foreach ($roll in $rolls) {
     if (Get-CodexLastTc $roll.FullName) { return $roll }
@@ -176,6 +183,116 @@ function Get-CodexLevel($path) {
   @($h, $wk, $cx) | ForEach-Object { if ($null -eq $_) { '-' } else { Fmt1 $_ } }
 }
 
+function Get-CachedQuota {
+  $cands = @(
+    if ($env:CLAUDE_USAGE_WATCH_DIR) { Join-Path $env:CLAUDE_USAGE_WATCH_DIR 'quota-cache.json' }
+    if ($env:SKILLATOR_PROFILE_DIR) { Join-Path $env:SKILLATOR_PROFILE_DIR 'quota-cache.json' }
+    if ($env:AGY_CONFIG_DIR) { Join-Path $env:AGY_CONFIG_DIR 'quota-cache.json' }
+    if ($env:MUSE_CONFIG_DIR) { Join-Path $env:MUSE_CONFIG_DIR 'quota-cache.json' }
+    if ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR 'quota-cache.json' }
+    if ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR 'handoff-watch\quota-cache.json' }
+    Join-Path $dir 'quota-cache.json'
+    if ($env:ANTIGRAVITY_APP_DATA_DIR) { Join-Path $env:ANTIGRAVITY_APP_DATA_DIR 'quota-cache.json' }
+    Join-Path $HOME '.gemini\antigravity-cli\quota-cache.json'
+  ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+
+  foreach ($cp in $cands) {
+    if (Test-Fresh $cp) {
+      try {
+        $raw = [IO.File]::ReadAllText((Convert-Path -LiteralPath $cp))
+        $s = if ($raw -match '"src"\s*:\s*"([^"]+)"') { $Matches[1] } else { 'none' }
+        $h = if ($raw -match '"(?:5h|five)"\s*:\s*([0-9.]+)') { $Matches[1] } else { $null }
+        $w = if ($raw -match '"(?:7d|weekly)"\s*:\s*([0-9.]+)') { $Matches[1] } else { $null }
+        $n = if ($raw -match '"note"\s*:\s*"([^"]+)"') { $Matches[1] } else { $null }
+        $m = if ($raw -match '"max"\s*:\s*([0-9.]+)') { $Matches[1] } else { $null }
+        return @{ src = $s; '5h' = $h; '7d' = $w; max = $m; note = $n; path = $cp }
+      } catch { }
+    }
+  }
+  return $null
+}
+
+function Start-QuotaRefresh([string]$targetCli, [string]$targetDir) {
+  if (-not $targetCli -or -not $targetDir) { return }
+  $lock = Join-Path $targetDir 'quota-cache.json.refreshing'
+  if (Test-Path -LiteralPath $lock) {
+    $item = Get-Item -LiteralPath $lock -ErrorAction SilentlyContinue
+    if ($item -and $item.LastWriteTime -gt (Get-Date).AddSeconds(-60)) { return }
+  }
+  New-Item $targetDir -ItemType Directory -Force | Out-Null
+  Set-Content -LiteralPath $lock -Value (Get-Date).ToString()
+
+  $ps1 = $MyInvocation.MyCommand.Path
+  if (-not $ps1) { $ps1 = $PSCommandPath }
+  if ($ps1) {
+    $arg = "-NoProfile -ExecutionPolicy Bypass -File `"$ps1`" -Mode refresh -Cli $targetCli -Dir `"$targetDir`""
+    try { Start-Process powershell -ArgumentList $arg -WindowStyle Hidden } catch { }
+  }
+}
+
+if ($Mode -eq 'refresh') {
+  if (-not $Cli -or -not $Dir) { exit 0 }
+  $lock = Join-Path $Dir 'quota-cache.json.refreshing'
+  $cache = Join-Path $Dir 'quota-cache.json'
+  try {
+    $res = $null
+    if ($Cli -eq 'agy') {
+      $raw = & agy -p "/usage" --output-format json 2>$null | Out-String
+      if ($raw) {
+        $parsed = ConvertFrom-Json $raw -ErrorAction SilentlyContinue
+        $h = $null; $wk = $null
+        if ($parsed.command.data.groups) {
+          foreach ($g in $parsed.command.data.groups) {
+            if ($g.buckets) {
+              foreach ($b in $g.buckets) {
+                if ($null -ne $b.remaining_fraction) {
+                  $used = [math]::Round((1.0 - [double]$b.remaining_fraction) * 100, 1)
+                  if ($b.window -match '5h' -or $b.window -match 'hour') {
+                    if ($null -eq $h -or $used -gt $h) { $h = $used }
+                  } elseif ($b.window -match 'week' -or $b.window -match '7d') {
+                    if ($null -eq $wk -or $used -gt $wk) { $wk = $used }
+                  }
+                }
+              }
+            }
+          }
+        }
+        if ($null -ne $h -or $null -ne $wk) {
+          $res = @{ src = 'agy'; '5h' = $h; '7d' = $wk }
+        }
+      }
+    } elseif ($Cli -eq 'claude') {
+      $oldCfg = $env:CLAUDE_CONFIG_DIR
+      $env:CLAUDE_CONFIG_DIR = $Dir
+      $raw = & claude -p "/usage" --output-format json 2>$null | Out-String
+      $env:CLAUDE_CONFIG_DIR = $oldCfg
+      if ($raw) {
+        $h = $null; $wk = $null
+        if ($raw -match 'Current session:\s*([0-9.]+)%\s*used') { $h = [double]$Matches[1] }
+        if ($raw -match 'Current week[^:]*:\s*([0-9.]+)%\s*used') { $wk = [double]$Matches[1] }
+        if ($null -ne $h -or $null -ne $wk) {
+          $res = @{ src = 'claude-code'; '5h' = $h; '7d' = $wk }
+        }
+      }
+    } elseif ($Cli -eq 'muse') {
+      $raw = & muse usage --json 2>$null | Out-String
+      if ($LASTEXITCODE -ne 0 -or $raw -match 'not logged in') {
+        $res = @{ src = 'muse'; note = 'not logged in' }
+      } else {
+        $p = ConvertFrom-Json $raw -ErrorAction SilentlyContinue
+        if ($p) { $res = @{ src = 'muse'; '5h' = $p.five_hour; '7d' = $p.weekly } }
+        else { $res = @{ src = 'muse'; note = 'unparseable' } }
+      }
+    }
+    if ($res) {
+      [IO.File]::WriteAllText($cache, (ConvertTo-Json $res -Compress))
+    }
+  } finally {
+    Remove-Item -LiteralPath $lock -ErrorAction SilentlyContinue
+  }
+  exit 0
+}
+
 # level (F31): one machine line for relay-morpheus's chain hold, and nothing
 # else - no stdin, no .done, no threshold, no directory created. Same source
 # order and same bytes as the sh twin:
@@ -185,7 +302,7 @@ function Get-CodexLevel($path) {
 # is the max of every window, context included, for reading only: relay's
 # chain decide never holds on it - with no 5h it uses 7d, else unobservable.
 if ($Mode -eq 'level') {
-  $src = 'none'; $h = '-'; $wk = '-'; $cx = '-'; $mx = '-'
+  $src = 'none'; $h = '-'; $wk = '-'; $cx = '-'; $mx = '-'; $noteTag = ''
   $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
   $roll = Get-CodexRollout $codexHome
   if ($roll -and $roll.LastWriteTime -gt (Get-Date).AddHours(-$staleHours)) {
@@ -209,7 +326,21 @@ if ($Mode -eq 'level') {
       $v = Read-Fresh (Join-Path $dir "$key.ctx") ${function:Read-Token};       if ($null -ne $v) { $cx = $v }
     }
   }
-  "src=$src 5h=$h 7d=$wk ctx=$cx max=$mx"
+  if ($src -eq 'none') {
+    $cq = Get-CachedQuota
+    if ($cq) {
+      $src = $cq.src
+      if ($cq['5h']) { $h = Fmt1 $cq['5h'] }
+      if ($cq['7d']) { $wk = Fmt1 $cq['7d'] }
+      if ($cq.max) { $mx = Fmt1 $cq.max }
+      elseif ($h -ne '-' -and $wk -ne '-') { $mx = Fmt1 ([math]::Max([double]::Parse($h, $inv), [double]::Parse($wk, $inv))) }
+      elseif ($h -ne '-') { $mx = $h } elseif ($wk -ne '-') { $mx = $wk }
+      if ($cq.note) { $noteTag = " note=$($cq.note -replace '\s+','_')" }
+    } elseif ($env:SKILLATOR_CLI -and $env:SKILLATOR_PROFILE_DIR) {
+      Start-QuotaRefresh $env:SKILLATOR_CLI $env:SKILLATOR_PROFILE_DIR
+    }
+  }
+  "src=$src 5h=$h 7d=$wk ctx=$cx max=$mx$noteTag"
   exit 0
 }
 
@@ -233,6 +364,80 @@ if ($Mode -eq 'check') {
       $pct = Read-Fresh (Join-Path $dir $k) ${function:Read-Flag}
       $wk  = Read-Fresh (Join-Path $dir "$k.weekly") ${function:Read-Flag}
       if ($null -ne $pct -or $null -ne $wk) { $src = 'claude-code'; $key = $k }
+    }
+  }
+  if ($null -eq $pct -and $null -eq $wk) {
+    $cq = Get-CachedQuota
+    if ($cq) {
+      if ($cq['5h']) { $pct = [double]::Parse($cq['5h'], $inv) }
+      if ($cq['7d']) { $wk  = [double]::Parse($cq['7d'], $inv) }
+      if ($null -ne $pct -or $null -ne $wk) {
+        $src = $cq.src
+        $key = "$($cq.src)-cache"
+      }
+    }
+  }
+  if ($null -eq $pct -and $null -eq $wk) {
+    # Check cursor estimated usage ledger
+    $cands = @(
+      if ($env:CURSOR_LEDGER_PATH) { $env:CURSOR_LEDGER_PATH }
+      if ($env:SKILLATOR_PROFILE_DIR) { Join-Path $env:SKILLATOR_PROFILE_DIR 'cursor-ledger.json' }
+      if ($env:SKILLATOR_CONFIG_DIR) { Join-Path $env:SKILLATOR_CONFIG_DIR 'cursor-ledger.json' }
+      Join-Path $HOME '.skillator\cursor-ledger.json'
+      Join-Path $HOME '.cursor\cursor-ledger.json'
+      '.skillator\cursor-ledger.json'
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+
+    foreach ($clp in $cands) {
+      try {
+        $rawLedger = [IO.File]::ReadAllText((Convert-Path -LiteralPath $clp))
+        $json = ConvertFrom-Json $rawLedger -ErrorAction SilentlyContinue
+        $budget = if ($json.budget_tokens) { [double]$json.budget_tokens }
+                  elseif ($json.budget_cost) { [double]$json.budget_cost }
+                  elseif ($json.budget) { [double]$json.budget }
+                  else { $null }
+        if ($null -ne $budget -and $budget -gt 0) {
+          $bDay = if ($json.billing_day) { [int]$json.billing_day } else { 1 }
+          $now = if ($env:SKILLATOR_NOW) { [DateTime]::Parse($env:SKILLATOR_NOW).ToUniversalTime() } else { (Get-Date).ToUniversalTime() }
+          $cycleYear = $now.Year
+          $cycleMonth = $now.Month
+          if ($now.Day -lt $bDay) {
+            $cycleMonth--
+            if ($cycleMonth -lt 1) { $cycleMonth = 12; $cycleYear-- }
+          }
+          $daysInMonth = [DateTime]::DaysInMonth($cycleYear, $cycleMonth)
+          $clampedDay = [Math]::Min($bDay, $daysInMonth)
+          $cycleStart = [DateTime]::new($cycleYear, $cycleMonth, $clampedDay, 0, 0, 0, [DateTimeKind]::Utc)
+
+          $tot = 0.0
+          if ($json.runs) {
+            foreach ($r in $json.runs) {
+              if ($r.timestamp) {
+                try {
+                  $ts = [DateTime]::Parse($r.timestamp).ToUniversalTime()
+                  if ($ts -lt $cycleStart) { continue }
+                } catch { }
+              }
+              if ($json.budget_cost) {
+                $c = if ($null -ne $r.cost) { $r.cost } elseif ($null -ne $r.cost_usd) { $r.cost_usd } elseif ($r.usage -and $null -ne $r.usage.cost) { $r.usage.cost } elseif ($r.usage -and $null -ne $r.usage.cost_usd) { $r.usage.cost_usd } else { 0 }
+                $tot += [double]$c
+              } else {
+                $tok = if ($null -ne $r.tokens) { $r.tokens } elseif ($r.usage -and $null -ne $r.usage.total_tokens) { $r.usage.total_tokens } else {
+                  $inT = if ($r.usage -and $r.usage.inputTokens) { $r.usage.inputTokens } elseif ($r.usage -and $r.usage.prompt_tokens) { $r.usage.prompt_tokens } else { 0 }
+                  $outT = if ($r.usage -and $r.usage.outputTokens) { $r.usage.outputTokens } elseif ($r.usage -and $r.usage.completion_tokens) { $r.usage.completion_tokens } else { 0 }
+                  $cR = if ($r.usage -and $r.usage.cacheReadTokens) { $r.usage.cacheReadTokens } else { 0 }
+                  $cW = if ($r.usage -and $r.usage.cacheWriteTokens) { $r.usage.cacheWriteTokens } else { 0 }
+                  [double]$inT + [double]$outT + [double]$cR + [double]$cW
+                }
+                $tot += [double]$tok
+              }
+            }
+          }
+          $estPct = [Math]::Round(($tot / $budget) * 100)
+          "watch-cortana: cursor est $estPct% of budget (skillator runs only) - check cursor.com/settings"
+          exit 0
+        }
+      } catch { }
     }
   }
   # ponytail: cursor and antigravity expose no usage anywhere on disk - say so

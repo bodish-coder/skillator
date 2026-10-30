@@ -16,9 +16,10 @@ export type BandInput = {
   counts: Counts | null; narrow: boolean; cols: number; now: number
   me?: string | null                // F97: the session owner's @handle (team.ts meOf), none null
   session?: string | null           // F109: this session's sid (team.ts sessionTag), none null
+  handoff?: string | null           // F130: pending handoff recipient handle (e.g. '@vidul'), none null
 }
 // One Seg for band, health and runs lines: bold is health's headings, drop the band's fold order.
-export type Seg = { text: string; color?: Color; dim?: boolean; inverse?: boolean; bold?: boolean; drop?: 1 | 2 }
+export type Seg = { text: string; color?: Color; dim?: boolean; inverse?: boolean; bold?: boolean; drop?: 1 | 2 | 3 }
 // Control bytes out of text a file or a program supplied (a tab is a space): no ESC reaches
 // the pane or the terminal, no newline makes a row two. The pane, the ops app and git's parse.
 export const clean = (t: string) => t.replace(/\t/g, ' ').replace(/[\x00-\x08\x0a-\x1f\x7f-\x9f]/g, '')
@@ -38,12 +39,23 @@ export function countsOf(board: Board | null): Counts | null {
 // and the handle-less line is shown whatever its length. A figure past 15 minutes says so;
 // none is left out, never a stale one shown as live.
 const STATUS_MAX = 60
-export function statusText(c: Counts | null, u: Usage | null, now: number, me: string | null): string {
+export function statusText(c: Counts | null, u: Usage | null, now: number, me: string | null, handoff?: string | null): string {
   const counts = !c ? '-'
     : `${c.open - c.progress - c.testing - c.blocked - c.decision} pending | ${c.progress} in progress | ${c.open} total`
   const part = (label: string, w: Window | null | undefined) => (w ? ` · ${label} ${w.pct}%${isStale(w, now) ? ' (stale)' : ''}` : '')
   const five = part('5h', u?.five), seven = part('7d', u?.seven)
   const head = (who: string | null) => `ops ${who ? who + ' ' : ''}${counts}`
+  if (handoff) {
+    const ho = ` → ${handoff}`
+    const triesWithHandoff = [
+      head(me) + five + seven + ho,
+      head(null) + five + seven + ho,
+      head(null) + five + ho,
+      head(null) + ho,
+    ]
+    const found = triesWithHandoff.find(t => t.length <= 80)
+    if (found) return found
+  }
   const tries = [head(me) + five + seven, head(me) + five, head(null) + five]
   return tries.find(t => t.length <= STATUS_MAX) ?? tries[2]!
 }
@@ -105,7 +117,8 @@ export function bandSegs(v: BandInput): Seg[][] {
         .filter(([, n]) => n > 0).flatMap(([b, n]): Seg[] => [{ text: ' ' }, { text: '●' + n, color: paint(b) }])]] : []
     const one = join([lead, ...counts, ...(v.relay ? [[{ text: v.relay }]] : []), disk, mem])
     const amberWords: Seg[][] = m?.locks.length ? [[{ text: 'locks ' }, { text: `${m.locks.length} stale`, color: 'warning' }]] : []
-    const second = join([[{ text: "" }], five, seven, ...amberWords, ...extra,
+    const ho: Seg[][] = v.handoff ? [[{ text: '→ ' + v.handoff, color: 'suggestion' }]] : []
+    const second = join([[{ text: "" }], five, seven, ...amberWords, ...extra, ...ho,
       [{ text: '/pending  /list-tickets  /ops opens the pane', dim: true }]])
     return [one, second]
   }
@@ -114,9 +127,10 @@ export function bandSegs(v: BandInput): Seg[][] {
     ? resetsText(u.seven.resetsAt) : null
   const sevenR: Seg[] = resets ? [...seven, { text: ' ', drop: 1 }, { text: resets, dim: true, drop: 1 }] : seven
   const relay: Seg[][] = v.relay ? [[{ text: 'relay ' + v.relay, drop: 2 }]] : []
-  let line = join([lead, disk, mem, five, sevenR, ...relay, locks, ...extra])
-  // Too wide: the reset time goes first, then the relay run; past that the Text truncates.
-  for (const level of [1, 2] as const) {
+  const ho: Seg[][] = v.handoff ? [[{ text: '→ ' + v.handoff, color: 'suggestion', drop: 3 }]] : []
+  let line = join([lead, disk, mem, five, sevenR, ...relay, locks, ...extra, ...ho])
+  // Too wide: the reset time goes first, then the relay run, then handoff; past that the Text truncates.
+  for (const level of [1, 2, 3] as const) {
     if (width(line) <= v.cols) break
     line = line.filter(s => s.drop !== level)
   }

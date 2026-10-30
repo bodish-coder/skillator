@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun } from '../state'
+import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser, openHelp, filteredSkills, SKILLS, startRunCommand, openStartRun, startRunLines } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
-import { buildModel } from '../../hooks/lib/ticketsmodel'
+import { buildModel, isUserSectionOpen } from '../../hooks/lib/ticketsmodel'
 import { continuePrompt } from '../../hooks/lib/runlines'
 
 // The board's groups run IN PROGRESS, BLOCKED, PENDING DECISION, PENDING (buildModel):
@@ -712,3 +712,458 @@ test('F85: a workflow run - mode, phases, next phase; e then Enter prints /skill
   const stale = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-old 2026-10-18T11:15Z') }, { 'RUN-0020': script })
   assert.equal(reduce(stale, key('e')).state.engage?.text, '/skillator:marathon-run RUN-0020')
 })
+
+test('B20: r key triggers poll effects and sets reload toast; onBoard reconciles selected/expanded', () => {
+  const r = reduce(s0, key('r'))
+  assert.equal(r.state.toast, '↻ TICKETS.md reloaded')
+  assert.deepEqual(r.effects, [{ kind: 'poll', what: 'board' }, { kind: 'poll', what: 'slow' }])
+
+  const b1 = parseBoard('- [ ] F1 — a\n- [ ] F2 — b\n', 'T', 0, 0)
+  const st1 = onBoard({ ...s0, open: [' '], selected: 'F1' }, b1, [], null)
+  assert.equal(st1.selected, 'F1')
+
+  const b2 = parseBoard('- [ ] F3 — c\n', 'T', 0, 0)
+  const st2 = onBoard({ ...st1, selected: 'F2', expanded: 'F2' }, b2, [], null)
+  assert.equal(st2.selected, 'head: ')
+  assert.equal(st2.expanded, null)
+})
+
+// F128: Ops board Tickets: collapsible Assigned and Decide sections
+test('F128: Assigned (N) and Decide (N) sections personalized to active user', () => {
+  const b = parseBoard(
+    '- [ ] F1 — Dark mode [owner: @asha]\n- [?] F3 — Pick chart [decide: @asha]\n- [ ] F5 — Other task [owner: @vidul]\n',
+    'T', 1, 1
+  )
+  const tm = [{ handle: '@asha', emails: [] }, { handle: '@vidul', emails: [] }]
+  const sAsha = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  const mAsha = buildModel(viewOf(sAsha))
+  const itemsAsha = ticketsItems(sAsha, mAsha)
+  assert.equal(itemsAsha[0], 'head:assigned')
+  assert.equal(itemsAsha[1], 'assigned:F1')
+  assert.equal(itemsAsha[2], 'head:decide')
+  assert.equal(itemsAsha[3], 'decide:F3')
+
+  const sVidul = onBoard(initial(80, 24, 0), b, tm, '@vidul')
+  const mVidul = buildModel(viewOf(sVidul))
+  const itemsVidul = ticketsItems(sVidul, mVidul)
+  assert.equal(itemsVidul[0], 'head:assigned')
+  assert.equal(itemsVidul[1], 'assigned:F5')
+  assert.equal(itemsVidul[2], 'head:decide')
+  assert.equal(itemsVidul[3], 'head:?')
+})
+
+test('F128: Enter, Space, and mouse click toggle expansion/folding of Assigned and Decide', () => {
+  const b = parseBoard(
+    '- [ ] F1 — Dark mode [owner: @asha]\n- [?] F3 — Pick chart [decide: @asha]\n',
+    'T', 1, 1
+  )
+  const tm = [{ handle: '@asha', emails: [] }]
+  let s = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  s.selected = 'head:assigned'
+  assert.ok(isUserSectionOpen(s.open, 'assigned'))
+
+  // Enter toggles folding
+  s = reduce(s, key('return')).state
+  assert.ok(!isUserSectionOpen(s.open, 'assigned'))
+  let items = ticketsItems(s, buildModel(viewOf(s)))
+  assert.ok(!items.includes('assigned:F1'))
+
+  // Space toggles it back open
+  s = reduce(s, key('space')).state
+  assert.ok(isUserSectionOpen(s.open, 'assigned'))
+  items = ticketsItems(s, buildModel(viewOf(s)))
+  assert.ok(items.includes('assigned:F1'))
+
+  // Mouse click via point toggles decide
+  s.selected = 'head:decide'
+  assert.ok(isUserSectionOpen(s.open, 'decide'))
+  s = point(s, { kind: 'row', area: 'tickets', id: 'head:decide' }).state
+  assert.ok(!isUserSectionOpen(s.open, 'decide'))
+  assert.ok(!ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+
+  // Click again unfolds decide
+  s = point(s, { kind: 'row', area: 'tickets', id: 'head:decide' }).state
+  assert.ok(isUserSectionOpen(s.open, 'decide'))
+  assert.ok(ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+})
+
+test('F128: dynamically adapts when switching users in Team view (t)', () => {
+  const b = parseBoard(
+    '- [ ] F1 — Dark mode [owner: @asha]\n- [?] F3 — Pick chart [decide: @vidul]\n',
+    'T', 1, 1
+  )
+  const tm = [{ handle: '@asha', emails: [] }, { handle: '@vidul', emails: [] }]
+  let s = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  assert.equal(activeUser(s), '@asha')
+  assert.ok(ticketsItems(s, buildModel(viewOf(s))).includes('assigned:F1'))
+  assert.ok(!ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+
+  // Open team view with 't'
+  s = reduce(s, key('t')).state
+  assert.equal(s.showTeam, true)
+
+  // Navigate to @vidul and press Enter to select
+  s = reduce(s, key('down')).state
+  assert.equal(s.teamSelected, '@vidul')
+  s = reduce(s, key('return')).state
+  assert.equal(s.showTeam, false)
+  assert.equal(activeUser(s), '@vidul')
+  assert.equal(s.me, '@vidul')
+
+  // Tickets tab now adapts to @vidul
+  const items = ticketsItems(s, buildModel(viewOf(s)))
+  assert.ok(!items.includes('assigned:F1'))
+  assert.ok(items.includes('decide:F3'))
+})
+
+test('F122: Workflows tab action bar operations (m mode, r rerun, p push pending, click triggers)', () => {
+  const chainWithPending = [
+    '## Stages',
+    '| # | stage | state | owner | heartbeat | landed |',
+    '|---|---|---|---|---|---|',
+    '| 1 | S1 F1 | x | b | - | sha1 |',
+    '| 2 | S2 F2 | pending | b | - | |',
+    '',
+    '## Chain',
+    '### S1 - stage 1 - F1 one',
+    'tickets: F1',
+    '### S2 - stage 2 - F2 two',
+    'tickets: F2',
+  ].join('\n')
+
+  let s = onRuns(reduce(s0, key('2')).state, LIST, { 'RUN-0012': chainWithPending })
+  assert.equal(s.tab, 'runs')
+  assert.equal(s.runMode, 'parallel')
+
+  // 1. m key toggles mode
+  const modeStep = reduce(s, key('m'))
+  assert.equal(modeStep.state.runMode, 'sequential')
+  assert.match(modeStep.state.toast ?? '', /sequential/)
+
+  const modeStep2 = reduce(modeStep.state, key('m'))
+  assert.equal(modeStep2.state.runMode, 'parallel')
+  assert.match(modeStep2.state.toast ?? '', /parallel/)
+
+  // 2. r key reruns selected run
+  s = { ...s, runsSelected: 'RUN-0012' }
+  const rerunStep = reduce(s, key('r'))
+  assert.match(rerunStep.state.toast ?? '', /Rerunning RUN-0012/)
+  assert.equal(rerunStep.effects.length, 1)
+  assert.equal(rerunStep.effects[0]!.kind, 'run')
+  assert.equal((rerunStep.effects[0] as any).call, 'relay-queue-add')
+
+  // 3. p key pushes pending stages
+  const pushStep = reduce(s, key('p'))
+  assert.match(pushStep.state.toast ?? '', /Pushing 1 pending stages of RUN-0012/)
+  assert.equal(pushStep.effects.length, 1)
+  assert.equal(pushStep.effects[0]!.kind, 'run')
+  assert.equal((pushStep.effects[0] as any).call, 'relay-queue-add')
+
+  // 4. Pointer clicks route through point()
+  const ptMode = point(s, { kind: 'key', key: { name: 'm' } })
+  assert.equal(ptMode.state.runMode, 'sequential')
+})
+
+// ---- F127: Help & Skills Guide Viewer ----
+
+test('F127: ? and 7 keys open Help modal with 31+ installed skills; Esc dismisses it', () => {
+  assert.equal(s0.help, null)
+  assert.ok(SKILLS.length >= 31, `Expected at least 31 skills, got ${SKILLS.length}`)
+
+  // ? key opens help
+  const sHelp = reduce(s0, { name: '?' }).state
+  assert.ok(sHelp.help)
+  assert.equal(sHelp.help!.selected, SKILLS[0]!.id)
+  assert.equal(sHelp.help!.expanded, false)
+  assert.equal(sHelp.help!.filter, '')
+
+  // Esc dismisses help
+  const sEsc = reduce(sHelp, { name: 'escape' }).state
+  assert.equal(sEsc.help, null)
+
+  // 7 key opens help
+  const s7 = reduce(s0, { name: '7' }).state
+  assert.ok(s7.help)
+
+  // ? sequence opens help
+  const sSeq = reduce(s0, { name: '', sequence: '?' }).state
+  assert.ok(sSeq.help)
+})
+
+test('F127: list navigation with up/down/j/k and Enter to expand doc viewer', () => {
+  let s = reduce(s0, { name: '?' }).state
+  assert.ok(s.help)
+  assert.equal(s.help!.selected, SKILLS[0]!.id)
+
+  // j / down moves down
+  s = reduce(s, { name: 'j' }).state
+  assert.equal(s.help!.selected, SKILLS[1]!.id)
+  s = reduce(s, { name: 'down' }).state
+  assert.equal(s.help!.selected, SKILLS[2]!.id)
+
+  // k / up moves up
+  s = reduce(s, { name: 'k' }).state
+  assert.equal(s.help!.selected, SKILLS[1]!.id)
+  s = reduce(s, { name: 'up' }).state
+  assert.equal(s.help!.selected, SKILLS[0]!.id)
+
+  // Enter expands doc viewer
+  s = reduce(s, { name: 'return' }).state
+  assert.equal(s.help!.expanded, true)
+  assert.equal(s.help!.scroll, 0)
+
+  // Scrolling in doc viewer
+  s = reduce(s, { name: 'down' }).state
+  assert.equal(s.help!.scroll, 1)
+  s = reduce(s, { name: 'j' }).state
+  assert.equal(s.help!.scroll, 2)
+  s = reduce(s, { name: 'k' }).state
+  assert.equal(s.help!.scroll, 1)
+
+  // Enter or Esc in doc viewer collapses back to list
+  s = reduce(s, { name: 'return' }).state
+  assert.equal(s.help!.expanded, false)
+  assert.equal(s.help!.scroll, 0)
+})
+
+test('F127: fast keyboard filtering (/) searches skills, backspace edits, Enter finishes filter', () => {
+  let s = reduce(s0, { name: '?' }).state
+  assert.ok(s.help)
+
+  // / starts filtering mode
+  s = reduce(s, { name: '/' }).state
+  assert.equal(s.help!.filtering, true)
+
+  // Type 'zordon'
+  for (const ch of 'zordon') {
+    s = reduce(s, { name: ch, sequence: ch }).state
+  }
+  assert.equal(s.help!.filter, 'zordon')
+  assert.equal(s.help!.selected, 'tickets-zordon')
+  const filtered = filteredSkills(s.help!.filter)
+  assert.equal(filtered.length, 1)
+  assert.equal(filtered[0]!.id, 'tickets-zordon')
+
+  // Backspace removes character
+  s = reduce(s, { name: 'backspace' }).state
+  assert.equal(s.help!.filter, 'zordo')
+
+  // Enter finishes filtering mode and leaves filter active
+  s = reduce(s, { name: 'return' }).state
+  assert.equal(s.help!.filtering, false)
+  assert.equal(s.help!.filter, 'zordo')
+
+  // Enter again expands the selected skill's doc
+  s = reduce(s, { name: 'return' }).state
+  assert.equal(s.help!.expanded, true)
+
+  // c copies quick reference toast
+  s = reduce(s, { name: 'c' }).state
+  assert.match(s.toast ?? '', /Copied reference: skillator:tickets-zordon/)
+
+  // Esc in doc view goes back to list
+  s = reduce(s, { name: 'escape' }).state
+  assert.equal(s.help!.expanded, false)
+
+  // Next Esc closes help
+  s = reduce(s, { name: 'escape' }).state
+  assert.equal(s.help, null)
+})
+
+test('F127: teams-uhura doc includes setup.ps1 wizard launch instructions', () => {
+  let s = openHelp(s0, 'teams-uhura').state
+  assert.equal(s.help!.selected, 'teams-uhura')
+  const sk = SKILLS.find(x => x.id === 'teams-uhura')!
+  assert.ok(sk.usage.includes('setup.ps1'))
+  assert.ok(sk.examples.some(e => e.includes('setup.ps1')))
+  assert.ok(sk.examples.some(e => e.includes('--check')))
+})
+
+test('F127: mouse point actions (help, help-skill, help-close)', () => {
+  // Click 'help' toggles open
+  let s = point(s0, { kind: 'help' }).state
+  assert.ok(s.help)
+
+  // Click on a skill selects it
+  s = point(s, { kind: 'help-skill', id: 'relay-morpheus' }).state
+  assert.equal(s.help!.selected, 'relay-morpheus')
+  assert.equal(s.help!.expanded, false)
+
+  // Clicking the same skill again expands it
+  s = point(s, { kind: 'help-skill', id: 'relay-morpheus' }).state
+  assert.equal(s.help!.expanded, true)
+
+  // Click 'help-close' closes help
+  s = point(s, { kind: 'help-close' }).state
+  assert.equal(s.help, null)
+})
+
+test('F113: startRunCommand pins command text per choice (mode, runner, count, tickets)', () => {
+  // 1. /pending-subagent sequential, default open tickets
+  assert.equal(
+    startRunCommand({ runner: '/pending-subagent', mode: 'sequential', count: null, tickets: '' }),
+    '/pending-subagent sequential',
+  )
+
+  // 2. /pending-subagent parallel, default open tickets
+  assert.equal(
+    startRunCommand({ runner: '/pending-subagent', mode: 'parallel', count: null, tickets: '' }),
+    '/pending-subagent parallel',
+  )
+
+  // 3. /pending-subagent parallel with count 2
+  assert.equal(
+    startRunCommand({ runner: '/pending-subagent', mode: 'parallel', count: 2, tickets: '' }),
+    '/pending-subagent parallel 2',
+  )
+
+  // 4. /pending-subagent parallel with count 3 and typed tickets
+  assert.equal(
+    startRunCommand({ runner: '/pending-subagent', mode: 'parallel', count: 3, tickets: 'F113 B20' }),
+    '/pending-subagent parallel 3 F113 B20',
+  )
+
+  // 5. /pending-subagent sequential with typed ticket
+  assert.equal(
+    startRunCommand({ runner: '/pending-subagent', mode: 'sequential', count: null, tickets: 'F113' }),
+    '/pending-subagent sequential F113',
+  )
+
+  // 6. /marathon-run sequential, default open tickets
+  assert.equal(
+    startRunCommand({ runner: '/marathon-run', mode: 'sequential', count: null, tickets: '' }),
+    '/marathon-run sequential',
+  )
+
+  // 7. /marathon-run parallel, default open tickets
+  assert.equal(
+    startRunCommand({ runner: '/marathon-run', mode: 'parallel', count: null, tickets: '' }),
+    '/marathon-run parallel',
+  )
+
+  // 8. /marathon-run parallel with count 2 and typed tickets
+  assert.equal(
+    startRunCommand({ runner: '/marathon-run', mode: 'parallel', count: 2, tickets: 'F113' }),
+    '/marathon-run parallel 2 F113',
+  )
+})
+
+test('F113: Workflows tab interactive start run flow (open, navigation, mode cycling, tickets editing, confirm & cancel)', () => {
+  let s = reduce(s0, key('2')).state
+  assert.equal(s.tab, 'runs')
+  assert.equal(s.startRun, null)
+
+  // 1. 's' key opens start run form
+  s = reduce(s, key('s')).state
+  assert.ok(s.startRun)
+  assert.equal(s.startRun.runner, '/pending-subagent')
+  assert.equal(s.startRun.mode, 'parallel')
+  assert.equal(s.startRun.count, null)
+  assert.equal(s.startRun.tickets, '')
+  assert.equal(s.startRun.field, 'mode')
+
+  // Check lines
+  assert.deepEqual(startRunLines(s), [
+    'Start Run',
+    '  Runner   /pending-subagent',
+    '  Mode     parallel',
+    '  Tickets  open ones',
+    '  Command  /pending-subagent parallel',
+  ])
+
+  // 2. Mode field cycling: space cycles parallel -> parallel 2 -> parallel 3 -> parallel 4 -> sequential -> parallel
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.mode, 'parallel')
+  assert.equal(s.startRun!.count, 2)
+  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel 2')
+
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.count, 3)
+  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel 3')
+
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.count, 4)
+
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.mode, 'sequential')
+  assert.equal(s.startRun!.count, null)
+  assert.equal(startRunCommand(s.startRun!), '/pending-subagent sequential')
+
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.mode, 'parallel')
+  assert.equal(s.startRun!.count, null)
+  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel')
+
+  // Direct shortcuts on mode field: 's' sets sequential, 'p' sets parallel, '3' sets parallel 3
+  s = reduce(s, { name: 's', sequence: 's' }).state
+  assert.equal(s.startRun!.mode, 'sequential')
+  s = reduce(s, { name: 'p', sequence: 'p' }).state
+  assert.equal(s.startRun!.mode, 'parallel')
+  assert.equal(s.startRun!.count, null)
+  s = reduce(s, { name: '3', sequence: '3' }).state
+  assert.equal(s.startRun!.mode, 'parallel')
+  assert.equal(s.startRun!.count, 3)
+  // Backspace on mode clears count back to uncapped
+  s = reduce(s, key('backspace')).state
+  assert.equal(s.startRun!.count, null)
+
+  // 3. Tab moves to tickets field
+  s = reduce(s, key('tab')).state
+  assert.equal(s.startRun!.field, 'tickets')
+
+  // Type tickets
+  s = reduce(s, { name: 'F', sequence: 'F' }).state
+  s = reduce(s, { name: '1', sequence: '1' }).state
+  s = reduce(s, { name: '1', sequence: '1' }).state
+  s = reduce(s, { name: '3', sequence: '3' }).state
+  assert.equal(s.startRun!.tickets, 'F113')
+  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel F113')
+
+  // Backspace deletes char
+  s = reduce(s, key('backspace')).state
+  assert.equal(s.startRun!.tickets, 'F11')
+  s = reduce(s, { name: '3', sequence: '3' }).state
+  assert.equal(s.startRun!.tickets, 'F113')
+
+  // 4. Tab moves to runner field
+  s = reduce(s, key('tab')).state
+  assert.equal(s.startRun!.field, 'runner')
+
+  // Space / 'm' switches to /marathon-run
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.runner, '/marathon-run')
+  assert.equal(startRunCommand(s.startRun!), '/marathon-run parallel F113')
+
+  // 'p' switches back to /pending-subagent
+  s = reduce(s, { name: 'p', sequence: 'p' }).state
+  assert.equal(s.startRun!.runner, '/pending-subagent')
+
+  // 5. Esc cancels: closes startRun, nothing executed
+  const cancelled = reduce(s, key('escape'))
+  assert.equal(cancelled.state.startRun, null)
+  assert.equal(cancelled.effects.length, 0)
+  assert.equal(cancelled.state.toast, null)
+
+  // 6. Confirm flow: Enter shows exact command to paste (ops app stays read-only)
+  // Nothing runs without confirm
+  const confirmed = reduce(s, key('return'))
+  assert.equal(confirmed.state.startRun, null)
+  assert.equal(confirmed.effects.length, 0)
+  assert.equal(confirmed.state.toast, 'Paste into your CLI:\n/pending-subagent parallel F113')
+})
+
+test('F113: mouse point action for start-run-field', () => {
+  let s = reduce(s0, key('2')).state
+  s = reduce(s, key('s')).state
+  assert.equal(s.startRun!.field, 'mode')
+
+  s = point(s, { kind: 'start-run-field', field: 'tickets' }).state
+  assert.equal(s.startRun!.field, 'tickets')
+
+  s = point(s, { kind: 'start-run-field', field: 'runner' }).state
+  assert.equal(s.startRun!.field, 'runner')
+})
+
+
+
+

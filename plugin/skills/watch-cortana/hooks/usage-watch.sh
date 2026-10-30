@@ -225,6 +225,93 @@ codex_level() {
           printf "%s %s %s", (h==""?"-":sprintf("%.1f",h+0)), (wk==""?"-":sprintf("%.1f",wk+0)), (c==""?"-":c) }'
 }
 
+read_cache() {
+  cp=""
+  for cand in "${CLAUDE_USAGE_WATCH_DIR:-}/quota-cache.json" \
+              "${SKILLATOR_PROFILE_DIR:-}/quota-cache.json" \
+              "${AGY_CONFIG_DIR:-}/quota-cache.json" \
+              "${MUSE_CONFIG_DIR:-}/quota-cache.json" \
+              "${CLAUDE_CONFIG_DIR:-}/quota-cache.json" \
+              "${CLAUDE_CONFIG_DIR:-}/handoff-watch/quota-cache.json" \
+              "$dir/quota-cache.json" \
+              "${ANTIGRAVITY_APP_DATA_DIR:-}/quota-cache.json" \
+              "$HOME/.gemini/antigravity-cli/quota-cache.json"; do
+    if [ -f "$cand" ]; then cp="$cand"; break; fi
+  done
+  [ -n "$cp" ] || return 0
+  fresh_file "$cp" || return 0
+  awk '
+    match($0,/"src"[[:space:]]*:[[:space:]]*"[^"]*"/){
+      s=substr($0,RSTART,RLENGTH); sub(/^[^:]*:[[:space:]]*"/,"",s); sub(/"$/,"",s); src=s }
+    match($0,/"(5h|five)"[[:space:]]*:[[:space:]]*[0-9.]+/){
+      h=substr($0,RSTART,RLENGTH); sub(/.*:[[:space:]]*/,"",h) }
+    match($0,/"(7d|weekly)"[[:space:]]*:[[:space:]]*[0-9.]+/){
+      w=substr($0,RSTART,RLENGTH); sub(/.*:[[:space:]]*/,"",w) }
+    match($0,/"note"[[:space:]]*:[[:space:]]*"[^"]*"/){
+      n=substr($0,RSTART,RLENGTH); sub(/^[^:]*:[[:space:]]*"/,"",n); sub(/"$/,"",n); gsub(/[[:space:]]/,"_",n); note=n }
+    END {
+      if (src=="") src="none"
+      if (h=="") h="-"
+      if (w=="") w="-"
+      mx="-"
+      if (h!="-" && w!="-") { mx = (h+0 > w+0 ? sprintf("%.1f", h+0) : sprintf("%.1f", w+0)) }
+      else if (h!="-") { mx = sprintf("%.1f", h+0) }
+      else if (w!="-") { mx = sprintf("%.1f", w+0) }
+      if (h!="-") h=sprintf("%.1f", h+0)
+      if (w!="-") w=sprintf("%.1f", w+0)
+      printf "%s %s %s %s %s", src, h, w, mx, note
+    }' "$cp"
+}
+
+if [ "$mode" = refresh ]; then
+  cli="$2"; target_dir="$3"
+  [ -n "$cli" ] && [ -n "$target_dir" ] || exit 0
+  lock="$target_dir/quota-cache.json.refreshing"
+  cache="$target_dir/quota-cache.json"
+  mkdir -p "$target_dir"
+  case $cli in
+    agy)
+      raw=$(agy -p "/usage" --output-format json 2>/dev/null)
+      if [ -n "$raw" ]; then
+        parsed=$(printf '%s' "$raw" | awk '
+          /"remaining_fraction"/ {
+            match($0, /"remaining_fraction"[[:space:]]*:[[:space:]]*[0-9.]+/);
+            f=substr($0, RSTART, RLENGTH); sub(/.*:[[:space:]]*/, "", f);
+            u=(1.0 - f)*100;
+            if ($0 ~ /5h|hour/) { if (h=="" || u>h) h=u }
+            if ($0 ~ /week|7d/) { if (w=="" || u>w) w=u }
+          }
+          END { if (h!="" || w!="") printf "{\"src\":\"agy\",\"5h\":%.1f,\"7d\":%.1f}", (h==""?0:h), (w==""?0:w) }')
+        [ -n "$parsed" ] && printf '%s' "$parsed" > "$cache"
+      fi
+      ;;
+    claude)
+      raw=$(CLAUDE_CONFIG_DIR="$target_dir" claude -p "/usage" --output-format json 2>/dev/null)
+      if [ -n "$raw" ]; then
+        parsed=$(printf '%s' "$raw" | awk '
+          /Current session:[[:space:]]*[0-9.]+%[[:space:]]*used/ {
+            match($0, /Current session:[[:space:]]*[0-9.]+/);
+            s=substr($0, RSTART, RLENGTH); sub(/.*:[[:space:]]*/, "", s); h=s;
+          }
+          /Current week.*:[[:space:]]*[0-9.]+%[[:space:]]*used/ {
+            match($0, /Current week[^:]*:[[:space:]]*[0-9.]+/);
+            s=substr($0, RSTART, RLENGTH); sub(/.*:[[:space:]]*/, "", s); w=s;
+          }
+          END { if (h!="" || w!="") printf "{\"src\":\"claude-code\",\"5h\":%.1f,\"7d\":%.1f}", (h==""?0:h), (w==""?0:w) }')
+        [ -n "$parsed" ] && printf '%s' "$parsed" > "$cache"
+      fi
+      ;;
+    muse)
+      raw=$(muse usage --json 2>&1)
+      if case $raw in *"not logged in"*) true ;; *) false ;; esac; then
+        printf '{"src":"muse","note":"not logged in"}' > "$cache"
+      fi
+      ;;
+  esac
+  rm -f "$lock"
+  exit 0
+fi
+
 # level (F31): one machine line for relay-morpheus's chain hold, and nothing
 # else - no stdin, no .done, no threshold, no directory created.
 #   src=<claude-code|codex|none> 5h=<pct|-> 7d=<pct|-> ctx=<pct|-> max=<pct|->
@@ -235,7 +322,7 @@ codex_level() {
 # reading only: relay's chain decide never holds on it (a full context is a
 # compaction, not a quota) - with no 5h it falls back to 7d, else unobservable.
 if [ "$mode" = level ]; then
-  src=none; h=-; wk=-; cx=-; mx=-
+  src=none; h=-; wk=-; cx=-; mx=-; note_tag=""
   roll=$(codex_newest_fresh "${CODEX_HOME:-$HOME/.codex}/sessions")
   if [ -n "$roll" ]; then
     set -- $(codex_level "$roll")
@@ -258,7 +345,20 @@ if [ "$mode" = level ]; then
       v=$(read_fresh "$dir/$key.ctx");      [ -n "$v" ] && cx=$v
     fi
   fi
-  echo "src=$src 5h=$h 7d=$wk ctx=$cx max=$mx"
+  if [ "$src" = none ]; then
+    cache_data=$(read_cache)
+    if [ -n "$cache_data" ]; then
+      set -- $cache_data
+      src=$1
+      [ "$2" != "-" ] && h=$2
+      [ "$3" != "-" ] && wk=$3
+      [ "$4" != "-" ] && mx=$4
+      [ -n "$5" ] && note_tag=" note=$5"
+    elif [ -n "${SKILLATOR_CLI:-}" ] && [ -n "${SKILLATOR_PROFILE_DIR:-}" ]; then
+      sh "$0" refresh "$SKILLATOR_CLI" "$SKILLATOR_PROFILE_DIR" >/dev/null 2>&1 &
+    fi
+  fi
+  echo "src=$src 5h=$h 7d=$wk ctx=$cx max=$mx$note_tag"
   exit 0
 fi
 
@@ -287,6 +387,63 @@ if [ "$mode" = check ]; then
     if [ -n "$k" ]; then
       pct=$(read_fresh "$dir/$k"); wk=$(read_fresh "$dir/$k.weekly")
       if [ -n "$pct" ] || [ -n "$wk" ]; then src=claude-code; key=$k; fi
+    fi
+  fi
+  if [ -z "$pct" ] && [ -z "$wk" ]; then
+    cache_data=$(read_cache)
+    if [ -n "$cache_data" ]; then
+      set -- $cache_data
+      src=$1
+      [ "$2" != "-" ] && pct=$2
+      [ "$3" != "-" ] && wk=$3
+      if [ -n "$pct" ] || [ -n "$wk" ]; then key="$src-cache"; fi
+    fi
+  fi
+  if [ -z "$pct" ] && [ -z "$wk" ]; then
+    clp=""
+    for cand in "${CURSOR_LEDGER_PATH:-}" \
+                "${SKILLATOR_PROFILE_DIR:-}/cursor-ledger.json" \
+                "${SKILLATOR_CONFIG_DIR:-}/cursor-ledger.json" \
+                "$HOME/.skillator/cursor-ledger.json" \
+                "$HOME/.cursor/cursor-ledger.json" \
+                ".skillator/cursor-ledger.json"; do
+      if [ -n "$cand" ] && [ -f "$cand" ]; then clp="$cand"; break; fi
+    done
+    if [ -n "$clp" ]; then
+      est=$(node -e '
+        const fs = require("fs");
+        try {
+          const json = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          const budget = json.budget_tokens ?? json.budget_cost ?? json.budget;
+          if (!budget || budget <= 0) process.exit(1);
+          const bDay = json.billing_day || 1;
+          const now = process.env.SKILLATOR_NOW ? new Date(process.env.SKILLATOR_NOW) : new Date();
+          let cYear = now.getUTCFullYear();
+          let cMonth = now.getUTCMonth();
+          if (now.getUTCDate() < bDay) { cMonth--; if (cMonth < 0) { cMonth = 11; cYear--; } }
+          const maxDays = new Date(Date.UTC(cYear, cMonth + 1, 0)).getUTCDate();
+          const cStart = new Date(Date.UTC(cYear, cMonth, Math.min(bDay, maxDays), 0, 0, 0));
+          let tot = 0;
+          for (const r of json.runs || []) {
+            if (r.timestamp && new Date(r.timestamp) < cStart) continue;
+            if (json.budget_cost) {
+              tot += Number(r.cost ?? r.cost_usd ?? r.usage?.cost ?? r.usage?.cost_usd ?? 0);
+            } else {
+              tot += Number(r.tokens ?? r.usage?.total_tokens ?? (
+                (r.usage?.inputTokens ?? r.usage?.prompt_tokens ?? 0) +
+                (r.usage?.outputTokens ?? r.usage?.completion_tokens ?? 0) +
+                (r.usage?.cacheReadTokens ?? 0) +
+                (r.usage?.cacheWriteTokens ?? 0)
+              ));
+            }
+          }
+          console.log(Math.round((tot / budget) * 100));
+        } catch { process.exit(1); }
+      ' "$clp" 2>/dev/null)
+      if [ -n "$est" ]; then
+        echo "watch-cortana: cursor est $est% of budget (skillator runs only) - check cursor.com/settings"
+        exit 0
+      fi
     fi
   fi
   if [ -z "$pct" ] && [ -z "$wk" ]; then

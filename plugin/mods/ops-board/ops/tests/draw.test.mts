@@ -1,12 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ansi, frame, frameSegs, fit, cells, glyph, plain, paintScreen } from '../draw'
-import { initial, onBoard, onMachine, onRuns, onUsage, reduce } from '../state'
+import { ansi, frame, frameSegs, fit, cells, glyph, plain, paintScreen, screen } from '../draw'
+import { initial, onBoard, onMachine, onRuns, onUsage, openHelp, openStartRun, reduce } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
 import { headKey } from '../../hooks/lib/ticketsmodel'
 import { BOARD } from '../../tests/fixtures'
+import { bandLines, statusText } from '../../hooks/lib/bandlines'
 // The block's excerpt, with the layout the owner approved in the mock (controller ruling
 // 2026-10-20: where the mock and the excerpt differ on what the user sees, the mock wins).
 // F61: groups start collapsed; the row tests run with every group open, the first row selected.
@@ -70,17 +71,17 @@ test('runs and health tabs as the mock; the assign box overlays the body', () =>
 test('the band: one line from 80 columns, the hold first, R resume at the right; two lines below 80', () => {
   const held = onUsage(onMachine(s, RED_HELD, 0).state, 'src=codex 5h=41 7d=55 ctx=- max=-\n', 0).state
   const b = frame(held, P).at(-1)!
-  assert.match(b, /^■ HOLD mem 0\.5 GB at 03:29Z · mem 0\.5 GB · C: 84 GB · 5h 41% · 7d 55% +R resume$/)
+  assert.match(b, /^■ HOLD mem 0\.5 GB at 03:29Z · mem 0\.5 GB · C: 84 GB · 5h 41% · 7d 5… +\[R resume\]$/)
   assert.ok(cells(b) <= 80)
   assert.match(frame({ ...held, cols: 120 }, P).at(-1)!, /C: 84 GB free · 5h/)
   const c = frame(held, { color: true, ascii: false }).at(-1)!
   assert.match(c, /\x1b\[31m■ HOLD/)
   assert.match(c, /mem \x1b\[31m0\.5 GB\x1b\[0m/)
-  assert.match(c, /\x1b\[2mR resume\x1b\[0m$/)
+  assert.match(c, /\x1b\[2m\[R resume\]\x1b\[0m$/)
   assert.doesNotMatch(frame({ ...s, cols: 120 }, P).at(-2)!, /ops ·/)
   const narrow = sized({ ...held, cols: 60 })
   assert.match(narrow.at(-2)!, /^■ HOLD/)
-  assert.match(narrow.at(-1)!, /5h 41% · 7d 55% +R resume$/)
+  assert.match(narrow.at(-1)!, /5h 41% · 7d 55% +\[R resume\]$/)
 })
 test('no Claude Code-only words in any frame', () => {
   const held = onMachine(s, RED_HELD, 0).state
@@ -138,30 +139,30 @@ test('F81 the reconcile box draws its proposals and its keys', () => {
   assert.match(t, /┌─ Reconcile tickets - 1 to change ─/)
   assert.match(t, /│ {2}\[x\] F1 {2}pending → in progress {2}2 commits name it/)
   assert.match(t, /│› {5}F3 {2}blocked stays - evidence unclear: x/)
-  assert.ok(frame(x, P).includes('↑↓ move · space pick · enter apply picked · a accept all · esc none'))
+  assert.ok(frame(x, P).includes('[↑↓ move] · [space pick] · [enter apply picked] · [a accept all] · [esc none]'))
 })
 test('the keys line as the mock; D decided only on a decidable row', () => {
-  const keys = (x: State) => frame({ ...x, cols: 100 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
-  assert.equal(keys(s), '↑↓ move · enter line · a assign · d decide · t team · c reconcile · r reload · q quit')
+  const keys = (x: State) => frame({ ...x, cols: 120 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
+  assert.equal(keys(s), '[↑↓ move] · [enter line] · [a assign] · [d decide] · [t team] · [c reconcile] · [r reload] · [q quit]')
   const f3: State = { ...s, selected: 'F3' }
-  assert.match(keys(f3), /D decided/)
-  assert.match(keys(f3), /q quit$/)
+  assert.match(keys(f3), /\[D decided\]/)
+  assert.match(keys(f3), /\[q quit\]$/)
   // A144: one separator throughout - " · " stays when "D decided" joins the row.
   for (const cols of [80, 60, 40]) {
     for (const x of [{ ...s, cols }, { ...f3, cols }, reduce({ ...s, cols }, { name: '3' }).state]) {
       const f = frame(x, P)
-      const line = f.find(l => /r reload/.test(l))
+      const line = f.find(l => /\[q quit\]/.test(l))
       assert.ok(line, `${cols}: no keys line ending q quit\n${f.join('\n')}`)
       assert.ok(cells(line) <= cols, `${cells(line)} > ${cols}: ${line}`)
       assert.doesNotMatch(line, /\S {2}\S/, line)
-      assert.match(line, /q quit$/, line)
+      assert.match(line, /\[q quit\]$/, line)
     }
   }
-  assert.match(keys(f3), / · D decided · /)
+  assert.match(keys(f3), / · \[D decided\] · /)
   // F76: no run yet, the cursor is on the Runs header (Enter closes it); on a run, Enter shows its stages
-  assert.match(text(reduce(s, { name: '2' }).state), /↑↓ move · enter close · e engage/)
-  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /↑↓ move · enter stages · e engage/)
-  assert.match(text(reduce(s, { name: '3' }).state), /R resume \(on a fresh non-red reading\) · F force resume · r reload · q quit/)
+  assert.match(text(reduce(s, { name: '2' }).state), /\[↑↓ move\] · \[enter close\] · \[s Start\] · \[Engage\]/)
+  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /\[↑↓ move\] · \[enter stages\] · \[s Start\] · \[Engage\]/)
+  assert.match(text(reduce(s, { name: '3' }).state), /\[R resume \(on a fresh non-red reading\)\](\n| · )\[F force resume\] · \[r reload\] · \[q quit\]/)
 })
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
   let x: State = { ...s, rows: 13 }
@@ -172,12 +173,12 @@ test('the selection scrolls into view in a short terminal; a cut list says so', 
 })
 test('filter row, tags, expanded chips and raw line, count line, done shown', () => {
   const f = text(s)
-  assert.match(f, /^filter  app: all · who: all · mine: off +f filter · x show done$/m)
+  assert.match(f, /^filter  app: all · who: all · mine: off +\[f filter\] · \[x show done\]$/m)
   assert.match(f, /^  ● F3  Pick the chart library +decide @asha$/m)
   assert.match(f, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
   assert.match(f, /  ▾ Pending decision \(1\)\n/)
   const ex = text(reduce({ ...s, selected: 'F3' }, { name: 'return' }).state)
-  assert.match(ex, /      decide:@asha   D decided\n      - \[\?\] F3 — Pick the chart library \[decide: @asha\]/)
+  assert.match(ex, /      decide:@asha   \[D decided\]\n      - \[\?\] F3 — Pick the chart library \[decide: @asha\]/)
   const done = text(reduce(s, { name: 'x' }).state)
   assert.match(done, /  ▾ Done \(8\)/)
   assert.match(done, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
@@ -284,15 +285,15 @@ test('team view and add-person form draw in the body at 80 columns', () => {
   const t = text(tv)
   assert.match(t, /Team  \.skillator\/team\.md · 2 people\n› @asha +Asha Rao +a@x, asha@y +\S.*\n  @vidul +Vidul K +v@x/)
   // A146: q closes the whole board from the Team view too, so its footer lists it
-  assert.match(t, /\nn add · del remove \(asks first\) · l make lead · esc back · q quit\n/)
+  assert.match(t, /\n\[n add\] · \[del remove \(asks first\)\] · \[l make lead\] · \[esc back\] · \[q quit\]\n/)
   // F80: the lead marked lead, me (you), the header says who you are
   const marked = text(reduce({ ...two, team: [{ ...two.team[0]!, lead: true as const }, two.team[1]!], me: '@vidul' }, { name: 't' }).state)
   assert.match(marked, /Team  \.skillator\/team\.md · 2 people · you: @vidul\n› @asha +Asha Rao +a@x, asha@y +lead\b.*\n  @vidul +Vidul K +v@x +\(you\)/)
   assert.match(text(reduce(tv, { name: 'down' }).state), /\n  @asha .*\n› @vidul /)
   const f = reduce(tv, { name: 'n' }).state
   const ft = text(f)
-  assert.match(ft, /  ┌─ Add person ─+┐\n  │  Handle   @_ +│\n  │  Name +│\n  │  Emails +│\n  │ +│\n  │  Runs    ticket-meta team add @\? \? \? +│\n  │  tab next field · enter add · esc cancel +│\n  └─+┘/)
-  assert.match(ft, /\ntab \/ shift-tab field · enter add · esc cancel\n/)
+  assert.match(ft, /  ┌─ Add person ─+┐\n  │  Handle   @_ +│\n  │  Name +│\n  │  Emails +│\n  │ +│\n  │  Runs    ticket-meta team add @\? \? \? +│\n  │  \[tab next field\] · \[enter add\] · \[esc cancel\] +│\n  └─+┘/)
+  assert.match(ft, /\n\[tab \/ shift-tab field\] · \[enter add\] · \[esc cancel\]\n/)
   const ask = reduce(tv, { name: 'delete' }).state
   assert.match(text(ask), /\nremove @asha from \.skillator\/team\.md\? \(y\/n\)\n/)
   assert.match(frame(ask, { color: true, ascii: false }).find(l => l.includes('(y/n)'))!, /\x1b\[33mremove @asha/)
@@ -384,12 +385,12 @@ test('F61: every group starts collapsed - one header per group with its count, t
 })
 
 test('F61: Enter opens a group under its header, ▾; the keys line says what Enter does on a header', () => {
-  const keys = (x: State) => frame({ ...x, cols: 100 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
-  assert.match(keys(fresh), /^↑↓ move · enter open · a assign/)
+  const keys = (x: State) => frame({ ...x, cols: 120 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
+  assert.match(keys(fresh), /^\[↑↓ move\] · \[enter open\] · \[a assign\]/)
   const o = reduce(fresh, { name: 'return' }).state
   assert.match(text(o), /› ▾ In progress \(1\)\n  ● B2  CSV export drops the last row[^\n]*\n  ▸ Blocked \(1\)/)
-  assert.match(keys(o), /^↑↓ move · enter close · a assign/)
-  assert.match(keys(reduce(o, { name: 'down' }).state), /^↑↓ move · enter line · a assign/)
+  assert.match(keys(o), /^\[↑↓ move\] · \[enter close\] · \[a assign\]/)
+  assert.match(keys(reduce(o, { name: 'down' }).state), /^\[↑↓ move\] · \[enter line\] · \[a assign\]/)
 })
 
 test('F61: ascii draws the headers > and v', () => {
@@ -424,11 +425,11 @@ test('F77: the assign box draws the Ticket line; typing an ID there, the keys sa
   const sel = reduce(s, { name: 'a' }).state                        // B2 selected
   const t = text(sel)
   assert.match(t, /┌─ Assign B2 ─+┐\n  │  Ticket  B2 · \[~\] in progress · CSV export drops the last row +│/)
-  assert.match(t, /\n↑↓ person · a \/ d kind · tab ticket · enter confirm · esc cancel\n/)
+  assert.match(t, /\n\[↑↓ person\] · \[a \/ d kind\] · \[tab ticket\] · \[enter confirm\] · \[esc cancel\]\n/)
   const none = reduce({ ...fresh }, { name: 'a' }).state             // a header selected: no ticket
   const n = text(none)
   assert.match(n, /┌─ Assign a ticket ─+┐\n  │  Ticket  _ · type a ticket ID, e.g. F12 +│/)
-  assert.match(n, /\ntype the ID · tab person · enter confirm · esc cancel\n/)
+  assert.match(n, /\ntype the ID · \[tab person\] · \[enter confirm\] · \[esc cancel\]\n/)
   for (const [cols, rows] of [[80, 24], [40, 12], [20, 5]] as const) sized({ ...none, cols, rows })
 })
 // Review #6: the stage dot differs only by colour; with colour off (--no-color, NO_COLOR)
@@ -455,3 +456,312 @@ test('F76: with colour off or --ascii a stage row keeps its state glyph', () => 
   assert.match(col, /^    \x1b\[32m●\x1b\[0m  1  /m)
   assert.match(col, /^    \x1b\[31m●\x1b\[0m  2  /m)
 })
+
+// F128: Ops board Tickets: collapsible Assigned and Decide sections draw
+test('F128 draw: Assigned and Decide sections render with fold indicators and adapt to folding and ascii', () => {
+  const b = parseBoard(
+    '- [ ] F1 — Dark mode [owner: @asha]\n- [?] F3 — Pick chart [decide: @asha]\n',
+    'T', 1, 1
+  )
+  const tm = [{ handle: '@asha', emails: [] }]
+  let sUser = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  let f = frame(sUser, P).join('\n')
+  assert.match(f, /▾ Assigned \(1\)/)
+  assert.match(f, /F1  Dark mode/)
+  assert.match(f, /▾ Decide \(1\)/)
+  assert.match(f, /F3  Pick chart/)
+
+  // Fold assigned section
+  sUser = { ...sUser, open: [...sUser.open, 'fold:assigned' as any] }
+  f = frame(sUser, P).join('\n')
+  assert.match(f, /▸ Assigned \(1\)/)
+  assert.match(f, /▸ Assigned \(1\)\n  ▾ Decide \(1\)/)
+
+  // In ASCII mode, ▾ / ▸ become v / >
+  const fAscii = frame(sUser, { color: false, ascii: true, plain: true }).join('\n')
+  assert.match(fAscii, /> Assigned \(1\)/)
+  assert.match(fAscii, /v Decide \(1\)/)
+})
+
+test('F120: responsive footer actions and wrapping across 40, 60, 80, 100, 120 columns without dropping keys', () => {
+  const expectedKeys = ['↑↓ move', 'enter line', 'a assign', 'd decide', 't team', 'c reconcile', 'r reload', 'q quit']
+  for (const cols of [40, 60, 80, 100, 120]) {
+    const f = frame({ ...s, cols }, P)
+    assert.equal(f.length, s.rows)
+    for (const l of f) assert.ok(cells(l) <= cols, `${cells(l)} > ${cols}: ${l}`)
+    const full = f.join('\n')
+    for (const k of expectedKeys) {
+      assert.ok(full.includes(k), `cols ${cols}: missing shortcut "${k}"\n${full}`)
+    }
+
+    // Decidable row adds D decided; none of the keys are dropped
+    const f3: State = { ...s, selected: 'F3', cols }
+    const f3Frame = frame(f3, P)
+    assert.equal(f3Frame.length, f3.rows)
+    for (const l of f3Frame) assert.ok(cells(l) <= cols, `${cells(l)} > ${cols}: ${l}`)
+    const f3Full = f3Frame.join('\n')
+    for (const k of [...expectedKeys, 'D decided']) {
+      assert.ok(f3Full.includes(k), `cols ${cols} (decidable): missing shortcut "${k}"\n${f3Full}`)
+    }
+
+    // Health tab shortcuts preserved across all widths
+    const h = reduce({ ...s, cols }, { name: '3' }).state
+    const hFrame = frame(h, P)
+    assert.equal(hFrame.length, h.rows)
+    for (const l of hFrame) assert.ok(cells(l) <= cols, `${cells(l)} > ${cols}: ${l}`)
+    const hFull = hFrame.join('\n')
+    for (const k of ['R resume', 'F force resume', 'r reload', 'q quit']) {
+      assert.ok(hFull.includes(k), `cols ${cols} (health): missing shortcut "${k}"\n${hFull}`)
+    }
+  }
+
+  // Body layout budget intact across narrow terminals
+  const narrow12 = frame({ ...s, cols: 40, rows: 12 }, P)
+  assert.equal(narrow12.length, 12)
+  for (const l of narrow12) assert.ok(cells(l) <= 40, `${cells(l)} > 40: ${l}`)
+  assert.ok(narrow12.some(l => l.includes('In progress') || l.includes('B2')))
+})
+
+// F123: Uniform TUI button badge design system across ops board
+test('F123: button badges [Key Label] across all tabs and click hitboxes match badge boundaries', () => {
+  // 1. Tickets tab
+  const scTickets = screen({ ...s, cols: 120 }, P)
+  const tText = scTickets.lines.join('\n')
+  assert.match(tText, /\[↑↓ move\] · \[enter line\] · \[a assign\] · \[d decide\] · \[t team\] · \[c reconcile\] · \[r reload\] · \[q quit\]/)
+  assert.match(tText, /\[f filter\] · \[x show done\]/)
+
+  // Hitbox check: find hit for 'q'
+  const qHit = scTickets.hits.find(h => h.action.kind === 'key' && (h.action as any).key.name === 'q')
+  assert.ok(qHit, 'q hitbox found')
+  assert.equal(qHit.width, cells('[q quit]'), 'hitbox width matches [q quit]')
+
+  // 2. Workflows (runs) tab
+  const scRuns = screen({ ...reduce(s, { name: '2' }).state, cols: 120 }, P)
+  assert.match(scRuns.lines.join('\n'), /\[↑↓ move\] · \[enter close\] · \[s Start\] · \[Engage\] · \[Rerun\] · \[Push Pending\] · \[Mode: \|\|\/seq\] · \[q quit\]/)
+
+  // 3. Health tab
+  const scHealth = screen({ ...reduce(s, { name: '3' }).state, cols: 120 }, P)
+  assert.match(scHealth.lines.join('\n'), /\[R resume \(on a fresh non-red reading\)\] · \[F force resume\] · \[r reload\] · \[q quit\]/)
+
+  // 4. Messages tab
+  const scMsgs = screen({ ...reduce(s, { name: '4' }).state, cols: 120 }, P)
+  assert.match(scMsgs.lines.join('\n'), /\[↑↓ move\] · \[enter open\] · \[m mark all read\] · \[s setup\] · \[q quit\]/)
+
+  // 5. Explorer tab
+  const scExp = screen({ ...reduce(s, { name: '5' }).state, cols: 120 }, P)
+  assert.match(scExp.lines.join('\n'), /\[↑↓ move\] · \[enter open\/close\] · \[r reload\] · \[q quit\]/)
+
+  // 6. Build (run) tab
+  const scBuild = screen({ ...reduce(s, { name: '6' }).state, cols: 120 }, P)
+  assert.match(scBuild.lines.join('\n'), /\[↑↓ move\] · \[enter run\] · \[n rename\] · \[r rescan\] · \[q quit\]/)
+})
+
+test('F122: Workflows tab action bar with compact action buttons and responsive width handling', () => {
+  const rState = reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state
+  for (const cols of [120, 80, 60, 40]) {
+    const sc = screen({ ...rState, cols }, P)
+    const full = sc.lines.join('\n')
+    assert.match(full, /\[Engage\]/, `Engage present at ${cols}`)
+    assert.match(full, /\[Rerun\]/, `Rerun present at ${cols}`)
+    assert.match(full, /\[Push Pending\]/, `Push Pending present at ${cols}`)
+    assert.match(full, /\[Mode: \|\|\/seq\]/, `Mode present at ${cols}`)
+    for (const l of sc.lines) {
+      assert.ok(cells(l) <= cols, `Line exceeded ${cols}: ${l}`)
+    }
+  }
+
+  // Hitbox assertions
+  const sc = screen({ ...rState, cols: 80 }, P)
+  for (const key of ['e', 'r', 'p', 'm']) {
+    const hit = sc.hits.find(h => h.action.kind === 'key' && (h.action as any).key.name === key)
+    assert.ok(hit, `Hitbox found for key ${key}`)
+  }
+})
+
+// ---- F127: Help & Skills Guide Viewer Drawing Tests ----
+
+test('F127: Help modal frame renders cleanly across 80, 60, 40 columns without breaking layout budget', () => {
+  const hState = openHelp(s).state
+  assert.ok(hState.help)
+
+  for (const cols of [80, 60, 40]) {
+    for (const rows of [24, 18, 12]) {
+      const f = sized({ ...hState, cols, rows })
+      assert.equal(f.length, rows)
+      for (const l of f) {
+        assert.ok(cells(l) <= cols, `Line exceeded ${cols} cells in ${cols}x${rows}: ${l}`)
+      }
+      const full = f.join('\n')
+      assert.match(full, /┌─ Help & Skills Guide/)
+      assert.match(full, /└─+┘/)
+    }
+  }
+
+  // 80 columns: check content formatting
+  const f80 = sized({ ...hState, cols: 80, rows: 24 })
+  const t80 = f80.join('\n')
+  assert.match(t80, /Filter: all \(\d+\)/)
+  assert.match(t80, /a11y-toph/)
+  assert.match(t80, /\[UI & Accessibility\]/)
+
+  // Selected skill in view
+  const fZordon = sized(openHelp(s, 'tickets-zordon').state)
+  assert.match(fZordon.join('\n'), /tickets-zordon/)
+  assert.match(fZordon.join('\n'), /\[Board & Tickets\]/)
+
+  // Keys line in list view
+  const keysLine = f80.find(l => l.includes('[enter doc]'))
+  assert.ok(keysLine, 'Found keys line with enter doc')
+  assert.match(keysLine!, /\[↑↓ move\] · \[enter doc\] · \[\/ filter\] · \[c copy ref\] · \[esc cancel\]/)
+})
+
+test('F127: Help documentation viewer rendering, setup.ps1 instructions, and scrolling', () => {
+  const hDoc = {
+    ...s,
+    cols: 80,
+    rows: 24,
+    help: {
+      selected: 'teams-uhura',
+      filter: '',
+      filtering: false,
+      expanded: true,
+      scroll: 0,
+    },
+  }
+
+  const f = sized(hDoc)
+  const full = f.join('\n')
+  assert.match(full, /┌─ Help · teams-uhura/)
+  assert.match(full, /Skill: +teams-uhura +\[Collaboration & Messages\]/)
+  assert.match(full, /Summary: +Microsoft Teams incoming\/outgoing webhook bridge/)
+  assert.match(full, /Usage Guide:/)
+  assert.match(full, /setup\.ps1/)
+
+  // At rows: 35 and cols: 80, the powershell launch command is in view cut cleanly with ellipsis
+  const fTall = sized({ ...hDoc, rows: 35 })
+  assert.match(fTall.join('\n'), /powershell -NoProfile -ExecutionPolicy Bypass -File plugin\/skills\/teams-u/)
+
+  // At cols: 120, the full powershell command fits without ellipsis
+  const fWide = sized({ ...hDoc, cols: 120, rows: 35 })
+  assert.match(fWide.join('\n'), /powershell -NoProfile -ExecutionPolicy Bypass -File plugin\/skills\/teams-uhura\/scripts\/setup\.ps1/)
+
+  // With scroll > 0, shows scroll indicator
+  const scrolled = sized({ ...hDoc, help: { ...hDoc.help!, scroll: 4 } })
+  assert.match(scrolled.join('\n'), /▲ \(4 lines above\)/)
+
+  // Keys line in doc view
+  const kLine = f.find(l => l.includes('[enter/esc back]'))
+  assert.ok(kLine, 'Found keys line with enter/esc back')
+  assert.match(kLine!, /\[enter\/esc back\]/)
+})
+
+test('F127: Mouse hitboxes in Help modal for skill rows', () => {
+  const hState = openHelp({ ...s, cols: 80, rows: 24 }).state
+  const sc = screen(hState, P)
+
+  // Find hitboxes for help-skill
+  const skillHits = sc.hits.filter(h => h.action.kind === 'help-skill')
+  assert.ok(skillHits.length > 0, 'Expected mouse hitboxes on skills in Help modal')
+  assert.ok(skillHits.some(h => (h.action as any).id === hState.help!.selected))
+})
+
+test('F113: Workflows tab draws [s Start] button and hitbox', () => {
+  const rState = reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state
+  const sc = screen({ ...rState, cols: 80 }, P)
+  const full = sc.lines.join('\n')
+  assert.match(full, /\[s Start\]/)
+
+  const startHit = sc.hits.find(h => h.action.kind === 'key' && (h.action as any).key.name === 's')
+  assert.ok(startHit, 'Hitbox found for key s ([s Start])')
+})
+
+test('F113: Start run modal drawing and responsive layout across columns', () => {
+  const rState = reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state
+  const srState = openStartRun(rState).state
+  assert.ok(srState.startRun)
+
+  for (const cols of [80, 60, 40]) {
+    for (const rows of [24, 18]) {
+      const f = sized({ ...srState, cols, rows })
+      assert.equal(f.length, rows)
+      const full = f.join('\n')
+      assert.match(full, /┌─ Start Run/)
+      assert.match(full, /Runner/)
+      assert.match(full, /Mode/)
+      assert.match(full, /Tickets/)
+      assert.match(full, /Command/)
+      assert.match(full, /\[Enter confirm\] · \[Esc cancel\]/)
+      assert.match(full, /\[tab \/ shift-tab field\]/)
+      assert.match(full, /\[enter confirm\] · \[esc cancel\]/)
+    }
+  }
+
+  // Hitbox assertions for start-run-field
+  const sc = screen({ ...srState, cols: 80 }, P)
+  const runnerHit = sc.hits.find(h => h.action.kind === 'start-run-field' && (h.action as any).field === 'runner')
+  const modeHit = sc.hits.find(h => h.action.kind === 'start-run-field' && (h.action as any).field === 'mode')
+  const ticketsHit = sc.hits.find(h => h.action.kind === 'start-run-field' && (h.action as any).field === 'tickets')
+  assert.ok(runnerHit, 'Hitbox found for runner field')
+  assert.ok(modeHit, 'Hitbox found for mode field')
+  assert.ok(ticketsHit, 'Hitbox found for tickets field')
+})
+
+test('F130: Ops band shows the addressee of a pending handoff', () => {
+  // 1. statusText ends with ' → @vidul' when pending handoff is present, unchanged when none
+  const counts = { open: 258, progress: 1, testing: 0, blocked: 0, decision: 0 }
+  const usage = {
+    five: { pct: 1, resetsAt: null, source: 'host' as const, at: 0 },
+    seven: { pct: 33, resetsAt: null, source: 'host' as const, at: 0 },
+    spendLimitPct: null, costUsd: null, decision: null,
+  }
+  const stWithHandoff = statusText(counts, usage, 0, null, '@vidul')
+  assert.equal(stWithHandoff, 'ops 257 pending | 1 in progress | 258 total · 5h 1% · 7d 33% → @vidul')
+  assert.ok(stWithHandoff.length <= 80)
+  assert.match(stWithHandoff, /→ @vidul$/)
+
+  const stNoHandoff = statusText(counts, usage, 0, null)
+  assert.equal(stNoHandoff, 'ops 257 pending | 1 in progress | 258 total · 5h 1% · 7d 33%')
+
+  // 2. bandLines across 40, 80, 120 columns
+  const baseInput = {
+    watch: { level: 'green' as const, reasons: [] },
+    machine: { at: 0, drive: 'C:', diskFree: 17 * 1073741824, diskTotal: 1000 * 1073741824, memFree: 3 * 1073741824, locks: [], hold: null },
+    usage,
+    relay: 'RUN-0012 2/4',
+    counts,
+    narrow: false,
+    cols: 120,
+    now: 0,
+    me: null,
+    handoff: '@vidul',
+  }
+
+  // 120 columns
+  const lines120 = bandLines({ ...baseInput, cols: 120 })
+  assert.match(lines120[0]!, /→ @vidul$/)
+  assert.ok(cells(lines120[0]!) <= 120)
+
+  // 80 columns: fits at 80 cols, relay drops so → @vidul fits
+  const lines80 = bandLines({ ...baseInput, cols: 80 })
+  assert.match(lines80[0]!, /→ @vidul$/)
+  assert.ok(cells(lines80[0]!) <= 80)
+
+  // 40 columns: cut before usage figures are cut (handoff drops)
+  const lines40 = bandLines({ ...baseInput, cols: 40 })
+  assert.doesNotMatch(lines40[0]!, /→ @vidul/)
+  assert.match(lines40[0]!, /5h 1%/)
+
+  // 3. Ops board TUI frame with handoff
+  const sWithHandoff = { ...s, handoff: '@vidul' }
+  const f80 = sized({ ...sWithHandoff, cols: 80, rows: 24 })
+  assert.match(f80.at(-1)!, /→ @vidul/)
+
+  const f120 = sized({ ...sWithHandoff, cols: 120, rows: 24 })
+  assert.match(f120.at(-1)!, /→ @vidul/)
+
+  const fNoHandoff = sized({ ...s, cols: 80, rows: 24 })
+  assert.doesNotMatch(fNoHandoff.at(-1)!, /→ @vidul/)
+})
+
+
+

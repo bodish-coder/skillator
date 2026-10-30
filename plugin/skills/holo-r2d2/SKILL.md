@@ -91,10 +91,19 @@ node --test <SKILL>/scripts/anatomy.test.mjs
   the dotted one a re-planned stage pointing at its replacement. A stage the
   run file lists no files for says so; the page never guesses them.
 - **A card per open or asked decision**: question, header chip, ticket, what it
-  blocks and which stages it holds, files, default; each option a small flow -
-  the choice, what it does, where it hurts, what it unblocks - with the
-  recommended one marked. Answered, ruled, re-planned and moot decisions sit
-  in one collapsed list below.
+  blocks and which stages it holds, files, default; optional visual SVG block
+  diagram (`diagram: Step A -> Step B -> Step C`); each option a visual flow
+  with explicit action explanation (`What this action does`), structured **Pros**
+  (`does` / `pros`, green-tinted card) and **Cons** (`hurts` / `tradeoff` / `cons`,
+  red/amber-tinted card), and what it unblocks - with the recommended one
+  marked. Answered, ruled, re-planned and moot decisions sit in one collapsed
+  list below.
+- **Visual SVG block diagrams (EdrawMax block-diagram style)**: Design sections
+  (`--design`) with subsections (`###`), bullet steps, or flow arrows (`A -> B -> C`)
+  and decision/option `diagram` fields render inline SVG block diagrams
+  (`class="block-diagram"`) with concise headings, minimal text, colour-coded
+  functional blocks (action flows, UI/workflow mockups, architecture blocks),
+  and directional arrows instead of prose walls.
 
 `.skillator/holo/` is generated output: the script writes a `.gitignore`
 (`*`) into it on first use, so it never lands in a commit.
@@ -102,16 +111,19 @@ node --test <SKILL>/scripts/anatomy.test.mjs
 ## Pick the output
 
 Every output carries the header, counts, the open decisions, the stage graph,
-every stage and the design sections with their tables - rendered from the run
-file by the script. Closed decisions (answered, ruled, re-planned, moot) are on
-the page only. `--out <path>` overrides any default path.
+every stage and the design sections with their tables and visual block diagrams -
+rendered from the run file by the script. Closed decisions (answered, ruled,
+re-planned, moot) are on the page only. `--out <path>` overrides any default path.
+**Always give the full resolved absolute file path** (e.g., `C:/.../RUN-12.html`
+or `/abs/path/.skillator/holo/RUN-12.html`) in the chat reply - never a relative
+path.
 
 | Said | Output | Command | Show |
 |---|---|---|---|
-| "artifact", "publish" | Artifact (published page) | `holo.mjs RUN-12` -> `RUN-12.artifact.html` | publish it (Show it, below) |
-| "html", "page", "file" | HTML file | `holo.mjs RUN-12 --html` -> `RUN-12.html` | give the path |
-| "markdown", "md", "mermaid" | Markdown with Mermaid | `holo.mjs RUN-12 --md` -> `RUN-12.md` | give the path |
-| "svg" | SVG | `holo.mjs RUN-12 --svg` -> `RUN-12.svg` | give the path |
+| "artifact", "publish" | Artifact (published page) | `holo.mjs RUN-12` -> `RUN-12.artifact.html` | publish it (Show it, below) + full path |
+| "html", "page", "file" | HTML file | `holo.mjs RUN-12 --html` -> `RUN-12.html` | give the full absolute path |
+| "markdown", "md", "mermaid" | Markdown with Mermaid | `holo.mjs RUN-12 --md` -> `RUN-12.md` | give the full absolute path |
+| "svg" | SVG | `holo.mjs RUN-12 --svg` -> `RUN-12.svg` | give the full absolute path |
 
 - **Named in the request** -> that one.
 - **Not named** -> ask once (`AskUserQuestion`, else a numbered list), in this
@@ -119,10 +131,15 @@ the page only. `--out <path>` overrides any default path.
   `HTML file`, `Markdown with Mermaid`, `SVG`; without it - `HTML file`,
   `Markdown with Mermaid`, `SVG` (Artifact left out).
 - **The end batch and the away flow never ask**: `--batch` draws its fixed set
-  (Artifact page, standalone page, wizard, ASCII), as below.
+  (Artifact page, standalone page, wizard, ASCII), printing the full resolved
+  absolute path for every generated file.
 - `--anatomy` is a page feature: with `--md` or `--svg` the script refuses.
 
 ## Show it
+
+**Always report the full absolute file path** in your chat reply for every
+generated file (`--html`, `--wizard`, `--batch`, `--md`, `--svg`, etc.), never a
+relative path.
 
 ### Claude Code, with the Artifact tool
 
@@ -135,8 +152,8 @@ the page only. `--out <path>` overrides any default path.
    republishes the same file path, so the link does not change; in a new
    session, find it first (`action: "list"`, title `Holo RUN-n`) and `read` it
    before publishing to its `url`.
-3. Give the link in one line. At the end batch it also goes **inside the
-   AskUserQuestion question text** of the first page -
+3. Give the link (and full absolute path) in one line. At the end batch it also
+   goes **inside the AskUserQuestion question text** of the first page -
    `RUN-11 Q7 (1/3): <question> - drawn: <link>` - because the question
    dialog is the one thing the user is certainly looking at. In the away flow
    it goes into the push notification text.
@@ -144,15 +161,16 @@ the page only. `--out <path>` overrides any default path.
 ### Every other host, and Claude Code without the tool (`-p`, headless)
 
 `--html` writes a standalone page (its own doctype) to
-`.skillator/holo/RUN-n.html`; give the path. Paste `--ascii` into the message
-as well when the user is in a terminal, so the picture is there without
-opening anything. Never claim a publish that did not happen.
+`.skillator/holo/RUN-n.html`; always give the **full absolute path** printed by
+the script. Paste `--ascii` into the message as well when the user is in a
+terminal, so the picture is there without opening anything. Never claim a
+publish that did not happen.
 
 ### Markdown and SVG
 
-`--md` and `--svg` write files - give the path. On a host that renders Mermaid
-in chat, the Markdown's fenced `mermaid` block may be pasted as well; it is the
-script's output, copied, never typed.
+`--md` and `--svg` write files - always give the **full absolute path**. On a
+host that renders Mermaid in chat, the Markdown's fenced `mermaid` block may be
+pasted as well; it is the script's output, copied, never typed.
 
 ## Answers from the page
 
@@ -187,19 +205,38 @@ review full of open questions, "make these decisions easier" - draw the
 wizard instead of (or beside) the cards:
 
 ```sh
-node <SKILL>/scripts/holo.mjs RUN-12 --wizard            # the run's open/asked Qs -> .skillator/holo/RUN-12.wizard.html
-node <SKILL>/scripts/holo.mjs --decisions set.json       # any decision set (holo-decisions/1) -> .skillator/holo/<id>.wizard.html
-node <SKILL>/scripts/holo.mjs --answers RUN-12-decisions-FINAL.json   # finalized answers -> relay-morpheus answer lines
+node <SKILL>/scripts/holo.mjs RUN-12 --wizard            # the run's open/asked Qs -> full path to RUN-12.wizard.html
+node <SKILL>/scripts/holo.mjs --decisions set.json       # any decision set (holo-decisions/1) -> full path to <id>.wizard.html
+node <SKILL>/scripts/holo.mjs RUN-12 --next-wizard RUN-12-decisions-FINAL.json   # Round N+1 wizard carrying settled answers forward & expanding Ask/Explain
+node <SKILL>/scripts/holo.mjs --answers RUN-12-decisions-FINAL.json              # finalized answers -> relay-morpheus answer lines
 ```
 
 One self-contained offline HTML file: one decision per step with the
-question, what exists now, why it matters, scope, an example, a labelled
-recommendation shown first and **never pre-selected**, two or three options
-with their trade-offs, "something else" and "discuss first" (each needs text),
-notes, sources, and a preview of where the selected option leads beside it.
+question, what exists now, why it matters, scope, an example, a visual SVG
+block diagram (`diagram`) showing the workflow/action/UI blocks with minimal
+text, a labelled recommendation shown first and **never pre-selected**, options
+with explicit per-action explanations (`What this action does` / `explain`),
+structured **Pros** (`pros` / `does`, green-tinted card) and **Cons** (`cons` /
+`tradeoff`, red/amber-tinted card), `"Something else - I'll describe it"`
+(`custom`) and `"Ask / Explain more - generate detailed explanation in next HTML"`
+(`defer` / `explain`), notes, sources, and a live visual block-diagram + Pros/Cons
+preview beside it.
 Back / Skip / Save & continue; drafts kept in the browser and as JSON
 (import is validated and asks before replacing); a review screen; finalizing
 needs the owner's name and a review tick, and any later edit clears it.
+**Finalizing and downloading JSON is always allowed** as soon as every decision
+has a response - including standard options (`answered`), `"Something else"`
+(`custom-review-required`), and `"Ask / Explain more"` (`deferred` with your
+question or explanation request). Only unanswered/blank decisions block
+finalizing.
+
+**Continuous multi-round discussion (`--next-wizard`).** When the downloaded
+JSON contains `"Something else"` or `"Ask / Explain more"` responses, run
+`holo.mjs [RUN-12 | --decisions set.json] --next-wizard <FINAL.json>` (or
+`--wizard --answers <FINAL.json>`) to generate the Round N+1 `.wizard.html`:
+all answered decisions move into `settled` (read-only), and open/explain/custom
+decisions stay active with a **"Discussion & Explanation Requested"** banner,
+expanded per-action explanations, Pros/Cons breakdown, and block diagrams.
 
 **Reconcile before you build a set.** Only decisions the owner alone can make
 go in `decisions`. Settled ones go in `settled` with their source (the later
@@ -208,18 +245,21 @@ missing builds and ETAs are never questions. Cite a source per decision; when
 evidence is missing, say so in `why` - never invent a safe value. From a run
 this is already done: the marathon parks only owner decisions.
 
-A set is JSON: `{"schema":"holo-decisions/1","id","title","source",
-"decisions":[{"id","ticket","question","now","why","scope","example",
-"recommendation","options":[{"id","label","does","tradeoff","consequence",
-"recommended"}],"sources":[]}],"settled":[{"id","question","answer","source"}]}`.
-At most one option is recommended; `custom` and `defer` are reserved ids.
+A set is JSON: `{"schema":"holo-decisions/1","id","title","source","round"?:1,
+"decisions":[{"id","ticket","question","now","why","scope","example","diagram"?:[],
+"recommendation","options":[{"id","label","explain"?:string,"does","pros"?:string,
+"tradeoff","cons"?:string,"consequence","diagram"?:[],"recommended"}],"sources":[]}],
+"settled":[{"id","question","answer","source"}]}`.
+At most one option is recommended; `custom`, `defer` and `explain` are reserved ids.
 
-Give the path and four lines: open it, answer, review, download the final JSON
-and share it here. Back in the session, `--answers` prints one single-quoted
-`relay-morpheus.sh answer` line per answered decision - run them yourself, after
-reading them; custom directions are flagged for interpretation and deferred
-ones stay open. A draft (not finalized) is refused. For a set that is not a
-relay run, read the answers to the user's work instead of `RM answer`.
+Always give the **full resolved absolute path** to the `.wizard.html` file and
+four lines: open it, answer (or choose Ask / Explain more), review, download the
+final JSON and share it here (for `--answers` or `--next-wizard`). Back in the
+session, `--answers` prints one single-quoted `relay-morpheus.sh answer` line
+per answered decision - run them yourself, after reading them; custom directions
+are flagged for interpretation and deferred/explain ones stay open. A draft (not
+finalized) is refused by `--answers`. For a set that is not a relay run, read
+the answers to the user's work instead of `RM answer`.
 
 ## What it never does
 

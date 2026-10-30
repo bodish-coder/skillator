@@ -5,15 +5,16 @@
 // it as is.
 import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
-import type { View } from '../hooks/lib/ticketsmodel'
+import type { Model, View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
 import { NO_SCRIPTS } from '../hooks/lib/calls'
-import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, parseReconcile, toggleGroup } from '../hooks/lib/ticketsmodel'
-import { STATE_NAME, ticketById } from '../hooks/lib/board'
+import { appliedHead, appliedLine, applyOf, assignedTickets, buildModel, canApply, decideTickets, HEAD, headKey, isHead, isUserHead, isUserSectionOpen, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
+import type { UserSection } from '../hooks/lib/ticketsmodel'
+import { STATE_NAME, ticketById, visible } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
-import { continuePrompt, engageOf, orderRuns, RUNS_SECTIONS } from '../hooks/lib/runlines'
+import { continuePrompt, engageOf, orderRuns, RUNS_SECTIONS, stageTickets } from '../hooks/lib/runlines'
 import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
@@ -26,11 +27,41 @@ import type { ExState } from './explorer'
 // F79: run = the Run tab (runtab.ts); F75: explorer = the Explorer tab (explorer.ts)
 export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run'
 export type FilterField = 'app' | 'who' | 'mine'
+
+export type SkillGuide = {
+  id: string
+  name: string
+  category: string
+  aliases: string[]
+  summary: string
+  triggers: string[]
+  usage: string
+  examples: string[]
+}
+
+export type HelpState = {
+  selected: string
+  filter: string
+  filtering: boolean
+  expanded: boolean
+  scroll: number
+}
 // node readline keypress names: 'up', 'down', 'left', 'right', 'return', 'escape', 'tab', 'a', 'D', ...
 // `sequence` is the character typed (app.ts sets it for printable keys): the Add person form's text.
 export type Key = { name: string; sequence?: string; shift?: boolean; ctrl?: boolean }
 export type PersonField = 'handle' | 'name' | 'emails'
 export type DialogField = 'ticket' | 'who'
+export type StartRunField = 'runner' | 'mode' | 'tickets'
+export type StartRunMode = 'sequential' | 'parallel'
+export type StartRunRunner = '/pending-subagent' | '/marathon-run'
+export type StartRunDraft = {
+  runner: StartRunRunner
+  mode: StartRunMode
+  count: number | null
+  tickets: string
+  field: StartRunField
+}
+
 export type PointerAction =
   | { kind: 'key'; key: Key }
   | { kind: 'tab'; tab: Tab }
@@ -42,13 +73,27 @@ export type PointerAction =
   | { kind: 'filter-field'; field: FilterField }
   | { kind: 'ticket-field' }
   | { kind: 'dialog-kind'; value: 'owner' | 'decide' }
+  | { kind: 'help' }
+  | { kind: 'help-skill'; id: string }
+  | { kind: 'help-close' }
+  | { kind: 'start-run-field'; field: StartRunField }
 
-export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.reconcile || s.teamConfirm || s.engage || s.filterField || s.runForm)
+export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.reconcile || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help)
 
 // Targets come only from the rendered frame, never from labels or terminal payloads.
 export function point(s: State, a: PointerAction): Step {
   const same = { state: s, effects: [] }
   if (a.kind === 'key') return reduce(s, a.key)
+  if (a.kind === 'help') return s.help ? { state: { ...s, help: null }, effects: [] } : openHelp(s)
+  if (a.kind === 'help-close') return { state: { ...s, help: null }, effects: [] }
+  if (a.kind === 'help-skill') {
+    if (!s.help) return openHelp(s, a.id)
+    if (s.help.selected === a.id) {
+      return { state: { ...s, help: { ...s.help, expanded: !s.help.expanded, scroll: 0 } }, effects: [] }
+    }
+    return { state: { ...s, help: { ...s.help, selected: a.id, expanded: false, scroll: 0 } }, effects: [] }
+  }
+  if (a.kind === 'start-run-field') return s.startRun ? { state: { ...s, startRun: { ...s.startRun, field: a.field } }, effects: [] } : same
   if (a.kind === 'person-field') return s.person ? { state: { ...s, personField: a.field }, effects: [] } : same
   if (a.kind === 'setup-field') {
     if (!s.setup || s.setup.confirmClear) return same
@@ -72,12 +117,13 @@ export function point(s: State, a: PointerAction): Step {
   if (a.kind === 'tab') return toTab(s, a.tab)
   if (a.kind !== 'row') return same
   let next = s
-  if (a.area === 'tickets' && s.tab === 'tickets' && !s.showTeam && buildModel(viewOf(s)).items.includes(a.id)) next = { ...s, selected: a.id }
-  else if (a.area === 'team' && s.tab === 'tickets' && s.showTeam && s.team.some(m => m.handle === a.id)) return { state: { ...s, teamSelected: a.id }, effects: [] }
+  if (a.area === 'tickets' && s.tab === 'tickets' && !s.showTeam && ticketsItems(s, buildModel(viewOf(s))).includes(a.id)) next = { ...s, selected: a.id }
+  else if (a.area === 'team' && s.tab === 'tickets' && s.showTeam && s.team.some(m => m.handle === a.id)) return { state: { ...s, teamSelected: a.id, me: a.id }, effects: [] }
   else if (a.area === 'runs' && s.tab === 'runs' && runsItems(s).includes(a.id)) next = { ...s, runsSelected: a.id }
   else if (a.area === 'messages' && s.tab === 'messages' && s.messages.some(m => m.id === a.id)) next = { ...s, msgSelected: a.id }
   else if (a.area === 'explorer' && s.tab === 'explorer') next = { ...s, explorer: { ...s.explorer, x: { ...s.explorer.x, selected: a.id } } }
   else if (a.area === 'run' && s.tab === 'run' && s.runFile?.entries.some(e => e.id === a.id)) next = { ...s, runSel: a.id }
+  if (a.area === 'tickets' && isHead(a.id)) return reduce({ ...s, selected: a.id }, { name: 'return' })
   return next === s ? same : reduce(next, { name: 'return' })
 }
 
@@ -92,7 +138,9 @@ export type State = {
   runs: RunView[]; runsSelected: string | null; runsExpanded: string | null   // runsSelected: a run id or 'head:<section>'
   runsOpen: RunsSection[]                  // F76: the Workflows tab's open sections (Runs, Workflows); both start open
   runsRead: boolean                        // false until relay's list was first read: 'reading runs…'
+  runMode?: 'parallel' | 'sequential'      // F122: execution mode toggle
   engage: Engage | null                    // F85: the engage confirm box up
+  startRun: StartRunDraft | null           // F113: start run modal on Workflows tab
   dialog: AssignDraft | null; dialogIndex: number    // -1: the cursor is on "+ add person"
   dialogField: DialogField                            // F77: the keys go to the Ticket field or the people
   person: PersonDraft | null; personField: PersonField  // the Add person form, over the dialog or the Team view
@@ -110,6 +158,7 @@ export type State = {
   messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
   teamsCfg: TeamsCfgView | null
   setup: Setup | null; setupField: SetupField
+  help: HelpState | null                       // F127: Help & Skills guide viewer
   explorer: ExState                        // F75: the Explorer tab (ops/explorer.ts)
 } & RunState                               // F79: the Run tab's file, row, form, job
 export type Setup = SetupValues & { result: string | null; confirmClear: boolean; touched: boolean }
@@ -137,10 +186,11 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   filter: { app: null, who: null, mine: false, showDone: false }, filterField: null,
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, relay: null,
-  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, engage: null,
+  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null, startRun: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
+  help: null,
   explorer: EX0,
   ...RUN_INITIAL,
 })
@@ -150,8 +200,32 @@ export const viewOf = (s: State): View => ({
   selected: s.selected, expanded: s.expanded, open: s.open, cols: s.cols,
 })
 
+export const activeUser = (s: State): string | null => s.me ?? s.teamSelected ?? null
+
+export function ticketsItems(s: State, m: Model): string[] {
+  const user = activeUser(s)
+  if (!user || !s.board) return m.items
+  const tickets = visible(s.board, s.filter, s.me)
+  const assigned = assignedTickets(tickets, user)
+  const decide = decideTickets(tickets, user)
+  const assignedOpen = isUserSectionOpen(s.open as string[], 'assigned')
+  const decideOpen = isUserSectionOpen(s.open as string[], 'decide')
+  return [
+    'head:assigned',
+    ...(assignedOpen ? assigned.map(t => 'assigned:' + t.id) : []),
+    'head:decide',
+    ...(decideOpen ? decide.map(t => 'decide:' + t.id) : []),
+    ...m.items,
+  ]
+}
+
 export function onBoard(s: State, board: Board, team: Member[], me: string | null): State {
-  return { ...s, board, team, me }
+  const next: State = { ...s, board, team, me }
+  const m = buildModel(viewOf(next))
+  const items = ticketsItems(next, m)
+  const selected = items.includes(s.selected ?? '') ? s.selected : (m.items[0] ?? items[0] ?? null)
+  const expanded = s.expanded && board.tickets.some(t => t.id === s.expanded) ? s.expanded : null
+  return { ...next, selected, expanded }
 }
 
 // --- words, as the mod says them (assign.tsx, register.tsx, runstab.tsx) ---
@@ -225,7 +299,8 @@ export function dialogLines(s: State): string[] {
 // the same, the keys on its empty Ticket field for the ID to be typed; with a ticket the
 // field is prefilled (tab reaches it to change it) and the keys start on the people.
 function openDialog(s: State, kind: AssignDraft['kind']): State {
-  const id = buildModel(viewOf(s)).ticket
+  const raw = rawTicketId(s.selected)
+  const id = raw && !isHead(raw) ? raw : buildModel(viewOf(s)).ticket
   const t = id ? ticketOf(s, id) : null
   const handle = startHandle(t, kind, s.team, s.me)
   const dialog: AssignDraft = { id: t?.id ?? '', kind, handle, result: null }
@@ -429,19 +504,23 @@ function teamKey(s: State, k: Key): Step {
     return { state: to ? { ...s, teamSelected: to } : s, effects: [] }
   }
   switch (k.name) {
-    case 't': case 'escape': return { state: { ...s, showTeam: false }, effects: [] }
+    case 't': return { state: { ...s, showTeam: false, me: cur ?? s.me }, effects: [] }
+    case 'escape': return { state: { ...s, showTeam: false }, effects: [] }
     case 'up': case 'k': return move(-1)
     case 'down': case 'j': return move(1)
     case 'n': return { state: openPerson(s, 'team'), effects: [] }
     case 'delete': case 'backspace': return cur ? { state: { ...s, teamConfirm: cur }, effects: [] } : same
     case 'l': return cur ? makeLead(s, cur) : same
+    case 'return': case 'enter': return cur ? { state: { ...s, showTeam: false, me: cur, teamSelected: cur }, effects: [] } : same
+    case 'space': return cur ? { state: { ...s, me: cur, teamSelected: cur }, effects: [] } : same
     default: return same
   }
 }
 
 // D: ticket-meta decided <ID> ([?] -> [ ], the [decide:] tag kept).
 function decided(s: State): Step {
-  const id = buildModel(viewOf(s)).ticket
+  const raw = rawTicketId(s.selected)
+  const id = raw && !isHead(raw) ? raw : buildModel(viewOf(s)).ticket
   const t = id ? ticketOf(s, id) : null
   if (!t || t.box !== '?' || !t.decide) {
     return { state: toast(s, 'D marks a decision taken: only on a [?] row with a [decide:] tag'), effects: [] }
@@ -708,6 +787,149 @@ function engageKey(s: State, k: Key): Step {
   return { state: s0, effects: [run('relay-queue-add', [id], then)] }
 }
 
+function rerunRun(s: State): Step {
+  const cur = runsCursor(s)
+  const r0 = s.runs.find(r => r.id === cur)
+  if (!r0) return { state: toast(s, 'r reruns the run under the cursor'), effects: [{ kind: 'poll', what: 'runs' }] }
+  const then: Then = r => x => {
+    if (r.code !== 0) return toast(x, `■ ${r0.id} rerun failed: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}`)
+    return { state: toast(x, `✓ ${r0.id} queued for rerun. Continue prompt:\n${continuePrompt(r0.id)}`), effects: [{ kind: 'poll', what: 'runs' }] }
+  }
+  return { state: toast(s, `Rerunning ${r0.id}…`), effects: [run('relay-queue-add', [r0.id], then)] }
+}
+
+function pushPendingRun(s: State): Step {
+  const cur = runsCursor(s)
+  const r0 = s.runs.find(r => r.id === cur)
+  if (!r0) return { state: toast(s, 'p pushes pending stages of the run under cursor to a follow-up run'), effects: [] }
+  const pend = r0.stages.filter(st => st.state === 'pending' || st.state === ' ')
+  if (!pend.length) return { state: toast(s, `No pending stages left in ${r0.id} to push`), effects: [] }
+  const tickets = pend.flatMap(st => stageTickets(st)).filter(Boolean)
+  const then: Then = r => x => {
+    if (r.code !== 0) return toast(x, `■ push pending failed: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`)
+    return { state: toast(x, `✓ Pushed ${pend.length} pending stages (${tickets.join(' ')}) from ${r0.id} to follow-up run`), effects: [{ kind: 'poll', what: 'runs' }] }
+  }
+  return {
+    state: toast(s, `Pushing ${pend.length} pending stages of ${r0.id} to follow-up run…`),
+    effects: [run('relay-queue-add', [r0.id], then)]
+  }
+}
+
+function toggleMode(s: State): Step {
+  const next = s.runMode === 'sequential' ? 'parallel' : 'sequential'
+  return { state: { ...s, runMode: next, toast: `Mode: ${next === 'parallel' ? 'parallel (||)' : 'sequential (seq)'}` }, effects: [] }
+}
+
+export function startRunCommand(sr: Pick<StartRunDraft, 'runner' | 'mode' | 'count' | 'tickets'>): string {
+  const modeStr = sr.mode === 'parallel' && sr.count ? `parallel ${sr.count}` : sr.mode
+  const ticketsStr = sr.tickets.trim().replace(/\s+/g, ' ')
+  return [sr.runner, modeStr, ticketsStr].filter(Boolean).join(' ')
+}
+
+export function openStartRun(s: State): Step {
+  return {
+    state: {
+      ...s,
+      startRun: {
+        runner: '/pending-subagent',
+        mode: s.runMode ?? 'parallel',
+        count: null,
+        tickets: '',
+        field: 'mode',
+      },
+    },
+    effects: [],
+  }
+}
+
+export function startRunLines(s: State): string[] {
+  const sr = s.startRun
+  if (!sr) return []
+  const cmd = startRunCommand(sr)
+  const modeStr = sr.mode === 'parallel' && sr.count ? `parallel ${sr.count}` : sr.mode
+  const ticketsStr = sr.tickets.trim() || 'open ones'
+  return [
+    'Start Run',
+    `  Runner   ${sr.runner}`,
+    `  Mode     ${modeStr}`,
+    `  Tickets  ${ticketsStr}`,
+    `  Command  ${cmd}`,
+  ]
+}
+
+export function startRunKey(s: State, k: Key): Step {
+  const sr = s.startRun!
+  const s0 = { ...s, startRun: null }
+  if (k.name === 'escape') return { state: s0, effects: [] }
+
+  if (k.name === 'return' || k.name === 'enter') {
+    const cmd = startRunCommand(sr)
+    return {
+      state: toast(s0, `Paste into your CLI:\n${cmd}`),
+      effects: [],
+    }
+  }
+
+  const fields: StartRunField[] = ['runner', 'mode', 'tickets']
+  const moveField = (by: number): Step => {
+    const at = fields.indexOf(sr.field)
+    const nextField = fields[(at + by + fields.length) % fields.length]!
+    return { state: { ...s, startRun: { ...sr, field: nextField } }, effects: [] }
+  }
+
+  if (k.name === 'tab') return moveField(k.shift ? -1 : 1)
+  if (k.name === 'up') return moveField(-1)
+  if (k.name === 'down') return moveField(1)
+
+  if (sr.field === 'runner') {
+    if (k.name === 'space' || k.name === 'left' || k.name === 'right') {
+      const nextRunner: StartRunRunner = sr.runner === '/pending-subagent' ? '/marathon-run' : '/pending-subagent'
+      return { state: { ...s, startRun: { ...sr, runner: nextRunner } }, effects: [] }
+    }
+    if (k.sequence === 'p' || k.sequence === 'P') {
+      return { state: { ...s, startRun: { ...sr, runner: '/pending-subagent' } }, effects: [] }
+    }
+    if (k.sequence === 'm' || k.sequence === 'M') {
+      return { state: { ...s, startRun: { ...sr, runner: '/marathon-run' } }, effects: [] }
+    }
+  } else if (sr.field === 'mode') {
+    const cycleMode = (by: number): Step => {
+      const cur = sr.mode === 'sequential' ? 0 : (sr.count === null ? 1 : Math.min(4, Math.max(2, sr.count)))
+      const next = (cur + by + 5) % 5
+      if (next === 0) return { state: { ...s, startRun: { ...sr, mode: 'sequential', count: null } }, effects: [] }
+      if (next === 1) return { state: { ...s, startRun: { ...sr, mode: 'parallel', count: null } }, effects: [] }
+      return { state: { ...s, startRun: { ...sr, mode: 'parallel', count: next } }, effects: [] }
+    }
+    if (k.name === 'space' || k.name === 'right') return cycleMode(1)
+    if (k.name === 'left') return cycleMode(-1)
+    if (k.sequence === 's' || k.sequence === 'S') {
+      return { state: { ...s, startRun: { ...sr, mode: 'sequential', count: null } }, effects: [] }
+    }
+    if (k.sequence === 'p' || k.sequence === 'P') {
+      return { state: { ...s, startRun: { ...sr, mode: 'parallel', count: null } }, effects: [] }
+    }
+    if (k.sequence && /^[2-9]$/.test(k.sequence)) {
+      return { state: { ...s, startRun: { ...sr, mode: 'parallel', count: parseInt(k.sequence, 10) } }, effects: [] }
+    }
+    if (k.sequence === '1') {
+      return { state: { ...s, startRun: { ...sr, mode: 'sequential', count: null } }, effects: [] }
+    }
+    if (k.name === 'backspace') {
+      return { state: { ...s, startRun: { ...sr, count: null } }, effects: [] }
+    }
+  } else if (sr.field === 'tickets') {
+    if (k.name === 'backspace') {
+      const tickets = [...sr.tickets].slice(0, -1).join('')
+      return { state: { ...s, startRun: { ...sr, tickets } }, effects: [] }
+    }
+    const ch = k.sequence
+    if (!k.ctrl && ch && [...ch].length === 1 && ch >= ' ' && ch !== '\x7f') {
+      return { state: { ...s, startRun: { ...sr, tickets: sr.tickets + ch } }, effects: [] }
+    }
+  }
+  return { state: s, effects: [] }
+}
+
 function runsKey(s: State, k: Key): Step {
   const items = runsItems(s)
   const cur = runsCursor(s)
@@ -729,6 +951,10 @@ function runsKey(s: State, k: Key): Step {
       return { state: { ...s, runsExpanded: s.runsExpanded !== cur ? cur : null }, effects: [] }
     }
     case 'e': return openEngage(s)
+    case 'r': return rerunRun(s)
+    case 'p': return pushPendingRun(s)
+    case 'm': return toggleMode(s)
+    case 's': case 'S': return openStartRun(s)
     default: return { state: s, effects: [] }
   }
 }
@@ -739,25 +965,38 @@ function ticketsKey(s: State, k: Key): Step {
   const same = { state: s, effects: [] }
   if (s.showTeam) return teamKey(s, k)
   const m = buildModel(viewOf(s))
+  const items = ticketsItems(s, m)
   // F61: up/down walk the group headers and the rows of open groups (the model's items).
   const move = (by: number): Step => {
-    const at = m.selected === null ? -1 : m.items.indexOf(m.selected)
-    const to = at < 0 ? undefined : m.items[at + by]
+    const cur = items.includes(s.selected ?? '') ? s.selected : m.selected
+    const at = cur === null ? -1 : items.indexOf(cur)
+    const to = at < 0 ? undefined : items[at + by]
     return { state: to ? { ...s, selected: to } : s, effects: [] }
+  }
+  const toggleHeader = (id: string): Step => {
+    if (id === 'head:assigned') {
+      return { state: { ...s, open: toggleUserSection(s.open as string[], 'assigned') as any }, effects: [] }
+    }
+    if (id === 'head:decide') {
+      return { state: { ...s, open: toggleUserSection(s.open as string[], 'decide') as any }, effects: [] }
+    }
+    const g = m.groups.find(x => headKey(x.box) === id)
+    const keep = s.selected && !isHead(s.selected) && g?.tickets.some(t => t.id === s.selected)
+    return { state: g ? { ...s, selected: keep ? s.selected : id, open: toggleGroup(s.open, g.box) } : s, effects: [] }
   }
   switch (k.name) {
     case 'up': case 'k': return move(-1)
     case 'down': case 'j': return move(1)
     case 'return': case 'enter': {
-      const id = m.selected
-      // on a header: open or close its group, the header stays selected - unless it stands
-      // for a ticket hidden in it (the stored selection), which opening lands back on
-      if (isHead(id)) {
-        const g = m.groups.find(x => headKey(x.box) === id)
-        const keep = s.selected && !isHead(s.selected) && g?.tickets.some(t => t.id === s.selected)
-        return { state: g ? { ...s, selected: keep ? s.selected : id, open: toggleGroup(s.open, g.box) } : s, effects: [] }
-      }
-      return { state: { ...s, expanded: id && s.expanded !== id ? id : null }, effects: [] }
+      const cur = items.includes(s.selected ?? '') ? s.selected : m.selected
+      if (cur && isHead(cur)) return toggleHeader(cur)
+      const rawId = rawTicketId(cur)
+      return { state: { ...s, expanded: rawId && s.expanded !== rawId ? rawId : null }, effects: [] }
+    }
+    case 'space': {
+      const cur = items.includes(s.selected ?? '') ? s.selected : m.selected
+      if (cur && isHead(cur)) return toggleHeader(cur)
+      return same
     }
     case 'a': return { state: openDialog(s, 'owner'), effects: [] }
     case 'd': return { state: openDialog(s, 'decide'), effects: [] }
@@ -901,24 +1140,866 @@ function toTab(s: State, tab: Tab): Step {
   return { state: { ...s, tab }, effects }
 }
 
+
+// --- F127: Help & Skills Guide Viewer ---
+
+export const SKILLS: SkillGuide[] = [
+  {
+    "id": "a11y-toph",
+    "name": "a11y-toph",
+    "category": "UI & Accessibility",
+    "aliases": [
+      "toph",
+      "a11y"
+    ],
+    "summary": "Accessibility audits, WCAG compliance, VPAT checks, and a11y test automation",
+    "triggers": [
+      "can't tab to it",
+      "focus ring invisible",
+      "screen reader reads nothing",
+      "the toast never announces",
+      "fails contrast"
+    ],
+    "usage": "Use when accessibility is the subject: an a11y or WCAG audit of existing code, a VPAT or compliance question, or a reported bug — \"can't tab to it\", \"focus ring invisible\", \"screen reader reads nothing\", \"the toast never announces\", \"fails contrast\", \"no reduced-motion\", \"tap target too small\", \"the error is only red\". Also for wiring axe, pa11y or Lighthouse into tests or CI.",
+    "examples": [
+      "/skillator:a11y-toph",
+      "/skillator:toph"
+    ]
+  },
+  {
+    "id": "audit-sherlock",
+    "name": "audit-sherlock",
+    "category": "Review & Audit",
+    "aliases": [
+      "sherlock",
+      "audit"
+    ],
+    "summary": "Full-application forensic codebase audits for hidden defects and release readiness",
+    "triggers": [
+      "sherlock",
+      "audit the app",
+      "review everything",
+      "find what's broken",
+      "full code review"
+    ],
+    "usage": "Use when the user says \"sherlock\", \"audit the app\", \"review everything\", \"find what's broken\", \"full code review\", \"what's wrong with this codebase\", \"check the whole thing\", \"sherlock #482\", wants a full-application forensic audit for the defects nobody filed, or is before a release/handover. Can also be pointed at a single GitHub PR. Merging and conflict resolution are handed to `skillator:merge-smith`.",
+    "examples": [
+      "/skillator:audit-sherlock",
+      "/skillator:sherlock"
+    ]
+  },
+  {
+    "id": "build-jarvis",
+    "name": "build-jarvis",
+    "category": "Build & Feature",
+    "aliases": [
+      "jarvis",
+      "build"
+    ],
+    "summary": "Single entry point to build features, designs, and F tickets with tiered ceremony",
+    "triggers": [
+      "add an import command",
+      "implement F12",
+      "add a settings screen",
+      "use fable",
+      "cheap"
+    ],
+    "usage": "Use whenever a feature is to be added, built, implemented or changed, any size - \"add an import command\", \"implement F12\", \"add a settings screen\", a dashboard, a TUI - or an F ticket is about to be worked, from the board or headless. Style words switch tiers: \"use fable\", \"cheap\", \"opus only\", \"full ceremony\".",
+    "examples": [
+      "/skillator:build-jarvis",
+      "/skillator:jarvis",
+      "/skillator:build-jarvis F127 \"cheap\"",
+      "/skillator:build-jarvis \"use fable\""
+    ]
+  },
+  {
+    "id": "build-ultron",
+    "name": "build-ultron",
+    "category": "Build & Feature",
+    "aliases": [
+      "ultron (retired, -> jarvis)"
+    ],
+    "summary": "Retired build skill; redirects to build-jarvis with opus-only mode",
+    "triggers": [
+      "build-ultron"
+    ],
+    "usage": "Use only when the user names \"build-ultron\" itself. A retired name, kept for one release so old prompts and docs still resolve; it points at build-jarvis.",
+    "examples": [
+      "/skillator:build-ultron",
+      "/skillator:ultron (retired, -> jarvis)"
+    ]
+  },
+  {
+    "id": "build-vision",
+    "name": "build-vision",
+    "category": "Build & Feature",
+    "aliases": [
+      "vision (retired, -> jarvis)"
+    ],
+    "summary": "Retired build skill; redirects to build-jarvis with full ceremony",
+    "triggers": [
+      "build-vision"
+    ],
+    "usage": "Use only when the user names \"build-vision\" itself. A retired name, kept for one release so old prompts and docs still resolve; it points at build-jarvis.",
+    "examples": [
+      "/skillator:build-vision",
+      "/skillator:vision (retired, -> jarvis)"
+    ]
+  },
+  {
+    "id": "chief-fury",
+    "name": "chief-fury",
+    "category": "Workflow & Orchestration",
+    "aliases": [
+      "fury",
+      "dri"
+    ],
+    "summary": "Directly Responsible Individual owning long-running goals across multiple sessions",
+    "triggers": [
+      "you own getting X to v1",
+      "be the DRI",
+      "chief of staff",
+      "I'm away for a month, keep it moving",
+      "I won't remember and neither will you"
+    ],
+    "usage": "Use when one session is handed a long-running goal to own across weeks and sessions - \"you own getting X to v1\", \"be the DRI\", \"chief of staff\", \"I'm away for a month, keep it moving\", \"I won't remember and neither will you\" - or when a decision on such a goal touches several seats and needs a board meeting.",
+    "examples": [
+      "/skillator:chief-fury",
+      "/skillator:fury"
+    ]
+  },
+  {
+    "id": "clone-odo",
+    "name": "clone-odo",
+    "category": "Product & Market",
+    "aliases": [
+      "odo",
+      "clone"
+    ],
+    "summary": "Clean-room app cloning, app store review complaint analysis, and UI mapping",
+    "triggers": [
+      "Clone this app",
+      "build my own version of X",
+      "map X's screens",
+      "how close is my clone",
+      "rebrand the clone"
+    ],
+    "usage": "Use before quoting or counting what users hate about an app - top complaints from a reviews.csv or .skillator/clone/, a quote and count each, for an investor or pitch, or review rows lacking a link. \"Clone this app\" (web, Android, iOS, Windows), \"build my own version of X\", \"map X's screens\", \"how close is my clone\", \"rebrand the clone\", or its URL, App Store, Google Play or Microsoft Store link.",
+    "examples": [
+      "/skillator:clone-odo",
+      "/skillator:odo"
+    ]
+  },
+  {
+    "id": "code-vader",
+    "name": "code-vader",
+    "category": "Code Quality & Review",
+    "aliases": [
+      "vader",
+      "pre-commit"
+    ],
+    "summary": "Unified pre-commit diff review combining correctness and ponytail restraint checks",
+    "triggers": [
+      "/code-vader",
+      "code-vader",
+      "vader",
+      "pre-commit review",
+      "review staged diff"
+    ],
+    "usage": "Use when the user says \"/code-vader\", \"code-vader\", \"vader\", \"pre-commit review\", \"review staged diff\", \"review before commit\", or wants a unified pre-commit diff review on non-Claude hosts (Antigravity, Codex, Cursor, Pi, OpenCode) combining correctness/safety checks (Claude Code /code-review) and restraint/anti-bloat checks (Ponytail / code-yoda) into a binary commit verdict.",
+    "examples": [
+      "/skillator:code-vader",
+      "/skillator:vader"
+    ]
+  },
+  {
+    "id": "code-yoda",
+    "name": "code-yoda",
+    "category": "Code Quality & Review",
+    "aliases": [
+      "yoda",
+      "lazy"
+    ],
+    "summary": "Anti-bloat, lazy mode, and debt ledger tracking (ponytail markers)",
+    "triggers": [
+      "yoda",
+      "be lazy",
+      "lazy mode",
+      "simplest solution",
+      "yagni"
+    ],
+    "usage": "Use when the user says \"yoda\", \"be lazy\", \"lazy mode\", \"simplest solution\", \"yagni\", \"do less\", complains about over-engineering, bloat, boilerplate or an unnecessary dependency, asks what can be deleted from a diff or a whole repo, or - before a release or handover - asks what was knowingly deferred, shortcut, \"left for later\" or \"should be tracked\" in the code (`ponytail:` markers).",
+    "examples": [
+      "/skillator:code-yoda",
+      "/skillator:yoda"
+    ]
+  },
+  {
+    "id": "deploy-merlin",
+    "name": "deploy-merlin",
+    "category": "Deployment",
+    "aliases": [
+      "merlin",
+      "deploy"
+    ],
+    "summary": "VPS deployment wizard with Docker Compose, nginx, TLS, and CI pipeline",
+    "triggers": [
+      "prep the deployment",
+      "set up deploy",
+      "deployment wizard",
+      "get this ready to ship to my server",
+      "scaffold the deploy"
+    ],
+    "usage": "Use when the user says \"prep the deployment\", \"set up deploy\", \"deployment wizard\", \"get this ready to ship to my server\", \"scaffold the deploy\", or is about to stand up a new app on a Linux VPS with the standard single-VPS pattern (Docker Compose + nginx + GitHub Actions, one-push deploy, maintenance gate, TLS via Let's Encrypt).",
+    "examples": [
+      "/skillator:deploy-merlin",
+      "/skillator:merlin"
+    ]
+  },
+  {
+    "id": "deploy-niyoj",
+    "name": "deploy-niyoj",
+    "category": "Deployment",
+    "aliases": [
+      "niyoj",
+      "manual-deploy"
+    ],
+    "summary": "Direct desktop SSH deployment to a VPS without GitHub Actions CI",
+    "triggers": [
+      "niyoj",
+      "set up niyoj deploy",
+      "deploy without CI",
+      "manual deploy",
+      "no github actions deploy"
+    ],
+    "usage": "Use when the user says \"niyoj\", \"set up niyoj deploy\", \"deploy without CI\", \"manual deploy\", \"no github actions deploy\", \"one-button deploy from my laptop\", when converting a project off `.github/workflows/deploy.yml`, or when a NiYoj deploy failed and needs diagnosing. The target is a single-VPS app (Docker Compose + nginx + maintenance gate + Let's Encrypt) deployed over SSH from the NiYoj desktop app, with no CI runner.",
+    "examples": [
+      "/skillator:deploy-niyoj",
+      "/skillator:niyoj"
+    ]
+  },
+  {
+    "id": "design-arwen",
+    "name": "design-arwen",
+    "category": "UI & Design",
+    "aliases": [
+      "arwen",
+      "design"
+    ],
+    "summary": "UI/UX design critique, styling polish, design system styling, typography, spacing",
+    "triggers": [
+      "[build|redesign|improve|critique] [UI-only target]"
+    ],
+    "usage": "Use for UI-only work on a UI/UX, native or web - redesign, improve or critique a page, screen, dashboard, form or design system; make it less generic, bolder, less AI-made; pick fonts/colors/layout/motion; fix hierarchy, spacing, contrast, a11y or UI performance; write UX copy and error states; one design language across native and web - or when this skill is named.",
+    "examples": [
+      "/skillator:design-arwen",
+      "/skillator:arwen"
+    ]
+  },
+  {
+    "id": "designui-galadriel",
+    "name": "designui-galadriel",
+    "category": "UI & Design",
+    "aliases": [
+      "galadriel",
+      "wire-up"
+    ],
+    "summary": "Converts existing static UI mockups into working features wired to logic",
+    "triggers": [
+      "just a UI",
+      "not functional",
+      "fake / hardcoded data",
+      "no backend",
+      "the buttons don't do anything"
+    ],
+    "usage": "Use when an EXISTING UI-only mockup must become real and working - the user says their app is \"just a UI\", \"not functional\", \"fake / hardcoded data\", \"no backend\", \"the buttons don't do anything\", or asks to \"make it real\", \"wire it up\", \"connect it to a backend/API/database\". Ends at a confirmed plan; does not build.",
+    "examples": [
+      "/skillator:designui-galadriel",
+      "/skillator:galadriel"
+    ]
+  },
+  {
+    "id": "grayskull-power",
+    "name": "grayskull-power",
+    "category": "Workflow & Orchestration",
+    "aliases": [
+      "grayskull",
+      "dev-mode"
+    ],
+    "summary": "Main programming workflow router; arms standing skills and routes requests",
+    "triggers": [
+      "dev mode",
+      "activate the programming skills",
+      "turn on the skillator workflow",
+      "use our skills",
+      "by the power of grayskull"
+    ],
+    "usage": "Use when the user says \"dev mode\", \"activate the programming skills\", \"turn on the skillator workflow\", \"use our skills\", \"by the power of grayskull\", \"grayskull\", \"check screenshot\", \"set up for coding\", or starts real development work in a repo with no skillator skill active. The single entry point that routes each request to the right skillator skill; it does not do the work itself.",
+    "examples": [
+      "/skillator:grayskull-power",
+      "/skillator:grayskull"
+    ]
+  },
+  {
+    "id": "handoff-cortana",
+    "name": "handoff-cortana",
+    "category": "Continuity & Safety",
+    "aliases": [
+      "cortana",
+      "handoff"
+    ],
+    "summary": "Verified session handoff documentation for cross-session continuity",
+    "triggers": [
+      "hand off",
+      "write a handoff",
+      "create a handoff doc",
+      "document where we are",
+      "prepare for the next session/person"
+    ],
+    "usage": "Use when the user asks to \"hand off\", \"write a handoff\", \"create a handoff doc\", \"document where we are\", \"prepare for the next session/person\", or wants a continuity/checkpoint summary of the current session — an in-depth, verified session-handoff document (a Markdown file) so a different person or AI can continue the work with zero loss of context, plan, or intent.",
+    "examples": [
+      "/skillator:handoff-cortana",
+      "/skillator:cortana"
+    ]
+  },
+  {
+    "id": "holo-r2d2",
+    "name": "holo-r2d2",
+    "category": "Workflow & Orchestration",
+    "aliases": [
+      "r2d2",
+      "obiwan"
+    ],
+    "summary": "Visualizes runs, architectures, decisions, and plans as diagrams and artifacts",
+    "triggers": [
+      "Help me, Obi-Wan",
+      "help me obiwan",
+      "help me obi wan kenobi",
+      "draw it"
+    ],
+    "usage": "Use when the user says \"Help me, Obi-Wan\", \"help me obiwan\" or \"help me obi wan kenobi\" - alone, with a run (RUN-12) or a ticket (F39): it means \"draw it\". Also to show a run, its decisions, a plan or a design as a diagram - as an Artifact, an HTML file, Markdown with Mermaid or an SVG, named or asked once - and when several owner decisions need answering - the decision wizard.",
+    "examples": [
+      "/skillator:holo-r2d2",
+      "/skillator:r2d2"
+    ]
+  },
+  {
+    "id": "live-friday",
+    "name": "live-friday",
+    "category": "UI & Live Preview",
+    "aliases": [
+      "friday",
+      "live-preview"
+    ],
+    "summary": "Live background preview runner for servers, web apps, TUIs, and dev processes",
+    "triggers": [
+      "let me see it",
+      "show me while you work",
+      "don't make me wait",
+      "live preview",
+      "run it while you build"
+    ],
+    "usage": "Use when the user says \"let me see it\", \"show me while you work\", \"don't make me wait\", \"live preview\", \"run it while you build\", \"stream the build\", or whenever a change is about to be made to a project that has a runnable surface — JS/web dev server, Rust, C++, Python, Go, Electron, mobile or a plain CLI. Armed as standard by grayskull-power.",
+    "examples": [
+      "/skillator:live-friday",
+      "/skillator:friday"
+    ]
+  },
+  {
+    "id": "merge-smith",
+    "name": "merge-smith",
+    "category": "Git & Integration",
+    "aliases": [
+      "smith",
+      "merge"
+    ],
+    "summary": "Consolidates and integrates multiple git branches with conflict resolution",
+    "triggers": [
+      "merge-smith",
+      "smith",
+      "merge"
+    ],
+    "usage": "Use when the user wants to combine/consolidate several GitHub branches into one integration branch, merge a feature branch into a base (main/develop), or reconcile divergent branches that touched the same code — and wants conflicts handled intelligently rather than by hand. The merge direction (`<source>` INTO `<destination>`) is confirmed before anything is touched; the base branch is never touched directly and nothing is pushed without explicit approval.",
+    "examples": [
+      "/skillator:merge-smith",
+      "/skillator:smith"
+    ]
+  },
+  {
+    "id": "mergeprep-oracle",
+    "name": "mergeprep-oracle",
+    "category": "Git & Integration",
+    "aliases": [
+      "oracle",
+      "mergeprep"
+    ],
+    "summary": "Prepares and normalizes git branches prior to merge integration",
+    "triggers": [
+      "prep a branch for merge",
+      "clean up a branch before merging",
+      "make sure only the real changes get merged",
+      "strip stale/old parts"
+    ],
+    "usage": "Use when the user wants to \"prep a branch for merge\", \"clean up a branch before merging\", \"make sure only the real changes get merged\", \"strip stale/old parts\", or is about to run merge-smith and wants the branch normalized first. Everything happens ON THE BRANCH ITSELF — never a side branch, never a history rewrite, never a force-push, never the base.",
+    "examples": [
+      "/skillator:mergeprep-oracle",
+      "/skillator:oracle"
+    ]
+  },
+  {
+    "id": "relay-morpheus",
+    "name": "relay-morpheus",
+    "category": "Workflow & Orchestration",
+    "aliases": [
+      "morpheus",
+      "relay",
+      "marathon"
+    ],
+    "summary": "Multi-stage workflow and marathon runner surviving across session limits",
+    "triggers": [
+      "marathon",
+      "May the Force be with you",
+      "Use the Force on F35 F36",
+      "work the board",
+      "keep going"
+    ],
+    "usage": "Use when work runs in stages and the session may not survive to their end — a multi-stage plan, fan-out, a sleeping laptop, a dropping link, a usage limit. Also on \"marathon\", \"May the Force be with you\", \"Use the Force on F35 F36\", \"work the board\", \"keep going\", \"I'll be back\", \"I'm back\", \"ask me everything at the end\", \"resume the run\".",
+    "examples": [
+      "/skillator:relay-morpheus",
+      "/skillator:morpheus",
+      "/skillator:marathon-run",
+      "/skillator:marathon-plan"
+    ]
+  },
+  {
+    "id": "remote-cerebro",
+    "name": "remote-cerebro",
+    "category": "Remote Access",
+    "aliases": [
+      "cerebro",
+      "remote"
+    ],
+    "summary": "Remote control bridge to drive coding sessions from mobile or Telegram",
+    "triggers": [
+      "remote control",
+      "control pi remotely",
+      "drive codex from my phone",
+      "keep working away from the desk",
+      "I'm leaving my desk"
+    ],
+    "usage": "Use when the user wants to drive codex, cursor-agent, pi or gemini from a phone or another device: \"remote control\", \"control pi remotely\", \"drive codex from my phone\", \"keep working away from the desk\", \"I'm leaving my desk\", a Telegram bot for a coding agent, pairing a phone to a CLI, or turning approvals off so the phone needs fewer taps.",
+    "examples": [
+      "/skillator:remote-cerebro",
+      "/skillator:cerebro"
+    ]
+  },
+  {
+    "id": "resume-cortana",
+    "name": "resume-cortana",
+    "category": "Continuity & Safety",
+    "aliases": [
+      "resume"
+    ],
+    "summary": "Executes tasks from previous session handoff documents",
+    "triggers": [
+      "execute the handoff",
+      "run the handoff",
+      "work through the handoffs",
+      "pick up the pending tasks",
+      "resume from the handoff doc(s)"
+    ],
+    "usage": "Use when the user says \"execute the handoff\", \"run the handoff\", \"work through the handoffs\", \"pick up the pending tasks\", \"resume from the handoff doc(s)\", \"do the next tasks in the handout\", \"process docs/handoffs\", or wants a repeatable pass — safe to re-run or /loop — that picks up where a handoff left off. The execution counterpart to handoff, which writes the doc.",
+    "examples": [
+      "/skillator:resume-cortana",
+      "/skillator:resume"
+    ]
+  },
+  {
+    "id": "rules-orko",
+    "name": "rules-orko",
+    "category": "Rules & Conventions",
+    "aliases": [
+      "orko",
+      "rules"
+    ],
+    "summary": "Manages standing repository rules and conventions across team chats",
+    "triggers": [
+      "always X",
+      "never Y",
+      "from now on",
+      "stop doing",
+      "I prefer"
+    ],
+    "usage": "Use when the user states how they work - \"always X\", \"never Y\", \"from now on\", \"stop doing\", \"I prefer\", \"in this repo nobody\", \"we don't\" - or asks what rules apply here, why a preference was forgotten between chats, or how a teammate gets the same conventions. Also at session start, to load the standing rules.",
+    "examples": [
+      "/skillator:rules-orko",
+      "/skillator:orko"
+    ]
+  },
+  {
+    "id": "screenshot-argus",
+    "name": "screenshot-argus",
+    "category": "Testing & UI",
+    "aliases": [
+      "argus",
+      "screenshots"
+    ],
+    "summary": "Inspects and processes test screenshots dropped in screenshot directories",
+    "triggers": [
+      "screenshots",
+      "check the screenshots",
+      "I dropped new screenshots",
+      "test screenshots",
+      "look at the latest run"
+    ],
+    "usage": "Use when the user says \"screenshots\", \"check the screenshots\", \"I dropped new screenshots\", \"test screenshots\", \"look at the latest run\", or gives a screenshot directory path — test screenshots dropped in a project's screenshot folder that need acting on and then clearing.",
+    "examples": [
+      "/skillator:screenshot-argus",
+      "/skillator:argus"
+    ]
+  },
+  {
+    "id": "skill-prometheus",
+    "name": "skill-prometheus",
+    "category": "Skill Authoring",
+    "aliases": [
+      "prometheus",
+      "author-skill"
+    ],
+    "summary": "Authors, tests, and improves agent skills and prompt engineering",
+    "triggers": [
+      "write a skill",
+      "make this a skill",
+      "skillify this",
+      "my skill isn't triggering",
+      "the agent ignored the skill"
+    ],
+    "usage": "Use when writing a new agent skill, editing an existing one, or diagnosing a skill agents don't load or don't follow - a SKILL.md, slash command, reference file, or always-on file (CLAUDE.md, AGENTS.md, GEMINI.md). Also when the user says \"write a skill\", \"make this a skill\", \"skillify this\", \"my skill isn't triggering\", \"the agent ignored the skill\", \"improve this skill\", or asks why a rule keeps getting rationalized away.",
+    "examples": [
+      "/skillator:skill-prometheus",
+      "/skillator:prometheus"
+    ]
+  },
+  {
+    "id": "skill-smith",
+    "name": "skill-smith",
+    "category": "Skill Authoring",
+    "aliases": [
+      "skill-smith (retired, -> prometheus)"
+    ],
+    "summary": "Retired skill authoring skill; redirects to skill-prometheus",
+    "triggers": [
+      "skill-smith"
+    ],
+    "usage": "Use only when the user names \"skill-smith\" itself. A retired name, kept for one release so old prompts and docs still resolve; it points at skill-prometheus.",
+    "examples": [
+      "/skillator:skill-smith",
+      "/skillator:skill-smith (retired, -> prometheus)"
+    ]
+  },
+  {
+    "id": "skillator-sync",
+    "name": "skillator-sync",
+    "category": "Upstream & Sync",
+    "aliases": [
+      "sync",
+      "upstream-sync"
+    ],
+    "summary": "Detects and absorbs upstream skill updates and UPSTREAM.md manifests",
+    "triggers": [
+      "/skillator-sync",
+      "skillator-sync",
+      "sync upstream skills",
+      "check upstream skills",
+      "absorb upstream"
+    ],
+    "usage": "Use when the user says \"/skillator-sync\", \"skillator-sync\", \"sync upstream skills\", \"check upstream skills\", \"absorb upstream\", or wants to sweep tracked UPSTREAM.md manifests (code-yoda, design-arwen, clone-odo), inspect upstream commit diffs and rule changes, and absorb new upstream commit hashes into local skills.",
+    "examples": [
+      "/skillator:skillator-sync",
+      "/skillator:sync"
+    ]
+  },
+  {
+    "id": "spec-watson",
+    "name": "spec-watson",
+    "category": "Build & Feature",
+    "aliases": [
+      "watson",
+      "spec"
+    ],
+    "summary": "Converts conversation briefs into persistent tracked specifications",
+    "triggers": [
+      "spec-watson",
+      "watson",
+      "spec"
+    ],
+    "usage": "Use when what a feature must do exists only in conversation — a spoken brief, a chat thread, a ticket body, a handover — and the work outlives the session: a contract ending, someone else picking it up, a spec a later pass must re-check against the code. Also on requests for spec-driven development, spec-kit, specify/plan/tasks artifacts, or a traceability matrix.",
+    "examples": [
+      "/skillator:spec-watson",
+      "/skillator:watson"
+    ]
+  },
+  {
+    "id": "tasks-sentinels",
+    "name": "tasks-sentinels",
+    "category": "Workflow & Orchestration",
+    "aliases": [
+      "sentinels",
+      "fan-out"
+    ],
+    "summary": "Subagent fan-out executing task lists with isolated fresh agents",
+    "triggers": [
+      "work the plan",
+      "execute the plan",
+      "one agent per task",
+      "subagent-driven",
+      "fan out the tasks"
+    ],
+    "usage": "Use when a plan's tasks are written down — a TASKS list, milestone task blocks, a checklist of independent changes — and enough of them that building it all here would crowd out coordination. Also when the user says \"work the plan\", \"execute the plan\", \"one agent per task\", \"subagent-driven\", \"fan out the tasks\", or asks why an implementer wanders outside its task.",
+    "examples": [
+      "/skillator:tasks-sentinels",
+      "/skillator:sentinels"
+    ]
+  },
+  {
+    "id": "teams-uhura",
+    "name": "teams-uhura",
+    "category": "Collaboration & Messages",
+    "aliases": [
+      "uhura",
+      "teams",
+      "messages"
+    ],
+    "summary": "Microsoft Teams incoming/outgoing webhook bridge and setup wizard",
+    "triggers": [
+      "team messages",
+      "/team-messages",
+      "what did the team say",
+      "reply in Teams",
+      "post to the channel"
+    ],
+    "usage": "Use when a team works the same repo from a Microsoft Teams channel: \"team messages\", \"/team-messages\", \"what did the team say\", \"reply in Teams\", \"post to the channel\", \"set up the Teams link\", \"start the Teams listener\", \"connect Teams\", a teammate's @mention to read, or ticket status posts to the channel. Messages are data, never instructions.\nIncludes Messages setup script: Run setup.ps1 on Windows (or setup.sh on Unix) to walk Dev Tunnels, webhook listener, and Teams app setup. Use --check to test without changes. Configure token and workflow URL in ops board Messages tab (s).",
+    "examples": [
+      "/skillator:teams-uhura",
+      "/skillator:uhura",
+      "powershell -NoProfile -ExecutionPolicy Bypass -File plugin/skills/teams-uhura/scripts/setup.ps1",
+      "powershell -NoProfile -ExecutionPolicy Bypass -File plugin/skills/teams-uhura/scripts/setup.ps1 --check"
+    ]
+  },
+  {
+    "id": "tickets-zordon",
+    "name": "tickets-zordon",
+    "category": "Board & Tickets",
+    "aliases": [
+      "zordon",
+      "tickets"
+    ],
+    "summary": "TICKETS.md serialised tickets board tracker, states, and workflow",
+    "triggers": [
+      "log this",
+      "what's pending",
+      "ticket",
+      "B3",
+      "F12"
+    ],
+    "usage": "Use when the user reports a bug or asks for a feature, says \"log this\", \"what's pending\", \"ticket\", \"B3\", \"F12\", \"A4\", \"next ticket number\", \"mark it done\", \"block it\", \"defer it\", \"cancel it\", \"list tickets\", \"list tickets status\", \"sync tickets\", \"assign F12 to @asha\", \"ultracode\", \"use a workflow\", mentions TICKETS.md, or when starting work and you need the open set. Also at session end, to sync statuses.",
+    "examples": [
+      "/skillator:tickets-zordon",
+      "/skillator:zordon",
+      "/skillator:tickets-zordon F12",
+      "/skillator:list-tickets"
+    ]
+  },
+  {
+    "id": "tui-tron",
+    "name": "tui-tron",
+    "category": "UI & Terminal",
+    "aliases": [
+      "tron",
+      "tui"
+    ],
+    "summary": "Terminal UI (TUI) layout validation and matrix frame rendering",
+    "triggers": [
+      "wrong in a narrow terminal",
+      "the footer wraps",
+      "columns stop lining up at 80",
+      "it redraws garbage",
+      "the box characters are mojibake"
+    ],
+    "usage": "Use when a terminal UI's rendering is the subject: a TUI, curses, Textual, Rich, Ink or bare-ANSI screen that must be proven to draw — \"wrong in a narrow terminal\", \"the footer wraps\", \"columns stop lining up at 80\", \"it redraws garbage\", \"the box characters are mojibake\", \"ΓöÇ\" — or there is no pty to drive it: no tmux, stdin closed, winpty ASSERT_CONDITION; or this skill is named.",
+    "examples": [
+      "/skillator:tui-tron",
+      "/skillator:tron"
+    ]
+  },
+  {
+    "id": "watch-cortana",
+    "name": "watch-cortana",
+    "category": "Monitoring & Safety",
+    "aliases": [
+      "watch",
+      "limits"
+    ],
+    "summary": "Monitors token usage limits and triggers automated session handoffs",
+    "triggers": [
+      "monitor usage limits",
+      "auto handoff before I run out",
+      "warn me at 92%",
+      "save the session before the limit",
+      "hand off automatically"
+    ],
+    "usage": "Use when the user asks to \"monitor usage limits\", \"auto handoff before I run out\", \"warn me at 92%\", \"save the session before the limit\", \"hand off automatically\", or wants to install, configure or debug the usage watcher. Installs hooks — the monitoring is done by those hooks, not the model, and the handoff document itself comes from the handoff skill.",
+    "examples": [
+      "/skillator:watch-cortana",
+      "/skillator:watch"
+    ]
+  }
+];
+
+
+export function filteredSkills(filter: string): SkillGuide[] {
+  const q = filter.trim().toLowerCase()
+  if (!q) return SKILLS
+  return SKILLS.filter(sk =>
+    sk.id.toLowerCase().includes(q) ||
+    sk.name.toLowerCase().includes(q) ||
+    sk.category.toLowerCase().includes(q) ||
+    sk.summary.toLowerCase().includes(q) ||
+    sk.aliases.some(a => a.toLowerCase().includes(q)) ||
+    sk.triggers.some(t => t.toLowerCase().includes(q))
+  )
+}
+
+export function openHelp(s: State, skillId?: string): Step {
+  const skills = filteredSkills(s.help?.filter ?? '')
+  const sel = skillId && SKILLS.some(sk => sk.id === skillId)
+    ? skillId
+    : (s.help?.selected && skills.some(x => x.id === s.help!.selected) ? s.help!.selected : (skills[0]?.id ?? SKILLS[0]!.id))
+  return {
+    state: {
+      ...s,
+      help: {
+        selected: sel,
+        filter: s.help?.filter ?? '',
+        filtering: false,
+        expanded: false,
+        scroll: 0,
+      },
+    },
+    effects: [],
+  }
+}
+
+export function helpKey(s: State, k: Key): Step {
+  const h = s.help!
+  const same = { state: s, effects: [] }
+  const close = { state: { ...s, help: null }, effects: [] }
+  const skills = filteredSkills(h.filter)
+
+  if (h.filtering) {
+    if (k.name === 'escape') {
+      return { state: { ...s, help: { ...h, filtering: false } }, effects: [] }
+    }
+    if (k.name === 'return' || k.name === 'enter') {
+      return { state: { ...s, help: { ...h, filtering: false } }, effects: [] }
+    }
+    if (k.name === 'backspace') {
+      const nextFilter = [...h.filter].slice(0, -1).join('')
+      const nextSkills = filteredSkills(nextFilter)
+      const nextSel = nextSkills.some(x => x.id === h.selected) ? h.selected : (nextSkills[0]?.id ?? '')
+      return { state: { ...s, help: { ...h, filter: nextFilter, selected: nextSel } }, effects: [] }
+    }
+    const ch = k.sequence
+    if (!k.ctrl && ch && ch.length === 1 && ch >= ' ' && ch !== '\x7f') {
+      const nextFilter = h.filter + ch
+      const nextSkills = filteredSkills(nextFilter)
+      const nextSel = nextSkills.some(x => x.id === h.selected) ? h.selected : (nextSkills[0]?.id ?? '')
+      return { state: { ...s, help: { ...h, filter: nextFilter, selected: nextSel } }, effects: [] }
+    }
+    return same
+  }
+
+  if (k.name === 'escape') {
+    if (h.expanded) return { state: { ...s, help: { ...h, expanded: false, scroll: 0 } }, effects: [] }
+    return close
+  }
+  if (k.name === '?' || k.sequence === '?') {
+    return close
+  }
+  if (k.name === '/') {
+    return { state: { ...s, help: { ...h, filtering: true } }, effects: [] }
+  }
+  if (k.name === 'c') {
+    const cur = skills.find(x => x.id === h.selected) ?? SKILLS.find(x => x.id === h.selected)
+    if (!cur) return same
+    const aliasStr = cur.aliases.length ? ` (alias: ${cur.aliases.join(', ')})` : ''
+    return { state: toast(s, `✓ Copied reference: skillator:${cur.id}${aliasStr}`), effects: [] }
+  }
+
+  if (h.expanded) {
+    switch (k.name) {
+      case 'up': case 'k':
+        return { state: { ...s, help: { ...h, scroll: Math.max(0, h.scroll - 1) } }, effects: [] }
+      case 'down': case 'j':
+        return { state: { ...s, help: { ...h, scroll: h.scroll + 1 } }, effects: [] }
+      case 'pageup':
+        return { state: { ...s, help: { ...h, scroll: Math.max(0, h.scroll - 6) } }, effects: [] }
+      case 'pagedown':
+        return { state: { ...s, help: { ...h, scroll: h.scroll + 6 } }, effects: [] }
+      case 'home':
+        return { state: { ...s, help: { ...h, scroll: 0 } }, effects: [] }
+      case 'return': case 'enter':
+        return { state: { ...s, help: { ...h, expanded: false, scroll: 0 } }, effects: [] }
+      default:
+        return same
+    }
+  }
+
+  const at = skills.findIndex(x => x.id === h.selected)
+  const move = (by: number): Step => {
+    if (!skills.length) return same
+    const idx = Math.max(0, Math.min(skills.length - 1, (at < 0 ? 0 : at) + by))
+    return { state: { ...s, help: { ...h, selected: skills[idx]!.id } }, effects: [] }
+  }
+
+  switch (k.name) {
+    case 'up': case 'k': return move(-1)
+    case 'down': case 'j': return move(1)
+    case 'pageup': return move(-5)
+    case 'pagedown': return move(5)
+    case 'home': return { state: { ...s, help: { ...h, selected: skills[0]?.id ?? h.selected } }, effects: [] }
+    case 'end': return { state: { ...s, help: { ...h, selected: skills[skills.length - 1]?.id ?? h.selected } }, effects: [] }
+    case 'return': case 'enter': {
+      if (!h.selected) return same
+      return { state: { ...s, help: { ...h, expanded: true, scroll: 0 } }, effects: [] }
+    }
+    default: return same
+  }
+}
+
 export function reduce(s: State, k: Key): Step {
   const quit: Step = { state: { ...s, quit: true }, effects: [{ kind: 'quit' }] }
   // A146: a form holding typed text is not thrown away by one ctrl+c - it cancels the
   // form (as Esc), the board stays; the next ctrl+c quits. An empty form has nothing to lose.
   if (k.ctrl && k.name === 'c') {
+    if (s.help) return { state: { ...s, help: null }, effects: [] }
+    if (s.startRun) return { state: { ...s, startRun: null }, effects: [] }
     if (s.setup?.touched) return { state: { ...s, setup: null }, effects: [] }
     if (s.runForm?.mode === 'rename' && s.tab === 'run') return { state: { ...s, runForm: null }, effects: [] }
     return s.person && (s.person.handle || s.person.name || s.person.emails) ? personKey(s, { name: 'escape' }) : quit
   }
+  if (s.help) return helpKey(s, k)
   if (s.setup) return setupKey(s, k)
   if (s.person) return personKey(s, k)
   if (s.dialog) return dialogKey(s, k)
   if (s.reconcile) return reconcileKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
   if (s.engage) return engageKey(s, k)          // F85
+  if (s.startRun) return startRunKey(s, k)      // F113
   if (s.filterField) return filterKey(s, k)
   if (s.tab === 'explorer' && k.name === 'r') return explorerKey(s, k)     // F75: r reads git again too
   if (s.tab === 'run' && (s.runForm || k.name === 'r')) return runKey(s, k)   // F79: r rescans here
+  if (s.tab === 'runs' && k.name === 'r') return runsKey(s, k)                // F122: r reruns on Workflows tab
   switch (k.name) {
     case 'q': return quit
     case '1': return toTab(s, 'tickets')
@@ -927,13 +2008,16 @@ export function reduce(s: State, k: Key): Step {
     case '4': return toTab(s, 'messages')
     case '5': return toTab(s, 'explorer')
     case '6': return toTab(s, 'run')          // F79's Run moved to 6: F75's Explorer took 5
+    case '7': return openHelp(s)
+    case '?': return openHelp(s)
     case 'tab': {
       const at = TABS.indexOf(s.tab)
       return toTab(s, TABS[(at + (k.shift ? TABS.length - 1 : 1)) % TABS.length]!)
     }
-    case 'r': return { state: s, effects: [{ kind: 'poll', what: 'board' }, { kind: 'poll', what: 'slow' }] }
+    case 'r': return { state: { ...s, toast: '↻ TICKETS.md reloaded' }, effects: [{ kind: 'poll', what: 'board' }, { kind: 'poll', what: 'slow' }] }
     case 'R': return resume(s)
   }
+  if (k.sequence === '?' || k.sequence === '7') return openHelp(s)
   if (s.tab === 'health' && k.name === 'F') return forceResume(s)     // F87
   if (s.tab === 'tickets') return ticketsKey(s, k)
   if (s.tab === 'runs') return runsKey(s, k)

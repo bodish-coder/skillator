@@ -417,26 +417,28 @@ put_agy_ext() {
 # ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets, /sync-tickets, /skillator-update, /team-messages and /pending-subagent are the plugin's commands/*.md).
 write_commands() {
   _c="$root/host-commands"
+  _cmds="pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run team code-vader skillator-sync message-uhura skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon pending-sentinel upstream-sync verify-shifu gauntlet-plan gauntlet-run"
+  _ops_cmds="ops skillator-ops"
   case "$1" in
     codex)
       # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
       # prompt an older run wrote under that name goes, nothing else in prompts/. F105: $ops -
       # skill hosts only; pi and Claude Code have their own /ops
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run team ops; do
+      for _n in $_cmds $_ops_cmds; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
         [ -n "$dry" ] || rm -f "$codex_home/prompts/$_n.md"
       done ;;
     cursor)
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run team; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
+      for _n in $_cmds; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
     pi)
       [ "$2" = "$HOME/.pi/agent/skills" ] || return 0
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run team; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
+      for _n in $_cmds; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
       put_pi_ext "$2" ;;
     opencode)
       # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run team; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
+      for _n in $_cmds; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
     antigravity)
-      for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run team ops; do
+      for _n in $_cmds $_ops_cmds; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
         [ -n "$dry" ] || rm -f "$2/$_n/$owned"
@@ -445,7 +447,7 @@ write_commands() {
       if [ "$2" = "$HOME/.gemini/config/skills" ]; then put_agy_ext "$2"; fi
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
       if [ "$2" = "$HOME/.gemini/skills" ]; then
-        for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run team; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
+        for _n in $_cmds; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
       fi ;;
   esac
 }

@@ -39,6 +39,10 @@
         "path": "skills/clone-odo/SKILL.md"
       },
       {
+        "id": "code-vader",
+        "path": "skills/code-vader/SKILL.md"
+      },
+      {
         "id": "code-yoda",
         "path": "skills/code-yoda/SKILL.md"
       },
@@ -109,6 +113,10 @@
       {
         "id": "skill-smith",
         "path": "skills/skill-smith/SKILL.md"
+      },
+      {
+        "id": "skillator-sync",
+        "path": "skills/skillator-sync/SKILL.md"
       },
       {
         "id": "spec-watson",

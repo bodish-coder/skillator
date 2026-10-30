@@ -194,11 +194,16 @@ async function shaFor(s: Stage, resume: string, g: { ask: Ask; why: () => string
     if (!branch) return { none: 'no run branch in the run file and no landed sha on HEAD' }
     if (branch.startsWith('-')) return { none: `run branch "${branch}" starts with - - not asked of git` }
     if ((await git(['rev-parse', '--verify', '--quiet', branch])).exitCode) return { none: `${branch} is gone (landed and removed?) and no landed sha on HEAD` }
-    // the fork point: the branch's own oldest reflog entry (where it was created) - after a merge into
-    // HEAD, merge-base (even --fork-point) answers the branch tip, an empty range
+    // the fork point: the branch's own oldest reflog entry (where it was created) that is not a main first-parent commit -
+    // after a merge into HEAD, merge-base (even --fork-point) answers the branch tip, an empty range.
+    // A run branch reset back to an older main commit excludes main commits from being taken as the fork.
     const ref = 'refs/heads/' + branch
-    let fork = (await git(['reflog', 'exists', ref])).exitCode ? ''
-      : (await git(['rev-list', '--walk-reflogs', ref], [0])).stdout.trim().split('\n').at(-1) ?? ''
+    let fork = ''
+    if ((await git(['reflog', 'exists', ref])).exitCode === 0) {
+      const main = new Set((await git(['rev-list', '--first-parent', 'HEAD'], [0])).stdout.trim().split('\n').filter(Boolean))
+      const r = (await git(['rev-list', '--walk-reflogs', ref], [0])).stdout.trim().split('\n').filter(Boolean)
+      fork = r.filter(h => !main.has(h)).at(-1) ?? r.at(-1) ?? ''
+    }
     if (!fork) {
       let base = await git(['merge-base', '--fork-point', 'HEAD', branch])
       if (base.exitCode) base = await git(['merge-base', 'HEAD', branch])
@@ -208,13 +213,26 @@ async function shaFor(s: Stage, resume: string, g: { ask: Ask; why: () => string
     const ids = ticketsOf(s)
     // the subject leads with the id: never a stage merge or a "board: testing F1" naming it
     const words = ids.map(id => new RegExp('^\\s*' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9])', 'i'))
-    // what main brought into the run is never the run's: on the run's own first-parent line, a merge whose
-    // second parent did not grow from the run's first own commit is main merged in (a stage branch forks
-    // off the run line, so its merge stays); the log hides each one's second parent
-    const line = (await git(['rev-list', '--first-parent', '--parents', `${fork}..${branch}`], [0])).stdout.trim().split('\n').filter(Boolean).map(l => l.split(' '))
-    const own = line.at(-1)?.[0]
+    // what main brought into the run is never the run's:
+    // (1) a merge on the run's first-parent line whose second parent shares no commit with the run's own
+    // first-parent line is main merged in;
+    // (3) the same check applies to merges on a kept stage branch's own line.
+    const fp = async (tip: string) => (await git(['rev-list', '--first-parent', '--parents', `${fork}..${tip}`], [0])).stdout.trim().split('\n').filter(Boolean).map(l => l.split(' '))
+    const line = await fp(branch)
+    const own = new Set(line.map(([h]) => h!))
     const hide: string[] = []
-    for (const [, , p2] of line) if (p2 && !(own && (await git(['merge-base', '--is-ancestor', own, p2])).exitCode === 0)) hide.push('^' + p2)
+    for (const [, , p2] of line) {
+      if (!p2) continue
+      const sline = await fp(p2)
+      if (!sline.some(([h]) => own.has(h!))) {
+        hide.push('^' + p2)
+      } else {
+        const sown = new Set(sline.map(([h]) => h!))
+        for (const [, , sp2] of sline) {
+          if (sp2 && !(await fp(sp2)).some(([h]) => sown.has(h!))) hide.push('^' + sp2)
+        }
+      }
+    }
     const hit = (await git(['log', '--no-merges', '--format=%H%x1f%s', `${fork}..${branch}`, ...hide], [0])).stdout.split('\n')
       .map(l => l.split('\x1f')).find(([h, subj]) => h && words.some(w => w.test(subj ?? '')))
     if (!hit) return { none: `no commit for ${ids.join(' ')} between ${fork.slice(0, 7)}..${branch}` }
