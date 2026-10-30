@@ -302,6 +302,18 @@ layer. Subagents went GA in March 2026: up to 8 in parallel, each with its own
 context window and sandbox — so tiered phases here are real delegation, not a
 sequential fallback.
 
+**F139 isolation harness (offline evidence).**
+[`practice/scripts/codex-isolation.mjs`](practice/scripts/codex-isolation.mjs)
+runs the copied PowerShell installer in a disposable Codex profile and checks
+generated commands and installed quota hooks. `--live` queries the selected
+executable's help/version/schema before a bounded read-only app-server session;
+it has not been run in RUN-0027. Native inventory validates source paths, explicit
+skill injection plus fixture-only tokens/text verifies loading, and native hook
+inventory reports discovery/trust separately from execution. These protocol
+paths are tested with offline stubs; no authentication or trust settings are
+changed. F90/F105/A149 owner checks
+remain outstanding. See [fixture provenance and limits](practice/baselines/README.md#isolated-codex-integration-f139).
+
 **codex hooks — what is actually verified.** Codex has a hook system configured
 by `hooks.json`, and its event enum is wider than turn-start events. Read out of
 the shipped binary (`codex.exe`, `codex-cli 0.147.0-alpha.6.5`) with `grep -a`,

@@ -470,6 +470,30 @@ skips; missing required runtimes also block complete coverage. Exit codes are
 1 for a failure, 2 for blocked/incomplete required checks (including all skipped),
 and 0 when available checks pass with any disclosed platform skips.
 
+## Isolated Codex checks
+
+Run `node plugin/practice/scripts/codex-isolation.mjs --selftest`, then
+`node plugin/practice/scripts/codex-isolation.mjs --offline --report <report.json>`.
+The Windows PowerShell fixture runs a copied installer with only a temporary
+Codex profile, checks generated command bytes, and runs installed quota hooks
+against synthetic rollouts. Missing PowerShell or unsupported HOME isolation
+prevents a passing installation check. It does not start Codex or read credentials.
+The report uses the parity check statuses and exit codes above; fixture evidence
+is retained in the printed temporary directory for inspection.
+
+An owner can opt in with `--live --codex <absolute-executable> --report <report.json>`.
+This queries that executable's version/help and generated protocol schema before
+a bounded stdio app-server session. Native `skills/list` must identify fixture
+skills and generated commands; explicit skill inputs plus recovered fixture-only
+tokens and command text verify injection/loading. `hooks/list` records the actual
+fixture hook discovery/trust state separately from execution. Missing login,
+unsupported protocol and observed untrusted hooks are blocked; no login or trust
+changes are made. An owner can review the retained fixture, configure its own
+login/trust, then retry with `--resume-fixture <root>`; this validates fixture
+containment and instruction/command/hook bytes before launching. F90, F105 and
+A149 still require their owner checks. See
+[evidence limits](plugin/practice/baselines/README.md#isolated-codex-integration-f139).
+
 ## Add a new skill
 
 `skillator:skill-prometheus` is the skill for this — read it before authoring.

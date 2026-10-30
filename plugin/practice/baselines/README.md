@@ -597,3 +597,50 @@ those *are* the originals' shape, from the description in
 named in the prompt): PASS 2/2 on disk, record in that file.
 `green-resume-cortana.txt` has not been run and is **unverified** until someone
 executes it and records the verdict here.
+
+## Isolated Codex integration (F139)
+
+`node plugin/practice/scripts/codex-isolation.mjs --offline --report <report.json>`
+(from the repository root) retains a disposable source copy, project, profile,
+installer output, and fixture manifest. The copied PowerShell installer runs with
+an empty PATH, isolated HOME/USERPROFILE/CODEX_HOME/XDG/APPDATA/TEMP roots and an
+explicit temporary shell profile. Only the Codex marker exists at install time.
+No inherited authentication or session variables are passed. Known repository
+source is copied, excluding symlinks and dependencies; no credential files are
+read or copied. Installed command files are compared byte-for-byte with template
+substitution, and installed usage hooks read synthetic quota and Stop inputs.
+These are offline installation/projection/hook observations, not skill loading.
+
+Temporary placement is physically resolved before copying or installation;
+repository-contained paths (including case/junction aliases) are rejected. The
+fixture project has its own Git boundary to stop ancestor instruction discovery.
+Unsafe setup produces an inspectable blocked report.
+
+`--selftest` covers missing commands, unexpected native sources, quota mismatch,
+missing CLI, unsupported schema/help, authentication/trust errors, malformed and
+failed protocol responses, and timeout cleanup. A local Node protocol stub handles
+these tests; it never forwards requests to Codex. `--live --codex <absolute-executable>
+--report <report.json>` is opt-in and was not run in RUN-0027. Runtime help and a
+generated JSON schema must advertise the required native methods and safety fields.
+The bounded stdio app-server session uses `skills/list`, `hooks/list`, read-only
+ephemeral `thread/start`, and `turn/start` with explicit skill inputs. Inventory
+must identify the fixture probe and generated pending command by exact enabled
+name/path and reject external skill sources. Successful injection must recover
+fixture-only instruction tokens and exact generated command text; these values
+are not provided in the prompt. Model-authored source lists are not used as proof.
+
+Hook discovery/trust is queried separately: absent hooks, unsupported responses
+and observed untrusted/modified states are blocked with their own reasons. A
+trusted configured hook is inventory evidence, not native execution evidence.
+Reports retain CLI version, exact launch argv, validated fixture paths and native
+method provenance, withholding raw CLI/model output. Login/runtime failures block
+without copying auth or changing trust. An owner may manually review/configure
+the retained profile, then add `--resume-fixture <root>` to the live command.
+Resume validates physical containment, boundary, instruction tokens and exact
+pending/hook bytes; it never opens credential files or changes trust itself.
+
+F90 command execution, F105 board opening and A149 owner verification remain
+outstanding. Native protocol behavior is tested with stubs, not verified live.
+HOME/.agents is separately isolated. Administrator/bundled sources outside the
+fixture cause a blocked/failed inventory instead of a false isolated pass.
+Fixture directories are retained for inspection and may be removed by the owner.
