@@ -24,7 +24,11 @@ import { runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
 
 export type Seg = BaseSeg & { action?: PointerAction }
-const hot = (text: string, name: string, shift = false): Seg => ({ text, dim: true, action: { kind: 'key', key: { name, shift } } })
+const hot = (text: string, name: string, shift = false): Seg => ({
+  text: text.startsWith('[') && text.endsWith(']') ? text : `[${text}]`,
+  dim: true,
+  action: { kind: 'key', key: { name, shift } },
+})
 const actionLine = (line: Seg[], action: PointerAction): Seg[] => line.map(s => ({ ...s, action: s.action ?? action }))
 
 // plain: text only, no SGR at all - for readers of text (--once without colour, a host's
@@ -170,17 +174,24 @@ function countLine(s: State, m: Model): Seg[] {
 
 function keysOf(s: State, m: Model): Seg[][] {
   const h = (text: string, key: string) => [hot(text, key)]
-  const move = [hot('↑', 'up'), hot('↓ move', 'down')]
+  const move: Seg[] = [
+    { text: '[↑', dim: true, action: { kind: 'key', key: { name: 'up' } } },
+    { text: '↓ move]', dim: true, action: { kind: 'key', key: { name: 'down' } } },
+  ]
   const cancel = h('esc cancel', 'escape'), quit = h('q quit', 'q')
-  const field = [hot('tab', 'tab'), dim(' / '), hot('shift-tab field', 'tab', true)]
+  const field: Seg[] = [
+    { text: '[tab', dim: true, action: { kind: 'key', key: { name: 'tab' } } },
+    dim(' / '),
+    { text: 'shift-tab field]', dim: true, action: { kind: 'key', key: { name: 'tab', shift: true } } },
+  ]
   if (s.setup?.confirmClear) return [h('y clear', 'y'), h('n cancel', 'n')]
   if (s.setup) return [field, h('space on/off', 'space'), h('enter save', 'return'), cancel]
   if (s.person) return [field, h('enter add', 'return'), cancel]
   if (s.dialog) return s.dialogField === 'ticket' ? [[dim('type the ID')], h('tab person', 'tab'), h('enter confirm', 'return'), cancel]
-    : [[hot('↑', 'up'), hot('↓ person', 'down')], [hot('a', 'a'), dim(' / '), hot('d kind', 'd')], h('tab ticket', 'tab'), h('enter confirm', 'return'), cancel]
+    : [[{ text: '[↑', dim: true, action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ person]', dim: true, action: { kind: 'key', key: { name: 'down' } } }], [{ text: '[a', dim: true, action: { kind: 'key', key: { name: 'a' } } }, dim(' / '), { text: 'd kind]', dim: true, action: { kind: 'key', key: { name: 'd' } } }], h('tab ticket', 'tab'), h('enter confirm', 'return'), cancel]
   if (s.reconcile) return [move, h('space pick', 'space'), h('enter apply picked', 'return'), h('a accept all', 'a'), h('esc none', 'escape')]
   if (s.engage) return [h('enter engage', 'return'), cancel]
-  if (s.filterField) return [[hot('←', 'left'), hot('→ field', 'right')], [hot('↑', 'up'), hot('↓ value', 'down')], h('enter/esc leave', 'escape')]
+  if (s.filterField) return [[{ text: '[←', dim: true, action: { kind: 'key', key: { name: 'left' } } }, { text: '→ field]', dim: true, action: { kind: 'key', key: { name: 'right' } } }], [{ text: '[↑', dim: true, action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ value]', dim: true, action: { kind: 'key', key: { name: 'down' } } }], h('enter/esc leave', 'escape')]
   if (s.tab === 'run') {
     if (s.runForm?.mode === 'confirm') return [h('enter run', 'return'), h('n rename', 'n'), cancel]
     if (s.runForm) return [[dim('type the name')], h('enter save', 'return'), cancel]
@@ -336,7 +347,7 @@ function chipLine(t: Ticket): Seg[] {
   if (t.session) groups.push([dim(t.session)])
   const out: Seg[] = [{ text: '      ' }]
   groups.forEach((g, i) => { if (i) out.push({ text: '  ' }); out.push(...g) })
-  if (isDecidable(t)) out.push(hot('   D decided', 'D'))
+  if (isDecidable(t)) out.push({ text: '   ' }, hot('D decided', 'D'))
   return out
 }
 
@@ -496,7 +507,7 @@ function runRows(s: State, sel: string): Keyed[] {
     for (const l of runLines(ex, s.board)) {
       if (/^(par|dec|phase):/.test(l.key)) out.push({ key: l.key, segs: [{ text: '    ' }, ...l.segs] })
     }
-    out.push({ key: 'start', segs: [hot('    e engages it; the command is then shown to paste into your CLI', 'e')] })
+    out.push({ key: 'start', segs: [{ text: '    ' }, hot('e engage', 'e'), dim('; the command is then shown to paste into your CLI')] })
   }
   return out
 }
@@ -647,7 +658,7 @@ function setupBody(s: State): Seg[][] {
   const res = s.setup?.result ? '  ' + s.setup.result : null
   const rows: Boxed['rows'] = ls.slice(1).map((l, i) => ({ text: l, color: l === res ? 'error' : undefined,
     action: i < 5 ? { kind: 'setup-field', field: (['token', 'url', 'port', 'posts', 'clear'] as const)[i]! } : undefined,
-    segs: s.setup?.confirmClear && i === 7 ? [dim('  clear the saved Teams settings? ('), hot('y', 'y'), dim('/'), hot('n', 'n'), dim(')')]
+    segs: s.setup?.confirmClear && i === 7 ? [dim('  clear the saved Teams settings? ('), { text: 'y', dim: true, action: { kind: 'key', key: { name: 'y' } } }, dim('/'), { text: 'n', dim: true, action: { kind: 'key', key: { name: 'n' } } }, dim(')')]
       : i === ls.length - 2 ? [dim('  '), hot('tab next field', 'tab'), dim(' · '), hot('space on/off', 'space'), dim(' · '), hot('enter save', 'return'), dim(' · '), hot('esc cancel', 'escape')] : undefined }))
   return boxBody(s, { title: ls[0] ?? '', rows })
 }

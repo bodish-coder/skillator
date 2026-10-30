@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ansi, frame, frameSegs, fit, cells, glyph, plain, paintScreen } from '../draw'
+import { ansi, frame, frameSegs, fit, cells, glyph, plain, paintScreen, screen } from '../draw'
 import { initial, onBoard, onMachine, onRuns, onUsage, reduce } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
@@ -70,17 +70,17 @@ test('runs and health tabs as the mock; the assign box overlays the body', () =>
 test('the band: one line from 80 columns, the hold first, R resume at the right; two lines below 80', () => {
   const held = onUsage(onMachine(s, RED_HELD, 0).state, 'src=codex 5h=41 7d=55 ctx=- max=-\n', 0).state
   const b = frame(held, P).at(-1)!
-  assert.match(b, /^■ HOLD mem 0\.5 GB at 03:29Z · mem 0\.5 GB · C: 84 GB · 5h 41% · 7d 55% +R resume$/)
+  assert.match(b, /^■ HOLD mem 0\.5 GB at 03:29Z · mem 0\.5 GB · C: 84 GB · 5h 41% · 7d 5… +\[R resume\]$/)
   assert.ok(cells(b) <= 80)
   assert.match(frame({ ...held, cols: 120 }, P).at(-1)!, /C: 84 GB free · 5h/)
   const c = frame(held, { color: true, ascii: false }).at(-1)!
   assert.match(c, /\x1b\[31m■ HOLD/)
   assert.match(c, /mem \x1b\[31m0\.5 GB\x1b\[0m/)
-  assert.match(c, /\x1b\[2mR resume\x1b\[0m$/)
+  assert.match(c, /\x1b\[2m\[R resume\]\x1b\[0m$/)
   assert.doesNotMatch(frame({ ...s, cols: 120 }, P).at(-2)!, /ops ·/)
   const narrow = sized({ ...held, cols: 60 })
   assert.match(narrow.at(-2)!, /^■ HOLD/)
-  assert.match(narrow.at(-1)!, /5h 41% · 7d 55% +R resume$/)
+  assert.match(narrow.at(-1)!, /5h 41% · 7d 55% +\[R resume\]$/)
 })
 test('no Claude Code-only words in any frame', () => {
   const held = onMachine(s, RED_HELD, 0).state
@@ -138,30 +138,30 @@ test('F81 the reconcile box draws its proposals and its keys', () => {
   assert.match(t, /┌─ Reconcile tickets - 1 to change ─/)
   assert.match(t, /│ {2}\[x\] F1 {2}pending → in progress {2}2 commits name it/)
   assert.match(t, /│› {5}F3 {2}blocked stays - evidence unclear: x/)
-  assert.ok(frame(x, P).includes('↑↓ move · space pick · enter apply picked · a accept all · esc none'))
+  assert.ok(frame(x, P).includes('[↑↓ move] · [space pick] · [enter apply picked] · [a accept all] · [esc none]'))
 })
 test('the keys line as the mock; D decided only on a decidable row', () => {
-  const keys = (x: State) => frame({ ...x, cols: 100 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
-  assert.equal(keys(s), '↑↓ move · enter line · a assign · d decide · t team · c reconcile · r reload · q quit')
+  const keys = (x: State) => frame({ ...x, cols: 120 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
+  assert.equal(keys(s), '[↑↓ move] · [enter line] · [a assign] · [d decide] · [t team] · [c reconcile] · [r reload] · [q quit]')
   const f3: State = { ...s, selected: 'F3' }
-  assert.match(keys(f3), /D decided/)
-  assert.match(keys(f3), /q quit$/)
+  assert.match(keys(f3), /\[D decided\]/)
+  assert.match(keys(f3), /\[q quit\]$/)
   // A144: one separator throughout - " · " stays when "D decided" joins the row.
   for (const cols of [80, 60, 40]) {
     for (const x of [{ ...s, cols }, { ...f3, cols }, reduce({ ...s, cols }, { name: '3' }).state]) {
       const f = frame(x, P)
-      const line = f.find(l => /r reload/.test(l))
+      const line = f.find(l => /\[q quit\]/.test(l))
       assert.ok(line, `${cols}: no keys line ending q quit\n${f.join('\n')}`)
       assert.ok(cells(line) <= cols, `${cells(line)} > ${cols}: ${line}`)
       assert.doesNotMatch(line, /\S {2}\S/, line)
-      assert.match(line, /q quit$/, line)
+      assert.match(line, /\[q quit\]$/, line)
     }
   }
-  assert.match(keys(f3), / · D decided · /)
+  assert.match(keys(f3), / · \[D decided\] · /)
   // F76: no run yet, the cursor is on the Runs header (Enter closes it); on a run, Enter shows its stages
-  assert.match(text(reduce(s, { name: '2' }).state), /↑↓ move · enter close · e engage/)
-  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /↑↓ move · enter stages · e engage/)
-  assert.match(text(reduce(s, { name: '3' }).state), /R resume \(on a fresh non-red reading\) · F force resume · r reload · q quit/)
+  assert.match(text(reduce(s, { name: '2' }).state), /\[↑↓ move\] · \[enter close\] · \[e engage\]/)
+  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /\[↑↓ move\] · \[enter stages\] · \[e engage\]/)
+  assert.match(text(reduce(s, { name: '3' }).state), /\[R resume \(on a fresh non-red reading\)\](\n| · )\[F force resume\] · \[r reload\] · \[q quit\]/)
 })
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
   let x: State = { ...s, rows: 13 }
@@ -172,12 +172,12 @@ test('the selection scrolls into view in a short terminal; a cut list says so', 
 })
 test('filter row, tags, expanded chips and raw line, count line, done shown', () => {
   const f = text(s)
-  assert.match(f, /^filter  app: all · who: all · mine: off +f filter · x show done$/m)
+  assert.match(f, /^filter  app: all · who: all · mine: off +\[f filter\] · \[x show done\]$/m)
   assert.match(f, /^  ● F3  Pick the chart library +decide @asha$/m)
   assert.match(f, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
   assert.match(f, /  ▾ Pending decision \(1\)\n/)
   const ex = text(reduce({ ...s, selected: 'F3' }, { name: 'return' }).state)
-  assert.match(ex, /      decide:@asha   D decided\n      - \[\?\] F3 — Pick the chart library \[decide: @asha\]/)
+  assert.match(ex, /      decide:@asha   \[D decided\]\n      - \[\?\] F3 — Pick the chart library \[decide: @asha\]/)
   const done = text(reduce(s, { name: 'x' }).state)
   assert.match(done, /  ▾ Done \(8\)/)
   assert.match(done, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
@@ -284,15 +284,15 @@ test('team view and add-person form draw in the body at 80 columns', () => {
   const t = text(tv)
   assert.match(t, /Team  \.skillator\/team\.md · 2 people\n› @asha +Asha Rao +a@x, asha@y +\S.*\n  @vidul +Vidul K +v@x/)
   // A146: q closes the whole board from the Team view too, so its footer lists it
-  assert.match(t, /\nn add · del remove \(asks first\) · l make lead · esc back · q quit\n/)
+  assert.match(t, /\n\[n add\] · \[del remove \(asks first\)\] · \[l make lead\] · \[esc back\] · \[q quit\]\n/)
   // F80: the lead marked lead, me (you), the header says who you are
   const marked = text(reduce({ ...two, team: [{ ...two.team[0]!, lead: true as const }, two.team[1]!], me: '@vidul' }, { name: 't' }).state)
   assert.match(marked, /Team  \.skillator\/team\.md · 2 people · you: @vidul\n› @asha +Asha Rao +a@x, asha@y +lead\b.*\n  @vidul +Vidul K +v@x +\(you\)/)
   assert.match(text(reduce(tv, { name: 'down' }).state), /\n  @asha .*\n› @vidul /)
   const f = reduce(tv, { name: 'n' }).state
   const ft = text(f)
-  assert.match(ft, /  ┌─ Add person ─+┐\n  │  Handle   @_ +│\n  │  Name +│\n  │  Emails +│\n  │ +│\n  │  Runs    ticket-meta team add @\? \? \? +│\n  │  tab next field · enter add · esc cancel +│\n  └─+┘/)
-  assert.match(ft, /\ntab \/ shift-tab field · enter add · esc cancel\n/)
+  assert.match(ft, /  ┌─ Add person ─+┐\n  │  Handle   @_ +│\n  │  Name +│\n  │  Emails +│\n  │ +│\n  │  Runs    ticket-meta team add @\? \? \? +│\n  │  \[tab next field\] · \[enter add\] · \[esc cancel\] +│\n  └─+┘/)
+  assert.match(ft, /\n\[tab \/ shift-tab field\] · \[enter add\] · \[esc cancel\]\n/)
   const ask = reduce(tv, { name: 'delete' }).state
   assert.match(text(ask), /\nremove @asha from \.skillator\/team\.md\? \(y\/n\)\n/)
   assert.match(frame(ask, { color: true, ascii: false }).find(l => l.includes('(y/n)'))!, /\x1b\[33mremove @asha/)
@@ -384,12 +384,12 @@ test('F61: every group starts collapsed - one header per group with its count, t
 })
 
 test('F61: Enter opens a group under its header, ▾; the keys line says what Enter does on a header', () => {
-  const keys = (x: State) => frame({ ...x, cols: 100 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
-  assert.match(keys(fresh), /^↑↓ move · enter open · a assign/)
+  const keys = (x: State) => frame({ ...x, cols: 120 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
+  assert.match(keys(fresh), /^\[↑↓ move\] · \[enter open\] · \[a assign\]/)
   const o = reduce(fresh, { name: 'return' }).state
   assert.match(text(o), /› ▾ In progress \(1\)\n  ● B2  CSV export drops the last row[^\n]*\n  ▸ Blocked \(1\)/)
-  assert.match(keys(o), /^↑↓ move · enter close · a assign/)
-  assert.match(keys(reduce(o, { name: 'down' }).state), /^↑↓ move · enter line · a assign/)
+  assert.match(keys(o), /^\[↑↓ move\] · \[enter close\] · \[a assign\]/)
+  assert.match(keys(reduce(o, { name: 'down' }).state), /^\[↑↓ move\] · \[enter line\] · \[a assign\]/)
 })
 
 test('F61: ascii draws the headers > and v', () => {
@@ -424,11 +424,11 @@ test('F77: the assign box draws the Ticket line; typing an ID there, the keys sa
   const sel = reduce(s, { name: 'a' }).state                        // B2 selected
   const t = text(sel)
   assert.match(t, /┌─ Assign B2 ─+┐\n  │  Ticket  B2 · \[~\] in progress · CSV export drops the last row +│/)
-  assert.match(t, /\n↑↓ person · a \/ d kind · tab ticket · enter confirm · esc cancel\n/)
+  assert.match(t, /\n\[↑↓ person\] · \[a \/ d kind\] · \[tab ticket\] · \[enter confirm\] · \[esc cancel\]\n/)
   const none = reduce({ ...fresh }, { name: 'a' }).state             // a header selected: no ticket
   const n = text(none)
   assert.match(n, /┌─ Assign a ticket ─+┐\n  │  Ticket  _ · type a ticket ID, e.g. F12 +│/)
-  assert.match(n, /\ntype the ID · tab person · enter confirm · esc cancel\n/)
+  assert.match(n, /\ntype the ID · \[tab person\] · \[enter confirm\] · \[esc cancel\]\n/)
   for (const [cols, rows] of [[80, 24], [40, 12], [20, 5]] as const) sized({ ...none, cols, rows })
 })
 // Review #6: the stage dot differs only by colour; with colour off (--no-color, NO_COLOR)
@@ -520,4 +520,39 @@ test('F120: responsive footer actions and wrapping across 40, 60, 80, 100, 120 c
   for (const l of narrow12) assert.ok(cells(l) <= 40, `${cells(l)} > 40: ${l}`)
   assert.ok(narrow12.some(l => l.includes('In progress') || l.includes('B2')))
 })
+
+// F123: Uniform TUI button badge design system across ops board
+test('F123: button badges [Key Label] across all tabs and click hitboxes match badge boundaries', () => {
+  // 1. Tickets tab
+  const scTickets = screen({ ...s, cols: 120 }, P)
+  const tText = scTickets.lines.join('\n')
+  assert.match(tText, /\[↑↓ move\] · \[enter line\] · \[a assign\] · \[d decide\] · \[t team\] · \[c reconcile\] · \[r reload\] · \[q quit\]/)
+  assert.match(tText, /\[f filter\] · \[x show done\]/)
+
+  // Hitbox check: find hit for 'q'
+  const qHit = scTickets.hits.find(h => h.action.kind === 'key' && (h.action as any).key.name === 'q')
+  assert.ok(qHit, 'q hitbox found')
+  assert.equal(qHit.width, cells('[q quit]'), 'hitbox width matches [q quit]')
+
+  // 2. Workflows (runs) tab
+  const scRuns = screen({ ...reduce(s, { name: '2' }).state, cols: 120 }, P)
+  assert.match(scRuns.lines.join('\n'), /\[↑↓ move\] · \[enter close\] · \[e engage\] · \[r reload\] · \[q quit\]/)
+
+  // 3. Health tab
+  const scHealth = screen({ ...reduce(s, { name: '3' }).state, cols: 120 }, P)
+  assert.match(scHealth.lines.join('\n'), /\[R resume \(on a fresh non-red reading\)\] · \[F force resume\] · \[r reload\] · \[q quit\]/)
+
+  // 4. Messages tab
+  const scMsgs = screen({ ...reduce(s, { name: '4' }).state, cols: 120 }, P)
+  assert.match(scMsgs.lines.join('\n'), /\[↑↓ move\] · \[enter open\] · \[m mark all read\] · \[s setup\] · \[q quit\]/)
+
+  // 5. Explorer tab
+  const scExp = screen({ ...reduce(s, { name: '5' }).state, cols: 120 }, P)
+  assert.match(scExp.lines.join('\n'), /\[↑↓ move\] · \[enter open\/close\] · \[r reload\] · \[q quit\]/)
+
+  // 6. Build (run) tab
+  const scBuild = screen({ ...reduce(s, { name: '6' }).state, cols: 120 }, P)
+  assert.match(scBuild.lines.join('\n'), /\[↑↓ move\] · \[enter run\] · \[n rename\] · \[r rescan\] · \[q quit\]/)
+})
+
 
