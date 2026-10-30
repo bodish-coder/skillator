@@ -816,4 +816,53 @@ test('F128: dynamically adapts when switching users in Team view (t)', () => {
   assert.ok(items.includes('decide:F3'))
 })
 
+test('F122: Workflows tab action bar operations (m mode, r rerun, p push pending, click triggers)', () => {
+  const chainWithPending = [
+    '## Stages',
+    '| # | stage | state | owner | heartbeat | landed |',
+    '|---|---|---|---|---|---|',
+    '| 1 | S1 F1 | x | b | - | sha1 |',
+    '| 2 | S2 F2 | pending | b | - | |',
+    '',
+    '## Chain',
+    '### S1 - stage 1 - F1 one',
+    'tickets: F1',
+    '### S2 - stage 2 - F2 two',
+    'tickets: F2',
+  ].join('\n')
+
+  let s = onRuns(reduce(s0, key('2')).state, LIST, { 'RUN-0012': chainWithPending })
+  assert.equal(s.tab, 'runs')
+  assert.equal(s.runMode, 'parallel')
+
+  // 1. m key toggles mode
+  const modeStep = reduce(s, key('m'))
+  assert.equal(modeStep.state.runMode, 'sequential')
+  assert.match(modeStep.state.toast ?? '', /sequential/)
+
+  const modeStep2 = reduce(modeStep.state, key('m'))
+  assert.equal(modeStep2.state.runMode, 'parallel')
+  assert.match(modeStep2.state.toast ?? '', /parallel/)
+
+  // 2. r key reruns selected run
+  s = { ...s, runsSelected: 'RUN-0012' }
+  const rerunStep = reduce(s, key('r'))
+  assert.match(rerunStep.state.toast ?? '', /Rerunning RUN-0012/)
+  assert.equal(rerunStep.effects.length, 1)
+  assert.equal(rerunStep.effects[0]!.kind, 'run')
+  assert.equal((rerunStep.effects[0] as any).call, 'relay-queue-add')
+
+  // 3. p key pushes pending stages
+  const pushStep = reduce(s, key('p'))
+  assert.match(pushStep.state.toast ?? '', /Pushing 1 pending stages of RUN-0012/)
+  assert.equal(pushStep.effects.length, 1)
+  assert.equal(pushStep.effects[0]!.kind, 'run')
+  assert.equal((pushStep.effects[0] as any).call, 'relay-queue-add')
+
+  // 4. Pointer clicks route through point()
+  const ptMode = point(s, { kind: 'key', key: { name: 'm' } })
+  assert.equal(ptMode.state.runMode, 'sequential')
+})
+
+
 

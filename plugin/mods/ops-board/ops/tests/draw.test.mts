@@ -159,8 +159,8 @@ test('the keys line as the mock; D decided only on a decidable row', () => {
   }
   assert.match(keys(f3), / · \[D decided\] · /)
   // F76: no run yet, the cursor is on the Runs header (Enter closes it); on a run, Enter shows its stages
-  assert.match(text(reduce(s, { name: '2' }).state), /\[↑↓ move\] · \[enter close\] · \[e engage\]/)
-  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /\[↑↓ move\] · \[enter stages\] · \[e engage\]/)
+  assert.match(text(reduce(s, { name: '2' }).state), /\[↑↓ move\] · \[enter close\] · \[Engage\]/)
+  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /\[↑↓ move\] · \[enter stages\] · \[Engage\]/)
   assert.match(text(reduce(s, { name: '3' }).state), /\[R resume \(on a fresh non-red reading\)\](\n| · )\[F force resume\] · \[r reload\] · \[q quit\]/)
 })
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
@@ -536,7 +536,7 @@ test('F123: button badges [Key Label] across all tabs and click hitboxes match b
 
   // 2. Workflows (runs) tab
   const scRuns = screen({ ...reduce(s, { name: '2' }).state, cols: 120 }, P)
-  assert.match(scRuns.lines.join('\n'), /\[↑↓ move\] · \[enter close\] · \[e engage\] · \[r reload\] · \[q quit\]/)
+  assert.match(scRuns.lines.join('\n'), /\[↑↓ move\] · \[enter close\] · \[Engage\] · \[Rerun\] · \[Push Pending\] · \[Mode: \|\|\/seq\] · \[q quit\]/)
 
   // 3. Health tab
   const scHealth = screen({ ...reduce(s, { name: '3' }).state, cols: 120 }, P)
@@ -553,6 +553,28 @@ test('F123: button badges [Key Label] across all tabs and click hitboxes match b
   // 6. Build (run) tab
   const scBuild = screen({ ...reduce(s, { name: '6' }).state, cols: 120 }, P)
   assert.match(scBuild.lines.join('\n'), /\[↑↓ move\] · \[enter run\] · \[n rename\] · \[r rescan\] · \[q quit\]/)
+})
+
+test('F122: Workflows tab action bar with compact action buttons and responsive width handling', () => {
+  const rState = reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state
+  for (const cols of [120, 80, 60, 40]) {
+    const sc = screen({ ...rState, cols }, P)
+    const full = sc.lines.join('\n')
+    assert.match(full, /\[Engage\]/, `Engage present at ${cols}`)
+    assert.match(full, /\[Rerun\]/, `Rerun present at ${cols}`)
+    assert.match(full, /\[Push Pending\]/, `Push Pending present at ${cols}`)
+    assert.match(full, /\[Mode: \|\|\/seq\]/, `Mode present at ${cols}`)
+    for (const l of sc.lines) {
+      assert.ok(cells(l) <= cols, `Line exceeded ${cols}: ${l}`)
+    }
+  }
+
+  // Hitbox assertions
+  const sc = screen({ ...rState, cols: 80 }, P)
+  for (const key of ['e', 'r', 'p', 'm']) {
+    const hit = sc.hits.find(h => h.action.kind === 'key' && (h.action as any).key.name === key)
+    assert.ok(hit, `Hitbox found for key ${key}`)
+  }
 })
 
 

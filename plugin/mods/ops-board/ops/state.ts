@@ -14,7 +14,7 @@ import { STATE_NAME, ticketById, visible } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
-import { continuePrompt, engageOf, orderRuns, RUNS_SECTIONS } from '../hooks/lib/runlines'
+import { continuePrompt, engageOf, orderRuns, RUNS_SECTIONS, stageTickets } from '../hooks/lib/runlines'
 import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
@@ -94,6 +94,7 @@ export type State = {
   runs: RunView[]; runsSelected: string | null; runsExpanded: string | null   // runsSelected: a run id or 'head:<section>'
   runsOpen: RunsSection[]                  // F76: the Workflows tab's open sections (Runs, Workflows); both start open
   runsRead: boolean                        // false until relay's list was first read: 'reading runs…'
+  runMode?: 'parallel' | 'sequential'      // F122: execution mode toggle
   engage: Engage | null                    // F85: the engage confirm box up
   dialog: AssignDraft | null; dialogIndex: number    // -1: the cursor is on "+ add person"
   dialogField: DialogField                            // F77: the keys go to the Ticket field or the people
@@ -139,7 +140,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   filter: { app: null, who: null, mine: false, showDone: false }, filterField: null,
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, relay: null,
-  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, engage: null,
+  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
@@ -739,6 +740,39 @@ function engageKey(s: State, k: Key): Step {
   return { state: s0, effects: [run('relay-queue-add', [id], then)] }
 }
 
+function rerunRun(s: State): Step {
+  const cur = runsCursor(s)
+  const r0 = s.runs.find(r => r.id === cur)
+  if (!r0) return { state: toast(s, 'r reruns the run under the cursor'), effects: [{ kind: 'poll', what: 'runs' }] }
+  const then: Then = r => x => {
+    if (r.code !== 0) return toast(x, `■ ${r0.id} rerun failed: ${r.err.trim() || r.out.trim() || `exit ${r.code}`}`)
+    return { state: toast(x, `✓ ${r0.id} queued for rerun. Continue prompt:\n${continuePrompt(r0.id)}`), effects: [{ kind: 'poll', what: 'runs' }] }
+  }
+  return { state: toast(s, `Rerunning ${r0.id}…`), effects: [run('relay-queue-add', [r0.id], then)] }
+}
+
+function pushPendingRun(s: State): Step {
+  const cur = runsCursor(s)
+  const r0 = s.runs.find(r => r.id === cur)
+  if (!r0) return { state: toast(s, 'p pushes pending stages of the run under cursor to a follow-up run'), effects: [] }
+  const pend = r0.stages.filter(st => st.state === 'pending' || st.state === ' ')
+  if (!pend.length) return { state: toast(s, `No pending stages left in ${r0.id} to push`), effects: [] }
+  const tickets = pend.flatMap(st => stageTickets(st)).filter(Boolean)
+  const then: Then = r => x => {
+    if (r.code !== 0) return toast(x, `■ push pending failed: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`)
+    return { state: toast(x, `✓ Pushed ${pend.length} pending stages (${tickets.join(' ')}) from ${r0.id} to follow-up run`), effects: [{ kind: 'poll', what: 'runs' }] }
+  }
+  return {
+    state: toast(s, `Pushing ${pend.length} pending stages of ${r0.id} to follow-up run…`),
+    effects: [run('relay-queue-add', [r0.id], then)]
+  }
+}
+
+function toggleMode(s: State): Step {
+  const next = s.runMode === 'sequential' ? 'parallel' : 'sequential'
+  return { state: { ...s, runMode: next, toast: `Mode: ${next === 'parallel' ? 'parallel (||)' : 'sequential (seq)'}` }, effects: [] }
+}
+
 function runsKey(s: State, k: Key): Step {
   const items = runsItems(s)
   const cur = runsCursor(s)
@@ -760,6 +794,9 @@ function runsKey(s: State, k: Key): Step {
       return { state: { ...s, runsExpanded: s.runsExpanded !== cur ? cur : null }, effects: [] }
     }
     case 'e': return openEngage(s)
+    case 'r': return rerunRun(s)
+    case 'p': return pushPendingRun(s)
+    case 'm': return toggleMode(s)
     default: return { state: s, effects: [] }
   }
 }
@@ -963,6 +1000,7 @@ export function reduce(s: State, k: Key): Step {
   if (s.filterField) return filterKey(s, k)
   if (s.tab === 'explorer' && k.name === 'r') return explorerKey(s, k)     // F75: r reads git again too
   if (s.tab === 'run' && (s.runForm || k.name === 'r')) return runKey(s, k)   // F79: r rescans here
+  if (s.tab === 'runs' && k.name === 'r') return runsKey(s, k)                // F122: r reruns on Workflows tab
   switch (k.name) {
     case 'q': return quit
     case '1': return toTab(s, 'tickets')
