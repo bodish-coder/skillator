@@ -12,6 +12,19 @@ const MAX_TEXT = 4000;
 const str = (v) => (v == null ? "" : String(v));
 const ASKABLE = new Set(["open", "asked"]);
 
+export function normalizeDiagram(raw) {
+  if (!raw) return [];
+  if (typeof raw === "string") {
+    return raw.split(/\s*(?:->|\u2192|\|)\s*/).map((s) => s.trim()).filter(Boolean)
+      .map((title, i) => ({ title, subtitle: `step ${i + 1}`, kind: "flow" }));
+  }
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x, i) => typeof x === "string"
+    ? { title: x, subtitle: `step ${i + 1}`, kind: "block" }
+    : { title: str(x && (x.title || x.label)), subtitle: str(x && (x.subtitle || x.does || "")), kind: str((x && x.kind) || "block") }
+  ).filter((x) => x.title.trim());
+}
+
 // A relay run's decisions as a set: open/asked ones are asked; answered, ruled,
 // moot and same-as ones are the settled reference, with the run file as source.
 export function setFromRun(run, runPath) {
@@ -19,18 +32,21 @@ export function setFromRun(run, runPath) {
   const decisions = run.qs.filter((q) => ASKABLE.has(q.state)).map((q) => {
     const then = `then: ${q.blocks.length ? "unblocks " + q.blocks.join(", ") : "unblocks the parked work"}` +
       `${q.holds.length ? "; re-plans stage " + q.holds.join(", ") : ""}`;
-    return {
+    const d = {
       id: q.id, ticket: str(q.f.ticket), header: str(q.f.header),
       question: str(q.f.question) || "(no question text in the run file)",
       now: str(q.f.parked ? `parked by ${q.f.parked}` : ""),
       why: str(q.f.reason), scope: [q.blocks.length ? `blocks ${q.blocks.join(", ")}` : "", q.holds.length ? `holds stage ${q.holds.join(", ")}` : "", q.files.length ? `files ${q.files.join(", ")}` : ""].filter(Boolean).join(" \u00b7 "),
       example: "", recommendation: q.options.some((o) => o.rec) ? "Marked recommended in the run file." : "",
       options: q.options.filter((o) => str(o.label).trim()).map((o, i) => ({
-        id: "o" + (i + 1), label: o.label, does: o.does, tradeoff: o.hurts, recommended: !!o.rec,
+        id: "o" + (i + 1), label: o.label, explain: str(o.explain || ""),
+        does: o.does, pros: o.does, tradeoff: o.hurts, cons: o.hurts, recommended: !!o.rec,
         consequence: `${o.does ? o.does + ". " : ""}${o.hurts ? "Cost: " + o.hurts + ". " : ""}${then}.`,
       })),
       sources: [`${src} ${q.id} ${q.state} ${q.ts}`.trim()],
     };
+    if (q.f.diagram) d.diagram = str(q.f.diagram);
+    return d;
   });
   const settled = run.qs.filter((q) => !ASKABLE.has(q.state)).map((q) => ({
     id: q.id, ticket: str(q.f.ticket), question: str(q.f.question), state: q.state,
@@ -49,7 +65,17 @@ export function checkSet(set) {
   const seen = new Set();
   const ID = /^[A-Za-z0-9_.-]{1,40}$/, RESERVED = new Set(["__proto__", "constructor", "prototype", "hasOwnProperty", "toString", "valueOf"]);
   const text = (v, where) => { if (v != null && typeof v !== "string") bad(`${where} must be text`); };
+  const checkDiag = (dg, where) => {
+    if (dg == null || typeof dg === "string") return;
+    if (!Array.isArray(dg)) bad(`${where} must be text or a list`);
+    for (const b of dg) {
+      if (typeof b === "string") continue;
+      if (!b || typeof b !== "object") bad(`${where} item must be text or an object`);
+      for (const k of ["title", "label", "subtitle", "kind"]) text(b[k], `${where}.${k}`);
+    }
+  };
   for (const k of ["id", "title", "source"]) text(set[k], k);
+  if (set.round != null && (typeof set.round !== "number" || !Number.isFinite(set.round))) bad("round must be a number");
   for (const d of set.decisions) {
     if (!d || typeof d !== "object") bad("a decision is not an object");
     if (!ID.test(str(d.id)) || RESERVED.has(d.id)) bad(`decision id "${d.id}" must be 1-40 of A-Z a-z 0-9 _ . - and not a reserved name`);
@@ -58,20 +84,104 @@ export function checkSet(set) {
     if (!str(d.question).trim()) bad(`${d.id}: question is required`);
     if (!Array.isArray(d.options)) bad(`${d.id}: options must be a list (it may be empty: custom and discuss-first are always offered)`);
     if (d.sources != null && (!Array.isArray(d.sources) || d.sources.some((x) => typeof x !== "string"))) bad(`${d.id}: sources must be a list of text`);
+    checkDiag(d.diagram, `${d.id}.diagram`);
+    if (d.discussion != null) {
+      if (typeof d.discussion !== "object" || Array.isArray(d.discussion)) bad(`${d.id}.discussion must be an object`);
+      for (const k of ["kind", "prompt", "notes", "previousStatus"]) text(d.discussion[k], `${d.id}.discussion.${k}`);
+    }
     const oids = new Set();
     for (const o of d.options) {
       if (!o || typeof o !== "object") bad(`${d.id}: an option is not an object`);
       if (!ID.test(str(o.id)) || RESERVED.has(o.id)) bad(`${d.id}: option id "${o.id}"`);
-      if (oids.has(o.id) || o.id === "custom" || o.id === "defer") bad(`${d.id}: option id ${o.id} repeats or is reserved`);
+      if (oids.has(o.id) || o.id === "custom" || o.id === "defer" || o.id === "explain") bad(`${d.id}: option id ${o.id} repeats or is reserved`);
       oids.add(o.id);
-      for (const k of ["label", "does", "tradeoff", "consequence"]) text(o[k], `${d.id}/${o.id}.${k}`);
+      for (const k of ["label", "explain", "does", "pros", "tradeoff", "cons", "consequence"]) text(o[k], `${d.id}/${o.id}.${k}`);
       if (!str(o.label).trim()) bad(`${d.id}/${o.id}: label is required`);
+      if (o.pros && !o.does) o.does = o.pros;
+      if (o.does && !o.pros) o.pros = o.does;
+      if (o.cons && !o.tradeoff) o.tradeoff = o.cons;
+      if (o.tradeoff && !o.cons) o.cons = o.tradeoff;
+      checkDiag(o.diagram, `${d.id}/${o.id}.diagram`);
     }
     if (d.options.filter((o) => o.recommended).length > 1) bad(`${d.id}: more than one recommended option`);
   }
   if (set.settled != null && !Array.isArray(set.settled)) bad("settled must be a list");
   for (const s of set.settled || []) for (const k of ["id", "ticket", "question", "state", "answer", "source"]) text(s && s[k], `settled.${k}`);
   return set;
+}
+
+// Continuous discussion (F134): build the Round N+1 wizard set from the previous
+// decision set and an exported holo-answers/1 JSON. Answered decisions move into
+// `settled` (read-only); "custom" (Something else) and "defer"/"explain" (Ask /
+// Explain more) stay open with an expanded Discussion & Explanation banner,
+// auto-populated option explanations, pros/cons, and block diagrams.
+export function nextWizardSet(set, ans) {
+  checkSet(set);
+  if (!ans || ans.schema !== ANSWER_SCHEMA || !Array.isArray(ans.answers)) throw new Error(`answers: schema must be "${ANSWER_SCHEMA}"`);
+  const round = (Number(set.round) || 1) + 1;
+  const byId = new Map(ans.answers.map((a) => [a && a.id, a]));
+  const decisions = [], settled = [...(set.settled || [])];
+  for (const d of set.decisions) {
+    const a = byId.get(d.id);
+    const cid = a && a.choice && typeof a.choice === "object" ? str(a.choice.id) : "";
+    const isExplain = cid === "defer" || cid === "explain";
+    const isCustom = cid === "custom";
+    const picked = !isExplain && !isCustom && cid ? d.options.find((o) => o.id === cid) : null;
+    if (picked) {
+      settled.push({
+        id: d.id, ticket: str(d.ticket), question: str(d.question), state: "answered",
+        answer: picked.label + (str(a.notes).trim() ? " - " + str(a.notes).trim() : ""),
+        source: `${ans.set || set.id} round ${round - 1}`,
+      });
+      continue;
+    }
+    const promptText = str(isCustom ? a?.custom : a?.clarification).trim();
+    const opts = d.options.map((o) => ({
+      ...o,
+      pros: o.pros || o.does || "Direct implementation path",
+      does: o.does || o.pros || "Direct implementation path",
+      cons: o.cons || o.tradeoff || "Standard trade-off",
+      tradeoff: o.tradeoff || o.cons || "Standard trade-off",
+      explain: o.explain || [o.does && `What this action does: ${o.does}`, o.tradeoff && `Cons: ${o.tradeoff}`, o.consequence && `Then: ${o.consequence}`].filter(Boolean).join(" \u00b7 ") || `Executes ${o.label}.`,
+    }));
+    if (isCustom && promptText) {
+      const customId = `custom_r${round - 1}`;
+      if (!opts.some((o) => o.id === customId)) {
+        opts.push({
+          id: customId,
+          label: `Custom direction: ${promptText.slice(0, 60)}`,
+          explain: `Your custom direction from Round ${round - 1}: ${promptText}`,
+          does: `Applies custom direction: ${promptText}`,
+          pros: `Applies custom direction: ${promptText}`,
+          tradeoff: "Requires custom implementation check",
+          cons: "Requires custom implementation check",
+          consequence: "Proceeds with your custom direction once confirmed.",
+          recommended: false,
+        });
+      }
+    }
+    const nextD = {
+      ...d,
+      options: opts,
+      diagram: d.diagram || [
+        { title: d.header || d.id, subtitle: "Decision context", kind: "block" },
+        ...(promptText ? [{ title: isCustom ? "Custom Proposal" : "Explain Request", subtitle: promptText.slice(0, 24), kind: "action" }] : []),
+        ...opts.slice(0, 3).map((o) => ({ title: o.label, subtitle: o.does || "Option", kind: o.recommended ? "action" : "flow" })),
+      ],
+    };
+    if (promptText || isExplain || isCustom) {
+      nextD.discussion = {
+        round,
+        kind: isCustom ? "custom" : "explain",
+        prompt: promptText || "Requested deeper explanation of options, pros, and cons.",
+        notes: str(a?.notes).trim(),
+        previousStatus: isCustom ? "custom-review-required" : "deferred",
+      };
+    }
+    decisions.push(nextD);
+  }
+  const baseTitle = str(set.title || set.id).replace(/\s*\(Round \d+\)$/, "");
+  return checkSet({ ...set, round, title: `${baseTitle} (Round ${round})`, decisions, settled });
 }
 
 // The finalized export -> one relay-morpheus answer line per answered decision,
@@ -92,10 +202,11 @@ export function answersToCommands(ans, rm = "relay-morpheus.sh") {
     if (!a || !/^Q\d+$/.test(str(a.id))) { out.open.push(`${a && a.id}: not a relay decision id`); continue; }
     const cid = a.choice && typeof a.choice === "object" ? str(a.choice.id) : "";
     const notes = one(a.notes);
+    const isDefer = cid === "defer" || cid === "explain";
     let textv = "", custom = false;
     if (cid === "custom") { textv = one(a.custom); custom = true; }
-    else if (cid && cid !== "defer") textv = one(a.choice.label);
-    if (cid === "defer" || !cid) { out.open.push(`${a.id}: ${cid === "defer" ? "deferred" : "no answer"}${one(a.clarification) ? " - " + one(a.clarification) : ""}`); continue; }
+    else if (cid && !isDefer) textv = one(a.choice.label);
+    if (isDefer || !cid) { out.open.push(`${a.id}: ${isDefer ? "deferred" : "no answer"}${one(a.clarification) ? " - " + one(a.clarification) : ""}`); continue; }
     if (!textv) { out.open.push(`${a.id}: ${custom ? "custom direction" : "choice"} has no text`); continue; }
     const full = textv + (notes ? " - " + notes : "");
     if (/^(--|#)/.test(full)) { out.open.push(`${a.id}: the answer starts with "${full.slice(0, 2)}", which relay-morpheus reads as a flag or comment - record it by hand: ${full}`); continue; }
@@ -177,6 +288,20 @@ legend{font-weight:600;margin-bottom:.5rem;padding:0}
 .opt input{width:22px;height:22px;margin:.15rem 0 0;flex:none;accent-color:var(--accent)}
 .opt .lbl{font-weight:600}.opt .tag{font-size:.78rem;font-weight:700;color:var(--rec);margin-left:.4rem;text-transform:uppercase;letter-spacing:.03em}
 .opt .meta{display:block;font-size:.93rem;color:var(--muted);margin-top:.15rem}
+.opt-explain{display:block;font-size:.9rem;color:var(--ink);margin-top:.2rem}
+.pros-cons{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.45rem;margin-top:.35rem}
+.pro-card,.con-card{display:block;font-size:.86rem;padding:.3rem .55rem;border-radius:6px;border:1px solid var(--line)}
+.pro-card{background:var(--rec-bg);border-color:var(--rec)}.con-card{background:var(--warn-bg);border-color:var(--warn)}
+.pc-k{font-weight:700;text-transform:uppercase;font-size:.74rem;letter-spacing:.04em;margin-right:.3rem}
+.pro-card .pc-k{color:var(--rec)}.con-card .pc-k{color:var(--warn)}
+.block-diagram{display:block;width:100%;height:auto;margin:.5rem 0 .85rem;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:.35rem}
+.bd-box{fill:var(--bg);stroke:var(--line);stroke-width:1.4}.bd-bar{fill:var(--accent)}
+.bd-pro .bd-box{fill:var(--rec-bg);stroke:var(--rec)}.bd-pro .bd-bar{fill:var(--rec)}
+.bd-con .bd-box{fill:var(--warn-bg);stroke:var(--warn)}.bd-con .bd-bar{fill:var(--warn)}
+.bd-title{font-size:12px;font-weight:700;fill:var(--ink)}.bd-sub{font-size:10.5px;fill:var(--muted)}
+.bd-edge{fill:none;stroke:var(--muted);stroke-width:1.5}.bd-arrow{fill:var(--muted)}
+.discuss-banner{border:1px solid var(--accent);background:var(--sel);margin-bottom:1rem}
+.discuss-banner h3{margin:0 0 .35rem;font-size:1.02rem;color:var(--accent)}
 .opt.alt{border-style:dashed}
 .need{margin:.2rem 0 .7rem 2.3rem}
 label.blk{display:block;font-weight:600;margin:.8rem 0 .3rem}
@@ -193,7 +318,7 @@ aside.preview{position:sticky;top:12px;background:var(--card);border:1px solid v
 .flow li{position:relative;padding:.45rem .7rem;border-radius:8px;border:1px solid var(--line);margin-bottom:22px}
 .flow li:not(:last-child)::after{content:"";position:absolute;left:50%;bottom:-19px;width:2px;height:16px;background:var(--line)}
 .flow .k{display:block;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
-.flow .pick{border-color:var(--accent)}.flow .cost{border-color:var(--warn);background:var(--warn-bg)}.flow .then{border-style:dashed}
+.flow .pick{border-color:var(--accent)}.flow .pro{border-color:var(--rec);background:var(--rec-bg)}.flow .cost{border-color:var(--warn);background:var(--warn-bg)}.flow .then{border-style:dashed}
 .note-ex{font-size:.85rem;color:var(--muted);margin:.4rem 0 0}
 .actions{display:flex;flex-wrap:wrap;gap:10px;margin:1.2rem 0 .5rem}
 button{font:inherit}
@@ -228,6 +353,7 @@ const CLIENT = String.raw`(() => {
 const SET = JSON.parse(document.getElementById("holo-set").textContent);
 const SCHEMA = "holo-answers/1", MAX = ${MAX_TEXT}, MAX_FILE = 1048576;
 const KEY = "holo-wizard:v1:" + SET.id + ":" + hash(JSON.stringify(SET.decisions.map(d => [d.id, d.options.map(o => o.id)])));
+const SVG_NS = (document.documentElement.namespaceURI || "").replace("1999/xhtml", "2000/svg");
 const $ = (id) => document.getElementById(id);
 const el = (tag, attrs, ...kids) => {
   const n = document.createElement(tag);
@@ -238,6 +364,49 @@ const el = (tag, attrs, ...kids) => {
   for (const c of kids.flat()) if (c != null && c !== false) n.append(c);
   return n;
 };
+const svgEl = (tag, attrs, ...kids) => {
+  const n = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "text") n.textContent = v; else n.setAttribute(k, String(v));
+  }
+  for (const c of kids.flat()) if (c != null && c !== false) n.append(c);
+  return n;
+};
+const clip = (s, n) => { s = String(s || "").trim(); return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; };
+function normDiag(raw) {
+  if (!raw) return [];
+  if (typeof raw === "string") return raw.split(/\s*(?:->|\u2192|\|)\s*/).map((s, i) => ({ title: s.trim(), subtitle: "step " + (i + 1), kind: "flow" })).filter(x => x.title);
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x, i) => typeof x === "string" ? { title: x, subtitle: "step " + (i + 1), kind: "block" } : { title: String((x && (x.title || x.label)) || ""), subtitle: String((x && (x.subtitle || x.does)) || ""), kind: String((x && x.kind) || "block") }).filter(x => x.title.trim());
+}
+function renderBlockDiagram(items, label) {
+  const list = normDiag(items);
+  if (!list.length) return null;
+  const cols = Math.min(list.length, 3), rows = Math.ceil(list.length / cols);
+  const BW = 152, BH = 52, GX = 24, GY = 18, PX = 8, PY = 8;
+  const W = PX * 2 + cols * BW + (cols - 1) * GX, H = PY * 2 + rows * BH + (rows - 1) * GY;
+  const svg = svgEl("svg", { class: "block-diagram", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": label || "Block diagram" },
+    svgEl("defs", null, svgEl("marker", { id: "wiz-arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" },
+      svgEl("path", { d: "M0,0 L10,5 L0,10 z", class: "bd-arrow" }))));
+  list.forEach((b, idx) => {
+    const c = idx % cols, r = Math.floor(idx / cols);
+    const x = PX + c * (BW + GX), y = PY + r * (BH + GY);
+    if (idx + 1 < list.length) {
+      const nc = (idx + 1) % cols, nr = Math.floor((idx + 1) / cols);
+      const nx = PX + nc * (BW + GX), ny = PY + nr * (BH + GY);
+      const d = nr === r ? "M" + (x + BW) + "," + (y + BH / 2) + " L" + (nx - 3) + "," + (ny + BH / 2)
+        : "M" + (x + BW / 2) + "," + (y + BH) + " L" + (nx + BW / 2) + "," + (ny - 3);
+      svg.append(svgEl("path", { class: "bd-edge", d, "marker-end": "url(#wiz-arrow)" }));
+    }
+    svg.append(svgEl("g", { class: "bd-node bd-" + (b.kind || "block"), transform: "translate(" + x + "," + y + ")" },
+      svgEl("rect", { class: "bd-box", width: BW, height: BH, rx: 6 }),
+      svgEl("rect", { class: "bd-bar", width: BW, height: 5, rx: 3 }),
+      svgEl("text", { class: "bd-title", x: 9, y: 22, text: clip(b.title, 20) }),
+      svgEl("text", { class: "bd-sub", x: 9, y: 39, text: clip(b.subtitle || ("block " + (idx + 1)), 23) })));
+  });
+  return svg;
+}
 function hash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0; return h.toString(36); }
 const blank = () => ({ choice: "", custom: "", clarification: "", notes: "", skipped: false });
 let st = { answers: Object.create(null), owner: "", reviewed: false, finalizedAt: null, step: 0, imported: false };
@@ -255,12 +424,12 @@ function save(quiet) {
 function say(m) { $("status").textContent = ""; setTimeout(() => { $("status").textContent = m; }, 30); }
 function statusOf(d) {
   const a = st.answers[d.id];
-  if (a.choice === "defer") return a.clarification.trim() ? "deferred" : "incomplete";
+  if (a.choice === "defer" || a.choice === "explain") return a.clarification.trim() ? "deferred" : "incomplete";
   if (a.choice === "custom") return a.custom.trim() ? "custom-review-required" : "incomplete";
   if (a.choice && d.options.some(o => o.id === a.choice)) return "answered";
   return "incomplete";
 }
-const LABEL = { "answered": "Answered", "custom-review-required": "Custom - needs review", "deferred": "Deferred for discussion", "incomplete": "Not answered" };
+const LABEL = { "answered": "Answered", "custom-review-required": "Custom - needs review", "deferred": "Ask / Explain in next HTML", "incomplete": "Not answered" };
 const GLYPH = { "answered": "\u2713", "custom-review-required": "\u270e", "deferred": "\u23f8", "incomplete": "\u00b7" };
 function unapprove() { if (st.reviewed || st.finalizedAt) { st.reviewed = false; st.finalizedAt = null; say("An answer changed, so the review approval was cleared."); } }
 
@@ -294,14 +463,16 @@ function render() {
 
 function stepView(d, i) {
   const a = st.answers[d.id], n = SET.decisions.length;
-  const errs = {};
   const rec = d.options.find(o => o.recommended);
   const ctx = [["What exists now", d.now], ["Why it matters", d.why], ["Scope", d.scope]].filter(([, v]) => v);
   const name = "q-" + d.id;
-  const opt = (id, labelKids, meta, extra) => {
-    const inp = el("input", { type: "radio", name, value: id, id: name + "-" + id, checked: a.choice === id || null,
+  const isDefer = () => a.choice === "defer" || a.choice === "explain";
+  const opt = (id, labelKids, meta, extra, extraKids) => {
+    const checkedVal = (id === "defer" ? isDefer() : a.choice === id) || null;
+    const inp = el("input", { type: "radio", name, value: id, id: name + "-" + id, checked: checkedVal,
       onchange: () => { a.choice = id; a.skipped = false; unapprove(); save(true); refreshPreview(); header(); toggleNeeds(); } });
-    return el("label", { class: "opt" + (extra ? " alt" : ""), for: name + "-" + id }, inp, el("span", null, labelKids, meta ? el("span", { class: "meta", text: meta }) : null));
+    return el("label", { class: "opt" + (extra ? " alt" : ""), for: name + "-" + id }, inp,
+      el("span", null, labelKids, meta ? el("span", { class: "meta", text: meta }) : null, extraKids || null));
   };
   const customTa = el("textarea", { id: name + "-custom-text", maxlength: MAX, "aria-describedby": name + "-custom-err",
     oninput: (e) => { a.custom = e.target.value; unapprove(); save(true); refreshPreview(); } });
@@ -313,17 +484,26 @@ function stepView(d, i) {
   notes.value = a.notes;
   const customNeed = el("div", { class: "need", hidden: a.choice !== "custom" || null },
     el("label", { class: "blk", for: customTa.id, text: "Your direction (required)" }), customTa, el("p", { class: "err", id: name + "-custom-err", "aria-live": "polite" }));
-  const deferNeed = el("div", { class: "need", hidden: a.choice !== "defer" || null },
-    el("label", { class: "blk", for: deferTa.id, text: "What needs discussing first (required)" }), deferTa, el("p", { class: "err", id: name + "-defer-err", "aria-live": "polite" }));
-  function toggleNeeds() { customNeed.hidden = a.choice !== "custom"; deferNeed.hidden = a.choice !== "defer"; }
+  const deferNeed = el("div", { class: "need", hidden: !isDefer() || null },
+    el("label", { class: "blk", for: deferTa.id, text: "What to explain or discuss in the next HTML (required)" }), deferTa, el("p", { class: "err", id: name + "-defer-err", "aria-live": "polite" }));
+  function toggleNeeds() { customNeed.hidden = a.choice !== "custom"; deferNeed.hidden = !isDefer(); }
   const choiceErr = el("p", { class: "err", id: name + "-err", "aria-live": "polite" });
   const fs = el("fieldset", { "aria-describedby": name + "-err" },
     el("legend", { text: "Your answer" }),
-    d.options.map(o => opt(o.id, [el("span", { class: "lbl", text: o.label }), o.recommended ? el("span", { class: "tag", text: "Recommended" }) : null],
-      [o.does && "Does: " + o.does, o.tradeoff && "Trade-off: " + o.tradeoff].filter(Boolean).join(" \u00b7 "))),
-    opt("custom", el("span", { class: "lbl", text: "Something else - I'll describe it" }), "Recorded verbatim; it still needs interpreting and checking before it is built.", true),
+    d.options.map(o => {
+      const pros = o.pros || o.does || "", cons = o.cons || o.tradeoff || "";
+      const pc = (pros || cons) ? el("span", { class: "pros-cons" },
+        pros ? el("span", { class: "pro-card" }, el("strong", { class: "pc-k", text: "Pros:" }), pros) : null,
+        cons ? el("span", { class: "con-card" }, el("strong", { class: "pc-k", text: "Cons:" }), cons) : null) : null;
+      return opt(o.id,
+        [el("span", { class: "lbl", text: o.label }), o.recommended ? el("span", { class: "tag", text: "Recommended" }) : null],
+        [o.does && "Does: " + o.does, o.tradeoff && "Trade-off: " + o.tradeoff].filter(Boolean).join(" \u00b7 "),
+        false,
+        [o.explain ? el("span", { class: "opt-explain", text: "What this action does: " + o.explain }) : null, pc]);
+    }),
+    opt("custom", el("span", { class: "lbl", text: "Something else - I'll describe it" }), "Recorded verbatim; can be finalized and carried forward into the next wizard round.", true),
     customNeed,
-    opt("defer", el("span", { class: "lbl", text: "Not yet - discuss first" }), "Holds this decision open; finalizing waits for it.", true),
+    opt("defer", el("span", { class: "lbl", text: "Ask / Explain more - generate detailed explanation in next HTML" }), "Ask a question or request a deeper explanation; finalizes and carries forward to the next wizard round.", true),
     deferNeed, choiceErr);
   const preview = el("aside", { class: "preview", "aria-live": "polite", "aria-label": "What your choice leads to" });
   function refreshPreview() {
@@ -332,17 +512,41 @@ function stepView(d, i) {
     const o = d.options.find(x => x.id === a.choice);
     const flow = el("ol", { class: "flow" });
     if (o) {
+      const diagItems = o.diagram ? normDiag(o.diagram) : [
+        { title: o.label, subtitle: o.explain || "Action", kind: "action" },
+        ...(o.pros || o.does ? [{ title: "Pros", subtitle: o.pros || o.does, kind: "pro" }] : []),
+        ...(o.cons || o.tradeoff ? [{ title: "Cons", subtitle: o.cons || o.tradeoff, kind: "con" }] : []),
+        ...(o.consequence ? [{ title: "Outcome", subtitle: o.consequence, kind: "flow" }] : []),
+      ];
+      const svg = renderBlockDiagram(diagItems, "Action flow for " + o.label);
+      if (svg) preview.append(svg);
       flow.append(el("li", { class: "pick" }, el("span", { class: "k", text: "Choice" }), o.label));
-      if (o.does) flow.append(el("li", null, el("span", { class: "k", text: "What it does" }), o.does));
-      if (o.tradeoff) flow.append(el("li", { class: "cost" }, el("span", { class: "k", text: "What it costs" }), o.tradeoff));
+      if (o.explain) flow.append(el("li", null, el("span", { class: "k", text: "What this action does" }), o.explain));
+      if (o.does || o.pros) flow.append(el("li", { class: "pro" }, el("span", { class: "k", text: "Pros (What it does)" }), o.pros || o.does));
+      if (o.tradeoff || o.cons) flow.append(el("li", { class: "cost" }, el("span", { class: "k", text: "Cons (What it costs)" }), o.cons || o.tradeoff));
       if (o.consequence) flow.append(el("li", { class: "then" }, el("span", { class: "k", text: "Then" }), o.consequence));
     } else if (a.choice === "custom") {
+      const svg = renderBlockDiagram([
+        { title: "Custom Direction", subtitle: a.custom.trim() || "Describe below", kind: "action" },
+        { title: "Export JSON", subtitle: "Finalize allowed", kind: "pro" },
+        { title: "Next Round / Build", subtitle: "Reviewed & applied", kind: "flow" },
+      ], "Custom direction flow");
+      if (svg) preview.append(svg);
       flow.append(el("li", { class: "pick" }, el("span", { class: "k", text: "Your direction" }), a.custom.trim() || "(not written yet)"));
-      flow.append(el("li", { class: "then" }, el("span", { class: "k", text: "Then" }), "Sent back as your exact words. Someone still has to interpret and check it - it is not treated as understood."));
-    } else if (a.choice === "defer") {
-      flow.append(el("li", { class: "pick" }, el("span", { class: "k", text: "Held for discussion" }), a.clarification.trim() || "(what to discuss is not written yet)"));
-      flow.append(el("li", { class: "then" }, el("span", { class: "k", text: "Then" }), "This stays open. Finalizing waits until it has an answer."));
+      flow.append(el("li", { class: "then" }, el("span", { class: "k", text: "Then" }), "Sent back as your exact words. You can finalize and download JSON now, or generate the next HTML round."));
+    } else if (isDefer()) {
+      const svg = renderBlockDiagram([
+        { title: "Ask / Explain", subtitle: a.clarification.trim() || "Write question", kind: "action" },
+        { title: "Finalize JSON", subtitle: "Download allowed", kind: "pro" },
+        { title: "Next HTML Round", subtitle: "Expanded explanation", kind: "flow" },
+      ], "Continuous discussion flow");
+      if (svg) preview.append(svg);
+      flow.append(el("li", { class: "pick" }, el("span", { class: "k", text: "Ask / Explain more" }), a.clarification.trim() || "(what to explain is not written yet)"));
+      flow.append(el("li", { class: "then" }, el("span", { class: "k", text: "Then" }), "Finalizing is allowed. Download the JSON and run --next-wizard to generate the next HTML with settled answers saved and this explanation expanded."));
     } else {
+      const fallbackDiag = d.diagram ? normDiag(d.diagram) : d.options.map((x, idx) => ({ title: x.label, subtitle: x.does || ("Option " + (idx + 1)), kind: x.recommended ? "pro" : "block" }));
+      const svg = renderBlockDiagram(fallbackDiag, "Decision overview diagram");
+      if (svg) preview.append(svg);
       flow.append(el("li", null, el("span", { class: "k", text: "Nothing chosen yet" }), rec ? "Pick an option to see where it leads. The recommendation is \u201c" + rec.label + "\u201d - it is not selected for you." : "Pick an option to see where it leads."));
     }
     preview.append(flow, el("p", { class: "note-ex", text: "An illustration of the choice, not live data or test results." }));
@@ -355,14 +559,21 @@ function stepView(d, i) {
     customNeed.querySelector(".err").textContent = ""; deferNeed.querySelector(".err").textContent = "";
     if (!a.choice) { choiceErr.textContent = "Choose an option, or use Skip for now."; first = fs.querySelector("input"); }
     else if (a.choice === "custom") set(customTa, customNeed.querySelector(".err"), a.custom.trim() ? "" : "Describe your direction, or pick another option.");
-    else if (a.choice === "defer") set(deferTa, deferNeed.querySelector(".err"), a.clarification.trim() ? "" : "Say what needs discussing, so the hold can be resolved.");
+    else if (isDefer()) set(deferTa, deferNeed.querySelector(".err"), a.clarification.trim() ? "" : "Say what needs explaining or discussing, so the next round can answer it.");
     if (first) first.focus();
     return !first;
   }
+  const discussBanner = d.discussion ? el("div", { class: "banner discuss-banner" },
+    el("h3", { text: "Discussion & Explanation Requested (Round " + (d.discussion.round || 2) + ")" }),
+    el("p", { text: (d.discussion.kind === "custom" ? "Your previous custom direction: " : "Your question / explain request: ") + d.discussion.prompt }),
+    d.discussion.notes ? el("p", { class: "small muted", text: "Notes from previous round: " + d.discussion.notes }) : null) : null;
+  const stepDiag = renderBlockDiagram(d.diagram || d.options.map((x, idx) => ({ title: x.label, subtitle: x.does || ("Option " + (idx + 1)), kind: x.recommended ? "pro" : "block" })), "Block diagram for " + d.id);
   const left = el("section", { "aria-labelledby": name + "-h" },
     el("p", { class: "ids", text: "Decision " + (i + 1) + " of " + n + " \u00b7 " + d.id + (d.ticket ? " \u00b7 ticket " + d.ticket : "") + (d.header ? " \u00b7 " + d.header : "") }),
     el("h2", { id: name + "-h", text: d.question }),
+    discussBanner,
     ctx.length ? el("dl", { class: "ctx" }, ctx.map(([k, v]) => el("div", null, el("dt", { text: k }), el("dd", { text: v })))) : null,
+    stepDiag,
     d.example ? el("p", { class: "example" }, el("strong", { text: "Example: " }), d.example) : null,
     rec ? el("div", { class: "recbox" }, el("strong", { text: "Recommended: " + rec.label }), d.recommendation ? el("div", { text: d.recommendation }) : null, el("div", { class: "small muted", text: "Shown first, not chosen for you." }))
         : el("div", { class: "recbox" }, el("strong", { text: "No recommendation" }), el("div", { text: d.recommendation || "None of the options can responsibly be recommended from the evidence given." })),
@@ -380,13 +591,14 @@ function review() {
   const n = SET.decisions.length;
   const rows = SET.decisions.map((d, i) => {
     const a = st.answers[d.id], s = statusOf(d), o = d.options.find(x => x.id === a.choice);
-    const what = o ? o.label : a.choice === "custom" ? "Custom: " + (a.custom || "(empty)") : a.choice === "defer" ? "Discuss first: " + (a.clarification || "(empty)") : "No answer";
+    const isDefer = a.choice === "defer" || a.choice === "explain";
+    const what = o ? o.label : a.choice === "custom" ? "Custom: " + (a.custom || "(empty)") : isDefer ? "Ask / Explain more: " + (a.clarification || "(empty)") : "No answer";
     return el("li", null,
       el("div", null, el("strong", { text: d.id + " - " + d.question }), el("span", { class: "badge b-" + s, text: LABEL[s] })),
       el("div", { text: what }), a.notes ? el("div", { class: "muted", text: "Notes: " + a.notes }) : null,
       el("button", { type: "button", class: "secondary", onclick: () => go(i), "aria-label": "Edit " + d.id }, "Edit"));
   });
-  const blockers = SET.decisions.filter(d => !["answered", "custom-review-required"].includes(statusOf(d)));
+  const blockers = SET.decisions.filter(d => statusOf(d) === "incomplete");
   const owner = el("input", { type: "text", id: "owner", maxlength: 200, autocomplete: "name", "aria-describedby": "owner-err",
     oninput: (e) => { st.owner = e.target.value; unapprove(); save(true); sync(); } });
   owner.value = st.owner;
@@ -399,12 +611,12 @@ function review() {
     header(); chk.checked = !!st.reviewed;
     state.className = "banner" + (blockers.length ? " warn" : "");
     state.textContent = blockers.length ? blockers.length + " decision" + (blockers.length > 1 ? "s" : "") + " still block finalizing (" + blockers.map(d => d.id + ": " + LABEL[statusOf(d)].toLowerCase()).join("; ") + "). A draft can be downloaded at any time."
-      : st.finalizedAt ? "Finalized " + st.finalizedAt + " by " + st.owner + ". Share the downloaded JSON in the working conversation - it has not been sent or applied anywhere."
-      : "Every decision has a response. Check them, then add your name and confirm to finalize.";
+      : st.finalizedAt ? "Finalized " + st.finalizedAt + " by " + st.owner + ". Share the downloaded JSON in the working conversation (or pass it to --next-wizard for continuous discussion)."
+      : "Every decision has a response (options, custom directions, and Ask / Explain requests can all be finalized). Add your name and confirm to finalize.";
   }
   function finalize() {
     finErr.textContent = "";
-    if (blockers.length) { finErr.textContent = "Answer or resolve every decision first - deferred and unanswered ones block finalizing."; return go(SET.decisions.indexOf(blockers[0])); }
+    if (blockers.length) { finErr.textContent = "Provide a response for every decision first - unanswered ones block finalizing."; return go(SET.decisions.indexOf(blockers[0])); }
     if (!st.owner.trim()) { owner.setAttribute("aria-invalid", "true"); $("owner-err").textContent = "Your name is required to finalize."; return owner.focus(); }
     owner.removeAttribute("aria-invalid"); $("owner-err").textContent = "";
     if (!st.reviewed) { finErr.textContent = "Confirm you reviewed every answer."; return chk.focus(); }
@@ -434,8 +646,9 @@ function exportObj(final) {
     owner: st.owner, reviewed: final ? st.reviewed : false,
     answers: SET.decisions.map(d => {
       const a = st.answers[d.id], o = d.options.find(x => x.id === a.choice);
+      const isDefer = a.choice === "defer" || a.choice === "explain";
       return { id: d.id, ticket: d.ticket || "", question: d.question, status: statusOf(d),
-        choice: o ? { id: o.id, label: o.label, does: o.does || "", tradeoff: o.tradeoff || "" } : a.choice === "custom" || a.choice === "defer" ? { id: a.choice } : null,
+        choice: o ? { id: o.id, label: o.label, does: o.does || "", tradeoff: o.tradeoff || "" } : a.choice === "custom" ? { id: "custom" } : isDefer ? { id: "defer" } : null,
         custom: a.custom, clarification: a.clarification, notes: a.notes, skipped: !!a.skipped,
         options: d.options.map(x => ({ id: x.id, label: x.label, recommended: !!x.recommended })) };
     }),
@@ -462,8 +675,9 @@ function validateImport(v) {
     if (out[a.id]) bad("decision " + a.id + " twice");
     for (const k of ["custom", "clarification", "notes"]) { if (a[k] != null && typeof a[k] !== "string") bad(a.id + ": " + k + " must be text"); if ((a[k] || "").length > MAX) bad(a.id + ": " + k + " is longer than " + MAX); }
     if (a.choice != null && (typeof a.choice !== "object" || Array.isArray(a.choice))) bad(a.id + ": choice must be an object or null");
-    const cid = a.choice && a.choice.id;
-    if (cid != null && typeof cid !== "string") bad(a.id + ": choice id must be text");
+    const rawCid = a.choice && a.choice.id;
+    if (rawCid != null && typeof rawCid !== "string") bad(a.id + ": choice id must be text");
+    const cid = rawCid === "explain" ? "defer" : rawCid;
     if (cid && cid !== "custom" && cid !== "defer" && !d.options.some(o => o.id === cid)) bad(a.id + ": unknown option " + cid.slice(0, 40));
     out[a.id] = { choice: cid || "", custom: a.custom || "", clarification: a.clarification || "", notes: a.notes || "", skipped: !!a.skipped };
   }

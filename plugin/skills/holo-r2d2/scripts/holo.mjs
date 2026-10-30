@@ -40,7 +40,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { setFromRun, checkSet, wizardPage, answersToCommands } from "./wizard.mjs";
+import { setFromRun, checkSet, wizardPage, answersToCommands, nextWizardSet, normalizeDiagram } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -129,9 +129,9 @@ export function parseRun(md, holds = null) {
       if (/^### /.test(l)) { q = null; inOpts = false; continue; } // unreadable header: never merge into the Q above
       if (!q) continue;
       if (inOpts && (m = /^ {2}- (.*)$/.exec(l))) {
-        const [label = "", does = "", hurts = ""] = m[1].split("|").map((x) => x.trim());
+        const [label = "", does = "", hurts = "", explain = ""] = m[1].split("|").map((x) => x.trim());
         const rec = /\s*\(Recommended\)$/.test(label);
-        q.options.push({ label: label.replace(/\s*\(Recommended\)$/, ""), does, hurts, rec });
+        q.options.push({ label: label.replace(/\s*\(Recommended\)$/, ""), does, hurts, pros: does, cons: hurts, explain, rec });
         continue;
       }
       inOpts = false;
@@ -255,10 +255,16 @@ export function parseDesign(md) {
     if (inFence) continue;
     let m;
     if (!out.title && (m = /^# (.*)$/.exec(l))) { out.title = m[1].trim(); continue; }
-    if ((m = /^## (.*)$/.exec(l))) { flush(); cur = { name: m[1].trim(), lead: "", subs: [], bullets: 0, code: 0, tables: [] }; out.parts.push(cur); continue; }
+    if ((m = /^## (.*)$/.exec(l))) { flush(); cur = { name: m[1].trim(), lead: "", subs: [], items: [], flows: [], bullets: 0, code: 0, tables: [] }; out.parts.push(cur); continue; }
     if (!cur) continue;
     if ((m = /^### (.*)$/.exec(l))) { flush(); cur.subs.push(m[1].trim()); continue; }
-    if (/^\s*([-*]|\d+\.)\s/.test(l)) { flush(); cur.bullets++; continue; }
+    if ((m = /^\s*([-*]|\d+\.)\s+(.*)$/.exec(l))) {
+      flush(); cur.bullets++;
+      const txt = m[2].trim();
+      if (txt) cur.items.push(txt);
+      if (/\s+(?:->|\u2192)\s+/.test(txt)) cur.flows.push(...txt.split(/\s*(?:->|\u2192)\s*/).map((s) => s.trim()).filter(Boolean));
+      continue;
+    }
     if (/^\s*\|/.test(l)) {
       flush();
       const cells = l.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
@@ -268,6 +274,7 @@ export function parseDesign(md) {
       continue;
     }
     if (l.trim() === "") { flush(); continue; }
+    if (/\s+(?:->|\u2192)\s+/.test(l)) cur.flows.push(...l.split(/\s*(?:->|\u2192)\s*/).map((s) => s.trim()).filter(Boolean));
     if (!cur.lead) para.push(l.trim());
   }
   flush();
@@ -388,6 +395,34 @@ function stageList(run) {
   return `<ol class="stages">${rows}</ol>`;
 }
 
+export function blockDiagramSvg(raw, title = "Block diagram") {
+  const list = normalizeDiagram(raw);
+  if (!list.length) return "";
+  const cols = Math.min(list.length, 3), rows = Math.ceil(list.length / cols);
+  const BW = 152, BH = 52, GX = 24, GY = 18, PX = 8, PY = 8;
+  const W = PX * 2 + cols * BW + (cols - 1) * GX, H = PY * 2 + rows * BH + (rows - 1) * GY;
+  const edges = [];
+  const boxes = list.map((b, idx) => {
+    const c = idx % cols, r = Math.floor(idx / cols);
+    const x = PX + c * (BW + GX), y = PY + r * (BH + GY);
+    if (idx + 1 < list.length) {
+      const nc = (idx + 1) % cols, nr = Math.floor((idx + 1) / cols);
+      const nx = PX + nc * (BW + GX), ny = PY + nr * (BH + GY);
+      const d = nr === r ? `M${x + BW},${y + BH / 2} L${nx - 3},${ny + BH / 2}`
+        : `M${x + BW / 2},${y + BH} L${nx + BW / 2},${ny - 3}`;
+      edges.push(`<path class="bd-edge" d="${d}" marker-end="url(#bd-arrow)"/>`);
+    }
+    return `<g class="bd-node bd-${esc(b.kind || "block")}" data-block="${idx + 1}" transform="translate(${x},${y})">` +
+      `<rect class="bd-box" width="${BW}" height="${BH}" rx="6"/>` +
+      `<rect class="bd-bar" width="${BW}" height="5" rx="3"/>` +
+      `<text class="bd-title" x="9" y="22">${esc(clip(b.title, 20))}</text>` +
+      `<text class="bd-sub" x="9" y="39">${esc(clip(b.subtitle || ("block " + (idx + 1)), 23))}</text></g>`;
+  });
+  return `<svg class="block-diagram" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">` +
+    `<defs><marker id="bd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>` +
+    edges.join("") + boxes.join("") + `</svg>`;
+}
+
 function optionFlow(run, q, o, i) {
   const W = 268, half = 126, lh = 15;
   const top = wrap(o.label, 30), does = wrap(o.does || "-", 15), hurts = wrap(o.hurts || "-", 15);
@@ -399,22 +434,28 @@ function optionFlow(run, q, o, i) {
   const H = ty + tH + 2;
   const rec = o.rec ? `<text class="rtag" x="12" y="${38 + top.length * lh}">recommended</text>` : "";
   const def = q.f.default && q.f.default === o.label ? `<text class="dtag" x="${W - 12}" y="17" text-anchor="end">default</text>` : "";
+  const explainHtml = o.explain ? `<p class="opt-explain"><b>What this action does:</b> ${esc(o.explain)}</p>` : "";
+  const pcHtml = `<div class="pros-cons">` +
+    `<span class="pro-card"><b class="pc-k">Pros:</b> ${esc(o.pros || o.does || "-")}</span>` +
+    `<span class="con-card"><b class="pc-k">Cons:</b> ${esc(o.cons || o.hurts || "-")}</span>` +
+    `</div>`;
   return `<figure class="opt${o.rec ? " rec" : ""}" data-rec="${o.rec ? 1 : 0}" data-option="${esc(o.label)}">` +
-    `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Option ${i + 1}: ${esc(o.label)}. Does: ${esc(o.does)}. Hurts: ${esc(o.hurts)}.">` +
+    `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Option ${i + 1}: ${esc(o.label)}. Pros: ${esc(o.does)}. Cons: ${esc(o.hurts)}.">` +
     `<rect class="b-pick" x="1" y="1" width="${W - 2}" height="${th}" rx="7"/>` +
     `<text class="okey" x="12" y="17">option ${i + 1}</text>${def}` +
     `<text class="olabel">${tspans(top, 12, 36, lh)}</text>${rec}` +
     `<path class="edge" d="M${W / 2},${th + 1} L${half / 2 + 1},${by - 3}" marker-end="url(#holo-arrow)"/>` +
     `<path class="edge" d="M${W / 2},${th + 1} L${W - half / 2 - 1},${by - 3}" marker-end="url(#holo-arrow)"/>` +
     `<rect class="b-does" x="1" y="${by}" width="${half}" height="${bh}" rx="6"/>` +
-    `<text class="bk" x="10" y="${by + 16}">does</text><text class="bt">${tspans(does, 10, by + 32, lh)}</text>` +
+    `<text class="bk" x="10" y="${by + 16}">pros \u00b7 does</text><text class="bt">${tspans(does, 10, by + 32, lh)}</text>` +
     `<rect class="b-hurts" x="${W - half - 1}" y="${by}" width="${half}" height="${bh}" rx="6"/>` +
-    `<text class="bk" x="${W - half + 8}" y="${by + 16}">hurts</text><text class="bt">${tspans(hurts, W - half + 8, by + 32, lh)}</text>` +
+    `<text class="bk" x="${W - half + 8}" y="${by + 16}">cons \u00b7 hurts</text><text class="bt">${tspans(hurts, W - half + 8, by + 32, lh)}</text>` +
     `<path class="edge" d="M${half / 2 + 1},${by + bh} L${W / 2},${ty - 3}" marker-end="url(#holo-arrow)"/>` +
     `<path class="edge" d="M${W - half / 2 - 1},${by + bh} L${W / 2},${ty - 3}"/>` +
     `<rect class="b-then" x="1" y="${ty}" width="${W - 2}" height="${tH}" rx="6"/>` +
     `<text class="bt">${tspans(then, 12, ty + 18, lh)}</text>` +
     `</svg>` +
+    explainHtml + pcHtml +
     `<button type="button" class="ans" hidden data-q="${q.id}" data-answer="${esc(o.label)}">Choose ${esc(clip(o.label, 28))}</button>` +
     `</figure>`;
 }
@@ -427,11 +468,13 @@ function qCard(run, q) {
     ["blocks", q.blocks.join(", ")], ["holds stages", q.holds.join(", ")],
     ["files", q.files.join(", ")], ["default", q.f.default], ["done", q.f.done], ["gated", q.f.gated],
   ].filter(([, v]) => v).map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("");
+  const diag = q.f.diagram ? blockDiagramSvg(q.f.diagram, `${q.id} action diagram`) : "";
   return `<article class="qcard" data-q="${q.id}" data-state="${q.state}">` +
     `<header><span class="qid">${esc(run.id)} ${q.id} (${pos}/${n})</span>` +
     `<span class="chip">${esc(q.f.header || q.id)}</span><span class="qst">${esc(q.state)}</span></header>` +
     `<h3>${esc(q.f.question || "(no question text)")}</h3>` +
     `<dl class="meta">${meta}</dl>` +
+    diag +
     `<div class="opts">${q.options.map((o, i) => optionFlow(run, q, o, i)).join("")}</div>` +
     `<div class="answer" hidden><label>Or in your own words <input type="text" maxlength="300" data-q="${q.id}"></label>` +
     `<button type="button" class="ans-own" data-q="${q.id}">Send</button>` +
@@ -452,12 +495,22 @@ function otherQs(run) {
 
 function designBlock(d, src) {
   if (!d) return "";
-  const cards = d.parts.map((p, i) =>
-    `<article class="comp" data-component="${i + 1}"><h3><span class="cn">${i + 1}</span>${esc(p.name)}</h3>` +
-    (p.lead ? `<p>${esc(p.lead)}</p>` : "") +
-    (p.subs.length ? `<ul>${p.subs.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : "") +
-    p.tables.map((t) => `<table>${t.head.length ? `<thead><tr>${t.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>` : ""}<tbody>${t.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`).join("") +
-    `<p class="cm">${p.subs.length} part${p.subs.length === 1 ? "" : "s"} \u00b7 ${p.bullets} point${p.bullets === 1 ? "" : "s"}${p.code ? " \u00b7 " + p.code + " code block" + (p.code > 1 ? "s" : "") : ""}${p.tables.length ? " \u00b7 " + p.tables.length + " table" + (p.tables.length > 1 ? "s" : "") : ""}</p></article>`).join("");
+  const cards = d.parts.map((p, i) => {
+    const nodes = (p.flows && p.flows.length)
+      ? p.flows.map((f, idx) => ({ title: f, subtitle: `flow ${idx + 1}`, kind: "flow" }))
+      : p.subs.length
+      ? p.subs.map((s, idx) => ({ title: s, subtitle: (p.items && p.items[idx]) || `part ${idx + 1}`, kind: "block" }))
+      : (p.items && p.items.length)
+      ? p.items.map((it, idx) => ({ title: it, subtitle: `step ${idx + 1}`, kind: "action" }))
+      : [];
+    const diag = nodes.length ? blockDiagramSvg(nodes, `${p.name} block diagram`) : "";
+    return `<article class="comp" data-component="${i + 1}"><h3><span class="cn">${i + 1}</span>${esc(p.name)}</h3>` +
+      (p.lead ? `<p>${esc(p.lead)}</p>` : "") +
+      diag +
+      (p.subs.length ? `<ul>${p.subs.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : "") +
+      p.tables.map((t) => `<table>${t.head.length ? `<thead><tr>${t.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>` : ""}<tbody>${t.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`).join("") +
+      `<p class="cm">${p.subs.length} part${p.subs.length === 1 ? "" : "s"} \u00b7 ${p.bullets} point${p.bullets === 1 ? "" : "s"}${p.code ? " \u00b7 " + p.code + " code block" + (p.code > 1 ? "s" : "") : ""}${p.tables.length ? " \u00b7 " + p.tables.length + " table" + (p.tables.length > 1 ? "s" : "") : ""}</p></article>`;
+  }).join("");
   return `<section class="design"><h2>Design \u00b7 ${esc(d.title || basename(src))}<span class="n">${d.parts.length} sections</span></h2>` +
     `<p class="src">${esc(src)}</p><div class="comps">${cards}</div></section>`;
 }
@@ -539,6 +592,17 @@ ${["landed", "inflight", "parked", "failed", "replanned", "pending", "unknown"].
 .okey,.bk{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;fill:var(--faint)}
 .dtag{font-family:var(--mono);font-size:10px;fill:var(--mid)} .rtag{font-family:var(--mono);font-size:10.5px;font-weight:700;fill:var(--accent)}
 .olabel{font-size:13.5px;font-weight:600;fill:var(--ink)} .bt{font-size:12px;fill:var(--ink)}
+.opt-explain{font-size:.78rem;margin:.35rem 0 0;color:var(--ink)}
+.pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;margin-top:.35rem}
+.pro-card,.con-card{font-size:.75rem;padding:.25rem .4rem;border-radius:4px;border:1px solid var(--rule)}
+.pro-card{background:var(--does-bg);border-color:var(--does)} .con-card{background:var(--hurts-bg);border-color:var(--hurts)}
+.pc-k{font-family:var(--mono);font-size:.6875rem;text-transform:uppercase}
+.pro-card .pc-k{color:var(--does)} .con-card .pc-k{color:var(--hurts)}
+.block-diagram{width:100%;height:auto;margin:.4rem 0 .6rem;border:1px solid var(--rule);border-radius:6px;background:var(--ground);padding:.3rem}
+.bd-box{fill:var(--surface);stroke:var(--rule);stroke-width:1.3} .bd-bar{fill:var(--accent)}
+.bd-action .bd-bar{fill:var(--inflight)} .bd-flow .bd-bar{fill:var(--landed)}
+.bd-title{font-size:11.5px;font-weight:700;fill:var(--ink)} .bd-sub{font-size:10px;fill:var(--mid);font-family:var(--mono)}
+.bd-edge{fill:none;stroke:var(--faint);stroke-width:1.4}
 button{font:inherit;font-size:.8125rem;margin-top:.5rem;padding:.4rem .8rem;border-radius:4px;border:1px solid var(--accent);
   background:var(--accent-bg);color:var(--ink);cursor:pointer;min-height:2.25rem}
 button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -865,6 +929,12 @@ async function buildFixture(dir) {
   return dir;
 }
 
+export function batchLines(html, art, wiz = "", decisionCount = 0) {
+  const lines = [`\npage: ${resolve(html)}  (Artifact tool: publish ${resolve(art)})`];
+  if (wiz) lines.push(`answer all ${decisionCount} in the decision wizard: ${resolve(wiz)}`);
+  return lines.join("\n");
+}
+
 function parseArgs(argv) {
   const o = { pos: [], mode: "artifact" };
   for (let i = 0; i < argv.length; i++) {
@@ -875,6 +945,7 @@ function parseArgs(argv) {
     else if (a === "--md") o.mode = "md";
     else if (a === "--svg") o.mode = "svg";
     else if (a === "--wizard") o.mode = "wizard";
+    else if (a === "--next-wizard") { o.mode = "wizard"; o.nextWizard = val(); }
     else if (a === "--batch") o.mode = "batch";
     else if (a === "--anatomy") o.anatomy = true;
     else if (a === "--decisions") { o.mode = "wizard"; o.decisions = val(); }
@@ -889,11 +960,15 @@ function parseArgs(argv) {
     else if (a.startsWith("--")) throw new Error(`unknown flag ${a}`);
     else o.pos.push(a);
   }
+  if (o.mode === "wizard" && o.answers && !o.nextWizard && o.ticket === undefined) {
+    o.nextWizard = o.answers;
+    delete o.answers;
+  }
   if (o.pos.length > 1) throw new Error(`one run at a time, got: ${o.pos.join(" ")}`);
   if (o.ticket !== undefined) {
     if (!/^[A-Za-z]{1,3}[0-9]+[a-z]?$/.test(o.ticket)) throw new Error("invalid ticket ID");
     o.ticket = o.ticket.replace(/^[A-Za-z]+/, x => x.toUpperCase());
-    if (!["html", "ascii"].includes(o.mode) || o.pos.length || o.answers || o.decisions || o.anatomy || o.fixture || o.out) throw new Error("--ticket requires --html or --ascii; no run, answers, wizard, anatomy, fixture or custom output");
+    if (!["html", "ascii"].includes(o.mode) || o.pos.length || o.answers || o.nextWizard || o.decisions || o.anatomy || o.fixture || o.out) throw new Error("--ticket requires --html or --ascii; no run, answers, wizard, anatomy, fixture or custom output");
   }
   return o;
 }
@@ -974,7 +1049,7 @@ async function ticketPage(root, o) {
     for (const {run, path} of matches) process.stdout.write(renderAscii(run, { runPath: relative(root, path) }));
     return;
   }
-  const out = join(root, '.skillator', 'holo', `ticket-${o.ticket}.html`);
+  const out = resolve(join(root, '.skillator', 'holo', `ticket-${o.ticket}.html`));
   await writeGenerated(root, out, standalonePage(rendered));
   console.log(`holo: ticket ${o.ticket}, ${matches.length} matching runs -> ${out}`);
 }
@@ -1004,9 +1079,12 @@ async function main(argv) {
       if (!run.id) throw new Error(`${runPath}: no '# RUN-<n> - <title>' line - not a relay run file`);
       set = setFromRun(run, relative(root, runPath).replace(/\\/g, "/")); stem = run.id;
     }
+    if (o.nextWizard) {
+      set = nextWizardSet(set, JSON.parse(await readFile(o.nextWizard, "utf8")));
+    }
     const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem.replace(/[^A-Za-z0-9_.-]/g, "-")}.wizard.html`));
     await writeGenerated(root, out, wizardPage(set));
-    console.log(`holo: wizard ${set.id}, ${set.decisions.length} decision${set.decisions.length === 1 ? "" : "s"} to answer, ${(set.settled || []).length} settled -> ${out}`);
+    console.log(`holo: wizard ${set.id}${set.round ? ` (round ${set.round})` : ""}, ${set.decisions.length} decision${set.decisions.length === 1 ? "" : "s"} to answer, ${(set.settled || []).length} settled -> ${out}`);
     return;
   }
   let run = null, runPath = "";
@@ -1027,15 +1105,14 @@ async function main(argv) {
   if (o.mode === "batch") {
     if (!run) throw new Error("--batch draws a run - name one");
     const r = render(run, opts), dir = join(root, ".skillator", "holo");
-    const art = join(dir, `${run.id}.artifact.html`), html = join(dir, `${run.id}.html`);
+    const art = resolve(join(dir, `${run.id}.artifact.html`)), html = resolve(join(dir, `${run.id}.html`));
     await writeGenerated(root, art, artifactPage(r));
     await writeGenerated(root, html, standalonePage(r));
     const set = setFromRun(run, rel(runPath));
     let wiz = "";
-    if (set.decisions.length) { wiz = join(dir, `${run.id}.wizard.html`); await writeGenerated(root, wiz, wizardPage(set)); }
+    if (set.decisions.length) { wiz = resolve(join(dir, `${run.id}.wizard.html`)); await writeGenerated(root, wiz, wizardPage(set)); }
     process.stdout.write(renderAscii(run, opts));
-    console.log(`\npage: ${rel(html)}  (Artifact tool: publish ${rel(art)})`);
-    if (wiz) console.log(`answer all ${set.decisions.length} in the decision wizard: ${rel(wiz)}`);
+    console.log(batchLines(html, art, wiz, set.decisions.length));
     return;
   }
   if ((o.mode === "md" || o.mode === "svg") && o.anatomy) throw new Error("--anatomy draws the page: use it with the Artifact or --html output");
@@ -1251,6 +1328,32 @@ function selftest() {
   ok(cmds.open.length === 1 && cmds.open[0].startsWith("Q3: deferred"), "answers: a deferred decision stays open", cmds.open);
   threw = false; try { answersToCommands({ ...fin, finalizedAt: null }); } catch { threw = true; }
   ok(threw, "answers: a draft is refused");
+
+  // 8. F134: full paths, visual block diagrams, pros/cons & explain, continuous discussion wizard
+  const bLines = batchLines(".skillator/holo/RUN-9.html", ".skillator/holo/RUN-9.artifact.html", ".skillator/holo/RUN-9.wizard.html", 2);
+  ok(bLines.includes(resolve(".skillator/holo/RUN-9.html")) && bLines.includes(resolve(".skillator/holo/RUN-9.artifact.html")) && bLines.includes(resolve(".skillator/holo/RUN-9.wizard.html")), "F134(1): batch output always prints resolved full paths");
+  ok(dp.includes('class="block-diagram"') && dp.includes('class="bd-node'), "F134(2): design sections render visual SVG block diagrams");
+  const flowDesign = parseDesign("# Drone UI\n\n## Flight Pipeline\nTakeoff -> Scan Grid -> Return Home\n");
+  const flowPage = artifactPage(render(null, { design: flowDesign }));
+  ok(flowDesign.parts[0].flows.length === 3 && flowPage.includes('class="block-diagram"') && flowPage.includes("Takeoff") && flowPage.includes("Scan Grid"), "F134(2): arrow flow in design section renders block diagram");
+  const runDiag = parseRun("# RUN-10 - drone\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 1 | fly | ? | - | - | - |\n\n## Decisions\n### Q1 open\nquestion: Drone action?\ndiagram: Hover -> Capture -> Land\noptions:\n  - Sweep (Recommended) | fast coverage | battery drain | Sweeps the sector in 3 passes\n");
+  const runDiagPage = artifactPage(render(runDiag));
+  ok(runDiagPage.includes('class="block-diagram"') && runDiagPage.includes("What this action does:") && runDiagPage.includes("Sweeps the sector in 3 passes") && runDiagPage.includes("Pros:") && runDiagPage.includes("Cons:") && runDiagPage.includes("pros \u00b7 does") && runDiagPage.includes("cons \u00b7 hurts"), "F134(2,3): decision card renders block diagram, action explanation, and Pros/Cons");
+  const pcSet = checkSet({ schema: "holo-decisions/1", id: "DRONE", decisions: [{ id: "Q1", question: "Mode?", diagram: [{ title: "Init", subtitle: "arm motors", kind: "action" }, { title: "Fly", subtitle: "waypoint", kind: "flow" }], options: [{ id: "o1", label: "Auto", explain: "Autonomous waypoint loop", pros: "Hands-free", cons: "Needs GPS lock", recommended: true }] }] });
+  ok(pcSet.decisions[0].options[0].does === "Hands-free" && pcSet.decisions[0].options[0].tradeoff === "Needs GPS lock", "F134(3): checkSet maps pros/cons aliases to does/tradeoff");
+  ok(wp.includes("Ask / Explain more - generate detailed explanation in next HTML") && wp.includes('statusOf(d) === "incomplete"') && wp.includes("renderBlockDiagram") && wp.includes("What this action does"), "F134(3,4): wizard includes Ask/Explain more option, unblocks finalize for defer/custom, and renders block diagrams + Pros/Cons");
+  const r2 = nextWizardSet(set, {
+    schema: "holo-answers/1", set: "RUN-9", owner: "Owner", reviewed: true, finalizedAt: "2026-10-30T00:00:00Z",
+    answers: [
+      { id: "Q1", status: "answered", choice: { id: "o1", label: set.decisions[0].options[0].label }, notes: "approved" },
+      { id: "Q2", status: "deferred", choice: { id: "defer" }, clarification: "Explain memory vs speed trade-off in detail", notes: "" },
+    ],
+  });
+  ok(r2.round === 2 && r2.decisions.length === 1 && r2.decisions[0].id === "Q2" && r2.settled.length === 6, "F134(4): nextWizardSet moves answered Q1 to settled and keeps deferred Q2 open for Round 2");
+  ok(r2.decisions[0].discussion && r2.decisions[0].discussion.prompt.includes("Explain memory vs speed") && r2.decisions[0].options.every((o) => o.explain && o.pros && o.cons), "F134(4): nextWizardSet expands explanation, pros/cons, and discussion context");
+  const wp2 = wizardPage(r2);
+  ok(wp2.includes("Discussion & Explanation Requested") && wp2.includes("Explain memory vs speed"), "F134(4): Round 2 wizard HTML embeds the discussion request and expanded explanations");
+  ok(parseArgs(["RUN-9", "--next-wizard", "ans.json"]).nextWizard === "ans.json" && parseArgs(["RUN-9", "--wizard", "--answers", "ans.json"]).nextWizard === "ans.json", "F134(4): CLI parses --next-wizard and --wizard --answers");
 
   if (fails) { console.error(`selftest: ${fails} failed`); process.exitCode = 1; } else console.log("selftest: ok");
 }
