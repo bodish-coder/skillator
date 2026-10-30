@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ansi, frame, frameSegs, fit, cells, glyph, plain, paintScreen, screen } from '../draw'
-import { initial, onBoard, onMachine, onRuns, onUsage, openHelp, reduce } from '../state'
+import { initial, onBoard, onMachine, onRuns, onUsage, openHelp, openStartRun, reduce } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
@@ -159,8 +159,8 @@ test('the keys line as the mock; D decided only on a decidable row', () => {
   }
   assert.match(keys(f3), / · \[D decided\] · /)
   // F76: no run yet, the cursor is on the Runs header (Enter closes it); on a run, Enter shows its stages
-  assert.match(text(reduce(s, { name: '2' }).state), /\[↑↓ move\] · \[enter close\] · \[Engage\]/)
-  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /\[↑↓ move\] · \[enter stages\] · \[Engage\]/)
+  assert.match(text(reduce(s, { name: '2' }).state), /\[↑↓ move\] · \[enter close\] · \[s Start\] · \[Engage\]/)
+  assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /\[↑↓ move\] · \[enter stages\] · \[s Start\] · \[Engage\]/)
   assert.match(text(reduce(s, { name: '3' }).state), /\[R resume \(on a fresh non-red reading\)\](\n| · )\[F force resume\] · \[r reload\] · \[q quit\]/)
 })
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
@@ -536,7 +536,7 @@ test('F123: button badges [Key Label] across all tabs and click hitboxes match b
 
   // 2. Workflows (runs) tab
   const scRuns = screen({ ...reduce(s, { name: '2' }).state, cols: 120 }, P)
-  assert.match(scRuns.lines.join('\n'), /\[↑↓ move\] · \[enter close\] · \[Engage\] · \[Rerun\] · \[Push Pending\] · \[Mode: \|\|\/seq\] · \[q quit\]/)
+  assert.match(scRuns.lines.join('\n'), /\[↑↓ move\] · \[enter close\] · \[s Start\] · \[Engage\] · \[Rerun\] · \[Push Pending\] · \[Mode: \|\|\/seq\] · \[q quit\]/)
 
   // 3. Health tab
   const scHealth = screen({ ...reduce(s, { name: '3' }).state, cols: 120 }, P)
@@ -662,6 +662,47 @@ test('F127: Mouse hitboxes in Help modal for skill rows', () => {
   const skillHits = sc.hits.filter(h => h.action.kind === 'help-skill')
   assert.ok(skillHits.length > 0, 'Expected mouse hitboxes on skills in Help modal')
   assert.ok(skillHits.some(h => (h.action as any).id === hState.help!.selected))
+})
+
+test('F113: Workflows tab draws [s Start] button and hitbox', () => {
+  const rState = reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state
+  const sc = screen({ ...rState, cols: 80 }, P)
+  const full = sc.lines.join('\n')
+  assert.match(full, /\[s Start\]/)
+
+  const startHit = sc.hits.find(h => h.action.kind === 'key' && (h.action as any).key.name === 's')
+  assert.ok(startHit, 'Hitbox found for key s ([s Start])')
+})
+
+test('F113: Start run modal drawing and responsive layout across columns', () => {
+  const rState = reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state
+  const srState = openStartRun(rState).state
+  assert.ok(srState.startRun)
+
+  for (const cols of [80, 60, 40]) {
+    for (const rows of [24, 18]) {
+      const f = sized({ ...srState, cols, rows })
+      assert.equal(f.length, rows)
+      const full = f.join('\n')
+      assert.match(full, /┌─ Start Run/)
+      assert.match(full, /Runner/)
+      assert.match(full, /Mode/)
+      assert.match(full, /Tickets/)
+      assert.match(full, /Command/)
+      assert.match(full, /\[Enter confirm\] · \[Esc cancel\]/)
+      assert.match(full, /\[tab \/ shift-tab field\]/)
+      assert.match(full, /\[enter confirm\] · \[esc cancel\]/)
+    }
+  }
+
+  // Hitbox assertions for start-run-field
+  const sc = screen({ ...srState, cols: 80 }, P)
+  const runnerHit = sc.hits.find(h => h.action.kind === 'start-run-field' && (h.action as any).field === 'runner')
+  const modeHit = sc.hits.find(h => h.action.kind === 'start-run-field' && (h.action as any).field === 'mode')
+  const ticketsHit = sc.hits.find(h => h.action.kind === 'start-run-field' && (h.action as any).field === 'tickets')
+  assert.ok(runnerHit, 'Hitbox found for runner field')
+  assert.ok(modeHit, 'Hitbox found for mode field')
+  assert.ok(ticketsHit, 'Hitbox found for tickets field')
 })
 
 

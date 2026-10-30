@@ -51,6 +51,17 @@ export type HelpState = {
 export type Key = { name: string; sequence?: string; shift?: boolean; ctrl?: boolean }
 export type PersonField = 'handle' | 'name' | 'emails'
 export type DialogField = 'ticket' | 'who'
+export type StartRunField = 'runner' | 'mode' | 'tickets'
+export type StartRunMode = 'sequential' | 'parallel'
+export type StartRunRunner = '/pending-subagent' | '/marathon-run'
+export type StartRunDraft = {
+  runner: StartRunRunner
+  mode: StartRunMode
+  count: number | null
+  tickets: string
+  field: StartRunField
+}
+
 export type PointerAction =
   | { kind: 'key'; key: Key }
   | { kind: 'tab'; tab: Tab }
@@ -65,8 +76,9 @@ export type PointerAction =
   | { kind: 'help' }
   | { kind: 'help-skill'; id: string }
   | { kind: 'help-close' }
+  | { kind: 'start-run-field'; field: StartRunField }
 
-export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.reconcile || s.teamConfirm || s.engage || s.filterField || s.runForm || s.help)
+export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.reconcile || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help)
 
 // Targets come only from the rendered frame, never from labels or terminal payloads.
 export function point(s: State, a: PointerAction): Step {
@@ -81,6 +93,7 @@ export function point(s: State, a: PointerAction): Step {
     }
     return { state: { ...s, help: { ...s.help, selected: a.id, expanded: false, scroll: 0 } }, effects: [] }
   }
+  if (a.kind === 'start-run-field') return s.startRun ? { state: { ...s, startRun: { ...s.startRun, field: a.field } }, effects: [] } : same
   if (a.kind === 'person-field') return s.person ? { state: { ...s, personField: a.field }, effects: [] } : same
   if (a.kind === 'setup-field') {
     if (!s.setup || s.setup.confirmClear) return same
@@ -127,6 +140,7 @@ export type State = {
   runsRead: boolean                        // false until relay's list was first read: 'reading runs…'
   runMode?: 'parallel' | 'sequential'      // F122: execution mode toggle
   engage: Engage | null                    // F85: the engage confirm box up
+  startRun: StartRunDraft | null           // F113: start run modal on Workflows tab
   dialog: AssignDraft | null; dialogIndex: number    // -1: the cursor is on "+ add person"
   dialogField: DialogField                            // F77: the keys go to the Ticket field or the people
   person: PersonDraft | null; personField: PersonField  // the Add person form, over the dialog or the Team view
@@ -172,7 +186,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   filter: { app: null, who: null, mine: false, showDone: false }, filterField: null,
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, relay: null,
-  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null,
+  runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null, startRun: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
@@ -806,6 +820,116 @@ function toggleMode(s: State): Step {
   return { state: { ...s, runMode: next, toast: `Mode: ${next === 'parallel' ? 'parallel (||)' : 'sequential (seq)'}` }, effects: [] }
 }
 
+export function startRunCommand(sr: Pick<StartRunDraft, 'runner' | 'mode' | 'count' | 'tickets'>): string {
+  const modeStr = sr.mode === 'parallel' && sr.count ? `parallel ${sr.count}` : sr.mode
+  const ticketsStr = sr.tickets.trim().replace(/\s+/g, ' ')
+  return [sr.runner, modeStr, ticketsStr].filter(Boolean).join(' ')
+}
+
+export function openStartRun(s: State): Step {
+  return {
+    state: {
+      ...s,
+      startRun: {
+        runner: '/pending-subagent',
+        mode: s.runMode ?? 'parallel',
+        count: null,
+        tickets: '',
+        field: 'mode',
+      },
+    },
+    effects: [],
+  }
+}
+
+export function startRunLines(s: State): string[] {
+  const sr = s.startRun
+  if (!sr) return []
+  const cmd = startRunCommand(sr)
+  const modeStr = sr.mode === 'parallel' && sr.count ? `parallel ${sr.count}` : sr.mode
+  const ticketsStr = sr.tickets.trim() || 'open ones'
+  return [
+    'Start Run',
+    `  Runner   ${sr.runner}`,
+    `  Mode     ${modeStr}`,
+    `  Tickets  ${ticketsStr}`,
+    `  Command  ${cmd}`,
+  ]
+}
+
+export function startRunKey(s: State, k: Key): Step {
+  const sr = s.startRun!
+  const s0 = { ...s, startRun: null }
+  if (k.name === 'escape') return { state: s0, effects: [] }
+
+  if (k.name === 'return' || k.name === 'enter') {
+    const cmd = startRunCommand(sr)
+    return {
+      state: toast(s0, `Paste into your CLI:\n${cmd}`),
+      effects: [],
+    }
+  }
+
+  const fields: StartRunField[] = ['runner', 'mode', 'tickets']
+  const moveField = (by: number): Step => {
+    const at = fields.indexOf(sr.field)
+    const nextField = fields[(at + by + fields.length) % fields.length]!
+    return { state: { ...s, startRun: { ...sr, field: nextField } }, effects: [] }
+  }
+
+  if (k.name === 'tab') return moveField(k.shift ? -1 : 1)
+  if (k.name === 'up') return moveField(-1)
+  if (k.name === 'down') return moveField(1)
+
+  if (sr.field === 'runner') {
+    if (k.name === 'space' || k.name === 'left' || k.name === 'right') {
+      const nextRunner: StartRunRunner = sr.runner === '/pending-subagent' ? '/marathon-run' : '/pending-subagent'
+      return { state: { ...s, startRun: { ...sr, runner: nextRunner } }, effects: [] }
+    }
+    if (k.sequence === 'p' || k.sequence === 'P') {
+      return { state: { ...s, startRun: { ...sr, runner: '/pending-subagent' } }, effects: [] }
+    }
+    if (k.sequence === 'm' || k.sequence === 'M') {
+      return { state: { ...s, startRun: { ...sr, runner: '/marathon-run' } }, effects: [] }
+    }
+  } else if (sr.field === 'mode') {
+    const cycleMode = (by: number): Step => {
+      const cur = sr.mode === 'sequential' ? 0 : (sr.count === null ? 1 : Math.min(4, Math.max(2, sr.count)))
+      const next = (cur + by + 5) % 5
+      if (next === 0) return { state: { ...s, startRun: { ...sr, mode: 'sequential', count: null } }, effects: [] }
+      if (next === 1) return { state: { ...s, startRun: { ...sr, mode: 'parallel', count: null } }, effects: [] }
+      return { state: { ...s, startRun: { ...sr, mode: 'parallel', count: next } }, effects: [] }
+    }
+    if (k.name === 'space' || k.name === 'right') return cycleMode(1)
+    if (k.name === 'left') return cycleMode(-1)
+    if (k.sequence === 's' || k.sequence === 'S') {
+      return { state: { ...s, startRun: { ...sr, mode: 'sequential', count: null } }, effects: [] }
+    }
+    if (k.sequence === 'p' || k.sequence === 'P') {
+      return { state: { ...s, startRun: { ...sr, mode: 'parallel', count: null } }, effects: [] }
+    }
+    if (k.sequence && /^[2-9]$/.test(k.sequence)) {
+      return { state: { ...s, startRun: { ...sr, mode: 'parallel', count: parseInt(k.sequence, 10) } }, effects: [] }
+    }
+    if (k.sequence === '1') {
+      return { state: { ...s, startRun: { ...sr, mode: 'sequential', count: null } }, effects: [] }
+    }
+    if (k.name === 'backspace') {
+      return { state: { ...s, startRun: { ...sr, count: null } }, effects: [] }
+    }
+  } else if (sr.field === 'tickets') {
+    if (k.name === 'backspace') {
+      const tickets = [...sr.tickets].slice(0, -1).join('')
+      return { state: { ...s, startRun: { ...sr, tickets } }, effects: [] }
+    }
+    const ch = k.sequence
+    if (!k.ctrl && ch && [...ch].length === 1 && ch >= ' ' && ch !== '\x7f') {
+      return { state: { ...s, startRun: { ...sr, tickets: sr.tickets + ch } }, effects: [] }
+    }
+  }
+  return { state: s, effects: [] }
+}
+
 function runsKey(s: State, k: Key): Step {
   const items = runsItems(s)
   const cur = runsCursor(s)
@@ -830,6 +954,7 @@ function runsKey(s: State, k: Key): Step {
     case 'r': return rerunRun(s)
     case 'p': return pushPendingRun(s)
     case 'm': return toggleMode(s)
+    case 's': case 'S': return openStartRun(s)
     default: return { state: s, effects: [] }
   }
 }
@@ -1858,6 +1983,7 @@ export function reduce(s: State, k: Key): Step {
   // form (as Esc), the board stays; the next ctrl+c quits. An empty form has nothing to lose.
   if (k.ctrl && k.name === 'c') {
     if (s.help) return { state: { ...s, help: null }, effects: [] }
+    if (s.startRun) return { state: { ...s, startRun: null }, effects: [] }
     if (s.setup?.touched) return { state: { ...s, setup: null }, effects: [] }
     if (s.runForm?.mode === 'rename' && s.tab === 'run') return { state: { ...s, runForm: null }, effects: [] }
     return s.person && (s.person.handle || s.person.name || s.person.emails) ? personKey(s, { name: 'escape' }) : quit
@@ -1869,6 +1995,7 @@ export function reduce(s: State, k: Key): Step {
   if (s.reconcile) return reconcileKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
   if (s.engage) return engageKey(s, k)          // F85
+  if (s.startRun) return startRunKey(s, k)      // F113
   if (s.filterField) return filterKey(s, k)
   if (s.tab === 'explorer' && k.name === 'r') return explorerKey(s, k)     // F75: r reads git again too
   if (s.tab === 'run' && (s.runForm || k.name === 'r')) return runKey(s, k)   // F79: r rescans here

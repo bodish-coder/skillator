@@ -11,7 +11,7 @@ import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State, PointerAction, SkillGuide } from './state'
-import { activeUser, pointerModal, dialogLines, engageLines, filteredSkills, formLines, reconcileLines, runsCursor, setupLines, SKILLS, teamRow, viewOf } from './state'
+import { activeUser, pointerModal, dialogLines, engageLines, filteredSkills, formLines, reconcileLines, runsCursor, setupLines, SKILLS, startRunLines, teamRow, viewOf } from './state'
 import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { assignedTickets, buildModel, chipsOf, decideTickets, headKey, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -194,6 +194,7 @@ function keysOf(s: State, m: Model): Seg[][] {
     : [[{ text: '[↑', dim: true, action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ person]', dim: true, action: { kind: 'key', key: { name: 'down' } } }], [{ text: '[a', dim: true, action: { kind: 'key', key: { name: 'a' } } }, dim(' / '), { text: 'd kind]', dim: true, action: { kind: 'key', key: { name: 'd' } } }], h('tab ticket', 'tab'), h('enter confirm', 'return'), cancel]
   if (s.reconcile) return [move, h('space pick', 'space'), h('enter apply picked', 'return'), h('a accept all', 'a'), h('esc none', 'escape')]
   if (s.engage) return [h('enter engage', 'return'), cancel]
+  if (s.startRun) return [field, h('space change', 'space'), h('enter confirm', 'return'), cancel]
   if (s.filterField) return [[{ text: '[←', dim: true, action: { kind: 'key', key: { name: 'left' } } }, { text: '→ field]', dim: true, action: { kind: 'key', key: { name: 'right' } } }], [{ text: '[↑', dim: true, action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ value]', dim: true, action: { kind: 'key', key: { name: 'down' } } }], h('enter/esc leave', 'escape')]
   if (s.tab === 'run') {
     if (s.runForm?.mode === 'confirm') return [h('enter run', 'return'), h('n rename', 'n'), cancel]
@@ -203,7 +204,7 @@ function keysOf(s: State, m: Model): Seg[][] {
   if (s.tab === 'runs') {
     const cur = runsCursor(s)
     const enter = isHead(cur) ? (s.runsOpen.some(x => headKey(x) === cur) ? 'enter close' : 'enter open') : 'enter stages'
-    return [move, h(enter, 'return'), h('Engage', 'e'), h('Rerun', 'r'), h('Push Pending', 'p'), h('Mode: ||/seq', 'm'), quit]
+    return [move, h(enter, 'return'), h('s Start', 's'), h('Engage', 'e'), h('Rerun', 'r'), h('Push Pending', 'p'), h('Mode: ||/seq', 'm'), quit]
   }
   if (s.tab === 'health') return [h('R resume (on a fresh non-red reading)', 'R'), h('F force resume', 'F'), h('r reload', 'r'), quit]
   if (s.tab === 'messages') return [move, h('enter open', 'return'), h('m mark all read', 'm'), h('s setup', 's'), quit]
@@ -806,12 +807,25 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
   const room = h - block.length
   const [recTitle = '', ...recRows] = reconcileLines(s)    // F81: [] with no reconcile box up
   const [engTitle = '', ...engRows] = engageLines(s)       // F85: [] with no engage box up
+  const [startTitle = '', ...startRows] = startRunLines(s) // F113: [] with no start run box up
   const main = s.help ? helpBody(s, room)
     : s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
     : s.reconcile ? boxBody(s, { title: recTitle, rows: recRows.map((text, index) => ({ text, action: { kind: 'reconcile' as const, index } })) })   // F81
     : s.engage ? boxBody(s, { title: engTitle, rows: engRows.map(text => ({ text })) })      // F85
+    : s.startRun ? boxBody(s, {
+        title: startTitle,
+        rows: [
+          ...startRows.map((text, i) => ({
+            text,
+            action: i < 3 ? { kind: 'start-run-field' as const, field: (['runner', 'mode', 'tickets'] as const)[i]! } : undefined,
+            color: (i === 0 && s.startRun?.field === 'runner') || (i === 1 && s.startRun?.field === 'mode') || (i === 2 && s.startRun?.field === 'tickets') ? 'suggestion' as Color : undefined,
+          })),
+          { text: '' },
+          { text: '', segs: [dim('  '), hot('Enter confirm', 'return'), dim(' · '), hot('Esc cancel', 'escape')] },
+        ],
+      })
     : s.tab === 'runs' ? runsBody(s, room)
     : s.tab === 'health' ? healthBody(s)
     : s.tab === 'messages' ? messagesBody(s, room)

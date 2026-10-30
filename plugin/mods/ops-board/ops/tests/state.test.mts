@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser, openHelp, filteredSkills, SKILLS } from '../state'
+import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser, openHelp, filteredSkills, SKILLS, startRunCommand, openStartRun, startRunLines } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
@@ -996,6 +996,172 @@ test('F127: mouse point actions (help, help-skill, help-close)', () => {
   // Click 'help-close' closes help
   s = point(s, { kind: 'help-close' }).state
   assert.equal(s.help, null)
+})
+
+test('F113: startRunCommand pins command text per choice (mode, runner, count, tickets)', () => {
+  // 1. /pending-subagent sequential, default open tickets
+  assert.equal(
+    startRunCommand({ runner: '/pending-subagent', mode: 'sequential', count: null, tickets: '' }),
+    '/pending-subagent sequential',
+  )
+
+  // 2. /pending-subagent parallel, default open tickets
+  assert.equal(
+    startRunCommand({ runner: '/pending-subagent', mode: 'parallel', count: null, tickets: '' }),
+    '/pending-subagent parallel',
+  )
+
+  // 3. /pending-subagent parallel with count 2
+  assert.equal(
+    startRunCommand({ runner: '/pending-subagent', mode: 'parallel', count: 2, tickets: '' }),
+    '/pending-subagent parallel 2',
+  )
+
+  // 4. /pending-subagent parallel with count 3 and typed tickets
+  assert.equal(
+    startRunCommand({ runner: '/pending-subagent', mode: 'parallel', count: 3, tickets: 'F113 B20' }),
+    '/pending-subagent parallel 3 F113 B20',
+  )
+
+  // 5. /pending-subagent sequential with typed ticket
+  assert.equal(
+    startRunCommand({ runner: '/pending-subagent', mode: 'sequential', count: null, tickets: 'F113' }),
+    '/pending-subagent sequential F113',
+  )
+
+  // 6. /marathon-run sequential, default open tickets
+  assert.equal(
+    startRunCommand({ runner: '/marathon-run', mode: 'sequential', count: null, tickets: '' }),
+    '/marathon-run sequential',
+  )
+
+  // 7. /marathon-run parallel, default open tickets
+  assert.equal(
+    startRunCommand({ runner: '/marathon-run', mode: 'parallel', count: null, tickets: '' }),
+    '/marathon-run parallel',
+  )
+
+  // 8. /marathon-run parallel with count 2 and typed tickets
+  assert.equal(
+    startRunCommand({ runner: '/marathon-run', mode: 'parallel', count: 2, tickets: 'F113' }),
+    '/marathon-run parallel 2 F113',
+  )
+})
+
+test('F113: Workflows tab interactive start run flow (open, navigation, mode cycling, tickets editing, confirm & cancel)', () => {
+  let s = reduce(s0, key('2')).state
+  assert.equal(s.tab, 'runs')
+  assert.equal(s.startRun, null)
+
+  // 1. 's' key opens start run form
+  s = reduce(s, key('s')).state
+  assert.ok(s.startRun)
+  assert.equal(s.startRun.runner, '/pending-subagent')
+  assert.equal(s.startRun.mode, 'parallel')
+  assert.equal(s.startRun.count, null)
+  assert.equal(s.startRun.tickets, '')
+  assert.equal(s.startRun.field, 'mode')
+
+  // Check lines
+  assert.deepEqual(startRunLines(s), [
+    'Start Run',
+    '  Runner   /pending-subagent',
+    '  Mode     parallel',
+    '  Tickets  open ones',
+    '  Command  /pending-subagent parallel',
+  ])
+
+  // 2. Mode field cycling: space cycles parallel -> parallel 2 -> parallel 3 -> parallel 4 -> sequential -> parallel
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.mode, 'parallel')
+  assert.equal(s.startRun!.count, 2)
+  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel 2')
+
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.count, 3)
+  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel 3')
+
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.count, 4)
+
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.mode, 'sequential')
+  assert.equal(s.startRun!.count, null)
+  assert.equal(startRunCommand(s.startRun!), '/pending-subagent sequential')
+
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.mode, 'parallel')
+  assert.equal(s.startRun!.count, null)
+  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel')
+
+  // Direct shortcuts on mode field: 's' sets sequential, 'p' sets parallel, '3' sets parallel 3
+  s = reduce(s, { name: 's', sequence: 's' }).state
+  assert.equal(s.startRun!.mode, 'sequential')
+  s = reduce(s, { name: 'p', sequence: 'p' }).state
+  assert.equal(s.startRun!.mode, 'parallel')
+  assert.equal(s.startRun!.count, null)
+  s = reduce(s, { name: '3', sequence: '3' }).state
+  assert.equal(s.startRun!.mode, 'parallel')
+  assert.equal(s.startRun!.count, 3)
+  // Backspace on mode clears count back to uncapped
+  s = reduce(s, key('backspace')).state
+  assert.equal(s.startRun!.count, null)
+
+  // 3. Tab moves to tickets field
+  s = reduce(s, key('tab')).state
+  assert.equal(s.startRun!.field, 'tickets')
+
+  // Type tickets
+  s = reduce(s, { name: 'F', sequence: 'F' }).state
+  s = reduce(s, { name: '1', sequence: '1' }).state
+  s = reduce(s, { name: '1', sequence: '1' }).state
+  s = reduce(s, { name: '3', sequence: '3' }).state
+  assert.equal(s.startRun!.tickets, 'F113')
+  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel F113')
+
+  // Backspace deletes char
+  s = reduce(s, key('backspace')).state
+  assert.equal(s.startRun!.tickets, 'F11')
+  s = reduce(s, { name: '3', sequence: '3' }).state
+  assert.equal(s.startRun!.tickets, 'F113')
+
+  // 4. Tab moves to runner field
+  s = reduce(s, key('tab')).state
+  assert.equal(s.startRun!.field, 'runner')
+
+  // Space / 'm' switches to /marathon-run
+  s = reduce(s, key('space')).state
+  assert.equal(s.startRun!.runner, '/marathon-run')
+  assert.equal(startRunCommand(s.startRun!), '/marathon-run parallel F113')
+
+  // 'p' switches back to /pending-subagent
+  s = reduce(s, { name: 'p', sequence: 'p' }).state
+  assert.equal(s.startRun!.runner, '/pending-subagent')
+
+  // 5. Esc cancels: closes startRun, nothing executed
+  const cancelled = reduce(s, key('escape'))
+  assert.equal(cancelled.state.startRun, null)
+  assert.equal(cancelled.effects.length, 0)
+  assert.equal(cancelled.state.toast, null)
+
+  // 6. Confirm flow: Enter shows exact command to paste (ops app stays read-only)
+  // Nothing runs without confirm
+  const confirmed = reduce(s, key('return'))
+  assert.equal(confirmed.state.startRun, null)
+  assert.equal(confirmed.effects.length, 0)
+  assert.equal(confirmed.state.toast, 'Paste into your CLI:\n/pending-subagent parallel F113')
+})
+
+test('F113: mouse point action for start-run-field', () => {
+  let s = reduce(s0, key('2')).state
+  s = reduce(s, key('s')).state
+  assert.equal(s.startRun!.field, 'mode')
+
+  s = point(s, { kind: 'start-run-field', field: 'tickets' }).state
+  assert.equal(s.startRun!.field, 'tickets')
+
+  s = point(s, { kind: 'start-run-field', field: 'runner' }).state
+  assert.equal(s.startRun!.field, 'runner')
 })
 
 
