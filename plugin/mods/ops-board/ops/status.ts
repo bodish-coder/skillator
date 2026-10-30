@@ -18,6 +18,7 @@ const MS = 5000
 const KINDS: [cli: string, def: string, prefix: string][] = [
   ['claude', '.claude', '.claude-'], ['codex', '.codex', '.codex-'],
   ['cursor', '.cursor', '.cursor-'], ['agy', '.gemini/antigravity-cli', '.agy-'],
+  ['muse', '.muse', '.muse-'],
 ]
 const key = (d: string) => (process.platform === 'win32' ? norm(d).toLowerCase() : norm(d))
 
@@ -51,9 +52,14 @@ function readerEnv(p: Profile, base: Env): Env {
   const e: Env = { ...base }
   delete e.CLAUDE_USAGE_WATCH_DIR
   delete e.CLAUDE_CODE_SESSION_ID
+  e.SKILLATOR_CLI = p.cli
+  e.SKILLATOR_PROFILE_DIR = p.dir
   const none = `${p.dir}/.ops-status-none`
   if (p.cli === 'claude') { e.CLAUDE_CONFIG_DIR = p.dir; e.CODEX_HOME = none }
-  else { e.CODEX_HOME = p.dir; e.CLAUDE_USAGE_WATCH_DIR = none }
+  else if (p.cli === 'codex') { e.CODEX_HOME = p.dir; e.CLAUDE_USAGE_WATCH_DIR = none }
+  else if (p.cli === 'agy') { e.AGY_CONFIG_DIR = p.dir; e.CLAUDE_USAGE_WATCH_DIR = none; e.CODEX_HOME = none }
+  else if (p.cli === 'muse') { e.MUSE_CONFIG_DIR = p.dir; e.CLAUDE_USAGE_WATCH_DIR = none; e.CODEX_HOME = none }
+  else { e.CODEX_HOME = none; e.CLAUDE_USAGE_WATCH_DIR = none }
   return e
 }
 
@@ -63,16 +69,17 @@ const pct = (v: string | undefined) => (v && /^\d+(\.\d+)?$/.test(v) ? `${Math.r
 export async function row(p: Profile, read: Reader, base: Env, darwin: boolean): Promise<Row> {
   const r = (note: string, five = '-', seven = '-'): Row => [p.name, five, seven, note]
   if (p.cli === 'cursor') return r('no quota source: cursor-agent has no usage command')
-  if (p.cli === 'agy') return r('no quota source: agy has no usage command')
-  if (p.cli !== 'claude' && p.cli !== 'codex') return r(`profiles file: unknown cli ${p.cli}`)
+  if (p.cli !== 'claude' && p.cli !== 'codex' && p.cli !== 'agy' && p.cli !== 'muse') return r(`profiles file: unknown cli ${p.cli}`)
   const res = await read(readerEnv(p, base), MS)
   if (res.err.startsWith('timed out')) return r(res.err.trim())
   const kv = new Map(res.out.trim().split(/\s+/).map(w => [w.slice(0, w.indexOf('=')), w.slice(w.indexOf('=') + 1)] as const))
   if (!kv.has('src')) return r(`unreadable: ${(res.err || res.out).trim().split(/\r?\n/)[0] || `exit ${res.code}`}`)
   const five = pct(kv.get('5h')), seven = pct(kv.get('7d'))
   if (kv.get('src') !== 'none' && (five !== '-' || seven !== '-')) return r('', five, seven)
-  const cred = p.cli === 'claude' ? '.credentials.json' : 'auth.json'
-  if (!(darwin && p.cli === 'claude') && !existsSync(`${p.dir}/${cred}`)) return r('not logged in')
+  if (kv.has('note') && kv.get('note')) return r(kv.get('note')!.replace(/_/g, ' '))
+  const cred = p.cli === 'claude' ? '.credentials.json' : (p.cli === 'agy' ? 'antigravity-oauth-token' : 'auth.json')
+  const loggedIn = (darwin && p.cli === 'claude') || existsSync(`${p.dir}/${cred}`) || (p.cli === 'agy' && existsSync(`${p.dir}/oauth_credentials.json`))
+  if (!loggedIn) return r('not logged in')
   return r('no quota source: no reading in the last 3 h')
 }
 

@@ -44,20 +44,20 @@ test('a profile with no credential file and no reading says not logged in', asyn
   assert.ok(env.CLAUDE_USAGE_WATCH_DIR?.startsWith(d + '/'), 'claude usage never leaks into a codex row')
 })
 
-test('no quota source: cursor and agy have none; a logged-in profile with no fresh reading says so', async () => {
+test('no quota source: cursor has none; a logged-in profile with no fresh reading says so', async () => {
   const h = home()
   dir(h, '.cursor-gamma')
-  dir(h, '.agy-delta')
+  dir(h, '.agy-delta', 'antigravity-oauth-token')
   dir(h, '.codex-eps', 'auth.json')
   let calls = 0
   const read: Reader = async e => { calls++; return NONE(e, 0) }
   const rows = []
   for (const p of discover(h)) rows.push(await row(p, read, {}, false))
-  assert.equal(calls, 1, 'the reader runs for claude and codex rows only')
+  assert.equal(calls, 2, 'the reader runs for live quota profiles (codex, agy, claude, muse), not cursor')
   assert.deepEqual(rows.map(r => [r[0], r[3]]), [
     ['codex-eps', 'no quota source: no reading in the last 3 h'],
     ['cursor-gamma', 'no quota source: cursor-agent has no usage command'],
-    ['agy-delta', 'no quota source: agy has no usage command'],
+    ['agy-delta', 'no quota source: no reading in the last 3 h'],
   ])
 })
 
@@ -66,6 +66,22 @@ test('a reader that runs out of time says so in its row', async () => {
   dir(h, '.claude-zeta', '.credentials.json')
   const read: Reader = async () => ({ code: -1, out: '', err: 'timed out after 5 s' })
   assert.deepEqual(await row(discover(h)[0]!, read, {}, false), ['claude-zeta', '-', '-', 'timed out after 5 s'])
+})
+
+test('F118: agy and muse live quota sources show % used; not logged in and cursor stay truthful', async () => {
+  const h = home()
+  const agyDir = dir(h, '.agy-work', 'antigravity-oauth-token')
+  const museDir = dir(h, '.muse-work')
+  const read: Reader = async e => {
+    if (e.AGY_CONFIG_DIR === agyDir) return { code: 0, out: 'src=agy 5h=15.0 7d=71.0 ctx=- max=71.0\n', err: '' }
+    if (e.MUSE_CONFIG_DIR === museDir) return { code: 0, out: 'src=muse 5h=- 7d=- ctx=- max=- note=not_logged_in\n', err: '' }
+    return NONE(e, 0)
+  }
+  const ps = discover(h)
+  const agyRow = await row(ps.find(p => p.name === 'agy-work')!, read, {}, false)
+  assert.deepEqual(agyRow, ['agy-work', '15%', '71%', ''])
+  const museRow = await row(ps.find(p => p.name === 'muse-work')!, read, {}, false)
+  assert.deepEqual(museRow, ['muse-work', '-', '-', 'not logged in'])
 })
 
 test('~/.skillator/profiles renames, adds and hides; the table is aligned', async () => {
