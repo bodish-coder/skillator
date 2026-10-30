@@ -2,7 +2,7 @@
 #   -Mode probe [-Then "<original statusline command>"]   (Claude Code statusLine)
 #   -Mode gate                                            (Claude Code / codex Stop hook)
 #   -Mode check                                           (any host, no stdin - see below)
-#   -Mode level                                           (any host, no stdin, no side effect)
+#   -Mode level                                           (any host, no stdin; profile cache refresh)
 # Threshold: $env:CLAUDE_USAGE_HANDOFF_PCT, default 92.
 # State dir: $env:CLAUDE_USAGE_WATCH_DIR, else $env:CLAUDE_CONFIG_DIR/handoff-watch,
 # else ~/.claude/handoff-watch (the first override exists so tests never touch
@@ -23,7 +23,8 @@ param(
 # A130: a CLAUDE_CONFIG_DIR profile keeps its flags in its own config dir - the
 # probe writes there and check/level read there, so one profile never reads
 # another's sessions. Same order as the ops-board mod's usage read.
-$dir      = if ($env:CLAUDE_USAGE_WATCH_DIR) { $env:CLAUDE_USAGE_WATCH_DIR }
+$dir      = if ($Mode -eq 'refresh') { $Dir } # PowerShell names are case-insensitive: preserve -Dir.
+            elseif ($env:CLAUDE_USAGE_WATCH_DIR) { $env:CLAUDE_USAGE_WATCH_DIR }
             elseif ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR 'handoff-watch' }
             else { Join-Path $HOME '.claude/handoff-watch' }
 $pctLimit = if ($env:CLAUDE_USAGE_HANDOFF_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_PCT } else { 92 }
@@ -84,6 +85,11 @@ function Get-CodexRollout($codexHome) {
   $rolls = Get-ChildItem $sess -Recurse -File -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
            Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-$staleHours) } | Sort-Object LastWriteTime -Descending
   foreach ($roll in $rolls) {
+    if ($codexSession) {
+      try { $meta = Get-Content -LiteralPath $roll.FullName -Encoding UTF8 -TotalCount 1 | ConvertFrom-Json }
+      catch { continue }
+      if ($meta.type -ne 'session_meta' -or $meta.payload.id -ne $codexSession) { continue }
+    }
     if (Get-CodexLastTc $roll.FullName) { return $roll }
   }
   return $null
@@ -154,7 +160,7 @@ function Get-FlagKey {
   # `.weekly` is written after the main flag, so it is always the newest -
   # the main flag is picked first, by name, never by mtime alone.
   $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
-       Where-Object { $_.Extension -notin @('.done', '.weekly', '.fivehour', '.ctx') } | Sort-Object LastWriteTime | Select-Object -Last 1
+       Where-Object { $_.Name -notlike 'quota-cache.json*' -and $_.Extension -notin @('.done', '.weekly', '.fivehour', '.ctx') } | Sort-Object LastWriteTime | Select-Object -Last 1
   if ($f) { if (Test-Fresh $f.FullName) { return $f.Name }; return $null }
   # A101: a weekly flag with no main flag beside it is a real state.
   $f = Get-ChildItem $dir -File -ErrorAction SilentlyContinue |
@@ -184,16 +190,10 @@ function Get-CodexLevel($path) {
 }
 
 function Get-CachedQuota {
+  if ($sourceError -or $codexSession -or $env:CLAUDE_CODE_SESSION_ID -or $selectedHost -eq 'codex') { return $null }
   $cands = @(
-    if ($env:CLAUDE_USAGE_WATCH_DIR) { Join-Path $env:CLAUDE_USAGE_WATCH_DIR 'quota-cache.json' }
-    if ($env:SKILLATOR_PROFILE_DIR) { Join-Path $env:SKILLATOR_PROFILE_DIR 'quota-cache.json' }
-    if ($env:AGY_CONFIG_DIR) { Join-Path $env:AGY_CONFIG_DIR 'quota-cache.json' }
-    if ($env:MUSE_CONFIG_DIR) { Join-Path $env:MUSE_CONFIG_DIR 'quota-cache.json' }
-    if ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR 'quota-cache.json' }
-    if ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR 'handoff-watch\quota-cache.json' }
-    Join-Path $dir 'quota-cache.json'
-    if ($env:ANTIGRAVITY_APP_DATA_DIR) { Join-Path $env:ANTIGRAVITY_APP_DATA_DIR 'quota-cache.json' }
-    Join-Path $HOME '.gemini\antigravity-cli\quota-cache.json'
+    Join-Path $selectedProfile 'quota-cache.json'
+    if ($selectedHost -eq 'claude-code') { Join-Path $dir 'quota-cache.json' }
   ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 
   foreach ($cp in $cands) {
@@ -201,6 +201,7 @@ function Get-CachedQuota {
       try {
         $raw = [IO.File]::ReadAllText((Convert-Path -LiteralPath $cp))
         $s = if ($raw -match '"src"\s*:\s*"([^"]+)"') { $Matches[1] } else { 'none' }
+        if ($selectedHost -ne 'profile' -and $s -ne $selectedHost) { return $null }
         $h = if ($raw -match '"(?:5h|five)"\s*:\s*([0-9.]+)') { $Matches[1] } else { $null }
         $w = if ($raw -match '"(?:7d|weekly)"\s*:\s*([0-9.]+)') { $Matches[1] } else { $null }
         $n = if ($raw -match '"note"\s*:\s*"([^"]+)"') { $Matches[1] } else { $null }
@@ -210,6 +211,44 @@ function Get-CachedQuota {
     }
   }
   return $null
+}
+
+# Resolve once for level/check. Explicit identities never fall through to another host.
+if ($Mode -in @('level','check')) {
+  $sourceError = $null
+  $selectedHost = $env:SKILLATOR_CLI
+  if ($selectedHost -eq 'claude') { $selectedHost = 'claude-code' }
+  $codexSession = if ($env:CODEX_THREAD_ID) { $env:CODEX_THREAD_ID } else { $env:CODEX_SESSION_ID }
+  if (($env:CODEX_THREAD_ID -and $env:CODEX_SESSION_ID -and $env:CODEX_THREAD_ID -ne $env:CODEX_SESSION_ID) -or
+      ($codexSession -and $env:CLAUDE_CODE_SESSION_ID) -or
+      ($selectedHost -and $codexSession -and $selectedHost -ne 'codex') -or
+      ($selectedHost -and $env:CLAUDE_CODE_SESSION_ID -and $selectedHost -ne 'claude-code')) {
+    $sourceError = 'conflicting_source_identities'
+  }
+  if (-not $selectedHost) {
+    $selectedHost = if ($env:CLAUDE_CODE_SESSION_ID) { 'claude-code' }
+      elseif ($codexSession) { 'codex' }
+      elseif ($env:SKILLATOR_PROFILE_DIR) {
+        if (Test-Path -LiteralPath (Join-Path $env:SKILLATOR_PROFILE_DIR 'sessions')) { 'codex' } else { 'profile' }
+      }
+      elseif ($env:CLAUDE_CONFIG_DIR) { 'claude-code' }
+      elseif ($env:CODEX_HOME) { 'codex' }
+      elseif ($env:AGY_CONFIG_DIR -or $env:ANTIGRAVITY_APP_DATA_DIR) { 'agy' }
+      elseif ($env:MUSE_CONFIG_DIR) { 'muse' }
+      elseif ($env:CURSOR_LEDGER_PATH) { 'cursor' }
+      elseif (Get-CodexRollout (Join-Path $HOME '.codex')) { 'codex' }
+      else { 'claude-code' }
+  }
+  $selectedProfile = if ($env:SKILLATOR_PROFILE_DIR) { $env:SKILLATOR_PROFILE_DIR }
+    elseif ($selectedHost -eq 'codex') { if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' } }
+    elseif ($selectedHost -eq 'claude-code') { if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' } }
+    elseif ($selectedHost -eq 'agy') { if ($env:AGY_CONFIG_DIR) { $env:AGY_CONFIG_DIR } elseif ($env:ANTIGRAVITY_APP_DATA_DIR) { $env:ANTIGRAVITY_APP_DATA_DIR } else { Join-Path $HOME '.gemini/antigravity-cli' } }
+    elseif ($selectedHost -eq 'muse') { if ($env:MUSE_CONFIG_DIR) { $env:MUSE_CONFIG_DIR } else { Join-Path $HOME '.muse' } }
+    else { Join-Path $HOME ".$selectedHost" }
+  if ($selectedHost -eq 'claude-code' -and ($env:SKILLATOR_PROFILE_DIR -or -not $env:CLAUDE_USAGE_WATCH_DIR)) {
+    $dir = Join-Path $selectedProfile 'handoff-watch'
+  }
+  $selectedRoll = if (-not $sourceError -and $selectedHost -eq 'codex') { Get-CodexRollout $selectedProfile } else { $null }
 }
 
 function Start-QuotaRefresh([string]$targetCli, [string]$targetDir) {
@@ -237,6 +276,8 @@ if ($Mode -eq 'refresh') {
   try {
     $res = $null
     if ($Cli -eq 'agy') {
+      $env:AGY_CONFIG_DIR = $Dir
+      $env:ANTIGRAVITY_APP_DATA_DIR = $Dir
       $raw = & agy -p "/usage" --output-format json 2>$null | Out-String
       if ($raw) {
         $parsed = ConvertFrom-Json $raw -ErrorAction SilentlyContinue
@@ -275,6 +316,7 @@ if ($Mode -eq 'refresh') {
         }
       }
     } elseif ($Cli -eq 'muse') {
+      $env:MUSE_CONFIG_DIR = $Dir
       $raw = & muse usage --json 2>$null | Out-String
       if ($LASTEXITCODE -ne 0 -or $raw -match 'not logged in') {
         $res = @{ src = 'muse'; note = 'not logged in' }
@@ -294,7 +336,7 @@ if ($Mode -eq 'refresh') {
 }
 
 # level (F31): one machine line for relay-morpheus's chain hold, and nothing
-# else - no stdin, no .done, no threshold, no directory created. Same source
+# else - no stdin, no .done, no threshold. Missing profile caches refresh asynchronously. Same source
 # order and same bytes as the sh twin:
 #   src=<claude-code|codex|none> 5h=<pct|-> 7d=<pct|-> ctx=<pct|-> max=<pct|->
 # On Claude Code 5h is the probe's .fivehour flag; absent, or older than the
@@ -303,8 +345,7 @@ if ($Mode -eq 'refresh') {
 # chain decide never holds on it - with no 5h it uses 7d, else unobservable.
 if ($Mode -eq 'level') {
   $src = 'none'; $h = '-'; $wk = '-'; $cx = '-'; $mx = '-'; $noteTag = ''
-  $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
-  $roll = Get-CodexRollout $codexHome
+  $roll = $selectedRoll
   if ($roll -and $roll.LastWriteTime -gt (Get-Date).AddHours(-$staleHours)) {
     $l = @(Get-CodexLevel $roll.FullName)
     if ($l.Count -eq 3 -and ($l | Where-Object { $_ -ne '-' })) {
@@ -312,7 +353,7 @@ if ($Mode -eq 'level') {
       $mx = ($l | Where-Object { $_ -ne '-' } | Sort-Object { [double]::Parse($_, $inv) } | Select-Object -Last 1)
     }
   }
-  if ($src -eq 'none') {
+  if ($src -eq 'none' -and $selectedHost -eq 'claude-code' -and -not $sourceError) {
     # A130: this session's flags only, and every one inside the same freshness
     # window as a codex rollout: the statusline rewrites them on every render,
     # so an older one is a dead or idle session's - unobservable, not a
@@ -330,16 +371,18 @@ if ($Mode -eq 'level') {
     $cq = Get-CachedQuota
     if ($cq) {
       $src = $cq.src
-      if ($cq['5h']) { $h = Fmt1 $cq['5h'] }
-      if ($cq['7d']) { $wk = Fmt1 $cq['7d'] }
-      if ($cq.max) { $mx = Fmt1 $cq.max }
+      if ($null -ne $cq['5h']) { $h = Fmt1 $cq['5h'] }
+      if ($null -ne $cq['7d']) { $wk = Fmt1 $cq['7d'] }
+      if ($null -ne $cq.max) { $mx = Fmt1 $cq.max }
       elseif ($h -ne '-' -and $wk -ne '-') { $mx = Fmt1 ([math]::Max([double]::Parse($h, $inv), [double]::Parse($wk, $inv))) }
       elseif ($h -ne '-') { $mx = $h } elseif ($wk -ne '-') { $mx = $wk }
       if ($cq.note) { $noteTag = " note=$($cq.note -replace '\s+','_')" }
-    } elseif ($env:SKILLATOR_CLI -and $env:SKILLATOR_PROFILE_DIR) {
-      Start-QuotaRefresh $env:SKILLATOR_CLI $env:SKILLATOR_PROFILE_DIR
+    } elseif ($env:SKILLATOR_CLI -and $env:SKILLATOR_PROFILE_DIR -and -not $sourceError -and -not $codexSession -and -not $env:CLAUDE_CODE_SESSION_ID -and $selectedHost -in @('claude-code','agy','muse')) {
+      $refreshCli = if ($selectedHost -eq 'claude-code') { 'claude' } else { $selectedHost }
+      Start-QuotaRefresh $refreshCli $selectedProfile
     }
   }
+  if ($sourceError) { $noteTag = " note=$sourceError" }
   "src=$src 5h=$h 7d=$wk ctx=$cx max=$mx$noteTag"
   exit 0
 }
@@ -347,8 +390,7 @@ if ($Mode -eq 'level') {
 if ($Mode -eq 'check') {
   # Codex: the rollout JSONL carries rate_limits.*.used_percent and the context total.
   # CODEX_HOME, same as install.ps1 - a relocated codex home must still be watched.
-  $codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
-  $roll = Get-CodexRollout $codexHome
+  $roll = $selectedRoll
   $pct = $null; $wk = $null; $src = 'none'; $key = 'none'
   if ($roll -and $roll.LastWriteTime -gt (Get-Date).AddHours(-$staleHours)) {
     $pct = Get-CodexPct $roll.FullName
@@ -356,7 +398,7 @@ if ($Mode -eq 'check') {
     if ($null -ne $pct -or $null -ne $wk) { $src = 'codex'; $key = $roll.BaseName }
   }
   # Claude Code: the statusline probe already wrote the number.
-  if ($null -eq $pct -and $null -eq $wk) {
+  if ($null -eq $pct -and $null -eq $wk -and $selectedHost -eq 'claude-code' -and -not $sourceError) {
     # A130: this session's flags only (Get-FlagKey), each one read only while
     # fresh. A weekly flag with no main flag beside it still counts (A101).
     $k = Get-FlagKey
@@ -369,23 +411,20 @@ if ($Mode -eq 'check') {
   if ($null -eq $pct -and $null -eq $wk) {
     $cq = Get-CachedQuota
     if ($cq) {
-      if ($cq['5h']) { $pct = [double]::Parse($cq['5h'], $inv) }
-      if ($cq['7d']) { $wk  = [double]::Parse($cq['7d'], $inv) }
+      if ($null -ne $cq['5h']) { $pct = [double]::Parse($cq['5h'], $inv) }
+      if ($null -ne $cq['7d']) { $wk  = [double]::Parse($cq['7d'], $inv) }
       if ($null -ne $pct -or $null -ne $wk) {
         $src = $cq.src
         $key = "$($cq.src)-cache"
       }
     }
   }
-  if ($null -eq $pct -and $null -eq $wk) {
+  if ($null -eq $pct -and $null -eq $wk -and $selectedHost -eq 'cursor' -and -not $sourceError) {
     # Check cursor estimated usage ledger
     $cands = @(
-      if ($env:CURSOR_LEDGER_PATH) { $env:CURSOR_LEDGER_PATH }
-      if ($env:SKILLATOR_PROFILE_DIR) { Join-Path $env:SKILLATOR_PROFILE_DIR 'cursor-ledger.json' }
-      if ($env:SKILLATOR_CONFIG_DIR) { Join-Path $env:SKILLATOR_CONFIG_DIR 'cursor-ledger.json' }
-      Join-Path $HOME '.skillator\cursor-ledger.json'
-      Join-Path $HOME '.cursor\cursor-ledger.json'
-      '.skillator\cursor-ledger.json'
+      if ($env:SKILLATOR_PROFILE_DIR) { Join-Path $selectedProfile 'cursor-ledger.json' }
+      elseif ($env:CURSOR_LEDGER_PATH) { $env:CURSOR_LEDGER_PATH }
+      else { Join-Path $selectedProfile 'cursor-ledger.json' }
     ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
 
     foreach ($clp in $cands) {
@@ -442,7 +481,7 @@ if ($Mode -eq 'check') {
   }
   # ponytail: cursor and antigravity expose no usage anywhere on disk - say so
   # rather than invent a number. Upgrade here if either ever writes one.
-  if ($null -eq $pct -and $null -eq $wk) { "watch-cortana: no usage signal on this host - run skillator:handoff-cortana manually before you run out"; exit 0 }
+  if ($null -eq $pct -and $null -eq $wk) { "watch-cortana: no usage signal on this host ($selectedHost $sourceError) - run skillator:handoff-cortana manually before you run out"; exit 0 }
   $done   = Join-Path $dir "$key.done"
   $wkDone = Join-Path $dir "$key.weekly.done"
   # The weekly gate applies on every host, not just the one with a Stop hook,

@@ -1,6 +1,6 @@
 // F94: `ops --status` - one row per CLI profile: name, 5-hour and 7-day % used, or why it
-// cannot be read. Read-only: the one process it starts is watch-cortana's `level` reader
-// (Claude and Codex rows), at most 5 s each, one after another; no CLI is run, no
+// cannot be read. It starts watch-cortana's `level` reader, at most 5 s each,
+// one after another; missing/stale profile caches request asynchronous refresh. No
 // credential file is ever opened (its existence is the login check). Sources and rulings:
 // docs/plans/PLAN-ops-status.md.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -47,11 +47,13 @@ export function discover(home: string): Profile[] {
 }
 
 // The reader's env for one profile: its own home set, the other CLI's pointed at a path that
-// does not exist (`level` only reads), and the in-session overrides dropped.
+// does not exist, and the in-session overrides dropped.
 function readerEnv(p: Profile, base: Env): Env {
   const e: Env = { ...base }
   delete e.CLAUDE_USAGE_WATCH_DIR
   delete e.CLAUDE_CODE_SESSION_ID
+  delete e.CODEX_THREAD_ID
+  delete e.CODEX_SESSION_ID
   e.SKILLATOR_CLI = p.cli
   e.SKILLATOR_PROFILE_DIR = p.dir
   const none = `${p.dir}/.ops-status-none`

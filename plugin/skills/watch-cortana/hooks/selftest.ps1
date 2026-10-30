@@ -7,7 +7,7 @@ $sid = "selftest-$PID"
 # check-mode fixtures live here, never in the user's real HOME: `check` writes a
 # genuine one-shot .done when it fires, so running it against the live
 # ~/.codex/sessions would burn a real session's handoff (and be non-deterministic).
-$tmp = Join-Path ([IO.Path]::GetTempPath()) "watch-cortana-selftest-$PID"
+$tmp = Join-Path $PSScriptRoot ".watch-cortana-selftest-$PID"
 # The probe/gate session's state dir is a temp one too (CLAUDE_USAGE_WATCH_DIR),
 # never the live ~/.claude/handoff-watch: a probe writes up to four flags
 # (.weekly, .fivehour, .ctx beside the main one), and a 98.2% flag there is
@@ -16,6 +16,11 @@ $liveW = Join-Path $tmp 'watch'
 $flag = Join-Path $liveW $sid
 $noCodexHome = Join-Path $tmp 'no-codex-home'
 $shExe = (Get-Command sh -ErrorAction SilentlyContinue)
+# Every inherited selector/path is isolated and restored, including Codex's session id.
+$envNames = @('HOME','USERPROFILE','CODEX_HOME','CODEX_THREAD_ID','CODEX_SESSION_ID','CLAUDE_CODE_SESSION_ID','CLAUDE_CONFIG_DIR','CLAUDE_USAGE_WATCH_DIR','SKILLATOR_CLI','SKILLATOR_PROFILE_DIR','AGY_CONFIG_DIR','MUSE_CONFIG_DIR','ANTIGRAVITY_APP_DATA_DIR','CURSOR_LEDGER_PATH','SKILLATOR_CONFIG_DIR','CLAUDE_USAGE_HANDOFF_PCT','CLAUDE_USAGE_HANDOFF_WEEKLY_PCT')
+$savedEnv = @{}
+foreach ($n in $envNames) { $savedEnv[$n] = [Environment]::GetEnvironmentVariable($n); [Environment]::SetEnvironmentVariable($n, $null) }
+$env:HOME = $tmp; $env:USERPROFILE = $tmp
 # A130: the state dir follows CLAUDE_CONFIG_DIR, and check/level read only the
 # flag named by CLAUDE_CODE_SESSION_ID. Run inside Claude Code, both are
 # inherited from the live session - every case below would then read (and
@@ -43,7 +48,7 @@ function RunSh($mode, $hm, $json) {
   $posix = ($hm -replace '\\', '/')
   $old = $env:HOME; $env:HOME = $posix
   $oW = $env:CLAUDE_USAGE_WATCH_DIR; $oC = $env:CODEX_HOME
-  Remove-Item Env:CLAUDE_USAGE_WATCH_DIR -ErrorAction SilentlyContinue; $env:CODEX_HOME = "$posix/.codex"
+  Remove-Item Env:CLAUDE_USAGE_WATCH_DIR, Env:CODEX_HOME -ErrorAction SilentlyContinue
   try {
     $out = if ($null -eq $json) { (& $shExe.Source $sh $mode) -join "`n" }
            else { ($json | & $shExe.Source $sh $mode) -join "`n" }
@@ -56,7 +61,7 @@ function RunCheck($hm) {
   $oldU = $env:USERPROFILE; $oldH = $env:HOME
   $oW = $env:CLAUDE_USAGE_WATCH_DIR; $oC = $env:CODEX_HOME
   $env:USERPROFILE = $hm; $env:HOME = $hm
-  Remove-Item Env:CLAUDE_USAGE_WATCH_DIR -ErrorAction SilentlyContinue; $env:CODEX_HOME = Join-Path $hm '.codex'
+  Remove-Item Env:CLAUDE_USAGE_WATCH_DIR, Env:CODEX_HOME -ErrorAction SilentlyContinue
   try { $out = (& powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode check) -join "`n" }
   finally { $env:USERPROFILE = $oldU; $env:HOME = $oldH; $env:CLAUDE_USAGE_WATCH_DIR = $oW; $env:CODEX_HOME = $oC }
   if ($LASTEXITCODE -ne 0) { throw "ps check: exit $LASTEXITCODE, output '$out'" }
@@ -113,6 +118,12 @@ foreach ($f in @($ps, $sh)) {
 }
 
 try {
+  # Fixture copies stub only refresh; no test may launch a live quota CLI.
+  New-Item $tmp -ItemType Directory -Force | Out-Null
+  $psSource = [IO.File]::ReadAllText($ps); $shSource = [IO.File]::ReadAllText($sh)
+  $ps = Join-Path $tmp 'usage-watch.ps1'; $sh = Join-Path $tmp 'usage-watch.sh'
+  [IO.File]::WriteAllText($ps, $psSource.Replace('# level (F31)', "function Start-QuotaRefresh { }`n# level (F31)"), (New-Object Text.UTF8Encoding $false))
+  [IO.File]::WriteAllText($sh, $shSource.Replace('# level (F31)', "start_quota_refresh() { :; }`n# level (F31)"), (New-Object Text.UTF8Encoding $false))
   # --- probe + gate against the real HOME (a scratch session id) -------------
   $sl = { param($a, $b, $c) "{`"session_id`":`"$sid`",`"rate_limits`":{`"five_hour`":{`"used_percentage`":$a},`"seven_day`":{`"used_percentage`":$b}},`"context_window`":{`"used_percentage`":$c}}" }
   $stop = "{`"session_id`":`"$sid`",`"stop_hook_active`":false}"
@@ -469,6 +480,8 @@ try {
   # ~/.claude/handoff-watch.
   function RunW($tw, $mode, $wdir, $codexHome, $json) {
     $oW = $env:CLAUDE_USAGE_WATCH_DIR; $oC = $env:CODEX_HOME
+    $oCli = $env:SKILLATOR_CLI
+    $env:SKILLATOR_CLI = if (Test-Path $codexHome) { 'codex' } else { 'claude' }
     $env:CLAUDE_USAGE_WATCH_DIR = $wdir.Replace('\', '/'); $env:CODEX_HOME = $codexHome.Replace('\', '/')
     try {
       if ($tw -eq 'sh') {
@@ -477,7 +490,7 @@ try {
         $out = if ($null -eq $json) { (& powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode $mode) -join "`n" }
                else { ($json | & powershell -NoProfile -ExecutionPolicy Bypass -File $ps -Mode $mode) -join "`n" }
       }
-    } finally { $env:CLAUDE_USAGE_WATCH_DIR = $oW; $env:CODEX_HOME = $oC }
+    } finally { $env:CLAUDE_USAGE_WATCH_DIR = $oW; $env:CODEX_HOME = $oC; $env:SKILLATOR_CLI = $oCli }
     if ($LASTEXITCODE -ne 0) { throw "$tw $mode`: exit $LASTEXITCODE, output '$out'" }
     $out
   }
@@ -643,6 +656,7 @@ try {
   'ok'
 }
 finally {
+  foreach ($n in $envNames) { [Environment]::SetEnvironmentVariable($n, $savedEnv[$n]) }
   # try/finally, not a trailing line: a failing assertion must still clean up.
   Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
   Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue

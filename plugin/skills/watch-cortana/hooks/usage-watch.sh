@@ -116,6 +116,12 @@ codex_newest_fresh() {
       k=0; for (i=1; i<=n; i++) if (paths[i]!="" && (!k || times[i]>times[k])) k=i
       print paths[k]; paths[k]="" } }' |
     while IFS= read -r candidate; do
+      if [ -n "$codex_session" ]; then
+        meta=$(head -1 "$candidate" | tr -d '\r')
+        meta_id=$(printf '%s' "$meta" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        case $meta in *'"session_meta"'*) ;; *) continue ;; esac
+        [ "$meta_id" = "$codex_session" ] || continue
+      fi
       # A starting child must not hide an older, still-fresh usage event.
       # Same test as codex_last_tc, two forks fewer per candidate (5s budget).
       if tail -400 "$candidate" | grep -q '"token_count"'; then printf '%s\n' "$candidate"; break; fi
@@ -180,7 +186,7 @@ codex_wk_pct() {
 # them as the max and compare it against the wrong threshold.
 main_flag() {
   ls -t "$dir" 2>/dev/null | grep -v '\.done$' | grep -v '\.weekly$' \
-    | grep -v '\.fivehour$' | grep -v '\.ctx$' | head -1
+    | grep -v '\.fivehour$' | grep -v '\.ctx$' | grep -v '^quota-cache\.json' | head -1
 }
 
 # A130: the flag key check/level may read, or nothing. Inside Claude Code
@@ -226,21 +232,14 @@ codex_level() {
 }
 
 read_cache() {
+  [ -z "$source_error$codex_session${CLAUDE_CODE_SESSION_ID:-}" ] || return 0
+  [ "$selected_host" != codex ] || return 0
   cp=""
-  for cand in "${CLAUDE_USAGE_WATCH_DIR:-}/quota-cache.json" \
-              "${SKILLATOR_PROFILE_DIR:-}/quota-cache.json" \
-              "${AGY_CONFIG_DIR:-}/quota-cache.json" \
-              "${MUSE_CONFIG_DIR:-}/quota-cache.json" \
-              "${CLAUDE_CONFIG_DIR:-}/quota-cache.json" \
-              "${CLAUDE_CONFIG_DIR:-}/handoff-watch/quota-cache.json" \
-              "$dir/quota-cache.json" \
-              "${ANTIGRAVITY_APP_DATA_DIR:-}/quota-cache.json" \
-              "$HOME/.gemini/antigravity-cli/quota-cache.json"; do
-    if [ -f "$cand" ]; then cp="$cand"; break; fi
-  done
+  if fresh_file "$selected_profile/quota-cache.json"; then cp="$selected_profile/quota-cache.json"
+  elif [ "$selected_host" = claude-code ] && fresh_file "$dir/quota-cache.json"; then cp="$dir/quota-cache.json"; fi
   [ -n "$cp" ] || return 0
   fresh_file "$cp" || return 0
-  awk '
+  awk -v selected="$selected_host" '
     match($0,/"src"[[:space:]]*:[[:space:]]*"[^"]*"/){
       s=substr($0,RSTART,RLENGTH); sub(/^[^:]*:[[:space:]]*"/,"",s); sub(/"$/,"",s); src=s }
     match($0,/"(5h|five)"[[:space:]]*:[[:space:]]*[0-9.]+/){
@@ -251,6 +250,7 @@ read_cache() {
       n=substr($0,RSTART,RLENGTH); sub(/^[^:]*:[[:space:]]*"/,"",n); sub(/"$/,"",n); gsub(/[[:space:]]/,"_",n); note=n }
     END {
       if (src=="") src="none"
+      if (selected!="profile" && src!=selected) exit
       if (h=="") h="-"
       if (w=="") w="-"
       mx="-"
@@ -263,6 +263,52 @@ read_cache() {
     }' "$cp"
 }
 
+# Resolve once for level/check; an explicit identity cannot fall through.
+case $mode in level|check)
+  source_error=""; selected_host=${SKILLATOR_CLI:-}
+  [ "$selected_host" != claude ] || selected_host=claude-code
+  codex_session=${CODEX_THREAD_ID:-${CODEX_SESSION_ID:-}}
+  if { [ -n "${CODEX_THREAD_ID:-}" ] && [ -n "${CODEX_SESSION_ID:-}" ] && [ "$CODEX_THREAD_ID" != "$CODEX_SESSION_ID" ]; } ||
+     { [ -n "$codex_session" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; } ||
+     { [ -n "$selected_host" ] && [ -n "$codex_session" ] && [ "$selected_host" != codex ]; } ||
+     { [ -n "$selected_host" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ "$selected_host" != claude-code ]; }; then
+    source_error=conflicting_source_identities
+  fi
+  if [ -z "$selected_host" ]; then
+    if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then selected_host=claude-code
+    elif [ -n "$codex_session" ]; then selected_host=codex
+    elif [ -n "${SKILLATOR_PROFILE_DIR:-}" ]; then
+      if [ -d "$(printf '%s' "$SKILLATOR_PROFILE_DIR" | tr '\\' '/')/sessions" ]; then selected_host=codex; else selected_host=profile; fi
+    elif [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then selected_host=claude-code
+    elif [ -n "${CODEX_HOME:-}" ]; then selected_host=codex
+    elif [ -n "${AGY_CONFIG_DIR:-}${ANTIGRAVITY_APP_DATA_DIR:-}" ]; then selected_host=agy
+    elif [ -n "${MUSE_CONFIG_DIR:-}" ]; then selected_host=muse
+    elif [ -n "${CURSOR_LEDGER_PATH:-}" ]; then selected_host=cursor
+    elif [ -n "$(codex_newest_fresh "$HOME/.codex/sessions")" ]; then selected_host=codex
+    else selected_host=claude-code; fi
+  fi
+  if [ -n "${SKILLATOR_PROFILE_DIR:-}" ]; then selected_profile=$SKILLATOR_PROFILE_DIR
+  else
+    case $selected_host in
+      codex) selected_profile=${CODEX_HOME:-$HOME/.codex} ;;
+      claude-code) selected_profile=${CLAUDE_CONFIG_DIR:-$HOME/.claude} ;;
+      agy) selected_profile=${AGY_CONFIG_DIR:-${ANTIGRAVITY_APP_DATA_DIR:-$HOME/.gemini/antigravity-cli}} ;;
+      muse) selected_profile=${MUSE_CONFIG_DIR:-$HOME/.muse} ;;
+      *) selected_profile=$HOME/.$selected_host ;;
+    esac
+  fi
+  selected_profile=$(printf '%s' "$selected_profile" | tr '\\' '/')
+  if [ "$selected_host" = claude-code ] && { [ -n "${SKILLATOR_PROFILE_DIR:-}" ] || [ -z "${CLAUDE_USAGE_WATCH_DIR:-}" ]; }; then
+    dir=$selected_profile/handoff-watch
+  fi
+  selected_roll=""
+  if [ -z "$source_error" ] && [ "$selected_host" = codex ]; then selected_roll=$(codex_newest_fresh "$selected_profile/sessions"); fi
+;; esac
+
+start_quota_refresh() {
+  sh "$0" refresh "$1" "$2" >/dev/null 2>&1 &
+}
+
 if [ "$mode" = refresh ]; then
   cli="$2"; target_dir="$3"
   [ -n "$cli" ] && [ -n "$target_dir" ] || exit 0
@@ -271,7 +317,7 @@ if [ "$mode" = refresh ]; then
   mkdir -p "$target_dir"
   case $cli in
     agy)
-      raw=$(agy -p "/usage" --output-format json 2>/dev/null)
+      raw=$(AGY_CONFIG_DIR="$target_dir" ANTIGRAVITY_APP_DATA_DIR="$target_dir" agy -p "/usage" --output-format json 2>/dev/null)
       if [ -n "$raw" ]; then
         parsed=$(printf '%s' "$raw" | awk '
           /"remaining_fraction"/ {
@@ -302,7 +348,7 @@ if [ "$mode" = refresh ]; then
       fi
       ;;
     muse)
-      raw=$(muse usage --json 2>&1)
+      raw=$(MUSE_CONFIG_DIR="$target_dir" muse usage --json 2>&1)
       if case $raw in *"not logged in"*) true ;; *) false ;; esac; then
         printf '{"src":"muse","note":"not logged in"}' > "$cache"
       fi
@@ -313,17 +359,16 @@ if [ "$mode" = refresh ]; then
 fi
 
 # level (F31): one machine line for relay-morpheus's chain hold, and nothing
-# else - no stdin, no .done, no threshold, no directory created.
+# else - no stdin, no .done, no threshold. Missing profile caches refresh asynchronously.
 #   src=<claude-code|codex|none> 5h=<pct|-> 7d=<pct|-> ctx=<pct|-> max=<pct|->
-# Same source order as `check`: a fresh codex rollout first, then the newest
-# Claude Code flag. On Claude Code 5h is the probe's .fivehour flag (the
+# Same selected source as `check`. On Claude Code 5h is the probe's .fivehour flag (the
 # statusline's rate_limits.five_hour.used_percentage); when that is absent, or
 # older than the codex freshness window (3h), it prints '-'. max is the max of every window, context included, and is for
 # reading only: relay's chain decide never holds on it (a full context is a
 # compaction, not a quota) - with no 5h it falls back to 7d, else unobservable.
 if [ "$mode" = level ]; then
   src=none; h=-; wk=-; cx=-; mx=-; note_tag=""
-  roll=$(codex_newest_fresh "${CODEX_HOME:-$HOME/.codex}/sessions")
+  roll=$selected_roll
   if [ -n "$roll" ]; then
     set -- $(codex_level "$roll")
     if [ "$#" = 3 ] && { [ "$1" != - ] || [ "$2" != - ] || [ "$3" != - ]; }; then
@@ -331,7 +376,7 @@ if [ "$mode" = level ]; then
       mx=$(printf '%s %s %s\n' "$h" "$wk" "$cx" | awk '{m=""; for(i=1;i<=NF;i++) if ($i!="-" && (m=="" || $i+0>m+0)) m=$i; print (m==""?"-":m)}')
     fi
   fi
-  if [ "$src" = none ]; then
+  if [ "$src" = none ] && [ "$selected_host" = claude-code ] && [ -z "$source_error" ]; then
     # A130: this session's flags only, and every one inside the same freshness
     # window as a codex rollout: the statusline rewrites them on every render,
     # so an older one is a dead or idle session's - unobservable, not a
@@ -354,10 +399,14 @@ if [ "$mode" = level ]; then
       [ "$3" != "-" ] && wk=$3
       [ "$4" != "-" ] && mx=$4
       [ -n "$5" ] && note_tag=" note=$5"
-    elif [ -n "${SKILLATOR_CLI:-}" ] && [ -n "${SKILLATOR_PROFILE_DIR:-}" ]; then
-      sh "$0" refresh "$SKILLATOR_CLI" "$SKILLATOR_PROFILE_DIR" >/dev/null 2>&1 &
+    elif [ -n "${SKILLATOR_CLI:-}" ] && [ -n "${SKILLATOR_PROFILE_DIR:-}" ] && [ -z "$source_error$codex_session${CLAUDE_CODE_SESSION_ID:-}" ]; then
+      case $selected_host in
+        claude-code) start_quota_refresh claude "$selected_profile" ;;
+        agy|muse) start_quota_refresh "$selected_host" "$selected_profile" ;;
+      esac
     fi
   fi
+  [ -z "$source_error" ] || note_tag=" note=$source_error"
   echo "src=$src 5h=$h 7d=$wk ctx=$cx max=$mx$note_tag"
   exit 0
 fi
@@ -372,13 +421,13 @@ if [ "$mode" = check ]; then
   # window - a week-old Codex session sitting at 98% must not make this fire on
   # a machine that is now running something else.
   # CODEX_HOME, same as install.sh - a relocated codex home must still be watched.
-  roll=$(codex_newest_fresh "${CODEX_HOME:-$HOME/.codex}/sessions")
+  roll=$selected_roll
   if [ -n "$roll" ]; then
     pct=$(codex_pct "$roll")
     wk=$(codex_wk_pct "$roll")
     if [ -n "$pct" ] || [ -n "$wk" ]; then src=codex; key=$(basename "$roll" .jsonl); fi
   fi
-  if [ -z "$pct" ] && [ -z "$wk" ]; then
+  if [ -z "$pct" ] && [ -z "$wk" ] && [ "$selected_host" = claude-code ] && [ -z "$source_error" ]; then
     # A130: this session's flags only (flag_key), each one read only while
     # fresh. `.weekly` is read by name, never picked by mtime (it is always
     # the newest, and would be compared against the wrong threshold); a
@@ -399,16 +448,9 @@ if [ "$mode" = check ]; then
       if [ -n "$pct" ] || [ -n "$wk" ]; then key="$src-cache"; fi
     fi
   fi
-  if [ -z "$pct" ] && [ -z "$wk" ]; then
-    clp=""
-    for cand in "${CURSOR_LEDGER_PATH:-}" \
-                "${SKILLATOR_PROFILE_DIR:-}/cursor-ledger.json" \
-                "${SKILLATOR_CONFIG_DIR:-}/cursor-ledger.json" \
-                "$HOME/.skillator/cursor-ledger.json" \
-                "$HOME/.cursor/cursor-ledger.json" \
-                ".skillator/cursor-ledger.json"; do
-      if [ -n "$cand" ] && [ -f "$cand" ]; then clp="$cand"; break; fi
-    done
+  if [ -z "$pct" ] && [ -z "$wk" ] && [ "$selected_host" = cursor ] && [ -z "$source_error" ]; then
+    if [ -n "${SKILLATOR_PROFILE_DIR:-}" ]; then clp=$selected_profile/cursor-ledger.json
+    else clp=${CURSOR_LEDGER_PATH:-$selected_profile/cursor-ledger.json}; fi
     if [ -n "$clp" ]; then
       est=$(node -e '
         const fs = require("fs");
@@ -447,7 +489,7 @@ if [ "$mode" = check ]; then
     fi
   fi
   if [ -z "$pct" ] && [ -z "$wk" ]; then
-    echo "watch-cortana: no usage signal on this host - run skillator:handoff-cortana manually before you run out"; exit 0
+    echo "watch-cortana: no usage signal on this host ($selected_host $source_error) - run skillator:handoff-cortana manually before you run out"; exit 0
   fi
   # The weekly gate applies on every host, not just the one with a Stop hook.
   # It has its own .done, so a 5-hour fire earlier in the session cannot eat
