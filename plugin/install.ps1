@@ -791,8 +791,12 @@ function Invoke-SelfTest([string]$T) {
   foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run') { if ($mf -ccontains $n) { return 'command in opencode manifest' } }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   foreach ($f in '.codex\skills\skillator-update\SKILL.md', '.cursor\commands\skillator-update.md', '.pi\agent\prompts\skillator-update.md',
-                 '.gemini\commands\skillator-update.toml', '.gemini\skills\skillator-update\SKILL.md', "$oc\commands\skillator-update.md") {
+                 '.gemini\commands\skillator-update.toml', '.gemini\skills\skillator-update\SKILL.md',
+                 '.gemini\config\skills\skillator-update\SKILL.md', '.gemini\antigravity-cli\skills\skillator-update\SKILL.md', "$oc\commands\skillator-update.md") {
     if (-not (& $has $f 'opencode')) { return "skillator-update does not name opencode in $f" }
+    foreach ($guard in 'rev-parse --show-toplevel', 'git -C <checkout-root> pull --ff-only', 'Re-check both installers', 'never merge, reset, stash or force', 'nongit cache') {
+      if (-not (& $has $f $guard)) { return "skillator-update missing $guard in $f" }
+    }
   }
   if (-not (& $has '.codex\skills\pending\SKILL.md' "sh $T\.codex\skills/tickets-zordon/scripts/pending.sh")) { return 'codex skill not substituted' }
   if (-not (& $has '.gemini\config\skills\pending\SKILL.md' "$T\.gemini\config\skills/tickets-zordon/SKILL.md")) { return 'agy skill not substituted with its own dest' }

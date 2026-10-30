@@ -718,8 +718,12 @@ if [ -n "$selftest" ]; then
   grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent|marathon-plan|marathon-run' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   for f in .codex/skills/skillator-update/SKILL.md .cursor/commands/skillator-update.md .pi/agent/prompts/skillator-update.md \
-           .gemini/commands/skillator-update.toml .gemini/skills/skillator-update/SKILL.md $_oc/commands/skillator-update.md; do
+           .gemini/commands/skillator-update.toml .gemini/skills/skillator-update/SKILL.md \
+           .gemini/config/skills/skillator-update/SKILL.md .gemini/antigravity-cli/skills/skillator-update/SKILL.md $_oc/commands/skillator-update.md; do
     grep -q 'opencode' "$T/$f" || { echo "FAIL: skillator-update does not name opencode in $f"; exit 1; }
+    for _guard in 'rev-parse --show-toplevel' 'git -C <checkout-root> pull --ff-only' 'Re-check both installers' 'never merge, reset, stash or force' 'nongit cache'; do
+      grep -qF "$_guard" "$T/$f" || { echo "FAIL: skillator-update missing $_guard in $f"; exit 1; }
+    done
   done
   grep -qF "sh $N/.codex/skills/tickets-zordon/scripts/pending.sh" "$T/.codex/skills/pending/SKILL.md" || { echo "FAIL: codex skill not substituted"; exit 1; }
   grep -qF "$N/.gemini/config/skills/tickets-zordon/SKILL.md" "$T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: agy skill not substituted with its own dest"; exit 1; }

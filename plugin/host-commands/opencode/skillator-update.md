@@ -23,8 +23,16 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
       holds both installers;
    d. ask the user for a skillator clone's path. Headless or no answer → stop and say
       `source: none found`.
-   A source that is a git clone (it has `.git`) → `git -C <src> pull --ff-only` first. It fails
-   (diverged, dirty, no upstream) → report it and stop: never merge, reset, stash or force.
+   Resolve the installer directory: use the selected source itself if it holds both `install.sh`
+   and `install.ps1`, otherwise its `plugin/` child if that holds both; neither → report and stop.
+   Retain this installer directory as `<src>` (also the `.skillator-source` value); do not replace
+   it with the checkout root. Run `git -C <src> rev-parse --show-toplevel` to detect checkout
+   membership, including a plugin subdirectory or linked worktree whose `.git` is a file.
+   Success → use its output as `<checkout-root>` and run `git -C <checkout-root> pull --ff-only`.
+   Pull fails (diverged, dirty, no upstream) → report it and stop before installation:
+   never merge, reset, stash or force. A confirmed nongit cache proceeds without pulling;
+   missing Git or any other lookup error → report and stop, not a cache fallback.
+   Re-check both installers in the retained `<src>` after pulling; either missing → report and stop.
 3. **Re-run the installer** from that source, for codex, cursor, gemini, agy, pi, opencode and the
    Antigravity IDE's ops board: on Windows
    `powershell -NoProfile -ExecutionPolicy Bypass -File "<src>/install.ps1" -Force`, elsewhere
