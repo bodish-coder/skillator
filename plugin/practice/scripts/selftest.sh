@@ -129,7 +129,7 @@ fi
 # directory, so the ps1 runs against a separate copy and the sh output is
 # snapshotted BEFORE it - a diff of two live paths can pass by comparing a file
 # to itself, which is the same false confidence this check exists to catch.
-ps=$(command -v pwsh || command -v powershell || true)
+ps=$(command -v powershell || command -v pwsh || true)
 if [ -n "$ps" ]; then
   mkdir -p "$tmp/pstwin"
   cp "$tmp/design.md" "$tmp/pstwin/design.md"
@@ -145,6 +145,31 @@ if [ -n "$ps" ]; then
     fi
   done
   echo "  twin: taskwork.ps1 matches taskwork.sh on tasks 1, 2, 10"
+
+  # A173: literal expected bytes catch mojibake, a BOM, missing LF and task leaks.
+  unicode="$tmp/café हिन्दी 中文 path"
+  mkdir -p "$unicode/sh" "$unicode/ps"
+  cat > "$tmp/expected-unicode" <<'EOF'
+### Task 3: café
+Requirements: हिन्दी 中文
+Files: café हिन्दी 中文 path/example.md
+````md
+```sh
+TASKS: café हिन्दी 中文 inside a nested fence
+```
+````
+EOF
+  cat "$tmp/expected-unicode" > "$unicode/sh/design.md"
+  printf '### Task 4: adjacent\nMust not appear in task 3.\n' >> "$unicode/sh/design.md"
+  cp "$unicode/sh/design.md" "$unicode/ps/design.md"
+  "$tw" brief "$unicode/sh/design.md" 3 >/dev/null
+  "$ps" -NoProfile -ExecutionPolicy Bypass -File "$here/taskwork.ps1" brief "$unicode/ps/design.md" 3 >/dev/null
+  # Use known paths: Windows PowerShell stdout encoding need not be UTF-8.
+  for port in sh ps; do
+    cmp -s "$tmp/expected-unicode" "$unicode/$port/.taskwork/task-3-brief.md" ||
+      die "A173: $port Unicode brief differs from expected UTF-8 bytes"
+  done
+  echo "  twin: Unicode briefs match expected UTF-8 bytes (no BOM, trailing LF)"
 else
   echo "  twin: no pwsh/powershell on PATH - taskwork.ps1 NOT checked"
 fi

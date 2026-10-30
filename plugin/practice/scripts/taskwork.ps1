@@ -34,7 +34,7 @@ if ($Command -eq 'brief') {
   # long as the one that opened it so nested fences do not re-open terminators.
   $fields = @('GOAL','REQUIREMENTS','APPROACHES','CHOSEN','DESIGN','CONSTRAINTS',
               'TRACE','TASKS','VERIFICATION','PLATFORM','DESIGN_MODEL','BUILD_MODEL')
-  $lines = Get-Content -LiteralPath $DesignFile
+  $lines = Get-Content -LiteralPath $DesignFile -Encoding UTF8
   $block = [System.Collections.Generic.List[string]]::new()
   $in = $false
   $fence = 0
