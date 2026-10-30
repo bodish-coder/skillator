@@ -426,13 +426,17 @@ function Write-AgyExt([string]$skillsDir) {
 # Same as install.sh write_commands.
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
-  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run', 'team'
+  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run', 'team',
+           'code-vader', 'skillator-sync', 'message-uhura',
+           'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon',
+           'pending-sentinel', 'upstream-sync', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run'
+  $opsNames = @('ops', 'skillator-ops')
   switch ($cli) {
     # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
     # prompt an older run wrote under that name goes, nothing else in prompts\
     'codex' {
       # F105: $ops - skill hosts only; pi and Claude Code have their own /ops
-      foreach ($n in $names + 'ops') {
+      foreach ($n in $names + $opsNames) {
         Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
         if (-not $DryRun) { Remove-Item -LiteralPath "$codexHome\prompts\$n.md" -Force -ErrorAction SilentlyContinue }
       }
@@ -446,7 +450,7 @@ function Write-Commands([string]$cli, [string]$dest) {
     # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode
     'opencode' { foreach ($n in $names) { Write-Cmd "$c\opencode\$n.md" $dest "$ocConfig\commands\$n.md" } }
     'antigravity' {
-      foreach ($n in $names + 'ops') {
+      foreach ($n in $names + $opsNames) {
         Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
         if (-not $DryRun) { Remove-Item -LiteralPath "$dest\$n\$owned" -Force -ErrorAction SilentlyContinue }
@@ -670,6 +674,15 @@ function Invoke-SelfTest([string]$T) {
             '.codex\skills\marathon-run\SKILL.md', '.gemini\commands\marathon-run.toml', '.cursor\commands\marathon-run.md', '.pi\agent\prompts\marathon-run.md',
             '.gemini\config\skills\marathon-run\SKILL.md', '.gemini\skills\marathon-run\SKILL.md', '.gemini\antigravity-cli\skills\marathon-run\SKILL.md',
             '.config\opencode\commands\marathon-run.md',
+            '.codex\skills\code-vader\SKILL.md', '.gemini\commands\code-vader.toml', '.cursor\commands\code-vader.md', '.pi\agent\prompts\code-vader.md',
+            '.config\opencode\commands\code-vader.md', '.gemini\config\skills\code-vader\SKILL.md',
+            '.codex\skills\skillator-sync\SKILL.md', '.gemini\commands\skillator-sync.toml', '.cursor\commands\skillator-sync.md', '.pi\agent\prompts\skillator-sync.md',
+            '.config\opencode\commands\skillator-sync.md', '.gemini\config\skills\skillator-sync\SKILL.md',
+            '.codex\skills\message-uhura\SKILL.md', '.gemini\commands\message-uhura.toml', '.cursor\commands\message-uhura.md', '.pi\agent\prompts\message-uhura.md',
+            '.config\opencode\commands\message-uhura.md', '.gemini\config\skills\message-uhura\SKILL.md',
+            '.codex\skills\gauntlet-plan\SKILL.md', '.cursor\commands\gauntlet-plan.md', '.gemini\commands\gauntlet-plan.toml',
+            '.codex\skills\verify-shifu\SKILL.md', '.cursor\commands\verify-shifu.md', '.gemini\commands\verify-shifu.toml',
+            '.codex\skills\skillator-pending\SKILL.md', '.cursor\commands\skillator-pending.md',
             '.codex\skills\ops\SKILL.md', '.gemini\config\skills\ops\SKILL.md', '.gemini\skills\ops\SKILL.md', '.gemini\antigravity-cli\skills\ops\SKILL.md')
   foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
