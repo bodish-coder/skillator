@@ -442,6 +442,56 @@ Deactivating is deleting `.skillator/grayskull.md`.
   `~/.skillator/teams.json`, this user only. Setup and threat model:
   [`plugin/skills/teams-uhura/references/setup.md`](plugin/skills/teams-uhura/references/setup.md).
 
+## Repository validation
+
+From the repository root, run:
+
+```sh
+node plugin/practice/scripts/validate.mjs --report validation-report.json
+```
+
+This fixed registry runs routing, manifest, board, context and grayskull checks,
+their existing selftests, both installer selftests, reliability parity (F138),
+isolated offline Codex checks (F139), validator fixtures and ops loader tests.
+The F140 generator's `--check` runs when present; its absence is explicitly
+skipped while the authoring decision is pending. No live coding host is started;
+offline fixture results do not establish native skill loading or hook trust.
+
+Each check reports `passed`, `failed`, `skipped` or `blocked` with its reason,
+argv, working directory, exit code and retained stdout/stderr paths. F138/F139
+entries are preserved under their parent check's `entries`, including platform
+skips and live-verification gaps. The JSON report includes summary counts for
+top-level checks, completeness and interruption flags. It is written before
+launch and after each check, including on handled Ctrl+C/SIGTERM. A forced OS
+termination can only leave the last checkpoint, which remains incomplete.
+
+Requires Node, Git, `sh`, and Windows PowerShell 5.1 (Windows) or `pwsh` (other
+systems); existing platform-specific limitations remain in the nested reports.
+On Windows the runner locates `sh.exe` on PATH, verifies its companion POSIX
+utilities and LF-preserving `sort`, then puts that utility directory first only
+in child environments. This prevents Windows `System32\sort.exe` from changing
+checker output. An incomplete or incompatible POSIX installation blocks checks
+that need it, with a prerequisite reason; parent/global PATH is not modified.
+Missing required runtimes/prerequisites are blocked. A launched timeout is a
+failure. Exit codes: 1 for failures; 2 for interruption or blocked/incomplete
+coverage without failures; 0 only when required checks pass, with any disclosed
+optional skips. Interruption takes precedence over earlier failures.
+
+Most checks have a three-minute limit; ops and Codex offline checks have ten
+minutes, and installer/parity checks have thirty minutes each. The shell
+installer alone can take nineteen minutes. A progress line appears every thirty
+seconds. Timeout/cancellation kills the owned process group on POSIX or uses
+Windows `taskkill /T /F` with hidden windows; cleanup has a bounded wait and
+unconfirmed cleanup is reported. Retained output is capped at 8 MiB per check;
+a burst between 50 ms polls may temporarily exceed that size before termination
+and truncation. Checks write directly to files, avoiding inherited-pipe hangs.
+Use a new report filename for evidence you want to retain across runs.
+
+For the tiny offline runner fixtures only:
+`node --test plugin/practice/scripts/validate.test.mjs`.
+Existing assertion failures are surfaced as failures, even where a repository
+audit was previously advisory; the runner does not repair the underlying files.
+
 ## Reliability regression parity
 
 From the repository root, run `node plugin/practice/scripts/reliability-parity.mjs --report <report.json>`.
