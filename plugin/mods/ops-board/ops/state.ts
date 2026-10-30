@@ -648,18 +648,18 @@ function lockNote(m: Machine): string {
 // outside is held again; the toast only when the outcome changes. Locks: one note.
 // F87: memory read green while muted - the mute file is emptied and the mute ends here.
 export function onMachine(s: State, kv: string, now: number): Step {
-  let m = parseMachine(kv, now)
+  const m = parseMachine(kv, now)
   const effects: Effect[] = []
-  let unmuted = false
   if (unmuteDue(m)) {
-    const { mute: _, ...rest } = m
-    m = rest
-    unmuted = true
-    effects.push({ kind: 'mute', text: '' })
+    effects.push({ kind: 'mute', text: '', then: r => x => {
+      if (r.code !== 0) return toast(x, `watchdog unmute failed: ${r.err || `exit ${r.code}`}`)
+      if (!x.machine || x.machine.mute !== m.mute) return x
+      const { mute: _, ...machine } = x.machine
+      return { ...x, machine, watch: classify(machine), toast: 'watchdog unmuted - memory reads green; memory red holds again' }
+    } })
   }
   const w = classify(m)
   let state: State = { ...s, machine: m, watch: w }
-  if (unmuted) state.toast = 'watchdog unmuted - memory reads green; memory red holds again'
   if (w.level !== 'red') state.holdOutcome = null
   else if (m.hold === null) {
     effects.push(run('relay-hold', [w.reasons.join('; ')], r => x => {

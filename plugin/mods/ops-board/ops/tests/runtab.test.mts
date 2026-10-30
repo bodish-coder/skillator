@@ -62,6 +62,19 @@ const engineOf = (f: Fake) => makeEngine({ host: f.host, email: null, once: fals
 const text = (s: State) => frame({ ...s, now: s.runJob?.ended ?? s.now }, { color: false, ascii: false, plain: true }).join('\n')
 const keys = async (e: ReturnType<typeof engineOf>, ...ks: string[]) => { for (const k of ks) await e.key(k.length === 1 ? { name: k, sequence: k } : { name: k }) }
 
+test('F137: synchronous spawn failure ends the job visibly with its command', async () => {
+  const f = fake({ [RUN_JSON]: file(FOUND) })
+  f.host.spawn = () => { throw new Error('fixture spawn denied') }
+  const e = engineOf(f)
+  try {
+    await keys(e, '6', 'return', 'return')
+    assert.notEqual(e.state.runJob?.ended, null)
+    assert.notEqual(e.state.runJob?.code, 0)
+    assert.match(text(e.state), /could not run: fixture spawn denied/)
+    assert.match(text(e.state), /ran: \/usr\/bin\/npm run build/)
+  } finally { e.stop() }
+})
+
 test('the Run tab: the first open scans and saves .skillator/run.json through run-entries; the next open reads it', async () => {
   const f = fake({})
   const e = engineOf(f)

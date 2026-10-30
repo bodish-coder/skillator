@@ -13,6 +13,9 @@ import { inboxDirOfCommonGitDir } from '../hooks/lib/inbox'
 import { NO_GIT } from '../hooks/lib/explorer'
 
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
+// Diagnostics are display text, not terminal instructions or unbounded process output.
+export const errorText = (error: unknown): string => String((error as Error)?.message ?? error)
+  .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 1024)
 export type Host = {
   win: boolean
   skillsDir: string | null
@@ -94,7 +97,7 @@ export function spawnArgv(argv: string[], cwd: string, timeoutMs: number, stdin?
   return new Promise(res => {
     let out = '', err = '', done = false
     let timer: ReturnType<typeof setTimeout> | undefined
-    const finish = (r: Omit<RunResult, 'argv'>) => { if (done) return; done = true; clearTimeout(timer); res({ ...r, argv }) }
+    const finish = (r: Omit<RunResult, 'argv'>) => { if (done) return; done = true; clearTimeout(timer); res({ ...r, err: r.err.slice(-4096), argv }) }
     let child: ReturnType<typeof spawn>
     try { child = spawn(argv[0]!, argv.slice(1), { cwd, windowsHide: true, ...(env ? { env } : {}) }) }
     catch (e) { finish({ code: -1, out: '', err: String((e as Error)?.message ?? e) }); return }
@@ -103,7 +106,7 @@ export function spawnArgv(argv: string[], cwd: string, timeoutMs: number, stdin?
       finish({ code: -1, out, err: 'timed out after ' + timeoutMs / 1000 + ' s' })
     }, timeoutMs)
     child.stdout?.setEncoding('utf8').on('data', (d: string) => { out += d })
-    child.stderr?.setEncoding('utf8').on('data', (d: string) => { err += d })
+    child.stderr?.setEncoding('utf8').on('data', (d: string) => { err = (err + d).slice(-4096) })
     child.on('error', e => finish({ code: -1, out, err: err + String(e?.message ?? e) }))
     child.on('close', code => finish({ code: code ?? -1, out, err }))
     child.stdin?.on('error', () => { /* the child closed it early */ })

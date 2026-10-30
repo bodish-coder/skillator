@@ -7,6 +7,7 @@ import type { Seg } from '../hooks/lib/bandlines'
 import type { Bins, Job, RunFile, RunForm } from '../hooks/lib/runentries'
 import { argvText, entryNote, jobStatus, keepTail, outLines, planEntry, RUN_FILE } from '../hooks/lib/runentries'
 import type { Effect, Key, State, Step, Then } from './state'
+import { errorText } from './nodehost'
 
 export type RunState = { runFile: RunFile | null; runSel: string | null; runForm: RunForm | null; runJob: Job | null; runBins: Bins | null; runRoot: string }
 export const RUN_INITIAL: RunState = { runFile: null, runSel: null, runForm: null, runJob: null, runBins: null, runRoot: '' }
@@ -63,7 +64,7 @@ function saveName(s: State): Step {
 // The job's output and its end, as the engine sees them.
 export const onJobOut = (s: State, text: string): State => (s.runJob ? { ...s, runJob: { ...s.runJob, out: keepTail(s.runJob.out, text) } } : s)
 export const onJobEnd = (s: State, code: number | null, error: string | null, now: number): State =>
-  (s.runJob && s.runJob.ended === null ? { ...s, runJob: { ...s.runJob, ended: now, code, error: s.runJob.stopped ? null : error } } : s)
+  (s.runJob && s.runJob.ended === null ? { ...s, runJob: { ...s.runJob, ended: now, code: error ? code || -1 : code, error: s.runJob.stopped || !error ? null : errorText(error) } } : s)
 
 function formKey(s: State, k: Key): Step {
   const f = s.runForm!
