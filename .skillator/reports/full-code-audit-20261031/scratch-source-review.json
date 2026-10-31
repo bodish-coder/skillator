@@ -1,0 +1,16 @@
+[
+  {
+    "file": "C:\\tools\\Projects\\skillator2\\scratch\\test-f136.ps1",
+    "lines": 74,
+    "sha256": "8a02d33a3190752fa342123a8d20daf2d865fb4eae574ce30d7917636da2b83c",
+    "role": "unshipped local test helper",
+    "executed": false
+  },
+  {
+    "file": "C:\\tools\\Projects\\skillator2\\scratch\\update_handoff.py",
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "role": "empty local placeholder",
+    "executed": false
+  }
+]

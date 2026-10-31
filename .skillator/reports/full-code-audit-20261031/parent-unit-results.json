@@ -1,0 +1,33 @@
+[
+  {
+    "id": "parity-driver-unit",
+    "command": [
+      "node",
+      "--test",
+      "plugin/practice/scripts/reliability-parity.test.mjs"
+    ],
+    "exit": 0,
+    "log": "C:\\tools\\Projects\\skillator2\\.skillator\\reports\\full-code-audit-20261031\\parity-driver-unit.log"
+  },
+  {
+    "id": "validator-unit",
+    "command": [
+      "node",
+      "--test",
+      "plugin/practice/scripts/validate.test.mjs"
+    ],
+    "exit": 0,
+    "log": "C:\\tools\\Projects\\skillator2\\.skillator\\reports\\full-code-audit-20261031\\validator-unit.log"
+  },
+  {
+    "id": "codex-selected-unit",
+    "command": [
+      "node",
+      "--test",
+      "--test-name-pattern=child environment|quota fixture|live prerequisites|native stdio|repository-contained|native protocol capability",
+      "plugin/practice/scripts/codex-isolation.test.mjs"
+    ],
+    "exit": 0,
+    "log": "C:\\tools\\Projects\\skillator2\\.skillator\\reports\\full-code-audit-20261031\\codex-selected-unit.log"
+  }
+]

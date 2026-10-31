@@ -1,3 +1,323 @@
+# CASEFILE - 2026-10-31: complete code and ticket audit
+
+Source snapshot: `8b92f76657a67c2e580e27098a02585e868bc3fa` (Skillator 4.22.0). Run: RUN-0028. Driver: @sher.
+
+**37 independently accepted findings**: 18 high and 19 medium. No critical finding is claimed. One candidate is separated as requested Messages completion work, two duplicate parent records collapse, and zero candidates remain pending. Previously rejected process-cleanup/cwd hypotheses remain excluded.
+
+**Coverage:** all 593 current source/test/configuration/instruction targets and all 377 pre-audit ticket rows have explicit review records. Generated host projections were checked against the canonical generator;79 current scenario specifications were read as tests. Historical execution logs, frozen proof copies and generated reports are evidence, not shipped implementation. Source/caller/test examination is not a fresh live execution of every contract.
+
+**Source assessment of377 rows:** 287 present,52 partial,7 pending/unimplemented,11 superseded,6 historical-evidence records,14 cancelled. Present means the implementation path exists in reviewed source; it does not mean all host/runtime acceptance passed. Partial includes unmet clauses or acceptance boundaries; it is not a count of independent bugs.
+
+**No production fixes were made.** 47 pending tickets were added: B21; F151-F156; F90a/F98a; A178-A215. Existing statuses/IDs were preserved. Parent/subpart placement is retained. Source snapshot excludes the subsequently added proposal/fix rows.
+
+## Evidence and validation
+
+- Full per-ticket trace: `.skillator/reports/full-code-audit-20261031/ticket-evidence.csv` and `.json`; each row has acceptance, actual source/caller/test refs and remaining uncertainty.
+- Published final evidence includes the ticket CSV/JSON, file-coverage ledgers, source scope, verification decisions and selected probe results. Raw execution logs, probe scripts, original snapshots and intermediate investigator ledgers remain local in the audit directory; references to those files identify retained local evidence, not published attachments.
+- File coverage and snapshot hashes: `expanded-source-scope.json`, domain `*-file-coverage.json`, `scenario-file-coverage.json`, and final `coverage-reconciliation.json` under the same directory.
+- A syntax-only credential-pattern scan covered all 1,835 tracked text files, including historical logs: 20 candidate lines traced to synthetic fixture literals. No credential liveness test was attempted; this does not prove every possible secret format is absent.
+- Untracked scratch/test-f136.ps1 and empty scratch/update_handoff.py were additionally inspected as unshipped local helpers, not executed or used as passing evidence. Generated reports, handoffs and frozen proof copies were retained.
+- Three Astra/high domain investigators, a fresh Astra/high helper investigator, parent source review and a fresh Astra/high adversarial verifier supplied the evidence; all investigator artifacts are under that audit directory.
+- Existing safe offline Node checks: parity driver 11/11, validator 9/9, selected Codex protocol 6/6; standalone Messages 12/12. Messages tests intentionally preserve the old auto-open contract.
+- Helper selftests: artifact/archive/checker/PowerShell allocator/PowerShell freshness passed; parent reran shell allocator/freshness with appropriate temporary-fixture access and both passed.
+- Routing, grayskull-template sync and context commands passed. The context command has a separately reproduced split-layout blind spot (A194), so its green result does not certify root instruction budgets. Generator --check matched 137 outputs.
+- The isolated Git-path probe inherited a denied global-ignore lookup warning in both its passing control and failing quoted-path case. This fixture-environment noise is retained in the evidence; the quoted-path case separately exits 128 with a pathspec error. Future probes should isolate global excludes as well as repository configuration.
+- Isolated negative probes and exact-function checks establish quoted Git path failure, decoder corruption, stalled disarm teardown, wrong-set wizard settling, unseen-message read markers, deploy rendering/contrast failures, alias projection, archival grouping and false-green check paths. A reproduced defect is not a passing feature test.
+- No live auth, tunnel arming, Teams message/reply, production deployment/DB backup/cert issuance, real AI Git workbench, native trusted Codex loading, new native Claude-pane acceptance, or race stress run was performed. Relay concurrency findings are source-proven conditional interleavings, not live stress claims.
+- Prior RUN-0027 release evidence remains retained separately: 18 composed top-level passes with two nested platform skips; it is not a new full audit-suite run.
+
+## Requested completion work
+
+- **B21 / F98a:** Messages must remain on inbox/empty state until explicit Setup; expose Sign in and Run first-time setup separately from read-only Check setup. Existing auto-open/check-only code is deliberate, while the user now explicitly requests a different interaction and F98 still lacks its full interactive launch. This is not counted as an accidental regression.
+- **F151-F156 / F133:** implement actual active-host AI review/drafting, incoming/outgoing analysis and conflict handoff; then bring confirmed Git actions, branch switching and streamed outcomes to the requested supported surfaces. Standalone read-only/paste-only policies are acknowledged as prior scope, not silently called defects.
+- **F90a:** verify/update only the selected active Codex profile when authorized. Its installed state.ts differs from the release checkout; a refresh of another profile does not establish this profile's parity. Exact installed version was not inferred from timestamps.
+- **A180 / A181:** preserve historical aliases in board readers and separate inbox-reading from handoff-sending command semantics; these already logged gaps remain pending alongside the new findings.
+
+## Codex-specific review
+
+- **Installation and discovery (F90):** native skill projection, command frontmatter and installer ownership paths are present in source. **F90a** records the selected active profile's installed-file mismatch and the remaining install/discovery/command/hook acceptance. Another profile's refresh does not establish parity.
+- **Quota selection and cache handling (A169/A171):** explicit host/profile/session selection and separate cache/flag readers are present in both ports. Source/caller/test traces are recorded per ticket; this audit did not rerun every native profile or certify live quota freshness.
+- **Thread switching (A170):** the Codex app adapter now guards busy switches and keeps thread/turn identifiers aligned. This audit found no additional proven thread-switch defect; selected offline protocol tests passed, with no live Codex turn executed.
+- **Isolation tooling (F139):** temporary-profile installation/loading and native-probe helpers exist. The six selected Codex tests exercised offline protocol behavior; they do not establish trusted native skill discovery or hook invocation in this session.
+- **Host boundaries:** generated wrappers share canonical instructions, while installation and hook behavior remain host-specific. Claude hook behavior is not evidence that Codex invokes an equivalent hook. A149 retains unproven live routing acceptance; no dependency on another host's successful run is used as a Codex pass.
+
+## High findings
+
+### A182: Tear down remote sessions before channel notifications
+
+**Failure/impact:** Session sets disarmed before awaiting remote approval-button cleanup and notification, and only later invokes local teardown. Independent probes separately stall send and editButtons; teardown never starts. Timer skips disarmed sessions. Production Telegram timeout bounds one request to35s by default, so prove delayed safety teardown on channel outage, not necessarily permanent production hang.
+**Source:** plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:284; plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:318; plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:971; plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:1048; plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:134.
+**Recommendation:** Start guaranteed local child/route teardown before awaiting remote notification or approval-button cleanup; bound best-effort remote work separately. Assert teardown occurs with send/editButtons permanently pending.
+**Evidence and limits:** score 95/100. Never-resolving in-memory channels,10ms observation plus static await dependency; no spawned process, real kill or network outage test. Proof: verification-pure-probes.json; automation-cerebro-probe-results.json.
+
+### A179: cmdMessage writes the sender-local inbox then sends only message text through say; recipient metadata is not transported. A failed channel post still returns success with a delivered-to-recipient-inbox claim. A recipient on another machine has no delivered inbox record.
+
+**Failure/impact:** cmdMessage appends only sender-local Git inbox and optionally sends plain text; recipient envelope never enters transport. Channel failure still returns0/delivered. Distinct from OPS-07 receiving/rendering metadata loss.
+**Source:** plugin/skills/teams-uhura/scripts/team.mjs:649; plugin/skills/teams-uhura/scripts/team.mjs:661; plugin/skills/teams-uhura/scripts/team.mjs:664; plugin/skills/teams-uhura/scripts/team.mjs:668.
+**Recommendation:** Transmit and validate sender/recipient envelopes through the inbound workflow, and report local queue versus confirmed transport separately.
+**Evidence and limits:** score 100/100. Complete local write/say/return path; no live channel or remote recipient used. Proof: automation-ticket-evidence.json.
+
+### A191: Make Code-vader selftest failures fail the process
+
+**Failure/impact:** Assertions mutate script-scoped counters; final status reads zero-valued function locals. An intentionally false extracted assertion reports FAIL and scriptFailures1 while local failures0 and exit0. Every assertion can fail without failing this selftest.
+**Source:** plugin/skills/code-vader/scripts/code-vader.ps1:297; plugin/skills/code-vader/scripts/code-vader.ps1:299; plugin/skills/code-vader/scripts/code-vader.ps1:409.
+**Recommendation:** Use one consistent counter scope and add a harness regression that deliberately fails one assertion and requires nonzero exit.
+**Evidence and limits:** score 100/100. Exact counter/function reproduction, not full selftest execution. Proof: automation-boundary-probes.py; automation-report.md.
+
+### A211: Fix shell app-assignment ticket normalization
+
+**Failure/impact:** norm_id writes global ID but emits no stdout. Command substitution runs it in a subshell and assigns empty output to ID; normal assign-app cannot match its requested ticket. Other writers call norm_id directly.
+**Source:** plugin/skills/tickets-zordon/scripts/ticket-meta.sh:122; plugin/skills/tickets-zordon/scripts/ticket-meta.sh:683; plugin/skills/tickets-zordon/scripts/ticket-meta.sh:696.
+**Recommendation:** Call norm_id directly as other shell writers do, and test shell assign-app through the real CLI.
+**Evidence and limits:** score 100/100. Literal shell dataflow; no production board mutation. Proof: automation-report.md.
+
+### A195: Stage exact Git paths and surface failures
+
+**Failure/impact:** Actual porcelain retains Git quotes around a space-containing filename; parseStatus passes them through and stageArgs sends those quotes as literal argv bytes. Isolated real Git rejects the resulting pathspec. Both callers use the same parser.
+**Source:** plugin/mods/ops-board/hooks/lib/explorer.ts:97; plugin/mods/ops-board/hooks/lib/explorer.ts:57; plugin/mods/ops-board/hooks/explorertab.tsx:96; plugin/mods/ops-board/ops/explorer.ts:66.
+**Recommendation:** Use NUL-delimited porcelain and retain exact raw paths separately from display-safe text; handle rename records without string splitting and display failed staging results.
+**Evidence and limits:** score 100/100. Real isolated Git reproduction reviewed; no production index mutation. Proof: parent-explorer-path-probe.json.
+
+### A197: Create real follow-up runs for Push Pending
+
+**Failure/impact:** Push Pending success text claims stages moved into a follow-up run; the only effect queues the existing ID. Backend qr_add_ only resolves and appends that same run. No follow-up or stage migration can result.
+**Source:** plugin/mods/ops-board/ops/state.ts:811; plugin/mods/ops-board/hooks/lib/calls.ts:61; plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:944.
+**Recommendation:** Implement explicit follow-up creation/migration and mode persistence through a backend contract; derive success text from returned run/stage results and test actual destination state.
+**Evidence and limits:** score 100/100. Literal end-to-end call path; no real run/queue mutation. Proof: ops-findings.json.
+
+### A178: Real pending handoff recipient is discarded before band rendering
+
+**Failure/impact:** Producer cleanRecord preserves to, but Ops record reconstructs only ts/from/email/text/id. Shared pendingHandoffOf therefore cannot see a real recipient; native band supplies no recipient either. This is distinct from AUTO-05 outbound delivery.
+**Source:** plugin/mods/ops-board/hooks/lib/inbox.ts:39; plugin/mods/ops-board/ops/draw.ts:339; plugin/mods/ops-board/hooks/band.tsx:26; plugin/skills/teams-uhura/scripts/inbox.mjs:82.
+**Recommendation:** Define validated recipient/pending handoff schema end-to-end, preserve it through producer/parser/state, pass it into both band/status callers and test actual decoded JSONL plus marker state.
+**Evidence and limits:** score 100/100. Actual production parse reproduction recorded by investigator; static producer-to-renderer boundary independently read. Proof: ops-report.md.
+
+### A187: Preserve nginx variables in deploy rendering
+
+**Failure/impact:** Unrestricted envsubst consumes nginx runtime variables, which are not deployment placeholders. Exact rendered template has empty set/if/Host expressions. This is deterministic scaffold breakage independent of real deployment values.
+**Source:** plugin/skills/deploy-niyoj/references/templates.md:153; plugin/skills/deploy-niyoj/references/templates.md:175; plugin/skills/deploy-niyoj/references/templates.md:189.
+**Recommendation:** Render only named deployment placeholders; preserve nginx variables with an explicit substitution allowlist and validate rendered nginx fixture.
+**Evidence and limits:** score 100/100. Actual envsubst output reviewed; nginx service/config was not changed or executed. Proof: integration-nginx-probe.json.
+
+### A210: Validate wizard answer identity before settling
+
+**Failure/impact:** nextWizardSet validates schema only and matches question/option IDs across answer sets. Production CLI passes exported JSON directly; fresh RUN999 unreviewed draft settles RUN1 Q1. Scope impact to generated wizard settled state, not automatic relay application (answersToCommands has separate finalization checks).
+**Source:** plugin/skills/holo-r2d2/scripts/wizard.mjs:118; plugin/skills/holo-r2d2/scripts/wizard.mjs:130; plugin/skills/holo-r2d2/scripts/wizard.mjs:193; plugin/skills/holo-r2d2/scripts/holo.mjs:1083.
+**Recommendation:** Validate answer set identity, round, finalization, owner approval and question/options against the active set before changing settled state.
+**Evidence and limits:** score 95/100. Pure imported production function; no relay answer mutation. Proof: verification-pure-probes.json.
+
+### A185: Keep dispatch timestamps separate from ticket IDs
+
+**Failure/impact:** Permitted benign claim-refusal path reuses $t for ticket iteration after timestamp assignment. PowerShell foreach variables survive in function scope; headers receive final ticket ID rather than date. Only this branch is claimed, not successful claims.
+**Source:** plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1176; plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1190; plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1205; plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1210.
+**Recommendation:** Use a distinct loop variable and immutable dispatch timestamp; exercise successful dispatch with refused claim and no foreign owner, then read status/heartbeat.
+**Evidence and limits:** score 95/100. Independent complete branch source review; no real dispatch. Proof: parent-relay-verification.json.
+
+### F151, F152, F153, F154, F155, F156: AI Git workbench does not call AI or resolve conflicts
+
+**Failure/impact:** Native UI explicitly promises AI change digest and autonomous conflict resolution, but drafting/digest/audit are deterministic heuristics and actionGo only runs Git and asks for manual conflict resolution. Accept native promised-AI gap; do not treat standalone read-only action policy as a defect.
+**Source:** plugin/mods/ops-board/hooks/lib/explorer.ts:113; plugin/mods/ops-board/hooks/lib/explorer.ts:138; plugin/mods/ops-board/hooks/lib/explorer.ts:153; plugin/mods/ops-board/hooks/explorertab.tsx:201; plugin/mods/ops-board/hooks/explorertab.tsx:252; plugin/mods/ops-board/hooks/explorertab.tsx:255.
+**Recommendation:** Connect actual supported AI CLI operations to explicit workbench plans, implement merge-smith conflict flow and streamed process events, and provide the promised actions on supported surfaces. Until then label heuristics truthfully.
+**Evidence and limits:** score 95/100. Direct source/caller verification; no live host execution. Proof: ops-ticket-evidence.json.
+
+### A196: Connect Start Run to the Claude session
+
+**Failure/impact:** F113 explicitly requires confirmed prompt submission on the session surface. Native RunsTab only renders existing-run Engage/Diagnose; no start form is in its state/routing. Standalone paste-only behavior is intentional and is not itself a defect.
+**Source:** plugin/mods/ops-board/hooks/runstab.tsx:385; plugin/mods/ops-board/types/index.d.ts:149; plugin/mods/ops-board/ops/state.ts:839; plugin/mods/ops-board/ops/tests/state.test.mts:1160.
+**Recommendation:** Implement native Start Run runner/mode/ticket form and guarded prompt submission using the canonical command builder; retain the terminal paste-only path as required.
+**Evidence and limits:** score 95/100. Direct source/caller verification; no live host execution. Proof: ops-ticket-evidence.json.
+
+### A186: Stop deployment when a required backup fails
+
+**Failure/impact:** Backup failure is explicitly converted to warn, after which build/up --build proceeds. This contradicts the required pre-deploy snapshot guarantee for an existing database. First install without a database may legitimately need a separate branch.
+**Source:** plugin/skills/deploy-niyoj/references/templates.md:120; plugin/skills/deploy-niyoj/references/templates.md:135; plugin/skills/deploy-niyoj/SKILL.md:72; plugin/skills/deploy-niyoj/SKILL.md:139.
+**Recommendation:** Distinguish first install with no database from an existing database backup failure; fail closed before rebuild when the required backup fails, and test the exact shell template with stub commands.
+**Evidence and limits:** score 95/100. Source-proven failure path; no DB loss, migration or remote deployment reproduced. Proof: integration-ticket-evidence.json.
+
+### A190: Keep installer selftests away from real Muse
+
+**Failure/impact:** An explicitly nonexistent override does not inhibit PATH lookup. Selftest exports that nonexistent override, yet the exact extracted function invoked the report-owned Muse stub for list/install. Real profile damage is conditional on inherited Muse environment; it was not executed.
+**Source:** plugin/install.sh:380; plugin/install.sh:562.
+**Recommendation:** If SKILLATOR_MUSE is set, honor it exclusively and return when unavailable; stub a PATH muse and assert no calls when the override is nonexistent.
+**Evidence and limits:** score 95/100. Extracted-function stub reproduction; never run full installer selftest or real Muse. Proof: integration-installer-probes.json.
+
+### A192: Fail reconcile when Git diff enumeration fails
+
+**Failure/impact:** git diff is the left pipeline command; the right group returns success when it reads no rows. Invalid refs therefore yield fatal Git diagnostics plus 0 paths/0 failed and status0, defeating a completeness gate.
+**Source:** plugin/skills/merge-smith/references/reconcile.sh:15; plugin/skills/merge-smith/references/reconcile.sh:28.
+**Recommendation:** Resolve both refs first, capture and check git diff enumeration status before the loop, propagate all enumeration failures; add missing-ref fixture.
+**Evidence and limits:** score 95/100. Read-only invalid-ref reproduction recorded; not a merge operation. Proof: integration-report.md.
+
+### A184: Update heartbeat state under the writer lock
+
+**Failure/impact:** Heartbeat reads state before writer lock; another writer can land x before heartbeat later writes stale~. Shell set_row only replaces landed when nonempty, so the common blank old value preserves new SHA: reject the stronger erased-SHA claim. In-flight/terminal state becomes inconsistent. PowerShell same read-before-DoStage ordering.
+**Source:** plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:654; plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:609; plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:630; plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:633; plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:674.
+**Recommendation:** Read and refresh heartbeat under the same mutation lock; update only heartbeat/owner fields without overwriting current state or landed SHA. Add deterministic interleaving fixture.
+**Evidence and limits:** score 90/100. Source-proven conditional interleaving; no live/stress scheduling reproduction. Completion SHA loss is not established. Proof: parent-relay-verification.json.
+
+### A183: Keep the winner's lease on duplicate dispatch
+
+**Failure/impact:** Both same-stage dispatches may read pending and take/replace stage lease before run lock. Winner marks in-flight; loser refuses and releases all rows keyed only by run/stage, deleting winner protection. Actual state recheck does not undo the lease cleanup bug. Both ports independently checked.
+**Source:** plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:1417; plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:818; plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:1436; plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:112; plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:835; plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1115; plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1215; plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1267.
+**Recommendation:** Track unique dispatch-attempt ownership and conditional cleanup, or atomically coordinate lease commit with run transition; race same stage with declared files and assert winner lease remains until landing.
+**Evidence and limits:** score 90/100. Source-proven conditional interleaving, no live/stress race. Existing no-files concurrency test does not exercise lease ownership. Proof: parent-relay-verification.json.
+
+### A214: Reject unknown PowerShell setup arguments
+
+**Failure/impact:** PowerShell only checks whether args contains --check and otherwise invokes full setup, with no unknown-argument rejection. Exact extracted mode expression makes --chek choose full walk. Depending on machine state that walk installs devtunnel, opens login and creates tunnel/port before its later Arm confirmation. Shell rejects unknown option with2. Narrow to fail-open mode selection, not unconfirmed live mutation.
+**Source:** plugin/skills/teams-uhura/scripts/setup.ps1:11; plugin/skills/teams-uhura/scripts/setup.ps1:77; plugin/skills/teams-uhura/scripts/setup.ps1:90; plugin/skills/teams-uhura/scripts/setup.ps1:100; plugin/skills/teams-uhura/scripts/setup.ps1:143; plugin/skills/teams-uhura/scripts/setup.ps1:250; plugin/skills/teams-uhura/scripts/setup.sh:226.
+**Recommendation:** Reject unknown arguments before any setup action.
+**Evidence and limits:** score 90/100. Only exact argument expression executed; actual setup/install/login entrypoint never run. Proof: verification-setup-probe.json.
+
+
+## Medium findings
+
+### A213: Preserve UTF-8 across remote stream chunks
+
+**Failure/impact:** lineSplitter decodes Buffer chunks independently, corrupting a split multibyte UTF8 codepoint. Independent production import yields three replacement characters for euro. ProcAdapter stdout uses this exact decoder, so transport fragmentation changes actual JSON string contents.
+**Source:** plugin/skills/remote-cerebro/hooks/cerebro-core.mjs:691; plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:339.
+**Recommendation:** Keep a streaming UTF-8 StringDecoder/TextDecoder per connection; test every byte split through non-ASCII JSONL, including split delimiter and flush.
+**Evidence and limits:** score 100/100. Pure framing probe, no native host; requires split within multibyte sequence, normal transport-permitted condition. Proof: verification-pure-probes.json; automation-cerebro-probe-results.json.
+
+### A204: Preserve lowercase sub-ticket IDs in the viewer
+
+**Failure/impact:** Uppercasing a whole canonical B2a ID yields B2A, then the lowercase-suffix regex fails. Grouping goes to Unrecognised IDs and copied identity is wrong. Canonical subparts are valid inputs, not malformed tickets.
+**Source:** plugin/skills/tickets-zordon/board/index.html:561; plugin/skills/tickets-zordon/board/index.html:577; plugin/skills/tickets-zordon/board/index.html:688; plugin/skills/tickets-zordon/SKILL.md:243.
+**Recommendation:** Preserve the canonical lowercase sub-ticket suffix; normalize only the alphabetic prefix if normalization is required. Test parse, both grouping modes, and copied IDs with B2a.
+**Evidence and limits:** score 100/100. Investigator executed exact extracted parser; browser rendering not required for this data defect. Proof: helpers-findings.json.
+
+### A198: Finish Help document loading and Copy actions
+
+**Failure/impact:** Copy shortcut returns a success toast with effects:[]; reducer has no clipboard mutation. Its test only asserts the toast. The guide is a compiled catalog rather than installed SKILL.md content, additionally missing F127 source-viewer behavior.
+**Source:** plugin/mods/ops-board/ops/state.ts:1908; plugin/mods/ops-board/ops/state.ts:1156; plugin/mods/ops-board/ops/tests/state.test.mts:973.
+**Recommendation:** Add an explicit clipboard host effect with honest unsupported/failure state; discover installed skills and render selected SKILL.md safely, keeping synopsis separate from source content.
+**Evidence and limits:** score 100/100. Direct source/caller verification; no live host execution. Proof: ops-ticket-evidence.json.
+
+### A194: Audit repo instructions and plugin context together
+
+**Failure/impact:** Default root derives plugin from plugin/practice/scripts, omitting root instructions; explicit repo root then misses plugin/skills descriptions. Synthetic oversized root CLAUDE passes default audit and fails explicit-root audit, confirming split-root coverage loss.
+**Source:** plugin/practice/scripts/context-audit.sh:17; plugin/practice/scripts/context-audit.sh:32.
+**Recommendation:** Resolve repository instruction root separately from plugin/installed payload root; test split clone and installed layouts with oversize root include and oversize skill description.
+**Evidence and limits:** score 100/100. Synthetic split layout, not a claim that current instruction length itself violates a limit. Proof: parent-context-layout-probe.json.
+
+### A207: Compare the entire image at nondivisible widths
+
+**Failure/impact:** Floor cell width times cols leaves a rightmost remainder unvisited. Fresh101px fixture differing at98..100 gives layout100 and no regions. Pixel score itself counts all pixels; narrow claim to layout score and region-grid omissions.
+**Source:** plugin/skills/clone-odo/scripts/imgdiff.py:344; plugin/skills/clone-odo/scripts/imgdiff.py:360; plugin/skills/clone-odo/scripts/imgdiff.py:367.
+**Recommendation:** Derive every grid boundary from proportional column positions or cover the remainder in the last column; test nondivisible widths.
+**Evidence and limits:** score 95/100. Fresh in-memory image arrays; no image editing tool or visual screenshot claim. Proof: automation-probes.py; verification-extra-probes.json.
+
+### A208: Fail brand sweeps for uninspected target roots
+
+**Failure/impact:** Nonexistent root produces empty os.walk, render says Clean, and CLI returns0. Fresh production main invocation reproduced it. Missing targets must not certify a preflight scan.
+**Source:** plugin/skills/clone-odo/scripts/sweep.py:81; plugin/skills/clone-odo/scripts/sweep.py:128; plugin/skills/clone-odo/scripts/sweep.py:171.
+**Recommendation:** Validate root exists/is directory; report walk permission errors as incomplete and nonzero.
+**Evidence and limits:** score 95/100. Fresh absent report-local target; no files written by sweep. Proof: automation-probes.py; verification-extra-probes.json.
+
+### A209: Mark only displayed inbox messages as read
+
+**Failure/impact:** frameMessages takes the oldest200 while cmdInbox marks the last of all records. Independent201-record frame verifies body200 absent but marker m200 selected; that unread message becomes consumed without display.
+**Source:** plugin/skills/teams-uhura/scripts/team.mjs:557; plugin/skills/teams-uhura/scripts/team.mjs:558; plugin/skills/teams-uhura/scripts/inbox.mjs:163.
+**Recommendation:** Advance the marker only to the last displayed record; add a 201-message regression.
+**Evidence and limits:** score 95/100. Pure production formatter plus literal caller marker selection; no real inbox mutation. Proof: verification-pure-probes.json.
+
+### A212: Keep app tags in ticket-meta selftest expectations
+
+**Failure/impact:** Both selftests save before-app-assignment bytes, perform successful app assignment, then compare against old bytes and expect later rows without app metadata. PowerShell functioning assign-app therefore necessarily fails these assertions; shell runtime bug currently masks part of the stale-fixture problem.
+**Source:** plugin/skills/tickets-zordon/scripts/ticket-meta.ps1:1527; plugin/skills/tickets-zordon/scripts/ticket-meta.ps1:1540; plugin/skills/tickets-zordon/scripts/ticket-meta.ps1:1546; plugin/skills/tickets-zordon/scripts/ticket-meta.sh:1279; plugin/skills/tickets-zordon/scripts/ticket-meta.sh:1291; plugin/skills/tickets-zordon/scripts/ticket-meta.sh:1297.
+**Recommendation:** Refresh the expected snapshot after assign-app and retain app tags in all later expected rows, preferably isolate the F136 fixture.
+**Evidence and limits:** score 95/100. Source-sequenced expected-value contradiction; no broad selftest rerun. Proof: automation-report.md.
+
+### A199: Show personalized ticket groups in Claude
+
+**Failure/impact:** Native Tickets receives buildModel status-only groups; personalized helper functions are not called by native rendering. Shared implementation does not satisfy the native pane contract.
+**Source:** plugin/mods/ops-board/hooks/pane.tsx:68; plugin/mods/ops-board/hooks/register.tsx:593; plugin/mods/ops-board/hooks/lib/ticketsmodel.ts:145; plugin/mods/ops-board/hooks/lib/ticketsmodel.ts:10.
+**Recommendation:** Reuse personalized group model in native pane and connect active-member selection, collapse state and reassignment refresh; test through native routing rather than only helper state.
+**Evidence and limits:** score 95/100. Direct source/caller verification; no live host execution. Proof: ops-ticket-evidence.json.
+
+### A200: Wire tester assignment in the Claude pane
+
+**Failure/impact:** Native form offers implementation and decision only; confirm maps every non-decision draft to meta-assign. Tester schema/backend support cannot make tester assignment available in this native UI.
+**Source:** plugin/mods/ops-board/hooks/assign.tsx:117; plugin/mods/ops-board/hooks/assign.tsx:314; plugin/mods/ops-board/types/index.d.ts:45.
+**Recommendation:** Add tester selection and explicit meta-assign-tester routing in native form, preserve owner/decision/state and verify unprivileged tester change through real backend fixture.
+**Evidence and limits:** score 95/100. Direct source/caller verification; no live host execution. Proof: ops-ticket-evidence.json.
+
+### A203: Compose backgrounds in accessibility contrast checks
+
+**Failure/impact:** bgOf skips translucent background layers rather than compositing them. For gray100 text over half-black on white it computes5.92 instead of1.488, a pass/fail reversal against its own required alpha-resolution procedure.
+**Source:** plugin/skills/a11y-toph/references/checks.md:199; plugin/skills/a11y-toph/references/checks.md:210; plugin/skills/a11y-toph/references/checks.md:216.
+**Recommendation:** Composite each translucent layer over its ancestor or mark result unknown for manual/browser verification; add transparent and translucent nested-background fixtures.
+**Evidence and limits:** score 95/100. Exact helper with synthetic computed styles; no browser-rendering claim. Proof: integration-contrast-probe.json.
+
+### A188: Verify nginx and TLS before reporting Live
+
+**Failure/impact:** Live is emitted before nginx/TLS, and certbot errors become warn/status0. On first issuance failure this contradicts explicit nonzero-on-failure and HTTPS verification contracts. Existing fresh certs are not the failing input.
+**Source:** plugin/skills/deploy-niyoj/references/templates.md:149; plugin/skills/deploy-niyoj/references/templates.md:157; plugin/skills/deploy-niyoj/SKILL.md:139; plugin/skills/deploy-niyoj/SKILL.md:205.
+**Recommendation:** Make required TLS success a gate, put final Live after all verification, and test command failure statuses and final-message ordering.
+**Evidence and limits:** score 95/100. Literal control-flow verification, no real certificate attempt. Proof: integration-ticket-evidence.json.
+
+### A215: Match setup hosting to the requested tunnel
+
+**Failure/impact:** PowerShell considers any devtunnel process hosted; shell considers any devtunnel host command. Neither checks requested named tunnel. Exact PS function with unrelated process fixture returns true; caller consequently suppresses hosting skillator-teams while presenting that tunnel URL. An existing configured tunnel/port is not evidence of an active host for that tunnel.
+**Source:** plugin/skills/teams-uhura/scripts/setup.ps1:38; plugin/skills/teams-uhura/scripts/setup.ps1:144; plugin/skills/teams-uhura/scripts/setup.sh:20; plugin/skills/teams-uhura/scripts/setup.sh:120.
+**Recommendation:** Verify exact requested tunnel/port identity before reusing a running host.
+**Evidence and limits:** score 95/100. Exact PS function with stub Get-Process; no live process enumeration, tunnel hosting or network test. Shell counterpart source-verified. Proof: verification-setup-probe.json.
+
+### A206: Return exact review excerpts without inserted text
+
+**Failure/impact:** Normal editorial ellipses are not inherently fabricated speech. Here reviews.md explicitly requires every quote be a copied substring and says never shorten; snippet appends dots within the quote value. Fresh production-function probe confirms membership false and test strips dots before checking. Accept only exact-quote contract violation, not fabricated review content.
+**Source:** plugin/skills/clone-odo/scripts/reviews.py:138; plugin/skills/clone-odo/scripts/reviews.py:147; plugin/skills/clone-odo/references/reviews.md:28; plugin/skills/clone-odo/scripts/tests/test_reviews.py:76.
+**Recommendation:** Return an exact substring with separate truncation metadata, and assert raw quote membership for long reviews.
+**Evidence and limits:** score 90/100. Fresh pure function execution; long synthetic review, no external review sourcing. Proof: automation-probes.py; verification-extra-probes.json.
+
+### A205: Keep open children with their archived parent
+
+**Failure/impact:** A blank line clears cur before the indented open child. Group eligibility considers only the old closed parent and archive moves it alone, violating the explicit parent/every-subpart-together rule.
+**Source:** plugin/practice/scripts/archive-tickets.sh:100; plugin/practice/scripts/archive-tickets.sh:106; plugin/skills/tickets-zordon/SKILL.md:444.
+**Recommendation:** Retain group identity across blank lines when a following indented sub-part or continuation belongs to the parent, or group subparts by their canonical parent ID. Add blank-separated open-child and continuation fixtures.
+**Evidence and limits:** score 90/100. Actual isolated old-commit dry-run reproduced; production board/archive untouched. Proof: helpers-findings.json.
+
+### A201: Convert every Gemini pending alias on Windows
+
+**Failure/impact:** Conversion is conditional on the literal pending.toml basename; alias receives the original sh injection. Extracted PowerShell Write-Cmd produces powershell for canonical command and sh for alias. Failure is conditional on Windows setups needing the documented conversion.
+**Source:** plugin/install.ps1:287; plugin/install.ps1:293.
+**Recommendation:** Apply the conversion by shared pending payload or include every pending alias, and assert installed canonical/alias execution parity.
+**Evidence and limits:** score 90/100. Generated contents reproduced; no native Gemini invocation. Proof: integration-installer-probes.json.
+
+### A202: Resolve upstream-watch paths after plugin move
+
+**Failure/impact:** Arming applies the old skills/design-arwen/UPSTREAM.md guard and practice/... commands to the current checkout whose payload is plugin/. The guard skips the watch before its commands can run.
+**Source:** plugin/skills/grayskull-power/references/arming.md:129; plugin/skills/grayskull-power/references/arming.md:132; plugin/skills/design-arwen/UPSTREAM.md:1.
+**Recommendation:** Resolve the plugin payload root once from the loaded skill, use it for manifest detection and commands, and add moved-checkout/installed-layout fixtures.
+**Evidence and limits:** score 90/100. Current checkout layout verified; no upstream network watch run. Proof: integration-report.md.
+
+### A189: Parse Antigravity quota windows independently
+
+**Failure/impact:** The line-oriented parser picks the first remaining_fraction and applies it to each window label found anywhere on that line. Compact JSON containing both buckets produces identical20/20 rather than20/90. Accept parser corruption for such valid structured input, not a claim about verified current live Antigravity payload shape.
+**Source:** plugin/skills/watch-cortana/hooks/usage-watch.sh:330; plugin/skills/watch-cortana/hooks/usage-watch.sh:332; plugin/skills/watch-cortana/hooks/usage-watch.sh:338.
+**Recommendation:** Parse the keyed JSON buckets independently and preserve absent/unknown windows; test actual producer responses in both ports.
+**Evidence and limits:** score 85/100. Exact awk synthetic producer-format probe; native quota source not invoked. Proof: automation-boundary-probes.py; automation-report.md.
+
+### A193: Reject failed PowerShell review packages
+
+**Failure/impact:** Existing noncommit object passes rev-parse --verify; diff/log native exit statuses are not checked. Actual blob fixture emitted Git usage errors but created a review packet and returned0. Narrow to failed review evidence generation; do not imply ordinary valid commit diffs fail.
+**Source:** plugin/practice/scripts/taskwork.ps1:79; plugin/practice/scripts/taskwork.ps1:89; plugin/practice/scripts/taskwork.ps1:96; plugin/practice/scripts/taskwork.ps1:99.
+**Recommendation:** Resolve and validate commit refs once (^{commit}), check every Git exit, write packet atomically only on complete success, remove partial output on error; test badrefs/noncommit refs and injected git failure in both ports.
+**Evidence and limits:** score 85/100. Actual isolated packet output and status reviewed; unusual noncommit input, practical impact is fail-open review handoff. Proof: parent-taskwork-ref-probe.json.
+
+## Priority and remaining decisions
+
+Start with cancellation/lease integrity, deployment backup/render/success gates, quota-window accuracy and honest validation outcomes (A182-A194). Address user-facing Messages launch and Explorer wiring next (B21/F98a and F151-F156), or reprioritize those first if the owner chooses. Same-file fixes should be sequenced together; no broad repair is authorized by this audit alone.
+
+AI host/delegate integration and merge-resolution execution need a concrete design before implementation. Interactive login should launch a user-controlled terminal/browser after an explicit action, not collect credentials in the board or silently arm a tunnel. These are implementation decisions, not claimed completed capabilities.
+
+B15/B17 retain their existing live-reproduction blockers. Existing testing rows remain testing; no mock success or code-presence judgment was used to flip them to verified. Seven prior additions F144-F150 remain pending improvements rather than a substitute for completing existing user-facing contracts.
+
+## Preserved historical casefile
+
+The following is the previous casefile, retained verbatim as history. Its dates, source snapshot and old verdicts are not the current audit result.
+
+---
 # CASEFILE — 2026-09-04
 
 > **Skill names updated 2026-09-22.** Every skill in this repo was renamed

@@ -1,0 +1,40 @@
+{
+  "root": "C:\\Users\\Ikran\\AppData\\Local\\Temp\\RUN0028-git-paths-ZEz399",
+  "status": "?? gitconfig\n?? \"space name.txt\"\n",
+  "rows": [
+    {
+      "path": "gitconfig",
+      "staged": null,
+      "unstaged": "?",
+      "isUntracked": true
+    },
+    {
+      "path": "\"space name.txt\"",
+      "staged": null,
+      "unstaged": "?",
+      "isUntracked": true
+    }
+  ],
+  "results": [
+    {
+      "parsedPath": "gitconfig",
+      "args": [
+        "add",
+        "--",
+        "gitconfig"
+      ],
+      "exit": 0,
+      "stderr": "warning: unable to access 'C:\\Users\\Ikran/.config/git/ignore': Permission denied\n"
+    },
+    {
+      "parsedPath": "\"space name.txt\"",
+      "args": [
+        "add",
+        "--",
+        "\"space name.txt\""
+      ],
+      "exit": 128,
+      "stderr": "warning: unable to access 'C:\\Users\\Ikran/.config/git/ignore': Permission denied\nfatal: pathspec '\"space name.txt\"' did not match any files\n"
+    }
+  ]
+}

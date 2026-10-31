@@ -1,0 +1,13 @@
+{
+  "utf8": {
+    "source": "€",
+    "decoded": "���",
+    "exact": false
+  },
+  "disarm": {
+    "markedDisarmed": "ttl",
+    "teardownCalled": false,
+    "observationMs": 25,
+    "limitation": "In-memory channel never resolves; no process spawned, killed, no real channel/network. Production Session method called."
+  }
+}

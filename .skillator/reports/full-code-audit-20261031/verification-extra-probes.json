@@ -1,0 +1,21 @@
+{
+  "method": "Fresh verifier reran read-only automation-probes.py on current production functions",
+  "long_quote": {
+    "is_exact_substring": false,
+    "length": 226
+  },
+  "imgdiff_right_edge": {
+    "width": 101,
+    "changed_x": [
+      98,
+      99,
+      100
+    ],
+    "layout_score": 100.0,
+    "regions": []
+  },
+  "missing_sweep_root": {
+    "exit": 0,
+    "stdout": "Clean. Nothing of the original's name, domain or colours found."
+  }
+}

@@ -1,0 +1,26 @@
+{
+    "parser":  [
+                   {
+                       "option":  "--check",
+                       "checkMode":  true,
+                       "selectedPath":  "check"
+                   },
+                   {
+                       "option":  "--chek",
+                       "checkMode":  false,
+                       "selectedPath":  "full walk"
+                   },
+                   {
+                       "option":  "--unexpected",
+                       "checkMode":  false,
+                       "selectedPath":  "full walk"
+                   }
+               ],
+    "unrelatedTunnel":  {
+                            "fixture":  "devtunnel host unrelated-project",
+                            "actualHosted":  true,
+                            "requestedTunnel":  "skillator-teams",
+                            "expectedHosted":  false
+                        },
+    "limits":  "Only exact mode expression and TunnelHosted function evaluated; Get-Process stubbed. No setup entrypoint, install, login, devtunnel command, network, live process enumeration or settings changes."
+}

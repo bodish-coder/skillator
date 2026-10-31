@@ -1,0 +1,22 @@
+{
+  "muse": {
+    "code": 0,
+    "stdout": "Muse (/c/tools/Projects/skillator2/.skillator/reports/full-code-audit-20261031/installer-function-probes/muse):\n        * Muse plugin skillator installed (C:/tools/Projects/skillator2/plugin)\n",
+    "stderr": "",
+    "stub_calls": "plugins list --json\nplugins install C:/tools/Projects/skillator2/plugin --json\n"
+  },
+  "gemini": {
+    "code": 0,
+    "stdout": "        * C:\\tools\\Projects\\skillator2\\.skillator\\reports\\full-code-audit-20261031\\installer-function-probes\\pending.toml\n        * C:\\tools\\Projects\\skillator2\\.skillator\\reports\\full-code-audit-20261031\\installer-function-probes\\skillator-pending.toml\n",
+    "stderr": "",
+    "injections": {
+      "pending": [
+        "!{powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\audit\\skills\\tickets-zordon\\scripts\\pending.ps1\"}"
+      ],
+      "skillator-pending": [
+        "!{sh \"C:\\audit\\skills/tickets-zordon/scripts/pending.sh\"}"
+      ]
+    }
+  },
+  "scope": "Exact extracted functions only; no installer entrypoint and no real Muse/host invoked. All writes inside audit artifact fixture."
+}

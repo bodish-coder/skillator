@@ -1,0 +1,792 @@
+[
+  {
+    "path": "plugin/practice/baselines/scenario-arwen-antislop.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 127,
+    "sha256": "2c78bc913299ea5b291890d9d64c38149dd016bed8abb362397a49654ffc0441",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared with current arwen mode/reference contracts. Rendering and computed metrics require actual browser evidence; static source/Skill invocation is insufficient for visual acceptance. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-arwen-f23b-brand.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 76,
+    "sha256": "e998b71409bac85b1b2d82c31208cecc9041c1a9d031495acf6548785bcc8c3f",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared with current arwen mode/reference contracts. Rendering and computed metrics require actual browser evidence; static source/Skill invocation is insufficient for visual acceptance. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-arwen-f23b-product.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 97,
+    "sha256": "1d2505ee0a80de966bb7b843ce740085ae2e4b71e6d5e8b20c5c88afacb2f4f3",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared with current arwen mode/reference contracts. Rendering and computed metrics require actual browser evidence; static source/Skill invocation is insufficient for visual acceptance. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-arwen-f32-menu.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 42,
+    "sha256": "4a9c2d81c4b8cea189926abc9952ebbffbc3be0a72cfb101962acc16c94e3b4c",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared with current arwen mode/reference contracts. Rendering and computed metrics require actual browser evidence; static source/Skill invocation is insufficient for visual acceptance. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-arwen-f32-round2.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 30,
+    "sha256": "32e5efbed1b6fd0ca89c8aacc67df337f31e029f3d7c44eebf906eabf3636e3b",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared with current arwen mode/reference contracts. Rendering and computed metrics require actual browser evidence; static source/Skill invocation is insufficient for visual acceptance. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-arwen-f32-unattended.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 29,
+    "sha256": "8533717d17afde9a49516b2598061f7ce1c1d11503d1b4b5f9b4acf1dae7e803",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared with current arwen mode/reference contracts. Rendering and computed metrics require actual browser evidence; static source/Skill invocation is insufficient for visual acceptance. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-a119-direct-1.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 28,
+    "sha256": "164d1f158eacc22b8e7de28b224efdd1dc683d271eea668399e9d8809795ef60",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-a119-direct-2.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 28,
+    "sha256": "7ddb944591b011d3c8a0399b94faad5c3aeed1178220f482f1ae7a988ae08464",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-mode-direct.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 29,
+    "sha256": "30cda30c38e08eec583f188132305d7ad5dd2632af6845ff5115d8419f65ab02",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-mode-headless.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 21,
+    "sha256": "1f8b9a99c173ac1b1e8e0866479f0a74693815a292bf9ace2a5bcf0ae0270837",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-mode-single.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 22,
+    "sha256": "5bae4a5cd4ef2914c8cc67667c5c8cc39475350ae681c3bc2f572cce041594ec",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-mode-workflow.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 19,
+    "sha256": "5bcc3ea9f270aa9a146ba6822c6f93e47cbbaae6936b32daa5a56eb98f690ba7",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-route-board-1.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 22,
+    "sha256": "bfb29e45fc847439c5fe29883f4dde0645c5c0076c2b0a0b9978e0f41a4fe845",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-route-board-2.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 22,
+    "sha256": "5570d1d3b4a31c5112f0acefa4b7f388a017674ebeeb25eb51e68b8069c7101f",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-route-direct-1.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 22,
+    "sha256": "584c570c3d6ac6291a229cf8b56313aff5a3ff5fe45b604e0476c3ce05bd89c1",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-route-direct-2.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 22,
+    "sha256": "280bf8a0c765a5b0557c5a5aeffac9a93da9209cf23ed20ca19e71d1e837652d",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-route-headless-1.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 22,
+    "sha256": "2233c187656944f17a04fa5d999b79bef4132147d494b816ef3205a1dcc026c4",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-route-headless-2.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 22,
+    "sha256": "a78ff430bd623ea69c15da4512da01a3fb2df5547238a0640ddeb576a81fca4b",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-ui-feature.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 28,
+    "sha256": "95cb245ec9377aa1a6576d2fbe607310f01ca8134c7925e56ffb72e98635b9f9",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-build-ui-only.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 17,
+    "sha256": "b633bddb0b23ee8ba67b27555f382154ac8eb2bee08ec02a7589a668ab320c4a",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. Fixture relay-chain has CLI scaffolding rather than the existing settings page asserted by prompt; valid as a narrow routing probe, weak as implementation acceptance. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-cerebro-codex.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 43,
+    "sha256": "0305c81fa19a7daa09597c31293454062712556df1b7ea0f6404cc263b89f633",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Stub-only host matrix and explicit isolation prerequisites reviewed. No real pairing/login/tunnel/approval action executed; fictional/stub discovery cannot establish native remote operation. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-cerebro-gemini.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 38,
+    "sha256": "b1b57d34267685fefd410f1089156a4a1753829e798d01f1632f2f8609590350",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Stub-only host matrix and explicit isolation prerequisites reviewed. No real pairing/login/tunnel/approval action executed; fictional/stub discovery cannot establish native remote operation. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-cerebro-matrix.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 37,
+    "sha256": "a81c7efac955f2c2ac6ab32f26f080bdfb15267282ec50d7271d59afeba30657",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Stub-only host matrix and explicit isolation prerequisites reviewed. No real pairing/login/tunnel/approval action executed; fictional/stub discovery cannot establish native remote operation. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-cerebro-pi.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 61,
+    "sha256": "6569b629bc44fb5b1ca7994a3e6fae99a84271e679ab8a0f571c32b3c737da0e",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Stub-only host matrix and explicit isolation prerequisites reviewed. No real pairing/login/tunnel/approval action executed; fictional/stub discovery cannot establish native remote operation. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-chief-fury-green.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 14,
+    "sha256": "b105d1d55b6277560315f868b7aa175107be736a4d84dd5c9f8f49b7b9431f4b",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable dated wiki, pointer dispatch, independent decision seats and recurring-check suggestion with current chief instructions; GREEN adds explicit skill and serial-owner constraint. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-chief-fury.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 19,
+    "sha256": "6f32aa67dcacc2d57f043af4c36bcbe83b6d70fb19ccca68e88d807a3fc7a158",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable dated wiki, pointer dispatch, independent decision seats and recurring-check suggestion with current chief instructions; GREEN adds explicit skill and serial-owner constraint. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-clone-odo-cleanroom.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 117,
+    "sha256": "c1342e4216d80de0c324c63c8784e95af33c8fd555429e2840029ef1eaa5562c",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared named fixture inputs and primary versus secondary pass criteria. Linked-review kept/dropped/dedup denominator and exact substring oracle distinguish evidence from summaries. Platform cases test description loading only, explicitly not fictional URL navigation/native capture. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-clone-odo-platform-android.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 23,
+    "sha256": "b170f6565323dda6cf8138155fafde99d44b7d77e693e7ac324cb7cd95b3d020",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared named fixture inputs and primary versus secondary pass criteria. Linked-review kept/dropped/dedup denominator and exact substring oracle distinguish evidence from summaries. Platform cases test description loading only, explicitly not fictional URL navigation/native capture. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-clone-odo-platform-ios.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 23,
+    "sha256": "07f146e8edd4692c1e9d1ee4090c692ebce7cae3bbee3f219b888ec51b330d50",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared named fixture inputs and primary versus secondary pass criteria. Linked-review kept/dropped/dedup denominator and exact substring oracle distinguish evidence from summaries. Platform cases test description loading only, explicitly not fictional URL navigation/native capture. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-clone-odo-platform-web.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 23,
+    "sha256": "bfe4cf86df2dfc4d7b93d0afec5a432d30db6803eed9755c64f1b531e95a68df",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared named fixture inputs and primary versus secondary pass criteria. Linked-review kept/dropped/dedup denominator and exact substring oracle distinguish evidence from summaries. Platform cases test description loading only, explicitly not fictional URL navigation/native capture. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-clone-odo-platform-windows.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 23,
+    "sha256": "ccfd566f1db6ec3659861db6a617094e6e19b979d4040223241f45b3faf95c6b",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared named fixture inputs and primary versus secondary pass criteria. Linked-review kept/dropped/dedup denominator and exact substring oracle distinguish evidence from summaries. Platform cases test description loading only, explicitly not fictional URL navigation/native capture. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-clone-odo-reviews.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 103,
+    "sha256": "9bd49289a844414c487538bd37533167c67dd8cc90495a9d8b95d729f28671c7",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared named fixture inputs and primary versus secondary pass criteria. Linked-review kept/dropped/dedup denominator and exact substring oracle distinguish evidence from summaries. Platform cases test description loading only, explicitly not fictional URL navigation/native capture. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-code-yoda-debt.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 88,
+    "sha256": "629f605deb5bd0115f8e78e032cafe6c805b21db2f769b67d0fbfdc61f7f9515",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared deliberate-shortcut harvesting, missing-trigger handling and concrete replacement review contract. Older five-marker debt oracle is dated; current fixture has six markers and updated A110 record is required. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-code-yoda-review.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 89,
+    "sha256": "c89af16e09227571771b7a1b111572c7384667a7793be8495d4f4f8f6d8f4195",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared deliberate-shortcut harvesting, missing-trigger handling and concrete replacement review contract. Older five-marker debt oracle is dated; current fixture has six markers and updated A110 record is required. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-deploy-merlin.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 21,
+    "sha256": "f5f9617c80ce308d60700bd92cfd1e0d9ec43d29fb17ff7db7c6997de156f07b",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Authority pressure includes explicit simulated instructions to perform the guarded act. Historical grading may conflate an unasked action with an authorized request; these are limited discipline evidence and do not justify overriding current user authorization. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-deploy-niyoj.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 20,
+    "sha256": "4f4e6687afc0cc8caf76f08a5a037d6fcefa0f7854ee9681c0c3e743f9f64f02",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Authority pressure includes explicit simulated instructions to perform the guarded act. Historical grading may conflate an unasked action with an authorized request; these are limited discipline evidence and do not justify overriding current user authorization. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-design-arwen-upstream.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 86,
+    "sha256": "025ddcba968a2c03fd512c89c9a02be544762fa0e7784fe389e3abb311c7c7b8",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared with current arwen mode/reference contracts. Rendering and computed metrics require actual browser evidence; static source/Skill invocation is insufficient for visual acceptance. Recorded focus/sticky criterion was vacuous because table had no focusables; do not count as focus-obscuring proof. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-design-arwen.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 26,
+    "sha256": "9c474c2f814773e88f3b4649babd744f3c4d5c729ad14b0b48b478ed2261e865",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared with current arwen mode/reference contracts. Rendering and computed metrics require actual browser evidence; static source/Skill invocation is insufficient for visual acceptance. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-fanout.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 71,
+    "sha256": "5999d5917b379851871a30593b8c149c938d5e83a68f554a9d9af71891f34141",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Seven-file symbol query only; explicit stated limit prevents generalizing no-fanout behavior to large unknown-cause audits. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-grayskull-a117.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 43,
+    "sha256": "af8b0f32f56ebd9029d8798b45f2402389e8ff61320981a58b0e9d222ab3276c",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared current routing/grounding and partial CodeGraph reporting. Empty graph result is not absence of unindexed callers; a11y routing specs measure load behavior rather than browser/AT repair. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-grayskull-a11y-v2.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 75,
+    "sha256": "a2de7811bcaa56c3fc11a8c7a3739a5f1a77fee5a1dcb744d7d8ba3cfd71990a",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared current routing/grounding and partial CodeGraph reporting. Empty graph result is not absence of unindexed callers; a11y routing specs measure load behavior rather than browser/AT repair. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-grayskull-a11y.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 74,
+    "sha256": "45a121847fc1a8735d51efb94fb3b2615844bcffb911858b93fab6436f4b2e65",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared current routing/grounding and partial CodeGraph reporting. Empty graph result is not absence of unindexed callers; a11y routing specs measure load behavior rather than browser/AT repair. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-grayskull.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 26,
+    "sha256": "4ec362259565caa33356c90a22d10a724c421e49b1e8e4869587caaa921a6f8c",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared current routing/grounding and partial CodeGraph reporting. Empty graph result is not absence of unindexed callers; a11y routing specs measure load behavior rather than browser/AT repair. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-handoff-cortana-v2.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 29,
+    "sha256": "954cf1e31662c27212f4884f441d73c73d1b8351a43e05f1e02f183831de4784",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared factual claims with deterministic small and99-file fixture truth. v1 openly hints at verification; v2 removes hint, v3 increases search cost; historical compliance remains model/environment-specific. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-handoff-cortana-v3.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 31,
+    "sha256": "5e0f3bf83f45d5ad2b40d60c4978e3ef9064af7e5b8adb8e27cde9aebffee933",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared factual claims with deterministic small and99-file fixture truth. v1 openly hints at verification; v2 removes hint, v3 increases search cost; historical compliance remains model/environment-specific. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-handoff-cortana.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 31,
+    "sha256": "d1ba61c59391bbd1c14908e47cf3215bbb7cc4191ec84b613cc4edc9ce78ed0e",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared factual claims with deterministic small and99-file fixture truth. v1 openly hints at verification; v2 removes hint, v3 increases search cost; historical compliance remains model/environment-specific. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-holo-f108-outputs.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 42,
+    "sha256": "3f00b464708ef1a98cfcf148eca6387793366abfb281470f056f8bc00d377299",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared artifact/script output and state immutability criteria. F108 output-picker supersedes older F41 no-question behavior when no format named; historical F41 success must not be treated as current interactive contract. F108 multi-prompt file requires selecting one prompt per run as documented. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-holo-f41-batch.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 18,
+    "sha256": "9050d012d30d12d4057c45dd0dcbe819084e3b3509a657485515298714b73a13",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared artifact/script output and state immutability criteria. F108 output-picker supersedes older F41 no-question behavior when no format named; historical F41 success must not be treated as current interactive contract. F108 multi-prompt file requires selecting one prompt per run as documented. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-holo-f41-loaded.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 26,
+    "sha256": "a9d8f210a2012f19716bdd398434ba259a757e5443402291c4d9ddf3cbe7200f",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared artifact/script output and state immutability criteria. F108 output-picker supersedes older F41 no-question behavior when no format named; historical F41 success must not be treated as current interactive contract. F108 multi-prompt file requires selecting one prompt per run as documented. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-holo-f41.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 42,
+    "sha256": "8df8692d01f785f4c167c40f0557518059bb6dcb46564d665cfad9ea8add7627",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared artifact/script output and state immutability criteria. F108 output-picker supersedes older F41 no-question behavior when no format named; historical F41 success must not be treated as current interactive contract. F108 multi-prompt file requires selecting one prompt per run as documented. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-live-friday.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 23,
+    "sha256": "8672c425068343806a5ba3e16d1c748a947bc2a38539a5e2656d04171e7e65fe",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Actual tool order is required; launch-after-edit fails the before-edit contract, and prerecorded server claims are not execution. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-marathon-batch.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 40,
+    "sha256": "5f99f4936f6a8cc93f4ebb0c7f5aa2519c3bc9235ff0dfa62f30f5eb54e74644",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-marathon-decidable.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 49,
+    "sha256": "bc996c68a50c190ac747233e4d32ced04ddca5e99f6da7550684ef9b39481430",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-marathon-resume.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 70,
+    "sha256": "e0a294f02e34916fa5fb564172f4d0fd5d2706d1059b51fb155ae533b3c5a5e0",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-marathon-stop.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 63,
+    "sha256": "48143c0a509b3a3bdf6b292a31f51040ae30bcc8541808a1f5352ab13ac28be1",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-marathon.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 86,
+    "sha256": "154e05f687a8265a09646a48ed08d2dc9515b3c437eda703a77f6e24a6fe2519",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-merge-smith.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 19,
+    "sha256": "10233f125c740b51d595c1bf0b08e2f97870fcc3cd7e497aca3339d542ce0412",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Authority pressure includes explicit simulated instructions to perform the guarded act. Historical grading may conflate an unasked action with an authorized request; these are limited discipline evidence and do not justify overriding current user authorization. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-mergeprep-oracle.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 24,
+    "sha256": "0ce58f75bf0eb9faca9ed7b41035d5f7d4c647fdadb58cebd569b9450421e32a",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Failed reverse-apply must prompt diagnosis rather than whole-file replacement; fixture preserves actual overlapping destination edits. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-relay-chain-hold.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 79,
+    "sha256": "86e0aac2a79fc942984326d1cffdf9ec964549848af6950204f76009b852463f",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-relay-chain-resume.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 76,
+    "sha256": "e0e6c1eb3f63a412644c0360d491af793b5d07c9d3530b36ff38b1bd426c2335",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-relay-chain.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 106,
+    "sha256": "7861ad80dc010e7d695e630c2a229699af240e5a7ef1338753b952b05b98209a",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-relay-morpheus-resume.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 53,
+    "sha256": "df9b3cc0eefc018e9be5c4a3ba7719616c05bf0c3c676fa7605a24edf456cf03",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-relay-morpheus.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 61,
+    "sha256": "bd8cf92493026c4f91b4d4db7eaa123a83b7fa5c3a9a8aba4a0e1c9f32f80092",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-relay-parallel-f37.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 21,
+    "sha256": "431e2fe211ffbcf3cfd084d62af6dc3d6cfa04128ccca2daf0ea2115082897c1",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-relay-queue-f38.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 28,
+    "sha256": "7baf263de6b4de431e54c6c80c3f6bdc3bbd040a4be132b0215d07160cc51522",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared durable pre-dispatch records, dependency holds, answer-before-replan and usage guards with harness fixtures. Interactive pages need interactive owner run; headless numbered-list observations cannot close that gate. Known denied-tool/limit/void rounds remain excluded. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-rules-orko.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 75,
+    "sha256": "3d0591ae7f39ee55d89cd9fe406623613b9463ed702fbeb4a000fa023504aaed",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Tests personal/project durable scope and preservation, but explicitly does not test clash resolution. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-sherlock.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 28,
+    "sha256": "bdb7cbf88d981ff8f016ae7c27698192fb290e65d6d1e4606643522109f50ca6",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Authority pressure includes explicit simulated instructions to perform the guarded act. Historical grading may conflate an unasked action with an authorized request; these are limited discipline evidence and do not justify overriding current user authorization. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-skill-smith.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 23,
+    "sha256": "05d44cb66329a743c5f0081fcee2333a3254538c46c55daaa34be167c0443c74",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Tests earned-rule process against frontmatter-only green and time pressure; current canonical replacement is skill-prometheus. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-spec-kit-durability.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 89,
+    "sha256": "72c2a057ab126a6b87a49be28a4ba1c432dec3ac0cb17f5ad6ccf41152b9e37d",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared stable trace IDs and fixture import graph. v1/v2 cannot separate incidental local reads from requirement sweep; v3 breaks import edges. Contaminated compliant historical runs do not prove default behavior. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-spec-kit-v2.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 57,
+    "sha256": "94ab356570e372299e988f1163a53d1af71dadb3393c5d4f0ec155fb2e0df2ae",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared stable trace IDs and fixture import graph. v1/v2 cannot separate incidental local reads from requirement sweep; v3 breaks import edges. Contaminated compliant historical runs do not prove default behavior. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-spec-kit-v3.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 66,
+    "sha256": "a1d9e82a743217dbec9e43dba1730848ed4a357058d63b36d332fc384bc55add",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared stable trace IDs and fixture import graph. v1/v2 cannot separate incidental local reads from requirement sweep; v3 breaks import edges. Contaminated compliant historical runs do not prove default behavior. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-spec-kit.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 51,
+    "sha256": "2f76c70fbe820d4cebe8467219523aa68413e2e60a15ff077b34f0d9a600d507",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared stable trace IDs and fixture import graph. v1/v2 cannot separate incidental local reads from requirement sweep; v3 breaks import edges. Contaminated compliant historical runs do not prove default behavior. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-tasks-sentinels-v2.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 112,
+    "sha256": "0a4056dc347cbeb7067318cb7cd777a8ef7bd151a6ece488243d2e5d7ceafb35",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. v1 direct anti-dispatch instruction and shared-file fixture make default-delegation grading void. v2 independent relay-split fixture corrects isolation, but written FAIL excludes considered declines that recorded verdict still calls violations; interpret explicit PASS contract rather than claim a fresh binary evaluator. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-tasks-sentinels.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 57,
+    "sha256": "515fd1dd62bc36609cd6968f8cc9a7dd04b585e2653dc523f411f4b28a850b3c",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. v1 direct anti-dispatch instruction and shared-file fixture make default-delegation grading void. v2 independent relay-split fixture corrects isolation, but written FAIL excludes considered declines that recorded verdict still calls violations; interpret explicit PASS contract rather than claim a fresh binary evaluator. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-tickets-people-f43.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 20,
+    "sha256": "c464f3f693d9c7af98329fc4faebc198193e5644acdfdfb93ae162a41cb3853f",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared exact owner/decide/app state and unchanged-other-row criteria with ticket-meta caller contract. Contributor claims require actual commit authors; alias resolution is assessed separately. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-tickets-reassign-f45.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 17,
+    "sha256": "a217dee32202df3cf82513bd0f45827436eb5122ab5b9ac04b362b1be2fbda1f",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared exact owner/decide/app state and unchanged-other-row criteria with ticket-meta caller contract. Contributor claims require actual commit authors; alias resolution is assessed separately. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-yoda-shortcut.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 95,
+    "sha256": "e9b313d263ffe11ada799f7d2f81dea7f256ae639477f4edf2a80bb60a38a3a5",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared deliberate-shortcut harvesting, missing-trigger handling and concrete replacement review contract. Older five-marker debt oracle is dated; current fixture has six markers and updated A110 record is required. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-zordon-mode-named.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 18,
+    "sha256": "c4ed93dbffd05fd7e129c9a5a711c2284513a10d40bc840067b2118d5648084a",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  },
+  {
+    "path": "plugin/practice/baselines/scenario-zordon-mode-sweep.txt",
+    "status": "inspected",
+    "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+    "line_count": 28,
+    "sha256": "8ad72db39b507ac4ca5ca3e692fe12db1ec27f7b80f5c78942a3450786c0ed7d",
+    "prompt_nonempty": true,
+    "notes": "Full prompt, fixture assumptions and comment grading/record read. Harness scenario reader strips comment lines; stored verdicts are historical, not new executions. Compared mode/grade/route before-spend ordering with canonical build/router commands. Named/headless modes are distinct from interactive ask-once; tool-call regex observations do not establish feature correctness. ",
+    "executed": false
+  }
+]

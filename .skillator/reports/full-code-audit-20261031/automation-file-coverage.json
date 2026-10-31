@@ -1,0 +1,966 @@
+[
+  {
+    "path": "plugin/skills/clone-odo/SKILL.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "055dfc94047031aa59425c6471e91fdbfe886dcd9246eb000195e82f726ab50a",
+    "lines": 250
+  },
+  {
+    "path": "plugin/skills/clone-odo/UPSTREAM.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "eb7664f4a685638160312a9672aa3d85afac75fe78979b27345d1bd80a1f79da",
+    "lines": 116
+  },
+  {
+    "path": "plugin/skills/clone-odo/references/brand.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "ccbc7627bd6d69bbacc38210cfb18b2ab37678d62a9d19e2d664356ad5462c4e",
+    "lines": 123
+  },
+  {
+    "path": "plugin/skills/clone-odo/references/clean-room.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "43f846cf89710f9c303b053a3e48d1e8709bfcf1a33e2f97dc887df91881dbfb",
+    "lines": 115
+  },
+  {
+    "path": "plugin/skills/clone-odo/references/handoffs.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "c3ac6ee02034176632fa05deca5a3528870115f9c4d7ce2299b6b84c93b0b255",
+    "lines": 99
+  },
+  {
+    "path": "plugin/skills/clone-odo/references/parity.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "ce696fc90bdc707925e8b829c58b830fbf50940f8f636ec2dcc98110def11252",
+    "lines": 79
+  },
+  {
+    "path": "plugin/skills/clone-odo/references/preflight.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "afc67b746a1c7947c6b3040c03335556c8e1d84964217360911b479bd6c6b1d4",
+    "lines": 46
+  },
+  {
+    "path": "plugin/skills/clone-odo/references/recon.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "255e5bc453293a20fcffb03c15b903e9206ef3835abaa390c80908c210a65127",
+    "lines": 148
+  },
+  {
+    "path": "plugin/skills/clone-odo/references/reviews.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "3c3fedce996eb449f7dcfd836d2f0fc5c79ce94f21be8b63846c4a0ca5b6d768",
+    "lines": 106
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/contrast.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "679111657cb05639a69233862dd2963ed3982f523c2f94d75ae8b46e427c6ae9",
+    "lines": 152
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/imgdiff.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "96c5c9597928c0b58d5d835ced4654d44029576b23d6c837c4b8c7dd32280bac",
+    "lines": 488
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/listing.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "d7294a0773b43d74640935ff9aa136858187fadab605069966a67cfe0b825068",
+    "lines": 181
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/odo.ps1",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "5bac585767bf2481edbd04b50427bc4fc742e20a8b5bc5d358b270ccf93bf14e",
+    "lines": 141
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/odo.sh",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "d9f570b50bc2777c37d29112af26b66d42136890c2e91f3994ac4b02422d0ec9",
+    "lines": 81
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/parity.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "af47f8a204064912d2aca4772eb7be62aca45e5016dabf332420a152703601cf",
+    "lines": 252
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/reviews.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "54ac18ad0cc17e5ce8460df14d88b238ef93171a366307cdcb39424c123dcdf4",
+    "lines": 311
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/sweep.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "77895190b0cfcd00126a35bb74583f10f47d109584acebb86b90e2376fe80112",
+    "lines": 177
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/tests/_load.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "7d89e88384f785f4ca075ccd68addd9a9d61b09ee6520b6b93794c2f77f17194",
+    "lines": 16
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/tests/test_contrast_listing.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "6f95035aa7ef0e0642749a0c0c8c70a928bbe6112729a1216ba95b9fc630b704",
+    "lines": 118
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/tests/test_imgdiff.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "8f01b8edbaefb92eabc7a2a9ffa19ed7016dc9262db6092f759b437f187493b1",
+    "lines": 262
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/tests/test_parity.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "c6c4f6c5772533daf919ce51755d99ed8bc0b9bea61bab8f0ab3d8c481e28ad0",
+    "lines": 190
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/tests/test_reviews.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "c5bdbea3743cde08be7c174ffb060986ac9ad426e65a392ec3cd9ad4a90e01e1",
+    "lines": 132
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/tests/test_sweep.py",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "434783ab6c56036e4e844a22f16c761b508f0cd040bf5ec3a7664c5dd1566e52",
+    "lines": 92
+  },
+  {
+    "path": "plugin/skills/clone-odo/scripts/themes.json",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "008d337c9dd3c33adb1aad24bb4c35feed776c5370b6b295cd67f306aaa3d754",
+    "lines": 52
+  },
+  {
+    "path": "plugin/skills/clone-odo/templates/bug-report.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "e8531f82aba8abb85ecff85b580e37536fa51c148877fad07e6717d3c2c6d411",
+    "lines": 24
+  },
+  {
+    "path": "plugin/skills/clone-odo/templates/features.csv",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "736a3166971267879de4aee7d2f9045acdf23233f484956e8ce0f789671bafe6",
+    "lines": 19
+  },
+  {
+    "path": "plugin/skills/clone-odo/templates/listing.example.json",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "2fb3ba9613c4f1d7946cd71ca9e6ab1e5d322804b1d1b2f388ded846bfc1375b",
+    "lines": 16
+  },
+  {
+    "path": "plugin/skills/clone-odo/templates/recon-map.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "7732a2c857048528888d2ba1d9ee698e034ae47645b12d9c06b7c3867de0ae7d",
+    "lines": 59
+  },
+  {
+    "path": "plugin/skills/clone-odo/templates/test-plan.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "db9c88b5865960de4a8358e04250b2b2596bf5e3896c4ede183f972dd3d8204f",
+    "lines": 10
+  },
+  {
+    "path": "plugin/skills/clone-odo/templates/tokens.json",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "b621fdfd2cc6adc309f23b80a01183e410d5a1c49e6bcf2de99e7aefbe7c606f",
+    "lines": 45
+  },
+  {
+    "path": "plugin/skills/clone-odo/upstream-check.ps1",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "e578dbc59f516f01fbd30d3baa50b0767bf38c2365c554f6a8d95dea3ca185a1",
+    "lines": 12
+  },
+  {
+    "path": "plugin/skills/clone-odo/upstream-check.sh",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed CLI callers, parity and quote contracts, manifest, templates, all tests; custom probes recorded separately.",
+    "sha256": "389ccbf8028b4f683e407905e73d96509ce4005af7e18d7c7fdda5c1177075c4",
+    "lines": 11
+  },
+  {
+    "path": "plugin/skills/code-vader/SKILL.md",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed staged/unstaged collection, working-copy marker reads, formatter validation, binary verdict, embedded selftests; PowerShell assertion counters scope suspected false green.",
+    "sha256": "b37496c9d492c51470138203d40807502e6e6e2ab28035c0bcef29f3452a8cf8",
+    "lines": 134
+  },
+  {
+    "path": "plugin/skills/code-vader/scripts/code-vader.ps1",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed staged/unstaged collection, working-copy marker reads, formatter validation, binary verdict, embedded selftests; PowerShell assertion counters scope suspected false green.",
+    "sha256": "1d5f3756c87526daae00750b1cfe50f3a81f447814f20115d937e667868de913",
+    "lines": 434
+  },
+  {
+    "path": "plugin/skills/code-vader/scripts/code-vader.sh",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed staged/unstaged collection, working-copy marker reads, formatter validation, binary verdict, embedded selftests; PowerShell assertion counters scope suspected false green.",
+    "sha256": "65b613b083bb79127450b8ff9bd29aa22c34a808b021ac3f6587c11ab97c1a93",
+    "lines": 445
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/SKILL.md",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "d688e15154f7d3ffcab24fef550b5f834529878119705dc1cfc1045c1cb81a5d",
+    "lines": 293
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/anatomy.mjs",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "496808e7e6bee02f0e33205276ca545066553411adf86755b03ecf4b7ae4564b",
+    "lines": 214
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/anatomy.test.mjs",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "91ead6b237a3807008e8350c3e7bb99c3f29f09b74ba8dd2f96502aa090b2272",
+    "lines": 82
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/fixture-all-states.md",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "0d5087a4b2e47e921d1fd57ad59d59f60e14c891e1f99895a6b38a3016d68f0f",
+    "lines": 168
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/fixture-design.md",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "dda971a0fb11281d33e4d817b4cb1db2970f28f4aa5ffd1d32dca33de5211c88",
+    "lines": 28
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/fixture-plain.md",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "406a2ca889eb1eec4f0d313320cdd27508a7689394b87dc666d220610747c4a3",
+    "lines": 20
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/README.md",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "22743a191dd6a3a98584cd4315eae4d7ac1477e27ae418e53fde2f2391bf4a85",
+    "lines": 16
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/TICKETS.md",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "b8e9050c0fc57dbaffe226a1f64262723af89d33288c5ebdb0ce6370dfa4feb4",
+    "lines": 22
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/_run.md",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "2d24a38b0633cf8d6c449f7d79135311697a6a50db60321767b33eb3cb6e0510",
+    "lines": 79
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/conftest.py",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines": 0
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/shelf/__init__.py",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lines": 0
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/shelf/__main__.py",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "24dd06a1c1fca204d9be6b7181035f0c2f60cec1efa5ba6c0174096269cae5d3",
+    "lines": 5
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/shelf/books.py",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "74b201709f6c5d2186bda5b8ed422d2141932c88622cbd2ac9f43a3ecbc29ee1",
+    "lines": 23
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/shelf/cli.py",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "6d57afc8de00f6975d7b44ccaa5c5386811233f0b85a48f11059bcbf85d9ae94",
+    "lines": 33
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/shelf/report.py",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "8115d7eabe4a03fccb46c6fd4b451977a5efdb4d1e7116875d149aad0278a84b",
+    "lines": 12
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/tests/test_books.py",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "152fb98f8aebb007c98ec026ec66626cecf4e49d31309899244e48063e3ccbf2",
+    "lines": 51
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/holo.mjs",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "50e8be9c1f0b3e2bc81ac9e6aa66a6c6383a6f089f61fbd2c11dd7ff0e18bdf9",
+    "lines": 1365
+  },
+  {
+    "path": "plugin/skills/holo-r2d2/scripts/wizard.mjs",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed parse/holds boundary, all output renderers, wizard schema/import/approval/storage, fixtures and assertions; next-round importer lacks identity/finalization checks.",
+    "sha256": "07ffd793a4f67409dd72087cfab42cfce7ea609d291717062042c7f1e566c6e2",
+    "lines": 721
+  },
+  {
+    "path": "plugin/skills/live-friday/SKILL.md",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed entry discovery, paired custom JSON parsers, merge/rename persistence, missing flags and tests; cwd resolution and discovered-directory JSON escaping require probes.",
+    "sha256": "62f9ab0780829d595a5a9d2c22f0e23fd2f3e2b6d0d388f97fc0c5d37677ccda",
+    "lines": 115
+  },
+  {
+    "path": "plugin/skills/live-friday/scripts/run-entries.ps1",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed entry discovery, paired custom JSON parsers, merge/rename persistence, missing flags and tests; cwd resolution and discovered-directory JSON escaping require probes.",
+    "sha256": "46e7c339946be8c0feb838a7c1041fb32af73e674a16066976eaa91f262633f2",
+    "lines": 426
+  },
+  {
+    "path": "plugin/skills/live-friday/scripts/run-entries.sh",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Reviewed entry discovery, paired custom JSON parsers, merge/rename persistence, missing flags and tests; cwd resolution and discovered-directory JSON escaping require probes.",
+    "sha256": "ceb2dd566d34dec2ac16dc945cb6521641710b41dd56c7d5ef9f7a900988f12c",
+    "lines": 422
+  },
+  {
+    "path": "plugin/skills/relay-morpheus/SKILL.md",
+    "inspected": true,
+    "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+    "notes": "Cross-port/call-site/error/concurrency/data assessment complete; test coverage is static unless named in probe artifacts.",
+    "sha256": "e5ba5ec2eb68eecf4ebb9fdebd32c6272aa815a06893153e01871b85b019600e",
+    "lines": 303
+  },
+  {
+    "path": "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1",
+    "inspected": true,
+    "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+    "notes": "Cross-port/call-site/error/concurrency/data assessment complete; test coverage is static unless named in probe artifacts.",
+    "sha256": "5c838997a1ebf6dc2dbba79c61d8290c245a4e25870aba24e48f61d8a27e226b",
+    "lines": 3866
+  },
+  {
+    "path": "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh",
+    "inspected": true,
+    "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+    "notes": "Cross-port/call-site/error/concurrency/data assessment complete; test coverage is static unless named in probe artifacts.",
+    "sha256": "dd11322169a0781f273b66f7826e039c88c7dd3ccbaa88e8319b707fd05423fc",
+    "lines": 3606
+  },
+  {
+    "path": "plugin/skills/relay-morpheus/references/chain.md",
+    "inspected": true,
+    "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+    "notes": "Cross-port/call-site/error/concurrency/data assessment complete; test coverage is static unless named in probe artifacts.",
+    "sha256": "fe601c3bc24f1912fb625f5d7836abc8b6e4802f934599bfe95018e76355607e",
+    "lines": 244
+  },
+  {
+    "path": "plugin/skills/relay-morpheus/references/marathon.md",
+    "inspected": true,
+    "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+    "notes": "Cross-port/call-site/error/concurrency/data assessment complete; test coverage is static unless named in probe artifacts.",
+    "sha256": "299882a1458ebbf167bd1a15313b2e24be8c51ef2e82d5d9d55272838f7edebc",
+    "lines": 495
+  },
+  {
+    "path": "plugin/skills/relay-morpheus/templates/marathon-workflow.js",
+    "inspected": true,
+    "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+    "notes": "Cross-port/call-site/error/concurrency/data assessment complete; test coverage is static unless named in probe artifacts.",
+    "sha256": "eec8b3e86efab8bf4823b8bb2285e12d55e0e9ce152aa5d201795f7c11f42fbc",
+    "lines": 106
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/SKILL.md",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "58253c3ba6ec216ffdc36b19657105ba4fbc249384c1d59167726dd67d5d4a05",
+    "lines": 136
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "3e8a42dba211ea65762ba7ec08a83e3cae044259c8756ac1fdd57157ca664a52",
+    "lines": 1434
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/cerebro-core.mjs",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "79fd923176f2045245f7d85a042baf30dd5380ad11ebb920780b00bd9711bab2",
+    "lines": 907
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/cerebro-gemini.toml",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "ba7ccda688a39e909a672f285575edc21d846f54b1f609abc7dd687983d693cb",
+    "lines": 29
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/cerebro-selftest.mjs",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "ba7363a213b3271950e827be26805e7fc0f4055ff1fb42951dac4e1253823ba8",
+    "lines": 1404
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/cerebro.ps1",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "f93fc6b01c42356d0030cfbd2509268dac6d3ad3012fcc244b87fbd0c1cccefc",
+    "lines": 12
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/cerebro.sh",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "42e30a1cee3bd68d5e1118d4b0ab57131202f849b0b077b8d2d54f44ae1f9191",
+    "lines": 10
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/gemini-afteragent.mjs",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "71918c6e9af98bb9cddbd875d7bf8b67f0f333e17da00cfe39c026042e3a886c",
+    "lines": 24
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/package.json",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "8bb32ac6829a9b37d4ac327451feb1ccce4e675808ddfcca15a012220b06ab4e",
+    "lines": 6
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/pi-cerebro.ts",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "50d32888acea700b852eb543b74bf738ae9de6149acee706b874d7e65dffbbf8",
+    "lines": 178
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/agent",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "4242762dd4fef56c44ff9fcd013fa4614bc2bed9f92147fd76221dacbe69285d",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/agy",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "f578029f510067e988f140d38328b49bb030ba6d63dcad5ba1a8436b3f6a2366",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/cloudflared",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "fa33201e00e381ea0759917ab5d16f48b63fb357b55f2d824ae1a661c7c9020b",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/codex",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "69e617a11a24f87153e68d96b8fd7d2c268c99b2ab3405f11a584b267e8c8440",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/cursor-agent",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "84131898808708acb6b4c40e6a1a2935db830367194b7ef012330aae7b18c66b",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/ngrok",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "3e06d3ded10dd4f37b1ebb307b1981a93c90f07ffaaecd61b6ec34218de2e111",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/tailscale",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "1d4955da099dbdf6db7ab9f2209fd3520227846937a060c2ff8c9de988f0bce9",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/native-host.mjs",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "5a6be1f5c53b4748385923fe7fab61b258c4c4389b67e49f5f18cbedd3dfbd9e",
+    "lines": 41
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/stub-acp.mjs",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "420d87c0a90e812d4e31d9cf69cb07c201db66a1692d62e40b607059e13c4fef",
+    "lines": 63
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/stub-codex-app.mjs",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "bb11d090a27b7def5a116556b1bd297d227446a91f8eaea21dd0d5fb0cc2a5e0",
+    "lines": 81
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/stub-native.mjs",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "a7f63d48eec78952b7af82f9f230b8092378bea027bac6e86657e64119a6f753",
+    "lines": 31
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/stub-pi-ext.mjs",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "c137edce905bb20bc72b47df9935f9f9ad5b4c148834e375b7f1346d5fb3f3ff",
+    "lines": 56
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/stub-pi-rpc.mjs",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "bd009142e6f58eef6e8761c9462a43aac3668f9087c5a422b789084b4dac60be",
+    "lines": 53
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/references/channels.md",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "14e50bdcaee923a74b3b3a5b763a0f395015aefc40ad1d0351c8a14b73fdbdaa",
+    "lines": 65
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/references/hosts.md",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "85e274ff47bf2ed70fd0f9dd9883366b167b0eec755bf9a07b8e08602bdc3b82",
+    "lines": 113
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/references/security.md",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "c110ebed96ccef97bf9df3817fba472f1da77003d44303613dd9a1327e46b72d",
+    "lines": 336
+  },
+  {
+    "path": "plugin/skills/skillator-sync/SKILL.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "ff088e8118aae516eacf42bbe0eefac42769429f9bf9a54b85cce7754caa2277",
+    "lines": 84
+  },
+  {
+    "path": "plugin/skills/skillator-sync/scripts/skillator-sync.ps1",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "2351a5fda3347865c0f3731561c46d7776ebe10cc29f6ba9fb31155b9a53893a",
+    "lines": 342
+  },
+  {
+    "path": "plugin/skills/skillator-sync/scripts/skillator-sync.sh",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "a7ec5afdbd05a23733439243a64b19c2e329f98febdcd9612d67508f41377dfd",
+    "lines": 340
+  },
+  {
+    "path": "plugin/skills/teams-uhura/SKILL.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "613aa9dfa5432925d631f8e1fa612942e7de27ef8a5e1368a24a2bcc1fc490b6",
+    "lines": 144
+  },
+  {
+    "path": "plugin/skills/teams-uhura/references/setup.md",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "558b262aec7d8e986068d370c6b6441371b53e3d46d56f925b306376ddc4fe20",
+    "lines": 182
+  },
+  {
+    "path": "plugin/skills/teams-uhura/scripts/inbox.mjs",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "02387cd8f75dbce651ef7023419ca33cfd62996ec0e352eddc7aee15b3d27162",
+    "lines": 175
+  },
+  {
+    "path": "plugin/skills/teams-uhura/scripts/setup.ps1",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "242a8e63e1c53ab14fb529a30844308b872f303b6cb33ef5bebc7a635f636232",
+    "lines": 250
+  },
+  {
+    "path": "plugin/skills/teams-uhura/scripts/setup.sh",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "b9da0b1f45ca29f32fe8714207f8abc354dfb00ca77edc75b4d16411c3844157",
+    "lines": 231
+  },
+  {
+    "path": "plugin/skills/teams-uhura/scripts/team-hook.mjs",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "03c2cfeb0c39450f77ec5c4f35c04b29b76b1a82b47fab1ebd8be5c266e20430",
+    "lines": 47
+  },
+  {
+    "path": "plugin/skills/teams-uhura/scripts/team.mjs",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "42b6a5fb393f619748e899ac69c6674f850275d24d12e1da4f7ac5373e1f6c33",
+    "lines": 771
+  },
+  {
+    "path": "plugin/skills/teams-uhura/scripts/team.test.mjs",
+    "inspected": true,
+    "method": "full source/test/instruction read after CodeGraph",
+    "notes": "Reviewed complete CLI, persistence, setup, tests, security and caller contracts.",
+    "sha256": "862d54ff927555d106dc1422ac6ecad9262abfa40fe857c0369091a9d7c8db9c",
+    "lines": 767
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/SKILL.md",
+    "inspected": true,
+    "method": "Transferred canonical full read by fresh helper investigator; source evidence integrated",
+    "notes": "All 1011 lines read, including canonical format, tags, allocation, collision hooks, statuses, archival, verification/workflow instructions, artifact publish fallback and all list rules. Instructions inspected as contracts, not claimed live native-host execution.",
+    "reviewer": "/root/full_audit_helpers",
+    "sha256": "03acc005bbadf14decc64fd447d0d1f52278a66d5a4f752fdef18d4c1a3789e2",
+    "lines": 1011
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/board/artifact.mjs",
+    "inspected": true,
+    "method": "Transferred canonical full read by fresh helper investigator; source evidence integrated",
+    "notes": "All source/CSS/selftests read. --selftest PASS. Escaping applies to user text in text nodes; status/tag class vocabularies are controlled. Archive read+count+closed mark verified in implementation and tests. No live publish attempted.",
+    "reviewer": "/root/full_audit_helpers",
+    "sha256": "c41a1ed16be94eefdf0a1e99d2e83ef60114aa2a3964b8994a74ecc658b3132d",
+    "lines": 329
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/board/index.html",
+    "inspected": true,
+    "method": "Transferred canonical full read by fresh helper investigator; source evidence integrated",
+    "notes": "All 943 lines read, including CSS/control markup, frozen sample board, parser/state/filter/render/copy/load/theme/file/hash logic. Exact parser extracted to node vm reproduces HELP-01. Browser setup attempts did not provide reliable usable end-to-end output, so browser rendering not claimed.",
+    "reviewer": "/root/full_audit_helpers",
+    "sha256": "346a2a0782ea9d1a547095b54773934bd4989ef826fa987eac5aea181b71623c",
+    "lines": 943
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/board/refresh.mjs",
+    "inspected": true,
+    "method": "Transferred canonical full read by fresh helper investigator; source evidence integrated",
+    "notes": "All 43 lines read. Template-only read, caller-selected source/output, sentinel validation and closing-script escape traced to index readSnapshot. No live file viewer launched or publication claimed.",
+    "reviewer": "/root/full_audit_helpers",
+    "sha256": "2cbe33db38d6fc0aaa466c285fba12c049a857108bff4c4a238bb8954bd0fff9",
+    "lines": 43
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/scripts/pending.ps1",
+    "inspected": true,
+    "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+    "notes": "Cross-port/call-site/error/concurrency/data assessment complete; test coverage is static unless named in probe artifacts.",
+    "sha256": "247fd49f232ba0df81b6be9fc60fc8aa5b499ce9b5fc116a2e4898e519bb4e99",
+    "lines": 1033
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/scripts/pending.sh",
+    "inspected": true,
+    "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+    "notes": "Cross-port/call-site/error/concurrency/data assessment complete; test coverage is static unless named in probe artifacts.",
+    "sha256": "02385cd7793ed9ed26f1a08c8f395e37b194efb6b367d180a72c396d9749a5e1",
+    "lines": 814
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/scripts/ticket-meta.ps1",
+    "inspected": true,
+    "method": "Full numbered canonical source and embedded selftest read; cross-port and caller assessment",
+    "notes": "Lock/CAS/CRLF, owner/lead/tester authorization, identity, app discovery, board commits, Teams post boundary and test fixtures reviewed. Shell assign-app defect and stale selftest expectations recorded.",
+    "sha256": "5952ad229c8c0376d3de470b821d9c5b8b61f9a9afb4d99eb3bf7a25320778f6",
+    "lines": 2220
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/scripts/ticket-meta.sh",
+    "inspected": true,
+    "method": "Full numbered canonical source and embedded selftest read; cross-port and caller assessment",
+    "notes": "Lock/CAS/CRLF, owner/lead/tester authorization, identity, app discovery, board commits, Teams post boundary and test fixtures reviewed. Shell assign-app defect and stale selftest expectations recorded.",
+    "sha256": "72529f4c81bab421bacc7e8743262f5a7d6aa3c0fab17bc8639e9a42770130cd",
+    "lines": 2048
+  },
+  {
+    "path": "plugin/skills/watch-cortana/SKILL.md",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Traced source identity, exact session freshness, cache schema, profile refresh, gate/check/level; tests stub refresh so producer behavior lacks coverage.",
+    "sha256": "5055a4ce32fb0d62132a4edcd305e2ba451a457152e0c2a14691fec5176f93c2",
+    "lines": 231
+  },
+  {
+    "path": "plugin/skills/watch-cortana/hooks/quota-source-selftest.ps1",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Traced source identity, exact session freshness, cache schema, profile refresh, gate/check/level; tests stub refresh so producer behavior lacks coverage.",
+    "sha256": "db50c3ede517102e28fcce3a14cdc4847105d6d2dd12134acb0e34197308eb2a",
+    "lines": 187
+  },
+  {
+    "path": "plugin/skills/watch-cortana/hooks/selftest.ps1",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Traced source identity, exact session freshness, cache schema, profile refresh, gate/check/level; tests stub refresh so producer behavior lacks coverage.",
+    "sha256": "be203c103cbadad86ed744c11747cba2a1889add004f4d5c39ea70ea70ca1f88",
+    "lines": 663
+  },
+  {
+    "path": "plugin/skills/watch-cortana/hooks/usage-watch.ps1",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Traced source identity, exact session freshness, cache schema, profile refresh, gate/check/level; tests stub refresh so producer behavior lacks coverage.",
+    "sha256": "d15cf5ef38e8afb5214c21aa33381cecef87c945479a8d48705e6d1f37e56412",
+    "lines": 591
+  },
+  {
+    "path": "plugin/skills/watch-cortana/hooks/usage-watch.sh",
+    "inspected": true,
+    "method": "Full canonical source, instructions, fixtures and embedded tests read",
+    "notes": "Traced source identity, exact session freshness, cache schema, profile refresh, gate/check/level; tests stub refresh so producer behavior lacks coverage.",
+    "sha256": "ee9eb7578d3fee6948b7d4c746d284fa788cc2e7f3596303bce80b3658f43768",
+    "lines": 585
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/agent.cmd",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "529e56afa5018a15a93720c4a3b7b259d6b11ecdb5ff88cce3013cbfc5886609",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/agy.cmd",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "ee78f6940217cbbbb213c9ac77a496af48ed47e3adb97a068a1c14a3c6ee2995",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/cloudflared.cmd",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "270fa5de60d0cc68b8004bbcbf319e870db5eefe79851d3edb77b9e48fe023fd",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/codex.cmd",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "3a6369e2a13c36139d3d7cf6f47f9cf0444ba311a33dfe97e7ff89eafcc60e53",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/cursor-agent.cmd",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "1f61e77df70849d436cdf8ba5d1728fe0f13bd5e0eaebae1a48c566a5beae325",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/ngrok.cmd",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "792c745dc3dde288c112705ea2daf9830fa2d2dea92964a9e445443c5d4df789",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/pi-rpc-stub.cmd",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "129ae7b4103a2e7e9e233b891f08e8bae4f035d376c85208d1de9e10a74e57e5",
+    "lines": 3
+  },
+  {
+    "path": "plugin/skills/remote-cerebro/hooks/stubs/bin/tailscale.cmd",
+    "inspected": true,
+    "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+    "notes": "UTF-8 boundary and stalled-channel disarm probes reproduced; real host/channel validation not executed; test stubs and provider proof are explicitly separated.",
+    "sha256": "3165c2bb12f894ba50629baf6c7dbb9282ba507e2255a1b0675d8503c309cf00",
+    "lines": 3
+  }
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "verification-setup-unknown-args",
+    "severity": "high",
+    "file": "plugin/skills/teams-uhura/scripts/setup.ps1",
+    "line": 11,
+    "claim": "Unknown setup flags select the mutation-capable full walk",
+    "failure": "A typo --chek sets Check false; Invoke-Setup can install, log in and create tunnel/port before its final arm confirmation."
+  },
+  {
+    "id": "verification-setup-tunnel-identity",
+    "severity": "medium",
+    "file": "plugin/skills/teams-uhura/scripts/setup.ps1",
+    "line": 38,
+    "claim": "Unrelated devtunnel process suppresses hosting the requested tunnel",
+    "failure": "With another devtunnel process active, TunnelHosted returns true and setup skips hosting skillator-teams, while presenting its callback URL."
+  }
+]

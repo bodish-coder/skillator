@@ -1,0 +1,55 @@
+[
+  {
+    "finding": "same-stage dispatch lease cleanup race",
+    "verdict": "source-confirmed conditional interleaving",
+    "confidence": 90,
+    "refs": [
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:1417",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:1421",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:1436",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:818",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:831",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:835",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:112"
+    ],
+    "interleaving": [
+      "A and B see same pending row before run lock",
+      "A leases files; B same run/stage replaces lease without attempt/driver identity guard",
+      "A acquires run lock and records in-flight",
+      "B acquires run lock and refuses because row now in-flight",
+      "B refusal cleanup removes all lease rows matching run/stage, including lease protecting winner A"
+    ],
+    "impact": "A remains in-flight but foreign-run file-conflict protection is gone",
+    "limits": "Independent literal control-flow review; not a live/stress race reproduction. PS corresponding paths corroborated by automation investigator; parent direct source review covered shell."
+  },
+  {
+    "finding": "heartbeat can restore stale pre-lock state",
+    "verdict": "source-confirmed conditional interleaving",
+    "confidence": 90,
+    "refs": [
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:652",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:656",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:659"
+    ],
+    "interleaving": [
+      "Heartbeat reads current state and landed before taking stage lock",
+      "Another writer lands row x with commit under lock",
+      "Heartbeat calls cmd_stage with previously read ~ and empty landed; cmd_stage overwrites latest row"
+    ],
+    "impact": "Landed stage can become in-flight again with stale metadata; row/lease state diverges",
+    "limits": "Independent source review, not live stress execution. Fix must move read-modify-write under one lock and assert terminal states survive heartbeat."
+  },
+  {
+    "finding": "PowerShell benign claim fallback clobbers dispatch timestamp",
+    "verdict": "source-confirmed branch-specific wrong value",
+    "confidence": 100,
+    "refs": [
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1176",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1190",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1205",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1210"
+    ],
+    "failure": "$t receives Now, then a failed claim on unassigned tickets iterates foreach($t in $ids), overwriting it with last ticket ID; Dispatched and driver headers then store ticket ID as timestamp.",
+    "limits": "Independent direct PS source review; no real dispatch/auth/lease was started."
+  }
+]

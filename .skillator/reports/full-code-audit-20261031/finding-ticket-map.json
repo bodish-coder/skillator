@@ -1,0 +1,118 @@
+{
+  "OPS-01": [
+    "F151",
+    "F152",
+    "F153",
+    "F154",
+    "F155",
+    "F156"
+  ],
+  "OPS-07": [
+    "A178"
+  ],
+  "AUTO-05": [
+    "A179"
+  ],
+  "AUTO-14": [
+    "A182"
+  ],
+  "AUTO-17": [
+    "A183"
+  ],
+  "AUTO-16": [
+    "A184"
+  ],
+  "AUTO-15": [
+    "A185"
+  ],
+  "integration-deploy-backup": [
+    "A186"
+  ],
+  "integration-nginx-envsubst": [
+    "A187"
+  ],
+  "integration-deploy-success": [
+    "A188"
+  ],
+  "AUTO-07": [
+    "A189"
+  ],
+  "integration-muse-override": [
+    "A190"
+  ],
+  "AUTO-10": [
+    "A191"
+  ],
+  "integration-reconcile-exit": [
+    "A192"
+  ],
+  "parent-taskwork-review-errors": [
+    "A193"
+  ],
+  "parent-context-layout": [
+    "A194"
+  ],
+  "OPS-02": [
+    "A195"
+  ],
+  "OPS-03": [
+    "A196"
+  ],
+  "OPS-04": [
+    "A197"
+  ],
+  "OPS-05": [
+    "A198"
+  ],
+  "OPS-06": [
+    "A199"
+  ],
+  "OPS-09": [
+    "A200"
+  ],
+  "integration-gemini-alias": [
+    "A201"
+  ],
+  "integration-upstream-root": [
+    "A202"
+  ],
+  "integration-alpha-contrast": [
+    "A203"
+  ],
+  "HELP-01": [
+    "A204"
+  ],
+  "HELP-02": [
+    "A205"
+  ],
+  "AUTO-01": [
+    "A206"
+  ],
+  "AUTO-02": [
+    "A207"
+  ],
+  "AUTO-03": [
+    "A208"
+  ],
+  "AUTO-06": [
+    "A209"
+  ],
+  "AUTO-08": [
+    "A210"
+  ],
+  "AUTO-11": [
+    "A211"
+  ],
+  "AUTO-12": [
+    "A212"
+  ],
+  "AUTO-13": [
+    "A213"
+  ],
+  "verification-setup-unknown-args": [
+    "A214"
+  ],
+  "verification-setup-tunnel-identity": [
+    "A215"
+  ]
+}

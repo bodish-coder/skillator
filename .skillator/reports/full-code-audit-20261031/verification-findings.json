@@ -1,0 +1,915 @@
+[
+  {
+    "id": "OPS-01",
+    "original_sources": [
+      "ops-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "Native UI explicitly promises AI change digest and autonomous conflict resolution, but drafting/digest/audit are deterministic heuristics and actionGo only runs Git and asks for manual conflict resolution. Accept native promised-AI gap; do not treat standalone read-only action policy as a defect.",
+    "verifiedrefs": [
+      "plugin/mods/ops-board/hooks/lib/explorer.ts:113",
+      "plugin/mods/ops-board/hooks/lib/explorer.ts:138",
+      "plugin/mods/ops-board/hooks/lib/explorer.ts:153",
+      "plugin/mods/ops-board/hooks/explorertab.tsx:201",
+      "plugin/mods/ops-board/hooks/explorertab.tsx:252",
+      "plugin/mods/ops-board/hooks/explorertab.tsx:255"
+    ],
+    "proofrefs": [
+      "ops-ticket-evidence.json"
+    ],
+    "test_limits": "Direct source/caller verification; no live host execution.",
+    "original_claim": "AI Git workbench does not call AI or resolve conflicts",
+    "original_failure": "User asks Explorer to draft a commit, digest incoming changes, guard push or merge conflicts. The helpers use filename/subject heuristics only; conflictAi is a boolean with no executor. Native actionGo runs buffered Git and tells the user to resolve conflicts manually; shared standalone has no these action dispatchers.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "OPS-02",
+    "original_sources": [
+      "ops-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "Actual porcelain retains Git quotes around a space-containing filename; parseStatus passes them through and stageArgs sends those quotes as literal argv bytes. Isolated real Git rejects the resulting pathspec. Both callers use the same parser.",
+    "verifiedrefs": [
+      "plugin/mods/ops-board/hooks/lib/explorer.ts:97",
+      "plugin/mods/ops-board/hooks/lib/explorer.ts:57",
+      "plugin/mods/ops-board/hooks/explorertab.tsx:96",
+      "plugin/mods/ops-board/ops/explorer.ts:66"
+    ],
+    "proofrefs": [
+      "parent-explorer-path-probe.json"
+    ],
+    "test_limits": "Real isolated Git reproduction reviewed; no production index mutation.",
+    "original_claim": "Working-tree filenames with spaces cannot be staged",
+    "original_failure": "Actual git status --porcelain=v1 -uall returns ?? \"space name.txt\". parseStatus retains the quotes and stageArgs passes them as literal filename bytes. git add exits 128 pathspec failure. Native and shared staging refresh without surfacing the result.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "OPS-03",
+    "original_sources": [
+      "ops-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "F113 explicitly requires confirmed prompt submission on the session surface. Native RunsTab only renders existing-run Engage/Diagnose; no start form is in its state/routing. Standalone paste-only behavior is intentional and is not itself a defect.",
+    "verifiedrefs": [
+      "plugin/mods/ops-board/hooks/runstab.tsx:385",
+      "plugin/mods/ops-board/types/index.d.ts:149",
+      "plugin/mods/ops-board/ops/state.ts:839",
+      "plugin/mods/ops-board/ops/tests/state.test.mts:1160"
+    ],
+    "proofrefs": [
+      "ops-ticket-evidence.json"
+    ],
+    "test_limits": "Direct source/caller verification; no live host execution.",
+    "original_claim": "Start Run is missing from the Claude Workflows pane",
+    "original_failure": "Open native Claude Workflows to start pending-subagent or marathon-run. The view offers only existing-run Engage/Diagnose. The new form exists in standalone state and confirmation emits a Paste command with zero effects, so the requested Claude prompt dispatch never occurs.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "OPS-04",
+    "original_sources": [
+      "ops-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "Push Pending success text claims stages moved into a follow-up run; the only effect queues the existing ID. Backend qr_add_ only resolves and appends that same run. No follow-up or stage migration can result.",
+    "verifiedrefs": [
+      "plugin/mods/ops-board/ops/state.ts:811",
+      "plugin/mods/ops-board/hooks/lib/calls.ts:61",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:944"
+    ],
+    "proofrefs": [
+      "ops-findings.json"
+    ],
+    "test_limits": "Literal end-to-end call path; no real run/queue mutation.",
+    "original_claim": "Push Pending reports a follow-up run without creating one",
+    "original_failure": "With unfinished stages, Push Pending counts them, queues the same run ID and toasts that stages were pushed to a follow-up run. queue-run add only appends the existing run to queue; no stage migration/new run occurs. Rerun uses the same mechanism, and Mode is only local form default.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "OPS-05",
+    "original_sources": [
+      "ops-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "Copy shortcut returns a success toast with effects:[]; reducer has no clipboard mutation. Its test only asserts the toast. The guide is a compiled catalog rather than installed SKILL.md content, additionally missing F127 source-viewer behavior.",
+    "verifiedrefs": [
+      "plugin/mods/ops-board/ops/state.ts:1908",
+      "plugin/mods/ops-board/ops/state.ts:1156",
+      "plugin/mods/ops-board/ops/tests/state.test.mts:973"
+    ],
+    "proofrefs": [
+      "ops-ticket-evidence.json"
+    ],
+    "test_limits": "Direct source/caller verification; no live host execution.",
+    "original_claim": "Help Copy reports success without copying and guide omits installed content",
+    "original_failure": "Choose a skill and press c: reducer returns a copied toast and no effect, so clipboard is unchanged. Help content is a compiled static catalog rather than loading that installation SKILL.md; native pane has no guide route.",
+    "severity": "medium",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "OPS-06",
+    "original_sources": [
+      "ops-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "Native Tickets receives buildModel status-only groups; personalized helper functions are not called by native rendering. Shared implementation does not satisfy the native pane contract.",
+    "verifiedrefs": [
+      "plugin/mods/ops-board/hooks/pane.tsx:68",
+      "plugin/mods/ops-board/hooks/register.tsx:593",
+      "plugin/mods/ops-board/hooks/lib/ticketsmodel.ts:145",
+      "plugin/mods/ops-board/hooks/lib/ticketsmodel.ts:10"
+    ],
+    "proofrefs": [
+      "ops-ticket-evidence.json"
+    ],
+    "test_limits": "Direct source/caller verification; no live host execution.",
+    "original_claim": "Personalized Assigned and Decide sections absent from native Tickets",
+    "original_failure": "Native Claude user expects personalized Assigned/Decide sections after selecting a team member. Native Tickets renders only status groups; helper/shared reducer implementation is never integrated into this surface.",
+    "severity": "medium",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "OPS-07",
+    "original_sources": [
+      "ops-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "Producer cleanRecord preserves to, but Ops record reconstructs only ts/from/email/text/id. Shared pendingHandoffOf therefore cannot see a real recipient; native band supplies no recipient either. This is distinct from AUTO-05 outbound delivery.",
+    "verifiedrefs": [
+      "plugin/mods/ops-board/hooks/lib/inbox.ts:39",
+      "plugin/mods/ops-board/ops/draw.ts:339",
+      "plugin/mods/ops-board/hooks/band.tsx:26",
+      "plugin/skills/teams-uhura/scripts/inbox.mjs:82"
+    ],
+    "proofrefs": [
+      "ops-report.md"
+    ],
+    "test_limits": "Actual production parse reproduction recorded by investigator; static producer-to-renderer boundary independently read.",
+    "original_claim": "Real pending handoff recipient is discarded before band rendering",
+    "original_failure": "Inbox JSONL contains valid pending handoff with to:@vidul. record reconstructs Msg without to. Shared pendingHandoffOf reads a field no record retains, while native band/status callers pass no handoff argument. Neither real path produces requested recipient suffix.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "OPS-08",
+    "original_sources": [
+      "ops-findings.json"
+    ],
+    "score": 75,
+    "verdict": "REJECT",
+    "reason": "Excluded from latent-defect count: auto-opening setup and running only --check are explicitly existing implementation/test policy. The F98 owner contract and latest request establish a real completion gap for launching the interactive first-time script; preserve that as requested requirement work (F98a), with passive entry under B21. Do not describe intentional auto-open as a newly discovered regression or claim auth login was reproduced.",
+    "verifiedrefs": [
+      "plugin/mods/ops-board/hooks/messagestab.tsx:95",
+      "plugin/mods/ops-board/hooks/messagestab.tsx:148",
+      "plugin/mods/ops-board/hooks/lib/calls.ts:72",
+      "plugin/mods/ops-board/tests/messages.test.tsx:108",
+      "plugin/mods/ops-board/tests/messages.test.tsx:168"
+    ],
+    "proofrefs": [
+      "ops-ticket-evidence.json"
+    ],
+    "test_limits": "Requirement classification; current signed-out live behavior not independently exercised.",
+    "original_claim": "Messages still auto-opens setup and cannot launch interactive login wizard",
+    "original_failure": "Enter Messages without saved token: setup opens automatically, contrary current user request. Choose first-time setup: only --check executes, leaving signed-out users unable to launch login/full wizard from Claude.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": false,
+    "classification": "requested_requirement_gap_excluded_from_latent_defect_count"
+  },
+  {
+    "id": "OPS-09",
+    "original_sources": [
+      "ops-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "Native form offers implementation and decision only; confirm maps every non-decision draft to meta-assign. Tester schema/backend support cannot make tester assignment available in this native UI.",
+    "verifiedrefs": [
+      "plugin/mods/ops-board/hooks/assign.tsx:117",
+      "plugin/mods/ops-board/hooks/assign.tsx:314",
+      "plugin/mods/ops-board/types/index.d.ts:45"
+    ],
+    "proofrefs": [
+      "ops-ticket-evidence.json"
+    ],
+    "test_limits": "Direct source/caller verification; no live host execution.",
+    "original_claim": "Native assignment form cannot assign a tester",
+    "original_failure": "Claude pane user attempts tester assignment. Native form offers only implementation and decision; executor maps every non-decision kind to ordinary assign, despite AssignDraft accepting tester and backend exposing assign-tester.",
+    "severity": "medium",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "integration-muse-override",
+    "original_sources": [
+      "integration-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "An explicitly nonexistent override does not inhibit PATH lookup. Selftest exports that nonexistent override, yet the exact extracted function invoked the report-owned Muse stub for list/install. Real profile damage is conditional on inherited Muse environment; it was not executed.",
+    "verifiedrefs": [
+      "plugin/install.sh:380",
+      "plugin/install.sh:562"
+    ],
+    "proofrefs": [
+      "integration-installer-probes.json"
+    ],
+    "test_limits": "Extracted-function stub reproduction; never run full installer selftest or real Muse.",
+    "original_claim": "A nonexistent SKILLATOR_MUSE override falls through to PATH discovery instead of disabling Muse.",
+    "original_failure": "The shell selftest sets SKILLATOR_MUSE=$T/none, but put_muse then discovers and invokes the real muse binary for plugin list/install/update; a live profile inherited via other environment variables can be affected. PowerShell correctly returns on the invalid override.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "integration-gemini-alias",
+    "original_sources": [
+      "integration-findings.json"
+    ],
+    "score": 90,
+    "verdict": "ACCEPT",
+    "reason": "Conversion is conditional on the literal pending.toml basename; alias receives the original sh injection. Extracted PowerShell Write-Cmd produces powershell for canonical command and sh for alias. Failure is conditional on Windows setups needing the documented conversion.",
+    "verifiedrefs": [
+      "plugin/install.ps1:287",
+      "plugin/install.ps1:293"
+    ],
+    "proofrefs": [
+      "integration-installer-probes.json"
+    ],
+    "test_limits": "Generated contents reproduced; no native Gemini invocation.",
+    "original_claim": "Windows conversion of Gemini pending shell injection omits the skillator-pending alias.",
+    "original_failure": "Write-Cmd matches only gemini/pending.toml and shell put_cmd only the same basename. Generated skillator-pending.toml retains !{sh ...pending.sh}; Windows Gemini environments that require the documented PowerShell conversion fail the alias while /pending works.",
+    "severity": "medium",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "integration-reconcile-exit",
+    "original_sources": [
+      "integration-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "git diff is the left pipeline command; the right group returns success when it reads no rows. Invalid refs therefore yield fatal Git diagnostics plus 0 paths/0 failed and status0, defeating a completeness gate.",
+    "verifiedrefs": [
+      "plugin/skills/merge-smith/references/reconcile.sh:15",
+      "plugin/skills/merge-smith/references/reconcile.sh:28"
+    ],
+    "proofrefs": [
+      "integration-report.md"
+    ],
+    "test_limits": "Read-only invalid-ref reproduction recorded; not a merge operation.",
+    "original_claim": "Reconcile reports success when Git fails to enumerate the requested diff.",
+    "original_failure": "reconcile audit_nonexistent_ref HEAD emits fatal ambiguous revision followed by 0 paths, 0 failed and exit0; consumers use zero status as completeness evidence.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "integration-nginx-envsubst",
+    "original_sources": [
+      "integration-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "Unrestricted envsubst consumes nginx runtime variables, which are not deployment placeholders. Exact rendered template has empty set/if/Host expressions. This is deterministic scaffold breakage independent of real deployment values.",
+    "verifiedrefs": [
+      "plugin/skills/deploy-niyoj/references/templates.md:153",
+      "plugin/skills/deploy-niyoj/references/templates.md:175",
+      "plugin/skills/deploy-niyoj/references/templates.md:189"
+    ],
+    "proofrefs": [
+      "integration-nginx-probe.json"
+    ],
+    "test_limits": "Actual envsubst output reviewed; nginx service/config was not changed or executed.",
+    "original_claim": "The deploy template destroys nginx runtime variables during unrestricted environment substitution.",
+    "original_failure": "Exact nginx template passed through envsubst yields set 0, if (=1), try_files / /index.html and proxy_set_header Host ; because maintenance/uri/host are unset shell variables. Normal scaffold fails nginx -t regardless of replacing deployment placeholders.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "integration-deploy-backup",
+    "original_sources": [
+      "integration-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "Backup failure is explicitly converted to warn, after which build/up --build proceeds. This contradicts the required pre-deploy snapshot guarantee for an existing database. First install without a database may legitimately need a separate branch.",
+    "verifiedrefs": [
+      "plugin/skills/deploy-niyoj/references/templates.md:120",
+      "plugin/skills/deploy-niyoj/references/templates.md:135",
+      "plugin/skills/deploy-niyoj/SKILL.md:72",
+      "plugin/skills/deploy-niyoj/SKILL.md:139"
+    ],
+    "proofrefs": [
+      "integration-ticket-evidence.json"
+    ],
+    "test_limits": "Source-proven failure path; no DB loss, migration or remote deployment reproduced.",
+    "original_claim": "A failed pre-deploy database snapshot does not stop rebuilding the application.",
+    "original_failure": "Existing deployment backup errors (disk full, DB outage or backup failure) invoke warn and continue into frontend build and compose up --build; a migrating release can proceed with no snapshot despite Database safety calling phase4 the guarantee.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "integration-deploy-success",
+    "original_sources": [
+      "integration-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "Live is emitted before nginx/TLS, and certbot errors become warn/status0. On first issuance failure this contradicts explicit nonzero-on-failure and HTTPS verification contracts. Existing fresh certs are not the failing input.",
+    "verifiedrefs": [
+      "plugin/skills/deploy-niyoj/references/templates.md:149",
+      "plugin/skills/deploy-niyoj/references/templates.md:157",
+      "plugin/skills/deploy-niyoj/SKILL.md:139",
+      "plugin/skills/deploy-niyoj/SKILL.md:205"
+    ],
+    "proofrefs": [
+      "integration-ticket-evidence.json"
+    ],
+    "test_limits": "Literal control-flow verification, no real certificate attempt.",
+    "original_claim": "Deployment announces Live before nginx/TLS verification and converts TLS failure into success.",
+    "original_failure": "On a first deployment with failed certificate issuance, ok Live prints before nginx configuration and certbot failure only warns, leaving process status0 although the skill requires valid HTTPS.",
+    "severity": "medium",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "integration-upstream-root",
+    "original_sources": [
+      "integration-findings.json"
+    ],
+    "score": 90,
+    "verdict": "ACCEPT",
+    "reason": "Arming applies the old skills/design-arwen/UPSTREAM.md guard and practice/... commands to the current checkout whose payload is plugin/. The guard skips the watch before its commands can run.",
+    "verifiedrefs": [
+      "plugin/skills/grayskull-power/references/arming.md:129",
+      "plugin/skills/grayskull-power/references/arming.md:132",
+      "plugin/skills/design-arwen/UPSTREAM.md:1"
+    ],
+    "proofrefs": [
+      "integration-report.md"
+    ],
+    "test_limits": "Current checkout layout verified; no upstream network watch run.",
+    "original_claim": "The upstream watch arming guard still uses the pre-move repository layout.",
+    "original_failure": "In current clone skills/design-arwen/UPSTREAM.md does not exist (it is plugin/skills/...); arming silently skips daily watches and automatic absorb tickets. Subsequent practice/... and skills/... command paths also target removed root locations.",
+    "severity": "medium",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "parent-taskwork-review-errors",
+    "original_sources": [
+      "integration-findings.json",
+      "parent-findings.json"
+    ],
+    "score": 85,
+    "verdict": "ACCEPT",
+    "reason": "Existing noncommit object passes rev-parse --verify; diff/log native exit statuses are not checked. Actual blob fixture emitted Git usage errors but created a review packet and returned0. Narrow to failed review evidence generation; do not imply ordinary valid commit diffs fail.",
+    "verifiedrefs": [
+      "plugin/practice/scripts/taskwork.ps1:79",
+      "plugin/practice/scripts/taskwork.ps1:89",
+      "plugin/practice/scripts/taskwork.ps1:96",
+      "plugin/practice/scripts/taskwork.ps1:99"
+    ],
+    "proofrefs": [
+      "parent-taskwork-ref-probe.json"
+    ],
+    "test_limits": "Actual isolated packet output and status reviewed; unusual noncommit input, practical impact is fail-open review handoff.",
+    "original_claim": "Review packet reports success for refs whose diff generation fails",
+    "original_failure": "Existing blob SHA passes rev-parse --verify; git diff exits with usage errors, but native errors are not checked and script writes packet/returns0. Caller may dispatch reviewer with empty evidence.",
+    "severity": "medium",
+    "duplicategroup": "parent-taskwork-review-errors",
+    "confirmed": true
+  },
+  {
+    "id": "parent-context-layout",
+    "original_sources": [
+      "integration-findings.json",
+      "parent-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "Default root derives plugin from plugin/practice/scripts, omitting root instructions; explicit repo root then misses plugin/skills descriptions. Synthetic oversized root CLAUDE passes default audit and fails explicit-root audit, confirming split-root coverage loss.",
+    "verifiedrefs": [
+      "plugin/practice/scripts/context-audit.sh:17",
+      "plugin/practice/scripts/context-audit.sh:32"
+    ],
+    "proofrefs": [
+      "parent-context-layout-probe.json"
+    ],
+    "test_limits": "Synthetic split layout, not a claim that current instruction length itself violates a limit.",
+    "original_claim": "Default context audit after plugin layout skips root instruction files",
+    "original_failure": "Defaultroot resolves plugin, which has skills but not repository CLAUDE/AGENTS/GEMINI; synthetic root240word CLAUDE exits0 bydefault. Passing explicit repository root detects240word error but then counts0skill descriptions because they reside under plugin.",
+    "severity": "medium",
+    "duplicategroup": "parent-context-layout",
+    "confirmed": true
+  },
+  {
+    "id": "integration-alpha-contrast",
+    "original_sources": [
+      "integration-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "bgOf skips translucent background layers rather than compositing them. For gray100 text over half-black on white it computes5.92 instead of1.488, a pass/fail reversal against its own required alpha-resolution procedure.",
+    "verifiedrefs": [
+      "plugin/skills/a11y-toph/references/checks.md:199",
+      "plugin/skills/a11y-toph/references/checks.md:210",
+      "plugin/skills/a11y-toph/references/checks.md:216"
+    ],
+    "proofrefs": [
+      "integration-contrast-probe.json"
+    ],
+    "test_limits": "Exact helper with synthetic computed styles; no browser-rendering claim.",
+    "original_claim": "Contrast sweep ignores translucent backgrounds and can classify failing text as passing.",
+    "original_failure": "Exact helper reports gray100 text over a half-opacity black background on white as5.92:1; composited background127.5 yields1.488:1. bgOf skips alpha backgrounds and uses white ancestor without compositing.",
+    "severity": "medium",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "HELP-01",
+    "original_sources": [
+      "helpers-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "Uppercasing a whole canonical B2a ID yields B2A, then the lowercase-suffix regex fails. Grouping goes to Unrecognised IDs and copied identity is wrong. Canonical subparts are valid inputs, not malformed tickets.",
+    "verifiedrefs": [
+      "plugin/skills/tickets-zordon/board/index.html:561",
+      "plugin/skills/tickets-zordon/board/index.html:577",
+      "plugin/skills/tickets-zordon/board/index.html:688",
+      "plugin/skills/tickets-zordon/SKILL.md:243"
+    ],
+    "proofrefs": [
+      "helpers-findings.json"
+    ],
+    "test_limits": "Investigator executed exact extracted parser; browser rendering not required for this data defect.",
+    "original_claim": "Uppercasing the entire ticket ID changes a valid B2a sub-ticket into B2A. The subsequent ID regexp only accepts a lowercase suffix, so prefix becomes ?, num 0, and parent null. By-type grouping puts the child under Unrecognised IDs, by-status loses its parent suffix, and copied text uses the wrong immutable ID.",
+    "original_failure": "Uppercasing the entire ticket ID changes a valid B2a sub-ticket into B2A. The subsequent ID regexp only accepts a lowercase suffix, so prefix becomes ?, num 0, and parent null. By-type grouping puts the child under Unrecognised IDs, by-status loses its parent suffix, and copied text uses the wrong immutable ID.",
+    "severity": "P2",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "HELP-02",
+    "original_sources": [
+      "helpers-findings.json"
+    ],
+    "score": 90,
+    "verdict": "ACCEPT",
+    "reason": "A blank line clears cur before the indented open child. Group eligibility considers only the old closed parent and archive moves it alone, violating the explicit parent/every-subpart-together rule.",
+    "verifiedrefs": [
+      "plugin/practice/scripts/archive-tickets.sh:100",
+      "plugin/practice/scripts/archive-tickets.sh:106",
+      "plugin/skills/tickets-zordon/SKILL.md:444"
+    ],
+    "proofrefs": [
+      "helpers-findings.json"
+    ],
+    "test_limits": "Actual isolated old-commit dry-run reproduced; production board/archive untouched.",
+    "original_claim": "A blank line resets the current parent group. An indented open child after that blank is not considered when deciding whether its old closed parent may archive; the parent moves alone and leaves an orphan child in TICKETS.md. This breaks the explicit all-sub-parts-close-before-parent-moves contract.",
+    "original_failure": "A blank line resets the current parent group. An indented open child after that blank is not considered when deciding whether its old closed parent may archive; the parent moves alone and leaves an orphan child in TICKETS.md. This breaks the explicit all-sub-parts-close-before-parent-moves contract.",
+    "severity": "P2",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-01",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 90,
+    "verdict": "ACCEPT",
+    "reason": "Normal editorial ellipses are not inherently fabricated speech. Here reviews.md explicitly requires every quote be a copied substring and says never shorten; snippet appends dots within the quote value. Fresh production-function probe confirms membership false and test strips dots before checking. Accept only exact-quote contract violation, not fabricated review content.",
+    "verifiedrefs": [
+      "plugin/skills/clone-odo/scripts/reviews.py:138",
+      "plugin/skills/clone-odo/scripts/reviews.py:147",
+      "plugin/skills/clone-odo/references/reviews.md:28",
+      "plugin/skills/clone-odo/scripts/tests/test_reviews.py:76"
+    ],
+    "proofrefs": [
+      "automation-probes.py",
+      "verification-extra-probes.json"
+    ],
+    "test_limits": "Fresh pure function execution; long synthetic review, no external review sourcing.",
+    "original_claim": "snippet adds literal ellipses to a long review excerpt; returned quote is not a substring of source text, contrary to SKILL.md and references/reviews.md. Existing verbatim test strips periods before checking.",
+    "original_failure": "snippet adds literal ellipses to a long review excerpt; returned quote is not a substring of source text, contrary to SKILL.md and references/reviews.md. Existing verbatim test strips periods before checking.",
+    "severity": "P2",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-02",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "Floor cell width times cols leaves a rightmost remainder unvisited. Fresh101px fixture differing at98..100 gives layout100 and no regions. Pixel score itself counts all pixels; narrow claim to layout score and region-grid omissions.",
+    "verifiedrefs": [
+      "plugin/skills/clone-odo/scripts/imgdiff.py:344",
+      "plugin/skills/clone-odo/scripts/imgdiff.py:360",
+      "plugin/skills/clone-odo/scripts/imgdiff.py:367"
+    ],
+    "proofrefs": [
+      "automation-probes.py",
+      "verification-extra-probes.json"
+    ],
+    "test_limits": "Fresh in-memory image arrays; no image editing tool or visual screenshot claim.",
+    "original_claim": "101px-wide images differing only at x98-100 yield layout score100 and no differing regions: floor(width/cols)*cols omits the right remainder strip.",
+    "original_failure": "101px-wide images differing only at x98-100 yield layout score100 and no differing regions: floor(width/cols)*cols omits the right remainder strip.",
+    "severity": "P2",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-03",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "Nonexistent root produces empty os.walk, render says Clean, and CLI returns0. Fresh production main invocation reproduced it. Missing targets must not certify a preflight scan.",
+    "verifiedrefs": [
+      "plugin/skills/clone-odo/scripts/sweep.py:81",
+      "plugin/skills/clone-odo/scripts/sweep.py:128",
+      "plugin/skills/clone-odo/scripts/sweep.py:171"
+    ],
+    "proofrefs": [
+      "automation-probes.py",
+      "verification-extra-probes.json"
+    ],
+    "test_limits": "Fresh absent report-local target; no files written by sweep.",
+    "original_claim": "A nonexistent root makes os.walk yield nothing and CLI exits0 with Clean, allowing a misspelled preflight target to pass without inspection.",
+    "original_failure": "A nonexistent root makes os.walk yield nothing and CLI exits0 with Clean, allowing a misspelled preflight target to pass without inspection.",
+    "severity": "P2",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-05",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "cmdMessage appends only sender-local Git inbox and optionally sends plain text; recipient envelope never enters transport. Channel failure still returns0/delivered. Distinct from OPS-07 receiving/rendering metadata loss.",
+    "verifiedrefs": [
+      "plugin/skills/teams-uhura/scripts/team.mjs:649",
+      "plugin/skills/teams-uhura/scripts/team.mjs:661",
+      "plugin/skills/teams-uhura/scripts/team.mjs:664",
+      "plugin/skills/teams-uhura/scripts/team.mjs:668"
+    ],
+    "proofrefs": [
+      "automation-ticket-evidence.json"
+    ],
+    "test_limits": "Complete local write/say/return path; no live channel or remote recipient used.",
+    "original_claim": "cmdMessage writes the sender-local inbox then sends only message text through say; recipient metadata is not transported. A failed channel post still returns success with a delivered-to-recipient-inbox claim. A recipient on another machine has no delivered inbox record.",
+    "original_failure": "cmdMessage writes the sender-local inbox then sends only message text through say; recipient metadata is not transported. A failed channel post still returns success with a delivered-to-recipient-inbox claim. A recipient on another machine has no delivered inbox record.",
+    "severity": "P1",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-06",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "frameMessages takes the oldest200 while cmdInbox marks the last of all records. Independent201-record frame verifies body200 absent but marker m200 selected; that unread message becomes consumed without display.",
+    "verifiedrefs": [
+      "plugin/skills/teams-uhura/scripts/team.mjs:557",
+      "plugin/skills/teams-uhura/scripts/team.mjs:558",
+      "plugin/skills/teams-uhura/scripts/inbox.mjs:163"
+    ],
+    "proofrefs": [
+      "verification-pure-probes.json"
+    ],
+    "test_limits": "Pure production formatter plus literal caller marker selection; no real inbox mutation.",
+    "original_claim": "cmdInbox --mark-read displays at most 200 messages but advances the read marker to the last message of the entire unread list, silently consuming messages never shown.",
+    "original_failure": "cmdInbox --mark-read displays at most 200 messages but advances the read marker to the last message of the entire unread list, silently consuming messages never shown.",
+    "severity": "P2",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-07",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 85,
+    "verdict": "ACCEPT",
+    "reason": "The line-oriented parser picks the first remaining_fraction and applies it to each window label found anywhere on that line. Compact JSON containing both buckets produces identical20/20 rather than20/90. Accept parser corruption for such valid structured input, not a claim about verified current live Antigravity payload shape.",
+    "verifiedrefs": [
+      "plugin/skills/watch-cortana/hooks/usage-watch.sh:330",
+      "plugin/skills/watch-cortana/hooks/usage-watch.sh:332",
+      "plugin/skills/watch-cortana/hooks/usage-watch.sh:338"
+    ],
+    "proofrefs": [
+      "automation-boundary-probes.py",
+      "automation-report.md"
+    ],
+    "test_limits": "Exact awk synthetic producer-format probe; native quota source not invoked.",
+    "original_claim": "Antigravity refresh uses line-oriented awk on JSON and extracts the first remainingFraction on a line for both windows. A compact response with 20% five-hour and 90% weekly usage produces 20% for both.",
+    "original_failure": "Antigravity refresh uses line-oriented awk on JSON and extracts the first remainingFraction on a line for both windows. A compact response with 20% five-hour and 90% weekly usage produces 20% for both.",
+    "severity": "P2",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-08",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "nextWizardSet validates schema only and matches question/option IDs across answer sets. Production CLI passes exported JSON directly; fresh RUN999 unreviewed draft settles RUN1 Q1. Scope impact to generated wizard settled state, not automatic relay application (answersToCommands has separate finalization checks).",
+    "verifiedrefs": [
+      "plugin/skills/holo-r2d2/scripts/wizard.mjs:118",
+      "plugin/skills/holo-r2d2/scripts/wizard.mjs:130",
+      "plugin/skills/holo-r2d2/scripts/wizard.mjs:193",
+      "plugin/skills/holo-r2d2/scripts/holo.mjs:1083"
+    ],
+    "proofrefs": [
+      "verification-pure-probes.json"
+    ],
+    "test_limits": "Pure imported production function; no relay answer mutation.",
+    "original_claim": "nextWizardSet accepts answers for a different set without finalized owner approval and turns matching decision IDs into settled answers. A RUN-999 draft settles Q1 in RUN-1.",
+    "original_failure": "nextWizardSet accepts answers for a different set without finalized owner approval and turns matching decision IDs into settled answers. A RUN-999 draft settles Q1 in RUN-1.",
+    "severity": "P1",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-10",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "Assertions mutate script-scoped counters; final status reads zero-valued function locals. An intentionally false extracted assertion reports FAIL and scriptFailures1 while local failures0 and exit0. Every assertion can fail without failing this selftest.",
+    "verifiedrefs": [
+      "plugin/skills/code-vader/scripts/code-vader.ps1:297",
+      "plugin/skills/code-vader/scripts/code-vader.ps1:299",
+      "plugin/skills/code-vader/scripts/code-vader.ps1:409"
+    ],
+    "proofrefs": [
+      "automation-boundary-probes.py",
+      "automation-report.md"
+    ],
+    "test_limits": "Exact counter/function reproduction, not full selftest execution.",
+    "original_claim": "Invoke-Selftest initializes local pass/failCnt, but Assert-Ok increments script-scoped counters. Final summary and exit read the unchanged local variables, so failed assertions report zero failures and return zero.",
+    "original_failure": "Invoke-Selftest initializes local pass/failCnt, but Assert-Ok increments script-scoped counters. Final summary and exit read the unchanged local variables, so failed assertions report zero failures and return zero.",
+    "severity": "P1",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-11",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "norm_id writes global ID but emits no stdout. Command substitution runs it in a subshell and assigns empty output to ID; normal assign-app cannot match its requested ticket. Other writers call norm_id directly.",
+    "verifiedrefs": [
+      "plugin/skills/tickets-zordon/scripts/ticket-meta.sh:122",
+      "plugin/skills/tickets-zordon/scripts/ticket-meta.sh:683",
+      "plugin/skills/tickets-zordon/scripts/ticket-meta.sh:696"
+    ],
+    "proofrefs": [
+      "automation-report.md"
+    ],
+    "test_limits": "Literal shell dataflow; no production board mutation.",
+    "original_claim": "assign-app sets ID=$(norm_id \"$1\"), but norm_id sets global ID without printing it. Command substitution loses that assignment and yields an empty ID, so normal ticket rows cannot match and shell app assignment fails. PowerShell returns the normalized ID correctly.",
+    "original_failure": "assign-app sets ID=$(norm_id \"$1\"), but norm_id sets global ID without printing it. Command substitution loses that assignment and yields an empty ID, so normal ticket rows cannot match and shell app assignment fails. PowerShell returns the normalized ID correctly.",
+    "severity": "P1",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-12",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "Both selftests save before-app-assignment bytes, perform successful app assignment, then compare against old bytes and expect later rows without app metadata. PowerShell functioning assign-app therefore necessarily fails these assertions; shell runtime bug currently masks part of the stale-fixture problem.",
+    "verifiedrefs": [
+      "plugin/skills/tickets-zordon/scripts/ticket-meta.ps1:1527",
+      "plugin/skills/tickets-zordon/scripts/ticket-meta.ps1:1540",
+      "plugin/skills/tickets-zordon/scripts/ticket-meta.ps1:1546",
+      "plugin/skills/tickets-zordon/scripts/ticket-meta.sh:1279",
+      "plugin/skills/tickets-zordon/scripts/ticket-meta.sh:1291",
+      "plugin/skills/tickets-zordon/scripts/ticket-meta.sh:1297"
+    ],
+    "proofrefs": [
+      "automation-report.md"
+    ],
+    "test_limits": "Source-sequenced expected-value contradiction; no broad selftest rerun.",
+    "original_claim": "Selftest successfully adds app tags to F12, then compares the board to a snapshot taken before that edit (1546) and expects subsequent F12 rows without the app tag (1547/1558). A functioning assign-app therefore makes the selftest fail. Both ports contain stale expectations; shell currently also fails the app command itself.",
+    "original_failure": "Selftest successfully adds app tags to F12, then compares the board to a snapshot taken before that edit (1546) and expects subsequent F12 rows without the app tag (1547/1558). A functioning assign-app therefore makes the selftest fail. Both ports contain stale expectations; shell currently also fails the app command itself.",
+    "severity": "P2",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-13",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 100,
+    "verdict": "ACCEPT",
+    "reason": "lineSplitter decodes Buffer chunks independently, corrupting a split multibyte UTF8 codepoint. Independent production import yields three replacement characters for euro. ProcAdapter stdout uses this exact decoder, so transport fragmentation changes actual JSON string contents.",
+    "verifiedrefs": [
+      "plugin/skills/remote-cerebro/hooks/cerebro-core.mjs:691",
+      "plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:339"
+    ],
+    "proofrefs": [
+      "verification-pure-probes.json",
+      "automation-cerebro-probe-results.json"
+    ],
+    "test_limits": "Pure framing probe, no native host; requires split within multibyte sequence, normal transport-permitted condition.",
+    "original_claim": "lineSplitter decodes each Buffer independently. A valid JSONL text containing euro sign split after its first UTF-8 byte becomes three replacement characters. Bridge stdout and attach socket callers use this decoder, corrupting prompts/replies/tool fields.",
+    "original_failure": "lineSplitter decodes each Buffer independently. A valid JSONL text containing euro sign split after its first UTF-8 byte becomes three replacement characters. Bridge stdout and attach socket callers use this decoder, corrupting prompts/replies/tool fields.",
+    "severity": "P2",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-14",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "Session sets disarmed before awaiting remote approval-button cleanup and notification, and only later invokes local teardown. Independent probes separately stall send and editButtons; teardown never starts. Timer skips disarmed sessions. Production Telegram timeout bounds one request to35s by default, so prove delayed safety teardown on channel outage, not necessarily permanent production hang.",
+    "verifiedrefs": [
+      "plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:284",
+      "plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:318",
+      "plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:971",
+      "plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:1048",
+      "plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs:134"
+    ],
+    "proofrefs": [
+      "verification-pure-probes.json",
+      "automation-cerebro-probe-results.json"
+    ],
+    "test_limits": "Never-resolving in-memory channels,10ms observation plus static await dependency; no spawned process, real kill or network outage test.",
+    "original_claim": "Session.disarm sets disarmed, awaits consumeAll editButtons and channel.send, and only then calls onDisarm at328. A pending channel operation prevents local teardown; independent timer skips already-disarmed sessions. Exact Session probe with paired=true and never-resolving send marks ttl but never calls teardown. Production Telegram requests have long timeouts and pending asks serialize, delaying kill on channel outage.",
+    "original_failure": "Session.disarm sets disarmed, awaits consumeAll editButtons and channel.send, and only then calls onDisarm at328. A pending channel operation prevents local teardown; independent timer skips already-disarmed sessions. Exact Session probe with paired=true and never-resolving send marks ttl but never calls teardown. Production Telegram requests have long timeouts and pending asks serialize, delaying kill on channel outage.",
+    "severity": "P1",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-15",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "Permitted benign claim-refusal path reuses $t for ticket iteration after timestamp assignment. PowerShell foreach variables survive in function scope; headers receive final ticket ID rather than date. Only this branch is claimed, not successful claims.",
+    "verifiedrefs": [
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1176",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1190",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1205",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1210"
+    ],
+    "proofrefs": [
+      "parent-relay-verification.json"
+    ],
+    "test_limits": "Independent complete branch source review; no real dispatch.",
+    "original_claim": "DoChainDispatch sets $t=Now at1176, but benign claim failure fallback foreach($t in $ids) overwrites timestamp with ticket ID. Dispatch block1205 and driver1210 store that ID as date, so subsequent header parsing/driver freshness fails. A caller not in team or ticket absent from board can take this explicitly permitted fallback.",
+    "original_failure": "DoChainDispatch sets $t=Now at1176, but benign claim failure fallback foreach($t in $ids) overwrites timestamp with ticket ID. Dispatch block1205 and driver1210 store that ID as date, so subsequent header parsing/driver freshness fails. A caller not in team or ticket absent from board can take this explicitly permitted fallback.",
+    "severity": "P1",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-16",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 90,
+    "verdict": "ACCEPT",
+    "reason": "Heartbeat reads state before writer lock; another writer can land x before heartbeat later writes stale~. Shell set_row only replaces landed when nonempty, so the common blank old value preserves new SHA: reject the stronger erased-SHA claim. In-flight/terminal state becomes inconsistent. PowerShell same read-before-DoStage ordering.",
+    "verifiedrefs": [
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:654",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:609",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:630",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:633",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:674"
+    ],
+    "proofrefs": [
+      "parent-relay-verification.json"
+    ],
+    "test_limits": "Source-proven conditional interleaving; no live/stress scheduling reproduction. Completion SHA loss is not established.",
+    "original_claim": "Heartbeat reads row state before cmd_stage takes writer lock. Landing can commit x between read and lock; delayed heartbeat then restores stale ~. PS DoHeartbeat674 has the same read-before-DoStage structure. Completed work appears in-flight again; a prior blank landed value does not erase the new SHA because setters only write nonempty landed values.",
+    "original_failure": "Heartbeat reads row state before cmd_stage takes writer lock. Landing can commit x between read and lock; delayed heartbeat then restores stale ~. PS DoHeartbeat674 has the same read-before-DoStage structure. Completed work appears in-flight again; a prior blank landed value does not erase the new SHA because setters only write nonempty landed values.",
+    "severity": "P1",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "AUTO-17",
+    "original_sources": [
+      "automation-findings.json"
+    ],
+    "score": 90,
+    "verdict": "ACCEPT",
+    "reason": "Both same-stage dispatches may read pending and take/replace stage lease before run lock. Winner marks in-flight; loser refuses and releases all rows keyed only by run/stage, deleting winner protection. Actual state recheck does not undo the lease cleanup bug. Both ports independently checked.",
+    "verifiedrefs": [
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:1417",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:818",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:1436",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:112",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh:835",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1115",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1215",
+      "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1:1267"
+    ],
+    "proofrefs": [
+      "parent-relay-verification.json"
+    ],
+    "test_limits": "Source-proven conditional interleaving, no live/stress race. Existing no-files concurrency test does not exercise lease ownership.",
+    "original_claim": "Two same-stage dispatches both read pending before run lock. Each takes file lease first; second replaces same run/stage lease regardless driver. Winner marks stage inflight; loser later refuses on state and lease_giveback deletes all same run/stage leases, including winner. PS1115/1215/1267 mirrors this. Another run can now acquire overlapping files while winner remains active.",
+    "original_failure": "Two same-stage dispatches both read pending before run lock. Each takes file lease first; second replaces same run/stage lease regardless driver. Winner marks stage inflight; loser later refuses on state and lease_giveback deletes all same run/stage leases, including winner. PS1115/1215/1267 mirrors this. Another run can now acquire overlapping files while winner remains active.",
+    "severity": "P1",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "verification-setup-unknown-args",
+    "original_sources": [
+      "verification-late-findings.json"
+    ],
+    "score": 90,
+    "verdict": "ACCEPT",
+    "reason": "PowerShell only checks whether args contains --check and otherwise invokes full setup, with no unknown-argument rejection. Exact extracted mode expression makes --chek choose full walk. Depending on machine state that walk installs devtunnel, opens login and creates tunnel/port before its later Arm confirmation. Shell rejects unknown option with2. Narrow to fail-open mode selection, not unconfirmed live mutation.",
+    "verifiedrefs": [
+      "plugin/skills/teams-uhura/scripts/setup.ps1:11",
+      "plugin/skills/teams-uhura/scripts/setup.ps1:77",
+      "plugin/skills/teams-uhura/scripts/setup.ps1:90",
+      "plugin/skills/teams-uhura/scripts/setup.ps1:100",
+      "plugin/skills/teams-uhura/scripts/setup.ps1:143",
+      "plugin/skills/teams-uhura/scripts/setup.ps1:250",
+      "plugin/skills/teams-uhura/scripts/setup.sh:226"
+    ],
+    "proofrefs": [
+      "verification-setup-probe.json"
+    ],
+    "test_limits": "Only exact argument expression executed; actual setup/install/login entrypoint never run.",
+    "original_claim": "Unknown setup flags select the mutation-capable full walk",
+    "original_failure": "A typo --chek sets Check false; Invoke-Setup can install, log in and create tunnel/port before its final arm confirmation.",
+    "severity": "high",
+    "duplicategroup": null,
+    "confirmed": true
+  },
+  {
+    "id": "verification-setup-tunnel-identity",
+    "original_sources": [
+      "verification-late-findings.json"
+    ],
+    "score": 95,
+    "verdict": "ACCEPT",
+    "reason": "PowerShell considers any devtunnel process hosted; shell considers any devtunnel host command. Neither checks requested named tunnel. Exact PS function with unrelated process fixture returns true; caller consequently suppresses hosting skillator-teams while presenting that tunnel URL. An existing configured tunnel/port is not evidence of an active host for that tunnel.",
+    "verifiedrefs": [
+      "plugin/skills/teams-uhura/scripts/setup.ps1:38",
+      "plugin/skills/teams-uhura/scripts/setup.ps1:144",
+      "plugin/skills/teams-uhura/scripts/setup.sh:20",
+      "plugin/skills/teams-uhura/scripts/setup.sh:120"
+    ],
+    "proofrefs": [
+      "verification-setup-probe.json"
+    ],
+    "test_limits": "Exact PS function with stub Get-Process; no live process enumeration, tunnel hosting or network test. Shell counterpart source-verified.",
+    "original_claim": "Unrelated devtunnel process suppresses hosting the requested tunnel",
+    "original_failure": "With another devtunnel process active, TunnelHosted returns true and setup skips hosting skillator-teams, while presenting its callback URL.",
+    "severity": "medium",
+    "duplicategroup": null,
+    "confirmed": true
+  }
+]

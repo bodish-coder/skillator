@@ -1,0 +1,4406 @@
+{
+  "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+  "targets": 593,
+  "covered": 593,
+  "missing": [],
+  "ticket_rows": 377,
+  "unique_ticket_keys": 377,
+  "production_files_changed": [],
+  "authorized_board_and_audit_document_changes": [
+    "CASEFILE.md",
+    "TICKETS.md"
+  ],
+  "source_assessment_counts": {
+    "present": 287,
+    "cancelled": 14,
+    "partial": 52,
+    "absent": 1,
+    "superseded": 11,
+    "historical-evidence": 6,
+    "pending": 6
+  },
+  "new_pending_tickets": [
+    "B21",
+    "F151",
+    "F152",
+    "F153",
+    "F154",
+    "F155",
+    "F156",
+    "A178",
+    "A179",
+    "A180",
+    "A181",
+    "F98a",
+    "F90a",
+    "A182",
+    "A183",
+    "A184",
+    "A185",
+    "A186",
+    "A187",
+    "A188",
+    "A189",
+    "A190",
+    "A191",
+    "A192",
+    "A193",
+    "A194",
+    "A195",
+    "A196",
+    "A197",
+    "A198",
+    "A199",
+    "A200",
+    "A201",
+    "A202",
+    "A203",
+    "A204",
+    "A205",
+    "A206",
+    "A207",
+    "A208",
+    "A209",
+    "A210",
+    "A211",
+    "A212",
+    "A213",
+    "A214",
+    "A215"
+  ],
+  "accepted_findings": 37,
+  "requested_change_exclusions": 1,
+  "duplicates_collapsed": 2,
+  "coverage": {
+    "plugin/mods/ops-board/.claude-plugin/plugin.json": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/README.md": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/antigravity/extension.cjs": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/antigravity/ops.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/antigravity/pack.mjs": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/antigravity/package.json": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/antigravity/tests/ops.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/agentstab.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/assign.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/band.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/explorertab.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/health.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/hooks.json": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/agents.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/bandlines.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/board.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/calls.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/diagnose.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/explorer.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/facts.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/healthlines.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/host.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/inbox.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/package.json": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/restore.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/runentries.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/runlines.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/runs.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/team.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/teamsconfig.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/lib/ticketsmodel.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/messagestab.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/paint.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/pane.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/reconcile.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/register.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/runstab.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/runtab.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/status.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/hooks/teamview.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/app.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/draw.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/engine.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/explorer.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/loader.mjs": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/mouse.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/nodehost.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/ops.ps1": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/ops.sh": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/package.json": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/runtab.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/state.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/status.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/app.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/draw.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/explorer.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/failures.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/fixtures.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/messages.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/mod-inbox.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/mouse-terminal.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/nodehost.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/quota-profile.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/runtab.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/shutdown.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/state.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/status.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/teams.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/tests/tuitron-viewports.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/ops/wt-fragment.json": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/pi/index.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/pi/ops.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/pi/package.json": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/pi/tests/ops.test.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/pi/tests/space-fixture.mts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/agents.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/agentworld.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/alphabet.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/assign.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/band.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/board.test.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/commands.test.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/diagnose.test.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/explorer.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/facts.test.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/fixtures.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/health.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/host.test.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/messages.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/model.test.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/pane.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/reconcile.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/restore.test.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/runs.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/runtab.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/status.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/team.test.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tests/workflows.test.tsx": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/tsconfig.json": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/mods/ops-board/types/index.d.ts": [
+      {
+        "ledger": "ops-file-coverage.json",
+        "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/SKILL.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/UPSTREAM.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/references/brand.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/references/clean-room.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/references/handoffs.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/references/parity.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/references/preflight.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/references/recon.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/references/reviews.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/contrast.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/imgdiff.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/listing.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/odo.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/odo.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/parity.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/reviews.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/sweep.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/tests/_load.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/tests/test_contrast_listing.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/tests/test_imgdiff.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/tests/test_parity.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/tests/test_reviews.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/tests/test_sweep.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/scripts/themes.json": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/templates/bug-report.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/templates/features.csv": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/templates/listing.example.json": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/templates/recon-map.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/templates/test-plan.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/templates/tokens.json": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/upstream-check.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/clone-odo/upstream-check.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/code-vader/SKILL.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/code-vader/scripts/code-vader.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/code-vader/scripts/code-vader.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/SKILL.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/anatomy.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/anatomy.test.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/fixture-all-states.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/fixture-design.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/fixture-plain.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/README.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/TICKETS.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/_run.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/conftest.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/shelf/__init__.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/shelf/__main__.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/shelf/books.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/shelf/cli.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/shelf/report.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/fixtures/repo-two-qs/tests/test_books.py": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/holo.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/holo-r2d2/scripts/wizard.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/live-friday/SKILL.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/live-friday/scripts/run-entries.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/live-friday/scripts/run-entries.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/relay-morpheus/SKILL.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/relay-morpheus/hooks/relay-morpheus.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/relay-morpheus/hooks/relay-morpheus.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/relay-morpheus/references/chain.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/relay-morpheus/references/marathon.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/relay-morpheus/templates/marathon-workflow.js": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/SKILL.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/cerebro-bridge.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/cerebro-core.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/cerebro-gemini.toml": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/cerebro-selftest.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/cerebro.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/cerebro.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/gemini-afteragent.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/package.json": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/pi-cerebro.ts": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/agent": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/agy": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/cloudflared": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/codex": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/cursor-agent": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/ngrok": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/tailscale": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/native-host.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/stub-acp.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/stub-codex-app.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/stub-native.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/stub-pi-ext.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/stub-pi-rpc.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/references/channels.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/references/hosts.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/references/security.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/skillator-sync/SKILL.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/skillator-sync/scripts/skillator-sync.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/skillator-sync/scripts/skillator-sync.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/teams-uhura/SKILL.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/teams-uhura/references/setup.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/teams-uhura/scripts/inbox.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/teams-uhura/scripts/setup.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/teams-uhura/scripts/setup.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/teams-uhura/scripts/team-hook.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/teams-uhura/scripts/team.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/teams-uhura/scripts/team.test.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "full source/test/instruction read after CodeGraph",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tickets-zordon/SKILL.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Transferred canonical full read by fresh helper investigator; source evidence integrated",
+        "ranges": null
+      },
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tickets-zordon/board/artifact.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Transferred canonical full read by fresh helper investigator; source evidence integrated",
+        "ranges": null
+      },
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tickets-zordon/board/index.html": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Transferred canonical full read by fresh helper investigator; source evidence integrated",
+        "ranges": null
+      },
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tickets-zordon/board/refresh.mjs": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Transferred canonical full read by fresh helper investigator; source evidence integrated",
+        "ranges": null
+      },
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tickets-zordon/scripts/pending.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tickets-zordon/scripts/pending.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered canonical source/instructions and all embedded tests read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tickets-zordon/scripts/ticket-meta.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered canonical source and embedded selftest read; cross-port and caller assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tickets-zordon/scripts/ticket-meta.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered canonical source and embedded selftest read; cross-port and caller assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/watch-cortana/SKILL.md": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/watch-cortana/hooks/quota-source-selftest.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/watch-cortana/hooks/selftest.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/watch-cortana/hooks/usage-watch.ps1": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/watch-cortana/hooks/usage-watch.sh": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full canonical source, instructions, fixtures and embedded tests read",
+        "ranges": null
+      }
+    ],
+    ".claude-plugin/marketplace.json": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    ".gitattributes": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    ".gitignore": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    ".screenshot-dir": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "AGENTS.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "CASEFILE.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "CLAUDE.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "GEMINI.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "LICENSE": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "README.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "TICKETS-archive.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Collective snapshot requirement-row review: integration205, Ops78, automation94; parent non-row headers/legends/continuations read",
+        "ranges": null
+      }
+    ],
+    "TICKETS.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Collective snapshot requirement-row review: integration205, Ops78, automation94; parent non-row headers/legends/continuations read",
+        "ranges": null
+      }
+    ],
+    "codegraph.json": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "install.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "install.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "knowledge-work-recommendations.html": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/.claude-plugin/plugin.json": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/.muse-plugin/marketplace.json": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/.muse-plugin/plugin.json": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/PLATFORMS.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/PRACTICE.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/WORKFLOW.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/archive-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/archive-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/code-vader.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/engage-picard.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/engage.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/gauntlet-plan.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/gauntlet-run.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/hosts.json": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/list-ticket-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/list-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/marathon-plan.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/marathon-plan.test.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/marathon-run.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/marathon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/message-uhura.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/pending-sentinel.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/pending-subagent.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/pending.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/plan-runs.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/skillator-pending.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/skillator-sync.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/skillator-update.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/sync-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/sync-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/team-messages.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/team.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/upstream-sync.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/verify-shifu.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/verify-subagent.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/hooks/hooks.json": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/hooks/session-owner.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/hooks/team-hook.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/archive-tickets/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/archive-zordon/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/code-vader/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/engage-picard/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/engage/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/gauntlet-plan/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/gauntlet-run/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/list-ticket-zordon/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/list-tickets/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/marathon-plan/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/marathon-run/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/message-uhura/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/ops/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/pending-sentinel/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/pending-subagent/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/pending/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/skillator-ops/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/skillator-pending/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/skillator-sync/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/skillator-update/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/sync-tickets/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/sync-zordon/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/team-messages/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/team/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/upstream-sync/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/verify-shifu/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/antigravity/verify-subagent/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/archive-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/archive-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/code-vader.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/engage-picard.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/engage.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/gauntlet-plan.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/gauntlet-run.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/list-ticket-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/list-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/marathon-plan.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/marathon-run.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/message-uhura.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/pending-sentinel.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/pending-subagent.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/pending.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/skillator-pending.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/skillator-sync.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/skillator-update.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/sync-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/sync-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/team-messages.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/team.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/upstream-sync.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/verify-shifu.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/cursor/verify-subagent.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/archive-tickets.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/archive-zordon.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/code-vader.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/engage-picard.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/engage.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/gauntlet-plan.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/gauntlet-run.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/list-ticket-zordon.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/list-tickets.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/marathon-plan.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/marathon-run.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/message-uhura.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/pending-sentinel.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/pending-subagent.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/pending.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/skillator-pending.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/skillator-sync.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/skillator-update.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/sync-tickets.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/sync-zordon.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/team-messages.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/team.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/upstream-sync.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/verify-shifu.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/gemini/verify-subagent.toml": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/archive-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/archive-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/code-vader.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/engage-picard.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/engage.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/gauntlet-plan.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/gauntlet-run.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/list-ticket-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/list-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/marathon-plan.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/marathon-run.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/message-uhura.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/pending-sentinel.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/pending-subagent.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/pending.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/skillator-pending.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/skillator-sync.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/skillator-update.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/sync-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/sync-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/team-messages.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/team.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/upstream-sync.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/verify-shifu.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/opencode/verify-subagent.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/archive-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/archive-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/code-vader.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/engage-picard.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/engage.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/gauntlet-plan.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/gauntlet-run.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/list-ticket-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/list-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/marathon-plan.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/marathon-run.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/message-uhura.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/pending-sentinel.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/pending-subagent.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/pending.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/skillator-pending.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/skillator-sync.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/skillator-update.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/sync-tickets.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/sync-zordon.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/team-messages.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/team.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/upstream-sync.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/verify-shifu.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/host-commands/pi/verify-subagent.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Canonical source, host metadata, generator and exact byte projection validation",
+        "ranges": null
+      }
+    ],
+    "plugin/install.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/install.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/debugging.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/prompts.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/archive-tickets.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      },
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/baseline-harness.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source read, helper-to-scenario contract review",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source read, helper-to-scenario contract review",
+        "ranges": [
+          [
+            341,
+            2004
+          ],
+          [
+            2488,
+            2824
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/scripts/board-fresh.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      },
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/board-fresh.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      },
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/check-grayskull-sync.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/check-muse-manifest.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/check-routing.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/check-tickets.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      },
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/codex-isolation.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": [
+          [
+            1,
+            198
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/scripts/codex-isolation.test.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": [
+          [
+            1,
+            96
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/scripts/codex-native-probe.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": [
+          [
+            1,
+            142
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/scripts/context-audit.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/fixtures/codex-native-stub.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": [
+          [
+            1,
+            47
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/scripts/fixtures/command-contract.json": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/generate-commands.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/generate-commands.test.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/next-id.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      },
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/next-id.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      },
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/probe-commands.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/reliability-parity.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": [
+          [
+            1,
+            129
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/scripts/reliability-parity.test.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": [
+          [
+            1,
+            68
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/scripts/rename-skill.py": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/renumber-tickets.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/selftest.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/taskwork.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": [
+          [
+            1,
+            101
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/scripts/taskwork.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": [
+          [
+            1,
+            120
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/scripts/upstream-check.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/upstream-check.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/scripts/validate.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": [
+          [
+            1,
+            193
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/scripts/validate.test.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": null
+      },
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Full verbatim source and paired tests/callers reviewed",
+        "ranges": [
+          [
+            1,
+            181
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/task-loop.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/tdd.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/references/anti-slop.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/a11y-toph/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/a11y-toph/references/checks.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/a11y-toph/references/patterns.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/audit-sherlock/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/build-jarvis/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/build-jarvis/hooks/feature-route.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/build-jarvis/hooks/feature-route.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/build-jarvis/hooks/grade-gate.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/build-jarvis/hooks/grade-gate.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/build-jarvis/references/ceremony.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/build-jarvis/references/grade.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/build-jarvis/references/platforms.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/build-jarvis/references/route-hook.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/chief-fury/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/chief-fury/references/board.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/chief-fury/references/wiki.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/code-yoda/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/code-yoda/UPSTREAM.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/code-yoda/references/audit.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/code-yoda/references/debt.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/code-yoda/references/review.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/code-yoda/upstream-check.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/code-yoda/upstream-check.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/deploy-merlin/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/deploy-niyoj/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/deploy-niyoj/references/templates.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/UPSTREAM.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/references/build.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/references/canvas.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/references/craft.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/references/critique.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/references/improve.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/references/product-ui.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/references/redesign.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/references/styles.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/references/terminal.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/design-arwen/references/verify.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/designui-galadriel/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/grayskull-power/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/grayskull-power/references/arming.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/grayskull-power/references/ground-rules.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/grayskull-power/references/hosts.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/grayskull-power/references/routing.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/grayskull-power/scripts/codegraph-check.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/grayskull-power/scripts/codegraph-check.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/handoff-cortana/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/handoff-cortana/template.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/merge-smith/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/merge-smith/references/between-merges.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/merge-smith/references/conflict-routing.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/merge-smith/references/git-procedure.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/merge-smith/references/reconcile.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/mergeprep-oracle/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/resume-cortana/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/rules-orko/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/rules-orko/references/clashes.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/rules-orko/references/scopes.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/rules-orko/scripts/rules-orko.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/rules-orko/scripts/rules-orko.sh": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/screenshot-argus/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/skill-prometheus/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/skill-prometheus/references/testing.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/skill-smith/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/spec-watson/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/spec-watson/references/artifacts.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tasks-sentinels/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tui-tron/SKILL.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/tui-tron/references/capture.md": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/tests/ownership-parity.ps1": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/tests/update-source.test.mjs": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full canonical source and callers/test inspection",
+        "ranges": null
+      }
+    ],
+    "plugin/commands/ops.txt": [
+      {
+        "ledger": "integration-file-coverage.json",
+        "method": "Full current payload read and installer caller inspection",
+        "ranges": null
+      }
+    ],
+    ".skillator/grayskull.md": [
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Read-only active configuration parse and documented consumer contract",
+        "ranges": [
+          [
+            1,
+            28
+          ]
+        ]
+      }
+    ],
+    ".skillator/team.md": [
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Read-only active configuration parse and documented consumer contract",
+        "ranges": [
+          [
+            1,
+            10
+          ]
+        ]
+      }
+    ],
+    ".skillator/run.json": [
+      {
+        "ledger": "parent-file-coverage.json",
+        "method": "Read-only active configuration parse and documented consumer contract",
+        "ranges": [
+          [
+            1,
+            8
+          ]
+        ]
+      }
+    ],
+    "plugin/practice/baselines/fixture-tickets-monorepo.sh": [
+      {
+        "ledger": "helpers-file-coverage.json",
+        "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/agent.cmd": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/agy.cmd": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/cloudflared.cmd": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/codex.cmd": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/cursor-agent.cmd": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/ngrok.cmd": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/pi-rpc-stub.cmd": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/skills/remote-cerebro/hooks/stubs/bin/tailscale.cmd": [
+      {
+        "ledger": "automation-file-coverage.json",
+        "method": "Full numbered source, caller paths, all embedded selftests, protocol stubs and security documentation read after CodeGraph mapping",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-arwen-antislop.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-arwen-f23b-brand.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-arwen-f23b-product.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-arwen-f32-menu.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-arwen-f32-round2.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-arwen-f32-unattended.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-a119-direct-1.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-a119-direct-2.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-mode-direct.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-mode-headless.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-mode-single.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-mode-workflow.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-route-board-1.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-route-board-2.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-route-direct-1.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-route-direct-2.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-route-headless-1.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-route-headless-2.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-ui-feature.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-build-ui-only.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-cerebro-codex.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-cerebro-gemini.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-cerebro-matrix.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-cerebro-pi.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-chief-fury-green.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-chief-fury.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-clone-odo-cleanroom.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-clone-odo-platform-android.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-clone-odo-platform-ios.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-clone-odo-platform-web.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-clone-odo-platform-windows.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-clone-odo-reviews.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-code-yoda-debt.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-code-yoda-review.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-deploy-merlin.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-deploy-niyoj.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-design-arwen-upstream.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-design-arwen.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-fanout.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-grayskull-a117.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-grayskull-a11y-v2.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-grayskull-a11y.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-grayskull.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-handoff-cortana-v2.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-handoff-cortana-v3.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-handoff-cortana.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-holo-f108-outputs.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-holo-f41-batch.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-holo-f41-loaded.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-holo-f41.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-live-friday.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-marathon-batch.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-marathon-decidable.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-marathon-resume.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-marathon-stop.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-marathon.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-merge-smith.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-mergeprep-oracle.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-relay-chain-hold.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-relay-chain-resume.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-relay-chain.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-relay-morpheus-resume.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-relay-morpheus.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-relay-parallel-f37.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-relay-queue-f38.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-rules-orko.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-sherlock.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-skill-smith.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-spec-kit-durability.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-spec-kit-v2.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-spec-kit-v3.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-spec-kit.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-tasks-sentinels-v2.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-tasks-sentinels.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-tickets-people-f43.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-tickets-reassign-f45.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-yoda-shortcut.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-zordon-mode-named.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ],
+    "plugin/practice/baselines/scenario-zordon-mode-sweep.txt": [
+      {
+        "ledger": "scenario-file-coverage.json",
+        "method": "Full verbatim scenario source read; fixture and current instruction/caller contract assessment",
+        "ranges": null
+      }
+    ]
+  }
+}

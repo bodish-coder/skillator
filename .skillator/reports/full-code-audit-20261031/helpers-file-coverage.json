@@ -1,0 +1,90 @@
+[
+  {
+    "path": "plugin/practice/scripts/next-id.sh",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 336,
+    "sha256": "435d1a9176e3d3e0e560035f9286b11b0069a2dc98298ebe4eb2a62b3b531e3b",
+    "notes": "Full allocator and inline tests read. Tree/archive/ref max, RUN/S/W scans, common-dir counter, mkdir stale lock and reserve-before-output traced. Calls from relay alloc and renumber reviewed. Shell selftest could not allocate in Windows sandbox temp path: mkdir C:/Users/Ikran permission denied; no source failure inferred."
+  },
+  {
+    "path": "plugin/practice/scripts/next-id.ps1",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 454,
+    "sha256": "e991d573948c6d88de973db250255b0fee279bf46341b2d65a489abbe7225406",
+    "notes": "Full allocator, owner-checked lock rename/free/retry paths and inline fixtures read. -Selftest PASS, including worktree/ref/archive numbering, W exhaustion, upstream-tip local-bare fixture and held-open stamp release. Current run did not repeat historical CPU-pressure stress."
+  },
+  {
+    "path": "plugin/practice/scripts/archive-tickets.sh",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 330,
+    "sha256": "9bc01b8cd64fe2da01dd7101c022b394a1081baf5312e42f406e603190583f88",
+    "notes": "Full history walker, grouping/merge/write paths, options and selftest read. --selftest PASS. Extra isolated old-parent/blank/open-child dry-run reproduces HELP-02. Archive-first write avoids losing moved rows on a crash but is not a board-wide transaction."
+  },
+  {
+    "path": "plugin/practice/scripts/check-tickets.sh",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 297,
+    "sha256": "1155da779e86af85aafc69cd38f63c7d7c16f7dfc34297cb24418e1b7d468711",
+    "notes": "Full script and tests read. Duplicate/archive, conflict, bare-plan, cwd, open-title checks traced. --selftest PASS with Git POSIX utilities first on PATH. First unnormalized invocation selected Windows sort and failed location assertion; environment-induced, not filed."
+  },
+  {
+    "path": "plugin/practice/scripts/board-fresh.sh",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 240,
+    "sha256": "665a166e6ebed2cfe29f9366d3abbd10a20488067e9175d5e0d2ed6e5216f7b8",
+    "notes": "Full guard, fetch timeout/stamp, clean-merge preflight, dirty writer report and inline tests read. ticket-meta and relay call it under their board lock. Selftest temp writes to C:/Users/Ikran denied by sandbox, so shell execution cannot certify parity in this run."
+  },
+  {
+    "path": "plugin/practice/scripts/board-fresh.ps1",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 225,
+    "sha256": "634892eb958e9806bec897c564b0085070cb986af9618a4fccf719ff8cad5345",
+    "notes": "Full guard/process timeout/byte-copy/preflight/dirty-log and inline tests read. -Selftest PASS against isolated local bare upstream, including clean/board-only ff, conflicts/local commits/foreign dirt refusal, offline and fetch-only."
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/SKILL.md",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 1011,
+    "sha256": "03acc005bbadf14decc64fd447d0d1f52278a66d5a4f752fdef18d4c1a3789e2",
+    "notes": "All 1011 lines read, including canonical format, tags, allocation, collision hooks, statuses, archival, verification/workflow instructions, artifact publish fallback and all list rules. Instructions inspected as contracts, not claimed live native-host execution."
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/board/artifact.mjs",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 329,
+    "sha256": "c41a1ed16be94eefdf0a1e99d2e83ef60114aa2a3964b8994a74ecc658b3132d",
+    "notes": "All source/CSS/selftests read. --selftest PASS. Escaping applies to user text in text nodes; status/tag class vocabularies are controlled. Archive read+count+closed mark verified in implementation and tests. No live publish attempted."
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/board/index.html",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 943,
+    "sha256": "346a2a0782ea9d1a547095b54773934bd4989ef826fa987eac5aea181b71623c",
+    "notes": "All 943 lines read, including CSS/control markup, frozen sample board, parser/state/filter/render/copy/load/theme/file/hash logic. Exact parser extracted to node vm reproduces HELP-01. Browser setup attempts did not provide reliable usable end-to-end output, so browser rendering not claimed."
+  },
+  {
+    "path": "plugin/skills/tickets-zordon/board/refresh.mjs",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 43,
+    "sha256": "2cbe33db38d6fc0aaa466c285fba12c049a857108bff4c4a238bb8954bd0fff9",
+    "notes": "All 43 lines read. Template-only read, caller-selected source/output, sentinel validation and closing-script escape traced to index readSnapshot. No live file viewer launched or publication claimed."
+  },
+  {
+    "path": "plugin/practice/baselines/fixture-tickets-monorepo.sh",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 43,
+    "sha256": "050ff4ee26981b5c896272d9a1ee4f4769019a98e2754745d740dcb762751df7",
+    "notes": "Full 43-line fixture read. Refuses existing destination, initializes only supplied fresh directory, fixed date/authors, two app commits plus second F1 author; F43/F45 scenario callers read. No native coding-host baseline rerun."
+  }
+]

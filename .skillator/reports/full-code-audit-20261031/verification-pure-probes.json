@@ -1,0 +1,37 @@
+{
+  "utf8": {
+    "expected": "€",
+    "actual": "���",
+    "equal": false
+  },
+  "disarm_send": {
+    "marked": "ttl",
+    "teardownCalled": false,
+    "resolvedApproval": false
+  },
+  "disarm_editButtons": {
+    "marked": "ttl",
+    "teardownCalled": false,
+    "resolvedApproval": false
+  },
+  "wrong_set_draft": {
+    "remaining": 0,
+    "settled": [
+      {
+        "id": "Q1",
+        "ticket": "",
+        "question": "Choose?",
+        "state": "answered",
+        "answer": "Selected",
+        "source": "RUN-999 round 1"
+      }
+    ]
+  },
+  "inbox_frame": {
+    "lastDisplayedId": "m199",
+    "callerMarkerId": "m200",
+    "shows200th": true,
+    "shows201st": false
+  },
+  "limits": "Imported production functions only; in-memory channels never resolve, no networking or child processes; disarm observations 10ms plus static await ordering. No auth/state writes occurred because disarm remains before local cleanup."
+}

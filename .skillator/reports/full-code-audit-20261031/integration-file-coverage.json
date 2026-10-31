@@ -1,0 +1,2046 @@
+[
+  {
+    "path": ".claude-plugin/marketplace.json",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "817c5aed5e531c86cc4a5aa180d0c96a376a31ae35bb532f3cf4f765e2100769"
+  },
+  {
+    "path": ".gitattributes",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "4b6182547a214e10ab3b0f7c9a1a305253abf99ec0920dea002475e46c73afc9"
+  },
+  {
+    "path": ".gitignore",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "7d35dba6edc933e18e5625efc0a6855d7f1f02c86947040bfd678c14a134c803"
+  },
+  {
+    "path": ".screenshot-dir",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "eff1a297dd4ccb89c988d895252e76ad2ce4b7dff696101abd25096330d9bdeb"
+  },
+  {
+    "path": "AGENTS.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "44fd918e05c134039b07d59ef825447e5a9d5b1b48d7ec420699108271d0345c"
+  },
+  {
+    "path": "CASEFILE.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full file read. README traced to installers, command generator and validation registry; pre-plugin-move clone examples remain stale. CASEFILE is dated evidence, not current implementation. HTML filter toggles hidden/aria-pressed/live count, print exposes all rows; no external assets, no input injection or network action; source semantics reviewed without browser render.",
+    "sha256": "51af42713b644ed65e06998cae1a19572b5f0cf8e910a1f7d031777a9e199c6e"
+  },
+  {
+    "path": "CLAUDE.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "c312a0a43d956b379215eb0b36f0c6ce6d437b20e37693028f188268ed79104a"
+  },
+  {
+    "path": "GEMINI.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "c312a0a43d956b379215eb0b36f0c6ce6d437b20e37693028f188268ed79104a"
+  },
+  {
+    "path": "LICENSE",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "671340759742508b936ffa436ce28a14f44d04b0d93bc508628e1ce39509fbb4"
+  },
+  {
+    "path": "README.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full file read. README traced to installers, command generator and validation registry; pre-plugin-move clone examples remain stale. CASEFILE is dated evidence, not current implementation. HTML filter toggles hidden/aria-pressed/live count, print exposes all rows; no external assets, no input injection or network action; source semantics reviewed without browser render.",
+    "sha256": "46b36a1e02d79087f21ba1c77e0c0bb893f647ffff86c7ae3bcffd6a66aa70f4"
+  },
+  {
+    "path": "TICKETS-archive.md",
+    "status": "inspected",
+    "method": "Collective snapshot requirement-row review: integration205, Ops78, automation94; parent non-row headers/legends/continuations read",
+    "notes": "Integration205 full requirements assessed here. Ops78 complete; automation94 source review complete, authored matrix pending at integration handoff. Collective board completeness requires final parent reconciliation of all377 keys. Source hash is immutable audit snapshot, not current board after authorized parent gap additions.",
+    "sha256": "986e06f94f7a44522b6f91214f8faf71bb28369ee1fca1ad9848d6be9e57166e",
+    "reviewer": "three domain investigators plus parent header review"
+  },
+  {
+    "path": "TICKETS.md",
+    "status": "inspected",
+    "method": "Collective snapshot requirement-row review: integration205, Ops78, automation94; parent non-row headers/legends/continuations read",
+    "notes": "Integration205 full requirements assessed here. Ops78 complete; automation94 source review complete, authored matrix pending at integration handoff. Collective board completeness requires final parent reconciliation of all377 keys. Source hash is immutable audit snapshot, not current board after authorized parent gap additions.",
+    "sha256": "38a873e6839090de8d0db178c582a9a3093766ad00e71f774936db22f066a264",
+    "reviewer": "three domain investigators plus parent header review"
+  },
+  {
+    "path": "codegraph.json",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "a0013fc7d38d1188c3111b4c419158eeea70213ff2141ecf4ce6c5bfbd633e3f"
+  },
+  {
+    "path": "install.ps1",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "410ecd6e8500f3401eabc13c1aec9cc161c2b5152388ac14b351b3b17804dd88"
+  },
+  {
+    "path": "install.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "e5f9633fe3166683233066e80c9b957bd3ca45314268f97817088bb845ba273d"
+  },
+  {
+    "path": "knowledge-work-recommendations.html",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full file read. README traced to installers, command generator and validation registry; pre-plugin-move clone examples remain stale. CASEFILE is dated evidence, not current implementation. HTML filter toggles hidden/aria-pressed/live count, print exposes all rows; no external assets, no input injection or network action; source semantics reviewed without browser render.",
+    "sha256": "3dea8ae5062fc471d61b7ea9fbcf2a925bcd8a5583e609c91f71b55fa5a26c30"
+  },
+  {
+    "path": "plugin/.claude-plugin/plugin.json",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "e43bc19d701275c203f0113ccad002a74280a09abc761fb1cb2b2848763f913b"
+  },
+  {
+    "path": "plugin/.muse-plugin/marketplace.json",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "e845172f86c5c719ce5ba72994a40096a4eb80363a5b29e2fde58ee95eed2f5c"
+  },
+  {
+    "path": "plugin/.muse-plugin/plugin.json",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "380cc3cce4802a478089d563b4dee1c315f162d32257d49cf090762c5b027171"
+  },
+  {
+    "path": "plugin/PLATFORMS.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "c1a368605b7cc2a34610270c72cdb197b1749638cfff056299fd45505e24ec9c"
+  },
+  {
+    "path": "plugin/PRACTICE.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "550c580fdd4eb0e6d65bc256e75c2f9819048eda1118be103379847ac93120e5"
+  },
+  {
+    "path": "plugin/WORKFLOW.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "54bdfc6cda186346cb1d05bbb472954ace81b25e1a2b1742e12199d6eed2d8e2"
+  },
+  {
+    "path": "plugin/commands/archive-tickets.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "6987e3831ac523d8d578f67d2febe6de4a69040e7c3e8062766b0535386a4c06"
+  },
+  {
+    "path": "plugin/commands/archive-zordon.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "6987e3831ac523d8d578f67d2febe6de4a69040e7c3e8062766b0535386a4c06"
+  },
+  {
+    "path": "plugin/commands/code-vader.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "39523a1b78b7863f9e7e57ee863623e4c5b114fa37696712616522b49395b6cd"
+  },
+  {
+    "path": "plugin/commands/engage-picard.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "aa465bb88479068703ed732e360bc9feaca547ca5a1ac00ab3caac45dcd1e06b"
+  },
+  {
+    "path": "plugin/commands/engage.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "aa465bb88479068703ed732e360bc9feaca547ca5a1ac00ab3caac45dcd1e06b"
+  },
+  {
+    "path": "plugin/commands/gauntlet-plan.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "fcfe13417873e4d7381d9ee126a74b908909dbfc7c394bad9ca0e43e2443d1bc"
+  },
+  {
+    "path": "plugin/commands/gauntlet-run.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "ebbb396621544b1ec6815eb648554e505d35883d8ea1ca52ed3f43e8ac21ef8a"
+  },
+  {
+    "path": "plugin/commands/hosts.json",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "1b0e1f7ec5e6352a83a1d2d8b67ecb9bac0cfaedf1a90eaf4a4aa2fcc873f49d"
+  },
+  {
+    "path": "plugin/commands/list-ticket-zordon.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "bd24e44af07c79fda4790775b065a63c0027715e48caa15ddbecbfdf60cd716d"
+  },
+  {
+    "path": "plugin/commands/list-tickets.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "bd24e44af07c79fda4790775b065a63c0027715e48caa15ddbecbfdf60cd716d"
+  },
+  {
+    "path": "plugin/commands/marathon-plan.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "fcfe13417873e4d7381d9ee126a74b908909dbfc7c394bad9ca0e43e2443d1bc"
+  },
+  {
+    "path": "plugin/commands/marathon-plan.test.ps1",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "681f70cd84a60edec332f30d4e28f357e44df53d6658e624dad02aab081599f7"
+  },
+  {
+    "path": "plugin/commands/marathon-run.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "ebbb396621544b1ec6815eb648554e505d35883d8ea1ca52ed3f43e8ac21ef8a"
+  },
+  {
+    "path": "plugin/commands/marathon.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "c8b7ae4f577999e3fa129d3c93284e12a4e53666003c5aea32b4dde67ba06d05"
+  },
+  {
+    "path": "plugin/commands/message-uhura.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "08b034e00049282cb3da45d2815a0d4f4ac124a4824e97bfa77b1f7c3b3c6c6b"
+  },
+  {
+    "path": "plugin/commands/pending-sentinel.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "22afd9a65a58eff0a9b458ffc9a894e968e884880e2b34dc819a1323d99489ce"
+  },
+  {
+    "path": "plugin/commands/pending-subagent.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "22afd9a65a58eff0a9b458ffc9a894e968e884880e2b34dc819a1323d99489ce"
+  },
+  {
+    "path": "plugin/commands/pending.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "cb86d60c5702f068b78c67552b02d2eb4ac43008483ed9609a73bf2db128c725"
+  },
+  {
+    "path": "plugin/commands/plan-runs.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "0a47e366c62ecfcb722d2a868062ac1c901dfc06ad6b932cc6f74394599561fe"
+  },
+  {
+    "path": "plugin/commands/skillator-pending.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "cb86d60c5702f068b78c67552b02d2eb4ac43008483ed9609a73bf2db128c725"
+  },
+  {
+    "path": "plugin/commands/skillator-sync.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "d1b19b558f58a78ba537a36c6febc33769f638453e34a563c32fa31f2b52cd36"
+  },
+  {
+    "path": "plugin/commands/skillator-update.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "9105469e6db0091d62e08446534375ca61de8e9bfb278f138229e2a72f5979e4"
+  },
+  {
+    "path": "plugin/commands/sync-tickets.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "df28785f125a4997e667ff86b04553635f55310938fd0ba108c1a6fa128bc62a"
+  },
+  {
+    "path": "plugin/commands/sync-zordon.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "df28785f125a4997e667ff86b04553635f55310938fd0ba108c1a6fa128bc62a"
+  },
+  {
+    "path": "plugin/commands/team-messages.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "d9082347a05491f3d97693067be9a2cef08ec9b1363c4b8f87c0071f8fb1f5f5"
+  },
+  {
+    "path": "plugin/commands/team.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "6fe3408058f1dd2d8070c7385df5cc80ac6df9394bf9e27d507ae211de159724"
+  },
+  {
+    "path": "plugin/commands/upstream-sync.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "d1b19b558f58a78ba537a36c6febc33769f638453e34a563c32fa31f2b52cd36"
+  },
+  {
+    "path": "plugin/commands/verify-shifu.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "de62d94373f1490a3d333b24b093580dadd5026b19ea10a8f61c119616e8bd65"
+  },
+  {
+    "path": "plugin/commands/verify-subagent.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Canonical command instructions reviewed, aliases verified by generator exact projection; traced installer host transformations and native command boundaries.",
+    "sha256": "de62d94373f1490a3d333b24b093580dadd5026b19ea10a8f61c119616e8bd65"
+  },
+  {
+    "path": "plugin/hooks/hooks.json",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "c05f85ffe731113ef576eac3a7bf5dccbb63a6541ba634f55929236af7b4e75a"
+  },
+  {
+    "path": "plugin/hooks/session-owner.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "e35596161234372504cf77550220d609494e831c7813a8bd1a24b3ec6bd2ff7a"
+  },
+  {
+    "path": "plugin/hooks/team-hook.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "68365ffae9dcd1ffb81984b8c11d3190483dbe6d871cf25d32b393fee7176aa8"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/archive-tickets/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "241be79f5f0a61959d9a3ca262cc7b0380afaabb73250d11bc46341472b68cb3"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/archive-zordon/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "0af8c9a58da9b9acc784159c85347a6a5c103dd24acf811989c36fe56c9ab1c5"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/code-vader/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "f2fa1b7c598d6333370dcfeeb015ca12a8109eea85a43467feeb234cc0f70650"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/engage-picard/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "a8ae5e4bffbcbdeabb6f27f91077967cb416eba854e02c1155c796b17a1011fc"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/engage/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "8420bec85fb58db362525e9a837f2b0292492ed0b29f2185e7abc92b352375b9"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/gauntlet-plan/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "1021a5659f37cfef877d9cbbde001e2d881618117250513b4b497aaa06f3e84f"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/gauntlet-run/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "1fac21a53b8c192c7377ec371d7196294920d67fd13270502d984acf9d0c4999"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/list-ticket-zordon/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "1bcc34817ca1d06df045e32f710bcc350aeb39e032b2b4dc89d1f1da37a87f71"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/list-tickets/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "b262907361be8e876bd37b4f50363402166e14853c47129989a7917619ce551b"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/marathon-plan/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "cbe4d7509eef691bc2e03518283d233b38a1c1ad6884e384adf37164eca9af24"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/marathon-run/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "0b68e343ec178b77f2df126aadd4352352e32c2b63887b9418660738ba7c4c02"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/message-uhura/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "de5cd042ffaa35d6245bf351a36fe4b28c64d3f8b21d4ff8a3881d9e690e08e7"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/ops/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "13d7206703ebfd9d04f1732a4c14cb82c46db29a6373503175612b0e299bd22d"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/pending-sentinel/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "acbf2ee4ffe90d3e9d3e99791f214a838d6e77ad3a531834c96c50691cc52e5b"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/pending-subagent/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "4a75dcd3c3f4ca6c7b888c4e7f38ea8dfb8fdc3bde4f3820412b8458947ff4b2"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/pending/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "46afcf070803a2a3bbbabd04050e0d3be573b878813b2937529a93c6ecf016bf"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/skillator-ops/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "26949fbf007cbf736c0e050b0f23c1da0097c56febd8716cd667c79ed7b6125d"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/skillator-pending/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "2df41a9583db161a549142057c95d3d287463b707f88fef446543f4fdb0ebca6"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/skillator-sync/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "0b750f390c82f03febd148d13f5cfb85fe1a8b5907ab1b13dbd66999c10756e8"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/skillator-update/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "65c9b2cf5443c32244a697caf48eca55fa9855d45e3c9d0276a5460760fa3d1e"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/sync-tickets/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "99f5f65ab8934d98d994cd2f45edee6bc149c90db29418e7de01d1e406fe3774"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/sync-zordon/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "28a6168ed348b155f5bf7af819417f0ab5db36cfd4fe9c89ebf2de0eeea9fa13"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/team-messages/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "70311f9e8595422938cdb220c33fae500de3b2a0e0d2806d2cef4c67d06f01ec"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/team/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "53da613389d0aaef03716023bec395dda8f42475959fb7474700176d745d0558"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/upstream-sync/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "a9660a16c313d059859004f0592967c5a495a48af4d96536ac3db2a03f762f96"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/verify-shifu/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "bf1963d1eb6d871fb46cbec38b371545b3dfd3f016734485ff6adea57bc2b444"
+  },
+  {
+    "path": "plugin/host-commands/antigravity/verify-subagent/SKILL.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "9f23c4fbf5fc5187588ca063b8733a1a2e2960ace1dbf84530c8f4eac59119cf"
+  },
+  {
+    "path": "plugin/host-commands/cursor/archive-tickets.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "ca036d44f0de078a9da7e86d2182db9ed7b0b83dd91be36580cc6212d8c0b5bc"
+  },
+  {
+    "path": "plugin/host-commands/cursor/archive-zordon.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "ca036d44f0de078a9da7e86d2182db9ed7b0b83dd91be36580cc6212d8c0b5bc"
+  },
+  {
+    "path": "plugin/host-commands/cursor/code-vader.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "22e083be129a1b180edfeb0900fb4e7251b65dbe195241758cfd8019530eb8af"
+  },
+  {
+    "path": "plugin/host-commands/cursor/engage-picard.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "cd6ea308bb386711285054e3543f61292a181d54b5e73bd3e1459b280d604c03"
+  },
+  {
+    "path": "plugin/host-commands/cursor/engage.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "cd6ea308bb386711285054e3543f61292a181d54b5e73bd3e1459b280d604c03"
+  },
+  {
+    "path": "plugin/host-commands/cursor/gauntlet-plan.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "cfba2a3e96540f61c2002f80649225eaef1655a6769f480380d5584219ba76fd"
+  },
+  {
+    "path": "plugin/host-commands/cursor/gauntlet-run.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "3c79d0a825641a479082ac4930f3f9d88b1e4588e3ee9798810fa64fac19c0b6"
+  },
+  {
+    "path": "plugin/host-commands/cursor/list-ticket-zordon.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "dd843e6e48b241a57797559c318eb51db85db0096ffb3ffd2e362a4759987484"
+  },
+  {
+    "path": "plugin/host-commands/cursor/list-tickets.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "dd843e6e48b241a57797559c318eb51db85db0096ffb3ffd2e362a4759987484"
+  },
+  {
+    "path": "plugin/host-commands/cursor/marathon-plan.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "cfba2a3e96540f61c2002f80649225eaef1655a6769f480380d5584219ba76fd"
+  },
+  {
+    "path": "plugin/host-commands/cursor/marathon-run.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "3c79d0a825641a479082ac4930f3f9d88b1e4588e3ee9798810fa64fac19c0b6"
+  },
+  {
+    "path": "plugin/host-commands/cursor/message-uhura.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "379c42177de6dcd6e11a9a1f0af07c35a08693c910852cbd71a9d55a338ba4cf"
+  },
+  {
+    "path": "plugin/host-commands/cursor/pending-sentinel.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "e1fd86414bfe11d1113103bacb645647493a092dfbfc1c239e84c71eb8c178dd"
+  },
+  {
+    "path": "plugin/host-commands/cursor/pending-subagent.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "e1fd86414bfe11d1113103bacb645647493a092dfbfc1c239e84c71eb8c178dd"
+  },
+  {
+    "path": "plugin/host-commands/cursor/pending.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "535e55907f31af1d04c6408792e8f557667e03ec57966ed5bdf4d7f743a96ba4"
+  },
+  {
+    "path": "plugin/host-commands/cursor/skillator-pending.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "535e55907f31af1d04c6408792e8f557667e03ec57966ed5bdf4d7f743a96ba4"
+  },
+  {
+    "path": "plugin/host-commands/cursor/skillator-sync.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "66506260133f72a5f797d5403fecf2a3c07b0dda456d91c53c82ae4505bec0d3"
+  },
+  {
+    "path": "plugin/host-commands/cursor/skillator-update.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "eab40c47eec8c08fc988272095b1de2864c883dec7cd50aff9d33eb0533a2253"
+  },
+  {
+    "path": "plugin/host-commands/cursor/sync-tickets.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "abb837ec1fbe6cfdb9e17a18e9873395894f83ceabd5b4eff8979c0fd876951c"
+  },
+  {
+    "path": "plugin/host-commands/cursor/sync-zordon.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "abb837ec1fbe6cfdb9e17a18e9873395894f83ceabd5b4eff8979c0fd876951c"
+  },
+  {
+    "path": "plugin/host-commands/cursor/team-messages.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "2ea013db2aab49366981b285a1848006eb8029b4f15c5820067adb590d1d0551"
+  },
+  {
+    "path": "plugin/host-commands/cursor/team.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "05bb696c94212aece09794cd5b2ba8d767e7ee2917fce51b1744ed04ea115f5e"
+  },
+  {
+    "path": "plugin/host-commands/cursor/upstream-sync.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "66506260133f72a5f797d5403fecf2a3c07b0dda456d91c53c82ae4505bec0d3"
+  },
+  {
+    "path": "plugin/host-commands/cursor/verify-shifu.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "62ec99269e73211ef175ec858d79eb1a80ef1d1de890a401d556e64cdfe2e6e9"
+  },
+  {
+    "path": "plugin/host-commands/cursor/verify-subagent.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "62ec99269e73211ef175ec858d79eb1a80ef1d1de890a401d556e64cdfe2e6e9"
+  },
+  {
+    "path": "plugin/host-commands/gemini/archive-tickets.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "fdbed0330336f323cc38ffd69d511dd97b1317f2d815f89b55726e48c7a0af55"
+  },
+  {
+    "path": "plugin/host-commands/gemini/archive-zordon.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "fdbed0330336f323cc38ffd69d511dd97b1317f2d815f89b55726e48c7a0af55"
+  },
+  {
+    "path": "plugin/host-commands/gemini/code-vader.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "8f0ae5aab76b073ecfb72c341252d945528b2fceedd2ef4aa2efa68d8ff5e66c"
+  },
+  {
+    "path": "plugin/host-commands/gemini/engage-picard.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "8f8e92047a7c7f05aad702f810606e1d4ee72b1875ecb0114da6a4f445e2bbad"
+  },
+  {
+    "path": "plugin/host-commands/gemini/engage.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "8f8e92047a7c7f05aad702f810606e1d4ee72b1875ecb0114da6a4f445e2bbad"
+  },
+  {
+    "path": "plugin/host-commands/gemini/gauntlet-plan.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "458713359fac7fc1fbe5d3be3b1cfa61baf984b94e7e64d2dcacb9d136773887"
+  },
+  {
+    "path": "plugin/host-commands/gemini/gauntlet-run.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "a01a0d9549a3f59dcf385b901d04ab64930598842eaeec77e9c7b321f128139f"
+  },
+  {
+    "path": "plugin/host-commands/gemini/list-ticket-zordon.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "af0cf4a0461e710fd038984c27d38bea000ac820cd9b5f0990917c717a5d2b74"
+  },
+  {
+    "path": "plugin/host-commands/gemini/list-tickets.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "af0cf4a0461e710fd038984c27d38bea000ac820cd9b5f0990917c717a5d2b74"
+  },
+  {
+    "path": "plugin/host-commands/gemini/marathon-plan.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "458713359fac7fc1fbe5d3be3b1cfa61baf984b94e7e64d2dcacb9d136773887"
+  },
+  {
+    "path": "plugin/host-commands/gemini/marathon-run.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "a01a0d9549a3f59dcf385b901d04ab64930598842eaeec77e9c7b321f128139f"
+  },
+  {
+    "path": "plugin/host-commands/gemini/message-uhura.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "dcafe4c86f28718ccf020cc90c13ac4f6d649c554e7975e08e77d607946e5d83"
+  },
+  {
+    "path": "plugin/host-commands/gemini/pending-sentinel.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "0765c9e9ba3e18a2342963d7666bdb02ec5d7c1f5873305c6e5a8f6515b3903a"
+  },
+  {
+    "path": "plugin/host-commands/gemini/pending-subagent.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "0765c9e9ba3e18a2342963d7666bdb02ec5d7c1f5873305c6e5a8f6515b3903a"
+  },
+  {
+    "path": "plugin/host-commands/gemini/pending.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "112b803af6201b30b59d0af06da307b6060a223fb369939bc16773511d2d655d"
+  },
+  {
+    "path": "plugin/host-commands/gemini/skillator-pending.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "112b803af6201b30b59d0af06da307b6060a223fb369939bc16773511d2d655d"
+  },
+  {
+    "path": "plugin/host-commands/gemini/skillator-sync.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "01af45490629b56d475abc11e0b8e56004cbc9d55548e07f100dbd42bc6c82ff"
+  },
+  {
+    "path": "plugin/host-commands/gemini/skillator-update.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "b367723c6d39f6c6d49cfc37bd56a8ffde2139ed061360315abf236cfe0c49fd"
+  },
+  {
+    "path": "plugin/host-commands/gemini/sync-tickets.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "e3ebc44c57f019d42b2c785d4c65c47931466370ea135e6c6e707d8199ad46f0"
+  },
+  {
+    "path": "plugin/host-commands/gemini/sync-zordon.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "e3ebc44c57f019d42b2c785d4c65c47931466370ea135e6c6e707d8199ad46f0"
+  },
+  {
+    "path": "plugin/host-commands/gemini/team-messages.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "b48f70c8663dd19d5950f910fad53e8596736200a22574e4f0d6261bc00c5f1a"
+  },
+  {
+    "path": "plugin/host-commands/gemini/team.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "59315ee34f47230f9dd32c2c3ccd8ad9156eb65d35281eba92028dd462c64af2"
+  },
+  {
+    "path": "plugin/host-commands/gemini/upstream-sync.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "01af45490629b56d475abc11e0b8e56004cbc9d55548e07f100dbd42bc6c82ff"
+  },
+  {
+    "path": "plugin/host-commands/gemini/verify-shifu.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "6257972ef191bda64106cebfaa7ca1102f67db38595562b9e4eb35d73f0643c3"
+  },
+  {
+    "path": "plugin/host-commands/gemini/verify-subagent.toml",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "6257972ef191bda64106cebfaa7ca1102f67db38595562b9e4eb35d73f0643c3"
+  },
+  {
+    "path": "plugin/host-commands/opencode/archive-tickets.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "8261a7c51f9a6c625c98ce0c9926cb4f02572cb21dd012138102cb78cf6c235c"
+  },
+  {
+    "path": "plugin/host-commands/opencode/archive-zordon.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "8261a7c51f9a6c625c98ce0c9926cb4f02572cb21dd012138102cb78cf6c235c"
+  },
+  {
+    "path": "plugin/host-commands/opencode/code-vader.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "2cd73d079abcdc7e4e4d00b10ba9e251c3e53104f238bd80fb45047849616966"
+  },
+  {
+    "path": "plugin/host-commands/opencode/engage-picard.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "44259d2908cb17facd4e4760548ea23e78ca7108824df28a4b37bd69398d5429"
+  },
+  {
+    "path": "plugin/host-commands/opencode/engage.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "44259d2908cb17facd4e4760548ea23e78ca7108824df28a4b37bd69398d5429"
+  },
+  {
+    "path": "plugin/host-commands/opencode/gauntlet-plan.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "601f0228a828799145e7c3e80d77fe2ec5d0d0ef737806627999774930b2d697"
+  },
+  {
+    "path": "plugin/host-commands/opencode/gauntlet-run.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "a188ebc8633d45ce2d2ae51b47c98c7af8652468f34e25306a92f911e01746c3"
+  },
+  {
+    "path": "plugin/host-commands/opencode/list-ticket-zordon.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "dc8d6fcf1220fca4e8cb2e030e6288c96d7b208f223567f57685f939f39247c5"
+  },
+  {
+    "path": "plugin/host-commands/opencode/list-tickets.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "dc8d6fcf1220fca4e8cb2e030e6288c96d7b208f223567f57685f939f39247c5"
+  },
+  {
+    "path": "plugin/host-commands/opencode/marathon-plan.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "601f0228a828799145e7c3e80d77fe2ec5d0d0ef737806627999774930b2d697"
+  },
+  {
+    "path": "plugin/host-commands/opencode/marathon-run.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "a188ebc8633d45ce2d2ae51b47c98c7af8652468f34e25306a92f911e01746c3"
+  },
+  {
+    "path": "plugin/host-commands/opencode/message-uhura.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "fa5a193a26b187fb028d436e64dab790fe4617d7a75120d8e7811abc9f024e37"
+  },
+  {
+    "path": "plugin/host-commands/opencode/pending-sentinel.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "6033780ba4628edb160cf999ef93e231e8cabd0a94f8d734976b339a59599c47"
+  },
+  {
+    "path": "plugin/host-commands/opencode/pending-subagent.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "6033780ba4628edb160cf999ef93e231e8cabd0a94f8d734976b339a59599c47"
+  },
+  {
+    "path": "plugin/host-commands/opencode/pending.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "535e55907f31af1d04c6408792e8f557667e03ec57966ed5bdf4d7f743a96ba4"
+  },
+  {
+    "path": "plugin/host-commands/opencode/skillator-pending.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "535e55907f31af1d04c6408792e8f557667e03ec57966ed5bdf4d7f743a96ba4"
+  },
+  {
+    "path": "plugin/host-commands/opencode/skillator-sync.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "3f912969763a0717b4076cd4bbd7c97808dc7e38f06733a1f3bdb2343db561c7"
+  },
+  {
+    "path": "plugin/host-commands/opencode/skillator-update.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "592d94b2796713f3258d180acaf3f201f11c3f3ecf0b0ee2c9babc8ba8de6f78"
+  },
+  {
+    "path": "plugin/host-commands/opencode/sync-tickets.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "1560135003fa1703bbe3edaf05322bfec887fb569457340c6b5ac66aa47032ca"
+  },
+  {
+    "path": "plugin/host-commands/opencode/sync-zordon.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "1560135003fa1703bbe3edaf05322bfec887fb569457340c6b5ac66aa47032ca"
+  },
+  {
+    "path": "plugin/host-commands/opencode/team-messages.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "9d817a21f4c427dfae867d780e5aaadb3fc239ed1fbff740ea9532b61c26850b"
+  },
+  {
+    "path": "plugin/host-commands/opencode/team.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "5d13d4b605de3c2560dfa55a7935e45ee43b4876c319c57b56d65e1648b3d6f5"
+  },
+  {
+    "path": "plugin/host-commands/opencode/upstream-sync.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "3f912969763a0717b4076cd4bbd7c97808dc7e38f06733a1f3bdb2343db561c7"
+  },
+  {
+    "path": "plugin/host-commands/opencode/verify-shifu.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "c0cf5591a69cc81bd02a8ea48ee70431eebfb4bc66a62baf9c2e71fd2a641960"
+  },
+  {
+    "path": "plugin/host-commands/opencode/verify-subagent.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "c0cf5591a69cc81bd02a8ea48ee70431eebfb4bc66a62baf9c2e71fd2a641960"
+  },
+  {
+    "path": "plugin/host-commands/pi/archive-tickets.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "486ccf62ea595c586dc5e386d8feeb6d13ed8feae17fe12f54200200786f4cce"
+  },
+  {
+    "path": "plugin/host-commands/pi/archive-zordon.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "486ccf62ea595c586dc5e386d8feeb6d13ed8feae17fe12f54200200786f4cce"
+  },
+  {
+    "path": "plugin/host-commands/pi/code-vader.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "71025e759f3c06bbf5fc5aa9694a87d8d609aa98b2365af116282144526b524e"
+  },
+  {
+    "path": "plugin/host-commands/pi/engage-picard.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "fd088384145b4a24e7d01d71f0af397e23448fe055d5bc389c34899ad503559e"
+  },
+  {
+    "path": "plugin/host-commands/pi/engage.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "fd088384145b4a24e7d01d71f0af397e23448fe055d5bc389c34899ad503559e"
+  },
+  {
+    "path": "plugin/host-commands/pi/gauntlet-plan.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "cdb14e3e85a765198e32698a78991f3954cbd498bd81135d3bff62c7bc3910ed"
+  },
+  {
+    "path": "plugin/host-commands/pi/gauntlet-run.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "d1f4e9a12a49cc92184ace9d80ba479f183cc39328c72211e05cd6ec163f72dd"
+  },
+  {
+    "path": "plugin/host-commands/pi/list-ticket-zordon.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "da40af8c0a794139acc6f8df8cc76eddeebbd6879c5d2c2ed8be557e9c00f84f"
+  },
+  {
+    "path": "plugin/host-commands/pi/list-tickets.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "da40af8c0a794139acc6f8df8cc76eddeebbd6879c5d2c2ed8be557e9c00f84f"
+  },
+  {
+    "path": "plugin/host-commands/pi/marathon-plan.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "cdb14e3e85a765198e32698a78991f3954cbd498bd81135d3bff62c7bc3910ed"
+  },
+  {
+    "path": "plugin/host-commands/pi/marathon-run.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "d1f4e9a12a49cc92184ace9d80ba479f183cc39328c72211e05cd6ec163f72dd"
+  },
+  {
+    "path": "plugin/host-commands/pi/message-uhura.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "784abbe55e3c973e54204eb0f0202a8afc5bf305de2c005cdf0021ee18579a0d"
+  },
+  {
+    "path": "plugin/host-commands/pi/pending-sentinel.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "3b3421d0f295ad28825719a0a12616a318426d9b3d243bdbbed2e6f47bb790c4"
+  },
+  {
+    "path": "plugin/host-commands/pi/pending-subagent.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "3b3421d0f295ad28825719a0a12616a318426d9b3d243bdbbed2e6f47bb790c4"
+  },
+  {
+    "path": "plugin/host-commands/pi/pending.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "535e55907f31af1d04c6408792e8f557667e03ec57966ed5bdf4d7f743a96ba4"
+  },
+  {
+    "path": "plugin/host-commands/pi/skillator-pending.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "535e55907f31af1d04c6408792e8f557667e03ec57966ed5bdf4d7f743a96ba4"
+  },
+  {
+    "path": "plugin/host-commands/pi/skillator-sync.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "819325fadeedcef9c7afd07c5caf9c2f1d3443d37929116f883175e8e9d9de07"
+  },
+  {
+    "path": "plugin/host-commands/pi/skillator-update.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "f5dcfb8e8922b2f265a732d7acc85c8ba78d1e272e3867a2287418a1122e4d7f"
+  },
+  {
+    "path": "plugin/host-commands/pi/sync-tickets.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "71a866bb9d40f13390c6ec8a2bc041b13c3e2a98f1da67c48c8326b5d1e34087"
+  },
+  {
+    "path": "plugin/host-commands/pi/sync-zordon.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "71a866bb9d40f13390c6ec8a2bc041b13c3e2a98f1da67c48c8326b5d1e34087"
+  },
+  {
+    "path": "plugin/host-commands/pi/team-messages.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "ee77a9b0bb5f6ae84734cb3ec38b61154551754669adc3fd76feaf17095ea4bd"
+  },
+  {
+    "path": "plugin/host-commands/pi/team.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "fc35ab3808c94677a575f3bbd0f5e57f7250276b51012a068fac9a1a04845072"
+  },
+  {
+    "path": "plugin/host-commands/pi/upstream-sync.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "819325fadeedcef9c7afd07c5caf9c2f1d3443d37929116f883175e8e9d9de07"
+  },
+  {
+    "path": "plugin/host-commands/pi/verify-shifu.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "adddd256d354637bacd2b378e8c1f2fd7a0ca5529777c5620aae65ab8a93ac39"
+  },
+  {
+    "path": "plugin/host-commands/pi/verify-subagent.md",
+    "status": "inspected",
+    "method": "Canonical source, host metadata, generator and exact byte projection validation",
+    "notes": "Byte projection checked against renderCommands from canonical commands and hosts.json; node generate-commands.mjs --check passed 137 generated outputs with zero writes. Installer transformations separately inspected; Windows pending alias discrepancy recorded.",
+    "sha256": "adddd256d354637bacd2b378e8c1f2fd7a0ca5529777c5620aae65ab8a93ac39"
+  },
+  {
+    "path": "plugin/install.ps1",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "34505d88ed483a23ce9ea5b6e8204457e517e3fb61b5f6695d1c926144df4610"
+  },
+  {
+    "path": "plugin/install.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "eb11bd963407ee9c90983eb4015cf5bcfc766683f8648cd0fe6438ed53f53b11"
+  },
+  {
+    "path": "plugin/practice/debugging.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "0049c550f1cb82e181b94d46a342936cc3a027156491f10e7766a49bf90b09dd"
+  },
+  {
+    "path": "plugin/practice/prompts.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "aa09c6b1092859b9efc901844ce37a1e2fac1ede48727eefa25713e1b0d00a57"
+  },
+  {
+    "path": "plugin/practice/scripts/archive-tickets.sh",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 330,
+    "sha256": "9bc01b8cd64fe2da01dd7101c022b394a1081baf5312e42f406e603190583f88",
+    "notes": "Full history walker, grouping/merge/write paths, options and selftest read. --selftest PASS. Extra isolated old-parent/blank/open-child dry-run reproduces HELP-02. Archive-first write avoids losing moved rows on a crash but is not a board-wide transaction.",
+    "reviewer": "full_audit_helpers; integrated by full_audit_integration"
+  },
+  {
+    "path": "plugin/practice/scripts/baseline-harness.sh",
+    "status": "inspected",
+    "method": "Full verbatim source read, helper-to-scenario contract review",
+    "notes": "Intentional mini-app defects are baseline controls, not production findings. usage_check numeric grammar and odo stdout differences sent to integration owner for caller validation. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "2336b69b1561dc14c89d467ac3dd7bd662fcef4dc0399089d1d368abda53f60f"
+  },
+  {
+    "path": "plugin/practice/scripts/board-fresh.ps1",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 225,
+    "sha256": "634892eb958e9806bec897c564b0085070cb986af9618a4fccf719ff8cad5345",
+    "notes": "Full guard/process timeout/byte-copy/preflight/dirty-log and inline tests read. -Selftest PASS against isolated local bare upstream, including clean/board-only ff, conflicts/local commits/foreign dirt refusal, offline and fetch-only.",
+    "reviewer": "full_audit_helpers; integrated by full_audit_integration"
+  },
+  {
+    "path": "plugin/practice/scripts/board-fresh.sh",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 240,
+    "sha256": "665a166e6ebed2cfe29f9366d3abbd10a20488067e9175d5e0d2ed6e5216f7b8",
+    "notes": "Full guard, fetch timeout/stamp, clean-merge preflight, dirty writer report and inline tests read. ticket-meta and relay call it under their board lock. Selftest temp writes to C:/Users/Ikran denied by sandbox, so shell execution cannot certify parity in this run.",
+    "reviewer": "full_audit_helpers; integrated by full_audit_integration"
+  },
+  {
+    "path": "plugin/practice/scripts/check-grayskull-sync.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read full validators and embedded selftests. Context audit default plugin root omits moved repo always-on pointers; parent verifying. Routing/template checks inspect current text, not model retrieval.",
+    "sha256": "fd42be8e5e1c094fc4cfa96653ae4fbcf8fd1314d9846bc2ee44fab34fb0238c"
+  },
+  {
+    "path": "plugin/practice/scripts/check-muse-manifest.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read full validators and embedded selftests. Context audit default plugin root omits moved repo always-on pointers; parent verifying. Routing/template checks inspect current text, not model retrieval.",
+    "sha256": "b2ab55946edb6412c48a58c3894ed92823e89b2c9847230d80eead2aab415d54"
+  },
+  {
+    "path": "plugin/practice/scripts/check-routing.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read full validators and embedded selftests. Context audit default plugin root omits moved repo always-on pointers; parent verifying. Routing/template checks inspect current text, not model retrieval.",
+    "sha256": "914daefb2e7a56b035506669c1032f1a45fcbcb785b683aa0039541d42549b35"
+  },
+  {
+    "path": "plugin/practice/scripts/check-tickets.sh",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 297,
+    "sha256": "1155da779e86af85aafc69cd38f63c7d7c16f7dfc34297cb24418e1b7d468711",
+    "notes": "Full script and tests read. Duplicate/archive, conflict, bare-plan, cwd, open-title checks traced. --selftest PASS with Git POSIX utilities first on PATH. First unnormalized invocation selected Windows sort and failed location assertion; environment-induced, not filed.",
+    "reviewer": "full_audit_helpers; integrated by full_audit_integration"
+  },
+  {
+    "path": "plugin/practice/scripts/codex-isolation.mjs",
+    "status": "inspected",
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "087c09084ce6147c2cf6a84296d8dc1488977406eb4fbe4802b44bb54e455a80"
+  },
+  {
+    "path": "plugin/practice/scripts/codex-isolation.test.mjs",
+    "status": "inspected",
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "3d13f05c0955643d91d21ddac9440b56029f26f4d7ee37d053f1be4737fa953e"
+  },
+  {
+    "path": "plugin/practice/scripts/codex-native-probe.mjs",
+    "status": "inspected",
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "573a74e321227ab11f1ea0ddd8bd0c1753a286e1a13becbc8dc2b0bac461833c"
+  },
+  {
+    "path": "plugin/practice/scripts/context-audit.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read full validators and embedded selftests. Context audit default plugin root omits moved repo always-on pointers; parent verifying. Routing/template checks inspect current text, not model retrieval.",
+    "sha256": "79ab677599a10ca1f3b89dd8996ac8dc3aa7deb83fad0db6bcc8445fdf66cb91"
+  },
+  {
+    "path": "plugin/practice/scripts/fixtures/codex-native-stub.mjs",
+    "status": "inspected",
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "55f60e4295d129320ef9af30e43bd7b140b216d5cc6f8fc9dcb109af05210c43"
+  },
+  {
+    "path": "plugin/practice/scripts/fixtures/command-contract.json",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "afe3e2c77b9172d72a144ffdd5bb55efc32abafee7f2e67bf1168767d73f17c1"
+  },
+  {
+    "path": "plugin/practice/scripts/generate-commands.mjs",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "a2928e336d10eca8fec678735fa24b334801c9e3d9de0ac8bdd9f3847ba1fd77"
+  },
+  {
+    "path": "plugin/practice/scripts/generate-commands.test.mjs",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "224d6eaffd75c08362aa521dbeebc1c6dabc587d6c8a63345c887e6f86120c79"
+  },
+  {
+    "path": "plugin/practice/scripts/next-id.ps1",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 454,
+    "sha256": "e991d573948c6d88de973db250255b0fee279bf46341b2d65a489abbe7225406",
+    "notes": "Full allocator, owner-checked lock rename/free/retry paths and inline fixtures read. -Selftest PASS, including worktree/ref/archive numbering, W exhaustion, upstream-tip local-bare fixture and held-open stamp release. Current run did not repeat historical CPU-pressure stress.",
+    "reviewer": "full_audit_helpers; integrated by full_audit_integration"
+  },
+  {
+    "path": "plugin/practice/scripts/next-id.sh",
+    "status": "inspected",
+    "method": "Complete source body and inline tests read; direct caller/test boundary slices traced",
+    "lines": 336,
+    "sha256": "435d1a9176e3d3e0e560035f9286b11b0069a2dc98298ebe4eb2a62b3b531e3b",
+    "notes": "Full allocator and inline tests read. Tree/archive/ref max, RUN/S/W scans, common-dir counter, mkdir stale lock and reserve-before-output traced. Calls from relay alloc and renumber reviewed. Shell selftest could not allocate in Windows sandbox temp path: mkdir C:/Users/Ikran permission denied; no source failure inferred.",
+    "reviewer": "full_audit_helpers; integrated by full_audit_integration"
+  },
+  {
+    "path": "plugin/practice/scripts/probe-commands.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "d1563710f0f4f68232a53594840a87195cf45978c963036e447079559c93f27e"
+  },
+  {
+    "path": "plugin/practice/scripts/reliability-parity.mjs",
+    "status": "inspected",
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "31b710fa12308aef9f32cbf468764c4f465180154ff988266473c59403c8153f"
+  },
+  {
+    "path": "plugin/practice/scripts/reliability-parity.test.mjs",
+    "status": "inspected",
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "bf44905233932f8a463dcce6a0db9ce522d30d861088b39640ad44fd8f6e6451"
+  },
+  {
+    "path": "plugin/practice/scripts/rename-skill.py",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "fbcbdf2540df5b1ca65df93139f2767a64f1a47ca5093fcf1bfba6c00b8c0d17"
+  },
+  {
+    "path": "plugin/practice/scripts/renumber-tickets.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source and embedded fixture review; traced callers and invalid-ref reconcile failure reproduced without mutation.",
+    "sha256": "7c976089f122af48926fb91c9dc102e181f252b8bbcd82e17f9a0400a59ba83f"
+  },
+  {
+    "path": "plugin/practice/scripts/selftest.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "0dcecb1052bcf1cce173e549bfb2bded431f16e83ef9483724b513f97794ec96"
+  },
+  {
+    "path": "plugin/practice/scripts/taskwork.ps1",
+    "status": "inspected",
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "8352f45eca717428ce8e0d68b6ce5a8266d86147a9cb8723e2007a999ddd6e77"
+  },
+  {
+    "path": "plugin/practice/scripts/taskwork.sh",
+    "status": "inspected",
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "05192391e03c73857fb49cb0595f31c812e1853ee935cd661e47e5c57f99a448"
+  },
+  {
+    "path": "plugin/practice/scripts/upstream-check.ps1",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "a5a1163bb2a437764f6620f9b04f8f9b229b009e35e63db557d42946e684c714"
+  },
+  {
+    "path": "plugin/practice/scripts/upstream-check.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "9a3ba6159e36dc74e57081821512c33286c946c834ff98351c0e0924daa8a0e7"
+  },
+  {
+    "path": "plugin/practice/scripts/validate.mjs",
+    "status": "inspected",
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "65e2984cc30c7629601f116138e5a46001b63e73c8499ebdbad593b6c520033f"
+  },
+  {
+    "path": "plugin/practice/scripts/validate.test.mjs",
+    "status": "inspected",
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately. Parent supplemental full reads; harness remaining ranges read by integration investigator.",
+    "sha256": "6943c3b788a149fdd4f2b3d1060e5c810cff4bf49a6633071fe2ca6d1c8892e9"
+  },
+  {
+    "path": "plugin/practice/task-loop.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "280898d20d212fdfddcc690b0f3f088176541c7e6952a7bea01e9a630fde86d7"
+  },
+  {
+    "path": "plugin/practice/tdd.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/instruction read with call contracts and assertions. Historical capability ledger assessed as dated evidence, not fresh live execution. Root wrapper forwards payload installers; workflow is instruction-mediated, dependency ordering requires controller enforcement.",
+    "sha256": "60a36fd4fa08d750ac5fbb0862dc020ed583d83804208e59777bee5a01b311ee"
+  },
+  {
+    "path": "plugin/references/anti-slop.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "0ae69e78a3a43ddc2fa1338d0611a8bf2c0cc90a40b9299178731f1c11de5d36"
+  },
+  {
+    "path": "plugin/skills/a11y-toph/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full instruction/reference read; checked callers and executable examples. A11y computed contrast false-pass reproduced on synthetic styles; no browser or assistive-technology acceptance claimed.",
+    "sha256": "6ff3882e7f2088cd72502c41569bd6d87f82f02a853d10be58761c740b5c5ffc"
+  },
+  {
+    "path": "plugin/skills/a11y-toph/references/checks.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full instruction/reference read; checked callers and executable examples. A11y computed contrast false-pass reproduced on synthetic styles; no browser or assistive-technology acceptance claimed.",
+    "sha256": "3ffbbd05563c9945cecda4137bd121af5259f91a238bb233c44578027958e8a3"
+  },
+  {
+    "path": "plugin/skills/a11y-toph/references/patterns.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full instruction/reference read; checked callers and executable examples. A11y computed contrast false-pass reproduced on synthetic styles; no browser or assistive-technology acceptance claimed.",
+    "sha256": "030627da3c6830b7aac923a6d657b1d70fabfe3ae4ed4cca0739793e195b027a"
+  },
+  {
+    "path": "plugin/skills/audit-sherlock/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read full investigation, evidence filtering, ticket allocation, repair/PR permission and no-user contracts; this audit scope overrides skill output paths.",
+    "sha256": "1b168e0c91f2cb351d07daaa119e3c528e232d822866600efe7dcc42c6eba93b"
+  },
+  {
+    "path": "plugin/skills/build-jarvis/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source/reference and embedded selftest review; noted F100 contract discrepancy and opt-in hook boundary.",
+    "sha256": "4735865b52d5e5691c18a08b130ea02efb048e9cd9db7b1a12b19266cf49296a"
+  },
+  {
+    "path": "plugin/skills/build-jarvis/hooks/feature-route.ps1",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source/reference and embedded selftest review; noted F100 contract discrepancy and opt-in hook boundary.",
+    "sha256": "f90a12d93562e1ed57ac89f25bcf3cd3f3e2611ba9392109aa4038b53b9567d8"
+  },
+  {
+    "path": "plugin/skills/build-jarvis/hooks/feature-route.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source/reference and embedded selftest review; noted F100 contract discrepancy and opt-in hook boundary.",
+    "sha256": "b6da0069d87761aa25c4ab9b248bce29a4977de9d22ee69a041e3a38e2e0ccc5"
+  },
+  {
+    "path": "plugin/skills/build-jarvis/hooks/grade-gate.ps1",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source/reference and embedded selftest review; noted F100 contract discrepancy and opt-in hook boundary.",
+    "sha256": "5174081cbf2948224be4573397ae742cd75b2d1fe4680165574eb3638258180e"
+  },
+  {
+    "path": "plugin/skills/build-jarvis/hooks/grade-gate.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source/reference and embedded selftest review; noted F100 contract discrepancy and opt-in hook boundary.",
+    "sha256": "9ff490a4d46dd96b7126f541c5d6a77c5a3b7b7868ac7b3ddab482ca7610f599"
+  },
+  {
+    "path": "plugin/skills/build-jarvis/references/ceremony.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source/reference and embedded selftest review; noted F100 contract discrepancy and opt-in hook boundary.",
+    "sha256": "9e0f14da5baf5abba3097f6897fc4970b7b09d417e1a022617377dd20d614cc8"
+  },
+  {
+    "path": "plugin/skills/build-jarvis/references/grade.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source/reference and embedded selftest review; noted F100 contract discrepancy and opt-in hook boundary.",
+    "sha256": "b8cfcb94f4f9d994ac2d48323ec341e1edaffe5a4cd5a49826cee34e0e339974"
+  },
+  {
+    "path": "plugin/skills/build-jarvis/references/platforms.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source/reference and embedded selftest review; noted F100 contract discrepancy and opt-in hook boundary.",
+    "sha256": "54e7ed801a5b4b8e9a11aa1e32ce0f968916f4d0f312829137e479ce95aa28d3"
+  },
+  {
+    "path": "plugin/skills/build-jarvis/references/route-hook.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source/reference and embedded selftest review; noted F100 contract discrepancy and opt-in hook boundary.",
+    "sha256": "fc2c166a649cf8c58ede74a94ab385274d80ce6226868174f25ec48b91a8fc5c"
+  },
+  {
+    "path": "plugin/skills/chief-fury/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read full goal wiki, decision score, board seat isolation and scheduling contracts; instruction implementation, model behavior not rerun.",
+    "sha256": "8d1d883130de4b3ef90157374f940b88a97d5d1b4d72d7710188db021e12fe28"
+  },
+  {
+    "path": "plugin/skills/chief-fury/references/board.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read full goal wiki, decision score, board seat isolation and scheduling contracts; instruction implementation, model behavior not rerun.",
+    "sha256": "1f42632e56f62ac3bc54e2adb29cd940f94cacdf403aabd428c04475e0e90433"
+  },
+  {
+    "path": "plugin/skills/chief-fury/references/wiki.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read full goal wiki, decision score, board seat isolation and scheduling contracts; instruction implementation, model behavior not rerun.",
+    "sha256": "3de4ded9086d4656adfcbfdb77edf3c146270c3c8fbb705238a166d067ea3706"
+  },
+  {
+    "path": "plugin/skills/code-yoda/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "a7cc9632a20daf6f385f5e9585e5d819196c76eab93e73005e41d25e8adbdfa5"
+  },
+  {
+    "path": "plugin/skills/code-yoda/UPSTREAM.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "78aec0853e1553b7c2476ec9e3c7db1d186ca492bdf0c1a1e925c16c54bee6f4"
+  },
+  {
+    "path": "plugin/skills/code-yoda/references/audit.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "6edda6c7681aece42d4597ac6e85551422a08b4e2052454db06febf65dfd3599"
+  },
+  {
+    "path": "plugin/skills/code-yoda/references/debt.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "c7319b360a282a476e6145280b2606c3c5f45995696a168a7e666283e8268578"
+  },
+  {
+    "path": "plugin/skills/code-yoda/references/review.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "c8afd86532429bb5b6a9245ebb5d2609a5ca8866fd960ea9753a416b9c49a190"
+  },
+  {
+    "path": "plugin/skills/code-yoda/upstream-check.ps1",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "8340df4b7272f18156d0005f6b1e2d2e62805f1b218d03f78612df6f1ceaf94a"
+  },
+  {
+    "path": "plugin/skills/code-yoda/upstream-check.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "d3342fc3becd7340539d25d14170975ce5bb3fea65f581e3a0c8258c4eef1d3e"
+  },
+  {
+    "path": "plugin/skills/deploy-merlin/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "bed2b2f8a668d433f133a7b10cf00861a0fdff05881d71da22fdac1a567ad126"
+  },
+  {
+    "path": "plugin/skills/deploy-niyoj/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "12826f3d8cca235f19885559b9fe53c3e7b20c001f25bf0cc0ddbb5ca1f7bca8"
+  },
+  {
+    "path": "plugin/skills/deploy-niyoj/references/templates.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "96d971dda5347474d925542da75c2995cde11a1adc60dae45cc48d3724b203a2"
+  },
+  {
+    "path": "plugin/skills/design-arwen/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "ef73f083916e83fd949080b40238b9ef879a5ee6aaf893bf77b4e74597b6b9c1"
+  },
+  {
+    "path": "plugin/skills/design-arwen/UPSTREAM.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "ddabea2c4bec30acaaa7d6c22c5b32058a34bc6852c0bdc2d3996b96baa6c223"
+  },
+  {
+    "path": "plugin/skills/design-arwen/references/build.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "93bffd2201da12ff200b97dc3bce2143f5d64e0076c45fa3cb93121fbcedd210"
+  },
+  {
+    "path": "plugin/skills/design-arwen/references/canvas.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "9c57801664a660f1bb24032c6b5687a34f9c6b79f83e1519174263861fd1f8c4"
+  },
+  {
+    "path": "plugin/skills/design-arwen/references/craft.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "1d699ee5e97127ea306e0bc150434006e852257414a1b88fe04d57bc8d833c61"
+  },
+  {
+    "path": "plugin/skills/design-arwen/references/critique.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "4275ff00dedae43933661739ee225378ce5e9267c775e3fa8e362fa446a50989"
+  },
+  {
+    "path": "plugin/skills/design-arwen/references/improve.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "8f71c52091c0f639ce80301c45e016d614977f22a89adced92f2a91b308792b7"
+  },
+  {
+    "path": "plugin/skills/design-arwen/references/product-ui.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "859d8f3dbe0d5a39fcd37795d61d6314b09a259582c5ca7ab991c1826878e3cd"
+  },
+  {
+    "path": "plugin/skills/design-arwen/references/redesign.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "2f8847feef267fd1fb59d6f4173ab37a6cd5cac6214fffad18fd1b08f5564254"
+  },
+  {
+    "path": "plugin/skills/design-arwen/references/styles.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "30b227803399f9911bd83018d33f4479b2af58eaad5bf4afc0eaa4ff719ec969"
+  },
+  {
+    "path": "plugin/skills/design-arwen/references/terminal.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "2a427a2d3741b0732c056f5e82aa54a48c75ed6d3cbe5c66e313b0bbdd666d04"
+  },
+  {
+    "path": "plugin/skills/design-arwen/references/verify.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "c5388f6f8aa5283f1b90e57abaa8c38271fe44e1e342616a96cf3d84c4ba6277"
+  },
+  {
+    "path": "plugin/skills/designui-galadriel/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Read complete canonical body and every reference; traced build/redesign/improve/critique, eight-style menu and second round, design-memory and render gate, no-user contracts and upstream reversion record. Test evidence remains historical, no model run.",
+    "sha256": "906f5106e0a9a9f0eb13ba1ca9993b470d7b7ef9ad96f303632333472ba4f2f0"
+  },
+  {
+    "path": "plugin/skills/grayskull-power/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "776824dd7a8d629fb995567c90ee8efa63e9edb97979943233a1406cb42804e4"
+  },
+  {
+    "path": "plugin/skills/grayskull-power/references/arming.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "a0fb413af3d56f3e5eea5dd5678aa21a4a7e21aa9e8a6ebb57d668e850763c7c"
+  },
+  {
+    "path": "plugin/skills/grayskull-power/references/ground-rules.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "5d1579b41f8e55b446fb4c00e6347b3d7571adab38380fc245822c1431db7896"
+  },
+  {
+    "path": "plugin/skills/grayskull-power/references/hosts.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "a1978a900016dac3ed0f8fee0cdd4677d85b1116ad48147516dec71509ccac49"
+  },
+  {
+    "path": "plugin/skills/grayskull-power/references/routing.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "442cf90ab47a799417dd46082688ed48fef8cbd4b043990f702f2cb853ac8af8"
+  },
+  {
+    "path": "plugin/skills/grayskull-power/scripts/codegraph-check.ps1",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "adc87c55d084ef915662792aa189787541ffd9e2374a3285108b00b102c3eefc"
+  },
+  {
+    "path": "plugin/skills/grayskull-power/scripts/codegraph-check.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "112be782be259d3a11c87b14827b4b11ef937713726296dcefa0e2c3e6ecd769"
+  },
+  {
+    "path": "plugin/skills/handoff-cortana/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "45ee493e9bde433f46272e0ab0033cc51b73392894af46d5c511471584ccdba7"
+  },
+  {
+    "path": "plugin/skills/handoff-cortana/template.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "7b4814d9b70a75a0dd94077e9bd6f4d6a2529c6da46c25bd1da90ab6f2cac478"
+  },
+  {
+    "path": "plugin/skills/merge-smith/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source and embedded fixture review; traced callers and invalid-ref reconcile failure reproduced without mutation.",
+    "sha256": "b63cb53e527286f97dea971756a0e471b3072aeca2a88f890cb9680e5a2c1fa2"
+  },
+  {
+    "path": "plugin/skills/merge-smith/references/between-merges.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source and embedded fixture review; traced callers and invalid-ref reconcile failure reproduced without mutation.",
+    "sha256": "e40bef5c0461b27968e09963dd9cbb53606d96a463f3ad57bbff1e4b0f74d691"
+  },
+  {
+    "path": "plugin/skills/merge-smith/references/conflict-routing.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source and embedded fixture review; traced callers and invalid-ref reconcile failure reproduced without mutation.",
+    "sha256": "ebba9a1ed445211e22d155f602f573676b71bcdc9a4887b8e174d7893d3b55d3"
+  },
+  {
+    "path": "plugin/skills/merge-smith/references/git-procedure.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source and embedded fixture review; traced callers and invalid-ref reconcile failure reproduced without mutation.",
+    "sha256": "56c2074241d53c62cc1df0ce9b6b21892c04106186bc833ad96f6dcef3e01582"
+  },
+  {
+    "path": "plugin/skills/merge-smith/references/reconcile.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source and embedded fixture review; traced callers and invalid-ref reconcile failure reproduced without mutation.",
+    "sha256": "8bc10fdcea5717f74dc53c186525f9dda7182cd076fc0596acdbc84d9aa864ea"
+  },
+  {
+    "path": "plugin/skills/mergeprep-oracle/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Complete source and embedded fixture review; traced callers and invalid-ref reconcile failure reproduced without mutation.",
+    "sha256": "4ea1ecb432514761b4a0f56ce7ca05e973c765341668c9032e38e81e47144301"
+  },
+  {
+    "path": "plugin/skills/resume-cortana/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "0cf8d61880850b3a0f8eb23c5d2f5edb5ce3a6db1010ac26155a58d857c35009"
+  },
+  {
+    "path": "plugin/skills/rules-orko/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "b74216ac68411a597ee56842592a2609577371d7276b92da820a530b45c6226e"
+  },
+  {
+    "path": "plugin/skills/rules-orko/references/clashes.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "fda3e7a156acae194d17a1b3c51aff924d10d61c7055fdbcbeb5317df1a134e0"
+  },
+  {
+    "path": "plugin/skills/rules-orko/references/scopes.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "b93b333955c3a7222041a67114b5f80ee1769ecb1f158e7966da0be14f0f8754"
+  },
+  {
+    "path": "plugin/skills/rules-orko/scripts/rules-orko.ps1",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "cec21e24ec0246bbc1b7527dd9d7f2f6708b1f84cef0b53679328f4f306d1636"
+  },
+  {
+    "path": "plugin/skills/rules-orko/scripts/rules-orko.sh",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "d0dc07764df22dcf3d21125680153e696d136200bec7ccc070536f36f9ab345f"
+  },
+  {
+    "path": "plugin/skills/screenshot-argus/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "4103c421900bdd6fc5067c8c121d053ccb79b1dcefe14e60bc586abb0c82589a"
+  },
+  {
+    "path": "plugin/skills/skill-prometheus/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full instruction/reference read; checked callers and executable examples. A11y computed contrast false-pass reproduced on synthetic styles; no browser or assistive-technology acceptance claimed.",
+    "sha256": "ac2f4fec70498a95b2f4323ec686a46108d16b9e3973915aaf1b1c74ac640a8d"
+  },
+  {
+    "path": "plugin/skills/skill-prometheus/references/testing.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full instruction/reference read; checked callers and executable examples. A11y computed contrast false-pass reproduced on synthetic styles; no browser or assistive-technology acceptance claimed.",
+    "sha256": "1198ef8772f30bb4ace67f1598042269f094fbdf3187d8a0981d0dffc49ec1a3"
+  },
+  {
+    "path": "plugin/skills/skill-smith/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full instruction/reference read; checked callers and executable examples. A11y computed contrast false-pass reproduced on synthetic styles; no browser or assistive-technology acceptance claimed.",
+    "sha256": "4db37604aae5bcd4894a0bd987b2307da6ec7fd4c77c86494c4a9abffc020911"
+  },
+  {
+    "path": "plugin/skills/spec-watson/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "48fc261390119dc5e11b58070a64aa2642b84108c4d6989acdad917bf65ffea8"
+  },
+  {
+    "path": "plugin/skills/spec-watson/references/artifacts.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "f5d27996fbfc5362c58520e95fd9f9974765053f3c7362a58650e875e4c33935"
+  },
+  {
+    "path": "plugin/skills/tasks-sentinels/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full source/reference/helper/selftest inspection. Traced installed layouts and downstream callers; prose contracts distinguished from model-driven acceptance. Deployment template and moved upstream-watch defects recorded.",
+    "sha256": "059e3a683ccbc43bc368855f36cb8201c60247b099187a9a08a9ff52f0253f7c"
+  },
+  {
+    "path": "plugin/skills/tui-tron/SKILL.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full instruction/reference read; checked callers and executable examples. A11y computed contrast false-pass reproduced on synthetic styles; no browser or assistive-technology acceptance claimed.",
+    "sha256": "b68d3ae329ad31991b1c40b8bdb88c163691a09c4e3eeb1f718b7f0e838884fb"
+  },
+  {
+    "path": "plugin/skills/tui-tron/references/capture.md",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Full instruction/reference read; checked callers and executable examples. A11y computed contrast false-pass reproduced on synthetic styles; no browser or assistive-technology acceptance claimed.",
+    "sha256": "c16cc28bfb9f59beb2e54e2464c5d5c54209cd79a496ed65704414503aff3779"
+  },
+  {
+    "path": "plugin/tests/ownership-parity.ps1",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "cacf1dd703aa3e46a3364fe8d9b1e8c023a462095051236df20b134a1140d7c4"
+  },
+  {
+    "path": "plugin/tests/update-source.test.mjs",
+    "status": "inspected",
+    "method": "Full canonical source and callers/test inspection",
+    "notes": "Inspected complete implementation and fixture assertions; installer entrypoints intentionally not executed because shell Muse override can fall through to a live executable.",
+    "sha256": "e0b6fb9da0aa1d79064f53ae8f81b6a4e4f730e12ad154554f4ddc46d5fd70b5"
+  },
+  {
+    "path": "plugin/commands/ops.txt",
+    "status": "inspected",
+    "method": "Full current payload read and installer caller inspection",
+    "notes": "Supplemental scope: current Open command, not historical text. Requires --open/-Open and reports printed failure.",
+    "sha256": "7147727f57092ff654e5b73117996876bf64321a8bcb6ff380ea437acfe2c24d"
+  }
+]

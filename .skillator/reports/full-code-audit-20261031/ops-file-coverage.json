@@ -1,0 +1,1372 @@
+[
+  {
+    "file": "plugin/mods/ops-board/.claude-plugin/plugin.json",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "2b8e9c0d23f7c1550ccc8a51ce2ee9b4d6d053da8c9a5bde9cd943e4dbad0a0d",
+    "lines": 7,
+    "notes": "Plugin metadata/version and entry contract checked against hook registration and packaged module layout.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/README.md",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "0180d8485c9340f854685beb0fbf118cd19ff22990cd0f4b4168ca281c6f0965",
+    "lines": 102,
+    "notes": "Read full launch/install/host capability and terminal font documentation; compared promised views to native and shared implementations. Installed/live behavior deliberately separate.",
+    "ticket_links": [
+      "F102"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/antigravity/extension.cjs",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "f8fbaca1bb7a52fa2d64d03615ef2115871839188c61db11ed86869295396bff",
+    "lines": 20,
+    "notes": "Activation entry, lazy module load, registered commands and disposal boundary checked against AGY adapter/package tests.",
+    "ticket_links": [
+      "F57"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/antigravity/ops.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "a7a196f60efc54094599ac323f72a463288de8648e5b941eb6618a20ad024d0f",
+    "lines": 212,
+    "notes": "Webview input/resize/frame update, shared engine lifecycle and shutdown/dispose examined; no claim that fake IDE equals real extension host.",
+    "ticket_links": [
+      "F57"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/antigravity/pack.mjs",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "560de603826e2f73e5734b88d058c508126fe575761652feb83fada5e3a3e65f",
+    "lines": 84,
+    "notes": "VSIX archive inputs/runtime dependencies and package manifest generation examined; packer not executed to avoid production artifacts.",
+    "ticket_links": [
+      "F57"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/antigravity/package.json",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "2a379e7c82c433a4f97910d8610dfd753c3d0da790d88c9016b6c1021c991796",
+    "lines": 18,
+    "notes": "Activation events/commands/VS Code engine and extension entry match extension.cjs and packer.",
+    "ticket_links": [
+      "F57"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/antigravity/tests/ops.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "0eeb05c583a23cff4e19e9f49006eb90f001e5f5972377986b28a0ae4209a86b",
+    "lines": 244,
+    "notes": "Full fake IDE/webview tests read: activation, one-frame command, input forwarding, polling/disposal and escaping. No actual IDE launch during audit.",
+    "ticket_links": [
+      "F57"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/agentstab.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "fc21e4d687179f12dedd4601fb9a5771c789dabbbefc652221ea90d95b5db46f",
+    "lines": 181,
+    "notes": "Agent/workflow rows, missing activity, collapsible integration and polling caller paths checked; live B15 remains not reproduced.",
+    "ticket_links": [
+      "B15",
+      "F53"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/assign.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "d6ee173940895104413e0273679553ec0f73fe62d236b2d4de62b72199159a52",
+    "lines": 340,
+    "notes": "Complete form lifecycle, typed ticket selection, ownership warning, writer delegation, dirty cancel and errors read. Native tester action missing despite expanded type.",
+    "ticket_links": [
+      "B5",
+      "B7",
+      "F47",
+      "F74",
+      "F77",
+      "F80",
+      "A143",
+      "F135"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/band.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "f2faa6ebf750acc3d740ec5e820a3ac634eed4f0b19309a8443d4a07d8452a8a",
+    "lines": 51,
+    "notes": "Resource/status rendering and owner/code consumers checked. Never supplies handoff argument to shared band helper.",
+    "ticket_links": [
+      "F48",
+      "F97",
+      "F130"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/explorertab.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "2f4a1fa71c694f50b553aff17139818740c102ea930e8b474e7bc7ce62e6b56a",
+    "lines": 296,
+    "notes": "Git reads, preview/confirm/revalidation, exact process env and failure paths read. Uses buffered process.run, no AI dispatch; manual conflicts; staging ignores result.",
+    "ticket_links": [
+      "F75",
+      "F103",
+      "A159",
+      "A164",
+      "F133"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/health.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "664d2c5a91a70f457210bffba94cb20cb0a2a1251f1015019620f5cb34788d4d",
+    "lines": 29,
+    "notes": "Quota/reset freshness, source, resource decisions and actionable guard text checked against healthlines, host and tests.",
+    "ticket_links": [
+      "F49"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/hooks.json",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "d842d789476d67282d0f04b7e5fdc68a3d981ccec65dd79cfa2d11eed13fb828",
+    "lines": 1,
+    "notes": "Native hook entry and supported events checked against register.tsx wiring.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/agents.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "b3d96190bc98617612d3c09279b3a4c2f9713d6eec06aa3005219d38a674c27a",
+    "lines": 191,
+    "notes": "Agent event models, bounded history, parent/phase provenance and honest unknown state checked against event subscribers/tests.",
+    "ticket_links": [
+      "B15",
+      "F53"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/bandlines.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "6940cd3ea028aa3a671e6f640c40787f4a91107254cec2eabd7298b5102d5799",
+    "lines": 142,
+    "notes": "Count/resource/usage/owner/code width formatting and optional handoff suffix read; helper-only tests cannot establish real recipient data flow.",
+    "ticket_links": [
+      "F95",
+      "F109",
+      "F130"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/board.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "bcb16352c50d9792034b26c6a534bba00aadbbde965ccfd6907eef7efe4a1ba8",
+    "lines": 173,
+    "notes": "All ticket boxes, metadata/session/app/tester parsing, title/raw preservation and malformed-row behavior read against board/model tests.",
+    "ticket_links": [
+      "F46",
+      "F62",
+      "F135",
+      "F136"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/calls.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "2e781176fbc8036c84bebcc6ba0159f611b518772c5119950072d0eb2c830b1c",
+    "lines": 143,
+    "notes": "Entire script argv registry and platform twins checked with host callers. Queue-add is not pending-stage migration; Teams setup is explicitly check-only.",
+    "ticket_links": [
+      "F47",
+      "F82",
+      "F86",
+      "F98",
+      "A150",
+      "F122"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/diagnose.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "01ecf78a5b9dc032520eb4ef407e685d433b1aa71d640289209271048d139ac6",
+    "lines": 58,
+    "notes": "Finished/inconsistent/running verdicts, stale driver, landed SHA/path handling and suggested close commands checked against runstab and tests.",
+    "ticket_links": [
+      "F99"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/explorer.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "4789ca455da6e879b41a8e356896e35538f44b7bee5420b3521f3af627287211",
+    "lines": 507,
+    "notes": "Full tree/status/diff/action parsing and safety preconditions read. Working-tree status has quoted-path corruption; AI helpers deterministic; conflictAi only metadata.",
+    "ticket_links": [
+      "F75",
+      "F103",
+      "A159",
+      "A164",
+      "F133"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/facts.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "0688c19ea779cdf78959bc7f741448f84f071b2d4bb528fd0aa23655ad4f5077",
+    "lines": 193,
+    "notes": "Machine health parser, resource thresholds, stale/unknown handling and floor rounding checked against host/health/band consumers.",
+    "ticket_links": [
+      "F48",
+      "F82",
+      "A132"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/healthlines.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "d6ee6316454aef99ab70a9340125fd6b0547c5d7708ef99131c527c7754806b2",
+    "lines": 140,
+    "notes": "Health rows, quota/reset/age/source, stale-board hints and exact command explanations read against facts and renderers.",
+    "ticket_links": [
+      "F49",
+      "F82"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/host.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "d3e9b4d3a97ca66d68ea353a940cdba6f80ceca276739364c4d956f0b7b69a5a",
+    "lines": 141,
+    "notes": "Installation-root trust, environment precedence, absolute binary resolution, watcher paths, script execution/refusal and filesystem errors reviewed.",
+    "ticket_links": [
+      "F49",
+      "A136",
+      "A138",
+      "A150"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/inbox.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "12a793c9cd790a26142f5adbd1944a1c68df2ed15a4a060295f38e497e42bf3c",
+    "lines": 111,
+    "notes": "Full JSONL schema validation, bounds/control sanitation, read marker semantics and row navigation reviewed. Decoder drops recipient to; actual pure probe confirms.",
+    "ticket_links": [
+      "F66",
+      "F130"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/package.json",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "3ca9d4afd21425087cf31893b8f9f63c81b0b8408db5e343ca76e5f8aa26ab9a",
+    "lines": 3,
+    "notes": "Module type declaration checked against Node loader and native import resolution.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/restore.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "f1f8aa4bb3669fca458899cebe716fb9cb9f87cc5d533ca1c1be929376cc166b",
+    "lines": 216,
+    "notes": "Hidden CLAUDE restore ownership/liveness/age guards, budget allocation, write-readback-before-remove and diagnostic persistence reviewed; no live account writes.",
+    "ticket_links": [
+      "F48",
+      "A150"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/runentries.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "0edc5ebc2b8ed1640c3eaee86121329b47e901d99eef9c73556b8145297d7241",
+    "lines": 162,
+    "notes": "Schema/raw ID retention, safe relative paths, executable resolution, exact argv/cwd, output cap and sanitation examined. Script targets root-relative independently of cwd.",
+    "ticket_links": [
+      "F79",
+      "A154"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/runlines.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "f5dee1dbd753ea33ffb9c5e5ae88a665e35838f5ca0e56ee12344d66d02ab3b7",
+    "lines": 189,
+    "notes": "Run/phase rows, mode/driver guard, finished sorting and command plans examined against both host executors and tests.",
+    "ticket_links": [
+      "F76",
+      "F85",
+      "F99"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/runs.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "2945841c87dc5f05b70ef9b754ea0dbda65ca05778bc57bd43782f66cc6129e5",
+    "lines": 162,
+    "notes": "Relay list/resume/stage/decision/flight parsing read; renderers only consume parsed data and workflow PLAN extraction does not execute code.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/team.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "5edecfa503913b5759790e9a19d2bb6101d38fb3dbd17b717ab49218007d0625",
+    "lines": 77,
+    "notes": "Team validation, identity lookup and stable session-code vectors checked against owner callers and backend contract.",
+    "ticket_links": [
+      "F109"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/teamsconfig.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "a811e57b5a4740b8f01f0dfd890a39b7768e66190667f86ce52d84e4339565ca",
+    "lines": 70,
+    "notes": "Public config parsing and masked secret-set flags checked against setup save/check readers; secrets not emitted in audit.",
+    "ticket_links": [
+      "F66"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/lib/ticketsmodel.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "8cd39ca95a067f103fe6c4416ac7d8a8fc1eb345779da7318e635b7774a3d45b",
+    "lines": 232,
+    "notes": "Status/filter/count/selection/window model read, including Assigned/Decide helpers used only by shared UI.",
+    "ticket_links": [
+      "F46",
+      "F50",
+      "F61",
+      "F62",
+      "F95",
+      "A161",
+      "F128"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/messagestab.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "f2281e788aceb678482b004f34bbfe1a5c87abb3819e5eb1bf95517953d326b5",
+    "lines": 267,
+    "notes": "Inbox poll/recovery/read markers and setup lifecycle checked. Auto-opens missing config and launches --check only; no explicit interactive wizard/login route.",
+    "ticket_links": [
+      "F66",
+      "F86",
+      "F98"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/paint.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "f1b51a1ecaca1c7caf9759bdf366aadb94b8060b3b0445959c3a5f73f7a45f67",
+    "lines": 2,
+    "notes": "Shared terminal color/status rendering primitives and selected/disabled conventions reviewed against pane renderers.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/pane.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "da6070acdd1e78e8d8e11bae8b14e390934742912dbfce8f3500aa0f37f66d4d",
+    "lines": 362,
+    "notes": "Full tab/navigation/form routing, responsive rows, detail window/scroll and selection read. Native pane lacks personalized Assigned/Decide and Help route.",
+    "ticket_links": [
+      "B4",
+      "B5",
+      "B14",
+      "F46",
+      "F61",
+      "F78",
+      "F93",
+      "F111",
+      "F115",
+      "A161",
+      "F128"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/reconcile.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "aa4a079236058b0048f7e325ab1ccce0a41b80b6920c81298ea1acab4863a738",
+    "lines": 88,
+    "notes": "Applicable/stay classification, selected/all writes, inline failures and refresh reviewed. Mock writer success does not resolve B17 live failure.",
+    "ticket_links": [
+      "B16",
+      "B17",
+      "F81"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/register.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "7454cfd9f99549d84f28e2018eb3793631d877a7e3cbec38e596845403fc1228",
+    "lines": 665,
+    "notes": "All session/command/event/timer handlers read, including state limits, owner polling, restore, band/agent/workflow updates and script calls; no Start Run creation route.",
+    "ticket_links": [
+      "B4",
+      "B15",
+      "B17",
+      "F48",
+      "F50",
+      "F53",
+      "F78",
+      "F81",
+      "F87",
+      "F92",
+      "F93",
+      "F97",
+      "F130"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/runstab.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "5cd455f776c3aab028f1dbf320dd1953abbffbdbc13109100280d6cebf25c864",
+    "lines": 423,
+    "notes": "Full polling/concurrency, Engage, Diagnose/Close and shaFor topology logic read against all 1020 test lines. No F113 new-run form or F122 action bar.",
+    "ticket_links": [
+      "F76",
+      "F85",
+      "F99",
+      "F113",
+      "A160"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/runtab.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "a611e436cc8f4ae37ab0c7627a1b60365c115cc6f64b388ec0e599f7e75df7d0",
+    "lines": 307,
+    "notes": "Scan/rename/confirm/spawn/output/stop lifecycle reviewed, including stop-before-spawn and orphan-reload guards.",
+    "ticket_links": [
+      "F79",
+      "A154"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/status.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "32136f4f3b327b9dc690bea3d4eb24aca513f04b70e06cfcffe0c0d6fbf1db34",
+    "lines": 135,
+    "notes": "Profile/action state machine, confirmations, busy/generation guards and stale completions reviewed. Apply lacks alphabet shortcut.",
+    "ticket_links": [
+      "F115"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/hooks/teamview.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "2e7e37fda347a5d220fee8f96ff65e0163b0431a488552eb56bee9c2685ce4de",
+    "lines": 60,
+    "notes": "Team list/add/member rendering and form dispatch reviewed; selecting native member is not standalone active-user switching.",
+    "ticket_links": [
+      "B5",
+      "F80"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/app.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "39da49cd909286f78f9888215a496011dd88739e5ea136c34c54b3683929be1a",
+    "lines": 194,
+    "notes": "Full CLI args, raw-mode/alt-screen/mouse setup, key buffering, launch/headless behavior and finally cleanup read against child-process tests.",
+    "ticket_links": [
+      "B19",
+      "F55"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/draw.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "f7018deebe710f7f8ba5035e174836f6af1d9db8b645f693d5bcf9738f50c1f5",
+    "lines": 895,
+    "notes": "All 895 lines read: width/cell utilities, badges/hits, six tabs, personalized groups, status band, Help and dialogs. F130 consumer expects field decoder removes.",
+    "ticket_links": [
+      "B19",
+      "F76",
+      "F89",
+      "F95",
+      "F115",
+      "A146",
+      "F123",
+      "A165",
+      "F127",
+      "F128",
+      "F130"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/engine.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "ad4757ca79ee3e6f84ff139f95e722c29eb55415c61e0b8f7a4671139457c6ad",
+    "lines": 343,
+    "notes": "All polling/effect dispatch, forced board reload, lifecycle/late result guards, job handling and redraw sequencing reviewed against failures/shutdown tests.",
+    "ticket_links": [
+      "F55",
+      "F78",
+      "B20"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/explorer.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "455d2f999b481a81cd6ec306c4a282225ba1a5de13e734e889df7841f58786a2",
+    "lines": 109,
+    "notes": "Standalone Git reads/tree/worktree selection/staging checked; no commit/push/pull/merge dispatch. Stage result ignored before refresh.",
+    "ticket_links": [
+      "F75",
+      "A159",
+      "A164",
+      "F133"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/loader.mjs",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "97406ce57badce0645103a029d67eeadb3819cf333dec7afd70cb587e3a24e2b",
+    "lines": 11,
+    "notes": "Extensionless relative import fallback to .ts; normal Node errors preserved. Used successfully in actual parseInbox probe.",
+    "ticket_links": [
+      "A141"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/mouse.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "d90f250e4e23bc381b9eca757ce768619cb1f97423033787cb8165ffeb627cc4",
+    "lines": 84,
+    "notes": "SGR input coordinates/press/release decoding, wheel/key mapping and hit lookup read against real app byte-stream test.",
+    "ticket_links": [
+      "B19",
+      "F123",
+      "A165"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/nodehost.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "514bf90576c383ad1b9d9a2426137e4bae6eba5a9556463ee374d860154eda16",
+    "lines": 219,
+    "notes": "Trusted script/binary roots, process execution/env, commonGit inbox, linked-worktree root and filesystem boundaries reviewed against planted-executable tests.",
+    "ticket_links": [
+      "F55",
+      "F66",
+      "A136",
+      "A150",
+      "B20"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/ops.ps1",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "d03e1c04b4cd29a660ab5a8390cc3b96c28211264575bdaf6e47614acf04e2bc",
+    "lines": 79,
+    "notes": "PowerShell launcher args, terminal tab/font behavior, executable/loader path quoting and fallback reviewed without opening windows.",
+    "ticket_links": [
+      "F89",
+      "F102"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/ops.sh",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "1cfc7d9cbd9fe2846c16e7270bf9aae9f9ba824caf163f57612242487b75b77d",
+    "lines": 67,
+    "notes": "Shell launch/once/root/terminal behavior, argument quoting and shared loader path reviewed; no shell installation executed.",
+    "ticket_links": [
+      "F89"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/package.json",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "bf44755fc7ac5dcd0ade83fed75d14ce4aa0033dce9eb8a16eedcd1239def6d9",
+    "lines": 6,
+    "notes": "Scripts/dependencies/module type checked; relative --import avoids Windows drive URL failure.",
+    "ticket_links": [
+      "A141"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/runtab.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "cf988d455fb5cc990303a910d95d9eab0852fb18e581170f8b3a940aa60d52d9",
+    "lines": 161,
+    "notes": "Shared reducer Run form, rename/confirm effects, output and job stop paths checked against native parity and backend raw-ID contract.",
+    "ticket_links": [
+      "F79",
+      "A154"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/state.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "1c6339a226846913707df1a6e4617293fa60fc9683f18b935e43b629b5746c57",
+    "lines": 2004,
+    "notes": "All 2004 lines read in chunks: every reducer/action/dialog/effect. Found fake Copy, fake pending transfer, static Help catalog and standalone-only newer features.",
+    "ticket_links": [
+      "F55",
+      "F61",
+      "F77",
+      "F81",
+      "F85",
+      "F87",
+      "F93",
+      "F98",
+      "F113",
+      "A143",
+      "A146",
+      "F122",
+      "F123",
+      "F127",
+      "F128",
+      "B20",
+      "F135",
+      "F136"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/status.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "57a3d658cb29d8489dff0e04e6cba92d250f0621156309056e61791ea1f9c966",
+    "lines": 290,
+    "notes": "All profile/credential/quota/cycle/ledger functions read. recordCursorRun is uncalled in production (tracked-code search); reader tests cannot establish automatic recording.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/app.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "8891943aaf7064bd2504be2235510d687d042f3581522d55cdf8277aa8df6e53",
+    "lines": 267,
+    "notes": "Full app CLI/fake TTY/cleanup/launcher tests read, including Windows file URL and --open stub assertions. Actual terminal placement not covered.",
+    "ticket_links": [
+      "F55",
+      "F89",
+      "F102",
+      "A141"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/draw.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "e7a7bc93ceec64d36dfb303bc9882439b5b6b179bd43cad03f2adfa8315241c8",
+    "lines": 776,
+    "notes": "Full rendering/assertions read: colors, width, badge keys, Help, assignment and band. Handoff tests inject ad hoc state instead of real decoder.",
+    "ticket_links": [
+      "B19",
+      "F89",
+      "A143",
+      "F122",
+      "F123",
+      "F127",
+      "F128",
+      "F130",
+      "F135"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/explorer.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "49d2c6f6bcaa9c2361ea6cb0c9bc4833182ae58b4c6598ccd65cba6bcc7476ce",
+    "lines": 259,
+    "notes": "Full pure/shared Git tests read, including real temporary unborn/detached repo and deterministic AI helper expectations; missing quoted working-path mutation coverage.",
+    "ticket_links": [
+      "F75",
+      "A159",
+      "A164",
+      "F133"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/failures.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "9053c471d57ac184a6823b5adb6e589ad79c126f3472060d31598fe6045c6c2f",
+    "lines": 124,
+    "notes": "Full injected read/process failure suite read; lifecycle errors remain visible and renderer/app shutdown assertions inspected.",
+    "ticket_links": [
+      "F55"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/fixtures.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "bb834eba3406d465ab6c75dec9850eff03c8ba81f2e2d67d315a4beb9652c3cb",
+    "lines": 24,
+    "notes": "Mock host/state/script outputs and root data read; identified where fake backend success can conceal real writer defects.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/messages.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "97b18020b803e1318ad8f89d040a2c6eaebba3555eedd77587ed9c1d8da8c9b9",
+    "lines": 225,
+    "notes": "Full inbox/unread/setup/recovery tests read; explicitly asserts old missing-config auto-open and stubs script setup.",
+    "ticket_links": [
+      "F66",
+      "F98"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/mod-inbox.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "084423bd295922725528230f2a70042bb8cc7c5a4e89d002f3a8460758948ae3",
+    "lines": 56,
+    "notes": "Full source-extracted production polling probe read: failure then same-stat recovery and commonGit correctness; does not deliver real Teams event.",
+    "ticket_links": [
+      "F66"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/mouse-terminal.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "1395ccdccc8a4e1af836d57e73ccc879ea682979f03d1f3f5da960d875bd64a5",
+    "lines": 44,
+    "notes": "Full child app fake TTY test read; actual SGR bytes drive Health at 40/80/120, stronger than directly calling reducer but not a physical terminal.",
+    "ticket_links": [
+      "B19",
+      "F123"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/nodehost.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "681449be325fb967fc6fa43912dc2cc4dd76a64f8b00685cd75e05403dd814dd",
+    "lines": 278,
+    "notes": "Full temporary filesystem/Git/process tests read: trusted root, absolute binary, planted executable, linked-worktree board/commonGit inbox.",
+    "ticket_links": [
+      "A136",
+      "A150",
+      "B20"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/quota-profile.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "21ee46397018bf1184b8f62437dc8ef5cdcd8be2bbd373a178518c1358288169",
+    "lines": 101,
+    "notes": "Full source-substituted watcher profile tests read; refresh is replaced with no-op, so actual producer response parsing is untested.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/runtab.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "ca5dd14d19f311c46c90d8625148b3f041754f7df93a84735067c9ad279eafad",
+    "lines": 261,
+    "notes": "Full Build tests read including real shell/PowerShell raw-ID rename roundtrip; job stream/stop and commandFor validation inspected.",
+    "ticket_links": [
+      "A154"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/shutdown.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "55476048ea1fc34ce8e467ad421a7e9efd40be023cf6b73f65b2f3456ba9caef",
+    "lines": 94,
+    "notes": "Full deferred-operation matrix read: stop during every read boundary, late writes suppressed, timer/job once cleanup. Meaningful race coverage.",
+    "ticket_links": [
+      "F55"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/state.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "dbfee2a1cb901a7cec6fa2d3d76c0b5b4521c271000341fa6219787197b76da2",
+    "lines": 1182,
+    "notes": "All reducer tests read including truncation-repaired lines 286-325. Start Run asserts no effect; Copy asserts toast only; Push Pending asserts queue call only.",
+    "ticket_links": [
+      "F61",
+      "F113",
+      "A143",
+      "A146",
+      "F122",
+      "F127",
+      "F128",
+      "B20",
+      "F135",
+      "F136"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/status.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "70e0644f5b533a18deb1011518e5b6e7b94d386edfbc052b5ed740a6f05e9d3c",
+    "lines": 250,
+    "notes": "Full profile/usage/Cursor ledger tests read; ledger recording is invoked directly by tests, and no production caller exists.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/teams.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "1dc77b4a0b258e2cd1ae1b83e413341af750a37b2e4c09173f3616a19b653600",
+    "lines": 20,
+    "notes": "Full Teams config/argument/private setup checks read; pure/fake service coverage distinguished from authenticated delivery.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/tests/tuitron-viewports.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "fd4381630b7dacc46f0d2581a0e37c2d5252a7069b6366bb932b803d90f60bc0",
+    "lines": 129,
+    "notes": "Full width/frame/hit bounds tests read; exact clickable labels checked only for Start/Engage, not exhaustive absent/clipped controls or Unicode hit alignment.",
+    "ticket_links": [
+      "A165"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/ops/wt-fragment.json",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "c813e77b8c643ac0827ec405c2cf9d4aa2d631e955c329bfd18278e8b639c93f",
+    "lines": 36,
+    "notes": "Windows Terminal profile defaults/font/colors match launch documentation; no settings installation performed.",
+    "ticket_links": [
+      "F102"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/pi/index.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "c9626d937992f93a060438d5075a41a65d9228aed599e5781062526d741fe65c",
+    "lines": 14,
+    "notes": "Native entry registration/import and host callbacks checked against adapter and module packaging.",
+    "ticket_links": [
+      "F56"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/pi/ops.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "f8c54598dd50fb939244cd5216ade75fe0d7ff2ea12c6cf12cbec6f3784c6b72",
+    "lines": 134,
+    "notes": "Shared-engine native render/input/lifecycle adapter read; dirty-form cancellation and dispose use shared state.",
+    "ticket_links": [
+      "F56",
+      "A146"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/pi/package.json",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "3ca9d4afd21425087cf31893b8f9f63c81b0b8408db5e343ca76e5f8aa26ab9a",
+    "lines": 3,
+    "notes": "Pi extension entry and package declarations checked against index and loader.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/pi/tests/ops.test.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "c8ed0181cee178637bd914aa9e8347493acbe069987cc0e9c83f772dc7c5120a",
+    "lines": 202,
+    "notes": "Full fake Pi tests read: render keys, dirty Ctrl+C, disposal and paths; actual native host session not started.",
+    "ticket_links": [
+      "F56",
+      "A146"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/pi/tests/space-fixture.mts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "be1948655ad49b22c56dddf8ed1aa8ec897ada2bb7e9a85a9e3d4d2306814a2a",
+    "lines": 28,
+    "notes": "Full spaced-path entry fixture read; proves import routing under copied module layout, no production write required for audit.",
+    "ticket_links": [
+      "F56"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/agents.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "6307d2a647ec4e0fa86d78e87740beb9ce267f4cd98de55079b4dd02ad8587db",
+    "lines": 229,
+    "notes": "Full lifecycle/parent/activity/limits/alias tests read; mock events cannot prove B15 owner missing agent symptom fixed.",
+    "ticket_links": [
+      "B15",
+      "F53",
+      "F93"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/agentworld.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "155dc0de7b1689a84255622532f9e77180e4d8694067f6253de33f5b9b1a8793",
+    "lines": 79,
+    "notes": "Full agent/mock clock environment read; event shapes and mocked host assumptions traced to agent tests.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/alphabet.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "8a60d23f52b5b2e8c21550ec1cbf694ddd8adb49452a45b7e4ca7e1b4d7aa791",
+    "lines": 210,
+    "notes": "All action hotkey/surface/narrow width tests read; explicitly mock native host, coverage not universal (Status Apply omitted).",
+    "ticket_links": [
+      "F111",
+      "F115"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/assign.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "928a627c6f032e57274bdd959a857abee3ee871f0a2e424268ea511911b7c287",
+    "lines": 628,
+    "notes": "All 628 lines read: exact argv, owner warnings, typed ticket input, kinds, in-pane forms, cancellation and refusals. No tester-kind path.",
+    "ticket_links": [
+      "B5",
+      "B7",
+      "F47",
+      "F74",
+      "F77",
+      "F80",
+      "A143",
+      "F135"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/band.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "15cc2af86958ecad26125cd52658941d459b17be3d4b8c55b7060a78c1623698",
+    "lines": 572,
+    "notes": "All 572 lines read: thresholds/resume/force/identity/session code/status formatting. Handoff tests bypass producer via helper argument.",
+    "ticket_links": [
+      "F48",
+      "F87",
+      "F92",
+      "F95",
+      "F97",
+      "F109",
+      "F130"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/board.test.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "09dee470f488d1e3f8489f7cd075e48cf3dc8f1e7c78da3817d8e8280b9a57e2",
+    "lines": 112,
+    "notes": "Full parsing assertions read: boxes, metadata, app/tester/raw tags, malformed/large lines.",
+    "ticket_links": [
+      "F46",
+      "F62",
+      "F136"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/commands.test.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "99bcadb6aa9139080cb83513585acf06b1a4e776769983bbcad8609258483750",
+    "lines": 110,
+    "notes": "Full deterministic list/pending command tests read; no model turn asserted.",
+    "ticket_links": [
+      "F50"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/diagnose.test.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "5b1f9cd0862b1b56b668aa2292249e7ff4da131aaeb6d2a15a4c0bcc70990551",
+    "lines": 79,
+    "notes": "Full pure verdict suite read: stale driver, disagreement, completed rows, missing evidence and suggested manual commands.",
+    "ticket_links": [
+      "F99"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/explorer.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "4a7a606aa211b6e0d39af2f7cafd9ea6cb3852b39a5e2f24de8017e580c19c6b",
+    "lines": 567,
+    "notes": "All 567 lines read: tree, history, action confirmation, stale-state, unsafe remote, errors, detached/unborn and AI mock commit. No real AI or conflict execution.",
+    "ticket_links": [
+      "F75",
+      "F103",
+      "A159",
+      "A164",
+      "F133"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/facts.test.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "4a29dff9d5c5001af3e9e6aadb5f5fe9bac3f7a212bbe101f71166d6a6fbc4a1",
+    "lines": 294,
+    "notes": "Full health machine parser, thresholds, stale/unknown and near-threshold display tests read.",
+    "ticket_links": [
+      "F82",
+      "A132"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/fixtures.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "8663d2f5fdda5c5526c71664374a61b2575e21b2f45d5c23776d4338b4434274",
+    "lines": 67,
+    "notes": "Full shared BOARD/TEAM and state fixtures read; statuses include testing and metadata used by pane assertions.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/health.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "c560ac7cb3fcbdf0441b1984a916474c42b0ee202bcf2b65b1c26e2fa7372b78",
+    "lines": 274,
+    "notes": "Full health/quota/stale/source/rule tests read; explicit 30s timeout in stale figure test retained.",
+    "ticket_links": [
+      "F49",
+      "F82",
+      "A140"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/host.test.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "06b1dfbea3ae6ac4f943fcc5e70133536a18a8fc70b1ceaebb046d76dea2c163",
+    "lines": 325,
+    "notes": "Full trusted-root/env/watcher/path/spawn tests read, including malicious cwd and selected config precedence.",
+    "ticket_links": [
+      "A136",
+      "A138",
+      "A150"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/messages.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "d99362ce5f998d24d95370ca72c2cdf92633002448be06d7d1513b55459d58bc",
+    "lines": 277,
+    "notes": "All 277 lines read: unread, sanitized bodies, private config, old auto-open and check-only setup; current user requirement intentionally not met by existing assertions.",
+    "ticket_links": [
+      "F66",
+      "F86",
+      "F98"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/model.test.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "671e87bc3499e4ba5da9d23504b32d2de92a3e7334db202d03f1d6d91c1a4559",
+    "lines": 172,
+    "notes": "Full grouping/filter/window/count tests read, including physical-row detail scrolling.",
+    "ticket_links": [
+      "F46",
+      "A161"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/pane.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "a71911077f836b3403b29b7bb6a2d7b6f4a7378c3e04637c14d0199fcba34df5",
+    "lines": 810,
+    "notes": "All 810 lines read: large board, collapsible group keyboard focus, forced same-stat refresh and whole-button wrapping. Native focus not implemented in fake engine.",
+    "ticket_links": [
+      "B4",
+      "B14",
+      "F46",
+      "F61",
+      "F62",
+      "F77",
+      "F78",
+      "F111",
+      "A161",
+      "B20"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/reconcile.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "601e9f5266435601921a8e7bd2e2ed48acc47b4c1679fb31361833af66161a77",
+    "lines": 233,
+    "notes": "All 233 lines read: applicable/stay summary, explicit picked/all sequential writer effects/refusals and refresh. Actual host B17 not reproduced.",
+    "ticket_links": [
+      "B16",
+      "B17",
+      "F81"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/restore.test.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "2eaf260d49e45c6d37fca7b3bdf29ca9a4280eeaed620a9861473bebb6f119ed",
+    "lines": 316,
+    "notes": "All 316 lines read: private fake files, no overwrite, readback failures, live/dead/unknown ownership, old owner safeguards, bounded session-end timing.",
+    "ticket_links": [
+      "F48",
+      "A150"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/runs.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "28d40cb98b4435f86fc5d0552eaffdd4b9a603d3f2e9238703e7315683416b49",
+    "lines": 1020,
+    "notes": "All 1020 lines read: mocked relay poll concurrency, Engage guards, Diagnose freshness, Close recheck/doublepress, all three A160 topologies. Real Git mapping not exercised.",
+    "ticket_links": [
+      "F76",
+      "F85",
+      "F99",
+      "A160"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/runtab.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "31dc239b079be9c02b9edba30679e16b70c8f9dc5071a3ef8b5348651038e49a",
+    "lines": 407,
+    "notes": "All 407 lines read: scanner is mocked writer; exact argv/cwd confirmation, bounded streaming, second job refusal, pre-spawn stop/reload orphan and one PATH walk.",
+    "ticket_links": [
+      "B5",
+      "F79",
+      "F93",
+      "A154"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/status.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "35479164fb8e7283c26b866322fd1f7c8f67592e3ff530d0cb5760eed7483d70",
+    "lines": 281,
+    "notes": "All 281 lines read: apply/drop confirmations, busy doublepress and stale async completion generations. Profile side effects mocked; Apply shortcut absent.",
+    "ticket_links": [
+      "F115"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/team.test.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "292f00e038cbd251ef1917501ee2c5060a2f4118e05363f6c89ca9b0b66f076a",
+    "lines": 79,
+    "notes": "Full team/owner/session-code vector validation read; code-display tests do not prove every writer stamps it.",
+    "ticket_links": [
+      "F109"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tests/workflows.test.tsx",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "619d9a1df65120ce8b8197341839f74e60934578651015aec1bd1af640b4f675",
+    "lines": 161,
+    "notes": "Full workflow observer/phase/status/error/history tests read; events fabricated and remote absence stated honestly.",
+    "ticket_links": [
+      "B15",
+      "F53"
+    ]
+  },
+  {
+    "file": "plugin/mods/ops-board/tsconfig.json",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "4107c9e8fff747fcb1b6701d0daa52f3514db920f727c360b10727c8b5097020",
+    "lines": 10,
+    "notes": "Compiler strict options/includes reviewed. Native hooks/types/tests included; shared ops runtime excluded, so native tsc alone is not whole-module type proof.",
+    "ticket_links": []
+  },
+  {
+    "file": "plugin/mods/ops-board/types/index.d.ts",
+    "status": "inspected-complete",
+    "method": "Full body read in bounded chunks; implementation, direct callers, data/schema boundaries and relevant complete tests reviewed. CodeGraph used before source discovery; truncated chunks explicitly reread.",
+    "snapshot": "8b92f76657a67c2e580e27098a02585e868bc3fa",
+    "sha256": "49ca28e78d08bca7618d7b9c765d413ba947212b36d72d61bb5da46249bfafcd",
+    "lines": 169,
+    "notes": "Full schema read across ticket/form/run/inbox/explorer/action models. AssignDraft accepts tester while native UI omits it; Msg lacks recipient to.",
+    "ticket_links": [
+      "F62",
+      "F135"
+    ]
+  }
+]

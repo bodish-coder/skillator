@@ -1,0 +1,160 @@
+[
+  {
+    "path": "plugin/practice/scripts/baseline-harness.sh",
+    "inspected_ranges": [
+      [
+        341,
+        2004
+      ],
+      [
+        2488,
+        2824
+      ]
+    ],
+    "method": "Full verbatim source read, helper-to-scenario contract review",
+    "notes": "Intentional mini-app defects are baseline controls, not production findings. usage_check numeric grammar and odo stdout differences sent to integration owner for caller validation."
+  },
+  {
+    "path": "plugin/practice/scripts/codex-isolation.mjs",
+    "inspected_ranges": [
+      [
+        1,
+        198
+      ]
+    ],
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately."
+  },
+  {
+    "path": "plugin/practice/scripts/codex-isolation.test.mjs",
+    "inspected_ranges": [
+      [
+        1,
+        96
+      ]
+    ],
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately."
+  },
+  {
+    "path": "plugin/practice/scripts/codex-native-probe.mjs",
+    "inspected_ranges": [
+      [
+        1,
+        142
+      ]
+    ],
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately."
+  },
+  {
+    "path": "plugin/practice/scripts/fixtures/codex-native-stub.mjs",
+    "inspected_ranges": [
+      [
+        1,
+        47
+      ]
+    ],
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately."
+  },
+  {
+    "path": "plugin/practice/scripts/reliability-parity.mjs",
+    "inspected_ranges": [
+      [
+        1,
+        129
+      ]
+    ],
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately."
+  },
+  {
+    "path": "plugin/practice/scripts/reliability-parity.test.mjs",
+    "inspected_ranges": [
+      [
+        1,
+        68
+      ]
+    ],
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately."
+  },
+  {
+    "path": "plugin/practice/scripts/validate.mjs",
+    "inspected_ranges": [
+      [
+        1,
+        193
+      ]
+    ],
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately."
+  },
+  {
+    "path": "plugin/practice/scripts/validate.test.mjs",
+    "inspected_ranges": [
+      [
+        1,
+        181
+      ]
+    ],
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately."
+  },
+  {
+    "path": "plugin/practice/scripts/taskwork.sh",
+    "inspected_ranges": [
+      [
+        1,
+        120
+      ]
+    ],
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately."
+  },
+  {
+    "path": "plugin/practice/scripts/taskwork.ps1",
+    "inspected_ranges": [
+      [
+        1,
+        101
+      ]
+    ],
+    "method": "Full verbatim source and paired tests/callers reviewed",
+    "notes": "Offline unit outputs parent-unit-results.json; no actual native Codex/installers launched in this check. PS review error propagation defect proved separately."
+  },
+  {
+    "path": ".skillator/grayskull.md",
+    "inspected_ranges": [
+      [
+        1,
+        28
+      ]
+    ],
+    "method": "Read-only active configuration parse and documented consumer contract",
+    "notes": "No team emails/secrets copied to report; runtime schema/caller source inspected by ops/automation owners."
+  },
+  {
+    "path": ".skillator/team.md",
+    "inspected_ranges": [
+      [
+        1,
+        10
+      ]
+    ],
+    "method": "Read-only active configuration parse and documented consumer contract",
+    "notes": "No team emails/secrets copied to report; runtime schema/caller source inspected by ops/automation owners."
+  },
+  {
+    "path": ".skillator/run.json",
+    "inspected_ranges": [
+      [
+        1,
+        8
+      ]
+    ],
+    "method": "Read-only active configuration parse and documented consumer contract",
+    "notes": "No team emails/secrets copied to report; runtime schema/caller source inspected by ops/automation owners."
+  }
+]

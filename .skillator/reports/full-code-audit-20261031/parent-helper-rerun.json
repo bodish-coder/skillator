@@ -1,0 +1,24 @@
+[
+  {
+    "id": "allocator-shell-selftest",
+    "command": [
+      "C:/Program Files/Git/bin/sh.exe",
+      "plugin/practice/scripts/next-id.sh",
+      "--selftest"
+    ],
+    "exit": 0,
+    "stdout": "ok - next-id.sh selftest passed (4, 5, 21, peek 22, stale lock -> 22, flag order, bad flag, missing board, B 3, archive B41/B61, RUN 1, tip fetched 41, runs RUN 6, runs S 13-15, W AAAB/AAAC/AABB/peek/count 3/BABA/9999/exhausted, no-git 8)\n",
+    "stderr": ""
+  },
+  {
+    "id": "freshness-shell-selftest",
+    "command": [
+      "C:/Program Files/Git/bin/sh.exe",
+      "plugin/practice/scripts/board-fresh.sh",
+      "--selftest"
+    ],
+    "exit": 0,
+    "stdout": "ok - board-fresh.sh selftest passed (silent when fresh, ff clean, 10-min stamp, ff dirty board kept, board conflict refused, local commit refused, foreign dirty refused with writers, offline unchecked, --fetch, no upstream, not git)\n",
+    "stderr": ""
+  }
+]

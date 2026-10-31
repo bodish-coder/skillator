@@ -1,0 +1,14 @@
+[
+  {
+    "probe": "default-plugin-layout",
+    "exit": 0,
+    "stdout": "== always-on files (budget 200 words, @-includes resolved) ==\n== skill descriptions (budget 80 words each, in the system prompt every turn) ==\n  total across all skills: 2 words, every turn\n== router skills (budget 800 words - loaded once per session, but every session) ==\n== MCP servers (each preloads its tool schemas into every message) ==\n  run: claude mcp list   (then remove the ones you are not using)\nOK: context ledger within budget\n",
+    "stderr": ""
+  },
+  {
+    "probe": "explicit-repository-root",
+    "exit": 1,
+    "stdout": "== always-on files (budget 200 words, @-includes resolved) ==\n  CLAUDE.md                                  240\n  OVER  CLAUDE.md is 240 words, budget 200 - push depth into a skill body\n== skill descriptions (budget 80 words each, in the system prompt every turn) ==\n  total across all skills: 0 words, every turn\n== router skills (budget 800 words - loaded once per session, but every session) ==\n== MCP servers (each preloads its tool schemas into every message) ==\n  run: claude mcp list   (then remove the ones you are not using)\n",
+    "stderr": ""
+  }
+]
