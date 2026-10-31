@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Source-grounded recommendations for adapting Anthropic Knowledge Work Plugins into existing Skillator skills.">
+<title>Skillator · Knowledge Work Plugins review</title>
+<style>
+:root{--paper:#f5f4ef;--surface:#fff;--ink:#202a25;--muted:#5d6961;--line:#dce2db;--green:#17664c;--wash:#edf5ef;--radius:12px}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+a{color:var(--green);text-underline-offset:3px}a:hover{text-decoration-thickness:2px}button,a,summary{touch-action:manipulation}a:focus-visible,button:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:3px solid #b37819;outline-offset:4px}
+.wrap{max-width:1440px;margin:auto;padding:0 42px}header{border-bottom:1px solid var(--line);background:var(--paper)}.mast{display:flex;justify-content:space-between;align-items:center;gap:20px;min-height:76px}.brand{font-weight:750;letter-spacing:-.03em;font-size:21px}.brand span{color:var(--muted);font-weight:450}.mast nav{display:flex;gap:24px;font-size:13px}
+.hero{padding:58px 0 36px;max-width:940px}.eyebrow{color:var(--green);text-transform:uppercase;font-size:11px;font-weight:750;letter-spacing:.14em}.hero h1{font-size:clamp(32px,4.3vw,59px);line-height:1.08;letter-spacing:-.045em;margin:16px 0 22px;font-weight:680;max-width:850px}.lead{color:var(--muted);font-size:19px;max-width:760px}.provenance{font-size:12px;color:var(--muted);margin-top:24px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);margin:0 0 32px;overflow:hidden}.stat{padding:23px 26px}.stat+.stat{border-left:1px solid var(--line)}.stat strong{font-size:30px;line-height:1.2;display:block;letter-spacing:-.03em}.stat span{font-size:13px;color:var(--muted)}
+.banner{border-left:4px solid var(--green);padding:17px 22px;background:var(--wash);border-radius:0 8px 8px 0;margin-bottom:38px}.banner p{margin:4px 0}.banner strong{color:var(--green)}
+.section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin:0 0 17px}.section-head h2,section h2{font-size:23px;letter-spacing:-.025em;margin:0 0 4px}p{margin:0 0 12px}.muted,.section-head p{color:var(--muted);font-size:13px}.controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:8px 13px;cursor:pointer;color:var(--ink)}button[aria-pressed=true]{background:var(--green);border-color:var(--green);color:white}button:hover{border-color:var(--green)}
+.table-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:auto}table{width:100%;border-collapse:collapse;min-width:1060px;text-align:left}caption{text-align:left;padding:17px 22px;color:var(--muted);font-size:12px;border-bottom:1px solid var(--line)}th{font-size:10px;letter-spacing:.1em;text-transform:uppercase;background:#f8faf7;color:var(--muted);padding:15px 19px;border-bottom:1px solid var(--line);white-space:nowrap}td{vertical-align:top;padding:24px 19px;border-bottom:1px solid var(--line);font-size:13px}tbody tr:last-child td{border-bottom:0}tbody tr[hidden]{display:none}td:first-child{width:86px}td:nth-child(2){width:33%}td:nth-child(3){width:22%}td:nth-child(4){width:25%}td:nth-child(5){width:16%}
+.priority{display:inline-flex;align-items:center;justify-content:center;border:1px solid #bdd5c7;color:var(--green);border-radius:50%;width:30px;height:30px;font-weight:750;background:var(--wash)}.phase{display:block;font-size:10px;color:var(--muted);margin-top:9px;white-space:nowrap}.badge{font-size:10px;color:var(--green);background:var(--wash);padding:4px 7px;border-radius:4px;font-weight:700}.table-wrap h3{font-size:17px;line-height:1.35;margin:10px 0 12px;letter-spacing:-.015em}.file{display:block;font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;padding:9px 10px;background:#f5f7f3;border:1px solid #e7ebe4;border-radius:5px;margin-bottom:9px}
+details{margin-top:17px;border-top:1px dashed var(--line);padding-top:10px}summary{font-size:12px;color:var(--green);cursor:pointer;font-weight:600}details p{font-size:12px;color:var(--muted);margin:10px 0 0}.table-note{font-size:12px;color:var(--muted);margin:12px 0 38px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:30px}.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:27px}.panel h2{font-size:21px;margin-bottom:18px}.panel h3{font-size:14px;margin:20px 0 5px}.panel p,.panel li{font-size:13px}.panel ul{padding-left:20px;margin:12px 0}.panel li{padding-bottom:7px}.mini{min-width:0;font-size:13px}.mini th,.mini td{padding:12px 0;background:transparent;font-size:12px;width:auto}.mini th{font-size:10px}.mini td+td,.mini th+th{padding-left:18px}.panel .mini td:first-child{width:32%;font-weight:650}
+.sources{background:#e9ede6;border-radius:var(--radius);padding:26px 30px;margin-bottom:38px}.sources h2{font-size:20px;margin-bottom:12px}.sources p{font-size:13px;max-width:1050px}.sources code{font-size:11px;overflow-wrap:anywhere}.foot{padding:22px 0 34px;border-top:1px solid var(--line);color:var(--muted);font-size:12px;display:flex;justify-content:space-between;gap:20px}.screen-reader{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:800px){.wrap{padding:0 20px}.mast{min-height:66px;align-items:flex-start;padding:17px 0}.mast nav{gap:13px;font-size:11px;flex-wrap:wrap;justify-content:flex-end}.brand{font-size:18px;white-space:nowrap}.hero{padding-top:36px}.lead{font-size:17px}.stat{padding:18px 14px}.stat strong{font-size:25px}.stat span{font-size:11px}.section-head{display:block}.controls{margin-top:15px}.grid{grid-template-columns:1fr}.panel{padding:21px}.sources{padding:22px}.foot{display:block}.table-wrap{border-radius:8px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{body{background:white;font-size:11px}.wrap{max-width:none;padding:0}.mast nav,.controls,.print-button{display:none}.hero{padding:24px 0 15px}.hero h1{font-size:30px}.stats{margin-bottom:18px}.stat{padding:12px}.stat strong{font-size:22px}.banner{margin-bottom:20px}.table-wrap{overflow:visible;border-radius:0}table{min-width:0}td,th{padding:10px;font-size:10px}.file{font-size:9px;padding:4px}tbody tr[hidden]{display:table-row}.grid{display:block}.panel,.sources{break-inside:avoid;margin:15px 0;padding:16px}a{color:inherit}.table-wrap h3{font-size:13px}.badge,.phase{font-size:9px}details{display:none}.foot{padding:12px 0}}
+</style>
+</head>
+<body>
+<header><div class="wrap mast"><div class="brand">skillator <span>/ upstream review</span></div><nav aria-label="Report sections"><a href="#recommendations">Recommendations</a><a href="#boundaries">What to skip</a><a href="#evidence">Evidence</a></nav></div></header>
+<main class="wrap">
+<section class="hero" aria-labelledby="title">
+<div class="eyebrow">Knowledge Work Plugins · 31 October 2026</div>
+<h1 id="title">Five practical improvements for Skillator.</h1>
+<p class="lead">Start with three focused updates to existing skills. Borrow useful workflow structure while preserving our ticket board, evidence rules, and host adapters.</p>
+<p class="provenance">Reviewed upstream commit <a href="https://github.com/anthropics/knowledge-work-plugins/tree/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d" target="_blank" rel="noopener noreferrer"><code>2574e293</code></a> · Recommendations, not implementation approval.</p>
+</section>
+<div class="stats" aria-label="Report summary"><div class="stat"><strong>3</strong><span>Recommended for the first batch</span></div><div class="stat"><strong>2</strong><span>Follow-up opportunities</span></div><div class="stat"><strong>0</strong><span>New top-level skills proposed for batch one</span></div></div>
+<aside class="banner"><strong>Recommended first batch: 1 + 2 + 3</strong><p>Optional product outcomes, deployment runbooks, and connector capability guidance. Start with text and scenario evaluations. Live connector integration is a separate verification step.</p></aside>
+<section id="recommendations" aria-labelledby="recommendations-title">
+<div class="section-head"><div><h2 id="recommendations-title">What to build or change</h2><p>Shared instructions and references first. Keep the current skill boundaries.</p></div><div class="controls" role="group" aria-label="Filter recommendations"><button type="button" id="filter-all" aria-pressed="true">All 5</button><button type="button" id="filter-first" aria-pressed="false">First batch only</button><button type="button" id="print-report" class="print-button">Print / save PDF</button></div></div>
+<p id="filter-status" class="screen-reader" aria-live="polite">Showing all 5 recommendations.</p>
+<div class="table-wrap" role="region" aria-label="Recommendation comparison, scroll horizontally on small screens" tabindex="0"><table>
+<caption>Source patterns are verified. Effort estimates and proposed improvements still require evaluation.</caption>
+<thead><tr><th scope="col">Priority</th><th scope="col">Recommendation</th><th scope="col">Affected Skillator files</th><th scope="col">Benefit &amp; dependencies</th><th scope="col">Effort &amp; upstream source</th></tr></thead>
+<tbody id="recommendation-rows"><tr data-batch="true" id="recommendation-1">
+<td><span class="priority">1</span><span class="phase">First batch</span></td>
+<td><span class="badge">Improve existing</span><h3>Optional product outcomes</h3><p>Add the intended audience, desired outcome, metric source, baseline and target if known, measurement window, and evaluation date. Preserve requirement IDs and test traceability; keep this optional for small technical changes.</p><details><summary>Acceptance checks</summary><p>Evaluate a vague product brief, a tiny mechanical edit, and missing metrics. Unknown targets must remain unknown.</p></details></td>
+<td><code class="file">plugin/skills/spec-watson/references/artifacts.md</code></td>
+<td><p>Judge whether a shipped feature helped users, alongside whether it met its requirements.</p><p class="muted"><strong>Dependencies:</strong> No connector required; analytics is optional.</p></td>
+<td><strong>Small</strong><p class="muted">About ½–1 day</p><a href="https://github.com/anthropics/knowledge-work-plugins/blob/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d/product-management/skills/write-spec/SKILL.md#L168-L192" target="_blank" rel="noopener noreferrer">Product specification <span aria-hidden="true">↗</span></a></td>
+</tr>
+<tr data-batch="true" id="recommendation-2">
+<td><span class="priority">2</span><span class="phase">First batch</span></td>
+<td><span class="badge">Reuse template</span><h3>Deployment runbooks</h3><p>Reuse the owner, prerequisites, exact steps, expected results, failure branches, verification, rollback, escalation, and last-tested structure in our existing deployment handoffs. Keep existing deployment commands.</p><details><summary>Acceptance checks</summary><p>Have a fresh evaluator follow a fixture procedure. Include incomplete inputs and rollback; unavailable verification stays unverified.</p></details></td>
+<td><code class="file">plugin/skills/deploy-merlin/SKILL.md</code><code class="file">plugin/skills/deploy-niyoj/SKILL.md</code></td>
+<td><p>Make the procedure usable by the next operator, including when a step fails.</p><p class="muted"><strong>Dependencies:</strong> Existing deployment tools only. No wiki publishing or additional service required.</p></td>
+<td><strong>Small</strong><p class="muted">About ½–1 day</p><a href="https://github.com/anthropics/knowledge-work-plugins/blob/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d/operations/skills/runbook/SKILL.md#L19-L70" target="_blank" rel="noopener noreferrer">Runbook output template <span aria-hidden="true">↗</span></a></td>
+</tr>
+<tr data-batch="true" id="recommendation-3">
+<td><span class="priority">3</span><span class="phase">First batch</span></td>
+<td><span class="badge">Adapt</span><h3>Connector capability guidance</h3><p>Add a compact reference mapping a capability such as chat search to actual available tools. Distinguish discovered, authenticated, successful read, and unavailable. Define a fallback when a connector cannot be used.</p><details><summary>Acceptance checks</summary><p>Cover no connector, authentication failure, rate limiting, partial coverage, and no results versus a failed source.</p></details></td>
+<td><code class="file">plugin/skills/skill-prometheus/SKILL.md</code><code class="file">plugin/PLATFORMS.md</code><code class="file">Proposed: plugin/skills/skill-prometheus/references/connectors.md</code></td>
+<td><p>Avoid assuming that a visible tool is authenticated, usable, or supported by every CLI.</p><p class="muted"><strong>Dependencies:</strong> Documentation and one consumer first. Live use needs a valid endpoint, credentials/scopes, and host-specific verification.</p></td>
+<td><strong>Small initially</strong><p class="muted">About 4–8 hours; live integration extra</p><a href="https://github.com/anthropics/knowledge-work-plugins/blob/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d/enterprise-search/CONNECTORS.md#L3-L21" target="_blank" rel="noopener noreferrer">Connector categories <span aria-hidden="true">↗</span></a></td>
+</tr>
+<tr data-batch="false" id="recommendation-4">
+<td><span class="priority">4</span><span class="phase">Later</span></td>
+<td><span class="badge">Improve existing</span><h3>Evidence-aware review synthesis</h3><p>Add impact, affected segments, contradictory evidence, and confidence around existing review-tool results. Keep source links, deterministic deduplication, and tool-derived counts authoritative.</p><details><summary>Acceptance checks</summary><p>Include duplicate reviews, missing URLs, one prolific reviewer, and contradictory segments. Mention counts must not be presented as unique users.</p></details></td>
+<td><code class="file">plugin/skills/clone-odo/references/reviews.md</code><code class="file">plugin/skills/clone-odo/SKILL.md</code></td>
+<td><p>Separate frequent complaints from serious segment-specific problems without weakening evidence integrity.</p><p class="muted"><strong>Dependencies:</strong> Existing Python review runner. No new connector required.</p></td>
+<td><strong>Small</strong><p class="muted">About ½–1 day</p><a href="https://github.com/anthropics/knowledge-work-plugins/blob/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d/product-management/skills/synthesize-research/SKILL.md#L47-L74" target="_blank" rel="noopener noreferrer">Research synthesis <span aria-hidden="true">↗</span></a></td>
+</tr>
+<tr data-batch="false" id="recommendation-5">
+<td><span class="priority">5</span><span class="phase">Later</span></td>
+<td><span class="badge">Adapt later</span><h3>Incident record reference</h3><p>Add severity, incident owner, timestamped observations, mitigation, resolution evidence, and follow-up ticket IDs. Route rollback through existing deployment skills and continuity through handoff-cortana.</p><details><summary>Acceptance checks</summary><p>Evaluate an uncertain outage, failed migration, recovery without proven root cause, and instructions embedded in logs. Omit automatic paging and posting.</p></details></td>
+<td><code class="file">plugin/skills/handoff-cortana/SKILL.md</code><code class="file">plugin/skills/deploy-niyoj/SKILL.md</code></td>
+<td><p>Preserve operational context across sessions during failed releases.</p><p class="muted"><strong>Dependencies:</strong> Supplied logs suffice initially. Monitoring and communications tools are optional; retain approval boundaries for external actions.</p></td>
+<td><strong>Medium</strong><p class="muted">About 1–2 days</p><a href="https://github.com/anthropics/knowledge-work-plugins/blob/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d/engineering/skills/incident-response/SKILL.md#L58-L152" target="_blank" rel="noopener noreferrer">Incident response <span aria-hidden="true">↗</span></a></td>
+</tr></tbody>
+</table></div>
+<p class="table-note">Effort includes focused scenario checks and is an estimate, not a measured result. “Reuse template” means the small output structure, not the upstream plugin or its automatic publishing behavior.</p>
+</section>
+<div class="grid" id="boundaries">
+<section class="panel" aria-labelledby="skip-title"><h2 id="skip-title">What to skip for now</h2>
+<table class="mini"><thead><tr><th scope="col">Upstream component</th><th scope="col">Reason</th></tr></thead><tbody>
+<tr><td><a href="https://github.com/anthropics/knowledge-work-plugins/blob/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d/productivity/skills/task-management/SKILL.md#L9-L29" target="_blank" rel="noopener noreferrer">Task manager &amp; dashboard</a></td><td>Creates TASKS.md and another dashboard. This duplicates tickets-zordon and ops-board.</td></tr>
+<tr><td><a href="https://github.com/anthropics/knowledge-work-plugins/blob/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d/cowork-plugin-management/skills/cowork-plugin-customizer/SKILL.md#L7-L14" target="_blank" rel="noopener noreferrer">Cowork customizer unchanged</a></td><td>Depends on desktop-mounted directories, Cowork connector-discovery tools, and a .plugin installation UI.</td></tr>
+<tr><td>Generic build, review, UX copy &amp; accessibility skills</td><td>Substantial overlap with build-jarvis, audit-sherlock, skill-prometheus, design-arwen, and a11y-toph. Borrow specific improvements only.</td></tr>
+<tr><td>Whole finance, legal, sales &amp; bio-research packs</td><td>Domain expansion rather than an immediate maintenance improvement. Some scripts require specialized scientific runtimes and data.</td></tr>
+</tbody></table></section>
+<section class="panel" aria-labelledby="hosts-title"><h2 id="hosts-title">What changes across CLIs</h2>
+<table class="mini"><thead><tr><th scope="col">Host</th><th scope="col">Adaptation required</th></tr></thead><tbody>
+<tr><td>Claude Code</td><td>Closest upstream packaging. Remove Cowork-only assumptions; verify real endpoints, authentication, and tool access.</td></tr>
+<tr><td>Codex</td><td>Use Skillator's skills/references layout and portable metadata. Configure MCP through supported Codex mechanisms; verify authentication and actual read/search operations.</td></tr>
+<tr><td>Cursor, Gemini &amp; opencode</td><td>Use existing host command adapters and each host's connector configuration. Test CLI tool discovery, not only editor configuration.</td></tr>
+<tr><td>Antigravity &amp; Pi</td><td>Prove connector availability in the specific host. Pi may need a suitable bridge or provider integration; do not assume native Cowork behavior.</td></tr>
+</tbody></table>
+<p class="muted" style="margin-top:16px">A visible tool is not proof of successful authentication. Some upstream MCP entries have empty URLs resolved by Cowork; copying that configuration does not establish CLI support.</p>
+<p><a href="https://learn.chatgpt.com/docs/extend/mcp?surface=cli" target="_blank" rel="noopener noreferrer">Official Codex MCP guidance ↗</a> · <a href="https://learn.chatgpt.com/docs/build-skills" target="_blank" rel="noopener noreferrer">Official skills guidance ↗</a></p>
+</section></div>
+<section class="sources" id="evidence" aria-labelledby="evidence-title"><h2 id="evidence-title">Evidence, licensing &amp; limits</h2>
+<p><strong>Source verified:</strong> the pinned upstream tree and recommendation files, matching local skills, relevant host assumptions, and the selected packages' licensing. Cached README names differed from current files, so recommendations use actual pinned source paths.</p>
+<p><strong>Not validated:</strong> upstream code execution, authenticated live integrations, model scenario evaluations, or the estimated benefit of these changes. No upstream plugin was installed and no tickets or source changes were created for this comparison. Earlier approved F140 work is separate.</p>
+<p><strong>Reuse conditions:</strong> reviewed material is Apache-2.0. Retain the applicable license and attribution, mark modified files, and include applicable NOTICE content if provided. Other per-skill licenses and externally referenced marketplace packages require individual checks. Reuse Skillator's existing <code>UPSTREAM.md</code> provenance pattern.</p>
+<p><a href="https://github.com/anthropics/knowledge-work-plugins/blob/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d/LICENSE#L79-L115" target="_blank" rel="noopener noreferrer">Upstream redistribution conditions ↗</a> · <a href="https://github.com/anthropics/knowledge-work-plugins/blob/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d/.claude-plugin/marketplace.json" target="_blank" rel="noopener noreferrer">Marketplace manifest ↗</a> · <a href="https://github.com/anthropics/knowledge-work-plugins/blob/2574e29377c7173d0cecffef29a6ecbd7f8ccb5d/README.md" target="_blank" rel="noopener noreferrer">Upstream overview ↗</a></p>
+<p class="muted">Upstream revision: <code>2574e29377c7173d0cecffef29a6ecbd7f8ccb5d</code> · Commit dated 28 October 2026. Local paths above identify affected or proposed files; no changes are applied by this report.</p>
+</section>
+</main>
+<footer class="wrap foot"><span>Skillator / Knowledge Work Plugins comparison</span><span>Standalone HTML · No external assets or network required to view</span></footer>
+<script>
+(() => {
+  const all = document.getElementById('filter-all');
+  const first = document.getElementById('filter-first');
+  const rows = Array.from(document.querySelectorAll('#recommendation-rows tr'));
+  function setFilter(firstOnly) {
+    rows.forEach(row => { row.hidden = firstOnly && row.dataset.batch !== 'true'; });
+    all.setAttribute('aria-pressed', String(!firstOnly));
+    first.setAttribute('aria-pressed', String(firstOnly));
+    document.getElementById('filter-status').textContent = firstOnly
+      ? 'Showing 3 first-batch recommendations.' : 'Showing all 5 recommendations.';
+  }
+  all.addEventListener('click', () => setFilter(false));
+  first.addEventListener('click', () => setFilter(true));
+  document.getElementById('print-report').addEventListener('click', () => window.print());
+})();
+</script>
+</body>
+</html>
