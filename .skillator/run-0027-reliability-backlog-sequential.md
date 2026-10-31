@@ -1,6 +1,6 @@
 # RUN-0027 - reliability backlog sequential
 plan: docs/plans/PLAN-reliability-20261030.md
-started: 2026-10-30T17:39Z   updated: 2026-10-31T04:52Z
+started: 2026-10-30T17:39Z   updated: 2026-10-31T05:07Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0027-reliability-backlog-sequential
 branch: run/RUN-0027-reliability-backlog-sequential
 owner: @sher
@@ -28,7 +28,7 @@ owner: @sher
 | 230 | AADH F142 | x | build:gpt-6-astra | 2026-10-30T22:01Z | 0a06268 |
 | 231 | AADI F143 | x | build:gpt-6-astra | 2026-10-30T22:13Z | cd0d17c |
 | 233 | AADJ F140 approved canonical command generation | x | build:gpt-6-astra | 2026-10-31T04:52Z | a77007a |
-| 232 | verify review bump commit push | ~ | main:codex | 2026-10-31T04:52Z | - |
+| 232 | verify review bump commit push | x | main:codex | 2026-10-31T05:07Z | a71aeee |
 
 ## In flight
 ## Chain
@@ -3260,3 +3260,5 @@ answered: 2026-10-31T01:36Z
 - Final whole-branch deep review dispatch: exact prompt .skillator/prompts/RUN-0027/final-review.txt; source range base1d702d through a77007a plus staged main merge/execution docs. Packet RUN-0027-final-review.diff is complete combined candidate. All implementations individually approved and affected integration checks passed; no native/live success claimed. Review is read-only, no duplicate suites or subagents.
 
 - Final whole-branch review Approved: no Critical/Important findings. Two Minor release-doc corrections accepted: stale F140/pending registry paragraph in PLATFORMS and removed generator tokens in README. Exact one final fix dispatch prompt final-fix1.txt recorded before fresh implementer; only those two docs, no source behavior changes or broad retesting. Scoped rereview follows.
+
+- Final release closure: all19 reliability implementations locally integrated on main at a71aeee, version4.22.0. Whole-branch review and final scoped documentation review approved. Composed18-check coverage retains original failures and two nested platform skips; native/live host checks remain unrun. F144-F150 are pending recommendations, not implemented. Owner explicitly authorized publication; push is the next operation and is not yet claimed successful. Final main CodeGraph refresh is running separately.
