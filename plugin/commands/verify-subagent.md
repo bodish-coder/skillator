@@ -10,7 +10,7 @@ step for this repo's TICKETS.md (`$PRACTICE` resolved as that skill says). Argum
 1. One fresh agent per `[%]` ticket, its line given verbatim, re-checks the Done line against
    evidence it gets now - commits naming the ID, the tests and checks the line names run now,
    the files it cites - and answers PASS, FAIL or OWNER with that evidence. The agents read and
-   run tests only: they never edit code, commit or touch TICKETS.md.
+   <!-- host-section:fallback -->run tests only: they never edit code, commit or touch TICKETS.md.<!-- /host-section:fallback -->
 2. A Done line that needs the owner's own eyes (`testing: owner ...`, a live look, a picker check,
    an account) is OWNER - never flipped, whatever else passed.
 3. The main session applies each verdict with ticket-meta, never a hand-edited box: PASS ->

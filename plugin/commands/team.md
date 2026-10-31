@@ -3,7 +3,9 @@ description: "Team management and ticket assignment: add, remove, list members, 
 argument-hint: "[add @handle \"Name\" email | remove @handle | lead @handle|- | assign <ID> @handle | assign-app <ID> <app> | assign-tester <ID> @handle | list]"
 ---
 
+<!-- host-section:invocation -->
 Load the `tickets-zordon` skill (skillator:tickets-zordon) and run the team or ticket assignment action for this repo.
+<!-- /host-section:invocation -->
 Arguments: `$ARGUMENTS`
 
 1. **Parse Arguments**:

@@ -36,13 +36,13 @@ option and stop.
    prompt says: work and commit in the run worktree (or the stage worktree dispatch names), never
    the main checkout, never push, never edit TICKETS.md.
    With grayskull-power on (`.skillator/grayskull.md` present) every prompt opens with this line, and without it does not: `Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.`
-3. **Dispatch** - one fresh implementer per ticket (tasks-sentinels): the Agent tool, given only that
+3. **Dispatch** - one fresh implementer per ticket (tasks-sentinels): <!-- host-section:delegate -->the Agent tool<!-- /host-section:delegate -->, given only that
    stage's stored prompt, no session history. `chain decide`, then `chain dispatch <n>` before
    each agent: it writes the row and the exact prompt into the run file first. Sequential: `chain
    next`, one stage at a time. Parallel: `RELAY_CHAIN_PARALLEL` from the table above on `chain
    next --all`, one dispatch and one agent per `NEXT` line; refill the
    free slots after each landing.
-4. **Land** each stage when its own agent returns: read the diff, regression sweep, `/code-review` (`code-review:code-review`) on the staged diff;
+4. **Land** each stage when its own agent returns: read the diff, regression sweep, <!-- host-section:review -->`/code-review` (`code-review:code-review`) on the staged diff;<!-- /host-section:review -->
    fix findings through a new implementer. A stage in its own worktree: `chain merge <n>` first
    (exit 3 = conflict: the stage is `!`, a retry stage is planned on the merged branch). Then
    `stage <n> x <sha>` and flip its ticket with tickets-zordon's ticket-meta (`board <ID> <mark>`

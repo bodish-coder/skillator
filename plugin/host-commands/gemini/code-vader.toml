@@ -1,9 +1,9 @@
-description = "Pre-commit diff review replicating Claude Code /code-review (correctness & safety) and Ponytail / code-yoda (restraint, anti-bloat & shortcut debt) across all hosts (code-vader)"
+description = "Pre-commit diff review replicating Claude Code /code-review (correctness & safety) and Ponytail / code-yoda (restraint, anti-bloat & shortcut debt) across all hosts, ending in READY-TO-COMMIT: YES or CHANGES-REQUESTED (code-vader)"
 prompt = '''
-Load the `code-vader` skill ({{SKILLS}}/code-vader/SKILL.md) and run its unified two-lens pre-commit review on this repo's diff. Arguments: {{args}}
+Load the `code-vader` skill ({{SKILLS}}/code-vader/SKILL.md) and run its unified two-lens pre-commit review on this repo's diff. Arguments: `{{args}}` (optional: `--staged`, `--unstaged`, or `--auto`; default `--auto` prefers `git diff --cached` and falls back to unstaged `git diff`).
 
-1. **Collect diff & debt markers** - Run `!{sh "{{SKILLS}}/code-vader/scripts/code-vader.sh" collect {{args}}}`
-2. **Lens 1: Correctness & Safety** - Audit for flaws, edge cases, unchecked errors, null crashes, race conditions, type unsoundness, security vulnerabilities (confidence >= 80).
-3. **Lens 2: Restraint & Anti-Bloat** - Audit for over-engineering, dead code, and shortcut/ponytail debt markers.
-4. **Rank & Verdict** - Output findings, followed by debt ledger and net line estimate, ending with final line: `READY-TO-COMMIT: YES` or `CHANGES-REQUESTED`.
+1. **Collect diff & debt markers** - Run `!{sh "{{SKILLS}}/code-vader/scripts/code-vader.sh" collect {{args}}}` Read the changed files and callers of modified symbols before judging.
+2. **Lens 1: Correctness & Safety (`/code-review` replication)** — Audit the diff for logic flaws, edge cases, unchecked error returns, null/undefined crashes, race conditions, type unsoundness, security vulnerabilities, and regression risks. Keep only findings with confidence >= 80 and a concrete failure scenario.
+3. **Lens 2: Restraint & Anti-Bloat (`code-yoda` / Ponytail replication)** — Audit the diff for over-engineering, unnecessary abstractions (`yagni:`), duplicate utilities (`reuse:`), stdlib replacements (`stdlib:`), platform features (`native:`), dead code (`delete:`), near-copies (`merge:`), and shorter forms (`shrink:`), plus `shortcut:` / `ponytail:` debt markers (flagging `no-trigger` markers) and the net line-count reduction estimate (`net: -<N> lines possible.`).
+4. **Rank & Verdict** — Output findings ranked by severity (`critical`, `high`, `important`, `low`) and `file:line` (via `code-vader.{sh,ps1} format` or the canonical report template), followed by the debt ledger and net line estimate, ending with the literal binary verdict on the final line: `READY-TO-COMMIT: YES` or `CHANGES-REQUESTED`.
 '''

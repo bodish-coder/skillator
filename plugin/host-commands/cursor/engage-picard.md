@@ -3,7 +3,7 @@ description: Improve the prompt written before (or after) this command with AI, 
 ---
 Engage: rewrite a rough prompt into a strong one, then carry it out.
 
-The prompt: the words typed after the command.
+The prompt: the words typed after the command
 Empty → the prompt is the user's message just before this command (what they wrote
 before typing it). Nothing there either → ask for the prompt in one line and stop.
 

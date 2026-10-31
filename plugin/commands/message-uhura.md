@@ -36,7 +36,7 @@ Arguments: `$ARGUMENTS`
    - Deliver the message through the existing teams-uhura channel/inbox:
      Write the drafted text to a temporary file using your file writing tool (never pass message text on the command line).
      Run:
-     `node <skill dir>/scripts/team.mjs message @handle --file <path-to-temp-file>`
+     <!-- host-section:delivery -->`node <skill dir>/scripts/team.mjs message @handle --file <path-to-temp-file>`<!-- /host-section:delivery -->
      and delete the temporary file after `team.mjs` completes.
    - If a Teams Workflows webhook is configured, `team.mjs` posts it to the channel.
    - `team.mjs` delivers the message into the repo's inbox (`team-inbox.jsonl`) for `@handle`.

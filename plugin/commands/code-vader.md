@@ -5,7 +5,9 @@ argument-hint: "[--staged | --unstaged | --auto]"
 
 Load the `code-vader` skill (`skillator:code-vader`) and run its unified two-lens pre-commit review on this repo's diff. Arguments: `$ARGUMENTS` (optional: `--staged`, `--unstaged`, or `--auto`; default `--auto` prefers `git diff --cached` and falls back to unstaged `git diff`).
 
+<!-- host-section:execute -->
 1. **Collect diff & debt markers** — Run `skills/code-vader/scripts/code-vader.sh collect $ARGUMENTS` (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File skills/code-vader/scripts/code-vader.ps1 collect $ARGUMENTS`). Read the changed files and callers of modified symbols before judging.
+<!-- /host-section:execute -->
 2. **Lens 1: Correctness & Safety (`/code-review` replication)** — Audit the diff for logic flaws, edge cases, unchecked error returns, null/undefined crashes, race conditions, type unsoundness, security vulnerabilities, and regression risks. Keep only findings with confidence >= 80 and a concrete failure scenario.
 3. **Lens 2: Restraint & Anti-Bloat (`code-yoda` / Ponytail replication)** — Audit the diff for over-engineering, unnecessary abstractions (`yagni:`), duplicate utilities (`reuse:`), stdlib replacements (`stdlib:`), platform features (`native:`), dead code (`delete:`), near-copies (`merge:`), and shorter forms (`shrink:`), plus `shortcut:` / `ponytail:` debt markers (flagging `no-trigger` markers) and the net line-count reduction estimate (`net: -<N> lines possible.`).
 4. **Rank & Verdict** — Output findings ranked by severity (`critical`, `high`, `important`, `low`) and `file:line` (via `code-vader.{sh,ps1} format` or the canonical report template), followed by the debt ledger and net line estimate, ending with the literal binary verdict on the final line: `READY-TO-COMMIT: YES` or `CHANGES-REQUESTED`.

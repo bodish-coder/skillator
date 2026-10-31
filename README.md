@@ -443,6 +443,42 @@ Deactivating is deleting `.skillator/grayskull.md`.
   `~/.skillator/teams.json`, this user only. Setup and threat model:
   [`plugin/skills/teams-uhura/references/setup.md`](plugin/skills/teams-uhura/references/setup.md).
 
+## Authoring commands
+
+Edit the canonical `plugin/commands/<name>.md`, then run from the repository root:
+
+```sh
+node plugin/practice/scripts/generate-commands.mjs --write
+node plugin/practice/scripts/generate-commands.mjs --check
+node --test plugin/practice/scripts/generate-commands.test.mjs
+```
+
+Commit the generated aliases and `plugin/host-commands/` files with the source change.
+`--check` names stale or missing outputs and exits nonzero without writing. Generation
+is deterministic UTF-8 without a BOM, with LF endings; unrecognized files are left alone.
+Node is needed only for authoring and checks, not for installing command files.
+
+`plugin/commands/hosts.json` lists the supported commands, aliases and host targets.
+Claude reads the canonical Markdown; aliases are generated copies. The skill-only
+`ops` body is `commands/ops.txt`, so it does not register an extra Claude command.
+Named `<!-- host-section:name -->` / `<!-- /host-section:name -->` boundaries keep
+Claude's default text in the canonical body. Metadata replaces only those sections
+whose execution differs by host; `all` is the non-Claude default, with a host key
+overriding it. The generator rejects missing, duplicate or unused sections.
+
+Shared substitutions convert explicit skill references and script paths to
+`{{SKILLS}}`, and arguments to the host's convention. `PLAN_END` and `DISPATCH`
+select the marathon delegate instructions. Gemini retains its `!{...}` expansion
+and `{{args}}`; Pi retains argument hints and `$ARGUMENTS`; Antigravity wrappers
+retain their skill names. Codex still consumes those skill wrappers through the
+existing installers. Installers replace `{{SKILLS}}` with the installed path.
+Unknown substitutions and duplicate output paths fail before any writes.
+
+The migration normalizes duplicated wording to the canonical instructions while
+retaining host dispatch, fallback and invocation differences. The focused tests
+preserve the pre-generation output inventory and delegate contracts; installer
+selftests remain the separate integration check, not evidence of live host execution.
+
 ## Repository validation
 
 From the repository root, run:

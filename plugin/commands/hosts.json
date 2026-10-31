@@ -1,0 +1,291 @@
+{
+  "commands": [
+    {
+      "name": "archive-tickets",
+      "aliases": [
+        "archive-zordon"
+      ],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "code-vader",
+      "aliases": [],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "engage",
+      "aliases": [
+        "engage-picard"
+      ],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "list-tickets",
+      "aliases": [
+        "list-ticket-zordon"
+      ],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "marathon-plan",
+      "aliases": [
+        "gauntlet-plan"
+      ],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ],
+      "hostDescription": "Plan a marathon from the saved Workflow data, using this host's delegate or session fallback"
+    },
+    {
+      "name": "marathon-run",
+      "aliases": [
+        "gauntlet-run"
+      ],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ],
+      "hostDescription": "Plan and run a marathon, or run the saved plan, using this host's delegate or session fallback"
+    },
+    {
+      "name": "marathon",
+      "aliases": [],
+      "hosts": []
+    },
+    {
+      "name": "pending-subagent",
+      "aliases": [
+        "pending-sentinel"
+      ],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "pending",
+      "aliases": [
+        "skillator-pending"
+      ],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "plan-runs",
+      "aliases": [],
+      "hosts": []
+    },
+    {
+      "name": "skillator-sync",
+      "aliases": [
+        "upstream-sync"
+      ],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "skillator-update",
+      "aliases": [],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "sync-tickets",
+      "aliases": [
+        "sync-zordon"
+      ],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "team-messages",
+      "aliases": [],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ],
+      "skillDir": "teams-uhura"
+    },
+    {
+      "name": "team",
+      "aliases": [],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "verify-subagent",
+      "aliases": [
+        "verify-shifu"
+      ],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
+      "name": "ops",
+      "source": "ops.txt",
+      "aliases": [
+        "skillator-ops"
+      ],
+      "hosts": [
+        "antigravity"
+      ],
+      "canonicalAliases": false
+    },
+    {
+      "name": "message-uhura",
+      "aliases": [],
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ],
+      "skillDir": "teams-uhura"
+    }
+  ],
+  "sections": {
+    "pending.run": {
+      "gemini": "!{sh \"{{SKILLS}}/tickets-zordon/scripts/pending.sh\"}\n\nAbove is the output of tickets-zordon's pending script for this repo. Paste it to me unchanged; it reads, it never edits the board."
+    },
+    "pending-subagent.delegate": {
+      "all": "the host's subagent tool (none: run each stored prompt yourself, one at a time, in a fresh context, and say so)"
+    },
+    "pending-subagent.review": {
+      "all": "a code review of the staged diff (`/code-review` where the host has it);"
+    },
+    "verify-subagent.fallback": {
+      "all": "run tests only: they never edit code, commit or touch TICKETS.md. No subagent on this host ->\n   check each ticket yourself in turn, under the same read-and-run-only rule."
+    },
+    "code-vader.execute": {
+      "gemini": "1. **Collect diff & debt markers** - Run `!{sh \"{{SKILLS}}/code-vader/scripts/code-vader.sh\" collect {{args}}}` Read the changed files and callers of modified symbols before judging.",
+      "all": "1. **Collect diff & debt markers** — Run `sh skills/code-vader/scripts/code-vader.sh collect $ARGUMENTS` (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File skills/code-vader/scripts/code-vader.ps1 collect $ARGUMENTS`). Read the changed files and callers of modified symbols before judging."
+    },
+    "skillator-sync.execute": {
+      "gemini": "1. **Sweep (check)** - Run `!{sh \"{{SKILLS}}/skillator-sync/scripts/skillator-sync.sh\" {{args}}}` Show every `unchanged`, `changed`, and `error` row plus the `summary:` line. All `unchanged` -> stop.",
+      "all": "1. **Sweep (`check`)** — Run `sh skills/skillator-sync/scripts/skillator-sync.sh` (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File skills/skillator-sync/scripts/skillator-sync.ps1`) with `$ARGUMENTS` (default `check`). Show every `unchanged`, `changed`, and `error` row plus the `summary:` line. All `unchanged` → stop."
+    },
+    "skillator-update.source-pointer": {
+      "all": "   c. the source pointer the installer left here: the one line in\n      `{{SKILLS}}/.skillator-source` - the dir it last installed from, used only if it still\n      holds both installers;"
+    },
+    "team.invocation": {
+      "all": "Load the `tickets-zordon` skill (skillator:tickets-zordon) and run the team or ticket assignment action for this repo.\nFor each `ticket-meta` invocation below use `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh`\n(on Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File {{SKILLS}}/tickets-zordon/scripts/ticket-meta.ps1`), followed by the shown arguments."
+    },
+    "message-uhura.delivery": {
+      "all": "`node \"<skill dir>/scripts/team.mjs\" message @handle --file <path-to-temp-file>` (and reply via `node \"<skill dir>/scripts/team.mjs\" say --file <path-to-temp-file>` when replying)"
+    },
+    "marathon-plan.workflow-skill": {
+      "all": ""
+    },
+    "marathon-plan.plan-format": {
+      "all": " On this host /marathon-run reads it as data (\"Run without the Workflow tool\"), never executes it."
+    },
+    "marathon-plan.workflow-call": {
+      "all": ""
+    },
+    "marathon-plan.plan-end": {
+      "cursor": " - on this host with the Task tool, one Task per agent.",
+      "pi": " - on this host with the subagent extension when installed, else the phases in order in this session.",
+      "opencode": " - on this host with the phases in order in this session (no delegate verified here).",
+      "antigravity": " - on this host with agy: background subagents; codex: subagents; Gemini CLI: in this session.",
+      "gemini": " - on this host with the phases in order in this session (no delegate verified here)."
+    },
+    "marathon-run.workflow-skill": {
+      "all": ""
+    },
+    "marathon-run.run-reference": {
+      "all": "\"Run without the Workflow tool\", says."
+    },
+    "marathon-run.execution": {
+      "all": "the plan. The `.workflow.js` is read as data (`meta.phases`, `PLAN`), never executed."
+    },
+    "marathon-run.dispatch": {
+      "cursor": ", driver `@cu-<6>`, `--owner task`) before the agent that runs it exists",
+      "pi": ", driver `@pi-<6>`, `--owner subagent` with the subagent extension, else `--owner session`) before its work starts",
+      "opencode": ", driver `@oc-<6>`, `--owner session`) before its work starts",
+      "antigravity": "; agy: driver `@agy-<6>`, `--owner subagent`; codex: driver `@cx-<6>`, `--owner subagent`; Gemini CLI: driver `@gm-<6>`, `--owner session`) before its work starts",
+      "gemini": ", driver `@gm-<6>`, `--owner session`) before its work starts"
+    },
+    "marathon-run.parallel": {
+      "cursor": "\n   A phase's tickets run at once through the Task tool, so the mode is the phase shape.",
+      "pi": "\n   With the subagent extension a phase's tickets run at once, so the mode is the phase shape. Otherwise in this session a phase's tickets run one after another - a parallel plan runs serial here, say so in the first line.",
+      "opencode": "\n   In this session a phase's tickets run one after another - a parallel plan runs serial here, say so in the first line.",
+      "antigravity": "\n   On agy/codex a phase's tickets run at once through subagents, so the mode is the phase shape. On Gemini CLI a phase's tickets run one after another - a parallel plan runs serial here, say so in the first line.",
+      "gemini": "\n   In this session a phase's tickets run one after another - a parallel plan runs serial here, say so in the first line."
+    },
+    "marathon-run.delegate": {
+      "cursor": ", through the Task tool, one Task per agent (a phase's tickets as several Task calls in one turn)",
+      "pi": ", through the subagent extension when installed, else in this session - the stored prompt done, then the verify text done as a second pass that edits nothing",
+      "opencode": ", in this session (no delegate verified here) - the stored prompt done, then the verify text done as a second pass that edits nothing",
+      "antigravity": " - agy: background subagents; codex: subagents (one subagent per ticket of the phase); Gemini CLI: in this session (no delegate verified there), the stored prompt done, then the verify text done as a second pass that edits nothing",
+      "gemini": ", in this session (no delegate verified here) - the stored prompt done, then the verify text done as a second pass that edits nothing"
+    }
+  }
+}

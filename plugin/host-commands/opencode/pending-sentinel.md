@@ -1,7 +1,7 @@
 ---
 description: "Work the open tickets, or the IDs given, to the end with subagents: a relay-morpheus run, one fresh implementer per ticket (sequential by default, or parallel and file-disjoint), each diff reviewed and landed, the run merged, the push asked (relay-morpheus)"
 ---
-Load the `relay-morpheus` skill ({{SKILLS}}/relay-morpheus/SKILL.md), the `tickets-zordon` skill ({{SKILLS}}/tickets-zordon/SKILL.md) and the `tasks-sentinels` skill ({{SKILLS}}/tasks-sentinels/SKILL.md) and work the tickets to the end with subagents. Arguments: `$ARGUMENTS`
+Load `{{SKILLS}}/relay-morpheus/SKILL.md` (run file, chain, worktrees), `{{SKILLS}}/tickets-zordon/SKILL.md` (the board) and `{{SKILLS}}/tasks-sentinels/SKILL.md` (one fresh implementer per task) and work the tickets to the end with subagents. Arguments: `$ARGUMENTS`
 
 **Arguments.** An optional mode first - `sequential` or `parallel` - then an optional agent count,
 then optional ticket IDs (`parallel F12 F14`, `parallel 2`, `2 F12`, `F12`). No mode and no count =

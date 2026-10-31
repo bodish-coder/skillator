@@ -2,26 +2,28 @@
 name: team
 description: "Team management and ticket assignment: add, remove, list members, set/change lead, and assign tickets to team members"
 ---
-
 Load the `tickets-zordon` skill ({{SKILLS}}/tickets-zordon/SKILL.md) and run the team or ticket assignment action for this repo.
-Arguments: whatever followed the command (`add @handle "Name" email`, `remove @handle`, `lead @handle|-`, `assign <ID> @handle`, `assign-tester <ID> @handle`, or `list`).
+For each `ticket-meta` invocation below use `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh`
+(on Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File {{SKILLS}}/tickets-zordon/scripts/ticket-meta.ps1`), followed by the shown arguments.
+Arguments: the words typed after the command
 
-1. **Action Routing**:
-   - `add @handle "Name" email[,email...]` -> Add teammate:
-     Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team add @handle "Name" email` (Windows: `ticket-meta.ps1`)
-   - `remove @handle` -> Remove teammate:
-     Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team remove @handle`
+1. **Parse Arguments**:
+   - `add @handle "Name" email[,email...]` -> Add teammate to `.skillator/team.md`:
+     Run `ticket-meta team add @handle "Name" email`
+   - `remove @handle` -> Remove teammate from `.skillator/team.md`:
+     Run `ticket-meta team remove @handle` (refused if currently the lead).
    - `lead @handle` or `lead -` -> Set, hand over, or clear team lead:
-     Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team lead @handle` (or `-` to clear)
-   - `assign <ID> @handle` or `<ID> @handle` -> Assign ticket:
-     Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign <ID> @handle`
-     **Lead Rule**: Once a lead is assigned, only the lead can assign or reassign tickets.
-   - `assign-app <ID> <app,...>` or `<ID> app <app>` -> Explicitly assign monorepo app(s):
-     Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign-app <ID> <app>`
-   - `assign-tester <ID> @handle` or `<ID> tester @handle` -> Assign tester:
-     Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh assign-tester <ID> @handle`
-     Open to all teammates at any time (leaves ticket mark as-is).
-   - `list` or empty -> List team:
-     Run `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh team list`
+     Run `ticket-meta team lead @handle` (or `ticket-meta team lead -`).
+     Only the existing lead can hand over or clear the lead.
+   - `assign <ID> @handle` or `<ID> @handle` -> Assign ticket to team member:
+     Run `ticket-meta assign <ID> @handle` (reopens ticket to `[ ]`).
+     **Lead Rule**: Once a lead is assigned, ONLY the lead may assign or reassign tickets. Non-lead assignments are refused.
+   - `assign-app <ID> <app,...>` or `<ID> app <app>` -> Explicitly assign monorepo application(s) to ticket:
+     Run `ticket-meta assign-app <ID> <app>` (leaves ticket mark as-is).
+   - `assign-tester <ID> @handle` or `<ID> tester @handle` -> Assign tester to ticket:
+     Run `ticket-meta assign-tester <ID> @handle` (leaves ticket mark as-is).
+     Unlike implementer assignment, tester assignment is open to any teammate at any time (even if a tester is already assigned).
+   - `list` or no arguments -> List all team members, emails, active lead `[lead]`, and current session user `(you)`:
+     Run `ticket-meta team list`
 
-2. Output the result line directly to the user.
+2. Print the read-back output from `ticket-meta` directly. If an operation was refused, explain the refusal message clearly.
