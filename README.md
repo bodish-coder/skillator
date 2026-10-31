@@ -464,11 +464,13 @@ Claude reads the canonical Markdown; aliases are generated copies. The skill-onl
 Named `<!-- host-section:name -->` / `<!-- /host-section:name -->` boundaries keep
 Claude's default text in the canonical body. Metadata replaces only those sections
 whose execution differs by host; `all` is the non-Claude default, with a host key
-overriding it. The generator rejects missing, duplicate or unused sections.
+overriding it. In `hosts.json`, `sections` keys include `marathon-plan.plan-end`,
+`marathon-run.dispatch`, `marathon-run.delegate` and `marathon-run.parallel`.
+Shared planning and argument rules stay outside these narrow host overrides.
+The generator rejects missing, duplicate or unused sections.
 
 Shared substitutions convert explicit skill references and script paths to
-`{{SKILLS}}`, and arguments to the host's convention. `PLAN_END` and `DISPATCH`
-select the marathon delegate instructions. Gemini retains its `!{...}` expansion
+`{{SKILLS}}`, and arguments to the host's convention. Gemini retains its `!{...}` expansion
 and `{{args}}`; Pi retains argument hints and `$ARGUMENTS`; Antigravity wrappers
 retain their skill names. Codex still consumes those skill wrappers through the
 existing installers. Installers replace `{{SKILLS}}` with the installed path.

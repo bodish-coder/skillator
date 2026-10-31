@@ -27,9 +27,12 @@ Dates on implemented/stub rows are this source review date, not a new test run.
 tests, schema/help inspection and model self-reports cannot establish live support.
 Windows Git sh evidence is not native Linux/macOS evidence. F137 inventory,
 F138 parity fixtures and F141's validation runner test repository behavior;
-they do not upgrade any host row. F140's shared-source generator is still pending
-Q1 and is not implemented. The RUN-0027 full registry on detached `c4dd648` was
-still running at this review; no full-suite pass is claimed here.
+they do not upgrade any host row. F140's shared-source generator is implemented;
+offline generation and installer checks passed. RUN-0027 retains the original
+registry result of 16 passes and two installer failures; after disk cleanup, six
+affected checks passed. Its composed 18-check passing evidence includes two nested
+platform skips, not a single full registry pass. Native/live host checks remain
+unrun by this validation; historical host evidence below keeps its original scope.
 
 ### Skill discovery and loading
 
