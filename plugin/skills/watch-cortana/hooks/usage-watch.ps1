@@ -73,7 +73,26 @@ function Get-Reason($pct, $limit) {
 
 # Last token_count line of a codex rollout, or $null.
 function Get-CodexLastTc($path) {
-  Get-Content -LiteralPath $path -Tail 400 | Where-Object { $_ -match '"token_count"' } | Select-Object -Last 1
+  # Get-Content -Tail is very slow on long JSONL lines in Windows PowerShell.
+  # Stream UTF8 once, retaining only the latest match and its distance from EOF.
+  $stream = $null
+  $reader = $null
+  $last = $null
+  $after = 400
+  try {
+    # Codex may still have the rollout open for append while status reads it.
+    $stream = [IO.File]::Open((Convert-Path -LiteralPath $path -ErrorAction Stop), [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+    $reader = [IO.StreamReader]::new($stream, [Text.Encoding]::UTF8, $true)
+    while ($null -ne ($line = $reader.ReadLine())) {
+      if ($line -match '"token_count"') { $last = $line; $after = 0 }
+      elseif ($after -lt 400) { $after++ }
+    }
+    if ($after -lt 400) { return $last }
+  } catch { Write-Error $_ }
+  finally {
+    if ($null -ne $reader) { $reader.Dispose() }
+    elseif ($null -ne $stream) { $stream.Dispose() }
+  }
 }
 
 # A starting child has no usage event yet; it must not hide a fresh reading.
