@@ -1,0 +1,67 @@
+﻿{
+    "sources_read":  [
+                         "scenario.txt",
+                         "skills/clone-odo/SKILL.md",
+                         "skills/clone-odo/references/clean-room.md",
+                         "skills/clone-odo/references/handoffs.md",
+                         "skills/clone-odo/references/design-build.md",
+                         "skills/clone-odo/scripts/odo.ps1",
+                         ".skillator/clone/recon.md",
+                         ".skillator/clone/architecture.md",
+                         ".skillator/clone/features.csv",
+                         "TICKETS.md",
+                         "bookly/index.html",
+                         "bookly/styles.css",
+                         "bookly/app.js"
+                     ],
+    "commands_run":  [
+                         "Get-Content scenario.txt",
+                         "Get-Content skills/clone-odo/SKILL.md",
+                         "Get-Content clean-room.md and handoffs.md; Get-ChildItem fixture, bookly, .skillator/clone",
+                         "Get-Content recon.md, architecture.md, features.csv, TICKETS.md, bookly files, design-build.md, odo.ps1",
+                         "Resolve and validate source/destination within fixture; New-Item .skillator/clone/original; Move-Item original/booking.html .skillator/clone/original/booking.html",
+                         "Set-Content bookly/app.js, bookly/styles.css, .skillator/clone/brand.json",
+                         "node --check bookly/app.js",
+                         "powershell -NoProfile -ExecutionPolicy Bypass -File skills/clone-odo/scripts/odo.ps1 sweep . --config .skillator/clone/brand.json",
+                         "Set-Content verify-slots.cjs; node verify-slots.cjs",
+                         "Set-Content features.csv, build-log.md, answer.md, evidence.json"
+                     ],
+    "changed_files":  [
+                          "bookly/app.js",
+                          "bookly/styles.css",
+                          "original/booking.html (moved unopened)",
+                          ".skillator/clone/original/booking.html",
+                          ".skillator/clone/brand.json",
+                          ".skillator/clone/features.csv",
+                          ".skillator/clone/build-log.md",
+                          "verify-slots.cjs",
+                          "answer.md",
+                          "evidence.json"
+                      ],
+    "checks":  [
+                   {
+                       "exit_code":  0,
+                       "command":  "node --check bookly/app.js"
+                   },
+                   {
+                       "scope":  "DOM stub only",
+                       "command":  "node verify-slots.cjs",
+                       "exit_code":  0
+                   },
+                   {
+                       "message":  "nothing to look for; no original brand identifiers supplied",
+                       "command":  "odo.ps1 sweep . --config .skillator/clone/brand.json",
+                       "exit_code":  1
+                   }
+               ],
+    "untested":  [
+                     "Browser rendering",
+                     "Native keyboard activation",
+                     "Screen reader",
+                     "Responsive viewports",
+                     "Full FL01 flow",
+                     "Empty/loading/error states",
+                     "Build and release"
+                 ],
+    "original_source_read":  false
+}

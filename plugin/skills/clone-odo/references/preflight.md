@@ -31,6 +31,9 @@ Date: <YYYY-MM-DD>  Commit: <sha>  Go from user: <yes / not yet>
       sh <this skill>/scripts/odo.sh contrast .skillator/clone/design/tokens.json
 - [ ] store listing passes (exit 0), if shipping to a store
       sh <this skill>/scripts/odo.sh listing .skillator/clone/listing.json --avoid "<brand.json avoid names>"
+- [ ] architecture/backend/screen handbacks match this candidate and have evidence
+- [ ] public launch claims have product/research evidence; any charged pricing is owner-approved
+- [ ] current platform listing/privacy/review checks recorded for the target store, if applicable
 - [ ] production build passes
 - [ ] nothing in the build loads from the original's domain or CDN
 - [ ] `.skillator/clone/screens/` is not in anything that ships
@@ -40,7 +43,7 @@ Date: <YYYY-MM-DD>  Commit: <sha>  Go from user: <yes / not yet>
       checked by eye
 ```
 
-Production, domain, email records, live payments and monitoring are
-deploy-merlin's and deploy-niyoj's checklists, not this one. This gate only
-answers one question: is this the user's own app, finished and clean, or
-still a copy of someone else's?
+After this gate, [Deploy](deploy.md) supplies the production/domain/email,
+payment, monitoring and platform handback contract for deploy-merlin/
+deploy-niyoj. Record actual results in `.skillator/clone/deploy.md`; this
+preflight and prepared commands do not establish a successful release.

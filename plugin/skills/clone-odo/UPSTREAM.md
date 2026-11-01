@@ -1,8 +1,8 @@
 # clone-odo upstream
 
-clone-odo absorbs the replica-skill pack by Jake Schincariol (F107): seven of
-its eleven skills and all six of its standard-library Python tools, rewritten
-as one skill in skillator's voice. This file records what was taken and from
+clone-odo absorbs the replica-skill pack by Jake Schincariol (F107): all
+eleven workflows and all six of its standard-library Python tools, adapted
+as one skill with explicit execution handbacks in skillator's voice. This file records what was taken and from
 which commit, so a later change upstream can be found and absorbed on purpose.
 It is also the manifest that `upstream-check.sh` / `upstream-check.ps1` in this
 directory read (thin wrappers over `practice/scripts/upstream-check.sh`, the
@@ -18,7 +18,7 @@ not versions.
 
 | Name | Repo | Watched paths | Absorbed commit | Absorbed | clone-odo files / sections |
 |---|---|---|---|---|---|
-| replica-skill | `Jakeschincariol/replica-skill` | `replica-architect/SKILL.md`<br>`replica-recon`<br>`replica-design`<br>`replica-diff`<br>`replica-entrepreneur`<br>`replica-brand`<br>`replica-launch`<br>`replica-deploy/preflight.md`<br>`replica-test/test-plan.md`<br>`replica-test/bug-report.md`<br>`tests`<br>`LICENSE` | `77c9436fb3d18c3d58169efb8caf4fe906b0dc51` | 2026-10-26 | `replica-recon/SKILL.md` → SKILL.md §2 + `references/recon.md`, its rules block → SKILL.md §0 + `references/clean-room.md` (flows `F<nn>` → `FL<nn>`; output paths → `.skillator/clone/`; step 7 gains the `ticket` column and SKILL.md §3; step 9 sizing kept); `replica-recon/recon-map.md`, `features.csv` → `templates/recon-map.md`, `templates/features.csv` (`FL01`; `ticket` column); `replica-design/contrast.py`, `tokens.json` → `scripts/contrast.py`, `templates/tokens.json` (docstring paths only); `replica-design/SKILL.md` → one hand-off block in `references/handoffs.md` (the component list, the measured roles, the never-take list), its never-take rules → `references/clean-room.md`; `replica-diff/SKILL.md`, `parity.py`, `imgdiff.py` → SKILL.md §7 + `references/parity.md`, `scripts/parity.py`, `scripts/imgdiff.py` (docstring paths); `replica-entrepreneur/SKILL.md`, `reviews.py`, `themes.json` → SKILL.md §6 + `references/reviews.md`, `scripts/reviews.py`, `scripts/themes.json` (none in the tool); `replica-brand/SKILL.md`, `sweep.py` → SKILL.md §8 + `references/brand.md`, `scripts/sweep.py` (skips `.skillator` not `replica`; `--include-planning`); `replica-launch/SKILL.md`, `listing.py`, `listing.example.json` → SKILL.md §8 (listing lint only) + `references/brand.md` § Listing, `scripts/listing.py`, `templates/listing.example.json`; `replica-deploy/preflight.md` → `references/preflight.md` (commands become `odo.sh …`; host, DNS and Stripe sections not absorbed); `replica-test/test-plan.md`, `bug-report.md` → `templates/` (`FL` ids; bugs go to the board as `B<n>`); `tests/*.py` → `scripts/tests/` (`_load.py` loads `../<name>.py`; `test_repo.py` not absorbed); `LICENSE` → § License below, verbatim. `replica-architect/SKILL.md` § Step 1 (the stack table) → `references/handoffs.md` § Build (web, Android, iOS rows; the Windows row is ours; schema, API and build order not absorbed). Not absorbed: replica-architect except its stack table, replica-build, replica-backend (build-jarvis), replica-design's measuring steps (design-arwen), replica-test/SKILL.md and e2e.example.spec.ts (PRACTICE §4, screenshot-argus), replica-deploy/SKILL.md's host/DNS/Stripe sections (deploy-merlin / deploy-niyoj), replica-launch's landing page, pricing and launch plan, README and the plugin manifests |
+| replica-skill | `Jakeschincariol/replica-skill` | `replica-recon`<br>`replica-architect`<br>`replica-design`<br>`replica-build`<br>`replica-backend`<br>`replica-test`<br>`replica-diff`<br>`replica-entrepreneur`<br>`replica-brand`<br>`replica-launch`<br>`replica-deploy`<br>`tests`<br>`LICENSE` | `77c9436fb3d18c3d58169efb8caf4fe906b0dc51` | 2026-11-01 | All eleven workflow contracts mapped below; six tools and tests retained with documented Skillator adaptations. Packaging/README/standalone replica command names are not installed. |
 
 Notes on the row:
 
@@ -47,12 +47,47 @@ Notes on the row:
   `test_fail_under_fails_on_a_missing_must_have` pin it, and upstream's
   `test_cli_fail_under` expects 1 at `--fail-under 10` for that reason. Keep
   this when absorbing a later `parity.py`.
-- **Watched paths** are directories where the whole folder landed and files
-  where only one file did. replica-build, replica-backend,
-  replica-deploy/SKILL.md and replica-test/SKILL.md are not watched
-  (replica-architect/SKILL.md is, for its stack table).
+- **Watched paths** cover all eleven workflow folders, their templates/tools,
+  tests and LICENSE. The 2026-11-01 integration expands the earlier deliberate
+  subset at the same upstream commit; this is not a claim of a newer revision.
 - **Absorbed** is the date clone-odo took the content in, not the upstream
   commit date.
+
+## Eleven-workflow coverage
+
+The entry point is [the workflow index](references/workflow.md). Every stage has
+inputs, outputs, execution ownership and an evidence handback. This is adapted
+workflow coverage, not eleven newly installed skills or proof of a live clone.
+
+| Upstream workflow at the pinned commit | Local contract and artifacts |
+|---|---|
+| [replica-recon](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-recon/SKILL.md) | [SKILL.md](SKILL.md) sections 0-3, [recon](references/recon.md), recon-map/features templates |
+| [replica-architect](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-architect/SKILL.md) | [Architecture](references/architecture.md), architecture template, schema/API/jobs/access and build-order handback |
+| [replica-design](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-design/SKILL.md) | [Design/build](references/design-build.md), tokens and component templates, platform bindings/gallery/contrast |
+| [replica-build](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-build/SKILL.md) | [Design/build](references/design-build.md), build-log template, shell/core-slice/screens/states and matrix/ticket reconciliation |
+| [replica-backend](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-backend/SKILL.md) | [Backend](references/backend.md), backend template, migrations/auth/payment test-mode/jobs/integration/security evidence |
+| [replica-test](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-test/SKILL.md) | [Testing](references/testing.md), test/bug templates and adapted optional local-only web example; PRACTICE remains shared |
+| [replica-diff](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-diff/SKILL.md) | [Parity](references/parity.md), parity.py/imgdiff.py, behavioral report and honest ship gate |
+| [replica-entrepreneur](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-entrepreneur/SKILL.md) | [Reviews](references/reviews.md), reviews.py/themes.json, evidence/fixes/angle and handoff to pricing proposals |
+| [replica-brand](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-brand/SKILL.md) | [Brand](references/brand.md), sweep.py, independent name/palette/voice and dated checks |
+| [replica-launch](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-launch/SKILL.md) | [Launch](references/launch.md), landing/pricing/launch-plan templates and listing.py/root listing.json |
+| [replica-deploy](https://github.com/Jakeschincariol/replica-skill/blob/77c9436fb3d18c3d58169efb8caf4fe906b0dc51/replica-deploy/SKILL.md) | [Preflight](references/preflight.md) + [Deploy](references/deploy.md), deploy template, provider/DNS/monitoring/platform and approval handback |
+
+Adaptations: output paths remain `.skillator/clone/`; S and FL IDs and canonical
+F/B tickets remain distinct; root listing.json stays compatible with existing
+lint/preflight. Existing build/design/deploy skills execute the work. Launch now
+prepares research/proposals while the owner retains pricing, account and outbound
+action approval. Native platforms keep their own bindings/runners; the optional
+web example is not native or backend-idempotency proof. Provider/store values and
+requirements are verified when used, not copied as timeless prices, fees or DNS.
+
+The six Python tools remain local adaptations, including the feature-score ship
+bar and native-platform screenshot guidance. Their presence and tests do not
+resolve every separately logged defect (including A206-A208); no such fix or live
+validation is claimed by this workflow integration. MIT notice below covers new
+adapted recipes/templates as well; retain it with substantial derived copies
+when moving them outside this pack. The optional code example carries it inline. Upstream packaging, plugin metadata and
+standalone command names are excluded to preserve one cross-host skill.
 
 ## When the check reports a change
 

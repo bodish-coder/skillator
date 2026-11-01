@@ -1,0 +1,29 @@
+﻿{
+    "sources_read":  [
+                         "scenario.txt",
+                         "skills/clone-odo/SKILL.md",
+                         "skills/clone-odo/references/clean-room.md",
+                         "skills/clone-odo/references/reviews.md",
+                         ".skillator/clone/feedback.md",
+                         ".skillator/clone/reviews.csv"
+                     ],
+    "commands_run":  [
+                         "Get-Content -LiteralPath scenario.txt",
+                         "Get-Content -LiteralPath skills/clone-odo/SKILL.md",
+                         "Get-Content -LiteralPath skills/clone-odo/references/clean-room.md,skills/clone-odo/references/reviews.md",
+                         "\u0026 ./skills/clone-odo/scripts/odo.ps1 reviews .skillator/clone/reviews.csv --out .skillator/clone/feedback.md",
+                         "sh skills/clone-odo/scripts/odo.sh reviews .skillator/clone/reviews.csv --out .skillator/clone/feedback.md",
+                         "Get-Content -LiteralPath .skillator/clone/feedback.md",
+                         "Get-Content -LiteralPath .skillator/clone/reviews.csv",
+                         "Write answer.md with Set-Content; write evidence.json with ConvertTo-Json and Set-Content"
+                     ],
+    "command_results":  {
+                            "powershell_runner":  "Exit 1: unsigned script blocked by execution policy.",
+                            "shell_runner":  "Exit 0: wrote .skillator/clone/feedback.md"
+                        },
+    "changed_files":  [
+                          ".skillator/clone/feedback.md",
+                          "answer.md",
+                          "evidence.json"
+                      ]
+}

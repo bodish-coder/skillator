@@ -113,11 +113,11 @@ and any name from `avoid` anywhere in the listing. Exit 1 on an error.
 It knows the App Store and Google Play; a Microsoft Store listing is checked
 by eye against that store's own limits (not linted), and the same `avoid` names apply.
 
-Apple's App Review Guideline 4.1 (Copycats) rejects an app that copies a
-popular one or makes minor changes to its name or UI: the fixes and the
-clone's own brand are what get it through, so they show in the screenshots
-and the description's first lines. No invented proof — no testimonials, user
-counts, star ratings or press logos — and no reviewer quotes.
+Check the current official store copycat/review requirements before uploading.
+A distinct brand and demonstrated improvements are evidence, not a guarantee of
+approval. No invented testimonials, user counts, ratings, press logos or reviewer
+quotes as testimonials.
 
-Not here: the landing page (design-arwen builds it), pricing (the owner
-decides it), the launch plan.
+Continue with [Launch](launch.md): landing and pricing proposals, listing/media
+readiness and the owner-approved launch plan. design-arwen builds the page;
+the owner retains pricing and outbound-action decisions.

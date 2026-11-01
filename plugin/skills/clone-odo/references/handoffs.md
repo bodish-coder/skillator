@@ -2,7 +2,8 @@
 
 clone-odo owns the map, the matrix, the tickets for the must-haves, the
 reviews, parity, the rebrand sweep, the listing lint and the preflight gate.
-Everything else is another skill's job. Each block below says what clone-odo
+Implementation is another skill's job; clone-odo supplies complete stage contracts
+through [the workflow index](workflow.md). Each block below says what clone-odo
 passes, what the other skill owns, and what clone-odo checks when it comes
 back. The guard (SKILL.md §0, `clean-room.md`) travels with every hand-off.
 
@@ -30,7 +31,9 @@ back. The guard (SKILL.md §0, `clean-room.md`) travels with every hand-off.
 | data, auth, payments, email (all platforms) | Postgres on Supabase or Neon with Drizzle or Prisma; Supabase Auth or Auth.js; Stripe; Resend or Postmark | PlanetScale or Turso; Clerk; Lemon Squeezy or Paddle; SES |
 
 One database, no microservices; the clone needs the original's features, not
-its architecture. Schema, API, migrations and build order are build-jarvis's.
+its architecture. Schema, API, migrations and build order are build-jarvis's execution work.
+Require [architecture.md](architecture.md) and its template as the handback;
+[backend.md](backend.md) supplies the backend acceptance contract.
 
 **Owns**: the stack, the schema, migrations and access rules, the API, auth,
 payments, email, integrations through official APIs with the user's own keys,
@@ -38,7 +41,9 @@ and every screen's code.
 
 **Comes back**: the screen built, the row's `clone` flipped `no → partial →
 yes`, the ticket closed. clone-odo checks that the row and the ticket agree
-(`odo.sh parity` shows a closed ticket on a `no` row as drift).
+by reading TICKETS.md and the feature row together. `parity.py` ignores the
+`ticket` column, so this reconciliation is explicit, not a claimed tool check.
+[Design/build](design-build.md) defines the screen-state ledger and evidence.
 
 ## Design — `skillator:design-arwen`
 
@@ -56,7 +61,9 @@ yes`, the ticket closed. clone-odo checks that the row and the ticket agree
 every screen's craft, the landing page.
 
 **Comes back**: `.skillator/clone/design/tokens.json`, which
-`odo.sh contrast` checks, and components built on original assets only.
+`odo.sh contrast` checks, token bindings and `design/components.md`, a primitive
+gallery/captures, and components built on original assets only. See
+[Design/build](design-build.md) for measured roles and state acceptance.
 
 ## Test — PRACTICE §4-5 and `skillator:screenshot-argus`
 
@@ -80,7 +87,8 @@ The severity token `[S1]`..`[S4]` opens the detail, so preflight's "no open S1
 or S2" is one grep. The steps, expected, actual and evidence go in
 `.skillator/clone/bugs/B<n>.md`, the template's second part — never a
 `bugs.md`, never a multi-line block on the board. "Might be an issue" is a
-separate to-check list. The clone is tested, never the original.
+separate to-check list. The clone is tested, never the original. [Testing](testing.md) supplies the
+clone-specific automation/manual/evidence recipe and optional web example.
 
 ## Deploy — `skillator:deploy-merlin` or `skillator:deploy-niyoj`
 
@@ -91,9 +99,14 @@ separate to-check list. The clone is tested, never the original.
 live payments, OAuth redirects, monitoring, store builds. The user buys and
 signs in; no skill enters a card, a password or a live key.
 
-**Comes back**: the clone live under the user's own name.
+**Comes back**: `.skillator/clone/deploy.md` with the actual checks, release
+revision/URL or artifact, recovery/monitoring and remaining manual work, using
+[Deploy](deploy.md). A prepared or blocked handoff is never called live.
 
-## Not handed on, not absorbed
+## Launch proposals
 
-Pricing is the owner's decision. A launch plan is the owner's. Neither has a
-skill; clone-odo lists the review evidence for both and stops there.
+clone-odo prepares the [launch contract](launch.md): landing brief, researched
+pricing alternatives, listing and launch plan. design-arwen builds the page.
+The owner approves prices, account settings, purchases and outbound posts;
+research/proposals never authorize those actions. Return evidence and outstanding
+decisions before preflight rather than stopping without the requested plan.

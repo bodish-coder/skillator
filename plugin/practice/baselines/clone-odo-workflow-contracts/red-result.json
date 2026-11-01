@@ -1,0 +1,114 @@
+{
+  "stage_contracts_found": 6,
+  "stage_contracts": {
+    "partial": [
+      "entrepreneur",
+      "deployment"
+    ],
+    "generic_or_absent": [
+      "architecture",
+      "backend",
+      "launch"
+    ],
+    "total_requested": 11,
+    "definition": "Explicit inputs, handback and acceptance documented; generic delegation not counted. Build explicit at feature level only.",
+    "explicit": [
+      "recon",
+      "design",
+      "build",
+      "test",
+      "diff",
+      "brand"
+    ]
+  },
+  "gaps": [
+    {
+      "detail": "Schema/API/migrations/build-order assigned to build-jarvis; jobs and architecture output/acceptance not defined.",
+      "citation": "skills/clone-odo/references/handoffs.md#Build",
+      "missing": "Explicit architecture handback artifact/schema/API/jobs/build-order contract and template",
+      "stage": "architecture"
+    },
+    {
+      "detail": "Screen states recorded in recon; build handback updates feature row and ticket only.",
+      "citation": "skills/clone-odo/references/recon.md#Step 3; skills/clone-odo/references/handoffs.md#Build",
+      "missing": "Screen-state build completion ledger and state-by-state update/acceptance operation",
+      "stage": "build"
+    },
+    {
+      "detail": "Backend ownership delegated without independent acceptance contract.",
+      "citation": "skills/clone-odo/references/handoffs.md#Build",
+      "missing": "Backend acceptance checklist and evidence handback for races, access isolation, payment webhook idempotency, API/jobs",
+      "stage": "backend"
+    },
+    {
+      "detail": "Pricing owner decision; research unresearched/blocked; no prices inferred from example listing.",
+      "citation": "skills/clone-odo/references/reviews.md#The fix plan; skills/clone-odo/references/handoffs.md#Not handed on, not absorbed",
+      "missing": "Pricing research/comparison and pricing recommendation artifact/procedure",
+      "stage": "entrepreneur"
+    },
+    {
+      "detail": "Landing page assigned to design-arwen without a proposal format.",
+      "citation": "skills/clone-odo/references/brand.md#final paragraph; skills/clone-odo/references/handoffs.md#Design",
+      "missing": "Landing-page proposal artifact and acceptance contract",
+      "stage": "entrepreneur"
+    },
+    {
+      "detail": "Explicitly left to owner; no scaffold created.",
+      "citation": "skills/clone-odo/references/handoffs.md#Not handed on, not absorbed; skills/clone-odo/references/brand.md#final paragraph",
+      "missing": "Launch plan scaffold, launch proposal procedure, deliverables and acceptance",
+      "stage": "launch"
+    },
+    {
+      "detail": "External deploy skills own these checklists; pack provides preflight only. Provider/account choices remain owner actions.",
+      "citation": "skills/clone-odo/references/preflight.md#final paragraph; skills/clone-odo/references/handoffs.md#Deploy",
+      "missing": "Production domain/DNS/email/live-payment/OAuth/monitoring checks with executable steps and evidence",
+      "stage": "deployment"
+    },
+    {
+      "detail": "Pack summarizes testing requirements but full referenced instructions are not supplied; no external retrieval allowed.",
+      "citation": "skills/clone-odo/references/handoffs.md#Test",
+      "missing": "Full referenced PRACTICE sections 4-5",
+      "stage": "test"
+    },
+    {
+      "detail": "Handoff claims parity shows drift; other instructions explicitly state ticket column ignored. Manual reconciliation required; no tool behavior asserted.",
+      "citation": "skills/clone-odo/references/handoffs.md#Build; skills/clone-odo/SKILL.md#3; skills/clone-odo/references/parity.md#Step 1",
+      "missing": "Reliable documented automated ticket-to-feature drift check",
+      "stage": "build"
+    }
+  ],
+  "created_files": [
+    "project/stage-contracts.md",
+    "project/retrieval-result.json"
+  ],
+  "access_scope": {
+    "excluded": "No checkout/global skills/upstream content/other agents/browser/accounts/installs/model CLIs/production/ticket writes",
+    "enumeration": "File names within supplied pack and project clone directory",
+    "fixture": "C:/Users/Ikran/AppData/Local/Temp/skillator-replica-baseline-mr1u9qvq",
+    "actions": "Read provided pack and synthetic requirements; wrote planning/retrieval artifacts only",
+    "sources_read": [
+      "scenario.txt",
+      "skills/clone-odo/SKILL.md",
+      "project/.skillator/clone/recon.md",
+      "project/.skillator/clone/features.csv",
+      "skills/clone-odo/references/brand.md",
+      "skills/clone-odo/references/clean-room.md",
+      "skills/clone-odo/references/handoffs.md",
+      "skills/clone-odo/references/parity.md",
+      "skills/clone-odo/references/preflight.md",
+      "skills/clone-odo/references/recon.md",
+      "skills/clone-odo/references/reviews.md",
+      "skills/clone-odo/templates/bug-report.md",
+      "skills/clone-odo/templates/features.csv",
+      "skills/clone-odo/templates/listing.example.json",
+      "skills/clone-odo/templates/recon-map.md",
+      "skills/clone-odo/templates/test-plan.md",
+      "skills/clone-odo/templates/tokens.json"
+    ]
+  },
+  "scaffold_decisions": {
+    "architecture": "Not created: no explicit contract",
+    "launch": "Not created: no explicit contract"
+  },
+  "execution_status": "Planning only. No build, tests, provider setup, pricing research or shipping performed."
+}

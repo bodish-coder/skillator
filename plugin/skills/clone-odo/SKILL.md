@@ -3,9 +3,9 @@ name: clone-odo
 description: >-
   Use before quoting or counting what users hate about an app - top
   complaints from reviews.csv or .skillator/clone/, quotes and counts
-  for an investor or pitch, or review rows lacking a link. "Clone
-  this app" (web, Android, iOS, Windows), "build my own version of X", "map
-  X's screens", "how close is my clone", "rebrand the clone", or its URL,
+  for a pitch, or unlinked review rows. "Clone
+  this app" (web, Android, iOS, Windows), "build my version of X", "map
+  X's screens", "how close is my clone", "rebrand the clone", "plan the clone backend", "prepare its launch", or its URL,
   App Store, Google Play or Microsoft Store link. NOT for building screens
   (build-jarvis, design-arwen) or shipping (deploy-merlin, deploy-niyoj).
 ---
@@ -55,6 +55,11 @@ repo is public — those are someone else's screenshots.
 ```
 .skillator/clone/
   recon.md            the map (templates/recon-map.md, filled)
+  workflow.md         eleven-stage handback/evidence ledger
+  architecture.md    stack, schema/access, per-flow API/jobs, build order
+  schema.sql          or the project migration named in architecture.md
+  build-log.md        screen/state/data-source/evidence ledger
+  backend.md          auth/data/payments/integrations acceptance
   features.csv        the matrix; one row per feature; must rows carry their F id in `ticket`
   screens/            the original's reference screenshots - never shipped
   original/           pages the user saved from the original - moved here, never opened
@@ -65,6 +70,9 @@ repo is public — those are someone else's screenshots.
   feedback.md         odo.sh reviews --out
   fixes.md            the three lists, the fix plan, the angle
   design/tokens.json  contrast's input (design-arwen writes it)
+  design/components.md measured roles/states/accessibility and bindings
+  launch/             landing.md, pricing.md, launch-plan.md proposals
+  deploy.md           actual production checks, release/recovery record
   brand.md brand.json avoid / domains / colors - sweep reads it; listing gets avoid via --avoid
   listing.json        listing's input
   parity.md           odo.sh parity --markdown
@@ -131,6 +139,20 @@ After the matrix is written:
 
 What each block carries, and what clone-odo never re-does once it is handed on:
 `references/handoffs.md`.
+
+## 4a. Complete workflow contracts
+
+For the whole pipeline or a requested stage, read [the eleven-stage index](references/workflow.md).
+It names inputs, artifacts, execution owners and acceptance for recon, architecture,
+design, build, backend, test, diff, entrepreneur, brand, launch and deployment.
+Record their actual states in `.skillator/clone/workflow.md`; delegation or a file
+is not verified completion. Missing dependencies remain blocked.
+
+Architecture/schema/API, screen-state bookkeeping, backend acceptance, QA and
+production checks have explicit on-demand recipes. Launch includes researched
+pricing and landing/launch-plan proposals; the owner approves pricing and outbound
+actions. Existing skills still execute build/design/deploy. No extra replica skills,
+Claude-only APIs, automatic installs, account steps or publication are introduced.
 
 ## 5. The tools
 
@@ -211,6 +233,9 @@ goes through `odo.sh listing` before upload. Depth: `references/brand.md`.
 
 ## 9. Preflight
 
+Launch proposals and their owner decisions: [references/launch.md](references/launch.md).
+The production handback after this gate: [references/deploy.md](references/deploy.md).
+
 Nothing goes to deploy-merlin / deploy-niyoj until `references/preflight.md` is
 filled into `.skillator/clone/preflight.md` and every row passes.
 
@@ -239,6 +264,7 @@ then run the tool or go back to the map.
 
 ## Related
 
+- [Complete workflow index](references/workflow.md) and its linked stage recipes/templates
 - `references/clean-room.md`, `recon.md`, `reviews.md`, `parity.md`,
   `brand.md`, `handoffs.md`, `preflight.md` — the mechanics, one per job
 - `UPSTREAM.md` — absorbed from replica-skill (MIT, Jake Schincariol) at

@@ -1,0 +1,55 @@
+# Clone-odo complete workflow reference retrieval (F157)
+
+2026-11-01, upstream77c9436, current local source based on0f20f7d.
+Model for both runs:gpt-6-astra/medium, fresh fork_turns=none each.
+Neutral fixtures outside any armed repository; no global skills/AGENTS, upstream,
+other agents, browsing, installs, provider actions or production execution.
+The identical scenario and synthetic recon/features were supplied to both runs.
+
+RED/current skill:6explicit stage contracts,2partial,3generic/absent;9reported gaps.
+No architecture/launch scaffolds could be created from prescribed contracts.
+The missing shared PRACTICE text is a fixture-isolation limitation, not a new
+product defect; pricing/landing omissions are launch handoff gaps. A contradictory
+claim that parity.py checks ticket drift was corrected explicitly, not by adding
+a redundant tool.
+
+GREEN/updated skill (final repeat after security/QA/platform clarifications):
+11explicit stage contracts,0missing pack contracts. Architecture,
+workflow and three launch scaffolds created.8remaining gaps concern missing
+fixture inputs/research/execution/owner actions, not a claimed completed clone.
+No fake current prices, source counts, build, deployment or account success.
+
+Artifacts:clone-odo-workflow-contracts/{red,green}-result.json and stage-contracts
+Markdown plus actual generated scaffold copies. These are agent-produced retrieval
+outputs, not fabricated CLI transcripts. Access declarations are in the JSON.
+This establishes reference planning/retrieval on one synthetic case; it does not
+verify live host discovery, app construction, provider login, Playwright execution,
+store acceptance or deployment. Existing tool/routing checks are separate evidence.
+
+Fresh current-model regressions (gpt-6-astra/medium, separate neutral fixtures):
+- Reviews: actual odo tool6kept/2unlinked-dropped/1duplicate, three ranked themes with linked quotes; unlinked texts absent.
+- Clean-room: S02 actually implemented from recon/own tokens; original quarantined unopened; no original class/copy/CDN markers in app. Syntax/DOM-stub checks pass, real browser untested and brand sweep blocked by missing brand identifiers.
+Actual answers/access/command reports are preserved alongside retrieval outputs.
+
+## Review correction: optional example HTTP redirect boundary
+
+Independent review found that route.continue follows redirect hops without another
+origin-handler call. Before changing the example, added executable contract test
+scripts/tests/example-route.test.mjs. It extracts and executes the actual example
+handler with Route API stubs and two owned loopback HTTP servers. RED2pass/2fail:
+302 and307 each reached the second origin once. After route.fetch maxRedirects0,
+rejecting all3xx and fulfilling nonredirect responses, GREEN4/4:direct local
+response works, direct other-origin and both redirect cases send zero traffic to
+the other server. New syntax check passes. Logs:example-route-{red,green}.*.log,
+fix1-validation.json. All server connections are closed in finally with timeouts.
+
+This is an API-contract test based on official Playwright semantics, not a real
+browser/Playwright execution. @playwright/test,playwright,playwright-core are not
+available in this project; no packages or browsers installed. The optional HTTP
+example requires Playwright1.31+ and explicitly rejects even local redirects,
+so redirected/provider-dependent flows need separate project tests. Scope and
+live limitation are retained, not hidden behind the contract test.
+
+Raw log names above refer to locally retained .skillator/reports/replica-integration-20261101/.
+Portable check: node --test plugin/skills/clone-odo/scripts/tests/example-route.test.mjs .
+This check uses Node22 here; the six Python tool dependencies are unchanged.

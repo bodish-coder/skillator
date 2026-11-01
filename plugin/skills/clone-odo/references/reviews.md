@@ -83,7 +83,8 @@ Thin themes are listed as thin. Three angry comments are not a trend.
 The top 5 to 8 by evidence times cost to fix. For each: what to build or
 change, a size (S, M, L), which skill builds it, and the evidence. Each one
 becomes a row in `features.csv` with `original` set to `no`. Pricing and
-billing complaints are the owner's call; list them, do not price.
+billing complaints feed [the launch pricing proposal](launch.md); research and
+present alternatives, with the final pricing decision retained by the owner.
 
 ## The angle
 

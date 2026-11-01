@@ -1,0 +1,110 @@
+{
+  "stage_contracts_found": 11,
+  "explicit_contract_stages": [
+    "recon",
+    "architecture",
+    "design",
+    "build",
+    "backend",
+    "test",
+    "diff",
+    "entrepreneur",
+    "brand",
+    "launch",
+    "deployment"
+  ],
+  "generic_only_delegations": 0,
+  "missing_requested_stage_contracts": 0,
+  "gaps": [
+    {
+      "kind": "external_contract_not_bundled",
+      "missing": "Execution-skill internals and full shared PRACTICE sections 4?5 are not in this pack; stage handbacks are explicit, but complete executor procedures cannot be retrieved here.",
+      "pack_citation": "references/workflow.md:38?43; references/testing.md:3?4; references/handoffs.md ?? Test/Deploy"
+    },
+    {
+      "kind": "fixture_input",
+      "missing": "Observed per-screen states/routes, screenshot measurements, detailed field confidence and real source links; approved synthetic scope exists, no external recon verification.",
+      "pack_citation": "references/recon.md ?? Steps 2?6; references/design-build.md:5?19"
+    },
+    {
+      "kind": "execution_evidence",
+      "missing": "Actual schema/migration, selected stack, exact API paths/jobs applicability and isolated migration/race/access results.",
+      "pack_citation": "references/architecture.md:8?33"
+    },
+    {
+      "kind": "execution_evidence",
+      "missing": "Design token bindings/components/gallery, implemented screens/state build log, backend code/.env.example and acceptance evidence.",
+      "pack_citation": "references/design-build.md:11?43; references/backend.md:26?38"
+    },
+    {
+      "kind": "execution_evidence",
+      "missing": "Runnable clone/runner, FL specs/results, matching screenshots and parity/behavior evidence; no tests or parity run.",
+      "pack_citation": "references/testing.md:16?42; references/parity.md:11?79"
+    },
+    {
+      "kind": "research_input",
+      "missing": "Linked review/changelog corpus, tool counts, fixes/positioning and researched current prices; pricing explicitly unresearched.",
+      "pack_citation": "references/reviews.md:8?100; references/launch.md:19?32"
+    },
+    {
+      "kind": "research_and_owner_decision",
+      "missing": "Measured brand roles, dated identity screenings, real product claims/image, built landing evidence, approved pricing/channels/consent.",
+      "pack_citation": "references/brand.md:12?91; references/launch.md:3?48"
+    },
+    {
+      "kind": "owner_and_release_evidence",
+      "missing": "Approved candidate/go, selected production host/accounts/domain/payment providers, exact DNS, tested migration/restore, live provider checks and monitoring/rollback record.",
+      "pack_citation": "references/preflight.md:3?49; references/deploy.md:3?44"
+    }
+  ],
+  "created_files": [
+    "project/stage-contracts.md",
+    "project/.skillator/clone/architecture.md",
+    "project/.skillator/clone/launch/landing.md",
+    "project/.skillator/clone/launch/pricing.md",
+    "project/.skillator/clone/launch/launch-plan.md",
+    "project/.skillator/clone/workflow.md",
+    "project/retrieval-result.json"
+  ],
+  "access_scope": {
+    "root": "C:\\Users\\Ikran\\AppData\\Local\\Temp\\skillator-replica-case-p48i5nc1",
+    "sources_read": [
+      "scenario.txt",
+      "project/.skillator/clone/recon.md",
+      "project/.skillator/clone/features.csv",
+      "skills/clone-odo/SKILL.md",
+      "skills/clone-odo/references/architecture.md",
+      "skills/clone-odo/references/backend.md",
+      "skills/clone-odo/references/brand.md",
+      "skills/clone-odo/references/clean-room.md",
+      "skills/clone-odo/references/deploy.md",
+      "skills/clone-odo/references/design-build.md",
+      "skills/clone-odo/references/handoffs.md",
+      "skills/clone-odo/references/launch.md",
+      "skills/clone-odo/references/parity.md",
+      "skills/clone-odo/references/preflight.md",
+      "skills/clone-odo/references/recon.md",
+      "skills/clone-odo/references/reviews.md",
+      "skills/clone-odo/references/testing.md",
+      "skills/clone-odo/references/workflow.md",
+      "skills/clone-odo/templates/architecture.md",
+      "skills/clone-odo/templates/backend.md",
+      "skills/clone-odo/templates/bug-report.md",
+      "skills/clone-odo/templates/build-log.md",
+      "skills/clone-odo/templates/deploy.md",
+      "skills/clone-odo/templates/design-components.md",
+      "skills/clone-odo/templates/features.csv",
+      "skills/clone-odo/templates/landing.md",
+      "skills/clone-odo/templates/launch-plan.md",
+      "skills/clone-odo/templates/listing.example.json",
+      "skills/clone-odo/templates/pricing.md",
+      "skills/clone-odo/templates/recon-map.md",
+      "skills/clone-odo/templates/test-plan.md",
+      "skills/clone-odo/templates/tokens.json",
+      "skills/clone-odo/templates/workflow.md"
+    ],
+    "inventory_only": "Fixture file paths enumerated; no script bodies, upstream, other agents or external/global instructions read.",
+    "network_or_production_execution": false
+  },
+  "verification": "Planning artifacts only; no implementation, provider setup, tests, parity or shipping success asserted."
+}
