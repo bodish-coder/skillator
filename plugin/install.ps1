@@ -352,6 +352,9 @@ function Get-AgyIde {
 
 # Write-Muse: F134 - install or update the skillator plugin for Muse Code CLI when muse is available
 function Write-Muse {
+  # Windows PowerShell surfaces native stderr as ErrorRecords; diagnostics must
+  # not bypass exit-code handling (especially the failed-install rollback).
+  $ErrorActionPreference = 'Continue'
   $muse = ''
   if ($env:SKILLATOR_MUSE) {
     if (Test-Path -LiteralPath $env:SKILLATOR_MUSE -PathType Leaf) { $muse = $env:SKILLATOR_MUSE }
@@ -367,7 +370,7 @@ function Write-Muse {
     if (Test-Path (Join-Path $pluginPath 'plugin\.muse-plugin\plugin.json')) {
       $pluginPath = Join-Path $pluginPath 'plugin'
     } else {
-      return
+      throw 'Muse: selected source has no .muse-plugin/plugin.json'
     }
   }
 
@@ -380,37 +383,67 @@ function Write-Muse {
   $prevNoAuto = $env:MUSE_NO_AUTO_UPDATE
   $env:MUSE_NO_AUTO_UPDATE = '1'
   try {
-    $listJson = & $muse plugins list --json 2>$null | Out-String
-    $hasSkillator = $false
-    if ($LASTEXITCODE -eq 0 -and $listJson) {
-      try {
-        $parsed = ConvertFrom-Json $listJson -ErrorAction SilentlyContinue
-        if ($parsed.plugins) {
-          foreach ($p in $parsed.plugins) {
-            if ($p.record.id -eq 'skillator' -or $p.plugin.id -eq 'skillator') {
-              $hasSkillator = $true
-              break
-            }
-          }
-        }
-      } catch { }
+    function Normalize-MusePath([string]$path) {
+      $path = $path.Replace('\', '/') -replace '^//\?/', ''
+      if ($path -match '^[A-Za-z]:/') { $path = $path.ToLowerInvariant() }
+      return $path.TrimEnd('/')
     }
-
-    if ($hasSkillator) {
+    function Read-MuseRecord {
+      $json = & $muse plugins list --json | Out-String
+      if ($LASTEXITCODE -ne 0) { throw 'Muse: plugins list failed; no reliable installed state' }
+      $list = ConvertFrom-Json $json -ErrorAction Stop
+      if ($null -eq $list -or $list.plugins -isnot [Array]) { throw 'Muse: invalid plugins list JSON' }
+      $matches = @($list.plugins | Where-Object { $_.record.id -ceq 'skillator' })
+      if ($matches.Count -gt 1) { throw 'Muse: ambiguous Skillator records; inspect muse plugins list --json manually' }
+      if ($matches.Count -eq 0) { return $null }
+      $entry = $matches[0]
+      $record = $entry.record
+      # The CLI global registry omits record.scope and reports installed-plugin.
+      if (-not $record.scope -and $entry.active_scope -ceq 'installed-plugin') {
+        $record | Add-Member -NotePropertyName scope -NotePropertyValue user -Force
+      }
+      return $record
+    }
+    $manifest = Get-Content -LiteralPath (Join-Path $pluginPath '.muse-plugin/plugin.json') -Raw | ConvertFrom-Json -ErrorAction Stop
+    if ($manifest.name -cne 'skillator' -or $manifest.version -isnot [string] -or -not $manifest.version.Trim()) { throw 'Muse: invalid selected Skillator manifest' }
+    $before = Read-MuseRecord
+    $scope = 'user'
+    $local = $true
+    if ($before) {
+      if ($before.enabled -isnot [bool] -or $before.enabled -ne $true -or $before.scope -cne 'user') { throw 'Muse: disabled or unsupported scope; preserve this installation manually (CLI remove/update has no scope selector)' }
+      $scope = $before.scope
+      $local = $before.source.provenance -ceq 'native-local'
+      if (-not $local -and $before.source.provenance -cne 'marketplace-user-added') { throw 'Muse: unsupported provenance; inspect installation manually' }
+      if ($local -and ($before.source.path -isnot [string] -or -not $before.source.path)) { throw 'Muse: missing native-local source path' }
+    }
+    if ($before -and $local -and (Normalize-MusePath $before.source.path) -cne (Normalize-MusePath $pluginPath)) {
+      $o = & $muse plugins remove skillator --json 2>&1 | Out-String
+      if ($LASTEXITCODE -ne 0) { throw "Muse: remove failed (data retained): $o" }
+      $o = & $muse plugins install $pluginPath --scope $scope --json 2>&1 | Out-String
+      if ($LASTEXITCODE -ne 0) {
+        $rollback = & $muse plugins install $before.source.path --scope $scope --json 2>&1 | Out-String
+        $rollbackCode = $LASTEXITCODE
+        throw "Muse: selected-source install failed: $o Rollback exit ${rollbackCode}: $rollback"
+      }
+    } elseif ($before) {
       $o = & $muse plugins update skillator --json 2>&1 | Out-String
-      if ($LASTEXITCODE -eq 0) {
-        Write-Host "        * Muse plugin skillator updated"
-      } else {
-        Write-Host "warn  Muse plugin update failed: $o" -ForegroundColor Yellow
-      }
+      if ($LASTEXITCODE -ne 0) { throw "Muse: update failed: $o" }
     } else {
-      $o = & $muse plugins install "$pluginPath" --json 2>&1 | Out-String
-      if ($LASTEXITCODE -eq 0) {
-        Write-Host "        * Muse plugin skillator installed ($pluginPath)"
-      } else {
-        Write-Host "warn  Muse plugin install failed: $o" -ForegroundColor Yellow
-      }
+      $o = & $muse plugins install $pluginPath --scope $scope --json 2>&1 | Out-String
+      if ($LASTEXITCODE -ne 0) { throw "Muse: install failed: $o" }
     }
+    $after = Read-MuseRecord
+    if (-not $after -or $after.version -cne $manifest.version -or $after.enabled -isnot [bool] -or $after.enabled -ne $true -or $after.scope -cne $scope) {
+      throw "Muse: verification failed; expected version $($manifest.version), enabled, scope $scope; got version $($after.version). Inspect muse plugins list --json manually."
+    }
+    if (($local -and ($after.source.provenance -cne 'native-local' -or (Normalize-MusePath $after.source.path) -cne (Normalize-MusePath $pluginPath))) -or
+        (-not $local -and ($after.source.provenance -cne $before.source.provenance -or $after.source.path -cne $before.source.path))) {
+      throw 'Muse: source verification failed; inspect muse plugins list --json manually'
+    }
+    Write-Host "        * Muse plugin skillator verified $($after.version) ($($after.source.path))"
+    Write-Host '        If runtime capabilities await approval, review: muse plugins approve skillator'
+  } catch {
+    throw "Muse update failed: $($_.Exception.Message)"
   } finally {
     $env:MUSE_NO_AUTO_UPDATE = $prevNoAuto
   }

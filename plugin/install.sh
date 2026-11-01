@@ -377,7 +377,8 @@ agy_ide() {
 # put_muse: F134 - install or update the skillator plugin for Muse Code CLI when muse is available
 put_muse() {
   _muse=""
-  if [ -n "${SKILLATOR_MUSE:-}" ] && [ -x "$SKILLATOR_MUSE" ]; then
+  if [ -n "${SKILLATOR_MUSE:-}" ]; then
+    [ -x "$SKILLATOR_MUSE" ] || return 0
     _muse="$SKILLATOR_MUSE"
   elif command -v muse >/dev/null 2>&1; then
     _muse=$(command -v muse)
@@ -389,7 +390,8 @@ put_muse() {
     if [ -f "$_plug_dir/plugin/.muse-plugin/plugin.json" ]; then
       _plug_dir="$_plug_dir/plugin"
     else
-      return 0
+      echo 'Muse: selected source has no .muse-plugin/plugin.json' >&2
+      return 1
     fi
   fi
 
@@ -399,20 +401,69 @@ put_muse() {
     return 0
   fi
 
-  _list=$(MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins list --json 2>/dev/null || true)
-  if echo "$_list" | grep -q '"id":[[:space:]]*"skillator"'; then
-    if MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins update skillator --json >/dev/null 2>&1; then
-      echo "        * Muse plugin skillator updated"
-    else
-      echo "warn  Muse plugin update failed" >&2
-    fi
-  else
-    if MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins install "$_plug_dir" --json >/dev/null 2>&1; then
-      echo "        * Muse plugin skillator installed ($_plug_dir)"
-    else
-      echo "warn  Muse plugin install failed" >&2
-    fi
-  fi
+  # Only the Muse integration needs Node for strict JSON parsing; skill copying does not.
+  command -v node >/dev/null 2>&1 || { echo 'Muse: Node is required to validate plugin JSON; no Muse changes made' >&2; return 1; }
+  muse_json() {
+    node -e '
+      const fs = require("fs"), [mode, arg, expected] = process.argv.slice(1);
+      const norm = p => { p = p.replace(/\\/g, "/").replace(/^\/\/\?\//, "").replace(/\/+$/, ""); return /^[a-z]:\//i.test(p) ? p.toLowerCase() : p; };
+      try {
+        const data = JSON.parse(fs.readFileSync(0, "utf8").replace(/^\uFEFF/, ""));
+        if (mode === "manifest") {
+          if (data.name !== "skillator" || typeof data.version !== "string" || !data.version.trim()) throw Error("invalid selected Skillator manifest");
+          console.log(data.version);
+        } else if (mode === "record") {
+          if (!data || !Array.isArray(data.plugins)) throw Error("invalid plugins list JSON");
+          const entries = data.plugins.filter(p => p?.record?.id === "skillator");
+          if (entries.length > 1) throw Error("ambiguous Skillator records; inspect manually");
+          if (!entries.length) { console.log("null"); process.exit(0); }
+          const {record, active_scope} = entries[0];
+          if (!record.scope && active_scope === "installed-plugin") record.scope = "user";
+          console.log(JSON.stringify(record));
+        } else if (mode === "policy") {
+          if (data === null) console.log("install");
+          else {
+            if (data.enabled !== true || data.scope !== "user") throw Error("disabled or unsupported scope; preserve installation manually (CLI remove/update has no scope selector)");
+            if (data.source?.provenance === "marketplace-user-added") console.log("update");
+            else if (data.source?.provenance !== "native-local") throw Error("unsupported provenance; inspect installation manually");
+            else if (typeof data.source.path !== "string" || !data.source.path) throw Error("missing native-local source path");
+            else console.log(norm(data.source.path) === norm(arg) ? "update" : "migrate");
+          }
+        } else if (mode === "scope") console.log(data?.scope || "user");
+        else if (mode === "path") console.log(data.source.path);
+        else if (mode === "verify") {
+          const before = JSON.parse(expected), local = !before || before.source.provenance === "native-local";
+          const [path, version] = JSON.parse(arg);
+          if (!data || data.version !== version || data.enabled !== true || data.scope !== (before?.scope || "user")) throw Error("verification failed: expected version " + version + ", enabled and original scope; got version " + data?.version + "; inspect muse plugins list --json manually");
+          if (local ? data.source?.provenance !== "native-local" || typeof data.source.path !== "string" || norm(data.source.path) !== norm(path) : data.source?.provenance !== before.source.provenance || data.source?.path !== before.source.path) throw Error("source verification failed; inspect muse plugins list --json manually");
+        }
+      } catch (e) { console.error("Muse: " + e.message); process.exit(1); }
+    ' "$@"
+  }
+  _version=$(muse_json manifest < "$_plug_dir/.muse-plugin/plugin.json") || return 1
+  _list=$(MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins list --json) || { echo 'Muse: plugins list failed' >&2; return 1; }
+  _before=$(printf '%s' "$_list" | muse_json record) || return 1
+  _action=$(printf '%s' "$_before" | muse_json policy "$_plug_dir") || return 1
+  _scope=$(printf '%s' "$_before" | muse_json scope) || return 1
+  case $_action in
+    migrate)
+      _old_path=$(printf '%s' "$_before" | muse_json path) || return 1
+      MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins remove skillator --json || { echo 'Muse: remove failed (data retained)' >&2; return 1; }
+      if ! MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins install "$_plug_dir" --scope "$_scope" --json; then
+        echo 'Muse: selected-source install failed; attempting old-source rollback' >&2
+        MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins install "$_old_path" --scope "$_scope" --json || echo 'Muse: rollback also failed; restore old source manually' >&2
+        return 1
+      fi ;;
+    update) MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins update skillator --json || { echo 'Muse: update failed' >&2; return 1; } ;;
+    install) MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins install "$_plug_dir" --scope "$_scope" --json || { echo 'Muse: install failed' >&2; return 1; } ;;
+  esac
+  _list=$(MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins list --json) || { echo 'Muse: post-update list failed' >&2; return 1; }
+  _after=$(printf '%s' "$_list" | muse_json record) || return 1
+  _expected=$(node -e 'console.log(JSON.stringify(process.argv.slice(1)))' "$_plug_dir" "$_version") || return 1
+  printf '%s' "$_after" | muse_json verify "$_expected" "$_before" || return 1
+  _verified_path=$(printf '%s' "$_after" | muse_json path) || return 1
+  echo "        * Muse plugin skillator verified $_version ($_verified_path)"
+  echo '        If runtime capabilities await approval, review: muse plugins approve skillator'
 }
 
 # put_agy_ext <skills-dir>: F57 - the ops board in the Antigravity IDE (command "skillator:

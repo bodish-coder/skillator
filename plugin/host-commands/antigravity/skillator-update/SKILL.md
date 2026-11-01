@@ -38,24 +38,20 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
    Antigravity IDE's ops board: on Windows
    `powershell -NoProfile -ExecutionPolicy Bypass -File "<src>/install.ps1" -Force`, elsewhere
    `sh "<src>/install.sh" --force`. A non-zero exit → show the last lines of its output and stop.
-4. **Muse** - only when `muse` is on PATH.
-   If `muse plugins list --json` does not list `skillator`:
-   Install it via `muse plugins install <src>/plugin` (or `<src>` if `<src>` has `.muse-plugin/plugin.json`).
-   If `muse plugins list --json` lists `skillator`:
-   Its `source.provenance` is `marketplace-user-added` → `muse plugins marketplace update <name>`
-   (`<name>`: the dir after `marketplaces\` in `source.path`), then `muse plugins remove skillator`
-   and `muse plugins install skillator@<name>` - a plain `update` re-reads the old snapshot and
-   changes nothing. Otherwise it refreshes from the dir it was installed from (`source.path` in
-   that list, a `\\?\` prefix dropped), not from step 2's source - a git clone there that step 2 did not pull →
-   `git -C <that dir> pull --ff-only` first, failing as in step 2. Then
-   `muse plugins update skillator` - or, when that dir has no `.muse-plugin/plugin.json` but
-   `<that dir>/plugin/.muse-plugin/plugin.json` exists (installed before F91 moved the plugin
-   into `plugin/`), `muse plugins remove skillator` then `muse plugins install <that dir>/plugin`
-   instead (install refuses a second source; remove keeps the plugin data). Either way note the
-   old and new `version`. It reports a runtime
-   capability awaiting approval → show `muse plugins approve skillator` to the user, never
-   run it on your own.
-5. **Report** one table: host, old -> new version (new: `version` in
+4. **Muse** - handled by the installer in step 3; do not repeat installation afterward.
+   The installer verifies the installed version against `<src>/.muse-plugin/plugin.json`.
+   For enabled user-level native-local installs it also verifies the selected source path,
+   migrating from an older cache when needed without deleting plugin data. Marketplace
+   installs retain their provenance; a stale version is an error requiring manual attention,
+   never permission to convert to a local install. Disabled or unsupported scopes stop safely.
+   The shell installer's Muse integration requires Node for JSON validation; other host skill
+   copying does not. Missing Muse is skipped: report `Muse: not installed/skipped`, not updated.
+   Report the installer's verified Muse version/source, or its failure; do not infer success
+   from step 2's source version. If old version was not captured, report `unknown`.
+   Runtime capabilities awaiting approval → show `muse plugins approve skillator` to the user,
+   never execute approval automatically. A verified version does not imply runtime approval.
+5. **Report** one table: host, old -> new version (Muse: verified result from step 4;
+   other hosts' new: `version` in
    `<src>/.claude-plugin/plugin.json`, or `<src>/plugin/.claude-plugin/plugin.json` when `<src>` is a
    clone root; old: step 1's list for Claude Code, else that file in the
    dir `.skillator-source` named before step 3 rewrote it, else `unknown`), what was written.
