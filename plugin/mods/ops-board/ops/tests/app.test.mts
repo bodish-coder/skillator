@@ -205,6 +205,31 @@ test('ps1 launcher refuses an old node with exit 2', { skip: !win }, () => {
 const FAKE_TTY = 'data:text/javascript,' + encodeURIComponent(
   "process.stdin.isTTY = true; process.stdin.setRawMode = on => { process.stderr.write('raw:' + on + '\\n'); return process.stdin }")
 
+test('live: Messages login confirmation cancels without launching or saving at 60 columns', async () => {
+  const s = fixtureSkills()
+  const child = spawn(process.execPath, ['--import', FAKE_TTY, '--import', pathToFileURL(join(ops, 'loader.mjs')).href, join(ops, 'app.ts'),
+    '--cols', '60', '--rows', '24', '--no-color', '--ascii', '--tab', 'messages', '--skills', s.dir], { cwd: fixtureRepo() })
+  let out = '', err = '', stage = 0
+  child.stderr.setEncoding('utf8').on('data', (d: string) => { err += d })
+  child.stdout.setEncoding('utf8').on('data', (d: string) => {
+    out += d
+    const plain = d.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    if (stage === 0 && plain.includes('Messages')) { stage = 1; child.stdin.write('s') }
+    else if (stage === 1 && plain.includes('Teams setup')) { stage = 2; child.stdin.write('\t\t\t\t\t\r') }
+    else if (stage === 2 && plain.includes('y sign in')) { stage = 3; child.stdin.write('n') }
+    else if (stage === 3 && plain.includes('enter activate/save')) { stage = 4; child.stdin.write('\x1b'); setTimeout(() => child.stdin.write('q'), 700) }
+  })
+  const timer = setTimeout(() => child.kill(), 60000)
+  const code = await new Promise<number | null>(resolve => child.on('close', resolve))
+  clearTimeout(timer)
+  assert.equal(code, 0, err + out.slice(-1200))
+  assert.equal(stage, 4)
+  assert.match(out, /Sign in to Dev Tunnels/)
+  assert.match(out, /y sign in/)
+  assert.doesNotMatch(out, /Opening sign-in terminal|Sign-in terminal opened/)
+  assert.doesNotMatch(readFileSync(s.log, 'utf8'), /config save|user login/)
+})
+
 test('live: alt screen, hidden cursor, raw keys; 2 reads the runs, q quits and restores the terminal', async () => {
   const s = fixtureSkills()
   const child = spawn(process.execPath, ['--import', FAKE_TTY, '--import', pathToFileURL(join(ops, 'loader.mjs')).href, join(ops, 'app.ts'),

@@ -10,7 +10,7 @@ export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' 
   | 'relay-stage-landed'
   | 'usage-level'
   | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'
-  | 'team-setup-check'
+  | 'team-setup-check' | 'team-login' | 'team-login-status'
   | 'run-scan' | 'run-rename'
 
 // Exists under a skills dir: what marks a directory as one.
@@ -37,7 +37,7 @@ export const up = (p: string, n: number) => {
 // [@handle, name, emails comma-joined]; meta-team-remove / meta-team-lead [@handle]; relay-resume and
 // relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; relay-stage-landed [RUN-id, n, sha];
 // run-rename [id, name]; team-setup-check none; others none.
-type ScriptCall = Exclude<Call, 'holo-ticket' | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'>
+type ScriptCall = Exclude<Call, 'holo-ticket' | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail' | 'team-login' | 'team-login-status'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
   'pending':            { script: PENDING, sh: a => a, ps: a => a },
   'pending-kv':         { script: PENDING, sh: a => ['--kv', ...a], ps: a => ['--kv', ...a] },
@@ -101,7 +101,7 @@ export const findNode = (pathEnv: string | undefined, win: boolean, exists: (p: 
 export async function findExe(name: string, pathEnv: string | undefined, win: boolean, exists: (p: string) => Promise<boolean>): Promise<string | null> {
   for (const raw of (pathEnv ?? '').split(win ? ';' : ':')) {
     const d = raw.trim().replace(/^"(.*)"$/, '$1')
-    if (!(win ? /^[A-Za-z]:[\\/]/.test(d) : d.startsWith('/'))) continue
+    if (!(win ? /^[A-Za-z]:[\\/]/.test(d) : d.startsWith('/') && !d.startsWith('//'))) continue
     const c = norm(d) + '/' + (win ? name + '.exe' : name)
     try { if (await exists(c)) return c } catch { /* not there */ }
   }
@@ -115,6 +115,46 @@ export const systemRoot = (v: string | undefined) => {
   return /^[A-Za-z]:[\\/]/.test(s) ? norm(s) : 'C:/Windows'
 }
 export const powershellExe = (sysRoot: string | undefined) => systemRoot(sysRoot) + '/System32/WindowsPowerShell/v1.0/powershell.exe'
+
+type LoginCall = 'team-login' | 'team-login-status'
+export const LOGIN_OPENED = 'Sign-in terminal opened. Finish there, then choose Refresh status.'
+export const LOGIN_FAILED = 'Sign-in terminal launch could not be confirmed. Check for an existing console before retrying.'
+const NO_DEVTUNNEL = 'Dev Tunnels was not found on absolute PATH entries. Install devtunnel, then retry.'
+const NO_POWERSHELL = 'Windows PowerShell was not found. Restore system PowerShell, then retry.'
+const LOGIN_UNSUPPORTED = 'Opening a sign-in terminal is unavailable on this platform. Run devtunnel user login in your terminal, then choose Refresh status.'
+const STATUS_FAILED = 'Could not check Dev Tunnels sign-in status. Check devtunnel, then choose Refresh status.'
+const SIGNED_IN = 'Signed in to Dev Tunnels.'
+const SIGNED_OUT = 'Not signed in to Dev Tunnels.'
+const STATUS_UNKNOWN = 'Could not determine Dev Tunnels sign-in status.'
+const LOGIN_ERRORS = [NO_DEVTUNNEL, NO_POWERSHELL, LOGIN_UNSUPPORTED]
+
+export async function devTunnelsArgv(call: LoginCall, win: boolean,
+  env: { path?: string; systemRoot?: string }, exists: (path: string) => Promise<boolean>): Promise<{ argv: string[] } | { error: string }> {
+  if (call === 'team-login' && !win) return { error: LOGIN_UNSUPPORTED }
+  const bin = await findExe('devtunnel', env.path, win, exists)
+  if (!bin) return { error: NO_DEVTUNNEL }
+  if (call === 'team-login-status') return { argv: [bin, 'user', 'show'] }
+  const ps = powershellExe(env.systemRoot)
+  try { if (!await exists(ps)) return { error: NO_POWERSHELL } } catch { return { error: NO_POWERSHELL } }
+  const literal = "'" + bin.replace(/'/g, "''") + "'"
+  const script = "$ErrorActionPreference='Stop'; Start-Process -FilePath " + literal
+    + " -ArgumentList @('user','login') -WindowStyle Normal -ErrorAction Stop | Out-Null"
+  return { argv: [ps, '-NoProfile', '-NonInteractive', '-Command', script] }
+}
+
+// Normalize at the adapter boundary, then again at the UI boundary for other hosts.
+// Only these fixed messages may survive; never retain account output or spawn errors.
+export function loginStatus(r: { code: number; out: string; err: string }): string {
+  if (LOGIN_ERRORS.includes(r.err)) return r.err
+  if (/\bnot (?:logged|signed) in\b/i.test(r.out + '\n' + r.err)) return SIGNED_OUT
+  if (r.code !== 0) return STATUS_FAILED
+  if (r.out === SIGNED_IN || /\blogged in as\b/i.test(r.out)) return SIGNED_IN
+  if (r.out === SIGNED_OUT) return SIGNED_OUT
+  return STATUS_UNKNOWN
+}
+export function loginMessage(r: { code: number; out: string; err: string }): string {
+  return r.code === 0 ? LOGIN_OPENED : LOGIN_ERRORS.includes(r.err) ? r.err : LOGIN_FAILED
+}
 export const tasklistExe = (sysRoot: string | undefined) => systemRoot(sysRoot) + '/System32/tasklist.exe'
 // POSIX guarantees /bin/sh; naming it needs no PATH (Ruling A150: no lookup there).
 export const BIN_SH = '/bin/sh'

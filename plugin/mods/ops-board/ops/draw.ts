@@ -187,8 +187,9 @@ function keysOf(s: State, m: Model): Seg[][] {
   if (s.help?.filtering) return [[dim('type filter')], h('enter apply', 'return'), cancel]
   if (s.help?.expanded) return [move, h('enter/esc back', 'return'), h('/ filter', '/'), h('c copy ref', 'c'), cancel]
   if (s.help) return [move, h('enter doc', 'return'), h('/ filter', '/'), h('c copy ref', 'c'), cancel]
+  if (s.setup?.confirmLogin) return [h('y sign in', 'y'), h('n cancel', 'n'), cancel]
   if (s.setup?.confirmClear) return [h('y clear', 'y'), h('n cancel', 'n')]
-  if (s.setup) return [field, h('space on/off', 'space'), h('enter save', 'return'), cancel]
+  if (s.setup) return [field, h('space on/off', 'space'), h('enter activate/save', 'return'), cancel]
   if (s.person) return [field, h('enter add', 'return'), cancel]
   if (s.dialog) return s.dialogField === 'ticket' ? [[dim('type the ID')], h('tab person', 'tab'), h('enter confirm', 'return'), cancel]
     : [[{ text: '[↑', dim: true, action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ person]', dim: true, action: { kind: 'key', key: { name: 'down' } } }], [{ text: '[a', dim: true, action: { kind: 'key', key: { name: 'a' } } }, dim(' / '), { text: 'd kind]', dim: true, action: { kind: 'key', key: { name: 'd' } } }], h('tab ticket', 'tab'), h('enter confirm', 'return'), cancel]
@@ -688,10 +689,31 @@ function messagesBody(s: State, h: number): Seg[][] {
 function setupBody(s: State): Seg[][] {
   const ls = setupLines(s)
   const res = s.setup?.result ? '  ' + s.setup.result : null
-  const rows: Boxed['rows'] = ls.slice(1).map((l, i) => ({ text: l, color: l === res ? 'error' : undefined,
-    action: i < 5 ? { kind: 'setup-field', field: (['token', 'url', 'port', 'posts', 'clear'] as const)[i]! } : undefined,
-    segs: s.setup?.confirmClear && i === 7 ? [dim('  clear the saved Teams settings? ('), { text: 'y', dim: true, action: { kind: 'key', key: { name: 'y' } } }, dim('/'), { text: 'n', dim: true, action: { kind: 'key', key: { name: 'n' } } }, dim(')')]
-      : i === ls.length - 2 ? [dim('  '), hot('tab next field', 'tab'), dim(' · '), hot('space on/off', 'space'), dim(' · '), hot('enter save', 'return'), dim(' · '), hot('esc cancel', 'escape')] : undefined }))
+  const rows: Boxed['rows'] = []
+  const inner = innerOf(s)
+  const confirming = s.setup?.confirmLogin || s.setup?.confirmClear
+  for (const [i, l] of ls.slice(1, -1).entries()) {
+    const action: PointerAction | undefined = !confirming && i < 7
+      ? { kind: 'setup-field', field: (['token', 'url', 'port', 'posts', 'clear', 'login', 'loginStatus'] as const)[i]! } : undefined
+    if (i < 7) { rows.push({ text: l, action }); continue }
+    // Prose wraps; fields and action labels keep a single stable hit row.
+    let line = ' '
+    for (const word of clean(l).trim().split(/\s+/)) {
+      if (cells(line + ' ' + word) > inner && line.trim()) { rows.push({ text: line, color: l === res ? 'error' : undefined }); line = ' ' }
+      line += ' ' + word
+    }
+    if (line.trim()) rows.push({ text: line, color: l === res ? 'error' : undefined })
+  }
+  const actions = s.setup?.confirmLogin ? [hot('y sign in', 'y'), hot('n cancel', 'n'), hot('esc cancel', 'escape')]
+    : s.setup?.confirmClear ? [hot('y clear', 'y'), hot('n cancel', 'n'), hot('esc cancel', 'escape')]
+    : [hot('tab next field', 'tab'), hot('space on/off', 'space'), hot('enter activate/save', 'return'), hot('esc cancel', 'escape')]
+  let segs: Seg[] = [dim('  ')]
+  for (const action of actions) {
+    if (width(segs) + cells(action.text) + 3 > inner && segs.length > 1) { rows.push({ text: '', segs }); segs = [dim('  ')] }
+    if (segs.length > 1) segs.push(dim(' · '))
+    segs.push(action)
+  }
+  rows.push({ text: '', segs })
   return boxBody(s, { title: ls[0] ?? '', rows })
 }
 

@@ -7,7 +7,7 @@ import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, Per
 import type { Call } from '../hooks/lib/calls'
 import type { Model, View } from '../hooks/lib/ticketsmodel'
 import type { RunResult } from './nodehost'
-import { NO_SCRIPTS } from '../hooks/lib/calls'
+import { NO_SCRIPTS, loginMessage, loginStatus } from '../hooks/lib/calls'
 import { appliedHead, appliedLine, applyOf, assignedTickets, buildModel, canApply, decideTickets, HEAD, headKey, isHead, isUserHead, isUserSectionOpen, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME, ticketById, visible } from '../hooks/lib/board'
@@ -96,9 +96,9 @@ export function point(s: State, a: PointerAction): Step {
   if (a.kind === 'start-run-field') return s.startRun ? { state: { ...s, startRun: { ...s.startRun, field: a.field } }, effects: [] } : same
   if (a.kind === 'person-field') return s.person ? { state: { ...s, personField: a.field }, effects: [] } : same
   if (a.kind === 'setup-field') {
-    if (!s.setup || s.setup.confirmClear) return same
+    if (!s.setup || s.setup.confirmClear || s.setup.confirmLogin) return same
     const next = { ...s, setupField: a.field }
-    return a.field === 'posts' ? reduce(next, { name: 'space' }) : a.field === 'clear' ? reduce(next, { name: 'return' }) : { state: next, effects: [] }
+    return a.field === 'posts' ? reduce(next, { name: 'space' }) : ['clear', 'login', 'loginStatus'].includes(a.field) ? reduce(next, { name: 'return' }) : { state: next, effects: [] }
   }
   if (s.person || s.setup) return same
   if (a.kind === 'ticket-field') return s.dialog ? { state: { ...s, dialogField: 'ticket' }, effects: [] } : same
@@ -161,7 +161,7 @@ export type State = {
   help: HelpState | null                       // F127: Help & Skills guide viewer
   explorer: ExState                        // F75: the Explorer tab (ops/explorer.ts)
 } & RunState                               // F79: the Run tab's file, row, form, job
-export type Setup = SetupValues & { result: string | null; confirmClear: boolean; touched: boolean }
+export type Setup = SetupValues & { result: string | null; confirmClear: boolean; touched: boolean; formId: object; confirmLogin: boolean; loginBusy: boolean; loginMessage: string | null }
 
 export type Step = { state: State; effects: Effect[] }
 // A run's result folded into the state as it then is; it may ask for more effects.
@@ -1031,7 +1031,7 @@ export function onInbox(s: State, text: string, readId: string | null): State {
 const teamWhy = (r: RunResult, what: string) => (timedOut(r) ? `${what} did not finish in 30 s` : why(r, what).replace(/^team: /, ''))
 
 const openSetup = (s: State): State =>
-  ({ ...s, setup: { ...freshSetup(s.teamsCfg), result: null, confirmClear: false, touched: false }, setupField: 'token' })
+  ({ ...s, setup: { ...freshSetup(s.teamsCfg), result: null, confirmClear: false, touched: false, formId: {}, confirmLogin: false, loginBusy: false, loginMessage: null }, setupField: 'token' })
 
 // `config show` read: the view kept; `auto` (entering the tab) opens the form when no
 // token is saved yet; a form not typed in yet takes the saved port and posts.
@@ -1069,9 +1069,25 @@ function clearSetup(s: State): Step {
 
 const TEXT_FIELDS: Partial<Record<SetupField, 'token' | 'url' | 'port'>> = { token: 'token', url: 'url', port: 'port' }
 
+function runLogin(s: State, call: 'team-login' | 'team-login-status'): Step {
+  const v = s.setup!
+  if (v.loginBusy) return { state: s, effects: [] }
+  return {
+    state: { ...s, setupField: 'loginStatus', setup: { ...v, confirmLogin: false, loginBusy: true,
+      loginMessage: call === 'team-login' ? 'Opening sign-in terminal...' : 'Checking sign-in status...' } },
+    effects: [run(call, [], r => x => x.setup?.formId !== v.formId ? x : {
+      ...x, setup: { ...x.setup, loginBusy: false, loginMessage: call === 'team-login' ? loginMessage(r) : loginStatus(r) },
+    })],
+  }
+}
+
 function setupKey(s: State, k: Key): Step {
   const v = s.setup!
   const same = { state: s, effects: [] }
+  if (v.confirmLogin) {
+    if (k.name === 'y') return runLogin(s, 'team-login')
+    return k.name === 'n' || k.name === 'escape' ? { state: { ...s, setupField: 'login', setup: { ...v, confirmLogin: false } }, effects: [] } : same
+  }
   if (v.confirmClear) {
     if (k.name === 'y') return clearSetup(s)
     return k.name === 'n' || k.name === 'escape' ? { state: { ...s, setup: { ...v, confirmClear: false } }, effects: [] } : same
@@ -1083,6 +1099,11 @@ function setupKey(s: State, k: Key): Step {
   }
   const set = (patch: Partial<SetupValues>): Step => ({ state: { ...s, setup: { ...v, ...patch, result: null, touched: true } }, effects: [] })
   const tf = TEXT_FIELDS[f]
+  if ((k.name === 'return' || k.name === 'enter' || k.name === 'space') && (f === 'login' || f === 'loginStatus')) {
+    if (v.loginBusy) return same
+    return f === 'loginStatus' ? runLogin(s, 'team-login-status')
+      : { state: { ...s, setup: { ...v, confirmClear: false, confirmLogin: true } }, effects: [] }
+  }
   switch (k.name) {
     case 'escape': return { state: { ...s, setup: null }, effects: [] }
     case 'tab': return field(k.shift ? -1 : 1)
@@ -1113,11 +1134,14 @@ export function setupLines(s: State): string[] {
     `${cur('port')}Port           ${v.port}${caret('port')}`,
     `${cur('posts')}Status posts   ${v.posts ? '[x] on' : '[ ] off'}`,
     `${cur('clear')}[ Clear the saved settings ]`,
-    '',
+    `${cur('login')}[ Sign in to Dev Tunnels ]`,
+    `${cur('loginStatus')}[ Refresh status ]`,
+    `  ${v.loginMessage ?? 'Sign-in status has not been checked.'}`,
     `  Saves ${cfg?.path || '~/.skillator/teams.json'} - this user only, outside every repo`]
+  if (v.confirmLogin) out.push('  Sign in to Dev Tunnels? A terminal and browser may open. This signs in your local Dev Tunnels account.')
   if (v.confirmClear) out.push('  clear the saved Teams settings? (y/n)')
   if (v.result) out.push(`  ${v.result}`)
-  out.push('  tab next field · space on/off · enter save · esc cancel')
+  out.push(v.confirmLogin ? '  y sign in · n cancel · esc cancel' : '  tab next field · space on/off · enter activate/save · esc cancel')
   return out
 }
 

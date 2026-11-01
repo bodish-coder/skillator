@@ -1,4 +1,7 @@
 import { test, after } from 'node:test'
+import childProcess from 'node:child_process'
+import { syncBuiltinESMExports } from 'node:module'
+import { EventEmitter } from 'node:events'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -13,6 +16,67 @@ const mkTmp = (prefix: string): string => { const d = mkdtempSync(prefix); tmpDi
 after(() => { for (const d of tmpDirs) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) })
 
 const fwd = (p: string) => p.replace(/\\/g, '/')
+
+test('Dev Tunnels calls use fixed absolute argv and redact results at the Node boundary', async () => {
+  const dir = mkTmp(join(tmpdir(), 'ops-login-'))
+  const host = await isolated(dir, () => makeHost({ appDir: '/missing', cwd: dir }))
+  const win = process.platform === 'win32'
+  writeFileSync(join(dir, win ? 'devtunnel.exe' : 'devtunnel'), '')
+  const savedPath = process.env.PATH
+  const original = childProcess.spawn
+  const seen: { bin: string; args: readonly string[]; opts: unknown }[] = []
+  let response = { code: 0, out: 'Logged in as synthetic-test-identity', err: '' }
+  let throws = false
+  childProcess.spawn = ((bin: string, args: readonly string[], opts: unknown) => {
+    seen.push({ bin, args, opts })
+    if (throws) throw new Error('private spawn failure')
+    const child = new EventEmitter() as any
+    child.stdout = new EventEmitter(); child.stdout.setEncoding = () => child.stdout
+    child.stderr = new EventEmitter(); child.stderr.setEncoding = () => child.stderr
+    child.stdin = new EventEmitter(); child.stdin.end = () => {}
+    child.kill = () => {}
+    queueMicrotask(() => { child.stdout.emit('data', response.out); child.stderr.emit('data', response.err); child.emit('close', response.code) })
+    return child
+  }) as typeof childProcess.spawn
+  syncBuiltinESMExports()
+  process.env.PATH = dir
+  try {
+    for (const [out, code, expected] of [['Logged in as synthetic-test-identity', 0, 'Signed in to Dev Tunnels.'], ['Not logged in', 1, 'Not signed in to Dev Tunnels.'], ['unexpected', 0, 'Could not determine Dev Tunnels sign-in status.']] as const) {
+      response = { out, code, err: '' }
+      const result = await host.run('team-login-status', [])
+      assert.equal(result.out || result.err, expected)
+      assert.deepEqual(seen.at(-1)?.args, ['user', 'show'])
+      assert.equal(seen.at(-1)?.bin, fwd(join(dir, win ? 'devtunnel.exe' : 'devtunnel')))
+      assert.doesNotMatch(JSON.stringify(result), /synthetic-test-identity/)
+    }
+    if (win) {
+      response = { code: 0, out: 'private login output', err: '' }
+      const result = await host.run('team-login', [])
+      assert.match(result.out, /^Sign-in terminal opened/)
+      assert.equal(seen.at(-1)?.bin, powershellExe(process.env.SystemRoot ?? process.env.SYSTEMROOT))
+      assert.deepEqual(seen.at(-1)?.args.slice(0, 3), ['-NoProfile', '-NonInteractive', '-Command'])
+      assert.match(seen.at(-1)?.args[3] ?? '', /-ArgumentList @\('user','login'\)/)
+      for (const code of [1, -1]) {
+        response = { code, out: 'private', err: 'private' }
+        assert.match((await host.run('team-login', [])).err, /^Sign-in terminal launch could not be confirmed/)
+      }
+      throws = true
+      assert.match((await host.run('team-login', [])).err, /^Sign-in terminal launch could not be confirmed/)
+      throws = false
+    } else assert.match((await host.run('team-login', [])).err, /unavailable on this platform/)
+    const count = seen.length
+    await host.run('team-login', ['bad'])
+    await host.run('team-login-status', [], '')
+    assert.equal(seen.length, count)
+    process.env.PATH = '.'
+    assert.match((await host.run('team-login-status', [])).err, /not found/)
+    assert.equal(seen.length, count)
+  } finally {
+    childProcess.spawn = original
+    syncBuiltinESMExports()
+    if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath
+  }
+})
 
 // makeHost reads process.env: point every lookup at an empty temp home for the call, so
 // this machine's own plugin install is not found.

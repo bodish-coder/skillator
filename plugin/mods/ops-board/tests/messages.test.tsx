@@ -2,6 +2,25 @@ import { test, expect, mock } from 'claude-code/testing'
 import type { On, ProcessRunResult } from 'claude-code'
 import type { Engine, MockClock } from 'claude-code/testing'
 
+test('login requires confirmation and cancel preserves the form', async ($, on) => {
+  const [w, clock] = world(on)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await ui.press({ key: 'key:setup' })
+  await clock.settle()
+  expect((await ui.find({ key: 'setup:login' }))?.text).toBe('Sign in to Dev Tunnels')
+  const before = w.runs.length
+  await ui.press({ key: 'setup:login' })
+  await clock.settle()
+  expect((await ui.find({ key: 'setup:login-yes' }))?.text).toBe('Sign in')
+  await ui.press({ key: 'setup:login-no' })
+  await clock.settle()
+  expect(w.runs.length).toBe(before)
+  expect(await ui.find({ key: 'setup:token' })).not.toBeNull()
+  await ui.unmount()
+})
+
 // F66: the Messages tab and the Teams setup form in the Claude Code pane. The inbox is
 // teams-uhura's (<repo>/.git/skillator/team-inbox.jsonl); the setup form's token is
 // masked as typed, never drawn back, and goes to `team.mjs config save` on stdin only.
@@ -17,22 +36,23 @@ const TOKEN = 'YS0zMi1ieXRlLXNlY3VyaXR5LXRva2VuLWZvci10c3Q='
 const CFG_NONE = '{"path":"/h/.skillator/teams.json","token":false,"workflowUrl":null,"port":3978,"statusPosts":false}\n'
 const CFG_SET = '{"path":"/h/.skillator/teams.json","token":true,"workflowUrl":"prod.example","port":4000,"statusPosts":true}\n'
 
-type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult }
+type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[] }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
-function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | null = '/r/.git'): [World, MockClock] {
+function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | null = '/r/.git', windows = false): [World, MockClock] {
   const w: World = {
     repoRoot, gitResult: commonGitDir ? ran(commonGitDir + '\r\n') : ran('', 128, 'not a git repository'),
     files: { [repoRoot + '/TICKETS.md']: '# Tickets\n\n- [ ] F1 — one\n', [ROOT + '/skills/tickets-zordon/scripts/ticket-meta.sh']: '#!/bin/sh\n',
       [BOX + '/team-inbox.jsonl']: INBOX, [BOX + '/team-inbox.read']: '1\n',
       // a node planted in the repo (the cwd, and the '.' PATH entry) - never what runs
       [NODE]: 'ELF', './node': 'PLANTED', '/r/node': 'PLANTED' },
-    runs: [], toasts: [], cfg, save: ran('saved: /h/.skillator/teams.json (this user only)\n'),
+    runs: [], toasts: [], cfg, save: ran('saved: /h/.skillator/teams.json (this user only)\n'), auth: ran(''), focuses: [],
   }
   const at = (p: string) => p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')
   const clock = mock.clock(on, { now: new Date(2026, 9, 23, 12, 0).getTime() })
-  mock.env(on, { SKILLATOR_ROOT: ROOT, HOME: '/h', PATH: '.:/usr/bin' })
+  mock.env(on, { SKILLATOR_ROOT: ROOT, HOME: '/h', ...(windows ? { OS: 'Windows_NT', PATH: 'C:/tools' } : { PATH: '.:/usr/bin' }) })
+  if (windows) for (const p of ['/tools/node.exe', '/tools/git.exe', '/tools/devtunnel.exe', '/Windows/System32/WindowsPowerShell/v1.0/powershell.exe']) w.files[p] = 'fixture'
   mock.store(on)
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.repo', () => ({ value: { root: w.repoRoot, remote: null, internal: false, name: 'r' } }))
@@ -52,13 +72,18 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
   on('fs.write', ($, e) => ({ deny: 'the mod must not write files: ' + e.path }))
   on('process.run', async ($, e) => {
     const a = e.argv
+    if (windows && a[0] === 'C:/tools/git.exe') return { value: ran(a[1] === 'config' ? 'vidul@ikran.in' : '/r/.git') }
+    if (a[0] === 'C:/tools/devtunnel.exe' || (a[0]?.endsWith('/powershell.exe') && a.includes('-Command'))) {
+      w.runs.push({ argv: a, stdin: e.init?.stdin })
+      return { value: await w.auth }
+    }
     if (a.join(' ') === 'git rev-parse --path-format=absolute --git-common-dir') {
       if (w.gitResult instanceof Error) throw w.gitResult
       return { value: w.gitResult }
     }
     if (a.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
     w.runs.push({ argv: a, stdin: e.init?.stdin })
-    if (a[0] === NODE && a[1] === TEAM_JS) {
+    if ((a[0] === NODE || a[0] === 'C:/tools/node.exe') && a[1] === TEAM_JS) {
       if (a[2] === 'config' && a[3] === 'show') return { value: ran(w.cfg) }
       if (a[2] === 'config' && a[3] === 'save') return { value: w.save }
       if (a[2] === 'config' && a[3] === 'clear') return { value: ran('cleared: /h/.skillator/teams.json\n') }
@@ -66,6 +91,7 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
       if (a[2] === 'inbox' && a[3] === 'mark-read') { w.files[commonGitDir + '/skillator/team-inbox.read'] = a[5] + '\n'; return { value: ran(`read up to ${a[5]}\n`) } }
     }
     // F98: the setup script's --check pass (sh here: no OS=Windows_NT in this world)
+    if (w.check && a.includes('--check') && a.some(p => /\/teams-uhura\/scripts\/setup\.(ps1|sh)$/.test(p))) return { value: await w.check }
     if (a[0] === '/bin/sh' && a[1] === ROOT + '/skills/teams-uhura/scripts/setup.sh' && a[2] === '--check') return { value: ran('node: v22.11.0\ndevtunnel: missing - the walk installs it\n\n  node        v22.11.0\n  devtunnel   missing\n', 1) }
     if (a.includes('decide')) return { value: ran('UNOBSERVABLE\n') }
     return { value: ran('', 1, 'not in this test') }
@@ -74,7 +100,7 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.status', () => ({ value: undefined }))
-  on('ui.focus', () => ({}))
+  on('ui.focus', ($, e) => { if (e.element) w.focuses.push(e.element); return {} })
   return [w, clock]
 }
 
@@ -84,6 +110,139 @@ async function start($: Engine, clock: MockClock) {
 }
 const PANE = { title: 'ops board', isFocused: true, bodyColumns: 96, placement: 'dock' as const, scroll: { offset: 0, bodyRows: 40 }, view: {} }
 const mount = ($: Engine) => $.ui.mount({ plugin: 'ops-board', surface: 'terminal', component: 'Pane', requestId: 'ops-board', props: PANE })
+
+test('login and refresh discard the older signed-out setup-check table and walk', async ($, on) => {
+  const [w, clock] = world(on, CFG_SET, '/r', '/r/.git', true)
+  w.check = ran('login: not signed in', 1)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await ui.press({ key: 'key:setup' })
+  await ui.input({ key: 'setup:port', text: '4321', kind: 'change' })
+  await ui.press({ key: 'setup:run' })
+  await ui.press({ key: 'setup:run-yes' })
+  await clock.settle()
+  expect((await ui.find({ key: 'setup:checked' }))?.text).toContain('login: not signed in')
+  await ui.press({ key: 'setup:login' })
+  await ui.press({ key: 'setup:login-no' })
+  await clock.settle()
+  expect((await ui.find({ key: 'setup:checked' }))?.text).toContain('login: not signed in')
+  await ui.press({ key: 'setup:login' })
+  await ui.press({ key: 'setup:login-yes' })
+  await clock.settle()
+  expect(await ui.find({ key: 'setup:checked' })).toBeUndefined()
+  expect(await ui.find({ key: 'setup:walk' })).toBeUndefined()
+  w.auth = ran('Logged in as synthetic-test-identity')
+  await ui.press({ key: 'setup:login-status' })
+  await clock.settle()
+  expect((await ui.find({ key: 'setup:login-message' }))?.text).toBe('Signed in to Dev Tunnels.')
+  expect((await ui.find({ key: 'setup:port' }))?.text).toBe('4321')
+  expect(JSON.stringify(await ui.drawn())).not.toContain('login: not signed in')
+  expect(w.runs.filter(r => r.argv[3] === 'save')).toHaveLength(0)
+  await ui.unmount()
+})
+
+for (const action of ['login', 'refresh', 'reopen'] as const) test(`late setup check cannot restore stale output after ${action}`, async ($, on) => {
+  const [w, clock] = world(on, CFG_SET, '/r', '/r/.git', true)
+  let finish!: (r: ProcessRunResult) => void
+  w.check = new Promise(resolve => { finish = resolve })
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await ui.press({ key: 'key:setup' })
+  await ui.press({ key: 'setup:run' })
+  await ui.press({ key: 'setup:run-yes' })
+  await clock.settle()
+  if (action === 'login') {
+    await ui.press({ key: 'setup:login' })
+    await ui.press({ key: 'setup:login-yes' })
+  } else if (action === 'refresh') {
+    w.auth = ran('Logged in as synthetic-test-identity')
+    await ui.press({ key: 'setup:login-status' })
+  } else {
+    await ui.press({ key: 'setup:cancel' })
+    await ui.press({ key: 'key:setup' })
+  }
+  await clock.settle()
+  finish(ran('login: not signed in', 1))
+  await clock.settle()
+  expect(await ui.find({ key: 'setup:checked' })).toBeUndefined()
+  expect(await ui.find({ key: 'setup:walk' })).toBeUndefined()
+  expect((await ui.find({ key: 'setup:login-message' }))?.text).toBe(action === 'refresh' ? 'Signed in to Dev Tunnels.' : action === 'login' ? 'Sign-in terminal opened. Finish there, then choose Refresh status.' : 'Sign-in status has not been checked.')
+  await ui.unmount()
+})
+
+test('login native frames: confirmed launch, pending, refresh, missing tool and preserved draft', async ($, on) => {
+  const [w, clock] = world(on, CFG_SET, '/r', '/r/.git', true)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await ui.press({ key: 'key:setup' })
+  await clock.settle()
+  await ui.input({ key: 'setup:port', text: '4321', kind: 'change' })
+  await ui.input({ key: 'setup:token', text: 'ylr', kind: 'change' })
+  await ui.press({ key: 'setup:login' })
+  await clock.settle()
+  await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: 'setup:login-no', origin: { kind: 'person' } })
+  expect((await ui.find({ key: 'setup:login-no' }))?.props.hotkey).toBe('n')
+  expect((await ui.find({ key: 'setup:login-confirm' }))?.text).toContain('A terminal and browser may open.')
+  expect(await ui.find({ key: 'setup:save' })).toBeUndefined()
+  let finish!: (r: ProcessRunResult) => void
+  w.auth = new Promise(resolve => { finish = resolve })
+  await ui.press({ key: 'setup:login-yes' })
+  await clock.settle()
+  expect((await ui.find({ key: 'setup:login-message' }))?.text).toBe('Opening sign-in terminal...')
+  await ui.press({ key: 'setup:login' })
+  await ui.press({ key: 'setup:login-status' })
+  expect(w.runs.filter(r => r.argv.includes('-Command'))).toHaveLength(1)
+  finish(ran('private login output'))
+  await clock.settle()
+  expect((await ui.find({ key: 'setup:login-message' }))?.text).toBe('Sign-in terminal opened. Finish there, then choose Refresh status.')
+  await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: 'setup:login-status', origin: { kind: 'person' } })
+  expect((await ui.find({ key: 'setup:save' }))?.props.hotkey).toBe('s')
+  expect((await ui.find({ key: 'setup:port' }))?.text).toBe('4321')
+  for (const [out, code, expected] of [['Logged in as synthetic-test-identity', 0, 'Signed in to Dev Tunnels.'], ['Not logged in', 1, 'Not signed in to Dev Tunnels.'], ['unknown', 0, 'Could not determine Dev Tunnels sign-in status.']] as const) {
+    w.auth = ran(out, code)
+    await ui.press({ key: 'setup:login-status' })
+    await clock.settle()
+    expect((await ui.find({ key: 'setup:login-message' }))?.text).toBe(expected)
+    expect(JSON.stringify(await ui.drawn())).not.toContain('synthetic-test-identity')
+  }
+  delete w.files['/tools/devtunnel.exe']
+  await ui.press({ key: 'setup:login-status' })
+  await clock.settle()
+  expect((await ui.find({ key: 'setup:login-message' }))?.text).toContain('Dev Tunnels was not found')
+  expect(w.runs.filter(r => r.argv[3] === 'save')).toHaveLength(0)
+  expect(w.toasts.join(' ')).not.toContain('private')
+  await ui.unmount()
+})
+
+test('native login cancellation and stale status cannot overwrite reopened form', async ($, on) => {
+  const [w, clock] = world(on, CFG_SET, '/r', '/r/.git', true)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await ui.press({ key: 'key:setup' })
+  await ui.press({ key: 'setup:login' })
+  await clock.settle()
+  await ui.press({ key: 'setup:login-no' })
+  await clock.settle()
+  await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: 'setup:login', origin: { kind: 'person' } })
+  expect((await ui.find({ key: 'setup:save' }))?.props.hotkey).toBe('s')
+  expect(w.runs.filter(r => r.argv.includes('-Command'))).toHaveLength(0)
+  let finish!: (r: ProcessRunResult) => void
+  w.auth = new Promise(resolve => { finish = resolve })
+  await ui.press({ key: 'setup:login-status' })
+  await clock.settle()
+  expect((await ui.find({ key: 'setup:login-message' }))?.text).toBe('Checking sign-in status...')
+  await ui.press({ key: 'setup:cancel' })
+  await ui.press({ key: 'key:setup' })
+  await clock.settle()
+  finish(ran('Logged in as synthetic-test-identity'))
+  await clock.settle()
+  expect((await ui.find({ key: 'setup:login-message' }))?.text).toBe('Sign-in status has not been checked.')
+  await ui.unmount()
+})
 
 test('the Messages tab: unread count on the tab, newest first, a read marker; mark all read runs teams-uhura', async ($, on) => {
   const [w, clock] = world(on)

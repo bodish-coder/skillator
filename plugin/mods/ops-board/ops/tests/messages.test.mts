@@ -2,7 +2,7 @@
 // standalone app, pi and the Antigravity IDE all draw these).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, onInbox, afterRun, settle } from '../state'
+import { initial, reduce, onInbox, afterRun, settle, point } from '../state'
 import type { State, Effect } from '../state'
 import { frame, cells } from '../draw'
 import { parseInbox, unreadCount } from '../../hooks/lib/inbox'
@@ -93,6 +93,85 @@ const openSetup = (cfg: string) => {
   const [show] = runs(st.effects)
   return show ? settle(show.then(ok(cfg))(st.state)).state : st.state
 }
+
+test('login selection confirms; escape cancels without saving', () => {
+  const s = { ...openSetup(CFG_SET), setupField: 'login' as const }
+  const ask = reduce(s, { name: 'return' })
+  assert.equal(ask.state.setup?.confirmLogin, true)
+  assert.deepEqual(ask.effects, [])
+  const cancel = reduce(ask.state, { name: 'escape' })
+  assert.ok(cancel.state.setup)
+  assert.equal(cancel.state.setup.confirmLogin, false)
+  assert.deepEqual(cancel.effects, [])
+})
+
+test('confirmed login runs once, preserves drafts, and ignores completion after close/reopen', () => {
+  let s = type(openSetup(CFG_SET), 'ylr')
+  assert.equal(s.setup?.token, 'ylr')
+  s = { ...s, setupField: 'login' }
+  const ask = reduce(s, { name: 'space' })
+  assert.equal(ask.state.setup?.confirmLogin, true)
+  assert.deepEqual(reduce(ask.state, { name: 'n' }).effects, [])
+  assert.equal(point(ask.state, { kind: 'setup-field', field: 'clear' }).state, ask.state)
+  const launched = reduce(ask.state, { name: 'y' })
+  const [launch] = runs(launched.effects)
+  assert.equal(launch?.call, 'team-login')
+  assert.deepEqual(launch?.args, [])
+  assert.equal(launch?.stdin, undefined)
+  assert.equal(launched.state.setup?.loginBusy, true)
+  assert.deepEqual(reduce(launched.state, { name: 'return' }).effects, [])
+  assert.deepEqual(reduce({ ...launched.state, setupField: 'login' }, { name: 'space' }).effects, [])
+  const done = afterRun(launch!, ok('private output'), launched.state, 0).state
+  assert.equal(done.setup?.token, 'ylr')
+  assert.equal(done.setup?.loginBusy, false)
+  assert.match(done.setup?.loginMessage ?? '', /^Sign-in terminal opened/)
+  assert.doesNotMatch(JSON.stringify(done), /private output/)
+  const reopened = press(launched.state, 'escape', 's')
+  assert.deepEqual(afterRun(launch!, ok(''), reopened, 0).state, reopened)
+})
+
+test('refresh is read-only, normalizes outcomes, suppresses duplicate refresh and ignores stale status', () => {
+  const s = { ...openSetup(CFG_SET), setupField: 'loginStatus' as const }
+  for (const [result, expected] of [
+    [ok('Logged in as synthetic-test-identity'), 'Signed in to Dev Tunnels.'],
+    [{ ...ok(''), code: 1, err: 'Not logged in' }, 'Not signed in to Dev Tunnels.'],
+    [ok('unknown'), 'Could not determine Dev Tunnels sign-in status.'],
+    [{ ...ok(''), code: -1, err: 'private error' }, 'Could not check'],
+  ] as const) {
+    const st = reduce(s, { name: 'return' })
+    const [effect] = runs(st.effects)
+    assert.equal(effect?.call, 'team-login-status')
+    assert.deepEqual(reduce(st.state, { name: 'return' }).effects, [])
+    const done = afterRun(effect!, result, st.state, 0).state
+    assert.ok(done.setup?.loginMessage?.startsWith(expected))
+    assert.equal(done.setup?.port, s.setup?.port)
+    assert.doesNotMatch(JSON.stringify(done), /synthetic-test-identity|private error/)
+    const reopened = press(st.state, 'escape', 's')
+    assert.deepEqual(afterRun(effect!, result, reopened, 0).state, reopened)
+  }
+})
+
+for (const cols of [60, 80, 100, 120]) test(`login frames ${cols}`, t => {
+  const base = { ...openSetup(CFG_SET), cols, rows: 24, setupField: 'login' as const }
+  const ask = reduce(base, { name: 'return' }).state
+  const launch = reduce(ask, { name: 'y' })
+  const opened = afterRun(runs(launch.effects)[0]!, ok(''), launch.state, 0).state
+  const refresh = reduce(opened, { name: 'return' })
+  const signed = afterRun(runs(refresh.effects)[0]!, ok('Logged in as synthetic-test-identity'), refresh.state, 0).state
+  const out = afterRun(runs(refresh.effects)[0]!, ok('Not logged in'), refresh.state, 0).state
+  const missing = afterRun(runs(launch.effects)[0]!, { ...ok(''), code: 127, err: 'Dev Tunnels was not found on absolute PATH entries. Install devtunnel, then retry.' }, launch.state, 0).state
+  for (const [name, state] of Object.entries({ base, ask, cancelled: press(ask, 'escape'), pending: launch.state, opened, refresh: refresh.state, signed, out, missing })) {
+    const lines = frame(state, { color: false, ascii: true, plain: true })
+    assert.ok(lines.length <= 24)
+    for (const line of lines) assert.ok(cells(line) <= cols, line)
+    const f = lines.join('\n')
+    assert.doesNotMatch(f, /[^\x00-\x7f]/)
+    assert.match(f, /\[ Sign in to Dev Tunnels \]/)
+    assert.match(f, /\[ Refresh status \]/)
+    if (name === 'ask') { assert.match(f, /y sign in/); assert.match(f, /n cancel/) }
+    if (process.env.LOGIN_FRAMES === '1') t.diagnostic(name + '\n' + f)
+  }
+})
 
 test('setup: the token is masked as typed and never in any frame; tab walks the fields; space toggles posts', () => {
   let s = openSetup(CFG_NONE)

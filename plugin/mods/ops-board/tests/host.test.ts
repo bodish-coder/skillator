@@ -53,6 +53,41 @@ const RM = 'relay-morpheus/hooks/relay-morpheus'
 const UW = 'watch-cortana/hooks/usage-watch'
 const META = '/tickets-zordon/scripts/ticket-meta.sh'
 
+test('Dev Tunnels dynamic calls bypass missing skills and redact process output', async () => {
+  const bin = 'C:/Tool Box/devtunnel.exe'
+  for (const result of [ran('Logged in as synthetic-test-identity'), ran('Not logged in', 1), ran('unexpected'), ran('private output', 1, 'private error')]) {
+    const [$, seen] = fake({ root: '/missing', env: { OS: 'Windows_NT', PATH: '.;C:/Tool Box' }, exists: [bin, PWSH], run: () => result })
+    const r = await runCall($, 'team-login-status', [])
+    expect(seen.runs[0]?.argv).toEqual([bin, 'user', 'show'])
+    expect(JSON.stringify(r).includes('synthetic-test-identity')).toBe(false)
+    expect(JSON.stringify(r).includes('private')).toBe(false)
+    expect(seen.runs[0]?.init?.timeoutMs).toBe(30000)
+  }
+  const [$, seen] = fake({ root: '/missing', env: { OS: 'Windows_NT', PATH: 'C:/Tool Box' }, exists: [bin, PWSH], run: () => ran('private login output') })
+  const r = await runCall($, 'team-login', [])
+  expect(r.out).toBe('Sign-in terminal opened. Finish there, then choose Refresh status.')
+  expect(seen.runs[0]?.argv[0]).toBe(PWSH)
+  expect(seen.runs[0]?.argv[4]).toContain("-ArgumentList @('user','login')")
+  expect(seen.runs[0]?.init?.stdin).toBeUndefined()
+  await runCall($, 'team-login', ['bad'])
+  await runCall($, 'team-login-status', [], '')
+  expect(seen.runs.length).toBe(1)
+})
+
+test('Dev Tunnels missing tools, unsupported platform and launch failures never expose raw errors', async () => {
+  for (const env of [{ OS: 'Windows_NT', PATH: '.' }, { OS: 'Windows_NT', PATH: 'C:/tools' }, { PATH: '/usr/bin' }]) {
+    const [$, seen] = fake({ env, exists: ['C:/tools/devtunnel.exe'] })
+    expect((await runCall($, 'team-login', [])).code).toBe(127)
+    expect(seen.runs.length).toBe(0)
+  }
+  for (const run of [() => ran('private', 1, 'private'), () => { throw new Error('timeout private') }]) {
+    const [$] = fake({ env: { OS: 'Windows_NT', PATH: 'C:/tools' }, exists: ['C:/tools/devtunnel.exe', PWSH], run })
+    const r = await runCall($, 'team-login', [])
+    expect(r.err).toBe('Sign-in terminal launch could not be confirmed. Check for an existing console before retrying.')
+    expect(r.out).toBe('')
+  }
+})
+
 test('argvFor joins the skills dir, no skills/ segment', () => {
   expect(argvFor('pending', false, '/s/skills', [], SH)).toEqual([SH, '/s/skills/' + PE + '.sh'])
   expect(argvFor('meta-assign', true, 'C:/u/.codex/skills', ['F1', '@a'], PWSH)).toEqual([...PS, 'C:/u/.codex/skills/' + TM + '.ps1', 'assign', 'F1', '@a'])

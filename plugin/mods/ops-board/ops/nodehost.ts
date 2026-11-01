@@ -5,7 +5,7 @@ import { spawn, execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, readFile, stat as fsStat, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join } from 'node:path'
-import { argvFor, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, systemRoot, up } from '../hooks/lib/calls'
+import { argvFor, devTunnelsArgv, loginMessage, loginStatus, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, systemRoot, up } from '../hooks/lib/calls'
 import { findBins } from '../hooks/lib/runentries'
 import type { Bins } from '../hooks/lib/runentries'
 import type { Call } from '../hooks/lib/calls'
@@ -183,6 +183,15 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
   return {
     win, skillsDir, repoRoot, inboxDir,
     async run(call, args, stdin) {
+      if (call === 'team-login' || call === 'team-login-status') {
+        if (args.length || stdin !== undefined) return { code: 1, out: '', err: 'Dev Tunnels actions accept no arguments or stdin.', argv: [] }
+        const env = process.env
+        const built = await devTunnelsArgv(call, platformWin(), { path: env.PATH ?? env.Path, systemRoot: env.SystemRoot ?? env.SYSTEMROOT }, fileExists)
+        if ('error' in built) return { code: 127, out: '', err: built.error, argv: [] }
+        const r = await spawnArgv(built.argv, repoRoot, 30000)
+        const message = call === 'team-login' ? loginMessage(r) : loginStatus(r)
+        return { code: r.code, out: r.code === 0 ? message : '', err: r.code === 0 ? '' : message, argv: built.argv }
+      }
       if (!skillsDir) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
       // F66 / A150: node, sh and powershell all by absolute path - never from the repo.
       let bin: string

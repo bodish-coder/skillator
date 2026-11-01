@@ -2,7 +2,7 @@ import type { FsEntry, ProcessRunInit, ProcessRunResult, SessionRepo, SessionUsa
 import type { Usage } from '../../types'
 import { usageFrom, usageFromFlags } from './facts'
 import type { Flag } from './facts'
-import { argvFor, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, up } from './calls'
+import { argvFor, devTunnelsArgv, loginMessage, loginStatus, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, up } from './calls'
 import type { Call } from './calls'
 export { argvFor, findNode, NO_SCRIPTS } from './calls'
 export type { Call } from './calls'
@@ -89,6 +89,18 @@ export async function gitBin($: HostApi): Promise<string | null> {
 export async function runCall($: HostApi, call: Call, args: string[], stdin?: string): Promise<{ code: number; out: string; err: string; argv: string[] }> {
   const win = await isWindows($)
   const repo = await $.session.repo()
+  if (call === 'team-login' || call === 'team-login-status') {
+    if (args.length || stdin !== undefined) return { code: 1, out: '', err: 'Dev Tunnels actions accept no arguments or stdin.', argv: [] }
+    const built = await devTunnelsArgv(call, win, { path: await pathOf($), systemRoot: await systemRootOf($) }, p => $.fs.exists(p))
+    if ('error' in built) return { code: 127, out: '', err: built.error, argv: [] }
+    let r: { code: number; out: string; err: string }
+    try {
+      const result = await $.process.run(built.argv, { ...(repo ? { cwd: repo.root } : {}), timeoutMs: 30000 })
+      r = { code: result.exitCode, out: result.stdout, err: result.stderr }
+    } catch { r = { code: -1, out: '', err: '' } }
+    const message = call === 'team-login' ? loginMessage(r) : loginStatus(r)
+    return { code: r.code, out: r.code === 0 ? message : '', err: r.code === 0 ? '' : message, argv: built.argv }
+  }
   const skills = await skillatorRoot($)
   if (!skills) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
   // F66 / A150: node, sh and powershell all by absolute path, never a bare name the
