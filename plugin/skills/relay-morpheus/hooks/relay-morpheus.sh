@@ -1148,7 +1148,7 @@ cmd_land() {
 # judges the work; the one decision is chain_decide (hold or release on a
 # `level` reading), and it is what the selftest mutation-checks.
 HOLD_PCT="${RELAY_CHAIN_HOLD_PCT:-80}"
-WEEKLY_PCT="${RELAY_CHAIN_WEEKLY_PCT:-90}"
+WEEKLY_PCT="${RELAY_CHAIN_WEEKLY_PCT:-97}"
 DRIVER_STALE="${RELAY_CHAIN_DRIVER_STALE:-20}"
 SEP='     '
 
@@ -2662,8 +2662,9 @@ chain_selftest() {
     'HOLD 91 7d|src=codex 5h=n/a 7d=91% ctx=- max=91' \
     'UNOBSERVABLE|src=claude-code 5h=n/a 7d= ctx=99 max=99' \
     'RELEASE 12.0|src=codex 5h=12.0 7d=45.0 ctx=90.0 max=90.0' \
-    'HOLD 90 7d|src=codex 5h=10 7d=90 ctx=- max=90' \
-    'RELEASE 10|src=codex 5h=10 7d=89.9 ctx=- max=89.9' \
+    'RELEASE 10|src=codex 5h=10 7d=90 ctx=- max=90' \
+    'HOLD 97 7d|src=codex 5h=10 7d=97 ctx=- max=97' \
+    'RELEASE 10|src=codex 5h=10 7d=96.9 ctx=- max=96.9' \
     'UNOBSERVABLE|src=claude-code 5h=- 7d=- ctx=- max=-' \
     'UNOBSERVABLE|src=none 5h=- 7d=- ctx=- max=-' \
     'UNOBSERVABLE|'; do
@@ -2675,7 +2676,7 @@ chain_selftest() {
   [ "$(RELAY_LEVEL_CMD='echo oops; exit 1' level_line)" = "src=none 5h=- 7d=- ctx=- max=-" ] || die "level_line: an error did not read as src=none"
   # F49: `chain decide --level` decides on the line it is given (the ops-board
   # mod's host reading), never on usage-watch's.
-  for row in 'HOLD 82|src=host 5h=82 7d=61 ctx=- max=-' 'HOLD 91 7d|src=host 5h=41 7d=91 ctx=- max=-' \
+  for row in 'HOLD 82|src=host 5h=82 7d=61 ctx=- max=-' 'HOLD 97 7d|src=host 5h=41 7d=97 ctx=- max=-' \
     'UNOBSERVABLE|src=none 5h=- 7d=- ctx=- max=-' 'RELEASE 41|src=host 5h=41 7d=55 ctx=- max=-'; do
     want=${row%%|*}; got=$(RELAY_LEVEL_CMD='echo src=host 5h=99 7d=99 ctx=- max=-' cmd_chain decide --level "${row#*|}")
     [ "$got" = "$want" ] || die "F49: chain decide --level '${row#*|}': want '$want', got '$got'"
@@ -2835,8 +2836,8 @@ b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
   # of polling 5.5h into STUCK.
   out=$(RELAY_LEVEL_CMD='echo src=claude-code 5h=- 7d=85 ctx=- max=85' chain_wait --interval 1); rc=$?
   [ "$rc" = 2 ] && [ "$out" = "STOP 85 7d" ] || die "chain wait: a 7-day-only 85% wants STOP 85 7d / 2, got '$out' / $rc"
-  out=$(RELAY_LEVEL_CMD='echo src=codex 5h=10 7d=91 ctx=- max=91' chain_wait --interval 1); rc=$?
-  [ "$rc" = 2 ] && [ "$out" = "STOP 91 7d" ] || die "chain wait: 7d 91% wants STOP 91 7d / 2, got '$out' / $rc"
+  out=$(RELAY_LEVEL_CMD='echo src=codex 5h=10 7d=97 ctx=- max=97' chain_wait --interval 1); rc=$?
+  [ "$rc" = 2 ] && [ "$out" = "STOP 97 7d" ] || die "chain wait: 7d 97% wants STOP 97 7d / 2, got '$out' / $rc"
   set -e
   sed "s/hold: 2026-01-01T00:00Z /hold: $(now) /" "$RUN" > "$RUN.x" && mv "$RUN.x" "$RUN"
   age_drv
@@ -2851,11 +2852,11 @@ b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
 
   # release: the reading decides; an override is a ruling; 7d needs --confirmed.
   (RELAY_LEVEL_CMD='echo src=claude-code 5h=83 7d=10 ctx=5 max=83' chain_release >/dev/null 2>&1); [ $? = 2 ] || die "chain release: released at 83%"
-  (RELAY_LEVEL_CMD='echo src=claude-code 5h=10 7d=91 ctx=5 max=91' chain_release --override >/dev/null 2>&1); [ $? = 2 ] || die "chain release --override: passed the 7-day stop without --confirmed"
+  (RELAY_LEVEL_CMD='echo src=claude-code 5h=10 7d=97 ctx=5 max=97' chain_release --override >/dev/null 2>&1); [ $? = 2 ] || die "chain release --override: passed the 7-day stop without --confirmed"
   set -e
   grep -q '^driver: .*     hold: 20' "$RUN" || die "chain release: a refused release cleared the hold"
-  out=$(RELAY_LEVEL_CMD='echo src=claude-code 5h=10 7d=91 ctx=5 max=91' chain_release --override --confirmed) || die "chain release --override --confirmed failed"
-  grep -q "$c3: override: user confirmed past 7d 90% (91%)" "$RUN" || die "chain release: no ruling for the 7-day override"
+  out=$(RELAY_LEVEL_CMD='echo src=claude-code 5h=10 7d=97 ctx=5 max=97' chain_release --override --confirmed) || die "chain release --override --confirmed failed"
+  grep -q "$c3: override: user confirmed past 7d 97% (97%)" "$RUN" || die "chain release: no ruling for the 7-day override"
   grep -q '^driver: @cc-b [^ ]*     hold: -     mode: workflow$' "$RUN" || die "chain release: hold not cleared"
   [ "$(chain_release)" = "not held" ] || die "chain release: not idempotent"
   chain_hold 83 >/dev/null
@@ -2890,19 +2891,19 @@ b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
   grep -q "$c2: override: user asked at 85%" "$RUN" || die "chain dispatch --override: no ruling"
   cmd_stage "$s2" '!' build:opus
   set +e
-  (RELAY_LEVEL_CMD='echo src=claude-code 5h=10 7d=92 ctx=5 max=92' chain_dispatch "$s2" --driver @cc-b >/dev/null 2>&1); [ $? = 2 ] || die "chain dispatch: started past the 7-day stop without --confirmed"
+  (RELAY_LEVEL_CMD='echo src=claude-code 5h=10 7d=98 ctx=5 max=98' chain_dispatch "$s2" --driver @cc-b >/dev/null 2>&1); [ $? = 2 ] || die "chain dispatch: started past the 7-day stop without --confirmed"
   set -e
   # F31 review 3: a redispatch of a failed stage replaces its In-flight block -
   # one block per stage, the new one, not the old block with its dead run id.
   sed "/^### stage $s2 - /,/^#/ s/^run: .*/run: dead-run-1/" "$RUN" > "$RUN.x" && mv "$RUN.x" "$RUN"
   grep -q '^run: dead-run-1$' "$RUN" || die "selftest: did not mark the old In-flight block"
-  RELAY_LEVEL_CMD='echo src=claude-code 5h=10 7d=92 ctx=5 max=92' chain_dispatch "$s2" --driver @cc-b --confirmed >/dev/null || die "chain dispatch --confirmed failed"
+  RELAY_LEVEL_CMD='echo src=claude-code 5h=10 7d=98 ctx=5 max=98' chain_dispatch "$s2" --driver @cc-b --confirmed >/dev/null || die "chain dispatch --confirmed failed"
   [ "$(grep -c "^### stage $s2 - " "$RUN")" = 1 ] || die "chain dispatch: redispatching a failed stage left $(grep -c "^### stage $s2 - " "$RUN") In-flight blocks for it"
   ! grep -q '^run: dead-run-1$' "$RUN" || die "chain dispatch: redispatching a failed stage kept the old In-flight block"
   # A153: stage $s1 landed, so its block went then; the redispatch must not bring it back.
   [ "$(grep -c "^### stage $s1 - " "$RUN")" = 0 ] || die "chain dispatch: landed stage $s1 still has an In-flight block"
   awk '/^## In flight$/{f=NR} /^## Rulings/{r=NR} END{exit !(f && r && f < r)}' "$RUN" || die "chain dispatch: the In-flight section lost its place"
-  grep -q "$c2: override: user confirmed past 7d 90% (92%)" "$RUN" || die "chain dispatch --confirmed: no ruling"
+  grep -q "$c2: override: user confirmed past 7d 97% (98%)" "$RUN" || die "chain dispatch --confirmed: no ruling"
   chain_status | grep -q "^### $c3 - stage $s3 - F3 cli\$" || die "chain status: did not print the chain"
   [ ! -e "$RUN.lock" ] || die "chain: left the lock behind"
 

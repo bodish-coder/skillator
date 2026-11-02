@@ -14,8 +14,10 @@ Standing rules:
   never inside an implementer.
 - Staged work runs to the end, no stop between stages. Six stops: a
   destructive op, a security-sensitive action, a side effect outside this
-  worktree (merge, push, publish), the 7-day limit at 90%, a scope-contract
-  breach, a failed repro. Else log a `Ruling:` in the run file.
+  worktree (merge, push, publish), the 7-day limit at 97% (do not stop at
+  90%; when 7-day quota reaches 97%, stop all agents and create a handoff),
+  a scope-contract breach, a failed repro. Else log a `Ruling:` in the run
+  file.
   `skillator:relay-morpheus` owns `.skillator/run.md`, updated before
   dispatch, never after.
 - One task per fresh implementer, own prompt, no session history —

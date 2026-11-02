@@ -771,7 +771,7 @@ function DoOrphans($limit) {
 # ChainDecide (hold or release on a `level` reading), mutation-checked by the
 # selftest.
 $HOLD_PCT = if ($env:RELAY_CHAIN_HOLD_PCT) { [double]$env:RELAY_CHAIN_HOLD_PCT } else { 80 }
-$WEEKLY_PCT = if ($env:RELAY_CHAIN_WEEKLY_PCT) { [double]$env:RELAY_CHAIN_WEEKLY_PCT } else { 90 }
+$WEEKLY_PCT = if ($env:RELAY_CHAIN_WEEKLY_PCT) { [double]$env:RELAY_CHAIN_WEEKLY_PCT } else { 97 }
 $DRIVER_STALE = if ($env:RELAY_CHAIN_DRIVER_STALE) { [int]$env:RELAY_CHAIN_DRIVER_STALE } else { 20 }
 $SEP = '     '
 
@@ -2258,8 +2258,9 @@ function ChainSelftest($d) {
       @('HOLD 91 7d', 'src=codex 5h=n/a 7d=91% ctx=- max=91'),
       @('UNOBSERVABLE', 'src=claude-code 5h=n/a 7d= ctx=99 max=99'),
       @('RELEASE 12.0', 'src=codex 5h=12.0 7d=45.0 ctx=90.0 max=90.0'),
-      @('HOLD 90 7d', 'src=codex 5h=10 7d=90 ctx=- max=90'),
-      @('RELEASE 10', 'src=codex 5h=10 7d=89.9 ctx=- max=89.9'),
+      @('RELEASE 10', 'src=codex 5h=10 7d=90 ctx=- max=90'),
+      @('HOLD 97 7d', 'src=codex 5h=10 7d=97 ctx=- max=97'),
+      @('RELEASE 10', 'src=codex 5h=10 7d=96.9 ctx=- max=96.9'),
       @('UNOBSERVABLE', 'src=claude-code 5h=- 7d=- ctx=- max=-'),
       @('UNOBSERVABLE', 'src=none 5h=- 7d=- ctx=- max=-'),
       @('UNOBSERVABLE', ''))) {
@@ -2275,7 +2276,7 @@ function ChainSelftest($d) {
   # F49: `chain decide -Text` decides on the line it is given (the ops-board
   # mod's host reading), never on usage-watch's.
   $env:RELAY_LEVEL_CMD = "echo 'src=host 5h=99 7d=99 ctx=- max=-'"
-  foreach ($row in @(@('HOLD 82', 'src=host 5h=82 7d=61 ctx=- max=-'), @('HOLD 91 7d', 'src=host 5h=41 7d=91 ctx=- max=-'),
+  foreach ($row in @(@('HOLD 82', 'src=host 5h=82 7d=61 ctx=- max=-'), @('HOLD 97 7d', 'src=host 5h=41 7d=97 ctx=- max=-'),
       @('UNOBSERVABLE', 'src=none 5h=- 7d=- ctx=- max=-'), @('RELEASE 41', 'src=host 5h=41 7d=55 ctx=- max=-'))) {
     $script:Text = $row[1]
     try { $got = DoChainDecide } finally { $script:Text = '' }
@@ -2516,8 +2517,8 @@ function ChainSelftest($d) {
   # polling 5.5h into STUCK.
   SetLevel 'src=claude-code 5h=- 7d=85 ctx=- max=85'
   $r = DoChainWait; if ($r[0] -ne 2 -or $r[1] -ne 'STOP 85 7d') { Die "chain wait: a 7-day-only 85% wants STOP 85 7d / 2, got '$($r[1])' / $($r[0])" }
-  SetLevel 'src=codex 5h=10 7d=91 ctx=- max=91'
-  $r = DoChainWait; if ($r[0] -ne 2 -or $r[1] -ne 'STOP 91 7d') { Die "chain wait: 7d 91% wants STOP 91 7d / 2, got '$($r[1])' / $($r[0])" }
+  SetLevel 'src=codex 5h=10 7d=97 ctx=- max=97'
+  $r = DoChainWait; if ($r[0] -ne 2 -or $r[1] -ne 'STOP 97 7d') { Die "chain wait: 7d 97% wants STOP 97 7d / 2, got '$($r[1])' / $($r[0])" }
   WriteRun (Get-Content -Encoding UTF8 $Run | ForEach-Object { $_ -replace 'hold: 2026-01-01T00:00Z ', "hold: $(Now) " })
   SetLevel 'src=claude-code 5h=84 7d=10 ctx=5 max=84'; $script:For = 1
   AgeDrv
@@ -2532,11 +2533,11 @@ function ChainSelftest($d) {
   # release: the reading decides; an override is a ruling; 7d needs -Confirmed.
   SetLevel 'src=claude-code 5h=83 7d=10 ctx=5 max=83'
   ShouldFail 'REFUSED: 5-hour reading 83%' { DoChainRelease }
-  SetLevel 'src=claude-code 5h=10 7d=91 ctx=5 max=91'; $script:Override = $true
-  ShouldFail 'REFUSED: 7-day window at 91%' { DoChainRelease }
+  SetLevel 'src=claude-code 5h=10 7d=97 ctx=5 max=97'; $script:Override = $true
+  ShouldFail 'REFUSED: 7-day window at 97%' { DoChainRelease }
   if (-not (Select-String -Path $Run -Pattern '^driver: .*     hold: 20' -Quiet)) { Die "chain release: a refused release cleared the hold" }
   $script:Confirmed = $true; DoChainRelease | Out-Null
-  if (-not (Select-String -Path $Run -SimpleMatch "${c3}: override: user confirmed past 7d 90% (91%)" -Quiet)) { Die "chain release: no ruling for the 7-day override" }
+  if (-not (Select-String -Path $Run -SimpleMatch "${c3}: override: user confirmed past 7d 97% (97%)" -Quiet)) { Die "chain release: no ruling for the 7-day override" }
   if (-not (Select-String -Path $Run -Pattern '^driver: @cc-b \S+     hold: -     mode: workflow$' -Quiet)) { Die "chain release: hold not cleared" }
   $script:Override = $false; $script:Confirmed = $false
   if ((DoChainRelease) -ne 'not held') { Die "chain release: not idempotent" }
@@ -2574,8 +2575,8 @@ function ChainSelftest($d) {
   DoChainDispatch $s2 | Out-Null; $script:Override = $false
   if (-not (Select-String -Path $Run -SimpleMatch "${c2}: override: user asked at 85%" -Quiet)) { Die "chain dispatch -Override: no ruling" }
   DoStage $s2 '!' 'build:opus' ''
-  SetLevel 'src=claude-code 5h=10 7d=92 ctx=5 max=92'
-  ShouldFail 'REFUSED: 7-day window at 92%' { DoChainDispatch $s2 }
+  SetLevel 'src=claude-code 5h=10 7d=98 ctx=5 max=98'
+  ShouldFail 'REFUSED: 7-day window at 98%' { DoChainDispatch $s2 }
   # F31 review 3: a redispatch of a failed stage replaces its In-flight block -
   # one block per stage, the new one, not the old block with its dead run id.
   $inb = $false
@@ -2591,7 +2592,7 @@ function ChainSelftest($d) {
   if (@(Select-String -Path $Run -Pattern "^### stage $s1 - ").Count -ne 0) { Die "chain dispatch: landed stage $s1 still has an In-flight block" }
   $txt = [IO.File]::ReadAllText($Run)
   if ($txt.IndexOf("`n## In flight`n") -lt 0 -or $txt.IndexOf("`n## In flight`n") -gt $txt.IndexOf("`n## Rulings")) { Die "chain dispatch: the In-flight section lost its place" }
-  if (-not (Select-String -Path $Run -SimpleMatch "${c2}: override: user confirmed past 7d 90% (92%)" -Quiet)) { Die "chain dispatch -Confirmed: no ruling" }
+  if (-not (Select-String -Path $Run -SimpleMatch "${c2}: override: user confirmed past 7d 97% (98%)" -Quiet)) { Die "chain dispatch -Confirmed: no ruling" }
   if (-not ((DoChainStatus) -ceq "### $c3 - stage $s3 - F3 cli")) { Die "chain status: did not print the chain" }
   if (Test-Path "$Run.lock") { Die "chain: left the lock behind" }
 

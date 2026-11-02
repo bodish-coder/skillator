@@ -32,7 +32,7 @@ $pctLimit = if ($env:CLAUDE_USAGE_HANDOFF_PCT) { [double]$env:CLAUDE_USAGE_HANDO
 # in hours, so crossing it is a pause; the weekly one does not, so crossing it
 # ends the week's work - which is why it gets its own threshold and its own
 # fourth step: ask where to go next rather than leave the user to guess.
-$wkLimit  = if ($env:CLAUDE_USAGE_HANDOFF_WEEKLY_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_WEEKLY_PCT } else { 90 }
+$wkLimit  = if ($env:CLAUDE_USAGE_HANDOFF_WEEKLY_PCT) { [double]$env:CLAUDE_USAGE_HANDOFF_WEEKLY_PCT } else { 97 }
 $inv      = [Globalization.CultureInfo]::InvariantCulture
 # A32: a rollout nobody has written to in this long is not this session's usage.
 # Must match $stale_secs in the sh twin (10800).

@@ -48,8 +48,9 @@ are picked up; whichever is highest wins.
 **The 7-day window is its own gate, and it is different in kind.** The 5-hour
 window refills in hours, so crossing it is a pause and the three steps above
 are the whole job. The 7-day window does not refill for days, so crossing it
-ends the week's work — it fires **lower** (`CLAUDE_USAGE_HANDOFF_WEEKLY_PCT`,
-default 90, against 92 for everything else) and adds a **step 4** the other
+ends the week's work — it fires at **97%** (`CLAUDE_USAGE_HANDOFF_WEEKLY_PCT`,
+default 97; do not stop at 90% — when 7-day quota reaches 97%, stop all agents
+and create a handoff) and adds a **step 4** the other
 windows have no use for: after the handoff, put the next direction to the user
 with `AskUserQuestion` as concrete options drawn from the open board and the
 handoff's own next-steps, with the recommendation first and its reason in one

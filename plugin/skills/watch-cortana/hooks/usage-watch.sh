@@ -26,7 +26,7 @@ limit="${CLAUDE_USAGE_HANDOFF_PCT:-92}"
 # hours, so crossing it is a pause; the weekly one does not, so crossing it ends
 # the week's work - which is why it gets its own threshold and its own fourth
 # step: ask where to go next rather than leave the user to guess.
-wk_limit="${CLAUDE_USAGE_HANDOFF_WEEKLY_PCT:-90}"
+wk_limit="${CLAUDE_USAGE_HANDOFF_WEEKLY_PCT:-97}"
 wk_step4=' (4) This is the 7-DAY window, which does not refill for days - the work is over for now, not paused. So after the handoff, do not stop on a summary: use AskUserQuestion to put the next direction to the user as concrete options drawn from the open board and the handoff'"'"'s own next-steps, say which one you recommend and why in one line, and make the recommendation the first option.'
 
 # The flag file is shared with the PowerShell twin, which used to write it with

@@ -163,23 +163,27 @@ try {
   if ($r -match 'AskUserQuestion') { throw 'gate: 5-hour spike fired the weekly order' }
   Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
-  # The weekly window alone, over 90 but under the 92 the other windows use.
-  Probe (& $sl 40 91 55)
-  if ((Get-Content "$flag.weekly" -Raw).Trim() -ne '91') { throw 'probe: weekly value not recorded' }
+  # The weekly window alone: does NOT stop at 90% (below 97%), fires at 97%.
+  Probe (& $sl 40 90 55)
+  if (Gate $stop) { throw 'gate: weekly fired at 90% (must wait until 97%)' }
+  Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
+
+  Probe (& $sl 40 97 55)
+  if ((Get-Content "$flag.weekly" -Raw).Trim() -ne '97') { throw 'probe: weekly value not recorded' }
   # Same bare-bytes contract as the main flag - the sh twin reads it too (A12).
   $wb = [IO.File]::ReadAllBytes((Convert-Path "$flag.weekly"))
   if ($wb[0] -eq 0xEF) { throw 'probe: weekly flag has a UTF-8 BOM' }
   if ($wb -contains 0x0D -or $wb -contains 0x0A) { throw 'probe: weekly flag has a line ending' }
   $r = Gate $stop
-  if ($r -notmatch '"decision":"block"') { throw 'gate: weekly 91% did not fire' }
-  if ($r -notmatch '91') { throw 'gate: weekly block does not name the percentage' }
+  if ($r -notmatch '"decision":"block"') { throw 'gate: weekly 97% did not fire' }
+  if ($r -notmatch '97') { throw 'gate: weekly block does not name the percentage' }
   if ($r -notmatch 'AskUserQuestion') { throw 'gate: weekly block has no step 4' }
   if ($r -notmatch 'recommend') { throw 'gate: step 4 does not ask for a recommendation' }
   Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
-  # Weekly under its own threshold and nothing else over: silence.
-  Probe (& $sl 40 89 55)
-  if (Gate $stop) { throw 'gate: weekly fired below 90' }
+  # Weekly under its own threshold (e.g. 96%) and nothing else over: silence.
+  Probe (& $sl 40 96 55)
+  if (Gate $stop) { throw 'gate: weekly fired below 97' }
   Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
 
   # F18/finding 4: the two gates fire at different times in one session. A
@@ -188,7 +192,7 @@ try {
   Probe (& $sl 98.2 40 55)
   $r = Gate $stop
   if ($r -notmatch '"decision":"block"') { throw 'gate sequence: the 5-hour spike did not fire' }
-  Probe (& $sl 98.2 91 55)
+  Probe (& $sl 98.2 97 55)
   $r = Gate $stop
   if ($r -notmatch 'AskUserQuestion') { throw 'gate sequence: the weekly order was eaten by the earlier .done' }
   Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
@@ -197,7 +201,7 @@ try {
   # Appending it after put the stop instruction ahead of the one step whose
   # point is that the session must NOT stop on a summary. Asserting only that
   # the string is present, as the first version did, misses the ordering.
-  Probe (& $sl 40 91 55)
+  Probe (& $sl 40 97 55)
   $r = Gate $stop
   $iAsk = $r.IndexOf('AskUserQuestion'); $iStop = $r.IndexOf('Then tell the user')
   if ($iAsk -lt 0 -or $iStop -lt 0) { throw 'gate: weekly order is missing a piece' }
@@ -208,7 +212,7 @@ try {
   # exactly what a probe that failed halfway leaves behind - and the gate used
   # to return before ever reading it, making the 7-day hard stop unreachable in
   # the one case it mattered most.
-  [IO.File]::WriteAllText((Join-Path (Convert-Path (Split-Path $flag -Parent)) "$sid.weekly"), '91')
+  [IO.File]::WriteAllText((Join-Path (Convert-Path (Split-Path $flag -Parent)) "$sid.weekly"), '97')
   $r = Gate $stop
   if ($r -notmatch 'AskUserQuestion') { throw 'gate: weekly-only flag did not fire' }
   Remove-Item "$flag", "$flag.*" -ErrorAction SilentlyContinue
@@ -229,10 +233,10 @@ try {
   # The sh twin has to agree - PLATFORMS.md requires the pair to move together.
   if ($shExe) {
     $h = NewHome 'weekly-sh'
-    RunSh 'probe' $h (& $sl 40 91 55) | Out-Null
+    RunSh 'probe' $h (& $sl 40 97 55) | Out-Null
     $wf = Join-Path $h ".claude\handoff-watch\$sid.weekly"
     if (-not (Test-Path $wf)) { throw 'sh probe: no weekly flag' }
-    if ((Get-Content $wf -Raw).Trim() -ne '91') { throw 'sh probe: weekly value wrong' }
+    if ((Get-Content $wf -Raw).Trim() -ne '97') { throw 'sh probe: weekly value wrong' }
     $r = RunSh 'gate' $h $stop
     if ($r -notmatch 'AskUserQuestion') { throw 'sh gate: weekly block has no step 4' }
   }
@@ -294,21 +298,21 @@ try {
   if ($c -notmatch '^HANDOFF NOW \(claude-code 98\.2%\)') { throw "check cc-weekly-shadow: the weekly flag shadowed the max, got '$c'" }
 
   # F18/finding 2: the weekly gate has to exist on hosts with no Stop hook too.
-  $h = NewHome 'cc-weekly'; AddFlag $h 'sess-a' '40' | Out-Null; AddFlag $h 'sess-a.weekly' '91' | Out-Null
+  $h = NewHome 'cc-weekly'; AddFlag $h 'sess-a' '40' | Out-Null; AddFlag $h 'sess-a.weekly' '97' | Out-Null
   $c = RunCheck $h
-  if ($c -notmatch 'HANDOFF NOW \(claude-code 7-day 91%\)') { throw "check cc-weekly: no weekly order, got '$c'" }
+  if ($c -notmatch 'HANDOFF NOW \(claude-code 7-day 97%\)') { throw "check cc-weekly: no weekly order, got '$c'" }
   if ($c -notmatch 'AskUserQuestion') { throw 'check cc-weekly: weekly order has no step 4' }
 
-  $h = NewHome 'cc-weekly-under'; AddFlag $h 'sess-a' '40' | Out-Null; AddFlag $h 'sess-a.weekly' '89' | Out-Null
+  $h = NewHome 'cc-weekly-under'; AddFlag $h 'sess-a' '40' | Out-Null; AddFlag $h 'sess-a.weekly' '90' | Out-Null
   $c = RunCheck $h
-  if ($c -match 'HANDOFF NOW') { throw "check cc-weekly-under: fired below 90, got '$c'" }
+  if ($c -match 'HANDOFF NOW') { throw "check cc-weekly-under: fired at 90% (below 97), got '$c'" }
 
   # A101: a `.weekly` flag with NO main flag beside it (the state a broken
   # probe leaves, and the one the gate already handles) used to read "no usage
   # signal" here, so the 7-day order never fired on the check-only hosts.
-  $h = NewHome 'cc-weekly-only'; AddFlag $h 'sess-a.weekly' '91' | Out-Null
+  $h = NewHome 'cc-weekly-only'; AddFlag $h 'sess-a.weekly' '97' | Out-Null
   $c = RunCheck $h
-  if ($c -notmatch 'HANDOFF NOW \(claude-code 7-day 91%\)') { throw "check cc-weekly-only: no weekly order, got '$c'" }
+  if ($c -notmatch 'HANDOFF NOW \(claude-code 7-day 97%\)') { throw "check cc-weekly-only: no weekly order, got '$c'" }
   if ($c -notmatch 'AskUserQuestion') { throw 'check cc-weekly-only: weekly order has no step 4' }
   if (-not (Test-Path (Join-Path $h '.claude\handoff-watch\sess-a.weekly.done'))) { throw 'check cc-weekly-only: one-shot is not keyed sess-a.weekly.done' }
   $c = RunCheck $h
@@ -433,10 +437,13 @@ try {
   if ($r) { throw "gate: single used_percent scalar bug regressed (50+45 would fire), got '$r'" }
   ClearCx
 
-  # 4. 10080-minute window at 91% -> the weekly gate fires (A98).
-  $rp4 = AddCodex $tmp 91.0 12000 200000 0 'a99-weekly' 10080
+  # 4. 10080-minute window at 97% -> the weekly gate fires (A98). At 90% it does NOT fire.
+  $rp4low = AddCodex $tmp 90.0 12000 200000 0 'a99-weekly-low' 10080
+  if (Gate (CxStop $rp4low)) { throw "gate: codex 10080-minute window at 90% fired (should need 97%)" }
+  ClearCx
+  $rp4 = AddCodex $tmp 97.0 12000 200000 0 'a99-weekly' 10080
   $r = Gate (CxStop $rp4)
-  if ($r -notmatch '"decision":"block"' -or $r -notmatch 'AskUserQuestion') { throw "gate: codex 10080-minute window at 91% did not fire the weekly order, got '$r'" }
+  if ($r -notmatch '"decision":"block"' -or $r -notmatch 'AskUserQuestion') { throw "gate: codex 10080-minute window at 97% did not fire the weekly order, got '$r'" }
   ClearCx
 
   # 5. 300-minute window at 91% -> silent (below the 92% ordinary threshold).
@@ -464,7 +471,7 @@ try {
     ClearCxSh
 
     $g = RunSh 'gate' $hSh (CxStop $rp4)
-    if ($g -notmatch '"decision":"block"' -or $g -notmatch 'AskUserQuestion') { throw "sh gate: codex 10080-minute window at 91% did not fire the weekly order, got '$g'" }
+    if ($g -notmatch '"decision":"block"' -or $g -notmatch 'AskUserQuestion') { throw "sh gate: codex 10080-minute window at 97% did not fire the weekly order, got '$g'" }
     ClearCxSh
 
     $g = RunSh 'gate' $hSh (CxStop $rp5)
