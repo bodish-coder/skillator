@@ -46,7 +46,7 @@ const HIGHLIGHT = ['1', '97', '44']
 const ASCII: Record<string, string> = {
   '●': '*', '▲': '^', '■': '#', '█': '=', '░': '-', '…': '...', '▾': 'v', '▸': '>',
   '✓': '+', '✗': 'x', '→': '>', '←': '<', '↑': '^', '↓': 'v', '•': '*', '›': '>', '‹': '<', '—': '-', '–': '-',
-  '┌': '+', '┐': '+', '└': '+', '┘': '+', '─': '-', '│': '|', '·': '.',
+  '┌': '+', '┐': '+', '└': '+', '┘': '+', '─': '-', '│': '|', '·': '.', '↻': 'r',
 }
 const ASCII_RE = new RegExp('[' + Object.keys(ASCII).join('') + ']', 'g')
 
@@ -207,7 +207,7 @@ function keysOf(s: State, m: Model): Seg[][] {
     const enter = isHead(cur) ? (s.runsOpen.some(x => headKey(x) === cur) ? 'enter close' : 'enter open') : 'enter stages'
     return [move, h(enter, 'return'), h('s Start', 's'), h('Engage', 'e'), h('Rerun', 'r'), h('Push Pending', 'p'), h('Mode: ||/seq', 'm'), quit]
   }
-  if (s.tab === 'health') return [h('R resume (on a fresh non-red reading)', 'R'), h('F force resume', 'F'), h('r reload', 'r'), quit]
+  if (s.tab === 'health') return [[hot('r refresh', 'r')], [hot('R resume', 'R', true)], [hot('c resume CLI', 'c')], [hot('F force resume', 'F', true)], quit]
   if (s.tab === 'messages') return [move, h('enter open', 'return'), h('m mark all read', 'm'), h('s setup', 's'), quit]
   if (s.tab === 'explorer') return [move, h('enter open/close', 'return'), h('r reload', 'r'), quit]
   if (s.showTeam) return [h('n add', 'n'), h('del remove (asks first)', 'delete'), h('l make lead', 'l'), h('esc back', 'escape'), quit]
@@ -607,6 +607,16 @@ function healthBody(s: State): Seg[][] {
   if (u?.spendLimitPct !== null && u?.spendLimitPct !== undefined) out.push(row('Spend limit', [{ text: `${u.spendLimitPct}% used` }]))
   if (u?.costUsd !== null && u?.costUsd !== undefined) out.push(row('Spent', [{ text: `$${u.costUsd.toFixed(2)} this session` }]))
   out.push([], [{ text: 'Machine', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now))
+  const btnR = hot('r refresh', 'r')
+  const btnRes = hot('R resume', 'R', true)
+  const btnCli = hot('c resume CLI', 'c')
+  const btnForce = hot('F force resume', 'F', true)
+  out.push([], [{ text: 'Actions', bold: true }])
+  if (s.cols < 60) {
+    out.push([dim('  '), btnR, dim('  '), btnRes], [dim('  '), btnCli, dim('  '), btnForce])
+  } else {
+    out.push([dim('  '), btnR, dim('  '), btnRes, dim('  '), btnCli, dim('  '), btnForce])
+  }
   return out
 }
 

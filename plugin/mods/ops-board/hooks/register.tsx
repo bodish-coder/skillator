@@ -7,6 +7,8 @@ import { clean } from './lib/bandlines'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, muteKv, mutedWords, muteText, parseMachine, unmuteDue, usageFrom } from './lib/facts'
 import { gitBin, NO_SCRIPTS, readUsage, runCall } from './lib/host'
 import { parseRuns } from './lib/runs'
+import { continuePrompt } from './lib/runlines'
+import type { RunView } from '../types'
 import { HIDDEN, restoreClaudeMd, RESTORE_NOTE } from './lib/restore'
 import { countsOf, renderBand, statusText } from './band'
 import { buildModel, lineKey, PANE_ID, PANE_TITLE, readView, renderPane } from './pane'
@@ -44,6 +46,7 @@ const usageA = atom({ plugin: 'ops-board', key: 'usage' } as const, null)
 const watchA = atom({ plugin: 'ops-board', key: 'watch' } as const, { level: 'green', reasons: [] })
 const notesA = atom({ plugin: 'ops-board', key: 'notes' } as const, [])
 const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
+const runsA = atom<RunView[]>({ plugin: 'ops-board', key: 'runs' } as const, [])
 const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows', 'agents'])
 
 const MAX_READ = 4 * 1024 * 1024
@@ -620,6 +623,47 @@ export const register: Register = on => {
   // F78: the Tickets tab's `r` - a forced poll here, where the poll lives.
   on('ui.press', { plugin: 'ops-board', element: 'key:refresh' }, async ($, e) => {
     await refresh($)
+    return { element: e.element }
+  })
+
+  on('ui.press', { plugin: 'ops-board', element: 'key:health-refresh' }, async ($, e) => {
+    decidedLine = null
+    await pollUsage($).catch(() => {})
+    await pollMachine($).catch(() => {})
+    await pollRelay($).catch(() => {})
+    await decide($).catch(() => {})
+    const u = await read($, usageA)
+    const toastMsg = (u?.five?.pct !== null && u?.five?.pct !== undefined) || (u?.seven?.pct !== null && u?.seven?.pct !== undefined)
+      ? `↻ Usage & health refreshed: 5h ${u?.five?.pct ?? '-'}% · 7d ${u?.seven?.pct ?? '-'}%`
+      : '↻ Usage & health refreshed (usage unobservable)'
+    $.ui.toast(toastMsg)
+    return { element: e.element }
+  })
+
+  on('ui.press', { plugin: 'ops-board', element: 'key:resume' }, async ($, e) => {
+    $.ui.toast(await resume($))
+    return { element: e.element }
+  })
+
+  on('ui.press', { plugin: 'ops-board', element: 'key:resume-cli' }, async ($, e) => {
+    await pollUsage($).catch(() => {})
+    await pollMachine($).catch(() => {})
+    const m = await read($, machineA)
+    const w = await read($, watchA)
+    if (m?.hold && w.level !== 'red') {
+      await release($).catch(() => {})
+    }
+    const relay = await read($, relayA)
+    const runs = await read($, runsA)
+    const run = runs.find(r => r.done < r.total)
+    const runId = relay ? relay.split(' ')[0] : run?.id ?? null
+    const cmd = runId ? continuePrompt(runId) : '/skillator:relay-morpheus resume'
+    if (runId) {
+      await runCall($, 'relay-queue-add', [runId]).catch(() => {})
+    }
+    void $.prompt.submit({ text: cmd })
+    const redNote = m?.hold && w.level === 'red' ? ` (still red: ${w.reasons.join('; ')} - not released)` : ''
+    $.ui.toast(`✓ Resume sent to CLI: ${cmd}${redNote}`)
     return { element: e.element }
   })
 

@@ -272,3 +272,30 @@ test('a hold with no reason: held (reason unknown)', async ($, on) => {
   expect((await ui.find({ key: 'held' }))?.text).toBe('held     held (reason unknown) - /ops resume to release')
   await ui.unmount()
 })
+
+test('Health tab exposes refresh, resume, resume-cli and force buttons with hotkeys', async ($, on) => {
+  const [, clock] = world(on)
+  on('prompt.submit', () => ({ value: undefined }))
+  await start($, clock)
+  const ui = await health($, 'terminal')
+
+  const btnRefresh = await ui.find({ key: 'key:health-refresh' })
+  expect(btnRefresh).toBeTruthy()
+  expect(btnRefresh?.props.hotkey).toBe('r')
+
+  const btnResume = await ui.find({ key: 'key:resume' })
+  expect(btnResume).toBeTruthy()
+  expect(btnResume?.props.hotkey).toBe('R')
+
+  const btnCli = await ui.find({ key: 'key:resume-cli' })
+  expect(btnCli).toBeTruthy()
+  expect(btnCli?.props.hotkey).toBe('c')
+
+  const btnForce = await ui.find({ key: 'key:force' })
+  expect(btnForce).toBeTruthy()
+
+  await ui.press({ key: 'key:health-refresh' })
+  await ui.press({ key: 'key:resume-cli' })
+  await ui.unmount()
+})
+

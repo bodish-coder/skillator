@@ -127,3 +127,69 @@ test('A165: Bracketed button badges and focus highlight verification', () => {
     assert.equal(engageSlice, '[Engage]', `Hitbox text matches badge exactly at ${cols} cols`)
   }
 })
+
+test('Health tab bracketed action badges, cell budgets, hitboxes, and ASCII fallback across 40, 60, 80, 100, 120 columns', () => {
+  for (const cols of VIEWPORT_WIDTHS) {
+    for (const rows of [18, 24, 35]) {
+      const hState: State = {
+        ...withRuns,
+        tab: 'health' as const,
+        cols,
+        rows,
+        toast: '↻ Usage & health refreshed: 5h 41% · 7d 55%',
+      }
+      const sc = screen(hState, P)
+
+      // 1. Frame height matches rows exactly
+      assert.equal(sc.lines.length, rows)
+
+      // 2. No line overflows cols and zero mojibake
+      sc.lines.forEach((l, idx) => {
+        const width = cells(l)
+        assert.ok(width <= cols, `Health at ${cols}x${rows} line ${idx + 1} overflowed (${width} > ${cols}): "${l}"`)
+        assert.doesNotMatch(l, /[\uFFFD]|Γö|ΓöÇ/, `Mojibake or broken box character in health line ${idx + 1}`)
+      })
+
+      // 3. Verify exact cell-width budgets on in-body Actions lines when vertical room fits full healthBody (rows >= 24)
+      if (rows >= 24) {
+        const actionsIdx = sc.lines.findIndex(l => l.trim() === 'Actions')
+        assert.ok(actionsIdx >= 0, `Actions header present at ${cols}x${rows}`)
+        if (cols < 60) {
+          assert.equal(sc.lines[actionsIdx + 1], '  [r refresh]  [R resume]')
+          assert.equal(cells(sc.lines[actionsIdx + 1]!), 25)
+          assert.equal(sc.lines[actionsIdx + 2], '  [c resume CLI]  [F force resume]')
+          assert.equal(cells(sc.lines[actionsIdx + 2]!), 34)
+        } else {
+          assert.equal(sc.lines[actionsIdx + 1], '  [r refresh]  [R resume]  [c resume CLI]  [F force resume]')
+          assert.equal(cells(sc.lines[actionsIdx + 1]!), 59)
+        }
+      }
+
+      // 4. Verify action hitboxes exist in footer (all row heights) and body (rows >= 24) and match exact badge text
+      for (const [keyName, expectedText, expectedWidth] of [
+        ['r', '[r refresh]', 11],
+        ['R', '[R resume]', 10],
+        ['c', '[c resume CLI]', 14],
+        ['F', '[F force resume]', 16],
+      ] as const) {
+        const matchingHits = sc.hits.filter(h => h.action.kind === 'key' && (h.action as any).key.name === keyName)
+        assert.ok(matchingHits.length >= (rows >= 24 ? 2 : 1), `Expected hitboxes for ${keyName} at ${cols}x${rows}`)
+        for (const hit of matchingHits) {
+          assert.equal(hit.width, expectedWidth)
+          assert.ok(hit.x >= 1 && hit.x + hit.width - 1 <= cols)
+          const slice = sc.lines[hit.y - 1]!.slice(hit.x - 1, hit.x - 1 + hit.width)
+          assert.equal(slice, expectedText, `Hitbox slice mismatch for ${keyName} at ${cols}x${rows}`)
+        }
+      }
+
+      // 5. Verify ASCII fallback (ascii: true) emits no codepoint > 127
+      const asciiSc = screen(hState, { color: false, ascii: true, plain: true })
+      asciiSc.lines.forEach((l, idx) => {
+        assert.ok(cells(l) <= cols, `ASCII Health at ${cols}x${rows} line ${idx + 1} overflowed`)
+        const bad = [...l].filter(ch => (ch.codePointAt(0) ?? 0) > 127)
+        assert.deepEqual(bad, [], `ASCII fallback leaked non-ASCII at ${cols}x${rows} line ${idx + 1}: ${JSON.stringify(bad)}`)
+      })
+    }
+  }
+})
+

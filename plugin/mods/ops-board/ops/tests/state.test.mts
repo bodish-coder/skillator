@@ -1177,6 +1177,52 @@ test('F113: mouse point action for start-run-field', () => {
   assert.equal(s.startRun!.field, 'runner')
 })
 
+test('Health tab: r forces fresh usage and machine poll, resets decidedLine, and toasts refreshed levels', () => {
+  const sHealth: State = { ...s0, tab: 'health', decidedLine: 'src=host 5h=41 7d=55 ctx=- max=-' }
+  const step = reduce(sHealth, { name: 'r' })
+  assert.equal(step.state.decidedLine, null)
+  assert.equal(step.effects.length, 1)
+  assert.equal(step.effects[0]!.kind, 'run')
+  assert.equal((step.effects[0] as any).call, 'usage-level')
+
+  // Simulate usage-level returning fresh output
+  const res = (step.effects[0] as any).then({ code: 0, out: 'src=host 5h=50 7d=60 ctx=- max=-\n', err: '', argv: [] })(step.state)
+  const step2 = settle(res)
+  assert.match(step2.state.toast ?? '', /↻ Usage & health refreshed: 5h 50% · 7d 60%/)
+  assert.ok(step2.effects.some(e => e.kind === 'run' && (e as any).call === 'relay-decide'))
+  assert.ok(step2.effects.some(e => e.kind === 'run' && (e as any).call === 'pending-machine'))
+})
+
+test('Health tab: c outputs CLI resume prompt in toast and releases active hold when machine is not red', () => {
+  const sHealth: State = { ...s0, tab: 'health', relay: 'RUN-0042 1/3' }
+  const step = reduce(sHealth, { name: 'c' })
+  assert.equal(step.state.toast, 'Paste into your CLI:\ncontinue RUN-0042: drive its chain with skillator:relay-morpheus (chain next / chain dispatch)')
+
+  // When a watchdog hold is set and machine reading is green/amber (not red), c also releases the hold via relay-release
+  const heldGreen: State = {
+    ...sHealth,
+    machine: { at: 0, drive: 'C:', diskFree: 10 * 1073741824, diskTotal: 100 * 1073741824, memFree: 8 * 1073741824, locks: [], hold: '2026-11-02T00:00Z mem 0.5 GB free' },
+    watch: { level: 'amber', reasons: ['held - /ops resume to release'] },
+  }
+  const stepHeld = reduce(heldGreen, { name: 'c' })
+  assert.match(stepHeld.state.toast ?? '', /^Paste into your CLI:\ncontinue RUN-0042/)
+  const relEff = stepHeld.effects.find(e => e.kind === 'run' && (e as any).call === 'relay-release') as any
+  assert.ok(relEff, 'Expected relay-release effect when hold is active and machine is not red')
+  const afterRel = settle(relEff.then({ code: 0, out: 'released', err: '', argv: ['relay-morpheus', 'release'] })(stepHeld.state))
+  assert.equal(afterRel.state.machine?.hold, null)
+
+  // When machine is red, c does NOT emit relay-release
+  const heldRed: State = {
+    ...sHealth,
+    machine: { at: 0, drive: 'C:', diskFree: 10 * 1073741824, diskTotal: 100 * 1073741824, memFree: 0.4 * 1073741824, locks: [], hold: '2026-11-02T00:00Z mem 0.4 GB free' },
+    watch: { level: 'red', reasons: ['mem 0.4 GB free (below 1 GB)'] },
+  }
+  const stepRed = reduce(heldRed, { name: 'c' })
+  assert.ok(!stepRed.effects.some(e => e.kind === 'run' && (e as any).call === 'relay-release'))
+  assert.match(stepRed.state.toast ?? '', /still red/)
+})
+
+
 
 
 

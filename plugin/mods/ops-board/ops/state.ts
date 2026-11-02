@@ -721,6 +721,54 @@ function forceResume(s: State): Step {
   return { state: s, effects: [run('pending-machine', [], read)] }
 }
 
+export function refreshHealth(s: State): Step {
+  const readUsageThen: Then = r => x => {
+    const out = r.code === 0 ? r.out : ''
+    const st0: State = { ...x, decidedLine: null }
+    const step = onUsage(st0, out, x.now)
+    const u = step.state.usage
+    const toastMsg = (u?.five?.pct !== null && u?.five?.pct !== undefined) || (u?.seven?.pct !== null && u?.seven?.pct !== undefined)
+      ? `↻ Usage & health refreshed: 5h ${u?.five?.pct ?? '-'}% · 7d ${u?.seven?.pct ?? '-'}%`
+      : '↻ Usage & health refreshed (usage unobservable)'
+    return {
+      state: toast(step.state, toastMsg),
+      effects: [...step.effects, run('pending-machine', [], readMachineThen)],
+    }
+  }
+  const readMachineThen: Then = r => x => {
+    if (r.code === 0 && r.out.trim()) return onMachine(x, r.out, x.now)
+    return x
+  }
+  return {
+    state: { ...s, decidedLine: null },
+    effects: [run('usage-level', [], readUsageThen)],
+  }
+}
+
+export function resumeCli(s: State): Step {
+  const runId = s.relay ? s.relay.split(' ')[0] : s.runs.find(r => r.done < r.total)?.id ?? null
+  const cmd = runId ? continuePrompt(runId) : '/skillator:relay-morpheus resume'
+  const w = s.machine ? classify(s.machine) : s.watch
+  const effects: Effect[] = [{ kind: 'poll', what: 'slow' }]
+  let msg = `Paste into your CLI:\n${cmd}`
+  if (s.machine?.hold) {
+    if (w.level === 'red') {
+      msg += `\n▲ still red: ${w.reasons.join('; ')} - not released`
+    } else {
+      const releaseThen: Then = r => x => {
+        if (r.code !== 0) return x
+        const freed = x.machine ? { ...x.machine, hold: null } : null
+        return { ...x, machine: freed, watch: freed ? classify(freed) : x.watch }
+      }
+      effects.push(run('relay-release', [], releaseThen))
+    }
+  }
+  return {
+    state: toast(s, msg),
+    effects,
+  }
+}
+
 // --- usage: watch-cortana's level line, relay's decision ---
 
 // A reading with no window keeps the last one's (it then shows its age). The hold decision
@@ -2000,6 +2048,11 @@ export function reduce(s: State, k: Key): Step {
   if (s.tab === 'explorer' && k.name === 'r') return explorerKey(s, k)     // F75: r reads git again too
   if (s.tab === 'run' && (s.runForm || k.name === 'r')) return runKey(s, k)   // F79: r rescans here
   if (s.tab === 'runs' && k.name === 'r') return runsKey(s, k)                // F122: r reruns on Workflows tab
+  if (s.tab === 'health') {
+    if (k.name === 'r') return refreshHealth(s)
+    if (k.name === 'c') return resumeCli(s)
+    if (k.name === 'F') return forceResume(s)
+  }
   switch (k.name) {
     case 'q': return quit
     case '1': return toTab(s, 'tickets')
@@ -2018,7 +2071,6 @@ export function reduce(s: State, k: Key): Step {
     case 'R': return resume(s)
   }
   if (k.sequence === '?' || k.sequence === '7') return openHelp(s)
-  if (s.tab === 'health' && k.name === 'F') return forceResume(s)     // F87
   if (s.tab === 'tickets') return ticketsKey(s, k)
   if (s.tab === 'runs') return runsKey(s, k)
   if (s.tab === 'messages') return messagesKey(s, k)

@@ -162,7 +162,7 @@ test('the keys line as the mock; D decided only on a decidable row', () => {
   // F76: no run yet, the cursor is on the Runs header (Enter closes it); on a run, Enter shows its stages
   assert.match(text(reduce(s, { name: '2' }).state), /\[↑↓ move\] · \[enter close\] · \[s Start\] · \[Engage\]/)
   assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /\[↑↓ move\] · \[enter stages\] · \[s Start\] · \[Engage\]/)
-  assert.match(text(reduce(s, { name: '3' }).state), /\[R resume \(on a fresh non-red reading\)\](\n| · )\[F force resume\] · \[r reload\] · \[q quit\]/)
+  assert.match(text(reduce(s, { name: '3' }).state), /\[r refresh\] · \[R resume\](?:\n| · )\[c resume CLI\] · \[F force resume\](?:\n| · )\[q quit\]/)
 })
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
   let x: State = { ...s, rows: 13 }
@@ -510,7 +510,7 @@ test('F120: responsive footer actions and wrapping across 40, 60, 80, 100, 120 c
     assert.equal(hFrame.length, h.rows)
     for (const l of hFrame) assert.ok(cells(l) <= cols, `${cells(l)} > ${cols}: ${l}`)
     const hFull = hFrame.join('\n')
-    for (const k of ['R resume', 'F force resume', 'r reload', 'q quit']) {
+    for (const k of ['r refresh', 'R resume', 'c resume CLI', 'F force resume', 'q quit']) {
       assert.ok(hFull.includes(k), `cols ${cols} (health): missing shortcut "${k}"\n${hFull}`)
     }
   }
@@ -541,7 +541,7 @@ test('F123: button badges [Key Label] across all tabs and click hitboxes match b
 
   // 3. Health tab
   const scHealth = screen({ ...reduce(s, { name: '3' }).state, cols: 120 }, P)
-  assert.match(scHealth.lines.join('\n'), /\[R resume \(on a fresh non-red reading\)\] · \[F force resume\] · \[r reload\] · \[q quit\]/)
+  assert.match(scHealth.lines.join('\n'), /\[r refresh\] · \[R resume\] · \[c resume CLI\] · \[F force resume\] · \[q quit\]/)
 
   // 4. Messages tab
   const scMsgs = screen({ ...reduce(s, { name: '4' }).state, cols: 120 }, P)
@@ -771,6 +771,17 @@ test('F135: tester badge in expanded chips and board parsing', () => {
   const ex = text(reduce({ ...st, selected: 'F88' }, { name: 'return' }).state)
   assert.match(ex, /owner:@asha +tester:@vidul/)
 })
+
+test('Health tab renders bracketed action badges in healthBody and keysOf', () => {
+  const sHealth: State = { ...s, tab: 'health', cols: 80, rows: 24 }
+  const sc = screen(sHealth, P)
+  const full = sc.lines.join('\n')
+  assert.match(full, /\[r refresh\]/)
+  assert.match(full, /\[R resume\]/)
+  assert.match(full, /\[c resume CLI\]/)
+  assert.match(full, /\[F force resume\]/)
+})
+
 
 
 

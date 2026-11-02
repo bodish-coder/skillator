@@ -115,7 +115,7 @@ async function bindings(ui: Ui, expected: Record<string, string>, cols: number, 
     const b = await ui.find({ key })
     expect(b?.props.hotkey, `${label} ${key}`).toBe(letter)
     expect(b?.props.plain, `${label} visible native prefix`).toBe(true)
-    expect(/^[a-z]$/.test(letter)).toBe(true)
+    expect(/^[a-zA-Z]$/.test(letter)).toBe(true)
   }
   for (const box of await ui.findAll({ type: 'Box' })) {
     const controls = box.children.filter(c => typeof c === 'object' && c !== null && (c as { type?: string }).type === 'Button')
@@ -180,7 +180,7 @@ for (const cols of [40, 60, 80, 120]) test(`F115 alphabet contexts and mounted f
   await focus($,'diag:close:2'); await bindings(ui, {'diag:close:2':'o'},cols,'Diagnose second'); await ui.press({key:'diag:close:2'})
   await bindings(ui, {'diag:close:go':'y','diag:close:cancel':'n','diag:back':'b'},cols,'Close stage')
   await ui.press({key:'diag:back'}); await seed($,ui,{tab:'health'})
-  await bindings(ui, {'key:force':'f'},cols,'Health')
+  await bindings(ui, {'key:health-refresh':'r','key:resume':'R','key:resume-cli':'c','key:force':'f'},cols,'Health')
   await seed($,ui,{tab:'messages',messages:[{id:'m1',ts:'2026-10-27',from:'@a',email:'a@x',text:'first message'},{id:'m2',ts:'2026-10-27',from:'@b',email:'b@x',text:'second message'}]})
   await bindings(ui, {'row:m2':'o','key:markread':'m','key:setup':'s'},cols,'Messages')
   await focus($,'row:m1'); await bindings(ui, {'row:m1':'o'},cols,'Messages first'); await ui.press({key:'row:m1'})
