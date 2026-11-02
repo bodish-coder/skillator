@@ -40,8 +40,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { setFromRun, checkSet, wizardPage, answersToCommands, nextWizardSet, normalizeDiagram } from "./wizard.mjs";
+import { setFromRun, checkSet, wizardPage, answersToCommands, nextWizardSet, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
+import { extractDomainGraph, understandPage } from "./understand.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -469,12 +470,13 @@ function qCard(run, q) {
     ["files", q.files.join(", ")], ["default", q.f.default], ["done", q.f.done], ["gated", q.f.gated],
   ].filter(([, v]) => v).map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("");
   const diag = q.f.diagram ? blockDiagramSvg(q.f.diagram, `${q.id} action diagram`) : "";
+  const parallel = q.options.length ? renderParallelLanesSvg({ id: q.id, scope: q.holds.length ? "holds stage " + q.holds.join(", ") : "" }, q.options, `${q.id} parallel option comparison`) : "";
   return `<article class="qcard" data-q="${q.id}" data-state="${q.state}">` +
     `<header><span class="qid">${esc(run.id)} ${q.id} (${pos}/${n})</span>` +
     `<span class="chip">${esc(q.f.header || q.id)}</span><span class="qst">${esc(q.state)}</span></header>` +
     `<h3>${esc(q.f.question || "(no question text)")}</h3>` +
     `<dl class="meta">${meta}</dl>` +
-    diag +
+    diag + parallel +
     `<div class="opts">${q.options.map((o, i) => optionFlow(run, q, o, i)).join("")}</div>` +
     `<div class="answer" hidden><label>Or in your own words <input type="text" maxlength="300" data-q="${q.id}"></label>` +
     `<button type="button" class="ans-own" data-q="${q.id}">Send</button>` +
@@ -598,11 +600,13 @@ ${["landed", "inflight", "parked", "failed", "replanned", "pending", "unknown"].
 .pro-card{background:var(--does-bg);border-color:var(--does)} .con-card{background:var(--hurts-bg);border-color:var(--hurts)}
 .pc-k{font-family:var(--mono);font-size:.6875rem;text-transform:uppercase}
 .pro-card .pc-k{color:var(--does)} .con-card .pc-k{color:var(--hurts)}
-.block-diagram{width:100%;height:auto;margin:.4rem 0 .6rem;border:1px solid var(--rule);border-radius:6px;background:var(--ground);padding:.3rem}
+.block-diagram,.parallel-lanes-svg,.arch-flow-svg{width:100%;height:auto;margin:.4rem 0 .6rem;border:1px solid var(--rule);border-radius:6px;background:var(--ground);padding:.3rem}
 .bd-box{fill:var(--surface);stroke:var(--rule);stroke-width:1.3} .bd-bar{fill:var(--accent)}
+.bd-gate{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.4}
+.bd-pro .bd-box{fill:var(--does-bg);stroke:var(--does)} .bd-pro .bd-bar{fill:var(--does)}
 .bd-action .bd-bar{fill:var(--inflight)} .bd-flow .bd-bar{fill:var(--landed)}
 .bd-title{font-size:11.5px;font-weight:700;fill:var(--ink)} .bd-sub{font-size:10px;fill:var(--mid);font-family:var(--mono)}
-.bd-edge{fill:none;stroke:var(--faint);stroke-width:1.4}
+.bd-edge{fill:none;stroke:var(--faint);stroke-width:1.4} .bd-edge-rec{stroke:var(--does);stroke-width:1.8} .bd-arrow{fill:var(--faint)}
 button{font:inherit;font-size:.8125rem;margin-top:.5rem;padding:.4rem .8rem;border-radius:4px;border:1px solid var(--accent);
   background:var(--accent-bg);color:var(--ink);cursor:pointer;min-height:2.25rem}
 button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -935,16 +939,17 @@ export function batchLines(html, art, wiz = "", decisionCount = 0) {
   return lines.join("\n");
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const o = { pos: [], mode: "artifact" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => { if (i + 1 >= argv.length || argv[i + 1].startsWith("--")) throw new Error(`${a} needs a value`); return argv[++i]; };
     if (a === "--ascii") o.mode = "ascii";
     else if (a === "--html") o.mode = "html";
-    else if (a === "--md") o.mode = "md";
+    else if (a === "--md" || a === "--markdown") o.mode = "md";
     else if (a === "--svg") o.mode = "svg";
-    else if (a === "--wizard") o.mode = "wizard";
+    else if (a === "--wizard" || a === "--decision") o.mode = "wizard";
+    else if (a === "--understand") o.mode = "understand";
     else if (a === "--next-wizard") { o.mode = "wizard"; o.nextWizard = val(); }
     else if (a === "--batch") o.mode = "batch";
     else if (a === "--anatomy") o.anatomy = true;
@@ -958,7 +963,18 @@ function parseArgs(argv) {
     else if (a === "--selftest") o.selftest = true;
     else if (a === "-h" || a === "--help") o.help = true;
     else if (a.startsWith("--")) throw new Error(`unknown flag ${a}`);
-    else o.pos.push(a);
+    else {
+      const low = a.toLowerCase();
+      if (low === "decision" || low === "wizard") o.mode = "wizard";
+      else if (low === "anatomy") o.anatomy = true;
+      else if (low === "md" || low === "markdown") o.mode = "md";
+      else if (low === "understand") o.mode = "understand";
+      else if (low === "html") o.mode = "html";
+      else if (low === "svg") o.mode = "svg";
+      else if (low === "ascii") o.mode = "ascii";
+      else if (low === "batch") o.mode = "batch";
+      else o.pos.push(a);
+    }
   }
   if (o.mode === "wizard" && o.answers && !o.nextWizard && o.ticket === undefined) {
     o.nextWizard = o.answers;
@@ -1117,6 +1133,12 @@ async function main(argv) {
   }
   if ((o.mode === "md" || o.mode === "svg") && o.anatomy) throw new Error("--anatomy draws the page: use it with the Artifact or --html output");
   const stem = run ? run.id : basename(o.design).replace(/\.md$/i, "");
+  if (o.mode === "understand") {
+    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}.understand.html`));
+    await writeGenerated(root, out, understandPage(run, opts));
+    console.log(`holo: understand ${run ? `${run.id} ${run.stages.length} stages` : "design only"}${design ? `, ${design.parts.length} design sections` : ""} -> ${out} (architecture & causal graph explorer)`);
+    return;
+  }
   if (o.mode === "md" || o.mode === "svg") {
     const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}.${o.mode}`));
     await writeGenerated(root, out, o.mode === "md" ? renderMarkdown(run, opts) : renderSvg(run, opts));
@@ -1354,6 +1376,17 @@ function selftest() {
   const wp2 = wizardPage(r2);
   ok(wp2.includes("Discussion & Explanation Requested") && wp2.includes("Explain memory vs speed"), "F134(4): Round 2 wizard HTML embeds the discussion request and expanded explanations");
   ok(parseArgs(["RUN-9", "--next-wizard", "ans.json"]).nextWizard === "ans.json" && parseArgs(["RUN-9", "--wizard", "--answers", "ans.json"]).nextWizard === "ans.json", "F134(4): CLI parses --next-wizard and --wizard --answers");
+
+  // 9. Understand mode, positional subcommands (decision|anatomy|md|understand), and decision wizard upgrades
+  ok(parseArgs(["RUN-9", "decision"]).mode === "wizard" && parseArgs(["decision", "RUN-9"]).pos[0] === "RUN-9", "subcommands: decision sets wizard mode");
+  ok(parseArgs(["RUN-9", "anatomy"]).anatomy === true && parseArgs(["RUN-9", "md"]).mode === "md", "subcommands: anatomy and md recognized");
+  ok(parseArgs(["RUN-9", "understand"]).mode === "understand" && parseArgs(["RUN-9", "--understand"]).mode === "understand", "subcommands: understand recognized");
+  const uGraph = extractDomainGraph(run, d);
+  ok(uGraph.nodes.some((n) => n.kind === "stage" && n.n === 1) && uGraph.nodes.some((n) => n.kind === "decision" && n.id === "Q1") && uGraph.nodes.some((n) => n.kind === "file") && uGraph.edges.length > 0 && uGraph.tour.length === 5, "understand: extractDomainGraph builds stages, decisions, files, edges and 5-step tour");
+  const uHtml = understandPage(run, { design: d, runPath: "fixture-all-states.md" });
+  ok(/^<!doctype html>/.test(uHtml) && uHtml.includes('id="understand-data"') && uHtml.includes('id="node-inspector"') && uHtml.includes('id="guided-tour-deck"') && !/<script[^>]+src=|https?:\/\//i.test(uHtml) && !/\binnerHTML\b/.test(uHtml), "understand: standalone offline HTML with inspector, guided tour, and zero innerHTML");
+  ok(wp.includes("comparison-matrix") && wp.includes("blast-radius-chips") && wp.includes("mini-stage-graph") && wp.includes("shortcuts-dlg") && wp.includes("copy-cmds") && wp.includes("dashboard-summary"), "wizard upgrades: matrix view, blast-radius chips, mini stage-graph, shortcuts dialog, command copy, and summary metrics");
+  ok(renderArchitecturalSvg(set.decisions[0], set.decisions[0].options[0]).includes('class="arch-flow-svg"') && renderParallelLanesSvg(set.decisions[0], set.decisions[0].options).includes('class="parallel-lanes-svg"'), "wizard upgrades: renderArchitecturalSvg and renderParallelLanesSvg produce inline SVG");
 
   if (fails) { console.error(`selftest: ${fails} failed`); process.exitCode = 1; } else console.log("selftest: ok");
 }

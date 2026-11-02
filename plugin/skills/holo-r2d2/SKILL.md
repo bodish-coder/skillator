@@ -54,19 +54,23 @@ repo root:
 ```sh
 node <SKILL>/scripts/holo.mjs                  # the live run -> .skillator/holo/RUN-n.artifact.html
 node <SKILL>/scripts/holo.mjs RUN-12           # a named run (RUN-12, run-12 or 12, or a path)
+node <SKILL>/scripts/holo.mjs RUN-12 decision  # first-class mode: decision wizard (--wizard / --decision) -> .skillator/holo/RUN-12.wizard.html
+node <SKILL>/scripts/holo.mjs RUN-12 anatomy [--html]    # first-class mode: bench machine (--anatomy) -> .skillator/holo/RUN-12.html + .wizard.html
+node <SKILL>/scripts/holo.mjs RUN-12 md        # first-class mode: Markdown + Mermaid (--md) -> .skillator/holo/RUN-12.md
+node <SKILL>/scripts/holo.mjs RUN-12 understand          # first-class mode: interactive architecture & causal graph explorer (--understand) -> .skillator/holo/RUN-12.understand.html
 node <SKILL>/scripts/holo.mjs RUN-12 --design docs/plans/PLAN-x.md   # + the design's sections
 node <SKILL>/scripts/holo.mjs --design docs/plans/PLAN-x.md          # design only
 node <SKILL>/scripts/holo.mjs RUN-12 --html    # standalone page -> .skillator/holo/RUN-12.html
-node <SKILL>/scripts/holo.mjs RUN-12 --md      # Markdown + Mermaid -> .skillator/holo/RUN-12.md
 node <SKILL>/scripts/holo.mjs RUN-12 --svg     # standalone SVG -> .skillator/holo/RUN-12.svg
 node <SKILL>/scripts/holo.mjs RUN-12 --ascii   # the same, for a terminal
-node <SKILL>/scripts/holo.mjs RUN-12 --batch   # end batch: page + standalone + wizard, ASCII and paths printed
-node <SKILL>/scripts/holo.mjs RUN-12 --anatomy [--html]   # + the run as a bench machine (Fig 1)
+node <SKILL>/scripts/holo.mjs RUN-12 --batch   # AUTOMATIC ONLY (end batch): page + standalone + wizard, ASCII and paths printed
 node <SKILL>/scripts/holo.mjs --selftest
 node --test <SKILL>/scripts/anatomy.test.mjs
 ```
 
-- **The anatomy view (`--anatomy`).** The same page opens with the run drawn
+- **First-class modes (`decision | anatomy | md | understand`).** Each can be passed as a positional subcommand (`holo.mjs RUN-12 decision`, `holo.mjs RUN-12 anatomy`, `holo.mjs RUN-12 md`, `holo.mjs RUN-12 understand`) or as a flag (`--decision`/`--wizard`, `--anatomy`, `--md`, `--understand`).
+- **The understand explorer (`understand` / `--understand`).** Inspired by [Understand-Anything](https://github.com/Egonex-AI/Understand-Anything), generates `.skillator/holo/RUN-n.understand.html`: a self-contained offline 4-lane Causal Conduit schematic mapping Pipeline Stages, Decision Gates, Files/Modules, and Target Tickets with interactive node inspection (`Why it matters`, Inbound Causes, Outbound Blast Radius), real-time search/filtering (`/`), and a 5-step Guided Tour walkthrough.
+- **The anatomy view (`anatomy` / `--anatomy`).** The same page opens with the run drawn
   as a bench machine (isometric, after wheresryan22/anatomy, MIT): one
   station per stage on a rail in stage order, its lamp the state (pending
   grey, in flight amber and pulsing, landed green with the sha on its face,
@@ -120,19 +124,17 @@ path.
 
 | Said | Output | Command | Show |
 |---|---|---|---|
+| "decision", "wizard", "decide" | Decision Wizard (HTML) | `holo.mjs RUN-12 decision` -> `RUN-12.wizard.html` | give the full absolute path |
+| "anatomy", "machine", "bench" | Bench Machine Anatomy (HTML) | `holo.mjs RUN-12 anatomy --html` -> `RUN-12.html` + `RUN-12.wizard.html` | give the full absolute paths |
+| "markdown", "md", "mermaid" | Markdown with Mermaid | `holo.mjs RUN-12 md` -> `RUN-12.md` | give the full absolute path |
+| "understand", "architecture", "explore" | Understand Architecture Explorer (HTML) | `holo.mjs RUN-12 understand` -> `RUN-12.understand.html` | give the full absolute path |
 | "artifact", "publish" | Artifact (published page) | `holo.mjs RUN-12` -> `RUN-12.artifact.html` | publish it (Show it, below) + full path |
 | "html", "page", "file" | HTML file | `holo.mjs RUN-12 --html` -> `RUN-12.html` | give the full absolute path |
-| "markdown", "md", "mermaid" | Markdown with Mermaid | `holo.mjs RUN-12 --md` -> `RUN-12.md` | give the full absolute path |
 | "svg" | SVG | `holo.mjs RUN-12 --svg` -> `RUN-12.svg` | give the full absolute path |
 
 - **Named in the request** -> that one.
-- **Not named** -> ask once (`AskUserQuestion`, else a numbered list), in this
-  order: with the Artifact tool present - `Artifact (published page)`,
-  `HTML file`, `Markdown with Mermaid`, `SVG`; without it - `HTML file`,
-  `Markdown with Mermaid`, `SVG` (Artifact left out).
-- **The end batch and the away flow never ask**: `--batch` draws its fixed set
-  (Artifact page, standalone page, wizard, ASCII), printing the full resolved
-  absolute path for every generated file.
+- **Not named** -> ask once (`AskUserQuestion`, else a numbered list), offering the interactive modes (`decision`, `anatomy`, `md`, `understand`, or `HTML file` / `SVG` / `Artifact`). **Never offer `batch` (`--batch`) as an interactive user choice.**
+- **The end batch and the away flow never ask**: `--batch` is strictly an automatic mode invoked by `relay-morpheus` marathon end batches and away flows; it draws its fixed set (Artifact page, standalone page, wizard, ASCII), printing the full resolved absolute path for every generated file.
 - `--anatomy` is a page feature: with `--md` or `--svg` the script refuses.
 
 ## Show it

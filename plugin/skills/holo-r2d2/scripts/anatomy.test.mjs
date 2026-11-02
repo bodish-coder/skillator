@@ -4,8 +4,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseRun, render, artifactPage, standalonePage, renderAscii } from "./holo.mjs";
+import { parseRun, render, artifactPage, standalonePage, renderAscii, parseArgs } from "./holo.mjs";
 import { figureParts, behind } from "./anatomy.mjs";
+import { setFromRun, wizardPage, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
+import { extractDomainGraph, understandPage } from "./understand.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fx = (n) => readFileSync(join(HERE, "fixtures", n), "utf8");
@@ -79,4 +81,43 @@ test("page rules: both themes, offline, reduced motion stills it, ascii unchange
   assert.ok(!artifactPage(render(run, { now: NOW })).includes("data-station"), "no figure without --anatomy");
   assert.equal(renderAscii(run), renderAscii(parseRun(FIXTURES["all states"])), "ascii untouched");
   assert.ok(!/<svg[^>]*role="img"[^>]*class="bench"/.test(page), "the bench is a group: its levers stay reachable");
+});
+
+test("understand mode: extractDomainGraph produces stages, files, tickets, decisions and valid HTML", () => {
+  const run = parseRun(FIXTURES["all states"]);
+  const graph = extractDomainGraph(run);
+  assert.ok(graph.nodes.some((n) => n.kind === "stage" && n.n === 1));
+  assert.ok(graph.nodes.some((n) => n.kind === "decision" && n.id === "Q1"));
+  assert.ok(graph.nodes.some((n) => n.kind === "file"));
+  assert.ok(graph.edges.length > 0);
+  const html = understandPage(run, { runPath: "fixture-all-states.md" });
+  assert.ok(html.includes("<!doctype html>"));
+  assert.ok(html.includes('id="understand-data"'));
+  assert.ok(html.includes("Guided Tour"));
+  assert.ok(html.includes("node-inspector"));
+  assert.ok(!html.includes("<script src="));
+  assert.ok(!html.includes("innerHTML"));
+});
+
+test("wizard upgrades: block diagrams, parallel lanes, matrix view, keyboard shortcuts, review command copy", () => {
+  const run = parseRun(FIXTURES["two qs"]);
+  const set = setFromRun(run, "repo-two-qs/_run.md");
+  const html = wizardPage(set);
+  assert.ok(html.includes("comparison-matrix"), "matrix view container included");
+  assert.ok(html.includes("blast-radius"), "blast radius chips included");
+  assert.ok(html.includes("mini-stage-graph"), "mini stage-graph strip included");
+  assert.ok(html.includes("shortcuts-dlg"), "keyboard shortcuts dialog included");
+  assert.ok(html.includes("copy-cmds"), "copy commands button included on review screen");
+  assert.ok(html.includes("dashboard-summary"), "review dashboard summary included");
+  assert.ok(!html.includes("innerHTML"), "no innerHTML usage in wizard code");
+  assert.ok(renderArchitecturalSvg(set.decisions[0], set.decisions[0].options[0]).includes('class="arch-flow-svg"'));
+  assert.ok(renderParallelLanesSvg(set.decisions[0], set.decisions[0].options).includes('class="parallel-lanes-svg"'));
+});
+
+test("cli subcommands: parseArgs accepts positional modes decision, anatomy, md, understand", () => {
+  assert.equal(parseArgs(["RUN-1", "decision"]).mode, "wizard");
+  assert.equal(parseArgs(["RUN-1", "anatomy"]).anatomy, true);
+  assert.equal(parseArgs(["RUN-1", "md"]).mode, "md");
+  assert.equal(parseArgs(["RUN-1", "understand"]).mode, "understand");
+  assert.equal(parseArgs(["RUN-1", "--understand"]).mode, "understand");
 });

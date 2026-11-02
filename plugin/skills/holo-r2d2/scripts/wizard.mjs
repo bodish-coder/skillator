@@ -1,15 +1,18 @@
-// holo-r2d2 decision wizard (F42): one owner decision per step, answered on the
-// page it is read on. A self-contained offline HTML file - no fetch, no fonts,
-// no libraries - built from a relay run's open decisions or from a decision set
-// (holo-decisions/1 JSON). The page decides nothing: the recommendation is shown
-// first and never selected; finalizing is local; the exported JSON goes back to
-// the session, which turns it into `relay-morpheus.sh answer` calls (answersToCommands).
+// holo-r2d2 decision wizard (F42 / F134): one owner decision per step, answered
+// on the page it is read on. Self-contained offline HTML file - no fetch, no
+// fonts, no libraries - built from a relay run's open decisions or from a
+// decision set (holo-decisions/1 JSON). The page decides nothing: the
+// recommendation is shown first and never selected; finalizing is local; the
+// exported JSON or copied CLI commands go back to the session, which turns them
+// into `relay-morpheus.sh answer` calls (answersToCommands).
 
 export const SET_SCHEMA = "holo-decisions/1";
 export const ANSWER_SCHEMA = "holo-answers/1";
 const MAX_TEXT = 4000;
 
 const str = (v) => (v == null ? "" : String(v));
+const escH = (s) => str(s).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const clipText = (s, n) => { s = str(s).trim(); return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; };
 const ASKABLE = new Set(["open", "asked"]);
 
 export function normalizeDiagram(raw) {
@@ -25,10 +28,76 @@ export function normalizeDiagram(raw) {
   ).filter((x) => x.title.trim());
 }
 
+// Single-option Causal Conduit architectural SVG (server-side export).
+export function renderArchitecturalSvg(step, option, label = "Architectural decision flow") {
+  const d = step || {};
+  const o = option || (d.options && d.options[0]) || { label: "Option", does: "Action", tradeoff: "Trade-off", consequence: "Unblocks pipeline" };
+  const nowTxt = clipText(d.now || d.header || "Current state", 22);
+  const gateTxt = clipText(d.id || "Gate", 12);
+  const optTxt = clipText(o.label || "Option", 22);
+  const doesTxt = clipText(o.pros || o.does || "Direct execution", 22);
+  const consTxt = clipText(o.cons || o.tradeoff || "Standard trade-off", 22);
+  const scopeTxt = clipText(d.scope || o.consequence || "Downstream stages", 24);
+  const W = 680, H = 136;
+  return `<svg class="arch-flow-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escH(label)}">` +
+    `<title>${escH(label)}</title>` +
+    `<desc>Causal conduit flow from ${escH(nowTxt)} through gate ${escH(gateTxt)} and option ${escH(optTxt)} to ${escH(scopeTxt)}.</desc>` +
+    `<defs><marker id="arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="bd-arrow"/></marker></defs>` +
+    `<rect class="bd-box" x="10" y="42" width="124" height="52" rx="6"/>` +
+    `<text class="bd-sub" x="18" y="60">NOW</text><text class="bd-title" x="18" y="78">${escH(nowTxt)}</text>` +
+    `<path class="bd-edge" d="M134,68 L168,68" marker-end="url(#arch-arrow)"/>` +
+    `<polygon class="bd-gate" points="184,38 242,38 254,68 242,98 184,98 172,68"/>` +
+    `<text class="bd-sub" x="192" y="62">GATE</text><text class="bd-title" x="192" y="80">${escH(gateTxt)}</text>` +
+    `<path class="bd-edge" d="M254,68 L288,68" marker-end="url(#arch-arrow)"/>` +
+    `<rect class="bd-box" x="292" y="42" width="136" height="52" rx="6"/>` +
+    `<rect class="bd-bar" x="292" y="42" width="136" height="5" rx="3"/>` +
+    `<text class="bd-title" x="300" y="64">${escH(optTxt)}</text><text class="bd-sub" x="300" y="82">${escH(doesTxt)}</text>` +
+    `<path class="bd-edge" d="M428,56 C460,56 460,28 492,28" marker-end="url(#arch-arrow)"/>` +
+    `<path class="bd-edge" d="M428,80 C460,80 460,104 492,104" marker-end="url(#arch-arrow)"/>` +
+    `<g class="bd-pro"><rect class="bd-box" x="496" y="8" width="172" height="44" rx="6"/><text class="bd-sub" x="504" y="24">PROS / UNBLOCKS</text><text class="bd-title" x="504" y="41">${escH(scopeTxt)}</text></g>` +
+    `<g class="bd-con"><rect class="bd-box" x="496" y="82" width="172" height="44" rx="6"/><text class="bd-sub" x="504" y="98">CONS / COST</text><text class="bd-title" x="504" y="115">${escH(consTxt)}</text></g>` +
+    `</svg>`;
+}
+
+// Multi-lane parallel comparison SVG (server-side export).
+export function renderParallelLanesSvg(decision, options, label = "Parallel option comparison") {
+  const d = decision || {};
+  const opts = Array.isArray(options) && options.length ? options : (d.options || []);
+  if (!opts.length) return "";
+  const LH = 64, GAP = 12, PY = 14, W = 680;
+  const H = PY * 2 + opts.length * LH + (opts.length - 1) * GAP;
+  const gy = Math.round(H / 2);
+  const lanes = opts.map((o, i) => {
+    const y = PY + i * (LH + GAP);
+    const cy = y + Math.round(LH / 2);
+    const rec = !!(o.recommended || o.rec);
+    return `<path class="bd-edge${rec ? " bd-edge-rec" : ""}" d="M114,${gy} C152,${gy} 152,${cy} 188,${cy}" marker-end="url(#lane-arrow)"/>` +
+      `<g class="lane-opt${rec ? " bd-pro" : ""}" transform="translate(192,${y})">` +
+      `<rect class="bd-box" width="474" height="${LH}" rx="7"/>` +
+      `<rect class="bd-bar" width="6" height="${LH}" rx="3"/>` +
+      `<text class="bd-title" x="16" y="23">${i + 1}. ${escH(clipText(o.label, 28))}${rec ? " (Recommended)" : ""}</text>` +
+      `<text class="bd-sub" x="16" y="42">Pros: ${escH(clipText(o.pros || o.does || "-", 26))} \u00b7 Cons: ${escH(clipText(o.cons || o.tradeoff || o.hurts || "-", 24))}</text>` +
+      `<text class="bd-sub" x="16" y="56">${escH(clipText(o.consequence || d.scope || "Unblocks downstream work", 58))}</text>` +
+      `</g>`;
+  }).join("");
+  return `<svg class="parallel-lanes-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escH(label)}">` +
+    `<title>${escH(label)}</title>` +
+    `<defs><marker id="lane-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="bd-arrow"/></marker></defs>` +
+    `<polygon class="bd-gate" points="22,${gy - 26} 98,${gy - 26} 114,${gy} 98,${gy + 26} 22,${gy + 26} 8,${gy}"/>` +
+    `<text class="bd-title" x="28" y="${gy + 4}">${escH(clipText(d.id || "Gate", 10))}</text>` +
+    lanes + `</svg>`;
+}
+
 // A relay run's decisions as a set: open/asked ones are asked; answered, ruled,
 // moot and same-as ones are the settled reference, with the run file as source.
 export function setFromRun(run, runPath) {
   const src = `${runPath || run.id} (## Decisions)`;
+  const runStages = (run.stages || []).map((s) => ({
+    n: s.n,
+    name: str(s.name),
+    state: str(s.state || "pending"),
+    waits: [...(s.waits || [])],
+  }));
   const decisions = run.qs.filter((q) => ASKABLE.has(q.state)).map((q) => {
     const then = `then: ${q.blocks.length ? "unblocks " + q.blocks.join(", ") : "unblocks the parked work"}` +
       `${q.holds.length ? "; re-plans stage " + q.holds.join(", ") : ""}`;
@@ -37,6 +106,10 @@ export function setFromRun(run, runPath) {
       question: str(q.f.question) || "(no question text in the run file)",
       now: str(q.f.parked ? `parked by ${q.f.parked}` : ""),
       why: str(q.f.reason), scope: [q.blocks.length ? `blocks ${q.blocks.join(", ")}` : "", q.holds.length ? `holds stage ${q.holds.join(", ")}` : "", q.files.length ? `files ${q.files.join(", ")}` : ""].filter(Boolean).join(" \u00b7 "),
+      files: [...(q.files || [])],
+      holds: [...(q.holds || [])],
+      blocks: [...(q.blocks || [])],
+      stages: runStages,
       example: "", recommendation: q.options.some((o) => o.rec) ? "Marked recommended in the run file." : "",
       options: q.options.filter((o) => str(o.label).trim()).map((o, i) => ({
         id: "o" + (i + 1), label: o.label, explain: str(o.explain || ""),
@@ -184,12 +257,6 @@ export function nextWizardSet(set, ans) {
   return checkSet({ ...set, round, title: `${baseTitle} (Round ${round})`, decisions, settled });
 }
 
-// The finalized export -> one relay-morpheus answer line per answered decision,
-// for the run the answers were made for (its id names the run, never "the one
-// here"). POSIX sh lines: single quotes only - page text is typed by whoever
-// opened the page. The run file is line-based, so text is folded onto one line;
-// text relay-morpheus would read as a flag or a comment is held back. Custom
-// directions go through verbatim but are flagged for interpretation.
 export function answersToCommands(ans, rm = "relay-morpheus.sh") {
   if (!ans || ans.schema !== ANSWER_SCHEMA) throw new Error(`answers: schema must be "${ANSWER_SCHEMA}"`);
   if (!ans.finalizedAt || !ans.reviewed || !str(ans.owner).trim()) throw new Error("answers: a draft, not finalized and reviewed by its owner - nothing is applied");
@@ -218,7 +285,6 @@ export function answersToCommands(ans, rm = "relay-morpheus.sh") {
 
 // Embedded data: JSON with every `<` escaped, so no string closes the script.
 const embed = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
-const escH = (s) => str(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 export function wizardPage(set) {
   checkSet(set);
@@ -229,8 +295,16 @@ export function wizardPage(set) {
 <body>
 <a class="skip" href="#main">Skip to the decision</a>
 <header class="top"><div class="wrap">
-  <p class="eyebrow">Owner decisions \u00b7 <span id="setid"></span></p>
-  <h1 id="title"></h1>
+  <div class="top-row">
+    <div>
+      <p class="eyebrow">Owner decisions \u00b7 <span id="setid"></span></p>
+      <h1 id="title"></h1>
+    </div>
+    <div class="head-controls">
+      <input type="search" id="decision-search" placeholder="Filter decisions (/)" aria-label="Filter decisions" autocomplete="off">
+      <button type="button" id="btn-shortcuts" class="quiet" aria-label="Keyboard shortcuts (?)">Shortcuts ?</button>
+    </div>
+  </div>
   <div class="progress" aria-hidden="true"><div id="bar"></div></div>
   <p id="progress-text" class="muted"></p>
   <nav aria-label="Decisions"><ol id="steps"></ol></nav>
@@ -247,6 +321,17 @@ export function wizardPage(set) {
 </footer>
 <dialog id="confirm"><form method="dialog"><h2 id="confirm-title"></h2><p id="confirm-text"></p>
   <div class="row"><button value="cancel" class="quiet">Cancel</button><button value="ok" id="confirm-ok" class="danger">Replace</button></div></form></dialog>
+<dialog id="shortcuts-dlg" aria-labelledby="shortcuts-title"><form method="dialog">
+  <h2 id="shortcuts-title">Keyboard Shortcuts</h2>
+  <dl class="shortcuts-list">
+    <div><dt><kbd>1</kbd> \u2013 <kbd>9</kbd></dt><dd>Select option 1 through 9 on the active decision</dd></div>
+    <div><dt><kbd>[</kbd> / <kbd>]</kbd></dt><dd>Previous / Next decision step (or Alt+Left / Alt+Right)</dd></div>
+    <div><dt><kbd>/</kbd></dt><dd>Focus the decision filter search input</dd></div>
+    <div><dt><kbd>?</kbd></dt><dd>Open this keyboard shortcuts sheet</dd></div>
+    <div><dt><kbd>Esc</kbd></dt><dd>Close open dialog</dd></div>
+  </dl>
+  <div class="row"><button value="close" class="primary">Close</button></div>
+</form></dialog>
 <script type="application/json" id="holo-set">${embed(set)}</script>
 <script>${CLIENT}</script>
 </body></html>
@@ -254,23 +339,36 @@ export function wizardPage(set) {
 }
 
 const CSS = `
-:root{--bg:#f7f6f2;--card:#fff;--ink:#1d2021;--muted:#55595c;--line:#d6d3cb;--accent:#0b5cad;--accent-ink:#fff;--rec:#1d6b3a;--rec-bg:#e6f2ea;--warn:#a23b12;--warn-bg:#fbeae2;--sel:#e8f0fa;--focus:#c25e00}
-@media (prefers-color-scheme:dark){:root{--bg:#141618;--card:#1d2023;--ink:#ecebe7;--muted:#b0b3b6;--line:#3a3f44;--accent:#6fb0f2;--accent-ink:#0b1420;--rec:#7fd39b;--rec-bg:#16301f;--warn:#f39a73;--warn-bg:#3a1f14;--sel:#1b2a3b;--focus:#ffb35c}}
+:root{--bg:#f6f8fa;--card:#ffffff;--ink:#1f2328;--muted:#656d76;--line:#d0d7de;--accent:#0969da;--accent-ink:#ffffff;--rec:#1a7f37;--rec-bg:#dafbe1;--warn:#cf222e;--warn-bg:#ffebe9;--sel:#ddf4ff;--focus:#fd8c73;--conduit:#8c959f;--conduit-active:#0969da}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1117;--card:#161b22;--ink:#f0f6fc;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--accent-ink:#0d1117;--rec:#3fb950;--rec-bg:#11281a;--warn:#f85149;--warn-bg:#321617;--sel:#182c44;--focus:#f0883e;--conduit:#484f58;--conduit-active:#58a6ff}}
+:root[data-theme="dark"]{--bg:#0d1117;--card:#161b22;--ink:#f0f6fc;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--accent-ink:#0d1117;--rec:#3fb950;--rec-bg:#11281a;--warn:#f85149;--warn-bg:#321617;--sel:#182c44;--focus:#f0883e;--conduit:#484f58;--conduit-active:#58a6ff}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-wrap:anywhere}
-.wrap{max-width:1120px;margin:0 auto;padding:0 16px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-wrap:anywhere}
+.wrap{max-width:1160px;margin:0 auto;padding:0 16px}
 .skip{position:absolute;left:-999px}.skip:focus{left:16px;top:8px;background:var(--card);padding:8px;z-index:9}
-.top{border-bottom:1px solid var(--line);background:var(--card);padding:16px 0 8px}
-.eyebrow{margin:0;color:var(--muted);font-size:.85rem;letter-spacing:.04em;text-transform:uppercase}
+.top{border-bottom:1px solid var(--line);background:var(--card);padding:16px 0 10px}
+.top-row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px}
+.head-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+#decision-search{min-height:44px;min-width:200px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:.9rem}
+.eyebrow{margin:0;color:var(--muted);font-size:.82rem;letter-spacing:.04em;text-transform:uppercase}
 h1{font-size:1.45rem;margin:.2rem 0 .6rem;line-height:1.25}
 h2{font-size:1.3rem;line-height:1.3;margin:.3rem 0 .8rem}
 .progress{height:6px;background:var(--line);border-radius:3px;overflow:hidden}#bar{height:100%;width:0;background:var(--accent)}
 .muted{color:var(--muted)}.small{font-size:.85rem}
 nav ol{list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:.6rem 0 0;padding:0}
-nav button{min-height:44px;min-width:44px;padding:4px 10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;font:inherit;font-size:.9rem;cursor:pointer}
+nav button{min-height:44px;min-width:44px;padding:4px 10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;font:inherit;font-size:.9rem;cursor:pointer;font-variant-numeric:tabular-nums}
 nav button[aria-current=step]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 nav .st{display:inline-block;width:1.1em;text-align:center}
 main{padding:20px 16px 8px}
+.subbar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;margin-bottom:16px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+.blast-radius-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.br-chip{font:600 .8rem/1.2 ui-monospace,"SF Mono",Menlo,Consolas,monospace;padding:4px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:var(--ink)}
+.br-chip.br-hold{border-color:var(--warn);background:var(--warn-bg);color:var(--warn)}
+.br-chip.br-ticket{border-color:var(--accent);background:var(--sel);color:var(--accent)}
+.view-toggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.view-toggle button{min-height:38px;padding:4px 12px;border:0;background:var(--bg);color:var(--ink);cursor:pointer;font-size:.86rem;font-weight:600}
+.view-toggle button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.mini-stage-graph{display:block;width:100%;max-width:560px;height:48px;margin:0 0 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:4px}
 .step{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:24px;align-items:start}
 @media (max-width:820px){.step{display:flex;flex-direction:column;gap:16px}.step>section{display:contents}.step fieldset{order:1}.step aside.preview{order:2}.step .after{order:3}.step .recbox,.step .ctx{align-self:stretch}}
 .ids{font-size:.9rem;color:var(--muted);margin:0}
@@ -294,12 +392,21 @@ legend{font-weight:600;margin-bottom:.5rem;padding:0}
 .pro-card{background:var(--rec-bg);border-color:var(--rec)}.con-card{background:var(--warn-bg);border-color:var(--warn)}
 .pc-k{font-weight:700;text-transform:uppercase;font-size:.74rem;letter-spacing:.04em;margin-right:.3rem}
 .pro-card .pc-k{color:var(--rec)}.con-card .pc-k{color:var(--warn)}
-.block-diagram{display:block;width:100%;height:auto;margin:.5rem 0 .85rem;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:.35rem}
+.block-diagram,.arch-flow-svg,.parallel-lanes-svg{display:block;width:100%;height:auto;margin:.5rem 0 .85rem;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:.35rem}
 .bd-box{fill:var(--bg);stroke:var(--line);stroke-width:1.4}.bd-bar{fill:var(--accent)}
+.bd-gate{fill:var(--sel);stroke:var(--accent);stroke-width:1.6}
 .bd-pro .bd-box{fill:var(--rec-bg);stroke:var(--rec)}.bd-pro .bd-bar{fill:var(--rec)}
 .bd-con .bd-box{fill:var(--warn-bg);stroke:var(--warn)}.bd-con .bd-bar{fill:var(--warn)}
 .bd-title{font-size:12px;font-weight:700;fill:var(--ink)}.bd-sub{font-size:10.5px;fill:var(--muted)}
-.bd-edge{fill:none;stroke:var(--muted);stroke-width:1.5}.bd-arrow{fill:var(--muted)}
+.bd-edge{fill:none;stroke:var(--conduit);stroke-width:1.6}.bd-edge-rec{stroke:var(--rec);stroke-width:2}.bd-arrow{fill:var(--conduit)}
+.comparison-matrix-wrap{overflow-x:auto;margin:0 0 1rem;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.comparison-matrix{width:100%;border-collapse:collapse;font-size:.9rem}
+.comparison-matrix caption{text-align:left;font-weight:700;padding:.65rem .8rem;border-bottom:1px solid var(--line);color:var(--muted)}
+.comparison-matrix th,.comparison-matrix td{padding:.6rem .75rem;border-top:1px solid var(--line);border-right:1px solid var(--line);text-align:left;vertical-align:top}
+.comparison-matrix th[scope="row"]{width:9.5rem;background:var(--bg);font-weight:700;color:var(--muted)}
+.comparison-matrix .col-active{background:var(--sel);box-shadow:inset 0 0 0 2px var(--accent)}
+.btn-select-opt{min-height:40px;padding:.35rem .75rem;border-radius:7px;border:1px solid var(--accent);background:var(--card);color:var(--ink);font-weight:600;cursor:pointer}
+.btn-select-opt.active{background:var(--accent);color:var(--accent-ink)}
 .discuss-banner{border:1px solid var(--accent);background:var(--sel);margin-bottom:1rem}
 .discuss-banner h3{margin:0 0 .35rem;font-size:1.02rem;color:var(--accent)}
 .opt.alt{border-style:dashed}
@@ -322,9 +429,9 @@ aside.preview{position:sticky;top:12px;background:var(--card);border:1px solid v
 .note-ex{font-size:.85rem;color:var(--muted);margin:.4rem 0 0}
 .actions{display:flex;flex-wrap:wrap;gap:10px;margin:1.2rem 0 .5rem}
 button{font:inherit}
-.primary,.secondary,.quiet,.danger{min-height:44px;padding:.5rem 1rem;border-radius:9px;cursor:pointer;border:1px solid var(--line)}
+.primary,.secondary,.quiet,.danger,.copy-cmds{min-height:44px;padding:.5rem 1rem;border-radius:9px;cursor:pointer;border:1px solid var(--line)}
 .primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
-.secondary{background:var(--card);color:var(--ink)}
+.secondary,.copy-cmds{background:var(--card);color:var(--ink);font-weight:600}
 .quiet{background:transparent;color:var(--ink)}
 .danger{background:var(--warn);color:#fff;border-color:var(--warn)}
 :focus-visible{outline:3px solid var(--focus);outline-offset:2px}
@@ -333,6 +440,14 @@ button{font:inherit}
 .filebtn{display:inline-flex;align-items:center;position:relative}
 .filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
 .filebtn:focus-within{outline:3px solid var(--focus);outline-offset:2px}
+.dashboard-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:10px;margin:0 0 1rem}
+.metric-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.7rem .9rem}
+.metric-card b{display:block;font-size:1.35rem;font-variant-numeric:tabular-nums}
+.metric-card span{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.blast-summary-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.75rem .95rem;margin:0 0 1rem;font-size:.9rem}
+.cmd-section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.85rem 1rem;margin:1rem 0}
+.cmd-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:.5rem}
+.cmd-box{margin:0;padding:.65rem .8rem;background:var(--bg);border:1px solid var(--line);border-radius:8px;font:13px/1.45 ui-monospace,"SF Mono",Menlo,Consolas,monospace;overflow-x:auto}
 .review ol{padding-left:1.2rem}.review li{margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--line)}
 .badge{display:inline-block;font-size:.78rem;font-weight:700;border-radius:6px;padding:.05rem .45rem;margin-left:.4rem;border:1px solid currentColor}
 .b-answered{color:var(--rec)}.b-custom-review-required{color:var(--accent)}.b-deferred,.b-incomplete{color:var(--warn)}
@@ -340,14 +455,17 @@ button{font:inherit}
 .settled table{border-collapse:collapse;width:100%;font-size:.92rem}.settled td,.settled th{border-top:1px solid var(--line);padding:.4rem;text-align:left;vertical-align:top}
 .banner{border-radius:10px;padding:.7rem .9rem;margin:0 0 1rem;background:var(--sel)}
 .banner.warn{background:var(--warn-bg)}
-dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);max-width:min(92vw,460px)}
-dialog .row{display:flex;gap:8px;justify-content:flex-end}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);max-width:min(92vw,480px);padding:1rem 1.2rem}
+dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:1rem}
+.shortcuts-list{display:grid;gap:.55rem;margin:.8rem 0}
+.shortcuts-list div{display:grid;grid-template-columns:6.5rem 1fr;gap:.5rem;align-items:baseline}
+kbd{font:700 .8rem ui-monospace,monospace;padding:2px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 @media (prefers-reduced-motion:no-preference){#bar{transition:width .25s}}
 `;
 
 // The page's own code. Text from the set or a draft only ever reaches the DOM
-// through textContent / value - never innerHTML.
+// through textContent / value.
 const CLIENT = String.raw`(() => {
 "use strict";
 const SET = JSON.parse(document.getElementById("holo-set").textContent);
@@ -407,15 +525,92 @@ function renderBlockDiagram(items, label) {
   });
   return svg;
 }
+function renderArchitecturalSvg(d, o, label) {
+  if (!o) return null;
+  const W = 540, H = 128;
+  const nowTxt = clip(d.now || d.header || "Current state", 18);
+  const gateTxt = clip(d.id || "Gate", 10);
+  const optTxt = clip(o.label || "Option", 18);
+  const doesTxt = clip(o.pros || o.does || "Action", 18);
+  const consTxt = clip(o.cons || o.tradeoff || "Trade-off", 18);
+  const scopeTxt = clip(d.scope || o.consequence || "Unblocks pipeline", 20);
+  return svgEl("svg", { class: "arch-flow-svg", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": label || "Architectural flow" },
+    svgEl("title", { text: label || "Architectural flow" }),
+    svgEl("defs", null, svgEl("marker", { id: "arch-arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" },
+      svgEl("path", { d: "M0,0 L10,5 L0,10 z", class: "bd-arrow" }))),
+    svgEl("rect", { class: "bd-box", x: 8, y: 38, width: 104, height: 50, rx: 6 }),
+    svgEl("text", { class: "bd-sub", x: 15, y: 55, text: "NOW" }),
+    svgEl("text", { class: "bd-title", x: 15, y: 74, text: nowTxt }),
+    svgEl("path", { class: "bd-edge", d: "M112,63 L136,63", "marker-end": "url(#arch-arrow)" }),
+    svgEl("polygon", { class: "bd-gate", points: "148,36 196,36 206,63 196,90 148,90 138,63" }),
+    svgEl("text", { class: "bd-title", x: 154, y: 67, text: gateTxt }),
+    svgEl("path", { class: "bd-edge", d: "M206,63 L230,63", "marker-end": "url(#arch-arrow)" }),
+    svgEl("rect", { class: "bd-box", x: 234, y: 38, width: 118, height: 50, rx: 6 }),
+    svgEl("rect", { class: "bd-bar", x: 234, y: 38, width: 118, height: 5, rx: 3 }),
+    svgEl("text", { class: "bd-title", x: 242, y: 58, text: optTxt }),
+    svgEl("text", { class: "bd-sub", x: 242, y: 76, text: doesTxt }),
+    svgEl("path", { class: "bd-edge", d: "M352,52 C374,52 374,28 394,28", "marker-end": "url(#arch-arrow)" }),
+    svgEl("path", { class: "bd-edge", d: "M352,74 C374,74 374,98 394,98", "marker-end": "url(#arch-arrow)" }),
+    svgEl("g", { class: "bd-pro" },
+      svgEl("rect", { class: "bd-box", x: 398, y: 8, width: 134, height: 42, rx: 6 }),
+      svgEl("text", { class: "bd-sub", x: 405, y: 23, text: "UNBLOCKS" }),
+      svgEl("text", { class: "bd-title", x: 405, y: 39, text: scopeTxt })),
+    svgEl("g", { class: "bd-con" },
+      svgEl("rect", { class: "bd-box", x: 398, y: 76, width: 134, height: 42, rx: 6 }),
+      svgEl("text", { class: "bd-sub", x: 405, y: 91, text: "COST" }),
+      svgEl("text", { class: "bd-title", x: 405, y: 107, text: consTxt })));
+}
+function renderParallelLanesSvg(d, opts, label) {
+  const list = Array.isArray(opts) ? opts : [];
+  if (!list.length) return null;
+  const LH = 54, GAP = 10, PY = 10, W = 540;
+  const H = PY * 2 + list.length * LH + (list.length - 1) * GAP;
+  const gy = Math.round(H / 2);
+  const svg = svgEl("svg", { class: "parallel-lanes-svg", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": label || "Parallel option lanes" },
+    svgEl("title", { text: label || "Parallel option lanes" }),
+    svgEl("defs", null, svgEl("marker", { id: "lane-arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" },
+      svgEl("path", { d: "M0,0 L10,5 L0,10 z", class: "bd-arrow" }))),
+    svgEl("polygon", { class: "bd-gate", points: "18," + (gy - 22) + " 78," + (gy - 22) + " 90," + gy + " 78," + (gy + 22) + " 18," + (gy + 22) + " 6," + gy }),
+    svgEl("text", { class: "bd-title", x: 24, y: gy + 4, text: clip(d.id || "Gate", 8) }));
+  list.forEach((o, idx) => {
+    const y = PY + idx * (LH + GAP), cy = y + Math.round(LH / 2);
+    svg.append(
+      svgEl("path", { class: "bd-edge" + (o.recommended ? " bd-edge-rec" : ""), d: "M90," + gy + " C118," + gy + " 118," + cy + " 144," + cy, "marker-end": "url(#lane-arrow)" }),
+      svgEl("g", { class: "lane-opt" + (o.recommended ? " bd-pro" : ""), transform: "translate(148," + y + ")" },
+        svgEl("rect", { class: "bd-box", width: 382, height: LH, rx: 6 }),
+        svgEl("rect", { class: "bd-bar", width: 5, height: LH, rx: 2 }),
+        svgEl("text", { class: "bd-title", x: 12, y: 20, text: (idx + 1) + ". " + clip(o.label, 24) + (o.recommended ? " (Recommended)" : "") }),
+        svgEl("text", { class: "bd-sub", x: 12, y: 39, text: "Pros: " + clip(o.pros || o.does || "-", 20) + " \u00b7 Cons: " + clip(o.cons || o.tradeoff || "-", 18) })));
+  });
+  return svg;
+}
+function renderMiniStageGraph(d) {
+  const held = (d.holds && d.holds.length) ? "Stage " + d.holds.join(", ") : (d.now || "Held Stage");
+  const blk = (d.blocks && d.blocks.length) ? "Unblocks " + d.blocks.join(", ") : (d.ticket ? "Ticket " + d.ticket : "Downstream");
+  return svgEl("svg", { class: "mini-stage-graph", viewBox: "0 0 540 44", role: "img", "aria-label": "Stage context strip for " + d.id },
+    svgEl("title", { text: "Mini stage graph for " + d.id }),
+    svgEl("g", { class: "bd-pro" },
+      svgEl("rect", { class: "bd-box", x: 6, y: 5, width: 146, height: 34, rx: 5 }),
+      svgEl("text", { class: "bd-title", x: 14, y: 26, text: "Upstream Stage [x]" })),
+    svgEl("path", { class: "bd-edge", d: "M152,22 L186,22" }),
+    svgEl("g", { class: "bd-con" },
+      svgEl("rect", { class: "bd-box", x: 190, y: 5, width: 162, height: 34, rx: 5 }),
+      svgEl("text", { class: "bd-title", x: 198, y: 26, text: clip(held + " [? " + d.id + "]", 22) })),
+    svgEl("path", { class: "bd-edge", d: "M352,22 L386,22" }),
+    svgEl("g", null,
+      svgEl("rect", { class: "bd-box", x: 390, y: 5, width: 144, height: 34, rx: 5 }),
+      svgEl("text", { class: "bd-title", x: 398, y: 26, text: clip(blk, 20) })));
+}
 function hash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 ^ s.charCodeAt(i)) >>> 0; return h.toString(36); }
 const blank = () => ({ choice: "", custom: "", clarification: "", notes: "", skipped: false });
-let st = { answers: Object.create(null), owner: "", reviewed: false, finalizedAt: null, step: 0, imported: false };
+let st = { answers: Object.create(null), owner: "", reviewed: false, finalizedAt: null, step: 0, imported: false, viewMode: "flow", search: "" };
 let storageOk = true;
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) { const v = JSON.parse(raw); if (v && typeof v === "object" && v.answers) st = Object.assign(st, v); } }
   catch (e) { storageOk = false; }
   for (const d of SET.decisions) st.answers[d.id] = Object.assign(blank(), st.answers[d.id] || {});
   st.step = Math.min(Math.max(0, st.step | 0), SET.decisions.length);
+  if (!st.viewMode) st.viewMode = "flow";
 }
 function save(quiet) {
   try { localStorage.setItem(KEY, JSON.stringify(st)); storageOk = true; if (!quiet) say("Draft saved in this browser."); }
@@ -440,15 +635,18 @@ function header() {
   $("bar").style.width = (n ? (done / n) * 100 : 100) + "%";
   $("progress-text").textContent = done + " of " + n + " decisions have a response" + (st.finalizedAt ? " \u00b7 finalized" : st.reviewed ? " \u00b7 reviewed, not finalized" : " \u00b7 nothing is approved until you finalize");
   const ol = $("steps"); ol.textContent = "";
+  const q = String(st.search || "").trim().toLowerCase();
   SET.decisions.forEach((d, i) => {
     const s = statusOf(d);
+    const match = !q || [d.id, d.ticket, d.header, d.question, d.scope].some(v => String(v || "").toLowerCase().includes(q));
+    if (!match) return;
     ol.append(el("li", null, el("button", { type: "button", "aria-current": st.step === i ? "step" : null, "aria-label": d.id + ", " + LABEL[s], onclick: () => go(i) },
       el("span", { class: "st", "aria-hidden": "true", text: GLYPH[s] }), " " + d.id)));
   });
   ol.append(el("li", null, el("button", { type: "button", "aria-current": st.step === n ? "step" : null, onclick: () => go(n) }, "Review")));
 }
 
-function go(i, focusMain) {
+function go(i) {
   st.step = Math.min(Math.max(0, i), SET.decisions.length); save(true); render();
   const h = document.querySelector("main h2"); if (h) { h.setAttribute("tabindex", "-1"); h.focus(); }
   window.scrollTo(0, 0);
@@ -461,12 +659,51 @@ function render() {
   m.append(stepView(SET.decisions[st.step], st.step));
 }
 
+function buildBlastChips(d) {
+  const files = Array.isArray(d.files) ? d.files : [];
+  const holds = Array.isArray(d.holds) ? d.holds : [];
+  const blocks = Array.isArray(d.blocks) ? d.blocks : (d.ticket ? [d.ticket] : []);
+  return el("div", { class: "blast-radius-chips", "aria-label": "Blast radius summary" },
+    el("span", { class: "br-chip", text: files.length ? (files.length + " file" + (files.length === 1 ? "" : "s") + " impacted") : (d.scope || "Scope in run file") }),
+    holds.length ? el("span", { class: "br-chip br-hold", text: "holds stage " + holds.join(", ") }) : null,
+    blocks.length ? el("span", { class: "br-chip br-ticket", text: "blocks " + blocks.join(", ") }) : null);
+}
+
+function buildComparisonMatrix(d, a, onPick) {
+  const opts = d.options || [];
+  const headRow = el("tr", null,
+    el("th", { scope: "col", text: "Attribute" }),
+    opts.map((o, idx) => el("th", { scope: "col", class: a.choice === o.id ? "col-active" : null, text: (idx + 1) + ". " + o.label })));
+  const rowOf = (title, fn) => el("tr", null,
+    el("th", { scope: "row", text: title }),
+    opts.map(o => el("td", { class: a.choice === o.id ? "col-active" : null }, fn(o))));
+  const tbl = el("table", { class: "comparison-matrix" },
+    el("caption", { text: "Side-by-side option comparison for " + d.id }),
+    el("thead", null, headRow),
+    el("tbody", null,
+      rowOf("Action / Does", o => o.explain || o.does || "-"),
+      rowOf("Pros", o => o.pros || o.does || "-"),
+      rowOf("Cons & Trade-offs", o => o.cons || o.tradeoff || "-"),
+      rowOf("Blast Radius", o => o.consequence || d.scope || "Unblocks downstream work"),
+      rowOf("Recommendation", o => o.recommended ? el("strong", { text: "Recommended" }) : "-"),
+      rowOf("Selection", (o, idx) => el("button", {
+        type: "button",
+        class: "btn-select-opt" + (a.choice === o.id ? " active" : ""),
+        onclick: () => onPick(o.id),
+        text: a.choice === o.id ? "Selected [" + (idx + 1) + "]" : "Select Option " + (idx + 1) + " [" + (idx + 1) + "]",
+      }))));
+  return el("div", { class: "comparison-matrix-wrap" }, tbl);
+}
+
 function stepView(d, i) {
   const a = st.answers[d.id], n = SET.decisions.length;
   const rec = d.options.find(o => o.recommended);
   const ctx = [["What exists now", d.now], ["Why it matters", d.why], ["Scope", d.scope]].filter(([, v]) => v);
   const name = "q-" + d.id;
   const isDefer = () => a.choice === "defer" || a.choice === "explain";
+  const selectChoice = (id) => {
+    a.choice = id; a.skipped = false; unapprove(); save(true); render();
+  };
   const opt = (id, labelKids, meta, extra, extraKids) => {
     const checkedVal = (id === "defer" ? isDefer() : a.choice === id) || null;
     const inp = el("input", { type: "radio", name, value: id, id: name + "-" + id, checked: checkedVal,
@@ -489,14 +726,14 @@ function stepView(d, i) {
   function toggleNeeds() { customNeed.hidden = a.choice !== "custom"; deferNeed.hidden = !isDefer(); }
   const choiceErr = el("p", { class: "err", id: name + "-err", "aria-live": "polite" });
   const fs = el("fieldset", { "aria-describedby": name + "-err" },
-    el("legend", { text: "Your answer" }),
-    d.options.map(o => {
+    el("legend", { text: "Your answer (press 1-9 for quick pick)" }),
+    d.options.map((o, idx) => {
       const pros = o.pros || o.does || "", cons = o.cons || o.tradeoff || "";
       const pc = (pros || cons) ? el("span", { class: "pros-cons" },
         pros ? el("span", { class: "pro-card" }, el("strong", { class: "pc-k", text: "Pros:" }), pros) : null,
         cons ? el("span", { class: "con-card" }, el("strong", { class: "pc-k", text: "Cons:" }), cons) : null) : null;
       return opt(o.id,
-        [el("span", { class: "lbl", text: o.label }), o.recommended ? el("span", { class: "tag", text: "Recommended" }) : null],
+        [el("span", { class: "lbl", text: (idx + 1) + ". " + o.label }), o.recommended ? el("span", { class: "tag", text: "Recommended" }) : null],
         [o.does && "Does: " + o.does, o.tradeoff && "Trade-off: " + o.tradeoff].filter(Boolean).join(" \u00b7 "),
         false,
         [o.explain ? el("span", { class: "opt-explain", text: "What this action does: " + o.explain }) : null, pc]);
@@ -512,6 +749,8 @@ function stepView(d, i) {
     const o = d.options.find(x => x.id === a.choice);
     const flow = el("ol", { class: "flow" });
     if (o) {
+      const archSvg = renderArchitecturalSvg(d, o, "Architectural flow for " + o.label);
+      if (archSvg) preview.append(archSvg);
       const diagItems = o.diagram ? normDiag(o.diagram) : [
         { title: o.label, subtitle: o.explain || "Action", kind: "action" },
         ...(o.pros || o.does ? [{ title: "Pros", subtitle: o.pros || o.does, kind: "pro" }] : []),
@@ -544,6 +783,8 @@ function stepView(d, i) {
       flow.append(el("li", { class: "pick" }, el("span", { class: "k", text: "Ask / Explain more" }), a.clarification.trim() || "(what to explain is not written yet)"));
       flow.append(el("li", { class: "then" }, el("span", { class: "k", text: "Then" }), "Finalizing is allowed. Download the JSON and run --next-wizard to generate the next HTML with settled answers saved and this explanation expanded."));
     } else {
+      const lanesSvg = renderParallelLanesSvg(d, d.options, "Parallel lanes comparison for " + d.id);
+      if (lanesSvg) preview.append(lanesSvg);
       const fallbackDiag = d.diagram ? normDiag(d.diagram) : d.options.map((x, idx) => ({ title: x.label, subtitle: x.does || ("Option " + (idx + 1)), kind: x.recommended ? "pro" : "block" }));
       const svg = renderBlockDiagram(fallbackDiag, "Decision overview diagram");
       if (svg) preview.append(svg);
@@ -568,12 +809,24 @@ function stepView(d, i) {
     el("p", { text: (d.discussion.kind === "custom" ? "Your previous custom direction: " : "Your question / explain request: ") + d.discussion.prompt }),
     d.discussion.notes ? el("p", { class: "small muted", text: "Notes from previous round: " + d.discussion.notes }) : null) : null;
   const stepDiag = renderBlockDiagram(d.diagram || d.options.map((x, idx) => ({ title: x.label, subtitle: x.does || ("Option " + (idx + 1)), kind: x.recommended ? "pro" : "block" })), "Block diagram for " + d.id);
+  const parallelDiag = renderParallelLanesSvg(d, d.options, "Parallel options for " + d.id);
+  const subbar = el("div", { class: "subbar" },
+    buildBlastChips(d),
+    el("div", { id: "view-mode-toggle", class: "view-toggle", role: "group", "aria-label": "View mode" },
+      el("button", { type: "button", "aria-pressed": st.viewMode !== "matrix" ? "true" : "false", onclick: () => { st.viewMode = "flow"; save(true); render(); }, text: "\u2635 Flow View" }),
+      el("button", { type: "button", "aria-pressed": st.viewMode === "matrix" ? "true" : "false", onclick: () => { st.viewMode = "matrix"; save(true); render(); }, text: "\u229e Matrix View" })));
+  const matrixEl = buildComparisonMatrix(d, a, selectChoice);
+  matrixEl.hidden = st.viewMode !== "matrix";
   const left = el("section", { "aria-labelledby": name + "-h" },
     el("p", { class: "ids", text: "Decision " + (i + 1) + " of " + n + " \u00b7 " + d.id + (d.ticket ? " \u00b7 ticket " + d.ticket : "") + (d.header ? " \u00b7 " + d.header : "") }),
     el("h2", { id: name + "-h", text: d.question }),
+    subbar,
+    renderMiniStageGraph(d),
     discussBanner,
     ctx.length ? el("dl", { class: "ctx" }, ctx.map(([k, v]) => el("div", null, el("dt", { text: k }), el("dd", { text: v })))) : null,
     stepDiag,
+    parallelDiag,
+    matrixEl,
     d.example ? el("p", { class: "example" }, el("strong", { text: "Example: " }), d.example) : null,
     rec ? el("div", { class: "recbox" }, el("strong", { text: "Recommended: " + rec.label }), d.recommendation ? el("div", { text: d.recommendation }) : null, el("div", { class: "small muted", text: "Shown first, not chosen for you." }))
         : el("div", { class: "recbox" }, el("strong", { text: "No recommendation" }), el("div", { text: d.recommendation || "None of the options can responsibly be recommended from the evidence given." })),
@@ -587,10 +840,58 @@ function stepView(d, i) {
   return el("div", { class: "step" }, left, preview);
 }
 
+function buildCliCommands() {
+  const m = /^RUN-(\d+)$/.exec(String(SET.id || ""));
+  const runNum = m ? m[1] : String(SET.id || "1");
+  const lines = [];
+  for (const d of SET.decisions) {
+    const a = st.answers[d.id], o = d.options.find(x => x.id === a.choice);
+    const notes = String(a.notes || "").replace(/\s+/g, " ").trim();
+    let val = "";
+    if (o) val = o.label;
+    else if (a.choice === "custom") val = String(a.custom || "").replace(/\s+/g, " ").trim();
+    if (!val) continue;
+    const full = val + (notes ? " - " + notes : "");
+    const quoted = "'" + full.replace(/'/g, "'\\''") + "'";
+    lines.push("sh relay-morpheus.sh " + runNum + " answer " + d.id + " " + quoted);
+  }
+  return lines.length ? lines.join("\n") : "# Answer at least one decision to generate relay-morpheus answer commands";
+}
+
+function copyText(txt, btn) {
+  const done = () => {
+    const orig = btn.textContent;
+    btn.textContent = "\u2713 Copied!";
+    say("Commands copied to clipboard.");
+    setTimeout(() => { btn.textContent = orig; }, 2000);
+  };
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    navigator.clipboard.writeText(txt).then(done).catch(() => fallbackCopy(txt, done));
+  } else {
+    fallbackCopy(txt, done);
+  }
+}
+function fallbackCopy(txt, done) {
+  const ta = el("textarea", { style: "position:fixed;left:-9999px" });
+  ta.value = txt; document.body.append(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch (e) { say("Copy failed - select the command box text manually."); }
+  ta.remove();
+}
+
 function review() {
   const n = SET.decisions.length;
+  const counts = { answered: 0, custom: 0, deferred: 0, incomplete: 0 };
+  const allFiles = new Set(), allStages = new Set(), allTickets = new Set();
   const rows = SET.decisions.map((d, i) => {
     const a = st.answers[d.id], s = statusOf(d), o = d.options.find(x => x.id === a.choice);
+    if (s === "answered") counts.answered++;
+    else if (s === "custom-review-required") counts.custom++;
+    else if (s === "deferred") counts.deferred++;
+    else counts.incomplete++;
+    for (const f of d.files || []) allFiles.add(f);
+    for (const h of d.holds || []) allStages.add(h);
+    for (const b of d.blocks || []) allTickets.add(b);
+    if (d.ticket) allTickets.add(d.ticket);
     const isDefer = a.choice === "defer" || a.choice === "explain";
     const what = o ? o.label : a.choice === "custom" ? "Custom: " + (a.custom || "(empty)") : isDefer ? "Ask / Explain more: " + (a.clarification || "(empty)") : "No answer";
     return el("li", null,
@@ -598,6 +899,21 @@ function review() {
       el("div", { text: what }), a.notes ? el("div", { class: "muted", text: "Notes: " + a.notes }) : null,
       el("button", { type: "button", class: "secondary", onclick: () => go(i), "aria-label": "Edit " + d.id }, "Edit"));
   });
+  const dashboard = el("div", { class: "dashboard-summary", "aria-label": "Decision summary metrics" },
+    el("div", { class: "metric-card" }, el("b", { class: "b-answered", text: String(counts.answered) }), el("span", { text: "Answered" })),
+    el("div", { class: "metric-card" }, el("b", { class: "b-custom-review-required", text: String(counts.custom) }), el("span", { text: "Custom Directions" })),
+    el("div", { class: "metric-card" }, el("b", { class: "b-deferred", text: String(counts.deferred) }), el("span", { text: "Deferred / Explain" })),
+    el("div", { class: "metric-card" }, el("b", { class: "b-incomplete", text: String(counts.incomplete) }), el("span", { text: "Incomplete" })));
+  const blastCard = el("div", { class: "blast-summary-card" },
+    el("strong", { text: "Aggregated Blast Radius: " }),
+    allFiles.size + " file" + (allFiles.size === 1 ? "" : "s") + " \u00b7 " +
+    allStages.size + " held stage" + (allStages.size === 1 ? "" : "s") + " \u00b7 " +
+    allTickets.size + " ticket" + (allTickets.size === 1 ? "" : "s"));
+  const cmdText = buildCliCommands();
+  const copyBtn = el("button", { type: "button", id: "btn-copy-cmds", class: "copy-cmds", onclick: () => copyText(cmdText, copyBtn), text: "Copy CLI commands" });
+  const cmdSection = el("div", { class: "cmd-section" },
+    el("div", { class: "cmd-head" }, el("strong", { text: "relay-morpheus answer commands" }), copyBtn),
+    el("pre", { class: "cmd-box" }, el("code", { text: cmdText })));
   const blockers = SET.decisions.filter(d => statusOf(d) === "incomplete");
   const owner = el("input", { type: "text", id: "owner", maxlength: 200, autocomplete: "name", "aria-describedby": "owner-err",
     oninput: (e) => { st.owner = e.target.value; unapprove(); save(true); sync(); } });
@@ -629,8 +945,11 @@ function review() {
   sync();
   return el("section", { class: "review", "aria-labelledby": "rv-h" },
     el("h2", { id: "rv-h", text: "Review your answers" }),
+    dashboard,
+    blastCard,
     st.imported ? el("p", { class: "banner warn", text: "These answers were imported from a file. Review them again before finalizing." }) : null,
     state, el("ol", null, rows),
+    cmdSection,
     el("label", { class: "blk", for: "owner", text: "Your name (decision owner)" }), owner, el("p", { class: "err", id: "owner-err", "aria-live": "polite" }),
     el("label", { class: "opt", for: "reviewed" }, chk, el("span", { class: "lbl", text: "I reviewed every answer above and they are my decisions." })),
     finErr, el("div", { class: "actions" }, fin, el("button", { type: "button", class: "secondary", onclick: () => download(false) }, "Download draft JSON"),
@@ -710,10 +1029,44 @@ $("import").addEventListener("change", async (e) => {
 });
 $("fresh").addEventListener("click", async () => {
   if (!(await ask("Start fresh?", "This clears every answer, note and your name from this page in this browser. Downloaded files are not touched.", "Clear everything"))) return;
-  st = { answers: {}, owner: "", reviewed: false, finalizedAt: null, step: 0, imported: false };
+  st = { answers: {}, owner: "", reviewed: false, finalizedAt: null, step: 0, imported: false, viewMode: "flow", search: "" };
   for (const d of SET.decisions) st.answers[d.id] = blank();
   try { localStorage.removeItem(KEY); } catch (e) {}
   save(true); go(0); say("Started fresh.");
+});
+$("decision-search").addEventListener("input", (e) => {
+  st.search = e.target.value || "";
+  header();
+});
+$("btn-shortcuts").addEventListener("click", () => {
+  const dlg = $("shortcuts-dlg");
+  if (dlg && typeof dlg.showModal === "function") dlg.showModal();
+});
+document.addEventListener("keydown", (e) => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(tag)) {
+    if (e.key === "Escape") document.activeElement.blur();
+    return;
+  }
+  if (e.key === "/") {
+    e.preventDefault(); $("decision-search").focus();
+  } else if (e.key === "?") {
+    e.preventDefault();
+    const dlg = $("shortcuts-dlg");
+    if (dlg && typeof dlg.showModal === "function") dlg.showModal();
+  } else if (e.key === "[" || (e.altKey && e.key === "ArrowLeft")) {
+    e.preventDefault(); if (st.step > 0) go(st.step - 1);
+  } else if (e.key === "]" || (e.altKey && e.key === "ArrowRight")) {
+    e.preventDefault(); if (st.step < SET.decisions.length) go(st.step + 1);
+  } else if (/^[1-9]$/.test(e.key) && st.step < SET.decisions.length) {
+    const d = SET.decisions[st.step];
+    const idx = Number(e.key) - 1;
+    if (d && d.options && d.options[idx]) {
+      st.answers[d.id].choice = d.options[idx].id;
+      st.answers[d.id].skipped = false;
+      unapprove(); save(true); render();
+    }
+  }
 });
 
 load(); render();
