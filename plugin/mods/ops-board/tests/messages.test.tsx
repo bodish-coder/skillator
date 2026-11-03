@@ -264,13 +264,33 @@ test('the Messages tab: unread count on the tab, newest first, a read marker; ma
   await ui.unmount()
 })
 
-test('the setup form opens by itself when nothing is configured; the token is masked and never drawn', async ($, on) => {
+test('B21: entering Messages shows inbox or unconfigured state; setup opens only on explicit action', async ($, on) => {
   const [w, clock] = world(on, CFG_NONE)
   await start($, clock)
   const ui = await mount($)
+  // Navigation when unconfigured does not open setup; shows inbox
   await ui.press({ key: 'tab:messages' })
   await clock.settle()
+  expect(await ui.find({ key: 'setup:token' })).toBeUndefined()
+  expect(await ui.find({ key: 'head' })).toBeDefined()
+  expect(await ui.find({ key: 'row:1' })).toBeDefined()
+
+  // Explicit action opens setup
+  await ui.press({ key: 'key:setup' })
+  await clock.settle()
   expect(await ui.find({ key: 'setup:token' })).toBeDefined()
+
+  // Cancel closes setup and returns to messages
+  await ui.press({ key: 'setup:cancel' })
+  await clock.settle()
+  expect(await ui.find({ key: 'setup:token' })).toBeUndefined()
+  expect(await ui.find({ key: 'head' })).toBeDefined()
+
+  // Re-open setup explicitly to complete setup tests
+  await ui.press({ key: 'key:setup' })
+  await clock.settle()
+  expect(await ui.find({ key: 'setup:token' })).toBeDefined()
+
   await ui.input({ key: 'setup:token', text: TOKEN, kind: 'change' })
   const drawn = JSON.stringify(await ui.drawn())
   expect(drawn).not.toContain(TOKEN)

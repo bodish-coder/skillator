@@ -124,19 +124,18 @@ async function runLogin($: EngineInterface, status: boolean) {
   if (form === generation && draft) await loginFocus($, 'setup:login-status')
 }
 
-async function refreshCfg($: EngineInterface, auto: boolean) {
+async function refreshCfg($: EngineInterface, _auto = false) {
   const r = await runCall($, 'team-config-show', [])
   if (r.code !== 0) return
   const cfg = parseCfgView(r.out)
   if (!cfg) return
   await update($, teamsCfgA, () => cfg)
   if (draft && !touched) { draft = freshSetup(cfg); await bump($) }
-  else if (auto && !cfg.token && !(await read($, setupA))) await openSetup($)
 }
 
-// Entering the tab: the config read; nothing saved yet opens the form.
+// Entering the tab: the config read; setup opens only through its explicit action.
 export async function enterMessages($: EngineInterface) {
-  await refreshCfg($, true)
+  await refreshCfg($, false)
 }
 
 async function bump($: EngineInterface, patch: Partial<SetupView> = {}) {

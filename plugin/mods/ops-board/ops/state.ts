@@ -1081,17 +1081,16 @@ const teamWhy = (r: RunResult, what: string) => (timedOut(r) ? `${what} did not 
 const openSetup = (s: State): State =>
   ({ ...s, setup: { ...freshSetup(s.teamsCfg), result: null, confirmClear: false, touched: false, formId: {}, confirmLogin: false, loginBusy: false, loginMessage: null }, setupField: 'token' })
 
-// `config show` read: the view kept; `auto` (entering the tab) opens the form when no
-// token is saved yet; a form not typed in yet takes the saved port and posts.
-const cfgThen = (auto: boolean): Then => r => x => {
+// `config show` read: the view kept; a form not typed in yet takes the saved port and posts.
+const cfgThen: Then = r => x => {
   if (r.code !== 0) return x
   const cfg = parseCfgView(r.out)
   if (!cfg) return x
   const y: State = { ...x, teamsCfg: cfg }
   if (y.setup && !y.setup.touched) return { ...y, setup: { ...y.setup, ...freshSetup(cfg) } }
-  return auto && !cfg.token && !y.setup ? openSetup(y) : y
+  return y
 }
-const showCfg = (auto: boolean): Effect => run('team-config-show', [], cfgThen(auto))
+const showCfg = (_auto = false): Effect => run('team-config-show', [], cfgThen)
 
 // Enter: checked here first (the same rules teams-uhura applies again), then `config
 // save` with the values on stdin. Done: the form goes, a toast, the view read again.
@@ -1216,7 +1215,7 @@ function messagesKey(s: State, k: Key): Step {
 
 function toTab(s: State, tab: Tab): Step {
   const effects: Effect[] = tab === 'runs' && s.tab !== 'runs' ? [{ kind: 'poll', what: 'runs' }] : []
-  if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(true))
+  if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(false))
   if (tab === 'explorer' && s.tab !== 'explorer') effects.push(...enterExplorer(s).effects)
   if (tab === 'run' && s.tab !== 'run') effects.push(enterRunEffect())
   return { state: { ...s, tab }, effects }
