@@ -140,7 +140,8 @@ Deploy twice because they weren't sure the first one took.
 the app card red and stamps the time. `set -euo pipefail` at the top, `die` on
 every gate, and `|| true` **only** where failure is genuinely fine (the prune,
 the submodule update). A script that swallows errors reports a green deploy of a
-broken box.
+broken box. TLS issuance and nginx verification are strict gates: certbot or nginx
+failures must exit non-zero and never report a green deploy of broken HTTPS.
 
 ### The maintenance gate, and why the trap is non-negotiable
 
@@ -175,8 +176,11 @@ delivering this skill, not an optional extra.
 - **Prune before `up --build`, never after.** Small VPS disks fill fast when a
   pip install dies mid-stream. Images belonging to running containers survive,
   so the live site keeps serving.
+- **TLS issuance is a gate, not a warning.** Certbot failure must abort the
+  deploy via `die`; never announce Live or downgrade TLS failure to a warning.
 - **A closing line you can grep for.** `ok "Live"` as the last output means
-  "scroll to the bottom" is a complete verification.
+  "scroll to the bottom" is a complete verification — emitted only after nginx,
+  TLS, and HTTPS verification pass and maintenance is cleared.
 
 Write the script for someone *watching* — one `say` per phase, `ok` per success,
 `die` with the reason per failure. NiYoj streams the log into a popup that can be
