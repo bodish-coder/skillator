@@ -147,6 +147,25 @@ tests the skill's decisions with restrictions/stubs, not real phone pairing.
 | OpenCode / remote | not implemented | No adapter or recorded run. |
 | Prime Agent / remote | not implemented | No adapter or recorded run. |
 
+### Connector capabilities and integrations
+
+Implementation: [connectors reference](skills/skill-prometheus/references/connectors.md).
+External search connectors map abstract capability categories (`chat_search`,
+`document_search`, `code_search`, `issue_search`, `customer_search`) to real tools
+in the host environment. Declared tool availability does not imply authentication or
+runtime success; status is tracked across explicit states (`discovered`,
+`authenticated`, `read-success`, `unavailable`) and host live support remains explicit
+following the evidence gates below.
+
+| Host / capability | Level | Evidence and limitation |
+|---|---|---|
+| Claude Code / connector capabilities | tested with stubs | [connectors.md](skills/skill-prometheus/references/connectors.md) offline fixtures; live host MCP/tool auth unverified. |
+| Cursor / connector capabilities | unverified gap | No live external connector probe recorded. |
+| Codex / connector capabilities | unverified gap | No live external connector probe recorded. |
+| agy / connector capabilities | unverified gap | No live external connector probe recorded. |
+| Pi / connector capabilities | unverified gap | No live external connector probe recorded. |
+| Prime Agent / connector capabilities | not implemented | No external connector tool adapter. |
+
 Tier selection, delegation, context checkpoint and memory rows below are
 translation guidance. For **each host**, these additional mechanics have an
 **unverified gap** (CLI version unknown, reviewed 2026-10-31) unless a specific
