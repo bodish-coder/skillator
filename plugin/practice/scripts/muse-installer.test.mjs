@@ -34,7 +34,7 @@ if(op==='list') {
 fs.writeFileSync(file,JSON.stringify(s));`;
 
 for (const host of ['ps1', 'sh']) {
- for (const scenario of ['migrate','same','normalized','fresh','list-fail','malformed','bad-shape','bad-manifest','remove-fail','install-fail','update-fail','stale','post-mismatch','source-mismatch','marketplace','unknown','disabled','project','unsupported-scope','dry','absent', ...(host==='sh'?['no-node']:[])]) {
+ for (const scenario of ['migrate','same','normalized','fresh','list-fail','malformed','bad-shape','bad-manifest','remove-fail','install-fail','update-fail','stale','post-mismatch','source-mismatch','marketplace','unknown','disabled','project','unsupported-scope','dry','absent','empty','path-discovery', ...(host==='sh'?['no-node']:[])]) {
   test(`${host}: ${scenario}`, () => {
    const dir=mkdtempSync(join(tmpdir(),'muse isolated '));
    try {
@@ -62,12 +62,16 @@ for (const host of ['ps1', 'sh']) {
     // No user CLI directories on PATH: even a regression in fallback discovery
     // cannot reach the real Muse. Explicit fake CLI and isolated homes always.
     const safePath=(scenario==='no-node'?[dir]:[dir, dirname(process.execPath), dirname(shell), ...(process.platform==='win32'?[join(process.env.SystemRoot,'System32')]:['/usr/bin','/bin'])]).join(delimiter);
-    const env={...process.env,PATH:safePath,HOME:dir,USERPROFILE:dir,SKILLATOR_MUSE:scenario==='absent'?join(dir,'nonexistent'):cli,MUSE_STATE:state,MUSE_NO_AUTO_UPDATE:'original'};
+    const env={...process.env,PATH:safePath,HOME:dir,USERPROFILE:dir,MUSE_STATE:state,MUSE_NO_AUTO_UPDATE:'original'};
+    if (scenario === 'absent') env.SKILLATOR_MUSE = join(dir, 'nonexistent');
+    else if (scenario === 'empty') env.SKILLATOR_MUSE = '';
+    else if (scenario === 'path-discovery') delete env.SKILLATOR_MUSE;
+    else env.SKILLATOR_MUSE = cli;
     const result=spawnSync(host==='ps1'?powershell:shell,host==='ps1'?['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',runner]:[runner],{env,encoding:'utf8',timeout:15000});
     const out=result.stdout+result.stderr, end=JSON.parse(readFileSync(state)), ops=end.calls.map(a=>a[1]);
-    if(['dry','absent'].includes(scenario)) {assert.equal(result.status,0,out);assert.deepEqual(ops,[]);return;}
+    if(['dry','absent','empty'].includes(scenario)) {assert.equal(result.status,0,out);assert.deepEqual(ops,[]);return;}
     if(scenario==='no-node') { assert.notEqual(result.status,0,out); assert.match(out,/Node is required/); assert.deepEqual(ops,[]); return; }
-    if(['migrate','same','normalized','fresh'].includes(scenario)) {assert.equal(result.status,0,out);assert.equal(end.record.version,'4.23.0',out);assert.equal(end.record.source.path.replaceAll('\\','/').replace(/^\/\/\?\//,'').replace(/\/$/,''),selected.replaceAll('\\','/'));}
+    if(['migrate','same','normalized','fresh','path-discovery'].includes(scenario)) {assert.equal(result.status,0,out);assert.equal(end.record.version,'4.23.0',out);assert.equal(end.record.source.path.replaceAll('\\','/').replace(/^\/\/\?\//,'').replace(/\/$/,''),selected.replaceAll('\\','/'));}
     else {assert.notEqual(result.status,0,out);assert(!out.includes('* Muse plugin skillator updated'),out);}
     if(['same','normalized'].includes(scenario)) assert.deepEqual(ops,['list','update','list']);
     if(['list-fail','malformed','bad-shape','unknown','disabled','project','unsupported-scope'].includes(scenario)) assert.deepEqual(ops,['list']);
