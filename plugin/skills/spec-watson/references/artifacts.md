@@ -13,6 +13,20 @@ record, say that here — it changes what a later reader is allowed to assume.>
 > <The brief, verbatim. Do not tidy it. The wording you would have "cleaned up"
 > is usually the wording that settles an ambiguity six weeks from now.>
 
+## Product outcomes (optional)
+
+<Include when the brief is driven by user or business impact. For tiny
+technical edits, refactors, or mechanical fixes, omit this section entirely —
+do not require PRD ceremony for mechanical changes.>
+
+- **Audience & Problem:** <Who is affected and the user pain or problem.>
+- **Desired outcome:** <Specific benefit or qualitative change expected.>
+- **Metric source:** <Telemetry event, dashboard, log query, or UNKNOWN.>
+- **Baseline:** <Current measured value, or UNKNOWN if not yet instrumented.>
+- **Target:** <Expected post-change target when known; unknown values stay UNKNOWN — do not fabricate targets.>
+- **Measurement window:** <E.g. 14 days post-launch, or UNKNOWN.>
+- **Evaluation date:** <Planned audit date, e.g. 2026-12-01, or UNKNOWN.>
+
 ## Requirements
 
 - R1  <one requirement, one id>
@@ -67,6 +81,22 @@ which satisfies R6 and violates R7. One id could not have caught that.
 The ambiguity the split exposes — "over fifty thousand" in *which* currency —
 belongs in Assumptions against R4, not silently in the code.
 
+## Product outcomes vs requirements
+
+Product outcomes (adapted from Anthropic's write-spec) give business and user
+context to a spec when helpful, but **never replace requirement ids or the trace
+table**.
+
+1. **Optional, not required.** For tiny technical edits, refactors, bug fixes, or
+   mechanical changes, omit product outcomes entirely. Do not require PRD
+   ceremony for mechanical changes.
+2. **Unknown values stay unknown.** If a baseline, target, metric source, or
+   evaluation date is unmeasured, write `UNKNOWN` (or leave it blank/TBD).
+   Never fabricate targets or invent imaginary metrics to fill a template.
+3. **Traceability is preserved.** Product outcomes define intent; requirements
+   (`R1`, `R2`, …) define the verifiable contract. Every requirement must still
+   carry a permanent R ID and map to file and test paths in the trace table.
+
 ## Anti-patterns
 
 | Row | Why it is empty |
@@ -75,6 +105,9 @@ belongs in Assumptions against R4, not silently in the code.
 | `R3 \| whole cents \| service.py \| 28 tests, one per requirement` | A coverage claim with no mapping. This is the exact output a real baseline produced instead of a table. |
 | `R3 \| whole cents \| src/ \| tests/` | A directory is not evidence. Name the symbol and the test. |
 | `R3+R4 \| cents and approval \| … \| …` | Two requirements on one id. They fail independently; they cannot share a verdict. |
+| `Target: 25% drop in churn` with unknown baseline | Fabricated target. Unknown values stay `UNKNOWN` until instrumented. |
+| `Audience & Outcomes` replacing `## Requirements` | Outcomes without R IDs cannot be mechanically verified. |
+| Full outcome block on a one-line regex or typo fix | Unnecessary PRD ceremony for a mechanical change. Omit outcomes. |
 
 ## Ids and `tickets-zordon`
 
