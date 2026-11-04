@@ -1393,6 +1393,95 @@ export async function run() {
     c.phone.msg("retry prompt"); assert(await drive(c.b, () => c.phone.sent(/^echo: retry prompt$/)), "failed transition blocked later prompt");
   });
 
+  // ------------------------------------------------------------------ A182 --
+  await t("A182-stalled-channels", "A182: local teardown and approval cancellation start promptly with send/editButtons permanently pending (TTL, manual, owner loss, repeated)", async () => {
+    for (const trig of ["ttl", "manual", "owner-loss"]) {
+      const h = mkHome();
+      const stalled = {
+        key: `stalled-${trig}`,
+        poll: async () => [],
+        send: () => new Promise(() => {}),
+        ask: async () => 101,
+        editButtons: () => new Promise(() => {}),
+        answerCallback: async () => {},
+      };
+      let teardownReason = null;
+      const s = new br.Session({
+        channel: stalled,
+        audit: { write: () => {}, discardKey: () => {} },
+        clock: () => 1000,
+        home: h,
+        allowedUserId: UID,
+        ttlMs: 5000,
+        onDisarm: async (r) => { teardownReason = r; },
+        remoteTimeoutMs: 50,
+      });
+      s.paired = true; s.chatId = UID;
+      let ans = "pending";
+      s.ask("approval request", "detail").then((r) => { ans = r; });
+      await sleep(10);
+      assert(s.pending.size === 1, "ask not pending");
+
+      if (trig === "ttl") {
+        const d = s.checkDeadman(1000 + 6000);
+        assert(d === "ttl", `deadman was ${d}`);
+        s.disarm(d);
+      } else if (trig === "owner-loss") {
+        fs.mkdirSync(core.stateDir(h), { recursive: true });
+        fs.writeFileSync(path.join(core.stateDir(h), "lock"), JSON.stringify({ pid: 2 ** 22 + 999 }));
+        const d = s.checkDeadman(1000);
+        assert(d === "owner-loss", `deadman was ${d}`);
+        s.disarm(d);
+      } else {
+        s.disarm("manual");
+      }
+
+      await sleep(25);
+      assert(teardownReason === trig, `teardown did not occur promptly for ${trig}: ${teardownReason}`);
+      assert(ans === "deny", `pending approval was not cancelled promptly for ${trig}: ${ans}`);
+      assert(s.disarmed === trig, `session not marked disarmed: ${s.disarmed}`);
+
+      const p1 = s.disarm("repeated");
+      const p2 = s.disarm("repeated");
+      assert(p1 === p2, "repeated disarm did not return same promise");
+      assert(teardownReason === trig, "repeated disarm re-ran teardown");
+    }
+  });
+
+  await t("A182-bridge-deadman", "A182: bridge deadTimer triggers prompt local teardown and child/token cleanup on stalled channel", async () => {
+    const h = mkHome();
+    const clk = clockAt();
+    const stalled = {
+      key: "stalled-bridge",
+      poll: async () => [],
+      send: () => new Promise(() => {}),
+      ask: async () => 101,
+      editButtons: () => new Promise(() => {}),
+      answerCallback: async () => {},
+    };
+    const b = new br.Bridge({
+      host: "pi", cwd: proj, home: h, channel: stalled, clock: clk.now, bin: BINS.pi,
+      allowedUserId: UID, env: envFor(h), token: TOKEN, ttlMs: 1000, deadmanMs: 20, remoteTimeoutMs: 50,
+      confirm: async () => true,
+    });
+    await b.arm();
+    b.session.paired = true; b.session.chatId = UID;
+    let ans = "pending";
+    b.session.ask("approval request", "detail").then((r) => { ans = r; });
+    await sleep(10);
+
+    clk.adv(2000);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 500 && !b.tornDown) await sleep(20);
+
+    assert(b.tornDown === "ttl", `bridge did not tear down promptly: ${b.tornDown}`);
+    assert(ans === "deny", `approval not cancelled promptly: ${ans}`);
+    assert(!fs.existsSync(core.armTokenPath(h)), "arm token survived stalled channel");
+    assert(!fs.existsSync(path.join(core.stateDir(h), "lock")), "lock survived stalled channel");
+    const st = br.readState(h);
+    assert(st && st.armed === false, `state not marked disarmed: ${JSON.stringify(st)}`);
+  });
+
   // ---------------------------------------------------------------- report --
   for (const k of Object.keys(process.env)) if (/^CEREBRO_/.test(k)) delete process.env[k];
   try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* a dying child may still hold a file */ }

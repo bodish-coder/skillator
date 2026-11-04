@@ -163,6 +163,7 @@ export class Session {
   constructor(o) {
     Object.assign(this, {
       pairWindowMs: 5 * 60e3, rateMax: 20, rateWindowMs: 10 * 60e3, askTimeoutMs: ASK_TIMEOUT, sleepGapMs: 90e3,
+      remoteTimeoutMs: 5000,
       mirror: () => {}, onPrompt: () => {}, onCommand: () => {}, onDisarm: () => {}, onLocalCancel: null,
       mirrorBodies: true, // false in attach mode: mirror.log gets metadata only, never a prompt, ask or reply body
     }, o);
@@ -178,12 +179,28 @@ export class Session {
   }
   #drop(reason, from = null) { this.audit.write("dropped", { dir: "in", from, reason }); this.mirror(`[drop] ${reason}`); }
   #detach(p) { Promise.resolve(p).catch((e) => this.mirror(`[command] failed: ${this.redact(e?.message || String(e))}`)); }
+  async #boundRemote(p, timeoutMs = this.remoteTimeoutMs) {
+    if (!p) return;
+    let timer;
+    try {
+      await Promise.race([
+        p,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("remote timeout")), timeoutMs);
+          timer.unref?.();
+        }),
+      ]);
+    } catch { /* best effort */ }
+    finally { if (timer) clearTimeout(timer); }
+  }
   redact(s) { return redact(s, this.redactCtx); }
   #body(s, what) { return this.mirrorBodies ? this.redact(s) : `(${what}, ${Buffer.byteLength(String(s ?? ""))} bytes)`; }
 
   checkDeadman(now) {
     const kill = path.join(stateDir(this.home), "KILL");
     if (fs.existsSync(kill)) { try { fs.unlinkSync(kill); } catch { /* raced */ } return "kill-file"; }
+    const lk = readJsonFile(lockFile(this.home));
+    if (lk && lk.pid && lk.pid !== process.pid) return "owner-loss";
     if (now >= this.armedAt + this.ttlMs) return "ttl";
     if (!this.paired && now >= this.armedAt + this.pairWindowMs) return "pair-timeout";
     if (this.paired && now - this.lastInbound >= this.idleMs) return "idle";
@@ -285,8 +302,10 @@ export class Session {
     const p = this.pending.get(nonce); if (!p) return;
     this.pending.delete(nonce); this.used.add(nonce);
     this.mirror(`[approval] ${outcome}`);
-    try { await this.channel.editButtons(this.chatId, p.msgId, `${p.text}\n\n-> ${outcome}`); } catch { /* best effort */ }
     p.resolve(decision);
+    if (this.paired && this.chatId != null && p.msgId != null) {
+      try { await this.#boundRemote(this.channel.editButtons(this.chatId, p.msgId, `${p.text}\n\n-> ${outcome}`)); } catch { /* best effort */ }
+    }
   }
   /** One approval. Only allow-once and deny are ever offered. Resolves "allow",
    *  "deny" (the phone said no, or did not answer in time) or "unavailable" (no
@@ -307,25 +326,57 @@ export class Session {
   }
   /** The desk answered first (attach mode): the phone's buttons go away. */
   async cancelAsk(predicate, outcome) { for (const [n, p] of this.pending) if (predicate(p)) await this.#resolve(n, "deny", outcome); }
-  async consumeAll(reason) { for (const n of [...this.pending.keys()]) await this.#resolve(n, "deny", `${reason}: denied`); }
+  async consumeAll(reason) {
+    const list = [...this.pending.entries()];
+    this.pending.clear();
+    const remote = [];
+    for (const [nonce, p] of list) {
+      this.used.add(nonce);
+      this.mirror(`[approval] ${reason}: denied`);
+      p.resolve("deny");
+      if (this.paired && this.chatId != null && p.msgId != null) {
+        remote.push(this.channel.editButtons(this.chatId, p.msgId, `${p.text}\n\n-> ${reason}: denied`));
+      }
+    }
+    if (remote.length) await this.#boundRemote(Promise.all(remote.map((p) => p.catch(() => {}))));
+  }
   async send(text, kind = "reply") {
     if (!this.paired || this.chatId == null) return;
     const clean = this.redact(text);
     if (kind === "reply") this.audit.write("reply", { dir: "out", body: clean });
     this.mirror(`[REMOTE] -> ${this.#body(clean.length > 300 ? clean.slice(0, 300) + "..." : clean, kind)}`);
-    for (const c of chunkText(clean)) { try { await this.channel.send(this.chatId, c); } catch (e) { this.mirror(`[channel] ${e.message}`); } }
+    for (const c of chunkText(clean)) { try { await this.#boundRemote(this.channel.send(this.chatId, c)); } catch (e) { this.mirror(`[channel] ${e.message}`); } }
   }
-  async disarm(reason) {
-    if (this.disarmed) return;
+  disarm(reason) {
+    if (this.disarmed) return this.disarmPromise || Promise.resolve();
     this.disarmed = reason;
-    await this.consumeAll(reason);
-    this.audit.write("kill", { reason });
-    this.mirror(`[disarm] ${reason}`);
-    if (this.paired) { try { await this.channel.send(this.chatId, `cerebro: disarmed (${reason}). A new arming needs a new code at the desk.`); } catch { /* best effort */ } }
-    this.paired = false;
-    deleteArmToken(this.home);
-    this.audit.discardKey();
-    await this.onDisarm(reason);
+    return (this.disarmPromise = (async () => {
+      const pendingApprovals = [...this.pending.entries()];
+      this.pending.clear();
+      for (const [nonce, p] of pendingApprovals) {
+        this.used.add(nonce);
+        this.mirror(`[approval] ${reason}: denied`);
+        p.resolve("deny");
+      }
+      deleteArmToken(this.home);
+      this.audit.discardKey();
+      try { await this.onDisarm(reason); } catch (e) { this.mirror(`[teardown] ${e?.message || e}`); }
+      this.audit.write("kill", { reason });
+      this.mirror(`[disarm] ${reason}`);
+      const remote = [];
+      if (this.paired && this.chatId != null) {
+        for (const [, p] of pendingApprovals) {
+          if (p.msgId != null) {
+            remote.push(this.channel.editButtons(this.chatId, p.msgId, `${p.text}\n\n-> ${reason}: denied`));
+          }
+        }
+        remote.push(this.channel.send(this.chatId, `cerebro: disarmed (${reason}). A new arming needs a new code at the desk.`));
+      }
+      this.paired = false;
+      if (remote.length) {
+        await this.#boundRemote(Promise.all(remote.map((p) => p.catch(() => {}))));
+      }
+    })());
   }
 }
 
@@ -669,9 +720,9 @@ export class AttachIpcAdapter extends EventEmitter {
 }
 
 // --------------------------------------------------------------- lock & state --
-const lockFile = (home) => path.join(stateDir(home), "lock");
-const stateFile = (home) => path.join(stateDir(home), "state.json");
-const readJsonFile = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
+function lockFile(home) { return path.join(stateDir(home), "lock"); }
+function stateFile(home) { return path.join(stateDir(home), "state.json"); }
+function readJsonFile(f) { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } }
 /** The state folder, user-only on POSIX (an older 0755 one is tightened). On Windows
  *  it inherits the profile's ACL (the user, SYSTEM, Administrators). */
 export function ensureStateDir(home) {
@@ -968,7 +1019,7 @@ export class Bridge {
     // The dead-man runs on its own timer, not inside the poll loop: a host rpc or a
     // channel call that never returns cannot hold off the TTL, idle, KILL file or pairing window.
     this.deadTimer = setInterval(() => {
-      const s = this.session; if (!s || s.disarmed) return;
+      const s = this.session; if (!s || this.tornDown || s.disarmed) return;
       let d = null; try { d = s.checkDeadman(this.clock()); } catch { /* state dir gone: next tick */ }
       if (d) s.disarm(d).catch((e) => this.mirror(`[disarm] ${e.message}`));
     }, this.deadmanMs ?? 250);
@@ -1043,7 +1094,7 @@ export class Bridge {
   }
   async teardown(reason) {
     if (this.tornDown) return; this.tornDown = reason;
-    if (this.deadTimer) clearInterval(this.deadTimer);
+    if (this.deadTimer) { clearInterval(this.deadTimer); this.deadTimer = null; }
     this.queued = [];
     if (this.adapter) this.adapter.kill();
     deleteArmToken(this.home);
@@ -1053,6 +1104,7 @@ export class Bridge {
     releaseLock(this.home);
     if (this.mode === "attach" && this.attachLog) { try { fs.unlinkSync(this.attachLog); } catch { /* gone */ } }
     this.mirror(`[REMOTE] disarmed (${reason})`);
+    if (this.session && !this.session.disarmed) this.session.disarm(reason).catch(() => {});
   }
   async run() {
     const off = installDeadman((why) => this.session.disarm(why), { onInt: () => this.session.disarm("ctrl-c") });
