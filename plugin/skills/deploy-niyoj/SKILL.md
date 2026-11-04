@@ -186,9 +186,24 @@ Write the script for someone *watching* — one `say` per phase, `ok` per succes
 `die` with the reason per failure. NiYoj streams the log into a popup that can be
 closed and reopened while the deploy keeps running.
 
-## Phase 3 — the human-only checklist
+## Phase 3 — the human-only checklist and deployment runbook
 
-Print it; never attempt these steps yourself.
+Print an ordered, repeatable **deployment runbook** (see `references/runbooks.md` for
+template and schema) with the user's non-secret values filled in. Never attempt these steps
+yourself. Each runbook specifies:
+- **Owner & Last-tested revision:** Designated operator role and git revision.
+- **Prerequisites:** All required configuration, DNS, and server settings. Incomplete
+  inputs halt execution before running commands (status `blocked` / `incomplete_inputs`).
+- **Exact commands:** Verbatim copy-pasteable commands for every manual step.
+- **Expected result:** Clear observable outcome per step (e.g. `✓ Live`).
+- **Failure branch:** Specific diagnostic and remediation path per step.
+- **Verification:** Health, TLS, and maintenance checks. Unexecuted checks remain explicitly
+  `unverified`.
+- **Rollback verification:** Explicit trigger, rollback command, and verification check.
+- **No automatic external publishing:** Runbook handoffs remain local markdown or terminal
+  output; never published to external wikis or channels without human instruction.
+
+The core manual bootstrap steps:
 
 1. VPS reachable; DNS `A` record for the subdomain points at it.
 2. `ssh-keygen -t ed25519 -f ~/.ssh/niyoj -C niyoj` — **press Enter twice, no
