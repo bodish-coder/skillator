@@ -291,10 +291,10 @@ function Invoke-Format([string[]]$rest, [string]$stdinText) {
   }
 }
 
-function Invoke-Selftest {
+function Invoke-Selftest([bool]$DeliberateFail = $false) {
   $st = Join-Path ([IO.Path]::GetTempPath()) ('code-vader-' + [guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Path $st | Out-Null
-  $pass = 0; $failCnt = 0
+  $script:pass = 0; $script:failCnt = 0
   function Assert-Ok([bool]$cond, [string]$msg) {
     if ($cond) { $script:pass++ } else { [Console]::Error.WriteLine("FAIL: $msg"); $script:failCnt++ }
   }
@@ -305,13 +305,23 @@ function Invoke-Selftest {
     function Run-Vader([string[]]$a) {
       $pinfo = New-Object System.Diagnostics.ProcessStartInfo
       $pinfo.FileName = "powershell.exe"
-      $argList = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', "`"$me`"") + $a
+      $escapedArgs = @()
+      foreach ($arg in $a) {
+        if ($arg -match '[\s"]') {
+          $escapedArgs += "`"$($arg -replace '"', '\"')`""
+        } else {
+          $escapedArgs += $arg
+        }
+      }
+      $argList = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', "`"$me`"") + $escapedArgs
       $pinfo.Arguments = $argList -join ' '
       $pinfo.RedirectStandardOutput = $true
       $pinfo.RedirectStandardError = $true
+      $pinfo.RedirectStandardInput = $true
       $pinfo.UseShellExecute = $false
       $pinfo.CreateNoWindow = $true
       $proc = [System.Diagnostics.Process]::Start($pinfo)
+      $proc.StandardInput.Close()
       $out = $proc.StandardOutput.ReadToEnd()
       $err = $proc.StandardError.ReadToEnd()
       $proc.WaitForExit()
@@ -336,7 +346,7 @@ function Invoke-Selftest {
     # Empty diff check
     $r = Run-Vader @('collect', '-Repo', $repo)
     Assert-Ok ($r.Rc -eq 0) "empty diff exits 0, got $($r.Rc)"
-    Assert-Ok ($r.Out -match '(?m)^target: empty$') "empty diff reports target: empty: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^target: empty\r?$') "empty diff reports target: empty: $($r.Out)"
 
     # Stage changes with two shortcut/ponytail markers (one with trigger, one no-trigger)
     $updatedPy = @(
@@ -350,11 +360,11 @@ function Invoke-Selftest {
 
     $r = Run-Vader @('collect', '-Repo', $repo)
     Assert-Ok ($r.Rc -eq 0) "staged collect exits 0, got $($r.Rc)"
-    Assert-Ok ($r.Out -match '(?m)^target: staged$') "staged collect reports target: staged: $($r.Out)"
-    Assert-Ok ($r.Out -match '(?m)^files: 1$') "staged collect counts 1 changed file: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^target: staged\r?$') "staged collect reports target: staged: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^files: 1\r?$') "staged collect counts 1 changed file: $($r.Out)"
     Assert-Ok ($r.Out.Contains('src/app.py:1  -  global lock. ceiling: "global lock". trigger: "per-account locks when throughput exceeds 100 rps".')) "staged collect parses shortcut trigger: $($r.Out)"
     Assert-Ok ($r.Out.Contains('src/app.py:2  -  linear scan. ceiling: "linear scan". trigger: no-trigger.')) "staged collect flags no-trigger ponytail marker: $($r.Out)"
-    Assert-Ok ($r.Out -match '(?m)^markers: 2 total, 1 no-trigger\.$') "staged collect totals markers: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^markers: 2 total, 1 no-trigger\.\r?$') "staged collect totals markers: $($r.Out)"
 
     # 2. Format rankings: mixed severities & lenses -> sorted by severity then file:line, net lines summed, CHANGES-REQUESTED (exit 1)
     $f1 = Join-Path $st 'findings1.txt'
@@ -370,12 +380,12 @@ function Invoke-Selftest {
 
     $r = Run-Vader @('format', '-Target', 'staged (5 files)', $f1)
     Assert-Ok ($r.Rc -eq 1) "format with blocking findings exits 1, got $($r.Rc)"
-    Assert-Ok ($r.Out -match '(?m)^1\. \[critical\] \[correctness\] src/auth\.ts:42  -  Unchecked verify return allows expired token\. Fix: check err and return 401\.$') "critical finding ranked #1: $($r.Out)"
-    Assert-Ok ($r.Out -match '(?m)^2\. \[high\] \[security\] scripts/sync\.sh:19  -  Unquoted variable in eval\. Fix: pass positional args\.$') "high finding ranked #2: $($r.Out)"
-    Assert-Ok ($r.Out -match '(?m)^3\. \[important\] \[restraint:yagni\] src/cache\.ts:10  -  AbstractCacheProvider has one implementation\. Fix: inline into MemoryCache \(-28 lines\)\.$') "important yagni finding ranked #3 with line count: $($r.Out)"
-    Assert-Ok ($r.Out -match '(?m)^4\. \[important\] \[restraint:stdlib\] src/util\.py:55  -  Hand-rolled slug loop\. Fix: use re\.sub \(-14 lines\)\.$') "important stdlib finding ranked #4 with line count: $($r.Out)"
-    Assert-Ok ($r.Out -match '(?m)^5\. \[low\] \[restraint:reuse\] src/cli\.ts:88  -  Duplicate padRight helper\. Fix: reuse src/format\.ts:padRight \(-9 lines\)\.$') "low reuse finding ranked #5: $($r.Out)"
-    Assert-Ok ($r.Out -match '(?m)^net: -51 lines possible\.$') "net line estimate sums to -51: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^1\. \[critical\] \[correctness\] src/auth\.ts:42  -  Unchecked verify return allows expired token\. Fix: check err and return 401\.\r?$') "critical finding ranked #1: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^2\. \[high\] \[security\] scripts/sync\.sh:19  -  Unquoted variable in eval\. Fix: pass positional args\.\r?$') "high finding ranked #2: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^3\. \[important\] \[restraint:yagni\] src/cache\.ts:10  -  AbstractCacheProvider has one implementation\. Fix: inline into MemoryCache \(-28 lines\)\.\r?$') "important yagni finding ranked #3 with line count: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^4\. \[important\] \[restraint:stdlib\] src/util\.py:55  -  Hand-rolled slug loop\. Fix: use re\.sub \(-14 lines\)\.\r?$') "important stdlib finding ranked #4 with line count: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^5\. \[low\] \[restraint:reuse\] src/cli\.ts:88  -  Duplicate padRight helper\. Fix: reuse src/format\.ts:padRight \(-9 lines\)\.\r?$') "low reuse finding ranked #5: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^net: -51 lines possible\.\r?$') "net line estimate sums to -51: $($r.Out)"
     $lastLine = ($r.Out -split "`r?`n")[-1].Trim()
     Assert-Ok ($lastLine -ceq 'CHANGES-REQUESTED') "final line is CHANGES-REQUESTED, got '$lastLine'"
 
@@ -398,7 +408,7 @@ function Invoke-Selftest {
     $r = Run-Vader @('format', '-Target', 'staged (1 file)', $fDebt)
     Assert-Ok ($r.Rc -eq 1) "no-trigger marker blocks commit with exit 1, got $($r.Rc)"
     Assert-Ok ($r.Out.Contains('[important] [debt:no-trigger] src/billing.py:7')) "no-trigger marker surfaced in ranked findings: $($r.Out)"
-    Assert-Ok ($r.Out -match '(?m)^markers: 1 total, 1 no-trigger\.$') "no-trigger count reported: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^markers: 1 total, 1 no-trigger\.\r?$') "no-trigger count reported: $($r.Out)"
 
     # 5. Invalid severity rejected with exit 2
     $fBad = Join-Path $st 'findings_bad.txt'
@@ -406,8 +416,17 @@ function Invoke-Selftest {
     $r = Run-Vader @('format', $fBad)
     Assert-Ok ($r.Rc -eq 2) "invalid severity rejected with exit 2, got $($r.Rc)"
 
-    if ($failCnt -gt 0) { exit 1 }
-    Write-Output "ok - code-vader.ps1 selftest ($pass/$pass passed)"
+    # 6. Selftest failure handling: deliberate assertion failure fails the process
+    if ($DeliberateFail -or $env:CODE_VADER_FAIL_ASSERTION) {
+      Assert-Ok $false "deliberate assertion failure for harness regression"
+    } else {
+      $rFail = Run-Vader @('-Selftest', '-DeliberateFail')
+      Assert-Ok ($rFail.Rc -ne 0) "deliberately failing selftest exited nonzero ($($rFail.Rc))"
+      Assert-Ok ($rFail.Out.Contains("FAIL: deliberate assertion failure for harness regression")) "deliberately failing selftest reported failure message"
+    }
+
+    if ($script:failCnt -gt 0) { exit 1 }
+    Write-Output "ok - code-vader.ps1 selftest ($($script:pass)/$($script:pass) passed)"
     exit 0
   } finally {
     Remove-Item -Recurse -Force -LiteralPath $st -ErrorAction SilentlyContinue
@@ -418,13 +437,28 @@ $first = if ($args.Count -gt 0) { "$($args[0])" } else { 'collect' }
 $tail  = if ($args.Count -gt 1) { @($args[1..($args.Count - 1)]) } else { @() }
 
 switch -regex ($first) {
-  '^--?selftest$' { if ($tail.Count -gt 0) { Show-Usage }; Invoke-Selftest }
+  '^--?selftest$' {
+    $delib = ($tail -contains '-DeliberateFail')
+    if ($tail.Count -gt 0 -and -not $delib) { Show-Usage }
+    Invoke-Selftest $delib
+  }
   '^collect$'     { Invoke-Collect $tail }
   '^format$'      {
+    $hasInputFile = $false
+    $j = 0
+    while ($j -lt $tail.Count) {
+      $a = $tail[$j]
+      if ($a -match '^--?target$') {
+        $j += 2
+      } elseif ($a.StartsWith('-')) {
+        $j++
+      } else {
+        $hasInputFile = $true
+        break
+      }
+    }
     $stdinContent = ''
-    if (-not [Console]::IsInputRedirected) {
-      # No piped input
-    } else {
+    if (-not $hasInputFile -and [Console]::IsInputRedirected) {
       $stdinContent = [Console]::In.ReadToEnd()
     }
     Invoke-Format $tail $stdinContent
