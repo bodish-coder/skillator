@@ -377,8 +377,8 @@ agy_ide() {
 # put_muse: F134 - install or update the skillator plugin for Muse Code CLI when muse is available
 put_muse() {
   _muse=""
-  if [ -n "${SKILLATOR_MUSE:-}" ]; then
-    [ -x "$SKILLATOR_MUSE" ] || return 0
+  if [ "${SKILLATOR_MUSE+set}" = set ]; then
+    [ -n "$SKILLATOR_MUSE" ] && [ -x "$SKILLATOR_MUSE" ] || return 0
     _muse="$SKILLATOR_MUSE"
   elif command -v muse >/dev/null 2>&1; then
     _muse=$(command -v muse)

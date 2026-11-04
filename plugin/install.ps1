@@ -356,8 +356,8 @@ function Write-Muse {
   # not bypass exit-code handling (especially the failed-install rollback).
   $ErrorActionPreference = 'Continue'
   $muse = ''
-  if ($env:SKILLATOR_MUSE) {
-    if (Test-Path -LiteralPath $env:SKILLATOR_MUSE -PathType Leaf) { $muse = $env:SKILLATOR_MUSE }
+  if (Test-Path Env:SKILLATOR_MUSE) {
+    if ($env:SKILLATOR_MUSE -and (Test-Path -LiteralPath $env:SKILLATOR_MUSE -PathType Leaf)) { $muse = $env:SKILLATOR_MUSE }
     else { return }
   } else {
     $c = Get-Command muse -CommandType Application, ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1
