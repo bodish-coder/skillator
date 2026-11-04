@@ -30,10 +30,11 @@ export const GROUPS: { box: Box; title: string }[] = [
 ]
 
 // A ticket line as ticket-meta and pending read it: `- [b]`, blanks, the id
-// ([A-Z]{1,3}[0-9]+[a-z]?), then an em dash, an en dash or a plain `-`.
-const TICKET = /^([ \t]*)- \[([ ~%!?>x-])\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)[ \t]*(?:—|–|-)[ \t]*(.*)$/
+// ([A-Z]{1,3}[0-9]+[a-z]?), optional historical alias `(was <ID>)`, then an em dash, an en dash or a plain `-`.
+const TICKET = /^([ \t]*)- \[([ ~%!?>x-])\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)(?:[ \t]+(\(was[ \t]+[A-Z]{1,3}[0-9]+[a-z]?\)))?[ \t]*(?:—|–|-)[ \t]*(.*)$/
 // Anchored on the id, so `F3—re-run the GREEN` keeps "re-run the GREEN".
-const ID_DASH = /^[A-Z]{1,3}[0-9]+[a-z]?[ \t]*(?:—|–|-)[ \t]*/
+const ID_DASH = /^[A-Z]{1,3}[0-9]+[a-z]?[ \t]*(?:\(was[ \t]+[A-Z]{1,3}[0-9]+[a-z]?\)[ \t]*)?(?:—|–|-)[ \t]*/
+const HIST_ALIAS = /^[A-Z]{1,3}[0-9]+[a-z]?[ \t]+(\(was[ \t]+[A-Z]{1,3}[0-9]+[a-z]?\))/
 const handles = (s: string) => s.split(',').map(x => x.trim().toLowerCase()).filter(Boolean)
 const tag = (s: string, name: string) => new RegExp('\\[' + name + ':\\s*([^\\]]*)\\]').exec(s)?.[1]?.trim() ?? null
 const SESSION_TAIL = /\s\((@[\w.]+-[\w.:-]+)\)\s*$/      // (@cc-4ae496), F109 (@cc-k7q2:asha:run); a dashless (@asha) is title text
@@ -49,13 +50,15 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
     if (!m) continue
     const indent = m[1]!.length
     const line = raw.slice(indent + 5).replace(/^[ \t]+/, '')   // text after "- [b] "
-    let body = m[4]!
+    const al = m[4] ?? null
+    let body = m[5]!
     let session: string | null = null
     const s = SESSION_TAIL.exec(body)
     if (s) { session = s[1]!; body = body.slice(0, s.index) }
     let cut = body.search(/ \[(?:app|decide|owner|tester|by):/)
     if (cut < 0) cut = body.search(/ \([^()]*\)\s*$/)
-    const title = (cut < 0 ? body : body.slice(0, cut)).trim()
+    const baseTitle = (cut < 0 ? body : body.slice(0, cut)).trim()
+    const title = al ? `${al} ${baseTitle}` : baseTitle
     while (stack.length && stack[stack.length - 1]!.indent >= indent) stack.pop()
     const t: Ticket = {
       id: m[3]!, box: m[2] as Box, title, line, parent: stack.length ? stack[stack.length - 1]!.id : null,
@@ -101,7 +104,11 @@ const numOf = (id: string) => Number(/\d+/.exec(id)?.[0] ?? 0)
 
 // The ticket's own words with the bracket code; the session tag is bookkeeping and is left off.
 // Any of the three dashes the file may hold is shown as the em dash.
-const shown = (t: Ticket) => `[${t.box}] ${t.id} — ${t.line.replace(ID_DASH, '').replace(SESSION_TAIL, '')}`
+const shown = (t: Ticket) => {
+  const al = HIST_ALIAS.exec(t.line)?.[1]
+  const mid = al ? ` ${al} — ` : ' — '
+  return `[${t.box}] ${t.id}${mid}${t.line.replace(ID_DASH, '').replace(SESSION_TAIL, '')}`
+}
 
 // /list-tickets body: tickets-zordon "Showing the board". Args: status, all, app:<a>, @person, <prefix>, <ID>.
 export function listView(b: Board, args: string): string {
