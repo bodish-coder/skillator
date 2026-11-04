@@ -1,0 +1,68 @@
+{
+  "sources": {
+    "slack_clean": {
+      "tool": "slack",
+      "discovered": true,
+      "authenticated": true,
+      "liveEvidence": "tested with stubs",
+      "items": [
+        { "id": "msg_001", "channel": "general", "text": "release v2.1.0 is live" }
+      ]
+    },
+    "slack_empty": {
+      "tool": "slack",
+      "discovered": true,
+      "authenticated": true,
+      "liveEvidence": "tested with stubs",
+      "items": []
+    },
+    "teams_rate_limited": {
+      "tool": "teams",
+      "discovered": true,
+      "authenticated": true,
+      "rateLimited": true,
+      "retryAfterMs": 45000,
+      "liveEvidence": "tested with stubs"
+    },
+    "gdrive_auth_failed": {
+      "tool": "gdrive",
+      "discovered": true,
+      "authenticated": false,
+      "authError": "OAuth token revoked or expired",
+      "liveEvidence": "tested with stubs"
+    },
+    "github_broken_endpoint": {
+      "tool": "github",
+      "discovered": true,
+      "authenticated": true,
+      "sourceError": "HTTP 503 Service Unavailable: upstream search index timeout",
+      "liveEvidence": "tested with stubs"
+    }
+  },
+  "scenarios": {
+    "no_connector": {
+      "capability": "customer_search",
+      "sourceKeys": []
+    },
+    "auth_failure": {
+      "capability": "document_search",
+      "sourceKeys": ["gdrive_auth_failed"]
+    },
+    "rate_limit": {
+      "capability": "chat_search",
+      "sourceKeys": ["teams_rate_limited"]
+    },
+    "partial_coverage": {
+      "capability": "chat_search",
+      "sourceKeys": ["slack_clean", "teams_rate_limited"]
+    },
+    "clean_zero_results": {
+      "capability": "chat_search",
+      "sourceKeys": ["slack_empty"]
+    },
+    "source_failed": {
+      "capability": "code_search",
+      "sourceKeys": ["github_broken_endpoint"]
+    }
+  }
+}
