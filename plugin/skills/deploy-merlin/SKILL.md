@@ -105,10 +105,24 @@ Then **offer to run only the safe LOCAL steps** with per-step confirmation: writ
 files, `chmod +x deploy/deploy.sh`, stage them. **Do NOT** `git push`, run anything
 against the server, or write any secret. Confirm before each write if overwriting.
 
-## Step 3 — Manual handoff checklist (the human-only steps)
+## Step 3 — Manual handoff checklist and deployment runbook
 
-Print an ordered, copy-pasteable checklist with the user's non-secret values filled
-in (secrets as placeholders). These are the steps the wizard will NOT do:
+Print an ordered, repeatable **deployment runbook** (see `references/runbooks.md` for
+template and schema) with the user's non-secret values filled in (secrets as placeholders /
+env references). Each runbook specifies:
+- **Owner & Last-tested revision:** Designated operator role and git revision.
+- **Prerequisites:** All required configuration, DNS, and server settings. Incomplete
+  inputs halt execution before running commands (status `blocked` / `incomplete_inputs`).
+- **Exact commands:** Verbatim copy-pasteable commands for every manual step.
+- **Expected result:** Clear observable outcome per step.
+- **Failure branch:** Specific diagnostic and remediation path per step.
+- **Verification:** Health, TLS, and maintenance checks. Unexecuted checks remain explicitly
+  `unverified`.
+- **Rollback verification:** Explicit trigger, rollback command, and verification check.
+- **No automatic external publishing:** Runbook handoffs remain local markdown or terminal
+  output; never published to external wikis or channels without human instruction.
+
+These are the core steps the wizard hands off:
 
 1. **Deploy key** — `ssh-keygen` a deploy keypair; add the public key to
    `DEPLOY_USER@DEPLOY_HOST:~/.ssh/authorized_keys`.
