@@ -313,9 +313,9 @@ if ($Mode -eq 'refresh') {
       $env:ANTIGRAVITY_APP_DATA_DIR = $Dir
       $raw = & agy -p "/usage" --output-format json 2>$null | Out-String
       if ($raw) {
-        $parsed = ConvertFrom-Json $raw -ErrorAction SilentlyContinue
+        $parsed = try { ConvertFrom-Json $raw -ErrorAction Stop } catch { $null }
         $h = $null; $wk = $null
-        if ($parsed.command.data.groups) {
+        if ($parsed -and $parsed.command -and $parsed.command.data -and $parsed.command.data.groups) {
           foreach ($g in $parsed.command.data.groups) {
             if ($g.buckets) {
               foreach ($b in $g.buckets) {
@@ -332,7 +332,9 @@ if ($Mode -eq 'refresh') {
           }
         }
         if ($null -ne $h -or $null -ne $wk) {
-          $res = @{ src = 'agy'; '5h' = $h; '7d' = $wk }
+          $res = [ordered]@{ src = 'agy' }
+          if ($null -ne $h) { $res['5h'] = $h }
+          if ($null -ne $wk) { $res['7d'] = $wk }
         }
       }
     } elseif ($Cli -eq 'claude') {

@@ -329,15 +329,67 @@ if [ "$mode" = refresh ]; then
     agy)
       raw=$(AGY_CONFIG_DIR="$target_dir" ANTIGRAVITY_APP_DATA_DIR="$target_dir" agy -p "/usage" --output-format json 2>/dev/null)
       if [ -n "$raw" ]; then
-        parsed=$(printf '%s' "$raw" | awk '
-          /"remaining_fraction"/ {
-            match($0, /"remaining_fraction"[[:space:]]*:[[:space:]]*[0-9.]+/);
-            f=substr($0, RSTART, RLENGTH); sub(/.*:[[:space:]]*/, "", f);
-            u=(1.0 - f)*100;
-            if ($0 ~ /5h|hour/) { if (h=="" || u>h) h=u }
-            if ($0 ~ /week|7d/) { if (w=="" || u>w) w=u }
-          }
-          END { if (h!="" || w!="") printf "{\"src\":\"agy\",\"5h\":%.1f,\"7d\":%.1f}", (h==""?0:h), (w==""?0:w) }')
+        parsed=""
+        if command -v node >/dev/null 2>&1; then
+          parsed=$(node -e '
+            try {
+              const raw = JSON.parse(process.argv[1]);
+              let h = null, w = null;
+              const groups = raw?.command?.data?.groups || [];
+              for (const g of groups) {
+                for (const b of (g.buckets || [])) {
+                  if (b && b.remaining_fraction != null) {
+                    const f = Number(b.remaining_fraction);
+                    if (Number.isFinite(f)) {
+                      const used = Math.round((1.0 - f) * 1000) / 10;
+                      const win = String(b.window || "");
+                      if (/5h|hour/.test(win)) {
+                        if (h === null || used > h) h = used;
+                      } else if (/week|7d/.test(win)) {
+                        if (w === null || used > w) w = used;
+                      }
+                    }
+                  }
+                }
+              }
+              if (h !== null || w !== null) {
+                const res = { src: "agy" };
+                if (h !== null) res["5h"] = h;
+                if (w !== null) res["7d"] = w;
+                process.stdout.write(JSON.stringify(res));
+              }
+            } catch (_) {}
+          ' "$raw" 2>/dev/null)
+        elif command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1; then
+          py=$(command -v python3 || command -v python)
+          parsed=$("$py" -c '
+import sys, json
+try:
+    raw = json.loads(sys.argv[1])
+    h = None; w = None
+    for g in raw.get("command", {}).get("data", {}).get("groups", []):
+        for b in g.get("buckets", []):
+            rf = b.get("remaining_fraction")
+            if rf is not None:
+                try:
+                    f = float(rf)
+                    used = round((1.0 - f) * 100, 1)
+                    win = str(b.get("window", ""))
+                    if "5h" in win or "hour" in win:
+                        if h is None or used > h: h = used
+                    elif "week" in win or "7d" in win:
+                        if w is None or used > w: w = used
+                except Exception:
+                    pass
+    if h is not None or w is not None:
+        res = {"src": "agy"}
+        if h is not None: res["5h"] = h
+        if w is not None: res["7d"] = w
+        sys.stdout.write(json.dumps(res))
+except Exception:
+    pass
+' "$raw" 2>/dev/null)
+        fi
         [ -n "$parsed" ] && printf '%s' "$parsed" > "$cache"
       fi
       ;;

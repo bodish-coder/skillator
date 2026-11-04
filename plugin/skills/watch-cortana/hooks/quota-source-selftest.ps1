@@ -46,10 +46,10 @@ try {
     $env:SKILLATOR_CLI = $null; $env:SKILLATOR_PROFILE_DIR = $null
     $env:CODEX_THREAD_ID = $null; $env:CODEX_SESSION_ID = $null
     $rp = Roll $env:CODEX_HOME 'cx-a' 10 10
-    Put "$base/watch/cc" '95'; Put "$base/watch/cc.fivehour" '95'; Put "$base/watch/cc.weekly" '91'
+    Put "$base/watch/cc" '95'; Put "$base/watch/cc.fivehour" '95'; Put "$base/watch/cc.weekly" '98'
     $env:CLAUDE_CODE_SESSION_ID = 'cc'
-    Expect $port level '^src=claude-code 5h=95 7d=91 '
-    Expect $port check '^HANDOFF NOW \(claude-code 7-day 91%\)'
+    Expect $port level '^src=claude-code 5h=95 7d=98 '
+    Expect $port check '^HANDOFF NOW \(claude-code 7-day 98%\)'
     $env:CLAUDE_CODE_SESSION_ID = $null; $env:SKILLATOR_CLI = 'codex'
     Expect $port level '^src=codex 5h=10.0 7d=10.0 '
     Expect $port check '^watch-cortana: codex 10(\.0)?%.*ok$'
@@ -104,9 +104,9 @@ try {
     # A171: caches are JSON records; artifacts and partial flags are not sessions.
     $env:SKILLATOR_PROFILE_DIR = "$base/schema"
     $cache = "$base/schema/handoff-watch/quota-cache.json"
-    Put $cache '{"src":"claude-code","5h":95,"7d":91}'
-    Expect $port level '^src=claude-code 5h=95.0 7d=91.0 ctx=- max=95.0$'
-    Expect $port check '^HANDOFF NOW \(claude-code 7-day 91(\.0)?%\)'
+    Put $cache '{"src":"claude-code","5h":95,"7d":98}'
+    Expect $port level '^src=claude-code 5h=95.0 7d=98.0 ctx=- max=98.0$'
+    Expect $port check '^HANDOFF NOW \(claude-code 7-day 98(\.0)?%\)'
     Put $cache '[{"src":"claude-code","five":95,"weekly":91}]'
     Expect $port level '^src=none 5h=- 7d=- ctx=- max=-$'
     Expect $port check '^watch-cortana: no usage signal'
@@ -166,8 +166,8 @@ try {
     Put "$base/agy/quota-cache.json" '{"src":"agy","5h":15.0,"7d":71.0,"max":71.0}'
     Expect $port level '^src=agy 5h=15.0 7d=71.0 ctx=- max=71.0$'
     Expect $port check '^watch-cortana: agy 15(\.0)?%.*ok$'
-    Put "$base/agy/quota-cache.json" '{"src":"agy","5h":15.0,"7d":91.0,"max":91.0}'
-    Expect $port check '^HANDOFF NOW \(agy 7-day 91(\.0)?%\)'
+    Put "$base/agy/quota-cache.json" '{"src":"agy","5h":15.0,"7d":98.0,"max":98.0}'
+    Expect $port check '^HANDOFF NOW \(agy 7-day 98(\.0)?%\)'
     $env:SKILLATOR_CLI = 'muse'; $env:SKILLATOR_PROFILE_DIR = "$base/muse"
     Put "$base/muse/quota-cache.json" '{"src":"muse","note":"not logged in"}'
     Expect $port level '^src=muse 5h=- 7d=- ctx=- max=- note=not_logged_in$'
