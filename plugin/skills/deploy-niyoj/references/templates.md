@@ -146,7 +146,6 @@ ok "API healthy"
 
 # 9. Maintenance gate OFF (the trap clears it too — belt-and-braces)
 rm -f "$MAINT_FLAG"
-ok "Live"
 
 # 10. nginx + TLS (certbot is a no-op if the cert is fresh)
 say "Configuring nginx"
@@ -155,7 +154,12 @@ ln -sf /etc/nginx/sites-available/<app> /etc/nginx/sites-enabled/<app>
 nginx -t && systemctl reload nginx
 
 certbot --nginx -d "$SUBDOMAIN" -m "$EMAIL" \
-        --agree-tos --non-interactive --redirect || warn "TLS step skipped"
+        --agree-tos --non-interactive --redirect || die "TLS setup failed"
+
+# 11. Verify HTTP/HTTPS endpoints
+say "Verifying HTTPS"
+curl -fsS "https://$SUBDOMAIN/api/health" >/dev/null 2>&1 || die "HTTPS verification failed"
+ok "Live"
 ```
 
 **Key idempotency rule:** every step is *detect → skip-if-already-done →
