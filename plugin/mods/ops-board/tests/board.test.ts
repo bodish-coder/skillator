@@ -110,3 +110,21 @@ test('list view: a dash glued to the id keeps the hyphenated words after it', ()
   expect(out).toContain('[ ] F3 — re-run the GREEN')
   expect(out).toContain('[ ] F4 — semi-final pass')
 })
+
+// A180: historical alias parses, counts open/testing, preserves alias and text
+test('A180: historical ticket alias visible to readers, counts and round-trips correctly', () => {
+  const raw = '- [%] F107 (was F97) — clone-odo: a clean-room app-cloning skill [owner: @sher] (@cc-xhvvy2)\n'
+  const b = parseBoard(raw, 'T', 0, 0)
+  expect(b.tickets.length).toBe(1)
+  const t = b.tickets[0]!
+  expect(t.id).toBe('F107')
+  expect(t.box).toBe('%')
+  expect(t.owner).toBe('@sher')
+  expect(t.session).toBe('@cc-xhvvy2')
+  expect(t.title).toBe('(was F97) clone-odo: a clean-room app-cloning skill')
+  expect(countLine(b.tickets)).toStartWith('1 open (0 pending · 0 in-progress · 1 testing')
+  const out = listView(b, '')
+  expect(out).toContain('[%] F107 (was F97) — clone-odo: a clean-room app-cloning skill [owner: @sher]')
+  expect(out).not.toContain('F107 — F107')
+  expect(`[${t.box}] ${t.line}`).toBe('[%] F107 (was F97) — clone-odo: a clean-room app-cloning skill [owner: @sher] (@cc-xhvvy2)')
+})

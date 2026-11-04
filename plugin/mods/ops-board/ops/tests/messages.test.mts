@@ -77,15 +77,46 @@ test('control characters in a message never reach the frame (no escape sequence,
   assert.match(f, /x\[2J\]0;pwned y/)
 })
 
-test('setup opens on its own when nothing is configured; s opens it any time', () => {
+test('B21: entering Messages shows inbox or unconfigured state, not setup; setup opens only on explicit action', () => {
   const st = reduce(s0, { name: '4' })
   const [show] = runs(st.effects)
   const s = settle(show!.then(ok(CFG_NONE))(st.state)).state
-  assert.ok(s.setup, 'setup up when no token is saved')
-  assert.match(text(s), /Teams setup/)
+  assert.equal(s.setup, null, 'setup must not open on its own when no token is saved')
+  assert.doesNotMatch(text(s), /Teams setup/)
+  assert.match(text(s), /2 unread · 3 messages/)
+
+  // explicit s opens setup; escape cancels
+  const withSetup = press(s, 's')
+  assert.ok(withSetup.setup, 'setup opens on explicit s action')
+  assert.match(text(withSetup), /Teams setup/)
+  const back = press(withSetup, 'escape')
+  assert.equal(back.setup, null)
+  assert.match(text(back), /2 unread · 3 messages/)
+
+  // configured state (CFG_SET)
   const set = settle(show!.then(ok(CFG_SET))(st.state)).state
   assert.equal(set.setup, null)
   assert.ok(press(set, 's').setup)
+  assert.equal(press(press(set, 's'), 'escape').setup, null)
+
+  // unconfigured state when inbox is empty: shows empty inbox state, not setup
+  const empty = onInbox(initial(80, 24, 0), '', null)
+  const stEmpty = reduce(empty, { name: '4' })
+  const [showEmpty] = runs(stEmpty.effects)
+  const sEmpty = settle(showEmpty!.then(ok(CFG_NONE))(stEmpty.state)).state
+  assert.equal(sEmpty.setup, null)
+  assert.match(text(sEmpty), /no team messages yet/)
+  assert.doesNotMatch(text(sEmpty), /Teams setup/)
+
+  // pointer navigation: tab click and footer button click
+  const ptrTab = point(s0, { kind: 'tab', tab: 'messages' })
+  const [showPtr] = runs(ptrTab.effects)
+  const sPtr = settle(showPtr!.then(ok(CFG_NONE))(ptrTab.state)).state
+  assert.equal(sPtr.setup, null)
+  const sPtrOpen = point(sPtr, { kind: 'key', key: { name: 's' } })
+  assert.ok(sPtrOpen.state.setup)
+  const sPtrCancel = point(sPtrOpen.state, { kind: 'key', key: { name: 'escape' } })
+  assert.equal(sPtrCancel.state.setup, null)
 })
 
 const openSetup = (cfg: string) => {

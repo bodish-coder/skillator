@@ -107,8 +107,8 @@ BEGIN {
   LDQ = sprintf("%c%c%c", 226, 128, 156); RDQ = sprintf("%c%c%c", 226, 128, 157)
   ELL = sprintf("%c%c%c", 226, 128, 166); RARR = sprintf("%c%c%c", 226, 134, 146)
   MDOT = sprintf("%c%c", 194, 183)
-  # A ticket line, as ticket-meta reads it: `[indent]- [<box>] <ID> <dash> ...`.
-  TRE = "^[ \t]*- \\[.\\][ \t]+[A-Z][A-Z]?[A-Z]?[0-9]+[a-z]?[ \t]*(" EMD "|" ENDASH "|-)"
+  # A ticket line, as ticket-meta reads it: `[indent]- [<box>] <ID> [alias] <dash> ...`.
+  TRE = "^[ \t]*- \\[.\\][ \t]+[A-Z][A-Z]?[A-Z]?[0-9]+[a-z]?([ \t]+\\(was[ \t]+[A-Z][A-Z]?[A-Z]?[0-9]+[a-z]?\\))?[ \t]*(" EMD "|" ENDASH "|-)"
 }
 function ascii(s) {
   gsub(/[\001-\037\177]/, " ", s)
@@ -145,7 +145,14 @@ board() {
       c[m]++
       if (m != " " && m != "~" && m != "!" && m != "?" && m != "%" && m != ">") next
       if (m != ">" && tolower($0) ~ /(^|[^a-z0-9_])owed([^a-z0-9_]|$)/) ow = ow "OWED=" id "\n"
-      r = ascii(substr(r, RLENGTH + 1)); sub(/^ *- */, "", r)
+      r = substr(r, RLENGTH + 1)
+      al = ""
+      if (match(r, /^[ \t]+\(was[ \t]+[A-Z]+[0-9]+[a-z]?\)/)) {
+        al = substr(r, RSTART, RLENGTH)
+        gsub(/^[ \t]+|[ \t]+$/, "", al)
+        r = substr(r, RSTART + RLENGTH)
+      }
+      r = ascii(r); sub(/^[ \t]*-+[ \t]*/, "", r)
       tag = ""
       if (match(r, /\[owner:[^]]*\]/)) tag = trim(substr(r, RSTART + 7, RLENGTH - 8))
       if (m == "?" && match(r, /\[decide:[^]]*\]/)) { v = trim(substr(r, RSTART + 8, RLENGTH - 9)); if (v != "") tag = tag (tag == "" ? "" : " ") "decide " v }
@@ -158,6 +165,7 @@ board() {
       a = index(r, " ("); b = index(r, ". "); if (b && (!a || b < a)) a = b
       if (a) r = substr(r, 1, a - 1)
       gsub(/  +/, " ", r); r = trim(r)
+      if (al != "") r = al " " r
       tk = tk "TICKET=" m "|" id "|" tag "|" r "\n"
       if (m == "%") te = te "TEST=" id "|" (note == "" ? "-" : note) "\n"
     }

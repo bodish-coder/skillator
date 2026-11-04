@@ -21,8 +21,8 @@ $script:Main = ''
 $script:Now = [long]0
 $script:Relay = ''
 $GbBytes = [double]1073741824
-# A ticket line, as ticket-meta reads it: `[indent]- [<box>] <ID> <dash> ...`.
-$TicketRe = '^[ \t]*- \[(.)\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)[ \t]*(' + [char]0x2014 + '|' + [char]0x2013 + '|-)'
+# A ticket line, as ticket-meta reads it: `[indent]- [<box>] <ID> [alias] <dash> ...`.
+$TicketRe = '^[ \t]*- \[(.)\][ \t]+([A-Z]{1,3}[0-9]+[a-z]?)(?:[ \t]+(\(was[ \t]+[A-Z]{1,3}[0-9]+[a-z]?\)))?[ \t]*(' + [char]0x2014 + '|' + [char]0x2013 + '|-)'
 
 function Git-Out {
   # Native git, stdout lines only; $null on failure. A local 'Continue': under
@@ -126,11 +126,13 @@ function Get-Board {
       if (-not $m.Success) { continue }
       $k = $m.Groups[1].Value
       $id = $m.Groups[2].Value
+      $alias = ''
+      if ($m.Groups[3].Success) { $alias = $m.Groups[3].Value }
       if ($c.ContainsKey($k)) { $c[$k] = $c[$k] + 1 } else { $c[$k] = 1 }
       if (@(' ', '~', '!', '?', '%', '>') -cnotcontains $k) { continue }
       if ($k -cne '>' -and $l.ToLowerInvariant() -cmatch '(^|[^a-z0-9_])owed([^a-z0-9_]|$)') { [void]$owed.Add('OWED=' + $id) }
-      $g = $m.Groups[2]
-      $r = ConvertTo-Ascii $l.Substring($g.Index + $g.Length)
+      $dash = $m.Groups[4]
+      $r = ConvertTo-Ascii $l.Substring($dash.Index + $dash.Length)
       $r = [regex]::Replace($r, '^ *- *', '')
       $tag = ''
       $x = [regex]::Match($r, '\[owner:[^\]]*\]')
@@ -159,6 +161,7 @@ function Get-Board {
       if ($b -ge 0 -and ($a -lt 0 -or $b -lt $a)) { $a = $b }
       if ($a -ge 0) { $r = $r.Substring(0, $a) }
       $r = [regex]::Replace($r, '  +', ' ').Trim(' ')
+      if ($alias -ne '') { $r = "$alias $r" }
       [void]$tk.Add("TICKET=$k|$id|$tag|$r")
       if ($k -ceq '%') {
         if ($note -eq '') { $note = '-' }
