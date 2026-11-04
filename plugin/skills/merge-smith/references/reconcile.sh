@@ -12,8 +12,19 @@
 # untracked file on a checked path corrupts its `apply --check`. The relay run
 # file (.skillator/run-*.md) is the one allowed dirty path - it is never checked.
 reconcile() {
-  git -c core.quotepath=off diff --raw --no-abbrev -M "$1" "$2" | {
-    from=$1 to=$2 n=0 bad=0 tab=$(printf '\t')
+  from=$1 to=$2
+  git rev-parse -q --verify "$from^{commit}" >/dev/null 2>&1 ||
+    git rev-parse -q --verify "$from^{tree}" >/dev/null 2>&1 || return 1
+  git rev-parse -q --verify "$to^{commit}" >/dev/null 2>&1 ||
+    git rev-parse -q --verify "$to^{tree}" >/dev/null 2>&1 || return 1
+
+  raw=$(git -c core.quotepath=off diff --raw --no-abbrev -M "$from" "$to")
+  diff_rc=$?
+  [ $diff_rc -eq 0 ] || return $diff_rc
+  [ -z "$raw" ] && { echo "reconcile $from..$to: 0 paths, 0 failed"; return 0; }
+
+  printf '%s\n' "$raw" | {
+    n=0 bad=0 tab=$(printf '\t')
     while IFS=$tab read -r meta p1 p2; do
       n=$((n+1)); set -- $meta                 # :omode nmode osha nsha status
       if [ "$1" = :160000 ] || [ "$2" = 160000 ]; then      # submodule: compare commits
