@@ -150,7 +150,8 @@ ok "Live"
 
 # 10. nginx + TLS (certbot is a no-op if the cert is fresh)
 say "Configuring nginx"
-envsubst < deploy/nginx.conf.template > /etc/nginx/sites-available/<app>
+export APP_DIR SUBDOMAIN
+envsubst '$APP_DIR $SUBDOMAIN' < deploy/nginx.conf.template > /etc/nginx/sites-available/<app>
 ln -sf /etc/nginx/sites-available/<app> /etc/nginx/sites-enabled/<app>
 nginx -t && systemctl reload nginx
 
@@ -168,16 +169,16 @@ otherwise-do*. Re-running the whole script must be safe at any time.
 ```nginx
 server {
     listen 80;
-    server_name __SUBDOMAIN__;
-    root __APP_DIR__/frontend/dist;
+    server_name $SUBDOMAIN;
+    root $APP_DIR/frontend/dist;
     index index.html;
 
     set $maintenance 0;
-    if (-f __APP_DIR__/maintenance.flag) { set $maintenance 1; }
+    if (-f $APP_DIR/maintenance.flag) { set $maintenance 1; }
     if ($maintenance = 1) { rewrite ^.*$ /maintenance.html last; }
 
     location = /maintenance.html {
-        root __APP_DIR__;
+        root $APP_DIR;
         # 200, NOT 503 — some browsers/proxies cache 5xx and strand users
         # on the maintenance page after the deploy finishes.
         add_header Cache-Control "no-cache, no-store, must-revalidate" always;
