@@ -164,6 +164,9 @@ delivering this skill, not an optional extra.
 
 - `nginx -t` **before** `systemctl reload` — never reload a config that doesn't
   parse.
+- **Explicit variable allowlist for `envsubst`** (`envsubst '$APP_DIR $SUBDOMAIN'`)
+  — never run unrestricted `envsubst`, which consumes runtime nginx variables
+  (`$maintenance`, `$uri`, `$host`) and breaks the rendered config.
 - **Health-poll before clearing maintenance**, 45 × 2 s, then `die`. If the API
   never came up, the site stays on the maintenance page rather than serving a
   broken app.
