@@ -76,26 +76,60 @@ elseif ($Command -eq 'report') {
 }
 else {
   if (-not $A -or -not $B) { Write-Error 'usage: taskwork.ps1 review <DesignFile> <Base> <Head>'; exit 2 }
+  $resolved = [System.Collections.Generic.List[string]]::new()
+  $shorts = [System.Collections.Generic.List[string]]::new()
   foreach ($r in @($A, $B)) {
-    git rev-parse --verify --quiet $r > $null
-    if ($LASTEXITCODE -ne 0) { Write-Error "bad ref: $r"; exit 1 }
+    $sha = (git rev-parse --verify --quiet "$r^{commit}")
+    if ($LASTEXITCODE -ne 0 -or -not $sha) { Write-Error "bad ref: $r"; exit 1 }
+    $resolved.Add($sha.Trim())
+    $sh = (git rev-parse --short $sha.Trim())
+    if ($LASTEXITCODE -ne 0 -or -not $sh) { Write-Error "bad ref: $r"; exit 1 }
+    $shorts.Add($sh.Trim())
   }
-  $f = Join-Path $out "review-$(git rev-parse --short $A)-$(git rev-parse --short $B).md"
+  $baseSha = $resolved[0]; $headSha = $resolved[1]
+  $f = Join-Path $out "review-$($shorts[0])-$($shorts[1]).md"
+
+  $commits = @(git log --oneline "$baseSha..$headSha")
+  if ($LASTEXITCODE -ne 0) {
+    Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+    Write-Error "git log failed: $baseSha..$headSha"; exit 1
+  }
+
+  $stat = @(git diff --stat $baseSha $headSha)
+  if ($LASTEXITCODE -ne 0) {
+    Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+    Write-Error "git diff --stat failed: $baseSha $headSha"; exit 1
+  }
+
+  $diff = @(git diff -U8 $baseSha $headSha)
+  if ($LASTEXITCODE -ne 0) {
+    Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+    Write-Error "git diff failed: $baseSha $headSha"; exit 1
+  }
+
   $body = @(
     '# Review package', ''
-    "Base: $(git rev-parse $A)"
-    "Head: $(git rev-parse $B)", ''
+    "Base: $baseSha"
+    "Head: $headSha", ''
     '## Commits', '```'
-    (git log --oneline "$A..$B")
+    $commits
     '```', ''
     '## Stat', '```'
-    (git diff --stat $A $B)
+    $stat
     '```', ''
     '## Diff', '```diff'
-    # -U8: reviewers judge hunks in context; 3 lines is not enough context.
-    (git diff -U8 $A $B)
+    $diff
     '```'
   )
-  Set-Content $f ($body -join "`n") -Encoding utf8
+  $tmp = "$f.$PID.tmp"
+  try {
+    [System.IO.File]::WriteAllText($tmp, ($body -join "`n") + "`n",
+      (New-Object System.Text.UTF8Encoding $false))
+    Move-Item -LiteralPath $tmp -Destination $f -Force
+  }
+  catch {
+    Remove-Item -LiteralPath $tmp, $f -Force -ErrorAction SilentlyContinue
+    throw
+  }
   $f
 }

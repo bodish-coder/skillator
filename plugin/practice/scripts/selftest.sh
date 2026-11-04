@@ -170,6 +170,23 @@ EOF
       die "A173: $port Unicode brief differs from expected UTF-8 bytes"
   done
   echo "  twin: Unicode briefs match expected UTF-8 bytes (no BOM, trailing LF)"
+
+  # A193: PowerShell review package validation and parity
+  mkdir -p "$tmp/psreview"
+  cp "$tmp/design.md" "$tmp/psreview/design.md"
+  ppkg=$("$ps" -NoProfile -ExecutionPolicy Bypass -File "$here/taskwork.ps1" review "$tmp/psreview/design.md" "$base" "$head" | tr -d '\r')
+  [ -f "$ppkg" ] || die 'A193: taskwork.ps1 produced no review packet'
+  cmp -s "$p" "$ppkg" || die 'A193: taskwork.ps1 review packet differs from taskwork.sh'
+
+  # A193: reject bad ref, noncommit blob ref, leave no packet
+  blob=$(git -C "$r" rev-parse HEAD:f.txt)
+  if "$ps" -NoProfile -ExecutionPolicy Bypass -File "$here/taskwork.ps1" review "$tmp/psreview/design.md" nosuchref "$head" >/dev/null 2>&1; then
+    die 'A193: taskwork.ps1 accepted bad ref'
+  fi
+  if "$ps" -NoProfile -ExecutionPolicy Bypass -File "$here/taskwork.ps1" review "$tmp/psreview/design.md" "$base" "$blob" >/dev/null 2>&1; then
+    die 'A193: taskwork.ps1 accepted noncommit blob ref'
+  fi
+  echo "  twin: review packages match and reject noncommit/bad refs"
 else
   echo "  twin: no pwsh/powershell on PATH - taskwork.ps1 NOT checked"
 fi
