@@ -680,7 +680,7 @@ cmd_assign_tester() {
 cmd_assign_app() {
   CMD=assign-app
   [ $# -ge 2 ] || die "usage: assign-app <ID> <app,...>"
-  ID=$(norm_id "$1"); shift
+  norm_id "$1"; shift
   raw="$*"
   case "$raw" in *"$NL"*|*\[*|*\]*) die "the app cannot hold brackets or line breaks" ;; esac
   apps=$(printf '%s' "$raw" | tr ',' ' ' | awk '{
