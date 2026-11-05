@@ -18,7 +18,7 @@ RUN-0026  marathon run   3/5 done
 const withRuns = onRuns(s, RUNS_BODY, 0)
 
 const VIEWPORT_WIDTHS = [40, 60, 80, 100, 120]
-const TABS: State['tab'][] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run']
+const TABS: State['tab'][] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help']
 
 test('A165: Tui-tron exhaustive multi-width viewport validation across 40, 60, 80, 100, 120 columns', () => {
   for (const cols of VIEWPORT_WIDTHS) {

@@ -4,7 +4,7 @@
 import { spawn, execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, readFile, stat as fsStat, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { argvFor, devTunnelsArgv, loginMessage, loginStatus, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, systemRoot, up } from '../hooks/lib/calls'
 import { findBins } from '../hooks/lib/runentries'
 import type { Bins } from '../hooks/lib/runentries'
@@ -31,6 +31,62 @@ export type Host = {
   bins?(): Promise<Bins>
   spawn?(argv: string[], cwd: string, onOut: (text: string) => void, onEnd: (code: number | null, err: string | null) => void): { stop(): void }
   git?(args: string[]): Promise<RunResult>         // F75: git <args> by its absolute path (A150), cwd = repoRoot; 15 s
+  copy?(text: string): Promise<RunResult>          // A198 / F160: write text to clipboard via system utility
+}
+
+export const SKILL_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
+export const MAX_SKILL_DOC_BYTES = 256 * 1024
+
+export async function readSkillDoc(host: Pick<Host, 'skillsDir' | 'repoRoot' | 'stat' | 'read'>, skillId: string): Promise<RunResult> {
+  if (!SKILL_ID_RE.test(skillId)) {
+    return { code: 1, out: '', err: `Invalid skill ID: ${errorText(skillId)}`, argv: [] }
+  }
+  if (!host.skillsDir) {
+    return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
+  }
+  const baseDir = norm(resolve(host.skillsDir))
+  const resolvedDoc = norm(resolve(baseDir, skillId, 'SKILL.md'))
+  if (!resolvedDoc.startsWith(baseDir + '/')) {
+    return { code: 1, out: '', err: 'Skill path escapes skillsDir boundary', argv: [] }
+  }
+  const relLabel = norm(relative(host.repoRoot, resolvedDoc))
+  const displayPath = relLabel && !relLabel.startsWith('..') ? relLabel : `${skillId}/SKILL.md`
+  const st = await host.stat(resolvedDoc)
+  if (!st) {
+    return { code: 1, out: '', err: `SKILL.md not found for ${skillId}`, argv: [displayPath] }
+  }
+  if (st.size > MAX_SKILL_DOC_BYTES) {
+    return { code: 1, out: '', err: `SKILL.md exceeds ${MAX_SKILL_DOC_BYTES} byte limit (${st.size} bytes)`, argv: [displayPath] }
+  }
+  try {
+    const raw = await host.read(resolvedDoc)
+    const sanitized = raw.replace(/\r\n/g, '\n').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
+    return { code: 0, out: sanitized, err: '', argv: [displayPath] }
+  } catch (e) {
+    return { code: 1, out: '', err: errorText(e), argv: [displayPath] }
+  }
+}
+
+export async function copyToClipboard(text: string, cwd: string, env: Record<string, string | undefined> = process.env): Promise<RunResult> {
+  const win = process.platform === 'win32'
+  if (win) {
+    const clip = systemRoot(env.SystemRoot ?? env.SYSTEMROOT) + '/System32/clip.exe'
+    if (!existsSync(clip)) return { code: 127, out: '', err: 'clip.exe not found', argv: [] }
+    return spawnArgv([clip], cwd, 5000, text)
+  }
+  if (process.platform === 'darwin') {
+    const pbcopy = '/usr/bin/pbcopy'
+    if (!existsSync(pbcopy)) return { code: 127, out: '', err: 'pbcopy not found', argv: [] }
+    return spawnArgv([pbcopy], cwd, 5000, text)
+  }
+  for (const [cmd, args] of [['wl-copy', []], ['xclip', ['-selection', 'clipboard']], ['xsel', ['--clipboard', '--input']]] as const) {
+    const bin = await findExe(cmd, env.PATH ?? env.Path, false, fileExists)
+    if (bin) {
+      const r = await spawnArgv([bin, ...args], cwd, 5000, text)
+      if (r.code === 0) return r
+    }
+  }
+  return { code: 127, out: '', err: 'no clipboard utility available', argv: [] }
 }
 
 type Env = Record<string, string | undefined>
@@ -224,5 +280,6 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
       if (!bin) return { code: 127, out: '', err: NO_GIT, argv: [] }
       return spawnArgv([bin, ...args], repoRoot, 15000)
     },
+    copy: text => copyToClipboard(text, repoRoot),
   }
 }

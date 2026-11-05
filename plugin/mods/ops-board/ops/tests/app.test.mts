@@ -79,8 +79,8 @@ for (const [kind, skip] of launchers) {
     const lines = r.out.replace(/\r?\n$/, '').split(/\r?\n/)
     assert.equal(lines.length, 20, r.out)
     for (const l of lines) { assert.ok([...l].length <= 80, l); assert.doesNotMatch(l, /\x1b/) }
-    // F75 + F79: six tabs leave no room at 80 columns for "ops · <repo>" - spread() drops it (draw.test: it shows at 100)
-    assert.match(lines[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build$/)
+    // F75 + F79 + F160: seven tabs leave no room at 80 columns for "ops · <repo>" - spread() drops it (draw.test: it shows at 100)
+    assert.match(lines[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help$/)
     // F61: every group starts collapsed - its header and count, no rows
     assert.match(r.out, /› ▸ In progress \(1\)\r?\n  ▸ Pending \(1\)\r?\n/)
     assert.doesNotMatch(r.out, /F2  Bulk delete/)
@@ -102,7 +102,7 @@ for (const [kind, skip] of launchers) {
     assert.equal(r.code, 0, r.err)
     const lines = r.out.replace(/\r?\n$/, '').split(/\r?\n/)
     assert.equal(lines.length, 20, r.out)
-    assert.match(lines[0]!, /3 Health   4 Messages   5 Explorer   6 Build$/)        // the repo label does not fit at 80 beside six tabs
+    assert.match(lines[0]!, /3 Health   4 Messages   5 Explorer   6 Build   7 Help$/) // the repo label does not fit at 80 beside seven tabs
     assert.match(r.out, /› ● RUN-0099  fixture run +agents · 1\/2 done/)
     assert.match(lines.at(-1)!, /RUN-0099|mem 8\.4 GB/)
     assert.deepEqual(files.map(f => (existsSync(f) ? `${statSync(f).mtimeMs}:${readFileSync(f, 'utf8')}` : 'none')), before)
@@ -264,12 +264,15 @@ test('flags: sizes, paint, tab, skills; anything else is an error', () => {
   // F76: the Workflows tab (id runs) is --tab workflows; --tab runs stays an alias
   assert.equal(parseArgs(['--tab', 'workflows']).tab, 'runs')
   assert.equal(parseArgs(['--tab', 'runs']).tab, 'runs')
-  assert.equal(parseArgs(['--tab', 'bogus']).error, 'ops: --tab is one of tickets, workflows, health, messages, explorer, build, got bogus')
+  assert.equal(parseArgs(['--tab', 'bogus']).error, 'ops: --tab is one of tickets, workflows, health, messages, explorer, build, help, got bogus')
   assert.equal(parseArgs(['--tab', 'agents']).tab, 'runs')          // F93: the agents word opens Workflows
   assert.equal(parseArgs(['--tab', 'build']).tab, 'run')            // F93: Build is tab run; run stays an alias
   assert.equal(parseArgs(['--tab', 'explorer']).tab, 'explorer')
   assert.equal(parseArgs(['--tab', 'run']).tab, 'run')
-  assert.match(USAGE, /--tab tickets\|workflows\|health\|messages\|explorer\|build\]$/)
+  assert.equal(parseArgs(['--tab', 'help']).tab, 'help')
+  assert.equal(parseArgs(['--tab', 'guide']).tab, 'help')
+  assert.equal(parseArgs(['--tab', 'skills']).tab, 'help')
+  assert.match(USAGE, /--tab tickets\|workflows\|health\|messages\|explorer\|build\|help\]$/)
   assert.match(parseArgs(['stray']).error ?? '', /unknown flag stray/)
 })
 

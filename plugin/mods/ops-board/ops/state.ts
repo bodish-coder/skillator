@@ -24,8 +24,8 @@ import type { RunState } from './runtab'
 import { enterExplorer, EX0, explorerKey } from './explorer'
 import type { ExState } from './explorer'
 
-// F79: run = the Run tab (runtab.ts); F75: explorer = the Explorer tab (explorer.ts)
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run'
+// F79: run = the Run tab (runtab.ts); F75: explorer = the Explorer tab (explorer.ts); F160: help = the Help tab
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help'
 export type FilterField = 'app' | 'who' | 'mine'
 
 export type SkillGuide = {
@@ -45,6 +45,10 @@ export type HelpState = {
   filtering: boolean
   expanded: boolean
   scroll: number
+  docContent?: string | null
+  docError?: string | null
+  docPath?: string | null
+  runPrompt?: string | null
 }
 // node readline keypress names: 'up', 'down', 'left', 'right', 'return', 'escape', 'tab', 'a', 'D', ...
 // `sequence` is the character typed (app.ts sets it for printable keys): the Add person form's text.
@@ -76,22 +80,41 @@ export type PointerAction =
   | { kind: 'help' }
   | { kind: 'help-skill'; id: string }
   | { kind: 'help-close' }
+  | { kind: 'help-run'; id?: string }
+  | { kind: 'help-copy'; id?: string }
   | { kind: 'start-run-field'; field: StartRunField }
 
-export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.reconcile || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help)
+export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.reconcile || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help?.runPrompt != null || s.help?.filtering)
 
 // Targets come only from the rendered frame, never from labels or terminal payloads.
 export function point(s: State, a: PointerAction): Step {
   const same = { state: s, effects: [] }
   if (a.kind === 'key') return reduce(s, a.key)
-  if (a.kind === 'help') return s.help ? { state: { ...s, help: null }, effects: [] } : openHelp(s)
-  if (a.kind === 'help-close') return { state: { ...s, help: null }, effects: [] }
+  if (a.kind === 'help') return s.help ? { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] } : openHelp(s)
+  if (a.kind === 'help-close') return { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] }
+  if (a.kind === 'help-run') {
+    const targetId = a.id ?? s.help?.selected
+    if (!targetId) return same
+    if (!s.help) {
+      const opened = openHelp(s, targetId)
+      return { state: { ...opened.state, help: { ...opened.state.help!, runPrompt: '' } }, effects: opened.effects }
+    }
+    return { state: { ...s, help: { ...s.help, selected: targetId, runPrompt: '' } }, effects: [] }
+  }
+  if (a.kind === 'help-copy') {
+    const targetId = a.id ?? s.help?.selected ?? SKILLS[0]!.id
+    const base = s.help ? { ...s, help: { ...s.help, selected: targetId } } : openHelp(s, targetId).state
+    return helpKey(base, { name: 'c' })
+  }
   if (a.kind === 'help-skill') {
     if (!s.help) return openHelp(s, a.id)
     if (s.help.selected === a.id) {
       return { state: { ...s, help: { ...s.help, expanded: !s.help.expanded, scroll: 0 } }, effects: [] }
     }
-    return { state: { ...s, help: { ...s.help, selected: a.id, expanded: false, scroll: 0 } }, effects: [] }
+    return {
+      state: { ...s, help: { ...s.help, selected: a.id, expanded: false, scroll: 0, docContent: null, docError: null, docPath: null } },
+      effects: [{ kind: 'skill-doc', skillId: a.id, then: onSkillDoc(a.id) }],
+    }
   }
   if (a.kind === 'start-run-field') return s.startRun ? { state: { ...s, startRun: { ...s.startRun, field: a.field } }, effects: [] } : same
   if (a.kind === 'person-field') return s.person ? { state: { ...s, personField: a.field }, effects: [] } : same
@@ -172,6 +195,8 @@ export type Effect = { kind: 'run'; call: Call; args: string[]; then: Then; stdi
   | { kind: 'runfile'; scanIfMissing: boolean } | { kind: 'job'; argv: string[]; cwd: string } | { kind: 'stop' }   // F79
   | { kind: 'git'; args: string[]; then: Then }       // F75: read-only git, the host's absolute git
   | { kind: 'mute'; text: string; then?: Then }       // F87: write the watchdog mute file ('' = unmuted); code 1 + err when it failed
+  | { kind: 'skill-doc'; skillId: string; then: Then } // A198: read-only bounded SKILL.md load
+  | { kind: 'copy'; text: string; label?: string; then?: Then } // A198 / F160: clipboard write
 
 // A `then`'s answer as a step: a bare state asks for nothing more.
 export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: x, effects: [] })
@@ -179,7 +204,7 @@ export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: 
 // A run's result applied at `now`, the clock when it landed (a `then` stamps facts with s.now).
 export const afterRun = (e: { then: Then }, r: RunResult, s: State, now: number): Step => settle(e.then(r)({ ...s, now }))
 
-const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run']
+const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help']
 
 export const initial = (cols: number, rows: number, now: number): State => ({
   tab: 'tickets', board: null, team: [], me: null,
@@ -1214,11 +1239,12 @@ function messagesKey(s: State, k: Key): Step {
 }
 
 function toTab(s: State, tab: Tab): Step {
+  if (tab === 'help') return openHelp(s)
   const effects: Effect[] = tab === 'runs' && s.tab !== 'runs' ? [{ kind: 'poll', what: 'runs' }] : []
   if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(false))
   if (tab === 'explorer' && s.tab !== 'explorer') effects.push(...enterExplorer(s).effects)
   if (tab === 'run' && s.tab !== 'run') effects.push(enterRunEffect())
-  return { state: { ...s, tab }, effects }
+  return { state: { ...s, tab, help: null }, effects }
 }
 
 
@@ -1917,6 +1943,32 @@ export function filteredSkills(filter: string): SkillGuide[] {
   )
 }
 
+export function onSkillDoc(skillId: string): Then {
+  return r => x => {
+    if (!x.help || x.help.selected !== skillId) return x
+    if (r.code !== 0) {
+      return {
+        ...x,
+        help: {
+          ...x.help,
+          docContent: null,
+          docError: r.err.trim() || `SKILL.md unavailable (code ${r.code})`,
+          docPath: r.argv[0] ?? null,
+        },
+      }
+    }
+    return {
+      ...x,
+      help: {
+        ...x.help,
+        docContent: r.out,
+        docError: null,
+        docPath: r.argv[0] ?? null,
+      },
+    }
+  }
+}
+
 export function openHelp(s: State, skillId?: string): Step {
   const skills = filteredSkills(s.help?.filter ?? '')
   const sel = skillId && SKILLS.some(sk => sk.id === skillId)
@@ -1925,23 +1977,57 @@ export function openHelp(s: State, skillId?: string): Step {
   return {
     state: {
       ...s,
+      tab: 'help',
       help: {
         selected: sel,
         filter: s.help?.filter ?? '',
         filtering: false,
         expanded: false,
         scroll: 0,
+        docContent: s.help?.selected === sel ? (s.help?.docContent ?? null) : null,
+        docError: s.help?.selected === sel ? (s.help?.docError ?? null) : null,
+        docPath: s.help?.selected === sel ? (s.help?.docPath ?? null) : null,
+        runPrompt: null,
       },
     },
-    effects: [],
+    effects: [{ kind: 'skill-doc', skillId: sel, then: onSkillDoc(sel) }],
   }
 }
 
 export function helpKey(s: State, k: Key): Step {
   const h = s.help!
-  const same = { state: s, effects: [] }
-  const close = { state: { ...s, help: null }, effects: [] }
+  const same: Step = { state: s, effects: [] }
+  const close: Step = { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] }
   const skills = filteredSkills(h.filter)
+
+  if (h.runPrompt !== null && h.runPrompt !== undefined) {
+    if (k.name === 'escape') {
+      return { state: { ...s, help: { ...h, runPrompt: null } }, effects: [] }
+    }
+    if (k.name === 'return' || k.name === 'enter') {
+      const args = h.runPrompt.trim()
+      const cmd = `/skillator:${h.selected}${args ? ' ' + args : ''}`
+      return {
+        state: { ...s, help: { ...h, runPrompt: null } },
+        effects: [{
+          kind: 'copy',
+          text: cmd,
+          label: cmd,
+          then: r => x => r.code === 0
+            ? toast(x, `✓ Ready to run: ${cmd} (copied to clipboard — paste into your CLI)`)
+            : toast(x, `Paste into your CLI to run:\n${cmd}${r.err ? ` (clipboard: ${r.err.trim()})` : ''}`),
+        }],
+      }
+    }
+    if (k.name === 'backspace') {
+      return { state: { ...s, help: { ...h, runPrompt: [...h.runPrompt].slice(0, -1).join('') } }, effects: [] }
+    }
+    const ch = k.sequence
+    if (!k.ctrl && ch && [...ch].length === 1 && ch >= ' ' && ch !== '\x7f' && [...h.runPrompt].length < 500) {
+      return { state: { ...s, help: { ...h, runPrompt: h.runPrompt + ch } }, effects: [] }
+    }
+    return same
+  }
 
   if (h.filtering) {
     if (k.name === 'escape') {
@@ -1954,14 +2040,22 @@ export function helpKey(s: State, k: Key): Step {
       const nextFilter = [...h.filter].slice(0, -1).join('')
       const nextSkills = filteredSkills(nextFilter)
       const nextSel = nextSkills.some(x => x.id === h.selected) ? h.selected : (nextSkills[0]?.id ?? '')
-      return { state: { ...s, help: { ...h, filter: nextFilter, selected: nextSel } }, effects: [] }
+      const changed = nextSel !== h.selected
+      return {
+        state: { ...s, help: { ...h, filter: nextFilter, selected: nextSel, ...(changed ? { docContent: null, docError: null, docPath: null } : {}) } },
+        effects: changed && nextSel ? [{ kind: 'skill-doc', skillId: nextSel, then: onSkillDoc(nextSel) }] : [],
+      }
     }
     const ch = k.sequence
     if (!k.ctrl && ch && ch.length === 1 && ch >= ' ' && ch !== '\x7f') {
       const nextFilter = h.filter + ch
       const nextSkills = filteredSkills(nextFilter)
       const nextSel = nextSkills.some(x => x.id === h.selected) ? h.selected : (nextSkills[0]?.id ?? '')
-      return { state: { ...s, help: { ...h, filter: nextFilter, selected: nextSel } }, effects: [] }
+      const changed = nextSel !== h.selected
+      return {
+        state: { ...s, help: { ...h, filter: nextFilter, selected: nextSel, ...(changed ? { docContent: null, docError: null, docPath: null } : {}) } },
+        effects: changed && nextSel ? [{ kind: 'skill-doc', skillId: nextSel, then: onSkillDoc(nextSel) }] : [],
+      }
     }
     return same
   }
@@ -1973,14 +2067,43 @@ export function helpKey(s: State, k: Key): Step {
   if (k.name === '?' || k.sequence === '?') {
     return close
   }
+  if (k.name === '1') return toTab(s, 'tickets')
+  if (k.name === '2') return toTab(s, 'runs')
+  if (k.name === '3') return toTab(s, 'health')
+  if (k.name === '4') return toTab(s, 'messages')
+  if (k.name === '5') return toTab(s, 'explorer')
+  if (k.name === '6') return toTab(s, 'run')
+  if (k.name === 'tab') {
+    const at = TABS.indexOf(s.tab)
+    return toTab(s, TABS[(at + (k.shift ? TABS.length - 1 : 1)) % TABS.length]!)
+  }
+  if (k.name === 'q') {
+    return { state: { ...s, quit: true }, effects: [{ kind: 'quit' }] }
+  }
   if (k.name === '/') {
     return { state: { ...s, help: { ...h, filtering: true } }, effects: [] }
+  }
+  if (k.name === 'r' || k.sequence === 'r') {
+    const cur = skills.find(x => x.id === h.selected) ?? SKILLS.find(x => x.id === h.selected)
+    if (!cur) return same
+    return { state: { ...s, help: { ...h, runPrompt: '' } }, effects: [] }
   }
   if (k.name === 'c') {
     const cur = skills.find(x => x.id === h.selected) ?? SKILLS.find(x => x.id === h.selected)
     if (!cur) return same
     const aliasStr = cur.aliases.length ? ` (alias: ${cur.aliases.join(', ')})` : ''
-    return { state: toast(s, `✓ Copied reference: skillator:${cur.id}${aliasStr}`), effects: [] }
+    const refText = `skillator:${cur.id}`
+    return {
+      state: s,
+      effects: [{
+        kind: 'copy',
+        text: refText,
+        label: `${refText}${aliasStr}`,
+        then: r => x => r.code === 0
+          ? toast(x, `✓ Copied reference: ${refText}${aliasStr}`)
+          : toast(x, `✗ Copy failed: ${r.err.trim() || 'clipboard unavailable'} (reference: ${refText}${aliasStr})`),
+      }],
+    }
   }
 
   if (h.expanded) {
@@ -2006,7 +2129,12 @@ export function helpKey(s: State, k: Key): Step {
   const move = (by: number): Step => {
     if (!skills.length) return same
     const idx = Math.max(0, Math.min(skills.length - 1, (at < 0 ? 0 : at) + by))
-    return { state: { ...s, help: { ...h, selected: skills[idx]!.id } }, effects: [] }
+    const nextId = skills[idx]!.id
+    const changed = nextId !== h.selected
+    return {
+      state: { ...s, help: { ...h, selected: nextId, ...(changed ? { docContent: null, docError: null, docPath: null } : {}) } },
+      effects: changed ? [{ kind: 'skill-doc', skillId: nextId, then: onSkillDoc(nextId) }] : [],
+    }
   }
 
   switch (k.name) {
@@ -2014,11 +2142,28 @@ export function helpKey(s: State, k: Key): Step {
     case 'down': case 'j': return move(1)
     case 'pageup': return move(-5)
     case 'pagedown': return move(5)
-    case 'home': return { state: { ...s, help: { ...h, selected: skills[0]?.id ?? h.selected } }, effects: [] }
-    case 'end': return { state: { ...s, help: { ...h, selected: skills[skills.length - 1]?.id ?? h.selected } }, effects: [] }
+    case 'home': {
+      const nextId = skills[0]?.id ?? h.selected
+      const changed = nextId !== h.selected
+      return {
+        state: { ...s, help: { ...h, selected: nextId, ...(changed ? { docContent: null, docError: null, docPath: null } : {}) } },
+        effects: changed ? [{ kind: 'skill-doc', skillId: nextId, then: onSkillDoc(nextId) }] : [],
+      }
+    }
+    case 'end': {
+      const nextId = skills[skills.length - 1]?.id ?? h.selected
+      const changed = nextId !== h.selected
+      return {
+        state: { ...s, help: { ...h, selected: nextId, ...(changed ? { docContent: null, docError: null, docPath: null } : {}) } },
+        effects: changed ? [{ kind: 'skill-doc', skillId: nextId, then: onSkillDoc(nextId) }] : [],
+      }
+    }
     case 'return': case 'enter': {
       if (!h.selected) return same
-      return { state: { ...s, help: { ...h, expanded: true, scroll: 0 } }, effects: [] }
+      return {
+        state: { ...s, help: { ...h, expanded: true, scroll: 0 } },
+        effects: h.docContent ? [] : [{ kind: 'skill-doc', skillId: h.selected, then: onSkillDoc(h.selected) }],
+      }
     }
     default: return same
   }
@@ -2029,7 +2174,7 @@ export function reduce(s: State, k: Key): Step {
   // A146: a form holding typed text is not thrown away by one ctrl+c - it cancels the
   // form (as Esc), the board stays; the next ctrl+c quits. An empty form has nothing to lose.
   if (k.ctrl && k.name === 'c') {
-    if (s.help) return { state: { ...s, help: null }, effects: [] }
+    if (s.help) return { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] }
     if (s.startRun) return { state: { ...s, startRun: null }, effects: [] }
     if (s.setup?.touched) return { state: { ...s, setup: null }, effects: [] }
     if (s.runForm?.mode === 'rename' && s.tab === 'run') return { state: { ...s, runForm: null }, effects: [] }

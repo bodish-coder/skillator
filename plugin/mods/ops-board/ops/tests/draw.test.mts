@@ -28,10 +28,10 @@ const RED_HELD = 'DRIVE=C:\nDISK_FREE=90000000000\nDISK_TOTAL=1\nMEM_FREE=500000
 test('a frame is rows × ≤cols, tab bar first, band last, no escapes without colour', () => {
   const f = sized(s)
   assert.equal(f.length, 24)
-  assert.match(f[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build +ops$/)
-  // F75 + F79: with six tabs "ops · <repo>" fits from 87 columns; at 80 spread() drops it, as at any narrow width
-  assert.match(sized({ ...s, repo: 'skillator2' })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build$/)
-  assert.match(sized({ ...s, repo: 'skillator2', cols: 100 })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build +ops · skillator2$/)
+  assert.match(f[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help$/)
+  // F160: seven tabs fit in 80 columns; "ops · <repo>" fits at 100 columns
+  assert.match(sized({ ...s, repo: 'skillator2' })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help$/)
+  assert.match(sized({ ...s, repo: 'skillator2', cols: 100 })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help +ops · skillator2$/)
   assert.match(f[23]!, /^● ops · mem \? · disk \? · 5h \? · 7d \?$/)       // one band line at 80 columns
   assert.match(text(s), /  ▾ In progress \(1\)\n› ● B2  CSV export drops the last row/)
 })
@@ -612,7 +612,7 @@ test('F127: Help modal frame renders cleanly across 80, 60, 40 columns without b
   // Keys line in list view
   const keysLine = f80.find(l => l.includes('[enter doc]'))
   assert.ok(keysLine, 'Found keys line with enter doc')
-  assert.match(keysLine!, /\[↑↓ move\] · \[enter doc\] · \[\/ filter\] · \[c copy ref\] · \[esc cancel\]/)
+  assert.match(keysLine!, /\[↑↓ move\] · \[enter doc\] · \[r run\] · \[\/ filter\] · \[c copy ref\] · \[esc cancel\]/)
 })
 
 test('F127: Help documentation viewer rendering, setup.ps1 instructions, and scrolling', () => {
@@ -782,6 +782,50 @@ test('Health tab renders bracketed action badges in healthBody and keysOf', () =
   assert.match(full, /\[F force resume\]/)
 })
 
+test('F160/A198: 7 Help tab header, SKILL.md doc content, run prompt box, and width matrix', () => {
+  const hState = openHelp({ ...s, cols: 80, rows: 24 }, 'tickets-zordon').state
+  assert.equal(hState.tab, 'help')
 
+  for (const [cols, rows] of [[40, 16], [60, 20], [80, 24], [120, 30]] as const) {
+    const f = sized({ ...hState, cols, rows })
+    assert.equal(f.length, rows)
+    for (const line of f) assert.ok(cells(line) <= cols, `line "${line}" exceeded ${cols} cols`)
+  }
 
+  // Expanded view with real SKILL.md content
+  const withDoc: State = {
+    ...hState,
+    help: {
+      ...hState.help!,
+      expanded: true,
+      docContent: '# Tickets Zordon\nManage the board and pending set.',
+      docPath: 'plugin/skills/tickets-zordon/SKILL.md',
+    },
+  }
+  const fDoc = sized({ ...withDoc, cols: 80, rows: 35 }).join('\n')
+  assert.match(fDoc, /─── Installed SKILL\.md \(plugin\/skills\/tickets-zordon\/SKILL\.md\) ───/)
+  assert.match(fDoc, /# Tickets Zordon/)
+
+  // Inline run prompt box
+  const withPrompt: State = {
+    ...hState,
+    help: {
+      ...hState.help!,
+      runPrompt: 'status',
+    },
+  }
+  const fPrompt = sized({ ...withPrompt, cols: 80, rows: 24 }).join('\n')
+  assert.match(fPrompt, /┌─ Run skillator:tickets-zordon/)
+  assert.match(fPrompt, /Args: status_/)
+  assert.match(fPrompt, /\[type args \(optional\)\] · \[enter confirm\] · \[esc cancel\]/)
+
+  // ASCII mode uses ASCII box drawing
+  const fAscii = screen({ ...withPrompt, cols: 80, rows: 24 }, { color: false, ascii: true, plain: true }).lines.join('\n')
+  assert.match(fAscii, /\+- Run skillator:tickets-zordon/)
+
+  // Mouse hitboxes for help-run and help-copy
+  const sc = screen(hState, P)
+  assert.ok(sc.hits.some(h => h.action.kind === 'help-run'), 'Expected help-run hitbox')
+  assert.ok(sc.hits.some(h => h.action.kind === 'help-copy'), 'Expected help-copy hitbox')
+})
 

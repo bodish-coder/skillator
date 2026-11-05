@@ -21,6 +21,7 @@ import { AgentsTab, pollAgents, readAgents, WorkflowsTab } from './agentstab'
 import { enterMessages, MessagesTab, renderSetup, unreadOf } from './messagestab'
 import { enterRun, isRunFormUp, RunTab } from './runtab'
 import { ActionConfirm, enterExplorer, ExplorerTab, readExplorer, readExplorerAction } from './explorertab'
+import { enterHelp, HelpTab } from './helptab'
 
 // The ops board pane (design §5): tab bar, the Tickets tab with its filter row,
 // status rails, a yielding list, and wrapping footer keys.
@@ -31,7 +32,7 @@ export const PANE_TITLE = 'ops board'
 // F76: one tab, id 'runs', labelled Workflows (owner: relay runs and workflows are one thing):
 // a Runs section and a Workflows section. /ops workflows opens it; /ops runs is an alias.
 // F93: its Agents section is the old Agents tab; tab 'run' is labelled Build.
-export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run'
+export type Tab = 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help'
 // Each file names the atoms it reads or writes as its own consts: the engine's scan
 // lists state access from those, not from an import (register.tsx repeats them).
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
@@ -218,7 +219,8 @@ export async function readView($: EngineInterface, cols: number, rows: number | 
 const TABS: { id: Tab; label: string }[] = [{ id: 'tickets', label: 'Tickets' }, { id: 'runs', label: 'Workflows' },
   { id: 'health', label: 'Health' }, { id: 'messages', label: 'Messages' },
   { id: 'explorer', label: 'Explorer' },   // F75: git-tracked files and recent commits (explorertab.tsx)
-  { id: 'run', label: 'Build' }]   // F79: the repo's entry points (runtab.tsx) - not Workflows (id 'runs')
+  { id: 'run', label: 'Build' },            // F79: the repo's entry points (runtab.tsx) - not Workflows (id 'runs')
+  { id: 'help', label: 'Help' }]            // F160 / A198: the Skills & Help guide (helptab.tsx)
 
 // F76: the Workflows tab (id 'runs') - a Runs section (relay runs, F50) and a Workflows section (F53),
 // each a header Button with its count that Enter or a click opens and closes, as F61's
@@ -270,6 +272,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
             if (x.id === 'messages' && tab !== 'messages') void enterMessages($).catch(() => {})
             if (x.id === 'explorer') void enterExplorer($).catch(() => {})        // F75: read on entering the tab
             if (x.id === 'run') void enterRun($).catch(() => {})            // F79: first open scans
+            if (x.id === 'help') void enterHelp($).catch(() => {})          // F160 / A198: load selected skill doc
           }}>{ascii ? (x.id === tab ? '[' : ' ') : x.id === tab ? glyphs.active : ''}{x.id === 'messages' && unread ? `${x.label} ${unread}` : x.label}{ascii ? (x.id === tab ? ']' : ' ') : ''}</Button>
       ))}
     </Box>
@@ -277,6 +280,15 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
   // F66: the Teams setup form draws in place of any view, as the assign forms do
   const setup = await renderSetup($, e)
   if (setup) return setup
+  if (tab === 'help') {
+    return (
+      <Box flexDirection="column">
+        {bar}
+        <Text> </Text>
+        {await HelpTab($, e, els, cols)}
+      </Box>
+    )
+  }
   if (tab === 'messages') {
     return (
       <Box flexDirection="column">

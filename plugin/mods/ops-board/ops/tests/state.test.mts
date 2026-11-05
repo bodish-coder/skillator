@@ -330,10 +330,11 @@ test('tabs, filter mode, team view, refresh, quit', () => {
   assert.equal(reduce(s0, key('3')).state.tab, 'health')
   assert.equal(reduce(press(s0, '3'), key('1')).state.tab, 'tickets')
   assert.equal(reduce(s0, key('tab')).state.tab, 'runs')
-  assert.equal(reduce(s0, key('tab', { shift: true })).state.tab, 'run')   // F79: Run is the last tab
+  assert.equal(reduce(s0, key('tab', { shift: true })).state.tab, 'help')   // F160: Help is the 7th tab
   assert.equal(reduce(press(s0, '4'), key('tab')).state.tab, 'explorer')  // F75: Explorer after Messages
   assert.equal(reduce(press(s0, '5'), key('tab')).state.tab, 'run')
-  assert.equal(reduce(press(s0, '6'), key('tab')).state.tab, 'tickets')
+  assert.equal(reduce(press(s0, '6'), key('tab')).state.tab, 'help')
+  assert.equal(reduce(press(s0, '7'), key('tab')).state.tab, 'tickets')
   assert.equal(reduce(press(s0, '3'), key('tab')).state.tab, 'messages')
 
   const f = reduce(s0, key('f')).state
@@ -970,8 +971,11 @@ test('F127: fast keyboard filtering (/) searches skills, backspace edits, Enter 
   s = reduce(s, { name: 'return' }).state
   assert.equal(s.help!.expanded, true)
 
-  // c copies quick reference toast
-  s = reduce(s, { name: 'c' }).state
+  // c copies quick reference via copy effect (A198)
+  const copyStep = reduce(s, { name: 'c' })
+  const copyEff = copyStep.effects.find(e => e.kind === 'copy') as any
+  assert.ok(copyEff, 'Expected copy effect on c')
+  s = settle(copyEff.then(ok(''))(copyStep.state)).state
   assert.match(s.toast ?? '', /Copied reference: skillator:tickets-zordon/)
 
   // Esc in doc view goes back to list
@@ -1221,6 +1225,51 @@ test('Health tab: c outputs CLI resume prompt in toast and releases active hold 
   assert.ok(!stepRed.effects.some(e => e.kind === 'run' && (e as any).call === 'relay-release'))
   assert.match(stepRed.state.toast ?? '', /still red/)
 })
+
+test('F160/A198: Help is a first-class tab (7 Help), loads skill-doc, copies via effect, and runs skills with r', () => {
+  // 1. Pressing 7 switches s.tab to 'help' and emits skill-doc effect
+  const step7 = reduce(s0, { name: '7' })
+  assert.equal(step7.state.tab, 'help')
+  assert.ok(step7.state.help)
+  const docEff = step7.effects.find(e => e.kind === 'skill-doc') as any
+  assert.ok(docEff, 'Expected skill-doc effect on opening help')
+  assert.equal(docEff.skillId, SKILLS[0]!.id)
+
+  // 2. Folding skill-doc result stores docContent separate from synopsis
+  const loaded = settle(docEff.then(ok('# a11y-toph\nReal SKILL.md content', ['plugin/skills/a11y-toph/SKILL.md']))(step7.state))
+  assert.equal(loaded.state.help?.docContent, '# a11y-toph\nReal SKILL.md content')
+  assert.equal(loaded.state.help?.docPath, 'plugin/skills/a11y-toph/SKILL.md')
+  assert.equal(loaded.state.help?.docError, null)
+
+  // 3. Pressing c emits copy effect; success sets Copied toast, failure sets honest error toast
+  const stepCopy = reduce(loaded.state, { name: 'c' })
+  const copyEff = stepCopy.effects.find(e => e.kind === 'copy') as any
+  assert.ok(copyEff, 'Expected copy effect on c')
+  assert.equal(copyEff.text, `skillator:${SKILLS[0]!.id}`)
+
+  const copyOk = settle(copyEff.then(ok(''))(stepCopy.state))
+  assert.match(copyOk.state.toast ?? '', /✓ Copied reference: skillator:a11y-toph/)
+
+  const copyFail = settle(copyEff.then({ code: 1, out: '', err: 'no clipboard utility', argv: ['clip'] })(stepCopy.state))
+  assert.match(copyFail.state.toast ?? '', /✗ Copy failed: no clipboard utility \(reference: skillator:a11y-toph/)
+
+  // 4. Pressing r opens runPrompt, typing args and pressing Enter emits copy effect with /skillator:<id> <args>
+  let sRun = reduce(loaded.state, { name: 'r', sequence: 'r' }).state
+  assert.equal(sRun.help?.runPrompt, '')
+  sRun = reduce(sRun, { name: 'F', sequence: 'F' }).state
+  sRun = reduce(sRun, { name: '1', sequence: '1' }).state
+  assert.equal(sRun.help?.runPrompt, 'F1')
+
+  const execStep = reduce(sRun, { name: 'return' })
+  assert.equal(execStep.state.help?.runPrompt, null)
+  const runCopy = execStep.effects.find(e => e.kind === 'copy') as any
+  assert.ok(runCopy, 'Expected copy effect when confirming run')
+  assert.equal(runCopy.text, `/skillator:${SKILLS[0]!.id} F1`)
+
+  const runDone = settle(runCopy.then(ok(''))(execStep.state))
+  assert.match(runDone.state.toast ?? '', /✓ Ready to run: \/skillator:a11y-toph F1/)
+})
+
 
 
 

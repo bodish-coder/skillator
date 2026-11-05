@@ -22,6 +22,7 @@ import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, no
 import { closeSetup, enterMessages, isSetupUp, pollInbox, unreadOf } from './messagestab'
 import { closeRunForm, dropRunForm, enterRun, isRunFormUp } from './runtab'
 import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, isActionUp, isExplorerItem } from './explorertab'
+import { enterHelp } from './helptab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -400,13 +401,13 @@ async function openPane($: EngineInterface, asked: boolean) {
   return r
 }
 
-const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', explorer: 'Explorer', run: 'Build' }
+const TAB_NAME: Record<Tab, string> = { tickets: 'Tickets', runs: 'Workflows', health: 'Health', messages: 'Messages', explorer: 'Explorer', run: 'Build', help: 'Help' }
 // F76: /ops workflows opens the Workflows tab (id runs) with its Workflows section open; /ops runs is
 // an alias that opens it with its Runs section open. F93: /ops agents opens it with its Agents section
-// open; /ops build opens tab run, /ops run an alias.
-const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'build', 'run']
+// open; /ops build opens tab run, /ops run an alias. F160: /ops help and /ops guide open tab help.
+const WORDS = ['tickets', 'workflows', 'runs', 'health', 'messages', 'agents', 'explorer', 'build', 'run', 'help', 'guide']
 const SECTION_OF: Record<string, 'runs' | 'workflows' | 'agents'> = { runs: 'runs', workflows: 'workflows', agents: 'agents' }
-const USAGE = 'usage: /ops [tickets|workflows|health|messages|explorer|build|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build;'
+const USAGE = 'usage: /ops [tickets|workflows|health|messages|explorer|build|help|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build, guide opens Help;'
   + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)'
 
 export const register: Register = on => {
@@ -416,8 +417,8 @@ export const register: Register = on => {
     await update($, asciiA, () => ['1', 'true', 'yes'].includes(env) || stored === true)
     await $.command.register({
       name: 'ops',
-      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs, Workflow runs and agents), health, Teams messages, the explorer and the build entries',
-      argumentHint: '[tickets|workflows|health|messages|explorer|build|resume [force]|watchdog on]',
+      description: 'Open the ops board pane: the TICKETS.md board, workflows (relay runs, Workflow runs and agents), health, Teams messages, the explorer, build entries and the skills help guide',
+      argumentHint: '[tickets|workflows|health|messages|explorer|build|help|resume [force]|watchdog on]',
     })
     await $.command.register({
       name: 'list-tickets',
@@ -468,7 +469,7 @@ export const register: Register = on => {
     if (word === 'resume force') return { text: await forceResume($) }       // F87
     if (word === 'watchdog on') return { text: await watchdogOn($) }
     if (word && !WORDS.includes(word)) return { text: USAGE }
-    const tab: Tab | null = word ? (SECTION_OF[word] ? 'runs' : word === 'build' ? 'run' : word as Tab) : null
+    const tab: Tab | null = word ? (SECTION_OF[word] ? 'runs' : word === 'build' ? 'run' : word === 'guide' ? 'help' : word as Tab) : null
     const sec = SECTION_OF[word]
     // A form draws only on Tickets: leaving it drops the form, or a later Esc / close
     // on that tab would be taken as the hidden form's Cancel.
@@ -483,6 +484,7 @@ export const register: Register = on => {
     if (word === 'messages') void enterMessages($).catch(() => {})
     if (word === 'explorer') void enterExplorer($).catch(() => {})
     if (tab === 'run') void enterRun($).catch(() => {})     // F79: the Build tab, first open scans
+    if (tab === 'help') void enterHelp($).catch(() => {})   // F160 / A198: the Help tab, loads skill doc
     const r = await openPane($, true)
     if (!r.isPlaced) return { text: `ops board is open but not drawn: ${r.reason}` }
     if (word === 'runs') return { text: 'ops board opened on Workflows, Runs open.' }

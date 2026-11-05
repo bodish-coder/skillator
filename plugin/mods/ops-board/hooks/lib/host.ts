@@ -2,7 +2,7 @@ import type { FsEntry, ProcessRunInit, ProcessRunResult, SessionRepo, SessionUsa
 import type { Usage } from '../../types'
 import { usageFrom, usageFromFlags } from './facts'
 import type { Flag } from './facts'
-import { argvFor, devTunnelsArgv, loginMessage, loginStatus, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, up } from './calls'
+import { argvFor, devTunnelsArgv, loginMessage, loginStatus, findExe, findNode, isNodeCall, MARKER, NO_NODE, NO_SCRIPTS, NO_SH, norm, shellFor, systemRoot, up } from './calls'
 import type { Call } from './calls'
 export { argvFor, findNode, NO_SCRIPTS } from './calls'
 export type { Call } from './calls'
@@ -19,11 +19,78 @@ export type HostApi = {
     exists: (path: string) => Promise<boolean>
     read: (path: string) => Promise<string>
     list: (path?: string) => Promise<FsEntry[]>
+    stat?: (path: string) => Promise<{ mtimeMs: number; size: number }>
   }
   session: {
     repo: () => Promise<SessionRepo | null>
     usage: () => Promise<SessionUsage>
     id: () => Promise<string>
+  }
+}
+
+export const SKILL_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
+export const MAX_SKILL_DOC_BYTES = 256 * 1024
+
+export async function readSkillDocHost($: HostApi, skillId: string): Promise<{ code: number; out: string; err: string; path: string | null }> {
+  if (!SKILL_ID_RE.test(skillId)) {
+    return { code: 1, out: '', err: `Invalid skill ID: ${skillId}`, path: null }
+  }
+  const skills = await skillatorRoot($)
+  if (!skills) {
+    return { code: 127, out: '', err: NO_SCRIPTS, path: null }
+  }
+  const baseDir = norm(skills)
+  const docPath = `${baseDir}/${skillId}/SKILL.md`
+  if (!docPath.startsWith(baseDir + '/') || docPath.includes('..')) {
+    return { code: 1, out: '', err: 'Skill path escapes skillsDir boundary', path: null }
+  }
+  try {
+    if (!(await $.fs.exists(docPath))) {
+      return { code: 1, out: '', err: `SKILL.md not found for ${skillId}`, path: `${skillId}/SKILL.md` }
+    }
+    if ($.fs.stat) {
+      const st = await $.fs.stat(docPath)
+      if (st.size > MAX_SKILL_DOC_BYTES) {
+        return { code: 1, out: '', err: `SKILL.md exceeds ${MAX_SKILL_DOC_BYTES} byte limit`, path: `${skillId}/SKILL.md` }
+      }
+    }
+    const raw = await $.fs.read(docPath)
+    if (raw.length > MAX_SKILL_DOC_BYTES) {
+      return { code: 1, out: '', err: `SKILL.md exceeds ${MAX_SKILL_DOC_BYTES} byte limit`, path: `${skillId}/SKILL.md` }
+    }
+    const sanitized = raw.replace(/\r\n/g, '\n').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
+    return { code: 0, out: sanitized, err: '', path: `${skillId}/SKILL.md` }
+  } catch (e) {
+    return { code: 1, out: '', err: e instanceof Error ? e.message : String(e), path: `${skillId}/SKILL.md` }
+  }
+}
+
+export async function copyHost($: HostApi, text: string): Promise<{ code: number; err: string }> {
+  const win = await isWindows($)
+  const repo = await $.session.repo()
+  const init: ProcessRunInit = { ...(repo ? { cwd: repo.root } : {}), timeoutMs: 5000, stdin: text }
+  try {
+    if (win) {
+      const clip = systemRoot(await systemRootOf($)) + '/System32/clip.exe'
+      if (!(await $.fs.exists(clip))) return { code: 127, err: 'clip.exe not found' }
+      const r = await $.process.run([clip], init)
+      return { code: r.exitCode, err: r.stderr }
+    }
+    if (await $.fs.exists('/usr/bin/pbcopy')) {
+      const r = await $.process.run(['/usr/bin/pbcopy'], init)
+      return { code: r.exitCode, err: r.stderr }
+    }
+    const path = await pathOf($)
+    for (const [cmd, args] of [['wl-copy', []], ['xclip', ['-selection', 'clipboard']], ['xsel', ['--clipboard', '--input']]] as const) {
+      const bin = await findExe(cmd, path, false, p => $.fs.exists(p))
+      if (bin) {
+        const r = await $.process.run([bin, ...args], init)
+        if (r.exitCode === 0) return { code: 0, err: '' }
+      }
+    }
+    return { code: 127, err: 'no clipboard utility available' }
+  } catch (e) {
+    return { code: 1, err: e instanceof Error ? e.message : String(e) }
   }
 }
 

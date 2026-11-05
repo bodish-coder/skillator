@@ -17,7 +17,7 @@ import type { Host } from './nodehost'
 import type { Key, State, Tab } from './state'
 import type { Paint } from './draw'
 import { makeHost } from './nodehost'
-import { initial } from './state'
+import { initial, openHelp } from './state'
 import { frame, paintScreen, screen } from './draw'
 import type { Hit } from './draw'
 import { mouseInput, mouseTarget, MOUSE_ON, MOUSE_OFF } from './mouse'
@@ -29,7 +29,7 @@ export type Opts = {
   skills: string | null; tab: Tab; error: string | null
 }
 
-export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no-color] [--ascii] [--skills <dir>] [--tab tickets|workflows|health|messages|explorer|build]'
+export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no-color] [--ascii] [--skills <dir>] [--tab tickets|workflows|health|messages|explorer|build|help]'
 // F89: --help prints this and exits 0. --open is the launchers' (ops.sh / ops.ps1), never the app's.
 export const HELP = USAGE + '\n'
   + '  launcher: ops [repo-dir] --open   (ops.ps1: -Open) the board in a new tab of the current\n'
@@ -38,7 +38,7 @@ export const HELP = USAGE + '\n'
   + "  ops --font-size N   sets the 'skillator ops' Windows Terminal profile font (install.ps1 -OpsFontSize N too; skillator-update keeps it)\n"
   + "  zoom: Ctrl+minus / Ctrl+plus / Ctrl+scroll resizes any Windows Terminal or herdr tab live; the in-session pane draws in the host terminal's font\n"
   + '  NO_COLOR or --no-color drops the colours only; bold, inverse and the › marker stay'
-const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', agents: 'runs', health: 'health', messages: 'messages', explorer: 'explorer', build: 'run', run: 'run' }
+const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', agents: 'runs', health: 'health', messages: 'messages', explorer: 'explorer', build: 'run', run: 'run', help: 'help', guide: 'help', skills: 'help' }
 
 // The flags; the first wrong one is `error` (the launcher has taken the repo dir already).
 // NO_COLOR (any non-empty value) turns colour off as --no-color does.
@@ -69,7 +69,7 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         const v = value()
         const tab = v && Object.hasOwn(TAB_WORDS, v) ? TAB_WORDS[v] : undefined
         if (tab) o.tab = tab
-        else o.error = `ops: --tab is one of tickets, workflows, health, messages, explorer, build, got ${v ?? 'nothing'}`
+        else o.error = `ops: --tab is one of tickets, workflows, health, messages, explorer, build, help, got ${v ?? 'nothing'}`
         break
       }
       default: o.error = `ops: unknown flag ${a}`
@@ -117,7 +117,8 @@ export async function main(argv: string[]): Promise<number> {
   const paint: Paint = { color: opts.color, ascii: opts.ascii, plain: once && !opts.color }
   const size = () => ({ cols: opts.cols ?? (out.isTTY && out.columns ? out.columns : 80), rows: opts.rows ?? (out.isTTY && out.rows ? out.rows : 24) })
   const sz = size()
-  const state: State = { ...initial(sz.cols, sz.rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot) }
+  const baseState: State = { ...initial(sz.cols, sz.rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot) }
+  const state: State = opts.tab === 'help' ? openHelp(baseState).state : baseState
   const email = await host.gitEmail()
 
   let live = false

@@ -4,10 +4,10 @@
 // extension (../pi) both run this one loop - neither re-implements a poll.
 import type { Board, Member } from '../types'
 import type { Host, RunResult } from './nodehost'
-import { errorText } from './nodehost'
+import { errorText, readSkillDoc } from './nodehost'
 import { MUTE_FILE, muteKv } from '../hooks/lib/facts'
 import type { Effect, Key, PointerAction, State, Step } from './state'
-import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun, point } from './state'
+import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun, point, openHelp, onSkillDoc } from './state'
 import { INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
 import { parseBoard } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
@@ -91,6 +91,24 @@ export function makeEngine(o: EngineOpts): Engine {
       const g = await command('git', async () => host.git ? host.git(e.args) : { code: 127, out: '', err: NO_GIT, argv: [] })
       if (stopped) return
       return apply(afterRun(e, g, state, Date.now()))
+    }
+    if (e.kind === 'skill-doc') {               // A198: read-only bounded SKILL.md load (--once runs it too)
+      const d = await readSkillDoc(host, e.skillId)
+      if (stopped) return
+      return apply(afterRun(e, d, state, Date.now()))
+    }
+    if (e.kind === 'copy') {                    // A198 / F160: clipboard write
+      let r: RunResult
+      try {
+        if (once) r = { code: 1, out: '', err: 'read only (--once)', argv: [] }
+        else if (!host.copy) r = { code: 127, out: '', err: 'clipboard not supported on this host', argv: [] }
+        else r = await host.copy(e.text)
+      } catch (err) {
+        r = { code: 1, out: '', err: errorText(err), argv: [] }
+      }
+      if (stopped) return
+      if (e.then) await apply(afterRun({ then: e.then }, r, state, Date.now()))
+      return
     }
     if (e.kind === 'mute') {                    // F87: a write, so never in --once
       let r: RunResult = { code: 0, out: '', err: '', argv: [] }
@@ -315,6 +333,11 @@ export function makeEngine(o: EngineOpts): Engine {
       if (state.tab === 'explorer') await apply(enterExplorer(state))
       if (stopped) return
       if (state.tab === 'run') await runEffect(enterRunEffect())    // --tab run: read run.json (never scanned in --once)
+      if (stopped) return
+      if (state.tab === 'help') {
+        if (!state.help) await apply(openHelp(state))
+        else await runEffect({ kind: 'skill-doc', skillId: state.help.selected, then: onSkillDoc(state.help.selected) })
+      }
     },
     async start() {
       draw()
@@ -324,6 +347,10 @@ export function makeEngine(o: EngineOpts): Engine {
       if (state.tab === 'runs') void guarded('runs', pollRuns)
       if (state.tab === 'explorer') void apply(enterExplorer(state))
       if (state.tab === 'run') void runEffect(enterRunEffect())
+      if (state.tab === 'help') {
+        if (!state.help) void apply(openHelp(state))
+        else void runEffect({ kind: 'skill-doc', skillId: state.help.selected, then: onSkillDoc(state.help.selected) })
+      }
       if (stopped) return
       timers.push(setInterval(() => { void guarded('board', () => pollBoard()) }, BOARD_MS))
       timers.push(setInterval(() => { void guarded('slow', pollSlow) }, SLOW_MS))

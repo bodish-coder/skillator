@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { findSkillsDir, gitFor, makeHost, nodeFor } from '../nodehost'
+import { findSkillsDir, gitFor, makeHost, nodeFor, readSkillDoc } from '../nodehost'
 import { parseBoard } from '../../hooks/lib/board'      // proves the loader resolves the lib's own imports
 import { NO_SCRIPTS, NO_SH, powershellExe, shellFor } from '../../hooks/lib/calls'
 import { skills, echoSkills } from './fixtures'
@@ -340,3 +340,32 @@ test('A175: main and relative linked worktree share producer inbox/read state, w
     assert.equal(host.inboxDir, null)
   })
 })
+
+test('A198: readSkillDoc loads bounded SKILL.md safely and rejects path traversal or oversized files', async () => {
+  const dir = mkTmp(join(tmpdir(), 'ops-skilldoc-'))
+  const sDir = skills(join(dir, 'skills'))
+  mkdirSync(join(sDir, 'tickets-zordon'), { recursive: true })
+  writeFileSync(join(sDir, 'tickets-zordon/SKILL.md'), '# tickets-zordon\nManage TICKETS.md\x1b[31m!\x07\n')
+
+  const host = await makeHost({ appDir: '/x', cwd: dir, skills: sDir })
+
+  // 1. Valid skill loads and strips ANSI/control characters
+  const res = await readSkillDoc(host, 'tickets-zordon')
+  assert.equal(res.code, 0)
+  assert.match(res.out, /# tickets-zordon\nManage TICKETS\.md!/)
+  assert.doesNotMatch(res.out, /\x1b|\x07/)
+
+  // 2. Path traversal attempts are rejected
+  for (const bad of ['../secret', 'tickets-zordon/../../etc/passwd', 'a\\b', 'UPPERCASE', '', 'a'.repeat(80)]) {
+    const rBad = await readSkillDoc(host, bad)
+    assert.notEqual(rBad.code, 0, `Expected failure for invalid skillId: ${bad}`)
+  }
+
+  // 3. Oversized SKILL.md (> 256 KiB) is rejected
+  mkdirSync(join(sDir, 'huge-skill'), { recursive: true })
+  writeFileSync(join(sDir, 'huge-skill/SKILL.md'), 'x'.repeat(270 * 1024))
+  const rHuge = await readSkillDoc(host, 'huge-skill')
+  assert.notEqual(rHuge.code, 0)
+  assert.match(rHuge.err, /exceeds 262144 byte limit/)
+})
+

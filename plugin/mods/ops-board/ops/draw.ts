@@ -144,7 +144,7 @@ function windowOf(lines: Keyed[], id: string | null, h: number, area?: 'tickets'
 
 // --- the fixed lines ---
 
-const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Build']]
+const TABS: [State['tab'], string][] = [['tickets', '1 Tickets'], ['runs', '2 Workflows'], ['health', '3 Health'], ['messages', '4 Messages'], ['explorer', '5 Explorer'], ['run', '6 Build'], ['help', '7 Help']]
 
 function tabsLine(s: State): Seg[] {
   // F66: the unread count rides on the Messages label
@@ -184,9 +184,12 @@ function keysOf(s: State, m: Model): Seg[][] {
     dim(' / '),
     { text: 'shift-tab field]', dim: true, action: { kind: 'key', key: { name: 'tab', shift: true } } },
   ]
+  const helpRun: Seg[] = [{ text: '[r run]', dim: true, action: { kind: 'help-run' } }]
+  const helpCopy: Seg[] = [{ text: '[c copy ref]', dim: true, action: { kind: 'help-copy' } }]
+  if (s.help?.runPrompt !== null && s.help?.runPrompt !== undefined) return [[dim('[type args (optional)]')], h('enter confirm', 'return'), cancel]
   if (s.help?.filtering) return [[dim('type filter')], h('enter apply', 'return'), cancel]
-  if (s.help?.expanded) return [move, h('enter/esc back', 'return'), h('/ filter', '/'), h('c copy ref', 'c'), cancel]
-  if (s.help) return [move, h('enter doc', 'return'), h('/ filter', '/'), h('c copy ref', 'c'), cancel]
+  if (s.help?.expanded) return [move, h('enter/esc back', 'return'), helpRun, h('/ filter', '/'), helpCopy, cancel]
+  if (s.help || s.tab === 'help') return [move, h('enter doc', 'return'), helpRun, h('/ filter', '/'), helpCopy, cancel]
   if (s.setup?.confirmLogin) return [h('y sign in', 'y'), h('n cancel', 'n'), cancel]
   if (s.setup?.confirmClear) return [h('y clear', 'y'), h('n cancel', 'n')]
   if (s.setup) return [field, h('space on/off', 'space'), h('enter activate/save', 'return'), cancel]
@@ -741,7 +744,7 @@ function tailLines(s: State): Seg[][] {
 
 // --- F127: Help & Skills Guide Viewer ---
 
-export function skillDocLines(sk: SkillGuide, inner: number): { text: string; segs?: Seg[] }[] {
+export function skillDocLines(sk: SkillGuide, inner: number, h?: State['help']): { text: string; segs?: Seg[] }[] {
   const lines: { text: string; segs?: Seg[] }[] = []
   lines.push({ text: `Skill: ${sk.id} [${sk.category}]`, segs: [{ text: 'Skill: ', dim: true }, { text: sk.id, bold: true }, { text: `  [${sk.category}]`, color: 'suggestion' }] })
   if (sk.aliases.length) {
@@ -765,11 +768,22 @@ export function skillDocLines(sk: SkillGuide, inner: number): { text: string; se
       lines.push({ text: `  ${ex}`, segs: [{ text: '  ', dim: true }, { text: ex, color: 'success' }] })
     }
   }
+  if (h?.docContent) {
+    lines.push({ text: '' })
+    const label = h.docPath ?? `${sk.id}/SKILL.md`
+    lines.push({ text: `─── Installed SKILL.md (${label}) ───`, segs: [dim(`─── Installed SKILL.md (${label}) ───`)] })
+    for (const rawLine of h.docContent.split('\n')) {
+      lines.push({ text: `  ${rawLine}` })
+    }
+  } else if (h?.docError) {
+    lines.push({ text: '' })
+    lines.push({ text: `─── Installed SKILL.md unavailable: ${h.docError} ───`, segs: [{ text: `─── Installed SKILL.md unavailable: ${h.docError} ───`, color: 'warning' }] })
+  }
   return lines
 }
 
 export function helpBody(s: State, room: number): Seg[][] {
-  const h = s.help
+  const h = s.help ?? (s.tab === 'help' ? { selected: SKILLS[0]!.id, filter: '', filtering: false, expanded: false, scroll: 0 } : null)
   if (!h || room <= 0) return []
   if (room <= 2) return [[{ text: 'Help & Skills Guide', bold: true }]]
   const inner = Math.max(4, s.cols <= 40 ? s.cols - 2 : Math.min(s.cols - 4, 116))
@@ -787,20 +801,33 @@ export function helpBody(s: State, room: number): Seg[][] {
 
   const contentRows: { segs: Seg[] }[] = []
 
+  if (h.runPrompt !== null && h.runPrompt !== undefined) {
+    const pInner = Math.max(4, inner - 2)
+    const pTitle = cut(`Run skillator:${h.selected}`, Math.max(1, pInner - 4))
+    const pTop = `┌─ ${pTitle} ${'─'.repeat(Math.max(0, pInner - cells(pTitle) - 3))}┐`
+    const argStr = cut(` Args: ${h.runPrompt}_`, pInner)
+    const pMid = `│${argStr}${' '.repeat(Math.max(0, pInner - cells(argStr)))}│`
+    const pBot = `└${'─'.repeat(pInner)}┘`
+    contentRows.push({ segs: [{ text: pTop, color: 'suggestion', bold: true }] })
+    contentRows.push({ segs: [{ text: pMid, bold: true }] })
+    contentRows.push({ segs: [{ text: pBot, color: 'suggestion' }] })
+  }
+
   if (h.expanded) {
     const sk = skills.find(x => x.id === h.selected) ?? SKILLS.find(x => x.id === h.selected)
     if (!sk) {
       contentRows.push({ segs: [{ text: `Skill not found: ${h.selected}`, color: 'error' }] })
     } else {
-      const doc = skillDocLines(sk, inner)
-      const maxScroll = Math.max(0, doc.length - avail)
+      const docAvail = Math.max(0, avail - contentRows.length)
+      const doc = skillDocLines(sk, inner, h)
+      const maxScroll = Math.max(0, doc.length - docAvail)
       const scroll = Math.min(h.scroll, maxScroll)
-      const windowed = doc.slice(scroll, scroll + avail)
+      const windowed = doc.slice(scroll, scroll + docAvail)
       windowed.forEach((row, i) => {
         if (i === 0 && scroll > 0) {
           contentRows.push({ segs: [dim(`▲ (${scroll} lines above)`)] })
-        } else if (i === windowed.length - 1 && scroll + avail < doc.length) {
-          contentRows.push({ segs: [dim(`▼ (${doc.length - scroll - avail} lines below · use ↑/↓ to scroll)`)] })
+        } else if (i === windowed.length - 1 && scroll + docAvail < doc.length) {
+          contentRows.push({ segs: [dim(`▼ (${doc.length - scroll - docAvail} lines below · use ↑/↓ to scroll)`)] })
         } else {
           contentRows.push({ segs: row.segs ?? [{ text: row.text }] })
         }
@@ -821,7 +848,7 @@ export function helpBody(s: State, room: number): Seg[][] {
     )
     contentRows.push({ segs: filterSegs })
 
-    const listRoom = Math.max(0, avail - 1)
+    const listRoom = Math.max(0, avail - contentRows.length)
     if (!skills.length) {
       contentRows.push({ segs: [{ text: `  No skills matching "${h.filter}"`, color: 'warning' }] })
     } else {
@@ -868,7 +895,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
   const [recTitle = '', ...recRows] = reconcileLines(s)    // F81: [] with no reconcile box up
   const [engTitle = '', ...engRows] = engageLines(s)       // F85: [] with no engage box up
   const [startTitle = '', ...startRows] = startRunLines(s) // F113: [] with no start run box up
-  const main = s.help ? helpBody(s, room)
+  const main = s.help || s.tab === 'help' ? helpBody(s, room)
     : s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
