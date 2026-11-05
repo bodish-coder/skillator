@@ -17,7 +17,15 @@ has() { command -v "$1" >/dev/null 2>&1; }
 refresh_path() { PATH="$HOME/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; }
 answer() { printf '%s ' "$1" >&2; read -r _a || _a=; printf '%s' "$_a"; }
 ask() { [ -z "$CHECK" ] || return 1; case $(answer "$1 [y/N]") in y|Y|yes|Yes|YES) return 0 ;; esac; return 1; }
-tunnel_hosted() { pgrep -f "devtunnel host" >/dev/null 2>&1; }
+tunnel_hosted() {
+  _t="${1:-$TUNNEL}"; _p="${2:-$PORT}"
+  if [ -n "$_p" ] && pgrep -f "devtunnel.*host.*[ -]-p" >/dev/null 2>&1; then
+    pgrep -f "devtunnel.*host.*(^|[[:space:]\"'])($_t)(['\"[:space:]]|$).*[ -]-p(ort)?[[:space:]=]*$_p([[:space:]]|$)" >/dev/null 2>&1 ||
+    pgrep -f "devtunnel.*host.*[ -]-p(ort)?[[:space:]=]*$_p([[:space:]]|$).*(^|[[:space:]\"'])($_t)(['\"[:space:]]|$)" >/dev/null 2>&1
+    return $?
+  fi
+  pgrep -f "devtunnel.*host.*(^|[[:space:]\"'])($_t)(['\"[:space:]]|$)" >/dev/null 2>&1
+}
 open_tunnel() {
   mkdir -p "$HOME/.skillator/teams"
   nohup devtunnel host "$TUNNEL" > "$HOME/.skillator/teams/devtunnel.log" 2>&1 &
@@ -117,7 +125,7 @@ setup() {
   [ -n "$TN" ] || { table; return 1; }
   ask "Arm it now: host $TUNNEL in the background and run the listener on 127.0.0.1:$PORT?" ||
     { say 'not armed - run this again when you are ready'; table; return 1; }
-  if tunnel_hosted; then say 'tunnel: already hosted'; else open_tunnel; fi
+  if tunnel_hosted "$TUNNEL" "$PORT"; then say 'tunnel: already hosted'; else open_tunnel; fi
   URL=$(tunnel_url)
   if [ -n "$URL" ]; then say "tunnel URL: $URL"; else URL='<the https URL in ~/.skillator/teams/devtunnel.log>'; say "tunnel URL: read it in ~/.skillator/teams/devtunnel.log"; fi
   if [ -z "$SAVED" ]; then
