@@ -126,25 +126,33 @@ percentage to give them — see `PLATFORMS.md`), so run
   plugin's `SessionStart` hook (`hooks/session-owner.sh`) has already put the
   team list and this ask in context; a hook cannot ask, so the ask is still
   yours. Report `owner @handle` (or `owner -`) in the active-set line.
-- **Upstream watch** (F23c, F29) — only in a repo that has
-  `skills/design-arwen/UPSTREAM.md` (skillator itself); anywhere else skip it
-  silently, because those tickets belong on skillator's board, not the user's.
-  Run `sh practice/scripts/upstream-check.sh --daily` (Windows:
+- **Upstream watch** (F23c, F29, A202) — resolve the payload root once (`$payload`
+  = `plugin` when `plugin/skills/design-arwen/UPSTREAM.md` exists, `.` when
+  `skills/design-arwen/UPSTREAM.md` exists, or `<SKILL_DIR>/..` from the loaded
+  skill) and check `<payload>/skills/design-arwen/UPSTREAM.md` (skillator
+  itself); anywhere else skip it silently, because those tickets belong on
+  skillator's board, not the user's.
+  Run `sh <payload>/practice/scripts/upstream-check.sh --daily` (Windows:
   `powershell -NoProfile -ExecutionPolicy Bypass -File
-  practice/scripts/upstream-check.ps1 -Daily`). `--daily` makes it a no-op after
-  the first finished run of the day; the stamp is
+  "<payload>/practice/scripts/upstream-check.ps1" -Daily`). `--daily` makes it a
+  no-op after the first finished run of the day; the stamp is
   `$(git rev-parse --git-common-dir)/skillator/upstream-check.day`, shared by
-  every worktree. Also run `sh skills/code-yoda/upstream-check.sh --daily`
-  (Windows: the `.ps1` beside it, `-Daily`) — code-yoda's manifest, same
-  output shape, its own stamp. And
-  `sh skills/clone-odo/upstream-check.sh --daily` the same way (clone-odo's
-  manifest, `replica-skill`). Act on the output of all three:
+  every worktree. Also run `sh <payload>/skills/code-yoda/upstream-check.sh --daily`
+  (Windows: `<payload>/skills/code-yoda/upstream-check.ps1 -Daily`) — code-yoda's
+  manifest, same output shape, its own stamp. And
+  `sh <payload>/skills/clone-odo/upstream-check.sh --daily` (Windows:
+  `<payload>/skills/clone-odo/upstream-check.ps1 -Daily`) the same way
+  (clone-odo's manifest, `replica-skill`). If the required shell or watcher
+  tooling is unavailable, report `upstreams: check failed (tooling unavailable)`
+  and never fake a network query as successful. Act on the output of all three:
   - `skipped:` or exit 0: nothing to do.
   - each `changed <name> <old>..<new> <url>` line (exit 1, and also exit 2,
     because one failed row does not hide another's change): look for an open
     (`[ ]` or `[~]`) ticket line in `TICKETS.md` that names both `<name>` and
     `<new>`. If there is one, it is already logged. If not, take a number with
-    `sh practice/scripts/next-id.sh A` and add
+    `sh <payload>/practice/scripts/next-id.sh A` (Windows:
+    `powershell -NoProfile -ExecutionPolicy Bypass -File
+    "<payload>/practice/scripts/next-id.ps1" A`) and add
     `- [ ] A<n> — absorb <name> <old>..<new> into <skill> (<url>)`, `<skill>`
     being the one whose manifest reported it (`design-arwen`, `code-yoda` for
     `ponytail`, or `clone-odo` for `replica-skill`). The procedure is in that

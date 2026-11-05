@@ -86,22 +86,33 @@ split_board() {
       }
       return ""
     }
+    function pid(id) { sub(/[a-z]+$/, "", id); return id }
     { line[++n] = $0 }
     END {
-      g = 0
+      g = 0; cur = 0
       for (i = 1; i <= n; i++) {
-        l = line[i]; id = tid(l)
-        if (id != "" && l ~ /^- /) {            # top-level ticket: new group
-          g++; gstart[g] = i; gsect[g] = sect; gids[g] = id; gok[g] = 1
-          grp[i] = g; cur = g
-        } else if (l ~ /^#/) {
+        l = line[i]; id = tid(l); p = pid(id)
+        if (l ~ /^#/) {
           if (l ~ /^## /) { sect = substr(l, 4) }
-          cur = 0
-        } else if (l ~ /^[ \t]*$/) {
-          cur = 0
-        } else if (cur) {                        # sub-part or continuation
+          cur = 0; continue
+        }
+        if (l ~ /^[ \t]*$/) continue
+        if (id != "") {
+          if (p in pgrp) {
+            cur = pgrp[p]; grp[i] = cur; gids[cur] = gids[cur] " " id
+          } else if (l ~ /^- / && p == id) {     # top-level parent: new group
+            g++; gstart[g] = i; gsect[g] = sect; gids[g] = id; gok[g] = 1
+            pgrp[p] = g; grp[i] = g; cur = g
+          } else if (cur && l ~ /^[ \t]+/) {     # indented sub-part under current parent
+            grp[i] = cur; gids[cur] = gids[cur] " " id; pgrp[p] = cur
+          } else {                               # standalone or ungrouped sub-part
+            g++; gstart[g] = i; gsect[g] = sect; gids[g] = id; gok[g] = 1
+            pgrp[p] = g; grp[i] = g; cur = g
+          }
+        } else if (cur && l ~ /^[ \t]+/) {       # indented continuation
           grp[i] = cur
-          if (id != "") gids[cur] = gids[cur] " " id
+        } else {
+          cur = 0
         }
         if (grp[i] && id != "") {
           s = l; sub(/^[ \t]*- \[/, "", s); s = substr(s, 1, 1)
@@ -308,11 +319,42 @@ EOF
   echo "$out" | grep -q 'nothing closed' || fail "--days not honoured: $out"
   sh "$here/check-tickets.sh" TICKETS.md >/dev/null || fail "check-tickets fails after archiving"
 
+  # A205: blank-separated open children prevent moving their closed parent;
+  # blank-separated closed children and continuations move together with parent.
+  mkdir "$t/a205" && cd "$t/a205"
+  g init -q -b main .
+  cat > TICKETS.md <<'EOF'
+# TICKETS
+
+## Bugs
+
+- [x] B1 - old closed parent with blank-separated open child
+
+  - [ ] B1a - open child after blank line
+
+- [x] B2 - old closed parent with blank-separated old closed child
+
+  - [x] B2a - old closed child after blank line
+
+    continuation of B2a
+EOF
+  GIT_COMMITTER_DATE="@$old" GIT_AUTHOR_DATE="@$old" g add TICKETS.md
+  GIT_COMMITTER_DATE="@$old" GIT_AUTHOR_DATE="@$old" g commit -q -m old
+  sh "$me" >/dev/null || fail "A205 archive run errored"
+  grep -q '\] B1 ' TICKETS.md || fail "A205: closed parent B1 moved despite blank-separated open child B1a"
+  grep -q '\] B1a ' TICKETS.md || fail "A205: open child B1a missing from board"
+  grep -q '\] B2 ' TICKETS.md && fail "A205: B2 stayed on board"
+  grep -q '\] B2a ' TICKETS.md && fail "A205: B2a stayed on board"
+  grep -q '\] B2 ' TICKETS-archive.md || fail "A205: B2 missing from archive"
+  grep -q '\] B2a ' TICKETS-archive.md || fail "A205: B2a missing from archive"
+  grep -q '^    continuation of B2a$' TICKETS-archive.md || fail "A205: continuation of B2a missing from archive"
+  cd "$t/r"
+
   # A board check-tickets rejects is never archived.
   printf -- '- [ ] B2 - duplicate\n' >> TICKETS.md
   if sh "$me" >/dev/null 2>&1; then fail "archived a board with a duplicate ID"; fi
   if sh "$me" --days x >/dev/null 2>&1; then fail "--days x accepted"; fi
-  echo "ok - archive-tickets.sh selftest passed (dry run writes nothing, flip date not last edit, parent waits for parts, continuation moves, uncommitted close stays, old [?] and [%] stay, second run appends, --days, refuses a bad board)"
+  echo "ok - archive-tickets.sh selftest passed (dry run writes nothing, flip date not last edit, parent waits for parts including blank-separated children, continuation moves, uncommitted close stays, old [?] and [%] stay, second run appends, --days, refuses a bad board)"
 }
 
 dry=0 days=14 board= want=

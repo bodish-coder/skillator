@@ -135,19 +135,25 @@ def weight(review, today, months):
     return w
 
 
-def snippet(text, pattern, limit=220):
-    """The first sentence of text that matches pattern, verbatim."""
+def snippet_with_meta(text, pattern, limit=220):
+    """Return (quote, truncated): exact substring matching pattern, within limit."""
     for sent in SENTENCE.split(text):
         if pattern.search(sent):
             s = sent.strip()
             if len(s) > limit:
                 m = pattern.search(s)
                 start = max(0, m.start() - limit // 2)
-                s = s[start:start + limit].strip()
-                s = ("..." if start > 0 else "") + s + "..."
-            return s
+                return s[start:start + limit].strip(), True
+            return s, False
     s = text.strip()
-    return s if len(s) <= limit else s[:limit].rstrip() + "..."
+    if len(s) > limit:
+        return s[:limit].rstrip(), True
+    return s, False
+
+
+def snippet(text, pattern, limit=220):
+    """The first sentence of text that matches pattern, verbatim."""
+    return snippet_with_meta(text, pattern, limit)[0]
 
 
 def analyse(reviews, themes, request_patterns, today=None, months=18):
@@ -167,10 +173,12 @@ def analyse(reviews, themes, request_patterns, today=None, months=18):
             matched = True
             res = results[t["id"]]
             res["score"] += w
-            res["reviews"].append({"rv": rv, "quote": snippet(rv["text"], hit)})
+            q, trunc = snippet_with_meta(rv["text"], hit)
+            res["reviews"].append({"rv": rv, "quote": q, "truncated": trunc})
         req = next((p for p in request_patterns if p.search(rv["text"])), None)
         if req is not None:
-            requests.append({"quote": snippet(rv["text"], req), "url": rv["url"],
+            q, trunc = snippet_with_meta(rv["text"], req)
+            requests.append({"quote": q, "truncated": trunc, "url": rv["url"],
                              "source": rv["source"], "rating": rv["rating"]})
         if not matched and rv["rating"] is not None and rv["rating"] <= 2:
             unthemed_negative.append(rv)
@@ -194,7 +202,8 @@ def analyse(reviews, themes, request_patterns, today=None, months=18):
             "avg_rating": round(sum(rated) / len(rated), 2) if rated else None,
             "sources": sources,
             "thin": len(items) < 3 or len(sources) < 2,
-            "quotes": [{"quote": x["quote"], "url": x["rv"]["url"],
+            "quotes": [{"quote": x["quote"], "truncated": x["truncated"],
+                        "url": x["rv"]["url"],
                         "source": x["rv"]["source"], "rating": x["rv"]["rating"]}
                        for x in items[:3]],
         })

@@ -278,14 +278,14 @@ function Write-OpsFunction([string]$shimSrc, [string]$path) {
 
 # Write-Cmd <template> <skills-dir> <target>: one command file (or say it would). The
 # template with {{SKILLS}} replaced by the skills dir as the host sees it (C:\...); no
-# other templating, except that Gemini CLI's pending.toml runs pending.ps1 in place of
+# other templating, except that Gemini CLI's pending.toml (and aliases) runs pending.ps1 in place of
 # pending.sh. UTF-8 without BOM, LF - the bytes install.sh writes but for the separators
 # inside {{SKILLS}} and that shell line (pi's frontmatter and gemini's TOML reject a BOM).
 function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
   if ($DryRun) { Write-Host "        would write $target"; return }
   $text = [IO.File]::ReadAllText($tpl).Replace("`r", '')
-  if ($tpl -like '*\gemini\pending.toml') {
-    $re = [regex]'(?m)^!\{sh "\{\{SKILLS\}\}/tickets-zordon/scripts/pending\.sh"\}$'
+  $re = [regex]'(?m)^!\{sh "\{\{SKILLS\}\}/tickets-zordon/scripts/pending\.sh"\}$'
+  if ($tpl -match '[\\/]gemini[\\/][^\\/]+\.toml$' -and ($tpl -match '[\\/](pending|skillator-pending)\.toml$' -or $re.IsMatch($text))) {
     if (-not $re.IsMatch($text)) { throw "no pending.sh shell line in $tpl" }
     $text = $re.Replace($text,
       '!{powershell -NoProfile -ExecutionPolicy Bypass -File "{{SKILLS}}\tickets-zordon\scripts\pending.ps1"}')
@@ -790,7 +790,7 @@ function Invoke-SelfTest([string]$T) {
             '.config\opencode\commands\message-uhura.md', '.gemini\config\skills\message-uhura\SKILL.md',
             '.codex\skills\gauntlet-plan\SKILL.md', '.cursor\commands\gauntlet-plan.md', '.gemini\commands\gauntlet-plan.toml',
             '.codex\skills\verify-shifu\SKILL.md', '.cursor\commands\verify-shifu.md', '.gemini\commands\verify-shifu.toml',
-            '.codex\skills\skillator-pending\SKILL.md', '.cursor\commands\skillator-pending.md',
+            '.codex\skills\skillator-pending\SKILL.md', '.cursor\commands\skillator-pending.md', '.gemini\commands\skillator-pending.toml',
             '.codex\skills\ops\SKILL.md', '.gemini\config\skills\ops\SKILL.md', '.gemini\skills\ops\SKILL.md', '.gemini\antigravity-cli\skills\ops\SKILL.md')
   foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
@@ -837,9 +837,12 @@ function Invoke-SelfTest([string]$T) {
   if (-not (& $has '.gemini\skills\list-tickets\SKILL.md' "$T\.gemini\skills/tickets-zordon/SKILL.md")) { return 'agy skill not substituted with its own dest' }
   # B8: agy 1.4.5 reads ~/.gemini/antigravity-cli/skills - its commands point at that dest
   if (-not (& $has '.gemini\antigravity-cli\skills\pending\SKILL.md' "$T\.gemini\antigravity-cli\skills/tickets-zordon/SKILL.md")) { return 'agy-cli skill not substituted with its own dest' }
-  if ((& $read '.gemini\commands\pending.toml') -notmatch '(?m)^!\{powershell ') { return 'gemini shell injection' }
-  if (-not (& $has '.gemini\commands\pending.toml' "!{powershell -NoProfile -ExecutionPolicy Bypass -File `"$T\.gemini\skills\tickets-zordon\scripts\pending.ps1`"}")) { return 'gemini pending path' }
-  if ((& $read '.gemini\commands\pending.toml') -match '(?m)^!\{sh ') { return 'gemini pending kept the sh line' }
+  foreach ($gp in '.gemini\commands\pending.toml', '.gemini\commands\skillator-pending.toml') {
+    if ((& $read $gp) -notmatch '(?m)^!\{powershell ') { return "gemini shell injection in $gp" }
+    if (-not (& $has $gp "!{powershell -NoProfile -ExecutionPolicy Bypass -File `"$T\.gemini\skills\tickets-zordon\scripts\pending.ps1`"}")) { return "gemini pending path in $gp" }
+    if ((& $read $gp) -match '(?m)^!\{sh ') { return "gemini pending kept the sh line in $gp" }
+  }
+  if ((& $read '.gemini\commands\skillator-pending.toml') -cne (& $read '.gemini\commands\pending.toml')) { return 'gemini skillator-pending alias differs from pending.toml (A201)' }
   # F65: /skillator-update reads each dest's source pointer (.skillator-source, one line:
   # the repo root this installer ran from) - the command finds its source by it
   foreach ($d in '.codex\skills', '.cursor\skills', '.pi\agent\skills', '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {

@@ -26,9 +26,11 @@ duplicates it removed. Every count in the reply comes from that output:
 - **Theme counts are the tool's `reviews` column**, not a re-count by hand
   over the CSV.
 - **Every quote is a substring of a kept row's `text`, copied exactly, with
-  that row's URL.** The tool prints quotes in that shape; use them, or copy
-  another sentence of the same row exactly. Never shorten, merge or reword a
-  quote, and never put a source name where the URL goes.
+  that row's URL.** The tool prints quotes in that shape (returning an exact
+  verbatim substring without inserted ellipses and recording `truncated: true`
+  separately when clipped to the character limit); use them, or copy another
+  sentence of the same row exactly. Never shorten, merge or reword a quote, and
+  never put a source name where the URL goes.
 - **No python3?** The runner says so in one line. Pass it on; then, if the
   user still wants an answer now, apply the same rules by hand — drop every
   row with no `url`, remove exact repeats (case and spacing ignored), and say

@@ -73,7 +73,8 @@ class Feedback(unittest.TestCase):
         self.assertTrue(quotes)
         for q in quotes:
             self.assertIn(q["url"], by_url)
-            self.assertIn(q["quote"].strip(".").strip(), by_url[q["url"]])
+            self.assertIn(q["quote"], by_url[q["url"]])
+            self.assertFalse(q["truncated"])
 
     def test_requests_are_found_in_their_own_words(self):
         texts = [q["quote"] for q in self.result["requests"]]
@@ -122,10 +123,58 @@ class Feedback(unittest.TestCase):
 
     def test_snippet_truncates_around_the_match(self):
         import re
-        text = "x" * 400 + " too expensive " + "y" * 400
-        s = reviews.snippet(text, re.compile("expensive"), limit=100)
+        pat = re.compile("expensive")
+        # Match in the middle (>220 chars)
+        mid_text = "x" * 300 + " too expensive " + "y" * 300
+        s, trunc = reviews.snippet_with_meta(mid_text, pat, limit=100)
+        self.assertEqual(reviews.snippet(mid_text, pat, limit=100), s)
         self.assertIn("expensive", s)
-        self.assertLessEqual(len(s), 106)
+        self.assertIn(s, mid_text)
+        self.assertTrue(trunc)
+        self.assertLessEqual(len(s), 100)
+
+        # Match near start (>220 chars)
+        start_text = "Way too expensive right at the start " + "z" * 300
+        s_start, trunc_start = reviews.snippet_with_meta(start_text, pat)
+        self.assertIn("expensive", s_start)
+        self.assertIn(s_start, start_text)
+        self.assertTrue(trunc_start)
+        self.assertLessEqual(len(s_start), 220)
+
+        # Match near end (>220 chars)
+        end_text = "a" * 300 + " and at the very end it is too expensive"
+        s_end, trunc_end = reviews.snippet_with_meta(end_text, pat)
+        self.assertIn("expensive", s_end)
+        self.assertIn(s_end, end_text)
+        self.assertTrue(trunc_end)
+        self.assertLessEqual(len(s_end), 220)
+
+        # Fallback when no sentence split matches (pattern spans sentence boundary)
+        fallback_text = "First sentence ends here. Second starts here " + "b" * 300
+        cross_pat = re.compile(r"here\.\s+Second")
+        s_fb, trunc_fb = reviews.snippet_with_meta(fallback_text, cross_pat)
+        self.assertIn(s_fb, fallback_text)
+        self.assertTrue(trunc_fb)
+        self.assertLessEqual(len(s_fb), 220)
+
+        # Analyse integration with long reviews: raw quote membership & truncated metadata
+        long_rows = [
+            ("app-store", "https://apps.apple.com/r/long1", "2026-08-01", "1",
+             "w" * 150 + " way too expensive for my team and I wish it had " + "v" * 150),
+        ]
+        long_path = os.path.join(self.tmp.name, "long.csv")
+        write_csv(long_path, long_rows)
+        kept_long, _, _ = reviews.load_reviews(long_path)
+        res_long = reviews.analyse(kept_long, self.themes, self.req,
+                                   today=datetime.date(2026, 10, 1))
+        src_text = kept_long[0]["text"]
+        for t in res_long["themes"]:
+            for q in t["quotes"]:
+                self.assertIn(q["quote"], src_text)
+                self.assertTrue(q["truncated"])
+        for q in res_long["requests"]:
+            self.assertIn(q["quote"], src_text)
+            self.assertTrue(q["truncated"])
 
 
 if __name__ == "__main__":
