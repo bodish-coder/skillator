@@ -19,9 +19,12 @@ not versions.
 | Name | Repo | Watched paths | Absorbed commit | Absorbed | clone-odo files / sections |
 |---|---|---|---|---|---|
 | replica-skill | `Jakeschincariol/replica-skill` | `replica-recon`<br>`replica-architect`<br>`replica-design`<br>`replica-build`<br>`replica-backend`<br>`replica-test`<br>`replica-diff`<br>`replica-entrepreneur`<br>`replica-brand`<br>`replica-launch`<br>`replica-deploy`<br>`tests`<br>`LICENSE` | `77c9436fb3d18c3d58169efb8caf4fe906b0dc51` | 2026-11-01 | All eleven workflow contracts mapped below; six tools and tests retained with documented Skillator adaptations. Packaging/README/standalone replica command names are not installed. |
+| synthesize-research | `anthropics/knowledge-work-plugins` | `product-management/skills/synthesize-research/SKILL.md` | `2574e29377c7173d0cecffef29a6ecbd7f8ccb5d` | 2026-11-05 | `references/reviews.md` (review synthesis: affected segments, impact, contradictory evidence, and confidence around existing tool-derived results; preserving linked quotes, deterministic dedupe and kept/dropped counts; mentions not unique-user counts) |
 
-Notes on the row:
+Notes on the rows:
 
+- **synthesize-research row:** Adapted from `anthropics/knowledge-work-plugins` at commit `2574e29377c7173d0cecffef29a6ecbd7f8ccb5d` (`product-management/skills/synthesize-research/SKILL.md#L47-L74`).
+  Extends review synthesis reporting into `.skillator/clone/fixes.md` with affected segments, impact, contradictory evidence, and calibrated confidence while preserving clone-odo's strict Python tool evidence counts, deterministic deduplication, and unlinked row dropping. Mentions/reviews are never converted to unique-user counts, ensuring prolific reviewers do not inflate customer numbers.
 - **Reframed, not copied.** Eleven slash-command skills became one skill with
   laws in SKILL.md and mechanics in `references/`. What is skillator's own: the
   clean-room rules as a standing guard that binds every hand-off (SKILL.md §0),
@@ -120,7 +123,18 @@ A watched path that moves or disappears upstream shows up as an `error` row and
 exit 2. Find the new path, update the Watched paths cell, and treat whatever
 changed in the move as a normal absorb.
 
+## Modifications
+
+In accordance with Section 4(b) of the Apache License, Version 2.0, the following modifications were made to the absorbed `synthesize-research` content:
+- Adapted research synthesis structure (affected segments, impact, contradictory evidence, confidence ratings) to wrap around clone-odo's existing Python review runner (`odo.sh reviews` / `reviews.py`).
+- Preserved strict tool-derived evidence counts, deterministic deduplication, and dropped-URL discipline.
+- Enforced that mention/review counts must never be reported as unique-user counts, specifically addressing prolific-reviewer scenarios.
+- Required contradictory evidence to cite verbatim substrings with source URLs from kept reviews, or explicitly state none observed.
+- Embedded synthesis fields directly into `references/reviews.md` reporting workflow for `.skillator/clone/fixes.md`.
+
 ## License
+
+### replica-skill (MIT)
 
 replica-skill is MIT-licensed. The notice below is retained as that license
 requires and covers every portion of this skill derived from it: SKILL.md,
@@ -148,4 +162,25 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+### knowledge-work-plugins (Apache-2.0)
+
+Derived in part from `anthropics/knowledge-work-plugins` (`product-management/skills/synthesize-research/SKILL.md`),
+licensed under the Apache License, Version 2.0.
+
+```
+Copyright 2026 Anthropic, PBC.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EXPRESS OR IMPLIED.
+See the License for the specific language governing permissions and
+limitations under the License.
 ```

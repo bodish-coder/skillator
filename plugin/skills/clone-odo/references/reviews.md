@@ -66,10 +66,9 @@ source as **thin**, lists requests in the users' own words, and lists low
 ratings that matched no theme. Read that last list by hand; it is often the
 best part.
 
-## The three lists
+## The three lists and synthesis reporting
 
-Into `.skillator/clone/fixes.md`, each item: the problem in one line, how many
-reviews, how many sources, one or two linked quotes.
+Into `.skillator/clone/fixes.md`, categorize items into three lists:
 
 1. **What they hate** — complaints about things the app does.
 2. **What is missing** — features people ask for by name.
@@ -77,6 +76,34 @@ reviews, how many sources, one or two linked quotes.
    teams"). These become positioning.
 
 Thin themes are listed as thin. Three angry comments are not a trend.
+
+Each synthesized item in `.skillator/clone/fixes.md` reports:
+
+- **Problem:** the finding or issue in one line.
+- **Evidence:** tool-derived counts (`<n> reviews across <n> sources`). Preserves
+  deterministic deduplication and dropped counts. Mentions and review counts must
+  never be presented as unique-user counts: if 4 reviews come from one reviewer,
+  state `4 reviews across 1 reviewer/source` or `4 mentions`, never `4 users` or
+  `4 customers`. A prolific reviewer does not multiply user count.
+- **Affected segments:** user cohorts, platforms, plan tiers, or environments
+  specifically affected (e.g. mobile field workers, self-hosted admins, free tier),
+  identified directly from review context.
+- **Impact:** concrete workflow severity or friction (e.g. data loss blocker,
+  crash on startup, pricing churn risk, minor annoyance).
+- **Quotes:** one or two verbatim linked quotes (`[quote](url)`), copied exactly
+  from kept reviews. Dropped rows (missing URL) are never quoted or counted.
+- **Contradictory evidence:** conflicting feedback, contrasting experiences, or
+  segments where the workflow works well or users express satisfaction, cited with
+  verbatim linked quotes and URLs. If no contrary evidence was found in the kept
+  dataset, state `None observed in dataset`. Never ignore or fabricate contradictions.
+- **Confidence:** calibrated as `High`, `Medium`, or `Low`:
+  - `High`: multi-source (2+ distinct sources), substantial volume (5+ reviews),
+    consistent sentiment across segments, no unresolved contradictions.
+  - `Medium`: moderate volume (3-4 reviews) or single source with multiple reviews,
+    or mixed sentiment where contradictions exist but the core issue is documented.
+  - `Low`: thin themes (< 3 reviews or 1 source), heavy concentration in a single
+    prolific reviewer, or strong contradictory evidence across segments indicating
+    niche or conflicting workflows.
 
 ## The fix plan
 
@@ -102,6 +129,8 @@ stays out of the clone's name, ads and store listing.
 ## Never
 
 - invent a review, a quote, a rating, a count, a user or a source;
+- present mention or review counts as unique-user counts;
+- ignore or omit contradictory evidence found in kept reviews, or fabricate counter-claims;
 - post or buy a review — for the clone or against the original (illegal in the
   US under the FTC's 2024 rule, and in many other places);
 - put a reviewer's words on the clone's landing page or listing.
