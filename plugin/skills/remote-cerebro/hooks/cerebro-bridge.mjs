@@ -381,15 +381,17 @@ export class Session {
 }
 
 // ------------------------------------------------------------------ adapters --
-class ProcAdapter extends EventEmitter {
+export class ProcAdapter extends EventEmitter {
   constructor(o) { super(); Object.assign(this, { rpcTimeoutMs: RPC_TIMEOUT }, o); this.busy = false; this.seq = 0; this.rpc = new Map(); }
   spawnChild(args) {
     this.child = spawnBin(this.bin, args, { cwd: this.cwd, env: this.env });
     // Redact the WHOLE line first, then cut it: a secret straddling the cut would
     // otherwise lose the tail the patterns need and leak its head.
-    this.child.stdout.on("data", lineSplitter((l) => { let m; try { m = JSON.parse(l); } catch { return this.emit("status", `[non-json] ${redact(l, this.redactCtx || { env: this.env }).slice(0, 120)}`); } this.onMsg(m); }));
+    const split = lineSplitter((l) => { let m; try { m = JSON.parse(l); } catch { return this.emit("status", `[non-json] ${redact(l, this.redactCtx || { env: this.env }).slice(0, 120)}`); } this.onMsg(m); });
+    this.child.stdout.on("data", split);
+    this.child.stdout.on("end", () => split.flush());
     this.child.stderr.on("data", (d) => this.emit("stderr", d.toString()));
-    this.child.on("exit", (code) => { this.exited = true; this.failAll(`host exited (${code})`); this.emit("exit", code); });
+    this.child.on("exit", (code) => { split.flush(); this.exited = true; this.failAll(`host exited (${code})`); this.emit("exit", code); });
     this.child.on("error", (e) => { this.exited = true; this.failAll(`spawn error ${e.code || e.message}`); this.emit("exit", `spawn error ${e.code || e.message}`); });
     this.child.stdin.on("error", () => {});
   }
@@ -683,7 +685,7 @@ export class AttachIpcAdapter extends EventEmitter {
     if (this.sock || this.closed) return sock.destroy();
     let authed = false;
     const t = setTimeout(() => { if (!authed) sock.destroy(); }, 5000); t.unref?.();
-    sock.on("data", lineSplitter((l) => {
+    const split = lineSplitter((l) => {
       if (sock.destroyed) return;
       let m; try { m = JSON.parse(l); } catch { return sock.destroy(); }
       if (!authed) {
@@ -695,7 +697,9 @@ export class AttachIpcAdapter extends EventEmitter {
         return;
       }
       this.#dispatch(m);
-    }));
+    });
+    sock.on("data", split);
+    sock.on("end", () => split.flush());
   }
   #dispatch(m) {
     if (m.type === "reply") this.emit("reply", m.text);
