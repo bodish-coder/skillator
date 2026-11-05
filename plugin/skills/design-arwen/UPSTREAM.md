@@ -1,6 +1,6 @@
 # design-arwen upstreams
 
-Arwen absorbs rules from five outside skills (F23, F149). This file records what it took
+Arwen absorbs rules from six outside skills (F23, F149, F150). This file records what it took
 and from which commit, so a later change upstream can be found and absorbed on
 purpose. It is also the manifest that `practice/scripts/upstream-check.sh` (and
 `.ps1`) reads. Keep the table below in its current shape: the script parses the
@@ -21,6 +21,7 @@ of the absorbed one counts as unchanged.
 | impeccable | `pbakaus/impeccable` | `skill` | `71a3341289b86b7b628dd40d5d69c1e686a181b0` | 2026-09-23 | `craft.md` Color & type (large text is 24px / 18.67px bold, explicit colours over alpha stacks, dark mode not inverted, ::selection/caret, three-axis dark compensation), Layout & space (more space above headings, halo shadow), Interaction (hover media queries, interrupted pointer), Motion (duration bands, reduced motion means fewer not none, loops stop offscreen), Native (8dp spacing, `sp`); `product-ui.md` Inputs (16px), slop test Q6 (count rule); `verify.md` The run (screenshot validity, bounded rounds), Contrast, Colour-blind check, Reduced motion, Mechanical scan; `critique.md` sections 3-4 (counts, support tiebreak, `impeccable critique` pointer); `redesign.md` section 2; `canvas.md` floors; SKILL.md Design memory (PRODUCT.md), ship gate rows 1, 9, 16 |
 | ui-ux-pro-max | `nextlevelbuilder/ui-ux-pro-max-skill` | `.claude/skills/ui-ux-pro-max/SKILL.md`<br>`.claude/skills/ui-ux-pro-max/references/quick-reference.md`<br>`.claude/skills/ui-ux-pro-max/references/pro-rules.md`<br>`.claude/skills/ui-ux-pro-max/data/ux-guidelines.csv`<br>`.claude/skills/ui-ux-pro-max/data/app-interface.csv` | `dcc40ff5133ef78276117db0cc34e7b83cc8aeba` | 2026-09-23 | `product-ui.md` Validation (error summary), Data tables (sticky header scroll-padding, 24px sort controls, chip overflow), Multi-step flows (redundant entry, consistent help); `craft.md` Interaction (sticky chrome never hides focus, 24 CSS px web target, drag alternative, press ≤100ms), Motion (interruptible, no transitionend-gated state, autoplay pause), Layout & space (dvh, long-token wrapping), Backgrounds & imagery (icon aria), Native (tab bar ≤5 labelled, web viewport never blocks zoom, heading sequence, route-change focus); `verify.md` The run (landscape), Targets and obscured focus; SKILL.md Design memory (MASTER.md), accessibility floor, ship gate rows 4, 8, 10 |
 | design-critique | `anthropics/knowledge-work-plugins` | `design/skills/design-critique/SKILL.md` | `2574e29377c7173d0cecffef29a6ecbd7f8ccb5d` | 2026-11-05 | `references/critique.md` (design critique stages distinguishing exploration, refinement, implementation; evidence classification and explicit limits for screenshot-only, Figma-unavailable, and live-implementation reviews; barring fabricated interaction, performance, or accessibility measurements while preserving ranked evidence, concrete fixes, and rendering/accessibility gates) |
+| design-handoff | `anthropics/knowledge-work-plugins` | `design/skills/design-handoff/SKILL.md` | `2574e29377c7173d0cecffef29a6ecbd7f8ccb5d` | 2026-11-05 | `references/handoff.md` (design-to-build handoff contract: components/variants/props, token references, interaction states, responsive behavior, content limits, motion, assets, accessibility expectations, open questions; Figma optional; labeled screenshot estimates; distinct specified vs verified a11y); also connected to `build-jarvis/references/handoff.md` |
 
 Notes on the rows:
 
@@ -40,6 +41,12 @@ Notes on the rows:
   Reframed into arwen's ranked-severity list (P0/P1/P2) and "write no code" law. Strict
   evidence limits rule: screenshot-only and Figma-unavailable reviews must explicitly state
   limitations and never invent interaction, performance, or accessibility numbers.
+- **design-handoff** absorbs the design-to-build handoff contract from Anthropic's knowledge-work-plugins (F150),
+  connecting design-arwen to build-jarvis. Preserves strict artifact boundaries: DESIGN.md
+  retains design decisions, handoff-cortana retains session status, and the handoff contract
+  retains concrete UI implementation specifications. Enforces labeled screenshot estimates,
+  leaving unknown measurements unspecified, keeping Figma optional, and distinguishing specified
+  accessibility expectations from verified runtime behavior.
 - **A94 reverts (2026-09-24).** Five F23b rulings were taken back out because a
   run gave them no failing test (the RED already passed 2/2) or the GREEN did not
   pass 2/2: sign-in paste + autocomplete, scrim only
@@ -85,10 +92,15 @@ modifications were made to the absorbed upstream content:
 - Mandated explicit evidence limit labeling for screenshot-only, Figma-unavailable, and static mockup scenarios.
 - Barred fabricated interaction, performance, and accessibility measurements across all static critique modes.
 - Retained arwen's strict P0/P1/P2 severity ranking, concrete one-sentence fixes, and "write no code" law.
+- Adapted design handoff contract into arwen's reference architecture (`references/handoff.md`) and connected it to `build-jarvis` implementer workflow (`build-jarvis/references/handoff.md`).
+- Established explicit artifact boundary separation: `DESIGN.md` retains design decisions, `handoff-cortana` retains session continuity, and the handoff contract specifies UI implementation details.
+- Mandated explicit labeling for screenshot estimates (`[estimated from screenshot]`) and leaving unknown measurements unspecified (`[unspecified]`).
+- Separated specified accessibility expectations from verified runtime accessibility.
+- Made Figma optional, ensuring full handoff usability across screenshot, terminal, and code-first workflows.
 
 ## License
 
-Derived in part from `anthropics/knowledge-work-plugins` (`design/skills/design-critique/SKILL.md`),
+Derived in part from `anthropics/knowledge-work-plugins` (`design/skills/design-critique/SKILL.md` and `design/skills/design-handoff/SKILL.md`),
 licensed under the Apache License, Version 2.0.
 
 ```
