@@ -8,7 +8,11 @@
 $ErrorActionPreference = 'Stop'
 $Team = Join-Path (Split-Path -Parent $PSCommandPath) 'team.mjs'
 $Tunnel = 'skillator-teams'
-$script:Check = $args -contains '--check'
+if ($args.Count -gt 1 -or ($args.Count -eq 1 -and $args[0] -notin @('--check', '-check', '--selftest', '-selftest'))) {
+  [Console]::Error.WriteLine('usage: setup.ps1 [--check | --selftest]')
+  exit 2
+}
+$script:Check = $args -contains '--check' -or $args -contains '-check'
 $script:Out = New-Object System.Collections.ArrayList
 $script:Quiet = $false
 
@@ -165,7 +169,7 @@ function Invoke-Setup {
   if ($up -and $saved) { 0 } else { 1 }
 }
 
-if ($args -contains '--selftest') {
+if ($args -contains '--selftest' -or $args -contains '-selftest') {
   $script:Quiet = $true
   $T = Join-Path ([IO.Path]::GetTempPath()) ('uhura-setup-' + [guid]::NewGuid().ToString('N'))
   $Alias = Join-Path $T 'Microsoft\WindowsApps\winget.exe'
