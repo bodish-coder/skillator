@@ -194,7 +194,8 @@
         "skillator-ops"
       ],
       "hosts": [
-        "antigravity"
+        "antigravity",
+        "opencode"
       ],
       "canonicalAliases": false
     },
@@ -286,6 +287,9 @@
       "opencode": ", in this session (no delegate verified here) - the stored prompt done, then the verify text done as a second pass that edits nothing",
       "antigravity": " - agy: background subagents; codex: subagents (one subagent per ticket of the phase); Gemini CLI: in this session (no delegate verified there), the stored prompt done, then the verify text done as a second pass that edits nothing",
       "gemini": ", in this session (no delegate verified here) - the stored prompt done, then the verify text done as a second pass that edits nothing"
+    },
+    "ops.execution": {
+      "opencode": "If the argument is `terminal` (or `--open`):\nOpen the ops board in a new terminal tab. From the repo root, run on Windows:\n`powershell -NoProfile -ExecutionPolicy Bypass -File \"{{SKILLS}}/ops-board/ops/ops.ps1\" -Repo <repo root> -Open`\nelsewhere:\n`sh \"{{SKILLS}}/ops-board/ops/ops.sh\" <repo root> --open`\nThen say one line: where it opened, or the error it printed. It reads; it never edits the board.\n\nOtherwise (bare `/ops`, or a tab name like `tickets`, `workflows`, `health`, `messages`, `explorer`, `build`):\nDisplay the ops board frame right here in the opencode app. From the repo root, run on Windows:\n`powershell -NoProfile -ExecutionPolicy Bypass -File \"{{SKILLS}}/ops-board/ops/ops.ps1\" -Repo <repo root> --once $ARGUMENTS`\nelsewhere:\n`sh \"{{SKILLS}}/ops-board/ops/ops.sh\" <repo root> --once $ARGUMENTS`\nPaste what it outputs, unchanged. It reads; it never edits the board."
     }
   }
 }

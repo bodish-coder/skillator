@@ -1,6 +1,6 @@
 ---
 name: ops
-description: Open the ops board (TICKETS.md board, runs, health, messages, explorer, build) for this repo in a new terminal tab
+description: Open the ops board (TICKETS.md board, runs, health, messages, explorer, build) for this repo
 ---
 From the repo root, run `ops --open` if `ops` is a command in your shell. It usually is
 not (an agent's shell does not load the user's profile), so then run the installed script

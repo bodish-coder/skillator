@@ -499,8 +499,8 @@ function Write-Commands([string]$cli, [string]$dest) {
       foreach ($n in $names) { Write-Cmd "$c\pi\$n.md" $dest "$HOME\.pi\agent\prompts\$n.md" }
       Write-PiExt $dest
     }
-    # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode
-    'opencode' { foreach ($n in $names) { Write-Cmd "$c\opencode\$n.md" $dest "$ocConfig\commands\$n.md" } }
+    # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode; F159: /ops
+    'opencode' { foreach ($n in $names + $opsNames) { Write-Cmd "$c\opencode\$n.md" $dest "$ocConfig\commands\$n.md" } }
     'antigravity' {
       foreach ($n in $names + $opsNames) {
         Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
@@ -769,6 +769,7 @@ function Invoke-SelfTest([string]$T) {
             '.config\opencode\commands\pending.md', '.config\opencode\commands\list-tickets.md', '.config\opencode\commands\engage.md',
             '.config\opencode\commands\archive-tickets.md', '.config\opencode\commands\sync-tickets.md',
             '.config\opencode\commands\skillator-update.md', '.config\opencode\commands\team-messages.md',
+            '.config\opencode\commands\ops.md',
             '.codex\skills\pending-subagent\SKILL.md', '.gemini\commands\pending-subagent.toml', '.cursor\commands\pending-subagent.md',
             '.pi\agent\prompts\pending-subagent.md', '.gemini\config\skills\pending-subagent\SKILL.md', '.gemini\skills\pending-subagent\SKILL.md',
             '.gemini\antigravity-cli\skills\pending-subagent\SKILL.md', '.config\opencode\commands\pending-subagent.md',
@@ -821,7 +822,7 @@ function Invoke-SelfTest([string]$T) {
   if ([IO.File]::ReadAllText((Join-Path $T "$oc\skills\.skillator-source")) -cne "$PSScriptRoot`n") { return "source pointer in $oc\skills" }
   if (-not (Test-Path -LiteralPath (Join-Path $T "$oc\skills\tickets-zordon\.skillator-owned") -PathType Leaf)) { return 'opencode skill has no ownership marker' }
   $mf = @([IO.File]::ReadAllLines((Join-Path $T "$oc\skills\.skillator-installed")))
-  foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run') { if ($mf -ccontains $n) { return 'command in opencode manifest' } }
+  foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run', 'ops', 'skillator-ops') { if ($mf -ccontains $n) { return 'command in opencode manifest' } }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   foreach ($f in '.codex\skills\skillator-update\SKILL.md', '.cursor\commands\skillator-update.md', '.pi\agent\prompts\skillator-update.md',
                  '.gemini\commands\skillator-update.toml', '.gemini\skills\skillator-update\SKILL.md',
@@ -945,9 +946,15 @@ function Invoke-SelfTest([string]$T) {
     if ($ct -cnotmatch '(?m)^name: ops$' -or $ct -cnotmatch '(?m)^description: ') { return "ops skill frontmatter in $d" }
     if (-not ($ct.Contains("`"$T\$d/ops-board/ops/ops.ps1`" -Repo <repo root> -Open") -and $ct.Contains("`"$T\$d/ops-board/ops/ops.sh`" <repo root> --open") -and $ct.Contains('ops --open'))) { return "ops skill not substituted or not --open in $d" }
   }
-  foreach ($f in '.cursor\commands\ops.md', '.gemini\commands\ops.toml', '.config\opencode\commands\ops.md', '.pi\agent\prompts\ops.md') {
+  foreach ($f in '.cursor\commands\ops.md', '.gemini\commands\ops.toml', '.pi\agent\prompts\ops.md') {
     if (Test-Path -LiteralPath (Join-Path $T $f)) { return "ops command written to $f" }
   }
+  # F159: opencode /ops command written with --once and -Open
+  $ocOps = Join-Path $T "$oc\commands\ops.md"
+  if (-not (Test-Path -LiteralPath $ocOps -PathType Leaf)) { return 'missing opencode ops.md' }
+  if (-not (& $has "$oc\commands\ops.md" "$T\$oc\skills/ops-board/ops/ops.ps1")) { return 'opencode ops not substituted' }
+  if (-not (& $has "$oc\commands\ops.md" '--once')) { return 'opencode ops has no --once' }
+  if (-not (& $has "$oc\commands\ops.md" '-Open')) { return 'opencode ops has no -Open' }
   if ((& $read '.gemini\config\skills\pending\SKILL.md') -cnotmatch '(?m)^name: pending$') { return 'agy skill name' }
   if ((& $read '.gemini\skills\list-tickets\SKILL.md') -cnotmatch '(?m)^name: list-tickets$') { return 'agy skill name' }
   if ([IO.File]::ReadAllBytes((Join-Path $T '.pi\agent\prompts\pending.md'))[0] -ne 0x2D) { return 'pi prompt does not start with - (BOM?)' }

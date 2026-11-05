@@ -514,8 +514,8 @@ write_commands() {
       for _n in $_cmds; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
       put_pi_ext "$2" ;;
     opencode)
-      # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode
-      for _n in $_cmds; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
+      # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode; F159: /ops
+      for _n in $_cmds $_ops_cmds; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
     antigravity)
       for _n in $_cmds $_ops_cmds; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
@@ -766,7 +766,7 @@ if [ -n "$selftest" ]; then
   grep -qF -e "<<'EOF'" -e "@'" -e 'say "' "$T/$_oc/commands/team-messages.md" && { echo "FAIL: opencode team-messages puts reply text in shell source"; exit 1; }
   [ "$(cat "$T/$_oc/skills/.skillator-source" 2>/dev/null)" = "$(native "$root")" ] || { echo "FAIL: source pointer in $_oc/skills"; exit 1; }
   [ -f "$T/$_oc/skills/tickets-zordon/.skillator-owned" ] || { echo "FAIL: opencode skill has no ownership marker"; exit 1; }
-  grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent|marathon-plan|marathon-run' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
+  grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent|marathon-plan|marathon-run|ops|skillator-ops' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   for f in .codex/skills/skillator-update/SKILL.md .cursor/commands/skillator-update.md .pi/agent/prompts/skillator-update.md \
            .gemini/commands/skillator-update.toml .gemini/skills/skillator-update/SKILL.md \
@@ -893,9 +893,15 @@ if [ -n "$selftest" ]; then
     { grep -qF "\"$N/$d/ops-board/ops/ops.ps1\" -Repo <repo root> -Open" "$_f" && grep -qF "\"$N/$d/ops-board/ops/ops.sh\" <repo root> --open" "$_f" && grep -qF 'ops --open' "$_f"; } || { echo "FAIL: ops skill not substituted or not --open in $d"; exit 1; }
     grep -qF '{{SKILLS}}' "$_f" && { echo "FAIL: placeholder left in $d/ops"; exit 1; }
   done
-  for f in .cursor/commands/ops.md .gemini/commands/ops.toml .config/opencode/commands/ops.md .pi/agent/prompts/ops.md; do
+  for f in .cursor/commands/ops.md .gemini/commands/ops.toml .pi/agent/prompts/ops.md; do
     [ -e "$T/$f" ] && { echo "FAIL: ops command written to $f"; exit 1; }
   done
+  # F159: opencode /ops command written with --once and --open
+  _oc_ops="$T/.config/opencode/commands/ops.md"
+  [ -f "$_oc_ops" ] || { echo "FAIL: missing opencode ops.md"; exit 1; }
+  grep -qF "$N/.config/opencode/skills/ops-board/ops/ops.sh" "$_oc_ops" || { echo "FAIL: opencode ops not substituted"; exit 1; }
+  grep -qF -- '--once' "$_oc_ops" || { echo "FAIL: opencode ops has no --once"; exit 1; }
+  grep -qF -- '--open' "$_oc_ops" || { echo "FAIL: opencode ops has no --open"; exit 1; }
   grep -q '^name: pending$' "$T/.gemini/config/skills/pending/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
   grep -q '^name: list-tickets$' "$T/.gemini/skills/list-tickets/SKILL.md" || { echo "FAIL: agy skill name"; exit 1; }
   for f in .gemini/commands .cursor/commands .pi/agent/prompts \

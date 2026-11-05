@@ -1,6 +1,8 @@
 ---
-description: Open the ops board (TICKETS.md board, runs, health, messages, explorer, build) for this repo in a new terminal tab
+description: Open the ops board (TICKETS.md board, runs, health, messages, explorer, build) for this repo
+argument-hint: [terminal|tickets|workflows|health|messages|explorer|build]
 ---
+<!-- host-section:execution -->
 From the repo root, run `ops --open` if `ops` is a command in your shell. It usually is
 not (an agent's shell does not load the user's profile), so then run the installed script
 by path - on Windows:
@@ -8,3 +10,4 @@ by path - on Windows:
 elsewhere: `sh "{{SKILLS}}/ops-board/ops/ops.sh" <repo root> --open`.
 Never without `-Open` / `--open`: a bare board opens a separate console window. Then say
 one line: where it opened, or the error it printed. It reads; it never edits the board.
+<!-- /host-section:execution -->
