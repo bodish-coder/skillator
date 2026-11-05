@@ -39,7 +39,7 @@ function Repair-Winget {
   } catch { Say "winget: the repair failed - $_" }
 }
 function Open-TunnelWindow { Start-Process devtunnel -ArgumentList 'host', $Tunnel }
-function TunnelHosted { [bool](Get-Process devtunnel -ErrorAction SilentlyContinue) }
+function TunnelHosted([string]$name = '', [int]$port = 0) { $target = if ($name) { $name } elseif ($Tunnel) { $Tunnel } else { 'skillator-teams' }; foreach ($p in @(Get-Process devtunnel -ErrorAction SilentlyContinue)) { $cmd = $p.CommandLine; if (-not $cmd -and $p.Id) { try { $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $($p.Id)" -ErrorAction SilentlyContinue).CommandLine } catch {} }; if (-not $cmd -or $cmd -notmatch '\bhost\b' -or $cmd -notmatch ('(^|\s|[`"''\\])' + [regex]::Escape($target) + '($|\s|[`"''\\])')) { continue }; if ($port -gt 0 -and $cmd -match '(?i)(?:-p|--port)\s+(\d+)' -and [int]$Matches[1] -ne $port) { continue }; return $true }; $false }
 
 function Step-Node {
   if (-not (Has 'node')) { Say 'node: missing - install Node.js 18 or later from https://nodejs.org/ , open a new terminal, run this again'; return $null }
@@ -145,7 +145,7 @@ function Invoke-Setup {
   if ($script:Check) { Show-Table $r; return 0 }
   if (-not $tn) { Show-Table $r; return 1 }
   if (-not (Ask "Arm it now: host $Tunnel in its own window and run the listener on 127.0.0.1:$port?")) { Say 'not armed - run this again when you are ready'; Show-Table $r; return 1 }
-  if (TunnelHosted) { Say 'tunnel: already hosted' } else { Open-TunnelWindow; Say "tunnel: hosting $Tunnel in its own window - close that window to stop it" }
+  if (TunnelHosted $Tunnel $port) { Say 'tunnel: already hosted' } else { Open-TunnelWindow; Say "tunnel: hosting $Tunnel in its own window - close that window to stop it" }
   $url = TunnelUrl $port
   if ($url) { Say "tunnel URL: $url" } else { $url = '<the https URL in the tunnel window>'; Say 'tunnel URL: read it in the tunnel window' }
   if (-not $saved) {
