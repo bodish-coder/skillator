@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout, redirect_stderr
+from unittest import mock
 
 from _load import load
 
@@ -86,6 +87,51 @@ class Sweep(unittest.TestCase):
         self.assertIn("Clean", buf.getvalue())
         with redirect_stderr(io.StringIO()):
             self.assertEqual(sweep.main([clean]), 2)
+
+    def test_invalid_or_inaccessible_roots_and_unreadable_files_fail(self):
+        missing = os.path.join(self.root, "does-not-exist")
+        file_target = put(self.root, "single.txt", "clean text\n")
+
+        with self.assertRaises(FileNotFoundError):
+            sweep.sweep(missing, avoid=["Calendly"])
+        with self.assertRaises(NotADirectoryError):
+            sweep.sweep(file_target, avoid=["Calendly"])
+
+        for bad_target in (missing, file_target):
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                self.assertEqual(sweep.main([bad_target, "--avoid", "Calendly"]), 2)
+            self.assertNotIn("Clean", out.getvalue())
+            self.assertIn("incomplete", err.getvalue().lower())
+
+        clean = tempfile.mkdtemp(dir=self.root)
+        secret = put(clean, "src/secret.ts", "export const ok = 1\n")
+
+        def walk_with_error(top, onerror=None, **kw):
+            if onerror is not None:
+                onerror(PermissionError(13, "Permission denied", os.path.join(top, "locked")))
+            return iter(())
+
+        with mock.patch.object(sweep.os, "walk", side_effect=walk_with_error):
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(sweep.main([clean, "--avoid", "Calendly"]), 2)
+            self.assertNotIn("Clean", out.getvalue())
+            self.assertIn("Incomplete sweep", out.getvalue())
+
+        real_open = open
+
+        def deny_secret(path, *args, **kwargs):
+            if os.path.abspath(path) == os.path.abspath(secret):
+                raise PermissionError(13, "Permission denied", path)
+            return real_open(path, *args, **kwargs)
+
+        with mock.patch("builtins.open", side_effect=deny_secret):
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(sweep.main([clean, "--avoid", "Calendly"]), 2)
+            self.assertNotIn("Clean", out.getvalue())
+            self.assertIn("Incomplete sweep", out.getvalue())
 
 
 if __name__ == "__main__":

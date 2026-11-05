@@ -67,11 +67,8 @@ def build_patterns(avoid, domains):
 def is_binary(path):
     if os.path.splitext(path)[1].lower() in BINARY_EXT:
         return True
-    try:
-        with open(path, "rb") as fh:
-            return b"\0" in fh.read(4096)
-    except OSError:
-        return True
+    with open(path, "rb") as fh:
+        return b"\0" in fh.read(4096)
 
 
 def sweep(root, avoid=(), domains=(), colors=(), include_planning=False, max_size=2_000_000):
@@ -79,7 +76,18 @@ def sweep(root, avoid=(), domains=(), colors=(), include_planning=False, max_siz
     cols = {norm_hex(c) for c in colors if HEX.fullmatch(c.strip())}
     hits = []
     root = os.path.abspath(root)
-    for dirpath, dirnames, filenames in os.walk(root):
+    if not os.path.exists(root):
+        raise FileNotFoundError("no such directory: %s" % root)
+    if not os.path.isdir(root):
+        raise NotADirectoryError("not a directory: %s" % root)
+
+    def on_walk_error(exc):
+        bad = getattr(exc, "filename", None) or root
+        rel = os.path.relpath(bad, root) if os.path.isabs(bad) else bad
+        hits.append({"file": os.path.normpath(rel), "line": 0, "kind": "error",
+                     "match": "unreadable", "text": exc.strerror or str(exc)})
+
+    for dirpath, dirnames, filenames in os.walk(root, onerror=on_walk_error):
         rel_dir = os.path.relpath(dirpath, root)
         keep = []
         for d in dirnames:
@@ -104,12 +112,16 @@ def sweep(root, avoid=(), domains=(), colors=(), include_planning=False, max_siz
                 if kind == "name" and rx.search(fn):
                     hits.append({"file": rel, "line": 0, "kind": "path", "match": label,
                                  "text": "file name"})
+            if os.path.splitext(fn)[1].lower() in BINARY_EXT:
+                continue
             try:
                 if os.path.getsize(path) > max_size or is_binary(path):
                     continue
                 with open(path, encoding="utf-8", errors="replace") as fh:
                     lines = fh.readlines()
-            except OSError:
+            except OSError as exc:
+                hits.append({"file": rel, "line": 0, "kind": "error",
+                             "match": "unreadable", "text": exc.strerror or str(exc)})
                 continue
             for i, line in enumerate(lines, 1):
                 for kind, label, rx in pats:
@@ -136,8 +148,13 @@ def render(hits):
         loc = h["file"] if not h["line"] else "%s:%d" % (h["file"], h["line"])
         out.append("%-7s %-18s %s  %s" % (h["kind"], h["match"][:18], loc, h["text"]))
     out.append("")
-    out.append("%d hits (%s). Replace every one before you launch."
-               % (len(hits), ", ".join("%s %d" % kv for kv in sorted(by_kind.items()))))
+    summary = ", ".join("%s %d" % kv for kv in sorted(by_kind.items()))
+    if "error" in by_kind:
+        out.append("Incomplete sweep: %d hits (%s). Fix unreadable paths and re-run before you launch."
+                   % (len(hits), summary))
+    else:
+        out.append("%d hits (%s). Replace every one before you launch."
+                   % (len(hits), summary))
     return "\n".join(out)
 
 
@@ -168,8 +185,14 @@ def main(argv=None):
         print("sweep: nothing to look for. Pass --avoid with the original app's name.",
               file=sys.stderr)
         return 2
-    hits = sweep(args.root, avoid, domains, colors, args.include_planning)
+    try:
+        hits = sweep(args.root, avoid, domains, colors, args.include_planning)
+    except OSError as exc:
+        print("sweep: incomplete sweep: %s" % exc, file=sys.stderr)
+        return 2
     print(json.dumps(hits, indent=2) if args.json else render(hits))
+    if any(h["kind"] == "error" for h in hits):
+        return 2
     return 1 if hits else 0
 
 

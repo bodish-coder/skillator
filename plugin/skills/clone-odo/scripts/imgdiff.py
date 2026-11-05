@@ -323,6 +323,10 @@ def compare(img_a, img_b, mode="layout", width=480, cols=12, tolerance=24,
         report["platform"], report["orientation_mismatch"] = platform_report(
             platform, img_a, img_b)
 
+    cell = max(1, w // cols)
+    n_rows = max(1, int(math.ceil(h / float(cell))))
+    flags = [[False] * cols for _ in range(n_rows)]
+
     if mode == "pixel":
         changed = 0
         flags_px = []
@@ -341,30 +345,23 @@ def compare(img_a, img_b, mode="layout", width=480, cols=12, tolerance=24,
         score = 100.0 * (1 - changed / float(total))
         report["changed_pixels"] = changed
         # Summarise pixel hits as grid regions so the report stays readable.
-        cell = max(1, w // cols)
-        n_rows = int(math.ceil(h / float(cell)))
-        flags = [[False] * cols for _ in range(n_rows)]
         for r in range(n_rows):
+            y0, y1 = (r * h) // n_rows, ((r + 1) * h) // n_rows
             for c in range(cols):
-                hits = 0
-                area = 0
-                for y in range(r * cell, min(h, (r + 1) * cell)):
-                    row = flags_px[y]
-                    for x in range(c * cell, min(w, (c + 1) * cell)):
-                        area += 1
-                        hits += row[x]
-                flags[r][c] = area > 0 and hits / float(area) > 0.02
+                x0, x1 = (c * w) // cols, ((c + 1) * w) // cols
+                area = (y1 - y0) * (x1 - x0)
+                if area <= 0:
+                    continue
+                hits = sum(sum(flags_px[y][x0:x1]) for y in range(y0, y1))
+                flags[r][c] = hits / float(area) > 0.02
     else:
         ea = edges(ga, edge_threshold)
         eb = edges(gray(rb), edge_threshold)
-        cell = max(1, w // cols)
-        n_rows = int(math.ceil(h / float(cell)))
-        flags = [[False] * cols for _ in range(n_rows)]
         sims = []
         for r in range(n_rows):
+            y0, y1 = (r * h) // n_rows, ((r + 1) * h) // n_rows
             for c in range(cols):
-                y0, y1 = r * cell, min(h, (r + 1) * cell)
-                x0, x1 = c * cell, min(w, (c + 1) * cell)
+                x0, x1 = (c * w) // cols, ((c + 1) * w) // cols
                 area = (y1 - y0) * (x1 - x0)
                 if area <= 0:
                     continue
@@ -385,12 +382,14 @@ def compare(img_a, img_b, mode="layout", width=480, cols=12, tolerance=24,
 
     regions = []
     for r0, c0, r1, c1, n in _regions(flags, len(flags), cols):
-        x = int(c0 * cell * to_orig)
-        y = int(r0 * cell * to_orig)
+        x0, x1 = (c0 * w) // cols, ((c1 + 1) * w) // cols
+        y0, y1 = (r0 * h) // n_rows, ((r1 + 1) * h) // n_rows
+        x = int(x0 * to_orig)
+        y = int(y0 * to_orig)
         regions.append({
             "x": x, "y": y,
-            "w": min(wa - x, int((c1 - c0 + 1) * cell * to_orig)),
-            "h": min(ha - y, int((r1 - r0 + 1) * cell * to_orig)),
+            "w": min(wa - x, int((x1 - x0) * to_orig)),
+            "h": min(ha - y, int((y1 - y0) * to_orig)),
             "cells": n,
             "where": _where(r0, c0, r1, c1, len(flags), cols),
         })

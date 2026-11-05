@@ -217,6 +217,49 @@ class Compare(unittest.TestCase):
         self.assertEqual(imgdiff.render_text(rep, "a", "b"),
                          "  a vs b\n  LAYOUT ########################  100.0  MATCHES\n  no differing regions")
 
+    def test_nondivisible_width_and_height_right_and_bottom_edges(self):
+        w, h = 101, 101
+        base = (w, h, canvas(w, h))
+        right_rows = canvas(w, h)
+        rect(right_rows, 98, 10, 3, 40, (20, 20, 20))
+        right_img = (w, h, right_rows)
+
+        bottom_rows = canvas(w, h)
+        rect(bottom_rows, 10, 98, 40, 3, (20, 20, 20))
+        bottom_img = (w, h, bottom_rows)
+
+        with tempfile.TemporaryDirectory() as d:
+            p_base = os.path.join(d, "base.png")
+            p_right = os.path.join(d, "right.png")
+            p_bottom = os.path.join(d, "bottom.png")
+            imgdiff.write_png(p_base, *base)
+            imgdiff.write_png(p_right, *right_img)
+            imgdiff.write_png(p_bottom, *bottom_img)
+
+            for label, other_path, edge_word, coord_key in (
+                ("right", p_right, "right", "x"),
+                ("bottom", p_bottom, "bottom", "y"),
+            ):
+                with self.subTest(edge=label):
+                    buf = io.StringIO()
+                    with redirect_stdout(buf):
+                        self.assertEqual(imgdiff.main([p_base, other_path, "--json"]), 0)
+                    layout_rep = json.loads(buf.getvalue())
+                    self.assertLess(layout_rep["score"], 100.0)
+                    self.assertTrue(layout_rep["regions"])
+                    self.assertIn(edge_word, layout_rep["regions"][0]["where"])
+                    span_key = "w" if coord_key == "x" else "h"
+                    self.assertEqual(layout_rep["regions"][0][coord_key] + layout_rep["regions"][0][span_key], 101)
+
+                    buf = io.StringIO()
+                    with redirect_stdout(buf):
+                        self.assertEqual(imgdiff.main([p_base, other_path, "--mode", "pixel", "--json"]), 0)
+                    px_rep = json.loads(buf.getvalue())
+                    self.assertEqual(px_rep["changed_pixels"], 120)
+                    self.assertEqual(px_rep["score"], round(100.0 * (1 - 120 / float(w * h)), 1))
+                    self.assertTrue(px_rep["regions"])
+                    self.assertIn(edge_word, px_rep["regions"][0]["where"])
+
 
 class Cli(unittest.TestCase):
     def test_json_out_and_fail_under(self):

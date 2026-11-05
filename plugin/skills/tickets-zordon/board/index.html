@@ -554,15 +554,16 @@ function parse(text) {
     const st = m[2];
     let rest = m[3];
 
-    /* `ID — title`, tolerating em dash, en dash, or a spaced hyphen. */
-    const idm = rest.match(/^([A-Za-z]{1,3}\d+[a-z]?)\s*(?:[—–]|-)\s+(.*)$/);
+    /* `ID — title`, tolerating optional `(was OLD)` alias, em dash, en dash, or a spaced hyphen. */
+    const idm = rest.match(/^([A-Za-z]{1,3}\d+[a-z]?)(?:\s+(\(was\s+[A-Za-z]{1,3}\d+[a-z]?\)))?\s*(?:[—–]|-)\s+(.*)$/);
     if (!idm) { errs.push({ line: i + 1, raw }); continue; }
 
-    const id = idm[1].toUpperCase();
+    const id = idm[1].replace(/^[A-Za-z]+/, p => p.toUpperCase());
+    const alias = idm[2] ? idm[2].replace(/\b([A-Za-z]+)(?=\d+[a-z]?\)$)/, p => p.toUpperCase()) : "";
     /* F43/F45: `[app: ..] [decide: @x] [owner: @x] [by: @y]` tags come off the title and draw
        as chips; a line without them parses exactly as before. */
     const tags = [];
-    let title = idm[2].replace(/\s*\[(app|decide|owner|by):\s*([^\]]*)\]/g,
+    let title = idm[3].replace(/\s*\[(app|decide|owner|by):\s*([^\]]*)\]/g,
       (_, k, v) => { tags.push([k, v.trim()]); return ""; }).trim();
 
     /* A trailing parenthetical is a reason only when it names one. Everything
@@ -573,8 +574,9 @@ function parse(text) {
       why = par[1].trim();
       title = title.slice(0, par.index).trim();
     }
+    if (alias) title = title ? `${alias} ${title}` : alias;
 
-    const pm = id.match(/^([A-Za-z]+)(\d+)([a-z]?)$/);
+    const pm = id.match(/^([A-Z]+)(\d+)([a-z]?)$/);
     out.push({
       id, st, title, why, tags,
       prefix: pm ? pm[1] : "?",

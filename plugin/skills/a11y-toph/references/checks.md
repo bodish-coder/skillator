@@ -198,24 +198,33 @@ results and "3 of 40 loaded" are `role="status"` (polite).
 
 Do not eyeball, do not trust tokens, do not trust the design file. Pull the
 computed colours off the rendered element and **resolve alpha and translucency**
-by compositing over the nearest opaque ancestor — a `rgba(0,0,0,.55)` label over
-a tinted card is the pair that quietly fails.
+by compositing every translucent background layer from back to front over the
+nearest opaque ancestor — a `rgba(0,0,0,.55)` label over a tinted card is the
+pair that quietly fails. Non-RGB colour functions (`oklch`, `lab`, `color()`)
+and `background-image` layers stay `unverified` rather than passing.
 
 ```js
 const lum = ([r,g,b]) => { const s=[r,g,b].map(v=>v/255).map(v=>v<=0.03928?v/12.92:((v+0.055)/1.055)**2.4)
   return 0.2126*s[0]+0.7152*s[1]+0.0722*s[2] }
 const ratio = (a,b) => { const [x,y]=[lum(a),lum(b)].sort((p,q)=>q-p); return (x+0.05)/(y+0.05) }
-const parse = c => (c.match(/[\d.]+/g)||[0,0,0,1]).map(Number)          // [r,g,b,a?]
+const parse = c => { if (c?.trim?.() === 'transparent') return [0,0,0,0]
+  if (!/^\s*rgba?\([^)%]*\)\s*$/i.test(c||'')) return null
+  const v = (c.match(/[\d.]+/g)||[]).map(Number)
+  return v.length >= 3 && v.length <= 4 && (v[3] ?? 1) <= 1 ? v : null } // [r,g,b,a?] | null
 const over = (fg, bg) => { const a = fg[3] ?? 1; return [0,1,2].map(i => fg[i]*a + bg[i]*(1-a)) }
-const bgOf = el => { for (let n = el; n; n = n.parentElement) {
-    const c = parse(getComputedStyle(n).backgroundColor)
-    if ((c[3] ?? 1) > 0.99) return c.slice(0,3) } return [255,255,255] }
-const check = el => { const s = getComputedStyle(el), bg = bgOf(el)
-  const px = parseFloat(s.fontSize), large = px >= 24 || (px >= 18.66 && +s.fontWeight >= 700)
+const bgOf = el => { const layers = []; for (let n = el; n; n = n.parentElement) {
+    const s = getComputedStyle(n); if (s.backgroundImage && s.backgroundImage !== 'none') return null
+    const c = parse(s.backgroundColor); if (!c) return null; const a = c[3] ?? 1
+    if (a > 0.99) return layers.reduceRight((bg, l) => over(l, bg), c.slice(0,3))
+    if (a > 0) layers.push(c) }
+  return layers.reduceRight((bg, l) => over(l, bg), [255,255,255]) }
+const check = el => { const s = getComputedStyle(el), fg = parse(s.color), bg = bgOf(el)
+  const px = parseFloat(s.fontSize), large = px >= 24 || (px >= 18.66 && +s.fontWeight >= 700), need = large ? 3 : 4.5
+  const r = fg && bg ? +ratio(over(fg, bg), bg).toFixed(2) : null
   return { el: el.tagName+'.'+el.className, text: el.innerText?.trim().slice(0,24),
-           ratio: +ratio(over(parse(s.color), bg), bg).toFixed(2), need: large ? 3 : 4.5 } }
+           ratio: r, need, status: r === null ? 'unverified' : r < need ? 'fail' : 'pass', unverified: r === null } }
 console.table([...document.querySelectorAll('body *')].filter(el => el.innerText?.trim() && el.children.length === 0)
-  .map(check).filter(r => r.ratio < r.need))
+  .map(check).filter(r => r.unverified || r.ratio < r.need))
 ```
 
 Then force the states the default render never shows and re-run `check`:
