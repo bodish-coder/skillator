@@ -1187,7 +1187,7 @@ function DoChainDispatch($n) {
     $r = $null; if ($ids.Count) { $r = TMeta (@('claim') + $ids) }
     if ($r -and $r.code -ne 0) {
       $om = OwnedMap $n
-      foreach ($t in $ids) { if ($om.ContainsKey($t)) { Refuse "stage ${n}: $t is owned by $($om[$t]) - a run takes only unassigned tickets and yours (ticket-meta pick); its owner or the lead reassigns it" } }
+      foreach ($tid in $ids) { if ($om.ContainsKey($tid)) { Refuse "stage ${n}: $tid is owned by $($om[$tid]) - a run takes only unassigned tickets and yours (ticket-meta pick); its owner or the lead reassigns it" } }
       foreach ($l in @($r.err -split "`r?`n" | Where-Object { $_ })) { [Console]::Error.WriteLine("note: claim refused - $l") }
     }
     $swt = ''; $sbr = ''; $rwt = HdrField $Run 'worktree'

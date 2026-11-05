@@ -8,7 +8,7 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 const templatesMdPath = resolve(here, 'templates.md');
 const skillMdPath = resolve(here, '../SKILL.md');
 
-function extractDeployScript(markdown) {
+export function extractDeployScript(markdown) {
   const sectionMatch = markdown.match(/## 3\.\s*`deploy\/deploy\.sh`([\s\S]*?)(?=---\s*|\n## [0-9]|$)/);
   assert.ok(sectionMatch, 'deploy.sh section should be found in templates.md');
   const codeBlockMatch = sectionMatch[1].match(/```bash\n([\s\S]*?)```/);
@@ -20,8 +20,10 @@ function extractDeployScript(markdown) {
  * Control-flow simulator for deploy.sh.
  * Models set -euo pipefail semantics with external command mock responses.
  */
-function runDeployControlFlow(scriptText, mocks = {}) {
+export function runDeployControlFlow(scriptText, mocks = {}) {
   const env = {
+    apiRunning: mocks.apiRunning ?? true,
+    backupOk: mocks.backupOk ?? true,
     nginxTestOk: mocks.nginxTestOk ?? true,
     nginxReloadOk: mocks.nginxReloadOk ?? true,
     certbotOk: mocks.certbotOk ?? true,
@@ -31,6 +33,7 @@ function runDeployControlFlow(scriptText, mocks = {}) {
 
   const logs = [];
   const errors = [];
+  const steps = [];
   let exitCode = 0;
   let maintenanceFlag = false;
 
@@ -42,6 +45,44 @@ function runDeployControlFlow(scriptText, mocks = {}) {
 
     // Skip empty lines or pure comments
     if (!line || line.startsWith('#')) {
+      continue;
+    }
+
+    // Pre-deploy backup gate block
+    if (line.includes('docker compose ps --status running -q api')) {
+      // Find matching fi
+      let endIdx = i;
+      while (endIdx < lines.length && lines[endIdx].trim() !== 'fi') {
+        endIdx++;
+      }
+      const blockText = lines.slice(i, endIdx + 1).join('\n');
+      i = endIdx;
+
+      if (env.apiRunning) {
+        steps.push('backup');
+        if (!env.backupOk) {
+          const dieM = blockText.match(/die\s+"([^"]+)"/);
+          errors.push(`die: ${dieM ? dieM[1] : 'pre-deploy backup failed'}`);
+          exitCode = 1;
+          break;
+        }
+        const okM = blockText.match(/ok\s+"([^"]+)"/);
+        if (okM) logs.push(`ok: ${okM[1]}`);
+      } else {
+        steps.push('backup-skipped-first-install');
+        const warnM = blockText.match(/warn\s+"([^"]+)"/);
+        if (warnM) errors.push(`warn: ${warnM[1]}`);
+      }
+      continue;
+    }
+
+    if (line.includes('npm run build')) {
+      steps.push('frontend-build');
+      continue;
+    }
+
+    if (line.includes('docker compose') && line.includes('up -d --build')) {
+      steps.push('compose-up-build');
       continue;
     }
 
@@ -181,6 +222,7 @@ function runDeployControlFlow(scriptText, mocks = {}) {
     exitCode,
     logs,
     errors,
+    steps,
     announcedLive,
     lastLog,
     maintenanceFlag,

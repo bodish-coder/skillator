@@ -1291,10 +1291,11 @@ selftest() {
   eq "assign-app explicit" "$(run assign-app F12 web, api)" "- [ ] F12 $D Bulk delete [app: web, api]"
   out=$(run assign-app F12 web, api)
   printf '%s' "$out" | grep -q 'no change' || { echo "FAIL: same assign-app did not say no change: $out"; fail=1; }
+  cp TICKETS.md "$T/before.md"
 
   sh "$self" assign F1 @nobody > /dev/null 2>&1 && { echo "FAIL: assign accepted an unknown handle"; fail=1; }
   cmp -s TICKETS.md "$T/before.md" || { echo "FAIL: refused assign changed the board"; fail=1; }
-  eq "assign F12" "$(run assign F12 @asha)" "- [ ] F12 $D Bulk delete [owner: @asha]"
+  eq "assign F12" "$(run assign F12 @asha)" "- [ ] F12 $D Bulk delete [app: web, api] [owner: @asha]"
   eq "F82: board write committed" "$(git log -1 --format=%s)" "board: assign F12"
   eq "F82: board left clean" "$(git status --porcelain -- TICKETS.md)" ""
   eq "assign F1" "$(run assign F1 asha)" "- [ ] F1 $D Dark mode [owner: @asha] (@cc-bbbbbb) warning: F1 was in progress under @cc-bbbbbb - its box left [~], the session tag stays; tell that session"
@@ -1304,7 +1305,7 @@ selftest() {
   eq "tag B2" "$(run tag B2)" "- [ ] B2 $D Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)"
   eq "tag F3 keeps hand app" "$(run tag F3)" "- [ ] F3 $D Hand tagged [app: web] (@cc-cccccc)"
   sh "$self" tag F9 > /dev/null 2>&1 && { echo "FAIL: tag accepted a missing ticket"; fail=1; }
-  printf '# TICKETS\n\n## Bugs\n\n- [ ] B2 %s Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)\n\n## Features\n\n- [ ] F1 %s Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)\n- [ ] F12 %s Bulk delete [owner: @asha]\n- [ ] F3 %s Hand tagged [app: web] (@cc-cccccc)\n' \
+  printf '# TICKETS\n\n## Bugs\n\n- [ ] B2 %s Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)\n\n## Features\n\n- [ ] F1 %s Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)\n- [ ] F12 %s Bulk delete [app: web, api] [owner: @asha]\n- [ ] F3 %s Hand tagged [app: web] (@cc-cccccc)\n' \
     "$D" "$D" "$D" "$D" > "$T/want.md"
   cmp -s TICKETS.md "$T/want.md" || { echo "FAIL: board bytes differ beyond the edited tags"; diff "$T/want.md" TICKETS.md; fail=1; }
 

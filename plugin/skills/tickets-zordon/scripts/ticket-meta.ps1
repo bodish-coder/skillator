@@ -727,7 +727,7 @@ function Do-AssignApp([string[]]$a) {
     if ($x -ne '' -and -not $tokens.Contains($x)) { [void]$tokens.Add($x) }
   }
   if ($tokens.Count -eq 0) { Fail 'usage: assign-app <ID> <app,...> - no apps given' }
-  $apps = [string]::Join(', ', $tokens)
+  $apps = [string]::Join(', ', $tokens.ToArray())
   return (Edit-Line $id @{ app = $apps; samekey = 'app'; sameval = $apps; owncheck = $false; requireleadassign = $false; cmd = 'assign-app' })
 }
 
@@ -1540,11 +1540,12 @@ function Invoke-Selftest {
     Eq 'assign-app explicit' (Run assign-app F12 web, api) "- [ ] F12 $dash Bulk delete [app: web, api]"
     $o = [string]::Join(' ', @(Run assign-app F12 web, api))
     if ($o -notmatch 'no change') { Write-Output "FAIL: same assign-app did not say no change: [$o]"; $script:fail = 1 }
+    $before = [System.IO.File]::ReadAllBytes("$M/TICKETS.md")
 
     if (-not (Refused assign F1 '@nobody')) { Write-Output 'FAIL: assign accepted an unknown handle'; $script:fail = 1 }
     $now = [System.IO.File]::ReadAllBytes("$M/TICKETS.md")
     if ([Convert]::ToBase64String($now) -ne [Convert]::ToBase64String($before)) { Write-Output 'FAIL: refused assign changed the board'; $script:fail = 1 }
-    Eq 'assign F12' (Run assign F12 '@asha') "- [ ] F12 $dash Bulk delete [owner: @asha]"
+    Eq 'assign F12' (Run assign F12 '@asha') "- [ ] F12 $dash Bulk delete [app: web, api] [owner: @asha]"
     Eq 'F82: board write committed' (& git log -1 --format=%s) 'board: assign F12'
     Eq 'F82: board left clean' (& git status --porcelain -- TICKETS.md) ''
     Eq 'assign F1' (Run assign F1 'asha') "- [ ] F1 $dash Dark mode [owner: @asha] (@cc-bbbbbb) warning: F1 was in progress under @cc-bbbbbb - its box left [~], the session tag stays; tell that session"
@@ -1555,7 +1556,7 @@ function Invoke-Selftest {
     Eq 'tag F3 keeps hand app' (Run tag F3) "- [ ] F3 $dash Hand tagged [app: web] (@cc-cccccc)"
     if (-not (Refused tag F9)) { Write-Output 'FAIL: tag accepted a missing ticket'; $script:fail = 1 }
     $want = "# TICKETS`n`n## Bugs`n`n- [ ] B2 $dash Button misaligned [app: ui] [by: ghost@x.com] (@cc-aaaaaa)`n`n## Features`n`n" +
-      "- [ ] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)`n- [ ] F12 $dash Bulk delete [owner: @asha]`n" +
+      "- [ ] F1 $dash Dark mode [app: ui, web] [owner: @vidul] [by: @vidul] (@cc-bbbbbb)`n- [ ] F12 $dash Bulk delete [app: web, api] [owner: @asha]`n" +
       "- [ ] F3 $dash Hand tagged [app: web] (@cc-cccccc)`n"
     $got = [System.IO.File]::ReadAllBytes("$M/TICKETS.md")
     if ([Convert]::ToBase64String($got) -ne [Convert]::ToBase64String($Utf8.GetBytes($want))) {

@@ -72,7 +72,10 @@ Never scaffold against a guessed subdomain.
 2. **Move the DB snapshot from `.githooks/pre-push` into `deploy.sh`.** With
    push and deploy separated, a pre-push hook fires at a moment that has nothing
    to do with production. Drop the hook; the pre-deploy snapshot inside the
-   script is now the guarantee.
+   script is now the guarantee — when the `api` container is already running, a
+   snapshot failure must `die` and abort before any rebuild or migration (only on
+   first install with no running `api` container is the snapshot skipped with an
+   explicit warning).
 3. Everything else — `deploy.sh`, nginx template, maintenance page, backup
    functions, health endpoint — stays byte-identical. Say so rather than
    rewriting working files.
@@ -173,6 +176,11 @@ delivering this skill, not an optional extra.
   broken app.
 - `docker compose ps` after `up` — a container not `running` is a failed deploy
   even when `up` returned 0.
+- **Pre-deploy DB snapshot is a strict gate on existing installs.** When `api` is
+  running (`docker compose ps --status running -q api`), `create_backup('pre-deploy')`
+  must succeed or `die` before any frontend build or `up --build`. Only on a first
+  install with no running `api` container is the snapshot skipped with an explicit
+  warning.
 - **Prune before `up --build`, never after.** Small VPS disks fill fast when a
   pip install dies mid-stream. Images belonging to running containers survive,
   so the live site keeps serving.

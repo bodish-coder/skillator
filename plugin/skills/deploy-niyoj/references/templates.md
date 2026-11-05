@@ -117,8 +117,14 @@ touch "$MAINT_FLAG"
 
 # 4. Snapshot the DB before anything rebuilds it
 say "Pre-deploy snapshot"
-docker compose exec -T api python -c \
-  "from app.db import create_backup; create_backup('pre-deploy')" || warn "snapshot skipped"
+if [ -n "$(docker compose ps --status running -q api 2>/dev/null)" ]; then
+  docker compose exec -T api python -c \
+    "from app.db import create_backup; create_backup('pre-deploy')" \
+    || die "pre-deploy backup failed — aborting before rebuild"
+  ok "Pre-deploy snapshot saved"
+else
+  warn "first install (no running api container) — pre-deploy snapshot skipped"
+fi
 
 # 5. Build frontend
 say "Building frontend"

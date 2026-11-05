@@ -765,3 +765,53 @@ test('fixture: /message-uhura @vidul <issue> writes a six-section message to @vi
   assert.match(inboxRun.stdout, /> 6 Ask/)
 })
 
+test('inbox --mark-read: marks only the 200 displayed messages; 201st stays unread for the next pass; empty/malformed preserve markers', () => {
+  const r = repo()
+  const runInbox = (...a) => spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'inbox', ...a], { encoding: 'utf8', cwd: r })
+
+  // Empty inbox leaves marker untouched
+  const empty0 = runInbox('--unread', '--mark-read')
+  assert.equal(empty0.status, 0)
+  assert.match(empty0.stdout, /no unread team messages/)
+  assert.equal(existsSync(join(box(r), READ)), false)
+
+  // 201 valid messages + 1 malformed line
+  const lines = Array.from({ length: 201 }, (_, i) =>
+    JSON.stringify({ ts: '2026-10-23T09:20:00.000Z', from: '@asha', email: 'asha@x.com', text: `body-${i}`, id: `m${i}` })
+  )
+  lines.splice(10, 0, 'not-json-at-all')
+  writeFileSync(join(box(r), INBOX), lines.join('\n') + '\n')
+
+  // First pass: frames oldest 200 (m0..m199), does not show body-200, marks m199
+  const pass1 = runInbox('--unread', '--mark-read')
+  assert.equal(pass1.status, 0, pass1.stderr)
+  assert.match(pass1.stdout, /> body-0\n/)
+  assert.match(pass1.stdout, /> body-199\n/)
+  assert.doesNotMatch(pass1.stdout, /body-200/)
+  assert.match(pass1.stdout, /1 more not shown - \/team-messages lists them/)
+  assert.match(pass1.stdout, /\(marked 200 read\)/)
+  assert.equal(readFileSync(join(box(r), READ), 'utf8').trim(), 'm199')
+
+  // Second pass with --unread --mark-read: shows the remaining 1 message (m200) and advances marker to m200
+  const pass2 = runInbox('--unread', '--mark-read')
+  assert.equal(pass2.status, 0, pass2.stderr)
+  assert.doesNotMatch(pass2.stdout, /body-199/)
+  assert.match(pass2.stdout, /> body-200\n/)
+  assert.match(pass2.stdout, /\(marked 1 read\)/)
+  assert.equal(readFileSync(join(box(r), READ), 'utf8').trim(), 'm200')
+
+  // Third pass with --unread --mark-read: no unread left, marker preserved at m200
+  const pass3 = runInbox('--unread', '--mark-read')
+  assert.equal(pass3.status, 0, pass3.stderr)
+  assert.match(pass3.stdout, /no unread team messages/)
+  assert.equal(readFileSync(join(box(r), READ), 'utf8').trim(), 'm200')
+
+  // Explicit `inbox mark-read` still marks all records up to the last one (m200)
+  writeFileSync(join(box(r), READ), 'm0\n')
+  const markAll = runInbox('mark-read')
+  assert.equal(markAll.status, 0, markAll.stderr)
+  assert.match(markAll.stdout, /read up to m200/)
+  assert.equal(readFileSync(join(box(r), READ), 'utf8').trim(), 'm200')
+})
+
+

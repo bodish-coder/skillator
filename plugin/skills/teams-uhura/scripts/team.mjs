@@ -35,7 +35,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve, isAbsolute } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { mainRoot, inboxDir, readInbox, after, readMarker, writeMarker, appendRecord, frameMessages, linesOf, HANDLE_RE, ID_RE, INBOX, READ, TEAM, IDS } from './inbox.mjs'
+import { mainRoot, inboxDir, readInbox, after, readMarker, writeMarker, appendRecord, frameMessages, cleanRecord, linesOf, HANDLE_RE, ID_RE, INBOX, READ, TEAM, IDS } from './inbox.mjs'
 
 export const BODY_MAX = 64 * 1024
 export const MSG_TEXT_MAX = 8000
@@ -554,8 +554,9 @@ async function cmdInbox(argv) {
   const recs = readInbox(box)
   const list = unread ? after(recs, readMarker(box, READ)) : recs
   if (!list.length) { out(unread ? 'no unread team messages' : 'no team messages'); return 0 }
+  const shown = list.map(cleanRecord).filter(Boolean).slice(0, 200)
   out(frameMessages(list, { max: 200 }))
-  if (mark) { writeMarker(box, READ, list.at(-1).id); out(`(marked ${list.length} read)`) }
+  if (mark && shown.length) { writeMarker(box, READ, shown.at(-1).id); out(`(marked ${shown.length} read)`) }
   return 0
 }
 
