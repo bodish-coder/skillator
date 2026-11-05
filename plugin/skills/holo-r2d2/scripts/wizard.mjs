@@ -191,7 +191,54 @@ export function checkSet(set) {
 export function nextWizardSet(set, ans) {
   checkSet(set);
   if (!ans || ans.schema !== ANSWER_SCHEMA || !Array.isArray(ans.answers)) throw new Error(`answers: schema must be "${ANSWER_SCHEMA}"`);
-  const round = (Number(set.round) || 1) + 1;
+  if (str(ans.set) !== str(set.id)) throw new Error(`answers: set "${str(ans.set)}" does not match active set "${set.id}"`);
+  if (ans.setSchema && ans.setSchema !== set.schema) throw new Error(`answers: setSchema "${ans.setSchema}" does not match active set schema "${set.schema}"`);
+  const activeRound = Number(set.round) || 1;
+  if (ans.round != null && (!Number.isFinite(ans.round) || ans.round !== activeRound)) {
+    throw new Error(`answers: round ${ans.round} does not match active round ${activeRound}`);
+  }
+  if (!ans.finalizedAt || typeof ans.finalizedAt !== "string" || !ans.finalizedAt.trim() || !ans.reviewed || ans.reviewed !== true || !str(ans.owner).trim() || ans.final === false) {
+    throw new Error("answers: a draft, not finalized and reviewed by its owner - cannot settle decisions");
+  }
+
+  const knownDecisions = new Map(set.decisions.map((d) => [d.id, d]));
+  const settledIds = new Set((set.settled || []).map((s) => s.id));
+  const seen = new Set();
+  for (const a of ans.answers) {
+    if (!a || typeof a !== "object") throw new Error("answers: an answer is not an object");
+    if (settledIds.has(a.id)) throw new Error(`answers: decision "${a.id}" is already settled in active set`);
+    if (!knownDecisions.has(a.id)) throw new Error(`answers: unknown decision id "${a && a.id}"`);
+    if (seen.has(a.id)) throw new Error(`answers: decision "${a.id}" answered twice`);
+    seen.add(a.id);
+    const d = knownDecisions.get(a.id);
+    if (a.question != null && str(a.question).trim() && str(a.question).trim() !== str(d.question).trim()) {
+      throw new Error(`answers: decision "${a.id}" question text does not match active set`);
+    }
+    if (a.choice != null) {
+      if (typeof a.choice !== "object" || Array.isArray(a.choice)) throw new Error(`answers: decision "${a.id}" choice must be an object`);
+      const rawCid = a.choice.id;
+      if (rawCid != null && typeof rawCid !== "string") throw new Error(`answers: decision "${a.id}" choice id must be text`);
+      const cid = str(rawCid);
+      const isExplain = cid === "defer" || cid === "explain";
+      const isCustom = cid === "custom";
+      if (cid && !isExplain && !isCustom) {
+        const picked = d.options.find((o) => o.id === cid);
+        if (!picked) throw new Error(`answers: decision "${a.id}" has unknown option id "${cid}"`);
+        if (a.choice.label != null && str(a.choice.label).trim() && str(a.choice.label).trim() !== str(picked.label).trim()) {
+          throw new Error(`answers: decision "${a.id}" option "${cid}" label does not match active set`);
+        }
+      }
+    }
+    if (a.options != null && Array.isArray(a.options)) {
+      for (const opt of a.options) {
+        if (opt && opt.id && !d.options.some((o) => o.id === opt.id)) {
+          throw new Error(`answers: decision "${a.id}" option list does not match active set`);
+        }
+      }
+    }
+  }
+
+  const round = activeRound + 1;
   const byId = new Map(ans.answers.map((a) => [a && a.id, a]));
   const decisions = [], settled = [...(set.settled || [])];
   for (const d of set.decisions) {
@@ -961,6 +1008,7 @@ function review() {
 function exportObj(final) {
   return {
     schema: SCHEMA, set: SET.id, setSchema: SET.schema, title: SET.title || SET.id, source: SET.source || "",
+    round: Number(SET.round) || 1,
     exportedAt: new Date().toISOString(), finalizedAt: final ? st.finalizedAt : null, final: !!final,
     owner: st.owner, reviewed: final ? st.reviewed : false,
     answers: SET.decisions.map(d => {
