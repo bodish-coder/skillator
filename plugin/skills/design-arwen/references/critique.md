@@ -5,23 +5,53 @@ Prereq: SKILL.md Phase 0 (platform + register, so you judge against the right ba
 scale test and slop test when the target is product UI. See it rendered first
 ([verify.md](verify.md)); a critique written from source is a guess.
 
+Derived in part from `anthropics/knowledge-work-plugins` (`design/skills/design-critique/SKILL.md`)
+under the Apache-2.0 License.
+
 **Write no code in this mode.** Not "here's a quick fix", not a patch at the end. The
 deliverable is a ranked, evidenced list the user can act on or hand to `improve` /
 `redesign`. Offering to implement afterwards is fine; doing it unasked is not.
 
 ---
 
-## 1. See the real thing
+## 1. Stage & Evidence Context
+
+Before running the checklist, explicitly declare the **design stage** and **evidence mode** on the first lines of the critique.
+
+### Design Stages
+
+Critique calibrates to the maturity of the work:
+- **Exploration stage:** Early concepts, layout directions, and core flows. Feedback focuses on macro layout, user flow, and information architecture. Do not flag unselected tokens, missing edge-case states, or placeholder copy that hasn't been designed yet.
+- **Refinement stage:** Mid-stage UI design. Feedback focuses on visual hierarchy, layout consistency, typography scale, spacing rhythm, and component states.
+- **Implementation stage:** Final production code or runnable interface. Feedback focuses on exact token usage, responsive breakpoints (320px / tablet / desktop), verified accessibility, and rendering performance.
+
+### Evidence Classification & Scenarios
+
+Distinguish supplied mockup critique from verified live-interface findings:
+
+- **Screenshot-only scenario:** Critiquing from static image(s).
+  - *Evidence limits:* Must explicitly label evidence limits (e.g. `Evidence limits: static visual evidence only; interactive states, DOM semantics, keyboard navigation, focus indicators, screen reader accessibility, and runtime performance cannot be measured`).
+  - *No-invention rule:* **Never invent** interaction behavior, performance measurements (no fabricated LCP, FID, CLS, or millisecond load times), or accessibility measurements (no fabricated screen reader announcements or focus trap confirmations). State what is visible in the pixels only.
+- **Figma-unavailable scenario:** When a Figma URL is supplied but inaccessible, or only static previews/partial exports are viewable.
+  - *Evidence limits:* Explicitly state that Figma design tokens, component variants, and layer specs are unavailable. Critique what is present in the fallback artifact only.
+  - *No-invention rule:* Do not invent token names, component properties, unverified hover/active interactions, or performance metrics.
+- **Live-implementation scenario:** Runnable app, dev server, or browser session.
+  - *Evidence limits:* State the exact viewport, environment, and whether DOM/accessibility trees were inspected.
+  - *Verification:* Contrast on real computed pairs, focus visibility, keyboard traps, and responsive reflow at 320px / tablet / desktop. Measured numbers only if you actually measured.
+
+---
+
+## 2. See the real thing
 
 Screenshot every in-scope surface (drive the browser, run the screen) and read the actual
 code for the ones you'll cite. A critique of a described interface is worthless. If you
-cannot render it, say so and critique the code only — labelled as such.
+cannot render it, say so and critique the code only — labelled as such with explicit evidence limits.
 
 Capture both themes if both ship, and at least 320px / tablet / desktop widths.
 
 ---
 
-## 2. Judge against the register, not your taste
+## 3. Judge against the register, not your taste
 
 - **Product register:** the bar is trust and fluency. "Would someone fluent in
   Linear/Figma/Notion/Stripe trust this, or pause at every subtly-off component?"
@@ -34,7 +64,7 @@ Say which bar you're using in the first line.
 
 ---
 
-## 3. Run the checklist
+## 4. Run the checklist
 
 In this order — the top of the list is where the real damage lives:
 
@@ -53,7 +83,7 @@ In this order — the top of the list is where the real damage lives:
 5. **Distinctiveness** — the shared anti-slop floor's bans (`anti-slop.md`, cited from
    SKILL.md's ship gate) plus arwen's three, the content/copy tells, and the signature test
    (cover the logo: is it still this product?). The two-altitude category-reflex check
-   applies **in the brand register only** — per §2 above, a conventional product surface is
+   applies **in the brand register only** — per §3 above, a conventional product surface is
    not a finding, so in the product register judge whether one systematic UX device is
    present and consistent, never whether the category is guessable.
 6. **Performance as perceived quality** — obvious LCP/CLS offenders. Measured numbers only
@@ -61,7 +91,7 @@ In this order — the top of the list is where the real damage lives:
 
 ---
 
-## 4. Report
+## 5. Report
 
 One finding per line. Ranked by severity, most damaging first. Each finding carries:
 
