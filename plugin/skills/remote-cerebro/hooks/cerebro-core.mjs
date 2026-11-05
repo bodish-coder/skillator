@@ -11,6 +11,7 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { spawnSync, execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { StringDecoder } from "node:string_decoder";
 
 export const IS_WIN = process.platform === "win32";
 // Case-insensitive filesystems by default: NTFS and APFS/HFS+ (gemini's
@@ -689,9 +690,11 @@ export function checkCredsFile(file, { user = os.userInfo().username, icacls = n
 
 /** JSONL on \n only (pi rpc.md: readline is non-compliant, it splits on U+2028). */
 export function lineSplitter(onLine) {
+  const decoder = new StringDecoder("utf8");
   let buf = "";
-  return (chunk) => {
-    buf += chunk.toString("utf8");
+  const feed = (chunk) => {
+    if (chunk == null) { feed.flush(); return; }
+    buf += typeof chunk === "string" ? chunk : decoder.write(chunk);
     let i;
     while ((i = buf.indexOf("\n")) >= 0) {
       let line = buf.slice(0, i); buf = buf.slice(i + 1);
@@ -699,6 +702,25 @@ export function lineSplitter(onLine) {
       if (line.trim()) onLine(line);
     }
   };
+  feed.flush = () => {
+    buf += decoder.end();
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      let line = buf.slice(0, i); buf = buf.slice(i + 1);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      if (line.trim()) onLine(line);
+    }
+    if (buf.length > 0) {
+      let line = buf; buf = "";
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      if (line.trim()) onLine(line);
+    }
+  };
+  feed.end = (chunk) => {
+    if (chunk != null) feed(chunk);
+    feed.flush();
+  };
+  return feed;
 }
 
 // --------------------------------------------------------------- the gemini policy --
