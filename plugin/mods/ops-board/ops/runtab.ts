@@ -125,14 +125,14 @@ export function runLines(s: State): { key: string; segs: Seg[] }[] {
   if (f) {
     const was = s.runFile?.entries.find(e => e.id === f.id)?.name ?? f.id   // the saved name, not the one being typed
     const head = f.mode === 'confirm' ? `Run ${was}?` : `Rename ${was}`
-    out.push({ key: 'title', segs: [{ text: '  ' + head, bold: true }, dim('  esc cancels')] }, { key: 'gap', segs: [] })
+    out.push({ key: 'title', segs: [{ text: '  ' + head, color: 'suggestion', bold: true }, dim('  esc cancels')] }, { key: 'gap', segs: [] })
     if (f.mode === 'confirm') {
       const p = planOf(s, f.id)
       if ('error' in p) out.push({ key: 'error', segs: [{ text: '  ' + p.error, color: 'error' }] })
-      else out.push({ key: 'command', segs: [dim('  Command  '), { text: argvText(p.argv) }] }, { key: 'cwd', segs: [dim('  In       '), { text: p.cwd }] },
+      else out.push({ key: 'command', segs: [{ text: '  Command  ', color: 'permission' }, { text: argvText(p.argv), color: 'suggestion' }] }, { key: 'cwd', segs: [{ text: '  In       ', color: 'permission' }, { text: p.cwd }] },
         { key: 'warn', segs: [{ text: '  This runs the repo\'s own code on this machine.', color: 'warning' }] })
     } else {
-      out.push({ key: 'name', segs: [dim('  Name  '), { text: f.name + '_' }] }, { key: 'runs', segs: [dim('  Runs  '), { text: `run-entries rename ${f.id} ${f.name.trim()}` }] })
+      out.push({ key: 'name', segs: [{ text: '  Name  ', color: 'permission' }, { text: f.name + '_', color: 'suggestion', bold: true }] }, { key: 'runs', segs: [{ text: '  Runs  ', color: 'permission' }, { text: `run-entries rename ${f.id} ${f.name.trim()}` }] })
     }
     if (f.result) out.push({ key: 'result', segs: [{ text: '  ' + f.result, color: 'error' }] })
     return out
@@ -148,7 +148,7 @@ export function runLines(s: State): { key: string; segs: Seg[] }[] {
       const busy = s.runJob && s.runJob.id === e.id && s.runJob.ended === null
       const body = ' ' + cut(e.name, nameW).padEnd(nameW)
       out.push({ key: 'row:' + e.id, segs: [{ text: isSel ? '› ' : '  ' }, { text: '●', color: busy ? 'warning' : e.missing ? 'error' : 'success' },
-        { text: body, inverse: isSel, dim: e.missing && !isSel }, dim(entryNote(e))] })
+        { text: body, color: e.missing ? undefined : 'suggestion', bold: !e.missing, inverse: isSel, dim: e.missing && !isSel }, { text: entryNote(e), color: 'permission' }] })
     }
   }
   const j = s.runJob

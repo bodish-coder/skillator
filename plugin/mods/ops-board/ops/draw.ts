@@ -24,9 +24,9 @@ import { runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
 
 export type Seg = BaseSeg & { action?: PointerAction }
-const hot = (text: string, name: string, shift = false): Seg => ({
+const hot = (text: string, name: string, shift = false, isDim = false): Seg => ({
   text: text.startsWith('[') && text.endsWith(']') ? text : `[${text}]`,
-  dim: true,
+  ...(isDim ? { dim: true } : { color: 'suggestion' as Color }),
   action: { kind: 'key', key: { name, shift } },
 })
 const actionLine = (line: Seg[], action: PointerAction): Seg[] => line.map(s => ({ ...s, action: s.action ?? action }))
@@ -150,16 +150,21 @@ function tabsLine(s: State): Seg[] {
   // F66: the unread count rides on the Messages label
   const unread = unreadCount(s.messages, s.msgRead)
   const label = (id: State['tab'], l: string) => (id === 'messages' && unread ? `${l} (${unread})` : l)
-  const tabs = join(TABS.map(([id, l]): Seg[] => actionLine([id === s.tab ? { text: label(id, l), inverse: true, bold: true }
-    : id === 'messages' && unread ? { text: label(id, l), color: 'suggestion' } : dim(l)], { kind: 'tab', tab: id })), '   ')
-  return spread([{ text: ' ' }, ...tabs], [dim(s.repo ? `ops · ${s.repo}` : 'ops')], s.cols)
+  const tabs = join(TABS.map(([id, l]): Seg[] => {
+    const full = label(id, l)
+    if (id === s.tab) return actionLine([{ text: full, inverse: true, bold: true }], { kind: 'tab', tab: id })
+    if (id === 'messages' && unread) return actionLine([{ text: full, color: 'suggestion', bold: true }], { kind: 'tab', tab: id })
+    return actionLine([{ text: full.slice(0, 2), color: 'suggestion' }, { text: full.slice(2) }], { kind: 'tab', tab: id })
+  }), '   ')
+  const right: Seg[] = s.repo ? [{ text: 'ops', color: 'permission', bold: true }, dim(' · '), { text: s.repo, color: 'suggestion' }] : [{ text: 'ops', color: 'permission', bold: true }]
+  return spread([{ text: ' ' }, ...tabs], right, s.cols)
 }
 
 // "7 open (6 pending · 1 in progress · 0 blocked · 0 decision) · 2 deferred", over the
 // tickets the filter shows; a filter in force says what it hides instead.
 function countLine(s: State, m: Model): Seg[] {
   if (!s.board || s.board.error) return []
-  if (m.filterActive) return [dim(m.count.text)]
+  if (m.filterActive) return [{ text: m.count.text, color: 'suggestion' }]
   const pool = visible(s.board, { ...s.filter, showDone: true }, s.me)
   const n = (b: Box) => pool.filter(t => t.box === b).length
   const open = n(' ') + n('~') + n('%') + n('!') + n('?')
@@ -169,23 +174,41 @@ function countLine(s: State, m: Model): Seg[] {
     + (n('>') ? ` · ${n('>')} deferred` : '')
   // Done shown: the closed count too when it fits (the Done and Cancelled heads carry it anyway).
   const closed = ` · ${n('x') + n('-')} closed`
-  return [dim(s.filter.showDone && n('x') + n('-') && cells(head + closed) <= s.cols ? head + closed : head)]
+  const withClosed = !!(s.filter.showDone && n('x') + n('-') && cells(head + closed) <= s.cols)
+  const segs: Seg[] = [
+    { text: `${open} open`, bold: true },
+    dim(' ('),
+    { text: `${n(' ')} pending` },
+    dim(' · '),
+    { text: `${n('~')} in progress`, color: n('~') ? 'warning' : undefined, dim: !n('~') },
+  ]
+  if (n('%')) segs.push(dim(' · '), { text: `${n('%')} testing`, color: 'suggestion' })
+  segs.push(
+    dim(' · '),
+    { text: `${n('!')} blocked`, color: n('!') ? 'error' : undefined, dim: !n('!') },
+    dim(' · '),
+    { text: `${n('?')} decision`, color: n('?') ? 'permission' : undefined, dim: !n('?') },
+    dim(')'),
+  )
+  if (n('>')) segs.push(dim(' · '), dim(`${n('>')} deferred`))
+  if (withClosed) segs.push(dim(' · '), { text: `${n('x') + n('-')} closed`, color: 'success' })
+  return segs
 }
 
 function keysOf(s: State, m: Model): Seg[][] {
   const h = (text: string, key: string) => [hot(text, key)]
   const move: Seg[] = [
-    { text: '[↑', dim: true, action: { kind: 'key', key: { name: 'up' } } },
-    { text: '↓ move]', dim: true, action: { kind: 'key', key: { name: 'down' } } },
+    { text: '[↑', color: 'suggestion', action: { kind: 'key', key: { name: 'up' } } },
+    { text: '↓ move]', color: 'suggestion', action: { kind: 'key', key: { name: 'down' } } },
   ]
   const cancel = h('esc cancel', 'escape'), quit = h('q quit', 'q')
   const field: Seg[] = [
-    { text: '[tab', dim: true, action: { kind: 'key', key: { name: 'tab' } } },
+    { text: '[tab', color: 'suggestion', action: { kind: 'key', key: { name: 'tab' } } },
     dim(' / '),
-    { text: 'shift-tab field]', dim: true, action: { kind: 'key', key: { name: 'tab', shift: true } } },
+    { text: 'shift-tab field]', color: 'suggestion', action: { kind: 'key', key: { name: 'tab', shift: true } } },
   ]
-  const helpRun: Seg[] = [{ text: '[r run]', dim: true, action: { kind: 'help-run' } }]
-  const helpCopy: Seg[] = [{ text: '[c copy ref]', dim: true, action: { kind: 'help-copy' } }]
+  const helpRun: Seg[] = [{ text: '[r run]', color: 'suggestion', action: { kind: 'help-run' } }]
+  const helpCopy: Seg[] = [{ text: '[c copy ref]', color: 'suggestion', action: { kind: 'help-copy' } }]
   if (s.help?.runPrompt !== null && s.help?.runPrompt !== undefined) return [[dim('[type args (optional)]')], h('enter confirm', 'return'), cancel]
   if (s.help?.filtering) return [[dim('type filter')], h('enter apply', 'return'), cancel]
   if (s.help?.expanded) return [move, h('enter/esc back', 'return'), helpRun, h('/ filter', '/'), helpCopy, cancel]
@@ -195,11 +218,11 @@ function keysOf(s: State, m: Model): Seg[][] {
   if (s.setup) return [field, h('space on/off', 'space'), h('enter activate/save', 'return'), cancel]
   if (s.person) return [field, h('enter add', 'return'), cancel]
   if (s.dialog) return s.dialogField === 'ticket' ? [[dim('type the ID')], h('tab person', 'tab'), h('enter confirm', 'return'), cancel]
-    : [[{ text: '[↑', dim: true, action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ person]', dim: true, action: { kind: 'key', key: { name: 'down' } } }], [{ text: '[a', dim: true, action: { kind: 'key', key: { name: 'a' } } }, dim(' / '), { text: 'd kind]', dim: true, action: { kind: 'key', key: { name: 'd' } } }], h('tab ticket', 'tab'), h('enter confirm', 'return'), cancel]
+    : [[{ text: '[↑', color: 'suggestion', action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ person]', color: 'suggestion', action: { kind: 'key', key: { name: 'down' } } }], [{ text: '[a', color: 'suggestion', action: { kind: 'key', key: { name: 'a' } } }, dim(' / '), { text: 'd kind]', color: 'suggestion', action: { kind: 'key', key: { name: 'd' } } }], h('tab ticket', 'tab'), h('enter confirm', 'return'), cancel]
   if (s.reconcile) return [move, h('space pick', 'space'), h('enter apply picked', 'return'), h('a accept all', 'a'), h('esc none', 'escape')]
   if (s.engage) return [h('enter engage', 'return'), cancel]
   if (s.startRun) return [field, h('space change', 'space'), h('enter confirm', 'return'), cancel]
-  if (s.filterField) return [[{ text: '[←', dim: true, action: { kind: 'key', key: { name: 'left' } } }, { text: '→ field]', dim: true, action: { kind: 'key', key: { name: 'right' } } }], [{ text: '[↑', dim: true, action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ value]', dim: true, action: { kind: 'key', key: { name: 'down' } } }], h('enter/esc leave', 'escape')]
+  if (s.filterField) return [[{ text: '[←', color: 'suggestion', action: { kind: 'key', key: { name: 'left' } } }, { text: '→ field]', color: 'suggestion', action: { kind: 'key', key: { name: 'right' } } }], [{ text: '[↑', color: 'suggestion', action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ value]', color: 'suggestion', action: { kind: 'key', key: { name: 'down' } } }], h('enter/esc leave', 'escape')]
   if (s.tab === 'run') {
     if (s.runForm?.mode === 'confirm') return [h('enter run', 'return'), h('n rename', 'n'), cancel]
     if (s.runForm) return [[dim('type the name')], h('enter save', 'return'), cancel]
@@ -301,10 +324,10 @@ const heldOf = (u: Usage | null) => {
 function bandSegs(s: State): Seg[][] {
   const { machine: m, usage: u, watch: w, now, cols } = s
   const red = w.level === 'red'
-  const right: Seg[] = m?.hold || red ? [hot('R resume', 'R')] : []
+  const right: Seg[] = m?.hold || red ? [hot('R resume', 'R', false, true)] : []
   const lead: Seg[] = m?.hold || red
     ? [{ text: `${red ? '■' : '▲'} HOLD ${m?.hold ? holdShort(m.hold) : w.reasons.join('; ')}`, color: red ? 'error' : 'warning' }]
-    : [{ text: '●', color: LEVEL_COLOR[w.level] }, { text: ' ops' }]
+    : [{ text: '●', color: LEVEL_COLOR[w.level] }, { text: ' ops', color: 'permission', bold: true }]
   const held = heldOf(u)
   const facts: Seg[][] = [
     [{ text: 'mem ' }, figSeg(m?.memFree, MEM, '')],
@@ -350,12 +373,18 @@ const GROUP_WORD: Record<Box, string> = {
 
 function filterLine(s: State): Seg[] {
   const f = s.filter, ff = s.filterField
-  const val = (field: State['filterField'] & string, text: string): Seg => ({ text, inverse: ff === field, action: { kind: 'filter-field', field } })
-  const left: Seg[] = [dim('filter  '), { text: 'app: ' }, val('app', f.app ?? 'all')]
+  const val = (field: State['filterField'] & string, text: string, active: boolean): Seg => ({
+    text,
+    color: active ? 'warning' : 'suggestion',
+    bold: active,
+    inverse: ff === field,
+    action: { kind: 'filter-field', field },
+  })
+  const left: Seg[] = [dim('filter  '), { text: 'app: ', color: 'permission' }, val('app', f.app ?? 'all', !!f.app)]
   if (s.team.length) {
-    left.push({ text: ' · who: ' }, val('who', f.mine ? 'me' : f.who ?? 'all'), { text: ' · mine: ' }, val('mine', f.mine ? 'on' : 'off'))
+    left.push(dim(' · '), { text: 'who: ', color: 'permission' }, val('who', f.mine ? 'me' : f.who ?? 'all', !!(f.mine || f.who)), dim(' · '), { text: 'mine: ', color: 'permission' }, val('mine', f.mine ? 'on' : 'off', !!f.mine))
   }
-  if (f.showDone) left.push({ text: ' · done: shown' })
+  if (f.showDone) left.push(dim(' · '), { text: 'done: ', color: 'permission' }, { text: 'shown', color: 'success' })
   return spread(left, [hot('f filter', 'f'), dim(' · '), hot(`x ${f.showDone ? 'hide' : 'show'} done`, 'x')], s.cols)
 }
 
@@ -377,6 +406,12 @@ function chipLine(t: Ticket): Seg[] {
 // The tag a row carries at its right: the session working it (only while [~] or [%] - A143
 // keeps the tag after the box moves on), else its owner or decider.
 const tagOf = (t: Ticket) => (t.box === '~' || t.box === '%' ? t.session : null) ?? t.owner ?? (t.decide ? 'decide ' + t.decide : null) ?? (t.tester ? 'test ' + t.tester : null)
+const tagColorOf = (tag: string | null): Color | undefined =>
+  !tag ? undefined
+  : tag.startsWith('decide ') ? 'permission'
+  : tag.startsWith('test ') ? 'success'
+  : /^@(cc|cx|cu|ag|pi|oc|ge|mu)-/.test(tag) ? 'warning'
+  : 'suggestion'
 
 // F61: groups as headers `  ▸ In progress (1)` (open: `▾`) in the state's colour, every one
 // collapsed at first; Enter on a header opens or closes it. The selected header or row is
@@ -411,12 +446,16 @@ function ticketLines(s: State, m: Model): Keyed[] {
       let tag = tagOf(t)
       let room = avail - 1 - idW - (tag ? cells(tag) + 2 : 0)
       if (tag && room < 12) { tag = null; room = avail - 1 - idW }
-      const body = ` ${t.id.padEnd(idW)}${cut(clean(t.title), Math.max(4, room))}`
+      const idStr = ` ${t.id.padEnd(idW)}`
+      const titleStr = cut(clean(t.title), Math.max(4, room))
+      const body = idStr + titleStr
       const tagText = tag ? ' '.repeat(Math.max(2, avail - cells(body) - cells(tag))) + tag : ''
       const dot: Seg = { text: '●', color: paint(t.box) }
+      const isDimRow = STATE_COLOR[t.box] === 'dim'
+      const idColor = isDimRow ? undefined : paint(t.box) ?? 'suggestion'
       out.push({ key: 'row:' + itemKey, segs: sel
         ? [{ text: lead }, dot, { text: (body + tagText).padEnd(Math.max(0, avail)), inverse: true }]
-        : [{ text: lead }, dot, { text: body, dim: STATE_COLOR[t.box] === 'dim' }, dim(tagText)] })
+        : [{ text: lead }, dot, { text: idStr, color: idColor, bold: !isDimRow, dim: isDimRow }, { text: titleStr, dim: isDimRow }, ...(tagText ? [{ text: tagText, color: isDimRow ? undefined : tagColorOf(tag), dim: isDimRow }] : [])] })
       if (s.expanded === itemKey || s.expanded === t.id) {
         if (chipsOf(t)) out.push({ key: 'chips:' + itemKey, segs: chipLine(t) })
         out.push({ key: 'raw:' + itemKey, segs: [dim(`      - [${t.box}] ${t.line}`)] })
@@ -439,12 +478,16 @@ function ticketLines(s: State, m: Model): Keyed[] {
       let tag = tagOf(t)
       let room = avail - 1 - idW - cells(tail) - (tag ? cells(tag) + 2 : 0)
       if (tag && room < 12) { tag = null; room = avail - 1 - idW - cells(tail) }
-      const body = ` ${t.id.padEnd(idW)}${cut(clean(t.title), Math.max(4, room))}${tail}`
+      const idStr = ` ${t.id.padEnd(idW)}`
+      const titleStr = `${cut(clean(t.title), Math.max(4, room))}${tail}`
+      const body = idStr + titleStr
       const tagText = tag ? ' '.repeat(Math.max(2, avail - cells(body) - cells(tag))) + tag : ''
       const dot: Seg = { text: '●', color: paint(t.box) }
+      const isDimRow = STATE_COLOR[t.box] === 'dim'
+      const idColor = isDimRow ? undefined : paint(t.box) ?? 'suggestion'
       out.push({ key: 'row:' + t.id, segs: sel
         ? [{ text: lead }, dot, { text: (body + tagText).padEnd(Math.max(0, avail)), inverse: true }]
-        : [{ text: lead }, dot, { text: body, dim: STATE_COLOR[t.box] === 'dim' }, dim(tagText)] })
+        : [{ text: lead }, dot, { text: idStr, color: idColor, bold: !isDimRow, dim: isDimRow }, { text: titleStr, dim: isDimRow }, ...(tagText ? [{ text: tagText, color: isDimRow ? undefined : tagColorOf(tag), dim: isDimRow }] : [])] })
       if (s.expanded === t.id) {
         if (chipsOf(t)) out.push({ key: 'chips:' + t.id, segs: chipLine(t) })
         out.push({ key: 'raw:' + t.id, segs: [dim(`      - [${t.box}] ${t.line}`)] })
@@ -458,12 +501,21 @@ function ticketLines(s: State, m: Model): Keyed[] {
 function teamLines(s: State): Seg[][] {
   const line = (hd: string, n: string, e: string, t: string) => `${hd.padEnd(9)}${n.padEnd(14)}${e.padEnd(22)}${t}`
   const n = s.team.length
-  const out: Seg[][] = [[{ text: 'Team', bold: true }, dim(`  .skillator/team.md · ${n} ${n === 1 ? 'person' : 'people'}${s.me ? ` · you: ${s.me}` : ''}`)]]
+  const out: Seg[][] = [[{ text: 'Team', color: 'suggestion', bold: true }, dim(`  .skillator/team.md · ${n} ${n === 1 ? 'person' : 'people'}${s.me ? ` · you: ${s.me}` : ''}`)]]
   if (!n) out.push([dim('  no .skillator/team.md yet - n adds the first person (ticket-meta creates the file)')])
   const sel = teamRow(s)
   for (const m of s.team) {
-    const text = line(m.handle + ' ', (m.name ?? '') + ' ', m.emails.join(', ') + ' ', ticketsOf(m, s.board, s.me))
-    out.push(actionLine(m.handle === sel ? [{ text: '› ' }, { text: text.padEnd(Math.max(0, s.cols - 2)), inverse: true }] : [{ text: '  ' + text }], { kind: 'row', area: 'team', id: m.handle }))
+    const hd = (m.handle + ' ').padEnd(9)
+    const nm = ((m.name ?? '') + ' ').padEnd(14)
+    const em = (m.emails.join(', ') + ' ').padEnd(22)
+    const tk = ticketsOf(m, s.board, s.me)
+    const text = line(m.handle + ' ', (m.name ?? '') + ' ', m.emails.join(', ') + ' ', tk)
+    out.push(actionLine(
+      m.handle === sel
+        ? [{ text: '› ' }, { text: text.padEnd(Math.max(0, s.cols - 2)), inverse: true }]
+        : [{ text: '  ' }, { text: hd, color: 'suggestion', bold: true }, { text: nm }, { text: em, color: 'permission' }, { text: tk, dim: true }],
+      { kind: 'row', area: 'team', id: m.handle }
+    ))
   }
   return out
 }
@@ -500,7 +552,7 @@ function runsBody(s: State, h: number): Seg[][] {
     const n = sec === 'runs' ? (s.runsRead || s.runs.length ? s.runs.length : null) : null
     const st = sec === 'runs' ? sectionStatus(s.runs.map(runStatus)) : null     // F76: the header's colour
     out.push({ key: hk, segs: [{ text: hk === sel ? '› ' : '  ' },
-      { text: sectionHead(sec, on, n), bold: true, inverse: hk === sel, color: st ? statusColor(st) : undefined }] })
+      { text: sectionHead(sec, on, n), bold: true, inverse: hk === sel, color: st ? statusColor(st) : 'permission' }] })
     if (!on) continue
     if (sec === 'workflows') out.push({ key: 'wf:none', segs: [dim('    not observable here - only the host that runs a workflow sees it')] })
     else out.push(...runRows(s, sel))
@@ -512,19 +564,23 @@ function runRows(s: State, sel: string): Keyed[] {
   if (!s.runs.length) return [{ key: 'none', segs: [dim('    ' + (s.runsRead ? 'no open runs - plan one with relay-morpheus (plan-runs)' : 'reading runs…'))] }]
   const idW = Math.max(...s.runs.map(r => r.id.length)) + 2
   const out: Keyed[] = s.runs.map((run: RunView): Keyed => {
-    const dot: Seg = { text: '●', color: statusColor(runStatus(run)) }   // F76: the Tickets tab's colours
+    const rCol = statusColor(runStatus(run))
+    const dot: Seg = { text: '●', color: rCol }   // F76: the Tickets tab's colours
     const right = modeOf(run) + ' · ' + (run.planned ? `planned · ${run.stages.length} stage${run.stages.length === 1 ? '' : 's'}` : `${run.done}/${run.total} done`)
     const isSel = run.id === sel
     const avail = s.cols - 3
-    const body = ` ${run.id.padEnd(idW)}${cut(clean(run.title), Math.max(4, avail - idW - 1 - right.length - 2))}`
+    const idStr = ` ${run.id.padEnd(idW)}`
+    const titleStr = cut(clean(run.title), Math.max(4, avail - idW - 1 - right.length - 2))
+    const body = idStr + titleStr
     const text = body + ' '.repeat(Math.max(2, avail - cells(body) - right.length)) + right
+    const fin = isFinished(run)
     return { key: 'row:' + run.id, segs: isSel
       ? [{ text: '› ' }, dot, { text: text.padEnd(avail), inverse: true }]
-      : [{ text: '  ' }, dot, { text: body, dim: isFinished(run) }, dim(text.slice(body.length))] }   // F99: a finished run dim whole
+      : [{ text: '  ' }, dot, { text: idStr, color: fin ? undefined : 'suggestion', bold: !fin, dim: fin }, { text: titleStr, dim: fin }, { text: text.slice(body.length), color: fin ? undefined : rCol, dim: fin }] }   // F99: a finished run dim whole
   })
   const ex = s.runs.find(r => r.id === s.runsExpanded)
   if (ex) {
-    out.push({ key: 'gap', segs: [] }, { key: 'stages', segs: [{ text: `  ${ex.id} stages`, bold: true }] })
+    out.push({ key: 'gap', segs: [] }, { key: 'stages', segs: [{ text: `  ${ex.id} stages`, color: 'suggestion', bold: true }] })
     if (!ex.stages.length) out.push({ key: 'none', segs: [dim('    no stages read yet')] })
     ex.stages.forEach(st => out.push({ key: 'st:' + st.n, segs: stageLine(st, ex.planned) }))
     for (const l of runLines(ex, s.board)) {
@@ -538,7 +594,7 @@ function runRows(s: State, sel: string): Keyed[] {
 // --- the Health tab, as the mock: Usage and Machine, a label column ---
 
 const BAR = 20
-const row = (label: string, value: Seg[]): Seg[] => [{ text: '  ' + label.padEnd(14) }, ...value]
+const row = (label: string, value: Seg[]): Seg[] => [{ text: '  ' + label.padEnd(14), color: label ? 'permission' : undefined }, ...value]
 
 function usageRow(label: string, w: Window | null, held: boolean, now: number): Seg[] {
   if (!w) return row(label, [dim('not observable here')])
@@ -592,20 +648,20 @@ function healthBody(s: State): Seg[][] {
   const u = s.usage
   const held = heldOf(u)
   const out: Seg[][] = [
-    [{ text: 'Usage'.padEnd(15), bold: true }, dim('from watch-cortana usage-watch level')],
+    [{ text: 'Usage'.padEnd(15), color: 'suggestion', bold: true }, dim('from watch-cortana usage-watch level')],
     usageRow('5-hour', u?.five ?? null, held.five, s.now),
     usageRow('7-day', u?.seven ?? null, held.seven, s.now),
     relayRow(u),
     row('Credit', [dim('not available')]),
   ]
-  if (u?.spendLimitPct !== null && u?.spendLimitPct !== undefined) out.push(row('Spend limit', [{ text: `${u.spendLimitPct}% used` }]))
-  if (u?.costUsd !== null && u?.costUsd !== undefined) out.push(row('Spent', [{ text: `$${u.costUsd.toFixed(2)} this session` }]))
-  out.push([], [{ text: 'Machine', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now))
+  if (u?.spendLimitPct !== null && u?.spendLimitPct !== undefined) out.push(row('Spend limit', [{ text: `${u.spendLimitPct}% used`, color: 'suggestion' }]))
+  if (u?.costUsd !== null && u?.costUsd !== undefined) out.push(row('Spent', [{ text: `$${u.costUsd.toFixed(2)} this session`, color: 'suggestion' }]))
+  out.push([], [{ text: 'Machine', color: 'suggestion', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now))
   const btnR = hot('r refresh', 'r')
   const btnRes = hot('R resume', 'R', true)
   const btnCli = hot('c resume CLI', 'c')
   const btnForce = hot('F force resume', 'F', true)
-  out.push([], [{ text: 'Actions', bold: true }])
+  out.push([], [{ text: 'Actions', color: 'suggestion', bold: true }])
   if (s.cols < 60) {
     out.push([dim('  '), btnR, dim('  '), btnRes], [dim('  '), btnCli, dim('  '), btnForce])
   } else {
@@ -624,12 +680,12 @@ function boxBody(s: State, b: Boxed): Seg[][] {
   const inner = innerOf(s)
   const pad = s.cols - inner - 2 >= 2 ? '  ' : ''
   const title = cut(clean(b.title), Math.max(1, inner - 4))
-  const out: Seg[][] = [[{ text: pad + '┌─ ' }, { text: title, bold: true }, { text: ' ' + '─'.repeat(Math.max(0, inner - cells(title) - 3)) + '┐' }]]
+  const out: Seg[][] = [[{ text: pad + '┌─ ', color: 'suggestion' }, { text: title, color: 'suggestion', bold: true }, { text: ' ' + '─'.repeat(Math.max(0, inner - cells(title) - 3)) + '┐', color: 'suggestion' }]]
   for (const r of b.rows) {
     const content = r.segs ? fitSegs(r.segs, inner) : fitSegs([{ text: r.text, color: r.color, action: r.action }], inner)
-    out.push([{ text: pad + '│' }, ...content, { text: ' '.repeat(Math.max(0, inner - width(content))) + '│' }])
+    out.push([{ text: pad + '│', color: 'suggestion' }, ...content, { text: ' '.repeat(Math.max(0, inner - width(content))) + '│', color: 'suggestion' }])
   }
-  out.push([{ text: pad + '└' + '─'.repeat(inner) + '┘' }])
+  out.push([{ text: pad + '└' + '─'.repeat(inner) + '┘', color: 'suggestion' }])
   return out
 }
 
@@ -751,24 +807,24 @@ function tailLines(s: State): Seg[][] {
 
 export function skillDocLines(sk: SkillGuide, inner: number, h?: State['help']): { text: string; segs?: Seg[] }[] {
   const lines: { text: string; segs?: Seg[] }[] = []
-  lines.push({ text: `Skill: ${sk.id} [${sk.category}]`, segs: [{ text: 'Skill: ', dim: true }, { text: sk.id, bold: true }, { text: `  [${sk.category}]`, color: 'suggestion' }] })
+  lines.push({ text: `Skill: ${sk.id} [${sk.category}]`, segs: [{ text: 'Skill: ', color: 'permission' }, { text: sk.id, color: 'suggestion', bold: true }, { text: `  [${sk.category}]`, color: 'warning' }] })
   if (sk.aliases.length) {
-    lines.push({ text: `Aliases: ${sk.aliases.join(', ')}`, segs: [{ text: 'Aliases: ', dim: true }, { text: sk.aliases.join(', ') }] })
+    lines.push({ text: `Aliases: ${sk.aliases.join(', ')}`, segs: [{ text: 'Aliases: ', color: 'permission' }, { text: sk.aliases.join(', '), color: 'suggestion' }] })
   }
-  lines.push({ text: `Summary: ${sk.summary}`, segs: [{ text: 'Summary: ', dim: true }, { text: sk.summary }] })
-  lines.push({ text: '─'.repeat(Math.max(4, Math.min(inner, 48))) })
-  lines.push({ text: 'Triggers (when to use):', segs: [{ text: 'Triggers:', bold: true }] })
+  lines.push({ text: `Summary: ${sk.summary}`, segs: [{ text: 'Summary: ', color: 'permission' }, { text: sk.summary }] })
+  lines.push({ text: '─'.repeat(Math.max(4, Math.min(inner, 48))), segs: [{ text: '─'.repeat(Math.max(4, Math.min(inner, 48))), color: 'suggestion' }] })
+  lines.push({ text: 'Triggers (when to use):', segs: [{ text: 'Triggers:', color: 'suggestion', bold: true }] })
   for (const tr of sk.triggers) {
-    lines.push({ text: `  • ${tr}`, segs: [{ text: '  • ', dim: true }, { text: tr }] })
+    lines.push({ text: `  • ${tr}`, segs: [{ text: '  • ', color: 'permission' }, { text: tr }] })
   }
   lines.push({ text: '' })
-  lines.push({ text: 'Usage Guide:', segs: [{ text: 'Usage Guide:', bold: true }] })
+  lines.push({ text: 'Usage Guide:', segs: [{ text: 'Usage Guide:', color: 'suggestion', bold: true }] })
   for (const u of sk.usage.split('\n')) {
     lines.push({ text: `  ${u}` })
   }
   if (sk.examples.length) {
     lines.push({ text: '' })
-    lines.push({ text: 'Examples & Invocations:', segs: [{ text: 'Examples & Invocations:', bold: true }] })
+    lines.push({ text: 'Examples & Invocations:', segs: [{ text: 'Examples & Invocations:', color: 'suggestion', bold: true }] })
     for (const ex of sk.examples) {
       lines.push({ text: `  ${ex}`, segs: [{ text: '  ', dim: true }, { text: ex, color: 'success' }] })
     }
@@ -776,7 +832,7 @@ export function skillDocLines(sk: SkillGuide, inner: number, h?: State['help']):
   if (h?.docContent) {
     lines.push({ text: '' })
     const label = h.docPath ?? `${sk.id}/SKILL.md`
-    lines.push({ text: `─── Installed SKILL.md (${label}) ───`, segs: [dim(`─── Installed SKILL.md (${label}) ───`)] })
+    lines.push({ text: `─── Installed SKILL.md (${label}) ───`, segs: [{ text: `─── Installed SKILL.md (${label}) ───`, color: 'permission' }] })
     for (const rawLine of h.docContent.split('\n')) {
       lines.push({ text: `  ${rawLine}` })
     }
@@ -790,7 +846,7 @@ export function skillDocLines(sk: SkillGuide, inner: number, h?: State['help']):
 export function helpBody(s: State, room: number): Seg[][] {
   const h = s.help ?? (s.tab === 'help' ? { selected: SKILLS[0]!.id, filter: '', filtering: false, expanded: false, scroll: 0 } : null)
   if (!h || room <= 0) return []
-  if (room <= 2) return [[{ text: 'Help & Skills Guide', bold: true }]]
+  if (room <= 2) return [[{ text: 'Help & Skills Guide', color: 'suggestion', bold: true }]]
   const inner = Math.max(4, s.cols <= 40 ? s.cols - 2 : Math.min(s.cols - 4, 116))
   const pad = s.cols - inner - 2 >= 2 ? '  ' : s.cols - inner - 2 >= 1 ? ' ' : ''
   const skills = filteredSkills(h.filter)
@@ -798,11 +854,11 @@ export function helpBody(s: State, room: number): Seg[][] {
 
   const topTitle = cut(h.expanded ? `Help · ${h.selected}` : `Help & Skills Guide (${skills.length} skills)`, Math.max(1, inner - 4))
   const topSegs: Seg[] = [
-    { text: pad + '┌─ ' },
-    { text: topTitle, bold: true },
-    { text: ' ' + '─'.repeat(Math.max(0, inner - cells(topTitle) - 3)) + '┐' },
+    { text: pad + '┌─ ', color: 'suggestion' },
+    { text: topTitle, color: 'suggestion', bold: true },
+    { text: ' ' + '─'.repeat(Math.max(0, inner - cells(topTitle) - 3)) + '┐', color: 'suggestion' },
   ]
-  const botSegs: Seg[] = [{ text: pad + '└' + '─'.repeat(inner) + '┘' }]
+  const botSegs: Seg[] = [{ text: pad + '└' + '─'.repeat(inner) + '┘', color: 'suggestion' }]
 
   const contentRows: { segs: Seg[] }[] = []
 
@@ -830,9 +886,9 @@ export function helpBody(s: State, room: number): Seg[][] {
       const windowed = doc.slice(scroll, scroll + docAvail)
       windowed.forEach((row, i) => {
         if (i === 0 && scroll > 0) {
-          contentRows.push({ segs: [dim(`▲ (${scroll} lines above)`)] })
+          contentRows.push({ segs: [{ text: `▲ (${scroll} lines above)`, color: 'warning' }] })
         } else if (i === windowed.length - 1 && scroll + docAvail < doc.length) {
-          contentRows.push({ segs: [dim(`▼ (${doc.length - scroll - docAvail} lines below · use ↑/↓ to scroll)`)] })
+          contentRows.push({ segs: [{ text: `▼ (${doc.length - scroll - docAvail} lines below · use ↑/↓ to scroll)`, color: 'warning' }] })
         } else {
           contentRows.push({ segs: row.segs ?? [{ text: row.text }] })
         }
@@ -847,7 +903,7 @@ export function helpBody(s: State, room: number): Seg[][] {
       : `Filter: all (${skills.length})`
     const hintText = h.filtering ? 'Enter apply · Esc cancel' : '/ filter · Enter doc'
     const filterSegs: Seg[] = spread(
-      [{ text: filterText, bold: h.filtering, color: h.filtering ? 'suggestion' : undefined, action: { kind: 'help-skill', id: h.selected } }],
+      [{ text: filterText, bold: true, color: h.filtering ? 'warning' : 'suggestion', action: { kind: 'help-skill', id: h.selected } }],
       [dim(hintText)],
       inner
     )
@@ -869,9 +925,10 @@ export function helpBody(s: State, room: number): Seg[][] {
         const rem = inner - cells(lead) - cells(meta)
         const summary = rem > 5 ? cut(sk.summary, rem) : ''
         const rowSegs: Seg[] = [
-          { text: lead, bold: isSel, inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
-          { text: catStr.padEnd(20), color: 'suggestion', inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
-          { text: (aliasStr.padEnd(10) + ' ' + summary).trimEnd(), dim: !isSel, inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+          { text: lead, color: 'suggestion', bold: true, inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+          { text: catStr.padEnd(20), color: 'permission', inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+          { text: aliasStr.padEnd(10) + ' ', color: 'warning', inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+          { text: summary.trimEnd(), inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
         ]
         contentRows.push({ segs: rowSegs })
       })
@@ -884,9 +941,9 @@ export function helpBody(s: State, room: number): Seg[][] {
     if (row) {
       const content = fitSegs(row.segs, inner)
       const w = width(content)
-      out.push([{ text: pad + '│' }, ...content, { text: ' '.repeat(Math.max(0, inner - w)) + '│' }])
+      out.push([{ text: pad + '│', color: 'suggestion' }, ...content, { text: ' '.repeat(Math.max(0, inner - w)) + '│', color: 'suggestion' }])
     } else {
-      out.push([{ text: pad + '│' + ' '.repeat(inner) + '│' }])
+      out.push([{ text: pad + '│' + ' '.repeat(inner) + '│', color: 'suggestion' }])
     }
   }
   out.push(botSegs)

@@ -478,6 +478,7 @@ export const register: Register = on => {
       await dropRunForm($)
       await dropEngage($)
       await dropAction($)
+      await update($, tabA, () => 'tickets')
       decidedLine = null
       void poll($, true).catch(() => {})
       void slowPoll($).catch(() => {})

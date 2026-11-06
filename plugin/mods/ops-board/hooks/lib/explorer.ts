@@ -1004,14 +1004,14 @@ export function explorerLines(x: Explorer, cols: number): ExLine[] {
     const on = item === sel
     out.push({ key: item, item, segs: [{ text: lead }, ...segs.map(s => (on ? { ...s, inverse: true } : s))] })
   }
-  const head = (item: string, title: string, n: number | null, tail = '') =>
-    line(item, '', [{ text: cut(`${x.open.includes(item) ? '▾' : '▸'} ${title}${n === null ? '' : ` (${n})`}`, cols - 1), bold: true },
-      ...(tail ? [{ text: tail, dim: true }] : [])])
+  const head = (item: string, title: string, n: number | null, tail = '', col: Color = 'suggestion') =>
+    line(item, '', [{ text: cut(`${x.open.includes(item) ? '▾' : '▸'} ${title}${n === null ? '' : ` (${n})`}`, cols - 1), color: col, bold: true },
+      ...(tail ? [{ text: tail, color: 'permission' as Color }] : [])])
   const commitRows = (pre: string, list: Commit[]) => {
     for (const c of list) {
       const glyph = x.open.includes(pre + c.sha) ? '▾' : '▸'
       const fixed = `${glyph} ${c.short}  ${c.date}  `
-      line(pre + c.sha, '  ', [{ text: `${glyph} ` }, { text: c.short, color: 'warning' }, { text: `  ${c.date}  `, dim: true },
+      line(pre + c.sha, '  ', [{ text: `${glyph} `, color: 'suggestion' }, { text: c.short, color: 'warning', bold: true }, { text: `  ${c.date}  `, color: 'permission' },
         { text: cut(c.subject, Math.max(4, cols - 3 - fixed.length)) }])
       const ch = x.changes[c.sha]
       if (!x.open.includes(pre + c.sha)) continue
@@ -1038,7 +1038,7 @@ export function explorerLines(x: Explorer, cols: number): ExLine[] {
     const stagedCount = x.worktree!.filter(f => f.staged !== null).length
     const unstagedCount = x.worktree!.filter(f => f.unstaged !== null).length
     const tail = `  staged ${stagedCount} · unstaged ${unstagedCount}`
-    head(CHANGES, 'Changes', x.worktree!.length, tail)
+    head(CHANGES, 'Changes', x.worktree!.length, tail, 'warning')
     if (x.open.includes(CHANGES)) {
       for (const f of x.worktree!) {
         const itemKey = xwItem(f.path)
@@ -1051,7 +1051,7 @@ export function explorerLines(x: Explorer, cols: number): ExLine[] {
         const displayName = f.from ? `${f.from} → ${f.path}` : f.path
         const room = Math.max(4, cols - 1 - 10 - warnIcon.length)
         const segs: Seg[] = [
-          { text: `${dot} [` },
+          { text: `${dot} [`, color: isStaged ? 'success' : 'warning' },
           { text: badge, color: badgeColor, bold: true },
           { text: '] ' },
           { text: cut(displayName, room) },
@@ -1063,27 +1063,27 @@ export function explorerLines(x: Explorer, cols: number): ExLine[] {
       }
     }
   }
-  head(FILES, 'Files', x.files)
+  head(FILES, 'Files', x.files, '', 'suggestion')
   if (x.open.includes(FILES)) {
     if (x.files === null) out.push({ key: 'xtree:none', item: null, segs: [{ text: '  reading git ls-files…', dim: true }] })
     else if (!x.files) out.push({ key: 'xtree:none', item: null, segs: [{ text: '  no tracked files', dim: true }] })
     for (const r of x.tree) {
       const lead = '  ' + '  '.repeat(r.depth)
-      if (r.dir) line('xd:' + r.path, lead, [{ text: cut(`${x.open.includes('xd:' + r.path) ? '▾' : '▸'} ${r.name}/ (${r.count})`, cols - lead.length - 1) }])
+      if (r.dir) line('xd:' + r.path, lead, [{ text: cut(`${x.open.includes('xd:' + r.path) ? '▾' : '▸'} ${r.name}/ (${r.count})`, cols - lead.length - 1), color: 'suggestion', bold: true }])
       else line('xf:' + r.path, lead + '  ', [{ text: cut(r.name, cols - lead.length - 3) }])
     }
     if (x.treeMore) out.push({ key: 'xtree:more', item: null, segs: [{ text: `  … ${x.treeMore} more rows - close a folder`, dim: true }] })
   }
   const up = x.upstream
   head(COMMITS, 'Commits', x.commits ? x.commits.length : null,
-    up === 'none' ? '  no upstream' : up ? `  ↑${up.ahead} ↓${up.behind} vs ${up.name}` : '')
+    up === 'none' ? '  no upstream' : up ? `  ↑${up.ahead} ↓${up.behind} vs ${up.name}` : '', 'permission')
   if (x.open.includes(COMMITS)) {
     if (!x.commits) out.push({ key: 'xlog:none', item: null, segs: [{ text: '  reading git log…', dim: true }] })
     else if (!x.commits.length) out.push({ key: 'xlog:none', item: null, segs: [{ text: '  no commits yet', dim: true }] })
     commitRows('xc:', x.commits ?? [])
   }
   if (hasIncoming(x)) {
-    head(INCOMING, 'Incoming', x.incoming ? x.incoming.length : null)
+    head(INCOMING, 'Incoming', x.incoming ? x.incoming.length : null, '', 'warning')
     if (x.open.includes(INCOMING)) commitRows('xi:', x.incoming ?? [])
   }
   return out

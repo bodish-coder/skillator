@@ -2292,8 +2292,9 @@ export function reduce(s: State, k: Key): Step {
   if (s.tab === 'runs' && k.name === 'r') return runsKey(s, k)                // F122: r reruns on Workflows tab
   if (s.tab === 'health') {
     if (k.name === 'r') return refreshHealth(s)
+    if (k.name === 'u' || k.name === 'R') return resume(s)
     if (k.name === 'c') return resumeCli(s)
-    if (k.name === 'F') return forceResume(s)
+    if (k.name === 'f' || k.name === 'F') return forceResume(s)
   }
   switch (k.name) {
     case 'q': return quit

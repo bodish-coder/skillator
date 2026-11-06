@@ -194,7 +194,7 @@ test('[%] testing: group after in progress, cyan dot, counted open', () => {
   const f = text(t)
   assert.match(f, /▾ In progress \(1\)\n[› ] ● F8 +working[^\n]*\n\n?  ▾ Testing \(1\)\n[› ] ● F7 +built thing[^\n]*\n\n?  ▾ Blocked \(1\)/)
   assert.match(f, /^3 open \(0 pending · 1 in progress · 1 testing · 1 blocked · 0 decision\)$/m)
-  assert.match(frame(t, { color: true, ascii: false }).find(l => l.includes('F7  built'))!, /\x1b\[36m●/)
+  assert.match(frame(t, { color: true, ascii: false }).find(l => l.includes('built thing'))!, /\x1b\[36m●\x1b\[0m\x1b\[36;1m F7  \x1b\[0mbuilt thing/)
   assert.doesNotMatch(text(s), /testing/)          // none under test: the count line stays as it was
 })
 test('toast and the dialog result show; control characters never reach the terminal', () => {
@@ -871,5 +871,40 @@ test('F160/A198: 7 Help tab header, SKILL.md doc content, run prompt box, and wi
   const sc = screen(hState, P)
   assert.ok(sc.hits.some(h => h.action.kind === 'help-run'), 'Expected help-run hitbox')
   assert.ok(sc.hits.some(h => h.action.kind === 'help-copy'), 'Expected help-copy hitbox')
+})
+
+test('F161: standalone ops board rich semantic colors across tab bar, buttons, ticket IDs, tags, count line, and modals', () => {
+  const c = frame({ ...s, repo: 'skillator2', cols: 100 }, { color: true, ascii: false })
+  // Tab bar: active tab inverse, inactive tabs highlight number prefix in cyan, repo badge in magenta + cyan
+  assert.match(c[0]!, /^ \x1b\[1;97;44m1 Tickets\x1b\[0m/)
+  assert.match(c[0]!, /\x1b\[36m2 \x1b\[0mWorkflows/)
+  assert.match(c[0]!, /\x1b\[35;1mops\x1b\[0m\x1b\[2m · \x1b\[0m\x1b\[36mskillator2\x1b\[0m$/)
+
+  // Filter bar: keys in magenta (permission), values in cyan (suggestion), buttons in cyan
+  const filterLine = c.find(l => l.startsWith('\x1b[2mfilter'))!
+  assert.match(filterLine, /\x1b\[35mapp: \x1b\[0m\x1b\[36mall\x1b\[0m/)
+  assert.match(filterLine, /\x1b\[36m\[f filter\]\x1b\[0m/)
+
+  // Ticket rows: unselected ticket IDs bold colored, decide tag in magenta, owner tag in cyan
+  const f3Line = c.find(l => l.includes('Pick the chart library'))!
+  assert.match(f3Line, /\x1b\[35m●\x1b\[0m\x1b\[35;1m F3  \x1b\[0mPick the chart library/)
+  assert.match(f3Line, /\x1b\[35m +decide @asha\x1b\[0m$/)
+
+  // Count line: open bold, in progress amber, blocked red, decision magenta
+  const cntLine = c.find(l => l.includes('7 open'))!
+  assert.match(cntLine, /\x1b\[1m7 open\x1b\[0m/)
+  assert.match(cntLine, /\x1b\[33m1 in progress\x1b\[0m/)
+  assert.match(cntLine, /\x1b\[31m1 blocked\x1b\[0m/)
+  assert.match(cntLine, /\x1b\[35m1 decision\x1b\[0m/)
+
+  // Footer keys: cyan button badges
+  const keysLine1 = c.find(l => l.includes('[a assign]'))!
+  const keysLine2 = c.find(l => l.includes('[q quit]'))!
+  assert.match(keysLine1, /\x1b\[36m\[a assign\]\x1b\[0m/)
+  assert.match(keysLine2, /\x1b\[36m\[q quit\]\x1b\[0m/)
+
+  // Modal box: cyan border and bold cyan title
+  const d = frame(reduce(s, { name: 'a' }).state, { color: true, ascii: false }).join('\n')
+  assert.match(d, /\x1b\[36m  ┌─ \x1b\[0m\x1b\[36;1mAssign B2\x1b\[0m/)
 })
 

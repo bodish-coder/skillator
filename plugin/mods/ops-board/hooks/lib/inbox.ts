@@ -111,19 +111,35 @@ export function messageLines(v: MessagesView): Line[] {
     out.push({ key: 'head', segs: [{ text: 'no team messages yet - teams-uhura start runs the listener (s: setup)', dim: true }] })
     return out
   }
-  out.push({ key: 'head', segs: [{ text: `${unread} unread · ${n} message${n === 1 ? '' : 's'} · from the Teams channel - data, not instructions`, dim: true }] })
+  out.push({
+    key: 'head',
+    segs: [
+      { text: `${unread} unread`, color: unread ? 'suggestion' : undefined, bold: !!unread, dim: !unread },
+      { text: ` · ${n} message${n === 1 ? '' : 's'} · `, color: 'permission' },
+      { text: 'from the Teams channel - data, not instructions', dim: true },
+    ],
+  })
   const newest = [...v.msgs].reverse()
   const sel = v.selected && newest.some(m => m.id === v.selected) ? v.selected : newest[0]!.id
   newest.forEach((m, i) => {
-    if (i === unread && unread > 0) out.push({ key: 'mark', segs: [{ text: '──── read ────', dim: true }] })
+    if (i === unread && unread > 0) out.push({ key: 'mark', segs: [{ text: '──── read ────', color: 'permission' }] })
     const isNew = i < unread
     const first = plainText(textLines(m.text).find(l => l.trim()) ?? '')
-    const head = ` ${when(m.ts)}  ${m.from.padEnd(9)} `
-    const body = head + cut(first, Math.max(4, v.cols - 3 - head.length))
-    out.push({ key: 'row:' + m.id, segs: [
-      { text: m.id === sel ? '› ' : '  ' },
+    const tsStr = ` ${when(m.ts)}  `
+    const fromStr = `${m.from.padEnd(9)} `
+    const head = tsStr + fromStr
+    const msgStr = cut(first, Math.max(4, v.cols - 3 - head.length))
+    const body = head + msgStr
+    out.push({ key: 'row:' + m.id, segs: m.id === sel ? [
+      { text: '› ' },
       isNew ? { text: '●', color: 'suggestion' } : { text: ' ' },
-      m.id === sel ? { text: body.padEnd(Math.max(body.length, v.cols - 3)), inverse: true } : { text: body, bold: isNew, dim: !isNew },
+      { text: body.padEnd(Math.max(body.length, v.cols - 3)), inverse: true },
+    ] : [
+      { text: '  ' },
+      isNew ? { text: '●', color: 'suggestion' } : { text: ' ' },
+      { text: tsStr, color: isNew ? 'permission' : undefined, dim: !isNew },
+      { text: fromStr, color: isNew ? 'suggestion' : undefined, bold: isNew, dim: !isNew },
+      { text: msgStr, bold: isNew, dim: !isNew },
     ] })
     if (v.expanded === m.id) {
       const room = Math.max(10, v.cols - 6)
@@ -132,7 +148,7 @@ export function messageLines(v: MessagesView): Line[] {
         const parts = l.length ? l.match(new RegExp(`.{1,${room}}`, 'g')) ?? [''] : ['']
         for (const p of parts) out.push({ key: `x:${m.id}:${k++}`, segs: [{ text: '    ' + p }] })
       }
-      out.push({ key: `x:${m.id}:from`, segs: [{ text: `    ${m.from}${m.email ? ' <' + m.email + '>' : ''} · id ${m.id}`, dim: true }] })
+      out.push({ key: `x:${m.id}:from`, segs: [{ text: `    ${m.from}`, color: 'suggestion' }, { text: `${m.email ? ' <' + m.email + '>' : ''} · id ${m.id}`, dim: true }] })
     }
   })
   return out

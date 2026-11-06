@@ -285,7 +285,7 @@ test('Health tab exposes refresh, resume, resume-cli and force buttons with hotk
 
   const btnResume = await ui.find({ key: 'key:resume' })
   expect(btnResume).toBeTruthy()
-  expect(btnResume?.props.hotkey).toBe('R')
+  expect(btnResume?.props.hotkey).toBe('u')
 
   const btnCli = await ui.find({ key: 'key:resume-cli' })
   expect(btnCli).toBeTruthy()
@@ -293,6 +293,7 @@ test('Health tab exposes refresh, resume, resume-cli and force buttons with hotk
 
   const btnForce = await ui.find({ key: 'key:force' })
   expect(btnForce).toBeTruthy()
+  expect(btnForce?.props.hotkey).toBe('f')
 
   await ui.press({ key: 'key:health-refresh' })
   await ui.press({ key: 'key:resume-cli' })

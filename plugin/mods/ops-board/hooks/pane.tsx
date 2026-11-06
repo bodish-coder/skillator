@@ -340,7 +340,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
         {/* F87: register.tsx takes this press (ui.press) - /ops resume force */}
         <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
           <Button key="key:health-refresh" plain dimColor hotkey="r" onPress={() => {}}>refresh</Button>
-          <Button key="key:resume" plain dimColor hotkey="R" onPress={() => {}}>resume</Button>
+          <Button key="key:resume" plain dimColor hotkey="u" onPress={() => {}}>resume</Button>
           <Button key="key:resume-cli" plain dimColor hotkey="c" onPress={() => {}}>resume CLI</Button>
           <Button key="key:force" plain dimColor hotkey="f" onPress={() => {}}>force resume</Button>
         </Box>

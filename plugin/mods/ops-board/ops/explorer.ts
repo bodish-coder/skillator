@@ -406,22 +406,22 @@ function actionConfirmSegs(a: Action): Seg[][] {
   const rows: Seg[][] = []
   const statusTag = a.runState?.status === 'running' ? ' (running…)' : ''
   rows.push([
-    { text: `git ${a.kind}?${statusTag}`, bold: true },
-    { text: a.conflictAi && a.result ? '  [m /skillator:merge-smith] · [a abort] · [esc close]' : '  [y run] · [n/esc cancel]', dim: true },
+    { text: `git ${a.kind}?${statusTag}`, color: 'suggestion', bold: true },
+    { text: a.conflictAi && a.result ? '  [m /skillator:merge-smith] · [a abort] · [esc close]' : '  [y run] · [n/esc cancel]', color: 'permission' },
   ])
   if (a.args.length) {
-    rows.push([{ text: '  runs    ', dim: true }, { text: 'git ' + clean(a.args.join(' ')) }])
+    rows.push([{ text: '  runs    ', color: 'permission' }, { text: 'git ' + clean(a.args.join(' ')), color: 'suggestion' }])
   } else if (a.pick?.length) {
-    rows.push([{ text: `  pick    ${a.pick.map(clean).join(' · ')}`, dim: true }])
+    rows.push([{ text: '  pick    ', color: 'permission' }, { text: a.pick.map(clean).join(' · '), color: 'suggestion' }])
   }
-  rows.push([{ text: '  on      ', dim: true }, { text: clean(a.branch) }])
+  rows.push([{ text: '  on      ', color: 'permission' }, { text: clean(a.branch), color: 'warning', bold: true }])
   if (a.message) {
-    rows.push([{ text: '  message ', dim: true }, { text: clean(a.message), bold: true }])
+    rows.push([{ text: '  message ', color: 'permission' }, { text: clean(a.message), bold: true }])
   }
   if (a.aiReview) {
-    rows.push([{ text: `  review  ${clean(a.aiReview.source)} (${a.aiReview.status})`, dim: true }])
+    rows.push([{ text: `  review  ${clean(a.aiReview.source)} (${a.aiReview.status})`, color: 'suggestion' }])
     for (const f of (a.aiReview.findings ?? []).slice(0, 2)) {
-      rows.push([{ text: '    • ' + clean(f), dim: true }])
+      rows.push([{ text: '    • ' + clean(f), color: 'warning' }])
     }
   }
   for (const w of a.warn) {

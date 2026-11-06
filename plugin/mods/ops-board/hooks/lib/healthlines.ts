@@ -141,9 +141,9 @@ export function healthLines(v: HealthView): Line[] {
     key: 'actions',
     segs: [
       { text: '[r refresh]  ', dim: true },
-      { text: '[R resume]  ', dim: true },
+      { text: '[u resume]  ', dim: true },
       { text: '[c resume CLI]  ', dim: true },
-      { text: '[F force resume]', dim: true },
+      { text: '[f force resume]', dim: true },
     ],
   })
   return lines

@@ -25,6 +25,7 @@ const RUNS = 'RUN-0099  fixture run  1/2 done  (stage 2 open)\n'
 function fixtureSkills(): { dir: string; log: string } {
   const dir = mkTmp(join(tmpdir(), 'ops-skills-'))
   const log = join(dir, 'calls.log')
+  writeFileSync(log, '')
   const put = (rel: string, sh: string, ps: string) => {
     mkdirSync(join(dir, rel, '..'), { recursive: true })
     writeFileSync(join(dir, rel + '.sh'), `printf '%s\\n' "$(basename "$0") $*" >> '${log.replace(/\\/g, '/')}'\n${sh}\n`)
