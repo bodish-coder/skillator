@@ -48,12 +48,12 @@ export async function readSkillDocHost($: HostApi, skillId: string): Promise<{ c
     if (!(await $.fs.exists(docPath))) {
       return { code: 1, out: '', err: `SKILL.md not found for ${skillId}`, path: `${skillId}/SKILL.md` }
     }
-    if ($.fs.stat) {
-      const st = await $.fs.stat(docPath)
+    try {
+      const st = await $.fs.stat!(docPath)
       if (st.size > MAX_SKILL_DOC_BYTES) {
         return { code: 1, out: '', err: `SKILL.md exceeds ${MAX_SKILL_DOC_BYTES} byte limit`, path: `${skillId}/SKILL.md` }
       }
-    }
+    } catch {}
     const raw = await $.fs.read(docPath)
     if (raw.length > MAX_SKILL_DOC_BYTES) {
       return { code: 1, out: '', err: `SKILL.md exceeds ${MAX_SKILL_DOC_BYTES} byte limit`, path: `${skillId}/SKILL.md` }

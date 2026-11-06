@@ -226,11 +226,9 @@ export async function handoffConflict($: EngineInterface): Promise<void> {
   conflictPlan = null
   await cancelAction($)
   try {
-    if ($.prompt?.submit) {
-      await $.prompt.submit({ text: plan.prompt })
-      $.ui.toast('✓ Sent conflict resolution handoff to /skillator:merge-smith')
-      return
-    }
+    await $.prompt.submit({ text: plan.prompt })
+    $.ui.toast('✓ Sent conflict resolution handoff to /skillator:merge-smith')
+    return
   } catch { /* fallback to toast */ }
   $.ui.toast(`✓ Run in CLI: ${plan.prompt}`)
 }

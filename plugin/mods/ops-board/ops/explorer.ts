@@ -4,8 +4,7 @@
 import type { Seg } from './draw'
 import { clean } from '../hooks/lib/bandlines'
 import type { Action, ActionKind, Explorer, ExplorerAiDelegate, Here, WorkTreeFile } from '../hooks/lib/explorer'
-import type { RunResult } from './nodehost'
-import type { Effect, Key, State, Step, Then } from './state'
+import type { Effect, Key, RunResult, State, Step, Then } from './state'
 import {
   abortConflictArgs, ACTION_ARGS, beginActionRun, BRANCH_ARGS, BRANCHES_ARGS, buildConflictResolutionPlan, canRunSwitch,
   changeArgs, COUNT_ARGS, DIFF_CACHED_ARGS, DIRTY_ARGS, EMPTY, explorerLines, explorerOffset, finishActionRun, HEAD_ARGS,

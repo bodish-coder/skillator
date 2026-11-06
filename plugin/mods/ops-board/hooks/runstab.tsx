@@ -396,15 +396,8 @@ export async function startRunGo($: EngineInterface): Promise<void> {
     return
   }
   const cmd = startRunCmd(sr.runner, sr.mode, sr.tickets)
-  const submit = $.prompt?.submit
-  if (typeof submit !== 'function') {
-    const msg = '■ Session prompt submission is unavailable on this surface'
-    await update($, startRunA, cur => cur && { ...cur, result: msg })
-    $.ui.toast(msg)
-    return
-  }
   try {
-    await submit({ text: cmd })
+    await $.prompt.submit({ text: cmd })
     await closeStartRun($)
     $.ui.toast(`✓ Sent to session: ${cmd}`)
   } catch (err) {

@@ -56,7 +56,8 @@ const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs
 
 export async function toggleUserGroup($: EngineInterface, sec: UserSection) {
   await update($, ticketOffsetA, () => null)
-  await update($, sec === 'assigned' ? assignedFoldedA : decideFoldedA, x => !x)
+  if (sec === 'assigned') await update($, assignedFoldedA, x => !x)
+  else await update($, decideFoldedA, x => !x)
   await update($, openA, x => (x as string[]).filter(k => k !== 'fold:' + sec) as typeof x)
 }
 

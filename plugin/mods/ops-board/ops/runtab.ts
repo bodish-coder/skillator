@@ -7,7 +7,9 @@ import type { Seg } from '../hooks/lib/bandlines'
 import type { Bins, Job, RunFile, RunForm } from '../hooks/lib/runentries'
 import { argvText, entryNote, jobStatus, keepTail, outLines, planEntry, RUN_FILE } from '../hooks/lib/runentries'
 import type { Effect, Key, State, Step, Then } from './state'
-import { errorText } from './nodehost'
+
+const errorText = (error: unknown): string => String((error as Error)?.message ?? error)
+  .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 1024)
 
 export type RunState = { runFile: RunFile | null; runSel: string | null; runForm: RunForm | null; runJob: Job | null; runBins: Bins | null; runRoot: string }
 export const RUN_INITIAL: RunState = { runFile: null, runSel: null, runForm: null, runJob: null, runBins: null, runRoot: '' }
