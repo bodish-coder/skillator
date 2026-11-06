@@ -132,11 +132,11 @@ codex_newest_fresh() {
     done
 }
 
-# True when file $1 exists and was written inside the freshness window. A file
-# whose mtime this host cannot read is not fresh - same decline as above.
+# True when file $1 exists and was written inside the freshness window ($2, default $stale_secs).
+# A file whose mtime this host cannot read is not fresh - same decline as above.
 fresh_file() {
   [ -f "$1" ] || return 1
-  mtime_list "$1" | awk -v now="$(now_epoch)" -v w="$stale_secs" '{ if (now - $1 < w) ok=1 } END { exit !ok }'
+  mtime_list "$1" | awk -v now="$(now_epoch)" -v w="${2:-$stale_secs}" '{ if (now - $1 < w) ok=1 } END { exit !ok }'
 }
 
 # Last token_count line of a codex rollout, or nothing.
@@ -252,8 +252,9 @@ read_cache() {
   # Node is optional: without a JSON parser, this cache is unavailable.
   command -v node >/dev/null 2>&1 || return 0
   node -e '
+    const fs = require("fs");
     try {
-      const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8").replace(/^\uFEFF/, ""));
+      const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8").replace(/^\uFEFF/, ""));
       const selected = process.argv[2];
       if (!r || typeof r !== "object" || Array.isArray(r) ||
           !["claude-code","codex","agy","muse","cursor"].includes(r.src) ||
@@ -263,6 +264,12 @@ read_cache() {
         if (v != null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 100)) process.exit(0);
       }
       if (r.note != null && typeof r.note !== "string") process.exit(0);
+      if (r.failures != null && (typeof r.failures !== "number" || !Number.isInteger(r.failures) || r.failures < 1)) process.exit(0);
+      if (r.backoff_secs != null) {
+        if (typeof r.backoff_secs !== "number" || !Number.isFinite(r.backoff_secs) || r.backoff_secs <= 0) process.exit(0);
+        const ageSecs = (Date.now() - fs.statSync(process.argv[1]).mtimeMs) / 1000;
+        if (ageSecs >= r.backoff_secs) process.exit(0);
+      }
       const h = Object.hasOwn(r,"5h") ? r["5h"] : r.five;
       const w = Object.hasOwn(r,"7d") ? r["7d"] : r.weekly;
       const values = [h,w].filter(v => v != null);
@@ -315,21 +322,41 @@ case $mode in level|check)
   if [ -z "$source_error" ] && [ "$selected_host" = codex ]; then selected_roll=$(codex_newest_fresh "$selected_profile/sessions"); fi
 ;; esac
 
+spawn_quota_refresh() {
+  sh "$0" refresh "$1" "$2" >/dev/null 2>&1 </dev/null &
+}
+
 start_quota_refresh() {
-  sh "$0" refresh "$1" "$2" >/dev/null 2>&1 &
+  [ -n "$1" ] && [ -n "$2" ] || return 0
+  lock="$2/quota-cache.json.refreshing"
+  if fresh_file "$lock" 60; then
+    note_tag=" note=refresh_pending"
+    return 0
+  fi
+  rm -f "$lock"
+  mkdir -p "$2"
+  if ! ( set -C; printf '%s' "$(now_epoch)" > "$lock" ) 2>/dev/null; then
+    note_tag=" note=refresh_pending"
+    return 0
+  fi
+  note_tag=" note=refresh_pending"
+  spawn_quota_refresh "$1" "$2"
 }
 
 if [ "$mode" = refresh ]; then
   cli="$2"; target_dir="$3"
-  [ -n "$cli" ] && [ -n "$target_dir" ] || exit 0
+  case $cli in agy|claude|muse) ;; *) exit 0 ;; esac
+  [ -n "$target_dir" ] || exit 0
   lock="$target_dir/quota-cache.json.refreshing"
   cache="$target_dir/quota-cache.json"
   mkdir -p "$target_dir"
+  parsed=""
+  raw=""
   case $cli in
     agy)
+      src_name=agy
       raw=$(AGY_CONFIG_DIR="$target_dir" ANTIGRAVITY_APP_DATA_DIR="$target_dir" agy -p "/usage" --output-format json 2>/dev/null)
       if [ -n "$raw" ]; then
-        parsed=""
         if command -v node >/dev/null 2>&1; then
           parsed=$(node -e '
             try {
@@ -390,10 +417,10 @@ except Exception:
     pass
 ' "$raw" 2>/dev/null)
         fi
-        [ -n "$parsed" ] && printf '%s' "$parsed" > "$cache"
       fi
       ;;
     claude)
+      src_name=claude-code
       raw=$(CLAUDE_CONFIG_DIR="$target_dir" claude -p "/usage" --output-format json 2>/dev/null)
       if [ -n "$raw" ]; then
         parsed=$(printf '%s' "$raw" | awk '
@@ -405,17 +432,63 @@ except Exception:
             match($0, /Current week[^:]*:[[:space:]]*[0-9.]+/);
             s=substr($0, RSTART, RLENGTH); sub(/.*:[[:space:]]*/, "", s); w=s;
           }
-          END { if (h!="" || w!="") printf "{\"src\":\"claude-code\",\"5h\":%.1f,\"7d\":%.1f}", (h==""?0:h), (w==""?0:w) }')
-        [ -n "$parsed" ] && printf '%s' "$parsed" > "$cache"
+          END {
+            if (h!="" || w!="") {
+              printf "{\"src\":\"claude-code\""
+              if (h!="") printf ",\"5h\":%.1f", h+0
+              if (w!="") printf ",\"7d\":%.1f", w+0
+              printf "}"
+            }
+          }')
       fi
       ;;
     muse)
+      src_name=muse
       raw=$(MUSE_CONFIG_DIR="$target_dir" muse usage --json 2>&1)
-      if case $raw in *"not logged in"*) true ;; *) false ;; esac; then
-        printf '{"src":"muse","note":"not logged in"}' > "$cache"
+      if [ -n "$raw" ] && ! case $raw in *[Nn]"ot logged in"*) true ;; *) false ;; esac; then
+        if command -v node >/dev/null 2>&1; then
+          parsed=$(node -e '
+            try {
+              const p = JSON.parse(process.argv[1]);
+              const h = p && typeof p.five_hour === "number" && Number.isFinite(p.five_hour) ? p.five_hour : null;
+              const w = p && typeof p.weekly === "number" && Number.isFinite(p.weekly) ? p.weekly : null;
+              if (h !== null || w !== null) {
+                const res = { src: "muse" };
+                if (h !== null) res["5h"] = h;
+                if (w !== null) res["7d"] = w;
+                process.stdout.write(JSON.stringify(res));
+              }
+            } catch (_) {}
+          ' "$raw" 2>/dev/null)
+        fi
       fi
       ;;
   esac
+  if [ -n "$parsed" ]; then
+    printf '%s' "$parsed" > "$cache"
+  else
+    if case $raw in *[Nn]"ot logged in"*) true ;; *) false ;; esac; then
+      fail_note="not logged in"
+    elif [ -n "$(printf '%s' "$raw" | tr -d '[:space:]')" ]; then
+      fail_note="unparseable"
+    else
+      fail_note="refresh failed"
+    fi
+    prev_failures=0
+    if [ -f "$cache" ] && ! grep -q '"5h"\|"7d"' "$cache" 2>/dev/null; then
+      pf=$(sed -n 's/.*"failures"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$cache" | head -1)
+      case $pf in ''|*[!0-9]*) ;; *) prev_failures=$pf ;; esac
+    fi
+    failures=$((prev_failures + 1))
+    backoff=60
+    i=1
+    while [ "$i" -lt "$failures" ] && [ "$backoff" -lt 900 ]; do
+      backoff=$((backoff * 2))
+      [ "$backoff" -gt 900 ] && backoff=900
+      i=$((i + 1))
+    done
+    printf '{"src":"%s","note":"%s","failures":%d,"backoff_secs":%d}' "$src_name" "$fail_note" "$failures" "$backoff" > "$cache"
+  fi
   rm -f "$lock"
   exit 0
 fi

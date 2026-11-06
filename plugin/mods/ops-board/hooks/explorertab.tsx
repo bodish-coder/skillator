@@ -2,17 +2,21 @@ import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, TextProps } from 'claude-code'
 import { clean } from './lib/bandlines'
 import { gitBin } from './lib/host'
-import { BRANCH_ARGS, BRANCHES_ARGS, changeArgs, CHANGES, COUNT_ARGS, DIRTY_ARGS, EMPTY, explorerLines, explorerOffset, GIT_DIR_ARGS, HEAD_ARGS,
-  IN_PROGRESS, INCOMING_ARGS, LOG_ARGS, LS_ARGS, moveSel, NO_GIT, OUTGOING_ARGS, parseFiles, parseStatus, pickBranch, planAction, pushToArgs,
-  selectedOf, stageArgs, staleAction, STATUS_ARGS, toggle, unstageArgs, UPSTREAM_ARGS, withChanges, withError, withFiles, withIncoming, withLog,
-  withUpstream, withWorktree, xwItem } from './lib/explorer'
+import {
+  abortConflictArgs, beginActionRun, BRANCH_ARGS, BRANCHES_ARGS, buildConflictResolutionPlan, canRunSwitch, changeArgs, CHANGES,
+  COUNT_ARGS, DIFF_CACHED_ARGS, DIRTY_ARGS, EMPTY, explorerLines, explorerOffset, finishActionRun, GIT_DIR_ARGS, HEAD_ARGS,
+  IN_PROGRESS, INCOMING_ARGS, isActionRunning, LOG_ARGS, LS_ARGS, moveSel, NO_GIT, OUTGOING_ARGS, parseFiles, parseStatus,
+  pickBranch, planAction, pushToArgs, reviewStagedCommit, reviewSyncChanges, selectedOf, stageArgs, stagedSignature, staleAction,
+  STATUS_ARGS, toggle, unstageArgs, UPSTREAM_ARGS, verifyCommitPreconditions, withActionNotice, withChanges, withError, withFiles,
+  withIncoming, withLog, withUpstream, withWorktree, xwItem,
+} from './lib/explorer'
 import type { Action, ActionKind, Explorer, Here, Need } from './lib/explorer'
 
 // F75: the Explorer tab - the git-tracked files as a tree, the newest commits each
 // opening to what it changed (lib/explorer.ts). git ls-files and git log, run by the
 // mod's absolute git (A150, host.ts gitBin) in the repo. $.state holds only what is
 // drawn (B4); the file list itself stays in this module, read again on entering the
-// tab and on r. F103: fetch/pull/push/revert/merge, each only after a confirm drawn in
+// tab and on r. F103: fetch/pull/push/revert/merge/switch, each only after a confirm drawn in
 // place of the tab that names the exact argv run (ACTION_ARGS).
 
 const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
@@ -23,8 +27,9 @@ const PANE = 'ops-board'          // pane.tsx's PANE_ID (it imports this file)
 const PANE_NAME = 'ops board'     // pane.tsx's PANE_TITLE
 
 let files: string[] | null = null          // the last git ls-files, this load
+let conflictPlan: Action | null = null     // F153: last conflicted action for /skillator:merge-smith handoff or abort
 
-type Git = { ok: true; out: string; said: string; cut: boolean } | { ok: false; err: string; code: number | null }
+type Git = { ok: true; out: string; said: string; cut: boolean } | { ok: false; err: string; code: number | null; out?: string; said?: string; timedOut?: boolean }
 
 async function git($: EngineInterface, name: string, args: string[], timeoutMs = 15000, env?: Record<string, string>): Promise<Git> {
   const repo = await $.session.repo()
@@ -36,13 +41,13 @@ async function git($: EngineInterface, name: string, args: string[], timeoutMs =
     const r = await $.process.run([bin, ...args], { cwd: repo.root, timeoutMs, env })
     // both streams: git says CONFLICT on stdout, hints and fatals on stderr
     const said = [r.stderr.trim(), r.stdout.trim()].filter(Boolean).join('\n') || 'exit ' + r.exitCode
-    if (r.exitCode !== 0) return { ok: false, err: `git ${name} failed: ${said}`, code: r.exitCode }
+    if (r.exitCode !== 0) return { ok: false, err: `git ${name} failed: ${said}`, code: r.exitCode, out: r.stdout, said: r.stderr }
     return { ok: true, out: r.stdout, said: r.stderr, cut: r.isStdoutTruncated }
   } catch (e) {
     const said = errText(e)
     // the host kills git at the timeout: a write it was making can leave the index lock behind
     if (Date.now() - t0 >= timeoutMs || /timed? ?out/i.test(said))
-      return { ok: false, err: `git ${name} timed out after ${timeoutMs / 1000}s - .git/index.lock may be left; remove it once no git runs`, code: null }
+      return { ok: false, err: `git ${name} timed out after ${timeoutMs / 1000}s - .git/index.lock may be left; remove it once no git runs`, code: null, timedOut: true }
     return { ok: false, err: `git ${name} failed: ${said}`, code: null }
   }
 }
@@ -97,10 +102,20 @@ export async function toggleExplorer($: EngineInterface, item: string): Promise<
     const x = await read($, explorerA)
     const f = (x.worktree ?? []).find(w => w.path === need.stagePath)
     const isStaged = f && f.staged !== null
-    const args = isStaged ? unstageArgs(need.stagePath) : stageArgs(need.stagePath)
-    await git($, isStaged ? 'reset' : 'add', args)
+    const target = f ?? need.stagePath
+    const args = isStaged ? unstageArgs(target) : stageArgs(target)
+    const res = await git($, isStaged ? 'reset' : 'add', args)
+    if (!res.ok) {
+      $.ui.toast('■ ' + res.err)
+      await update($, explorerA, cur => withActionNotice(withError(cur, res.err), res.err))
+    }
     const st = await git($, 'status', STATUS_ARGS)
-    if (st.ok) await update($, explorerA, cur => withWorktree(cur, parseStatus(st.out)))
+    if (st.ok) {
+      await update($, explorerA, cur => {
+        const next = withWorktree(cur, parseStatus(st.out))
+        return res.ok ? next : withError(next, res.err)
+      })
+    }
   }
   if (need.files) {
     const list = files ?? (await readFiles($)).list
@@ -131,12 +146,12 @@ export async function readExplorer($: EngineInterface): Promise<Explorer> {
   return read($, explorerA)
 }
 
-// --- F103: the git actions, each behind its confirm ---
+// --- F103 / F151 / F152 / F153 / F155 / F156: the git actions, each behind its confirm ---
 
 const lines = (r: Git | null) => (r?.ok ? r.out.split(/\r?\n/).filter(Boolean) : [])
 
 // What a plan stands on: the branch ('HEAD': detached), HEAD's sha ('' before the first commit), tracked changes.
-async function readHere($: EngineInterface): Promise<Here | { err: string }> {
+async function readHere($: EngineInterface): Promise<{ branch: string; head: string; dirty: number } | { err: string }> {
   const branch = await git($, 'branch', BRANCH_ARGS)
   const head = await git($, 'rev-parse', HEAD_ARGS)
   const dirty = await git($, 'status', DIRTY_ARGS)
@@ -148,10 +163,11 @@ async function readHere($: EngineInterface): Promise<Here | { err: string }> {
 // A key: what the plan needs read now (branch, HEAD, tracked changes, branches, upstream,
 // git-dir markers, root), then the plan - refused in a toast, or the confirm up, Esc its Cancel.
 export async function openAction($: EngineInterface, kind: ActionKind): Promise<void> {
-  if (running) { $.ui.toast(`■ git ${running} is still running`); return }
+  const curAction = await read($, actionA)
+  if (running || isActionRunning(curAction)) { $.ui.toast(`■ git ${running ?? curAction?.kind ?? 'action'} is still running`); return }
   const here = await readHere($)
   if ('err' in here) { $.ui.toast('■ ' + here.err); return }
-  const branches = kind === 'merge' ? await git($, 'branch', BRANCHES_ARGS) : null
+  const branches = kind === 'merge' || kind === 'switch' ? await git($, 'branch', BRANCHES_ARGS) : null
   // push/pull/sync: the upstream read now, not as last drawn (one set by hand since counts)
   const up = kind === 'push' || kind === 'pull' || kind === 'sync' ? await git($, 'rev-parse', UPSTREAM_ARGS) : null
   const to = kind === 'push' && here.branch !== 'HEAD' ? await git($, 'for-each-ref', pushToArgs(here.branch)) : null
@@ -163,17 +179,36 @@ export async function openAction($: EngineInterface, kind: ActionKind): Promise<
   const dir = lines(gitDir)[0]
   for (const m of IN_PROGRESS) if (dir && !inProgress && await $.fs.exists(dir + '/' + m)) inProgress = m
   const [remote = '', ref = ''] = to?.ok ? to.out.trim().split('\t') : []
-  const x = await read($, explorerA)
-  const upstream = up && !up.ok && up.code === 128 ? 'none' as const : up ? null : x.upstream
+  let x = await read($, explorerA)
+  if (kind === 'commit' && (!x.worktree || x.worktree.length === 0)) {
+    const st = await git($, 'status', STATUS_ARGS)
+    if (st.ok) {
+      x = withWorktree(x, parseStatus(st.out))
+      await update($, explorerA, () => x)
+    }
+  }
+  const upstream = up && !up.ok && up.code === 128 ? 'none' as const : up && up.ok ? (x.upstream && x.upstream !== 'none' ? x.upstream : { name: up.out.trim(), ahead: 0, behind: 0 }) : up ? null : x.upstream
   const activeTicket = here.branch.match(/run\/RUN-\d+-([a-z0-9]+)/i)?.[1]?.toUpperCase()
   const p = planAction({ ...x, upstream, selected: selectedOf(x) }, kind, {
     ...here, root: (await $.session.repo())?.root ?? '', branches: lines(branches), inProgress, pushTo: { remote, ref },
     activeTicket, outgoing: outgoing?.ok ? outgoing.out : undefined })
   if ('refused' in p) { $.ui.toast('■ ' + p.refused); return }
-  await update($, actionA, () => p.action)
+
+  let action: Action = p.action
+  if (kind === 'commit') {
+    const diffRes = await git($, 'diff', DIFF_CACHED_ARGS)
+    const diff = diffRes.ok ? diffRes.out : ''
+    const aiReview = reviewStagedCommit(x, { diff, ticketId: activeTicket })
+    action = { ...action, stagedSig: stagedSignature(x.worktree, diff), aiReview }
+  } else if (kind === 'pull' || kind === 'push' || kind === 'sync') {
+    const aiReview = reviewSyncChanges({ ...x, upstream }, kind, { outgoingRaw: outgoing?.ok ? outgoing.out : undefined })
+    action = { ...action, aiReview }
+  }
+
+  await update($, actionA, () => action)
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
-  const first = p.action.pick?.[0]
-  void $.ui.focus({ requestId: PANE, key: first ? 'xb:' + first : p.action.args.length ? 'xa:go' : 'xa:cancel' }).catch(() => {})
+  const first = action.pick?.[0]
+  void $.ui.focus({ requestId: PANE, key: first ? 'xb:' + first : action.args.length ? 'xa:go' : 'xa:cancel' }).catch(() => {})
 }
 
 let running: string | null = null          // the action's argv while git runs: one at a time
@@ -183,26 +218,80 @@ async function pickAction($: EngineInterface, name: string): Promise<void> {
   void $.ui.focus({ requestId: PANE, key: 'xa:go' }).catch(() => {})
 }
 
+export async function handoffConflict($: EngineInterface): Promise<void> {
+  const a = (await read($, actionA)) ?? conflictPlan
+  if (!a) return
+  const x = await read($, explorerA)
+  const plan = buildConflictResolutionPlan(x, a)
+  conflictPlan = null
+  await cancelAction($)
+  try {
+    if ($.prompt?.submit) {
+      await $.prompt.submit({ text: plan.prompt })
+      $.ui.toast('✓ Sent conflict resolution handoff to /skillator:merge-smith')
+      return
+    }
+  } catch { /* fallback to toast */ }
+  $.ui.toast(`✓ Run in CLI: ${plan.prompt}`)
+}
+
+export async function abortConflict($: EngineInterface): Promise<void> {
+  const a = (await read($, actionA)) ?? conflictPlan
+  if (!a) return
+  const args = abortConflictArgs(a.kind)
+  conflictPlan = null
+  await cancelAction($)
+  const r = await git($, args.join(' '), args)
+  if (r.ok) $.ui.toast(`✓ git ${args.join(' ')}: aborted`)
+  else $.ui.toast(`■ ${r.err}`)
+  await enterExplorer($)
+}
+
 // Run: the argv shown is the argv run (bin aside); git's own words said, a conflict left as git left it.
 export async function actionGo($: EngineInterface): Promise<void> {
   if (running) return                       // a second Run press, or one while git runs
   running = '…'
   try {
     const a = await read($, actionA)
-    if (!a || !a.args.length) return
+    if (!a || !a.args.length || isActionRunning(a)) return
+    if (a.kind === 'switch') {
+      const switchErr = canRunSwitch(a)
+      if (switchErr) {
+        await cancelAction($)
+        $.ui.toast(`■ ${switchErr} - nothing run`)
+        return
+      }
+    }
+    await update($, actionA, cur => (cur ? beginActionRun(cur) : cur))
     await cancelAction($)
     // the plan as shown still stands: nothing moved while the confirm was up
     const here = await readHere($)
     const why = 'err' in here ? here.err : staleAction(a, here)
     if (why) { $.ui.toast(`■ ${why} - nothing run`); return }
+    if (a.kind === 'commit' && a.stagedSig) {
+      const st = await git($, 'status', STATUS_ARGS)
+      const diffRes = await git($, 'diff', DIFF_CACHED_ARGS)
+      if (st.ok) {
+        const currentWt = parseStatus(st.out)
+        const currentDiff = diffRes.ok ? diffRes.out : ''
+        const commitErr = verifyCommitPreconditions(a, here.head, here.branch, currentWt, currentDiff)
+        if (commitErr) { $.ui.toast(`■ ${commitErr} - nothing run`); return }
+      }
+    }
     const cmd = a.args.join(' ')
     running = cmd
     // fetch/pull/push talk to a remote; a credential prompt (terminal or GCM window) would wait unseen until the timeout
     const r = await git($, cmd, a.args, 120000, { GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' })
-    if (r.ok) $.ui.toast(`✓ git ${cmd}: ${(r.out.trim() || r.said.trim()).split(/\r?\n/)[0] || 'done'}`)
-    else {
+    if (r.ok) {
+      conflictPlan = null
+      $.ui.toast(`✓ git ${cmd}: ${(r.out.trim() || r.said.trim()).split(/\r?\n/)[0] || 'done'}`)
+    } else {
+      const isConflict = (a.kind === 'merge' || a.kind === 'revert' || a.kind === 'pull' || a.kind === 'sync') && /CONFLICT/.test(r.err)
       const stopped = (a.kind === 'merge' || a.kind === 'revert') && /CONFLICT/.test(r.err)
         ? ` - ${a.kind} stopped on conflict: resolve by hand, or git ${a.kind} --abort` : ''
+      if (isConflict) {
+        conflictPlan = { ...finishActionRun(a, { code: r.code, out: r.out, err: r.err, timedOut: r.timedOut }), conflictAi: true, result: r.err }
+      }
       $.ui.toast(`■ ${r.err.split(/\r?\n/).slice(0, 3).join(' ')}${stopped}`)
     }
   } finally {
@@ -238,12 +327,15 @@ export async function ActionConfirm($: EngineInterface, els: Els, a: Action): Pr
   const { Box, Text, Button } = els
   const focus = await read($, actionFocusA)
   const current = a.pick?.find(name => 'xb:' + name === focus) ?? a.pick?.[0]
+  const pickPrompt = a.kind === 'switch'
+    ? (a.pick?.length ? 'switch to which local branch?' : 'no other local branch to switch to')
+    : (a.pick?.length ? 'merge which branch into this one?' : 'no other branch to merge')
   return [
     <Box key="xa:title"><Text bold>{`git ${a.kind}?`}</Text><Text dimColor>{'  Esc cancels'}</Text></Box>,
     <Text> </Text>,
     a.args.length
       ? <Box key="xa:argv" flexDirection="row" flexWrap="wrap"><Text dimColor>{'runs    '}</Text><Text wrap="wrap">{'git ' + a.args.join(' ')}</Text></Box>
-      : <Text key="xa:pickhead" dimColor>{a.pick?.length ? 'merge which branch into this one?' : 'no other branch to merge'}</Text>,
+      : <Text key="xa:pickhead" dimColor>{pickPrompt}</Text>,
     <Box key="xa:on" flexDirection="row" flexWrap="wrap"><Text dimColor>{'on      '}</Text><Text>{clean(a.branch)}</Text></Box>,
     ...(a.message ? [<Box key="xa:msg" flexDirection="row" flexWrap="wrap"><Text dimColor>{'message '}</Text><Text bold>{clean(a.message)}</Text></Box>] : []),
     ...(a.files ? a.files.slice(0, 8).map((f, i) =>
@@ -252,12 +344,19 @@ export async function ActionConfirm($: EngineInterface, els: Els, a: Action): Pr
       <Box key="xa:digest_head"><Text bold dimColor>{'AI Change Digest:'}</Text></Box>,
       ...a.digest.map((d, i) => <Box key={'xa:digest:' + i}><Text dimColor>{'  ' + clean(d)}</Text></Box>),
     ] : []),
-    ...(a.conflictAi && !a.args.length ? [<Box key="xa:ai_note"><Text dimColor>{'AI autonomous conflict resolution available if conflicts occur.'}</Text></Box>] : []),
+    ...(a.aiReview ? [
+      <Box key="xa:review_source"><Text dimColor>{`Review (${clean(a.aiReview.source)} · ${a.aiReview.status}):`}</Text></Box>,
+      ...(a.aiReview.findings ?? []).slice(0, 4).map((f, i) => <Box key={'xa:finding:' + i}><Text dimColor>{'  • ' + clean(f)}</Text></Box>),
+    ] : []),
+    ...(a.conflictAi && !a.args.length ? [<Box key="xa:ai_note"><Text dimColor>{'/skillator:merge-smith conflict handoff available if conflicts occur.'}</Text></Box>] : []),
+    ...(a.result ? [<Box key="xa:result"><Text color="error" wrap="wrap">{clean(a.result)}</Text></Box>] : []),
     ...a.warn.map((w, i) => <Box key={'xa:warn:' + i}><Text color="warning" wrap="wrap">{clean(w)}</Text></Box>),
     ...(a.pick ?? []).map(name => <Button key={'xb:' + name} hotkey={name === current ? 'o' : undefined} plain onPress={() => { void pickAction($, name).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>{'  ' + clean(name)}</Button>),
     <Text> </Text>,
     <Box flexDirection="row" flexWrap="wrap" gap={4}>
-      {a.args.length ? <Button key="xa:go" plain hotkey={'y'} variant="primary" onPress={() => { void actionGo($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Run</Button> : null}
+      {a.args.length && !a.result ? <Button key="xa:go" plain hotkey={'y'} variant="primary" onPress={() => { void actionGo($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Run</Button> : null}
+      {a.conflictAi && a.result ? <Button key="xa:merge_smith" plain hotkey={'m'} variant="primary" onPress={() => { void handoffConflict($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>hand off to /skillator:merge-smith</Button> : null}
+      {a.conflictAi && a.result ? <Button key="xa:abort" plain hotkey={'a'} onPress={() => { void abortConflict($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>abort</Button> : null}
       <Button key="xa:cancel" plain hotkey={'n'} onPress={() => { void cancelAction($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>Cancel</Button>
     </Box>,
   ]
@@ -268,6 +367,7 @@ const ACTION_KEYS: [ActionKind, string, string][] = [
   ['pull', 'p', 'pull/sync'],
   ['push', 'u', 'push'],
   ['merge', 'm', 'merge'],
+  ['switch', 'b', 'switch'],
   ['fetch', 'f', 'fetch'],
   ['revert', 'v', 'revert'],
 ]
@@ -275,6 +375,15 @@ const ACTION_KEYS: [ActionKind, string, string][] = [
 export function ExplorerTab($: EngineInterface, els: Els, x: Explorer, cols: number): RenderElement[] {
   const { Box, Text, Button } = els
   const out: RenderElement[] = []
+  if (conflictPlan) {
+    out.push(
+      <Box key="xa:conflict_banner" flexDirection="row" flexWrap="wrap" gap={2}>
+        <Text color="error">{clean(`Conflict in git ${conflictPlan.kind}:`)}</Text>
+        <Button key="xa:merge_smith" plain onPress={() => { void handoffConflict($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>[m hand off to /skillator:merge-smith]</Button>
+        <Button key="xa:abort" plain onPress={() => { void abortConflict($).catch(e => { $.ui.toast('■ ' + errText(e)) }) }}>[a abort]</Button>
+      </Box>,
+    )
+  }
   for (const l of explorerLines(x, cols - 3)) {
     const body = <Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim} bold={s.bold} inverse={s.inverse}>{clean(s.text)}</Text>)}</Text>
     const item = l.item

@@ -1,10 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ansi, frame, frameSegs, fit, cells, glyph, plain, paintScreen, screen } from '../draw'
-import { initial, onBoard, onMachine, onRuns, onUsage, openHelp, openStartRun, reduce } from '../state'
+import { initial, onBoard, onInbox, onMachine, onRuns, onUsage, openHelp, openStartRun, reduce } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
+import { parseInbox, pendingHandoffOf } from '../../hooks/lib/inbox'
 import { headKey } from '../../hooks/lib/ticketsmodel'
 import { BOARD } from '../../tests/fixtures'
 import { bandLines, statusText } from '../../hooks/lib/bandlines'
@@ -706,23 +707,55 @@ test('F113: Start run modal drawing and responsive layout across columns', () =>
   assert.ok(ticketsHit, 'Hitbox found for tickets field')
 })
 
-test('F130: Ops band shows the addressee of a pending handoff', () => {
-  // 1. statusText ends with ' → @vidul' when pending handoff is present, unchanged when none
+test('F130 / A178: Ops band shows the addressee of a pending handoff from serialized inbox records', () => {
+  const team = [{ handle: '@asha', emails: ['asha@ikran.in'] }, { handle: '@vidul', emails: ['vidul@ikran.in'] }]
+  const rec = (id: string, from: string, to: unknown, text: string, min: number) =>
+    JSON.stringify({ ts: `2026-10-30T10:${String(min).padStart(2, '0')}:00.000Z`, from, ...(to !== undefined ? { to } : {}), email: 's@ikran.in', text, id })
+  const jsonl = [
+    rec('m1', '@asha', '@vidul', 'handoff F129: please verify', 1),
+    rec('m2', '@asha', undefined, 'general channel note', 2),
+  ].join('\n') + '\n'
+
+  const parsed = parseInbox(jsonl)
+  assert.equal(parsed[0]?.to, '@vidul')
+  assert.equal(parsed[1]?.to, undefined)
+  assert.equal(pendingHandoffOf(parsed, null, team), '@vidul')
+  assert.equal(pendingHandoffOf(parsed, 'm1', team), null)
+  assert.equal(pendingHandoffOf(parsed, 'm2', team), null)
+
+  // Case-insensitive match resolves to canonical handle from team.md; unknown handle rejected when team is loaded
+  const caseJsonl = rec('m3', '@asha', '@VIDUL', 'handoff case check', 3) + '\n'
+  assert.equal(pendingHandoffOf(parseInbox(caseJsonl), null, team), '@vidul')
+  const unknownJsonl = rec('m4', '@asha', '@ghost', 'handoff unknown user', 4) + '\n'
+  assert.equal(pendingHandoffOf(parseInbox(unknownJsonl), null, team), null)
+
+  // Malicious or malformed `to` values are dropped by parseInbox and never surface
+  const badJsonl = [
+    rec('b1', '@asha', '@vidul\u001b[2J', 'ansi escape in to', 5),
+    rec('b2', '@asha', 'vidul', 'missing leading at-sign', 6),
+    rec('b3', '@asha', '@vidul; rm -rf /', 'shell metacharacters', 7),
+    rec('b4', '@asha', '', 'empty string', 8),
+    rec('b5', '@asha', 123, 'non-string', 9),
+  ].join('\n') + '\n'
+  assert.equal(parseInbox(badJsonl).length, 0)
+  assert.equal(pendingHandoffOf(parseInbox(badJsonl), null, team), null)
+
+  // 1. statusText ends with ' → @vidul' when pending handoff is derived from parsed inbox, unchanged when read
   const counts = { open: 258, progress: 1, testing: 0, blocked: 0, decision: 0 }
   const usage = {
     five: { pct: 1, resetsAt: null, source: 'host' as const, at: 0 },
     seven: { pct: 33, resetsAt: null, source: 'host' as const, at: 0 },
     spendLimitPct: null, costUsd: null, decision: null,
   }
-  const stWithHandoff = statusText(counts, usage, 0, null, '@vidul')
+  const stWithHandoff = statusText(counts, usage, 0, null, pendingHandoffOf(parsed, null, team))
   assert.equal(stWithHandoff, 'ops 257 pending | 1 in progress | 258 total · 5h 1% · 7d 33% → @vidul')
   assert.ok(stWithHandoff.length <= 80)
   assert.match(stWithHandoff, /→ @vidul$/)
 
-  const stNoHandoff = statusText(counts, usage, 0, null)
+  const stNoHandoff = statusText(counts, usage, 0, null, pendingHandoffOf(parsed, 'm1', team))
   assert.equal(stNoHandoff, 'ops 257 pending | 1 in progress | 258 total · 5h 1% · 7d 33%')
 
-  // 2. bandLines across 40, 80, 120 columns
+  // 2. bandLines across 40, 80, 120 columns using derived handoff
   const baseInput = {
     watch: { level: 'green' as const, reasons: [] },
     machine: { at: 0, drive: 'C:', diskFree: 17 * 1073741824, diskTotal: 1000 * 1073741824, memFree: 3 * 1073741824, locks: [], hold: null },
@@ -733,7 +766,7 @@ test('F130: Ops band shows the addressee of a pending handoff', () => {
     cols: 120,
     now: 0,
     me: null,
-    handoff: '@vidul',
+    handoff: pendingHandoffOf(parsed, null, team),
   }
 
   // 120 columns
@@ -751,16 +784,27 @@ test('F130: Ops band shows the addressee of a pending handoff', () => {
   assert.doesNotMatch(lines40[0]!, /→ @vidul/)
   assert.match(lines40[0]!, /5h 1%/)
 
-  // 3. Ops board TUI frame with handoff
-  const sWithHandoff = { ...s, handoff: '@vidul' }
-  const f80 = sized({ ...sWithHandoff, cols: 80, rows: 24 })
-  assert.match(f80.at(-1)!, /→ @vidul/)
+  // 3. Ops board TUI frame fed via real onInbox(s, jsonl, readId) without injected s.handoff
+  const sWithTeam: State = { ...s, team }
+  const sUnread = onInbox(sWithTeam, jsonl, null)
+  const f80 = sized({ ...sUnread, cols: 80, rows: 24 })
+  assert.match(f80.at(-1)!, /→ @vidul$/)
 
-  const f120 = sized({ ...sWithHandoff, cols: 120, rows: 24 })
-  assert.match(f120.at(-1)!, /→ @vidul/)
+  const f120 = sized({ ...sUnread, cols: 120, rows: 24 })
+  assert.match(f120.at(-1)!, /→ @vidul$/)
 
-  const fNoHandoff = sized({ ...s, cols: 80, rows: 24 })
-  assert.doesNotMatch(fNoHandoff.at(-1)!, /→ @vidul/)
+  // Marked read: disappears from frame
+  const sRead = onInbox(sWithTeam, jsonl, 'm1')
+  const fRead = sized({ ...sRead, cols: 80, rows: 24 })
+  assert.doesNotMatch(fRead.at(-1)!, /→ @vidul/)
+
+  // Unknown team member in inbox: ignored when team is loaded
+  const sUnknown = onInbox(sWithTeam, unknownJsonl, null)
+  assert.doesNotMatch(sized({ ...sUnknown, cols: 80, rows: 24 }).at(-1)!, /→ @ghost/)
+
+  // Malicious inbox lines: ignored safely
+  const sMalicious = onInbox(sWithTeam, badJsonl, null)
+  assert.doesNotMatch(sized({ ...sMalicious, cols: 80, rows: 24 }).at(-1)!, /→/)
 })
 
 test('F135: tester badge in expanded chips and board parsing', () => {

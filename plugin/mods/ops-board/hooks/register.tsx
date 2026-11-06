@@ -20,6 +20,7 @@ import { applyReconcile } from './reconcile'
 import { closeEngage, dropEngage, isEngageUp, pollRuns, RUNS_POLL_MS } from './runstab'
 import { AGENTS_POLL_MS, noteActivity, noteSpawn, noteTurnEnd, noteTurnStart, noteWorkflowCall, pollAgents } from './agentstab'
 import { closeSetup, enterMessages, isSetupUp, pollInbox, unreadOf } from './messagestab'
+import { pendingHandoffOf } from './lib/inbox'
 import { closeRunForm, dropRunForm, enterRun, isRunFormUp } from './runtab'
 import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, isActionUp, isExplorerItem } from './explorertab'
 import { enterHelp } from './helptab'
@@ -49,6 +50,8 @@ const notesA = atom({ plugin: 'ops-board', key: 'notes' } as const, [])
 const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
 const runsA = atom<RunView[]>({ plugin: 'ops-board', key: 'runs' } as const, [])
 const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows', 'agents'])
+const messagesA = atom({ plugin: 'ops-board', key: 'messages' } as const, [])
+const msgReadA = atom({ plugin: 'ops-board', key: 'msgRead' } as const, null)
 
 const MAX_READ = 4 * 1024 * 1024
 const POLL_MS = 2000
@@ -163,7 +166,8 @@ async function addNotes($: EngineInterface, add: string[], drop: (n: string) => 
 async function updateStatus($: EngineInterface) {
   const board = await read($, boardA)
   if (!board) return
-  const text = statusText(countsOf(board), await read($, usageA), await $.clock.now(), await read($, meA))
+  const handoff = pendingHandoffOf(await read($, messagesA), await read($, msgReadA), await read($, teamA))
+  const text = statusText(countsOf(board), await read($, usageA), await $.clock.now(), await read($, meA), handoff)
   if (text === lastStatus) return
   lastStatus = text
   $.ui.status(text)
@@ -468,6 +472,20 @@ export const register: Register = on => {
     if (word === 'resume') return { text: await resume($) }
     if (word === 'resume force') return { text: await forceResume($) }       // F87
     if (word === 'watchdog on') return { text: await watchdogOn($) }
+    if (word === 'reset' || word === '--reset') {
+      await clearForm($)
+      await closeSetup($)
+      await dropRunForm($)
+      await dropEngage($)
+      await dropAction($)
+      decidedLine = null
+      void poll($, true).catch(() => {})
+      void slowPoll($).catch(() => {})
+      await openPane($, true)
+      const text = 'ops board reset - forms cleared and polls restarted.'
+      await $.ui.toast(text)
+      return { text }
+    }
     if (word && !WORDS.includes(word)) return { text: USAGE }
     const tab: Tab | null = word ? (SECTION_OF[word] ? 'runs' : word === 'build' ? 'run' : word === 'guide' ? 'help' : word as Tab) : null
     const sec = SECTION_OF[word]
@@ -592,7 +610,21 @@ export const register: Register = on => {
   // F61: the selection walks the group headers and the rows of open groups, and the
   // focus ring follows it, so Enter opens or closes the header shown selected.
   on('ui.scroll', { requestId: 'ops-board' }, async ($, e, next) => {
-    if ((await read($, tabA)) === 'tickets' && !(await isFormUp($)) && !(await isSetupUp($)) && !(await read($, teamViewA))) {
+    if ((await read($, tabA)) === 'tickets' && !(await isFormUp($)) && !(await isSetupUp($))) {
+      const tv = await read($, teamViewA)
+      if (tv) {
+        if (e.pointer || e.origin.kind !== 'person' || Math.abs(e.by) !== 1 || tv.confirm) return next(e)
+        const team = await read($, teamA)
+        const hs = team.map(m => m.handle)
+        const cur = team.find(m => m.handle === tv.selected)?.handle ?? hs[0] ?? null
+        const to = cur ? hs[hs.indexOf(cur) + e.by] : undefined
+        if (to) {
+          await update($, teamViewA, x => (x ? { ...x, selected: to, confirm: false } : x))
+          await update($, meA, () => to)
+          void $.ui.focus({ requestId: PANE_ID, key: 'member:' + to }).catch(() => {})
+        }
+        return lastScroll.offset ? next({ ...e, offset: 0 }) : {}
+      }
       if (e.origin.kind !== 'person') return next(e)
       const v = await readView($, lastCols, e.bodyRows, await unreadOf($))
       const m = buildModel(v)
@@ -705,6 +737,10 @@ export const register: Register = on => {
     if (el?.startsWith('row:') || el?.startsWith('head:')) await update($, ticketOffsetA, () => null)
     if (el?.startsWith('row:')) await update($, selectedA, () => el.slice(4))
     else if (el?.startsWith('head:')) await update($, selectedA, () => el)
+    else if (el?.startsWith('member:')) {
+      const h = el.slice('member:'.length)
+      await update($, teamViewA, x => (x ? { ...x, selected: h, confirm: false } : x))
+    }
     else if (el && isExplorerItem(el)) await focusExplorer($, el)          // F75
     return next(e)
   }).catch(($, e, next) => next(e))

@@ -1,4 +1,4 @@
-import type { Msg } from '../../types'
+import type { Member, Msg } from '../../types'
 import type { Line } from './healthlines'
 
 // F66: the Messages tab's data - the Teams inbox teams-uhura's listener writes, read
@@ -32,11 +32,19 @@ function record(x: unknown): Msg | null {
   if (!x || typeof x !== 'object') return null
   const r = x as Record<string, unknown>
   if (typeof r.from !== 'string' || !HANDLE_RE.test(r.from)) return null
+  if (r.to !== undefined && (typeof r.to !== 'string' || !HANDLE_RE.test(r.to))) return null
   if (typeof r.id !== 'string' || !ID_RE.test(r.id)) return null
   if (typeof r.ts !== 'string' || !TS_RE.test(r.ts)) return null
   if (typeof r.text !== 'string') return null
   const text = r.text.length > TEXT_MAX ? r.text.slice(0, TEXT_MAX - 1) + '…' : r.text
-  return { ts: r.ts, from: r.from, email: typeof r.email === 'string' && EMAIL_RE.test(r.email) ? r.email : '', text, id: r.id }
+  return {
+    ts: r.ts,
+    from: r.from,
+    ...(typeof r.to === 'string' ? { to: r.to } : {}),
+    email: typeof r.email === 'string' && EMAIL_RE.test(r.email) ? r.email : '',
+    text,
+    id: r.id,
+  }
 }
 
 // The well-formed records, in file order, the newest MSG_MAX of them.
@@ -54,6 +62,37 @@ export function unreadCount(msgs: Msg[], readId: string | null): number {
   if (!readId) return msgs.length
   for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i]!.id === readId) return msgs.length - 1 - i
   return msgs.length
+}
+
+// F130 / A178: the addressee of the newest unread handoff message; when team.md is
+// loaded, only a known member's canonical handle qualifies.
+export function pendingHandoffOf(
+  msgs: Msg[] | undefined | null,
+  readId: string | null | undefined,
+  team?: Member[] | null,
+): string | null {
+  if (!msgs || !msgs.length) return null
+  let unreadIdx = -1
+  if (readId) {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i]!.id === readId) { unreadIdx = i; break }
+    }
+  }
+  const unread = unreadIdx >= 0 ? msgs.slice(unreadIdx + 1) : msgs
+  for (let i = unread.length - 1; i >= 0; i--) {
+    const m = unread[i]!
+    const to = m.to
+    if (typeof to !== 'string' || !HANDLE_RE.test(to)) continue
+    let handle = to
+    if (team && team.length > 0) {
+      const member = team.find(t => t.handle.toLowerCase() === to.toLowerCase())
+      if (!member || !HANDLE_RE.test(member.handle)) continue
+      handle = member.handle
+    }
+    if (unread.slice(i + 1).some(r => r.from.toLowerCase() === handle.toLowerCase() && r.text.includes(m.id))) continue
+    return handle
+  }
+  return null
 }
 
 const when = (ts: string) => ts.slice(5, 10) + ' ' + ts.slice(11, 16) + 'Z'

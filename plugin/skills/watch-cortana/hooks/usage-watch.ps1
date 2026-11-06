@@ -225,7 +225,7 @@ function Get-CachedQuota {
         # PowerShell member lookup ignores case; admit only exact JSON schema keys.
         $fields = @{}
         foreach ($property in $record.PSObject.Properties) {
-          if ($property.Name -cin @('src','5h','five','7d','weekly','max','note')) { $fields[$property.Name] = $property.Value }
+          if ($property.Name -cin @('src','5h','five','7d','weekly','max','note','failures','backoff_secs')) { $fields[$property.Name] = $property.Value }
         }
         $record = $fields
         $s = $record.src
@@ -235,6 +235,16 @@ function Get-CachedQuota {
           if ($null -ne $v -and (($v -isnot [int] -and $v -isnot [long] -and $v -isnot [double] -and $v -isnot [decimal]) -or [double]::IsNaN($v) -or $v -lt 0 -or $v -gt 100)) { return $null }
         }
         if ($null -ne $record.note -and $record.note -isnot [string]) { return $null }
+        if ($null -ne $record.failures) {
+          $fl = $record.failures
+          if (($fl -isnot [int] -and $fl -isnot [long]) -or $fl -lt 1) { return $null }
+        }
+        if ($null -ne $record.backoff_secs) {
+          $b = $record.backoff_secs
+          if (($b -isnot [int] -and $b -isnot [long] -and $b -isnot [double] -and $b -isnot [decimal]) -or [double]::IsNaN([double]$b) -or [double]$b -le 0) { return $null }
+          $item = Get-Item -LiteralPath $cp -ErrorAction SilentlyContinue
+          if (-not $item -or $item.LastWriteTime -le (Get-Date).AddSeconds(-[double]$b)) { return $null }
+        }
         $h = if ($record.ContainsKey('5h')) { $record.'5h' } else { $record.five }
         $w = if ($record.ContainsKey('7d')) { $record.'7d' } else { $record.weekly }
         $n = $record.note
@@ -289,29 +299,47 @@ function Start-QuotaRefresh([string]$targetCli, [string]$targetDir) {
   $lock = Join-Path $targetDir 'quota-cache.json.refreshing'
   if (Test-Path -LiteralPath $lock) {
     $item = Get-Item -LiteralPath $lock -ErrorAction SilentlyContinue
-    if ($item -and $item.LastWriteTime -gt (Get-Date).AddSeconds(-60)) { return }
+    if ($item -and $item.LastWriteTime -gt (Get-Date).AddSeconds(-60)) {
+      $script:noteTag = ' note=refresh_pending'
+      return
+    }
+    Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue
   }
   New-Item $targetDir -ItemType Directory -Force | Out-Null
-  Set-Content -LiteralPath $lock -Value (Get-Date).ToString()
+  $acquired = $false
+  try {
+    $absLock = [IO.Path]::Combine((Convert-Path -LiteralPath $targetDir), 'quota-cache.json.refreshing')
+    $fs = [IO.File]::Open($absLock, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try {
+      $bytes = [Text.Encoding]::UTF8.GetBytes((Get-Date).ToString('o', $inv))
+      $fs.Write($bytes, 0, $bytes.Length)
+    } finally { $fs.Dispose() }
+    $acquired = $true
+  } catch { }
+  $script:noteTag = ' note=refresh_pending'
+  if (-not $acquired) { return }
 
   $ps1 = $MyInvocation.MyCommand.Path
   if (-not $ps1) { $ps1 = $PSCommandPath }
   if ($ps1) {
     $arg = "-NoProfile -ExecutionPolicy Bypass -File `"$ps1`" -Mode refresh -Cli $targetCli -Dir `"$targetDir`""
-    try { Start-Process powershell -ArgumentList $arg -WindowStyle Hidden } catch { }
+    try { Start-Process powershell -ArgumentList $arg -WindowStyle Hidden } catch { Remove-Item -LiteralPath $lock -ErrorAction SilentlyContinue }
   }
 }
 
 if ($Mode -eq 'refresh') {
-  if (-not $Cli -or -not $Dir) { exit 0 }
+  if (-not $Cli -or -not $Dir -or $Cli -notin @('agy','claude','muse')) { exit 0 }
   $lock = Join-Path $Dir 'quota-cache.json.refreshing'
   $cache = Join-Path $Dir 'quota-cache.json'
+  $oldAgy = $env:AGY_CONFIG_DIR; $oldApp = $env:ANTIGRAVITY_APP_DATA_DIR
+  $oldCfg = $env:CLAUDE_CONFIG_DIR; $oldMuse = $env:MUSE_CONFIG_DIR
   try {
-    $res = $null
+    New-Item $Dir -ItemType Directory -Force | Out-Null
+    $res = $null; $raw = ''
     if ($Cli -eq 'agy') {
       $env:AGY_CONFIG_DIR = $Dir
       $env:ANTIGRAVITY_APP_DATA_DIR = $Dir
-      $raw = & agy -p "/usage" --output-format json 2>$null | Out-String
+      try { $raw = & agy -p "/usage" --output-format json 2>$null | Out-String } catch { $raw = '' }
       if ($raw) {
         $parsed = try { ConvertFrom-Json $raw -ErrorAction Stop } catch { $null }
         $h = $null; $wk = $null
@@ -338,33 +366,55 @@ if ($Mode -eq 'refresh') {
         }
       }
     } elseif ($Cli -eq 'claude') {
-      $oldCfg = $env:CLAUDE_CONFIG_DIR
       $env:CLAUDE_CONFIG_DIR = $Dir
-      $raw = & claude -p "/usage" --output-format json 2>$null | Out-String
-      $env:CLAUDE_CONFIG_DIR = $oldCfg
+      try { $raw = & claude -p "/usage" --output-format json 2>$null | Out-String } catch { $raw = '' }
       if ($raw) {
         $h = $null; $wk = $null
         if ($raw -match 'Current session:\s*([0-9.]+)%\s*used') { $h = [double]$Matches[1] }
         if ($raw -match 'Current week[^:]*:\s*([0-9.]+)%\s*used') { $wk = [double]$Matches[1] }
         if ($null -ne $h -or $null -ne $wk) {
-          $res = @{ src = 'claude-code'; '5h' = $h; '7d' = $wk }
+          $res = [ordered]@{ src = 'claude-code' }
+          if ($null -ne $h) { $res['5h'] = $h }
+          if ($null -ne $wk) { $res['7d'] = $wk }
         }
       }
     } elseif ($Cli -eq 'muse') {
       $env:MUSE_CONFIG_DIR = $Dir
-      $raw = & muse usage --json 2>$null | Out-String
-      if ($LASTEXITCODE -ne 0 -or $raw -match 'not logged in') {
-        $res = @{ src = 'muse'; note = 'not logged in' }
-      } else {
-        $p = ConvertFrom-Json $raw -ErrorAction SilentlyContinue
-        if ($p) { $res = @{ src = 'muse'; '5h' = $p.five_hour; '7d' = $p.weekly } }
-        else { $res = @{ src = 'muse'; note = 'unparseable' } }
+      try { $raw = & muse usage --json 2>&1 | Out-String } catch { $raw = '' }
+      if ($raw -and $raw -notmatch 'not logged in') {
+        $p = try { ConvertFrom-Json $raw -ErrorAction Stop } catch { $null }
+        $h = if ($p -and $null -ne $p.five_hour) { [double]$p.five_hour } else { $null }
+        $wk = if ($p -and $null -ne $p.weekly) { [double]$p.weekly } else { $null }
+        if ($null -ne $h -or $null -ne $wk) {
+          $res = [ordered]@{ src = 'muse' }
+          if ($null -ne $h) { $res['5h'] = $h }
+          if ($null -ne $wk) { $res['7d'] = $wk }
+        }
       }
     }
-    if ($res) {
-      [IO.File]::WriteAllText($cache, (ConvertTo-Json $res -Compress))
+    if (-not $res) {
+      $srcName = if ($Cli -eq 'claude') { 'claude-code' } else { $Cli }
+      $failNote = if ($raw -and $raw -match 'not logged in') { 'not logged in' }
+                  elseif ($raw -and $raw.Trim()) { 'unparseable' }
+                  else { 'refresh failed' }
+      $prevFailures = 0
+      if (Test-Path -LiteralPath $cache) {
+        try {
+          $old = ConvertFrom-Json ([IO.File]::ReadAllText((Convert-Path -LiteralPath $cache))) -ErrorAction Stop
+          if ($null -ne $old -and $null -eq $old.'5h' -and $null -eq $old.'7d' -and $null -ne $old.failures -and ($old.failures -is [int] -or $old.failures -is [long]) -and $old.failures -ge 1) {
+            $prevFailures = [int]$old.failures
+          }
+        } catch { }
+      }
+      $failures = $prevFailures + 1
+      $backoff = [int][Math]::Min(900, 60 * [Math]::Pow(2, [Math]::Min($failures - 1, 10)))
+      $res = [ordered]@{ src = $srcName; note = $failNote; failures = $failures; backoff_secs = $backoff }
     }
+    $absCache = [IO.Path]::Combine((Convert-Path -LiteralPath $Dir), 'quota-cache.json')
+    [IO.File]::WriteAllText($absCache, (ConvertTo-Json $res -Compress), (New-Object Text.UTF8Encoding $false))
   } finally {
+    $env:AGY_CONFIG_DIR = $oldAgy; $env:ANTIGRAVITY_APP_DATA_DIR = $oldApp
+    $env:CLAUDE_CONFIG_DIR = $oldCfg; $env:MUSE_CONFIG_DIR = $oldMuse
     Remove-Item -LiteralPath $lock -ErrorAction SilentlyContinue
   }
   exit 0

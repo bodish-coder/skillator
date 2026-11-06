@@ -537,20 +537,28 @@ async function cmdInbox(argv) {
   if (!box) throw new Error('not inside a git repo - run it from the repo the messages are for')
   // tail: the newest 200 records, as JSONL - the ops board's read of an inbox too big to
   // read whole (readInbox reads only its last 4 MiB)
-  if (argv[0] === 'tail') {
+  if (argv[0] === 'tail' && argv.length === 1) {
     for (const r of readInbox(box).slice(-200)) process.stdout.write(JSON.stringify(r) + '\n')
     return 0
   }
   if (argv[0] === 'mark-read') {
+    const rest = argv.slice(1)
     const recs = readInbox(box)
-    const upto = flag(argv, '--upto') ?? recs.at(-1)?.id ?? null
+    const upto = flag(rest, '--upto') ?? recs.at(-1)?.id ?? null
+    if (rest.length > 0) { err('usage: inbox mark-read [--upto <id>]'); return 2 }
     if (!upto) { out('inbox empty - nothing to mark'); return 0 }
     if (!ID_RE.test(upto)) { err('--upto takes a message id'); return 2 }
     writeMarker(box, READ, upto)
     out(`read up to ${upto}`)
     return 0
   }
-  const unread = has(argv, '--unread'), mark = has(argv, '--mark-read')
+  const allFlag = has(argv, 'all') || has(argv, '--all')
+  const unread = !allFlag && has(argv, '--unread')
+  const mark = !allFlag && has(argv, '--mark-read')
+  if (argv.length > 0) {
+    err('inbox is read-only (usage: inbox [--unread] [--mark-read] [all] | tail | mark-read [--upto <id>]); to hand off an issue to a teammate, use: message <@handle> --file <path> (/message-uhura @handle <issue>)')
+    return 2
+  }
   const recs = readInbox(box)
   const list = unread ? after(recs, readMarker(box, READ)) : recs
   if (!list.length) { out(unread ? 'no unread team messages' : 'no team messages'); return 0 }
@@ -588,14 +596,23 @@ export function resolveSender(root, teamMembers, env = process.env) {
   return { handle: teamMembers.length === 1 ? teamMembers[0].handle : '@owner', email: '' }
 }
 
+export function findAck(recs, id, recipientHandle) {
+  const h = String(recipientHandle ?? '').toLowerCase()
+  return recs.find(r => r.id !== id && r.from.toLowerCase() === h && r.text.includes(id)) ?? null
+}
+
 async function cmdMessage(argv, cfg) {
   const fileArg = flag(argv, '--file')
   const fromArg = flag(argv, '--from')
+  const retryId = flag(argv, '--retry')
+  const statusId = flag(argv, '--status')
   const stdinFlag = has(argv, '--stdin')
+  const requireRemote = has(argv, '--require-remote')
   const [handle, ...extra] = argv
 
-  if (!handle || (!fileArg && !stdinFlag) || extra.length > 0) {
-    err('usage: message <@handle> --file <path> | --stdin [--from <@sender>] (text on the command line is refused)')
+  const modes = [Boolean(fileArg), stdinFlag, Boolean(retryId), Boolean(statusId)].filter(Boolean).length
+  if (!handle || modes !== 1 || extra.length > 0) {
+    err('usage: message <@handle> --file <path> | --stdin | --retry <id> | --status <id> [--from <@sender>] [--require-remote] (send/handoff command; to read the inbox, use: team.mjs inbox or /team-messages; text on the command line is refused)')
     return 2
   }
 
@@ -610,6 +627,57 @@ async function cmdMessage(argv, cfg) {
   if (!member) {
     err(`${h} is not on .skillator/team.md - add <email> to .skillator/team.md (ticket-meta team add ${h} "Name" email)`)
     return 1
+  }
+
+  const box = inboxDir(root)
+  if (!box) throw new Error('no git dir - the inbox lives in it')
+  const inboxPath = join(box, INBOX)
+
+  if (statusId) {
+    if (!ID_RE.test(statusId)) { err(`message: invalid record id: ${statusId}`); return 2 }
+    const recs = readInbox(box)
+    const rec = recs.find(r => r.id === statusId && (!r.to || r.to.toLowerCase() === member.handle.toLowerCase()))
+    if (!rec) {
+      err(`message: no local record with id ${statusId} for ${member.handle} in ${inboxPath}`)
+      return 1
+    }
+    const ack = findAck(recs, statusId, member.handle)
+    if (ack) {
+      out(`local record (id ${statusId}) for ${member.handle}: status=acknowledged, local_queue=present, ack=acknowledged by ${member.handle} in message ${ack.id}`)
+    } else {
+      out(`local record (id ${statusId}) for ${member.handle}: status=unacknowledged, local_queue=present, ack=unacknowledged (local storage in ${inboxPath} is not cross-machine receipt)`)
+    }
+    return 0
+  }
+
+  if (retryId) {
+    if (!ID_RE.test(retryId)) { err(`message: invalid record id: ${retryId}`); return 2 }
+    const recs = readInbox(box)
+    const rec = recs.find(r => r.id === retryId && (!r.to || r.to.toLowerCase() === member.handle.toLowerCase()))
+    if (!rec) {
+      err(`message: no local record with id ${retryId} for ${member.handle} in ${inboxPath}`)
+      return 1
+    }
+    if (!cfg?.TEAMS_WORKFLOW_URL) {
+      err(`channel post failed: TEAMS_WORKFLOW_URL is not set (${configPath()} or the environment)`)
+      err(`recovery: local record (id ${rec.id}) retained in ${inboxPath}; configure TEAMS_WORKFLOW_URL and retry with: node team.mjs message ${member.handle} --retry ${rec.id}`)
+      out(`queued locally for ${member.handle} in this clone's inbox (id ${rec.id}; status: failed_post, local_queue: retained, channel: not_configured, ack: unacknowledged - remote delivery failed, local storage is not cross-machine receipt)`)
+      return 1
+    }
+    const sayRes = await say(rec.text, cfg)
+    if (!sayRes.ok) {
+      err(`channel post failed: ${sayRes.error}`)
+      err(`recovery: local record (id ${rec.id}) retained in ${inboxPath}; retry remote post with: node team.mjs message ${member.handle} --retry ${rec.id}`)
+      out(`queued locally for ${member.handle} in this clone's inbox (id ${rec.id}; status: failed_post, local_queue: retained, channel: failed, ack: unacknowledged - remote delivery failed, local storage is not cross-machine receipt)`)
+      return 1
+    }
+    const ack = findAck(recs, rec.id, member.handle)
+    if (ack) {
+      out(`queued locally (id ${rec.id}) and posted to Teams channel for ${member.handle} (status: acknowledged, local_queue: retained, channel: posted, ack: acknowledged by ${member.handle} in message ${ack.id})`)
+    } else {
+      out(`queued locally (id ${rec.id}) and posted to Teams channel for ${member.handle} (status: channel_posted, local_queue: retained, channel: posted, ack: unacknowledged - channel post succeeded, no recipient acknowledgment yet)`)
+    }
+    return 0
   }
 
   let text = ''
@@ -647,9 +715,6 @@ async function cmdMessage(argv, cfg) {
     senderEmail = resolved.email
   }
 
-  const box = inboxDir(root)
-  if (!box) throw new Error('no git dir - the inbox lives in it')
-
   const id = `${Date.now()}`
   const rec = {
     ts: new Date().toISOString(),
@@ -663,10 +728,29 @@ async function cmdMessage(argv, cfg) {
 
   if (cfg?.TEAMS_WORKFLOW_URL) {
     const sayRes = await say(text.trim(), cfg)
-    if (!sayRes.ok) err(`channel post failed: ${sayRes.error}`)
+    if (!sayRes.ok) {
+      err(`channel post failed: ${sayRes.error}`)
+      err(`recovery: local record (id ${id}) retained in ${inboxPath}; retry remote post with: node team.mjs message ${member.handle} --retry ${id}`)
+      out(`queued locally for ${member.handle} in this clone's inbox (id ${id}; status: failed_post, local_queue: retained, channel: failed, ack: unacknowledged - remote delivery failed, local storage is not cross-machine receipt)`)
+      return 1
+    }
+    const ack = findAck(readInbox(box), id, member.handle)
+    if (ack) {
+      out(`queued locally (id ${id}) and posted to Teams channel for ${member.handle} (status: acknowledged, local_queue: queued, channel: posted, ack: acknowledged by ${member.handle} in message ${ack.id})`)
+    } else {
+      out(`queued locally (id ${id}) and posted to Teams channel for ${member.handle} (status: channel_posted, local_queue: queued, channel: posted, ack: unacknowledged - channel post succeeded, no recipient acknowledgment yet)`)
+    }
+    return 0
   }
 
-  out(`delivered message to ${member.handle}'s inbox (id ${id})`)
+  if (requireRemote) {
+    err(`channel post failed: TEAMS_WORKFLOW_URL is not set (${configPath()} or the environment)`)
+    err(`recovery: local record (id ${id}) retained in ${inboxPath}; configure TEAMS_WORKFLOW_URL and retry with: node team.mjs message ${member.handle} --retry ${id}`)
+    out(`queued locally for ${member.handle} in this clone's inbox (id ${id}; status: failed_post, local_queue: retained, channel: not_configured, ack: unacknowledged - remote delivery failed, local storage is not cross-machine receipt)`)
+    return 1
+  }
+
+  out(`queued locally for ${member.handle} in this clone's inbox (id ${id}; status: local_queue_only, local_queue: queued, channel: not_configured, ack: unacknowledged - local clone only, not delivered cross-machine)`)
   return 0
 }
 

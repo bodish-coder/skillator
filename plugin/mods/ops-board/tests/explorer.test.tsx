@@ -1,8 +1,12 @@
 import { test, expect, mock } from 'claude-code/testing'
 import type { On, ProcessRunResult } from 'claude-code'
 import type { Engine, MockClock, Plugin } from 'claude-code/testing'
-import { ACTION_ARGS, COMMITS, EMPTY, explorerLines, INCOMING, isRunRef, parseCount, planAction, toggle, withIncoming, withLog,
-  withUpstream } from '../hooks/lib/explorer'
+import {
+  abortConflictArgs, ACTION_ARGS, buildConflictResolutionPlan, canRunSwitch, COMMITS, EMPTY, explorerLines,
+  findUntrackedSwitchBlockers, formatGitFailure, INCOMING, isRunRef, parseCount, parseStatus, pickBranch,
+  planAction, reviewStagedCommit, reviewSyncChanges, stageArgs, toggle, unstageArgs, withIncoming, withLog,
+  withUpstream, withWorktree,
+} from '../hooks/lib/explorer'
 
 // F75: the Explorer tab - the project's git-tracked files as a tree and the recent
 // commits, each opening to the files it changed. Read-only; git by the mod's own
@@ -18,7 +22,7 @@ const CH2 = ':100644 100644 eee eee R100\tsrc/old.ts\tsrc/new.ts\n:100644 100644
 
 const SHA3 = 'fedcba9' + 'c'.repeat(33)          // F103: the upstream's commit HEAD has not
 
-// F103: `actions` records the argv of every fetch/pull/push/revert/merge run; each answers `actionResult`.
+// F103: `actions` records the argv of every fetch/pull/push/revert/merge/commit/sync/switch run; each answers `actionResult`.
 type World = { runs: { argv: readonly string[]; cwd?: string; env?: Record<string, string> }[]; git: (args: readonly string[]) => ProcessRunResult
   exes: string[]; actions: string[][]; actionResult: ProcessRunResult | string; dirty: string; branch: string; head: string; pushTo: string
   root: string; toasts: string[]; repoFails: boolean; existsFails: boolean; branchError?: ProcessRunResult }
@@ -38,7 +42,7 @@ const answer = (args: readonly string[]): ProcessRunResult => {
   if (a.includes(' log ')) return ran(LOG)
   return ran('', 1, 'not in this test')
 }
-const ACTION = /^(fetch|pull|push|revert|merge|commit|sync)$/
+const ACTION = /^(fetch|pull|push|revert|merge|commit|sync|switch)$/
 
 function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   const w: World = { runs: [], git: answer, exes: [], actions: [], actionResult: ran('Already up to date.\n'), dirty: '', branch: 'main', head: SHA1,
@@ -53,7 +57,8 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
     if (a === 'rev-parse HEAD') return w.head ? ran(w.head + '\n') : ran('HEAD\n', 128, 'fatal: ambiguous argument HEAD')
     if (a === 'rev-parse --absolute-git-dir') return ran('/r/.git\n')
     if (a.startsWith('for-each-ref')) return ran(w.pushTo + '\n')
-    if (a.startsWith('status --porcelain')) return ran(w.dirty)
+    if (a.includes('status --porcelain')) return ran(w.dirty)
+    if (a.startsWith('diff --cached')) return ran('')
     if (a.startsWith('branch --format')) return ran('main\nfeature/x\nrun/RUN-0021-y\n')
     return w.git(args)
   }
@@ -290,13 +295,14 @@ test('a long file name with an ESC and a CR lines up with any other long name', 
 
 // F103: the git actions - the argv is fixed per action, a plan refuses what git would refuse
 // or stop half way on, and run branches / worktrees are warned before anything runs.
-test('F103 argv per action is fixed: ff-only no-rebase pull, push by explicit refspec, no-edit revert, merge with --', () => {
+test('F103 argv per action is fixed: ff-only no-rebase pull, push by explicit refspec, no-edit revert, merge and switch with --', () => {
   expect(ACTION_ARGS.fetch('')).toEqual(['fetch', '--prune'])
   expect(ACTION_ARGS.pull('')).toEqual(['pull', '--ff-only', '--no-rebase'])
   expect(ACTION_ARGS.push('origin', 'main')).toEqual(['push', 'origin', 'HEAD:refs/heads/main'])
   expect(ACTION_ARGS.revert('abc1')).toEqual(['revert', '--no-edit', 'abc1'])
   expect(ACTION_ARGS.merge('feature/x')).toEqual(['merge', '--no-edit', '--', 'feature/x'])
   expect(ACTION_ARGS.merge('-n')).toEqual(['merge', '--no-edit', '--', '-n'])   // a branch named -n is no option
+  expect(ACTION_ARGS.switch('feature/x')).toEqual(['switch', '--', 'feature/x'])
   for (const k of Object.keys(ACTION_ARGS) as (keyof typeof ACTION_ARGS)[]) expect(ACTION_ARGS[k]('t').some(a => /force/.test(a))).toBe(false)
 })
 
@@ -312,7 +318,7 @@ test('F103 planAction: dirty tree refuses pull/merge/revert, push needs an upstr
   const r = planAction(x, 'revert', { ...at, branch: 'run/RUN-0022-x', root: '/r/.skillator/worktrees/RUN-0022-x' })
   expect(r).toEqual({ action: { kind: 'revert', args: ['revert', '--no-edit', SHA1], warn: ['on relay run branch run/RUN-0022-x - runs land through relay-morpheus; continue only if you mean it', 'this checkout is a run worktree (/r/.skillator/worktrees/RUN-0022-x)'], pick: null, result: null, branch: 'run/RUN-0022-x', head: SHA1 } })
   const m = planAction(x, 'merge', { ...at, branches: ['main', 'feature/x', 'run/RUN-0021-y'] })
-  expect(m).toEqual({ action: { kind: 'merge', args: [], warn: [], pick: ['feature/x', 'run/RUN-0021-y'], result: null, branch: 'main', head: SHA1 } })
+  expect(m).toEqual({ action: { kind: 'merge', args: [], warn: [], pick: ['feature/x', 'run/RUN-0021-y'], result: null, branch: 'main', head: SHA1, conflictAi: true } })
 })
 
 test('F103 upstream and incoming: the count line, the Incoming section only when behind, its items open like commits', () => {
@@ -352,7 +358,7 @@ test('F103 pull: the confirm names the exact argv; Run runs it once; Cancel and 
   await ui.unmount()
 })
 
-test('F103 every action: fetch, push, revert of the selected commit, merge of a picked branch - argv pinned; a dirty tree refuses pull/merge/revert with a toast', WITH, async ($, on) => {
+test('F103 every action: fetch, push, revert of the selected commit, merge and switch of a picked branch - argv pinned; a dirty tree refuses pull/merge/revert with a toast', WITH, async ($, on) => {
   const [w, clock] = world(on); await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
   await go(ui, clock, 'key:fetch'); expect(w.actions).toEqual([['fetch', '--prune']]); w.actions = []
   await go(ui, clock, 'key:push'); expect(w.actions).toEqual([['push', 'origin', 'HEAD:refs/heads/main']]); w.actions = []
@@ -365,6 +371,13 @@ test('F103 every action: fetch, push, revert of the selected commit, merge of a 
   expect((await ui.find({ key: 'xa:argv' }))?.text).toBe('runs    git merge --no-edit -- feature/x')
   await ui.press({ key: 'xa:go' }); await clock.settle()
   expect(w.actions).toEqual([['merge', '--no-edit', '--', 'feature/x']]); w.actions = []
+  // F155: switch action
+  await ui.press({ key: 'key:switch' }); await clock.settle()
+  expect(await ui.find({ key: 'xb:main' })).toBeUndefined()
+  await ui.press({ key: 'xb:feature/x' }); await clock.settle()
+  expect((await ui.find({ key: 'xa:argv' }))?.text).toBe('runs    git switch -- feature/x')
+  await ui.press({ key: 'xa:go' }); await clock.settle()
+  expect(w.actions).toEqual([['switch', '--', 'feature/x']]); w.actions = []
   w.dirty = ' M a.ts\n'
   for (const k of ['key:pull', 'key:merge', 'key:revert']) {
     await ui.press({ key: k }); await clock.settle()
@@ -383,6 +396,9 @@ test('F103 a failed command shows git\'s message; a merge conflict says the merg
   const t = w.toasts.at(-1)!
   expect(t.startsWith('■ git merge --no-edit -- feature/x failed: CONFLICT')).toBe(true)
   expect(t.endsWith('- merge stopped on conflict: resolve by hand, or git merge --abort')).toBe(true)
+  // F153: conflict handoff and abort buttons are rendered
+  expect(await ui.find({ key: 'xa:merge_smith' })).toBeDefined()
+  expect(await ui.find({ key: 'xa:abort' })).toBeDefined()
   w.actionResult = ran('', 1, 'fatal: Not possible to fast-forward, aborting.\n')
   await go(ui, clock, 'key:pull')
   expect(w.toasts.at(-1)).toBe('■ git pull --ff-only --no-rebase failed: fatal: Not possible to fast-forward, aborting.')
@@ -404,10 +420,10 @@ test('F103 Run pressed twice runs git once; a detached HEAD is no merge source',
   await ui.unmount()
 })
 
-test('F103 a run branch and a run worktree are warned in the confirm; the keys line names f p u v m', WITH, async ($, on) => {
+test('F103 a run branch and a run worktree are warned in the confirm; the keys line names f p u v m b', WITH, async ($, on) => {
   const [w, clock] = world(on); w.branch = 'run/RUN-0022-x'; w.root = '/r/.skillator/worktrees/RUN-0022-x'
   await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
-  for (const [k, h] of [['fetch', 'f'], ['pull', 'p'], ['push', 'u'], ['revert', 'v'], ['merge', 'm']])
+  for (const [k, h] of [['fetch', 'f'], ['pull', 'p'], ['push', 'u'], ['revert', 'v'], ['merge', 'm'], ['switch', 'b']])
     expect((await ui.find({ key: 'key:' + k }))?.props.hotkey).toBe(h)
   await ui.press({ key: 'key:push' }); await clock.settle()
   expect((await ui.find({ key: 'xa:warn:0' }))?.text).toBe('on relay run branch run/RUN-0022-x - runs land through relay-morpheus; continue only if you mean it')
@@ -554,7 +570,7 @@ test('A164 a branch query failure refuses fetch without a confirm or action', WI
 
 test('F133 commit: staging and committing working tree files with drafted message', WITH, async ($, on) => {
   const [w, clock] = world(on)
-  w.dirty = 'M  src/app.ts\n?? .env\n'
+  w.dirty = 'M  src/app.ts\nA  .env\n'
   await start($, clock); const ui = await mountExplorer($, clock, 'terminal', 70)
   expect(await ui.find({ key: 'key:commit' })).toBeDefined()
   await ui.press({ key: 'key:commit' }); await clock.settle()
@@ -564,4 +580,42 @@ test('F133 commit: staging and committing working tree files with drafted messag
   await go(ui, clock, 'key:commit')
   expect(w.actions.some(a => a[0] === 'commit')).toBe(true)
   await ui.unmount()
+})
+
+test('A195, F151, F152, F153, F155, F156: special paths, AI review delegate & fallback, conflict handoff, branch switch, and failure formatting', () => {
+  const parsed = parseStatus('M   spaced.ts \0?? arrow -> file.ts\0R  new.ts\0old.ts\0')
+  expect(parsed).toHaveLength(3)
+  expect(parsed[0]!.path).toBe(' spaced.ts ')
+  expect(parsed[1]!.path).toBe('arrow -> file.ts')
+  expect(stageArgs(parsed[2]!)).toEqual(['add', '--', 'old.ts', 'new.ts'])
+  expect(unstageArgs(parsed[2]!)).toEqual(['reset', 'HEAD', '--', 'old.ts', 'new.ts'])
+
+  const wt = withWorktree(EMPTY, parsed)
+  const commitRev = reviewStagedCommit(wt, { diff: '+ghp_1234567890abcdefghijklmnopqrstuv\n', ticketId: 'F151' })
+  expect(commitRev.status).toBe('unavailable')
+  expect(commitRev.findings.some(f => f.includes('secret'))).toBe(true)
+
+  const syncRev = reviewSyncChanges(withUpstream(EMPTY, 'origin/main', '1\t1'), 'pull')
+  expect(syncRev.status).toBe('fallback')
+  expect(syncRev.summary?.some(s => s.includes('HEAD ↔ origin/main'))).toBe(true)
+
+  const conflictPlan = buildConflictResolutionPlan(
+    withWorktree(EMPTY, parseStatus('UU src/a.ts\0')),
+    { kind: 'merge', args: ['merge', '--no-edit', '--', 'feature/x'], warn: [], pick: null, result: 'CONFLICT', branch: 'main', head: SHA1 }
+  )
+  expect(conflictPlan.conflictedFiles).toEqual(['src/a.ts'])
+  expect(conflictPlan.abortArgs).toEqual(abortConflictArgs('merge'))
+  expect(conflictPlan.prompt).toContain('/skillator:merge-smith')
+
+  const blockers = findUntrackedSwitchBlockers(parseStatus('?? clash.ts\0'), ['clash.ts'])
+  expect(blockers).toEqual(['clash.ts'])
+  const sw = planAction(EMPTY, 'switch', { branch: 'main', head: SHA1, dirty: 0, branches: ['main', 'dev'], untrackedBlockers: blockers })
+  expect('action' in sw).toBe(true)
+  if ('action' in sw) {
+    const picked = pickBranch(sw.action, 'dev')
+    expect(canRunSwitch(picked)).toContain('cannot switch branches')
+  }
+
+  const fmt = formatGitFailure('commit', ['commit', '-m', 'msg'], { code: null, err: 'timed out', timedOut: true })
+  expect(fmt.uncertain).toBe(true)
 })

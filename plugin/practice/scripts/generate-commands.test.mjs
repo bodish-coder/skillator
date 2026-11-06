@@ -67,7 +67,10 @@ test('every published output and alias has a source; host invocation contracts s
       assert.ok(body.includes('{{SKILLS}}/.skillator-source'), path);
     }
     if (/message-uhura/.test(path)) {
-      for (const guard of ['@handle <issue>', '6-Section Analysis', 'message @handle --file', 'No secrets or tokens']) assert.ok(body.includes(guard), `${path}: ${guard}`);
+      for (const guard of ['@handle <issue>', '6-Section Analysis', 'message @handle --file', 'No secrets or tokens', '/team-messages', 'local_queue_only', 'channel_posted', 'failed_post', 'acknowledged']) assert.ok(body.includes(guard), `${path}: ${guard}`);
+    }
+    if (/team-messages/.test(path)) {
+      for (const guard of ['read-only inbox command', 'not an alias for `/message-uhura`', '/message-uhura @handle <issue>']) assert.ok(body.includes(guard), `${path}: ${guard}`);
     }
     if (/marathon-(plan|run)|gauntlet-(plan|run)/.test(path)) {
       for (const guard of ['Legacy recovery (A162)', 'PLAN.mode', 'planned in RUN-<id>', '/marathon-plan <mode> <IDs>']) assert.ok(body.includes(guard), `${path}: ${guard}`);
@@ -79,6 +82,12 @@ test('every published output and alias has a source; host invocation contracts s
   assert.match(outputs.get('host-commands/antigravity/engage/SKILL.md'), /^---\nname: engage\n/);
   assert.ok(outputs.get('host-commands/antigravity/skillator-pending/SKILL.md').includes('name: skillator-pending'));
   assert.equal(outputs.get('commands/gauntlet-plan.md'), readFileSync(join(plugin, 'commands/marathon-plan.md'), 'utf8').replaceAll('\r\n', '\n'));
+  const hostsMeta = JSON.parse(readFileSync(join(plugin, 'commands/hosts.json'), 'utf8'));
+  const tm = hostsMeta.commands.find(c => c.name === 'team-messages');
+  const mu = hostsMeta.commands.find(c => c.name === 'message-uhura');
+  assert.ok(tm && mu, 'team-messages and message-uhura exist as distinct commands');
+  assert.ok(!tm.aliases.includes('message-uhura') && !mu.aliases.includes('team-messages'), 'neither command aliases the other');
+  ok(run(plugin, '--check'));
 });
 
 test('canonical edits propagate and CRLF input produces LF output', t => {

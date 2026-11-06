@@ -668,30 +668,33 @@ function SetRow($n, $state, $owner, $landed) {
   $true
 }
 
-# A heartbeat carries the row's existing `landed` back in. Without it the
-# "x with no sha" guard fires on a stage that already landed, turning a no-op
-# bookkeeping call from a late-reporting agent into a hard error.
+# A184: read and refresh heartbeat under the same mutation lock, updating only
+# the heartbeat field without overwriting state or landed SHA.
 function DoHeartbeat($n) {
   if (-not $n) { Die "usage: -Mode heartbeat -N <n> [-Driver TAG]" }
   NeedRun
-  $st = $null; $la = ''
-  Get-Content -Encoding UTF8 $Run | ForEach-Object {
-    if ((RowNum $_) -eq $n) {
-      $st = Cell $_ 3
-      $la = Cell $_ 6
-      if ($la -eq '-') { $la = '' }
+  $st = $null; $t = Now
+  Lock
+  try {
+    $out = foreach ($l in @(Get-Content -Encoding UTF8 $Run)) {
+      if ((RowNum $l) -eq [int]$n) {
+        $st = Cell $l 3
+        $c = $l -split '\|'
+        $c[5] = " $t "
+        ($c -join '|')
+      } else { $l }
     }
-  }
-  if ($null -eq $st) { Die "no stage $n in $Run" }
-  if ($st -eq '') { $st = 'pending' }
-  DoStage $n $st '' $la
+    if ($null -eq $st) { Die "no stage $n in $Run" }
+    WriteRun $out
+    # F31: the driver's own heartbeat keeps its stamp fresh - a live driver in a
+    # 40-minute stage is not stale. Anyone else's leaves the stamp alone.
+    if (IsMe) { TouchDriver }
+    StampUpdated
+  } finally { Unlock }
   if ($st -ceq '~' -and (HasChain) -and @(StageFiles $n).Count) {
     $k = try { LeaseBeat $n } catch { $null }
     if ($k -eq 0) { [Console]::Error.WriteLine("WARNING: stage $n holds no lease on its files any more - another run took it as stale and may be editing them; tell the user before landing") }
   }
-  # F31: the driver's own heartbeat keeps its stamp fresh - a live driver in a
-  # 40-minute stage is not stale. Anyone else's leaves the stamp alone.
-  if (IsMe) { Lock; try { TouchDriver; StampUpdated } finally { Unlock } }
 }
 
 function DoStatus {
@@ -1100,39 +1103,10 @@ function DoChainDispatch($n) {
   $wdHold = WdRead (Split-Path -Parent $Run)
   if ($wdHold) { Refuse "watchdog hold ($($wdHold.why)) - clear the cause, then /ops resume or relay-morpheus watchdog release" }
   $d = ChainDecide (LevelLine)
-  # F36: the stage's files are leased BEFORE the run lock - the registry wait
-  # must never stretch a run-lock hold - and given back if the dispatch is then
-  # refused or dies. A stage with no files: line could touch anything, so it
-  # waits while another run holds any live lease.
+  # A183: verify stage state under the run lock BEFORE taking or replacing its
+  # lease, so a losing duplicate dispatch cannot overwrite or release the
+  # winner's lease.
   $leased = $false; $took = @()
-  if ((RowCellN $n 3) -cin @('', '!') -and (HasChain) -and (CodeOf $n)) {
-    $files = @(StageFiles $n)
-    if ($files.Count) {
-      $r = RunTag; $stl = LeaseStale; $tn = Now
-      $res = LeaseLocked { param($reg)
-        $keep = @(); $hit = ''; $tk = @()
-        foreach ($z in @(LeaseRead $reg)) {
-          if ((SameRun $z.r $r) -and $z.s -ceq "$n") { continue }
-          if (-not (SameRun $z.r $r) -and @($files | Where-Object { PathsMeet $z.p $_ }).Count) {
-            $a = LeaseAge $z.h
-            if ($a -lt $stl) { $hit = "LEASED $($z.p) $($z.r) stage $($z.s)"; break }
-            $tk += "lease on $($z.p) from $($z.r) stage $($z.s) was ${a}m stale (limit ${stl}m), taken"; continue
-          }
-          $keep += $z
-        }
-        if (-not $hit) {
-          foreach ($f in $files) { $keep += [pscustomobject]@{ p = $f; r = $r; s = "$n"; d = $drv; h = $tn } }
-          LeaseWrite $reg $keep
-        }
-        [pscustomobject]@{ hit = $hit; took = $tk }
-      }
-      if ($res -and $res.hit) { Refuse "$($res.hit) - another run's live stage holds it; chain next names what can run" }
-      if ($res) { $leased = $true; $took = @($res.took) }
-    } else {
-      $fz = @(LeaseForeign)
-      if ($fz.Count) { Refuse "stage $n names no files: line, and $($fz[0].r) holds live leases - plan it with -Files, or wait for that run to land" }
-    }
-  }
   try {
   Lock
   try {
@@ -1141,6 +1115,34 @@ function DoChainDispatch($n) {
     if ($hp[1] -ne '-') { Refuse "chain is held ($($hp[1])) - chain release first, or chain wait" }
     $st = RowCellN $n 3
     if ($st -notin @('', '!')) { Refuse "stage $n is '$st', not pending or failed - a stage is never dispatched twice" }
+    if (HasChain) {
+      $files = @(StageFiles $n)
+      if ($files.Count) {
+        $r = RunTag; $stl = LeaseStale; $tn = Now
+        $res = LeaseLocked { param($reg)
+          $keep = @(); $hit = ''; $tk = @()
+          foreach ($z in @(LeaseRead $reg)) {
+            if ((SameRun $z.r $r) -and $z.s -ceq "$n") { continue }
+            if (-not (SameRun $z.r $r) -and @($files | Where-Object { PathsMeet $z.p $_ }).Count) {
+              $a = LeaseAge $z.h
+              if ($a -lt $stl) { $hit = "LEASED $($z.p) $($z.r) stage $($z.s)"; break }
+              $tk += "lease on $($z.p) from $($z.r) stage $($z.s) was ${a}m stale (limit ${stl}m), taken"; continue
+            }
+            $keep += $z
+          }
+          if (-not $hit) {
+            foreach ($f in $files) { $keep += [pscustomobject]@{ p = $f; r = $r; s = "$n"; d = $drv; h = $tn } }
+            LeaseWrite $reg $keep
+          }
+          [pscustomobject]@{ hit = $hit; took = $tk }
+        }
+        if ($res -and $res.hit) { Refuse "$($res.hit) - another run's live stage holds it; chain next names what can run" }
+        if ($res) { $leased = $true; $took = @($res.took) }
+      } else {
+        $fz = @(LeaseForeign)
+        if ($fz.Count) { Refuse "stage $n names no files: line, and $($fz[0].r) holds live leases - plan it with -Files, or wait for that run to land" }
+      }
+    }
     # F33: a stage a holding decision waits on runs only on a prompt written
     # after the answer - re-planned as a new stage, or ruled independent.
     $w = @(ChainScan | Where-Object { $_.StartsWith("IDLE $n Q") }) | Select-Object -First 1
@@ -1274,7 +1276,15 @@ function LeaseForeign { $r = RunTag; $st = LeaseStale; LeaseLocked { param($reg)
 # at a time. The file is written only under its own lock. Same file and rules
 # as relay-morpheus.sh: -Mode queue-run -Sub add|list|next|start|pause|done -Id n,
 # -Mode land -Id n -Sub start|finish|abort, -Mode away -Sub on|off|status.
-function QFile { $m = MainOf; if (-not $m) { $m = (Get-Location).Path }; $d = "$m/.skillator"; if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force $d | Out-Null }; "$d/queue.md" }
+function QFile {
+  if ($env:RELAY_DIR) {
+    if (-not (Test-Path -LiteralPath $env:RELAY_DIR)) { New-Item -ItemType Directory -Force $env:RELAY_DIR | Out-Null }
+    return "$($env:RELAY_DIR)/queue.md"
+  }
+  $m = MainOf; if (-not $m) { $m = (Get-Location).Path }; $d = "$m/.skillator"
+  if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Force $d | Out-Null }
+  "$d/queue.md"
+}
 function QLocked([scriptblock]$body) {
   $f = QFile
   $sv = $script:Lock; $script:Lock = $null
@@ -1309,6 +1319,173 @@ function QSetHdr($f, $k, $v) { QSave $f @(QLines $f | ForEach-Object { if ($_.St
 function QState($f, $r) { foreach ($l in (QLines $f)) { if ($null -ne (RowNum $l) -and (CanonTag (Cell $l 2)) -ceq (CanonTag $r)) { return (Cell $l 3) } }; '' }
 function QSet($f, $r, $st) { $t = Now; QSave $f @(QLines $f | ForEach-Object { if ($null -ne (RowNum $_) -and (CanonTag (Cell $_ 2)) -ceq (CanonTag $r)) { $c = $_ -split '\|'; $c[3] = " $st "; $c[4] = " $t "; $c -join '|' } else { $_ } }) }
 function RunIdArg($v) { $p = PadId $v; if (-not $p) { Die "'$v' is not a run id (RUN-0012)" }; "RUN-$p" }   # 12 | RUN-12 | RUN-0012 -> RUN-0012
+# A197: create a distinct follow-up run, migrate only eligible pending stages,
+# preserve provenance/dependencies and chosen mode, mark moved stages as '>' in
+# the source run, and queue the new follow-up run.
+function DoPushPending {
+  $ppId = "$Id".Trim()
+  $ppMd = "$ChainMode".Trim()
+  for ($i = 0; $i -lt $Rest.Count; $i++) {
+    $arg = "$($Rest[$i])"
+    if ($arg -ceq '--mode' -or $arg -ceq '-ChainMode') {
+      if ($i + 1 -ge $Rest.Count) { Die "push-pending: $arg needs a value" }
+      $ppMd = "$($Rest[$i + 1])"; $i++
+    } elseif ($arg.StartsWith('--mode=')) {
+      $ppMd = $arg.Substring(7)
+    } elseif ($arg.StartsWith('-')) {
+      Die "push-pending: unknown flag $arg"
+    } elseif (-not $ppId) {
+      $ppId = $arg
+    } else {
+      Die 'usage: -Mode queue-run -Sub push-pending -Id <id> [-ChainMode <mode>]'
+    }
+  }
+  if (-not $ppId -and $script:Run -and (Test-Path -LiteralPath $script:Run)) {
+    $ppId = "RUN-$(IdOf (Split-Path -Leaf $script:Run))"
+  }
+  if (-not $ppId) { Die 'usage: -Mode queue-run -Sub push-pending -Id <id> [-ChainMode <mode>]' }
+  if ($ppMd -and $ppMd -cnotin @('parallel', 'sequential', 'workflow', 'agents')) {
+    Die "push-pending: --mode must be parallel, sequential, workflow or agents, got $ppMd"
+  }
+  $r = RunIdArg $ppId
+  $rf = Resolve-Run ($r -replace '^RUN-', '')
+  if (-not $rf) { Die "no run file for $r - see: -Mode list" }
+  $svRun = $script:Run; $svDir = $script:Dir
+  $script:Run = $rf; $script:Dir = Split-Path -Parent $rf
+  $newId = ''; $movedCnt = 0; $movedList = ''; $tkStr = '-'; $effMd = ''; $srcId = ''
+  Lock
+  try {
+    $srcId = "RUN-$(IdOf (Split-Path -Leaf $rf))"
+    $lines = @(Get-Content -Encoding UTF8 $rf)
+    $sec = ''
+    $elNums = New-Object System.Collections.Generic.List[int]
+    $elRows = New-Object System.Collections.Generic.List[string]
+    $elSet = @{}
+    foreach ($l in $lines) {
+      if ($l.StartsWith('## ')) { $sec = $l; continue }
+      if ($sec -ceq '## Stages') {
+        $n = RowNum $l
+        if ($null -ne $n) {
+          $st = (Cell $l 3).Trim()
+          if ($st -ceq '' -or $st -ceq 'pending') {
+            $elNums.Add([int]$n)
+            $elSet["$n"] = $true
+            $nm = (Cell $l 2).Trim()
+            $elRows.Add("| $n | $nm |   | - | - | - |")
+          }
+        }
+      }
+    }
+    if ($elNums.Count -eq 0) {
+      Refuse "no eligible pending stages in $srcId to push"
+    }
+    $movedCnt = $elNums.Count
+    $movedList = ($elNums | ForEach-Object { "$_" }) -join ','
+    $baseTitle = ($lines[0] -replace '^# RUN[-a-zA-Z0-9]* *- *', '') -replace '^Follow-up from RUN-[0-9A-Za-z-]+: *', ''
+    if (-not $baseTitle) { $baseTitle = 'run' }
+    $plan = HdrField $rf 'plan'; if (-not $plan) { $plan = 'TICKETS.md' }
+    $ow = HdrField $rf 'owner'
+    $srcMd = HdrField $rf 'mode'
+    $chParts = HdrSplit (ChainHdr)
+    $chMd = if ($chParts) { $chParts[2] } else { '' }
+    $effMd = if ($ppMd) { $ppMd } elseif ($srcMd) { $srcMd } elseif ($chMd) { $chMd } else { 'workflow' }
+    $newNum = PadId ((Alloc 'RUN' 1 $script:Dir)[0])
+    $newId = "RUN-$newNum"
+    $sl = Slug "followup-$srcId-$baseTitle"; if (-not $sl) { $sl = 'followup' }
+    $newFile = Join-Path $script:Dir "run-$newNum-$sl.md"
+    $now = Now
+    $day = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd', $INV)
+    # Collect tickets and migrated chain blocks
+    $seenTk = @{}
+    $tks = New-Object System.Collections.Generic.List[string]
+    $chainBlocks = New-Object System.Collections.Generic.List[string]
+    $sec = ''; $keepChain = $false
+    foreach ($l in $lines) {
+      if ($l.StartsWith('## ')) { $sec = $l; $keepChain = $false; continue }
+      if ($sec -ceq '## Stages') {
+        $n = RowNum $l
+        if ($null -ne $n -and $elSet.ContainsKey("$n")) {
+          $cellNoCode = ((Cell $l 2).Trim()) -replace '^[A-Z0-9]{4}\s+', ''
+          foreach ($tid in @(IdsOf $cellNoCode)) {
+            if ($tid -cmatch '^[A-Z]{1,3}[0-9]+[a-z]?$' -and -not $seenTk.ContainsKey($tid)) { $seenTk[$tid] = $true; $tks.Add($tid) }
+          }
+        }
+        continue
+      }
+      if ($sec -ceq '## Chain') {
+        if ($l.StartsWith('### ')) {
+          $keepChain = $false
+          if ($l -cmatch '^### [A-Z0-9]{4} - stage ([0-9]+) - ') {
+            if ($elSet.ContainsKey($Matches[1])) { $keepChain = $true }
+          }
+        }
+        if ($keepChain) {
+          $chainBlocks.Add($l)
+          if ($l.StartsWith('tickets: ')) {
+            foreach ($tid in @(IdsOf $l.Substring(9))) {
+              if ($tid -cmatch '^[A-Z]{1,3}[0-9]+[a-z]?$' -and -not $seenTk.ContainsKey($tid)) { $seenTk[$tid] = $true; $tks.Add($tid) }
+            }
+          }
+        }
+      }
+    }
+    if ($tks.Count -gt 0) { $tkStr = $tks -join ',' }
+    $newLines = New-Object System.Collections.Generic.List[string]
+    $newLines.Add("# $newId - Follow-up from ${srcId}: $baseTitle")
+    $newLines.Add("plan: $plan")
+    $newLines.Add("started: $now   updated: $now")
+    $newLines.Add("followup_from: $srcId")
+    $newLines.Add("Follow-up from: $srcId")
+    $newLines.Add("mode: $effMd")
+    if ($ow) { $newLines.Add("owner: $ow") }
+    $newLines.Add('')
+    $newLines.Add('## Stages')
+    $newLines.Add('| # | stage | state | owner | heartbeat | landed |')
+    $newLines.Add('|---|-------|-------|-------|-----------|--------|')
+    foreach ($rline in $elRows) { $newLines.Add($rline) }
+    $newLines.Add('')
+    $newLines.Add('## In flight')
+    $newLines.Add('- none')
+    $newLines.Add('')
+    $newLines.Add('## Chain')
+    $newLines.Add("driver: -$($SEP)hold: -$($SEP)mode: $effMd")
+    foreach ($cline in $chainBlocks) { $newLines.Add($cline) }
+    $newLines.Add('')
+    $newLines.Add('## Rulings')
+    $newLines.Add("- $day - Follow-up from $srcId (mode: $effMd, stages: $movedList)")
+    [IO.File]::WriteAllText($newFile, (($newLines -join "`n") + "`n"), (New-Object Text.UTF8Encoding($false)))
+    # Mark migrated stages in the source run as '>' pointing to the follow-up run
+    $sec = ''
+    $updatedSrc = foreach ($l in $lines) {
+      if ($l.StartsWith('## ')) { $sec = $l }
+      if ($sec -ceq '## Stages') {
+        $n = RowNum $l
+        if ($null -ne $n -and $elSet.ContainsKey("$n")) {
+          $c = $l -split '\|'
+          $c[3] = ' > '
+          $c[5] = " $now "
+          $c[6] = " $newId stage $n "
+          $c -join '|'
+          continue
+        }
+      }
+      $l
+    }
+    WriteRun $updatedSrc
+    AddRuling "pushed pending stages ($movedList) to follow-up $newId (mode: $effMd)"
+    StampUpdated
+  } finally {
+    Unlock
+    $script:Run = $svRun; $script:Dir = $svDir
+  }
+  QLocked { param($f)
+    if (-not (QState $f $newId)) {
+      $qn = 1; foreach ($l in (QLines $f)) { $k = RowNum $l; if ($null -ne $k) { $qn = $k + 1 } }
+      QSave $f (@(QLines $f) + "| $qn | $newId | queued | $(Now) |")
+    }
+  } | Out-Null
+  "FOLLOWUP $newId moved=$movedCnt stages=$movedList tickets=$tkStr mode=$effMd from=$srcId"
+}
 function DoQueueRun {
   $sub = if ($Sub) { $Sub } else { 'list' }
   switch ($sub) {
@@ -1316,6 +1493,7 @@ function DoQueueRun {
             QLocked { param($f) if (QState $f $r) { "$r is already queued ($(QState $f $r))"; return }
               $n = 1; foreach ($l in (QLines $f)) { $k = RowNum $l; if ($null -ne $k) { $n = $k + 1 } }
               QSave $f (@(QLines $f) + "| $n | $r | queued | $(Now) |"); "$r queued (#$n)" } }
+    'push-pending' { DoPushPending }
     'list' { $f = QFile; QLocked { param($f) } | Out-Null
              # F44: ids printed padded, and each run's owner in a last column.
              foreach ($l in (QLines $f)) {
@@ -1338,7 +1516,7 @@ function DoQueueRun {
         # A paused or finished run gives up a landing it held.
         if ($st -cne 'running' -and (CanonTag (QHdr $f 'landing').Split(' ')[0]) -ceq $r) { QSetHdr $f 'landing' '-' }
         QSet $f $r $st; "$r $st" } }
-    default { Die "usage: -Mode queue-run -Sub add|list|next|start|pause|done [-Id n]" }
+    default { Die "usage: -Mode queue-run -Sub add|push-pending|list|next|start|pause|done [-Id n]" }
   }
 }
 function DoAway {
@@ -1951,7 +2129,7 @@ function ChainScan([switch]$NextOnly) {
   }
   $holding = { param($k) $qs[$k] -cin @('open', 'asked', 'answered', 'ruled') }
   $landed = $null
-  $landed = { param($s, $d) if ($st[$s] -ceq 'x') { return $true }
+  $landed = { param($s, $d) if (-not $st.ContainsKey($s) -or $st[$s] -ceq 'x') { return $true }
     if ($st[$s] -ceq '>' -and $rep.ContainsKey($s) -and [int]$d -lt 64) { return (& $landed $rep[$s] ([int]$d + 1)) }; $false }
   # $true when an unlanded after: stage behind d (transitively) is a failed one.
   $failBehind = $null
@@ -3818,7 +3996,7 @@ try {
   # -Id names the run for every mode that touches one.
   if ($Id) {
     $f = Resolve-Run $Id
-    if (-not $f -and $Mode -cnotin @('resume', 'queue-run', 'land')) { Die "no run matching '$Id' - see: -Mode list" }
+    if (-not $f -and $Mode -cnotin @('resume', 'queue-run', 'push-pending', 'land')) { Die "no run matching '$Id' - see: -Mode list" }
     if ($f) { $Run = $f }
   }
   switch ($Mode) {
@@ -3827,6 +4005,7 @@ try {
     'init'      { DoInit }
     'board'     { DoBoard }
     'queue-run' { DoQueueRun }
+    'push-pending' { DoPushPending }
     'land'      { DoLand }
     'away'      { DoAway }
     'add'       { DoAdd $Title }

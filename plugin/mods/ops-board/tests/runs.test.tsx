@@ -1003,7 +1003,8 @@ test('F104 a relay failure is shown with what ran', async ($, on) => {
 })
 
 // F99: a finished run (done >= total) sorts after the active ones, draws dim and never engages.
-import { engageOf, finishedLine, isFinished, orderRuns, stampAge } from '../hooks/lib/runlines'
+import { eligibleRunTickets, engageOf, finishedLine, isFinished, orderRuns, parseFollowupOut, stampAge, startRunCmd } from '../hooks/lib/runlines'
+import { openStartRun, pushPendingRunNative, runsKey, startRunGo } from '../hooks/runstab'
 test('F99 pure: isFinished, orderRuns, finishedLine, stampAge, engageOf refuses a finished run', () => {
   const mk = (id: string, done: number, total: number) => ({ id, title: 't ' + id, done, total, owner: null, stages: [], planned: false, decisions: [], mode: null, driver: null, flights: [], phases: null })
   const [a, b, c] = [mk('RUN-0011', 3, 3), mk('RUN-0012', 2, 4), mk('RUN-0013', 0, 0)]
@@ -1017,4 +1018,85 @@ test('F99 pure: isFinished, orderRuns, finishedLine, stampAge, engageOf refuses 
   expect(stampAge(stampAgo(5), NOW)).toBe(5)
   expect(Number.isNaN(stampAge('yesterday', NOW))).toBe(true)
   expect(engageOf(a, NOW)).toEqual({ refused: '■ RUN-0011 not engaged: all 3 stages landed - nothing left to drive' })
+})
+
+test('A196: native RunsTab Start Run form selects runner/mode/tickets, renders canonical startRunCmd preview, submits on confirm, and cancels cleanly', async ($, on) => {
+  const [w, clock] = world(on)
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+  const text = async (key: string) => (await ui.find({ key }))?.text
+
+  // 1. Start Run button is rendered in RunsTab
+  expect(await text('runs:start')).toBe('Start Run')
+
+  // 2. Pressing runs:start opens StartRunForm initialized with marathon + sequential + eligible open tickets
+  await ui.press({ key: 'runs:start' })
+  await ui.redraw()
+  expect(await text('start:runner')).toBe('Runner: marathon')
+  expect(await text('start:mode')).toBe('Mode: sequential')
+  expect(await text('start:preview')).toBe('Command  /marathon-run sequential F46 F47 F48 F49 B2')
+
+  // 3. Toggle runner and mode via buttons and runsKey
+  await ui.press({ key: 'start:runner' })
+  await ui.redraw()
+  expect(await text('start:runner')).toBe('Runner: pending-subagent')
+  expect(await text('start:preview')).toBe('Command  /pending-subagent sequential F46 F47 F48 F49 B2')
+
+  await runsKey($, 'm')
+  await ui.redraw()
+  expect(await text('start:mode')).toBe('Mode: parallel')
+  expect(await text('start:preview')).toBe('Command  /pending-subagent parallel F46 F47 F48 F49 B2')
+
+  // 4. Clear all tickets -> Confirm guards against empty ticket selection without submitting
+  await ui.press({ key: 'start:clear' })
+  await ui.redraw()
+  await ui.press({ key: 'start:go' })
+  await ui.redraw()
+  expect(w.submits).toEqual([])
+  expect(w.toasts.at(-1)).toBe('■ Select at least 1 ticket before starting a run')
+  expect(await text('start:result')).toBe('■ Select at least 1 ticket before starting a run')
+
+  // 5. Select specific tickets (F46 and B2) and verify canonical preview matches startRunCmd
+  await ui.press({ key: 'start:ticket:F46' })
+  await ui.press({ key: 'start:ticket:B2' })
+  await ui.redraw()
+  const expectedCmd = startRunCmd('pending-subagent', 'parallel', ['F46', 'B2'])
+  expect(expectedCmd).toBe('/pending-subagent parallel F46 B2')
+  expect(await text('start:preview')).toBe(`Command  ${expectedCmd}`)
+
+  // 6. Cancel via Esc / start:cancel closes form without submitting
+  await runsKey($, 'escape')
+  await ui.redraw()
+  expect(await ui.find({ key: 'start:title' })).toBeUndefined()
+  expect(w.submits).toEqual([])
+
+  // 7. Re-open via runsKey('s'), toggle runner/mode, and Confirm -> dispatches exact command to $.prompt.submit
+  await runsKey($, 's')
+  await runsKey($, 'm')
+  await ui.redraw()
+  const fullCmd = startRunCmd('marathon', 'parallel', ['F46', 'F47', 'F48', 'F49', 'B2'])
+  expect(await text('start:preview')).toBe(`Command  ${fullCmd}`)
+  await startRunGo($)
+  await ui.redraw()
+  expect(w.submits).toEqual([fullCmd])
+  expect(w.toasts.at(-1)).toBe(`✓ Sent to session: ${fullCmd}`)
+  expect(await ui.find({ key: 'start:title' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('A197: native RunsTab Push Pending invokes relay-push-pending and derives toast from FOLLOWUP result', async ($, on) => {
+  const [w, clock] = world(on)
+  w.queue = ran('FOLLOWUP RUN-0015 moved=2 stages=2,4 tickets=F47,B2 mode=sequential from=RUN-0013\n')
+  await start($, clock)
+  const ui = await runsTab($, 'terminal')
+
+  await pushPendingRunNative($, 'RUN-0014')
+  expect(w.runs.some(a => a[2] === 'queue-run' && a[3] === 'push-pending' && a[4] === 'RUN-0014')).toBe(true)
+  expect(w.toasts.at(-1)).toBe('✓ pushed 2 pending stage(s) from RUN-0013 → RUN-0015 (sequential)')
+
+  // Refusal / non-FOLLOWUP output makes no false claim
+  w.queue = ran('queued: RUN-0014\n')
+  await pushPendingRunNative($, 'RUN-0014')
+  expect(w.toasts.at(-1)).toBe('■ push pending failed: queued: RUN-0014')
+  await ui.unmount()
 })

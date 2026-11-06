@@ -333,3 +333,27 @@ test('A175: unavailable host inbox never probes a guessed .git directory', async
   assert.equal(paths.some(p => p.includes('/.git/')), false)
   assert.deepEqual(engine.state.messages, [])
 })
+
+test('F98a: setup check and first-time setup walk ask y/n, run through calls, and refresh status', () => {
+  const base = openSetup(CFG_SET)
+  // Setup check via pointer click
+  const askCheck = point(base, { kind: 'setup-field', field: 'setupCheck' })
+  assert.equal(askCheck.state.setup?.confirmCheck, true)
+  assert.match(text(askCheck.state), /setup --check/)
+  assert.equal(reduce(askCheck.state, { name: 'n' }).state.setup?.confirmCheck, false)
+  const runCheck = reduce(askCheck.state, { name: 'y' })
+  assert.equal(runs(runCheck.effects)[0]?.call, 'team-setup-check')
+  const checked = afterRun(runs(runCheck.effects)[0]!, ok('node ok\ndevtunnel ok\n', ['bash', 'setup.sh', '--check']), runCheck.state, 0).state
+  assert.match(text(checked), /node ok · devtunnel ok/)
+  assert.match(text(checked), /Walk: bash setup\.sh/)
+
+  // First-time setup walk via pointer click
+  const askWalk = point(base, { kind: 'setup-field', field: 'setupWalk' })
+  assert.equal(askWalk.state.setup?.confirmWalk, true)
+  assert.match(text(askWalk.state), /first-time setup now\?/)
+  const runWalk = reduce(askWalk.state, { name: 'y' })
+  assert.equal(runs(runWalk.effects)[0]?.call, 'team-setup-walk')
+  const walked = afterRun(runs(runWalk.effects)[0]!, ok('setup complete\n', ['bash', 'setup.sh']), runWalk.state, 0)
+  assert.match(text(walked.state), /setup complete/)
+  assert.deepEqual(runs(walked.effects).map(e => e.call), ['team-config-show', 'team-login-status'])
+})

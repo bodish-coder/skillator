@@ -6,7 +6,7 @@
 import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
 import type { Model, View } from '../hooks/lib/ticketsmodel'
-import type { RunResult } from './nodehost'
+export type RunResult = { code: number; out: string; err: string; argv: string[] }
 import { NO_SCRIPTS, loginMessage, loginStatus } from '../hooks/lib/calls'
 import { appliedHead, appliedLine, applyOf, assignedTickets, buildModel, canApply, decideTickets, HEAD, headKey, isHead, isUserHead, isUserSectionOpen, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -14,7 +14,8 @@ import { STATE_NAME, ticketById, visible } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
 import { parseRuns } from '../hooks/lib/runs'
-import { continuePrompt, engageOf, orderRuns, RUNS_SECTIONS, stageTickets } from '../hooks/lib/runlines'
+import { continuePrompt, engageOf, orderRuns, parseFollowupOut, RUNS_SECTIONS, stageTickets, startRunCmd } from '../hooks/lib/runlines'
+export { parseFollowupOut, startRunCmd }
 import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
@@ -119,9 +120,9 @@ export function point(s: State, a: PointerAction): Step {
   if (a.kind === 'start-run-field') return s.startRun ? { state: { ...s, startRun: { ...s.startRun, field: a.field } }, effects: [] } : same
   if (a.kind === 'person-field') return s.person ? { state: { ...s, personField: a.field }, effects: [] } : same
   if (a.kind === 'setup-field') {
-    if (!s.setup || s.setup.confirmClear || s.setup.confirmLogin) return same
+    if (!s.setup || s.setup.confirmClear || s.setup.confirmLogin || s.setup.confirmCheck || s.setup.confirmWalk) return same
     const next = { ...s, setupField: a.field }
-    return a.field === 'posts' ? reduce(next, { name: 'space' }) : ['clear', 'login', 'loginStatus'].includes(a.field) ? reduce(next, { name: 'return' }) : { state: next, effects: [] }
+    return a.field === 'posts' ? reduce(next, { name: 'space' }) : ['clear', 'login', 'loginStatus', 'setupCheck', 'setupWalk'].includes(a.field) ? reduce(next, { name: 'return' }) : { state: next, effects: [] }
   }
   if (s.person || s.setup) return same
   if (a.kind === 'ticket-field') return s.dialog ? { state: { ...s, dialogField: 'ticket' }, effects: [] } : same
@@ -184,7 +185,11 @@ export type State = {
   help: HelpState | null                       // F127: Help & Skills guide viewer
   explorer: ExState                        // F75: the Explorer tab (ops/explorer.ts)
 } & RunState                               // F79: the Run tab's file, row, form, job
-export type Setup = SetupValues & { result: string | null; confirmClear: boolean; touched: boolean; formId: object; confirmLogin: boolean; loginBusy: boolean; loginMessage: string | null }
+export type Setup = SetupValues & {
+  result: string | null; confirmClear: boolean; touched: boolean; formId: object
+  confirmLogin: boolean; loginBusy: boolean; loginMessage: string | null
+  confirmCheck?: boolean; confirmWalk?: boolean; setupBusy?: boolean; setupOut?: string | null; setupWalkCmd?: string | null
+}
 
 export type Step = { state: State; effects: Effect[] }
 // A run's result folded into the state as it then is; it may ask for more effects.
@@ -887,14 +892,20 @@ function pushPendingRun(s: State): Step {
   if (!r0) return { state: toast(s, 'p pushes pending stages of the run under cursor to a follow-up run'), effects: [] }
   const pend = r0.stages.filter(st => st.state === 'pending' || st.state === ' ')
   if (!pend.length) return { state: toast(s, `No pending stages left in ${r0.id} to push`), effects: [] }
-  const tickets = pend.flatMap(st => stageTickets(st)).filter(Boolean)
+  const mode = s.runMode ?? 'parallel'
   const then: Then = r => x => {
     if (r.code !== 0) return toast(x, `■ push pending failed: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`)
-    return { state: toast(x, `✓ Pushed ${pend.length} pending stages (${tickets.join(' ')}) from ${r0.id} to follow-up run`), effects: [{ kind: 'poll', what: 'runs' }] }
+    const f = parseFollowupOut(r.out)
+    if (!f) return toast(x, `■ push pending failed: ${r.err.trim() || r.out.trim() || 'backend returned no follow-up run'}`)
+    const tkPart = f.tickets.length ? ` (${f.tickets.join(' ')})` : ''
+    return {
+      state: toast(x, `✓ Pushed ${f.moved} pending stage${f.moved === 1 ? '' : 's'}${tkPart} from ${f.from} to follow-up ${f.id} (${f.mode})`),
+      effects: [{ kind: 'poll', what: 'runs' }],
+    }
   }
   return {
-    state: toast(s, `Pushing ${pend.length} pending stages of ${r0.id} to follow-up run…`),
-    effects: [run('relay-queue-add', [r0.id], then)]
+    state: toast(s, `Pushing ${pend.length} pending stages of ${r0.id} (${mode})…`),
+    effects: [run('relay-push-pending', [r0.id, mode], then)]
   }
 }
 
@@ -904,9 +915,7 @@ function toggleMode(s: State): Step {
 }
 
 export function startRunCommand(sr: Pick<StartRunDraft, 'runner' | 'mode' | 'count' | 'tickets'>): string {
-  const modeStr = sr.mode === 'parallel' && sr.count ? `parallel ${sr.count}` : sr.mode
-  const ticketsStr = sr.tickets.trim().replace(/\s+/g, ' ')
-  return [sr.runner, modeStr, ticketsStr].filter(Boolean).join(' ')
+  return startRunCmd(sr.runner, sr.mode, sr.tickets, sr.count)
 }
 
 export function openStartRun(s: State): Step {
@@ -1103,8 +1112,25 @@ export function onInbox(s: State, text: string, readId: string | null): State {
 
 const teamWhy = (r: RunResult, what: string) => (timedOut(r) ? `${what} did not finish in 30 s` : why(r, what).replace(/^team: /, ''))
 
-const openSetup = (s: State): State =>
-  ({ ...s, setup: { ...freshSetup(s.teamsCfg), result: null, confirmClear: false, touched: false, formId: {}, confirmLogin: false, loginBusy: false, loginMessage: null }, setupField: 'token' })
+const openSetup = (s: State): State => ({
+  ...s,
+  setup: {
+    ...freshSetup(s.teamsCfg),
+    result: null,
+    confirmClear: false,
+    touched: false,
+    formId: {},
+    confirmLogin: false,
+    loginBusy: false,
+    loginMessage: null,
+    confirmCheck: false,
+    confirmWalk: false,
+    setupBusy: false,
+    setupOut: null,
+    setupWalkCmd: null,
+  },
+  setupField: 'token',
+})
 
 // `config show` read: the view kept; a form not typed in yet takes the saved port and posts.
 const cfgThen: Then = r => x => {
@@ -1143,12 +1169,59 @@ const TEXT_FIELDS: Partial<Record<SetupField, 'token' | 'url' | 'port'>> = { tok
 
 function runLogin(s: State, call: 'team-login' | 'team-login-status'): Step {
   const v = s.setup!
-  if (v.loginBusy) return { state: s, effects: [] }
+  if (v.loginBusy || v.setupBusy) return { state: s, effects: [] }
   return {
-    state: { ...s, setupField: 'loginStatus', setup: { ...v, confirmLogin: false, loginBusy: true,
+    state: { ...s, setupField: 'loginStatus', setup: { ...v, confirmLogin: false, loginBusy: true, setupOut: null, setupWalkCmd: null,
       loginMessage: call === 'team-login' ? 'Opening sign-in terminal...' : 'Checking sign-in status...' } },
     effects: [run(call, [], r => x => x.setup?.formId !== v.formId ? x : {
       ...x, setup: { ...x.setup, loginBusy: false, loginMessage: call === 'team-login' ? loginMessage(r) : loginStatus(r) },
+    })],
+  }
+}
+
+function runSetupScript(s: State, call: 'team-setup-check' | 'team-setup-walk'): Step {
+  const v = s.setup!
+  if (v.setupBusy || v.loginBusy) return { state: s, effects: [] }
+  const isWalk = call === 'team-setup-walk'
+  return {
+    state: {
+      ...s,
+      setupField: isWalk ? 'setupWalk' : 'setupCheck',
+      setup: {
+        ...v,
+        confirmCheck: false,
+        confirmWalk: false,
+        setupBusy: true,
+        result: null,
+        setupOut: isWalk ? 'Running first-time setup...' : 'Checking setup prerequisites...',
+        setupWalkCmd: null,
+      },
+    },
+    effects: [run(call, [], r => x => {
+      if (x.setup?.formId !== v.formId) return x
+      const failed = r.code < 0 || r.code === 127
+      if (failed) {
+        return {
+          ...x,
+          setup: { ...x.setup, setupBusy: false, setupOut: null, setupWalkCmd: null, result: teamWhy(r, 'teams-uhura setup') },
+        }
+      }
+      const outText = r.out.trim() || r.err.trim() || `setup exited ${r.code}`
+      const walkCmd = r.argv.filter(a => a !== '--check').map(quote).join(' ')
+      const nextState: State = {
+        ...x,
+        setup: { ...x.setup, setupBusy: false, setupOut: outText, setupWalkCmd: walkCmd || null },
+      }
+      if (!isWalk) return nextState
+      return {
+        state: nextState,
+        effects: [
+          showCfg(false),
+          run('team-login-status', [], rr => y => y.setup?.formId !== v.formId ? y : {
+            ...y, setup: { ...y.setup, loginBusy: false, loginMessage: loginStatus(rr) },
+          }),
+        ],
+      }
     })],
   }
 }
@@ -1164,6 +1237,14 @@ function setupKey(s: State, k: Key): Step {
     if (k.name === 'y') return clearSetup(s)
     return k.name === 'n' || k.name === 'escape' ? { state: { ...s, setup: { ...v, confirmClear: false } }, effects: [] } : same
   }
+  if (v.confirmCheck) {
+    if (k.name === 'y') return runSetupScript(s, 'team-setup-check')
+    return k.name === 'n' || k.name === 'escape' ? { state: { ...s, setupField: 'setupCheck', setup: { ...v, confirmCheck: false } }, effects: [] } : same
+  }
+  if (v.confirmWalk) {
+    if (k.name === 'y') return runSetupScript(s, 'team-setup-walk')
+    return k.name === 'n' || k.name === 'escape' ? { state: { ...s, setupField: 'setupWalk', setup: { ...v, confirmWalk: false } }, effects: [] } : same
+  }
   const f = s.setupField
   const field = (by: number): Step => {
     const at = SETUP_FIELDS.indexOf(f)
@@ -1172,9 +1253,15 @@ function setupKey(s: State, k: Key): Step {
   const set = (patch: Partial<SetupValues>): Step => ({ state: { ...s, setup: { ...v, ...patch, result: null, touched: true } }, effects: [] })
   const tf = TEXT_FIELDS[f]
   if ((k.name === 'return' || k.name === 'enter' || k.name === 'space') && (f === 'login' || f === 'loginStatus')) {
-    if (v.loginBusy) return same
+    if (v.loginBusy || v.setupBusy) return same
     return f === 'loginStatus' ? runLogin(s, 'team-login-status')
-      : { state: { ...s, setup: { ...v, confirmClear: false, confirmLogin: true } }, effects: [] }
+      : { state: { ...s, setup: { ...v, confirmClear: false, confirmCheck: false, confirmWalk: false, confirmLogin: true } }, effects: [] }
+  }
+  if ((k.name === 'return' || k.name === 'enter' || k.name === 'space') && (f === 'setupCheck' || f === 'setupWalk')) {
+    if (v.setupBusy || v.loginBusy) return same
+    return f === 'setupCheck'
+      ? { state: { ...s, setup: { ...v, confirmClear: false, confirmLogin: false, confirmWalk: false, confirmCheck: true, result: null } }, effects: [] }
+      : { state: { ...s, setup: { ...v, confirmClear: false, confirmLogin: false, confirmCheck: false, confirmWalk: true, result: null } }, effects: [] }
   }
   switch (k.name) {
     case 'escape': return { state: { ...s, setup: null }, effects: [] }
@@ -1200,6 +1287,7 @@ export function setupLines(s: State): string[] {
   const cur = (f: SetupField) => (s.setupField === f ? '› ' : '  ')
   const caret = (f: SetupField) => (s.setupField === f ? '_' : '')
   const cfg = s.teamsCfg
+  const confirming = !!(v.confirmLogin || v.confirmClear || v.confirmCheck || v.confirmWalk)
   const out = ['Teams setup',
     `${cur('token')}Token          ${tokenShown(v, cfg)}${caret('token')}`,
     `${cur('url')}Workflow URL   ${urlShown(v, cfg)}${caret('url')}`,
@@ -1208,12 +1296,22 @@ export function setupLines(s: State): string[] {
     `${cur('clear')}[ Clear the saved settings ]`,
     `${cur('login')}[ Sign in to Dev Tunnels ]`,
     `${cur('loginStatus')}[ Refresh status ]`,
-    `  ${v.loginMessage ?? 'Sign-in status has not been checked.'}`,
-    `  Saves ${cfg?.path || '~/.skillator/teams.json'} - this user only, outside every repo`]
+    `${cur('setupCheck')}[ Setup check ]  ${cur('setupWalk')}[ First-time setup ]`,
+    `  ${v.loginMessage ?? 'Sign-in status has not been checked.'}`]
+  if (v.setupOut) {
+    const summary = v.setupOut.split(/\r?\n/).map(l => l.trim()).filter(Boolean).slice(0, 2).join(' · ')
+    if (summary) out.push(`  ${summary}`)
+  }
+  if (v.setupWalkCmd && !confirming) out.push(`  Walk: ${v.setupWalkCmd}`)
+  if (!confirming && !v.setupOut) out.push(`  Saves ${cfg?.path || '~/.skillator/teams.json'} - this user only, outside every repo`)
   if (v.confirmLogin) out.push('  Sign in to Dev Tunnels? A terminal and browser may open. This signs in your local Dev Tunnels account.')
   if (v.confirmClear) out.push('  clear the saved Teams settings? (y/n)')
+  if (v.confirmCheck) out.push("  Run teams-uhura's setup --check now? (reads prerequisites; changes nothing)")
+  if (v.confirmWalk) out.push("  Run teams-uhura's first-time setup now? (runs setup.ps1 / setup.sh)")
   if (v.result) out.push(`  ${v.result}`)
-  out.push(v.confirmLogin ? '  y sign in · n cancel · esc cancel' : '  tab next field · space on/off · enter activate/save · esc cancel')
+  out.push(v.confirmLogin ? '  y sign in · n cancel · esc cancel'
+    : (v.confirmCheck || v.confirmWalk) ? '  y run · n cancel · esc cancel'
+    : '  tab next field · space on/off · enter activate/save · esc cancel')
   return out
 }
 

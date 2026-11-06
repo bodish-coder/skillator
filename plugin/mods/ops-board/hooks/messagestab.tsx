@@ -83,8 +83,8 @@ let touched = false
 // confirm. Only its --check pass runs here - the walk asks questions and opens a browser
 // sign-in, which no pane child can answer - and its table is shown with the walk's command
 // (the same argv without --check) for the owner's own terminal. Held here, as `draft` is.
-let check: { confirm: boolean; out: string | null; walk: string | null } = { confirm: false, out: null, walk: null }
-const NO_CHECK = { confirm: false, out: null, walk: null }
+let check: { confirm: boolean; walkConfirm: boolean; out: string | null; walk: string | null } = { confirm: false, walkConfirm: false, out: null, walk: null }
+const NO_CHECK = { confirm: false, walkConfirm: false, out: null, walk: null }
 let checkGeneration = 0
 let generation = 0
 let login = { confirm: false, busy: false, message: 'Sign-in status has not been checked.' }
@@ -102,7 +102,7 @@ async function cancelLogin($: EngineInterface) {
 async function requestLogin($: EngineInterface) {
   const form = generation
   const sv = await read($, setupA)
-  if (form !== generation || !draft || login.busy || login.confirm || check.confirm || sv?.confirmClear) return
+  if (form !== generation || !draft || login.busy || login.confirm || check.confirm || check.walkConfirm || sv?.confirmClear) return
   login = { ...login, confirm: true }
   await bump($)
   await loginFocus($, 'setup:login-no')
@@ -110,7 +110,7 @@ async function requestLogin($: EngineInterface) {
 async function runLogin($: EngineInterface, status: boolean) {
   const form = generation
   const sv = status ? await read($, setupA) : null
-  if (form !== generation || !draft || login.busy || (status ? login.confirm || check.confirm || sv?.confirmClear : !login.confirm)) return
+  if (form !== generation || !draft || login.busy || (status ? login.confirm || check.confirm || check.walkConfirm || sv?.confirmClear : !login.confirm)) return
   // The check table includes authentication status. A new auth action supersedes
   // both its displayed snapshot and any check still running for that snapshot.
   checkGeneration++
@@ -189,21 +189,34 @@ async function clearSaved($: EngineInterface) {
   await refreshCfg($, false)
 }
 
-// F98: the check pass, confirmed. Exit 1 (something missing) is still the table; only a child
-// that could not start or run (code -1 / 127) is an error.
-async function runSetupCheck($: EngineInterface) {
+// F98 / F98a: the check pass or full first-time setup walk, confirmed.
+async function runSetupCheck($: EngineInterface, walk = false) {
   if (!draft || login.confirm) return
   const form = generation
   const attempt = ++checkGeneration
   const current = () => !!draft && form === generation && attempt === checkGeneration
   check = NO_CHECK
   await bump($, { result: null })
-  const r = await runCall($, 'team-setup-check', [])
+  const r = await runCall($, walk ? 'team-setup-walk' : 'team-setup-check', [])
   if (!current()) return
   const failed = r.code < 0 || r.code === 127
-  if (!failed) check = { confirm: false, out: r.out.trim() || r.err.trim() || `setup exited ${r.code}`, walk: r.argv.filter(a => a !== '--check').map(quote).join(' ') }
-  // Recheck inside the atom update as well: it may retry after the form changes.
+  if (!failed) {
+    check = {
+      confirm: false,
+      walkConfirm: false,
+      out: r.out.trim() || r.err.trim() || `setup exited ${r.code}`,
+      walk: r.argv.filter(a => a !== '--check').map(quote).join(' '),
+    }
+  }
   await update($, setupA, x => x && current() ? { ...x, rev: x.rev + 1, ...(failed ? { result: why(r) } : {}) } : x)
+  if (walk && !failed && current()) {
+    await refreshCfg($, false)
+    const lr = await runCall($, 'team-login-status', [])
+    if (current()) {
+      login = { confirm: false, busy: false, message: loginStatus(lr) }
+      await bump($)
+    }
+  }
 }
 
 async function markRead($: EngineInterface) {
@@ -259,8 +272,8 @@ export async function renderSetup($: EngineInterface, e: RenderInput<'Pane'>): P
   const Input = e.surface !== 'mobile' && 'Input' in t ? t.Input : null
   const cfg: TeamsCfgView | null = await read($, teamsCfgA)
   const focus = await read($, actionFocusA)
-  const confirming = sv.confirmClear || check.confirm || login.confirm
-  const armed = !!focus && (login.confirm ? ['setup:login-yes', 'setup:login-no'] : sv.confirmClear ? ['setup:clear-yes', 'setup:clear-no'] : check.confirm ? ['setup:run-yes', 'setup:run-no'] : ['setup:posts', 'setup:save', 'setup:clear', 'setup:run', 'setup:cancel', 'setup:login', 'setup:login-status']).includes(focus)
+  const confirming = sv.confirmClear || check.confirm || check.walkConfirm || login.confirm
+  const armed = !!focus && (login.confirm ? ['setup:login-yes', 'setup:login-no'] : sv.confirmClear ? ['setup:clear-yes', 'setup:clear-no'] : check.confirm ? ['setup:run-yes', 'setup:run-no'] : check.walkConfirm ? ['setup:walk-yes', 'setup:walk-no'] : ['setup:posts', 'setup:save', 'setup:clear', 'setup:run', 'setup:walk-run', 'setup:cancel', 'setup:login', 'setup:login-status']).includes(focus)
   const d = draft
   const edit = (k: 'token' | 'url' | 'port') => (v: string) => {
     if (!draft || login.confirm) return
@@ -301,8 +314,15 @@ export async function renderSetup($: EngineInterface, e: RenderInput<'Pane'>): P
       {check.confirm && (
         <Box key="setup:run-confirm" flexDirection="row" flexWrap="wrap" gap={2}>
           <Text color="warning" wrap="wrap">{"run teams-uhura's first-time setup check now? (setup --check: reads node, winget/brew, devtunnel, the tunnel and the listener; changes nothing)"}</Text>
-          <Button key="setup:run-yes" plain hotkey={armed ? 'y' : undefined} onPress={() => { void runSetupCheck($) }}>Yes, run</Button>
+          <Button key="setup:run-yes" plain hotkey={armed ? 'y' : undefined} onPress={() => { void runSetupCheck($, false) }}>Yes, run</Button>
           <Button key="setup:run-no" plain hotkey={armed ? 'n' : undefined} onPress={() => { check = NO_CHECK; void bump($) }}>No</Button>
+        </Box>
+      )}
+      {check.walkConfirm && (
+        <Box key="setup:walk-confirm" flexDirection="row" flexWrap="wrap" gap={2}>
+          <Text color="warning" wrap="wrap">{"run teams-uhura's first-time setup now? (launches setup.ps1 / setup.sh and refreshes status)"}</Text>
+          <Button key="setup:walk-yes" plain hotkey={armed ? 'y' : undefined} onPress={() => { void runSetupCheck($, true) }}>Yes, run setup</Button>
+          <Button key="setup:walk-no" plain hotkey={armed ? 'n' : undefined} onPress={() => { check = NO_CHECK; void bump($) }}>No</Button>
         </Box>
       )}
       <Box key="setup:login-message"><Text wrap="wrap">{login.message}</Text></Box>
@@ -315,7 +335,8 @@ export async function renderSetup($: EngineInterface, e: RenderInput<'Pane'>): P
       {!login.confirm && <Box flexDirection="row" flexWrap="wrap" gap={4}>
         <Button key="setup:save" plain hotkey={armed && !confirming ? 's' : undefined} variant="primary" onPress={() => { void saveSetup($) }}>Save</Button>
         <Button key="setup:clear" plain hotkey={armed && !confirming ? 'd' : undefined} onPress={() => { if (login.confirm) return; check = NO_CHECK; void bump($, { confirmClear: true, result: null }) }}>Clear saved</Button>
-        <Button key="setup:run" plain hotkey={armed && !confirming ? 'r' : undefined} onPress={() => { if (login.confirm) return; check = { confirm: true, out: null, walk: null }; void bump($, { confirmClear: false, result: null }) }}>Setup check</Button>
+        <Button key="setup:run" plain hotkey={armed && !confirming ? 'r' : undefined} onPress={() => { if (login.confirm) return; check = { confirm: true, walkConfirm: false, out: null, walk: null }; void bump($, { confirmClear: false, result: null }) }}>Setup check</Button>
+        <Button key="setup:walk-run" plain hotkey={armed && !confirming ? 'w' : undefined} onPress={() => { if (login.confirm) return; check = { confirm: false, walkConfirm: true, out: null, walk: null }; void bump($, { confirmClear: false, result: null }) }}>First-time setup</Button>
         <Button key="setup:login" plain onPress={() => { void requestLogin($) }}>Sign in to Dev Tunnels</Button>
         <Button key="setup:login-status" plain onPress={() => { void runLogin($, true) }}>Refresh status</Button>
         <Button key="setup:cancel" plain hotkey={armed && !confirming ? 'c' : undefined} onPress={() => { void closeSetup($).then(() => $.ui.open({ id: 'ops-board', title: 'ops board' })) }}>Cancel</Button>

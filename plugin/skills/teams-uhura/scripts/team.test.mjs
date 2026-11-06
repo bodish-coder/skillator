@@ -362,7 +362,7 @@ test('hook: unread messages - one additionalContext, framed as data, then marked
 const PRE = join(HERE, '../../../hooks/team-hook.sh')
 const shDir = (() => {
   const c = process.platform === 'win32' ? 'cygpath -w "$(dirname "$(command -v sh)")"' : 'dirname "$(command -v sh)"'
-  return spawnSync('sh', ['-c', c], { encoding: 'utf8' }).stdout.trim()
+  return (spawnSync('sh', ['-c', c], { encoding: 'utf8' }).stdout ?? '').trim()
 })()
 const pre = (cwd, env = process.env) => spawnSync('sh', [PRE], { input: JSON.stringify({ cwd }), encoding: 'utf8', cwd, env })
 
@@ -677,6 +677,7 @@ test('message: text on argv is refused, missing file is refused, empty file is r
 
 test('message: delivers six-section message to @vidul inbox', () => {
   const r = repo()
+  const noWebhookEnv = { ...process.env, SKILLATOR_TEAMS_CONFIG: join(r, 'no-teams.json'), TEAMS_WORKFLOW_URL: '' }
   const sixSection = [
     '1 Issue',
     'Installer crashes on an unreadable profile',
@@ -698,9 +699,10 @@ test('message: delivers six-section message to @vidul inbox', () => {
   ].join('\n')
   const msgFile = join(r, 'issue.txt')
   writeFileSync(msgFile, sixSection)
-  const res = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--file', msgFile, '--from', '@sher'], { encoding: 'utf8', cwd: r })
+  const res = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--file', msgFile, '--from', '@sher'], { encoding: 'utf8', cwd: r, env: noWebhookEnv })
   assert.equal(res.status, 0, res.stderr)
-  assert.match(res.stdout, /delivered message to @vidul's inbox/)
+  assert.match(res.stdout, /queued locally for @vidul in this clone's inbox.*status: local_queue_only/)
+  assert.doesNotMatch(res.stdout, /delivered message to @vidul's inbox/)
   const recs = parseInbox(inboxOf(r))
   assert.equal(recs.length, 1)
   const rec = recs[0]
@@ -726,6 +728,7 @@ test('message: message containing Teams HMAC token or workflow URL is refused', 
 
 test('fixture: /message-uhura @vidul <issue> writes a six-section message to @vidul inbox and @nobody is refused with the hint', () => {
   const r = repo()
+  const noWebhookEnv = { ...process.env, SKILLATOR_TEAMS_CONFIG: join(r, 'no-teams.json'), TEAMS_WORKFLOW_URL: '' }
   // 1. @nobody is refused with the hint
   const issueFile = join(r, 'handoff.txt')
   writeFileSync(issueFile, [
@@ -737,15 +740,15 @@ test('fixture: /message-uhura @vidul <issue> writes a six-section message to @vi
     '6 Ask: @vidul please add mkdirSync for cache dir',
   ].join('\n'))
 
-  const resNobody = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@nobody', '--file', issueFile], { encoding: 'utf8', cwd: r })
+  const resNobody = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@nobody', '--file', issueFile], { encoding: 'utf8', cwd: r, env: noWebhookEnv })
   assert.equal(resNobody.status, 1)
   assert.match(resNobody.stderr, /add <email> to \.skillator\/team\.md/)
   assert.equal(inboxOf(r), '')
 
-  // 2. @vidul succeeds and writes six-section message to @vidul's inbox
-  const resVidul = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--file', issueFile, '--from', '@sher'], { encoding: 'utf8', cwd: r })
+  // 2. @vidul succeeds and writes six-section message to this clone's local inbox
+  const resVidul = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--file', issueFile, '--from', '@sher'], { encoding: 'utf8', cwd: r, env: noWebhookEnv })
   assert.equal(resVidul.status, 0, resVidul.stderr)
-  assert.match(resVidul.stdout, /delivered message to @vidul's inbox/)
+  assert.match(resVidul.stdout, /queued locally for @vidul in this clone's inbox.*status: local_queue_only/)
 
   const recs = parseInbox(inboxOf(r))
   assert.equal(recs.length, 1)
@@ -759,10 +762,95 @@ test('fixture: /message-uhura @vidul <issue> writes a six-section message to @vi
   assert.match(recs[0].text, /6 Ask/)
 
   // Inbox check: team.mjs inbox displays the framed message
-  const inboxRun = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'inbox'], { encoding: 'utf8', cwd: r })
+  const inboxRun = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'inbox'], { encoding: 'utf8', cwd: r, env: noWebhookEnv })
   assert.equal(inboxRun.status, 0)
   assert.match(inboxRun.stdout, /> 1 Issue/)
   assert.match(inboxRun.stdout, /> 6 Ask/)
+})
+
+test('A179: separate clones do not share local queues; message distinguishes local_queue_only, failed_post, channel_posted, retry, and acknowledged; inbox refuses handoff args', () => {
+  const cloneA = repo()
+  const cloneB = repo()
+  const baseEnv = { ...process.env, SKILLATOR_TEAMS_CONFIG: join(cloneA, 'no-teams.json'), TEAMS_WORKFLOW_URL: '' }
+  const msgFile = join(cloneA, 'handoff.txt')
+  writeFileSync(msgFile, '1 Issue\nCross-machine check\n2 What was seen\nx\n3 Evidence\ny\n4 Repro steps\nz\n5 Suspected cause marked unverified\nu\n6 Ask\n@vidul check\n')
+
+  // (a) & (b) No webhook configured: local_queue_only in cloneA does NOT appear in cloneB's inbox
+  const localOnly = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--file', msgFile, '--from', '@asha'], { encoding: 'utf8', cwd: cloneA, env: baseEnv })
+  assert.equal(localOnly.status, 0, localOnly.stderr)
+  assert.match(localOnly.stdout, /status: local_queue_only, local_queue: queued, channel: not_configured, ack: unacknowledged - local clone only, not delivered cross-machine/)
+  assert.doesNotMatch(localOnly.stdout, /delivered message to @vidul's inbox/)
+  assert.equal(parseInbox(inboxOf(cloneA)).length, 1)
+  assert.equal(inboxOf(cloneB), '')
+  const cloneBInbox = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'inbox'], { encoding: 'utf8', cwd: cloneB, env: baseEnv })
+  assert.equal(cloneBInbox.status, 0)
+  assert.match(cloneBInbox.stdout, /no team messages/)
+
+  // (c) Rejected/failing webhook (HTTP 500): exits 1, retains local record, prints recovery --retry <id>
+  const postedLog = join(cloneA, 'posted.jsonl')
+  const preload = join(cloneA, 'mock-fetch.mjs')
+  writeFileSync(preload, [
+    "import { appendFileSync } from 'node:fs'",
+    'globalThis.fetch = async (url, init) => {',
+    '  const status = Number(process.env.MOCK_WEBHOOK_STATUS || 202)',
+    '  if (status >= 200 && status < 300 && process.env.MOCK_POSTED_LOG) {',
+    "    appendFileSync(process.env.MOCK_POSTED_LOG, String(init?.body ?? '') + '\\n')",
+    '  }',
+    '  return new Response(status >= 400 ? "server error" : "", { status })',
+    '}',
+  ].join('\n'))
+  const preloadUrl = new URL(`file:///${preload.replace(/\\/g, '/')}`).href
+  const hookEnv = {
+    ...baseEnv,
+    TEAMS_WORKFLOW_URL: 'https://prod.westus.logic.azure.com/workflows/x?sig=SECRET',
+    MOCK_POSTED_LOG: postedLog,
+  }
+
+  const failed = spawnSync(process.execPath, ['--import', preloadUrl, join(HERE, 'team.mjs'), 'message', '@vidul', '--file', msgFile, '--from', '@asha'], {
+    encoding: 'utf8',
+    cwd: cloneA,
+    env: { ...hookEnv, MOCK_WEBHOOK_STATUS: '500' },
+  })
+  assert.equal(failed.status, 1)
+  assert.match(failed.stderr, /channel post failed: the Workflows webhook answered HTTP 500/)
+  assert.match(failed.stderr, /recovery: local record \(id \d+\) retained.*--retry \d+/)
+  assert.match(failed.stdout, /status: failed_post, local_queue: retained, channel: failed, ack: unacknowledged/)
+  const recsAfterFail = parseInbox(inboxOf(cloneA))
+  assert.equal(recsAfterFail.length, 2)
+  const failedId = recsAfterFail[1].id
+
+  // (d) & (e) Retry after webhook recovers (HTTP 202): exits 0, reports channel_posted (unacknowledged)
+  const retried = spawnSync(process.execPath, ['--import', preloadUrl, join(HERE, 'team.mjs'), 'message', '@vidul', '--retry', failedId], {
+    encoding: 'utf8',
+    cwd: cloneA,
+    env: { ...hookEnv, MOCK_WEBHOOK_STATUS: '202' },
+  })
+  assert.equal(retried.status, 0, retried.stderr)
+  assert.match(retried.stdout, new RegExp(`id ${failedId}.*status: channel_posted, local_queue: retained, channel: posted, ack: unacknowledged`))
+  const postedLines = readFileSync(postedLog, 'utf8').trim().split('\n')
+  assert.equal(postedLines.length, 1)
+  assert.match(JSON.parse(postedLines[0]).attachments[0].content.body[0].text, /1 Issue\nCross-machine check/)
+
+  // Status check before acknowledgment: reports status=unacknowledged
+  const stUnack = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--status', failedId], { encoding: 'utf8', cwd: cloneA, env: hookEnv })
+  assert.equal(stUnack.status, 0, stUnack.stderr)
+  assert.match(stUnack.stdout, /status=unacknowledged, local_queue=present, ack=unacknowledged/)
+
+  // Simulate recipient (@vidul) acknowledging the message id in the inbox
+  const ackRec = { ts: new Date().toISOString(), from: '@vidul', email: 'vidul@ikran.in', text: `ack ${failedId} - looking into it`, id: 'ack-99' }
+  writeFileSync(join(box(cloneA), INBOX), inboxOf(cloneA) + JSON.stringify(ackRec) + '\n')
+
+  const stAck = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'message', '@vidul', '--status', failedId], { encoding: 'utf8', cwd: cloneA, env: hookEnv })
+  assert.equal(stAck.status, 0, stAck.stderr)
+  assert.match(stAck.stdout, /status=acknowledged, local_queue=present, ack=acknowledged by @vidul in message ack-99/)
+
+  // (f) inbox read-only argument enforcement: refuses @handle / issue arguments without marking read or writing
+  const beforeInbox = inboxOf(cloneA)
+  const badInbox = spawnSync(process.execPath, [join(HERE, 'team.mjs'), 'inbox', '@vidul', 'fix installer'], { encoding: 'utf8', cwd: cloneA, env: baseEnv })
+  assert.equal(badInbox.status, 2)
+  assert.match(badInbox.stderr, /inbox is read-only.*\/message-uhura @handle <issue>/)
+  assert.equal(inboxOf(cloneA), beforeInbox)
+  assert.equal(existsSync(join(box(cloneA), READ)), false)
 })
 
 test('inbox --mark-read: marks only the 200 displayed messages; 201st stays unread for the next pass; empty/malformed preserve markers', () => {

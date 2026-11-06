@@ -1,5 +1,5 @@
 import type { Color } from 'claude-code'
-import type { Board, Box, RunView, Stage } from '../../types'
+import type { Board, Box, RunView, Stage, Ticket } from '../../types'
 import type { Seg } from './bandlines'
 import type { Line } from './healthlines'
 import { paint } from './board'
@@ -187,3 +187,46 @@ export function runLines(run: RunView, board: Board | null): Line[] {
 }
 
 export { ticketsOf as stageTickets }
+
+// F113 / A196: canonical Start Run command builder shared by standalone ops/state.ts and native hooks/runstab.tsx.
+export type RunnerChoice = 'marathon' | 'pending-subagent' | '/marathon-run' | '/pending-subagent'
+export type ModeChoice = 'sequential' | 'parallel'
+
+export function startRunCmd(
+  runner: RunnerChoice,
+  mode: ModeChoice,
+  tickets: readonly string[] | string,
+  count?: number | null,
+): string {
+  const runnerCmd = runner === 'marathon' ? '/marathon-run' : runner === 'pending-subagent' ? '/pending-subagent' : runner
+  const modeStr = mode === 'parallel' && count ? `parallel ${count}` : mode
+  const ticketsStr = (typeof tickets === 'string' ? tickets : tickets.join(' ')).trim().replace(/\s+/g, ' ')
+  return [runnerCmd, modeStr, ticketsStr].filter(Boolean).join(' ')
+}
+
+export function eligibleRunTickets(board: Board | readonly Ticket[] | null | undefined): Ticket[] {
+  const tickets = Array.isArray(board) ? board : (board as Board | null | undefined)?.tickets ?? []
+  return tickets.filter(t => t.box === ' ' || t.box === '~' || t.box === '?' || t.box === '!')
+}
+
+// A197: structured backend output from `relay-morpheus queue-run push-pending <id> [--mode <mode>]`.
+export type FollowupResult = {
+  id: string
+  moved: number
+  stages: string[]
+  tickets: string[]
+  mode: string
+  from: string
+}
+
+const FOLLOWUP_RE = /^FOLLOWUP (RUN-\S+) moved=(\d+)(?: stages=(\S+))?(?: tickets=(\S+))? mode=(\S+) from=(RUN-\S+)\s*$/m
+
+export function parseFollowupOut(out: string): FollowupResult | null {
+  const m = FOLLOWUP_RE.exec(out)
+  if (!m) return null
+  const moved = Number(m[2])
+  if (!Number.isFinite(moved) || moved <= 0) return null
+  const stages = m[3] && m[3] !== '-' ? m[3].split(',').filter(Boolean) : []
+  const tickets = m[4] && m[4] !== '-' ? m[4].split(',').filter(Boolean) : []
+  return { id: m[1]!, moved, stages, tickets, mode: m[5]!, from: m[6]! }
+}

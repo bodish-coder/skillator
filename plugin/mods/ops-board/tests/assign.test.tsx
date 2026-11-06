@@ -117,7 +117,7 @@ const mountPane = async ($: Engine, surface: Surface) => {
   const pane = await $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: 'ops-board', props: props('ops board') })
   await openAll(pane)
   // opening ends on a header; the first row is the selection, as before groups collapsed
-  const first = (await pane.findAll({ type: 'Button' })).find(x => x.key?.startsWith('row:'))
+  const first = (await pane.findAll({ type: 'Button' })).find(x => x.key?.startsWith('row:') && !/^row:(assigned|decide):/.test(x.key))
   if (first) await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: first.key!, origin: { kind: 'person' } })
   return pane
 }
@@ -626,3 +626,46 @@ test('team handles as ticket-meta reads them: @Asha assignable and removable, @j
   expect(w.runs.at(-1)!.argv).toEqual(['/bin/sh', META + '.sh', 'team', 'remove', '@Asha'])
   await pane.unmount()
 })
+
+for (const surface of SURFACES) {
+  test(`${surface}: A200 tester radio option previews assign-tester, suppresses in-progress move warning, and routes confirm to meta-assign-tester preserving state/owner/decide`, WITH, async ($, on) => {
+    const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+    w.answer = argv => argv.includes('assign-tester')
+      ? ran('- [~] F3 — cart drawer keeps items on reload [app: web] [owner: @vidul] [tester: @asha] (@cc-4ae496)\n')
+      : null
+    await start($, clock)
+    const pane = await mountPane($, surface)
+    await select($, 'F3')
+    await pane.press({ key: 'key:assign' })
+
+    expect((await pane.find({ key: 'kind:implementation' }))?.text).toBe('(•) implementation')
+    expect((await pane.find({ key: 'kind:decision' }))?.text).toBe('( ) decision')
+    expect((await pane.find({ key: 'kind:tester' }))?.text).toBe('( ) tester')
+    expect(await pane.find({ key: 'warn' })).toBeDefined()
+
+    // Focus kind:tester to arm hotkeys and switch to tester mode
+    await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: 'kind:tester', origin: { kind: 'person' } })
+    expect((await pane.find({ key: 'kind:tester' }))?.props.hotkey).toBe('t')
+    await pane.press({ key: 'kind:tester' })
+    expect((await pane.find({ key: 'kind:tester' }))?.text).toBe('(•) tester')
+    expect(await title(pane)).toBe('Assign F3 for testing  Esc cancels')
+    expect(await pane.find({ key: 'warn' })).toBeUndefined()
+
+    await pane.press({ key: 'who:@asha' })
+    expect((await pane.find({ key: 'change' }))?.text).toBe('Change  ● in progress, tester @asha (keeps state, owner & decide; open to any teammate)')
+    expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta assign-tester F3 @asha')
+
+    await pane.press({ key: 'go' })
+    expect(w.runs.map(r => r.argv)).toEqual([['/bin/sh', META + '.sh', 'assign-tester', 'F3', '@asha']])
+    expect(w.toasts[0]).toContain('✓ F3 tester assigned tester @asha: cart drawer keeps items on reload')
+    formClosed(w)
+
+    // Verify F3 kept box '~' and owner '@vidul', and gained tester '@asha'
+    const updatedBoard = await state($, 'board') as { tickets: { id: string; box: string; owner: string | null; tester: string | null }[] }
+    const f3 = updatedBoard.tickets.find(t => t.id === 'F3')
+    expect(f3?.box).toBe('~')
+    expect(f3?.owner).toBe('@vidul')
+    expect(f3?.tester).toBe('@asha')
+    await pane.unmount()
+  })
+}

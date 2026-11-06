@@ -3,8 +3,8 @@ import type { BoxProps, ButtonProps, Color, ElementConstructor, EngineInterface,
   SelectProps, TextProps } from 'claude-code'
 import type { Filter } from '../types'
 import { STATE_COLOR } from './lib/board'
-import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, UNI, ASCII, cutTo, headText, rowText, chromeRows, windowOf } from './lib/ticketsmodel'
-import type { Model, View } from './lib/ticketsmodel'
+import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, UNI, ASCII, cutTo, headText, userHeadText, rowText, chromeRows, windowOf } from './lib/ticketsmodel'
+import type { Model, UserSection, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
 import { clearForm, openAssign, renderForm, runDecided } from './assign'
@@ -49,8 +49,16 @@ const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 // F61: the boxes of the open groups, this session; empty = every group collapsed. Only
 // the set is held, never rows: the board's own value stays within $.state's cap (B4).
 const openA = atom({ plugin: 'ops-board', key: 'openGroups' } as const, [])
+const assignedFoldedA = atom({ plugin: 'ops-board', key: 'assignedFolded' } as const, false)
+const decideFoldedA = atom({ plugin: 'ops-board', key: 'decideFolded' } as const, false)
 // F76: the Workflows tab's open sections (Runs, Workflows, F93 Agents), this session; all start open.
 const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows', 'agents'])
+
+export async function toggleUserGroup($: EngineInterface, sec: UserSection) {
+  await update($, ticketOffsetA, () => null)
+  await update($, sec === 'assigned' ? assignedFoldedA : decideFoldedA, x => !x)
+  await update($, openA, x => (x as string[]).filter(k => k !== 'fold:' + sec) as typeof x)
+}
 
 const CHIP_KEY: Color = 'permission'
 const CHIP_VALUE: Color = 'suggestion'
@@ -103,8 +111,71 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
 
   if (!v.board || v.board.error) {
     entries.push(<Text dimColor>{v.board?.error ?? `reading TICKETS.md${glyphs.more}`}</Text>)
-  } else if (!m.groups.length) {   // F61: m.rows holds only open groups' rows; test the groups
+  } else if (!m.groups.length && !m.userGroups.length) {   // F61: m.rows holds only open groups' rows; test the groups
     entries.push(<Text dimColor>{m.filterActive ? 'no ticket matches the filter' : 'no open tickets'}</Text>)
+  }
+
+  const pushTicketEntry = (t: Model['rows'][number], itemKey: string, nested: boolean) => {
+    const isSel = itemKey === m.selected
+    const row = rowText(t, v.cols, glyphs, !!v.ascii, nested, isSel ? 3 : 0)
+    const body = v.ascii && isSel ? '> ' + row.text.slice(2) : row.text
+    entries.push(
+      <Button key={'row:' + itemKey} hotkey={isSel ? 'o' : undefined} plain onPress={() => {
+        void update($, ticketOffsetA, () => null)
+        void update($, selectedA, () => itemKey)
+        void update($, expandedA, x => (x === itemKey || x === t.id ? null : itemKey))
+      }}>
+        {!v.ascii && <Text color={paint(t.box)}>{glyphs.rail}</Text>}
+        {isSel ? <Text inverse>{body.padEnd(v.cols - (v.ascii ? 0 : 2) - 3)}</Text>
+          : <Text dimColor={STATE_COLOR[t.box] === 'dim'}>{row.owner && body.endsWith(row.owner)
+            ? [body.slice(0, -row.owner.length), <Text dimColor>{row.owner}</Text>] : body}</Text>}
+      </Button>,
+    )
+    if (chipsOf(t)) {
+      const parts: (RenderElement | string)[] = ['    ']
+      const groupCount = [t.apps.length, t.owner, t.decide, t.tester, t.by.length, t.session].filter(Boolean).length
+      let room = v.cols - 4 - (isDecidable(t) ? (isSel ? 13 : 10) : 0) - Math.max(0, groupCount - 1) * 2
+      const take = (s: string) => { const text = cutTo(s, Math.max(0, room), glyphs.cut); room -= text.length; return text }
+      const chip = (k: string, val: string) => [<Text color={CHIP_KEY}>{take(k + ':')}</Text>, <Text color={CHIP_VALUE}>{take(val)}</Text>]
+      const groupsOf: (RenderElement | string)[][] = []
+      if (t.apps.length) groupsOf.push(t.apps.flatMap((a, i) => [...(i ? [take(' ')] : []), ...chip('app', a)]))
+      if (t.owner) groupsOf.push(chip('owner', t.owner))
+      if (t.decide) groupsOf.push(chip('decide', t.decide))
+      if (t.tester) groupsOf.push(chip('tester', t.tester))
+      if (t.by.length) groupsOf.push(chip('by', t.by.join(' ')))
+      if (t.session) groupsOf.push([<Text dimColor>{take(t.session)}</Text>])
+      groupsOf.forEach((gr, i) => { if (i) parts.push('  '); parts.push(...gr) })
+      entries.push(
+        <Box key={'chips:' + itemKey} flexDirection="row" gap={3}>
+          <Text wrap="truncate-end">{parts}</Text>
+          {isDecidable(t) && <Button key={'decided:' + itemKey} plain hotkey={isSel ? 'v' : undefined} onPress={() => { void runDecided($, t.id) }}>Decided</Button>}
+        </Box>,
+      )
+    }
+    if (v.expanded === itemKey || (itemKey === t.id && v.expanded === t.id)) {
+      const raw = `    - [${t.box}] ${t.line}`
+      const at = list.slice(0, entries.length).reduce((n, l) => n + l.rows, 0)
+      const from = Math.max(0, w.start - at), to = Math.min(Math.ceil(raw.length / v.cols), w.end - at)
+      entries.push(<Box key={'raw:' + itemKey} flexDirection="column">{Array.from({ length: Math.max(0, to - from) }, (_, i) => <Text dimColor>{raw.slice((from + i) * v.cols, (from + i + 1) * v.cols)}</Text>)}</Box>)
+    }
+  }
+
+  if (v.me && (v.assignedFolded !== undefined || v.decideFolded !== undefined)) {
+    for (const ug of m.userGroups) {
+      const hk = headKey(ug.id)
+      const head = cutTo(userHeadText(ug, glyphs, !!v.ascii), v.cols - (v.ascii ? 0 : 2) - (hk === m.selected ? 3 : 0), glyphs.cut)
+      entries.push(
+        <Button key={hk} hotkey={hk === m.selected ? 'o' : undefined} plain onPress={() => {
+          void update($, selectedA, x => (hk === m.selected && x && x.startsWith(ug.id + ':') && ug.tickets.some(t => `${ug.id}:${t.id}` === x) ? x : hk))
+          void toggleUserGroup($, ug.id)
+        }}>
+          {!v.ascii && <Text color={ug.open ? ug.color : undefined} dimColor={!ug.open} inverse={hk === m.selected}>{ug.open ? glyphs.rail : glyphs.railDim}</Text>}
+          <Text color={v.ascii ? undefined : ug.color} bold inverse={hk === m.selected}>{head}</Text>
+        </Button>,
+      )
+      if (!ug.open) continue
+      for (const t of ug.tickets) pushTicketEntry(t, `${ug.id}:${t.id}`, false)
+    }
   }
 
   const shownIds = new Set(m.rows.map(t => t.id))
@@ -126,55 +197,14 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
     if (!g.open) continue
     for (const t of g.tickets) {
       const nested = !!t.parent && shownIds.has(t.parent) && g.tickets.some(p => p.id === t.parent)
-      const row = rowText(t, v.cols, glyphs, !!v.ascii, nested, t.id === m.selected ? 3 : 0)
-      const isSel = t.id === m.selected
-      const body = v.ascii && isSel ? '> ' + row.text.slice(2) : row.text
-      entries.push(
-        <Button key={'row:' + t.id} hotkey={isSel ? 'o' : undefined} plain onPress={() => {
-          void update($, ticketOffsetA, () => null)
-          void update($, selectedA, () => t.id)
-          void update($, expandedA, x => (x === t.id ? null : t.id))
-        }}>
-          {!v.ascii && <Text color={paint(t.box)}>{glyphs.rail}</Text>}
-          {isSel ? <Text inverse>{body.padEnd(v.cols - (v.ascii ? 0 : 2) - 3)}</Text>
-            : <Text dimColor={STATE_COLOR[t.box] === 'dim'}>{row.owner && body.endsWith(row.owner)
-              ? [body.slice(0, -row.owner.length), <Text dimColor>{row.owner}</Text>] : body}</Text>}
-        </Button>,
-      )
-      if (chipsOf(t)) {
-        const parts: (RenderElement | string)[] = ['    ']
-        const groupCount = [t.apps.length, t.owner, t.decide, t.tester, t.by.length, t.session].filter(Boolean).length
-        let room = v.cols - 4 - (isDecidable(t) ? (isSel ? 13 : 10) : 0) - Math.max(0, groupCount - 1) * 2
-        const take = (s: string) => { const text = cutTo(s, Math.max(0, room), glyphs.cut); room -= text.length; return text }
-        const chip = (k: string, val: string) => [<Text color={CHIP_KEY}>{take(k + ':')}</Text>, <Text color={CHIP_VALUE}>{take(val)}</Text>]
-        const groupsOf: (RenderElement | string)[][] = []
-        if (t.apps.length) groupsOf.push(t.apps.flatMap((a, i) => [...(i ? [take(' ')] : []), ...chip('app', a)]))
-        if (t.owner) groupsOf.push(chip('owner', t.owner))
-        if (t.decide) groupsOf.push(chip('decide', t.decide))
-        if (t.tester) groupsOf.push(chip('tester', t.tester))
-        if (t.by.length) groupsOf.push(chip('by', t.by.join(' ')))
-        if (t.session) groupsOf.push([<Text dimColor>{take(t.session)}</Text>])
-        groupsOf.forEach((gr, i) => { if (i) parts.push('  '); parts.push(...gr) })
-        entries.push(
-          <Box key={'chips:' + t.id} flexDirection="row" gap={3}>
-            <Text wrap="truncate-end">{parts}</Text>
-            {isDecidable(t) && <Button key={'decided:' + t.id} plain hotkey={isSel ? 'v' : undefined} onPress={() => { void runDecided($, t.id) }}>Decided</Button>}
-          </Box>,
-        )
-      }
-      if (v.expanded === t.id) {
-        const raw = `    - [${t.box}] ${t.line}`
-        const at = list.slice(0, entries.length).reduce((n, l) => n + l.rows, 0)
-        const from = Math.max(0, w.start - at), to = Math.min(Math.ceil(raw.length / v.cols), w.end - at)
-        entries.push(<Box key={'raw:' + t.id} flexDirection="column">{Array.from({ length: Math.max(0, to - from) }, (_, i) => <Text dimColor>{raw.slice((from + i) * v.cols, (from + i + 1) * v.cols)}</Text>)}</Box>)
-      }
+      pushTicketEntry(t, t.id, nested)
     }
   }
 
   if (w.above) out.push(<Box key="more:up"><Text dimColor>{`  ${glyphs.more} ${w.above} rows above ${glyphs.up}`}</Text></Box>)
   let at = 0
-  out.push(...(m.groups.length ? entries.filter((_, i) => {
-    const start = at; at += list[i]!.rows
+  out.push(...(m.groups.length || m.userGroups.length ? entries.filter((_, i) => {
+    const start = at; at += list[i]?.rows ?? 1
     return start < w.end && at > w.start
   }) : entries))
   if (w.below) out.push(<Box key="more:down"><Text dimColor>{`  ${glyphs.more} ${w.below} more rows ${glyphs.down}`}</Text></Box>)
@@ -211,8 +241,9 @@ export async function readView($: EngineInterface, cols: number, rows: number | 
   return {
     board: await read($, boardA), team: await read($, teamA), me: await read($, meA),
     filter: await read($, filterA), filterOpen: await read($, filterOpenA),
-    selected: await read($, selectedA), expanded: await read($, expandedA), open: await read($, openA), cols,
-    ascii: await read($, asciiA), rows, unread, offset: await read($, ticketOffsetA),
+    selected: await read($, selectedA), expanded: await read($, expandedA), open: await read($, openA),
+    assignedFolded: await read($, assignedFoldedA), decideFolded: await read($, decideFoldedA),
+    cols, ascii: await read($, asciiA), rows, unread, offset: await read($, ticketOffsetA),
   }
 }
 
@@ -266,6 +297,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
       {TABS.map(x => (
         <Button key={'tab:' + x.id} variant={x.id === tab ? 'primary' : undefined} dimColor={x.id !== tab}
           onPress={() => {
+            if (x.id !== 'tickets') void clearForm($).catch(() => {})
             void update($, tabA, () => x.id)
             if (x.id === 'runs') void pollRuns($).catch(() => {})       // read on entering the tab
             if (x.id === 'runs') void pollAgents($).catch(() => {})     // F93: its Agents section likewise

@@ -6,6 +6,7 @@ import { sameHandle } from './team'
 // F128: dedicated collapsible sections personalized to the active user
 export type UserSection = 'assigned' | 'decide'
 export const USER_SECTIONS: UserSection[] = ['assigned', 'decide']
+export type UserGroup = { id: UserSection; title: string; color: 'suggestion' | 'permission'; tickets: Ticket[]; open: boolean }
 
 export const assignedTickets = (tickets: readonly Ticket[], user: string | null): Ticket[] =>
   user ? tickets.filter(t => isOpen(t) && sameHandle(t.owner, user)) : []
@@ -25,6 +26,25 @@ export const isUserHead = (item: string | null): item is 'head:assigned' | 'head
 export const rawTicketId = (item: string | null): string | null =>
   item ? item.replace(/^(assigned|decide):/, '') : null
 
+export function personalGroups(
+  tickets: readonly Ticket[],
+  user: string | null,
+  opts?: { open?: readonly string[]; assignedFolded?: boolean; decideFolded?: boolean },
+): UserGroup[] {
+  if (!user) return []
+  const open = opts?.open ?? []
+  const assignedOpen = !opts?.assignedFolded && isUserSectionOpen(open, 'assigned')
+  const decideOpen = !opts?.decideFolded && isUserSectionOpen(open, 'decide')
+  return [
+    { id: 'assigned', title: 'Assigned', color: 'suggestion', tickets: assignedTickets(tickets, user), open: assignedOpen },
+    { id: 'decide', title: 'Decide', color: 'permission', tickets: decideTickets(tickets, user), open: decideOpen },
+  ]
+}
+
+export function userHeadText(g: UserGroup, glyphs: Glyphs, _ascii = false): string {
+  return `${g.open ? glyphs.open : glyphs.closed} ${g.title} (${g.tickets.length})`
+}
+
 // The Tickets tab's model (design §5): groups, drawn rows, line keys for keeping a
 // row in view, the count line. Pure; pane.tsx draws it, the ops app frames it.
 // F61: every group is a header with its count that opens and closes; `open` holds the
@@ -35,6 +55,7 @@ const OPEN_STATES: State[] = ['~', '%', '!', '?', ' ', '>']
 
 export type Group = { box: State; title: string; tickets: Ticket[]; open: boolean }
 export type Model = {
+  userGroups: UserGroup[]             // F128 / A199: personalized Assigned and Decide sections when me is set
   groups: Group[]                     // tickets: every one the filter shows, open or not (the count)
   rows: Ticket[]                      // the rows drawn, in order: those of open groups
   items: string[]                     // what up/down walk: 'head:<box>' and ticket ids, drawn order
@@ -48,6 +69,7 @@ export type Model = {
 export type View = {
   board: Board | null; team: Member[]; me: string | null; filter: Filter; filterOpen: boolean
   selected: string | null; expanded: string | null; open: State[]; cols: number
+  assignedFolded?: boolean; decideFolded?: boolean
   ascii?: boolean; rows?: number | null // omitted by the standalone ops app
   offset?: number | null              // list rows; null follows the selection
   unread?: number
@@ -142,20 +164,54 @@ export const isDecidable = (t: Ticket) => t.box === '?' && !!t.decide
 export function buildModel(v: View): Model {
   const shown = v.board ? visible(v.board, v.filter, v.me) : []
   const open = v.open ?? []
+  const userGroups = personalGroups(shown, v.me, {
+    open: open as readonly string[],
+    assignedFolded: v.assignedFolded,
+    decideFolded: v.decideFolded,
+  })
+  const includePersonal = v.me !== null && (v.assignedFolded !== undefined || v.decideFolded !== undefined)
   const groups = GROUPS
     .filter(g => v.filter.showDone || (g.box !== 'x' && g.box !== '-'))
     .map(g => ({ ...g, tickets: shown.filter(t => t.box === g.box), open: open.includes(g.box) }))
     .filter(g => g.tickets.length > 0)
   const rows = groups.flatMap(g => (g.open ? g.tickets : []))
-  const items = groups.flatMap(g => [headKey(g.box), ...(g.open ? g.tickets.map(t => t.id) : [])])
+  const userItems = includePersonal
+    ? userGroups.flatMap(ug => [headKey(ug.id), ...(ug.open ? ug.tickets.map(t => `${ug.id}:${t.id}`) : [])])
+    : []
+  const statusItems = groups.flatMap(g => [headKey(g.box), ...(g.open ? g.tickets.map(t => t.id) : [])])
+  const items = [...userItems, ...statusItems]
   // A ticket whose group is collapsed shows as its header selected; it is still the one
   // stored, so opening the group lands back on it.
   const want = v.selected
+  const userHome = includePersonal && want && /^(assigned|decide):/.test(want)
+    ? userGroups.find(ug => ug.tickets.some(t => `${ug.id}:${t.id}` === want))
+    : undefined
   const home = want && !isHead(want) ? groups.find(g => g.tickets.some(t => t.id === want)) : undefined
-  const selected = (want && items.includes(want) ? want : home ? headKey(home.box) : null) ?? items[0] ?? null
-  const ticket = selected && !isHead(selected) ? selected : null
+  const fallback = statusItems[0] ?? items[0] ?? null
+  const selected = (want && items.includes(want)
+    ? want
+    : userHome
+      ? headKey(userHome.id)
+      : home
+        ? headKey(home.box)
+        : null) ?? fallback
+  const ticket = selected && !isHead(selected) ? rawTicketId(selected) : null
 
   const lines: Model['lines'] = [{ key: 'tabs', rows: 1 }, { key: 'filters', rows: 1 }, { key: 'gap', rows: 1 }]
+  if (includePersonal) {
+    for (const ug of userGroups) {
+      lines.push({ key: headKey(ug.id), rows: 1 })
+      if (!ug.open) continue
+      for (const t of ug.tickets) {
+        const itemKey = `${ug.id}:${t.id}`
+        lines.push({ key: 'row:' + itemKey, rows: 1 })
+        if (chipsOf(t)) lines.push({ key: 'chips:' + itemKey, rows: 1 })
+        if (v.expanded === itemKey || v.expanded === t.id) {
+          lines.push({ key: 'raw:' + itemKey, rows: Math.max(1, Math.ceil((t.line.length + 10) / Math.max(10, v.cols))) })
+        }
+      }
+    }
+  }
   for (const g of groups) {
     lines.push({ key: headKey(g.box), rows: 1 })
     if (!g.open) continue
@@ -184,7 +240,7 @@ export function buildModel(v: View): Model {
     : `${openT.length} open` + dots.map(d => ` ●${d.n}`).join('') +
       (v.filter.showDone ? (closedN ? ' ·' + closed.map(d => ` ●${d.n}`).join('') + ' closed' : '')
         : (closedN ? ` · ${closedN} done hidden` : ''))
-  const model = { groups, rows, items, selected, ticket, lines, count: { open: openT.length, dots, closed, text }, filterActive }
+  const model = { userGroups, groups, rows, items, selected, ticket, lines, count: { open: openT.length, dots, closed, text }, filterActive }
   if (v.ascii !== undefined) {
     const chrome = chromeRows(v, model, v.ascii ? ASCII : UNI)
     for (const key of ['tabs', 'count', 'keys'] as const) lines.find(l => l.key === key)!.rows = chrome[key]

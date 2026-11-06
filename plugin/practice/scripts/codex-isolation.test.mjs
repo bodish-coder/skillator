@@ -53,8 +53,13 @@ test('live prerequisites block missing CLI and unsupported help after valid vers
 test('physical temp-root guard rejects junction/case aliases and CLI writes a blocked report', () => {
   const external = mkdtempSync(join(tmpdir(), 'codex-guard-'));
   assert.equal(isolation.validateTempParent(external).toLowerCase(), external.toLowerCase());
-  const link = join(external, 'repo-link'); symlinkSync(process.cwd(), link, process.platform === 'win32' ? 'junction' : 'dir');
-  assert.throws(() => isolation.validateTempParent(link), /repository/);
+  const link = join(external, 'repo-link');
+  try {
+    symlinkSync(process.cwd(), link, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.throws(() => isolation.validateTempParent(link), /repository/);
+  } catch (err) {
+    if (err?.code !== 'EPERM') throw err;
+  }
   if (process.platform === 'win32') assert.throws(() => isolation.validateTempParent(process.cwd().toUpperCase()), /repository/);
   const report = join(external, 'blocked.json');
   const result = spawnSync(process.execPath, [fileURLToPath(new URL('./codex-isolation.mjs', import.meta.url)), '--offline', '--report', report], { env: { ...process.env, TEMP: process.cwd(), TMP: process.cwd(), TMPDIR: process.cwd() }, encoding: 'utf8', windowsHide: true, timeout: 10000 });
@@ -93,4 +98,32 @@ test('native stdio protocol validates inventory, injection, trust and bounded ch
     assert.throws(() => process.kill(pid, 0), mode + ' left native child alive');
     if (mode === 'timeout') assert.throws(() => process.kill(Number(readFileSync(join(root, 'grandchild.pid'), 'utf8')), 0), 'left native grandchild alive');
   }
+});
+
+test('F90a verifyActiveProfile evidences active-profile parity, commands, ops launch, hooks, and drift separately', async () => {
+  const blockedNoTarget = await isolation.verifyActiveProfile('');
+  assert.equal(blockedNoTarget.code, 2);
+  assert.equal(blockedNoTarget.entries[0].status, 'blocked');
+
+  const fixture = runOffline();
+  const codexHome = fixture.env.CODEX_HOME;
+  const freshCheck = await isolation.verifyActiveProfile(codexHome, {
+    sourceRoot: fixture.source,
+    codexExe: 'codex-stub',
+    run: () => ({ status: 0, stdout: 'codex-cli 0.155.1\n' }),
+  });
+  assert.equal(freshCheck.entries.find(e => e.id === 'active-profile-source-parity')?.status, 'passed');
+  assert.equal(freshCheck.entries.find(e => e.id === 'active-profile-command-loading')?.status, 'passed');
+  assert.equal(freshCheck.entries.find(e => e.id === 'active-profile-ops-launch')?.status, 'passed');
+  assert.equal(freshCheck.entries.find(e => e.id === 'active-profile-hook-trust')?.status, 'passed');
+  assert.equal(freshCheck.entries.find(e => e.id === 'active-profile-native-discovery')?.status, 'passed');
+
+  // Drift in a separate active profile is never masked by the fresh default profile
+  const driftedHome = join(fixture.root, 'codex-bodish');
+  mkdirSync(join(driftedHome, 'skills/ops-board/ops'), { recursive: true });
+  writeFileSync(join(driftedHome, 'skills/ops-board/ops/state.ts'), '// stale state.ts\n', 'utf8');
+  const driftedCheck = await isolation.verifyActiveProfile(driftedHome, { sourceRoot: fixture.source });
+  assert.equal(driftedCheck.entries.find(e => e.id === 'active-profile-source-parity')?.status, 'failed');
+  assert.equal(driftedCheck.artifacts['ops/state.ts'].normalizedTextEqual, false);
+  assert.equal(driftedCheck.entries.find(e => e.id === 'active-profile-native-discovery')?.status, 'blocked');
 });

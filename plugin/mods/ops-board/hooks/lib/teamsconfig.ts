@@ -6,8 +6,8 @@ import type { TeamsCfgView } from '../../types'
 // keeps, draws or logs the token: it is masked as typed, and a saved one is only ever
 // "set" or "not set".
 
-export type SetupField = 'token' | 'url' | 'port' | 'posts' | 'clear' | 'login' | 'loginStatus'
-export const SETUP_FIELDS: SetupField[] = ['token', 'url', 'port', 'posts', 'clear', 'login', 'loginStatus']
+export type SetupField = 'token' | 'url' | 'port' | 'posts' | 'clear' | 'login' | 'loginStatus' | 'setupCheck' | 'setupWalk'
+export const SETUP_FIELDS: SetupField[] = ['token', 'url', 'port', 'posts', 'clear', 'login', 'loginStatus', 'setupCheck', 'setupWalk']
 export const DEFAULT_PORT = 3978
 // What the form holds while it is up. The token and URL as typed ('' = keep the saved one).
 export type SetupValues = { token: string; url: string; port: string; posts: boolean }

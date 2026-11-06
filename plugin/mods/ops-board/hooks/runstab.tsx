@@ -1,17 +1,17 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, ProcessRunResult, RenderElement, TextProps } from 'claude-code'
-import type { Board, Diagnose, Engage, RunView, Stage } from '../types'
+import type { Board, Diagnose, Engage, RunView, Stage, StartRunDraft } from '../types'
 import type { AgentsView } from './agentstab'
 import { gitBin, runCall } from './lib/host'
 import { parseBoard } from './lib/board'
 import { norm } from './lib/calls'
 import { parseRuns, scriptPathOf } from './lib/runs'
-import { continuePrompt, engageOf, finishedLine, isFinished, runLines, stageTickets as ticketsOf } from './lib/runlines'
+import { continuePrompt, eligibleRunTickets, engageOf, finishedLine, isFinished, parseFollowupOut, runLines, stageTickets as ticketsOf, startRunCmd } from './lib/runlines'
 import type { RunLine } from './lib/runlines'
 import { treeLines } from './lib/agents'
 import { diagnose } from './lib/diagnose'
 import type { ShaState } from './lib/diagnose'
-export { continuePrompt, runLines, waves } from './lib/runlines'
+export { continuePrompt, eligibleRunTickets, parseFollowupOut, runLines, startRunCmd, waves } from './lib/runlines'
 
 // F50, design §8: the Runs tab (mock m-plan). relay-morpheus list, then resume (F85: the
 // run file whole) for each run not all done; a planned run shows its stage table, what runs
@@ -27,7 +27,9 @@ const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
 const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const engageA = atom({ plugin: 'ops-board', key: 'engage' } as const, null)
 const diagnoseA = atom({ plugin: 'ops-board', key: 'diagnose' } as const, null)   // F99
+export const startRunA = atom({ plugin: 'ops-board', key: 'startRun' } as const, null as StartRunDraft | null) // A196
 const tabA = atom({ plugin: 'ops-board', key: 'tab' } as const, 'tickets')
+const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows', 'agents'] as ('runs' | 'workflows' | 'agents')[])
 
 const PANE = 'ops-board'          // pane.tsx's PANE_ID (it imports this file)
 const PANE_NAME = 'ops board'     // pane.tsx's PANE_TITLE
@@ -70,21 +72,23 @@ export async function pollRuns($: EngineInterface): Promise<void> {
   }
 }
 
-// F85: the confirm is up while the Workflows tab is the one shown (as the Run tab's form); F99: the Diagnose view likewise
+// F85: the confirm is up while the Workflows tab is the one shown (as the Run tab's form); F99: the Diagnose view likewise; A196: StartRunForm too
 export async function isEngageUp($: EngineInterface): Promise<boolean> {
-  return (await read($, tabA)) === 'runs' && ((await read($, engageA)) !== null || (await read($, diagnoseA)) !== null)
+  return (await read($, tabA)) === 'runs' && ((await read($, engageA)) !== null || (await read($, diagnoseA)) !== null || (await read($, startRunA)) !== null)
 }
 // /ops to another tab and an unload: the confirm just goes.
 export async function dropEngage($: EngineInterface) {
   if ((await read($, engageA)) !== null) await update($, engageA, () => null)
   if ((await read($, diagnoseA)) !== null) await update($, diagnoseA, () => null)   // F99
+  if ((await read($, startRunA)) !== null) await update($, startRunA, () => null)   // A196
 }
 // Cancel, Esc and done: the tab back, Esc the pane's own again.
 export async function closeEngage($: EngineInterface) {
-  const up = (await read($, engageA)) !== null || (await read($, diagnoseA)) !== null   // F99: the Diagnose view too
+  const up = (await read($, engageA)) !== null || (await read($, diagnoseA)) !== null || (await read($, startRunA)) !== null   // F99, A196
   if (!up) return
   await update($, engageA, () => null)
   await update($, diagnoseA, () => null)
+  await update($, startRunA, () => null)
   await $.ui.open({ id: PANE, title: PANE_NAME })
 }
 
@@ -320,16 +324,174 @@ export async function readDiagnose($: EngineInterface): Promise<Diagnose | null>
   return read($, diagnoseA)
 }
 
-export type RunsView = { runs: RunView[]; board: Board | null; cols: number; engage: Engage | null }
+export type RunsView = { runs: RunView[]; board: Board | null; cols: number; engage: Engage | null; startRun?: StartRunDraft | null }
 
 // The runs the tab draws in full: those not all done (F99: the finished ones get one dim row after them).
 export const openRuns = (runs: RunView[]) => runs.filter(r => !isFinished(r))   // F99: the one definition
 
 export async function readRuns($: EngineInterface, cols: number): Promise<RunsView> {
-  return { runs: await read($, runsA), board: await read($, boardA), cols, engage: await read($, engageA) }
+  return { runs: await read($, runsA), board: await read($, boardA), cols, engage: await read($, engageA), startRun: await read($, startRunA) }
+}
+
+// A196: native Start Run form state + guarded session prompt submission
+export async function openStartRun($: EngineInterface): Promise<void> {
+  const board = await read($, boardA)
+  const tickets = eligibleRunTickets(board).map(t => t.id)
+  await update($, startRunA, () => ({ runner: 'marathon', mode: 'sequential', tickets, result: null }))
+  const open = await read($, runsOpenA)
+  if (!open.includes('runs')) await update($, runsOpenA, xs => ['runs', ...xs])
+  await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
+  void $.ui.focus({ requestId: PANE, key: 'start:go' }).catch(() => {})
+}
+
+export async function closeStartRun($: EngineInterface): Promise<void> {
+  if ((await read($, startRunA)) === null) return
+  await update($, startRunA, () => null)
+  await $.ui.open({ id: PANE, title: PANE_NAME })
+}
+
+export async function toggleStartRunRunner($: EngineInterface, next?: StartRunDraft['runner']): Promise<void> {
+  await update($, startRunA, sr => sr && {
+    ...sr,
+    runner: next ?? (sr.runner === 'marathon' ? 'pending-subagent' : 'marathon'),
+    result: null,
+  })
+}
+
+export async function toggleStartRunMode($: EngineInterface, next?: StartRunDraft['mode']): Promise<void> {
+  await update($, startRunA, sr => sr && {
+    ...sr,
+    mode: next ?? (sr.mode === 'sequential' ? 'parallel' : 'sequential'),
+    result: null,
+  })
+}
+
+export async function toggleStartRunTicket($: EngineInterface, id?: string): Promise<void> {
+  const board = await read($, boardA)
+  const eligible = eligibleRunTickets(board)
+  const focus = await read($, actionFocusA)
+  const target = id ?? eligible.find(t => focus === 'start:ticket:' + t.id)?.id ?? eligible[0]?.id
+  if (!target) return
+  await update($, startRunA, sr => {
+    if (!sr) return null
+    const has = sr.tickets.includes(target)
+    const next = has ? sr.tickets.filter(x => x !== target) : eligible.map(t => t.id).filter(x => x === target || sr.tickets.includes(x))
+    return { ...sr, tickets: next, result: null }
+  })
+}
+
+export async function setAllStartRunTickets($: EngineInterface, all: boolean): Promise<void> {
+  const board = await read($, boardA)
+  const ids = all ? eligibleRunTickets(board).map(t => t.id) : []
+  await update($, startRunA, sr => sr && { ...sr, tickets: ids, result: null })
+}
+
+export async function startRunGo($: EngineInterface): Promise<void> {
+  const sr = await read($, startRunA)
+  if (!sr) return
+  if (sr.tickets.length === 0) {
+    const msg = '■ Select at least 1 ticket before starting a run'
+    await update($, startRunA, cur => cur && { ...cur, result: msg })
+    $.ui.toast(msg)
+    return
+  }
+  const cmd = startRunCmd(sr.runner, sr.mode, sr.tickets)
+  const submit = $.prompt?.submit
+  if (typeof submit !== 'function') {
+    const msg = '■ Session prompt submission is unavailable on this surface'
+    await update($, startRunA, cur => cur && { ...cur, result: msg })
+    $.ui.toast(msg)
+    return
+  }
+  try {
+    await submit({ text: cmd })
+    await closeStartRun($)
+    $.ui.toast(`✓ Sent to session: ${cmd}`)
+  } catch (err) {
+    const msg = `■ Start Run not submitted: ${err instanceof Error ? err.message : String(err)}`
+    await update($, startRunA, cur => cur && { ...cur, result: msg })
+    $.ui.toast(msg)
+  }
+}
+
+// A197: Push Pending creates a distinct follow-up run via relay-push-pending and derives toast from FOLLOWUP result
+export async function pushPendingRunNative($: EngineInterface, id?: string): Promise<void> {
+  const runs = await read($, runsA)
+  const open = openRuns(runs)
+  const r0 = (id ? runs.find(r => r.id === id) : open[0]) ?? runs[0]
+  if (!r0) { $.ui.toast('no run available to push pending stages'); return }
+  const pending = r0.stages.filter(s => s.state !== 'x' && s.state !== '~' && s.state !== '>')
+  if (pending.length === 0) { $.ui.toast(`${r0.id}: no eligible pending stages (all completed or in-flight)`); return }
+  const mode = r0.mode === 'parallel' ? 'parallel' : 'sequential'
+  const r = await runCall($, 'relay-push-pending', [r0.id, mode])
+  const parsed = r.code === 0 ? parseFollowupOut(r.out) : null
+  if (r.code !== 0 || !parsed) {
+    $.ui.toast(`■ push pending failed: ${(r.err || r.out).trim() || `exit ${r.code}`}`)
+    return
+  }
+  $.ui.toast(`✓ pushed ${parsed.moved} pending stage(s) from ${parsed.from} → ${parsed.id} (${parsed.mode})`)
+  void pollRuns($).catch(() => {})
+}
+
+export async function runsKey($: EngineInterface, key: string | { name?: string; sequence?: string }): Promise<boolean> {
+  const raw = typeof key === 'string' ? key : (key.name || key.sequence || '')
+  const k = raw.toLowerCase()
+  const sr = await read($, startRunA)
+  if (sr) {
+    if (k === 'escape' || k === 'esc' || k === 'c') { await closeStartRun($); return true }
+    if (k === 'enter' || k === 'return' || k === 'y') { await startRunGo($); return true }
+    if (k === 'r' || k === 't') { await toggleStartRunRunner($); return true }
+    if (k === 'm') { await toggleStartRunMode($); return true }
+    if (raw === ' ' || k === 'space' || k === 'o') { await toggleStartRunTicket($); return true }
+    if (k === 'a') { await setAllStartRunTickets($, true); return true }
+    if (k === 'x') { await setAllStartRunTickets($, false); return true }
+    return false
+  }
+  if (k === 's' || k === 'n') { await openStartRun($); return true }
+  if (k === 'p') { await pushPendingRunNative($); return true }
+  return false
 }
 
 type Els = { Box: ElementConstructor<BoxProps>; Text: ElementConstructor<TextProps>; Button: ElementConstructor<ButtonProps> }
+
+export async function StartRunForm($: EngineInterface, els: Els, sr: StartRunDraft, board: Board | null): Promise<RenderElement[]> {
+  const { Box, Text, Button } = els
+  const eligible = eligibleRunTickets(board)
+  const focus = await read($, actionFocusA)
+  const focusedTicket = eligible.find(t => focus === 'start:ticket:' + t.id)?.id ?? eligible[0]?.id
+  const cmd = startRunCmd(sr.runner, sr.mode, sr.tickets)
+  return [
+    <Box key="start:title"><Text bold>{'Start Run'}</Text><Text dimColor>{'  r/t runner · m mode · space toggle · Enter confirm · Esc cancel'}</Text></Box>,
+    <Text> </Text>,
+    <Box key="start:controls" flexDirection="row" flexWrap="wrap" gap={3}>
+      <Button key="start:runner" plain hotkey={'t'} onPress={() => { void toggleStartRunRunner($) }}>{`Runner: ${sr.runner}`}</Button>
+      <Button key="start:mode" plain hotkey={'m'} onPress={() => { void toggleStartRunMode($) }}>{`Mode: ${sr.mode}`}</Button>
+      <Button key="start:all" plain hotkey={'a'} onPress={() => { void setAllStartRunTickets($, true) }}>All</Button>
+      <Button key="start:clear" plain hotkey={'x'} onPress={() => { void setAllStartRunTickets($, false) }}>Clear</Button>
+    </Box>,
+    <Text> </Text>,
+    <Box key="start:tickets-hdr"><Text dimColor>{`Eligible open tickets (${sr.tickets.length}/${eligible.length} selected):`}</Text></Box>,
+    ...(eligible.length
+      ? eligible.map(t => {
+        const on = sr.tickets.includes(t.id)
+        return (
+          <Box key={`start:row:${t.id}`} flexDirection="row" flexWrap="wrap" gap={2}>
+            <Button key={`start:ticket:${t.id}`} plain hotkey={t.id === focusedTicket ? 'o' : undefined} onPress={() => { void toggleStartRunTicket($, t.id) }}>{`${on ? '[x]' : '[ ]'} ${t.id}`}</Button>
+            <Text dimColor wrap="truncate-end">{t.title}</Text>
+          </Box>
+        )
+      })
+      : [<Box key="start:no-tickets"><Text dimColor>{'no eligible open tickets on board'}</Text></Box>]),
+    <Text> </Text>,
+    <Box key="start:preview" flexDirection="row" flexWrap="wrap"><Text dimColor>{'Command  '}</Text><Text bold wrap="wrap">{cmd}</Text></Box>,
+    ...(sr.result ? [<Box key="start:result"><Text color="error" wrap="wrap">{sr.result}</Text></Box>] : []),
+    <Text> </Text>,
+    <Box key="start:actions" flexDirection="row" flexWrap="wrap" gap={4}>
+      <Button key="start:go" plain hotkey={'y'} variant="primary" onPress={() => { void startRunGo($) }}>Confirm</Button>
+      <Button key="start:cancel" plain hotkey={'c'} onPress={() => { void closeStartRun($) }}>Cancel</Button>
+    </Box>,
+  ]
+}
 
 // F85: the engage confirm, drawn in place of the tab (B5: never a second pane).
 export function EngageConfirm($: EngineInterface, els: Els, g: Engage): RenderElement[] {
@@ -384,22 +546,31 @@ export async function DiagnoseView($: EngineInterface, els: Els, d: Diagnose): P
 
 export async function RunsTab($: EngineInterface, els: Els, v: RunsView, a: AgentsView): Promise<RenderElement[]> {
   const { Box, Text, Button } = els
+  const sr = v.startRun !== undefined ? v.startRun : await read($, startRunA)
+  if (sr) return StartRunForm($, els, sr, v.board)
   const out: RenderElement[] = []
   const draw = (l: RunLine) =>
     <Box key={l.key}><Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim}>{s.text}</Text>)}</Text></Box>
   const focus = await read($, actionFocusA)
-  const current = v.runs.find(r => focus === 'engage:' + r.id || focus === 'diagnose:' + r.id)?.id ?? openRuns(v.runs)[0]?.id ?? v.runs[0]?.id
+  const current = v.runs.find(r => focus === 'engage:' + r.id || focus === 'diagnose:' + r.id || focus === 'push-pending:' + r.id)?.id ?? openRuns(v.runs)[0]?.id ?? v.runs[0]?.id
   const open = openRuns(v.runs)
+  out.push(
+    <Box key="runs:bar" flexDirection="row" flexWrap="wrap" gap={3}>
+      <Button key="runs:start" plain hotkey={'s'} onPress={() => { void openStartRun($) }}>Start Run</Button>
+    </Box>,
+  )
   if (!open.length) out.push(<Box key="none"><Text dimColor>{'no relay run open - /skillator:plan-runs <tickets> plans one'}</Text></Box>)
   open.forEach((run, i) => {
     if (i) out.push(<Text> </Text>)
     out.push(...runLines(run, v.board).map(draw))
     out.push(...treeLines(run, open, a.agents, a.workflows, v.board).map(draw))
     const ids = [...new Set(run.stages.flatMap(ticketsOf))]
+    const hasPending = run.stages.some(s => s.state !== 'x' && s.state !== '~' && s.state !== '>')
     out.push(
       <Box flexDirection="row" flexWrap="wrap" gap={3}>
         <Button key={'engage:' + run.id} plain hotkey={run.id === current ? 'e' : undefined} variant="primary" onPress={() => { void openEngage($, run.id) }}>Engage</Button>
         <Button key={'diagnose:' + run.id} plain hotkey={run.id === current ? 'd' : undefined} onPress={() => { void openDiagnose($, run.id) }}>Diagnose</Button>
+        {hasPending && <Button key={'push-pending:' + run.id} plain hotkey={run.id === current ? 'p' : undefined} onPress={() => { void pushPendingRunNative($, run.id) }}>Push Pending</Button>}
         {run.planned && <Box key={'edit:' + run.id}><Text dimColor>{`Edit in chat: /skillator:plan-runs ${ids.join(' ')}`}</Text></Box>}
       </Box>,
     )

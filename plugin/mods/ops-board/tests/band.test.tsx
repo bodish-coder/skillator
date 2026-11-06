@@ -217,6 +217,7 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   on('process.run', ($, e) => {
     const a = e.argv
     if (a.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
+    if (a.join(' ') === 'git rev-parse --path-format=absolute --git-common-dir') return { value: ran('/r/.git\n') }
     w.runs.push(a)
     if (a.includes('--machine') && w.machineFails) return { value: ran('', 1, 'pending: cannot read the disk') }
     if (a.includes('--machine')) return { value: ran(w.held ? w.machine.replace('HOLD=-', 'HOLD=' + w.held) : w.machine) }
@@ -569,4 +570,40 @@ test('/ops resume: the machine facts failing or empty - not released, relay neve
     expect(out.text).toBe('could not read the machine facts - not released')
   }
   expect(w.runs.filter(a => a[3] === 'release')).toHaveLength(0)
+})
+
+test('A178: serialized inbox handoff flows through pollInbox to AbovePrompt band and status line; read marker, unknown team member and malicious metadata stay safe', WITH, async ($, on) => {
+  const [w, clock] = world(on)
+  w.files['/r/.skillator/team.md'] = '- @asha: asha@ikran.in\n- @vidul: vidul@ikran.in\n'
+  const rec = (id: string, from: string, to: unknown, text: string, min: number) =>
+    JSON.stringify({ ts: `2026-10-30T10:${String(min).padStart(2, '0')}:00.000Z`, from, ...(to !== undefined ? { to } : {}), email: 'asha@ikran.in', text, id })
+  w.files['/r/.git/skillator/team-inbox.jsonl'] = [
+    rec('m1', '@asha', '@VIDUL', 'handoff F130 to vidul', 1),
+    rec('m2', '@asha', undefined, 'follow-up note without recipient', 2),
+  ].join('\n') + '\n'
+
+  await start($, clock)
+  expect(w.statuses.at(-1)).toBe('ops @vidul 2 pending | 1 in progress | 5 total · 5h 41% · 7d 55% → @vidul')
+
+  const ui = await mountBand($, 'terminal')
+  expect((await ui.find({ key: 'line:0' }))?.text).toBe(
+    '● ops @vidul  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok  → @vidul')
+
+  // Marking m1 read clears → @vidul from both status line and AbovePrompt band
+  w.files['/r/.git/skillator/team-inbox.read'] = 'm1\n'
+  await clock.advance(2000)
+  expect(w.statuses.at(-1)).toBe('ops @vidul 2 pending | 1 in progress | 5 total · 5h 41%')
+  expect((await ui.find({ key: 'line:0' }))?.text).toBe(
+    '● ops @vidul  disk 17 GB  mem 3.2 GB  5h 41%  7d 55% resets Tue 09:00  relay RUN-0012 2/4  locks ok')
+
+  // Unknown team member (@ghost) and malicious/invalid `to` values are ignored safely
+  w.files['/r/.git/skillator/team-inbox.jsonl'] += [
+    rec('m3', '@asha', '@ghost', 'unknown member', 3),
+    rec('m4', '@asha', '@vidul\u001b[2J', 'escape sequence in recipient', 4),
+    rec('m5', '@asha', 'vidul', 'missing at sign', 5),
+  ].join('\n') + '\n'
+  await clock.advance(2000)
+  expect(w.statuses.at(-1)).toBe('ops @vidul 2 pending | 1 in progress | 5 total · 5h 41%')
+  expect((await ui.find({ key: 'line:0' }))?.text).not.toContain('→')
+  await ui.unmount()
 })

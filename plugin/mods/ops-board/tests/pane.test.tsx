@@ -180,7 +180,8 @@ const texts = async (ui: { findAll: (q: { type?: string; key?: string }) => Prom
 // F61: every group starts collapsed. The group headers, as drawn; openAll presses each
 // collapsed one open, as a person clicking down the list would.
 type Ui = { findAll: (q: { type?: string }) => Promise<{ key: string | undefined; text: string }[]>; press: (q: { key: string }) => Promise<unknown> }
-const heads = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('head:')).map(b => b.text.replace(/^[▌▏] /, ''))
+const heads = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('head:') && b.key !== 'head:assigned' && b.key !== 'head:decide').map(b => b.text.replace(/^[▌▏] /, ''))
+const userHeads = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key === 'head:assigned' || b.key === 'head:decide').map(b => b.text.replace(/^[▌▏] /, ''))
 async function openAll(ui: Ui) {
   for (const b of (await ui.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && / (▸|\+)$/.test(x.text)))
     await ui.press({ key: b.key! })
@@ -374,7 +375,7 @@ for (const surface of SURFACES) {
     expect((await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('row:'))).toHaveLength(0)
     await ui.select({ key: 'sel:app', value: 'all' })
     const mine = (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('row:')).map(b => b.key)
-    expect(mine).toEqual(['row:F3', 'row:F1'])
+    expect(mine).toEqual(['row:assigned:F3', 'row:F3', 'row:F1'])
     await ui.unmount()
   })
 
@@ -808,3 +809,53 @@ test('B14: the tab bar and the key rows wrap whole buttons', WITH, async ($, on)
   for (const id of ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help']) expect(await ui.find({ key: 'tab:' + id }), id).toBeDefined()
   await ui.unmount()
 })
+
+for (const surface of SURFACES) {
+  test(`${surface}: A199 personalized Assigned and Decide sections fold via pointer and keyboard, and refresh on user or reassignment changes`, WITH, async ($, on) => {
+    const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+    await start($, clock)
+    const ui = await mountPane($, surface)
+
+    // Active user is @vidul -> Assigned (1) with F3, Decide (0)
+    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▾ Decide (0)'])
+    expect(await ui.find({ key: 'row:assigned:F3' })).toBeDefined()
+
+    // Pointer fold/unfold on head:assigned
+    await ui.press({ key: 'head:assigned' })
+    expect(await state($, 'assignedFolded')).toBe(true)
+    expect(await userHeads(ui)).toEqual(['▸ Assigned (1)', '▾ Decide (0)'])
+    expect(await ui.find({ key: 'row:assigned:F3' })).toBeUndefined()
+    await ui.press({ key: 'head:assigned' })
+    expect(await state($, 'assignedFolded')).toBe(false)
+    expect(await ui.find({ key: 'row:assigned:F3' })).toBeDefined()
+
+    // Keyboard navigation (ui.scroll) up into personalized sections and folding Decide
+    await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'head:decide', origin: { kind: 'person' } })
+    expect(await state($, 'selected')).toBe('head:decide')
+    expect((await ui.find({ key: 'head:decide' }))?.props.hotkey).toBe('o')
+    await ui.press({ key: 'head:decide' })
+    expect(await state($, 'decideFolded')).toBe(true)
+    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▸ Decide (0)'])
+    await ui.press({ key: 'head:decide' })
+    expect(await state($, 'decideFolded')).toBe(false)
+
+    // Switch active user in Team view to @asha -> Assigned (0), Decide (1) with F2
+    await ui.press({ key: 'key:team' })
+    await ui.press({ key: 'member:@asha' })
+    await ui.press({ key: 'team:back' })
+    expect(await state($, 'me')).toBe('@asha')
+    expect(await userHeads(ui)).toEqual(['▾ Assigned (0)', '▾ Decide (1)'])
+    expect(await ui.find({ key: 'row:assigned:F3' })).toBeUndefined()
+    expect(await ui.find({ key: 'row:decide:F2' })).toBeDefined()
+
+    // Reassign B1 to @asha -> Assigned (1) with B1 refreshes immediately
+    await ui.press({ key: 'head: ' })
+    await $.ui.focus({ component: 'Pane', requestId: PANE_ID, plugin: 'ops-board', element: 'row:B1', origin: { kind: 'person' } })
+    await ui.press({ key: 'key:assign' })
+    await ui.press({ key: 'who:@asha' })
+    await ui.press({ key: 'go' })
+    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▾ Decide (1)'])
+    expect(await ui.find({ key: 'row:assigned:B1' })).toBeDefined()
+    await ui.unmount()
+  })
+}

@@ -6,11 +6,11 @@
 export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' | 'meta-assign-tester' | 'meta-decide' | 'meta-decided'
   | 'meta-team-add' | 'meta-team-remove' | 'meta-team-lead'
   | 'meta-status' | 'holo-ticket' | 'meta-reconcile' | 'meta-unblock' | 'meta-start' | 'meta-testing' | 'meta-block'
-  | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
+  | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-push-pending' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
   | 'relay-stage-landed'
   | 'usage-level'
   | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'
-  | 'team-setup-check' | 'team-login' | 'team-login-status'
+  | 'team-setup-check' | 'team-setup-walk' | 'team-login' | 'team-login-status'
   | 'run-scan' | 'run-rename'
 
 // Exists under a skills dir: what marks a directory as one.
@@ -22,7 +22,7 @@ const META = 'tickets-zordon/scripts/ticket-meta'
 const RELAY = 'relay-morpheus/hooks/relay-morpheus'
 const WATCH = 'watch-cortana/hooks/usage-watch'
 const RUNS = 'live-friday/scripts/run-entries'   // F79: the one writer of .skillator/run.json
-const SETUP = 'teams-uhura/scripts/setup'   // F98: the first-time setup walk; only its --check pass runs from the board
+const SETUP = 'teams-uhura/scripts/setup'   // F98 / F98a: first-time setup (--check and interactive walk)
 
 // Forward slashes, no trailing one: both hosts take them, and joins stay simple.
 export const norm = (p: string) => p.replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
@@ -35,8 +35,8 @@ export const up = (p: string, n: number) => {
 // args: meta-assign/meta-decide [id, @handle]; meta-decided / meta-unblock / meta-start [id];
 // meta-testing / meta-block [id, text]; meta-reconcile [ids...]; meta-team-add
 // [@handle, name, emails comma-joined]; meta-team-remove / meta-team-lead [@handle]; relay-resume and
-// relay-queue-add [RUN-id]; relay-hold [reason]; relay-decide [level line]; relay-stage-landed [RUN-id, n, sha];
-// run-rename [id, name]; team-setup-check none; others none.
+// relay-queue-add [RUN-id]; relay-push-pending [RUN-id, mode?]; relay-hold [reason]; relay-decide [level line]; relay-stage-landed [RUN-id, n, sha];
+// run-rename [id, name]; team-setup-check / team-setup-walk none; others none.
 type ScriptCall = Exclude<Call, 'holo-ticket' | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail' | 'team-login' | 'team-login-status'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
   'pending':            { script: PENDING, sh: a => a, ps: a => a },
@@ -59,6 +59,8 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   // read-only: a poll must never recreate a run worktree its owner removed
   'relay-resume':       { script: RELAY, sh: a => ['resume', a[0] ?? '', '--read-only'], ps: a => ['-Mode', 'resume', '-Id', a[0] ?? '', '-ReadOnly'] },
   'relay-queue-add':    { script: RELAY, sh: a => ['queue-run', 'add', a[0] ?? ''], ps: a => ['-Mode', 'queue-run', '-Sub', 'add', '-Id', a[0] ?? ''] },
+  'relay-push-pending': { script: RELAY, sh: a => ['queue-run', 'push-pending', a[0] ?? '', ...(a[1] ? ['--mode', a[1]] : [])],
+                          ps: a => ['-Mode', 'queue-run', '-Sub', 'push-pending', '-Id', a[0] ?? '', ...(a[1] ? ['-ChainMode', a[1]] : [])] },
   'relay-hold':         { script: RELAY, sh: a => ['watchdog', 'hold', a[0] ?? ''], ps: a => ['-Mode', 'watchdog', '-Action', 'hold', '-Reason', a[0] ?? ''] },
   'relay-release':      { script: RELAY, sh: () => ['watchdog', 'release'], ps: () => ['-Mode', 'watchdog', '-Action', 'release'] },
   'relay-hold-status':  { script: RELAY, sh: () => ['watchdog', 'status'], ps: () => ['-Mode', 'watchdog', '-Action', 'status'] },
@@ -70,6 +72,7 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'run-scan':           { script: RUNS, sh: () => ['scan'], ps: () => ['scan'] },
   'run-rename':         { script: RUNS, sh: a => ['rename', a[0] ?? '', a[1] ?? ''], ps: a => ['rename', a[0] ?? '', a[1] ?? ''] },
   'team-setup-check':   { script: SETUP, sh: () => ['--check'], ps: () => ['--check'] },
+  'team-setup-walk':    { script: SETUP, sh: () => [], ps: () => [] },
 }
 
 // F66: teams-uhura's script is Node (no sh / ps1 twin): `node <skills>/teams-uhura/

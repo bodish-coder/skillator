@@ -12,7 +12,7 @@ import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State, PointerAction, SkillGuide } from './state'
 import { activeUser, pointerModal, dialogLines, engageLines, filteredSkills, formLines, reconcileLines, runsCursor, setupLines, SKILLS, startRunLines, teamRow, viewOf } from './state'
-import { messageLines, selectedOf, unreadCount } from '../hooks/lib/inbox'
+import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { assignedTickets, buildModel, chipsOf, decideTickets, headKey, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
 import { isFinished, modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
@@ -324,7 +324,9 @@ function bandSegs(s: State): Seg[][] {
     if (width(line()) > limit) facts[1] = [facts[1]![0]!, figSeg(m?.diskFree, DISK, '')]
     return line()
   }
-  const handoff = (s as any).handoff ?? pendingHandoffOf(s.messages, s.msgRead)
+  const rawHo = (s as any).handoff
+  const handoff = pendingHandoffOf(s.messages, s.msgRead, s.team)
+    ?? (typeof rawHo === 'string' && /^@[A-Za-z0-9_.-]{1,64}$/.test(rawHo) ? rawHo : null)
   const ho: Seg[] = handoff ? [{ text: `→ ${handoff}`, color: 'suggestion' }] : []
   if (cols >= 80) {
     if (ho.length) {
@@ -338,17 +340,6 @@ function bandSegs(s: State): Seg[][] {
     if (width(line2) <= cols) return [tight(() => join([lead, ...facts], ' · '), cols), edge(line2)]
   }
   return [tight(() => join([lead, ...facts], ' · '), cols), edge(join(usage, ' · '))]
-}
-
-function pendingHandoffOf(msgs: Msg[] | undefined | null, readId: string | null): string | null {
-  if (!msgs || !msgs.length) return null
-  const unreadIdx = readId ? msgs.findLastIndex(m => m.id === readId) : -1
-  const unread = unreadIdx >= 0 ? msgs.slice(unreadIdx + 1) : msgs
-  for (let i = unread.length - 1; i >= 0; i--) {
-    const to = (unread[i] as any)?.to
-    if (typeof to === 'string' && to.startsWith('@')) return to
-  }
-  return null
 }
 
 // --- the Tickets tab, as the mock ---
@@ -704,11 +695,24 @@ function setupBody(s: State): Seg[][] {
   const res = s.setup?.result ? '  ' + s.setup.result : null
   const rows: Boxed['rows'] = []
   const inner = innerOf(s)
-  const confirming = s.setup?.confirmLogin || s.setup?.confirmClear
+  const confirming = !!(s.setup?.confirmLogin || s.setup?.confirmClear || s.setup?.confirmCheck || s.setup?.confirmWalk)
   for (const [i, l] of ls.slice(1, -1).entries()) {
     const action: PointerAction | undefined = !confirming && i < 7
       ? { kind: 'setup-field', field: (['token', 'url', 'port', 'posts', 'clear', 'login', 'loginStatus'] as const)[i]! } : undefined
     if (i < 7) { rows.push({ text: l, action }); continue }
+    if (i === 7) {
+      const splitAt = l.indexOf('  ', 17)
+      const left = splitAt > 0 ? l.slice(0, splitAt + 2) : l
+      const right = splitAt > 0 ? l.slice(splitAt + 2) : ''
+      rows.push({
+        text: l,
+        segs: [
+          { text: left, action: !confirming ? { kind: 'setup-field', field: 'setupCheck' } : undefined },
+          ...(right ? [{ text: right, action: !confirming ? { kind: 'setup-field', field: 'setupWalk' } : undefined }] : []),
+        ],
+      })
+      continue
+    }
     // Prose wraps; fields and action labels keep a single stable hit row.
     let line = ' '
     for (const word of clean(l).trim().split(/\s+/)) {
@@ -719,6 +723,7 @@ function setupBody(s: State): Seg[][] {
   }
   const actions = s.setup?.confirmLogin ? [hot('y sign in', 'y'), hot('n cancel', 'n'), hot('esc cancel', 'escape')]
     : s.setup?.confirmClear ? [hot('y clear', 'y'), hot('n cancel', 'n'), hot('esc cancel', 'escape')]
+    : (s.setup?.confirmCheck || s.setup?.confirmWalk) ? [hot('y run', 'y'), hot('n cancel', 'n'), hot('esc cancel', 'escape')]
     : [hot('tab next field', 'tab'), hot('space on/off', 'space'), hot('enter activate/save', 'return'), hot('esc cancel', 'escape')]
   let segs: Seg[] = [dim('  ')]
   for (const action of actions) {

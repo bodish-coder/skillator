@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 import type { AssignDraft, Box as State, Member, PersonDraft, Ticket } from '../types'
-import { STATE_NAME, ticketById } from './lib/board'
+import { parseBoard, STATE_NAME, ticketById } from './lib/board'
 export { isOpen } from './lib/board'
 import { runCall } from './lib/host'
 import { sameHandle } from './lib/team'
@@ -51,10 +51,29 @@ const ran = (argv: string[]) => 'ran: ' + argv.map(quote).join(' ')
 const notes = (out: string) => out.split(/\r?\n/).map(l => l.trimEnd()).filter(l => l && !/^\s*- \[/.test(l))
 
 // F77: the heading names the ticket the Ticket field resolves to, else "a ticket".
-const titleOf = (d: AssignDraft, t: Ticket | null) => `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : ''}`
+const titleOf = (d: AssignDraft, t: Ticket | null) =>
+  `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : d.kind === 'tester' ? ' for testing' : ''}`
 // The ticket an ID names on the loaded board, typed in any case (F77).
 async function findTicket($: EngineInterface, id: string): Promise<Ticket | null> {
   return ticketById((await read($, boardA))?.tickets, id)
+}
+
+async function refreshBoardTicket($: EngineInterface, id: string, patch: (t: Ticket) => Ticket) {
+  const b = await read($, boardA)
+  if (!b) return
+  if (b.path) {
+    try {
+      const text = await $.fs.read(b.path)
+      const parsed = parseBoard(text, b.path, b.mtimeMs, text.length)
+      const before = b.tickets.find(x => x.id === id)
+      const after = parsed.tickets.find(x => x.id === id)
+      if (after && JSON.stringify(before) !== JSON.stringify(after)) {
+        await update($, boardA, () => parsed)
+        return
+      }
+    } catch {}
+  }
+  await update($, boardA, cur => (cur ? { ...cur, tickets: cur.tickets.map(x => (x.id === id ? patch(x) : x)) } : cur))
 }
 
 // The handle a fresh dialog starts on: the ticket's own (owner or decider) when
@@ -63,7 +82,7 @@ async function findTicket($: EngineInterface, id: string): Promise<Ticket | null
 // No ticket yet (F77: the ID still to be typed): me, else the first member.
 function startHandle(t: Ticket | null, kind: AssignDraft['kind'], team: Member[], me: string | null): string | null {
   const on = (h: string | null) => team.find(m => sameHandle(m.handle, h))?.handle ?? null
-  return on(t ? (kind === 'owner' ? t.owner : t.decide) : null) ?? on(me) ?? team[0]?.handle ?? null
+  return on(t ? (kind === 'owner' ? t.owner : kind === 'decide' ? t.decide : t.tester) : null) ?? on(me) ?? team[0]?.handle ?? null
 }
 
 // `a` / `d`: the dialog on the ticket the pane shows selected (its model resolves a
@@ -106,7 +125,7 @@ export async function closeForm($: EngineInterface) {
   await $.ui.open({ id: PANE, title: PANE_NAME })
 }
 
-// Assign: ticket-meta assign|decide <ID> @h. Done: a toast with what it said and
+// Assign: ticket-meta assign|decide|assign-tester <ID> @h. Done: a toast with what it said and
 // the command that ran, the dialog closed. Refused: its stderr in the dialog.
 async function confirm($: EngineInterface) {
   const d = await read($, assignA)
@@ -114,17 +133,25 @@ async function confirm($: EngineInterface) {
   // F77: Assign only on a ticket the field resolves to, under the board's own ID.
   const t = await findTicket($, d.id)
   if (!t) return
-  const call: Call = d.kind === 'decide' ? 'meta-decide' : 'meta-assign'
+  const call: Call = d.kind === 'decide' ? 'meta-decide' : d.kind === 'tester' ? 'meta-assign-tester' : 'meta-assign'
   const r = await runCall($, call, [t.id, d.handle])
   if (r.code !== 0) {
     const why = (r.err.trim() || r.out.trim() || `ticket-meta exited ${r.code}`)
     await update($, assignA, x => (x ? { ...x, result: why } : x))
     return
   }
+  const h = d.handle.toLowerCase()
+  await refreshBoardTicket($, t.id, tk => d.kind === 'tester'
+    ? { ...tk, tester: h }
+    : d.kind === 'decide'
+      ? { ...tk, box: '?', decide: h }
+      : { ...tk, box: ' ', owner: h })
   const closed = t.box === 'x' || t.box === '-'
   const state = d.kind === 'decide' ? 'pending decision' : 'pending'
-  const role = d.kind === 'decide' ? `for ${d.handle} to decide` : `owned by ${d.handle}`
-  const head = `✓ ${t.id} ${closed ? 'reopened as' : 'now'} ${state}, ${role}: ${t.title}`
+  const role = d.kind === 'decide' ? `for ${d.handle} to decide` : d.kind === 'tester' ? `tester ${d.handle}` : `owned by ${d.handle}`
+  const head = d.kind === 'tester'
+    ? `✓ ${t.id} tester assigned ${role}: ${t.title}`
+    : `✓ ${t.id} ${closed ? 'reopened as' : 'now'} ${state}, ${role}: ${t.title}`
   $.ui.toast([head, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeForm($)
 }
@@ -137,6 +164,7 @@ export async function runDecided($: EngineInterface, id: string) {
     $.ui.toast([`✗ ticket-meta decided ${id} refused: ${r.err.trim() || r.out.trim() || 'exit ' + r.code}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
     return
   }
+  await refreshBoardTicket($, id, tk => ({ ...tk, box: ' ' }))
   $.ui.toast([`✓ ${id} decided, now pending${t ? ': ' + t.title : ''}`, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
 }
 
@@ -267,12 +295,14 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const tk = await findTicket($, d.id)
   const people = [...team]
   if (d.handle && !people.some(m => m.handle === d.handle)) people.push({ handle: d.handle, emails: [] })
-  const armed = !!focus && (['kind:implementation', 'kind:decision', 'who:+add', 'cancel', ...(tk && d.handle ? ['go'] : [])].includes(focus) || people.some(m => focus === 'who:' + m.handle))
+  const armed = !!focus && (['kind:implementation', 'kind:decision', 'kind:tester', 'who:+add', 'cancel', ...(tk && d.handle ? ['go'] : [])].includes(focus) || people.some(m => focus === 'who:' + m.handle))
   const from: State = tk?.box ?? ' '
   const to: State = d.kind === 'decide' ? '?' : ' '
   const set = (fn: (x: AssignDraft) => AssignDraft) => { void update($, assignA, x => (x ? fn({ ...x, result: null }) : x)) }
+  const radioKey = (kind: AssignDraft['kind']) => (kind === 'owner' ? 'kind:implementation' : kind === 'decide' ? 'kind:decision' : 'kind:tester')
+  const radioHotkey = (kind: AssignDraft['kind']) => (kind === 'owner' ? 'a' : kind === 'decide' ? 'd' : 't')
   const radio = (kind: AssignDraft['kind'], text: string) => (
-    <Button key={kind === 'owner' ? 'kind:implementation' : 'kind:decision'} hotkey={armed ? kind === 'owner' ? 'a' : 'd' : undefined} plain onPress={() => set(x => ({ ...x, kind }))}>
+    <Button key={radioKey(kind)} hotkey={armed ? radioHotkey(kind) : undefined} plain onPress={() => set(x => ({ ...x, kind }))}>
       <Text color={d.kind === kind ? 'success' : undefined}>{d.kind === kind ? '(•)' : '( )'}</Text>{' ' + text}
     </Button>
   )
@@ -285,7 +315,7 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
       </Button>
     )
   })
-  const verb = d.kind === 'decide' ? 'decide' : 'assign'
+  const verb = d.kind === 'decide' ? 'decide' : d.kind === 'tester' ? 'assign-tester' : 'assign'
   // F77: the Ticket field - typed in any case; its line under it says what it resolves to.
   const typed = d.id.trim()
   const ticketField = Input
@@ -298,7 +328,7 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
         <Text dimColor wrap="truncate-end">{'  ' + cut(tk.title, Math.max(4, cols - STATE_NAME[tk.box].length - 4))}</Text>
       </Box>
     : <Box key="title">{typed ? <Text color="error">no such ticket</Text> : <Text dimColor>type a ticket ID, e.g. F12</Text>}</Box>
-  const warn = tk?.box === '~'
+  const warn = tk?.box === '~' && d.kind !== 'tester'
     ? (tk.session
         ? `! ${tk.id} is in progress under ${tk.session} - this moves it to ${word(to)}; the tag stays - tell that session`
         : `! ${tk.id} is in progress - this moves it to ${word(to)}; tell whoever is working it`)
@@ -311,7 +341,7 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
       {ticketField}
       {said}
       <Text> </Text>
-      <Box key="for" flexDirection="row" flexWrap="wrap" gap={3}>{label('For')}{radio('owner', 'implementation')}{radio('decide', 'decision')}</Box>
+      <Box key="for" flexDirection="row" flexWrap="wrap" gap={3}>{label('For')}{radio('owner', 'implementation')}{radio('decide', 'decision')}{radio('tester', 'tester')}</Box>
       <Box key="who" flexDirection="row" flexWrap="wrap">
         {label('Who   ')}
         <Box flexDirection="column">
@@ -320,13 +350,19 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
           <Button key="who:+add" hotkey={armed ? 'n' : undefined} plain dimColor onPress={() => { void openAddPerson($, 'assign') }}>{'  + add person'}</Button>
         </Box>
       </Box>
-      {tk && <Box key="change" flexDirection="row" flexWrap="wrap">
-        <Text dimColor>Change  </Text>
-        <Text color={paint(from)}>{'● ' + word(from)}</Text>
-        <Text>{' -> '}</Text>
-        <Text color={paint(to)}>{'● ' + word(to)}</Text>
-        <Text>{`  ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`}</Text>
-      </Box>}
+      {tk && (d.kind === 'tester'
+        ? <Box key="change" flexDirection="row" flexWrap="wrap">
+            <Text dimColor>Change  </Text>
+            <Text color={paint(from)}>{'● ' + word(from)}</Text>
+            <Text>{`, tester ${d.handle ?? '(pick someone)'} (keeps state, owner & decide; open to any teammate)`}</Text>
+          </Box>
+        : <Box key="change" flexDirection="row" flexWrap="wrap">
+            <Text dimColor>Change  </Text>
+            <Text color={paint(from)}>{'● ' + word(from)}</Text>
+            <Text>{' -> '}</Text>
+            <Text color={paint(to)}>{'● ' + word(to)}</Text>
+            <Text>{`  ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`}</Text>
+          </Box>)}
       {warn && <Box key="warn"><Text color="warning" wrap="wrap">{warn}</Text></Box>}
       <Box key="runs" flexDirection="row" flexWrap="wrap">{label('Runs')}<Text>{`    ticket-meta ${verb} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`}</Text></Box>
       {d.result && <Box key="result"><Text color={isGood ? 'success' : 'error'} wrap="wrap">{d.result}</Text></Box>}

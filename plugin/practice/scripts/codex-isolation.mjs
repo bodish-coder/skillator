@@ -4,7 +4,7 @@ import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, re
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { reportCode } from './reliability-parity.mjs';
 import { nativeProbe } from './codex-native-probe.mjs';
 export { nativeProbe };
@@ -124,7 +124,7 @@ export function runOffline(parent = tmpdir()) {
     const gateRollout = join(env.CODEX_HOME, 'sessions/rollout-gate.jsonl');
     put(gateRollout, readFileSync(join(env.CODEX_HOME, 'sessions/rollout-fixture.jsonl'), 'utf8').replace('"used_percent":13', '"used_percent":91'));
     const gateArgs = [...args.slice(0, -1), 'gate'];
-    const gate = execute(ps, gateArgs, { cwd: project, env, input: JSON.stringify({ session_id: 'fixture-gate', transcript_path: gateRollout }) });
+    const gate = execute(ps, gateArgs, { cwd: project, env: { ...env, CLAUDE_USAGE_HANDOFF_WEEKLY_PCT: '90' }, input: JSON.stringify({ session_id: 'fixture-gate', transcript_path: gateRollout }) });
     let blocked = false;
     try { blocked = JSON.parse(gate.stdout).decision === 'block'; } catch { /* Assertion below records malformed output. */ }
     record('offline-usage-gate', gate.error ? outcome('blocked', 'Usage gate unavailable') : gate.status === 0 && blocked ? outcome('passed', 'Installed Stop gate blocks synthetic 91% weekly rollout; native hook trust not tested') : outcome('failed', 'Installed Stop gate did not block synthetic weekly limit'), [ps, ...gateArgs]);
@@ -169,12 +169,96 @@ export function resumeFixture(path) {
   if (JSON.stringify(JSON.parse(readFileSync(hookSource, 'utf8'))) !== JSON.stringify(expectedHooks)) throw new Error('Fixture hook definition changed');
   return { root, project, env, hookSource, hookCommand, expected: { sources, tokens, commandContent }, entries: [{ id: 'fixture-resume', ...outcome('passed', 'Existing fixture paths, instruction bytes, generated pending command and hook definition validated; authentication/trust not read or changed'), command: [], code: 0, evidence: { manifest: manifestPath } }] };
 }
+const sha256Text = text => createHash('sha256').update(text.replaceAll('\r\n', '\n'), 'utf8').digest('hex');
+export async function verifyActiveProfile(codexHomeInput, opts = {}) {
+  if (!codexHomeInput || typeof codexHomeInput !== 'string') {
+    return { code: 2, codexHome: null, installerSource: null, artifacts: {}, entries: [{ id: 'active-profile-target', ...outcome('blocked', 'Explicit CODEX_HOME profile path required; blanket profile scanning is prohibited'), command: [], code: null, evidence: {} }] };
+  }
+  const codexHome = resolve(codexHomeInput);
+  const sourceRoot = resolve(opts.sourceRoot || plugin);
+  const skillsDir = join(codexHome, 'skills');
+  if (!existsSync(codexHome) || !existsSync(skillsDir)) {
+    return { code: 2, codexHome, installerSource: null, artifacts: {}, entries: [{ id: 'active-profile-target', ...outcome('blocked', `Selected CODEX_HOME skills directory not found: ${skillsDir}`), command: [], code: null, evidence: { codexHome, skillsDir } }] };
+  }
+  const pointerFile = join(skillsDir, '.skillator-source');
+  const installerSource = existsSync(pointerFile) ? readFileSync(pointerFile, 'utf8').trim() : null;
+  const pairs = [
+    ['ops/state.ts', join(sourceRoot, 'mods/ops-board/ops/state.ts'), join(skillsDir, 'ops-board/ops/state.ts')],
+    ['ops/draw.ts', join(sourceRoot, 'mods/ops-board/ops/draw.ts'), join(skillsDir, 'ops-board/ops/draw.ts')],
+    ['ops/explorer.ts', join(sourceRoot, 'mods/ops-board/ops/explorer.ts'), join(skillsDir, 'ops-board/ops/explorer.ts')],
+    ['watch-cortana/usage-watch.ps1', join(sourceRoot, 'skills/watch-cortana/hooks/usage-watch.ps1'), join(skillsDir, 'watch-cortana/hooks/usage-watch.ps1')],
+  ];
+  const artifacts = {};
+  const drifted = [];
+  for (const [key, srcPath, instPath] of pairs) {
+    const srcExists = existsSync(srcPath), instExists = existsSync(instPath);
+    const srcText = srcExists ? readFileSync(srcPath, 'utf8') : null;
+    const instText = instExists ? readFileSync(instPath, 'utf8') : null;
+    const srcHash = srcText !== null ? sha256Text(srcText) : null;
+    const instHash = instText !== null ? sha256Text(instText) : null;
+    const equal = srcHash !== null && srcHash === instHash;
+    artifacts[key] = { sourcePath: srcPath, installedPath: instPath, sourceSha256: srcHash, installedSha256: instHash, normalizedTextEqual: equal };
+    if (!equal) drifted.push(`${key} (source=${srcHash?.slice(0, 12) ?? 'missing'}, installed=${instHash?.slice(0, 12) ?? 'missing'})`);
+  }
+  const entries = [];
+  const add = (id, res, command = [], evidence = {}) => entries.push({ id, ...res, command, code: res.status === 'passed' ? 0 : res.status === 'failed' ? 1 : null, evidence });
+  add('active-profile-source-parity', drifted.length === 0
+    ? outcome('passed', `Selected profile ${codexHome} matches release source across ${pairs.length} tracked artifacts`)
+    : outcome('failed', `Selected profile ${codexHome} differs from source: ${drifted.join('; ')}`), [], { codexHome, installerSource, artifacts });
+  add('active-profile-command-loading', commandProjection(sourceRoot, skillsDir), [], { skillsDir });
+  const opsSkill = join(skillsDir, 'ops/SKILL.md');
+  const opsScript = join(skillsDir, 'ops-board/ops', process.platform === 'win32' ? 'ops.ps1' : 'ops.sh');
+  if (!existsSync(opsSkill) || !existsSync(opsScript)) {
+    add('active-profile-ops-launch', outcome('failed', 'Missing ops skill or launcher script in selected profile'), [], { opsSkill, opsScript });
+  } else {
+    const opsSkillText = readFileSync(opsSkill, 'utf8');
+    const hasOpen = opsSkillText.includes('--open') || opsSkillText.includes('-Open');
+    add('active-profile-ops-launch', hasOpen
+      ? outcome('passed', 'Selected profile contains $ops skill and launcher with terminal-tab open flag')
+      : outcome('failed', 'Selected profile $ops skill missing terminal-tab open flag'), [], { opsSkill, opsScript });
+  }
+  const hookSource = join(codexHome, 'hooks.json');
+  const hookScript = join(skillsDir, 'watch-cortana/hooks/usage-watch.ps1');
+  if (!existsSync(hookSource) || !existsSync(hookScript)) {
+    add('active-profile-hook-trust', outcome('blocked', 'Selected profile hooks.json or usage-watch.ps1 missing; hook registration not active in this profile'), [], { hookSource, hookScript });
+  } else {
+    let hookValid = false;
+    try {
+      const parsed = JSON.parse(readFileSync(hookSource, 'utf8'));
+      hookValid = Array.isArray(parsed?.hooks?.Stop) && JSON.stringify(parsed.hooks.Stop).includes('usage-watch');
+    } catch { hookValid = false; }
+    add('active-profile-hook-trust', hookValid
+      ? outcome('passed', 'Selected profile hooks.json registers watch-cortana Stop hook')
+      : outcome('failed', 'Selected profile hooks.json does not contain watch-cortana Stop hook'), [], { hookSource, hookScript });
+  }
+  if (opts.codexExe) {
+    const run = opts.run || execute;
+    const ver = run(opts.codexExe, ['--version'], { env: { ...process.env, CODEX_HOME: codexHome } });
+    if (ver.error || ver.status !== 0) {
+      add('active-profile-native-discovery', outcome('blocked', 'Selected Codex executable unavailable or version probe failed'), [opts.codexExe, '--version'], { codexHome });
+    } else {
+      add('active-profile-native-discovery', outcome('passed', `Codex CLI reachable (${(ver.stdout || '').trim()}) for selected profile; live auth/session not auto-triggered`), [opts.codexExe, '--version'], { codexHome });
+    }
+  } else {
+    add('active-profile-native-discovery', outcome('blocked', 'No --codex executable supplied for native skill discovery check; missing capability/auth is blocked without automatic auth'), [], { codexHome });
+  }
+  return { code: reportCode(entries), codexHome, installerSource, sourceRoot, artifacts, entries };
+}
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--selftest') return execute(process.execPath, ['--test', join(here, 'codex-isolation.test.mjs')], { stdio: 'inherit' }).status ?? 2;
+  if (args[0] === '--verify-profile') {
+    const codexHome = args[1];
+    const reportIdx = args.indexOf('--report');
+    const codexIdx = args.indexOf('--codex');
+    const res = await verifyActiveProfile(codexHome, { codexExe: codexIdx > -1 ? args[codexIdx + 1] : null });
+    if (reportIdx > -1 && args[reportIdx + 1]) put(resolve(args[reportIdx + 1]), JSON.stringify(res, null, 2) + '\n');
+    console.log(JSON.stringify(res, null, 2));
+    return res.code;
+  }
   if (!['--offline', '--live'].includes(args[0]) || (args[0] === '--offline' && args.length !== 1 && !(args.length === 3 && args[1] === '--report')) ||
       (args[0] === '--live' && !((args.length === 5 || (args.length === 7 && args[5] === '--resume-fixture')) && args[1] === '--codex' && args[3] === '--report'))) {
-    console.error('Usage: codex-isolation.mjs --selftest | --offline [--report FILE] | --live --codex ABSOLUTE_EXECUTABLE --report FILE [--resume-fixture ROOT]'); return 2;
+    console.error('Usage: codex-isolation.mjs --selftest | --offline [--report FILE] | --live --codex ABSOLUTE_EXECUTABLE --report FILE [--resume-fixture ROOT] | --verify-profile CODEX_HOME [--codex EXE] [--report FILE]'); return 2;
   }
   let fixture;
   try { fixture = args[6] ? resumeFixture(args[6]) : runOffline(); } catch {

@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { Color, EngineInterface, RenderElement, RenderInput } from 'claude-code'
 import { bandSegs, countsOf, NARROW_COLUMNS } from './lib/bandlines'
 import type { BandInput, Seg } from './lib/bandlines'
+import { pendingHandoffOf } from './lib/inbox'
 export { bandLines, bandSegs, countsOf, NARROW_COLUMNS, statusText } from './lib/bandlines'
 export type { BandInput, Counts, Seg } from './lib/bandlines'
 
@@ -17,16 +18,20 @@ const boardA = atom({ plugin: 'ops-board', key: 'board' } as const, null)
 const narrowA = atom({ plugin: 'ops-board', key: 'narrow' } as const, false)
 const meA = atom({ plugin: 'ops-board', key: 'me' } as const, null)
 const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)
+const teamA = atom({ plugin: 'ops-board', key: 'team' } as const, [])
+const messagesA = atom({ plugin: 'ops-board', key: 'messages' } as const, [])
+const msgReadA = atom({ plugin: 'ops-board', key: 'msgRead' } as const, null)
 
 // The AbovePrompt hook's body: the band, then the notes, each with its own [ ok ].
 export async function renderBand($: EngineInterface, e: RenderInput<'AbovePrompt'>): Promise<RenderElement> {
   const { Box, Text, Button } = $.ui.resolve(e)
   const cols = Math.max(20, e.props.bodyColumns)
   const narrow = (await read($, narrowA)) || (e.viewport !== undefined && e.viewport.columns < NARROW_COLUMNS)
+  const handoff = pendingHandoffOf(await read($, messagesA), await read($, msgReadA), await read($, teamA))
   const v: BandInput = {
     watch: await read($, watchA), machine: await read($, machineA), usage: await read($, usageA),
     relay: await read($, relayA), counts: countsOf(await read($, boardA)), narrow, cols, now: await $.clock.now(),
-    me: await read($, meA), session: await read($, sessionA),
+    me: await read($, meA), session: await read($, sessionA), handoff,
   }
   const notes = await read($, notesA)
   const seg = (s: Seg) => <Text color={s.color} dimColor={s.dim} inverse={s.inverse}>{s.text}</Text>

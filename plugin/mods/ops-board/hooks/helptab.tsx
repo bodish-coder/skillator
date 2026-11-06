@@ -11,16 +11,13 @@ const helpSelA = atom({ plugin: 'ops-board', key: 'helpSel' } as const, SKILLS[0
 const helpFilterA = atom({ plugin: 'ops-board', key: 'helpFilter' } as const, '')
 const helpArgsA = atom({ plugin: 'ops-board', key: 'helpArgs' } as const, '')
 const helpExpandedA = atom({ plugin: 'ops-board', key: 'helpExpanded' } as const, false)
-const helpDocA = atom<{ id: string; content: string | null; error: string | null; path: string | null } | null>(
-  { plugin: 'ops-board', key: 'helpDoc' } as const,
-  null,
-)
+const helpDocA = atom({ plugin: 'ops-board', key: 'helpDoc' } as const, null)
 
 type Els = {
   Box: ElementConstructor<BoxProps>
   Text: ElementConstructor<TextProps>
   Button: ElementConstructor<ButtonProps>
-  canType: boolean
+  canType?: boolean
 }
 
 const cut = (s: string, room: number) => cutTo(s, room, UNI.cut)
@@ -143,7 +140,7 @@ export async function HelpTab($: EngineInterface, e: RenderInput<'Pane'>, els: E
         {err ? (
           <Text color="warning">{`SKILL.md unavailable: ${err}`}</Text>
         ) : content ? (
-          ...content.split('\n').slice(0, 80).map((line, i) => <Text key={`doc:${i}`}>{cut(line, cols - 2)}</Text>)
+          content.split('\n').slice(0, 80).map((line, i) => <Text key={`doc:${i}`}>{cut(line, cols - 2)}</Text>)
         ) : (
           <Text dimColor>Loading SKILL.md...</Text>
         )}

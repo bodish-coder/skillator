@@ -6,8 +6,17 @@ import { frame, cells } from '../draw'
 import { makeEngine } from '../engine'
 import { parseArgs } from '../app'
 import type { Host, RunResult } from '../nodehost'
-import { changeArgs, COUNT_ARGS, detectUnwanted, draftCommitMessage, INCOMING_ARGS, LOG_ARGS, LS_ARGS, NO_GIT,
-  parseStatus, stageArgs, STATUS_ARGS, summarizeIncoming, auditOutgoing, unstageArgs, UPSTREAM_ARGS } from '../../hooks/lib/explorer'
+import {
+  abortConflictArgs, ACTION_ARGS, auditOutgoing, beginActionRun, boundOutput, buildConflictResolutionPlan,
+  canRunSwitch, canShutdownExplorer, changeArgs, COUNT_ARGS, detectUnwanted, draftCommitMessage, EMPTY,
+  findUntrackedSwitchBlockers, finishActionRun, formatGitFailure, INCOMING_ARGS, isActionRunning, LOG_ARGS,
+  LS_ARGS, MAX_DIFF_BYTES, NO_GIT, OUT_TAIL_MAX, parseStatus, pickBranch, planAction, reviewStagedCommit,
+  reviewStagedCommitAsync, reviewSyncChanges, stageArgs, stagedSignature, STATUS_ARGS, summarizeIncoming,
+  unstageArgs, UPSTREAM_ARGS, verifyCommitPreconditions, withUpstream, withWorktree,
+} from '../../hooks/lib/explorer'
+import {
+  abortExplorerConflict, editExplorerCommitMessage, executeExplorerAction, pickExplorerBranch, planExplorerAction,
+} from '../explorer'
 
 // F75: the standalone app's Explorer tab (5) - the same model as the pane's
 // (hooks/lib/explorer.ts): git-tracked files as a tree, the newest commits opening to
@@ -256,4 +265,269 @@ test('F133 AI commit message drafting and change digest helpers', () => {
   assert.equal(audit.warnings.length, 2)
   assert.match(audit.warnings[0]!, /temporary or WIP/)
   assert.match(audit.warnings[1]!, /fixup\/squash/)
+})
+
+// A195: NUL-delimited status parsing, special paths, renames, and stage failure reporting
+test('A195: STATUS_ARGS uses -z and parseStatus preserves spaces, arrows, quotes, Unicode, and renames', () => {
+  assert.ok(STATUS_ARGS.includes('-z'))
+  assert.deepEqual(parseStatus('M  a.ts\n'), [{ path: 'a.ts', staged: 'M', unstaged: null, isUntracked: false }])
+
+  // NUL-delimited porcelain v1 output: R has destination first, then source NUL-separated; literal " -> " in non-rename path is kept intact
+  const nulOut = [
+    'M   leading and trailing.ts ',
+    '?? file -> with -> arrow.ts',
+    'A  "quoted-name".ts',
+    'M  café-🚀.ts',
+    'R  renamed new.ts',
+    'renamed old.ts',
+    '',
+  ].join('\0')
+  const parsed = parseStatus(nulOut)
+  assert.equal(parsed.length, 5)
+  assert.equal(parsed[0]!.path, ' leading and trailing.ts ')
+  assert.equal(parsed[1]!.path, 'file -> with -> arrow.ts')
+  assert.equal(parsed[2]!.path, '"quoted-name".ts')
+  assert.equal(parsed[3]!.path, 'café-🚀.ts')
+  assert.equal(parsed[4]!.path, 'renamed new.ts')
+  assert.equal(parsed[4]!.from, 'renamed old.ts')
+
+  // stageArgs / unstageArgs include both source and destination on rename
+  assert.deepEqual(stageArgs(parsed[0]!), ['add', '--', ' leading and trailing.ts '])
+  assert.deepEqual(stageArgs(parsed[4]!), ['add', '--', 'renamed old.ts', 'renamed new.ts'])
+  assert.deepEqual(unstageArgs(parsed[4]!), ['reset', 'HEAD', '--', 'renamed old.ts', 'renamed new.ts'])
+
+  // Failed git add/reset surfaces error on Explorer state while still refreshing status
+  const STATUS_NUL = 'M  staged.ts\0'
+  let s = initial(80, 24, 0)
+  s = { ...s, tab: 'explorer', explorer: { ...s.explorer, x: withWorktree({ ...s.explorer.x, open: ['xs:changes'], selected: 'xw:staged.ts' }, parseStatus(STATUS_NUL)) } }
+  const step = reduce(s, { name: 'space' })
+  assert.deepEqual(gits(step.effects).map(e => e.args), [unstageArgs('staged.ts')])
+  const afterFail = afterRun(gits(step.effects)[0]!, { code: 128, out: '', err: 'fatal: Unable to create .git/index.lock', argv: ['git'] }, step.state, 0)
+  assert.match(afterFail.state.explorer.x.error ?? '', /git stage failed: fatal: Unable to create \.git\/index\.lock/)
+  assert.deepEqual(gits(afterFail.effects).map(e => e.args), [STATUS_ARGS])
+})
+
+// F151: AI-assisted commit flow, honest local fallback, secret detection, diff truncation, and precondition verification
+test('F151: reviewStagedCommit handles host AI delegate, honest local fallback, secret detection, and verifyCommitPreconditions', async () => {
+  const wt = parseStatus('M  src/index.ts\0A  .env.production\0')
+  const x = withWorktree(EMPTY, wt)
+  const bigDiff = '+const token = "ghp_1234567890abcdefghijklmnopqrstuv";\n' + 'x'.repeat(MAX_DIFF_BYTES + 100)
+
+  // Without delegate: honest 'unavailable' status, secret + unwanted file + truncation findings
+  const localReview = reviewStagedCommit(x, { diff: bigDiff, ticketId: 'F151', instructions: 'keep concise' })
+  assert.equal(localReview.status, 'unavailable')
+  assert.equal(localReview.source, 'deterministic-local')
+  assert.equal(localReview.truncated, true)
+  assert.ok(localReview.findings.some(f => f.includes('.env.production')))
+  assert.ok(localReview.findings.some(f => f.includes('secret or private key')))
+  assert.ok(localReview.findings.some(f => f.includes('truncated')))
+  assert.ok(localReview.findings.some(f => f.includes('active-host AI delegate unavailable')))
+  assert.match(localReview.draftMessage ?? '', /^F151: update index and 1 other files \(keep concise\)$/)
+
+  // With active-host AI delegate
+  const hostReview = await reviewStagedCommitAsync(x, {
+    diff: '+const a = 1;\n',
+    ticketId: 'F151',
+    delegate: {
+      hostName: 'claude-host',
+      reviewCommit: ctx => ({
+        status: 'ready',
+        source: 'claude-host',
+        findings: [`Reviewed ${ctx.stagedFiles.length} staged files`],
+        draftMessage: 'F151: refine staged commit flow',
+      }),
+    },
+  })
+  assert.equal(hostReview.status, 'ready')
+  assert.equal(hostReview.source, 'claude-host')
+  assert.equal(hostReview.draftMessage, 'F151: refine staged commit flow')
+  assert.ok(hostReview.findings.some(f => f.includes('Reviewed 2 staged files')))
+
+  // Preconditions check: stagedSig drift, empty staged set, HEAD moved
+  const sig = stagedSignature(wt, '+const a = 1;\n')
+  const plan = {
+    kind: 'commit' as const,
+    args: ['commit', '-m', 'F151: test'],
+    warn: [],
+    pick: null,
+    result: null,
+    branch: 'main',
+    head: SHA1,
+    stagedSig: sig,
+  }
+  assert.equal(verifyCommitPreconditions(plan, SHA1, 'main', wt, '+const a = 1;\n'), null)
+  assert.match(verifyCommitPreconditions(plan, SHA1, 'main', wt, '+const a = 2;\n') ?? '', /staged files changed/)
+  assert.match(verifyCommitPreconditions(plan, SHA2, 'main', wt, '+const a = 1;\n') ?? '', /HEAD moved/)
+  assert.match(verifyCommitPreconditions(plan, SHA1, 'main', []) ?? '', /no staged files/)
+})
+
+// F152: AI incoming and outgoing sync change analysis
+test('F152: reviewSyncChanges preserves source/target refs, handles no-upstream, deterministic fallback, and host delegate', () => {
+  const noUp = reviewSyncChanges(withUpstream(EMPTY, null, null), 'pull')
+  assert.equal(noUp.status, 'unavailable')
+  assert.equal(noUp.source, 'no-upstream')
+
+  let x = withUpstream(EMPTY, 'origin/main', '1\t1')
+  x = { ...x, incoming: [{ sha: SHA3, short: 'fedcba9', date: '2026-10-26', author: 'Asha', subject: 'F152: sync' }] }
+
+  const fallback = reviewSyncChanges(x, 'push', {
+    outgoingRaw: '1234567 wip: debug logging\n',
+    diff: 'a'.repeat(MAX_DIFF_BYTES + 50),
+  })
+  assert.equal(fallback.status, 'fallback')
+  assert.equal(fallback.source, 'deterministic-fallback')
+  assert.equal(fallback.truncated, true)
+  assert.ok(fallback.summary?.some(s => s.includes('HEAD ↔ origin/main')))
+  assert.ok(fallback.findings.some(f => f.includes('WIP')))
+  assert.ok(fallback.findings.some(f => f.includes('deterministic fallback')))
+
+  const delegated = reviewSyncChanges(x, 'sync', {
+    outgoingRaw: '1234567 feat: clean commit\n',
+    delegate: {
+      hostName: 'agy-host',
+      reviewSync: ctx => ({
+        status: 'ready',
+        source: 'agy-host',
+        summary: [`${ctx.direction}: ${ctx.sourceRef} -> ${ctx.targetRef}`],
+        findings: ['No conflict risk detected'],
+      }),
+    },
+  })
+  assert.equal(delegated.status, 'ready')
+  assert.equal(delegated.source, 'agy-host')
+  assert.ok(delegated.summary?.includes('both: HEAD -> origin/main'))
+})
+
+// F153: Conflict resolution handoff (/skillator:merge-smith) and abort workflow
+test('F153: buildConflictResolutionPlan and abortConflictArgs produce explicit merge-smith handoff and abort commands', () => {
+  assert.deepEqual(abortConflictArgs('merge'), ['merge', '--abort'])
+  assert.deepEqual(abortConflictArgs('revert'), ['revert', '--abort'])
+  assert.deepEqual(abortConflictArgs('rebase'), ['rebase', '--abort'])
+
+  const wt = parseStatus('UU src/conflict.ts\0M  src/clean.ts\0')
+  const x = withWorktree(EMPTY, wt)
+  const plan = {
+    kind: 'merge' as const,
+    args: ['merge', '--no-edit', '--', 'feature/x'],
+    warn: [],
+    pick: null,
+    result: 'CONFLICT',
+    branch: 'main',
+    head: SHA1,
+    conflictAi: true,
+  }
+  const res = buildConflictResolutionPlan(x, plan)
+  assert.deepEqual(res.conflictedFiles, ['src/conflict.ts'])
+  assert.deepEqual(res.abortArgs, ['merge', '--abort'])
+  assert.match(res.prompt, /^\/skillator:merge-smith/)
+  assert.match(res.prompt, /main/)
+  assert.match(res.prompt, /feature\/x/)
+  assert.match(res.prompt, /src\/conflict\.ts/)
+})
+
+// F154, F155, F156: Standalone Explorer parity, branch switching, and execution guards/diagnostics
+test('F155: branch switching planAction, pickBranch, findUntrackedSwitchBlockers, and canRunSwitch guards', () => {
+  assert.deepEqual(ACTION_ARGS.switch('feature/b'), ['switch', '--', 'feature/b'])
+  assert.deepEqual(ACTION_ARGS.switch(EMPTY, { branch: 'feature/b' }), ['switch', '--', 'feature/b'])
+  assert.equal(ACTION_ARGS.switch('feature/b').some(a => /force/.test(a)), false)
+
+  const wt = parseStatus('?? collision.ts\0?? safe.ts\0')
+  const blockers = findUntrackedSwitchBlockers(wt, ['src/index.ts', 'collision.ts'])
+  assert.deepEqual(blockers, ['collision.ts'])
+
+  // Refused when inProgress or no other branches
+  const inProg = planAction(EMPTY, 'switch', { branch: 'main', head: SHA1, dirty: 0, inProgress: 'MERGE_HEAD', branches: ['main', 'dev'] })
+  assert.ok('refused' in inProg && inProg.refused.includes('MERGE_HEAD'))
+  const singleBranch = planAction(EMPTY, 'switch', { branch: 'main', head: SHA1, dirty: 0, branches: ['main'] })
+  assert.ok('refused' in singleBranch && singleBranch.refused.includes('no other local branches'))
+
+  // Warns on dirty worktree or untracked blockers and blocks execution via canRunSwitch
+  const dirtySwitch = planAction(EMPTY, 'switch', {
+    branch: 'main',
+    head: SHA1,
+    dirty: 1,
+    branches: ['main', 'feature/b'],
+    untrackedBlockers: blockers,
+  })
+  assert.ok('action' in dirtySwitch)
+  assert.deepEqual(dirtySwitch.action.pick, ['feature/b'])
+  assert.equal(canRunSwitch(dirtySwitch.action), 'pick a target branch first.')
+  const pickedDirty = pickBranch(dirtySwitch.action, 'feature/b')
+  assert.deepEqual(pickedDirty.args, ['switch', '--', 'feature/b'])
+  assert.match(canRunSwitch(pickedDirty) ?? '', /cannot switch branches with uncommitted or conflicting untracked files/)
+
+  // Clean switch allowed
+  const cleanSwitch = planAction(EMPTY, 'switch', { branch: 'main', head: SHA1, dirty: 0, branches: ['main', 'feature/b'] })
+  assert.ok('action' in cleanSwitch)
+  const pickedClean = pickBranch(cleanSwitch.action, 'feature/b')
+  assert.equal(canRunSwitch(pickedClean), null)
+})
+
+test('F154 & F156: standalone Explorer action flow, bounded diagnostics, duplicate-run guard, and shutdown guard', () => {
+  // F156: boundOutput and formatGitFailure
+  const huge = 'line1\n' + 'x'.repeat(OUT_TAIL_MAX + 500) + '\nlast-line'
+  const bounded = boundOutput(huge)
+  assert.ok(bounded.length <= OUT_TAIL_MAX)
+  assert.ok(bounded.startsWith('line1'))
+  assert.ok(bounded.endsWith('last-line'))
+
+  const timeoutFail = formatGitFailure('push', ['push', 'origin', 'HEAD:refs/heads/main'], {
+    code: null,
+    err: 'git push timed out after 120s',
+    timedOut: true,
+  })
+  assert.equal(timeoutFail.uncertain, true)
+  assert.match(timeoutFail.summary, /index\.lock/)
+  assert.match(timeoutFail.details, /Outcome uncertain/)
+
+  // F154: standalone commit plan, message edit, execution, and conflict abort
+  let s = initial(80, 24, 1000)
+  const wt = parseStatus('M  src/app.ts\0')
+  s = { ...s, tab: 'explorer', explorer: { ...s.explorer, x: withUpstream(withWorktree(s.explorer.x, wt), 'origin/main', '0\t0') } }
+
+  s = planExplorerAction(s, 'commit', { branch: 'main', head: SHA1, dirty: 1 }, { diff: '+const x = 1;\n' })
+  assert.equal(s.explorer.action?.kind, 'commit')
+  assert.match(text(s), /git commit\?/)
+
+  // Empty commit message is blocked
+  s = editExplorerCommitMessage(s, '   ')
+  const blockedStep = executeExplorerAction(s, { branch: 'main', sha: SHA1, dirty: 1 })
+  assert.equal(blockedStep.effects.length, 0)
+  assert.match(blockedStep.state.toast ?? '', /commit message cannot be empty/)
+
+  // Valid commit message runs and guards against duplicate concurrent run or shutdown
+  s = editExplorerCommitMessage(s, 'F154: standalone commit')
+  const runStep = executeExplorerAction(s, { branch: 'main', sha: SHA1, dirty: 1 }, { currentWorktree: wt, currentDiff: '+const x = 1;\n' })
+  assert.equal(isActionRunning(runStep.state.explorer.action), true)
+  assert.equal(canShutdownExplorer(runStep.state.explorer.action).ok, false)
+  assert.deepEqual(gits(runStep.effects).map(e => e.args), [['commit', '-m', 'F154: standalone commit']])
+
+  // Duplicate execute while running is refused
+  const dupStep = executeExplorerAction(runStep.state, { branch: 'main', sha: SHA1, dirty: 1 })
+  assert.equal(dupStep.effects.length, 0)
+  assert.match(dupStep.state.toast ?? '', /already running/)
+
+  // Finish commit -> reloads Explorer
+  const afterCommit = afterRun(gits(runStep.effects)[0]!, ok('[main abc1234] F154: standalone commit\n'), runStep.state, 2000)
+  assert.equal(afterCommit.state.explorer.action, null)
+  assert.match(afterCommit.state.toast ?? '', /✓ git commit -m F154: standalone commit/)
+
+  // Standalone merge conflict -> abortExplorerConflict
+  let sMerge = planExplorerAction(afterCommit.state, 'merge', { branch: 'main', head: SHA1, dirty: 0, branches: ['main', 'feature/conflict'] })
+  sMerge = pickExplorerBranch(sMerge, 'feature/conflict')
+  const mergeStep = executeExplorerAction(sMerge, { branch: 'main', sha: SHA1, dirty: 0 })
+  const afterConflict = afterRun(
+    gits(mergeStep.effects)[0]!,
+    { code: 1, out: 'CONFLICT (content): Merge conflict in src/app.ts\n', err: 'Automatic merge failed\n', argv: ['git'] },
+    mergeStep.state,
+    3000
+  )
+  assert.equal(afterConflict.state.explorer.action?.conflictAi, true)
+  assert.equal(afterConflict.state.explorer.action?.runState?.status, 'failed')
+
+  const abortStep = abortExplorerConflict(afterConflict.state)
+  assert.deepEqual(gits(abortStep.effects).map(e => e.args), [['merge', '--abort']])
+  const afterAbort = afterRun(gits(abortStep.effects)[0]!, ok(''), abortStep.state, 4000)
+  assert.equal(afterAbort.state.explorer.action, null)
+  assert.match(afterAbort.state.toast ?? '', /✓ git merge --abort: aborted/)
 })

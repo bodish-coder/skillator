@@ -54,7 +54,7 @@ loader=$url/loader.mjs
 app=$dir/app.ts
 if [ -n "$msys" ] && [ -t 0 ] && [ -t 1 ]; then
   once=
-  for a in "$@"; do case $a in --once|--status) once=1 ;; esac; done
+  for a in "$@"; do case $a in --once|--status|--reset) once=1 ;; esac; done
   # A150: winpty starts its program through CreateProcess, which looks in the current
   # directory (the repo, cd'd into above) before PATH - so node goes to it by absolute
   # Windows path, the one this shell resolves; no absolute node: no winpty.

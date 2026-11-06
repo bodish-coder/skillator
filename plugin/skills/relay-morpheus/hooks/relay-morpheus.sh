@@ -648,16 +648,27 @@ cmd_heartbeat() {
     shift
   done
   need_run
-  # A heartbeat carries the row's existing `landed` back in. Without it the
-  # "x with no sha" guard fires on a stage that already landed, turning a
-  # no-op bookkeeping call from a late-reporting agent into a hard error.
-  cur=$(awk -v n="$n" 'BEGIN{FS="|"} /^\| *[0-9]+ *\|/{num=$2;gsub(/ /,"",num); if(num==n){s=$4;gsub(/ /,"",s); l=$7;gsub(/^ +| +$/,"",l); print s "\t" l}}' "$RUN")
-  st=$(printf %s "$cur" | cut -f1); la=$(printf %s "$cur" | cut -f2)
-  [ "$la" = "-" ] && la=""
-  cmd_stage "$n" "$st" "" "$la"
+  # A184: read and refresh heartbeat under the same mutation lock, updating only
+  # the heartbeat field without overwriting state or landed SHA.
+  lock
+  st=$(awk -v n="$n" -v t="$(now)" -v sc="$RUN.st.$$" '
+    BEGIN { FS = "|"; OFS = "|" }
+    /^\| *[0-9]+ *\|/ {
+      num = $2; gsub(/ /, "", num)
+      if (num == n) {
+        found = 1; s = $4; gsub(/ /, "", s); print s > sc
+        $6 = " " t " "
+      }
+    }
+    { print }
+    END { if (!found) exit 3 }' "$RUN" > "$RUN.tmp.$$" && mv "$RUN.tmp.$$" "$RUN" && cat "$RUN.st.$$") \
+    || { rm -f "$RUN.tmp.$$" "$RUN.st.$$"; die "no stage $n in $RUN"; }
+  rm -f "$RUN.st.$$"
   # F31: the driver's own heartbeat keeps its stamp fresh - a live driver in a
   # 40-minute stage is not stale. Anyone else's leaves the stamp alone.
-  if is_me; then lock; touch_driver; stamp_updated; unlock; fi
+  if is_me; then touch_driver; fi
+  stamp_updated
+  unlock
   if [ "$st" = '~' ] && has_chain && [ -n "$(stage_files "$n")" ]; then
     _hb=$(lease_locked lease_beat_ "$(run_tag)" "$n") || _hb=
     [ "$_hb" != 0 ] || echo "WARNING: stage $n holds no lease on its files any more - another run took it as stale and may be editing them; tell the user before landing" >&2
@@ -906,7 +917,10 @@ cmd_board() {
 # ------------------------------------------------------------ run queue ----
 # F38: runs wait their turn in <main>/.skillator/queue.md and land on main one
 # at a time. The file is written only under its own lock.
-qfile() { _qm=$(main_of) || _qm=$(pwd); mkdir -p "$_qm/.skillator"; printf '%s' "$_qm/.skillator/queue.md"; }
+qfile() {
+  if [ -n "${RELAY_DIR:-}" ]; then mkdir -p "$RELAY_DIR"; printf '%s' "$RELAY_DIR/queue.md"; return 0; fi
+  _qm=$(main_of) || _qm=$(pwd); mkdir -p "$_qm/.skillator"; printf '%s' "$_qm/.skillator/queue.md"
+}
 q_init() {
   [ -f "$1" ] || printf '%s\n' "# Run queue" "away: -" "landing: -" "" "| # | run | state | since |" "|---|-----|-------|-------|" > "$1"
 }
@@ -964,10 +978,142 @@ qr_set_() {   # <run> <state> <file>
   _ql=$(q_hdr landing "$3"); canon_tag_ "${_ql%% *}"; [ "$CT" != "$1" ] || [ "$2" = running ] || q_sethdr landing - "$3"
   q_set "$1" "$2" "$3"; echo "$1 $2"
 }
+# A197: create a distinct follow-up run, migrate only eligible pending stages,
+# preserve provenance/dependencies and chosen mode, mark moved stages as '>' in
+# the source run, and queue the new follow-up run.
+cmd_push_pending() {
+  _pp_id= _pp_md=
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --mode) [ "$#" -ge 2 ] || die "push-pending: --mode needs a value"; _pp_md=$2; shift 2 ;;
+      --mode=*) _pp_md=${1#--mode=}; shift ;;
+      -*) die "push-pending: unknown flag $1" ;;
+      *) [ -z "$_pp_id" ] || die "usage: relay-morpheus.sh queue-run push-pending <id> [--mode <mode>]"; _pp_id=$1; shift ;;
+    esac
+  done
+  if [ -z "$_pp_id" ] && [ -n "${RUN:-}" ] && [ -f "$RUN" ]; then _pp_id="RUN-$(id_of "$RUN")"; fi
+  [ -n "$_pp_id" ] || die "usage: relay-morpheus.sh queue-run push-pending <id> [--mode <mode>]"
+  if [ -n "$_pp_md" ]; then
+    case "$_pp_md" in parallel|sequential|workflow|agents) ;; *) die "push-pending: --mode must be parallel, sequential, workflow or agents, got $_pp_md" ;; esac
+  fi
+  _pp_r=$(run_id_arg "$_pp_id")
+  _pp_rf=$(resolve "${_pp_r#RUN-}") || die "no run file for $_pp_r - see: relay-morpheus.sh list"
+  _pp_sv_run=$RUN; _pp_sv_dir=$DIR
+  RUN=$_pp_rf; DIR=$(dirname "$_pp_rf")
+  lock
+  _pp_src="RUN-$(id_of "$_pp_rf")"
+  # Eligible pending stages: state cell in ## Stages is empty (or 'pending') - never x, ~, !, ?, >
+  _pp_stages=$(awk 'BEGIN{FS="|"} /^## /{sec=$0} sec=="## Stages" && /^\| *[0-9]+ *\|/{
+    n=$2; gsub(/ /,"",n); s=$4; gsub(/^ +| +$/,"",s)
+    if (s=="" || s=="pending") printf "%s%s", (k++ ? "," : ""), n
+  }' "$_pp_rf")
+  if [ -z "$_pp_stages" ]; then
+    unlock; RUN=$_pp_sv_run; DIR=$_pp_sv_dir
+    refuse "no eligible pending stages in $_pp_src to push"
+  fi
+  _pp_cnt=$(printf '%s\n' "$_pp_stages" | tr ',' '\n' | grep -c . || :)
+  _pp_title=$(sed -n '1s/^# RUN[-a-zA-Z0-9]* *- *//p' "$_pp_rf" | sed 's/^Follow-up from RUN-[0-9A-Za-z-]*: *//')
+  [ -n "$_pp_title" ] || _pp_title="run"
+  _pp_plan=$(hdr_field "$_pp_rf" plan); [ -n "$_pp_plan" ] || _pp_plan="TICKETS.md"
+  _pp_ow=$(hdr_field "$_pp_rf" owner)
+  _pp_src_md=$(hdr_field "$_pp_rf" mode)
+  _pp_ch_md=$(hdr_mode)
+  _pp_eff_md=${_pp_md:-${_pp_src_md:-${_pp_ch_md:-workflow}}}
+  _pp_raw_num=$(alloc RUN 1 "$DIR") || { _rc=$?; unlock; RUN=$_pp_sv_run; DIR=$_pp_sv_dir; exit "$_rc"; }
+  _pp_new_num=$(pad_id "$_pp_raw_num")
+  _pp_new_id="RUN-$_pp_new_num"
+  _pp_slug=$(slug "followup-$_pp_src-$_pp_title"); [ -n "$_pp_slug" ] || _pp_slug="followup"
+  _pp_new_f="$DIR/run-$_pp_new_num-$_pp_slug.md"
+  _pp_now=$(now)
+  _pp_day=$(date -u +%Y-%m-%d)
+  # Extract tickets from migrated stages (chain blocks first, then stage names)
+  _pp_tks=$(awk -v stg=",$_pp_stages," '
+    function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t\r]+$/, "", s); return s }
+    /^## / { sec = $0; cs = 0; next }
+    sec == "## Stages" && /^\| *[0-9]+ *\|/ {
+      split($0, c, "|"); n = trim(c[2])
+      if (index(stg, "," n ",") > 0) {
+        nm = trim(c[3]); sub(/^[A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][ \t]+/, "", nm)
+        m = split(nm, w, /[^A-Za-z0-9]+/)
+        for (i = 1; i <= m; i++) if (w[i] ~ /^[A-Z]{1,3}[0-9]+[a-z]?$/ && !(w[i] in seen)) { seen[w[i]] = 1; out = out (out ? "," : "") w[i] }
+      }
+      next
+    }
+    sec == "## Chain" && /^### / {
+      cs = 0
+      if ($0 ~ /^### [A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9] - stage [0-9]+ - /) {
+        split($0, h, " "); if (index(stg, "," h[5] ",") > 0) cs = h[5]
+      }
+      next
+    }
+    sec == "## Chain" && cs && index($0, "tickets: ") == 1 {
+      m = split(substr($0, 10), w, /[^A-Za-z0-9]+/)
+      for (i = 1; i <= m; i++) if (w[i] ~ /^[A-Z]{1,3}[0-9]+[a-z]?$/ && !(w[i] in seen)) { seen[w[i]] = 1; out = out (out ? "," : "") w[i] }
+    }
+    END { print (out ? out : "-") }
+  ' "$_pp_rf")
+  # Write the follow-up run file with provenance, chosen mode, migrated stage rows, and migrated chain blocks
+  {
+    echo "# $_pp_new_id - Follow-up from $_pp_src: $_pp_title"
+    echo "plan: $_pp_plan"
+    echo "started: $_pp_now   updated: $_pp_now"
+    echo "followup_from: $_pp_src"
+    echo "Follow-up from: $_pp_src"
+    echo "mode: $_pp_eff_md"
+    [ -z "$_pp_ow" ] || echo "owner: $_pp_ow"
+    echo
+    echo "## Stages"
+    echo "| # | stage | state | owner | heartbeat | landed |"
+    echo "|---|-------|-------|-------|-----------|--------|"
+    awk -v stg=",$_pp_stages," 'BEGIN{FS="|"} /^## /{sec=$0} sec=="## Stages" && /^\| *[0-9]+ *\|/{
+      n=$2; gsub(/ /,"",n); nm=$3; gsub(/^ +| +$/,"",nm)
+      if (index(stg, "," n ",") > 0) printf "| %s | %s |   | - | - | - |\n", n, nm
+    }' "$_pp_rf"
+    echo
+    echo "## In flight"
+    echo "- none"
+    echo
+    echo "## Chain"
+    echo "driver: -${SEP}hold: -${SEP}mode: $_pp_eff_md"
+    awk -v stg=",$_pp_stages," '
+      /^## / { sec = $0; keep = 0; next }
+      sec == "## Chain" && /^### / {
+        keep = 0
+        if ($0 ~ /^### [A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9] - stage [0-9]+ - /) {
+          split($0, h, " ")
+          if (index(stg, "," h[5] ",") > 0) keep = 1
+        }
+      }
+      sec == "## Chain" && keep { print }
+    ' "$_pp_rf"
+    echo
+    echo "## Rulings"
+    echo "- $_pp_day - Follow-up from $_pp_src (mode: $_pp_eff_md, stages: $_pp_stages)"
+  } > "$_pp_new_f"
+  # Mark moved stages in the source run as '>' pointing to the follow-up run
+  awk -v stg=",$_pp_stages," -v nid="$_pp_new_id" -v t="$_pp_now" 'BEGIN{FS=OFS="|"}
+    /^## /{sec=$0}
+    sec=="## Stages" && /^\| *[0-9]+ *\|/{
+      n=$2; gsub(/ /,"",n)
+      if (index(stg, "," n ",") > 0) {
+        $4 = " > "
+        $6 = " " t " "
+        $7 = " " nid " stage " n " "
+      }
+    }
+    { print }' "$_pp_rf" > "$_pp_rf.tmp.$$" && mv "$_pp_rf.tmp.$$" "$_pp_rf"
+  add_ruling "pushed pending stages ($_pp_stages) to follow-up $_pp_new_id (mode: $_pp_eff_md)"
+  stamp_updated
+  unlock
+  q_locked qr_add_ "$_pp_new_id" >/dev/null || { RUN=$_pp_sv_run; DIR=$_pp_sv_dir; die "push-pending: $_pp_new_id could not be queued"; }
+  RUN=$_pp_sv_run; DIR=$_pp_sv_dir
+  echo "FOLLOWUP $_pp_new_id moved=$_pp_cnt stages=$_pp_stages tickets=$_pp_tks mode=$_pp_eff_md from=$_pp_src"
+}
 cmd_queue_run() {
   sub=${1:-list}; [ "$#" -gt 0 ] && shift
   case $sub in
     add)   r=$(run_id_arg "${1:-}"); q_locked qr_add_ "$r" || die "queue-run: $r cannot be queued" ;;
+    push-pending) cmd_push_pending "$@" ;;
     list)  q_locked q_norm_; f=$(qfile)
            # F44: each run's owner in a last column - one awk pass over the
            # run files' headers, then the queue file.
@@ -987,7 +1133,7 @@ cmd_queue_run() {
     # A hard stop pauses only its own run; the 7-day stop halts everything.
     pause) r=$(run_id_arg "${1:-}"); q_locked qr_set_ "$r" paused || die "queue-run: $r is not queued" ;;
     done)  r=$(run_id_arg "${1:-}"); q_locked qr_set_ "$r" landed || die "queue-run: $r is not queued" ;;
-    *) die "usage: relay-morpheus.sh queue-run add <id> | list | next | start <id> | pause <id> | done <id>" ;;
+    *) die "usage: relay-morpheus.sh queue-run add <id> | push-pending <id> [--mode <mode>] | list | next | start <id> | pause <id> | done <id>" ;;
   esac
 }
 away_() {   # <on|off|status> <file>
@@ -1409,13 +1555,18 @@ chain_dispatch() {
   # any lease or lock is taken.
   if wd_read "$(dirname "$RUN")"; then refuse "watchdog hold ($WD_WHY) - clear the cause, then /ops resume or relay-morpheus watchdog release"; fi
   dv=$(chain_decide "$(level_line)"); pct=$(echo "$dv" | cut -d' ' -f2)
-  # F36: the stage's files are leased BEFORE the run lock - the registry wait
-  # must never stretch a run-lock hold - and given back if the dispatch is
-  # then refused or dies. A stage with no files: line could touch anything, so
-  # it waits while another run holds any live lease.
+  # A183: verify stage state under the run lock BEFORE taking or replacing its
+  # lease, so a losing duplicate dispatch cannot overwrite or release the
+  # winner's lease.
   _dz=; LEASED_N=
-  case "$(row_cell "$n" 4)" in ''|'!') _dp=1 ;; *) _dp= ;; esac
-  if [ -n "$_dp" ] && has_chain && [ -n "$(code_of "$n")" ]; then
+  lock
+  hdr_check
+  c=$(code_of "$n")
+  [ -n "$(chain_hdr)" ] && [ -n "$c" ] || die "stage $n has no chain block - chain plan $n first"
+  h=$(hdr_hold); [ "$h" = - ] || refuse "chain is held ($h) - chain release first, or chain wait"
+  st=$(row_cell "$n" 4)
+  case "$st" in ''|'!') ;; *) refuse "stage $n is '$st', not pending or failed - a stage is never dispatched twice" ;; esac
+  if has_chain; then
     _df="$RUN.files.$$"; stage_files "$n" > "$_df"
     if [ -s "$_df" ]; then
       _dz=$(lease_locked lease_take_ "$(run_tag)" "$n" "$drv" "$_df") || {
@@ -1433,13 +1584,6 @@ chain_dispatch() {
     fi
     rm -f "$_df"
   fi
-  lock
-  hdr_check
-  c=$(code_of "$n")
-  [ -n "$(chain_hdr)" ] && [ -n "$c" ] || die "stage $n has no chain block - chain plan $n first"
-  h=$(hdr_hold); [ "$h" = - ] || refuse "chain is held ($h) - chain release first, or chain wait"
-  st=$(row_cell "$n" 4)
-  case "$st" in ''|'!') ;; *) refuse "stage $n is '$st', not pending or failed - a stage is never dispatched twice" ;; esac
   # F33: a stage a holding decision waits on runs only on a prompt written
   # after the answer - re-planned as a new stage, or ruled independent.
   w=$(chain_scan | grep "^IDLE $n Q" | head -1)
@@ -1964,7 +2108,7 @@ chain_scan() {
     function paths(s,  n, w, i, o) { n = split(s, w, /,/); o = ""
       for (i = 1; i <= n; i++) { w[i] = norm(w[i]); if (w[i] != "") o = o SUBSEP w[i] } return o }
     function holding(k) { return qs[k] == "open" || qs[k] == "asked" || qs[k] == "answered" || qs[k] == "ruled" }
-    function landed(s, d) { if (st[s] == "x") return 1
+    function landed(s, d) { if (!(s in st) || st[s] == "x") return 1
       if (st[s] == ">" && (s in rep) && d < 64) return landed(rep[s], d + 1); return 0 }
     # 1 when an unlanded after: stage behind d (transitively) is a failed one.
     function failbehind(d, depth,  m, a, i) { if (depth > 64) return 0; m = split(af[d], a, " ")
@@ -3589,6 +3733,7 @@ case "$c" in
   init)      cmd_init "$@" ;;
   board)     cmd_board "$@" ;;
   queue-run) cmd_queue_run "$@" ;;
+  push-pending) cmd_push_pending "$@" ;;
   land)      cmd_land "$@" ;;
   away)      cmd_away "$@" ;;
   add)       cmd_add "$@" ;;

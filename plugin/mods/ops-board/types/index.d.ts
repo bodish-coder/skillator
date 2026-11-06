@@ -34,6 +34,7 @@ export type Flight = { n: number; by: string | null; run: string | null }   // i
 export type PlanItem = { n: number; ticket: string }
 // F85: the engage confirm in the pane - what goes, and whether relay queue-run add goes first.
 export type Engage = { id: string; text: string; queue: boolean }
+export type StartRunDraft = { runner: 'marathon' | 'pending-subagent'; mode: 'sequential' | 'parallel'; tickets: string[]; result?: string | null }
 // F99: the Diagnose view in the pane - the verdict, one line per disagreement and, per closable
 // stage, the relay-morpheus command that closes it by hand. F104: close = the closable stages
 // with a derived sha (runs: the command Close runs, shown in its confirm); confirm = the stage asked.
@@ -79,7 +80,7 @@ export type WorkflowRow = {
 }
 // F66: the Messages tab. Msg is one line of teams-uhura's inbox (<repo>/.git/skillator/
 // team-inbox.jsonl); TeamsCfgView is what `team.mjs config show` says - never a secret.
-export type Msg = { ts: string; from: string; email: string; text: string; id: string }
+export type Msg = { ts: string; from: string; to?: string; email: string; text: string; id: string }
 export type TeamsCfgView = { path: string; token: boolean; workflowUrl: string | null; port: number; statusPosts: boolean }
 // The setup form in the pane: only what is safe to hold in $.state - the field values
 // live in the module (the token never reaches $.state); `rev` redraws it.
@@ -104,7 +105,25 @@ export type Commit = { sha: string; short: string; date: string; author: string;
 export type Change = { status: string; path: string; from: string | null; add: number | null; del: number | null }
 export type TreeRow = { path: string; name: string; depth: number; dir: boolean; count: number }
 export type StatusBadge = 'M' | 'A' | 'D' | 'R' | 'C' | '?' | 'U'
-export type WorkTreeFile = { path: string; staged: StatusBadge | null; unstaged: StatusBadge | null; isUntracked: boolean; warning?: string }
+export type WorkTreeFile = { path: string; rawPath?: string; from?: string | null; rawFrom?: string | null; staged: StatusBadge | null; unstaged: StatusBadge | null; isUntracked: boolean; warning?: string }
+export type AiReviewResult = {
+  status: 'ready' | 'unavailable' | 'fallback' | 'error'
+  source: string
+  findings: string[]
+  draftMessage?: string
+  summary?: string[]
+  resolutions?: { path: string; summary: string }[]
+  truncated?: boolean
+  error?: string
+}
+export type ActionRunState = {
+  status: 'idle' | 'running' | 'succeeded' | 'failed' | 'uncertain'
+  code?: number | null
+  stdout?: string
+  stderr?: string
+  startedAt?: number
+  endedAt?: number
+}
 export type Explorer = {
   open: string[]; selected: string | null
   files: number | null                  // tracked files; null: not read yet
@@ -116,9 +135,10 @@ export type Explorer = {
   upstream: { name: string; ahead: number; behind: number } | 'none' | null
   incoming: Commit[] | null
   worktree: WorkTreeFile[] | null       // F133: working tree staged and unstaged files
+  actionNotice?: string | null          // A195/F154/F156: visible notice or error from stage/unstage or standalone git action
 }
 // F103 & F133: a git action planned - its argv (empty: a merge with no branch picked yet), warnings, the branches to pick from
-export type ActionKind = 'fetch' | 'pull' | 'push' | 'revert' | 'merge' | 'commit' | 'sync'
+export type ActionKind = 'fetch' | 'pull' | 'push' | 'revert' | 'merge' | 'commit' | 'sync' | 'switch'
 // branch, head: what the plan stood on when the confirm opened - Run refuses if either moved
 export type Action = {
   kind: ActionKind
@@ -133,22 +153,33 @@ export type Action = {
   digest?: string[]
   auditWarning?: string
   conflictAi?: boolean
+  stagedSig?: string
+  aiReview?: AiReviewResult | null
+  runState?: ActionRunState | null
+  targetRef?: string | null
+  untrackedBlockers?: string[]
 }
+export type LogEntry = { at: number; text: string }
+export type HelpDoc = { id: string; content: string | null; error: string | null; path: string | null }
 declare module 'claude-code' {
   interface PluginState {
     'ops-board': {
       actionFocus: string | null // F115: element key only, never input content
       board: Board | null; team: Member[]; me: string | null
       session: string | null   // F109: this session's sid (team.ts sessionTag), the band's
-      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run'; selected: string | null; expanded: string | null
+      tab: 'tickets' | 'runs' | 'health' | 'messages' | 'explorer' | 'run' | 'help' | 'log'; selected: string | null; expanded: string | null
       filter: Filter; filterOpen: boolean
       ascii: boolean
       ticketOffset: number | null    // pinned Tickets list; null follows selection
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
+      assignedFolded: boolean
+      decideFolded: boolean
       runsOpen: ('runs' | 'workflows' | 'agents')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
       runs: RunView[]; assign: AssignDraft | null; narrow: boolean
       engage: Engage | null             // F85: the engage confirm up in the Workflows tab
+      startRun: StartRunDraft | null    // F113/A196: the Start Run form up in the Workflows tab
+      openTickets: Ticket[]             // F113/A196: open tickets cached for Start Run form
       diagnose: Diagnose | null         // F99: the Diagnose view up in the Workflows tab
       relay: string | null   // F48 band: "RUN-0012 2/4", the first relay run not all done
       teamView: TeamView | null; person: PersonDraft | null
@@ -164,6 +195,12 @@ declare module 'claude-code' {
       runFile: RunFile | null; runForm: RunForm | null; runJob: Job | null
       explorer: Explorer     // F75: what the Explorer tab draws, no more (B4)
       'explorer-action': Action | null   // F103: the git action confirm up in the Explorer tab
+      log: LogEntry[]
+      helpSel: string
+      helpFilter: string
+      helpArgs: string
+      helpExpanded: boolean
+      helpDoc: HelpDoc | null
     }
   }
 }

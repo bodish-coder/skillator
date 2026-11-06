@@ -866,12 +866,22 @@ test('F122: Workflows tab action bar operations (m mode, r rerun, p push pending
   assert.equal(rerunStep.effects[0]!.kind, 'run')
   assert.equal((rerunStep.effects[0] as any).call, 'relay-queue-add')
 
-  // 3. p key pushes pending stages
+  // 3. p key pushes pending stages via relay-push-pending and derives toast from FOLLOWUP output (A197)
   const pushStep = reduce(s, key('p'))
   assert.match(pushStep.state.toast ?? '', /Pushing 1 pending stages of RUN-0012/)
   assert.equal(pushStep.effects.length, 1)
   assert.equal(pushStep.effects[0]!.kind, 'run')
-  assert.equal((pushStep.effects[0] as any).call, 'relay-queue-add')
+  assert.equal((pushStep.effects[0] as any).call, 'relay-push-pending')
+  assert.deepEqual((pushStep.effects[0] as any).args, ['RUN-0012', 'parallel'])
+
+  const pushOk = settle((pushStep.effects[0] as any).then(ok('FOLLOWUP RUN-0013 moved=1 stages=2 tickets=F2 mode=parallel from=RUN-0012\n'))(pushStep.state))
+  assert.equal(pushOk.state.toast, '✓ Pushed 1 pending stage (F2) from RUN-0012 to follow-up RUN-0013 (parallel)')
+
+  const pushFail = settle((pushStep.effects[0] as any).then({ code: 2, out: '', err: 'REFUSED: no eligible pending stages in RUN-0012 to push', argv: [] })(pushStep.state))
+  assert.equal(pushFail.state.toast, '■ push pending failed: REFUSED: no eligible pending stages in RUN-0012 to push')
+
+  const pushMissingFollowup = settle((pushStep.effects[0] as any).then(ok('RUN-0012\n'))(pushStep.state))
+  assert.equal(pushMissingFollowup.state.toast, '■ push pending failed: RUN-0012')
 
   // 4. Pointer clicks route through point()
   const ptMode = point(s, { kind: 'key', key: { name: 'm' } })
@@ -1270,8 +1280,51 @@ test('F160/A198: Help is a first-class tab (7 Help), loads skill-doc, copies via
   assert.match(runDone.state.toast ?? '', /✓ Ready to run: \/skillator:a11y-toph F1/)
 })
 
+import { eligibleRunTickets, parseFollowupOut, startRunCmd } from '../../hooks/lib/runlines'
 
+test('A196 + A197: startRunCmd canonical parity, eligibleRunTickets, parseFollowupOut, and pushPendingRun blocked/landed handling', () => {
+  // A196: startRunCmd canonical command builder matches startRunCommand
+  assert.equal(startRunCmd('marathon', 'sequential', ['F1', 'B2']), '/marathon-run sequential F1 B2')
+  assert.equal(startRunCmd('/marathon-run', 'parallel', 'F1 B2', 2), '/marathon-run parallel 2 F1 B2')
+  assert.equal(startRunCmd('pending-subagent', 'parallel', ['A196']), '/pending-subagent parallel A196')
+  assert.equal(startRunCmd('/pending-subagent', 'sequential', []), '/pending-subagent sequential')
 
+  // A196: eligibleRunTickets filters only open [ ], [~], [?], [!] tickets
+  const boardMix = parseBoard(
+    '- [ ] F1 — Open\n- [~] F2 — In progress\n- [?] F3 — Decide\n- [!] B1 — Blocked\n- [%] F5 — Testing\n- [>] A4 — Deferred\n- [x] F4 — Done\n',
+    'T', 1, 1,
+  )
+  assert.deepEqual(eligibleRunTickets(boardMix).map(t => t.id), ['F1', 'F2', 'F3', 'B1'])
+  assert.deepEqual(eligibleRunTickets(null), [])
 
+  // A197: parseFollowupOut parses structured FOLLOWUP line and rejects non-FOLLOWUP output
+  assert.deepEqual(
+    parseFollowupOut('FOLLOWUP RUN-0015 moved=2 stages=1,2 tickets=F1,F2 mode=parallel from=RUN-0012\n'),
+    { id: 'RUN-0015', moved: 2, stages: ['1', '2'], tickets: ['F1', 'F2'], mode: 'parallel', from: 'RUN-0012' },
+  )
+  assert.equal(parseFollowupOut('queued: RUN-0012\n'), null)
+  assert.equal(parseFollowupOut('FOLLOWUP RUN-0015 moved=0 stages= tickets= mode=parallel from=RUN-0012'), null)
 
+  // A197: pushPendingRun refuses when all stages are landed/in-flight/moved
+  const chainAllDone = [
+    '## Stages',
+    '| # | stage | state | owner | heartbeat | landed |',
+    '|---|---|---|---|---|---|',
+    '| 1 | S1 F1 | x | b | - | sha1 |',
+    '| 2 | S2 F2 | ~ | b | - | |',
+    '| 3 | S3 F3 | > | b | - | RUN-0014 stage 3 |',
+    '',
+    '## Chain',
+    '### S1 - stage 1 - F1',
+    'tickets: F1',
+    '### S2 - stage 2 - F2',
+    'tickets: F2',
+    '### S3 - stage 3 - F3',
+    'tickets: F3',
+  ].join('\n')
+  const sDone = { ...onRuns(reduce(s0, key('2')).state, 'RUN-0012  the ops board  1/3 done\n', { 'RUN-0012': chainAllDone }), runsSelected: 'RUN-0012' }
+  const noPend = reduce(sDone, key('p'))
+  assert.equal(noPend.effects.length, 0)
+  assert.equal(noPend.state.toast, 'No pending stages left in RUN-0012 to push')
+})
 

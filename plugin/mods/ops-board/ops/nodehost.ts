@@ -153,17 +153,29 @@ export function spawnArgv(argv: string[], cwd: string, timeoutMs: number, stdin?
   return new Promise(res => {
     let out = '', err = '', done = false
     let timer: ReturnType<typeof setTimeout> | undefined
-    const finish = (r: Omit<RunResult, 'argv'>) => { if (done) return; done = true; clearTimeout(timer); res({ ...r, err: r.err.slice(-4096), argv }) }
-    let child: ReturnType<typeof spawn>
+    let exitTimer: ReturnType<typeof setTimeout> | undefined
+    let child: ReturnType<typeof spawn> | undefined
+    const finish = (r: Omit<RunResult, 'argv'>) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      clearTimeout(exitTimer)
+      try { child?.stdout?.destroy() } catch { /* closed */ }
+      try { child?.stderr?.destroy() } catch { /* closed */ }
+      res({ ...r, err: r.err.slice(-4096), argv })
+    }
     try { child = spawn(argv[0]!, argv.slice(1), { cwd, windowsHide: true, ...(env ? { env } : {}) }) }
     catch (e) { finish({ code: -1, out: '', err: String((e as Error)?.message ?? e) }); return }
     timer = setTimeout(() => {
-      try { child.kill() } catch { /* already gone */ }
+      try { child?.kill() } catch { /* already gone */ }
       finish({ code: -1, out, err: 'timed out after ' + timeoutMs / 1000 + ' s' })
     }, timeoutMs)
     child.stdout?.setEncoding('utf8').on('data', (d: string) => { out += d })
     child.stderr?.setEncoding('utf8').on('data', (d: string) => { err = (err + d).slice(-4096) })
     child.on('error', e => finish({ code: -1, out, err: err + String(e?.message ?? e) }))
+    child.on('exit', code => {
+      exitTimer = setTimeout(() => finish({ code: code ?? -1, out, err }), 50)
+    })
     child.on('close', code => finish({ code: code ?? -1, out, err }))
     child.stdin?.on('error', () => { /* the child closed it early */ })
     child.stdin?.end(stdin ?? '')
