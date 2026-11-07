@@ -428,12 +428,12 @@ the Workflow tool). Each tag below turns **verified** only with a recorded run
 | gemini | marathon: in-session, phases in order (no delegate verified) | inferred |
 
 `/skillator-update` (F65) finds its source in this order: a clone path given as its
-argument; Claude Code's updated plugin (`installPath` of `skillator@<mkt>` in
-`claude plugin list --json` - the package ships `install.sh` / `install.ps1`); the
-**source pointer** every install run writes into each skills dest,
+argument; the **source pointer** every install run writes into each skills dest,
 `<dest>/.skillator-source` (one line, LF, no BOM: the plugin folder the installer ran
 from - `<clone>/plugin` since F91; an older pointer names the clone root, whose
-forwarding `install.sh` / `install.ps1` still run it); else it asks, and headless it stops with `source: none found`. A git source is
+forwarding `install.sh` / `install.ps1` still run it); Claude Code's updated plugin
+(`installPath` of `skillator@<mkt>` in `claude plugin list --json` - the package ships
+`install.sh` / `install.ps1`); else it asks, and headless it stops with `source: none found`. A git source is
 updated with `git pull --ff-only` only.
 
 | Host | Path | Tag |

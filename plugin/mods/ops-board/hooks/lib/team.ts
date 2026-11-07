@@ -58,13 +58,34 @@ export function sessionTag(envSession: string | null | undefined, sessionId: str
 
 // F80: as ticket-meta whoami / me_of - F97: the F92 session owner file first (its one
 // line, exact; a handle not on the team is nobody, never a fall back), then SKILLATOR_ME
-// (a member as written, @ optional), then the email.
+// (a member as written, @ optional), then the email, then the team lead when no email is read.
 export function meOf(team: Member[], email: string, envMe?: string | null, owner?: string | null): string | null {
   if (owner !== null && owner !== undefined) return team.find(m => m.handle === owner)?.handle ?? null
   if (envMe) { const h = envMe.startsWith('@') ? envMe : '@' + envMe; return team.find(m => m.handle === h)?.handle ?? null }
   const e = email.trim().toLowerCase()
-  if (!e) return null
+  if (!e) return team.find(m => m.lead)?.handle ?? null
   return team.find(m => m.emails.includes(e))?.handle ?? null
+}
+
+export function parseGitConfigEmail(text: string): string | null {
+  let inUser = false
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/[#;].*$/, '').trim()
+    if (!line) continue
+    const sec = line.match(/^\[([^\]]+)\]$/)
+    if (sec) {
+      inUser = sec[1]!.trim().toLowerCase() === 'user'
+      continue
+    }
+    if (inUser) {
+      const m = line.match(/^email\s*=\s*(.+)$/i)
+      if (m) {
+        const val = m[1]!.trim().replace(/^"(.*)"$/, '$1').toLowerCase()
+        if (val) return val
+      }
+    }
+  }
+  return null
 }
 
 // "lead · (you) · 3 owned · 1 decide" over the open tickets ([ ] [~] [%] [!] [?]).

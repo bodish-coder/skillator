@@ -96,6 +96,8 @@ const PEEK: Plugin = {
         : e.args === 'narrow' ? await $.state.get({ plugin: 'ops-board', key: 'narrow' })
         : e.args === 'tab' ? await $.state.get({ plugin: 'ops-board', key: 'tab' })
         : e.args === 'openGroups' ? await $.state.get({ plugin: 'ops-board', key: 'openGroups' })
+        : e.args === 'assignedFolded' ? await $.state.get({ plugin: 'ops-board', key: 'assignedFolded' })
+        : e.args === 'decideFolded' ? await $.state.get({ plugin: 'ops-board', key: 'decideFolded' })
         : await $.state.get({ plugin: 'ops-board', key: 'me' })
       return { text: JSON.stringify(v.value ?? null) }
     })
@@ -103,7 +105,7 @@ const PEEK: Plugin = {
 }
 const WITH = { plugins: [PEEK] }
 const RUN = { origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 120 } }
-const state = async ($: Engine, key: 'selected' | 'expanded' | 'narrow' | 'tab' | 'me' | 'openGroups') =>
+const state = async ($: Engine, key: 'selected' | 'expanded' | 'narrow' | 'tab' | 'me' | 'openGroups' | 'assignedFolded' | 'decideFolded') =>
   JSON.parse((await $.command.run({ command: 'peek', args: key, ...RUN })).text ?? 'undefined') as unknown
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -569,8 +571,17 @@ test('/ops runs switches the tab; an unknown word says how to use it', WITH, asy
   const run = (args: string) => $.command.run({ command: 'ops', args, ...RUN })
   expect((await run('runs')).text).toBe('ops board opened on Workflows, Runs open.')   // F76: runs is an alias
   expect(await state($, 'tab')).toBe('runs')
-  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|explorer|build|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build;'
+  expect((await run('bogus')).text).toBe('usage: /ops [tickets|workflows|health|messages|explorer|build|help|resume [force]|watchdog on] - runs and agents open Workflows too, run opens Build, guide opens Help;'
     + ' resume force releases the hold whatever the reading and mutes memory red until it reads green once (watchdog on unmutes)')
+})
+
+test('F162: Tickets tab bottom keys row displays the session owner handle', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  expect((await ui.find({ key: 'key:me' }))?.text).toBe('@vidul')
+  expect((await ui.find({ key: 'keys' }))?.text).toContain('@vidul')
+  await ui.unmount()
 })
 
 test('the first render arms the poll when session.start never ran (a hot reload)', WITH, async ($, on) => {

@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SiteScroll } from 'claude-code'
 import type { Board, Machine, Member, Usage, Watch } from '../types'
 import { listView, parseBoard } from './lib/board'
-import { meOf, parseTeam, sessionTag } from './lib/team'
+import { meOf, parseGitConfigEmail, parseTeam, sessionTag } from './lib/team'
 import { clean } from './lib/bandlines'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, muteKv, mutedWords, muteText, parseMachine, unmuteDue, usageFrom } from './lib/facts'
 import { gitBin, NO_SCRIPTS, readUsage, runCall } from './lib/host'
@@ -368,12 +368,26 @@ async function startNotes($: EngineInterface) {
 async function loadEmail($: EngineInterface) {
   try { envMe = (await $.env.get('SKILLATOR_ME')) || null } catch { envMe = null }
   const repo = await $.session.repo()
+  email = null
   try {
     const git = await gitBin($)                    // A150: absolute on Windows; none: no email
-    if (!git) { email = null; return }
-    const r = await $.process.run([git, 'config', 'user.email'], repo ? { cwd: repo.root, timeoutMs: 10000 } : { timeoutMs: 10000 })
-    email = r.exitCode === 0 ? r.stdout.trim().toLowerCase() || null : null
+    if (git) {
+      const r = await $.process.run([git, 'config', 'user.email'], repo ? { cwd: repo.root, timeoutMs: 10000 } : { timeoutMs: 10000 })
+      email = r.exitCode === 0 ? r.stdout.trim().toLowerCase() || null : null
+    }
   } catch { email = null }
+  if (!email) {
+    const candidates: string[] = []
+    if (repo) candidates.push(norm(repo.root) + '/.git/config')
+    try { const h = await $.env.get('HOME'); if (h) candidates.push(norm(h) + '/.gitconfig') } catch { /* ignore */ }
+    try { const h = await $.env.get('USERPROFILE'); if (h) candidates.push(norm(h) + '/.gitconfig') } catch { /* ignore */ }
+    for (const c of candidates) {
+      try {
+        const parsed = parseGitConfigEmail(await $.fs.read(c))
+        if (parsed) { email = parsed; break }
+      } catch { /* ignore */ }
+    }
+  }
 }
 
 // Arms the poll once per load: from session.start, or from the first draw or

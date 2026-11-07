@@ -80,7 +80,7 @@ export type Glyphs = { open: string; closed: string; rail: string; railDim: stri
 export const UNI: Glyphs = { open: '▾', closed: '▸', rail: '▌ ', railDim: '▏ ', dot: '●', more: '…', down: '↓', up: '↑', move: '↑↓', sep: '·', active: '● ', cut: '…' }
 export const ASCII: Glyphs = { open: 'v', closed: '>', rail: '| ', railDim: ': ', dot: '*', more: '...', down: 'v', up: '^', move: '^v', sep: '-', active: '', cut: '...' }
 export const STATE_WORD: Record<State, string> = { ' ': 'open', '~': 'wip ', '%': 'test', '!': 'blkd', '?': 'dec ', '>': 'defr', x: 'done', '-': 'canc' }
-export const TAB_LABELS = ['Tickets', 'Workflows', 'Health', 'Messages', 'Explorer', 'Build']
+export const TAB_LABELS = ['Tickets', 'Workflows', 'Health', 'Messages', 'Explorer', 'Build', 'Help']
 export const KEY_LABELS = ['move', 'a assign', 'd decide', 'f filter', 'x done', 't team', 'c reconcile', 's status', 'h help', 'r refresh']
 
 export function packRows(widths: number[], cols: number, gap: number): number {
@@ -119,7 +119,7 @@ export function chromeRows(v: View, m: Model, g: Glyphs) {
     ...(c.closed.length ? v.filter.showDone ? [g.sep.length, ...c.closed.map(d => (g.dot + d.n).length), 6]
       : [`${g.sep} ${c.closed.reduce((s, d) => s + d.n, 0)} done hidden`.length] : [])]
   const count = packRows(countItems, v.cols, 1)
-  const keys = packRows([g.move.length + 5, ...KEY_LABELS.slice(1).map(l => l.length + 1)], v.cols, 2)
+  const keys = packRows([g.move.length + 5, ...KEY_LABELS.slice(1).map(l => l.length + 1), ...(v.me ? [v.me.length] : [])], v.cols, 2)
   return { tabs, count, keys, total: tabs + 3 + count + keys }
 }
 

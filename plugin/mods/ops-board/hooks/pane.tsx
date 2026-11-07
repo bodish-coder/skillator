@@ -233,6 +233,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       <Button key="key:help" plain dimColor hotkey="h" onPress={() => { void openStatus($, m.ticket, els.canType, 'help') }}>help</Button>
       {/* F78: register.tsx takes this press (ui.press) - the forced poll lives there */}
       <Button key="key:refresh" plain dimColor hotkey="r" onPress={() => {}}>refresh</Button>
+      {v.me && <Text key="key:me" color="suggestion">{v.me}</Text>}
     </Box>,
   )
   return out

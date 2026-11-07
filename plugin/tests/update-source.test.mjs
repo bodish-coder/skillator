@@ -90,6 +90,30 @@ test('every updater carries membership, retained-directory and failure guards', 
     assert.ok(!text.includes('it has `.git`'), path);
   }
 });
+test('every updater prioritizes .skillator-source over Claude Code installPath', () => {
+  for (const path of commands) {
+    const text = readFileSync(join(plugin, path), 'utf8');
+    const bSection = text.match(/^\s*b\.([\s\S]*?)(?=^\s*c\.|\n\n)/m);
+    assert.ok(bSection && bSection[1].includes('.skillator-source'), `${path}: option b. must describe .skillator-source`);
+    const cSection = text.match(/^\s*c\.([\s\S]*?)(?=^\s*d\.|\n\n)/m);
+    assert.ok(cSection && cSection[1].includes('installPath'), `${path}: option c. must describe installPath`);
+    assert.ok(text.indexOf('.skillator-source') < text.indexOf('installPath'),
+      `${path}: .skillator-source must appear before installPath`);
+
+    const order = [];
+    for (const opt of ['b', 'c']) {
+      const m = text.match(new RegExp(`^\\s*${opt}\\.([\\s\\S]*?)(?=^\\s*[c-d]\\.|\\n\\n)`, 'm'));
+      if (m) {
+        if (m[1].includes('.skillator-source')) order.push('savedSource');
+        else if (m[1].includes('installPath')) order.push('installPath');
+      }
+    }
+    const candidates = { savedSource: '/path/to/saved-git-repo', installPath: '/path/to/claude-cache' };
+    const chosen = order.map(k => candidates[k]).find(Boolean);
+    assert.equal(chosen, candidates.savedSource,
+      `${path}: source resolution must prefer .skillator-source over installPath even when installPath is present`);
+  }
+});
 test('both installer writers preserve updater instructions in every host template', { skip: !ps || !hasSh ? 'Missing executable: ' + [!ps && 'powershell/pwsh', !hasSh && 'sh'].filter(Boolean).join(', ') : false }, () => {
   const shell = readFileSync(join(plugin, 'install.sh'), 'utf8').replaceAll('\r', '');
   const functions = ['native', 'subst', 'put_cmd'].map(name => {

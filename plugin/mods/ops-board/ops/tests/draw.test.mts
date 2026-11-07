@@ -34,6 +34,7 @@ test('a frame is rows × ≤cols, tab bar first, band last, no escapes without c
   assert.match(sized({ ...s, repo: 'skillator2' })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help$/)
   assert.match(sized({ ...s, repo: 'skillator2', cols: 100 })[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages   5 Explorer   6 Build   7 Help +ops · skillator2$/)
   assert.match(f[23]!, /^● ops · mem \? · disk \? · 5h \? · 7d \?$/)       // one band line at 80 columns
+  assert.match(sized({ ...s, me: '@sher' })[23]!, /^● ops @sher · mem \? · disk \? · 5h \? · 7d \?$/) // F162: session owner in bottom band
   assert.match(text(s), /  ▾ In progress \(1\)\n› ● B2  CSV export drops the last row/)
 })
 test('colour on: dot carries the state colour, selected row highlighted', () => {

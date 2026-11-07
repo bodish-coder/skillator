@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { meOf, parseTeam, sessionCode, sessionTag } from '../hooks/lib/team'
+import { meOf, parseGitConfigEmail, parseTeam, sessionCode, sessionTag } from '../hooks/lib/team'
 
 // team.md as ticket-meta `team add` writes it: the member line, then an indented
 // `  name:` line straight under it (T2b). The old shape, with no name, still reads.
@@ -76,4 +76,15 @@ test('team: F97 the session owner file wins over SKILLATOR_ME and the email, and
   expect(meOf(team, 'a@x', 'asha', null)).toBe('@asha')
   expect(meOf(team, 'a@x', null, undefined)).toBe('@asha')
   expect(meOf(team, 'a@x', null, '@Sher')).toBe(null)                 // exact, case kept, as grep -qxF
+})
+
+// F162: when no session owner file, SKILLATOR_ME, or email is present, meOf falls back to the team lead;
+// parseGitConfigEmail reads [user] email from .git/config or ~/.gitconfig.
+test('team: F162 meOf falls back to team lead when email is empty and parseGitConfigEmail reads [user] email', () => {
+  const team = parseTeam('# Team\nlead: @sher\n\n- @sher: shamsherr@ikran.in, admin@ikran.in\n  name: shamsher\n- @asha: a@x\n')
+  expect(meOf(team, '')).toBe('@sher')
+  expect(meOf(team, '', null, null)).toBe('@sher')
+  expect(meOf(team, 'admin@ikran.in')).toBe('@sher')
+  expect(parseGitConfigEmail('[core]\n\trepositoryformatversion = 0\n[user]\n\tname = Sher\n\temail = Admin@Ikran.in # comment\n')).toBe('admin@ikran.in')
+  expect(parseGitConfigEmail('[core]\n\tbare = false\n')).toBe(null)
 })

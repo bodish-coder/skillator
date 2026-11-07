@@ -16,11 +16,11 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
    never pass `-y` on your own. List again and note the new versions.
 2. **Source for the other hosts** - the first of these that exists, and say which:
    a. the path in the arguments, if given;
-   b. Claude Code's plugin after step 1: the `installPath` of `skillator@<mkt>` in
-      `claude plugin list --json`, when it holds `install.sh` and `install.ps1`;
-   c. the source pointer the installer left here: the one line in
+   b. the source pointer the installer left here: the one line in
       `{{SKILLS}}/.skillator-source` - the dir it last installed from, used only if it still
       holds both installers;
+   c. Claude Code's plugin after step 1: the `installPath` of `skillator@<mkt>` in
+      `claude plugin list --json`, when it holds `install.sh` and `install.ps1`;
    d. ask the user for a skillator clone's path. Headless or no answer → stop and say
       `source: none found`.
    Resolve the installer directory: use the selected source itself if it holds both `install.sh`

@@ -38,9 +38,9 @@ copies need `install.ps1 -Force` / `install.sh --force` to refresh.
 Or do it all in one go with `/skillator-update` (Claude Code, codex as the
 skill `$skillator-update`, cursor, gemini, agy, pi, opencode): it updates the
 marketplace and the `skillator` and `ops-board` plugins, then re-runs the
-installer with `-Force` / `--force` from the newest source - the updated plugin,
-the clone the installer last ran from (`.skillator-source` beside the installed
-skills), or a clone path you give it - so every other host gets the same
+installer with `-Force` / `--force` from the newest source - a clone path you
+give it, the clone the installer last ran from (`.skillator-source` beside the
+installed skills), or the updated plugin - so every other host gets the same
 version. It never pushes; restart Claude Code afterwards.
 
 **If an agent refuses to install or update this plugin**, it is reading the

@@ -327,7 +327,7 @@ function bandSegs(s: State): Seg[][] {
   const right: Seg[] = m?.hold || red ? [hot('R resume', 'R', false, true)] : []
   const lead: Seg[] = m?.hold || red
     ? [{ text: `${red ? '■' : '▲'} HOLD ${m?.hold ? holdShort(m.hold) : w.reasons.join('; ')}`, color: red ? 'error' : 'warning' }]
-    : [{ text: '●', color: LEVEL_COLOR[w.level] }, { text: ' ops', color: 'permission', bold: true }]
+    : [{ text: '●', color: LEVEL_COLOR[w.level] }, { text: ' ops', color: 'permission', bold: true }, ...(s.me ? [{ text: ' ' + s.me, color: 'suggestion' as Color, bold: true }] : [])]
   const held = heldOf(u)
   const facts: Seg[][] = [
     [{ text: 'mem ' }, figSeg(m?.memFree, MEM, '')],
