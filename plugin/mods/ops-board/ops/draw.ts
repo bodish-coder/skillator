@@ -10,8 +10,8 @@ import type { Seg as BaseSeg } from '../hooks/lib/bandlines'
 import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
-import type { State, PointerAction, SkillGuide } from './state'
-import { activeUser, pointerModal, dialogLines, engageLines, filteredSkills, formLines, reconcileLines, runsCursor, setupLines, SKILLS, startRunLines, teamRow, viewOf } from './state'
+import type { State, PointerAction, SkillGuide, HelpItem } from './state'
+import { activeUser, pointerModal, dialogLines, engageLines, filteredSkills, formLines, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
 import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { assignedTickets, buildModel, chipsOf, decideTickets, headKey, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -822,9 +822,35 @@ function tailLines(s: State): Seg[][] {
 
 export function skillDocLines(sk: SkillGuide, inner: number, h?: State['help']): { text: string; segs?: Seg[] }[] {
   const lines: { text: string; segs?: Seg[] }[] = []
-  lines.push({ text: `Skill: ${sk.id} [${sk.category}]`, segs: [{ text: 'Skill: ', color: 'permission' }, { text: sk.id, color: 'suggestion', bold: true }, { text: `  [${sk.category}]`, color: 'warning' }] })
-  if (sk.aliases.length) {
-    lines.push({ text: `Aliases: ${sk.aliases.join(', ')}`, segs: [{ text: 'Aliases: ', color: 'permission' }, { text: sk.aliases.join(', '), color: 'suggestion' }] })
+  const isCmd = sk.kind === 'command'
+  if (isCmd) {
+    lines.push({
+      text: `Command: /${sk.id} [${sk.category}]`,
+      segs: [{ text: 'Command: ', color: 'permission' }, { text: `/${sk.id}`, color: 'suggestion', bold: true }, { text: `  [${sk.category}]`, color: 'warning' }],
+    })
+    if (sk.hint) {
+      lines.push({
+        text: `Arguments: ${sk.hint}`,
+        segs: [{ text: 'Arguments: ', color: 'permission' }, { text: sk.hint, color: 'suggestion' }],
+      })
+    }
+    if (sk.aliases.length) {
+      lines.push({
+        text: `Aliases: /${sk.aliases.join(', /')}`,
+        segs: [{ text: 'Aliases: ', color: 'permission' }, { text: `/${sk.aliases.join(', /')}`, color: 'suggestion' }],
+      })
+    }
+  } else {
+    lines.push({
+      text: `Skill: ${sk.id} [${sk.category}]`,
+      segs: [{ text: 'Skill: ', color: 'permission' }, { text: sk.id, color: 'suggestion', bold: true }, { text: `  [${sk.category}]`, color: 'warning' }],
+    })
+    if (sk.aliases.length) {
+      lines.push({
+        text: `Aliases: ${sk.aliases.join(', ')}`,
+        segs: [{ text: 'Aliases: ', color: 'permission' }, { text: sk.aliases.join(', '), color: 'suggestion' }],
+      })
+    }
   }
   lines.push({ text: `Summary: ${sk.summary}`, segs: [{ text: 'Summary: ', color: 'permission' }, { text: sk.summary }] })
   lines.push({ text: '─'.repeat(Math.max(4, Math.min(inner, 48))), segs: [{ text: '─'.repeat(Math.max(4, Math.min(inner, 48))), color: 'suggestion' }] })
@@ -846,20 +872,22 @@ export function skillDocLines(sk: SkillGuide, inner: number, h?: State['help']):
   }
   if (h?.docContent) {
     lines.push({ text: '' })
-    const label = h.docPath ?? `${sk.id}/SKILL.md`
-    lines.push({ text: `─── Installed SKILL.md (${label}) ───`, segs: [{ text: `─── Installed SKILL.md (${label}) ───`, color: 'permission' }] })
+    const label = h.docPath ?? (isCmd ? `plugin/commands/${sk.id}.md` : `${sk.id}/SKILL.md`)
+    const titleText = isCmd ? `─── Command Documentation (${label}) ───` : `─── Installed SKILL.md (${label}) ───`
+    lines.push({ text: titleText, segs: [{ text: titleText, color: 'permission' }] })
     for (const rawLine of h.docContent.split('\n')) {
       lines.push({ text: `  ${rawLine}` })
     }
   } else if (h?.docError) {
     lines.push({ text: '' })
-    lines.push({ text: `─── Installed SKILL.md unavailable: ${h.docError} ───`, segs: [{ text: `─── Installed SKILL.md unavailable: ${h.docError} ───`, color: 'warning' }] })
+    const label = isCmd ? 'Command documentation' : 'Installed SKILL.md'
+    lines.push({ text: `─── ${label} unavailable: ${h.docError} ───`, segs: [{ text: `─── ${label} unavailable: ${h.docError} ───`, color: 'warning' }] })
   }
   return lines
 }
 
 export function helpBody(s: State, room: number): Seg[][] {
-  const h = s.help ?? (s.tab === 'help' ? { selected: SKILLS[0]!.id, filter: '', filtering: false, expanded: false, scroll: 0 } : null)
+  const h = s.help ?? (s.tab === 'help' ? { selected: HELP_ITEMS[0]!.id, filter: '', filtering: false, expanded: false, scroll: 0 } : null)
   if (!h || room <= 0) return []
   if (room <= 2) return [[{ text: 'Help & Skills Guide', color: 'suggestion', bold: true }]]
   const inner = Math.max(4, s.cols <= 40 ? s.cols - 2 : Math.min(s.cols - 4, 116))
@@ -867,7 +895,7 @@ export function helpBody(s: State, room: number): Seg[][] {
   const skills = filteredSkills(h.filter)
   const avail = Math.max(0, room - 2)
 
-  const topTitle = cut(h.expanded ? `Help · ${h.selected}` : `Help & Skills Guide (${skills.length} skills)`, Math.max(1, inner - 4))
+  const topTitle = cut(h.expanded ? `Help · ${h.selected}` : `Help & Skills Guide (${skills.length} skills & commands)`, Math.max(1, inner - 4))
   const topSegs: Seg[] = [
     { text: pad + '┌─ ', color: 'suggestion' },
     { text: topTitle, color: 'suggestion', bold: true },
@@ -878,8 +906,10 @@ export function helpBody(s: State, room: number): Seg[][] {
   const contentRows: { segs: Seg[] }[] = []
 
   if (h.runPrompt !== null && h.runPrompt !== undefined) {
+    const cur = skills.find(x => x.id === h.selected) ?? HELP_ITEMS.find(x => x.id === h.selected)
+    const isCmd = cur?.kind === 'command'
     const pInner = Math.max(4, inner - 2)
-    const pTitle = cut(`Run skillator:${h.selected}`, Math.max(1, pInner - 4))
+    const pTitle = cut(isCmd ? `Run /${h.selected}` : `Run skillator:${h.selected}`, Math.max(1, pInner - 4))
     const pTop = `┌─ ${pTitle} ${'─'.repeat(Math.max(0, pInner - cells(pTitle) - 3))}┐`
     const argStr = cut(` Args: ${h.runPrompt}_`, pInner)
     const pMid = `│${argStr}${' '.repeat(Math.max(0, pInner - cells(argStr)))}│`
@@ -891,9 +921,9 @@ export function helpBody(s: State, room: number): Seg[][] {
   }
 
   if (h.expanded) {
-    const sk = skills.find(x => x.id === h.selected) ?? SKILLS.find(x => x.id === h.selected)
+    const sk = skills.find(x => x.id === h.selected) ?? HELP_ITEMS.find(x => x.id === h.selected)
     if (!sk) {
-      contentRows.push({ segs: [{ text: `Skill not found: ${h.selected}`, color: 'error' }] })
+      contentRows.push({ segs: [{ text: `Item not found: ${h.selected}`, color: 'error' }] })
     } else {
       const docAvail = Math.max(0, avail - contentRows.length)
       const doc = skillDocLines(sk, inner, h)
@@ -927,25 +957,46 @@ export function helpBody(s: State, room: number): Seg[][] {
 
     const listRoom = Math.max(0, avail - contentRows.length)
     if (!skills.length) {
-      contentRows.push({ segs: [{ text: `  No skills matching "${h.filter}"`, color: 'warning' }] })
+      contentRows.push({ segs: [{ text: `  No items matching "${h.filter}"`, color: 'warning' }] })
     } else {
       const selIdx = Math.max(0, skills.findIndex(x => x.id === h.selected))
       const top = Math.max(0, Math.min(skills.length - listRoom, selIdx - Math.floor(listRoom / 2)))
       const slice = skills.slice(top, top + listRoom)
       slice.forEach(sk => {
         const isSel = sk.id === h.selected
-        const catStr = `[${sk.category}]`
-        const aliasStr = sk.aliases.length ? `(${sk.aliases[0]})` : ''
-        const lead = `${isSel ? '› ' : '  '}${sk.id.padEnd(17)} `
-        const meta = `${catStr.padEnd(20)} ${aliasStr.padEnd(10)} `
-        const rem = inner - cells(lead) - cells(meta)
-        const summary = rem > 5 ? cut(sk.summary, rem) : ''
-        const rowSegs: Seg[] = [
-          { text: lead, color: 'suggestion', bold: true, inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
-          { text: catStr.padEnd(20), color: 'permission', inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
-          { text: aliasStr.padEnd(10) + ' ', color: 'warning', inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
-          { text: summary.trimEnd(), inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
-        ]
+        const isCmd = sk.kind === 'command'
+        const tagStr = isCmd ? '[Cmd]' : '[Skill]'
+        const rowSegs: Seg[] = []
+
+        if (inner >= 70) {
+          const lead = `${isSel ? '› ' : '  '}${tagStr.padEnd(8)}${sk.id.padEnd(18)} `
+          const catStr = `[${sk.category}]`.padEnd(18)
+          const aliasStr = sk.aliases.length ? `(${sk.aliases[0]})`.padEnd(12) : ' '.repeat(12)
+          const rem = inner - cells(lead) - cells(catStr) - cells(aliasStr)
+          const summary = rem > 5 ? cut(sk.summary, rem) : ''
+          rowSegs.push(
+            { text: lead, color: 'suggestion', bold: true, inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+            { text: catStr, color: 'permission', inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+            { text: aliasStr, color: 'warning', inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+            { text: summary.trimEnd(), inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+          )
+        } else if (inner >= 55) {
+          const lead = `${isSel ? '› ' : '  '}${isCmd ? '/' : ''}${sk.id.padEnd(17)} `
+          const rem = inner - cells(lead)
+          const summary = rem > 5 ? cut(sk.summary, rem) : ''
+          rowSegs.push(
+            { text: lead, color: 'suggestion', bold: true, inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+            { text: summary.trimEnd(), inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+          )
+        } else {
+          const lead = `${isSel ? '› ' : '  '}${isCmd ? '/' : ''}${cut(sk.id, 12).padEnd(13)} `
+          const rem = inner - cells(lead)
+          const summary = rem > 3 ? cut(sk.summary, rem) : ''
+          rowSegs.push(
+            { text: lead, color: 'suggestion', bold: true, inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+            { text: summary.trimEnd(), inverse: isSel, action: { kind: 'help-skill', id: sk.id } },
+          )
+        }
         contentRows.push({ segs: rowSegs })
       })
     }

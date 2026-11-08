@@ -35,33 +35,58 @@ export async function readSkillDocHost($: HostApi, skillId: string): Promise<{ c
   if (!SKILL_ID_RE.test(skillId)) {
     return { code: 1, out: '', err: `Invalid skill ID: ${skillId}`, path: null }
   }
+  let docPath: string | null = null
+  let displayPath = `${skillId}/SKILL.md`
+
   const skills = await skillatorRoot($)
-  if (!skills) {
-    return { code: 127, out: '', err: NO_SCRIPTS, path: null }
-  }
-  const baseDir = norm(skills)
-  const docPath = `${baseDir}/${skillId}/SKILL.md`
-  if (!docPath.startsWith(baseDir + '/') || docPath.includes('..')) {
-    return { code: 1, out: '', err: 'Skill path escapes skillsDir boundary', path: null }
-  }
-  try {
-    if (!(await $.fs.exists(docPath))) {
-      return { code: 1, out: '', err: `SKILL.md not found for ${skillId}`, path: `${skillId}/SKILL.md` }
+  if (skills) {
+    const baseDir = norm(skills)
+    const cand = `${baseDir}/${skillId}/SKILL.md`
+    if (cand.startsWith(baseDir + '/') && !cand.includes('..')) {
+      if (await $.fs.exists(cand)) {
+        docPath = cand
+      }
     }
+  }
+
+  if (!docPath) {
+    const repo = await $.session.repo()
+    if (repo?.root) {
+      const repoBase = norm(repo.root)
+      const candMd = `${repoBase}/plugin/commands/${skillId}.md`
+      if (candMd.startsWith(repoBase + '/') && !candMd.includes('..') && (await $.fs.exists(candMd))) {
+        docPath = candMd
+        displayPath = `plugin/commands/${skillId}.md`
+      } else {
+        const candTxt = `${repoBase}/plugin/commands/${skillId}.txt`
+        if (candTxt.startsWith(repoBase + '/') && !candTxt.includes('..') && (await $.fs.exists(candTxt))) {
+          docPath = candTxt
+          displayPath = `plugin/commands/${skillId}.txt`
+        }
+      }
+    }
+  }
+
+  if (!docPath) {
+    if (!skills) return { code: 127, out: '', err: NO_SCRIPTS, path: null }
+    return { code: 1, out: '', err: `SKILL.md not found for ${skillId}`, path: displayPath }
+  }
+
+  try {
     try {
       const st = await $.fs.stat!(docPath)
       if (st.size > MAX_SKILL_DOC_BYTES) {
-        return { code: 1, out: '', err: `SKILL.md exceeds ${MAX_SKILL_DOC_BYTES} byte limit`, path: `${skillId}/SKILL.md` }
+        return { code: 1, out: '', err: `SKILL.md exceeds ${MAX_SKILL_DOC_BYTES} byte limit`, path: displayPath }
       }
     } catch {}
     const raw = await $.fs.read(docPath)
     if (raw.length > MAX_SKILL_DOC_BYTES) {
-      return { code: 1, out: '', err: `SKILL.md exceeds ${MAX_SKILL_DOC_BYTES} byte limit`, path: `${skillId}/SKILL.md` }
+      return { code: 1, out: '', err: `SKILL.md exceeds ${MAX_SKILL_DOC_BYTES} byte limit`, path: displayPath }
     }
     const sanitized = raw.replace(/\r\n/g, '\n').replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '')
-    return { code: 0, out: sanitized, err: '', path: `${skillId}/SKILL.md` }
+    return { code: 0, out: sanitized, err: '', path: displayPath }
   } catch (e) {
-    return { code: 1, out: '', err: e instanceof Error ? e.message : String(e), path: `${skillId}/SKILL.md` }
+    return { code: 1, out: '', err: e instanceof Error ? e.message : String(e), path: displayPath }
   }
 }
 

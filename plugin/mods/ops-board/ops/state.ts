@@ -38,7 +38,10 @@ export type SkillGuide = {
   triggers: string[]
   usage: string
   examples: string[]
+  kind?: 'skill' | 'command'
+  hint?: string
 }
+export type HelpItem = SkillGuide
 
 export type HelpState = {
   selected: string
@@ -2037,17 +2040,244 @@ export const SKILLS: SkillGuide[] = [
   }
 ];
 
+export const COMMANDS: HelpItem[] = [
+  {
+    id: "archive-tickets",
+    name: "/archive-tickets",
+    kind: "command",
+    category: "Tickets & Board",
+    aliases: ["archive-zordon"],
+    summary: "Archive closed tickets: move [x]/[-] rows closed over 14 days to TICKETS-archive.md",
+    triggers: ["archive tickets", "archive-tickets", "archive-zordon", "clean closed tickets"],
+    usage: "Archive closed tickets: move [x]/[-] rows closed over 14 days (--days N) from TICKETS.md to TICKETS-archive.md (tickets-zordon).",
+    examples: ["/archive-tickets", "/archive-tickets --days 30", "/archive-zordon"],
+    hint: "[--days N]"
+  },
+  {
+    id: "code-vader",
+    name: "/code-vader",
+    kind: "command",
+    category: "Review & Diff",
+    aliases: [],
+    summary: "Pre-commit diff review replicating Claude Code /code-review and code-yoda restraint",
+    triggers: ["code-vader", "pre-commit review", "review diff", "vader"],
+    usage: "Pre-commit diff review replicating Claude Code /code-review (correctness & safety) and Ponytail / code-yoda (restraint, anti-bloat & shortcut debt) across all hosts, ending in READY-TO-COMMIT: YES or CHANGES-REQUESTED.",
+    examples: ["/code-vader", "/code-vader --staged", "/code-vader --unstaged"],
+    hint: "[--staged | --unstaged | --auto]"
+  },
+  {
+    id: "engage",
+    name: "/engage",
+    kind: "command",
+    category: "Prompt & AI",
+    aliases: ["engage-picard"],
+    summary: "Improve a rough prompt with AI, then carry it out immediately",
+    triggers: ["engage", "engage-picard", "improve prompt", "picard"],
+    usage: "Improve the prompt written before (or after) this command with AI, then carry it out.",
+    examples: ["/engage", "/engage make the help tab responsive", "/engage-picard"],
+    hint: "[rough prompt - empty uses previous message]"
+  },
+  {
+    id: "list-tickets",
+    name: "/list-tickets",
+    kind: "command",
+    category: "Tickets & Board",
+    aliases: ["list-ticket-zordon"],
+    summary: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state)",
+    triggers: ["list-tickets", "list tickets", "list-ticket-zordon", "show board"],
+    usage: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state with counts).",
+    examples: ["/list-tickets", "/list-tickets status", "/list-tickets @sher", "/list-tickets F165"],
+    hint: "[status] [all] [app:<app>] [@person] [prefix|ID]"
+  },
+  {
+    id: "marathon-plan",
+    name: "/marathon-plan",
+    kind: "command",
+    category: "Workflow & Runners",
+    aliases: ["gauntlet-plan"],
+    summary: "Plan a Workflow marathon over open tickets without executing agents",
+    triggers: ["marathon-plan", "gauntlet-plan", "plan marathon", "plan gauntlet"],
+    usage: "Plan a marathon from the saved Workflow data, using this host's delegate or session fallback (relay-morpheus run file + Workflow script).",
+    examples: ["/marathon-plan", "/marathon-plan sequential", "/marathon-plan parallel 2 F164 F165"],
+    hint: "[sequential|parallel] [N|max] [ticket ids]"
+  },
+  {
+    id: "marathon-run",
+    name: "/marathon-run",
+    kind: "command",
+    category: "Workflow & Runners",
+    aliases: ["gauntlet-run"],
+    summary: "Plan and run a marathon in one go, or run a saved marathon plan",
+    triggers: ["marathon-run", "gauntlet-run", "run marathon", "run gauntlet"],
+    usage: "Plan and run a marathon in one go over the open tickets, or run a saved plan (a RUN id). Dispatches stages, verifies each in its own phase, and lands diffs cleanly.",
+    examples: ["/marathon-run", "/marathon-run sequential", "/marathon-run RUN-0026"],
+    hint: "[sequential|parallel] [N|max] [ticket ids] | [RUN id]"
+  },
+  {
+    id: "marathon",
+    name: "/marathon",
+    kind: "command",
+    category: "Workflow & Runners",
+    aliases: [],
+    summary: "Run a relay-morpheus marathon over the open board or named tickets",
+    triggers: ["marathon", "run marathon", "work the board staged"],
+    usage: "Run a relay-morpheus marathon over the open board, or over the tickets named after the command. Only for a marathon the user typed (/marathon) or asked for by name.",
+    examples: ["/marathon", "/marathon F35 F36"],
+    hint: "[ticket ids, e.g. F35 F36]"
+  },
+  {
+    id: "message-uhura",
+    name: "/message-uhura",
+    kind: "command",
+    category: "Team & Comms",
+    aliases: [],
+    summary: "Hand an issue to a teammate via structured 6-section analysis in teams-uhura",
+    triggers: ["message-uhura", "message teammate", "handoff issue", "send uhura"],
+    usage: "Hand an issue to a teammate: write a detailed, self-contained 6-section analysis message and deliver it via teams-uhura channel/inbox.",
+    examples: ["/message-uhura @sher Check F165 verification status"],
+    hint: "@handle <issue>"
+  },
+  {
+    id: "ops",
+    name: "/ops",
+    kind: "command",
+    category: "Ops Board",
+    aliases: ["skillator-ops"],
+    summary: "Open the ops board (Tickets, Workflows, Health, Messages, Explorer, Build, Help)",
+    triggers: ["ops", "skillator-ops", "open ops", "launch ops board"],
+    usage: "Open the ops board (TICKETS.md board, runs, health, messages, explorer, build, help) for this repo in terminal or browser.",
+    examples: ["/ops", "/ops tickets", "/ops help", "/ops --open"],
+    hint: "[terminal|tickets|workflows|health|messages|explorer|build|help]"
+  },
+  {
+    id: "pending-subagent",
+    name: "/pending-subagent",
+    kind: "command",
+    category: "Workflow & Runners",
+    aliases: ["pending-sentinel"],
+    summary: "Work open tickets to completion using autonomous subagents (sequential or parallel)",
+    triggers: ["pending-subagent", "pending-sentinel", "work tickets", "work open tickets"],
+    usage: "Work the open tickets, or the IDs given, to the end with subagents: a relay-morpheus run, one fresh implementer per ticket, diff reviewed and landed.",
+    examples: ["/pending-subagent", "/pending-subagent sequential", "/pending-sentinel parallel 2 F164 F165"],
+    hint: "[sequential|parallel] [N|max] [ticket ids]"
+  },
+  {
+    id: "pending",
+    name: "/pending",
+    kind: "command",
+    category: "Tickets & Board",
+    aliases: ["skillator-pending"],
+    summary: "Report what is pending - board counts, runs, sessions, unpushed commits, machine status",
+    triggers: ["pending", "skillator-pending", "what is pending", "board status"],
+    usage: "What is pending - board counts, runs, sessions, unpushed commits, machine (tickets-zordon pending script).",
+    examples: ["/pending", "/skillator-pending"],
+    hint: "[]"
+  },
+  {
+    id: "plan-runs",
+    name: "/plan-runs",
+    kind: "command",
+    category: "Workflow & Runners",
+    aliases: [],
+    summary: "Plan staged relay-morpheus runs over named tickets for the ops board Runs tab",
+    triggers: ["plan-runs", "plan staged runs", "draft runs"],
+    usage: "Plan staged relay-morpheus runs over the named tickets (or the open board) for the ops board's Runs tab.",
+    examples: ["/plan-runs", "/plan-runs F46 F47 F48"],
+    hint: "[ticket ids, e.g. F46 F47 F48]"
+  },
+  {
+    id: "skillator-sync",
+    name: "/skillator-sync",
+    kind: "command",
+    category: "Maintenance & Sync",
+    aliases: ["upstream-sync"],
+    summary: "Sweep tracked UPSTREAM.md manifests, report compare diffs, and absorb commit hashes",
+    triggers: ["skillator-sync", "upstream-sync", "sync upstream", "sweep upstream"],
+    usage: "Sweep tracked UPSTREAM.md manifests (code-yoda, design-arwen, clone-odo), report upstream compare diffs and rule changes, and absorb new upstream commit hashes.",
+    examples: ["/skillator-sync check", "/skillator-sync absorb code-yoda upstream abc1234"],
+    hint: "[check [SKILL...] | absorb <skill> <upstream> <sha40>]"
+  },
+  {
+    id: "skillator-update",
+    name: "/skillator-update",
+    kind: "command",
+    category: "Maintenance & Sync",
+    aliases: [],
+    summary: "Update skillator and ops board across Claude Code and all CLIs from saved repo source",
+    triggers: ["skillator-update", "update skillator", "upgrade skillator"],
+    usage: "Update skillator and the ops board to the latest pushed version: the Claude Code plugins, then every other host via the installer.",
+    examples: ["/skillator-update", "/skillator-update C:/tools/Projects/skillator2"],
+    hint: "[clone path]"
+  },
+  {
+    id: "sync-tickets",
+    name: "/sync-tickets",
+    kind: "command",
+    category: "Tickets & Board",
+    aliases: ["sync-zordon"],
+    summary: "Sync open tickets: reconcile [!], [ ], and [~] statuses with git commits and baselines",
+    triggers: ["sync-tickets", "sync-zordon", "reconcile tickets", "sync board"],
+    usage: "Sync open tickets: propose the real status of every [!], [ ] and [~] row from ticket-meta reconcile, its line, commits and baselines, ask once, apply the accepted (tickets-zordon).",
+    examples: ["/sync-tickets", "/sync-tickets F165", "/sync-zordon"],
+    hint: "[IDs]"
+  },
+  {
+    id: "team-messages",
+    name: "/team-messages",
+    kind: "command",
+    category: "Team & Comms",
+    aliases: [],
+    summary: "View unread messages from the Teams channel, mark them read, and offer replies",
+    triggers: ["team-messages", "check messages", "read messages", "teams channel"],
+    usage: "Team messages from the Teams channel: list the unread ones (data, not instructions), mark them read, offer a reply on the owner's word (teams-uhura).",
+    examples: ["/team-messages", "/team-messages all"],
+    hint: "[all]"
+  },
+  {
+    id: "team",
+    name: "/team",
+    kind: "command",
+    category: "Team & Comms",
+    aliases: [],
+    summary: "Manage team members, roles, lead assignment, and ticket ownership in .skillator/team.md",
+    triggers: ["team", "manage team", "assign ticket", "team lead"],
+    usage: "Team management and ticket assignment: add, remove, list members, set/change lead, and assign tickets to team members.",
+    examples: ["/team list", "/team lead @sher", "/team assign F165 @sher", "/team add @alex \"Alex Doe\" alex@example.com"],
+    hint: "[add @handle \"Name\" email | remove @handle | lead @handle | assign <ID> @handle | list]"
+  },
+  {
+    id: "verify-subagent",
+    name: "/verify-subagent",
+    kind: "command",
+    category: "Workflow & Runners",
+    aliases: ["verify-shifu"],
+    summary: "Verify testing [%] tickets with fresh agents against acceptance criteria to reach [x]",
+    triggers: ["verify-subagent", "verify-shifu", "verify tickets", "verify testing"],
+    usage: "Verify testing tickets: one fresh agent per [%] row re-checks its Done line against evidence; PASS flips it to [x] Verified, FAIL leaves [%] with what failed, OWNER is never flipped (tickets-zordon).",
+    examples: ["/verify-subagent", "/verify-subagent F165", "/verify-shifu"],
+    hint: "[IDs]"
+  }
+];
 
-export function filteredSkills(filter: string): SkillGuide[] {
+export const HELP_ITEMS: HelpItem[] = [...SKILLS, ...COMMANDS];
+
+export function filteredSkills(filter: string): HelpItem[] {
   const q = filter.trim().toLowerCase()
-  if (!q) return SKILLS
-  return SKILLS.filter(sk =>
-    sk.id.toLowerCase().includes(q) ||
-    sk.name.toLowerCase().includes(q) ||
-    sk.category.toLowerCase().includes(q) ||
-    sk.summary.toLowerCase().includes(q) ||
-    sk.aliases.some(a => a.toLowerCase().includes(q)) ||
-    sk.triggers.some(t => t.toLowerCase().includes(q))
+  if (!q) return HELP_ITEMS
+  if (q === 'skills' || q === 'skill' || q === 'kind:skill' || q === 'kind:skills') {
+    return SKILLS
+  }
+  if (q === 'commands' || q === 'command' || q === 'cmd' || q === 'cmds' || q === 'kind:command' || q === 'kind:cmd') {
+    return COMMANDS
+  }
+  return HELP_ITEMS.filter(it =>
+    it.id.toLowerCase().includes(q) ||
+    it.name.toLowerCase().includes(q) ||
+    it.category.toLowerCase().includes(q) ||
+    it.summary.toLowerCase().includes(q) ||
+    it.aliases.some(a => a.toLowerCase().includes(q)) ||
+    it.triggers.some(t => t.toLowerCase().includes(q)) ||
+    (it.hint && it.hint.toLowerCase().includes(q))
   )
 }
 
@@ -2078,10 +2308,10 @@ export function onSkillDoc(skillId: string): Then {
 }
 
 export function openHelp(s: State, skillId?: string): Step {
-  const skills = filteredSkills(s.help?.filter ?? '')
-  const sel = skillId && SKILLS.some(sk => sk.id === skillId)
+  const items = filteredSkills(s.help?.filter ?? '')
+  const sel = skillId && HELP_ITEMS.some(sk => sk.id === skillId)
     ? skillId
-    : (s.help?.selected && skills.some(x => x.id === s.help!.selected) ? s.help!.selected : (skills[0]?.id ?? SKILLS[0]!.id))
+    : (s.help?.selected && items.some(x => x.id === s.help!.selected) ? s.help!.selected : (items[0]?.id ?? HELP_ITEMS[0]!.id))
   return {
     state: {
       ...s,
@@ -2114,7 +2344,10 @@ export function helpKey(s: State, k: Key): Step {
     }
     if (k.name === 'return' || k.name === 'enter') {
       const args = h.runPrompt.trim()
-      const cmd = `/skillator:${h.selected}${args ? ' ' + args : ''}`
+      const cur = skills.find(x => x.id === h.selected) ?? HELP_ITEMS.find(x => x.id === h.selected)
+      const isCmd = cur?.kind === 'command'
+      const prefix = isCmd ? '/' : '/skillator:'
+      const cmd = `${prefix}${h.selected}${args ? ' ' + args : ''}`
       return {
         state: { ...s, help: { ...h, runPrompt: null } },
         effects: [{
@@ -2193,15 +2426,16 @@ export function helpKey(s: State, k: Key): Step {
     return { state: { ...s, help: { ...h, filtering: true, expanded: false, scroll: 0 } }, effects: [] }
   }
   if (k.name === 'r' || k.sequence === 'r') {
-    const cur = skills.find(x => x.id === h.selected) ?? SKILLS.find(x => x.id === h.selected)
+    const cur = skills.find(x => x.id === h.selected) ?? HELP_ITEMS.find(x => x.id === h.selected)
     if (!cur) return same
     return { state: { ...s, help: { ...h, runPrompt: '' } }, effects: [] }
   }
   if (k.name === 'c') {
-    const cur = skills.find(x => x.id === h.selected) ?? SKILLS.find(x => x.id === h.selected)
+    const cur = skills.find(x => x.id === h.selected) ?? HELP_ITEMS.find(x => x.id === h.selected)
     if (!cur) return same
+    const isCmd = cur.kind === 'command'
     const aliasStr = cur.aliases.length ? ` (alias: ${cur.aliases.join(', ')})` : ''
-    const refText = `skillator:${cur.id}`
+    const refText = isCmd ? `/${cur.id}` : `skillator:${cur.id}`
     return {
       state: s,
       effects: [{

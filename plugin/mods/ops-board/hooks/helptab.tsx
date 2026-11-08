@@ -1,14 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, RenderInput, TextProps } from 'claude-code'
-import { SKILLS, filteredSkills } from '../ops/state'
+import { HELP_ITEMS, filteredSkills } from '../ops/state'
 import { copyHost, readSkillDocHost } from './lib/host'
 import { cutTo, UNI } from './lib/ticketsmodel'
 
-// F160 / A198: the Help tab in the Claude Code native pane - skill catalog, filter,
-// synopsis, bounded SKILL.md viewer, clipboard copy, and direct session invocation.
+// F160 / A198 / F165: the Help tab in the Claude Code native pane - skill and command catalog,
+// filter, synopsis, bounded doc viewer, clipboard copy, and direct session invocation.
 
 const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
-const helpSelA = atom({ plugin: 'ops-board', key: 'helpSel' } as const, SKILLS[0]!.id)
+const helpSelA = atom({ plugin: 'ops-board', key: 'helpSel' } as const, HELP_ITEMS[0]!.id)
 const helpFilterA = atom({ plugin: 'ops-board', key: 'helpFilter' } as const, '')
 const helpArgsA = atom({ plugin: 'ops-board', key: 'helpArgs' } as const, '')
 const helpExpandedA = atom({ plugin: 'ops-board', key: 'helpExpanded' } as const, false)
@@ -39,7 +39,7 @@ export async function loadSkillDoc($: EngineInterface, skillId: string): Promise
 
 export async function enterHelp($: EngineInterface): Promise<void> {
   await update($, actionFocusA, () => null)
-  const sel = (await read($, helpSelA)) || SKILLS[0]!.id
+  const sel = (await read($, helpSelA)) || HELP_ITEMS[0]!.id
   await loadSkillDoc($, sel)
 }
 
@@ -73,9 +73,11 @@ export async function arrowHelp($: EngineInterface, by: number): Promise<boolean
 
 async function runSkill($: EngineInterface, skillId: string, rawArgs?: string): Promise<void> {
   const curArgs = (rawArgs ?? (await read($, helpArgsA))).trim()
-  const cmd = `/skillator:${skillId}${curArgs ? ' ' + curArgs : ''}`
+  const it = HELP_ITEMS.find(x => x.id === skillId)
+  const isCmd = it?.kind === 'command'
+  const cmd = isCmd ? `/${skillId}${curArgs ? ' ' + curArgs : ''}` : `/skillator:${skillId}${curArgs ? ' ' + curArgs : ''}`
   try {
-    await $.command.run({ command: `skillator:${skillId}`, ...(curArgs ? { args: curArgs } : {}) })
+    await $.command.run({ command: isCmd ? skillId : `skillator:${skillId}`, ...(curArgs ? { args: curArgs } : {}) })
     $.ui.toast(`✓ Sent to session: ${cmd}`)
   } catch {
     try {
@@ -97,13 +99,14 @@ export async function HelpTab($: EngineInterface, e: RenderInput<'Pane'>, els: E
   const focus = await read($, actionFocusA)
   const armed = focus !== 'help:filter' && focus !== 'help:args'
   const filter = await read($, helpFilterA)
-  const skills = filteredSkills(filter)
+  const items = filteredSkills(filter)
   const rawSel = await read($, helpSelA)
-  const sel = skills.some(x => x.id === rawSel) ? rawSel : (skills[0]?.id ?? SKILLS[0]!.id)
+  const sel = items.some(x => x.id === rawSel) ? rawSel : (items[0]?.id ?? HELP_ITEMS[0]!.id)
   const expanded = await read($, helpExpandedA)
   const args = await read($, helpArgsA)
   const doc = await read($, helpDocA)
-  const sk = skills.find(x => x.id === sel) ?? SKILLS.find(x => x.id === sel) ?? SKILLS[0]!
+  const it = items.find(x => x.id === sel) ?? HELP_ITEMS.find(x => x.id === sel) ?? HELP_ITEMS[0]!
+  const isCmd = it.kind === 'command'
 
   const setFilter = (v: string) => {
     void (async () => {
@@ -122,12 +125,12 @@ export async function HelpTab($: EngineInterface, e: RenderInput<'Pane'>, els: E
 
   out.push(
     <Box key="help:header" flexDirection="row" flexWrap="wrap" gap={2}>
-      <Text bold>{`Help & Skills Guide (${skills.length} skills)`}</Text>
+      <Text bold>{`Help Guide (${items.length} skills & commands)`}</Text>
       {Input && (
         <Input
           key="help:filter"
           label="Filter "
-          placeholder="Filter skills..."
+          placeholder="Filter skills & commands..."
           value={filter}
           onInput={(v: string) => { setFilter(v) }}
           onSubmit={(v: string) => { setFilter(v) }}
@@ -142,21 +145,21 @@ export async function HelpTab($: EngineInterface, e: RenderInput<'Pane'>, els: E
         key="help:run"
         plain
         hotkey={armed ? 'r' : undefined}
-        onPress={() => { void runSkill($, sk.id) }}
+        onPress={() => { void runSkill($, it.id) }}
       >
-        {`Run /skillator:${sk.id}`}
+        {isCmd ? `Run /${it.id}` : `Run /skillator:${it.id}`}
       </Button>
       {Input && (
         <Input
           key="help:args"
           label="Args "
-          placeholder="Optional args (e.g. F12)"
+          placeholder={it.hint || "Optional args (e.g. F12)"}
           value={args}
           onInput={(v: string) => { void update($, helpArgsA, () => v) }}
           onSubmit={(v: string) => {
             void (async () => {
               await update($, helpArgsA, () => v)
-              await runSkill($, sk.id, v)
+              await runSkill($, it.id, v)
             })()
           }}
         />
@@ -167,7 +170,7 @@ export async function HelpTab($: EngineInterface, e: RenderInput<'Pane'>, els: E
         hotkey={armed ? 'c' : undefined}
         onPress={() => {
           void (async () => {
-            const refText = `skillator:${sk.id}`
+            const refText = isCmd ? `/${it.id}` : `skillator:${it.id}`
             const r = await copyHost($, refText)
             if (r.code === 0) $.ui.toast(`✓ Copied reference: ${refText}`)
             else $.ui.toast(`✗ Copy failed: ${r.err || 'clipboard unavailable'} (reference: ${refText})`)
@@ -184,44 +187,48 @@ export async function HelpTab($: EngineInterface, e: RenderInput<'Pane'>, els: E
           void (async () => {
             const next = !(await read($, helpExpandedA))
             await update($, helpExpandedA, () => next)
-            if (next) await loadSkillDoc($, sk.id)
+            if (next) await loadSkillDoc($, it.id)
           })()
         }}
       >
-        {expanded ? 'Hide SKILL.md' : 'View SKILL.md'}
+        {expanded ? (isCmd ? 'Hide Command Doc' : 'Hide SKILL.md') : (isCmd ? 'View Command Doc' : 'View SKILL.md')}
       </Button>
     </Box>,
   )
 
   out.push(
     <Box key="help:synopsis" flexDirection="column">
-      <Text bold color="suggestion">{`${sk.id} [${sk.category}]${sk.aliases.length ? ` (aliases: ${sk.aliases.join(', ')})` : ''}`}</Text>
-      <Text>{cut(sk.summary, cols - 2)}</Text>
-      <Text dimColor>{`Triggers: ${sk.triggers.join(' · ')}`}</Text>
-      <Text dimColor>{`Examples: ${sk.examples.join('  ')}`}</Text>
+      <Text bold color="suggestion">{`${isCmd ? `[Cmd] /${it.id}` : `[Skill] ${it.id}`} [${it.category}]${it.aliases.length ? ` (aliases: ${it.aliases.join(', ')})` : ''}`}</Text>
+      <Text>{cut(it.summary, cols - 2)}</Text>
+      {it.hint && <Text color="permission">{`Argument hint: ${it.hint}`}</Text>}
+      <Text dimColor>{`Triggers: ${it.triggers.join(' · ')}`}</Text>
+      <Text dimColor>{`Examples: ${it.examples.join('  ')}`}</Text>
     </Box>,
   )
 
   if (expanded) {
-    const content = doc?.id === sk.id ? doc.content : null
-    const err = doc?.id === sk.id ? doc.error : null
+    const content = doc?.id === it.id ? doc.content : null
+    const err = doc?.id === it.id ? doc.error : null
+    const defaultDocPath = isCmd ? `plugin/commands/${it.id}.md` : `${it.id}/SKILL.md`
+    const docLabel = doc?.path ?? defaultDocPath
     out.push(
       <Box key="help:doc" flexDirection="column">
-        <Text bold dimColor>{`─── Installed SKILL.md (${doc?.path ?? `${sk.id}/SKILL.md`}) ───`}</Text>
+        <Text bold dimColor>{`─── ${isCmd ? 'Command Documentation' : 'Installed SKILL.md'} (${docLabel}) ───`}</Text>
         {err ? (
-          <Text color="warning">{`SKILL.md unavailable: ${err}`}</Text>
+          <Text color="warning">{`${isCmd ? 'Command documentation' : 'SKILL.md'} unavailable: ${err}`}</Text>
         ) : content ? (
           content.split('\n').slice(0, 80).map((line, i) => <Text key={`doc:${i}`}>{cut(line, cols - 2)}</Text>)
         ) : (
-          <Text dimColor>Loading SKILL.md...</Text>
+          <Text dimColor>{`Loading ${isCmd ? 'command documentation' : 'SKILL.md'}...`}</Text>
         )}
       </Box>,
     )
   } else {
     out.push(
       <Box key="help:list" flexDirection="column">
-        {skills.map(item => {
-          const isSel = item.id === sk.id
+        {items.map(item => {
+          const isSel = item.id === it.id
+          const tag = item.kind === 'command' ? '[Cmd]' : '[Skill]'
           return (
             <Button
               key={`help:skill:${item.id}`}
@@ -229,7 +236,7 @@ export async function HelpTab($: EngineInterface, e: RenderInput<'Pane'>, els: E
               hotkey={isSel && armed ? 'o' : undefined}
               onPress={() => {
                 void (async () => {
-                  if (item.id === sk.id) {
+                  if (item.id === it.id) {
                     const next = !(await read($, helpExpandedA))
                     await update($, helpExpandedA, () => next)
                     if (next) await loadSkillDoc($, item.id)
@@ -241,7 +248,7 @@ export async function HelpTab($: EngineInterface, e: RenderInput<'Pane'>, els: E
               }}
             >
               <Text inverse={isSel} bold={isSel}>
-                {cut(`${isSel ? '› ' : '  '}${item.id.padEnd(18)} [${item.category}] ${item.summary}`, cols - 2 - (isSel && armed ? 3 : 0))}
+                {cut(`${isSel ? '› ' : '  '}${tag.padEnd(8)}${item.id.padEnd(18)} [${item.category}] ${item.summary}`, cols - 2 - (isSel && armed ? 3 : 0))}
               </Text>
             </Button>
           )

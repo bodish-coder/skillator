@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ansi, frame, frameSegs, fit, cells, glyph, plain, paintScreen, screen } from '../draw'
-import { initial, onBoard, onInbox, onMachine, onRuns, onUsage, openHelp, openStartRun, reduce } from '../state'
+import { COMMANDS, filteredSkills, HELP_ITEMS, initial, onBoard, onInbox, onMachine, onRuns, onUsage, openHelp, openStartRun, reduce, SKILLS } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
@@ -908,5 +908,75 @@ test('F161: standalone ops board rich semantic colors across tab bar, buttons, t
   // Modal box: cyan border and bold cyan title
   const d = frame(reduce(s, { name: 'a' }).state, { color: true, ascii: false }).join('\n')
   assert.match(d, /\x1b\[36m  ┌─ \x1b\[0m\x1b\[36;1mAssign B2\x1b\[0m/)
+})
+
+test('F165: Help catalog renders skills and commands with brief explanations and expanded details across 40, 60, 80, 100, 120 cols', () => {
+  assert.ok(COMMANDS.length >= 18, `Expected at least 18 commands in COMMANDS catalog, got ${COMMANDS.length}`)
+  assert.ok(HELP_ITEMS.length >= 49, `Expected at least 49 items in HELP_ITEMS, got ${HELP_ITEMS.length}`)
+
+  // 1. Kind filtering
+  const onlyCmds = filteredSkills('cmd')
+  assert.equal(onlyCmds.length, COMMANDS.length)
+  assert.ok(onlyCmds.every(c => c.kind === 'command'))
+
+  const onlySkills = filteredSkills('skills')
+  assert.equal(onlySkills.length, SKILLS.length)
+  assert.ok(onlySkills.every(sk => sk.kind !== 'command'))
+
+  // 2. Open help with command selected
+  const cmdState = openHelp(s, 'archive-tickets').state
+  assert.equal(cmdState.help?.selected, 'archive-tickets')
+
+  // 3. Viewport width matrix: 40, 60, 80, 100, 120 cols
+  for (const cols of [40, 60, 80, 100, 120]) {
+    const f = sized({ ...cmdState, cols, rows: 24 })
+    assert.equal(f.length, 24)
+    for (const l of f) {
+      assert.ok(cells(l) <= cols, `Line exceeded ${cols} cells: ${l}`)
+    }
+    const full = f.join('\n')
+    // All viewports must include the selected command and an explanation
+    assert.match(full, /archive-tic/)
+    assert.match(full, /Archive clos/)
+    if (cols >= 80) {
+      assert.match(full, /\[Cmd\]/)
+      assert.match(full, /\[Tickets & Board\]/)
+    }
+  }
+
+  // 4. Command detail view (expanded)
+  const expState: State = {
+    ...cmdState,
+    help: {
+      ...cmdState.help!,
+      expanded: true,
+      docContent: 'Command markdown body for archive-tickets',
+    },
+  }
+  const fExp = sized({ ...expState, cols: 80, rows: 35 }).join('\n')
+  assert.match(fExp, /Command: \/archive-tickets/)
+  assert.match(fExp, /Arguments: \[--days N\]/)
+  assert.match(fExp, /Aliases: \/archive-zordon/)
+  assert.match(fExp, /Usage Guide:/)
+  assert.match(fExp, /Examples & Invocations:/)
+  assert.match(fExp, /─── Command Documentation/)
+  assert.match(fExp, /Command markdown body for archive-tickets/)
+
+  // 5. Command run prompt renders Run /<id>
+  const runPromptState: State = {
+    ...cmdState,
+    help: {
+      ...cmdState.help!,
+      runPrompt: '--days 30',
+    },
+  }
+  const fPrompt = sized({ ...runPromptState, cols: 80, rows: 24 }).join('\n')
+  assert.match(fPrompt, /┌─ Run \/archive-tickets/)
+  assert.match(fPrompt, /Args: --days 30_/)
+
+  // 6. Hitboxes on command rows
+  const sc = screen(cmdState, P)
+  const cmdHit = sc.hits.find(h => h.action.kind === 'help-skill' && h.action.id === 'archive-tickets')
+  assert.ok(cmdHit, 'Expected hitbox for archive-tickets command row')
 })
 

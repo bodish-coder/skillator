@@ -41,21 +41,51 @@ export async function readSkillDoc(host: Pick<Host, 'skillsDir' | 'repoRoot' | '
   if (!SKILL_ID_RE.test(skillId)) {
     return { code: 1, out: '', err: `Invalid skill ID: ${errorText(skillId)}`, argv: [] }
   }
-  if (!host.skillsDir) {
-    return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
+  let resolvedDoc: string | null = null
+  let displayPath = `${skillId}/SKILL.md`
+
+  if (host.skillsDir) {
+    const baseDir = norm(resolve(host.skillsDir))
+    const cand = norm(resolve(baseDir, skillId, 'SKILL.md'))
+    if (!cand.startsWith(baseDir + '/')) {
+      return { code: 1, out: '', err: 'Skill path escapes skillsDir boundary', argv: [] }
+    }
+    const st = await host.stat(cand)
+    if (st) {
+      resolvedDoc = cand
+      const relLabel = norm(relative(host.repoRoot, cand))
+      displayPath = relLabel && !relLabel.startsWith('..') ? relLabel : `${skillId}/SKILL.md`
+    }
   }
-  const baseDir = norm(resolve(host.skillsDir))
-  const resolvedDoc = norm(resolve(baseDir, skillId, 'SKILL.md'))
-  if (!resolvedDoc.startsWith(baseDir + '/')) {
-    return { code: 1, out: '', err: 'Skill path escapes skillsDir boundary', argv: [] }
+
+  if (!resolvedDoc && host.repoRoot) {
+    const repoBase = norm(resolve(host.repoRoot))
+    const candMd = norm(resolve(repoBase, 'plugin', 'commands', `${skillId}.md`))
+    if (candMd.startsWith(repoBase + '/')) {
+      const st = await host.stat(candMd)
+      if (st) {
+        resolvedDoc = candMd
+        displayPath = `plugin/commands/${skillId}.md`
+      }
+    }
+    if (!resolvedDoc) {
+      const candTxt = norm(resolve(repoBase, 'plugin', 'commands', `${skillId}.txt`))
+      if (candTxt.startsWith(repoBase + '/')) {
+        const st = await host.stat(candTxt)
+        if (st) {
+          resolvedDoc = candTxt
+          displayPath = `plugin/commands/${skillId}.txt`
+        }
+      }
+    }
   }
-  const relLabel = norm(relative(host.repoRoot, resolvedDoc))
-  const displayPath = relLabel && !relLabel.startsWith('..') ? relLabel : `${skillId}/SKILL.md`
-  const st = await host.stat(resolvedDoc)
-  if (!st) {
+
+  if (!resolvedDoc) {
+    if (!host.skillsDir) return { code: 127, out: '', err: NO_SCRIPTS, argv: [] }
     return { code: 1, out: '', err: `SKILL.md not found for ${skillId}`, argv: [displayPath] }
   }
-  if (st.size > MAX_SKILL_DOC_BYTES) {
+  const st = await host.stat(resolvedDoc)
+  if (st && st.size > MAX_SKILL_DOC_BYTES) {
     return { code: 1, out: '', err: `SKILL.md exceeds ${MAX_SKILL_DOC_BYTES} byte limit (${st.size} bytes)`, argv: [displayPath] }
   }
   try {

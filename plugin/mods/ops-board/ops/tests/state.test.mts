@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser, openHelp, filteredSkills, SKILLS, startRunCommand, openStartRun, startRunLines } from '../state'
+import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser, openHelp, filteredSkills, SKILLS, COMMANDS, HELP_ITEMS, startRunCommand, openStartRun, startRunLines } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
@@ -965,7 +965,7 @@ test('F127: fast keyboard filtering (/) searches skills, backspace edits, Enter 
   assert.equal(s.help!.filter, 'zordon')
   assert.equal(s.help!.selected, 'tickets-zordon')
   const filtered = filteredSkills(s.help!.filter)
-  assert.equal(filtered.length, 1)
+  assert.equal(filtered.length, 4)
   assert.equal(filtered[0]!.id, 'tickets-zordon')
 
   // Backspace removes character
@@ -1342,5 +1342,54 @@ test('A196 + A197: startRunCmd canonical parity, eligibleRunTickets, parseFollow
   const noPend = reduce(sDone, key('p'))
   assert.equal(noPend.effects.length, 0)
   assert.equal(noPend.state.toast, 'No pending stages left in RUN-0012 to push')
+})
+
+test('F165 state: Help catalog includes commands, supports command execution, copying, and filtering', () => {
+  // 1. Catalog inventory
+  assert.ok(COMMANDS.length >= 18)
+  assert.ok(HELP_ITEMS.length >= 49)
+
+  // 2. Open help with command selected
+  let s = openHelp(s0, 'list-tickets').state
+  assert.equal(s.help?.selected, 'list-tickets')
+
+  // 3. Copy command reference via 'c'
+  const copyStep = reduce(s, { name: 'c' })
+  const copyEff = copyStep.effects.find(e => e.kind === 'copy') as any
+  assert.ok(copyEff, 'Expected copy effect for command')
+  assert.equal(copyEff.text, '/list-tickets')
+  assert.match(copyEff.label, /\/list-tickets \(alias: list-ticket-zordon\)/)
+
+  // Settle copy effect
+  const sAfterCopy = settle(copyEff.then(ok(''))(copyStep.state)).state
+  assert.match(sAfterCopy.toast ?? '', /Copied reference: \/list-tickets/)
+
+  // 4. Run command with arguments via 'r'
+  s = reduce(s, { name: 'r' }).state
+  assert.equal(s.help?.runPrompt, '')
+
+  // Type arguments '@sher status'
+  for (const ch of '@sher status') {
+    s = reduce(s, { name: ch, sequence: ch }).state
+  }
+  assert.equal(s.help?.runPrompt, '@sher status')
+
+  // Press Enter to confirm run: must produce /list-tickets @sher status (NOT /skillator:...)
+  const runStep = reduce(s, { name: 'return' })
+  assert.equal(runStep.state.help?.runPrompt, null)
+  const runEff = runStep.effects.find(e => e.kind === 'copy') as any
+  assert.ok(runEff, 'Expected clipboard copy effect for running command')
+  assert.equal(runEff.text, '/list-tickets @sher status')
+
+  // Settle run effect
+  const sAfterRun = settle(runEff.then(ok(''))(runStep.state)).state
+  assert.match(sAfterRun.toast ?? '', /Ready to run: \/list-tickets @sher status/)
+
+  // 5. Expand command details and ensure skill-doc effect is emitted
+  const enterStep = reduce(openHelp(s0, 'list-tickets').state, { name: 'return' })
+  assert.equal(enterStep.state.help?.expanded, true)
+  const docEff = enterStep.effects.find(e => e.kind === 'skill-doc') as any
+  assert.ok(docEff, 'Expected skill-doc effect on expanding command')
+  assert.equal(docEff.skillId, 'list-tickets')
 })
 

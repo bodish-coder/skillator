@@ -367,5 +367,13 @@ test('A198: readSkillDoc loads bounded SKILL.md safely and rejects path traversa
   const rHuge = await readSkillDoc(host, 'huge-skill')
   assert.notEqual(rHuge.code, 0)
   assert.match(rHuge.err, /exceeds 262144 byte limit/)
+
+  // 4. Command docs load from plugin/commands/<id>.md when not in skillsDir
+  mkdirSync(join(dir, 'plugin/commands'), { recursive: true })
+  writeFileSync(join(dir, 'plugin/commands/archive-tickets.md'), '---\ndescription: Archive closed tickets\n---\nCommand body\n')
+  const rCmd = await readSkillDoc(host, 'archive-tickets')
+  assert.equal(rCmd.code, 0)
+  assert.match(rCmd.out, /Archive closed tickets/)
+  assert.match(rCmd.argv[0] ?? '', /plugin\/commands\/archive-tickets\.md/)
 })
 
