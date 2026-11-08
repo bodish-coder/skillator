@@ -235,6 +235,11 @@ function keysOf(s: State, m: Model): Seg[][] {
   }
   if (s.tab === 'health') return [[hot('r refresh', 'r')], [hot('R resume', 'R', true)], [hot('c resume CLI', 'c')], [hot('F force resume', 'F', true)], quit]
   if (s.tab === 'messages') return [move, h('enter open', 'return'), h('m mark all read', 'm'), h('s setup', 's'), quit]
+  if (s.tab === 'explorer' && s.explorer.action) {
+    const a = s.explorer.action
+    return a.conflictAi && a.result ? [h('m merge-smith', 'm'), h('a abort', 'a'), h('esc close', 'escape')]
+      : [...(a.args?.length ? [h('y run', 'y')] : [[dim('click a branch')]]), h('n/esc cancel', 'escape')]
+  }
   if (s.tab === 'explorer') return [move, h('enter open/close', 'return'), h('r reload', 'r'), quit]
   if (s.showTeam) return [h('n add', 'n'), h('del remove (asks first)', 'delete'), h('l make lead', 'l'), h('esc back', 'escape'), quit]
   const sel = m.rows.find(t => t.id === m.ticket)
@@ -247,7 +252,9 @@ function keysOf(s: State, m: Model): Seg[][] {
 
 export function keysLines(s: State, m: Model): Seg[][] {
   if (s.teamConfirm && !s.person && !s.dialog) {
-    return [[{ text: `remove ${s.teamConfirm} from .skillator/team.md? (y/n)`, color: 'warning', action: { kind: 'key', key: { name: 'y' } } }]]
+    // B25: the question is no button (a click on its "n" used to remove); y and n are their own
+    return [[{ text: `remove ${s.teamConfirm} from .skillator/team.md? (y/n)`, color: 'warning' }],
+      [hot('y remove', 'y'), dim(' · '), hot('n keep', 'n')]]
   }
   const ks = keysOf(s, m)
   if (!ks.length) return []
@@ -794,11 +801,19 @@ function setupBody(s: State): Seg[][] {
 // --- the frame ---
 
 // The toast (what the last action said) and the notes (stale locks, a hold not set).
+// B25: a note repeating the reason the toast already gives, or a line already drawn, is not drawn again.
 function tailLines(s: State): Seg[][] {
   const out: Seg[][] = []
+  const seen = new Set<string>()
   const lead = (t: string): Seg['color'] => (/^[✓]/.test(t) ? 'success' : /^[■✗]/.test(t) ? 'error' : /^▲/.test(t) ? 'warning' : undefined)
-  for (const block of [...(s.toast ? [s.toast] : []), ...s.notes]) {
-    block.split(/\r?\n/).forEach((l, i) => out.push([/^ran: /.test(l) ? dim(l) : { text: l, color: i === 0 ? lead(l) : undefined }]))
+  const reasonOf = (n: string) => (n.split(/\r?\n/)[0] ?? '').split(': ').slice(1).join(': ').replace(/ - ran: .*$/, '').trim()
+  const notes = s.notes.filter(n => { const r = reasonOf(n); return !(s.toast && r.length > 3 && s.toast.includes(r)) })
+  for (const block of [...(s.toast ? [s.toast] : []), ...notes]) {
+    block.split(/\r?\n/).forEach((l, i) => {
+      if (l.trim() && seen.has(l)) return
+      seen.add(l)
+      out.push([/^ran: /.test(l) ? dim(l) : { text: l, color: i === 0 ? lead(l) : undefined }])
+    })
   }
   return out
 }
@@ -872,6 +887,7 @@ export function helpBody(s: State, room: number): Seg[][] {
     contentRows.push({ segs: [{ text: pTop, color: 'suggestion', bold: true }] })
     contentRows.push({ segs: [{ text: pMid, bold: true }] })
     contentRows.push({ segs: [{ text: pBot, color: 'suggestion' }] })
+    contentRows.push({ segs: [dim('  '), hot('Enter confirm', 'return'), dim(' · '), hot('Esc cancel', 'escape')] })
   }
 
   if (h.expanded) {
@@ -903,8 +919,8 @@ export function helpBody(s: State, room: number): Seg[][] {
       : `Filter: all (${skills.length})`
     const hintText = h.filtering ? 'Enter apply · Esc cancel' : '/ filter · Enter doc'
     const filterSegs: Seg[] = spread(
-      [{ text: filterText, bold: true, color: h.filtering ? 'warning' : 'suggestion', action: { kind: 'help-skill', id: h.selected } }],
-      [dim(hintText)],
+      [{ text: filterText, bold: true, color: h.filtering ? 'warning' : 'suggestion', action: { kind: 'key', key: { name: h.filtering ? 'return' : '/' } } }],
+      [{ text: hintText, dim: true, action: { kind: 'key', key: { name: h.filtering ? 'return' : '/' } } }],
       inner
     )
     contentRows.push({ segs: filterSegs })
@@ -961,8 +977,10 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
-    : s.reconcile ? boxBody(s, { title: recTitle, rows: recRows.map((text, index) => ({ text, action: { kind: 'reconcile' as const, index } })) })   // F81
-    : s.engage ? boxBody(s, { title: engTitle, rows: engRows.map(text => ({ text })) })      // F85
+    : s.reconcile ? boxBody(s, { title: recTitle, rows: [...recRows.map((text, index) => ({ text, action: { kind: 'reconcile' as const, index } })), { text: '' },
+        { text: '', segs: [dim('  '), hot('Enter apply picked', 'return'), dim(' · '), hot('a accept all', 'a'), dim(' · '), hot('Esc none', 'escape')] }] })   // F81
+    : s.engage ? boxBody(s, { title: engTitle, rows: [...engRows.map(text => ({ text })), { text: '' },
+        { text: '', segs: [dim('  '), hot('Enter engage', 'return'), dim(' · '), hot('Esc cancel', 'escape')] }] })      // F85
     : s.startRun ? boxBody(s, {
         title: startTitle,
         rows: [
@@ -981,7 +999,11 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.tab === 'explorer' ? explorerBody(s, room)
     : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room, 'run')
     : ticketsBody(s, m, room)
-  const top = main.slice(0, room)
+  // B25: a modal box taller than the room keeps its last rows (the buttons, the bottom edge)
+  const boxed = !!(s.setup || s.person || s.dialog || s.reconcile || s.engage || s.startRun) && !(s.help || s.tab === 'help')
+  const top = boxed && main.length > room && room >= 4
+    ? [...main.slice(0, room - 2), ...main.slice(-2)]
+    : main.slice(0, room)
   while (top.length < room) top.push([])
   return [...top, ...block]
 }

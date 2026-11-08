@@ -200,10 +200,11 @@ export function spawnJob(argv: string[], cwd: string, onOut: (text: string) => v
   return {
     stop() {
       if (done || !child.pid) return
+      try { child.kill() } catch { /* gone */ }
       try {
-        if (win) execFile(systemRoot(process.env.SystemRoot ?? process.env.SYSTEMROOT) + '/System32/taskkill.exe', ['/T', '/F', '/PID', String(child.pid)], { windowsHide: true }, () => {})
+        if (win) execFile(systemRoot(process.env.SystemRoot ?? process.env.SYSTEMROOT) + '/System32/taskkill.exe', ['/T', '/F', '/PID', String(child.pid)], { windowsHide: true, timeout: 500 }, () => {})
         else process.kill(-child.pid, 'SIGTERM')
-      } catch { try { child.kill() } catch { /* gone */ } }
+      } catch { /* ignore */ }
     },
   }
 }

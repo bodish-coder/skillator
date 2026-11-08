@@ -344,7 +344,7 @@ export async function ActionConfirm($: EngineInterface, els: Els, a: Action): Pr
     ] : []),
     ...(a.aiReview ? [
       <Box key="xa:review_source"><Text dimColor>{`Review (${clean(a.aiReview.source)} · ${a.aiReview.status}):`}</Text></Box>,
-      ...(a.aiReview.findings ?? []).slice(0, 4).map((f, i) => <Box key={'xa:finding:' + i}><Text dimColor>{'  • ' + clean(f)}</Text></Box>),
+      ...(a.aiReview.findings ?? []).filter(f => !a.warn.includes(f)).slice(0, 4).map((f, i) => <Box key={'xa:finding:' + i}><Text dimColor>{'  • ' + clean(f)}</Text></Box>),
     ] : []),
     ...(a.conflictAi && !a.args.length ? [<Box key="xa:ai_note"><Text dimColor>{'/skillator:merge-smith conflict handoff available if conflicts occur.'}</Text></Box>] : []),
     ...(a.result ? [<Box key="xa:result"><Text color="error" wrap="wrap">{clean(a.result)}</Text></Box>] : []),

@@ -1278,6 +1278,22 @@ test('F160/A198: Help is a first-class tab (7 Help), loads skill-doc, copies via
 
   const runDone = settle(runCopy.then(ok(''))(execStep.state))
   assert.match(runDone.state.toast ?? '', /✓ Ready to run: \/skillator:a11y-toph F1/)
+
+  // 5. When tab === 'help' and help === null (e.g. initial --tab help before start poll), keys still route through helpKey
+  const uninitHelp: State = { ...s0, tab: 'help', help: null }
+  const stepDown = reduce(uninitHelp, { name: 'down' })
+  assert.ok(stepDown.state.help)
+  assert.equal(stepDown.state.help?.selected, SKILLS[1]!.id)
+
+  // 6. Pressing / while expanded exits expanded doc view into filter list mode; scroll in expanded view clamps at maxScroll
+  const expState: State = { ...loaded.state, help: { ...loaded.state.help!, expanded: true, scroll: 0 } }
+  const endStep = reduce(expState, { name: 'end' })
+  const maxScroll = endStep.state.help!.scroll
+  const pastEnd = reduce(endStep.state, { name: 'pagedown' })
+  assert.equal(pastEnd.state.help?.scroll, maxScroll)
+  const slashFromExp = reduce(expState, { name: '/' })
+  assert.equal(slashFromExp.state.help?.filtering, true)
+  assert.equal(slashFromExp.state.help?.expanded, false)
 })
 
 import { eligibleRunTickets, parseFollowupOut, startRunCmd } from '../../hooks/lib/runlines'

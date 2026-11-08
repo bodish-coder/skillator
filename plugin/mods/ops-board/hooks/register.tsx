@@ -23,7 +23,7 @@ import { closeSetup, enterMessages, isSetupUp, pollInbox, unreadOf } from './mes
 import { pendingHandoffOf } from './lib/inbox'
 import { closeRunForm, dropRunForm, enterRun, isRunFormUp } from './runtab'
 import { arrowExplorer, cancelAction, dropAction, enterExplorer, focusExplorer, isActionUp, isExplorerItem } from './explorertab'
-import { enterHelp } from './helptab'
+import { arrowHelp, enterHelp, focusHelp, isHelpItem } from './helptab'
 
 // Wiring only (design §4): /ops, the 2 s TICKETS.md poll, team and me, the pane
 // and its keys; the 60 s machine / relay / usage poll, the band, the watchdog hold on
@@ -666,6 +666,10 @@ export const register: Register = on => {
       const o = await arrowExplorer($, e.by, lastScroll.offset, e.bodyRows, lastCols)
       return o === undefined ? next(e) : o === null || e.contentRows <= e.bodyRows ? {} : next({ ...e, offset: o })
     }
+    if ((await read($, tabA)) === 'help') {
+      const handled = await arrowHelp($, e.by)
+      if (handled) return lastScroll.offset ? next({ ...e, offset: 0 }) : {}
+    }
     return next(e)   // other tabs and forms keep the host's scrolling
   }).catch(($, e, next) => next(e))   // failing, the arrow scrolls as the engine would
 
@@ -757,6 +761,7 @@ export const register: Register = on => {
       await update($, teamViewA, x => (x ? { ...x, selected: h, confirm: false } : x))
     }
     else if (el && isExplorerItem(el)) await focusExplorer($, el)          // F75
+    else if (el && isHelpItem(el)) await focusHelp($, el)
     return next(e)
   }).catch(($, e, next) => next(e))
 }

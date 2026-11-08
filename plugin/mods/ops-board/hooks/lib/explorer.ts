@@ -1030,9 +1030,10 @@ export function explorerLines(x: Explorer, cols: number): ExLine[] {
     }
   }
 
+  const stripLead = (t: string) => t.replace(/^[■✗✓▲]\s*/, '')
   if (x.error) out.push({ key: 'xerr', item: null, segs: [{ text: cut(x.error, cols - 1), color: 'error' }] })
-  if (x.actionNotice && x.actionNotice !== x.error) {
-    out.push({ key: 'xnotice', item: null, segs: [{ text: cut(x.actionNotice, cols - 1), color: x.actionNotice.startsWith('✓') ? 'success' : 'warning' }] })
+  if (x.actionNotice && (!x.error || !stripLead(x.error).includes(stripLead(x.actionNotice)))) {
+    out.push({ key: 'xnotice', item: null, segs: [{ text: cut(x.actionNotice, cols - 1), color: x.actionNotice.startsWith('✓') ? 'success' : x.actionNotice.startsWith('■') ? 'error' : 'warning' }] })
   }
   if (hasChanges(x)) {
     const stagedCount = x.worktree!.filter(f => f.staged !== null).length

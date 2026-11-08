@@ -9,8 +9,10 @@
 // under plain node.
 import type { Key, State } from '../ops/state'
 import type { Engine } from '../ops/engine'
-import { initial } from '../ops/state'
-import { frame } from '../ops/draw'
+import { initial, openHelp } from '../ops/state'
+import { frame, screen } from '../ops/draw'
+import type { Hit } from '../ops/draw'
+import { mouseTarget } from '../ops/mouse'
 import { makeEngine } from '../ops/engine'
 import { makeHost } from '../ops/nodehost'
 import { parseArgs, repoName, USAGE } from '../ops/app'
@@ -119,6 +121,13 @@ addEventListener('keydown', e => {
   e.preventDefault()
   vs.postMessage({ type: 'key', key: e.key, shift: e.shiftKey, ctrl: e.ctrlKey })
 })
+addEventListener('click', e => {
+  const r = m.getBoundingClientRect(), cw = r.width / 10 || 8, ch = (r.height - 16) || 16
+  const fr = f.getBoundingClientRect()
+  const col = Math.floor((e.clientX - fr.left - 8) / cw) + 1
+  const row = Math.floor((e.clientY - fr.top - 8) / ch) + 1
+  if (col >= 1 && row >= 1) vs.postMessage({ type: 'click', col, row })
+})
 size()
 </script></body></html>`
 }
@@ -139,7 +148,10 @@ export function registerOps(api: VsApi, context: VsContext, deps: Deps): void {
     if (opts.error) return { error: `${opts.error}\n${USAGE.replace(/^usage: ops \[repo-dir\] /, 'usage: skillator.ops ')}` } as const
     const host = await makeHost({ appDir: deps.appDir, cwd: cwd(), ...(opts.skills ? { skills: opts.skills } : {}) })
     const email = await host.gitEmail()
-    const first = (cols: number, rows: number): State => ({ ...initial(cols, rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot) })
+    const first = (cols: number, rows: number): State => {
+      const base: State = { ...initial(cols, rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot) }
+      return opts.tab === 'help' ? openHelp(base).state : base
+    }
     return { opts, host, email, first } as const
   }
   let output: VsOutput | null = null
@@ -170,9 +182,12 @@ export function registerOps(api: VsApi, context: VsContext, deps: Deps): void {
     const panel = api.window.createWebviewPanel('skillator.ops', 'ops', api.ViewColumn.Active, { enableScripts: true })
     const paint = { color: s.opts.color, ascii: s.opts.ascii }
     let last = ''
+    let hits: Hit[] = []
     const draw = () => {
       if (open?.panel !== panel) return
-      const html = htmlOf(frame({ ...engine.state, now: Date.now() }, paint))
+      const scr = screen({ ...engine.state, now: Date.now() }, paint)
+      hits = scr.hits
+      const html = htmlOf(scr.lines)
       if (html === last) return
       last = html
       void panel.webview.postMessage({ type: 'frame', html })
@@ -184,7 +199,7 @@ export function registerOps(api: VsApi, context: VsContext, deps: Deps): void {
     open = { panel, engine }
     const subs: Disposable[] = []
     subs.push(panel.webview.onDidReceiveMessage(m => {
-      const msg = m as { type?: string; cols?: number; rows?: number } & DomKey
+      const msg = m as { type?: string; cols?: number; rows?: number; col?: number; row?: number } & DomKey
       if (msg?.type === 'size' && Number.isInteger(msg.cols) && Number.isInteger(msg.rows)) {
         engine.resize(s.opts.cols ?? Math.max(1, msg.cols!), s.opts.rows ?? Math.max(1, msg.rows!))
         last = ''
@@ -192,6 +207,9 @@ export function registerOps(api: VsApi, context: VsContext, deps: Deps): void {
       } else if (msg?.type === 'key' && typeof msg.key === 'string') {
         const k = keyFromDom(msg)
         if (k) void engine.key(k)
+      } else if (msg?.type === 'click' && typeof msg.col === 'number' && typeof msg.row === 'number') {
+        const target = mouseTarget({ x: msg.col, y: msg.row, button: 0, release: false }, hits, engine.state.cols, engine.state.rows)
+        if (target) void engine.point(target)
       }
     }))
     subs.push(panel.onDidDispose(() => {

@@ -122,6 +122,15 @@ test('view: the frame at pi\'s width and the terminal\'s rows, each line within 
   view.handleInput('\x03')
   assert.equal(engine.state.person, null); assert.equal(engine.state.quit, false); assert.equal(engine.state.showTeam, true)
   assert.ok(renders > 0)
+  view.handleInput('\x1b')                             // close team view
+
+  // SGR mouse click on "2 Workflows" tab: col 16, row 1
+  view.handleInput('\x1b[<0;16;1M')
+  assert.equal(engine.state.tab, 'runs')
+  // SGR mouse release is ignored
+  view.handleInput('\x1b[<0;16;1m')
+  assert.equal(engine.state.tab, 'runs')
+
   view.dispose()
 })
 
@@ -169,7 +178,7 @@ test('/ops with a wrong flag says so with the usage, as an error', async () => {
   registerOps(f.pi, opts)
   await f.cmd.handler('--tab bogus', f.ctx(repo()))
   assert.equal(f.notes[0]!.type, 'error')
-  assert.match(f.notes[0]!.msg, /--tab is one of tickets, workflows, health, messages, explorer, build, got bogus/)
+  assert.match(f.notes[0]!.msg, /--tab is one of tickets, workflows, health, messages, explorer, build, help, got bogus/)
   assert.match(f.notes[0]!.msg, /^usage: \/ops /m)
 })
 

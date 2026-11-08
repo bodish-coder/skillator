@@ -8,9 +8,10 @@
 // tests drive this file under plain node.
 import type { Key, State } from '../ops/state'
 import type { Engine } from '../ops/engine'
-import type { Paint } from '../ops/draw'
-import { initial } from '../ops/state'
-import { frame } from '../ops/draw'
+import type { Hit, Paint } from '../ops/draw'
+import { initial, openHelp } from '../ops/state'
+import { frame, screen } from '../ops/draw'
+import { mouseTarget } from '../ops/mouse'
 import { makeEngine } from '../ops/engine'
 import { makeHost } from '../ops/nodehost'
 import { parseArgs, repoName, USAGE } from '../ops/app'
@@ -75,15 +76,25 @@ export class OpsView implements PiComponent {
   private paint: Paint
   private rows: () => number
   private deps: Pick<Deps, 'parseKey' | 'kitty' | 'fit'>
+  private hits: Hit[] = []
   constructor(engine: Engine, paint: Paint, rows: () => number, deps: Pick<Deps, 'parseKey' | 'kitty' | 'fit'>) {
     this.engine = engine; this.paint = paint; this.rows = rows; this.deps = deps
   }
   render(width: number): string[] {
     const cols = Math.max(1, width)
     this.engine.resize(cols, Math.max(1, this.rows()))
-    return frame({ ...this.engine.state, now: Date.now() }, this.paint).map(l => this.deps.fit(l, cols))
+    const scr = screen({ ...this.engine.state, now: Date.now() }, this.paint)
+    this.hits = scr.hits
+    return scr.lines.map(l => this.deps.fit(l, cols))
   }
   handleInput(data: string): void {
+    const m = /^\x1b\[<(\d{1,3});(\d{1,5});(\d{1,5})([Mm])$/.exec(data)
+    if (m) {
+      const event = { button: +m[1]!, x: +m[2]!, y: +m[3]!, release: m[4] === 'm' }
+      const action = mouseTarget(event, this.hits, this.engine.state.cols, this.engine.state.rows)
+      if (action) void this.engine.point(action)
+      return
+    }
     const k = keyFromPi(data, this.deps.parseKey(data), this.deps.kitty?.(data))
     if (k) void this.engine.key(k)
   }
@@ -101,7 +112,10 @@ export function registerOps(pi: PiApi, deps: Deps): void {
       if (opts.error) { ctx.ui.notify(`${opts.error}\n${USAGE.replace(/^usage: ops/, 'usage: /ops')}`, 'error'); return }
       const host = await makeHost({ appDir: deps.appDir, cwd: ctx.cwd, ...(opts.skills ? { skills: opts.skills } : {}) })
       const email = await host.gitEmail()
-      const first = (cols: number, rows: number): State => ({ ...initial(cols, rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot) })
+      const first = (cols: number, rows: number): State => {
+        const base: State = { ...initial(cols, rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot) }
+        return opts.tab === 'help' ? openHelp(base).state : base
+      }
 
       if (opts.once) {
         const engine = makeEngine({ host, email, once: true, state: first(opts.cols ?? 80, opts.rows ?? 24), onChange: () => {}, onQuit: () => {} })

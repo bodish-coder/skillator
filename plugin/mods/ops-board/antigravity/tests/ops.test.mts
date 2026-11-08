@@ -141,7 +141,7 @@ test('no workspace folder: the frame is of deps.cwd; a wrong flag is an error me
   registerOps(f.api, f.ctx, { appDir, env: {}, cwd: repo() })
   assert.match(await f.cmds.get(ONCE)!(noSkills()) as string, /▸ Pending \(1\)/)
   assert.equal(await f.cmds.get(ONCE)!(['--tab', 'nope']), null)
-  assert.match(f.errors[0]!, /--tab is one of tickets, workflows, health, messages, explorer, build, got nope/)
+  assert.match(f.errors[0]!, /--tab is one of tickets, workflows, health, messages, explorer, build, help, got nope/)
   assert.match(f.errors[0]!, /^usage: skillator\.ops /m)
   await f.cmds.get(OPEN)!(['--tab', 'bogus'])                  // F76: workflows is a tab word now
   assert.equal(f.created, 0)
@@ -192,6 +192,24 @@ test('the panel: frames at the size the page reports, keys reach the reducer, q 
   assert.equal(f.created, 2)
   f.ctx.subscriptions.at(-1)!.dispose()                // deactivation closes it
   assert.equal(f.disposed, 2)
+})
+
+test('the panel: mouse clicks dispatch hit targets and switch tabs or select items', async () => {
+  const f = fakeIde(repo())
+  registerOps(f.api, f.ctx, { appDir, env: {} })
+  await f.cmds.get(OPEN)!(noSkills())
+  await new Promise(r => setTimeout(r, 200))
+  f.send({ type: 'size', cols: 70, rows: 18 })
+  await new Promise(r => setTimeout(r, 50))
+  // Click on "2 Workflows" tab on row 1 (around col 16)
+  f.send({ type: 'click', col: 16, row: 1 })
+  await new Promise(r => setTimeout(r, 50))
+  assert.match(f.lastFrame().split('\n')[0]!, /2 Workflows/)
+  // Click on "3 Health" tab (around col 28)
+  f.send({ type: 'click', col: 28, row: 1 })
+  await new Promise(r => setTimeout(r, 50))
+  assert.match(f.lastFrame(), /Usage .*from watch-cortana/)
+  f.send({ type: 'key', key: 'q' })
 })
 
 test('pack: a VSIX the IDE reads - the manifest, and a shim requiring this dir\'s extension.cjs with the IDE\'s vscode', () => {

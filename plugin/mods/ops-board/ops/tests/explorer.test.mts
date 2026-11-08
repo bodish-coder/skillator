@@ -198,7 +198,7 @@ test('A164 shared branch query works before the first commit and identifies deta
   const { spawnSync } = await import('node:child_process')
   const { BRANCH_ARGS, EMPTY, planAction } = await import('../../hooks/lib/explorer')
   const repo = mkdtempSync(join(tmpdir(), 'ops-a164-'))
-  const run = (...args: string[]) => spawnSync('git', args, { cwd: repo, encoding: 'utf8' })
+  const run = (...args: string[]) => spawnSync('git', ['-c', 'safe.directory=*', ...args], { cwd: repo, encoding: 'utf8' })
   try {
     assert.equal(run('init', '-b', 'main').status, 0)
     const unborn = run(...BRANCH_ARGS)

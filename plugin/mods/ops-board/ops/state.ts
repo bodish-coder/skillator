@@ -22,7 +22,7 @@ import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenSho
 import type { SetupField, SetupValues } from '../hooks/lib/teamsconfig'
 import { enterRunEffect, RUN_INITIAL, runKey } from './runtab'
 import type { RunState } from './runtab'
-import { enterExplorer, EX0, explorerKey } from './explorer'
+import { enterExplorer, EX0, explorerKey, pickExplorerBranch } from './explorer'
 import type { ExState } from './explorer'
 
 // F79: run = the Run tab (runtab.ts); F75: explorer = the Explorer tab (explorer.ts); F160: help = the Help tab
@@ -84,6 +84,7 @@ export type PointerAction =
   | { kind: 'help-run'; id?: string }
   | { kind: 'help-copy'; id?: string }
   | { kind: 'start-run-field'; field: StartRunField }
+  | { kind: 'explorer-branch'; branch: string }       // B25: a branch in the Explorer confirm's picker
 
 export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.reconcile || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help?.runPrompt != null || s.help?.filtering)
 
@@ -94,13 +95,13 @@ export function point(s: State, a: PointerAction): Step {
   if (a.kind === 'help') return s.help ? { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] } : openHelp(s)
   if (a.kind === 'help-close') return { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] }
   if (a.kind === 'help-run') {
-    const targetId = a.id ?? s.help?.selected
+    const targetId = a.id ?? s.help?.selected ?? SKILLS[0]!.id
     if (!targetId) return same
     if (!s.help) {
       const opened = openHelp(s, targetId)
       return { state: { ...opened.state, help: { ...opened.state.help!, runPrompt: '' } }, effects: opened.effects }
     }
-    return { state: { ...s, help: { ...s.help, selected: targetId, runPrompt: '' } }, effects: [] }
+    return { state: { ...s, help: { ...s.help, selected: targetId, filtering: false, runPrompt: '' } }, effects: [] }
   }
   if (a.kind === 'help-copy') {
     const targetId = a.id ?? s.help?.selected ?? SKILLS[0]!.id
@@ -110,14 +111,23 @@ export function point(s: State, a: PointerAction): Step {
   if (a.kind === 'help-skill') {
     if (!s.help) return openHelp(s, a.id)
     if (s.help.selected === a.id) {
-      return { state: { ...s, help: { ...s.help, expanded: !s.help.expanded, scroll: 0 } }, effects: [] }
+      return { state: { ...s, help: { ...s.help, filtering: false, expanded: !s.help.expanded, scroll: 0 } }, effects: [] }
     }
     return {
-      state: { ...s, help: { ...s.help, selected: a.id, expanded: false, scroll: 0, docContent: null, docError: null, docPath: null } },
+      state: { ...s, help: { ...s.help, selected: a.id, filtering: false, expanded: false, scroll: 0, docContent: null, docError: null, docPath: null } },
       effects: [{ kind: 'skill-doc', skillId: a.id, then: onSkillDoc(a.id) }],
     }
   }
-  if (a.kind === 'start-run-field') return s.startRun ? { state: { ...s, startRun: { ...s.startRun, field: a.field } }, effects: [] } : same
+  if (a.kind === 'start-run-field') {
+    if (!s.startRun) return same
+    // B25: a second click on the focused Runner or Mode changes it, as Space does
+    if (s.startRun.field === a.field && a.field !== 'tickets') return reduce(s, { name: 'space' })
+    return { state: { ...s, startRun: { ...s.startRun, field: a.field } }, effects: [] }
+  }
+  if (a.kind === 'explorer-branch') {
+    const act = s.explorer.action
+    return act?.pick?.includes(a.branch) ? { state: pickExplorerBranch(s, a.branch), effects: [] } : same
+  }
   if (a.kind === 'person-field') return s.person ? { state: { ...s, personField: a.field }, effects: [] } : same
   if (a.kind === 'setup-field') {
     if (!s.setup || s.setup.confirmClear || s.setup.confirmLogin || s.setup.confirmCheck || s.setup.confirmWalk) return same
@@ -861,8 +871,8 @@ export function engageLines(s: State): string[] {
 function engageKey(s: State, k: Key): Step {
   const g = s.engage!
   const s0 = { ...s, engage: null }
-  if (k.name === 'escape') return { state: s0, effects: [] }
-  if (k.name !== 'return' && k.name !== 'enter') return { state: s, effects: [] }
+  if (k.name === 'escape' || k.name === 'n') return { state: s0, effects: [] }
+  if (k.name !== 'return' && k.name !== 'enter' && k.name !== 'y') return { state: s, effects: [] }
   if (!g.queue) return { state: toast(s0, `Paste into your CLI:\n${g.text}`), effects: [] }
   const id = g.id
   const then: Then = r => x => {
@@ -2171,6 +2181,7 @@ export function helpKey(s: State, k: Key): Step {
   if (k.name === '4') return toTab(s, 'messages')
   if (k.name === '5') return toTab(s, 'explorer')
   if (k.name === '6') return toTab(s, 'run')
+  if (k.name === '7') return same
   if (k.name === 'tab') {
     const at = TABS.indexOf(s.tab)
     return toTab(s, TABS[(at + (k.shift ? TABS.length - 1 : 1)) % TABS.length]!)
@@ -2179,7 +2190,7 @@ export function helpKey(s: State, k: Key): Step {
     return { state: { ...s, quit: true }, effects: [{ kind: 'quit' }] }
   }
   if (k.name === '/') {
-    return { state: { ...s, help: { ...h, filtering: true } }, effects: [] }
+    return { state: { ...s, help: { ...h, filtering: true, expanded: false, scroll: 0 } }, effects: [] }
   }
   if (k.name === 'r' || k.sequence === 'r') {
     const cur = skills.find(x => x.id === h.selected) ?? SKILLS.find(x => x.id === h.selected)
@@ -2205,17 +2216,21 @@ export function helpKey(s: State, k: Key): Step {
   }
 
   if (h.expanded) {
+    const docLines = (h.docContent ? Math.min(h.docContent.split(/\r?\n/).length, 120) : 10) + 18
+    const maxScroll = Math.max(0, docLines - Math.max(4, s.rows - 8))
     switch (k.name) {
       case 'up': case 'k':
         return { state: { ...s, help: { ...h, scroll: Math.max(0, h.scroll - 1) } }, effects: [] }
       case 'down': case 'j':
-        return { state: { ...s, help: { ...h, scroll: h.scroll + 1 } }, effects: [] }
+        return { state: { ...s, help: { ...h, scroll: Math.min(maxScroll, h.scroll + 1) } }, effects: [] }
       case 'pageup':
         return { state: { ...s, help: { ...h, scroll: Math.max(0, h.scroll - 6) } }, effects: [] }
       case 'pagedown':
-        return { state: { ...s, help: { ...h, scroll: h.scroll + 6 } }, effects: [] }
+        return { state: { ...s, help: { ...h, scroll: Math.min(maxScroll, h.scroll + 6) } }, effects: [] }
       case 'home':
         return { state: { ...s, help: { ...h, scroll: 0 } }, effects: [] }
+      case 'end':
+        return { state: { ...s, help: { ...h, scroll: maxScroll } }, effects: [] }
       case 'return': case 'enter':
         return { state: { ...s, help: { ...h, expanded: false, scroll: 0 } }, effects: [] }
       default:
@@ -2279,6 +2294,11 @@ export function reduce(s: State, k: Key): Step {
     return s.person && (s.person.handle || s.person.name || s.person.emails) ? personKey(s, { name: 'escape' }) : quit
   }
   if (s.help) return helpKey(s, k)
+  if (s.tab === 'help') {
+    const opened = openHelp(s)
+    const next = helpKey(opened.state, k)
+    return { state: next.state, effects: [...opened.effects, ...next.effects] }
+  }
   if (s.setup) return setupKey(s, k)
   if (s.person) return personKey(s, k)
   if (s.dialog) return dialogKey(s, k)

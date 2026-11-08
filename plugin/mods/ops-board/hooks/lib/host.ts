@@ -118,7 +118,7 @@ async function configDir($: HostApi): Promise<string | null> {
 export async function skillatorRoot($: HostApi): Promise<string | null> {
   const env = await $.env.get('SKILLATOR_ROOT')
   const tries = env ? [norm(env) + '/skills', norm(env)] : []
-  tries.push(up($.plugin.root, 2) + '/skills')
+  tries.push(up($.plugin.root, 2) + '/skills', up($.plugin.root, 1) + '/skills', up($.plugin.root, 1))
   for (const t of tries) if (await has($, t)) return t
   const cfg = await configDir($)
   if (!cfg) return null

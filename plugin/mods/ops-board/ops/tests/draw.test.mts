@@ -868,10 +868,11 @@ test('F160/A198: 7 Help tab header, SKILL.md doc content, run prompt box, and wi
   const fAscii = screen({ ...withPrompt, cols: 80, rows: 24 }, { color: false, ascii: true, plain: true }).lines.join('\n')
   assert.match(fAscii, /\+- Run skillator:tickets-zordon/)
 
-  // Mouse hitboxes for help-run and help-copy
+  // Mouse hitboxes for help-run, help-copy, and filter bar
   const sc = screen(hState, P)
   assert.ok(sc.hits.some(h => h.action.kind === 'help-run'), 'Expected help-run hitbox')
   assert.ok(sc.hits.some(h => h.action.kind === 'help-copy'), 'Expected help-copy hitbox')
+  assert.ok(sc.hits.some(h => h.action.kind === 'key' && h.action.key.name === '/'), 'Expected / filter hitbox on Filter bar and footer')
 })
 
 test('F161: standalone ops board rich semantic colors across tab bar, buttons, ticket IDs, tags, count line, and modals', () => {

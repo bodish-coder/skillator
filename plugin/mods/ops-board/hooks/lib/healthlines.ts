@@ -136,15 +136,5 @@ export function healthLines(v: HealthView): Line[] {
   }
   lines.push({ key: '', segs: [] }, { key: 'h:machine', segs: [{ text: 'MACHINE', bold: true }] })
   lines.push(...machineLines(v.machine, v.now))
-  lines.push({ key: '', segs: [] }, { key: 'h:actions', segs: [{ text: 'ACTIONS', bold: true }] })
-  lines.push({
-    key: 'actions',
-    segs: [
-      { text: '[r refresh]  ', dim: true },
-      { text: '[u resume]  ', dim: true },
-      { text: '[c resume CLI]  ', dim: true },
-      { text: '[f force resume]', dim: true },
-    ],
-  })
   return lines
 }

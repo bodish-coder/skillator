@@ -401,17 +401,29 @@ export function explorerKey(s: State, k: Key): Step {
   }
 }
 
-function actionConfirmSegs(a: Action): Seg[][] {
+// B25: every bracketed control is a click target - the same key the keyboard presses.
+const btn = (text: string, name: string): Seg => ({ text, color: 'suggestion', action: { kind: 'key', key: { name } } })
+const sep: Seg = { text: ' · ', color: 'permission' }
+
+export function actionConfirmSegs(a: Action): Seg[][] {
   const rows: Seg[][] = []
   const statusTag = a.runState?.status === 'running' ? ' (running…)' : ''
   rows.push([
     { text: `git ${a.kind}?${statusTag}`, color: 'suggestion', bold: true },
-    { text: a.conflictAi && a.result ? '  [m /skillator:merge-smith] · [a abort] · [esc close]' : '  [y run] · [n/esc cancel]', color: 'permission' },
+    { text: '  ' },
+    ...(a.conflictAi && a.result
+      ? [btn('[m /skillator:merge-smith]', 'm'), sep, btn('[a abort]', 'a'), sep, btn('[esc close]', 'escape')]
+      : [...(a.args?.length ? [btn('[y run]', 'y'), sep] : []), btn('[n/esc cancel]', 'escape')]),
   ])
-  if (a.args.length) {
+  if (a.args?.length) {
     rows.push([{ text: '  runs    ', color: 'permission' }, { text: 'git ' + clean(a.args.join(' ')), color: 'suggestion' }])
   } else if (a.pick?.length) {
-    rows.push([{ text: '  pick    ', color: 'permission' }, { text: a.pick.map(clean).join(' · '), color: 'suggestion' }])
+    const pick: Seg[] = [{ text: '  pick    ', color: 'permission' }]
+    a.pick.forEach((b, i) => {
+      if (i) pick.push(sep)
+      pick.push({ text: clean(b), color: 'suggestion', action: { kind: 'explorer-branch', branch: b } })
+    })
+    rows.push(pick)
   }
   rows.push([{ text: '  on      ', color: 'permission' }, { text: clean(a.branch), color: 'warning', bold: true }])
   if (a.message) {
@@ -419,7 +431,8 @@ function actionConfirmSegs(a: Action): Seg[][] {
   }
   if (a.aiReview) {
     rows.push([{ text: `  review  ${clean(a.aiReview.source)} (${a.aiReview.status})`, color: 'suggestion' }])
-    for (const f of (a.aiReview.findings ?? []).slice(0, 2)) {
+    // a warning already listed below is not said twice
+    for (const f of (a.aiReview.findings ?? []).filter(f => !a.warn.includes(f)).slice(0, 2)) {
       rows.push([{ text: '    • ' + clean(f), color: 'warning' }])
     }
   }
@@ -433,11 +446,33 @@ function actionConfirmSegs(a: Action): Seg[][] {
   return rows
 }
 
+// B25: the git actions as buttons (the keys c p u m b f v), wrapped to the width.
+function actionBar(cols: number): Seg[][] {
+  const items: [string, string][] = [['c commit', 'c'], ['p pull', 'p'], ['u push', 'u'], ['m merge', 'm'], ['b switch', 'b'], ['f fetch', 'f'], ['v revert', 'v']]
+  const rows: Seg[][] = []
+  let row: Seg[] = [], w = 0
+  for (const [label, key] of items) {
+    const t = `[${label}]`
+    const add = (row.length ? 1 : 0) + t.length
+    if (row.length && w + add > cols - 1) { rows.push(row); row = []; w = 0 }
+    if (row.length) { row.push({ text: ' ' }); w += 1 }
+    row.push(btn(t, key)); w += t.length
+  }
+  if (row.length) rows.push(row)
+  return rows
+}
+
+const stripLead = (t: string) => t.replace(/^[■✗✓▲]\s*/, '').trim()
+
 // Control characters out (git's error text can hold them); the window keeps the selection
 // in view and says when lines are left below it.
 export function explorerBody(s: State, h: number): Seg[][] {
-  const x = s.explorer.x
-  const prefix = s.explorer.action ? actionConfirmSegs(s.explorer.action) : []
+  // B25: what the toast or the confirm's result already says is not drawn again in the tab
+  const said = [s.toast, s.explorer.action?.result].filter((t): t is string => !!t).map(stripLead)
+  const isShown = (t: string | null) => !!t && said.some(x => x.includes(stripLead(t)))
+  const x0 = s.explorer.x
+  const x = { ...x0, actionNotice: isShown(x0.actionNotice) ? null : x0.actionNotice, error: isShown(x0.error) ? null : x0.error }
+  const prefix = s.explorer.action ? actionConfirmSegs(s.explorer.action) : (h >= 6 ? [...actionBar(s.cols), []] : [])
   const remH = Math.max(0, h - prefix.length)
   const lines = explorerLines(x, s.cols).map(l => ({ ...l, segs: l.segs.map(g => ({ ...g, text: clean(g.text), ...(l.item ? { action: { kind: 'row' as const, area: 'explorer' as const, id: l.item } } : {}) })) }))
   if (lines.length <= remH) return [...prefix, ...lines.map(l => l.segs)]
