@@ -42,8 +42,6 @@ const reconcileA = atom({ plugin: 'ops-board', key: 'reconcile' } as const, null
 
 const HANDLE = /^@[a-z0-9_-]+$/
 
-// A state in words for the Change line: `?` reads "decision" there.
-const word = (b: State) => (b === '?' ? 'decision' : STATE_NAME[b])
 const cut = (s: string, room: number) => (s.length <= room ? s : s.slice(0, Math.max(1, room - 1)) + '…')
 const quote = (a: string) => (/[\s"]/.test(a) || a === '' ? '"' + a.replace(/"/g, '\\"') + '"' : a)
 const ran = (argv: string[]) => 'ran: ' + argv.map(quote).join(' ')
@@ -147,7 +145,7 @@ async function confirm($: EngineInterface) {
       ? { ...tk, box: '?', decide: h }
       : { ...tk, box: ' ', owner: h })
   const closed = t.box === 'x' || t.box === '-'
-  const state = d.kind === 'decide' ? 'pending decision' : 'pending'
+  const state = d.kind === 'decide' ? 'decide' : 'pending'
   const role = d.kind === 'decide' ? `for ${d.handle} to decide` : d.kind === 'tester' ? `tester ${d.handle}` : `owned by ${d.handle}`
   const head = d.kind === 'tester'
     ? `✓ ${t.id} tester assigned ${role}: ${t.title}`
@@ -330,8 +328,8 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
     : <Box key="title">{typed ? <Text color="error">no such ticket</Text> : <Text dimColor>type a ticket ID, e.g. F12</Text>}</Box>
   const warn = tk?.box === '~' && d.kind !== 'tester'
     ? (tk.session
-        ? `! ${tk.id} is in progress under ${tk.session} - this moves it to ${word(to)}; the tag stays - tell that session`
-        : `! ${tk.id} is in progress - this moves it to ${word(to)}; tell whoever is working it`)
+        ? `! ${tk.id} is in progress under ${tk.session} - this moves it to ${STATE_NAME[to]}; the tag stays - tell that session`
+        : `! ${tk.id} is in progress - this moves it to ${STATE_NAME[to]}; tell whoever is working it`)
     : null
   const isGood = !!d.result?.startsWith('✓')
   return (
@@ -353,14 +351,14 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
       {tk && (d.kind === 'tester'
         ? <Box key="change" flexDirection="row" flexWrap="wrap">
             <Text dimColor>Change  </Text>
-            <Text color={paint(from)}>{'● ' + word(from)}</Text>
+            <Text color={paint(from)}>{'● ' + STATE_NAME[from]}</Text>
             <Text>{`, tester ${d.handle ?? '(pick someone)'} (keeps state, owner & decide; open to any teammate)`}</Text>
           </Box>
         : <Box key="change" flexDirection="row" flexWrap="wrap">
             <Text dimColor>Change  </Text>
-            <Text color={paint(from)}>{'● ' + word(from)}</Text>
+            <Text color={paint(from)}>{'● ' + STATE_NAME[from]}</Text>
             <Text>{' -> '}</Text>
-            <Text color={paint(to)}>{'● ' + word(to)}</Text>
+            <Text color={paint(to)}>{'● ' + STATE_NAME[to]}</Text>
             <Text>{`  ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`}</Text>
           </Box>)}
       {warn && <Box key="warn"><Text color="warning" wrap="wrap">{warn}</Text></Box>}

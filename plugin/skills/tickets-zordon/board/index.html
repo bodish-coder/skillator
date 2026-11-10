@@ -427,7 +427,7 @@ body.dragging::after {
 <!--TICKETS:BEGIN-->
 # TICKETS
 
-Legend: `[ ]` pending · `[~]` in-progress · `[%]` testing · `[!]` blocked · `[?]` pending decision · `[>]` deferred · `[x]` done · `[-]` cancelled
+Legend: `[ ]` pending · `[~]` in-progress · `[%]` testing · `[!]` blocked · `[?]` decide · `[>]` deferred · `[x]` done · `[-]` cancelled
 IDs are permanent — never reuse or renumber. Append new tickets at the end of
 their section.
 
@@ -513,13 +513,13 @@ const STATES = [
   { k: "~", key: "inprogress",  label: "in-progress", bucket: "open"   },
   { k: "%", key: "testing",     label: "testing",     bucket: "open"   },
   { k: "!", key: "blocked",     label: "blocked",     bucket: "open"   },
-  { k: "?", key: "decision",    label: "pending decision", bucket: "open" },
+  { k: "?", key: "decision",    label: "decide",      bucket: "open" },
   { k: ">", key: "deferred",    label: "deferred",    bucket: "defer"  },
   { k: "x", key: "done",        label: "done",        bucket: "closed" },
   { k: "-", key: "cancelled",   label: "cancelled",   bucket: "closed" },
 ];
 const BY_K = Object.fromEntries(STATES.map(s => [s.k, s]));
-/* Sort order inside a group: in-progress, testing, blocked, pending decision,
+/* Sort order inside a group: in-progress, testing, blocked, decide,
    deferred, pending, then closed. */
 const SORT = { "~": 0, "%": 1, "!": 2, "?": 3, ">": 4, " ": 5, "x": 6, "-": 7 };
 const SERIES = [
@@ -602,7 +602,7 @@ function tally(ts) {
 /* Fixed shape, all eight states, zeros included. Whole board, never the filter. */
 function tallyLine(c) {
   return `${c.open} open (${c.pending} pending · ${c.inprogress} in-progress · ` +
-         `${c.testing} testing · ${c.blocked} blocked · ${c.decision} pending decision) · ${c.deferred} deferred · ` +
+         `${c.testing} testing · ${c.blocked} blocked · ${c.decision} decide) · ${c.deferred} deferred · ` +
          `${c.closed} closed (${c.done} done · ${c.cancelled} cancelled) · ${c.total} total`;
 }
 

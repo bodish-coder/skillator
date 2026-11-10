@@ -279,7 +279,6 @@ const ran = (argv: string[]) => 'ran: ' + argv.map(quote).join(' ')
 const notesOf = (out: string) => out.split(/\r?\n/).map(l => l.trimEnd()).filter(l => l && !/^\s*- \[/.test(l))
 const why = (r: RunResult, what: string) => r.err.trim() || r.out.trim() || `${what} exited ${r.code}`
 const timedOut = (r: RunResult) => r.code === -1 && /^timed out/.test(r.err)
-const word = (b: Box) => (b === '?' ? 'decision' : STATE_NAME[b])
 const ticketOf = (s: State, id: string): Ticket | null => s.board?.tickets.find(t => t.id === id) ?? null
 const toast = (s: State, text: string): State => ({ ...s, toast: text })
 const run = (call: Call, args: string[], then: Then, stdin?: string): Effect =>
@@ -329,15 +328,15 @@ export function dialogLines(s: State): string[] {
   out.push(`  ${onAdd ? '› ' : '  '}+ add person`)
   if (tk) {
     if (d.kind === 'tester') {
-      out.push(`  Change  [${from}] ${word(from)}, tester ${d.handle ?? '(pick someone)'}`)
+      out.push(`  Change  [${from}] ${STATE_NAME[from]}, tester ${d.handle ?? '(pick someone)'}`)
     } else {
-      out.push(`  Change  [${from}] ${word(from)} → [${to}] ${word(to)}, ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`)
+      out.push(`  Change  [${from}] ${STATE_NAME[from]} → [${to}] ${STATE_NAME[to]}, ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`)
     }
   }
   if (tk?.box === '~' && d.kind !== 'tester') {
     out.push(tk.session
-      ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${word(to)}; the tag stays - tell that session`
-      : `  ! ${tk.id} is in progress - this moves it to ${word(to)}; tell whoever is working it`)
+      ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${STATE_NAME[to]}; the tag stays - tell that session`
+      : `  ! ${tk.id} is in progress - this moves it to ${STATE_NAME[to]}; tell whoever is working it`)
   }
   const metaCmd = d.kind === 'decide' ? 'decide' : d.kind === 'tester' ? 'assign-tester' : 'assign'
   out.push(`  Runs    ticket-meta ${metaCmd} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`)
@@ -379,7 +378,7 @@ function confirmAssign(s: State): Step {
     }
     const t = ticketOf(x, id)
     const closed = !t || t.box === 'x' || t.box === '-'
-    const state = d.kind === 'decide' ? 'pending decision' : 'pending'
+    const state = d.kind === 'decide' ? 'decide' : 'pending'
     const role = d.kind === 'decide' ? `for ${handle} to decide` : d.kind === 'tester' ? `tester ${handle}` : `owned by ${handle}`
     const head = `✓ ${id} ${d.kind === 'tester' ? 'tester assigned ' : closed ? 'reopened as ' + state + ', ' : 'now ' + state + ', '}${role}${t ? ': ' + t.title : ''}`
     return { ...x, dialog: null, toast: [head, ...notesOf(r.out), ran(r.argv)].join('\n') }
@@ -1886,8 +1885,7 @@ export const SKILLS: SkillGuide[] = [
     "name": "skillator-sync",
     "category": "Upstream & Sync",
     "aliases": [
-      "sync",
-      "upstream-sync"
+      "sync"
     ],
     "summary": "Detects and absorbs upstream skill updates and UPSTREAM.md manifests",
     "triggers": [
@@ -2046,11 +2044,11 @@ export const COMMANDS: HelpItem[] = [
     name: "/archive-tickets",
     kind: "command",
     category: "Tickets & Board",
-    aliases: ["archive-zordon"],
+    aliases: [],
     summary: "Archive closed tickets: move [x]/[-] rows closed over 14 days to TICKETS-archive.md",
-    triggers: ["archive tickets", "archive-tickets", "archive-zordon", "clean closed tickets"],
+    triggers: ["archive tickets", "archive-tickets", "clean closed tickets"],
     usage: "Archive closed tickets: move [x]/[-] rows closed over 14 days (--days N) from TICKETS.md to TICKETS-archive.md (tickets-zordon).",
-    examples: ["/archive-tickets", "/archive-tickets --days 30", "/archive-zordon"],
+    examples: ["/archive-tickets", "/archive-tickets --days 30"],
     hint: "[--days N]"
   },
   {
@@ -2070,11 +2068,11 @@ export const COMMANDS: HelpItem[] = [
     name: "/engage",
     kind: "command",
     category: "Prompt & AI",
-    aliases: ["engage-picard"],
+    aliases: [],
     summary: "Improve a rough prompt with AI, then carry it out immediately",
-    triggers: ["engage", "engage-picard", "improve prompt", "picard"],
+    triggers: ["engage", "improve prompt", "picard"],
     usage: "Improve the prompt written before (or after) this command with AI, then carry it out.",
-    examples: ["/engage", "/engage make the help tab responsive", "/engage-picard"],
+    examples: ["/engage", "/engage make the help tab responsive"],
     hint: "[rough prompt - empty uses previous message]"
   },
   {
@@ -2082,9 +2080,9 @@ export const COMMANDS: HelpItem[] = [
     name: "/list-tickets",
     kind: "command",
     category: "Tickets & Board",
-    aliases: ["list-ticket-zordon"],
+    aliases: [],
     summary: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state)",
-    triggers: ["list-tickets", "list tickets", "list-ticket-zordon", "show board"],
+    triggers: ["list-tickets", "list tickets", "show board"],
     usage: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state with counts).",
     examples: ["/list-tickets", "/list-tickets status", "/list-tickets @sher", "/list-tickets F165"],
     hint: "[status] [all] [app:<app>] [@person] [prefix|ID]"
@@ -2094,9 +2092,9 @@ export const COMMANDS: HelpItem[] = [
     name: "/marathon-plan",
     kind: "command",
     category: "Workflow & Runners",
-    aliases: ["gauntlet-plan"],
+    aliases: [],
     summary: "Plan a Workflow marathon over open tickets without executing agents",
-    triggers: ["marathon-plan", "gauntlet-plan", "plan marathon", "plan gauntlet"],
+    triggers: ["marathon-plan", "plan marathon"],
     usage: "Plan a marathon from the saved Workflow data, using this host's delegate or session fallback (relay-morpheus run file + Workflow script).",
     examples: ["/marathon-plan", "/marathon-plan sequential", "/marathon-plan parallel 2 F164 F165"],
     hint: "[sequential|parallel] [N|max] [ticket ids]"
@@ -2106,9 +2104,9 @@ export const COMMANDS: HelpItem[] = [
     name: "/marathon-run",
     kind: "command",
     category: "Workflow & Runners",
-    aliases: ["gauntlet-run"],
+    aliases: [],
     summary: "Plan and run a marathon in one go, or run a saved marathon plan",
-    triggers: ["marathon-run", "gauntlet-run", "run marathon", "run gauntlet"],
+    triggers: ["marathon-run", "run marathon"],
     usage: "Plan and run a marathon in one go over the open tickets, or run a saved plan (a RUN id). Dispatches stages, verifies each in its own phase, and lands diffs cleanly.",
     examples: ["/marathon-run", "/marathon-run sequential", "/marathon-run RUN-0026"],
     hint: "[sequential|parallel] [N|max] [ticket ids] | [RUN id]"
@@ -2142,9 +2140,9 @@ export const COMMANDS: HelpItem[] = [
     name: "/ops",
     kind: "command",
     category: "Ops Board",
-    aliases: ["skillator-ops"],
+    aliases: [],
     summary: "Open the ops board (Tickets, Workflows, Health, Messages, Explorer, Build, Help)",
-    triggers: ["ops", "skillator-ops", "open ops", "launch ops board"],
+    triggers: ["ops", "open ops", "launch ops board"],
     usage: "Open the ops board (TICKETS.md board, runs, health, messages, explorer, build, help) for this repo in terminal or browser.",
     examples: ["/ops", "/ops tickets", "/ops help", "/ops --open"],
     hint: "[terminal|tickets|workflows|health|messages|explorer|build|help]"
@@ -2154,11 +2152,11 @@ export const COMMANDS: HelpItem[] = [
     name: "/pending-subagent",
     kind: "command",
     category: "Workflow & Runners",
-    aliases: ["pending-sentinel"],
+    aliases: [],
     summary: "Work open tickets to completion using autonomous subagents (sequential or parallel)",
-    triggers: ["pending-subagent", "pending-sentinel", "work tickets", "work open tickets"],
+    triggers: ["pending-subagent", "work tickets", "work open tickets"],
     usage: "Work the open tickets, or the IDs given, to the end with subagents: a relay-morpheus run, one fresh implementer per ticket, diff reviewed and landed.",
-    examples: ["/pending-subagent", "/pending-subagent sequential", "/pending-sentinel parallel 2 F164 F165"],
+    examples: ["/pending-subagent", "/pending-subagent sequential", "/pending-subagent parallel 2 F164 F165"],
     hint: "[sequential|parallel] [N|max] [ticket ids]"
   },
   {
@@ -2166,11 +2164,11 @@ export const COMMANDS: HelpItem[] = [
     name: "/pending",
     kind: "command",
     category: "Tickets & Board",
-    aliases: ["skillator-pending"],
+    aliases: [],
     summary: "Report what is pending - board counts, runs, sessions, unpushed commits, machine status",
-    triggers: ["pending", "skillator-pending", "what is pending", "board status"],
+    triggers: ["pending", "what is pending", "board status"],
     usage: "What is pending - board counts, runs, sessions, unpushed commits, machine (tickets-zordon pending script).",
-    examples: ["/pending", "/skillator-pending"],
+    examples: ["/pending"],
     hint: "[]"
   },
   {
@@ -2190,9 +2188,9 @@ export const COMMANDS: HelpItem[] = [
     name: "/skillator-sync",
     kind: "command",
     category: "Maintenance & Sync",
-    aliases: ["upstream-sync"],
+    aliases: [],
     summary: "Sweep tracked UPSTREAM.md manifests, report compare diffs, and absorb commit hashes",
-    triggers: ["skillator-sync", "upstream-sync", "sync upstream", "sweep upstream"],
+    triggers: ["skillator-sync", "sync upstream", "sweep upstream"],
     usage: "Sweep tracked UPSTREAM.md manifests (code-yoda, design-arwen, clone-odo), report upstream compare diffs and rule changes, and absorb new upstream commit hashes.",
     examples: ["/skillator-sync check", "/skillator-sync absorb code-yoda upstream abc1234"],
     hint: "[check [SKILL...] | absorb <skill> <upstream> <sha40>]"
@@ -2214,11 +2212,11 @@ export const COMMANDS: HelpItem[] = [
     name: "/sync-tickets",
     kind: "command",
     category: "Tickets & Board",
-    aliases: ["sync-zordon"],
+    aliases: [],
     summary: "Sync open tickets: reconcile [!], [ ], and [~] statuses with git commits and baselines",
-    triggers: ["sync-tickets", "sync-zordon", "reconcile tickets", "sync board"],
+    triggers: ["sync-tickets", "reconcile tickets", "sync board"],
     usage: "Sync open tickets: propose the real status of every [!], [ ] and [~] row from ticket-meta reconcile, its line, commits and baselines, ask once, apply the accepted (tickets-zordon).",
-    examples: ["/sync-tickets", "/sync-tickets F165", "/sync-zordon"],
+    examples: ["/sync-tickets", "/sync-tickets F165"],
     hint: "[IDs]"
   },
   {
@@ -2250,12 +2248,12 @@ export const COMMANDS: HelpItem[] = [
     name: "/verify-subagent",
     kind: "command",
     category: "Workflow & Runners",
-    aliases: ["verify-shifu"],
-    summary: "Verify testing [%] tickets with fresh agents against acceptance criteria to reach [x]",
-    triggers: ["verify-subagent", "verify-shifu", "verify tickets", "verify testing"],
-    usage: "Verify testing tickets: one fresh agent per [%] row re-checks its Done line against evidence; PASS flips it to [x] Verified, FAIL leaves [%] with what failed, OWNER is never flipped (tickets-zordon).",
-    examples: ["/verify-subagent", "/verify-subagent F165", "/verify-shifu"],
-    hint: "[IDs]"
+    aliases: [],
+    summary: "Verify testing [%] tickets with fresh agents against acceptance criteria; records a PASS or FAIL note, the box stays [%]",
+    triggers: ["verify-subagent", "verify tickets", "verify testing"],
+    usage: "Verify testing tickets: one fresh agent per [%] row re-checks its Done line against evidence and records a verdict note - verified PASS, or verified FAIL with what failed and why; the box never moves, OWNER gets no note (tickets-zordon). --deep (opt-in) also runs a code-vader review of the ticket's commits.",
+    examples: ["/verify-subagent", "/verify-subagent F165", "/verify-subagent --deep F165"],
+    hint: "[--deep] [IDs]"
   }
 ];
 

@@ -132,7 +132,7 @@ test('the one-frame command returns the plain frame of the workspace folder and 
   assert.doesNotMatch(text, /\x1b/)
   assert.match(lines[0]!, /1 Tickets {3}2 Workflows {3}3 Health/)
   // F61: every group starts collapsed - headers with counts, no rows
-  assert.match(text, /› ▸ Pending decision \(1\)\n  ▸ Pending \(1\)/)
+  assert.match(text, /› ▸ Decide \(1\)\n  ▸ Pending \(1\)/)
   assert.equal(f.out.join(''), text + '\n')
 })
 

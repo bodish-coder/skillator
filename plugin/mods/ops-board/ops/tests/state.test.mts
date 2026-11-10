@@ -7,7 +7,7 @@ import { parseBoard } from '../../hooks/lib/board'
 import { buildModel, isUserSectionOpen } from '../../hooks/lib/ticketsmodel'
 import { continuePrompt } from '../../hooks/lib/runlines'
 
-// The board's groups run IN PROGRESS, BLOCKED, PENDING DECISION, PENDING (buildModel):
+// The board's groups run IN PROGRESS, BLOCKED, DECIDE, PENDING (buildModel):
 // F3 [?] is drawn before F1 [ ], so the first row - the selection in force - is F3.
 const BOARD = '- [ ] F1 — Dark mode [owner: @asha]\n- [?] F3 — Pick chart [decide: @asha]\n- [x] F4 — Done one\n'
 const team = [{ handle: '@asha', emails: ['a@x'], name: 'Asha' }, { handle: '@vidul', emails: ['v@x'] }]
@@ -99,9 +99,9 @@ test('d on a row opens a decision; a / d in the dialog switch kind; D on a [?] r
   const state = reduce(s0, key('d')).state                 // F3, the first row
   assert.equal(state.dialog?.kind, 'decide'); assert.equal(state.dialog?.handle, '@asha')
   assert.equal(dialogLines(state)[0], 'Assign F3 for a decision')
-  assert.equal(dialogLines(state)[1], '  Ticket  F3 · [?] pending decision · Pick chart')
+  assert.equal(dialogLines(state)[1], '  Ticket  F3 · [?] decide · Pick chart')
   assert.equal(dialogLines(state)[2], '  ( ) implementation   (•) decision   ( ) tester   a / d / t')
-  assert.ok(dialogLines(state).includes('  Change  [?] decision → [?] decision, decide @asha'))
+  assert.ok(dialogLines(state).includes('  Change  [?] decide → [?] decide, decide @asha'))
   const flipped = reduce(state, key('a')).state
   assert.equal(flipped.dialog?.kind, 'owner'); assert.equal(dialogLines(flipped)[0], 'Assign F3')
   const toTester = reduce(state, key('t')).state
@@ -112,7 +112,7 @@ test('d on a row opens a decision; a / d in the dialog switch kind; D on a [?] r
   assert.deepEqual([rTester.effects[0]!.call, rTester.effects[0]!.args], ['meta-assign-tester', ['F3', '@asha']])
   const r = reduce(reduce(flipped, key('d')).state, key('return'))
   assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-decide', ['F3', '@asha']])
-  assert.match(settle(r.effects[0]!.then(ok(''))(r.state)).state.toast ?? '', /^✓ F3 now pending decision, for @asha to decide: Pick chart/)
+  assert.match(settle(r.effects[0]!.then(ok(''))(r.state)).state.toast ?? '', /^✓ F3 now decide, for @asha to decide: Pick chart/)
   const dd = reduce(state, key('escape')).state
   const dr = reduce(dd, key('D'))
   assert.deepEqual([dr.effects[0]!.call, dr.effects[0]!.args], ['meta-decided', ['F3']])
@@ -496,7 +496,7 @@ test('F81 c opens the reconcile box from ticket-meta reconcile; nothing to chang
   assert.equal(s.reconcile?.index, 0)
   assert.deepEqual(reconcileLines(s), ['Reconcile tickets - 2 to change',
     '› [ ] F1  pending → in progress  2 commits name it, newest abc1234',
-    '      F3  pending decision stays - evidence unclear: x',
+    '      F3  decide stays - evidence unclear: x',
     '  [ ] F9  blocked → pending  blocked on F4, now done'])
   assert.equal(settle(r.effects[0]!.then(ok('no change: nothing to reconcile\n'))(r.state)).state.toast, 'reconcile - every [!] [ ] [~] row matches its evidence')
   const no = settle(r.effects[0]!.then({ code: 1, out: '', err: 'ticket-meta: no TICKETS.md at /r', argv: ['sh'] })(r.state)).state
@@ -640,10 +640,10 @@ const typing = (st: State, text: string) => [...text].reduce((x, ch) => reduce(x
 test('F77: a ticket selected - the Ticket field is prefilled, the cursor on the people; tab reaches the field', () => {
   const d = reduce(s0, key('a')).state                              // F3 selected
   assert.equal(d.dialog?.id, 'F3'); assert.equal(d.dialogField, 'who')
-  assert.equal(dialogLines(d)[1], '  Ticket  F3 · [?] pending decision · Pick chart')
+  assert.equal(dialogLines(d)[1], '  Ticket  F3 · [?] decide · Pick chart')
   const onField = reduce(d, key('tab')).state
   assert.equal(onField.dialogField, 'ticket')
-  assert.equal(dialogLines(onField)[1], '  Ticket  F3_ · [?] pending decision · Pick chart')
+  assert.equal(dialogLines(onField)[1], '  Ticket  F3_ · [?] decide · Pick chart')
   assert.equal(reduce(onField, key('tab')).state.dialogField, 'who')
 })
 test('F77: no ticket selected - the dialog opens on an empty Ticket field; f1 resolves, Enter runs on F1', () => {
@@ -680,7 +680,7 @@ test('F77: a changed ID moves the dialog to that ticket; Enter runs on the new o
   d = reduce(reduce(d, key('backspace')).state, key('backspace')).state
   d = typing(d, 'f1')
   assert.equal(dialogLines(d)[0], 'Assign F1 for a decision')
-  assert.ok(dialogLines(d).includes('  Change  [ ] pending → [?] decision, decide @asha'))
+  assert.ok(dialogLines(d).includes('  Change  [ ] pending → [?] decide, decide @asha'))
   d = reduce(d, key('tab')).state
   const r = reduce(d, key('return'))
   assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-decide', ['F1', '@asha']])
@@ -965,7 +965,7 @@ test('F127: fast keyboard filtering (/) searches skills, backspace edits, Enter 
   assert.equal(s.help!.filter, 'zordon')
   assert.equal(s.help!.selected, 'tickets-zordon')
   const filtered = filteredSkills(s.help!.filter)
-  assert.equal(filtered.length, 4)
+  assert.equal(filtered.length, 2)  // F166: the *-zordon command aliases no longer match
   assert.equal(filtered[0]!.id, 'tickets-zordon')
 
   // Backspace removes character
@@ -1344,6 +1344,11 @@ test('A196 + A197: startRunCmd canonical parity, eligibleRunTickets, parseFollow
   assert.equal(noPend.state.toast, 'No pending stages left in RUN-0012 to push')
 })
 
+test('F169 state: /verify-subagent help hint advertises --deep', () => {
+  const item = HELP_ITEMS.find(i => i.id === 'verify-subagent')
+  assert.ok(item?.hint?.includes('--deep'))
+})
+
 test('F165 state: Help catalog includes commands, supports command execution, copying, and filtering', () => {
   // 1. Catalog inventory
   assert.ok(COMMANDS.length >= 18)
@@ -1358,7 +1363,7 @@ test('F165 state: Help catalog includes commands, supports command execution, co
   const copyEff = copyStep.effects.find(e => e.kind === 'copy') as any
   assert.ok(copyEff, 'Expected copy effect for command')
   assert.equal(copyEff.text, '/list-tickets')
-  assert.match(copyEff.label, /\/list-tickets \(alias: list-ticket-zordon\)/)
+  assert.doesNotMatch(copyEff.label, /alias/)  // F166: commands have no legacy aliases
 
   // Settle copy effect
   const sAfterCopy = settle(copyEff.then(ok(''))(copyStep.state)).state

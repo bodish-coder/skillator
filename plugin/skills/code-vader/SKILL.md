@@ -25,13 +25,15 @@ Ends with a definitive binary gate: `READY-TO-COMMIT: YES` or `CHANGES-REQUESTED
 
 Run the helper script from this skill's `scripts/` directory (`$VADER`):
 
-- Unix / Git Bash: `sh "$VADER/code-vader.sh" collect [--repo <dir>] [--unstaged|--staged|--auto]`
-- Windows PowerShell: `powershell -NoProfile -ExecutionPolicy Bypass -File "$VADER/code-vader.ps1" collect [-Repo <dir>] [-Unstaged|-Staged|-Auto]`
+- Unix / Git Bash: `sh "$VADER/code-vader.sh" collect [--repo <dir>] [--unstaged|--staged|--auto|--range <base>..<head>]`
+- Windows PowerShell: `powershell -NoProfile -ExecutionPolicy Bypass -File "$VADER/code-vader.ps1" collect [-Repo <dir>] [-Unstaged|-Staged|-Auto|-Range <base>..<head>]`
 
 Default mode is `--auto`: uses `git diff --cached` when staged changes exist,
-else falls back to unstaged `git diff`. It outputs:
+else falls back to unstaged `git diff`. `--range <base>..<head>` reviews
+committed work instead - `git diff <base>..<head>`, debt markers read from the
+files as they are at `<head>` (a bad revision exits 2). It outputs:
 
-- `target: staged|unstaged|empty` and `files: <count>`
+- `target: staged|unstaged|range|empty` and `files: <count>`
 - `changed_files:` (`path` per line)
 - `markers:` every added or existing `shortcut:` / `ponytail:` comment in the
   changed files with `<file>:<line> — <what>. ceiling: "<quoted>". trigger: "<quoted>"|no-trigger.`

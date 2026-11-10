@@ -13,7 +13,7 @@
 #   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
 #   ticket-meta.sh testing <ID> <test>  box -> [%] testing, the line says ` (testing: <test>)`
 #   ticket-meta.sh tested <ID> pass|fail  [%] -> [x] (pass) or [~] (fail); the note stays
-#   ticket-meta.sh verify <ID> pass|fail <evidence>  F72: [%] -> [x] ` **Verified <date>: ..**`, or stays [%] ` (verify failed <date>: ..)`
+#   ticket-meta.sh verify <ID> pass|fail <evidence>  F72/F167: stays [%], ` (verified PASS|FAIL <date>: ..)` replaces an earlier one
 #   ticket-meta.sh done <ID> [evidence] box -> [x], tagged, ` **Done <date>: <evidence>**`
 #   ticket-meta.sh block <ID> <on what> box -> [!], the line says ` (blocked: <on what>)`
 #   ticket-meta.sh defer <ID> <until>   box -> [>], the line says ` (deferred: <until>)`
@@ -513,16 +513,13 @@ edit_line() {
         if (ENVIRON["DROP_BLOCKED"] != "") sub(/[ \t]*\(blocked:[^()]*\)/, "", line)   # F81 unblock
         if (ENVIRON["DONE_NOTE"] != "")
           line = setnote(line, " **Done " ENVIRON["DONE_NOTE"] "**", "[ \t]*\\*\\*Done [^*]*\\*\\*")
-        # F72: verify notes - a pass, a fail; each replaces its own earlier one,
-        # and a pass drops an earlier (verify failed ..) note
-        if (ENVIRON["VERIFIED_NOTE"] != "") {
-          # every dated one (the date keeps words in the title safe)
-          while (match(line, /[ \t]*\(verify failed [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]: [^()]*\)/))
-            line = substr(line, 1, RSTART - 1) substr(line, RSTART + RLENGTH)
-          line = setnote(line, " **Verified " ENVIRON["VERIFIED_NOTE"] "**", "[ \t]*\\*\\*Verified [^*]*\\*\\*")
+        # F72/F167: one verify note - it drops every earlier dated one, new
+        # (verified PASS|FAIL ..) or old (verify failed ..); the date keeps title words safe
+        if (ENVIRON["VERIFY_NOTE"] != "") {
+          vp = "[ \t]*\\(verif(ied PASS|ied FAIL|y failed) [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]: [^()]*\\)"
+          while (match(line, vp)) line = substr(line, 1, RSTART - 1) substr(line, RSTART + RLENGTH)
+          line = setnote(line, " (verified " ENVIRON["VERIFY_NOTE"] ")", vp)
         }
-        if (ENVIRON["VFAIL_NOTE"] != "")
-          line = setnote(line, " (verify failed " ENVIRON["VFAIL_NOTE"] ")", "[ \t]*\\(verify failed [^()]*\\)")
         # F109: the trailing session tag - replaced (old or new shape) or appended
         if (ENVIRON["SET_TAG"] != "") {
           if (match(line, /[ \t]*\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$/)) line = substr(line, 1, RSTART - 1) " (" ENVIRON["SET_TAG"] ")"
@@ -833,27 +830,20 @@ cmd_done() {
   SET_MARK='x' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b NOTE_VAL='' DONE_NOTE=$dn REFUSE_MARKS='-' SAME_KEY='' NEED_MARK='' edit_line
 }
 
-# F72: /verify-subagent's verdict on a [%] ticket, with the evidence (one line,
-# no parentheses, no *). pass: [x], tagged as a close is, ` **Verified <date>:
-# <evidence>**`. fail: the box stays [%], ` (verify failed <date>: <what failed>)`.
+# F72/F167: /verify-subagent's verdict on a [%] ticket, with the evidence (one
+# line, no parentheses, no *; a fail's is "<what failed> - <why>"). A note, never
+# a status: the box stays [%], ` (verified PASS|FAIL <date>: <evidence>)` replaces
+# any earlier verify note.
 cmd_verify() {
   CMD=verify
   [ $# -ge 3 ] || die "usage: verify <ID> pass|fail <evidence>"
   norm_id "$1"; shift
-  vd=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
-  case $vd in pass|fail) ;; *) die "usage: verify <ID> pass|fail <evidence> - not '$1'" ;; esac
+  vd=$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')
+  case $vd in PASS|FAIL) ;; *) die "usage: verify <ID> pass|fail <evidence> - not '$1'" ;; esac
   shift
   note_text evidence 0 "$@"
   case $NOTE in *'*'*) die "the evidence cannot hold * - it sits on the line as a note" ;; esac
-  dn="$(date -u +%Y-%m-%d): $NOTE"
-  if [ "$vd" = fail ]; then
-    SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' VFAIL_NOTE=$dn SAME_KEY='' NEED_MARK='%' edit_line
-    return
-  fi
-  info=$(commits_info "$ID")
-  a=$(printf '%s\n' "$info" | apps_from | join_list)
-  b=$(printf '%s\n' "$info" | by_from | join_list)
-  SET_MARK='x' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b NOTE_VAL='' VERIFIED_NOTE=$dn SAME_KEY='' NEED_MARK='%' edit_line
+  SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_VAL='' VERIFY_NOTE="$vd $(date -u +%Y-%m-%d): $NOTE" SAME_KEY='' NEED_MARK='%' edit_line
 }
 
 # F64: can't proceed until something outside it lands: [!], ` (blocked: <on what>)`.
@@ -889,7 +879,7 @@ cmd_status() {
       if [ "$target" = blocked ]; then mark='!'; else mark='>'; fi ;;
     *) die "unknown status target: $target" ;;
   esac
-  GUARDED_STATUS=1 EXPECT_ROW=$expected DROP_WAIT=1 KEEP_SESSION=1 OWN_CHECK='' CLAIM_FREE='' DROP_BLOCKED='' DONE_NOTE='' VERIFIED_NOTE='' VFAIL_NOTE='' SET_MARK=$mark SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_KEY=$key NOTE_VAL=$note SAME_KEY='' NEED_MARK='' REFUSE_MARKS='' edit_line
+  GUARDED_STATUS=1 EXPECT_ROW=$expected DROP_WAIT=1 KEEP_SESSION=1 OWN_CHECK='' CLAIM_FREE='' DROP_BLOCKED='' DONE_NOTE='' VERIFY_NOTE='' SET_MARK=$mark SET_APP='' SET_DECIDE='' SET_OWNER='' SET_BY='' NOTE_KEY=$key NOTE_VAL=$note SAME_KEY='' NEED_MARK='' REFUSE_MARKS='' edit_line
 }
 
 # F81: the wait is over: [!] -> [ ], its (blocked: ..) note dropped. Only from [!].
@@ -1566,7 +1556,8 @@ selftest() {
     cmp -s TICKETS.md "$T/want64-$nl.md" || { echo "FAIL: $nl done/block/defer line endings or bytes"; od -c TICKETS.md | head -n 6; fail=1; }
   done
 
-  # --- F72: verify - /verify-subagent's verdict on a [%] ticket; pass -> [x] Verified, fail stays [%]
+  # --- F72/F167: verify - /verify-subagent's verdict on a [%] ticket; one
+  # (verified PASS|FAIL ..) note, the box never moves
   V="$T/f72"
   mkdir -p "$V/apps/web" && cd "$V" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
   {
@@ -1574,15 +1565,17 @@ selftest() {
     printf -- '- [%%] F60 %s Built (testing: unit run) (@cc-gggggg)\n' "$D"
     printf -- '- [%%] F61 %s Failing (testing: live check)\n' "$D"
     printf -- '- [ ] F62 %s Not testing\n' "$D"
+    printf -- '- [%%] F63 %s Legacy (verify failed 2026-01-01: old)\n' "$D"
   } > TICKETS.md
   commit vidul@ikran.in "init" README.md
   commit vidul@ikran.in "F60: built" apps/web/a.js
-  eq "verify pass, any case" "$(run verify F60 PaSs RED/GREEN 3/3, abc1234)" "- [x] F60 $D Built [app: web] (testing: unit run) **Verified $TODAY: RED/GREEN 3/3, abc1234** (@cc-gggggg)"
-  eq "verify fail stays [%]" "$(run verify F61 fail unit run red, 2 of 5)" "- [%] F61 $D Failing (testing: live check) (verify failed $TODAY: unit run red, 2 of 5)"
-  eq "verify fail replaces the note" "$(run verify F61 FAIL '  still red ')" "- [%] F61 $D Failing (testing: live check) (verify failed $TODAY: still red)"
+  eq "verify pass, any case, box stays" "$(run verify F60 PaSs RED/GREEN 3/3, abc1234)" "- [%] F60 $D Built (testing: unit run) (verified PASS $TODAY: RED/GREEN 3/3, abc1234) (@cc-gggggg)"
+  eq "verify pass again replaces the note" "$(run verify F60 pass again)" "- [%] F60 $D Built (testing: unit run) (verified PASS $TODAY: again) (@cc-gggggg)"
+  eq "verify fail stays [%]" "$(run verify F61 fail unit run red, 2 of 5 - exit 1 on the fixture)" "- [%] F61 $D Failing (testing: live check) (verified FAIL $TODAY: unit run red, 2 of 5 - exit 1 on the fixture)"
+  eq "verify fail replaces the note" "$(run verify F61 FAIL '  still red ')" "- [%] F61 $D Failing (testing: live check) (verified FAIL $TODAY: still red)"
+  eq "verify replaces a legacy verify-failed note" "$(run verify F63 pass ok)" "- [%] F63 $D Legacy (verified PASS $TODAY: ok)"
   cp TICKETS.md "$T/f72a.md"
-  sh "$self" verify F60 pass again > /dev/null 2>&1 && { echo "FAIL: verify took a ticket that is not [%]"; fail=1; }
-  sh "$self" verify F62 fail red > /dev/null 2>&1 && { echo "FAIL: verify fail took a ticket that is not [%]"; fail=1; }
+  sh "$self" verify F62 fail red > /dev/null 2>&1 && { echo "FAIL: verify took a ticket that is not [%]"; fail=1; }
   sh "$self" verify F61 maybe red > /dev/null 2>&1 && { echo "FAIL: verify took a verdict that is not pass/fail"; fail=1; }
   sh "$self" verify F61 pass > /dev/null 2>&1 && { echo "FAIL: verify took no evidence"; fail=1; }
   sh "$self" verify F61 fail '  ' > /dev/null 2>&1 && { echo "FAIL: verify took blank evidence"; fail=1; }
@@ -1590,7 +1583,7 @@ selftest() {
   sh "$self" verify F61 pass 'a ** b' > /dev/null 2>&1 && { echo "FAIL: verify took an asterisk"; fail=1; }
   sh "$self" verify F61 fail "a${NL}b" > /dev/null 2>&1 && { echo "FAIL: verify took a line break"; fail=1; }
   cmp -s TICKETS.md "$T/f72a.md" || { echo "FAIL: a refused verify changed the board"; diff "$T/f72a.md" TICKETS.md; fail=1; }
-  eq "verify pass after a fail drops the fail note" "$(run verify F61 pass green now)" "- [x] F61 $D Failing (testing: live check) **Verified $TODAY: green now**"
+  eq "verify pass after a fail replaces the fail note" "$(run verify F61 pass green now)" "- [%] F61 $D Failing (testing: live check) (verified PASS $TODAY: green now)"
 
   # --- team add / remove / list: .skillator/team.md written under the board lock
   G="$T/team"

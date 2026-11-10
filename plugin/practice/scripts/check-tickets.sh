@@ -80,7 +80,7 @@ EOF
     exit 1
   fi
 
-  # F45: [?] (pending decision) is a ticket state like any other: a board with
+  # F45: [?] (decide) is a ticket state like any other: a board with
   # one passes, it is open (a bare Plan pointer on it is fine), and its ID
   # still counts toward duplicates.
   printf '# Board\n\n- [?] A6 - waiting on a decision [decide: @asha]. Plan: S4\n- [ ] A7 - open\n' > "$stmp/q.md"
@@ -88,7 +88,7 @@ EOF
     echo "SELFTEST FAIL: a board with a [?] line failed" >&2; cat "$stmp/q.out" >&2; exit 1; }
   grep -q '2 ticket IDs' "$stmp/q.out" || {
     echo "SELFTEST FAIL: [?] line not counted as a ticket" >&2; cat "$stmp/q.out" >&2; exit 1; }
-  printf -- '- [?] A7 - same number, pending decision\n' >> "$stmp/q.md"
+  printf -- '- [?] A7 - same number, decide\n' >> "$stmp/q.md"
   if sh "$0" "$stmp/q.md" >/dev/null 2>&1; then
     echo "SELFTEST FAIL: a [?] line duplicating an ID passed" >&2; exit 1
   fi

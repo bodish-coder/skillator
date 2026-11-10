@@ -12,7 +12,7 @@ test('by status matches tickets-zordon', () => {
   expect(listView(parseBoard(BOARD, 'T', 0, 0), 'status')).toBe(BY_STATUS)
 })
 test('empty board prints all eight states', () => {
-  expect(countLine([])).toBe('0 open (0 pending · 0 in-progress · 0 testing · 0 blocked · 0 pending decision) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total')
+  expect(countLine([])).toBe('0 open (0 pending · 0 in-progress · 0 testing · 0 blocked · 0 decide) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total')
 })
 // F62: [%] testing - built, waiting on a test result. Open; its own group and status
 // heading between In progress and Blocked; drawn in the suggestion colour.
@@ -26,7 +26,7 @@ test('[%] testing parses, is open, groups and lists between in progress and bloc
   expect(paint('%')).toBe('suggestion')
   expect(GROUPS.map(g => g.box).slice(0, 3)).toEqual(['~', '%', '!'])
   expect(GROUPS.find(g => g.box === '%')!.title).toBe('TESTING')
-  expect(countLine(b.tickets)).toBe('4 open (1 pending · 1 in-progress · 1 testing · 1 blocked · 0 pending decision) · 0 deferred · 0 closed (0 done · 0 cancelled) · 4 total')
+  expect(countLine(b.tickets)).toBe('4 open (1 pending · 1 in-progress · 1 testing · 1 blocked · 0 decide) · 0 deferred · 0 closed (0 done · 0 cancelled) · 4 total')
   expect(listView(b, 'status').split('\n').filter(l => l && !l.startsWith(' ')).slice(0, 4)).toEqual(['In progress', 'Testing', 'Blocked', 'Pending'])
   expect(listView(b, '')).toContain('[%] F7 — built thing (testing: owner live check)')
 })
@@ -89,6 +89,9 @@ test('closed shown only with all; big boards cap pending at 20', () => {
 test('state colours', () => {
   expect(STATE_COLOR['~']).toBe('amber')
   expect(STATE_COLOR['x']).toBe('green')
+  // F168: pending is orange, decide is pink
+  expect(paint(' ')).toBe('claude')
+  expect(paint('?')).toBe('autoAccept')
 })
 
 // Review fix: ticket-meta and pending take an em dash, an en dash or a plain `-` after the id.

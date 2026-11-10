@@ -399,10 +399,11 @@ file-disjoint tickets at once in their own stage worktrees (`chain next --all`,
 `chain merge`). A host with no subagent tool runs the stored prompts itself, one at a time.
 
 `/verify-subagent` (F72, `tickets-zordon`) re-checks every `[%]` ticket (or the IDs
-given) with one fresh read-and-run-only agent each: PASS flips it to `[x]` with a
-dated **Verified** note (`ticket-meta verify <ID> pass`), FAIL leaves it `[%]` with what
-failed appended (`verify <ID> fail`), OWNER (the Done line needs the owner's own eyes)
-is never flipped. A host with no subagents runs the checks itself, one at a time.
+given) with one fresh read-and-run-only agent each and records the verdict as one
+note, the box never moving (F167): PASS ` (verified PASS <date>: ..)` (`ticket-meta verify
+<ID> pass`), FAIL ` (verified FAIL <date>: <what> - <why>)` (`verify <ID> fail`), OWNER
+(the Done line needs the owner's own eyes) no note. A host with no subagents runs the
+checks itself, one at a time.
 
 `/marathon-run [sequential|parallel] [N|max] [IDs]` (F112) plans and runs a marathon in one go,
 `/marathon-plan` with the same words saves the plan and `/marathon-run [RUN id]` runs a saved one

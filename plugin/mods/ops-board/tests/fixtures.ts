@@ -28,7 +28,7 @@ export const BOARD = `# Tickets
 - [x] A4 — Flaky timer test
 `
 
-const COUNT = '7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total'
+const COUNT = '7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 decide) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total'
 
 export const BY_TYPE = `Bugs
   [~] B2 — CSV export drops the last row
@@ -52,7 +52,7 @@ export const BY_STATUS = `In progress
 Blocked
   [!] B3 — Avatar upload 500s over 5MB (blocked: needs S3 creds from ops)
 
-Pending decision
+Decide
   [?] F3 — Pick the chart library [decide: @asha]
 
 Deferred

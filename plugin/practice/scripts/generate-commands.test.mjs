@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -51,7 +51,23 @@ test('stale check names the path without writing; regeneration is deterministic 
   ok(run(root, '--check'));
 });
 
-test('every published output and alias has a source; host invocation contracts survive', async t => {
+test('F166: the legacy alias names are neither rendered nor left on disk; hosts.json has no aliases', async () => {
+  const { renderCommands } = await import('./generate-commands.mjs');
+  const legacy = ['archive-zordon', 'engage-picard', 'list-ticket-zordon', 'gauntlet-plan', 'gauntlet-run', 'pending-sentinel',
+    'skillator-pending', 'upstream-sync', 'sync-zordon', 'verify-shifu', 'skillator-ops'];
+  const outputs = [...renderCommands(plugin).keys()];
+  const meta = JSON.parse(readFileSync(join(plugin, 'commands/hosts.json'), 'utf8'));
+  for (const entry of meta.commands) assert.ok(!('aliases' in entry) && !('canonicalAliases' in entry), entry.name);
+  for (const old of legacy) {
+    assert.ok(!outputs.some(p => p.split('/').some(part => part.replace(/\.(md|toml)$/, '') === old)), old);
+    assert.ok(!existsSync(join(plugin, `commands/${old}.md`)), `commands/${old}.md`);
+    for (const path of [`antigravity/${old}`, `cursor/${old}.md`, `gemini/${old}.toml`, `opencode/${old}.md`, `pi/${old}.md`]) {
+      assert.ok(!existsSync(join(plugin, 'host-commands', path)), path);
+    }
+  }
+});
+
+test('every published output has a source; host invocation contracts survive', async t => {
   const { renderCommands } = await import('./generate-commands.mjs');
   const outputs = renderCommands(plugin);
   assert.deepEqual([...outputs.keys()].filter(p => p.startsWith('host-commands/')).sort(), contract.outputs);
@@ -72,7 +88,7 @@ test('every published output and alias has a source; host invocation contracts s
     if (/team-messages/.test(path)) {
       for (const guard of ['read-only inbox command', 'not an alias for `/message-uhura`', '/message-uhura @handle <issue>']) assert.ok(body.includes(guard), `${path}: ${guard}`);
     }
-    if (/marathon-(plan|run)|gauntlet-(plan|run)/.test(path)) {
+    if (/marathon-(plan|run)/.test(path)) {
       for (const guard of ['Legacy recovery (A162)', 'PLAN.mode', 'planned in RUN-<id>', '/marathon-plan <mode> <IDs>']) assert.ok(body.includes(guard), `${path}: ${guard}`);
     }
   }
@@ -80,13 +96,11 @@ test('every published output and alias has a source; host invocation contracts s
   assert.match(outputs.get('host-commands/gemini/code-vader.toml'), /!\{sh .* collect \{\{args\}\}/);
   assert.match(outputs.get('host-commands/pi/engage.md'), /argument-hint:.*\n---\n[\s\S]*\$ARGUMENTS/);
   assert.match(outputs.get('host-commands/antigravity/engage/SKILL.md'), /^---\nname: engage\n/);
-  assert.ok(outputs.get('host-commands/antigravity/skillator-pending/SKILL.md').includes('name: skillator-pending'));
-  assert.equal(outputs.get('commands/gauntlet-plan.md'), readFileSync(join(plugin, 'commands/marathon-plan.md'), 'utf8').replaceAll('\r\n', '\n'));
+  assert.ok(outputs.get('host-commands/antigravity/pending/SKILL.md').includes('name: pending'));
   const hostsMeta = JSON.parse(readFileSync(join(plugin, 'commands/hosts.json'), 'utf8'));
   const tm = hostsMeta.commands.find(c => c.name === 'team-messages');
   const mu = hostsMeta.commands.find(c => c.name === 'message-uhura');
   assert.ok(tm && mu, 'team-messages and message-uhura exist as distinct commands');
-  assert.ok(!tm.aliases.includes('message-uhura') && !mu.aliases.includes('team-messages'), 'neither command aliases the other');
   ok(run(plugin, '--check'));
 });
 
@@ -100,7 +114,6 @@ test('canonical edits propagate and CRLF input produces LF output', t => {
     assert.ok(text.includes('Shared new instruction.'), output);
     assert.ok(!text.includes('\r'), output);
   }
-  assert.ok(readFileSync(join(root, 'commands/engage-picard.md'), 'utf8').includes('Shared new instruction.'));
 });
 
 for (const [name, region, original] of [
@@ -109,7 +122,7 @@ for (const [name, region, original] of [
   ['marathon-run', 'intro', 'The count is a whole number of at least 1 or `max`'],
   ['marathon-run', 'workflow', 'park the owner\'s questions for one end batch'],
 ]) {
-  test(`${name} shared ${region} edits reach every host and alias with dispatch intact`, async t => {
+  test(`${name} shared ${region} edits reach every host with dispatch intact`, async t => {
     const root = fixture(t);
     const path = join(root, `commands/${name}.md`);
     const source = readFileSync(path, 'utf8');
@@ -118,15 +131,11 @@ for (const [name, region, original] of [
     writeFileSync(path, source.replace(original, changed), 'utf8');
     const { renderCommands } = await import('./generate-commands.mjs');
     const outputs = renderCommands(root);
-    const alias = name.replace('marathon', 'gauntlet');
-    assert.ok(outputs.get(`commands/${alias}.md`).includes(changed));
     for (const [host, fragments] of Object.entries(contract.hostFragments)) {
-      for (const command of [name, alias]) {
-        const path = `host-commands/${host}/${command}${host === 'antigravity' ? '/SKILL.md' : host === 'gemini' ? '.toml' : '.md'}`;
-        const body = outputs.get(path);
-        assert.ok(body.includes(changed), `${path}: shared ${region} mutation missing`);
-        assert.ok(body.includes(fragments[name === 'marathon-plan' ? 0 : 1]), `${path}: dispatch contract`);
-      }
+      const path = `host-commands/${host}/${name}${host === 'antigravity' ? '/SKILL.md' : host === 'gemini' ? '.toml' : '.md'}`;
+      const body = outputs.get(path);
+      assert.ok(body.includes(changed), `${path}: shared ${region} mutation missing`);
+      assert.ok(body.includes(fragments[name === 'marathon-plan' ? 0 : 1]), `${path}: dispatch contract`);
     }
   });
 }
@@ -163,7 +172,7 @@ test('unknown substitutions and duplicate paths fail before any writes', t => {
     if (kind === 'unknown') writeFileSync(join(root, 'commands/engage.md'), readFileSync(join(root, 'commands/engage.md'), 'utf8') + '\n{{TYPO}}\n');
     if (kind === 'duplicate') metadata(root, data => data.commands.push(data.commands[0]));
     if (kind === 'section') metadata(root, data => { data.sections['engage.absent'] = { all: 'oops' }; });
-    if (kind === 'traversal') metadata(root, data => { data.commands[0].aliases.push('../escape'); });
+    if (kind === 'traversal') metadata(root, data => { data.commands[0].name = '../escape'; });
     const result = run(root, '--write');
     assert.equal(result.status, 1, kind + result.stdout + result.stderr);
     assert.match(result.stderr, { unknown: /Unknown substitution.*TYPO/, duplicate: /Duplicate output path/, section: /Unused section metadata/, traversal: /Invalid command name/ }[kind]);
@@ -184,7 +193,7 @@ test('a directory in an output path fails preflight before any writes', t => {
   assert.equal(readFileSync(stale, 'utf8'), 'keep stale');
 });
 
-test('Windows PowerShell installer writes all 27 Codex skill wrappers with exact substituted bytes', { skip: process.platform !== 'win32' ? 'Windows PowerShell writer check requires Windows' : false }, t => {
+test('Windows PowerShell installer writes all 16 Codex skill wrappers with exact substituted bytes', { skip: process.platform !== 'win32' ? 'Windows PowerShell writer check requires Windows' : false }, t => {
   const root = fixture(t);
   ok(run(root, '--write'));
   const driver = join(root, 'writer.ps1');
@@ -207,7 +216,7 @@ Write-Commands codex $Target
   ok(result);
   assert.equal(result.stderr, '');
   const paths = contract.outputs.filter(p => p.startsWith('host-commands/antigravity/'));
-  assert.equal(paths.length, 27);
+  assert.equal(paths.length, 16);
   for (const path of paths) {
     const actual = readFileSync(join(target, path.replace('host-commands/antigravity/', '')));
     const expected = readFileSync(join(root, path), 'utf8').replaceAll('{{SKILLS}}', target);

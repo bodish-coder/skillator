@@ -1,14 +1,14 @@
 import type { Color } from 'claude-code'
 import type { Board, Box, Filter, Ticket } from '../../types'
 
-export type StateColor = 'amber' | 'cyan' | 'red' | 'violet' | 'neutral' | 'dim' | 'green'
+export type StateColor = 'amber' | 'cyan' | 'red' | 'pink' | 'orange' | 'dim' | 'green'
 // The pane shows state by colour; listView() keeps the bracket codes.
 export const STATE_COLOR: Record<Box, StateColor> = {
-  '~': 'amber', '%': 'cyan', '!': 'red', '?': 'violet', ' ': 'neutral', '>': 'dim', 'x': 'green', '-': 'dim',
+  '~': 'amber', '%': 'cyan', '!': 'red', '?': 'pink', ' ': 'orange', '>': 'dim', 'x': 'green', '-': 'dim',
 }
 // Theme keys follow the person's theme on every surface; dim states are drawn dim.
 export const PAINT: Record<StateColor, Color> = {
-  amber: 'warning', cyan: 'suggestion', red: 'error', violet: 'permission', neutral: 'text', dim: 'inactive', green: 'success',
+  amber: 'warning', cyan: 'suggestion', red: 'error', pink: 'autoAccept', orange: 'claude', dim: 'inactive', green: 'success',
 }
 export const paint = (b: Box): Color => PAINT[STATE_COLOR[b]]
 // Open = [ ] [~] [%] [!] [?] (tickets-zordon, pending); deferred and closed are not.
@@ -22,10 +22,10 @@ export function ticketById(tickets: readonly Ticket[] | undefined, text: string)
   return id ? tickets?.find(t => t.id.toUpperCase() === id) ?? null : null
 }
 export const STATE_NAME: Record<Box, string> = {
-  '~': 'in progress', '%': 'testing', '!': 'blocked', '?': 'pending decision', ' ': 'pending', '>': 'deferred', 'x': 'done', '-': 'cancelled',
+  '~': 'in progress', '%': 'testing', '!': 'blocked', '?': 'decide', ' ': 'pending', '>': 'deferred', 'x': 'done', '-': 'cancelled',
 }
 export const GROUPS: { box: Box; title: string }[] = [
-  { box: '~', title: 'IN PROGRESS' }, { box: '%', title: 'TESTING' }, { box: '!', title: 'BLOCKED' }, { box: '?', title: 'PENDING DECISION' },
+  { box: '~', title: 'IN PROGRESS' }, { box: '%', title: 'TESTING' }, { box: '!', title: 'BLOCKED' }, { box: '?', title: 'DECIDE' },
   { box: ' ', title: 'PENDING' }, { box: '>', title: 'DEFERRED' }, { box: 'x', title: 'DONE' }, { box: '-', title: 'CANCELLED' },
 ]
 
@@ -88,7 +88,7 @@ export function countLine(ts: Ticket[]): string {
   const n = (b: Box) => ts.filter(t => t.box === b).length
   const open = n(' ') + n('~') + n('%') + n('!') + n('?')
   const closed = n('x') + n('-')
-  return `${open} open (${n(' ')} pending · ${n('~')} in-progress · ${n('%')} testing · ${n('!')} blocked · ${n('?')} pending decision)` +
+  return `${open} open (${n(' ')} pending · ${n('~')} in-progress · ${n('%')} testing · ${n('!')} blocked · ${n('?')} decide)` +
     ` · ${n('>')} deferred · ${closed} closed (${n('x')} done · ${n('-')} cancelled) · ${ts.length} total`
 }
 
@@ -96,7 +96,7 @@ const TYPE_NAME: Record<string, string> = { B: 'Bugs', F: 'Features', A: 'Agent-
 const TYPE_ORDER = ['B', 'F', 'A']
 const STATUS_RANK: Box[] = ['~', '%', '!', '?', '>', ' ']
 const STATUS_VIEW: { box: Box; title: string }[] = [
-  { box: '~', title: 'In progress' }, { box: '%', title: 'Testing' }, { box: '!', title: 'Blocked' }, { box: '?', title: 'Pending decision' },
+  { box: '~', title: 'In progress' }, { box: '%', title: 'Testing' }, { box: '!', title: 'Blocked' }, { box: '?', title: 'Decide' },
   { box: '>', title: 'Deferred' }, { box: ' ', title: 'Pending' }, { box: 'x', title: 'Done' }, { box: '-', title: 'Cancelled' },
 ]
 const prefixOf = (id: string) => (/^[A-Za-z]+/.exec(id)?.[0] ?? id).toUpperCase()

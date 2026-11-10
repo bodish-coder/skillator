@@ -1,7 +1,7 @@
 ---
 description: "Pre-commit diff review replicating Claude Code /code-review (correctness & safety) and Ponytail / code-yoda (restraint, anti-bloat & shortcut debt) across all hosts, ending in READY-TO-COMMIT: YES or CHANGES-REQUESTED (code-vader)"
 ---
-Load the `code-vader` skill ({{SKILLS}}/code-vader/SKILL.md) and run its unified two-lens pre-commit review on this repo's diff. Arguments: the words typed after the command (optional: `--staged`, `--unstaged`, or `--auto`; default `--auto` prefers `git diff --cached` and falls back to unstaged `git diff`).
+Load the `code-vader` skill ({{SKILLS}}/code-vader/SKILL.md) and run its unified two-lens pre-commit review on this repo's diff. Arguments: the words typed after the command (optional: `--staged`, `--unstaged`, `--auto`, or `--range <base>..<head>` for committed work; default `--auto` prefers `git diff --cached` and falls back to unstaged `git diff`).
 
 1. **Collect diff & debt markers** — Run `sh {{SKILLS}}/code-vader/scripts/code-vader.sh collect <args>` (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File {{SKILLS}}/code-vader/scripts/code-vader.ps1 collect <args>`). Read the changed files and callers of modified symbols before judging.
 2. **Lens 1: Correctness & Safety (`/code-review` replication)** — Audit the diff for logic flaws, edge cases, unchecked error returns, null/undefined crashes, race conditions, type unsoundness, security vulnerabilities, and regression risks. Keep only findings with confidence >= 80 and a concrete failure scenario.

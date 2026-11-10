@@ -3,7 +3,7 @@
 # /code-review (correctness & safety) and Ponytail / code-yoda (restraint,
 # anti-bloat, and shortcut/ponytail debt ledger) across all hosts (F125).
 #
-#   code-vader.sh [collect] [--repo DIR] [--staged|--unstaged|--auto]
+#   code-vader.sh [collect] [--repo DIR] [--staged|--unstaged|--auto|--range BASE..HEAD]
 #   code-vader.sh format [--target LABEL] [FINDINGS_FILE]
 #   code-vader.sh --selftest
 #
@@ -28,7 +28,7 @@ set -u
 prog=code-vader.sh
 
 usage() {
-  echo "usage: $prog [collect] [--repo DIR] [--staged|--unstaged|--auto]" >&2
+  echo "usage: $prog [collect] [--repo DIR] [--staged|--unstaged|--auto|--range BASE..HEAD]" >&2
   echo "       $prog format [--target LABEL] [FINDINGS_FILE]" >&2
   echo "       $prog --selftest" >&2
   exit 2
@@ -78,6 +78,11 @@ do_collect() {
       --staged|-Staged) mode=staged; shift ;;
       --unstaged|-Unstaged) mode=unstaged; shift ;;
       --auto|-Auto) mode=auto; shift ;;
+      --range|-Range)
+        [ $# -ge 2 ] || usage
+        # a leading - would reach git diff as an option; no .. would diff against the working tree
+        case $2 in -*) usage ;; *..*) ;; *) usage ;; esac
+        mode=range; range=$2; shift 2 ;;
       *) usage ;;
     esac
   done
@@ -103,6 +108,15 @@ do_collect() {
     if git -c "safe.directory=*" -C "$repo" diff --quiet 2>/dev/null; then
       target=empty
     fi
+  else
+    git -c "safe.directory=*" -C "$repo" diff --quiet "$range" -- 2>/dev/null
+    case $? in
+      0) target=empty ;;
+      1) ;;
+      *) die "bad range: $range" 2 ;;
+    esac
+    head_rev=${range##*..}
+    [ -n "$head_rev" ] || head_rev=HEAD
   fi
 
   if [ "$target" = empty ]; then
@@ -115,6 +129,9 @@ do_collect() {
   if [ "$target" = staged ]; then
     files=$(git -c "safe.directory=*" -C "$repo" diff --cached --name-only --diff-filter=ACMR)
     diff_out=$(git -c "safe.directory=*" -C "$repo" diff --cached --no-color -U3)
+  elif [ "$target" = range ]; then
+    files=$(git -c "safe.directory=*" -C "$repo" diff --name-only --diff-filter=ACMR "$range" --)
+    diff_out=$(git -c "safe.directory=*" -C "$repo" diff --no-color -U3 "$range" --)
   else
     files=$(git -c "safe.directory=*" -C "$repo" diff --name-only --diff-filter=ACMR)
     diff_out=$(git -c "safe.directory=*" -C "$repo" diff --no-color -U3)
@@ -147,9 +164,15 @@ do_collect() {
     case $f in
       *.md|*.txt|*.rst|*.adoc|*.jsonl|*.log) continue ;;
     esac
-    full="$repo/$f"
-    [ -f "$full" ] || continue
-    hits=$(grep -nE '(#|//|--|;|%|<!--|/\*|^\s*\*).*\b(shortcut|ponytail):' "$full" 2>/dev/null || true)
+    mark_re='(#|//|--|;|%|<!--|/\*|^\s*\*).*\b(shortcut|ponytail):'
+    if [ "$target" = range ]; then
+      # a range is judged as committed at its head, not as the working tree has it now
+      hits=$(git -c "safe.directory=*" -C "$repo" show "$head_rev:$f" 2>/dev/null | grep -nE "$mark_re" || true)
+    else
+      full="$repo/$f"
+      [ -f "$full" ] || continue
+      hits=$(grep -nE "$mark_re" "$full" 2>/dev/null || true)
+    fi
     for h in $hits; do
       [ -n "$h" ] || continue
       lno=${h%%:*}
@@ -380,6 +403,36 @@ EOF
   assert_ok $? "staged collect flags no-trigger ponytail marker: $out"
   echo "$out" | grep -q "^markers: 2 total, 1 no-trigger.$"
   assert_ok $? "staged collect totals markers: $out"
+
+  # 1b. --range <base>..<head>: the committed diff between two revisions, markers read at head
+  base=$(git -c "safe.directory=*" -C "$repo" rev-parse HEAD)
+  git -c "safe.directory=*" -c commit.gpgsign=false -C "$repo" commit -qm "markers"
+  echo "# scratch" > "$repo/src/app.py"
+  out=$(sh "$me" collect --repo "$repo" --range "$base..HEAD" 2>&1); rc=$?
+  assert_ok "$([ $rc = 0 ] && echo 0 || echo 1)" "range collect exits 0, got $rc: $out"
+  echo "$out" | grep -q "^target: range$"
+  assert_ok $? "range collect reports target: range: $out"
+  echo "$out" | grep -q "^files: 1$"
+  assert_ok $? "range collect counts 1 changed file: $out"
+  echo "$out" | grep -q 'src/app.py:2 — linear scan. ceiling: "linear scan". trigger: no-trigger.'
+  assert_ok $? "range collect reads markers at head, not the working tree: $out"
+  echo "$out" | grep -q '^+# shortcut: global lock'
+  assert_ok $? "range collect prints the committed diff: $out"
+  out=$(sh "$me" collect --repo "$repo" --range "HEAD..HEAD" 2>&1); rc=$?
+  assert_ok "$([ $rc = 0 ] && echo 0 || echo 1)" "empty range exits 0, got $rc"
+  echo "$out" | grep -q "^target: empty$"
+  assert_ok $? "empty range reports target: empty: $out"
+  sh "$me" collect --repo "$repo" --range "no-such-rev..HEAD" >/dev/null 2>&1; rc=$?
+  assert_ok "$([ $rc = 2 ] && echo 0 || echo 1)" "bad range rejected with exit 2, got $rc"
+  out=$(sh "$me" collect --repo "$repo" --range "$base...HEAD" 2>&1)
+  echo "$out" | grep -q 'src/app.py:2 — linear scan'
+  assert_ok $? "three-dot range reads markers at its head: $out"
+  sh "$me" collect --repo "$repo" --range HEAD >/dev/null 2>&1; rc=$?
+  assert_ok "$([ $rc = 2 ] && echo 0 || echo 1)" "--range without .. is usage exit 2, got $rc"
+  sh "$me" collect --repo "$repo" --range >/dev/null 2>&1; rc=$?
+  assert_ok "$([ $rc = 2 ] && echo 0 || echo 1)" "--range without a value is usage exit 2, got $rc"
+  sh "$me" collect --repo "$repo" --range "--output=$st/leak" >/dev/null 2>&1; rc=$?
+  assert_ok "$([ $rc = 2 ] && [ ! -e "$st/leak" ] && echo 0 || echo 1)" "--range never passes an option to git, got $rc"
 
   # 2. Format rankings: mixed severities & lenses -> sorted by severity then file:line, net lines summed, CHANGES-REQUESTED (exit 1)
   cat > "$st/findings1.txt" <<'EOF'

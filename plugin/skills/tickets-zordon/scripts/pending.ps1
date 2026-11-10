@@ -627,7 +627,7 @@ function Format-Human($facts) {
   if ($h.Length -le 80) { & $add $h } else { & $wrap 'REPO      ' "$repo $bt $when" '          ' }
 
   & $add "TICKETS   $no open, $nd deferred"
-  $labels = @{ '~' = 'in progress'; '%' = 'testing'; '!' = 'blocked'; '?' = 'decision'; ' ' = 'pending' }
+  $labels = @{ '~' = 'in progress'; '%' = 'testing'; '!' = 'blocked'; '?' = 'decide'; ' ' = 'pending' }
   foreach ($m in @('~', '%', '!', '?', ' ')) {
     $rows = $tix[$m]
     if ($rows.Count -eq 0) { continue }
@@ -874,7 +874,7 @@ function Invoke-Selftest {
       '    F7    en dash title "quoted" -> arrow',
       '  blocked (1)',
       '    B2    orders 500 past page 3                                          @vidul',
-      '  decision (1)',
+      '  decide (1)',
       '    F1    pick the chart library                                    decide @asha',
       '  pending (2)',
       '    F3    pending one',

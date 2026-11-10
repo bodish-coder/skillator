@@ -496,8 +496,8 @@ put_agy_ext() {
 # ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets, /sync-tickets, /skillator-update, /team-messages and /pending-subagent are the plugin's commands/*.md).
 write_commands() {
   _c="$root/host-commands"
-  _cmds="pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run team code-vader skillator-sync message-uhura skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon pending-sentinel upstream-sync verify-shifu gauntlet-plan gauntlet-run"
-  _ops_cmds="ops skillator-ops"
+  _cmds="pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run team code-vader skillator-sync message-uhura"
+  _ops_cmds="ops"
   case "$1" in
     codex)
       # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
@@ -766,7 +766,7 @@ if [ -n "$selftest" ]; then
   grep -qF -e "<<'EOF'" -e "@'" -e 'say "' "$T/$_oc/commands/team-messages.md" && { echo "FAIL: opencode team-messages puts reply text in shell source"; exit 1; }
   [ "$(cat "$T/$_oc/skills/.skillator-source" 2>/dev/null)" = "$(native "$root")" ] || { echo "FAIL: source pointer in $_oc/skills"; exit 1; }
   [ -f "$T/$_oc/skills/tickets-zordon/.skillator-owned" ] || { echo "FAIL: opencode skill has no ownership marker"; exit 1; }
-  grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent|marathon-plan|marathon-run|ops|skillator-ops' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
+  grep -qxE 'pending|list-tickets|engage|archive-tickets|sync-tickets|skillator-update|team-messages|pending-subagent|verify-subagent|marathon-plan|marathon-run|ops' "$T/$_oc/skills/.skillator-installed" && { echo "FAIL: command in opencode manifest"; exit 1; }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   for f in .codex/skills/skillator-update/SKILL.md .cursor/commands/skillator-update.md .pi/agent/prompts/skillator-update.md \
            .gemini/commands/skillator-update.toml .gemini/skills/skillator-update/SKILL.md \

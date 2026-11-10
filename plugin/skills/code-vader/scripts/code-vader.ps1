@@ -3,7 +3,7 @@
 # anti-bloat, and shortcut/ponytail debt ledger) across all hosts (F125).
 # Windows twin of code-vader.sh; keep the two in step.
 #
-#   code-vader.ps1 [collect] [-Repo DIR] [-Staged|-Unstaged|-Auto]
+#   code-vader.ps1 [collect] [-Repo DIR] [-Staged|-Unstaged|-Auto|-Range BASE..HEAD]
 #   code-vader.ps1 format [-Target LABEL] [FINDINGS_FILE]
 #   code-vader.ps1 -SelfTest   (--selftest / -Selftest also accepted)
 $ErrorActionPreference = 'Continue'
@@ -11,7 +11,7 @@ $prog = 'code-vader.ps1'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 function Show-Usage {
-  [Console]::Error.WriteLine("usage: $prog [collect] [-Repo DIR] [-Staged|-Unstaged|-Auto]")
+  [Console]::Error.WriteLine("usage: $prog [collect] [-Repo DIR] [-Staged|-Unstaged|-Auto|-Range BASE..HEAD]")
   [Console]::Error.WriteLine("       $prog format [-Target LABEL] [FINDINGS_FILE]")
   [Console]::Error.WriteLine("       $prog -SelfTest")
   exit 2
@@ -59,6 +59,13 @@ function Invoke-Collect([string[]]$rest) {
       '^--?staged$'   { $mode = 'staged'; $i++; continue }
       '^--?unstaged$' { $mode = 'unstaged'; $i++; continue }
       '^--?auto$'     { $mode = 'auto'; $i++; continue }
+      '^--?range$' {
+        if ($i + 1 -ge $rest.Count) { Show-Usage }
+        $range = "$($rest[$i + 1])"
+        # a leading - would reach git diff as an option; no .. would diff against the working tree
+        if ($range.StartsWith('-') -or -not $range.Contains('..')) { Show-Usage }
+        $mode = 'range'; $i += 2; continue
+      }
       default         { Show-Usage }
     }
   }
@@ -90,6 +97,12 @@ function Invoke-Collect([string[]]$rest) {
   } elseif ($mode -eq 'unstaged') {
     & git -c "safe.directory=*" -C $repo diff --quiet 2>$null
     if ($LASTEXITCODE -eq 0) { $target = 'empty' }
+  } else {
+    & git -c "safe.directory=*" -C $repo diff --quiet $range -- 2>$null
+    if ($LASTEXITCODE -eq 0) { $target = 'empty' }
+    elseif ($LASTEXITCODE -ne 1) { Fail-Die "bad range: $range" 2 }
+    $headRev = $range -replace '^.*\.\.', ''
+    if (-not $headRev) { $headRev = 'HEAD' }
   }
 
   if ($target -eq 'empty') {
@@ -102,6 +115,9 @@ function Invoke-Collect([string[]]$rest) {
   if ($target -eq 'staged') {
     $filesRaw = @(& git -c "safe.directory=*" -C $repo diff --cached --name-only --diff-filter=ACMR 2>$null)
     $diffOut = (@(& git -c "safe.directory=*" -C $repo diff --cached --no-color -U3 2>$null) -join "`n")
+  } elseif ($target -eq 'range') {
+    $filesRaw = @(& git -c "safe.directory=*" -C $repo diff --name-only --diff-filter=ACMR $range -- 2>$null)
+    $diffOut = (@(& git -c "safe.directory=*" -C $repo diff --no-color -U3 $range -- 2>$null) -join "`n")
   } else {
     $filesRaw = @(& git -c "safe.directory=*" -C $repo diff --name-only --diff-filter=ACMR 2>$null)
     $diffOut = (@(& git -c "safe.directory=*" -C $repo diff --no-color -U3 2>$null) -join "`n")
@@ -120,9 +136,15 @@ function Invoke-Collect([string[]]$rest) {
   $ntCnt = 0
   foreach ($f in $files) {
     if ($f -match '\.(md|txt|rst|adoc|jsonl|log)$') { continue }
-    $full = Join-Path $repo $f
-    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
-    $lines = [IO.File]::ReadAllLines($full, [Text.Encoding]::UTF8)
+    if ($target -eq 'range') {
+      # a range is judged as committed at its head, not as the working tree has it now
+      $lines = @(& git -c "safe.directory=*" -C $repo show "${headRev}:$f" 2>$null)
+      if ($LASTEXITCODE -ne 0) { continue }
+    } else {
+      $full = Join-Path $repo $f
+      if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+      $lines = [IO.File]::ReadAllLines($full, [Text.Encoding]::UTF8)
+    }
     for ($ln = 0; $ln -lt $lines.Count; $ln++) {
       $lineText = $lines[$ln]
       if ($lineText -notmatch '(#|//|--|;|%|<!--|/\*|^\s*\*).*\b(shortcut|ponytail):') { continue }
@@ -366,6 +388,31 @@ function Invoke-Selftest([bool]$DeliberateFail = $false) {
     Assert-Ok ($r.Out.Contains('src/app.py:2  -  linear scan. ceiling: "linear scan". trigger: no-trigger.')) "staged collect flags no-trigger ponytail marker: $($r.Out)"
     Assert-Ok ($r.Out -match '(?m)^markers: 2 total, 1 no-trigger\.\r?$') "staged collect totals markers: $($r.Out)"
 
+    # 1b. -Range <base>..<head>: the committed diff between two revisions, markers read at head
+    $base = (& git -c "safe.directory=*" -C $repo rev-parse HEAD)
+    & git -c "safe.directory=*" -c commit.gpgsign=false -C $repo commit -qm 'markers'
+    [IO.File]::WriteAllText($appPy, "# scratch`n", $enc)
+    $r = Run-Vader @('collect', '-Repo', $repo, '-Range', "$base..HEAD")
+    Assert-Ok ($r.Rc -eq 0) "range collect exits 0, got $($r.Rc): $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^target: range\r?$') "range collect reports target: range: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^files: 1\r?$') "range collect counts 1 changed file: $($r.Out)"
+    Assert-Ok ($r.Out.Contains('src/app.py:2  -  linear scan. ceiling: "linear scan". trigger: no-trigger.')) "range collect reads markers at head, not the working tree: $($r.Out)"
+    Assert-Ok ($r.Out -match '(?m)^\+# shortcut: global lock') "range collect prints the committed diff: $($r.Out)"
+    $r = Run-Vader @('collect', '-Repo', $repo, '-Range', 'HEAD..HEAD')
+    Assert-Ok ($r.Rc -eq 0) "empty range exits 0, got $($r.Rc)"
+    Assert-Ok ($r.Out -match '(?m)^target: empty\r?$') "empty range reports target: empty: $($r.Out)"
+    $r = Run-Vader @('collect', '-Repo', $repo, '-Range', 'no-such-rev..HEAD')
+    Assert-Ok ($r.Rc -eq 2) "bad range rejected with exit 2, got $($r.Rc)"
+    $r = Run-Vader @('collect', '-Repo', $repo, '-Range', "$base...HEAD")
+    Assert-Ok ($r.Out.Contains('src/app.py:2  -  linear scan')) "three-dot range reads markers at its head: $($r.Out)"
+    $r = Run-Vader @('collect', '-Repo', $repo, '-Range', 'HEAD')
+    Assert-Ok ($r.Rc -eq 2) "-Range without .. is usage exit 2, got $($r.Rc)"
+    $r = Run-Vader @('collect', '-Repo', $repo, '-Range')
+    Assert-Ok ($r.Rc -eq 2) "-Range without a value is usage exit 2, got $($r.Rc)"
+    $leak = Join-Path $st 'leak'
+    $r = Run-Vader @('collect', '-Repo', $repo, '-Range', "--output=$leak")
+    Assert-Ok (($r.Rc -eq 2) -and -not (Test-Path -LiteralPath $leak)) "-Range never passes an option to git, got $($r.Rc)"
+
     # 2. Format rankings: mixed severities & lenses -> sorted by severity then file:line, net lines summed, CHANGES-REQUESTED (exit 1)
     $f1 = Join-Path $st 'findings1.txt'
     $f1Body = @(
@@ -434,7 +481,7 @@ function Invoke-Selftest([bool]$DeliberateFail = $false) {
 }
 
 $first = if ($args.Count -gt 0) { "$($args[0])" } else { 'collect' }
-$tail  = if ($args.Count -gt 1) { @($args[1..($args.Count - 1)]) } else { @() }
+$tail  = @($args | Select-Object -Skip 1) # @() outside: an if-expression unrolls one item to a string
 
 switch -regex ($first) {
   '^--?selftest$' {

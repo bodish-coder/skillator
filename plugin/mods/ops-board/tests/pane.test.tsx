@@ -316,7 +316,7 @@ for (const surface of SURFACES) {
     await openAll(ui)
 
     expect((await ui.find({ key: 'row:F3' }))?.text).toMatch(/^▌  F3  cart drawer/)
-    expect(await heads(ui)).toEqual(['IN PROGRESS  1', 'BLOCKED  1', 'PENDING DECISION  1', 'PENDING  2', 'DEFERRED  1'])
+    expect(await heads(ui)).toEqual(['IN PROGRESS  1', 'BLOCKED  1', 'DECIDE  1', 'PENDING  2', 'DEFERRED  1'])
     expect(await rowKeys(ui)).toEqual(['row:F3', 'row:B2', 'row:F2', 'row:F1', 'row:B1', 'row:A4'])
     // State is colour, not a bracket code: the head and the dot share it.
     const dot = async (id: string) => ((await ui.find({ key: 'row:' + id }))!.children
@@ -445,7 +445,7 @@ for (const surface of SURFACES) {
     expect(await ui.find({ key: 'row:B2' })).toBeDefined()
     expect(w.scrolls).toBe(0)
     const before = w.scrolls
-    for (let i = 0; i < 5; i++) await arrow(1)            // the PENDING DECISION header, F2, the PENDING header, F1, B1
+    for (let i = 0; i < 5; i++) await arrow(1)            // the DECIDE header, F2, the PENDING header, F1, B1
     expect(await state($, 'selected')).toBe('B1')
     expect(w.scrolls).toBe(before)
     expect(await ui.find({ key: 'row:B1' })).toBeDefined()
@@ -636,7 +636,7 @@ test('F61: every group starts collapsed - headers with counts, no rows; a click 
   const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
   await start($, clock)
   const ui = await mountPane($, 'terminal')
-  expect(await heads(ui)).toEqual(['IN PROGRESS  1  ▸', 'BLOCKED  1  ▸', 'PENDING DECISION  1  ▸', 'PENDING  2  ▸', 'DEFERRED  1  ▸'])
+  expect(await heads(ui)).toEqual(['IN PROGRESS  1  ▸', 'BLOCKED  1  ▸', 'DECIDE  1  ▸', 'PENDING  2  ▸', 'DEFERRED  1  ▸'])
   expect(await rowKeys(ui)).toEqual([])
   // collapsed groups are not an empty board: no "no open tickets" over the headers
   expect((await texts(ui)).join('\n')).not.toMatch(/no open tickets|no ticket matches/)
@@ -735,7 +735,7 @@ test('F61: a filter shows the matching groups with their filtered counts; x adds
   expect((await texts(ui)).join('\n')).not.toContain('no ticket matches the filter')
   await ui.select({ key: 'sel:app', value: 'all' })
   await ui.press({ key: 'key:done' })
-  expect(await heads(ui)).toEqual(['IN PROGRESS  1  ▸', 'BLOCKED  1  ▸', 'PENDING DECISION  1  ▸', 'PENDING  2  ▸', 'DEFERRED  1  ▸', 'DONE  6  ▸', 'CANCELLED  1  ▸'])
+  expect(await heads(ui)).toEqual(['IN PROGRESS  1  ▸', 'BLOCKED  1  ▸', 'DECIDE  1  ▸', 'PENDING  2  ▸', 'DEFERRED  1  ▸', 'DONE  6  ▸', 'CANCELLED  1  ▸'])
   await ui.unmount()
 })
 
@@ -745,7 +745,7 @@ for (const cols of [80, 60, 40]) {
     const [, clock] = world(on, { '/r/TICKETS.md': many })
     await start($, clock)
     const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: cols })
-    expect(await heads(ui)).toEqual(['PENDING DECISION  1  ▸', 'PENDING  240  ▸'])
+    expect(await heads(ui)).toEqual(['DECIDE  1  ▸', 'PENDING  240  ▸'])
     await openAll(ui)
     for (const b of (await ui.findAll({ type: 'Button' })).filter(x => /^(head|row):/.test(x.key ?? '')))
       expect(b.text.length, b.key).toBeLessThanOrEqual(cols)
