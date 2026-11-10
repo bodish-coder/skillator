@@ -67,14 +67,9 @@ export function renderCommands(root = defaultRoot) {
   }
   for (const entry of metadata.commands) {
     name(entry.name);
-    for (const alias of entry.aliases) name(alias);
     const source = entry.source ?? `${entry.name}.md`;
     if (!/^[a-z][a-z0-9-]*\.(md|txt)$/.test(source)) throw new Error(`Invalid source path: ${source}`);
-    const text = read(join(root, 'commands', source));
-    const parsed = command(text, source);
-    if (entry.canonicalAliases !== false) {
-      for (const alias of entry.aliases) add(`commands/${alias}.md`, text);
-    }
+    const parsed = command(read(join(root, 'commands', source)), source);
     for (const host of entry.hosts) {
       if (!hosts.includes(host)) throw new Error(`Unknown host: ${host}`);
       let sourceBody = sections(parsed.body, entry.name, host, metadata, used);
@@ -84,16 +79,14 @@ export function renderCommands(root = defaultRoot) {
       }
       const body = substitute(sourceBody, host);
       const description = entry.hostDescription ? JSON.stringify(entry.hostDescription) : parsed.description;
-      for (const outputName of [entry.name, ...entry.aliases]) {
-        if (host === 'gemini') {
-          if (body.includes("'''")) throw new Error(`TOML literal delimiter in ${entry.name}`);
-          const desc = description.startsWith('"') ? JSON.parse(description) : description;
-          add(`host-commands/gemini/${outputName}.toml`, `description = ${JSON.stringify(desc)}\nprompt = '''\n${body}\n'''\n`);
-        } else {
-          const skill = host === 'antigravity';
-          const header = `---\n${skill ? `name: ${outputName}\n` : ''}description: ${description}\n${host === 'pi' && parsed.hint ? `argument-hint: ${parsed.hint}\n` : ''}---\n`;
-          add(`host-commands/${host}/${outputName}${skill ? '/SKILL.md' : '.md'}`, `${header}${body}\n`);
-        }
+      if (host === 'gemini') {
+        if (body.includes("'''")) throw new Error(`TOML literal delimiter in ${entry.name}`);
+        const desc = description.startsWith('"') ? JSON.parse(description) : description;
+        add(`host-commands/gemini/${entry.name}.toml`, `description = ${JSON.stringify(desc)}\nprompt = '''\n${body}\n'''\n`);
+      } else {
+        const skill = host === 'antigravity';
+        const header = `---\n${skill ? `name: ${entry.name}\n` : ''}description: ${description}\n${host === 'pi' && parsed.hint ? `argument-hint: ${parsed.hint}\n` : ''}---\n`;
+        add(`host-commands/${host}/${entry.name}${skill ? '/SKILL.md' : '.md'}`, `${header}${body}\n`);
       }
     }
   }

@@ -2,9 +2,6 @@
   "commands": [
     {
       "name": "archive-tickets",
-      "aliases": [
-        "archive-zordon"
-      ],
       "hosts": [
         "cursor",
         "pi",
@@ -15,7 +12,6 @@
     },
     {
       "name": "code-vader",
-      "aliases": [],
       "hosts": [
         "cursor",
         "pi",
@@ -26,9 +22,6 @@
     },
     {
       "name": "engage",
-      "aliases": [
-        "engage-picard"
-      ],
       "hosts": [
         "cursor",
         "pi",
@@ -39,9 +32,6 @@
     },
     {
       "name": "list-tickets",
-      "aliases": [
-        "list-ticket-zordon"
-      ],
       "hosts": [
         "cursor",
         "pi",
@@ -52,9 +42,6 @@
     },
     {
       "name": "marathon-plan",
-      "aliases": [
-        "gauntlet-plan"
-      ],
       "hosts": [
         "cursor",
         "pi",
@@ -66,9 +53,6 @@
     },
     {
       "name": "marathon-run",
-      "aliases": [
-        "gauntlet-run"
-      ],
       "hosts": [
         "cursor",
         "pi",
@@ -80,14 +64,10 @@
     },
     {
       "name": "marathon",
-      "aliases": [],
       "hosts": []
     },
     {
       "name": "pending-subagent",
-      "aliases": [
-        "pending-sentinel"
-      ],
       "hosts": [
         "cursor",
         "pi",
@@ -98,9 +78,6 @@
     },
     {
       "name": "pending",
-      "aliases": [
-        "skillator-pending"
-      ],
       "hosts": [
         "cursor",
         "pi",
@@ -111,14 +88,10 @@
     },
     {
       "name": "plan-runs",
-      "aliases": [],
       "hosts": []
     },
     {
       "name": "skillator-sync",
-      "aliases": [
-        "upstream-sync"
-      ],
       "hosts": [
         "cursor",
         "pi",
@@ -129,7 +102,6 @@
     },
     {
       "name": "skillator-update",
-      "aliases": [],
       "hosts": [
         "cursor",
         "pi",
@@ -140,9 +112,6 @@
     },
     {
       "name": "sync-tickets",
-      "aliases": [
-        "sync-zordon"
-      ],
       "hosts": [
         "cursor",
         "pi",
@@ -153,7 +122,6 @@
     },
     {
       "name": "team-messages",
-      "aliases": [],
       "hosts": [
         "cursor",
         "pi",
@@ -165,7 +133,6 @@
     },
     {
       "name": "team",
-      "aliases": [],
       "hosts": [
         "cursor",
         "pi",
@@ -176,9 +143,6 @@
     },
     {
       "name": "verify-subagent",
-      "aliases": [
-        "verify-shifu"
-      ],
       "hosts": [
         "cursor",
         "pi",
@@ -190,18 +154,13 @@
     {
       "name": "ops",
       "source": "ops.txt",
-      "aliases": [
-        "skillator-ops"
-      ],
       "hosts": [
         "antigravity",
         "opencode"
-      ],
-      "canonicalAliases": false
+      ]
     },
     {
       "name": "message-uhura",
-      "aliases": [],
       "hosts": [
         "cursor",
         "pi",

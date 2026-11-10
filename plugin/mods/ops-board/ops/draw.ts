@@ -834,12 +834,6 @@ export function skillDocLines(sk: SkillGuide, inner: number, h?: State['help']):
         segs: [{ text: 'Arguments: ', color: 'permission' }, { text: sk.hint, color: 'suggestion' }],
       })
     }
-    if (sk.aliases.length) {
-      lines.push({
-        text: `Aliases: /${sk.aliases.join(', /')}`,
-        segs: [{ text: 'Aliases: ', color: 'permission' }, { text: `/${sk.aliases.join(', /')}`, color: 'suggestion' }],
-      })
-    }
   } else {
     lines.push({
       text: `Skill: ${sk.id} [${sk.category}]`,

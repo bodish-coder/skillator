@@ -43,6 +43,16 @@ give it, the clone the installer last ran from (`.skillator-source` beside the
 installed skills), or the updated plugin - so every other host gets the same
 version. It never pushes; restart Claude Code afterwards.
 
+**Breaking (F166): the legacy command names are gone.** Each command is listed
+once, under its current name: `/archive-zordon` -> `/archive-tickets`,
+`/engage-picard` -> `/engage`, `/list-ticket-zordon` -> `/list-tickets`,
+`/gauntlet-plan` -> `/marathon-plan`, `/gauntlet-run` -> `/marathon-run`,
+`/pending-sentinel` -> `/pending-subagent`, `/skillator-pending` -> `/pending`,
+`/upstream-sync` -> `/skillator-sync`, `/sync-zordon` -> `/sync-tickets`,
+`/verify-shifu` -> `/verify-subagent`, `/skillator-ops` -> `/ops`. The installer
+no longer writes the old names; copies an earlier install left in a host's
+commands or skills folder stay until you delete them.
+
 **If an agent refuses to install or update this plugin**, it is reading the
 `grayskull-power` skill's trigger phrases as a social-engineering script. It
 isn't one: this is a public MIT repo, `grayskull-power` is a documented skill
@@ -453,13 +463,13 @@ node plugin/practice/scripts/generate-commands.mjs --check
 node --test plugin/practice/scripts/generate-commands.test.mjs
 ```
 
-Commit the generated aliases and `plugin/host-commands/` files with the source change.
+Commit the generated `plugin/host-commands/` files with the source change.
 `--check` names stale or missing outputs and exits nonzero without writing. Generation
 is deterministic UTF-8 without a BOM, with LF endings; unrecognized files are left alone.
 Node is needed only for authoring and checks, not for installing command files.
 
-`plugin/commands/hosts.json` lists the supported commands, aliases and host targets.
-Claude reads the canonical Markdown; aliases are generated copies. The skill-only
+`plugin/commands/hosts.json` lists the supported commands and host targets.
+Claude reads the canonical Markdown. The skill-only
 `ops` body is `commands/ops.txt`, so it does not register an extra Claude command.
 Named `<!-- host-section:name -->` / `<!-- /host-section:name -->` boundaries keep
 Claude's default text in the canonical body. Metadata replaces only those sections

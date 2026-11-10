@@ -956,7 +956,7 @@ test('F165: Help catalog renders skills and commands with brief explanations and
   const fExp = sized({ ...expState, cols: 80, rows: 35 }).join('\n')
   assert.match(fExp, /Command: \/archive-tickets/)
   assert.match(fExp, /Arguments: \[--days N\]/)
-  assert.match(fExp, /Aliases: \/archive-zordon/)
+  assert.doesNotMatch(fExp, /Aliases:/)  // F166: commands have no legacy aliases
   assert.match(fExp, /Usage Guide:/)
   assert.match(fExp, /Examples & Invocations:/)
   assert.match(fExp, /─── Command Documentation/)

@@ -965,7 +965,7 @@ test('F127: fast keyboard filtering (/) searches skills, backspace edits, Enter 
   assert.equal(s.help!.filter, 'zordon')
   assert.equal(s.help!.selected, 'tickets-zordon')
   const filtered = filteredSkills(s.help!.filter)
-  assert.equal(filtered.length, 4)
+  assert.equal(filtered.length, 2)  // F166: the *-zordon command aliases no longer match
   assert.equal(filtered[0]!.id, 'tickets-zordon')
 
   // Backspace removes character
@@ -1358,7 +1358,7 @@ test('F165 state: Help catalog includes commands, supports command execution, co
   const copyEff = copyStep.effects.find(e => e.kind === 'copy') as any
   assert.ok(copyEff, 'Expected copy effect for command')
   assert.equal(copyEff.text, '/list-tickets')
-  assert.match(copyEff.label, /\/list-tickets \(alias: list-ticket-zordon\)/)
+  assert.doesNotMatch(copyEff.label, /alias/)  // F166: commands have no legacy aliases
 
   // Settle copy effect
   const sAfterCopy = settle(copyEff.then(ok(''))(copyStep.state)).state
