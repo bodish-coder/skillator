@@ -540,6 +540,20 @@ never against the line's own claim.
      **OWNER** when any part needs the owner's own eyes - `testing: owner ..`, a
      live look, a picker or UI check, an account or credentials, a device - even
      if the rest passed.
+   - **`--deep` only** (`/verify-subagent --deep [IDs]`; off by default): after
+     the Done check, judge the ticket's code. The commits naming the ID as a
+     word, `board:` commits left out, give the range `<oldest>^..<newest>`; run
+     code-vader on it (`code-vader.sh collect --range <oldest>^..<newest>`,
+     Windows `code-vader.ps1 collect -Range ..`) and its two lenses, charging
+     the ticket only for lines its own commits wrote (`git show <sha>` each -
+     the range can hold other tickets' commits), plus a design-principles lens: single
+     responsibility, coupling and cohesion, naming, error handling at trust
+     boundaries, tests that pin behaviour (not internals), `.sh`/`.ps1` twins in
+     step. Same severities. PASS only when the Done line is met **and** no
+     `critical` or `high` finding; else FAIL, EVIDENCE the top findings (at most
+     three, worst first) as `<file:line> - <why>` joined by `; `, reworded
+     without parentheses or `*` as ticket-meta needs, no separate WHY (each
+     finding carries its own). OWNER still wins.
 2. **Record each verdict** in the main session, with ticket-meta only - the
    owner's standing ruling, so no question first, headless included. A verdict
    is a note, never a status: the box stays `[%]` on every verdict (closing it
