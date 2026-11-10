@@ -267,7 +267,7 @@ selftest() {
 - [x] F3 - old, with a continuation line
    continuation of F3
 - [>] F4 - deferred, old
-- [?] F5 - pending decision, old [decide: @asha]
+- [?] F5 - decide, old [decide: @asha]
 - [%] F6 - testing, old (testing: a live check)
 EOF
   GIT_COMMITTER_DATE="@$old" GIT_AUTHOR_DATE="@$old" g add TICKETS.md
@@ -296,7 +296,7 @@ EOF
     grep -q "\] $id " TICKETS-archive.md || fail "$id missing from the archive"
   done
   grep -q '^   continuation of F3$' TICKETS-archive.md || fail "continuation line lost"
-  # F45: [?] (pending decision) is open - an old one is never archived.
+  # F45: [?] (decide) is open - an old one is never archived.
   # F62: [%] (testing) is open too - an old one is never archived.
   for id in B2 B3 B9 F2 F2a F2b F4 F5 F6; do grep -q "\] $id " TICKETS.md || fail "$id left the board"; done
   ka=$(grep -c '^ *- \[' TICKETS.md); kb=$(grep -c '^ *- \[' TICKETS-archive.md)

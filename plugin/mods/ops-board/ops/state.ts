@@ -279,7 +279,6 @@ const ran = (argv: string[]) => 'ran: ' + argv.map(quote).join(' ')
 const notesOf = (out: string) => out.split(/\r?\n/).map(l => l.trimEnd()).filter(l => l && !/^\s*- \[/.test(l))
 const why = (r: RunResult, what: string) => r.err.trim() || r.out.trim() || `${what} exited ${r.code}`
 const timedOut = (r: RunResult) => r.code === -1 && /^timed out/.test(r.err)
-const word = (b: Box) => (b === '?' ? 'decision' : STATE_NAME[b])
 const ticketOf = (s: State, id: string): Ticket | null => s.board?.tickets.find(t => t.id === id) ?? null
 const toast = (s: State, text: string): State => ({ ...s, toast: text })
 const run = (call: Call, args: string[], then: Then, stdin?: string): Effect =>
@@ -329,15 +328,15 @@ export function dialogLines(s: State): string[] {
   out.push(`  ${onAdd ? '› ' : '  '}+ add person`)
   if (tk) {
     if (d.kind === 'tester') {
-      out.push(`  Change  [${from}] ${word(from)}, tester ${d.handle ?? '(pick someone)'}`)
+      out.push(`  Change  [${from}] ${STATE_NAME[from]}, tester ${d.handle ?? '(pick someone)'}`)
     } else {
-      out.push(`  Change  [${from}] ${word(from)} → [${to}] ${word(to)}, ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`)
+      out.push(`  Change  [${from}] ${STATE_NAME[from]} → [${to}] ${STATE_NAME[to]}, ${d.kind === 'decide' ? 'decide' : 'owner'} ${d.handle ?? '(pick someone)'}`)
     }
   }
   if (tk?.box === '~' && d.kind !== 'tester') {
     out.push(tk.session
-      ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${word(to)}; the tag stays - tell that session`
-      : `  ! ${tk.id} is in progress - this moves it to ${word(to)}; tell whoever is working it`)
+      ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${STATE_NAME[to]}; the tag stays - tell that session`
+      : `  ! ${tk.id} is in progress - this moves it to ${STATE_NAME[to]}; tell whoever is working it`)
   }
   const metaCmd = d.kind === 'decide' ? 'decide' : d.kind === 'tester' ? 'assign-tester' : 'assign'
   out.push(`  Runs    ticket-meta ${metaCmd} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`)
@@ -379,7 +378,7 @@ function confirmAssign(s: State): Step {
     }
     const t = ticketOf(x, id)
     const closed = !t || t.box === 'x' || t.box === '-'
-    const state = d.kind === 'decide' ? 'pending decision' : 'pending'
+    const state = d.kind === 'decide' ? 'decide' : 'pending'
     const role = d.kind === 'decide' ? `for ${handle} to decide` : d.kind === 'tester' ? `tester ${handle}` : `owned by ${handle}`
     const head = `✓ ${id} ${d.kind === 'tester' ? 'tester assigned ' : closed ? 'reopened as ' + state + ', ' : 'now ' + state + ', '}${role}${t ? ': ' + t.title : ''}`
     return { ...x, dialog: null, toast: [head, ...notesOf(r.out), ran(r.argv)].join('\n') }

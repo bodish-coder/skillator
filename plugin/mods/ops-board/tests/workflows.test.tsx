@@ -62,7 +62,7 @@ for (const surface of SURFACES) {
     const dot = async (key: string) => dotColor(await ui.find({ key }))
     expect(await dot('wf:wf_done')).toBe('success')       // every agent ended, none failed: completed
     expect(await dot('wf:wf_run')).toBe('warning')        // an agent running
-    expect(await dot('wf:wf_new')).toBe('text')           // no agent started yet: pending
+    expect(await dot('wf:wf_new')).toBe('claude')         // no agent started yet: pending
     expect(await dot('wf:wf_bad')).toBe('error')          // its agents ended, one failed
     expect(await dot('wf:call:tu-broken')).toBe('error')  // the call failed its check
     const head = (await ui.find({ key: 'sect:workflows' }))?.children[0] as { props?: { color?: string } } | undefined

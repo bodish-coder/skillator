@@ -38,7 +38,7 @@ export type Paint = { color: boolean; ascii: boolean; plain?: boolean }
 type Mono = Seg & { mono?: string }
 
 // Theme names → SGR (CONSTRAINTS); 'text' and any other name draw in the default colour.
-const SGR: Record<string, string> = { warning: '33', error: '31', permission: '35', success: '32', suggestion: '36', inactive: '2' }
+const SGR: Record<string, string> = { warning: '33', error: '31', permission: '35', autoAccept: '95', claude: '38;5;208', success: '32', suggestion: '36', inactive: '2' }
 const HIGHLIGHT = ['1', '97', '44']
 
 // --ascii: the design's map, plus the arrows, marks, dashes and box lines a raster console
@@ -170,7 +170,7 @@ function countLine(s: State, m: Model): Seg[] {
   const open = n(' ') + n('~') + n('%') + n('!') + n('?')
   // F62: testing is named only while a ticket is under test, so the line keeps its 80-column fit.
   const head = `${open} open (${n(' ')} pending · ${n('~')} in progress` + (n('%') ? ` · ${n('%')} testing` : '')
-    + ` · ${n('!')} blocked · ${n('?')} decision)`
+    + ` · ${n('!')} blocked · ${n('?')} decide)`
     + (n('>') ? ` · ${n('>')} deferred` : '')
   // Done shown: the closed count too when it fits (the Done and Cancelled heads carry it anyway).
   const closed = ` · ${n('x') + n('-')} closed`
@@ -178,7 +178,7 @@ function countLine(s: State, m: Model): Seg[] {
   const segs: Seg[] = [
     { text: `${open} open`, bold: true },
     dim(' ('),
-    { text: `${n(' ')} pending` },
+    { text: `${n(' ')} pending`, color: n(' ') ? 'claude' : undefined },
     dim(' · '),
     { text: `${n('~')} in progress`, color: n('~') ? 'warning' : undefined, dim: !n('~') },
   ]
@@ -187,7 +187,7 @@ function countLine(s: State, m: Model): Seg[] {
     dim(' · '),
     { text: `${n('!')} blocked`, color: n('!') ? 'error' : undefined, dim: !n('!') },
     dim(' · '),
-    { text: `${n('?')} decision`, color: n('?') ? 'permission' : undefined, dim: !n('?') },
+    { text: `${n('?')} decide`, color: n('?') ? 'autoAccept' : undefined, dim: !n('?') },
     dim(')'),
   )
   if (n('>')) segs.push(dim(' · '), dim(`${n('>')} deferred`))
@@ -375,7 +375,7 @@ function bandSegs(s: State): Seg[][] {
 // --- the Tickets tab, as the mock ---
 
 const GROUP_WORD: Record<Box, string> = {
-  '~': 'In progress', '%': 'Testing', '!': 'Blocked', '?': 'Pending decision', ' ': 'Pending', '>': 'Deferred', x: 'Done', '-': 'Cancelled',
+  '~': 'In progress', '%': 'Testing', '!': 'Blocked', '?': 'Decide', ' ': 'Pending', '>': 'Deferred', x: 'Done', '-': 'Cancelled',
 }
 
 function filterLine(s: State): Seg[] {

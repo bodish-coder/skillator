@@ -25,7 +25,7 @@ Create it if missing, with exactly this shape:
 ```markdown
 # TICKETS
 
-Legend: `[ ]` pending · `[~]` in-progress · `[%]` testing · `[!]` blocked · `[?]` pending decision · `[>]` deferred · `[x]` done · `[-]` cancelled
+Legend: `[ ]` pending · `[~]` in-progress · `[%]` testing · `[!]` blocked · `[?]` decide · `[>]` deferred · `[x]` done · `[-]` cancelled
 IDs are permanent — never reuse or renumber. Append new tickets at the end of
 their section.
 
@@ -361,8 +361,8 @@ write the ticket.**
   moment the dependency clears. Never leave an agent spinning on a blocked
   ticket — flip it and move to the next one.
 - Waiting on a person's decision (which option, whether to do it at all) →
-  `[?]` pending decision, via `ticket-meta decide <ID> @who` so the line names
-  who decides. Pending decision is **open**, like blocked: report it at session
+  `[?]` decide, via `ticket-meta decide <ID> @who` so the line names
+  who decides. Decide is **open**, like blocked: report it at session
   end, never build it before the decision, and flip it to `[ ]` with
   `ticket-meta decided <ID>` once the answer is in.
 - Postponed by choice — not now, waiting on a condition that isn't a hard
@@ -889,14 +889,14 @@ Agent-found
   [ ] A1 — Unhandled promise rejection in the upload worker
   [>] A2 — `parseDate` returns Invalid Date on empty string (deferred: after the parser rewrite)
 
-7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
+7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 decide) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
 ```
 
 ### By status (`list tickets status`)
 
 Same lines, regrouped. Sections in this order — **in-progress first**, because
 that is what someone asking for a status view wants to see — In progress,
-Testing, Blocked, Pending decision, Deferred, Pending (this board has nothing
+Testing, Blocked, Decide, Deferred, Pending (this board has nothing
 under test, so no Testing section):
 
 ```
@@ -906,7 +906,7 @@ In progress
 Blocked
   [!] B3 — Avatar upload 500s over 5MB (blocked: needs S3 creds from ops)
 
-Pending decision
+Decide
   [?] F3 — Pick the chart library [decide: @asha]
 
 Deferred
@@ -918,7 +918,7 @@ Pending
   [ ] F2 — Bulk delete in the table view
   [ ] A1 — Unhandled promise rejection in the upload worker
 
-7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
+7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 decide) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
 ```
 
 A sub-part shown away from its parent carries the parent ID in trailing
@@ -940,12 +940,12 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
   ("show everything", "what did we finish") — then `[x]` and `[-]` too.
 - **Drop empty sections.** No "Features: none", no empty `Blocked`.
 - **Blocked and deferred show their reason**; that is the whole point of
-  `[!]` and `[>]`. Pending decision shows who decides — its `[decide: ..]` tag;
+  `[!]` and `[>]`. Decide shows who decides — its `[decide: ..]` tag;
   testing shows what test — its `(testing: ..)` note.
 - **The counts must add up, and the line must show its work.** Eight mutually
   exclusive states, two buckets and a loner:
-  `open = pending + in-progress + testing + blocked + pending decision`
-  (testing, blocked and pending decision are open, just waiting) ·
+  `open = pending + in-progress + testing + blocked + decide`
+  (testing, blocked and decide are open, just waiting) ·
   `closed = done + cancelled` · deferred is **neither** — it stands alone
   between them, so it never inflates the open count someone is judging the
   week by · `total = open + deferred + closed`. Each bucket prints its own
@@ -958,13 +958,13 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
   prints the full line:
 
   ```
-  0 open (0 pending · 0 in-progress · 0 testing · 0 blocked · 0 pending decision) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total
+  0 open (0 pending · 0 in-progress · 0 testing · 0 blocked · 0 decide) · 0 deferred · 0 closed (0 done · 0 cancelled) · 0 total
   ```
 - **One count line after the list**, and nothing else. No commentary on the
   board's health, no suggested next ticket unless asked:
 
   ```
-  7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 pending decision) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
+  7 open (4 pending · 1 in-progress · 0 testing · 1 blocked · 1 decide) · 1 deferred · 9 closed (8 done · 1 cancelled) · 17 total
   ```
 - Legend only if the user seems new to the board, and then one line.
 
@@ -973,7 +973,7 @@ parentheses — `(B2)` — since the indentation that explained it is gone. Incl
 Long boards are where the list is *most* needed and most often ruined. Do not
 compress by dropping titles. Compress by **showing less of the board, in full**:
 
-1. **In-progress, testing, blocked and pending decision print in full, always.** However big the board,
+1. **In-progress, testing, blocked and decide print in full, always.** However big the board,
    that is what the person asking is actually working on and stuck behind.
 2. **Pending prints in full up to 20 lines per section**, oldest first. Over
    that, print 20 and add one line naming the rest and how to see it:
@@ -985,7 +985,7 @@ compress by dropping titles. Compress by **showing less of the board, in full**:
    files drift: a `B68` logged during a burst of agent findings ends up under
    `## Agent-found` and stays there forever. The ID is the classification; the
    heading is just where the line happened to land. Sort within a group by status
-   (in-progress, testing, blocked, pending decision, deferred, pending) then by number.
+   (in-progress, testing, blocked, decide, deferred, pending) then by number.
 4. **`list tickets <prefix>`** (`list tickets A`, `list tickets B`) scopes to one
    type and prints it whole, no cap. That is the escape hatch the truncation line
    points at, so it must actually work.

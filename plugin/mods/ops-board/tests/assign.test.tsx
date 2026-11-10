@@ -179,7 +179,7 @@ for (const surface of SURFACES) {
     await pane.press({ key: 'kind:decision' })
     expect((await pane.find({ key: 'kind:decision' }))?.text).toBe('(•) decision')
     expect(await title(pane)).toBe('Assign F1 for a decision  Esc cancels')
-    expect((await pane.find({ key: 'change' }))?.text).toBe('Change  ● done -> ● decision  decide @asha')
+    expect((await pane.find({ key: 'change' }))?.text).toBe('Change  ● done -> ● decide  decide @asha')
     expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta decide F1 @asha')
 
     await pane.press({ key: 'go' })
@@ -189,7 +189,7 @@ for (const surface of SURFACES) {
     expect(w.runs[0]!.init?.cwd?.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')).toBe('/r')
     expect(w.runs[0]!.init?.timeoutMs).toBe(30000)
     expect(w.toasts).toHaveLength(1)
-    expect(w.toasts[0]).toContain('✓ F1 reopened as pending decision, for @asha to decide: product grid on the home page')
+    expect(w.toasts[0]).toContain('✓ F1 reopened as decide, for @asha to decide: product grid on the home page')
     expect(w.toasts[0]).toContain(`ran: /bin/sh ${META}.sh decide F1 @asha`)
     // back on the Tickets view, the board never closed
     expect(w.closes).toEqual([])
@@ -213,7 +213,7 @@ for (const surface of SURFACES) {
     formOpen(w)
     expect(await title(pane)).toBe('Assign F3 for a decision  Esc cancels')
     expect((await pane.find({ key: 'kind:decision' }))?.text).toBe('(•) decision')
-    expect((await pane.find({ key: 'warn' }))?.text).toBe('! F3 is in progress under @cc-4ae496 - this moves it to decision; the tag stays - tell that session')
+    expect((await pane.find({ key: 'warn' }))?.text).toBe('! F3 is in progress under @cc-4ae496 - this moves it to decide; the tag stays - tell that session')
     await pane.press({ key: 'kind:implementation' })
     await pane.press({ key: 'who:@asha' })
     expect((await pane.find({ key: 'change' }))?.text).toBe('Change  ● in progress -> ● pending  owner @asha')
@@ -345,12 +345,12 @@ for (const surface of SURFACES) {
     expect(await pane.find({ key: 'change' })).toBeUndefined()
     await pane.input({ key: 'ticket', text: 'f2', kind: 'change' })
     expect(await title(pane)).toBe('Assign F2 for a decision  Esc cancels')
-    expect((await pane.find({ key: 'title' }))?.text).toBe('● pending decision  /orders endpoint returns the last…')   // cut to the 54-column body
+    expect((await pane.find({ key: 'title' }))?.text).toBe('● decide  /orders endpoint returns the last…')   // cut to the 54-column body
     expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta decide F2 @vidul')
     await pane.press({ key: 'who:@asha' })
     await pane.press({ key: 'go' })
     expect(w.runs.map(r => r.argv)).toEqual([['/bin/sh', META + '.sh', 'decide', 'F2', '@asha']])
-    expect(w.toasts[0]).toContain('✓ F2 now pending decision, for @asha to decide: /orders endpoint returns the last 20 orders')
+    expect(w.toasts[0]).toContain('✓ F2 now decide, for @asha to decide: /orders endpoint returns the last 20 orders')
     formClosed(w)
     expect(w.writes).toEqual([])
     await pane.unmount()

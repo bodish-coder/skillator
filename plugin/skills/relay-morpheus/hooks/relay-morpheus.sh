@@ -869,7 +869,7 @@ cmd_board() {
   bid=${1:-}; mk=${2-}
   [ "$#" = 2 ] || die "usage: relay-morpheus.sh board <ID> <mark>  (mark: ' ' ~ x ! ? % > -)"
   printf '%s' "$bid" | grep -Eqx '[A-Z]{1,3}[0-9]+[a-z]?' || die "board: '$bid' is not a ticket id"
-  # F45: '?' is pending decision (tickets-zordon), an open state like '!'.
+  # F45: '?' is decide (tickets-zordon), an open state like '!'.
   # F62: '%' is testing (tickets-zordon), open too.
   case "$mk" in ' '|'~'|x|'!'|'?'|'%'|'>'|'-') ;; *) die "board: mark is one of ' ' ~ x ! ? % > -" ;; esac
   _bm=$(main_of) || _bm=$(pwd); _bf="$_bm/TICKETS.md"
@@ -3218,7 +3218,7 @@ b" >/dev/null 2>&1); then die "F48: watchdog hold took a two-line reason"; fi
   printf '%s\n' '# board' "- [ ] F9 $em lease me" "- [ ] F90 $em not me" > "$d6/TICKETS.md"
   ( cd "$d6" && cmd_board F9 '~' >/dev/null ) || die "F36: board failed"
   grep -q "^- \\[~\\] F9 $em lease me\$" "$d6/TICKETS.md" && grep -q "^- \\[ \\] F90 $em not me\$" "$d6/TICKETS.md" || die "F36: board flipped the wrong line: $(cat "$d6/TICKETS.md")"
-  # F45: '?' (pending decision) is a mark like the others.
+  # F45: '?' (decide) is a mark like the others.
   ( cd "$d6" && cmd_board F9 '?' >/dev/null ) || die "F45: board refused mark '?'"
   grep -q "^- \\[?\\] F9 $em lease me\$" "$d6/TICKETS.md" && grep -q "^- \\[ \\] F90 $em not me\$" "$d6/TICKETS.md" || die "F45: board did not set [?]: $(cat "$d6/TICKETS.md")"
   # F62: '%' (testing) is a mark like the others.

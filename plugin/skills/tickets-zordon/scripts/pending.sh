@@ -483,7 +483,7 @@ human() {
       if (length(h) <= 80) out(h); else wrap("REPO      ", repo " " bt " " civil(now), "          ")
 
       out("TICKETS   " (no + 0) " open, " (nd + 0) " deferred")
-      LB["~"] = "in progress"; LB["%"] = "testing"; LB["!"] = "blocked"; LB["?"] = "decision"; LB[" "] = "pending"
+      LB["~"] = "in progress"; LB["%"] = "testing"; LB["!"] = "blocked"; LB["?"] = "decide"; LB[" "] = "pending"
       G = "~%!? "
       for (gi = 1; gi <= 5; gi++) {
         m = substr(G, gi, 1); if (!N[m]) continue
@@ -653,7 +653,7 @@ TICKETS   8 open, 2 deferred
     F7    en dash title \"quoted\" -> arrow
   blocked (1)
     B2    orders 500 past page 3                                          @vidul
-  decision (1)
+  decide (1)
     F1    pick the chart library                                    decide @asha
   pending (2)
     F3    pending one

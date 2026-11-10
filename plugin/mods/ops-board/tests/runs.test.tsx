@@ -224,9 +224,9 @@ for (const surface of SURFACES) {
     expect(await text('par:RUN-0014')).toBe('runs in parallel: 1 and 3 · then 2')
     expect(await text('dec:RUN-0014:0')).toBe('parked  Q1 ● F49 credit source? - planning waits on it')
     expect(await text('edit:RUN-0014')).toBe('Edit in chat: /skillator:plan-runs F46 F47 F48')
-    // Ticket state is colour, never a bracket code: F48 in progress is amber, F49 violet.
+    // Ticket state is colour, never a bracket code: F48 in progress is amber, F49 pink.
     expect(JSON.stringify(await ui.find({ key: 'stage:RUN-0014:3' }))).toContain('"color":"warning"')
-    expect(JSON.stringify(await ui.find({ key: 'dec:RUN-0014:0' }))).toContain('"color":"permission"')
+    expect(JSON.stringify(await ui.find({ key: 'dec:RUN-0014:0' }))).toContain('"color":"autoAccept"')
     expect(await text('stage:RUN-0014:3')).not.toContain('[~]')
     // a dispatched run: no Start, its stage open
     expect(await text('run:RUN-0012')).toBe('● RUN-0012  the ops board  owner @asha  workflow · 2/4 done')
@@ -339,12 +339,12 @@ for (const surface of SURFACES) {
     const dot = async (key: string) => dotColor(await ui.find({ key }))
     expect((await ui.find({ key: 'run:RUN-0012' }))?.text).toBe('● RUN-0012  the ops board  owner @asha  workflow · 2/4 done')
     expect(await dot('run:RUN-0012')).toBe('warning')          // dispatched, not all landed: in progress
-    expect(await dot('run:RUN-0014')).toBe('text')             // planned, not started: pending
+    expect(await dot('run:RUN-0014')).toBe('claude')           // planned, not started: pending
     expect(await dot('stage:RUN-0013:1')).toBe('success')      // landed
     expect(await dot('stage:RUN-0013:2')).toBe('error')        // failed keeps its red
     expect(await dot('stage:RUN-0013:3')).toBe('warning')      // in flight
-    expect(await dot('stage:RUN-0013:4')).toBe('text')         // not started
-    expect(await dot('stage:RUN-0014:1')).toBe('text')         // a planned run's stage
+    expect(await dot('stage:RUN-0013:4')).toBe('claude')       // not started
+    expect(await dot('stage:RUN-0014:1')).toBe('claude')       // a planned run's stage
     expect((await ui.find({ key: 'stage:RUN-0013:1' }))?.text).toStartWith('● 1    ')
     expect(await headColor(ui, 'sect:runs')).toBe('warning')   // a run under way: the header is amber
     await ui.unmount()

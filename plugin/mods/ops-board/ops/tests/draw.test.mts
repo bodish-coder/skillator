@@ -177,13 +177,13 @@ test('filter row, tags, expanded chips and raw line, count line, done shown', ()
   const f = text(s)
   assert.match(f, /^filter  app: all · who: all · mine: off +\[f filter\] · \[x show done\]$/m)
   assert.match(f, /^  ● F3  Pick the chart library +decide @asha$/m)
-  assert.match(f, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
-  assert.match(f, /  ▾ Pending decision \(1\)\n/)
+  assert.match(f, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decide\) · 1 deferred$/m)
+  assert.match(f, /  ▾ Decide \(1\)\n/)
   const ex = text(reduce({ ...s, selected: 'F3' }, { name: 'return' }).state)
   assert.match(ex, /      decide:@asha   \[D decided\]\n      - \[\?\] F3 — Pick the chart library \[decide: @asha\]/)
   const done = text(reduce(s, { name: 'x' }).state)
   assert.match(done, /  ▾ Done \(8\)/)
-  assert.match(done, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
+  assert.match(done, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decide\) · 1 deferred$/m)
   assert.match(text({ ...reduce(s, { name: 'x' }).state, cols: 100 }), /· 1 deferred · 9 closed$/m)
   const fm = reduce(s, { name: 'f' }).state
   assert.match(text(fm), /←→ field/)
@@ -194,7 +194,7 @@ test('[%] testing: group after in progress, cyan dot, counted open', () => {
   const t = opened(onBoard(initial(80, 24, 0), parseBoard('- [!] B1 — stuck\n- [%] F7 — built thing (testing: owner live check)\n- [~] F8 — working\n', 'T', 1, 1), [], null))
   const f = text(t)
   assert.match(f, /▾ In progress \(1\)\n[› ] ● F8 +working[^\n]*\n\n?  ▾ Testing \(1\)\n[› ] ● F7 +built thing[^\n]*\n\n?  ▾ Blocked \(1\)/)
-  assert.match(f, /^3 open \(0 pending · 1 in progress · 1 testing · 1 blocked · 0 decision\)$/m)
+  assert.match(f, /^3 open \(0 pending · 1 in progress · 1 testing · 1 blocked · 0 decide\)$/m)
   assert.match(frame(t, { color: true, ascii: false }).find(l => l.includes('built thing'))!, /\x1b\[36m●\x1b\[0m\x1b\[36;1m F7  \x1b\[0mbuilt thing/)
   assert.doesNotMatch(text(s), /testing/)          // none under test: the count line stays as it was
 })
@@ -259,11 +259,11 @@ test('F76: a status dot on every run and stage row, coloured as the Tickets tab'
   const dot = (re: RegExp) => line(re)?.find(x => x.text === '●')?.color
   assert.equal(dot(/RUN-0012  board sweep/), 'warning')     // dispatched, not all landed: in progress
   assert.equal(dot(/RUN-0011  older run/), 'success')       // all landed: completed
-  assert.equal(dot(/RUN-0014  planned one/), 'text')        // planned: not started
+  assert.equal(dot(/RUN-0014  planned one/), 'claude')      // planned: not started, pending orange
   assert.equal(dot(/^    ●  1  F1 /), 'success')
   assert.equal(dot(/^    ●  2  F2 /), 'error')                // failed keeps its red
   assert.equal(dot(/^    ●  3  F3 /), 'warning')
-  assert.equal(dot(/^    ●  4  B2 /), 'text')
+  assert.equal(dot(/^    ●  4  B2 /), 'claude')
   assert.equal(line(/▾ Runs \(3\)/)?.find(x => /Runs/.test(x.text))?.color, 'warning')
 })
 // F99: a finished run sorts after the active ones and draws dim whole, its done dot kept.
@@ -376,10 +376,10 @@ test('A143 follow-up: a row shows its session tag only while [~] or [%]; a stale
 
 test('F61: every group starts collapsed - one header per group with its count, the first selected, no rows', () => {
   const f = text(fresh)
-  assert.match(f, /\n› ▸ In progress \(1\)\n  ▸ Blocked \(1\)\n  ▸ Pending decision \(1\)\n  ▸ Pending \(4\)\n  ▸ Deferred \(1\)\n/)
+  assert.match(f, /\n› ▸ In progress \(1\)\n  ▸ Blocked \(1\)\n  ▸ Decide \(1\)\n  ▸ Pending \(4\)\n  ▸ Deferred \(1\)\n/)
   assert.doesNotMatch(f, /● B2 /)
   // the count line is the board's, not the view's
-  assert.match(f, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decision\) · 1 deferred$/m)
+  assert.match(f, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decide\) · 1 deferred$/m)
   // colour: the glyph and the words in the state's colour, the selected header highlighted (F89)
   const c = frame(fresh, { color: true, ascii: false })
   assert.match(c.find(l => l.includes('In progress'))!, /\x1b\[1;97;44m▸ In progress \(1\)/)
@@ -889,15 +889,16 @@ test('F161: standalone ops board rich semantic colors across tab bar, buttons, t
 
   // Ticket rows: unselected ticket IDs bold colored, decide tag in magenta, owner tag in cyan
   const f3Line = c.find(l => l.includes('Pick the chart library'))!
-  assert.match(f3Line, /\x1b\[35m●\x1b\[0m\x1b\[35;1m F3  \x1b\[0mPick the chart library/)
+  assert.match(f3Line, /\x1b\[95m●\x1b\[0m\x1b\[95;1m F3  \x1b\[0mPick the chart library/)
   assert.match(f3Line, /\x1b\[35m +decide @asha\x1b\[0m$/)
 
-  // Count line: open bold, in progress amber, blocked red, decision magenta
+  // Count line: open bold, in progress amber, blocked red, decide pink
   const cntLine = c.find(l => l.includes('7 open'))!
   assert.match(cntLine, /\x1b\[1m7 open\x1b\[0m/)
   assert.match(cntLine, /\x1b\[33m1 in progress\x1b\[0m/)
   assert.match(cntLine, /\x1b\[31m1 blocked\x1b\[0m/)
-  assert.match(cntLine, /\x1b\[35m1 decision\x1b\[0m/)
+  assert.match(cntLine, /\x1b\[95m1 decide\x1b\[0m/)
+  assert.match(cntLine, /\x1b\[38;5;208m4 pending\x1b\[0m/)
 
   // Footer keys: cyan button badges
   const keysLine1 = c.find(l => l.includes('[a assign]'))!

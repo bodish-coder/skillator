@@ -1660,7 +1660,7 @@ function DoLand {
 function DoBoard {
   if (-not $Ticket -or $null -eq $Mark) { Die "usage: -Mode board -Ticket <ID> -Mark <' '|~|x|!|?|>|->" }
   if ($Ticket -cnotmatch '^[A-Z]{1,3}[0-9]+[a-z]?$') { Die "board: '$Ticket' is not a ticket id" }
-  # F45: '?' is pending decision (tickets-zordon), an open state like '!'.
+  # F45: '?' is decide (tickets-zordon), an open state like '!'.
   # F62: '%' is testing (tickets-zordon), open too.
   if ($Mark -cnotin @(' ', '~', 'x', '!', '?', '%', '>', '-')) { Die "board: mark is one of ' ' ~ x ! ? % > -" }
   $m = MainOf; if (-not $m) { $m = (Get-Location).Path }
@@ -3683,7 +3683,7 @@ function DoSelftest {
       $o = R6 @('-Mode', 'board', '-Ticket', 'F9', '-Mark', '~'); if ($o.rc -ne 0) { Die "F36: board failed: $($o.out)" }
       $tl = [IO.File]::ReadAllText("$d6/TICKETS.md")
       if (-not $tl.Contains("- [~] F9 $([char]0x2014) lease me`n") -or -not $tl.Contains("- [ ] F90 $([char]0x2014) not me")) { Die "F36: board flipped the wrong line: $tl" }
-      # F45: '?' (pending decision) is a mark like the others.
+      # F45: '?' (decide) is a mark like the others.
       $o = R6 @('-Mode', 'board', '-Ticket', 'F9', '-Mark', '?'); if ($o.rc -ne 0) { Die "F45: board refused mark '?': $($o.out)" }
       $tl = [IO.File]::ReadAllText("$d6/TICKETS.md")
       if (-not $tl.Contains("- [?] F9 $([char]0x2014) lease me`n") -or -not $tl.Contains("- [ ] F90 $([char]0x2014) not me")) { Die "F45: board did not set [?]: $tl" }
