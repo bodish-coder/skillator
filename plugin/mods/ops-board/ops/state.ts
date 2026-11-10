@@ -2251,9 +2251,9 @@ export const COMMANDS: HelpItem[] = [
     aliases: [],
     summary: "Verify testing [%] tickets with fresh agents against acceptance criteria; records a PASS or FAIL note, the box stays [%]",
     triggers: ["verify-subagent", "verify tickets", "verify testing"],
-    usage: "Verify testing tickets: one fresh agent per [%] row re-checks its Done line against evidence and records a verdict note - verified PASS, or verified FAIL with what failed and why; the box never moves, OWNER gets no note (tickets-zordon).",
-    examples: ["/verify-subagent", "/verify-subagent F165"],
-    hint: "[IDs]"
+    usage: "Verify testing tickets: one fresh agent per [%] row re-checks its Done line against evidence and records a verdict note - verified PASS, or verified FAIL with what failed and why; the box never moves, OWNER gets no note (tickets-zordon). --deep (opt-in) also runs a code-vader review of the ticket's commits.",
+    examples: ["/verify-subagent", "/verify-subagent F165", "/verify-subagent --deep F165"],
+    hint: "[--deep] [IDs]"
   }
 ];
 

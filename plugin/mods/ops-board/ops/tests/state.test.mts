@@ -1344,6 +1344,11 @@ test('A196 + A197: startRunCmd canonical parity, eligibleRunTickets, parseFollow
   assert.equal(noPend.state.toast, 'No pending stages left in RUN-0012 to push')
 })
 
+test('F169 state: /verify-subagent help hint advertises --deep', () => {
+  const item = HELP_ITEMS.find(i => i.id === 'verify-subagent')
+  assert.ok(item?.hint?.includes('--deep'))
+})
+
 test('F165 state: Help catalog includes commands, supports command execution, copying, and filtering', () => {
   // 1. Catalog inventory
   assert.ok(COMMANDS.length >= 18)
