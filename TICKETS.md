@@ -1,6 +1,6 @@
 # TICKETS
 
-Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[?]` pending decision · `[>]` deferred · `[x]` done · `[-]` cancelled
+Legend: `[ ]` pending · `[~]` in-progress · `[!]` blocked · `[?]` decide · `[>]` deferred · `[x]` done · `[-]` cancelled
 IDs are permanent — never reuse or renumber. Append new tickets at the end of
 their section.
 
