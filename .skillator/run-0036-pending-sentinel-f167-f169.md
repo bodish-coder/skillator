@@ -10,7 +10,7 @@ branch: run/RUN-0036-pending-sentinel-f167-f169
 | 269 | AADP F167 verify verdict-only | x | build:opus | 2026-11-10T19:15Z | 4282779 |
 | 270 | AADQ F169 verify --deep code-vader | x | build:opus | 2026-11-10T19:31Z | c291ed9 |
 | 271 | AADR F166 drop command aliases | x | build:opus | 2026-11-10T20:18Z | 220fd8e |
-| 272 | verify review bump commit push |   | - | - | - |
+| 272 | verify review bump commit push | x | main | 2026-11-10T20:48Z | fc40b2b |
 | 273 | AADS F168 ops colors + Decide rename | x | build:opus | 2026-11-10T20:42Z | b66b6df |
 | 274 | AADT F169 review fix: Help shows --deep | x | build:sonnet | 2026-11-10T20:48Z | bc00268 |
 
@@ -129,3 +129,4 @@ prompt: |
 - 20:42 - Ruling: AADS F168 landed b66b6df - pane suite 397/68 vs baseline 396/69, failing set a subset of the baseline (diffed); ops npm 287/287 rerun alone; artifact, pending.sh selftests ok; tsc 19 errors = clean-tree baseline per agent; review low on code paths: 0 findings, neutral/violet grep-checked unused; TICKETS.md legend renamed by the main session; history files outside plugin/ (.skillator run files, reports, docs handoff/plan, baselines) keep 'pending decision' as records - cost if wrong: one more grep-and-replace. archive-tickets selftest gawk failure reproduced on main, logged A219. Owner-taste items from review carried to the end batch: Decide group heading vs personal Decide section, pink dot beside violet decide tag, artifact CSS still violet.
 - 20:44 - Ruling: watchdog hold from 20:29Z (mem 0.8 GB, during F168's test runs) released - free memory re-read at 3.0 GB - cost if wrong: the fix stage's one test run slows or is killed and is rerun alone. Stage 274 AADT added for the whole-run review's one finding: /verify-subagent Help entry lacks F169's --deep; fix seat cheap=sonnet (one entry, named change).
 - 20:48 - Ruling: AADT stage 274 landed bc00268 - ops npm 288/288 rerun by main session, review low: 0 findings (the agent's own review read the main checkout by mistake; redone on the commit). Version bump minor 4.25.4->4.26.0 / 0.14.4->0.15.0 - features plus F166's breaking command removal - same five files as release 0a297ad - cost if wrong: one more bump.
+- 20:48 - Ruling: stage 272 - run branch merged into main fc40b2b; post-merge generate --check 77/0, check-tickets ok, no 'pending decision' under plugin/, no alias command files, versions 4.26.0/0.15.0; worktree and branch removed; push waits for the owner. Owed by the owner: F166 picker check on a non-Claude host, F167 live verify-subagent run, F168 live look, F169 live verify-subagent --deep run; F168 taste questions in the end batch.
