@@ -533,11 +533,13 @@ function Edit-Line([string]$id, [hashtable]$o) {
     }
     if ($o.unblock) { $line = ([regex]'[ \t]*\(blocked:[^()]*\)').Replace($line, '', 1) }   # F81 unblock
     if ($o.done) { $line = Set-Note $line (' **Done ' + $o.done + '**') '[ \t]*\*\*Done [^*]*\*\*' }
-    # F72: verify's notes - a pass's **Verified ..**, a fail's (verify failed ..); each replaces its own earlier one,
-    # and a pass drops an earlier fail's note.
-    if ($o.verified) { $line = ([regex]'[ \t]*\(verify failed \d{4}-\d{2}-\d{2}: [^()]*\)').Replace($line, '') }   # every dated one
-    if ($o.verified) { $line = Set-Note $line (' **Verified ' + $o.verified + '**') '[ \t]*\*\*Verified [^*]*\*\*' }
-    if ($o.vfail) { $line = Set-Note $line (' (verify failed ' + $o.vfail + ')') '[ \t]*\(verify failed [^()]*\)' }
+    # F72/F167: one verify note - it drops every earlier dated one, new
+    # (verified PASS|FAIL ..) or old (verify failed ..); the date keeps title words safe
+    if ($o.verify) {
+      $vp = '[ \t]*\(verif(ied PASS|ied FAIL|y failed) [0-9]{4}-[0-9]{2}-[0-9]{2}: [^()]*\)'
+      $line = ([regex]$vp).Replace($line, '')
+      $line = Set-Note $line (' (verified ' + $o.verify + ')') $vp
+    }
     # F109: the trailing session tag - replaced (old or new shape) or appended
     if ($tagText -ne '') {
       $sm = [regex]::Match($line, '[ \t]*\(@[A-Za-z0-9_.]+-[A-Za-z0-9_.:-]+\)[ \t]*$')
@@ -901,22 +903,18 @@ function Do-Tested([string[]]$a) {
   return (Edit-Line $id @{ mark = $mk; need = '%' })
 }
 
-# F72: /verify-subagent's verdict on a [%] ticket, with the evidence (one line,
-# no parentheses, no *). pass: [x], tagged as a close is, ` **Verified <date>:
-# <evidence>**`. fail: the box stays [%], ` (verify failed <date>: <what failed>)`.
+# F72/F167: /verify-subagent's verdict on a [%] ticket, with the evidence (one
+# line, no parentheses, no *; a fail's is "<what failed> - <why>"). A note, never
+# a status: the box stays [%], ` (verified PASS|FAIL <date>: <evidence>)` replaces
+# any earlier verify note.
 function Do-Verify([string[]]$a) {
   if ($a.Count -lt 3) { Fail 'usage: verify <ID> pass|fail <evidence>' }
   $id = Get-NormId $a[0]
-  $v = $a[1].ToLowerInvariant()
-  if ($v -cne 'pass' -and $v -cne 'fail') { Fail "usage: verify <ID> pass|fail <evidence> - not '$($a[1])'" }
+  $v = $a[1].ToUpperInvariant()
+  if ($v -cne 'PASS' -and $v -cne 'FAIL') { Fail "usage: verify <ID> pass|fail <evidence> - not '$($a[1])'" }
   $t = Get-NoteText 'verify' 'evidence' $false @($a[1..($a.Count - 1)])
   if ($t.Contains('*')) { Fail 'the evidence cannot hold * - it sits on the line as a note' }
-  $dn = [DateTime]::UtcNow.ToString('yyyy-MM-dd') + ': ' + $t
-  if ($v -ceq 'fail') { return (Edit-Line $id @{ need = '%'; vfail = $dn; cmd = 'verify' }) }
-  $info = Get-Info $id
-  $apps = [string]::Join(', ', @(Get-AppsFrom $info))
-  $by = [string]::Join(', ', @(Get-ByFrom $info))
-  return (Edit-Line $id @{ mark = 'x'; need = '%'; app = $apps; by = $by; verified = $dn; cmd = 'verify' })
+  return (Edit-Line $id @{ need = '%'; verify = "$v " + [DateTime]::UtcNow.ToString('yyyy-MM-dd') + ': ' + $t; cmd = 'verify' })
 }
 
 # F81: the wait is over: [!] -> [ ], its (blocked: ..) note dropped. Only from [!].
@@ -1782,20 +1780,22 @@ function Invoke-Selftest {
       if (-not (& $same $want)) { Write-Output "FAIL: $name done/block/defer line endings or bytes"; $script:fail = 1 }
     }
 
-    # --- F72: verify - /verify-subagent's verdict on a [%] ticket; pass -> [x] Verified, fail stays [%]
+    # --- F72/F167: verify - /verify-subagent's verdict on a [%] ticket; one
+    # (verified PASS|FAIL ..) note, the box never moves
     $V = "$T/f72"
     Init-Repo $V
     W "$V/apps/web/f.txt" "x`n"
-    W "$V/TICKETS.md" ("# TICKETS`n`n- [%] F60 $dash Built (testing: unit run) (@cc-gggggg)`n- [%] F61 $dash Failing (testing: live check)`n- [ ] F62 $dash Not testing`n")
+    W "$V/TICKETS.md" ("# TICKETS`n`n- [%] F60 $dash Built (testing: unit run) (@cc-gggggg)`n- [%] F61 $dash Failing (testing: live check)`n- [ ] F62 $dash Not testing`n- [%] F63 $dash Legacy (verify failed 2026-01-01: old)`n")
     Commit 'vidul@ikran.in' 'init' 'README.md'
     Commit 'vidul@ikran.in' 'F60: built' 'apps/web/a.js'
     $board = "$V/TICKETS.md"
-    Eq 'verify pass, any case' (Run verify F60 PaSs 'RED/GREEN' '3/3,' 'abc1234') "- [x] F60 $dash Built [app: web] (testing: unit run) **Verified ${today}: RED/GREEN 3/3, abc1234** (@cc-gggggg)"
-    Eq 'verify fail stays [%]' (Run verify F61 fail unit run 'red,' 2 of 5) "- [%] F61 $dash Failing (testing: live check) (verify failed ${today}: unit run red, 2 of 5)"
-    Eq 'verify fail replaces the note' (Run verify F61 FAIL '  still red ') "- [%] F61 $dash Failing (testing: live check) (verify failed ${today}: still red)"
+    Eq 'verify pass, any case, box stays' (Run verify F60 PaSs 'RED/GREEN' '3/3,' 'abc1234') "- [%] F60 $dash Built (testing: unit run) (verified PASS ${today}: RED/GREEN 3/3, abc1234) (@cc-gggggg)"
+    Eq 'verify pass again replaces the note' (Run verify F60 pass again) "- [%] F60 $dash Built (testing: unit run) (verified PASS ${today}: again) (@cc-gggggg)"
+    Eq 'verify fail stays [%]' (Run verify F61 fail unit run 'red,' 2 of 5 - exit 1 on the fixture) "- [%] F61 $dash Failing (testing: live check) (verified FAIL ${today}: unit run red, 2 of 5 - exit 1 on the fixture)"
+    Eq 'verify fail replaces the note' (Run verify F61 FAIL '  still red ') "- [%] F61 $dash Failing (testing: live check) (verified FAIL ${today}: still red)"
+    Eq 'verify replaces a legacy verify-failed note' (Run verify F63 pass ok) "- [%] F63 $dash Legacy (verified PASS ${today}: ok)"
     $f72a = $Utf8.GetString([System.IO.File]::ReadAllBytes($board))
-    if (-not (Refused verify F60 pass again)) { Write-Output 'FAIL: verify took a ticket that is not [%]'; $script:fail = 1 }
-    if (-not (Refused verify F62 fail red)) { Write-Output 'FAIL: verify fail took a ticket that is not [%]'; $script:fail = 1 }
+    if (-not (Refused verify F62 fail red)) { Write-Output 'FAIL: verify took a ticket that is not [%]'; $script:fail = 1 }
     if (-not (Refused verify F61 maybe red)) { Write-Output 'FAIL: verify took a verdict that is not pass/fail'; $script:fail = 1 }
     if (-not (Refused verify F61 pass)) { Write-Output 'FAIL: verify took no evidence'; $script:fail = 1 }
     if (-not (Refused verify F61 fail '  ')) { Write-Output 'FAIL: verify took blank evidence'; $script:fail = 1 }
@@ -1803,7 +1803,7 @@ function Invoke-Selftest {
     if (-not (Refused verify F61 pass 'a ** b')) { Write-Output 'FAIL: verify took an asterisk'; $script:fail = 1 }
     if (-not (Refused verify F61 fail "a`nb")) { Write-Output 'FAIL: verify took a line break'; $script:fail = 1 }
     if (-not (& $same $f72a)) { Write-Output 'FAIL: a refused verify changed the board'; $script:fail = 1 }
-    Eq 'verify pass after a fail drops the fail note' (Run verify F61 pass green now) "- [x] F61 $dash Failing (testing: live check) **Verified ${today}: green now**"
+    Eq 'verify pass after a fail replaces the fail note' (Run verify F61 pass green now) "- [%] F61 $dash Failing (testing: live check) (verified PASS ${today}: green now)"
 
     # --- team add / remove / list: .skillator/team.md written under the board lock
     $G = "$T/team"

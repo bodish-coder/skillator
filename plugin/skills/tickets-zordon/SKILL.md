@@ -534,22 +534,25 @@ never against the line's own claim.
      repo, commit, or touch `TICKETS.md`. A check that would need an edit to run
      is not run: FAIL, "needs an edit to check".
    - Answer exactly `VERDICT: PASS|FAIL|OWNER` and `EVIDENCE: <one line>` (no
-     parentheses, no `*`). PASS only when every part is shown met. Anything
-     failing, missing or not runnable is FAIL, the line naming what failed.
+     parentheses, no `*`), and on FAIL also `WHY: <one line>` - why it failed,
+     when you can tell. PASS only when every part is shown met. Anything
+     failing, missing or not runnable is FAIL, the EVIDENCE line naming what failed.
      **OWNER** when any part needs the owner's own eyes - `testing: owner ..`, a
      live look, a picker or UI check, an account or credentials, a device - even
      if the rest passed.
-2. **Apply each verdict** in the main session (agents report, you flip), with
-   ticket-meta only - the owner's standing ruling, so no question first, headless included:
-   - PASS → `ticket-meta verify <ID> pass <evidence>`: `[%]` → `[x]`, tagged as a
-     close is, ` **Verified <date>: <evidence>**` on the line.
-   - FAIL → `ticket-meta verify <ID> fail <what failed>`: stays `[%]`,
-     ` (verify failed <date>: <what>)` on the line (it replaces an earlier one).
-   - OWNER → nothing. Never flipped, never marked.
+2. **Record each verdict** in the main session, with ticket-meta only - the
+   owner's standing ruling, so no question first, headless included. A verdict
+   is a note, never a status: the box stays `[%]` on every verdict (closing it
+   stays the owner's `done`). The note replaces any earlier verify note:
+   - PASS → `ticket-meta verify <ID> pass <evidence>`:
+     ` (verified PASS <date>: <evidence>)` on the line.
+   - FAIL → `ticket-meta verify <ID> fail <what failed> - <why>` (` - <why>`
+     only when the agent gave a WHY): ` (verified FAIL <date>: <what> - <why>)`.
+   - OWNER → nothing. No note.
    - An agent that returns no verdict line is FAIL, "no verdict"; never PASS.
 3. Read the board back - `grep -n '<ID>' TICKETS.md` per ticket - run
    `sh "$PRACTICE/scripts/check-tickets.sh"`, and report one table
-   `ID | verdict | evidence` and the count: `testing 3 -> 2 (1 verified, 1 failed, 1 owner)`.
+   `ID | verdict | evidence` and the count: `testing 3 (1 pass, 1 fail, 1 owner)`.
 
 ## Work tickets in parallel, not in a line
 

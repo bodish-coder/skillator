@@ -2251,9 +2251,9 @@ export const COMMANDS: HelpItem[] = [
     kind: "command",
     category: "Workflow & Runners",
     aliases: ["verify-shifu"],
-    summary: "Verify testing [%] tickets with fresh agents against acceptance criteria to reach [x]",
+    summary: "Verify testing [%] tickets with fresh agents against acceptance criteria; records a PASS or FAIL note, the box stays [%]",
     triggers: ["verify-subagent", "verify-shifu", "verify tickets", "verify testing"],
-    usage: "Verify testing tickets: one fresh agent per [%] row re-checks its Done line against evidence; PASS flips it to [x] Verified, FAIL leaves [%] with what failed, OWNER is never flipped (tickets-zordon).",
+    usage: "Verify testing tickets: one fresh agent per [%] row re-checks its Done line against evidence and records a verdict note - verified PASS, or verified FAIL with what failed and why; the box never moves, OWNER gets no note (tickets-zordon).",
     examples: ["/verify-subagent", "/verify-subagent F165", "/verify-shifu"],
     hint: "[IDs]"
   }

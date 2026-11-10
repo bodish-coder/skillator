@@ -287,9 +287,9 @@ Deactivating is deleting `.skillator/grayskull.md`.
   parallel, with structured verdicts coming back. The main session always owns
   `TICKETS.md`; agents only report. Invoke with `/tickets-zordon`.
   `/verify-subagent` re-checks every `[%]` testing ticket with one fresh agent
-  each (read and run tests only): PASS → `[x]` with a dated **Verified** note,
-  FAIL stays `[%]` with what failed, a Done line needing the owner's eyes → OWNER,
-  never flipped.
+  each (read and run tests only) and records a dated `(verified PASS ..)` or
+  `(verified FAIL ..: what - why)` note; the box stays `[%]` either way, and a
+  Done line needing the owner's eyes → OWNER, no note.
 - **rules-orko** — how the user works, written down the moment they say it.
   "From now on always run the tests before you commit" or "in this repo nobody
   touches `store.py` without asking" dies with the chat otherwise: two isolated
