@@ -8,7 +8,7 @@ branch: run/RUN-0037-f170-decide-follow-up
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
 | 275 | AADU F170 mine-to-decide + all pink | x | build:opus | 2026-11-11T05:50Z | 5a50fa3 |
-| 276 | verify review bump commit push |   | - | - | - |
+| 276 | verify review bump commit push | x | main | 2026-11-11T08:50Z | 324c3d3 |
 | 277 | AADV F171 unique command names only | x | build:opus | 2026-11-11T07:27Z | 81997d3 |
 | 278 | AADW F171 review fixes | x | build:opus | 2026-11-11T08:13Z | 564e95a |
 | 279 | AADX F171 Help docs for native commands | > | - | 2026-11-11T08:13Z | 280 |
@@ -138,3 +138,4 @@ prompt: |
 - 07:27 - Ruling: watchdog hold from 06:06Z (mem 0.3 GB, during stage 277's suites) released - 1.7 GB free now; the fix prompt keeps one suite at a time - cost if wrong: a suite killed, rerun alone.
 - 08:13 - Ruling: AADW 278 recorded 564e95a - main session reran install.sh and install.ps1 selftests alone: ok/ok; review medium: 10 findings - fixed in stage 280 AADY: Help names commands every host has (/skillator-pending, /list-ticket-zordon back; /ops kept; no pi claim), ops doc lookup, one runner spelling with each form's default kept, every legacy prompt seeded in selftests, stale comment; stage 279 re-planned into 280 (same files); upgrade leftovers -> A218; the two legacy lists are dismissed - one is pre-F90 Codex prompt names, the other the plain names a fresh install must not write, different sets on purpose - cost if wrong: one more review round.
 - 08:50 - Ruling: AADY 280 landed e98f491 - ops npm 289/289, generate --check 77/0 and generator tests 12/12 rerun by main session; agent's install.sh/ps1 selftests ok; pane 397/69 vs baseline 397/68, the extra is a 5s timeout in band.test 'red holds once' that this diff does not touch (seen flaky before); review medium: 6 findings - #1/#2 doc lookup only inside the skillator repo predates F171 -> A222; #3-#6 duplication/style dismissed (two-line special case, selftest list copy, type copy) - cost if wrong: Help shows not found outside the skillator repo until A222. Three review rounds on F171; landing.
+- 08:50 - Ruling: stage 276 - RUN-0037 merged into main 324c3d3; post-merge generate --check 77/0, only unique command names in plugin/commands, versions 4.26.0/0.15.0 unchanged (unpublished); worktree and branch removed; F170 and F171 [%] owing owner checks; F166 cancelled as superseded by F171; push waits for the owner.
