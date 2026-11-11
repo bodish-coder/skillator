@@ -2076,15 +2076,15 @@ export const COMMANDS: HelpItem[] = [
     hint: "[rough prompt - empty uses previous message]"
   },
   {
-    id: "list-ticket-zordon",
-    name: "/list-ticket-zordon",
+    id: "list-tickets",
+    name: "/list-tickets",
     kind: "command",
     category: "Tickets & Board",
     aliases: [],
     summary: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state)",
-    triggers: ["list-ticket-zordon", "list tickets", "show board"],
-    usage: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state with counts).",
-    examples: ["/list-ticket-zordon", "/list-ticket-zordon status", "/list-ticket-zordon @sher", "/list-ticket-zordon F165"],
+    triggers: ["list-tickets", "list-ticket-zordon", "list tickets", "show board"],
+    usage: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state with counts). Claude Code and pi answer /list-tickets from the board; other hosts use the plugin command /list-ticket-zordon.",
+    examples: ["/list-tickets", "/list-tickets status", "/list-tickets @sher", "/list-tickets F165"],
     hint: "[status] [all] [app:<app>] [@person] [prefix|ID]"
   },
   {
@@ -2136,15 +2136,15 @@ export const COMMANDS: HelpItem[] = [
     hint: "@handle <issue>"
   },
   {
-    id: "skillator-ops",
-    name: "/skillator-ops",
+    id: "ops",
+    name: "/ops",
     kind: "command",
     category: "Ops Board",
     aliases: [],
     summary: "Open the ops board (Tickets, Workflows, Health, Messages, Explorer, Build, Help)",
-    triggers: ["skillator-ops", "open ops", "launch ops board"],
-    usage: "Open the ops board (TICKETS.md board, runs, health, messages, explorer, build, help) for this repo in terminal or browser.",
-    examples: ["/skillator-ops", "/skillator-ops tickets", "/skillator-ops help", "/skillator-ops --open"],
+    triggers: ["ops", "skillator-ops", "open ops", "launch ops board"],
+    usage: "Open the ops board (TICKETS.md board, runs, health, messages, explorer, build, help) for this repo in terminal or browser. Claude Code and pi have /ops; Codex, Antigravity and OpenCode use the plugin command skillator-ops ($skillator-ops on Codex).",
+    examples: ["/ops", "/ops tickets", "/ops help", "/ops --open"],
     hint: "[terminal|tickets|workflows|health|messages|explorer|build|help]"
   },
   {
@@ -2160,15 +2160,15 @@ export const COMMANDS: HelpItem[] = [
     hint: "[sequential|parallel] [N|max] [ticket ids]"
   },
   {
-    id: "skillator-pending",
-    name: "/skillator-pending",
+    id: "pending",
+    name: "/pending",
     kind: "command",
     category: "Tickets & Board",
     aliases: [],
     summary: "Report what is pending - board counts, runs, sessions, unpushed commits, machine status",
-    triggers: ["skillator-pending", "what is pending", "board status"],
-    usage: "What is pending - board counts, runs, sessions, unpushed commits, machine (tickets-zordon pending script).",
-    examples: ["/skillator-pending"],
+    triggers: ["pending", "skillator-pending", "what is pending", "board status"],
+    usage: "What is pending - board counts, runs, sessions, unpushed commits, machine (tickets-zordon pending script). Claude Code and pi answer /pending from the board; other hosts use the plugin command /skillator-pending.",
+    examples: ["/pending"],
     hint: "[]"
   },
   {

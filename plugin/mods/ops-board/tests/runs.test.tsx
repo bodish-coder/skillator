@@ -1032,14 +1032,14 @@ test('A196: native RunsTab Start Run form selects runner/mode/tickets, renders c
   // 2. Pressing runs:start opens StartRunForm initialized with marathon + sequential + eligible open tickets
   await ui.press({ key: 'runs:start' })
   await ui.redraw()
-  expect(await text('start:runner')).toBe('Runner: marathon')
+  expect(await text('start:runner')).toBe('Runner: gauntlet-run')
   expect(await text('start:mode')).toBe('Mode: sequential')
   expect(await text('start:preview')).toBe('Command  /gauntlet-run sequential F46 F47 F48 F49 B2')
 
   // 3. Toggle runner and mode via buttons and runsKey
   await ui.press({ key: 'start:runner' })
   await ui.redraw()
-  expect(await text('start:runner')).toBe('Runner: pending-subagent')
+  expect(await text('start:runner')).toBe('Runner: pending-sentinel')
   expect(await text('start:preview')).toBe('Command  /pending-sentinel sequential F46 F47 F48 F49 B2')
 
   await runsKey($, 'm')
@@ -1060,7 +1060,7 @@ test('A196: native RunsTab Start Run form selects runner/mode/tickets, renders c
   await ui.press({ key: 'start:ticket:F46' })
   await ui.press({ key: 'start:ticket:B2' })
   await ui.redraw()
-  const expectedCmd = startRunCmd('pending-subagent', 'parallel', ['F46', 'B2'])
+  const expectedCmd = startRunCmd('pending-sentinel', 'parallel', ['F46', 'B2'])
   expect(expectedCmd).toBe('/pending-sentinel parallel F46 B2')
   expect(await text('start:preview')).toBe(`Command  ${expectedCmd}`)
 
@@ -1074,7 +1074,7 @@ test('A196: native RunsTab Start Run form selects runner/mode/tickets, renders c
   await runsKey($, 's')
   await runsKey($, 'm')
   await ui.redraw()
-  const fullCmd = startRunCmd('marathon', 'parallel', ['F46', 'F47', 'F48', 'F49', 'B2'])
+  const fullCmd = startRunCmd('gauntlet-run', 'parallel', ['F46', 'F47', 'F48', 'F49', 'B2'])
   expect(await text('start:preview')).toBe(`Command  ${fullCmd}`)
   await startRunGo($)
   await ui.redraw()

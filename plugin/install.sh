@@ -501,11 +501,11 @@ write_commands() {
   case "$1" in
     codex)
       # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
-      # prompt an older run wrote under that name goes, nothing else in prompts/. F105: $skillator-ops -
+      # prompts pre-F90 runs wrote under the plain names go, nothing else in prompts/. F105: $skillator-ops -
       # skill hosts only; pi and Claude Code have their own /ops
-      for _n in $_cmds $_ops_cmds; do
-        put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
-        [ -n "$dry" ] || rm -f "$codex_home/prompts/$_n.md"
+      for _n in $_cmds $_ops_cmds; do put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"; done
+      [ -n "$dry" ] || for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do
+        rm -f "$codex_home/prompts/$_n.md"
       done ;;
     cursor)
       for _n in $_cmds; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
@@ -970,12 +970,12 @@ if [ -n "$selftest" ]; then
   : > "$T/.pi/agent/skills/tickets-zordon/.selftest-sentinel"
   printf 'my-own-line' >> "$T/.pi/agent/skills/.ignore"
   # F90: an older run's codex prompt goes, a foreign prompt stays
-  mkdir -p "$T/.codex/prompts"; echo old > "$T/.codex/prompts/skillator-pending.md"; echo mine > "$T/.codex/prompts/my-own.md"
+  mkdir -p "$T/.codex/prompts"; echo old > "$T/.codex/prompts/pending.md"; echo mine > "$T/.codex/prompts/my-own.md"
   # F91: a --link install from before plugin/ - its link into <clone>/skills now dangles
   rm -rf "$T/.codex/skills/tui-tron"; ln -s "$T/pre-f91/skills/tui-tron" "$T/.codex/skills/tui-tron" 2>/dev/null || :
   out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0") || { echo "FAIL: second install exited $?"; exit 1; }
   [ -f "$T/.codex/skills/tui-tron/SKILL.md" ] || { echo "FAIL: dangling pre-F91 link not reinstalled"; exit 1; }
-  [ -e "$T/.codex/prompts/skillator-pending.md" ] && { echo "FAIL: old codex prompt skillator-pending.md kept"; exit 1; }
+  [ -e "$T/.codex/prompts/pending.md" ] && { echo "FAIL: old codex prompt pending.md kept"; exit 1; }
   [ -f "$T/.codex/prompts/my-own.md" ] || { echo "FAIL: foreign codex prompt removed"; exit 1; }
   grep -qx 'my-own-line' "$T/.pi/agent/skills/.ignore" || { echo "FAIL: pi .ignore lost a user line"; exit 1; }
   [ "$(grep -cxF /PLATFORMS.md "$T/.pi/agent/skills/.ignore")" = 1 ] || { echo "FAIL: pi .ignore lines duplicated on the second run"; exit 1; }

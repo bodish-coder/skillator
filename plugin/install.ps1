@@ -483,12 +483,14 @@ function Write-Commands([string]$cli, [string]$dest) {
   $opsNames = @('skillator-ops')
   switch ($cli) {
     # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
-    # prompt an older run wrote under that name goes, nothing else in prompts\
+    # prompts pre-F90 runs wrote under the plain names go, nothing else in prompts\
     'codex' {
       # F105: $skillator-ops - skill hosts only; pi and Claude Code have their own /ops
-      foreach ($n in $names + $opsNames) {
-        Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
-        if (-not $DryRun) { Remove-Item -LiteralPath "$codexHome\prompts\$n.md" -Force -ErrorAction SilentlyContinue }
+      foreach ($n in $names + $opsNames) { Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md" }
+      if (-not $DryRun) {
+        foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run') {
+          Remove-Item -LiteralPath "$codexHome\prompts\$n.md" -Force -ErrorAction SilentlyContinue
+        }
       }
     }
     'cursor' { foreach ($n in $names) { Write-Cmd "$c\cursor\$n.md" $dest "$HOME\.cursor\commands\$n.md" } }
@@ -988,11 +990,11 @@ function Invoke-SelfTest([string]$T) {
   [IO.File]::AppendAllText((Join-Path $T '.pi\agent\skills\.ignore'), 'my-own-line')
   # F90: an older run's codex prompt goes, a foreign prompt stays
   New-Item -ItemType Directory -Force (Join-Path $T '.codex\prompts') | Out-Null
-  [IO.File]::WriteAllText((Join-Path $T '.codex\prompts\skillator-pending.md'), "old`n")
+  [IO.File]::WriteAllText((Join-Path $T '.codex\prompts\pending.md'), "old`n")
   [IO.File]::WriteAllText((Join-Path $T '.codex\prompts\my-own.md'), "mine`n")
   $null = & $run @()
   if ($script:selfCode -ne 0) { return "second install exited $script:selfCode" }
-  if (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\skillator-pending.md')) { return 'old codex prompt skillator-pending.md kept' }
+  if (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\pending.md')) { return 'old codex prompt pending.md kept' }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\my-own.md') -PathType Leaf)) { return 'foreign codex prompt removed' }
   $igl = @([IO.File]::ReadAllLines((Join-Path $T '.pi\agent\skills\.ignore')))
   if ($igl -cnotcontains 'my-own-line') { return 'pi .ignore lost a user line' }

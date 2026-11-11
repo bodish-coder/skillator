@@ -1300,9 +1300,9 @@ import { eligibleRunTickets, parseFollowupOut, startRunCmd } from '../../hooks/l
 
 test('A196 + A197: startRunCmd canonical parity, eligibleRunTickets, parseFollowupOut, and pushPendingRun blocked/landed handling', () => {
   // A196: startRunCmd canonical command builder matches startRunCommand
-  assert.equal(startRunCmd('marathon', 'sequential', ['F1', 'B2']), '/gauntlet-run sequential F1 B2')
+  assert.equal(startRunCmd('gauntlet-run', 'sequential', ['F1', 'B2']), '/gauntlet-run sequential F1 B2')
   assert.equal(startRunCmd('/gauntlet-run', 'parallel', 'F1 B2', 2), '/gauntlet-run parallel 2 F1 B2')
-  assert.equal(startRunCmd('pending-subagent', 'parallel', ['A196']), '/pending-sentinel parallel A196')
+  assert.equal(startRunCmd('pending-sentinel', 'parallel', ['A196']), '/pending-sentinel parallel A196')
   assert.equal(startRunCmd('/pending-sentinel', 'sequential', []), '/pending-sentinel sequential')
 
   // A196: eligibleRunTickets filters only open [ ], [~], [?], [!] tickets
@@ -1355,19 +1355,19 @@ test('F165 state: Help catalog includes commands, supports command execution, co
   assert.ok(HELP_ITEMS.length >= 49)
 
   // 2. Open help with command selected
-  let s = openHelp(s0, 'list-ticket-zordon').state
-  assert.equal(s.help?.selected, 'list-ticket-zordon')
+  let s = openHelp(s0, 'list-tickets').state
+  assert.equal(s.help?.selected, 'list-tickets')
 
   // 3. Copy command reference via 'c'
   const copyStep = reduce(s, { name: 'c' })
   const copyEff = copyStep.effects.find(e => e.kind === 'copy') as any
   assert.ok(copyEff, 'Expected copy effect for command')
-  assert.equal(copyEff.text, '/list-ticket-zordon')
+  assert.equal(copyEff.text, '/list-tickets')
   assert.doesNotMatch(copyEff.label, /alias/)  // F166: commands have no legacy aliases
 
   // Settle copy effect
   const sAfterCopy = settle(copyEff.then(ok(''))(copyStep.state)).state
-  assert.match(sAfterCopy.toast ?? '', /Copied reference: \/list-ticket-zordon/)
+  assert.match(sAfterCopy.toast ?? '', /Copied reference: \/list-tickets/)
 
   // 4. Run command with arguments via 'r'
   s = reduce(s, { name: 'r' }).state
@@ -1379,32 +1379,38 @@ test('F165 state: Help catalog includes commands, supports command execution, co
   }
   assert.equal(s.help?.runPrompt, '@sher status')
 
-  // Press Enter to confirm run: must produce /list-ticket-zordon @sher status (NOT /skillator:...)
+  // Press Enter to confirm run: must produce /list-tickets @sher status (NOT /skillator:...)
   const runStep = reduce(s, { name: 'return' })
   assert.equal(runStep.state.help?.runPrompt, null)
   const runEff = runStep.effects.find(e => e.kind === 'copy') as any
   assert.ok(runEff, 'Expected clipboard copy effect for running command')
-  assert.equal(runEff.text, '/list-ticket-zordon @sher status')
+  assert.equal(runEff.text, '/list-tickets @sher status')
 
   // Settle run effect
   const sAfterRun = settle(runEff.then(ok(''))(runStep.state)).state
-  assert.match(sAfterRun.toast ?? '', /Ready to run: \/list-ticket-zordon @sher status/)
+  assert.match(sAfterRun.toast ?? '', /Ready to run: \/list-tickets @sher status/)
 
   // 5. Expand command details and ensure skill-doc effect is emitted
-  const enterStep = reduce(openHelp(s0, 'list-ticket-zordon').state, { name: 'return' })
+  const enterStep = reduce(openHelp(s0, 'list-tickets').state, { name: 'return' })
   assert.equal(enterStep.state.help?.expanded, true)
   const docEff = enterStep.effects.find(e => e.kind === 'skill-doc') as any
   assert.ok(docEff, 'Expected skill-doc effect on expanding command')
-  assert.equal(docEff.skillId, 'list-ticket-zordon')
+  assert.equal(docEff.skillId, 'list-tickets')
 })
 
 
-test('F171 state: Help lists each command once, under its unique name - no plain twin', () => {
+test('F171 state: Help lists each command once - no removed plain plugin name; the mod\'s own /ops, /pending, /list-tickets stay', () => {
   const names = COMMANDS.map(c => c.name)
-  for (const n of ['/verify-shifu', '/gauntlet-plan', '/gauntlet-run', '/engage-picard', '/archive-zordon', '/list-ticket-zordon', '/sync-zordon', '/pending-sentinel', '/skillator-pending', '/skillator-sync', '/skillator-ops']) {
+  for (const n of ['/verify-shifu', '/gauntlet-plan', '/gauntlet-run', '/engage-picard', '/archive-zordon', '/sync-zordon', '/pending-sentinel', '/skillator-sync', '/ops', '/pending', '/list-tickets']) {
     assert.equal(names.filter(x => x === n).length, 1, n)
   }
-  for (const n of ['/verify-subagent', '/marathon-plan', '/marathon-run', '/engage', '/archive-tickets', '/list-tickets', '/sync-tickets', '/pending-subagent', '/pending', '/upstream-sync', '/ops']) {
+  for (const n of ['/verify-subagent', '/marathon-plan', '/marathon-run', '/engage', '/archive-tickets', '/sync-tickets', '/pending-subagent', '/upstream-sync', '/skillator-ops', '/skillator-pending', '/list-ticket-zordon']) {
     assert.ok(!names.includes(n), n)
   }
+  // the mod's own /ops, /pending, /list-tickets answer where the board runs; the entry names the plugin twin for other hosts
+  const by = (id: string) => COMMANDS.find(c => c.id === id)!
+  assert.ok(by('ops').triggers.includes('ops'))
+  assert.match(by('ops').usage, /skillator-ops/)
+  assert.match(by('pending').usage, /\/skillator-pending/)
+  assert.match(by('list-tickets').usage, /\/list-ticket-zordon/)
 })

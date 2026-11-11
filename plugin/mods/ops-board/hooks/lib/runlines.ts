@@ -189,7 +189,7 @@ export function runLines(run: RunView, board: Board | null): Line[] {
 export { ticketsOf as stageTickets }
 
 // F113 / A196: canonical Start Run command builder shared by standalone ops/state.ts and native hooks/runstab.tsx.
-export type RunnerChoice = 'marathon' | 'pending-subagent' | '/gauntlet-run' | '/pending-sentinel'
+export type RunnerChoice = 'gauntlet-run' | 'pending-sentinel' | '/gauntlet-run' | '/pending-sentinel'
 export type ModeChoice = 'sequential' | 'parallel'
 
 export function startRunCmd(
@@ -198,7 +198,7 @@ export function startRunCmd(
   tickets: readonly string[] | string,
   count?: number | null,
 ): string {
-  const runnerCmd = runner === 'marathon' ? '/gauntlet-run' : runner === 'pending-subagent' ? '/pending-sentinel' : runner
+  const runnerCmd = runner.startsWith('/') ? runner : `/${runner}`
   const modeStr = mode === 'parallel' && count ? `parallel ${count}` : mode
   const ticketsStr = (typeof tickets === 'string' ? tickets : tickets.join(' ')).trim().replace(/\s+/g, ' ')
   return [runnerCmd, modeStr, ticketsStr].filter(Boolean).join(' ')

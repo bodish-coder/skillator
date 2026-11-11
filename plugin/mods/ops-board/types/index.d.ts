@@ -34,7 +34,7 @@ export type Flight = { n: number; by: string | null; run: string | null }   // i
 export type PlanItem = { n: number; ticket: string }
 // F85: the engage confirm in the pane - what goes, and whether relay queue-run add goes first.
 export type Engage = { id: string; text: string; queue: boolean }
-export type StartRunDraft = { runner: 'marathon' | 'pending-subagent'; mode: 'sequential' | 'parallel'; tickets: string[]; result?: string | null }
+export type StartRunDraft = { runner: 'gauntlet-run' | 'pending-sentinel'; mode: 'sequential' | 'parallel'; tickets: string[]; result?: string | null }
 // F99: the Diagnose view in the pane - the verdict, one line per disagreement and, per closable
 // stage, the relay-morpheus command that closes it by hand. F104: close = the closable stages
 // with a derived sha (runs: the command Close runs, shown in its confirm); confirm = the stage asked.
