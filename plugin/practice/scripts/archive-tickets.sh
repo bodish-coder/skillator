@@ -91,23 +91,23 @@ split_board() {
     END {
       g = 0; cur = 0
       for (i = 1; i <= n; i++) {
-        l = line[i]; id = tid(l); p = pid(id)
+        l = line[i]; id = tid(l); par = pid(id)
         if (l ~ /^#/) {
           if (l ~ /^## /) { sect = substr(l, 4) }
           cur = 0; continue
         }
         if (l ~ /^[ \t]*$/) continue
         if (id != "") {
-          if (p in pgrp) {
-            cur = pgrp[p]; grp[i] = cur; gids[cur] = gids[cur] " " id
-          } else if (l ~ /^- / && p == id) {     # top-level parent: new group
+          if (par in pgrp) {
+            cur = pgrp[par]; grp[i] = cur; gids[cur] = gids[cur] " " id
+          } else if (l ~ /^- / && par == id) {   # top-level parent: new group
             g++; gstart[g] = i; gsect[g] = sect; gids[g] = id; gok[g] = 1
-            pgrp[p] = g; grp[i] = g; cur = g
+            pgrp[par] = g; grp[i] = g; cur = g
           } else if (cur && l ~ /^[ \t]+/) {     # indented sub-part under current parent
-            grp[i] = cur; gids[cur] = gids[cur] " " id; pgrp[p] = cur
+            grp[i] = cur; gids[cur] = gids[cur] " " id; pgrp[par] = cur
           } else {                               # standalone or ungrouped sub-part
             g++; gstart[g] = i; gsect[g] = sect; gids[g] = id; gok[g] = 1
-            pgrp[p] = g; grp[i] = g; cur = g
+            pgrp[par] = g; grp[i] = g; cur = g
           }
         } else if (cur && l ~ /^[ \t]+/) {       # indented continuation
           grp[i] = cur
