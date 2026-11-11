@@ -476,6 +476,35 @@ function Write-AgyExt([string]$skillsDir) {
 # .skillator-installed, so Remove-Unshipped never touches them. Claude Code: nothing (the
 # ops-board mod has its own /pending, /list-tickets; /engage-picard, /archive-zordon, /sync-zordon, /skillator-update, /team-messages and /pending-sentinel are the plugin's commands/*.md).
 # Same as install.sh write_commands.
+#
+# A218: F171 retired the plain names (the unique ones are the only names). Remove-Retired
+# <file> drops what a pre-F171 run wrote under one - a command file, or a skill-command
+# dir by its SKILL.md - only when the body names a skillator skill or command (the
+# generator's words), never through a link; anything else is kept and said so. Same as
+# install.sh retire_cmd.
+$retired = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run', 'upstream-sync'
+$retiredBody = 'tickets-zordon|relay-morpheus|code-vader|skillator-sync|tasks-sentinels|skillator:|ops-board/ops/ops|Engaged prompt'
+function Remove-Retired([string]$file) {
+  $d = if ($file.EndsWith('\SKILL.md')) { Split-Path -Parent $file } else { '' }
+  $p = if ($d) { $d } else { $file }
+  $link = [IO.FileAttributes]::ReparsePoint
+  $di = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
+  $fi = Get-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
+  if (-not $fi -and -not ($di -and ($di.Attributes -band $link))) { return }
+  # unreadable (a dir, locked, no access) reads as '' - kept, as install.sh's grep keeps it
+  $text = try { [IO.File]::ReadAllText($file) } catch { '' }
+  if (($di.Attributes -band $link) -or -not $fi -or ($fi.Attributes -band $link) -or $text -cnotmatch $retiredBody) {
+    Write-Host "        kept ${p}: not written by skillator"; return
+  }
+  if ($DryRun) { Write-Host "        would remove $p"; return }
+  try { Remove-Item -LiteralPath $file -Force } catch { Write-Host "warn  $p not removed: $($_.Exception.Message)"; return }
+  if ($d) {
+    Remove-Item -LiteralPath (Join-Path $d $owned) -Force -ErrorAction SilentlyContinue
+    # non-recursive, as install.sh's rmdir: a dir holding anything else stays
+    try { [IO.Directory]::Delete($d) } catch { $p = $file }
+  }
+  Write-Host "        removed $p (retired command)"
+}
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
   $names = 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run', 'team',
@@ -487,31 +516,41 @@ function Write-Commands([string]$cli, [string]$dest) {
     'codex' {
       # F105: $skillator-ops - skill hosts only; pi and Claude Code have their own /ops
       foreach ($n in $names + $opsNames) { Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md" }
+      foreach ($n in $retired + 'ops') { Remove-Retired "$dest\$n\SKILL.md" }
       if (-not $DryRun) {
         foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run') {
           Remove-Item -LiteralPath "$codexHome\prompts\$n.md" -Force -ErrorAction SilentlyContinue
         }
       }
     }
-    'cursor' { foreach ($n in $names) { Write-Cmd "$c\cursor\$n.md" $dest "$HOME\.cursor\commands\$n.md" } }
+    'cursor' {
+      foreach ($n in $names) { Write-Cmd "$c\cursor\$n.md" $dest "$HOME\.cursor\commands\$n.md" }
+      foreach ($n in $retired) { Remove-Retired "$HOME\.cursor\commands\$n.md" }
+    }
     'pi' {
       if ($dest -ne "$HOME\.pi\agent\skills") { return }
       foreach ($n in $names) { Write-Cmd "$c\pi\$n.md" $dest "$HOME\.pi\agent\prompts\$n.md" }
+      foreach ($n in $retired) { Remove-Retired "$HOME\.pi\agent\prompts\$n.md" }
       Write-PiExt $dest
     }
     # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode; F159: /skillator-ops
-    'opencode' { foreach ($n in $names + $opsNames) { Write-Cmd "$c\opencode\$n.md" $dest "$ocConfig\commands\$n.md" } }
+    'opencode' {
+      foreach ($n in $names + $opsNames) { Write-Cmd "$c\opencode\$n.md" $dest "$ocConfig\commands\$n.md" }
+      foreach ($n in $retired + 'ops') { Remove-Retired "$ocConfig\commands\$n.md" }
+    }
     'antigravity' {
       foreach ($n in $names + $opsNames) {
         Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
         if (-not $DryRun) { Remove-Item -LiteralPath "$dest\$n\$owned" -Force -ErrorAction SilentlyContinue }
       }
+      foreach ($n in $retired + 'ops') { Remove-Retired "$dest\$n\SKILL.md" }
       # F57: the Antigravity IDE's extension, from Antigravity's own dest
       if ($dest -eq "$HOME\.gemini\config\skills") { Write-AgyExt $dest }
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
       if ($dest -eq "$HOME\.gemini\skills") {
         foreach ($n in $names) { Write-Cmd "$c\gemini\$n.toml" $dest "$HOME\.gemini\commands\$n.toml" }
+        foreach ($n in $retired) { Remove-Retired "$HOME\.gemini\commands\$n.toml" }
       }
     }
   }
@@ -993,8 +1032,37 @@ function Invoke-SelfTest([string]$T) {
   New-Item -ItemType Directory -Force (Join-Path $T '.codex\prompts') | Out-Null
   foreach ($n in $oldPrompts) { [IO.File]::WriteAllText((Join-Path $T ".codex\prompts\$n.md"), "old`n") }
   [IO.File]::WriteAllText((Join-Path $T '.codex\prompts\my-own.md'), "mine`n")
-  $null = & $run @()
+  # A218: the plain names F171 retired, where a pre-F171 run wrote them, go - only when
+  # skillator's body says so; a user's own same-name file and a file of another name stay
+  $seeded = @()
+  foreach ($n in 'verify-subagent', 'marathon-plan', 'marathon-run', 'engage', 'archive-tickets', 'list-tickets', 'sync-tickets', 'pending-subagent', 'pending', 'upstream-sync', 'ops') {
+    $body = switch ($n) { 'engage' { 'Show it once, under `**Engaged prompt:**`' } 'ops' { 'sh "/x/ops-board/ops/ops.sh" <repo root> --open' } default { 'Load /x/tickets-zordon/SKILL.md' } }
+    $fs = @(".codex\skills\$n\SKILL.md", ".gemini\config\skills\$n\SKILL.md", ".gemini\skills\$n\SKILL.md", ".gemini\antigravity-cli\skills\$n\SKILL.md", "$oc\commands\$n.md")
+    if ($n -ne 'ops') { $fs += ".cursor\commands\$n.md", ".pi\agent\prompts\$n.md", ".gemini\commands\$n.toml" }
+    foreach ($f in $fs) {
+      New-Item -ItemType Directory -Force (Split-Path -Parent (Join-Path $T $f)) | Out-Null
+      [IO.File]::WriteAllText((Join-Path $T $f), "$body`n"); $seeded += $f
+    }
+  }
+  [IO.File]::WriteAllText((Join-Path $T '.pi\agent\prompts\pending.md'), "my own pending`n")
+  [IO.File]::WriteAllText((Join-Path $T '.cursor\commands\my-cmd.md'), "mine`n")
+  $out = & $run @('-DryRun')
+  if ($script:selfCode -ne 0) { return "retired dry run exited $script:selfCode" }
+  if (-not $out.Contains("would remove $T\.cursor\commands\engage.md")) { return 'dry run does not name a retired command' }
+  if (-not $out.Contains("would remove $T\.codex\skills\ops")) { return 'dry run does not name a retired skill-command' }
+  if (-not (Test-Path -LiteralPath (Join-Path $T '.cursor\commands\engage.md'))) { return 'dry run removed a retired command' }
+  $out = & $run @()
   if ($script:selfCode -ne 0) { return "second install exited $script:selfCode" }
+  $lines = $out -split "`r?`n"
+  foreach ($f in $seeded) {
+    if ($f -eq '.pi\agent\prompts\pending.md') { continue }
+    $p = Join-Path $T ($f -replace '\\SKILL\.md$', '')
+    if (Test-Path -LiteralPath $p) { return "retired command $f kept" }
+    if ($lines -cnotcontains "        removed $p (retired command)") { return "removal of $f not printed" }
+  }
+  if ((& $read '.pi\agent\prompts\pending.md') -cne "my own pending`n") { return "a user's own pending.md removed" }
+  if ($lines -cnotcontains "        kept $T\.pi\agent\prompts\pending.md: not written by skillator") { return 'kept user file not printed' }
+  if (-not (Test-Path -LiteralPath (Join-Path $T '.cursor\commands\my-cmd.md') -PathType Leaf)) { return 'a user command of another name removed' }
   foreach ($n in $oldPrompts) { if (Test-Path -LiteralPath (Join-Path $T ".codex\prompts\$n.md")) { return "old codex prompt $n.md kept" } }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\my-own.md') -PathType Leaf)) { return 'foreign codex prompt removed' }
   $igl = @([IO.File]::ReadAllLines((Join-Path $T '.pi\agent\skills\.ignore')))
