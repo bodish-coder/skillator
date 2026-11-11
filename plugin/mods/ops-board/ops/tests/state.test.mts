@@ -1028,49 +1028,49 @@ test('F127: mouse point actions (help, help-skill, help-close)', () => {
 test('F113: startRunCommand pins command text per choice (mode, runner, count, tickets)', () => {
   // 1. /pending-sentinel sequential, default open tickets
   assert.equal(
-    startRunCommand({ runner: '/pending-sentinel', mode: 'sequential', count: null, tickets: '' }),
+    startRunCommand({ runner: 'pending-sentinel', mode: 'sequential', count: null, tickets: '' }),
     '/pending-sentinel sequential',
   )
 
   // 2. /pending-sentinel parallel, default open tickets
   assert.equal(
-    startRunCommand({ runner: '/pending-sentinel', mode: 'parallel', count: null, tickets: '' }),
+    startRunCommand({ runner: 'pending-sentinel', mode: 'parallel', count: null, tickets: '' }),
     '/pending-sentinel parallel',
   )
 
   // 3. /pending-sentinel parallel with count 2
   assert.equal(
-    startRunCommand({ runner: '/pending-sentinel', mode: 'parallel', count: 2, tickets: '' }),
+    startRunCommand({ runner: 'pending-sentinel', mode: 'parallel', count: 2, tickets: '' }),
     '/pending-sentinel parallel 2',
   )
 
   // 4. /pending-sentinel parallel with count 3 and typed tickets
   assert.equal(
-    startRunCommand({ runner: '/pending-sentinel', mode: 'parallel', count: 3, tickets: 'F113 B20' }),
+    startRunCommand({ runner: 'pending-sentinel', mode: 'parallel', count: 3, tickets: 'F113 B20' }),
     '/pending-sentinel parallel 3 F113 B20',
   )
 
   // 5. /pending-sentinel sequential with typed ticket
   assert.equal(
-    startRunCommand({ runner: '/pending-sentinel', mode: 'sequential', count: null, tickets: 'F113' }),
+    startRunCommand({ runner: 'pending-sentinel', mode: 'sequential', count: null, tickets: 'F113' }),
     '/pending-sentinel sequential F113',
   )
 
   // 6. /gauntlet-run sequential, default open tickets
   assert.equal(
-    startRunCommand({ runner: '/gauntlet-run', mode: 'sequential', count: null, tickets: '' }),
+    startRunCommand({ runner: 'gauntlet-run', mode: 'sequential', count: null, tickets: '' }),
     '/gauntlet-run sequential',
   )
 
   // 7. /gauntlet-run parallel, default open tickets
   assert.equal(
-    startRunCommand({ runner: '/gauntlet-run', mode: 'parallel', count: null, tickets: '' }),
+    startRunCommand({ runner: 'gauntlet-run', mode: 'parallel', count: null, tickets: '' }),
     '/gauntlet-run parallel',
   )
 
   // 8. /gauntlet-run parallel with count 2 and typed tickets
   assert.equal(
-    startRunCommand({ runner: '/gauntlet-run', mode: 'parallel', count: 2, tickets: 'F113' }),
+    startRunCommand({ runner: 'gauntlet-run', mode: 'parallel', count: 2, tickets: 'F113' }),
     '/gauntlet-run parallel 2 F113',
   )
 })
@@ -1083,7 +1083,7 @@ test('F113: Workflows tab interactive start run flow (open, navigation, mode cyc
   // 1. 's' key opens start run form
   s = reduce(s, key('s')).state
   assert.ok(s.startRun)
-  assert.equal(s.startRun.runner, '/pending-sentinel')
+  assert.equal(s.startRun.runner, 'pending-sentinel')
   assert.equal(s.startRun.mode, 'parallel')
   assert.equal(s.startRun.count, null)
   assert.equal(s.startRun.tickets, '')
@@ -1092,7 +1092,7 @@ test('F113: Workflows tab interactive start run flow (open, navigation, mode cyc
   // Check lines
   assert.deepEqual(startRunLines(s), [
     'Start Run',
-    '  Runner   /pending-sentinel',
+    '  Runner   pending-sentinel',
     '  Mode     parallel',
     '  Tickets  open ones',
     '  Command  /pending-sentinel parallel',
@@ -1158,12 +1158,12 @@ test('F113: Workflows tab interactive start run flow (open, navigation, mode cyc
 
   // Space / 'm' switches to /gauntlet-run
   s = reduce(s, key('space')).state
-  assert.equal(s.startRun!.runner, '/gauntlet-run')
+  assert.equal(s.startRun!.runner, 'gauntlet-run')
   assert.equal(startRunCommand(s.startRun!), '/gauntlet-run parallel F113')
 
   // 'p' switches back to /pending-sentinel
   s = reduce(s, { name: 'p', sequence: 'p' }).state
-  assert.equal(s.startRun!.runner, '/pending-sentinel')
+  assert.equal(s.startRun!.runner, 'pending-sentinel')
 
   // 5. Esc cancels: closes startRun, nothing executed
   const cancelled = reduce(s, key('escape'))
@@ -1301,9 +1301,9 @@ import { eligibleRunTickets, parseFollowupOut, startRunCmd } from '../../hooks/l
 test('A196 + A197: startRunCmd canonical parity, eligibleRunTickets, parseFollowupOut, and pushPendingRun blocked/landed handling', () => {
   // A196: startRunCmd canonical command builder matches startRunCommand
   assert.equal(startRunCmd('gauntlet-run', 'sequential', ['F1', 'B2']), '/gauntlet-run sequential F1 B2')
-  assert.equal(startRunCmd('/gauntlet-run', 'parallel', 'F1 B2', 2), '/gauntlet-run parallel 2 F1 B2')
+  assert.equal(startRunCmd('gauntlet-run', 'parallel', 'F1 B2', 2), '/gauntlet-run parallel 2 F1 B2')
   assert.equal(startRunCmd('pending-sentinel', 'parallel', ['A196']), '/pending-sentinel parallel A196')
-  assert.equal(startRunCmd('/pending-sentinel', 'sequential', []), '/pending-sentinel sequential')
+  assert.equal(startRunCmd('pending-sentinel', 'sequential', []), '/pending-sentinel sequential')
 
   // A196: eligibleRunTickets filters only open [ ], [~], [?], [!] tickets
   const boardMix = parseBoard(
@@ -1355,19 +1355,19 @@ test('F165 state: Help catalog includes commands, supports command execution, co
   assert.ok(HELP_ITEMS.length >= 49)
 
   // 2. Open help with command selected
-  let s = openHelp(s0, 'list-tickets').state
-  assert.equal(s.help?.selected, 'list-tickets')
+  let s = openHelp(s0, 'list-ticket-zordon').state
+  assert.equal(s.help?.selected, 'list-ticket-zordon')
 
   // 3. Copy command reference via 'c'
   const copyStep = reduce(s, { name: 'c' })
   const copyEff = copyStep.effects.find(e => e.kind === 'copy') as any
   assert.ok(copyEff, 'Expected copy effect for command')
-  assert.equal(copyEff.text, '/list-tickets')
+  assert.equal(copyEff.text, '/list-ticket-zordon')
   assert.doesNotMatch(copyEff.label, /alias/)  // F166: commands have no legacy aliases
 
   // Settle copy effect
   const sAfterCopy = settle(copyEff.then(ok(''))(copyStep.state)).state
-  assert.match(sAfterCopy.toast ?? '', /Copied reference: \/list-tickets/)
+  assert.match(sAfterCopy.toast ?? '', /Copied reference: \/list-ticket-zordon/)
 
   // 4. Run command with arguments via 'r'
   s = reduce(s, { name: 'r' }).state
@@ -1379,38 +1379,40 @@ test('F165 state: Help catalog includes commands, supports command execution, co
   }
   assert.equal(s.help?.runPrompt, '@sher status')
 
-  // Press Enter to confirm run: must produce /list-tickets @sher status (NOT /skillator:...)
+  // Press Enter to confirm run: must produce /list-ticket-zordon @sher status (NOT /skillator:...)
   const runStep = reduce(s, { name: 'return' })
   assert.equal(runStep.state.help?.runPrompt, null)
   const runEff = runStep.effects.find(e => e.kind === 'copy') as any
   assert.ok(runEff, 'Expected clipboard copy effect for running command')
-  assert.equal(runEff.text, '/list-tickets @sher status')
+  assert.equal(runEff.text, '/list-ticket-zordon @sher status')
 
   // Settle run effect
   const sAfterRun = settle(runEff.then(ok(''))(runStep.state)).state
-  assert.match(sAfterRun.toast ?? '', /Ready to run: \/list-tickets @sher status/)
+  assert.match(sAfterRun.toast ?? '', /Ready to run: \/list-ticket-zordon @sher status/)
 
   // 5. Expand command details and ensure skill-doc effect is emitted
-  const enterStep = reduce(openHelp(s0, 'list-tickets').state, { name: 'return' })
+  const enterStep = reduce(openHelp(s0, 'list-ticket-zordon').state, { name: 'return' })
   assert.equal(enterStep.state.help?.expanded, true)
   const docEff = enterStep.effects.find(e => e.kind === 'skill-doc') as any
   assert.ok(docEff, 'Expected skill-doc effect on expanding command')
-  assert.equal(docEff.skillId, 'list-tickets')
+  assert.equal(docEff.skillId, 'list-ticket-zordon')
 })
 
 
-test('F171 state: Help lists each command once - no removed plain plugin name; the mod\'s own /ops, /pending, /list-tickets stay', () => {
+test('F171 state: Help names commands every host has - /ops, /skillator-pending, /list-ticket-zordon', () => {
   const names = COMMANDS.map(c => c.name)
-  for (const n of ['/verify-shifu', '/gauntlet-plan', '/gauntlet-run', '/engage-picard', '/archive-zordon', '/sync-zordon', '/pending-sentinel', '/skillator-sync', '/ops', '/pending', '/list-tickets']) {
+  for (const n of ['/verify-shifu', '/gauntlet-plan', '/gauntlet-run', '/engage-picard', '/archive-zordon', '/sync-zordon', '/pending-sentinel', '/skillator-sync', '/ops', '/skillator-pending', '/list-ticket-zordon']) {
     assert.equal(names.filter(x => x === n).length, 1, n)
   }
-  for (const n of ['/verify-subagent', '/marathon-plan', '/marathon-run', '/engage', '/archive-tickets', '/sync-tickets', '/pending-subagent', '/upstream-sync', '/skillator-ops', '/skillator-pending', '/list-ticket-zordon']) {
+  for (const n of ['/verify-subagent', '/marathon-plan', '/marathon-run', '/engage', '/archive-tickets', '/sync-tickets', '/pending-subagent', '/upstream-sync', '/skillator-ops', '/pending', '/list-tickets']) {
     assert.ok(!names.includes(n), n)
   }
-  // the mod's own /ops, /pending, /list-tickets answer where the board runs; the entry names the plugin twin for other hosts
   const by = (id: string) => COMMANDS.find(c => c.id === id)!
-  assert.ok(by('ops').triggers.includes('ops'))
-  assert.match(by('ops').usage, /skillator-ops/)
-  assert.match(by('pending').usage, /\/skillator-pending/)
-  assert.match(by('list-tickets').usage, /\/list-ticket-zordon/)
+  assert.match(by('ops').usage, /\$skillator-ops/)
+  assert.match(by('ops').usage, /Antigravity and OpenCode/)
+  // Claude Code's board answers /pending and /list-tickets natively; pi registers only /ops
+  for (const [id, native] of [['skillator-pending', '/pending'], ['list-ticket-zordon', '/list-tickets']]) {
+    assert.ok(by(id).usage.includes(`On Claude Code the board also answers ${native}`), id)
+    assert.doesNotMatch(by(id).usage, /\bpi\b/, id)
+  }
 })

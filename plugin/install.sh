@@ -969,13 +969,15 @@ if [ -n "$selftest" ]; then
   : > "$T/.gemini/skills/list-ticket-zordon/.skillator-owned"
   : > "$T/.pi/agent/skills/tickets-zordon/.selftest-sentinel"
   printf 'my-own-line' >> "$T/.pi/agent/skills/.ignore"
-  # F90: an older run's codex prompt goes, a foreign prompt stays
-  mkdir -p "$T/.codex/prompts"; echo old > "$T/.codex/prompts/pending.md"; echo mine > "$T/.codex/prompts/my-own.md"
+  # F90: every older run's codex prompt goes, a foreign prompt stays
+  _old_prompts="pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run"
+  mkdir -p "$T/.codex/prompts"; echo mine > "$T/.codex/prompts/my-own.md"
+  for _n in $_old_prompts; do echo old > "$T/.codex/prompts/$_n.md"; done
   # F91: a --link install from before plugin/ - its link into <clone>/skills now dangles
   rm -rf "$T/.codex/skills/tui-tron"; ln -s "$T/pre-f91/skills/tui-tron" "$T/.codex/skills/tui-tron" 2>/dev/null || :
   out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0") || { echo "FAIL: second install exited $?"; exit 1; }
   [ -f "$T/.codex/skills/tui-tron/SKILL.md" ] || { echo "FAIL: dangling pre-F91 link not reinstalled"; exit 1; }
-  [ -e "$T/.codex/prompts/pending.md" ] && { echo "FAIL: old codex prompt pending.md kept"; exit 1; }
+  for _n in $_old_prompts; do [ -e "$T/.codex/prompts/$_n.md" ] && { echo "FAIL: old codex prompt $_n.md kept"; exit 1; }; done
   [ -f "$T/.codex/prompts/my-own.md" ] || { echo "FAIL: foreign codex prompt removed"; exit 1; }
   grep -qx 'my-own-line' "$T/.pi/agent/skills/.ignore" || { echo "FAIL: pi .ignore lost a user line"; exit 1; }
   [ "$(grep -cxF /PLATFORMS.md "$T/.pi/agent/skills/.ignore")" = 1 ] || { echo "FAIL: pi .ignore lines duplicated on the second run"; exit 1; }

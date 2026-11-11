@@ -1029,7 +1029,7 @@ test('A196: native RunsTab Start Run form selects runner/mode/tickets, renders c
   // 1. Start Run button is rendered in RunsTab
   expect(await text('runs:start')).toBe('Start Run')
 
-  // 2. Pressing runs:start opens StartRunForm initialized with marathon + sequential + eligible open tickets
+  // 2. Pressing runs:start opens StartRunForm initialized with gauntlet-run + sequential + eligible open tickets
   await ui.press({ key: 'runs:start' })
   await ui.redraw()
   expect(await text('start:runner')).toBe('Runner: gauntlet-run')

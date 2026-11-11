@@ -53,15 +53,16 @@ export async function readSkillDocHost($: HostApi, skillId: string): Promise<{ c
     const repo = await $.session.repo()
     if (repo?.root) {
       const repoBase = norm(repo.root)
-      const candMd = `${repoBase}/plugin/commands/${skillId}.md`
+      const doc = skillId === 'ops' ? 'skillator-ops' : skillId   // F171: /ops is documented by its plugin command
+      const candMd = `${repoBase}/plugin/commands/${doc}.md`
       if (candMd.startsWith(repoBase + '/') && !candMd.includes('..') && (await $.fs.exists(candMd))) {
         docPath = candMd
-        displayPath = `plugin/commands/${skillId}.md`
+        displayPath = `plugin/commands/${doc}.md`
       } else {
-        const candTxt = `${repoBase}/plugin/commands/${skillId}.txt`
+        const candTxt = `${repoBase}/plugin/commands/${doc}.txt`
         if (candTxt.startsWith(repoBase + '/') && !candTxt.includes('..') && (await $.fs.exists(candTxt))) {
           docPath = candTxt
-          displayPath = `plugin/commands/${skillId}.txt`
+          displayPath = `plugin/commands/${doc}.txt`
         }
       }
     }

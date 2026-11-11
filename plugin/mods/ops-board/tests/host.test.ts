@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import type { EngineInterface, ProcessRunInit, ProcessRunResult, FsEntry, SessionRepo, SessionUsage } from 'claude-code'
-import { argvFor, findNode, gitBin, isWindows, skillatorRoot, runCall, readUsage } from '../hooks/lib/host'
+import { argvFor, findNode, gitBin, isWindows, skillatorRoot, runCall, readUsage, readSkillDocHost } from '../hooks/lib/host'
 import type { Call, HostApi } from '../hooks/lib/host'
 
 // Compile-time: the plugin's own `$` is a HostApi, so register passes `$` as is.
@@ -357,4 +357,11 @@ test('F116 guarded status argv stays literal on both shells and holo has its own
     expect(argvFor('meta-status',true,'C:/skills path',args,PWSH)).toEqual([...PS,'C:/skills path/'+TM+'.ps1','status',...args])
   }
   expect(argvFor('holo-ticket',false,'/skills path',['F91'],'/node path/node')).toEqual(['/node path/node','/skills path/holo-r2d2/scripts/holo.mjs','--ticket','F91','--html'])
+})
+
+test('F171: Help doc for the ops entry is plugin/commands/skillator-ops.txt; a renamed entry loads its own .md', async () => {
+  const ops = '/r/plugin/commands/skillator-ops.txt', pend = '/r/plugin/commands/skillator-pending.md'
+  const [$] = fake({ root: '/missing', repo: { root: '/r', remote: null, internal: false, name: 'r' }, exists: [ops, pend], files: { [ops]: 'Open the ops board\n', [pend]: 'What is pending\n' } })
+  expect(await readSkillDocHost($, 'ops')).toEqual({ code: 0, out: 'Open the ops board\n', err: '', path: 'plugin/commands/skillator-ops.txt' })
+  expect(await readSkillDocHost($, 'skillator-pending')).toEqual({ code: 0, out: 'What is pending\n', err: '', path: 'plugin/commands/skillator-pending.md' })
 })

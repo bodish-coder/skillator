@@ -988,13 +988,14 @@ function Invoke-SelfTest([string]$T) {
   [IO.File]::WriteAllText((Join-Path $T '.gemini\skills\list-ticket-zordon\.skillator-owned'), '')
   [IO.File]::WriteAllText((Join-Path $T '.pi\agent\skills\tickets-zordon\.selftest-sentinel'), '')
   [IO.File]::AppendAllText((Join-Path $T '.pi\agent\skills\.ignore'), 'my-own-line')
-  # F90: an older run's codex prompt goes, a foreign prompt stays
+  # F90: every older run's codex prompt goes, a foreign prompt stays
+  $oldPrompts = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run'
   New-Item -ItemType Directory -Force (Join-Path $T '.codex\prompts') | Out-Null
-  [IO.File]::WriteAllText((Join-Path $T '.codex\prompts\pending.md'), "old`n")
+  foreach ($n in $oldPrompts) { [IO.File]::WriteAllText((Join-Path $T ".codex\prompts\$n.md"), "old`n") }
   [IO.File]::WriteAllText((Join-Path $T '.codex\prompts\my-own.md'), "mine`n")
   $null = & $run @()
   if ($script:selfCode -ne 0) { return "second install exited $script:selfCode" }
-  if (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\pending.md')) { return 'old codex prompt pending.md kept' }
+  foreach ($n in $oldPrompts) { if (Test-Path -LiteralPath (Join-Path $T ".codex\prompts\$n.md")) { return "old codex prompt $n.md kept" } }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\my-own.md') -PathType Leaf)) { return 'foreign codex prompt removed' }
   $igl = @([IO.File]::ReadAllLines((Join-Path $T '.pi\agent\skills\.ignore')))
   if ($igl -cnotcontains 'my-own-line') { return 'pi .ignore lost a user line' }

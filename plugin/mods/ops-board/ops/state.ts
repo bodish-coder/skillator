@@ -61,7 +61,7 @@ export type PersonField = 'handle' | 'name' | 'emails'
 export type DialogField = 'ticket' | 'who'
 export type StartRunField = 'runner' | 'mode' | 'tickets'
 export type StartRunMode = 'sequential' | 'parallel'
-export type StartRunRunner = '/pending-sentinel' | '/gauntlet-run'
+export type StartRunRunner = 'pending-sentinel' | 'gauntlet-run'
 export type StartRunDraft = {
   runner: StartRunRunner
   mode: StartRunMode
@@ -935,7 +935,7 @@ export function openStartRun(s: State): Step {
     state: {
       ...s,
       startRun: {
-        runner: '/pending-sentinel',
+        runner: 'pending-sentinel',
         mode: s.runMode ?? 'parallel',
         count: null,
         tickets: '',
@@ -987,14 +987,14 @@ export function startRunKey(s: State, k: Key): Step {
 
   if (sr.field === 'runner') {
     if (k.name === 'space' || k.name === 'left' || k.name === 'right') {
-      const nextRunner: StartRunRunner = sr.runner === '/pending-sentinel' ? '/gauntlet-run' : '/pending-sentinel'
+      const nextRunner: StartRunRunner = sr.runner === 'pending-sentinel' ? 'gauntlet-run' : 'pending-sentinel'
       return { state: { ...s, startRun: { ...sr, runner: nextRunner } }, effects: [] }
     }
     if (k.sequence === 'p' || k.sequence === 'P') {
-      return { state: { ...s, startRun: { ...sr, runner: '/pending-sentinel' } }, effects: [] }
+      return { state: { ...s, startRun: { ...sr, runner: 'pending-sentinel' } }, effects: [] }
     }
     if (k.sequence === 'm' || k.sequence === 'M') {
-      return { state: { ...s, startRun: { ...sr, runner: '/gauntlet-run' } }, effects: [] }
+      return { state: { ...s, startRun: { ...sr, runner: 'gauntlet-run' } }, effects: [] }
     }
   } else if (sr.field === 'mode') {
     const cycleMode = (by: number): Step => {
@@ -2076,15 +2076,15 @@ export const COMMANDS: HelpItem[] = [
     hint: "[rough prompt - empty uses previous message]"
   },
   {
-    id: "list-tickets",
-    name: "/list-tickets",
+    id: "list-ticket-zordon",
+    name: "/list-ticket-zordon",
     kind: "command",
     category: "Tickets & Board",
     aliases: [],
     summary: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state)",
     triggers: ["list-tickets", "list-ticket-zordon", "list tickets", "show board"],
-    usage: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state with counts). Claude Code and pi answer /list-tickets from the board; other hosts use the plugin command /list-ticket-zordon.",
-    examples: ["/list-tickets", "/list-tickets status", "/list-tickets @sher", "/list-tickets F165"],
+    usage: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state with counts). On Claude Code the board also answers /list-tickets natively, without a model turn.",
+    examples: ["/list-ticket-zordon", "/list-ticket-zordon status", "/list-ticket-zordon @sher", "/list-ticket-zordon F165"],
     hint: "[status] [all] [app:<app>] [@person] [prefix|ID]"
   },
   {
@@ -2143,7 +2143,7 @@ export const COMMANDS: HelpItem[] = [
     aliases: [],
     summary: "Open the ops board (Tickets, Workflows, Health, Messages, Explorer, Build, Help)",
     triggers: ["ops", "skillator-ops", "open ops", "launch ops board"],
-    usage: "Open the ops board (TICKETS.md board, runs, health, messages, explorer, build, help) for this repo in terminal or browser. Claude Code and pi have /ops; Codex, Antigravity and OpenCode use the plugin command skillator-ops ($skillator-ops on Codex).",
+    usage: "Open the ops board (TICKETS.md board, runs, health, messages, explorer, build, help) for this repo in terminal or browser. Claude Code and pi have /ops; on Codex use $skillator-ops, on Antigravity and OpenCode the plugin command skillator-ops.",
     examples: ["/ops", "/ops tickets", "/ops help", "/ops --open"],
     hint: "[terminal|tickets|workflows|health|messages|explorer|build|help]"
   },
@@ -2160,15 +2160,15 @@ export const COMMANDS: HelpItem[] = [
     hint: "[sequential|parallel] [N|max] [ticket ids]"
   },
   {
-    id: "pending",
-    name: "/pending",
+    id: "skillator-pending",
+    name: "/skillator-pending",
     kind: "command",
     category: "Tickets & Board",
     aliases: [],
     summary: "Report what is pending - board counts, runs, sessions, unpushed commits, machine status",
     triggers: ["pending", "skillator-pending", "what is pending", "board status"],
-    usage: "What is pending - board counts, runs, sessions, unpushed commits, machine (tickets-zordon pending script). Claude Code and pi answer /pending from the board; other hosts use the plugin command /skillator-pending.",
-    examples: ["/pending"],
+    usage: "What is pending - board counts, runs, sessions, unpushed commits, machine (tickets-zordon pending script). On Claude Code the board also answers /pending natively, without a model turn.",
+    examples: ["/skillator-pending"],
     hint: "[]"
   },
   {
