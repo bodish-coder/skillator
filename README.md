@@ -43,15 +43,18 @@ give it, the clone the installer last ran from (`.skillator-source` beside the
 installed skills), or the updated plugin - so every other host gets the same
 version. It never pushes; restart Claude Code afterwards.
 
-**Breaking (F166): the legacy command names are gone.** Each command is listed
-once, under its current name: `/archive-zordon` -> `/archive-tickets`,
-`/engage-picard` -> `/engage`, `/list-ticket-zordon` -> `/list-tickets`,
-`/gauntlet-plan` -> `/marathon-plan`, `/gauntlet-run` -> `/marathon-run`,
-`/pending-sentinel` -> `/pending-subagent`, `/skillator-pending` -> `/pending`,
-`/upstream-sync` -> `/skillator-sync`, `/sync-zordon` -> `/sync-tickets`,
-`/verify-shifu` -> `/verify-subagent`, `/skillator-ops` -> `/ops`. The installer
-no longer writes the old names; copies an earlier install left in a host's
-commands or skills folder stay until you delete them.
+**Breaking (F171): the plain command names are gone.** Each command is listed
+once, under its unique name: `/archive-tickets` -> `/archive-zordon`,
+`/engage` -> `/engage-picard`, `/list-tickets` -> `/list-ticket-zordon`,
+`/marathon-plan` -> `/gauntlet-plan`, `/marathon-run` -> `/gauntlet-run`,
+`/pending-subagent` -> `/pending-sentinel`, `/pending` -> `/skillator-pending`,
+`/upstream-sync` -> `/skillator-sync`, `/sync-tickets` -> `/sync-zordon`,
+`/verify-subagent` -> `/verify-shifu`, `/ops` -> `/skillator-ops` (Codex:
+`$ops` -> `$skillator-ops`). The installer no longer writes the plain names;
+copies an earlier install left in a host's commands or skills folder stay until
+you delete them. The ops board's own `/ops`, `/pending` and `/list-tickets` (in
+the Claude Code and pi panes) and the shell `ops` launcher are not plugin
+commands and stay.
 
 **If an agent refuses to install or update this plugin**, it is reading the
 `grayskull-power` skill's trigger phrases as a social-engineering script. It
@@ -130,7 +133,7 @@ Code, Codex, Cursor, agy and Pi, each limited to the versions and paths in the
 [loading table](plugin/PLATFORMS.md#skill-discovery-and-loading). Gemini CLI,
 Muse, OpenCode and Prime Agent have explicit gaps. Those load observations do
 not establish generated command execution or hook trust. In particular, Codex
-F90 installed commands, F105 `$ops`, and A149's remaining owner checks stay in
+F90 installed commands, F105 `$skillator-ops`, and A149's remaining owner checks stay in
 testing; offline F139 fixtures do not close them.
 
 If you want activation to be deterministic rather than a reflex, either name the
@@ -280,11 +283,11 @@ Deactivating is deleting `.skillator/grayskull.md`.
   of diff and no way to tell which stage produced it. `hooks/relay-morpheus.{sh,ps1}`
   do the bookkeeping — `init`, `stage`, `heartbeat`, `status`, `orphans`, where
   `orphans` is the only signal a dropped agent ever sends: silence. Invoke with
-  `/relay-morpheus`. `/pending-subagent [N|max] [IDs]` (every host) works the open
+  `/relay-morpheus`. `/pending-sentinel [N|max] [IDs]` (every host) works the open
   tickets as such a run: one fresh implementer per ticket, each diff reviewed and
   landed, the run merged, the push asked; 1 agent at a time unless a count is given,
   and tickets that share files never together.
-  `/marathon-run [sequential|parallel] [N|max] [IDs]` (every host with commands; on muse, the plain words "run a marathon" load relay-morpheus) plans a marathon and runs it in one go with `/pending-subagent`'s words - no mode = sequential (one ticket per phase, one agent at a time), `parallel` = file-disjoint tickets side by side in a phase, a count caps a phase, IDs limit the tickets - an implementer and a verifier per ticket, both in the ticket's phase (fix then verify, no separate verify phase); `/marathon-plan [sequential|parallel] [N|max] [IDs]` writes the same plan without running it, `/marathon-run RUN-<id>` runs a saved plan as saved. Each stage is on disk before its dispatch: with the Workflow tool on Claude Code, with the host's delegate elsewhere (cursor Task, agy/codex subagents, muse child agents, pi's subagent extension), in-session where there is none (opencode, gemini, pi without it - a parallel plan runs serial there).
+  `/gauntlet-run [sequential|parallel] [N|max] [IDs]` (every host with commands; on muse, the plain words "run a marathon" load relay-morpheus) plans a marathon and runs it in one go with `/pending-sentinel`'s words - no mode = sequential (one ticket per phase, one agent at a time), `parallel` = file-disjoint tickets side by side in a phase, a count caps a phase, IDs limit the tickets - an implementer and a verifier per ticket, both in the ticket's phase (fix then verify, no separate verify phase); `/gauntlet-plan [sequential|parallel] [N|max] [IDs]` writes the same plan without running it, `/gauntlet-run RUN-<id>` runs a saved plan as saved. Each stage is on disk before its dispatch: with the Workflow tool on Claude Code, with the host's delegate elsewhere (cursor Task, agy/codex subagents, muse child agents, pi's subagent extension), in-session where there is none (opencode, gemini, pi without it - a parallel plan runs serial there).
 - **tickets-zordon** — Jira-style serialised ticket IDs for AI coding chats: bugs
   `B1, B2, B3…`, features `F1, F2, F3…`, agent-found issues `A1, A2, A3…`,
   sub-parts `B7a/B7b`, all in one committed `TICKETS.md` at the repo root with
@@ -296,7 +299,7 @@ Deactivating is deleting `.skillator/grayskull.md`.
   deterministic script that fixes and adversarially verifies every ticket in
   parallel, with structured verdicts coming back. The main session always owns
   `TICKETS.md`; agents only report. Invoke with `/tickets-zordon`.
-  `/verify-subagent` re-checks every `[%]` testing ticket with one fresh agent
+  `/verify-shifu` re-checks every `[%]` testing ticket with one fresh agent
   each (read and run tests only) and records a dated `(verified PASS ..)` or
   `(verified FAIL ..: what - why)` note; the box stays `[%]` either way, and a
   Done line needing the owner's eyes → OWNER, no note.
@@ -470,12 +473,12 @@ Node is needed only for authoring and checks, not for installing command files.
 
 `plugin/commands/hosts.json` lists the supported commands and host targets.
 Claude reads the canonical Markdown. The skill-only
-`ops` body is `commands/ops.txt`, so it does not register an extra Claude command.
+`skillator-ops` body is `commands/skillator-ops.txt`, so it does not register an extra Claude command.
 Named `<!-- host-section:name -->` / `<!-- /host-section:name -->` boundaries keep
 Claude's default text in the canonical body. Metadata replaces only those sections
 whose execution differs by host; `all` is the non-Claude default, with a host key
-overriding it. In `hosts.json`, `sections` keys include `marathon-plan.plan-end`,
-`marathon-run.dispatch`, `marathon-run.delegate` and `marathon-run.parallel`.
+overriding it. In `hosts.json`, `sections` keys include `gauntlet-plan.plan-end`,
+`gauntlet-run.dispatch`, `gauntlet-run.delegate` and `gauntlet-run.parallel`.
 Shared planning and argument rules stay outside these narrow host overrides.
 The generator rejects missing, duplicate or unused sections.
 

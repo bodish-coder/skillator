@@ -108,8 +108,8 @@ are separate observations. No remote-pairing result proves any of these.
 | Claude Code / pane, band and actions | tested with stubs | unknown; 2026-10-31 | [mod hooks](mods/ops-board/hooks/), [mounted tests](mods/ops-board/tests/); mocked host/event chains, not physical keyboard/mouse. B15/B17 owner checks remain. |
 | Pi / ops overlay | verified live | 0.74.2; 2026-10-22 | [extension](mods/ops-board/pi/index.ts), [scripted ConPTY record](practice/baselines/green-pi-ops-f56.txt); real Pi UI, no model call or human visual inspection. |
 | Antigravity IDE / webview and one-frame command | tested with stubs | IDE 1.107.0 reported; run date unknown | [extension](mods/ops-board/antigravity/extension.cjs), [tests](mods/ops-board/antigravity/tests/ops.test.mts); historical headless activation below has no linked run record. Live owner panel check remains. |
-| Codex / `$ops` launch | implemented | unknown; 2026-10-31 | [ops skill template](host-commands/antigravity/ops/SKILL.md), F139 installer fixture; F105 real-session board opening remains unverified. |
-| agy / `/ops` launch | implemented | unknown; 2026-10-31 | [ops skill template](host-commands/antigravity/ops/SKILL.md); no recorded real-session launch. |
+| Codex / `$skillator-ops` launch | implemented | unknown; 2026-10-31 | [skillator-ops skill template](host-commands/antigravity/skillator-ops/SKILL.md), F139 installer fixture; F105 real-session board opening remains unverified. |
+| agy / `/skillator-ops` launch | implemented | unknown; 2026-10-31 | [skillator-ops skill template](host-commands/antigravity/skillator-ops/SKILL.md); no recorded real-session launch. |
 | Standalone Windows terminal / rendering and launcher | verified live | Node 22.23.2, PowerShell 5.1, Git sh version unknown; 2026-10-22 | [app](mods/ops-board/ops/), [scripted ConPTY record](practice/baselines/green-ops-standalone-f55.txt); no human window inspection, native POSIX or `--open` tab verification implied. |
 | Cursor / external board | implemented | unknown; 2026-10-31 | [launchers](mods/ops-board/ops/); standalone evidence above, no Cursor pane or host-triggered launch proof. |
 | Gemini CLI / external board | implemented | unknown; 2026-10-31 | [launchers](mods/ops-board/ops/); no host-integrated rendering proof. |
@@ -240,7 +240,7 @@ Where a historical summary differs, the capability ledger takes precedence.
 | **Usage % readable** | `statusLine` `rate_limits.*.used_percentage` | no | yes — `$CODEX_HOME/sessions/**/rollout-*.jsonl` (default `~/.codex`), last `token_count`; the `Stop` stdin's `transcript_path` names the session's own | no | no | no |
 | **Turn-end hook that can inject** | `Stop` → `{"decision":"block"}` | `stop` in `~/.cursor/hooks.json` (`command`/`prompt`) | `Stop` in `hooks.json` → `{"decision":"block","reason":…}` on stdout (0.155.1, verified under `codex exec`; needs hook trust). Exit 2 + stderr does not inject. `watch-cortana` `usage-watch.* gate` wired and verified here, 0.156.1 (A83). See the codex note | `AfterAgent` / `PreCompress` in `~/.gemini/settings.json` | no | no |
 | **Durable memory** | `CLAUDE.md` + files on disk | files on disk | `AGENTS.md` + files | `AGENTS.md` + files | `AGENTS.md` (`~/.pi/agent/`, parents, cwd) + files | Continual Harness + `AGENTS.md` + files |
-| **Slash command file** (`/pending`, `/list-tickets`, `/engage`, `/archive-tickets`, `/sync-tickets`, `/skillator-update`, `/team-messages`, `/pending-subagent`, `/verify-subagent`, `/marathon-plan`, `/marathon-run`; F54, F58, F59, F63, F65, F66, F71, F72, F73, texts in `host-commands/<host>/`, tags in "Commands - what is verified") | the ops-board mod's own commands / `commands/*.md`; the installer writes none | `~/.cursor/commands/<n>.md`, `.cursor/commands/<n>.md` | a skill (F90): `$CODEX_HOME/skills/<n>/SKILL.md`, from `host-commands/antigravity/` → `$<n>` (or pick it in `/skills`) | none of its own: a skill is the command, `<ws>/.agents/skills/<n>/SKILL.md` → `/<n>` (workflows deprecated); Gemini CLI: `~/.gemini/commands/<n>.toml` | `~/.pi/agent/prompts/<n>.md`, `.pi/prompts/<n>.md` → `/<n>` | **none — the skill route** (no command mechanism) |
+| **Slash command file** (`/skillator-pending`, `/list-ticket-zordon`, `/engage-picard`, `/archive-zordon`, `/sync-zordon`, `/skillator-update`, `/team-messages`, `/pending-sentinel`, `/verify-shifu`, `/gauntlet-plan`, `/gauntlet-run`; F54, F58, F59, F63, F65, F66, F71, F72, F73, texts in `host-commands/<host>/`, tags in "Commands - what is verified") | the ops-board mod's own commands / `commands/*.md`; the installer writes none | `~/.cursor/commands/<n>.md`, `.cursor/commands/<n>.md` | a skill (F90): `$CODEX_HOME/skills/<n>/SKILL.md`, from `host-commands/antigravity/` → `$<n>` (or pick it in `/skills`) | none of its own: a skill is the command, `<ws>/.agents/skills/<n>/SKILL.md` → `/<n>` (workflows deprecated); Gemini CLI: `~/.gemini/commands/<n>.toml` | `~/.pi/agent/prompts/<n>.md`, `.pi/prompts/<n>.md` → `/<n>` | **none — the skill route** (no command mechanism) |
 | **Remote drive** (from a phone, `remote-cerebro`; matrix and evidence tags in [`skills/remote-cerebro/references/hosts.md`](skills/remote-cerebro/references/hosts.md)) | not this skill — Claude Code's own Remote Control | native: cloud agent via `agent worker start` (runs here, not the local TUI); bridge via `agent acp` arms only after an ACP proof | native: `codex remote-control` + ChatGPT app (Windows pairing unproven); bridge: `codex app-server` | gemini: **no native remote** — bridge via `--acp` (after an ACP proof); attach hook v2, approvals not answerable from the phone. agy: native `--remote-control` | bridge: `--mode rpc` (own) or `--mode attach` on a pi cerebro launched; no native remote | not possible (not installed, not probed) |
 
 **Frontmatter:** only `name` + `description` are portable. Everything else
@@ -376,7 +376,7 @@ install skills and the shared docs only.
 
 ## Commands - what is verified
 
-`/pending`, `/list-tickets` (F54), `/engage` (F58), `/archive-tickets` (F59), `/sync-tickets` (F63), `/skillator-update` (F65), `/team-messages` (F66), `/pending-subagent` (F71), `/verify-subagent` (F72), `/marathon-plan` and `/marathon-run` (F73) are written by the installers at user level
+`/skillator-pending`, `/list-ticket-zordon` (F54), `/engage-picard` (F58), `/archive-zordon` (F59), `/sync-zordon` (F63), `/skillator-update` (F65), `/team-messages` (F66), `/pending-sentinel` (F71), `/verify-shifu` (F72), `/gauntlet-plan` and `/gauntlet-run` (F73) are written by the installers at user level
 only, rewritten every run; per-host shapes are in the session design's D7 table.
 Evidence tags: **verified** = read from the host's docs/binary or exercised here;
 **inferred** = from docs only, until the owner's picker check
@@ -390,7 +390,7 @@ Code also gets them at the next turn from the plugin's own `hooks/hooks.json`
 have no plugin hook here, so they read them on the ops board's 4 Messages tab and with
 `/team-messages`.
 
-`/pending-subagent [N|max] [IDs]` (F71, `relay-morpheus` with `tickets-zordon` and
+`/pending-sentinel [N|max] [IDs]` (F71, `relay-morpheus` with `tickets-zordon` and
 `tasks-sentinels`) works the open tickets, or the IDs given, as one relay run: a stage
 and its exact prompt in the run file before each dispatch, one fresh implementer per
 ticket, each diff reviewed and landed by the main session, then the run merged, the
@@ -398,27 +398,27 @@ version bumped and the push asked. The count defaults to 1 (serial); N or `max` 
 file-disjoint tickets at once in their own stage worktrees (`chain next --all`,
 `chain merge`). A host with no subagent tool runs the stored prompts itself, one at a time.
 
-`/verify-subagent` (F72, `tickets-zordon`) re-checks every `[%]` ticket (or the IDs
+`/verify-shifu` (F72, `tickets-zordon`) re-checks every `[%]` ticket (or the IDs
 given) with one fresh read-and-run-only agent each and records the verdict as one
 note, the box never moving (F167): PASS ` (verified PASS <date>: ..)` (`ticket-meta verify
 <ID> pass`), FAIL ` (verified FAIL <date>: <what> - <why>)` (`verify <ID> fail`), OWNER
 (the Done line needs the owner's own eyes) no note. A host with no subagents runs the
 checks itself, one at a time.
 
-`/marathon-run [sequential|parallel] [N|max] [IDs]` (F112) plans and runs a marathon in one go,
-`/marathon-plan` with the same words saves the plan and `/marathon-run [RUN id]` runs a saved one
+`/gauntlet-run [sequential|parallel] [N|max] [IDs]` (F112) plans and runs a marathon in one go,
+`/gauntlet-plan` with the same words saves the plan and `/gauntlet-run [RUN id]` runs a saved one
 (F73, `relay-morpheus`): the plan is a run file plus a Workflow script beside it
 (`run-<0000>-<slug>.workflow.js`, from relay-morpheus `templates/marathon-workflow.js`:
 one implementer and one verifier per ticket, phases serial where tickets share files,
 one ticket per phase under sequential (the default), at most N under parallel N - PLAN.mode),
-shown with its agent count and no agent run; `/marathon-run` runs it one phase per
+shown with its agent count and no agent run; `/gauntlet-run` runs it one phase per
 Workflow call, every stage `chain dispatch`ed first, then landing and the end batch.
-Every other host writes the same plan and `/marathon-run` reads it as data, running each
+Every other host writes the same plan and `/gauntlet-run` reads it as data, running each
 stage with that host's delegate or in-session (relay-morpheus marathon.md § Run without
 the Workflow tool). Each tag below turns **verified** only with a recorded run
 (`practice/baselines/README.md`):
 
-| Host | `/marathon-run` runs the agents with | Tag |
+| Host | `/gauntlet-run` runs the agents with | Tag |
 |---|---|---|
 | cursor | marathon: the Task tool, one Task per agent (command text written, Task-tool run not exercised) | inferred |
 | antigravity | marathon: background subagents | inferred |
@@ -439,23 +439,23 @@ updated with `git pull --ff-only` only.
 
 | Host | Path | Tag |
 |---|---|---|
-| claude-code | the ops-board mod's `/pending`, `/list-tickets`; the plugin's `commands/engage.md`, `commands/archive-tickets.md`, `commands/sync-tickets.md`, `commands/skillator-update.md`, `commands/team-messages.md`, `commands/pending-subagent.md`, `commands/verify-subagent.md`, `commands/marathon-plan.md`, `commands/marathon-run.md` (installer writes none) | verified |
+| claude-code | the ops-board mod's `/pending`, `/list-tickets`; the plugin's `commands/skillator-pending.md`, `commands/list-ticket-zordon.md`, `commands/engage-picard.md`, `commands/archive-zordon.md`, `commands/sync-zordon.md`, `commands/skillator-update.md`, `commands/team-messages.md`, `commands/pending-sentinel.md`, `commands/verify-shifu.md`, `commands/gauntlet-plan.md`, `commands/gauntlet-run.md` (installer writes none) | verified |
 | gemini CLI | `~/.gemini/commands/<n>.toml`, `!{...}` shell injection, `{{args}}` | verified (dir, `!{`, `{{args}}`) |
 | antigravity | skills, `/<n>` in `agy`; all three dests `~/.gemini/config/skills/`, `~/.gemini/skills/` and `~/.gemini/antigravity-cli/skills/` (agy 1.4.5's global dir, B8) | verified (a skill is a slash command) |
 | pi | `~/.pi/agent/prompts/<n>.md`, `$ARGUMENTS` | verified |
 | pi `/ops` (F56) | the ops board as a pi extension: `~/.pi/agent/extensions/skillator-ops.ts` re-exports `~/.pi/agent/skills/ops-board/pi/index.ts`; full-screen overlay, Tickets / Runs / Health, assign / decide, the standalone app's keys; `/ops --once` notifies one frame | historical RPC discovery/one-frame probe; later scripted ConPTY overlay evidence and remaining visual limits are in the capability ledger |
 | Antigravity IDE ops board (F57) | the ops board as an extension of the Antigravity IDE (the VS Code fork, `antigravity-ide`; not `agy`): `ops-board/antigravity/pack.mjs` writes a VSIX whose entry requires `~/.gemini/config/skills/ops-board/antigravity/extension.cjs`, installed with `antigravity-ide --install-extension <vsix> --force` (a folder dropped beside `~/.antigravity-ide/extensions/extensions.json` is ignored); command "skillator: Ops board" opens a webview panel - Tickets / Runs / Health, assign / decide, the standalone app's keys; "skillator: Ops board - one frame" writes one frame to the "skillator ops" output channel | verified headless (Antigravity IDE 1.107.0, Electron 39 / node 22.21: `--extensionTestsPath` run activates `skillator.skillator-ops`, both commands listed, the one-frame command draws, the panel opens); the live panel is the owner's check |
 | codex | a skill (F90): `$CODEX_HOME/skills/<n>/SKILL.md`, written from `host-commands/antigravity/<n>/SKILL.md` (name + description frontmatter, `{{SKILLS}}` filled with that dest) → `$<n>` in the prompt, or pick it in `/skills`; the installer removes the `$CODEX_HOME/prompts/<n>.md` an older run wrote (those names only) | inferred (docs) until the owner runs one as a skill |
-| codex `$ops` (F105) | the ops board from Codex (and `/ops` in agy, same template): `host-commands/antigravity/ops/SKILL.md`, written to the codex and antigravity dests only (pi and Claude Code have their own `/ops`; none for cursor, gemini CLI; opencode has `/ops` [F159]); runs `ops --open`, else that dest's `ops-board/ops/ops.ps1 -Repo <repo root> -Open` / `ops.sh <repo root> --open`, never a bare console window | inferred until a real Codex run opens the board |
+| codex `$skillator-ops` (F105) | the ops board from Codex (and `/skillator-ops` in agy, same template): `host-commands/antigravity/skillator-ops/SKILL.md`, written to the codex and antigravity dests only (pi and Claude Code have their own `/ops`; none for cursor, gemini CLI; opencode has `/skillator-ops` [F159]); runs `ops --open`, else that dest's `ops-board/ops/ops.ps1 -Repo <repo root> -Open` / `ops.sh <repo root> --open`, never a bare console window | inferred until a real Codex run opens the board |
 | cursor | user `~/.cursor/commands/<n>.md` | historical project/user expansion recorded in the capability ledger; picker unverified |
 | muse (F68) | none: `.muse-plugin/plugin.json` lists `commands: []` (the command schema is unprobed - superpowers ships none either); the skill route stays | inferred |
-| opencode (F67, F159) | `~/.config/opencode/commands/<n>.md` (`$XDG_CONFIG_HOME/opencode/commands/` when that is set) → `/<n>`; markdown, frontmatter `description` (also `agent`, `model`, `subtask`), body = the template, `$ARGUMENTS` / `$1`… for arguments; `/ops` renders the board frame inline with `--once`, `/ops terminal` opens a new terminal tab (F159) | verified (opencode 1.19.4: `opencode debug config` lists a command from `<config>/commands/` and from `.opencode/command/` + `.opencode/commands/`, `$ARGUMENTS` kept in the template; the binary globs `{command,commands}/**/*.md` in every config dir); the TUI picker is the owner's check |
+| opencode (F67, F159) | `~/.config/opencode/commands/<n>.md` (`$XDG_CONFIG_HOME/opencode/commands/` when that is set) → `/<n>`; markdown, frontmatter `description` (also `agent`, `model`, `subtask`), body = the template, `$ARGUMENTS` / `$1`… for arguments; `/skillator-ops` renders the board frame inline with `--once`, `/skillator-ops terminal` opens a new terminal tab (F159) | verified (opencode 1.19.4: `opencode debug config` lists a command from `<config>/commands/` and from `.opencode/command/` + `.opencode/commands/`, `$ARGUMENTS` kept in the template; the binary globs `{command,commands}/**/*.md` in every config dir); the TUI picker is the owner's check |
 | prime-agent | none; the skill route stays | verified (no loader) |
 
 **cursor** — Cursor's CLI is `cursor-agent` (`agent.exe` beside it). A bare `agent`
 on `PATH` can be a different tool (on the author's machine it is Grok's), so the
 probe and every headless check use `cursor-agent`, never `agent`:
-`cursor-agent -p "/pending" --mode ask`.
+`cursor-agent -p "/skillator-pending" --mode ask`.
 
 ## Host notes
 
@@ -597,8 +597,8 @@ skill's `name` must match its folder. The installers write the skills to
 (`host-commands/opencode/`, the pi texts without `argument-hint`). opencode also
 reads `~/.claude/skills`, so where `install.sh` / `install.ps1` fill that dir
 (Claude Code with no plugin) opencode finds each skill twice (how it settles a
-duplicate name is unprobed). `/ops` in opencode (F159)
-renders the ops board frame in-app via `--once` by default; `/ops terminal`
+duplicate name is unprobed). `/skillator-ops` in opencode (F159)
+renders the ops board frame in-app via `--once` by default; `/skillator-ops terminal`
 opens the board in a new terminal tab.
 
 **prime-agent** — skills are importable *Python packages*, so these markdown

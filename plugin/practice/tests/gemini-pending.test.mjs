@@ -29,15 +29,15 @@ Write-Cmd $Tpl $SkillsDir $Target
   });
 }
 
-test('Write-Cmd converts only Gemini pending.toml, like install.sh, and preserves paths with spaces', { skip: process.platform !== 'win32' ? 'Windows PowerShell required' : false }, t => {
+test('Write-Cmd converts only Gemini skillator-pending.toml, like install.sh, and preserves paths with spaces', { skip: process.platform !== 'win32' ? 'Windows PowerShell required' : false }, t => {
   const root = mkdtempSync(join(tmpdir(), 'gemini-pending-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
 
   const skillsDir = join(root, 'Profile With Spaces', '.gemini', 'skills');
   const outDir = join(root, 'Profile With Spaces', '.gemini', 'commands');
-  const pendingTpl = join(plugin, 'host-commands', 'gemini', 'pending.toml');
+  const pendingTpl = join(plugin, 'host-commands', 'gemini', 'skillator-pending.toml');
 
-  const target = join(outDir, 'pending.toml');
+  const target = join(outDir, 'skillator-pending.toml');
   const res = runWriteCmd(root, pendingTpl, skillsDir, target);
   assert.equal(res.status, 0, `${res.stdout}\n${res.stderr}`);
   const bytes = readFileSync(target);
@@ -66,10 +66,10 @@ test('Write-Cmd converts only Gemini pending.toml, like install.sh, and preserve
   assert.equal(otherRes.status, 0, otherRes.stderr);
   assert.match(readFileSync(otherTarget, 'utf8'), /^!\{sh /m);
 
-  // Missing shell line in pending.toml throws
-  const brokenTpl = join(tplDir, 'pending.toml');
+  // Missing shell line in skillator-pending.toml throws
+  const brokenTpl = join(tplDir, 'skillator-pending.toml');
   writeFileSync(brokenTpl, 'description = "broken"\nprompt = "no shell line"\n', 'utf8');
   const brokenRes = runWriteCmd(root, brokenTpl, skillsDir, join(outDir, 'broken-pending.toml'));
-  assert.notEqual(brokenRes.status, 0, 'expected pending.toml without pending.sh line to fail');
+  assert.notEqual(brokenRes.status, 0, 'expected skillator-pending.toml without pending.sh line to fail');
   assert.match(brokenRes.stderr + brokenRes.stdout, /no pending\.sh shell line/);
 });

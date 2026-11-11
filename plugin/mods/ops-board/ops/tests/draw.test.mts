@@ -933,8 +933,8 @@ test('F165: Help catalog renders skills and commands with brief explanations and
   assert.ok(onlySkills.every(sk => sk.kind !== 'command'))
 
   // 2. Open help with command selected
-  const cmdState = openHelp(s, 'archive-tickets').state
-  assert.equal(cmdState.help?.selected, 'archive-tickets')
+  const cmdState = openHelp(s, 'archive-zordon').state
+  assert.equal(cmdState.help?.selected, 'archive-zordon')
 
   // 3. Viewport width matrix: 40, 60, 80, 100, 120 cols
   for (const cols of [40, 60, 80, 100, 120]) {
@@ -945,7 +945,7 @@ test('F165: Help catalog renders skills and commands with brief explanations and
     }
     const full = f.join('\n')
     // All viewports must include the selected command and an explanation
-    assert.match(full, /archive-tic/)
+    assert.match(full, /archive-zo/)
     assert.match(full, /Archive clos/)
     if (cols >= 80) {
       assert.match(full, /\[Cmd\]/)
@@ -963,7 +963,7 @@ test('F165: Help catalog renders skills and commands with brief explanations and
     },
   }
   const fExp = sized({ ...expState, cols: 80, rows: 35 }).join('\n')
-  assert.match(fExp, /Command: \/archive-tickets/)
+  assert.match(fExp, /Command: \/archive-zordon/)
   assert.match(fExp, /Arguments: \[--days N\]/)
   assert.doesNotMatch(fExp, /Aliases:/)  // F166: commands have no legacy aliases
   assert.match(fExp, /Usage Guide:/)
@@ -980,12 +980,12 @@ test('F165: Help catalog renders skills and commands with brief explanations and
     },
   }
   const fPrompt = sized({ ...runPromptState, cols: 80, rows: 24 }).join('\n')
-  assert.match(fPrompt, /┌─ Run \/archive-tickets/)
+  assert.match(fPrompt, /┌─ Run \/archive-zordon/)
   assert.match(fPrompt, /Args: --days 30_/)
 
   // 6. Hitboxes on command rows
   const sc = screen(cmdState, P)
-  const cmdHit = sc.hits.find(h => h.action.kind === 'help-skill' && h.action.id === 'archive-tickets')
-  assert.ok(cmdHit, 'Expected hitbox for archive-tickets command row')
+  const cmdHit = sc.hits.find(h => h.action.kind === 'help-skill' && h.action.id === 'archive-zordon')
+  assert.ok(cmdHit, 'Expected hitbox for archive-zordon command row')
 })
 

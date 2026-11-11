@@ -44,7 +44,7 @@ and ask.
 
 Off `claude-code`, workflow mode is a *pattern*, not a tool. Don't pretend a
 `Workflow` call happened. The marathon plan is the same file on every host;
-`/marathon-run` dispatches it with that host's delegate (relay-morpheus
+`/gauntlet-run` dispatches it with that host's delegate (relay-morpheus
 marathon.md § Run without the Workflow tool). The mode (`sequential` default, `parallel`,
 `parallel N`) is the plan's phase shape; a delegate host runs a phase's tickets at once,
 an in-session host one after another.

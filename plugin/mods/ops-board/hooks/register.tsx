@@ -79,9 +79,9 @@ async function setBoard($: EngineInterface, next: Board, force = false) {
 }
 
 const failed = (path: string, error: string): Board => ({ path, mtimeMs: 0, size: 0, tickets: [], error })
-const TOO_BIG = 'TICKETS.md is over 4 MiB - not read; /archive-tickets moves the closed rows out'
+const TOO_BIG = 'TICKETS.md is over 4 MiB - not read; /archive-zordon moves the closed rows out'
 const notLoaded = (e: unknown) =>
-  `TICKETS.md not loaded: ${String((e as Error)?.message ?? e)} - /archive-tickets moves the closed rows out`
+  `TICKETS.md not loaded: ${String((e as Error)?.message ?? e)} - /archive-zordon moves the closed rows out`
 
 // The board at path. Only a stat that fails is "no TICKETS.md"; a read the engine
 // refuses or a parse that throws names its error (a big board read as missing, before).

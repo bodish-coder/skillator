@@ -18,7 +18,7 @@ export { continuePrompt, eligibleRunTickets, parseFollowupOut, runLines, startRu
 // in parallel and its parked decisions. F85: a run's mode, its script's phases (the
 // .workflow.js beside the run file, read as data, never run) and, under it, the Workflow
 // runs and agents serving its stages. Engage asks first, in this pane (B5), then submits
-// /skillator:marathon-run (a script) or queues the run and submits its continue prompt.
+// /skillator:gauntlet-run (a script) or queues the run and submits its continue prompt.
 // Ticket state is a coloured dot from the board, never a bracket code.
 
 const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)

@@ -903,7 +903,7 @@ function Do-Tested([string[]]$a) {
   return (Edit-Line $id @{ mark = $mk; need = '%' })
 }
 
-# F72/F167: /verify-subagent's verdict on a [%] ticket, with the evidence (one
+# F72/F167: /verify-shifu's verdict on a [%] ticket, with the evidence (one
 # line, no parentheses, no *; a fail's is "<what failed> - <why>"). A note, never
 # a status: the box stays [%], ` (verified PASS|FAIL <date>: <evidence>)` replaces
 # any earlier verify note.
@@ -1721,7 +1721,7 @@ function Invoke-Selftest {
       "- [~] F44 $dash Failing (testing: live check)`n- [ ] F46 $dash Not testing`n"
     if (-not (& $same $want62)) { Write-Output 'FAIL: F62 board bytes'; $script:fail = 1 }
 
-    # --- F64: done / block / defer - the boxes /sync-tickets used to hand-edit
+    # --- F64: done / block / defer - the boxes /sync-zordon used to hand-edit
     $Q = "$T/f64"
     Init-Repo $Q
     W "$Q/apps/web/f.txt" "x`n"
@@ -1780,7 +1780,7 @@ function Invoke-Selftest {
       if (-not (& $same $want)) { Write-Output "FAIL: $name done/block/defer line endings or bytes"; $script:fail = 1 }
     }
 
-    # --- F72/F167: verify - /verify-subagent's verdict on a [%] ticket; one
+    # --- F72/F167: verify - /verify-shifu's verdict on a [%] ticket; one
     # (verified PASS|FAIL ..) note, the box never moves
     $V = "$T/f72"
     Init-Repo $V

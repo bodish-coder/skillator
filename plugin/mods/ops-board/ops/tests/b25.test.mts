@@ -162,7 +162,7 @@ test('B25: Start Run modal clicking on focused runner or mode cycles value', () 
   let s: State = {
     ...initial(80, 24, Date.now()),
     startRun: {
-      runner: '/pending-subagent',
+      runner: '/pending-sentinel',
       mode: 'parallel',
       count: null,
       tickets: '',
@@ -180,7 +180,7 @@ test('B25: Start Run modal clicking on focused runner or mode cycles value', () 
 
   // Clicking 'runner' again cycles runner
   const cycledRunner = point(focusedRunner.state, { kind: 'start-run-field', field: 'runner' })
-  assert.equal(cycledRunner.state.startRun?.runner, '/marathon-run')
+  assert.equal(cycledRunner.state.startRun?.runner, '/gauntlet-run')
 })
 
 test('B25: Team confirm separate question and button actions', () => {

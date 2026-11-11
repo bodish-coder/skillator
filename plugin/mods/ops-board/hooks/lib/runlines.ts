@@ -47,7 +47,7 @@ export const sectionStatus = (all: RunStatus[]): RunStatus | null => PRESSING.fi
 export const continuePrompt = (id: string) =>
   `continue ${id}: drive its chain with skillator:relay-morpheus (chain next / chain dispatch)`
 
-// F85: a run with a /marathon-plan script beside it is a workflow run; else the Chain
+// F85: a run with a /gauntlet-plan script beside it is a workflow run; else the Chain
 // header's mode, else agents.
 export const modeOf = (r: RunView) => (r.phases ? 'workflow' : r.mode ?? 'agents')
 // The first phase with a stage not landed (x) or moved on (>); -1: none.
@@ -58,7 +58,7 @@ export const nextPhase = (r: RunView) =>
 export const DRIVER_STALE_MIN = 20
 export type EngageCheck = { text: string; queue: boolean } | { refused: string }
 // Never two drivers: a stage in flight, or a driver stamp under 20 min, refuses. A run with
-// a script runs it with /marathon-run; one without is queued (queue-run add) and continued.
+// a script runs it with /gauntlet-run; one without is queued (queue-run add) and continued.
 // F99: a driver stamp's age in minutes. relay writes `<tag> YYYY-MM-DDTHH:MMZ`; a stamp that
 // does not read so is NaN (engageOf then fails closed: not stale).
 export const stampAge = (stamp: string | undefined, now: number) => {
@@ -78,7 +78,7 @@ export function engageOf(r: RunView, now: number): EngageCheck {
     const beat = Number.isNaN(age) ? `heartbeat unreadable: ${stamp ?? '-'}` : `heartbeat ${age}m ago, stale at ${DRIVER_STALE_MIN}m`
     return { refused: `■ ${r.id} not engaged: driven by ${tag} (${beat}) - never two drivers` }
   }
-  return r.phases ? { text: `/skillator:marathon-run ${r.id}`, queue: false } : { text: continuePrompt(r.id), queue: true }
+  return r.phases ? { text: `/skillator:gauntlet-run ${r.id}`, queue: false } : { text: continuePrompt(r.id), queue: true }
 }
 
 // F85: a short title - up to the first '. ' or ' (', as /pending cuts one, at most 40 wide.
@@ -189,7 +189,7 @@ export function runLines(run: RunView, board: Board | null): Line[] {
 export { ticketsOf as stageTickets }
 
 // F113 / A196: canonical Start Run command builder shared by standalone ops/state.ts and native hooks/runstab.tsx.
-export type RunnerChoice = 'marathon' | 'pending-subagent' | '/marathon-run' | '/pending-subagent'
+export type RunnerChoice = 'marathon' | 'pending-subagent' | '/gauntlet-run' | '/pending-sentinel'
 export type ModeChoice = 'sequential' | 'parallel'
 
 export function startRunCmd(
@@ -198,7 +198,7 @@ export function startRunCmd(
   tickets: readonly string[] | string,
   count?: number | null,
 ): string {
-  const runnerCmd = runner === 'marathon' ? '/marathon-run' : runner === 'pending-subagent' ? '/pending-subagent' : runner
+  const runnerCmd = runner === 'marathon' ? '/gauntlet-run' : runner === 'pending-subagent' ? '/pending-sentinel' : runner
   const modeStr = mode === 'parallel' && count ? `parallel ${count}` : mode
   const ticketsStr = (typeof tickets === 'string' ? tickets : tickets.join(' ')).trim().replace(/\s+/g, ' ')
   return [runnerCmd, modeStr, ticketsStr].filter(Boolean).join(' ')

@@ -352,7 +352,7 @@ for (const surface of SURFACES) {
     const all = (await texts(ui)).join('\n')
     expect(all).not.toContain('no TICKETS.md')
     expect(all).toContain('read budget exceeded')
-    expect(all).toContain('/archive-tickets')
+    expect(all).toContain('/archive-zordon')
     await ui.unmount()
   })
 

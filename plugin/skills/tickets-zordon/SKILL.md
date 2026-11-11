@@ -54,11 +54,11 @@ trailing ` (@owner)` or ` (branch: x)` if the user wants it, and the
 else. Sub-parts are indented two spaces under their parent.
 
 The title comes first and is short: at most 60 characters, a name the owner
-recognises, ending at the first `. ` or ` (` — /pending cuts it there — and the
+recognises, ending at the first `. ` or ` (` — /skillator-pending cuts it there — and the
 detail follows. Write the title before the spec.
 Good: `- [ ] F12 — CSV export. The table view gets an Export button; ...`.
 Bad: `- [ ] F12 — The table view gets an Export button that writes the filtered rows ...`
-(the title is the whole spec, and /pending shows a cut sentence).
+(the title is the whole spec, and /skillator-pending shows a cut sentence).
 `check-tickets.sh` warns on every open line whose title is over 60 or empty.
 
 ## Who touched it
@@ -174,7 +174,7 @@ lead: @vidul
   emails. A handle not on the team is refused. No match → `not on the team: add
   <email> to .skillator/team.md`.
 - **Claims**: planning or dispatching a ticket (relay-morpheus `chain plan` /
-  `chain dispatch`, `/pending-subagent`, `/marathon-plan`) runs
+  `chain dispatch`, `/pending-sentinel`, `/gauntlet-plan`) runs
   `ticket-meta claim <ID>...` — `[owner: <me>]`, the box kept. A ticket already
   owned by someone else is reassigned (`assign` or `claim`) only by that owner or
   the lead; anyone else is refused, the refusal naming both. Not on the team →
@@ -450,11 +450,11 @@ artifact board read both files, so an archived number is never reused and a
 duplicate across the two still fails. For an old ID the board does not show,
 `grep -n '<ID>' TICKETS-archive.md` before saying it does not exist.
 
-### Sync what is in progress (`/sync-tickets`)
+### Sync what is in progress (`/sync-zordon`)
 
 `[~]` collects rows that are really done, waiting on a test, stuck or parked,
 because nothing flips them back; `[!]` and `[ ]` rows go stale the same way. On
-`/sync-tickets` (or "sync tickets"), walk **every** `[!]`, `[ ]` and `[~]` row —
+`/sync-zordon` (or "sync tickets"), walk **every** `[!]`, `[ ]` and `[~]` row —
 or only the IDs given as arguments — and propose the status it really has.
 **Propose from evidence, never invent it.**
 
@@ -515,9 +515,9 @@ or only the IDs given as arguments — and propose the status it really has.
    run `sh "$PRACTICE/scripts/check-tickets.sh"`, and report from that output: `in progress 14 -> 6
    (3 done, 2 testing, 1 blocked, 1 deferred, 1 decision)`.
 
-### Verify what is in testing (`/verify-subagent`)
+### Verify what is in testing (`/verify-shifu`)
 
-`[%]` says built, a check owed. On `/verify-subagent` (or "verify the testing
+`[%]` says built, a check owed. On `/verify-shifu` (or "verify the testing
 tickets"), re-check **every** `[%]` row - or only the IDs given; a named ID not
 in `[%]` is reported `not [%]` and skipped - against evidence obtained **now**,
 never against the line's own claim.
@@ -540,7 +540,7 @@ never against the line's own claim.
      **OWNER** when any part needs the owner's own eyes - `testing: owner ..`, a
      live look, a picker or UI check, an account or credentials, a device - even
      if the rest passed.
-   - **`--deep` only** (`/verify-subagent --deep [IDs]`; off by default): after
+   - **`--deep` only** (`/verify-shifu --deep [IDs]`; off by default): after
      the Done check, judge the ticket's code. The commits naming the ID as a
      word, `board:` commits left out, give the range `<oldest>^..<newest>`; run
      code-vader on it (`code-vader.sh collect --range <oldest>^..<newest>`,

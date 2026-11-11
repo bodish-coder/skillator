@@ -30,13 +30,13 @@ function metadata(root, edit) {
 test('stale check names the path without writing; regeneration is deterministic and preserves unknown files', t => {
   const root = fixture(t);
   ok(run(root, '--write'));
-  const stale = join(root, 'host-commands/cursor/pending.md');
+  const stale = join(root, 'host-commands/cursor/skillator-pending.md');
   writeFileSync(stale, 'stale\r\n', 'utf8');
   const user = join(root, 'host-commands/cursor/user.md');
   writeFileSync(user, 'user file', 'utf8');
   const result = run(root, '--check');
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /host-commands\/cursor\/pending\.md/);
+  assert.match(result.stderr, /host-commands\/cursor\/skillator-pending\.md/);
   assert.equal(readFileSync(stale, 'utf8'), 'stale\r\n');
   ok(run(root, '--write'));
   const once = contract.outputs.map(path => readFileSync(join(root, path)));
@@ -51,16 +51,21 @@ test('stale check names the path without writing; regeneration is deterministic 
   ok(run(root, '--check'));
 });
 
-test('F166: the legacy alias names are neither rendered nor left on disk; hosts.json has no aliases', async () => {
+test('F171: only the unique command names are rendered; no plain twin is rendered or left on disk; hosts.json has no aliases', async () => {
   const { renderCommands } = await import('./generate-commands.mjs');
-  const legacy = ['archive-zordon', 'engage-picard', 'list-ticket-zordon', 'gauntlet-plan', 'gauntlet-run', 'pending-sentinel',
-    'skillator-pending', 'upstream-sync', 'sync-zordon', 'verify-shifu', 'skillator-ops'];
+  const unique = ['archive-zordon', 'engage-picard', 'list-ticket-zordon', 'gauntlet-plan', 'gauntlet-run', 'pending-sentinel',
+    'skillator-pending', 'skillator-sync', 'sync-zordon', 'verify-shifu', 'skillator-ops'];
+  const plain = ['archive-tickets', 'engage', 'list-tickets', 'marathon-plan', 'marathon-run', 'pending-subagent',
+    'pending', 'upstream-sync', 'sync-tickets', 'verify-subagent', 'ops'];
   const outputs = [...renderCommands(plugin).keys()];
   const meta = JSON.parse(readFileSync(join(plugin, 'commands/hosts.json'), 'utf8'));
   for (const entry of meta.commands) assert.ok(!('aliases' in entry) && !('canonicalAliases' in entry), entry.name);
-  for (const old of legacy) {
+  const names = meta.commands.map(c => c.name);
+  for (const name of unique) assert.ok(names.includes(name), `hosts.json lacks ${name}`);
+  for (const old of plain) {
+    assert.ok(!names.includes(old), `hosts.json still has ${old}`);
     assert.ok(!outputs.some(p => p.split('/').some(part => part.replace(/\.(md|toml)$/, '') === old)), old);
-    assert.ok(!existsSync(join(plugin, `commands/${old}.md`)), `commands/${old}.md`);
+    for (const ext of ['md', 'txt']) assert.ok(!existsSync(join(plugin, `commands/${old}.${ext}`)), `commands/${old}.${ext}`);
     for (const path of [`antigravity/${old}`, `cursor/${old}.md`, `gemini/${old}.toml`, `opencode/${old}.md`, `pi/${old}.md`]) {
       assert.ok(!existsSync(join(plugin, 'host-commands', path)), path);
     }
@@ -72,7 +77,7 @@ test('every published output has a source; host invocation contracts survive', a
   const outputs = renderCommands(plugin);
   assert.deepEqual([...outputs.keys()].filter(p => p.startsWith('host-commands/')).sort(), contract.outputs);
   for (const [host, fragments] of Object.entries(contract.hostFragments)) {
-    for (const [i, name] of ['marathon-plan', 'marathon-run'].entries()) {
+    for (const [i, name] of ['gauntlet-plan', 'gauntlet-run'].entries()) {
       const path = `host-commands/${host}/${name}${host === 'antigravity' ? '/SKILL.md' : host === 'gemini' ? '.toml' : '.md'}`;
       assert.ok(outputs.get(path).includes(fragments[i]), path);
     }
@@ -88,15 +93,15 @@ test('every published output has a source; host invocation contracts survive', a
     if (/team-messages/.test(path)) {
       for (const guard of ['read-only inbox command', 'not an alias for `/message-uhura`', '/message-uhura @handle <issue>']) assert.ok(body.includes(guard), `${path}: ${guard}`);
     }
-    if (/marathon-(plan|run)/.test(path)) {
-      for (const guard of ['Legacy recovery (A162)', 'PLAN.mode', 'planned in RUN-<id>', '/marathon-plan <mode> <IDs>']) assert.ok(body.includes(guard), `${path}: ${guard}`);
+    if (/gauntlet-(plan|run)/.test(path)) {
+      for (const guard of ['Legacy recovery (A162)', 'PLAN.mode', 'planned in RUN-<id>', '/gauntlet-plan <mode> <IDs>']) assert.ok(body.includes(guard), `${path}: ${guard}`);
     }
   }
-  assert.match(outputs.get('host-commands/gemini/pending.toml'), /!\{sh "\{\{SKILLS\}\}/);
+  assert.match(outputs.get('host-commands/gemini/skillator-pending.toml'), /!\{sh "\{\{SKILLS\}\}/);
   assert.match(outputs.get('host-commands/gemini/code-vader.toml'), /!\{sh .* collect \{\{args\}\}/);
-  assert.match(outputs.get('host-commands/pi/engage.md'), /argument-hint:.*\n---\n[\s\S]*\$ARGUMENTS/);
-  assert.match(outputs.get('host-commands/antigravity/engage/SKILL.md'), /^---\nname: engage\n/);
-  assert.ok(outputs.get('host-commands/antigravity/pending/SKILL.md').includes('name: pending'));
+  assert.match(outputs.get('host-commands/pi/engage-picard.md'), /argument-hint:.*\n---\n[\s\S]*\$ARGUMENTS/);
+  assert.match(outputs.get('host-commands/antigravity/engage-picard/SKILL.md'), /^---\nname: engage-picard\n/);
+  assert.ok(outputs.get('host-commands/antigravity/skillator-pending/SKILL.md').includes('name: skillator-pending'));
   const hostsMeta = JSON.parse(readFileSync(join(plugin, 'commands/hosts.json'), 'utf8'));
   const tm = hostsMeta.commands.find(c => c.name === 'team-messages');
   const mu = hostsMeta.commands.find(c => c.name === 'message-uhura');
@@ -106,10 +111,10 @@ test('every published output has a source; host invocation contracts survive', a
 
 test('canonical edits propagate and CRLF input produces LF output', t => {
   const root = fixture(t);
-  const path = join(root, 'commands/engage.md');
+  const path = join(root, 'commands/engage-picard.md');
   writeFileSync(path, (readFileSync(path, 'utf8') + '\nShared new instruction.\n').replaceAll('\n', '\r\n'), 'utf8');
   ok(run(root, '--write'));
-  for (const output of contract.outputs.filter(p => /engage/.test(p))) {
+  for (const output of contract.outputs.filter(p => /engage-picard/.test(p))) {
     const text = readFileSync(join(root, output), 'utf8');
     assert.ok(text.includes('Shared new instruction.'), output);
     assert.ok(!text.includes('\r'), output);
@@ -117,10 +122,10 @@ test('canonical edits propagate and CRLF input produces LF output', t => {
 });
 
 for (const [name, region, original] of [
-  ['marathon-plan', 'intro', 'compute file disjointness from ticket bodies/history'],
-  ['marathon-plan', 'workflow', 'compute file disjointness from ticket bodies and history'],
-  ['marathon-run', 'intro', 'The count is a whole number of at least 1 or `max`'],
-  ['marathon-run', 'workflow', 'park the owner\'s questions for one end batch'],
+  ['gauntlet-plan', 'intro', 'compute file disjointness from ticket bodies/history'],
+  ['gauntlet-plan', 'workflow', 'compute file disjointness from ticket bodies and history'],
+  ['gauntlet-run', 'intro', 'The count is a whole number of at least 1 or `max`'],
+  ['gauntlet-run', 'workflow', 'park the owner\'s questions for one end batch'],
 ]) {
   test(`${name} shared ${region} edits reach every host with dispatch intact`, async t => {
     const root = fixture(t);
@@ -135,7 +140,7 @@ for (const [name, region, original] of [
       const path = `host-commands/${host}/${name}${host === 'antigravity' ? '/SKILL.md' : host === 'gemini' ? '.toml' : '.md'}`;
       const body = outputs.get(path);
       assert.ok(body.includes(changed), `${path}: shared ${region} mutation missing`);
-      assert.ok(body.includes(fragments[name === 'marathon-plan' ? 0 : 1]), `${path}: dispatch contract`);
+      assert.ok(body.includes(fragments[name === 'gauntlet-plan' ? 0 : 1]), `${path}: dispatch contract`);
     }
   });
 }
@@ -167,11 +172,11 @@ test('Gemini delivery and reply parse spaced installed script paths as one argum
 test('unknown substitutions and duplicate paths fail before any writes', t => {
   for (const kind of ['unknown', 'duplicate', 'section', 'traversal']) {
     const root = fixture(t);
-    const stale = join(root, 'host-commands/cursor/pending.md');
+    const stale = join(root, 'host-commands/cursor/skillator-pending.md');
     writeFileSync(stale, 'keep stale', 'utf8');
-    if (kind === 'unknown') writeFileSync(join(root, 'commands/engage.md'), readFileSync(join(root, 'commands/engage.md'), 'utf8') + '\n{{TYPO}}\n');
+    if (kind === 'unknown') writeFileSync(join(root, 'commands/engage-picard.md'), readFileSync(join(root, 'commands/engage-picard.md'), 'utf8') + '\n{{TYPO}}\n');
     if (kind === 'duplicate') metadata(root, data => data.commands.push(data.commands[0]));
-    if (kind === 'section') metadata(root, data => { data.sections['engage.absent'] = { all: 'oops' }; });
+    if (kind === 'section') metadata(root, data => { data.sections['engage-picard.absent'] = { all: 'oops' }; });
     if (kind === 'traversal') metadata(root, data => { data.commands[0].name = '../escape'; });
     const result = run(root, '--write');
     assert.equal(result.status, 1, kind + result.stdout + result.stderr);
@@ -182,7 +187,7 @@ test('unknown substitutions and duplicate paths fail before any writes', t => {
 
 test('a directory in an output path fails preflight before any writes', t => {
   const root = fixture(t);
-  const stale = join(root, 'host-commands/cursor/pending.md');
+  const stale = join(root, 'host-commands/cursor/skillator-pending.md');
   writeFileSync(stale, 'keep stale');
   const target = join(root, 'host-commands/pi/team.md');
   rmSync(target);

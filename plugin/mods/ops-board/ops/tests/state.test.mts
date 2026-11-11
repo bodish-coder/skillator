@@ -689,7 +689,7 @@ test('F77: a changed ID moves the dialog to that ticket; Enter runs on the new o
 // F85: the ops app shows a run's mode, its script's phases and the next one; e engages
 // it - having no session, Enter prints the exact command to paste; another live driver
 // refuses. Fixture run text and script only.
-test('F85: a workflow run - mode, phases, next phase; e then Enter prints /skillator:marathon-run; a live driver refuses', async () => {
+test('F85: a workflow run - mode, phases, next phase; e then Enter prints /skillator:gauntlet-run; a live driver refuses', async () => {
   const { engageLines } = await import('../state')
   const { frameSegs } = await import('../draw')
   const SEP = '     '
@@ -707,11 +707,11 @@ test('F85: a workflow run - mode, phases, next phase; e then Enter prints /skill
   assert.ok(txt.some(l => /RUN-0020  marathon +workflow · 1\/2 done/.test(l)), txt.join('\n'))
   assert.ok(txt.some(l => l === '    phase 2  s137 B10  ← next'), txt.join('\n'))
   const asked = reduce(open, key('e')).state
-  assert.deepEqual(engageLines(asked), ['Engage RUN-0020?', 'Paste    /skillator:marathon-run RUN-0020'])
+  assert.deepEqual(engageLines(asked), ['Engage RUN-0020?', 'Paste    /skillator:gauntlet-run RUN-0020'])
   assert.ok(frameSegs({ ...asked, rows: 40 }).some(l => l.map(x => x.text).join('').includes('Engage RUN-0020?')))
   const go = reduce(asked, key('return'))
   assert.deepEqual(go.effects, [])                                  // nothing queued for a script run
-  assert.equal(go.state.toast, 'Paste into your CLI:\n/skillator:marathon-run RUN-0020')
+  assert.equal(go.state.toast, 'Paste into your CLI:\n/skillator:gauntlet-run RUN-0020')
   assert.equal(go.state.engage, null)
   // another driver's stamp 5 minutes old: refused, naming it, no confirm
   const now = Date.parse('2026-10-18T12:00:00Z')
@@ -724,7 +724,7 @@ test('F85: a workflow run - mode, phases, next phase; e then Enter prints /skill
   assert.equal(reduce(odd, key('e')).state.toast, '■ RUN-0020 not engaged: driven by @cc-odd (heartbeat unreadable: 2026-10-18T11:55:30Z) - never two drivers')
   // a stale one (45 minutes) engages
   const stale = onRuns({ ...reduce(s0, key('2')).state, now }, list, { 'RUN-0020': run20('@cc-old 2026-10-18T11:15Z') }, { 'RUN-0020': script })
-  assert.equal(reduce(stale, key('e')).state.engage?.text, '/skillator:marathon-run RUN-0020')
+  assert.equal(reduce(stale, key('e')).state.engage?.text, '/skillator:gauntlet-run RUN-0020')
 })
 
 test('B20: r key triggers poll effects and sets reload toast; onBoard reconciles selected/expanded', () => {
@@ -965,7 +965,7 @@ test('F127: fast keyboard filtering (/) searches skills, backspace edits, Enter 
   assert.equal(s.help!.filter, 'zordon')
   assert.equal(s.help!.selected, 'tickets-zordon')
   const filtered = filteredSkills(s.help!.filter)
-  assert.equal(filtered.length, 2)  // F166: the *-zordon command aliases no longer match
+  assert.equal(filtered.length, 4)  // F171: plus the archive-zordon, list-ticket-zordon and sync-zordon commands
   assert.equal(filtered[0]!.id, 'tickets-zordon')
 
   // Backspace removes character
@@ -1026,52 +1026,52 @@ test('F127: mouse point actions (help, help-skill, help-close)', () => {
 })
 
 test('F113: startRunCommand pins command text per choice (mode, runner, count, tickets)', () => {
-  // 1. /pending-subagent sequential, default open tickets
+  // 1. /pending-sentinel sequential, default open tickets
   assert.equal(
-    startRunCommand({ runner: '/pending-subagent', mode: 'sequential', count: null, tickets: '' }),
-    '/pending-subagent sequential',
+    startRunCommand({ runner: '/pending-sentinel', mode: 'sequential', count: null, tickets: '' }),
+    '/pending-sentinel sequential',
   )
 
-  // 2. /pending-subagent parallel, default open tickets
+  // 2. /pending-sentinel parallel, default open tickets
   assert.equal(
-    startRunCommand({ runner: '/pending-subagent', mode: 'parallel', count: null, tickets: '' }),
-    '/pending-subagent parallel',
+    startRunCommand({ runner: '/pending-sentinel', mode: 'parallel', count: null, tickets: '' }),
+    '/pending-sentinel parallel',
   )
 
-  // 3. /pending-subagent parallel with count 2
+  // 3. /pending-sentinel parallel with count 2
   assert.equal(
-    startRunCommand({ runner: '/pending-subagent', mode: 'parallel', count: 2, tickets: '' }),
-    '/pending-subagent parallel 2',
+    startRunCommand({ runner: '/pending-sentinel', mode: 'parallel', count: 2, tickets: '' }),
+    '/pending-sentinel parallel 2',
   )
 
-  // 4. /pending-subagent parallel with count 3 and typed tickets
+  // 4. /pending-sentinel parallel with count 3 and typed tickets
   assert.equal(
-    startRunCommand({ runner: '/pending-subagent', mode: 'parallel', count: 3, tickets: 'F113 B20' }),
-    '/pending-subagent parallel 3 F113 B20',
+    startRunCommand({ runner: '/pending-sentinel', mode: 'parallel', count: 3, tickets: 'F113 B20' }),
+    '/pending-sentinel parallel 3 F113 B20',
   )
 
-  // 5. /pending-subagent sequential with typed ticket
+  // 5. /pending-sentinel sequential with typed ticket
   assert.equal(
-    startRunCommand({ runner: '/pending-subagent', mode: 'sequential', count: null, tickets: 'F113' }),
-    '/pending-subagent sequential F113',
+    startRunCommand({ runner: '/pending-sentinel', mode: 'sequential', count: null, tickets: 'F113' }),
+    '/pending-sentinel sequential F113',
   )
 
-  // 6. /marathon-run sequential, default open tickets
+  // 6. /gauntlet-run sequential, default open tickets
   assert.equal(
-    startRunCommand({ runner: '/marathon-run', mode: 'sequential', count: null, tickets: '' }),
-    '/marathon-run sequential',
+    startRunCommand({ runner: '/gauntlet-run', mode: 'sequential', count: null, tickets: '' }),
+    '/gauntlet-run sequential',
   )
 
-  // 7. /marathon-run parallel, default open tickets
+  // 7. /gauntlet-run parallel, default open tickets
   assert.equal(
-    startRunCommand({ runner: '/marathon-run', mode: 'parallel', count: null, tickets: '' }),
-    '/marathon-run parallel',
+    startRunCommand({ runner: '/gauntlet-run', mode: 'parallel', count: null, tickets: '' }),
+    '/gauntlet-run parallel',
   )
 
-  // 8. /marathon-run parallel with count 2 and typed tickets
+  // 8. /gauntlet-run parallel with count 2 and typed tickets
   assert.equal(
-    startRunCommand({ runner: '/marathon-run', mode: 'parallel', count: 2, tickets: 'F113' }),
-    '/marathon-run parallel 2 F113',
+    startRunCommand({ runner: '/gauntlet-run', mode: 'parallel', count: 2, tickets: 'F113' }),
+    '/gauntlet-run parallel 2 F113',
   )
 })
 
@@ -1083,7 +1083,7 @@ test('F113: Workflows tab interactive start run flow (open, navigation, mode cyc
   // 1. 's' key opens start run form
   s = reduce(s, key('s')).state
   assert.ok(s.startRun)
-  assert.equal(s.startRun.runner, '/pending-subagent')
+  assert.equal(s.startRun.runner, '/pending-sentinel')
   assert.equal(s.startRun.mode, 'parallel')
   assert.equal(s.startRun.count, null)
   assert.equal(s.startRun.tickets, '')
@@ -1092,21 +1092,21 @@ test('F113: Workflows tab interactive start run flow (open, navigation, mode cyc
   // Check lines
   assert.deepEqual(startRunLines(s), [
     'Start Run',
-    '  Runner   /pending-subagent',
+    '  Runner   /pending-sentinel',
     '  Mode     parallel',
     '  Tickets  open ones',
-    '  Command  /pending-subagent parallel',
+    '  Command  /pending-sentinel parallel',
   ])
 
   // 2. Mode field cycling: space cycles parallel -> parallel 2 -> parallel 3 -> parallel 4 -> sequential -> parallel
   s = reduce(s, key('space')).state
   assert.equal(s.startRun!.mode, 'parallel')
   assert.equal(s.startRun!.count, 2)
-  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel 2')
+  assert.equal(startRunCommand(s.startRun!), '/pending-sentinel parallel 2')
 
   s = reduce(s, key('space')).state
   assert.equal(s.startRun!.count, 3)
-  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel 3')
+  assert.equal(startRunCommand(s.startRun!), '/pending-sentinel parallel 3')
 
   s = reduce(s, key('space')).state
   assert.equal(s.startRun!.count, 4)
@@ -1114,12 +1114,12 @@ test('F113: Workflows tab interactive start run flow (open, navigation, mode cyc
   s = reduce(s, key('space')).state
   assert.equal(s.startRun!.mode, 'sequential')
   assert.equal(s.startRun!.count, null)
-  assert.equal(startRunCommand(s.startRun!), '/pending-subagent sequential')
+  assert.equal(startRunCommand(s.startRun!), '/pending-sentinel sequential')
 
   s = reduce(s, key('space')).state
   assert.equal(s.startRun!.mode, 'parallel')
   assert.equal(s.startRun!.count, null)
-  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel')
+  assert.equal(startRunCommand(s.startRun!), '/pending-sentinel parallel')
 
   // Direct shortcuts on mode field: 's' sets sequential, 'p' sets parallel, '3' sets parallel 3
   s = reduce(s, { name: 's', sequence: 's' }).state
@@ -1144,7 +1144,7 @@ test('F113: Workflows tab interactive start run flow (open, navigation, mode cyc
   s = reduce(s, { name: '1', sequence: '1' }).state
   s = reduce(s, { name: '3', sequence: '3' }).state
   assert.equal(s.startRun!.tickets, 'F113')
-  assert.equal(startRunCommand(s.startRun!), '/pending-subagent parallel F113')
+  assert.equal(startRunCommand(s.startRun!), '/pending-sentinel parallel F113')
 
   // Backspace deletes char
   s = reduce(s, key('backspace')).state
@@ -1156,14 +1156,14 @@ test('F113: Workflows tab interactive start run flow (open, navigation, mode cyc
   s = reduce(s, key('tab')).state
   assert.equal(s.startRun!.field, 'runner')
 
-  // Space / 'm' switches to /marathon-run
+  // Space / 'm' switches to /gauntlet-run
   s = reduce(s, key('space')).state
-  assert.equal(s.startRun!.runner, '/marathon-run')
-  assert.equal(startRunCommand(s.startRun!), '/marathon-run parallel F113')
+  assert.equal(s.startRun!.runner, '/gauntlet-run')
+  assert.equal(startRunCommand(s.startRun!), '/gauntlet-run parallel F113')
 
-  // 'p' switches back to /pending-subagent
+  // 'p' switches back to /pending-sentinel
   s = reduce(s, { name: 'p', sequence: 'p' }).state
-  assert.equal(s.startRun!.runner, '/pending-subagent')
+  assert.equal(s.startRun!.runner, '/pending-sentinel')
 
   // 5. Esc cancels: closes startRun, nothing executed
   const cancelled = reduce(s, key('escape'))
@@ -1176,7 +1176,7 @@ test('F113: Workflows tab interactive start run flow (open, navigation, mode cyc
   const confirmed = reduce(s, key('return'))
   assert.equal(confirmed.state.startRun, null)
   assert.equal(confirmed.effects.length, 0)
-  assert.equal(confirmed.state.toast, 'Paste into your CLI:\n/pending-subagent parallel F113')
+  assert.equal(confirmed.state.toast, 'Paste into your CLI:\n/pending-sentinel parallel F113')
 })
 
 test('F113: mouse point action for start-run-field', () => {
@@ -1300,10 +1300,10 @@ import { eligibleRunTickets, parseFollowupOut, startRunCmd } from '../../hooks/l
 
 test('A196 + A197: startRunCmd canonical parity, eligibleRunTickets, parseFollowupOut, and pushPendingRun blocked/landed handling', () => {
   // A196: startRunCmd canonical command builder matches startRunCommand
-  assert.equal(startRunCmd('marathon', 'sequential', ['F1', 'B2']), '/marathon-run sequential F1 B2')
-  assert.equal(startRunCmd('/marathon-run', 'parallel', 'F1 B2', 2), '/marathon-run parallel 2 F1 B2')
-  assert.equal(startRunCmd('pending-subagent', 'parallel', ['A196']), '/pending-subagent parallel A196')
-  assert.equal(startRunCmd('/pending-subagent', 'sequential', []), '/pending-subagent sequential')
+  assert.equal(startRunCmd('marathon', 'sequential', ['F1', 'B2']), '/gauntlet-run sequential F1 B2')
+  assert.equal(startRunCmd('/gauntlet-run', 'parallel', 'F1 B2', 2), '/gauntlet-run parallel 2 F1 B2')
+  assert.equal(startRunCmd('pending-subagent', 'parallel', ['A196']), '/pending-sentinel parallel A196')
+  assert.equal(startRunCmd('/pending-sentinel', 'sequential', []), '/pending-sentinel sequential')
 
   // A196: eligibleRunTickets filters only open [ ], [~], [?], [!] tickets
   const boardMix = parseBoard(
@@ -1344,8 +1344,8 @@ test('A196 + A197: startRunCmd canonical parity, eligibleRunTickets, parseFollow
   assert.equal(noPend.state.toast, 'No pending stages left in RUN-0012 to push')
 })
 
-test('F169 state: /verify-subagent help hint advertises --deep', () => {
-  const item = HELP_ITEMS.find(i => i.id === 'verify-subagent')
+test('F169 state: /verify-shifu help hint advertises --deep', () => {
+  const item = HELP_ITEMS.find(i => i.id === 'verify-shifu')
   assert.ok(item?.hint?.includes('--deep'))
 })
 
@@ -1355,19 +1355,19 @@ test('F165 state: Help catalog includes commands, supports command execution, co
   assert.ok(HELP_ITEMS.length >= 49)
 
   // 2. Open help with command selected
-  let s = openHelp(s0, 'list-tickets').state
-  assert.equal(s.help?.selected, 'list-tickets')
+  let s = openHelp(s0, 'list-ticket-zordon').state
+  assert.equal(s.help?.selected, 'list-ticket-zordon')
 
   // 3. Copy command reference via 'c'
   const copyStep = reduce(s, { name: 'c' })
   const copyEff = copyStep.effects.find(e => e.kind === 'copy') as any
   assert.ok(copyEff, 'Expected copy effect for command')
-  assert.equal(copyEff.text, '/list-tickets')
+  assert.equal(copyEff.text, '/list-ticket-zordon')
   assert.doesNotMatch(copyEff.label, /alias/)  // F166: commands have no legacy aliases
 
   // Settle copy effect
   const sAfterCopy = settle(copyEff.then(ok(''))(copyStep.state)).state
-  assert.match(sAfterCopy.toast ?? '', /Copied reference: \/list-tickets/)
+  assert.match(sAfterCopy.toast ?? '', /Copied reference: \/list-ticket-zordon/)
 
   // 4. Run command with arguments via 'r'
   s = reduce(s, { name: 'r' }).state
@@ -1379,22 +1379,32 @@ test('F165 state: Help catalog includes commands, supports command execution, co
   }
   assert.equal(s.help?.runPrompt, '@sher status')
 
-  // Press Enter to confirm run: must produce /list-tickets @sher status (NOT /skillator:...)
+  // Press Enter to confirm run: must produce /list-ticket-zordon @sher status (NOT /skillator:...)
   const runStep = reduce(s, { name: 'return' })
   assert.equal(runStep.state.help?.runPrompt, null)
   const runEff = runStep.effects.find(e => e.kind === 'copy') as any
   assert.ok(runEff, 'Expected clipboard copy effect for running command')
-  assert.equal(runEff.text, '/list-tickets @sher status')
+  assert.equal(runEff.text, '/list-ticket-zordon @sher status')
 
   // Settle run effect
   const sAfterRun = settle(runEff.then(ok(''))(runStep.state)).state
-  assert.match(sAfterRun.toast ?? '', /Ready to run: \/list-tickets @sher status/)
+  assert.match(sAfterRun.toast ?? '', /Ready to run: \/list-ticket-zordon @sher status/)
 
   // 5. Expand command details and ensure skill-doc effect is emitted
-  const enterStep = reduce(openHelp(s0, 'list-tickets').state, { name: 'return' })
+  const enterStep = reduce(openHelp(s0, 'list-ticket-zordon').state, { name: 'return' })
   assert.equal(enterStep.state.help?.expanded, true)
   const docEff = enterStep.effects.find(e => e.kind === 'skill-doc') as any
   assert.ok(docEff, 'Expected skill-doc effect on expanding command')
-  assert.equal(docEff.skillId, 'list-tickets')
+  assert.equal(docEff.skillId, 'list-ticket-zordon')
 })
 
+
+test('F171 state: Help lists each command once, under its unique name - no plain twin', () => {
+  const names = COMMANDS.map(c => c.name)
+  for (const n of ['/verify-shifu', '/gauntlet-plan', '/gauntlet-run', '/engage-picard', '/archive-zordon', '/list-ticket-zordon', '/sync-zordon', '/pending-sentinel', '/skillator-pending', '/skillator-sync', '/skillator-ops']) {
+    assert.equal(names.filter(x => x === n).length, 1, n)
+  }
+  for (const n of ['/verify-subagent', '/marathon-plan', '/marathon-run', '/engage', '/archive-tickets', '/list-tickets', '/sync-tickets', '/pending-subagent', '/pending', '/upstream-sync', '/ops']) {
+    assert.ok(!names.includes(n), n)
+  }
+})

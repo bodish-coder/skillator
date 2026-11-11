@@ -9,7 +9,7 @@
 #                            CurrentUserAllHosts profile) - there so a test never
 #                            touches the real one; with no -Profile and a USERPROFILE
 #                            that is not your user profile dir the step is skipped (B9)
-# F54: /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets, /skillator-update, /team-messages and /pending-subagent are written as each host's own command file (codex
+# F54: /skillator-pending, /list-ticket-zordon, /engage-picard, /archive-zordon, /sync-zordon, /skillator-update, /team-messages and /pending-sentinel are written as each host's own command file (codex
 # skills (F90), Gemini CLI commands, cursor commands, pi prompt templates, opencode commands,
 # Antigravity skill-commands) from host-commands\<host>\, rewritten every run - see Write-Commands.
 # Claude Code is left to its plugin install whenever one exists, -Force included.
@@ -278,14 +278,14 @@ function Write-OpsFunction([string]$shimSrc, [string]$path) {
 
 # Write-Cmd <template> <skills-dir> <target>: one command file (or say it would). The
 # template with {{SKILLS}} replaced by the skills dir as the host sees it (C:\...); no
-# other templating, except that Gemini CLI's pending.toml runs pending.ps1 in place of
+# other templating, except that Gemini CLI's skillator-pending.toml runs pending.ps1 in place of
 # pending.sh. UTF-8 without BOM, LF - the bytes install.sh writes but for the separators
 # inside {{SKILLS}} and that shell line (pi's frontmatter and gemini's TOML reject a BOM).
 function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
   if ($DryRun) { Write-Host "        would write $target"; return }
   $text = [IO.File]::ReadAllText($tpl).Replace("`r", '')
   $re = [regex]'(?m)^!\{sh "\{\{SKILLS\}\}/tickets-zordon/scripts/pending\.sh"\}$'
-  if ($tpl -match '[\\/]gemini[\\/]pending\.toml$') {
+  if ($tpl -match '[\\/]gemini[\\/]skillator-pending\.toml$') {
     if (-not $re.IsMatch($text)) { throw "no pending.sh shell line in $tpl" }
     $text = $re.Replace($text,
       '!{powershell -NoProfile -ExecutionPolicy Bypass -File "{{SKILLS}}\tickets-zordon\scripts\pending.ps1"}')
@@ -469,23 +469,23 @@ function Write-AgyExt([string]$skillsDir) {
   else { Write-Host "warn  the Antigravity IDE did not install the ops board: $o" -ForegroundColor Yellow }
 }
 
-# Write-Commands <cli> <dest>: F54 - /pending, /list-tickets, /engage, /archive-tickets, /sync-tickets, /skillator-update, /team-messages and /pending-subagent as the host's own command
+# Write-Commands <cli> <dest>: F54 - /skillator-pending, /list-ticket-zordon, /engage-picard, /archive-zordon, /sync-zordon, /skillator-update, /team-messages and /pending-sentinel as the host's own command
 # file, user level, rewritten every run. Called per dest; per-CLI files are written for
 # the dest the host reads its skills from. Antigravity's are skills (/<name> in agy),
 # written into each antigravity dest with no .skillator-owned marker and kept out of
 # .skillator-installed, so Remove-Unshipped never touches them. Claude Code: nothing (the
-# ops-board mod has its own /pending, /list-tickets; /engage, /archive-tickets, /sync-tickets, /skillator-update, /team-messages and /pending-subagent are the plugin's commands/*.md).
+# ops-board mod has its own /pending, /list-tickets; /engage-picard, /archive-zordon, /sync-zordon, /skillator-update, /team-messages and /pending-sentinel are the plugin's commands/*.md).
 # Same as install.sh write_commands.
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
-  $names = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run', 'team',
+  $names = 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run', 'team',
            'code-vader', 'skillator-sync', 'message-uhura'
-  $opsNames = @('ops')
+  $opsNames = @('skillator-ops')
   switch ($cli) {
     # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
     # prompt an older run wrote under that name goes, nothing else in prompts\
     'codex' {
-      # F105: $ops - skill hosts only; pi and Claude Code have their own /ops
+      # F105: $skillator-ops - skill hosts only; pi and Claude Code have their own /ops
       foreach ($n in $names + $opsNames) {
         Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
         if (-not $DryRun) { Remove-Item -LiteralPath "$codexHome\prompts\$n.md" -Force -ErrorAction SilentlyContinue }
@@ -497,7 +497,7 @@ function Write-Commands([string]$cli, [string]$dest) {
       foreach ($n in $names) { Write-Cmd "$c\pi\$n.md" $dest "$HOME\.pi\agent\prompts\$n.md" }
       Write-PiExt $dest
     }
-    # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode; F159: /ops
+    # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode; F159: /skillator-ops
     'opencode' { foreach ($n in $names + $opsNames) { Write-Cmd "$c\opencode\$n.md" $dest "$ocConfig\commands\$n.md" } }
     'antigravity' {
       foreach ($n in $names + $opsNames) {
@@ -613,12 +613,12 @@ function Invoke-SelfTest([string]$T) {
   $out = & $run @('-DryRun')
   if ($script:selfCode -ne 0) { return "dry run exited $script:selfCode" }
   if (-not $out.Contains("would write function ops in $prof")) { return 'dry-run ops line' }
-  if (-not $out.Contains("would write $T\.pi\agent\prompts\list-tickets.md")) { return 'dry-run command line' }
+  if (-not $out.Contains("would write $T\.pi\agent\prompts\list-ticket-zordon.md")) { return 'dry-run command line' }
   if (-not $out.Contains("would write $T\.pi\agent\extensions\skillator-ops.ts")) { return 'dry-run pi extension line' }
   if (-not $out.Contains("would install the ops board extension $T\.gemini\config\skills\ops-board\antigravity\skillator-ops.vsix with $env:SKILLATOR_AGY_IDE")) { return 'dry-run antigravity extension line' }
   if (@(& $ideCalls).Count -ne 0) { return 'dry run called the Antigravity IDE' }
-  if (-not $out.Contains("would write $T\.gemini\config\skills\pending\SKILL.md")) { return 'dry-run skill-command line' }
-  if (-not $out.Contains("would write $T\.gemini\antigravity-cli\skills\pending\SKILL.md")) { return 'dry-run agy-cli skill-command line' }
+  if (-not $out.Contains("would write $T\.gemini\config\skills\skillator-pending\SKILL.md")) { return 'dry-run skill-command line' }
+  if (-not $out.Contains("would write $T\.gemini\antigravity-cli\skills\skillator-pending\SKILL.md")) { return 'dry-run agy-cli skill-command line' }
   if (-not $out.Contains("would write $T\.config\opencode\commands\team-messages.md")) { return 'dry-run opencode command line' }
   if (-not $out.Contains("would write $frag")) { return 'dry-run fragment line' }
   if (Test-Path -LiteralPath $frag) { return 'dry run wrote the fragment' }
@@ -629,13 +629,13 @@ function Invoke-SelfTest([string]$T) {
   $out = & $run @('-DryRun')
   Remove-Item Env:XDG_CONFIG_HOME
   if ($script:selfCode -ne 0) { return "XDG dry run exited $script:selfCode" }
-  if (-not $out.Contains("would write $T\xdg\opencode\commands\pending.md")) { return 'opencode under XDG_CONFIG_HOME' }
+  if (-not $out.Contains("would write $T\xdg\opencode\commands\skillator-pending.md")) { return 'opencode under XDG_CONFIG_HOME' }
   if (Test-Path -LiteralPath $prof) { return 'dry run wrote the profile' }
-  if (Test-Path -LiteralPath (Join-Path $T '.codex\skills\pending')) { return 'dry run wrote a command file' }
+  if (Test-Path -LiteralPath (Join-Path $T '.codex\skills\skillator-pending')) { return 'dry run wrote a command file' }
 
   $out = & $run @()
   if ($script:selfCode -ne 0) { return "install exited $script:selfCode" }
-  if (-not $out.Contains('Codex: $ops opens the board')) { return 'install summary has no Codex $ops line (F105)' }
+  if (-not $out.Contains('Codex: $skillator-ops opens the board')) { return 'install summary has no Codex $skillator-ops line (F105)' }
   # F89: the ops tab's Windows Terminal profile, the shipped fragment byte for byte, and how to remove it
   if (-not (Test-Path -LiteralPath $frag -PathType Leaf)) { return 'Windows Terminal fragment not written' }
   if ([IO.File]::ReadAllText($frag) -cne [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'mods\ops-board\ops\wt-fragment.json'))) { return 'Windows Terminal fragment differs from the shipped one' }
@@ -654,7 +654,7 @@ function Invoke-SelfTest([string]$T) {
   [IO.File]::WriteAllText($calls, $callsBefore)
   # B6: every frontmatter in commands\ and host-commands\ must be valid YAML or pi never registers
   # the command. No YAML parser in the installer, so a narrow check: an unquoted plain value
-  # holding ": " (the one slip that bit /archive-tickets). Quote such a value.
+  # holding ": " (the one slip that bit /archive-zordon). Quote such a value.
   foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'commands'), (Join-Path $PSScriptRoot 'host-commands') -Recurse -Filter '*.md' -File)) {
     $ls = [IO.File]::ReadAllLines($f.FullName)
     if ($ls.Count -eq 0 -or $ls[0].TrimEnd() -ne '---') { continue }
@@ -662,17 +662,17 @@ function Invoke-SelfTest([string]$T) {
       if ($ls[$i] -match '^[A-Za-z_-]+:\s+([^"''\[{|>&*!#%\s].*)$' -and $Matches[1].Contains(': ')) { return "frontmatter has an unquoted ': ' (invalid YAML, pi will not register the command): $($f.FullName): $($ls[$i])" }
     }
   }
-  if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'commands\verify-subagent.md') -PathType Leaf)) { return 'B6 scan misses commands\verify-subagent.md' }
-  # F71: /pending-subagent ships on Claude Code (commands\) and every host, and the scan reaches it
-  foreach ($f in 'commands\pending-subagent.md', 'host-commands\cursor\pending-subagent.md',
-                 'host-commands\pi\pending-subagent.md', 'host-commands\opencode\pending-subagent.md',
-                 'host-commands\antigravity\pending-subagent\SKILL.md', 'host-commands\gemini\pending-subagent.toml') {
+  if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'commands\verify-shifu.md') -PathType Leaf)) { return 'B6 scan misses commands\verify-shifu.md' }
+  # F71: /pending-sentinel ships on Claude Code (commands\) and every host, and the scan reaches it
+  foreach ($f in 'commands\pending-sentinel.md', 'host-commands\cursor\pending-sentinel.md',
+                 'host-commands\pi\pending-sentinel.md', 'host-commands\opencode\pending-sentinel.md',
+                 'host-commands\antigravity\pending-sentinel\SKILL.md', 'host-commands\gemini\pending-sentinel.toml') {
     if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $f) -PathType Leaf)) { return "missing source $f" }
   }
-  if (@(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'commands'), (Join-Path $PSScriptRoot 'host-commands') -Recurse -Filter '*.md' -File | Where-Object { $_.FullName -match 'pending-subagent' }).Count -ne 5) { return 'B6 scan misses a pending-subagent file' }
-  # F73: /marathon-plan and /marathon-run - Claude Code runs them with the Workflow tool, every
+  if (@(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'commands'), (Join-Path $PSScriptRoot 'host-commands') -Recurse -Filter '*.md' -File | Where-Object { $_.FullName -match 'pending-sentinel' }).Count -ne 5) { return 'B6 scan misses a pending-sentinel file' }
+  # F73: /gauntlet-plan and /gauntlet-run - Claude Code runs them with the Workflow tool, every
   # other host with its delegate (F101); descriptions quoted (B6)
-  foreach ($n in 'marathon-plan', 'marathon-run') {
+  foreach ($n in 'gauntlet-plan', 'gauntlet-run') {
     foreach ($f in "commands\$n.md", "host-commands\cursor\$n.md", "host-commands\pi\$n.md",
                    "host-commands\opencode\$n.md", "host-commands\antigravity\$n\SKILL.md", "host-commands\gemini\$n.toml") {
       if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $f) -PathType Leaf)) { return "missing source $f" }
@@ -683,7 +683,7 @@ function Invoke-SelfTest([string]$T) {
     if (-not $ct.Contains('Workflow')) { return "commands\$n.md does not name the Workflow tool" }
     if (-not $ct.Contains('skillator:relay-morpheus')) { return "commands\$n.md does not load relay-morpheus" }
   }
-  if (-not ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'commands\marathon-plan.md'))).Contains('workflow-authoring')) { return 'commands\marathon-plan.md does not load workflow-authoring' }
+  if (-not ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'commands\gauntlet-plan.md'))).Contains('workflow-authoring')) { return 'commands\gauntlet-plan.md does not load workflow-authoring' }
   # A155: with grayskull-power on, every implementer prompt opens with the code-yoda line - the
   # line carried verbatim, in the commands only beside the grayskull.md gate
   $yoda = 'Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.'
@@ -693,16 +693,16 @@ function Invoke-SelfTest([string]$T) {
     if (-not ([IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))).Contains($yoda)) { return "$f does not carry the code-yoda line (A155)" }
   }
   if (-not ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'skills\grayskull-power\references\arming.md'))).Contains('skillator:code-yoda first')) { return 'arming.md does not say code-yoda carries to implementers (A155)' }
-  foreach ($n in 'pending-subagent', 'marathon-plan', 'marathon-run') {
+  foreach ($n in 'pending-sentinel', 'gauntlet-plan', 'gauntlet-run') {
     foreach ($f in "commands\$n.md", "host-commands\cursor\$n.md", "host-commands\pi\$n.md",
                    "host-commands\opencode\$n.md", "host-commands\antigravity\$n\SKILL.md", "host-commands\gemini\$n.toml") {
       if (-not (& $gated ([IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))))) { return "$f has no grayskull-gated code-yoda line (A155)" }
     }
   }
-  # F88: every /pending-subagent copy maps no argument / sequential / parallel / a count to RELAY_CHAIN_PARALLEL
-  foreach ($f in 'commands\pending-subagent.md', 'host-commands\cursor\pending-subagent.md',
-                 'host-commands\pi\pending-subagent.md', 'host-commands\opencode\pending-subagent.md',
-                 'host-commands\antigravity\pending-subagent\SKILL.md', 'host-commands\gemini\pending-subagent.toml') {
+  # F88: every /pending-sentinel copy maps no argument / sequential / parallel / a count to RELAY_CHAIN_PARALLEL
+  foreach ($f in 'commands\pending-sentinel.md', 'host-commands\cursor\pending-sentinel.md',
+                 'host-commands\pi\pending-sentinel.md', 'host-commands\opencode\pending-sentinel.md',
+                 'host-commands\antigravity\pending-sentinel\SKILL.md', 'host-commands\gemini\pending-sentinel.toml') {
     $ct = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))
     foreach ($r in '| nothing, `sequential`, `1` | sequential | unset', '| `parallel`, `max`, `parallel max` | parallel | the number of ticket stages', '| `parallel 2`, `2` | parallel, capped | 2 |') {
       if (-not $ct.Contains($r)) { return "$f has no mode row '$r' (F88)" }
@@ -726,67 +726,67 @@ function Invoke-SelfTest([string]$T) {
   foreach ($r in '| Explicit own legacy; pending and landed only | regenerate in place |', '| Modern PLAN.mode present | skip; keep saved plan |', '| Any active worker or in-flight stage | refuse; wait for completion |', '| Implicit, ambiguous or mixed target | refuse; print explicit target command |', '| Failed stage needing retry | refuse; existing retry flow first |', '| Parked or unresolved replacement stage | refuse; resolve existing hold first |') {
     if (-not $mm.Contains($r)) { return "marathon.md has no recovery decision '$r' (A162)" }
   }
-  foreach ($n in 'marathon-plan', 'marathon-run') {
+  foreach ($n in 'gauntlet-plan', 'gauntlet-run') {
     foreach ($f in "commands\$n.md", "host-commands\cursor\$n.md", "host-commands\pi\$n.md", "host-commands\opencode\$n.md", "host-commands\antigravity\$n\SKILL.md", "host-commands\gemini\$n.toml") {
       $ct = [IO.File]::ReadAllText((Join-Path $PSScriptRoot $f))
       foreach ($r in '| nothing, `sequential`, `1` | sequential | one ticket | unset |', '| `parallel`, `max`, `parallel max` | parallel | every file-disjoint ticket that fits | the number of stages in the phase |', '| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |') {
         if (-not $ct.Contains($r)) { return "$f has no mode row '$r' (F112)" }
       }
       # A162: every host routes a legacy refusal to the guarded in-place recovery.
-      foreach ($r in 'Legacy recovery (A162)', '/marathon-plan <mode> <IDs>', 'PLAN.mode', 'planned in RUN-<id>') {
+      foreach ($r in 'Legacy recovery (A162)', '/gauntlet-plan <mode> <IDs>', 'PLAN.mode', 'planned in RUN-<id>') {
         if (-not $ct.Contains($r)) { return "$f has no legacy recovery pin '$r' (A162)" }
       }
       if (-not $ct.Contains('say it is not an option and stop')) { return "$f has no bad-first-word refusal (F112)" }
       if (($f -like 'commands\*' -or $f -like 'host-commands\pi\*') -and $ct -cnotmatch '(?m)^argument-hint: "\[sequential\|parallel\] \[N\|max\]') { return "$f argument-hint has no mode (F112)" }
     }
   }
-  $ct = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'commands\marathon-run.md'))
-  if (-not $ct.Contains('plans the marathon')) { return 'commands\marathon-run.md does not plan and run in one go (F112)' }
-  if (-not $ct.Contains('the saved plan fixes its shape')) { return 'commands\marathon-run.md has no RUN-id mode refusal (F112)' }
-  $cmds = @('.codex\skills\pending\SKILL.md', '.codex\skills\list-tickets\SKILL.md',
-            '.gemini\commands\pending.toml', '.gemini\commands\list-tickets.toml',
-            '.cursor\commands\pending.md', '.cursor\commands\list-tickets.md',
-            '.pi\agent\prompts\pending.md', '.pi\agent\prompts\list-tickets.md',
-            '.gemini\config\skills\pending\SKILL.md', '.gemini\config\skills\list-tickets\SKILL.md',
-            '.gemini\skills\pending\SKILL.md', '.gemini\skills\list-tickets\SKILL.md',
-            '.codex\skills\engage\SKILL.md', '.gemini\commands\engage.toml', '.cursor\commands\engage.md',
-            '.pi\agent\prompts\engage.md', '.gemini\config\skills\engage\SKILL.md', '.gemini\skills\engage\SKILL.md',
-            '.codex\skills\archive-tickets\SKILL.md', '.gemini\commands\archive-tickets.toml', '.cursor\commands\archive-tickets.md',
-            '.pi\agent\prompts\archive-tickets.md', '.gemini\config\skills\archive-tickets\SKILL.md', '.gemini\skills\archive-tickets\SKILL.md',
-            '.codex\skills\sync-tickets\SKILL.md', '.gemini\commands\sync-tickets.toml', '.cursor\commands\sync-tickets.md',
-            '.pi\agent\prompts\sync-tickets.md', '.gemini\config\skills\sync-tickets\SKILL.md', '.gemini\skills\sync-tickets\SKILL.md',
-            '.gemini\antigravity-cli\skills\pending\SKILL.md', '.gemini\antigravity-cli\skills\list-tickets\SKILL.md',
-            '.gemini\antigravity-cli\skills\engage\SKILL.md', '.gemini\antigravity-cli\skills\archive-tickets\SKILL.md',
-            '.gemini\antigravity-cli\skills\sync-tickets\SKILL.md',
+  $ct = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'commands\gauntlet-run.md'))
+  if (-not $ct.Contains('plans the marathon')) { return 'commands\gauntlet-run.md does not plan and run in one go (F112)' }
+  if (-not $ct.Contains('the saved plan fixes its shape')) { return 'commands\gauntlet-run.md has no RUN-id mode refusal (F112)' }
+  $cmds = @('.codex\skills\skillator-pending\SKILL.md', '.codex\skills\list-ticket-zordon\SKILL.md',
+            '.gemini\commands\skillator-pending.toml', '.gemini\commands\list-ticket-zordon.toml',
+            '.cursor\commands\skillator-pending.md', '.cursor\commands\list-ticket-zordon.md',
+            '.pi\agent\prompts\skillator-pending.md', '.pi\agent\prompts\list-ticket-zordon.md',
+            '.gemini\config\skills\skillator-pending\SKILL.md', '.gemini\config\skills\list-ticket-zordon\SKILL.md',
+            '.gemini\skills\skillator-pending\SKILL.md', '.gemini\skills\list-ticket-zordon\SKILL.md',
+            '.codex\skills\engage-picard\SKILL.md', '.gemini\commands\engage-picard.toml', '.cursor\commands\engage-picard.md',
+            '.pi\agent\prompts\engage-picard.md', '.gemini\config\skills\engage-picard\SKILL.md', '.gemini\skills\engage-picard\SKILL.md',
+            '.codex\skills\archive-zordon\SKILL.md', '.gemini\commands\archive-zordon.toml', '.cursor\commands\archive-zordon.md',
+            '.pi\agent\prompts\archive-zordon.md', '.gemini\config\skills\archive-zordon\SKILL.md', '.gemini\skills\archive-zordon\SKILL.md',
+            '.codex\skills\sync-zordon\SKILL.md', '.gemini\commands\sync-zordon.toml', '.cursor\commands\sync-zordon.md',
+            '.pi\agent\prompts\sync-zordon.md', '.gemini\config\skills\sync-zordon\SKILL.md', '.gemini\skills\sync-zordon\SKILL.md',
+            '.gemini\antigravity-cli\skills\skillator-pending\SKILL.md', '.gemini\antigravity-cli\skills\list-ticket-zordon\SKILL.md',
+            '.gemini\antigravity-cli\skills\engage-picard\SKILL.md', '.gemini\antigravity-cli\skills\archive-zordon\SKILL.md',
+            '.gemini\antigravity-cli\skills\sync-zordon\SKILL.md',
             '.codex\skills\skillator-update\SKILL.md', '.gemini\commands\skillator-update.toml', '.cursor\commands\skillator-update.md',
             '.pi\agent\prompts\skillator-update.md', '.gemini\config\skills\skillator-update\SKILL.md', '.gemini\skills\skillator-update\SKILL.md',
             '.gemini\antigravity-cli\skills\skillator-update\SKILL.md',
             '.codex\skills\team-messages\SKILL.md', '.gemini\commands\team-messages.toml', '.cursor\commands\team-messages.md',
             '.pi\agent\prompts\team-messages.md', '.gemini\config\skills\team-messages\SKILL.md', '.gemini\skills\team-messages\SKILL.md',
             '.gemini\antigravity-cli\skills\team-messages\SKILL.md', '.codex\skills\teams-uhura\scripts\team.mjs',
-            '.config\opencode\commands\pending.md', '.config\opencode\commands\list-tickets.md', '.config\opencode\commands\engage.md',
-            '.config\opencode\commands\archive-tickets.md', '.config\opencode\commands\sync-tickets.md',
+            '.config\opencode\commands\skillator-pending.md', '.config\opencode\commands\list-ticket-zordon.md', '.config\opencode\commands\engage-picard.md',
+            '.config\opencode\commands\archive-zordon.md', '.config\opencode\commands\sync-zordon.md',
             '.config\opencode\commands\skillator-update.md', '.config\opencode\commands\team-messages.md',
-            '.config\opencode\commands\ops.md',
-            '.codex\skills\pending-subagent\SKILL.md', '.gemini\commands\pending-subagent.toml', '.cursor\commands\pending-subagent.md',
-            '.pi\agent\prompts\pending-subagent.md', '.gemini\config\skills\pending-subagent\SKILL.md', '.gemini\skills\pending-subagent\SKILL.md',
-            '.gemini\antigravity-cli\skills\pending-subagent\SKILL.md', '.config\opencode\commands\pending-subagent.md',
-            '.codex\skills\verify-subagent\SKILL.md', '.gemini\commands\verify-subagent.toml', '.cursor\commands\verify-subagent.md', '.pi\agent\prompts\verify-subagent.md',
-            '.gemini\config\skills\verify-subagent\SKILL.md', '.gemini\skills\verify-subagent\SKILL.md', '.gemini\antigravity-cli\skills\verify-subagent\SKILL.md',
-            '.config\opencode\commands\verify-subagent.md',
-            '.codex\skills\marathon-plan\SKILL.md', '.gemini\commands\marathon-plan.toml', '.cursor\commands\marathon-plan.md', '.pi\agent\prompts\marathon-plan.md',
-            '.gemini\config\skills\marathon-plan\SKILL.md', '.gemini\skills\marathon-plan\SKILL.md', '.gemini\antigravity-cli\skills\marathon-plan\SKILL.md',
-            '.config\opencode\commands\marathon-plan.md',
-            '.codex\skills\marathon-run\SKILL.md', '.gemini\commands\marathon-run.toml', '.cursor\commands\marathon-run.md', '.pi\agent\prompts\marathon-run.md',
-            '.gemini\config\skills\marathon-run\SKILL.md', '.gemini\skills\marathon-run\SKILL.md', '.gemini\antigravity-cli\skills\marathon-run\SKILL.md',
-            '.config\opencode\commands\marathon-run.md',
+            '.config\opencode\commands\skillator-ops.md',
+            '.codex\skills\pending-sentinel\SKILL.md', '.gemini\commands\pending-sentinel.toml', '.cursor\commands\pending-sentinel.md',
+            '.pi\agent\prompts\pending-sentinel.md', '.gemini\config\skills\pending-sentinel\SKILL.md', '.gemini\skills\pending-sentinel\SKILL.md',
+            '.gemini\antigravity-cli\skills\pending-sentinel\SKILL.md', '.config\opencode\commands\pending-sentinel.md',
+            '.codex\skills\verify-shifu\SKILL.md', '.gemini\commands\verify-shifu.toml', '.cursor\commands\verify-shifu.md', '.pi\agent\prompts\verify-shifu.md',
+            '.gemini\config\skills\verify-shifu\SKILL.md', '.gemini\skills\verify-shifu\SKILL.md', '.gemini\antigravity-cli\skills\verify-shifu\SKILL.md',
+            '.config\opencode\commands\verify-shifu.md',
+            '.codex\skills\gauntlet-plan\SKILL.md', '.gemini\commands\gauntlet-plan.toml', '.cursor\commands\gauntlet-plan.md', '.pi\agent\prompts\gauntlet-plan.md',
+            '.gemini\config\skills\gauntlet-plan\SKILL.md', '.gemini\skills\gauntlet-plan\SKILL.md', '.gemini\antigravity-cli\skills\gauntlet-plan\SKILL.md',
+            '.config\opencode\commands\gauntlet-plan.md',
+            '.codex\skills\gauntlet-run\SKILL.md', '.gemini\commands\gauntlet-run.toml', '.cursor\commands\gauntlet-run.md', '.pi\agent\prompts\gauntlet-run.md',
+            '.gemini\config\skills\gauntlet-run\SKILL.md', '.gemini\skills\gauntlet-run\SKILL.md', '.gemini\antigravity-cli\skills\gauntlet-run\SKILL.md',
+            '.config\opencode\commands\gauntlet-run.md',
             '.codex\skills\code-vader\SKILL.md', '.gemini\commands\code-vader.toml', '.cursor\commands\code-vader.md', '.pi\agent\prompts\code-vader.md',
             '.config\opencode\commands\code-vader.md', '.gemini\config\skills\code-vader\SKILL.md',
             '.codex\skills\skillator-sync\SKILL.md', '.gemini\commands\skillator-sync.toml', '.cursor\commands\skillator-sync.md', '.pi\agent\prompts\skillator-sync.md',
             '.config\opencode\commands\skillator-sync.md', '.gemini\config\skills\skillator-sync\SKILL.md',
             '.codex\skills\message-uhura\SKILL.md', '.gemini\commands\message-uhura.toml', '.cursor\commands\message-uhura.md', '.pi\agent\prompts\message-uhura.md',
             '.config\opencode\commands\message-uhura.md', '.gemini\config\skills\message-uhura\SKILL.md',
-            '.codex\skills\ops\SKILL.md', '.gemini\config\skills\ops\SKILL.md', '.gemini\skills\ops\SKILL.md', '.gemini\antigravity-cli\skills\ops\SKILL.md')
+            '.codex\skills\skillator-ops\SKILL.md', '.gemini\config\skills\skillator-ops\SKILL.md', '.gemini\skills\skillator-ops\SKILL.md', '.gemini\antigravity-cli\skills\skillator-ops\SKILL.md')
   foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
@@ -801,15 +801,15 @@ function Invoke-SelfTest([string]$T) {
   # F67: opencode - the skills in its global skills dir, the seven commands in its commands\
   # dir, each substituted with that dest, arguments by $ARGUMENTS (BOM, CR, placeholder: the $cmds loop)
   $oc = '.config\opencode'
-  foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run') {
+  foreach ($n in 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run') {
     $ot = & $read "$oc\commands\$n.md"
     if (-not $ot.StartsWith("---`n")) { return "opencode $n has no frontmatter" }
     if ($ot -cnotmatch '(?m)^description: ') { return "opencode $n description" }
     if ($ot -cmatch '(?m)^argument-hint: ') { return "opencode $n kept pi's argument-hint" }
-    if ($n -ne 'engage' -and -not $ot.Contains("$T\$oc\skills/")) { return "opencode $n not substituted with its own dest" }
-    if ($n -ne 'pending' -and -not $ot.Contains('$ARGUMENTS')) { return "opencode $n args" }
+    if ($n -ne 'engage-picard' -and -not $ot.Contains("$T\$oc\skills/")) { return "opencode $n not substituted with its own dest" }
+    if ($n -ne 'skillator-pending' -and -not $ot.Contains('$ARGUMENTS')) { return "opencode $n args" }
   }
-  if (-not (& $has "$oc\commands\pending.md" "sh $T\$oc\skills/tickets-zordon/scripts/pending.sh")) { return 'opencode pending not substituted' }
+  if (-not (& $has "$oc\commands\skillator-pending.md" "sh $T\$oc\skills/tickets-zordon/scripts/pending.sh")) { return 'opencode pending not substituted' }
   if (-not (& $has "$oc\commands\skillator-update.md" "$T\$oc\skills/.skillator-source")) { return 'opencode skillator-update not substituted' }
   if (-not (& $has "$oc\commands\team-messages.md" "$T\$oc\skills/teams-uhura/scripts/team.mjs inbox --unread --mark-read")) { return 'opencode team-messages not substituted' }
   if (-not (& $has "$oc\commands\team-messages.md" "$T\$oc\skills/teams-uhura/scripts/team.mjs say --file <that path>")) { return 'opencode team-messages reply not by say --file' }
@@ -817,7 +817,7 @@ function Invoke-SelfTest([string]$T) {
   if ([IO.File]::ReadAllText((Join-Path $T "$oc\skills\.skillator-source")) -cne "$PSScriptRoot`n") { return "source pointer in $oc\skills" }
   if (-not (Test-Path -LiteralPath (Join-Path $T "$oc\skills\tickets-zordon\.skillator-owned") -PathType Leaf)) { return 'opencode skill has no ownership marker' }
   $mf = @([IO.File]::ReadAllLines((Join-Path $T "$oc\skills\.skillator-installed")))
-  foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run', 'ops') { if ($mf -ccontains $n) { return 'command in opencode manifest' } }
+  foreach ($n in 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run', 'skillator-ops') { if ($mf -ccontains $n) { return 'command in opencode manifest' } }
   # /skillator-update names opencode among the hosts it refreshes, on every host
   foreach ($f in '.codex\skills\skillator-update\SKILL.md', '.cursor\commands\skillator-update.md', '.pi\agent\prompts\skillator-update.md',
                  '.gemini\commands\skillator-update.toml', '.gemini\skills\skillator-update\SKILL.md',
@@ -827,12 +827,12 @@ function Invoke-SelfTest([string]$T) {
       if (-not (& $has $f $guard)) { return "skillator-update missing $guard in $f" }
     }
   }
-  if (-not (& $has '.codex\skills\pending\SKILL.md' "sh $T\.codex\skills/tickets-zordon/scripts/pending.sh")) { return 'codex skill not substituted' }
-  if (-not (& $has '.gemini\config\skills\pending\SKILL.md' "$T\.gemini\config\skills/tickets-zordon/SKILL.md")) { return 'agy skill not substituted with its own dest' }
-  if (-not (& $has '.gemini\skills\list-tickets\SKILL.md' "$T\.gemini\skills/tickets-zordon/SKILL.md")) { return 'agy skill not substituted with its own dest' }
+  if (-not (& $has '.codex\skills\skillator-pending\SKILL.md' "sh $T\.codex\skills/tickets-zordon/scripts/pending.sh")) { return 'codex skill not substituted' }
+  if (-not (& $has '.gemini\config\skills\skillator-pending\SKILL.md' "$T\.gemini\config\skills/tickets-zordon/SKILL.md")) { return 'agy skill not substituted with its own dest' }
+  if (-not (& $has '.gemini\skills\list-ticket-zordon\SKILL.md' "$T\.gemini\skills/tickets-zordon/SKILL.md")) { return 'agy skill not substituted with its own dest' }
   # B8: agy 1.4.5 reads ~/.gemini/antigravity-cli/skills - its commands point at that dest
-  if (-not (& $has '.gemini\antigravity-cli\skills\pending\SKILL.md' "$T\.gemini\antigravity-cli\skills/tickets-zordon/SKILL.md")) { return 'agy-cli skill not substituted with its own dest' }
-  $gp = '.gemini\commands\pending.toml'
+  if (-not (& $has '.gemini\antigravity-cli\skills\skillator-pending\SKILL.md' "$T\.gemini\antigravity-cli\skills/tickets-zordon/SKILL.md")) { return 'agy-cli skill not substituted with its own dest' }
+  $gp = '.gemini\commands\skillator-pending.toml'
   if ((& $read $gp) -notmatch '(?m)^!\{powershell ') { return "gemini shell injection in $gp" }
   if (-not (& $has $gp "!{powershell -NoProfile -ExecutionPolicy Bypass -File `"$T\.gemini\skills\tickets-zordon\scripts\pending.ps1`"}")) { return "gemini pending path in $gp" }
   if ((& $read $gp) -match '(?m)^!\{sh ') { return "gemini pending kept the sh line in $gp" }
@@ -864,21 +864,21 @@ function Invoke-SelfTest([string]$T) {
     if (& $has $p[0] '{{SKILLS}}') { return "placeholder left in $($p[0])" }
   }
   if ((& $read '.gemini\antigravity-cli\skills\team-messages\SKILL.md') -cnotmatch '(?m)^name: team-messages$') { return 'agy skill name team-messages' }
-  # F71: /pending-subagent loads relay-morpheus from the host's own dest and takes the agent count
-  foreach ($p in @(@('.codex\skills\pending-subagent\SKILL.md', '.codex\skills'), @('.cursor\commands\pending-subagent.md', '.cursor\skills'),
-                   @('.pi\agent\prompts\pending-subagent.md', '.pi\agent\skills'), @('.gemini\commands\pending-subagent.toml', '.gemini\skills'),
-                   @('.gemini\config\skills\pending-subagent\SKILL.md', '.gemini\config\skills'), @('.gemini\skills\pending-subagent\SKILL.md', '.gemini\skills'),
-                   @('.gemini\antigravity-cli\skills\pending-subagent\SKILL.md', '.gemini\antigravity-cli\skills'),
-                   @('.config\opencode\commands\pending-subagent.md', '.config\opencode\skills'))) {
-    if (-not (& $has $p[0] "$T\$($p[1])/relay-morpheus/SKILL.md")) { return "pending-subagent not substituted in $($p[0])" }
-    if (-not ((& $has $p[0] 'chain merge') -and (& $has $p[0] 'max'))) { return "pending-subagent has no agent count in $($p[0])" }
-    if (-not (& $gated (& $read $p[0]))) { return "pending-subagent has no grayskull-gated code-yoda line in $($p[0])" }
+  # F71: /pending-sentinel loads relay-morpheus from the host's own dest and takes the agent count
+  foreach ($p in @(@('.codex\skills\pending-sentinel\SKILL.md', '.codex\skills'), @('.cursor\commands\pending-sentinel.md', '.cursor\skills'),
+                   @('.pi\agent\prompts\pending-sentinel.md', '.pi\agent\skills'), @('.gemini\commands\pending-sentinel.toml', '.gemini\skills'),
+                   @('.gemini\config\skills\pending-sentinel\SKILL.md', '.gemini\config\skills'), @('.gemini\skills\pending-sentinel\SKILL.md', '.gemini\skills'),
+                   @('.gemini\antigravity-cli\skills\pending-sentinel\SKILL.md', '.gemini\antigravity-cli\skills'),
+                   @('.config\opencode\commands\pending-sentinel.md', '.config\opencode\skills'))) {
+    if (-not (& $has $p[0] "$T\$($p[1])/relay-morpheus/SKILL.md")) { return "pending-sentinel not substituted in $($p[0])" }
+    if (-not ((& $has $p[0] 'chain merge') -and (& $has $p[0] 'max'))) { return "pending-sentinel has no agent count in $($p[0])" }
+    if (-not (& $gated (& $read $p[0]))) { return "pending-sentinel has no grayskull-gated code-yoda line in $($p[0])" }
   }
-  if ((& $read '.gemini\antigravity-cli\skills\pending-subagent\SKILL.md') -cnotmatch '(?m)^name: pending-subagent$') { return 'agy skill name pending-subagent' }
-  if ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'commands\pending-subagent.md')) -cnotmatch '(?m)^argument-hint: .*max') { return 'commands\pending-subagent.md argument-hint has no count' }
-  # F73/F101: off Claude Code /marathon-plan and /marathon-run load relay-morpheus from the
+  if ((& $read '.gemini\antigravity-cli\skills\pending-sentinel\SKILL.md') -cnotmatch '(?m)^name: pending-sentinel$') { return 'agy skill name pending-sentinel' }
+  if ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'commands\pending-sentinel.md')) -cnotmatch '(?m)^argument-hint: .*max') { return 'commands\pending-sentinel.md argument-hint has no count' }
+  # F73/F101: off Claude Code /gauntlet-plan and /gauntlet-run load relay-morpheus from the
   # host's own dest and run the saved plan with the host's delegate or in-session
-  foreach ($n in 'marathon-plan', 'marathon-run') {
+  foreach ($n in 'gauntlet-plan', 'gauntlet-run') {
     foreach ($p in @(@(".codex\skills\$n\SKILL.md", '.codex\skills'), @(".cursor\commands\$n.md", '.cursor\skills'),
                      @(".pi\agent\prompts\$n.md", '.pi\agent\skills'), @(".gemini\commands\$n.toml", '.gemini\skills'),
                      @(".gemini\config\skills\$n\SKILL.md", '.gemini\config\skills'), @(".gemini\skills\$n\SKILL.md", '.gemini\skills'),
@@ -887,18 +887,18 @@ function Invoke-SelfTest([string]$T) {
       if (-not (& $has $p[0] '| `parallel 2`, `2` | parallel, capped | at most 2 file-disjoint tickets | 2 |')) { return "$n has no mode table in $($p[0]) (F112)" }
       if (-not (& $has $p[0] "$T\$($p[1])/relay-morpheus/SKILL.md")) { return "$n not substituted in $($p[0])" }
       if (-not ((& $has $p[0] 'chain dispatch') -and (& $has $p[0] '.workflow.js') -and (& $has $p[0] 'Run without the Workflow tool'))) { return "$n does not run the plan with this host's delegate in $($p[0])" }
-      if (& $has $p[0] 'pending-subagent') { return "$n still points at /pending-subagent in $($p[0])" }
+      if (& $has $p[0] 'pending-sentinel') { return "$n still points at /pending-sentinel in $($p[0])" }
       $o = switch -Wildcard ($p[0]) { '.cursor\*' { 'task' } '.pi\*' { 'subagent', 'session' } '.gemini\skills\*' { 'subagent', 'session' } '.gemini\commands\*' { 'session' } '.config\*' { 'session' } default { 'subagent' } }
-      if ($n -eq 'marathon-run') { foreach ($w in $o) { if (-not (& $has $p[0] "--owner $w")) { return "$n has no --owner $w in $($p[0])" } }
+      if ($n -eq 'gauntlet-run') { foreach ($w in $o) { if (-not (& $has $p[0] "--owner $w")) { return "$n has no --owner $w in $($p[0])" } }
         if (-not (& $has $p[0] 'RELAY_CHAIN_PARALLEL=')) { return "$n has no RELAY_CHAIN_PARALLEL= in $($p[0])" } }
       if (-not (& $gated (& $read $p[0]))) { return "$n has no grayskull-gated code-yoda line in $($p[0])" }
     }
     if ((& $read ".gemini\antigravity-cli\skills\$n\SKILL.md") -cnotmatch "(?m)^name: $n`$") { return "agy skill name $n" }
   }
-  if (-not (& $has '.gemini\commands\list-tickets.toml' '{{args}}')) { return 'gemini args' }
-  if (-not (& $has '.pi\agent\prompts\list-tickets.md' '$ARGUMENTS')) { return 'pi args' }
-  if ((& $read '.pi\agent\prompts\list-tickets.md') -notmatch '(?m)^argument-hint: ') { return 'pi argument-hint' }
-  if ((& $read '.cursor\commands\pending.md') -notmatch '(?m)^description: ') { return 'cursor description' }
+  if (-not (& $has '.gemini\commands\list-ticket-zordon.toml' '{{args}}')) { return 'gemini args' }
+  if (-not (& $has '.pi\agent\prompts\list-ticket-zordon.md' '$ARGUMENTS')) { return 'pi args' }
+  if ((& $read '.pi\agent\prompts\list-ticket-zordon.md') -notmatch '(?m)^argument-hint: ') { return 'pi argument-hint' }
+  if ((& $read '.cursor\commands\skillator-pending.md') -notmatch '(?m)^description: ') { return 'cursor description' }
   # F56: pi's extension re-exports the board from the pi dest's ops-board/pi (forward slashes, no BOM, no CR)
   $piExt = "export { default } from `"$($T.Replace('\', '/'))/.pi/agent/skills/ops-board/pi/index.ts`";"
   if (@((& $read '.pi\agent\extensions\skillator-ops.ts').Split("`n")) -cnotcontains $piExt) { return 'pi extension target' }
@@ -930,30 +930,38 @@ function Invoke-SelfTest([string]$T) {
   }
   # F90: codex runs the commands as skills - <codex home>\skills\<n>\SKILL.md with name and
   # description (no placeholder, BOM or CR: the $cmds loop), and no custom prompt written
-  foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run') {
+  foreach ($n in 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run') {
     $ct = & $read ".codex\skills\$n\SKILL.md"
     if (-not $ct.StartsWith("---`n") -or $ct -cnotmatch "(?m)^name: $n`$" -or $ct -cnotmatch '(?m)^description: ') { return "codex skill $n frontmatter" }
     if (Test-Path -LiteralPath (Join-Path $T ".codex\prompts\$n.md")) { return "codex prompt $n.md written" }
   }
-  # F105: $ops - a skill on the skill-command hosts only (codex, agy), the board by its own
+  # F105/F171: $skillator-ops - a skill on the skill-command hosts only (codex, agy), the board by its own
   # dest's script, always -Open / --open; no ops command where pi and Claude Code have /ops
   foreach ($d in '.codex\skills', '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
-    $ct = & $read "$d\ops\SKILL.md"
-    if ($ct -cnotmatch '(?m)^name: ops$' -or $ct -cnotmatch '(?m)^description: ') { return "ops skill frontmatter in $d" }
-    if (-not ($ct.Contains("`"$T\$d/ops-board/ops/ops.ps1`" -Repo <repo root> -Open") -and $ct.Contains("`"$T\$d/ops-board/ops/ops.sh`" <repo root> --open") -and $ct.Contains('ops --open'))) { return "ops skill not substituted or not --open in $d" }
+    $ct = & $read "$d\skillator-ops\SKILL.md"
+    if ($ct -cnotmatch '(?m)^name: skillator-ops$' -or $ct -cnotmatch '(?m)^description: ') { return "skillator-ops skill frontmatter in $d" }
+    if (-not ($ct.Contains("`"$T\$d/ops-board/ops/ops.ps1`" -Repo <repo root> -Open") -and $ct.Contains("`"$T\$d/ops-board/ops/ops.sh`" <repo root> --open") -and $ct.Contains('ops --open'))) { return "skillator-ops skill not substituted or not --open in $d" }
   }
-  foreach ($f in '.cursor\commands\ops.md', '.gemini\commands\ops.toml', '.pi\agent\prompts\ops.md') {
+  foreach ($f in '.cursor\commands\ops.md', '.gemini\commands\ops.toml', '.pi\agent\prompts\ops.md',
+                 '.cursor\commands\skillator-ops.md', '.gemini\commands\skillator-ops.toml', '.pi\agent\prompts\skillator-ops.md') {
     if (Test-Path -LiteralPath (Join-Path $T $f)) { return "ops command written to $f" }
   }
-  # F159: opencode /ops command written with --once and -Open
-  $ocOps = Join-Path $T "$oc\commands\ops.md"
-  if (-not (Test-Path -LiteralPath $ocOps -PathType Leaf)) { return 'missing opencode ops.md' }
-  if (-not (& $has "$oc\commands\ops.md" "$T\$oc\skills/ops-board/ops/ops.ps1")) { return 'opencode ops not substituted' }
-  if (-not (& $has "$oc\commands\ops.md" '--once')) { return 'opencode ops has no --once' }
-  if (-not (& $has "$oc\commands\ops.md" '-Open')) { return 'opencode ops has no -Open' }
-  if ((& $read '.gemini\config\skills\pending\SKILL.md') -cnotmatch '(?m)^name: pending$') { return 'agy skill name' }
-  if ((& $read '.gemini\skills\list-tickets\SKILL.md') -cnotmatch '(?m)^name: list-tickets$') { return 'agy skill name' }
-  if ([IO.File]::ReadAllBytes((Join-Path $T '.pi\agent\prompts\pending.md'))[0] -ne 0x2D) { return 'pi prompt does not start with - (BOM?)' }
+  # F171: the unique names are the only names - no plain twin is written to any host
+  foreach ($n in 'verify-subagent', 'marathon-plan', 'marathon-run', 'engage', 'archive-tickets', 'list-tickets', 'sync-tickets', 'pending-subagent', 'pending', 'upstream-sync', 'ops') {
+    foreach ($f in ".codex\skills\$n", ".gemini\config\skills\$n", ".gemini\skills\$n", ".gemini\antigravity-cli\skills\$n",
+                   ".cursor\commands\$n.md", ".pi\agent\prompts\$n.md", ".gemini\commands\$n.toml", "$oc\commands\$n.md") {
+      if (Test-Path -LiteralPath (Join-Path $T $f)) { return "plain command $n written to $f" }
+    }
+  }
+  # F159/F171: opencode /skillator-ops command written with --once and -Open
+  $ocOps = Join-Path $T "$oc\commands\skillator-ops.md"
+  if (-not (Test-Path -LiteralPath $ocOps -PathType Leaf)) { return 'missing opencode skillator-ops.md' }
+  if (-not (& $has "$oc\commands\skillator-ops.md" "$T\$oc\skills/ops-board/ops/ops.ps1")) { return 'opencode ops not substituted' }
+  if (-not (& $has "$oc\commands\skillator-ops.md" '--once')) { return 'opencode ops has no --once' }
+  if (-not (& $has "$oc\commands\skillator-ops.md" '-Open')) { return 'opencode ops has no -Open' }
+  if ((& $read '.gemini\config\skills\skillator-pending\SKILL.md') -cnotmatch '(?m)^name: skillator-pending$') { return 'agy skill name' }
+  if ((& $read '.gemini\skills\list-ticket-zordon\SKILL.md') -cnotmatch '(?m)^name: list-ticket-zordon$') { return 'agy skill name' }
+  if ([IO.File]::ReadAllBytes((Join-Path $T '.pi\agent\prompts\skillator-pending.md'))[0] -ne 0x2D) { return 'pi prompt does not start with - (BOM?)' }
   foreach ($f in $cmds) {
     $b = [IO.File]::ReadAllBytes((Join-Path $T $f))
     if ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) { return "BOM in $f" }
@@ -962,8 +970,8 @@ function Invoke-SelfTest([string]$T) {
   }
   foreach ($d in '.codex\skills', '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
     $mf =@([IO.File]::ReadAllLines((Join-Path $T "$d\.skillator-installed")))
-    if ($mf -ccontains 'pending' -or $mf -ccontains 'list-tickets' -or $mf -ccontains 'engage' -or $mf -ccontains 'archive-tickets' -or $mf -ccontains 'sync-tickets' -or $mf -ccontains 'skillator-update' -or $mf -ccontains 'team-messages' -or $mf -ccontains 'pending-subagent' -or $mf -ccontains 'verify-subagent' -or $mf -ccontains 'marathon-plan' -or $mf -ccontains 'marathon-run' -or $mf -ccontains 'ops') { return "command skill in manifest $d" }
-    if (Test-Path -LiteralPath (Join-Path $T "$d\pending\.skillator-owned")) { return "command skill carries an ownership marker in $d" }
+    if ($mf -ccontains 'skillator-pending' -or $mf -ccontains 'list-ticket-zordon' -or $mf -ccontains 'engage-picard' -or $mf -ccontains 'archive-zordon' -or $mf -ccontains 'sync-zordon' -or $mf -ccontains 'skillator-update' -or $mf -ccontains 'team-messages' -or $mf -ccontains 'pending-sentinel' -or $mf -ccontains 'verify-shifu' -or $mf -ccontains 'gauntlet-plan' -or $mf -ccontains 'gauntlet-run' -or $mf -ccontains 'skillator-ops') { return "command skill in manifest $d" }
+    if (Test-Path -LiteralPath (Join-Path $T "$d\skillator-pending\.skillator-owned")) { return "command skill carries an ownership marker in $d" }
   }
   $opsLine = "-File '$T\.cursor\skills\ops-board\ops\ops.ps1' @args"
   $count = { @(Select-String -LiteralPath $prof -SimpleMatch -Pattern '# >>> skillator ops >>>').Count }
@@ -972,29 +980,29 @@ function Invoke-SelfTest([string]$T) {
 
   # second run: command files are rewritten, installed skills are not, the
   # skill-commands survive the prune and lose a stale marker an older run left
-  [IO.File]::AppendAllText((Join-Path $T '.codex\skills\pending\SKILL.md'), "stale`n")
+  [IO.File]::AppendAllText((Join-Path $T '.codex\skills\skillator-pending\SKILL.md'), "stale`n")
   [IO.File]::AppendAllText((Join-Path $T '.pi\agent\extensions\skillator-ops.ts'), "stale`n")
-  [IO.File]::AppendAllText((Join-Path $T '.gemini\skills\pending\SKILL.md'), "stale`n")
-  [IO.File]::WriteAllText((Join-Path $T '.gemini\skills\list-tickets\.skillator-owned'), '')
+  [IO.File]::AppendAllText((Join-Path $T '.gemini\skills\skillator-pending\SKILL.md'), "stale`n")
+  [IO.File]::WriteAllText((Join-Path $T '.gemini\skills\list-ticket-zordon\.skillator-owned'), '')
   [IO.File]::WriteAllText((Join-Path $T '.pi\agent\skills\tickets-zordon\.selftest-sentinel'), '')
   [IO.File]::AppendAllText((Join-Path $T '.pi\agent\skills\.ignore'), 'my-own-line')
   # F90: an older run's codex prompt goes, a foreign prompt stays
   New-Item -ItemType Directory -Force (Join-Path $T '.codex\prompts') | Out-Null
-  [IO.File]::WriteAllText((Join-Path $T '.codex\prompts\pending.md'), "old`n")
+  [IO.File]::WriteAllText((Join-Path $T '.codex\prompts\skillator-pending.md'), "old`n")
   [IO.File]::WriteAllText((Join-Path $T '.codex\prompts\my-own.md'), "mine`n")
   $null = & $run @()
   if ($script:selfCode -ne 0) { return "second install exited $script:selfCode" }
-  if (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\pending.md')) { return 'old codex prompt pending.md kept' }
+  if (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\skillator-pending.md')) { return 'old codex prompt skillator-pending.md kept' }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\my-own.md') -PathType Leaf)) { return 'foreign codex prompt removed' }
   $igl = @([IO.File]::ReadAllLines((Join-Path $T '.pi\agent\skills\.ignore')))
   if ($igl -cnotcontains 'my-own-line') { return 'pi .ignore lost a user line' }
   if (@($igl | Where-Object { $_ -ceq '/PLATFORMS.md' }).Count -ne 1) { return 'pi .ignore lines duplicated on the second run' }
-  if (& $has '.codex\skills\pending\SKILL.md' 'stale') { return 'codex skill-command not rewritten' }
+  if (& $has '.codex\skills\skillator-pending\SKILL.md' 'stale') { return 'codex skill-command not rewritten' }
   if (& $has '.pi\agent\extensions\skillator-ops.ts' 'stale') { return 'pi extension not rewritten' }
   if (@(& $ideCalls).Count -ne 2) { return 'antigravity extension not reinstalled on the second run' }
-  if (-not (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\pending\SKILL.md'))) { return 'agy skill-command pruned' }
-  if (& $has '.gemini\skills\pending\SKILL.md' 'stale') { return 'agy skill-command not rewritten' }
-  if (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\list-tickets\.skillator-owned')) { return 'stale marker kept on a skill-command' }
+  if (-not (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\skillator-pending\SKILL.md'))) { return 'agy skill-command pruned' }
+  if (& $has '.gemini\skills\skillator-pending\SKILL.md' 'stale') { return 'agy skill-command not rewritten' }
+  if (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\list-ticket-zordon\.skillator-owned')) { return 'stale marker kept on a skill-command' }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.pi\agent\skills\tickets-zordon\.selftest-sentinel'))) { return 'installed skill was rewritten' }
   if ((& $count) -ne 1) { return 'second run: profile does not hold one ops block' }
 
@@ -1233,7 +1241,7 @@ if ($shimSrc) { Write-Host "" }
 foreach ($d in $writtenDests) {
   Write-Host "ops   sh $($d.Replace('\', '/'))/ops-board/ops/ops.sh <repo>   (Windows: powershell -NoProfile -ExecutionPolicy Bypass -File $d\ops-board\ops\ops.ps1 -Repo <repo>)"
 }
-if ($writtenDests -contains "$codexHome\skills") { Write-Host 'ops   Codex: $ops opens the board' }
+if ($writtenDests -contains "$codexHome\skills") { Write-Host 'ops   Codex: $skillator-ops opens the board' }
 # B9: the default profile follows the Documents folder, not HOME - with no -Profile and a
 # USERPROFILE that is not the real user profile dir (a scratch install) it is skipped. Only
 # USERPROFILE: every dest is under $HOME, which PowerShell takes from it - a HOME of the
