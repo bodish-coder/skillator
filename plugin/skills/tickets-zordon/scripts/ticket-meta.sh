@@ -1787,8 +1787,8 @@ selftest() {
   # F131: once a lead is assigned, an owner cannot reassign their own ticket - only the lead may reassign
   SKILLATOR_ME=@neo sh "$self" assign F6 @asha > /dev/null 2> "$T/err" && { echo "FAIL: owner reassigned when lead assigned"; fail=1; }
   grep -q 'F6 is owned by @neo - only the lead @vidul may reassign it (you: @neo)' "$T/err" || { echo "FAIL: owner refusal does not name lead: $(cat "$T/err")"; fail=1; }
-  # F131: non-lead cannot assign an unowned ticket when lead is assigned
-  SKILLATOR_ME=@neo sh "$self" assign F1 @asha > /dev/null 2> "$T/err" && { echo "FAIL: non-lead assigned unowned ticket"; fail=1; }
+  # F131: non-lead cannot assign an unowned ticket when lead is assigned (A217: F13, not F1 - F1 is @asha's since its claim)
+  SKILLATOR_ME=@neo sh "$self" assign F13 @asha > /dev/null 2> "$T/err" && { echo "FAIL: non-lead assigned unowned ticket"; fail=1; }
   grep -q 'lead @vidul is assigned - only the lead may assign tickets (you: @neo)' "$T/err" || { echo "FAIL: unowned refusal does not name lead: $(cat "$T/err")"; fail=1; }
   eq "the lead reassigns" "$(SKILLATOR_ME=@vidul sh "$self" assign F6 @asha 2>&1)" "- [ ] F6 $D Neos [owner: @asha]"
   # --- F135: tester tag & assign-tester open to all users (even with lead assigned)
