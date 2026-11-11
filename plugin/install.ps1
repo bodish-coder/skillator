@@ -485,12 +485,15 @@ function Write-AgyExt([string]$skillsDir) {
 # Same as install.sh retire_file / retire_dir.
 $retired = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run'
 $retiredBody = 'tickets-zordon|relay-morpheus|code-vader|skillator-sync|tasks-sentinels|teams-uhura|skillator:|\.skillator-source|ops-board/ops/ops|Engaged prompt'
-# Test-UnderLink <path>: the path, or a dir between it and $HOME, is a symlink or junction -
-# by LinkType, not the ReparsePoint attribute (OneDrive placeholders carry that too)
+# Test-UnderLink <path>: the path, or a dir between it and $HOME, is a link - a dir with the
+# ReparsePoint attribute (as Get-RelFiles), a file only by LinkType (OneDrive file
+# placeholders carry ReparsePoint). A dir above the path that cannot be read counts as one.
 function Test-UnderLink([string]$path) {
   for ($q = $path; $q -and $q -ne $HOME.TrimEnd('\'); $q = Split-Path -Parent $q) {
     $i = Get-Item -LiteralPath $q -Force -ErrorAction SilentlyContinue
-    if ($i -and $i.LinkType -and $i.LinkType -ne 'HardLink') { return $true }
+    if (-not $i) { if ($q -ne $path) { return $true } }
+    elseif ($i.PSIsContainer) { if ($i.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $true } }
+    elseif ($i.LinkType -and $i.LinkType -ne 'HardLink') { return $true }
   }
   return $false
 }
@@ -511,6 +514,8 @@ function Rename-Retired([string]$file) {
   if (Get-Item -LiteralPath $to -Force -ErrorAction SilentlyContinue) { Write-Host "        kept ${file}: $to exists"; return }
   if ($DryRun) { Write-Host "        would retire $file -> $to"; return }
   try { Move-Item -LiteralPath $file -Destination $to } catch { Write-Host "warn  $file not retired: $($_.Exception.Message)"; return }
+  # as install.sh: the source must be gone and the target the moved file
+  if ((Test-Path -LiteralPath $file) -or -not (Test-Path -LiteralPath $to -PathType Leaf)) { Write-Host "warn  $file not retired (kept)"; return }
   Write-Host "        retired $file -> $to (delete it if unused)"
 }
 # Remove-RetiredDir <dir>: a skill-command dir holding only SKILL.md (and its marker).
@@ -1129,6 +1134,8 @@ function Invoke-SelfTest([string]$T) {
   if (-not (Test-Path -LiteralPath (Join-Path $T "$oc\commands\marathon-plan.md")) -or (& $read "$oc\commands\marathon-plan.md.skillator-retired") -cne "older`n") { return 'an existing .skillator-retired overwritten' }
   foreach ($n in $retired + @('upstream-sync')) { if (-not (Test-Path -LiteralPath (Join-Path $T "pi-prompts\$n.md"))) { return "$n.md under a linked dir touched" } }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.cursor\commands\my-cmd.md')) -or -not (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\my-own.md'))) { return 'a user command of another name touched' }
+  # a dir above the file that Get-Item cannot return is never taken for a plain dir
+  if (-not (Test-UnderLink (Join-Path $T 'unreadable\x.md'))) { return 'an unreadable dir above a retired file not kept' }
   $igl = @([IO.File]::ReadAllLines((Join-Path $T '.pi\agent\skills\.ignore')))
   if ($igl -cnotcontains 'my-own-line') { return 'pi .ignore lost a user line' }
   if (@($igl | Where-Object { $_ -ceq '/PLATFORMS.md' }).Count -ne 1) { return 'pi .ignore lines duplicated on the second run' }

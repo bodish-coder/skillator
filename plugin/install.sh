@@ -524,7 +524,12 @@ retire_file() {
     echo "        kept $_f: $_f.skillator-retired exists"; return 0
   fi
   if [ -n "$dry" ]; then echo "        would retire $_f -> $_f.skillator-retired"; return 0; fi
-  mv -- "$_f" "$_f.skillator-retired" || { echo "warn  $_f not retired"; return 0; }
+  # never overwrite: mv -n, then the source must be gone and the target hold its bytes
+  _sum=$(cksum < "$_f")
+  mv -n -- "$_f" "$_f.skillator-retired" || :
+  if [ -e "$_f" ] || [ -L "$_f" ] || [ ! -f "$_f.skillator-retired" ] || [ "$(cksum < "$_f.skillator-retired")" != "$_sum" ]; then
+    echo "warn  $_f not retired (kept)"; return 0
+  fi
   echo "        retired $_f -> $_f.skillator-retired (delete it if unused)"
 }
 # retire_dir <dir>: a skill-command dir holding only SKILL.md (and its marker). Decided
@@ -1109,6 +1114,10 @@ if [ -n "$selftest" ]; then
   { [ -f "$T/$_oc/commands/marathon-plan.md" ] && grep -qx older "$T/$_oc/commands/marathon-plan.md.skillator-retired"; } || { echo "FAIL: an existing .skillator-retired overwritten"; exit 1; }
   for _n in $retired_cmds upstream-sync; do [ -f "$T/pi-prompts/$_n.md" ] || { echo "FAIL: $_n.md under a linked dir touched"; exit 1; }; done
   { [ -f "$T/.cursor/commands/my-cmd.md" ] && [ -f "$T/.codex/prompts/my-own.md" ]; } || { echo "FAIL: a user command of another name touched"; exit 1; }
+  # retire never overwrites: a mv that moves nothing (mv -n refusing) keeps the file and warns
+  echo 'Load /x/tickets-zordon/SKILL.md' > "$T/mv-refused.md"
+  _o=$(HOME=$T; dry=; mv() { :; }; retire_file "$T/mv-refused.md")
+  { [ "$_o" = "warn  $T/mv-refused.md not retired (kept)" ] && [ -f "$T/mv-refused.md" ]; } || { echo "FAIL: a refused rename not kept: $_o"; exit 1; }
   [ -f "$T/.codex/skills/tui-tron/SKILL.md" ] || { echo "FAIL: dangling pre-F91 link not reinstalled"; exit 1; }
   grep -qx 'my-own-line' "$T/.pi/agent/skills/.ignore" || { echo "FAIL: pi .ignore lost a user line"; exit 1; }
   [ "$(grep -cxF /PLATFORMS.md "$T/.pi/agent/skills/.ignore")" = 1 ] || { echo "FAIL: pi .ignore lines duplicated on the second run"; exit 1; }
