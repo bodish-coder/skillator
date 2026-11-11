@@ -6,7 +6,7 @@ import { sameHandle } from './team'
 // F128: dedicated collapsible sections personalized to the active user
 export type UserSection = 'assigned' | 'decide'
 export const USER_SECTIONS: UserSection[] = ['assigned', 'decide']
-export type UserGroup = { id: UserSection; title: string; color: 'suggestion' | 'permission'; tickets: Ticket[]; open: boolean }
+export type UserGroup = { id: UserSection; title: string; color: 'suggestion' | 'autoAccept'; tickets: Ticket[]; open: boolean }
 
 export const assignedTickets = (tickets: readonly Ticket[], user: string | null): Ticket[] =>
   user ? tickets.filter(t => isOpen(t) && sameHandle(t.owner, user)) : []
@@ -37,7 +37,7 @@ export function personalGroups(
   const decideOpen = !opts?.decideFolded && isUserSectionOpen(open, 'decide')
   return [
     { id: 'assigned', title: 'Assigned', color: 'suggestion', tickets: assignedTickets(tickets, user), open: assignedOpen },
-    { id: 'decide', title: 'Decide', color: 'permission', tickets: decideTickets(tickets, user), open: decideOpen },
+    { id: 'decide', title: 'Mine to decide', color: 'autoAccept', tickets: decideTickets(tickets, user), open: decideOpen },
   ]
 }
 

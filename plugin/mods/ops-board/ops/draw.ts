@@ -396,7 +396,7 @@ function filterLine(s: State): Seg[] {
 }
 
 function chipLine(t: Ticket): Seg[] {
-  const chip = (k: string, v: string): Seg[] => [{ text: k + ':', color: 'permission' }, { text: v, color: 'suggestion' }]
+  const chip = (k: string, v: string): Seg[] => [{ text: k + ':', color: k === 'decide' ? 'autoAccept' : 'permission' }, { text: v, color: 'suggestion' }]
   const groups: Seg[][] = []
   if (t.apps.length) groups.push(t.apps.flatMap((a, i) => [...(i ? [{ text: ' ' }] : []), ...chip('app', a)]))
   if (t.owner) groups.push(chip('owner', t.owner))
@@ -415,7 +415,7 @@ function chipLine(t: Ticket): Seg[] {
 const tagOf = (t: Ticket) => (t.box === '~' || t.box === '%' ? t.session : null) ?? t.owner ?? (t.decide ? 'decide ' + t.decide : null) ?? (t.tester ? 'test ' + t.tester : null)
 const tagColorOf = (tag: string | null): Color | undefined =>
   !tag ? undefined
-  : tag.startsWith('decide ') ? 'permission'
+  : tag.startsWith('decide ') ? 'autoAccept'
   : tag.startsWith('test ') ? 'success'
   : /^@(cc|cx|cu|ag|pi|oc|ge|mu)-/.test(tag) ? 'warning'
   : 'suggestion'
@@ -431,7 +431,7 @@ function ticketLines(s: State, m: Model): Keyed[] {
   const pool = visible(b, s.filter, s.me)
   const userSecs: { id: UserSection; title: string; tickets: Ticket[]; color: Color }[] = user ? [
     { id: 'assigned', title: 'Assigned', tickets: assignedTickets(pool, user), color: 'suggestion' },
-    { id: 'decide', title: 'Decide', tickets: decideTickets(pool, user), color: 'permission' },
+    { id: 'decide', title: 'Mine to decide', tickets: decideTickets(pool, user), color: 'autoAccept' },
   ] : []
   if (!m.groups.length && !userSecs.length) return [{ key: 'msg', segs: [dim(m.filterActive ? 'no ticket matches the filter' : 'no open tickets')] }]
   const out: Keyed[] = []

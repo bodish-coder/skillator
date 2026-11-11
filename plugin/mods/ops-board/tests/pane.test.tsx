@@ -332,6 +332,10 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'chips:F1' }))?.text).toBe('    app:web app:ui  by:@vidul @asha')
     expect(await ui.find({ key: 'decided:F2' })).toBeDefined()
     expect(await ui.find({ key: 'decided:F1' })).toBeUndefined()
+    // F170: the decide: chip is F168's decision pink; other chip keys stay violet
+    const chipKey = async (k: string) => (await ui.findAll({ type: 'Text' })).find(t => t.text === k)?.props.color
+    expect(await chipKey('decide:')).toBe('autoAccept')
+    expect(await chipKey('owner:')).toBe('permission')
     expect((await ui.find({ key: 'count' }))?.text).toBe('5 open●1●1●1●2●1· 7 done hidden')
     for (const k of ['key:assign', 'key:decide', 'key:filter', 'key:done', 'key:status', 'key:help', 'tab:tickets', 'tab:runs', 'tab:health'])
       expect(await ui.find({ key: k }), k).toBeDefined()
@@ -827,14 +831,15 @@ for (const surface of SURFACES) {
     await start($, clock)
     const ui = await mountPane($, surface)
 
-    // Active user is @vidul -> Assigned (1) with F3, Decide (0)
-    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▾ Decide (0)'])
+    // Active user is @vidul -> Assigned (1) with F3, Mine to decide (0)
+    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▾ Mine to decide (0)'])
+    expect(((await ui.find({ key: 'head:decide' }))!.children.at(-1) as { props: { color?: string } }).props.color).toBe('autoAccept')
     expect(await ui.find({ key: 'row:assigned:F3' })).toBeDefined()
 
     // Pointer fold/unfold on head:assigned
     await ui.press({ key: 'head:assigned' })
     expect(await state($, 'assignedFolded')).toBe(true)
-    expect(await userHeads(ui)).toEqual(['▸ Assigned (1)', '▾ Decide (0)'])
+    expect(await userHeads(ui)).toEqual(['▸ Assigned (1)', '▾ Mine to decide (0)'])
     expect(await ui.find({ key: 'row:assigned:F3' })).toBeUndefined()
     await ui.press({ key: 'head:assigned' })
     expect(await state($, 'assignedFolded')).toBe(false)
@@ -846,16 +851,16 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'head:decide' }))?.props.hotkey).toBe('o')
     await ui.press({ key: 'head:decide' })
     expect(await state($, 'decideFolded')).toBe(true)
-    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▸ Decide (0)'])
+    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▸ Mine to decide (0)'])
     await ui.press({ key: 'head:decide' })
     expect(await state($, 'decideFolded')).toBe(false)
 
-    // Switch active user in Team view to @asha -> Assigned (0), Decide (1) with F2
+    // Switch active user in Team view to @asha -> Assigned (0), Mine to decide (1) with F2
     await ui.press({ key: 'key:team' })
     await ui.press({ key: 'member:@asha' })
     await ui.press({ key: 'team:back' })
     expect(await state($, 'me')).toBe('@asha')
-    expect(await userHeads(ui)).toEqual(['▾ Assigned (0)', '▾ Decide (1)'])
+    expect(await userHeads(ui)).toEqual(['▾ Assigned (0)', '▾ Mine to decide (1)'])
     expect(await ui.find({ key: 'row:assigned:F3' })).toBeUndefined()
     expect(await ui.find({ key: 'row:decide:F2' })).toBeDefined()
 
@@ -865,7 +870,7 @@ for (const surface of SURFACES) {
     await ui.press({ key: 'key:assign' })
     await ui.press({ key: 'who:@asha' })
     await ui.press({ key: 'go' })
-    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▾ Decide (1)'])
+    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▾ Mine to decide (1)'])
     expect(await ui.find({ key: 'row:assigned:B1' })).toBeDefined()
     await ui.unmount()
   })

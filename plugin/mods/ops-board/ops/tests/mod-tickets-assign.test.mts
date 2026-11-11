@@ -53,7 +53,8 @@ test('A199: personalGroups and buildModel compute Assigned/Decide sections, head
   const mVidul = buildModel(baseView)
   assert.equal(mVidul.userGroups.length, 2)
   assert.equal(userHeadText(mVidul.userGroups[0]!, UNI, false), '▾ Assigned (1)')
-  assert.equal(userHeadText(mVidul.userGroups[1]!, UNI, false), '▾ Decide (1)')
+  assert.equal(userHeadText(mVidul.userGroups[1]!, UNI, false), '▾ Mine to decide (1)')
+  assert.equal(mVidul.userGroups[1]!.color, 'autoAccept')     // F170: F168's decision pink
   assert.equal(userHeadText(mVidul.userGroups[0]!, ASCII, true), 'v Assigned (1)')
   assert.deepEqual(mVidul.items.slice(0, 5), [
     'head:assigned',
@@ -76,10 +77,10 @@ test('A199: personalGroups and buildModel compute Assigned/Decide sections, head
   assert.equal(mFoldedAssigned.selected, 'head:assigned')
   assert.equal(mFoldedAssigned.ticket, null)
 
-  // Switching active user to @asha refreshes Assigned (2: B2, B1) and Decide (1: F2)
+  // Switching active user to @asha refreshes Assigned (2: B2, B1) and Mine to decide (1: F2)
   const mAsha = buildModel({ ...baseView, me: '@asha' })
   assert.equal(userHeadText(mAsha.userGroups[0]!, UNI, false), '▾ Assigned (2)')
-  assert.equal(userHeadText(mAsha.userGroups[1]!, UNI, false), '▾ Decide (1)')
+  assert.equal(userHeadText(mAsha.userGroups[1]!, UNI, false), '▾ Mine to decide (1)')
   assert.deepEqual(mAsha.userGroups[0]!.tickets.map(t => t.id), ['B2', 'B1'])
   assert.deepEqual(mAsha.userGroups[1]!.tickets.map(t => t.id), ['F2'])
 })

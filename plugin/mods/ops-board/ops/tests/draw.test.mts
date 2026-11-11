@@ -181,6 +181,10 @@ test('filter row, tags, expanded chips and raw line, count line, done shown', ()
   assert.match(f, /  ▾ Decide \(1\)\n/)
   const ex = text(reduce({ ...s, selected: 'F3' }, { name: 'return' }).state)
   assert.match(ex, /      decide:@asha   \[D decided\]\n      - \[\?\] F3 — Pick the chart library \[decide: @asha\]/)
+  // F170: the decide: chip is the decision pink (95); other chip keys stay violet (35)
+  const exCol = frame(reduce({ ...s, selected: 'F3' }, { name: 'return' }).state, { color: true, ascii: false }).join('\n')
+  assert.match(exCol, /\x1b\[95mdecide:\x1b\[0m/)
+  assert.ok(!/\x1b\[35mdecide:/.test(exCol))
   const done = text(reduce(s, { name: 'x' }).state)
   assert.match(done, /  ▾ Done \(8\)/)
   assert.match(done, /^7 open \(4 pending · 1 in progress · 1 blocked · 1 decide\) · 1 deferred$/m)
@@ -470,19 +474,23 @@ test('F128 draw: Assigned and Decide sections render with fold indicators and ad
   let f = frame(sUser, P).join('\n')
   assert.match(f, /▾ Assigned \(1\)/)
   assert.match(f, /F1  Dark mode/)
-  assert.match(f, /▾ Decide \(1\)/)
+  assert.match(f, /▾ Mine to decide \(1\)/)
   assert.match(f, /F3  Pick chart/)
+  // F170: the personal section header and the [decide: @who] tag paint F168's pink (SGR 95)
+  const col = frame(sUser, { color: true, ascii: false }).join('\n')
+  assert.match(col, /\x1b\[95;1m▾ Mine to decide \(1\)/)
+  assert.match(col, /\x1b\[95m +decide @asha\x1b\[0m/)
 
   // Fold assigned section
   sUser = { ...sUser, open: [...sUser.open, 'fold:assigned' as any] }
   f = frame(sUser, P).join('\n')
   assert.match(f, /▸ Assigned \(1\)/)
-  assert.match(f, /▸ Assigned \(1\)\n  ▾ Decide \(1\)/)
+  assert.match(f, /▸ Assigned \(1\)\n  ▾ Mine to decide \(1\)/)
 
   // In ASCII mode, ▾ / ▸ become v / >
   const fAscii = frame(sUser, { color: false, ascii: true, plain: true }).join('\n')
   assert.match(fAscii, /> Assigned \(1\)/)
-  assert.match(fAscii, /v Decide \(1\)/)
+  assert.match(fAscii, /v Mine to decide \(1\)/)
 })
 
 test('F120: responsive footer actions and wrapping across 40, 60, 80, 100, 120 columns without dropping keys', () => {
@@ -887,10 +895,10 @@ test('F161: standalone ops board rich semantic colors across tab bar, buttons, t
   assert.match(filterLine, /\x1b\[35mapp: \x1b\[0m\x1b\[36mall\x1b\[0m/)
   assert.match(filterLine, /\x1b\[36m\[f filter\]\x1b\[0m/)
 
-  // Ticket rows: unselected ticket IDs bold colored, decide tag in magenta, owner tag in cyan
+  // Ticket rows: unselected ticket IDs bold colored, decide tag in pink (F170), owner tag in cyan
   const f3Line = c.find(l => l.includes('Pick the chart library'))!
   assert.match(f3Line, /\x1b\[95m●\x1b\[0m\x1b\[95;1m F3  \x1b\[0mPick the chart library/)
-  assert.match(f3Line, /\x1b\[35m +decide @asha\x1b\[0m$/)
+  assert.match(f3Line, /\x1b\[95m +decide @asha\x1b\[0m$/)
 
   // Count line: open bold, in progress amber, blocked red, decide pink
   const cntLine = c.find(l => l.includes('7 open'))!
