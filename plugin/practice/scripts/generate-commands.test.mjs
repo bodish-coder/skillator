@@ -48,23 +48,26 @@ test('stale check names the path without writing; regeneration is deterministic'
   ok(run(root, '--check'));
 });
 
-test('A220: orphaned files under generated host directories fail --check and are removed by --write; other paths are kept', t => {
+test('A220: --check reports orphaned host files; --write reports them too but never deletes; litter, symlinks and case variants are ignored', t => {
   const root = fixture(t);
   ok(run(root, '--write'));
-  const orphans = ['host-commands/cursor/oldname.md', 'host-commands/gemini/oldname.toml', 'host-commands/antigravity/oldname/SKILL.md'];
-  for (const path of orphans) {
+  const orphans = ['host-commands/cursor/oldname.md', 'host-commands/cursor/user.md', 'host-commands/gemini/oldname.toml', 'host-commands/antigravity/oldname/SKILL.md'];
+  const ignored = ['host-commands/cursor/.DS_Store', 'host-commands/cursor/Thumbs.db', 'host-commands/cursor/desktop.ini', 'host-commands/cursor/notes.md~', 'host-commands/cursor/.notes.md.swp'];
+  for (const path of [...orphans, ...ignored]) {
     mkdirSync(join(root, path, '..'), { recursive: true });
-    writeFileSync(join(root, path), 'orphan', 'utf8');
+    writeFileSync(join(root, path), 'x', 'utf8');
   }
-  writeFileSync(join(root, 'commands/keep.txt'), 'keep', 'utf8');
-  const result = run(root, '--check');
-  assert.equal(result.status, 1);
-  for (const path of orphans) assert.match(result.stderr, new RegExp(`Orphaned generated file: ${path.replace('.', '\\.')}`));
-  for (const path of orphans) assert.ok(existsSync(join(root, path)), path);
-  ok(run(root, '--write'));
-  for (const path of orphans) assert.ok(!existsSync(join(root, path)), path);
-  assert.ok(!existsSync(join(root, 'host-commands/antigravity/oldname')));
-  assert.ok(existsSync(join(root, 'commands/keep.txt')));
+  // A case variant of an expected output is not an orphan (same bytes, so not stale either).
+  const variant = 'host-commands/cursor/Team.MD';
+  writeFileSync(join(root, variant), readFileSync(join(root, 'host-commands/cursor/team.md')));
+  for (const mode of ['--check', '--write']) {
+    const result = run(root, mode);
+    assert.equal(result.status, 1, mode + result.stdout + result.stderr);
+    for (const path of orphans) assert.ok(result.stderr.includes(`Orphaned generated file: ${path} (remove with: git rm ${path})`), mode + path);
+    for (const path of [...ignored, variant]) assert.ok(!result.stderr.includes(path), mode + path);
+    for (const path of [...orphans, ...ignored, variant]) assert.ok(existsSync(join(root, path)), mode + path);
+  }
+  for (const path of orphans) rmSync(join(root, path));
   ok(run(root, '--check'));
 });
 
