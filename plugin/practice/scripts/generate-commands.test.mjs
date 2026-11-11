@@ -27,13 +27,11 @@ function metadata(root, edit) {
   writeFileSync(path, JSON.stringify(data), 'utf8');
 }
 
-test('stale check names the path without writing; regeneration is deterministic and preserves unknown files', t => {
+test('stale check names the path without writing; regeneration is deterministic', t => {
   const root = fixture(t);
   ok(run(root, '--write'));
   const stale = join(root, 'host-commands/cursor/skillator-pending.md');
   writeFileSync(stale, 'stale\r\n', 'utf8');
-  const user = join(root, 'host-commands/cursor/user.md');
-  writeFileSync(user, 'user file', 'utf8');
   const result = run(root, '--check');
   assert.equal(result.status, 1);
   assert.match(result.stderr, /host-commands\/cursor\/skillator-pending\.md/);
@@ -47,7 +45,26 @@ test('stale check names the path without writing; regeneration is deterministic 
     assert.ok(!bytes.includes(13), path);
     assert.notEqual(bytes.toString('utf8')[0], '\uFEFF', path);
   });
-  assert.equal(readFileSync(user, 'utf8'), 'user file');
+  ok(run(root, '--check'));
+});
+
+test('A220: orphaned files under generated host directories fail --check and are removed by --write; other paths are kept', t => {
+  const root = fixture(t);
+  ok(run(root, '--write'));
+  const orphans = ['host-commands/cursor/oldname.md', 'host-commands/gemini/oldname.toml', 'host-commands/antigravity/oldname/SKILL.md'];
+  for (const path of orphans) {
+    mkdirSync(join(root, path, '..'), { recursive: true });
+    writeFileSync(join(root, path), 'orphan', 'utf8');
+  }
+  writeFileSync(join(root, 'commands/keep.txt'), 'keep', 'utf8');
+  const result = run(root, '--check');
+  assert.equal(result.status, 1);
+  for (const path of orphans) assert.match(result.stderr, new RegExp(`Orphaned generated file: ${path.replace('.', '\\.')}`));
+  for (const path of orphans) assert.ok(existsSync(join(root, path)), path);
+  ok(run(root, '--write'));
+  for (const path of orphans) assert.ok(!existsSync(join(root, path)), path);
+  assert.ok(!existsSync(join(root, 'host-commands/antigravity/oldname')));
+  assert.ok(existsSync(join(root, 'commands/keep.txt')));
   ok(run(root, '--check'));
 });
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Offline authoring tool. Installers consume the committed outputs without Node.
-import { readFileSync, writeFileSync, mkdirSync, lstatSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, lstatSync, readdirSync, unlinkSync, rmdirSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -125,7 +125,26 @@ export function generate(root, mode) {
       writeFileSync(destination, text, 'utf8');
     }
   }
-  return { stale, count: outputs.size };
+  // Orphans: files left under a generated host directory by a renamed or removed command.
+  const orphans = [];
+  function walk(relative) {
+    let entries;
+    try { entries = readdirSync(join(root, relative), { withFileTypes: true }); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+    for (const entry of entries) {
+      const path = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) walk(path);
+      else if (!outputs.has(path)) orphans.push(path);
+    }
+  }
+  for (const host of hosts) walk(`host-commands/${host}`);
+  if (mode === '--write') {
+    for (const path of orphans) {
+      unlinkSync(join(root, path));
+      // Drop the emptied per-command directory (antigravity); rmdir fails if it is not empty.
+      try { rmdirSync(dirname(join(root, path))); } catch {}
+    }
+  }
+  return { stale, orphans, count: outputs.size };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -133,9 +152,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const [mode, flag, root, ...extra] = process.argv.slice(2);
     if (!['--check', '--write'].includes(mode) || (flag && flag !== '--root') || (flag && !root) || extra.length) throw new Error('Usage: node generate-commands.mjs --check|--write [--root <plugin directory>]');
     const result = generate(root ? resolve(root) : defaultRoot, mode);
-    if (mode === '--check' && result.stale.length) {
-      console.error(result.stale.map(path => `Stale generated command: ${path}`).join('\n'));
+    if (mode === '--check' && (result.stale.length || result.orphans.length)) {
+      console.error([...result.stale.map(path => `Stale generated command: ${path}`), ...result.orphans.map(path => `Orphaned generated file: ${path}`)].join('\n'));
       process.exitCode = 1;
-    } else console.log(`${result.count} generated commands checked; ${mode === '--write' ? result.stale.length : 0} written.`);
+    } else console.log(`${result.count} generated commands checked; ${mode === '--write' ? result.stale.length : 0} written, ${mode === '--write' ? result.orphans.length : 0} removed.`);
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
