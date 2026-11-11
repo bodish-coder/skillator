@@ -1,4 +1,5 @@
 # Team
+lead: @sabre
 
 - @vidul: vidul@ikran.in
   name: vidul
