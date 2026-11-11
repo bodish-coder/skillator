@@ -830,7 +830,7 @@ cmd_done() {
   SET_MARK='x' SET_APP=$a SET_DECIDE='' SET_OWNER='' SET_BY=$b NOTE_VAL='' DONE_NOTE=$dn REFUSE_MARKS='-' SAME_KEY='' NEED_MARK='' edit_line
 }
 
-# F72/F167: /verify-subagent's verdict on a [%] ticket, with the evidence (one
+# F72/F167: /verify-shifu's verdict on a [%] ticket, with the evidence (one
 # line, no parentheses, no *; a fail's is "<what failed> - <why>"). A note, never
 # a status: the box stays [%], ` (verified PASS|FAIL <date>: <evidence>)` replaces
 # any earlier verify note.
@@ -912,7 +912,7 @@ cmd_start() {
 # the subject's leading ids, `board:` subjects left out (they log tickets, not
 # work). Stages: .skillator/run-*.md rows led by the id (after a stage code); the
 # last by run and stage number counts, whatever its state. A [~] row with a session tag is that
-# session's - nothing proposed (/sync-tickets' rule). IDs given: only those rows.
+# session's - nothing proposed (/sync-zordon' rule). IDs given: only those rows.
 cmd_reconcile() {
   bf="$MAIN/TICKETS.md"
   [ -f "$bf" ] || die "no TICKETS.md at $bf"
@@ -1483,7 +1483,7 @@ selftest() {
   } > "$T/want62.md"
   cmp -s TICKETS.md "$T/want62.md" || { echo "FAIL: F62 board bytes"; diff "$T/want62.md" TICKETS.md; fail=1; }
 
-  # --- F64: done / block / defer - the boxes /sync-tickets used to hand-edit
+  # --- F64: done / block / defer - the boxes /sync-zordon used to hand-edit
   Q="$T/f64"
   mkdir -p "$Q/apps/web" && cd "$Q" && git init -q . && git config core.autocrlf false || die "cannot init fixture"
   {
@@ -1556,7 +1556,7 @@ selftest() {
     cmp -s TICKETS.md "$T/want64-$nl.md" || { echo "FAIL: $nl done/block/defer line endings or bytes"; od -c TICKETS.md | head -n 6; fail=1; }
   done
 
-  # --- F72/F167: verify - /verify-subagent's verdict on a [%] ticket; one
+  # --- F72/F167: verify - /verify-shifu's verdict on a [%] ticket; one
   # (verified PASS|FAIL ..) note, the box never moves
   V="$T/f72"
   mkdir -p "$V/apps/web" && cd "$V" && git init -q . && git config core.autocrlf false || die "cannot init fixture"

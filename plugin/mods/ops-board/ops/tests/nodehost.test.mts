@@ -375,5 +375,16 @@ test('A198: readSkillDoc loads bounded SKILL.md safely and rejects path traversa
   assert.equal(rCmd.code, 0)
   assert.match(rCmd.out, /Archive closed tickets/)
   assert.match(rCmd.argv[0] ?? '', /plugin\/commands\/archive-tickets\.md/)
+
+  // F171: the ops entry's doc is skillator-ops.txt; a renamed entry loads its own .md
+  writeFileSync(join(dir, 'plugin/commands/skillator-ops.txt'), 'Open the ops board\n')
+  writeFileSync(join(dir, 'plugin/commands/skillator-pending.md'), 'What is pending\n')
+  const rOps = await readSkillDoc(host, 'ops')
+  assert.equal(rOps.code, 0, rOps.err)
+  assert.match(rOps.out, /Open the ops board/)
+  assert.match(rOps.argv[0] ?? '', /plugin\/commands\/skillator-ops\.txt/)
+  const rPend = await readSkillDoc(host, 'skillator-pending')
+  assert.equal(rPend.code, 0, rPend.err)
+  assert.match(rPend.out, /What is pending/)
 })
 

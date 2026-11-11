@@ -60,21 +60,22 @@ export async function readSkillDoc(host: Pick<Host, 'skillsDir' | 'repoRoot' | '
 
   if (!resolvedDoc && host.repoRoot) {
     const repoBase = norm(resolve(host.repoRoot))
-    const candMd = norm(resolve(repoBase, 'plugin', 'commands', `${skillId}.md`))
+    const doc = skillId === 'ops' ? 'skillator-ops' : skillId   // F171: /ops is documented by its plugin command
+    const candMd = norm(resolve(repoBase, 'plugin', 'commands', `${doc}.md`))
     if (candMd.startsWith(repoBase + '/')) {
       const st = await host.stat(candMd)
       if (st) {
         resolvedDoc = candMd
-        displayPath = `plugin/commands/${skillId}.md`
+        displayPath = `plugin/commands/${doc}.md`
       }
     }
     if (!resolvedDoc) {
-      const candTxt = norm(resolve(repoBase, 'plugin', 'commands', `${skillId}.txt`))
+      const candTxt = norm(resolve(repoBase, 'plugin', 'commands', `${doc}.txt`))
       if (candTxt.startsWith(repoBase + '/')) {
         const st = await host.stat(candTxt)
         if (st) {
           resolvedDoc = candTxt
-          displayPath = `plugin/commands/${skillId}.txt`
+          displayPath = `plugin/commands/${doc}.txt`
         }
       }
     }

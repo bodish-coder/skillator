@@ -131,16 +131,16 @@ export function render(md, title, archiveMd = "", archiveName = "TICKETS-archive
 <style>
 :root{
   --ground:#f4f5f2; --surface:#fbfbf9; --ink:#191c19; --mid:#5c625c; --faint:#8b918b;
-  --rule:#dfe3dd; --amber:#a8590c; --red:#b0241a; --violet:#6d3fb3; --teal:#0b6e70; --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --rule:#dfe3dd; --amber:#a8590c; --red:#b0241a; --pink:#b0307a; --teal:#0b6e70; --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --ground:#141714; --surface:#191d19; --ink:#e7eae6; --mid:#9aa199; --faint:#6e756d;
-  --rule:#2a2f29; --amber:#e0a25c; --red:#f08b80; --violet:#b9a0ef; --teal:#6cc9c9;
+  --rule:#2a2f29; --amber:#e0a25c; --red:#f08b80; --pink:#f08cc4; --teal:#6cc9c9;
 }}
 :root[data-theme="dark"]{
   --ground:#141714; --surface:#191d19; --ink:#e7eae6; --mid:#9aa199; --faint:#6e756d;
-  --rule:#2a2f29; --amber:#e0a25c; --red:#f08b80; --violet:#b9a0ef; --teal:#6cc9c9;
+  --rule:#2a2f29; --amber:#e0a25c; --red:#f08b80; --pink:#f08cc4; --teal:#6cc9c9;
 }
 *{box-sizing:border-box}
 body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;
@@ -157,7 +157,7 @@ h1 .repo{color:var(--mid);font-weight:400}
 .chip .k{font-size:.6875rem;color:var(--faint);letter-spacing:.05em;text-transform:uppercase}
 .c-inprogress .v{color:var(--amber)}
 .c-blocked .v{color:var(--red)}
-.c-decision .v{color:var(--violet)}
+.c-decision .v{color:var(--pink)}
 .c-testing .v{color:var(--teal)}
 .c-total{background:color-mix(in oklab,var(--ground) 60%,var(--surface))}
 section{margin:0 0 2rem}
@@ -176,7 +176,7 @@ li.sub{padding-left:1.4rem;grid-template-columns:1.9rem 3.4rem 1fr auto}
 .st{font-size:.6875rem;color:var(--faint);letter-spacing:.04em;text-align:right;white-space:nowrap}
 .s-inprogress .id,.s-inprogress .g,.s-inprogress .st{color:var(--amber)}
 .s-blocked .id,.s-blocked .g,.s-blocked .st{color:var(--red)}
-.s-decision .id,.s-decision .g,.s-decision .st{color:var(--violet)}
+.s-decision .id,.s-decision .g,.s-decision .st{color:var(--pink)}
 .s-testing .id,.s-testing .g,.s-testing .st{color:var(--teal)}
 .s-deferred .id,.s-deferred .t{color:var(--mid)}
 .s-done .t,.s-cancelled .t{color:var(--mid);text-decoration:line-through;text-decoration-color:var(--rule)}
@@ -191,7 +191,7 @@ details ul{margin-top:.75rem}
   border:1px solid var(--rule);border-radius:3px;padding:0 .35rem;background:var(--surface);white-space:nowrap}
 .tag b{font-weight:400;color:var(--faint)}
 .tag-owner{color:var(--ink)}
-.tag-decide{color:var(--violet);border-color:var(--violet)}
+.tag-decide{color:var(--pink);border-color:var(--pink)}
 </style>
 <header>
   <h1>TICKETS <span class="repo">· ${esc(title)}</span></h1>
@@ -274,6 +274,8 @@ not a ticket line
   ok(dts[0].title === "Pick a vendor" && dts[0].tags.length === 1 && dts[0].tags[0][0] === "decide", "decide tag lifted off the title", dts[0]);
   ok(!/<span class="t">[^<]*\[decide:/.test(dh), "no raw [decide: in the title");
   ok((dh.match(/class="tag tag-decide"/g) || []).length === 1 && dh.includes('<span class="tag tag-decide"><b>decide</b> @asha</span>'), "one decide chip");
+  // F170: every decision mark paints F168's pink, not violet
+  ok(dh.includes(".c-decision .v{color:var(--pink)}") && dh.includes(".s-decision .st{color:var(--pink)}") && dh.includes(".tag-decide{color:var(--pink);border-color:var(--pink)}") && !dh.includes("--violet"), "decision marks are pink");
   const three = parse("- [ ] F33 — Split [app: web] [decide: @vidul] [owner: @asha] (@cc-1)")[0];
   ok(three.title === "Split (@cc-1)" && JSON.stringify(three.tags) === JSON.stringify([["app", "web"], ["decide", "@vidul"], ["owner", "@asha"]]), "app + decide + owner split cleanly", three);
   // F109: the (@sid:owner:mode) session tag stays in the title, as the old (@cc-..) shape does

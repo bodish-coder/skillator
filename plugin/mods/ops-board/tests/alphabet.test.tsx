@@ -173,7 +173,7 @@ for (const cols of [40, 60, 80, 120]) test(`F115 alphabet contexts and mounted f
   await focus($,'diagnose:RUN-2'); await bindings(ui, {'engage:RUN-2':'e','diagnose:RUN-2':'d'},cols,'Workflows second')
   await focus($,'diagnose:RUN-3'); await bindings(ui, {'diagnose:RUN-3':'d'},cols,'Finished run')
   expect((await ui.findAll({type:'Button'})).some(b=>b.props.hotkey==='e')).toBe(false)
-  await seed($,ui,{engage:{id:'RUN-1',queue:false,text:'/skillator:marathon-run demo'}})
+  await seed($,ui,{engage:{id:'RUN-1',queue:false,text:'/skillator:gauntlet-run demo'}})
   await bindings(ui, {'engage:go':'e','engage:cancel':'c'},cols,'Engage'); await ui.press({key:'engage:cancel'})
   await seed($,ui,{diagnose:{id:'RUN-1',verdict:'unfinished',lines:[],byHand:[],confirm:null,close:[1,2].map(n=>({n,sha:'123456789',why:'on HEAD',runs:'relay stage'}))}})
   await bindings(ui, {'diag:close:1':'o','diag:back':'b'},cols,'Diagnose')

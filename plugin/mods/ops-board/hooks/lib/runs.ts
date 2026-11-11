@@ -101,7 +101,7 @@ function parseChain(text: string): Parsed {
   return { stages, hasChain, states, landed, decisions, mode, driver, flights }
 }
 
-// F85: a /marathon-plan script's PLAN, read as data - never imported or run. The template
+// F85: a /gauntlet-plan script's PLAN, read as data - never imported or run. The template
 // writes `const PLAN = <JSON>` closed by a `}` at column 0; null when it is not that.
 export function parsePlan(js: string): PlanItem[][] | null {
   const i = js.indexOf('const PLAN = ')

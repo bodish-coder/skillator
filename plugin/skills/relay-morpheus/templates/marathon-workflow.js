@@ -1,7 +1,7 @@
 // marathon-workflow.js - relay-morpheus's Workflow script template (F73).
-// /marathon-plan copies it beside the run file - .skillator/run-<0000>-<slug>.md ->
+// /gauntlet-plan copies it beside the run file - .skillator/run-<0000>-<slug>.md ->
 // .skillator/run-<0000>-<slug>.workflow.js - and fills `meta` and `PLAN` (nothing below them).
-// /marathon-run runs it one phase per Workflow call, after `chain dispatch` of that phase's stages:
+// /gauntlet-run runs it one phase per Workflow call, after `chain dispatch` of that phase's stages:
 //   Workflow({scriptPath: '<that file>', args: {phase: 1, worktrees: {'12': '<path>'}}})
 // args.phase   - the phase to run, 1-based. Required: a phase is one Workflow call, so every stage
 //                in it is on disk (`~`, its prompt in the In-flight block) before its agent exists.
@@ -31,7 +31,7 @@ export const meta = {
 const PLAN = {
   run: 'RUN-0000',
   runWorktree: '<the run worktree init printed>',
-  mode: 'sequential', // 'sequential' | 'parallel' | 'parallel <N>' - the mode /marathon-plan or /marathon-run was given (F112)
+  mode: 'sequential', // 'sequential' | 'parallel' | 'parallel <N>' - the mode /gauntlet-plan or /gauntlet-run was given (F112)
   phases: [
     [
       { stage: 0, code: 'XXXX', ticket: 'F0', files: ['<path>'], done: '<the ticket Done line>', prompt: '<prompt file text>' },
@@ -72,7 +72,7 @@ PLAN.phases.forEach((p, i) => {
 
 const k = args && args.phase
 if (!Number.isInteger(k) || k < 1 || k > PLAN.phases.length) {
-  throw new Error(`args.phase must be 1..${PLAN.phases.length} - /marathon-run runs one phase per call, after chain dispatch of its stages`)
+  throw new Error(`args.phase must be 1..${PLAN.phases.length} - /gauntlet-run runs one phase per call, after chain dispatch of its stages`)
 }
 const items = PLAN.phases[k - 1]
 const wts = (args && args.worktrees) || {}

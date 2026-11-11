@@ -18,7 +18,7 @@ export { continuePrompt, eligibleRunTickets, parseFollowupOut, runLines, startRu
 // in parallel and its parked decisions. F85: a run's mode, its script's phases (the
 // .workflow.js beside the run file, read as data, never run) and, under it, the Workflow
 // runs and agents serving its stages. Engage asks first, in this pane (B5), then submits
-// /skillator:marathon-run (a script) or queues the run and submits its continue prompt.
+// /skillator:gauntlet-run (a script) or queues the run and submits its continue prompt.
 // Ticket state is a coloured dot from the board, never a bracket code.
 
 const actionFocusA = atom({ plugin: 'ops-board', key: 'actionFocus' } as const, null)
@@ -337,7 +337,7 @@ export async function readRuns($: EngineInterface, cols: number): Promise<RunsVi
 export async function openStartRun($: EngineInterface): Promise<void> {
   const board = await read($, boardA)
   const tickets = eligibleRunTickets(board).map(t => t.id)
-  await update($, startRunA, () => ({ runner: 'marathon', mode: 'sequential', tickets, result: null }))
+  await update($, startRunA, () => ({ runner: 'gauntlet-run', mode: 'sequential', tickets, result: null }))
   const open = await read($, runsOpenA)
   if (!open.includes('runs')) await update($, runsOpenA, xs => ['runs', ...xs])
   await $.ui.open({ id: PANE, title: PANE_NAME, closeOnEscape: true })
@@ -353,7 +353,7 @@ export async function closeStartRun($: EngineInterface): Promise<void> {
 export async function toggleStartRunRunner($: EngineInterface, next?: StartRunDraft['runner']): Promise<void> {
   await update($, startRunA, sr => sr && {
     ...sr,
-    runner: next ?? (sr.runner === 'marathon' ? 'pending-subagent' : 'marathon'),
+    runner: next ?? (sr.runner === 'gauntlet-run' ? 'pending-sentinel' : 'gauntlet-run'),
     result: null,
   })
 }

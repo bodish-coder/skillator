@@ -135,7 +135,7 @@ export function runOffline(parent = tmpdir()) {
   put(sources[0], `Isolation token: ${tokens[0]}\n`); put(sources[1], `Isolation token: ${tokens[1]}\n`);
   put(sources[2], `---\nname: isolation-probe\ndescription: Read-only isolation evidence probe.\n---\nIsolation token: ${tokens[2]}\n`);
   mkdirSync(join(env.HOME, '.agents/skills'), { recursive: true });
-  const pending = join(dest, 'pending/SKILL.md');
+  const pending = join(dest, 'skillator-pending/SKILL.md');
   const hookSource = join(env.CODEX_HOME, 'hooks.json');
   const hookCommand = `"${ps}" -NoProfile -ExecutionPolicy Bypass -File "${hook}" -Mode gate`;
   put(hookSource, JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: hookCommand, timeout: 10 }] }] } }, null, 2));
@@ -149,7 +149,7 @@ export function resumeFixture(path) {
   if (lstatSync(manifestPath).isSymbolicLink()) throw new Error('Fixture manifest link rejected');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const dest = join(env.CODEX_HOME, 'skills');
-  const sources = [join(project, 'AGENTS.md'), join(env.CODEX_HOME, 'AGENTS.md'), join(dest, 'isolation-probe/SKILL.md'), join(dest, 'pending/SKILL.md')];
+  const sources = [join(project, 'AGENTS.md'), join(env.CODEX_HOME, 'AGENTS.md'), join(dest, 'isolation-probe/SKILL.md'), join(dest, 'skillator-pending/SKILL.md')];
   const tokens = manifest.tokens;
   if (manifest.version !== 1 || !Array.isArray(tokens) || tokens.length !== 3 || !tokens.every(t => /^[0-9a-f-]{36}$/.test(t)) || JSON.stringify(manifest.sources) !== JSON.stringify(sources)) throw new Error('Invalid fixture manifest');
   const ps = process.platform === 'win32' ? join(process.env.SystemRoot || 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe') : 'pwsh';
@@ -163,7 +163,7 @@ export function resumeFixture(path) {
   }
   if (readFileSync(join(project, '.git/HEAD'), 'utf8') !== 'ref: refs/heads/isolation\n' || readFileSync(join(project, '.git/config'), 'utf8') !== '[core]\n repositoryformatversion = 0\n bare = false\n') throw new Error('Fixture boundary changed');
   if (readFileSync(sources[0], 'utf8') !== `Isolation token: ${tokens[0]}\n` || readFileSync(sources[1], 'utf8') !== `Isolation token: ${tokens[1]}\n` || readFileSync(sources[2], 'utf8') !== `---\nname: isolation-probe\ndescription: Read-only isolation evidence probe.\n---\nIsolation token: ${tokens[2]}\n`) throw new Error('Fixture instructions changed');
-  const commandContent = readFileSync(join(plugin, 'host-commands/antigravity/pending/SKILL.md'), 'utf8').replaceAll('\r', '').replaceAll('{{SKILLS}}', dest);
+  const commandContent = readFileSync(join(plugin, 'host-commands/antigravity/skillator-pending/SKILL.md'), 'utf8').replaceAll('\r', '').replaceAll('{{SKILLS}}', dest);
   if (readFileSync(sources[3], 'utf8') !== commandContent || !readFileSync(hook).equals(readFileSync(join(plugin, 'skills/watch-cortana/hooks/usage-watch.ps1')))) throw new Error('Fixture command/hook code changed');
   const expectedHooks = { hooks: { Stop: [{ hooks: [{ type: 'command', command: hookCommand, timeout: 10 }] }] } };
   if (JSON.stringify(JSON.parse(readFileSync(hookSource, 'utf8'))) !== JSON.stringify(expectedHooks)) throw new Error('Fixture hook definition changed');
@@ -206,7 +206,7 @@ export async function verifyActiveProfile(codexHomeInput, opts = {}) {
     ? outcome('passed', `Selected profile ${codexHome} matches release source across ${pairs.length} tracked artifacts`)
     : outcome('failed', `Selected profile ${codexHome} differs from source: ${drifted.join('; ')}`), [], { codexHome, installerSource, artifacts });
   add('active-profile-command-loading', commandProjection(sourceRoot, skillsDir), [], { skillsDir });
-  const opsSkill = join(skillsDir, 'ops/SKILL.md');
+  const opsSkill = join(skillsDir, 'skillator-ops/SKILL.md');
   const opsScript = join(skillsDir, 'ops-board/ops', process.platform === 'win32' ? 'ops.ps1' : 'ops.sh');
   if (!existsSync(opsSkill) || !existsSync(opsScript)) {
     add('active-profile-ops-launch', outcome('failed', 'Missing ops skill or launcher script in selected profile'), [], { opsSkill, opsScript });
@@ -214,8 +214,8 @@ export async function verifyActiveProfile(codexHomeInput, opts = {}) {
     const opsSkillText = readFileSync(opsSkill, 'utf8');
     const hasOpen = opsSkillText.includes('--open') || opsSkillText.includes('-Open');
     add('active-profile-ops-launch', hasOpen
-      ? outcome('passed', 'Selected profile contains $ops skill and launcher with terminal-tab open flag')
-      : outcome('failed', 'Selected profile $ops skill missing terminal-tab open flag'), [], { opsSkill, opsScript });
+      ? outcome('passed', 'Selected profile contains $skillator-ops skill and launcher with terminal-tab open flag')
+      : outcome('failed', 'Selected profile $skillator-ops skill missing terminal-tab open flag'), [], { opsSkill, opsScript });
   }
   const hookSource = join(codexHome, 'hooks.json');
   const hookScript = join(skillsDir, 'watch-cortana/hooks/usage-watch.ps1');

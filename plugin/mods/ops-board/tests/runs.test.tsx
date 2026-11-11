@@ -183,7 +183,7 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   })
   on('prompt.submit', ($, e) => { w.submits.push(e.text); return { text: e.text } })
   // F85: a slash command goes through command.run, the way a person's /command does
-  on('command.run', { command: 'skillator:marathon-run' }, ($, e) => { w.submits.push(`/${e.command} ${e.args}`); return { text: 'ok' } })
+  on('command.run', { command: 'skillator:gauntlet-run' }, ($, e) => { w.submits.push(`/${e.command} ${e.args}`); return { text: 'ok' } })
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.status', () => ({ value: undefined }))
@@ -431,7 +431,7 @@ const WF_RUN = (driver: string, b10: string, flight: string[] = []) => [
   '### AAA9 - stage 137 - B10 muse', 'tickets: B10', 'prompt: |', '  x',
   '### AABA - stage 138 - F81 reconcile', 'tickets: F81', 'prompt: |', '  x', '',
 ].join('\n')
-// The /marathon-plan template's shape: meta, then `const PLAN = <JSON>` closed at column 0;
+// The /gauntlet-plan template's shape: meta, then `const PLAN = <JSON>` closed at column 0;
 // a prompt holding "\n}" must not end it early.
 const SCRIPT = [
   "export const meta = { name: 'marathon-RUN-0020', phases: [{ title: 'Phase 1' }] }",
@@ -461,7 +461,7 @@ const f85World = (on: On, run20: string, env: Record<string, string> = {}) => {
 }
 
 for (const surface of SURFACES) {
-  test(`${surface}: F85 a workflow run - its mode, its script's phases and the next one; engage confirms, then submits /marathon-run`, async ($, on) => {
+  test(`${surface}: F85 a workflow run - its mode, its script's phases and the next one; engage confirms, then submits /gauntlet-run`, async ($, on) => {
     const [w, clock] = f85World(on, WF_RUN('@cc-old ' + stampAgo(45), ' '))
     await start($, clock)
     const ui = await runsTab($, surface)
@@ -476,11 +476,11 @@ for (const surface of SURFACES) {
     await ui.press({ key: 'engage:RUN-0020' })
     expect(w.submits).toEqual([])                             // the confirm, in this pane
     expect(await text('engage:title')).toBe('Engage RUN-0020?  Esc cancels')
-    expect(await text('engage:submits')).toBe('Submits  /skillator:marathon-run RUN-0020')
+    expect(await text('engage:submits')).toBe('Submits  /skillator:gauntlet-run RUN-0020')
     expect(await ui.find({ key: 'engage:queue' })).toBeUndefined()
     expect(await ui.find({ key: 'tab:runs' })).toBeUndefined()   // drawn in place of the tab
     await ui.press({ key: 'engage:go' })
-    expect(w.submits).toEqual(['/skillator:marathon-run RUN-0020'])
+    expect(w.submits).toEqual(['/skillator:gauntlet-run RUN-0020'])
     expect(w.runs.filter(a => a[2] === 'queue-run')).toEqual([])
     expect(await text('run:RUN-0020')).toBe('● RUN-0020  marathon  workflow · 1/3 done')   // the tab back
     await ui.unmount()
@@ -1029,23 +1029,23 @@ test('A196: native RunsTab Start Run form selects runner/mode/tickets, renders c
   // 1. Start Run button is rendered in RunsTab
   expect(await text('runs:start')).toBe('Start Run')
 
-  // 2. Pressing runs:start opens StartRunForm initialized with marathon + sequential + eligible open tickets
+  // 2. Pressing runs:start opens StartRunForm initialized with gauntlet-run + sequential + eligible open tickets
   await ui.press({ key: 'runs:start' })
   await ui.redraw()
-  expect(await text('start:runner')).toBe('Runner: marathon')
+  expect(await text('start:runner')).toBe('Runner: gauntlet-run')
   expect(await text('start:mode')).toBe('Mode: sequential')
-  expect(await text('start:preview')).toBe('Command  /marathon-run sequential F46 F47 F48 F49 B2')
+  expect(await text('start:preview')).toBe('Command  /gauntlet-run sequential F46 F47 F48 F49 B2')
 
   // 3. Toggle runner and mode via buttons and runsKey
   await ui.press({ key: 'start:runner' })
   await ui.redraw()
-  expect(await text('start:runner')).toBe('Runner: pending-subagent')
-  expect(await text('start:preview')).toBe('Command  /pending-subagent sequential F46 F47 F48 F49 B2')
+  expect(await text('start:runner')).toBe('Runner: pending-sentinel')
+  expect(await text('start:preview')).toBe('Command  /pending-sentinel sequential F46 F47 F48 F49 B2')
 
   await runsKey($, 'm')
   await ui.redraw()
   expect(await text('start:mode')).toBe('Mode: parallel')
-  expect(await text('start:preview')).toBe('Command  /pending-subagent parallel F46 F47 F48 F49 B2')
+  expect(await text('start:preview')).toBe('Command  /pending-sentinel parallel F46 F47 F48 F49 B2')
 
   // 4. Clear all tickets -> Confirm guards against empty ticket selection without submitting
   await ui.press({ key: 'start:clear' })
@@ -1060,8 +1060,8 @@ test('A196: native RunsTab Start Run form selects runner/mode/tickets, renders c
   await ui.press({ key: 'start:ticket:F46' })
   await ui.press({ key: 'start:ticket:B2' })
   await ui.redraw()
-  const expectedCmd = startRunCmd('pending-subagent', 'parallel', ['F46', 'B2'])
-  expect(expectedCmd).toBe('/pending-subagent parallel F46 B2')
+  const expectedCmd = startRunCmd('pending-sentinel', 'parallel', ['F46', 'B2'])
+  expect(expectedCmd).toBe('/pending-sentinel parallel F46 B2')
   expect(await text('start:preview')).toBe(`Command  ${expectedCmd}`)
 
   // 6. Cancel via Esc / start:cancel closes form without submitting
@@ -1074,7 +1074,7 @@ test('A196: native RunsTab Start Run form selects runner/mode/tickets, renders c
   await runsKey($, 's')
   await runsKey($, 'm')
   await ui.redraw()
-  const fullCmd = startRunCmd('marathon', 'parallel', ['F46', 'F47', 'F48', 'F49', 'B2'])
+  const fullCmd = startRunCmd('gauntlet-run', 'parallel', ['F46', 'F47', 'F48', 'F49', 'B2'])
   expect(await text('start:preview')).toBe(`Command  ${fullCmd}`)
   await startRunGo($)
   await ui.redraw()

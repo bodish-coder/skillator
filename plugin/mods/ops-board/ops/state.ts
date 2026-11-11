@@ -61,7 +61,7 @@ export type PersonField = 'handle' | 'name' | 'emails'
 export type DialogField = 'ticket' | 'who'
 export type StartRunField = 'runner' | 'mode' | 'tickets'
 export type StartRunMode = 'sequential' | 'parallel'
-export type StartRunRunner = '/pending-subagent' | '/marathon-run'
+export type StartRunRunner = 'pending-sentinel' | 'gauntlet-run'
 export type StartRunDraft = {
   runner: StartRunRunner
   mode: StartRunMode
@@ -935,7 +935,7 @@ export function openStartRun(s: State): Step {
     state: {
       ...s,
       startRun: {
-        runner: '/pending-subagent',
+        runner: 'pending-sentinel',
         mode: s.runMode ?? 'parallel',
         count: null,
         tickets: '',
@@ -987,14 +987,14 @@ export function startRunKey(s: State, k: Key): Step {
 
   if (sr.field === 'runner') {
     if (k.name === 'space' || k.name === 'left' || k.name === 'right') {
-      const nextRunner: StartRunRunner = sr.runner === '/pending-subagent' ? '/marathon-run' : '/pending-subagent'
+      const nextRunner: StartRunRunner = sr.runner === 'pending-sentinel' ? 'gauntlet-run' : 'pending-sentinel'
       return { state: { ...s, startRun: { ...sr, runner: nextRunner } }, effects: [] }
     }
     if (k.sequence === 'p' || k.sequence === 'P') {
-      return { state: { ...s, startRun: { ...sr, runner: '/pending-subagent' } }, effects: [] }
+      return { state: { ...s, startRun: { ...sr, runner: 'pending-sentinel' } }, effects: [] }
     }
     if (k.sequence === 'm' || k.sequence === 'M') {
-      return { state: { ...s, startRun: { ...sr, runner: '/marathon-run' } }, effects: [] }
+      return { state: { ...s, startRun: { ...sr, runner: 'gauntlet-run' } }, effects: [] }
     }
   } else if (sr.field === 'mode') {
     const cycleMode = (by: number): Step => {
@@ -1750,8 +1750,8 @@ export const SKILLS: SkillGuide[] = [
     "examples": [
       "/skillator:relay-morpheus",
       "/skillator:morpheus",
-      "/skillator:marathon-run",
-      "/skillator:marathon-plan"
+      "/skillator:gauntlet-run",
+      "/skillator:gauntlet-plan"
     ]
   },
   {
@@ -1989,7 +1989,7 @@ export const SKILLS: SkillGuide[] = [
       "/skillator:tickets-zordon",
       "/skillator:zordon",
       "/skillator:tickets-zordon F12",
-      "/skillator:list-tickets"
+      "/skillator:list-ticket-zordon"
     ]
   },
   {
@@ -2040,15 +2040,15 @@ export const SKILLS: SkillGuide[] = [
 
 export const COMMANDS: HelpItem[] = [
   {
-    id: "archive-tickets",
-    name: "/archive-tickets",
+    id: "archive-zordon",
+    name: "/archive-zordon",
     kind: "command",
     category: "Tickets & Board",
     aliases: [],
     summary: "Archive closed tickets: move [x]/[-] rows closed over 14 days to TICKETS-archive.md",
-    triggers: ["archive tickets", "archive-tickets", "clean closed tickets"],
+    triggers: ["archive-zordon", "archive tickets", "clean closed tickets"],
     usage: "Archive closed tickets: move [x]/[-] rows closed over 14 days (--days N) from TICKETS.md to TICKETS-archive.md (tickets-zordon).",
-    examples: ["/archive-tickets", "/archive-tickets --days 30"],
+    examples: ["/archive-zordon", "/archive-zordon --days 30"],
     hint: "[--days N]"
   },
   {
@@ -2064,51 +2064,51 @@ export const COMMANDS: HelpItem[] = [
     hint: "[--staged | --unstaged | --auto]"
   },
   {
-    id: "engage",
-    name: "/engage",
+    id: "engage-picard",
+    name: "/engage-picard",
     kind: "command",
     category: "Prompt & AI",
     aliases: [],
     summary: "Improve a rough prompt with AI, then carry it out immediately",
-    triggers: ["engage", "improve prompt", "picard"],
+    triggers: ["engage-picard", "improve prompt", "picard"],
     usage: "Improve the prompt written before (or after) this command with AI, then carry it out.",
-    examples: ["/engage", "/engage make the help tab responsive"],
+    examples: ["/engage-picard", "/engage-picard make the help tab responsive"],
     hint: "[rough prompt - empty uses previous message]"
   },
   {
-    id: "list-tickets",
-    name: "/list-tickets",
+    id: "list-ticket-zordon",
+    name: "/list-ticket-zordon",
     kind: "command",
     category: "Tickets & Board",
     aliases: [],
     summary: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state)",
-    triggers: ["list-tickets", "list tickets", "show board"],
-    usage: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state with counts).",
-    examples: ["/list-tickets", "/list-tickets status", "/list-tickets @sher", "/list-tickets F165"],
+    triggers: ["list-tickets", "list-ticket-zordon", "list tickets", "show board"],
+    usage: "List the TICKETS.md board the tickets-zordon way (by type; status groups by state with counts). On Claude Code the board also answers /list-tickets natively, without a model turn.",
+    examples: ["/list-ticket-zordon", "/list-ticket-zordon status", "/list-ticket-zordon @sher", "/list-ticket-zordon F165"],
     hint: "[status] [all] [app:<app>] [@person] [prefix|ID]"
   },
   {
-    id: "marathon-plan",
-    name: "/marathon-plan",
+    id: "gauntlet-plan",
+    name: "/gauntlet-plan",
     kind: "command",
     category: "Workflow & Runners",
     aliases: [],
     summary: "Plan a Workflow marathon over open tickets without executing agents",
-    triggers: ["marathon-plan", "plan marathon"],
+    triggers: ["gauntlet-plan", "plan marathon"],
     usage: "Plan a marathon from the saved Workflow data, using this host's delegate or session fallback (relay-morpheus run file + Workflow script).",
-    examples: ["/marathon-plan", "/marathon-plan sequential", "/marathon-plan parallel 2 F164 F165"],
+    examples: ["/gauntlet-plan", "/gauntlet-plan sequential", "/gauntlet-plan parallel 2 F164 F165"],
     hint: "[sequential|parallel] [N|max] [ticket ids]"
   },
   {
-    id: "marathon-run",
-    name: "/marathon-run",
+    id: "gauntlet-run",
+    name: "/gauntlet-run",
     kind: "command",
     category: "Workflow & Runners",
     aliases: [],
     summary: "Plan and run a marathon in one go, or run a saved marathon plan",
-    triggers: ["marathon-run", "run marathon"],
+    triggers: ["gauntlet-run", "run marathon"],
     usage: "Plan and run a marathon in one go over the open tickets, or run a saved plan (a RUN id). Dispatches stages, verifies each in its own phase, and lands diffs cleanly.",
-    examples: ["/marathon-run", "/marathon-run sequential", "/marathon-run RUN-0026"],
+    examples: ["/gauntlet-run", "/gauntlet-run sequential", "/gauntlet-run RUN-0026"],
     hint: "[sequential|parallel] [N|max] [ticket ids] | [RUN id]"
   },
   {
@@ -2142,33 +2142,33 @@ export const COMMANDS: HelpItem[] = [
     category: "Ops Board",
     aliases: [],
     summary: "Open the ops board (Tickets, Workflows, Health, Messages, Explorer, Build, Help)",
-    triggers: ["ops", "open ops", "launch ops board"],
-    usage: "Open the ops board (TICKETS.md board, runs, health, messages, explorer, build, help) for this repo in terminal or browser.",
+    triggers: ["ops", "skillator-ops", "open ops", "launch ops board"],
+    usage: "Open the ops board (TICKETS.md board, runs, health, messages, explorer, build, help) for this repo in terminal or browser. Claude Code and pi have /ops; on Codex use $skillator-ops, on Antigravity and OpenCode the plugin command skillator-ops.",
     examples: ["/ops", "/ops tickets", "/ops help", "/ops --open"],
     hint: "[terminal|tickets|workflows|health|messages|explorer|build|help]"
   },
   {
-    id: "pending-subagent",
-    name: "/pending-subagent",
+    id: "pending-sentinel",
+    name: "/pending-sentinel",
     kind: "command",
     category: "Workflow & Runners",
     aliases: [],
     summary: "Work open tickets to completion using autonomous subagents (sequential or parallel)",
-    triggers: ["pending-subagent", "work tickets", "work open tickets"],
+    triggers: ["pending-sentinel", "work tickets", "work open tickets"],
     usage: "Work the open tickets, or the IDs given, to the end with subagents: a relay-morpheus run, one fresh implementer per ticket, diff reviewed and landed.",
-    examples: ["/pending-subagent", "/pending-subagent sequential", "/pending-subagent parallel 2 F164 F165"],
+    examples: ["/pending-sentinel", "/pending-sentinel sequential", "/pending-sentinel parallel 2 F164 F165"],
     hint: "[sequential|parallel] [N|max] [ticket ids]"
   },
   {
-    id: "pending",
-    name: "/pending",
+    id: "skillator-pending",
+    name: "/skillator-pending",
     kind: "command",
     category: "Tickets & Board",
     aliases: [],
     summary: "Report what is pending - board counts, runs, sessions, unpushed commits, machine status",
-    triggers: ["pending", "what is pending", "board status"],
-    usage: "What is pending - board counts, runs, sessions, unpushed commits, machine (tickets-zordon pending script).",
-    examples: ["/pending"],
+    triggers: ["pending", "skillator-pending", "what is pending", "board status"],
+    usage: "What is pending - board counts, runs, sessions, unpushed commits, machine (tickets-zordon pending script). On Claude Code the board also answers /pending natively, without a model turn.",
+    examples: ["/skillator-pending"],
     hint: "[]"
   },
   {
@@ -2208,15 +2208,15 @@ export const COMMANDS: HelpItem[] = [
     hint: "[clone path]"
   },
   {
-    id: "sync-tickets",
-    name: "/sync-tickets",
+    id: "sync-zordon",
+    name: "/sync-zordon",
     kind: "command",
     category: "Tickets & Board",
     aliases: [],
     summary: "Sync open tickets: reconcile [!], [ ], and [~] statuses with git commits and baselines",
-    triggers: ["sync-tickets", "reconcile tickets", "sync board"],
+    triggers: ["sync-zordon", "reconcile tickets", "sync board"],
     usage: "Sync open tickets: propose the real status of every [!], [ ] and [~] row from ticket-meta reconcile, its line, commits and baselines, ask once, apply the accepted (tickets-zordon).",
-    examples: ["/sync-tickets", "/sync-tickets F165"],
+    examples: ["/sync-zordon", "/sync-zordon F165"],
     hint: "[IDs]"
   },
   {
@@ -2244,15 +2244,15 @@ export const COMMANDS: HelpItem[] = [
     hint: "[add @handle \"Name\" email | remove @handle | lead @handle | assign <ID> @handle | list]"
   },
   {
-    id: "verify-subagent",
-    name: "/verify-subagent",
+    id: "verify-shifu",
+    name: "/verify-shifu",
     kind: "command",
     category: "Workflow & Runners",
     aliases: [],
     summary: "Verify testing [%] tickets with fresh agents against acceptance criteria; records a PASS or FAIL note, the box stays [%]",
-    triggers: ["verify-subagent", "verify tickets", "verify testing"],
+    triggers: ["verify-shifu", "verify tickets", "verify testing"],
     usage: "Verify testing tickets: one fresh agent per [%] row re-checks its Done line against evidence and records a verdict note - verified PASS, or verified FAIL with what failed and why; the box never moves, OWNER gets no note (tickets-zordon). --deep (opt-in) also runs a code-vader review of the ticket's commits.",
-    examples: ["/verify-subagent", "/verify-subagent F165", "/verify-subagent --deep F165"],
+    examples: ["/verify-shifu", "/verify-shifu F165", "/verify-shifu --deep F165"],
     hint: "[--deep] [IDs]"
   }
 ];

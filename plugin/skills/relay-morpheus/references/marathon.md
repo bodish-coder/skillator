@@ -243,19 +243,19 @@ stop: watch-cortana's order first and alone, then the queue. A fresh
 `continue RUN-n`: `resume`, then `chain next` — `UNBLOCK` re-plans first without
 asking; `ASK` asks (that is the one question a resume may ask).
 
-## A saved Workflow marathon - /marathon-plan, /marathon-run (F73)
+## A saved Workflow marathon - /gauntlet-plan, /gauntlet-run (F73)
 
-The plan is written by `/marathon-plan [sequential|parallel] [N|max] [IDs]`, or
-planned and run in one go by `/marathon-run` with the same words, on every host;
+The plan is written by `/gauntlet-plan [sequential|parallel] [N|max] [IDs]`, or
+planned and run in one go by `/gauntlet-run` with the same words, on every host;
 Claude Code runs it with the Workflow tool, the other hosts with their delegate
-(below) or in-session. Typing `/marathon-run` is the explicit opt-in to run it.
+(below) or in-session. Typing `/gauntlet-run` is the explicit opt-in to run it.
 
 ### Mode - sequential or parallel (F112)
 
-`/marathon-run [sequential|parallel] [N|max] [IDs]` **or** `/marathon-run [RUN id]`.
+`/gauntlet-run [sequential|parallel] [N|max] [IDs]` **or** `/gauntlet-run [RUN id]`.
 
 - Mode first (optional): `sequential` or `parallel`. Then an optional count: a whole number ≥ 1 or `max`. Then optional ticket IDs. No mode and no count = `sequential`. A bare count still works (`2 F12`); `sequential` takes no count (`sequential 2`: say so and stop); `parallel 1` runs as `1`. No IDs = every open ticket on TICKETS.md (`[ ]`, `[~]`, `[!]` re-checked), picked through `ticket-meta pick` (F80).
-- A RUN id alone (`RUN-0019`) runs the plan `/marathon-plan` saved for it, as saved (today's behaviour). A mode or count beside a RUN id → say the saved plan fixes its shape (Legacy recovery below applies only to pre-F112 plans) and stop.
+- A RUN id alone (`RUN-0019`) runs the plan `/gauntlet-plan` saved for it, as saved (today's behaviour). A mode or count beside a RUN id → say the saved plan fixes its shape (Legacy recovery below applies only to pre-F112 plans) and stop.
 - Nothing typed: the one open run with a `.workflow.js` beside it and an unlanded stage → run it (today); two or more → list them and stop (today); none → plan over every open ticket, `sequential`, and run.
 - A first word that is neither a mode, a count, a ticket ID nor a RUN id (`0`, `two`) → say it is not an option and stop.
 
@@ -280,17 +280,17 @@ Record the normalized mode in `PLAN.mode` and `meta.description`: `sequential`, 
 or `parallel <N>` (N >= 2); `1` and `parallel 1` normalize to `sequential`.
 
 Planning (no RUN id) checks Legacy recovery below first for an explicit
-`/marathon-plan` selection; otherwise it runs `ticket-meta pick`, then:
+`/gauntlet-plan` selection; otherwise it runs `ticket-meta pick`, then:
 
 1. A picked ticket that is already a stage of an open run with a `.workflow.js` beside it is **skipped**, listed as `planned in RUN-<id>` — never two open runs over one ticket.
-2. For `/marathon-run` only: if every picked ticket sits in one such run and no mode or count was typed → run that run instead (`using RUN-<id>'s plan`); a mode or count typed → the RUN-id refusal above (the saved plan fixes its shape).
+2. For `/gauntlet-run` only: if every picked ticket sits in one such run and no mode or count was typed → run that run instead (`using RUN-<id>'s plan`); a mode or count typed → the RUN-id refusal above (the saved plan fixes its shape).
 3. Nothing left to plan → say so and stop (the `planned in` lines name what to run).
 
 On an in-session host a parallel plan runs serial; say so in the first line.
 
 ### Adaptive marathon-plan (F121)
 
-When `/marathon-plan` is invoked without arguments (no mode, no count, no IDs), instead
+When `/gauntlet-plan` is invoked without arguments (no mode, no count, no IDs), instead
 of silently defaulting to `sequential`, analyze open eligible tickets:
 1. `ticket-meta pick` finds open tickets (unassigned, or yours; skipping those already planned in an open run). Nothing left → say so, stop.
 2. Compute file disjointness from ticket bodies and git history: extract the files/directories each ticket touches or names in its body, or from recent commits/runs for related tickets.
@@ -303,13 +303,13 @@ of silently defaulting to `sequential`, analyze open eligible tickets:
    - Headless, chained or relay (or no interactive response): proceed with the recommendation without blocking.
    - Once confirmed, proceed with Plan below using the selected mode.
 
-When `/marathon-plan` is invoked with explicit arguments (mode, count, or ticket IDs), adaptive suggestion is bypassed and the specified arguments are used directly.
+When `/gauntlet-plan` is invoked with explicit arguments (mode, count, or ticket IDs), adaptive suggestion is bypassed and the specified arguments are used directly.
 
 ### Legacy recovery (A162)
 
 Read the saved `PLAN` as data, never execute the old script. Legacy means its
 `mode` property is absent, whether its keys are bare or quoted JSON keys.
-Only `/marathon-plan <mode> <IDs>` with explicit IDs can select recovery; the
+Only `/gauntlet-plan <mode> <IDs>` with explicit IDs can select recovery; the
 existing mode/count grammar and default apply, with no new flag or RUN argument.
 Before ordinary duplicate filtering, locate the one own open legacy run whose
 remaining ticket IDs exactly match the selection. All selected tickets must pass
@@ -336,7 +336,7 @@ a resolved replacement is followed to its existing pending successor exactly
 once. Completed `x` stages are never included in the regenerated phases.
 
 For ambiguous/mixed selections, list candidate runs and print one concrete
-`/marathon-plan sequential <IDs>` per candidate using that run's actual remaining
+`/gauntlet-plan sequential <IDs>` per candidate using that run's actual remaining
 ticket IDs (including any pending successor), not literal placeholders. No IDs
 never opts into recovery. A failed/held/active target also gets that command plus
 the blocker that must be settled first; do not imply rerunning it clears a hold.
@@ -355,11 +355,11 @@ Use the current template, fill only `meta` and `PLAN` (including normalized
 `PLAN.mode`) from those records, and keep its compiled driver unchanged.
 Validate the regenerated plan against the ledger and recheck liveness before
 replacing the script; a changed ledger/worker state aborts without replacement.
-Show the retained stages, phases, backup/script paths and `run it: /marathon-run
+Show the retained stages, phases, backup/script paths and `run it: /gauntlet-run
 RUN-<id>` with the actual run ID. Planning ends here, with no dispatch. A second
 call now sees a modern plan and skips it; it cannot repeatedly replace it.
 
-**Plan** (`/marathon-plan [sequential|parallel] [N|max] [IDs]`) - no agent runs, no `chain dispatch`, no Workflow call:
+**Plan** (`/gauntlet-plan [sequential|parallel] [N|max] [IDs]`) - no agent runs, no `chain dispatch`, no Workflow call:
 
 For an eligible legacy selection, use Legacy recovery above and stop; steps
 1-6 below create a new plan only.
@@ -390,22 +390,22 @@ For an eligible legacy selection, use Legacy recovery above and stop; steps
 6. Show it: the run file's stages, each phase with its tickets, codes and files,
    tickets left out and why, the agent count (2 per ticket - an implementer and
    a read-and-run-only verifier; the final stage is the main session's), the
-   script's path, and the line `run it: /marathon-run RUN-<0000>` with what runs
+   script's path, and the line `run it: /gauntlet-run RUN-<0000>` with what runs
    it on this host: Claude Code `(Workflow tool)`; cursor `(Task tool, one Task
    per agent)`; antigravity/agy `(background subagents)`; codex `(subagents)`;
    muse `(child agents)`; pi, opencode, gemini `(in-session, phases in order;
    pi with the subagent extension: that)`. The script is written on every host.
 
-**Run** (`/marathon-run [RUN id] | [sequential|parallel] [N|max] [IDs]`):
+**Run** (`/gauntlet-run [RUN id] | [sequential|parallel] [N|max] [IDs]`):
 a RUN id runs as saved; mode/count/IDs plan as Plan above, show it, then run
 without a pause. A mode or count beside a RUN id: the saved plan fixes its
 shape, stop. Nothing typed: one open planned run runs; two or more are listed
 and stop; none plans every open ticket sequentially and runs.
 
 1. `RM resume <id>`; the script is the run file's name with `.workflow.js`.
-   A missing script → say `/marathon-plan` writes it, stop. Read PLAN as text
+   A missing script → say `/gauntlet-plan` writes it, stop. Read PLAN as text
    first: a missing `mode` property means a pre-F112 plan; follow Legacy recovery
-   (A162), printing a concrete `/marathon-plan <mode> <IDs>` command for its
+   (A162), printing a concrete `/gauntlet-plan <mode> <IDs>` command for its
    remaining tickets, and stop before any dispatch. Quoted keys count too.
 2. Phase by phase, in order, skipping a phase whose stages are all `x`:
    `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,
@@ -452,9 +452,9 @@ Cursor, antigravity/agy, codex, muse, pi, opencode and gemini run the same
 
 1. `RM resume <id>`; read the `.workflow.js` beside the run file **as data**:
    `meta.phases` and `PLAN`. Never execute it (its tail throws without `args`).
-   A missing script → say `/marathon-plan` writes it, stop. Read PLAN as text
+   A missing script → say `/gauntlet-plan` writes it, stop. Read PLAN as text
    first: a missing `mode` property means a pre-F112 plan; follow Legacy recovery
-   (A162), printing a concrete `/marathon-plan <mode> <IDs>` command for its
+   (A162), printing a concrete `/gauntlet-plan <mode> <IDs>` command for its
    remaining tickets, and stop before any dispatch. Quoted keys count too.
 2. Phase by phase, in order, skipping a phase whose stages are all `x`:
    `RM chain decide`; use no RELAY_CHAIN_PARALLEL for sequential,

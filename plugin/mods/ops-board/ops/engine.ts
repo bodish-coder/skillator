@@ -214,11 +214,11 @@ export function makeEngine(o: EngineOpts): Engine {
       boardSig = sig
       moved = true
       if (!st) board = failed(path, `no TICKETS.md at ${root}`)
-      else if (st.size > MAX_READ) board = failed(path, 'TICKETS.md is over 4 MiB - not read; /archive-tickets moves the closed rows out')
+      else if (st.size > MAX_READ) board = failed(path, 'TICKETS.md is over 4 MiB - not read; /archive-zordon moves the closed rows out')
       else {
         // there but unreadable is its own error, never "no TICKETS.md" (same as the mod's loadBoard)
         try { board = parseBoard(await host.read(path), path, st.mtimeMs, st.size) }
-        catch (e) { board = failed(path, `TICKETS.md not loaded: ${String((e as Error)?.message ?? e)} - /archive-tickets moves the closed rows out`) }
+        catch (e) { board = failed(path, `TICKETS.md not loaded: ${String((e as Error)?.message ?? e)} - /archive-zordon moves the closed rows out`) }
       }
     }
     if (stopped) return

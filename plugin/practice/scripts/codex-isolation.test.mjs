@@ -29,7 +29,7 @@ test('copied installer and installed usage hooks pass; deleting a generated comm
   const resumed = isolation.resumeFixture(fixture.root);
   assert.deepEqual(resumed.expected, fixture.expected);
   const dest = join(fixture.env.CODEX_HOME, 'skills');
-  unlinkSync(join(dest, 'pending/SKILL.md'));
+  unlinkSync(join(dest, 'skillator-pending/SKILL.md'));
   assert.equal(commandProjection(fixture.source, dest).status, 'failed');
   assert.throws(() => isolation.resumeFixture(fixture.root));
 });
@@ -70,7 +70,7 @@ test('physical temp-root guard rejects junction/case aliases and CLI writes a bl
 test('native stdio protocol validates inventory, injection, trust and bounded child cleanup', async () => {
   const root = mkdtempSync(join(tmpdir(), 'codex-protocol-'));
   const env = isolatedEnv(root), project = join(root, 'project'); mkdirSync(project);
-  const sources = [join(project, 'AGENTS.md'), join(env.CODEX_HOME, 'AGENTS.md'), join(env.CODEX_HOME, 'skills/isolation-probe/SKILL.md'), join(env.CODEX_HOME, 'skills/pending/SKILL.md')];
+  const sources = [join(project, 'AGENTS.md'), join(env.CODEX_HOME, 'AGENTS.md'), join(env.CODEX_HOME, 'skills/isolation-probe/SKILL.md'), join(env.CODEX_HOME, 'skills/skillator-pending/SKILL.md')];
   for (const path of sources) { mkdirSync(resolve(path, '..'), { recursive: true }); writeFileSync(path, 'fixture-text'); }
   const hookSource = join(env.CODEX_HOME, 'hooks.json'), hookCommand = 'fixture-only-hook';
   writeFileSync(hookSource, JSON.stringify({ hooks: { Stop: [{ hooks: [{ command: hookCommand }] }] } }));

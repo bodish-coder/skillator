@@ -106,5 +106,5 @@ test('/list-tickets on a board it cannot read names the error, never "no TICKETS
   const out = await $.command.run({ command: 'list-tickets', args: '', ...RUN })
   expect(out.text).not.toContain('no TICKETS.md')
   expect(out.text).toContain('read budget exceeded')
-  expect(out.text).toContain('/archive-tickets')
+  expect(out.text).toContain('/archive-zordon')
 })
