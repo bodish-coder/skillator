@@ -317,6 +317,9 @@ for (const surface of SURFACES) {
     await pane.press({ key: 'key:assign' })
     expect(w.toasts).toEqual([])
     expect((await pane.find({ key: 'ticket' }))?.props.value).toBe('B1')
+    // With a ticket selected showForm focuses the who list: the Ticket field must
+    // not also carry autoFocus, or the ring (and letter hotkeys) would land on it.
+    expect((await pane.find({ key: 'ticket' }))?.props.autoFocus).toBeFalsy()
     expect(await title(pane)).toBe('Assign B1  Esc cancels')
     expect((await pane.find({ key: 'title' }))?.text).toBe('● pending  button focus ring missing')
     expect(await pane.find({ key: 'go' })).toBeDefined()
@@ -370,6 +373,7 @@ for (const surface of SURFACES) {
     await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: 'head:?', origin: { kind: 'person' } })
     await pane.press({ key: 'key:assign' })
     expect((await pane.find({ key: 'ticket' }))?.props.value).toBe('')
+    expect((await pane.find({ key: 'ticket' }))?.props.autoFocus).toBe(true)
     // The pane takes the keyboard: the ring starts where autoFocus says, through the
     // real ui.focus hook (which also disarms the form's letter hotkeys, F115).
     let ring: string | undefined
