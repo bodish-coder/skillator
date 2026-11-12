@@ -50,11 +50,11 @@ export async function readSkillDocHost($: HostApi, skillId: string): Promise<{ c
   }
 
   if (!docPath) {
-    // A222: the mod's own plugin root (<plugin>/mods/ops-board), only when it is skillator's plugin
-    // tree; then the repo's plugin/commands as a dev fallback
+    // A222: commands of skillator's plugin tree above the skills dir (only with its plugin.json) -
+    // installed, ops-board is a plugin of its own; then the repo's plugin/commands as a dev fallback
     const repo = await $.session.repo()
-    const plugin = up(norm($.plugin.root), 2)
-    const own = (await $.fs.exists(plugin + '/.claude-plugin/plugin.json')) ? plugin + '/commands' : null
+    const plugin = skills ? up(norm(skills), 1) : null
+    const own = plugin && (await $.fs.exists(plugin + '/.claude-plugin/plugin.json')) ? plugin + '/commands' : null
     const cmdDirs = [own, repo?.root && norm(repo.root) + '/plugin/commands']
     const doc = skillId === 'ops' ? 'skillator-ops' : skillId   // F171: /ops is documented by its plugin command
     for (const dir of cmdDirs) {

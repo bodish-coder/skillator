@@ -302,7 +302,9 @@ install_into() {
     rm -rf "$_dest/ops-board" && mkdir -p "$_dest/ops-board/hooks" "$_dest/ops-board/commands" &&
       cp -R "$root/mods/ops-board/hooks/lib" "$_dest/ops-board/hooks/" &&
       cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$root/mods/ops-board/pi" "$root/mods/ops-board/antigravity" "$_dest/ops-board/" &&
-      cp "$root"/commands/*.md "$root"/commands/*.txt "$_dest/ops-board/commands/"
+      for _f in "$root"/commands/*.md "$root"/commands/*.txt; do
+        if [ -f "$_f" ]; then cp "$_f" "$_dest/ops-board/commands/"; fi
+      done
     printf '%s\n' "$shipped" > "$_dest/$manifest"
     # F65: the source pointer - one line, the repo root this ran from (native form), so
     # /skillator-update can find a source on a host with no plugin cache
