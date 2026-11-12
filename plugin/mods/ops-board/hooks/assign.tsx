@@ -317,7 +317,7 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   // F77: the Ticket field - typed in any case; its line under it says what it resolves to.
   const typed = d.id.trim()
   const ticketField = Input
-    ? <Input key="ticket" label="Ticket  " placeholder="F12" value={d.id}
+    ? <Input key="ticket" label="Ticket  " placeholder="F12" value={d.id} autoFocus
         onInput={v => set(x => ({ ...x, id: v }))} onSubmit={v => set(x => ({ ...x, id: v }))} />
     : <Box key="ticket" flexDirection="row" flexWrap="wrap">{label('Ticket  ')}<Text>{typed || '(none - needs a keyboard surface)'}</Text></Box>
   const said = tk

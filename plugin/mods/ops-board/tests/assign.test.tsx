@@ -356,6 +356,46 @@ for (const surface of SURFACES) {
     await pane.unmount()
   })
 
+  // The owner's live check (2026-11-11, installed 4.22.0): the form opens, the Ticket
+  // field is the one to type in, but typed digits are ignored and pick no ticket. A real
+  // keypress takes the host's path, not pane.input on trust: when the pane takes the
+  // keyboard the ring starts on the drawn autoFocus element (SDK autoFocus); while an
+  // Input holds the ring every printable key reaches it alone (ui.input); off an Input
+  // a key presses the Button carrying it as hotkey; with the ring nowhere it is lost.
+  test(`${surface}: F77 typing f2 through the keyboard path resolves F2 and Assign runs on it`, WITH, async ($, on) => {
+    const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+    w.answer = () => ran('- [ ] F2 — /orders endpoint returns the last 20 orders [app: api] [decide: @asha]\n')
+    await start($, clock)
+    const pane = await mountPane($, surface)
+    await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: 'head:?', origin: { kind: 'person' } })
+    await pane.press({ key: 'key:assign' })
+    expect((await pane.find({ key: 'ticket' }))?.props.value).toBe('')
+    // The pane takes the keyboard: the ring starts where autoFocus says, through the
+    // real ui.focus hook (which also disarms the form's letter hotkeys, F115).
+    let ring: string | undefined
+    if ((await pane.find({ key: 'ticket' }))?.props.autoFocus) {
+      ring = 'ticket'
+      await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: ring, origin: { kind: 'person' } })
+    }
+    let text = ''
+    for (const ch of 'f2') {
+      const hot = ring === 'ticket' ? undefined : (await pane.findAll({ type: 'Button' })).find(b => b.props.hotkey === ch)
+      if (hot?.key) { await pane.press({ key: hot.key }); continue }
+      if (ring !== 'ticket') continue          // no ring on the field: the key goes nowhere
+      text += ch
+      await pane.input({ key: 'ticket', text, kind: 'change' })
+    }
+    expect((await pane.find({ key: 'ticket' }))?.props.value).toBe('f2')
+    expect(await title(pane)).toBe('Assign F2  Esc cancels')
+    expect((await pane.find({ key: 'title' }))?.text).toContain('/orders endpoint returns')
+    expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta assign F2 @vidul')
+    await pane.press({ key: 'go' })
+    expect(w.runs.filter(r => r.argv.join(' ').includes(META)).map(r => r.argv)).toEqual([['/bin/sh', META + '.sh', 'assign', 'F2', '@vidul']])
+    expect(w.toasts[0]).toContain('✓ F2 now pending, owned by @vidul: /orders endpoint returns the last 20 orders')
+    expect(w.writes).toEqual([])
+    await pane.unmount()
+  })
+
   test(`${surface}: F77 an unknown ID says no such ticket and offers no Assign`, WITH, async ($, on) => {
     const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
     await start($, clock)
