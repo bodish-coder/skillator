@@ -825,6 +825,25 @@ test('B14: the tab bar and the key rows wrap whole buttons', WITH, async ($, on)
   await ui.unmount()
 })
 
+// A221: Help's Run sends a plugin command as skillator:<id>; the mod-native /ops stays bare.
+test('A221: Help Run launches a plugin command as skillator:<id> and /ops bare', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  const ran: string[] = []
+  for (const command of ['skillator:gauntlet-run', 'gauntlet-run', 'skillator:ops', 'ops'])
+    on('command.run', { command }, ($, e) => { ran.push(e.command); return { text: 'ok' } })
+  on('ui.toast', () => ({ value: undefined }))
+  await start($, clock)
+  const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: 96 })
+  await ui.press({ key: 'tab:help' })
+  for (const id of ['gauntlet-run', 'ops']) {
+    await ui.press({ key: 'help:skill:' + id })
+    await ui.press({ key: 'help:run' })
+    await clock.settle()
+  }
+  expect(ran).toEqual(['skillator:gauntlet-run', 'ops'])
+  await ui.unmount()
+})
+
 for (const surface of SURFACES) {
   test(`${surface}: A199 personalized Assigned and Decide sections fold via pointer and keyboard, and refresh on user or reassignment changes`, WITH, async ($, on) => {
     const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })

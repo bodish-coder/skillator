@@ -73,11 +73,11 @@ export async function arrowHelp($: EngineInterface, by: number): Promise<boolean
 
 async function runSkill($: EngineInterface, skillId: string, rawArgs?: string): Promise<void> {
   const curArgs = (rawArgs ?? (await read($, helpArgsA))).trim()
-  const it = HELP_ITEMS.find(x => x.id === skillId)
-  const isCmd = it?.kind === 'command'
-  const cmd = isCmd ? `/${skillId}${curArgs ? ' ' + curArgs : ''}` : `/skillator:${skillId}${curArgs ? ' ' + curArgs : ''}`
+  // A221: /ops is the mod's own command; every other Help entry is a plugin skill or command, namespaced.
+  const command = skillId === 'ops' ? skillId : `skillator:${skillId}`
+  const cmd = `/${command}${curArgs ? ' ' + curArgs : ''}`
   try {
-    await $.command.run({ command: isCmd ? skillId : `skillator:${skillId}`, ...(curArgs ? { args: curArgs } : {}) })
+    await $.command.run({ command, ...(curArgs ? { args: curArgs } : {}) })
     $.ui.toast(`✓ Sent to session: ${cmd}`)
   } catch {
     try {
