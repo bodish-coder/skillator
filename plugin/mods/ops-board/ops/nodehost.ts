@@ -58,25 +58,17 @@ export async function readSkillDoc(host: Pick<Host, 'skillsDir' | 'repoRoot' | '
     }
   }
 
-  if (!resolvedDoc && host.repoRoot) {
-    const repoBase = norm(resolve(host.repoRoot))
-    const doc = skillId === 'ops' ? 'skillator-ops' : skillId   // F171: /ops is documented by its plugin command
-    const candMd = norm(resolve(repoBase, 'plugin', 'commands', `${doc}.md`))
-    if (candMd.startsWith(repoBase + '/')) {
-      const st = await host.stat(candMd)
-      if (st) {
-        resolvedDoc = candMd
-        displayPath = `plugin/commands/${doc}.md`
-      }
-    }
-    if (!resolvedDoc) {
-      const candTxt = norm(resolve(repoBase, 'plugin', 'commands', `${doc}.txt`))
-      if (candTxt.startsWith(repoBase + '/')) {
-        const st = await host.stat(candTxt)
-        if (st) {
-          resolvedDoc = candTxt
-          displayPath = `plugin/commands/${doc}.txt`
-        }
+  // A222: commands beside the installed skills first, the repo's plugin/commands as a dev fallback
+  const cmdDirs = [host.skillsDir && resolve(host.skillsDir, '..', 'commands'), host.repoRoot && resolve(host.repoRoot, 'plugin', 'commands')]
+  const doc = skillId === 'ops' ? 'skillator-ops' : skillId   // F171: /ops is documented by its plugin command
+  for (const dir of cmdDirs) {
+    if (resolvedDoc || !dir) continue
+    const base = norm(dir)
+    for (const ext of ['md', 'txt']) {
+      const cand = norm(resolve(base, `${doc}.${ext}`))
+      if (!resolvedDoc && cand.startsWith(base + '/') && await host.stat(cand)) {
+        resolvedDoc = cand
+        displayPath = `plugin/commands/${doc}.${ext}`
       }
     }
   }

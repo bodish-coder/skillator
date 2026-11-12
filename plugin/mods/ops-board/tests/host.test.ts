@@ -365,3 +365,9 @@ test('F171: Help doc for the ops entry is plugin/commands/skillator-ops.txt; a r
   expect(await readSkillDocHost($, 'ops')).toEqual({ code: 0, out: 'Open the ops board\n', err: '', path: 'plugin/commands/skillator-ops.txt' })
   expect(await readSkillDocHost($, 'skillator-pending')).toEqual({ code: 0, out: 'What is pending\n', err: '', path: 'plugin/commands/skillator-pending.md' })
 })
+
+test('A222: Help doc for a command loads from the installed plugin root when the repo has no plugin/commands', async () => {
+  const ops = '/s/commands/skillator-ops.txt'
+  const [$] = fake({ repo: { root: '/other', remote: null, internal: false, name: 'other' }, exists: ['/s/skills' + META, ops], files: { [ops]: 'Open the ops board\n' } })
+  expect(await readSkillDocHost($, 'ops')).toEqual({ code: 0, out: 'Open the ops board\n', err: '', path: 'plugin/commands/skillator-ops.txt' })
+})

@@ -388,3 +388,16 @@ test('A198: readSkillDoc loads bounded SKILL.md safely and rejects path traversa
   assert.match(rPend.out, /What is pending/)
 })
 
+test('A222: readSkillDoc loads a command doc from the installed plugin root when the repo has no plugin/commands', async () => {
+  const plug = mkTmp(join(tmpdir(), 'ops-plugroot-'))
+  const sDir = skills(join(plug, 'skills'))
+  mkdirSync(join(plug, 'commands'), { recursive: true })
+  writeFileSync(join(plug, 'commands/skillator-ops.txt'), 'Open the ops board\n')
+  const repo = mkTmp(join(tmpdir(), 'ops-otherrepo-'))
+  const host = await makeHost({ appDir: '/x', cwd: repo, skills: sDir })
+  const r = await readSkillDoc(host, 'ops')
+  assert.equal(r.code, 0, r.err)
+  assert.match(r.out, /Open the ops board/)
+  assert.match(r.argv[0] ?? '', /plugin\/commands\/skillator-ops\.txt/)
+})
+
