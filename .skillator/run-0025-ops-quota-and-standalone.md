@@ -1,15 +1,15 @@
 # RUN-0025 - ops quota and standalone clicks
 plan: TICKETS.md
-started: 2026-10-28T01:54Z   updated: 2026-10-28T01:58Z
+started: 2026-10-28T01:54Z   updated: 2026-11-07T18:35Z
 owner: @sher
 
 ## Stages
 | # | stage | state | owner | heartbeat | landed |
 |---|-------|-------|-------|-----------|--------|
-| 190 | B18 quota source repair | ~ | agy:review | 2026-10-28T02:28Z | - |
-| 191 | B19 standalone mouse clicks | ~ | agy:build | 2026-10-28T02:28Z | - |
-| 192 | independent review verify and install |   | - | - | - |
-| 193 | F117 cross-host command access |   | - | - | - |
+| 190 | B18 quota source repair | x | agy:review | 2026-10-28T08:05Z | 0c369a0 |
+| 191 | B19 standalone mouse clicks | x | agy:build | 2026-10-28T09:15Z | 7a92f61 |
+| 192 | independent review verify and install | x | main:agy | 2026-10-28T09:20Z | 622db30 |
+| 193 | F117 cross-host command access | > | main:agy | 2026-10-30T04:10Z | stage 210 (73c8391) |
 
 ## In flight
 

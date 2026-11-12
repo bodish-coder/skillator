@@ -1,6 +1,6 @@
 # RUN-0023 - pending F100-F104
 plan: TICKETS.md
-started: 2026-10-26T14:56Z   updated: 2026-10-27T17:20Z
+started: 2026-10-26T14:56Z   updated: 2026-11-07T18:35Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104
 branch: run/RUN-0023-pending-f100-f104
 
@@ -21,38 +21,13 @@ branch: run/RUN-0023-pending-f100-f104
 | 181 | AACA F110 rename skill-smith to skill-prometheus | x | subagent | 2026-10-27T08:47Z | d79cce6 |
 | 183 | AACC A159 explorer review leftovers | x | subagent | 2026-10-27T03:49Z | 72a17cd |
 | 184 | AACD F112 one marathon command, sequential or parallel | x | build:astra | 2026-10-27T11:23Z | 4a600823bbfe189a808babf690c019cbb6412d9a |
-| 185 | AACE B15 Workflows agents missing | ! | deep:astra | 2026-10-27T11:20Z | - |
+| 185 | AACE B15 Workflows agents missing | > | deep:astra | 2026-11-07T18:35Z | blocked B15 (926eaad) |
 | 186 | AACF AACF B16 reconcile form with nothing pressable | x | subagent | 2026-10-27T10:42Z | dbd023e4c3f97862aa35402e7597c064b1c5c721 |
 | 187 | AACG AACG F114 clone-odo for web Android iOS Windows | x | build:astra | 2026-10-27T11:17Z | 46a2f2d25c934c7bb9dfef007aaaca5af28a00f5 |
 | 188 | AACH F115 alphabet action shortcuts and B17 reconcile apply | x | build:astra | 2026-10-27T15:35Z | f02ad369bf4ef4ee30822af6dfdf3a548199557f |
 | 189 | AACI F116 individual ticket status and holo decision support | x | build:astra | 2026-10-27T16:57Z | f3c71d987fc696509b1a660a02be689654ead499 |
 
 ## In flight
-### stage 185 - AACE B15 Workflows agents missing  (dispatched 2026-10-27T11:10Z, @cx-resume)
-run: -
-worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s185
-branch: run/RUN-0023-pending-f100-f104-s185
-prompt: |
-  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
-
-  Ticket B15 (bug) - fix seat, tier deep: the cause is unknown. No design file: the ticket line is the spec. Follow root-cause-first (plugin/PRACTICE.md §7): reproduce, then find and name the cause with evidence, and only then fix it.
-
-  The ticket line, verbatim:
-  - [ ] B15 — Workflows tab does not show the run's agents. Owner 2026-10-27, while RUN-0023 ran F109, F110 and a design agent from this session: the agents section of the ops board's Workflows tab (F93) does not list them. The section is fed by pollAgents ($.agent.list, every 5 s while Workflows is shown) and noteSpawn on each Agent call (register.tsx ~508), so they should show; cause unknown - reproduce first (installed skillator 4.19.0 on Claude Code 2.1.310, background agents started with the Agent tool and resumed with SendMessage). Done when: the cause is named with evidence, a test reproduces it red, and the section lists every running and finished agent of the session green. [owner: @sher] (@cc-9de7d9)
-
-  Read first: plugin/mods/ops-board/hooks/agentstab.tsx (pollAgents, noteSpawn, readAgents, WorkflowsTab's agents section), hooks/lib/agents.ts (listed, kindOf, capAgents, agentOrder), hooks/register.tsx (the 5 s poll while Workflows is shown, the PostToolUse hooks around lines 500-530), hooks/pane.tsx, the existing tests (tests/agents*.test.tsx), and the host API types the plugin-authoring skill points to (types/claude-code.d.ts: $.agent.list's AgentInfo, the tool hook event shapes for an Agent call with run_in_background and for SendMessage). Questions to settle with evidence: does $.agent.list return background agents started by this session (and resumed ones)? does noteSpawn see a background Agent call's result (async launch: the result carries an agentId, not the agent's output)? does kindOf/capAgents/a filter drop them? is the section drawn at all when relay runs are listed? If the installed 4.19.0 mod differs from this branch in this code, say so - the owner runs 4.19.0.
-
-  If you cannot reproduce it in the test world from the types, STOP and report what you checked (a failed repro is a stop - do not guess a fix).
-
-  Files you may touch: plugin/mods/ops-board/hooks/agentstab.tsx, hooks/lib/agents.ts, hooks/register.tsx, types/index.d.ts, tests/agents*.test.tsx. Anything else -> stop and report. Verify: claude plugin test C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s185/plugin/mods/ops-board (all pass), the repro test red first then green; tsc with C:/Users/Ikran/AppData/Local/Temp/claude/C--tools-Projects-skillator2/147ee797-591f-4b4f-98fa-687ea69de7d9/scratchpad/tsconfig.f103.json (no output). Commit messages start with "B15: " and state the cause.
-
-  Work and commit in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0023-pending-f100-f104.s185 (branch run/RUN-0023-pending-f100-f104), never in the main checkout C:/tools/Projects/skillator2. Never push. Never edit TICKETS.md or any .skillator/run-*.md file.
-
-  In the worktree, run one plain command per call, by absolute path - never `cd` (or `Set-Location`) into it first. Git: `git -C "<worktree>" status`, `git -C "<worktree>" add <paths>`, `git -C "<worktree>" commit -m "..."`. Tests: the project's runner with the worktree path as its argument. No `&&` chains, no `$(...)`, no heredocs; read and edit files with the file tools, not shell redirection.
-
-  Report back: the root cause (with the line that causes it), the commit sha(s), files changed, the red then green test output, anything you could not verify, any unrelated problem (one line each).
-
-  Codex resume ruling: reproduce against current final F111 source and installed API types before any fix; failed repro is a stop. Work in the stage worktree named above. Do not spawn or commit. Stage minimal scoped fix and meaningful red/green regression, then report C:/tools/Projects/skillator2/.skillator/reports/s185-build.md for independent review before commit. Cached tsc is C:/Users/Ikran/AppData/Local/npm-cache/_npx/6bc7bae5c2059953/node_modules/typescript/bin/tsc; create your own local tsconfig in main .skillator/reports pointing to this stage and main installed plugin types, rather than the obsolete scratch config in the historical prompt. Full plugin checks, targeted root-cause evidence and tsc needed. Unix shell PATH first; git writes require escalation. Preserve F111 new pane behavior and B16 reconcile fix. Persist stdout/exit codes for any async suite before returning (agent session handles do not survive a returned turn). Final <15lines; never push or edit board/run ledgers.
 ## Chain
 driver: @cx-resume 2026-10-27T16:21Z     hold: -     mode: agents
 ### AABZ - stage 167 - F100 build-jarvis UI entry

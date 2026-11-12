@@ -11,3 +11,8 @@ Microsoft/
 # taskwork.sh scratch (briefs, reports, review packages)
 .taskwork/
 __pycache__/
+
+# relay scratch: run prompts, reports and logs
+.skillator/prompts/
+.skillator/reports/
+.skillator/*.log
