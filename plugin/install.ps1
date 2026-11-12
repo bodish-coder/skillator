@@ -858,7 +858,7 @@ function Invoke-SelfTest([string]$T) {
             '.codex\skills\message-uhura\SKILL.md', '.gemini\commands\message-uhura.toml', '.cursor\commands\message-uhura.md', '.pi\agent\prompts\message-uhura.md',
             '.config\opencode\commands\message-uhura.md', '.gemini\config\skills\message-uhura\SKILL.md',
             '.codex\skills\skillator-ops\SKILL.md', '.gemini\config\skills\skillator-ops\SKILL.md', '.gemini\skills\skillator-ops\SKILL.md', '.gemini\antigravity-cli\skills\skillator-ops\SKILL.md')
-  foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
+  foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.codex\skills\ops-board\commands\skillator-ops.txt', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
                            '.pi\agent\extensions\skillator-ops.ts', '.config\opencode\skills\tickets-zordon\SKILL.md',
@@ -1314,6 +1314,9 @@ foreach ($cli in $targets.Keys) {
       Copy-Item (Join-Path $mod 'pi') $board -Recurse -Force
       # F57: antigravity\, the same board as an Antigravity IDE extension (Write-AgyExt)
       Copy-Item (Join-Path $mod 'antigravity') $board -Recurse -Force
+      # A222: commands\, the plugin's own command docs, which the Help tab reads beside ops\
+      $boardCmds = New-Item -ItemType Directory -Force (Join-Path $board 'commands')
+      Copy-Item (Join-Path $PSScriptRoot 'commands\*') $boardCmds -Include '*.md', '*.txt' -Force
       # LF, no BOM - the same bytes install.sh writes, so either twin reads the other's
       [IO.File]::WriteAllText((Join-Path $dest $manifest), (($shipped -join "`n") + "`n"))
       # F65: the source pointer - one line, the repo root this ran from, so /skillator-update

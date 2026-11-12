@@ -19,6 +19,7 @@ export const errorText = (error: unknown): string => String((error as Error)?.me
 export type Host = {
   win: boolean
   skillsDir: string | null
+  appDir?: string                                    // A222: the app's own folder; installed, <dest>/ops-board/ops
   repoRoot: string                                   // board root: local TICKETS.md wins
   inboxDir?: string | null                          // common Git storage; absent/null = unavailable
   run(call: Call, args: string[], stdin?: string): Promise<RunResult> // never rejects; 30 s / 15 s budgets; cwd = repoRoot; stdin (F66) written then closed
@@ -37,7 +38,7 @@ export type Host = {
 export const SKILL_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
 export const MAX_SKILL_DOC_BYTES = 256 * 1024
 
-export async function readSkillDoc(host: Pick<Host, 'skillsDir' | 'repoRoot' | 'stat' | 'read'>, skillId: string): Promise<RunResult> {
+export async function readSkillDoc(host: Pick<Host, 'skillsDir' | 'appDir' | 'repoRoot' | 'stat' | 'read'>, skillId: string): Promise<RunResult> {
   if (!SKILL_ID_RE.test(skillId)) {
     return { code: 1, out: '', err: `Invalid skill ID: ${errorText(skillId)}`, argv: [] }
   }
@@ -58,8 +59,14 @@ export async function readSkillDoc(host: Pick<Host, 'skillsDir' | 'repoRoot' | '
     }
   }
 
-  // A222: commands beside the installed skills first, the repo's plugin/commands as a dev fallback
-  const cmdDirs = [host.skillsDir && resolve(host.skillsDir, '..', 'commands'), host.repoRoot && resolve(host.repoRoot, 'plugin', 'commands')]
+  // A222: commands of skillator's plugin tree above the skills dir (only with its plugin.json),
+  // then the installer's <dest>/ops-board/commands beside the app, then the repo's as a dev fallback
+  const plugin = host.skillsDir ? resolve(host.skillsDir, '..') : null
+  const cmdDirs = [
+    plugin && await host.stat(join(plugin, '.claude-plugin', 'plugin.json')) ? join(plugin, 'commands') : null,
+    host.appDir && resolve(host.appDir, '..', 'commands'),
+    host.repoRoot && resolve(host.repoRoot, 'plugin', 'commands'),
+  ]
   const doc = skillId === 'ops' ? 'skillator-ops' : skillId   // F171: /ops is documented by its plugin command
   for (const dir of cmdDirs) {
     if (resolvedDoc || !dir) continue
@@ -273,7 +280,7 @@ export async function makeHost(opts: { appDir: string; cwd: string; skills?: str
   const inboxDir = commonGitDir ? inboxDirOfCommonGitDir(commonGitDir) : null
   const abs = (p: string) => (isAbsolute(p) ? p : join(repoRoot, p))
   return {
-    win, skillsDir, repoRoot, inboxDir,
+    win, skillsDir, appDir: opts.appDir, repoRoot, inboxDir,
     async run(call, args, stdin) {
       if (call === 'team-login' || call === 'team-login-status') {
         if (args.length || stdin !== undefined) return { code: 1, out: '', err: 'Dev Tunnels actions accept no arguments or stdin.', argv: [] }

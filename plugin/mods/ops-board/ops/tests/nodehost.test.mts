@@ -392,6 +392,8 @@ test('A222: readSkillDoc loads a command doc from the installed plugin root when
   const plug = mkTmp(join(tmpdir(), 'ops-plugroot-'))
   const sDir = skills(join(plug, 'skills'))
   mkdirSync(join(plug, 'commands'), { recursive: true })
+  mkdirSync(join(plug, '.claude-plugin'), { recursive: true })
+  writeFileSync(join(plug, '.claude-plugin/plugin.json'), '{}')
   writeFileSync(join(plug, 'commands/skillator-ops.txt'), 'Open the ops board\n')
   const repo = mkTmp(join(tmpdir(), 'ops-otherrepo-'))
   const host = await makeHost({ appDir: '/x', cwd: repo, skills: sDir })
@@ -401,3 +403,31 @@ test('A222: readSkillDoc loads a command doc from the installed plugin root when
   assert.match(r.argv[0] ?? '', /plugin\/commands\/skillator-ops\.txt/)
 })
 
+test('A222: readSkillDoc never reads a commands/ folder beside a host skills dir without the plugin marker', async () => {
+  const cfg = mkTmp(join(tmpdir(), 'ops-hostcfg-'))
+  const sDir = skills(join(cfg, 'skills'))
+  mkdirSync(join(cfg, 'commands'), { recursive: true })
+  writeFileSync(join(cfg, 'commands/skillator-ops.md'), 'host prompt template\n')
+  writeFileSync(join(cfg, 'commands/team.md'), 'user team command\n')
+  const repo = mkTmp(join(tmpdir(), 'ops-otherrepo-'))
+  const host = await makeHost({ appDir: join(sDir, 'ops-board/ops'), cwd: repo, skills: sDir })
+  for (const id of ['ops', 'team']) {
+    const r = await readSkillDoc(host, id)
+    assert.equal(r.code, 1, id)
+    assert.equal(r.out, '')
+  }
+})
+
+test('A222: readSkillDoc loads a command doc from the installer-owned <dest>/ops-board/commands', async () => {
+  const dest = mkTmp(join(tmpdir(), 'ops-dest-'))
+  const sDir = skills(dest)
+  mkdirSync(join(dest, 'ops-board/ops'), { recursive: true })
+  mkdirSync(join(dest, 'ops-board/commands'), { recursive: true })
+  writeFileSync(join(dest, 'ops-board/commands/skillator-ops.txt'), 'Open the ops board\n')
+  const repo = mkTmp(join(tmpdir(), 'ops-otherrepo-'))
+  const host = await makeHost({ appDir: join(dest, 'ops-board/ops'), cwd: repo, skills: sDir })
+  const r = await readSkillDoc(host, 'ops')
+  assert.equal(r.code, 0, r.err)
+  assert.match(r.out, /Open the ops board/)
+  assert.equal(r.argv[0], 'plugin/commands/skillator-ops.txt')
+})

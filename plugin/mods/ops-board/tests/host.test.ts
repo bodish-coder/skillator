@@ -366,8 +366,16 @@ test('F171: Help doc for the ops entry is plugin/commands/skillator-ops.txt; a r
   expect(await readSkillDocHost($, 'skillator-pending')).toEqual({ code: 0, out: 'What is pending\n', err: '', path: 'plugin/commands/skillator-pending.md' })
 })
 
-test('A222: Help doc for a command loads from the installed plugin root when the repo has no plugin/commands', async () => {
+test('A222: Help doc for a command loads from the mod\'s own plugin root when the repo has no plugin/commands', async () => {
   const ops = '/s/commands/skillator-ops.txt'
-  const [$] = fake({ repo: { root: '/other', remote: null, internal: false, name: 'other' }, exists: ['/s/skills' + META, ops], files: { [ops]: 'Open the ops board\n' } })
+  const [$] = fake({ repo: { root: '/other', remote: null, internal: false, name: 'other' }, exists: ['/s/skills' + META, '/s/.claude-plugin/plugin.json', ops], files: { [ops]: 'Open the ops board\n' } })
   expect(await readSkillDocHost($, 'ops')).toEqual({ code: 0, out: 'Open the ops board\n', err: '', path: 'plugin/commands/skillator-ops.txt' })
+})
+
+test('A222: a commands/ folder beside a host skills dir without the plugin marker is never read as skillator\'s', async () => {
+  const base = '/h/.config/opencode', ops = base + '/commands/skillator-ops.md', team = base + '/commands/team.md'
+  const [$, seen] = fake({ root: base + '/skills/ops-board', repo: { root: '/other', remote: null, internal: false, name: 'other' }, exists: [base + '/skills' + META, ops, team], files: { [ops]: 'host prompt\n', [team]: 'user team\n' } })
+  expect((await readSkillDocHost($, 'ops')).code).toBe(1)
+  expect((await readSkillDocHost($, 'team')).code).toBe(1)
+  expect(seen.reads).toEqual([])
 })

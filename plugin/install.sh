@@ -290,6 +290,7 @@ install_into() {
   # F55: ops-board/ is the ops terminal app (hooks/lib, types, ops) - same refresh.
   # F56: and pi/, the same board as a pi extension (write_commands points pi at it).
   # F57: and antigravity/, the same board as an Antigravity IDE extension (put_agy_ext).
+  # A222: and commands/, the plugin's own command docs (*.md, *.txt), which the Help tab reads beside ops/.
   if [ -n "$dry" ]; then
     echo "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice/ references/ ops-board/ .skillator-source in $_dest"
     if [ "$_cli" = pi ]; then echo "        would list the three docs in $_dest/.ignore (pi skips them as skills)"; fi
@@ -298,9 +299,10 @@ install_into() {
     cp "$root/PLATFORMS.md" "$root/PRACTICE.md" "$root/WORKFLOW.md" "$_dest/"
     rm -rf "$_dest/practice" && cp -R "$root/practice" "$_dest/"
     rm -rf "$_dest/references" && cp -R "$root/references" "$_dest/"
-    rm -rf "$_dest/ops-board" && mkdir -p "$_dest/ops-board/hooks" &&
+    rm -rf "$_dest/ops-board" && mkdir -p "$_dest/ops-board/hooks" "$_dest/ops-board/commands" &&
       cp -R "$root/mods/ops-board/hooks/lib" "$_dest/ops-board/hooks/" &&
-      cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$root/mods/ops-board/pi" "$root/mods/ops-board/antigravity" "$_dest/ops-board/"
+      cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$root/mods/ops-board/pi" "$root/mods/ops-board/antigravity" "$_dest/ops-board/" &&
+      cp "$root"/commands/*.md "$root"/commands/*.txt "$_dest/ops-board/commands/"
     printf '%s\n' "$shipped" > "$_dest/$manifest"
     # F65: the source pointer - one line, the repo root this ran from (native form), so
     # /skillator-update can find a source on a host with no plugin cache
@@ -801,7 +803,7 @@ if [ -n "$selftest" ]; then
            .gemini/config/skills/gauntlet-plan/SKILL.md .gemini/skills/gauntlet-plan/SKILL.md .gemini/antigravity-cli/skills/gauntlet-plan/SKILL.md \
            .codex/skills/gauntlet-run/SKILL.md .gemini/commands/gauntlet-run.toml .cursor/commands/gauntlet-run.md .pi/agent/prompts/gauntlet-run.md \
            .gemini/config/skills/gauntlet-run/SKILL.md .gemini/skills/gauntlet-run/SKILL.md .gemini/antigravity-cli/skills/gauntlet-run/SKILL.md \
-           .codex/skills/ops-board/ops/app.ts .pi/agent/skills/ops-board/hooks/lib/board.ts \
+           .codex/skills/ops-board/ops/app.ts .codex/skills/ops-board/commands/skillator-ops.txt .pi/agent/skills/ops-board/hooks/lib/board.ts \
            .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json \
            .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
            .pi/agent/extensions/skillator-ops.ts .config/opencode/skills/tickets-zordon/SKILL.md \
