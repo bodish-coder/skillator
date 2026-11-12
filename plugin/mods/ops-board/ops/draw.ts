@@ -11,7 +11,7 @@ import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State, PointerAction, SkillGuide, HelpItem } from './state'
-import { activeUser, pointerModal, dialogLines, engageLines, filteredSkills, formLines, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
+import { activeUser, pointerModal, dialogLines, engageLines, filteredSkills, formLines, helpCommand, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
 import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { assignedTickets, buildModel, chipsOf, decideTickets, headKey, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -900,10 +900,8 @@ export function helpBody(s: State, room: number): Seg[][] {
   const contentRows: { segs: Seg[] }[] = []
 
   if (h.runPrompt !== null && h.runPrompt !== undefined) {
-    const cur = skills.find(x => x.id === h.selected) ?? HELP_ITEMS.find(x => x.id === h.selected)
-    const isCmd = cur?.kind === 'command'
     const pInner = Math.max(4, inner - 2)
-    const pTitle = cut(isCmd ? `Run /${h.selected}` : `Run skillator:${h.selected}`, Math.max(1, pInner - 4))
+    const pTitle = cut(`Run /${helpCommand(h.selected)}`, Math.max(1, pInner - 4))
     const pTop = `┌─ ${pTitle} ${'─'.repeat(Math.max(0, pInner - cells(pTitle) - 3))}┐`
     const argStr = cut(` Args: ${h.runPrompt}_`, pInner)
     const pMid = `│${argStr}${' '.repeat(Math.max(0, pInner - cells(argStr)))}│`

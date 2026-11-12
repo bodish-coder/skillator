@@ -829,6 +829,7 @@ test('B14: the tab bar and the key rows wrap whole buttons', WITH, async ($, on)
 test('A221: Help Run launches a plugin command as skillator:<id> and /ops bare', WITH, async ($, on) => {
   const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
   const ran: string[] = []
+  const labels: string[] = []
   for (const command of ['skillator:gauntlet-run', 'gauntlet-run', 'skillator:ops', 'ops'])
     on('command.run', { command }, ($, e) => { ran.push(e.command); return { text: 'ok' } })
   on('ui.toast', () => ({ value: undefined }))
@@ -837,10 +838,12 @@ test('A221: Help Run launches a plugin command as skillator:<id> and /ops bare',
   await ui.press({ key: 'tab:help' })
   for (const id of ['gauntlet-run', 'ops']) {
     await ui.press({ key: 'help:skill:' + id })
+    labels.push(labelOf(await ui.find({ key: 'help:run' })))
     await ui.press({ key: 'help:run' })
     await clock.settle()
   }
   expect(ran).toEqual(['skillator:gauntlet-run', 'ops'])
+  expect(labels).toEqual(['Run /skillator:gauntlet-run', 'Run /ops'])
   await ui.unmount()
 })
 

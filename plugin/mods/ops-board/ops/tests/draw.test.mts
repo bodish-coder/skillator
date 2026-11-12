@@ -868,13 +868,13 @@ test('F160/A198: 7 Help tab header, SKILL.md doc content, run prompt box, and wi
     },
   }
   const fPrompt = sized({ ...withPrompt, cols: 80, rows: 24 }).join('\n')
-  assert.match(fPrompt, /┌─ Run skillator:tickets-zordon/)
+  assert.match(fPrompt, /┌─ Run \/skillator:tickets-zordon/)
   assert.match(fPrompt, /Args: status_/)
   assert.match(fPrompt, /\[type args \(optional\)\] · \[enter confirm\] · \[esc cancel\]/)
 
   // ASCII mode uses ASCII box drawing
   const fAscii = screen({ ...withPrompt, cols: 80, rows: 24 }, { color: false, ascii: true, plain: true }).lines.join('\n')
-  assert.match(fAscii, /\+- Run skillator:tickets-zordon/)
+  assert.match(fAscii, /\+- Run \/skillator:tickets-zordon/)
 
   // Mouse hitboxes for help-run, help-copy, and filter bar
   const sc = screen(hState, P)
@@ -971,7 +971,7 @@ test('F165: Help catalog renders skills and commands with brief explanations and
   assert.match(fExp, /─── Command Documentation/)
   assert.match(fExp, /Command markdown body for archive-tickets/)
 
-  // 5. Command run prompt renders Run /<id>
+  // 5. Command run prompt renders what Run sends: Run /skillator:<id> (A221)
   const runPromptState: State = {
     ...cmdState,
     help: {
@@ -980,7 +980,7 @@ test('F165: Help catalog renders skills and commands with brief explanations and
     },
   }
   const fPrompt = sized({ ...runPromptState, cols: 80, rows: 24 }).join('\n')
-  assert.match(fPrompt, /┌─ Run \/archive-zordon/)
+  assert.match(fPrompt, /┌─ Run \/skillator:archive-zordon/)
   assert.match(fPrompt, /Args: --days 30_/)
 
   // 6. Hitboxes on command rows

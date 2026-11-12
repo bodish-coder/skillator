@@ -1344,6 +1344,14 @@ test('A196 + A197: startRunCmd canonical parity, eligibleRunTickets, parseFollow
   assert.equal(noPend.state.toast, 'No pending stages left in RUN-0012 to push')
 })
 
+test('A221 state: Help Run copies a plugin command as /skillator:<id>; /ops stays bare', () => {
+  for (const [id, want] of [['gauntlet-run', '/skillator:gauntlet-run'], ['ops', '/ops']]) {
+    const s = reduce(openHelp(s0, id).state, { name: 'r' }).state
+    const run = reduce(s, { name: 'return' }).effects.find(e => e.kind === 'copy') as any
+    assert.equal(run?.text, want)
+  }
+})
+
 test('F169 state: /verify-shifu help hint advertises --deep', () => {
   const item = HELP_ITEMS.find(i => i.id === 'verify-shifu')
   assert.ok(item?.hint?.includes('--deep'))
@@ -1379,16 +1387,16 @@ test('F165 state: Help catalog includes commands, supports command execution, co
   }
   assert.equal(s.help?.runPrompt, '@sher status')
 
-  // Press Enter to confirm run: must produce /list-ticket-zordon @sher status (NOT /skillator:...)
+  // Press Enter to confirm run: a plugin command runs namespaced (A221)
   const runStep = reduce(s, { name: 'return' })
   assert.equal(runStep.state.help?.runPrompt, null)
   const runEff = runStep.effects.find(e => e.kind === 'copy') as any
   assert.ok(runEff, 'Expected clipboard copy effect for running command')
-  assert.equal(runEff.text, '/list-ticket-zordon @sher status')
+  assert.equal(runEff.text, '/skillator:list-ticket-zordon @sher status')
 
   // Settle run effect
   const sAfterRun = settle(runEff.then(ok(''))(runStep.state)).state
-  assert.match(sAfterRun.toast ?? '', /Ready to run: \/list-ticket-zordon @sher status/)
+  assert.match(sAfterRun.toast ?? '', /Ready to run: \/skillator:list-ticket-zordon @sher status/)
 
   // 5. Expand command details and ensure skill-doc effect is emitted
   const enterStep = reduce(openHelp(s0, 'list-ticket-zordon').state, { name: 'return' })

@@ -2259,6 +2259,9 @@ export const COMMANDS: HelpItem[] = [
 
 export const HELP_ITEMS: HelpItem[] = [...SKILLS, ...COMMANDS];
 
+// A221: /ops is the mod's own command; every other Help entry is a plugin skill or command, namespaced.
+export const helpCommand = (id: string): string => id === 'ops' ? 'ops' : 'skillator:' + id
+
 export function filteredSkills(filter: string): HelpItem[] {
   const q = filter.trim().toLowerCase()
   if (!q) return HELP_ITEMS
@@ -2342,10 +2345,7 @@ export function helpKey(s: State, k: Key): Step {
     }
     if (k.name === 'return' || k.name === 'enter') {
       const args = h.runPrompt.trim()
-      const cur = skills.find(x => x.id === h.selected) ?? HELP_ITEMS.find(x => x.id === h.selected)
-      const isCmd = cur?.kind === 'command'
-      const prefix = isCmd ? '/' : '/skillator:'
-      const cmd = `${prefix}${h.selected}${args ? ' ' + args : ''}`
+      const cmd = `/${helpCommand(h.selected)}${args ? ' ' + args : ''}`
       return {
         state: { ...s, help: { ...h, runPrompt: null } },
         effects: [{
