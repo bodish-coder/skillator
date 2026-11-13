@@ -91,9 +91,165 @@ th{font-family:var(--mono);font-size:.6875rem;text-transform:uppercase;letter-sp
 button{font:inherit;font-size:.8125rem;padding:.4rem .8rem;border-radius:4px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--ink);cursor:pointer;min-height:44px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 @media print{body{max-width:none} .no-print{display:none!important}}
+.tl-svg{max-width:none;height:auto}
+.tl-axis{font-family:var(--mono);font-size:10.5px;fill:var(--mid)}
+.tl-axisline{stroke:var(--rule);stroke-width:1.5}
+.tl-n{font-family:var(--mono);font-size:11px;fill:var(--ink)}
+.tl-cpbadge{font-family:var(--mono);font-size:10px;font-weight:700;fill:var(--accent)}
+.tl-bar{fill:var(--inflight-bg);stroke:var(--inflight);stroke-width:1.5}
+.tl-pt{fill:var(--accent);stroke:var(--accent)}
+.tl-cp{font-family:var(--mono);font-size:.8125rem}
+.tl-rail{list-style:none;margin:1rem 0 0;padding:0}
+.tl-filters{display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0}
+[data-critical="1"]{border-left:3px solid var(--accent)}
+@media print{.tl-svg,.tl-filters{display:none!important}}
 `;
 
-export const FORMAT_RENDERERS = {};
+// ------------------------------------------------------------- timeline ----
+export function timelineModel(run, layoutData) {
+  const events = [];
+  const add = (raw, kind, label, extra = {}) => {
+    const at = parseTime(raw);
+    if (at !== null) events.push({ at, raw: String(raw), kind, label, ...extra });
+  };
+  add(run.started, "started", "run started");
+  add(run.updated, "updated", "run updated");
+  for (const s of run.stages) {
+    add(s.dispatchedAt, "dispatched", `stage ${s.n} dispatched`, { n: s.n });
+    add(s.heartbeat, "heartbeat", `stage ${s.n} heartbeat`, { n: s.n });
+  }
+  for (const q of run.qs) {
+    add(q.ts, "decision", `${q.id} ${q.state}`, { q: q.id });
+    add(q.f.answered, "answered", `${q.id} answered`, { q: q.id });
+    add(q.f.ruled, "ruled", `${q.id} ruled`, { q: q.id });
+  }
+  events.sort((a, b) => a.at - b.at);
+  const distinct = [...new Set(events.map((e) => e.at))];
+  const window = distinct.length >= 2 ? { start: distinct[0], end: distinct[distinct.length - 1] } : null;
+  // Longest after: chain by stage count; memoised DFS, in-stack guard on cycles.
+  const byN = new Map(run.stages.map((s) => [s.n, s]));
+  const memo = new Map();
+  const chain = (n, stack) => {
+    if (memo.has(n)) return memo.get(n);
+    if (stack.has(n)) return null; // cyclic branch contributes nothing
+    stack.add(n);
+    let best = null;
+    for (const d of [...(byN.get(n)?.after ?? [])].sort((a, b) => a - b)) {
+      if (!byN.has(d)) continue;
+      const c = chain(d, stack);
+      if (c && (!best || c.length > best.length)) best = c;
+    }
+    stack.delete(n);
+    const out = [...(best ?? []), n];
+    memo.set(n, out);
+    return out;
+  };
+  let criticalPath = [];
+  for (const s of [...run.stages].sort((a, b) => a.n - b.n)) {
+    const c = chain(s.n, new Set());
+    if (c.length > criticalPath.length) criticalPath = c;
+  }
+  const crit = new Set(criticalPath);
+  const pos = layoutData?.pos ?? new Map();
+  const rows = run.stages.map((s) => {
+    const p = pos.get(s.n) ?? { col: 0, lane: 0 };
+    const from = parseTime(s.dispatchedAt), to = parseTime(s.heartbeat);
+    const bar = from !== null && to !== null && to >= from ? { from, to, kind: "observed" } : null;
+    const points = [];
+    if (from !== null) points.push({ at: from, kind: "dispatched", raw: s.dispatchedAt });
+    if (to !== null) points.push({ at: to, kind: "heartbeat", raw: s.heartbeat });
+    return { n: s.n, code: s.code, name: s.name, state: s.state, st: s.st, lane: p.lane, col: p.col, bar, points, critical: crit.has(s.n) };
+  }).sort((a, b) => a.lane - b.lane || a.n - b.n);
+  const laneCount = rows.length ? Math.max(...rows.map((r) => r.lane)) + 1 : 0;
+  return { window, events, rows, criticalPath, laneCount, stepCount: layoutData?.cols?.length ?? 0 };
+}
+
+const TL_SCRIPT = `
+(function(){
+  var status = document.getElementById("tl-count");
+  function show(lane){
+    var n = 0;
+    document.querySelectorAll("[data-tl-row]").forEach(function(el){
+      var on = lane === "all" || el.getAttribute("data-lane") === lane;
+      el.hidden = !on; if (on) n++;
+    });
+    document.querySelectorAll("[data-lane-btn]").forEach(function(b){
+      b.setAttribute("aria-pressed", b.getAttribute("data-lane-btn") === lane ? "true" : "false");
+    });
+    if (status) status.textContent = n + " stage row" + (n === 1 ? "" : "s") + " shown";
+  }
+  document.querySelectorAll("[data-lane-btn]").forEach(function(b){
+    b.addEventListener("click", function(){ show(b.getAttribute("data-lane-btn")); });
+  });
+})();
+`;
+
+export function renderTimeline(run, ctx) {
+  const m = timelineModel(run, ctx.layout);
+  const byN = new Map(run.stages.map((s) => [s.n, s]));
+  const head = `<header><h1>${esc(run.id)} <span class="t">\u00b7 ${esc(run.title)}</span></h1>` +
+    `<p class="sub">timeline \u00b7 recorded times only \u00b7 ${m.rows.length} stages \u00b7 ${m.laneCount} lanes \u00b7 ${m.stepCount} steps</p></header>`;
+  if (!run.stages.length) {
+    const times = m.events.length
+      ? `<h2>Recorded times</h2><ul>${m.events.map((e) => `<li class="mono">${esc(e.raw)} \u00b7 ${esc(e.label)}</li>`).join("")}</ul>`
+      : "";
+    return head + `<p class="empty">No stage rows in this run file.</p>` + times;
+  }
+  const cpLine = m.criticalPath.length
+    ? `<p class="tl-cp">critical path (longest after: chain, by stage count): ${m.criticalPath.join(" -&gt; ")} (${m.criticalPath.length} stages)</p>`
+    : `<p class="tl-cp">critical path (longest after: chain, by stage count): none recorded</p>`;
+  const lanes = [...new Set(m.rows.map((r) => r.lane))].sort((a, b) => a - b);
+  const filters = `<div class="tl-filters no-print" role="group" aria-label="Lane filter">` +
+    `<button type="button" data-lane-btn="all" aria-pressed="true">all lanes</button>` +
+    lanes.map((k) => `<button type="button" data-lane-btn="${k}" aria-pressed="false">lane ${k + 1}</button>`).join("") +
+    `</div><p id="tl-count" class="sub" aria-live="polite"></p>`;
+  let chart = "";
+  if (m.window) {
+    const W = 880, rowH = 30, top = 34, left = 150;
+    const H = top + m.rows.length * rowH + 24;
+    const x = (at) => left + ((at - m.window.start) / Math.max(1, m.window.end - m.window.start)) * (W - left - 16);
+    const startRaw = m.events.find((e) => e.at === m.window.start)?.raw ?? "";
+    const endRaw = [...m.events].reverse().find((e) => e.at === m.window.end)?.raw ?? "";
+    const groups = m.rows.map((r, i) => {
+      const y = top + i * rowH;
+      const s = byN.get(r.n);
+      const bar = r.bar ? `<rect class="tl-bar s-${r.state}" x="${x(r.bar.from).toFixed(1)}" y="${y + 9}" width="${Math.max(2, x(r.bar.to) - x(r.bar.from)).toFixed(1)}" height="10" rx="2"><title>observed: dispatched -&gt; last heartbeat</title></rect>` : "";
+      const pts = r.points.map((p) => {
+        const px = x(p.at).toFixed(1);
+        return p.kind === "heartbeat"
+          ? `<path class="tl-pt" d="M${px},${y + 6} L${(x(p.at) + 6).toFixed(1)},${y + 14} L${px},${y + 22} L${(x(p.at) - 6).toFixed(1)},${y + 14} Z"><title>heartbeat ${esc(p.raw)}</title></path>`
+          : `<circle class="tl-pt" cx="${px}" cy="${y + 14}" r="4"><title>dispatched ${esc(p.raw)}</title></circle>`;
+      }).join("");
+      return `<g class="tl-row s-${r.state}" data-tl-row data-stage="${r.n}" data-lane="${r.lane}"${r.critical ? ' data-critical="1"' : ""} tabindex="0">` +
+        `<title>stage ${r.n} ${esc(r.code)} ${esc(r.name)} - ${LABEL[r.state] || r.state}</title>` +
+        `<circle class="dot" cx="10" cy="${y + 14}" r="5"/><text class="tl-n" x="20" y="${y + 18}">#${r.n} ${esc(clip(r.code || r.name, 14))}</text>` +
+        (r.critical ? `<text class="tl-cpbadge" x="118" y="${y + 18}">CP</text>` : "") + bar + pts + `</g>`;
+    }).join("");
+    chart = `<div class="scroll"><svg class="tl-svg" role="img" aria-label="Timeline of ${esc(run.id)} from recorded times" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
+      `<text class="tl-axis" x="${left}" y="16">${esc(startRaw)}</text><text class="tl-axis" x="${W - 16}" y="16" text-anchor="end">${esc(endRaw)}</text>` +
+      `<line class="tl-axisline" x1="${left}" y1="22" x2="${W - 16}" y2="22"/>` + groups + `</svg></div>`;
+  } else {
+    chart = `<p class="empty">Not enough recorded times to draw a scale.</p>` +
+      (m.events.length ? `<h2>Recorded times</h2><ul>${m.events.map((e) => `<li class="mono">${esc(e.raw)} \u00b7 ${esc(e.label)}</li>`).join("")}</ul>` : "");
+  }
+  const rail = `<ol class="tl-rail">${m.rows.map((r) => {
+    const s = byN.get(r.n);
+    return `<li class="rail-row s-${r.state}" data-tl-row data-stage="${r.n}" data-lane="${r.lane}"${r.critical ? ' data-critical="1"' : ""}>` +
+      `<span class="dot" aria-hidden="true"></span><span class="sn">${r.n}</span>` +
+      `<span class="sname">${r.code ? `<b>${esc(r.code)}</b> ` : ""}${esc(r.name)}<span class="sfiles">lane ${r.lane + 1} \u00b7 step ${r.col + 1}${r.critical ? ` \u00b7 CP` : ""}</span></span>` +
+      `<span class="sst">${LABEL[r.state] || r.state}${r.state === "unknown" ? " (" + esc(r.st) + ")" : ""}</span></li>`;
+  }).join("")}</ol>`;
+  const table = `<h2>Recorded times</h2><div class="scroll"><table class="tl-table"><thead><tr><th>#</th><th>stage</th><th>state</th><th>dispatched</th><th>heartbeat</th><th>landed</th><th>note</th></tr></thead><tbody>` +
+    m.rows.map((r) => {
+      const s = byN.get(r.n);
+      const note = r.bar ? "observed window: dispatched -&gt; last heartbeat" : "duration not recorded";
+      return `<tr data-stage="${r.n}" data-lane="${r.lane}"><td>${r.n}</td><td>${r.code ? esc(r.code) + " " : ""}${esc(r.name)}</td><td>${LABEL[r.state] || r.state}</td>` +
+        `<td class="mono">${esc(s.dispatchedAt || "-")}</td><td class="mono">${esc(s.heartbeat)}</td><td class="mono">${esc(s.landed)}</td><td>${note}</td></tr>`;
+    }).join("") + `</tbody></table></div>`;
+  return head + cpLine + filters + chart + rail + table + `<script>${TL_SCRIPT}</script>`;
+}
+
+export const FORMAT_RENDERERS = { timeline: renderTimeline };
 
 export function formatPage(run, format, opts = {}) {
   if (!FORMATS.includes(format)) throw new Error(`unknown format ${format} (timeline, executive, runbook, mindmap)`);

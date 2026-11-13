@@ -5,7 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { parseRun, render, artifactPage, standalonePage, renderAscii, parseArgs, layout } from "./holo.mjs";
-import { FORMATS, THEMES, parseTime, themeCss, formatPage } from "./formats.mjs";
+import { FORMATS, THEMES, parseTime, themeCss, formatPage, timelineModel } from "./formats.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fx = (n) => readFileSync(join(HERE, "fixtures", n), "utf8");
@@ -47,4 +47,25 @@ test("default output byte-identical; explicit theme only adds data-theme + theme
   assert.ok(themed.includes(themeCss("contrast")) && themeCss("contrast").includes('[data-theme="contrast"]'));
   assert.equal(themeCss("dark"), "");
   assert.equal(themeCss(undefined), "");
+});
+
+test("timeline: bars only from recorded dispatched->heartbeat, critical path by stage count", () => {
+  const run = parseRun(fx("fixture-all-states.md"));
+  const m = timelineModel(run, layout(run));
+  assert.deepEqual(m.criticalPath, [1, 2, 4], "longest after: chain 1->2->4");
+  const s2 = m.rows.find((r) => r.n === 2);
+  assert.deepEqual([s2.bar.from, s2.bar.to], [Date.parse("2026-09-01T11:00Z"), Date.parse("2026-09-01T11:50Z")], "observed window");
+  assert.equal(m.rows.find((r) => r.n === 1).bar, null, "landed sha is not an end time");
+  assert.ok(m.rows.every((r) => r.lane >= 0) && m.laneCount >= 1);
+  const html = formatPage(run, "timeline", { layout: layout(run) });
+  assert.ok(html.includes('data-format="timeline"') && html.includes('class="tl-svg"') && html.includes('data-critical="1"'));
+  assert.ok(html.includes("critical path (longest after: chain, by stage count): 1 -&gt; 2 -&gt; 4"), "labelled chain, HTML-escaped arrow");
+  assert.ok(!/duration: \d/.test(html), "no invented duration");
+});
+
+test("timeline: no stages and thin times still render", () => {
+  const empty = parseRun("# RUN-7 - empty\n");
+  const m = timelineModel(empty, layout(empty));
+  assert.equal(m.window, null);
+  assert.ok(formatPage(empty, "timeline", { layout: layout(empty) }).includes("No stage rows in this run file."));
 });

@@ -1428,6 +1428,13 @@ function selftest() {
   ok(wp.includes("comparison-matrix") && wp.includes("blast-radius-chips") && wp.includes("mini-stage-graph") && wp.includes("shortcuts-dlg") && wp.includes("copy-cmds") && wp.includes("dashboard-summary"), "wizard upgrades: matrix view, blast-radius chips, mini stage-graph, shortcuts dialog, command copy, and summary metrics");
   ok(renderArchitecturalSvg(set.decisions[0], set.decisions[0].options[0]).includes('class="arch-flow-svg"') && renderParallelLanesSvg(set.decisions[0], set.decisions[0].options).includes('class="parallel-lanes-svg"'), "wizard upgrades: renderArchitecturalSvg and renderParallelLanesSvg produce inline SVG");
 
+  // F164 timeline: recorded windows only, critical path by stage count.
+  const tlPage = formatPage(run, "timeline", { layout: layout(run) });
+  ok(tlPage.includes('data-format="timeline"') && tlPage.includes('class="tl-svg"') && tlPage.includes("1 -&gt; 2 -&gt; 4"), "F164 timeline: standalone page, labelled critical path");
+  ok((tlPage.match(/class="rail-row/g) || []).length === rows.length, "F164 timeline: one rail row per stage", (tlPage.match(/class="rail-row/g) || []).length);
+  ok(!tlPage.includes("NaN"), "F164 timeline: no NaN");
+  ok(formatPage(parseRun("# RUN-7 - empty\n"), "timeline", { layout: layout(parseRun("# RUN-7 - empty\n")) }).includes("No stage rows in this run file."), "F164 timeline: no-stage run renders");
+
   if (fails) { console.error(`selftest: ${fails} failed`); process.exitCode = 1; } else console.log("selftest: ok");
 }
 
