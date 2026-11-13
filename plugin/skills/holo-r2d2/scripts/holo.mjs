@@ -1434,6 +1434,10 @@ function selftest() {
   ok((tlPage.match(/class="rail-row/g) || []).length === rows.length, "F164 timeline: one rail row per stage", (tlPage.match(/class="rail-row/g) || []).length);
   ok(!tlPage.includes("NaN"), "F164 timeline: no NaN");
   ok(formatPage(parseRun("# RUN-7 - empty\n"), "timeline", { layout: layout(parseRun("# RUN-7 - empty\n")) }).includes("No stage rows in this run file."), "F164 timeline: no-stage run renders");
+  const exPage = formatPage(run, "executive", {});
+  ok(exPage.includes('class="kpi-band"') && exPage.includes('class="audit-table"') && (exPage.match(/<tr>/g) || []).length >= run.qs.length, "F164 executive: KPI band and one audit row per decision");
+  ok(!/<script/.test(exPage), "F164 executive: static, no script");
+  ok(exPage.includes("25%"), "F164 executive: done percent from landed + replanned");
 
   if (fails) { console.error(`selftest: ${fails} failed`); process.exitCode = 1; } else console.log("selftest: ok");
 }

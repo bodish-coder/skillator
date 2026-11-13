@@ -103,6 +103,14 @@ button{font:inherit;font-size:.8125rem;padding:.4rem .8rem;border-radius:4px;bor
 .tl-filters{display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0}
 [data-critical="1"]{border-left:3px solid var(--accent)}
 @media print{.tl-svg,.tl-filters{display:none!important}}
+.kpi-band{display:flex;flex-wrap:wrap;border:1px solid var(--rule);border-radius:4px;background:var(--surface);overflow:hidden}
+.kpi-band div{flex:1 1 5.5rem;padding:.5rem .7rem;border-left:1px solid var(--rule)}
+.kpi-band div:first-child{border-left:0}
+.kpi-band b{display:block;font-family:var(--mono);font-size:1.05rem;font-variant-numeric:tabular-nums}
+.kpi-band span{font-size:.6875rem;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.ex-miles{list-style:none;margin:0;padding:0}
+.risk-list{margin:.5rem 0;padding-left:1.2rem}
+@media print{@page{margin:14mm} .kpi-band,.audit-table tr{break-inside:avoid} body{background:#fff;color:#000}}
 `;
 
 // ------------------------------------------------------------- timeline ----
@@ -249,7 +257,66 @@ export function renderTimeline(run, ctx) {
   return head + cpLine + filters + chart + rail + table + `<script>${TL_SCRIPT}</script>`;
 }
 
-export const FORMAT_RENDERERS = { timeline: renderTimeline };
+// ------------------------------------------------------------ executive ----
+export function executiveModel(run) {
+  const count = (st) => run.stages.filter((s) => s.state === st).length;
+  const total = run.stages.length;
+  const done = count("landed") + count("replanned");
+  const kpis = {
+    total, done, pct: total ? Math.round((100 * done) / total) : null,
+    landed: count("landed"), inflight: count("inflight"), parked: count("parked"),
+    failed: count("failed"), pending: count("pending"), replanned: count("replanned"), unknown: count("unknown"),
+    openDecisions: run.qs.filter((q) => ASKABLE.has(q.state)).length,
+  };
+  const milestones = run.stages.filter((s) => s.state === "landed")
+    .map((s) => ({ n: s.n, code: s.code, name: s.name, landed: s.landed, heartbeat: s.heartbeat }));
+  const audit = [...run.qs].sort((a, b) => a.k - b.k).map((q) => {
+    const outcome = q.f.replanned ? `replanned: ${q.f.replanned}` : q.f.moot ? `moot: ${q.f.moot}` : q.f["same-as"] ? `same as ${q.f["same-as"]}` : ASKABLE.has(q.state) ? (q.holds.length ? `holds stage ${q.holds.join(", ")}` : "waiting for an answer") : `answer: ${q.f.answer ?? "-"}`;
+    return { id: q.id, state: q.state, ts: q.ts, ticket: q.f.ticket || "", question: q.f.question || "", outcome, holds: [...q.holds], answer: q.f.answer || "" };
+  });
+  const risks = [];
+  const failed = run.stages.filter((s) => s.state === "failed");
+  if (failed.length) risks.push({ signal: "failed stage", stages: failed.map((s) => s.n), detail: failed.map((s) => `stage ${s.n} (${s.code || s.name}) failed`).join("; ") });
+  const byQ = new Map(run.qs.map((q) => [q.id, q]));
+  for (const s of run.stages.filter((x) => x.state === "parked")) {
+    const holders = [...new Set([...(s.waits || []), ...run.qs.filter((q) => q.holds.includes(s.n)).map((q) => q.id)])];
+    risks.push({ signal: "parked stage", stages: [s.n], detail: `stage ${s.n} parked${holders.length ? ` on ${holders.join(", ")}` : ""}` });
+  }
+  if (kpis.openDecisions) risks.push({ signal: "decisions waiting", stages: [], detail: `${kpis.openDecisions} decisions waiting` });
+  const unknown = run.stages.filter((s) => s.state === "unknown");
+  if (unknown.length) risks.push({ signal: "unknown state", stages: unknown.map((s) => s.n), detail: unknown.map((s) => `stage ${s.n}: state not recognised (${s.st})`).join("; ") });
+  const noHb = run.stages.filter((s) => s.state === "inflight" && parseTime(s.heartbeat) === null);
+  if (noHb.length) risks.push({ signal: "no heartbeat recorded", stages: noHb.map((s) => s.n), detail: noHb.map((s) => `stage ${s.n} in flight: no heartbeat recorded`).join("; ") });
+  const replanned = run.stages.filter((s) => s.state === "replanned");
+  if (replanned.length) risks.push({ signal: "re-planned", stages: replanned.map((s) => s.n), detail: replanned.map((s) => `stage ${s.n} re-planned to stage ${s.replacedBy ?? s.landed}`).join("; ") });
+  return { kpis, milestones, audit, risks };
+}
+
+export function renderExecutive(run, ctx) {
+  const m = executiveModel(run);
+  const k = m.kpis;
+  const head = `<header><h1>${esc(run.id)} <span class="t">\u00b7 ${esc(run.title)}</span></h1>` +
+    `<p class="sub">executive summary \u00b7 from the recorded states only</p></header>`;
+  const band = `<div class="kpi-band">` +
+    `<div><b>${k.pct === null ? "-" : k.pct + "%"}</b><span>done</span></div>` +
+    `<div><b>${k.landed}</b><span>landed</span></div><div><b>${k.inflight}</b><span>in flight</span></div>` +
+    `<div><b>${k.openDecisions}</b><span>open decisions</span></div><div><b>${k.failed}</b><span>failed</span></div>` +
+    `<div><b>${k.total}</b><span>stages</span></div></div>`;
+  const miles = m.milestones.length
+    ? `<ol class="ex-miles">${m.milestones.map((x) => `<li class="rail-row s-landed" data-stage="${x.n}"><span class="dot" aria-hidden="true"></span><span class="sn">${x.n}</span><span class="sname">${x.code ? `<b>${esc(x.code)}</b> ` : ""}${esc(x.name)}<span class="sfiles">landed ${esc(x.landed)} \u00b7 heartbeat ${esc(x.heartbeat)}</span></span><span class="sst">landed</span></li>`).join("")}</ol>`
+    : `<p class="empty">No landed stages recorded.</p>`;
+  const audit = m.audit.length
+    ? `<div class="scroll"><table class="audit-table"><thead><tr><th>Q</th><th>state</th><th>ticket</th><th>question</th><th>outcome</th><th>holds</th></tr></thead><tbody>` +
+      m.audit.map((a) => `<tr><td class="mono">${esc(a.id)}</td><td>${esc(a.state)}</td><td class="mono">${esc(a.ticket || "-")}</td><td>${esc(a.question)}</td><td>${esc(a.outcome)}</td><td>${a.holds.length ? a.holds.join(", ") : "-"}</td></tr>`).join("") +
+      `</tbody></table></div>`
+    : `<p class="empty">No decisions recorded.</p>`;
+  const risks = m.risks.length
+    ? `<ul class="risk-list">${m.risks.map((r) => `<li><b>${esc(r.signal)}</b> - ${esc(r.detail)}</li>`).join("")}</ul>`
+    : `<p class="empty">No risk signals in the recorded states.</p>`;
+  return head + band + `<h2>Milestones</h2>` + miles + `<h2>Decision audit log</h2>` + audit + `<h2>Risk signals</h2>` + risks;
+}
+
+export const FORMAT_RENDERERS = { timeline: renderTimeline, executive: renderExecutive };
 
 export function formatPage(run, format, opts = {}) {
   if (!FORMATS.includes(format)) throw new Error(`unknown format ${format} (timeline, executive, runbook, mindmap)`);

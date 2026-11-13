@@ -5,7 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { parseRun, render, artifactPage, standalonePage, renderAscii, parseArgs, layout } from "./holo.mjs";
-import { FORMATS, THEMES, parseTime, themeCss, formatPage, timelineModel } from "./formats.mjs";
+import { FORMATS, THEMES, parseTime, themeCss, formatPage, timelineModel, executiveModel } from "./formats.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fx = (n) => readFileSync(join(HERE, "fixtures", n), "utf8");
@@ -61,6 +61,24 @@ test("timeline: bars only from recorded dispatched->heartbeat, critical path by 
   assert.ok(html.includes('data-format="timeline"') && html.includes('class="tl-svg"') && html.includes('data-critical="1"'));
   assert.ok(html.includes("critical path (longest after: chain, by stage count): 1 -&gt; 2 -&gt; 4"), "labelled chain, HTML-escaped arrow");
   assert.ok(!/duration: \d/.test(html), "no invented duration");
+});
+
+test("executive: KPIs, audit of every decision, milestones, state-derived risks", () => {
+  const run = parseRun(fx("fixture-all-states.md"));
+  const m = executiveModel(run);
+  assert.equal(m.kpis.total, 8);
+  assert.equal(m.kpis.done, 2, "landed + replanned (anatomy readout rule)");
+  assert.equal(m.kpis.pct, 25);
+  assert.equal(m.kpis.openDecisions, 2);
+  assert.deepEqual(m.milestones.map((x) => x.n), [1]);
+  assert.equal(m.audit.length, 7, "every decision, not only open ones");
+  assert.ok(m.risks.some((r) => r.signal === "failed stage" && r.stages.includes(6)));
+  assert.ok(m.risks.some((r) => r.detail.includes("Q1")), "parked stage names its holding decision");
+  const html = formatPage(run, "executive", {});
+  assert.ok(html.includes('class="kpi-band"') && html.includes('class="audit-table"') && html.includes("Decision audit log"));
+  assert.ok(!/<script/.test(html), "executive is static: no script");
+  const empty = executiveModel(parseRun("# RUN-7 - empty\n"));
+  assert.equal(empty.kpis.pct, null, "no NaN percent on zero stages");
 });
 
 test("timeline: no stages and thin times still render", () => {
