@@ -1441,6 +1441,10 @@ function selftest() {
   const rbPage = formatPage(run, "runbook", { layout: layout(run) });
   ok((rbPage.match(/data-step="/g) || []).length === rows.length && (rbPage.match(/type="checkbox"/g) || []).length === rows.length, "F164 runbook: one step and checkbox per stage");
   ok(rbPage.includes("Verify command: not recorded in the run file.") && rbPage.includes('id="rb-progress"'), "F164 runbook: honest verify line and progress");
+  const mmPage = formatPage(run, "mindmap", {});
+  ok(mmPage.includes('class="mm-tree"') && mmPage.includes('data-ticket="F6"'), "F164 mindmap: tree with fixture tickets");
+  const mmChild = parseRun("# RUN-8 - sub\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 1 | F90 parent work | x | - | - | abc1234 |\n| 2 | F90a child work |   | - | - | - |\n| 3 | F91a orphan sub |   | - | - | - |\n");
+  ok(formatPage(mmChild, "mindmap", {}).includes('data-ticket="F91a" data-parent="none"'), "F164 mindmap: orphan ticket is a labelled root");
 
   if (fails) { console.error(`selftest: ${fails} failed`); process.exitCode = 1; } else console.log("selftest: ok");
 }

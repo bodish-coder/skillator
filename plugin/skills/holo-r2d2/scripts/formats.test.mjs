@@ -5,7 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { parseRun, render, artifactPage, standalonePage, renderAscii, parseArgs, layout } from "./holo.mjs";
-import { FORMATS, THEMES, parseTime, themeCss, formatPage, timelineModel, executiveModel, runbookModel } from "./formats.mjs";
+import { FORMATS, THEMES, parseTime, themeCss, formatPage, timelineModel, executiveModel, runbookModel, mindmapModel } from "./formats.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fx = (n) => readFileSync(join(HERE, "fixtures", n), "utf8");
@@ -95,6 +95,21 @@ test("runbook: dependency order, recorded vs not-recorded verify, no invented co
   assert.ok(html.includes('type="checkbox"') && html.includes('id="rb-progress"'));
   assert.ok(html.includes("item F2: export."), "captured prompt is the step instructions");
   assert.ok(!/npm test|pytest|node --test/.test(html), "no guessed verify command anywhere");
+});
+
+test("mindmap: suffix parent only when in the run, dependencies kept out of the tree", () => {
+  const run = parseRun(fx("fixture-all-states.md"));
+  const m = mindmapModel(run);
+  assert.ok(m.tickets.every((t) => t.parent === null), "no suffix children in this fixture: all roots");
+  assert.deepEqual(m.tickets.find((t) => t.id === "F6").dependsOn, ["F2"], "stage 4 is after stage 2");
+  assert.ok(m.tickets.find((t) => t.id === "F2").modules.includes("src"));
+  const child = parseRun("# RUN-8 - sub\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 1 | F90 parent work | x | - | - | abc1234 |\n| 2 | F90a child work |   | - | - | - |\n| 3 | F91a orphan sub |   | - | - | - |\n");
+  const mm = mindmapModel(child);
+  assert.equal(mm.tickets.find((t) => t.id === "F90a").parent, "F90");
+  assert.equal(mm.tickets.find((t) => t.id === "F91a").parent, null, "parent F91 not in run: root, never guessed");
+  const html = formatPage(child, "mindmap", {});
+  assert.ok(html.includes('data-ticket="F91a" data-parent="none"') && html.includes("parent F91 not in this run"));
+  assert.ok(html.includes('class="mm-tree"'));
 });
 
 test("timeline: no stages and thin times still render", () => {

@@ -125,6 +125,14 @@ button{font:inherit;font-size:.8125rem;padding:.4rem .8rem;border-radius:4px;bor
 .rb-dl dd{margin:0;font-size:.8125rem;overflow-wrap:anywhere}
 summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-family:var(--mono);font-size:.75rem;color:var(--mid)}
 @media print{.rb-bar{display:none!important} .rb-step{break-inside:avoid}}
+.mm-tree ul{list-style:none;margin:.3rem 0 .3rem .6rem;padding-left:1rem;border-left:2px solid var(--rule)}
+.mm-tree>details>ul{border-left:0;margin-left:0;padding-left:.2rem}
+.mm-tree li{padding:.25rem 0}
+.mm-tid{font-family:var(--mono);font-weight:700}
+.mm-parent{color:var(--mid);font-size:.8125rem}
+.mm-deps{border-left-style:dashed!important}
+.mm-deps li{font-family:var(--mono);font-size:.75rem;color:var(--mid)}
+@media print{.mm-tree ul{border-left-color:#8a8a8a}}
 `;
 
 // ------------------------------------------------------------- timeline ----
@@ -417,7 +425,108 @@ export function renderRunbook(run, ctx) {
   return head + progress + `<section>${steps}</section><script>${RB_SCRIPT}</script>`;
 }
 
-export const FORMAT_RENDERERS = { timeline: renderTimeline, executive: renderExecutive, runbook: renderRunbook };
+// ------------------------------------------------------------- mindmap ----
+const ticketIds = (s) => (String(s || "").match(/\b[A-Z]{1,3}\d+[a-z]?\b/g) || []);
+function topModule(p) {
+  const clean = String(p).replace(/\\/g, "/").replace(/^\.\//, "");
+  const parts = clean.split("/").filter(Boolean);
+  return parts.length > 1 ? parts.slice(0, Math.min(2, parts.length - 1)).join("/") : "root";
+}
+
+export function mindmapModel(run) {
+  const stageTickets = new Map(); // ticketId -> [stage numbers]
+  for (const s of run.stages) {
+    for (const t of new Set([...(s.tickets || []), ...ticketIds(s.raw)])) {
+      if (!stageTickets.has(t)) stageTickets.set(t, []);
+      stageTickets.get(t).push(s.n);
+    }
+  }
+  const byN = new Map(run.stages.map((s) => [s.n, s]));
+  const ids = [...stageTickets.keys()];
+  const inRun = new Set(ids);
+  const tickets = ids.map((id) => {
+    const stages = [...stageTickets.get(id)].sort((a, b) => a - b);
+    const home = byN.get(stages[0]);
+    const deps = new Set();
+    for (const d of home?.after ?? []) {
+      for (const t of new Set([...(byN.get(d)?.tickets || []), ...ticketIds(byN.get(d)?.raw)])) if (t !== id) deps.add(t);
+    }
+    const decisions = run.qs.filter((q) => ticketIds(q.f.ticket).includes(id) || (q.blocks || []).includes(id)).map((q) => q.id);
+    const files = [...new Set(stages.flatMap((n) => byN.get(n)?.files ?? []))];
+    const modules = [...new Set(files.map(topModule))];
+    const suf = /^([A-Z]{1,3}\d+)([a-z])$/.exec(id);
+    return {
+      id, parent: suf && inRun.has(suf[1]) ? suf[1] : null,
+      stages, state: home?.state ?? "unknown", dependsOn: [...deps].sort(), modules, decisions,
+    };
+  }).sort((a, b) => a.stages[0] - b.stages[0] || a.id.localeCompare(b.id));
+  const modMap = new Map();
+  const addFile = (file, ticket, decision) => {
+    const name = topModule(file);
+    if (!modMap.has(name)) modMap.set(name, { name, files: [], decisionFiles: [], tickets: [] });
+    const e = modMap.get(name);
+    const list = decision ? e.decisionFiles : e.files;
+    if (!list.includes(file)) list.push(file);
+    if (ticket && !e.tickets.includes(ticket)) e.tickets.push(ticket);
+  };
+  for (const t of tickets) for (const n of t.stages) for (const f of byN.get(n)?.files ?? []) addFile(f, t.id, false);
+  for (const q of run.qs) {
+    const named = [...new Set([...ticketIds(q.f.ticket), ...(q.blocks || [])])].filter((t) => inRun.has(t));
+    for (const f of q.files || []) for (const t of named.length ? named : [null]) addFile(f, t, true);
+  }
+  return { roots: tickets.filter((t) => !t.parent).map((t) => t.id), tickets, modules: [...modMap.values()] };
+}
+
+const MM_SCRIPT = `
+(function(){
+  function setAll(open){
+    document.querySelectorAll(".mm-tree details").forEach(function(d){ d.open = open; });
+  }
+  document.querySelectorAll("[data-mm-expand]").forEach(function(b){
+    b.addEventListener("click", function(){ setAll(true); });
+  });
+  document.querySelectorAll("[data-mm-collapse]").forEach(function(b){
+    b.addEventListener("click", function(){ setAll(false); });
+  });
+  window.addEventListener("beforeprint", function(){ setAll(true); });
+})();
+`;
+
+export function renderMindmap(run, ctx) {
+  const m = mindmapModel(run);
+  const byN = new Map(run.stages.map((s) => [s.n, s]));
+  const byTicket = new Map(m.tickets.map((t) => [t.id, t]));
+  const head = `<header><h1>${esc(run.id)} <span class="t">\u00b7 ${esc(run.title)}</span></h1>` +
+    `<p class="sub">mindmap \u00b7 from the run file only \u00b7 ${m.tickets.length} tickets, ${m.modules.length} modules</p></header>`;
+  if (!m.tickets.length) return head + `<p class="empty">No tickets in this run.</p>`;
+  const depLabel = (t) => t.dependsOn.map((d) => {
+    const home = byTicket.get(t.id), homeStage = byN.get(home.stages[0]);
+    const depStages = (homeStage?.after ?? []).filter((n) => (byN.get(n)?.tickets || []).includes(d) || ticketIds(byN.get(n)?.raw).includes(d));
+    return `<li>depends on ${esc(d)}${depStages.length ? ` - stage ${home.stages[0]} after stage ${depStages.join(", ")}` : ""}</li>`;
+  }).join("");
+  const ticketNode = (t) => {
+    const kids = m.tickets.filter((x) => x.parent === t.id);
+    const suf = /^([A-Z]{1,3}\d+)([a-z])$/.exec(t.id);
+    const parentText = t.parent ? `child of ${t.parent}` : (suf ? `parent ${suf[1]} not in this run` : "no parent in this run");
+    return `<li data-ticket="${esc(t.id)}" data-parent="${t.parent ? esc(t.parent) : "none"}">` +
+      `<span class="mm-tid">${esc(t.id)}</span> <span class="sst">${LABEL[t.state] || t.state}</span> <span class="mm-parent">${esc(parentText)}</span>` +
+      `<span class="sfiles">stages: ${t.stages.map((n) => "stage " + n).join(", ")}${t.modules.length ? ` \u00b7 modules: ${esc(t.modules.join(", "))}` : ""}${t.decisions.length ? ` \u00b7 decisions: ${esc(t.decisions.join(", "))}` : ""}</span>` +
+      (t.dependsOn.length ? `<ul class="mm-deps">${depLabel(t)}</ul>` : "") +
+      (kids.length ? `<ul>${kids.map(ticketNode).join("")}</ul>` : "") + `</li>`;
+  };
+  const stagesBranch = `<details open><summary>Stages</summary><ul>${run.stages.map((s) => {
+    const ts = [...new Set([...(s.tickets || []), ...ticketIds(s.raw)])];
+    return `<li class="s-${s.state}"><span class="dot" aria-hidden="true"></span> <span class="mono">#${s.n}${s.code ? " " + esc(s.code) : ""}</span> ${esc(s.name)} - ${LABEL[s.state] || s.state}` +
+      (ts.length ? `<ul>${ts.map((t) => `<li data-ticket="${esc(t)}" data-parent="${byTicket.get(t)?.parent ? esc(byTicket.get(t).parent) : "none"}"><span class="mm-tid">${esc(t)}</span></li>`).join("")}</ul>` : "") + `</li>`;
+  }).join("")}</ul></details>`;
+  const ticketsBranch = `<details open><summary>Tickets</summary><ul>${m.roots.map((id) => ticketNode(byTicket.get(id))).join("")}</ul>` +
+    (m.roots.length ? `<p class="sub">Tickets with no parent in this run are listed above as roots.</p>` : "") + `</details>`;
+  const modulesBranch = `<details><summary>Modules</summary><ul>${m.modules.map((mod) => `<li data-module="${esc(mod.name)}"><span class="mm-tid">${esc(mod.name)}</span><span class="sfiles">files: ${esc(mod.files.join(", ") || "-")}${mod.decisionFiles.length ? ` \u00b7 decision files: ${esc(mod.decisionFiles.join(", "))}` : ""}${mod.tickets.length ? ` \u00b7 tickets: ${esc(mod.tickets.join(", "))}` : ""}</span></li>`).join("")}</ul></details>`;
+  const tools = `<div class="no-print"><button type="button" data-mm-expand>Expand all</button> <button type="button" data-mm-collapse>Collapse all</button></div>`;
+  return head + tools + `<div class="mm-tree">${stagesBranch}${ticketsBranch}${modulesBranch}</div><script>${MM_SCRIPT}</script>`;
+}
+
+export const FORMAT_RENDERERS = { timeline: renderTimeline, executive: renderExecutive, runbook: renderRunbook, mindmap: renderMindmap };
 
 export function formatPage(run, format, opts = {}) {
   if (!FORMATS.includes(format)) throw new Error(`unknown format ${format} (timeline, executive, runbook, mindmap)`);
