@@ -5,7 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { parseRun, render, artifactPage, standalonePage, renderAscii, parseArgs, layout } from "./holo.mjs";
-import { FORMATS, THEMES, parseTime, themeCss, formatPage, timelineModel, executiveModel } from "./formats.mjs";
+import { FORMATS, THEMES, parseTime, themeCss, formatPage, timelineModel, executiveModel, runbookModel } from "./formats.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fx = (n) => readFileSync(join(HERE, "fixtures", n), "utf8");
@@ -79,6 +79,22 @@ test("executive: KPIs, audit of every decision, milestones, state-derived risks"
   assert.ok(!/<script/.test(html), "executive is static: no script");
   const empty = executiveModel(parseRun("# RUN-7 - empty\n"));
   assert.equal(empty.kpis.pct, null, "no NaN percent on zero stages");
+});
+
+test("runbook: dependency order, recorded vs not-recorded verify, no invented commands", () => {
+  const run = parseRun(fx("fixture-all-states.md"));
+  const m = runbookModel(run, layout(run));
+  assert.deepEqual(m.steps.map((s) => s.n), [1, 3, 5, 6, 7, 2, 4, 8], "layout columns, then stage number");
+  const s1 = m.steps.find((s) => s.n === 1);
+  assert.equal(s1.verify.kind, "recorded");
+  assert.ok(s1.verify.text.includes("4d72860"), "landed value is the recorded evidence");
+  const s4 = m.steps.find((s) => s.n === 4);
+  assert.equal(s4.verify.kind, "none");
+  const html = formatPage(run, "runbook", { layout: layout(run) });
+  assert.ok(html.includes("Verify command: not recorded in the run file."));
+  assert.ok(html.includes('type="checkbox"') && html.includes('id="rb-progress"'));
+  assert.ok(html.includes("item F2: export."), "captured prompt is the step instructions");
+  assert.ok(!/npm test|pytest|node --test/.test(html), "no guessed verify command anywhere");
 });
 
 test("timeline: no stages and thin times still render", () => {

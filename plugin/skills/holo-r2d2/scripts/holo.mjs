@@ -1438,6 +1438,9 @@ function selftest() {
   ok(exPage.includes('class="kpi-band"') && exPage.includes('class="audit-table"') && (exPage.match(/<tr>/g) || []).length >= run.qs.length, "F164 executive: KPI band and one audit row per decision");
   ok(!/<script/.test(exPage), "F164 executive: static, no script");
   ok(exPage.includes("25%"), "F164 executive: done percent from landed + replanned");
+  const rbPage = formatPage(run, "runbook", { layout: layout(run) });
+  ok((rbPage.match(/data-step="/g) || []).length === rows.length && (rbPage.match(/type="checkbox"/g) || []).length === rows.length, "F164 runbook: one step and checkbox per stage");
+  ok(rbPage.includes("Verify command: not recorded in the run file.") && rbPage.includes('id="rb-progress"'), "F164 runbook: honest verify line and progress");
 
   if (fails) { console.error(`selftest: ${fails} failed`); process.exitCode = 1; } else console.log("selftest: ok");
 }

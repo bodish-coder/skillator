@@ -111,6 +111,20 @@ button{font:inherit;font-size:.8125rem;padding:.4rem .8rem;border-radius:4px;bor
 .ex-miles{list-style:none;margin:0;padding:0}
 .risk-list{margin:.5rem 0;padding-left:1.2rem}
 @media print{@page{margin:14mm} .kpi-band,.audit-table tr{break-inside:avoid} body{background:#fff;color:#000}}
+.rb-bar{position:sticky;top:0;background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:.5rem .7rem;font-family:var(--mono);font-size:.8125rem;z-index:2}
+.rb-step{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--rule);border-radius:6px;padding:.7rem .9rem;margin:.6rem 0;break-inside:avoid}
+.rb-head{display:flex;gap:.5rem;align-items:center;min-height:44px;cursor:pointer;flex-wrap:wrap}
+.rb-head input{width:1.2rem;height:1.2rem;flex:none}
+.rb-title{font-weight:600}
+.rb-badge{font-family:var(--mono);font-size:.6875rem;border:1px solid var(--rule);border-radius:3px;padding:0 .4rem;color:var(--mid)}
+.rb-meta{font-size:.8125rem;color:var(--mid);margin:.3rem 0;overflow-wrap:anywhere}
+.rb-prompt{background:var(--ground);border:1px solid var(--rule);border-radius:4px;padding:.6rem;overflow-x:auto;font-family:var(--mono);font-size:.75rem;white-space:pre-wrap;overflow-wrap:anywhere}
+.rb-verify{font-family:var(--mono);font-size:.8125rem;margin:.4rem 0 0}
+.rb-dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.3rem 1rem}
+.rb-dl dt{font-size:.6875rem;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+.rb-dl dd{margin:0;font-size:.8125rem;overflow-wrap:anywhere}
+summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-family:var(--mono);font-size:.75rem;color:var(--mid)}
+@media print{.rb-bar{display:none!important} .rb-step{break-inside:avoid}}
 `;
 
 // ------------------------------------------------------------- timeline ----
@@ -316,7 +330,94 @@ export function renderExecutive(run, ctx) {
   return head + band + `<h2>Milestones</h2>` + miles + `<h2>Decision audit log</h2>` + audit + `<h2>Risk signals</h2>` + risks;
 }
 
-export const FORMAT_RENDERERS = { timeline: renderTimeline, executive: renderExecutive };
+// ------------------------------------------------------------- runbook ----
+export function runbookModel(run, layoutData) {
+  const ordered = [];
+  for (const col of layoutData?.cols ?? []) for (const s of [...col].sort((a, b) => a.n - b.n)) ordered.push(s);
+  const seen = new Set(ordered.map((s) => s.n));
+  for (const s of run.stages) if (!seen.has(s.n)) ordered.push(s);
+  return {
+    inputs: {
+      id: run.id, title: run.title, plan: run.plan, started: run.started, updated: run.updated,
+      chain: run.chain ? { driver: run.chain.driver, hold: run.chain.hold, mode: run.chain.mode } : null,
+      runPath: "", holdsFrom: run.holdsFrom,
+    },
+    steps: ordered.map((s) => ({
+      n: s.n, code: s.code, name: s.name, state: s.state, st: s.st, owner: s.owner,
+      tickets: [...s.tickets], after: [...s.after], implicit: Boolean(s.implicit?.length),
+      files: [...s.files], prompt: s.prompt || "", landed: s.landed, replacedBy: s.replacedBy,
+      verify: s.state === "landed"
+        ? { kind: "recorded", text: `Landed ${s.landed} recorded - confirm it is the commit/artifact for this step.` }
+        : { kind: "none", text: "Verify command: not recorded in the run file." },
+    })),
+  };
+}
+
+const RB_SCRIPT = `
+(function(){
+  var main = document.querySelector("main[data-run]");
+  var runId = main ? main.getAttribute("data-run") : "";
+  var key = "holo-runbook-" + runId;
+  var boxes = Array.prototype.slice.call(document.querySelectorAll("[data-check]"));
+  var progress = document.getElementById("rb-progress");
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(key) || "{}") || {}; } catch (e) { saved = {}; }
+  function sync(){
+    var done = boxes.filter(function(b){ return b.checked; }).length;
+    if (progress) progress.textContent = done + " of " + boxes.length + " steps checked";
+    var state = {};
+    boxes.forEach(function(b){ if (b.checked) state[b.getAttribute("data-check")] = 1; });
+    try { localStorage.setItem(key, JSON.stringify(state)); } catch (e) { /* checking still works in-page */ }
+  }
+  boxes.forEach(function(b){
+    if (saved[b.getAttribute("data-check")]) b.checked = true;
+    b.addEventListener("change", sync);
+  });
+  sync();
+  window.addEventListener("beforeprint", function(){
+    document.querySelectorAll("details").forEach(function(d){ d.open = true; });
+  });
+})();
+`;
+
+export function renderRunbook(run, ctx) {
+  const m = runbookModel(run, ctx.layout);
+  const colOf = new Map(), colSize = new Map();
+  (ctx.layout?.cols ?? []).forEach((col, ci) => { colSize.set(ci, col.length); for (const s of col) colOf.set(s.n, ci); });
+  const inp = m.inputs;
+  const chainLine = inp.chain ? `driver ${inp.chain.driver} \u00b7 hold ${inp.chain.hold} \u00b7 mode ${inp.chain.mode}` : "no chain recorded";
+  const head = `<header><h1>${esc(run.id)} <span class="t">\u00b7 ${esc(run.title)}</span></h1>` +
+    `<p class="sub">runbook \u00b7 check state stays in this page only</p></header>` +
+    `<section class="rb-inputs"><h2>Reproducible inputs</h2><dl class="rb-dl">` +
+    `<div><dt>run</dt><dd class="mono">${esc(inp.id)} - ${esc(inp.title)}</dd></div>` +
+    `<div><dt>plan</dt><dd class="mono">${esc(inp.plan || "-")}</dd></div>` +
+    `<div><dt>started</dt><dd class="mono">${esc(inp.started || "-")}</dd></div>` +
+    `<div><dt>updated</dt><dd class="mono">${esc(inp.updated || "-")}</dd></div>` +
+    `<div><dt>chain</dt><dd class="mono">${esc(chainLine)}</dd></div>` +
+    `<div><dt>run file</dt><dd class="mono">${esc(ctx.runPath || "-")}</dd></div>` +
+    `<div><dt>holds</dt><dd>${run.chain ? (inp.holdsFrom === "relay" ? "as relay-morpheus chain next judges them" : "estimated here - relay-morpheus could not be run") : "no chain in this run"}</dd></div>` +
+    `</dl></section>`;
+  const progress = `<div class="rb-bar no-print"><span id="rb-progress" aria-live="polite">0 of ${m.steps.length} steps checked</span></div>`;
+  if (!m.steps.length) return head + progress + `<p class="empty">No stage rows in this run file.</p><script>${RB_SCRIPT}</script>`;
+  const steps = m.steps.map((s) => {
+    const ci = colOf.get(s.n);
+    const side = ci !== undefined && colSize.get(ci) > 1 ? ` <span class="rb-badge">may run side by side</span>` : "";
+    const prereq = [s.after.length ? `after ${s.after.join(", ")}` : "", s.implicit ? "final stage, after everything by convention" : ""].filter(Boolean).join(" \u00b7 ");
+    const prompt = s.prompt ? `<details><summary>Instructions</summary><pre class="rb-prompt">${esc(s.prompt)}</pre></details>` : "";
+    const files = s.files.length ? esc(s.files.join(", ")) : "files: not listed in the run file";
+    return `<article class="rb-step s-${s.state}" data-step="${s.n}">` +
+      `<label class="rb-head"><input type="checkbox" data-check="${s.n}"> <span class="dot" aria-hidden="true"></span> ` +
+      `<span class="rb-title">#${s.n}${s.code ? ` <b class="mono">${esc(s.code)}</b>` : ""} ${esc(s.name)} - ${LABEL[s.state] || s.state}${s.state === "unknown" ? " (" + esc(s.st) + ")" : ""}</span>${side}</label>` +
+      (prereq ? `<p class="rb-meta">prerequisites: ${esc(prereq)}</p>` : "") +
+      `<p class="rb-meta">owner ${esc(s.owner)}${s.tickets.length ? ` \u00b7 tickets ${esc(s.tickets.join(", "))}` : ""}</p>` +
+      prompt +
+      `<p class="rb-meta">artifacts: ${files}${s.landed && s.landed !== "-" ? ` \u00b7 landed <span class="mono">${esc(s.landed)}</span>` : ""}${s.replacedBy ? ` \u00b7 replaced by stage ${s.replacedBy}` : ""}</p>` +
+      `<p class="rb-verify">${esc(s.verify.text)}</p></article>`;
+  }).join("");
+  return head + progress + `<section>${steps}</section><script>${RB_SCRIPT}</script>`;
+}
+
+export const FORMAT_RENDERERS = { timeline: renderTimeline, executive: renderExecutive, runbook: renderRunbook };
 
 export function formatPage(run, format, opts = {}) {
   if (!FORMATS.includes(format)) throw new Error(`unknown format ${format} (timeline, executive, runbook, mindmap)`);
