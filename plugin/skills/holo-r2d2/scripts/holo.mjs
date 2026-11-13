@@ -43,6 +43,8 @@ import { execFileSync } from "node:child_process";
 import { setFromRun, checkSet, wizardPage, answersToCommands, nextWizardSet, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 import { extractDomainGraph, understandPage } from "./understand.mjs";
+import { FORMATS, THEMES, formatPage, themeCss } from "./formats.mjs";
+import { createHash } from "node:crypto";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -78,13 +80,13 @@ export function parseRun(md, holds = null) {
     id: "", title: "", plan: "", started: "", updated: "",
     stages: [], chain: null, asks: "", qs: [], inflight: {}, rulings: [],
   };
-  let sec = "", cur = null, q = null, inPrompt = false, inOpts = false;
+  let sec = "", cur = null, q = null, inPrompt = false, inOpts = false, promptSink = null;
   for (const l of md.replace(/\r/g, "").split("\n")) {
     let m;
     if (!run.id && (m = /^# (RUN-\d+)\s*(?:-|\u2014|\u2013)\s*(.*)$/.exec(l))) {
       run.id = m[1]; run.title = m[2].trim(); continue;
     }
-    if (l.startsWith("## ")) { sec = l.slice(3).trim(); cur = null; q = null; inPrompt = false; continue; }
+    if (l.startsWith("## ")) { sec = l.slice(3).trim(); cur = null; q = null; inPrompt = false; promptSink = null; continue; }
     if (sec === "") {
       if ((m = /^plan:\s*(.*)$/.exec(l))) run.plan = m[1].trim();
       if ((m = /started:\s*(\S+)/.exec(l))) run.started = m[1];
@@ -92,10 +94,11 @@ export function parseRun(md, holds = null) {
       continue;
     }
     // A prompt body is indented two spaces (or blank); it ends at the first
-    // line that is neither. Nothing inside it is a field.
+    // line that is neither. Nothing inside it is a field - it is captured
+    // verbatim (F164 stage.prompt) but never parsed.
     if (inPrompt) {
-      if (l === "" || l.startsWith("  ")) continue;
-      inPrompt = false;
+      if (l === "" || l.startsWith("  ")) { if (promptSink) promptSink.push(l.startsWith("  ") ? l.slice(2) : ""); continue; }
+      inPrompt = false; promptSink = null;
     }
     if (sec === "Stages") {
       if (!/^\|\s*\d+\s*\|/.test(l)) continue;
@@ -106,6 +109,7 @@ export function parseRun(md, holds = null) {
         n: Number(n), raw: name, name, code: "", st,
         state: STATE[st] ?? "unknown", owner: owner || "-", heartbeat: hb || "-", landed: landed || "-",
         tickets: [], files: [], after: [], indep: [], implicit: [], waits: [], replacedBy: null,
+        prompt: "", dispatchedAt: "",
       });
     } else if (sec === "Chain") {
       if (!run.chain) run.chain = { driver: "-", hold: "-", mode: "-", blocks: {} };
@@ -115,7 +119,7 @@ export function parseRun(md, holds = null) {
         cur = { code: m[1], n: Number(m[2]), name: m[3], tickets: "", files: [], after: [], indep: [] };
         run.chain.blocks[cur.n] = cur;
       } else if (cur) {
-        if (/^prompt:/.test(l)) inPrompt = true;
+        if (/^prompt:/.test(l)) { inPrompt = true; cur.promptLines = []; promptSink = cur.promptLines; const rest = l.slice(7).trim(); if (rest && rest !== "|") promptSink.push(rest); }
         else if ((m = /^tickets: (.*)$/.exec(l))) cur.tickets = m[1];
         else if ((m = /^files: (.*)$/.exec(l))) cur.files.push(...list(m[1]));
         else if ((m = /^after: (.*)$/.exec(l))) cur.after.push(...nums(m[1]));
@@ -143,7 +147,7 @@ export function parseRun(md, holds = null) {
         cur = { n: Number(m[1]), head: m[2].trim(), parked: [], files: [], lastSeen: "" };
         run.inflight[cur.n] = cur;
       } else if (cur) {
-        if (/^prompt:/.test(l)) inPrompt = true;
+        if (/^prompt:/.test(l)) { inPrompt = true; cur.promptLines = []; promptSink = cur.promptLines; const rest = l.slice(7).trim(); if (rest && rest !== "|") promptSink.push(rest); }
         else if ((m = /^parked: (.*)$/.exec(l))) cur.parked.push(...(m[1].match(/Q\d+/g) || []));
         else if ((m = /^files: (.*)$/.exec(l))) cur.files.push(...list(m[1]));
         else if ((m = /^last seen: (.*)$/.exec(l))) cur.lastSeen = m[1];
@@ -159,6 +163,7 @@ export function parseRun(md, holds = null) {
 function derive(run, holds = null) {
   const byN = new Map(run.stages.map((s) => [s.n, s]));
   const blocks = run.chain?.blocks ?? {};
+  const promptText = (lines) => (lines || []).join("\n").replace(/\n+$/, "");
   for (const s of run.stages) {
     const b = blocks[s.n];
     if (b) {
@@ -168,11 +173,16 @@ function derive(run, holds = null) {
       s.files = [...b.files];
       s.after = b.after.filter((a) => byN.has(a) && a !== s.n);
       s.indep = b.indep;
+      s.prompt = promptText(b.promptLines);
     }
     const inf = run.inflight[s.n];
     if (inf) {
       if (!s.files.length) s.files = [...inf.files];
       s.lastSeen = inf.lastSeen;
+      if (!s.prompt) s.prompt = promptText(inf.promptLines);
+      // Ruling: precise ISO capture, not \S+ - the head's trailing comma is not part of the stamp.
+      const dm = /dispatched\s+(\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d)?(?:Z|[+-]\d\d:?\d\d)?)/.exec(inf.head || "");
+      s.dispatchedAt = dm ? dm[1] : "";
     }
     if (s.state === "replanned") {
       const t = /stage (\d+)/.exec(s.landed);
@@ -710,12 +720,12 @@ export function render(run, opts = {}) {
     `${run ? ` at ${esc(run.updated || "?")}` : ""}. It decides nothing: answers are written to the run file by the session (relay-morpheus answer).` +
     `${run && run.chain ? ` Holds: ${run.holdsFrom === "relay" ? "as relay-morpheus chain next judges them" : "estimated here - relay-morpheus could not be run"}.` : ""}</p></main>`;
   const fig = run && opts.anatomy;
-  return { title, css: fig ? CSS + ANATOMY_CSS : CSS, body, script: fig ? CLIENT + ANATOMY_SCRIPT : CLIENT };
+  return { title, css: (fig ? CSS + ANATOMY_CSS : CSS) + (opts.theme ? themeCss(opts.theme) : ""), body, script: fig ? CLIENT + ANATOMY_SCRIPT : CLIENT };
 }
 
 export const artifactPage = (r) => `<title>${esc(r.title)}</title>\n<style>${r.css}</style>\n${r.body}\n<script>${r.script}</script>\n`;
-export const standalonePage = (r) =>
-  `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n` +
+export const standalonePage = (r, theme) =>
+  `<!doctype html>\n<html lang="en"${theme ? ` data-theme="${esc(theme)}"` : ""}>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n` +
   `<title>${esc(r.title)}</title>\n<style>${r.css}</style>\n</head>\n<body>\n${r.body}\n<script>${r.script}</script>\n</body>\n</html>\n`;
 
 // --------------------------------------------------------------- ascii ----
@@ -956,6 +966,10 @@ export function parseArgs(argv) {
     else if (a === "--decisions") { o.mode = "wizard"; o.decisions = val(); }
     else if (a === "--answers") o.answers = val();
     else if (a === "--out") o.out = val();
+    else if (a === "--format") o.format = val();
+    else if (a.startsWith("--format=")) o.format = a.slice("--format=".length);
+    else if (a === "--theme") o.theme = val();
+    else if (a.startsWith("--theme=")) o.theme = a.slice("--theme=".length);
     else if (a === "--ticket") o.ticket = val();
     else if (a === "--design") o.design = val();
     else if (a === "--root") o.root = val();
@@ -985,6 +999,20 @@ export function parseArgs(argv) {
     if (!/^[A-Za-z]{1,3}[0-9]+[a-z]?$/.test(o.ticket)) throw new Error("invalid ticket ID");
     o.ticket = o.ticket.replace(/^[A-Za-z]+/, x => x.toUpperCase());
     if (!["html", "ascii"].includes(o.mode) || o.pos.length || o.answers || o.nextWizard || o.decisions || o.anatomy || o.fixture || o.out) throw new Error("--ticket requires --html or --ascii; no run, answers, wizard, anatomy, fixture or custom output");
+  }
+  if (o.format !== undefined) {
+    if (![...FORMATS, "default"].includes(o.format)) throw new Error(`unknown --format ${o.format} (timeline, executive, runbook, mindmap, default)`);
+    // Ruling: --format=default means today's renderer, so the refusals below bind only the four new formats.
+    if (o.format !== "default" && (["md", "svg", "ascii", "wizard", "understand", "batch"].includes(o.mode) || o.anatomy || o.ticket !== undefined || o.decisions || o.answers || o.nextWizard || o.fixture)) {
+      throw new Error("--format draws a standalone HTML page: refused with --md/--svg/--ascii/--wizard/--understand/--batch, --anatomy, --ticket, --decisions, --answers, --next-wizard or --fixture");
+    }
+  }
+  if (o.theme !== undefined) {
+    if (!THEMES.includes(o.theme)) throw new Error(`unknown --theme ${o.theme} (dark, light, contrast, print)`);
+    if (["md", "svg", "ascii", "wizard", "understand", "batch"].includes(o.mode) || o.ticket !== undefined) {
+      throw new Error("--theme applies to a standalone HTML page only: refused with --md/--svg/--ascii/--wizard/--understand/--batch or --ticket");
+    }
+    if (!(o.format && o.format !== "default") && o.mode !== "html") throw new Error("--theme needs --html or --format (a standalone page)");
   }
   return o;
 }
@@ -1113,7 +1141,14 @@ async function main(argv) {
   let design = null;
   if (o.design) design = parseDesign(await readFile(o.design, "utf8"));
   const rel = (p) => (p ? relative(root, p).replace(/\\/g, "/") : p);
-  const opts = { design, designPath: o.design && rel(resolve(o.design)), runPath: rel(runPath), anatomy: o.anatomy && o.mode !== "ascii" };
+  const opts = { design, designPath: o.design && rel(resolve(o.design)), runPath: rel(runPath), anatomy: o.anatomy && o.mode !== "ascii", theme: o.theme };
+  if (o.format && o.format !== "default") {
+    if (!run) throw new Error("--format draws a run - name one");
+    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${run.id}.${o.format}.html`));
+    await writeGenerated(root, out, formatPage(run, o.format, { theme: o.theme, now: Date.now(), runPath: rel(runPath), layout: layout(run), designHtml: design ? designBlock(design, opts.designPath || "") : "" }));
+    console.log(`holo: ${run.id} ${run.stages.length} stages -> ${out} (format ${o.format}, theme ${o.theme || "default"})`);
+    return;
+  }
   if (o.mode === "ascii") { process.stdout.write(renderAscii(run, opts)); return; }
   // F41 end batch: every drawing at once, so none is skipped - two GREEN runs
   // that ran the pieces one by one drew the wizard and the ASCII but never the
@@ -1148,7 +1183,7 @@ async function main(argv) {
   }
   const r = render(run, opts);
   const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem}${o.mode === "html" ? "" : ".artifact"}.html`));
-  await writeGenerated(root, out, o.mode === "html" ? standalonePage(r) : artifactPage(r));
+  await writeGenerated(root, out, o.mode === "html" ? standalonePage(r, o.theme) : artifactPage(r));
   const nq = run ? run.qs.filter((q) => ASKABLE.has(q.state)).length : 0;
   // The levers link to the wizard by a relative name: write it beside the page.
   if (opts.anatomy && run && nq) await writeGenerated(root, join(dirname(out), `${run.id}.wizard.html`), wizardPage(setFromRun(run, rel(runPath))));
@@ -1215,6 +1250,11 @@ function selftest() {
   ok(!/<(!doctype|html|head|body)\b/i.test(page), "artifact page has no wrapper tags");
   ok(/^<!doctype html>/.test(full) && full.includes('name="viewport"'), "standalone page has its own doctype and viewport");
   ok(page.includes("@media (prefers-color-scheme:dark)") && page.includes(':root[data-theme="dark"]') && /body\{background:var\(--ground\)/.test(page), "tokens, dark mode, body background");
+  // F164: default output byte-identical when --format/--theme are absent (hashes pinned on the unmodified code).
+  const sha256 = (s) => createHash("sha256").update(s).digest("hex");
+  ok(sha256(page) === "72fb231a1bf834d6a2e788e0cf19d65374223fa9388b1c386f40b72cc1c4efbd", "F164: artifact default byte-identical", sha256(page));
+  ok(sha256(full) === "4372395b6c5980bb4e8ca5ada452600c934d2c72ca2546702bdecbdbc085ede1", "F164: standalone default byte-identical", sha256(full));
+  ok(sha256(ascii) === "c9619d2f1d0c1be9d000e2169b5ae86df8b1ad89e6d80bcbd8289563bf809aae", "F164: ascii default byte-identical", sha256(ascii));
   ok(!/<script[^>]+src=/i.test(page) && !/https?:\/\//.test(page), "no external fetch: draws offline");
   ok(!/[^\x09\x0a\x20-\x7e]/.test(ascii), "ascii output is ASCII");
   ok(/<title>Holo RUN-9<\/title>/.test(page), "two-to-four word title");
