@@ -2,6 +2,8 @@
 
 > **Status legend:** ✅ DONE (verified in repo) · 🟡 IN-PROGRESS (partial/uncommitted) · 📝 CLAIMED (asserted in chat, unverified) · ⬜ NOT STARTED
 
+> **Update 2026-11-13 22:28 (supersedes the A224 rows below):** the original A224 implementer was stopped by the orchestrator after ~6 h — its first full `install.sh --selftest` failed with `FAIL: dry run actions differ from the real run` and a second full run was still going. A first finisher died without reporting. A second finisher is now on the stage: it made its fix (worktree diff `plugin/install.sh` + `plugin/install.ps1`, +69/−4 — the antigravity marker-delete now prints the `kept …: a link or under one` line through the same `under_link` guard in both modes instead of silently skipping in dry mode, plus selftest-case adjustments) and started one full `sh` selftest at 21:28 (`.skillator/a224-scratch/selftest-sh2.log` in the worktree), still running at 22:28; the `ps1` selftest follows. **Next action unchanged:** when that finisher reports, review + land stage 292, then 293 (F174) → 294 (F175) → 287 (verify/merge/push). Do not dispatch a third A224 agent while the finisher (subagent "A224 finish retry") is running.
+
 ## 1. TL;DR (read this first)
 Session handed off at the owner's "usage 5% left" order. `RUN-0038` (the /pending-sentinel sequential run over A217–A222, F77, F164, F172, A224) has stages 281–291 landed on its run branch and reviewed; stage 292 (A224) is mid-selftest with an uncommitted diff; stages 293 (F174), 294 (F175) and 287 (verify/merge/push) remain, with full prompts already written in the run file. **Next action:** `continue RUN-0038` — check the worktree log for an A224 commit first (see §7).
 
@@ -70,4 +72,4 @@ Session handed off at the owner's "usage 5% left" order. `RUN-0038` (the /pendin
 - **Working tree:** main clean except pre-existing untracked `.skillator/*` run/scratch files and `docs/handoffs/*`; worktree has the uncommitted A224 diff + scratch dirs named in §3
 - **PR / remote state:** local only; main ahead 120, nothing pushed this session
 - **Tests at handoff time:** not re-run for this doc; per-stage results are in §3 with their sources
-- **Handoff written by:** Muse Code (muse-wonder-1.0) session, owner @sabre, 2026-11-13
+- **Handoff written by:** Muse Code (muse-wonder-1.0) session, owner @sabre, 2026-11-13; updated 2026-11-13 22:28 same session
