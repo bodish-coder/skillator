@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { calculateCursorUsage, discover, getBillingCycleStart, recordCursorRun, render, row } from '../status'
+import { calculateCursorUsage, discover, getBillingCycleStart, ownProfile, recordCursorRun, render, row } from '../status'
 import type { Reader } from '../status'
 
 // F94: `ops --status` - one row per CLI profile found under a fake HOME (never the owner's
@@ -61,6 +61,16 @@ test('no quota source: cursor has none; a logged-in profile with no fresh readin
     ['cursor-gamma', 'no quota source: cursor-agent has no usage command'],
     ['agy-delta', 'no quota source: no reading in the last 3 h'],
   ])
+})
+
+test('F172: ownProfile names the env-named profile via the same discovery; none says null', () => {
+  const h = home()
+  const d = dir(h, '.claude-alpha', '.credentials.json')
+  dir(h, '.codex')
+  assert.deepEqual(ownProfile({ HOME: h, SKILLATOR_PROFILE_DIR: d }), { name: 'claude-alpha', cli: 'claude', dir: d })
+  assert.deepEqual(ownProfile({ HOME: h, SKILLATOR_CLI: 'codex' }), { name: 'codex', cli: 'codex', dir: `${h}/.codex` })
+  assert.equal(ownProfile({ HOME: h }), null)
+  assert.equal(ownProfile({ HOME: h, SKILLATOR_PROFILE_DIR: `${h}/.claude-beta` })?.name, 'claude-beta')
 })
 
 test('a reader that runs out of time says so in its row', async () => {

@@ -20,6 +20,7 @@ import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM, MUTED_HOW, mutedWords } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
 import { ticketsOf } from '../hooks/lib/team'
+import { FIVE_HOLD_PCT, resetsText, usageColor, WEEKLY_STOP_PCT } from '../hooks/lib/healthlines'
 import { runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
 
@@ -601,24 +602,49 @@ function runRows(s: State, sel: string): Keyed[] {
 // --- the Health tab, as the mock: Usage and Machine, a label column ---
 
 const BAR = 20
-const row = (label: string, value: Seg[]): Seg[] => [{ text: '  ' + label.padEnd(14), color: label ? 'permission' : undefined }, ...value]
+const row = (label: string, value: Seg[]): Seg[] => [{ text: '  ' + label.padEnd(14) }, ...value]
 
-function usageRow(label: string, w: Window | null, held: boolean, now: number): Seg[] {
+function usageRow(label: string, w: Window | null, limit: number, now: number): Seg[] {
   if (!w) return row(label, [dim('not observable here')])
   const stale = isStale(w, now)
   const filled = Math.round(Math.min(100, Math.max(0, w.pct)) / 100 * BAR)
-  const c: Color | undefined = stale ? undefined : held ? 'warning' : 'success'
+  const c: Color | undefined = stale ? undefined : usageColor(w.pct, limit)
   return row(label, [{ text: '█'.repeat(filled), color: c, dim: stale }, dim('░'.repeat(BAR - filled)),
     { text: `  ${w.pct}%`, color: c, dim: stale }, dim(` (${ageText(w, now)}${stale ? ', stale' : ''})`)])
 }
 
-function relayRow(u: Usage | null): Seg[] {
+const fmtPct = (n: number) => String(Math.round(n * 10) / 10)
+
+// F172: this CLI's own profile (state.profile, from status.ts ownProfile), its
+// figures the same usage reading the bars draw; unreadable shows its reason.
+function profileRow(s: State): Seg[] {
+  const u = s.usage
+  if (!u?.five && !u?.seven) {
+    const reason = (u?.decision ?? '').trim() === 'UNOBSERVABLE' ? 'no usage reading' : u ? 'not available' : 'not read yet'
+    return row('Profile', [s.profile ? { text: `${s.profile} · ${reason}` } : dim('none detected')])
+  }
+  const pct = (w: Window | null) => (w ? `${w.pct}%` : '-')
+  const reset = resetsText(u.five?.resetsAt ?? null, s.now) ?? resetsText(u.seven?.resetsAt ?? null, s.now)
+  return row('Profile', [{ text: `${s.profile ?? 'none detected'} · 5h ${pct(u.five)} · 7d ${pct(u.seven)}${reset ? ` · ${reset}` : ''}` }])
+}
+
+function relayRow(u: Usage | null, now: number): Seg[] {
   const d = (u?.decision ?? '').trim()
   const h = /^HOLD (\S+)( 7d)?$/.exec(d)
   if (h) return row('Relay', h[2]
     ? [{ text: `■ 7-day hold reached (${h[1]}%)`, color: 'error' }, dim(' - waits for the reset or your go')]
     : [{ text: `▲ 5-hour hold reached (${h[1]}%)`, color: 'warning' }, dim(' - new stages wait')])
-  if (/^RELEASE /.test(d)) return row('Relay', [{ text: 'stages run', color: 'success' }, dim(` (${d})`)])
+  if (/^RELEASE /.test(d)) {
+    const segs: Seg[] = [{ text: 'stages run' }, dim(` (${d})`)]
+    const seven = u?.seven && !isStale(u.seven, now) ? u.seven : null
+    if (seven) {
+      const dist = seven.pct >= WEEKLY_STOP_PCT
+        ? (seven.pct === WEEKLY_STOP_PCT ? 'at stop' : `${fmtPct(seven.pct - WEEKLY_STOP_PCT)}% past stop`)
+        : `${fmtPct(WEEKLY_STOP_PCT - seven.pct)}% to stop`
+      segs.push({ text: ` - 7-day ${seven.pct}% of ${WEEKLY_STOP_PCT}% stop (${dist})`, color: usageColor(seven.pct, WEEKLY_STOP_PCT) })
+    }
+    return row('Relay', segs)
+  }
   if (d === 'UNOBSERVABLE') return row('Relay', [{ text: 'no usage reading', color: 'warning' }, dim(' (UNOBSERVABLE)')])
   if (!u?.five && !u?.seven) return row('Relay', [dim('no decision without a reading')])
   return row('Relay', [dim('decision not known yet')])
@@ -626,7 +652,7 @@ function relayRow(u: Usage | null): Seg[] {
 
 function factRow(label: string, bytes: number | null, t: Limits): Seg[] {
   const f = figure(bytes, t)
-  const value: Seg = f.level === null ? dim('not known') : { text: `${f.text} free`, color: LEVEL_COLOR[f.level] }
+  const value: Seg = f.level === null ? dim('not known') : { text: `${f.text} free`, color: f.level === 'green' ? undefined : LEVEL_COLOR[f.level] }
   return row(label, [{ ...value, text: value.text.padEnd(19) }, dim(`amber < ${t.amber / GiB} GB · red < ${t.red / GiB} GB`)])
 }
 
@@ -653,27 +679,18 @@ function machineRows(m: Machine | null, red: boolean, now: number): Seg[][] {
 
 function healthBody(s: State): Seg[][] {
   const u = s.usage
-  const held = heldOf(u)
   const out: Seg[][] = [
-    [{ text: 'Usage'.padEnd(15), color: 'suggestion', bold: true }, dim('from watch-cortana usage-watch level')],
-    usageRow('5-hour', u?.five ?? null, held.five, s.now),
-    usageRow('7-day', u?.seven ?? null, held.seven, s.now),
-    relayRow(u),
+    [{ text: 'Usage'.padEnd(15), bold: true }, dim('from watch-cortana usage-watch level')],
+    profileRow(s),
+    usageRow('5-hour', u?.five ?? null, FIVE_HOLD_PCT, s.now),
+    usageRow('7-day', u?.seven ?? null, WEEKLY_STOP_PCT, s.now),
+    relayRow(u, s.now),
     row('Credit', [dim('not available')]),
   ]
-  if (u?.spendLimitPct !== null && u?.spendLimitPct !== undefined) out.push(row('Spend limit', [{ text: `${u.spendLimitPct}% used`, color: 'suggestion' }]))
-  if (u?.costUsd !== null && u?.costUsd !== undefined) out.push(row('Spent', [{ text: `$${u.costUsd.toFixed(2)} this session`, color: 'suggestion' }]))
-  out.push([], [{ text: 'Machine', color: 'suggestion', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now))
-  const btnR = hot('r refresh', 'r')
-  const btnRes = hot('R resume', 'R', true)
-  const btnCli = hot('c resume CLI', 'c')
-  const btnForce = hot('F force resume', 'F', true)
-  out.push([], [{ text: 'Actions', color: 'suggestion', bold: true }])
-  if (s.cols < 60) {
-    out.push([dim('  '), btnR, dim('  '), btnRes], [dim('  '), btnCli, dim('  '), btnForce])
-  } else {
-    out.push([dim('  '), btnR, dim('  '), btnRes, dim('  '), btnCli, dim('  '), btnForce])
-  }
+  if (u?.spendLimitPct !== null && u?.spendLimitPct !== undefined) out.push(row('Spend limit', [{ text: `${u.spendLimitPct}% used` }]))
+  if (u?.costUsd !== null && u?.costUsd !== undefined) out.push(row('Spent', [{ text: `$${u.costUsd.toFixed(2)} this session` }]))
+  // F172: no in-body Actions row - the footer keys (keysOf) are the one action row.
+  out.push([], [{ text: 'Machine', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now))
   return out
 }
 

@@ -58,7 +58,7 @@ test('ascii swaps the glyphs; fit cuts with an ellipsis; a long title never wrap
 })
 test('runs and health tabs as the mock; the assign box overlays the body', () => {
   const h = text(reduce(s, { name: '3' }).state)
-  assert.match(h, /Usage +from watch-cortana usage-watch level\n  5-hour        not observable here\n  7-day         not observable here\n  Relay         no decision without a reading\n  Credit        not available/)
+  assert.match(h, /Usage +from watch-cortana usage-watch level\n  Profile       none detected\n  5-hour        not observable here\n  7-day         not observable here\n  Relay         no decision without a reading\n  Credit        not available/)
   assert.match(h, /Machine\n  machine facts not read yet/)
   assert.match(text(reduce(s, { name: '2' }).state), /reading runs…/)
   assert.match(text(reduce(onRuns(s, '', {}), { name: '2' }).state), /no open runs - plan one with relay-morpheus \(plan-runs\)/)
@@ -334,6 +334,42 @@ test('the assign box lists + add person; from it the form overlays the dialog; n
   assert.match(text(reduce(onAdd, { name: 'return' }).state), /┌─ Add person ─/)
   const none = text(reduce({ ...s, team: [] }, { name: 'a' }).state)
   assert.match(none, /│  no \.skillator\/team\.md yet - \+ add person creates it +│\n  │  › \+ add person +│/)
+})
+
+test('F172: health actions once (footer only), bars by relay threshold, relay 7-day stop, profile row, plain labels', () => {
+  const held = onMachine(s, RED_HELD, 0).state
+  const u = onUsage(held, 'src=codex 5h=14 7d=94 ctx=- max=-\n', 0)
+  const decided = u.effects[0]!.kind === 'run' ? (u.effects[0]!.then({ code: 0, out: 'RELEASE 14\n', err: '', argv: [] })(u.state) as State) : u.state
+  const x: State = { ...reduce(decided, { name: '3' }).state, profile: 'codex' }
+  const h = text(x)
+  assert.match(h, /  Profile       codex · 5h 14% · 7d 94%/)
+  assert.match(h, /  Relay         stages run \(RELEASE 14\) - 7-day 94% of 97% stop \(3% to stop\)/)
+  assert.doesNotMatch(h, /Actions/)
+  assert.equal(h.split('[r refresh]').length - 1, 1, 'refresh key shown once')
+  assert.equal(h.split('[c resume CLI]').length - 1, 1, 'resume CLI key shown once')
+  assert.equal(h.split('[F force resume]').length - 1, 1, 'force resume key shown once')
+  const col = frame(x, { color: true, ascii: false })
+  const five = col.find(l => l.includes('5-hour'))!, seven = col.find(l => l.includes('7-day'))!
+  assert.doesNotMatch(five, /\x1b\[32m|\x1b\[33m|\x1b\[31m/, 'low 5h bar is plain')
+  assert.match(seven, /\x1b\[33m/, '7d 94% bar is amber, near the 97% stop')
+  assert.doesNotMatch(seven, /\x1b\[32m/, '7d 94% bar is not green')
+  assert.doesNotMatch(five, /\x1b\[35m/, 'row labels are plain')
+  assert.doesNotMatch(col.find(l => l.includes('Usage'))!, /\x1b\[36m/, 'Usage heading is plain')
+  const past = onUsage(onMachine(s, RED_HELD, 0).state, 'src=codex 5h=85 7d=97 ctx=- max=-\n', 0).state
+  const pastCol = frame({ ...past, tab: 'health' }, { color: true, ascii: false })
+  assert.match(pastCol.find(l => l.includes('5-hour'))!, /\x1b\[31m/, '5h at/past 80% hold is red')
+  assert.match(pastCol.find(l => l.includes('7-day'))!, /\x1b\[31m/, '7d at the 97% stop is red')
+})
+
+test('F172: profile row shows the reset when known and the reason when unreadable', () => {
+  const now = new Date(2026, 9, 18, 12, 15).getTime()
+  const win = (pct: number, resetsAt: string | null) => ({ pct, resetsAt, source: 'host' as const, at: now })
+  const base: State = { ...s, tab: 'health', now, profile: 'codex' }
+  const known = text({ ...base, usage: { five: win(14, new Date(2026, 9, 18, 14, 20).toISOString()), seven: win(94, null), spendLimitPct: null, costUsd: null, decision: 'RELEASE 14' } })
+  assert.match(known, /  Profile       codex · 5h 14% · 7d 94% · resets today 14:20 · in 2h 05m/)
+  const unreadable = text({ ...base, usage: { five: null, seven: null, spendLimitPct: null, costUsd: null, decision: 'UNOBSERVABLE' } })
+  assert.match(unreadable, /  Profile       codex · no usage reading/)
+  assert.match(text({ ...base, profile: null, usage: null }), /  Profile       none detected/)
 })
 
 test('health with readings: bars, relay, machine rows with their thresholds', () => {

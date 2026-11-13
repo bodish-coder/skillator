@@ -46,6 +46,27 @@ export function discover(home: string): Profile[] {
   return out
 }
 
+// F172: the one profile this process speaks for - the env-named one
+// (SKILLATOR_PROFILE_DIR / a CLI's config dir, else SKILLATOR_CLI), resolved
+// through the same discovery `ops --status` lists; null when env names none.
+export function ownProfile(env: Env): Profile | null {
+  const home = norm(env.HOME || env.USERPROFILE || homedir())
+  const profiles = discover(home)
+  const dir = env.SKILLATOR_PROFILE_DIR || env.CLAUDE_CONFIG_DIR || env.CODEX_HOME || env.MUSE_CONFIG_DIR || env.AGY_CONFIG_DIR
+  if (dir) {
+    const found = profiles.find(p => key(p.dir) === key(dir))
+    if (found) return found
+    const base = norm(dir).split('/').filter(Boolean).pop() ?? ''
+    for (const [cli, def, prefix] of KINDS) {
+      if (base === def.split('/').pop()) return { name: cli, cli, dir: norm(dir) }
+      if (base.startsWith(prefix)) return { name: base.slice(1), cli, dir: norm(dir) }
+    }
+    return { name: env.SKILLATOR_CLI || base.replace(/^\./, '') || 'none', cli: env.SKILLATOR_CLI || '', dir: norm(dir) }
+  }
+  if (env.SKILLATOR_CLI) return profiles.find(p => p.cli === env.SKILLATOR_CLI) ?? { name: env.SKILLATOR_CLI, cli: env.SKILLATOR_CLI, dir: '' }
+  return null
+}
+
 // The reader's env for one profile: its own home set, the other CLI's pointed at a path that
 // does not exist, and the in-session overrides dropped.
 function readerEnv(p: Profile, base: Env): Env {

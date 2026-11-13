@@ -13,6 +13,7 @@ import { openReconcile, renderReconcile } from './reconcile'
 import { paint } from './paint'
 import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
+import { hostingProfileName } from './lib/healthlines'
 import { DiagnoseView, EngageConfirm, openRuns, pollRuns, readDiagnose, readRuns, RunsTab } from './runstab'
 import { runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, statusColor } from './lib/runlines'
 import type { RunsSection } from './lib/runlines'
@@ -333,11 +334,17 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
     )
   }
   if (tab === 'health') {
+    // F172: the USAGE block names the hosting CLI's own profile (env-named, else claude)
+    let profile = 'claude'
+    try {
+      const dir = (await $.env.get('SKILLATOR_PROFILE_DIR')) || (await $.env.get('CLAUDE_CONFIG_DIR')) || (await $.env.get('CODEX_HOME')) || (await $.env.get('MUSE_CONFIG_DIR')) || (await $.env.get('AGY_CONFIG_DIR')) || null
+      profile = hostingProfileName((await $.env.get('SKILLATOR_CLI')) || null, dir)
+    } catch { /* the hosting CLI's name stands */ }
     return (
       <Box flexDirection="column">
         {bar}
         <Text> </Text>
-        {HealthTab(els, await readHealth($))}
+        {HealthTab(els, { ...(await readHealth($)), profile: { name: profile } })}
         <Text> </Text>
         {/* F87: register.tsx takes this press (ui.press) - /ops resume force */}
         <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>

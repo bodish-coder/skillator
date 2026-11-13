@@ -103,11 +103,12 @@ for (const surface of SURFACES) {
     const ui = await health($, surface)
     const text = async (key: string) => (await ui.find({ key }))?.text
     expect(await text('h:usage')).toBe('USAGE')
+    expect(await text('profile')).toBe('profile claude · 5h 41% · 7d 55% · resets today 14:20 · in 2h 05m')
     expect(await text('u:five')).toBe(`5-hour  ${bar(41)}  41%`)
     expect(await text('r:five')).toBe('        resets today 14:20 · in 2h 05m')
     expect(await text('u:seven')).toBe(`7-day   ${bar(55)}  55%`)
     expect(await text('r:seven')).toBe('        resets Thu 22 Oct 09:00')
-    expect(await text('relay')).toBe('relay: stages run (RELEASE 41)')
+    expect(await text('relay')).toBe('relay: stages run (RELEASE 41) - 7-day 55% of 97% stop (42% to stop)')
     expect(await text('decide')).toBe('same decision relay-morpheus makes: chain decide --level "src=host 5h=41 7d=55 ctx=- max=-"')
     // relay-morpheus decided it, on this session's own line, never empty.
     expect(decides(w)).toEqual([['/bin/sh', RELAY + '.sh', 'chain', 'decide', '--level', 'src=host 5h=41 7d=55 ctx=- max=-']])
@@ -270,6 +271,48 @@ test('a hold with no reason: held (reason unknown)', async ($, on) => {
   await start($, clock)
   const ui = await health($, 'terminal')
   expect((await ui.find({ key: 'held' }))?.text).toBe('held     held (reason unknown) - /ops resume to release')
+  await ui.unmount()
+})
+
+test('F172: 7-day at 94% is amber not green, 5h low is plain, relay names the 7-day stop distance', async ($, on) => {
+  const [w, clock] = world(on)
+  w.rate = [{ kind: 'five_hour', percentUsed: 14, resetsAt: FIVE_RESET }, { kind: 'seven_day', percentUsed: 94, resetsAt: SEVEN_RESET }]
+  w.decide = 'RELEASE 14\n'
+  await start($, clock)
+  const ui = await health($, 'terminal')
+  const seven = await ui.find({ key: 'u:seven' })
+  expect(seven?.text).toBe(`7-day   ${bar(94)}  94%`)
+  expect(JSON.stringify(seven)).toContain('"color":"warning"')
+  expect(JSON.stringify(seven)).not.toContain('"color":"success"')
+  const five = await ui.find({ key: 'u:five' })
+  expect(JSON.stringify(five)).not.toContain('"color":"success"')
+  expect(JSON.stringify(five)).not.toContain('"color":"warning"')
+  expect((await ui.find({ key: 'relay' }))?.text).toBe('relay: stages run (RELEASE 14) - 7-day 94% of 97% stop (3% to stop)')
+  expect((await ui.find({ key: 'profile' }))?.text).toBe('profile claude · 5h 14% · 7d 94% · resets today 14:20 · in 2h 05m')
+  const locks = await ui.find({ key: 'locks' })
+  expect(locks?.text).toBe('locks    none stale                ok')
+  expect(JSON.stringify(locks)).not.toContain('"color":"success"')
+  await ui.unmount()
+})
+
+test('F172: at or past the relay thresholds the bars are red (5h 85, 7d 97)', async ($, on) => {
+  const [w, clock] = world(on)
+  w.rate = [{ kind: 'five_hour', percentUsed: 85, resetsAt: FIVE_RESET }, { kind: 'seven_day', percentUsed: 97, resetsAt: SEVEN_RESET }]
+  w.decide = 'HOLD 97 7d\n'
+  await start($, clock)
+  const ui = await health($, 'terminal')
+  expect(JSON.stringify(await ui.find({ key: 'u:five' }))).toContain('"color":"error"')
+  expect(JSON.stringify(await ui.find({ key: 'u:seven' }))).toContain('"color":"error"')
+  await ui.unmount()
+})
+
+test('F172: an unreadable profile shows its reason, never a guessed figure', async ($, on) => {
+  const [w, clock] = world(on)
+  w.rate = []
+  w.decide = 'UNOBSERVABLE\n'
+  await start($, clock)
+  const ui = await health($, 'terminal')
+  expect((await ui.find({ key: 'profile' }))?.text).toBe('profile claude · no usage reading')
   await ui.unmount()
 })
 

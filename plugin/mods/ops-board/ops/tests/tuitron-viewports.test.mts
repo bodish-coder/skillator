@@ -150,22 +150,10 @@ test('Health tab bracketed action badges, cell budgets, hitboxes, and ASCII fall
         assert.doesNotMatch(l, /[\uFFFD]|Γö|ΓöÇ/, `Mojibake or broken box character in health line ${idx + 1}`)
       })
 
-      // 3. Verify exact cell-width budgets on in-body Actions lines when vertical room fits full healthBody (rows >= 24)
-      if (rows >= 24) {
-        const actionsIdx = sc.lines.findIndex(l => l.trim() === 'Actions')
-        assert.ok(actionsIdx >= 0, `Actions header present at ${cols}x${rows}`)
-        if (cols < 60) {
-          assert.equal(sc.lines[actionsIdx + 1], '  [r refresh]  [R resume]')
-          assert.equal(cells(sc.lines[actionsIdx + 1]!), 25)
-          assert.equal(sc.lines[actionsIdx + 2], '  [c resume CLI]  [F force resume]')
-          assert.equal(cells(sc.lines[actionsIdx + 2]!), 34)
-        } else {
-          assert.equal(sc.lines[actionsIdx + 1], '  [r refresh]  [R resume]  [c resume CLI]  [F force resume]')
-          assert.equal(cells(sc.lines[actionsIdx + 1]!), 59)
-        }
-      }
+      // 3. F172: the health actions live only in the footer keys - no in-body Actions row
+      assert.ok(!sc.lines.some(l => l.trim() === 'Actions'), `no in-body Actions header at ${cols}x${rows}`)
 
-      // 4. Verify action hitboxes exist in footer (all row heights) and body (rows >= 24) and match exact badge text
+      // 4. Verify action hitboxes exist in the footer only and match exact badge text
       for (const [keyName, expectedText, expectedWidth] of [
         ['r', '[r refresh]', 11],
         ['R', '[R resume]', 10],
@@ -173,7 +161,7 @@ test('Health tab bracketed action badges, cell budgets, hitboxes, and ASCII fall
         ['F', '[F force resume]', 16],
       ] as const) {
         const matchingHits = sc.hits.filter(h => h.action.kind === 'key' && (h.action as any).key.name === keyName)
-        assert.ok(matchingHits.length >= (rows >= 24 ? 2 : 1), `Expected hitboxes for ${keyName} at ${cols}x${rows}`)
+        assert.equal(matchingHits.length, 1, `Expected exactly one hitbox for ${keyName} at ${cols}x${rows}`)
         for (const hit of matchingHits) {
           assert.equal(hit.width, expectedWidth)
           assert.ok(hit.x >= 1 && hit.x + hit.width - 1 <= cols)

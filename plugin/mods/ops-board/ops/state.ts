@@ -171,6 +171,7 @@ export type State = {
   selected: string | null; expanded: string | null; showTeam: boolean
   open: Box[]                              // F61: the open groups' boxes this session; none = all collapsed
   machine: Machine | null; usage: Usage | null; watch: Watch
+  profile: string | null                   // F172: the env-named CLI profile (app.ts, via status.ts ownProfile); null = none detected
   relay: string | null                     // band: "RUN-0012 2/4", the first relay run not all done
   runs: RunView[]; runsSelected: string | null; runsExpanded: string | null   // runsSelected: a run id or 'head:<section>'
   runsOpen: RunsSection[]                  // F76: the Workflows tab's open sections (Runs, Workflows); both start open
@@ -228,7 +229,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   tab: 'tickets', board: null, team: [], me: null,
   filter: { app: null, who: null, mine: false, showDone: false }, filterField: null,
   selected: null, expanded: null, showTeam: false, open: [],
-  machine: null, usage: null, watch: { level: 'green', reasons: [] }, relay: null,
+  machine: null, usage: null, watch: { level: 'green', reasons: [] }, profile: null, relay: null,
   runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null, startRun: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
