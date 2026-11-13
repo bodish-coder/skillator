@@ -112,6 +112,19 @@ test("mindmap: suffix parent only when in the run, dependencies kept out of the 
   assert.ok(html.includes('class="mm-tree"'));
 });
 
+test("all formats x all themes: standalone, offline, themed, escaped", () => {
+  const run = parseRun(fx("fixture-all-states.md"));
+  for (const f of FORMATS) for (const t of THEMES) {
+    const html = formatPage(run, f, { theme: t, layout: layout(run) });
+    assert.ok(html.startsWith("<!doctype html>"), `${f}/${t} doctype`);
+    assert.ok(html.includes(`data-format="${f}"`) && html.includes(`data-theme="${t}"`), `${f}/${t} markers`);
+    assert.ok(!/<script[^>]+src=|<link[^>]+href=|@import|url\(\s*https?:/i.test(html), `${f}/${t} offline`);
+    assert.ok(!/https?:\/\//.test(html.replaceAll('xmlns="http://www.w3.org/2000/svg"', "")), `${f}/${t} no external URL`);
+  }
+  const noTheme = formatPage(run, "timeline", { layout: layout(run) });
+  assert.ok(!noTheme.includes("data-theme="), "no theme flag, no theme attribute");
+});
+
 test("timeline: no stages and thin times still render", () => {
   const empty = parseRun("# RUN-7 - empty\n");
   const m = timelineModel(empty, layout(empty));

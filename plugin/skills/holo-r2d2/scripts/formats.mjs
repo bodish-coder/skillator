@@ -60,8 +60,8 @@ const FORMAT_CSS = `
   --does:#2f7d4f; --does-bg:#e8f3ec; --hurts:#b3261e; --hurts-bg:#f9e9e7; --accent:#a8590c; --accent-bg:#fbefe2;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){${DARK}}}
-:root[data-theme="dark"]{${DARK}}
+@media (prefers-color-scheme:dark){:root:not([data-theme = "light"]){${DARK}}}
+:root[data-theme = "dark"]{${DARK}}
 *{box-sizing:border-box}
 body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;margin:0 auto;max-width:64rem;padding:2rem 16px 4rem;-webkit-font-smoothing:antialiased}
 h1{font-family:var(--mono);font-size:1rem;margin:0 0 .25rem;letter-spacing:.03em}

@@ -1446,6 +1446,20 @@ function selftest() {
   const mmChild = parseRun("# RUN-8 - sub\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n| 1 | F90 parent work | x | - | - | abc1234 |\n| 2 | F90a child work |   | - | - | - |\n| 3 | F91a orphan sub |   | - | - | - |\n");
   ok(formatPage(mmChild, "mindmap", {}).includes('data-ticket="F91a" data-parent="none"'), "F164 mindmap: orphan ticket is a labelled root");
 
+  // 10. F164: every format stands alone and offline, hostile text stays text
+  for (const f of FORMATS) {
+    const hp = formatPage(run, f, { layout: layout(run), theme: "contrast" });
+    ok(hp.startsWith("<!doctype html>") && hp.includes(`data-format="${f}"`) && hp.includes('data-theme="contrast"'), `F164 ${f}: standalone contrast page`);
+    ok(!/<script[^>]+src=|https?:\/\//.test(hp.replaceAll('xmlns="http://www.w3.org/2000/svg"', "")), `F164 ${f}: offline, no external URL`);
+    ok(!formatPage(nasty, f, { layout: layout(nasty) }).includes("<b>yes</b>"), `F164 ${f}: hostile text escaped`);
+    ok(formatPage(odd, f, { layout: layout(odd) }).length > 0, `F164 ${f}: after: cycle renders`);
+    ok(formatPage(parseRun("# RUN-7 - empty\n"), f, { layout: layout(parseRun("# RUN-7 - empty\n")) }).includes("<!doctype html>"), `F164 ${f}: no-stage run renders`);
+  }
+  const bigMd = "# RUN-60 - big\n\n## Stages\n| # | stage | state | owner | heartbeat | landed |\n|---|---|---|---|---|---|\n" +
+    Array.from({ length: 60 }, (_, i) => `| ${i + 1} | stage ${i + 1} | ${i % 3 ? "" : "x"} | - | - | - |`).join("\n") + "\n";
+  const bigPage = formatPage(parseRun(bigMd), "timeline", { layout: layout(parseRun(bigMd)) });
+  ok((bigPage.match(/data-stage="/g) || []).length >= 60 && !bigPage.includes("NaN"), "F164 timeline: 60 stages, no NaN");
+
   if (fails) { console.error(`selftest: ${fails} failed`); process.exitCode = 1; } else console.log("selftest: ok");
 }
 
