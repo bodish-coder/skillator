@@ -1,0 +1,7 @@
+**Engaged prompt:**
+> Analyse why users churn and tell me what to fix, using ONLY this repo's app source code — there are NO usage logs, NO analytics exports, NO customer data anywhere you can access, so do not claim proven churn causes. Goal: identify source-evidenced churn risks (onboarding, activation, core flows, errors, paywalls/limits, performance, empty states) and prioritise fixes. First read the repo structure, README/docs, and relevant code/conventions — never guess them, cite file/symbol evidence for every finding. Done when: a prioritised fix list is delivered, each item with evidence, likely churn mechanism, and concrete fix, plus an explicit note on what cannot be proven without data. Scope: read-only analysis; do not modify code or invent data, requirements, or metrics.
+
+First actions:
+- Inventory repo files and read README/docs to map the user journey and conventions.
+- Trace onboarding, activation, core, error, and paywall code paths for friction evidence.
+- Draft prioritised, evidence-cited churn-risk hypotheses and fixes, marking unprovable claims.

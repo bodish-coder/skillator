@@ -1,0 +1,29 @@
+Goal beyond the goal: a login CTA that reads as the primary, trustworthy action — not just a blue fill.
+Picked: Depth. Skipped: Altitude, Range — one narrow fix with one right answer.
+Missing: login button location, current styling system, and how login is tested — the agent must find them in the repo, not guess.
+
+**Engaged prompt:**
+> Make the login button blue and check it still works.
+>
+> Goal beyond the goal: the login button should be unmistakably the primary action on its screen — visually dominant, legible, and trustworthy enough that no user hesitates over which control logs them in.
+>
+> Do this:
+> - Locate the login button in the codebase and its current styling (component, stylesheet, or theme token). Use the project's existing color system if it has a primary/blue token; do not introduce a new hardcoded hex if a token exists. If no token exists, use a clear, saturated blue.
+> - Change only the login button's color to blue. Keep its size, label, position, and behavior unchanged. Do not restyle other buttons or elements.
+> - Preserve accessibility: text on the blue must meet WCAG AA contrast (4.5:1 for normal text). If white text on the chosen blue fails, adjust the blue shade until it passes and note the shade used.
+> - Check it still works: trigger the real login flow the button belongs to (existing test suite, or running the app and clicking through) and confirm the button still renders, is clickable, and submits as before.
+>
+> Done means: the login button renders blue, passes AA contrast, and the login flow succeeds exactly as it did before the change.
+>
+> Scope: touch only the login button's color styling. Do not change login logic, auth, routing, copy, or layout.
+>
+> Context: find the button, styling convention, and test/run commands from the repo itself — read the relevant files and project config; never guess paths or conventions.
+>
+> Access needed:
+> - Repo file locations for the login button and its styles — missing (locate in repo; unlocks a targeted, token-consistent change)
+> - Existing test command or runnable login flow for verification — missing (locate in repo; unlocks the works-check)
+> - File read/edit and command execution in the repo — have (required to make and verify the change)
+>
+> Output: the file(s) changed with the new blue value/token, the contrast result, and the verification evidence.
+>
+> Outside judge (pass/fail, not your opinion): the project's existing login-related tests pass (or a manual click-through of the real login flow succeeds end-to-end), and a contrast checker confirms ≥4.5:1 for the button text. A blue button that breaks login or fails contrast is a fail.

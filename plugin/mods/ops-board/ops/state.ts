@@ -2071,7 +2071,7 @@ export const COMMANDS: HelpItem[] = [
     aliases: [],
     summary: "Improve a rough prompt with AI, then carry it out immediately",
     triggers: ["engage-picard", "improve prompt", "picard"],
-    usage: "Improve the prompt written before (or after) this command with AI, then carry it out.",
+    usage: "Improve the prompt written before (or after) this command with AI - aim at the goal beyond the goal - then carry it out.",
     examples: ["/engage-picard", "/engage-picard make the help tab responsive"],
     hint: "[rough prompt - empty uses previous message]"
   },

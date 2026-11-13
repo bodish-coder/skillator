@@ -1,21 +1,52 @@
 ---
-description: Improve the prompt written before (or after) this command with AI, then carry it out
+description: Improve the prompt written before (or after) this command with AI - aim at the goal beyond the goal - then carry it out
 argument-hint: "[rough prompt - empty uses your previous message]"
 ---
-Engage: rewrite a rough prompt into a strong one, then carry it out.
+Engage: rewrite a rough prompt into a strong, more ambitious one, then carry it out.
+Adapted from be-ambitious (MIT, RoboNuggets), after Felix Rieseberg's article on ambition for humans with models.
 
 The prompt: `$ARGUMENTS`
 Empty → the prompt is the user's message just before this command (what they wrote
 before typing it). Nothing there either → ask for the prompt in one line and stop.
 
-1. **Rewrite it.** Keep every requirement, name, path, number and constraint exactly,
-   and the user's intent. Make the goal explicit; add what "done" means, the scope
-   (what not to touch), the context the repo already gives (read the files and
-   conventions it names - never guess them) and the output expected. Settle an
-   ambiguity by its most likely reading; never invent a requirement. A gap that would
-   change the result and that the repo cannot settle → ask that one question first.
-2. **Show it** once, under `**Engaged prompt:**`, as a quote block. No commentary on
-   what changed.
-3. **Do it.** Treat the engaged prompt as the user's request, in this same turn, with
-   every rule of this session still in force (skills, CLAUDE.md / AGENTS.md /
-   GEMINI.md, permissions). No stop for approval between the rewrite and the work.
+First decide what you were handed. A prompt to improve (a rewrite is asked for, or
+it is meant for another agent or tool) → stop after the rewrite. A task to do →
+carry it out. Cannot tell → stop after the rewrite.
+
+1. **Aim higher — better, not bigger.** Find the goal beyond the goal: the outcome
+   this task serves. Pick the ambition types that fit (usually one or two); skip a
+   type that does not fit. Ambition raises the outcome, the standard or the
+   perspectives — never the deliverables, features or side quests.
+   - **Altitude** — the task serves an outcome: climb the ladder (do this task →
+     remove the whole class of it → keep it from coming back, naming the setup
+     that needs), and work the highest rung you can finish and check with the
+     access you have.
+   - **Depth** — the task should be done really well: start from the rawest
+     material, not what was digested for you; use the field's best methods and
+     instruments, not its vocabulary; set a specific hard target and treat it
+     as reasonable.
+   - **Range** — the result must land with people, or the obvious field is stuck:
+     name the verbs under the nouns, bring in the fields they call for, each
+     doing its real job with its own tools (a subagent each, where available) —
+     never role-play. A narrow fix with one right answer takes Depth only.
+2. **Rewrite it.** Keep every requirement, name, path, number and constraint exactly,
+   and the user's intent. Make the goal and the goal beyond it explicit; add what
+   "done" means, the scope (what not to touch), the context the repo already gives
+   (read the files and conventions it names - never guess them) and the output
+   expected. List the data, tools and access the plan needs, each marked have or
+   missing (and what a missing one would unlock); never invent a source, tool or
+   result. End with the outside judge: a test, benchmark, reproduction,
+   measurement or other check that is not you, and what counts as a pass. Settle
+   an ambiguity by its most likely reading; never invent a requirement. A gap
+   that would change the result and that the repo cannot settle → ask that one
+   question first.
+3. **Show it.** At most three short lines first: the goal beyond the goal; the
+   types picked and skipped; what is missing. Then the rewrite once, under
+   `**Engaged prompt:**`, as a quote block. No other commentary.
+4. **Do it.** Treat the engaged prompt as the user's request, in this same turn,
+   with every rule of this session still in force (skills, CLAUDE.md / AGENTS.md /
+   GEMINI.md, permissions). Start at the rung you picked. For the work itself, ask
+   first only when that rung replaces what the user asked for instead of raising
+   it, spends money, or cannot be undone; otherwise no stop for approval. Report
+   honestly against the judge: a missed hard target with real numbers is a result;
+   a faked pass is not.

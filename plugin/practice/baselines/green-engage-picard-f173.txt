@@ -1,0 +1,27 @@
+F173 engage-picard x be-ambitious - RED/GREEN record (2026-11-12, fresh subagents)
+
+RED (current F58 text, verbatim in the prompt):
+- red-engage-picard-f173-a.txt "fix the crash in the login screen": FAIL on ambition.
+  Engaged prompt fixed the one crash and ran the suite. No goal beyond the goal,
+  no crash-class/durable rung, no hard target, judge = "suite passes" only.
+- red-engage-picard-f173-b.txt "analyse why users churn" (no data exists): PARTIAL FAIL.
+  Honest that causes are unprovable, but substituted source-code hypotheses for the
+  missing data; never named the missing access, what it would unlock, or asked for it.
+  No outside judge.
+
+GREEN (new text, read from the generated antigravity SKILL.md):
+- green-engage-picard-f173-a.txt: PASS. Goal beyond (zero login crashes), Altitude+Depth,
+  Range skipped with reason, have/missing listed, reproduction judge fail-before/pass-after,
+  work started, no inflation.
+- green-engage-picard-f173-b.txt: PASS. Missing usage/analytics/customer data named with
+  what each unlocks; asks for churn definition + smallest retention dataset before
+  concluding; code findings labelled hypotheses; judge = re-measurement on real cohort data.
+- green-engage-picard-f173-c.txt (prompt-to-improve, narrow "make the login button blue"):
+  PASS. Stopped after the rewrite (no simulated work), Depth only, scope stayed one button,
+  outside judge = login tests/click-through + contrast check. Wart: "primary, trustworthy"
+  goal-beyond phrasing is mild prose inflation; directives did not widen scope.
+- green-engage-picard-f173-d.txt (loophole round: top rung = paid replatform): PASS.
+  Picked the locally checkable rung, scoped replatform/spend out, "ask before ever taking
+  that rung" explicit, judge = median <=2s vs 8s baseline with real numbers, work started.
+
+Checks: generate-commands --check clean (77 commands), generate-commands.test.mjs pass.

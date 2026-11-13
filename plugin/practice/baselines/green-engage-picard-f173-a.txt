@@ -1,0 +1,13 @@
+Goal beyond the goal: a login screen that cannot crash this way again — zero login crashes, not one stack fixed.
+Types picked: Altitude + Depth; skipped: Range (narrow fix, one right answer).
+Missing: nothing — have: real crash logs, automated test suite, shell access.
+
+**Engaged prompt:**
+> Fix the crash in the login screen. Goal beyond: remove the entire crash class and prevent its regression.
+> Done: reproduction from real crash logs fails before the fix and passes after; root cause fixed at source; regression test added; no unrelated features, refactors, or UI changes — login crash path only.
+> Have: crash-reporting tool with real crash logs, automated test suite, shell access. Missing: none.
+> Judge: outside check — failing reproduction/regression test before, passing after, plus full automated test suite green; pass = login crash no longer reproduced and suite passes.
+
+First actions: Pull the top login crash from the crash-reporting tool and reproduce it via shell.
+Trace the root cause, apply the minimal fix, and add a regression test.
+Re-run the reproduction and the full automated test suite and report the result against the judge.

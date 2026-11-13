@@ -1,0 +1,13 @@
+Goal beyond the goal: stop users churning, not just explain past churn.
+Picked: Depth, Range. Skipped: Altitude — prevention is premature until causes are evidenced.
+Missing: usage logs, analytics exports, and customer data — no causal churn claim is possible without them.
+
+**Engaged prompt:**
+> Analyse why users churn and tell me what to fix, with the goal beyond it of durably reducing churn.
+> Context and constraint: this repo contains ONLY app source code — NO usage logs, NO analytics exports, NO customer data anywhere accessible. Treat code findings as unproven friction hypotheses, never as proven churn causes. Scope: analysis and prioritised fix recommendations only; do not modify code or invent sources, tools, or results.
+> Data/tools needed: app source code — have (can surface onboarding, activation, paywall, error, and cancellation-path friction); product analytics and cohort/retention data — missing (would unlock funnel drop-off and churn timing); churn definition and subscription/cancellation records — missing (would unlock who counts as churned and when); interviews, support tickets, and exit surveys — missing (would unlock stated reasons). Before concluding, ask for the churn definition and the smallest available retention dataset; if none exists, label every cause “hypothesis” and state what data would confirm or refute it.
+> Done means: causes ranked by evidence strength, each with its supporting evidence or “missing,” its affected user journey step, a specific fix, and the metric that fix should move. Outside judge: re-measurement on real cohort/retention data not produced by you; a cause passes only if its linked segment shows higher churn in that data, and a fix passes only if a follow-up cohort or A/B check improves retention for that segment.
+
+First actions:
+1. Request the churn definition and smallest retention dataset; log all missing sources above.
+2. Audit the source only for labelled churn-risk friction, without claiming proven causes.

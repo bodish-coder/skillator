@@ -1,0 +1,7 @@
+**Engaged prompt:**
+> Fix the crash in the login screen. Done means: reproduce the crash using the real crash logs from the repo's crash-reporting tool, fix the root cause, and confirm the repo's automated test suite passes. Scope: touch only code relevant to the login screen crash; do not change unrelated features. Context: read the repo's files, conventions, crash logs, and tests it already gives — never guess them. Output expected: the fix and verification that the crash is resolved.
+
+First actions:
+- Locate and read the crash logs for the login screen via the crash-reporting tool.
+- Reproduce the crash and identify the failing login-screen code.
+- Apply the minimal fix and run the automated test suite.

@@ -1,0 +1,11 @@
+Goal beyond the goal: a fast site that stays fast, so slow load times stop costing visitors and never silently regress.
+Types picked: Altitude + Depth; skipped: Range — this is a focused performance fix with measurable answers.
+Missing: paid hosting/CDN plan — would unlock replatforming (replaces current setup, costs money); not used without approval.
+
+**Engaged prompt:**
+> Speed up our marketing website, which currently takes 8 seconds to load. Goal: cut load time hard using best-practice performance measurement from raw traces, not guesses. Goal beyond the goal: remove the whole class of slowdowns and set up the guardrails (performance budget/monitoring) that keep load time from creeping back. Done means: median load at or under 2 seconds on a repeatable local measurement, verified by an outside judge — Lighthouse/WebPageTest-style timing run, pass = median ≤2s vs the 8s baseline, reported with real numbers. Scope: edit and measure the site code locally only; do not replatform, do not switch hosting/CDN, do not spend money, and do not change content or design except where a change is a performance fix. Access: have — local site code and free local measurement/editing; missing — a new paid hosting/CDN plan, which would unlock the top rung of replatforming but replaces the current setup and costs money, so ask before ever taking that rung. Output: the optimisations made, before/after measurements, and the regression guardrail left in place.
+
+First actions:
+1. Measure the current 8s baseline locally (timing/Lighthouse) and identify the largest contributors.
+2. Apply the highest-impact local code/asset optimisations that need no spend and no replatforming.
+3. Re-measure against the ≤2s judge and add a performance budget/check to catch regressions.
