@@ -7,7 +7,8 @@ import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, Per
 import type { Call } from '../hooks/lib/calls'
 import type { Model, View } from '../hooks/lib/ticketsmodel'
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
-import { NO_SCRIPTS, loginMessage, loginStatus } from '../hooks/lib/calls'
+import { NO_SCRIPTS, decideQuestionsPrompt, holoTicketCmd, loginMessage, loginStatus } from '../hooks/lib/calls'
+export { decideQuestionsPrompt, holoTicketCmd }
 import { appliedHead, appliedLine, applyOf, assignedTickets, buildModel, canApply, decideTickets, HEAD, headKey, isHead, isUserHead, isUserSectionOpen, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME, ticketById, visible } from '../hooks/lib/board'
@@ -59,6 +60,8 @@ export type HelpState = {
 export type Key = { name: string; sequence?: string; shift?: boolean; ctrl?: boolean }
 export type PersonField = 'handle' | 'name' | 'emails'
 export type DialogField = 'ticket' | 'who'
+export type DecideChoice = 'assign' | 'holo' | 'questions'
+export type DecideDraft = { id: string; field: 'ticket' | 'choice'; choice: DecideChoice; path: string | null; result: string | null }
 export type StartRunField = 'runner' | 'mode' | 'tickets'
 export type StartRunMode = 'sequential' | 'parallel'
 export type StartRunRunner = 'pending-sentinel' | 'gauntlet-run'
@@ -81,6 +84,8 @@ export type PointerAction =
   | { kind: 'filter-field'; field: FilterField }
   | { kind: 'ticket-field' }
   | { kind: 'dialog-kind'; value: 'owner' | 'decide' | 'tester' }
+  | { kind: 'decide-ticket-field' }
+  | { kind: 'decide-choice'; choice: DecideChoice }
   | { kind: 'help' }
   | { kind: 'help-skill'; id: string }
   | { kind: 'help-close' }
@@ -89,7 +94,7 @@ export type PointerAction =
   | { kind: 'start-run-field'; field: StartRunField }
   | { kind: 'explorer-branch'; branch: string }       // B25: a branch in the Explorer confirm's picker
 
-export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.reconcile || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help?.runPrompt != null || s.help?.filtering)
+export const pointerModal = (s: State) => !!(s.setup || s.person || s.dialog || s.decide || s.reconcile || s.teamConfirm || s.engage || s.startRun || s.filterField || s.runForm || s.help?.runPrompt != null || s.help?.filtering)
 
 // Targets come only from the rendered frame, never from labels or terminal payloads.
 export function point(s: State, a: PointerAction): Step {
@@ -138,6 +143,8 @@ export function point(s: State, a: PointerAction): Step {
     return a.field === 'posts' ? reduce(next, { name: 'space' }) : ['clear', 'login', 'loginStatus', 'setupCheck', 'setupWalk'].includes(a.field) ? reduce(next, { name: 'return' }) : { state: next, effects: [] }
   }
   if (s.person || s.setup) return same
+  if (a.kind === 'decide-ticket-field') return s.decide ? { state: { ...s, decide: { ...s.decide, field: 'ticket' } }, effects: [] } : same
+  if (a.kind === 'decide-choice') return s.decide ? runDecideChoice({ ...s, decide: { ...s.decide, field: 'choice', choice: a.choice } }, a.choice) : same
   if (a.kind === 'ticket-field') return s.dialog ? { state: { ...s, dialogField: 'ticket' }, effects: [] } : same
   if (a.kind === 'dialog-kind') return s.dialog ? reduce({ ...s, dialogField: 'who' }, { name: a.value === 'owner' ? 'a' : a.value === 'decide' ? 'd' : 't' }) : same
   if (a.kind === 'person') {
@@ -181,6 +188,7 @@ export type State = {
   startRun: StartRunDraft | null           // F113: start run modal on Workflows tab
   dialog: AssignDraft | null; dialogIndex: number    // -1: the cursor is on "+ add person"
   dialogField: DialogField                            // F77: the keys go to the Ticket field or the people
+  decide: DecideDraft | null                          // F174: the Decide chooser modal on Tickets tab
   person: PersonDraft | null; personField: PersonField  // the Add person form, over the dialog or the Team view
   teamSelected: string | null                         // the Team view's row
   teamConfirm: string | null                          // the handle the Team view asks to remove (y/n)
@@ -231,7 +239,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, profile: null, relay: null,
   runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null, startRun: null,
-  dialog: null, dialogIndex: 0, dialogField: 'who', person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
+  dialog: null, dialogIndex: 0, dialogField: 'who', decide: null, person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
   messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
   help: null,
@@ -429,6 +437,124 @@ function dialogKey(s: State, k: Key): Step {
     case 'return': case 'enter': return onAdd ? { state: openPerson(s, 'assign'), effects: [] } : confirmAssign(s)
     case 'escape': return { state: { ...s, dialog: null, dialogIndex: 0, dialogField: 'who' }, effects: [] }
     default: return same
+  }
+}
+
+const DECIDE_CHOICES: DecideChoice[] = ['assign', 'holo', 'questions']
+const decideTicket = (s: State): Ticket | null => (s.decide ? ticketById(s.board?.tickets, s.decide.id) : null)
+
+export function openDecide(s: State): State {
+  const raw = rawTicketId(s.selected)
+  const id = raw && !isHead(raw) ? raw : buildModel(viewOf(s)).ticket
+  const t = id ? ticketOf(s, id) : null
+  return {
+    ...s,
+    dialog: null,
+    decide: { id: t?.id ?? '', field: t ? 'choice' : 'ticket', choice: 'assign', path: null, result: null },
+  }
+}
+
+export function decideLines(s: State): string[] {
+  const d = s.decide
+  if (!d) return []
+  const tk = decideTicket(s)
+  const said = tk ? `[${tk.box}] ${STATE_NAME[tk.box]} · ${tk.title}` : d.id.trim() ? 'no such ticket' : 'type a ticket ID, e.g. F12'
+  const mark = (c: DecideChoice) => (d.field === 'choice' && d.choice === c ? '› ' : '  ')
+  const out = [
+    `Decide ${tk ? tk.id : 'a ticket'}`,
+    `  Ticket  ${d.id}${d.field === 'ticket' ? '_' : ''} · ${said}`,
+    `${mark('assign')}(a) Assign a decider  ${tk ? `ticket-meta decide ${tk.id} <@handle>` : 'open the decision assignee picker'}`,
+    `${mark('holo')}(h) Decision page     ${tk ? `${holoTicketCmd(tk.id)} (read-only)` : 'generate read-only HTML decision page'}`,
+    `${mark('questions')}(q) MCQ decision      ${tk ? decideQuestionsPrompt(tk.id) : 'print CLI MCQ prompt + holo command'}`,
+  ]
+  if (d.path) out.push(`  Page    ${d.path}`)
+  if (d.result) out.push(`  ${d.result}`)
+  out.push('  a assign decider · h decision page · q MCQ decision · Enter choose · Esc cancel')
+  return out
+}
+
+function runDecideChoice(s: State, choice: DecideChoice): Step {
+  const d = s.decide
+  if (!d) return { state: s, effects: [] }
+  const tk = decideTicket(s)
+  if (!tk) {
+    return {
+      state: { ...s, decide: { ...d, choice, result: d.id.trim() ? 'no such ticket' : 'type a ticket ID first' } },
+      effects: [],
+    }
+  }
+  if (choice === 'assign') {
+    const handle = startHandle(tk, 'decide', s.team, s.me)
+    const dialog: AssignDraft = { id: tk.id, kind: 'decide', handle, result: null }
+    return {
+      state: {
+        ...s,
+        decide: null,
+        dialog,
+        dialogField: 'who',
+        dialogIndex: handle ? Math.max(0, s.team.findIndex(m => m.handle === handle)) : -1,
+      },
+      effects: [],
+    }
+  }
+  if (choice === 'holo') {
+    const then: Then = r => x => {
+      const path = r.code === 0 ? / -> (.+?)(?: \(standalone page\))?\s*$/.exec(r.out)?.[1]?.trim() ?? null : null
+      if (!path) {
+        const err = timedOut(r) ? 'holo did not finish in 30 s' : why(r, 'holo')
+        return x.decide ? { ...x, decide: { ...x.decide, result: err, path: null } } : toast(x, err)
+      }
+      return {
+        ...x,
+        toast: path,
+        decide: x.decide ? { ...x.decide, choice: 'holo', path, result: 'Read-only decision support generated.' } : null,
+      }
+    }
+    return {
+      state: { ...s, decide: { ...d, choice: 'holo', result: null } },
+      effects: [run('holo-ticket', [tk.id], then)],
+    }
+  }
+  const prompt = decideQuestionsPrompt(tk.id)
+  const holo = holoTicketCmd(tk.id)
+  return {
+    state: toast({ ...s, decide: null }, `Paste into your CLI:\n${prompt}\nDecision page (read-only): ${holo}`),
+    effects: [],
+  }
+}
+
+function decideTicketFieldKey(s: State, k: Key): Step {
+  const d = s.decide!
+  const edit = (id: string): Step => ({ state: { ...s, decide: { ...d, id, path: null, result: null } }, effects: [] })
+  switch (k.name) {
+    case 'tab': case 'down': return { state: { ...s, decide: { ...d, field: 'choice' } }, effects: [] }
+    case 'backspace': return edit([...d.id].slice(0, -1).join(''))
+    case 'return': case 'enter': return runDecideChoice(s, d.choice)
+    case 'escape': return { state: { ...s, decide: null }, effects: [] }
+  }
+  const ch = k.sequence ?? (k.name.length === 1 ? k.name : undefined)
+  if (!k.ctrl && ch && [...ch].length === 1 && ch > ' ' && ch !== '\x7f' && [...d.id].length < 20) return edit(d.id + ch)
+  return { state: s, effects: [] }
+}
+
+export function decideKey(s: State, k: Key): Step {
+  const d = s.decide!
+  if (d.field === 'ticket') return decideTicketFieldKey(s, k)
+  const move = (by: number): Step => {
+    const at = DECIDE_CHOICES.indexOf(d.choice)
+    const choice = DECIDE_CHOICES[(at + by + DECIDE_CHOICES.length) % DECIDE_CHOICES.length]!
+    return { state: { ...s, decide: { ...d, choice, result: null } }, effects: [] }
+  }
+  switch (k.name) {
+    case 'up': case 'k': return move(-1)
+    case 'down': case 'j': return move(1)
+    case 'tab': return { state: { ...s, decide: { ...d, field: 'ticket' } }, effects: [] }
+    case 'a': return runDecideChoice(s, 'assign')
+    case 'h': return runDecideChoice(s, 'holo')
+    case 'q': return runDecideChoice(s, 'questions')
+    case 'return': case 'enter': return runDecideChoice(s, d.choice)
+    case 'escape': case 'c': return { state: { ...s, decide: null }, effects: [] }
+    default: return { state: s, effects: [] }
   }
 }
 
@@ -1104,7 +1230,7 @@ function ticketsKey(s: State, k: Key): Step {
       return same
     }
     case 'a': return { state: openDialog(s, 'owner'), effects: [] }
-    case 'd': return { state: openDialog(s, 'decide'), effects: [] }
+    case 'd': return { state: openDecide(s), effects: [] }
     case 'D': return decided(s)
     case 'f': return { state: { ...s, filterField: 'app' }, effects: [] }
     case 'x': return { state: { ...s, filter: { ...s.filter, showDone: !s.filter.showDone } }, effects: [] }
@@ -2521,6 +2647,7 @@ export function reduce(s: State, k: Key): Step {
   // form (as Esc), the board stays; the next ctrl+c quits. An empty form has nothing to lose.
   if (k.ctrl && k.name === 'c') {
     if (s.help) return { state: { ...s, help: null, tab: s.tab === 'help' ? 'tickets' : s.tab }, effects: [] }
+    if (s.decide) return { state: { ...s, decide: null }, effects: [] }
     if (s.startRun) return { state: { ...s, startRun: null }, effects: [] }
     if (s.setup?.touched) return { state: { ...s, setup: null }, effects: [] }
     if (s.runForm?.mode === 'rename' && s.tab === 'run') return { state: { ...s, runForm: null }, effects: [] }
@@ -2535,6 +2662,7 @@ export function reduce(s: State, k: Key): Step {
   if (s.setup) return setupKey(s, k)
   if (s.person) return personKey(s, k)
   if (s.dialog) return dialogKey(s, k)
+  if (s.decide) return decideKey(s, k)
   if (s.reconcile) return reconcileKey(s, k)
   if (s.teamConfirm) return teamKey(s, k)
   if (s.engage) return engageKey(s, k)          // F85

@@ -1,9 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser, openHelp, filteredSkills, SKILLS, COMMANDS, HELP_ITEMS, startRunCommand, openStartRun, startRunLines } from '../state'
+import { initial, reduce, runsCursor, onBoard, onMachine, onUsage, onRuns, dialogLines, decideLines, formLines, personArgs, personError, reconcileLines, viewOf, startHandle, settle, afterRun, point, ticketsItems, activeUser, openHelp, filteredSkills, SKILLS, COMMANDS, HELP_ITEMS, startRunCommand, openStartRun, startRunLines } from '../state'
 import type { State } from '../state'
 import type { Box } from '../../types'
 import { parseBoard } from '../../hooks/lib/board'
+import { decideQuestionsPrompt, holoTicketCmd } from '../../hooks/lib/calls'
 import { buildModel, isUserSectionOpen } from '../../hooks/lib/ticketsmodel'
 import { continuePrompt } from '../../hooks/lib/runlines'
 
@@ -95,8 +96,13 @@ test('dialog: Esc cancels, q does not quit, the result line shows a refusal', ()
   assert.ok(dialogLines(bad).includes('  not on the team'))
 })
 
-test('d on a row opens a decision; a / d in the dialog switch kind; D on a [?] row runs decided', () => {
-  const state = reduce(s0, key('d')).state                 // F3, the first row
+test('d on a row opens the Decide chooser; a opens the decision dialog; a / d in the dialog switch kind; D on a [?] row runs decided', () => {
+  const chooser = reduce(s0, key('d')).state               // F3, the first row -> opens Decide chooser
+  assert.equal(chooser.decide?.id, 'F3')
+  assert.equal(chooser.decide?.field, 'choice')
+  assert.equal(chooser.dialog, null)
+  const state = reduce(chooser, key('a')).state            // (a) Assign a decider -> opens today's dialog
+  assert.equal(state.decide, null)
   assert.equal(state.dialog?.kind, 'decide'); assert.equal(state.dialog?.handle, '@asha')
   assert.equal(dialogLines(state)[0], 'Assign F3 for a decision')
   assert.equal(dialogLines(state)[1], '  Ticket  F3 · [?] decide · Pick chart')
@@ -120,6 +126,72 @@ test('d on a row opens a decision; a / d in the dialog switch kind; D on a [?] r
   assert.match(settle(dr.effects[0]!.then({ code: 2, out: '', err: 'no', argv: ['sh'] })(dr.state)).state.toast ?? '', /^✗ ticket-meta decided F3 refused: no/)
   const notDecidable = reduce(press(s0, 'down', 'down'), key('D'))   // F1 is [ ]
   assert.equal(notDecidable.effects.length, 0); assert.ok(notDecidable.state.toast)
+})
+
+test('F174 state: Decide chooser routes (a) assign, (h) holo-ticket read-only, (q) CLI questions prompt + holo command, Esc and unknown-ID', () => {
+  // 1. Selected ticket opens chooser on 'choice' with (a), (h), (q)
+  const c0 = reduce(s0, key('d'))
+  assert.equal(c0.effects.length, 0)
+  assert.deepEqual(c0.state.decide, { id: 'F3', field: 'choice', choice: 'assign', path: null, result: null })
+  const lines = decideLines(c0.state)
+  assert.ok(lines.some(l => l.includes('Decide F3')))
+  assert.ok(lines.some(l => /assign.*decider/i.test(l)))
+  assert.ok(lines.some(l => /decision page/i.test(l) && l.includes(holoTicketCmd('F3'))))
+  assert.ok(lines.some(l => l.includes('MCQ decision') && l.includes(decideQuestionsPrompt('F3'))))
+
+  // 2. Esc cancels the chooser cleanly with no effects
+  const esc = reduce(c0.state, key('escape'))
+  assert.equal(esc.state.decide, null)
+  assert.equal(esc.effects.length, 0)
+
+  // 3. (h) Holo decision page runs holo-ticket ['F3'], shows generated path, and writes nothing to the board
+  const holoStep = reduce(c0.state, key('h'))
+  assert.equal(holoStep.effects.length, 1)
+  assert.deepEqual([holoStep.effects[0]!.call, holoStep.effects[0]!.args], ['holo-ticket', ['F3']])
+  const holoDone = settle(holoStep.effects[0]!.then(ok('ok -> /r/.skillator/holo/ticket-F3.html (standalone page)\n'))(holoStep.state))
+  assert.equal(holoDone.effects.length, 0)                  // no refresh / no board write
+  assert.equal(holoDone.state.decide?.path, '/r/.skillator/holo/ticket-F3.html')
+  assert.equal(holoDone.state.decide?.result, 'Read-only decision support generated.')
+  assert.equal(holoDone.state.toast, '/r/.skillator/holo/ticket-F3.html')
+  assert.ok(decideLines(holoDone.state).some(l => l.includes('/r/.skillator/holo/ticket-F3.html')))
+
+  // 4. (q) Decide by questions in CLI prints the exact prompt + holo command to paste, closes chooser, no board write
+  const qStep = reduce(c0.state, key('q'))
+  assert.equal(qStep.effects.length, 0)                     // no process call, no board write
+  assert.equal(qStep.state.decide, null)
+  assert.ok(qStep.state.toast?.includes(decideQuestionsPrompt('F3')))
+  assert.ok(qStep.state.toast?.includes(holoTicketCmd('F3')))
+  assert.doesNotMatch(decideQuestionsPrompt('F3'), /^\//)   // never a slash command
+
+  // 5. No ticket selected (collapsed group header) opens chooser on 'ticket' field; letter keys type into ticket ID
+  const onHeader = { ...s0, open: [] as Box[], selected: 'head:?' }
+  const h0 = reduce(onHeader, key('d')).state
+  assert.equal(h0.decide?.id, '')
+  assert.equal(h0.decide?.field, 'ticket')
+  const emptyEnter = reduce(h0, key('return'))
+  assert.equal(emptyEnter.effects.length, 0)
+  assert.equal(emptyEnter.state.decide?.result, 'type a ticket ID first')
+
+  // Unknown ID ('F99') refuses (a), (h), and (q) with no effects
+  const badTyped = press(h0, 'F', '9', '9')
+  assert.equal(badTyped.decide?.id, 'F99')
+  assert.ok(decideLines(badTyped).some(l => l.includes('no such ticket')))
+  const badChoice = reduce(badTyped, key('tab')).state
+  assert.equal(badChoice.decide?.field, 'choice')
+  for (const ch of ['a', 'h', 'q'] as const) {
+    const attempt = reduce(badChoice, key(ch))
+    assert.equal(attempt.effects.length, 0)
+    assert.equal(attempt.state.dialog, null)
+    assert.match(attempt.state.decide?.result ?? '', /no such ticket/i)
+  }
+
+  // Typing valid ID 'f1' resolves F1 and routes to (q) or (a)
+  const cleared = press(badTyped, 'backspace', 'backspace', 'backspace', 'f', '1')
+  assert.equal(cleared.decide?.id, 'f1')
+  const f1Assign = reduce(reduce(cleared, key('tab')).state, key('a')).state
+  assert.equal(f1Assign.decide, null)
+  assert.equal(f1Assign.dialog?.id, 'F1')
+  assert.equal(f1Assign.dialog?.kind, 'decide')
 })
 
 test('a dialog on a ticket in progress warns; an empty team starts on no one and Enter runs nothing', () => {
@@ -598,15 +670,16 @@ test('F61: Enter on a header opens and closes it; the selection stays on the hea
 })
 
 test('F61: a / d / D on a header ask for a ticket; on a row they work as before', () => {
-  // F77: a / d on a header open the dialog on an empty Ticket field (was: a toast)
-  for (const k of ['a', 'd']) {
-    const r = reduce(fresh, key(k)).state
-    assert.equal(r.toast, null); assert.equal(r.dialog?.id, ''); assert.equal(r.dialogField, 'ticket')
-  }
+  // F77/F174: a on a header opens the assign dialog on an empty Ticket field; d opens the Decide chooser on an empty Ticket field
+  const ra = reduce(fresh, key('a')).state
+  assert.equal(ra.toast, null); assert.equal(ra.dialog?.id, ''); assert.equal(ra.dialogField, 'ticket')
+  const rd = reduce(fresh, key('d')).state
+  assert.equal(rd.toast, null); assert.equal(rd.decide?.id, ''); assert.equal(rd.decide?.field, 'ticket')
   const D = reduce(fresh, key('D'))
   assert.equal(D.effects.length, 0); assert.ok(D.state.toast)
   const onRow = press(fresh, 'return', 'down')
-  assert.equal(reduce(onRow, key('d')).state.dialog?.id, 'F3')
+  assert.equal(reduce(onRow, key('d')).state.decide?.id, 'F3')
+  assert.equal(press(onRow, 'd', 'a').dialog?.id, 'F3')
   assert.deepEqual(reduce(onRow, key('D')).effects.map(e => e.kind === 'run' ? e.call : e.kind), ['meta-decided'])
 })
 
@@ -667,7 +740,12 @@ test('F77: no ticket selected - the dialog opens on an empty Ticket field; f1 re
   assert.match(settle(r.effects[0]!.then(ok(''))(r.state)).state.toast ?? '', /^✓ F1 now pending, owned by @vidul: Dark mode/)
 })
 test('F77: an unknown ID says no such ticket and Enter runs nothing', () => {
-  const d = typing(reduce({ ...s0, selected: 'head:?' }, key('d')).state, 'F99')
+  const c = typing(reduce({ ...s0, selected: 'head:?' }, key('d')).state, 'F99')
+  assert.equal(decideLines(c)[0], 'Decide a ticket')
+  assert.equal(decideLines(c)[1], '  Ticket  F99_ · no such ticket')
+  const rc = reduce(c, key('return'))
+  assert.equal(rc.effects.length, 0); assert.equal(rc.state.decide?.result, 'no such ticket')
+  const d = typing(press({ ...s0, selected: 'head:?' }, 'a', 'tab', 'd', 'tab'), 'F99')
   assert.equal(dialogLines(d)[0], 'Assign a ticket for a decision')
   assert.equal(dialogLines(d)[1], '  Ticket  F99_ · no such ticket')
   assert.ok(dialogLines(d).includes('  Runs    ticket-meta decide <ID> @vidul'))
@@ -675,7 +753,7 @@ test('F77: an unknown ID says no such ticket and Enter runs nothing', () => {
   assert.equal(r.effects.length, 0); assert.equal(r.state.dialog?.result, 'no such ticket')
 })
 test('F77: a changed ID moves the dialog to that ticket; Enter runs on the new one', () => {
-  let d = reduce(s0, key('d')).state                                 // F3 selected
+  let d = press(s0, 'd', 'a')                                        // F3 selected -> Decide chooser -> (a) Assign a decider
   d = reduce(d, key('tab')).state
   d = reduce(reduce(d, key('backspace')).state, key('backspace')).state
   d = typing(d, 'f1')

@@ -2,7 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 import type { StatusDraft, Ticket } from '../types'
 import { STATE_NAME } from './lib/board'
+import { decideQuestionsPrompt, holoTicketCmd } from './lib/calls'
 import { runCall } from './lib/host'
+import { openAssign } from './assign'
 
 const statusA = atom({ plugin: 'ops-board', key: 'status' } as const, null)
 const flightA = atom({ plugin: 'ops-board', key: 'statusFlight' } as const, null)
@@ -23,16 +25,18 @@ const fresh = (id: string, t: Ticket | null, mode: StatusDraft['mode']): StatusD
 export async function clearStatus($: EngineInterface) { await update($, statusA, () => null) }
 export async function openStatus($: EngineInterface, shown: string | null, canType = true, mode: StatusDraft['mode'] = 'status') {
   const t = shown ? await resolveTicket($, shown) : null
-  if (!t && !canType) { $.ui.toast('Select a ticket first; typing an ID needs a keyboard surface.'); return }
-  await update($, actionFocusA, () => null)
+  if (!t && !canType) { $.ui.toast(mode === 'decide' ? 'ops board: select a ticket first' : 'Select a ticket first; typing an ID needs a keyboard surface.'); return }
+  await update($, actionFocusA, () => (mode === 'decide' && t ? 'decide:assign' : null))
   await update($, assignA, () => null)
   await update($, personA, () => null)
   await update($, reconcileA, () => null)
   await update($, statusA, () => fresh(t?.id ?? '', t, mode))
   await $.ui.open({ id: 'ops-board', title: 'ops board', closeOnEscape: true })
-  void $.ui.focus({ requestId: 'ops-board', key: t ? 'status:help' : 'status:ticket' }).catch(() => {})
+  void $.ui.focus({ requestId: 'ops-board', key: t ? (mode === 'decide' ? 'decide:assign' : 'status:help') : 'status:ticket' }).catch(() => {})
   if (mode === 'help' && t) await generateStatusHelp($)
 }
+export const openDecide = ($: EngineInterface, shown: string | null, canType = true) =>
+  openStatus($, shown, canType, 'decide')
 async function cancel($: EngineInterface) {
   await clearStatus($)
   await update($, actionFocusA, () => null)
@@ -98,16 +102,59 @@ export async function generateStatusHelp($: EngineInterface): Promise<void> {
     $.ui.toast(path, { timeoutMs: 10000 })
   } catch (err) { await finish($, d, String(err)) }
 }
+export async function decideStatusAssign($: EngineInterface): Promise<void> {
+  const d = await read($, statusA)
+  if (!d || d.busy) return
+  const t = await resolveTicket($, d.id)
+  if (!t) {
+    await update($, statusA, x => x?.generation === d.generation ? { ...x, result: 'Type a unique ticket ID first.' } : x)
+    return
+  }
+  await openAssign($, 'decide', t.id, true)
+}
+export async function decideStatusQuestions($: EngineInterface): Promise<void> {
+  const d = await claim($)
+  if (!d) return
+  const t = await resolveTicket($, d.id)
+  if (!t) { await finish($, d, 'Type a unique ticket ID first.'); return }
+  const text = decideQuestionsPrompt(t.id)
+  try {
+    await $.prompt.submit({ text })
+    await update($, flightA, () => null)
+    $.ui.toast(`✓ Sent to session: ${text}`, { timeoutMs: 8000 })
+    await cancel($)
+  } catch (err) { await finish($, d, String(err)) }
+}
 export async function renderStatus($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement | null> {
   const d = await read($, statusA)
   if (!d) return null
   const els = $.ui.resolve(e), { Box, Text, Button } = els
   const Input = e.surface !== 'mobile' && 'Input' in els ? els.Input : null
   const t = await resolveTicket($, d.id), focus = await read($, actionFocusA)
-  const armed = !d.busy && !!focus && ['status:pending', 'status:blocked', 'status:deferred', 'status:apply', 'status:help', 'status:cancel'].includes(focus)
+  const armed = !d.busy && !!focus && ['status:pending', 'status:blocked', 'status:deferred', 'status:apply', 'status:help', 'status:cancel', 'decide:assign', 'decide:questions'].includes(focus)
   const setId = async (id: string) => {
     const tk = await resolveTicket($, id)
     await update($, statusA, x => x && !x.busy && x.generation === d.generation ? { ...fresh(id, tk, x.mode), generation: x.generation } : x)
+  }
+  if (d.mode === 'decide') {
+    return <Box flexDirection="column">
+      <Box key="status:title"><Text bold>{t ? `Decide ${t.id}` : 'Decide a ticket'}</Text><Text dimColor>{'  '}Esc cancels</Text></Box>
+      <Text dimColor>Tab to actions; letters there. Esc cancels.</Text>
+      {Input && !d.busy ? <Input key="status:ticket" label="Ticket " value={d.id} autoFocus={t ? undefined : true} onInput={v => { void setId(v) }} onSubmit={v => { void setId(v) }} /> : <Text wrap="wrap">{'Ticket: ' + (d.id || '(select a ticket first)')}</Text>}
+      <Text key="status:current" wrap="wrap">{t ? `${t.id}: ${STATE_NAME[t.box]} - ${t.title}\n${t.line}` : d.id.trim() ? 'no such ticket — type a unique ticket ID.' : 'Type a unique ticket ID.'}</Text>
+      {t && <Text key="decide:holo-cmd" dimColor wrap="wrap">{`Decision page  ${holoTicketCmd(t.id)} (read-only)`}</Text>}
+      {t && <Text key="decide:questions-cmd" dimColor wrap="wrap">{`MCQ decision   ${decideQuestionsPrompt(t.id)}`}</Text>}
+      {d.result && <Box key="status:result"><Text wrap="wrap">{d.result}</Text></Box>}
+      {d.helpPath && <Box key="status:path"><Text wrap="wrap">{d.helpPath}</Text></Box>}
+      <Box flexDirection="row" flexWrap="wrap" gap={2}>
+        {d.busy ? <Text>Working; check status before retrying.</Text> : <Box flexDirection="row" flexWrap="wrap" gap={2}>
+          {t && <Button key="decide:assign" plain variant="primary" hotkey={armed ? 'a' : undefined} onPress={() => { void decideStatusAssign($) }}>Assign a decider</Button>}
+          {t && <Button key="status:help" plain hotkey={armed ? 'h' : undefined} onPress={() => { void generateStatusHelp($) }}>Decision page</Button>}
+          {t && <Button key="decide:questions" plain hotkey={armed ? 'q' : undefined} onPress={() => { void decideStatusQuestions($) }}>MCQ decision</Button>}
+          <Button key="status:cancel" plain hotkey={armed ? 'c' : undefined} onPress={() => { void cancel($) }}>Cancel</Button>
+        </Box>}
+      </Box>
+    </Box>
   }
   const set = (fn: (x: StatusDraft) => StatusDraft) => { void update($, statusA, x => x && !x.busy && x.generation === d.generation ? fn(x) : x) }
   return <Box flexDirection="column">

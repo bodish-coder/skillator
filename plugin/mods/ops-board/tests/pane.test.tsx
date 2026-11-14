@@ -724,6 +724,8 @@ test('F61: a and d on a ticket row still open the in-pane form; on a header they
   await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 0, by: 1, bodyRows: 40, contentRows: 30, origin: { kind: 'person' } })
   expect(await state($, 'selected')).toBe('F2')
   await ui.press({ key: 'key:decide' })
+  expect((await ui.find({ key: 'status:title' }))?.text).toBe('Decide F2  Esc cancels')
+  await ui.press({ key: 'decide:assign' })
   expect((await ui.find({ key: 'form:title' }))?.text).toBe('Assign F2 for a decision  Esc cancels')
   expect(w.opens.length).toBeGreaterThan(0)
   await ui.unmount()

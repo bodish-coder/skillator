@@ -89,6 +89,14 @@ const NODE: Partial<Record<Call, { script: string; args: (a: string[]) => string
   'holo-ticket': { script: 'holo-r2d2/scripts/holo.mjs', args: a => ['--ticket', a[0] ?? '', '--html'] },
 }
 
+export const holoTicketCmd = (id: string) =>
+  `node <skills>/holo-r2d2/scripts/holo.mjs --ticket ${id || '<ID>'} --html`
+
+export const decideQuestionsPrompt = (id?: string | null) =>
+  id?.trim()
+    ? `Decide ticket ${id.trim()} by asking me multiple-choice questions one at a time (use AskUserQuestion where this host has it), then record my answers only through ticket-meta decided or ticket-meta decide afterwards.`
+    : `Walk the open decision tickets by asking me multiple-choice questions one at a time (use AskUserQuestion where this host has it), then record my answers only through ticket-meta decided or ticket-meta decide afterwards.`
+
 export const isNodeCall = (call: Call) => NODE[call] !== undefined
 export const NO_NODE = 'node not found on PATH (absolute entries only) - this script needs Node'
 

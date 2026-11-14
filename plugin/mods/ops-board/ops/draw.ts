@@ -11,7 +11,7 @@ import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State, PointerAction, SkillGuide, HelpItem } from './state'
-import { activeUser, pointerModal, dialogLines, engageLines, filteredSkills, formLines, helpCommand, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
+import { activeUser, pointerModal, decideLines, dialogLines, engageLines, filteredSkills, formLines, helpCommand, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
 import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { assignedTickets, buildModel, chipsOf, decideTickets, headKey, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -220,6 +220,9 @@ function keysOf(s: State, m: Model): Seg[][] {
   if (s.person) return [field, h('enter add', 'return'), cancel]
   if (s.dialog) return s.dialogField === 'ticket' ? [[dim('type the ID')], h('tab person', 'tab'), h('enter confirm', 'return'), cancel]
     : [[{ text: '[↑', color: 'suggestion', action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ person]', color: 'suggestion', action: { kind: 'key', key: { name: 'down' } } }], [{ text: '[a', color: 'suggestion', action: { kind: 'key', key: { name: 'a' } } }, dim(' / '), { text: 'd kind]', color: 'suggestion', action: { kind: 'key', key: { name: 'd' } } }], h('tab ticket', 'tab'), h('enter confirm', 'return'), cancel]
+  if (s.decide) return s.decide.field === 'ticket'
+    ? [[dim('type the ID')], h('tab choices', 'tab'), h('enter choose', 'return'), cancel]
+    : [move, h('a assign decider', 'a'), h('h decision page', 'h'), h('q MCQ decision', 'q'), h('tab ticket', 'tab'), h('enter choose', 'return'), cancel]
   if (s.reconcile) return [move, h('space pick', 'space'), h('enter apply picked', 'return'), h('a accept all', 'a'), h('esc none', 'escape')]
   if (s.engage) return [h('enter engage', 'return'), cancel]
   if (s.startRun) return [field, h('space change', 'space'), h('enter confirm', 'return'), cancel]
@@ -737,6 +740,31 @@ function dialogBody(s: State): Seg[][] {
   return boxBody(s, { title: ls[0] ?? '', rows })
 }
 
+function decideBody(s: State): Seg[][] {
+  const d = s.decide
+  if (!d) return []
+  const ls = decideLines(s)
+  const r = d.result ? '  ' + d.result : null
+  const isGood = !!d.result?.startsWith('Read-only')
+  const choices: ('assign' | 'holo' | 'questions')[] = ['assign', 'holo', 'questions']
+  const rows: Boxed['rows'] = ls.slice(1).map((l, i, all) => {
+    const last = i === all.length - 1
+    const action: PointerAction | undefined = i === 0 ? { kind: 'decide-ticket-field' }
+      : i >= 1 && i <= 3 ? { kind: 'decide-choice', choice: choices[i - 1]! }
+      : undefined
+    const color: Color | undefined = l === r ? (isGood ? 'success' : 'error')
+      : (i >= 1 && i <= 3 && d.field === 'choice' && d.choice === choices[i - 1]) ? 'suggestion'
+      : undefined
+    return {
+      text: l,
+      color,
+      action,
+      segs: last ? [dim('  '), hot('a assign', 'a'), dim(' · '), hot('h decision page', 'h'), dim(' · '), hot('q MCQ decision', 'q'), dim(' · '), hot('Esc cancel', 'escape')] : undefined,
+    }
+  })
+  return boxBody(s, { title: ls[0] ?? '', rows })
+}
+
 // The Add person form, boxed as the mock: a Runs line too wide for the box puts its
 // emails on the next line, under the command; ticket-meta's refusal (it names the team
 // file's full path) wraps inside the box, in red, up to three lines.
@@ -1037,6 +1065,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
+    : s.decide ? decideBody(s)
     : s.reconcile ? boxBody(s, { title: recTitle, rows: [...recRows.map((text, index) => ({ text, action: { kind: 'reconcile' as const, index } })), { text: '' },
         { text: '', segs: [dim('  '), hot('Enter apply picked', 'return'), dim(' · '), hot('a accept all', 'a'), dim(' · '), hot('Esc none', 'escape')] }] })   // F81
     : s.engage ? boxBody(s, { title: engTitle, rows: [...engRows.map(text => ({ text })), { text: '' },
@@ -1060,7 +1089,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room, 'run')
     : ticketsBody(s, m, room)
   // B25: a modal box taller than the room keeps its last rows (the buttons, the bottom edge)
-  const boxed = !!(s.setup || s.person || s.dialog || s.reconcile || s.engage || s.startRun) && !(s.help || s.tab === 'help')
+  const boxed = !!(s.setup || s.person || s.dialog || s.decide || s.reconcile || s.engage || s.startRun) && !(s.help || s.tab === 'help')
   const top = boxed && main.length > room && room >= 4
     ? [...main.slice(0, room - 2), ...main.slice(-2)]
     : main.slice(0, room)

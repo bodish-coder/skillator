@@ -7,7 +7,7 @@ import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, UNI, ASCII, cut
 import type { Model, UserSection, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
-import { clearForm, openAssign, renderForm, runDecided } from './assign'
+import { clearForm, openAssign, openDecide, renderForm, runDecided } from './assign'
 import { openStatus, renderStatus } from './status'
 import { openReconcile, renderReconcile } from './reconcile'
 import { paint } from './paint'
@@ -225,7 +225,7 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
     <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
       <Text dimColor>{glyphs.move + ' move'}</Text>
       <Button key="key:assign" plain dimColor hotkey="a" onPress={() => { void openAssign($, 'owner', m.ticket, els.canType) }}>assign</Button>
-      <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openAssign($, 'decide', m.ticket, els.canType) }}>decide</Button>
+      <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openDecide($, m.ticket, els.canType) }}>decide</Button>
       <Button key="key:filter" plain dimColor hotkey="f" onPress={() => { void update($, filterOpenA, x => !x) }}>filter</Button>
       <Button key="key:done" plain dimColor hotkey="x" onPress={() => setFilter(x => ({ ...x, showDone: !x.showDone }))}>done</Button>
       <Button key="key:team" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => ({ selected: null, confirm: false })) }}>team</Button>

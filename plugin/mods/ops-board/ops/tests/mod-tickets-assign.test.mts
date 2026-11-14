@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { parseBoard } from '../../hooks/lib/board.ts'
 import { parseTeam } from '../../hooks/lib/team.ts'
-import { argvFor } from '../../hooks/lib/calls.ts'
+import { argvFor, decideQuestionsPrompt, holoTicketCmd } from '../../hooks/lib/calls.ts'
 import {
   buildModel,
   userHeadText,
@@ -208,3 +208,24 @@ test('A200: real temporary-board backend fixture verifies unprivileged teammate 
     rmSync(tmp, { recursive: true, force: true })
   }
 })
+
+test('F174: pane.tsx, assign.tsx, status.tsx, and calls.ts wire Decide chooser (a) Assign a decider, (h) Decision page, (q) MCQ decision', () => {
+  const paneSrc = readFileSync(new URL('../../hooks/pane.tsx', import.meta.url), 'utf8')
+  const assignSrc = readFileSync(new URL('../../hooks/assign.tsx', import.meta.url), 'utf8')
+  const statusSrc = readFileSync(new URL('../../hooks/status.tsx', import.meta.url), 'utf8')
+
+  assert.match(paneSrc, /key="key:decide".*openDecide\(\$,\s*m\.ticket,\s*els\.canType\)/)
+  assert.match(assignSrc, /export\s*\{\s*openDecide\s*\}/)
+  assert.match(statusSrc, /key="decide:assign".*hotkey=\{armed \? 'a' : undefined\}.*Assign a decider/)
+  assert.match(statusSrc, /key="status:help".*hotkey=\{armed \? 'h' : undefined\}.*Decision page/)
+  assert.match(statusSrc, /key="decide:questions".*hotkey=\{armed \? 'q' : undefined\}.*MCQ decision/)
+  assert.match(statusSrc, /\$\.prompt\.submit\(\{\s*text\s*\}\)/)
+
+  const prompt = decideQuestionsPrompt('F174')
+  assert.ok(prompt.includes('F174'))
+  assert.ok(prompt.includes('AskUserQuestion'))
+  assert.ok(prompt.includes('ticket-meta decided'))
+  assert.doesNotMatch(prompt, /^\//)
+  assert.equal(holoTicketCmd('F174'), 'node <skills>/holo-r2d2/scripts/holo.mjs --ticket F174 --html')
+})
+

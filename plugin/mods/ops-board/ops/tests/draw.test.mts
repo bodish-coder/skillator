@@ -1025,3 +1025,17 @@ test('F165: Help catalog renders skills and commands with brief explanations and
   assert.ok(cmdHit, 'Expected hitbox for archive-zordon command row')
 })
 
+test('F174 draw: Decide chooser renders (a) assign, (h) decision page, (q) MCQ decision within rows x cols', () => {
+  const dState = reduce(s, { name: 'd', sequence: 'd' }).state
+  assert.ok(dState.decide)
+  for (const cols of [40, 60, 80, 120]) {
+    const f = sized({ ...dState, cols, rows: 24 })
+    const full = f.join('\n')
+    assert.match(full, /Decide B2/)
+    assert.match(full, /\(a\) [Aa]ssign.*decider/)
+    assert.match(full, /\(h\) [Dd]ecision page/)
+    assert.match(full, /\(q\) MCQ decision/)
+  }
+})
+
+
