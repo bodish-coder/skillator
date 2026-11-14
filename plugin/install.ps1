@@ -282,7 +282,13 @@ function Write-OpsFunction([string]$shimSrc, [string]$path) {
 # pending.sh. UTF-8 without BOM, LF - the bytes install.sh writes but for the separators
 # inside {{SKILLS}} and that shell line (pi's frontmatter and gemini's TOML reject a BOM).
 function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
-  if ($DryRun) { Write-Host "        would write $target"; return }
+  if ($DryRun) {
+    # a dry run creates nothing, so probe the nearest existing ancestor
+    $probe = $target
+    while ($probe -and -not (Test-Path -LiteralPath $probe)) { $probe = Split-Path -Parent $probe }
+    if ($probe -and (Test-UnderLink $probe)) { Write-Host "        kept ${target}: a link or under one"; return }
+    Write-Host "        would write $target"; return
+  }
   $text = [IO.File]::ReadAllText($tpl).Replace("`r", '')
   $re = [regex]'(?m)^!\{sh "\{\{SKILLS\}\}/tickets-zordon/scripts/pending\.sh"\}$'
   if ($tpl -match '[\\/]gemini[\\/]skillator-pending\.toml$') {
@@ -292,6 +298,7 @@ function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
   }
   $text = $text.Replace('{{SKILLS}}', $skillsDir)
   New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+  if (Test-UnderLink $target) { Write-Host "        kept ${target}: a link or under one"; return }
   [IO.File]::WriteAllText($target, $text, (New-Object Text.UTF8Encoding $false))
   Write-Host "        * $target"
 }
@@ -572,7 +579,14 @@ function Write-Commands([string]$cli, [string]$dest) {
       foreach ($n in $names + $opsNames) {
         Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
-        if (-not $DryRun) { Remove-Item -LiteralPath "$dest\$n\$owned" -Force -ErrorAction SilentlyContinue }
+        $markerPath = "$dest\$n\$owned"
+        if ($DryRun) {
+          # a dry run creates nothing, so probe the nearest existing ancestor
+          $probe = $markerPath
+          while ($probe -and -not (Test-Path -LiteralPath $probe)) { $probe = Split-Path -Parent $probe }
+          if ($probe -and (Test-UnderLink $probe)) { Write-Host "        kept ${markerPath}: a link or under one" }
+        } elseif (Test-UnderLink $markerPath) { Write-Host "        kept ${markerPath}: a link or under one" }
+        else { Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue }
       }
       foreach ($n in $retired + @('upstream-sync', 'ops')) { Remove-RetiredDir "$dest\$n" }
       # F57: the Antigravity IDE's extension, from Antigravity's own dest
@@ -1146,6 +1160,28 @@ function Invoke-SelfTest([string]$T) {
   if (& $has '.gemini\skills\skillator-pending\SKILL.md' 'stale') { return 'agy skill-command not rewritten' }
   if (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\list-ticket-zordon\.skillator-owned')) { return 'stale marker kept on a skill-command' }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.pi\agent\skills\tickets-zordon\.selftest-sentinel'))) { return 'installed skill was rewritten' }
+  # A224: a current command file behind a link, and an antigravity skill dir behind a
+  # link holding its marker: the run writes neither file and deletes no marker through
+  # the link, and says kept for each. The commands dir is junctioned (A218's seeding):
+  # a file symlink needs a privilege this user may not hold.
+  $outside = Join-Path $T 'link-outside'
+  New-Item -ItemType Directory -Force (Join-Path $outside 'skill') | Out-Null
+  [IO.File]::WriteAllText((Join-Path $outside 'skill\SKILL.md'), "user skill bytes`n")
+  [IO.File]::WriteAllText((Join-Path $outside 'skill\.skillator-owned'), "skillator-owned 2`n")
+  Move-Item -LiteralPath (Join-Path $T '.cursor\commands') -Destination (Join-Path $outside 'commands')
+  [IO.File]::WriteAllText((Join-Path $outside 'commands\skillator-update.md'), "user command bytes`n")
+  New-Item -ItemType Junction -Path (Join-Path $T '.cursor\commands') -Target (Join-Path $outside 'commands') | Out-Null
+  Remove-Item -LiteralPath (Join-Path $T '.gemini\skills\skillator-update') -Recurse -Force
+  New-Item -ItemType Junction -Path (Join-Path $T '.gemini\skills\skillator-update') -Target (Join-Path $outside 'skill') | Out-Null
+  $out = & $run @()
+  if ($script:selfCode -ne 0) { return "linked install exited $script:selfCode" }
+  if (([IO.File]::ReadAllText((Join-Path $outside 'commands\skillator-update.md'))) -cne "user command bytes`n") { return 'a linked command file was overwritten' }
+  if (([IO.File]::ReadAllText((Join-Path $outside 'skill\SKILL.md'))) -cne "user skill bytes`n") { return 'a linked skill was overwritten' }
+  if (-not (Test-Path -LiteralPath (Join-Path $outside 'skill\.skillator-owned') -PathType Leaf)) { return 'a marker was deleted through a linked skill dir' }
+  $lines = $out -split "`r?`n"
+  foreach ($k in '.cursor\commands\skillator-update.md', '.gemini\skills\skillator-update\SKILL.md', '.gemini\skills\skillator-update\.skillator-owned') {
+    if ($lines -cnotcontains "        kept $T\${k}: a link or under one") { return "no kept line for $k" }
+  }
   if ((& $count) -ne 1) { return 'second run: profile does not hold one ops block' }
 
   # a damaged profile - two blocks around a user line - ends with one block, user line kept

@@ -337,6 +337,7 @@ subst_gemini_pending() {
 
 # put_cmd <template> <skills-dir> <target>: write one command file (or say it would).
 put_cmd() {
+  if under_link "$3"; then echo "        kept $3: a link or under one"; return 0; fi
   if [ -n "$dry" ]; then echo "        would write $3"; return 0; fi
   mkdir -p "$(dirname -- "$3")"
   case "$1" in
@@ -586,7 +587,7 @@ write_commands() {
       for _n in $_cmds $_ops_cmds; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
-        [ -n "$dry" ] || rm -f "$2/$_n/$owned"
+        if under_link "$2/$_n/$owned"; then echo "        kept $2/$_n/$owned: a link or under one"; elif [ -z "$dry" ]; then rm -f "$2/$_n/$owned"; fi
       done
       for _n in $retired_cmds upstream-sync ops; do retire_dir "$2/$_n"; done
       # F57: the Antigravity IDE's extension, from Antigravity's own dest
@@ -1137,12 +1138,40 @@ if [ -n "$selftest" ]; then
   grep -q stale "$T/.gemini/skills/skillator-pending/SKILL.md" && { echo "FAIL: agy skill-command not rewritten"; exit 1; }
   [ -e "$T/.gemini/skills/list-ticket-zordon/.skillator-owned" ] && { echo "FAIL: stale marker kept on a skill-command"; exit 1; }
   [ -f "$T/.pi/agent/skills/tickets-zordon/.selftest-sentinel" ] || { echo "FAIL: installed skill was rewritten"; exit 1; }
+  # A224: a current command file behind a link, and an antigravity skill dir behind a
+  # link holding its marker: the run writes neither file and deletes no marker through
+  # the link, and says kept for each (no IDE call - the count above stays two)
+  mkdir -p "$T/link-outside/skill"
+  printf 'user command bytes\n' > "$T/link-outside/cmd.md"
+  rm -f "$T/.cursor/commands/skillator-update.md"
+  if command -v cygpath >/dev/null 2>&1; then
+    MSYS=winsymlinks:nativestrict ln -s "$T/link-outside/cmd.md" "$T/.cursor/commands/skillator-update.md"
+  else
+    ln -s "$T/link-outside/cmd.md" "$T/.cursor/commands/skillator-update.md"
+  fi
+  [ -L "$T/.cursor/commands/skillator-update.md" ] || { echo "FAIL: selftest could not link a command file"; exit 1; }
+  printf 'user skill bytes\n' > "$T/link-outside/skill/SKILL.md"
+  printf 'skillator-owned 2\n' > "$T/link-outside/skill/.skillator-owned"
+  rm -rf "$T/.gemini/skills/skillator-update"
+  if command -v cygpath >/dev/null 2>&1; then
+    powershell -NoProfile -Command "New-Item -ItemType Junction -Path '$(cygpath -w "$T/.gemini/skills/skillator-update")' -Target '$(cygpath -w "$T/link-outside/skill")' | Out-Null"
+  else
+    ln -s "$T/link-outside/skill" "$T/.gemini/skills/skillator-update"
+  fi
+  [ -L "$T/.gemini/skills/skillator-update" ] || { echo "FAIL: selftest could not link a skill dir"; exit 1; }
+  out=$(HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0") || { echo "FAIL: linked install exited $?"; exit 1; }
+  grep -qx 'user command bytes' "$T/link-outside/cmd.md" || { echo "FAIL: a linked command file was overwritten"; exit 1; }
+  grep -qx 'user skill bytes' "$T/link-outside/skill/SKILL.md" || { echo "FAIL: a linked skill was overwritten"; exit 1; }
+  [ -f "$T/link-outside/skill/.skillator-owned" ] || { echo "FAIL: a marker was deleted through a linked skill dir"; exit 1; }
+  for _k in ".cursor/commands/skillator-update.md" ".gemini/skills/skillator-update/SKILL.md" ".gemini/skills/skillator-update/.skillator-owned"; do
+    printf '%s\n' "$out" | grep -qxF "        kept $T/$_k: a link or under one" || { echo "FAIL: no kept line for $_k"; exit 1; }
+  done
   out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0" --dry-run) || { echo "FAIL: dry run exited $?"; exit 1; }
   printf '%s\n' "$out" | grep -q "would write $T/.local/bin/ops" || { echo "FAIL: dry-run shim line"; exit 1; }
   if command -v cygpath >/dev/null 2>&1; then
     printf '%s\n' "$out" | grep -qF "would write $(cygpath -u "$T/lad")/Microsoft/Windows Terminal/Fragments/skillator/ops.json" || { echo "FAIL: dry-run fragment line"; exit 1; }
   fi
-  printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/prompts/list-ticket-zordon.md" || { echo "FAIL: dry-run command line"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "kept $T/.pi/agent/prompts/list-ticket-zordon.md: a link or under one" || { echo "FAIL: dry-run command line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/extensions/skillator-ops.ts" || { echo "FAIL: dry-run pi extension line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would install the ops board extension $T/.gemini/config/skills/ops-board/antigravity/skillator-ops.vsix with $T/fake-ide" || { echo "FAIL: dry-run antigravity extension line"; exit 1; }
   [ "$(wc -l < "$T/ide-calls" | tr -d ' ')" = 2 ] || { echo "FAIL: dry run called the Antigravity IDE"; exit 1; }
