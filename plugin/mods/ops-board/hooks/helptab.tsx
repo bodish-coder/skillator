@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, RenderInput, TextProps } from 'claude-code'
-import { HELP_ITEMS, filteredSkills } from '../ops/state'
+import { HELP_ITEMS, filteredSkills, helpCommand } from '../ops/state'
 import { copyHost, readSkillDocHost } from './lib/host'
 import { cutTo, UNI } from './lib/ticketsmodel'
 
@@ -73,11 +73,10 @@ export async function arrowHelp($: EngineInterface, by: number): Promise<boolean
 
 async function runSkill($: EngineInterface, skillId: string, rawArgs?: string): Promise<void> {
   const curArgs = (rawArgs ?? (await read($, helpArgsA))).trim()
-  const it = HELP_ITEMS.find(x => x.id === skillId)
-  const isCmd = it?.kind === 'command'
-  const cmd = isCmd ? `/${skillId}${curArgs ? ' ' + curArgs : ''}` : `/skillator:${skillId}${curArgs ? ' ' + curArgs : ''}`
+  const command = helpCommand(skillId)
+  const cmd = `/${command}${curArgs ? ' ' + curArgs : ''}`
   try {
-    await $.command.run({ command: isCmd ? skillId : `skillator:${skillId}`, ...(curArgs ? { args: curArgs } : {}) })
+    await $.command.run({ command, ...(curArgs ? { args: curArgs } : {}) })
     $.ui.toast(`✓ Sent to session: ${cmd}`)
   } catch {
     try {
@@ -147,7 +146,7 @@ export async function HelpTab($: EngineInterface, e: RenderInput<'Pane'>, els: E
         hotkey={armed ? 'r' : undefined}
         onPress={() => { void runSkill($, it.id) }}
       >
-        {isCmd ? `Run /${it.id}` : `Run /skillator:${it.id}`}
+        {`Run /${helpCommand(it.id)}`}
       </Button>
       {Input && (
         <Input

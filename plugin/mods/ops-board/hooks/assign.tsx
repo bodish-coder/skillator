@@ -6,7 +6,8 @@ export { isOpen } from './lib/board'
 import { runCall } from './lib/host'
 import { sameHandle } from './lib/team'
 import type { Call } from './lib/host'
-import { clearStatus } from './status'
+import { clearStatus, openDecide } from './status'
+export { openDecide }
 import { paint } from './paint'
 
 // F47: the assign / decide form, the Decided button's call and the Add person
@@ -317,7 +318,7 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   // F77: the Ticket field - typed in any case; its line under it says what it resolves to.
   const typed = d.id.trim()
   const ticketField = Input
-    ? <Input key="ticket" label="Ticket  " placeholder="F12" value={d.id}
+    ? <Input key="ticket" label="Ticket  " placeholder="F12" value={d.id} autoFocus={tk ? undefined : true}
         onInput={v => set(x => ({ ...x, id: v }))} onSubmit={v => set(x => ({ ...x, id: v }))} />
     : <Box key="ticket" flexDirection="row" flexWrap="wrap">{label('Ticket  ')}<Text>{typed || '(none - needs a keyboard surface)'}</Text></Box>
   const said = tk

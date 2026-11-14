@@ -290,6 +290,7 @@ install_into() {
   # F55: ops-board/ is the ops terminal app (hooks/lib, types, ops) - same refresh.
   # F56: and pi/, the same board as a pi extension (write_commands points pi at it).
   # F57: and antigravity/, the same board as an Antigravity IDE extension (put_agy_ext).
+  # A222: and commands/, the plugin's own command docs (*.md, *.txt), which the Help tab reads beside ops/.
   if [ -n "$dry" ]; then
     echo "        would refresh PLATFORMS.md PRACTICE.md WORKFLOW.md practice/ references/ ops-board/ .skillator-source in $_dest"
     if [ "$_cli" = pi ]; then echo "        would list the three docs in $_dest/.ignore (pi skips them as skills)"; fi
@@ -298,9 +299,12 @@ install_into() {
     cp "$root/PLATFORMS.md" "$root/PRACTICE.md" "$root/WORKFLOW.md" "$_dest/"
     rm -rf "$_dest/practice" && cp -R "$root/practice" "$_dest/"
     rm -rf "$_dest/references" && cp -R "$root/references" "$_dest/"
-    rm -rf "$_dest/ops-board" && mkdir -p "$_dest/ops-board/hooks" &&
+    rm -rf "$_dest/ops-board" && mkdir -p "$_dest/ops-board/hooks" "$_dest/ops-board/commands" &&
       cp -R "$root/mods/ops-board/hooks/lib" "$_dest/ops-board/hooks/" &&
-      cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$root/mods/ops-board/pi" "$root/mods/ops-board/antigravity" "$_dest/ops-board/"
+      cp -R "$root/mods/ops-board/types" "$root/mods/ops-board/ops" "$root/mods/ops-board/pi" "$root/mods/ops-board/antigravity" "$_dest/ops-board/" &&
+      for _f in "$root"/commands/*.md "$root"/commands/*.txt; do
+        if [ -f "$_f" ]; then cp "$_f" "$_dest/ops-board/commands/"; fi
+      done
     printf '%s\n' "$shipped" > "$_dest/$manifest"
     # F65: the source pointer - one line, the repo root this ran from (native form), so
     # /skillator-update can find a source on a host with no plugin cache
@@ -333,6 +337,7 @@ subst_gemini_pending() {
 
 # put_cmd <template> <skills-dir> <target>: write one command file (or say it would).
 put_cmd() {
+  if under_link "$3"; then echo "        kept $3: a link or under one"; return 0; fi
   if [ -n "$dry" ]; then echo "        would write $3"; return 0; fi
   mkdir -p "$(dirname -- "$3")"
   case "$1" in
@@ -494,39 +499,103 @@ put_agy_ext() {
 # written into each antigravity dest with no .skillator-owned marker and kept out of
 # .skillator-installed, so prune_dest never touches them. Claude Code: nothing (the
 # ops-board mod has its own /pending, /list-tickets; /engage-picard, /archive-zordon, /sync-zordon, /skillator-update, /team-messages and /pending-sentinel are the plugin's commands/*.md).
+#
+# A218: F171 retired the plain names (the unique ones are the only names) and F90 the
+# Codex prompts. retired_cmds is what older runs wrote everywhere; upstream-sync (pre-F166
+# alias) and ops were also written, skillator-update and team-messages as Codex prompts.
+# Ownership is the body: it names a skillator skill, script or phrase (every committed
+# version of every retired template matches retired_body). Nothing goes through a link.
+retired_cmds="pending list-tickets engage archive-tickets sync-tickets pending-subagent verify-subagent marathon-plan marathon-run"
+retired_body='tickets-zordon|relay-morpheus|code-vader|skillator-sync|tasks-sentinels|teams-uhura|skillator:|\.skillator-source|ops-board/ops/ops|Engaged prompt'
+# under_link <path>: the path, or a dir between it and $HOME, is a symlink or junction
+under_link() {
+  _q=$1
+  while [ "$_q" != "${HOME%/}" ]; do
+    [ -L "$_q" ] && return 0
+    _up=$(dirname -- "$_q"); [ "$_up" = "$_q" ] && return 1; _q=$_up
+  done
+  return 1
+}
+# retire_file <file>: rename a loose command file skillator wrote to <file>.skillator-retired
+# - the hosts list only .md / .toml, so it leaves the picker and stays recoverable
+retire_file() {
+  _f=$1
+  [ -e "$_f" ] || [ -L "$_f" ] || return 0
+  if under_link "$_f"; then echo "        kept $_f: a link or under one"; return 0; fi
+  if [ ! -f "$_f" ] || ! grep -qE "$retired_body" "$_f"; then
+    echo "        kept $_f: not written by skillator"; return 0
+  fi
+  if [ -e "$_f.skillator-retired" ] || [ -L "$_f.skillator-retired" ]; then
+    echo "        kept $_f: $_f.skillator-retired exists"; return 0
+  fi
+  if [ -n "$dry" ]; then echo "        would retire $_f -> $_f.skillator-retired"; return 0; fi
+  # never overwrite: mv -n, then the source must be gone and the target hold its bytes
+  _sum=$(cksum < "$_f")
+  mv -n -- "$_f" "$_f.skillator-retired" || :
+  if [ -e "$_f" ] || [ -L "$_f" ] || [ ! -f "$_f.skillator-retired" ] || [ "$(cksum < "$_f.skillator-retired")" != "$_sum" ]; then
+    echo "warn  $_f not retired (kept)"; return 0
+  fi
+  echo "        retired $_f -> $_f.skillator-retired (delete it if unused)"
+}
+# retire_dir <dir>: a skill-command dir holding only SKILL.md (and its marker). Decided
+# before anything is touched: an intact .skillator-owned marker (owned_intact) removes the
+# dir; without one - what pre-F171 runs left, they stripped the marker - SKILL.md is
+# retired by rename as a loose file is; any other file, or a link, keeps it all.
+retire_dir() {
+  _d=$1
+  [ -e "$_d/SKILL.md" ] || [ -L "$_d/SKILL.md" ] || [ -L "$_d" ] || return 0
+  if under_link "$_d/SKILL.md"; then echo "        kept $_d: a link or under one"; return 0; fi
+  if [ ! -f "$_d/SKILL.md" ] || ! grep -qE "$retired_body" "$_d/SKILL.md"; then
+    echo "        kept $_d: not written by skillator"; return 0
+  fi
+  if [ -n "$(ls -A "$_d" | grep -vxF -e SKILL.md -e "$owned")" ]; then
+    echo "        kept $_d: holds files skillator did not write"; return 0
+  fi
+  if [ -f "$_d/$owned" ] && owned_intact "$_d"; then
+    if [ -n "$dry" ]; then echo "        would remove dir $_d"; return 0; fi
+    rm -rf "$_d" || { echo "warn  $_d not removed"; return 0; }
+    echo "        removed dir $_d"
+  else
+    retire_file "$_d/SKILL.md"
+  fi
+}
 write_commands() {
   _c="$root/host-commands"
-  _cmds="skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu gauntlet-plan gauntlet-run team code-vader skillator-sync message-uhura"
+  _cmds="skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu gauntlet-plan gauntlet-run team code-vader skillator-sync message-uhura decision-matrix"
   _ops_cmds="skillator-ops"
   case "$1" in
     codex)
       # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
-      # prompts pre-F90 runs wrote under the plain names go, nothing else in prompts/. F105: $skillator-ops -
+      # prompts pre-F90 runs wrote are retired (A218), nothing else in prompts/. F105: $skillator-ops -
       # skill hosts only; pi and Claude Code have their own /ops
       for _n in $_cmds $_ops_cmds; do put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"; done
-      [ -n "$dry" ] || for _n in pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run; do
-        rm -f "$codex_home/prompts/$_n.md"
-      done ;;
+      for _n in $retired_cmds upstream-sync ops; do retire_dir "$2/$_n"; done
+      for _n in $retired_cmds skillator-update team-messages; do retire_file "$codex_home/prompts/$_n.md"; done ;;
     cursor)
-      for _n in $_cmds; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done ;;
+      for _n in $_cmds; do put_cmd "$_c/cursor/$_n.md" "$2" "$HOME/.cursor/commands/$_n.md"; done
+      for _n in $retired_cmds upstream-sync; do retire_file "$HOME/.cursor/commands/$_n.md"; done ;;
     pi)
       [ "$2" = "$HOME/.pi/agent/skills" ] || return 0
       for _n in $_cmds; do put_cmd "$_c/pi/$_n.md" "$2" "$HOME/.pi/agent/prompts/$_n.md"; done
+      for _n in $retired_cmds upstream-sync; do retire_file "$HOME/.pi/agent/prompts/$_n.md"; done
       put_pi_ext "$2" ;;
     opencode)
       # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode; F159: /skillator-ops
-      for _n in $_cmds $_ops_cmds; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done ;;
+      for _n in $_cmds $_ops_cmds; do put_cmd "$_c/opencode/$_n.md" "$2" "$oc_config/commands/$_n.md"; done
+      for _n in $retired_cmds upstream-sync ops; do retire_file "$oc_config/commands/$_n.md"; done ;;
     antigravity)
       for _n in $_cmds $_ops_cmds; do
         put_cmd "$_c/antigravity/$_n/SKILL.md" "$2" "$2/$_n/SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
-        [ -n "$dry" ] || rm -f "$2/$_n/$owned"
+        if under_link "$2/$_n/$owned"; then echo "        kept $2/$_n/$owned: a link or under one"; elif [ -z "$dry" ]; then rm -f "$2/$_n/$owned"; fi
       done
+      for _n in $retired_cmds upstream-sync ops; do retire_dir "$2/$_n"; done
       # F57: the Antigravity IDE's extension, from Antigravity's own dest
       if [ "$2" = "$HOME/.gemini/config/skills" ]; then put_agy_ext "$2"; fi
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
       if [ "$2" = "$HOME/.gemini/skills" ]; then
         for _n in $_cmds; do put_cmd "$_c/gemini/$_n.toml" "$2" "$HOME/.gemini/commands/$_n.toml"; done
+        for _n in $retired_cmds upstream-sync; do retire_file "$HOME/.gemini/commands/$_n.toml"; done
       fi ;;
   esac
 }
@@ -737,7 +806,7 @@ if [ -n "$selftest" ]; then
            .gemini/config/skills/gauntlet-plan/SKILL.md .gemini/skills/gauntlet-plan/SKILL.md .gemini/antigravity-cli/skills/gauntlet-plan/SKILL.md \
            .codex/skills/gauntlet-run/SKILL.md .gemini/commands/gauntlet-run.toml .cursor/commands/gauntlet-run.md .pi/agent/prompts/gauntlet-run.md \
            .gemini/config/skills/gauntlet-run/SKILL.md .gemini/skills/gauntlet-run/SKILL.md .gemini/antigravity-cli/skills/gauntlet-run/SKILL.md \
-           .codex/skills/ops-board/ops/app.ts .pi/agent/skills/ops-board/hooks/lib/board.ts \
+           .codex/skills/ops-board/ops/app.ts .codex/skills/ops-board/commands/skillator-ops.txt .pi/agent/skills/ops-board/hooks/lib/board.ts \
            .pi/agent/skills/ops-board/ops/package.json .pi/agent/skills/ops-board/hooks/lib/package.json \
            .pi/agent/skills/ops-board/pi/index.ts .pi/agent/skills/ops-board/pi/ops.ts .pi/agent/skills/ops-board/ops/engine.ts \
            .pi/agent/extensions/skillator-ops.ts .config/opencode/skills/tickets-zordon/SKILL.md \
@@ -969,16 +1038,92 @@ if [ -n "$selftest" ]; then
   : > "$T/.gemini/skills/list-ticket-zordon/.skillator-owned"
   : > "$T/.pi/agent/skills/tickets-zordon/.selftest-sentinel"
   printf 'my-own-line' >> "$T/.pi/agent/skills/.ignore"
-  # F90: every older run's codex prompt goes, a foreign prompt stays
-  _old_prompts="pending list-tickets engage archive-tickets sync-tickets skillator-update team-messages pending-subagent verify-subagent marathon-plan marathon-run"
-  mkdir -p "$T/.codex/prompts"; echo mine > "$T/.codex/prompts/my-own.md"
-  for _n in $_old_prompts; do echo old > "$T/.codex/prompts/$_n.md"; done
   # F91: a --link install from before plugin/ - its link into <clone>/skills now dangles
   rm -rf "$T/.codex/skills/tui-tron"; ln -s "$T/pre-f91/skills/tui-tron" "$T/.codex/skills/tui-tron" 2>/dev/null || :
+  # A218/F90: what older runs wrote under a retired name is retired - a loose file renamed
+  # to .skillator-retired (recoverable), a skill dir removed only with an intact marker and
+  # nothing else in it - only when the body is skillator's, never through a link, and the
+  # dry run names exactly the actions the real run takes
+  _body() {
+    case $1 in
+      engage) echo 'Show it once, under `**Engaged prompt:**`' ;;
+      ops) echo 'sh "/x/ops-board/ops/ops.sh" <repo root> --open' ;;
+      skillator-update) echo 'cat /x/.skillator-source' ;;
+      team-messages) echo 'node /x/teams-uhura/scripts/team.mjs inbox' ;;
+      *) echo 'Load /x/tickets-zordon/SKILL.md' ;;
+    esac
+  }
+  _seed() { mkdir -p "$T/${1%/*}"; _body "$2" > "$T/$1"; }
+  _wants=
+  _want() { _wants="$_wants$1
+"; }
+  _ret() { _want "        retired $T/$1 -> $T/$1.skillator-retired (delete it if unused)"; }
+  # pi's prompts dir behind a link: nothing in it is touched
+  mv "$T/.pi/agent/prompts" "$T/pi-prompts"
+  if command -v cygpath >/dev/null 2>&1; then
+    powershell -NoProfile -Command "New-Item -ItemType Junction -Path '$(cygpath -w "$T/.pi/agent/prompts")' -Target '$(cygpath -w "$T/pi-prompts")' | Out-Null"
+  else
+    ln -s "$T/pi-prompts" "$T/.pi/agent/prompts"
+  fi
+  [ -L "$T/.pi/agent/prompts" ] || { echo "FAIL: selftest could not link the pi prompts dir"; exit 1; }
+  mkdir -p "$T/.codex/prompts"; echo mine > "$T/.codex/prompts/my-own.md"; echo mine > "$T/.cursor/commands/my-cmd.md"
+  for _n in $retired_cmds skillator-update team-messages; do _seed ".codex/prompts/$_n.md" $_n; _ret ".codex/prompts/$_n.md"; done
+  for _n in $retired_cmds upstream-sync ops; do
+    for d in .codex/skills .gemini/config/skills .gemini/skills .gemini/antigravity-cli/skills; do
+      _seed "$d/$_n/SKILL.md" $_n
+      case $d/$_n in
+        .gemini/config/skills/sync-tickets) write_owned "$T/$d/$_n" "$T/$d/$_n"; _want "        removed dir $T/$d/$_n" ;;
+        .codex/skills/engage) echo mine > "$T/$d/$_n/notes.txt"; _want "        kept $T/$d/$_n: holds files skillator did not write" ;;
+        *) _ret "$d/$_n/SKILL.md" ;;
+      esac
+    done
+    _seed "$_oc/commands/$_n.md" $_n
+    if [ $_n = marathon-plan ]; then
+      echo older > "$T/$_oc/commands/$_n.md.skillator-retired"
+      _want "        kept $T/$_oc/commands/$_n.md: $T/$_oc/commands/$_n.md.skillator-retired exists"
+    else
+      _ret "$_oc/commands/$_n.md"
+    fi
+    [ $_n = ops ] && continue
+    _seed ".cursor/commands/$_n.md" $_n; _ret ".cursor/commands/$_n.md"
+    if [ $_n = list-tickets ]; then
+      echo 'my own list' > "$T/.gemini/commands/$_n.toml"; _want "        kept $T/.gemini/commands/$_n.toml: not written by skillator"
+    else
+      _seed ".gemini/commands/$_n.toml" $_n; _ret ".gemini/commands/$_n.toml"
+    fi
+    _seed ".pi/agent/prompts/$_n.md" $_n; _want "        kept $T/.pi/agent/prompts/$_n.md: a link or under one"
+  done
+  # a user's own file under a retired name: with a skillator mention it is renamed, not lost
+  echo 'my notes: run skillator:tickets-zordon, then deploy' > "$T/.cursor/commands/pending.md"
+  _acts() {
+    grep -E '^        (would retire|retired|would remove dir|removed dir|kept /)' |
+      sed -e 's/^        would retire /        retired /' -e 's/^        would remove dir /        removed dir /' -e 's/ (delete it if unused)$//'
+  }
+  out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0" --dry-run) || { echo "FAIL: retired dry run exited $?"; exit 1; }
+  _dry=$(printf '%s\n' "$out" | _acts)
+  { [ -f "$T/.cursor/commands/engage.md" ] && [ ! -e "$T/.cursor/commands/engage.md.skillator-retired" ] && [ -d "$T/.gemini/config/skills/sync-tickets" ]; } || { echo "FAIL: dry run touched a retired command"; exit 1; }
   out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0") || { echo "FAIL: second install exited $?"; exit 1; }
+  [ -n "$_dry" ] && [ "$(printf '%s\n' "$out" | _acts)" = "$_dry" ] || { echo "FAIL: dry run actions differ from the real run"; exit 1; }
+  printf '%s\n' "$_wants" | while IFS= read -r _w; do
+    [ -n "$_w" ] || continue
+    printf '%s\n' "$out" | grep -qxF -- "$_w" || { echo "FAIL: not done: $_w"; exit 1; }
+    case $_w in "        retired "*)
+      _a=${_w#        retired }; _a=${_a%% -> *}
+      { [ ! -e "$_a" ] && [ -f "$_a.skillator-retired" ]; } || { echo "FAIL: $_a not retired"; exit 1; } ;;
+    esac
+  done || exit 1
+  grep -qx 'my notes: run skillator:tickets-zordon, then deploy' "$T/.cursor/commands/pending.md.skillator-retired" || { echo "FAIL: a user's renamed pending.md not recoverable"; exit 1; }
+  grep -qx 'my own list' "$T/.gemini/commands/list-tickets.toml" || { echo "FAIL: a user's own list-tickets.toml touched"; exit 1; }
+  { [ -f "$T/.codex/skills/engage/SKILL.md" ] && [ -f "$T/.codex/skills/engage/notes.txt" ]; } || { echo "FAIL: a skill dir with a user file touched"; exit 1; }
+  [ -e "$T/.gemini/config/skills/sync-tickets" ] && { echo "FAIL: an intact owned skill dir kept"; exit 1; }
+  { [ -f "$T/$_oc/commands/marathon-plan.md" ] && grep -qx older "$T/$_oc/commands/marathon-plan.md.skillator-retired"; } || { echo "FAIL: an existing .skillator-retired overwritten"; exit 1; }
+  for _n in $retired_cmds upstream-sync; do [ -f "$T/pi-prompts/$_n.md" ] || { echo "FAIL: $_n.md under a linked dir touched"; exit 1; }; done
+  { [ -f "$T/.cursor/commands/my-cmd.md" ] && [ -f "$T/.codex/prompts/my-own.md" ]; } || { echo "FAIL: a user command of another name touched"; exit 1; }
+  # retire never overwrites: a mv that moves nothing (mv -n refusing) keeps the file and warns
+  echo 'Load /x/tickets-zordon/SKILL.md' > "$T/mv-refused.md"
+  _o=$(HOME=$T; dry=; mv() { :; }; retire_file "$T/mv-refused.md")
+  { [ "$_o" = "warn  $T/mv-refused.md not retired (kept)" ] && [ -f "$T/mv-refused.md" ]; } || { echo "FAIL: a refused rename not kept: $_o"; exit 1; }
   [ -f "$T/.codex/skills/tui-tron/SKILL.md" ] || { echo "FAIL: dangling pre-F91 link not reinstalled"; exit 1; }
-  for _n in $_old_prompts; do [ -e "$T/.codex/prompts/$_n.md" ] && { echo "FAIL: old codex prompt $_n.md kept"; exit 1; }; done
-  [ -f "$T/.codex/prompts/my-own.md" ] || { echo "FAIL: foreign codex prompt removed"; exit 1; }
   grep -qx 'my-own-line' "$T/.pi/agent/skills/.ignore" || { echo "FAIL: pi .ignore lost a user line"; exit 1; }
   [ "$(grep -cxF /PLATFORMS.md "$T/.pi/agent/skills/.ignore")" = 1 ] || { echo "FAIL: pi .ignore lines duplicated on the second run"; exit 1; }
   printf '%s\n' "$out" | grep -q "not on your PATH" || { echo "FAIL: PATH note"; exit 1; }
@@ -993,12 +1138,40 @@ if [ -n "$selftest" ]; then
   grep -q stale "$T/.gemini/skills/skillator-pending/SKILL.md" && { echo "FAIL: agy skill-command not rewritten"; exit 1; }
   [ -e "$T/.gemini/skills/list-ticket-zordon/.skillator-owned" ] && { echo "FAIL: stale marker kept on a skill-command"; exit 1; }
   [ -f "$T/.pi/agent/skills/tickets-zordon/.selftest-sentinel" ] || { echo "FAIL: installed skill was rewritten"; exit 1; }
+  # A224: a current command file behind a link, and an antigravity skill dir behind a
+  # link holding its marker: the run writes neither file and deletes no marker through
+  # the link, and says kept for each (no IDE call - the count above stays two)
+  mkdir -p "$T/link-outside/skill"
+  printf 'user command bytes\n' > "$T/link-outside/cmd.md"
+  rm -f "$T/.cursor/commands/skillator-update.md"
+  if command -v cygpath >/dev/null 2>&1; then
+    MSYS=winsymlinks:nativestrict ln -s "$T/link-outside/cmd.md" "$T/.cursor/commands/skillator-update.md"
+  else
+    ln -s "$T/link-outside/cmd.md" "$T/.cursor/commands/skillator-update.md"
+  fi
+  [ -L "$T/.cursor/commands/skillator-update.md" ] || { echo "FAIL: selftest could not link a command file"; exit 1; }
+  printf 'user skill bytes\n' > "$T/link-outside/skill/SKILL.md"
+  printf 'skillator-owned 2\n' > "$T/link-outside/skill/.skillator-owned"
+  rm -rf "$T/.gemini/skills/skillator-update"
+  if command -v cygpath >/dev/null 2>&1; then
+    powershell -NoProfile -Command "New-Item -ItemType Junction -Path '$(cygpath -w "$T/.gemini/skills/skillator-update")' -Target '$(cygpath -w "$T/link-outside/skill")' | Out-Null"
+  else
+    ln -s "$T/link-outside/skill" "$T/.gemini/skills/skillator-update"
+  fi
+  [ -L "$T/.gemini/skills/skillator-update" ] || { echo "FAIL: selftest could not link a skill dir"; exit 1; }
+  out=$(HOME=$T CODEX_HOME=$T/.codex SKILLATOR_AGY_IDE=$T/none sh "$0") || { echo "FAIL: linked install exited $?"; exit 1; }
+  grep -qx 'user command bytes' "$T/link-outside/cmd.md" || { echo "FAIL: a linked command file was overwritten"; exit 1; }
+  grep -qx 'user skill bytes' "$T/link-outside/skill/SKILL.md" || { echo "FAIL: a linked skill was overwritten"; exit 1; }
+  [ -f "$T/link-outside/skill/.skillator-owned" ] || { echo "FAIL: a marker was deleted through a linked skill dir"; exit 1; }
+  for _k in ".cursor/commands/skillator-update.md" ".gemini/skills/skillator-update/SKILL.md" ".gemini/skills/skillator-update/.skillator-owned"; do
+    printf '%s\n' "$out" | grep -qxF "        kept $T/$_k: a link or under one" || { echo "FAIL: no kept line for $_k"; exit 1; }
+  done
   out=$(HOME=$T CODEX_HOME=$T/.codex sh "$0" --dry-run) || { echo "FAIL: dry run exited $?"; exit 1; }
   printf '%s\n' "$out" | grep -q "would write $T/.local/bin/ops" || { echo "FAIL: dry-run shim line"; exit 1; }
   if command -v cygpath >/dev/null 2>&1; then
     printf '%s\n' "$out" | grep -qF "would write $(cygpath -u "$T/lad")/Microsoft/Windows Terminal/Fragments/skillator/ops.json" || { echo "FAIL: dry-run fragment line"; exit 1; }
   fi
-  printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/prompts/list-ticket-zordon.md" || { echo "FAIL: dry-run command line"; exit 1; }
+  printf '%s\n' "$out" | grep -qF "kept $T/.pi/agent/prompts/list-ticket-zordon.md: a link or under one" || { echo "FAIL: dry-run command line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would write $T/.pi/agent/extensions/skillator-ops.ts" || { echo "FAIL: dry-run pi extension line"; exit 1; }
   printf '%s\n' "$out" | grep -qF "would install the ops board extension $T/.gemini/config/skills/ops-board/antigravity/skillator-ops.vsix with $T/fake-ide" || { echo "FAIL: dry-run antigravity extension line"; exit 1; }
   [ "$(wc -l < "$T/ide-calls" | tr -d ' ')" = 2 ] || { echo "FAIL: dry run called the Antigravity IDE"; exit 1; }

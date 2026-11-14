@@ -1995,8 +1995,8 @@ function Invoke-Selftest {
     # F131: once a lead is assigned, an owner cannot reassign their own ticket - only the lead may reassign
     $msg = AsMe '@neo' { ErrOf assign F6 '@asha' }
     if ($msg -notmatch 'F6 is owned by @neo - only the lead @vidul may reassign it \(you: @neo\)') { Write-Output "FAIL: lead-only reassign refusal on owner: [$msg]"; $script:fail = 1 }
-    # F131: non-lead cannot assign an unowned ticket when lead is assigned
-    $msg = AsMe '@neo' { ErrOf assign F1 '@asha' }
+    # F131: non-lead cannot assign an unowned ticket when lead is assigned (A217: F13, not F1 - F1 is @asha's since its claim)
+    $msg = AsMe '@neo' { ErrOf assign F13 '@asha' }
     if ($msg -notmatch 'lead @vidul is assigned - only the lead may assign tickets \(you: @neo\)') { Write-Output "FAIL: lead-only assign refusal on unowned: [$msg]"; $script:fail = 1 }
     Eq 'the lead reassigns' (AsMe '@vidul' { Run assign F6 '@asha' }) "- [ ] F6 $dash Neos [owner: @asha]"
     # --- F135: tester tag & assign-tester open to all users (even with lead assigned)

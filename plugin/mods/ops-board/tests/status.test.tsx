@@ -242,6 +242,7 @@ test('F116 rapid successful Apply refreshes once; detached completion cannot ove
   await pane.unmount()
 })
 
+
 test('F116 rapid help claims once and errors preserve an editable form', WITH, async ($, on) => {
   const [w,clock]=world(on,{'/r/TICKETS.md':FIXTURE})
   let complete!: (r: ProcessRunResult) => void, entered!: () => void
@@ -279,3 +280,94 @@ test('F116 successful completion clear retries against a new generation without 
   expect(w.runs).toHaveLength(1);expect(w.opens.length).toBe(opens)
   await pane.unmount()
 })
+
+for (const surface of SURFACES) {
+  test(`${surface}: F174 Decide opens chooser and routes (a) assign, (h) holo-ticket read-only, (q) CLI questions prompt, Esc and unknown-ID`, WITH, async ($, on) => {
+    const [w, clock] = world(on, { '/r/TICKETS.md': FIXTURE })
+    const submits: string[] = []
+    on('ui.status', () => ({ value: undefined }))
+    on('prompt.submit', ($, e) => { submits.push(e.text); return { text: e.text } })
+    w.answer = argv => {
+      if (argv.includes('--ticket')) return ran('ok -> /r/.skillator/holo/ticket-F91.html (standalone page)\n')
+      return ran('')
+    }
+    const pane = await start($, clock, surface)
+
+    // 1. No ticket selected (header focused) opens Decide chooser with empty autoFocus Ticket input and disarms hotkeys
+    await focus($, 'head:>')
+    await pane.press({ key: 'key:decide' })
+    expect((await pane.find({ key: 'status:title' }))?.text).toBe('Decide a ticket  Esc cancels')
+    expect((await pane.find({ key: 'status:ticket' }))?.props.value).toBe('')
+    expect((await pane.find({ key: 'status:ticket' }))?.props.autoFocus).toBe(true)
+    expect((await pane.find({ key: 'status:cancel' }))?.props.hotkey).toBeUndefined()
+    expect(await pane.find({ key: 'decide:assign' })).toBeUndefined()
+    expect(await pane.find({ key: 'status:help' })).toBeUndefined()
+    expect(await pane.find({ key: 'decide:questions' })).toBeUndefined()
+
+    // 2. Unknown ID shows no such ticket and offers no chooser actions
+    await typeId(pane, 'F404')
+    expect((await pane.find({ key: 'status:current' }))?.text).toContain('no such ticket')
+    expect(await pane.find({ key: 'decide:assign' })).toBeUndefined()
+    expect(await pane.find({ key: 'status:help' })).toBeUndefined()
+    expect(await pane.find({ key: 'decide:questions' })).toBeUndefined()
+
+    // 3. Esc cancels the chooser back to Tickets view
+    await $.command.run({ command: 'close', args: 'ops-board', ...RUN })
+    expect(await pane.find({ key: 'status:title' })).toBeUndefined()
+
+    // 4. Select F91 and press Decide -> chooser shows (a), (h) decision page, (q) MCQ decision with armed hotkeys
+    await pane.press({ key: 'head:>' })
+    await focus($, 'row:F91')
+    await pane.press({ key: 'key:decide' })
+    expect((await pane.find({ key: 'status:title' }))?.text).toBe('Decide F91  Esc cancels')
+    expect((await pane.find({ key: 'decide:assign' }))?.props.hotkey).toBe('a')
+    expect((await pane.find({ key: 'status:help' }))?.props.hotkey).toBe('h')
+    expect((await pane.find({ key: 'status:help' }))?.text).toMatch(/decision page/i)
+    expect((await pane.find({ key: 'decide:questions' }))?.props.hotkey).toBe('q')
+    expect((await pane.find({ key: 'decide:questions' }))?.text).toBe('MCQ decision')
+    expect((await pane.find({ key: 'status:cancel' }))?.props.hotkey).toBe('c')
+
+    // 5. (h) Holo decision page runs holo.mjs --ticket F91 --html, shows path, and writes nothing to the board
+    const runsBefore = w.runs.length
+    await pane.press({ key: 'status:help' })
+    const holoRuns = w.runs.slice(runsBefore).filter(a => a[0] !== 'git')
+    expect(holoRuns).toEqual([['/bin/node', '/s/skills/holo-r2d2/scripts/holo.mjs', '--ticket', 'F91', '--html']])
+    expect((await pane.find({ key: 'status:path' }))?.text).toBe('/r/.skillator/holo/ticket-F91.html')
+    expect(w.toasts.at(-1)).toBe('/r/.skillator/holo/ticket-F91.html')
+    expect(w.writes).toEqual([])
+
+    // 6. (q) Decide by questions in CLI submits plain ticket-naming prompt via $.prompt.submit, closes chooser, no board write
+    const runsBeforeQ = w.runs.length
+    await pane.press({ key: 'decide:questions' })
+    expect(w.runs.slice(runsBeforeQ).filter(a => a[0] !== 'git')).toEqual([])
+    expect(submits).toHaveLength(1)
+    expect(submits[0]).toContain('F91')
+    expect(submits[0]).toContain('AskUserQuestion')
+    expect(submits[0]).toContain('ticket-meta decided')
+    expect(submits[0]).not.toMatch(/^\//)
+    expect(await pane.find({ key: 'status:title' })).toBeUndefined()
+    expect(w.writes).toEqual([])
+
+    // 7. (a) Assign a decider routes into today's assign form with kind='decide'
+    await pane.press({ key: 'key:decide' })
+    await pane.press({ key: 'decide:assign' })
+    expect((await pane.find({ key: 'form:title' }))?.text).toBe('Assign F91 for a decision  Esc cancels')
+    expect((await pane.find({ key: 'kind:decision' }))?.text).toBe('(•) decision')
+    await pane.press({ key: 'cancel' })
+
+    // 8. F175: Tickets-page key:questions (u ask) submits the board-wide decideQuestionsPrompt() with no board write
+    const askBtn = await pane.find({ key: 'key:questions' })
+    expect(askBtn?.props.hotkey).toBe('u')
+    expect(askBtn?.text).toBe('ask')
+    await pane.press({ key: 'key:questions' })
+    expect(submits).toHaveLength(2)
+    expect(submits[1]).toContain('[?]')
+    expect(submits[1]).toContain('queue --all')
+    expect(submits[1]).toContain('ticket-meta decided')
+    expect(submits[1]).toContain('relay-morpheus answer')
+    expect(submits[1]).not.toMatch(/^\//)
+    expect(w.writes).toEqual([])
+    await pane.unmount()
+  })
+}
+

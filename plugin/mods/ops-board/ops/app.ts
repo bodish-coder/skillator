@@ -22,7 +22,7 @@ import { frame, paintScreen, screen } from './draw'
 import type { Hit } from './draw'
 import { mouseInput, mouseTarget, MOUSE_ON, MOUSE_OFF } from './mouse'
 import { makeEngine } from './engine'
-import { status } from './status'
+import { ownProfile, status } from './status'
 import { reset } from './reset'
 
 export type Opts = {
@@ -120,7 +120,7 @@ export async function main(argv: string[]): Promise<number> {
   const paint: Paint = { color: opts.color, ascii: opts.ascii, plain: once && !opts.color }
   const size = () => ({ cols: opts.cols ?? (out.isTTY && out.columns ? out.columns : 80), rows: opts.rows ?? (out.isTTY && out.rows ? out.rows : 24) })
   const sz = size()
-  const baseState: State = { ...initial(sz.cols, sz.rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot) }
+  const baseState: State = { ...initial(sz.cols, sz.rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot), profile: ownProfile(process.env)?.name ?? null }
   const state: State = opts.tab === 'help' ? openHelp(baseState).state : baseState
   const email = await host.gitEmail()
 

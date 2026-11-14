@@ -1,0 +1,13 @@
+---
+description: "Ask the board's open decision questions ([?] decide tickets and parked relay run questions) one at a time as multiple choice and record answers through ticket-meta and relay-morpheus"
+---
+Ask every open owner decision on this repo one at a time as multiple choice, record the accepted answers through the existing writers, and read the board back.
+
+1. **Collect.** Read `TICKETS.md` (or `ticket-meta`/`pending`) for every `[?]` decide ticket, and run `relay-morpheus queue --all` for every open parked question in `.skillator/run-*.md`. Nothing open → say so and stop.
+2. **Reconcile.** Keep only owner decisions (product, scope, taste, external commitments, or explicit `[?]` / parked run questions) and cite each question's ticket or run source (`<ID>` or `<RUN-ID>:<Q-ID>`). Skip engineering choices, build/test work, and settled rulings — they are never questions.
+3. **Ask one at a time.** Use the host's question tool (`AskUserQuestion` on Claude Code, a numbered list where none). Give 2-4 options derived from the ticket or run evidence with brief trade-offs, with the labelled `(Recommended)` option first and never pre-selected, plus a custom answer option and a defer option.
+4. **Record.** Write answers only through the existing writers — never edit `TICKETS.md` or run files by hand, never flip silently, and leave unanswered questions open:
+   - `[?]` decide ticket answered → `ticket-meta decided <ID>` (or `ticket-meta decide <ID> @handle` / `ticket-meta assign <ID> @handle` when the answer names another decider)
+   - `[?]` decide ticket deferred → `ticket-meta defer <ID> "<reason>"`
+   - Parked run question answered → `relay-morpheus <RUN-ID> answer <Q-ID> "<answer>"`
+5. **Read back.** Re-read `TICKETS.md` and `relay-morpheus queue --all` and report what was recorded and what remains open.

@@ -208,7 +208,9 @@ for (const surface of SURFACES) {
       'warning: F3 was in progress under @cc-4ae496 - its box left [~], the session tag stays; tell that session\n')
     await start($, clock)
     const pane = await mountPane($, surface)
-    await pane.press({ key: 'key:decide' })            // F3, the first row, is selected
+    await pane.press({ key: 'key:decide' })            // F3, the first row, is selected -> opens Decide chooser
+    expect((await pane.find({ key: 'status:title' }))?.text).toBe('Decide F3  Esc cancels')
+    await pane.press({ key: 'decide:assign' })         // (a) Assign a decider -> opens today's assign form
     expect(await state($, 'assign')).toEqual({ id: 'F3', kind: 'decide', handle: '@vidul', result: null })
     formOpen(w)
     expect(await title(pane)).toBe('Assign F3 for a decision  Esc cancels')
@@ -317,6 +319,9 @@ for (const surface of SURFACES) {
     await pane.press({ key: 'key:assign' })
     expect(w.toasts).toEqual([])
     expect((await pane.find({ key: 'ticket' }))?.props.value).toBe('B1')
+    // With a ticket selected showForm focuses the who list: the Ticket field must
+    // not also carry autoFocus, or the ring (and letter hotkeys) would land on it.
+    expect((await pane.find({ key: 'ticket' }))?.props.autoFocus).toBeFalsy()
     expect(await title(pane)).toBe('Assign B1  Esc cancels')
     expect((await pane.find({ key: 'title' }))?.text).toBe('● pending  button focus ring missing')
     expect(await pane.find({ key: 'go' })).toBeDefined()
@@ -338,12 +343,11 @@ for (const surface of SURFACES) {
     expect(w.toasts).toEqual([])
     formOpen(w)
     onlyBoard(w)
-    expect(await title(pane)).toBe('Assign a ticket for a decision  Esc cancels')
-    expect((await pane.find({ key: 'ticket' }))?.props.value).toBe('')
-    expect((await pane.find({ key: 'title' }))?.text).toBe('type a ticket ID, e.g. F12')
-    expect(await pane.find({ key: 'go' })).toBeUndefined()
-    expect(await pane.find({ key: 'change' })).toBeUndefined()
-    await pane.input({ key: 'ticket', text: 'f2', kind: 'change' })
+    expect((await pane.find({ key: 'status:title' }))?.text).toBe('Decide a ticket  Esc cancels')
+    expect((await pane.find({ key: 'status:ticket' }))?.props.value).toBe('')
+    await pane.input({ key: 'status:ticket', text: 'f2', kind: 'change' })
+    expect((await pane.find({ key: 'status:title' }))?.text).toBe('Decide F2  Esc cancels')
+    await pane.press({ key: 'decide:assign' })
     expect(await title(pane)).toBe('Assign F2 for a decision  Esc cancels')
     expect((await pane.find({ key: 'title' }))?.text).toBe('● decide  /orders endpoint returns the last…')   // cut to the 54-column body
     expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta decide F2 @vidul')
@@ -352,6 +356,47 @@ for (const surface of SURFACES) {
     expect(w.runs.map(r => r.argv)).toEqual([['/bin/sh', META + '.sh', 'decide', 'F2', '@asha']])
     expect(w.toasts[0]).toContain('✓ F2 now decide, for @asha to decide: /orders endpoint returns the last 20 orders')
     formClosed(w)
+    expect(w.writes).toEqual([])
+    await pane.unmount()
+  })
+
+  // The owner's live check (2026-11-11, installed 4.22.0): the form opens, the Ticket
+  // field is the one to type in, but typed digits are ignored and pick no ticket. A real
+  // keypress takes the host's path, not pane.input on trust: when the pane takes the
+  // keyboard the ring starts on the drawn autoFocus element (SDK autoFocus); while an
+  // Input holds the ring every printable key reaches it alone (ui.input); off an Input
+  // a key presses the Button carrying it as hotkey; with the ring nowhere it is lost.
+  test(`${surface}: F77 typing f2 through the keyboard path resolves F2 and Assign runs on it`, WITH, async ($, on) => {
+    const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+    w.answer = () => ran('- [ ] F2 — /orders endpoint returns the last 20 orders [app: api] [decide: @asha]\n')
+    await start($, clock)
+    const pane = await mountPane($, surface)
+    await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: 'head:?', origin: { kind: 'person' } })
+    await pane.press({ key: 'key:assign' })
+    expect((await pane.find({ key: 'ticket' }))?.props.value).toBe('')
+    expect((await pane.find({ key: 'ticket' }))?.props.autoFocus).toBe(true)
+    // The pane takes the keyboard: the ring starts where autoFocus says, through the
+    // real ui.focus hook (which also disarms the form's letter hotkeys, F115).
+    let ring: string | undefined
+    if ((await pane.find({ key: 'ticket' }))?.props.autoFocus) {
+      ring = 'ticket'
+      await $.ui.focus({ component: 'Pane', requestId: 'ops-board', plugin: 'ops-board', element: ring, origin: { kind: 'person' } })
+    }
+    let text = ''
+    for (const ch of 'f2') {
+      const hot = ring === 'ticket' ? undefined : (await pane.findAll({ type: 'Button' })).find(b => b.props.hotkey === ch)
+      if (hot?.key) { await pane.press({ key: hot.key }); continue }
+      if (ring !== 'ticket') continue          // no ring on the field: the key goes nowhere
+      text += ch
+      await pane.input({ key: 'ticket', text, kind: 'change' })
+    }
+    expect((await pane.find({ key: 'ticket' }))?.props.value).toBe('f2')
+    expect(await title(pane)).toBe('Assign F2  Esc cancels')
+    expect((await pane.find({ key: 'title' }))?.text).toContain('/orders endpoint returns')
+    expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta assign F2 @vidul')
+    await pane.press({ key: 'go' })
+    expect(w.runs.filter(r => r.argv.join(' ').includes(META)).map(r => r.argv)).toEqual([['/bin/sh', META + '.sh', 'assign', 'F2', '@vidul']])
+    expect(w.toasts[0]).toContain('✓ F2 now pending, owned by @vidul: /orders endpoint returns the last 20 orders')
     expect(w.writes).toEqual([])
     await pane.unmount()
   })
@@ -475,7 +520,7 @@ test('a, d, + add person and the Team view add open NO second pane', WITH, async
   await pane.press({ key: 'cancel' })
   await pane.press({ key: 'cancel' })
   await pane.press({ key: 'key:decide' })
-  await pane.press({ key: 'cancel' })
+  await pane.press({ key: 'status:cancel' })
   await pane.press({ key: 'key:team' })
   await pane.press({ key: 'team:add' })
   await pane.press({ key: 'cancel' })
@@ -609,6 +654,7 @@ test('team handles as ticket-meta reads them: @Asha assignable and removable, @j
   const pane = await mountPane($, 'terminal')
   await select($, 'F2')
   await pane.press({ key: 'key:decide' })
+  await pane.press({ key: 'decide:assign' })
   expect(await state($, 'assign')).toEqual({ id: 'F2', kind: 'decide', handle: '@Asha', result: null })
   expect(await pane.find({ key: 'who:@Asha' })).toBeDefined()
   expect(await pane.find({ key: 'who:@j.doe' })).toBeDefined()

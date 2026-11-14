@@ -11,7 +11,7 @@ import { clean } from '../hooks/lib/bandlines'
 import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State, PointerAction, SkillGuide, HelpItem } from './state'
-import { activeUser, pointerModal, dialogLines, engageLines, filteredSkills, formLines, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
+import { activeUser, pointerModal, decideLines, dialogLines, engageLines, filteredSkills, formLines, helpCommand, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
 import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { assignedTickets, buildModel, chipsOf, decideTickets, headKey, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -20,6 +20,7 @@ import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
 import { ageText, DISK, figure, GiB, HOLD_UNKNOWN, isStale, MEM, MUTED_HOW, mutedWords } from '../hooks/lib/facts'
 import type { Limits } from '../hooks/lib/facts'
 import { ticketsOf } from '../hooks/lib/team'
+import { FIVE_HOLD_PCT, resetsText, usageColor, WEEKLY_STOP_PCT } from '../hooks/lib/healthlines'
 import { runLines as runTabLines } from './runtab'
 import { explorerBody } from './explorer'
 
@@ -219,6 +220,9 @@ function keysOf(s: State, m: Model): Seg[][] {
   if (s.person) return [field, h('enter add', 'return'), cancel]
   if (s.dialog) return s.dialogField === 'ticket' ? [[dim('type the ID')], h('tab person', 'tab'), h('enter confirm', 'return'), cancel]
     : [[{ text: '[↑', color: 'suggestion', action: { kind: 'key', key: { name: 'up' } } }, { text: '↓ person]', color: 'suggestion', action: { kind: 'key', key: { name: 'down' } } }], [{ text: '[a', color: 'suggestion', action: { kind: 'key', key: { name: 'a' } } }, dim(' / '), { text: 'd kind]', color: 'suggestion', action: { kind: 'key', key: { name: 'd' } } }], h('tab ticket', 'tab'), h('enter confirm', 'return'), cancel]
+  if (s.decide) return s.decide.field === 'ticket'
+    ? [[dim('type the ID')], h('tab choices', 'tab'), h('enter choose', 'return'), cancel]
+    : [move, h('a assign decider', 'a'), h('h decision page', 'h'), h('q MCQ decision', 'q'), h('tab ticket', 'tab'), h('enter choose', 'return'), cancel]
   if (s.reconcile) return [move, h('space pick', 'space'), h('enter apply picked', 'return'), h('a accept all', 'a'), h('esc none', 'escape')]
   if (s.engage) return [h('enter engage', 'return'), cancel]
   if (s.startRun) return [field, h('space change', 'space'), h('enter confirm', 'return'), cancel]
@@ -247,7 +251,7 @@ function keysOf(s: State, m: Model): Seg[][] {
   const userOpen = isUsrHead ? isUserSectionOpen(s.open as string[], s.selected === 'head:assigned' ? 'assigned' : 'decide') : false
   const head = isHead(s.selected ?? m.selected) ? m.groups.find(g => headKey(g.box) === (s.selected ?? m.selected)) : undefined
   const enter = isUsrHead ? (userOpen ? 'enter close' : 'enter open') : head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
-  return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), h('r reload', 'r'), quit]
+  return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), h('u ask', 'u'), h('r reload', 'r'), quit]
 }
 
 export function keysLines(s: State, m: Model): Seg[][] {
@@ -601,24 +605,49 @@ function runRows(s: State, sel: string): Keyed[] {
 // --- the Health tab, as the mock: Usage and Machine, a label column ---
 
 const BAR = 20
-const row = (label: string, value: Seg[]): Seg[] => [{ text: '  ' + label.padEnd(14), color: label ? 'permission' : undefined }, ...value]
+const row = (label: string, value: Seg[]): Seg[] => [{ text: '  ' + label.padEnd(14) }, ...value]
 
-function usageRow(label: string, w: Window | null, held: boolean, now: number): Seg[] {
+function usageRow(label: string, w: Window | null, limit: number, now: number): Seg[] {
   if (!w) return row(label, [dim('not observable here')])
   const stale = isStale(w, now)
   const filled = Math.round(Math.min(100, Math.max(0, w.pct)) / 100 * BAR)
-  const c: Color | undefined = stale ? undefined : held ? 'warning' : 'success'
+  const c: Color | undefined = stale ? undefined : usageColor(w.pct, limit)
   return row(label, [{ text: '█'.repeat(filled), color: c, dim: stale }, dim('░'.repeat(BAR - filled)),
     { text: `  ${w.pct}%`, color: c, dim: stale }, dim(` (${ageText(w, now)}${stale ? ', stale' : ''})`)])
 }
 
-function relayRow(u: Usage | null): Seg[] {
+const fmtPct = (n: number) => String(Math.round(n * 10) / 10)
+
+// F172: this CLI's own profile (state.profile, from status.ts ownProfile), its
+// figures the same usage reading the bars draw; unreadable shows its reason.
+function profileRow(s: State): Seg[] {
+  const u = s.usage
+  if (!u?.five && !u?.seven) {
+    const reason = (u?.decision ?? '').trim() === 'UNOBSERVABLE' ? 'no usage reading' : u ? 'not available' : 'not read yet'
+    return row('Profile', [s.profile ? { text: `${s.profile} · ${reason}` } : dim('none detected')])
+  }
+  const pct = (w: Window | null) => (w ? `${w.pct}%` : '-')
+  const reset = resetsText(u.five?.resetsAt ?? null, s.now) ?? resetsText(u.seven?.resetsAt ?? null, s.now)
+  return row('Profile', [{ text: `${s.profile ?? 'none detected'} · 5h ${pct(u.five)} · 7d ${pct(u.seven)}${reset ? ` · ${reset}` : ''}` }])
+}
+
+function relayRow(u: Usage | null, now: number): Seg[] {
   const d = (u?.decision ?? '').trim()
   const h = /^HOLD (\S+)( 7d)?$/.exec(d)
   if (h) return row('Relay', h[2]
     ? [{ text: `■ 7-day hold reached (${h[1]}%)`, color: 'error' }, dim(' - waits for the reset or your go')]
     : [{ text: `▲ 5-hour hold reached (${h[1]}%)`, color: 'warning' }, dim(' - new stages wait')])
-  if (/^RELEASE /.test(d)) return row('Relay', [{ text: 'stages run', color: 'success' }, dim(` (${d})`)])
+  if (/^RELEASE /.test(d)) {
+    const segs: Seg[] = [{ text: 'stages run' }, dim(` (${d})`)]
+    const seven = u?.seven && !isStale(u.seven, now) ? u.seven : null
+    if (seven) {
+      const dist = seven.pct >= WEEKLY_STOP_PCT
+        ? (seven.pct === WEEKLY_STOP_PCT ? 'at stop' : `${fmtPct(seven.pct - WEEKLY_STOP_PCT)}% past stop`)
+        : `${fmtPct(WEEKLY_STOP_PCT - seven.pct)}% to stop`
+      segs.push({ text: ` - 7-day ${seven.pct}% of ${WEEKLY_STOP_PCT}% stop (${dist})`, color: usageColor(seven.pct, WEEKLY_STOP_PCT) })
+    }
+    return row('Relay', segs)
+  }
   if (d === 'UNOBSERVABLE') return row('Relay', [{ text: 'no usage reading', color: 'warning' }, dim(' (UNOBSERVABLE)')])
   if (!u?.five && !u?.seven) return row('Relay', [dim('no decision without a reading')])
   return row('Relay', [dim('decision not known yet')])
@@ -626,7 +655,7 @@ function relayRow(u: Usage | null): Seg[] {
 
 function factRow(label: string, bytes: number | null, t: Limits): Seg[] {
   const f = figure(bytes, t)
-  const value: Seg = f.level === null ? dim('not known') : { text: `${f.text} free`, color: LEVEL_COLOR[f.level] }
+  const value: Seg = f.level === null ? dim('not known') : { text: `${f.text} free`, color: f.level === 'green' ? undefined : LEVEL_COLOR[f.level] }
   return row(label, [{ ...value, text: value.text.padEnd(19) }, dim(`amber < ${t.amber / GiB} GB · red < ${t.red / GiB} GB`)])
 }
 
@@ -653,27 +682,18 @@ function machineRows(m: Machine | null, red: boolean, now: number): Seg[][] {
 
 function healthBody(s: State): Seg[][] {
   const u = s.usage
-  const held = heldOf(u)
   const out: Seg[][] = [
-    [{ text: 'Usage'.padEnd(15), color: 'suggestion', bold: true }, dim('from watch-cortana usage-watch level')],
-    usageRow('5-hour', u?.five ?? null, held.five, s.now),
-    usageRow('7-day', u?.seven ?? null, held.seven, s.now),
-    relayRow(u),
+    [{ text: 'Usage'.padEnd(15), bold: true }, dim('from watch-cortana usage-watch level')],
+    profileRow(s),
+    usageRow('5-hour', u?.five ?? null, FIVE_HOLD_PCT, s.now),
+    usageRow('7-day', u?.seven ?? null, WEEKLY_STOP_PCT, s.now),
+    relayRow(u, s.now),
     row('Credit', [dim('not available')]),
   ]
-  if (u?.spendLimitPct !== null && u?.spendLimitPct !== undefined) out.push(row('Spend limit', [{ text: `${u.spendLimitPct}% used`, color: 'suggestion' }]))
-  if (u?.costUsd !== null && u?.costUsd !== undefined) out.push(row('Spent', [{ text: `$${u.costUsd.toFixed(2)} this session`, color: 'suggestion' }]))
-  out.push([], [{ text: 'Machine', color: 'suggestion', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now))
-  const btnR = hot('r refresh', 'r')
-  const btnRes = hot('R resume', 'R', true)
-  const btnCli = hot('c resume CLI', 'c')
-  const btnForce = hot('F force resume', 'F', true)
-  out.push([], [{ text: 'Actions', color: 'suggestion', bold: true }])
-  if (s.cols < 60) {
-    out.push([dim('  '), btnR, dim('  '), btnRes], [dim('  '), btnCli, dim('  '), btnForce])
-  } else {
-    out.push([dim('  '), btnR, dim('  '), btnRes, dim('  '), btnCli, dim('  '), btnForce])
-  }
+  if (u?.spendLimitPct !== null && u?.spendLimitPct !== undefined) out.push(row('Spend limit', [{ text: `${u.spendLimitPct}% used` }]))
+  if (u?.costUsd !== null && u?.costUsd !== undefined) out.push(row('Spent', [{ text: `$${u.costUsd.toFixed(2)} this session` }]))
+  // F172: no in-body Actions row - the footer keys (keysOf) are the one action row.
+  out.push([], [{ text: 'Machine', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now))
   return out
 }
 
@@ -716,6 +736,31 @@ function dialogBody(s: State): Seg[][] {
             { text: part.slice(38), action: { kind: 'dialog-kind', value: 'tester' } },
           ] : undefined })
     if (i === 1) rows.push({ text: '' })   // F77: after the Ticket line and the kind
+  })
+  return boxBody(s, { title: ls[0] ?? '', rows })
+}
+
+function decideBody(s: State): Seg[][] {
+  const d = s.decide
+  if (!d) return []
+  const ls = decideLines(s)
+  const r = d.result ? '  ' + d.result : null
+  const isGood = !!d.result?.startsWith('Read-only')
+  const choices: ('assign' | 'holo' | 'questions')[] = ['assign', 'holo', 'questions']
+  const rows: Boxed['rows'] = ls.slice(1).map((l, i, all) => {
+    const last = i === all.length - 1
+    const action: PointerAction | undefined = i === 0 ? { kind: 'decide-ticket-field' }
+      : i >= 1 && i <= 3 ? { kind: 'decide-choice', choice: choices[i - 1]! }
+      : undefined
+    const color: Color | undefined = l === r ? (isGood ? 'success' : 'error')
+      : (i >= 1 && i <= 3 && d.field === 'choice' && d.choice === choices[i - 1]) ? 'suggestion'
+      : undefined
+    return {
+      text: l,
+      color,
+      action,
+      segs: last ? [dim('  '), hot('a assign', 'a'), dim(' · '), hot('h decision page', 'h'), dim(' · '), hot('q MCQ decision', 'q'), dim(' · '), hot('Esc cancel', 'escape')] : undefined,
+    }
   })
   return boxBody(s, { title: ls[0] ?? '', rows })
 }
@@ -900,10 +945,8 @@ export function helpBody(s: State, room: number): Seg[][] {
   const contentRows: { segs: Seg[] }[] = []
 
   if (h.runPrompt !== null && h.runPrompt !== undefined) {
-    const cur = skills.find(x => x.id === h.selected) ?? HELP_ITEMS.find(x => x.id === h.selected)
-    const isCmd = cur?.kind === 'command'
     const pInner = Math.max(4, inner - 2)
-    const pTitle = cut(isCmd ? `Run /${h.selected}` : `Run skillator:${h.selected}`, Math.max(1, pInner - 4))
+    const pTitle = cut(`Run /${helpCommand(h.selected)}`, Math.max(1, pInner - 4))
     const pTop = `┌─ ${pTitle} ${'─'.repeat(Math.max(0, pInner - cells(pTitle) - 3))}┐`
     const argStr = cut(` Args: ${h.runPrompt}_`, pInner)
     const pMid = `│${argStr}${' '.repeat(Math.max(0, pInner - cells(argStr)))}│`
@@ -1022,6 +1065,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.setup ? setupBody(s)
     : s.person ? formBody(s)
     : s.dialog ? dialogBody(s)
+    : s.decide ? decideBody(s)
     : s.reconcile ? boxBody(s, { title: recTitle, rows: [...recRows.map((text, index) => ({ text, action: { kind: 'reconcile' as const, index } })), { text: '' },
         { text: '', segs: [dim('  '), hot('Enter apply picked', 'return'), dim(' · '), hot('a accept all', 'a'), dim(' · '), hot('Esc none', 'escape')] }] })   // F81
     : s.engage ? boxBody(s, { title: engTitle, rows: [...engRows.map(text => ({ text })), { text: '' },
@@ -1045,7 +1089,7 @@ function bodyOf(s: State, m: Model, h: number): Seg[][] {
     : s.tab === 'run' ? windowOf(runTabLines(s), s.runForm ? null : s.runSel, room, 'run')
     : ticketsBody(s, m, room)
   // B25: a modal box taller than the room keeps its last rows (the buttons, the bottom edge)
-  const boxed = !!(s.setup || s.person || s.dialog || s.reconcile || s.engage || s.startRun) && !(s.help || s.tab === 'help')
+  const boxed = !!(s.setup || s.person || s.dialog || s.decide || s.reconcile || s.engage || s.startRun) && !(s.help || s.tab === 'help')
   const top = boxed && main.length > room && room >= 4
     ? [...main.slice(0, room - 2), ...main.slice(-2)]
     : main.slice(0, room)

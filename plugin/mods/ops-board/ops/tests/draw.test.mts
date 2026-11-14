@@ -58,7 +58,7 @@ test('ascii swaps the glyphs; fit cuts with an ellipsis; a long title never wrap
 })
 test('runs and health tabs as the mock; the assign box overlays the body', () => {
   const h = text(reduce(s, { name: '3' }).state)
-  assert.match(h, /Usage +from watch-cortana usage-watch level\n  5-hour        not observable here\n  7-day         not observable here\n  Relay         no decision without a reading\n  Credit        not available/)
+  assert.match(h, /Usage +from watch-cortana usage-watch level\n  Profile       none detected\n  5-hour        not observable here\n  7-day         not observable here\n  Relay         no decision without a reading\n  Credit        not available/)
   assert.match(h, /Machine\n  machine facts not read yet/)
   assert.match(text(reduce(s, { name: '2' }).state), /reading runs…/)
   assert.match(text(reduce(onRuns(s, '', {}), { name: '2' }).state), /no open runs - plan one with relay-morpheus \(plan-runs\)/)
@@ -144,8 +144,8 @@ test('F81 the reconcile box draws its proposals and its keys', () => {
   assert.ok(frame(x, P).includes('[↑↓ move] · [space pick] · [enter apply picked] · [a accept all] · [esc none]'))
 })
 test('the keys line as the mock; D decided only on a decidable row', () => {
-  const keys = (x: State) => frame({ ...x, cols: 120 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
-  assert.equal(keys(s), '[↑↓ move] · [enter line] · [a assign] · [d decide] · [t team] · [c reconcile] · [r reload] · [q quit]')
+  const keys = (x: State) => frame({ ...x, cols: 130 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile; F175: u ask
+  assert.equal(keys(s), '[↑↓ move] · [enter line] · [a assign] · [d decide] · [t team] · [c reconcile] · [u ask] · [r reload] · [q quit]')
   const f3: State = { ...s, selected: 'F3' }
   assert.match(keys(f3), /\[D decided\]/)
   assert.match(keys(f3), /\[q quit\]$/)
@@ -336,6 +336,42 @@ test('the assign box lists + add person; from it the form overlays the dialog; n
   assert.match(none, /│  no \.skillator\/team\.md yet - \+ add person creates it +│\n  │  › \+ add person +│/)
 })
 
+test('F172: health actions once (footer only), bars by relay threshold, relay 7-day stop, profile row, plain labels', () => {
+  const held = onMachine(s, RED_HELD, 0).state
+  const u = onUsage(held, 'src=codex 5h=14 7d=94 ctx=- max=-\n', 0)
+  const decided = u.effects[0]!.kind === 'run' ? (u.effects[0]!.then({ code: 0, out: 'RELEASE 14\n', err: '', argv: [] })(u.state) as State) : u.state
+  const x: State = { ...reduce(decided, { name: '3' }).state, profile: 'codex' }
+  const h = text(x)
+  assert.match(h, /  Profile       codex · 5h 14% · 7d 94%/)
+  assert.match(h, /  Relay         stages run \(RELEASE 14\) - 7-day 94% of 97% stop \(3% to stop\)/)
+  assert.doesNotMatch(h, /Actions/)
+  assert.equal(h.split('[r refresh]').length - 1, 1, 'refresh key shown once')
+  assert.equal(h.split('[c resume CLI]').length - 1, 1, 'resume CLI key shown once')
+  assert.equal(h.split('[F force resume]').length - 1, 1, 'force resume key shown once')
+  const col = frame(x, { color: true, ascii: false })
+  const five = col.find(l => l.includes('5-hour'))!, seven = col.find(l => l.includes('7-day'))!
+  assert.doesNotMatch(five, /\x1b\[32m|\x1b\[33m|\x1b\[31m/, 'low 5h bar is plain')
+  assert.match(seven, /\x1b\[33m/, '7d 94% bar is amber, near the 97% stop')
+  assert.doesNotMatch(seven, /\x1b\[32m/, '7d 94% bar is not green')
+  assert.doesNotMatch(five, /\x1b\[35m/, 'row labels are plain')
+  assert.doesNotMatch(col.find(l => l.includes('Usage'))!, /\x1b\[36m/, 'Usage heading is plain')
+  const past = onUsage(onMachine(s, RED_HELD, 0).state, 'src=codex 5h=85 7d=97 ctx=- max=-\n', 0).state
+  const pastCol = frame({ ...past, tab: 'health' }, { color: true, ascii: false })
+  assert.match(pastCol.find(l => l.includes('5-hour'))!, /\x1b\[31m/, '5h at/past 80% hold is red')
+  assert.match(pastCol.find(l => l.includes('7-day'))!, /\x1b\[31m/, '7d at the 97% stop is red')
+})
+
+test('F172: profile row shows the reset when known and the reason when unreadable', () => {
+  const now = new Date(2026, 9, 18, 12, 15).getTime()
+  const win = (pct: number, resetsAt: string | null) => ({ pct, resetsAt, source: 'host' as const, at: now })
+  const base: State = { ...s, tab: 'health', now, profile: 'codex' }
+  const known = text({ ...base, usage: { five: win(14, new Date(2026, 9, 18, 14, 20).toISOString()), seven: win(94, null), spendLimitPct: null, costUsd: null, decision: 'RELEASE 14' } })
+  assert.match(known, /  Profile       codex · 5h 14% · 7d 94% · resets today 14:20 · in 2h 05m/)
+  const unreadable = text({ ...base, usage: { five: null, seven: null, spendLimitPct: null, costUsd: null, decision: 'UNOBSERVABLE' } })
+  assert.match(unreadable, /  Profile       codex · no usage reading/)
+  assert.match(text({ ...base, profile: null, usage: null }), /  Profile       none detected/)
+})
+
 test('health with readings: bars, relay, machine rows with their thresholds', () => {
   const held = onMachine(s, RED_HELD, 0).state
   const u = onUsage(held, 'src=codex 5h=41 7d=55 ctx=- max=-\n', 0)
@@ -494,7 +530,7 @@ test('F128 draw: Assigned and Decide sections render with fold indicators and ad
 })
 
 test('F120: responsive footer actions and wrapping across 40, 60, 80, 100, 120 columns without dropping keys', () => {
-  const expectedKeys = ['↑↓ move', 'enter line', 'a assign', 'd decide', 't team', 'c reconcile', 'r reload', 'q quit']
+  const expectedKeys = ['↑↓ move', 'enter line', 'a assign', 'd decide', 't team', 'c reconcile', 'u ask', 'r reload', 'q quit']
   for (const cols of [40, 60, 80, 100, 120]) {
     const f = frame({ ...s, cols }, P)
     assert.equal(f.length, s.rows)
@@ -537,7 +573,7 @@ test('F123: button badges [Key Label] across all tabs and click hitboxes match b
   // 1. Tickets tab
   const scTickets = screen({ ...s, cols: 120 }, P)
   const tText = scTickets.lines.join('\n')
-  assert.match(tText, /\[↑↓ move\] · \[enter line\] · \[a assign\] · \[d decide\] · \[t team\] · \[c reconcile\] · \[r reload\] · \[q quit\]/)
+  assert.match(tText, /\[↑↓ move\] · \[enter line\] · \[a assign\] · \[d decide\] · \[t team\] · \[c reconcile\] · \[u ask\] · \[r reload\] · \[q quit\]/)
   assert.match(tText, /\[f filter\] · \[x show done\]/)
 
   // Hitbox check: find hit for 'q'
@@ -868,13 +904,13 @@ test('F160/A198: 7 Help tab header, SKILL.md doc content, run prompt box, and wi
     },
   }
   const fPrompt = sized({ ...withPrompt, cols: 80, rows: 24 }).join('\n')
-  assert.match(fPrompt, /┌─ Run skillator:tickets-zordon/)
+  assert.match(fPrompt, /┌─ Run \/skillator:tickets-zordon/)
   assert.match(fPrompt, /Args: status_/)
   assert.match(fPrompt, /\[type args \(optional\)\] · \[enter confirm\] · \[esc cancel\]/)
 
   // ASCII mode uses ASCII box drawing
   const fAscii = screen({ ...withPrompt, cols: 80, rows: 24 }, { color: false, ascii: true, plain: true }).lines.join('\n')
-  assert.match(fAscii, /\+- Run skillator:tickets-zordon/)
+  assert.match(fAscii, /\+- Run \/skillator:tickets-zordon/)
 
   // Mouse hitboxes for help-run, help-copy, and filter bar
   const sc = screen(hState, P)
@@ -971,7 +1007,7 @@ test('F165: Help catalog renders skills and commands with brief explanations and
   assert.match(fExp, /─── Command Documentation/)
   assert.match(fExp, /Command markdown body for archive-tickets/)
 
-  // 5. Command run prompt renders Run /<id>
+  // 5. Command run prompt renders what Run sends: Run /skillator:<id> (A221)
   const runPromptState: State = {
     ...cmdState,
     help: {
@@ -980,7 +1016,7 @@ test('F165: Help catalog renders skills and commands with brief explanations and
     },
   }
   const fPrompt = sized({ ...runPromptState, cols: 80, rows: 24 }).join('\n')
-  assert.match(fPrompt, /┌─ Run \/archive-zordon/)
+  assert.match(fPrompt, /┌─ Run \/skillator:archive-zordon/)
   assert.match(fPrompt, /Args: --days 30_/)
 
   // 6. Hitboxes on command rows
@@ -988,4 +1024,18 @@ test('F165: Help catalog renders skills and commands with brief explanations and
   const cmdHit = sc.hits.find(h => h.action.kind === 'help-skill' && h.action.id === 'archive-zordon')
   assert.ok(cmdHit, 'Expected hitbox for archive-zordon command row')
 })
+
+test('F174 draw: Decide chooser renders (a) assign, (h) decision page, (q) MCQ decision within rows x cols', () => {
+  const dState = reduce(s, { name: 'd', sequence: 'd' }).state
+  assert.ok(dState.decide)
+  for (const cols of [40, 60, 80, 120]) {
+    const f = sized({ ...dState, cols, rows: 24 })
+    const full = f.join('\n')
+    assert.match(full, /Decide B2/)
+    assert.match(full, /\(a\) [Aa]ssign.*decider/)
+    assert.match(full, /\(h\) [Dd]ecision page/)
+    assert.match(full, /\(q\) MCQ decision/)
+  }
+})
+
 

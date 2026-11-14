@@ -61,6 +61,8 @@ node <SKILL>/scripts/holo.mjs RUN-12 understand          # first-class mode: int
 node <SKILL>/scripts/holo.mjs RUN-12 --design docs/plans/PLAN-x.md   # + the design's sections
 node <SKILL>/scripts/holo.mjs --design docs/plans/PLAN-x.md          # design only
 node <SKILL>/scripts/holo.mjs RUN-12 --html    # standalone page -> .skillator/holo/RUN-12.html
+node <SKILL>/scripts/holo.mjs RUN-12 --html --format=timeline|executive|runbook|mindmap [--theme=dark|light|contrast|print]   # format page -> .skillator/holo/RUN-12.<format>.html
+node <SKILL>/scripts/holo.mjs RUN-12 --html --theme=dark|light|contrast|print   # themed default page -> .skillator/holo/RUN-12.html
 node <SKILL>/scripts/holo.mjs RUN-12 --svg     # standalone SVG -> .skillator/holo/RUN-12.svg
 node <SKILL>/scripts/holo.mjs RUN-12 --ascii   # the same, for a terminal
 node <SKILL>/scripts/holo.mjs RUN-12 --batch   # AUTOMATIC ONLY (end batch): page + standalone + wizard, ASCII and paths printed
@@ -131,6 +133,12 @@ path.
 | "artifact", "publish" | Artifact (published page) | `holo.mjs RUN-12` -> `RUN-12.artifact.html` | publish it (Show it, below) + full path |
 | "html", "page", "file" | HTML file | `holo.mjs RUN-12 --html` -> `RUN-12.html` | give the full absolute path |
 | "svg" | SVG | `holo.mjs RUN-12 --svg` -> `RUN-12.svg` | give the full absolute path |
+| "timeline" | Timeline (HTML) | `holo.mjs RUN-12 --format=timeline` -> `RUN-12.timeline.html` | give the full absolute path |
+| "executive", "summary" | Executive summary (HTML) | `holo.mjs RUN-12 --format=executive` -> `RUN-12.executive.html` | give the full absolute path |
+| "runbook", "checklist" | Runbook checklist (HTML) | `holo.mjs RUN-12 --format=runbook` -> `RUN-12.runbook.html` | give the full absolute path |
+| "mindmap", "tree" | Mindmap tree (HTML) | `holo.mjs RUN-12 --format=mindmap` -> `RUN-12.mindmap.html` | give the full absolute path |
+
+The four formats (`--format=timeline|executive|runbook|mindmap`, also `--format <type>`) are standalone HTML only: one file, inline CSS/JS, no CDN, drawn offline. They are refused with `--md`/`--svg`/`--ascii`, the wizard, `--understand`, `--batch`, `--ticket`, `--anatomy` and on design-only runs, and there is no positional format word. `--theme=dark|light|contrast|print` (also `--theme <type>`) applies to the default page and to all four formats, and needs a standalone page (`--html` or a format); an explicit theme is locked on the page as `data-theme`. The timeline shows recorded times only: dispatched-to-heartbeat observed windows, points otherwise, and the critical path is the longest `after:` chain by stage count, labelled as such - no duration is invented. The runbook never invents a verify command: a step shows its recorded landed evidence or the line `Verify command: not recorded in the run file.`, and its checkmarks live in the page only. The mindmap reads the run file only: a ticket's parent is its id-suffix base only when that base is in the run, and dependencies stay separate from the tree.
 
 - **Named in the request** -> that one.
 - **Not named** -> ask once (`AskUserQuestion`, else a numbered list), offering the interactive modes (`decision`, `anatomy`, `md`, `understand`, or `HTML file` / `SVG` / `Artifact`). **Never offer `batch` (`--batch`) as an interactive user choice.**
@@ -278,7 +286,10 @@ draws offline, light and dark, at phone width: the stage graph scrolls inside
 its own box, the cards and lists reflow). `--selftest` renders fixture runs
 covering every stage state and every decision state and asserts each stage
 row of the table - read by a regex of its own, not by the parser - appears in
-the graph, the list and the ASCII with its state. `--fixture <DIR>` builds the
+the graph, the list and the ASCII with its state; it also validates every
+`--format` in every `--theme` as a standalone offline page (hostile, cyclic,
+empty and 60-stage runs included) and pins the default output byte-identical
+by SHA-256 when `--format`/`--theme` are absent. `--fixture <DIR>` builds the
 RED/GREEN repo (`practice/baselines/scenario-holo-f41.txt`). Run the selftest
 after touching the script.
 

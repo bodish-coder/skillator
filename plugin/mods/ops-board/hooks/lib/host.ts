@@ -50,19 +50,20 @@ export async function readSkillDocHost($: HostApi, skillId: string): Promise<{ c
   }
 
   if (!docPath) {
+    // A222: commands of skillator's plugin tree above the skills dir (only with its plugin.json) -
+    // installed, ops-board is a plugin of its own; then the repo's plugin/commands as a dev fallback
     const repo = await $.session.repo()
-    if (repo?.root) {
-      const repoBase = norm(repo.root)
-      const doc = skillId === 'ops' ? 'skillator-ops' : skillId   // F171: /ops is documented by its plugin command
-      const candMd = `${repoBase}/plugin/commands/${doc}.md`
-      if (candMd.startsWith(repoBase + '/') && !candMd.includes('..') && (await $.fs.exists(candMd))) {
-        docPath = candMd
-        displayPath = `plugin/commands/${doc}.md`
-      } else {
-        const candTxt = `${repoBase}/plugin/commands/${doc}.txt`
-        if (candTxt.startsWith(repoBase + '/') && !candTxt.includes('..') && (await $.fs.exists(candTxt))) {
-          docPath = candTxt
-          displayPath = `plugin/commands/${doc}.txt`
+    const plugin = skills ? up(norm(skills), 1) : null
+    const own = plugin && (await $.fs.exists(plugin + '/.claude-plugin/plugin.json')) ? plugin + '/commands' : null
+    const cmdDirs = [own, repo?.root && norm(repo.root) + '/plugin/commands']
+    const doc = skillId === 'ops' ? 'skillator-ops' : skillId   // F171: /ops is documented by its plugin command
+    for (const dir of cmdDirs) {
+      if (docPath || !dir) continue
+      for (const ext of ['md', 'txt']) {
+        const cand = `${dir}/${doc}.${ext}`
+        if (!docPath && !cand.includes('..') && (await $.fs.exists(cand))) {
+          docPath = cand
+          displayPath = `plugin/commands/${doc}.${ext}`
         }
       }
     }

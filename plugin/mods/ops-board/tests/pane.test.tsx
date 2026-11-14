@@ -724,6 +724,8 @@ test('F61: a and d on a ticket row still open the in-pane form; on a header they
   await $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: 0, by: 1, bodyRows: 40, contentRows: 30, origin: { kind: 'person' } })
   expect(await state($, 'selected')).toBe('F2')
   await ui.press({ key: 'key:decide' })
+  expect((await ui.find({ key: 'status:title' }))?.text).toBe('Decide F2  Esc cancels')
+  await ui.press({ key: 'decide:assign' })
   expect((await ui.find({ key: 'form:title' }))?.text).toBe('Assign F2 for a decision  Esc cancels')
   expect(w.opens.length).toBeGreaterThan(0)
   await ui.unmount()
@@ -822,6 +824,28 @@ test('B14: the tab bar and the key rows wrap whole buttons', WITH, async ($, on)
   expect((await ui.find({ key: 'tabs' }))?.props.flexWrap).toBe('wrap')
   expect((await ui.find({ key: 'keys' }))?.props.flexWrap).toBe('wrap')
   for (const id of ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help']) expect(await ui.find({ key: 'tab:' + id }), id).toBeDefined()
+  await ui.unmount()
+})
+
+// A221: Help's Run sends a plugin command as skillator:<id>; the mod-native /ops stays bare.
+test('A221: Help Run launches a plugin command as skillator:<id> and /ops bare', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD })
+  const ran: string[] = []
+  const labels: string[] = []
+  for (const command of ['skillator:gauntlet-run', 'gauntlet-run', 'skillator:ops', 'ops'])
+    on('command.run', { command }, ($, e) => { ran.push(e.command); return { text: 'ok' } })
+  on('ui.toast', () => ({ value: undefined }))
+  await start($, clock)
+  const ui = await mountPane($, 'terminal', { ...PANE, bodyColumns: 96 })
+  await ui.press({ key: 'tab:help' })
+  for (const id of ['gauntlet-run', 'ops']) {
+    await ui.press({ key: 'help:skill:' + id })
+    labels.push(labelOf(await ui.find({ key: 'help:run' })))
+    await ui.press({ key: 'help:run' })
+    await clock.settle()
+  }
+  expect(ran).toEqual(['skillator:gauntlet-run', 'ops'])
+  expect(labels).toEqual(['Run /skillator:gauntlet-run', 'Run /ops'])
   await ui.unmount()
 })
 

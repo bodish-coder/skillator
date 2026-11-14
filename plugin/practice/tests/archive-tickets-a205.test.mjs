@@ -121,7 +121,7 @@ test('archive-tickets.sh contains pid(id) parent grouping across blank lines and
   const script = readFileSync(archiveScriptPath, 'utf8');
   assert.match(script, /function pid\(id\) \{ sub\(\/\[a-z\]\+\$\/, "", id\); return id \}/);
   assert.match(script, /if \(l ~ \/\^\[ \\t\]\*\$\/\) continue/);
-  assert.match(script, /if \(p in pgrp\)/);
+  assert.match(script, /if \(par in pgrp\)/);
   assert.match(script, /A205: closed parent B1 moved despite blank-separated open child B1a/);
 });
 

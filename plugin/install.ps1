@@ -282,6 +282,9 @@ function Write-OpsFunction([string]$shimSrc, [string]$path) {
 # pending.sh. UTF-8 without BOM, LF - the bytes install.sh writes but for the separators
 # inside {{SKILLS}} and that shell line (pi's frontmatter and gemini's TOML reject a BOM).
 function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
+  $probe = $target
+  while ($probe -and -not (Get-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue)) { $probe = Split-Path -Parent $probe }
+  if ($probe -and (Test-UnderLink $probe)) { Write-Host "        kept ${target}: a link or under one"; return }
   if ($DryRun) { Write-Host "        would write $target"; return }
   $text = [IO.File]::ReadAllText($tpl).Replace("`r", '')
   $re = [regex]'(?m)^!\{sh "\{\{SKILLS\}\}/tickets-zordon/scripts/pending\.sh"\}$'
@@ -476,42 +479,115 @@ function Write-AgyExt([string]$skillsDir) {
 # .skillator-installed, so Remove-Unshipped never touches them. Claude Code: nothing (the
 # ops-board mod has its own /pending, /list-tickets; /engage-picard, /archive-zordon, /sync-zordon, /skillator-update, /team-messages and /pending-sentinel are the plugin's commands/*.md).
 # Same as install.sh write_commands.
+#
+# A218: F171 retired the plain names (the unique ones are the only names) and F90 the
+# Codex prompts. $retired is what older runs wrote everywhere; upstream-sync (pre-F166
+# alias) and ops were also written, skillator-update and team-messages as Codex prompts.
+# Ownership is the body: it names a skillator skill, script or phrase (every committed
+# version of every retired template matches $retiredBody). Nothing goes through a link.
+# Same as install.sh retire_file / retire_dir.
+$retired = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run'
+$retiredBody = 'tickets-zordon|relay-morpheus|code-vader|skillator-sync|tasks-sentinels|teams-uhura|skillator:|\.skillator-source|ops-board/ops/ops|Engaged prompt'
+# Test-UnderLink <path>: the path, or a dir between it and $HOME, is a link - a dir with the
+# ReparsePoint attribute (as Get-RelFiles), a file only by LinkType (OneDrive file
+# placeholders carry ReparsePoint). A dir above the path that cannot be read counts as one.
+function Test-UnderLink([string]$path) {
+  for ($q = $path; $q -and $q -ne $HOME.TrimEnd('\'); $q = Split-Path -Parent $q) {
+    $i = Get-Item -LiteralPath $q -Force -ErrorAction SilentlyContinue
+    if (-not $i) { if ($q -ne $path) { return $true } }
+    elseif ($i.PSIsContainer) { if ($i.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $true } }
+    elseif ($i.LinkType -and $i.LinkType -ne 'HardLink') { return $true }
+  }
+  return $false
+}
+# Read-Retired <item>: its text; unreadable (a dir, locked, no access) reads as '' - kept,
+# as install.sh's grep keeps it
+function Read-Retired($item) {
+  if (-not $item -or $item.PSIsContainer) { return '' }
+  try { return [IO.File]::ReadAllText($item.FullName) } catch { return '' }
+}
+# Rename-Retired <file>: rename a loose command file skillator wrote to <file>.skillator-retired
+# - the hosts list only .md / .toml, so it leaves the picker and stays recoverable
+function Rename-Retired([string]$file) {
+  $fi = Get-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue
+  if (-not $fi) { return }
+  if (Test-UnderLink $file) { Write-Host "        kept ${file}: a link or under one"; return }
+  if ((Read-Retired $fi) -cnotmatch $retiredBody) { Write-Host "        kept ${file}: not written by skillator"; return }
+  $to = "$file.skillator-retired"
+  if (Get-Item -LiteralPath $to -Force -ErrorAction SilentlyContinue) { Write-Host "        kept ${file}: $to exists"; return }
+  if ($DryRun) { Write-Host "        would retire $file -> $to"; return }
+  try { Move-Item -LiteralPath $file -Destination $to } catch { Write-Host "warn  $file not retired: $($_.Exception.Message)"; return }
+  # as install.sh: the source must be gone and the target the moved file
+  if ((Test-Path -LiteralPath $file) -or -not (Test-Path -LiteralPath $to -PathType Leaf)) { Write-Host "warn  $file not retired (kept)"; return }
+  Write-Host "        retired $file -> $to (delete it if unused)"
+}
+# Remove-RetiredDir <dir>: a skill-command dir holding only SKILL.md (and its marker).
+# Decided before anything is touched: an intact .skillator-owned marker (Test-OwnedIntact)
+# removes the dir; without one - what pre-F171 runs left, they stripped the marker -
+# SKILL.md is retired by rename as a loose file is; any other file, or a link, keeps it all.
+function Remove-RetiredDir([string]$dir) {
+  $skill = Join-Path $dir 'SKILL.md'
+  $di = Get-Item -LiteralPath $dir -Force -ErrorAction SilentlyContinue
+  $si = Get-Item -LiteralPath $skill -Force -ErrorAction SilentlyContinue
+  if (-not $si -and -not ($di -and $di.LinkType)) { return }
+  if (Test-UnderLink $skill) { Write-Host "        kept ${dir}: a link or under one"; return }
+  if ((Read-Retired $si) -cnotmatch $retiredBody) { Write-Host "        kept ${dir}: not written by skillator"; return }
+  $other = try { @(Get-ChildItem -LiteralPath $dir -Force | Where-Object { $_.Name -cne 'SKILL.md' -and $_.Name -cne $owned }).Count } catch { 1 }
+  if ($other) {
+    Write-Host "        kept ${dir}: holds files skillator did not write"; return
+  }
+  if ((Test-Path -LiteralPath (Join-Path $dir $owned) -PathType Leaf) -and (Test-OwnedIntact $dir)) {
+    if ($DryRun) { Write-Host "        would remove dir $dir"; return }
+    try { Remove-Item -LiteralPath $dir -Recurse -Force } catch { Write-Host "warn  $dir not removed: $($_.Exception.Message)"; return }
+    Write-Host "        removed dir $dir"
+  } else { Rename-Retired $skill }
+}
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
   $names = 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run', 'team',
-           'code-vader', 'skillator-sync', 'message-uhura'
+           'code-vader', 'skillator-sync', 'message-uhura', 'decision-matrix'
   $opsNames = @('skillator-ops')
   switch ($cli) {
     # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom
-    # prompts pre-F90 runs wrote under the plain names go, nothing else in prompts\
+    # prompts pre-F90 runs wrote are retired (A218), nothing else in prompts\
     'codex' {
       # F105: $skillator-ops - skill hosts only; pi and Claude Code have their own /ops
       foreach ($n in $names + $opsNames) { Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md" }
-      if (-not $DryRun) {
-        foreach ($n in 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run') {
-          Remove-Item -LiteralPath "$codexHome\prompts\$n.md" -Force -ErrorAction SilentlyContinue
-        }
-      }
+      foreach ($n in $retired + @('upstream-sync', 'ops')) { Remove-RetiredDir "$dest\$n" }
+      foreach ($n in $retired + @('skillator-update', 'team-messages')) { Rename-Retired "$codexHome\prompts\$n.md" }
     }
-    'cursor' { foreach ($n in $names) { Write-Cmd "$c\cursor\$n.md" $dest "$HOME\.cursor\commands\$n.md" } }
+    'cursor' {
+      foreach ($n in $names) { Write-Cmd "$c\cursor\$n.md" $dest "$HOME\.cursor\commands\$n.md" }
+      foreach ($n in $retired + @('upstream-sync')) { Rename-Retired "$HOME\.cursor\commands\$n.md" }
+    }
     'pi' {
       if ($dest -ne "$HOME\.pi\agent\skills") { return }
       foreach ($n in $names) { Write-Cmd "$c\pi\$n.md" $dest "$HOME\.pi\agent\prompts\$n.md" }
+      foreach ($n in $retired + @('upstream-sync')) { Rename-Retired "$HOME\.pi\agent\prompts\$n.md" }
       Write-PiExt $dest
     }
     # F67: markdown, frontmatter description, $ARGUMENTS - /<n> in opencode; F159: /skillator-ops
-    'opencode' { foreach ($n in $names + $opsNames) { Write-Cmd "$c\opencode\$n.md" $dest "$ocConfig\commands\$n.md" } }
+    'opencode' {
+      foreach ($n in $names + $opsNames) { Write-Cmd "$c\opencode\$n.md" $dest "$ocConfig\commands\$n.md" }
+      foreach ($n in $retired + @('upstream-sync', 'ops')) { Rename-Retired "$ocConfig\commands\$n.md" }
+    }
     'antigravity' {
       foreach ($n in $names + $opsNames) {
         Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
-        if (-not $DryRun) { Remove-Item -LiteralPath "$dest\$n\$owned" -Force -ErrorAction SilentlyContinue }
+        $markerPath = "$dest\$n\$owned"
+        $probe = $markerPath
+        while ($probe -and -not (Get-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue)) { $probe = Split-Path -Parent $probe }
+        if ($probe -and (Test-UnderLink $probe)) { Write-Host "        kept ${markerPath}: a link or under one" }
+        elseif (-not $DryRun) { Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue }
       }
+      foreach ($n in $retired + @('upstream-sync', 'ops')) { Remove-RetiredDir "$dest\$n" }
       # F57: the Antigravity IDE's extension, from Antigravity's own dest
       if ($dest -eq "$HOME\.gemini\config\skills") { Write-AgyExt $dest }
       # Gemini CLI shares the ~/.gemini marker and reads ~/.gemini/skills
       if ($dest -eq "$HOME\.gemini\skills") {
         foreach ($n in $names) { Write-Cmd "$c\gemini\$n.toml" $dest "$HOME\.gemini\commands\$n.toml" }
+        foreach ($n in $retired + @('upstream-sync')) { Rename-Retired "$HOME\.gemini\commands\$n.toml" }
       }
     }
   }
@@ -789,7 +865,7 @@ function Invoke-SelfTest([string]$T) {
             '.codex\skills\message-uhura\SKILL.md', '.gemini\commands\message-uhura.toml', '.cursor\commands\message-uhura.md', '.pi\agent\prompts\message-uhura.md',
             '.config\opencode\commands\message-uhura.md', '.gemini\config\skills\message-uhura\SKILL.md',
             '.codex\skills\skillator-ops\SKILL.md', '.gemini\config\skills\skillator-ops\SKILL.md', '.gemini\skills\skillator-ops\SKILL.md', '.gemini\antigravity-cli\skills\skillator-ops\SKILL.md')
-  foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
+  foreach ($f in $cmds + @('.gemini\antigravity-cli\skills\tickets-zordon\SKILL.md', '.codex\skills\ops-board\ops\app.ts', '.codex\skills\ops-board\commands\skillator-ops.txt', '.pi\agent\skills\ops-board\hooks\lib\board.ts',
                            '.pi\agent\skills\ops-board\ops\package.json', '.pi\agent\skills\ops-board\hooks\lib\package.json',
                            '.pi\agent\skills\ops-board\pi\index.ts', '.pi\agent\skills\ops-board\pi\ops.ts', '.pi\agent\skills\ops-board\ops\engine.ts',
                            '.pi\agent\extensions\skillator-ops.ts', '.config\opencode\skills\tickets-zordon\SKILL.md',
@@ -988,15 +1064,85 @@ function Invoke-SelfTest([string]$T) {
   [IO.File]::WriteAllText((Join-Path $T '.gemini\skills\list-ticket-zordon\.skillator-owned'), '')
   [IO.File]::WriteAllText((Join-Path $T '.pi\agent\skills\tickets-zordon\.selftest-sentinel'), '')
   [IO.File]::AppendAllText((Join-Path $T '.pi\agent\skills\.ignore'), 'my-own-line')
-  # F90: every older run's codex prompt goes, a foreign prompt stays
-  $oldPrompts = 'pending', 'list-tickets', 'engage', 'archive-tickets', 'sync-tickets', 'skillator-update', 'team-messages', 'pending-subagent', 'verify-subagent', 'marathon-plan', 'marathon-run'
+  # A218/F90: what older runs wrote under a retired name is retired - a loose file renamed
+  # to .skillator-retired (recoverable), a skill dir removed only with an intact marker and
+  # nothing else in it - only when the body is skillator's, never through a link, and the
+  # dry run names exactly the actions the real run takes
+  $body = { param([string]$n)
+    switch ($n) {
+      'engage' { 'Show it once, under `**Engaged prompt:**`' }
+      'ops' { 'sh "/x/ops-board/ops/ops.sh" <repo root> --open' }
+      'skillator-update' { 'cat /x/.skillator-source' }
+      'team-messages' { 'node /x/teams-uhura/scripts/team.mjs inbox' }
+      default { 'Load /x/tickets-zordon/SKILL.md' }
+    }
+  }
+  $seed = { param([string]$f, [string]$n)
+    New-Item -ItemType Directory -Force (Split-Path -Parent (Join-Path $T $f)) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $T $f), "$(& $body $n)`n")
+  }
+  $wants = New-Object 'Collections.Generic.List[string]'
+  $ret = { param([string]$f) $wants.Add("        retired $T\$f -> $T\$f.skillator-retired (delete it if unused)") }
+  # pi's prompts dir behind a junction: nothing in it is touched
+  Move-Item -LiteralPath (Join-Path $T '.pi\agent\prompts') -Destination (Join-Path $T 'pi-prompts')
+  New-Item -ItemType Junction -Path (Join-Path $T '.pi\agent\prompts') -Target (Join-Path $T 'pi-prompts') | Out-Null
   New-Item -ItemType Directory -Force (Join-Path $T '.codex\prompts') | Out-Null
-  foreach ($n in $oldPrompts) { [IO.File]::WriteAllText((Join-Path $T ".codex\prompts\$n.md"), "old`n") }
   [IO.File]::WriteAllText((Join-Path $T '.codex\prompts\my-own.md'), "mine`n")
-  $null = & $run @()
+  [IO.File]::WriteAllText((Join-Path $T '.cursor\commands\my-cmd.md'), "mine`n")
+  foreach ($n in $retired + @('skillator-update', 'team-messages')) { & $seed ".codex\prompts\$n.md" $n; & $ret ".codex\prompts\$n.md" }
+  foreach ($n in $retired + @('upstream-sync', 'ops')) {
+    foreach ($d in '.codex\skills', '.gemini\config\skills', '.gemini\skills', '.gemini\antigravity-cli\skills') {
+      & $seed "$d\$n\SKILL.md" $n
+      if ("$d\$n" -eq '.gemini\config\skills\sync-tickets') {
+        Write-Owned (Join-Path $T "$d\$n") (Join-Path $T "$d\$n"); $wants.Add("        removed dir $T\$d\$n")
+      } elseif ("$d\$n" -eq '.codex\skills\engage') {
+        [IO.File]::WriteAllText((Join-Path $T "$d\$n\notes.txt"), "mine`n"); $wants.Add("        kept $T\$d\${n}: holds files skillator did not write")
+      } else { & $ret "$d\$n\SKILL.md" }
+    }
+    & $seed "$oc\commands\$n.md" $n
+    if ($n -eq 'marathon-plan') {
+      [IO.File]::WriteAllText((Join-Path $T "$oc\commands\$n.md.skillator-retired"), "older`n")
+      $wants.Add("        kept $T\$oc\commands\${n}.md: $T\$oc\commands\${n}.md.skillator-retired exists")
+    } else { & $ret "$oc\commands\$n.md" }
+    if ($n -eq 'ops') { continue }
+    & $seed ".cursor\commands\$n.md" $n; & $ret ".cursor\commands\$n.md"
+    if ($n -eq 'list-tickets') {
+      [IO.File]::WriteAllText((Join-Path $T ".gemini\commands\$n.toml"), "my own list`n")
+      $wants.Add("        kept $T\.gemini\commands\${n}.toml: not written by skillator")
+    } else { & $seed ".gemini\commands\$n.toml" $n; & $ret ".gemini\commands\$n.toml" }
+    & $seed ".pi\agent\prompts\$n.md" $n; $wants.Add("        kept $T\.pi\agent\prompts\${n}.md: a link or under one")
+  }
+  # a user's own file under a retired name: with a skillator mention it is renamed, not lost
+  [IO.File]::WriteAllText((Join-Path $T '.cursor\commands\pending.md'), "my notes: run skillator:tickets-zordon, then deploy`n")
+  $acts = { param([string]$o)
+    @($o -split "`r?`n" | Where-Object { $_ -cmatch '^        (would retire|retired|would remove dir|removed dir|kept [A-Za-z]:\\)' } |
+      ForEach-Object { $_ -creplace '^        would retire ', '        retired ' -creplace '^        would remove dir ', '        removed dir ' -creplace ' \(delete it if unused\)$', '' }) -join "`n"
+  }
+  $out = & $run @('-DryRun')
+  if ($script:selfCode -ne 0) { return "retired dry run exited $script:selfCode" }
+  $dry = & $acts $out
+  if (-not (Test-Path -LiteralPath (Join-Path $T '.cursor\commands\engage.md')) -or (Test-Path -LiteralPath (Join-Path $T '.cursor\commands\engage.md.skillator-retired')) -or
+      -not (Test-Path -LiteralPath (Join-Path $T '.gemini\config\skills\sync-tickets'))) { return 'dry run touched a retired command' }
+  $out = & $run @()
   if ($script:selfCode -ne 0) { return "second install exited $script:selfCode" }
-  foreach ($n in $oldPrompts) { if (Test-Path -LiteralPath (Join-Path $T ".codex\prompts\$n.md")) { return "old codex prompt $n.md kept" } }
-  if (-not (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\my-own.md') -PathType Leaf)) { return 'foreign codex prompt removed' }
+  if (-not $dry -or (& $acts $out) -cne $dry) { return 'dry run actions differ from the real run' }
+  $lines = $out -split "`r?`n"
+  foreach ($w in $wants) {
+    if ($lines -cnotcontains $w) { return "not done: $w" }
+    if ($w -cmatch '^        retired (.+?) -> ') {
+      $a = $Matches[1]
+      if ((Test-Path -LiteralPath $a) -or -not (Test-Path -LiteralPath "$a.skillator-retired" -PathType Leaf)) { return "$a not retired" }
+    }
+  }
+  if ((& $read '.cursor\commands\pending.md.skillator-retired') -cne "my notes: run skillator:tickets-zordon, then deploy`n") { return "a user's renamed pending.md not recoverable" }
+  if ((& $read '.gemini\commands\list-tickets.toml') -cne "my own list`n") { return "a user's own list-tickets.toml touched" }
+  if (-not (Test-Path -LiteralPath (Join-Path $T '.codex\skills\engage\SKILL.md')) -or -not (Test-Path -LiteralPath (Join-Path $T '.codex\skills\engage\notes.txt'))) { return 'a skill dir with a user file touched' }
+  if (Test-Path -LiteralPath (Join-Path $T '.gemini\config\skills\sync-tickets')) { return 'an intact owned skill dir kept' }
+  if (-not (Test-Path -LiteralPath (Join-Path $T "$oc\commands\marathon-plan.md")) -or (& $read "$oc\commands\marathon-plan.md.skillator-retired") -cne "older`n") { return 'an existing .skillator-retired overwritten' }
+  foreach ($n in $retired + @('upstream-sync')) { if (-not (Test-Path -LiteralPath (Join-Path $T "pi-prompts\$n.md"))) { return "$n.md under a linked dir touched" } }
+  if (-not (Test-Path -LiteralPath (Join-Path $T '.cursor\commands\my-cmd.md')) -or -not (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\my-own.md'))) { return 'a user command of another name touched' }
+  # a dir above the file that Get-Item cannot return is never taken for a plain dir
+  if (-not (Test-UnderLink (Join-Path $T 'unreadable\x.md'))) { return 'an unreadable dir above a retired file not kept' }
   $igl = @([IO.File]::ReadAllLines((Join-Path $T '.pi\agent\skills\.ignore')))
   if ($igl -cnotcontains 'my-own-line') { return 'pi .ignore lost a user line' }
   if (@($igl | Where-Object { $_ -ceq '/PLATFORMS.md' }).Count -ne 1) { return 'pi .ignore lines duplicated on the second run' }
@@ -1007,6 +1153,28 @@ function Invoke-SelfTest([string]$T) {
   if (& $has '.gemini\skills\skillator-pending\SKILL.md' 'stale') { return 'agy skill-command not rewritten' }
   if (Test-Path -LiteralPath (Join-Path $T '.gemini\skills\list-ticket-zordon\.skillator-owned')) { return 'stale marker kept on a skill-command' }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.pi\agent\skills\tickets-zordon\.selftest-sentinel'))) { return 'installed skill was rewritten' }
+  # A224: a current command file behind a link, and an antigravity skill dir behind a
+  # link holding its marker: the run writes neither file and deletes no marker through
+  # the link, and says kept for each. The commands dir is junctioned (A218's seeding):
+  # a file symlink needs a privilege this user may not hold.
+  $outside = Join-Path $T 'link-outside'
+  New-Item -ItemType Directory -Force (Join-Path $outside 'skill') | Out-Null
+  [IO.File]::WriteAllText((Join-Path $outside 'skill\SKILL.md'), "user skill bytes`n")
+  [IO.File]::WriteAllText((Join-Path $outside 'skill\.skillator-owned'), "skillator-owned 2`n")
+  Move-Item -LiteralPath (Join-Path $T '.cursor\commands') -Destination (Join-Path $outside 'commands')
+  [IO.File]::WriteAllText((Join-Path $outside 'commands\skillator-update.md'), "user command bytes`n")
+  New-Item -ItemType Junction -Path (Join-Path $T '.cursor\commands') -Target (Join-Path $outside 'commands') | Out-Null
+  Remove-Item -LiteralPath (Join-Path $T '.gemini\skills\skillator-update') -Recurse -Force
+  New-Item -ItemType Junction -Path (Join-Path $T '.gemini\skills\skillator-update') -Target (Join-Path $outside 'skill') | Out-Null
+  $out = & $run @()
+  if ($script:selfCode -ne 0) { return "linked install exited $script:selfCode" }
+  if (([IO.File]::ReadAllText((Join-Path $outside 'commands\skillator-update.md'))) -cne "user command bytes`n") { return 'a linked command file was overwritten' }
+  if (([IO.File]::ReadAllText((Join-Path $outside 'skill\SKILL.md'))) -cne "user skill bytes`n") { return 'a linked skill was overwritten' }
+  if (-not (Test-Path -LiteralPath (Join-Path $outside 'skill\.skillator-owned') -PathType Leaf)) { return 'a marker was deleted through a linked skill dir' }
+  $lines = $out -split "`r?`n"
+  foreach ($k in '.cursor\commands\skillator-update.md', '.gemini\skills\skillator-update\SKILL.md', '.gemini\skills\skillator-update\.skillator-owned') {
+    if ($lines -cnotcontains "        kept $T\${k}: a link or under one") { return "no kept line for $k" }
+  }
   if ((& $count) -ne 1) { return 'second run: profile does not hold one ops block' }
 
   # a damaged profile - two blocks around a user line - ends with one block, user line kept
@@ -1175,6 +1343,9 @@ foreach ($cli in $targets.Keys) {
       Copy-Item (Join-Path $mod 'pi') $board -Recurse -Force
       # F57: antigravity\, the same board as an Antigravity IDE extension (Write-AgyExt)
       Copy-Item (Join-Path $mod 'antigravity') $board -Recurse -Force
+      # A222: commands\, the plugin's own command docs, which the Help tab reads beside ops\
+      $boardCmds = New-Item -ItemType Directory -Force (Join-Path $board 'commands')
+      Copy-Item (Join-Path $PSScriptRoot 'commands\*') $boardCmds -Include '*.md', '*.txt' -Force
       # LF, no BOM - the same bytes install.sh writes, so either twin reads the other's
       [IO.File]::WriteAllText((Join-Path $dest $manifest), (($shipped -join "`n") + "`n"))
       # F65: the source pointer - one line, the repo root this ran from, so /skillator-update

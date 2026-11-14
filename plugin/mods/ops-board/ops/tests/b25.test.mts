@@ -101,15 +101,12 @@ test('B25: Deduplicate AI review findings against warnings', () => {
 })
 
 test('B25: Health tab action buttons in healthlines are removed from plain text', () => {
+  const w = (pct: number) => ({ pct, resetsAt: null, source: 'host' as const, at: 0 })
   const lines = healthLines({
-    level: 'yellow',
-    reasons: ['disk 88%'],
-    fiveHour: { pct: 40, resetIn: '2h' },
-    sevenDay: { pct: 60, resetIn: '3d' },
-    held: false,
-    machineMuted: false,
+    usage: { five: w(40), seven: w(60), spendLimitPct: null, costUsd: null, decision: 'RELEASE 40' },
+    machine: null, relay: null, now: 0, profile: { name: 'claude' },
   })
-  const joined = lines.join('\n')
+  const joined = lines.map(l => l.segs.map(s => s.text).join('')).join('\n')
   // Should NOT contain the old plain text button line [r refresh] · [u resume]
   assert.ok(!joined.includes('[r refresh]'), 'plain text action buttons removed from healthlines')
   assert.ok(!joined.includes('[u resume]'), 'plain text action buttons removed from healthlines')

@@ -7,12 +7,14 @@ import { buildModel, chipsOf, headKey, isDecidable, toggleGroup, UNI, ASCII, cut
 import type { Model, UserSection, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
-import { clearForm, openAssign, renderForm, runDecided } from './assign'
+import { clearForm, openAssign, openDecide, renderForm, runDecided } from './assign'
+import { decideQuestionsPrompt } from './lib/calls'
 import { openStatus, renderStatus } from './status'
 import { openReconcile, renderReconcile } from './reconcile'
 import { paint } from './paint'
 import { TeamTab } from './teamview'
 import { HealthTab, readHealth } from './health'
+import { hostingProfileName } from './lib/healthlines'
 import { DiagnoseView, EngageConfirm, openRuns, pollRuns, readDiagnose, readRuns, RunsTab } from './runstab'
 import { runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, statusColor } from './lib/runlines'
 import type { RunsSection } from './lib/runlines'
@@ -224,11 +226,18 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
     <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
       <Text dimColor>{glyphs.move + ' move'}</Text>
       <Button key="key:assign" plain dimColor hotkey="a" onPress={() => { void openAssign($, 'owner', m.ticket, els.canType) }}>assign</Button>
-      <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openAssign($, 'decide', m.ticket, els.canType) }}>decide</Button>
+      <Button key="key:decide" plain dimColor hotkey="d" onPress={() => { void openDecide($, m.ticket, els.canType) }}>decide</Button>
       <Button key="key:filter" plain dimColor hotkey="f" onPress={() => { void update($, filterOpenA, x => !x) }}>filter</Button>
       <Button key="key:done" plain dimColor hotkey="x" onPress={() => setFilter(x => ({ ...x, showDone: !x.showDone }))}>done</Button>
       <Button key="key:team" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => ({ selected: null, confirm: false })) }}>team</Button>
       <Button key="key:reconcile" plain dimColor hotkey="c" onPress={() => { void clearForm($).then(() => openReconcile($)) }}>reconcile</Button>
+      <Button key="key:questions" plain dimColor hotkey="u" onPress={() => {
+        const text = decideQuestionsPrompt()
+        void $.prompt.submit({ text }).then(
+          () => { $.ui.toast(`✓ Sent to session: ${text}`, { timeoutMs: 8000 }) },
+          err => { $.ui.toast(`✗ ${String(err)}`, { timeoutMs: 8000 }) },
+        )
+      }}>ask</Button>
       <Button key="key:status" plain dimColor hotkey="s" onPress={() => { void openStatus($, m.ticket, els.canType, 'status') }}>status</Button>
       <Button key="key:help" plain dimColor hotkey="h" onPress={() => { void openStatus($, m.ticket, els.canType, 'help') }}>help</Button>
       {/* F78: register.tsx takes this press (ui.press) - the forced poll lives there */}
@@ -333,11 +342,17 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
     )
   }
   if (tab === 'health') {
+    // F172: the USAGE block names the hosting CLI's own profile (env-named, else claude)
+    let profile = 'claude'
+    try {
+      const dir = (await $.env.get('SKILLATOR_PROFILE_DIR')) || (await $.env.get('CLAUDE_CONFIG_DIR')) || (await $.env.get('CODEX_HOME')) || (await $.env.get('MUSE_CONFIG_DIR')) || (await $.env.get('AGY_CONFIG_DIR')) || null
+      profile = hostingProfileName((await $.env.get('SKILLATOR_CLI')) || null, dir)
+    } catch { /* the hosting CLI's name stands */ }
     return (
       <Box flexDirection="column">
         {bar}
         <Text> </Text>
-        {HealthTab(els, await readHealth($))}
+        {HealthTab(els, { ...(await readHealth($)), profile: { name: profile } })}
         <Text> </Text>
         {/* F87: register.tsx takes this press (ui.press) - /ops resume force */}
         <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
