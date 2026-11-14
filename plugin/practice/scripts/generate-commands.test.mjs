@@ -73,7 +73,7 @@ test('A220: --check reports orphaned host files; --write reports them too but ne
 
 test('F171: only the unique command names are rendered; no plain twin is rendered or left on disk; hosts.json has no aliases', async () => {
   const { renderCommands } = await import('./generate-commands.mjs');
-  const unique = ['archive-zordon', 'engage-picard', 'list-ticket-zordon', 'gauntlet-plan', 'gauntlet-run', 'pending-sentinel',
+  const unique = ['archive-zordon', 'decision-matrix', 'engage-picard', 'list-ticket-zordon', 'gauntlet-plan', 'gauntlet-run', 'pending-sentinel',
     'skillator-pending', 'skillator-sync', 'sync-zordon', 'verify-shifu', 'skillator-ops'];
   const plain = ['archive-tickets', 'engage', 'list-tickets', 'marathon-plan', 'marathon-run', 'pending-subagent',
     'pending', 'upstream-sync', 'sync-tickets', 'verify-subagent', 'ops'];
@@ -218,7 +218,7 @@ test('a directory in an output path fails preflight before any writes', t => {
   assert.equal(readFileSync(stale, 'utf8'), 'keep stale');
 });
 
-test('Windows PowerShell installer writes all 16 Codex skill wrappers with exact substituted bytes', { skip: process.platform !== 'win32' ? 'Windows PowerShell writer check requires Windows' : false }, t => {
+test('Windows PowerShell installer writes all 17 Codex skill wrappers with exact substituted bytes', { skip: process.platform !== 'win32' ? 'Windows PowerShell writer check requires Windows' : false }, t => {
   const root = fixture(t);
   ok(run(root, '--write'));
   const driver = join(root, 'writer.ps1');
@@ -228,7 +228,7 @@ $ErrorActionPreference = 'Stop'
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $InstallerDirectory 'install.ps1'), [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw 'Installer parse failure' }
-foreach ($name in 'Write-Cmd', 'Write-Commands') {
+foreach ($name in 'Rename-Retired', 'Remove-RetiredDir', 'Test-UnderLink', 'Write-Cmd', 'Write-Commands') {
   $fn = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
   if (-not $fn) { throw "Missing function $name" }
   . ([scriptblock]::Create($fn.Extent.Text.Replace('$PSScriptRoot', '$TemplateRoot')))
@@ -241,10 +241,196 @@ Write-Commands codex $Target
   ok(result);
   assert.equal(result.stderr, '');
   const paths = contract.outputs.filter(p => p.startsWith('host-commands/antigravity/'));
-  assert.equal(paths.length, 16);
+  assert.equal(paths.length, 17);
   for (const path of paths) {
     const actual = readFileSync(join(target, path.replace('host-commands/antigravity/', '')));
     const expected = readFileSync(join(root, path), 'utf8').replaceAll('{{SKILLS}}', target);
     assert.deepEqual(actual, Buffer.from(expected, 'utf8'), path);
   }
+});
+
+test('F175: decision-matrix resolves across Claude Code and host copies; fixture board with two [?] tickets and one parked run question asks and records those three in order', async t => {
+  const { renderCommands } = await import('./generate-commands.mjs');
+  const outputs = renderCommands(plugin);
+  const canonical = readFileSync(join(plugin, 'commands/decision-matrix.md'), 'utf8');
+  const hostPaths = [
+    'host-commands/cursor/decision-matrix.md',
+    'host-commands/pi/decision-matrix.md',
+    'host-commands/opencode/decision-matrix.md',
+    'host-commands/antigravity/decision-matrix/SKILL.md',
+    'host-commands/gemini/decision-matrix.toml',
+  ];
+  for (const body of [canonical, ...hostPaths.map(p => outputs.get(p))]) {
+    assert.ok(body, 'decision-matrix body rendered');
+    for (const guard of [
+      '[?]',
+      'queue --all',
+      'engineering choices',
+      'settled rulings',
+      '2-4 options',
+      '(Recommended)',
+      'never pre-selected',
+      'ticket-meta',
+      'decided',
+      'defer',
+      'relay-morpheus',
+      'answer',
+    ]) {
+      assert.ok(body.includes(guard), `missing guard: ${guard}`);
+    }
+  }
+
+  // Fixture repo: two [?] decide tickets (F12, A7), non-question tickets ([ ] F10, [~] B4, [x] F9),
+  // and an open relay run with one open parked question (Q1) and one already-answered question (Q2).
+  const root = mkdtempSync(join(tmpdir(), 'f175-decision-matrix-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const repo = join(root, 'repo').replace(/\\/g, '/');
+  const bin = join(root, 'bin');
+  mkdirSync(join(repo, '.skillator'), { recursive: true });
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(repo, '.skillator/team.md'), '# Team\nlead: @sabre\n- @sabre: sabre@example.com\n  name: Sabre\n', 'utf8');
+  writeFileSync(join(repo, 'TICKETS.md'), [
+    '# Tickets',
+    '',
+    '## Open',
+    '',
+    '- [ ] F10 — Build login form [owner: @sabre]',
+    '- [?] F12 — Pick auth token storage (cookie vs memory) [owner: @sabre] [decide: @sabre]',
+    '- [~] B4 — Fix header alignment [owner: @sabre]',
+    '- [?] A7 — Choose audit retention window (30d vs 90d) [owner: @sabre] [decide: @sabre]',
+    '',
+    '## Closed',
+    '',
+    '- [x] F9 — Settled theme ruling (decided 2026-10-01 by @sabre)',
+    '',
+  ].join('\n'), 'utf8');
+  writeFileSync(join(repo, '.skillator/run-0001-demo.md'), [
+    '# RUN-0001 — demo',
+    'goal: demo',
+    'created: 2026-11-14T10:00Z',
+    'updated: 2026-11-14T10:00Z',
+    '',
+    '## Stages',
+    '| # | Stage | State | Owner | Landed |',
+    '|---|---|---|---|---|',
+    '| 1 | F10 | ? | - | - |',
+    '',
+    '## Chain',
+    'hold: -',
+    '',
+    '### AAAA - stage 1 - F10',
+    'tickets: F10',
+    'files: src/auth.ts',
+    'prompt: |',
+    '  build F10',
+    '',
+    '## Decisions',
+    'asks: end',
+    '',
+    '### Q1 open 2026-11-14T10:00Z',
+    'parked: stage 1 (AAAA)',
+    'ticket: F10',
+    'reason: taste',
+    'question: Which session expiry policy should F10 use?',
+    'header: Expiry',
+    'options:',
+    '  - Sliding 7d (Recommended) | extends on activity | longer token lifetime',
+    '  - Fixed 24h | strict daily re-login | interrupts active sessions',
+    'default: Sliding 7d',
+    'blocks: F10',
+    'files: src/auth.ts',
+    'answer: -',
+    '',
+    '### Q2 answered 2026-11-14T09:00Z',
+    'parked: stage 1 (AAAA)',
+    'ticket: F10',
+    'reason: taste',
+    'question: Already settled question?',
+    'header: Settled',
+    'options:',
+    '  - Yes | a | b',
+    '  - No | c | d',
+    'default: Yes',
+    'blocks: F10',
+    'files: src/auth.ts',
+    'answer: Yes',
+    'answered: 2026-11-14T09:05Z',
+    '',
+  ].join('\n'), 'utf8');
+
+  const win = process.platform === 'win32';
+  const repoFwd = repo.replace(/\\/g, '/');
+  // Lightweight git shim in bin so ticket-meta resolves TOP/MAIN/user.email inside the sandbox without git init.
+  if (win) {
+    writeFileSync(join(bin, 'git.cmd'), [
+      '@echo off',
+      'set "args=%*"',
+      `echo %args% | findstr /C:"--show-toplevel" >nul && (echo ${repoFwd}& exit /b 0)`,
+      `echo %args% | findstr /C:"--git-common-dir" >nul && (echo ${repoFwd}/.git& exit /b 0)`,
+      'echo %args% | findstr /C:"user.email" >nul && (echo sabre@example.com& exit /b 0)',
+      'echo %args% | findstr /C:"ls-files" >nul && exit /b 1',
+      'exit /b 0',
+    ].join('\r\n'), 'utf8');
+  } else {
+    writeFileSync(join(bin, 'git'), [
+      '#!/bin/sh',
+      'case "$*" in',
+      `  *--show-toplevel*) printf '%s\\n' "${repo}" ;;`,
+      `  *--git-common-dir*) printf '%s/.git\\n' "${repo}" ;;`,
+      '  *user.email*) printf "sabre@example.com\\n" ;;',
+      '  *ls-files*) exit 1 ;;',
+      '  *) exit 0 ;;',
+      'esac',
+    ].join('\n'), { encoding: 'utf8', mode: 0o755 });
+  }
+
+  const env = {
+    ...process.env,
+    PATH: `${bin}${win ? ';' : ':'}${process.env.PATH ?? ''}`,
+    RELAY_DIR: join(repo, '.skillator').replace(/\\/g, '/'),
+    SKILLATOR_ME: '@sabre',
+  };
+  const runScript = (relBase, args) => win
+    ? spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(plugin, `${relBase}.ps1`), ...args], { cwd: repo, env, encoding: 'utf8', windowsHide: true })
+    : spawnSync('sh', [join(plugin, `${relBase}.sh`), ...args], { cwd: repo, env, encoding: 'utf8', windowsHide: true });
+  const collectQuestions = () => {
+    const boardLines = readFileSync(join(repo, 'TICKETS.md'), 'utf8').split(/\r?\n/);
+    const decideIds = boardLines
+      .map(l => /^- \[\?\] ([A-Z]{1,3}[0-9]+[a-z]?) /.exec(l)?.[1])
+      .filter(Boolean);
+    const qOut = runScript('skills/relay-morpheus/hooks/relay-morpheus', win ? ['-Mode', 'queue', '-All'] : ['queue', '--all']);
+    ok(qOut);
+    const runQs = [];
+    let curRun = null;
+    for (const line of qOut.stdout.split(/\r?\n/)) {
+      const mRun = /^## (RUN-[0-9]+)/.exec(line);
+      if (mRun) curRun = mRun[1];
+      const mQ = /^(Q[0-9]+) \[/.exec(line);
+      if (mQ && curRun) runQs.push(`${curRun}:${mQ[1]}`);
+    }
+    return [...decideIds, ...runQs];
+  };
+
+  // 1. Reconciled collection yields ONLY the two [?] tickets and the one open parked question, in order.
+  assert.deepEqual(collectQuestions(), ['F12', 'A7', 'RUN-0001:Q1']);
+
+  // 2. Record answers through the existing writers (F12 answered -> decided, A7 deferred -> defer, Q1 answered -> relay answer).
+  ok(runScript('skills/tickets-zordon/scripts/ticket-meta', ['decided', 'F12']));
+  ok(runScript('skills/tickets-zordon/scripts/ticket-meta', ['defer', 'A7', 'after v1 launch']));
+  ok(runScript('skills/relay-morpheus/hooks/relay-morpheus', win
+    ? ['-Mode', 'answer', '-Id', 'RUN-0001', '-Q', 'Q1', '-Text', 'Sliding 7d (Recommended)']
+    : ['RUN-0001', 'answer', 'Q1', 'Sliding 7d (Recommended)']));
+
+  // 3. Read back: zero open questions remain, and each writer recorded the exact state without touching other rows.
+  assert.deepEqual(collectQuestions(), []);
+  const afterBoard = readFileSync(join(repo, 'TICKETS.md'), 'utf8');
+  // ticket-meta decided: [?] -> [ ], the [decide:] tag stays (its documented contract)
+  assert.match(afterBoard, /^- \[ \] F12 — Pick auth token storage .*\[decide: @sabre\]$/m);
+  assert.match(afterBoard, /^- \[>\] A7 — Choose audit retention window .* \(deferred: after v1 launch\)/m);
+  assert.match(afterBoard, /^- \[ \] F10 — Build login form \[owner: @sabre\]$/m);
+  assert.match(afterBoard, /^- \[~\] B4 — Fix header alignment \[owner: @sabre\]$/m);
+  assert.match(afterBoard, /^- \[x\] F9 — Settled theme ruling/m);
+  const afterRun = readFileSync(join(repo, '.skillator/run-0001-demo.md'), 'utf8');
+  assert.match(afterRun, /^### Q1 answered /m);
+  assert.match(afterRun, /^answer: Sliding 7d \(Recommended\)$/m);
 });

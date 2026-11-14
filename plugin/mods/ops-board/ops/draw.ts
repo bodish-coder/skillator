@@ -251,7 +251,7 @@ function keysOf(s: State, m: Model): Seg[][] {
   const userOpen = isUsrHead ? isUserSectionOpen(s.open as string[], s.selected === 'head:assigned' ? 'assigned' : 'decide') : false
   const head = isHead(s.selected ?? m.selected) ? m.groups.find(g => headKey(g.box) === (s.selected ?? m.selected)) : undefined
   const enter = isUsrHead ? (userOpen ? 'enter close' : 'enter open') : head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
-  return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), h('r reload', 'r'), quit]
+  return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), h('u ask', 'u'), h('r reload', 'r'), quit]
 }
 
 export function keysLines(s: State, m: Model): Seg[][] {

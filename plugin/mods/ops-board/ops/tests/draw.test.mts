@@ -144,8 +144,8 @@ test('F81 the reconcile box draws its proposals and its keys', () => {
   assert.ok(frame(x, P).includes('[↑↓ move] · [space pick] · [enter apply picked] · [a accept all] · [esc none]'))
 })
 test('the keys line as the mock; D decided only on a decidable row', () => {
-  const keys = (x: State) => frame({ ...x, cols: 120 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile
-  assert.equal(keys(s), '[↑↓ move] · [enter line] · [a assign] · [d decide] · [t team] · [c reconcile] · [r reload] · [q quit]')
+  const keys = (x: State) => frame({ ...x, cols: 130 }, P).find(l => l.includes('a assign'))!   // F81: room for c reconcile; F175: u ask
+  assert.equal(keys(s), '[↑↓ move] · [enter line] · [a assign] · [d decide] · [t team] · [c reconcile] · [u ask] · [r reload] · [q quit]')
   const f3: State = { ...s, selected: 'F3' }
   assert.match(keys(f3), /\[D decided\]/)
   assert.match(keys(f3), /\[q quit\]$/)
@@ -530,7 +530,7 @@ test('F128 draw: Assigned and Decide sections render with fold indicators and ad
 })
 
 test('F120: responsive footer actions and wrapping across 40, 60, 80, 100, 120 columns without dropping keys', () => {
-  const expectedKeys = ['↑↓ move', 'enter line', 'a assign', 'd decide', 't team', 'c reconcile', 'r reload', 'q quit']
+  const expectedKeys = ['↑↓ move', 'enter line', 'a assign', 'd decide', 't team', 'c reconcile', 'u ask', 'r reload', 'q quit']
   for (const cols of [40, 60, 80, 100, 120]) {
     const f = frame({ ...s, cols }, P)
     assert.equal(f.length, s.rows)
@@ -573,7 +573,7 @@ test('F123: button badges [Key Label] across all tabs and click hitboxes match b
   // 1. Tickets tab
   const scTickets = screen({ ...s, cols: 120 }, P)
   const tText = scTickets.lines.join('\n')
-  assert.match(tText, /\[↑↓ move\] · \[enter line\] · \[a assign\] · \[d decide\] · \[t team\] · \[c reconcile\] · \[r reload\] · \[q quit\]/)
+  assert.match(tText, /\[↑↓ move\] · \[enter line\] · \[a assign\] · \[d decide\] · \[t team\] · \[c reconcile\] · \[u ask\] · \[r reload\] · \[q quit\]/)
   assert.match(tText, /\[f filter\] · \[x show done\]/)
 
   // Hitbox check: find hit for 'q'

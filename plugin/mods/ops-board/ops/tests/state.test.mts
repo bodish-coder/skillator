@@ -1487,7 +1487,7 @@ test('F165 state: Help catalog includes commands, supports command execution, co
 
 test('F171 state: Help names commands every host has - /ops, /skillator-pending, /list-ticket-zordon', () => {
   const names = COMMANDS.map(c => c.name)
-  for (const n of ['/verify-shifu', '/gauntlet-plan', '/gauntlet-run', '/engage-picard', '/archive-zordon', '/sync-zordon', '/pending-sentinel', '/skillator-sync', '/ops', '/skillator-pending', '/list-ticket-zordon']) {
+  for (const n of ['/verify-shifu', '/gauntlet-plan', '/gauntlet-run', '/engage-picard', '/archive-zordon', '/sync-zordon', '/pending-sentinel', '/skillator-sync', '/ops', '/skillator-pending', '/list-ticket-zordon', '/decision-matrix']) {
     assert.equal(names.filter(x => x === n).length, 1, n)
   }
   for (const n of ['/verify-subagent', '/marathon-plan', '/marathon-run', '/engage', '/archive-tickets', '/sync-tickets', '/pending-subagent', '/upstream-sync', '/skillator-ops', '/pending', '/list-tickets']) {
@@ -1501,4 +1501,19 @@ test('F171 state: Help names commands every host has - /ops, /skillator-pending,
     assert.ok(by(id).usage.includes(`On Claude Code the board also answers ${native}`), id)
     assert.doesNotMatch(by(id).usage, /\bpi\b/, id)
   }
+})
+
+test('F175 state: Tickets-page u action prints board-wide decideQuestionsPrompt() and Help lists /decision-matrix', () => {
+  const prompt = decideQuestionsPrompt()
+  assert.doesNotMatch(prompt, /^\//)
+  for (const needle of ['[?]', 'queue --all', '2-4 options', 'ticket-meta decided', 'ticket-meta defer', 'relay-morpheus answer']) {
+    assert.ok(prompt.includes(needle), `decideQuestionsPrompt() missing ${needle}`)
+  }
+  const step = reduce(s0, key('u'))
+  assert.equal(step.effects.length, 0)
+  assert.equal(step.state.toast, `Paste into your CLI:\n${prompt}`)
+  const dm = COMMANDS.find(c => c.id === 'decision-matrix')
+  assert.ok(dm, 'COMMANDS includes decision-matrix')
+  assert.equal(dm.name, '/decision-matrix')
+  assert.match(dm.usage, /\$decision-matrix/)
 })

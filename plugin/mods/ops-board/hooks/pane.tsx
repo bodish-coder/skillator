@@ -8,6 +8,7 @@ import type { Model, UserSection, View } from './lib/ticketsmodel'
 export { buildModel, lineKey, offsetFor } from './lib/ticketsmodel'
 export type { View, Model } from './lib/ticketsmodel'
 import { clearForm, openAssign, openDecide, renderForm, runDecided } from './assign'
+import { decideQuestionsPrompt } from './lib/calls'
 import { openStatus, renderStatus } from './status'
 import { openReconcile, renderReconcile } from './reconcile'
 import { paint } from './paint'
@@ -230,6 +231,13 @@ export function TicketsTab($: EngineInterface, els: Els, v: View, m: Model): Ren
       <Button key="key:done" plain dimColor hotkey="x" onPress={() => setFilter(x => ({ ...x, showDone: !x.showDone }))}>done</Button>
       <Button key="key:team" plain dimColor hotkey="t" onPress={() => { void update($, teamViewA, () => ({ selected: null, confirm: false })) }}>team</Button>
       <Button key="key:reconcile" plain dimColor hotkey="c" onPress={() => { void clearForm($).then(() => openReconcile($)) }}>reconcile</Button>
+      <Button key="key:questions" plain dimColor hotkey="u" onPress={() => {
+        const text = decideQuestionsPrompt()
+        void $.prompt.submit({ text }).then(
+          () => { $.ui.toast(`✓ Sent to session: ${text}`, { timeoutMs: 8000 }) },
+          err => { $.ui.toast(`✗ ${String(err)}`, { timeoutMs: 8000 }) },
+        )
+      }}>ask</Button>
       <Button key="key:status" plain dimColor hotkey="s" onPress={() => { void openStatus($, m.ticket, els.canType, 'status') }}>status</Button>
       <Button key="key:help" plain dimColor hotkey="h" onPress={() => { void openStatus($, m.ticket, els.canType, 'help') }}>help</Button>
       {/* F78: register.tsx takes this press (ui.press) - the forced poll lives there */}

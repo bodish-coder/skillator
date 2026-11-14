@@ -1236,6 +1236,7 @@ function ticketsKey(s: State, k: Key): Step {
     case 'x': return { state: { ...s, filter: { ...s.filter, showDone: !s.filter.showDone } }, effects: [] }
     case 't': return { state: { ...s, showTeam: true }, effects: [] }
     case 'c': return openReconcile(s)
+    case 'u': return { state: toast(s, `Paste into your CLI:\n${decideQuestionsPrompt()}`), effects: [] }
     case 'escape': return { state: { ...s, toast: null }, effects: [] }
     default: return same
   }
@@ -2189,6 +2190,18 @@ export const COMMANDS: HelpItem[] = [
     usage: "Pre-commit diff review replicating Claude Code /code-review (correctness & safety) and Ponytail / code-yoda (restraint, anti-bloat & shortcut debt) across all hosts, ending in READY-TO-COMMIT: YES or CHANGES-REQUESTED.",
     examples: ["/code-vader", "/code-vader --staged", "/code-vader --unstaged"],
     hint: "[--staged | --unstaged | --auto]"
+  },
+  {
+    id: "decision-matrix",
+    name: "/decision-matrix",
+    kind: "command",
+    category: "Tickets & Board",
+    aliases: [],
+    summary: "Ask open [?] decide tickets and parked relay run questions one at a time as multiple choice",
+    triggers: ["decision-matrix", "ask questions", "decide queue", "open questions"],
+    usage: "Collect every [?] decide ticket and open parked relay run question, ask one at a time as multiple choice (2-4 options, recommendation first, custom + defer), and record answers via ticket-meta and relay-morpheus. Runs as /decision-matrix on Claude Code or $decision-matrix on Codex.",
+    examples: ["/decision-matrix", "$decision-matrix"],
+    hint: ""
   },
   {
     id: "engage-picard",

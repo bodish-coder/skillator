@@ -95,7 +95,7 @@ export const holoTicketCmd = (id: string) =>
 export const decideQuestionsPrompt = (id?: string | null) =>
   id?.trim()
     ? `Decide ticket ${id.trim()} by asking me multiple-choice questions one at a time (use AskUserQuestion where this host has it), then record my answers only through ticket-meta decided or ticket-meta decide afterwards.`
-    : `Walk the open decision tickets by asking me multiple-choice questions one at a time (use AskUserQuestion where this host has it), then record my answers only through ticket-meta decided or ticket-meta decide afterwards.`
+    : `Collect every [?] decide ticket on TICKETS.md and every open parked question from relay-morpheus queue --all (skip engineering choices, build/test work, and settled rulings). Ask each question one at a time as multiple choice (2-4 options, labelled recommendation first and never pre-selected, plus custom and defer; use AskUserQuestion where this host has it). Record answers only through ticket-meta decided (or ticket-meta decide/assign if another decider), ticket-meta defer, or relay-morpheus answer, then read the board back.`
 
 export const isNodeCall = (call: Call) => NODE[call] !== undefined
 export const NO_NODE = 'node not found on PATH (absolute entries only) - this script needs Node'

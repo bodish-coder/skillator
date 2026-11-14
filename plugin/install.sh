@@ -561,7 +561,7 @@ retire_dir() {
 }
 write_commands() {
   _c="$root/host-commands"
-  _cmds="skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu gauntlet-plan gauntlet-run team code-vader skillator-sync message-uhura"
+  _cmds="skillator-pending list-ticket-zordon engage-picard archive-zordon sync-zordon skillator-update team-messages pending-sentinel verify-shifu gauntlet-plan gauntlet-run team code-vader skillator-sync message-uhura decision-matrix"
   _ops_cmds="skillator-ops"
   case "$1" in
     codex)

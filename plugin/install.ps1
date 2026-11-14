@@ -545,7 +545,7 @@ function Remove-RetiredDir([string]$dir) {
 function Write-Commands([string]$cli, [string]$dest) {
   $c = Join-Path $PSScriptRoot 'host-commands'
   $names = 'skillator-pending', 'list-ticket-zordon', 'engage-picard', 'archive-zordon', 'sync-zordon', 'skillator-update', 'team-messages', 'pending-sentinel', 'verify-shifu', 'gauntlet-plan', 'gauntlet-run', 'team',
-           'code-vader', 'skillator-sync', 'message-uhura'
+           'code-vader', 'skillator-sync', 'message-uhura', 'decision-matrix'
   $opsNames = @('skillator-ops')
   switch ($cli) {
     # F90: skills (Codex runs them now), from Antigravity's skill-commands; the custom

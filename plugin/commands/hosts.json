@@ -21,6 +21,16 @@
       ]
     },
     {
+      "name": "decision-matrix",
+      "hosts": [
+        "cursor",
+        "pi",
+        "opencode",
+        "antigravity",
+        "gemini"
+      ]
+    },
+    {
       "name": "engage-picard",
       "hosts": [
         "cursor",

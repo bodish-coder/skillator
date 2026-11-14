@@ -353,6 +353,20 @@ for (const surface of SURFACES) {
     await pane.press({ key: 'decide:assign' })
     expect((await pane.find({ key: 'form:title' }))?.text).toBe('Assign F91 for a decision  Esc cancels')
     expect((await pane.find({ key: 'kind:decision' }))?.text).toBe('(•) decision')
+    await pane.press({ key: 'cancel' })
+
+    // 8. F175: Tickets-page key:questions (u ask) submits the board-wide decideQuestionsPrompt() with no board write
+    const askBtn = await pane.find({ key: 'key:questions' })
+    expect(askBtn?.props.hotkey).toBe('u')
+    expect(askBtn?.text).toBe('ask')
+    await pane.press({ key: 'key:questions' })
+    expect(submits).toHaveLength(2)
+    expect(submits[1]).toContain('[?]')
+    expect(submits[1]).toContain('queue --all')
+    expect(submits[1]).toContain('ticket-meta decided')
+    expect(submits[1]).toContain('relay-morpheus answer')
+    expect(submits[1]).not.toMatch(/^\//)
+    expect(w.writes).toEqual([])
     await pane.unmount()
   })
 }
