@@ -282,13 +282,10 @@ function Write-OpsFunction([string]$shimSrc, [string]$path) {
 # pending.sh. UTF-8 without BOM, LF - the bytes install.sh writes but for the separators
 # inside {{SKILLS}} and that shell line (pi's frontmatter and gemini's TOML reject a BOM).
 function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
-  if ($DryRun) {
-    # a dry run creates nothing, so probe the nearest existing ancestor
-    $probe = $target
-    while ($probe -and -not (Test-Path -LiteralPath $probe)) { $probe = Split-Path -Parent $probe }
-    if ($probe -and (Test-UnderLink $probe)) { Write-Host "        kept ${target}: a link or under one"; return }
-    Write-Host "        would write $target"; return
-  }
+  $probe = $target
+  while ($probe -and -not (Get-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue)) { $probe = Split-Path -Parent $probe }
+  if ($probe -and (Test-UnderLink $probe)) { Write-Host "        kept ${target}: a link or under one"; return }
+  if ($DryRun) { Write-Host "        would write $target"; return }
   $text = [IO.File]::ReadAllText($tpl).Replace("`r", '')
   $re = [regex]'(?m)^!\{sh "\{\{SKILLS\}\}/tickets-zordon/scripts/pending\.sh"\}$'
   if ($tpl -match '[\\/]gemini[\\/]skillator-pending\.toml$') {
@@ -298,7 +295,6 @@ function Write-Cmd([string]$tpl, [string]$skillsDir, [string]$target) {
   }
   $text = $text.Replace('{{SKILLS}}', $skillsDir)
   New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
-  if (Test-UnderLink $target) { Write-Host "        kept ${target}: a link or under one"; return }
   [IO.File]::WriteAllText($target, $text, (New-Object Text.UTF8Encoding $false))
   Write-Host "        * $target"
 }
@@ -580,13 +576,10 @@ function Write-Commands([string]$cli, [string]$dest) {
         Write-Cmd "$c\antigravity\$n\SKILL.md" $dest "$dest\$n\SKILL.md"
         # an older run may have marked it owned - it is not a manifest skill
         $markerPath = "$dest\$n\$owned"
-        if ($DryRun) {
-          # a dry run creates nothing, so probe the nearest existing ancestor
-          $probe = $markerPath
-          while ($probe -and -not (Test-Path -LiteralPath $probe)) { $probe = Split-Path -Parent $probe }
-          if ($probe -and (Test-UnderLink $probe)) { Write-Host "        kept ${markerPath}: a link or under one" }
-        } elseif (Test-UnderLink $markerPath) { Write-Host "        kept ${markerPath}: a link or under one" }
-        else { Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue }
+        $probe = $markerPath
+        while ($probe -and -not (Get-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue)) { $probe = Split-Path -Parent $probe }
+        if ($probe -and (Test-UnderLink $probe)) { Write-Host "        kept ${markerPath}: a link or under one" }
+        elseif (-not $DryRun) { Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue }
       }
       foreach ($n in $retired + @('upstream-sync', 'ops')) { Remove-RetiredDir "$dest\$n" }
       # F57: the Antigravity IDE's extension, from Antigravity's own dest
