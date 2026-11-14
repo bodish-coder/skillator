@@ -1,4 +1,11 @@
 # Handoff — RUN-0038 completion + F173/F174/F175 (2026-11-13)
+<!-- skillator-execute
+status: complete
+last-run: 2026-11-14
+runs: 4
+remaining: 0
+note: RUN-0038 merged to main (4.28.0 / 0.16.0); A224 [x], F77/F164/F172/F174/F175 [%]; awaiting owner approval to push
+-->
 
 > **Status legend:** ✅ DONE (verified in repo) · 🟡 IN-PROGRESS (partial/uncommitted) · 📝 CLAIMED (asserted in chat, unverified) · ⬜ NOT STARTED
 
@@ -24,9 +31,9 @@ Session handed off at the owner's "usage 5% left" order. `RUN-0038` (the /pendin
 | Stage 289 F164 design | ✅ | worktree `3e784da` | `docs/sessions/session-2026-11-11-f164-holo-formats.md` in worktree |
 | Stage 290 F164 build | ✅ | worktree `c33f3b2`…`b252dc5`; reviewer APPROVE | selftest ok; formats 10/10; anatomy 11/11; default byte-identical (SHA-256 pins). Flips [%] at merge |
 | Stage 291 F172 Health (incl. CLI-profile row) | ✅ | worktree `8a53c3c`; reviewer APPROVE | first implementer died 429 mid-stage; finisher fixed pane env-compile break + standalone draw. draw 51/51; one pane timing-flake vs sandbox baseline. Flips [%] at merge |
-| Stage 292 A224 installers refuse links | 🟡 | worktree diff `plugin/install.sh`, `plugin/install.ps1` +68/−4 uncommitted; scratch `.skillator/a224-scratch/` | implementer still running installer selftests at drain; two stop requests timed out unconfirmed — it may yet commit. Code+selftest cases written; verdict UNKNOWN |
-| Stage 293 F174 Decide chooser | ⬜ | prompt in `.skillator/run-0038-agent-found-a217-a222.md` (AADA) | after 291 |
-| Stage 294 F175 decision-matrix | ⬜ | prompt in run file (AADB) | after 293; reuses F174's questions helper |
+| Stage 292 A224 installers refuse links | ✅ | worktree `9aa662c`+`426e768`; reviewer APPROVE | both full selftests (`install.ps1 -SelfTest`, `install.sh --selftest`) passed (`ok`, exit `0`); scratch cleaned. Flips `[x]` at merge |
+| Stage 293 F174 Decide chooser | ✅ | worktree `a1db156`; reviewer APPROVE | `(a)` Assign a decider, `(h)` Decision page, `(q)` MCQ decision; state 63/63, draw 52/52, b25 8/8, viewports 4/4, status 11/11. Flips `[%]` at merge |
+| Stage 294 F175 decision-matrix | 🟡 | prompt in run file (AADB) | dispatched after 293; reuses F174's `decideQuestionsPrompt` helper |
 | Stage 287 verify/merge/bump/board/push | ⬜ | run file stage 287 | version after 4.27.0 (F173 took it); bump once more for the run's release |
 | A224 board row | 🟡 | `TICKETS.md` [~] via `9a86866` | matches 🟡 state |
 | Watcher arming for this host | 📝 | `usage-watch.ps1 -Mode check` prints "no usage signal on this host" | Muse (muse-wonder) exposes no usage %; threshold env `CLAUDE_USAGE_HANDOFF_PCT=95` (5% left) only takes effect on Claude Code/Codex hosts where the probe/gate hooks are wired in that profile's settings |
