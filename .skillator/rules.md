@@ -6,3 +6,4 @@ the repo. rules-orko reads it at session start; rules-orko.sh add project
 ~/.skillator/rules.md, which follows its owner and nobody else.
 
 - Do not stop at 90% for 7-day quota; when 7-day quota reaches 97%, stop all agents and create a handoff (Ikran, 2026-11-02)
+- Always bump the skillator version across all four manifests (.claude-plugin/marketplace.json, plugin/.claude-plugin/plugin.json, plugin/.muse-plugin/marketplace.json, plugin/.muse-plugin/plugin.json) before pushing (IkranActual, 2026-11-15)
