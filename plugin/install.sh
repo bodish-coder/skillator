@@ -530,10 +530,14 @@ retire_file() {
   fi
   if [ -n "$dry" ]; then echo "        would retire $_f -> $_f.skillator-retired"; return 0; fi
   # never overwrite: mv -n, then the source must be gone and the target hold its bytes
-  _sum=$(cksum < "$_f")
+  _sum=$(cksum < "$_f" 2>/dev/null) || _sum=
+  if [ -z "$_sum" ]; then echo "warn  $_f not retired (kept)"; return 0; fi
   mv -n -- "$_f" "$_f.skillator-retired" || :
-  if [ -e "$_f" ] || [ -L "$_f" ] || [ ! -f "$_f.skillator-retired" ] || [ "$(cksum < "$_f.skillator-retired")" != "$_sum" ]; then
+  if [ -e "$_f" ] || [ -L "$_f" ]; then
     echo "warn  $_f not retired (kept)"; return 0
+  fi
+  if [ ! -f "$_f.skillator-retired" ] || [ "$(cksum < "$_f.skillator-retired" 2>/dev/null)" != "$_sum" ]; then
+    echo "warn  $_f.skillator-retired mismatched"; return 0
   fi
   echo "        retired $_f -> $_f.skillator-retired (delete it if unused)"
 }
@@ -1119,10 +1123,20 @@ if [ -n "$selftest" ]; then
   { [ -f "$T/$_oc/commands/marathon-plan.md" ] && grep -qx older "$T/$_oc/commands/marathon-plan.md.skillator-retired"; } || { echo "FAIL: an existing .skillator-retired overwritten"; exit 1; }
   for _n in $retired_cmds upstream-sync; do [ -f "$T/pi-prompts/$_n.md" ] || { echo "FAIL: $_n.md under a linked dir touched"; exit 1; }; done
   { [ -f "$T/.cursor/commands/my-cmd.md" ] && [ -f "$T/.codex/prompts/my-own.md" ]; } || { echo "FAIL: a user command of another name touched"; exit 1; }
-  # retire never overwrites: a mv that moves nothing (mv -n refusing) keeps the file and warns
+  # A225: retire never overwrites: refused mv, moved-but-mismatched target, dropped -n, and failing cksum
   echo 'Load /x/tickets-zordon/SKILL.md' > "$T/mv-refused.md"
   _o=$(HOME=$T; dry=; mv() { :; }; retire_file "$T/mv-refused.md")
   { [ "$_o" = "warn  $T/mv-refused.md not retired (kept)" ] && [ -f "$T/mv-refused.md" ]; } || { echo "FAIL: a refused rename not kept: $_o"; exit 1; }
+  echo 'Load /x/tickets-zordon/SKILL.md' > "$T/mv-mismatch.md"
+  _o=$(HOME=$T; dry=; mv() { rm -f "$3"; echo 'corrupted' > "$4"; }; retire_file "$T/mv-mismatch.md")
+  { [ "$_o" = "warn  $T/mv-mismatch.md.skillator-retired mismatched" ] && [ ! -f "$T/mv-mismatch.md" ] && [ -f "$T/mv-mismatch.md.skillator-retired" ]; } || { echo "FAIL: a moved-but-mismatched target not warned: $_o"; exit 1; }
+  echo 'Load /x/tickets-zordon/SKILL.md' > "$T/mv-dropped-n.md"
+  _o=$(HOME=$T; dry=; mv() { case " $* " in *" -n "*) :;; *) echo "dropped -n";; esac; }; retire_file "$T/mv-dropped-n.md")
+  [ "$_o" != "dropped -n" ] || { echo "FAIL: retire_file dropped -n on mv"; exit 1; }
+  echo 'Load /x/tickets-zordon/SKILL.md' > "$T/cksum-fail.md"
+  _o=$(HOME=$T; dry=; cksum() { return 1; }; retire_file "$T/cksum-fail.md")
+  _ec=$?
+  { [ "$_ec" = 0 ] && [ "$_o" = "warn  $T/cksum-fail.md not retired (kept)" ] && [ -f "$T/cksum-fail.md" ]; } || { echo "FAIL: failing cksum did not keep file or aborted install: $_o (exit $_ec)"; exit 1; }
   [ -f "$T/.codex/skills/tui-tron/SKILL.md" ] || { echo "FAIL: dangling pre-F91 link not reinstalled"; exit 1; }
   grep -qx 'my-own-line' "$T/.pi/agent/skills/.ignore" || { echo "FAIL: pi .ignore lost a user line"; exit 1; }
   [ "$(grep -cxF /PLATFORMS.md "$T/.pi/agent/skills/.ignore")" = 1 ] || { echo "FAIL: pi .ignore lines duplicated on the second run"; exit 1; }

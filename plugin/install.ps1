@@ -516,9 +516,15 @@ function Rename-Retired([string]$file) {
   $to = "$file.skillator-retired"
   if (Get-Item -LiteralPath $to -Force -ErrorAction SilentlyContinue) { Write-Host "        kept ${file}: $to exists"; return }
   if ($DryRun) { Write-Host "        would retire $file -> $to"; return }
+  $bytes = try { [IO.File]::ReadAllBytes($file) } catch { $null }
+  if ($null -eq $bytes) { Write-Host "warn  $file not retired (kept)"; return }
   try { Move-Item -LiteralPath $file -Destination $to } catch { Write-Host "warn  $file not retired: $($_.Exception.Message)"; return }
-  # as install.sh: the source must be gone and the target the moved file
-  if ((Test-Path -LiteralPath $file) -or -not (Test-Path -LiteralPath $to -PathType Leaf)) { Write-Host "warn  $file not retired (kept)"; return }
+  # as install.sh: the source must be gone and the target hold its bytes
+  if (Test-Path -LiteralPath $file) { Write-Host "warn  $file not retired (kept)"; return }
+  $toSame = if (Test-Path -LiteralPath $to -PathType Leaf) {
+    try { [Convert]::ToBase64String([IO.File]::ReadAllBytes($to)) -ceq [Convert]::ToBase64String($bytes) } catch { $false }
+  } else { $false }
+  if (-not $toSame) { Write-Host "warn  $to mismatched"; return }
   Write-Host "        retired $file -> $to (delete it if unused)"
 }
 # Remove-RetiredDir <dir>: a skill-command dir holding only SKILL.md (and its marker).
@@ -1142,7 +1148,50 @@ function Invoke-SelfTest([string]$T) {
   foreach ($n in $retired + @('upstream-sync')) { if (-not (Test-Path -LiteralPath (Join-Path $T "pi-prompts\$n.md"))) { return "$n.md under a linked dir touched" } }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.cursor\commands\my-cmd.md')) -or -not (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\my-own.md'))) { return 'a user command of another name touched' }
   # a dir above the file that Get-Item cannot return is never taken for a plain dir
-  if (-not (Test-UnderLink (Join-Path $T 'unreadable\x.md'))) { return 'an unreadable dir above a retired file not kept' }
+  $unr = Join-Path $T 'unreadable'
+  New-Item -ItemType Directory -Force $unr | Out-Null
+  $unrFile = Join-Path $unr 'x.md'
+  $underLink = & {
+    function Get-Item { param($LiteralPath) if ($LiteralPath -ceq $unr) { return $null }; Microsoft.PowerShell.Management\Get-Item @PSBoundParameters }
+    Test-UnderLink $unrFile
+  }
+  if (-not $underLink) { return 'an unreadable dir above a retired file not kept' }
+  # A225: Rename-Retired covers a refused move, a moved-but-mismatched target, and a failing read
+  $refused = Join-Path $T 'mv-refused.md'
+  [IO.File]::WriteAllText($refused, "Load /x/tickets-zordon/SKILL.md`n")
+  $outRefused = & {
+    function Move-Item { param($LiteralPath, $Destination) }
+    (Rename-Retired $refused 6>&1 | Out-String).Trim()
+  }
+  if ($outRefused -cne "warn  $refused not retired (kept)" -or -not (Test-Path -LiteralPath $refused)) {
+    return "a refused move not kept: $outRefused"
+  }
+  $mismatch = Join-Path $T 'mv-mismatch.md'
+  [IO.File]::WriteAllText($mismatch, "Load /x/tickets-zordon/SKILL.md`n")
+  $outMismatch = & {
+    function Move-Item { param($LiteralPath, $Destination)
+      Remove-Item -LiteralPath $LiteralPath -Force
+      [IO.File]::WriteAllText($Destination, "corrupted`n")
+    }
+    (Rename-Retired $mismatch 6>&1 | Out-String).Trim()
+  }
+  $mismatchTo = "$mismatch.skillator-retired"
+  if ($outMismatch -cne "warn  $mismatchTo mismatched" -or (Test-Path -LiteralPath $mismatch) -or -not (Test-Path -LiteralPath $mismatchTo)) {
+    return "a moved-but-mismatched target not warned: $outMismatch"
+  }
+  $locked = Join-Path $T 'read-fail.md'
+  [IO.File]::WriteAllText($locked, "Load /x/tickets-zordon/SKILL.md`n")
+  $outLocked = & {
+    function Read-Retired { param($item)
+      $script:testLock = [IO.File]::Open($item.FullName, 'Open', 'ReadWrite', 'None')
+      return 'Load /x/tickets-zordon/SKILL.md'
+    }
+    try { (Rename-Retired $locked 6>&1 | Out-String).Trim() }
+    finally { if ($script:testLock) { $script:testLock.Close(); $script:testLock = $null } }
+  }
+  if ($outLocked -cne "warn  $locked not retired (kept)" -or -not (Test-Path -LiteralPath $locked)) {
+    return "a failing read did not keep file: $outLocked"
+  }
   $igl = @([IO.File]::ReadAllLines((Join-Path $T '.pi\agent\skills\.ignore')))
   if ($igl -cnotcontains 'my-own-line') { return 'pi .ignore lost a user line' }
   if (@($igl | Where-Object { $_ -ceq '/PLATFORMS.md' }).Count -ne 1) { return 'pi .ignore lines duplicated on the second run' }
