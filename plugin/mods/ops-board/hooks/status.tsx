@@ -35,8 +35,9 @@ export async function openStatus($: EngineInterface, shown: string | null, canTy
   void $.ui.focus({ requestId: 'ops-board', key: t ? (mode === 'decide' ? 'decide:assign' : 'status:help') : 'status:ticket' }).catch(() => {})
   if (mode === 'help' && t) await generateStatusHelp($)
 }
-export const openDecide = ($: EngineInterface, shown: string | null, canType = true) =>
-  openStatus($, shown, canType, 'decide')
+export async function openDecide($: EngineInterface, shown: string | null, canType = true) {
+  await openStatus($, shown, canType, 'decide')
+}
 async function cancel($: EngineInterface) {
   await clearStatus($)
   await update($, actionFocusA, () => null)

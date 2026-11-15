@@ -214,8 +214,10 @@ test('F174: pane.tsx, assign.tsx, status.tsx, and calls.ts wire Decide chooser (
   const assignSrc = readFileSync(new URL('../../hooks/assign.tsx', import.meta.url), 'utf8')
   const statusSrc = readFileSync(new URL('../../hooks/status.tsx', import.meta.url), 'utf8')
 
+  assert.match(paneSrc, /import\s*\{[^}]*\bopenDecide\b[^}]*\}\s*from\s*'\.\/status'/)
   assert.match(paneSrc, /key="key:decide".*openDecide\(\$,\s*m\.ticket,\s*els\.canType\)/)
-  assert.match(assignSrc, /export\s*\{\s*openDecide\s*\}/)
+  assert.doesNotMatch(assignSrc, /export\s*\{[^}]*\bopenDecide\b[^}]*\}/)
+  assert.match(statusSrc, /^export async function openDecide\(/m)
   assert.match(statusSrc, /key="decide:assign".*hotkey=\{armed \? 'a' : undefined\}.*Assign a decider/)
   assert.match(statusSrc, /key="status:help".*hotkey=\{armed \? 'h' : undefined\}.*Decision page/)
   assert.match(statusSrc, /key="decide:questions".*hotkey=\{armed \? 'q' : undefined\}.*MCQ decision/)

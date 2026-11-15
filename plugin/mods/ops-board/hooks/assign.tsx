@@ -6,8 +6,7 @@ export { isOpen } from './lib/board'
 import { runCall } from './lib/host'
 import { sameHandle } from './lib/team'
 import type { Call } from './lib/host'
-import { clearStatus, openDecide } from './status'
-export { openDecide }
+import { clearStatus } from './status'
 import { paint } from './paint'
 
 // F47: the assign / decide form, the Decided button's call and the Add person
