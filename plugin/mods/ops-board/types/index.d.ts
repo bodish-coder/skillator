@@ -82,6 +82,13 @@ export type WorkflowRow = {
 // team-inbox.jsonl); TeamsCfgView is what `team.mjs config show` says - never a secret.
 export type Msg = { ts: string; from: string; to?: string; email: string; text: string; id: string }
 export type TeamsCfgView = { path: string; token: boolean; workflowUrl: string | null; port: number; statusPosts: boolean }
+// F177: what `setup --status | --arm | --disarm | --ack` says (hooks/lib/teamsarm.ts parseArm).
+// The URL is the tunnel's public callback URL: drawn on the Messages tab, never in a toast.
+export type ArmView = {
+  result: 'status' | 'armed' | 'refused' | 'failed' | 'disarmed' | 'acked'; why: string
+  devtunnel: boolean; login: boolean; form: boolean; tunnel: boolean; hosted: boolean; listener: boolean
+  port: number; url: string | null; urlChanged: boolean; expires: string | null
+}
 // The setup form in the pane: only what is safe to hold in $.state - the field values
 // live in the module (the token never reaches $.state); `rev` redraws it.
 export type SetupView = { rev: number; field: string; result: string | null; confirmClear: boolean }

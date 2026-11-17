@@ -3,7 +3,7 @@
 // one table, and its `then` folds the result back in. No process, terminal or fs here -
 // app.ts executes the effects, the tests drive reduce without any process, and F56 takes
 // it as is.
-import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, Ticket, Usage, Watch } from '../types'
+import type { AssignDraft, Board, Box, Engage, Filter, Machine, Member, Msg, PersonDraft, Reconcile, RunView, TeamsCfgView, ArmView, Ticket, Usage, Watch } from '../types'
 import type { Call } from '../hooks/lib/calls'
 import type { Model, View } from '../hooks/lib/ticketsmodel'
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
@@ -19,6 +19,7 @@ import { continuePrompt, engageOf, orderRuns, parseFollowupOut, RUNS_SECTIONS, s
 export { parseFollowupOut, startRunCmd }
 import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
+import { armToast, parseArm } from '../hooks/lib/teamsarm'
 import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
 import type { SetupField, SetupValues } from '../hooks/lib/teamsconfig'
 import { enterRunEffect, RUN_INITIAL, runKey } from './runtab'
@@ -203,6 +204,7 @@ export type State = {
   // values live only in this process; the token is drawn masked, never logged.
   messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
   teamsCfg: TeamsCfgView | null
+  teamsArm: ArmView | null; armBusy: boolean   // F177: what setup --status last said; an arm / disarm in flight
   setup: Setup | null; setupField: SetupField
   help: HelpState | null                       // F127: Help & Skills guide viewer
   explorer: ExState                        // F75: the Explorer tab (ops/explorer.ts)
@@ -241,7 +243,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null, startRun: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', decide: null, person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
-  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, setup: null, setupField: 'token',
+  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, teamsArm: null, armBusy: false, setup: null, setupField: 'token',
   help: null,
   explorer: EX0,
   ...RUN_INITIAL,
@@ -1463,6 +1465,35 @@ function markRead(s: State): Step {
   return { state: s, effects: [run('team-mark-read', [id], then)] }
 }
 
+// --- F177: connect Teams. c runs setup --arm, d setup --disarm, y copies the URL. Only
+// these keys act; entering the tab runs --status (a read). ---
+type ArmCall = 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack'
+const armThen = (call: ArmCall): Then => r => x => {
+  const quiet = call === 'team-arm-status' || call === 'team-url-ack'
+  if (quiet && x.armBusy) return x                 // an arm or disarm in flight is the newer read
+  const y: State = quiet ? x : { ...x, armBusy: false }
+  const v = parseArm(r.out)
+  if (!v) return quiet ? y : toast(y, `✗ Teams: ${teamWhy(r, 'teams-uhura setup')}`)
+  const said = armToast(v)
+  return said ? toast({ ...y, teamsArm: v }, [said, ran(r.argv)].join('\n')) : { ...y, teamsArm: v }
+}
+const armStatus = (): Effect => run('team-arm-status', [], armThen('team-arm-status'))
+
+function armRun(s: State, call: 'team-arm' | 'team-disarm'): Step {
+  if (s.armBusy) return { state: toast(s, 'Teams: still working - one moment'), effects: [] }
+  return { state: { ...s, armBusy: true, toast: call === 'team-arm' ? 'Connecting Teams…' : 'Disconnecting Teams…' }, effects: [run(call, [], armThen(call))] }
+}
+
+function copyUrl(s: State): Step {
+  const url = s.teamsArm?.url
+  if (!url) return { state: toast(s, 'no tunnel URL yet - c connects'), effects: [] }
+  const then: Then = r => x => r.code !== 0
+    ? toast(x, `✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`)
+    : { state: toast(x, '✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL'),
+        effects: x.teamsArm?.urlChanged ? [run('team-url-ack', [], armThen('team-url-ack'))] : [] }
+  return { state: s, effects: [{ kind: 'copy', text: url, then }] }
+}
+
 function messagesKey(s: State, k: Key): Step {
   const cur = selectedOf(s.messages, s.msgSelected)
   switch (k.name) {
@@ -1471,6 +1502,9 @@ function messagesKey(s: State, k: Key): Step {
     case 'return': case 'enter': return { state: { ...s, msgSelected: cur, msgExpanded: cur && s.msgExpanded !== cur ? cur : null }, effects: [] }
     case 'm': return markRead(s)
     case 's': return { state: openSetup(s), effects: [showCfg(false)] }
+    case 'c': return armRun(s, 'team-arm')
+    case 'd': return armRun(s, 'team-disarm')
+    case 'y': return copyUrl(s)
     case 'escape': return { state: { ...s, toast: null }, effects: [] }
     default: return { state: s, effects: [] }
   }
@@ -1479,7 +1513,7 @@ function messagesKey(s: State, k: Key): Step {
 function toTab(s: State, tab: Tab): Step {
   if (tab === 'help') return openHelp(s)
   const effects: Effect[] = tab === 'runs' && s.tab !== 'runs' ? [{ kind: 'poll', what: 'runs' }] : []
-  if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(false))
+  if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(false), armStatus())
   if (tab === 'explorer' && s.tab !== 'explorer') effects.push(...enterExplorer(s).effects)
   if (tab === 'run' && s.tab !== 'run') effects.push(enterRunEffect())
   return { state: { ...s, tab, help: null }, effects }

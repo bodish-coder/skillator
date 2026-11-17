@@ -591,7 +591,7 @@ test('F123: button badges [Key Label] across all tabs and click hitboxes match b
 
   // 4. Messages tab
   const scMsgs = screen({ ...reduce(s, { name: '4' }).state, cols: 120 }, P)
-  assert.match(scMsgs.lines.join('\n'), /\[↑↓ move\] · \[enter open\] · \[m mark all read\] · \[s setup\] · \[q quit\]/)
+  assert.match(scMsgs.lines.join('\n'), /\[↑↓ move\] · \[enter open\] · \[c connect\] · \[d disconnect\] · \[y copy URL\] · \[m mark all read\] · \[s setup\] · \[q quit\]/)
 
   // 5. Explorer tab
   const scExp = screen({ ...reduce(s, { name: '5' }).state, cols: 120 }, P)

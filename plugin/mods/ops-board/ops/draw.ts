@@ -12,6 +12,7 @@ import type { Model } from '../hooks/lib/ticketsmodel'
 import type { Box, Level, Machine, RunView, Stage, Ticket, Usage, Window } from '../types'
 import type { State, PointerAction, SkillGuide, HelpItem } from './state'
 import { activeUser, pointerModal, decideLines, dialogLines, engageLines, filteredSkills, formLines, helpCommand, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
+import { armLines } from '../hooks/lib/teamsarm'
 import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
 import { assignedTickets, buildModel, chipsOf, decideTickets, headKey, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
@@ -238,7 +239,7 @@ function keysOf(s: State, m: Model): Seg[][] {
     return [move, h(enter, 'return'), h('s Start', 's'), h('Engage', 'e'), h('Rerun', 'r'), h('Push Pending', 'p'), h('Mode: ||/seq', 'm'), quit]
   }
   if (s.tab === 'health') return [[hot('r refresh', 'r')], [hot('R resume', 'R', true)], [hot('c resume CLI', 'c')], [hot('F force resume', 'F', true)], quit]
-  if (s.tab === 'messages') return [move, h('enter open', 'return'), h('m mark all read', 'm'), h('s setup', 's'), quit]
+  if (s.tab === 'messages') return [move, h('enter open', 'return'), h('c connect', 'c'), h('d disconnect', 'd'), h('y copy URL', 'y'), h('m mark all read', 'm'), h('s setup', 's'), quit]
   if (s.tab === 'explorer' && s.explorer.action) {
     const a = s.explorer.action
     return a.conflictAi && a.result ? [h('m merge-smith', 'm'), h('a abort', 'a'), h('esc close', 'escape')]
@@ -791,9 +792,12 @@ function formBody(s: State): Seg[][] {
 // --- F66: the Messages tab and the Teams setup form ---
 
 function messagesBody(s: State, h: number): Seg[][] {
+  // F177: the Teams lines stay above the list; the list windows in what is left
+  const arm = armLines(s.teamsArm, s.now, s.cols).slice(0, Math.max(0, h - 1))
+    .map(l => fitSegs(l.segs.map(x => ({ ...x, text: clean(x.text) })), s.cols))
   const lines = messageLines({ msgs: s.messages, readId: s.msgRead, selected: s.msgSelected, expanded: s.msgExpanded, cols: s.cols })
   const sel = selectedOf(s.messages, s.msgSelected)
-  return windowOf(lines.map(l => ({ key: l.key, segs: l.segs.map(x => ({ ...x, text: clean(x.text) })) })), sel, h, 'messages')
+  return [...arm, ...windowOf(lines.map(l => ({ key: l.key, segs: l.segs.map(x => ({ ...x, text: clean(x.text) })) })), sel, Math.max(1, h - arm.length), 'messages')]
 }
 
 // The setup form, boxed like Add person; its result line (a check or teams-uhura's

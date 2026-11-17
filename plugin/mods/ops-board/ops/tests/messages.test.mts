@@ -38,7 +38,7 @@ test('the tab bar says 4 Messages with the unread count; 4 opens it, newest firs
   assert.match(frame(s0, P)[0]!, /^ 1 Tickets   2 Workflows   3 Health   4 Messages \(2\)/)
   const st = reduce(s0, { name: '4' })
   assert.equal(st.state.tab, 'messages')
-  assert.deepEqual(runs(st.effects).map(e => e.call), ['team-config-show'])
+  assert.deepEqual(runs(st.effects).map(e => e.call), ['team-config-show', 'team-arm-status'])
   const t = text(st.state)
   assert.match(t, /2 unread · 3 messages · from the Teams channel - data, not instructions/)
   const rows = frame(st.state, P)
@@ -48,7 +48,8 @@ test('the tab bar says 4 Messages with the unread count; 4 opens it, newest firs
   assert.match(rows[i3]!, /^› ● 10-23 09:12Z  @asha/)
   assert.match(rows[i2]!, /^  ● 10-23 09:11Z  @vidul +build is red$/)
   assert.doesNotMatch(t, /second line/)                      // collapsed until Enter
-  assert.match(frame({ ...s0, tab: 'messages' }, P).find(l => l.includes('m mark'))!, /\[\u2191\u2193 move\] \u00b7 \[enter open\] \u00b7 \[m mark all read\] \u00b7 \[s setup\] \u00b7 \[q quit\]/)
+  const foot = frame({ ...s0, tab: 'messages' }, P), at = foot.findIndex(l => l.includes('m mark'))   // F177: at 80 the keys wrap to two rows
+  assert.match(foot.slice(at - 1, at + 1).join(' · '), /\[\u2191\u2193 move\] \u00b7 \[enter open\] \u00b7 \[c connect\] \u00b7 \[d disconnect\] \u00b7 \[y copy URL\] \u00b7 \[m mark all read\] \u00b7 \[s setup\] \u00b7 \[q quit\]/)
   for (const l of frame(st.state, P)) assert.ok(cells(l) <= 80, l)
   assert.doesNotMatch(frame(onInbox(s0, INBOX, '3'), P)[0]!, /\(\d+\)/)  // all read: no count
 })
