@@ -40,7 +40,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
+import { setFromRun, checkSet, wizardPage, stableNonce, nonceFile, pageSet, answersToCommands, nextWizardSet, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 import { extractDomainGraph, understandPage } from "./understand.mjs";
 import { FORMATS, THEMES, formatPage, themeCss } from "./formats.mjs";
@@ -1025,6 +1025,13 @@ async function writeGenerated(root, out, text) {
   await writeFile(out, text, "utf8");
 }
 
+// F179: every wizard page is written here, so a rebuild of the same set keeps its nonce (page, else sidecar).
+async function writeWizard(root, out, set) {
+  const nonce = stableNonce(root, out, set.id);
+  await writeGenerated(root, out, wizardPage(set, nonce));
+  await writeGenerated(root, nonceFile(root, set.id), `${nonce}\n`);
+}
+
 // A118: the holds as relay-morpheus judges them - `chain next --holds`, read-only
 // (it refreshes no lease and writes nothing). sh first, then the ps1 twin;
 // HOLO_RELAY_CMD replaces both (tests). null when the run has no chain or
@@ -1125,12 +1132,16 @@ async function main(argv) {
     }
     const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem.replace(/[^A-Za-z0-9_.-]/g, "-")}.wizard.html`));
     if (o.nextWizard) {
-      // The answers came from the page on disk: a round-2+ page's own set is the base, not round 1.
+      // The base is the page the answers came from: the page on disk when its id and round match, the run's (or
+      // --decisions) set for round 1, else refused - never a mix of rounds.
+      const ans = JSON.parse(await readFile(o.nextWizard, "utf8"));
+      const round = Number(ans && ans.round) || 1;
       const drawn = existsSync(out) ? pageSet(await readFile(out, "utf8")) : null;
-      if (drawn && String(drawn.id) === String(set.id)) set = drawn;
-      set = nextWizardSet(set, JSON.parse(await readFile(o.nextWizard, "utf8")));
+      if (drawn && String(drawn.id) === String(set.id) && (Number(drawn.round) || 1) === round) set = drawn;
+      else if (round !== 1) throw new Error(`the page for round ${round} is not on disk - open the round-${round} page and finalize again`);
+      set = nextWizardSet(set, ans);
     }
-    await writeGenerated(root, out, wizardPage(set));
+    await writeWizard(root, out, set);
     console.log(`holo: wizard ${set.id}${set.round ? ` (round ${set.round})` : ""}, ${set.decisions.length} decision${set.decisions.length === 1 ? "" : "s"} to answer, ${(set.settled || []).length} settled -> ${out}`);
     return;
   }
@@ -1164,7 +1175,7 @@ async function main(argv) {
     await writeGenerated(root, html, standalonePage(r));
     const set = setFromRun(run, rel(runPath));
     let wiz = "";
-    if (set.decisions.length) { wiz = resolve(join(dir, `${run.id}.wizard.html`)); await writeGenerated(root, wiz, wizardPage(set)); }
+    if (set.decisions.length) { wiz = resolve(join(dir, `${run.id}.wizard.html`)); await writeWizard(root, wiz, set); }
     process.stdout.write(renderAscii(run, opts));
     console.log(batchLines(html, art, wiz, set.decisions.length));
     return;
@@ -1189,7 +1200,7 @@ async function main(argv) {
   await writeGenerated(root, out, o.mode === "html" ? standalonePage(r, o.theme) : artifactPage(r));
   const nq = run ? run.qs.filter((q) => ASKABLE.has(q.state)).length : 0;
   // The levers link to the wizard by a relative name: write it beside the page.
-  if (opts.anatomy && run && nq) await writeGenerated(root, join(dirname(out), `${run.id}.wizard.html`), wizardPage(setFromRun(run, rel(runPath))));
+  if (opts.anatomy && run && nq) await writeWizard(root, join(dirname(out), `${run.id}.wizard.html`), setFromRun(run, rel(runPath)));
   console.log(`holo: ${run ? `${run.id} ${run.stages.length} stages, ${nq} open decision${nq === 1 ? "" : "s"}` : "design only"}` +
     `${design ? `, ${design.parts.length} design sections` : ""} -> ${out}` +
     (o.mode === "html" ? " (standalone page)" : " (Artifact page: publish it with the Artifact tool, capabilities {db:{}})"));

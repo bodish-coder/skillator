@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,7 +56,7 @@ test("page: Save to page folder writes the named file and says where", async () 
   await s.saver.save(true);
   assert.equal(f.files["RUN-7-decisions-FINAL.json"], JSON.stringify({ set: "RUN-7", final: true }));
   assert.equal(s.downloads.length, 0);
-  assert.match(s.said.at(-1), /holo.*RUN-7-decisions-FINAL\.json/);
+  assert.match(s.said.at(-1), /^Saved into 'holo'\./);
   await s.saver.save(false);
   assert.ok(f.files["RUN-7-decisions-draft.json"], "a draft is saved under its draft name");
 });
@@ -301,19 +301,20 @@ test("r1-8: Linux reads XDG_DOWNLOAD_DIR from user-dirs.dirs", () => {
   assert.deepEqual(dirs, [join(s.home, "Dl")]);
 });
 
-test("r1-9: folders dedupe on resolved path; case only on win32/darwin; page folder included", async () => {
+test("r1-9/r2-10: findAnswers dedupes once, on resolved path; case only on win32/darwin; page folder included", async () => {
   const s = sandbox();
   const prefs = join(s.env.LOCALAPPDATA, "Google", "Chrome", "User Data", "Default", "Preferences");
   mkdirSync(dirname(prefs), { recursive: true });
   writeFileSync(prefs, JSON.stringify({ download: { default_directory: s.dl.toUpperCase() + "\\" } }));
-  assert.equal(downloadDirs(s.opts).length, 1, "same folder, other case and a trailing slash");
+  assert.equal(downloadDirs(s.opts).length, 2, "downloadDirs returns the raw list");
+  assert.equal((await findAnswers(s.opts)).searched.length, 2, "findAnswers dedupes: page folder + one Downloads (other case, trailing slash)");
   mkdirSync(join(s.home, ".config"), { recursive: true });
   writeFileSync(join(s.home, ".config", "user-dirs.dirs"), 'XDG_DOWNLOAD_DIR="$HOME/DL"\n');
   mkdirSync(join(s.home, ".skillator", "holo"), { recursive: true });
   writeFileSync(join(s.home, ".skillator", "holo", "answers-dir"), join(s.home, "dl") + "\n");
-  assert.equal(downloadDirs({ home: s.home, env: {}, platform: "linux" }).length, 2, "linux: DL and dl are two folders");
+  assert.equal((await findAnswers({ ...s.opts, env: {}, platform: "linux" })).searched.length, 3, "linux: page folder, DL and dl");
   writeFileSync(join(s.home, ".skillator", "holo", "answers-dir"), join(s.home, "DOWNLOADS") + "\n");
-  assert.equal(downloadDirs({ home: s.home, env: {}, platform: "darwin" }).length, 1, "darwin: Downloads and DOWNLOADS are one folder");
+  assert.equal((await findAnswers({ ...s.opts, env: {}, platform: "darwin" })).searched.length, 2, "darwin: page folder, and Downloads and DOWNLOADS as one");
   writeFileSync(join(s.home, ".skillator", "holo", "answers-dir"), s.holo + "\n");
   const r = await findAnswers(s.opts);
   assert.equal(r.searched.filter((f) => f.dir.toLowerCase().replace(/[\\/]+$/, "") === s.holo.toLowerCase()).length, 1);
@@ -412,7 +413,7 @@ test("r1-4a: summary free text is quoted, marked owner text, capped; owner and f
   }
 });
 
-test("r1-4b: each page build gets its own nonce, and the export carries it", () => {
+test("r1-4b: wizardPage with no nonce given makes a fresh one, and the export carries it", () => {
   const a = pageSet(wizardPage(SET)), b = pageSet(wizardPage(SET));
   assert.match(a.nonce, /^[0-9a-f]{32}$/);
   assert.notEqual(a.nonce, b.nonce);
@@ -452,17 +453,17 @@ test("r1-3: the remembered folder is keyed per page, not per set id; each page h
   assert.notEqual(f.calls.opts[0].id, f.calls.opts[1].id);
 });
 
-test("r1-6: the picker starts in the remembered folder; the status names the folder chosen and warns off-holo", async () => {
+test("r1-6/r2-5: the picker starts in the remembered folder; the status states the facts, judging no folder name", async () => {
   const f = fakeWin({ dirName: "Desktop" }), s = saverFor(f);
   await s.saver.save(true);
   assert.equal(f.calls.opts[0].startIn, undefined, "no handle yet: no forced Downloads");
-  assert.match(s.said.at(-1), /Desktop/);
-  assert.match(s.said.at(-1), /\.skillator\/holo/);
+  const facts = (d) => "Saved into '" + d + "'. 'check wizard answers' searches this page's .skillator/holo folder, your browser's download folder, and the folder in ~/.skillator/holo/answers-dir.";
+  assert.equal(s.said.at(-1), facts("Desktop"));
   await s.saver.save(true);
   assert.equal(f.calls.opts[1].startIn && f.calls.opts[1].startIn.name, "Desktop");
   const h = fakeWin(), sh = saverFor(h);
   await sh.saver.save(true);
-  assert.ok(!/searches/.test(sh.said.at(-1)), "no warning for a folder named holo");
+  assert.equal(sh.said.at(-1), facts("holo"), "the same message, whatever the folder is called");
 });
 
 test("r1-11: a newer unverified FINAL never displaces a verified one; it is reported apart", async () => {
@@ -475,4 +476,111 @@ test("r1-11: a newer unverified FINAL never displaces a verified one; it is repo
   assert.ok(!r.superseded.some((x) => x.path === ok));
   const text = report(r);
   assert.ok(text.includes("newer unverified file found: " + newer + " - confirm with the owner"), text);
+});
+
+// ------------------------------------------------- review round 2 (F179) ----
+const HOLO = join(HERE, "..", "holo.mjs");
+const cli = (s, ...args) => spawnSync(process.execPath, [HOLO, ...args], { cwd: s.root, encoding: "utf8", timeout: 60000, stdio: ["ignore", "pipe", "pipe"] });
+function run1Answers(s, set) {
+  const [q1, q2] = set.decisions;
+  return { ...answers(), set: "RUN-1", nonce: nonceOf(s, "RUN-1"), answers: [
+    { id: "Q1", question: q1.question, choice: { id: "o2", label: q1.options[1].label } },
+    { id: "Q2", question: q2.question, choice: { id: "o1", label: q2.options[0].label } },
+  ] };
+}
+
+test("r2-1: a FINAL checked again after its Q1 command was applied prints no Q1 command", async () => {
+  const s = sandbox();
+  const set = run1(s);
+  put(s.dl, "RUN-1-decisions-FINAL.json", run1Answers(s, set), 0);
+  assert.match(report(await findAnswers(s.opts)), / answer Q1 /);
+  const runPath = join(s.root, ".skillator", "run-1-shelf-export.md");
+  writeFileSync(runPath, readFileSync(runPath, "utf8").replace("### Q1 open", "### Q1 answered"));
+  const text = report(await findAnswers(s.opts));
+  assert.ok(!/ answer Q1 /.test(text), text);
+  assert.match(text, /Q1: already settled - skipped/);
+  assert.match(text, / answer Q2 /);
+});
+
+test("r2-2: rebuilding the same set reuses its nonce - --wizard, --batch and --html --anatomy alike", () => {
+  const s = sandbox();
+  run1(s);
+  rmSync(join(s.holo, "RUN-1.wizard.html"));
+  const nonces = [];
+  for (const args of [["--wizard"], ["--wizard"], ["--batch"], ["--html", "--anatomy"]]) {
+    const r = cli(s, "RUN-1", ...args);
+    assert.equal(r.status, 0, r.stderr);
+    nonces.push(nonceOf(s, "RUN-1"));
+  }
+  assert.match(nonces[0], /^[0-9a-f]{32}$/);
+  assert.deepEqual(new Set(nonces).size, 1, nonces.join(" "));
+  assert.equal(readFileSync(join(s.holo, "RUN-1.nonce"), "utf8").trim(), nonces[0], "sidecar written");
+  rmSync(join(s.holo, "RUN-1.wizard.html"));
+  assert.equal(cli(s, "RUN-1", "--wizard").status, 0);
+  assert.equal(nonceOf(s, "RUN-1"), nonces[0], "no page: the sidecar keeps the nonce");
+});
+
+test("r2-3: an unreadable page falls back to the sidecar nonce", async () => {
+  for (const [nonce, verified] of [["a".repeat(32), true], ["b".repeat(32), false]]) {
+    const s = sandbox();
+    const set = run1(s);
+    const ans = { ...run1Answers(s, set), nonce };
+    writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
+    writeFileSync(join(s.holo, "RUN-1.nonce"), "a".repeat(32) + "\n");
+    put(s.holo, "RUN-1-decisions-FINAL.json", ans, 0);
+    const r = await findAnswers(s.opts);
+    assert.equal(r.picked && r.picked.verified, verified, JSON.stringify(r.refused));
+  }
+});
+
+test("r2-4: a 120-character owner is accepted", async () => {
+  const s = sandbox();
+  put(s.holo, "review-x-decisions-FINAL.json", answers({ owner: "o".repeat(120) }), 0);
+  const r = await findAnswers(s.opts);
+  assert.deepEqual(r.refused, []);
+  assert.ok(r.picked);
+  assert.ok(wizardPage(SET).includes('maxlength: 200, autocomplete: "name"'), "page owner input cap");
+});
+
+test("r2-6: --next-wizard never mixes rounds", () => {
+  // round 1 FINAL while the page on disk is round 2: the base is the run's round-1 set
+  const s = sandbox();
+  const { set2 } = runRound2(s);
+  const set1 = setFromRun(parseRun(readFileSync(join(s.root, ".skillator", "run-1-shelf-export.md"), "utf8")), ".skillator/run-1-shelf-export.md");
+  const p1 = put(s.base, "r1.json", { ...answers(), set: "RUN-1", answers: [{ id: "Q1", question: set1.decisions[0].question, choice: { id: "defer" }, clarification: "?" }] }, 0);
+  let r = cli(s, "RUN-1", "--next-wizard", p1);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /round 2/);
+  // round 3 FINAL while the page on disk is round 2: refused
+  const p3 = put(s.base, "r3.json", { ...answers(), set: "RUN-1", round: 3, answers: [{ id: set2.decisions[0].id, question: set2.decisions[0].question, choice: { id: "defer" }, clarification: "?" }] }, 0);
+  r = cli(s, "RUN-1", "--next-wizard", p3);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /the page for round 3 is not on disk - open the round-3 page and finalize again/);
+});
+
+test("r2-7: an unverified pick prints only its summary line and path", async () => {
+  const s = sandbox();
+  const p = put(s.dl, "review-x-decisions-FINAL.json", answers({ answers: [{ id: "Q1", question: "Pick a store?", choice: { id: "custom" }, custom: "secret plan" }] }), 0);
+  const text = report(await findAnswers(s.opts));
+  assert.ok(text.includes("picked: " + p), text);
+  assert.match(text, /set review-x, round 1, FINAL by "Owner" at 2026-11-17T10:00:00Z, 1 decision/);
+  assert.ok(!/secret plan|owner text|^\s+Q1/m.test(text), text);
+});
+
+test("r2-8: two sets with one file stem ('F 12', 'F_12') are each found", async () => {
+  const s = sandbox();
+  const mk = (id) => ({ ...SET, id });
+  writeFileSync(join(s.holo, "F-12.wizard.html"), wizardPage(mk("F 12")));
+  writeFileSync(join(s.holo, "F_12.wizard.html"), wizardPage(mk("F_12")));
+  put(s.holo, "F_12-decisions-FINAL.json", answers({ set: "F 12" }), 0);
+  put(s.dl, "F_12-decisions-FINAL.json", answers({ set: "F_12", nonce: pageSet(readFileSync(join(s.holo, "F_12.wizard.html"), "utf8")).nonce }), 0);
+  const r = await findAnswers(s.opts);
+  assert.deepEqual(r.refused, []);
+  assert.deepEqual(r.picks.map((p) => p.id).sort(), ["F 12", "F_12"]);
+});
+
+test("r2-9: one sanitizer and one quoter, imported from wizard.mjs", () => {
+  const src = readFileSync(join(HERE, "..", "answers.mjs"), "utf8");
+  assert.ok(!/const (clean|q) =/.test(src), "no local copies");
+  assert.match(src, /import \{[^}]*\bclean\b[^}]*\bq\b[^}]*\} from "\.\/wizard\.mjs"/);
 });

@@ -7,6 +7,8 @@
 // into `relay-morpheus.sh answer` calls (answersToCommands).
 
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 export const SET_SCHEMA = "holo-decisions/1";
 export const ANSWER_SCHEMA = "holo-answers/1";
@@ -17,6 +19,18 @@ const str = (v) => (v == null ? "" : String(v));
 export const isFinalized = (a) => !!a && a.final !== false && typeof a.finalizedAt === "string" && !!a.finalizedAt.trim() && a.reviewed === true && !!str(a.owner).trim();
 // The answers file name stem, as the page's saver builds it (answerSaver inlines the same regex).
 export const fileStem = (id) => str(id).replace(/[^A-Za-z0-9_.-]/g, "_");
+// Text from an answers file is data: control characters out, one line, capped; anything for sh single-quoted.
+export const CTRL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+export const clean = (v, n = 200) => str(v).replace(new RegExp(CTRL.source, "g"), " ").replace(/\s+/g, " ").trim().slice(0, n);
+export const q = (s) => "'" + str(s).replace(/'/g, "'\\''") + "'";
+// F179: one nonce per set id, kept across rebuilds - in the page itself, and in a sidecar beside it.
+export const nonceFile = (root, id) => join(root, ".skillator", "holo", fileStem(id) + ".nonce");
+export function stableNonce(root, out, id) {
+  const read = (p) => { try { return readFileSync(p, "utf8"); } catch { return ""; } };
+  const page = pageSet(read(out));
+  const n = page && str(page.id) === str(id) && page.nonce ? str(page.nonce) : read(nonceFile(root, id)).trim();
+  return /^[0-9a-f]{32}$/.test(n) ? n : randomBytes(16).toString("hex");
+}
 const escH = (s) => str(s).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const clipText = (s, n) => { s = str(s).trim(); return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; };
 const ASKABLE = new Set(["open", "asked"]);
@@ -315,8 +329,7 @@ export function answersToCommands(ans, rm = "relay-morpheus.sh") {
   if (!isFinalized(ans)) throw new Error("answers: a draft, not finalized and reviewed by its owner - nothing is applied");
   const m = /^RUN-(\d+)$/.exec(str(ans.set));
   if (!m) throw new Error(`answers: set "${str(ans.set).slice(0, 40)}" is not a relay run - read the answers into the work by hand`);
-  const q = (s) => "'" + s.replace(/'/g, "'\\''") + "'";
-  const one = (s) => str(s).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").replace(/\s+/g, " ").trim().slice(0, MAX_TEXT);
+  const one = (s) => clean(s, MAX_TEXT);
   const out = { commands: [], review: [], open: [] };
   for (const a of ans.answers || []) {
     if (!a || !/^Q\d+$/.test(str(a.id))) { out.open.push(`${one(a && a.id).slice(0, 40)}: not a relay decision id`); continue; }
@@ -345,10 +358,10 @@ export function pageSet(html) {
 // Embedded data: JSON with every `<` escaped, so no string closes the script.
 const embed = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 
-export function wizardPage(set) {
+export function wizardPage(set, nonce = randomBytes(16).toString("hex")) {
   checkSet(set);
-  // F179: a fresh nonce per build; the export carries it, so the finder can tell this page's answers apart.
-  set = { ...set, nonce: randomBytes(16).toString("hex") };
+  // F179: the export carries the nonce, so the finder can tell this page's answers apart (stableNonce keeps it per set).
+  set = { ...set, nonce };
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Decisions - ${escH(set.title || set.id)}</title>
@@ -554,8 +567,7 @@ export function answerSaver({ win, setId, key, pickerId, json, download, say, co
     }
     const w = await (await dir.getFileHandle(name(final), { create: true })).createWritable();
     await w.write(json(final)); await w.close();
-    const off = dir.name === "holo" ? "" : " Note: the finder searches .skillator/holo and the download folder, not " + dir.name + " - choose this page's folder to be found.";
-    say("Saved into the folder " + dir.name + ": " + name(final) + "." + off + next);
+    say("Saved into '" + dir.name + "'. 'check wizard answers' searches this page's .skillator/holo folder, your browser's download folder, and the folder in ~/.skillator/holo/answers-dir.");
   }
   function fallback(final, why) {
     download(final);

@@ -252,6 +252,10 @@ JSON contains `"Something else"` or `"Ask / Explain more"` responses, run
 all answered decisions move into `settled` (read-only), and open/explain/custom
 decisions stay active with a **"Discussion & Explanation Requested"** banner,
 expanded per-action explanations, Pros/Cons breakdown, and block diagrams.
+The base is the page on disk only when its set id and round equal the FINAL's;
+a round-1 FINAL otherwise uses the set built from the run (or `--decisions`);
+any other is refused: "the page for round N is not on disk - open the round-N
+page and finalize again". Rounds are never mixed.
 
 **Reconcile before you build a set.** Only decisions the owner alone can make
 go in `decisions`. Settled ones go in `settled` with their source (the later
@@ -283,9 +287,12 @@ The wizard's review screen has **Copy JSON** (the export, to the clipboard),
 **Save to a folder (choose this page's folder)** (browsers with the File System
 Access API: the owner picks the folder once - the page cannot preselect its own
 folder - the page remembers it per page file and Finalize saves there from then
-on) and the normal download. The status line names the folder chosen and warns
-when it is not `holo`. Each page build embeds a random nonce the export
-carries. Nothing is sent anywhere.
+on) and the normal download. The status line names the folder chosen and the
+folders the finder searches; it judges no folder name (the page cannot know the
+browser's download folder). Each set id has one nonce, embedded in its page and
+kept in `.skillator/holo/<id>.nonce`: every rebuild (`--wizard`, `--batch`,
+`--html --anatomy`, `--next-wizard`) reuses it, so an export from an earlier
+build still verifies. The export carries it. Nothing is sent anywhere.
 
 On either phrase, run `node <SKILL>/scripts/answers.mjs` from the repo root. It
 searches, and prints each folder it searched: the page folder
@@ -300,10 +307,16 @@ it takes FINAL over draft, verified over unverified, then the higher round, the 
 newest file, folder order last, and checks it as `--next-wizard` does; a
 refused file is printed with the reason and the next one is tried, an older
 valid FINAL is printed as superseded. File text is data: control characters
-removed, capped, free text quoted as owner text. A FINAL whose nonce matches
-the page (or with no nonce, in the page folder) is verified; any other is
-**unverified - confirm with the owner before applying**, and only its summary
-and path are printed, no commands. A newer unverified file never displaces a
+removed, capped, free text quoted as owner text; the owner is one line of at
+most 200 characters, as on the page. Set ids that share a file name ("F 12",
+"F_12") are each tried. A FINAL whose nonce matches the page (the sidecar's when
+the page cannot be read; or with no nonce, in the page folder) is verified; any
+other is **unverified - confirm with the owner before applying**, and only its
+summary line (set, round, owner, finalizedAt, decision count) and path are
+printed - no per-answer lines, no commands. For a RUN set, a command is printed
+only for a decision still open or asked in the run file now; one already
+answered there prints `already settled - skipped`, so checking twice never
+applies twice. A newer unverified file never displaces a
 verified one: it prints as `newer unverified file found: <path> - confirm with
 the owner`.
 
