@@ -128,7 +128,7 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
   const sets = await openSets(root, holo);
   const searched = dedupe([{ dir: holo, why: "page folder" }, ...downloadDirs(where)], where.platform);
   const byStem = new Map([...sets.keys()].map((id) => [fileStem(id), id]));
-  const r = { searched, sets: [...sets.keys()], picks: [], superseded: [], drafts: [], refused: [], ignored: [] };
+  const r = { searched, sets: [...sets.keys()], picks: [], superseded: [], unverifiedNewer: [], drafts: [], refused: [], ignored: [] };
   const cands = [];
   for (const [i, f] of searched.entries()) {
     let names;
@@ -147,11 +147,17 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
       } catch (e) { r.refused.push({ path, why: e.message }); }
     }
   }
-  // FINAL before draft, then the higher round, newest finalizedAt, newest file;
-  // folder order only breaks a tie.
+  // Verified: the export carries this page's nonce, or (an older export without
+  // one) it sits in the page folder, which is the owner's repo.
+  for (const c of cands) {
+    const pageNonce = sets.get(c.id).nonce;
+    c.verified = c.ans && c.ans.nonce ? !!pageNonce && c.ans.nonce === pageNonce : searched[c.folder].why === "page folder";
+  }
+  // FINAL before draft, verified before unverified (never fail open), then the
+  // higher round, newest finalizedAt, newest file; folder order only breaks a tie.
   const when = (c) => Date.parse(c.ans && c.ans.finalizedAt) || 0;
-  cands.sort((a, b) => isFinalized(b.ans) - isFinalized(a.ans) || (Number(b.ans?.round) || 1) - (Number(a.ans?.round) || 1)
-    || when(b) - when(a) || b.mtime - a.mtime || a.folder - b.folder);
+  const fresher = (a, b) => (Number(b.ans?.round) || 1) - (Number(a.ans?.round) || 1) || when(b) - when(a) || b.mtime - a.mtime;
+  cands.sort((a, b) => isFinalized(b.ans) - isFinalized(a.ans) || b.verified - a.verified || fresher(a, b) || a.folder - b.folder);
   for (const c of cands) {
     if (!isFinalized(c.ans)) { if (!r.drafts.some((d) => d.id === c.id)) r.drafts.push(c); continue; }
     try {
@@ -159,11 +165,10 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
       if (typeof c.ans.owner !== "string" || c.ans.owner.trim().length > 80 || CTRL.test(c.ans.owner)) throw new Error("owner is not one short line");
       nextWizardSet(sets.get(c.id), c.ans);
     } catch (e) { r.refused.push({ path: c.path, why: e.message }); continue; }
-    // Verified: the export carries this page's nonce, or (an older export without
-    // one) it sits in the page folder, which is the owner's repo.
-    const pageNonce = sets.get(c.id).nonce;
-    c.verified = c.ans.nonce ? !!pageNonce && c.ans.nonce === pageNonce : searched[c.folder].why === "page folder";
-    (r.picks.some((p) => p.id === c.id) ? r.superseded : r.picks).push(c);
+    const pick = r.picks.find((p) => p.id === c.id);
+    if (!pick) r.picks.push(c);
+    else if (pick.verified && !c.verified && fresher(pick, c) > 0) r.unverifiedNewer.push(c);
+    else r.superseded.push(c);
   }
   r.drafts = r.drafts.filter((d) => !r.picks.some((p) => p.id === d.id));
   r.picked = r.picks[0] || null;
@@ -199,6 +204,7 @@ export function report(r) {
     }
   }
   for (const x of r.superseded) L.push(`superseded: ${x.path} (set ${clean(x.id)}; older than the FINAL picked)`);
+  for (const x of r.unverifiedNewer) L.push(`newer unverified file found: ${x.path} - confirm with the owner (set ${clean(x.id)}; not applied)`);
   for (const d of r.drafts) L.push("", `draft - not applied: ${d.path} (set ${clean(d.id)}; finalize it on the page first)`);
   for (const x of r.refused) L.push(`refused: ${x.path} - ${clean(x.why)}`);
   for (const x of r.ignored) L.push(`ignored: ${x.path} - ${clean(x.why)}`);

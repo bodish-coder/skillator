@@ -357,7 +357,7 @@ test("r1-1: the next-round hint works on round 2 (holo.mjs --next-wizard reads t
 test("r1-2: a newer Downloads FINAL beats an older page-folder FINAL; the older is superseded", async () => {
   const s = sandbox();
   const old = put(s.holo, "review-x-decisions-FINAL.json", answers({ finalizedAt: "2026-11-17T10:00:00Z" }), 600);
-  const fresh = put(s.dl, "review-x-decisions-FINAL.json", answers({ finalizedAt: "2026-11-17T11:00:00Z" }), 0);
+  const fresh = put(s.dl, "review-x-decisions-FINAL.json", answers({ finalizedAt: "2026-11-17T11:00:00Z", nonce: nonceOf(s, "review-x") }), 0);
   const r = await findAnswers(s.opts);
   assert.equal(r.picked.path, fresh);
   assert.ok(r.superseded.some((x) => x.path === old));
@@ -463,4 +463,16 @@ test("r1-6: the picker starts in the remembered folder; the status names the fol
   const h = fakeWin(), sh = saverFor(h);
   await sh.saver.save(true);
   assert.ok(!/searches/.test(sh.said.at(-1)), "no warning for a folder named holo");
+});
+
+test("r1-11: a newer unverified FINAL never displaces a verified one; it is reported apart", async () => {
+  const s = sandbox();
+  const ok = put(s.holo, "review-x-decisions-FINAL.json", answers({ finalizedAt: "2026-11-17T10:00:00Z" }), 600);
+  const newer = put(s.dl, "review-x-decisions-FINAL.json", answers({ finalizedAt: "2026-11-17T11:00:00Z" }), 0);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked.path, ok);
+  assert.equal(r.picked.verified, true);
+  assert.ok(!r.superseded.some((x) => x.path === ok));
+  const text = report(r);
+  assert.ok(text.includes("newer unverified file found: " + newer + " - confirm with the owner"), text);
 });

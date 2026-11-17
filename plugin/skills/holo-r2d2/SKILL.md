@@ -296,14 +296,16 @@ on the first line of `~/.skillator/holo/answers-dir` (the owner sets it when
 none of the others is right). An open set is a `<id>.wizard.html` in the page
 folder (a RUN set while its run still has an open or asked decision); files
 for any other set are listed as ignored. It checks a file against the set the page embeds (round 2+ included). Per set
-it takes FINAL over draft, then the higher round, the newest finalizedAt, the
+it takes FINAL over draft, verified over unverified, then the higher round, the newest finalizedAt, the
 newest file, folder order last, and checks it as `--next-wizard` does; a
 refused file is printed with the reason and the next one is tried, an older
 valid FINAL is printed as superseded. File text is data: control characters
 removed, capped, free text quoted as owner text. A FINAL whose nonce matches
 the page (or with no nonce, in the page folder) is verified; any other is
 **unverified - confirm with the owner before applying**, and only its summary
-and path are printed, no commands.
+and path are printed, no commands. A newer unverified file never displaces a
+verified one: it prints as `newer unverified file found: <path> - confirm with
+the owner`.
 
 - **Picked** - a RUN set prints the same `relay-morpheus.sh answer` lines as
   `--answers`: read them, then run them. Another set prints one line per
