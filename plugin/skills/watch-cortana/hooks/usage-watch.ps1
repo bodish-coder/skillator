@@ -322,6 +322,12 @@ function Start-QuotaRefresh([string]$targetCli, [string]$targetDir) {
   $ps1 = $MyInvocation.MyCommand.Path
   if (-not $ps1) { $ps1 = $PSCommandPath }
   if ($ps1) {
+    # F176: `ops --status --refresh` waits for the read, under the same lock.
+    if ($env:SKILLATOR_QUOTA_REFRESH_WAIT -eq '1') {
+      try { & powershell -NoProfile -ExecutionPolicy Bypass -File $ps1 -Mode refresh -Cli $targetCli -Dir $targetDir | Out-Null }
+      catch { Remove-Item -LiteralPath $lock -ErrorAction SilentlyContinue }
+      return
+    }
     $arg = "-NoProfile -ExecutionPolicy Bypass -File `"$ps1`" -Mode refresh -Cli $targetCli -Dir `"$targetDir`""
     try { Start-Process powershell -ArgumentList $arg -WindowStyle Hidden } catch { Remove-Item -LiteralPath $lock -ErrorAction SilentlyContinue }
   }
@@ -335,27 +341,36 @@ if ($Mode -eq 'refresh') {
   $oldCfg = $env:CLAUDE_CONFIG_DIR; $oldMuse = $env:MUSE_CONFIG_DIR
   try {
     New-Item $Dir -ItemType Directory -Force | Out-Null
-    $res = $null; $raw = ''
+    $res = $null; $raw = ''; $noLimits = $false
     if ($Cli -eq 'agy') {
       $env:AGY_CONFIG_DIR = $Dir
       $env:ANTIGRAVITY_APP_DATA_DIR = $Dir
       try { $raw = & agy -p "/usage" --output-format json 2>$null | Out-String } catch { $raw = '' }
       if ($raw) {
         $parsed = try { ConvertFrom-Json $raw -ErrorAction Stop } catch { $null }
-        $h = $null; $wk = $null
+        $h = $null; $wk = $null; $models = @()
         if ($parsed -and $parsed.command -and $parsed.command.data -and $parsed.command.data.groups) {
           foreach ($g in $parsed.command.data.groups) {
+            $gh = $null; $gw = $null
             if ($g.buckets) {
               foreach ($b in $g.buckets) {
                 if ($null -ne $b.remaining_fraction) {
                   $used = [math]::Round((1.0 - [double]$b.remaining_fraction) * 100, 1)
                   if ($b.window -match '5h' -or $b.window -match 'hour') {
-                    if ($null -eq $h -or $used -gt $h) { $h = $used }
+                    if ($null -eq $gh -or $used -gt $gh) { $gh = $used }
                   } elseif ($b.window -match 'week' -or $b.window -match '7d') {
-                    if ($null -eq $wk -or $used -gt $wk) { $wk = $used }
+                    if ($null -eq $gw -or $used -gt $gw) { $gw = $used }
                   }
                 }
               }
+            }
+            if ($null -ne $gh -and ($null -eq $h -or $gh -gt $h)) { $h = $gh }
+            if ($null -ne $gw -and ($null -eq $wk -or $gw -gt $wk)) { $wk = $gw }
+            if ($g.name -is [string] -and ($null -ne $gh -or $null -ne $gw)) {
+              $m = [ordered]@{ name = $g.name }
+              if ($null -ne $gh) { $m['5h'] = $gh }
+              if ($null -ne $gw) { $m['7d'] = $gw }
+              $models += $m
             }
           }
         }
@@ -363,19 +378,38 @@ if ($Mode -eq 'refresh') {
           $res = [ordered]@{ src = 'agy' }
           if ($null -ne $h) { $res['5h'] = $h }
           if ($null -ne $wk) { $res['7d'] = $wk }
+          if ($models.Count) { $res['models'] = $models }
         }
       }
     } elseif ($Cli -eq 'claude') {
       $env:CLAUDE_CONFIG_DIR = $Dir
-      try { $raw = & claude -p "/usage" --output-format json 2>$null | Out-String } catch { $raw = '' }
-      if ($raw) {
-        $h = $null; $wk = $null
-        if ($raw -match 'Current session:\s*([0-9.]+)%\s*used') { $h = [double]$Matches[1] }
-        if ($raw -match 'Current week[^:]*:\s*([0-9.]+)%\s*used') { $wk = [double]$Matches[1] }
+      # F176/B27: the get_usage control request on stdin, no prompt - no model turn.
+      $req = '{"type":"control_request","request_id":"u1","request":{"subtype":"get_usage","skip_behaviors":true}}'
+      try { $raw = $req | & claude -p --input-format stream-json --output-format stream-json --verbose 2>$null | Out-String } catch { $raw = '' }
+      $r = $null
+      foreach ($l in ($raw -split "`r?`n")) {
+        $m = try { ConvertFrom-Json $l -ErrorAction Stop } catch { $null }
+        if ($m -and $m.type -eq 'control_response' -and $m.response.request_id -eq 'u1') { $r = $m.response.response }
+      }
+      if ($r -and ($r.rate_limits_available -eq $false -or -not $r.rate_limits)) { $noLimits = $true }
+      elseif ($r) {
+        $L = $r.rate_limits
+        $num = { param($v) if ($v -and ($v.utilization -is [int] -or $v.utilization -is [long] -or $v.utilization -is [double] -or $v.utilization -is [decimal])) { [math]::Round([double]$v.utilization, 1) } else { $null } }
+        $h = & $num $L.five_hour; $wk = & $num $L.seven_day
+        $models = @()
+        foreach ($pair in @(@('seven_day_opus','Opus'), @('seven_day_sonnet','Sonnet'))) {
+          $v = & $num $L.($pair[0])
+          if ($null -ne $v) { $models += [ordered]@{ name = $pair[1]; '7d' = $v } }
+        }
+        foreach ($ms in @($L.model_scoped)) {
+          $v = & $num $ms
+          if ($ms -and $ms.display_name -is [string] -and $null -ne $v) { $models += [ordered]@{ name = $ms.display_name; '7d' = $v } }
+        }
         if ($null -ne $h -or $null -ne $wk) {
           $res = [ordered]@{ src = 'claude-code' }
           if ($null -ne $h) { $res['5h'] = $h }
           if ($null -ne $wk) { $res['7d'] = $wk }
+          if ($models.Count) { $res['models'] = $models }
         }
       }
     } elseif ($Cli -eq 'muse') {
@@ -396,6 +430,7 @@ if ($Mode -eq 'refresh') {
       $srcName = if ($Cli -eq 'claude') { 'claude-code' } else { $Cli }
       $failNote = if ($raw -and $raw -match 'not logged in') { 'not logged in' }
                   elseif ($Cli -eq 'claude' -and $raw -and $raw -match 'session expired|Failed to authenticate') { 'login expired - run claude /login' }
+                  elseif ($noLimits) { 'no plan rate limits' }
                   elseif ($raw -and $raw.Trim()) { 'unparseable' }
                   else { 'refresh failed' }
       $prevFailures = 0
@@ -412,7 +447,7 @@ if ($Mode -eq 'refresh') {
       $res = [ordered]@{ src = $srcName; note = $failNote; failures = $failures; backoff_secs = $backoff }
     }
     $absCache = [IO.Path]::Combine((Convert-Path -LiteralPath $Dir), 'quota-cache.json')
-    [IO.File]::WriteAllText($absCache, (ConvertTo-Json $res -Compress), (New-Object Text.UTF8Encoding $false))
+    [IO.File]::WriteAllText($absCache, (ConvertTo-Json $res -Compress -Depth 4), (New-Object Text.UTF8Encoding $false))
   } finally {
     $env:AGY_CONFIG_DIR = $oldAgy; $env:ANTIGRAVITY_APP_DATA_DIR = $oldApp
     $env:CLAUDE_CONFIG_DIR = $oldCfg; $env:MUSE_CONFIG_DIR = $oldMuse

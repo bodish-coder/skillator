@@ -35,7 +35,8 @@ export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no
 export const HELP = USAGE + '\n'
   + '  launcher: ops [repo-dir] --open   (ops.ps1: -Open) the board in a new tab of the current\n'
   + '            Windows Terminal window when wt.exe is on PATH, else here as without it\n'
-  + '  ops --status   one row per CLI profile (5h / 7d % used, or why not), then exits\n'
+  + '  ops --status   one row per CLI profile (5h / 7d % used, or why not) and its model rows, then exits\n'
+  + '  ops --status --refresh   the same, a blank logged-in claude/agy/muse row read once first (not at >= 90% 7d)\n'
   + '  ops --reset    reset terminal state, clear stale locks and kill hung refresh processes, then exits\n'
   + "  ops --font-size N   sets the 'skillator ops' Windows Terminal profile font (install.ps1 -OpsFontSize N too; skillator-update keeps it)\n"
   + "  zoom: Ctrl+minus / Ctrl+plus / Ctrl+scroll resizes any Windows Terminal or herdr tab live; the in-session pane draws in the host terminal's font\n"
@@ -100,7 +101,7 @@ export const repoName = (root: string): string | null => root.split('/').filter(
 
 export async function main(argv: string[]): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write(HELP + '\n'); return 0 }
-  if (argv.includes('--status')) { process.stdout.write(await status(process.env, import.meta.dirname)); return 0 }
+  if (argv.includes('--status')) { process.stdout.write(await status(process.env, import.meta.dirname, argv.includes('--refresh'))); return 0 }
   if (argv.includes('--reset')) { process.stdout.write(await reset(process.env, import.meta.dirname)); return 0 }
   const opts = parseArgs(argv)
   if (opts.error) { process.stderr.write(`${opts.error}\n${USAGE}\n`); return 2 }
@@ -117,6 +118,7 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const host: Host = await makeHost({ appDir: import.meta.dirname, cwd: process.cwd(), ...(opts.skills ? { skills: opts.skills } : {}) })
+  host.status = async refresh => ({ code: 0, out: await status(process.env, import.meta.dirname, refresh), err: '', argv: ['ops', '--status', ...(refresh ? ['--refresh'] : [])] })
   // --once without colour is read as text (pipes, tests, screenshots): no SGR at all
   const paint: Paint = { color: opts.color, ascii: opts.ascii, plain: once && !opts.color }
   const size = () => ({ cols: opts.cols ?? (out.isTTY && out.columns ? out.columns : 80), rows: opts.rows ?? (out.isTTY && out.rows ? out.rows : 24) })

@@ -3,7 +3,8 @@
 // one after another; missing/stale profile caches request asynchronous refresh. No
 // credential file is ever opened (its existence is the login check). Sources and rulings:
 // docs/plans/PLAN-ops-status.md.
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from 'node:fs'
+import type { Dirent } from 'node:fs'
 import { homedir } from 'node:os'
 import { argvFor, NO_SCRIPTS, NO_SH, norm, shellFor } from '../hooks/lib/calls'
 import { findSkillsDir, spawnArgv, windowsScripts } from './nodehost'
@@ -283,10 +284,98 @@ export async function row(p: Profile, read: Reader, base: Env, darwin: boolean):
   const five = pct(kv.get('5h')), seven = pct(kv.get('7d'))
   if (kv.get('src') !== 'none' && (five !== '-' || seven !== '-')) return r('', five, seven)
   if (kv.has('note') && kv.get('note')) return r(kv.get('note')!.replace(/_/g, ' '))
-  const cred = p.cli === 'claude' ? '.credentials.json' : (p.cli === 'agy' ? 'antigravity-oauth-token' : 'auth.json')
-  const loggedIn = (darwin && p.cli === 'claude') || existsSync(`${p.dir}/${cred}`) || (p.cli === 'agy' && existsSync(`${p.dir}/oauth_credentials.json`))
-  if (!loggedIn) return r('not logged in')
+  if (!loggedIn(p, darwin)) return r('not logged in')
   return r('no quota source: no reading in the last 3 h')
+}
+
+function loggedIn(p: Profile, darwin: boolean): boolean {
+  const cred = p.cli === 'claude' ? '.credentials.json' : (p.cli === 'agy' ? 'antigravity-oauth-token' : 'auth.json')
+  return (darwin && p.cli === 'claude') || existsSync(`${p.dir}/${cred}`) || (p.cli === 'agy' && existsSync(`${p.dir}/oauth_credentials.json`))
+}
+
+const FRESH_MS = 3 * 3600 * 1000
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? `${Math.round(v)}%` : '-')
+const readCache = (p: Profile): Record<string, any> | null => {
+  try { return JSON.parse(readFileSync(`${p.dir}/quota-cache.json`, 'utf8').replace(/^﻿/, '')) } catch { return null }
+}
+
+// F176: the per-model windows under a profile - the cache usage-watch's refresh wrote
+// (claude get_usage, agy /usage groups), or for codex the newest fresh rollout's latest
+// rate_limits per named bucket (limit_name set; the unnamed one is the profile row).
+function modelRows(p: Profile): Row[] {
+  if (p.cli === 'codex') return codexModels(p.dir)
+  try { if (Date.now() - statSync(`${p.dir}/quota-cache.json`).mtimeMs > FRESH_MS) return [] } catch { return [] }
+  const models = readCache(p)?.models
+  if (!Array.isArray(models)) return []
+  return models.filter(m => typeof m?.name === 'string').map(m => [`  ${m.name}`, num(m['5h']), num(m['7d']), ''])
+}
+
+function codexModels(dir: string): Row[] {
+  let newest: { path: string; mtime: number } | null = null
+  const walk = (d: string, depth: number) => {
+    let entries: Dirent[] = []
+    try { entries = readdirSync(d, { withFileTypes: true }) } catch { return }
+    for (const e of entries) {
+      const f = `${d}/${e.name}`
+      if (e.isDirectory() && depth < 6) walk(f, depth + 1)
+      else if (e.isFile() && e.name.endsWith('.jsonl')) {
+        let mtime = 0
+        try { mtime = statSync(f).mtimeMs } catch { continue }   // rotated away mid-walk
+        if (!newest || mtime > newest.mtime) newest = { path: f, mtime }
+      }
+    }
+  }
+  walk(`${dir}/sessions`, 0)
+  const found = newest as { path: string; mtime: number } | null
+  if (!found || Date.now() - found.mtime > FRESH_MS) return []
+  const last = new Map<string, any>()
+  for (const line of tail(found.path).split(/\r?\n/)) {
+    if (!line.includes('"rate_limits"')) continue
+    try {
+      const rl = JSON.parse(line)?.payload?.rate_limits
+      if (rl && typeof rl.limit_name === 'string') last.set(rl.limit_id ?? rl.limit_name, rl)
+    } catch { /* a cut first line */ }
+  }
+  return [...last.values()].map(rl => {
+    let five: unknown, seven: unknown
+    for (const w of [rl.primary, rl.secondary]) {
+      if (typeof w?.resets_at === 'number' && w.resets_at * 1000 < Date.now()) continue   // reset since that line
+      if (w?.window_minutes === 10080) seven = w.used_percent
+      else if (w) five = w.used_percent
+    }
+    return [`  ${rl.limit_name}`, num(five), num(seven), '']
+  })
+}
+
+// The last 2 MB of a rollout: they grow to hundreds of MB.
+function tail(path: string): string {
+  const fd = openSync(path, 'r')
+  try {
+    const size = fstatSync(fd).size, n = Math.min(size, 2 * 1024 * 1024)
+    const buf = Buffer.alloc(n)
+    readSync(fd, buf, 0, n, size - n)
+    return buf.toString('utf8')
+  } finally { closeSync(fd) }
+}
+
+// Under usage-watch's 60 s lock: a longer read would let another reader call the lock stale.
+const REFRESH_MS = 55_000
+const FORCED = new Set(['claude', 'agy', 'muse'])
+
+// F176: a profile's row and its model rows. `refresh`: a logged-in claude/agy/muse profile
+// is first read by usage-watch level with SKILLATOR_QUOTA_REFRESH_WAIT - it reads the CLI
+// in the foreground only when the cache is blank or stale, under its lock and backoff (a
+// plain read first would take that lock for a background read); never at a last 7d >= 90%.
+export async function profileRows(p: Profile, read: Reader, base: Env, darwin: boolean, refresh: boolean): Promise<Row[]> {
+  let held: number | null = null
+  if (refresh && FORCED.has(p.cli) && loggedIn(p, darwin)) {
+    const last = readCache(p)?.['7d']
+    if (typeof last === 'number' && last >= 90) held = last
+    else await read({ ...readerEnv(p, base), SKILLATOR_QUOTA_REFRESH_WAIT: '1' }, REFRESH_MS)
+  }
+  let main = await row(p, read, base, darwin)
+  if (held !== null && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', `not refreshed: last 7d ${Math.round(held)}% >= 90%`]
+  return [main, ...modelRows(p)]
 }
 
 export function render(rows: Row[]): string {
@@ -295,7 +384,7 @@ export function render(rows: Row[]): string {
   return all.map(x => x.map((c, i) => (i < 3 ? c.padEnd(w[i]! + 2) : c)).join('').trimEnd()).join('\n') + '\n'
 }
 
-export async function status(env: Env, appDir: string): Promise<string> {
+export async function status(env: Env, appDir: string, refresh = false): Promise<string> {
   const home = norm(env.HOME || env.USERPROFILE || homedir())
   const skills = findSkillsDir(appDir, env, existsSync, p => JSON.parse(readFileSync(p, 'utf8')))
   const win = windowsScripts(env)
@@ -306,6 +395,6 @@ export async function status(env: Env, appDir: string): Promise<string> {
     return spawnArgv(argvFor('usage-level', win, skills, [], sh), home, ms, undefined, e)
   }
   const rows: Row[] = []
-  for (const p of discover(home)) rows.push(await row(p, read, env, process.platform === 'darwin'))
+  for (const p of discover(home)) rows.push(...await profileRows(p, read, env, process.platform === 'darwin', refresh))
   return rows.length ? render(rows) : `ops --status: no CLI profiles found under ${home}\n`
 }

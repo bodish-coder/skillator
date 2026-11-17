@@ -33,6 +33,7 @@ export type Host = {
   spawn?(argv: string[], cwd: string, onOut: (text: string) => void, onEnd: (code: number | null, err: string | null) => void): { stop(): void }
   git?(args: string[]): Promise<RunResult>         // F75: git <args> by its absolute path (A150), cwd = repoRoot; 15 s
   copy?(text: string): Promise<RunResult>          // A198 / F160: write text to clipboard via system utility
+  status?(refresh: boolean): Promise<RunResult>    // F176: the ops --status table (app.ts sets it)
 }
 
 export const SKILL_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/

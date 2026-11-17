@@ -1,11 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { calculateCursorUsage, discover, getBillingCycleStart, ownProfile, recordCursorRun, render, row } from '../status'
+import { calculateCursorUsage, discover, getBillingCycleStart, ownProfile, profileRows, recordCursorRun, render, row } from '../status'
 import type { Reader } from '../status'
 
 // F94: `ops --status` - one row per CLI profile found under a fake HOME (never the owner's
@@ -257,4 +257,59 @@ test('F119: watch-cortana check mode outputs estimated cursor budget and never f
 
   assert.equal(out, 'watch-cortana: cursor est 95% of budget (skillator runs only) - check cursor.com/settings')
   assert.ok(!out.includes('HANDOFF NOW'), 'never fires 90% gate as authoritative')
+})
+
+// F176: per-model rows under each profile, and the forced read (`ops --status --refresh`).
+// The codex lines are real rollout lines (no account fields); the cache models are the
+// shape usage-watch's refresh writes from claude get_usage / agy /usage.
+const FIXTURE = (n: string) => readFileSync(fileURLToPath(new URL(`./f176/${n}`, import.meta.url)), 'utf8')
+
+test('F176: model rows come from the profile cache (claude, agy) and the newest fresh codex rollout', async () => {
+  const h = home()
+  const c = dir(h, '.claude-m', '.credentials.json')
+  writeFileSync(join(c, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', '5h': 12.5, '7d': 61, models: [{ name: 'Opus', '7d': 40 }, { name: 'Fable', '7d': 43 }] }))
+  const x = dir(h, '.codex-m', 'auth.json')
+  mkdirSync(join(x, 'sessions/2026/09/02'), { recursive: true })
+  // the real lines' resets_at moved to the future: a window already reset shows '-'
+  const later = (Math.floor(Date.now() / 1000) + 3600)
+  writeFileSync(join(x, 'sessions/2026/09/02/rollout-a.jsonl'), FIXTURE('codex-rollout.jsonl').replace(/"resets_at":1789\d+/g, `"resets_at":${later}`))
+  const ps = discover(h)
+  const read = said('src=claude-code 5h=12.5 7d=61.0 ctx=- max=61.0\n')
+  assert.deepEqual(await profileRows(ps.find(p => p.cli === 'claude')!, read, {}, false, false), [
+    ['claude-m', '13%', '61%', ''],
+    ['  Opus', '-', '40%', ''],
+    ['  Fable', '-', '43%', ''],
+  ])
+  const codexRows = await profileRows(ps.find(p => p.cli === 'codex')!, said('src=codex 5h=- 7d=30.0 ctx=- max=30.0\n'), {}, false, false)
+  assert.deepEqual(codexRows, [['codex-m', '-', '30%', ''], ['  GPT-5.3-Codex-Spark', '-', '0%', '']])
+})
+
+test('F176: --refresh reads blank logged-in rows once, in the foreground, and skips the rest', async () => {
+  const h = home()
+  dir(h, '.claude-blank', '.credentials.json')
+  const hot = dir(h, '.claude-hot', '.credentials.json')
+  writeFileSync(join(hot, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', '5h': 1, '7d': 95 }))
+  dir(h, '.claude-out')
+  dir(h, '.codex-cx', 'auth.json')
+  const calls: { dir: string | undefined; wait: string | undefined; ms: number }[] = []
+  const filled = new Set<string>(), locked = new Set<string>()
+  // as usage-watch level: a cold plain read starts a background refresh and holds the lock,
+  // and a held lock turns the foreground read away
+  const read: Reader = async (e, ms) => {
+    const d = e.SKILLATOR_PROFILE_DIR!
+    calls.push({ dir: d, wait: e.SKILLATOR_QUOTA_REFRESH_WAIT, ms })
+    if (filled.has(d)) return { code: 0, out: 'src=claude-code 5h=4.0 7d=20.0 ctx=- max=20.0\n', err: '' }
+    if (e.SKILLATOR_QUOTA_REFRESH_WAIT === '1' && !locked.has(d)) filled.add(d)
+    else locked.add(d)
+    return NONE(e, 0)
+  }
+  const out: string[][] = []
+  for (const p of discover(h)) out.push(...await profileRows(p, read, {}, false, true))
+  assert.deepEqual(out.map(r => [r[0], r[1], r[2]]), [
+    ['claude-blank', '4%', '20%'], ['claude-hot', '-', '-'], ['claude-out', '-', '-'], ['codex-cx', '-', '-'],
+  ])
+  const waits = calls.filter(c => c.wait === '1')
+  assert.deepEqual(waits.map(c => c.dir), [`${h}/.claude-blank`], 'one forced read: not >= 90% 7d, not logged out, not codex')
+  assert.ok(waits[0]!.ms > 5000 && waits[0]!.ms < 60000, 'time for a slow CLI, inside the 60 s refresh lock')
+  assert.match(out.find(r => r[0] === 'claude-hot')![3], /7d 95% >= 90%/)
 })

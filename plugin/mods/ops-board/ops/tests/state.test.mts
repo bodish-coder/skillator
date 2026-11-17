@@ -1517,3 +1517,21 @@ test('F175 state: Tickets-page u action prints board-wide decideQuestionsPrompt(
   assert.equal(dm.name, '/decision-matrix')
   assert.match(dm.usage, /\$decision-matrix/)
 })
+
+test('F176: p on Health forces the profile read and keeps its table', () => {
+  const sHealth: State = { ...s0, tab: 'health' }
+  const step = reduce(sHealth, { name: 'p' })
+  assert.equal(step.effects.length, 1)
+  const e = step.effects[0] as any
+  assert.equal(e.kind, 'status')
+  assert.equal(e.refresh, true)
+  assert.match(step.state.toast ?? '', /reading every profile/)
+  const table = 'profile  5h used  7d used\nclaude   4%       20%\n  Fable  -        43%\n'
+  const done = settle(e.then({ code: 0, out: table, err: '', argv: [] })(step.state))
+  assert.equal(done.state.profiles, table)
+  assert.deepEqual(reduce(step.state, { name: 'p' }).effects, [], 'a second p while one read runs starts nothing')
+  const failed = settle(e.then({ code: 127, out: '', err: 'not on this host', argv: [] })(step.state))
+  assert.equal(failed.state.profilesBusy, false)
+  assert.equal(failed.state.profiles, null)
+  assert.match(failed.state.toast ?? '', /not on this host/)
+})

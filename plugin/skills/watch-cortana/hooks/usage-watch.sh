@@ -340,7 +340,9 @@ start_quota_refresh() {
     return 0
   fi
   note_tag=" note=refresh_pending"
-  spawn_quota_refresh "$1" "$2"
+  # F176: `ops --status --refresh` waits for the read, under the same lock.
+  if [ "${SKILLATOR_QUOTA_REFRESH_WAIT:-}" = 1 ]; then sh "$0" refresh "$1" "$2" >/dev/null 2>&1 </dev/null
+  else spawn_quota_refresh "$1" "$2"; fi
 }
 
 if [ "$mode" = refresh ]; then
@@ -355,15 +357,18 @@ if [ "$mode" = refresh ]; then
   case $cli in
     agy)
       src_name=agy
-      raw=$(AGY_CONFIG_DIR="$target_dir" ANTIGRAVITY_APP_DATA_DIR="$target_dir" agy -p "/usage" --output-format json 2>/dev/null)
+      # B27: MSYS_NO_PATHCONV - Git Bash rewrites "/usage" to a path, a paid prompt.
+      raw=$(MSYS_NO_PATHCONV=1 AGY_CONFIG_DIR="$target_dir" ANTIGRAVITY_APP_DATA_DIR="$target_dir" agy -p "/usage" --output-format json 2>/dev/null)
       if [ -n "$raw" ]; then
         if command -v node >/dev/null 2>&1; then
           parsed=$(node -e '
             try {
               const raw = JSON.parse(process.argv[1]);
               let h = null, w = null;
+              const models = [];
               const groups = raw?.command?.data?.groups || [];
               for (const g of groups) {
+                let gh = null, gw = null;
                 for (const b of (g.buckets || [])) {
                   if (b && b.remaining_fraction != null) {
                     const f = Number(b.remaining_fraction);
@@ -371,18 +376,27 @@ if [ "$mode" = refresh ]; then
                       const used = Math.round((1.0 - f) * 1000) / 10;
                       const win = String(b.window || "");
                       if (/5h|hour/.test(win)) {
-                        if (h === null || used > h) h = used;
+                        if (gh === null || used > gh) gh = used;
                       } else if (/week|7d/.test(win)) {
-                        if (w === null || used > w) w = used;
+                        if (gw === null || used > gw) gw = used;
                       }
                     }
                   }
+                }
+                if (gh !== null && (h === null || gh > h)) h = gh;
+                if (gw !== null && (w === null || gw > w)) w = gw;
+                if (typeof g.name === "string" && (gh !== null || gw !== null)) {
+                  const m = { name: g.name };
+                  if (gh !== null) m["5h"] = gh;
+                  if (gw !== null) m["7d"] = gw;
+                  models.push(m);
                 }
               }
               if (h !== null || w !== null) {
                 const res = { src: "agy" };
                 if (h !== null) res["5h"] = h;
                 if (w !== null) res["7d"] = w;
+                if (models.length) res.models = models;
                 process.stdout.write(JSON.stringify(res));
               }
             } catch (_) {}
@@ -393,8 +407,9 @@ if [ "$mode" = refresh ]; then
 import sys, json
 try:
     raw = json.loads(sys.argv[1])
-    h = None; w = None
+    h = None; w = None; models = []
     for g in raw.get("command", {}).get("data", {}).get("groups", []):
+        gh = None; gw = None
         for b in g.get("buckets", []):
             rf = b.get("remaining_fraction")
             if rf is not None:
@@ -403,15 +418,23 @@ try:
                     used = round((1.0 - f) * 100, 1)
                     win = str(b.get("window", ""))
                     if "5h" in win or "hour" in win:
-                        if h is None or used > h: h = used
+                        if gh is None or used > gh: gh = used
                     elif "week" in win or "7d" in win:
-                        if w is None or used > w: w = used
+                        if gw is None or used > gw: gw = used
                 except Exception:
                     pass
+        if gh is not None and (h is None or gh > h): h = gh
+        if gw is not None and (w is None or gw > w): w = gw
+        if isinstance(g.get("name"), str) and (gh is not None or gw is not None):
+            m = {"name": g["name"]}
+            if gh is not None: m["5h"] = gh
+            if gw is not None: m["7d"] = gw
+            models.append(m)
     if h is not None or w is not None:
         res = {"src": "agy"}
         if h is not None: res["5h"] = h
         if w is not None: res["7d"] = w
+        if models: res["models"] = models
         sys.stdout.write(json.dumps(res))
 except Exception:
     pass
@@ -421,25 +444,30 @@ except Exception:
       ;;
     claude)
       src_name=claude-code
-      raw=$(CLAUDE_CONFIG_DIR="$target_dir" claude -p "/usage" --output-format json 2>/dev/null)
-      if [ -n "$raw" ]; then
-        parsed=$(printf '%s' "$raw" | awk '
-          /Current session:[[:space:]]*[0-9.]+%[[:space:]]*used/ {
-            match($0, /Current session:[[:space:]]*[0-9.]+/);
-            s=substr($0, RSTART, RLENGTH); sub(/.*:[[:space:]]*/, "", s); h=s;
-          }
-          /Current week.*:[[:space:]]*[0-9.]+%[[:space:]]*used/ {
-            match($0, /Current week[^:]*:[[:space:]]*[0-9.]+/);
-            s=substr($0, RSTART, RLENGTH); sub(/.*:[[:space:]]*/, "", s); w=s;
-          }
-          END {
-            if (h!="" || w!="") {
-              printf "{\"src\":\"claude-code\""
-              if (h!="") printf ",\"5h\":%.1f", h+0
-              if (w!="") printf ",\"7d\":%.1f", w+0
-              printf "}"
+      # F176/B27: the get_usage control request on stdin, no prompt - no model turn.
+      raw=$(printf '%s\n' '{"type":"control_request","request_id":"u1","request":{"subtype":"get_usage","skip_behaviors":true}}' |
+        MSYS_NO_PATHCONV=1 CLAUDE_CONFIG_DIR="$target_dir" claude -p --input-format stream-json --output-format stream-json --verbose 2>/dev/null)
+      if [ -n "$raw" ] && command -v node >/dev/null 2>&1; then
+        parsed=$(printf '%s' "$raw" | node -e '
+          try {
+            let r = null;
+            for (const l of require("fs").readFileSync(0, "utf8").split(/\r?\n/)) {
+              try { const m = JSON.parse(l); if (m?.type === "control_response" && m.response?.request_id === "u1") r = m.response.response; } catch (_) {}
             }
-          }')
+            if (!r) process.exit(0);
+            if (r.rate_limits_available === false || !r.rate_limits) { process.stdout.write("NOLIMITS"); process.exit(0); }
+            const L = r.rate_limits;
+            const n = v => typeof v?.utilization === "number" && Number.isFinite(v.utilization) ? Math.round(v.utilization * 10) / 10 : null;
+            const res = { src: "claude-code" };
+            if (n(L.five_hour) !== null) res["5h"] = n(L.five_hour);
+            if (n(L.seven_day) !== null) res["7d"] = n(L.seven_day);
+            const models = [];
+            for (const [k, name] of [["seven_day_opus", "Opus"], ["seven_day_sonnet", "Sonnet"]]) if (n(L[k]) !== null) models.push({ name, "7d": n(L[k]) });
+            for (const m of (Array.isArray(L.model_scoped) ? L.model_scoped : [])) if (typeof m?.display_name === "string" && n(m) !== null) models.push({ name: m.display_name, "7d": n(m) });
+            if (models.length) res.models = models;
+            if (res["5h"] != null || res["7d"] != null) process.stdout.write(JSON.stringify(res));
+          } catch (_) {}
+        ' 2>/dev/null)
       fi
       ;;
     muse)
@@ -464,6 +492,8 @@ except Exception:
       fi
       ;;
   esac
+  no_limits=0
+  if [ "$parsed" = NOLIMITS ]; then no_limits=1; parsed=""; fi
   if [ -n "$parsed" ]; then
     printf '%s' "$parsed" > "$cache"
   else
@@ -471,6 +501,8 @@ except Exception:
       fail_note="not logged in"
     elif [ "$cli" = claude ] && printf '%s' "$raw" | grep -qi 'session expired\|Failed to authenticate'; then
       fail_note="login expired - run claude /login"
+    elif [ "$no_limits" = 1 ]; then
+      fail_note="no plan rate limits"
     elif [ -n "$(printf '%s' "$raw" | tr -d '[:space:]')" ]; then
       fail_note="unparseable"
     else

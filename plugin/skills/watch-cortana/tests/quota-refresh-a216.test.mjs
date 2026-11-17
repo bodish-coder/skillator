@@ -13,6 +13,8 @@ const shExe = ['sh', 'C:/Program Files/Git/bin/sh.exe', 'C:/Program Files/Git/us
 const hasSh = Boolean(shExe)
 const shPathPrefix = shExe && shExe.includes('/') ? [dirname(shExe), 'C:/Program Files/Git/usr/bin'].join(delimiter) + delimiter : ''
 
+const fixture = name => readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), 'utf8')
+
 const selectors = [
   'CODEX_THREAD_ID', 'CODEX_SESSION_ID', 'CLAUDE_CODE_SESSION_ID',
   'SKILLATOR_CLI', 'SKILLATOR_PROFILE_DIR', 'CODEX_HOME',
@@ -26,6 +28,8 @@ function makeFixture(port) {
   const launchesFile = `${root}/launches.log`
   const responseFile = `${root}/cli-response.txt`
   const exitCodeFile = `${root}/cli-exit.txt`
+  const argsFile = `${root}/cli-args.log`
+  const stdinFile = `${root}/cli-stdin.txt`
   writeFileSync(responseFile, 'fixture: usage unavailable', 'utf8')
   writeFileSync(exitCodeFile, '0', 'utf8')
 
@@ -35,8 +39,8 @@ function makeFixture(port) {
   if (port === 'ps1') {
     const stub = [
       `function Start-Process { param($FilePath, $ArgumentList, $WindowStyle) [IO.File]::AppendAllText('${launchesFile}', "$ArgumentList\`n") }`,
-      `function claude { if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
-      `function agy { if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
+      `function claude { [IO.File]::AppendAllText('${argsFile}', "claude|1|$($args -join ' ')\`n"); [IO.File]::WriteAllText('${stdinFile}', (@($input) -join "\`n")); if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
+      `function agy { [IO.File]::AppendAllText('${argsFile}', "agy|1|$($args -join ' ')\`n"); if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       `function muse { if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       '',
     ].join('\n')
@@ -44,8 +48,8 @@ function makeFixture(port) {
   } else {
     const stub = [
       `spawn_quota_refresh() { printf '%s|%s\\n' "$1" "$2" >> '${launchesFile}'; }`,
-      `claude() { [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
-      `agy() { [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
+      `claude() { printf 'claude|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; cat > '${stdinFile}'; [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
+      `agy() { printf 'agy|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
       `muse() { [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
       '',
     ].join('\n')
@@ -88,7 +92,10 @@ function makeFixture(port) {
 
   const cleanup = () => rmSync(root, { recursive: true, force: true })
 
-  return { root, runLevel, runRefresh, launchCount, setCliResponse, cleanup }
+  const cliCalls = () => existsSync(argsFile) ? readFileSync(argsFile, 'utf8').trim().split('\n').filter(Boolean) : []
+  const cliStdin = () => existsSync(stdinFile) ? readFileSync(stdinFile, 'utf8') : ''
+
+  return { root, runLevel, runRefresh, launchCount, setCliResponse, cleanup, cliCalls, cliStdin }
 }
 
 for (const port of ['ps1', 'sh']) {
@@ -226,17 +233,17 @@ for (const port of ['ps1', 'sh']) {
       assert.equal(fx.runLevel(envAgyOnA), 'src=none 5h=- 7d=- ctx=- max=- note=refresh_pending')
 
       // Now profileA recovers when refresh gets a valid Claude usage response
-      fx.setCliResponse('Current session: 22.5% used\nCurrent week (all models): 64% used\n', 0)
+      fx.setCliResponse(fixture('claude-get-usage.jsonl'), 0)
       fx.runRefresh('claude', profileA, envA)
       const recovered = JSON.parse(readFileSync(`${profileA}/quota-cache.json`, 'utf8'))
       assert.equal(recovered.src, 'claude-code')
-      assert.equal(recovered['5h'], 22.5)
-      assert.equal(recovered['7d'], 64)
+      assert.equal(recovered['5h'], 12.5)
+      assert.equal(recovered['7d'], 61)
       assert.equal(recovered.note, undefined)
       assert.equal(recovered.failures, undefined)
       assert.equal(recovered.backoff_secs, undefined)
 
-      assert.equal(fx.runLevel(envA), 'src=claude-code 5h=22.5 7d=64.0 ctx=- max=64.0')
+      assert.equal(fx.runLevel(envA), 'src=claude-code 5h=12.5 7d=61.0 ctx=- max=61.0')
     } finally {
       fx.cleanup()
     }
@@ -274,6 +281,97 @@ for (const port of ['ps1', 'sh']) {
       const cache = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
       assert.equal(cache.note, 'login expired - run claude /login')
       assert.equal(fx.runLevel(env), 'src=claude-code 5h=- 7d=- ctx=- max=- note=login_expired_-_run_claude_/login')
+    } finally {
+      fx.cleanup()
+    }
+  })
+
+  // F176 / B27: the Claude read is the get_usage control request on stdin - no prompt,
+  // so no model turn; sh keeps Git Bash from rewriting any arg (it turned "/usage"
+  // into a paid prompt). claude-get-usage.jsonl is schema-derived (field names from
+  // the installed Claude Code 2.1.326's get_usage schema, numbers made up): a sandboxed
+  // live capture could only get the null answer, which is the -unavailable fixture.
+  test(`${port}: F176 claude refresh sends get_usage on stdin, never a prompt, and keeps per-model windows`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const profile = `${fx.root}/claude-models`
+      mkdirSync(profile, { recursive: true })
+      const env = { SKILLATOR_CLI: 'claude', SKILLATOR_PROFILE_DIR: profile, CLAUDE_CONFIG_DIR: profile }
+      // a verbose stream can open with a long system line - past Windows' 32K argv limit
+      const init = JSON.stringify({ type: 'system', subtype: 'init', tools: Array.from({ length: 2000 }, (_, i) => `tool_${i}_padding_padding`) })
+      fx.setCliResponse(init + '\n' + fixture('claude-get-usage.jsonl'), 0)
+      fx.runRefresh('claude', profile, env)
+      const [call] = fx.cliCalls()
+      const [, pathconv, args] = call.split('|')
+      assert.equal(pathconv, '1', 'MSYS path conversion is off for the claude call')
+      assert.ok(!args.includes('/usage'), `no /usage arg: ${args}`)
+      assert.match(args, /--input-format stream-json/)
+      const req = JSON.parse(fx.cliStdin().trim())
+      assert.equal(req.type, 'control_request')
+      assert.equal(req.request.subtype, 'get_usage')
+      assert.equal(req.request.skip_behaviors, true)
+      const cache = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.deepEqual(cache, { src: 'claude-code', '5h': 12.5, '7d': 61, models: [{ name: 'Opus', '7d': 40 }, { name: 'Fable', '7d': 43 }] })
+      assert.equal(fx.runLevel(env), 'src=claude-code 5h=12.5 7d=61.0 ctx=- max=61.0')
+    } finally {
+      fx.cleanup()
+    }
+  })
+
+  test(`${port}: F176 claude get_usage with no plan rate limits says so and backs off`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const profile = `${fx.root}/claude-nolimits`
+      mkdirSync(profile, { recursive: true })
+      const env = { SKILLATOR_CLI: 'claude', SKILLATOR_PROFILE_DIR: profile, CLAUDE_CONFIG_DIR: profile }
+      fx.setCliResponse(fixture('claude-get-usage-unavailable.jsonl'), 0)
+      fx.runRefresh('claude', profile, env)
+      const cache = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.deepEqual(cache, { src: 'claude-code', note: 'no plan rate limits', failures: 1, backoff_secs: 60 })
+    } finally {
+      fx.cleanup()
+    }
+  })
+
+  test(`${port}: F176 agy refresh keeps each model group's windows and turns MSYS path conversion off`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const profile = `${fx.root}/agy-models`
+      mkdirSync(profile, { recursive: true })
+      const env = { SKILLATOR_CLI: 'agy', SKILLATOR_PROFILE_DIR: profile, AGY_CONFIG_DIR: profile }
+      fx.setCliResponse(fixture('agy-usage.json'), 0)
+      fx.runRefresh('agy', profile, env)
+      const [, pathconv, args] = fx.cliCalls()[0].split('|')
+      assert.equal(pathconv, '1')
+      assert.match(args, /-p \/usage --output-format json/)
+      const cache = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.deepEqual(cache, { src: 'agy', '5h': 0, '7d': 24.5, models: [
+        { name: 'Gemini Models', '5h': 0, '7d': 24.5 },
+        { name: 'Claude and GPT models', '5h': 0, '7d': 0 },
+      ] })
+    } finally {
+      fx.cleanup()
+    }
+  })
+
+  test(`${port}: F176 SKILLATOR_QUOTA_REFRESH_WAIT runs the cold refresh in the foreground, once, under the lock`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const profile = `${fx.root}/claude-wait`
+      mkdirSync(profile, { recursive: true })
+      const env = { SKILLATOR_CLI: 'claude', SKILLATOR_PROFILE_DIR: profile, CLAUDE_CONFIG_DIR: profile, SKILLATOR_QUOTA_REFRESH_WAIT: '1' }
+      fx.setCliResponse(fixture('claude-get-usage.jsonl'), 0)
+      fx.runLevel(env)
+      assert.equal(fx.launchCount(), 0, 'no background launch')
+      assert.equal(fx.cliCalls().length, 1, 'one read')
+      assert.equal(existsSync(`${profile}/quota-cache.json.refreshing`), false, 'lock released')
+      assert.equal(fx.runLevel(env), 'src=claude-code 5h=12.5 7d=61.0 ctx=- max=61.0')
+      assert.equal(fx.cliCalls().length, 1, 'a fresh cache is not read again')
+      // a held lock still wins: no second read while another refresh runs
+      rmSync(`${profile}/quota-cache.json`)
+      writeFileSync(`${profile}/quota-cache.json.refreshing`, 'x')
+      assert.match(fx.runLevel(env), /note=refresh_pending$/)
+      assert.equal(fx.cliCalls().length, 1)
     } finally {
       fx.cleanup()
     }
