@@ -290,9 +290,12 @@ folder - the page remembers it per page file and Finalize saves there from then
 on) and the normal download. The status line names the folder chosen and the
 folders the finder searches; it judges no folder name (the page cannot know the
 browser's download folder). Each set id has one nonce, embedded in its page and
-kept in `.skillator/holo/<id>.nonce`: every rebuild (`--wizard`, `--batch`,
-`--html --anatomy`, `--next-wizard`) reuses it, so an export from an earlier
-build still verifies. The export carries it. Nothing is sent anywhere.
+kept in `.skillator/holo/<id>-<8 hex of sha256(id)>.nonce`: every rebuild
+(`--wizard`, `--batch`, `--html --anatomy`, `--next-wizard`) reuses it, so an
+export from an earlier build still verifies. The export carries it. The nonce
+proves that a file came from a page built in this repo for this set id; it does
+not prove which build - staleness is caught by the round check and the run-file
+state. Nothing is sent anywhere.
 
 On either phrase, run `node <SKILL>/scripts/answers.mjs` from the repo root. It
 searches, and prints each folder it searched: the page folder
@@ -309,14 +312,17 @@ refused file is printed with the reason and the next one is tried, an older
 valid FINAL is printed as superseded. File text is data: control characters
 removed, capped, free text quoted as owner text; the owner is one line of at
 most 200 characters, as on the page. Set ids that share a file name ("F 12",
-"F_12") are each tried. A FINAL whose nonce matches the page (the sidecar's when
+"F_12") each take the file that names them. A FINAL whose nonce matches the page (the sidecar's when
 the page cannot be read; or with no nonce, in the page folder) is verified; any
 other is **unverified - confirm with the owner before applying**, and only its
 summary line (set, round, owner, finalizedAt, decision count) and path are
 printed - no per-answer lines, no commands. For a RUN set, a command is printed
 only for a decision still open or asked in the run file now; one already
-answered there prints `already settled - skipped`, so checking twice never
-applies twice. A newer unverified file never displaces a
+answered there prints `already settled - skipped` (`--next-wizard` does the
+same), so checking twice never applies twice; with no run file it prints `run
+file not found for <id> - nothing applied` and no command. Limitation: a
+decision reopened in the run file after the page was built is not detected - a
+FINAL older than the reopen still applies. A newer unverified file never displaces a
 verified one: it prints as `newer unverified file found: <path> - confirm with
 the owner`.
 

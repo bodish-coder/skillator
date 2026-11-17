@@ -3,6 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -57,6 +58,7 @@ test("page: Save to page folder writes the named file and says where", async () 
   assert.equal(f.files["RUN-7-decisions-FINAL.json"], JSON.stringify({ set: "RUN-7", final: true }));
   assert.equal(s.downloads.length, 0);
   assert.match(s.said.at(-1), /^Saved into 'holo'\./);
+  assert.ok(s.said.at(-1).endsWith('Then say "check wizard answers" in the working conversation.'), "r3-5: same next step as the download");
   await s.saver.save(false);
   assert.ok(f.files["RUN-7-decisions-draft.json"], "a draft is saved under its draft name");
 });
@@ -306,7 +308,7 @@ test("r1-9/r2-10: findAnswers dedupes once, on resolved path; case only on win32
   const prefs = join(s.env.LOCALAPPDATA, "Google", "Chrome", "User Data", "Default", "Preferences");
   mkdirSync(dirname(prefs), { recursive: true });
   writeFileSync(prefs, JSON.stringify({ download: { default_directory: s.dl.toUpperCase() + "\\" } }));
-  assert.equal(downloadDirs(s.opts).length, 2, "downloadDirs returns the raw list");
+  assert.equal(downloadDirs(s.opts).length, 1, "r3-7: downloadDirs dedupes its own result");
   assert.equal((await findAnswers(s.opts)).searched.length, 2, "findAnswers dedupes: page folder + one Downloads (other case, trailing slash)");
   mkdirSync(join(s.home, ".config"), { recursive: true });
   writeFileSync(join(s.home, ".config", "user-dirs.dirs"), 'XDG_DOWNLOAD_DIR="$HOME/DL"\n');
@@ -365,6 +367,7 @@ test("r1-2: a newer Downloads FINAL beats an older page-folder FINAL; the older 
   assert.match(report(r), /superseded: .*review-x-decisions-FINAL\.json/);
 });
 
+const sidecar = (s, id) => join(s.holo, id.replace(/[^A-Za-z0-9_.-]/g, "_") + "-" + createHash("sha256").update(id).digest("hex").slice(0, 8) + ".nonce");
 function nonceOf(s, id) { return pageSet(readFileSync(join(s.holo, id + ".wizard.html"), "utf8")).nonce; }
 function run1(s) {
   const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("@LANDED@", "abc1234");
@@ -457,7 +460,7 @@ test("r1-6/r2-5: the picker starts in the remembered folder; the status states t
   const f = fakeWin({ dirName: "Desktop" }), s = saverFor(f);
   await s.saver.save(true);
   assert.equal(f.calls.opts[0].startIn, undefined, "no handle yet: no forced Downloads");
-  const facts = (d) => "Saved into '" + d + "'. 'check wizard answers' searches this page's .skillator/holo folder, your browser's download folder, and the folder in ~/.skillator/holo/answers-dir.";
+  const facts = (d) => "Saved into '" + d + "'. 'check wizard answers' searches this page's .skillator/holo folder, your browser's download folder, and the folder in ~/.skillator/holo/answers-dir. Then say \"check wizard answers\" in the working conversation.";
   assert.equal(s.said.at(-1), facts("Desktop"));
   await s.saver.save(true);
   assert.equal(f.calls.opts[1].startIn && f.calls.opts[1].startIn.name, "Desktop");
@@ -514,7 +517,7 @@ test("r2-2: rebuilding the same set reuses its nonce - --wizard, --batch and --h
   }
   assert.match(nonces[0], /^[0-9a-f]{32}$/);
   assert.deepEqual(new Set(nonces).size, 1, nonces.join(" "));
-  assert.equal(readFileSync(join(s.holo, "RUN-1.nonce"), "utf8").trim(), nonces[0], "sidecar written");
+  assert.equal(readFileSync(sidecar(s, "RUN-1"), "utf8").trim(), nonces[0], "sidecar written");
   rmSync(join(s.holo, "RUN-1.wizard.html"));
   assert.equal(cli(s, "RUN-1", "--wizard").status, 0);
   assert.equal(nonceOf(s, "RUN-1"), nonces[0], "no page: the sidecar keeps the nonce");
@@ -526,7 +529,7 @@ test("r2-3: an unreadable page falls back to the sidecar nonce", async () => {
     const set = run1(s);
     const ans = { ...run1Answers(s, set), nonce };
     writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
-    writeFileSync(join(s.holo, "RUN-1.nonce"), "a".repeat(32) + "\n");
+    writeFileSync(sidecar(s, "RUN-1"), "a".repeat(32) + "\n");
     put(s.holo, "RUN-1-decisions-FINAL.json", ans, 0);
     const r = await findAnswers(s.opts);
     assert.equal(r.picked && r.picked.verified, verified, JSON.stringify(r.refused));
@@ -583,4 +586,69 @@ test("r2-9: one sanitizer and one quoter, imported from wizard.mjs", () => {
   const src = readFileSync(join(HERE, "..", "answers.mjs"), "utf8");
   assert.ok(!/const (clean|q) =/.test(src), "no local copies");
   assert.match(src, /import \{[^}]*\bclean\b[^}]*\bq\b[^}]*\} from "\.\/wizard\.mjs"/);
+});
+
+// ------------------------------------------------------ review round 3 ----
+test("r3-1: --next-wizard takes a --decisions set whose own round matches the FINAL's", () => {
+  const s = sandbox();
+  const set2 = nextWizardSet(SET, answers({ answers: [{ id: "Q1", question: "Pick a store?", choice: { id: "defer" }, clarification: "why?" }] }));
+  const d = set2.decisions[0];
+  const sp = put(s.base, "set2.json", set2), ap = put(s.base, "a2.json", answers({ round: 2, answers: [{ id: d.id, question: d.question, choice: { id: "defer" }, clarification: "more" }] }));
+  const r = cli(s, "--decisions", sp, "--next-wizard", ap); // the page on disk is round 1
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /round 3/);
+  const bad = cli(s, "--decisions", sp, "--next-wizard", put(s.base, "a4.json", answers({ round: 4 })));
+  assert.match(bad.stderr, /the page for round 4 is not on disk/);
+});
+
+// Q1 answered in the run file, then the page rebuilt: neither the page nor the run lists Q1 any more.
+function q1Settled(s) {
+  const set = run1(s), runPath = join(s.root, ".skillator", "run-1-shelf-export.md");
+  const md = readFileSync(runPath, "utf8").replace("### Q1 open", "### Q1 answered");
+  writeFileSync(runPath, md);
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(setFromRun(parseRun(md), ".skillator/run-1-shelf-export.md")));
+  return set;
+}
+
+test("r3-2: a FINAL naming a decision the run no longer lists - skipped, never 'unknown decision id'", async () => {
+  const s = sandbox();
+  const set = q1Settled(s);
+  const ans = run1Answers(s, set);
+  ans.answers[1] = { id: "Q2", question: set.decisions[1].question, choice: { id: "defer" }, clarification: "why?" };
+  const p = put(s.dl, "RUN-1-decisions-FINAL.json", ans, 0);
+  const found = await findAnswers(s.opts);
+  assert.deepEqual(found.refused, []);
+  assert.match(report(found), /Q1: already settled - skipped/);
+  const r = cli(s, "RUN-1", "--next-wizard", p);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Q1: already settled - skipped/);
+  assert.match(r.stdout, /round 2\), 1 decision to answer/);
+  const junk = put(s.dl, "RUN-1-decisions-FINAL (1).json", { ...ans, answers: [{ id: "Q9", choice: { id: "o1" } }] }, 0);
+  assert.match(cli(s, "RUN-1", "--next-wizard", junk).stderr, /unknown decision id "Q9"/, "an id the run never had is still refused");
+});
+
+test("r3-3: 'F 12' and 'F_12' keep separate nonces; each verifies only its own exports", async () => {
+  const s = sandbox();
+  for (const id of ["F 12", "F_12"]) assert.equal(cli(s, "--decisions", put(s.base, "set.json", { ...SET, id }), "--wizard").status, 0);
+  const a = nonceOf(s, "F-12"), b = nonceOf(s, "F_12");
+  assert.notEqual(a, b);
+  assert.equal(readFileSync(sidecar(s, "F 12"), "utf8").trim(), a);
+  assert.equal(readFileSync(sidecar(s, "F_12"), "utf8").trim(), b);
+  put(s.dl, "F_12-decisions-FINAL.json", answers({ set: "F 12", nonce: a }), 0);
+  put(s.dl, "F_12-decisions-FINAL (1).json", answers({ set: "F_12", nonce: a }), 0);
+  const r = await findAnswers(s.opts);
+  assert.deepEqual(r.picks.map((p) => [p.id, p.verified]).sort(), [["F 12", true], ["F_12", false]]);
+});
+
+test("r3-4: a RUN set with no run file prints no commands", async () => {
+  const s = sandbox();
+  const set = run1(s);
+  writeFileSync(join(s.holo, "elsewhere.wizard.html"), readFileSync(join(s.holo, "RUN-1.wizard.html"), "utf8"));
+  const ans = run1Answers(s, set);
+  rmSync(join(s.holo, "RUN-1.wizard.html"));
+  rmSync(join(s.root, ".skillator", "run-1-shelf-export.md"));
+  put(s.holo, "RUN-1-decisions-FINAL.json", ans, 0);
+  const text = report(await findAnswers(s.opts));
+  assert.match(text, /run file not found for RUN-1 - nothing applied/);
+  assert.ok(!/ answer Q/.test(text), text);
 });

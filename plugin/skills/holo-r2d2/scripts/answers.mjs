@@ -14,8 +14,8 @@ import { join, resolve, dirname, relative } from "node:path";
 import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { nextWizardSet, setFromRun, answersToCommands, isFinalized, fileStem, pageSet, nonceFile, CTRL, clean, q } from "./wizard.mjs";
-import { parseRun, findRoot, runFiles } from "./holo.mjs";
+import { nextWizardSet, setFromRun, answersToCommands, isFinalized, fileStem, pageSet, settledIn, without, CTRL, clean, q } from "./wizard.mjs";
+import { parseRun, findRoot, runFiles, nonceFile } from "./holo.mjs";
 
 const MAX_FILE = 1048576;
 const NAME = /^(.+)-decisions-(FINAL|draft)\s*(?:\(\d+\))?\.json$/i;
@@ -57,7 +57,7 @@ function xdgDownload(home, env) {
   return h ? join(home, h[1]) : m && m[1] ? m[1] : null;
 }
 
-// Every download folder worth searching, in order, each with where it came from (raw: findAnswers dedupes).
+// Every download folder worth searching, in order, each with where it came from.
 export function downloadDirs({ home = homedir(), env = process.env, platform = process.platform, regQuery = winDownloads } = {}) {
   const out = [];
   const add = (dir, why) => { if (dir) out.push({ dir, why }); };
@@ -93,15 +93,15 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
   else add(join(home, "Downloads"), "Downloads folder");
   const owner = (tryRead(join(home, ".skillator", "holo", "answers-dir")) || "").split(/\r?\n/).map((l) => l.trim()).find(Boolean);
   if (owner) add(owner, "~/.skillator/holo/answers-dir");
-  return out;
+  return dedupe(out, platform);
 }
 
 // Open sets: a wizard page in the page folder, validated against the set the page
 // embeds (a --next-wizard page is round 2+). A RUN set is open only while its run
 // file has an open or asked decision; with no readable page set it is rebuilt from the run. openNow: a RUN
-// set's decisions still open or asked in the run file now - only those may get a command.
+// set's decisions still open or asked in the run file now - only those may get a command; gone: the ones settled there.
 async function openSets(root, holo) {
-  const sets = new Map(), openNow = new Map();
+  const sets = new Map(), openNow = new Map(), gone = new Map();
   const runs = await runFiles(root);
   for (const n of tryDir(holo).filter((n) => n.endsWith(".wizard.html"))) {
     const stem = n.slice(0, -".wizard.html".length);
@@ -111,25 +111,25 @@ async function openSets(root, holo) {
       if (m) {
         const path = runs.find((f) => { const k = /^run-(\d+)-/.exec(f.replace(/^.*[\\/]/, "")); return k && Number(k[1]) === Number(m[1]); });
         if (!path) continue;
-        const live = setFromRun(parseRun(await readFile(path, "utf8")), relative(root, path).replace(/\\/g, "/"));
+        const run = parseRun(await readFile(path, "utf8"));
+        const live = setFromRun(run, relative(root, path).replace(/\\/g, "/"));
         if (!live.decisions.length) continue;
         if (!set || String(set.id) !== String(live.id)) set = live;
         openNow.set(String(set.id), new Set(live.decisions.map((d) => d.id)));
+        gone.set(String(set.id), settledIn(run));
       }
       if (set && set.decisions && set.decisions.length) sets.set(String(set.id), set);
     } catch { /* not a readable wizard page */ }
   }
-  return { sets, openNow };
+  return { sets, openNow, gone };
 }
 
 export async function findAnswers({ root = findRoot(process.cwd()), ...where } = {}) {
   const holo = join(root, ".skillator", "holo");
-  const { sets, openNow } = await openSets(root, holo);
+  const { sets, openNow, gone } = await openSets(root, holo);
   const searched = dedupe([{ dir: holo, why: "page folder" }, ...downloadDirs(where)], where.platform);
   const byStem = new Map();
   for (const id of sets.keys()) byStem.set(fileStem(id), [...(byStem.get(fileStem(id)) || []), id]);
-  // Set ids can share a file stem ("F 12", "F_12"): the first that validates the file, else the one it names.
-  const fits = (id, ans) => { try { nextWizardSet(sets.get(id), ans); return true; } catch { return false; } };
   const r = { searched, sets: [...sets.keys()], picks: [], superseded: [], unverifiedNewer: [], drafts: [], refused: [], ignored: [] };
   const cands = [];
   for (const [i, f] of searched.entries()) {
@@ -146,7 +146,8 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
         const s = await stat(path);
         if (s.size > MAX_FILE) throw new Error("larger than 1 MB");
         const ans = JSON.parse(await readFile(path, "utf8"));
-        const id = ids.find((x) => fits(x, ans)) ?? ids.find((x) => x === String(ans?.set)) ?? ids[0];
+        // Set ids can share a file stem ("F 12", "F_12"): the one the file names.
+        const id = ids.find((x) => x === String(ans?.set)) ?? ids[0];
         cands.push({ path, folder: i, mtime: s.mtimeMs, id, ans, openNow: openNow.get(id) });
       } catch (e) { r.refused.push({ path, why: e.message }); }
     }
@@ -167,7 +168,7 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
     try {
       if (!ISO.test(c.ans.finalizedAt) || !Date.parse(c.ans.finalizedAt)) throw new Error("finalizedAt is not an ISO 8601 time");
       if (typeof c.ans.owner !== "string" || c.ans.owner.trim().length > 200 || CTRL.test(c.ans.owner)) throw new Error("owner is not one short line");
-      nextWizardSet(sets.get(c.id), c.ans);
+      nextWizardSet(sets.get(c.id), without(c.ans, gone.get(c.id) || new Set()));
     } catch (e) { r.refused.push({ path: c.path, why: e.message }); continue; }
     const pick = r.picks.find((p) => p.id === c.id);
     if (!pick) r.picks.push(c);
@@ -188,11 +189,12 @@ export function report(r) {
     const a = p.ans;
     const n = (a.answers || []).length;
     L.push("", `picked: ${p.path}`, `  set ${clean(p.id)}, round ${Number(a.round) || 1}, FINAL by ${show(a.owner)} at ${clean(a.finalizedAt, 40)}, ${n} decision${n === 1 ? "" : "s"}`);
-    const run = /^RUN-\d+$/.test(p.id);
+    const run = /^RUN-\d+$/i.test(p.id);
     if (!p.verified) { L.push("  unverified - confirm with the owner before applying (no page nonce match); no commands printed"); continue; }
+    if (run && !p.openNow) { L.push(`  run file not found for ${clean(p.id)} - nothing applied`); continue; }
     if (run) {
       // Only decisions still open or asked in the run file now: a FINAL checked twice never applies twice.
-      const live = (x) => !p.openNow || p.openNow.has(String(x?.id));
+      const live = (x) => p.openNow.has(String(x?.id));
       const c = answersToCommands({ ...a, answers: (a.answers || []).filter(live) });
       L.push("# POSIX sh lines (Git Bash on Windows) - read them, then run them yourself", ...c.commands, ...c.review.map((x) => `# review: ${x}`), ...c.open.map((x) => `# still open: ${x}`),
         ...(a.answers || []).filter((x) => !live(x)).map((x) => `# ${clean(x?.id, 40)}: already settled - skipped`));

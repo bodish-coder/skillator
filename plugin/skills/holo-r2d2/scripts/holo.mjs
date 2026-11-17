@@ -40,7 +40,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { setFromRun, checkSet, wizardPage, stableNonce, nonceFile, pageSet, answersToCommands, nextWizardSet, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
+import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, settledIn, without, fileStem, clean, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 import { extractDomainGraph, understandPage } from "./understand.mjs";
 import { FORMATS, THEMES, formatPage, themeCss } from "./formats.mjs";
@@ -1025,11 +1025,16 @@ async function writeGenerated(root, out, text) {
   await writeFile(out, text, "utf8");
 }
 
-// F179: every wizard page is written here, so a rebuild of the same set keeps its nonce (page, else sidecar).
+// F179: every wizard page is written here, so a rebuild of the same set keeps its nonce: the page's own, else
+// the sidecar's (keyed by the set id itself - "F 12" and "F_12" share a file stem), else a fresh one.
+export const nonceFile = (root, id) => join(root, ".skillator", "holo", `${fileStem(id)}-${createHash("sha256").update(String(id)).digest("hex").slice(0, 8)}.nonce`);
 async function writeWizard(root, out, set) {
-  const nonce = stableNonce(root, out, set.id);
-  await writeGenerated(root, out, wizardPage(set, nonce));
-  await writeGenerated(root, nonceFile(root, set.id), `${nonce}\n`);
+  const read = (p) => readFile(p, "utf8").catch(() => "");
+  const page = pageSet(await read(out));
+  const n = page && String(page.id) === String(set.id) && page.nonce ? String(page.nonce) : (await read(nonceFile(root, set.id))).trim();
+  const html = wizardPage(set, /^[0-9a-f]{32}$/.test(n) ? n : undefined);
+  await writeGenerated(root, out, html);
+  await writeGenerated(root, nonceFile(root, set.id), `${pageSet(html).nonce}\n`);
 }
 
 // A118: the holds as relay-morpheus judges them - `chain next --holds`, read-only
@@ -1121,24 +1126,30 @@ async function main(argv) {
   const root = findRoot(o.root ?? process.cwd());
   if (o.ticket) return ticketPage(root, o);
   if (o.mode === "wizard") {
-    let set, stem;
+    let set, stem, run;
     if (o.decisions) { set = JSON.parse(await readFile(o.decisions, "utf8")); stem = String(set && set.id || "decisions"); }
     else {
       const runPath = await resolveRun(o.pos[0], root);
       const md = await readFile(runPath, "utf8");
-      const run = parseRun(md, relayHolds(md, runPath, root));
+      run = parseRun(md, relayHolds(md, runPath, root));
       if (!run.id) throw new Error(`${runPath}: no '# RUN-<n> - <title>' line - not a relay run file`);
       set = setFromRun(run, relative(root, runPath).replace(/\\/g, "/")); stem = run.id;
     }
     const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem.replace(/[^A-Za-z0-9_.-]/g, "-")}.wizard.html`));
     if (o.nextWizard) {
-      // The base is the page the answers came from: the page on disk when its id and round match, the run's (or
-      // --decisions) set for round 1, else refused - never a mix of rounds.
-      const ans = JSON.parse(await readFile(o.nextWizard, "utf8"));
-      const round = Number(ans && ans.round) || 1;
+      // The base is the page the answers came from: the page on disk when its id and round match, else the
+      // --decisions set when its own round matches, else the run's set for round 1; anything else is refused.
+      let ans = JSON.parse(await readFile(o.nextWizard, "utf8"));
+      const round = Number(ans && ans.round) || 1, roundOf = (s) => Number(s && s.round) || 1;
       const drawn = existsSync(out) ? pageSet(await readFile(out, "utf8")) : null;
-      if (drawn && String(drawn.id) === String(set.id) && (Number(drawn.round) || 1) === round) set = drawn;
-      else if (round !== 1) throw new Error(`the page for round ${round} is not on disk - open the round-${round} page and finalize again`);
+      if (drawn && String(drawn.id) === String(set.id) && roundOf(drawn) === round) set = drawn;
+      else if (roundOf(set) !== round) throw new Error(`the page for round ${round} is not on disk - open the round-${round} page and finalize again`);
+      if (run) {
+        const gone = settledIn(run), kept = without(ans, gone);
+        if (kept !== ans) for (const a of ans.answers) if (gone.has(a && a.id)) console.log(`${clean(a.id, 40)}: already settled - skipped`);
+        ans = kept;
+        if (Array.isArray(set.decisions)) set = { ...set, decisions: set.decisions.filter((d) => !gone.has(d && d.id)) };
+      }
       set = nextWizardSet(set, ans);
     }
     await writeWizard(root, out, set);
