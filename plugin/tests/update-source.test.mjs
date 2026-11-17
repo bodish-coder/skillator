@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import fs from 'node:fs';
+import nodePath from 'node:path';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -114,6 +116,23 @@ test('every updater prioritizes .skillator-source over Claude Code installPath',
       `${path}: source resolution must prefer .skillator-source over installPath even when installPath is present`);
   }
 });
+test('A231: every updater treats the pointer as a hint that never stops or downgrades the update', () => {
+  for (const path of commands) {
+    const text = readFileSync(join(plugin, path), 'utf8').replace(/\s+/g, ' ');
+    const b = text.match(/ b\. (.*?) c\. /)?.[1] ?? '';
+    assert.doesNotMatch(b, /older/, `${path}: option b. must not judge staleness before the pull`);
+    const pull = text.indexOf('pull --ff-only'), rule = text.indexOf('Stale pointer');
+    assert.ok(pull >= 0 && rule > pull, `${path}: the stale check must come after the pull`);
+    const fails = text.slice(pull, rule);
+    assert.match(fails, /Pull fails.*? From a\.[^→]*→ report it and stop before installation/, `${path}: an explicit path still stops on a failed pull`);
+    assert.match(fails, /From b\. the pointer is a hint, not an order[^.]*say the pull failed and go on to c\./, `${path}: a pointer falls through on a failed pull`);
+    assert.match(fails, /go on to c\. If c\. resolves to the directory of the failed b\. checkout, report it and stop/, `${path}: the fallback after a failed pull is a different directory`);
+    const r = text.slice(rule, rule + 700);
+    assert.doesNotMatch(r, /used, not skipped/, `${path}: a pulled clone may still be stale`);
+    assert.match(r, /after the pull, or for a nongit cache.*Still older than.*step 1.*skip.*say so.*go on to c\..*never a downgrade/, `${path}: a stale pointer is skipped, pulled or not`);
+    assert.match(r, /no skillator version in step 1.*use the pointer.*say so/, `${path}: no step-1 version uses the pointer`);
+  }
+});
 test('both installer writers preserve updater instructions in every host template', { skip: !ps || !hasSh ? 'Missing executable: ' + [!ps && 'powershell/pwsh', !hasSh && 'sh'].filter(Boolean).join(', ') : false }, () => {
   const shell = readFileSync(join(plugin, 'install.sh'), 'utf8').replaceAll('\r', '');
   const functions = ['native', 'subst', 'put_cmd'].map(name => {
@@ -179,3 +198,78 @@ test('installers removed by a successful pull stop installation', () => {
 });
 // Retain isolated fixtures for inspection; no recursive deletion or live profile access.
 console.log(`A168 local fixtures: ${root}`);
+test('A231: both installers normalize a Muse source path to the same string', { skip: process.platform !== 'win32' || !ps ? 'Windows with PowerShell only' : false }, () => {
+  const normSrc = readFileSync(join(plugin, 'install.sh'), 'utf8').match(/^\s*const norm = (p => .*);\r?$/m)?.[1];
+  assert.ok(normSrc, 'install.sh: muse_json norm not found');
+  const nodeNorm = new Function('fs', 'path', `return ${normSrc}`)(fs, nodePath);
+  const fx = join(root, 'a231'), real = join(fx, 'real'), skips = [];
+  mkdirSync(join(real, 'sub'), { recursive: true }); mkdirSync(join(fx, 'a'));
+  fs.symlinkSync(real, join(fx, 'junction'), 'junction');
+  const viaLink = fs.realpathSync.native(join(real, 'sub')).replace(/\\/g, '/').toLowerCase();
+  const sys = real.slice(0, 2), share = `\\\\localhost\\${sys[0]}$${real.slice(2)}\\sub`;
+  // [input, expected]; expected null = the two installers must only agree
+  const cases = [[join(fx, 'junction', 'sub'), viaLink], [`${fx}\\a\\..\\junction\\sub`, viaLink],
+    ['\\\\?\\' + join(real, 'sub').toUpperCase(), viaLink],
+    [`${sys.toUpperCase()}\\`, `${sys.toLowerCase()}/`], [`${sys.toLowerCase()}\\`, `${sys.toLowerCase()}/`],
+    ['\\\\?\\UNC\\localhost\\a231-none\\x', '//localhost/a231-none/x'], ['\\\\LOCALHOST\\A231-None\\x\\', '//localhost/a231-none/x'],
+    [share, null], [share.toUpperCase(), null]];
+  try { fs.symlinkSync('..\\real', join(fx, 'a', 'rel'), 'dir'); cases.push([join(fx, 'a', 'rel', 'sub'), viaLink]); }
+  catch { skips.push('relative symlink case (no symlink privilege)'); }
+  let deep;
+  try {
+    deep = join(real, 'l'.repeat(140), 'm'.repeat(140)); mkdirSync(deep, { recursive: true });
+    cases.push([join(fx, 'junction', 'l'.repeat(140), 'M'.repeat(140)), fs.realpathSync.native(deep).replace(/\\/g, '/').toLowerCase()]);
+  } catch (e) { deep = undefined; skips.push(`long path case (${e.code || e.message})`); }
+  const script = join(fx, 'norm.ps1');
+  writeFileSync(script, `param([switch]$NoAddType, [switch]$LegacyPaths, [switch]$NotWindows)
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+if ($NoAddType) { function Add-Type { $global:a231Compiles++; throw 'a231 no Add-Type' } }
+if ($NotWindows) { $env:OS = 'a231' }
+if ($LegacyPaths) { # Windows PowerShell 5.1 as an older .NET runs it: GetFullPath stops at 260 characters
+  foreach ($s in 'UseLegacyPathHandling', 'BlockLongPaths') { [AppContext]::SetSwitch("Switch.System.IO.$s", $true) }
+  $t = [object].Assembly.GetType('System.AppContextSwitches')
+  foreach ($f in '_useLegacyPathHandling', '_blockLongPaths') { $t.GetField($f, 'NonPublic,Static').SetValue($null, 0) }
+}
+$ast = [Management.Automation.Language.Parser]::ParseFile('${join(plugin, 'install.ps1').replaceAll("'", "''")}', [ref]$null, [ref]$null)
+. ([scriptblock]::Create($ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Normalize-MusePath' }, $true).Extent.Text))
+foreach ($p in ([Console]::In.ReadToEnd() | ConvertFrom-Json)) { Normalize-MusePath $p }
+if ($NoAddType) { [Console]::Error.WriteLine("compiles: $global:a231Compiles") }`);
+  // [stdout lines, stderr lines]
+  const psRun = (inputs, flags = [], cwd) => {
+    const r = spawnSync(ps, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, ...flags],
+      { input: JSON.stringify(inputs), cwd, encoding: 'utf8', timeout: 120000, windowsHide: true });
+    assert.equal(r.status, 0, r.stderr);
+    return [r.stdout, r.stderr].map(t => t.trim().split(/\r?\n/).filter(Boolean));
+  };
+  // the letters are picked just before use: one stays unmapped, one becomes a subst drive
+  const free = 'ZYXWVUTSRQPONMLKJIHG'.split('').filter(l => !fs.existsSync(`${l}:\\`));
+  const gone = free[0], drive = process.env.SKILLATOR_NO_SUBST === '1' ? undefined : free[1];
+  if (gone) cases.push([`${gone}:\\gone\\x\\`, `${gone.toLowerCase()}:/gone/x`]);
+  else skips.push('unmapped drive case (no free drive letter)');
+  const subst = drive && spawnSync('subst', [`${drive}:`, real], { timeout: 15000, windowsHide: true }).status === 0;
+  try {
+    if (subst) cases.push([`${drive}:\\sub`, viaLink], [`${drive}:\\`, viaLink.slice(0, -'/sub'.length)]);
+    else skips.push(`subst case (${process.env.SKILLATOR_NO_SUBST === '1' ? 'SKILLATOR_NO_SUBST=1' : drive ? 'subst failed' : 'no free drive letter'})`);
+    const [psOut, psErr] = psRun(cases.map(c => c[0]));
+    assert.deepEqual(psErr, [], 'resolvable paths print no note');
+    cases.forEach(([input, want], i) => {
+      const n = nodeNorm(input);
+      assert.equal(psOut[i], n, `${input}: install.ps1 and install.sh disagree`);
+      if (want !== null) assert.equal(n, want, `${input}: normalized wrongly`);
+      assert.equal(n, n.toLowerCase(), `${input}: not lowercased`);
+    });
+  } finally { if (subst) spawnSync('subst', [`${drive}:`, '/d'], { timeout: 15000, windowsHide: true }); }
+  // Windows PowerShell 5.1 with its 260-character limit: '..' and a relative path still resolve
+  if (deep && ps === 'powershell') {
+    const L = 'l'.repeat(140), M = 'm'.repeat(140), want = fs.realpathSync.native(deep).replace(/\\/g, '/').toLowerCase();
+    assert.deepEqual(psRun([`${fx}\\junction\\${L}\\x\\..\\${M.toUpperCase()}`, `${L}\\.\\${M}\\..\\${M}`], ['-LegacyPaths'], real), [[want, want], []]);
+  } else if (deep) skips.push('long path under Windows PowerShell 5.1 case (no powershell.exe)');
+  // no link resolution: only the string-only form on stdout; one compile attempt and one note on stderr
+  const written = [join(fx, 'junction', 'sub'), `${sys.toUpperCase()}\\`, real];
+  assert.deepEqual(psRun(written, ['-NoAddType']), [written.map(p => p.replace(/\\/g, '/').toLowerCase().replace(/(?<!:)\/$/, '')),
+    ['note: path resolution unavailable (Add-Type: a231 no Add-Type) - comparing paths as written', 'compiles: 1']]);
+  // Node lowercases on win32 only: off Windows the case is kept
+  const cased = join(fx, 'NoSuch', 'CaSe');
+  assert.deepEqual(psRun([cased], ['-NotWindows'])[0], [cased.replace(/\\/g, '/')]);
+  for (const s of skips) console.log(`# skip A231 ${s}`);
+});

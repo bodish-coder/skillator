@@ -379,6 +379,47 @@ agy_ide() {
   return 0
 }
 
+# muse_json: strict JSON checks for put_muse (Node), one mode per call
+muse_json() {
+  node -e '
+    const fs = require("fs"), path = require("path"), [mode, arg, expected] = process.argv.slice(1);
+    // A231: the same string as install.ps1 Normalize-MusePath: links resolved by the OS, then one spelling
+    // a subst or mapped drive resolves by its mapping at run time, as realpath does - accepted
+    const norm = p => { const win = process.platform === "win32"; if (win) p = path.resolve(p.replace(/\//g, "\\").replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/, "")); try { p = fs.realpathSync.native(p); } catch {} p = p.replace(/\\/g, "/"); if (win) p = p.toLowerCase(); p = p.replace(/\/+$/, ""); return win && /^[a-z]:$/.test(p) ? p + "/" : p || "/"; };
+    try {
+      const data = JSON.parse(fs.readFileSync(0, "utf8").replace(/^\uFEFF/, ""));
+      if (mode === "manifest") {
+        if (data.name !== "skillator" || typeof data.version !== "string" || !data.version.trim()) throw Error("invalid selected Skillator manifest");
+        console.log(data.version);
+      } else if (mode === "record") {
+        if (!data || !Array.isArray(data.plugins)) throw Error("invalid plugins list JSON");
+        const entries = data.plugins.filter(p => p?.record?.id === "skillator");
+        if (entries.length > 1) throw Error("ambiguous Skillator records; inspect manually");
+        if (!entries.length) { console.log("null"); process.exit(0); }
+        const {record, active_scope} = entries[0];
+        if (!record.scope && active_scope === "installed-plugin") record.scope = "user";
+        console.log(JSON.stringify(record));
+      } else if (mode === "policy") {
+        if (data === null) console.log("install");
+        else {
+          if (data.enabled !== true || data.scope !== "user") throw Error("disabled or unsupported scope; preserve installation manually (CLI remove/update has no scope selector)");
+          if (data.source?.provenance === "marketplace-user-added") console.log("update");
+          else if (data.source?.provenance !== "native-local") throw Error("unsupported provenance; inspect installation manually");
+          else if (typeof data.source.path !== "string" || !data.source.path) throw Error("missing native-local source path");
+          else console.log(norm(data.source.path) === norm(arg) ? "update" : "migrate");
+        }
+      } else if (mode === "scope") console.log(data?.scope || "user");
+      else if (mode === "path") console.log(data.source.path);
+      else if (mode === "verify") {
+        const before = JSON.parse(expected), local = !before || before.source.provenance === "native-local";
+        const [path, version] = JSON.parse(arg);
+        if (!data || data.version !== version || data.enabled !== true || data.scope !== (before?.scope || "user")) throw Error("verification failed: expected version " + version + ", enabled and original scope; got version " + data?.version + "; inspect muse plugins list --json manually");
+        if (local ? data.source?.provenance !== "native-local" || typeof data.source.path !== "string" || norm(data.source.path) !== norm(path) : data.source?.provenance !== before.source.provenance || data.source?.path !== before.source.path) throw Error("source verification failed; inspect muse plugins list --json manually");
+      }
+    } catch (e) { console.error("Muse: " + e.message); process.exit(1); }
+  ' "$@"
+}
+
 # put_muse: F134 - install or update the skillator plugin for Muse Code CLI when muse is available
 put_muse() {
   _muse=""
@@ -408,43 +449,6 @@ put_muse() {
 
   # Only the Muse integration needs Node for strict JSON parsing; skill copying does not.
   command -v node >/dev/null 2>&1 || { echo 'Muse: Node is required to validate plugin JSON; no Muse changes made' >&2; return 1; }
-  muse_json() {
-    node -e '
-      const fs = require("fs"), [mode, arg, expected] = process.argv.slice(1);
-      const norm = p => { p = p.replace(/\\/g, "/").replace(/^\/\/\?\//, "").replace(/\/+$/, ""); return /^[a-z]:\//i.test(p) ? p.toLowerCase() : p; };
-      try {
-        const data = JSON.parse(fs.readFileSync(0, "utf8").replace(/^\uFEFF/, ""));
-        if (mode === "manifest") {
-          if (data.name !== "skillator" || typeof data.version !== "string" || !data.version.trim()) throw Error("invalid selected Skillator manifest");
-          console.log(data.version);
-        } else if (mode === "record") {
-          if (!data || !Array.isArray(data.plugins)) throw Error("invalid plugins list JSON");
-          const entries = data.plugins.filter(p => p?.record?.id === "skillator");
-          if (entries.length > 1) throw Error("ambiguous Skillator records; inspect manually");
-          if (!entries.length) { console.log("null"); process.exit(0); }
-          const {record, active_scope} = entries[0];
-          if (!record.scope && active_scope === "installed-plugin") record.scope = "user";
-          console.log(JSON.stringify(record));
-        } else if (mode === "policy") {
-          if (data === null) console.log("install");
-          else {
-            if (data.enabled !== true || data.scope !== "user") throw Error("disabled or unsupported scope; preserve installation manually (CLI remove/update has no scope selector)");
-            if (data.source?.provenance === "marketplace-user-added") console.log("update");
-            else if (data.source?.provenance !== "native-local") throw Error("unsupported provenance; inspect installation manually");
-            else if (typeof data.source.path !== "string" || !data.source.path) throw Error("missing native-local source path");
-            else console.log(norm(data.source.path) === norm(arg) ? "update" : "migrate");
-          }
-        } else if (mode === "scope") console.log(data?.scope || "user");
-        else if (mode === "path") console.log(data.source.path);
-        else if (mode === "verify") {
-          const before = JSON.parse(expected), local = !before || before.source.provenance === "native-local";
-          const [path, version] = JSON.parse(arg);
-          if (!data || data.version !== version || data.enabled !== true || data.scope !== (before?.scope || "user")) throw Error("verification failed: expected version " + version + ", enabled and original scope; got version " + data?.version + "; inspect muse plugins list --json manually");
-          if (local ? data.source?.provenance !== "native-local" || typeof data.source.path !== "string" || norm(data.source.path) !== norm(path) : data.source?.provenance !== before.source.provenance || data.source?.path !== before.source.path) throw Error("source verification failed; inspect muse plugins list --json manually");
-        }
-      } catch (e) { console.error("Muse: " + e.message); process.exit(1); }
-    ' "$@"
-  }
   _version=$(muse_json manifest < "$_plug_dir/.muse-plugin/plugin.json") || return 1
   _list=$(MUSE_NO_AUTO_UPDATE=1 "$_muse" plugins list --json) || { echo 'Muse: plugins list failed' >&2; return 1; }
   _before=$(printf '%s' "$_list" | muse_json record) || return 1
@@ -675,6 +679,17 @@ if [ -n "$selftest" ]; then
     [ -d "$fixture/legacy/legacy" ] || exit 1
   ) || { echo 'FAIL: A166 ownership cleanup'; exit 1; }
   rm -rf "$T/ownership"
+  # A231: Muse may record the link-resolved spelling of the installer's source
+  mkdir -p "$T/a231/real/src"
+  ln -s "$T/a231/real" "$T/a231/lnk" 2>/dev/null
+  [ -L "$T/a231/lnk" ] || { rm -rf "$T/a231/lnk"; ! command -v cygpath >/dev/null 2>&1 || MSYS2_ARG_CONV_EXCL="*" cmd /c mklink /J "$(cygpath -w "$T/a231/lnk")" "$(cygpath -w "$T/a231/real")" >/dev/null 2>&1 || true; }
+  if ! command -v node >/dev/null 2>&1 || [ ! -d "$T/a231/lnk/src" ]; then
+    echo 'skip  A231 link case (no node, or no symlink or junction)'
+  else
+    printf '{"version":"1","enabled":true,"scope":"user","source":{"provenance":"native-local","path":"%s/src"}}' "$(native "$T/a231/real")" |
+      muse_json verify "[\"$(native "$T/a231/lnk")/src\",\"1\"]" null || { echo 'FAIL: A231 Muse source through a link compared unequal'; exit 1; }
+  fi
+  rm -rf "$T/a231"
   mkdir -p "$T/.codex" "$T/.cursor" "$T/.gemini" "$T/.pi" "$T/.config/opencode"
   # F67: opencode's config dir is $XDG_CONFIG_HOME/opencode when that is set - never let
   # the selftest follow it out of the temp HOME

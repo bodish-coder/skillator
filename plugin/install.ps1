@@ -353,6 +353,75 @@ function Get-AgyIde {
   return ''
 }
 
+# Normalize-MusePath: a source path as Muse and the installer may both spell it, for comparison
+# A231: the same string as install.sh muse_json's norm; both resolve links with
+# GetFinalPathNameByHandle (Node's realpathSync.native), then spell the result one way
+function Normalize-MusePath([string]$path) {
+  $path = $path.Replace('/', '\') -replace '^\\\\\?\\UNC\\', '\\' -replace '^\\\\\?\\', ''
+  $step = 'full path'
+  try {
+    try { $path = [IO.Path]::GetFullPath($path) }
+    catch [IO.PathTooLongException] {
+      # Windows PowerShell 5.1 can stop GetFullPath at 260 characters: the same resolution, on the string
+      # shortcut: a drive-relative C:x resolves from the drive root, per-drive directories if one ever shows up
+      $cwd = [Environment]::CurrentDirectory
+      if ($path -match '^\\(?!\\)') { $path = [IO.Path]::GetPathRoot($cwd).TrimEnd('\') + $path }
+      elseif ($path -notmatch '^(\\\\|[A-Za-z]:)') { $path = $cwd.TrimEnd('\') + '\' + $path }
+      $root = [regex]::Match($path, '^(\\\\[^\\]+\\[^\\]+|[A-Za-z]:)').Value
+      if ($root) {
+        $kept = New-Object Collections.Generic.List[string]
+        foreach ($part in $path.Substring($root.Length).Split('\')) {
+          if ($part -eq '..') { if ($kept.Count) { $kept.RemoveAt($kept.Count - 1) } }
+          elseif ($part -and $part -ne '.') { $kept.Add($part) }
+        }
+        $path = $root + '\' + ($kept -join '\')
+      }
+    }
+    # one compile attempt per process: after a failure every path is compared as written
+    if (-not $script:MuseNoFinalPath) {
+      if (-not ('MuseFinalPath' -as [type])) {
+        $step = 'Add-Type'
+        try { Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices; using System.Text;
+public static class MuseFinalPath {
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr sa, uint disposition, uint flags, IntPtr template);
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  static extern uint GetFinalPathNameByHandleW(IntPtr handle, StringBuilder buffer, uint length, uint flags);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+  public static string Get(string path) {
+    IntPtr h = CreateFileW(path, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+    if (h == new IntPtr(-1)) return null;
+    try {
+      StringBuilder b = new StringBuilder(32768);
+      uint n = GetFinalPathNameByHandleW(h, b, (uint)b.Capacity, 0);
+      return n == 0 || n >= b.Capacity ? null : b.ToString();
+    } finally { CloseHandle(h); }
+  }
+}
+'@
+        } catch { $script:MuseNoFinalPath = $true; throw }
+      }
+      $step = 'final path'
+      # the long-path form, so a path over 260 characters still opens
+      $real = [MuseFinalPath]::Get($(if ($path.StartsWith('\\')) { '\\?\UNC\' + $path.Substring(2) } else { '\\?\' + $path }))
+      if ($real) { $path = $real -replace '^\\\\\?\\UNC\\', '\\' -replace '^\\\\\?\\', '' }
+    }
+  } catch {
+    if (-not $script:MuseLinkNoted) {
+      $script:MuseLinkNoted = $true
+      # stderr, so stdout carries only what the caller asked for
+      [Console]::Error.WriteLine("note: path resolution unavailable (${step}: $($_.Exception.GetBaseException().Message)) - comparing paths as written")
+    }
+  }
+  $path = $path.Replace('\', '/')
+  # as Node does: lowercase on Windows only
+  if ($env:OS -eq 'Windows_NT') { $path = $path.ToLowerInvariant() }
+  $path = $path.TrimEnd('/')
+  if ($path -match '^[a-z]:$') { $path += '/' }
+  return $path
+}
+
 # Write-Muse: F134 - install or update the skillator plugin for Muse Code CLI when muse is available
 function Write-Muse {
   # Windows PowerShell surfaces native stderr as ErrorRecords; diagnostics must
@@ -386,11 +455,6 @@ function Write-Muse {
   $prevNoAuto = $env:MUSE_NO_AUTO_UPDATE
   $env:MUSE_NO_AUTO_UPDATE = '1'
   try {
-    function Normalize-MusePath([string]$path) {
-      $path = $path.Replace('\', '/') -replace '^//\?/', ''
-      if ($path -match '^[A-Za-z]:/') { $path = $path.ToLowerInvariant() }
-      return $path.TrimEnd('/')
-    }
     function Read-MuseRecord {
       $json = & $muse plugins list --json | Out-String
       if ($LASTEXITCODE -ne 0) { throw 'Muse: plugins list failed; no reliable installed state' }
@@ -660,6 +724,17 @@ function Invoke-SelfTest([string]$T) {
     if (-not (Test-Path -LiteralPath (Join-Path $dest 'legacy'))) { return 'A166 legacy removed' }
   }
   Remove-Item -LiteralPath $fixture -Recurse -Force
+  # A231: Muse may record the link-resolved, \\?\-prefixed spelling of the installer's source
+  $real = Join-Path $T 'a231\real'; $lnk = Join-Path $T 'a231\lnk'
+  New-Item -ItemType Directory -Force (Join-Path $real 'src') | Out-Null
+  try {
+    try { New-Item -ItemType Junction -Path $lnk -Target $real -ErrorAction Stop | Out-Null } catch { Write-Host "skip  A231 link case (no junction: $($_.Exception.Message))" }
+    if ((Test-Path -LiteralPath $lnk) -and (Normalize-MusePath ('\\?\' + $real.ToUpperInvariant() + '\src')) -cne (Normalize-MusePath (Join-Path $lnk 'src'))) { return 'A231 Muse source through a junction compared unequal' }
+  } finally {
+    # the link alone, never recursive, then its target; cleanup never fails the selftest
+    try { if (Test-Path -LiteralPath $lnk) { [IO.Directory]::Delete($lnk) } } catch {}
+    try { Remove-Item -LiteralPath (Join-Path $T 'a231') -Recurse -Force -ErrorAction Stop } catch {}
+  }
   $prof = Join-Path $T 'profile.ps1'
   foreach ($m in '.codex','.cursor','.gemini','.pi','.config\opencode') { New-Item -ItemType Directory -Force (Join-Path $T $m) | Out-Null }
   $env:HOME = $T; $env:USERPROFILE = $T; $env:CODEX_HOME = Join-Path $T '.codex'
