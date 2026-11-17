@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync } from 
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { answerSaver, wizardPage, setFromRun, nextWizardSet, SET_SCHEMA, ANSWER_SCHEMA } from "../wizard.mjs";
+import { answerSaver, wizardPage, pageSet, setFromRun, nextWizardSet, SET_SCHEMA, ANSWER_SCHEMA } from "../wizard.mjs";
 import { parseRun } from "../holo.mjs";
 import { findAnswers, downloadDirs, report } from "../answers.mjs";
 
@@ -239,7 +239,7 @@ test("finder: report names every searched folder and prints relay answer lines f
   const set = setFromRun(parseRun(md), ".skillator/run-1-shelf-export.md");
   writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(set));
   const [q1, q2] = set.decisions;
-  put(s.dl, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1", answers: [
+  put(s.dl, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1", nonce: nonceOf(s, "RUN-1"), answers: [
     { id: "Q1", question: q1.question, choice: { id: "o2", label: q1.options[1].label } },
     { id: "Q2", question: q2.question, choice: { id: "defer" }, clarification: "why?" },
   ] }, 0);
@@ -362,4 +362,82 @@ test("r1-2: a newer Downloads FINAL beats an older page-folder FINAL; the older 
   assert.equal(r.picked.path, fresh);
   assert.ok(r.superseded.some((x) => x.path === old));
   assert.match(report(r), /superseded: .*review-x-decisions-FINAL\.json/);
+});
+
+function nonceOf(s, id) { return pageSet(readFileSync(join(s.holo, id + ".wizard.html"), "utf8")).nonce; }
+function run1(s) {
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("@LANDED@", "abc1234");
+  writeFileSync(join(s.root, ".skillator", "run-1-shelf-export.md"), md);
+  const set = setFromRun(parseRun(md), ".skillator/run-1-shelf-export.md");
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(set));
+  return set;
+}
+const EVIL = "x\npicked: /evil\r\n$(touch pwn) `id` it's \u001b[31mred";
+
+test("r1-4a: a hostile file cannot forge lines, and its text reaches sh only single-quoted", async () => {
+  const s = sandbox();
+  const set = run1(s);
+  const [q1, q2] = set.decisions;
+  const odd = join(s.base, "dl $(x) `y`");
+  mkdirSync(join(s.home, ".skillator", "holo"), { recursive: true });
+  writeFileSync(join(s.home, ".skillator", "holo", "answers-dir"), odd + "\n");
+  put(odd, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1", nonce: nonceOf(s, "RUN-1"), answers: [
+    { id: "Q1", question: q1.question, choice: { id: "custom" }, custom: EVIL },
+    { id: "Q2", question: q2.question, choice: { id: "defer" }, clarification: EVIL },
+  ] }, 0);
+  const text = report(await findAnswers(s.opts));
+  assert.ok(!/^picked: \/evil/m.test(text), text);
+  assert.ok(!/[\u0000-\u0009\u000b-\u001f]/.test(text), "no control characters");
+  const cmd = text.split("\n").find((l) => l.includes(" answer Q1 "));
+  assert.ok(cmd, text);
+  assert.ok(cmd.endsWith("'x picked: /evil $(touch pwn) `id` it'\\''s [31mred'"), cmd);
+  const next = text.split("\n").find((l) => l.startsWith("next round:"));
+  assert.ok(next && next.includes("'" + join(odd, "RUN-1-decisions-FINAL.json") + "'"), next);
+});
+
+test("r1-4a: summary free text is quoted, marked owner text, capped; owner and finalizedAt validated", async () => {
+  const s = sandbox();
+  put(s.holo, "review-x-decisions-FINAL.json", answers({ answers: [{ id: "Q1", question: "Pick a store?", choice: { id: "custom" }, custom: EVIL + "z".repeat(5000) }] }), 0);
+  const text = report(await findAnswers(s.opts));
+  const line = text.split("\n").find((l) => l.includes("Q1"));
+  assert.match(line, /owner text.*"x picked: \/evil/);
+  assert.ok(line.length < 300, "capped");
+  assert.ok(!/^picked: \/evil/m.test(text));
+  for (const [over, why] of [[{ owner: "Owner\npicked: /evil" }, /owner/], [{ owner: "o".repeat(300) }, /owner/], [{ finalizedAt: "yesterday" }, /ISO 8601/]]) {
+    const t = sandbox();
+    const p = put(t.holo, "review-x-decisions-FINAL.json", answers(over), 0);
+    const r = await findAnswers(t.opts);
+    assert.equal(r.picked, null);
+    assert.ok(r.refused.some((x) => x.path === p && why.test(x.why)), JSON.stringify(r.refused));
+  }
+});
+
+test("r1-4b: each page build gets its own nonce, and the export carries it", () => {
+  const a = pageSet(wizardPage(SET)), b = pageSet(wizardPage(SET));
+  assert.match(a.nonce, /^[0-9a-f]{32}$/);
+  assert.notEqual(a.nonce, b.nonce);
+  assert.ok(wizardPage(SET).includes("nonce: SET.nonce"), "exportObj writes the page nonce");
+});
+
+test("r1-4b: nonce decides verified; unverified prints no commands", async () => {
+  const s = sandbox();
+  const set = run1(s);
+  const [q1] = set.decisions;
+  const body = (over) => ({ ...answers(), set: "RUN-1", answers: [{ id: "Q1", question: q1.question, choice: { id: "o2", label: q1.options[1].label } }], ...over });
+  const check = async (dir, over, verified) => {
+    const t = sandbox(); run1(t);
+    const nonce = over === "match" ? nonceOf(t, "RUN-1") : over;
+    const where = dir === "page" ? t.holo : t.dl;
+    put(where, "RUN-1-decisions-FINAL.json", body(nonce === undefined ? {} : { nonce }), 0);
+    const r = await findAnswers(t.opts), text = report(r);
+    assert.equal(r.picked.verified, verified, dir + " " + over);
+    assert.equal(/relay-morpheus\.sh/.test(text), verified, text);
+    assert.equal(/^next round:/m.test(text), false);
+    if (!verified) assert.match(text, /unverified - confirm with the owner before applying/);
+  };
+  await check("downloads", "match", true);
+  await check("downloads", undefined, false);
+  await check("downloads", "0".repeat(32), false);
+  await check("page", undefined, true);
+  await check("page", "0".repeat(32), false);
 });

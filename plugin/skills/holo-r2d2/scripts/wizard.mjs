@@ -6,6 +6,8 @@
 // exported JSON or copied CLI commands go back to the session, which turns them
 // into `relay-morpheus.sh answer` calls (answersToCommands).
 
+import { randomBytes } from "node:crypto";
+
 export const SET_SCHEMA = "holo-decisions/1";
 export const ANSWER_SCHEMA = "holo-answers/1";
 const MAX_TEXT = 4000;
@@ -314,10 +316,10 @@ export function answersToCommands(ans, rm = "relay-morpheus.sh") {
   const m = /^RUN-(\d+)$/.exec(str(ans.set));
   if (!m) throw new Error(`answers: set "${str(ans.set).slice(0, 40)}" is not a relay run - read the answers into the work by hand`);
   const q = (s) => "'" + s.replace(/'/g, "'\\''") + "'";
-  const one = (s) => str(s).replace(/\s+/g, " ").trim();
+  const one = (s) => str(s).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").replace(/\s+/g, " ").trim().slice(0, MAX_TEXT);
   const out = { commands: [], review: [], open: [] };
   for (const a of ans.answers || []) {
-    if (!a || !/^Q\d+$/.test(str(a.id))) { out.open.push(`${a && a.id}: not a relay decision id`); continue; }
+    if (!a || !/^Q\d+$/.test(str(a.id))) { out.open.push(`${one(a && a.id).slice(0, 40)}: not a relay decision id`); continue; }
     const cid = a.choice && typeof a.choice === "object" ? str(a.choice.id) : "";
     const notes = one(a.notes);
     const isDefer = cid === "defer" || cid === "explain";
@@ -345,6 +347,8 @@ const embed = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/
 
 export function wizardPage(set) {
   checkSet(set);
+  // F179: a fresh nonce per build; the export carries it, so the finder can tell this page's answers apart.
+  set = { ...set, nonce: randomBytes(16).toString("hex") };
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Decisions - ${escH(set.title || set.id)}</title>
@@ -1081,6 +1085,7 @@ function review() {
 function exportObj(final) {
   return {
     schema: SCHEMA, set: SET.id, setSchema: SET.schema, title: SET.title || SET.id, source: SET.source || "",
+    nonce: SET.nonce || "",
     round: Number(SET.round) || 1,
     exportedAt: new Date().toISOString(), finalizedAt: final ? st.finalizedAt : null, final: !!final,
     owner: st.owner, reviewed: final ? st.reviewed : false,

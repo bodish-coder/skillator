@@ -22,7 +22,15 @@ const NAME = /^(.+)-decisions-(FINAL|draft)\s*(?:\(\d+\))?\.json$/i;
 const SHELL_FOLDERS = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders";
 const DOWNLOADS_GUID = "{374DE290-123F-4565-9164-39C4925E467B}";
 
-const tryRead = (p) => { try { return readFileSync(p, "utf8"); } catch { return null; } };
+// Text from an answers file is data: control characters out, length capped, free
+// text printed JSON-quoted, and anything for sh single-quoted.
+const CTRL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/, CTRL_G = new RegExp(CTRL.source, "g");
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
+const clean = (v, n = 200) => String(v ?? "").replace(CTRL_G, " ").replace(/\s+/g, " ").trim().slice(0, n);
+const show = (v) => JSON.stringify(clean(v));
+const q = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
+
+const tryRead =(p) => { try { return readFileSync(p, "utf8"); } catch { return null; } };
 const tryDir = (p) => { try { return readdirSync(p); } catch { return []; } };
 
 function winDownloads() {
@@ -146,7 +154,15 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
     || when(b) - when(a) || b.mtime - a.mtime || a.folder - b.folder);
   for (const c of cands) {
     if (!isFinalized(c.ans)) { if (!r.drafts.some((d) => d.id === c.id)) r.drafts.push(c); continue; }
-    try { nextWizardSet(sets.get(c.id), c.ans); } catch (e) { r.refused.push({ path: c.path, why: e.message }); continue; }
+    try {
+      if (!ISO.test(c.ans.finalizedAt) || !Date.parse(c.ans.finalizedAt)) throw new Error("finalizedAt is not an ISO 8601 time");
+      if (typeof c.ans.owner !== "string" || c.ans.owner.trim().length > 80 || CTRL.test(c.ans.owner)) throw new Error("owner is not one short line");
+      nextWizardSet(sets.get(c.id), c.ans);
+    } catch (e) { r.refused.push({ path: c.path, why: e.message }); continue; }
+    // Verified: the export carries this page's nonce, or (an older export without
+    // one) it sits in the page folder, which is the owner's repo.
+    const pageNonce = sets.get(c.id).nonce;
+    c.verified = c.ans.nonce ? !!pageNonce && c.ans.nonce === pageNonce : searched[c.folder].why === "page folder";
     (r.picks.some((p) => p.id === c.id) ? r.superseded : r.picks).push(c);
   }
   r.drafts = r.drafts.filter((d) => !r.picks.some((p) => p.id === d.id));
@@ -161,29 +177,34 @@ export function report(r) {
   L.push(`open wizard sets: ${r.sets.join(", ") || "none"}`);
   for (const p of r.picks) {
     const a = p.ans;
-    L.push("", `picked: ${p.path}`, `  set ${p.id}, FINAL by ${a.owner} at ${a.finalizedAt}`);
-    if (/^RUN-\d+$/.test(p.id)) {
+    L.push("", `picked: ${p.path}`, `  set ${clean(p.id)}, FINAL by ${show(a.owner)} (owner text) at ${clean(a.finalizedAt, 40)}`);
+    const run = /^RUN-\d+$/.test(p.id);
+    if (!p.verified) L.push("  unverified - confirm with the owner before applying (no page nonce match); no commands printed");
+    if (run && p.verified) {
       const c = answersToCommands(a);
       L.push("# POSIX sh lines (Git Bash on Windows) - read them, then run them yourself", ...c.commands, ...c.review.map((x) => `# review: ${x}`), ...c.open.map((x) => `# still open: ${x}`));
     } else {
       for (const x of a.answers || []) {
         const cid = String(x?.choice?.id || "");
-        const what = cid === "custom" ? `custom - ${x.custom || ""}` : cid === "defer" || cid === "explain" ? `ask / explain - ${x.clarification || ""}` : cid ? `answered - ${x.choice.label || cid}` : "no answer";
-        L.push(`  ${x.id}${x.ticket ? ` (${x.ticket})` : ""}: ${what}`.replace(/\s+$/, ""));
+        const what = cid === "custom" ? `custom - owner text (data): ${show(x.custom)}`
+          : cid === "defer" || cid === "explain" ? `ask / explain - owner text (data): ${show(x.clarification)}`
+          : cid ? `answered - ${show(x.choice.label || cid)}` : "no answer";
+        L.push(`  ${clean(x?.id, 40)}${x?.ticket ? ` (${clean(x.ticket, 40)})` : ""}: ${what}`);
       }
     }
-    if ((a.answers || []).some((x) => ["custom", "defer", "explain"].includes(String(x?.choice?.id || "")))) {
-      L.push(/^RUN-\d+$/.test(p.id)
-        ? `next round: node ${join(dirname(fileURLToPath(import.meta.url)), "holo.mjs")} ${p.id} --next-wizard "${p.path}"`
-        : `next round: holo.mjs --decisions <the set JSON that drew this page> --next-wizard "${p.path}"`);
+    if (p.verified && (a.answers || []).some((x) => ["custom", "defer", "explain"].includes(String(x?.choice?.id || "")))) {
+      L.push(run
+        ? `next round: node ${q(join(dirname(fileURLToPath(import.meta.url)), "holo.mjs"))} ${p.id} --next-wizard ${q(p.path)}`
+        : `next round: holo.mjs --decisions <the set JSON that drew this page> --next-wizard ${q(p.path)}`);
     }
   }
-  for (const x of r.superseded) L.push(`superseded: ${x.path} (set ${x.id}; older than the FINAL picked)`);
-  for (const d of r.drafts) L.push("", `draft - not applied: ${d.path} (set ${d.id}; finalize it on the page first)`);
-  for (const x of r.refused) L.push(`refused: ${x.path} - ${x.why}`);
-  for (const x of r.ignored) L.push(`ignored: ${x.path} - ${x.why}`);
+  for (const x of r.superseded) L.push(`superseded: ${x.path} (set ${clean(x.id)}; older than the FINAL picked)`);
+  for (const d of r.drafts) L.push("", `draft - not applied: ${d.path} (set ${clean(d.id)}; finalize it on the page first)`);
+  for (const x of r.refused) L.push(`refused: ${x.path} - ${clean(x.why)}`);
+  for (const x of r.ignored) L.push(`ignored: ${x.path} - ${clean(x.why)}`);
   if (!r.picks.length && !r.drafts.length) L.push("", "no answers file found for an open set");
-  return L.join("\n");
+  // Paths and folder names come from disk and profiles: no line may carry a control character.
+  return L.map((l) => l.replace(CTRL_G, " ")).join("\n");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
