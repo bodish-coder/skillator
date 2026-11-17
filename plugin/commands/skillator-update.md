@@ -34,15 +34,16 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
    it with the checkout root. Run `git -C <src> rev-parse --show-toplevel` to detect checkout
    membership, including a plugin subdirectory or linked worktree whose `.git` is a file.
    Success → use its output as `<checkout-root>` and run `git -C <checkout-root> pull --ff-only`.
-   Pull fails (diverged, dirty, no upstream) → report it and stop before installation:
-   never merge, reset, stash or force. A confirmed nongit cache proceeds without pulling;
+   Pull fails (diverged, dirty, no upstream): never merge, reset, stash or force. From a., c. or
+   d. → report it and stop before installation. From b. the pointer is a hint, not an order →
+   say the pull failed and go on to c. A confirmed nongit cache proceeds without pulling;
    missing Git or any other lookup error → report and stop, not a cache fallback.
    Re-check both installers in the retained `<src>` after pulling; either missing → report and stop.
-   Stale pointer - only when the source came from b.: read the `version` in
-   `<src>/.claude-plugin/plugin.json` now, after the pull. A git checkout was pulled above, so it
-   is used, not skipped. A nongit cache whose version is older than the Claude Code skillator
-   version from step 1 → skip it, say so, and go on to c. With no skillator version in step 1
-   (no `claude`, or skillator not listed) there is nothing to compare: use the pointer and say so.
+   Stale pointer - only when the source came from b.: after the pull, or for a nongit cache, read
+   the `version` in `<src>/.claude-plugin/plugin.json`. Still older than the Claude Code skillator
+   version from step 1 → skip the pointer, say so, and go on to c. - never a downgrade. With no
+   skillator version in step 1 (no `claude`, or skillator not listed) there is nothing to
+   compare: use the pointer and say so.
 3. **Re-run the installer** from that source, for codex, cursor, gemini, agy, pi, opencode and the
    Antigravity IDE's ops board: on Windows
    `powershell -NoProfile -ExecutionPolicy Bypass -File "<src>/install.ps1" -Force`, elsewhere

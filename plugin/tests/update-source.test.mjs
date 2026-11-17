@@ -116,16 +116,19 @@ test('every updater prioritizes .skillator-source over Claude Code installPath',
       `${path}: source resolution must prefer .skillator-source over installPath even when installPath is present`);
   }
 });
-test('A231: every updater checks a pointer for staleness after the pull, never before', () => {
+test('A231: every updater treats the pointer as a hint that never stops or downgrades the update', () => {
   for (const path of commands) {
     const text = readFileSync(join(plugin, path), 'utf8').replace(/\s+/g, ' ');
     const b = text.match(/ b\. (.*?) c\. /)?.[1] ?? '';
     assert.doesNotMatch(b, /older/, `${path}: option b. must not judge staleness before the pull`);
     const pull = text.indexOf('pull --ff-only'), rule = text.indexOf('Stale pointer');
     assert.ok(pull >= 0 && rule > pull, `${path}: the stale check must come after the pull`);
+    const fails = text.slice(pull, rule);
+    assert.match(fails, /Pull fails.*? From a\.[^→]*→ report it and stop before installation/, `${path}: an explicit path still stops on a failed pull`);
+    assert.match(fails, /From b\. the pointer is a hint, not an order[^.]*say the pull failed and go on to c\./, `${path}: a pointer falls through on a failed pull`);
     const r = text.slice(rule, rule + 700);
-    assert.match(r, /git checkout.*pulled.*used, not skipped/, `${path}: a pulled clone is used`);
-    assert.match(r, /nongit cache.*older than.*step 1.*skip.*say so/, `${path}: only a stale nongit cache is skipped`);
+    assert.doesNotMatch(r, /used, not skipped/, `${path}: a pulled clone may still be stale`);
+    assert.match(r, /after the pull, or for a nongit cache.*Still older than.*step 1.*skip.*say so.*go on to c\..*never a downgrade/, `${path}: a stale pointer is skipped, pulled or not`);
     assert.match(r, /no skillator version in step 1.*use the pointer.*say so/, `${path}: no step-1 version uses the pointer`);
   }
 });
