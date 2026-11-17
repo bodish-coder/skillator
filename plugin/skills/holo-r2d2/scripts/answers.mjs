@@ -14,7 +14,7 @@ import { join, resolve, dirname, relative } from "node:path";
 import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { nextWizardSet, setFromRun, answersToCommands, isFinalized, fileStem } from "./wizard.mjs";
+import { nextWizardSet, setFromRun, answersToCommands, isFinalized, fileStem, pageSet } from "./wizard.mjs";
 import { parseRun, findRoot, runFiles } from "./holo.mjs";
 
 const MAX_FILE = 1048576;
@@ -91,8 +91,9 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
   return dedupe(out, platform);
 }
 
-// Open sets: a wizard page in the page folder; a RUN set is rebuilt from its run
-// file (the live truth) and is open only while it has an open or asked decision.
+// Open sets: a wizard page in the page folder, validated against the set the page
+// embeds (a --next-wizard page is round 2+). A RUN set is open only while its run
+// file has an open or asked decision; with no readable page set it is rebuilt from the run.
 async function openSets(root, holo) {
   const sets = new Map();
   const runs = await runFiles(root);
@@ -100,16 +101,15 @@ async function openSets(root, holo) {
     const stem = n.slice(0, -".wizard.html".length);
     try {
       const m = /^RUN-(\d+)$/i.exec(stem);
-      let set;
+      let set = pageSet(await readFile(join(holo, n), "utf8"));
       if (m) {
         const path = runs.find((f) => { const k = /^run-(\d+)-/.exec(f.replace(/^.*[\\/]/, "")); return k && Number(k[1]) === Number(m[1]); });
         if (!path) continue;
-        set = setFromRun(parseRun(await readFile(path, "utf8")), relative(root, path).replace(/\\/g, "/"));
-      } else {
-        const page = await readFile(join(holo, n), "utf8");
-        set = JSON.parse(/<script type="application\/json" id="holo-set">([\s\S]*?)<\/script>/.exec(page)[1]);
+        const live = setFromRun(parseRun(await readFile(path, "utf8")), relative(root, path).replace(/\\/g, "/"));
+        if (!live.decisions.length) continue;
+        if (!set || String(set.id) !== String(live.id)) set = live;
       }
-      if (set.decisions && set.decisions.length) sets.set(String(set.id), set);
+      if (set && set.decisions && set.decisions.length) sets.set(String(set.id), set);
     } catch { /* not a readable wizard page */ }
   }
   return sets;
@@ -120,7 +120,7 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
   const sets = await openSets(root, holo);
   const searched = dedupe([{ dir: holo, why: "page folder" }, ...downloadDirs(where)], where.platform);
   const byStem = new Map([...sets.keys()].map((id) => [fileStem(id), id]));
-  const r = { searched, sets: [...sets.keys()], picks: [], drafts: [], refused: [], ignored: [] };
+  const r = { searched, sets: [...sets.keys()], picks: [], superseded: [], drafts: [], refused: [], ignored: [] };
   const cands = [];
   for (const [i, f] of searched.entries()) {
     let names;
@@ -139,13 +139,15 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
       } catch (e) { r.refused.push({ path, why: e.message }); }
     }
   }
-  // FINAL before draft, then folder order, then newest.
-  cands.sort((a, b) => isFinalized(b.ans) - isFinalized(a.ans) || a.folder - b.folder || b.mtime - a.mtime);
+  // FINAL before draft, then the higher round, newest finalizedAt, newest file;
+  // folder order only breaks a tie.
+  const when = (c) => Date.parse(c.ans && c.ans.finalizedAt) || 0;
+  cands.sort((a, b) => isFinalized(b.ans) - isFinalized(a.ans) || (Number(b.ans?.round) || 1) - (Number(a.ans?.round) || 1)
+    || when(b) - when(a) || b.mtime - a.mtime || a.folder - b.folder);
   for (const c of cands) {
-    if (r.picks.some((p) => p.id === c.id)) continue;
     if (!isFinalized(c.ans)) { if (!r.drafts.some((d) => d.id === c.id)) r.drafts.push(c); continue; }
-    try { nextWizardSet(sets.get(c.id), c.ans); r.picks.push(c); }
-    catch (e) { r.refused.push({ path: c.path, why: e.message }); }
+    try { nextWizardSet(sets.get(c.id), c.ans); } catch (e) { r.refused.push({ path: c.path, why: e.message }); continue; }
+    (r.picks.some((p) => p.id === c.id) ? r.superseded : r.picks).push(c);
   }
   r.drafts = r.drafts.filter((d) => !r.picks.some((p) => p.id === d.id));
   r.picked = r.picks[0] || null;
@@ -176,6 +178,7 @@ export function report(r) {
         : `next round: holo.mjs --decisions <the set JSON that drew this page> --next-wizard "${p.path}"`);
     }
   }
+  for (const x of r.superseded) L.push(`superseded: ${x.path} (set ${x.id}; older than the FINAL picked)`);
   for (const d of r.drafts) L.push("", `draft - not applied: ${d.path} (set ${d.id}; finalize it on the page first)`);
   for (const x of r.refused) L.push(`refused: ${x.path} - ${x.why}`);
   for (const x of r.ignored) L.push(`ignored: ${x.path} - ${x.why}`);

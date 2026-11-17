@@ -334,6 +334,12 @@ export function answersToCommands(ans, rm = "relay-morpheus.sh") {
   return out;
 }
 
+// The set a wizard page was built from (its embedded holo-set), or null.
+export function pageSet(html) {
+  const m = /<script type="application\/json" id="holo-set">([\s\S]*?)<\/script>/.exec(str(html));
+  try { return m ? JSON.parse(m[1]) : null; } catch { return null; }
+}
+
 // Embedded data: JSON with every `<` escaped, so no string closes the script.
 const embed = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 

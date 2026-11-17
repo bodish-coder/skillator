@@ -40,7 +40,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { setFromRun, checkSet, wizardPage, answersToCommands, nextWizardSet, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
+import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 import { extractDomainGraph, understandPage } from "./understand.mjs";
 import { FORMATS, THEMES, formatPage, themeCss } from "./formats.mjs";
@@ -1123,10 +1123,13 @@ async function main(argv) {
       if (!run.id) throw new Error(`${runPath}: no '# RUN-<n> - <title>' line - not a relay run file`);
       set = setFromRun(run, relative(root, runPath).replace(/\\/g, "/")); stem = run.id;
     }
+    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem.replace(/[^A-Za-z0-9_.-]/g, "-")}.wizard.html`));
     if (o.nextWizard) {
+      // The answers came from the page on disk: a round-2+ page's own set is the base, not round 1.
+      const drawn = existsSync(out) ? pageSet(await readFile(out, "utf8")) : null;
+      if (drawn && String(drawn.id) === String(set.id)) set = drawn;
       set = nextWizardSet(set, JSON.parse(await readFile(o.nextWizard, "utf8")));
     }
-    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem.replace(/[^A-Za-z0-9_.-]/g, "-")}.wizard.html`));
     await writeGenerated(root, out, wizardPage(set));
     console.log(`holo: wizard ${set.id}${set.round ? ` (round ${set.round})` : ""}, ${set.decisions.length} decision${set.decisions.length === 1 ? "" : "s"} to answer, ${(set.settled || []).length} settled -> ${out}`);
     return;

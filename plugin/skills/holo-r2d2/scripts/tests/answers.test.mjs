@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync } from 
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { answerSaver, wizardPage, setFromRun, SET_SCHEMA, ANSWER_SCHEMA } from "../wizard.mjs";
+import { answerSaver, wizardPage, setFromRun, nextWizardSet, SET_SCHEMA, ANSWER_SCHEMA } from "../wizard.mjs";
 import { parseRun } from "../holo.mjs";
 import { findAnswers, downloadDirs, report } from "../answers.mjs";
 
@@ -145,10 +145,12 @@ function put(dir, name, obj, ageSec = 0) {
   return p;
 }
 
-test("finder: the page folder beats Downloads", async () => {
+test("finder: on a tie (same round, finalizedAt and file time) the page folder beats Downloads", async () => {
   const s = sandbox();
-  put(s.dl, "review-x-decisions-FINAL.json", answers(), 0);
-  const inPage = put(s.holo, "review-x-decisions-FINAL.json", answers(), 60);
+  const dl = put(s.dl, "review-x-decisions-FINAL.json", answers(), 0);
+  const inPage = put(s.holo, "review-x-decisions-FINAL.json", answers(), 0);
+  const t = new Date("2026-11-17T12:00:00Z");
+  utimesSync(dl, t, t); utimesSync(inPage, t, t);
   const r = await findAnswers(s.opts);
   assert.equal(r.picked.path, inPage);
 });
@@ -316,4 +318,48 @@ test("r1-9: folders dedupe on resolved path; case only on win32/darwin; page fol
   const r = await findAnswers(s.opts);
   assert.equal(r.searched.filter((f) => f.dir.toLowerCase().replace(/[\\/]+$/, "") === s.holo.toLowerCase()).length, 1);
   assert.equal(r.searched[0].why, "page folder");
+});
+
+function runRound2(s) {
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("@LANDED@", "abc1234");
+  writeFileSync(join(s.root, ".skillator", "run-1-shelf-export.md"), md);
+  const set1 = setFromRun(parseRun(md), ".skillator/run-1-shelf-export.md");
+  const [q1, q2] = set1.decisions;
+  const set2 = nextWizardSet(set1, { ...answers(), set: "RUN-1", answers: [
+    { id: "Q1", question: q1.question, choice: { id: "o2", label: q1.options[1].label } },
+    { id: "Q2", question: q2.question, choice: { id: "defer" }, clarification: "why?" },
+  ] });
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(set2));
+  const d = set2.decisions[0];
+  const ans2 = { ...answers(), set: "RUN-1", round: 2, finalizedAt: "2026-11-17T11:00:00Z",
+    answers: [{ id: d.id, question: d.question, choice: { id: "defer" }, clarification: "still unclear" }] };
+  return { set2, ans2 };
+}
+
+test("r1-1: a round-2 FINAL from a --next-wizard page is validated against that page's set", async () => {
+  const s = sandbox();
+  const { ans2 } = runRound2(s);
+  const p = put(s.holo, "RUN-1-decisions-FINAL.json", ans2, 0);
+  const r = await findAnswers(s.opts);
+  assert.deepEqual(r.refused, []);
+  assert.equal(r.picked && r.picked.path, p);
+});
+
+test("r1-1: the next-round hint works on round 2 (holo.mjs --next-wizard reads the page's set)", () => {
+  const s = sandbox();
+  const { ans2 } = runRound2(s);
+  const p = put(s.holo, "RUN-1-decisions-FINAL.json", ans2, 0);
+  const r = spawnSync(process.execPath, [join(HERE, "..", "holo.mjs"), "RUN-1", "--next-wizard", p], { cwd: s.root, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /round 3/);
+});
+
+test("r1-2: a newer Downloads FINAL beats an older page-folder FINAL; the older is superseded", async () => {
+  const s = sandbox();
+  const old = put(s.holo, "review-x-decisions-FINAL.json", answers({ finalizedAt: "2026-11-17T10:00:00Z" }), 600);
+  const fresh = put(s.dl, "review-x-decisions-FINAL.json", answers({ finalizedAt: "2026-11-17T11:00:00Z" }), 0);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked.path, fresh);
+  assert.ok(r.superseded.some((x) => x.path === old));
+  assert.match(report(r), /superseded: .*review-x-decisions-FINAL\.json/);
 });
