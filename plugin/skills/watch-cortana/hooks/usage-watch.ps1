@@ -412,6 +412,35 @@ if ($Mode -eq 'refresh') {
           if ($models.Count) { $res['models'] = $models }
         }
       }
+      # F176 owner ruling: no limits from get_usage -> a forced read (WAIT=1, never the
+      # background spawn) of a logged-in, unexpired profile under 90% 7d spends ONE tiny
+      # turn and reads its rate_limit_event. Lock and backoff stay the level reader's.
+      if ($noLimits -and $env:SKILLATOR_QUOTA_REFRESH_WAIT -eq '1' -and
+          ((Test-Path -LiteralPath (Join-Path $Dir '.credentials.json')) -or $IsMacOS) -and
+          $raw -notmatch 'session expired|Failed to authenticate') {
+        $last7 = $null
+        try { $last7 = (ConvertFrom-Json ([IO.File]::ReadAllText((Convert-Path -LiteralPath $cache))) -ErrorAction Stop).'7d' } catch { }
+        if (-not ($last7 -is [int] -or $last7 -is [long] -or $last7 -is [double] -or $last7 -is [decimal]) -or $last7 -lt 90) {
+          $env:SKILLATOR_QUOTA_REFRESH_WAIT = ''
+          try { $turn = $null | & claude -p 1 --model haiku --max-turns 1 --output-format stream-json --verbose 2>$null | Out-String } catch { $turn = '' }
+          $env:SKILLATOR_QUOTA_REFRESH_WAIT = '1'
+          $u = $null
+          foreach ($l in ($turn -split "`r?`n")) {
+            $m = try { ConvertFrom-Json $l -ErrorAction Stop } catch { $null }
+            if ($m -and $m.type -eq 'rate_limit_event' -and $m.rate_limit_info.unifiedWindows) { $u = $m.rate_limit_info.unifiedWindows }
+          }
+          $tn = { param($v) if ($v -and ($v.utilization -is [int] -or $v.utilization -is [long] -or $v.utilization -is [double] -or $v.utilization -is [decimal])) { [math]::Round([double]$v.utilization * 100, 1) } else { $null } }
+          if ($u) {
+            $h = & $tn $u.five_hour; $wk = & $tn $u.seven_day
+            if ($null -ne $h -or $null -ne $wk) {
+              $res = [ordered]@{ src = 'claude-code' }
+              if ($null -ne $h) { $res['5h'] = $h }
+              if ($null -ne $wk) { $res['7d'] = $wk }
+              $res['via'] = 'turn'
+            }
+          }
+        }
+      }
     } elseif ($Cli -eq 'muse') {
       $env:MUSE_CONFIG_DIR = $Dir
       try { $raw = & muse usage --json 2>&1 | Out-String } catch { $raw = '' }

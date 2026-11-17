@@ -39,7 +39,7 @@ function makeFixture(port) {
   if (port === 'ps1') {
     const stub = [
       `function Start-Process { param($FilePath, $ArgumentList, $WindowStyle) [IO.File]::AppendAllText('${launchesFile}', "$ArgumentList\`n") }`,
-      `function claude { [IO.File]::AppendAllText('${argsFile}', "claude|1|$($args -join ' ')\`n"); [IO.File]::WriteAllText('${stdinFile}', (@($input) -join "\`n")); if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
+      `function claude { [IO.File]::AppendAllText('${argsFile}', "claude|1|$($args -join ' ')\`n"); [IO.File]::WriteAllText('${stdinFile}', (@($input) -join "\`n")); $n = @([IO.File]::ReadAllLines('${argsFile}')).Count; $f = "${root}/cli-response-$n.txt"; if (Test-Path $f) { [IO.File]::ReadAllText($f) } elseif (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       `function agy { [IO.File]::AppendAllText('${argsFile}', "agy|1|$($args -join ' ')\`n"); if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       `function muse { if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       '',
@@ -48,7 +48,7 @@ function makeFixture(port) {
   } else {
     const stub = [
       `spawn_quota_refresh() { printf '%s|%s\\n' "$1" "$2" >> '${launchesFile}'; }`,
-      `claude() { printf 'claude|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; cat > '${stdinFile}'; [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
+      `claude() { printf 'claude|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; cat > '${stdinFile}'; n=$(wc -l < '${argsFile}' | tr -d ' '); if [ -f "${root}/cli-response-$n.txt" ]; then cat "${root}/cli-response-$n.txt"; elif [ -f '${responseFile}' ]; then cat '${responseFile}'; fi; return "$(cat '${exitCodeFile}')"; }`,
       `agy() { printf 'agy|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
       `muse() { [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
       '',
@@ -90,12 +90,15 @@ function makeFixture(port) {
     writeFileSync(exitCodeFile, String(exitCode), 'utf8')
   }
 
+  // F176: the nth claude call answers cli-response-<n>.txt (get_usage first, the turn second).
+  const setCliResponses = texts => texts.forEach((t, i) => writeFileSync(`${root}/cli-response-${i + 1}.txt`, t, 'utf8'))
+
   const cleanup = () => rmSync(root, { recursive: true, force: true })
 
   const cliCalls = () => existsSync(argsFile) ? readFileSync(argsFile, 'utf8').trim().split('\n').filter(Boolean) : []
   const cliStdin = () => existsSync(stdinFile) ? readFileSync(stdinFile, 'utf8') : ''
 
-  return { root, runLevel, runRefresh, launchCount, setCliResponse, cleanup, cliCalls, cliStdin }
+  return { root, runLevel, runRefresh, launchCount, setCliResponse, setCliResponses, cleanup, cliCalls, cliStdin }
 }
 
 for (const port of ['ps1', 'sh']) {
@@ -375,5 +378,92 @@ for (const port of ['ps1', 'sh']) {
     } finally {
       fx.cleanup()
     }
+  })
+
+  // F176 owner ruling 2026-11-17: when get_usage has no limits, a FORCED read of a
+  // logged-in profile spends one tiny turn (cheapest model, one-token prompt) and reads
+  // the turn's rate_limit_event. Never from the background, at a last 7d >= 90%, on an
+  // expired login, or twice inside the backoff. Stubbed CLI: no live paid turn.
+  const turnSetup = (fx, name, cache) => {
+    const profile = `${fx.root}/${name}`
+    mkdirSync(profile, { recursive: true })
+    writeFileSync(`${profile}/.credentials.json`, '{}')
+    if (cache) writeFileSync(`${profile}/quota-cache.json`, JSON.stringify(cache))
+    return { profile, env: { SKILLATOR_CLI: 'claude', SKILLATOR_PROFILE_DIR: profile, CLAUDE_CONFIG_DIR: profile } }
+  }
+  const FORCED = { SKILLATOR_QUOTA_REFRESH_WAIT: '1' }
+
+  test(`${port}: F176 forced read: get_usage with limits spends no turn`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'turn-limits')
+      fx.setCliResponses([fixture('claude-get-usage.jsonl'), fixture('claude-turn.jsonl')])
+      fx.runRefresh('claude', profile, { ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 1)
+    } finally { fx.cleanup() }
+  })
+
+  test(`${port}: F176 forced read: get_usage with no limits spends exactly one cheap turn, via turn`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'turn-one')
+      fx.setCliResponses([fixture('claude-get-usage-unavailable.jsonl'), fixture('claude-turn.jsonl')])
+      fx.runRefresh('claude', profile, { ...env, ...FORCED })
+      const calls = fx.cliCalls()
+      assert.equal(calls.length, 2, 'get_usage, then one turn')
+      const [, pathconv, args] = calls[1].split('|')
+      assert.equal(pathconv, '1')
+      assert.match(args, /--model haiku/)
+      assert.match(args, /--max-turns 1/)
+      assert.ok(!args.includes('/'), `no slash in the turn: ${args}`)
+      const cache = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.deepEqual(cache, { src: 'claude-code', '5h': 23, '7d': 5, via: 'turn' })
+    } finally { fx.cleanup() }
+  })
+
+  test(`${port}: F176 background refresh never spends a turn`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'turn-bg')
+      fx.setCliResponses([fixture('claude-get-usage-unavailable.jsonl'), fixture('claude-turn.jsonl')])
+      fx.runRefresh('claude', profile, env)
+      assert.equal(fx.cliCalls().length, 1)
+      assert.equal(JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8')).note, 'no plan rate limits')
+    } finally { fx.cleanup() }
+  })
+
+  test(`${port}: F176 forced read never spends a turn at a last 7d of 90% or more`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'turn-90', { src: 'claude-code', '5h': 10, '7d': 90, models: [{ name: 'Opus', '7d': 3 }] })
+      fx.setCliResponses([fixture('claude-get-usage-unavailable.jsonl'), fixture('claude-turn.jsonl')])
+      fx.runRefresh('claude', profile, { ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 1)
+    } finally { fx.cleanup() }
+  })
+
+  test(`${port}: F176 forced read never spends a turn on an expired login`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'turn-expired')
+      const expired = '{"is_error":true,"result":"Failed to authenticate: OAuth session expired and could not be refreshed","type":"result"}'
+      fx.setCliResponses([fixture('claude-get-usage-unavailable.jsonl') + expired + '\n', fixture('claude-turn.jsonl')])
+      fx.runRefresh('claude', profile, { ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 1)
+      assert.equal(JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8')).note, 'login expired - run claude /login')
+    } finally { fx.cleanup() }
+  })
+
+  test(`${port}: F176 two forced reads inside the backoff spend one turn`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'turn-backoff')
+      fx.setCliResponses([fixture('claude-get-usage-unavailable.jsonl'), fixture('claude-turn-nolimits.jsonl')])
+      fx.runLevel({ ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 2, 'first forced read: get_usage + one turn')
+      assert.equal(JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8')).backoff_secs, 60)
+      fx.runLevel({ ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 2, 'inside the backoff: no read, no turn')
+    } finally { fx.cleanup() }
   })
 }

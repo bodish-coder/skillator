@@ -469,6 +469,32 @@ except Exception:
           } catch (_) {}
         ' 2>/dev/null)
       fi
+      # F176 owner ruling: no limits from get_usage -> a forced read (WAIT=1, never the
+      # background spawn) of a logged-in, unexpired profile under 90% 7d spends ONE tiny
+      # turn and reads its rate_limit_event. Lock and backoff stay the level reader's.
+      if [ "$parsed" = NOLIMITS ] && [ "${SKILLATOR_QUOTA_REFRESH_WAIT:-}" = 1 ] &&
+         { [ -f "$target_dir/.credentials.json" ] || [ "$(uname -s)" = Darwin ]; } &&
+         ! printf '%s' "$raw" | grep -qi 'session expired\|Failed to authenticate'; then
+        last7=$(node -e 'try { const v = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))["7d"]; if (typeof v === "number") process.stdout.write(String(v)) } catch (_) {}' "$cache" 2>/dev/null)
+        if [ -z "$last7" ] || awk "BEGIN { exit !($last7 < 90) }"; then
+          turn=$(MSYS_NO_PATHCONV=1 SKILLATOR_QUOTA_REFRESH_WAIT= CLAUDE_CONFIG_DIR="$target_dir" claude -p 1 --model haiku --max-turns 1 --output-format stream-json --verbose </dev/null 2>/dev/null)
+          via=$(printf '%s' "$turn" | node -e '
+            try {
+              let u = null;
+              for (const l of require("fs").readFileSync(0, "utf8").split(/\r?\n/)) {
+                try { const m = JSON.parse(l); if (m?.type === "rate_limit_event" && m.rate_limit_info?.unifiedWindows) u = m.rate_limit_info.unifiedWindows; } catch (_) {}
+              }
+              const n = v => typeof v?.utilization === "number" && Number.isFinite(v.utilization) ? Math.round(v.utilization * 1000) / 10 : null;
+              const res = { src: "claude-code" };
+              if (u && n(u.five_hour) !== null) res["5h"] = n(u.five_hour);
+              if (u && n(u.seven_day) !== null) res["7d"] = n(u.seven_day);
+              res.via = "turn";
+              if (res["5h"] != null || res["7d"] != null) process.stdout.write(JSON.stringify(res));
+            } catch (_) {}
+          ' 2>/dev/null)
+          [ -z "$via" ] || parsed=$via
+        fi
+      fi
       ;;
     muse)
       src_name=muse
