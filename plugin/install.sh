@@ -384,6 +384,7 @@ muse_json() {
   node -e '
     const fs = require("fs"), path = require("path"), [mode, arg, expected] = process.argv.slice(1);
     // A231: the same string as install.ps1 Normalize-MusePath: links resolved by the OS, then one spelling
+    // a subst or mapped drive resolves by its mapping at run time, as realpath does - accepted
     const norm = p => { const win = process.platform === "win32"; if (win) p = path.resolve(p.replace(/\//g, "\\").replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/, "")); try { p = fs.realpathSync.native(p); } catch {} p = p.replace(/\\/g, "/"); if (win) p = p.toLowerCase(); p = p.replace(/\/+$/, ""); return win && /^[a-z]:$/.test(p) ? p + "/" : p || "/"; };
     try {
       const data = JSON.parse(fs.readFileSync(0, "utf8").replace(/^\uFEFF/, ""));
