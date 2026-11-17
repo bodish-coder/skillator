@@ -18,9 +18,7 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
    a. the path in the arguments, if given;
    b. the source pointer the installer left here: the one line in
       `{{SKILLS}}/.skillator-source` - the dir it last installed from, used only if it still
-      holds both installers and its `.claude-plugin/plugin.json` version (or
-      `plugin/.claude-plugin/plugin.json`) is not older than the Claude Code skillator version
-      from step 1 - a stale pointer is skipped: say so;
+      holds both installers;
    c. Claude Code's plugin after step 1: the `installPath` of `skillator@<mkt>` in
       `claude plugin list --json`, when it holds `install.sh` and `install.ps1`;
    d. ask the user for a skillator clone's path. Headless or no answer → stop and say
@@ -35,6 +33,11 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
    never merge, reset, stash or force. A confirmed nongit cache proceeds without pulling;
    missing Git or any other lookup error → report and stop, not a cache fallback.
    Re-check both installers in the retained `<src>` after pulling; either missing → report and stop.
+   Stale pointer - only when the source came from b.: read the `version` in
+   `<src>/.claude-plugin/plugin.json` now, after the pull. A git checkout was pulled above, so it
+   is used, not skipped. A nongit cache whose version is older than the Claude Code skillator
+   version from step 1 → skip it, say so, and go on to c. With no skillator version in step 1
+   (no `claude`, or skillator not listed) there is nothing to compare: use the pointer and say so.
 3. **Re-run the installer** from that source, for codex, cursor, gemini, agy, pi, opencode and the
    Antigravity IDE's ops board: on Windows
    `powershell -NoProfile -ExecutionPolicy Bypass -File "<src>/install.ps1" -Force`, elsewhere

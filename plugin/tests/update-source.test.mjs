@@ -114,11 +114,17 @@ test('every updater prioritizes .skillator-source over Claude Code installPath',
       `${path}: source resolution must prefer .skillator-source over installPath even when installPath is present`);
   }
 });
-test('A231: every updater skips a .skillator-source older than Claude Code\'s skillator', () => {
+test('A231: every updater checks a pointer for staleness after the pull, never before', () => {
   for (const path of commands) {
-    const b = readFileSync(join(plugin, path), 'utf8').match(/^\s*b\.([\s\S]*?)(?=^\s*c\.)/m)?.[1].replace(/\s+/g, ' ') ?? '';
-    assert.match(b, /older than the Claude Code skillator version from step 1/, `${path}: option b. must skip a stale pointer`);
-    assert.match(b, /say so/, `${path}: option b. must report the skip`);
+    const text = readFileSync(join(plugin, path), 'utf8').replace(/\s+/g, ' ');
+    const b = text.match(/ b\. (.*?) c\. /)?.[1] ?? '';
+    assert.doesNotMatch(b, /older/, `${path}: option b. must not judge staleness before the pull`);
+    const pull = text.indexOf('pull --ff-only'), rule = text.indexOf('Stale pointer');
+    assert.ok(pull >= 0 && rule > pull, `${path}: the stale check must come after the pull`);
+    const r = text.slice(rule, rule + 700);
+    assert.match(r, /git checkout.*pulled.*used, not skipped/, `${path}: a pulled clone is used`);
+    assert.match(r, /nongit cache.*older than.*step 1.*skip.*say so/, `${path}: only a stale nongit cache is skipped`);
+    assert.match(r, /no skillator version in step 1.*use the pointer.*say so/, `${path}: no step-1 version uses the pointer`);
   }
 });
 test('both installer writers preserve updater instructions in every host template', { skip: !ps || !hasSh ? 'Missing executable: ' + [!ps && 'powershell/pwsh', !hasSh && 'sh'].filter(Boolean).join(', ') : false }, () => {
