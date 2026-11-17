@@ -6,6 +6,7 @@
 #   sh setup.sh              the walk
 #   sh setup.sh --check      checks + table, changes nothing
 #   sh setup.sh --selftest   offline, every command stubbed
+#   sh setup.sh --status | --arm | --disarm | --ack   the ops board's keys (F177): key=value lines, exit 0
 TEAM="$(cd "$(dirname "$0")" && pwd)/team.mjs"
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 TUNNEL=skillator-teams
@@ -91,15 +92,17 @@ step_tunnel() {
 
 # B28: the port's own portUri from `devtunnel show -j` - a named tunnel's URL carries its
 # generated id, never its name, so it cannot be built from the Tunnel ID line
-tunnel_url() {
-  devtunnel show "$TUNNEL" -j 2>/dev/null | tr -d ' \r\n' | tr ',{}' '\n\n\n' |
+url_of() {
+  printf '%s' "$1" | tr -d ' \r\n' | tr ',{}' '\n\n\n' |
     sed -n 's/^"portUri":"\(https:[^"]*\)"$/\1/p' | sed 's:/*$::' | grep -e "-$PORT\." | head -n 1
 }
+tunnel_url() { url_of "$(devtunnel show "$TUNNEL" -j 2>/dev/null)"; }
 
 read_config() {
   _c=$(node "$TEAM" config show 2>/dev/null)
   _p=$(printf '%s' "$_c" | sed -n 's/.*"port":\([0-9][0-9]*\).*/\1/p'); PORT=${_p:-3978}
   case $_c in *'"token":true'*'"workflowUrl":"'*) SAVED=1 ;; *) SAVED= ;; esac
+  case $_c in *'"token":true'*) TOKEN=1 ;; *) TOKEN= ;; esac
   if [ -n "$SAVED" ]; then R_FORM=set; else R_FORM='not set'; fi
 }
 listener_up() { node "$TEAM" status --port "$PORT" 2>/dev/null | grep -q '^listener: up'; }
@@ -107,6 +110,77 @@ set_listener() { if [ -n "$UP" ]; then R_LISTEN="up on 127.0.0.1:$PORT"; else R_
 table() {
   say ''
   printf '  %-11s %s\n' node "$R_NODE" brew "$R_BREW" devtunnel "$R_DT" login "$R_LOGIN" tunnel "$R_TUN" listener "$R_LISTEN" 'form saved' "$R_FORM"
+}
+
+# --- F177: the ops board's keys. --status reads; --arm, --disarm and --ack act, each only
+# on the owner's key press on the Messages tab. Output: twelve key=value lines.
+state_dir() { printf '%s' "${SKILLATOR_TEAMS_STATE:-$HOME/.skillator/teams}"; }
+seen_url() { [ -f "$(state_dir)/tunnel-url" ] && tr -d '\r\n' < "$(state_dir)/tunnel-url"; }
+save_url() { mkdir -p "$(state_dir)" && (umask 077; printf '%s\n' "$1" > "$(state_dir)/tunnel-url"); }
+mark_url() { _s=$(seen_url); if [ -n "$A_URL" ] && [ -n "$_s" ] && [ "$_s" != "$A_URL" ]; then A_CHANGED=1; else A_CHANGED=0; fi; }
+expiry_of() { printf '%s' "$1" | tr -d '\r\n' | sed -n 's/.*"tunnelExpiration"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | cut -c1-40; }
+stop_tunnel() { pkill -f "devtunnel.*host.*(^|[[:space:]\"'])($TUNNEL)(['\"[:space:]]|$)" >/dev/null 2>&1; sleep 1; }
+show_arm() {
+  printf '%s\n' "result=$A_RESULT" "why=$A_WHY" "devtunnel=$A_DT" "login=$A_LOGIN" "form=$A_FORM" "tunnel=$A_TUN" \
+    "hosted=$A_HOSTED" "listener=$A_LISTEN" "port=$PORT" "url=$A_URL" "url_changed=$A_CHANGED" "expires=$A_EXP"
+}
+
+arm_view() {
+  A_RESULT=status; A_WHY=; A_DT=missing; A_LOGIN=-; A_FORM=notset; A_TUN=-; A_HOSTED=0; A_LISTEN=down; A_URL=; A_CHANGED=0; A_EXP=
+  PORT=3978; TOKEN=
+  if has node; then
+    read_config
+    [ -n "$TOKEN" ] && A_FORM=set
+    listener_up && A_LISTEN=up
+  fi
+  if find_devtunnel; then
+    A_DT=ok
+    if logged_in; then
+      A_LOGIN=in
+      if _j=$(devtunnel show "$TUNNEL" -j 2>/dev/null) && printf '%s' "$_j" | tr -d ' \r\n' | grep -q "\"portNumber\":$PORT[,}]"; then
+        A_TUN=ready; A_URL=$(url_of "$_j"); A_EXP=$(expiry_of "$_j")
+      else A_TUN=none; fi
+    else A_LOGIN=out; fi
+    tunnel_hosted "$TUNNEL" "$PORT" && A_HOSTED=1
+  fi
+  mark_url
+}
+
+arm() {
+  arm_view
+  if [ "$A_DT" != ok ]; then _no='devtunnel is not installed - s, then First-time setup'
+  elif [ "$A_LOGIN" != in ]; then _no='not signed in to Dev Tunnels - s, then Sign in to Dev Tunnels'
+  elif [ "$A_FORM" != set ]; then _no='the form has no token - s, paste the security token, save'
+  elif [ "$A_TUN" != ready ]; then _no="the tunnel $TUNNEL is not created yet - s, then First-time setup"
+  else _no=; fi
+  if [ -n "$_no" ]; then A_RESULT=refused; A_WHY=$_no; return 0; fi
+  # the listener first: the tunnel opens only onto a listener that verifies signatures
+  if [ "$A_LISTEN" != up ]; then node "$TEAM" start --port "$PORT" >/dev/null 2>&1; listener_up && A_LISTEN=up; fi
+  if [ "$A_LISTEN" != up ]; then A_RESULT=failed; A_WHY='the listener did not come up - the tunnel was not hosted'; return 0; fi
+  if [ "$A_HOSTED" != 1 ]; then
+    open_tunnel >/dev/null
+    _i=0; while [ "$_i" -lt 5 ] && ! tunnel_hosted "$TUNNEL" "$PORT"; do sleep 1; _i=$((_i + 1)); done
+    tunnel_hosted "$TUNNEL" "$PORT" && A_HOSTED=1
+  fi
+  if [ "$A_HOSTED" != 1 ]; then A_RESULT=failed; A_WHY='the tunnel did not start - see ~/.skillator/teams/devtunnel.log'; return 0; fi
+  [ -n "$A_URL" ] || A_URL=$(tunnel_url)
+  if [ -n "$A_URL" ] && [ -z "$(seen_url)" ]; then save_url "$A_URL"; fi
+  mark_url; A_RESULT=armed
+}
+
+disarm() {
+  PORT=3978; has node && read_config
+  stop_tunnel   # the tunnel first: the public side closes before the listener goes
+  has node && node "$TEAM" stop --port "$PORT" >/dev/null 2>&1
+  arm_view
+  if [ "$A_HOSTED" = 1 ]; then A_RESULT=failed; A_WHY='the tunnel is still hosted - stop its devtunnel process'
+  elif [ "$A_LISTEN" = up ]; then A_RESULT=failed; A_WHY='the listener is still up - node team.mjs stop'
+  else A_RESULT=disarmed; fi
+}
+
+ack() {
+  arm_view
+  if [ -n "$A_URL" ]; then save_url "$A_URL"; mark_url; A_RESULT=acked; else A_RESULT=failed; A_WHY='no tunnel URL to remember'; fi
 }
 
 setup() {
@@ -160,13 +234,14 @@ case $a in
   'devtunnel user show') if [ -f "$ST/login" ]; then echo 'Logged in as owner using GitHub.'; else echo 'Not logged in.'; fi ;;
   'devtunnel user login') : > "$ST/login" ;;
   'devtunnel show skillator-teams') if [ -f "$ST/tunnel" ]; then echo 'Tunnel ID : skillator-teams.euw'; else echo 'Tunnel not found.'; exit 1; fi ;;
-  'devtunnel show skillator-teams -j') if [ -f "$ST/tunnel" ]; then echo '{"tunnel":{"tunnelId":"skillator-teams.euw","ports":[{"portNumber":3978,"portUri":"https://ab12cd34-3978.euw.devtunnels.ms/"}]}}'; else echo 'Tunnel not found.'; exit 1; fi ;;
+  'devtunnel show skillator-teams -j') if [ -f "$ST/tunnel" ]; then i=ab12cd34; [ -f "$ST/newid" ] && i=zz99yy88; echo '{"tunnel":{"tunnelId":"skillator-teams.euw","tunnelExpiration":"2026-12-17T00:00:00Z","ports":[{"portNumber":3978,"portUri":"https://'"$i"'-3978.euw.devtunnels.ms/"}]}}'; else echo 'Tunnel not found.'; exit 1; fi ;;
   'devtunnel create '*) : > "$ST/tunnel" ;;
   'devtunnel port list '*) if [ -f "$ST/port" ]; then echo 'Port 3978 auto'; else echo 'Found 0 ports'; fi ;;
   'devtunnel port create '*) : > "$ST/port" ;;
   'node '*' config show') if [ -f "$ST/saved" ]; then echo '{"token":true,"workflowUrl":"x.logic.azure.com","port":3978}'; else echo '{"token":false,"workflowUrl":null,"port":3978}'; fi ;;
   'node '*' status --port '*) if [ -f "$ST/up" ]; then echo 'listener: up on 127.0.0.1:3978 (pid 1)'; else echo 'listener: not running on port 3978'; fi ;;
-  'node '*' start --port '*) : > "$ST/up" ;;
+  'node '*' start --port '*) [ -f "$ST/nostart" ] || : > "$ST/up" ;;
+  'node '*' stop --port '*) rm -f "$ST/up" ;;
   'curl '*) echo 'echo installed' ;;
   'bash'*) cat > /dev/null; cp "$0" "$BIN/devtunnel" ;;
   'brew install --cask devtunnel') cp "$0" "$BIN/devtunnel" ;;
@@ -177,8 +252,11 @@ EOF
   has() { [ -x "$BIN/$1" ]; }
   refresh_path() { :; }
   answer() { echo ask >> "$ST/calls"; case $1 in Press*) : > "$ST/saved" ;; esac; printf '%s' "$YES"; }
-  open_tunnel() { echo host >> "$ST/calls"; }
-  tunnel_hosted() { return 1; }
+  open_tunnel() { echo host >> "$ST/calls"; [ -f "$ST/noopen" ] || : > "$ST/hosted"; }
+  tunnel_hosted() { [ -f "$ST/hosted" ]; }
+  stop_tunnel() { echo unhost >> "$ST/calls"; rm -f "$ST/hosted"; }
+  sleep() { :; }
+  SKILLATOR_TEAMS_STATE="$T/state"; export SKILLATOR_TEAMS_STATE
   # scen <check> <yes> <commands present> <state files>
   scen() {
     rm -rf "$BIN" "$ST"; mkdir -p "$BIN" "$ST"; : > "$ST/calls"
@@ -229,6 +307,58 @@ EOF
   out 'Messages tab, s' || fail 'walk: form not named'
   out '^  listener *up' || fail 'walk: table listener'
   out '^  form saved *set' || fail 'walk: table form'
+  # --- F177: the board's modes ---
+  # kv <mode function> <commands present> <state files>
+  kv() {
+    rm -rf "$BIN" "$ST"; mkdir -p "$BIN" "$ST"; : > "$ST/calls"
+    for c in $2; do cp "$T/stub" "$BIN/$c"; chmod 755 "$BIN/$c"; done
+    for f in $3; do : > "$ST/$f"; done
+    $1; show_arm > "$T/out" 2>&1
+  }
+  ACTS='^\(host\|unhost\)$\| \(start\|stop\) --port '
+  RDY='login tunnel port saved'
+  U1='https://ab12cd34-3978.euw.devtunnels.ms'; U2='https://zz99yy88-3978.euw.devtunnels.ms'
+  # --status: twelve lines, the facts, nothing changed
+  kv arm_view "$ALL" "$RDY"
+  [ "$(wc -l < "$T/out" | tr -d ' ')" = 12 ] || fail 'status: not twelve lines'
+  [ "$(cut -d= -f1 "$T/out" | tr '\n' ,)" = 'result,why,devtunnel,login,form,tunnel,hosted,listener,port,url,url_changed,expires,' ] || fail 'status: keys'
+  out '^result=status$' && out '^form=set$' && out '^tunnel=ready$' && out '^hosted=0$' && out '^listener=down$' || fail 'status: facts'
+  out "^url=$U1\$" && out '^expires=2026-12-17T00:00:00Z$' && out '^url_changed=0$' || fail 'status: url / expires'
+  called "$ACTS" && fail 'status changed something'
+  # --arm refuses, and starts nothing: devtunnel missing, signed out, no token, no tunnel
+  kv arm 'node' "$RDY";              out '^result=refused$' && out '^why=devtunnel is not installed' || fail 'arm: devtunnel missing'
+  called "$ACTS" && fail 'arm: devtunnel missing started something'
+  kv arm "$ALL" 'tunnel port saved'; out '^result=refused$' && out '^why=not signed in' || fail 'arm: signed out'
+  called "$ACTS" && fail 'arm: signed out started something'
+  kv arm "$ALL" 'login tunnel port'; out '^result=refused$' && out '^why=the form has no token' || fail 'arm: no token'
+  called "$ACTS" && fail 'arm: no token started something'
+  kv arm "$ALL" 'login saved';       out '^result=refused$' && out '^why=the tunnel skillator-teams is not created yet' || fail 'arm: no tunnel'
+  called "$ACTS" && fail 'arm: no tunnel started something'
+  # --arm: the listener first, then the tunnel; the URL is remembered on the first arm
+  rm -rf "$T/state"
+  kv arm "$ALL" "$RDY"
+  out '^result=armed$' && out '^hosted=1$' && out '^listener=up$' && out "^url=$U1\$" && out '^url_changed=0$' || fail 'arm'
+  [ "$(grep -e ' start --port 3978' -e '^host$' "$ST/calls" | head -n 1 | grep -c start)" = 1 ] || fail 'arm: the tunnel was hosted before the listener'
+  [ "$(seen_url)" = "$U1" ] || fail 'arm: the URL was not remembered'
+  # already up and hosted: neither started again
+  kv arm "$ALL" "$RDY up hosted"; out '^result=armed$' || fail 'arm when armed'
+  called "$ACTS" && fail 'arm when armed started something'
+  # the listener does not come up: failed, the tunnel is not hosted
+  kv arm "$ALL" "$RDY nostart"; out '^result=failed$' && out '^why=the listener did not come up' || fail 'arm without a listener'
+  called '^host$' && fail 'arm without a listener hosted the tunnel'
+  # the tunnel does not start: failed
+  kv arm "$ALL" "$RDY noopen"; out '^result=failed$' && out '^why=the tunnel did not start' || fail 'arm without a tunnel process'
+  # URL guard: unchanged = no warning; changed = warning, kept through --arm, cleared only by --ack
+  kv arm_view "$ALL" "$RDY";       out '^url_changed=0$' || fail 'guard: an unchanged URL was flagged'
+  kv arm_view "$ALL" "$RDY newid"; out "^url=$U2\$" && out '^url_changed=1$' || fail 'guard: a changed URL was not flagged'
+  kv arm "$ALL" "$RDY newid";      out '^url_changed=1$' || fail 'guard: --arm cleared the warning'
+  [ "$(seen_url)" = "$U1" ] || fail 'guard: --arm overwrote the remembered URL'
+  kv ack "$ALL" "$RDY newid";      out '^result=acked$' && out '^url_changed=0$' || fail 'guard: --ack'
+  [ "$(seen_url)" = "$U2" ] || fail 'guard: --ack did not remember the new URL'
+  # --disarm: the tunnel first, then the listener
+  kv disarm "$ALL" "$RDY up hosted"
+  out '^result=disarmed$' && out '^hosted=0$' && out '^listener=down$' || fail 'disarm'
+  [ "$(grep -e '^unhost$' -e ' stop --port 3978' "$ST/calls" | head -n 1 | grep -c unhost)" = 1 ] || fail 'disarm: the listener was stopped before the tunnel'
   LC_ALL=C grep -q "$(printf '[^\t -~]')" "$SELF" && fail 'not pure ASCII + LF'
   echo ok
 }
@@ -236,6 +366,10 @@ EOF
 case $1 in
   --selftest) selftest ;;
   --check) CHECK=1; setup ;;
+  --status) arm_view; show_arm ;;
+  --arm) arm; show_arm ;;
+  --disarm) disarm; show_arm ;;
+  --ack) ack; show_arm ;;
   '') setup ;;
-  *) echo 'usage: setup.sh [--check | --selftest]' >&2; exit 2 ;;
+  *) echo 'usage: setup.sh [--check | --selftest] | --status | --arm | --disarm | --ack' >&2; exit 2 ;;
 esac

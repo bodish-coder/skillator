@@ -75,6 +75,12 @@ side effect outside the worktree (stop #3). No `Ruling:` does either.
    terminal** and gives the https URL to the outgoing webhook.
 4. `team.mjs status` shows the listener, the settings (set / not set) and the
    inbox. `team.mjs stop` and Ctrl-C in the tunnel's terminal disarm.
+5. Or one key, from the ops board's Messages tab: `c` connects (the listener, then
+   the tunnel in its own window; skipped when already up), `d` disconnects, `y`
+   copies the URL. The key press is the owner's act. It runs `scripts/setup.ps1|sh
+   --arm` / `--disarm`; a session never runs those itself, and no `Ruling:` does.
+   The tab warns when the tunnel URL is no longer the one last shown (a recreated
+   tunnel gets a new one) and shows when the tunnel expires.
 
 Never paste the token, the Workflows URL or a tunnel URL into the chat, a
 command line, a repo file or a ticket.
