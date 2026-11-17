@@ -354,24 +354,46 @@ function Get-AgyIde {
 }
 
 # Normalize-MusePath: a source path as Muse and the installer may both spell it, for comparison
-function Normalize-MusePath([string]$path, [int]$depth = 0) {
-  $path = $path.Replace('/', '\') -replace '^\\\\\?\\', ''
-  # A231: follow symlinks and junctions on every component (PS 5.1 has no realpath)
-  $parts = $path.TrimEnd('\') -split '\\'
-  $cur = $parts[0] + '\'
-  for ($i = 1; $path -match '^[A-Za-z]:\\' -and $i -lt $parts.Count -and $depth -lt 32; $i++) {
-    $cur = Join-Path $cur $parts[$i]
-    $item = Get-Item -LiteralPath $cur -Force -ErrorAction SilentlyContinue
-    if ($item -and $item.LinkType -in 'SymbolicLink', 'Junction' -and @($item.Target)[0]) {
-      $t = @($item.Target)[0] -replace '^\\\\\?\\', ''
-      if (-not [IO.Path]::IsPathRooted($t)) { $t = Join-Path (Split-Path $cur) $t }
-      $rest = @($parts | Select-Object -Skip ($i + 1))
-      return Normalize-MusePath ((@($t) + $rest) -join '\') ($depth + 1)
-    }
+# A231: the same string as install.sh muse_json's norm; both resolve links with
+# GetFinalPathNameByHandle (Node's realpathSync.native) and keep a subst/mapped drive letter
+function Normalize-MusePath([string]$path) {
+  $path = $path.Replace('/', '\') -replace '^\\\\\?\\UNC\\', '\\' -replace '^\\\\\?\\', ''
+  try {
+    $path = [IO.Path]::GetFullPath($path)
+    if (-not ('MuseFinalPath' -as [type])) {
+      Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices; using System.Text;
+public static class MuseFinalPath {
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr sa, uint disposition, uint flags, IntPtr template);
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  static extern uint GetFinalPathNameByHandleW(IntPtr handle, StringBuilder buffer, uint length, uint flags);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+  public static string Get(string path) {
+    IntPtr h = CreateFileW(path, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+    if (h == new IntPtr(-1)) return null;
+    try {
+      StringBuilder b = new StringBuilder(32768);
+      uint n = GetFinalPathNameByHandleW(h, b, (uint)b.Capacity, 0);
+      if (n == 0 || n >= b.Capacity) return null;
+      string s = b.ToString();
+      if (s.StartsWith(@"\\?\UNC\")) return @"\\" + s.Substring(8);
+      return s.StartsWith(@"\\?\") ? s.Substring(4) : s;
+    } finally { CloseHandle(h); }
   }
-  $path = $path.Replace('\', '/')
+}
+'@
+    }
+    $real = [MuseFinalPath]::Get($path)
+    if ($real -and $path -match '^[A-Za-z]:') {
+      $root = ([string][MuseFinalPath]::Get($path.Substring(0, 2) + '\')).TrimEnd('\')
+      if ($root -and ($real -eq $root -or $real.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase))) { $real = $path.Substring(0, 2) + $real.Substring($root.Length) }
+    }
+    if ($real) { $path = $real }
+  } catch {}
+  $path = $path.Replace('\', '/').TrimEnd('/')
   if ($path -match '^[A-Za-z]:/') { $path = $path.ToLowerInvariant() }
-  return $path.TrimEnd('/')
+  return $path
 }
 
 # Write-Muse: F134 - install or update the skillator plugin for Muse Code CLI when muse is available
@@ -679,10 +701,13 @@ function Invoke-SelfTest([string]$T) {
   # A231: Muse may record the link-resolved, \\?\-prefixed spelling of the installer's source
   $real = Join-Path $T 'a231\real'; $lnk = Join-Path $T 'a231\lnk'
   New-Item -ItemType Directory -Force (Join-Path $real 'src') | Out-Null
-  try { New-Item -ItemType Junction -Path $lnk -Target $real -ErrorAction Stop | Out-Null } catch { Write-Host "skip  A231 link case (no junction: $($_.Exception.Message))" }
-  if (Test-Path -LiteralPath $lnk) {
-    if ((Normalize-MusePath ('\\?\' + $real.ToUpperInvariant() + '\src')) -cne (Normalize-MusePath (Join-Path $lnk 'src'))) { return 'A231 Muse source through a junction compared unequal' }
-    [IO.Directory]::Delete($lnk)
+  try {
+    try { New-Item -ItemType Junction -Path $lnk -Target $real -ErrorAction Stop | Out-Null } catch { Write-Host "skip  A231 link case (no junction: $($_.Exception.Message))" }
+    if ((Test-Path -LiteralPath $lnk) -and (Normalize-MusePath ('\\?\' + $real.ToUpperInvariant() + '\src')) -cne (Normalize-MusePath (Join-Path $lnk 'src'))) { return 'A231 Muse source through a junction compared unequal' }
+  } finally {
+    # the link alone, never recursive, then its target
+    if (Test-Path -LiteralPath $lnk) { [IO.Directory]::Delete($lnk) }
+    Remove-Item -LiteralPath (Join-Path $T 'a231') -Recurse -Force -ErrorAction SilentlyContinue
   }
   $prof = Join-Path $T 'profile.ps1'
   foreach ($m in '.codex','.cursor','.gemini','.pi','.config\opencode') { New-Item -ItemType Directory -Force (Join-Path $T $m) | Out-Null }

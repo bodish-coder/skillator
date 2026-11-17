@@ -380,43 +380,44 @@ agy_ide() {
 }
 
 # muse_json: strict JSON checks for put_muse (Node), one mode per call
-muse_json() {
-  node -e '
-    const fs = require("fs"), [mode, arg, expected] = process.argv.slice(1);
-    const norm = p => { p = p.replace(/^\\\\\?\\/, ""); try { p = fs.realpathSync.native(p); } catch {} p = p.replace(/\\/g, "/").replace(/^\/\/\?\//, "").replace(/\/+$/, ""); return /^[a-z]:\//i.test(p) ? p.toLowerCase() : p; };
-    try {
-      const data = JSON.parse(fs.readFileSync(0, "utf8").replace(/^\uFEFF/, ""));
-      if (mode === "manifest") {
-        if (data.name !== "skillator" || typeof data.version !== "string" || !data.version.trim()) throw Error("invalid selected Skillator manifest");
-        console.log(data.version);
-      } else if (mode === "record") {
-        if (!data || !Array.isArray(data.plugins)) throw Error("invalid plugins list JSON");
-        const entries = data.plugins.filter(p => p?.record?.id === "skillator");
-        if (entries.length > 1) throw Error("ambiguous Skillator records; inspect manually");
-        if (!entries.length) { console.log("null"); process.exit(0); }
-        const {record, active_scope} = entries[0];
-        if (!record.scope && active_scope === "installed-plugin") record.scope = "user";
-        console.log(JSON.stringify(record));
-      } else if (mode === "policy") {
-        if (data === null) console.log("install");
-        else {
-          if (data.enabled !== true || data.scope !== "user") throw Error("disabled or unsupported scope; preserve installation manually (CLI remove/update has no scope selector)");
-          if (data.source?.provenance === "marketplace-user-added") console.log("update");
-          else if (data.source?.provenance !== "native-local") throw Error("unsupported provenance; inspect installation manually");
-          else if (typeof data.source.path !== "string" || !data.source.path) throw Error("missing native-local source path");
-          else console.log(norm(data.source.path) === norm(arg) ? "update" : "migrate");
+  muse_json() {
+    node -e '
+      const fs = require("fs"), path = require("path"), [mode, arg, expected] = process.argv.slice(1);
+      // A231: the same string as install.ps1 Normalize-MusePath; links resolved, a subst/mapped drive letter kept
+      const norm = p => { const real = q => { try { return fs.realpathSync.native(q); } catch { return ""; } }; if (process.platform === "win32") { p = path.resolve(p.replace(/\//g, "\\").replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/, "")); const r = real(p), root = /^[a-z]:/i.test(p) ? real(p.slice(0, 2) + "\\").replace(/\\$/, "") : ""; if (r) p = root && (r.toLowerCase() === root.toLowerCase() || r.toLowerCase().startsWith(root.toLowerCase() + "\\")) ? p.slice(0, 2) + r.slice(root.length) : r; } else p = real(p) || p; p = p.replace(/\\/g, "/").replace(/\/+$/, ""); return /^[a-z]:\//i.test(p) ? p.toLowerCase() : p; };
+      try {
+        const data = JSON.parse(fs.readFileSync(0, "utf8").replace(/^\uFEFF/, ""));
+        if (mode === "manifest") {
+          if (data.name !== "skillator" || typeof data.version !== "string" || !data.version.trim()) throw Error("invalid selected Skillator manifest");
+          console.log(data.version);
+        } else if (mode === "record") {
+          if (!data || !Array.isArray(data.plugins)) throw Error("invalid plugins list JSON");
+          const entries = data.plugins.filter(p => p?.record?.id === "skillator");
+          if (entries.length > 1) throw Error("ambiguous Skillator records; inspect manually");
+          if (!entries.length) { console.log("null"); process.exit(0); }
+          const {record, active_scope} = entries[0];
+          if (!record.scope && active_scope === "installed-plugin") record.scope = "user";
+          console.log(JSON.stringify(record));
+        } else if (mode === "policy") {
+          if (data === null) console.log("install");
+          else {
+            if (data.enabled !== true || data.scope !== "user") throw Error("disabled or unsupported scope; preserve installation manually (CLI remove/update has no scope selector)");
+            if (data.source?.provenance === "marketplace-user-added") console.log("update");
+            else if (data.source?.provenance !== "native-local") throw Error("unsupported provenance; inspect installation manually");
+            else if (typeof data.source.path !== "string" || !data.source.path) throw Error("missing native-local source path");
+            else console.log(norm(data.source.path) === norm(arg) ? "update" : "migrate");
+          }
+        } else if (mode === "scope") console.log(data?.scope || "user");
+        else if (mode === "path") console.log(data.source.path);
+        else if (mode === "verify") {
+          const before = JSON.parse(expected), local = !before || before.source.provenance === "native-local";
+          const [path, version] = JSON.parse(arg);
+          if (!data || data.version !== version || data.enabled !== true || data.scope !== (before?.scope || "user")) throw Error("verification failed: expected version " + version + ", enabled and original scope; got version " + data?.version + "; inspect muse plugins list --json manually");
+          if (local ? data.source?.provenance !== "native-local" || typeof data.source.path !== "string" || norm(data.source.path) !== norm(path) : data.source?.provenance !== before.source.provenance || data.source?.path !== before.source.path) throw Error("source verification failed; inspect muse plugins list --json manually");
         }
-      } else if (mode === "scope") console.log(data?.scope || "user");
-      else if (mode === "path") console.log(data.source.path);
-      else if (mode === "verify") {
-        const before = JSON.parse(expected), local = !before || before.source.provenance === "native-local";
-        const [path, version] = JSON.parse(arg);
-        if (!data || data.version !== version || data.enabled !== true || data.scope !== (before?.scope || "user")) throw Error("verification failed: expected version " + version + ", enabled and original scope; got version " + data?.version + "; inspect muse plugins list --json manually");
-        if (local ? data.source?.provenance !== "native-local" || typeof data.source.path !== "string" || norm(data.source.path) !== norm(path) : data.source?.provenance !== before.source.provenance || data.source?.path !== before.source.path) throw Error("source verification failed; inspect muse plugins list --json manually");
-      }
-    } catch (e) { console.error("Muse: " + e.message); process.exit(1); }
-  ' "$@"
-}
+      } catch (e) { console.error("Muse: " + e.message); process.exit(1); }
+    ' "$@"
+  }
 
 # put_muse: F134 - install or update the skillator plugin for Muse Code CLI when muse is available
 put_muse() {

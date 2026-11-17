@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import fs from 'node:fs';
+import nodePath from 'node:path';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -192,3 +194,38 @@ test('installers removed by a successful pull stop installation', () => {
 });
 // Retain isolated fixtures for inspection; no recursive deletion or live profile access.
 console.log(`A168 local fixtures: ${root}`);
+test('A231: both installers normalize a Muse source path to the same string', { skip: process.platform !== 'win32' || !ps ? 'Windows with PowerShell only' : false }, () => {
+  const normSrc = readFileSync(join(plugin, 'install.sh'), 'utf8').match(/^\s*const norm = (p => .*);\r?$/m)?.[1];
+  assert.ok(normSrc, 'install.sh: muse_json norm not found');
+  const nodeNorm = new Function('fs', 'path', `return ${normSrc}`)(fs, nodePath);
+  const fx = join(root, 'a231'), real = join(fx, 'real');
+  mkdirSync(join(real, 'sub'), { recursive: true }); mkdirSync(join(fx, 'a'));
+  fs.symlinkSync(real, join(fx, 'junction'), 'junction');
+  let rel = true;
+  try { fs.symlinkSync('..\\real', join(fx, 'a', 'rel'), 'dir'); } catch { rel = false; }
+  const [gone, drive] = 'ZYXWVUTSRQPONMLKJIHG'.split('').filter(l => !fs.existsSync(`${l}:\\`));
+  const subst = drive && spawnSync('subst', [`${drive}:`, real], { timeout: 15000, windowsHide: true }).status === 0;
+  try {
+    const cases = [[join(fx, 'junction', 'sub'), 'real'], [`${fx}\\a\\..\\junction\\sub`, 'real'],
+      ...(rel ? [[join(fx, 'a', 'rel', 'sub'), 'real']] : []), ['\\\\?\\' + join(real, 'sub').toUpperCase(), 'real'],
+      [`${gone}:\\gone\\x`, `${gone.toLowerCase()}:/gone/x`], ['\\\\?\\UNC\\localhost\\a231-none\\x', '//localhost/a231-none/x'],
+      ['\\\\localhost\\a231-none\\x', '//localhost/a231-none/x'], ...(subst ? [[`${drive}:\\sub`, `${drive.toLowerCase()}:/sub`]] : [])];
+    const expected = fs.realpathSync.native(join(real, 'sub')).replace(/\\/g, '/').toLowerCase();
+    const script = join(fx, 'norm.ps1');
+    writeFileSync(script, `[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$ast = [Management.Automation.Language.Parser]::ParseFile('${join(plugin, 'install.ps1').replaceAll("'", "''")}', [ref]$null, [ref]$null)
+. ([scriptblock]::Create($ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Normalize-MusePath' }, $true).Extent.Text))
+foreach ($p in ([Console]::In.ReadToEnd() | ConvertFrom-Json)) { Normalize-MusePath $p }`);
+    const r = spawnSync(ps, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script],
+      { input: JSON.stringify(cases.map(c => c[0])), encoding: 'utf8', timeout: 120000, windowsHide: true });
+    assert.equal(r.status, 0, r.stderr);
+    const psOut = r.stdout.trim().split(/\r?\n/);
+    cases.forEach(([input, want], i) => {
+      const n = nodeNorm(input);
+      assert.equal(psOut[i], n, `${input}: install.ps1 and install.sh disagree`);
+      assert.equal(n, want === 'real' ? expected : want, `${input}: normalized wrongly`);
+    });
+    if (!rel) console.log('# skip A231 relative symlink case (no symlink privilege)');
+    if (!subst) console.log('# skip A231 subst case (no free drive or subst failed)');
+  } finally { if (subst) spawnSync('subst', [`${drive}:`, '/d'], { timeout: 15000, windowsHide: true }); }
+});
