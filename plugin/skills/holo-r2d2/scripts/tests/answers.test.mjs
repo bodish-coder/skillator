@@ -2,6 +2,7 @@
 // the same function the page embeds) and the finder (answers.mjs).
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -257,4 +258,62 @@ test("finder: a run with no open decision is not an open set", async () => {
   const r = await findAnswers(s.opts);
   assert.equal(r.picked, null);
   assert.ok(r.ignored.some((x) => x.path.endsWith("RUN-1-decisions-FINAL.json")));
+});
+
+// ------------------------------------------------- review round 1 (F179) ----
+test("r1-7: one isFinalized, shared by nextWizardSet, answersToCommands and the finder", async () => {
+  const w = await import("../wizard.mjs");
+  assert.equal(typeof w.isFinalized, "function");
+  assert.equal(w.isFinalized(answers()), true);
+  assert.equal(w.isFinalized(answers({ final: false })), false);
+  assert.equal(w.isFinalized(answers(DRAFT)), false);
+  assert.throws(() => w.answersToCommands({ ...answers({ final: false }), set: "RUN-1" }), /draft/);
+});
+
+test("r1-10: --root with no value says so and exits 2", () => {
+  const r = spawnSync(process.execPath, [join(HERE, "..", "answers.mjs"), "--root"], { encoding: "utf8" });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /answers: --root needs a path/);
+  assert.ok(!/at .*answers\.mjs/.test(r.stderr), "no stack trace");
+});
+
+test("r1-5: page and finder sanitise the file name the same way", async () => {
+  const f = fakeWin();
+  const s = answerSaver({ win: f.win, setId: "a/b c", key: "k", pickerId: "p", json: () => "{}", download: () => {}, say: () => {} });
+  await s.save(true);
+  assert.deepEqual(Object.keys(f.files), ["a_b_c-decisions-FINAL.json"]);
+  assert.equal(s.name(true), "a_b_c-decisions-FINAL.json");
+  const sb = sandbox();
+  const set = { ...SET, id: "a/b c" };
+  writeFileSync(join(sb.holo, "odd.wizard.html"), wizardPage(set));
+  const p = put(sb.holo, "a_b_c-decisions-FINAL.json", answers({ set: "a/b c" }), 0);
+  const r = await findAnswers(sb.opts);
+  assert.equal(r.picked && r.picked.path, p);
+});
+
+test("r1-8: Linux reads XDG_DOWNLOAD_DIR from user-dirs.dirs", () => {
+  const s = sandbox();
+  mkdirSync(join(s.home, ".config"), { recursive: true });
+  writeFileSync(join(s.home, ".config", "user-dirs.dirs"), '# x\nXDG_DESKTOP_DIR="$HOME/Desk"\nXDG_DOWNLOAD_DIR="$HOME/Dl"\n');
+  const dirs = downloadDirs({ home: s.home, env: {}, platform: "linux" }).map((d) => d.dir);
+  assert.deepEqual(dirs, [join(s.home, "Dl")]);
+});
+
+test("r1-9: folders dedupe on resolved path; case only on win32/darwin; page folder included", async () => {
+  const s = sandbox();
+  const prefs = join(s.env.LOCALAPPDATA, "Google", "Chrome", "User Data", "Default", "Preferences");
+  mkdirSync(dirname(prefs), { recursive: true });
+  writeFileSync(prefs, JSON.stringify({ download: { default_directory: s.dl.toUpperCase() + "\\" } }));
+  assert.equal(downloadDirs(s.opts).length, 1, "same folder, other case and a trailing slash");
+  mkdirSync(join(s.home, ".config"), { recursive: true });
+  writeFileSync(join(s.home, ".config", "user-dirs.dirs"), 'XDG_DOWNLOAD_DIR="$HOME/DL"\n');
+  mkdirSync(join(s.home, ".skillator", "holo"), { recursive: true });
+  writeFileSync(join(s.home, ".skillator", "holo", "answers-dir"), join(s.home, "dl") + "\n");
+  assert.equal(downloadDirs({ home: s.home, env: {}, platform: "linux" }).length, 2, "linux: DL and dl are two folders");
+  writeFileSync(join(s.home, ".skillator", "holo", "answers-dir"), join(s.home, "DOWNLOADS") + "\n");
+  assert.equal(downloadDirs({ home: s.home, env: {}, platform: "darwin" }).length, 1, "darwin: Downloads and DOWNLOADS are one folder");
+  writeFileSync(join(s.home, ".skillator", "holo", "answers-dir"), s.holo + "\n");
+  const r = await findAnswers(s.opts);
+  assert.equal(r.searched.filter((f) => f.dir.toLowerCase().replace(/[\\/]+$/, "") === s.holo.toLowerCase()).length, 1);
+  assert.equal(r.searched[0].why, "page folder");
 });

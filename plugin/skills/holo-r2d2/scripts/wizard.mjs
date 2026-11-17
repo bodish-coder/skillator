@@ -11,6 +11,10 @@ export const ANSWER_SCHEMA = "holo-answers/1";
 const MAX_TEXT = 4000;
 
 const str = (v) => (v == null ? "" : String(v));
+// FINAL = finalized, reviewed and owned; anything less is a draft (F179: one rule).
+export const isFinalized = (a) => !!a && a.final !== false && typeof a.finalizedAt === "string" && !!a.finalizedAt.trim() && a.reviewed === true && !!str(a.owner).trim();
+// The answers file name stem, as the page's saver builds it (answerSaver inlines the same regex).
+export const fileStem = (id) => str(id).replace(/[^A-Za-z0-9_.-]/g, "_");
 const escH = (s) => str(s).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const clipText = (s, n) => { s = str(s).trim(); return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; };
 const ASKABLE = new Set(["open", "asked"]);
@@ -197,7 +201,7 @@ export function nextWizardSet(set, ans) {
   if (ans.round != null && (!Number.isFinite(ans.round) || ans.round !== activeRound)) {
     throw new Error(`answers: round ${ans.round} does not match active round ${activeRound}`);
   }
-  if (!ans.finalizedAt || typeof ans.finalizedAt !== "string" || !ans.finalizedAt.trim() || !ans.reviewed || ans.reviewed !== true || !str(ans.owner).trim() || ans.final === false) {
+  if (!isFinalized(ans)) {
     throw new Error("answers: a draft, not finalized and reviewed by its owner - cannot settle decisions");
   }
 
@@ -306,7 +310,7 @@ export function nextWizardSet(set, ans) {
 
 export function answersToCommands(ans, rm = "relay-morpheus.sh") {
   if (!ans || ans.schema !== ANSWER_SCHEMA) throw new Error(`answers: schema must be "${ANSWER_SCHEMA}"`);
-  if (!ans.finalizedAt || !ans.reviewed || !str(ans.owner).trim()) throw new Error("answers: a draft, not finalized and reviewed by its owner - nothing is applied");
+  if (!isFinalized(ans)) throw new Error("answers: a draft, not finalized and reviewed by its owner - nothing is applied");
   const m = /^RUN-(\d+)$/.exec(str(ans.set));
   if (!m) throw new Error(`answers: set "${str(ans.set).slice(0, 40)}" is not a relay run - read the answers into the work by hand`);
   const q = (s) => "'" + s.replace(/'/g, "'\\''") + "'";
@@ -516,7 +520,7 @@ kbd{font:700 .8rem ui-monospace,monospace;padding:2px 6px;border:1px solid var(-
 // The page embeds this function by its own source, so the tests run the browser
 // code. Self-contained: no template literals, no outside names. Nothing is sent.
 export function answerSaver({ win, setId, json, download, say, copyFallback }) {
-  const name = (final) => setId + "-decisions-" + (final ? "FINAL" : "draft") + ".json";
+  const name = (final) => String(setId).replace(/[^A-Za-z0-9_.-]/g, "_") + "-decisions-" + (final ? "FINAL" : "draft") + ".json";
   const next = " Then say \"check wizard answers\" in the working conversation.";
   const canSave = typeof win.showDirectoryPicker === "function";
   function idb(mode, fn) {
@@ -569,7 +573,7 @@ export function answerSaver({ win, setId, json, download, say, copyFallback }) {
     say(ok ? "Answers JSON (" + (final ? "FINAL" : "draft") + ") copied. Paste it in the working conversation."
       : "Copy failed - use Save to page folder or Download instead.");
   }
-  return { canSave, save, deliver, copy };
+  return { canSave, save, deliver, copy, name };
 }
 
 // The page's own code. Text from the set or a draft only ever reaches the DOM
@@ -1086,7 +1090,7 @@ function exportObj(final) {
 }
 function download(final) {
   const blob = new Blob([JSON.stringify(exportObj(final), null, 2)], { type: "application/json" });
-  const u = URL.createObjectURL(blob), a = el("a", { href: u, download: SET.id + "-decisions-" + (final ? "FINAL" : "draft") + ".json" });
+  const u = URL.createObjectURL(blob), a = el("a", { href: u, download: SAVER.name(final) });
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000);
   if (!final) say("Draft downloaded. It stays a draft, whatever was finalized before.");
 }
