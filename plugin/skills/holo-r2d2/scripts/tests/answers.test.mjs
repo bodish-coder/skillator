@@ -1,0 +1,260 @@
+// F179: answers back without hand-sharing - the page's copy/save code (answerSaver,
+// the same function the page embeds) and the finder (answers.mjs).
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { answerSaver, wizardPage, setFromRun, SET_SCHEMA, ANSWER_SCHEMA } from "../wizard.mjs";
+import { parseRun } from "../holo.mjs";
+import { findAnswers, downloadDirs, report } from "../answers.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+// ---------------------------------------------------------------- page ----
+function fakeWin({ picker = true, perm = "granted", abort = false, db = new Map() } = {}) {
+  const files = {}, calls = { picker: 0, clip: [] }, state = { perm };
+  const dir = {
+    name: "holo", kind: "directory",
+    queryPermission: async () => state.perm, requestPermission: async () => state.perm,
+    getFileHandle: async (n) => ({ createWritable: async () => { let buf = ""; return { write: async (s) => { buf += s; }, close: async () => { files[n] = buf; } }; } }),
+  };
+  const req = (fn) => { const r = {}; queueMicrotask(() => { try { r.result = fn(); r.onsuccess && r.onsuccess({ target: r }); } catch (e) { r.error = e; r.onerror && r.onerror({ target: r }); } }); return r; };
+  const idb = {
+    objectStoreNames: { contains: () => false }, createObjectStore() {},
+    transaction: () => ({ objectStore: () => ({ get: (k) => req(() => db.get(k)), put: (v, k) => req(() => db.set(k, v)) }) }),
+  };
+  const win = {
+    indexedDB: { open: () => { const r = {}; queueMicrotask(() => { r.result = idb; r.onupgradeneeded && r.onupgradeneeded({ target: r }); r.onsuccess && r.onsuccess({ target: r }); }); return r; } },
+    navigator: { clipboard: { writeText: async (t) => { calls.clip.push(t); } } },
+  };
+  if (picker) win.showDirectoryPicker = async () => { calls.picker++; if (abort) { const e = new Error("cancel"); e.name = "AbortError"; throw e; } return dir; };
+  return { win, files, calls, db, state };
+}
+function saverFor(f) {
+  const out = { said: [], downloads: [] };
+  out.saver = answerSaver({
+    win: f.win, setId: "RUN-7",
+    json: (final) => JSON.stringify({ set: "RUN-7", final }),
+    download: (final) => out.downloads.push(final),
+    say: (m) => out.said.push(m),
+  });
+  return out;
+}
+
+test("page: Copy JSON puts the same export on the clipboard", async () => {
+  const f = fakeWin(), s = saverFor(f);
+  await s.saver.copy(true);
+  assert.deepEqual(f.calls.clip, [JSON.stringify({ set: "RUN-7", final: true })]);
+  assert.match(s.said.at(-1), /copied/i);
+});
+
+test("page: Save to page folder writes the named file and says where", async () => {
+  const f = fakeWin(), s = saverFor(f);
+  await s.saver.save(true);
+  assert.equal(f.files["RUN-7-decisions-FINAL.json"], JSON.stringify({ set: "RUN-7", final: true }));
+  assert.equal(s.downloads.length, 0);
+  assert.match(s.said.at(-1), /holo.*RUN-7-decisions-FINAL\.json/);
+  await s.saver.save(false);
+  assert.ok(f.files["RUN-7-decisions-draft.json"], "a draft is saved under its draft name");
+});
+
+test("page: the folder is remembered per set - Finalize later saves there without a picker", async () => {
+  const f = fakeWin();
+  await saverFor(f).saver.save(false);
+  const s2 = saverFor(f); // a fresh page load, same IndexedDB
+  await s2.saver.deliver(true);
+  assert.equal(f.calls.picker, 1, "no second picker");
+  assert.ok(f.files["RUN-7-decisions-FINAL.json"]);
+  assert.equal(s2.downloads.length, 0);
+  const other = answerSaver({ win: f.win, setId: "RUN-8", json: () => "{}", download: () => s2.downloads.push("RUN-8"), say: () => {} });
+  await other.deliver(true);
+  assert.deepEqual(s2.downloads, ["RUN-8"], "another set does not reuse RUN-7's folder");
+});
+
+test("page: no folder chosen -> Finalize downloads as before", async () => {
+  const f = fakeWin(), s = saverFor(f);
+  await s.saver.deliver(true);
+  assert.deepEqual(s.downloads, [true]);
+  assert.equal(f.calls.picker, 0);
+  assert.match(s.said.at(-1), /download folder/i);
+});
+
+test("page: no File System Access API -> Save falls back to the download", async () => {
+  const f = fakeWin({ picker: false }), s = saverFor(f);
+  assert.equal(s.saver.canSave, false);
+  await s.saver.save(true);
+  assert.deepEqual(s.downloads, [true]);
+});
+
+test("page: a cancelled picker writes nothing and downloads nothing", async () => {
+  const f = fakeWin({ abort: true }), s = saverFor(f);
+  await s.saver.save(true);
+  assert.deepEqual(f.files, {});
+  assert.deepEqual(s.downloads, []);
+  assert.match(s.said.at(-1), /cancel/i);
+});
+
+test("page: permission refused on the remembered folder -> download, and says why", async () => {
+  const f = fakeWin();
+  await saverFor(f).saver.save(true);
+  f.state.perm = "denied"; // a later page load where the owner refuses the prompt
+  const s = saverFor(f);
+  await s.saver.deliver(true);
+  assert.deepEqual(s.downloads, [true]);
+  assert.match(s.said.at(-1), /permission/i);
+});
+
+test("page: the wizard embeds the saver and labels the new buttons", () => {
+  const set = { schema: SET_SCHEMA, id: "X", decisions: [{ id: "Q1", question: "q", options: [{ id: "a", label: "A" }] }] };
+  const wp = wizardPage(set);
+  assert.ok(wp.includes("function answerSaver"), "the page runs the tested function");
+  assert.ok(wp.includes('aria-label": "Copy the answers JSON to the clipboard') || wp.includes("Copy the answers JSON to the clipboard"));
+  assert.ok(wp.includes("Save the answers JSON into the folder that holds this page"));
+  assert.ok(!/\bfetch\(|XMLHttpRequest|sendBeacon|WebSocket/.test(wp), "nothing is sent anywhere");
+});
+
+// -------------------------------------------------------------- finder ----
+const SET = { schema: SET_SCHEMA, id: "review-x", title: "Review X", decisions: [
+  { id: "Q1", ticket: "F12", question: "Pick a store?", options: [{ id: "o1", label: "SQLite" }, { id: "o2", label: "Postgres" }] },
+] };
+function answers(over = {}) {
+  return { schema: ANSWER_SCHEMA, set: "review-x", setSchema: SET_SCHEMA, round: 1, owner: "Owner", reviewed: true, final: true,
+    finalizedAt: "2026-11-17T10:00:00Z", answers: [{ id: "Q1", question: "Pick a store?", status: "answered", choice: { id: "o1", label: "SQLite" } }], ...over };
+}
+const DRAFT = { final: false, finalizedAt: null, reviewed: false };
+let seq = 0;
+function sandbox() {
+  const base = mkdtempSync(join(tmpdir(), "holo-f179-"));
+  const root = join(base, "repo"), home = join(base, "home");
+  const holo = join(root, ".skillator", "holo"), dl = join(home, "Downloads");
+  for (const d of [holo, dl]) mkdirSync(d, { recursive: true });
+  writeFileSync(join(holo, "review-x.wizard.html"), wizardPage(SET));
+  const env = { LOCALAPPDATA: join(home, "AppData", "Local"), APPDATA: join(home, "AppData", "Roaming") };
+  const opts = { root, home, env, platform: "win32", regQuery: () => null };
+  return { base, root, home, holo, dl, env, opts };
+}
+function put(dir, name, obj, ageSec = 0) {
+  mkdirSync(dir, { recursive: true });
+  const p = join(dir, name);
+  writeFileSync(p, JSON.stringify(obj));
+  const t = new Date(Date.parse("2026-11-17T12:00:00Z") - ageSec * 1000 + seq++);
+  utimesSync(p, t, t);
+  return p;
+}
+
+test("finder: the page folder beats Downloads", async () => {
+  const s = sandbox();
+  put(s.dl, "review-x-decisions-FINAL.json", answers(), 0);
+  const inPage = put(s.holo, "review-x-decisions-FINAL.json", answers(), 60);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked.path, inPage);
+});
+
+test("finder: FINAL beats a newer draft", async () => {
+  const s = sandbox();
+  const fin = put(s.holo, "review-x-decisions-FINAL.json", answers(), 600);
+  put(s.holo, "review-x-decisions-draft.json", answers(DRAFT), 0);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked.path, fin);
+});
+
+test("finder: newest FINAL wins inside one folder (browser ' (1)' copies count)", async () => {
+  const s = sandbox();
+  put(s.dl, "review-x-decisions-FINAL.json", answers(), 600);
+  const newer = put(s.dl, "review-x-decisions-FINAL (1).json", answers(), 0);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked.path, newer);
+});
+
+test("finder: a file for a set that is not open is ignored", async () => {
+  const s = sandbox();
+  put(s.holo, "other-decisions-FINAL.json", answers({ set: "other" }), 0);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked, null);
+  assert.ok(r.ignored.some((x) => x.path.endsWith("other-decisions-FINAL.json")));
+});
+
+test("finder: a file whose set id differs from the open set is refused, the next valid one picked", async () => {
+  const s = sandbox();
+  put(s.holo, "review-x-decisions-FINAL.json", answers({ set: "RUN-999" }), 0);
+  const stale = put(s.holo, "review-x-decisions-FINAL (1).json", answers({ answers: [{ id: "Q1", question: "Different text?", choice: { id: "o1" } }] }), 10);
+  const good = put(s.dl, "review-x-decisions-FINAL.json", answers(), 900);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked.path, good);
+  assert.equal(r.refused.length, 2);
+  assert.ok(r.refused.some((x) => x.path === stale && /question/.test(x.why)));
+});
+
+test("finder: a draft alone is reported, never picked", async () => {
+  const s = sandbox();
+  const d = put(s.holo, "review-x-decisions-draft.json", answers(DRAFT), 0);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked, null);
+  assert.equal(r.draft.path, d);
+  assert.match(report(r), /draft - not applied/);
+});
+
+test("finder: Chrome's real download folder is read and searched", async () => {
+  const s = sandbox();
+  const custom = join(s.base, "D", "My Downloads");
+  const prefs = join(s.env.LOCALAPPDATA, "Google", "Chrome", "User Data", "Default", "Preferences");
+  mkdirSync(dirname(prefs), { recursive: true });
+  writeFileSync(prefs, JSON.stringify({ download: { default_directory: custom, prompt_for_download: false }, profile: { name: "secret" } }));
+  const p = put(custom, "review-x-decisions-FINAL.json", answers(), 0);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked.path, p);
+  assert.match(report(r), /Chrome/);
+  assert.ok(!report(r).includes("secret"), "nothing else from the profile is printed");
+});
+
+test("finder: Edge and Firefox download folders and the owner-set folder are found, in order", () => {
+  const s = sandbox();
+  const edge = join(s.env.LOCALAPPDATA, "Microsoft", "Edge", "User Data", "Profile 1", "Preferences");
+  mkdirSync(dirname(edge), { recursive: true });
+  writeFileSync(edge, JSON.stringify({ download: { default_directory: "E:\\edge dl" } }));
+  const ff = join(s.env.APPDATA, "Mozilla", "Firefox", "Profiles", "ab12.default-release", "prefs.js");
+  mkdirSync(dirname(ff), { recursive: true });
+  writeFileSync(ff, 'user_pref("browser.startup.page", 3);\nuser_pref("browser.download.dir", "F:\\\\ff \\"dl\\"");\n');
+  mkdirSync(join(s.home, ".skillator", "holo"), { recursive: true });
+  writeFileSync(join(s.home, ".skillator", "holo", "answers-dir"), "G:\\owner set\n");
+  const dirs = downloadDirs(s.opts).map((d) => d.dir);
+  assert.deepEqual(dirs, ["E:\\edge dl", 'F:\\ff "dl"', join(s.home, "Downloads"), "G:\\owner set"]);
+});
+
+test("finder: the Windows Downloads known folder replaces ~/Downloads when the registry names one", () => {
+  const s = sandbox();
+  const dirs = downloadDirs({ ...s.opts, env: { ...s.env, USERPROFILE: "C:\\Users\\me" }, regQuery: () => "%USERPROFILE%\\Dl" });
+  assert.deepEqual(dirs.map((d) => d.dir), ["C:\\Users\\me\\Dl"]);
+});
+
+test("finder: report names every searched folder and prints relay answer lines for a run", async () => {
+  const s = sandbox();
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("@LANDED@", "abc1234");
+  writeFileSync(join(s.root, ".skillator", "run-1-shelf-export.md"), md);
+  const set = setFromRun(parseRun(md), ".skillator/run-1-shelf-export.md");
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(set));
+  const [q1, q2] = set.decisions;
+  put(s.dl, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1", answers: [
+    { id: "Q1", question: q1.question, choice: { id: "o2", label: q1.options[1].label } },
+    { id: "Q2", question: q2.question, choice: { id: "defer" }, clarification: "why?" },
+  ] }, 0);
+  const r = await findAnswers(s.opts);
+  const text = report(r);
+  assert.ok(text.includes(s.holo) && text.includes(join(s.home, "Downloads")), text);
+  assert.match(text, /answer Q1 'CSV'/);
+  assert.match(text, /still open: Q2: deferred/);
+  assert.match(text, /--next-wizard/);
+});
+
+test("finder: a run with no open decision is not an open set", async () => {
+  const s = sandbox();
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("### Q1 open", "### Q1 answered").replaceAll("### Q2 open", "### Q2 answered");
+  writeFileSync(join(s.root, ".skillator", "run-1-shelf-export.md"), md);
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
+  put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1" }, 0);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked, null);
+  assert.ok(r.ignored.some((x) => x.path.endsWith("RUN-1-decisions-FINAL.json")));
+});

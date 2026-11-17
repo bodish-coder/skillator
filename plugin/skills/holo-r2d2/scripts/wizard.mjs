@@ -511,6 +511,67 @@ kbd{font:700 .8rem ui-monospace,monospace;padding:2px 6px;border:1px solid var(-
 @media (prefers-reduced-motion:no-preference){#bar{transition:width .25s}}
 `;
 
+// F179: where the answers go - clipboard, the page's folder (File System Access
+// API, the folder handle remembered per set in IndexedDB) or the normal download.
+// The page embeds this function by its own source, so the tests run the browser
+// code. Self-contained: no template literals, no outside names. Nothing is sent.
+export function answerSaver({ win, setId, json, download, say, copyFallback }) {
+  const name = (final) => setId + "-decisions-" + (final ? "FINAL" : "draft") + ".json";
+  const next = " Then say \"check wizard answers\" in the working conversation.";
+  const canSave = typeof win.showDirectoryPicker === "function";
+  function idb(mode, fn) {
+    return new Promise((res, rej) => {
+      if (!win.indexedDB) return res(undefined);
+      const open = win.indexedDB.open("holo-wizard", 1);
+      open.onupgradeneeded = () => { const db = open.result; if (!db.objectStoreNames.contains("dirs")) db.createObjectStore("dirs"); };
+      open.onerror = () => rej(open.error);
+      open.onsuccess = () => {
+        try { const r = fn(open.result.transaction("dirs", mode).objectStore("dirs")); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }
+        catch (e) { rej(e); }
+      };
+    });
+  }
+  const remembered = () => idb("readonly", (s) => s.get(setId)).catch(() => undefined);
+  const remember = (dir) => idb("readwrite", (s) => s.put(dir, setId)).catch(() => undefined);
+  async function writeTo(dir, final) {
+    const opts = { mode: "readwrite" };
+    if ((await dir.queryPermission(opts)) !== "granted" && (await dir.requestPermission(opts)) !== "granted") {
+      const e = new Error("permission refused"); e.name = "NotAllowedError"; throw e;
+    }
+    const w = await (await dir.getFileHandle(name(final), { create: true })).createWritable();
+    await w.write(json(final)); await w.close();
+    say("Saved into the folder " + dir.name + ": " + name(final) + "." + next);
+  }
+  function fallback(final, why) {
+    download(final);
+    say((why ? why + " " : "") + "Downloaded " + name(final) + " to the browser's download folder." + next);
+  }
+  const failed = (dir, e) => (e && e.name === "NotAllowedError" ? "No permission to write into " : "Could not write into ") + dir.name + ".";
+  // Save button: choose (or choose again) the folder, remember it, write there.
+  async function save(final) {
+    if (!canSave) return fallback(final, "This browser cannot save into a folder.");
+    let dir;
+    try { dir = await win.showDirectoryPicker({ id: "holo-answers", mode: "readwrite", startIn: (await remembered()) || "downloads" }); }
+    catch (e) { return e && e.name === "AbortError" ? say("Save cancelled; nothing was written.") : fallback(final, "Could not open the folder picker."); }
+    await remember(dir);
+    try { await writeTo(dir, final); } catch (e) { fallback(final, failed(dir, e)); }
+  }
+  // Finalize: the folder already chosen for this set, else the normal download.
+  async function deliver(final) {
+    const dir = canSave ? await remembered() : undefined;
+    if (!dir) return fallback(final, "");
+    try { await writeTo(dir, final); } catch (e) { fallback(final, failed(dir, e)); }
+  }
+  async function copy(final) {
+    const text = json(final);
+    let ok = false;
+    try { await win.navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = !!(copyFallback && copyFallback(text)); }
+    say(ok ? "Answers JSON (" + (final ? "FINAL" : "draft") + ") copied. Paste it in the working conversation."
+      : "Copy failed - use Save to page folder or Download instead.");
+  }
+  return { canSave, save, deliver, copy };
+}
+
 // The page's own code. Text from the set or a draft only ever reaches the DOM
 // through textContent / value.
 const CLIENT = String.raw`(() => {
@@ -968,13 +1029,13 @@ function review() {
   const chk = el("input", { type: "checkbox", id: "reviewed", checked: st.reviewed || null, "aria-describedby": "fin-err",
     onchange: (e) => { st.reviewed = e.target.checked; if (!st.reviewed) st.finalizedAt = null; save(true); sync(); } });
   const finErr = el("p", { class: "err", id: "fin-err", "aria-live": "polite" });
-  const fin = el("button", { type: "button", class: "primary", onclick: finalize }, "Finalize and download");
+  const fin = el("button", { type: "button", class: "primary", onclick: finalize }, SAVER.canSave ? "Finalize and save" : "Finalize and download");
   const state = el("p", { class: "banner" });
   function sync() {
     header(); chk.checked = !!st.reviewed;
     state.className = "banner" + (blockers.length ? " warn" : "");
     state.textContent = blockers.length ? blockers.length + " decision" + (blockers.length > 1 ? "s" : "") + " still block finalizing (" + blockers.map(d => d.id + ": " + LABEL[statusOf(d)].toLowerCase()).join("; ") + "). A draft can be downloaded at any time."
-      : st.finalizedAt ? "Finalized " + st.finalizedAt + " by " + st.owner + ". Share the downloaded JSON in the working conversation (or pass it to --next-wizard for continuous discussion)."
+      : st.finalizedAt ? "Finalized " + st.finalizedAt + " by " + st.owner + ". The status line at the bottom says where the JSON went; say \"check wizard answers\" in the working conversation (or pass it to --next-wizard for continuous discussion)."
       : "Every decision has a response (options, custom directions, and Ask / Explain requests can all be finalized). Add your name and confirm to finalize.";
   }
   function finalize() {
@@ -984,7 +1045,7 @@ function review() {
     owner.removeAttribute("aria-invalid"); $("owner-err").textContent = "";
     if (!st.reviewed) { finErr.textContent = "Confirm you reviewed every answer."; return chk.focus(); }
     st.finalizedAt = new Date().toISOString(); st.imported = false; save(true); sync();
-    download(true); say("Finalized and downloaded. Share that JSON file in the working conversation.");
+    SAVER.deliver(true);
   }
   const settled = (SET.settled && SET.settled.length) ? el("details", { class: "settled" }, el("summary", { text: SET.settled.length + " already settled (read-only)" }),
     el("table", null, el("thead", null, el("tr", null, ["ID", "Question", "Settled as", "Source"].map(h => el("th", { scope: "col", text: h })))),
@@ -1000,6 +1061,8 @@ function review() {
     el("label", { class: "blk", for: "owner", text: "Your name (decision owner)" }), owner, el("p", { class: "err", id: "owner-err", "aria-live": "polite" }),
     el("label", { class: "opt", for: "reviewed" }, chk, el("span", { class: "lbl", text: "I reviewed every answer above and they are my decisions." })),
     finErr, el("div", { class: "actions" }, fin, el("button", { type: "button", class: "secondary", onclick: () => download(false) }, "Download draft JSON"),
+      el("button", { type: "button", class: "secondary", onclick: () => SAVER.copy(!!st.finalizedAt), "aria-label": "Copy the answers JSON to the clipboard" }, "Copy JSON"),
+      SAVER.canSave ? el("button", { type: "button", class: "secondary", onclick: () => SAVER.save(!!st.finalizedAt), "aria-label": "Save the answers JSON into the folder that holds this page" }, "Save to page folder") : null,
       el("button", { type: "button", class: "quiet", onclick: () => go(n - 1) }, "Back")),
     el("p", { class: "muted small", text: "Saving, downloading, recommendations and time spent never count as approval. Only finalizing does, and it stays on this device until you share the file." }),
     settled);
@@ -1027,6 +1090,9 @@ function download(final) {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000);
   if (!final) say("Draft downloaded. It stays a draft, whatever was finalized before.");
 }
+
+const SAVER = (${answerSaver})({ win: window, setId: SET.id, json: (final) => JSON.stringify(exportObj(final), null, 2), download, say,
+  copyFallback: (t) => { const ta = el("textarea", { style: "position:fixed;left:-9999px" }); ta.value = t; document.body.append(ta); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (e) {} ta.remove(); return ok; } });
 
 function validateImport(v) {
   const bad = (m) => { throw new Error(m); };

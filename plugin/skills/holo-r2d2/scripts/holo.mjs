@@ -874,7 +874,7 @@ export function renderSvg(run, opts = {}) {
 }
 
 // ----------------------------------------------------------------- cli ----
-function findRoot(start) {
+export function findRoot(start) {
   let d = resolve(start);
   for (;;) {
     if (existsSync(join(d, ".skillator"))) return d;
@@ -885,7 +885,7 @@ function findRoot(start) {
   }
 }
 
-async function runFiles(root) {
+export async function runFiles(root) {
   const dir = join(root, ".skillator");
   let names = [];
   try { names = await readdir(dir); } catch { return []; }

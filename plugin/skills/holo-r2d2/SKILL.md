@@ -6,7 +6,8 @@ description: >-
   or to show a run, its decisions, a
   plan or design diagram: Artifact, HTML file, Markdown with
   Mermaid or an SVG - or when several owner decisions
-  need answering - the decision wizard. NOT for answering or ruling decisions (`relay-morpheus`), NOT the
+  need answering - the decision wizard; "check wizard answers" or "r2d2
+  answers" finds the wizard's saved answers. NOT for answering or ruling decisions (`relay-morpheus`), NOT the
   ticket board (`tickets-zordon`).
 ---
 
@@ -44,6 +45,8 @@ invents stages. Run the script.
 | a marathon's end batch (relay-morpheus `chain next` prints `ASK`) | the run, before the questions are asked; the link goes into the question text |
 | a plan or design is put up for approval | the plan/design file's sections as components, plus the run if there is one |
 | the away flow sends its push | the run; the link goes into the notification |
+| "check wizard answers" | nothing drawn: `answers.mjs` finds and checks the wizard's answers (Answers back, below) |
+| "r2d2 answers" | the same as "check wizard answers" |
 
 ## Draw it
 
@@ -68,6 +71,8 @@ node <SKILL>/scripts/holo.mjs RUN-12 --ascii   # the same, for a terminal
 node <SKILL>/scripts/holo.mjs RUN-12 --batch   # AUTOMATIC ONLY (end batch): page + standalone + wizard, ASCII and paths printed
 node <SKILL>/scripts/holo.mjs --selftest
 node --test <SKILL>/scripts/anatomy.test.mjs
+node <SKILL>/scripts/answers.mjs [--root DIR]  # "check wizard answers": find + check the wizard's answers files
+node --test <SKILL>/scripts/tests/answers.test.mjs
 ```
 
 - **First-class modes (`decision | anatomy | md | understand`).** Each can be passed as a positional subcommand (`holo.mjs RUN-12 decision`, `holo.mjs RUN-12 anatomy`, `holo.mjs RUN-12 md`, `holo.mjs RUN-12 understand`) or as a flag (`--decision`/`--wizard`, `--anatomy`, `--md`, `--understand`).
@@ -263,13 +268,46 @@ A set is JSON: `{"schema":"holo-decisions/1","id","title","source","round"?:1,
 At most one option is recommended; `custom`, `defer` and `explain` are reserved ids.
 
 Always give the **full resolved absolute path** to the `.wizard.html` file and
-four lines: open it, answer (or choose Ask / Explain more), review, download the
-final JSON and share it here (for `--answers` or `--next-wizard`). Back in the
+four lines: open it, answer (or choose Ask / Explain more), review, finalize
+(Save to page folder, Copy JSON or the download), then say "check wizard
+answers" here (Answers back, below). Back in the
 session, `--answers` prints one single-quoted `relay-morpheus.sh answer` line
 per answered decision - run them yourself, after reading them; custom directions
 are flagged for interpretation and deferred/explain ones stay open. A draft (not
 finalized) is refused by `--answers`. For a set that is not a relay run, read
 the answers to the user's work instead of `RM answer`.
+
+### Answers back - "check wizard answers" / "r2d2 answers" (F179)
+
+The wizard's review screen has **Copy JSON** (the export, to the clipboard),
+**Save to page folder** (browsers with the File System Access API: the owner
+picks the folder once, the page remembers it per set and Finalize saves there
+from then on) and the normal download. The status line says where the file
+went. Nothing is sent anywhere.
+
+On either phrase, run `node <SKILL>/scripts/answers.mjs` from the repo root. It
+searches, and prints each folder it searched: the page folder
+`.skillator/holo`, the browser's real download folder (Chrome / Edge
+`download.default_directory`, Firefox `browser.download.dir` - that one key,
+nothing else from the profile), the OS Downloads folder, then the folder named
+on the first line of `~/.skillator/holo/answers-dir` (the owner sets it when
+none of the others is right). An open set is a `<id>.wizard.html` in the page
+folder (a RUN set while its run still has an open or asked decision); files
+for any other set are listed as ignored. Per set it takes FINAL over draft,
+then folder order, then newest, and checks it as `--next-wizard` does; a
+refused file is printed with the reason and the next one is tried.
+
+- **Picked** - a RUN set prints the same `relay-morpheus.sh answer` lines as
+  `--answers`: read them, then run them. Another set prints one line per
+  answer; an answered decision whose ticket is `[?]` is recorded with
+  tickets-zordon's `ticket-meta decided <ID>`. Custom or Ask / Explain answers
+  also print the `--next-wizard` command.
+- **Draft only** - reported as `draft - not applied`. A draft is never
+  approval: say so and ask the owner to finalize on the page.
+- **Pasted JSON** (Copy JSON) - write it to `.skillator/holo/<set>-decisions-FINAL.json`
+  and run the finder; the same checks apply.
+- **Nothing found** - give the searched folders and ask where the browser
+  saves; with the answer, write that folder to `~/.skillator/holo/answers-dir`.
 
 ## What it never does
 
