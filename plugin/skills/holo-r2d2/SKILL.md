@@ -304,7 +304,7 @@ searches, and prints each folder it searched: the page folder
 nothing else from the profile), the OS Downloads folder, then the folder named
 on the first line of `~/.skillator/holo/answers-dir` (the owner sets it when
 none of the others is right). An open set is a `<id>.wizard.html` in the page
-folder (a RUN set while its run still has an open or asked decision); files
+folder (a RUN set finds its run file by the set id; what the run has settled is skipped); files
 for any other set are listed as ignored. It checks a file against the set the page embeds (round 2+ included). Per set
 it takes FINAL over draft, verified over unverified, then the higher round, the newest finalizedAt, the
 newest file, folder order last, and checks it as `--next-wizard` does; a

@@ -97,28 +97,25 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
 }
 
 // Open sets: a wizard page in the page folder, validated against the set the page
-// embeds (a --next-wizard page is round 2+). A RUN set is open only while its run
-// file has an open or asked decision; with no readable page set it is rebuilt from the run. openNow: a RUN
+// embeds (a --next-wizard page is round 2+). A RUN set's run file is found by that set's id (by the page's
+// file name only when the page is unreadable - the set is then rebuilt from the run). openNow: a RUN
 // set's decisions still open or asked in the run file now - only those may get a command; gone: the ones settled there.
 async function openSets(root, holo) {
   const sets = new Map(), openNow = new Map(), gone = new Map();
   const runs = await runFiles(root);
   for (const n of tryDir(holo).filter((n) => n.endsWith(".wizard.html"))) {
-    const stem = n.slice(0, -".wizard.html".length);
     try {
-      const m = /^RUN-(\d+)$/i.exec(stem);
       let set = pageSet(await readFile(join(holo, n), "utf8"));
-      if (m) {
-        const path = runs.find((f) => { const k = /^run-(\d+)-/.exec(f.replace(/^.*[\\/]/, "")); return k && Number(k[1]) === Number(m[1]); });
-        if (!path) continue;
+      const m = /^RUN-(\d+)$/i.exec(String(set?.id ?? n.slice(0, -".wizard.html".length)));
+      const path = m && runs.find((f) => { const k = /^run-(\d+)-/.exec(f.replace(/^.*[\\/]/, "")); return k && Number(k[1]) === Number(m[1]); });
+      if (path) {
         const run = parseRun(await readFile(path, "utf8"));
         const live = setFromRun(run, relative(root, path).replace(/\\/g, "/"));
-        if (!live.decisions.length) continue;
         if (!set || String(set.id) !== String(live.id)) set = live;
         openNow.set(String(set.id), new Set(live.decisions.map((d) => d.id)));
         gone.set(String(set.id), settledIn(run));
       }
-      if (set && set.decisions && set.decisions.length) sets.set(String(set.id), set);
+      if (set && set.decisions && (path || set.decisions.length)) sets.set(String(set.id), set);
     } catch { /* not a readable wizard page */ }
   }
   return { sets, openNow, gone };
@@ -147,7 +144,8 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
         if (s.size > MAX_FILE) throw new Error("larger than 1 MB");
         const ans = JSON.parse(await readFile(path, "utf8"));
         // Set ids can share a file stem ("F 12", "F_12"): the one the file names.
-        const id = ids.find((x) => x === String(ans?.set)) ?? ids[0];
+        const id = ids.find((x) => x === String(ans?.set));
+        if (id === undefined) throw new Error(`set ${show(ans?.set)} is not an open wizard set`);
         cands.push({ path, folder: i, mtime: s.mtimeMs, id, ans, openNow: openNow.get(id) });
       } catch (e) { r.refused.push({ path, why: e.message }); }
     }
@@ -187,14 +185,14 @@ export function report(r) {
   L.push(`open wizard sets: ${r.sets.join(", ") || "none"}`);
   for (const p of r.picks) {
     const a = p.ans;
-    const n = (a.answers || []).length;
-    L.push("", `picked: ${p.path}`, `  set ${clean(p.id)}, round ${Number(a.round) || 1}, FINAL by ${show(a.owner)} at ${clean(a.finalizedAt, 40)}, ${n} decision${n === 1 ? "" : "s"}`);
+    // Only decisions still open or asked in the run file now: a FINAL checked twice never applies twice.
+    const live = (x) => !p.openNow || p.openNow.has(String(x?.id));
+    const n = (a.answers || []).filter(live).length, skipped = (a.answers || []).length - n;
+    L.push("", `picked: ${p.path}`, `  set ${clean(p.id)}, round ${Number(a.round) || 1}, FINAL by ${show(a.owner)} at ${clean(a.finalizedAt, 40)}, ${p.openNow ? `${n} to apply, ${skipped} already settled` : `${n} decision${n === 1 ? "" : "s"}`}`);
     const run = /^RUN-\d+$/i.test(p.id);
     if (!p.verified) { L.push("  unverified - confirm with the owner before applying (no page nonce match); no commands printed"); continue; }
     if (run && !p.openNow) { L.push(`  run file not found for ${clean(p.id)} - nothing applied`); continue; }
     if (run) {
-      // Only decisions still open or asked in the run file now: a FINAL checked twice never applies twice.
-      const live = (x) => p.openNow.has(String(x?.id));
       const c = answersToCommands({ ...a, answers: (a.answers || []).filter(live) });
       L.push("# POSIX sh lines (Git Bash on Windows) - read them, then run them yourself", ...c.commands, ...c.review.map((x) => `# review: ${x}`), ...c.open.map((x) => `# still open: ${x}`),
         ...(a.answers || []).filter((x) => !live(x)).map((x) => `# ${clean(x?.id, 40)}: already settled - skipped`));

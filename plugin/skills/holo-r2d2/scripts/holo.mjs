@@ -44,7 +44,7 @@ import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizar
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 import { extractDomainGraph, understandPage } from "./understand.mjs";
 import { FORMATS, THEMES, formatPage, themeCss } from "./formats.mjs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -1032,9 +1032,9 @@ async function writeWizard(root, out, set) {
   const read = (p) => readFile(p, "utf8").catch(() => "");
   const page = pageSet(await read(out));
   const n = page && String(page.id) === String(set.id) && page.nonce ? String(page.nonce) : (await read(nonceFile(root, set.id))).trim();
-  const html = wizardPage(set, /^[0-9a-f]{32}$/.test(n) ? n : undefined);
-  await writeGenerated(root, out, html);
-  await writeGenerated(root, nonceFile(root, set.id), `${pageSet(html).nonce}\n`);
+  const nonce = /^[0-9a-f]{32}$/.test(n) ? n : randomBytes(16).toString("hex");
+  await writeGenerated(root, out, wizardPage(set, nonce));
+  await writeGenerated(root, nonceFile(root, set.id), `${nonce}\n`);
 }
 
 // A118: the holds as relay-morpheus judges them - `chain next --holds`, read-only
@@ -1141,14 +1141,15 @@ async function main(argv) {
       // --decisions set when its own round matches, else the run's set for round 1; anything else is refused.
       let ans = JSON.parse(await readFile(o.nextWizard, "utf8"));
       const round = Number(ans && ans.round) || 1, roundOf = (s) => Number(s && s.round) || 1;
-      const drawn = existsSync(out) ? pageSet(await readFile(out, "utf8")) : null;
+      const fromRun = set, drawn = existsSync(out) ? pageSet(await readFile(out, "utf8")) : null;
       if (drawn && String(drawn.id) === String(set.id) && roundOf(drawn) === round) set = drawn;
       else if (roundOf(set) !== round) throw new Error(`the page for round ${round} is not on disk - open the round-${round} page and finalize again`);
       if (run) {
-        const gone = settledIn(run), kept = without(ans, gone);
-        if (kept !== ans) for (const a of ans.answers) if (gone.has(a && a.id)) console.log(`${clean(a.id, 40)}: already settled - skipped`);
-        ans = kept;
-        if (Array.isArray(set.decisions)) set = { ...set, decisions: set.decisions.filter((d) => !gone.has(d && d.id)) };
+        // What the run has settled leaves the questions and stays in the settled reference, as setFromRun lists it.
+        const gone = settledIn(run), have = new Set((set.settled || []).map((x) => x && x.id));
+        for (const a of ans && Array.isArray(ans.answers) ? ans.answers : []) if (gone.has(a && a.id)) console.log(`${clean(a.id, 40)}: already settled - skipped`);
+        ans = without(ans, gone);
+        if (Array.isArray(set.decisions)) set = { ...set, decisions: set.decisions.filter((d) => !gone.has(d && d.id)), settled: [...(set.settled || []), ...fromRun.settled.filter((x) => !have.has(x.id))] };
       }
       set = nextWizardSet(set, ans);
     }

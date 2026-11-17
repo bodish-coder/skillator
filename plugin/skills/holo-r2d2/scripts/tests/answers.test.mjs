@@ -3,13 +3,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync, rmSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { answerSaver, wizardPage, pageSet, setFromRun, nextWizardSet, SET_SCHEMA, ANSWER_SCHEMA } from "../wizard.mjs";
-import { parseRun } from "../holo.mjs";
+import { parseRun, nonceFile } from "../holo.mjs";
 import { findAnswers, downloadDirs, report } from "../answers.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -253,15 +252,16 @@ test("finder: report names every searched folder and prints relay answer lines f
   assert.match(text, /--next-wizard/);
 });
 
-test("finder: a run with no open decision is not an open set", async () => {
+test("r4-1: a fully settled run is still loaded - its FINAL's answers are skipped, not 'not an open wizard set'", async () => {
   const s = sandbox();
   const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("### Q1 open", "### Q1 answered").replaceAll("### Q2 open", "### Q2 answered");
   writeFileSync(join(s.root, ".skillator", "run-1-shelf-export.md"), md);
   writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
   put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1" }, 0);
-  const r = await findAnswers(s.opts);
-  assert.equal(r.picked, null);
-  assert.ok(r.ignored.some((x) => x.path.endsWith("RUN-1-decisions-FINAL.json")));
+  const text = report(await findAnswers(s.opts));
+  assert.match(text, /Q1: already settled - skipped/);
+  assert.match(text, /0 to apply, 1 already settled/);
+  assert.ok(!/not an open wizard set| answer Q/.test(text), text);
 });
 
 // ------------------------------------------------- review round 1 (F179) ----
@@ -367,7 +367,7 @@ test("r1-2: a newer Downloads FINAL beats an older page-folder FINAL; the older 
   assert.match(report(r), /superseded: .*review-x-decisions-FINAL\.json/);
 });
 
-const sidecar = (s, id) => join(s.holo, id.replace(/[^A-Za-z0-9_.-]/g, "_") + "-" + createHash("sha256").update(id).digest("hex").slice(0, 8) + ".nonce");
+const sidecar = (s, id) => nonceFile(s.root, id);
 function nonceOf(s, id) { return pageSet(readFileSync(join(s.holo, id + ".wizard.html"), "utf8")).nonce; }
 function run1(s) {
   const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("@LANDED@", "abc1234");
@@ -503,6 +503,7 @@ test("r2-1: a FINAL checked again after its Q1 command was applied prints no Q1 
   assert.ok(!/ answer Q1 /.test(text), text);
   assert.match(text, /Q1: already settled - skipped/);
   assert.match(text, / answer Q2 /);
+  assert.match(text, /, 1 to apply, 1 already settled/);
 });
 
 test("r2-2: rebuilding the same set reuses its nonce - --wizard, --batch and --html --anatomy alike", () => {
@@ -651,4 +652,33 @@ test("r3-4: a RUN set with no run file prints no commands", async () => {
   const text = report(await findAnswers(s.opts));
   assert.match(text, /run file not found for RUN-1 - nothing applied/);
   assert.ok(!/ answer Q/.test(text), text);
+});
+
+test("r4-1: a RUN set's run file is found by the id inside the page, not the page's file name", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set);
+  renameSync(join(s.holo, "RUN-1.wizard.html"), join(s.holo, "elsewhere.wizard.html"));
+  put(s.dl, "RUN-1-decisions-FINAL.json", ans, 0);
+  const text = report(await findAnswers(s.opts));
+  assert.match(text, / answer Q1 /);
+  assert.ok(!/run file not found/.test(text), text);
+});
+
+test("r4-2: --next-wizard keeps a decision the run settled in the settled reference", () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set), runPath = join(s.root, ".skillator", "run-1-shelf-export.md");
+  ans.answers[1] = { id: "Q2", question: set.decisions[1].question, choice: { id: "defer" }, clarification: "why?" };
+  writeFileSync(runPath, readFileSync(runPath, "utf8").replace("### Q1 open", "### Q1 answered"));
+  const r = cli(s, "RUN-1", "--next-wizard", put(s.dl, "RUN-1-decisions-FINAL.json", ans, 0));
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(pageSet(readFileSync(join(s.holo, "RUN-1.wizard.html"), "utf8")).settled.map((x) => x.id), ["Q1"]);
+});
+
+test("r4-4: a file whose set names none of the ids sharing its stem is refused - no first-id fallback", async () => {
+  const s = sandbox();
+  for (const [f, id] of [["F-12", "F 12"], ["F_12", "F_12"]]) writeFileSync(join(s.holo, f + ".wizard.html"), wizardPage({ ...SET, id }));
+  const p = put(s.holo, "F_12-decisions-FINAL.json", answers({ set: "F-12" }), 0);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked, null);
+  assert.deepEqual(r.refused.map((x) => [x.path, x.why]), [[p, 'set "F-12" is not an open wizard set']]);
 });
