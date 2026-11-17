@@ -329,7 +329,9 @@ spawn_quota_refresh() {
 start_quota_refresh() {
   [ -n "$1" ] && [ -n "$2" ] || return 0
   lock="$2/quota-cache.json.refreshing"
-  if fresh_file "$lock" 60; then
+  # F176: stale at 90 s - over the refresh's capped CLI calls (20 s + 30 s), so a read
+  # still alive always holds it and a second reader can never start a turn beside it.
+  if fresh_file "$lock" 90; then
     note_tag=" note=refresh_pending"
     return 0
   fi
@@ -354,6 +356,37 @@ if [ "$mode" = refresh ]; then
   mkdir -p "$target_dir"
   parsed=""
   raw=""
+  # F176: each claude call is capped (secs, function); on expiry its whole process
+  # tree is killed, so no read outlives the lock.
+  # Parent first (its children listed beforehand), so nothing it runs gets to finish.
+  kill_tree() {
+    set -- "$1" $(ps -ef 2>/dev/null | awk -v p="$1" '$3 == p { print $2 }')
+    [ -r "/proc/$1/winpid" ] && MSYS_NO_PATHCONV=1 taskkill /T /F /PID "$(cat "/proc/$1/winpid")" >/dev/null 2>&1
+    kill -9 "$1" 2>/dev/null
+    shift
+    for c in "$@"; do kill_tree "$c"; done
+  }
+  capped() {
+    out="$target_dir/quota-cache.json.out"
+    "$2" > "$out" 2>/dev/null &
+    cp_pid=$!
+    # The watchdog ends itself within 1 s of the call; never kill it - it may be mid-tree.
+    ( n=0; while [ "$n" -lt "$1" ]; do sleep 1; kill -0 "$cp_pid" 2>/dev/null || exit 0; n=$((n + 1)); done
+      kill_tree "$cp_pid" ) >/dev/null 2>&1 </dev/null &
+    wait "$cp_pid" 2>/dev/null
+    cat "$out" 2>/dev/null; rm -f "$out"
+  }
+  # The CLI's own hooks must never see a forced read (WAIT) and start one themselves.
+  claude_get_usage() {
+    printf '%s\n' '{"type":"control_request","request_id":"u1","request":{"subtype":"get_usage","skip_behaviors":true}}' |
+      MSYS_NO_PATHCONV=1 SKILLATOR_QUOTA_REFRESH_WAIT= CLAUDE_CONFIG_DIR="$target_dir" claude -p --input-format stream-json --output-format stream-json --verbose
+  }
+  # The smallest turn: no tools, no MCP, no saved session (flags from `claude --help`;
+  # --max-turns is unlisted but parsed). --tools last: it takes a list.
+  claude_turn() {
+    MSYS_NO_PATHCONV=1 SKILLATOR_QUOTA_REFRESH_WAIT= CLAUDE_CONFIG_DIR="$target_dir" claude -p 1 --model haiku --max-turns 1 \
+      --no-session-persistence --strict-mcp-config --output-format stream-json --verbose --tools '' </dev/null
+  }
   case $cli in
     agy)
       src_name=agy
@@ -445,8 +478,7 @@ except Exception:
     claude)
       src_name=claude-code
       # F176/B27: the get_usage control request on stdin, no prompt - no model turn.
-      raw=$(printf '%s\n' '{"type":"control_request","request_id":"u1","request":{"subtype":"get_usage","skip_behaviors":true}}' |
-        MSYS_NO_PATHCONV=1 CLAUDE_CONFIG_DIR="$target_dir" claude -p --input-format stream-json --output-format stream-json --verbose 2>/dev/null)
+      raw=$(capped 20 claude_get_usage)
       if [ -n "$raw" ] && command -v node >/dev/null 2>&1; then
         parsed=$(printf '%s' "$raw" | node -e '
           try {
@@ -455,7 +487,11 @@ except Exception:
               try { const m = JSON.parse(l); if (m?.type === "control_response" && m.response?.request_id === "u1") r = m.response.response; } catch (_) {}
             }
             if (!r) process.exit(0);
-            if (r.rate_limits_available === false || !r.rate_limits) { process.stdout.write("NOLIMITS"); process.exit(0); }
+            // The installed CLI (2.1.x) answers false for API key / Bedrock / Vertex (or a
+            // login without profile scope), and null limits when its usage fetch failed -
+            // an expired login prints nothing else (the error goes to its debug log).
+            if (r.rate_limits_available === false) { process.stdout.write("APIKEY"); process.exit(0); }
+            if (!r.rate_limits) { process.stdout.write("NOAUTH"); process.exit(0); }
             const L = r.rate_limits;
             const n = v => typeof v?.utilization === "number" && Number.isFinite(v.utilization) ? Math.round(v.utilization * 10) / 10 : null;
             const res = { src: "claude-code" };
@@ -466,19 +502,31 @@ except Exception:
             for (const m of (Array.isArray(L.model_scoped) ? L.model_scoped : [])) if (typeof m?.display_name === "string" && n(m) !== null) models.push({ name: m.display_name, "7d": n(m) });
             if (models.length) res.models = models;
             if (res["5h"] != null || res["7d"] != null) process.stdout.write(JSON.stringify(res));
+            else process.stdout.write("NOWINDOWS");
           } catch (_) {}
         ' 2>/dev/null)
       fi
-      # F176 owner ruling: no limits from get_usage -> a forced read (WAIT=1, never the
-      # background spawn) of a logged-in, unexpired profile under 90% 7d spends ONE tiny
-      # turn and reads its rate_limit_event. Lock and backoff stay the level reader's.
-      if [ "$parsed" = NOLIMITS ] && [ "${SKILLATOR_QUOTA_REFRESH_WAIT:-}" = 1 ] &&
+      # F176 owner ruling: limits but no windows yet from get_usage -> a forced read (WAIT=1,
+      # never the background spawn) of a logged-in profile spends ONE tiny turn and reads
+      # its rate_limit_event - only while the last 7d known is under 90%. In doubt, no turn:
+      # a corrupt or legacy cache is unknown; only no cache file at all, or a failure
+      # record that carries `"last":null` (never a reading), counts as blank.
+      if [ "$parsed" = NOWINDOWS ] && [ "${SKILLATOR_QUOTA_REFRESH_WAIT:-}" = 1 ] &&
          { [ -f "$target_dir/.credentials.json" ] || [ "$(uname -s)" = Darwin ]; } &&
-         ! printf '%s' "$raw" | grep -qi 'session expired\|Failed to authenticate'; then
-        last7=$(node -e 'try { const v = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))["7d"]; if (typeof v === "number") process.stdout.write(String(v)) } catch (_) {}' "$cache" 2>/dev/null)
-        if [ -z "$last7" ] || awk "BEGIN { exit !($last7 < 90) }"; then
-          turn=$(MSYS_NO_PATHCONV=1 SKILLATOR_QUOTA_REFRESH_WAIT= CLAUDE_CONFIG_DIR="$target_dir" claude -p 1 --model haiku --max-turns 1 --output-format stream-json --verbose </dev/null 2>/dev/null)
-          via=$(printf '%s' "$turn" | node -e '
+         ! printf '%s' "$raw" | grep -qi 'session expired\|Failed to authenticate' &&
+         node -e '
+           const fs = require("fs"); let s;
+           try { s = fs.readFileSync(process.argv[1], "utf8") } catch (e) { process.exit(e.code === "ENOENT" ? 0 : 1) }
+           let r; try { r = JSON.parse(s.replace(/^﻿/, "")) } catch (_) { process.exit(1) }
+           if (!r || typeof r !== "object" || Array.isArray(r)) process.exit(1);
+           const has = o => o && (Object.hasOwn(o, "7d") || Object.hasOwn(o, "weekly"));
+           let o = r;
+           if (!has(r)) { if (!Object.hasOwn(r, "last")) process.exit(1); if (r.last === null) process.exit(0); o = r.last; if (!has(o)) process.exit(1) }
+           const v = Object.hasOwn(o, "7d") ? o["7d"] : o.weekly;
+           process.exit(typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 90 ? 0 : 1);
+         ' "$cache" 2>/dev/null; then
+        turn=$(capped 30 claude_turn)
+        via=$(printf '%s' "$turn" | node -e '
             try {
               let u = null;
               for (const l of require("fs").readFileSync(0, "utf8").split(/\r?\n/)) {
@@ -492,8 +540,7 @@ except Exception:
               if (res["5h"] != null || res["7d"] != null) process.stdout.write(JSON.stringify(res));
             } catch (_) {}
           ' 2>/dev/null)
-          [ -z "$via" ] || parsed=$via
-        fi
+        [ -z "$via" ] || parsed=$via
       fi
       ;;
     muse)
@@ -518,8 +565,8 @@ except Exception:
       fi
       ;;
   esac
-  no_limits=0
-  if [ "$parsed" = NOLIMITS ]; then no_limits=1; parsed=""; fi
+  verdict=""
+  case $parsed in APIKEY|NOAUTH|NOWINDOWS) verdict=$parsed; parsed="" ;; esac
   if [ -n "$parsed" ]; then
     printf '%s' "$parsed" > "$cache"
   else
@@ -527,15 +574,43 @@ except Exception:
       fail_note="not logged in"
     elif [ "$cli" = claude ] && printf '%s' "$raw" | grep -qi 'session expired\|Failed to authenticate'; then
       fail_note="login expired - run claude /login"
-    elif [ "$no_limits" = 1 ]; then
+    elif [ "$verdict" = NOAUTH ]; then
+      fail_note="no usage reading - login may have expired, run claude /login"
+    elif [ "$verdict" = APIKEY ]; then
+      fail_note="no plan rate limits (API key billing)"
+    elif [ "$verdict" = NOWINDOWS ]; then
       fail_note="no plan rate limits"
     elif [ -n "$(printf '%s' "$raw" | tr -d '[:space:]')" ]; then
       fail_note="unparseable"
     else
       fail_note="refresh failed"
     fi
-    prev_failures=0
-    if [ -f "$cache" ] && ! grep -q '"5h"\|"7d"' "$cache" 2>/dev/null; then
+    # F176: a failure record carries the last good readings (`last`: 5h, 7d and when),
+    # so the turn gate never loses a high 7d; `"last":null` = no reading ever, while a
+    # corrupt or legacy cache leaves `last` out (unknown). No node: unknown too.
+    prev_failures=0; last_tag=""
+    if command -v node >/dev/null 2>&1; then
+      carry=$(node -e '
+        const fs = require("fs"); let s, r;
+        try { s = fs.readFileSync(process.argv[1], "utf8") } catch (e) { process.stdout.write(e.code === "ENOENT" ? "0 null" : "0"); process.exit(0) }
+        try { r = JSON.parse(s.replace(/^﻿/, "")) } catch (_) { process.stdout.write("0"); process.exit(0) }
+        if (!r || typeof r !== "object" || Array.isArray(r)) { process.stdout.write("0"); process.exit(0) }
+        const ok = v => typeof v === "number" && Number.isFinite(v);
+        const h = ok(r["5h"]) ? r["5h"] : r.five, w = ok(r["7d"]) ? r["7d"] : r.weekly;
+        if (ok(h) || ok(w)) {
+          const last = {};
+          if (ok(h)) last["5h"] = h;
+          if (ok(w)) last["7d"] = w;
+          last.at = Math.floor(fs.statSync(process.argv[1]).mtimeMs / 1000);
+          process.stdout.write("0 " + JSON.stringify(last)); process.exit(0)
+        }
+        const f = Number.isInteger(r.failures) && r.failures >= 1 ? r.failures : 0;
+        process.stdout.write(Object.hasOwn(r, "last") ? f + " " + JSON.stringify(r.last) : String(f));
+      ' "$cache" 2>/dev/null)
+      prev_failures=${carry%% *}
+      case $carry in *" "*) last_tag=",\"last\":${carry#* }" ;; esac
+      case $prev_failures in ''|*[!0-9]*) prev_failures=0 ;; esac
+    elif [ -f "$cache" ] && ! grep -q '"5h"\|"7d"' "$cache" 2>/dev/null; then
       pf=$(sed -n 's/.*"failures"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$cache" | head -1)
       case $pf in ''|*[!0-9]*) ;; *) prev_failures=$pf ;; esac
     fi
@@ -547,7 +622,7 @@ except Exception:
       [ "$backoff" -gt 900 ] && backoff=900
       i=$((i + 1))
     done
-    printf '{"src":"%s","note":"%s","failures":%d,"backoff_secs":%d}' "$src_name" "$fail_note" "$failures" "$backoff" > "$cache"
+    printf '{"src":"%s","note":"%s","failures":%d,"backoff_secs":%d%s}' "$src_name" "$fail_note" "$failures" "$backoff" "$last_tag" > "$cache"
   fi
   rm -f "$lock"
   exit 0

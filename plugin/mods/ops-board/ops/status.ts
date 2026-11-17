@@ -358,23 +358,30 @@ function tail(path: string): string {
   } finally { closeSync(fd) }
 }
 
-// Under usage-watch's 60 s lock: a longer read would let another reader call the lock stale.
-const REFRESH_MS = 55_000
+// Over usage-watch's capped CLI calls (20 s + 30 s) and under its 90 s lock.
+const REFRESH_MS = 60_000
+// The board runs `ops --status --refresh` under a 300 s cap; forced reads stop in time
+// for every row to still be read plainly and printed.
+const BUDGET_MS = 270_000
 const FORCED = new Set(['claude', 'agy', 'muse'])
 
 // F176: a profile's row and its model rows. `refresh`: a logged-in claude/agy/muse profile
 // is first read by usage-watch level with SKILLATOR_QUOTA_REFRESH_WAIT - it reads the CLI
 // in the foreground only when the cache is blank or stale, under its lock and backoff (a
-// plain read first would take that lock for a background read); never at a last 7d >= 90%.
-export async function profileRows(p: Profile, read: Reader, base: Env, darwin: boolean, refresh: boolean): Promise<Row[]> {
-  let held: number | null = null
+// plain read first would take that lock for a background read); never at a last 7d >= 90%
+// (a failure record's carried `last`, or a legacy `weekly`), nor past `deadline`.
+export async function profileRows(p: Profile, read: Reader, base: Env, darwin: boolean, refresh: boolean, deadline = Infinity): Promise<Row[]> {
+  let held: number | null = null, late = false
   if (refresh && FORCED.has(p.cli) && loggedIn(p, darwin)) {
-    const last = readCache(p)?.['7d']
+    const c = readCache(p)
+    const last = c?.['7d'] ?? c?.weekly ?? c?.last?.['7d'] ?? c?.last?.weekly
     if (typeof last === 'number' && last >= 90) held = last
+    else if (Date.now() + REFRESH_MS > deadline) late = true
     else await read({ ...readerEnv(p, base), SKILLATOR_QUOTA_REFRESH_WAIT: '1' }, REFRESH_MS)
   }
   let main = await row(p, read, base, darwin)
   if (held !== null && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', `not refreshed: last 7d ${Math.round(held)}% >= 90%`]
+  else if (late && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: out of time - press p again']
   else if (!main[3] && (main[1] !== '-' || main[2] !== '-') && readCache(p)?.via === 'turn') main = [main[0], main[1], main[2], 'via one turn']
   return [main, ...modelRows(p)]
 }
@@ -395,7 +402,7 @@ export async function status(env: Env, appDir: string, refresh = false): Promise
     if (!sh) return { code: 127, out: '', err: NO_SH }
     return spawnArgv(argvFor('usage-level', win, skills, [], sh), home, ms, undefined, e)
   }
-  const rows: Row[] = []
-  for (const p of discover(home)) rows.push(...await profileRows(p, read, env, process.platform === 'darwin', refresh))
+  const rows: Row[] = [], deadline = Date.now() + BUDGET_MS
+  for (const p of discover(home)) rows.push(...await profileRows(p, read, env, process.platform === 'darwin', refresh, deadline))
   return rows.length ? render(rows) : `ops --status: no CLI profiles found under ${home}\n`
 }

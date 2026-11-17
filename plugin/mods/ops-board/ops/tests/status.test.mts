@@ -310,8 +310,23 @@ test('F176: --refresh reads blank logged-in rows once, in the foreground, and sk
   ])
   const waits = calls.filter(c => c.wait === '1')
   assert.deepEqual(waits.map(c => c.dir), [`${h}/.claude-blank`], 'one forced read: not >= 90% 7d, not logged out, not codex')
-  assert.ok(waits[0]!.ms > 5000 && waits[0]!.ms < 60000, 'time for a slow CLI, inside the 60 s refresh lock')
+  assert.ok(waits[0]!.ms >= 50000 && waits[0]!.ms < 90000, 'over the capped CLI calls, inside the 90 s refresh lock')
   assert.match(out.find(r => r[0] === 'claude-hot')![3], /7d 95% >= 90%/)
+})
+
+test('F176 verify: a carried last 7d or a legacy weekly holds the forced read; past the deadline every row is still read', async () => {
+  const h = home()
+  const carried = dir(h, '.claude-carried', '.credentials.json')
+  writeFileSync(join(carried, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', note: 'x', failures: 1, backoff_secs: 60, last: { '5h': 10, '7d': 95, at: 1 } }))
+  const weekly = dir(h, '.claude-weekly', '.credentials.json')
+  writeFileSync(join(weekly, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', weekly: 92 }))
+  dir(h, '.claude-late', '.credentials.json')
+  const waits: string[] = []
+  const read: Reader = async (e, ms) => { if (e.SKILLATOR_QUOTA_REFRESH_WAIT === '1') waits.push(e.SKILLATOR_PROFILE_DIR!); return NONE(e, ms) }
+  const out: string[][] = []
+  for (const p of discover(h)) out.push(...await profileRows(p, read, {}, false, true, Date.now() + 1000))
+  assert.deepEqual(waits, [], 'no forced read')
+  assert.deepEqual(out.map(r => r[3]), ['not refreshed: last 7d 95% >= 90%', 'not refreshed: out of time - press p again', 'not refreshed: last 7d 92% >= 90%'])
 })
 
 test('F176: a reading a forced read got from one tiny turn says so on its row', async () => {
