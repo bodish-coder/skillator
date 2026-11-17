@@ -128,9 +128,10 @@ async function runLogin($: EngineInterface, status: boolean) {
 
 async function refreshCfg($: EngineInterface, _auto = false) {
   const r = await runCall($, 'team-config-show', [])
-  if (r.code !== 0) return
+  // B29: a failed read is said in the form, never a silent fallback path
+  if (r.code !== 0) { if (draft) await bump($, { result: `saved settings not read: ${why(r)}` }); return }
   const cfg = parseCfgView(r.out)
-  if (!cfg) return
+  if (!cfg) { if (draft) await bump($, { result: `saved settings not read: unexpected output from teams-uhura config show` }); return }
   await update($, teamsCfgA, () => cfg)
   if (draft && !touched) { draft = freshSetup(cfg); await bump($) }
 }

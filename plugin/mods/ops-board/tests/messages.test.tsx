@@ -41,7 +41,7 @@ const KV = (o: Record<string, string> = {}) => Object.entries({ result: 'status'
   hosted: '0', listener: 'down', port: '3978', url: '', url_changed: '0', expires: '', ...o }).map(([k, v]) => `${k}=${v}`).join('\n') + '\n'
 const ARMED = { result: 'armed', hosted: '1', listener: 'up', url: U1 }
 
-type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult> }
+type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult>; cfgRun?: ProcessRunResult }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
@@ -92,7 +92,7 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
     if (a[0] === '/bin/sh' && a[1] === SETUP_SH && w.arm[a[2] ?? '']) return { value: w.arm[a[2]!]! }
     if (a[0] === '/usr/bin/pbcopy') return { value: ran('') }
     if ((a[0] === NODE || a[0] === 'C:/tools/node.exe') && a[1] === TEAM_JS) {
-      if (a[2] === 'config' && a[3] === 'show') return { value: ran(w.cfg) }
+      if (a[2] === 'config' && a[3] === 'show') return { value: w.cfgRun ?? ran(w.cfg) }
       if (a[2] === 'config' && a[3] === 'save') return { value: w.save }
       if (a[2] === 'config' && a[3] === 'clear') return { value: ran('cleared: /h/.skillator/teams.json\n') }
       if (a[2] === 'inbox' && a[3] === 'tail') return { value: ran(INBOX) }
@@ -349,6 +349,22 @@ test('setup on re-open: the saved token only as set, the URL only as its host; C
   await clock.settle()
   expect(w.runs.some(r => r.argv[2] === 'config' && r.argv[3] === 'clear')).toBe(true)
   expect(w.toasts.at(-1)).toContain('✓ Teams settings cleared')
+  await ui.unmount()
+})
+
+// B29: a config read that fails is said in the form, never a silent fallback path
+test('B29: the setup form says when the saved settings cannot be read, and why', async ($, on) => {
+  const [w, clock] = world(on, CFG_SET)
+  w.cfgRun = ran('', 1, 'team: EPERM reading the config')
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  await ui.press({ key: 'key:setup' })
+  await clock.settle()
+  const res = (await ui.find({ key: 'setup:result' }))?.text ?? ''
+  expect(res).toContain('saved settings not read')
+  expect(res).toContain('EPERM reading the config')
   await ui.unmount()
 })
 
