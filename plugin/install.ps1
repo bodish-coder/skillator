@@ -704,9 +704,9 @@ function Invoke-SelfTest([string]$T) {
     try { New-Item -ItemType Junction -Path $lnk -Target $real -ErrorAction Stop | Out-Null } catch { Write-Host "skip  A231 link case (no junction: $($_.Exception.Message))" }
     if ((Test-Path -LiteralPath $lnk) -and (Normalize-MusePath ('\\?\' + $real.ToUpperInvariant() + '\src')) -cne (Normalize-MusePath (Join-Path $lnk 'src'))) { return 'A231 Muse source through a junction compared unequal' }
   } finally {
-    # the link alone, never recursive, then its target
-    if (Test-Path -LiteralPath $lnk) { [IO.Directory]::Delete($lnk) }
-    Remove-Item -LiteralPath (Join-Path $T 'a231') -Recurse -Force -ErrorAction SilentlyContinue
+    # the link alone, never recursive, then its target; cleanup never fails the selftest
+    try { if (Test-Path -LiteralPath $lnk) { [IO.Directory]::Delete($lnk) } } catch {}
+    try { Remove-Item -LiteralPath (Join-Path $T 'a231') -Recurse -Force -ErrorAction Stop } catch {}
   }
   $prof = Join-Path $T 'profile.ps1'
   foreach ($m in '.codex','.cursor','.gemini','.pi','.config\opencode') { New-Item -ItemType Directory -Force (Join-Path $T $m) | Out-Null }
