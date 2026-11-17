@@ -22,7 +22,9 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
    b. a source pointer the installer left: the one line in `.skillator-source` beside the skills
       in `~/.codex/skills`, `~/.cursor/skills`, `~/.pi/agent/skills`, `~/.gemini/config/skills`,
       `~/.gemini/skills`, `~/.gemini/antigravity-cli/skills` or `~/.config/opencode/skills` - the dir
-      it last installed from, used only if it still holds both installers;
+      it last installed from, used only if it still holds both installers and its
+      `.claude-plugin/plugin.json` version (or `plugin/.claude-plugin/plugin.json`) is not
+      older than the Claude Code skillator version from step 1 - a stale pointer is skipped: say so;
 <!-- /host-section:source-pointer -->
    c. Claude Code's plugin after step 1: the `installPath` of `skillator@<mkt>` in
       `claude plugin list --json`, when it holds `install.sh` and `install.ps1`;

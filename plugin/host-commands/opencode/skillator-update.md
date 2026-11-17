@@ -18,7 +18,9 @@ Never push, never edit any repo's TICKETS.md, never guess or search the disk for
    a. the path in the arguments, if given;
    b. the source pointer the installer left here: the one line in
       `{{SKILLS}}/.skillator-source` - the dir it last installed from, used only if it still
-      holds both installers;
+      holds both installers and its `.claude-plugin/plugin.json` version (or
+      `plugin/.claude-plugin/plugin.json`) is not older than the Claude Code skillator version
+      from step 1 - a stale pointer is skipped: say so;
    c. Claude Code's plugin after step 1: the `installPath` of `skillator@<mkt>` in
       `claude plugin list --json`, when it holds `install.sh` and `install.ps1`;
    d. ask the user for a skillator clone's path. Headless or no answer → stop and say

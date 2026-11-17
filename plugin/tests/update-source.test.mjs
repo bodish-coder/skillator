@@ -114,6 +114,13 @@ test('every updater prioritizes .skillator-source over Claude Code installPath',
       `${path}: source resolution must prefer .skillator-source over installPath even when installPath is present`);
   }
 });
+test('A231: every updater skips a .skillator-source older than Claude Code\'s skillator', () => {
+  for (const path of commands) {
+    const b = readFileSync(join(plugin, path), 'utf8').match(/^\s*b\.([\s\S]*?)(?=^\s*c\.)/m)?.[1].replace(/\s+/g, ' ') ?? '';
+    assert.match(b, /older than the Claude Code skillator version from step 1/, `${path}: option b. must skip a stale pointer`);
+    assert.match(b, /say so/, `${path}: option b. must report the skip`);
+  }
+});
 test('both installer writers preserve updater instructions in every host template', { skip: !ps || !hasSh ? 'Missing executable: ' + [!ps && 'powershell/pwsh', !hasSh && 'sh'].filter(Boolean).join(', ') : false }, () => {
   const shell = readFileSync(join(plugin, 'install.sh'), 'utf8').replaceAll('\r', '');
   const functions = ['native', 'subst', 'put_cmd'].map(name => {

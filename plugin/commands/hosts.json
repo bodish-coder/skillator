@@ -203,7 +203,7 @@
       "all": "1. **Sweep (`check`)** — Run `sh skills/skillator-sync/scripts/skillator-sync.sh` (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File skills/skillator-sync/scripts/skillator-sync.ps1`) with `$ARGUMENTS` (default `check`). Show every `unchanged`, `changed`, and `error` row plus the `summary:` line. All `unchanged` → stop."
     },
     "skillator-update.source-pointer": {
-      "all": "   b. the source pointer the installer left here: the one line in\n      `{{SKILLS}}/.skillator-source` - the dir it last installed from, used only if it still\n      holds both installers;"
+      "all": "   b. the source pointer the installer left here: the one line in\n      `{{SKILLS}}/.skillator-source` - the dir it last installed from, used only if it still\n      holds both installers and its `.claude-plugin/plugin.json` version (or\n      `plugin/.claude-plugin/plugin.json`) is not older than the Claude Code skillator version\n      from step 1 - a stale pointer is skipped: say so;"
     },
     "team.invocation": {
       "all": "Load the `tickets-zordon` skill (skillator:tickets-zordon) and run the team or ticket assignment action for this repo.\nFor each `ticket-meta` invocation below use `sh {{SKILLS}}/tickets-zordon/scripts/ticket-meta.sh`\n(on Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File {{SKILLS}}/tickets-zordon/scripts/ticket-meta.ps1`), followed by the shown arguments."
