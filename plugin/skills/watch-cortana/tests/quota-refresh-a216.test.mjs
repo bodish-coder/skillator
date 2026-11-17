@@ -262,4 +262,20 @@ for (const port of ['ps1', 'sh']) {
       fx.cleanup()
     }
   })
+
+  test(`${port}: B27 an expired claude login says login expired with the fix, not unparseable`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const profile = `${fx.root}/claude-expired`
+      mkdirSync(profile, { recursive: true })
+      const env = { SKILLATOR_CLI: 'claude', SKILLATOR_PROFILE_DIR: profile, CLAUDE_CONFIG_DIR: profile }
+      fx.setCliResponse('{"is_error":true,"result":"Failed to authenticate: OAuth session expired and could not be refreshed","type":"result"}', 1)
+      fx.runRefresh('claude', profile, env)
+      const cache = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.equal(cache.note, 'login expired - run claude /login')
+      assert.equal(fx.runLevel(env), 'src=claude-code 5h=- 7d=- ctx=- max=- note=login_expired_-_run_claude_/login')
+    } finally {
+      fx.cleanup()
+    }
+  })
 }

@@ -469,6 +469,8 @@ except Exception:
   else
     if case $raw in *[Nn]"ot logged in"*) true ;; *) false ;; esac; then
       fail_note="not logged in"
+    elif [ "$cli" = claude ] && printf '%s' "$raw" | grep -qi 'session expired\|Failed to authenticate'; then
+      fail_note="login expired - run claude /login"
     elif [ -n "$(printf '%s' "$raw" | tr -d '[:space:]')" ]; then
       fail_note="unparseable"
     else

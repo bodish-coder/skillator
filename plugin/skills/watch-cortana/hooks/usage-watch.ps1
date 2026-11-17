@@ -395,6 +395,7 @@ if ($Mode -eq 'refresh') {
     if (-not $res) {
       $srcName = if ($Cli -eq 'claude') { 'claude-code' } else { $Cli }
       $failNote = if ($raw -and $raw -match 'not logged in') { 'not logged in' }
+                  elseif ($Cli -eq 'claude' -and $raw -and $raw -match 'session expired|Failed to authenticate') { 'login expired - run claude /login' }
                   elseif ($raw -and $raw.Trim()) { 'unparseable' }
                   else { 'refresh failed' }
       $prevFailures = 0
