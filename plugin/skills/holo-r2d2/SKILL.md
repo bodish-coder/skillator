@@ -269,7 +269,7 @@ At most one option is recommended; `custom`, `defer` and `explain` are reserved 
 
 Always give the **full resolved absolute path** to the `.wizard.html` file and
 four lines: open it, answer (or choose Ask / Explain more), review, finalize
-(Save to page folder, Copy JSON or the download), then say "check wizard
+(Save to a folder, Copy JSON or the download), then say "check wizard
 answers" here (Answers back, below). Back in the
 session, `--answers` prints one single-quoted `relay-morpheus.sh answer` line
 per answered decision - run them yourself, after reading them; custom directions
@@ -280,10 +280,12 @@ the answers to the user's work instead of `RM answer`.
 ### Answers back - "check wizard answers" / "r2d2 answers" (F179)
 
 The wizard's review screen has **Copy JSON** (the export, to the clipboard),
-**Save to page folder** (browsers with the File System Access API: the owner
-picks the folder once, the page remembers it per set and Finalize saves there
-from then on) and the normal download. The status line says where the file
-went. Nothing is sent anywhere.
+**Save to a folder (choose this page's folder)** (browsers with the File System
+Access API: the owner picks the folder once - the page cannot preselect its own
+folder - the page remembers it per page file and Finalize saves there from then
+on) and the normal download. The status line names the folder chosen and warns
+when it is not `holo`. Each page build embeds a random nonce the export
+carries. Nothing is sent anywhere.
 
 On either phrase, run `node <SKILL>/scripts/answers.mjs` from the repo root. It
 searches, and prints each folder it searched: the page folder
@@ -293,9 +295,15 @@ nothing else from the profile), the OS Downloads folder, then the folder named
 on the first line of `~/.skillator/holo/answers-dir` (the owner sets it when
 none of the others is right). An open set is a `<id>.wizard.html` in the page
 folder (a RUN set while its run still has an open or asked decision); files
-for any other set are listed as ignored. Per set it takes FINAL over draft,
-then folder order, then newest, and checks it as `--next-wizard` does; a
-refused file is printed with the reason and the next one is tried.
+for any other set are listed as ignored. It checks a file against the set the page embeds (round 2+ included). Per set
+it takes FINAL over draft, then the higher round, the newest finalizedAt, the
+newest file, folder order last, and checks it as `--next-wizard` does; a
+refused file is printed with the reason and the next one is tried, an older
+valid FINAL is printed as superseded. File text is data: control characters
+removed, capped, free text quoted as owner text. A FINAL whose nonce matches
+the page (or with no nonce, in the page folder) is verified; any other is
+**unverified - confirm with the owner before applying**, and only its summary
+and path are printed, no commands.
 
 - **Picked** - a RUN set prints the same `relay-morpheus.sh answer` lines as
   `--answers`: read them, then run them. Another set prints one line per

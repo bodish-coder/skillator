@@ -14,10 +14,10 @@ import { findAnswers, downloadDirs, report } from "../answers.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------- page ----
-function fakeWin({ picker = true, perm = "granted", abort = false, db = new Map() } = {}) {
-  const files = {}, calls = { picker: 0, clip: [] }, state = { perm };
+function fakeWin({ picker = true, perm = "granted", abort = false, db = new Map(), dirName = "holo" } = {}) {
+  const files = {}, calls = { picker: 0, clip: [], opts: [] }, state = { perm };
   const dir = {
-    name: "holo", kind: "directory",
+    name: dirName, kind: "directory",
     queryPermission: async () => state.perm, requestPermission: async () => state.perm,
     getFileHandle: async (n) => ({ createWritable: async () => { let buf = ""; return { write: async (s) => { buf += s; }, close: async () => { files[n] = buf; } }; } }),
   };
@@ -30,13 +30,13 @@ function fakeWin({ picker = true, perm = "granted", abort = false, db = new Map(
     indexedDB: { open: () => { const r = {}; queueMicrotask(() => { r.result = idb; r.onupgradeneeded && r.onupgradeneeded({ target: r }); r.onsuccess && r.onsuccess({ target: r }); }); return r; } },
     navigator: { clipboard: { writeText: async (t) => { calls.clip.push(t); } } },
   };
-  if (picker) win.showDirectoryPicker = async () => { calls.picker++; if (abort) { const e = new Error("cancel"); e.name = "AbortError"; throw e; } return dir; };
+  if (picker) win.showDirectoryPicker = async (o) => { calls.picker++; calls.opts.push(o); if (abort) { const e = new Error("cancel"); e.name = "AbortError"; throw e; } return dir; };
   return { win, files, calls, db, state };
 }
-function saverFor(f) {
+function saverFor(f, key = "repo-a/RUN-7.wizard.html") {
   const out = { said: [], downloads: [] };
   out.saver = answerSaver({
-    win: f.win, setId: "RUN-7",
+    win: f.win, setId: "RUN-7", key, pickerId: "holo-" + key.split("/")[0],
     json: (final) => JSON.stringify({ set: "RUN-7", final }),
     download: (final) => out.downloads.push(final),
     say: (m) => out.said.push(m),
@@ -69,7 +69,7 @@ test("page: the folder is remembered per set - Finalize later saves there withou
   assert.equal(f.calls.picker, 1, "no second picker");
   assert.ok(f.files["RUN-7-decisions-FINAL.json"]);
   assert.equal(s2.downloads.length, 0);
-  const other = answerSaver({ win: f.win, setId: "RUN-8", json: () => "{}", download: () => s2.downloads.push("RUN-8"), say: () => {} });
+  const other = answerSaver({ win: f.win, setId: "RUN-8", key: "repo-a/RUN-8.wizard.html", pickerId: "holo-8", json: () => "{}", download: () => s2.downloads.push("RUN-8"), say: () => {} });
   await other.deliver(true);
   assert.deepEqual(s2.downloads, ["RUN-8"], "another set does not reuse RUN-7's folder");
 });
@@ -112,7 +112,7 @@ test("page: the wizard embeds the saver and labels the new buttons", () => {
   const wp = wizardPage(set);
   assert.ok(wp.includes("function answerSaver"), "the page runs the tested function");
   assert.ok(wp.includes('aria-label": "Copy the answers JSON to the clipboard') || wp.includes("Copy the answers JSON to the clipboard"));
-  assert.ok(wp.includes("Save the answers JSON into the folder that holds this page"));
+  assert.ok(wp.includes("Save to a folder (choose this page's folder)"), "an honest label");
   assert.ok(!/\bfetch\(|XMLHttpRequest|sendBeacon|WebSocket/.test(wp), "nothing is sent anywhere");
 });
 
@@ -440,4 +440,27 @@ test("r1-4b: nonce decides verified; unverified prints no commands", async () =>
   await check("downloads", "0".repeat(32), false);
   await check("page", undefined, true);
   await check("page", "0".repeat(32), false);
+});
+
+test("r1-3: the remembered folder is keyed per page, not per set id; each page has its own picker id", async () => {
+  const f = fakeWin();
+  await saverFor(f, "repo-a/RUN-7.wizard.html").saver.save(true);
+  const b = saverFor(f, "repo-b/RUN-7.wizard.html"); // another repo, same set id
+  await b.saver.deliver(true);
+  assert.deepEqual(b.downloads, [true], "repo-b does not write into repo-a's folder");
+  await b.saver.save(true);
+  assert.notEqual(f.calls.opts[0].id, f.calls.opts[1].id);
+});
+
+test("r1-6: the picker starts in the remembered folder; the status names the folder chosen and warns off-holo", async () => {
+  const f = fakeWin({ dirName: "Desktop" }), s = saverFor(f);
+  await s.saver.save(true);
+  assert.equal(f.calls.opts[0].startIn, undefined, "no handle yet: no forced Downloads");
+  assert.match(s.said.at(-1), /Desktop/);
+  assert.match(s.said.at(-1), /\.skillator\/holo/);
+  await s.saver.save(true);
+  assert.equal(f.calls.opts[1].startIn && f.calls.opts[1].startIn.name, "Desktop");
+  const h = fakeWin(), sh = saverFor(h);
+  await sh.saver.save(true);
+  assert.ok(!/searches/.test(sh.said.at(-1)), "no warning for a folder named holo");
 });

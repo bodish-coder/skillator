@@ -529,7 +529,7 @@ kbd{font:700 .8rem ui-monospace,monospace;padding:2px 6px;border:1px solid var(-
 // API, the folder handle remembered per set in IndexedDB) or the normal download.
 // The page embeds this function by its own source, so the tests run the browser
 // code. Self-contained: no template literals, no outside names. Nothing is sent.
-export function answerSaver({ win, setId, json, download, say, copyFallback }) {
+export function answerSaver({ win, setId, key, pickerId, json, download, say, copyFallback }) {
   const name = (final) => String(setId).replace(/[^A-Za-z0-9_.-]/g, "_") + "-decisions-" + (final ? "FINAL" : "draft") + ".json";
   const next = " Then say \"check wizard answers\" in the working conversation.";
   const canSave = typeof win.showDirectoryPicker === "function";
@@ -545,8 +545,8 @@ export function answerSaver({ win, setId, json, download, say, copyFallback }) {
       };
     });
   }
-  const remembered = () => idb("readonly", (s) => s.get(setId)).catch(() => undefined);
-  const remember = (dir) => idb("readwrite", (s) => s.put(dir, setId)).catch(() => undefined);
+  const remembered = () => idb("readonly", (s) => s.get(key)).catch(() => undefined);
+  const remember = (dir) => idb("readwrite", (s) => s.put(dir, key)).catch(() => undefined);
   async function writeTo(dir, final) {
     const opts = { mode: "readwrite" };
     if ((await dir.queryPermission(opts)) !== "granted" && (await dir.requestPermission(opts)) !== "granted") {
@@ -554,7 +554,8 @@ export function answerSaver({ win, setId, json, download, say, copyFallback }) {
     }
     const w = await (await dir.getFileHandle(name(final), { create: true })).createWritable();
     await w.write(json(final)); await w.close();
-    say("Saved into the folder " + dir.name + ": " + name(final) + "." + next);
+    const off = dir.name === "holo" ? "" : " Note: the finder searches .skillator/holo and the download folder, not " + dir.name + " - choose this page's folder to be found.";
+    say("Saved into the folder " + dir.name + ": " + name(final) + "." + off + next);
   }
   function fallback(final, why) {
     download(final);
@@ -565,7 +566,9 @@ export function answerSaver({ win, setId, json, download, say, copyFallback }) {
   async function save(final) {
     if (!canSave) return fallback(final, "This browser cannot save into a folder.");
     let dir;
-    try { dir = await win.showDirectoryPicker({ id: "holo-answers", mode: "readwrite", startIn: (await remembered()) || "downloads" }); }
+    const opts = { id: pickerId, mode: "readwrite" }, start = await remembered();
+    if (start) opts.startIn = start;
+    try { dir = await win.showDirectoryPicker(opts); }
     catch (e) { return e && e.name === "AbortError" ? say("Save cancelled; nothing was written.") : fallback(final, "Could not open the folder picker."); }
     await remember(dir);
     try { await writeTo(dir, final); } catch (e) { fallback(final, failed(dir, e)); }
@@ -581,7 +584,7 @@ export function answerSaver({ win, setId, json, download, say, copyFallback }) {
     let ok = false;
     try { await win.navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = !!(copyFallback && copyFallback(text)); }
     say(ok ? "Answers JSON (" + (final ? "FINAL" : "draft") + ") copied. Paste it in the working conversation."
-      : "Copy failed - use Save to page folder or Download instead.");
+      : "Copy failed - use Save to a folder or Download instead.");
   }
   return { canSave, save, deliver, copy, name };
 }
@@ -1076,7 +1079,7 @@ function review() {
     el("label", { class: "opt", for: "reviewed" }, chk, el("span", { class: "lbl", text: "I reviewed every answer above and they are my decisions." })),
     finErr, el("div", { class: "actions" }, fin, el("button", { type: "button", class: "secondary", onclick: () => download(false) }, "Download draft JSON"),
       el("button", { type: "button", class: "secondary", onclick: () => SAVER.copy(!!st.finalizedAt), "aria-label": "Copy the answers JSON to the clipboard" }, "Copy JSON"),
-      SAVER.canSave ? el("button", { type: "button", class: "secondary", onclick: () => SAVER.save(!!st.finalizedAt), "aria-label": "Save the answers JSON into the folder that holds this page" }, "Save to page folder") : null,
+      SAVER.canSave ? el("button", { type: "button", class: "secondary", onclick: () => SAVER.save(!!st.finalizedAt), title: "Writes the answers JSON into the folder you choose; the finder looks in .skillator/holo and the download folder" }, "Save to a folder (choose this page's folder)") : null,
       el("button", { type: "button", class: "quiet", onclick: () => go(n - 1) }, "Back")),
     el("p", { class: "muted small", text: "Saving, downloading, recommendations and time spent never count as approval. Only finalizing does, and it stays on this device until you share the file." }),
     settled);
@@ -1106,7 +1109,7 @@ function download(final) {
   if (!final) say("Draft downloaded. It stays a draft, whatever was finalized before.");
 }
 
-const SAVER = (${answerSaver})({ win: window, setId: SET.id, json: (final) => JSON.stringify(exportObj(final), null, 2), download, say,
+const SAVER = (${answerSaver})({ win: window, setId: SET.id, key: "page:" + location.pathname, pickerId: "holo-" + hash(location.pathname), json: (final) => JSON.stringify(exportObj(final), null, 2), download, say,
   copyFallback: (t) => { const ta = el("textarea", { style: "position:fixed;left:-9999px" }); ta.value = t; document.body.append(ta); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (e) {} ta.remove(); return ok; } });
 
 function validateImport(v) {
