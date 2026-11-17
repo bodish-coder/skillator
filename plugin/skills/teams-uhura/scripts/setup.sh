@@ -89,10 +89,11 @@ step_tunnel() {
   say "tunnel: $TUNNEL on port $PORT"
 }
 
-# https://<tunnel id>-<port>.<region>.devtunnels.ms, from the tunnel id devtunnel show prints
+# B28: the port's own portUri from `devtunnel show -j` - a named tunnel's URL carries its
+# generated id, never its name, so it cannot be built from the Tunnel ID line
 tunnel_url() {
-  devtunnel show "$TUNNEL" 2>/dev/null |
-    sed -n "s/.*Tunnel ID[[:space:]]*:[[:space:]]*\([A-Za-z0-9_-]*\)\.\([A-Za-z0-9]*\).*/https:\/\/\1-$PORT.\2.devtunnels.ms/p" | head -n 1
+  devtunnel show "$TUNNEL" -j 2>/dev/null | tr -d ' \r\n' | tr ',{}' '\n\n\n' |
+    sed -n 's/^"portUri":"\(https:[^"]*\)"$/\1/p' | sed 's:/*$::' | grep -e "-$PORT\." | head -n 1
 }
 
 read_config() {
@@ -159,6 +160,7 @@ case $a in
   'devtunnel user show') if [ -f "$ST/login" ]; then echo 'Logged in as owner using GitHub.'; else echo 'Not logged in.'; fi ;;
   'devtunnel user login') : > "$ST/login" ;;
   'devtunnel show skillator-teams') if [ -f "$ST/tunnel" ]; then echo 'Tunnel ID : skillator-teams.euw'; else echo 'Tunnel not found.'; exit 1; fi ;;
+  'devtunnel show skillator-teams -j') if [ -f "$ST/tunnel" ]; then echo '{"tunnel":{"tunnelId":"skillator-teams.euw","ports":[{"portNumber":3978,"portUri":"https://ab12cd34-3978.euw.devtunnels.ms/"}]}}'; else echo 'Tunnel not found.'; exit 1; fi ;;
   'devtunnel create '*) : > "$ST/tunnel" ;;
   'devtunnel port list '*) if [ -f "$ST/port" ]; then echo 'Port 3978 auto'; else echo 'Found 0 ports'; fi ;;
   'devtunnel port create '*) : > "$ST/port" ;;
@@ -217,13 +219,13 @@ EOF
   scen '' y "$ALL" 'login tunnel port saved up'
   [ "$CODE" = 0 ] || fail "listener up: exit $CODE"
   called 'start --port' && fail 'listener up: started again'
-  out 'https://skillator-teams-3978.euw.devtunnels.ms' || fail 'listener up: no URL'
+  out 'https://ab12cd34-3978.euw.devtunnels.ms' || fail 'listener up: no URL'
   # whole walk: the Teams steps carry the URL, the form is named, the listener starts after it
   scen '' y "$ALL"
   [ "$CODE" = 0 ] || fail "walk: exit $CODE"
   called '^host' || fail 'walk: tunnel not hosted'
   called 'start --port 3978' || fail 'walk: listener not started'
-  out 'Callback URL: https://skillator-teams-3978.euw.devtunnels.ms' || fail 'walk: Teams steps without the URL'
+  out 'Callback URL: https://ab12cd34-3978.euw.devtunnels.ms' || fail 'walk: Teams steps without the URL'
   out 'Messages tab, s' || fail 'walk: form not named'
   out '^  listener *up' || fail 'walk: table listener'
   out '^  form saved *set' || fail 'walk: table form'

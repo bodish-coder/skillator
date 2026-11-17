@@ -112,9 +112,11 @@ function Step-Tunnel([int]$port) {
   Say "tunnel: $Tunnel on port $port"; $true
 }
 
-# https://<tunnel id>-<port>.<region>.devtunnels.ms, from the tunnel id devtunnel show prints
+# B28: the port's own portUri from `devtunnel show -j` - a named tunnel's URL carries its
+# generated id, never its name, so it cannot be built from the Tunnel ID line
 function TunnelUrl([int]$port) {
-  if ((Run devtunnel show $Tunnel).out -match 'Tunnel ID\s*:\s*([\w-]+)\.(\w+)') { return "https://$($Matches[1])-$port.$($Matches[2]).devtunnels.ms" }
+  try { $j = (Run devtunnel show $Tunnel -j).out | ConvertFrom-Json } catch { return $null }
+  foreach ($p in @($j.tunnel.ports)) { if ($p.portNumber -eq $port -and $p.portUri) { return ([string]$p.portUri).TrimEnd('/') } }
   $null
 }
 
@@ -183,6 +185,7 @@ if ($args -contains '--selftest' -or $args -contains '-selftest') {
     if ($k -like '*--version') { return @{ code = 0; out = 'v1' } }
     if ($k -eq 'devtunnel user show') { return @{ code = 0; out = $(if ($S.login) { 'Logged in as owner using Microsoft.' } else { 'Not logged in.' }) } }
     if ($k -eq "devtunnel show $Tunnel") { if ($S.tunnel) { return @{ code = 0; out = "Tunnel ID : $Tunnel.euw" } }; return @{ code = 1; out = 'Tunnel not found.' } }
+    if ($k -eq "devtunnel show $Tunnel -j") { if ($S.tunnel) { return @{ code = 0; out = '{"tunnel":{"tunnelId":"skillator-teams.euw","ports":[{"portNumber":3978,"portUri":"https://ab12cd34-3978.euw.devtunnels.ms/"}]}}' } }; return @{ code = 1; out = 'Tunnel not found.' } }
     if ($k -like 'devtunnel create *') { $S.tunnel = $true; return @{ code = 0; out = '' } }
     if ($k -like 'devtunnel port list *') { return @{ code = 0; out = $(if ($S.port) { 'Port 3978 auto' } else { 'Found 0 ports' }) } }
     if ($k -like 'devtunnel port create *') { $S.port = $true; return @{ code = 0; out = '' } }
@@ -240,11 +243,11 @@ if ($args -contains '--selftest' -or $args -contains '-selftest') {
   if ($r.calls -match 'create') { Fail "tunnel existing: created again`n$($r.calls)" }
   # listener already up: not started again, URL printed, exit 0
   $r = Scenario @{ has = $tools; login = $true; tunnel = $true; port = $true; saved = $true; up = $true; yes = 'y' } $false
-  if ($r.code -ne 0 -or $r.calls -match 'start --port' -or $r.out -notmatch 'https://skillator-teams-3978\.euw\.devtunnels\.ms') { Fail "listener up`n$($r.out)" }
+  if ($r.code -ne 0 -or $r.calls -match 'start --port' -or $r.out -notmatch 'https://ab12cd34-3978\.euw\.devtunnels\.ms') { Fail "listener up`n$($r.out)" }
   # whole walk: the Teams steps carry the URL, the form is named, the listener starts after it
   $r = Scenario @{ has = $tools; yes = 'y' } $false
   if ($r.code -ne 0 -or $r.calls -notmatch '(?m)^host' -or $r.calls -notmatch 'start --port 3978') { Fail "walk`n$($r.calls)" }
-  if ($r.out -notmatch 'Callback URL: https://skillator-teams-3978\.euw\.devtunnels\.ms' -or $r.out -notmatch 'Messages tab, s') { Fail "walk: Teams steps`n$($r.out)" }
+  if ($r.out -notmatch 'Callback URL: https://ab12cd34-3978\.euw\.devtunnels\.ms' -or $r.out -notmatch 'Messages tab, s') { Fail "walk: Teams steps`n$($r.out)" }
   if ($r.out -notmatch '(?m)^  listener\s+up' -or $r.out -notmatch '(?m)^  form saved\s+set') { Fail "walk: status table`n$($r.out)" }
   if (@([IO.File]::ReadAllBytes($PSCommandPath) | Where-Object { $_ -gt 127 -or $_ -eq 13 }).Count) { Fail 'not pure ASCII + LF' }
   $env:Path = $savedPath; $env:LOCALAPPDATA = $savedLocal; Remove-Item -Recurse -Force $T
