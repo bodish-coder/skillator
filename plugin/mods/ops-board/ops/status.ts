@@ -375,6 +375,7 @@ export async function profileRows(p: Profile, read: Reader, base: Env, darwin: b
   }
   let main = await row(p, read, base, darwin)
   if (held !== null && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', `not refreshed: last 7d ${Math.round(held)}% >= 90%`]
+  else if (!main[3] && (main[1] !== '-' || main[2] !== '-') && readCache(p)?.via === 'turn') main = [main[0], main[1], main[2], 'via one turn']
   return [main, ...modelRows(p)]
 }
 

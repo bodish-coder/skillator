@@ -313,3 +313,11 @@ test('F176: --refresh reads blank logged-in rows once, in the foreground, and sk
   assert.ok(waits[0]!.ms > 5000 && waits[0]!.ms < 60000, 'time for a slow CLI, inside the 60 s refresh lock')
   assert.match(out.find(r => r[0] === 'claude-hot')![3], /7d 95% >= 90%/)
 })
+
+test('F176: a reading a forced read got from one tiny turn says so on its row', async () => {
+  const h = home()
+  const c = dir(h, '.claude-t', '.credentials.json')
+  writeFileSync(join(c, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', '5h': 23, '7d': 5, via: 'turn' }))
+  const rows = await profileRows(discover(h)[0]!, said('src=claude-code 5h=23.0 7d=5.0 ctx=- max=23.0\n'), {}, false, false)
+  assert.deepEqual(rows, [['claude-t', '23%', '5%', 'via one turn']])
+})

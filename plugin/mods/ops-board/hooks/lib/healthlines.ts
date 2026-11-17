@@ -7,7 +7,7 @@ import type { Limits } from './facts'
 // F49, design §8: the Health tab's lines (mocks m-health, m-health-hold). Pure;
 // health.tsx draws them.
 
-export type HealthView = { usage: Usage | null; machine: Machine | null; relay: string | null; now: number; profile?: { name: string | null; note?: string | null } }
+export type HealthView = { usage: Usage | null; machine: Machine | null; relay: string | null; now: number; profile?: { name: string | null; note?: string | null }; profiles?: { text: string | null; busy: boolean } }
 export type Line = { key: string; segs: Seg[] }
 
 // Relay's own thresholds (relay-morpheus chain decide): the 5-hour hold and the
@@ -176,6 +176,13 @@ export function healthLines(v: HealthView): Line[] {
   lines.push(...windowLines('five', '5-hour', u?.five ?? null, v.now, FIVE_HOLD_PCT))
   lines.push(...windowLines('seven', '7-day', u?.seven ?? null, v.now, WEEKLY_STOP_PCT))
   lines.push(...relayLines(u ?? { five: null, seven: null, spendLimitPct: null, costUsd: null, decision: null }, v))
+  // F176: every profile with its model rows, as `ops --status --refresh` prints them (p)
+  if (v.profiles) {
+    lines.push({ key: '', segs: [] }, { key: 'h:profiles', segs: [{ text: 'PROFILES', bold: true }] })
+    if (v.profiles.busy) lines.push({ key: 'profiles', segs: [{ text: 'reading every profile...', dim: true }] })
+    else if (!v.profiles.text) lines.push({ key: 'profiles', segs: [{ text: 'p reads every profile (a blank one once)', dim: true }] })
+    else lines.push(...v.profiles.text.trimEnd().split(/\r?\n/).map((t, i) => ({ key: `prof:${i}`, segs: [{ text: t }] })))
+  }
   lines.push({ key: '', segs: [] }, { key: 'h:credit', segs: [{ text: 'CREDIT', bold: true }] })
   lines.push({ key: 'credit', segs: [{ text: 'not available' }, { text: ' · this host exposes no credit source', dim: true }] })
   if (u?.spendLimitPct !== null && u?.spendLimitPct !== undefined) {

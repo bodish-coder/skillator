@@ -14,9 +14,11 @@ export type { HealthView } from './lib/healthlines'
 const usageA = atom({ plugin: 'ops-board', key: 'usage' } as const, null)
 const machineA = atom({ plugin: 'ops-board', key: 'machine' } as const, null)
 const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
+// F176: the last `ops --status --refresh` table (p), and whether one is in flight
+const profilesA = atom({ plugin: 'ops-board', key: 'profiles' } as const, null as { text: string | null; busy: boolean; at?: number } | null)
 
 export async function readHealth($: EngineInterface): Promise<HealthView> {
-  return { usage: await read($, usageA), machine: await read($, machineA), relay: await read($, relayA), now: await $.clock.now() }
+  return { usage: await read($, usageA), machine: await read($, machineA), relay: await read($, relayA), now: await $.clock.now(), profiles: (await read($, profilesA)) ?? { text: null, busy: false } }
 }
 
 type Els = { Box: ElementConstructor<BoxProps>; Text: ElementConstructor<TextProps> }
