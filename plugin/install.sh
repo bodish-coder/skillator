@@ -383,8 +383,8 @@ agy_ide() {
   muse_json() {
     node -e '
       const fs = require("fs"), path = require("path"), [mode, arg, expected] = process.argv.slice(1);
-      // A231: the same string as install.ps1 Normalize-MusePath; links resolved, a subst/mapped drive letter kept
-      const norm = p => { const real = q => { try { return fs.realpathSync.native(q); } catch { return ""; } }; if (process.platform === "win32") { p = path.resolve(p.replace(/\//g, "\\").replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/, "")); const r = real(p), root = /^[a-z]:/i.test(p) ? real(p.slice(0, 2) + "\\").replace(/\\$/, "") : ""; if (r) p = root && (r.toLowerCase() === root.toLowerCase() || r.toLowerCase().startsWith(root.toLowerCase() + "\\")) ? p.slice(0, 2) + r.slice(root.length) : r; } else p = real(p) || p; p = p.replace(/\\/g, "/").replace(/\/+$/, ""); return /^[a-z]:\//i.test(p) ? p.toLowerCase() : p; };
+      // A231: the same string as install.ps1 Normalize-MusePath: links resolved by the OS, then one spelling
+      const norm = p => { const win = process.platform === "win32"; if (win) p = path.resolve(p.replace(/\//g, "\\").replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/, "")); try { p = fs.realpathSync.native(p); } catch {} p = p.replace(/\\/g, "/"); if (win) p = p.toLowerCase(); p = p.replace(/\/+$/, ""); return win && /^[a-z]:$/.test(p) ? p + "/" : p || "/"; };
       try {
         const data = JSON.parse(fs.readFileSync(0, "utf8").replace(/^\uFEFF/, ""));
         if (mode === "manifest") {

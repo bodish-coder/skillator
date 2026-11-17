@@ -198,34 +198,56 @@ test('A231: both installers normalize a Muse source path to the same string', { 
   const normSrc = readFileSync(join(plugin, 'install.sh'), 'utf8').match(/^\s*const norm = (p => .*);\r?$/m)?.[1];
   assert.ok(normSrc, 'install.sh: muse_json norm not found');
   const nodeNorm = new Function('fs', 'path', `return ${normSrc}`)(fs, nodePath);
-  const fx = join(root, 'a231'), real = join(fx, 'real');
+  const fx = join(root, 'a231'), real = join(fx, 'real'), skips = [];
   mkdirSync(join(real, 'sub'), { recursive: true }); mkdirSync(join(fx, 'a'));
   fs.symlinkSync(real, join(fx, 'junction'), 'junction');
-  let rel = true;
-  try { fs.symlinkSync('..\\real', join(fx, 'a', 'rel'), 'dir'); } catch { rel = false; }
-  const [gone, drive] = 'ZYXWVUTSRQPONMLKJIHG'.split('').filter(l => !fs.existsSync(`${l}:\\`));
-  const subst = drive && spawnSync('subst', [`${drive}:`, real], { timeout: 15000, windowsHide: true }).status === 0;
+  const viaLink = fs.realpathSync.native(join(real, 'sub')).replace(/\\/g, '/').toLowerCase();
+  const sys = real.slice(0, 2), share = `\\\\localhost\\${sys[0]}$${real.slice(2)}\\sub`;
+  // [input, expected]; expected null = the two installers must only agree
+  const cases = [[join(fx, 'junction', 'sub'), viaLink], [`${fx}\\a\\..\\junction\\sub`, viaLink],
+    ['\\\\?\\' + join(real, 'sub').toUpperCase(), viaLink],
+    [`${sys.toUpperCase()}\\`, `${sys.toLowerCase()}/`], [`${sys.toLowerCase()}\\`, `${sys.toLowerCase()}/`],
+    ['\\\\?\\UNC\\localhost\\a231-none\\x', '//localhost/a231-none/x'], ['\\\\LOCALHOST\\A231-None\\x\\', '//localhost/a231-none/x'],
+    [share, null], [share.toUpperCase(), null]];
+  try { fs.symlinkSync('..\\real', join(fx, 'a', 'rel'), 'dir'); cases.push([join(fx, 'a', 'rel', 'sub'), viaLink]); }
+  catch { skips.push('relative symlink case (no symlink privilege)'); }
   try {
-    const cases = [[join(fx, 'junction', 'sub'), 'real'], [`${fx}\\a\\..\\junction\\sub`, 'real'],
-      ...(rel ? [[join(fx, 'a', 'rel', 'sub'), 'real']] : []), ['\\\\?\\' + join(real, 'sub').toUpperCase(), 'real'],
-      [`${gone}:\\gone\\x`, `${gone.toLowerCase()}:/gone/x`], ['\\\\?\\UNC\\localhost\\a231-none\\x', '//localhost/a231-none/x'],
-      ['\\\\localhost\\a231-none\\x', '//localhost/a231-none/x'], ...(subst ? [[`${drive}:\\sub`, `${drive.toLowerCase()}:/sub`]] : [])];
-    const expected = fs.realpathSync.native(join(real, 'sub')).replace(/\\/g, '/').toLowerCase();
-    const script = join(fx, 'norm.ps1');
-    writeFileSync(script, `[Console]::OutputEncoding = [Text.Encoding]::UTF8
+    const deep = join(real, 'l'.repeat(140), 'm'.repeat(140)); mkdirSync(deep, { recursive: true });
+    cases.push([join(fx, 'junction', 'l'.repeat(140), 'M'.repeat(140)), fs.realpathSync.native(deep).replace(/\\/g, '/').toLowerCase()]);
+  } catch (e) { skips.push(`long path case (${e.code || e.message})`); }
+  const script = join(fx, 'norm.ps1');
+  writeFileSync(script, `param([switch]$NoAddType)
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+if ($NoAddType) { function Add-Type { throw 'a231 no Add-Type' } }
 $ast = [Management.Automation.Language.Parser]::ParseFile('${join(plugin, 'install.ps1').replaceAll("'", "''")}', [ref]$null, [ref]$null)
 . ([scriptblock]::Create($ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Normalize-MusePath' }, $true).Extent.Text))
 foreach ($p in ([Console]::In.ReadToEnd() | ConvertFrom-Json)) { Normalize-MusePath $p }`);
-    const r = spawnSync(ps, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script],
-      { input: JSON.stringify(cases.map(c => c[0])), encoding: 'utf8', timeout: 120000, windowsHide: true });
+  const psNorm = (inputs, ...flags) => {
+    const r = spawnSync(ps, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, ...flags],
+      { input: JSON.stringify(inputs), encoding: 'utf8', timeout: 120000, windowsHide: true });
     assert.equal(r.status, 0, r.stderr);
-    const psOut = r.stdout.trim().split(/\r?\n/);
+    return r.stdout.trim().split(/\r?\n/);
+  };
+  // the letters are picked just before use: one stays unmapped, one becomes a subst drive
+  const free = 'ZYXWVUTSRQPONMLKJIHG'.split('').filter(l => !fs.existsSync(`${l}:\\`));
+  const gone = free[0], drive = process.env.SKILLATOR_NO_SUBST === '1' ? undefined : free[1];
+  if (gone) cases.push([`${gone}:\\gone\\x\\`, `${gone.toLowerCase()}:/gone/x`]);
+  else skips.push('unmapped drive case (no free drive letter)');
+  const subst = drive && spawnSync('subst', [`${drive}:`, real], { timeout: 15000, windowsHide: true }).status === 0;
+  try {
+    if (subst) cases.push([`${drive}:\\sub`, viaLink], [`${drive}:\\`, viaLink.slice(0, -'/sub'.length)]);
+    else skips.push(`subst case (${process.env.SKILLATOR_NO_SUBST === '1' ? 'SKILLATOR_NO_SUBST=1' : drive ? 'subst failed' : 'no free drive letter'})`);
+    const psOut = psNorm(cases.map(c => c[0]));
     cases.forEach(([input, want], i) => {
       const n = nodeNorm(input);
       assert.equal(psOut[i], n, `${input}: install.ps1 and install.sh disagree`);
-      assert.equal(n, want === 'real' ? expected : want, `${input}: normalized wrongly`);
+      if (want !== null) assert.equal(n, want, `${input}: normalized wrongly`);
+      assert.equal(n, n.toLowerCase(), `${input}: not lowercased`);
     });
-    if (!rel) console.log('# skip A231 relative symlink case (no symlink privilege)');
-    if (!subst) console.log('# skip A231 subst case (no free drive or subst failed)');
   } finally { if (subst) spawnSync('subst', [`${drive}:`, '/d'], { timeout: 15000, windowsHide: true }); }
+  // no link resolution: the string-only form, explained by one note however many paths follow
+  const written = [join(fx, 'junction', 'sub'), `${sys.toUpperCase()}\\`, real];
+  assert.deepEqual(psNorm(written, '-NoAddType'), ['note: link resolution unavailable (a231 no Add-Type) - comparing paths as written',
+    ...written.map(p => p.replace(/\\/g, '/').toLowerCase().replace(/(?<!:)\/$/, ''))]);
+  for (const s of skips) console.log(`# skip A231 ${s}`);
 });

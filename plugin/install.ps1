@@ -355,7 +355,7 @@ function Get-AgyIde {
 
 # Normalize-MusePath: a source path as Muse and the installer may both spell it, for comparison
 # A231: the same string as install.sh muse_json's norm; both resolve links with
-# GetFinalPathNameByHandle (Node's realpathSync.native) and keep a subst/mapped drive letter
+# GetFinalPathNameByHandle (Node's realpathSync.native), then spell the result one way
 function Normalize-MusePath([string]$path) {
   $path = $path.Replace('/', '\') -replace '^\\\\\?\\UNC\\', '\\' -replace '^\\\\\?\\', ''
   try {
@@ -375,24 +375,23 @@ public static class MuseFinalPath {
     try {
       StringBuilder b = new StringBuilder(32768);
       uint n = GetFinalPathNameByHandleW(h, b, (uint)b.Capacity, 0);
-      if (n == 0 || n >= b.Capacity) return null;
-      string s = b.ToString();
-      if (s.StartsWith(@"\\?\UNC\")) return @"\\" + s.Substring(8);
-      return s.StartsWith(@"\\?\") ? s.Substring(4) : s;
+      return n == 0 || n >= b.Capacity ? null : b.ToString();
     } finally { CloseHandle(h); }
   }
 }
 '@
     }
-    $real = [MuseFinalPath]::Get($path)
-    if ($real -and $path -match '^[A-Za-z]:') {
-      $root = ([string][MuseFinalPath]::Get($path.Substring(0, 2) + '\')).TrimEnd('\')
-      if ($root -and ($real -eq $root -or $real.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase))) { $real = $path.Substring(0, 2) + $real.Substring($root.Length) }
+    # the long-path form, so a path over 260 characters still opens
+    $real = [MuseFinalPath]::Get($(if ($path.StartsWith('\\')) { '\\?\UNC\' + $path.Substring(2) } else { '\\?\' + $path }))
+    if ($real) { $path = $real -replace '^\\\\\?\\UNC\\', '\\' -replace '^\\\\\?\\', '' }
+  } catch {
+    if (-not $script:MuseLinkNoted) {
+      $script:MuseLinkNoted = $true
+      Write-Host "note: link resolution unavailable ($($_.Exception.Message)) - comparing paths as written"
     }
-    if ($real) { $path = $real }
-  } catch {}
-  $path = $path.Replace('\', '/').TrimEnd('/')
-  if ($path -match '^[A-Za-z]:/') { $path = $path.ToLowerInvariant() }
+  }
+  $path = $path.Replace('\', '/').ToLowerInvariant().TrimEnd('/')
+  if ($path -match '^[a-z]:$') { $path += '/' }
   return $path
 }
 
