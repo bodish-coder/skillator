@@ -134,6 +134,11 @@ test('argvFor: both spellings of every call', () => {
     ['usage-level', [], [`/s/skills/${UW}.sh`, 'level'], [`C:/s/skills/${UW}.ps1`, '-Mode', 'level']],
     // F98: teams-uhura's first-time setup, its --check pass only (the walk is interactive)
     ['team-setup-check', [], ['/s/skills/teams-uhura/scripts/setup.sh', '--check'], ['C:/s/skills/teams-uhura/scripts/setup.ps1', '--check']],
+    // F177: the Messages tab's connect / disconnect / status / URL-seen calls
+    ['team-arm', [], ['/s/skills/teams-uhura/scripts/setup.sh', '--arm'], ['C:/s/skills/teams-uhura/scripts/setup.ps1', '--arm']],
+    ['team-disarm', [], ['/s/skills/teams-uhura/scripts/setup.sh', '--disarm'], ['C:/s/skills/teams-uhura/scripts/setup.ps1', '--disarm']],
+    ['team-arm-status', [], ['/s/skills/teams-uhura/scripts/setup.sh', '--status'], ['C:/s/skills/teams-uhura/scripts/setup.ps1', '--status']],
+    ['team-url-ack', [], ['/s/skills/teams-uhura/scripts/setup.sh', '--ack'], ['C:/s/skills/teams-uhura/scripts/setup.ps1', '--ack']],
   ]
   for (const [call, args, sh, ps] of cases) {
     expect(argvFor(call, false, '/s/skills', args, SH)).toEqual([SH, ...sh])

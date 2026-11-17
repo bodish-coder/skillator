@@ -1,9 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { BoxProps, ButtonProps, ElementConstructor, EngineInterface, RenderElement, RenderInput, TextProps } from 'claude-code'
 import type { Msg, SetupView, TeamsCfgView } from '../types'
-import { gitBin, runCall } from './lib/host'
+import { copyHost, gitBin, runCall } from './lib/host'
 import { loginMessage, loginStatus } from './lib/calls'
 import { inboxDirOfCommonGitDir, INBOX_FILE, messageLines, parseInbox, plainText, READ_FILE, unreadCount } from './lib/inbox'
+import { armLines, armToast, parseArm } from './lib/teamsarm'
 import { freshSetup, parseCfgView, setupError, setupJson, unmask, urlShown } from './lib/teamsconfig'
 import type { SetupValues } from './lib/teamsconfig'
 
@@ -24,6 +25,7 @@ const msgSelectedA = atom({ plugin: 'ops-board', key: 'msgSelected' } as const, 
 const msgExpandedA = atom({ plugin: 'ops-board', key: 'msgExpanded' } as const, null)
 const teamsCfgA = atom({ plugin: 'ops-board', key: 'teamsCfg' } as const, null)
 const setupA = atom({ plugin: 'ops-board', key: 'setup' } as const, null)
+const armA = atom({ plugin: 'ops-board', key: 'teamsArm' } as const, null)
 
 const quote = (a: string) => (/[\s"]/.test(a) || a === '' ? '"' + a.replace(/"/g, '\\"') + '"' : a)
 const ran = (argv: string[]) => 'ran: ' + argv.map(quote).join(' ')
@@ -133,9 +135,11 @@ async function refreshCfg($: EngineInterface, _auto = false) {
   if (draft && !touched) { draft = freshSetup(cfg); await bump($) }
 }
 
-// Entering the tab: the config read; setup opens only through its explicit action.
+// Entering the tab: the config read and the Teams status (setup --status, a read). Setup
+// opens, and Teams connects, only through their explicit keys.
 export async function enterMessages($: EngineInterface) {
   await refreshCfg($, false)
+  await runArm($, 'team-arm-status')
 }
 
 async function bump($: EngineInterface, patch: Partial<SetupView> = {}) {
@@ -229,6 +233,33 @@ async function markRead($: EngineInterface) {
   await update($, msgReadA, () => id)
 }
 
+// --- F177: connect Teams. c runs setup --arm, d setup --disarm, y copies the URL. Only the
+// owner's key press reaches team-arm; entering the tab runs --status (a read). ---
+let armBusy = false
+async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack') {
+  const quiet = call === 'team-arm-status' || call === 'team-url-ack'
+  if (armBusy) { if (!quiet) $.ui.toast('Teams: still working - one moment'); return }
+  if (!quiet) armBusy = true
+  try {
+    const r = await runCall($, call, [])
+    if (quiet && armBusy) return                    // an arm or disarm started meanwhile is the newer read
+    const v = parseArm(r.out)
+    if (!v) { if (!quiet) $.ui.toast(`✗ Teams: ${why(r)}\n${ran(r.argv)}`, { timeoutMs: 8000 }); return }
+    await update($, armA, () => v)
+    const said = armToast(v)
+    if (said) $.ui.toast([said, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  } finally { if (!quiet) armBusy = false }
+}
+
+async function copyUrl($: EngineInterface) {
+  const v = await read($, armA)
+  if (!v?.url) { $.ui.toast('no tunnel URL yet - c connects'); return }
+  const r = await copyHost($, v.url)
+  if (r.code !== 0) { $.ui.toast(`✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`); return }
+  $.ui.toast('✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL')
+  if (v.urlChanged) await runArm($, 'team-url-ack')
+}
+
 // --- drawing ---
 
 type Els = { Box: ElementConstructor<BoxProps>; Text: ElementConstructor<TextProps>; Button: ElementConstructor<ButtonProps> }
@@ -240,6 +271,9 @@ export async function MessagesTab($: EngineInterface, els: Els, cols: number): P
   const view = { msgs, readId: await read($, msgReadA), selected: await read($, msgSelectedA), expanded: await read($, msgExpandedA), cols }
   const current = msgs.find(m => 'row:' + m.id === focus)?.id ?? (msgs.some(m => m.id === view.selected) ? view.selected : msgs.at(-1)?.id)
   const out: RenderElement[] = []
+  for (const l of armLines(await read($, armA), Date.now(), cols - 3)) {
+    out.push(<Box key={l.key}><Text wrap="truncate-end">{l.segs.map(s => <Text color={s.color} dimColor={s.dim} bold={s.bold}>{plainText(s.text)}</Text>)}</Text></Box>)
+  }
   for (const l of messageLines({ ...view, cols: cols - 3 })) {
     const segs = l.segs.map(s => <Text color={s.color} dimColor={s.dim} bold={s.bold} inverse={s.inverse}>{plainText(s.text)}</Text>)
     if (l.key.startsWith('row:')) {
@@ -255,6 +289,9 @@ export async function MessagesTab($: EngineInterface, els: Els, cols: number): P
   out.push(<Text> </Text>)
   out.push(
     <Box key="keys" flexDirection="row" flexWrap="wrap" gap={2}>
+      <Button key="key:connect" plain dimColor hotkey="c" onPress={() => { void runArm($, 'team-arm') }}>connect</Button>
+      <Button key="key:disconnect" plain dimColor hotkey="d" onPress={() => { void runArm($, 'team-disarm') }}>disconnect</Button>
+      <Button key="key:copyurl" plain dimColor hotkey="y" onPress={() => { void copyUrl($) }}>copy URL</Button>
       <Button key="key:markread" plain dimColor hotkey="m" onPress={() => { void markRead($) }}>mark all read</Button>
       <Button key="key:setup" plain dimColor hotkey="s" onPress={() => { void (async () => { await openSetup($); await refreshCfg($, false) })() }}>setup</Button>
     </Box>,

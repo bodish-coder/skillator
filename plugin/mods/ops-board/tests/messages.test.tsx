@@ -35,8 +35,13 @@ const INBOX = [rec('1', '@asha', 'can you look at F12?', 10), rec('2', '@vidul',
 const TOKEN = 'YS0zMi1ieXRlLXNlY3VyaXR5LXRva2VuLWZvci10c3Q='
 const CFG_NONE = '{"path":"/h/.skillator/teams.json","token":false,"workflowUrl":null,"port":3978,"statusPosts":false}\n'
 const CFG_SET = '{"path":"/h/.skillator/teams.json","token":true,"workflowUrl":"prod.example","port":4000,"statusPosts":true}\n'
+const SETUP_SH = ROOT + '/skills/teams-uhura/scripts/setup.sh'
+const U1 = 'https://ab12cd34-3978.euw.devtunnels.ms', U2 = 'https://zz99yy88-3978.euw.devtunnels.ms'
+const KV = (o: Record<string, string> = {}) => Object.entries({ result: 'status', why: '', devtunnel: 'ok', login: 'in', form: 'set', tunnel: 'ready',
+  hosted: '0', listener: 'down', port: '3978', url: '', url_changed: '0', expires: '', ...o }).map(([k, v]) => `${k}=${v}`).join('\n') + '\n'
+const ARMED = { result: 'armed', hosted: '1', listener: 'up', url: U1 }
 
-type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[] }
+type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult> }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
@@ -47,7 +52,7 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
       [BOX + '/team-inbox.jsonl']: INBOX, [BOX + '/team-inbox.read']: '1\n',
       // a node planted in the repo (the cwd, and the '.' PATH entry) - never what runs
       [NODE]: 'ELF', './node': 'PLANTED', '/r/node': 'PLANTED' },
-    runs: [], toasts: [], cfg, save: ran('saved: /h/.skillator/teams.json (this user only)\n'), auth: ran(''), focuses: [],
+    runs: [], toasts: [], cfg, save: ran('saved: /h/.skillator/teams.json (this user only)\n'), auth: ran(''), focuses: [], arm: {},
   }
   const at = (p: string) => p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')
   const clock = mock.clock(on, { now: new Date(2026, 9, 23, 12, 0).getTime() })
@@ -83,6 +88,9 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
     }
     if (a.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
     w.runs.push({ argv: a, stdin: e.init?.stdin })
+    // F177: the setup script's board modes, answered from the fixture - nothing is started
+    if (a[0] === '/bin/sh' && a[1] === SETUP_SH && w.arm[a[2] ?? '']) return { value: w.arm[a[2]!]! }
+    if (a[0] === '/usr/bin/pbcopy') return { value: ran('') }
     if ((a[0] === NODE || a[0] === 'C:/tools/node.exe') && a[1] === TEAM_JS) {
       if (a[2] === 'config' && a[3] === 'show') return { value: ran(w.cfg) }
       if (a[2] === 'config' && a[3] === 'save') return { value: w.save }
@@ -454,3 +462,100 @@ for (const failure of ['nonzero', 'empty', 'throws', 'changed-root'] as const) {
     await ui.unmount()
   })
 }
+
+test('F177 frames: nothing arms before the key; c connects in one press - status, URL, copy; d disconnects', async ($, on) => {
+  const [w, clock] = world(on)
+  const modes = () => w.runs.filter(r => r.argv[1] === SETUP_SH).map(r => r.argv[2])
+  w.arm = { '--status': ran(KV()), '--arm': ran(KV(ARMED)), '--disarm': ran(KV({ result: 'disarmed' })) }
+  w.files['/usr/bin/pbcopy'] = 'ELF'
+  await start($, clock)
+  const ui = await mount($)
+  await clock.advance(4100)                                  // board start and two polls
+  expect(modes()).toEqual([])                                // ran no setup mode at all
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  expect(modes()).toEqual(['--status'])                      // entering the tab only reads
+  expect((await ui.find({ key: 'arm' }))?.text).toContain('Teams  ○ tunnel not hosted · ○ listener down · form saved')
+  expect(await ui.find({ key: 'arm:url' })).toBeUndefined()
+  expect((await ui.find({ key: 'key:connect' }))?.props.hotkey).toBe('c')
+  expect((await ui.find({ key: 'key:disconnect' }))?.props.hotkey).toBe('d')
+  expect((await ui.find({ key: 'key:copyurl' }))?.props.hotkey).toBe('y')
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
+  expect(modes()).toEqual(['--status', '--arm'])             // one press, one run
+  expect((await ui.find({ key: 'arm' }))?.text).toContain('Teams  ● tunnel hosted · ● listener up :3978 · form saved')
+  expect((await ui.find({ key: 'arm:url' }))?.text).toContain(U1)
+  expect(w.toasts.at(-1)).toContain('✓ Teams connected - tunnel hosted, listener up on 127.0.0.1:3978')
+  expect(w.toasts.at(-1)).toContain('ran: /bin/sh ' + SETUP_SH + ' --arm')
+  expect(w.toasts.join('\n')).not.toContain('devtunnels.ms')  // the URL is on the tab, never in a toast
+  await ui.press({ key: 'key:copyurl' })
+  await clock.settle()
+  expect(w.runs.find(r => r.argv[0] === '/usr/bin/pbcopy')?.stdin).toBe(U1)
+  expect(w.toasts.at(-1)).toContain('✓ tunnel URL copied')
+  expect(modes()).toEqual(['--status', '--arm'])             // unchanged URL: no --ack
+  await ui.press({ key: 'key:disconnect' })
+  await clock.settle()
+  expect(modes()).toEqual(['--status', '--arm', '--disarm'])
+  expect((await ui.find({ key: 'arm' }))?.text).toContain('Teams  ○ tunnel not hosted · ○ listener down · form saved')
+  expect(await ui.find({ key: 'arm:url' })).toBeUndefined()
+  expect(w.toasts.at(-1)).toContain('✓ Teams disconnected - tunnel stopped, listener stopped')
+  await ui.unmount()
+})
+
+test('F177 refusals: devtunnel missing, not signed in, no token - a toast each, the status line says what is missing', async ($, on) => {
+  const [w, clock] = world(on)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  for (const [why, facts] of [
+    ['devtunnel is not installed - s, then First-time setup', { devtunnel: 'missing', login: '-', tunnel: '-' }],
+    ['not signed in to Dev Tunnels - s, then Sign in to Dev Tunnels', { login: 'out', tunnel: '-' }],
+    ['the form has no token - s, paste the security token, save', { form: 'notset' }],
+  ] as const) {
+    w.arm = { '--arm': ran(KV({ result: 'refused', why, ...facts })) }
+    const setupRuns = () => w.runs.filter(r => r.argv[1] === SETUP_SH).length
+    const before = setupRuns()
+    await ui.press({ key: 'key:connect' })
+    await clock.settle()
+    expect(w.toasts.at(-1)).toContain('✗ Teams not connected: ' + why)
+    expect(setupRuns()).toBe(before + 1)                     // the one --arm; nothing after a refusal
+    expect((await ui.find({ key: 'arm' }))?.text).toContain('○ tunnel not hosted · ○ listener down')
+  }
+  expect((await ui.find({ key: 'arm' }))?.text).toContain('form: no token')
+  // the script could not run: a toast, no crash
+  w.arm = {}
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toContain('✗ Teams: not in this test')
+  await ui.unmount()
+})
+
+test('F177 URL guard frames: unchanged URL - no warning; changed - the warning with the new URL, cleared when y copies it', async ($, on) => {
+  const [w, clock] = world(on)
+  const modes = () => w.runs.filter(r => r.argv[1] === SETUP_SH).map(r => r.argv[2])
+  const warns = async () => (await ui.findAll({})).filter(x => !!x.key && x.key.startsWith('arm:warn')).map(x => x.text)
+  w.files['/usr/bin/pbcopy'] = 'ELF'
+  w.arm = { '--status': ran(KV({ ...ARMED, result: 'status' })) }
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  expect(await warns()).toEqual([])                          // the URL last shown: no warning
+  // the tunnel was recreated: a new id
+  w.arm = { '--status': ran(KV({ ...ARMED, result: 'status', url: U2, url_changed: '1' })), '--ack': ran(KV({ ...ARMED, result: 'acked', url: U2 })) }
+  await ui.press({ key: 'tab:tickets' })
+  await clock.settle()
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  const shown = await warns()
+  expect(shown[0]).toContain('▲ tunnel URL changed - update the Teams outgoing webhook callback to')
+  expect(shown.join('\n')).toContain(U2)
+  expect((await ui.find({ key: 'arm:url' }))?.text).toContain(U2)
+  await ui.press({ key: 'key:copyurl' })
+  await clock.settle()
+  expect(w.runs.filter(r => r.argv[0] === '/usr/bin/pbcopy').at(-1)?.stdin).toBe(U2)
+  expect(modes().at(-1)).toBe('--ack')                       // the owner took the new URL
+  expect(await warns()).toEqual([])
+  await ui.unmount()
+})

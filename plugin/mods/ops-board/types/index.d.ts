@@ -197,7 +197,7 @@ declare module 'claude-code' {
       // F66: the Messages tab - the inbox (newest MSG_MAX), the read marker's id, the
       // row picked / opened, the saved config's view, the setup form's safe part
       messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
-      teamsCfg: TeamsCfgView | null; setup: SetupView | null
+      teamsCfg: TeamsCfgView | null; setup: SetupView | null; teamsArm: ArmView | null   // F177: what setup --status last said
       // F79: the Run tab - .skillator/run.json as read, the confirm / rename form, the one job (its output's tail)
       runFile: RunFile | null; runForm: RunForm | null; runJob: Job | null
       explorer: Explorer     // F75: what the Explorer tab draws, no more (B4)
