@@ -80,7 +80,7 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
   return o
 }
 
-type RawKey = { name?: string; shift?: boolean; ctrl?: boolean } | undefined
+type RawKey = { name?: string; shift?: boolean; ctrl?: boolean; meta?: boolean } | undefined
 
 // A readline keypress as the reducer's Key: readline names 'D' as d + shift, the reducer
 // wants 'D' (and 'R'); a character readline does not name is its own name. A printable
@@ -91,7 +91,8 @@ export function keyOf(str: string | undefined, key: RawKey): Key | null {
   const name = one && /^[A-Z]$/.test(one) ? one : key?.name ?? (one && one >= ' ' ? one : null)
   const printable = one && !key?.ctrl && one >= ' ' && one !== '\x7f' ? one : null
   if (!name) return null
-  return printable ? { name, sequence: printable, shift: !!key?.shift, ctrl: !!key?.ctrl } : { name, shift: !!key?.shift, ctrl: !!key?.ctrl }
+  const k: Key = printable ? { name, sequence: printable, shift: !!key?.shift, ctrl: !!key?.ctrl } : { name, shift: !!key?.shift, ctrl: !!key?.ctrl }
+  return key?.meta ? { ...k, meta: true } : k   // alt+<key>: readline's meta
 }
 
 // The tab bar's "ops · <repo>": the repo root's basename.

@@ -58,7 +58,7 @@ export type HelpState = {
 }
 // node readline keypress names: 'up', 'down', 'left', 'right', 'return', 'escape', 'tab', 'a', 'D', ...
 // `sequence` is the character typed (app.ts sets it for printable keys): the Add person form's text.
-export type Key = { name: string; sequence?: string; shift?: boolean; ctrl?: boolean }
+export type Key = { name: string; sequence?: string; shift?: boolean; ctrl?: boolean; meta?: boolean }
 export type PersonField = 'handle' | 'name' | 'emails'
 export type DialogField = 'ticket' | 'who'
 export type DecideChoice = 'assign' | 'holo' | 'questions'
@@ -1502,9 +1502,9 @@ function messagesKey(s: State, k: Key): Step {
     case 'return': case 'enter': return { state: { ...s, msgSelected: cur, msgExpanded: cur && s.msgExpanded !== cur ? cur : null }, effects: [] }
     case 'm': return markRead(s)
     case 's': return { state: openSetup(s), effects: [showCfg(false)] }
-    case 'c': return armRun(s, 'team-arm')
-    case 'd': return armRun(s, 'team-disarm')
-    case 'y': return copyUrl(s)
+    case 'c': case 'd': case 'y':
+      if (k.ctrl || k.meta) return { state: s, effects: [] }   // ctrl+d / alt+c are not c, d or y
+      return k.name === 'y' ? copyUrl(s) : armRun(s, k.name === 'c' ? 'team-arm' : 'team-disarm')
     case 'escape': return { state: { ...s, toast: null }, effects: [] }
     default: return { state: s, effects: [] }
   }

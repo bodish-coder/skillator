@@ -8,6 +8,7 @@ import type { State, Effect } from '../state'
 import { frame, cells } from '../draw'
 import { parseArm, armLines, armToast, expiryShown } from '../../hooks/lib/teamsarm'
 import { argvFor } from '../../hooks/lib/calls'
+import { keyOf } from '../app'
 
 const P = { color: false, ascii: false, plain: true }
 const text = (s: State) => frame(s, P).join('\n')
@@ -171,6 +172,16 @@ test('d disarms; y copies the URL and, when it changed, acknowledges it', () => 
   const failed = afterRun({ then: copy2.then! }, { code: 127, out: '', err: 'no clipboard utility available', argv: [] }, y2.state, NOW)
   assert.deepEqual(failed.effects, [])
   assert.match(failed.state.toast ?? '', /^✗ not copied: no clipboard utility available/)
+})
+
+test('c, d and y act only with no modifier: ctrl+d, alt+c, alt+y run nothing', () => {
+  const armed: State = { ...onTab.state, teamsArm: parseArm(KV(ARMED)) }
+  assert.deepEqual(keyOf('\x1bc', { name: 'c', meta: true })?.meta, true)   // readline: alt+c is c + meta
+  for (const k of [{ name: 'd', ctrl: true }, { name: 'c', meta: true }, { name: 'd', meta: true }, { name: 'y', ctrl: true }, { name: 'y', meta: true }]) {
+    const r = reduce(armed, k)
+    assert.deepEqual(r.effects, [], JSON.stringify(k))
+    assert.equal(r.state.armBusy, armed.armBusy, JSON.stringify(k))
+  }
 })
 
 test('width matrix 80 / 110 / 140: the Messages tab with Teams armed and a changed URL fits and shows everything', () => {

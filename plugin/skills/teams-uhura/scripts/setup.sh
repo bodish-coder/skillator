@@ -119,7 +119,9 @@ seen_url() { [ -f "$(state_dir)/tunnel-url" ] && tr -d '\r\n' < "$(state_dir)/tu
 save_url() { mkdir -p "$(state_dir)" && (umask 077; printf '%s\n' "$1" > "$(state_dir)/tunnel-url"); }
 mark_url() { _s=$(seen_url); if [ -n "$A_URL" ] && [ -n "$_s" ] && [ "$_s" != "$A_URL" ]; then A_CHANGED=1; else A_CHANGED=0; fi; }
 expiry_of() { printf '%s' "$1" | tr -d '\r\n' | sed -n 's/.*"tunnelExpiration"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | cut -c1-40; }
-stop_tunnel() { pkill -f "devtunnel.*host.*(^|[[:space:]\"'])($TUNNEL)(['\"[:space:]]|$)" >/dev/null 2>&1; sleep 1; }
+# the host process open_tunnel starts, on this port or none - the pattern pkill -f is given
+host_re() { printf '%s' "^([^ ]*/)?devtunnel host $TUNNEL( .*(-p|--port)[ =]?$PORT( .*)?)?\$"; }
+stop_tunnel() { pkill -f "$(host_re)" >/dev/null 2>&1; sleep 1; }
 show_arm() {
   printf '%s\n' "result=$A_RESULT" "why=$A_WHY" "devtunnel=$A_DT" "login=$A_LOGIN" "form=$A_FORM" "tunnel=$A_TUN" \
     "hosted=$A_HOSTED" "listener=$A_LISTEN" "port=$PORT" "url=$A_URL" "url_changed=$A_CHANGED" "expires=$A_EXP"
@@ -152,6 +154,7 @@ arm() {
   elif [ "$A_LOGIN" != in ]; then _no='not signed in to Dev Tunnels - s, then Sign in to Dev Tunnels'
   elif [ "$A_FORM" != set ]; then _no='the form has no token - s, paste the security token, save'
   elif [ "$A_TUN" != ready ]; then _no="the tunnel $TUNNEL is not created yet - s, then First-time setup"
+  elif ! has pgrep; then _no='cannot verify the tunnel host - pgrep is missing; nothing was started'
   else _no=; fi
   if [ -n "$_no" ]; then A_RESULT=refused; A_WHY=$_no; return 0; fi
   # the listener first: the tunnel opens only onto a listener that verifies signatures
@@ -170,7 +173,13 @@ arm() {
 
 disarm() {
   PORT=3978; has node && read_config
+  if ! has pgrep || ! has pkill; then
+    arm_view; A_RESULT=failed; A_WHY='cannot verify the tunnel is closed - pgrep or pkill is missing; nothing was stopped'; return 0
+  fi
   stop_tunnel   # the tunnel first: the public side closes before the listener goes
+  arm_view
+  # still hosted (root's, another user's): the listener stays, so the tunnel never points at a dead port
+  if [ "$A_HOSTED" = 1 ]; then A_RESULT=failed; A_WHY='the tunnel is still hosted - stop its devtunnel process; the listener is left up'; return 0; fi
   has node && node "$TEAM" stop --port "$PORT" >/dev/null 2>&1
   arm_view
   if [ "$A_HOSTED" = 1 ]; then A_RESULT=failed; A_WHY='the tunnel is still hosted - stop its devtunnel process'
@@ -254,7 +263,7 @@ EOF
   answer() { echo ask >> "$ST/calls"; case $1 in Press*) : > "$ST/saved" ;; esac; printf '%s' "$YES"; }
   open_tunnel() { echo host >> "$ST/calls"; [ -f "$ST/noopen" ] || : > "$ST/hosted"; }
   tunnel_hosted() { [ -f "$ST/hosted" ]; }
-  stop_tunnel() { echo unhost >> "$ST/calls"; rm -f "$ST/hosted"; }
+  stop_tunnel() { echo unhost >> "$ST/calls"; [ -f "$ST/stuck" ] || rm -f "$ST/hosted"; }
   sleep() { :; }
   SKILLATOR_TEAMS_STATE="$T/state"; export SKILLATOR_TEAMS_STATE
   # scen <check> <yes> <commands present> <state files>
@@ -269,7 +278,7 @@ EOF
   out() { grep -q "$1" "$T/out"; }
   called() { grep -q "$1" "$ST/calls"; }
   MUTATE='^\(ask\|host\|curl\|bash\|brew install\|devtunnel create\|devtunnel port create\|devtunnel user login\|node .* start\)'
-  ALL='node brew devtunnel curl bash'
+  ALL='node brew devtunnel curl bash pgrep pkill'
 
   # brew missing: --check names Microsoft's script, asks nothing, changes nothing
   scen 1 '' 'node curl bash'
@@ -359,6 +368,24 @@ EOF
   kv disarm "$ALL" "$RDY up hosted"
   out '^result=disarmed$' && out '^hosted=0$' && out '^listener=down$' || fail 'disarm'
   [ "$(grep -e '^unhost$' -e ' stop --port 3978' "$ST/calls" | head -n 1 | grep -c unhost)" = 1 ] || fail 'disarm: the listener was stopped before the tunnel'
+  # the tunnel will not stop (another user's, root's): failed, and the listener stays up
+  kv disarm "$ALL" "$RDY up hosted stuck"
+  out '^result=failed$' && out '^why=the tunnel is still hosted' && out '^listener=up$' || fail 'disarm: tunnel still hosted'
+  called ' stop --port' && fail 'disarm: the listener was stopped under a hosted tunnel'
+  # pgrep or pkill missing: it cannot verify - failed, nothing stopped, never disarmed
+  kv disarm 'node devtunnel pkill' "$RDY up hosted"; out '^result=failed$' && out '^why=cannot verify' && out '^listener=up$' || fail 'disarm without pgrep'
+  called "$ACTS" && fail 'disarm without pgrep stopped something'
+  kv disarm 'node devtunnel pgrep' "$RDY up hosted"; out '^result=failed$' && out '^why=cannot verify' || fail 'disarm without pkill'
+  called "$ACTS" && fail 'disarm without pkill stopped something'
+  # --arm without pgrep: refused, nothing started (unseen, every c would start another host)
+  kv arm 'node devtunnel pkill' "$RDY"; out '^result=refused$' && out '^why=cannot verify' || fail 'arm without pgrep'
+  called "$ACTS" && fail 'arm without pgrep started something'
+  # the pkill pattern: devtunnel host skillator-teams, on this port or none, nothing else
+  PORT=3978
+  for l in 'devtunnel host skillator-teams' '/usr/local/bin/devtunnel host skillator-teams' 'devtunnel host skillator-teams -p 3978' 'devtunnel host skillator-teams --port 3978 --allow-anonymous'; do
+    printf '%s\n' "$l" | grep -Eq "$(host_re)" || fail "host_re missed: $l"; done
+  for l in 'devtunnel host skillator-teams-2' 'devtunnel host skillator-teams -p 4000' 'devtunnel host skillator-teams -p 39780' 'vi devtunnel host skillator-teams' 'devtunnel host other'; do
+    printf '%s\n' "$l" | grep -Eq "$(host_re)" && fail "host_re matched: $l"; done
   LC_ALL=C grep -q "$(printf '[^\t -~]')" "$SELF" && fail 'not pure ASCII + LF'
   echo ok
 }

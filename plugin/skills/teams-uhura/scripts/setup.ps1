@@ -191,6 +191,9 @@ function Invoke-Disarm {
   $port = 3978
   if (Has 'node') { $c = Get-Config; if ($c -and $c.port) { $port = [int]$c.port } }
   Stop-Tunnel $port   # the tunnel first: the public side closes before the listener goes
+  $a = @(Get-Arm)[-1]
+  # still hosted (elevated, another user's): the listener stays, so the tunnel never points at a dead port
+  if ($a['hosted'] -eq '1') { $a['result'] = 'failed'; $a['why'] = 'the tunnel is still hosted - close its window; the listener is left up'; return $a }
   if (Has 'node') { [void](Run node $Team stop --port $port) }
   $a = @(Get-Arm)[-1]
   if ($a['hosted'] -eq '1') { $a['result'] = 'failed'; $a['why'] = 'the tunnel is still hosted - close its window' }
@@ -288,7 +291,7 @@ if ($args -contains '--selftest' -or $args -contains '-selftest') {
   function Repair-Winget { [void]$S.calls.Add('repair') }
   function Open-TunnelWindow { [void]$S.calls.Add('host'); if (-not $S.noopen) { $S.hosted = $true } }
   function TunnelHosted { [bool]$S.hosted }
-  function Stop-Tunnel { [void]$S.calls.Add('unhost'); $S.hosted = $false }
+  function Stop-Tunnel { [void]$S.calls.Add('unhost'); if (-not $S.stuck) { $S.hosted = $false } }
   function Start-Sleep { }
   function Scenario([hashtable]$given, [bool]$check) {
     $script:S = @{ has = @(); stored = @(); alias = $false; login = $false; tunnel = $false; port = $false; saved = $false; up = $false; yes = ''; calls = (New-Object System.Collections.ArrayList) }
@@ -383,6 +386,9 @@ if ($args -contains '--selftest' -or $args -contains '-selftest') {
   $r = Kv @{ up = $true; hosted = $true } { Invoke-Disarm }
   if ($r.a['result'] -ne 'disarmed' -or $r.a['hosted'] -ne '0' -or $r.a['listener'] -ne 'down') { Fail "disarm`n$($r.a | Out-String)" }
   if ($r.calls -notmatch '(?s)(^|\n)unhost\n.* stop --port 3978') { Fail "disarm: the listener was stopped before the tunnel`n$($r.calls)" }
+  # the tunnel will not stop (elevated, another user's): failed, and the listener stays up
+  $r = Kv @{ up = $true; hosted = $true; stuck = $true } { Invoke-Disarm }
+  if ($r.a['result'] -ne 'failed' -or $r.a['why'] -notlike 'the tunnel is still hosted*' -or $r.a['listener'] -ne 'up' -or $r.calls -match 'stop --port') { Fail "disarm with the tunnel still hosted`n$($r.a | Out-String)`n$($r.calls)" }
   if (@([IO.File]::ReadAllBytes($PSCommandPath) | Where-Object { $_ -gt 127 -or $_ -eq 13 }).Count) { Fail 'not pure ASCII + LF' }
   $env:Path = $savedPath; $env:LOCALAPPDATA = $savedLocal; Remove-Item -Recurse -Force $T
   'ok'; exit 0
