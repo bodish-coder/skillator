@@ -239,6 +239,9 @@ try {
     if ((Get-Content $wf -Raw).Trim() -ne '97') { throw 'sh probe: weekly value wrong' }
     $r = RunSh 'gate' $h $stop
     if ($r -notmatch 'AskUserQuestion') { throw 'sh gate: weekly block has no step 4' }
+    $h = NewHome 'weekly-sh-96'   # B31: a 96% week must not reach the 92% gate
+    RunSh 'probe' $h (& $sl 40 96 55) | Out-Null
+    if (RunSh 'gate' $h $stop) { throw 'sh gate: weekly fired below 97' }
   }
 
   # A12 regression, gate side: a BOM'd flag below threshold must not fire.

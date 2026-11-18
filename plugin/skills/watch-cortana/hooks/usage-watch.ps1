@@ -754,8 +754,10 @@ $flag = Join-Path $dir $sid
 
 if ($Mode -eq 'probe') {
   # ponytail: regex over the raw JSON instead of walking it - catches every
-  # used_percentage (5h window, 7d window, context window) whatever the shape.
-  $pcts = [regex]::Matches($raw, '"used_percentage"\s*:\s*([0-9.]+)') | ForEach-Object { [double]$_.Groups[1].Value }
+  # used_percentage (5h window, context window) whatever the shape. B31: not
+  # the 7-day one, as on the codex path (A98) - it has its own 97% gate, and in
+  # the max a 96% week fired the 92% handoff.
+  $pcts = [regex]::Matches(($raw -replace '"seven_day"\s*:\s*\{[^}]*\}', ''), '"used_percentage"\s*:\s*([0-9.]+)') | ForEach-Object { [double]$_.Groups[1].Value }
   if ($pcts) { Write-Flag $flag (($pcts | Measure-Object -Maximum).Maximum) }
   # The weekly number needs its own file: the main flag is read by the sh twin
   # as bare bytes with no line endings (A12), so a second value cannot share it.
@@ -772,7 +774,7 @@ if ($Mode -eq 'probe') {
   }
   # F31: the 5-hour window and the context on their own, for `level`. The key
   # is rate_limits.five_hour.used_percentage (verified against the statusline
-  # docs, 2026-10-10); the main flag stays the max of every window. The value
+  # docs, 2026-10-10); the main flag stays the max of every non-7-day window. The value
   # is written as the payload spelled it, so both twins read the same bytes.
   foreach ($pair in @(@('five_hour', 'fivehour'), @('context_window', 'ctx'))) {
     if ($raw -match ('"' + $pair[0] + '"\s*:\s*\{[^}]*"used_percentage"\s*:\s*([0-9.]+)')) {
