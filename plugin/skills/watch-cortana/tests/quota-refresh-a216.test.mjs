@@ -756,6 +756,23 @@ for (const port of ['ps1', 'sh']) {
     } finally { fx.cleanup() }
   })
 
+  // A236 fix round (5): only a reading written strictly after the refresh started is current. One
+  // stored earlier in the same whole second is a prior reading - moved into last, not kept.
+  test(`${port}: A236 a reading from the second the refresh started, but before it, is moved into last`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'same-second', { src: 'claude-code', '5h': 10, '7d': 95 })
+      fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn-nolimits.jsonl')])
+      while (Date.now() % 1000 > 30) { /* align to the start of a second */ }
+      const x = Math.floor(Date.now() / 1000)
+      utimesSync(`${profile}/quota-cache.json`, x, x)
+      fx.runRefresh('claude', profile, { ...env, ...FORCED })
+      const rec = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.deepEqual(rec.last, { '5h': 10, '7d': 95, at: x }, JSON.stringify(rec))
+      assert.equal(rec.failures, 1)
+    } finally { fx.cleanup() }
+  })
+
   // F176 last round: the failure record re-reads the cache at write time in both ports, so a
   // corrupt one still keeps the 24 h hold.
   test(`${port}: F176 last round - a record written after a turn with no limits carries what the cache holds then`, { skip }, () => {

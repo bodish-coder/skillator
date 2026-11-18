@@ -382,7 +382,7 @@ if ($Mode -eq 'refresh') {
       } catch { 'corrupt' }
     }
     $turned = $false
-    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); $started = [DateTime]::UtcNow
     if ($Cli -eq 'agy') {
       $env:AGY_CONFIG_DIR = $Dir
       $env:ANTIGRAVITY_APP_DATA_DIR = $Dir
@@ -544,10 +544,11 @@ if ($Mode -eq 'refresh') {
       else {
         $h = if (& $isNum $prev.'5h') { $prev.'5h' } elseif (& $isNum $prev.five) { $prev.five } else { $null }
         $wk = if (& $isNum $prev.'7d') { $prev.'7d' } elseif (& $isNum $prev.weekly) { $prev.weekly } else { $null }
-        $at = [long][Math]::Floor(((Get-Item -LiteralPath $cache).LastWriteTimeUtc - [datetime]'1970-01-01').TotalSeconds)
-        # A236: a reading written since this refresh started is current - kept (a turn's
-        # turned_at stamped on it), never moved into last under a failure record.
-        if (($null -ne $h -or $null -ne $wk) -and $at -ge $now) { $kept = $true }
+        $mt = (Get-Item -LiteralPath $cache).LastWriteTimeUtc
+        $at = [long][Math]::Floor(($mt - [datetime]'1970-01-01').TotalSeconds)
+        # A236: a reading written strictly after this refresh started is current - kept (a
+        # turn's turned_at stamped on it), never moved into last under a failure record.
+        if (($null -ne $h -or $null -ne $wk) -and $mt -gt $started) { $kept = $true }
         elseif ($null -ne $h -or $null -ne $wk) {
           $last = [ordered]@{}
           if ($null -ne $h) { $last['5h'] = $h }

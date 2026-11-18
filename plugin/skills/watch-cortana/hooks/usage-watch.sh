@@ -354,7 +354,9 @@ if [ "$mode" = refresh ]; then
   lock="$target_dir/quota-cache.json.refreshing"
   cache="$target_dir/quota-cache.json"
   mkdir -p "$target_dir"
-  parsed=""; turned=""; started_at=$(now_epoch)
+  # A236: the refresh start, sub-second where date has %N (GNU), else whole seconds.
+  parsed=""; turned=""; started_at=$(date +%s.%N 2>/dev/null)
+  case $started_at in *[!0-9.]*|.*|*.|'') started_at=$(now_epoch) ;; esac
   raw=""
   # F176: each claude call is capped (secs, function); on expiry its whole process
   # tree is killed, so no read outlives the lock.
@@ -622,7 +624,9 @@ except Exception:
         if (!r || typeof r !== "object" || Array.isArray(r)) { r = null; out(0) }
         const ok = v => typeof v === "number" && Number.isFinite(v);
         const h = ok(r["5h"]) ? r["5h"] : r.five, w = ok(r["7d"]) ? r["7d"] : r.weekly;
-        if ((ok(h) || ok(w)) && Math.floor(fs.statSync(process.argv[1]).mtimeMs / 1000) >= S) {
+        // Strictly after the start: sub-second when S has a fraction, else a later whole second.
+        const m = fs.statSync(process.argv[1]).mtimeMs / 1000;
+        if ((ok(h) || ok(w)) && (process.argv[3].includes(".") ? m : Math.floor(m)) > S) {
           if (T) fs.writeFileSync(process.argv[1], JSON.stringify({ ...r, turned_at: Number(T) }));
           process.stdout.write("KEEP"); process.exit(0)
         }
