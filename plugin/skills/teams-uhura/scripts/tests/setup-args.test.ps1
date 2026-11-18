@@ -62,6 +62,15 @@ $multi = Run-Script '--check' 'extra'
 Assert-Equal $multi.code 2 "setup.ps1 with multiple arguments must exit with code 2"
 Assert-Match $multi.out 'usage: setup\.ps1 \[--check \| --selftest\]' "setup.ps1 multiple arguments output must show usage"
 
+# A226 review 1: --ack takes at most one argument, an https:// URL - an option there is refused
+foreach ($second in @('--selftest', '--check', 'http://x.devtunnels.ms')) {
+  $r = Run-Script '--ack' $second
+  Assert-Equal $r.code 2 "setup.ps1 --ack $second must exit with code 2"
+  Assert-Match $r.out 'usage: setup\.ps1' "setup.ps1 --ack $second output must show usage"
+}
+$r = Run-Script '--ack' 'https://x.devtunnels.ms' 'extra'
+Assert-Equal $r.code 2 "setup.ps1 --ack with two arguments must exit with code 2"
+
 # 4. Test documented options retain behavior
 Write-Host "Testing documented options retain behavior..."
 # --selftest must exit 0 and print ok

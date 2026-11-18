@@ -36,12 +36,17 @@ test('parseArm: the twelve keys; a URL that is not a devtunnels.ms https URL is 
     'the form has no token - s, paste the security token, save')
 })
 
-test('A226 c: parseArm - the first key wins and a value with a control character is dropped, so a reply cannot forge result= or hosted=', () => {
-  const forged = KV({ result: 'failed', why: 'x', url: U1 }) + 'result=armed\nhosted=1\nlistener=up\n'
-  const v = parseArm(forged)!
-  assert.equal(v.result, 'failed'); assert.equal(v.hosted, false); assert.equal(v.listener, false)
-  const w = parseArm(KV({ why: 'a\x1b[2Jb', expires: '2026-12-17\x07' }) + 'why=later\nexpires=2026-12-18T00:00:00Z\n')!
+test('A226 c: parseArm - a value with a control character is dropped, so a reply cannot forge result= or hosted=', () => {
+  const w = parseArm(KV({ why: 'a\x1b[2Jb', expires: '2026-12-17\x07' }))!
   assert.equal(w.why, ''); assert.equal(w.expires, null)
+})
+
+test('A226 review 1: a key that appears twice makes the whole reply invalid, before url or after it', () => {
+  const body = KV({ result: 'failed', why: 'x', url: U1 })
+  assert.equal(parseArm(body + 'result=armed\nhosted=1\nlistener=up\n'), null)       // after url
+  assert.equal(parseArm('hosted=1\n' + body), null)                                // before url
+  assert.equal(parseArm(body.replace('url=', 'result=armed\nurl=')), null)          // result twice, both before url
+  assert.equal(parseArm(KV({ why: 'a\x1b[2Jb' }) + 'why=later\n'), null)           // a dropped value still claims its key
 })
 
 test('expiryShown: days, hours under two days, EXPIRED, an unparsed value as printed, none', () => {
