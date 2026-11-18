@@ -127,8 +127,7 @@ test('A231: every updater treats the pointer as a hint that never stops or downg
     const fails = text.slice(pull, rule);
     assert.match(fails, /Pull fails.*? From a\.[^→]*→ report it and stop before installation/, `${path}: an explicit path still stops on a failed pull`);
     assert.match(fails, /From b\. the pointer is a hint, not an order[^.]*say the pull failed and go on to c\./, `${path}: a pointer falls through on a failed pull`);
-    // A234: c. pulls again and stops on its own failure, so no same-directory rule is needed
-    assert.doesNotMatch(text, /directory of the failed b\./, `${path}: the same-directory rule is redundant`);
+    assert.match(fails, /go on to c\. If c\. resolves to the directory of the failed b\. checkout, report it and stop/, `${path}: the fallback after a failed pull is a different directory`);
     const r = text.slice(rule, rule + 700);
     assert.doesNotMatch(r, /used, not skipped/, `${path}: a pulled clone may still be stale`);
     assert.match(r, /after the pull, or for a nongit cache.*Still older than.*step 1.*skip.*say so.*go on to c\..*never a downgrade/, `${path}: a stale pointer is skipped, pulled or not`);
