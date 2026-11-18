@@ -71,7 +71,7 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   on('ui.copy', ($, e) => { w.copies.push(e.text); return { value: { isCopied: true as const } } })
   on('ui.status', () => ({ value: undefined }))
   on('ui.scroll', () => ({}))
-  on('ui.focus', () => ({}))
+  on('ui.focus', { plugin: '*' }, () => ({ value: undefined }))
   on('prompt.submit', () => ({ value: undefined }))
   return [w, clock]
 }
