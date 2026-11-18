@@ -682,3 +682,24 @@ test("r4-4: a file whose set names none of the ids sharing its stem is refused -
   assert.equal(r.picked, null);
   assert.deepEqual(r.refused.map((x) => [x.path, x.why]), [[p, 'set "F-12" is not an open wizard set']]);
 });
+
+// ------------------------------------------------------------ A233 ----
+const RUN1 = (s) => join(s.root, ".skillator", "run-1-shelf-export.md");
+const at = (p, iso) => { const t = new Date(iso); utimesSync(p, t, t); return p; };
+
+test("A233-1: no next-round hint when the only defer is already settled; --next-wizard refuses a 0-decision page", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set);
+  ans.answers[1] = { id: "Q2", question: set.decisions[1].question, choice: { id: "defer" }, clarification: "why?" };
+  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace("### Q2 open", "### Q2 answered"));
+  const p = put(s.dl, "RUN-1-decisions-FINAL.json", ans, 0);
+  const text = report(await findAnswers(s.opts));
+  assert.match(text, / answer Q1 /);
+  assert.ok(!/next round:/.test(text), text);
+  const before = readFileSync(join(s.holo, "RUN-1.wizard.html"), "utf8");
+  const r = cli(s, "RUN-1", "--next-wizard", p);
+  assert.notEqual(r.status, 0, r.stdout);
+  assert.match(r.stderr, /no decision left to ask/);
+  assert.equal(readFileSync(join(s.holo, "RUN-1.wizard.html"), "utf8"), before, "the page is not rewritten");
+});
+

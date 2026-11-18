@@ -1152,6 +1152,7 @@ async function main(argv) {
         if (Array.isArray(set.decisions)) set = { ...set, decisions: set.decisions.filter((d) => !gone.has(d && d.id)), settled: [...(set.settled || []), ...fromRun.settled.filter((x) => !have.has(x.id))] };
       }
       set = nextWizardSet(set, ans);
+      if (!set.decisions.length) throw new Error(`no decision left to ask - every answer is settled; round ${set.round} page not written`);
     }
     await writeWizard(root, out, set);
     console.log(`holo: wizard ${set.id}${set.round ? ` (round ${set.round})` : ""}, ${set.decisions.length} decision${set.decisions.length === 1 ? "" : "s"} to answer, ${(set.settled || []).length} settled -> ${out}`);

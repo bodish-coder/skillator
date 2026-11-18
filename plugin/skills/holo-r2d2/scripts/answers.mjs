@@ -205,7 +205,7 @@ export function report(r) {
         L.push(`  ${clean(x?.id, 40)}${x?.ticket ? ` (${clean(x.ticket, 40)})` : ""}: ${what}`);
       }
     }
-    if ((a.answers || []).some((x) => ["custom", "defer", "explain"].includes(String(x?.choice?.id || "")))) {
+    if ((a.answers || []).filter(live).some((x) => ["custom", "defer", "explain"].includes(String(x?.choice?.id || "")))) {
       L.push(run
         ? `next round: node ${q(join(dirname(fileURLToPath(import.meta.url)), "holo.mjs"))} ${p.id} --next-wizard ${q(p.path)}`
         : `next round: holo.mjs --decisions <the set JSON that drew this page> --next-wizard ${q(p.path)}`);
