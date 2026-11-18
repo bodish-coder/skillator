@@ -161,7 +161,7 @@ board() {
       if (v != "") tag = tag (tag == "" ? "" : " ") v
       note = ""
       if (match(r, /\(testing:[^)]*\)/)) note = trim(substr(r, RSTART + 9, RLENGTH - 10))
-      gsub(/\[(app|owner|decide|by):[^]]*\]/, "", r); gsub(/\(@[^() ]+\)/, "", r); gsub(/\(testing:[^)]*\)/, "", r)
+      gsub(/\[(app|owner|decide|by|session):[^]]*\]/, "", r); gsub(/\(@[^() ]+\)/, "", r); gsub(/\(testing:[^)]*\)/, "", r)
       a = index(r, " ("); b = index(r, ". "); if (b && (!a || b < a)) a = b
       if (a) r = substr(r, 1, a - 1)
       gsub(/  +/, " ", r); r = trim(r)
@@ -574,7 +574,7 @@ selftest() {
     "- [?] F1 $D pick the chart library [decide: @asha]" \
     "- [>] F2 $D later thing" \
     "- [%] F4 $D built, under test (testing: live check)" \
-    "- [ ] F3 $D pending one" \
+    "- [ ] F3 $D pending one [session: cc-1ir0]" \
     "  - [ ] F3a $D a towed car, slowed down" \
     "- [x] A1 $D fixed, the GREEN re-run is OWED" \
     "- [ ] no id on this line" \
