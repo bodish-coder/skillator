@@ -164,7 +164,7 @@ test('the keys line as the mock; D decided only on a decidable row', () => {
   // F76: no run yet, the cursor is on the Runs header (Enter closes it); on a run, Enter shows its stages
   assert.match(text(reduce(s, { name: '2' }).state), /\[↑↓ move\] · \[enter close\] · \[s Start\] · \[Engage\]/)
   assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /\[↑↓ move\] · \[enter stages\] · \[s Start\] · \[Engage\]/)
-  assert.match(text(reduce(s, { name: '3' }).state), /\[r refresh\] · \[R resume\](?:\n| · )\[c resume CLI\](?:\n| · )\[F force resume\](?:\n| · )\[p profiles\](?:\n| · )\[q quit\]/)
+  assert.match(text(reduce(s, { name: '3' }).state), /\[r refresh\] · \[R resume\](?:\n| · )\[c resume CLI\](?:\n| · )\[F force resume\](?:\n| · )\[p re-read status\](?:\n| · )\[q quit\]/)
 })
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
   let x: State = { ...s, rows: 13 }
@@ -590,7 +590,7 @@ test('F123: button badges [Key Label] across all tabs and click hitboxes match b
 
   // 3. Health tab
   const scHealth = screen({ ...reduce(s, { name: '3' }).state, cols: 120 }, P)
-  assert.match(scHealth.lines.join('\n'), /\[r refresh\] · \[R resume\] · \[c resume CLI\] · \[F force resume\] · \[p profiles\] · \[q quit\]/)
+  assert.match(scHealth.lines.join('\n'), /\[r refresh\] · \[R resume\] · \[c resume CLI\] · \[F force resume\] · \[p re-read status\] · \[q quit\]/)
 
   // 4. Messages tab
   const scMsgs = screen({ ...reduce(s, { name: '4' }).state, cols: 120 }, P)
