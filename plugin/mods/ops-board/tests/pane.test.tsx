@@ -899,3 +899,27 @@ for (const surface of SURFACES) {
     await ui.unmount()
   })
 }
+
+// F178: 'This session (<code>)' beside Assigned and Mine to decide - only when the board knows its session code
+for (const surface of SURFACES) {
+  test(`${surface}: F178 the This session section lists open tickets tagged [session: <code>] of this session`, WITH, async ($, on) => {
+    const board = BOARD.replace('[app: ui]\n', '[app: ui] [session: cc-1ir0]\n')
+    const [, clock] = world(on, { '/r/TICKETS.md': board, '/r/.skillator/team.md': TEAM }, true, undefined, { SKILLATOR_SESSION: '@cc-1ir0' })
+    on('session.id', () => ({ value: 'sid-1' }))
+    await start($, clock)
+    const ui = await mountPane($, surface)
+    const head = async () => (await ui.find({ key: 'head:session' }))?.text.replace(/^[▌▏] /, '')
+    expect((await head())?.endsWith('This session (cc-1ir0) (1)')).toBe(true)
+    if (!(await ui.find({ key: 'row:session:B1' }))) await ui.press({ key: 'head:session' })
+    expect(await ui.find({ key: 'row:session:B1' })).toBeDefined()
+    expect((await texts(ui)).join(' ')).toContain('session:')
+    await ui.unmount()
+  })
+}
+test('F178: no session code, no This session section', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD.replace('[app: ui]\n', '[app: ui] [session: cc-1ir0]\n'), '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  expect(await ui.find({ key: 'head:session' })).toBeUndefined()
+  await ui.unmount()
+})

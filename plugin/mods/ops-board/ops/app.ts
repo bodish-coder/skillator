@@ -24,6 +24,7 @@ import { mouseInput, mouseTarget, MOUSE_ON, MOUSE_OFF } from './mouse'
 import { makeEngine } from './engine'
 import { ownProfile, status } from './status'
 import { reset } from './reset'
+import { sessionTag } from '../hooks/lib/team'
 
 export type Opts = {
   once: boolean; cols: number | null; rows: number | null; color: boolean; ascii: boolean
@@ -45,6 +46,11 @@ const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', 
 
 // The flags; the first wrong one is `error` (the launcher has taken the repo dir already).
 // NO_COLOR (any non-empty value) turns colour off as --no-color does.
+// F178: this app's session code, as the pane's (team.ts sessionTag); none when it cannot tell
+function ownSession(): string | null {
+  try { return sessionTag(process.env.SKILLATOR_SESSION, process.env.CLAUDE_CODE_SESSION_ID) } catch { return null }
+}
+
 export function parseArgs(argv: string[], env: Record<string, string | undefined> = process.env): Opts {
   const o: Opts = { once: false, cols: null, rows: null, color: !env.NO_COLOR, ascii: false, skills: null, tab: 'tickets', error: null }
   for (let i = 0; i < argv.length && !o.error; i++) {
@@ -123,7 +129,7 @@ export async function main(argv: string[]): Promise<number> {
   const paint: Paint = { color: opts.color, ascii: opts.ascii, plain: once && !opts.color }
   const size = () => ({ cols: opts.cols ?? (out.isTTY && out.columns ? out.columns : 80), rows: opts.rows ?? (out.isTTY && out.rows ? out.rows : 24) })
   const sz = size()
-  const baseState: State = { ...initial(sz.cols, sz.rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot), profile: ownProfile(process.env)?.name ?? null }
+  const baseState: State = { ...initial(sz.cols, sz.rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot), profile: ownProfile(process.env)?.name ?? null, session: ownSession() }
   const state: State = opts.tab === 'help' ? openHelp(baseState).state : baseState
   const email = await host.gitEmail()
 

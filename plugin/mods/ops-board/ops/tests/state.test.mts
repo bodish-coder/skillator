@@ -1535,3 +1535,16 @@ test('F176: p on Health forces the profile read and keeps its table', () => {
   assert.equal(failed.state.profiles, null)
   assert.match(failed.state.toast ?? '', /not on this host/)
 })
+
+// F178: the ops app's 'This session (<code>)' section - only when it knows its session code
+test('F178: This session section lists open tickets tagged with the app session code', () => {
+  const b = parseBoard('- [ ] F1 — Dark mode [session: cc-1ir0]\n- [ ] F2 — Other [session: cc-zzzz]\n', 'T', 1, 1)
+  const none = onBoard(initial(80, 24, 0), b, [], null)
+  assert.ok(!ticketsItems(none, buildModel(viewOf(none))).includes('head:session'))
+  let s = onBoard({ ...initial(80, 24, 0), session: 'cc-1ir0' }, b, [], null)
+  s = { ...s, selected: 'head:session' }
+  if (!isUserSectionOpen(s.open as string[], 'session')) s = reduce(s, key('return')).state
+  const items = ticketsItems(s, buildModel(viewOf(s)))
+  assert.deepEqual(items.slice(0, 2), ['head:session', 'session:F1'])
+  assert.ok(!items.includes('session:F2'))
+})

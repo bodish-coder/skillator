@@ -131,3 +131,9 @@ test('A180: historical ticket alias visible to readers, counts and round-trips c
   expect(out).not.toContain('F107 — F107')
   expect(`[${t.box}] ${t.line}`).toBe('[%] F107 (was F97) — clone-odo: a clean-room app-cloning skill [owner: @sher] (@cc-xhvvy2)')
 })
+// F178: [session: <code>] names the session a ticket is for - a tag, off the title
+test('F178: the [session:] tag parsed beside [owner:], left off the title', () => {
+  const t = parseBoard('- [ ] F9 — Wip [owner: @asha] [session: CC-1ir0] (@cc-k7q2:asha:run)\n', 'T', 0, 0).tickets[0]!
+  expect([t.title, t.owner, t.assignedSession, t.session]).toEqual(['Wip', '@asha', 'cc-1ir0', '@cc-k7q2:asha:run'])
+  expect(parseBoard('- [ ] F8 — Ask\n', 'T', 0, 0).tickets[0]!.assignedSession).toBe(null)
+})

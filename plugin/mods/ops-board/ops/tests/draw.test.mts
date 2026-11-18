@@ -1048,3 +1048,14 @@ test('F176: the Health tab shows the profile table once read, and how to read it
   assert.match(t, /claude   4%       20%/)
   assert.match(t, / {2}Fable  -        43%/)
 })
+
+// F178: the ops app draws 'This session (<code>)' with its tickets once opened
+test('F178: This session section drawn when the app knows its session code', () => {
+  const b = parseBoard('- [ ] F1 — Dark mode [session: cc-1ir0]\n', 'T', 1, 1)
+  assert.doesNotMatch(frame(onBoard(initial(80, 24, 0), b, [], null), P).join('\n'), /This session/)
+  const x = onBoard({ ...initial(80, 24, 0), session: 'cc-1ir0' }, b, [], null)
+  const opened = reduce({ ...x, selected: 'head:session' }, { name: 'return' }).state
+  const both = [frame(x, P).join('\n'), frame(opened, P).join('\n')]
+  assert.ok(both.some(f => /This session \(cc-1ir0\) \(1\)/.test(f)))
+  assert.ok(both.some(f => /F1  Dark mode/.test(f)))
+})

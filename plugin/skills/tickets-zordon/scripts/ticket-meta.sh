@@ -9,6 +9,7 @@
 #   ticket-meta.sh assign <ID> @handle  [owner: @handle] (implements it), box -> [ ]
 #   ticket-meta.sh assign-app <ID> <app,...> [app: <app,...>], box kept
 #   ticket-meta.sh assign-tester <ID> @handle [tester: @handle], box kept
+#   ticket-meta.sh assign-session <ID> <code>|-  F178: [session: <code>] (a F109 session code), box kept; - clears
 #   ticket-meta.sh decide <ID> @handle  [decide: @handle] (must decide), box -> [?]
 #   ticket-meta.sh decided <ID>         [?] -> [ ]; the [decide:] tag stays
 #   ticket-meta.sh testing <ID> <test>  box -> [%] testing, the line says ` (testing: <test>)`
@@ -72,7 +73,7 @@ MAIN=''
 LOCKF=''
 LOCK_ME=''
 # Guarded options never come from the inherited environment.
-GUARDED_STATUS='' EXPECT_ROW='' DROP_WAIT='' KEEP_SESSION=''
+GUARDED_STATUS='' EXPECT_ROW='' DROP_WAIT='' KEEP_SESSION='' SET_SESSION='' DROP_SESSION=''
 
 die() { board_unlock; echo "ticket-meta: $*" >&2; exit 1; }
 
@@ -397,7 +398,7 @@ edit_line() {
     if [ "$v" = "$SAME_VAL" ] && { [ "$mk" = "${SET_MARK:-}" ] || [ -z "${SET_MARK:-}" ]; }; then
       board_unlock
       printf '%s\n' "$cur"
-      echo "no change: $ID already has [$SAME_KEY: $SAME_VAL]"
+      if [ -n "$SAME_VAL" ]; then echo "no change: $ID already has [$SAME_KEY: $SAME_VAL]"; else echo "no change: $ID has no [$SAME_KEY:]"; fi
       return 0
     fi
   fi
@@ -460,15 +461,15 @@ edit_line() {
       return out
     }
     function find(line, key) { return match(line, "[ \t]*\\[" key ":[ \t]*[^]]*\\]") }
-    # A tag goes where it is, else before the next tag in app/decide/owner/tester/by order,
+    # A tag goes where it is, else before the next tag in app/decide/owner/session/tester/by order,
     # else before the trailing (..) groups and a bare "Plan: S<n>" before them
     # (check-tickets must still see that pointer as bare).
     function settag(line, key, val,    i, pos, head) {
       if (find(line, key))
         return substr(line, 1, RSTART - 1) " [" key ": " val "]" substr(line, RSTART + RLENGTH)
       pos = 0
-      for (i = 1; i <= 5; i++) if (ORD[i] == key) break
-      for (i = i + 1; i <= 5; i++)
+      for (i = 1; i <= 6; i++) if (ORD[i] == key) break
+      for (i = i + 1; i <= 6; i++)
         if (find(line, ORD[i]) && (pos == 0 || RSTART < pos)) pos = RSTART
       if (pos == 0) {
         pos = length(line) + 1
@@ -491,7 +492,7 @@ edit_line() {
       sub(/[ \t]+$/, "", line)
       return line note
     }
-    BEGIN { ORD[1] = "app"; ORD[2] = "decide"; ORD[3] = "owner"; ORD[4] = "tester"; ORD[5] = "by"; re = ENVIRON["RE"] }
+    BEGIN { ORD[1] = "app"; ORD[2] = "decide"; ORD[3] = "owner"; ORD[4] = "session"; ORD[5] = "tester"; ORD[6] = "by"; re = ENVIRON["RE"] }
     { line = $0; cr = ""
       if (sub(/\r$/, "", line)) cr = "\r"
       if (line ~ re) {
@@ -501,6 +502,8 @@ edit_line() {
         if (ENVIRON["SET_APP"] != "") line = settag(line, "app", ENVIRON["SET_APP"])
         if (ENVIRON["SET_DECIDE"] != "") line = settag(line, "decide", ENVIRON["SET_DECIDE"])
         if (ENVIRON["SET_OWNER"] != "") line = settag(line, "owner", ENVIRON["SET_OWNER"])
+        if (ENVIRON["SET_SESSION"] != "") line = settag(line, "session", ENVIRON["SET_SESSION"])
+        if (ENVIRON["DROP_SESSION"] != "" && find(line, "session")) line = substr(line, 1, RSTART - 1) substr(line, RSTART + RLENGTH)
         if (ENVIRON["SET_TESTER"] != "") line = settag(line, "tester", ENVIRON["SET_TESTER"])
         if (ENVIRON["SET_BY"] != "") line = settag(line, "by", ENVIRON["SET_BY"])
         # (testing: ..) replaces only itself; (blocked: ..) and (deferred: ..)
@@ -671,6 +674,21 @@ cmd_assign() {
 cmd_assign_tester() {
   CMD=assign-tester; id_and_handle "$@"
   SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_TESTER=$HANDLE SET_BY='' SAME_KEY=tester SAME_VAL=$HANDLE NEED_MARK='' edit_line
+}
+
+# F178: assign-session <ID> <code>|- - the session a ticket is for, beside its owner; open
+# to anyone like a tester, the box kept. A code is a F109 session tag (cc-1ir0); - clears it.
+cmd_assign_session() {
+  CMD=assign-session
+  [ $# -eq 2 ] || die "usage: assign-session <ID> <code>|-"
+  norm_id "$1"
+  if [ "$2" = - ]; then
+    SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_TESTER='' SET_BY='' SET_SESSION='' DROP_SESSION=1 SAME_KEY=session SAME_VAL='' NEED_MARK='' edit_line
+    return
+  fi
+  code=$(lc "${2#@}")
+  one_line "$code" && printf '%s' "$code" | grep -Eqx '[a-z0-9_]+-[a-z0-9_-]+' || die "not a session code (cc-1ir0): $2"
+  SET_MARK='' SET_APP='' SET_DECIDE='' SET_OWNER='' SET_TESTER='' SET_BY='' SET_SESSION=$code DROP_SESSION='' SAME_KEY=session SAME_VAL=$code NEED_MARK='' edit_line
 }
 
 # F136: assign-app <ID> <app,...> - explicitly set/assign apps ahead of commits
@@ -1799,6 +1817,14 @@ selftest() {
   sh "$self" assign-tester F6 @nobody > /dev/null 2>&1 && { echo "FAIL: assign-tester accepted an unknown handle"; fail=1; }
   printf -- "- [ ] F70 %s Tag order [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]\n" "$D" > TICKETS.md
   eq "tester tag order" "$(run assign-tester F70 @neo)" "- [ ] F70 $D Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul]"
+  # --- F178: [session: <code>] beside [owner:], open to anyone, the box kept; again replaces, - clears
+  eq "assign-session" "$(SKILLATOR_ME=@neo sh "$self" assign-session F70 cc-1ir0 2>&1)" "- [ ] F70 $D Tag order [app: web] [decide: @asha] [owner: @vidul] [session: cc-1ir0] [tester: @neo] [by: @vidul]"
+  eq "assign-session replaces" "$(run assign-session F70 @CC-2abc)" "- [ ] F70 $D Tag order [app: web] [decide: @asha] [owner: @vidul] [session: cc-2abc] [tester: @neo] [by: @vidul]"
+  eq "assign-session same" "$(run assign-session F70 cc-2abc)" "- [ ] F70 $D Tag order [app: web] [decide: @asha] [owner: @vidul] [session: cc-2abc] [tester: @neo] [by: @vidul] no change: F70 already has [session: cc-2abc]"
+  sh "$self" assign-session F70 'cc 1' > /dev/null 2>&1 && { echo "FAIL: assign-session took a code with a blank"; fail=1; }
+  sh "$self" assign-session F70 nodash > /dev/null 2>&1 && { echo "FAIL: assign-session took a code with no dash"; fail=1; }
+  eq "assign-session clears" "$(run assign-session F70 -)" "- [ ] F70 $D Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul]"
+  eq "assign-session clear, none" "$(run assign-session F70 -)" "- [ ] F70 $D Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul] no change: F70 has no [session:]"
   eq "hand-over" "$(SKILLATOR_ME=@vidul sh "$self" team lead asha 2>&1)" "lead: @asha"
   eq "one lead line" "$(grep -c '^lead:' .skillator/team.md)" "1"
   eq "team lead same" "$(run team lead @asha)" "no change: @asha is already the lead"
@@ -2003,7 +2029,7 @@ teams_post() {
   return 0
 }
 
-[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|assign-app|assign-tester|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest"
+[ $# -ge 1 ] || die "usage: ticket-meta.sh apps|app-of|by|apps-of|assign|assign-app|assign-tester|assign-session|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest"
 c=$1; shift
 SUB=$c
 [ "$c" = selftest ] && { selftest; exit 0; }
@@ -2018,6 +2044,7 @@ case $c in
   assign) cmd_assign "$@" && teams_post assign "$@" ;;
   assign-app) cmd_assign_app "$@" && teams_post assign-app "$@" ;;
   assign-tester) cmd_assign_tester "$@" && teams_post assign-tester "$@" ;;
+  assign-session) cmd_assign_session "$@" ;;
   decide) cmd_decide "$@" ;;
   decided) cmd_decided "$@" ;;
   testing) cmd_testing "$@" && teams_post testing "$@" ;;

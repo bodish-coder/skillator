@@ -2,7 +2,7 @@
 # ticket-meta.sh, which carries the full reasoning; same output, keep in step.
 #
 #   ticket-meta.ps1 apps | app-of <path>... | by <ID> | apps-of <ID>
-#   ticket-meta.ps1 assign <ID> @handle | assign-app <ID> <app,...> | assign-tester <ID> @handle | decide <ID> @handle | decided <ID>
+#   ticket-meta.ps1 assign <ID> @handle | assign-app <ID> <app,...> | assign-tester <ID> @handle | assign-session <ID> <code>|- | decide <ID> @handle | decided <ID>
 #   ticket-meta.ps1 testing <ID> <what test> | tested <ID> pass|fail | verify <ID> pass|fail <evidence>
 #   ticket-meta.ps1 done <ID> [evidence] | block <ID> <on what> | defer <ID> <until what>
 #   ticket-meta.ps1 tag <ID> | selftest
@@ -325,14 +325,14 @@ function Find-Tag([string]$line, [string]$key) {
   return [regex]::Match($line, '[ \t]*\[' + $key + ':[ \t]*[^\]]*\]')
 }
 
-# A tag goes where it is, else before the next tag in app/decide/owner/tester/by order, else
+# A tag goes where it is, else before the next tag in app/decide/owner/session/tester/by order, else
 # before the trailing (..) groups and a bare "Plan: S<n>" before them
 # (check-tickets must still see that pointer as bare).
 function Set-Tag([string]$line, [string]$key, [string]$val) {
   $tag = " [$key" + ": $val]"
   $m = Find-Tag $line $key
   if ($m.Success) { return $line.Substring(0, $m.Index) + $tag + $line.Substring($m.Index + $m.Length) }
-  $ord = @('app', 'decide', 'owner', 'tester', 'by')
+  $ord = @('app', 'decide', 'owner', 'session', 'tester', 'by')
   $pos = -1
   for ($i = [array]::IndexOf($ord, $key) + 1; $i -lt $ord.Length; $i++) {
     $m = Find-Tag $line $ord[$i]
@@ -456,6 +456,7 @@ function Edit-Line([string]$id, [hashtable]$o) {
         return @($line, "no change: $id already has [$($o.samekey): $($o.sameval)]")
       }
     }
+    if ($o.dropsession -and -not (Find-Tag $line 'session').Success) { return @($line, "no change: $id has no [session:]") }
     # F80: a ticket owned by someone else moves only by its owner's or the lead's
     # hand ($o.me, $o.lead from the caller). A team convention, not security.
     # F131: once a lead is assigned, only the lead can change the assignment.
@@ -510,9 +511,10 @@ function Edit-Line([string]$id, [hashtable]$o) {
       }
     }
     if ($o.mark) { $line = $line.Substring(0, $b) + $o.mark + $line.Substring($b + 1) }
-    foreach ($k in @('app', 'decide', 'owner', 'tester', 'by')) {
+    foreach ($k in @('app', 'decide', 'owner', 'session', 'tester', 'by')) {
       if ($o[$k]) { $line = Set-Tag $line $k $o[$k] }
     }
+    if ($o.dropsession) { $m = Find-Tag $line 'session'; $line = $line.Remove($m.Index, $m.Length) }
     # F62/F64: a note replaces the one matching its pattern, else goes before a
     # trailing (@agent-id) session tag, else at the end of the line. (testing: ..)
     # replaces only itself; (blocked: ..) and (deferred: ..) replace either - the
@@ -714,6 +716,16 @@ function Do-Assign([string[]]$a) {
 function Do-AssignTester([string[]]$a) {
   $x = Get-IdAndHandle 'assign-tester' $a
   return (Edit-Line $x[0] @{ tester = $x[1]; samekey = 'tester'; sameval = $x[1]; owncheck = $false; requireleadassign = $false })
+}
+
+# F178: assign-session <ID> <code>|- - as ticket-meta.sh: open to anyone, the box kept; - clears.
+function Do-AssignSession([string[]]$a) {
+  if ($a.Count -ne 2) { Fail 'usage: assign-session <ID> <code>|-' }
+  $id = Get-NormId $a[0]
+  if ($a[1] -ceq '-') { return (Edit-Line $id @{ dropsession = $true; owncheck = $false; requireleadassign = $false; cmd = 'assign-session' }) }
+  $code = $a[1].TrimStart('@').ToLowerInvariant()
+  if (-not (Test-OneLine $code) -or $code -cnotmatch '\A[a-z0-9_]+-[a-z0-9_-]+\z') { Fail "not a session code (cc-1ir0): $($a[1])" }
+  return (Edit-Line $id @{ session = $code; samekey = 'session'; sameval = $code; owncheck = $false; requireleadassign = $false; cmd = 'assign-session' })
 }
 
 # F136: assign-app <ID> <app,...> - explicitly set/assign apps ahead of commits
@@ -1363,6 +1375,7 @@ function Invoke-Cmd([string]$c, [string[]]$a) {
     'assign' { return (Do-Assign $a) }
     'assign-app' { return (Do-AssignApp $a) }
     'assign-tester' { return (Do-AssignTester $a) }
+    'assign-session' { return (Do-AssignSession $a) }
     'decide' { return (Do-Decide $a) }
     'decided' { return (Do-Decided $a) }
     'testing' { return (Do-Testing $a) }
@@ -2007,6 +2020,14 @@ function Invoke-Selftest {
     if (-not (Refused assign-tester F6 '@nobody')) { Write-Output 'FAIL: assign-tester accepted an unknown handle'; $script:fail = 1 }
     W $board "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [by: @vidul]`n"
     Eq 'tester tag order' (Run assign-tester F70 '@neo') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul]"
+    # --- F178: [session: <code>] beside [owner:], open to anyone, the box kept; again replaces, - clears
+    Eq 'assign-session' (AsMe '@neo' { Run assign-session F70 'cc-1ir0' }) "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [session: cc-1ir0] [tester: @neo] [by: @vidul]"
+    Eq 'assign-session replaces' (Run assign-session F70 '@CC-2abc') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [session: cc-2abc] [tester: @neo] [by: @vidul]"
+    Eq 'assign-session same' (Run assign-session F70 'cc-2abc') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [session: cc-2abc] [tester: @neo] [by: @vidul] no change: F70 already has [session: cc-2abc]"
+    if (-not (Refused assign-session F70 'cc 1')) { Write-Output 'FAIL: assign-session took a code with a blank'; $script:fail = 1 }
+    if (-not (Refused assign-session F70 'nodash')) { Write-Output 'FAIL: assign-session took a code with no dash'; $script:fail = 1 }
+    Eq 'assign-session clears' (Run assign-session F70 '-') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul]"
+    Eq 'assign-session clear, none' (Run assign-session F70 '-') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul] no change: F70 has no [session:]"
     Eq 'hand-over' (AsMe '@vidul' { Run team lead 'asha' }) 'lead: @asha'
     Eq 'one lead line' @(([System.IO.File]::ReadAllText($tf)) -split "`n" | Where-Object { $_ -match '^lead:' }).Count '1'
     Eq 'team lead same' (Run team lead '@asha') 'no change: @asha is already the lead'
@@ -2198,7 +2219,7 @@ function Invoke-Selftest {
 }
 
 if ($args.Count -lt 1) {
-  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|assign-app|assign-tester|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest')
+  [Console]::Error.WriteLine('usage: ticket-meta.ps1 apps|app-of|by|apps-of|assign|assign-app|assign-tester|assign-session|decide|decided|testing|tested|verify|done|block|defer|tag|team|whoami|iam|stamp|session|claim|pick|reconcile|unblock|start|selftest')
   exit 1
 }
 $cmd = [string]$args[0]

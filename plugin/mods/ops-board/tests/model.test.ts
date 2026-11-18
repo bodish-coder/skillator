@@ -189,3 +189,17 @@ test('A199: buildModel includes personalized Assigned and Decide groups, folding
   expect(mFolded.selected).toBe('head:decide')
   expect(mFolded.ticket).toBeNull()
 })
+
+// F178: a third personal section, 'This session (<code>)', only when the board knows its session code
+test('F178: the This session section lists open tickets tagged [session: <code>], only with a session code', () => {
+  const b = parseBoard('- [ ] F1 — mine [session: cc-1ir0]\n- [ ] F2 — other [session: cc-zzzz]\n- [x] F3 — done [session: cc-1ir0]\n', 'T', 0, 0)
+  const m = buildModel(view({ board: b, me: '@vidul', session: 'cc-1ir0', assignedFolded: false, decideFolded: false, sessionFolded: false }))
+  const g = m.userGroups.find(x => x.id === 'session')!
+  expect([g.title, g.tickets.map(t => t.id), g.open]).toEqual(['This session (cc-1ir0)', ['F1'], true])
+  expect(m.items.slice(0, 4)).toEqual(['head:assigned', 'head:decide', 'head:session', 'session:F1'])
+  const sel = buildModel(view({ board: b, me: '@vidul', session: 'cc-1ir0', assignedFolded: false, decideFolded: false, sessionFolded: false, selected: 'session:F1' }))
+  expect(sel.ticket).toBe('F1')
+  // no session code: no section; no me, but a session code: the session section alone
+  expect(buildModel(view({ board: b, me: '@vidul', assignedFolded: false, decideFolded: false })).userGroups.map(x => x.id)).toEqual(['assigned', 'decide'])
+  expect(buildModel(view({ board: b, session: 'cc-1ir0', sessionFolded: false })).items.slice(0, 2)).toEqual(['head:session', 'session:F1'])
+})
