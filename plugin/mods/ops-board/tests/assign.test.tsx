@@ -747,3 +747,31 @@ for (const surface of SURFACES) {
     await pane.unmount()
   })
 }
+
+// F178 fix: a ticket's [session:] code that is not live still shows as the current value;
+// the form offers clear (assign-session <ID> -), and Assign is gone while nothing changes
+for (const surface of SURFACES) {
+  test(`${surface}: F178 a not-live [session:] code is the current value, clear drops it, no change disables Assign`, WITH, async ($, on) => {
+    const board = BOARD.replace('[owner: @vidul] (@cc-4ae496)', '[owner: @vidul] [session: cc-dead] (@cc-4ae496)')
+    const [w, clock] = world(on, { '/r/TICKETS.md': board, '/r/.skillator/team.md': TEAM }, { SKILLATOR_SESSION: '@cc-1ir0' })
+    on('session.id', () => ({ value: 'sid-1' }))
+    w.answer = argv => argv.includes('assign-session')
+      ? ran('- [~] F3 — cart drawer keeps items on reload [app: web] [owner: @vidul] (@cc-4ae496)\n')
+      : null
+    await start($, clock)
+    const pane = await $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: 'ops-board', props: props('ops board') })
+    await pane.press({ key: 'head:~' })
+    await pane.press({ key: 'row:F3' })
+    await pane.press({ key: 'key:assign' })
+    await pane.press({ key: 'kind:session' })
+    expect((await pane.find({ key: 'ses:cc-dead' }))?.text).toContain('› @? cc-dead (not live)')
+    expect(await pane.find({ key: 'go' })).toBeUndefined()
+    await pane.press({ key: 'ses:-' })
+    expect((await pane.find({ key: 'ses:-' }))?.text).toContain('› clear')
+    expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta assign-session F3 -')
+    await pane.press({ key: 'go' })
+    expect(w.runs.map(r => r.argv).filter(a => a[0] !== 'git')).toEqual([['/bin/sh', META + '.sh', 'assign-session', 'F3', '-']])
+    expect(w.toasts[0]).toContain('✓ F3 session cleared')
+    await pane.unmount()
+  })
+}

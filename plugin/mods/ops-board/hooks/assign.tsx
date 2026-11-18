@@ -191,8 +191,8 @@ async function confirmSession($: EngineInterface, t: Ticket, d: AssignDraft) {
     await update($, assignA, x => (x ? { ...x, result: r.err.trim() || r.out.trim() || `ticket-meta exited ${r.code}` } : x))
     return
   }
-  await refreshBoardTicket($, t.id, tk => ({ ...tk, assignedSession: code }))
-  $.ui.toast([`✓ ${t.id} assigned to session ${code}: ${t.title}`, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  await refreshBoardTicket($, t.id, tk => ({ ...tk, assignedSession: code === '-' ? null : code }))
+  $.ui.toast([`✓ ${t.id} ${code === '-' ? 'session cleared' : 'assigned to session ' + code}: ${t.title}`, ...notes(r.out), ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeForm($)
 }
 
@@ -336,8 +336,12 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const people = [...team]
   if (d.handle && !people.some(m => m.handle === d.handle)) people.push({ handle: d.handle, emails: [] })
   const isSession = d.kind === 'session'
-  const sessions = d.sessions ?? []
-  const canGo = !!tk && (isSession ? !!d.session : !!d.handle)
+  // F178: the ticket's own [session:] code is listed even when not live; '-' (clear) drops it.
+  const current = tk?.assignedSession ?? null
+  const sessions = [...(d.sessions ?? [])]
+  if (current && !sessions.some(x => x.code === current)) sessions.push({ code: current, owner: null })
+  if (current) sessions.push({ code: '-', owner: null })
+  const canGo = !!tk && (isSession ? !!d.session && d.session !== (current ?? '-') : !!d.handle)
   const armed = !!focus && (['kind:implementation', 'kind:decision', 'kind:tester', 'kind:session', 'who:+add', 'cancel', ...(canGo ? ['go'] : [])].includes(focus)
     || people.some(m => focus === 'who:' + m.handle) || sessions.some(x => focus === 'ses:' + x.code))
   const from: State = tk?.box ?? ' '
@@ -362,7 +366,7 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   // F178: the live sessions as `@owner code`; a pick sets the [session:] tag
   const ses = sessions.map(x => {
     const isSel = x.code === d.session
-    const body = `${isSel ? '› ' : '  '}${x.owner ?? '@?'} ${x.code}`
+    const body = `${isSel ? '› ' : '  '}${x.code === '-' ? 'clear (drop the tag)' : `${x.owner ?? '@?'} ${x.code}${x.code === current && !d.sessions?.some(y => y.code === current) ? ' (not live)' : ''}`}`
     return (
       <Button key={'ses:' + x.code} hotkey={armed && x.code === (sessions.find(y => 'ses:' + y.code === focus)?.code ?? d.session) ? 'o' : undefined} plain onPress={() => set(y => ({ ...y, session: x.code }))}>
         {isSel ? <Text inverse wrap="wrap">{body.padEnd(Math.max(body.length, 24))}</Text> : <Text wrap="wrap">{body}</Text>}
