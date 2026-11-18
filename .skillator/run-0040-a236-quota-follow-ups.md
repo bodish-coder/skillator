@@ -1,6 +1,6 @@
 # RUN-0040 - A236 quota follow-ups
 plan: TICKETS.md
-started: 2026-11-18T11:33Z   updated: 2026-11-18T15:53Z
+started: 2026-11-18T11:33Z   updated: 2026-11-18T15:57Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-a236-quota-follow-ups
 branch: run/RUN-0040-a236-quota-follow-ups
 
@@ -10,7 +10,7 @@ branch: run/RUN-0040-a236-quota-follow-ups
 | 307 | A236 quota gate follow-ups | ~ | build:opus | 2026-11-18T13:23Z | - |
 | 308 | A240 assign tests under the ui.focus-less mock | ~ | build:opus | 2026-11-18T15:48Z | - |
 | 309 | A241 wizard answers follow-ups | ~ | build:opus | 2026-11-18T15:53Z | - |
-| 310 | B32 reproduce agy Health tab | ~ | build:opus | 2026-11-18T15:39Z | - |
+| 310 | B32 reproduce agy Health tab | ~ | build:opus | 2026-11-18T15:57Z | - |
 
 ## In flight
 ### stage 310 (dispatched 15:39Z, own worktree RUN-0040-s310)
@@ -98,3 +98,4 @@ fix round (dispatched 13:23Z) prompt: |
 - 2026-11-18T15:39Z - owner: start next. Ruling: B32 runs reproduce-only as stage 310 (4th agent) - its fix touches ops/status.ts, which A236 is editing; the fix is planned after A236 lands - cost if wrong: one extra dispatch.
 - 2026-11-18T15:48Z - stage 308 (A240) back bfe5059, test-only (assign 6/37 -> 43/43, messages 23/4 -> 27/27 per agent); orchestrator read the 26-line diff: the ui.focus stub answers {plugin:'*'} with {value}, stale expectations updated to F178/A175/F174 behaviour. Ruling: merge held until stage 307 lands - its agent commits in the run worktree - cost if wrong: A240 lands an hour later. Leftover: alphabet/pane/status/explorer/log/reconcile/runtab tests keep the old ui.focus stub -> ticket.
 - 2026-11-18T15:53Z - stage 309 (A241) back 3d77151..7553d81; orchestrator re-run answers 73/0 + selftest ok. Review: 8 findings, worst a stale updated: stamp trusted over the mtime (needs a hand edit; relay bumps updated:). Ruling: no fix round at 7d 94% - leftovers are A245 - cost if wrong: a stale FINAL can reopen a hand-edited settled run. Merge held for 307 like 308.
+- 2026-11-18T15:57Z - stage 310 (B32 repro) back: failing test 9b260a2 (tests only). Root causes (verified unless noted): (1) usage rows never fill - ownProfile (status.ts ~55) ignores ANTIGRAVITY_APP_DATA_DIR and the wt new-tab from ops.ps1 -Open passes no SKILLATOR_CLI/AGY_CONFIG_DIR (inferred), so usage-watch level returns src=none; (2) per-model table only after p, and each profile read hits the 5 s budget (one level read 3.2-7.5 s); (3) Health clipped at 80x24 with no scroll or marker (Disk/Hold/Stale locks vanish); (4) loading rows resolve in 4-12 s (serial pollSlow). Fix touches ops.ps1/ops.sh, the agy skillator-ops SKILL.md, status.ts (after 307), draw.ts, maybe engine.ts. INCIDENT: the agent's first run put a C:/ path on Git Bash PATH, the stubs were skipped, and one real 'agy -p /usage' ran at 21:18 with a temp AGY_CONFIG_DIR; owner's profile dirs untouched; later runs stub-verified. Ruling: B32 fix is planned after 307 lands - status.ts overlap.
