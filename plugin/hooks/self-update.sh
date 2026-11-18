@@ -63,6 +63,12 @@ newer() {
     exit 1 }'
 }
 
+# plain <v>: a bare x.y.z - anything else never reaches a notice or a command line.
+plain() {
+  case $1 in *[!0-9.]*|.*|*.|*..*|*.*.*.*) return 1 ;; *.*.*) return 0 ;; esac
+  return 1
+}
+
 # why_skip: a reason not to touch the install, or nothing.
 why_skip() {
   r=$PWD
@@ -92,12 +98,14 @@ check() {
   m=$(printf '%s\n' "$L" | awk '$1 == "id" && $2 ~ /^skillator@/ { print substr($2, 11); exit }')
   [ -n "$m" ] || { RES='skipped: skillator is not a Claude Code plugin here'; return; }
   old=$(pf "skillator@$m" version)
+  plain "$old" || { old=''; RES='skipped: unexpected version'; return; }
   claude plugin marketplace update "$m" </dev/null >/dev/null 2>&1 || { RES=offline; return; }
   loc=$(claude plugin marketplace list --json </dev/null 2>/dev/null | kv 'name|installLocation' \
     | awk -v m="$m" '$1 == "name" { n = $2; next } $1 == "installLocation" && n == m { sub(/^[^ ]* /, ""); print; exit }')
   new=$(cat "$loc/.claude-plugin/marketplace.json" 2>/dev/null | kv 'name|version' \
     | awk '$1 == "name" { n = $2; next } $1 == "version" && n == "skillator" { print $2; exit }')
   [ -n "$new" ] || { RES="failed: no skillator version in marketplace $m"; return; }
+  plain "$new" || { new=''; RES='skipped: unexpected version'; return; }
   if newer "$old" "$new"; then RES="newer $old -> $new"; else RES="up to date $old"; fi
 }
 
@@ -119,6 +127,7 @@ update() {
   nv=$(pf "skillator@$m" version)
   ip=$(pf "skillator@$m" installPath)
   sv=$(cat "$ip/.claude-plugin/plugin.json" 2>/dev/null | kv version | awk '{ print $2; exit }')
+  plain "$nv" && { [ -z "$sv" ] || plain "$sv"; } || { nv=''; RES='skipped: unexpected version'; return; }
   for v in "$nv" $sv; do
     newer "$v" "$old" && { RES="skipped: would downgrade $old -> $v"; return; }
   done
@@ -251,6 +260,10 @@ claude plugin list --json'
   reset
   o=$(SU_NEWV=4.28.0 sh "$me" run)
   t 'downgrade: refused, no installer' '[ "$o" = "skipped: would downgrade 4.29.0 -> 4.28.0" ] && ! lg | grep -q "^installer"'
+
+  reset
+  o=$(SU_OLDV='4.29.0-evil$(x)' sh "$me" run)
+  t 'unexpected version: skipped, kept out of notice and commands' '[ "$o" = "skipped: unexpected version" ] && ! st | grep -q evil && ! lg | grep -q -e evil -e "plugin update"'
 
   reset
   s=$(date +%s)

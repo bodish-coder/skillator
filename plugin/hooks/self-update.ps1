@@ -34,6 +34,8 @@ function Test-Due {
   if ($lc -notmatch '^\d+$') { return $true }
   ((Get-Now) - [int64]$lc) -ge ($H * 3600)
 }
+# A bare x.y.z - anything else never reaches a notice or a command line.
+function Test-Plain([string]$v) { $v -cmatch '^[0-9]+\.[0-9]+\.[0-9]+\z' }
 function Test-Newer([string]$a, [string]$b) { try { [version]$b -gt [version]$a } catch { $false } }
 
 function Get-WhySkip {
@@ -66,6 +68,7 @@ function Invoke-Check {
   $sk = $script:L | Where-Object { "$($_.id)" -like 'skillator@*' } | Select-Object -First 1
   if (-not $sk) { return 'skipped: skillator is not a Claude Code plugin here' }
   $script:m = $sk.id.Substring(10); $script:old = "$($sk.version)"
+  if (-not (Test-Plain $script:old)) { $script:old = ''; return 'skipped: unexpected version' }
   $null | & claude plugin marketplace update $script:m *> $null
   if ($LASTEXITCODE -ne 0) { return 'offline' }
   try {
@@ -74,6 +77,7 @@ function Invoke-Check {
     $script:new = "$(($cat.plugins | Where-Object { $_.name -eq 'skillator' } | Select-Object -First 1).version)"
   } catch { $script:new = '' }
   if (-not $script:new) { return "failed: no skillator version in marketplace $($script:m)" }
+  if (-not (Test-Plain $script:new)) { $script:new = ''; return 'skipped: unexpected version' }
   if (Test-Newer $script:old $script:new) { "newer $($script:old) -> $($script:new)" } else { "up to date $($script:old)" }
 }
 
@@ -96,6 +100,7 @@ function Invoke-Update {
   $script:nv = "$($sk.version)"; $ip = "$($sk.installPath)"
   $sv = ''
   try { $sv = "$((Get-Content -LiteralPath (Join-Path $ip '.claude-plugin/plugin.json') -Raw -ErrorAction Stop | ConvertFrom-Json).version)" } catch { }
+  if (-not (Test-Plain $script:nv) -or ($sv -and -not (Test-Plain $sv))) { $script:nv = ''; return 'skipped: unexpected version' }
   foreach ($v in @($script:nv, $sv)) {
     if ($v -and (Test-Newer $v $script:old)) { return "skipped: would downgrade $($script:old) -> $v" }
   }
@@ -217,6 +222,11 @@ if (($args -join ' ') -match 'status') { $env:SU_DIRTY }
     $o = Su 'run'
     T 'downgrade: refused, no installer' ($o -eq 'skipped: would downgrade 4.29.0 -> 4.28.0' -and -not ((Lg) -match '^installer'))
     Remove-Item Env:SU_NEWV
+
+    Reset-T; $env:SU_OLDV = '4.29.0-evil$(x)'
+    $o = Su 'run'
+    T 'unexpected version: skipped, kept out of notice and commands' ($o -eq 'skipped: unexpected version' -and (St) -notmatch 'evil' -and -not ((Lg) -match 'evil|plugin update'))
+    Remove-Item Env:SU_OLDV
 
     # in-process, so PowerShell's own start-up is not counted against the second
     Reset-T; $env:SU_SLEEP = '3'
