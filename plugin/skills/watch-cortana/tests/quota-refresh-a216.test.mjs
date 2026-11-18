@@ -757,6 +757,20 @@ for (const port of ['ps1', 'sh']) {
     }
   })
 
+  // A236 (2): without node the sh counter must not read the "7d" inside a carried last as a
+  // reading - the counter keeps counting and the backoff grows.
+  test(`${port}: A236 without node a record carrying last keeps counting failures`, { skip: port !== 'sh' || skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'nonode', { src: 'claude-code', note: 'unparseable', failures: 2, backoff_secs: 120, last: { '5h': 10, '7d': 95, at: 1 } })
+      fx.setCliResponse('fixture: usage unavailable', 0)
+      fx.runRefresh('claude', profile, { ...env, PATH: 'C:/Program Files/Git/usr/bin' })
+      const rec = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.equal(rec.failures, 3, JSON.stringify(rec))
+      assert.equal(rec.backoff_secs, 240)
+    } finally { fx.cleanup() }
+  })
+
   // F176 last round: Get-Process -Id $PID failing must not spare the whole tree.
   test(`${port}: F176 last round - with no start time of its own, the capped call kills its children by parent pid`, { skip: port !== 'ps1' || skip }, async () => {
     const fx = makeFixture(port)

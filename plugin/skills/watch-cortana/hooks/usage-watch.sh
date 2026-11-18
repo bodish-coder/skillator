@@ -631,7 +631,8 @@ except Exception:
       prev_failures=${carry%% *}
       case $carry in *" "*) last_tag=${carry#* } ;; esac
       case $prev_failures in ''|*[!0-9]*) prev_failures=0 ;; esac
-    elif [ -f "$cache" ] && ! grep -q '"5h"\|"7d"' "$cache" 2>/dev/null; then
+    # A carried last is not a reading: its "7d" must not reset the counter.
+    elif [ -f "$cache" ] && ! sed 's/"last":{[^}]*}//' "$cache" 2>/dev/null | grep -q '"5h"\|"7d"'; then
       pf=$(sed -n 's/.*"failures"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$cache" | head -1)
       case $pf in ''|*[!0-9]*) ;; *) prev_failures=$pf ;; esac
     fi
