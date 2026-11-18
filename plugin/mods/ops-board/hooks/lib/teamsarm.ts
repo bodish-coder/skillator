@@ -32,6 +32,7 @@ export function parseArm(out: string): ArmView | null {
     port: Number.isInteger(port) && port > 0 && port < 65536 ? port : 3978,
     url, urlChanged: url !== null && kv.url_changed === '1',
     expires: kv.expires ? kv.expires.slice(0, 40) : null,
+    note: kv.note ? kv.note.slice(0, 80) : null,
   }
 }
 
@@ -76,6 +77,12 @@ export function armLines(v: ArmView | null, now: number, cols: number): Line[] {
       ...(exp ? [sep, { text: exp, color: soon ? 'warning' as const : undefined, dim: !soon }] : []),
     ],
   }]
+  // the note on the arm line when it fits, else its own dim line - never cut
+  if (v.note) {
+    const used = out[0]!.segs.reduce((n, s) => n + s.text.length, 0)
+    if (used + sep.text.length + v.note.length <= cols) out[0]!.segs.push(sep, { text: v.note, dim: true })
+    else out.push({ key: 'arm:note', segs: [{ text: '  ' + v.note, dim: true }] })
+  }
   if (v.url) out.push({ key: 'arm:url', segs: [{ text: '  ' }, { text: v.url, color: 'suggestion' }, { text: '  y copies', dim: true }] })
   else if (v.hosted) out.push({ key: 'arm:url', segs: [{ text: '  URL: read it in the tunnel window', dim: true }] })
   if (v.url && v.urlChanged) {

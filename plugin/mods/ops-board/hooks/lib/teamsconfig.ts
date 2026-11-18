@@ -68,3 +68,12 @@ export const parseCfgView = (out: string): TeamsCfgView | null => {
     }
   } catch { return null }
 }
+
+// B29 / A235: team.mjs config save | clear print one result line - an exit 0 without it did
+// nothing. The line, and why it is not one when it is not.
+export const SAVED_LINE = /^saved: /
+export const CLEARED_LINE = /^(cleared: |nothing saved at )/
+export function resultLine(out: string, ok: RegExp, did: string): { line: string; bad: string | null } {
+  const line = out.trim().split(/\r?\n/)[0] ?? ''
+  return { line, bad: ok.test(line) ? null : `teams-uhura did not say it ${did}` + (line ? ': ' + line : '') }
+}

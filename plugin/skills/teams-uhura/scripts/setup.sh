@@ -113,7 +113,7 @@ table() {
 }
 
 # --- F177: the ops board's keys. --status reads; --arm, --disarm and --ack act, each only
-# on the owner's key press on the Messages tab. Output: twelve key=value lines.
+# on the owner's key press on the Messages tab. Output: thirteen key=value lines.
 state_dir() { printf '%s' "${SKILLATOR_TEAMS_STATE:-$HOME/.skillator/teams}"; }
 seen_url() { [ -f "$(state_dir)/tunnel-url" ] && tr -d '\r\n' < "$(state_dir)/tunnel-url"; }
 save_url() { mkdir -p "$(state_dir)" && (umask 077; printf '%s\n' "$1" > "$(state_dir)/tunnel-url"); }
@@ -128,9 +128,10 @@ now() { date +%s; }
 late() { [ "$(now)" -lt "$_dl" ] && return 1; A_RESULT=failed; A_WHY='took too long - try again'; }
 # --ack [url]: one argument at most, an https:// URL; every other mode takes none
 args_ok() { [ $# -le 1 ] || { [ $# = 2 ] && [ "$1" = --ack ] && case $2 in https://*) true ;; *) false ;; esac; }; }
+# note= (A235): setup.ps1 notes a devtunnel it cannot inspect; pgrep -f reads every command line, so here it is empty
 show_arm() {
   printf '%s\n' "result=$A_RESULT" "why=$A_WHY" "devtunnel=$A_DT" "login=$A_LOGIN" "form=$A_FORM" "tunnel=$A_TUN" \
-    "hosted=$A_HOSTED" "listener=$A_LISTEN" "port=$PORT" "url=$A_URL" "url_changed=$A_CHANGED" "expires=$A_EXP"
+    "hosted=$A_HOSTED" "listener=$A_LISTEN" "port=$PORT" "url=$A_URL" "url_changed=$A_CHANGED" "expires=$A_EXP" "note="
 }
 
 arm_view() {
@@ -177,7 +178,9 @@ arm() {
   fi
   if [ "$A_HOSTED" != 1 ]; then
     open_tunnel >/dev/null
-    _i=0; _seen=; while [ "$_i" -lt 5 ]; do tunnel_hosted "$TUNNEL" "$PORT" && { _seen=1; break; }; late && return 0; sleep 1; _i=$((_i + 1)); done
+    # by the clock for 8 s, as setup.ps1 - a probe can be slow; late() holds the 25 s
+    _end=$(($(now) + 8)); _seen=
+    while :; do tunnel_hosted "$TUNNEL" "$PORT" && { _seen=1; break; }; late && return 0; [ "$(now)" -lt "$_end" ] || break; sleep 1; done
     if [ -z "$_seen" ]; then A_RESULT=failed; A_WHY='the tunnel did not start - see ~/.skillator/teams/devtunnel.log'; return 0; fi
     # a host that exits at once (signed out, port taken) is not armed
     sleep 2; tunnel_hosted "$TUNNEL" "$PORT" && A_HOSTED=1
@@ -284,11 +287,11 @@ EOF
   refresh_path() { :; }
   answer() { echo ask >> "$ST/calls"; case $1 in Press*) : > "$ST/saved" ;; esac; printf '%s' "$YES"; }
   open_tunnel() { echo host >> "$ST/calls"; [ -f "$ST/noopen" ] || : > "$ST/hosted"; }
-  tunnel_hosted() { [ -f "$ST/hosted" ] || return 1; [ -f "$ST/dies" ] && rm -f "$ST/hosted"; return 0; }
+  tunnel_hosted() { [ -z "$PROBE" ] || echo $(($(now) + PROBE)) > "$ST/clock"; [ -f "$ST/hosted" ] || return 1; [ -f "$ST/dies" ] && rm -f "$ST/hosted"; return 0; }
   stop_tunnel() { echo unhost >> "$ST/calls"; [ -f "$ST/stuck" ] || rm -f "$ST/hosted"; }
-  sleep() { :; }
+  sleep() { echo $(($(now) + $1)) > "$ST/clock"; }
   now() { cat "$ST/clock" 2>/dev/null || echo 0; }
-  SKILLATOR_TEAMS_STATE="$T/state"; export SKILLATOR_TEAMS_STATE
+  SKILLATOR_TEAMS_STATE="$T/state"; export SKILLATOR_TEAMS_STATE; PROBE=
   # scen <check> <yes> <commands present> <state files>
   scen() {
     rm -rf "$BIN" "$ST"; mkdir -p "$BIN" "$ST"; : > "$ST/calls"
@@ -350,11 +353,12 @@ EOF
   ACTS='^\(host\|unhost\)$\| \(start\|stop\) --port '
   RDY='login tunnel port saved'
   U1='https://ab12cd34-3978.euw.devtunnels.ms'; U2='https://zz99yy88-3978.euw.devtunnels.ms'
-  # --status: twelve lines, the facts, nothing changed
+  # --status: thirteen lines, the facts, nothing changed
   kv arm_view "$ALL" "$RDY"
-  [ "$(wc -l < "$T/out" | tr -d ' ')" = 12 ] || fail 'status: not twelve lines'
-  [ "$(cut -d= -f1 "$T/out" | tr '\n' ,)" = 'result,why,devtunnel,login,form,tunnel,hosted,listener,port,url,url_changed,expires,' ] || fail 'status: keys'
+  [ "$(wc -l < "$T/out" | tr -d ' ')" = 13 ] || fail 'status: not thirteen lines'
+  [ "$(cut -d= -f1 "$T/out" | tr '\n' ,)" = 'result,why,devtunnel,login,form,tunnel,hosted,listener,port,url,url_changed,expires,note,' ] || fail 'status: keys'
   out '^result=status$' && out '^form=set$' && out '^tunnel=ready$' && out '^hosted=0$' && out '^listener=down$' || fail 'status: facts'
+  out '^note=$' || fail '5: status without an empty note= line'
   out "^url=$U1\$" && out '^expires=2026-12-17T00:00:00Z$' && out '^url_changed=0$' || fail 'status: url / expires'
   called "$ACTS" && fail 'status changed something'
   # --arm refuses, and starts nothing: devtunnel missing, signed out, no token, no tunnel
@@ -436,6 +440,15 @@ EOF
   args_ok --ack https://x.devtunnels.ms extra && fail '--ack with two arguments was not refused'
   args_ok --check extra && fail '--check with an argument was not refused'
   args_ok --ack "$U1" && args_ok --ack && args_ok --check && args_ok || fail 'a documented form was refused'
+  # A235 2: the host confirmed as the deadline passes - hosted=1, what was seen, as setup.ps1
+  PROBE=10; kv arm "$ALL" "$RDY"; PROBE=
+  out '^why=took too long - try again$' && out '^hosted=1$' || fail '2: a confirmed host past the deadline was not reported hosted'
+  # A235 fix 2: the probe that first sees the host crosses the deadline - still confirmed, hosted=1
+  PROBE=13; kv arm "$ALL" "$RDY"; PROBE=
+  out '^why=took too long - try again$' && out '^hosted=1$' || fail '2: a host seen across the deadline was not reported hosted'
+  # A235 4: the poll for the host is by the clock, as setup.ps1 - probes of 5 s give up within 20 s, before the 25 s deadline
+  PROBE=5; kv arm "$ALL" "$RDY noopen"; PROBE=
+  out '^why=the tunnel did not start' && [ "$(now)" -le 20 ] || fail "4: a failed arm with 5 s probes took $(now) s"
   LC_ALL=C grep -q "$(printf '[^\t -~]')" "$SELF" && fail 'not pure ASCII + LF'
   echo ok
 }

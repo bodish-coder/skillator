@@ -92,6 +92,7 @@ export type ArmView = {
   result: 'status' | 'armed' | 'refused' | 'failed' | 'disarmed' | 'acked'; why: string
   devtunnel: boolean; login: boolean; form: boolean; tunnel: boolean; hosted: boolean; listener: boolean
   port: number; url: string | null; urlChanged: boolean; expires: string | null
+  note: string | null   // A235: e.g. a devtunnel the board cannot inspect - drawn dim, never a failure
 }
 // The setup form in the pane: only what is safe to hold in $.state - the field values
 // live in the module (the token never reaches $.state); `rev` redraws it.
