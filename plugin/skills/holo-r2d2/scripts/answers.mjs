@@ -27,6 +27,7 @@ const CTRL_G = new RegExp(CTRL.source, "g");
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
 const show = (v) => JSON.stringify(clean(v));
 const minute = (t) => Math.floor(t / 60000);
+const isRunId = (id) => /^RUN-\d+$/i.test(id);
 
 const tryRead =(p) => { try { return readFileSync(p, "utf8"); } catch { return null; } };
 const tryDir = (p) => { try { return readdirSync(p); } catch { return []; } };
@@ -122,7 +123,7 @@ async function openSets(root, holo) {
     if (set) seen.add(id);
     try {
       // Only a RUN- id is a run: a --decisions set "12" keeps its own set beside run-0012-*.md.
-      const path = /^RUN-/i.test(id) ? runFilesFor(id, runs)?.[0] : undefined;
+      const path = isRunId(id) ? runFilesFor(id, runs)?.[0] : undefined;
       if (path) {
         if (!parsed.has(path)) parsed.set(path, parseRun(await readFile(path, "utf8")));
         const run = parsed.get(path), r = reconcile(set, run, relative(root, path).replace(/\\/g, "/"));
@@ -232,7 +233,7 @@ export function report(r) {
     // To apply: only answers that print a command - none from an unverified pick.
     const c = p.verified && p.openNow ? answersToCommands({ ...a, answers: kept }) : null, n = kept.length;
     L.push("", `picked: ${p.path}`, `  set ${clean(p.id)}, round ${Number(a.round) || 1}, FINAL by ${show(a.owner)} at ${clean(a.finalizedAt, 40)}, ${p.openNow ? `${c ? c.commands.length : 0} to apply, ${skipped.length} already settled` : `${n} decision${n === 1 ? "" : "s"}`}`);
-    const run = /^RUN-\d+$/i.test(p.id);
+    const run = isRunId(p.id);
     if (!p.verified) { L.push("  unverified - confirm with the owner before applying (no page nonce match); no commands printed"); continue; }
     if (run && !p.openNow) { L.push(`  run file not found for ${clean(p.id)} - nothing applied`); continue; }
     if (run) {
