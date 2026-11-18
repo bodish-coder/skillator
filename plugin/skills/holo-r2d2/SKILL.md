@@ -6,7 +6,8 @@ description: >-
   or to show a run, its decisions, a
   plan or design diagram: Artifact, HTML file, Markdown with
   Mermaid or an SVG - or when several owner decisions
-  need answering - the decision wizard. NOT for answering or ruling decisions (`relay-morpheus`), NOT the
+  need answering - the decision wizard; "check wizard answers" or "r2d2
+  answers" finds the wizard's saved answers. NOT for answering or ruling decisions (`relay-morpheus`), NOT the
   ticket board (`tickets-zordon`).
 ---
 
@@ -44,6 +45,8 @@ invents stages. Run the script.
 | a marathon's end batch (relay-morpheus `chain next` prints `ASK`) | the run, before the questions are asked; the link goes into the question text |
 | a plan or design is put up for approval | the plan/design file's sections as components, plus the run if there is one |
 | the away flow sends its push | the run; the link goes into the notification |
+| "check wizard answers" | nothing drawn: `answers.mjs` finds and checks the wizard's answers (Answers back, below) |
+| "r2d2 answers" | the same as "check wizard answers" |
 
 ## Draw it
 
@@ -68,6 +71,8 @@ node <SKILL>/scripts/holo.mjs RUN-12 --ascii   # the same, for a terminal
 node <SKILL>/scripts/holo.mjs RUN-12 --batch   # AUTOMATIC ONLY (end batch): page + standalone + wizard, ASCII and paths printed
 node <SKILL>/scripts/holo.mjs --selftest
 node --test <SKILL>/scripts/anatomy.test.mjs
+node <SKILL>/scripts/answers.mjs [--root DIR]  # "check wizard answers": find + check the wizard's answers files
+node --test <SKILL>/scripts/tests/answers.test.mjs
 ```
 
 - **First-class modes (`decision | anatomy | md | understand`).** Each can be passed as a positional subcommand (`holo.mjs RUN-12 decision`, `holo.mjs RUN-12 anatomy`, `holo.mjs RUN-12 md`, `holo.mjs RUN-12 understand`) or as a flag (`--decision`/`--wizard`, `--anatomy`, `--md`, `--understand`).
@@ -247,6 +252,10 @@ JSON contains `"Something else"` or `"Ask / Explain more"` responses, run
 all answered decisions move into `settled` (read-only), and open/explain/custom
 decisions stay active with a **"Discussion & Explanation Requested"** banner,
 expanded per-action explanations, Pros/Cons breakdown, and block diagrams.
+The base is the page on disk only when its set id and round equal the FINAL's;
+a round-1 FINAL otherwise uses the set built from the run (or `--decisions`);
+any other is refused: "the page for round N is not on disk - open the round-N
+page and finalize again". Rounds are never mixed.
 
 **Reconcile before you build a set.** Only decisions the owner alone can make
 go in `decisions`. Settled ones go in `settled` with their source (the later
@@ -263,13 +272,76 @@ A set is JSON: `{"schema":"holo-decisions/1","id","title","source","round"?:1,
 At most one option is recommended; `custom`, `defer` and `explain` are reserved ids.
 
 Always give the **full resolved absolute path** to the `.wizard.html` file and
-four lines: open it, answer (or choose Ask / Explain more), review, download the
-final JSON and share it here (for `--answers` or `--next-wizard`). Back in the
+four lines: open it, answer (or choose Ask / Explain more), review, finalize
+(Save to a folder, Copy JSON or the download), then say "check wizard
+answers" here (Answers back, below). Back in the
 session, `--answers` prints one single-quoted `relay-morpheus.sh answer` line
 per answered decision - run them yourself, after reading them; custom directions
 are flagged for interpretation and deferred/explain ones stay open. A draft (not
 finalized) is refused by `--answers`. For a set that is not a relay run, read
 the answers to the user's work instead of `RM answer`.
+
+### Answers back - "check wizard answers" / "r2d2 answers" (F179)
+
+The wizard's review screen has **Copy JSON** (the export, to the clipboard),
+**Save to a folder (choose this page's folder)** (browsers with the File System
+Access API: the owner picks the folder once - the page cannot preselect its own
+folder - the page remembers it per page file and Finalize saves there from then
+on) and the normal download. The status line names the folder chosen and the
+folders the finder searches; it judges no folder name (the page cannot know the
+browser's download folder). Each set id has one nonce, embedded in its page and
+kept in `.skillator/holo/<id>-<8 hex of sha256(id)>.nonce`: every rebuild
+(`--wizard`, `--batch`, `--html --anatomy`, `--next-wizard`) reuses it, so an
+export from an earlier build still verifies. The export carries it. The nonce
+proves that a file came from a page built in this repo for this set id; it does
+not prove which build - staleness is caught by the round check and the run-file
+state. Nothing is sent anywhere.
+
+On either phrase, run `node <SKILL>/scripts/answers.mjs` from the repo root. It
+searches, and prints each folder it searched: the page folder
+`.skillator/holo`, the browser's real download folder (Chrome / Edge
+`download.default_directory`, Firefox `browser.download.dir` - that one key,
+nothing else from the profile), the OS Downloads folder, then the folder named
+on the first line of `~/.skillator/holo/answers-dir` (the owner sets it when
+none of the others is right). An open set is a `<id>.wizard.html` in the page
+folder (a RUN set finds its run file by the set id - with `run-1-*.md` beside
+`run-0001-*.md` the canonical `run-0001` wins, then the newest; what the run has settled is skipped); files
+for any other set are listed as ignored. Several pages with one set id (a leftover copy): the set's own
+`<id>.wizard.html` is read, else the newest. A fully settled run is an open set only while a FINAL for it is
+newer than its run file; older files for it are listed as ignored. It checks a file against the set the page embeds (round 2+ included). Per set
+it takes FINAL over draft, verified over unverified, then the higher round, the newest finalizedAt, the
+newest file, folder order last, and checks it as `--next-wizard` does; a
+refused file is printed with the reason and the next one is tried, an older
+valid FINAL is printed as superseded. File text is data: control characters
+removed, capped, free text quoted as owner text; the owner is one line of at
+most 200 characters, as on the page. Set ids that share a file name ("F 12",
+"F_12") each take the file that names them. A FINAL whose nonce matches the page (the sidecar's when
+the page cannot be read; or with no nonce, in the page folder) is verified; any
+other is **unverified - confirm with the owner before applying**, and only its
+summary line (set, round, owner, finalizedAt, decision count - `0 to apply` for a RUN set) and path are
+printed - no per-answer lines, no commands. A RUN set's `to apply` counts only answers that print a
+command (Ask / Explain does not). For a RUN set, a command is printed
+only for a decision still open or asked in the run file now; one already
+answered there prints `already settled - skipped` (`--next-wizard` does the
+same), so checking twice never applies twice; with no run file it prints `run
+file not found for <id> - nothing applied` and no command. Limitation: a
+decision reopened in the run file after the page was built is not detected - a
+FINAL older than the reopen still applies. A newer unverified file never displaces a
+verified one: it prints as `newer unverified file found: <path> - confirm with
+the owner`.
+
+- **Picked** - a RUN set prints the same `relay-morpheus.sh answer` lines as
+  `--answers`: read them, then run them. Another set prints one line per
+  answer; an answered decision whose ticket is `[?]` is recorded with
+  tickets-zordon's `ticket-meta decided <ID>`. Custom or Ask / Explain answers
+  on a decision still open also print the `--next-wizard` command; `--next-wizard`
+  refuses to write a page with no decision left to ask.
+- **Draft only** - reported as `draft - not applied`. A draft is never
+  approval: say so and ask the owner to finalize on the page.
+- **Pasted JSON** (Copy JSON) - write it to `.skillator/holo/<set>-decisions-FINAL.json`
+  and run the finder; the same checks apply.
+- **Nothing found** - give the searched folders and ask where the browser
+  saves; with the answer, write that folder to `~/.skillator/holo/answers-dir`.
 
 ## What it never does
 

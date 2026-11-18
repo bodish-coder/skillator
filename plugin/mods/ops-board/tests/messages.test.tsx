@@ -41,7 +41,7 @@ const KV = (o: Record<string, string> = {}) => Object.entries({ result: 'status'
   hosted: '0', listener: 'down', port: '3978', url: '', url_changed: '0', expires: '', ...o }).map(([k, v]) => `${k}=${v}`).join('\n') + '\n'
 const ARMED = { result: 'armed', hosted: '1', listener: 'up', url: U1 }
 
-type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult>; cfgRun?: ProcessRunResult }
+type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string; env?: Record<string, string> }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult | Promise<ProcessRunResult>>; cfgRun?: ProcessRunResult; clear?: ProcessRunResult }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
@@ -87,14 +87,14 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
       return { value: w.gitResult }
     }
     if (a.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
-    w.runs.push({ argv: a, stdin: e.init?.stdin })
+    w.runs.push({ argv: a, stdin: e.init?.stdin, env: e.init?.env })
     // F177: the setup script's board modes, answered from the fixture - nothing is started
-    if (a[0] === '/bin/sh' && a[1] === SETUP_SH && w.arm[a[2] ?? '']) return { value: w.arm[a[2]!]! }
+    if (a[0] === '/bin/sh' && a[1] === SETUP_SH && w.arm[a[2] ?? '']) return { value: await w.arm[a[2]!]! }
     if (a[0] === '/usr/bin/pbcopy') return { value: ran('') }
     if ((a[0] === NODE || a[0] === 'C:/tools/node.exe') && a[1] === TEAM_JS) {
       if (a[2] === 'config' && a[3] === 'show') return { value: w.cfgRun ?? ran(w.cfg) }
       if (a[2] === 'config' && a[3] === 'save') return { value: w.save }
-      if (a[2] === 'config' && a[3] === 'clear') return { value: ran('cleared: /h/.skillator/teams.json\n') }
+      if (a[2] === 'config' && a[3] === 'clear') return { value: w.clear ?? ran('cleared: /h/.skillator/teams.json\n') }
       if (a[2] === 'inbox' && a[3] === 'tail') return { value: ran(INBOX) }
       if (a[2] === 'inbox' && a[3] === 'mark-read') { w.files[commonGitDir + '/skillator/team-inbox.read'] = a[5] + '\n'; return { value: ran(`read up to ${a[5]}\n`) } }
     }
@@ -368,6 +368,45 @@ test('B29: the setup form says when the saved settings cannot be read, and why',
   await ui.unmount()
 })
 
+// B29: team.mjs started through a linked plugin path exited 0 having saved nothing, and the
+// board said saved. The toast names the file team.mjs wrote; no 'saved: <path>' line, or a
+// refusal, is a ✗ toast as well as the form's line. The pane sets no env of its own: the child
+// keeps the host's home (verified the same as the board's), so it writes the file the listener reads.
+const DUMMY = 'ZHVtbXktdG9rZW4tYjI5'   // base64 of dummy-token-b29: the form asks base64
+test('B29: a save toasts the file written; no saved line or a refusal is a ✗ toast', { timeoutMs: 60_000 }, async ($, on) => {
+  const [w, clock] = world(on, CFG_SET)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  const save = async () => {
+    await ui.press({ key: 'key:setup' })
+    await clock.settle()
+    await ui.input({ key: 'setup:token', text: DUMMY, kind: 'change' })
+    await ui.press({ key: 'setup:save' })
+    await clock.settle()
+  }
+  await save()
+  const run = w.runs.find(r => r.argv[3] === 'save')!
+  expect(run.argv).toEqual([NODE, TEAM_JS, 'config', 'save'])
+  expect(run.env).toBeUndefined()
+  expect(w.toasts.at(-1)).toContain('✓ Teams settings saved - saved: /h/.skillator/teams.json')
+
+  w.save = ran('')                                   // exit 0, nothing said: nothing saved
+  await save()
+  expect(w.toasts.at(-1)).toContain('✗ Teams settings not saved')
+  expect(w.toasts.at(-1)).not.toContain('✓')
+  expect((await ui.find({ key: 'setup:result' }))?.text).toContain('teams-uhura did not say it saved')
+
+  w.save = ran('', 1, 'team: token: required')       // refused: a toast, not only the form's line
+  await ui.press({ key: 'setup:save' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toContain('✗ Teams settings not saved: token: required')
+  expect((await ui.find({ key: 'setup:result' }))?.text).toContain('token: required')
+  for (const t of w.toasts) expect(t).not.toContain(DUMMY)
+  await ui.unmount()
+})
+
 // F98: the form offers the first-time setup script, after a confirm; only its --check pass runs
 // here (the walk asks questions and opens a sign-in), and the walk's command is shown for the
 // owner's terminal. Cancel runs nothing.
@@ -539,6 +578,12 @@ test('F177 refusals: devtunnel missing, not signed in, no token - a toast each, 
     expect((await ui.find({ key: 'arm' }))?.text).toContain('○ tunnel not hosted · ○ listener down')
   }
   expect((await ui.find({ key: 'arm' }))?.text).toContain('form: no token')
+  // A226 review 1: a key twice - the reply is not read, and the toast says so without echoing it
+  w.arm = { '--arm': ran(KV({ result: 'refused', why: 'x' }) + 'result=armed\nhosted=1\n') }
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toContain('✗ Teams: unexpected output from teams-uhura')
+  expect(w.toasts.at(-1)).not.toContain('hosted=1')
   // the script could not run: a toast, no crash
   w.arm = {}
   await ui.press({ key: 'key:connect' })
@@ -568,10 +613,145 @@ test('F177 URL guard frames: unchanged URL - no warning; changed - the warning w
   expect(shown[0]).toContain('▲ tunnel URL changed - update the Teams outgoing webhook callback to')
   expect(shown.join('\n')).toContain(U2)
   expect((await ui.find({ key: 'arm:url' }))?.text).toContain(U2)
+  // A226 review 1: y while c is in flight - copied, and acked once the arm is done, with no second press
+  let finish!: (r: ProcessRunResult) => void
+  w.arm['--arm'] = new Promise(resolve => { finish = resolve })
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
   await ui.press({ key: 'key:copyurl' })
   await clock.settle()
   expect(w.runs.filter(r => r.argv[0] === '/usr/bin/pbcopy').at(-1)?.stdin).toBe(U2)
+  expect(modes()).not.toContain('--ack')                     // not under the arm
+  finish(ran(KV({ ...ARMED, url: U2, url_changed: '1' })))
+  await clock.settle()
   expect(modes().at(-1)).toBe('--ack')                       // the owner took the new URL
+  expect(modes().filter(m => m === '--ack')).toHaveLength(1)
+  expect(w.runs.filter(r => r.argv[1] === SETUP_SH).at(-1)?.argv[3]).toBe(U2)  // A226 d: the URL copied, not the one read at ack time
+  expect(w.toasts.join('\n')).not.toContain('devtunnels.ms')
   expect(await warns()).toEqual([])
+  // A226 review 1: a failed ack's toast names the URL by <url>, redacted by value
+  w.arm = { '--status': ran(KV({ ...ARMED, result: 'status', url: U2, url_changed: '1' })), '--ack': ran(KV({ ...ARMED, result: 'failed', why: 'no tunnel URL to remember', url: '' })) }
+  await ui.press({ key: 'tab:tickets' })
+  await clock.settle()
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  await ui.press({ key: 'key:copyurl' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toContain('✗ Teams: no tunnel URL to remember')
+  expect(w.toasts.at(-1)).toContain(' --ack <url>')
+  expect(w.toasts.join('\n')).not.toContain('devtunnels.ms')
+  await ui.unmount()
+})
+
+// A235 3: the URL y copied under d is never acked after the disarm. A235 fix 1: an ack reply
+// never overwrites the view of an arm started after it
+test('A235 3: no deferred ack after a disarm; an ack reply never overwrites a later arm', async ($, on) => {
+  const [w, clock] = world(on)
+  const modes = () => w.runs.filter(r => r.argv[1] === SETUP_SH).map(r => r.argv[2])
+  const warns = async () => (await ui.findAll({})).filter(x => !!x.key && x.key.startsWith('arm:warn')).map(x => x.text)
+  const later = () => { let done!: (r: ProcessRunResult) => void; const p = new Promise<ProcessRunResult>(r => { done = r }); return [p, (r: ProcessRunResult) => done(r)] as const }
+  w.files['/usr/bin/pbcopy'] = 'ELF'
+  w.arm = { '--status': ran(KV({ ...ARMED, result: 'status', url: U2, url_changed: '1' })) }
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  // y under d: copied, never acked once the disarm lands
+  const [disarm, endDisarm] = later()
+  w.arm['--disarm'] = disarm
+  await ui.press({ key: 'key:disconnect' })
+  await clock.settle()
+  await ui.press({ key: 'key:copyurl' })
+  await clock.settle()
+  endDisarm(ran(KV({ result: 'disarmed' })))
+  await clock.settle()
+  expect(modes()).not.toContain('--ack')
+  // y under c: acked after it; c pressed while that ack is in flight lands armed, then the ack replies
+  w.arm['--status'] = ran(KV({ ...ARMED, result: 'status', url: U2, url_changed: '1' }))
+  await ui.press({ key: 'tab:tickets' })
+  await clock.settle()
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  const [arm, endArm] = later()
+  const [ack, endAck] = later()
+  w.arm['--arm'] = arm
+  w.arm['--ack'] = ack
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
+  await ui.press({ key: 'key:copyurl' })
+  await clock.settle()
+  endArm(ran(KV({ ...ARMED, url: U2, url_changed: '1' })))
+  await clock.settle()
+  expect(modes().at(-1)).toBe('--ack')
+  const U3 = 'https://nn11mm22-3978.euw.devtunnels.ms'
+  w.arm['--arm'] = ran(KV({ ...ARMED, url: U3, url_changed: '1' }))
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
+  endAck(ran(KV({ ...ARMED, result: 'acked', url: U2 })))
+  await clock.settle()
+  expect((await ui.find({ key: 'arm:url' }))?.text).toContain(U3)   // the armed view stays
+  expect((await warns()).join(' ')).toContain('tunnel URL changed')
+  await ui.unmount()
+})
+
+// A235 fix 3: the ack y deferred under c runs only after an armed (or hosted) reply
+test('A235 fix 3: the deferred ack is dropped after a refused, failed or unreadable arm reply', async ($, on) => {
+  const [w, clock] = world(on)
+  const modes = () => w.runs.filter(r => r.argv[1] === SETUP_SH).map(r => r.argv[2])
+  const later = () => { let done!: (r: ProcessRunResult) => void; const p = new Promise<ProcessRunResult>(r => { done = r }); return [p, (r: ProcessRunResult) => done(r)] as const }
+  w.files['/usr/bin/pbcopy'] = 'ELF'
+  w.arm = { '--status': ran(KV({ ...ARMED, result: 'status', url: U2, url_changed: '1' })), '--ack': ran(KV({ ...ARMED, result: 'acked', url: U2 })) }
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  const keep = { url: U2, url_changed: '1' }                 // so the next y still has a URL to copy
+  for (const reply of [ran(KV({ result: 'refused', why: 'not signed in', ...keep })), ran(KV({ result: 'failed', why: 'the tunnel did not start', ...keep })), ran('result=armed\nresult=armed\n')]) {
+    const [arm, endArm] = later()
+    w.arm['--arm'] = arm
+    await ui.press({ key: 'key:connect' })
+    await clock.settle()
+    await ui.press({ key: 'key:copyurl' })
+    await clock.settle()
+    endArm(reply)
+    await clock.settle()
+    expect(modes()).not.toContain('--ack')
+  }
+  // a failed reply that still says hosted=1: the ack runs
+  const [arm, endArm] = later()
+  w.arm['--arm'] = arm
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
+  await ui.press({ key: 'key:copyurl' })
+  await clock.settle()
+  endArm(ran(KV({ result: 'failed', why: 'x', hosted: '1', url: U2, url_changed: '1' })))
+  await clock.settle()
+  expect(modes().filter(m => m === '--ack')).toHaveLength(1)
+  await ui.unmount()
+})
+
+// A235 8: Clear counts only with team.mjs's 'cleared:' or 'nothing saved' line
+test('A235 8: an exit 0 from config clear without its line is not a clear', async ($, on) => {
+  const [w, clock] = world(on, CFG_SET)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  const clear = async () => {
+    await ui.press({ key: 'key:setup' })
+    await clock.settle()
+    await ui.press({ key: 'setup:clear' })
+    await ui.press({ key: 'setup:clear-yes' })
+    await clock.settle()
+  }
+  w.clear = ran('')
+  await clear()
+  expect(w.toasts.join('\n')).not.toContain('✓ Teams settings cleared')
+  expect((await ui.find({ key: 'setup:result' }))?.text).toContain('teams-uhura did not say it cleared')
+  w.clear = ran('nothing saved at /h/.skillator/teams.json\n')
+  await ui.press({ key: 'setup:clear' })
+  await ui.press({ key: 'setup:clear-yes' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toContain('✓ Teams settings cleared - nothing saved at /h/.skillator/teams.json')
   await ui.unmount()
 })

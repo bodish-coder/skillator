@@ -3,10 +3,11 @@ import type { Call } from './calls'
 import { GROUPS, isOpen, STATE_NAME, visible } from './board'
 import { sameHandle } from './team'
 
-// F128: dedicated collapsible sections personalized to the active user
-export type UserSection = 'assigned' | 'decide'
-export const USER_SECTIONS: UserSection[] = ['assigned', 'decide']
-export type UserGroup = { id: UserSection; title: string; color: 'suggestion' | 'autoAccept'; tickets: Ticket[]; open: boolean }
+// F128: dedicated collapsible sections personalized to the active user;
+// F178: a third, 'This session (<code>)', when the board knows its own session code
+export type UserSection = 'assigned' | 'decide' | 'session'
+export const USER_SECTIONS: UserSection[] = ['assigned', 'decide', 'session']
+export type UserGroup = { id: UserSection; title: string; color: 'suggestion' | 'autoAccept' | 'warning'; tickets: Ticket[]; open: boolean }
 
 export const assignedTickets = (tickets: readonly Ticket[], user: string | null): Ticket[] =>
   user ? tickets.filter(t => isOpen(t) && sameHandle(t.owner, user)) : []
@@ -14,31 +15,39 @@ export const assignedTickets = (tickets: readonly Ticket[], user: string | null)
 export const decideTickets = (tickets: readonly Ticket[], user: string | null): Ticket[] =>
   user ? tickets.filter(t => isOpen(t) && (sameHandle(t.decide, user) || (t.box === '?' && !t.decide))) : []
 
+export const sessionTickets = (tickets: readonly Ticket[], code: string | null | undefined): Ticket[] =>
+  code ? tickets.filter(t => isOpen(t) && sameHandle(t.assignedSession, code)) : []
+
+// F180: a personal section starts collapsed; 'unfold:<sec>' in `open` is the owner's choice this session
 export const isUserSectionOpen = (open: readonly string[], sec: UserSection): boolean =>
-  !open.includes('fold:' + sec)
+  open.includes('unfold:' + sec)
 
 export const toggleUserSection = (open: readonly string[], sec: UserSection): string[] =>
-  toggleGroup(open, 'fold:' + sec)
+  toggleGroup(open, 'unfold:' + sec)
 
-export const isUserHead = (item: string | null): item is 'head:assigned' | 'head:decide' =>
-  item === 'head:assigned' || item === 'head:decide'
+export const isUserHead = (item: string | null): item is `head:${UserSection}` =>
+  !!item && USER_SECTIONS.some(sec => item === 'head:' + sec)
 
 export const rawTicketId = (item: string | null): string | null =>
-  item ? item.replace(/^(assigned|decide):/, '') : null
+  item ? item.replace(/^(assigned|decide|session):/, '') : null
 
 export function personalGroups(
   tickets: readonly Ticket[],
   user: string | null,
-  opts?: { open?: readonly string[]; assignedFolded?: boolean; decideFolded?: boolean },
+  opts?: { open?: readonly string[]; assignedFolded?: boolean; decideFolded?: boolean; sessionFolded?: boolean; session?: string | null },
 ): UserGroup[] {
-  if (!user) return []
   const open = opts?.open ?? []
-  const assignedOpen = !opts?.assignedFolded && isUserSectionOpen(open, 'assigned')
-  const decideOpen = !opts?.decideFolded && isUserSectionOpen(open, 'decide')
-  return [
-    { id: 'assigned', title: 'Assigned', color: 'suggestion', tickets: assignedTickets(tickets, user), open: assignedOpen },
-    { id: 'decide', title: 'Mine to decide', color: 'autoAccept', tickets: decideTickets(tickets, user), open: decideOpen },
-  ]
+  // the pane holds a folded flag per section; the ops app (no flag) its `open` keys
+  const isOpenSec = (sec: UserSection, folded: boolean | undefined) => (folded === undefined ? isUserSectionOpen(open, sec) : !folded)
+  const out: UserGroup[] = []
+  if (user) {
+    out.push({ id: 'assigned', title: 'Assigned', color: 'suggestion', tickets: assignedTickets(tickets, user), open: isOpenSec('assigned', opts?.assignedFolded) })
+    out.push({ id: 'decide', title: 'Mine to decide', color: 'autoAccept', tickets: decideTickets(tickets, user), open: isOpenSec('decide', opts?.decideFolded) })
+  }
+  if (opts?.session) {
+    out.push({ id: 'session', title: `This session (${opts.session})`, color: 'warning', tickets: sessionTickets(tickets, opts.session), open: isOpenSec('session', opts.sessionFolded) })
+  }
+  return out
 }
 
 export function userHeadText(g: UserGroup, glyphs: Glyphs, _ascii = false): string {
@@ -55,7 +64,7 @@ const OPEN_STATES: State[] = ['~', '%', '!', '?', ' ', '>']
 
 export type Group = { box: State; title: string; tickets: Ticket[]; open: boolean }
 export type Model = {
-  userGroups: UserGroup[]             // F128 / A199: personalized Assigned and Decide sections when me is set
+  userGroups: UserGroup[]             // F128 / A199: Assigned and Decide when me is set; F178: This session with a session code
   groups: Group[]                     // tickets: every one the filter shows, open or not (the count)
   rows: Ticket[]                      // the rows drawn, in order: those of open groups
   items: string[]                     // what up/down walk: 'head:<box>' and ticket ids, drawn order
@@ -69,7 +78,8 @@ export type Model = {
 export type View = {
   board: Board | null; team: Member[]; me: string | null; filter: Filter; filterOpen: boolean
   selected: string | null; expanded: string | null; open: State[]; cols: number
-  assignedFolded?: boolean; decideFolded?: boolean
+  assignedFolded?: boolean; decideFolded?: boolean; sessionFolded?: boolean
+  session?: string | null             // F178: the board's own session code (cc-1ir0), none null
   ascii?: boolean; rows?: number | null // omitted by the standalone ops app
   offset?: number | null              // list rows; null follows the selection
   unread?: number
@@ -158,7 +168,7 @@ export const toggleGroup = <T>(open: readonly T[], b: T): T[] =>
   open.includes(b) ? open.filter(x => x !== b) : [...open, b]
 
 export const chipsOf = (t: Ticket) =>
-  t.apps.length > 0 || !!t.owner || !!t.decide || !!t.tester || t.by.length > 0 || !!t.session || isDecidable(t)
+  t.apps.length > 0 || !!t.owner || !!t.decide || !!t.tester || t.by.length > 0 || !!t.session || !!t.assignedSession || isDecidable(t)
 export const isDecidable = (t: Ticket) => t.box === '?' && !!t.decide
 
 export function buildModel(v: View): Model {
@@ -168,8 +178,10 @@ export function buildModel(v: View): Model {
     open: open as readonly string[],
     assignedFolded: v.assignedFolded,
     decideFolded: v.decideFolded,
+    sessionFolded: v.sessionFolded,
+    session: v.session,
   })
-  const includePersonal = v.me !== null && (v.assignedFolded !== undefined || v.decideFolded !== undefined)
+  const includePersonal = userGroups.length > 0 && (v.assignedFolded !== undefined || v.decideFolded !== undefined || v.sessionFolded !== undefined)
   const groups = GROUPS
     .filter(g => v.filter.showDone || (g.box !== 'x' && g.box !== '-'))
     .map(g => ({ ...g, tickets: shown.filter(t => t.box === g.box), open: open.includes(g.box) }))
@@ -183,7 +195,7 @@ export function buildModel(v: View): Model {
   // A ticket whose group is collapsed shows as its header selected; it is still the one
   // stored, so opening the group lands back on it.
   const want = v.selected
-  const userHome = includePersonal && want && /^(assigned|decide):/.test(want)
+  const userHome = includePersonal && want && /^(assigned|decide|session):/.test(want)
     ? userGroups.find(ug => ug.tickets.some(t => `${ug.id}:${t.id}` === want))
     : undefined
   const home = want && !isHead(want) ? groups.find(g => g.tickets.some(t => t.id === want)) : undefined

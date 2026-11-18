@@ -29,6 +29,7 @@ type World = {
   rate: Rate[]
   cost: number | null
   runs: (readonly string[])[]
+  status?: () => Promise<ProcessRunResult>   // F176: ops --status --refresh
 }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
@@ -63,10 +64,11 @@ function world(on: On, env: Record<string, string> = {}): [World, MockClock] {
   on('fs.list', ($, e) => at(e.path) === WATCH
     ? { value: w.flags.map(f => ({ name: f.name, kind: 'file' as const, size: 3, mtimeMs: f.mtimeMs, isLink: false })) }
     : { deny: 'ENOENT ' + e.path })
-  on('process.run', ($, e) => {
+  on('process.run', async ($, e) => {
     const a = e.argv
     if (a.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
     w.runs.push(a)
+    if (a.includes('--status') && w.status) return { value: await w.status() }
     if (a.includes('--machine')) return { value: ran(w.machine) }
     if (a.includes('decide')) return { value: ran(w.decide) }
     if (a.includes('list')) return { value: ran(RELAY_LIST) }
@@ -343,3 +345,35 @@ test('Health tab exposes refresh, resume, resume-cli and force buttons with hotk
   await ui.unmount()
 })
 
+
+// F176 owner ruling 2026-11-17: the Health tab shows every profile with its model rows,
+// the standalone app's table (`ops --status --refresh`); p is the forced read, one at a time.
+const TABLE = 'profile        5h used  7d used\nclaude-bodish  23%      5%       via one turn\n  Opus         -        40%\ncodex          -        30%\n'
+test('F176: p on Health reads every profile once and draws the per-model table', async ($, on) => {
+  const [w, clock] = world(on)
+  let release: () => void = () => {}
+  const gate = new Promise<void>(r => { release = r })
+  w.status = async () => { await gate; return ran(TABLE) }
+  await start($, clock)
+  const ui = await health($, 'terminal')
+  const text = async (key: string) => (await ui.find({ key }))?.text
+  expect((await ui.find({ key: 'key:health-profiles' }))?.props.hotkey).toBe('p')
+  expect(await text('h:profiles')).toBe('PROFILES')
+  expect(await text('profiles')).toBe('p reads every profile (a blank one once)')
+  const first = ui.press({ key: 'key:health-profiles' })
+  await clock.settle()
+  expect(await text('profiles')).toBe('reading every profile...')
+  await ui.press({ key: 'key:health-profiles' })            // in flight: no second read
+  release()
+  await first
+  await clock.settle()
+  const reads = w.runs.filter(a => a.includes('--status'))
+  expect(reads.length).toBe(1)
+  expect(reads[0]!.slice(-2)).toEqual(['--status', '--refresh'])
+  expect(await text('prof:0')).toBe('profile        5h used  7d used')
+  expect(await text('prof:1')).toBe('claude-bodish  23%      5%       via one turn')
+  expect(await text('prof:2')).toBe('  Opus         -        40%')
+  expect(await text('prof:3')).toBe('codex          -        30%')
+  expect(await ui.find({ key: 'profiles' })).toBeUndefined()
+  await ui.unmount()
+})

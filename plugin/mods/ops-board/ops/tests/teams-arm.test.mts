@@ -25,7 +25,7 @@ const onTab = reduce(onInbox(initial(80, 24, NOW), '', null), { name: '4' })
 test('parseArm: the twelve keys; a URL that is not a devtunnels.ms https URL is dropped; no result = null', () => {
   const v = parseArm(KV(ARMED))!
   assert.deepEqual(v, { result: 'armed', why: '', devtunnel: true, login: true, form: true, tunnel: true, hosted: true, listener: true,
-    port: 3978, url: U1, urlChanged: false, expires: '2026-12-17T00:00:00Z' })
+    port: 3978, url: U1, urlChanged: false, expires: '2026-12-17T00:00:00Z', note: null })
   assert.equal(parseArm('listener: up on 127.0.0.1:3978\n'), null)
   assert.equal(parseArm(KV({ result: 'bogus' })), null)
   for (const bad of ['http://ab12cd34-3978.euw.devtunnels.ms', 'https://evil.example/x', 'https://ab12cd34-3978.euw.devtunnels.ms.evil.example', U1 + '/\x1b[2J'])
@@ -34,6 +34,19 @@ test('parseArm: the twelve keys; a URL that is not a devtunnels.ms https URL is 
   assert.equal(parseArm(KV({ port: 'x' }))!.port, 3978)
   assert.equal(parseArm(KV({ result: 'refused', why: 'the form has no token - s, paste the security token, save' }).replace(/\n/g, '\r\n'))!.why,
     'the form has no token - s, paste the security token, save')
+})
+
+test('A226 c: parseArm - a value with a control character is dropped, so a reply cannot forge result= or hosted=', () => {
+  const w = parseArm(KV({ why: 'a\x1b[2Jb', expires: '2026-12-17\x07' }))!
+  assert.equal(w.why, ''); assert.equal(w.expires, null)
+})
+
+test('A226 review 1: a key that appears twice makes the whole reply invalid, before url or after it', () => {
+  const body = KV({ result: 'failed', why: 'x', url: U1 })
+  assert.equal(parseArm(body + 'result=armed\nhosted=1\nlistener=up\n'), null)       // after url
+  assert.equal(parseArm('hosted=1\n' + body), null)                                // before url
+  assert.equal(parseArm(body.replace('url=', 'result=armed\nurl=')), null)          // result twice, both before url
+  assert.equal(parseArm(KV({ why: 'a\x1b[2Jb' }) + 'why=later\n'), null)           // a dropped value still claims its key
 })
 
 test('expiryShown: days, hours under two days, EXPIRED, an unparsed value as printed, none', () => {
@@ -87,6 +100,9 @@ test('the call table: the four modes of setup, both spellings', () => {
     assert.deepEqual(argvFor(call, false, '/s/skills', [], '/bin/sh'), ['/bin/sh', '/s/skills/teams-uhura/scripts/setup.sh', mode])
     assert.deepEqual(argvFor(call, true, 'C:/s/skills/', [], 'C:/ps.exe'), [...PS, mode])
   }
+  // A226 d: --ack carries the URL the board copied
+  assert.deepEqual(argvFor('team-url-ack', false, '/s/skills', [U1], '/bin/sh').slice(2), ['--ack', U1])
+  assert.deepEqual(argvFor('team-url-ack', true, 'C:/s/skills/', [U1], 'C:/ps.exe').slice(-2), ['--ack', U1])
 })
 
 test('entering Messages only reads: config show and the status; no key but c arms, no key but d disarms', () => {
@@ -201,4 +217,107 @@ test('width matrix 80 / 110 / 140: the Messages tab with Teams armed and a chang
   // 40 columns: nothing overflows (the status line is cut, the keys wrap)
   const narrow = frame({ ...onTab.state, cols: 40, rows: 24, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }, P)
   for (const l of narrow) assert.ok(cells(l) <= 40, `40: ${l}`)
+})
+
+test('A235 1: y sends --ack with the URL copied; under c in flight it waits, then runs once the arm lands', () => {
+  const changed: State = { ...onTab.state, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }
+  const copied = (s: State) => {
+    const y = reduce(s, { name: 'y' })
+    const copy = y.effects.find((e): e is Extract<Effect, { kind: 'copy' }> => e.kind === 'copy')!
+    return afterRun({ then: copy.then! }, { code: 0, out: '', err: '', argv: [] }, y.state, NOW)
+  }
+  assert.deepEqual(runs(copied(changed).effects).map(e => [e.call, e.args]), [['team-url-ack', [U2]]])
+  const c = reduce(changed, { name: 'c' })
+  const during = copied(c.state)
+  assert.deepEqual(runs(during.effects), [])                       // not under the arm
+  const armed = afterRun(runs(c.effects)[0]!, ok(KV({ ...ARMED, url: U2, url_changed: '1' })), during.state, NOW)
+  assert.deepEqual(runs(armed.effects).map(e => [e.call, e.args]), [['team-url-ack', [U2]]])
+  // a failed ack's toast never carries the URL
+  const failed = afterRun(runs(armed.effects)[0]!, { ...ok(KV({ ...ARMED, result: 'failed', why: 'no tunnel URL to remember', url: '' })), argv: ['/bin/sh', 'setup.sh', '--ack', U2] }, armed.state, NOW).state
+  assert.match(failed.toast ?? '', /^✗ Teams: no tunnel URL to remember\nran: .* --ack <url>$/)
+})
+
+test('A235 1: a reply parseArm cannot read toasts unexpected output from teams-uhura', () => {
+  const c = reduce(onTab.state, { name: 'c' })
+  const done = afterRun(runs(c.effects)[0]!, ok('result=armed\nresult=armed\n'), c.state, NOW).state
+  assert.match(done.toast ?? '', /^✗ Teams: unexpected output from teams-uhura/)
+  assert.doesNotMatch(done.toast ?? '', /result=armed/)
+})
+
+test('A235 5: a devtunnel the board cannot inspect - a dim note on the arm line, never a failure', () => {
+  const NOTE = 'a devtunnel this board cannot inspect is running'
+  const v = parseArm(KV({ ...ARMED, note: NOTE }))!
+  assert.equal(v.note, NOTE)
+  assert.equal(v.result, 'armed')
+  const arm = armLines(v, NOW, 140)[0]!
+  assert.deepEqual(arm.segs.at(-1), { text: NOTE, dim: true })
+  assert.equal(lines(v, 140)[0]![1], 'Teams  ● tunnel hosted · ● listener up :3978 · form saved · expires in 30d · ' + NOTE)
+  assert.equal(parseArm(KV({ note: 'x\x1b[2J' }))!.note, null)
+  assert.equal(armToast(v), '✓ Teams connected - tunnel hosted, listener up on 127.0.0.1:3978')
+})
+
+test('A235 3: no deferred ack after a disarm', () => {
+  const changed: State = { ...onTab.state, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }
+  const copied = (s: State) => {
+    const y = reduce(s, { name: 'y' })
+    const copy = y.effects.find((e): e is Extract<Effect, { kind: 'copy' }> => e.kind === 'copy')!
+    return afterRun({ then: copy.then! }, { code: 0, out: '', err: '', argv: [] }, y.state, NOW)
+  }
+  const d = reduce(changed, { name: 'd' })
+  const off = afterRun(runs(d.effects)[0]!, ok(KV({ result: 'disarmed' })), copied(d.state).state, NOW)
+  assert.deepEqual(runs(off.effects), [])
+  assert.equal(off.state.ackAfter, null)
+})
+
+test('A235 fix 1: an ack reply never overwrites a view an arm started after it drew', () => {
+  const changed: State = { ...onTab.state, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }
+  const y = reduce(changed, { name: 'y' })
+  const copy = y.effects.find((e): e is Extract<Effect, { kind: 'copy' }> => e.kind === 'copy')!
+  const copied = afterRun({ then: copy.then! }, { code: 0, out: '', err: '', argv: [] }, y.state, NOW)
+  const ack = runs(copied.effects)[0]!
+  // ack in flight; c starts and lands armed; then the ack's reply arrives - the armed view stays
+  const c = reduce(copied.state, { name: 'c' })
+  const NEW = 'https://nn11mm22-3978.euw.devtunnels.ms'
+  const armed = afterRun(runs(c.effects)[0]!, ok(KV({ ...ARMED, url: NEW, url_changed: '1' })), c.state, NOW).state
+  const late = afterRun(ack, ok(KV({ ...ARMED, result: 'acked', url: U2 })), armed, NOW).state
+  assert.equal(late.teamsArm?.url, NEW)
+  assert.equal(late.teamsArm?.urlChanged, true)
+  // and while c is still in flight, the ack's reply is not drawn either
+  const during = afterRun(ack, ok(KV({ ...ARMED, result: 'acked', url: U2 })), c.state, NOW).state
+  assert.deepEqual(during.teamsArm, c.state.teamsArm)
+  // an ack with no arm after it is drawn
+  const acked = afterRun(ack, ok(KV({ ...ARMED, result: 'acked', url: U2 })), copied.state, NOW).state
+  assert.equal(acked.teamsArm?.urlChanged, false)
+})
+
+test('A235 fix 3: the ack y deferred under c runs only after an armed (or hosted) reply; dropped otherwise', () => {
+  const changed: State = { ...onTab.state, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }
+  const under = (reply: Parameters<typeof afterRun>[1]) => {
+    const c = reduce(changed, { name: 'c' })
+    const y = reduce(c.state, { name: 'y' })
+    const copy = y.effects.find((e): e is Extract<Effect, { kind: 'copy' }> => e.kind === 'copy')!
+    const during = afterRun({ then: copy.then! }, { code: 0, out: '', err: '', argv: [] }, y.state, NOW)
+    return afterRun(runs(c.effects)[0]!, reply, during.state, NOW)
+  }
+  assert.deepEqual(runs(under(ok(KV({ ...ARMED, url: U2, url_changed: '1' }))).effects).map(e => e.call), ['team-url-ack'])
+  assert.deepEqual(runs(under(ok(KV({ result: 'failed', why: 'x', hosted: '1', url: U2, url_changed: '1' }))).effects).map(e => e.call), ['team-url-ack'])
+  for (const reply of [ok(KV({ result: 'refused', why: 'not signed in', url: U2 })), ok(KV({ result: 'failed', why: 'the tunnel did not start', url: U2 })),
+    ok('result=armed\nresult=armed\n'), { code: 127, out: '', err: 'sh not found', argv: [] }]) {
+    const r = under(reply)
+    assert.deepEqual(runs(r.effects), [], reply.out)
+    assert.equal(r.state.ackAfter, null)
+  }
+})
+
+test('A235 fix 5: at 80 columns the uninspectable note gets its own dim line under the arm line, never cut', () => {
+  const NOTE = 'a devtunnel this board cannot inspect is running'
+  const v = parseArm(KV({ ...ARMED, note: NOTE }))!
+  const l80 = lines(v, 80)
+  assert.equal(l80[0]![1], 'Teams  ● tunnel hosted · ● listener up :3978 · form saved · expires in 30d')
+  assert.deepEqual(l80[1], ['arm:note', '  ' + NOTE])
+  assert.deepEqual(armLines(v, NOW, 80)[1]!.segs, [{ text: '  ' + NOTE, dim: true }])
+  const f = frame({ ...onTab.state, cols: 80, rows: 24, teamsArm: v }, P)
+  for (const l of f) assert.ok(cells(l) <= 80, l)
+  assert.ok(f.some(l => l.trimEnd() === '  ' + NOTE), 'the note whole on its own line')
+  assert.equal(lines(v, 140)[0]![1], 'Teams  ● tunnel hosted · ● listener up :3978 · form saved · expires in 30d · ' + NOTE)
 })

@@ -55,7 +55,7 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
     let session: string | null = null
     const s = SESSION_TAIL.exec(body)
     if (s) { session = s[1]!; body = body.slice(0, s.index) }
-    let cut = body.search(/ \[(?:app|decide|owner|tester|by):/)
+    let cut = body.search(/ \[(?:app|decide|owner|session|tester|by):/)
     if (cut < 0) cut = body.search(/ \([^()]*\)\s*$/)
     const baseTitle = (cut < 0 ? body : body.slice(0, cut)).trim()
     const title = al ? `${al} ${baseTitle}` : baseTitle
@@ -65,6 +65,7 @@ export function parseBoard(text: string, path: string, mtimeMs: number, size: nu
       indent, section,
       apps: handles(tag(body, 'app') ?? ''), decide: tag(body, 'decide')?.toLowerCase() ?? null,
       owner: tag(body, 'owner')?.toLowerCase() ?? null, tester: tag(body, 'tester')?.toLowerCase() ?? null, by: handles(tag(body, 'by') ?? ''), session,
+      assignedSession: tag(body, 'session')?.toLowerCase() ?? null,
     }
     tickets.push(t)
     stack.push(t)

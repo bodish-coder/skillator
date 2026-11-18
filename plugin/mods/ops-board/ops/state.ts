@@ -9,7 +9,7 @@ import type { Model, View } from '../hooks/lib/ticketsmodel'
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
 import { NO_SCRIPTS, decideQuestionsPrompt, holoTicketCmd, loginMessage, loginStatus } from '../hooks/lib/calls'
 export { decideQuestionsPrompt, holoTicketCmd }
-import { appliedHead, appliedLine, applyOf, assignedTickets, buildModel, canApply, decideTickets, HEAD, headKey, isHead, isUserHead, isUserSectionOpen, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
+import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, isUserHead, parseReconcile, personalGroups, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME, ticketById, visible } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
@@ -20,7 +20,7 @@ export { parseFollowupOut, startRunCmd }
 import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { armToast, parseArm } from '../hooks/lib/teamsarm'
-import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
+import { CLEARED_LINE, freshSetup, parseCfgView, resultLine, SAVED_LINE, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
 import type { SetupField, SetupValues } from '../hooks/lib/teamsconfig'
 import { enterRunEffect, RUN_INITIAL, runKey } from './runtab'
 import type { RunState } from './runtab'
@@ -175,6 +175,7 @@ export function point(s: State, a: PointerAction): Step {
 export type State = {
   tab: Tab
   board: Board | null; team: Member[]; me: string | null
+  session: string | null                   // F178: this app's session code (SKILLATOR_SESSION / Claude Code's), none null
   filter: Filter; filterField: FilterField | null
   selected: string | null; expanded: string | null; showTeam: boolean
   open: Box[]                              // F61: the open groups' boxes this session; none = all collapsed
@@ -205,6 +206,9 @@ export type State = {
   messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
   teamsCfg: TeamsCfgView | null
   teamsArm: ArmView | null; armBusy: boolean   // F177: what setup --status last said; an arm / disarm in flight
+  ackAfter: string | null                      // A235: the URL y copied while an arm was in flight
+  armSeq: number                               // A235: bumped as each arm / disarm starts; a read started before is stale
+  profiles: string | null; profilesBusy: boolean  // F176: the last `ops --status --refresh` table (p on Health); one in flight
   setup: Setup | null; setupField: SetupField
   help: HelpState | null                       // F127: Help & Skills guide viewer
   explorer: ExState                        // F75: the Explorer tab (ops/explorer.ts)
@@ -226,6 +230,7 @@ export type Effect = { kind: 'run'; call: Call; args: string[]; then: Then; stdi
   | { kind: 'mute'; text: string; then?: Then }       // F87: write the watchdog mute file ('' = unmuted); code 1 + err when it failed
   | { kind: 'skill-doc'; skillId: string; then: Then } // A198: read-only bounded SKILL.md load
   | { kind: 'copy'; text: string; label?: string; then?: Then } // A198 / F160: clipboard write
+  | { kind: 'status'; refresh: boolean; then: Then }  // F176: ops --status [--refresh] as a table
 
 // A `then`'s answer as a step: a bare state asks for nothing more.
 export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: x, effects: [] })
@@ -236,14 +241,14 @@ export const afterRun = (e: { then: Then }, r: RunResult, s: State, now: number)
 const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help']
 
 export const initial = (cols: number, rows: number, now: number): State => ({
-  tab: 'tickets', board: null, team: [], me: null,
+  tab: 'tickets', board: null, team: [], me: null, session: null,
   filter: { app: null, who: null, mine: false, showDone: false }, filterField: null,
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, profile: null, relay: null,
   runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null, startRun: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', decide: null, person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
-  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, teamsArm: null, armBusy: false, setup: null, setupField: 'token',
+  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, teamsArm: null, armBusy: false, ackAfter: null, armSeq: 0, profiles: null, profilesBusy: false, setup: null, setupField: 'token',
   help: null,
   explorer: EX0,
   ...RUN_INITIAL,
@@ -257,20 +262,9 @@ export const viewOf = (s: State): View => ({
 export const activeUser = (s: State): string | null => s.me ?? s.teamSelected ?? null
 
 export function ticketsItems(s: State, m: Model): string[] {
-  const user = activeUser(s)
-  if (!user || !s.board) return m.items
-  const tickets = visible(s.board, s.filter, s.me)
-  const assigned = assignedTickets(tickets, user)
-  const decide = decideTickets(tickets, user)
-  const assignedOpen = isUserSectionOpen(s.open as string[], 'assigned')
-  const decideOpen = isUserSectionOpen(s.open as string[], 'decide')
-  return [
-    'head:assigned',
-    ...(assignedOpen ? assigned.map(t => 'assigned:' + t.id) : []),
-    'head:decide',
-    ...(decideOpen ? decide.map(t => 'decide:' + t.id) : []),
-    ...m.items,
-  ]
+  if (!s.board) return m.items
+  const groups = personalGroups(visible(s.board, s.filter, s.me), activeUser(s), { open: s.open as string[], session: s.session })
+  return [...groups.flatMap(g => [headKey(g.id), ...(g.open ? g.tickets.map(t => g.id + ':' + t.id) : [])]), ...m.items]
 }
 
 export function onBoard(s: State, board: Board, team: Member[], me: string | null): State {
@@ -304,9 +298,9 @@ function addNotes(xs: string[], add: string[], drop: (n: string) => boolean = ()
 // The handle a fresh dialog starts on: the ticket's own (owner or decider) when on the
 // team, else me, else the first member - as team.md writes it (moved verbatim from assign.tsx).
 // F77: no ticket yet (its ID still to be typed) - me, else the first member.
-export function startHandle(t: Ticket | null, kind: 'owner' | 'decide' | 'tester', team: Member[], me: string | null): string | null {
+export function startHandle(t: Ticket | null, kind: AssignDraft['kind'], team: Member[], me: string | null): string | null {
   const on = (h: string | null) => team.find(m => sameHandle(m.handle, h))?.handle ?? null
-  return on(t ? (kind === 'owner' ? t.owner : kind === 'decide' ? t.decide : t.tester) : null) ?? on(me) ?? team[0]?.handle ?? null
+  return on(t && kind !== 'session' ? (kind === 'owner' ? t.owner : kind === 'decide' ? t.decide : t.tester) : null) ?? on(me) ?? team[0]?.handle ?? null
 }
 
 // The people the dialog lists: the team, plus the draft's handle when it is not on it.
@@ -317,7 +311,9 @@ function peopleOf(s: State): Member[] {
 
 // F77: the heading names the ticket the Ticket field resolves to, else "a ticket".
 const titleOf = (d: AssignDraft, t: Ticket | null) =>
-  `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : d.kind === 'tester' ? ' for testing' : ''}`
+  `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : d.kind === 'tester' ? ' for testing' : d.kind === 'session' ? ' to a session' : ''}`
+// F178: the code a session draft assigns - its pick, else this app's own session.
+const sessionOf = (s: State): string | null => s.dialog?.session ?? s.session
 // The ticket the dialog's Ticket field names (typed in any case), or null.
 const dialogTicket = (s: State): Ticket | null => (s.dialog ? ticketById(s.board?.tickets, s.dialog.id) : null)
 
@@ -349,8 +345,8 @@ export function dialogLines(s: State): string[] {
       ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${STATE_NAME[to]}; the tag stays - tell that session`
       : `  ! ${tk.id} is in progress - this moves it to ${STATE_NAME[to]}; tell whoever is working it`)
   }
-  const metaCmd = d.kind === 'decide' ? 'decide' : d.kind === 'tester' ? 'assign-tester' : 'assign'
-  out.push(`  Runs    ticket-meta ${metaCmd} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`)
+  const metaCmd = d.kind === 'decide' ? 'decide' : d.kind === 'tester' ? 'assign-tester' : d.kind === 'session' ? 'assign-session' : 'assign'
+  out.push(`  Runs    ticket-meta ${metaCmd} ${tk?.id ?? '<ID>'} ${d.kind === 'session' ? sessionOf(s) ?? '?' : d.handle ?? '@?'}`)
   if (d.result) out.push(`  ${d.result}`)
   out.push('  Enter confirm · Esc cancel')
   return out
@@ -378,9 +374,17 @@ function confirmAssign(s: State): Step {
   // F77: Assign waits for the Ticket field to name a ticket; ticket-meta gets the board's ID.
   const tk = dialogTicket(s)
   if (!tk) return { state: { ...s, dialog: { ...d, result: d.id.trim() ? 'no such ticket' : 'type a ticket ID first' } }, effects: [] }
+  const id = tk.id
+  if (d.kind === 'session') {
+    const code = sessionOf(s)
+    if (!code) return { state: { ...s, dialog: { ...d, result: 'no session known - ticket-meta iam names one' } }, effects: [] }
+    const done: Then = r => x => r.code !== 0
+      ? (x.dialog ? { ...x, dialog: { ...x.dialog, result: timedOut(r) ? 'ticket-meta did not finish in 30 s' : why(r, 'ticket-meta') } } : x)
+      : { ...x, dialog: null, toast: [`✓ ${id} assigned to session ${code}: ${tk.title}`, ...notesOf(r.out), ran(r.argv)].join('\n') }
+    return { state: s, effects: [run('meta-assign-session', [id, code], done)] }
+  }
   if (!d.handle) return { state: { ...s, dialog: { ...d, result: 'pick someone first' } }, effects: [] }
   const handle = d.handle
-  const id = tk.id
   const then: Then = r => x => {
     if (r.code !== 0) {
       const text = timedOut(r) ? 'ticket-meta did not finish in 30 s' : why(r, 'ticket-meta')
@@ -892,6 +896,15 @@ function forceResume(s: State): Step {
   return { state: s, effects: [run('pending-machine', [], read)] }
 }
 
+// F176: p on Health - every profile's row and model rows, blank ones read once (ops --status --refresh).
+function readProfiles(s: State): Step {
+  if (s.profilesBusy) return { state: s, effects: [] }
+  const then: Then = r => x => (r.code === 0 && r.out.trim()
+    ? toast({ ...x, profiles: r.out, profilesBusy: false }, '↻ profiles read')
+    : toast({ ...x, profilesBusy: false }, `profiles not read: ${r.err.trim() || `exit ${r.code}`}`))
+  return { state: toast({ ...s, profilesBusy: true }, '… reading every profile (blank ones get one usage read)'), effects: [{ kind: 'status', refresh: true, then }] }
+}
+
 export function refreshHealth(s: State): Step {
   const readUsageThen: Then = r => x => {
     const out = r.code === 0 ? r.out : ''
@@ -1207,11 +1220,8 @@ function ticketsKey(s: State, k: Key): Step {
     return { state: to ? { ...s, selected: to } : s, effects: [] }
   }
   const toggleHeader = (id: string): Step => {
-    if (id === 'head:assigned') {
-      return { state: { ...s, open: toggleUserSection(s.open as string[], 'assigned') as any }, effects: [] }
-    }
-    if (id === 'head:decide') {
-      return { state: { ...s, open: toggleUserSection(s.open as string[], 'decide') as any }, effects: [] }
+    if (isUserHead(id)) {
+      return { state: { ...s, open: toggleUserSection(s.open as string[], id.slice(HEAD.length) as UserSection) as any }, effects: [] }
     }
     const g = m.groups.find(x => headKey(x.box) === id)
     const keep = s.selected && !isHead(s.selected) && g?.tickets.some(t => t.id === s.selected)
@@ -1292,17 +1302,25 @@ function saveSetup(s: State): Step {
   const bad = setupError(v, s.teamsCfg)
   if (bad) return { state: { ...s, setup: { ...v, result: bad } }, effects: [] }
   const then: Then = r => x => {
-    if (r.code !== 0) return x.setup ? { ...x, setup: { ...x.setup, result: teamWhy(r, 'teams-uhura') } } : toast(x, teamWhy(r, 'teams-uhura'))
-    const said = r.out.trim().split(/\r?\n/)[0] ?? ''
-    return { state: { ...x, setup: null, toast: [`✓ Teams settings saved${said ? ' - ' + said : ''}`, ran(r.argv)].join('\n') }, effects: [showCfg(false)] }
+    // B29 / A235: only teams-uhura's 'saved: <path>' line is a save; a refusal is a toast and stays in the form
+    const said = resultLine(r.out, SAVED_LINE, 'saved')
+    const failed = r.code !== 0 ? teamWhy(r, 'teams-uhura') : said.bad
+    if (failed) {
+      const y = toast(x, [`✗ Teams settings not saved: ${failed}`, ran(r.argv)].join('\n'))
+      return y.setup ? { ...y, setup: { ...y.setup, result: failed } } : y
+    }
+    return { state: { ...x, setup: null, toast: [`✓ Teams settings saved - ${said.line}`, ran(r.argv)].join('\n') }, effects: [showCfg(false)] }
   }
   return { state: { ...s, setup: { ...v, result: null } }, effects: [run('team-config-save', [], then, setupJson(v))] }
 }
 
 function clearSetup(s: State): Step {
   const then: Then = r => x => {
-    if (r.code !== 0) return x.setup ? { ...x, setup: { ...x.setup, result: teamWhy(r, 'teams-uhura'), confirmClear: false } } : toast(x, teamWhy(r, 'teams-uhura'))
-    return { state: { ...x, setup: null, toast: [`✓ Teams settings cleared - ${r.out.trim().split(/\r?\n/)[0] ?? ''}`, ran(r.argv)].join('\n') }, effects: [showCfg(false)] }
+    // A235: only its 'cleared:' / 'nothing saved' line is a clear
+    const said = resultLine(r.out, CLEARED_LINE, 'cleared')
+    const failed = r.code !== 0 ? teamWhy(r, 'teams-uhura') : said.bad
+    if (failed) return x.setup ? { ...x, setup: { ...x.setup, result: failed, confirmClear: false } } : toast(x, failed)
+    return { state: { ...x, setup: null, toast: [`✓ Teams settings cleared - ${said.line}`, ran(r.argv)].join('\n') }, effects: [showCfg(false)] }
   }
   return { state: { ...s, setup: { ...s.setup!, confirmClear: false } }, effects: [run('team-config-clear', [], then)] }
 }
@@ -1468,20 +1486,26 @@ function markRead(s: State): Step {
 // --- F177: connect Teams. c runs setup --arm, d setup --disarm, y copies the URL. Only
 // these keys act; entering the tab runs --status (a read). ---
 type ArmCall = 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack'
-const armThen = (call: ArmCall): Then => r => x => {
+const armThen = (call: ArmCall, args: string[] = [], seq = 0): Then => r => x => {
   const quiet = call === 'team-arm-status' || call === 'team-url-ack'
-  if (quiet && x.armBusy) return x                 // an arm or disarm in flight is the newer read
-  const y: State = quiet ? x : { ...x, armBusy: false }
+  // an arm or disarm in flight, or started after this read, is the newer view
+  if (quiet && (x.armBusy || x.armSeq !== seq)) return x
   const v = parseArm(r.out)
-  if (!v) return quiet ? y : toast(y, `✗ Teams: ${teamWhy(r, 'teams-uhura setup')}`)
-  const said = armToast(v)
-  return said ? toast({ ...y, teamsArm: v }, [said, ran(r.argv)].join('\n')) : { ...y, teamsArm: v }
+  // A235: the URL y copied under an arm is acked once it lands armed (or hosted); else dropped
+  const effects = call === 'team-arm' && x.ackAfter && (v?.result === 'armed' || v?.hosted) ? [ackRun(x.ackAfter, x.armSeq)] : []
+  const y: State = quiet ? x : { ...x, armBusy: false, ackAfter: null }
+  // a toast never carries the URL: the ack's argument is replaced by value
+  const said = (t: string) => args.filter(Boolean).reduce((m, a) => m.split(a).join('<url>'), [t, ran(r.argv)].join('\n'))
+  if (!v) return { state: quiet ? y : toast(y, said(`✗ Teams: ${r.code === 0 ? 'unexpected output from teams-uhura' : teamWhy(r, 'teams-uhura setup')}`)), effects }
+  const t = armToast(v)
+  return { state: t ? toast({ ...y, teamsArm: v }, said(t)) : { ...y, teamsArm: v }, effects }
 }
-const armStatus = (): Effect => run('team-arm-status', [], armThen('team-arm-status'))
+const armStatus = (seq: number): Effect => run('team-arm-status', [], armThen('team-arm-status', [], seq))
+const ackRun = (url: string, seq: number): Effect => run('team-url-ack', [url], armThen('team-url-ack', [url], seq))
 
 function armRun(s: State, call: 'team-arm' | 'team-disarm'): Step {
   if (s.armBusy) return { state: toast(s, 'Teams: still working - one moment'), effects: [] }
-  return { state: { ...s, armBusy: true, toast: call === 'team-arm' ? 'Connecting Teams…' : 'Disconnecting Teams…' }, effects: [run(call, [], armThen(call))] }
+  return { state: { ...s, armBusy: true, armSeq: s.armSeq + 1, toast: call === 'team-arm' ? 'Connecting Teams…' : 'Disconnecting Teams…' }, effects: [run(call, [], armThen(call))] }
 }
 
 function copyUrl(s: State): Step {
@@ -1489,8 +1513,9 @@ function copyUrl(s: State): Step {
   if (!url) return { state: toast(s, 'no tunnel URL yet - c connects'), effects: [] }
   const then: Then = r => x => r.code !== 0
     ? toast(x, `✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`)
-    : { state: toast(x, '✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL'),
-        effects: x.teamsArm?.urlChanged ? [run('team-url-ack', [], armThen('team-url-ack'))] : [] }
+    // A235: the ack carries the URL copied; under a connect or disconnect in flight it waits for it
+    : { state: toast(x.teamsArm?.urlChanged && x.armBusy ? { ...x, ackAfter: url } : x, '✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL'),
+        effects: x.teamsArm?.urlChanged && !x.armBusy ? [ackRun(url, x.armSeq)] : [] }
   return { state: s, effects: [{ kind: 'copy', text: url, then }] }
 }
 
@@ -1513,7 +1538,7 @@ function messagesKey(s: State, k: Key): Step {
 function toTab(s: State, tab: Tab): Step {
   if (tab === 'help') return openHelp(s)
   const effects: Effect[] = tab === 'runs' && s.tab !== 'runs' ? [{ kind: 'poll', what: 'runs' }] : []
-  if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(false), armStatus())
+  if (tab === 'messages' && s.tab !== 'messages') effects.push(showCfg(false), armStatus(s.armSeq))
   if (tab === 'explorer' && s.tab !== 'explorer') effects.push(...enterExplorer(s).effects)
   if (tab === 'run' && s.tab !== 'run') effects.push(enterRunEffect())
   return { state: { ...s, tab, help: null }, effects }
@@ -2723,6 +2748,7 @@ export function reduce(s: State, k: Key): Step {
     if (k.name === 'u' || k.name === 'R') return resume(s)
     if (k.name === 'c') return resumeCli(s)
     if (k.name === 'f' || k.name === 'F') return forceResume(s)
+    if (k.name === 'p') return readProfiles(s)
   }
   switch (k.name) {
     case 'q': return quit

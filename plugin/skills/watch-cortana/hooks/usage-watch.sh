@@ -329,7 +329,9 @@ spawn_quota_refresh() {
 start_quota_refresh() {
   [ -n "$1" ] && [ -n "$2" ] || return 0
   lock="$2/quota-cache.json.refreshing"
-  if fresh_file "$lock" 60; then
+  # F176: stale at 90 s - over the refresh's capped CLI calls (20 s + 30 s), so a read
+  # still alive always holds it and a second reader can never start a turn beside it.
+  if fresh_file "$lock" 90; then
     note_tag=" note=refresh_pending"
     return 0
   fi
@@ -340,7 +342,9 @@ start_quota_refresh() {
     return 0
   fi
   note_tag=" note=refresh_pending"
-  spawn_quota_refresh "$1" "$2"
+  # F176: `ops --status --refresh` waits for the read, under the same lock.
+  if [ "${SKILLATOR_QUOTA_REFRESH_WAIT:-}" = 1 ]; then sh "$0" refresh "$1" "$2" >/dev/null 2>&1 </dev/null
+  else spawn_quota_refresh "$1" "$2"; fi
 }
 
 if [ "$mode" = refresh ]; then
@@ -350,20 +354,60 @@ if [ "$mode" = refresh ]; then
   lock="$target_dir/quota-cache.json.refreshing"
   cache="$target_dir/quota-cache.json"
   mkdir -p "$target_dir"
-  parsed=""
+  parsed=""; turned=""
   raw=""
+  # F176: each claude call is capped (secs, function); on expiry its whole process
+  # tree is killed, so no read outlives the lock.
+  # Parent first (its children listed beforehand), so nothing it runs gets to finish.
+  # A listed child that started before its parent (start tick from /proc, where there is
+  # one) is an orphan whose dead parent's PID was reused - never ours, never killed. A start
+  # that cannot be read or compared is killed.
+  started() { sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{ print $20 }'; }
+  kill_tree() {
+    t=$(started "$1")
+    set -- "$1" $(ps -ef 2>/dev/null | awk -v p="$1" '$3 == p { print $2 }' |
+      while read -r c; do s=$(started "$c"); [ -n "$t" ] && [ -n "$s" ] && [ "$s" -lt "$t" ] 2>/dev/null || echo "$c"; done)
+    [ -r "/proc/$1/winpid" ] && MSYS_NO_PATHCONV=1 taskkill /T /F /PID "$(cat "/proc/$1/winpid")" >/dev/null 2>&1
+    kill -9 "$1" 2>/dev/null
+    shift
+    for c in "$@"; do kill_tree "$c"; done
+  }
+  capped() {
+    out="$target_dir/quota-cache.json.out"
+    "$2" > "$out" 2>/dev/null &
+    cp_pid=$!
+    # The watchdog ends itself within 1 s of the call; never kill it - it may be mid-tree.
+    ( n=0; while [ "$n" -lt "$1" ]; do sleep 1; kill -0 "$cp_pid" 2>/dev/null || exit 0; n=$((n + 1)); done
+      kill_tree "$cp_pid" ) >/dev/null 2>&1 </dev/null &
+    wait "$cp_pid" 2>/dev/null
+    cat "$out" 2>/dev/null; rm -f "$out"
+  }
+  # The CLI's own hooks must never see a forced read (WAIT) and start one themselves.
+  claude_get_usage() {
+    printf '%s\n' '{"type":"control_request","request_id":"u1","request":{"subtype":"get_usage","skip_behaviors":true}}' |
+      MSYS_NO_PATHCONV=1 SKILLATOR_QUOTA_REFRESH_WAIT= CLAUDE_CONFIG_DIR="$target_dir" claude -p --input-format stream-json --output-format stream-json --verbose
+  }
+  # The smallest turn: no tools, no MCP, no saved session (flags from `claude --help`;
+  # --max-turns is unlisted but parsed). --tools last: it takes a list.
+  claude_turn() {
+    MSYS_NO_PATHCONV=1 SKILLATOR_QUOTA_REFRESH_WAIT= CLAUDE_CONFIG_DIR="$target_dir" claude -p 1 --model haiku --max-turns 1 \
+      --no-session-persistence --strict-mcp-config --output-format stream-json --verbose --tools '' </dev/null
+  }
   case $cli in
     agy)
       src_name=agy
-      raw=$(AGY_CONFIG_DIR="$target_dir" ANTIGRAVITY_APP_DATA_DIR="$target_dir" agy -p "/usage" --output-format json 2>/dev/null)
+      # B27: MSYS_NO_PATHCONV - Git Bash rewrites "/usage" to a path, a paid prompt.
+      raw=$(MSYS_NO_PATHCONV=1 AGY_CONFIG_DIR="$target_dir" ANTIGRAVITY_APP_DATA_DIR="$target_dir" agy -p "/usage" --output-format json 2>/dev/null)
       if [ -n "$raw" ]; then
         if command -v node >/dev/null 2>&1; then
           parsed=$(node -e '
             try {
               const raw = JSON.parse(process.argv[1]);
               let h = null, w = null;
+              const models = [];
               const groups = raw?.command?.data?.groups || [];
               for (const g of groups) {
+                let gh = null, gw = null;
                 for (const b of (g.buckets || [])) {
                   if (b && b.remaining_fraction != null) {
                     const f = Number(b.remaining_fraction);
@@ -371,18 +415,27 @@ if [ "$mode" = refresh ]; then
                       const used = Math.round((1.0 - f) * 1000) / 10;
                       const win = String(b.window || "");
                       if (/5h|hour/.test(win)) {
-                        if (h === null || used > h) h = used;
+                        if (gh === null || used > gh) gh = used;
                       } else if (/week|7d/.test(win)) {
-                        if (w === null || used > w) w = used;
+                        if (gw === null || used > gw) gw = used;
                       }
                     }
                   }
+                }
+                if (gh !== null && (h === null || gh > h)) h = gh;
+                if (gw !== null && (w === null || gw > w)) w = gw;
+                if (typeof g.name === "string" && (gh !== null || gw !== null)) {
+                  const m = { name: g.name };
+                  if (gh !== null) m["5h"] = gh;
+                  if (gw !== null) m["7d"] = gw;
+                  models.push(m);
                 }
               }
               if (h !== null || w !== null) {
                 const res = { src: "agy" };
                 if (h !== null) res["5h"] = h;
                 if (w !== null) res["7d"] = w;
+                if (models.length) res.models = models;
                 process.stdout.write(JSON.stringify(res));
               }
             } catch (_) {}
@@ -393,8 +446,9 @@ if [ "$mode" = refresh ]; then
 import sys, json
 try:
     raw = json.loads(sys.argv[1])
-    h = None; w = None
+    h = None; w = None; models = []
     for g in raw.get("command", {}).get("data", {}).get("groups", []):
+        gh = None; gw = None
         for b in g.get("buckets", []):
             rf = b.get("remaining_fraction")
             if rf is not None:
@@ -403,15 +457,23 @@ try:
                     used = round((1.0 - f) * 100, 1)
                     win = str(b.get("window", ""))
                     if "5h" in win or "hour" in win:
-                        if h is None or used > h: h = used
+                        if gh is None or used > gh: gh = used
                     elif "week" in win or "7d" in win:
-                        if w is None or used > w: w = used
+                        if gw is None or used > gw: gw = used
                 except Exception:
                     pass
+        if gh is not None and (h is None or gh > h): h = gh
+        if gw is not None and (w is None or gw > w): w = gw
+        if isinstance(g.get("name"), str) and (gh is not None or gw is not None):
+            m = {"name": g["name"]}
+            if gh is not None: m["5h"] = gh
+            if gw is not None: m["7d"] = gw
+            models.append(m)
     if h is not None or w is not None:
         res = {"src": "agy"}
         if h is not None: res["5h"] = h
         if w is not None: res["7d"] = w
+        if models: res["models"] = models
         sys.stdout.write(json.dumps(res))
 except Exception:
     pass
@@ -421,25 +483,77 @@ except Exception:
       ;;
     claude)
       src_name=claude-code
-      raw=$(CLAUDE_CONFIG_DIR="$target_dir" claude -p "/usage" --output-format json 2>/dev/null)
-      if [ -n "$raw" ]; then
-        parsed=$(printf '%s' "$raw" | awk '
-          /Current session:[[:space:]]*[0-9.]+%[[:space:]]*used/ {
-            match($0, /Current session:[[:space:]]*[0-9.]+/);
-            s=substr($0, RSTART, RLENGTH); sub(/.*:[[:space:]]*/, "", s); h=s;
-          }
-          /Current week.*:[[:space:]]*[0-9.]+%[[:space:]]*used/ {
-            match($0, /Current week[^:]*:[[:space:]]*[0-9.]+/);
-            s=substr($0, RSTART, RLENGTH); sub(/.*:[[:space:]]*/, "", s); w=s;
-          }
-          END {
-            if (h!="" || w!="") {
-              printf "{\"src\":\"claude-code\""
-              if (h!="") printf ",\"5h\":%.1f", h+0
-              if (w!="") printf ",\"7d\":%.1f", w+0
-              printf "}"
+      # F176/B27: the get_usage control request on stdin, no prompt - no model turn.
+      raw=$(capped 20 claude_get_usage)
+      if [ -n "$raw" ] && command -v node >/dev/null 2>&1; then
+        parsed=$(printf '%s' "$raw" | node -e '
+          try {
+            let r = null;
+            for (const l of require("fs").readFileSync(0, "utf8").split(/\r?\n/)) {
+              try { const m = JSON.parse(l); if (m?.type === "control_response" && m.response?.request_id === "u1") r = m.response.response; } catch (_) {}
             }
-          }')
+            if (!r) process.exit(0);
+            // The installed CLI (2.1.x) answers false for API key / Bedrock / Vertex (or a
+            // login without profile scope), and null limits when its usage fetch failed -
+            // an expired login prints nothing else (the error goes to its debug log).
+            if (r.rate_limits_available === false) { process.stdout.write("APIKEY"); process.exit(0); }
+            if (!r.rate_limits) { process.stdout.write("NOAUTH"); process.exit(0); }
+            const L = r.rate_limits;
+            const n = v => typeof v?.utilization === "number" && Number.isFinite(v.utilization) ? Math.round(v.utilization * 10) / 10 : null;
+            const res = { src: "claude-code" };
+            if (n(L.five_hour) !== null) res["5h"] = n(L.five_hour);
+            if (n(L.seven_day) !== null) res["7d"] = n(L.seven_day);
+            const models = [];
+            for (const [k, name] of [["seven_day_opus", "Opus"], ["seven_day_sonnet", "Sonnet"]]) if (n(L[k]) !== null) models.push({ name, "7d": n(L[k]) });
+            for (const m of (Array.isArray(L.model_scoped) ? L.model_scoped : [])) if (typeof m?.display_name === "string" && n(m) !== null) models.push({ name: m.display_name, "7d": n(m) });
+            if (models.length) res.models = models;
+            if (res["5h"] != null || res["7d"] != null) process.stdout.write(JSON.stringify(res));
+            else process.stdout.write("NOWINDOWS");
+          } catch (_) {}
+        ' 2>/dev/null)
+      fi
+      # F176 owner ruling: limits but no windows yet from get_usage -> a forced read (WAIT=1,
+      # never the background spawn) of a logged-in profile spends ONE tiny turn and reads
+      # its rate_limit_event - only while the last 7d known is under 90%. In doubt, no turn:
+      # a corrupt or legacy cache is unknown; only no cache file at all, or a failure
+      # record that carries `"last":null` (never a reading), counts as blank. A carried
+      # reading counts for 7 days from its `at` (a reset is plausible after: unknown), and
+      # a turn that gave no limits (`turned_at`) holds turns 24 h.
+      if [ "$parsed" = NOWINDOWS ] && [ "${SKILLATOR_QUOTA_REFRESH_WAIT:-}" = 1 ] &&
+         { [ -f "$target_dir/.credentials.json" ] || [ "$(uname -s)" = Darwin ]; } &&
+         ! printf '%s' "$raw" | grep -qi 'session expired\|Failed to authenticate' &&
+         node -e '
+           const fs = require("fs"); let s;
+           try { s = fs.readFileSync(process.argv[1], "utf8") } catch (e) { process.exit(e.code === "ENOENT" ? 0 : 1) }
+           let r; try { r = JSON.parse(s.replace(/^﻿/, "")) } catch (_) { process.exit(1) }
+           if (!r || typeof r !== "object" || Array.isArray(r)) process.exit(1);
+           const now = Date.now() / 1000;
+           if (Object.hasOwn(r, "turned_at") && !(typeof r.turned_at === "number" && now - r.turned_at >= 86400)) process.exit(1);
+           const has = o => o && (Object.hasOwn(o, "7d") || Object.hasOwn(o, "weekly"));
+           let o = r;
+           if (!has(r)) {
+             if (!Object.hasOwn(r, "last")) process.exit(1); if (r.last === null) process.exit(0); o = r.last; if (!has(o)) process.exit(1);
+             if (!(typeof o.at === "number" && now - o.at < 7 * 86400)) process.exit(1)
+           }
+           const v = Object.hasOwn(o, "7d") ? o["7d"] : o.weekly;
+           process.exit(typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 90 ? 0 : 1);
+         ' "$cache" 2>/dev/null; then
+        turn=$(capped 30 claude_turn)
+        via=$(printf '%s' "$turn" | node -e '
+            try {
+              let u = null;
+              for (const l of require("fs").readFileSync(0, "utf8").split(/\r?\n/)) {
+                try { const m = JSON.parse(l); if (m?.type === "rate_limit_event" && m.rate_limit_info?.unifiedWindows) u = m.rate_limit_info.unifiedWindows; } catch (_) {}
+              }
+              const n = v => typeof v?.utilization === "number" && Number.isFinite(v.utilization) ? Math.round(v.utilization * 1000) / 10 : null;
+              const res = { src: "claude-code" };
+              if (u && n(u.five_hour) !== null) res["5h"] = n(u.five_hour);
+              if (u && n(u.seven_day) !== null) res["7d"] = n(u.seven_day);
+              res.via = "turn";
+              if (res["5h"] != null || res["7d"] != null) process.stdout.write(JSON.stringify(res));
+            } catch (_) {}
+          ' 2>/dev/null)
+        if [ -n "$via" ]; then parsed=$via; else turned=$(now_epoch); fi
       fi
       ;;
     muse)
@@ -464,6 +578,8 @@ except Exception:
       fi
       ;;
   esac
+  verdict=""
+  case $parsed in APIKEY|NOAUTH|NOWINDOWS) verdict=$parsed; parsed="" ;; esac
   if [ -n "$parsed" ]; then
     printf '%s' "$parsed" > "$cache"
   else
@@ -471,13 +587,51 @@ except Exception:
       fail_note="not logged in"
     elif [ "$cli" = claude ] && printf '%s' "$raw" | grep -qi 'session expired\|Failed to authenticate'; then
       fail_note="login expired - run claude /login"
+    elif [ "$verdict" = NOAUTH ]; then
+      fail_note="no usage reading - login may have expired, run claude /login"
+    elif [ "$verdict" = APIKEY ]; then
+      fail_note="no plan rate limits (API key or limited-scope login)"
+    elif [ -n "$turned" ]; then
+      fail_note="one turn gave no limits"
+    elif [ "$verdict" = NOWINDOWS ]; then
+      fail_note="no plan rate limits"
     elif [ -n "$(printf '%s' "$raw" | tr -d '[:space:]')" ]; then
       fail_note="unparseable"
     else
       fail_note="refresh failed"
     fi
-    prev_failures=0
-    if [ -f "$cache" ] && ! grep -q '"5h"\|"7d"' "$cache" 2>/dev/null; then
+    # F176: a failure record carries the last good readings (`last`: 5h, 7d and when),
+    # so the turn gate never loses a high 7d; `"last":null` = no reading ever, while a
+    # corrupt or legacy cache leaves `last` out (unknown). No node: unknown too. A turn that
+    # gave no limits stamps `turned_at` (carried until a reading replaces the record).
+    prev_failures=0; last_tag=""
+    if command -v node >/dev/null 2>&1; then
+      carry=$(node -e '
+        const fs = require("fs"); let s, r; const T = process.argv[2];
+        // "<failures> <tail>": the tail carries "last" (undefined: left out) and "turned_at".
+        const out = (f, last) => {
+          const t = T ? T : r && Object.hasOwn(r, "turned_at") ? JSON.stringify(r.turned_at) : "";
+          process.stdout.write(f + " " + (last === undefined ? "" : ",\"last\":" + JSON.stringify(last)) + (t ? ",\"turned_at\":" + t : "")); process.exit(0)
+        };
+        try { s = fs.readFileSync(process.argv[1], "utf8") } catch (e) { out(0, e.code === "ENOENT" ? null : undefined) }
+        try { r = JSON.parse(s.replace(/^﻿/, "")) } catch (_) { out(0) }
+        if (!r || typeof r !== "object" || Array.isArray(r)) { r = null; out(0) }
+        const ok = v => typeof v === "number" && Number.isFinite(v);
+        const h = ok(r["5h"]) ? r["5h"] : r.five, w = ok(r["7d"]) ? r["7d"] : r.weekly;
+        if (ok(h) || ok(w)) {
+          const last = {};
+          if (ok(h)) last["5h"] = h;
+          if (ok(w)) last["7d"] = w;
+          last.at = Math.floor(fs.statSync(process.argv[1]).mtimeMs / 1000);
+          out(0, last)
+        }
+        const f = Number.isInteger(r.failures) && r.failures >= 1 ? r.failures : 0;
+        out(f, Object.hasOwn(r, "last") ? r.last : undefined);
+      ' "$cache" "$turned" 2>/dev/null)
+      prev_failures=${carry%% *}
+      case $carry in *" "*) last_tag=${carry#* } ;; esac
+      case $prev_failures in ''|*[!0-9]*) prev_failures=0 ;; esac
+    elif [ -f "$cache" ] && ! grep -q '"5h"\|"7d"' "$cache" 2>/dev/null; then
       pf=$(sed -n 's/.*"failures"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$cache" | head -1)
       case $pf in ''|*[!0-9]*) ;; *) prev_failures=$pf ;; esac
     fi
@@ -489,7 +643,7 @@ except Exception:
       [ "$backoff" -gt 900 ] && backoff=900
       i=$((i + 1))
     done
-    printf '{"src":"%s","note":"%s","failures":%d,"backoff_secs":%d}' "$src_name" "$fail_note" "$failures" "$backoff" > "$cache"
+    printf '{"src":"%s","note":"%s","failures":%d,"backoff_secs":%d%s}' "$src_name" "$fail_note" "$failures" "$backoff" "$last_tag" > "$cache"
   fi
   rm -f "$lock"
   exit 0

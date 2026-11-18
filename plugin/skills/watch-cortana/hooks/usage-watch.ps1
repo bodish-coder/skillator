@@ -299,7 +299,9 @@ function Start-QuotaRefresh([string]$targetCli, [string]$targetDir) {
   $lock = Join-Path $targetDir 'quota-cache.json.refreshing'
   if (Test-Path -LiteralPath $lock) {
     $item = Get-Item -LiteralPath $lock -ErrorAction SilentlyContinue
-    if ($item -and $item.LastWriteTime -gt (Get-Date).AddSeconds(-60)) {
+    # F176: stale at 90 s - over the refresh's capped CLI calls (20 s + 30 s), so a read
+    # still alive always holds it and a second reader can never start a turn beside it.
+    if ($item -and $item.LastWriteTime -gt (Get-Date).AddSeconds(-90)) {
       $script:noteTag = ' note=refresh_pending'
       return
     }
@@ -322,9 +324,42 @@ function Start-QuotaRefresh([string]$targetCli, [string]$targetDir) {
   $ps1 = $MyInvocation.MyCommand.Path
   if (-not $ps1) { $ps1 = $PSCommandPath }
   if ($ps1) {
+    # F176: `ops --status --refresh` waits for the read, under the same lock.
+    if ($env:SKILLATOR_QUOTA_REFRESH_WAIT -eq '1') {
+      try { & powershell -NoProfile -ExecutionPolicy Bypass -File $ps1 -Mode refresh -Cli $targetCli -Dir $targetDir | Out-Null }
+      catch { Remove-Item -LiteralPath $lock -ErrorAction SilentlyContinue }
+      return
+    }
     $arg = "-NoProfile -ExecutionPolicy Bypass -File `"$ps1`" -Mode refresh -Cli $targetCli -Dir `"$targetDir`""
     try { Start-Process powershell -ArgumentList $arg -WindowStyle Hidden } catch { Remove-Item -LiteralPath $lock -ErrorAction SilentlyContinue }
   }
+}
+
+# F176: one claude call capped at $secs, in its own runspace (this script's functions
+# carried in); on expiry this process's child tree is killed, so no read outlives the lock.
+function Invoke-Capped([int]$secs, [string]$call, $in) {
+  $iss = [Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+  foreach ($f in Get-ChildItem function:) { $iss.Commands.Add((New-Object Management.Automation.Runspaces.SessionStateFunctionEntry $f.Name, $f.Definition)) }
+  $rs = [runspacefactory]::CreateRunspace($iss); $rs.Open()
+  $ps = [powershell]::Create(); $ps.Runspace = $rs
+  [void]$ps.AddScript($call)
+  $inp = New-Object 'Management.Automation.PSDataCollection[psobject]'
+  if ($null -ne $in) { $inp.Add($in) }
+  $inp.Complete()
+  $out = New-Object 'Management.Automation.PSDataCollection[psobject]'
+  try {
+    $h = $ps.BeginInvoke($inp, $out)
+    if (-not $h.AsyncWaitHandle.WaitOne($secs * 1000)) {
+      # A listed child created before this process is an orphan whose dead parent's PID was
+      # reused; a start time that cannot be read (ours or the child's) kills it.
+      $me = try { (Get-Process -Id $PID).StartTime } catch { $null }
+      try { Get-CimInstance Win32_Process -Filter "ParentProcessId=$PID" | Where-Object { -not ($me -and $_.CreationDate -and $_.CreationDate -lt $me) } | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null } } catch { }
+      $null = $ps.BeginStop($null, $null)
+      return ''
+    }
+    try { $null = $ps.EndInvoke($h) } catch { }
+    return (@($out) -join "`n")
+  } finally { if ($h -and $h.IsCompleted) { $ps.Dispose(); $rs.Dispose() } }
 }
 
 if ($Mode -eq 'refresh') {
@@ -335,27 +370,47 @@ if ($Mode -eq 'refresh') {
   $oldCfg = $env:CLAUDE_CONFIG_DIR; $oldMuse = $env:MUSE_CONFIG_DIR
   try {
     New-Item $Dir -ItemType Directory -Force | Out-Null
-    $res = $null; $raw = ''
+    $res = $null; $raw = ''; $verdict = ''
+    $isNum = { param($v) $v -is [int] -or $v -is [long] -or $v -is [double] -or $v -is [decimal] }
+    # The cache as found after the CLI call (as sh reads it): 'missing', 'corrupt', or the record.
+    $readPrev = {
+      if (-not (Test-Path -LiteralPath $cache)) { return 'missing' }
+      try {
+        $p = ConvertFrom-Json ([IO.File]::ReadAllText((Convert-Path -LiteralPath $cache))) -ErrorAction Stop
+        if ($p -is [pscustomobject]) { $p } else { 'corrupt' }
+      } catch { 'corrupt' }
+    }
+    $turned = $false
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     if ($Cli -eq 'agy') {
       $env:AGY_CONFIG_DIR = $Dir
       $env:ANTIGRAVITY_APP_DATA_DIR = $Dir
       try { $raw = & agy -p "/usage" --output-format json 2>$null | Out-String } catch { $raw = '' }
       if ($raw) {
         $parsed = try { ConvertFrom-Json $raw -ErrorAction Stop } catch { $null }
-        $h = $null; $wk = $null
+        $h = $null; $wk = $null; $models = @()
         if ($parsed -and $parsed.command -and $parsed.command.data -and $parsed.command.data.groups) {
           foreach ($g in $parsed.command.data.groups) {
+            $gh = $null; $gw = $null
             if ($g.buckets) {
               foreach ($b in $g.buckets) {
                 if ($null -ne $b.remaining_fraction) {
                   $used = [math]::Round((1.0 - [double]$b.remaining_fraction) * 100, 1)
                   if ($b.window -match '5h' -or $b.window -match 'hour') {
-                    if ($null -eq $h -or $used -gt $h) { $h = $used }
+                    if ($null -eq $gh -or $used -gt $gh) { $gh = $used }
                   } elseif ($b.window -match 'week' -or $b.window -match '7d') {
-                    if ($null -eq $wk -or $used -gt $wk) { $wk = $used }
+                    if ($null -eq $gw -or $used -gt $gw) { $gw = $used }
                   }
                 }
               }
+            }
+            if ($null -ne $gh -and ($null -eq $h -or $gh -gt $h)) { $h = $gh }
+            if ($null -ne $gw -and ($null -eq $wk -or $gw -gt $wk)) { $wk = $gw }
+            if ($g.name -is [string] -and ($null -ne $gh -or $null -ne $gw)) {
+              $m = [ordered]@{ name = $g.name }
+              if ($null -ne $gh) { $m['5h'] = $gh }
+              if ($null -ne $gw) { $m['7d'] = $gw }
+              $models += $m
             }
           }
         }
@@ -363,20 +418,95 @@ if ($Mode -eq 'refresh') {
           $res = [ordered]@{ src = 'agy' }
           if ($null -ne $h) { $res['5h'] = $h }
           if ($null -ne $wk) { $res['7d'] = $wk }
+          if ($models.Count) { $res['models'] = $models }
         }
       }
     } elseif ($Cli -eq 'claude') {
       $env:CLAUDE_CONFIG_DIR = $Dir
-      try { $raw = & claude -p "/usage" --output-format json 2>$null | Out-String } catch { $raw = '' }
-      if ($raw) {
-        $h = $null; $wk = $null
-        if ($raw -match 'Current session:\s*([0-9.]+)%\s*used') { $h = [double]$Matches[1] }
-        if ($raw -match 'Current week[^:]*:\s*([0-9.]+)%\s*used') { $wk = [double]$Matches[1] }
+      # The CLI's own hooks must never see a forced read (WAIT) and start one themselves.
+      $forced = $env:SKILLATOR_QUOTA_REFRESH_WAIT -eq '1'
+      $env:SKILLATOR_QUOTA_REFRESH_WAIT = $null
+      # F176/B27: the get_usage control request on stdin, no prompt - no model turn.
+      $req = '{"type":"control_request","request_id":"u1","request":{"subtype":"get_usage","skip_behaviors":true}}'
+      $raw = Invoke-Capped 20 '$input | claude -p --input-format stream-json --output-format stream-json --verbose 2>$null' $req
+      $r = $null
+      foreach ($l in ($raw -split "`r?`n")) {
+        $m = try { ConvertFrom-Json $l -ErrorAction Stop } catch { $null }
+        if ($m -and $m.type -eq 'control_response' -and $m.response.request_id -eq 'u1') { $r = $m.response.response }
+      }
+      # The installed CLI (2.1.x) answers false for API key / Bedrock / Vertex (or a login
+      # without profile scope), and null limits when its usage fetch failed - an expired
+      # login prints nothing else (the error goes to its debug log).
+      if ($r -and $r.rate_limits_available -eq $false) { $verdict = 'APIKEY' }
+      elseif ($r -and -not $r.rate_limits) { $verdict = 'NOAUTH' }
+      elseif ($r) {
+        $L = $r.rate_limits
+        $num = { param($v) if ($v -and (& $isNum $v.utilization)) { [math]::Round([double]$v.utilization, 1) } else { $null } }
+        $h = & $num $L.five_hour; $wk = & $num $L.seven_day
+        $models = @()
+        foreach ($pair in @(@('seven_day_opus','Opus'), @('seven_day_sonnet','Sonnet'))) {
+          $v = & $num $L.($pair[0])
+          if ($null -ne $v) { $models += [ordered]@{ name = $pair[1]; '7d' = $v } }
+        }
+        foreach ($ms in @($L.model_scoped)) {
+          $v = & $num $ms
+          if ($ms -and $ms.display_name -is [string] -and $null -ne $v) { $models += [ordered]@{ name = $ms.display_name; '7d' = $v } }
+        }
         if ($null -ne $h -or $null -ne $wk) {
           $res = [ordered]@{ src = 'claude-code' }
           if ($null -ne $h) { $res['5h'] = $h }
           if ($null -ne $wk) { $res['7d'] = $wk }
+          if ($models.Count) { $res['models'] = $models }
+        } else { $verdict = 'NOWINDOWS' }
+      }
+      # F176 owner ruling: limits but no windows yet from get_usage -> a forced read (WAIT=1,
+      # never the background spawn) of a logged-in profile spends ONE tiny turn and reads
+      # its rate_limit_event - only while the last 7d known is under 90%. In doubt, no turn:
+      # a corrupt or legacy cache is unknown; only no cache file at all, or a failure
+      # record that carries `"last":null` (never a reading), counts as blank. A carried
+      # reading counts for 7 days from its `at` (a reset is plausible after: unknown), and
+      # a turn that gave no limits (`turned_at`) holds turns 24 h.
+      # Read only where a turn may follow; 'unread' never passes the gate.
+      $gateOk = $false
+      $prev = if ($verdict -eq 'NOWINDOWS' -and $forced) { & $readPrev } else { 'unread' }
+      if ($prev -is [string]) { $gateOk = $prev -eq 'missing' }
+      elseif (-not $prev.PSObject.Properties['turned_at'] -or ((& $isNum $prev.turned_at) -and $now - $prev.turned_at -ge 86400)) {
+        $has = { param($x) $x -is [pscustomobject] -and ($x.PSObject.Properties['7d'] -or $x.PSObject.Properties['weekly']) }
+        $o = $prev
+        if (-not (& $has $o)) {
+          $o = $null
+          if ($prev.PSObject.Properties['last']) {
+            if ($null -eq $prev.last) { $gateOk = $true }
+            elseif ((& $has $prev.last) -and (& $isNum $prev.last.at) -and $now - $prev.last.at -lt 7 * 86400) { $o = $prev.last }
+          }
         }
+        if ($o) {
+          $v = if ($o.PSObject.Properties['7d']) { $o.'7d' } else { $o.weekly }
+          $gateOk = (& $isNum $v) -and $v -ge 0 -and $v -lt 90
+        }
+      }
+      if ($verdict -eq 'NOWINDOWS' -and $forced -and $gateOk -and
+          ((Test-Path -LiteralPath (Join-Path $Dir '.credentials.json')) -or $IsMacOS) -and
+          $raw -notmatch 'session expired|Failed to authenticate') {
+        # The smallest turn: no tools, no MCP, no saved session (flags from `claude --help`;
+        # --max-turns is unlisted but parsed). '""' reaches the CLI as an empty --tools list.
+        $turn = Invoke-Capped 30 '$null | claude -p 1 --model haiku --max-turns 1 --no-session-persistence --strict-mcp-config --output-format stream-json --verbose --tools ''""'' 2>$null'
+        $u = $null
+        foreach ($l in ($turn -split "`r?`n")) {
+          $m = try { ConvertFrom-Json $l -ErrorAction Stop } catch { $null }
+          if ($m -and $m.type -eq 'rate_limit_event' -and $m.rate_limit_info.unifiedWindows) { $u = $m.rate_limit_info.unifiedWindows }
+        }
+        $tn = { param($v) if ($v -and (& $isNum $v.utilization)) { [math]::Round([double]$v.utilization * 100, 1) } else { $null } }
+        if ($u) {
+          $h = & $tn $u.five_hour; $wk = & $tn $u.seven_day
+          if ($null -ne $h -or $null -ne $wk) {
+            $res = [ordered]@{ src = 'claude-code' }
+            if ($null -ne $h) { $res['5h'] = $h }
+            if ($null -ne $wk) { $res['7d'] = $wk }
+            $res['via'] = 'turn'
+          }
+        }
+        $turned = -not $res
       }
     } elseif ($Cli -eq 'muse') {
       $env:MUSE_CONFIG_DIR = $Dir
@@ -393,26 +523,45 @@ if ($Mode -eq 'refresh') {
       }
     }
     if (-not $res) {
+      # Re-read at write time, as sh's carry does: a reading stored during the turn is carried.
+      $prev = & $readPrev
       $srcName = if ($Cli -eq 'claude') { 'claude-code' } else { $Cli }
       $failNote = if ($raw -and $raw -match 'not logged in') { 'not logged in' }
                   elseif ($Cli -eq 'claude' -and $raw -and $raw -match 'session expired|Failed to authenticate') { 'login expired - run claude /login' }
+                  elseif ($verdict -eq 'NOAUTH') { 'no usage reading - login may have expired, run claude /login' }
+                  elseif ($verdict -eq 'APIKEY') { 'no plan rate limits (API key or limited-scope login)' }
+                  elseif ($turned) { 'one turn gave no limits' }
+                  elseif ($verdict -eq 'NOWINDOWS') { 'no plan rate limits' }
                   elseif ($raw -and $raw.Trim()) { 'unparseable' }
                   else { 'refresh failed' }
-      $prevFailures = 0
-      if (Test-Path -LiteralPath $cache) {
-        try {
-          $old = ConvertFrom-Json ([IO.File]::ReadAllText((Convert-Path -LiteralPath $cache))) -ErrorAction Stop
-          if ($null -ne $old -and $null -eq $old.'5h' -and $null -eq $old.'7d' -and $null -ne $old.failures -and ($old.failures -is [int] -or $old.failures -is [long]) -and $old.failures -ge 1) {
-            $prevFailures = [int]$old.failures
-          }
-        } catch { }
+      # F176: a failure record carries the last good readings (`last`: 5h, 7d and when),
+      # so the turn gate never loses a high 7d; `"last":null` = no reading ever, while a
+      # corrupt or legacy cache leaves `last` out (unknown). A turn that gave no limits
+      # stamps `turned_at` (carried until a reading replaces the record).
+      $prevFailures = 0; $last = 'omit'
+      if ($prev -is [string]) { if ($prev -eq 'missing') { $last = $null } }
+      else {
+        $h = if (& $isNum $prev.'5h') { $prev.'5h' } elseif (& $isNum $prev.five) { $prev.five } else { $null }
+        $wk = if (& $isNum $prev.'7d') { $prev.'7d' } elseif (& $isNum $prev.weekly) { $prev.weekly } else { $null }
+        if ($null -ne $h -or $null -ne $wk) {
+          $last = [ordered]@{}
+          if ($null -ne $h) { $last['5h'] = $h }
+          if ($null -ne $wk) { $last['7d'] = $wk }
+          $last['at'] = [long][Math]::Floor(((Get-Item -LiteralPath $cache).LastWriteTimeUtc - [datetime]'1970-01-01').TotalSeconds)
+        } else {
+          if (($prev.failures -is [int] -or $prev.failures -is [long]) -and $prev.failures -ge 1) { $prevFailures = [int]$prev.failures }
+          if ($prev.PSObject.Properties['last']) { $last = $prev.last }
+        }
       }
       $failures = $prevFailures + 1
       $backoff = [int][Math]::Min(900, 60 * [Math]::Pow(2, [Math]::Min($failures - 1, 10)))
       $res = [ordered]@{ src = $srcName; note = $failNote; failures = $failures; backoff_secs = $backoff }
+      if ($last -isnot [string]) { $res['last'] = $last }
+      if ($turned) { $res['turned_at'] = $now }
+      elseif ($prev -isnot [string] -and $prev.PSObject.Properties['turned_at']) { $res['turned_at'] = $prev.turned_at }
     }
     $absCache = [IO.Path]::Combine((Convert-Path -LiteralPath $Dir), 'quota-cache.json')
-    [IO.File]::WriteAllText($absCache, (ConvertTo-Json $res -Compress), (New-Object Text.UTF8Encoding $false))
+    [IO.File]::WriteAllText($absCache, (ConvertTo-Json $res -Compress -Depth 4), (New-Object Text.UTF8Encoding $false))
   } finally {
     $env:AGY_CONFIG_DIR = $oldAgy; $env:ANTIGRAVITY_APP_DATA_DIR = $oldApp
     $env:CLAUDE_CONFIG_DIR = $oldCfg; $env:MUSE_CONFIG_DIR = $oldMuse

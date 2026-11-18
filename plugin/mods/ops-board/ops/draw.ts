@@ -14,7 +14,7 @@ import type { State, PointerAction, SkillGuide, HelpItem } from './state'
 import { activeUser, pointerModal, decideLines, dialogLines, engageLines, filteredSkills, formLines, helpCommand, reconcileLines, runsCursor, setupLines, SKILLS, COMMANDS, HELP_ITEMS, startRunLines, teamRow, viewOf } from './state'
 import { armLines } from '../hooks/lib/teamsarm'
 import { messageLines, pendingHandoffOf, selectedOf, unreadCount } from '../hooks/lib/inbox'
-import { assignedTickets, buildModel, chipsOf, decideTickets, headKey, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor } from '../hooks/lib/ticketsmodel'
+import { buildModel, chipsOf, headKey, HEAD, isDecidable, isHead, isUserHead, isUserSectionOpen, offsetFor, personalGroups } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
 import { isFinished, modeOf, runLines, runStatus, RUNS_SECTIONS, sectionHead, sectionStatus, stageStatus, stageTickets, statusColor } from '../hooks/lib/runlines'
 import { paint, STATE_COLOR, visible } from '../hooks/lib/board'
@@ -238,7 +238,7 @@ function keysOf(s: State, m: Model): Seg[][] {
     const enter = isHead(cur) ? (s.runsOpen.some(x => headKey(x) === cur) ? 'enter close' : 'enter open') : 'enter stages'
     return [move, h(enter, 'return'), h('s Start', 's'), h('Engage', 'e'), h('Rerun', 'r'), h('Push Pending', 'p'), h('Mode: ||/seq', 'm'), quit]
   }
-  if (s.tab === 'health') return [[hot('r refresh', 'r')], [hot('R resume', 'R', true)], [hot('c resume CLI', 'c')], [hot('F force resume', 'F', true)], quit]
+  if (s.tab === 'health') return [[hot('r refresh', 'r')], [hot('R resume', 'R', true)], [hot('c resume CLI', 'c')], [hot('F force resume', 'F', true)], [hot('p profiles', 'p')], quit]
   if (s.tab === 'messages') return [move, h('enter open', 'return'), h('c connect', 'c'), h('d disconnect', 'd'), h('y copy URL', 'y'), h('m mark all read', 'm'), h('s setup', 's'), quit]
   if (s.tab === 'explorer' && s.explorer.action) {
     const a = s.explorer.action
@@ -249,7 +249,7 @@ function keysOf(s: State, m: Model): Seg[][] {
   if (s.showTeam) return [h('n add', 'n'), h('del remove (asks first)', 'delete'), h('l make lead', 'l'), h('esc back', 'escape'), quit]
   const sel = m.rows.find(t => t.id === m.ticket)
   const isUsrHead = isUserHead(s.selected)
-  const userOpen = isUsrHead ? isUserSectionOpen(s.open as string[], s.selected === 'head:assigned' ? 'assigned' : 'decide') : false
+  const userOpen = isUsrHead ? isUserSectionOpen(s.open as string[], s.selected!.slice(HEAD.length) as UserSection) : false
   const head = isHead(s.selected ?? m.selected) ? m.groups.find(g => headKey(g.box) === (s.selected ?? m.selected)) : undefined
   const enter = isUsrHead ? (userOpen ? 'enter close' : 'enter open') : head ? (head.open ? 'enter close' : 'enter open') : 'enter line'
   return [move, h(enter, 'return'), h('a assign', 'a'), h('d decide', 'd'), ...(sel && isDecidable(sel) ? [h('D decided', 'D')] : []), h('t team', 't'), h('c reconcile', 'c'), h('u ask', 'u'), h('r reload', 'r'), quit]
@@ -405,6 +405,7 @@ function chipLine(t: Ticket): Seg[] {
   const groups: Seg[][] = []
   if (t.apps.length) groups.push(t.apps.flatMap((a, i) => [...(i ? [{ text: ' ' }] : []), ...chip('app', a)]))
   if (t.owner) groups.push(chip('owner', t.owner))
+  if (t.assignedSession) groups.push(chip('session', t.assignedSession))
   if (t.decide) groups.push(chip('decide', t.decide))
   if (t.tester) groups.push(chip('tester', t.tester))
   if (t.by.length) groups.push(chip('by', t.by.join(' ')))
@@ -434,10 +435,7 @@ function ticketLines(s: State, m: Model): Keyed[] {
   if (!b || b.error) return [{ key: 'msg', segs: [dim(b?.error ?? 'reading TICKETS.md…')] }]
   const user = activeUser(s)
   const pool = visible(b, s.filter, s.me)
-  const userSecs: { id: UserSection; title: string; tickets: Ticket[]; color: Color }[] = user ? [
-    { id: 'assigned', title: 'Assigned', tickets: assignedTickets(pool, user), color: 'suggestion' },
-    { id: 'decide', title: 'Mine to decide', tickets: decideTickets(pool, user), color: 'autoAccept' },
-  ] : []
+  const userSecs = personalGroups(pool, user, { open: s.open as string[], session: s.session })
   if (!m.groups.length && !userSecs.length) return [{ key: 'msg', segs: [dim(m.filterActive ? 'no ticket matches the filter' : 'no open tickets')] }]
   const out: Keyed[] = []
   const shown = new Set(m.rows.map(t => t.id))
@@ -446,7 +444,7 @@ function ticketLines(s: State, m: Model): Keyed[] {
   for (const sec of userSecs) {
     const hk = headKey(sec.id)
     const on = hk === s.selected
-    const open = isUserSectionOpen(s.open as string[], sec.id)
+    const open = sec.open
     out.push({ key: hk, segs: [{ text: on ? '› ' : '  ' },
       { text: `${open ? '▾' : '▸'} ${sec.title} (${sec.tickets.length})`, color: sec.color, bold: true, inverse: on }] })
     if (!open) continue
@@ -693,6 +691,10 @@ function healthBody(s: State): Seg[][] {
   ]
   if (u?.spendLimitPct !== null && u?.spendLimitPct !== undefined) out.push(row('Spend limit', [{ text: `${u.spendLimitPct}% used` }]))
   if (u?.costUsd !== null && u?.costUsd !== undefined) out.push(row('Spent', [{ text: `$${u.costUsd.toFixed(2)} this session` }]))
+  // F176: every profile with its model rows, as `ops --status` prints it
+  out.push([])
+  if (s.profiles) out.push([{ text: 'Profiles', bold: true }], ...s.profiles.trimEnd().split('\n').map(l => [{ text: '  ' + l }]))
+  else out.push(row('Profiles', [dim('p reads every profile')]))
   // F172: no in-body Actions row - the footer keys (keysOf) are the one action row.
   out.push([], [{ text: 'Machine', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now))
   return out

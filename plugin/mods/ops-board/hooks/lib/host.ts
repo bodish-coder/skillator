@@ -212,7 +212,8 @@ export async function runCall($: HostApi, call: Call, args: string[], stdin?: st
     bin = sh
   }
   const argv = argvFor(call, win, skills, args, bin)
-  const timeoutMs = call === 'pending-machine' ? 15000 : 30000
+  // F176: ops-status may read several profiles, each up to 55 s
+  const timeoutMs = call === 'pending-machine' ? 15000 : call === 'ops-status' ? 300000 : 30000
   const init: ProcessRunInit = { ...(repo ? { cwd: repo.root } : {}), timeoutMs, ...(stdin !== undefined ? { stdin } : {}) }
   try {
     const r = await $.process.run(argv, init)

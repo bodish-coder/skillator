@@ -5,7 +5,7 @@ import { copyHost, gitBin, runCall } from './lib/host'
 import { loginMessage, loginStatus } from './lib/calls'
 import { inboxDirOfCommonGitDir, INBOX_FILE, messageLines, parseInbox, plainText, READ_FILE, unreadCount } from './lib/inbox'
 import { armLines, armToast, parseArm } from './lib/teamsarm'
-import { freshSetup, parseCfgView, setupError, setupJson, unmask, urlShown } from './lib/teamsconfig'
+import { CLEARED_LINE, freshSetup, parseCfgView, resultLine, SAVED_LINE, setupError, setupJson, unmask, urlShown } from './lib/teamsconfig'
 import type { SetupValues } from './lib/teamsconfig'
 
 // F66: the Messages tab (teams-uhura's Teams inbox) and the Teams setup form, drawn in
@@ -178,9 +178,15 @@ async function saveSetup($: EngineInterface) {
   const bad = setupError(draft, await read($, teamsCfgA))
   if (bad) { await bump($, { result: bad }); return }
   const r = await runCall($, 'team-config-save', [], setupJson(draft))
-  if (r.code !== 0) { await bump($, { result: why(r) }); return }
-  const said = r.out.trim().split(/\r?\n/)[0] ?? ''
-  $.ui.toast([`✓ Teams settings saved${said ? ' - ' + said : ''}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  // B29: only teams-uhura's 'saved: <path>' line is a save - an exit 0 that says nothing saved nothing
+  const said = resultLine(r.out, SAVED_LINE, 'saved')
+  const failed = r.code !== 0 ? why(r) : said.bad
+  if (failed) {
+    $.ui.toast([`✗ Teams settings not saved: ${failed}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+    await bump($, { result: failed })
+    return
+  }
+  $.ui.toast([`✓ Teams settings saved - ${said.line}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeSetup($)
   await refreshCfg($, false)
 }
@@ -188,8 +194,11 @@ async function saveSetup($: EngineInterface) {
 async function clearSaved($: EngineInterface) {
   if (login.confirm) return
   const r = await runCall($, 'team-config-clear', [])
-  if (r.code !== 0) { await bump($, { result: why(r), confirmClear: false }); return }
-  $.ui.toast([`✓ Teams settings cleared - ${r.out.trim().split(/\r?\n/)[0] ?? ''}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  // A235: only its 'cleared:' / 'nothing saved' line is a clear
+  const said = resultLine(r.out, CLEARED_LINE, 'cleared')
+  const failed = r.code !== 0 ? why(r) : said.bad
+  if (failed) { await bump($, { result: failed, confirmClear: false }); return }
+  $.ui.toast([`✓ Teams settings cleared - ${said.line}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeSetup($)
   await refreshCfg($, false)
 }
@@ -237,19 +246,33 @@ async function markRead($: EngineInterface) {
 // --- F177: connect Teams. c runs setup --arm, d setup --disarm, y copies the URL. Only the
 // owner's key press reaches team-arm; entering the tab runs --status (a read). ---
 let armBusy = false
-async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack') {
+let ackAfter: string | null = null                 // the URL y copied while an arm was in flight
+let armSeq = 0                                     // bumped as each arm / disarm starts; a read started before is stale
+async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack', args: string[] = []) {
   const quiet = call === 'team-arm-status' || call === 'team-url-ack'
   if (armBusy) { if (!quiet) $.ui.toast('Teams: still working - one moment'); return }
-  if (!quiet) armBusy = true
+  if (!quiet) { armBusy = true; armSeq++ }
+  const seq = armSeq
+  let landed = false                               // an arm reply armed (or hosted): the deferred ack may run
   try {
-    const r = await runCall($, call, [])
-    if (quiet && armBusy) return                    // an arm or disarm started meanwhile is the newer read
+    const r = await runCall($, call, args)
+    // an arm or disarm in flight, or started after this read, is the newer view
+    if (quiet && (armBusy || seq !== armSeq)) return
+    // a toast never carries the URL: the ack's argument is replaced by value
+    const said = (s: string) => args.filter(Boolean).reduce((t, a) => t.split(a).join('<url>'), [s, ran(r.argv)].join('\n'))
     const v = parseArm(r.out)
-    if (!v) { if (!quiet) $.ui.toast(`✗ Teams: ${why(r)}\n${ran(r.argv)}`, { timeoutMs: 8000 }); return }
+    if (!v) { if (!quiet) $.ui.toast(said(`✗ Teams: ${r.code === 0 ? 'unexpected output from teams-uhura' : why(r)}`), { timeoutMs: 8000 }); return }
     await update($, armA, () => v)
-    const said = armToast(v)
-    if (said) $.ui.toast([said, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
-  } finally { if (!quiet) armBusy = false }
+    landed = call === 'team-arm' && (v.result === 'armed' || v.hosted)
+    const toast = armToast(v)
+    if (toast) $.ui.toast(said(toast), { timeoutMs: 8000 })
+  } finally {
+    if (!quiet) {
+      armBusy = false
+      const url = ackAfter; ackAfter = null
+      if (url && landed) await runArm($, 'team-url-ack', [url])   // never after a disarm, refusal or failure
+    }
+  }
 }
 
 async function copyUrl($: EngineInterface) {
@@ -258,7 +281,9 @@ async function copyUrl($: EngineInterface) {
   const r = await copyHost($, v.url)
   if (r.code !== 0) { $.ui.toast(`✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`); return }
   $.ui.toast('✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL')
-  if (v.urlChanged) await runArm($, 'team-url-ack')
+  // the ack carries the URL copied, so a newer one is never remembered in its place; under a
+  // connect or disconnect in flight it runs once that is done
+  if (v.urlChanged) { if (armBusy) ackAfter = v.url; else await runArm($, 'team-url-ack', [v.url]) }
 }
 
 // --- drawing ---

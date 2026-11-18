@@ -30,7 +30,7 @@
 // in environment variables of the same names, and are never printed or logged.
 import { createServer } from 'node:http'
 import { createHmac, timingSafeEqual, randomBytes } from 'node:crypto'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, rmSync, openSync, statSync, renameSync, chmodSync, mkdtempSync, readdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, appendFileSync, rmSync, openSync, statSync, renameSync, chmodSync, mkdtempSync, readdirSync, realpathSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve, isAbsolute } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
@@ -850,7 +850,8 @@ export async function main(argv) {
   }
 }
 
-const entry = p => (process.platform === 'win32' ? p.toLowerCase() : p)
+// B29: argv[1] keeps a link's spelling, import.meta.url is the real path - compare real paths.
+const entry = p => { try { p = realpathSync(p) } catch { /* as given */ } return process.platform === 'win32' ? p.toLowerCase() : p }
 if (process.argv[1] && entry(process.argv[1]) === entry(SELF)) {
   main(process.argv.slice(2)).then(code => { if (code !== undefined) process.exitCode = code })
 }

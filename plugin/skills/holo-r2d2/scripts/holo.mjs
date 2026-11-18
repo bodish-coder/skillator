@@ -36,15 +36,15 @@
 // No npm dependencies. Inline SVG only - no CDN, so the page draws offline.
 
 import { readFile, writeFile, mkdir, readdir, cp, stat } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, realpathSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { setFromRun, checkSet, wizardPage, answersToCommands, nextWizardSet, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
+import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, reconcile, without, runKey, sameSet, fileStem, pageFile, clean, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 import { extractDomainGraph, understandPage } from "./understand.mjs";
 import { FORMATS, THEMES, formatPage, themeCss } from "./formats.mjs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -874,7 +874,7 @@ export function renderSvg(run, opts = {}) {
 }
 
 // ----------------------------------------------------------------- cli ----
-function findRoot(start) {
+export function findRoot(start) {
   let d = resolve(start);
   for (;;) {
     if (existsSync(join(d, ".skillator"))) return d;
@@ -885,7 +885,7 @@ function findRoot(start) {
   }
 }
 
-async function runFiles(root) {
+export async function runFiles(root) {
   const dir = join(root, ".skillator");
   let names = [];
   try { names = await readdir(dir); } catch { return []; }
@@ -893,11 +893,16 @@ async function runFiles(root) {
 }
 
 // F44: runs are named RUN-0012 (run-0012-*.md); runs named before that are
-// run-12-*.md. Any spelling - 12, RUN-12, RUN-0012 - finds either, by number.
-function runFilesFor(arg, files) {
-  const m = /^(?:RUN-)?(\d+)$/i.exec(arg);
-  if (!m) return null;
-  return files.filter((f) => { const k = /^run-(\d+)-/.exec(basename(f)); return k && BigInt(k[1]) === BigInt(m[1]); });
+// run-12-*.md. Any spelling - 12, RUN-12, RUN-0012 - finds either, by number;
+// both on disk: the canonical run-0012 first, then the newest. One number rule: runKey.
+export function runFilesFor(arg, files) {
+  const key = runKey(/^\d+$/.test(arg) ? `RUN-${arg}` : arg);
+  if (!/^RUN-\d+$/.test(key)) return null;
+  const canon = `run-${key.slice(4).padStart(4, "0")}-`;
+  const age = (f) => { try { return statSync(f).mtimeMs; } catch { return 0; } };
+  return files.filter((f) => { const k = /^run-(\d+)-/.exec(basename(f)); return k && runKey(`RUN-${k[1]}`) === key; })
+    .map((f) => ({ f, canon: basename(f).startsWith(canon), t: age(f) }))
+    .sort((a, b) => b.canon - a.canon || b.t - a.t).map((x) => x.f);
 }
 
 async function resolveRun(arg, root) {
@@ -1025,6 +1030,18 @@ async function writeGenerated(root, out, text) {
   await writeFile(out, text, "utf8");
 }
 
+// F179: every wizard page is written here, so a rebuild of the same set keeps its nonce: the page's own, else
+// the sidecar's (keyed by the set id itself - "F 12" and "F_12" share a file stem), else a fresh one.
+export const nonceFile = (root, id) => join(root, ".skillator", "holo", `${fileStem(id)}-${createHash("sha256").update(String(id)).digest("hex").slice(0, 8)}.nonce`);
+async function writeWizard(root, out, set) {
+  const read = (p) => readFile(p, "utf8").catch(() => "");
+  const page = pageSet(await read(out));
+  const n = page && String(page.id) === String(set.id) && page.nonce ? String(page.nonce) : (await read(nonceFile(root, set.id))).trim();
+  const nonce = /^[0-9a-f]{32}$/.test(n) ? n : randomBytes(16).toString("hex");
+  await writeGenerated(root, out, wizardPage(set, nonce));
+  await writeGenerated(root, nonceFile(root, set.id), `${nonce}\n`);
+}
+
 // A118: the holds as relay-morpheus judges them - `chain next --holds`, read-only
 // (it refreshes no lease and writes nothing). sh first, then the ps1 twin;
 // HOLO_RELAY_CMD replaces both (tests). null when the run has no chain or
@@ -1114,20 +1131,35 @@ async function main(argv) {
   const root = findRoot(o.root ?? process.cwd());
   if (o.ticket) return ticketPage(root, o);
   if (o.mode === "wizard") {
-    let set, stem;
+    let set, stem, run;
     if (o.decisions) { set = JSON.parse(await readFile(o.decisions, "utf8")); stem = String(set && set.id || "decisions"); }
     else {
       const runPath = await resolveRun(o.pos[0], root);
       const md = await readFile(runPath, "utf8");
-      const run = parseRun(md, relayHolds(md, runPath, root));
+      run = parseRun(md, relayHolds(md, runPath, root));
       if (!run.id) throw new Error(`${runPath}: no '# RUN-<n> - <title>' line - not a relay run file`);
       set = setFromRun(run, relative(root, runPath).replace(/\\/g, "/")); stem = run.id;
     }
+    const out = resolve(o.out ?? join(root, ".skillator", "holo", pageFile(stem)));
     if (o.nextWizard) {
-      set = nextWizardSet(set, JSON.parse(await readFile(o.nextWizard, "utf8")));
+      // The base is the page the answers came from: the page on disk when its id and round match, else the
+      // --decisions set when its own round matches, else the run's set for round 1; anything else is refused.
+      let ans = JSON.parse(await readFile(o.nextWizard, "utf8"));
+      const round = Number(ans && ans.round) || 1, roundOf = (s) => Number(s && s.round) || 1;
+      const fromRun = set, drawn = existsSync(out) ? pageSet(await readFile(out, "utf8")) : null;
+      if (drawn && sameSet(drawn.id, set.id) && roundOf(drawn) === round) set = drawn;
+      else if (roundOf(set) !== round) throw new Error(`the page for round ${round} is not on disk - open the round-${round} page and finalize again`);
+      if (run) {
+        // What the run has settled leaves the questions and stays in the settled reference, as setFromRun lists it.
+        const r = reconcile(set, run, fromRun.source, fromRun);
+        for (const a of ans && Array.isArray(ans.answers) ? ans.answers : []) if (r.gone.has(a && a.id)) console.log(`${clean(a.id, 40)}: already settled - skipped`);
+        ans = without(ans, r.gone);
+        set = r.set;
+      }
+      set = nextWizardSet(set, ans);
+      if (!set.decisions.length) throw new Error(`no decision left to ask - every answer is settled; round ${set.round} page not written`);
     }
-    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem.replace(/[^A-Za-z0-9_.-]/g, "-")}.wizard.html`));
-    await writeGenerated(root, out, wizardPage(set));
+    await writeWizard(root, out, set);
     console.log(`holo: wizard ${set.id}${set.round ? ` (round ${set.round})` : ""}, ${set.decisions.length} decision${set.decisions.length === 1 ? "" : "s"} to answer, ${(set.settled || []).length} settled -> ${out}`);
     return;
   }
@@ -1161,7 +1193,7 @@ async function main(argv) {
     await writeGenerated(root, html, standalonePage(r));
     const set = setFromRun(run, rel(runPath));
     let wiz = "";
-    if (set.decisions.length) { wiz = resolve(join(dir, `${run.id}.wizard.html`)); await writeGenerated(root, wiz, wizardPage(set)); }
+    if (set.decisions.length) { wiz = resolve(join(dir, `${run.id}.wizard.html`)); await writeWizard(root, wiz, set); }
     process.stdout.write(renderAscii(run, opts));
     console.log(batchLines(html, art, wiz, set.decisions.length));
     return;
@@ -1186,7 +1218,7 @@ async function main(argv) {
   await writeGenerated(root, out, o.mode === "html" ? standalonePage(r, o.theme) : artifactPage(r));
   const nq = run ? run.qs.filter((q) => ASKABLE.has(q.state)).length : 0;
   // The levers link to the wizard by a relative name: write it beside the page.
-  if (opts.anatomy && run && nq) await writeGenerated(root, join(dirname(out), `${run.id}.wizard.html`), wizardPage(setFromRun(run, rel(runPath))));
+  if (opts.anatomy && run && nq) await writeWizard(root, join(dirname(out), `${run.id}.wizard.html`), setFromRun(run, rel(runPath)));
   console.log(`holo: ${run ? `${run.id} ${run.stages.length} stages, ${nq} open decision${nq === 1 ? "" : "s"}` : "design only"}` +
     `${design ? `, ${design.parts.length} design sections` : ""} -> ${out}` +
     (o.mode === "html" ? " (standalone page)" : " (Artifact page: publish it with the Artifact tool, capabilities {db:{}})"));
@@ -1465,6 +1497,8 @@ function selftest() {
 
 function readFileSyncText(p) { return readFileSync(p, "utf8"); }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// B30: argv[1] keeps a link's spelling, import.meta.url is the real path - compare real paths.
+const entry = (p) => { try { p = realpathSync(p); } catch { p = resolve(p); } return process.platform === "win32" ? p.toLowerCase() : p; };
+if (process.argv[1] && entry(process.argv[1]) === entry(fileURLToPath(import.meta.url))) {
   main(process.argv.slice(2)).catch((e) => { console.error(`holo: ${e.message}`); process.exit(e.code === 2 ? 2 : 1); });
 }

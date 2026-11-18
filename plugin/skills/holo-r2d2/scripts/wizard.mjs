@@ -6,14 +6,29 @@
 // exported JSON or copied CLI commands go back to the session, which turns them
 // into `relay-morpheus.sh answer` calls (answersToCommands).
 
+import { randomBytes } from "node:crypto";
+
 export const SET_SCHEMA = "holo-decisions/1";
 export const ANSWER_SCHEMA = "holo-answers/1";
 const MAX_TEXT = 4000;
 
 const str = (v) => (v == null ? "" : String(v));
+// FINAL = finalized, reviewed and owned; anything less is a draft (F179: one rule).
+export const isFinalized = (a) => !!a && a.final !== false && typeof a.finalizedAt === "string" && !!a.finalizedAt.trim() && a.reviewed === true && !!str(a.owner).trim();
+// The answers file name stem, as the page's saver builds it (answerSaver inlines the same regex).
+export const fileStem = (id) => str(id).replace(/[^A-Za-z0-9_.-]/g, "_");
+// The page holo.mjs writes for a set (its default --wizard output name).
+export const pageFile = (id) => str(id).replace(/[^A-Za-z0-9_.-]/g, "-") + ".wizard.html";
+// Text from an answers file is data: control characters out, one line, capped; anything for sh single-quoted.
+export const CTRL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+export const clean = (v, n = 200) => str(v).replace(new RegExp(CTRL.source, "g"), " ").replace(/\s+/g, " ").trim().slice(0, n);
+export const q = (s) => "'" + str(s).replace(/'/g, "'\\''") + "'";
 const escH = (s) => str(s).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const clipText = (s, n) => { s = str(s).trim(); return s.length > n ? s.slice(0, n - 1) + "\u2026" : s; };
 const ASKABLE = new Set(["open", "asked"]);
+// F179: a FINAL may name decisions the run file has since settled - those are skipped, never refused as unknown.
+export const settledIn = (run) => new Set(run.qs.filter((q) => !ASKABLE.has(q.state)).map((q) => q.id));
+export const without = (ans, gone) => (ans && Array.isArray(ans.answers) ? { ...ans, answers: ans.answers.filter((a) => !gone.has(a && a.id)) } : ans);
 
 export function normalizeDiagram(raw) {
   if (!raw) return [];
@@ -129,6 +144,23 @@ export function setFromRun(run, runPath) {
   return { schema: SET_SCHEMA, id: run.id, title: `${run.id} - ${run.title}`, source: runPath || run.id, decisions, settled };
 }
 
+// One run, however spelled: RUN-1, RUN-0001 and run-1 key as RUN-1; any other id is itself.
+export const runKey = (id) => { const m = /^RUN-(\d+)$/i.exec(str(id)); return m ? `RUN-${BigInt(m[1])}` : str(id); };
+export const sameSet = (a, b) => runKey(a) === runKey(b);
+
+// A page's set against its run file now: the page's set (the run's own when the page is another set's
+// or unreadable), less what the run has settled, which joins the settled reference as setFromRun lists it.
+// live: the run's set now (pass it when already built); gone: the decision ids the run has settled.
+export function reconcile(pageSet, run, runPath, live = setFromRun(run, runPath)) {
+  const gone = settledIn(run);
+  const base = pageSet && sameSet(pageSet.id, live.id) ? pageSet : live;
+  const have = new Set((base.settled || []).map((x) => x && x.id));
+  const set = Array.isArray(base.decisions)
+    ? { ...base, decisions: base.decisions.filter((d) => !gone.has(d && d.id)), settled: [...(base.settled || []), ...live.settled.filter((x) => !have.has(x.id))] }
+    : base;
+  return { set, live, gone };
+}
+
 // Throws on a set the page could not ask honestly.
 export function checkSet(set) {
   const bad = (m) => { throw new Error(`decision set: ${m}`); };
@@ -191,13 +223,13 @@ export function checkSet(set) {
 export function nextWizardSet(set, ans) {
   checkSet(set);
   if (!ans || ans.schema !== ANSWER_SCHEMA || !Array.isArray(ans.answers)) throw new Error(`answers: schema must be "${ANSWER_SCHEMA}"`);
-  if (str(ans.set) !== str(set.id)) throw new Error(`answers: set "${str(ans.set)}" does not match active set "${set.id}"`);
+  if (!sameSet(ans.set, set.id)) throw new Error(`answers: set "${str(ans.set)}" does not match active set "${set.id}"`);
   if (ans.setSchema && ans.setSchema !== set.schema) throw new Error(`answers: setSchema "${ans.setSchema}" does not match active set schema "${set.schema}"`);
   const activeRound = Number(set.round) || 1;
   if (ans.round != null && (!Number.isFinite(ans.round) || ans.round !== activeRound)) {
     throw new Error(`answers: round ${ans.round} does not match active round ${activeRound}`);
   }
-  if (!ans.finalizedAt || typeof ans.finalizedAt !== "string" || !ans.finalizedAt.trim() || !ans.reviewed || ans.reviewed !== true || !str(ans.owner).trim() || ans.final === false) {
+  if (!isFinalized(ans)) {
     throw new Error("answers: a draft, not finalized and reviewed by its owner - cannot settle decisions");
   }
 
@@ -306,14 +338,13 @@ export function nextWizardSet(set, ans) {
 
 export function answersToCommands(ans, rm = "relay-morpheus.sh") {
   if (!ans || ans.schema !== ANSWER_SCHEMA) throw new Error(`answers: schema must be "${ANSWER_SCHEMA}"`);
-  if (!ans.finalizedAt || !ans.reviewed || !str(ans.owner).trim()) throw new Error("answers: a draft, not finalized and reviewed by its owner - nothing is applied");
-  const m = /^RUN-(\d+)$/.exec(str(ans.set));
+  if (!isFinalized(ans)) throw new Error("answers: a draft, not finalized and reviewed by its owner - nothing is applied");
+  const m = /^RUN-(\d+)$/.exec(runKey(ans.set));
   if (!m) throw new Error(`answers: set "${str(ans.set).slice(0, 40)}" is not a relay run - read the answers into the work by hand`);
-  const q = (s) => "'" + s.replace(/'/g, "'\\''") + "'";
-  const one = (s) => str(s).replace(/\s+/g, " ").trim();
+  const one = (s) => clean(s, MAX_TEXT);
   const out = { commands: [], review: [], open: [] };
   for (const a of ans.answers || []) {
-    if (!a || !/^Q\d+$/.test(str(a.id))) { out.open.push(`${a && a.id}: not a relay decision id`); continue; }
+    if (!a || !/^Q\d+$/.test(str(a.id))) { out.open.push(`${one(a && a.id).slice(0, 40)}: not a relay decision id`); continue; }
     const cid = a.choice && typeof a.choice === "object" ? str(a.choice.id) : "";
     const notes = one(a.notes);
     const isDefer = cid === "defer" || cid === "explain";
@@ -330,11 +361,19 @@ export function answersToCommands(ans, rm = "relay-morpheus.sh") {
   return out;
 }
 
+// The set a wizard page was built from (its embedded holo-set), or null.
+export function pageSet(html) {
+  const m = /<script type="application\/json" id="holo-set">([\s\S]*?)<\/script>/.exec(str(html));
+  try { return m ? JSON.parse(m[1]) : null; } catch { return null; }
+}
+
 // Embedded data: JSON with every `<` escaped, so no string closes the script.
 const embed = (v) => JSON.stringify(v).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 
-export function wizardPage(set) {
+export function wizardPage(set, nonce = randomBytes(16).toString("hex")) {
   checkSet(set);
+  // F179: the export carries the nonce, so the finder can tell this page's answers apart (holo.mjs writeWizard keeps it per set).
+  set = { ...set, nonce };
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Decisions - ${escH(set.title || set.id)}</title>
@@ -510,6 +549,69 @@ kbd{font:700 .8rem ui-monospace,monospace;padding:2px 6px;border:1px solid var(-
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 @media (prefers-reduced-motion:no-preference){#bar{transition:width .25s}}
 `;
+
+// F179: where the answers go - clipboard, the page's folder (File System Access
+// API, the folder handle remembered per set in IndexedDB) or the normal download.
+// The page embeds this function by its own source, so the tests run the browser
+// code. Self-contained: no template literals, no outside names. Nothing is sent.
+export function answerSaver({ win, setId, key, pickerId, json, download, say, copyFallback }) {
+  const name = (final) => String(setId).replace(/[^A-Za-z0-9_.-]/g, "_") + "-decisions-" + (final ? "FINAL" : "draft") + ".json";
+  const next = " Then say \"check wizard answers\" in the working conversation.";
+  const canSave = typeof win.showDirectoryPicker === "function";
+  function idb(mode, fn) {
+    return new Promise((res, rej) => {
+      if (!win.indexedDB) return res(undefined);
+      const open = win.indexedDB.open("holo-wizard", 1);
+      open.onupgradeneeded = () => { const db = open.result; if (!db.objectStoreNames.contains("dirs")) db.createObjectStore("dirs"); };
+      open.onerror = () => rej(open.error);
+      open.onsuccess = () => {
+        try { const r = fn(open.result.transaction("dirs", mode).objectStore("dirs")); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }
+        catch (e) { rej(e); }
+      };
+    });
+  }
+  const remembered = () => idb("readonly", (s) => s.get(key)).catch(() => undefined);
+  const remember = (dir) => idb("readwrite", (s) => s.put(dir, key)).catch(() => undefined);
+  async function writeTo(dir, final) {
+    const opts = { mode: "readwrite" };
+    if ((await dir.queryPermission(opts)) !== "granted" && (await dir.requestPermission(opts)) !== "granted") {
+      const e = new Error("permission refused"); e.name = "NotAllowedError"; throw e;
+    }
+    const w = await (await dir.getFileHandle(name(final), { create: true })).createWritable();
+    await w.write(json(final)); await w.close();
+    say("Saved into '" + dir.name + "'. 'check wizard answers' searches this page's .skillator/holo folder, your browser's download folder, and the folder in ~/.skillator/holo/answers-dir." + next);
+  }
+  function fallback(final, why) {
+    download(final);
+    say((why ? why + " " : "") + "Downloaded " + name(final) + " to the browser's download folder." + next);
+  }
+  const failed = (dir, e) => (e && e.name === "NotAllowedError" ? "No permission to write into " : "Could not write into ") + dir.name + ".";
+  // Save button: choose (or choose again) the folder, remember it, write there.
+  async function save(final) {
+    if (!canSave) return fallback(final, "This browser cannot save into a folder.");
+    let dir;
+    const opts = { id: pickerId, mode: "readwrite" }, start = await remembered();
+    if (start) opts.startIn = start;
+    try { dir = await win.showDirectoryPicker(opts); }
+    catch (e) { return e && e.name === "AbortError" ? say("Save cancelled; nothing was written.") : fallback(final, "Could not open the folder picker."); }
+    await remember(dir);
+    try { await writeTo(dir, final); } catch (e) { fallback(final, failed(dir, e)); }
+  }
+  // Finalize: the folder already chosen for this set, else the normal download.
+  async function deliver(final) {
+    const dir = canSave ? await remembered() : undefined;
+    if (!dir) return fallback(final, "");
+    try { await writeTo(dir, final); } catch (e) { fallback(final, failed(dir, e)); }
+  }
+  async function copy(final) {
+    const text = json(final);
+    let ok = false;
+    try { await win.navigator.clipboard.writeText(text); ok = true; } catch (e) { ok = !!(copyFallback && copyFallback(text)); }
+    say(ok ? "Answers JSON (" + (final ? "FINAL" : "draft") + ") copied. Paste it in the working conversation."
+      : "Copy failed - use Save to a folder or Download instead.");
+  }
+  return { canSave, save, deliver, copy, name };
+}
 
 // The page's own code. Text from the set or a draft only ever reaches the DOM
 // through textContent / value.
@@ -968,13 +1070,13 @@ function review() {
   const chk = el("input", { type: "checkbox", id: "reviewed", checked: st.reviewed || null, "aria-describedby": "fin-err",
     onchange: (e) => { st.reviewed = e.target.checked; if (!st.reviewed) st.finalizedAt = null; save(true); sync(); } });
   const finErr = el("p", { class: "err", id: "fin-err", "aria-live": "polite" });
-  const fin = el("button", { type: "button", class: "primary", onclick: finalize }, "Finalize and download");
+  const fin = el("button", { type: "button", class: "primary", onclick: finalize }, SAVER.canSave ? "Finalize and save" : "Finalize and download");
   const state = el("p", { class: "banner" });
   function sync() {
     header(); chk.checked = !!st.reviewed;
     state.className = "banner" + (blockers.length ? " warn" : "");
     state.textContent = blockers.length ? blockers.length + " decision" + (blockers.length > 1 ? "s" : "") + " still block finalizing (" + blockers.map(d => d.id + ": " + LABEL[statusOf(d)].toLowerCase()).join("; ") + "). A draft can be downloaded at any time."
-      : st.finalizedAt ? "Finalized " + st.finalizedAt + " by " + st.owner + ". Share the downloaded JSON in the working conversation (or pass it to --next-wizard for continuous discussion)."
+      : st.finalizedAt ? "Finalized " + st.finalizedAt + " by " + st.owner + ". The status line at the bottom says where the JSON went; say \"check wizard answers\" in the working conversation (or pass it to --next-wizard for continuous discussion)."
       : "Every decision has a response (options, custom directions, and Ask / Explain requests can all be finalized). Add your name and confirm to finalize.";
   }
   function finalize() {
@@ -984,7 +1086,7 @@ function review() {
     owner.removeAttribute("aria-invalid"); $("owner-err").textContent = "";
     if (!st.reviewed) { finErr.textContent = "Confirm you reviewed every answer."; return chk.focus(); }
     st.finalizedAt = new Date().toISOString(); st.imported = false; save(true); sync();
-    download(true); say("Finalized and downloaded. Share that JSON file in the working conversation.");
+    SAVER.deliver(true);
   }
   const settled = (SET.settled && SET.settled.length) ? el("details", { class: "settled" }, el("summary", { text: SET.settled.length + " already settled (read-only)" }),
     el("table", null, el("thead", null, el("tr", null, ["ID", "Question", "Settled as", "Source"].map(h => el("th", { scope: "col", text: h })))),
@@ -1000,6 +1102,8 @@ function review() {
     el("label", { class: "blk", for: "owner", text: "Your name (decision owner)" }), owner, el("p", { class: "err", id: "owner-err", "aria-live": "polite" }),
     el("label", { class: "opt", for: "reviewed" }, chk, el("span", { class: "lbl", text: "I reviewed every answer above and they are my decisions." })),
     finErr, el("div", { class: "actions" }, fin, el("button", { type: "button", class: "secondary", onclick: () => download(false) }, "Download draft JSON"),
+      el("button", { type: "button", class: "secondary", onclick: () => SAVER.copy(!!st.finalizedAt), "aria-label": "Copy the answers JSON to the clipboard" }, "Copy JSON"),
+      SAVER.canSave ? el("button", { type: "button", class: "secondary", onclick: () => SAVER.save(!!st.finalizedAt), title: "Writes the answers JSON into the folder you choose; the finder looks in .skillator/holo and the download folder" }, "Save to a folder (choose this page's folder)") : null,
       el("button", { type: "button", class: "quiet", onclick: () => go(n - 1) }, "Back")),
     el("p", { class: "muted small", text: "Saving, downloading, recommendations and time spent never count as approval. Only finalizing does, and it stays on this device until you share the file." }),
     settled);
@@ -1008,6 +1112,7 @@ function review() {
 function exportObj(final) {
   return {
     schema: SCHEMA, set: SET.id, setSchema: SET.schema, title: SET.title || SET.id, source: SET.source || "",
+    nonce: SET.nonce || "",
     round: Number(SET.round) || 1,
     exportedAt: new Date().toISOString(), finalizedAt: final ? st.finalizedAt : null, final: !!final,
     owner: st.owner, reviewed: final ? st.reviewed : false,
@@ -1023,10 +1128,13 @@ function exportObj(final) {
 }
 function download(final) {
   const blob = new Blob([JSON.stringify(exportObj(final), null, 2)], { type: "application/json" });
-  const u = URL.createObjectURL(blob), a = el("a", { href: u, download: SET.id + "-decisions-" + (final ? "FINAL" : "draft") + ".json" });
+  const u = URL.createObjectURL(blob), a = el("a", { href: u, download: SAVER.name(final) });
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000);
   if (!final) say("Draft downloaded. It stays a draft, whatever was finalized before.");
 }
+
+const SAVER = (${answerSaver})({ win: window, setId: SET.id, key: "page:" + location.pathname, pickerId: "holo-" + hash(location.pathname), json: (final) => JSON.stringify(exportObj(final), null, 2), download, say,
+  copyFallback: (t) => { const ta = el("textarea", { style: "position:fixed;left:-9999px" }); ta.value = t; document.body.append(ta); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch (e) {} ta.remove(); return ok; } });
 
 function validateImport(v) {
   const bad = (m) => { throw new Error(m); };

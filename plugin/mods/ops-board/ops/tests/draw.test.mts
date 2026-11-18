@@ -164,7 +164,7 @@ test('the keys line as the mock; D decided only on a decidable row', () => {
   // F76: no run yet, the cursor is on the Runs header (Enter closes it); on a run, Enter shows its stages
   assert.match(text(reduce(s, { name: '2' }).state), /\[↑↓ move\] · \[enter close\] · \[s Start\] · \[Engage\]/)
   assert.match(text(reduce(onRuns(s, 'RUN-0012  board sweep  2/4 done\n', {}), { name: '2' }).state), /\[↑↓ move\] · \[enter stages\] · \[s Start\] · \[Engage\]/)
-  assert.match(text(reduce(s, { name: '3' }).state), /\[r refresh\] · \[R resume\](?:\n| · )\[c resume CLI\] · \[F force resume\](?:\n| · )\[q quit\]/)
+  assert.match(text(reduce(s, { name: '3' }).state), /\[r refresh\] · \[R resume\](?:\n| · )\[c resume CLI\](?:\n| · )\[F force resume\](?:\n| · )\[p profiles\](?:\n| · )\[q quit\]/)
 })
 test('the selection scrolls into view in a short terminal; a cut list says so', () => {
   let x: State = { ...s, rows: 13 }
@@ -507,6 +507,9 @@ test('F128 draw: Assigned and Decide sections render with fold indicators and ad
   )
   const tm = [{ handle: '@asha', emails: [] }]
   let sUser = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  // F180: both start collapsed; opened here as the person would
+  assert.match(frame(sUser, P).join('\n'), /▸ Assigned \(1\)\n  ▸ Mine to decide \(1\)/)
+  sUser = { ...sUser, open: [...sUser.open, 'unfold:assigned', 'unfold:decide'] as any }
   let f = frame(sUser, P).join('\n')
   assert.match(f, /▾ Assigned \(1\)/)
   assert.match(f, /F1  Dark mode/)
@@ -518,7 +521,7 @@ test('F128 draw: Assigned and Decide sections render with fold indicators and ad
   assert.match(col, /\x1b\[95m +decide @asha\x1b\[0m/)
 
   // Fold assigned section
-  sUser = { ...sUser, open: [...sUser.open, 'fold:assigned' as any] }
+  sUser = { ...sUser, open: (sUser.open as string[]).filter(k => k !== 'unfold:assigned') as any }
   f = frame(sUser, P).join('\n')
   assert.match(f, /▸ Assigned \(1\)/)
   assert.match(f, /▸ Assigned \(1\)\n  ▾ Mine to decide \(1\)/)
@@ -587,7 +590,7 @@ test('F123: button badges [Key Label] across all tabs and click hitboxes match b
 
   // 3. Health tab
   const scHealth = screen({ ...reduce(s, { name: '3' }).state, cols: 120 }, P)
-  assert.match(scHealth.lines.join('\n'), /\[r refresh\] · \[R resume\] · \[c resume CLI\] · \[F force resume\] · \[q quit\]/)
+  assert.match(scHealth.lines.join('\n'), /\[r refresh\] · \[R resume\] · \[c resume CLI\] · \[F force resume\] · \[p profiles\] · \[q quit\]/)
 
   // 4. Messages tab
   const scMsgs = screen({ ...reduce(s, { name: '4' }).state, cols: 120 }, P)
@@ -1039,3 +1042,34 @@ test('F174 draw: Decide chooser renders (a) assign, (h) decision page, (q) MCQ d
 })
 
 
+
+test('F176: the Health tab shows the profile table once read, and how to read it before', () => {
+  const h = { ...s, tab: 'health' as const, cols: 100 }
+  assert.match(text(h), /Profiles\s+p reads every profile/)
+  const t = text({ ...h, profiles: 'profile  5h used  7d used\nclaude   4%       20%\n  Fable  -        43%\n' })
+  assert.match(t, /Profiles/)
+  assert.match(t, /claude   4%       20%/)
+  assert.match(t, / {2}Fable  -        43%/)
+})
+
+// F178: the ops app draws 'This session (<code>)' with its tickets once opened
+test('F178: This session section drawn when the app knows its session code', () => {
+  const b = parseBoard('- [ ] F1 — Dark mode [session: cc-1ir0]\n', 'T', 1, 1)
+  assert.doesNotMatch(frame(onBoard(initial(80, 24, 0), b, [], null), P).join('\n'), /This session/)
+  const x = onBoard({ ...initial(80, 24, 0), session: 'cc-1ir0' }, b, [], null)
+  const opened = reduce({ ...x, selected: 'head:session' }, { name: 'return' }).state
+  const both = [frame(x, P).join('\n'), frame(opened, P).join('\n')]
+  assert.ok(both.some(f => /This session \(cc-1ir0\) \(1\)/.test(f)))
+  assert.ok(both.some(f => /F1  Dark mode/.test(f)))
+})
+
+// F180: a fresh board draws headers only - every section and group collapsed (▸), no ticket row
+test('F180: fresh ops board draws every section and status group collapsed', () => {
+  const b = parseBoard('- [~] F2 — Wip [owner: @asha]\n- [ ] F1 — Dark mode [owner: @asha] [session: cc-1ir0]\n', 'T', 1, 1)
+  const f = frame(onBoard({ ...initial(80, 24, 0), session: 'cc-1ir0' }, b, [{ handle: '@asha', emails: [] }], '@asha'), P).join('\n')
+  assert.match(f, /▸ Assigned \(2\)/)
+  assert.match(f, /▸ Mine to decide \(0\)/)
+  assert.match(f, /▸ This session \(cc-1ir0\) \(1\)/)
+  assert.doesNotMatch(f, /▾/)
+  assert.doesNotMatch(f, /F1  Dark mode|F2  Wip/)
+})

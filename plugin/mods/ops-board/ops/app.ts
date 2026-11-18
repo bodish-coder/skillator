@@ -10,7 +10,7 @@
 // decision (a read) and nothing else, so it never sets or releases the watchdog hold.
 import { emitKeypressEvents } from 'node:readline'
 import { PassThrough } from 'node:stream'
-import { writeSync } from 'node:fs'
+import { realpathSync, writeSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import type { Host } from './nodehost'
@@ -24,6 +24,7 @@ import { mouseInput, mouseTarget, MOUSE_ON, MOUSE_OFF } from './mouse'
 import { makeEngine } from './engine'
 import { ownProfile, status } from './status'
 import { reset } from './reset'
+import { sessionTag } from '../hooks/lib/team'
 
 export type Opts = {
   once: boolean; cols: number | null; rows: number | null; color: boolean; ascii: boolean
@@ -35,15 +36,22 @@ export const USAGE = 'usage: ops [repo-dir] [--once] [--cols N] [--rows N] [--no
 export const HELP = USAGE + '\n'
   + '  launcher: ops [repo-dir] --open   (ops.ps1: -Open) the board in a new tab of the current\n'
   + '            Windows Terminal window when wt.exe is on PATH, else here as without it\n'
-  + '  ops --status   one row per CLI profile (5h / 7d % used, or why not), then exits\n'
+  + '  ops --status   one row per CLI profile (5h / 7d % used, or why not) and its model rows, then exits\n'
+  + '  ops --status --refresh   the same, a blank logged-in claude/agy/muse row read once first (not at >= 90% 7d)\n'
   + '  ops --reset    reset terminal state, clear stale locks and kill hung refresh processes, then exits\n'
   + "  ops --font-size N   sets the 'skillator ops' Windows Terminal profile font (install.ps1 -OpsFontSize N too; skillator-update keeps it)\n"
   + "  zoom: Ctrl+minus / Ctrl+plus / Ctrl+scroll resizes any Windows Terminal or herdr tab live; the in-session pane draws in the host terminal's font\n"
-  + '  NO_COLOR or --no-color drops the colours only; bold, inverse and the › marker stay'
+  + '  NO_COLOR or --no-color drops the colours only; bold, inverse and the › marker stay\n'
+  + '  Tickets: every section and group opens collapsed (▸ header, its count); Enter or a click on a header opens or closes it'
 const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', agents: 'runs', health: 'health', messages: 'messages', explorer: 'explorer', build: 'run', run: 'run', help: 'help', guide: 'help', skills: 'help' }
 
 // The flags; the first wrong one is `error` (the launcher has taken the repo dir already).
 // NO_COLOR (any non-empty value) turns colour off as --no-color does.
+// F178: this app's session code, as the pane's (team.ts sessionTag); none when it cannot tell
+function ownSession(): string | null {
+  try { return sessionTag(process.env.SKILLATOR_SESSION, process.env.CLAUDE_CODE_SESSION_ID) } catch { return null }
+}
+
 export function parseArgs(argv: string[], env: Record<string, string | undefined> = process.env): Opts {
   const o: Opts = { once: false, cols: null, rows: null, color: !env.NO_COLOR, ascii: false, skills: null, tab: 'tickets', error: null }
   for (let i = 0; i < argv.length && !o.error; i++) {
@@ -100,7 +108,7 @@ export const repoName = (root: string): string | null => root.split('/').filter(
 
 export async function main(argv: string[]): Promise<number> {
   if (argv.includes('--help') || argv.includes('-h')) { process.stdout.write(HELP + '\n'); return 0 }
-  if (argv.includes('--status')) { process.stdout.write(await status(process.env, import.meta.dirname)); return 0 }
+  if (argv.includes('--status')) { process.stdout.write(await status(process.env, import.meta.dirname, argv.includes('--refresh'))); return 0 }
   if (argv.includes('--reset')) { process.stdout.write(await reset(process.env, import.meta.dirname)); return 0 }
   const opts = parseArgs(argv)
   if (opts.error) { process.stderr.write(`${opts.error}\n${USAGE}\n`); return 2 }
@@ -117,11 +125,12 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   const host: Host = await makeHost({ appDir: import.meta.dirname, cwd: process.cwd(), ...(opts.skills ? { skills: opts.skills } : {}) })
+  host.status = async refresh => ({ code: 0, out: await status(process.env, import.meta.dirname, refresh), err: '', argv: ['ops', '--status', ...(refresh ? ['--refresh'] : [])] })
   // --once without colour is read as text (pipes, tests, screenshots): no SGR at all
   const paint: Paint = { color: opts.color, ascii: opts.ascii, plain: once && !opts.color }
   const size = () => ({ cols: opts.cols ?? (out.isTTY && out.columns ? out.columns : 80), rows: opts.rows ?? (out.isTTY && out.rows ? out.rows : 24) })
   const sz = size()
-  const baseState: State = { ...initial(sz.cols, sz.rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot), profile: ownProfile(process.env)?.name ?? null }
+  const baseState: State = { ...initial(sz.cols, sz.rows, Date.now()), tab: opts.tab, repo: repoName(host.repoRoot), profile: ownProfile(process.env)?.name ?? null, session: ownSession() }
   const state: State = opts.tab === 'help' ? openHelp(baseState).state : baseState
   const email = await host.gitEmail()
 
@@ -189,8 +198,9 @@ export async function main(argv: string[]): Promise<number> {
 }
 
 // Run when started as the entry (node ... app.ts), not when a test imports it.
-// Windows paths compare without case (c:\ and C:\ are one file).
-const entryKey = (p: string) => (process.platform === 'win32' ? resolve(p).toLowerCase() : resolve(p))
+// Windows paths compare without case (c:\ and C:\ are one file). B30: argv[1] keeps a
+// link's spelling, import.meta.url is the real path - compare real paths.
+const entryKey = (p: string) => { p = resolve(p); try { p = realpathSync(p) } catch { /* as given */ } return process.platform === 'win32' ? p.toLowerCase() : p }
 if (process.argv[1] && entryKey(process.argv[1]) === entryKey(fileURLToPath(import.meta.url))) {
   main(process.argv.slice(2)).then(code => { process.exitCode = code }, e => {
     process.stderr.write(`ops: ${(e as Error)?.stack ?? e}\n`)

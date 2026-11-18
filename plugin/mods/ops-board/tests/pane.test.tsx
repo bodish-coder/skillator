@@ -184,8 +184,9 @@ const texts = async (ui: { findAll: (q: { type?: string; key?: string }) => Prom
 type Ui = { findAll: (q: { type?: string }) => Promise<{ key: string | undefined; text: string }[]>; press: (q: { key: string }) => Promise<unknown> }
 const heads = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('head:') && b.key !== 'head:assigned' && b.key !== 'head:decide').map(b => b.text.replace(/^[▌▏] /, ''))
 const userHeads = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key === 'head:assigned' || b.key === 'head:decide').map(b => b.text.replace(/^[▌▏] /, ''))
+// F180: the personal sections (`▸ Assigned (1)`) start collapsed too
 async function openAll(ui: Ui) {
-  for (const b of (await ui.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && / (▸|\+)$/.test(x.text)))
+  for (const b of (await ui.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && (/ (▸|\+)$/.test(x.text) || /^(?:[▌▏] )?[▸>] /.test(x.text))))
     await ui.press({ key: b.key! })
 }
 const rowKeys = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('row:')).map(b => b.key)
@@ -855,7 +856,10 @@ for (const surface of SURFACES) {
     await start($, clock)
     const ui = await mountPane($, surface)
 
-    // Active user is @vidul -> Assigned (1) with F3, Mine to decide (0)
+    // Active user is @vidul -> Assigned (1) with F3, Mine to decide (0); F180: both start collapsed
+    expect(await userHeads(ui)).toEqual(['▸ Assigned (1)', '▸ Mine to decide (0)'])
+    await ui.press({ key: 'head:assigned' })
+    await ui.press({ key: 'head:decide' })
     expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▾ Mine to decide (0)'])
     expect(((await ui.find({ key: 'head:decide' }))!.children.at(-1) as { props: { color?: string } }).props.color).toBe('autoAccept')
     expect(await ui.find({ key: 'row:assigned:F3' })).toBeDefined()
@@ -896,6 +900,50 @@ for (const surface of SURFACES) {
     await ui.press({ key: 'go' })
     expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▾ Mine to decide (1)'])
     expect(await ui.find({ key: 'row:assigned:B1' })).toBeDefined()
+    await ui.unmount()
+  })
+}
+
+// F178: 'This session (<code>)' beside Assigned and Mine to decide - only when the board knows its session code
+for (const surface of SURFACES) {
+  test(`${surface}: F178 the This session section lists open tickets tagged [session: <code>] of this session`, WITH, async ($, on) => {
+    const board = BOARD.replace('[app: ui]\n', '[app: ui] [session: cc-1ir0]\n')
+    const [, clock] = world(on, { '/r/TICKETS.md': board, '/r/.skillator/team.md': TEAM }, true, undefined, { SKILLATOR_SESSION: '@cc-1ir0' })
+    on('session.id', () => ({ value: 'sid-1' }))
+    await start($, clock)
+    const ui = await mountPane($, surface)
+    const head = async () => (await ui.find({ key: 'head:session' }))?.text.replace(/^[▌▏] /, '')
+    expect((await head())?.endsWith('This session (cc-1ir0) (1)')).toBe(true)
+    if (!(await ui.find({ key: 'row:session:B1' }))) await ui.press({ key: 'head:session' })
+    expect(await ui.find({ key: 'row:session:B1' })).toBeDefined()
+    expect((await texts(ui)).join(' ')).toContain('session:')
+    await ui.unmount()
+  })
+}
+test('F178: no session code, no This session section', WITH, async ($, on) => {
+  const [, clock] = world(on, { '/r/TICKETS.md': BOARD.replace('[app: ui]\n', '[app: ui] [session: cc-1ir0]\n'), '/r/.skillator/team.md': TEAM })
+  await start($, clock)
+  const ui = await mountPane($, 'terminal')
+  expect(await ui.find({ key: 'head:session' })).toBeUndefined()
+  await ui.unmount()
+})
+
+// F180: a fresh pane - every personal section and status group collapsed, no ticket row; a press opens one
+for (const surface of SURFACES) {
+  test(`${surface}: F180 the Tickets tab opens with every section and status group collapsed`, WITH, async ($, on) => {
+    const [, clock] = world(on, { '/r/TICKETS.md': BOARD.replace('[app: ui]\n', '[app: ui] [session: cc-1ir0]\n'), '/r/.skillator/team.md': TEAM }, true, undefined, { SKILLATOR_SESSION: '@cc-1ir0' })
+    on('session.id', () => ({ value: 'sid-1' }))
+    await start($, clock)
+    const ui = await mountPane($, surface)
+    expect(await userHeads(ui)).toEqual(['▸ Assigned (1)', '▸ Mine to decide (0)'])
+    expect((await ui.find({ key: 'head:session' }))?.text).toContain('▸ This session (cc-1ir0) (1)')
+    const hs = (await heads(ui)).filter(h => !h.includes('This session'))   // heads() keeps head:session
+    expect(hs.length).toBeGreaterThan(0)
+    expect(hs.every(h => h.endsWith(' ▸'))).toBe(true)
+    expect((await ui.findAll({ type: 'Button' })).some(b => b.key?.startsWith('row:'))).toBe(false)
+    await ui.press({ key: 'head:assigned' })
+    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▸ Mine to decide (0)'])
+    expect(await ui.find({ key: 'row:assigned:F3' })).toBeDefined()
     await ui.unmount()
   })
 }

@@ -358,3 +358,29 @@ test('F98a: setup check and first-time setup walk ask y/n, run through calls, an
   assert.match(text(walked.state), /setup complete/)
   assert.deepEqual(runs(walked.effects).map(e => e.call), ['team-config-show', 'team-login-status'])
 })
+
+test('A235 7: only the saved: <path> line is a save; an exit 0 without it, or a refusal, toasts and keeps the form', () => {
+  let s = openSetup(CFG_NONE)
+  s = type(s, TOKEN)
+  s = type(press(s, 'tab'), 'https://prod.example/w')
+  const st = reduce(s, { name: 'return' })
+  const [save] = runs(st.effects)
+  const quiet = settle(save!.then(ok('', ['node', 'team.mjs', 'config', 'save']))(st.state))
+  assert.ok(quiet.state.setup)
+  assert.deepEqual(runs(quiet.effects), [])
+  assert.match(quiet.state.toast ?? '', /^✗ Teams settings not saved: teams-uhura did not say it saved/)
+  const no = settle(save!.then({ code: 1, out: '', err: 'team: refused: inside the repo', argv: ['node'] })(st.state)).state
+  assert.ok(no.setup)
+  assert.match(no.toast ?? '', /^✗ Teams settings not saved: refused: inside the repo/)
+})
+
+test('A235 8: config clear counts only with its cleared: / nothing saved line', () => {
+  let s = press(openSetup(CFG_SET), 'tab', 'tab', 'tab', 'tab', 'return')
+  const [clear] = runs(reduce(s, { name: 'y' }).effects)
+  const quiet = settle(clear!.then(ok('', ['node', 'team.mjs', 'config', 'clear']))(s)).state
+  assert.ok(quiet.setup)
+  assert.match(quiet.setup!.result ?? '', /teams-uhura did not say it cleared/)
+  const none = settle(clear!.then(ok('nothing saved at /h/.skillator/teams.json\n'))(s)).state
+  assert.equal(none.setup, null)
+  assert.match(none.toast ?? '', /^✓ Teams settings cleared - nothing saved at \/h\/\.skillator\/teams\.json/)
+})

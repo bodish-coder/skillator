@@ -110,6 +110,16 @@ export function makeEngine(o: EngineOpts): Engine {
       if (e.then) await apply(afterRun({ then: e.then }, r, state, Date.now()))
       return
     }
+    if (e.kind === 'status') {                  // F176: may start usage reads and write caches, so never in --once
+      let r: RunResult
+      try {
+        if (once) r = { code: 1, out: '', err: 'read only (--once)', argv: [] }
+        else if (!host.status) r = { code: 127, out: '', err: 'profile read not supported on this host', argv: [] }
+        else r = await host.status(e.refresh)
+      } catch (err) { r = { code: 1, out: '', err: errorText(err), argv: [] } }
+      if (stopped) return
+      return apply(afterRun(e, r, state, Date.now()))
+    }
     if (e.kind === 'mute') {                    // F87: a write, so never in --once
       let r: RunResult = { code: 0, out: '', err: '', argv: [] }
       try {
