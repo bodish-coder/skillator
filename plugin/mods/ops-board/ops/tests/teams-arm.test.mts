@@ -289,3 +289,22 @@ test('A235 fix 1: an ack reply never overwrites a view an arm started after it d
   const acked = afterRun(ack, ok(KV({ ...ARMED, result: 'acked', url: U2 })), copied.state, NOW).state
   assert.equal(acked.teamsArm?.urlChanged, false)
 })
+
+test('A235 fix 3: the ack y deferred under c runs only after an armed (or hosted) reply; dropped otherwise', () => {
+  const changed: State = { ...onTab.state, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }
+  const under = (reply: Parameters<typeof afterRun>[1]) => {
+    const c = reduce(changed, { name: 'c' })
+    const y = reduce(c.state, { name: 'y' })
+    const copy = y.effects.find((e): e is Extract<Effect, { kind: 'copy' }> => e.kind === 'copy')!
+    const during = afterRun({ then: copy.then! }, { code: 0, out: '', err: '', argv: [] }, y.state, NOW)
+    return afterRun(runs(c.effects)[0]!, reply, during.state, NOW)
+  }
+  assert.deepEqual(runs(under(ok(KV({ ...ARMED, url: U2, url_changed: '1' }))).effects).map(e => e.call), ['team-url-ack'])
+  assert.deepEqual(runs(under(ok(KV({ result: 'failed', why: 'x', hosted: '1', url: U2, url_changed: '1' }))).effects).map(e => e.call), ['team-url-ack'])
+  for (const reply of [ok(KV({ result: 'refused', why: 'not signed in', url: U2 })), ok(KV({ result: 'failed', why: 'the tunnel did not start', url: U2 })),
+    ok('result=armed\nresult=armed\n'), { code: 127, out: '', err: 'sh not found', argv: [] }]) {
+    const r = under(reply)
+    assert.deepEqual(runs(r.effects), [], reply.out)
+    assert.equal(r.state.ackAfter, null)
+  }
+})

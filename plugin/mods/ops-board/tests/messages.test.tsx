@@ -694,6 +694,42 @@ test('A235 3: no deferred ack after a disarm; an ack reply never overwrites a la
   await ui.unmount()
 })
 
+// A235 fix 3: the ack y deferred under c runs only after an armed (or hosted) reply
+test('A235 fix 3: the deferred ack is dropped after a refused, failed or unreadable arm reply', async ($, on) => {
+  const [w, clock] = world(on)
+  const modes = () => w.runs.filter(r => r.argv[1] === SETUP_SH).map(r => r.argv[2])
+  const later = () => { let done!: (r: ProcessRunResult) => void; const p = new Promise<ProcessRunResult>(r => { done = r }); return [p, (r: ProcessRunResult) => done(r)] as const }
+  w.files['/usr/bin/pbcopy'] = 'ELF'
+  w.arm = { '--status': ran(KV({ ...ARMED, result: 'status', url: U2, url_changed: '1' })), '--ack': ran(KV({ ...ARMED, result: 'acked', url: U2 })) }
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  const keep = { url: U2, url_changed: '1' }                 // so the next y still has a URL to copy
+  for (const reply of [ran(KV({ result: 'refused', why: 'not signed in', ...keep })), ran(KV({ result: 'failed', why: 'the tunnel did not start', ...keep })), ran('result=armed\nresult=armed\n')]) {
+    const [arm, endArm] = later()
+    w.arm['--arm'] = arm
+    await ui.press({ key: 'key:connect' })
+    await clock.settle()
+    await ui.press({ key: 'key:copyurl' })
+    await clock.settle()
+    endArm(reply)
+    await clock.settle()
+    expect(modes()).not.toContain('--ack')
+  }
+  // a failed reply that still says hosted=1: the ack runs
+  const [arm, endArm] = later()
+  w.arm['--arm'] = arm
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
+  await ui.press({ key: 'key:copyurl' })
+  await clock.settle()
+  endArm(ran(KV({ result: 'failed', why: 'x', hosted: '1', url: U2, url_changed: '1' })))
+  await clock.settle()
+  expect(modes().filter(m => m === '--ack')).toHaveLength(1)
+  await ui.unmount()
+})
+
 // A235 8: Clear counts only with team.mjs's 'cleared:' or 'nothing saved' line
 test('A235 8: an exit 0 from config clear without its line is not a clear', async ($, on) => {
   const [w, clock] = world(on, CFG_SET)

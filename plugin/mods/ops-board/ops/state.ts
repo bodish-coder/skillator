@@ -1490,12 +1490,12 @@ const armThen = (call: ArmCall, args: string[] = [], seq = 0): Then => r => x =>
   const quiet = call === 'team-arm-status' || call === 'team-url-ack'
   // an arm or disarm in flight, or started after this read, is the newer view
   if (quiet && (x.armBusy || x.armSeq !== seq)) return x
-  // A235: the URL y copied under an arm is acked once it lands; never after a disarm
-  const effects = !quiet && call !== 'team-disarm' && x.ackAfter ? [ackRun(x.ackAfter, x.armSeq)] : []
+  const v = parseArm(r.out)
+  // A235: the URL y copied under an arm is acked once it lands armed (or hosted); else dropped
+  const effects = call === 'team-arm' && x.ackAfter && (v?.result === 'armed' || v?.hosted) ? [ackRun(x.ackAfter, x.armSeq)] : []
   const y: State = quiet ? x : { ...x, armBusy: false, ackAfter: null }
   // a toast never carries the URL: the ack's argument is replaced by value
   const said = (t: string) => args.filter(Boolean).reduce((m, a) => m.split(a).join('<url>'), [t, ran(r.argv)].join('\n'))
-  const v = parseArm(r.out)
   if (!v) return { state: quiet ? y : toast(y, said(`✗ Teams: ${r.code === 0 ? 'unexpected output from teams-uhura' : teamWhy(r, 'teams-uhura setup')}`)), effects }
   const t = armToast(v)
   return { state: t ? toast({ ...y, teamsArm: v }, said(t)) : { ...y, teamsArm: v }, effects }

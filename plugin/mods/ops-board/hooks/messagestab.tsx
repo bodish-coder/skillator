@@ -253,6 +253,7 @@ async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'te
   if (armBusy) { if (!quiet) $.ui.toast('Teams: still working - one moment'); return }
   if (!quiet) { armBusy = true; armSeq++ }
   const seq = armSeq
+  let landed = false                               // an arm reply armed (or hosted): the deferred ack may run
   try {
     const r = await runCall($, call, args)
     // an arm or disarm in flight, or started after this read, is the newer view
@@ -262,13 +263,14 @@ async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'te
     const v = parseArm(r.out)
     if (!v) { if (!quiet) $.ui.toast(said(`✗ Teams: ${r.code === 0 ? 'unexpected output from teams-uhura' : why(r)}`), { timeoutMs: 8000 }); return }
     await update($, armA, () => v)
+    landed = call === 'team-arm' && (v.result === 'armed' || v.hosted)
     const toast = armToast(v)
     if (toast) $.ui.toast(said(toast), { timeoutMs: 8000 })
   } finally {
     if (!quiet) {
       armBusy = false
       const url = ackAfter; ackAfter = null
-      if (url && call !== 'team-disarm') await runArm($, 'team-url-ack', [url])   // never after a disarm
+      if (url && landed) await runArm($, 'team-url-ack', [url])   // never after a disarm, refusal or failure
     }
   }
 }
