@@ -23,14 +23,14 @@ function Assert-False($val, [string]$msg) {
   }
 }
 
-# 1. Verify single-line extraction and evaluation as done in verification-setup-probe.ps1
+# 1. Extract TunnelHosted from setup.ps1 - the whole function, however many lines
 Write-Host "Extracting TunnelHosted function from setup.ps1..."
-$sourceLines = [IO.File]::ReadAllLines($setupPs1)
-$hostedLine = $sourceLines | Where-Object { $_ -match '^function TunnelHosted\b' } | Select-Object -First 1
-if (-not $hostedLine) {
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($setupPs1, [ref]$null, [ref]$null)
+$hosted = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'TunnelHosted' }, $true)
+if (-not $hosted) {
   throw "FAIL: function TunnelHosted not found in setup.ps1"
 }
-Invoke-Expression $hostedLine
+Invoke-Expression $hosted.Extent.Text
 
 # 2. Test: Unrelated devtunnel host process fixture must NOT satisfy readiness
 Write-Host "Testing unrelated devtunnel host fixture..."
