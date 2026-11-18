@@ -792,10 +792,11 @@ for (const port of ['ps1', 'sh']) {
     } finally { fx.cleanup() }
   })
 
-  // A236 (8): ps1 kills only a listed child with a readable start not before its own; with
-  // its own start or the child's unreadable, a reused PID could be anyone's - spared.
-  test(`${port}: A236 the capped call kills a child it started, and spares one whose start (or its own) cannot be read`, { skip: port !== 'ps1' || skip }, async () => {
-    for (const [flag, killed] of [[null, true], ['no-starttime', false], ['no-creation', false]]) {
+  // A236 fix round (2), F176 last round restored: a capped paid turn never outlives its lock -
+  // with its own start time or the child's unreadable, the capped call still kills its
+  // children by parent PID (taskkill /T); only a readable earlier start spares one.
+  test(`${port}: A236 the capped call kills its child, also when its own start or the child's cannot be read`, { skip: port !== 'ps1' || skip }, async () => {
+    for (const [flag, killed] of [[null, true], ['no-starttime', true], ['no-creation', true]]) {
       const fx = makeFixture(port)
       let pid = 0
       try {
@@ -805,10 +806,9 @@ for (const port of ['ps1', 'sh']) {
         writeFileSync(`${fx.root}/cli-sleep-2.txt`, '60')
         if (flag) writeFileSync(`${fx.root}/${flag}`, '')
         await fx.spawnLevel({ ...env, ...FORCED })
-        await new Promise(r => setTimeout(r, 1500))
         pid = Number(readFileSync(`${fx.root}/child.pid`, 'utf8'))
         let alive = true
-        try { process.kill(pid, 0) } catch { alive = false }
+        for (let i = 0; i < 20 && alive; i++) { await new Promise(r => setTimeout(r, 500)); try { process.kill(pid, 0) } catch { alive = false } }
         assert.equal(alive, !killed, `${flag ?? 'readable'}: child ${killed ? 'killed' : 'spared'}`)
       } finally {
         try { if (pid) process.kill(pid) } catch { }
