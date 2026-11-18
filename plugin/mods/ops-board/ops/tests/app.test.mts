@@ -131,6 +131,8 @@ for (const [kind, skip] of launchers) {
 // puts a wt first that logs its arguments one per line.
 function wtEnv(stub: Launcher | null, lad: string): { env: NodeJS.ProcessEnv; log: string } {
   const env = { ...process.env, LOCALAPPDATA: lad }
+  // B32: -Open forwards these CLI identity vars as --env; the runner's own must not leak into the tab line
+  for (const k of ['SKILLATOR_CLI', 'SKILLATOR_PROFILE_DIR', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'MUSE_CONFIG_DIR', 'AGY_CONFIG_DIR', 'ANTIGRAVITY_APP_DATA_DIR']) delete env[k]
   const key = Object.keys(env).find(k => k.toUpperCase() === 'PATH') ?? 'PATH'
   const hasWt = (d: string) => { try { return readdirSync(d).some(n => /^wt(\.exe|\.cmd)?$/i.test(n)) } catch { return false } }
   const dirs = (env[key] ?? '').split(';').filter(d => d && !hasWt(d))
