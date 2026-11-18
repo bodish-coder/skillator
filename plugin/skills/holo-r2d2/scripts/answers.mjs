@@ -133,9 +133,9 @@ async function openSets(root, holo) {
         const time = (x) => Date.parse(x.f.answered || x.f.ruled) || 0;
         const answered = Math.max(0, ...run.qs.map(time));
         if (!r.live.decisions.length) {
-          const mtime = (await stat(path)).mtimeMs, up = Date.parse(run.updated);
-          const untimed = answered && run.qs.some((x) => !time(x)); // all settled here
-          // No updated: stamp: the millisecond mtime bounds it, compared unfloored (exact).
+          const up = Date.parse(run.updated), untimed = answered && run.qs.some((x) => !time(x)); // all settled here
+          // No updated: stamp: the millisecond mtime bounds it, compared unfloored (exact). Stat only when used.
+          const mtime = !answered || (untimed && !up) ? (await stat(path)).mtimeMs : 0;
           done.set(id, !answered ? { mtime } : untimed && !up && mtime > answered ? { exact: mtime } : { answered: untimed ? Math.max(answered, up || 0) : answered });
         }
       }
