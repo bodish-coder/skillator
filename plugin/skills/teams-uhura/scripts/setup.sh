@@ -443,6 +443,9 @@ EOF
   # A235 2: the host confirmed as the deadline passes - hosted=1, what was seen, as setup.ps1
   PROBE=10; kv arm "$ALL" "$RDY"; PROBE=
   out '^why=took too long - try again$' && out '^hosted=1$' || fail '2: a confirmed host past the deadline was not reported hosted'
+  # A235 fix 2: the probe that first sees the host crosses the deadline - still confirmed, hosted=1
+  PROBE=13; kv arm "$ALL" "$RDY"; PROBE=
+  out '^why=took too long - try again$' && out '^hosted=1$' || fail '2: a host seen across the deadline was not reported hosted'
   # A235 4: the poll for the host is by the clock, as setup.ps1 - probes of 5 s give up within 20 s, before the 25 s deadline
   PROBE=5; kv arm "$ALL" "$RDY noopen"; PROBE=
   out '^why=the tunnel did not start' && [ "$(now)" -le 20 ] || fail "4: a failed arm with 5 s probes took $(now) s"
