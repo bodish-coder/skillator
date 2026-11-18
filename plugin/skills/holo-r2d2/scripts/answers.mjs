@@ -103,7 +103,7 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
 // file name only when the page is unreadable - the set is then rebuilt from the run). openNow: a RUN
 // set's decisions still open or asked in the run file now - only those may get a command; gone: the ones settled there.
 // done: a fully settled RUN set - its newest answered/ruled time (the run's updated: stamp when later and a moot,
-// same-as or replanned decision carries no time), else (none recorded) its run file's mtime.
+// same-as or replanned decision carries no time; no stamp: the mtime, exact), else (none recorded) its run file's mtime.
 // Every map is keyed by runKey (RUN-1, RUN-0001 and run-1 are one set).
 async function openSets(root, holo) {
   const sets = new Map(), openNow = new Map(), gone = new Map(), done = new Map();
@@ -133,9 +133,10 @@ async function openSets(root, holo) {
         const time = (x) => Date.parse(x.f.answered || x.f.ruled) || 0;
         let answered = Math.max(0, ...run.qs.map(time));
         if (!r.live.decisions.length) {
-          const mtime = (await stat(path)).mtimeMs;
-          if (answered && run.qs.some((x) => r.gone.has(x.id) && !time(x) && UNTIMED.some((k) => x.state === k || x.f[k]))) answered = Math.max(answered, Date.parse(run.updated) || mtime);
-          done.set(id, answered ? { answered } : { mtime });
+          const mtime = (await stat(path)).mtimeMs, up = Date.parse(run.updated);
+          const untimed = answered && run.qs.some((x) => r.gone.has(x.id) && !time(x) && UNTIMED.some((k) => x.state === k || x.f[k]));
+          // No updated: stamp: the millisecond mtime bounds it, compared unfloored (exact).
+          done.set(id, !answered ? { mtime } : untimed && !up && mtime > answered ? { exact: mtime } : { answered: untimed ? Math.max(answered, up || 0) : answered });
         }
       }
       if (set && set.decisions && (path || set.decisions.length)) sets.set(id, set);
@@ -185,14 +186,14 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
   // A fully settled run stays open only while a verified FINAL for it was finalized after the run's last
   // answer (no answer time in the run file: while the FINAL file is newer than the run file).
   // Answer stamps carry minutes: a FINAL counts as newer only in a later minute.
-  const newer = (c, d) => (d.answered ? minute(when(c)) > minute(d.answered) : c.mtime > d.mtime);
+  const newer = (c, d) => (d.exact ? when(c) > d.exact : d.answered ? minute(when(c)) > minute(d.answered) : c.mtime > d.mtime);
   for (const [id, d] of done) if (!cands.some((c) => c.id === id && isFinalized(c.ans) && newer(c, d) && verify(c))) sets.delete(id);
   for (const c of cands) {
     if (sets.has(c.id)) continue;
     const d = done.get(c.id);
     if (isFinalized(c.ans) && !validAt(c)) { r.refused.push({ path: c.path, why: "finalizedAt is not an ISO 8601 time" }); continue; }
     const why = !isFinalized(c.ans) ? "this file is a draft" : newer(c, d) ? "this file is unverified"
-      : d.answered ? "its run file answered after this file was finalized" : "its run file is newer than this file";
+      : d.mtime ? "its run file is newer than this file" : "its run file answered after this file was finalized";
     r.ignored.push({ path: c.path, why: `"${c.id}" is settled - ${why}` });
   }
   cands = cands.filter((c) => sets.has(c.id));

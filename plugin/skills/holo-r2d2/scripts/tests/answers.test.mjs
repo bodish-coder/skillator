@@ -953,6 +953,15 @@ test("A241-2: an untimed settled decision is bounded by the run's updated: stamp
   assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "after the updated: stamp, though before the file mtime");
 });
 
+test("A241-3: no updated: stamp - the millisecond file mtime bounds it, with no minute flooring", async () => {
+  const s = sandbox();
+  mootQ2(s, null, "2026-11-17T13:00:30.000Z");
+  finalAt(s, "2026-11-17T13:00:15Z");
+  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "before the mtime");
+  finalAt(s, "2026-11-17T13:00:45Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "after the mtime, in the same minute");
+});
+
 // B30: the plugin cache is reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins).
 // argv[1] kept the link's spelling, import.meta.url the real path: main never ran, output was empty.
 test("B30: holo.mjs --selftest and answers.mjs still run when started through a linked directory", (t) => {
