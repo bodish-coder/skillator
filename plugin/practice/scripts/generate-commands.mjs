@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Offline authoring tool. Installers consume the committed outputs without Node.
-import { readFileSync, writeFileSync, mkdirSync, lstatSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -144,7 +144,9 @@ export function generate(root, mode) {
   return { stale, orphans, count: outputs.size };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// B30: argv[1] keeps a link's spelling, import.meta.url is the real path - compare real paths.
+const entry = p => { try { p = realpathSync(p); } catch { p = resolve(p); } return process.platform === 'win32' ? p.toLowerCase() : p; };
+if (process.argv[1] && entry(process.argv[1]) === entry(fileURLToPath(import.meta.url))) {
   try {
     const [mode, flag, root, ...extra] = process.argv.slice(2);
     if (!['--check', '--write'].includes(mode) || (flag && flag !== '--root') || (flag && !root) || extra.length) throw new Error('Usage: node generate-commands.mjs --check|--write [--root <plugin directory>]');
