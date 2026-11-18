@@ -100,8 +100,9 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
 // embeds (a --next-wizard page is round 2+). A RUN set's run file is found by that set's id (by the page's
 // file name only when the page is unreadable - the set is then rebuilt from the run). openNow: a RUN
 // set's decisions still open or asked in the run file now - only those may get a command; gone: the ones settled there.
+// done: a fully settled RUN set, with its run file's time.
 async function openSets(root, holo) {
-  const sets = new Map(), openNow = new Map(), gone = new Map();
+  const sets = new Map(), openNow = new Map(), gone = new Map(), done = new Map();
   const runs = await runFiles(root), pages = [], seen = new Set();
   for (const n of tryDir(holo).filter((n) => n.endsWith(".wizard.html"))) {
     try {
@@ -123,21 +124,22 @@ async function openSets(root, holo) {
         if (!set || String(set.id) !== String(live.id)) set = live;
         openNow.set(String(set.id), new Set(live.decisions.map((d) => d.id)));
         gone.set(String(set.id), settledIn(run));
+        if (!live.decisions.length) done.set(String(set.id), (await stat(path)).mtimeMs);
       }
       if (set && set.decisions && (path || set.decisions.length)) sets.set(String(set.id), set);
     } catch { /* not a readable wizard page */ }
   }
-  return { sets, openNow, gone };
+  return { sets, openNow, gone, done };
 }
 
 export async function findAnswers({ root = findRoot(process.cwd()), ...where } = {}) {
   const holo = join(root, ".skillator", "holo");
-  const { sets, openNow, gone } = await openSets(root, holo);
+  const { sets, openNow, gone, done } = await openSets(root, holo);
   const searched = dedupe([{ dir: holo, why: "page folder" }, ...downloadDirs(where)], where.platform);
   const byStem = new Map();
   for (const id of sets.keys()) byStem.set(fileStem(id), [...(byStem.get(fileStem(id)) || []), id]);
-  const r = { searched, sets: [...sets.keys()], picks: [], superseded: [], unverifiedNewer: [], drafts: [], refused: [], ignored: [] };
-  const cands = [];
+  const r = { searched, sets: [], picks: [], superseded: [], unverifiedNewer: [], drafts: [], refused: [], ignored: [] };
+  let cands = [];
   for (const [i, f] of searched.entries()) {
     let names;
     try { names = await readdir(f.dir); f.found = 0; } catch { f.missing = true; continue; }
@@ -159,6 +161,11 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
       } catch (e) { r.refused.push({ path, why: e.message }); }
     }
   }
+  // A fully settled run stays open only while a FINAL for it is newer than its run file.
+  for (const [id, t] of done) if (!cands.some((c) => c.id === id && isFinalized(c.ans) && c.mtime > t)) sets.delete(id);
+  for (const c of cands) if (!sets.has(c.id)) r.ignored.push({ path: c.path, why: `"${c.id}" is settled - its run file is newer than this file` });
+  cands = cands.filter((c) => sets.has(c.id));
+  r.sets = [...sets.keys()];
   // Verified: the export carries this page's nonce (the sidecar's when the page has none), or
   // (an older export without one) it sits in the page folder, which is the owner's repo.
   for (const c of cands) {

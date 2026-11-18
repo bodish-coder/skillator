@@ -256,6 +256,8 @@ test("r4-1: a fully settled run is still loaded - its FINAL's answers are skippe
   const s = sandbox();
   const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("### Q1 open", "### Q1 answered").replaceAll("### Q2 open", "### Q2 answered");
   writeFileSync(join(s.root, ".skillator", "run-1-shelf-export.md"), md);
+  const before = new Date("2026-11-17T11:00:00Z"); // the FINAL is newer than the run file (A233-4)
+  utimesSync(join(s.root, ".skillator", "run-1-shelf-export.md"), before, before);
   writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
   put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1" }, 0);
   const text = report(await findAnswers(s.opts));
@@ -732,5 +734,26 @@ test("A233-3: a leftover page copy with the same set id never displaces the set'
   writeFileSync(join(s.holo, "a-copy.wizard.html"), wizardPage(SET, A));
   at(join(s.holo, "zz-leftover.wizard.html"), "2026-11-17T09:00:00Z");
   assert.equal((await findAnswers(s.opts)).picked.verified, true, "newest copy wins");
+});
+
+function settledRun(s) {
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("### Q1 open", "### Q1 answered").replaceAll("### Q2 open", "### Q2 answered");
+  writeFileSync(RUN1(s), md);
+  at(RUN1(s), "2026-11-17T11:00:00Z");
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
+}
+
+test("A233-4: a fully settled run is listed only while a FINAL for it is newer than the run file", async () => {
+  const s = sandbox();
+  settledRun(s);
+  const p = at(put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1" }, 0), "2026-11-17T10:00:00Z");
+  const r = await findAnswers(s.opts), text = report(r);
+  assert.ok(!r.sets.includes("RUN-1"), text);
+  assert.ok(!/to apply/.test(text), text);
+  assert.ok(r.ignored.some((x) => x.path === p), text);
+  at(p, "2026-11-17T12:00:00Z");
+  const r2 = await findAnswers(s.opts);
+  assert.ok(r2.sets.includes("RUN-1"));
+  assert.match(report(r2), /0 to apply, 1 already settled/);
 });
 
