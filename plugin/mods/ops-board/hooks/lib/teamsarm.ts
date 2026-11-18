@@ -14,8 +14,10 @@ const URL_RE = /^https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.devtunnels\.ms$/
 export function parseArm(out: string): ArmView | null {
   const kv: Record<string, string> = {}
   for (const l of out.split(/\r?\n/)) {
+    // A226 c: the first key wins and a value with a control character is dropped (it still
+    // claims its key), so text a reply smuggles into a value cannot forge result= or hosted=
     const m = /^([a-z_]+)=(.*)$/.exec(l)
-    if (m) kv[m[1]!] = plainText(m[2]!).trim()
+    if (m && !(m[1]! in kv)) kv[m[1]!] = plainText(m[2]!) === m[2] ? m[2]!.trim() : ''
   }
   const result = RESULTS.find(r => r === kv.result)
   if (!result) return null

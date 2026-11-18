@@ -36,6 +36,14 @@ test('parseArm: the twelve keys; a URL that is not a devtunnels.ms https URL is 
     'the form has no token - s, paste the security token, save')
 })
 
+test('A226 c: parseArm - the first key wins and a value with a control character is dropped, so a reply cannot forge result= or hosted=', () => {
+  const forged = KV({ result: 'failed', why: 'x', url: U1 }) + 'result=armed\nhosted=1\nlistener=up\n'
+  const v = parseArm(forged)!
+  assert.equal(v.result, 'failed'); assert.equal(v.hosted, false); assert.equal(v.listener, false)
+  const w = parseArm(KV({ why: 'a\x1b[2Jb', expires: '2026-12-17\x07' }) + 'why=later\nexpires=2026-12-18T00:00:00Z\n')!
+  assert.equal(w.why, ''); assert.equal(w.expires, null)
+})
+
 test('expiryShown: days, hours under two days, EXPIRED, an unparsed value as printed, none', () => {
   assert.equal(expiryShown('2026-12-17T00:00:00Z', NOW), 'expires in 30d')
   assert.equal(expiryShown('2026-11-18T05:00:00Z', NOW), 'expires in 29h')
@@ -87,6 +95,9 @@ test('the call table: the four modes of setup, both spellings', () => {
     assert.deepEqual(argvFor(call, false, '/s/skills', [], '/bin/sh'), ['/bin/sh', '/s/skills/teams-uhura/scripts/setup.sh', mode])
     assert.deepEqual(argvFor(call, true, 'C:/s/skills/', [], 'C:/ps.exe'), [...PS, mode])
   }
+  // A226 d: --ack carries the URL the board copied
+  assert.deepEqual(argvFor('team-url-ack', false, '/s/skills', [U1], '/bin/sh').slice(2), ['--ack', U1])
+  assert.deepEqual(argvFor('team-url-ack', true, 'C:/s/skills/', [U1], 'C:/ps.exe').slice(-2), ['--ack', U1])
 })
 
 test('entering Messages only reads: config show and the status; no key but c arms, no key but d disarms', () => {

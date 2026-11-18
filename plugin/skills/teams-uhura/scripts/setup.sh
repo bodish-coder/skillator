@@ -6,7 +6,7 @@
 #   sh setup.sh              the walk
 #   sh setup.sh --check      checks + table, changes nothing
 #   sh setup.sh --selftest   offline, every command stubbed
-#   sh setup.sh --status | --arm | --disarm | --ack   the ops board's keys (F177): key=value lines, exit 0
+#   sh setup.sh --status | --arm | --disarm | --ack [url]   the ops board's keys (F177): key=value lines, exit 0
 TEAM="$(cd "$(dirname "$0")" && pwd)/team.mjs"
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 TUNNEL=skillator-teams
@@ -94,7 +94,7 @@ step_tunnel() {
 # generated id, never its name, so it cannot be built from the Tunnel ID line
 url_of() {
   printf '%s' "$1" | tr -d ' \r\n' | tr ',{}' '\n\n\n' |
-    sed -n 's/^"portUri":"\(https:[^"]*\)"$/\1/p' | sed 's:/*$::' | grep -e "-$PORT\." | head -n 1
+    sed -n 's/^"portUri":"\(https:[^"[:cntrl:]]*\)"$/\1/p' | sed 's:/*$::' | grep -e "-$PORT\." | head -n 1
 }
 tunnel_url() { url_of "$(devtunnel show "$TUNNEL" -j 2>/dev/null)"; }
 
@@ -118,7 +118,8 @@ state_dir() { printf '%s' "${SKILLATOR_TEAMS_STATE:-$HOME/.skillator/teams}"; }
 seen_url() { [ -f "$(state_dir)/tunnel-url" ] && tr -d '\r\n' < "$(state_dir)/tunnel-url"; }
 save_url() { mkdir -p "$(state_dir)" && (umask 077; printf '%s\n' "$1" > "$(state_dir)/tunnel-url"); }
 mark_url() { _s=$(seen_url); if [ -n "$A_URL" ] && [ -n "$_s" ] && [ "$_s" != "$A_URL" ]; then A_CHANGED=1; else A_CHANGED=0; fi; }
-expiry_of() { printf '%s' "$1" | tr -d '\r\n' | sed -n 's/.*"tunnelExpiration"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | cut -c1-40; }
+# no control character, at most 40 characters, else none - as setup.ps1
+expiry_of() { printf '%s' "$1" | tr -d '\r\n' | sed -n 's/.*"tunnelExpiration"[[:space:]]*:[[:space:]]*"\([^"[:cntrl:]]\{1,40\}\)".*/\1/p'; }
 # the host process open_tunnel starts, on this port or none - the pattern pkill -f is given
 host_re() { printf '%s' "^([^ ]*/)?devtunnel host $TUNNEL( .*(-p|--port)[ =]?$PORT( .*)?)?\$"; }
 stop_tunnel() { pkill -f "$(host_re)" >/dev/null 2>&1; sleep 1; }
@@ -152,6 +153,7 @@ arm() {
   arm_view
   if [ "$A_DT" != ok ]; then _no='devtunnel is not installed - s, then First-time setup'
   elif [ "$A_LOGIN" != in ]; then _no='not signed in to Dev Tunnels - s, then Sign in to Dev Tunnels'
+  elif ! has node; then _no='node is not installed - install Node.js 18 or later, then c again'
   elif [ "$A_FORM" != set ]; then _no='the form has no token - s, paste the security token, save'
   elif [ "$A_TUN" != ready ]; then _no="the tunnel $TUNNEL is not created yet - s, then First-time setup"
   elif ! has pgrep; then _no='cannot verify the tunnel host - pgrep is missing; nothing was started'
@@ -159,13 +161,20 @@ arm() {
   if [ -n "$_no" ]; then A_RESULT=refused; A_WHY=$_no; return 0; fi
   # the listener first: the tunnel opens only onto a listener that verifies signatures
   if [ "$A_LISTEN" != up ]; then node "$TEAM" start --port "$PORT" >/dev/null 2>&1; listener_up && A_LISTEN=up; fi
-  if [ "$A_LISTEN" != up ]; then A_RESULT=failed; A_WHY='the listener did not come up - the tunnel was not hosted'; return 0; fi
+  if [ "$A_LISTEN" != up ]; then
+    A_RESULT=failed
+    if [ "$A_HOSTED" = 1 ]; then A_WHY='the listener did not come up - the tunnel is hosted with nothing behind it; d stops it'
+    else A_WHY='the listener did not come up - the tunnel was not hosted'; fi
+    return 0
+  fi
   if [ "$A_HOSTED" != 1 ]; then
     open_tunnel >/dev/null
-    _i=0; while [ "$_i" -lt 5 ] && ! tunnel_hosted "$TUNNEL" "$PORT"; do sleep 1; _i=$((_i + 1)); done
-    tunnel_hosted "$TUNNEL" "$PORT" && A_HOSTED=1
+    _i=0; _seen=; while [ "$_i" -lt 5 ]; do tunnel_hosted "$TUNNEL" "$PORT" && { _seen=1; break; }; sleep 1; _i=$((_i + 1)); done
+    if [ -z "$_seen" ]; then A_RESULT=failed; A_WHY='the tunnel did not start - see ~/.skillator/teams/devtunnel.log'; return 0; fi
+    # a host that exits at once (signed out, port taken) is not armed
+    sleep 2; tunnel_hosted "$TUNNEL" "$PORT" && A_HOSTED=1
+    if [ "$A_HOSTED" != 1 ]; then A_RESULT=failed; A_WHY='the tunnel stopped right after it started - see ~/.skillator/teams/devtunnel.log'; return 0; fi
   fi
-  if [ "$A_HOSTED" != 1 ]; then A_RESULT=failed; A_WHY='the tunnel did not start - see ~/.skillator/teams/devtunnel.log'; return 0; fi
   [ -n "$A_URL" ] || A_URL=$(tunnel_url)
   if [ -n "$A_URL" ] && [ -z "$(seen_url)" ]; then save_url "$A_URL"; fi
   mark_url; A_RESULT=armed
@@ -187,9 +196,11 @@ disarm() {
   else A_RESULT=disarmed; fi
 }
 
+# $1: the URL the board copied; the one shown now is remembered only when it is that one
 ack() {
   arm_view
-  if [ -n "$A_URL" ]; then save_url "$A_URL"; mark_url; A_RESULT=acked; else A_RESULT=failed; A_WHY='no tunnel URL to remember'; fi
+  if [ -n "$1" ] && [ "$1" != "$A_URL" ]; then A_RESULT=failed; A_WHY='the tunnel URL changed again since it was copied - y copies the new one'
+  elif [ -n "$A_URL" ]; then save_url "$A_URL"; mark_url; A_RESULT=acked; else A_RESULT=failed; A_WHY='no tunnel URL to remember'; fi
 }
 
 setup() {
@@ -262,7 +273,7 @@ EOF
   refresh_path() { :; }
   answer() { echo ask >> "$ST/calls"; case $1 in Press*) : > "$ST/saved" ;; esac; printf '%s' "$YES"; }
   open_tunnel() { echo host >> "$ST/calls"; [ -f "$ST/noopen" ] || : > "$ST/hosted"; }
-  tunnel_hosted() { [ -f "$ST/hosted" ]; }
+  tunnel_hosted() { [ -f "$ST/hosted" ] || return 1; [ -f "$ST/dies" ] && rm -f "$ST/hosted"; return 0; }
   stop_tunnel() { echo unhost >> "$ST/calls"; [ -f "$ST/stuck" ] || rm -f "$ST/hosted"; }
   sleep() { :; }
   SKILLATOR_TEAMS_STATE="$T/state"; export SKILLATOR_TEAMS_STATE
@@ -386,6 +397,23 @@ EOF
     printf '%s\n' "$l" | grep -Eq "$(host_re)" || fail "host_re missed: $l"; done
   for l in 'devtunnel host skillator-teams-2' 'devtunnel host skillator-teams -p 4000' 'devtunnel host skillator-teams -p 39780' 'vi devtunnel host skillator-teams' 'devtunnel host other'; do
     printf '%s\n' "$l" | grep -Eq "$(host_re)" && fail "host_re matched: $l"; done
+  # A226 c: no control character in a value the board reads
+  E=$(printf '\033')
+  [ -z "$(url_of '{"ports":[{"portNumber":3978,"portUri":"https://ab12cd34-3978.euw.devtunnels.ms'"$E"'[2J"}]}')" ] || fail 'c: a portUri with a control character was kept'
+  [ -z "$(expiry_of '{"tunnelExpiration":"2026-12-17'"$E"'[2J"}')" ] || fail 'c: an expiry with a control character was kept'
+  # A226 e: an expiry over 40 characters is dropped, as setup.ps1 drops it - never cut
+  [ -z "$(expiry_of '{"tunnelExpiration":"2026-12-17T00:00:00.0000000000000000000000Z"}')" ] || fail 'e: a long expiry was cut, not dropped'
+  # A226 a: hosted by hand, the listener does not come up - the why does not say it was not hosted
+  kv arm "$ALL" "$RDY nostart hosted"; out '^why=the listener did not come up' || fail 'a: no listener why'
+  out 'was not hosted' && fail 'a: a hosted tunnel was said not hosted'
+  # A226 b: a host that exits right after it starts is not armed
+  kv arm "$ALL" "$RDY dies"; out '^result=failed$' && out '^why=the tunnel stopped right after it started' || fail 'b: a dying host was armed'
+  # A226 d: --ack takes the URL copied; a newer one is not remembered in its place
+  kv "ack $U1" "$ALL" "$RDY newid"; out '^result=failed$' && out '^why=the tunnel URL changed again' || fail 'd: a stale copy was acked'
+  [ "$(seen_url)" = "$U2" ] || fail 'd: a stale --ack changed the remembered URL'
+  kv "ack $U2" "$ALL" "$RDY newid"; out '^result=acked$' || fail 'd: the copied URL was not acked'
+  # A226 f: node missing - c says so, not that the form has no token
+  kv arm 'devtunnel pgrep pkill' "$RDY"; out '^result=refused$' && out '^why=node is not installed' || fail 'f: node missing, wrong reason'
   LC_ALL=C grep -q "$(printf '[^\t -~]')" "$SELF" && fail 'not pure ASCII + LF'
   echo ok
 }
@@ -396,7 +424,7 @@ case $1 in
   --status) arm_view; show_arm ;;
   --arm) arm; show_arm ;;
   --disarm) disarm; show_arm ;;
-  --ack) ack; show_arm ;;
+  --ack) ack "$2"; show_arm ;;
   '') setup ;;
-  *) echo 'usage: setup.sh [--check | --selftest] | --status | --arm | --disarm | --ack' >&2; exit 2 ;;
+  *) echo 'usage: setup.sh [--check | --selftest] | --status | --arm | --disarm | --ack [url]' >&2; exit 2 ;;
 esac

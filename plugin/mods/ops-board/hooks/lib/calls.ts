@@ -36,7 +36,7 @@ export const up = (p: string, n: number) => {
 // meta-testing / meta-block [id, text]; meta-reconcile [ids...]; meta-team-add
 // [@handle, name, emails comma-joined]; meta-team-remove / meta-team-lead [@handle]; relay-resume and
 // relay-queue-add [RUN-id]; relay-push-pending [RUN-id, mode?]; relay-hold [reason]; relay-decide [level line]; relay-stage-landed [RUN-id, n, sha];
-// run-rename [id, name]; team-setup-check / team-setup-walk none; team-arm / team-disarm / team-arm-status / team-url-ack none; others none.
+// run-rename [id, name]; team-setup-check / team-setup-walk none; team-arm / team-disarm / team-arm-status none; team-url-ack [url copied] or none; others none.
 type ScriptCall = Exclude<Call, 'holo-ticket' | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail' | 'team-login' | 'team-login-status'>
 const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[]; ps: (a: string[]) => string[] }> = {
   'pending':            { script: PENDING, sh: a => a, ps: a => a },
@@ -78,7 +78,8 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'team-arm':           { script: SETUP, sh: () => ['--arm'], ps: () => ['--arm'] },
   'team-disarm':        { script: SETUP, sh: () => ['--disarm'], ps: () => ['--disarm'] },
   'team-arm-status':    { script: SETUP, sh: () => ['--status'], ps: () => ['--status'] },
-  'team-url-ack':       { script: SETUP, sh: () => ['--ack'], ps: () => ['--ack'] },
+  // A226 d: [the URL copied] - setup remembers the current URL only when it is that one
+  'team-url-ack':       { script: SETUP, sh: a => ['--ack', ...a.slice(0, 1)], ps: a => ['--ack', ...a.slice(0, 1)] },
 }
 
 // F66: teams-uhura's script is Node (no sh / ps1 twin): `node <skills>/teams-uhura/
