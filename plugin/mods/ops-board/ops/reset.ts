@@ -1,7 +1,7 @@
 // B24: `ops --reset` - recover from an unresponsive or hung ops board.
 // Resets terminal modes (ANSI attributes, cursor visible, mouse tracking off, screen buffer restored),
 // clears stale locks (quota refresh locks, board locks), and terminates orphaned reader processes.
-import { existsSync, readdirSync, unlinkSync } from 'node:fs'
+import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -40,7 +40,22 @@ export async function reset(env: Record<string, string | undefined> = process.en
     }
   }
 
-  // 2. Clear stale lock files
+  // 2. Process cleanup (Windows): terminate usage-watch / ops background refresh readers, each
+  // with its tree (taskkill /T) so no paid turn outlives its lock - their locks go in step 3.
+  // Never this query itself: its own command line matches.
+  let readersKilled = false
+  if (process.platform === 'win32') {
+    try {
+      const cmd = "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and ($_.CommandLine -like '*usage-watch.ps1*refresh*' -or $_.CommandLine -like '*ops.ps1*refresh*') } | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null; $_.ProcessId }"
+      const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', cmd], { timeout: 15000 })   // a loaded machine runs this query slowly: a timeout keeps young locks
+      result.killedProcesses += stdout.trim().split(/\r?\n/).filter(Boolean).length
+      readersKilled = true
+    } catch {
+      // Ignore process query issues
+    }
+  }
+
+  // 3. Clear stale lock files
   const home = resolveUserHome(env)
   const lockCandidates: string[] = [
     '.skillator/board.lock',
@@ -49,10 +64,14 @@ export async function reset(env: Record<string, string | undefined> = process.en
     `${home}/.skillator/profiles.lock`,
   ]
 
-  // Add refreshing locks from all profiles
+  // A refresh lock goes when its readers were just killed, else only past usage-watch's 90 s
+  // stale age: a younger one belongs to a read that may still be live, and freeing it lets a
+  // `p` start a second turn.
   try {
     for (const p of discover(home)) {
-      lockCandidates.push(`${p.dir}/quota-cache.json.refreshing`)
+      const lk = `${p.dir}/quota-cache.json.refreshing`
+      try { if (!readersKilled && Date.now() - statSync(lk).mtimeMs < 90_000) continue } catch { continue }
+      lockCandidates.push(lk)
     }
   } catch {
     // Discovery failed
@@ -66,19 +85,6 @@ export async function reset(env: Record<string, string | undefined> = process.en
       } catch (e: any) {
         result.errors.push(`Could not remove ${lk}: ${e.message}`)
       }
-    }
-  }
-
-  // 3. Process cleanup: terminate orphaned usage-watch or stale ops background processes
-  if (process.platform === 'win32') {
-    try {
-      // Find and kill stale background powershell processes running usage-watch -Mode refresh
-      const cmd = "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*usage-watch.ps1*refresh*' -or $_.CommandLine -like '*ops.ps1*refresh*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $_.ProcessId }"
-      const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', cmd], { timeout: 4000 })
-      const count = stdout.trim().split(/\r?\n/).filter(Boolean).length
-      result.killedProcesses += count
-    } catch {
-      // Ignore process query issues
     }
   }
 

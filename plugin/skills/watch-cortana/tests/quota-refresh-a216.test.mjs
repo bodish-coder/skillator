@@ -39,10 +39,11 @@ function makeFixture(port) {
   if (port === 'ps1') {
     const stub = [
       `function Start-Process { param($FilePath, $ArgumentList, $WindowStyle) [IO.File]::AppendAllText('${launchesFile}', "$ArgumentList\`n") }`,
-      `function claude { [IO.File]::AppendAllText('${argsFile}', "claude|1|$($args -join ' ')\`n"); [IO.File]::WriteAllText('${stdinFile}', (@($input) -join "\`n")); $n = @([IO.File]::ReadAllLines('${argsFile}')).Count; [IO.File]::AppendAllText('${root}/cli-wait.log', "w=$env:SKILLATOR_QUOTA_REFRESH_WAIT\`n"); if (Test-Path "${root}/cli-cache-$n.txt") { [IO.File]::WriteAllText("$env:CLAUDE_CONFIG_DIR/quota-cache.json", [IO.File]::ReadAllText("${root}/cli-cache-$n.txt")) }; if (Test-Path "${root}/cli-sleep-$n.txt") { Start-Sleep -Seconds ([int][IO.File]::ReadAllText("${root}/cli-sleep-$n.txt")) }; $f = "${root}/cli-response-$n.txt"; if (Test-Path $f) { [IO.File]::ReadAllText($f) } elseif (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
+      `function claude { [IO.File]::AppendAllText('${argsFile}', "claude|1|$($args -join ' ')\`n"); [IO.File]::WriteAllText('${stdinFile}', (@($input) -join "\`n")); $n = @([IO.File]::ReadAllLines('${argsFile}')).Count; [IO.File]::AppendAllText('${root}/cli-wait.log', "w=$env:SKILLATOR_QUOTA_REFRESH_WAIT\`n"); if (Test-Path "${root}/cli-cache-$n.txt") { [IO.File]::WriteAllText("$env:CLAUDE_CONFIG_DIR/quota-cache.json", [IO.File]::ReadAllText("${root}/cli-cache-$n.txt")) }; if (Test-Path "${root}/cli-child-$n.txt") { $si = New-Object Diagnostics.ProcessStartInfo 'ping', '-n 120 127.0.0.1'; $si.UseShellExecute = $false; $si.CreateNoWindow = $true; [IO.File]::WriteAllText('${root}/child.pid', "$([Diagnostics.Process]::Start($si).Id)") }; if (Test-Path "${root}/cli-sleep-$n.txt") { Start-Sleep -Seconds ([int][IO.File]::ReadAllText("${root}/cli-sleep-$n.txt")) }; $f = "${root}/cli-response-$n.txt"; if (Test-Path $f) { [IO.File]::ReadAllText($f) } elseif (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       `function agy { [IO.File]::AppendAllText('${argsFile}', "agy|1|$($args -join ' ')\`n"); if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       // F176: orphan.pid - a process that started before the refresh, listed as its child (a reused parent PID).
-      `function Get-CimInstance { if (Test-Path '${root}/orphan.pid') { CimCmdlets\\Get-CimInstance Win32_Process -Filter "ProcessId=$([IO.File]::ReadAllText('${root}/orphan.pid').Trim())" } else { CimCmdlets\\Get-CimInstance @args } }`,
+      `function Get-CimInstance { if (Test-Path '${root}/orphan.pid') { CimCmdlets\\Get-CimInstance Win32_Process -Filter "ProcessId=$([IO.File]::ReadAllText('${root}/orphan.pid').Trim())" } elseif (Test-Path '${root}/no-creation') { CimCmdlets\\Get-CimInstance @args | Select-Object ProcessId, @{ n = 'CreationDate'; e = { $null } } } else { CimCmdlets\\Get-CimInstance @args } }`,
+      // A236: no-creation - a listed child's CreationDate cannot be read.
       // F176: no-starttime - this process's own start time cannot be read.
       `function Get-Process { if (Test-Path '${root}/no-starttime') { throw 'denied' } else { Microsoft.PowerShell.Management\\Get-Process @args } }`,
       `function muse { if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
@@ -69,11 +70,11 @@ function makeFixture(port) {
   }
   for (const name of selectors) delete baseEnv[name]
 
-  const runLevel = (envOverrides = {}) => {
+  const runLevel = (envOverrides = {}, mode = 'level') => {
     const env = { ...baseEnv, ...envOverrides }
     const args = port === 'ps1'
-      ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Mode', 'level']
-      : [script, 'level']
+      ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Mode', mode]
+      : [script, mode]
     return execFileSync(port === 'ps1' ? 'powershell' : shExe, args, { env, encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim()
   }
 
@@ -735,10 +736,47 @@ for (const port of ['ps1', 'sh']) {
     } finally { fx.cleanup() }
   })
 
+  // A236 (5): a good reading stored while the turn ran is the current reading - kept, with the
+  // turn's 24 h hold stamped on it, never moved into last under a failure record; level and
+  // check still see its 95% weekly.
+  test(`${port}: A236 a reading written during a turn with no limits stays the current reading`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'during-good')
+      fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn-nolimits.jsonl')])
+      writeFileSync(`${fx.root}/cli-cache-2.txt`, JSON.stringify({ src: 'claude-code', '5h': 10, '7d': 95 }))
+      fx.runRefresh('claude', profile, { ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 2)
+      const rec = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.equal(typeof rec.turned_at, 'number', JSON.stringify(rec))
+      delete rec.turned_at
+      assert.deepEqual(rec, { src: 'claude-code', '5h': 10, '7d': 95 })
+      assert.equal(fx.runLevel(env), 'src=claude-code 5h=10.0 7d=95.0 ctx=- max=95.0')
+      assert.match(fx.runLevel({ ...env, CLAUDE_USAGE_HANDOFF_WEEKLY_PCT: '90' }, 'check'), /HANDOFF NOW \(claude-code 7-day 95(\.0)?%\)/)
+    } finally { fx.cleanup() }
+  })
+
+  // A236 fix round (5): only a reading written strictly after the refresh started is current. One
+  // stored earlier in the same whole second is a prior reading - moved into last, not kept.
+  test(`${port}: A236 a reading from the second the refresh started, but before it, is moved into last`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'same-second', { src: 'claude-code', '5h': 10, '7d': 95 })
+      fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn-nolimits.jsonl')])
+      while (Date.now() % 1000 > 30) { /* align to the start of a second */ }
+      const x = Math.floor(Date.now() / 1000)
+      utimesSync(`${profile}/quota-cache.json`, x, x)
+      fx.runRefresh('claude', profile, { ...env, ...FORCED })
+      const rec = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.deepEqual(rec.last, { '5h': 10, '7d': 95, at: x }, JSON.stringify(rec))
+      assert.equal(rec.failures, 1)
+    } finally { fx.cleanup() }
+  })
+
   // F176 last round: the failure record re-reads the cache at write time in both ports, so a
-  // reading stored while the turn ran is carried, and a corrupt one still keeps the 24 h hold.
+  // corrupt one still keeps the 24 h hold.
   test(`${port}: F176 last round - a record written after a turn with no limits carries what the cache holds then`, { skip }, () => {
-    for (const [name, during, last] of [['95', JSON.stringify({ src: 'claude-code', '5h': 10, '7d': 95 }), { '5h': 10, '7d': 95 }], ['corrupt', '{"x":', undefined], ['array', '[1]', undefined]]) {
+    for (const [name, during, last] of [['corrupt', '{"x":', undefined], ['array', '[1]', undefined]]) {
       const fx = makeFixture(port)
       try {
         const { profile, env } = turnSetup(fx, 'during')
@@ -757,40 +795,88 @@ for (const port of ['ps1', 'sh']) {
     }
   })
 
-  // F176 last round: Get-Process -Id $PID failing must not spare the whole tree.
-  test(`${port}: F176 last round - with no start time of its own, the capped call kills its children by parent pid`, { skip: port !== 'ps1' || skip }, async () => {
+  // A236 (2): without node the sh counter must not read the "7d" inside a carried last as a
+  // reading - the counter keeps counting and the backoff grows.
+  test(`${port}: A236 without node a record carrying last keeps counting failures`, { skip: port !== 'sh' || skip }, () => {
     const fx = makeFixture(port)
     try {
-      const { env } = turnSetup(fx, 'nostart')
-      fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn.jsonl')])
-      writeFileSync(`${fx.root}/cli-sleep-2.txt`, '60')
-      writeFileSync(`${fx.root}/no-starttime`, '')
-      const child = await fx.spawnOrphan()
-      await fx.spawnLevel({ ...env, ...FORCED })
-      await new Promise(r => setTimeout(r, 1500))
-      const alive = child.exitCode === null && child.signalCode === null
-      child.kill()
-      assert.equal(alive, false, 'the listed child was killed')
+      const { profile, env } = turnSetup(fx, 'nonode', { src: 'claude-code', note: 'unparseable', failures: 2, backoff_secs: 120, last: { '5h': 10, '7d': 95, at: 1 } })
+      fx.setCliResponse('fixture: usage unavailable', 0)
+      fx.runRefresh('claude', profile, { ...env, PATH: 'C:/Program Files/Git/usr/bin' })
+      const rec = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.equal(rec.failures, 3, JSON.stringify(rec))
+      assert.equal(rec.backoff_secs, 240)
     } finally { fx.cleanup() }
   })
 
-  // F176 last round: sh kill_tree spares only a child with a readable start earlier than its parent's.
-  test(`${port}: F176 last round - kill_tree kills a child whose start time cannot be read or compared`, { skip: port !== 'sh' || skip }, () => {
+  // A236 fix round (6): without node (no turn, no parse) a reading another writer stored while the
+  // read ran is kept as the node branch keeps it - level and check still see its 95% weekly.
+  test(`${port}: A236 without node a reading written during the read stays the current reading`, { skip: port !== 'sh' || skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'nonode-during', { src: 'claude-code', '5h': 5, '7d': 50 })
+      age(`${profile}/quota-cache.json`, 3600)
+      fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl')])
+      writeFileSync(`${fx.root}/cli-cache-1.txt`, JSON.stringify({ src: 'claude-code', '5h': 10, '7d': 95 }))
+      fx.runRefresh('claude', profile, { ...env, ...FORCED, PATH: 'C:/Program Files/Git/usr/bin' })
+      assert.equal(fx.cliCalls().length, 1)
+      const rec = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.deepEqual(rec, { src: 'claude-code', '5h': 10, '7d': 95 }, JSON.stringify(rec))
+      assert.equal(fx.runLevel(env), 'src=claude-code 5h=10.0 7d=95.0 ctx=- max=95.0')
+      assert.match(fx.runLevel({ ...env, CLAUDE_USAGE_HANDOFF_WEEKLY_PCT: '90' }, 'check'), /HANDOFF NOW \(claude-code 7-day 95(\.0)?%\)/)
+    } finally { fx.cleanup() }
+  })
+
+  // A236 fix round (2), F176 last round restored: a capped paid turn never outlives its lock -
+  // with its own start time or the child's unreadable, the capped call still kills its
+  // children by parent PID (taskkill /T); only a readable earlier start spares one.
+  test(`${port}: A236 the capped call kills its child, also when its own start or the child's cannot be read`, { skip: port !== 'ps1' || skip }, async () => {
+    for (const [flag, killed] of [[null, true], ['no-starttime', true], ['no-creation', true]]) {
+      const fx = makeFixture(port)
+      let pid = 0
+      try {
+        const { env } = turnSetup(fx, 'kids')
+        fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn.jsonl')])
+        writeFileSync(`${fx.root}/cli-child-2.txt`, '')
+        writeFileSync(`${fx.root}/cli-sleep-2.txt`, '60')
+        if (flag) writeFileSync(`${fx.root}/${flag}`, '')
+        await fx.spawnLevel({ ...env, ...FORCED })
+        pid = Number(readFileSync(`${fx.root}/child.pid`, 'utf8'))
+        let alive = true
+        for (let i = 0; i < 20 && alive; i++) { await new Promise(r => setTimeout(r, 500)); try { process.kill(pid, 0) } catch { alive = false } }
+        assert.equal(alive, !killed, `${flag ?? 'readable'}: child ${killed ? 'killed' : 'spared'}`)
+      } finally {
+        try { if (pid) process.kill(pid) } catch { }
+        fx.cleanup()
+      }
+    }
+  })
+
+  // A236 fix round (1, 3): a capped paid turn never outlives its lock - kill_tree spares a listed
+  // child only when its start is readable and strictly earlier than its parent's (provably an
+  // orphan on a reused PID); no /proc (macOS) or an unreadable start kills it, as before A236.
+  test(`${port}: A236 kill_tree spares only a child with a readable start earlier than its parent's`, { skip: port !== 'sh' || skip }, () => {
     const src = readFileSync(`${hooksDir}/usage-watch.sh`, 'utf8')
     const fns = src.slice(src.indexOf('  started() {'), src.indexOf('  capped() {'))
-    for (const [ct, killed] of [['', true], ['abc', true], ['200', true], ['100', true], ['50', false]]) {
+    for (const [pt, ct, killed] of [['100', '', true], ['100', 'abc', true], ['100', '200', true], ['100', '100', true], ['100', '50', false], ['', '200', true], ['', '', true]]) {
       const root = mkdtempSync(join(tmpdir(), 'kill-tree-')).replace(/\\/g, '/')
       try {
         const harness = `${fns}
-  taskkill() { :; }
+  taskkill() { echo "$*" >> '${root}/tk'; }
   ( sleep 120 & echo $! > '${root}/child'; wait ) & P=$!
   while [ ! -s '${root}/child' ]; do sleep 0.1; done; C=$(cat '${root}/child')
-  started() { if [ "$1" = "$P" ]; then echo 100; elif [ "$1" = "$C" ]; then printf '%s' '${ct}'; fi; }
+  started() { if [ "$1" = "$P" ]; then printf '%s' '${pt}'; elif [ "$1" = "$C" ]; then printf '%s' '${ct}'; fi; }
   kill_tree "$P"; sleep 1
   if kill -0 "$C" 2>/dev/null; then echo alive; kill "$C"; else echo dead; fi
 `
         const r = spawnSync(shExe, ['-c', harness], { encoding: 'utf8', windowsHide: true, timeout: 30000, env: { ...process.env, PATH: shPathPrefix + (process.env.PATH || process.env.Path || '') } })
-        assert.equal(r.stdout.trim(), killed ? 'dead' : 'alive', `child start "${ct}": ${r.stderr}`)
+        assert.equal(r.stdout.trim(), killed ? 'dead' : 'alive', `parent "${pt}" child "${ct}": ${r.stderr}`)
+        const tk = existsSync(`${root}/tk`) ? readFileSync(`${root}/tk`, 'utf8').trim().split(/\r?\n/) : []
+        if (tk.length) {
+          // (3) every killed process with a Windows PID gets taskkill /T: native node.exe under claude.cmd dies too.
+          for (const l of tk) assert.match(l, /^\/T \/F \/PID \d+$/, `taskkill /T on each killed process (${l})`)
+          assert.equal(tk.length, killed ? 2 : 1)
+        }
       } finally { rmSync(root, { recursive: true, force: true }) }
     }
   })

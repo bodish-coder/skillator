@@ -350,8 +350,9 @@ function Invoke-Capped([int]$secs, [string]$call, $in) {
   try {
     $h = $ps.BeginInvoke($inp, $out)
     if (-not $h.AsyncWaitHandle.WaitOne($secs * 1000)) {
-      # A listed child created before this process is an orphan whose dead parent's PID was
-      # reused; a start time that cannot be read (ours or the child's) kills it.
+      # A listed child is spared only when provably not ours: created before this process (an
+      # orphan whose dead parent's PID was reused). A start time that cannot be read (ours or
+      # the child's) kills it - a capped paid turn must never outlive its lock.
       $me = try { (Get-Process -Id $PID).StartTime } catch { $null }
       try { Get-CimInstance Win32_Process -Filter "ParentProcessId=$PID" | Where-Object { -not ($me -and $_.CreationDate -and $_.CreationDate -lt $me) } | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null } } catch { }
       $null = $ps.BeginStop($null, $null)
@@ -381,7 +382,7 @@ if ($Mode -eq 'refresh') {
       } catch { 'corrupt' }
     }
     $turned = $false
-    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); $started = [DateTime]::UtcNow
     if ($Cli -eq 'agy') {
       $env:AGY_CONFIG_DIR = $Dir
       $env:ANTIGRAVITY_APP_DATA_DIR = $Dir
@@ -538,27 +539,37 @@ if ($Mode -eq 'refresh') {
       # so the turn gate never loses a high 7d; `"last":null` = no reading ever, while a
       # corrupt or legacy cache leaves `last` out (unknown). A turn that gave no limits
       # stamps `turned_at` (carried until a reading replaces the record).
-      $prevFailures = 0; $last = 'omit'
+      $prevFailures = 0; $last = 'omit'; $kept = $false
       if ($prev -is [string]) { if ($prev -eq 'missing') { $last = $null } }
       else {
         $h = if (& $isNum $prev.'5h') { $prev.'5h' } elseif (& $isNum $prev.five) { $prev.five } else { $null }
         $wk = if (& $isNum $prev.'7d') { $prev.'7d' } elseif (& $isNum $prev.weekly) { $prev.weekly } else { $null }
-        if ($null -ne $h -or $null -ne $wk) {
+        $mt = (Get-Item -LiteralPath $cache).LastWriteTimeUtc
+        $at = [long][Math]::Floor(($mt - [datetime]'1970-01-01').TotalSeconds)
+        # A236: a reading written strictly after this refresh started is current - kept (a
+        # turn's turned_at stamped on it), never moved into last under a failure record.
+        if (($null -ne $h -or $null -ne $wk) -and $mt -gt $started) { $kept = $true }
+        elseif ($null -ne $h -or $null -ne $wk) {
           $last = [ordered]@{}
           if ($null -ne $h) { $last['5h'] = $h }
           if ($null -ne $wk) { $last['7d'] = $wk }
-          $last['at'] = [long][Math]::Floor(((Get-Item -LiteralPath $cache).LastWriteTimeUtc - [datetime]'1970-01-01').TotalSeconds)
+          $last['at'] = $at
         } else {
           if (($prev.failures -is [int] -or $prev.failures -is [long]) -and $prev.failures -ge 1) { $prevFailures = [int]$prev.failures }
           if ($prev.PSObject.Properties['last']) { $last = $prev.last }
         }
       }
-      $failures = $prevFailures + 1
-      $backoff = [int][Math]::Min(900, 60 * [Math]::Pow(2, [Math]::Min($failures - 1, 10)))
-      $res = [ordered]@{ src = $srcName; note = $failNote; failures = $failures; backoff_secs = $backoff }
-      if ($last -isnot [string]) { $res['last'] = $last }
-      if ($turned) { $res['turned_at'] = $now }
-      elseif ($prev -isnot [string] -and $prev.PSObject.Properties['turned_at']) { $res['turned_at'] = $prev.turned_at }
+      if ($kept) {
+        $res = $prev
+        if ($turned) { $res | Add-Member -NotePropertyName turned_at -NotePropertyValue $now -Force }
+      } else {
+        $failures = $prevFailures + 1
+        $backoff = [int][Math]::Min(900, 60 * [Math]::Pow(2, [Math]::Min($failures - 1, 10)))
+        $res = [ordered]@{ src = $srcName; note = $failNote; failures = $failures; backoff_secs = $backoff }
+        if ($last -isnot [string]) { $res['last'] = $last }
+        if ($turned) { $res['turned_at'] = $now }
+        elseif ($prev -isnot [string] -and $prev.PSObject.Properties['turned_at']) { $res['turned_at'] = $prev.turned_at }
+      }
     }
     $absCache = [IO.Path]::Combine((Convert-Path -LiteralPath $Dir), 'quota-cache.json')
     [IO.File]::WriteAllText($absCache, (ConvertTo-Json $res -Compress -Depth 4), (New-Object Text.UTF8Encoding $false))

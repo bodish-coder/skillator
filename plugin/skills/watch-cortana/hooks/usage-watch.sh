@@ -354,14 +354,18 @@ if [ "$mode" = refresh ]; then
   lock="$target_dir/quota-cache.json.refreshing"
   cache="$target_dir/quota-cache.json"
   mkdir -p "$target_dir"
-  parsed=""; turned=""
+  # A236: the refresh start, sub-second where date has %N (GNU), else whole seconds.
+  parsed=""; turned=""; started_at=$(date +%s.%N 2>/dev/null)
+  case $started_at in *[!0-9.]*|.*|*.|'') started_at=$(now_epoch) ;; esac
   raw=""
   # F176: each claude call is capped (secs, function); on expiry its whole process
   # tree is killed, so no read outlives the lock.
   # Parent first (its children listed beforehand), so nothing it runs gets to finish.
-  # A listed child that started before its parent (start tick from /proc, where there is
-  # one) is an orphan whose dead parent's PID was reused - never ours, never killed. A start
-  # that cannot be read or compared is killed.
+  # A listed child is spared only when provably not ours: its start tick (from /proc) and
+  # its parent's are readable and its start is strictly earlier - an orphan whose dead
+  # parent's PID was reused. No /proc (macOS) or an unreadable start kills it: a capped paid
+  # turn must never outlive its lock. Each killed process with a Windows PID gets taskkill /T,
+  # so a native node.exe under claude.cmd dies with it.
   started() { sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{ print $20 }'; }
   kill_tree() {
     t=$(started "$1")
@@ -604,10 +608,12 @@ except Exception:
     # so the turn gate never loses a high 7d; `"last":null` = no reading ever, while a
     # corrupt or legacy cache leaves `last` out (unknown). No node: unknown too. A turn that
     # gave no limits stamps `turned_at` (carried until a reading replaces the record).
+    # A236: a reading written since this refresh started is current - kept (a turn's
+    # `turned_at` stamped on it), never moved into last under a failure record.
     prev_failures=0; last_tag=""
     if command -v node >/dev/null 2>&1; then
       carry=$(node -e '
-        const fs = require("fs"); let s, r; const T = process.argv[2];
+        const fs = require("fs"); let s, r; const T = process.argv[2], S = Number(process.argv[3]);
         // "<failures> <tail>": the tail carries "last" (undefined: left out) and "turned_at".
         const out = (f, last) => {
           const t = T ? T : r && Object.hasOwn(r, "turned_at") ? JSON.stringify(r.turned_at) : "";
@@ -618,6 +624,12 @@ except Exception:
         if (!r || typeof r !== "object" || Array.isArray(r)) { r = null; out(0) }
         const ok = v => typeof v === "number" && Number.isFinite(v);
         const h = ok(r["5h"]) ? r["5h"] : r.five, w = ok(r["7d"]) ? r["7d"] : r.weekly;
+        // Strictly after the start: sub-second when S has a fraction, else a later whole second.
+        const m = fs.statSync(process.argv[1]).mtimeMs / 1000;
+        if ((ok(h) || ok(w)) && (process.argv[3].includes(".") ? m : Math.floor(m)) > S) {
+          if (T) fs.writeFileSync(process.argv[1], JSON.stringify({ ...r, turned_at: Number(T) }));
+          process.stdout.write("KEEP"); process.exit(0)
+        }
         if (ok(h) || ok(w)) {
           const last = {};
           if (ok(h)) last["5h"] = h;
@@ -627,11 +639,19 @@ except Exception:
         }
         const f = Number.isInteger(r.failures) && r.failures >= 1 ? r.failures : 0;
         out(f, Object.hasOwn(r, "last") ? r.last : undefined);
-      ' "$cache" "$turned" 2>/dev/null)
+      ' "$cache" "$turned" "$started_at" 2>/dev/null)
+      [ "$carry" != KEEP ] || { rm -f "$lock"; exit 0; }
       prev_failures=${carry%% *}
       case $carry in *" "*) last_tag=${carry#* } ;; esac
       case $prev_failures in ''|*[!0-9]*) prev_failures=0 ;; esac
-    elif [ -f "$cache" ] && ! grep -q '"5h"\|"7d"' "$cache" 2>/dev/null; then
+    # A236: no node - a reading written strictly after the start is kept, as the node branch
+    # keeps it (no turn runs without node, so no turned_at to stamp).
+    elif [ -f "$cache" ] && sed 's/"last":{[^}]*}//' "$cache" 2>/dev/null | grep -q '"5h"\|"7d"' &&
+         case $started_at in *.*) mt=$(date -r "$cache" +%s.%N 2>/dev/null) ;; *) mt=$(date -r "$cache" +%s 2>/dev/null) ;; esac &&
+         awk -v m="$mt" -v s="$started_at" 'BEGIN { exit !(m ~ /^[0-9.]+$/ && m + 0 > s + 0) }'; then
+      rm -f "$lock"; exit 0
+    # A carried last is not a reading: its "7d" must not reset the counter.
+    elif [ -f "$cache" ] && ! sed 's/"last":{[^}]*}//' "$cache" 2>/dev/null | grep -q '"5h"\|"7d"'; then
       pf=$(sed -n 's/.*"failures"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$cache" | head -1)
       case $pf in ''|*[!0-9]*) ;; *) prev_failures=$pf ;; esac
     fi

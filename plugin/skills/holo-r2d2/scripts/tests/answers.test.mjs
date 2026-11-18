@@ -902,27 +902,28 @@ test("A237-r2: a FINAL is newer than the run's last answer only in a later minut
   assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "a later minute: newer");
 });
 
-test("A237-r3: a settled decision with no time (moot) - judged by the later of the answer time and the run file's mtime", async () => {
+test("A237-r3: a settled decision with no time (moot) - judged by the later of the answer time and the run's updated: stamp", async () => {
   const s = sandbox();
-  stampedRun(s, "### Q2 moot");
-  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace(/(### Q2 moot[\s\S]*?)answer: -/, "$1moot: covered by F5"));
-  at(RUN1(s), "2026-11-17T13:00:00Z");
+  mootQ2(s, "2026-11-17T13:00Z");
   finalAt(s, "2026-11-17T12:00:00Z");
   assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "finalized after the 11:00 answer but before the 13:00 run file");
   finalAt(s, "2026-11-17T13:01:00Z");
   assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"));
 });
 
-test("A237-r4: the canonical page is the set's own page; another RUN spelling only when it is missing or unreadable", async () => {
-  const s = sandbox();
-  const set = run1(s), ans = run1Answers(s, set), A = "a".repeat(32), B = "b".repeat(32);
-  at((writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(set, A)), join(s.holo, "RUN-1.wizard.html")), "2026-11-17T09:00:00Z");
-  writeFileSync(join(s.holo, "RUN-0001.wizard.html"), wizardPage(set, B));
+test("A237-r4/A241-1: the canonical page is pageFile(set.id) - holo's padded RUN-0001 page beats a stray RUN-1 copy", async () => {
+  const s = sandbox(), A = "a".repeat(32), B = "b".repeat(32);
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("@LANDED@", "abc1234").replace("# RUN-1 ", "# RUN-0001 ");
+  writeFileSync(join(s.root, ".skillator", "run-0001-shelf-export.md"), md);
+  const set = setFromRun(parseRun(md), ".skillator/run-0001-shelf-export.md"), own = join(s.holo, "RUN-0001.wizard.html");
+  at((writeFileSync(own, wizardPage(set, A)), own), "2026-11-17T09:00:00Z");
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(set, B));
+  const ans = run1Answers(s, set);
   put(s.dl, "RUN-1-decisions-FINAL.json", { ...ans, nonce: A }, 0);
-  assert.equal((await findAnswers(s.opts)).picked.verified, true, "canonical RUN-1 page beats a newer RUN-0001 page");
-  writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
+  assert.equal((await findAnswers(s.opts)).picked.verified, true, "canonical RUN-0001 page beats a newer RUN-1 copy");
+  writeFileSync(own, "<!doctype html>");
   put(s.dl, "RUN-1-decisions-FINAL.json", { ...ans, nonce: B }, 0);
-  assert.equal((await findAnswers(s.opts)).picked.verified, true, "canonical unreadable: the RUN-0001 page");
+  assert.equal((await findAnswers(s.opts)).picked.verified, true, "canonical unreadable: the RUN-1 page");
 });
 
 test("A237-r5: a settled-run FINAL with no valid finalizedAt is refused as such", async () => {
@@ -932,6 +933,52 @@ test("A237-r5: a settled-run FINAL with no valid finalizedAt is refused as such"
   const r = await findAnswers(s.opts);
   assert.equal(r.refused.find((x) => x.path === p)?.why, "finalizedAt is not an ISO 8601 time", report(r));
   assert.ok(!r.ignored.some((x) => x.path === p), report(r));
+});
+
+// ------------------------------------------------------------ A241 ----
+// Q2 settled moot with no time; updated: the run file's stamp (null drops it); mtime: the file time.
+function mootQ2(s, updated, mtime = "2026-11-17T13:00:00Z") {
+  stampedRun(s, "### Q2 moot");
+  const md = readFileSync(RUN1(s), "utf8").replace(/(### Q2 moot[\s\S]*?)answer: -/, "$1moot: covered by F5");
+  writeFileSync(RUN1(s), md.replace(/ *updated: \S+/, updated ? ` updated: ${updated}` : ""));
+  at(RUN1(s), mtime);
+}
+
+test("A241-2: an untimed settled decision is bounded by the run's updated: stamp, not a later file mtime", async () => {
+  const s = sandbox();
+  mootQ2(s, "2026-11-17T12:00Z", "2026-11-17T15:00:00Z"); // a checkout or merge bumped the file
+  finalAt(s, "2026-11-17T11:30:00Z");
+  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "before the updated: stamp");
+  finalAt(s, "2026-11-17T12:30:00Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "after the updated: stamp, though before the file mtime");
+});
+
+test("A241-3: no updated: stamp - the millisecond file mtime bounds it, with no minute flooring", async () => {
+  const s = sandbox();
+  mootQ2(s, null, "2026-11-17T13:00:30.000Z");
+  finalAt(s, "2026-11-17T13:00:15Z");
+  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "before the mtime");
+  finalAt(s, "2026-11-17T13:00:45Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "after the mtime, in the same minute");
+});
+
+test("A241-4: an answered decision with no stamp (legacy) is untimed, not time 0", async () => {
+  const s = sandbox();
+  stampedRun(s); // Q1 answered at 11:00, Q2 answered with no stamp
+  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace(/updated: \S+/, "updated: 2026-11-17T13:00Z"));
+  finalAt(s, "2026-11-17T12:00:00Z");
+  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "before the updated: stamp that covers Q2");
+  finalAt(s, "2026-11-17T13:01:00Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"));
+});
+
+test("A241-5: an invalid finalizedAt never keeps a settled run listed (file-time gate too)", async () => {
+  const s = sandbox();
+  settledRun(s); // no answer times: judged by file times
+  const p = put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers({ finalizedAt: "yesterday" }), set: "RUN-1" }, 0);
+  const r = await findAnswers(s.opts);
+  assert.ok(!r.sets.includes("RUN-1"), report(r));
+  assert.equal(r.refused.find((x) => x.path === p)?.why, "finalizedAt is not an ISO 8601 time", report(r));
 });
 
 // B30: the plugin cache is reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins).
