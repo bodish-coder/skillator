@@ -243,3 +243,21 @@ test('A235 1: a reply parseArm cannot read toasts unexpected output from teams-u
   assert.match(done.toast ?? '', /^✗ Teams: unexpected output from teams-uhura/)
   assert.doesNotMatch(done.toast ?? '', /result=armed/)
 })
+
+test('A235 3: no deferred ack after a disarm; an ack in flight keeps its view when c is pressed after', () => {
+  const changed: State = { ...onTab.state, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }
+  const copied = (s: State) => {
+    const y = reduce(s, { name: 'y' })
+    const copy = y.effects.find((e): e is Extract<Effect, { kind: 'copy' }> => e.kind === 'copy')!
+    return afterRun({ then: copy.then! }, { code: 0, out: '', err: '', argv: [] }, y.state, NOW)
+  }
+  const d = reduce(changed, { name: 'd' })
+  const off = afterRun(runs(d.effects)[0]!, ok(KV({ result: 'disarmed' })), copied(d.state).state, NOW)
+  assert.deepEqual(runs(off.effects), [])
+  assert.equal(off.state.ackAfter, null)
+  const ack = runs(copied(changed).effects)[0]!
+  const c = reduce(changed, { name: 'c' })
+  const acked = afterRun(ack, ok(KV({ ...ARMED, result: 'acked', url: U2 })), c.state, NOW).state
+  assert.equal(acked.teamsArm?.urlChanged, false)
+  assert.equal(acked.armBusy, true)
+})

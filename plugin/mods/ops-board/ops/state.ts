@@ -1484,9 +1484,10 @@ function markRead(s: State): Step {
 type ArmCall = 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack'
 const armThen = (call: ArmCall, args: string[] = []): Then => r => x => {
   const quiet = call === 'team-arm-status' || call === 'team-url-ack'
-  if (quiet && x.armBusy) return x                 // an arm or disarm in flight is the newer read
-  // A235: the URL y copied under an arm is acked once it lands
-  const effects = !quiet && x.ackAfter ? [ackRun(x.ackAfter)] : []
+  // an arm or disarm in flight is the newer read; an ack's reply is still shown
+  if (call === 'team-arm-status' && x.armBusy) return x
+  // A235: the URL y copied under an arm is acked once it lands; never after a disarm
+  const effects = !quiet && call !== 'team-disarm' && x.ackAfter ? [ackRun(x.ackAfter)] : []
   const y: State = quiet ? x : { ...x, armBusy: false, ackAfter: null }
   // a toast never carries the URL: the ack's argument is replaced by value
   const said = (t: string) => args.filter(Boolean).reduce((m, a) => m.split(a).join('<url>'), [t, ran(r.argv)].join('\n'))

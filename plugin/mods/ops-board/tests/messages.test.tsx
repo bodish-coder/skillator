@@ -642,3 +642,55 @@ test('F177 URL guard frames: unchanged URL - no warning; changed - the warning w
   expect(w.toasts.join('\n')).not.toContain('devtunnels.ms')
   await ui.unmount()
 })
+
+// A235 3: the URL y copied under d is never acked after the disarm; an ack in flight keeps its
+// view when c is pressed after the arm it waited for
+test('A235 3: no deferred ack after a disarm; the deferred ack keeps its view under a later c', async ($, on) => {
+  const [w, clock] = world(on)
+  const modes = () => w.runs.filter(r => r.argv[1] === SETUP_SH).map(r => r.argv[2])
+  const warns = async () => (await ui.findAll({})).filter(x => !!x.key && x.key.startsWith('arm:warn')).map(x => x.text)
+  const later = () => { let done!: (r: ProcessRunResult) => void; const p = new Promise<ProcessRunResult>(r => { done = r }); return [p, (r: ProcessRunResult) => done(r)] as const }
+  w.files['/usr/bin/pbcopy'] = 'ELF'
+  w.arm = { '--status': ran(KV({ ...ARMED, result: 'status', url: U2, url_changed: '1' })) }
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  // y under d: copied, never acked once the disarm lands
+  const [disarm, endDisarm] = later()
+  w.arm['--disarm'] = disarm
+  await ui.press({ key: 'key:disconnect' })
+  await clock.settle()
+  await ui.press({ key: 'key:copyurl' })
+  await clock.settle()
+  endDisarm(ran(KV({ result: 'disarmed' })))
+  await clock.settle()
+  expect(modes()).not.toContain('--ack')
+  // y under c: acked after it; c pressed while that ack is in flight does not drop the ack's view
+  w.arm['--status'] = ran(KV({ ...ARMED, result: 'status', url: U2, url_changed: '1' }))
+  await ui.press({ key: 'tab:tickets' })
+  await clock.settle()
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  const [arm, endArm] = later()
+  const [ack, endAck] = later()
+  w.arm['--arm'] = arm
+  w.arm['--ack'] = ack
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
+  await ui.press({ key: 'key:copyurl' })
+  await clock.settle()
+  endArm(ran(KV({ ...ARMED, url: U2, url_changed: '1' })))
+  await clock.settle()
+  expect(modes().at(-1)).toBe('--ack')
+  const [arm2, endArm2] = later()
+  w.arm['--arm'] = arm2
+  await ui.press({ key: 'key:connect' })
+  await clock.settle()
+  endAck(ran(KV({ ...ARMED, result: 'acked', url: U2 })))
+  await clock.settle()
+  expect(await warns()).toEqual([])
+  endArm2(ran(KV({ ...ARMED, url: U2 })))
+  await clock.settle()
+  await ui.unmount()
+})

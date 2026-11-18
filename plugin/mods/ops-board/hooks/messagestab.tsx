@@ -250,7 +250,8 @@ async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'te
   if (!quiet) armBusy = true
   try {
     const r = await runCall($, call, args)
-    if (quiet && armBusy) return                    // an arm or disarm started meanwhile is the newer read
+    // an arm or disarm started meanwhile is the newer read; an ack's reply is still shown
+    if (call === 'team-arm-status' && armBusy) return
     // a toast never carries the URL: the ack's argument is replaced by value
     const said = (s: string) => args.filter(Boolean).reduce((t, a) => t.split(a).join('<url>'), [s, ran(r.argv)].join('\n'))
     const v = parseArm(r.out)
@@ -262,7 +263,7 @@ async function runArm($: EngineInterface, call: 'team-arm' | 'team-disarm' | 'te
     if (!quiet) {
       armBusy = false
       const url = ackAfter; ackAfter = null
-      if (url) await runArm($, 'team-url-ack', [url])
+      if (url && call !== 'team-disarm') await runArm($, 'team-url-ack', [url])   // never after a disarm
     }
   }
 }
