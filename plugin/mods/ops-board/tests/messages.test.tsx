@@ -41,7 +41,7 @@ const KV = (o: Record<string, string> = {}) => Object.entries({ result: 'status'
   hosted: '0', listener: 'down', port: '3978', url: '', url_changed: '0', expires: '', ...o }).map(([k, v]) => `${k}=${v}`).join('\n') + '\n'
 const ARMED = { result: 'armed', hosted: '1', listener: 'up', url: U1 }
 
-type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string; env?: Record<string, string> }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult | Promise<ProcessRunResult>>; cfgRun?: ProcessRunResult }
+type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string; env?: Record<string, string> }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult | Promise<ProcessRunResult>>; cfgRun?: ProcessRunResult; clear?: ProcessRunResult }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
@@ -94,7 +94,7 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
     if ((a[0] === NODE || a[0] === 'C:/tools/node.exe') && a[1] === TEAM_JS) {
       if (a[2] === 'config' && a[3] === 'show') return { value: w.cfgRun ?? ran(w.cfg) }
       if (a[2] === 'config' && a[3] === 'save') return { value: w.save }
-      if (a[2] === 'config' && a[3] === 'clear') return { value: ran('cleared: /h/.skillator/teams.json\n') }
+      if (a[2] === 'config' && a[3] === 'clear') return { value: w.clear ?? ran('cleared: /h/.skillator/teams.json\n') }
       if (a[2] === 'inbox' && a[3] === 'tail') return { value: ran(INBOX) }
       if (a[2] === 'inbox' && a[3] === 'mark-read') { w.files[commonGitDir + '/skillator/team-inbox.read'] = a[5] + '\n'; return { value: ran(`read up to ${a[5]}\n`) } }
     }
@@ -692,5 +692,31 @@ test('A235 3: no deferred ack after a disarm; the deferred ack keeps its view un
   expect(await warns()).toEqual([])
   endArm2(ran(KV({ ...ARMED, url: U2 })))
   await clock.settle()
+  await ui.unmount()
+})
+
+// A235 8: Clear counts only with team.mjs's 'cleared:' or 'nothing saved' line
+test('A235 8: an exit 0 from config clear without its line is not a clear', async ($, on) => {
+  const [w, clock] = world(on, CFG_SET)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  const clear = async () => {
+    await ui.press({ key: 'key:setup' })
+    await clock.settle()
+    await ui.press({ key: 'setup:clear' })
+    await ui.press({ key: 'setup:clear-yes' })
+    await clock.settle()
+  }
+  w.clear = ran('')
+  await clear()
+  expect(w.toasts.join('\n')).not.toContain('✓ Teams settings cleared')
+  expect((await ui.find({ key: 'setup:result' }))?.text).toContain('teams-uhura did not say it cleared')
+  w.clear = ran('nothing saved at /h/.skillator/teams.json\n')
+  await ui.press({ key: 'setup:clear' })
+  await ui.press({ key: 'setup:clear-yes' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toContain('✓ Teams settings cleared - nothing saved at /h/.skillator/teams.json')
   await ui.unmount()
 })

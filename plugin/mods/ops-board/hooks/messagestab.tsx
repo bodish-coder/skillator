@@ -5,7 +5,7 @@ import { copyHost, gitBin, runCall } from './lib/host'
 import { loginMessage, loginStatus } from './lib/calls'
 import { inboxDirOfCommonGitDir, INBOX_FILE, messageLines, parseInbox, plainText, READ_FILE, unreadCount } from './lib/inbox'
 import { armLines, armToast, parseArm } from './lib/teamsarm'
-import { freshSetup, parseCfgView, setupError, setupJson, unmask, urlShown } from './lib/teamsconfig'
+import { CLEARED_LINE, freshSetup, parseCfgView, resultLine, SAVED_LINE, setupError, setupJson, unmask, urlShown } from './lib/teamsconfig'
 import type { SetupValues } from './lib/teamsconfig'
 
 // F66: the Messages tab (teams-uhura's Teams inbox) and the Teams setup form, drawn in
@@ -178,15 +178,15 @@ async function saveSetup($: EngineInterface) {
   const bad = setupError(draft, await read($, teamsCfgA))
   if (bad) { await bump($, { result: bad }); return }
   const r = await runCall($, 'team-config-save', [], setupJson(draft))
-  const said = r.out.trim().split(/\r?\n/)[0] ?? ''
   // B29: only teams-uhura's 'saved: <path>' line is a save - an exit 0 that says nothing saved nothing
-  const failed = r.code !== 0 ? why(r) : said.startsWith('saved: ') ? null : 'teams-uhura did not say it saved' + (said ? ': ' + said : '')
+  const said = resultLine(r.out, SAVED_LINE, 'saved')
+  const failed = r.code !== 0 ? why(r) : said.bad
   if (failed) {
     $.ui.toast([`✗ Teams settings not saved: ${failed}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
     await bump($, { result: failed })
     return
   }
-  $.ui.toast([`✓ Teams settings saved - ${said}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  $.ui.toast([`✓ Teams settings saved - ${said.line}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeSetup($)
   await refreshCfg($, false)
 }
@@ -194,8 +194,11 @@ async function saveSetup($: EngineInterface) {
 async function clearSaved($: EngineInterface) {
   if (login.confirm) return
   const r = await runCall($, 'team-config-clear', [])
-  if (r.code !== 0) { await bump($, { result: why(r), confirmClear: false }); return }
-  $.ui.toast([`✓ Teams settings cleared - ${r.out.trim().split(/\r?\n/)[0] ?? ''}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
+  // A235: only its 'cleared:' / 'nothing saved' line is a clear
+  const said = resultLine(r.out, CLEARED_LINE, 'cleared')
+  const failed = r.code !== 0 ? why(r) : said.bad
+  if (failed) { await bump($, { result: failed, confirmClear: false }); return }
+  $.ui.toast([`✓ Teams settings cleared - ${said.line}`, ran(r.argv)].join('\n'), { timeoutMs: 8000 })
   await closeSetup($)
   await refreshCfg($, false)
 }

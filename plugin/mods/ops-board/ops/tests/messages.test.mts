@@ -373,3 +373,14 @@ test('A235 7: only the saved: <path> line is a save; an exit 0 without it, or a 
   assert.ok(no.setup)
   assert.match(no.toast ?? '', /^✗ Teams settings not saved: refused: inside the repo/)
 })
+
+test('A235 8: config clear counts only with its cleared: / nothing saved line', () => {
+  let s = press(openSetup(CFG_SET), 'tab', 'tab', 'tab', 'tab', 'return')
+  const [clear] = runs(reduce(s, { name: 'y' }).effects)
+  const quiet = settle(clear!.then(ok('', ['node', 'team.mjs', 'config', 'clear']))(s)).state
+  assert.ok(quiet.setup)
+  assert.match(quiet.setup!.result ?? '', /teams-uhura did not say it cleared/)
+  const none = settle(clear!.then(ok('nothing saved at /h/.skillator/teams.json\n'))(s)).state
+  assert.equal(none.setup, null)
+  assert.match(none.toast ?? '', /^✓ Teams settings cleared - nothing saved at \/h\/\.skillator\/teams\.json/)
+})

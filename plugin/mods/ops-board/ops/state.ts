@@ -1315,8 +1315,11 @@ function saveSetup(s: State): Step {
 
 function clearSetup(s: State): Step {
   const then: Then = r => x => {
-    if (r.code !== 0) return x.setup ? { ...x, setup: { ...x.setup, result: teamWhy(r, 'teams-uhura'), confirmClear: false } } : toast(x, teamWhy(r, 'teams-uhura'))
-    return { state: { ...x, setup: null, toast: [`✓ Teams settings cleared - ${r.out.trim().split(/\r?\n/)[0] ?? ''}`, ran(r.argv)].join('\n') }, effects: [showCfg(false)] }
+    // A235: only its 'cleared:' / 'nothing saved' line is a clear
+    const said = resultLine(r.out, CLEARED_LINE, 'cleared')
+    const failed = r.code !== 0 ? teamWhy(r, 'teams-uhura') : said.bad
+    if (failed) return x.setup ? { ...x, setup: { ...x.setup, result: failed, confirmClear: false } } : toast(x, failed)
+    return { state: { ...x, setup: null, toast: [`✓ Teams settings cleared - ${said.line}`, ran(r.argv)].join('\n') }, effects: [showCfg(false)] }
   }
   return { state: { ...s, setup: { ...s.setup!, confirmClear: false } }, effects: [run('team-config-clear', [], then)] }
 }
