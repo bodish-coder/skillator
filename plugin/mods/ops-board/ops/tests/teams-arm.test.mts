@@ -308,3 +308,16 @@ test('A235 fix 3: the ack y deferred under c runs only after an armed (or hosted
     assert.equal(r.state.ackAfter, null)
   }
 })
+
+test('A235 fix 5: at 80 columns the uninspectable note gets its own dim line under the arm line, never cut', () => {
+  const NOTE = 'a devtunnel this board cannot inspect is running'
+  const v = parseArm(KV({ ...ARMED, note: NOTE }))!
+  const l80 = lines(v, 80)
+  assert.equal(l80[0]![1], 'Teams  ● tunnel hosted · ● listener up :3978 · form saved · expires in 30d')
+  assert.deepEqual(l80[1], ['arm:note', '  ' + NOTE])
+  assert.deepEqual(armLines(v, NOW, 80)[1]!.segs, [{ text: '  ' + NOTE, dim: true }])
+  const f = frame({ ...onTab.state, cols: 80, rows: 24, teamsArm: v }, P)
+  for (const l of f) assert.ok(cells(l) <= 80, l)
+  assert.ok(f.some(l => l.trimEnd() === '  ' + NOTE), 'the note whole on its own line')
+  assert.equal(lines(v, 140)[0]![1], 'Teams  ● tunnel hosted · ● listener up :3978 · form saved · expires in 30d · ' + NOTE)
+})
