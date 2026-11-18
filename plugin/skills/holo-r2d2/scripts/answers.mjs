@@ -240,7 +240,9 @@ export function report(r) {
   return L.map((l) => l.replace(CTRL_G, " ")).join("\n");
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// B30: argv[1] keeps a link's spelling, import.meta.url is the real path - compare real paths.
+const entry = (p) => { try { p = realpathSync(p); } catch { p = resolve(p); } return process.platform === "win32" ? p.toLowerCase() : p; };
+if (process.argv[1] && entry(process.argv[1]) === entry(fileURLToPath(import.meta.url))) {
   const a = process.argv.slice(2), i = a.indexOf("--root");
   if (i >= 0 && !a[i + 1]) { console.error("answers: --root needs a path"); process.exit(2); }
   findAnswers(i >= 0 ? { root: resolve(a[i + 1]) } : {})

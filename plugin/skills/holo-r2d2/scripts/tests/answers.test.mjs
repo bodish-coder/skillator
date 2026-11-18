@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync, rmSync, renameSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync, rmSync, renameSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -800,4 +800,19 @@ test("A233-8: only a verified FINAL keeps a settled run listed", async () => {
   put(s.dl, "RUN-1-decisions-FINAL (1).json", { ...answers(), set: "RUN-1", nonce: "c".repeat(32) }, 0);
   const r = await findAnswers(s.opts);
   assert.ok(!r.sets.includes("RUN-1"), report(r));
+});
+
+// B30: the plugin cache is reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins).
+// argv[1] kept the link's spelling, import.meta.url the real path: main never ran, output was empty.
+test("B30: holo.mjs --selftest and answers.mjs still run when started through a linked directory", () => {
+  const d = mkdtempSync(join(tmpdir(), "holo-b30-"));
+  const link = join(d, "linked");
+  symlinkSync(join(HERE, ".."), link, process.platform === "win32" ? "junction" : "dir");
+  const run = (...a) => spawnSync(process.execPath, a, { cwd: d, encoding: "utf8", timeout: 120000, stdio: ["ignore", "pipe", "pipe"] });
+  const h = run(join(link, "holo.mjs"), "--selftest");
+  assert.equal(h.status, 0, h.stderr);
+  assert.ok(h.stdout.trim(), "holo --selftest printed nothing");
+  const a = run(join(link, "answers.mjs"), "--root", d);
+  assert.equal(a.status, 0, a.stderr);
+  assert.ok(a.stdout.includes("no answers file found"), a.stdout);
 });

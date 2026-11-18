@@ -36,7 +36,7 @@
 // No npm dependencies. Inline SVG only - no CDN, so the page draws offline.
 
 import { readFile, writeFile, mkdir, readdir, cp, stat } from "node:fs/promises";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, realpathSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -1496,6 +1496,8 @@ function selftest() {
 
 function readFileSyncText(p) { return readFileSync(p, "utf8"); }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// B30: argv[1] keeps a link's spelling, import.meta.url is the real path - compare real paths.
+const entry = (p) => { try { p = realpathSync(p); } catch { p = resolve(p); } return process.platform === "win32" ? p.toLowerCase() : p; };
+if (process.argv[1] && entry(process.argv[1]) === entry(fileURLToPath(import.meta.url))) {
   main(process.argv.slice(2)).catch((e) => { console.error(`holo: ${e.message}`); process.exit(e.code === 2 ? 2 : 1); });
 }
