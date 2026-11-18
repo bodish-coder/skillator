@@ -41,7 +41,8 @@ export const HELP = USAGE + '\n'
   + '  ops --reset    reset terminal state, clear stale locks and kill hung refresh processes, then exits\n'
   + "  ops --font-size N   sets the 'skillator ops' Windows Terminal profile font (install.ps1 -OpsFontSize N too; skillator-update keeps it)\n"
   + "  zoom: Ctrl+minus / Ctrl+plus / Ctrl+scroll resizes any Windows Terminal or herdr tab live; the in-session pane draws in the host terminal's font\n"
-  + '  NO_COLOR or --no-color drops the colours only; bold, inverse and the › marker stay'
+  + '  NO_COLOR or --no-color drops the colours only; bold, inverse and the › marker stay\n'
+  + '  Tickets: every section and group opens collapsed (▸ header, its count); Enter or a click on a header opens or closes it'
 const TAB_WORDS: Record<string, Tab> = { tickets: 'tickets', workflows: 'runs', runs: 'runs', agents: 'runs', health: 'health', messages: 'messages', explorer: 'explorer', build: 'run', run: 'run', help: 'help', guide: 'help', skills: 'help' }
 
 // The flags; the first wrong one is `error` (the launcher has taken the repo dir already).

@@ -18,11 +18,12 @@ export const decideTickets = (tickets: readonly Ticket[], user: string | null): 
 export const sessionTickets = (tickets: readonly Ticket[], code: string | null | undefined): Ticket[] =>
   code ? tickets.filter(t => isOpen(t) && sameHandle(t.assignedSession, code)) : []
 
+// F180: a personal section starts collapsed; 'unfold:<sec>' in `open` is the owner's choice this session
 export const isUserSectionOpen = (open: readonly string[], sec: UserSection): boolean =>
-  !open.includes('fold:' + sec)
+  open.includes('unfold:' + sec)
 
 export const toggleUserSection = (open: readonly string[], sec: UserSection): string[] =>
-  toggleGroup(open, 'fold:' + sec)
+  toggleGroup(open, 'unfold:' + sec)
 
 export const isUserHead = (item: string | null): item is `head:${UserSection}` =>
   !!item && USER_SECTIONS.some(sec => item === 'head:' + sec)
@@ -36,13 +37,15 @@ export function personalGroups(
   opts?: { open?: readonly string[]; assignedFolded?: boolean; decideFolded?: boolean; sessionFolded?: boolean; session?: string | null },
 ): UserGroup[] {
   const open = opts?.open ?? []
+  // the pane holds a folded flag per section; the ops app (no flag) its `open` keys
+  const isOpenSec = (sec: UserSection, folded: boolean | undefined) => (folded === undefined ? isUserSectionOpen(open, sec) : !folded)
   const out: UserGroup[] = []
   if (user) {
-    out.push({ id: 'assigned', title: 'Assigned', color: 'suggestion', tickets: assignedTickets(tickets, user), open: !opts?.assignedFolded && isUserSectionOpen(open, 'assigned') })
-    out.push({ id: 'decide', title: 'Mine to decide', color: 'autoAccept', tickets: decideTickets(tickets, user), open: !opts?.decideFolded && isUserSectionOpen(open, 'decide') })
+    out.push({ id: 'assigned', title: 'Assigned', color: 'suggestion', tickets: assignedTickets(tickets, user), open: isOpenSec('assigned', opts?.assignedFolded) })
+    out.push({ id: 'decide', title: 'Mine to decide', color: 'autoAccept', tickets: decideTickets(tickets, user), open: isOpenSec('decide', opts?.decideFolded) })
   }
   if (opts?.session) {
-    out.push({ id: 'session', title: `This session (${opts.session})`, color: 'warning', tickets: sessionTickets(tickets, opts.session), open: !opts.sessionFolded && isUserSectionOpen(open, 'session') })
+    out.push({ id: 'session', title: `This session (${opts.session})`, color: 'warning', tickets: sessionTickets(tickets, opts.session), open: isOpenSec('session', opts.sessionFolded) })
   }
   return out
 }

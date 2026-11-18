@@ -203,3 +203,9 @@ test('F178: the This session section lists open tickets tagged [session: <code>]
   expect(buildModel(view({ board: b, me: '@vidul', assignedFolded: false, decideFolded: false })).userGroups.map(x => x.id)).toEqual(['assigned', 'decide'])
   expect(buildModel(view({ board: b, session: 'cc-1ir0', sessionFolded: false })).items.slice(0, 2)).toEqual(['head:session', 'session:F1'])
 })
+
+// F180: with no open choice made, every personal section is collapsed
+test('F180: personal sections start collapsed until opened', () => {
+  const m = buildModel(view({ me: '@vidul', session: 'cc-1ir0' }))
+  expect(m.userGroups.map(g => g.open)).toEqual([false, false, false])
+})

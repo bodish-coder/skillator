@@ -51,9 +51,10 @@ const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 // F61: the boxes of the open groups, this session; empty = every group collapsed. Only
 // the set is held, never rows: the board's own value stays within $.state's cap (B4).
 const openA = atom({ plugin: 'ops-board', key: 'openGroups' } as const, [])
-const assignedFoldedA = atom({ plugin: 'ops-board', key: 'assignedFolded' } as const, false)
-const decideFoldedA = atom({ plugin: 'ops-board', key: 'decideFolded' } as const, false)
-const sessionFoldedA = atom({ plugin: 'ops-board', key: 'sessionFolded' } as const, false)
+// F180: the personal sections start collapsed too; a press opens one for this session
+const assignedFoldedA = atom({ plugin: 'ops-board', key: 'assignedFolded' } as const, true)
+const decideFoldedA = atom({ plugin: 'ops-board', key: 'decideFolded' } as const, true)
+const sessionFoldedA = atom({ plugin: 'ops-board', key: 'sessionFolded' } as const, true)
 const sessionA = atom({ plugin: 'ops-board', key: 'session' } as const, null)   // F109: register.tsx sets it
 // F76: the Workflows tab's open sections (Runs, Workflows, F93 Agents), this session; all start open.
 const runsOpenA = atom({ plugin: 'ops-board', key: 'runsOpen' } as const, ['runs', 'workflows', 'agents'])
@@ -63,7 +64,6 @@ export async function toggleUserGroup($: EngineInterface, sec: UserSection) {
   if (sec === 'assigned') await update($, assignedFoldedA, x => !x)
   else if (sec === 'decide') await update($, decideFoldedA, x => !x)
   else await update($, sessionFoldedA, x => !x)
-  await update($, openA, x => (x as string[]).filter(k => k !== 'fold:' + sec) as typeof x)
 }
 
 const CHIP_KEY: Color = 'permission'

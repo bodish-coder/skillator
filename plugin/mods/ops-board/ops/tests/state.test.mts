@@ -829,7 +829,7 @@ test('F128: Assigned (N) and Decide (N) sections personalized to active user', (
   const tm = [{ handle: '@asha', emails: [] }, { handle: '@vidul', emails: [] }]
   const sAsha = onBoard(initial(80, 24, 0), b, tm, '@asha')
   const mAsha = buildModel(viewOf(sAsha))
-  const itemsAsha = ticketsItems(sAsha, mAsha)
+  const itemsAsha = ticketsItems({ ...sAsha, open: ['unfold:assigned', 'unfold:decide'] as any }, mAsha)
   assert.equal(itemsAsha[0], 'head:assigned')
   assert.equal(itemsAsha[1], 'assigned:F1')
   assert.equal(itemsAsha[2], 'head:decide')
@@ -837,7 +837,7 @@ test('F128: Assigned (N) and Decide (N) sections personalized to active user', (
 
   const sVidul = onBoard(initial(80, 24, 0), b, tm, '@vidul')
   const mVidul = buildModel(viewOf(sVidul))
-  const itemsVidul = ticketsItems(sVidul, mVidul)
+  const itemsVidul = ticketsItems({ ...sVidul, open: ['unfold:assigned', 'unfold:decide'] as any }, mVidul)
   assert.equal(itemsVidul[0], 'head:assigned')
   assert.equal(itemsVidul[1], 'assigned:F5')
   assert.equal(itemsVidul[2], 'head:decide')
@@ -852,31 +852,31 @@ test('F128: Enter, Space, and mouse click toggle expansion/folding of Assigned a
   const tm = [{ handle: '@asha', emails: [] }]
   let s = onBoard(initial(80, 24, 0), b, tm, '@asha')
   s.selected = 'head:assigned'
-  assert.ok(isUserSectionOpen(s.open, 'assigned'))
+  assert.ok(!isUserSectionOpen(s.open, 'assigned'))   // F180: starts collapsed
 
-  // Enter toggles folding
+  // Enter opens it
   s = reduce(s, key('return')).state
-  assert.ok(!isUserSectionOpen(s.open, 'assigned'))
-  let items = ticketsItems(s, buildModel(viewOf(s)))
-  assert.ok(!items.includes('assigned:F1'))
-
-  // Space toggles it back open
-  s = reduce(s, key('space')).state
   assert.ok(isUserSectionOpen(s.open, 'assigned'))
-  items = ticketsItems(s, buildModel(viewOf(s)))
+  let items = ticketsItems(s, buildModel(viewOf(s)))
   assert.ok(items.includes('assigned:F1'))
 
-  // Mouse click via point toggles decide
-  s.selected = 'head:decide'
-  assert.ok(isUserSectionOpen(s.open, 'decide'))
-  s = point(s, { kind: 'row', area: 'tickets', id: 'head:decide' }).state
-  assert.ok(!isUserSectionOpen(s.open, 'decide'))
-  assert.ok(!ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+  // Space folds it again
+  s = reduce(s, key('space')).state
+  assert.ok(!isUserSectionOpen(s.open, 'assigned'))
+  items = ticketsItems(s, buildModel(viewOf(s)))
+  assert.ok(!items.includes('assigned:F1'))
 
-  // Click again unfolds decide
+  // Mouse click via point opens decide
+  s.selected = 'head:decide'
+  assert.ok(!isUserSectionOpen(s.open, 'decide'))
   s = point(s, { kind: 'row', area: 'tickets', id: 'head:decide' }).state
   assert.ok(isUserSectionOpen(s.open, 'decide'))
   assert.ok(ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
+
+  // Click again folds decide
+  s = point(s, { kind: 'row', area: 'tickets', id: 'head:decide' }).state
+  assert.ok(!isUserSectionOpen(s.open, 'decide'))
+  assert.ok(!ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
 })
 
 test('F128: dynamically adapts when switching users in Team view (t)', () => {
@@ -886,6 +886,7 @@ test('F128: dynamically adapts when switching users in Team view (t)', () => {
   )
   const tm = [{ handle: '@asha', emails: [] }, { handle: '@vidul', emails: [] }]
   let s = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  s = { ...s, open: ['unfold:assigned', 'unfold:decide'] as any }   // F180: opened, as the person would
   assert.equal(activeUser(s), '@asha')
   assert.ok(ticketsItems(s, buildModel(viewOf(s))).includes('assigned:F1'))
   assert.ok(!ticketsItems(s, buildModel(viewOf(s))).includes('decide:F3'))
@@ -1547,4 +1548,13 @@ test('F178: This session section lists open tickets tagged with the app session 
   const items = ticketsItems(s, buildModel(viewOf(s)))
   assert.deepEqual(items.slice(0, 2), ['head:session', 'session:F1'])
   assert.ok(!items.includes('session:F2'))
+})
+
+// F180: a fresh board opens with every section and status group collapsed - headers only
+test('F180: fresh ops board - every personal section and status group collapsed', () => {
+  const b = parseBoard('- [~] F2 — Wip [owner: @asha]\n- [ ] F1 — Dark mode [owner: @asha] [session: cc-1ir0]\n- [?] F3 — Pick chart [decide: @asha]\n', 'T', 1, 1)
+  const s = onBoard({ ...initial(80, 24, 0), session: 'cc-1ir0' }, b, [{ handle: '@asha', emails: [] }], '@asha')
+  const items = ticketsItems(s, buildModel(viewOf(s)))
+  assert.deepEqual(items, ['head:assigned', 'head:decide', 'head:session', 'head:~', 'head:?', 'head: '])
+  for (const sec of ['assigned', 'decide', 'session'] as const) assert.ok(!isUserSectionOpen(s.open as string[], sec))
 })

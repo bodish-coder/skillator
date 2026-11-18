@@ -507,6 +507,9 @@ test('F128 draw: Assigned and Decide sections render with fold indicators and ad
   )
   const tm = [{ handle: '@asha', emails: [] }]
   let sUser = onBoard(initial(80, 24, 0), b, tm, '@asha')
+  // F180: both start collapsed; opened here as the person would
+  assert.match(frame(sUser, P).join('\n'), /▸ Assigned \(1\)\n  ▸ Mine to decide \(1\)/)
+  sUser = { ...sUser, open: [...sUser.open, 'unfold:assigned', 'unfold:decide'] as any }
   let f = frame(sUser, P).join('\n')
   assert.match(f, /▾ Assigned \(1\)/)
   assert.match(f, /F1  Dark mode/)
@@ -518,7 +521,7 @@ test('F128 draw: Assigned and Decide sections render with fold indicators and ad
   assert.match(col, /\x1b\[95m +decide @asha\x1b\[0m/)
 
   // Fold assigned section
-  sUser = { ...sUser, open: [...sUser.open, 'fold:assigned' as any] }
+  sUser = { ...sUser, open: (sUser.open as string[]).filter(k => k !== 'unfold:assigned') as any }
   f = frame(sUser, P).join('\n')
   assert.match(f, /▸ Assigned \(1\)/)
   assert.match(f, /▸ Assigned \(1\)\n  ▾ Mine to decide \(1\)/)
@@ -1058,4 +1061,15 @@ test('F178: This session section drawn when the app knows its session code', () 
   const both = [frame(x, P).join('\n'), frame(opened, P).join('\n')]
   assert.ok(both.some(f => /This session \(cc-1ir0\) \(1\)/.test(f)))
   assert.ok(both.some(f => /F1  Dark mode/.test(f)))
+})
+
+// F180: a fresh board draws headers only - every section and group collapsed (▸), no ticket row
+test('F180: fresh ops board draws every section and status group collapsed', () => {
+  const b = parseBoard('- [~] F2 — Wip [owner: @asha]\n- [ ] F1 — Dark mode [owner: @asha] [session: cc-1ir0]\n', 'T', 1, 1)
+  const f = frame(onBoard({ ...initial(80, 24, 0), session: 'cc-1ir0' }, b, [{ handle: '@asha', emails: [] }], '@asha'), P).join('\n')
+  assert.match(f, /▸ Assigned \(2\)/)
+  assert.match(f, /▸ Mine to decide \(0\)/)
+  assert.match(f, /▸ This session \(cc-1ir0\) \(1\)/)
+  assert.doesNotMatch(f, /▾/)
+  assert.doesNotMatch(f, /F1  Dark mode|F2  Wip/)
 })

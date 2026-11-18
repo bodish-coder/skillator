@@ -855,7 +855,10 @@ for (const surface of SURFACES) {
     await start($, clock)
     const ui = await mountPane($, surface)
 
-    // Active user is @vidul -> Assigned (1) with F3, Mine to decide (0)
+    // Active user is @vidul -> Assigned (1) with F3, Mine to decide (0); F180: both start collapsed
+    expect(await userHeads(ui)).toEqual(['▸ Assigned (1)', '▸ Mine to decide (0)'])
+    await ui.press({ key: 'head:assigned' })
+    await ui.press({ key: 'head:decide' })
     expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▾ Mine to decide (0)'])
     expect(((await ui.find({ key: 'head:decide' }))!.children.at(-1) as { props: { color?: string } }).props.color).toBe('autoAccept')
     expect(await ui.find({ key: 'row:assigned:F3' })).toBeDefined()
@@ -923,3 +926,23 @@ test('F178: no session code, no This session section', WITH, async ($, on) => {
   expect(await ui.find({ key: 'head:session' })).toBeUndefined()
   await ui.unmount()
 })
+
+// F180: a fresh pane - every personal section and status group collapsed, no ticket row; a press opens one
+for (const surface of SURFACES) {
+  test(`${surface}: F180 the Tickets tab opens with every section and status group collapsed`, WITH, async ($, on) => {
+    const [, clock] = world(on, { '/r/TICKETS.md': BOARD.replace('[app: ui]\n', '[app: ui] [session: cc-1ir0]\n'), '/r/.skillator/team.md': TEAM }, true, undefined, { SKILLATOR_SESSION: '@cc-1ir0' })
+    on('session.id', () => ({ value: 'sid-1' }))
+    await start($, clock)
+    const ui = await mountPane($, surface)
+    expect(await userHeads(ui)).toEqual(['▸ Assigned (1)', '▸ Mine to decide (0)'])
+    expect((await ui.find({ key: 'head:session' }))?.text).toContain('▸ This session (cc-1ir0) (1)')
+    const hs = (await heads(ui)).filter(h => !h.includes('This session'))   // heads() keeps head:session
+    expect(hs.length).toBeGreaterThan(0)
+    expect(hs.every(h => h.endsWith(' ▸'))).toBe(true)
+    expect((await ui.findAll({ type: 'Button' })).some(b => b.key?.startsWith('row:'))).toBe(false)
+    await ui.press({ key: 'head:assigned' })
+    expect(await userHeads(ui)).toEqual(['▾ Assigned (1)', '▸ Mine to decide (0)'])
+    expect(await ui.find({ key: 'row:assigned:F3' })).toBeDefined()
+    await ui.unmount()
+  })
+}
