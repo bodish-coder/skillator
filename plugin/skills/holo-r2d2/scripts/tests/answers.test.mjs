@@ -757,3 +757,14 @@ test("A233-4: a fully settled run is listed only while a FINAL for it is newer t
   assert.match(report(r2), /0 to apply, 1 already settled/);
 });
 
+test("A233-5: the summary counts only answers that produce a command", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set);
+  ans.answers[1] = { id: "Q2", question: set.decisions[1].question, choice: { id: "defer" }, clarification: "why?" };
+  put(s.dl, "RUN-1-decisions-FINAL.json", ans, 0);
+  assert.match(report(await findAnswers(s.opts)), /, 1 to apply, 0 already settled/);
+  put(s.dl, "RUN-1-decisions-FINAL (1).json", { ...ans, nonce: undefined }, 0);
+  rmSync(join(s.dl, "RUN-1-decisions-FINAL.json"));
+  assert.match(report(await findAnswers(s.opts)), /, 0 to apply, 0 already settled/, "an unverified pick applies nothing");
+});
+

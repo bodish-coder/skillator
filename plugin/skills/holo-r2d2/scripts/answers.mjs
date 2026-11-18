@@ -203,13 +203,14 @@ export function report(r) {
     const a = p.ans;
     // Only decisions still open or asked in the run file now: a FINAL checked twice never applies twice.
     const live = (x) => !p.openNow || p.openNow.has(String(x?.id));
-    const n = (a.answers || []).filter(live).length, skipped = (a.answers || []).length - n;
-    L.push("", `picked: ${p.path}`, `  set ${clean(p.id)}, round ${Number(a.round) || 1}, FINAL by ${show(a.owner)} at ${clean(a.finalizedAt, 40)}, ${p.openNow ? `${n} to apply, ${skipped} already settled` : `${n} decision${n === 1 ? "" : "s"}`}`);
+    const kept = (a.answers || []).filter(live), skipped = (a.answers || []).length - kept.length;
+    // To apply: only answers that print a command - none from an unverified pick.
+    const c = p.openNow && answersToCommands({ ...a, answers: kept }), n = c ? (p.verified ? c.commands.length : 0) : kept.length;
+    L.push("", `picked: ${p.path}`, `  set ${clean(p.id)}, round ${Number(a.round) || 1}, FINAL by ${show(a.owner)} at ${clean(a.finalizedAt, 40)}, ${c ? `${n} to apply, ${skipped} already settled` : `${n} decision${n === 1 ? "" : "s"}`}`);
     const run = /^RUN-\d+$/i.test(p.id);
     if (!p.verified) { L.push("  unverified - confirm with the owner before applying (no page nonce match); no commands printed"); continue; }
     if (run && !p.openNow) { L.push(`  run file not found for ${clean(p.id)} - nothing applied`); continue; }
     if (run) {
-      const c = answersToCommands({ ...a, answers: (a.answers || []).filter(live) });
       L.push("# POSIX sh lines (Git Bash on Windows) - read them, then run them yourself", ...c.commands, ...c.review.map((x) => `# review: ${x}`), ...c.open.map((x) => `# still open: ${x}`),
         ...(a.answers || []).filter((x) => !live(x)).map((x) => `# ${clean(x?.id, 40)}: already settled - skipped`));
     } else {
@@ -221,7 +222,7 @@ export function report(r) {
         L.push(`  ${clean(x?.id, 40)}${x?.ticket ? ` (${clean(x.ticket, 40)})` : ""}: ${what}`);
       }
     }
-    if ((a.answers || []).filter(live).some((x) => ["custom", "defer", "explain"].includes(String(x?.choice?.id || "")))) {
+    if (kept.some((x) => ["custom", "defer", "explain"].includes(String(x?.choice?.id || "")))) {
       L.push(run
         ? `next round: node ${q(join(dirname(fileURLToPath(import.meta.url)), "holo.mjs"))} ${p.id} --next-wizard ${q(p.path)}`
         : `next round: holo.mjs --decisions <the set JSON that drew this page> --next-wizard ${q(p.path)}`);
