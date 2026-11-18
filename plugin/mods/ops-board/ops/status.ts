@@ -53,7 +53,7 @@ export function discover(home: string): Profile[] {
 export function ownProfile(env: Env): Profile | null {
   const home = norm(env.HOME || env.USERPROFILE || homedir())
   const profiles = discover(home)
-  const dir = env.SKILLATOR_PROFILE_DIR || env.CLAUDE_CONFIG_DIR || env.CODEX_HOME || env.MUSE_CONFIG_DIR || env.AGY_CONFIG_DIR
+  const dir = env.SKILLATOR_PROFILE_DIR || env.CLAUDE_CONFIG_DIR || env.CODEX_HOME || env.MUSE_CONFIG_DIR || env.AGY_CONFIG_DIR || env.ANTIGRAVITY_APP_DATA_DIR
   if (dir) {
     const found = profiles.find(p => key(p.dir) === key(dir))
     if (found) return found
@@ -62,7 +62,9 @@ export function ownProfile(env: Env): Profile | null {
       if (base === def.split('/').pop()) return { name: cli, cli, dir: norm(dir) }
       if (base.startsWith(prefix)) return { name: base.slice(1), cli, dir: norm(dir) }
     }
-    return { name: env.SKILLATOR_CLI || base.replace(/^\./, '') || 'none', cli: env.SKILLATOR_CLI || '', dir: norm(dir) }
+    // B32: an agy dir by any name is agy, as usage-watch reads it.
+    const cli = env.SKILLATOR_CLI || (dir === env.AGY_CONFIG_DIR || dir === env.ANTIGRAVITY_APP_DATA_DIR ? 'agy' : '')
+    return { name: env.SKILLATOR_CLI || base.replace(/^\./, '') || 'none', cli, dir: norm(dir) }
   }
   if (env.SKILLATOR_CLI) return profiles.find(p => p.cli === env.SKILLATOR_CLI) ?? { name: env.SKILLATOR_CLI, cli: env.SKILLATOR_CLI, dir: '' }
   return null
