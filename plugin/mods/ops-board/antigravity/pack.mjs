@@ -7,7 +7,7 @@
 // not an option: beside an existing extensions.json the IDE ignores it (probed on
 // Antigravity IDE 1.107.0). A stored zip by hand - no zip tool is assumed (node >= 22.2
 // for zlib.crc32; ops needs 22.18).
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, realpathSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { crc32 } from 'node:zlib'
@@ -77,7 +77,9 @@ export function writeVsix(appDir, out) {
   writeFileSync(out, zip(vsixEntries(appDir)))
 }
 
-if (process.argv[1] && resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase()) {
+// B30: argv[1] keeps a link's spelling, import.meta.url is the real path - compare real paths.
+const entry = p => { try { p = realpathSync(p) } catch { p = resolve(p) } return process.platform === 'win32' ? p.toLowerCase() : p }
+if (process.argv[1] && entry(process.argv[1]) === entry(fileURLToPath(import.meta.url))) {
   const out = process.argv[2]
   if (!out) { process.stderr.write('usage: node pack.mjs <out.vsix>\n'); process.exit(2) }
   writeVsix(fileURLToPath(new URL('.', import.meta.url)), out)

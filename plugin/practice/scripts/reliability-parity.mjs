@@ -1,6 +1,6 @@
 // Offline reliability fixtures. No installer entrypoint or real coding host is started.
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, openSync, closeSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, openSync, closeSync, statSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -126,4 +126,6 @@ function main() {
   console.log(JSON.stringify({ code, report: output, entries: entries.map(({ id, status, reason }) => ({ id, status, reason })) }, null, 2));
   return code;
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = main();
+// B30: argv[1] keeps a link's spelling, import.meta.url is the real path - compare real paths.
+const entry = p => { try { p = realpathSync(p); } catch { p = resolve(p); } return process.platform === 'win32' ? p.toLowerCase() : p; };
+if (process.argv[1] && entry(process.argv[1]) === entry(fileURLToPath(import.meta.url))) process.exitCode = main();

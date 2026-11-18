@@ -1487,4 +1487,6 @@ export async function main(argv = process.argv.slice(2), { home = os.homedir() }
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().then((c) => process.exit(c));
+// B30: argv[1] keeps a link's spelling, import.meta.url is the real path - compare real paths.
+const entry = (p) => { try { p = fs.realpathSync(p); } catch { p = path.resolve(p); } return process.platform === "win32" ? p.toLowerCase() : p; };
+if (process.argv[1] && entry(process.argv[1]) === entry(fileURLToPath(import.meta.url))) main().then((c) => process.exit(c));

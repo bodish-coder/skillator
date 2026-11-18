@@ -1,6 +1,6 @@
 // Fixed, offline repository checks. No coding host or service is launched.
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, openSync, closeSync, statSync, truncateSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { existsSync, mkdtempSync, openSync, closeSync, statSync, truncateSync, readFileSync, writeFileSync, renameSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -190,4 +190,6 @@ async function main() {
   catch (error) { console.error('Validation blocked: ' + error.message); return 2; }
   finally { process.off('SIGINT', interrupt); process.off('SIGTERM', interrupt); }
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = await main();
+// B30: argv[1] keeps a link's spelling, import.meta.url is the real path - compare real paths.
+const entry = p => { try { p = realpathSync(p); } catch { p = resolve(p); } return process.platform === 'win32' ? p.toLowerCase() : p; };
+if (process.argv[1] && entry(process.argv[1]) === entry(fileURLToPath(import.meta.url))) process.exitCode = await main();

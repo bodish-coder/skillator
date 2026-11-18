@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync, existsSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -433,4 +433,24 @@ test('F175: decision-matrix resolves across Claude Code and host copies; fixture
   const afterRun = readFileSync(join(repo, '.skillator/run-0001-demo.md'), 'utf8');
   assert.match(afterRun, /^### Q1 answered /m);
   assert.match(afterRun, /^answer: Sliding 7d \(Recommended\)$/m);
+});
+
+// B30: the plugin cache is reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins).
+// argv[1] kept the link's spelling, import.meta.url the real path: main never ran, output was empty.
+test('B30: every argv[1]-guarded script still runs its main through a linked plugin directory', t => {
+  const d = mkdtempSync(join(tmpdir(), 'b30-link-'));
+  t.after(() => rmSync(d, { recursive: true, force: true }));
+  const link = join(d, 'plugin');
+  symlinkSync(plugin, link, process.platform === 'win32' ? 'junction' : 'dir');
+  for (const [file, ...args] of [
+    ['practice/scripts/codex-isolation.mjs', '--help'],
+    ['practice/scripts/generate-commands.mjs', '--check'],
+    ['practice/scripts/reliability-parity.mjs', '--help'],
+    ['practice/scripts/validate.mjs', '--help'],
+    ['mods/ops-board/antigravity/pack.mjs'],
+    ['skills/remote-cerebro/hooks/cerebro-bridge.mjs', '--help'],
+  ]) {
+    const r = spawnSync(process.execPath, [join(link, file), ...args], { cwd: d, encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] });
+    assert.ok((r.stdout + r.stderr).trim(), `${file} printed nothing through the link`);
+  }
 });

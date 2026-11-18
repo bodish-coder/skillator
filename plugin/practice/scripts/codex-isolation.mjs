@@ -279,4 +279,6 @@ async function main() {
   console.log(JSON.stringify({ code, report, entries: fixture.entries.map(({ id, status, reason }) => ({ id, status, reason })) }, null, 2));
   return code;
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = await main();
+// B30: argv[1] keeps a link's spelling, import.meta.url is the real path - compare real paths.
+const entry = p => { try { p = realpathSync(p); } catch { p = resolve(p); } return process.platform === 'win32' ? p.toLowerCase() : p; };
+if (process.argv[1] && entry(process.argv[1]) === entry(fileURLToPath(import.meta.url))) process.exitCode = await main();
