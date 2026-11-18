@@ -304,8 +304,11 @@ searches, and prints each folder it searched: the page folder
 nothing else from the profile), the OS Downloads folder, then the folder named
 on the first line of `~/.skillator/holo/answers-dir` (the owner sets it when
 none of the others is right). An open set is a `<id>.wizard.html` in the page
-folder (a RUN set finds its run file by the set id; what the run has settled is skipped); files
-for any other set are listed as ignored. It checks a file against the set the page embeds (round 2+ included). Per set
+folder (a RUN set finds its run file by the set id - with `run-1-*.md` beside
+`run-0001-*.md` the canonical `run-0001` wins, then the newest; what the run has settled is skipped); files
+for any other set are listed as ignored. Several pages with one set id (a leftover copy): the set's own
+`<id>.wizard.html` is read, else the newest. A fully settled run is an open set only while a FINAL for it is
+newer than its run file; older files for it are listed as ignored. It checks a file against the set the page embeds (round 2+ included). Per set
 it takes FINAL over draft, verified over unverified, then the higher round, the newest finalizedAt, the
 newest file, folder order last, and checks it as `--next-wizard` does; a
 refused file is printed with the reason and the next one is tried, an older
@@ -315,8 +318,9 @@ most 200 characters, as on the page. Set ids that share a file name ("F 12",
 "F_12") each take the file that names them. A FINAL whose nonce matches the page (the sidecar's when
 the page cannot be read; or with no nonce, in the page folder) is verified; any
 other is **unverified - confirm with the owner before applying**, and only its
-summary line (set, round, owner, finalizedAt, decision count) and path are
-printed - no per-answer lines, no commands. For a RUN set, a command is printed
+summary line (set, round, owner, finalizedAt, decision count - `0 to apply` for a RUN set) and path are
+printed - no per-answer lines, no commands. A RUN set's `to apply` counts only answers that print a
+command (Ask / Explain does not). For a RUN set, a command is printed
 only for a decision still open or asked in the run file now; one already
 answered there prints `already settled - skipped` (`--next-wizard` does the
 same), so checking twice never applies twice; with no run file it prints `run
@@ -330,7 +334,8 @@ the owner`.
   `--answers`: read them, then run them. Another set prints one line per
   answer; an answered decision whose ticket is `[?]` is recorded with
   tickets-zordon's `ticket-meta decided <ID>`. Custom or Ask / Explain answers
-  also print the `--next-wizard` command.
+  on a decision still open also print the `--next-wizard` command; `--next-wizard`
+  refuses to write a page with no decision left to ask.
 - **Draft only** - reported as `draft - not applied`. A draft is never
   approval: say so and ask the owner to finalize on the page.
 - **Pasted JSON** (Copy JSON) - write it to `.skillator/holo/<set>-decisions-FINAL.json`

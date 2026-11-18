@@ -256,6 +256,8 @@ test("r4-1: a fully settled run is still loaded - its FINAL's answers are skippe
   const s = sandbox();
   const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("### Q1 open", "### Q1 answered").replaceAll("### Q2 open", "### Q2 answered");
   writeFileSync(join(s.root, ".skillator", "run-1-shelf-export.md"), md);
+  const before = new Date("2026-11-17T11:00:00Z"); // the FINAL is newer than the run file (A233-4)
+  utimesSync(join(s.root, ".skillator", "run-1-shelf-export.md"), before, before);
   writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
   put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1" }, 0);
   const text = report(await findAnswers(s.opts));
@@ -681,4 +683,121 @@ test("r4-4: a file whose set names none of the ids sharing its stem is refused -
   const r = await findAnswers(s.opts);
   assert.equal(r.picked, null);
   assert.deepEqual(r.refused.map((x) => [x.path, x.why]), [[p, 'set "F-12" is not an open wizard set']]);
+});
+
+// ------------------------------------------------------------ A233 ----
+const RUN1 = (s) => join(s.root, ".skillator", "run-1-shelf-export.md");
+const at = (p, iso) => { const t = new Date(iso); utimesSync(p, t, t); return p; };
+
+test("A233-1: no next-round hint when the only defer is already settled; --next-wizard refuses a 0-decision page", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set);
+  ans.answers[1] = { id: "Q2", question: set.decisions[1].question, choice: { id: "defer" }, clarification: "why?" };
+  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace("### Q2 open", "### Q2 answered"));
+  const p = put(s.dl, "RUN-1-decisions-FINAL.json", ans, 0);
+  const text = report(await findAnswers(s.opts));
+  assert.match(text, / answer Q1 /);
+  assert.ok(!/next round:/.test(text), text);
+  const before = readFileSync(join(s.holo, "RUN-1.wizard.html"), "utf8");
+  const r = cli(s, "RUN-1", "--next-wizard", p);
+  assert.notEqual(r.status, 0, r.stdout);
+  assert.match(r.stderr, /no decision left to ask/);
+  assert.equal(readFileSync(join(s.holo, "RUN-1.wizard.html"), "utf8"), before, "the page is not rewritten");
+});
+
+test("A233-2: run-0001-*.md beside run-1-*.md - the canonical file wins, whatever the order", async () => {
+  const { runFilesFor } = await import("../holo.mjs");
+  const a = join("x", ".skillator", "run-1-old.md"), b = join("x", ".skillator", "run-0001-new.md");
+  for (const files of [[a, b], [b, a]]) assert.equal(runFilesFor("RUN-1", files)[0], b);
+  for (const older of ["canonical", "old"]) {
+    const s = sandbox();
+    const set = run1(s), md = readFileSync(RUN1(s), "utf8");
+    rmSync(RUN1(s));
+    const canon = join(s.root, ".skillator", "run-0001-shelf-export.md"), old = join(s.root, ".skillator", "run-1-shelf-export.md");
+    writeFileSync(canon, md.replace("# RUN-1 ", "# RUN-0001 "));
+    writeFileSync(old, md.replace("### Q1 open", "### Q1 answered"));
+    at(older === "canonical" ? canon : old, "2026-11-17T09:00:00Z");
+    put(s.dl, "RUN-1-decisions-FINAL.json", run1Answers(s, set), 0);
+    const text = report(await findAnswers(s.opts));
+    assert.match(text, / answer Q1 /, `${older} older: ${text}`);
+  }
+});
+
+test("A233-3: a leftover page copy with the same set id never displaces the set's own page; else the newest copy", async () => {
+  const s = sandbox(), A = "a".repeat(32), B = "b".repeat(32);
+  writeFileSync(join(s.holo, "review-x.wizard.html"), wizardPage(SET, A));
+  at(join(s.holo, "review-x.wizard.html"), "2026-11-17T09:00:00Z");
+  writeFileSync(join(s.holo, "zz-leftover.wizard.html"), wizardPage(SET, B));
+  put(s.dl, "review-x-decisions-FINAL.json", answers({ nonce: A }), 0);
+  assert.equal((await findAnswers(s.opts)).picked.verified, true, "own page wins");
+  rmSync(join(s.holo, "review-x.wizard.html"));
+  writeFileSync(join(s.holo, "a-copy.wizard.html"), wizardPage(SET, A));
+  at(join(s.holo, "zz-leftover.wizard.html"), "2026-11-17T09:00:00Z");
+  assert.equal((await findAnswers(s.opts)).picked.verified, true, "newest copy wins");
+});
+
+function settledRun(s) {
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("### Q1 open", "### Q1 answered").replaceAll("### Q2 open", "### Q2 answered");
+  writeFileSync(RUN1(s), md);
+  at(RUN1(s), "2026-11-17T11:00:00Z");
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
+}
+
+test("A233-4: a fully settled run is listed only while a FINAL for it is newer than the run file", async () => {
+  const s = sandbox();
+  settledRun(s);
+  const p = at(put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1" }, 0), "2026-11-17T10:00:00Z");
+  const r = await findAnswers(s.opts), text = report(r);
+  assert.ok(!r.sets.includes("RUN-1"), text);
+  assert.ok(!/to apply/.test(text), text);
+  assert.ok(r.ignored.some((x) => x.path === p), text);
+  at(p, "2026-11-17T12:00:00Z");
+  const r2 = await findAnswers(s.opts);
+  assert.ok(r2.sets.includes("RUN-1"));
+  assert.match(report(r2), /0 to apply, 1 already settled/);
+});
+
+test("A233-5: the summary counts only answers that produce a command", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set);
+  ans.answers[1] = { id: "Q2", question: set.decisions[1].question, choice: { id: "defer" }, clarification: "why?" };
+  put(s.dl, "RUN-1-decisions-FINAL.json", ans, 0);
+  assert.match(report(await findAnswers(s.opts)), /, 1 to apply, 0 already settled/);
+  put(s.dl, "RUN-1-decisions-FINAL (1).json", { ...ans, nonce: undefined }, 0);
+  rmSync(join(s.dl, "RUN-1-decisions-FINAL.json"));
+  assert.match(report(await findAnswers(s.opts)), /, 0 to apply, 0 already settled/, "an unverified pick applies nothing");
+});
+
+test("A233-6: answers and --next-wizard give the same reconciled set for one page plus run", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set);
+  ans.answers[1] = { id: "Q2", question: set.decisions[1].question, choice: { id: "defer" }, clarification: "why?" };
+  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace("### Q1 open", "### Q1 answered"));
+  const p = put(s.dl, "RUN-1-decisions-FINAL.json", ans, 0);
+  const r = await findAnswers(s.opts), text = report(r);
+  const c = cli(s, "RUN-1", "--next-wizard", p);
+  assert.equal(c.status, 0, c.stderr);
+  const page = pageSet(readFileSync(join(s.holo, "RUN-1.wizard.html"), "utf8"));
+  assert.deepEqual([...r.picked.openNow], page.decisions.map((d) => d.id));
+  assert.deepEqual([...text.matchAll(/# (\w+): already settled - skipped/g)].map((m) => m[1]), [...c.stdout.matchAll(/(\w+): already settled - skipped/g)].map((m) => m[1]));
+  assert.ok(page.settled.filter((x) => x.id === "Q1").length === 1, "Q1 settled once");
+});
+
+test("A233-7: an unreadable own page does not block a readable copy with the same set id", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set), A = "a".repeat(32);
+  writeFileSync(join(s.holo, "zz-copy.wizard.html"), wizardPage(set, A));
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
+  put(s.dl, "RUN-1-decisions-FINAL.json", { ...ans, nonce: A }, 0);
+  const r = await findAnswers(s.opts);
+  assert.equal(r.picked && r.picked.verified, true, report(r));
+});
+
+test("A233-8: only a verified FINAL keeps a settled run listed", async () => {
+  const s = sandbox();
+  settledRun(s);
+  put(s.dl, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1" }, 0);
+  put(s.dl, "RUN-1-decisions-FINAL (1).json", { ...answers(), set: "RUN-1", nonce: "c".repeat(32) }, 0);
+  const r = await findAnswers(s.opts);
+  assert.ok(!r.sets.includes("RUN-1"), report(r));
 });

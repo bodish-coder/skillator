@@ -36,11 +36,11 @@
 // No npm dependencies. Inline SVG only - no CDN, so the page draws offline.
 
 import { readFile, writeFile, mkdir, readdir, cp, stat } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, settledIn, without, fileStem, clean, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
+import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, reconcile, without, fileStem, pageFile, clean, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 import { extractDomainGraph, understandPage } from "./understand.mjs";
 import { FORMATS, THEMES, formatPage, themeCss } from "./formats.mjs";
@@ -893,11 +893,15 @@ export async function runFiles(root) {
 }
 
 // F44: runs are named RUN-0012 (run-0012-*.md); runs named before that are
-// run-12-*.md. Any spelling - 12, RUN-12, RUN-0012 - finds either, by number.
-function runFilesFor(arg, files) {
+// run-12-*.md. Any spelling - 12, RUN-12, RUN-0012 - finds either, by number;
+// both on disk: the canonical run-0012 first, then the newest.
+export function runFilesFor(arg, files) {
   const m = /^(?:RUN-)?(\d+)$/i.exec(arg);
   if (!m) return null;
-  return files.filter((f) => { const k = /^run-(\d+)-/.exec(basename(f)); return k && BigInt(k[1]) === BigInt(m[1]); });
+  const canon = `run-${String(BigInt(m[1])).padStart(4, "0")}-`;
+  const age = (f) => { try { return statSync(f).mtimeMs; } catch { return 0; } };
+  return files.filter((f) => { const k = /^run-(\d+)-/.exec(basename(f)); return k && BigInt(k[1]) === BigInt(m[1]); })
+    .sort((a, b) => basename(b).startsWith(canon) - basename(a).startsWith(canon) || age(b) - age(a));
 }
 
 async function resolveRun(arg, root) {
@@ -1135,7 +1139,7 @@ async function main(argv) {
       if (!run.id) throw new Error(`${runPath}: no '# RUN-<n> - <title>' line - not a relay run file`);
       set = setFromRun(run, relative(root, runPath).replace(/\\/g, "/")); stem = run.id;
     }
-    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem.replace(/[^A-Za-z0-9_.-]/g, "-")}.wizard.html`));
+    const out = resolve(o.out ?? join(root, ".skillator", "holo", pageFile(stem)));
     if (o.nextWizard) {
       // The base is the page the answers came from: the page on disk when its id and round match, else the
       // --decisions set when its own round matches, else the run's set for round 1; anything else is refused.
@@ -1146,12 +1150,13 @@ async function main(argv) {
       else if (roundOf(set) !== round) throw new Error(`the page for round ${round} is not on disk - open the round-${round} page and finalize again`);
       if (run) {
         // What the run has settled leaves the questions and stays in the settled reference, as setFromRun lists it.
-        const gone = settledIn(run), have = new Set((set.settled || []).map((x) => x && x.id));
-        for (const a of ans && Array.isArray(ans.answers) ? ans.answers : []) if (gone.has(a && a.id)) console.log(`${clean(a.id, 40)}: already settled - skipped`);
-        ans = without(ans, gone);
-        if (Array.isArray(set.decisions)) set = { ...set, decisions: set.decisions.filter((d) => !gone.has(d && d.id)), settled: [...(set.settled || []), ...fromRun.settled.filter((x) => !have.has(x.id))] };
+        const r = reconcile(set, run, fromRun.source);
+        for (const a of ans && Array.isArray(ans.answers) ? ans.answers : []) if (r.gone.has(a && a.id)) console.log(`${clean(a.id, 40)}: already settled - skipped`);
+        ans = without(ans, r.gone);
+        set = r.set;
       }
       set = nextWizardSet(set, ans);
+      if (!set.decisions.length) throw new Error(`no decision left to ask - every answer is settled; round ${set.round} page not written`);
     }
     await writeWizard(root, out, set);
     console.log(`holo: wizard ${set.id}${set.round ? ` (round ${set.round})` : ""}, ${set.decisions.length} decision${set.decisions.length === 1 ? "" : "s"} to answer, ${(set.settled || []).length} settled -> ${out}`);

@@ -17,6 +17,8 @@ const str = (v) => (v == null ? "" : String(v));
 export const isFinalized = (a) => !!a && a.final !== false && typeof a.finalizedAt === "string" && !!a.finalizedAt.trim() && a.reviewed === true && !!str(a.owner).trim();
 // The answers file name stem, as the page's saver builds it (answerSaver inlines the same regex).
 export const fileStem = (id) => str(id).replace(/[^A-Za-z0-9_.-]/g, "_");
+// The page holo.mjs writes for a set (its default --wizard output name).
+export const pageFile = (id) => str(id).replace(/[^A-Za-z0-9_.-]/g, "-") + ".wizard.html";
 // Text from an answers file is data: control characters out, one line, capped; anything for sh single-quoted.
 export const CTRL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 export const clean = (v, n = 200) => str(v).replace(new RegExp(CTRL.source, "g"), " ").replace(/\s+/g, " ").trim().slice(0, n);
@@ -140,6 +142,25 @@ export function setFromRun(run, runPath) {
     source: `${src} ${q.id}`,
   }));
   return { schema: SET_SCHEMA, id: run.id, title: `${run.id} - ${run.title}`, source: runPath || run.id, decisions, settled };
+}
+
+// A page's set against its run file now: the page's set (the run's own when the page is another set's
+// or unreadable), less what the run has settled, which joins the settled reference as setFromRun lists it.
+// live: the run's set now; gone: the decision ids the run has settled.
+// One run, however spelled: RUN-1 and RUN-0001 are the same set.
+export const sameSet = (a, b) => {
+  const k = (id) => { const m = /^RUN-(\d+)$/i.exec(str(id)); return m ? `RUN-${BigInt(m[1])}` : str(id); };
+  return k(a) === k(b);
+};
+
+export function reconcile(pageSet, run, runPath) {
+  const live = setFromRun(run, runPath), gone = settledIn(run);
+  const base = pageSet && sameSet(pageSet.id, live.id) ? pageSet : live;
+  const have = new Set((base.settled || []).map((x) => x && x.id));
+  const set = Array.isArray(base.decisions)
+    ? { ...base, decisions: base.decisions.filter((d) => !gone.has(d && d.id)), settled: [...(base.settled || []), ...live.settled.filter((x) => !have.has(x.id))] }
+    : base;
+  return { set, live, gone };
 }
 
 // Throws on a set the page could not ask honestly.
