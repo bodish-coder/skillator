@@ -12,7 +12,17 @@ set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 case ${1:-} in ''|-*) ;; *) cd -- "$1" || exit 2; shift ;; esac
 open=
-for a in "$@"; do shift; if [ "$a" = --open ]; then open=1; else set -- "$@" "$a"; fi; done
+# B32: --env NAME=VALUE sets one CLI identity var here; --open forwards those set at launch,
+# since a new Windows Terminal tab does not inherit this process's env.
+ids=' SKILLATOR_CLI SKILLATOR_PROFILE_DIR CLAUDE_CONFIG_DIR CODEX_HOME MUSE_CONFIG_DIR AGY_CONFIG_DIR ANTIGRAVITY_APP_DATA_DIR '
+envn=
+for a in "$@"; do shift
+  if [ -n "$envn" ]; then
+    envn=; k=${a%%=*}
+    case "$a:$ids" in *=*:*" $k "*) export "$k=${a#*=}" ;; *) echo "ops: --env takes NAME=VALUE, NAME one of$ids" >&2; exit 2 ;; esac
+  elif [ "$a" = --env ]; then envn=1
+  elif [ "$a" = --open ]; then open=1; else set -- "$@" "$a"; fi
+done
 # F102: --font-size N rewrites the installed 'skillator ops' Windows Terminal profile's font size, then exits
 fs=; want=
 for a in "$@"; do if [ -n "$want" ]; then fs=$a; want=; elif [ "$a" = --font-size ]; then fs=none; want=1; fi; done
@@ -40,6 +50,7 @@ dir=$here
 if [ -n "$msys" ]; then dir=$(cd -- "$here" && pwd -W); fi
 if [ -n "$open" ] && [ -n "$msys" ] && wt=$(command -v wt 2>/dev/null); then
   shw=$(cd -- "$(dirname -- "$(command -v sh)")" && pwd -W)/sh.exe
+  for k in $ids; do eval "v=\${$k:-}"; [ -z "$v" ] || set -- "$@" --env "$k=$v"; done
   set -- -d "$(pwd -W)" "$shw" "$dir/ops.sh" "$@"
   if [ -n "${LOCALAPPDATA:-}" ] && [ -f "$(cygpath -u "$LOCALAPPDATA")/Microsoft/Windows Terminal/Fragments/skillator/ops.json" ]; then
     set -- -p 'skillator ops' "$@"

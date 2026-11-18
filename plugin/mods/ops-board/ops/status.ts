@@ -1,5 +1,5 @@
 // F94: `ops --status` - one row per CLI profile: name, 5-hour and 7-day % used, or why it
-// cannot be read. It starts watch-cortana's `level` reader, at most 5 s each,
+// cannot be read. It starts watch-cortana's `level` reader, at most 15 s each (B32: a read takes 3-7 s),
 // one after another; missing/stale profile caches request asynchronous refresh. No
 // credential file is ever opened (its existence is the login check). Sources and rulings:
 // docs/plans/PLAN-ops-status.md.
@@ -14,7 +14,7 @@ export type Profile = { name: string; cli: string; dir: string }
 export type Row = [name: string, five: string, seven: string, note: string]
 export type Reader = (env: Env, ms: number) => Promise<{ code: number; out: string; err: string }>
 
-const MS = 5000
+const MS = 15_000
 // cli, its default dir under home (row name = the cli), the prefix of its named profiles.
 const KINDS: [cli: string, def: string, prefix: string][] = [
   ['claude', '.claude', '.claude-'], ['codex', '.codex', '.codex-'],
@@ -53,7 +53,7 @@ export function discover(home: string): Profile[] {
 export function ownProfile(env: Env): Profile | null {
   const home = norm(env.HOME || env.USERPROFILE || homedir())
   const profiles = discover(home)
-  const dir = env.SKILLATOR_PROFILE_DIR || env.CLAUDE_CONFIG_DIR || env.CODEX_HOME || env.MUSE_CONFIG_DIR || env.AGY_CONFIG_DIR
+  const dir = env.SKILLATOR_PROFILE_DIR || env.CLAUDE_CONFIG_DIR || env.CODEX_HOME || env.MUSE_CONFIG_DIR || env.AGY_CONFIG_DIR || env.ANTIGRAVITY_APP_DATA_DIR
   if (dir) {
     const found = profiles.find(p => key(p.dir) === key(dir))
     if (found) return found
@@ -62,7 +62,9 @@ export function ownProfile(env: Env): Profile | null {
       if (base === def.split('/').pop()) return { name: cli, cli, dir: norm(dir) }
       if (base.startsWith(prefix)) return { name: base.slice(1), cli, dir: norm(dir) }
     }
-    return { name: env.SKILLATOR_CLI || base.replace(/^\./, '') || 'none', cli: env.SKILLATOR_CLI || '', dir: norm(dir) }
+    // B32: an agy dir by any name is agy, as usage-watch reads it.
+    const cli = env.SKILLATOR_CLI || (dir === env.AGY_CONFIG_DIR || dir === env.ANTIGRAVITY_APP_DATA_DIR ? 'agy' : '')
+    return { name: env.SKILLATOR_CLI || base.replace(/^\./, '') || 'none', cli, dir: norm(dir) }
   }
   if (env.SKILLATOR_CLI) return profiles.find(p => p.cli === env.SKILLATOR_CLI) ?? { name: env.SKILLATOR_CLI, cli: env.SKILLATOR_CLI, dir: '' }
   return null
