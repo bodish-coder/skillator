@@ -1,6 +1,6 @@
 # RUN-0041 - pending parallel 4
 plan: TICKETS.md
-started: 2026-11-18T17:51Z   updated: 2026-11-18T17:52Z
+started: 2026-11-18T17:51Z   updated: 2026-11-18T17:56Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0041-pending-parallel-4
 branch: run/RUN-0041-pending-parallel-4
 
@@ -10,7 +10,7 @@ branch: run/RUN-0041-pending-parallel-4
 | 314 | A242 self-update follow-ups | ~ | build:opus | 2026-11-18T17:52Z | - |
 | 315 | A243 Teams follow-ups | ~ | build:opus | 2026-11-18T17:52Z | - |
 | 316 | A245 wizard answers follow-ups | ~ | build:opus | 2026-11-18T17:52Z | - |
-| 317 | A249 model test decide group | ~ | build:opus | 2026-11-18T17:52Z | - |
+| 317 | A249 model test decide group | x | build:opus | 2026-11-18T17:56Z | fe17cc3 |
 
 ## In flight
 ### stage 317 (dispatched 17:52Z, own worktree RUN-0041-s317)
@@ -64,3 +64,4 @@ prompt: |
 
 ## Rulings
 - 2026-11-18T17:52Z - /pending-sentinel parallel 4 at 7d 96%. Skipped: A227/A229/A230 (owner/machine); A238/A239/A246/A247/A248 (file overlap with the picks, live agy needed, or feature-sized). Ruling: 4 file-disjoint stages A242/A243/A245/A249, each committing per item - the 97% stop is likely mid-flight and halts all agents with a handoff - cost if wrong: partial stages, resumable from these prompts.
+- 2026-11-18T17:56Z - stage 317 (A249) back c31564b, test-only: decideTickets (F128 rule) is right, the A199 test used a plain [ ] ticket; now uses [?] F3 [decide: @asha]. model 18/1 -> 19/0. Orchestrator read the 8-line diff. Landed as fe17cc3.
