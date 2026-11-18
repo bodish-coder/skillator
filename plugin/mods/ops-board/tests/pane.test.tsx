@@ -184,8 +184,9 @@ const texts = async (ui: { findAll: (q: { type?: string; key?: string }) => Prom
 type Ui = { findAll: (q: { type?: string }) => Promise<{ key: string | undefined; text: string }[]>; press: (q: { key: string }) => Promise<unknown> }
 const heads = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('head:') && b.key !== 'head:assigned' && b.key !== 'head:decide').map(b => b.text.replace(/^[▌▏] /, ''))
 const userHeads = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key === 'head:assigned' || b.key === 'head:decide').map(b => b.text.replace(/^[▌▏] /, ''))
+// F180: the personal sections (`▸ Assigned (1)`) start collapsed too
 async function openAll(ui: Ui) {
-  for (const b of (await ui.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && / (▸|\+)$/.test(x.text)))
+  for (const b of (await ui.findAll({ type: 'Button' })).filter(x => x.key?.startsWith('head:') && (/ (▸|\+)$/.test(x.text) || /^(?:[▌▏] )?[▸>] /.test(x.text))))
     await ui.press({ key: b.key! })
 }
 const rowKeys = async (ui: Ui) => (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('row:')).map(b => b.key)
