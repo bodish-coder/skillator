@@ -317,7 +317,7 @@ test('F176: --refresh reads blank logged-in rows once, in the foreground, and sk
 test('F176 verify: a carried last 7d or a legacy weekly holds the forced read; past the deadline every row is still read', async () => {
   const h = home()
   const carried = dir(h, '.claude-carried', '.credentials.json')
-  writeFileSync(join(carried, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', note: 'x', failures: 1, backoff_secs: 60, last: { '5h': 10, '7d': 95, at: 1 } }))
+  writeFileSync(join(carried, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', note: 'x', failures: 1, backoff_secs: 60, last: { '5h': 10, '7d': 95, at: Math.floor(Date.now() / 1000) - 86400 } }))
   const weekly = dir(h, '.claude-weekly', '.credentials.json')
   writeFileSync(join(weekly, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', weekly: 92 }))
   dir(h, '.claude-late', '.credentials.json')
@@ -327,6 +327,18 @@ test('F176 verify: a carried last 7d or a legacy weekly holds the forced read; p
   for (const p of discover(h)) out.push(...await profileRows(p, read, {}, false, true, Date.now() + 1000))
   assert.deepEqual(waits, [], 'no forced read')
   assert.deepEqual(out.map(r => r[3]), ['not refreshed: last 7d 95% >= 90%', 'not refreshed: out of time - press p again', 'not refreshed: last 7d 92% >= 90%'])
+})
+
+test('F176 money: a carried 7d over 7 days old no longer holds the forced read (usage-watch then reads, no turn)', async () => {
+  const h = home()
+  const old = dir(h, '.claude-old', '.credentials.json')
+  writeFileSync(join(old, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', note: 'x', failures: 1, backoff_secs: 60, last: { '7d': 95, at: Math.floor(Date.now() / 1000) - 8 * 86400 } }))
+  const noAt = dir(h, '.claude-noat', '.credentials.json')
+  writeFileSync(join(noAt, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', note: 'x', failures: 1, backoff_secs: 60, last: { '7d': 95 } }))
+  const waits: string[] = []
+  const read: Reader = async (e, ms) => { if (e.SKILLATOR_QUOTA_REFRESH_WAIT === '1') waits.push(e.SKILLATOR_PROFILE_DIR!); return NONE(e, ms) }
+  for (const p of discover(h)) await profileRows(p, read, {}, false, true)
+  assert.deepEqual(waits, [`${h}/.claude-noat`, `${h}/.claude-old`])
 })
 
 test('F176: a reading a forced read got from one tiny turn says so on its row', async () => {

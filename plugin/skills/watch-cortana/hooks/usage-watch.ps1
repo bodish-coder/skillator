@@ -350,7 +350,8 @@ function Invoke-Capped([int]$secs, [string]$call, $in) {
   try {
     $h = $ps.BeginInvoke($inp, $out)
     if (-not $h.AsyncWaitHandle.WaitOne($secs * 1000)) {
-      try { Get-CimInstance Win32_Process -Filter "ParentProcessId=$PID" | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null } } catch { }
+      # A listed child created before this process is an orphan whose dead parent's PID was reused.
+      try { $me = (Get-Process -Id $PID).StartTime; Get-CimInstance Win32_Process -Filter "ParentProcessId=$PID" | Where-Object { $_.CreationDate -gt $me } | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null } } catch { }
       $null = $ps.BeginStop($null, $null)
       return ''
     }
@@ -369,14 +370,16 @@ if ($Mode -eq 'refresh') {
     New-Item $Dir -ItemType Directory -Force | Out-Null
     $res = $null; $raw = ''; $verdict = ''
     $isNum = { param($v) $v -is [int] -or $v -is [long] -or $v -is [double] -or $v -is [decimal] }
-    # The cache as found: 'missing', 'corrupt', or the parsed record.
-    $prev = 'missing'
-    if (Test-Path -LiteralPath $cache) {
+    # The cache as found after the CLI call (as sh reads it): 'missing', 'corrupt', or the record.
+    $readPrev = {
+      if (-not (Test-Path -LiteralPath $cache)) { return 'missing' }
       try {
         $p = ConvertFrom-Json ([IO.File]::ReadAllText((Convert-Path -LiteralPath $cache))) -ErrorAction Stop
-        $prev = if ($p -is [pscustomobject]) { $p } else { 'corrupt' }
-      } catch { $prev = 'corrupt' }
+        if ($p -is [pscustomobject]) { $p } else { 'corrupt' }
+      } catch { 'corrupt' }
     }
+    $prev = $null; $turned = $false
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     if ($Cli -eq 'agy') {
       $env:AGY_CONFIG_DIR = $Dir
       $env:ANTIGRAVITY_APP_DATA_DIR = $Dir
@@ -458,16 +461,20 @@ if ($Mode -eq 'refresh') {
       # never the background spawn) of a logged-in profile spends ONE tiny turn and reads
       # its rate_limit_event - only while the last 7d known is under 90%. In doubt, no turn:
       # a corrupt or legacy cache is unknown; only no cache file at all, or a failure
-      # record that carries `"last":null` (never a reading), counts as blank.
+      # record that carries `"last":null` (never a reading), counts as blank. A carried
+      # reading counts for 7 days from its `at` (a reset is plausible after: unknown), and
+      # a turn that gave no limits (`turned_at`) holds turns 24 h.
+      $prev = & $readPrev
       $gateOk = $false
       if ($prev -is [string]) { $gateOk = $prev -eq 'missing' }
-      else {
+      elseif (-not $prev.PSObject.Properties['turned_at'] -or ((& $isNum $prev.turned_at) -and $now - $prev.turned_at -ge 86400)) {
         $has = { param($x) $x -is [pscustomobject] -and ($x.PSObject.Properties['7d'] -or $x.PSObject.Properties['weekly']) }
         $o = $prev
         if (-not (& $has $o)) {
           $o = $null
           if ($prev.PSObject.Properties['last']) {
-            if ($null -eq $prev.last) { $gateOk = $true } elseif (& $has $prev.last) { $o = $prev.last }
+            if ($null -eq $prev.last) { $gateOk = $true }
+            elseif ((& $has $prev.last) -and (& $isNum $prev.last.at) -and $now - $prev.last.at -lt 7 * 86400) { $o = $prev.last }
           }
         }
         if ($o) {
@@ -496,6 +503,7 @@ if ($Mode -eq 'refresh') {
             $res['via'] = 'turn'
           }
         }
+        $turned = -not $res
       }
     } elseif ($Cli -eq 'muse') {
       $env:MUSE_CONFIG_DIR = $Dir
@@ -512,17 +520,20 @@ if ($Mode -eq 'refresh') {
       }
     }
     if (-not $res) {
+      if ($null -eq $prev) { $prev = & $readPrev }
       $srcName = if ($Cli -eq 'claude') { 'claude-code' } else { $Cli }
       $failNote = if ($raw -and $raw -match 'not logged in') { 'not logged in' }
                   elseif ($Cli -eq 'claude' -and $raw -and $raw -match 'session expired|Failed to authenticate') { 'login expired - run claude /login' }
                   elseif ($verdict -eq 'NOAUTH') { 'no usage reading - login may have expired, run claude /login' }
-                  elseif ($verdict -eq 'APIKEY') { 'no plan rate limits (API key billing)' }
+                  elseif ($verdict -eq 'APIKEY') { 'no plan rate limits (API key or limited-scope login)' }
+                  elseif ($turned) { 'one turn gave no limits' }
                   elseif ($verdict -eq 'NOWINDOWS') { 'no plan rate limits' }
                   elseif ($raw -and $raw.Trim()) { 'unparseable' }
                   else { 'refresh failed' }
       # F176: a failure record carries the last good readings (`last`: 5h, 7d and when),
       # so the turn gate never loses a high 7d; `"last":null` = no reading ever, while a
-      # corrupt or legacy cache leaves `last` out (unknown).
+      # corrupt or legacy cache leaves `last` out (unknown). A turn that gave no limits
+      # stamps `turned_at` (carried until a reading replaces the record).
       $prevFailures = 0; $last = 'omit'
       if ($prev -is [string]) { if ($prev -eq 'missing') { $last = $null } }
       else {
@@ -542,6 +553,8 @@ if ($Mode -eq 'refresh') {
       $backoff = [int][Math]::Min(900, 60 * [Math]::Pow(2, [Math]::Min($failures - 1, 10)))
       $res = [ordered]@{ src = $srcName; note = $failNote; failures = $failures; backoff_secs = $backoff }
       if ($last -isnot [string]) { $res['last'] = $last }
+      if ($turned) { $res['turned_at'] = $now }
+      elseif ($prev -isnot [string] -and $prev.PSObject.Properties['turned_at']) { $res['turned_at'] = $prev.turned_at }
     }
     $absCache = [IO.Path]::Combine((Convert-Path -LiteralPath $Dir), 'quota-cache.json')
     [IO.File]::WriteAllText($absCache, (ConvertTo-Json $res -Compress -Depth 4), (New-Object Text.UTF8Encoding $false))

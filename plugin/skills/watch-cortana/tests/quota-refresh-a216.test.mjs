@@ -39,8 +39,10 @@ function makeFixture(port) {
   if (port === 'ps1') {
     const stub = [
       `function Start-Process { param($FilePath, $ArgumentList, $WindowStyle) [IO.File]::AppendAllText('${launchesFile}', "$ArgumentList\`n") }`,
-      `function claude { [IO.File]::AppendAllText('${argsFile}', "claude|1|$($args -join ' ')\`n"); [IO.File]::WriteAllText('${stdinFile}', (@($input) -join "\`n")); $n = @([IO.File]::ReadAllLines('${argsFile}')).Count; [IO.File]::AppendAllText('${root}/cli-wait.log', "w=$env:SKILLATOR_QUOTA_REFRESH_WAIT\`n"); if (Test-Path "${root}/cli-sleep-$n.txt") { Start-Sleep -Seconds ([int][IO.File]::ReadAllText("${root}/cli-sleep-$n.txt")) }; $f = "${root}/cli-response-$n.txt"; if (Test-Path $f) { [IO.File]::ReadAllText($f) } elseif (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
+      `function claude { [IO.File]::AppendAllText('${argsFile}', "claude|1|$($args -join ' ')\`n"); [IO.File]::WriteAllText('${stdinFile}', (@($input) -join "\`n")); $n = @([IO.File]::ReadAllLines('${argsFile}')).Count; [IO.File]::AppendAllText('${root}/cli-wait.log', "w=$env:SKILLATOR_QUOTA_REFRESH_WAIT\`n"); if (Test-Path "${root}/cli-cache-$n.txt") { [IO.File]::WriteAllText("$env:CLAUDE_CONFIG_DIR/quota-cache.json", [IO.File]::ReadAllText("${root}/cli-cache-$n.txt")) }; if (Test-Path "${root}/cli-sleep-$n.txt") { Start-Sleep -Seconds ([int][IO.File]::ReadAllText("${root}/cli-sleep-$n.txt")) }; $f = "${root}/cli-response-$n.txt"; if (Test-Path $f) { [IO.File]::ReadAllText($f) } elseif (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       `function agy { [IO.File]::AppendAllText('${argsFile}', "agy|1|$($args -join ' ')\`n"); if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
+      // F176: orphan.pid - a process that started before the refresh, listed as its child (a reused parent PID).
+      `function Get-CimInstance { if (Test-Path '${root}/orphan.pid') { CimCmdlets\\Get-CimInstance Win32_Process -Filter "ProcessId=$([IO.File]::ReadAllText('${root}/orphan.pid').Trim())" } else { CimCmdlets\\Get-CimInstance @args } }`,
       `function muse { if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       '',
     ].join('\n')
@@ -48,8 +50,9 @@ function makeFixture(port) {
   } else {
     const stub = [
       `spawn_quota_refresh() { printf '%s|%s\\n' "$1" "$2" >> '${launchesFile}'; }`,
-      `claude() { printf 'claude|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; cat > '${stdinFile}'; n=$(wc -l < '${argsFile}' | tr -d ' '); printf 'w=%s\\n' "\${SKILLATOR_QUOTA_REFRESH_WAIT:-}" >> '${root}/cli-wait.log'; [ ! -f "${root}/cli-sleep-$n.txt" ] || sleep "$(cat "${root}/cli-sleep-$n.txt")"; if [ -f "${root}/cli-response-$n.txt" ]; then cat "${root}/cli-response-$n.txt"; elif [ -f '${responseFile}' ]; then cat '${responseFile}'; fi; return "$(cat '${exitCodeFile}')"; }`,
+      `claude() { printf 'claude|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; cat > '${stdinFile}'; n=$(wc -l < '${argsFile}' | tr -d ' '); printf 'w=%s\\n' "\${SKILLATOR_QUOTA_REFRESH_WAIT:-}" >> '${root}/cli-wait.log'; [ ! -f "${root}/cli-cache-$n.txt" ] || cp "${root}/cli-cache-$n.txt" "$CLAUDE_CONFIG_DIR/quota-cache.json"; [ ! -f "${root}/cli-sleep-$n.txt" ] || sleep "$(cat "${root}/cli-sleep-$n.txt")"; if [ -f "${root}/cli-response-$n.txt" ]; then cat "${root}/cli-response-$n.txt"; elif [ -f '${responseFile}' ]; then cat '${responseFile}'; fi; return "$(cat '${exitCodeFile}')"; }`,
       `agy() { printf 'agy|%s|%s\\n' "\${MSYS_NO_PATHCONV:-}" "$*" >> '${argsFile}'; [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
+      `ps() { command ps "$@"; [ -f '${root}/orphan.pid' ] || return 0; command ps "$@" | awk -v o="$(cat '${root}/orphan.pid')" 'NR > 1 && $2 != o { print "x", o, $2, "?", "00:00:00", "orphan" }'; }`,
       `muse() { [ -f '${responseFile}' ] && cat '${responseFile}'; return "$(cat '${exitCodeFile}')"; }`,
       '',
     ].join('\n')
@@ -111,7 +114,22 @@ function makeFixture(port) {
     child.on('exit', () => { clearTimeout(kill); resolve(Date.now() - t0) })
   })
 
-  return { root, runLevel, runRefresh, launchCount, setCliResponse, setCliResponses, cleanup, cliCalls, cliStdin, cliWaits, spawnLevel }
+  // F176: a bystander started before the refresh; its pid (MSYS pid for sh) lands in orphan.pid.
+  const spawnOrphan = async () => {
+    const child = port === 'ps1'
+      ? spawn('ping', ['-n', '120', '127.0.0.1'], { windowsHide: true, stdio: 'ignore' })
+      : spawn(shExe, ['-c', `echo $$ > '${root}/orphan.tmp'; exec sleep 120`], { env: baseEnv, windowsHide: true, stdio: 'ignore' })
+    if (port === 'ps1') writeFileSync(`${root}/orphan.pid`, String(child.pid))
+    else {
+      const until = Date.now() + 10000
+      while (!existsSync(`${root}/orphan.tmp`) && Date.now() < until) await new Promise(r => setTimeout(r, 100))
+      writeFileSync(`${root}/orphan.pid`, readFileSync(`${root}/orphan.tmp`, 'utf8').trim())
+    }
+    await new Promise(r => setTimeout(r, 1500))
+    return child
+  }
+
+  return { root, runLevel, runRefresh, launchCount, setCliResponse, setCliResponses, cleanup, cliCalls, cliStdin, cliWaits, spawnLevel, spawnOrphan }
 }
 
 for (const port of ['ps1', 'sh']) {
@@ -349,7 +367,7 @@ for (const port of ['ps1', 'sh']) {
       fx.setCliResponse(fixture('claude-get-usage-unavailable.jsonl'), 0)
       fx.runRefresh('claude', profile, env)
       const cache = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
-      assert.deepEqual(cache, { src: 'claude-code', note: 'no plan rate limits (API key billing)', failures: 1, backoff_secs: 60, last: null })
+      assert.deepEqual(cache, { src: 'claude-code', note: 'no plan rate limits (API key or limited-scope login)', failures: 1, backoff_secs: 60, last: null })
     } finally {
       fx.cleanup()
     }
@@ -491,7 +509,7 @@ for (const port of ['ps1', 'sh']) {
       fx.setCliResponses([fixture('claude-get-usage-unavailable.jsonl'), fixture('claude-turn.jsonl')])
       fx.runRefresh('claude', profile, { ...env, ...FORCED })
       assert.equal(fx.cliCalls().length, 1)
-      assert.equal(JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8')).note, 'no plan rate limits (API key billing)')
+      assert.equal(JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8')).note, 'no plan rate limits (API key or limited-scope login)')
     } finally { fx.cleanup() }
   })
 
@@ -605,6 +623,7 @@ for (const port of ['ps1', 'sh']) {
       const { profile, env } = turnSetup(fx, 'hung')
       fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn.jsonl')])
       writeFileSync(`${fx.root}/cli-sleep-2.txt`, '60')
+      const orphan = await fx.spawnOrphan()
       const first = fx.spawnLevel({ ...env, ...FORCED })
       const until = Date.now() + 20000
       while (fx.cliCalls().length < 2 && Date.now() < until) await new Promise(r => setTimeout(r, 200))
@@ -614,7 +633,103 @@ for (const port of ['ps1', 'sh']) {
       assert.equal(fx.cliCalls().length, 2, 'the second read started nothing')
       assert.ok(ms < 45000, `capped: the first read took ${ms} ms`)
       assert.equal(existsSync(`${profile}/quota-cache.json.refreshing`), false, 'lock released')
-      assert.equal(JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8')).note, 'no plan rate limits')
+      assert.equal(JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8')).note, 'one turn gave no limits')
+      await new Promise(r => setTimeout(r, 1000))
+      const alive = orphan.exitCode === null && orphan.signalCode === null
+      orphan.kill()
+      assert.ok(alive, 'the tree kill spares a parent-PID match that started before the refresh')
+    } finally { fx.cleanup() }
+  })
+
+  // F176 money round 1: a turn that hangs (killed at its cap) gave no limits - the next `p`
+  // after the plain backoff reads get_usage only; the turn waits 24 h.
+  test(`${port}: F176 money - a hung turn holds turns 24 h while plain reads still retry`, { skip }, async () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'hold')
+      const cache = `${profile}/quota-cache.json`
+      const nw = fixture('claude-get-usage-nowindows.jsonl')
+      fx.setCliResponses([nw, fixture('claude-turn.jsonl'), nw, nw, fixture('claude-turn.jsonl')])
+      writeFileSync(`${fx.root}/cli-sleep-2.txt`, '60')
+      await fx.spawnLevel({ ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 2, 'get_usage + the hung turn')
+      const rec = JSON.parse(readFileSync(cache, 'utf8'))
+      assert.equal(rec.note, 'one turn gave no limits')
+      assert.equal(rec.backoff_secs, 60, 'plain reads keep the short backoff')
+      age(cache, 900)
+      fx.runLevel({ ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 3, 'after 900 s: a plain read, no second turn')
+      const held = JSON.parse(readFileSync(cache, 'utf8'))
+      assert.equal(typeof held.turned_at, 'number', JSON.stringify(held))
+      writeFileSync(cache, JSON.stringify({ ...held, turned_at: held.turned_at - 86400 - 60 }))
+      age(cache, 900)
+      fx.runLevel({ ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 5, '24 h later: get_usage, then a turn')
+      assert.equal(JSON.parse(readFileSync(cache, 'utf8')).via, 'turn')
+    } finally { fx.cleanup() }
+  })
+
+  // F176 money round 2: a carried 7d is known for 7 days from its `at`; older is unknown - no turn.
+  test(`${port}: F176 money - a carried last 7d counts for 7 days from its at; older or no at is unknown`, { skip }, () => {
+    const now = Math.floor(Date.now() / 1000), day = 86400
+    const cases = [
+      ['50, 1 day', { '7d': 50, at: now - day }, 2],
+      ['50, 8 days', { '7d': 50, at: now - 8 * day }, 1],
+      ['50, no at', { '7d': 50 }, 1],
+      ['95, 1 day', { '7d': 95, at: now - day }, 1],
+      ['95, 8 days', { '7d': 95, at: now - 8 * day }, 1],
+    ]
+    for (const [name, last, calls] of cases) {
+      const fx = makeFixture(port)
+      try {
+        const { profile, env } = turnSetup(fx, 'at', { src: 'claude-code', note: 'x', failures: 1, backoff_secs: 60, last })
+        fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn.jsonl')])
+        fx.runRefresh('claude', profile, { ...env, ...FORCED })
+        assert.equal(fx.cliCalls().length, calls, name)
+      } finally { fx.cleanup() }
+    }
+  })
+
+  // F176 money round 3: the refresh lock holds for its full 90 s (capped calls end by 50 s).
+  test(`${port}: F176 money - the refresh lock holds at 85 s and is stale at 95 s`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const profile = `${fx.root}/lock`
+      mkdirSync(profile, { recursive: true })
+      const env = { SKILLATOR_CLI: 'claude', SKILLATOR_PROFILE_DIR: profile, CLAUDE_CONFIG_DIR: profile }
+      const lock = `${profile}/quota-cache.json.refreshing`
+      writeFileSync(lock, 'x')
+      age(lock, 85)
+      fx.runLevel(env)
+      assert.equal(fx.launchCount(), 0, 'an 85 s old lock still holds')
+      age(lock, 95)
+      fx.runLevel(env)
+      assert.equal(fx.launchCount(), 1, 'a 95 s old lock is stale')
+    } finally { fx.cleanup() }
+  })
+
+  // F176 money round 5: the gate reads the cache after get_usage, not before.
+  test(`${port}: F176 money - the gate reads the cache after get_usage`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'after')
+      fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn.jsonl')])
+      writeFileSync(`${fx.root}/cli-cache-1.txt`, JSON.stringify({ src: 'claude-code', '5h': 10, '7d': 95 }))
+      fx.runRefresh('claude', profile, { ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 1, 'a 95 written while get_usage ran: no turn')
+    } finally { fx.cleanup() }
+  })
+
+  // F176 money round 6: limits with no windows, but the stream also says the login failed.
+  test(`${port}: F176 money - an authentication error beside no windows spends no turn`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'autherr')
+      const err = '{"type":"result","is_error":true,"result":"Failed to authenticate: OAuth session expired and could not be refreshed"}'
+      fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl').trimEnd() + '\n' + err + '\n', fixture('claude-turn.jsonl')])
+      fx.runRefresh('claude', profile, { ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 1)
+      assert.equal(JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8')).note, 'login expired - run claude /login')
     } finally { fx.cleanup() }
   })
 }

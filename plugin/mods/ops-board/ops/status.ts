@@ -369,12 +369,16 @@ const FORCED = new Set(['claude', 'agy', 'muse'])
 // is first read by usage-watch level with SKILLATOR_QUOTA_REFRESH_WAIT - it reads the CLI
 // in the foreground only when the cache is blank or stale, under its lock and backoff (a
 // plain read first would take that lock for a background read); never at a last 7d >= 90%
-// (a failure record's carried `last`, or a legacy `weekly`), nor past `deadline`.
+// (a failure record's carried `last` under 7 days old, or a legacy `weekly`), nor past `deadline`.
 export async function profileRows(p: Profile, read: Reader, base: Env, darwin: boolean, refresh: boolean, deadline = Infinity): Promise<Row[]> {
   let held: number | null = null, late = false
   if (refresh && FORCED.has(p.cli) && loggedIn(p, darwin)) {
     const c = readCache(p)
-    const last = c?.['7d'] ?? c?.weekly ?? c?.last?.['7d'] ?? c?.last?.weekly
+    // A carried reading holds for 7 days from its `at`; after, a reset is plausible and
+    // usage-watch reads it as unknown (a plain read, no turn).
+    const at = c?.last?.at
+    const carried = typeof at === 'number' && Date.now() / 1000 - at < 7 * 86400 ? c?.last?.['7d'] ?? c?.last?.weekly : undefined
+    const last = c?.['7d'] ?? c?.weekly ?? carried
     if (typeof last === 'number' && last >= 90) held = last
     else if (Date.now() + REFRESH_MS > deadline) late = true
     else await read({ ...readerEnv(p, base), SKILLATOR_QUOTA_REFRESH_WAIT: '1' }, REFRESH_MS)

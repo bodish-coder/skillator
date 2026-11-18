@@ -354,13 +354,18 @@ if [ "$mode" = refresh ]; then
   lock="$target_dir/quota-cache.json.refreshing"
   cache="$target_dir/quota-cache.json"
   mkdir -p "$target_dir"
-  parsed=""
+  parsed=""; turned=""
   raw=""
   # F176: each claude call is capped (secs, function); on expiry its whole process
   # tree is killed, so no read outlives the lock.
   # Parent first (its children listed beforehand), so nothing it runs gets to finish.
+  # A listed child that started before its parent (start tick from /proc, where there is
+  # one) is an orphan whose dead parent's PID was reused - never ours, never killed.
+  started() { sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{ print $20 }'; }
   kill_tree() {
-    set -- "$1" $(ps -ef 2>/dev/null | awk -v p="$1" '$3 == p { print $2 }')
+    t=$(started "$1")
+    set -- "$1" $(ps -ef 2>/dev/null | awk -v p="$1" '$3 == p { print $2 }' |
+      while read -r c; do { [ -z "$t" ] || [ "$(started "$c")" -ge "$t" ] 2>/dev/null; } && echo "$c"; done)
     [ -r "/proc/$1/winpid" ] && MSYS_NO_PATHCONV=1 taskkill /T /F /PID "$(cat "/proc/$1/winpid")" >/dev/null 2>&1
     kill -9 "$1" 2>/dev/null
     shift
@@ -510,7 +515,9 @@ except Exception:
       # never the background spawn) of a logged-in profile spends ONE tiny turn and reads
       # its rate_limit_event - only while the last 7d known is under 90%. In doubt, no turn:
       # a corrupt or legacy cache is unknown; only no cache file at all, or a failure
-      # record that carries `"last":null` (never a reading), counts as blank.
+      # record that carries `"last":null` (never a reading), counts as blank. A carried
+      # reading counts for 7 days from its `at` (a reset is plausible after: unknown), and
+      # a turn that gave no limits (`turned_at`) holds turns 24 h.
       if [ "$parsed" = NOWINDOWS ] && [ "${SKILLATOR_QUOTA_REFRESH_WAIT:-}" = 1 ] &&
          { [ -f "$target_dir/.credentials.json" ] || [ "$(uname -s)" = Darwin ]; } &&
          ! printf '%s' "$raw" | grep -qi 'session expired\|Failed to authenticate' &&
@@ -519,9 +526,14 @@ except Exception:
            try { s = fs.readFileSync(process.argv[1], "utf8") } catch (e) { process.exit(e.code === "ENOENT" ? 0 : 1) }
            let r; try { r = JSON.parse(s.replace(/^﻿/, "")) } catch (_) { process.exit(1) }
            if (!r || typeof r !== "object" || Array.isArray(r)) process.exit(1);
+           const now = Date.now() / 1000;
+           if (Object.hasOwn(r, "turned_at") && !(typeof r.turned_at === "number" && now - r.turned_at >= 86400)) process.exit(1);
            const has = o => o && (Object.hasOwn(o, "7d") || Object.hasOwn(o, "weekly"));
            let o = r;
-           if (!has(r)) { if (!Object.hasOwn(r, "last")) process.exit(1); if (r.last === null) process.exit(0); o = r.last; if (!has(o)) process.exit(1) }
+           if (!has(r)) {
+             if (!Object.hasOwn(r, "last")) process.exit(1); if (r.last === null) process.exit(0); o = r.last; if (!has(o)) process.exit(1);
+             if (!(typeof o.at === "number" && now - o.at < 7 * 86400)) process.exit(1)
+           }
            const v = Object.hasOwn(o, "7d") ? o["7d"] : o.weekly;
            process.exit(typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 90 ? 0 : 1);
          ' "$cache" 2>/dev/null; then
@@ -540,7 +552,7 @@ except Exception:
               if (res["5h"] != null || res["7d"] != null) process.stdout.write(JSON.stringify(res));
             } catch (_) {}
           ' 2>/dev/null)
-        [ -z "$via" ] || parsed=$via
+        if [ -n "$via" ]; then parsed=$via; else turned=$(now_epoch); fi
       fi
       ;;
     muse)
@@ -577,7 +589,9 @@ except Exception:
     elif [ "$verdict" = NOAUTH ]; then
       fail_note="no usage reading - login may have expired, run claude /login"
     elif [ "$verdict" = APIKEY ]; then
-      fail_note="no plan rate limits (API key billing)"
+      fail_note="no plan rate limits (API key or limited-scope login)"
+    elif [ -n "$turned" ]; then
+      fail_note="one turn gave no limits"
     elif [ "$verdict" = NOWINDOWS ]; then
       fail_note="no plan rate limits"
     elif [ -n "$(printf '%s' "$raw" | tr -d '[:space:]')" ]; then
@@ -587,12 +601,18 @@ except Exception:
     fi
     # F176: a failure record carries the last good readings (`last`: 5h, 7d and when),
     # so the turn gate never loses a high 7d; `"last":null` = no reading ever, while a
-    # corrupt or legacy cache leaves `last` out (unknown). No node: unknown too.
+    # corrupt or legacy cache leaves `last` out (unknown). No node: unknown too. A turn that
+    # gave no limits stamps `turned_at` (carried until a reading replaces the record).
     prev_failures=0; last_tag=""
     if command -v node >/dev/null 2>&1; then
       carry=$(node -e '
-        const fs = require("fs"); let s, r;
-        try { s = fs.readFileSync(process.argv[1], "utf8") } catch (e) { process.stdout.write(e.code === "ENOENT" ? "0 null" : "0"); process.exit(0) }
+        const fs = require("fs"); let s, r; const T = process.argv[2];
+        // "<failures> <tail>": the tail carries "last" (undefined: left out) and "turned_at".
+        const out = (f, last) => {
+          const t = T ? T : r && Object.hasOwn(r, "turned_at") ? JSON.stringify(r.turned_at) : "";
+          process.stdout.write(f + " " + (last === undefined ? "" : ",\"last\":" + JSON.stringify(last)) + (t ? ",\"turned_at\":" + t : "")); process.exit(0)
+        };
+        try { s = fs.readFileSync(process.argv[1], "utf8") } catch (e) { out(0, e.code === "ENOENT" ? null : undefined) }
         try { r = JSON.parse(s.replace(/^﻿/, "")) } catch (_) { process.stdout.write("0"); process.exit(0) }
         if (!r || typeof r !== "object" || Array.isArray(r)) { process.stdout.write("0"); process.exit(0) }
         const ok = v => typeof v === "number" && Number.isFinite(v);
@@ -602,13 +622,13 @@ except Exception:
           if (ok(h)) last["5h"] = h;
           if (ok(w)) last["7d"] = w;
           last.at = Math.floor(fs.statSync(process.argv[1]).mtimeMs / 1000);
-          process.stdout.write("0 " + JSON.stringify(last)); process.exit(0)
+          out(0, last)
         }
         const f = Number.isInteger(r.failures) && r.failures >= 1 ? r.failures : 0;
-        process.stdout.write(Object.hasOwn(r, "last") ? f + " " + JSON.stringify(r.last) : String(f));
-      ' "$cache" 2>/dev/null)
+        out(f, Object.hasOwn(r, "last") ? r.last : undefined);
+      ' "$cache" "$turned" 2>/dev/null)
       prev_failures=${carry%% *}
-      case $carry in *" "*) last_tag=",\"last\":${carry#* }" ;; esac
+      case $carry in *" "*) last_tag=${carry#* } ;; esac
       case $prev_failures in ''|*[!0-9]*) prev_failures=0 ;; esac
     elif [ -f "$cache" ] && ! grep -q '"5h"\|"7d"' "$cache" 2>/dev/null; then
       pf=$(sed -n 's/.*"failures"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$cache" | head -1)
