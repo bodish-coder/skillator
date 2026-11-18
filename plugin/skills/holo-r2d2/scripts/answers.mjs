@@ -27,7 +27,7 @@ const CTRL_G = new RegExp(CTRL.source, "g");
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
 const show = (v) => JSON.stringify(clean(v));
 const minute = (t) => Math.floor(t / 60000);
-const UNTIMED = ["moot", "same-as", "replanned"];
+const isRunId = (id) => /^RUN-\d+$/i.test(id);
 
 const tryRead =(p) => { try { return readFileSync(p, "utf8"); } catch { return null; } };
 const tryDir = (p) => { try { return readdirSync(p); } catch { return []; } };
@@ -102,8 +102,8 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
 // embeds (a --next-wizard page is round 2+). A RUN set's run file is found by that set's id (by the page's
 // file name only when the page is unreadable - the set is then rebuilt from the run). openNow: a RUN
 // set's decisions still open or asked in the run file now - only those may get a command; gone: the ones settled there.
-// done: a fully settled RUN set - its newest answered/ruled time (the run file's mtime when later and a moot,
-// same-as or replanned decision carries no time), else (none recorded) its run file's mtime.
+// done: a fully settled RUN set - its newest answered/ruled time (the run's updated: stamp when later and a settled
+// decision carries no time - moot, same-as, replanned, a legacy answer; no stamp: the mtime, exact), else (none recorded) its run file's mtime.
 // Every map is keyed by runKey (RUN-1, RUN-0001 and run-1 are one set).
 async function openSets(root, holo) {
   const sets = new Map(), openNow = new Map(), gone = new Map(), done = new Map();
@@ -111,8 +111,8 @@ async function openSets(root, holo) {
   for (const n of tryDir(holo).filter((n) => n.endsWith(".wizard.html"))) {
     try {
       const p = join(holo, n), stem = n.slice(0, -".wizard.html".length), set = pageSet(await readFile(p, "utf8")), id = runKey(set?.id ?? stem);
-      // own: 2 the canonical page, 1 another spelling of the same run (RUN-0001 for RUN-1), 0 a copy.
-      pages.push({ set, id, own: n === pageFile(id) ? 2 : pageFile(runKey(stem)) === pageFile(id) ? 1 : 0, mtime: (await stat(p)).mtimeMs });
+      // own: 2 the canonical page (pageFile of the id it carries, as holo writes it), 1 another spelling of the same run, 0 a copy.
+      pages.push({ set, id, own: set && n === pageFile(set.id) ? 2 : pageFile(runKey(stem)) === pageFile(id) ? 1 : 0, mtime: (await stat(p)).mtimeMs });
     } catch { /* not a readable wizard page */ }
   }
   // Several pages carry one set id (a leftover copy): the set's own page, else the newest.
@@ -123,7 +123,7 @@ async function openSets(root, holo) {
     if (set) seen.add(id);
     try {
       // Only a RUN- id is a run: a --decisions set "12" keeps its own set beside run-0012-*.md.
-      const path = /^RUN-/i.test(id) ? runFilesFor(id, runs)?.[0] : undefined;
+      const path = isRunId(id) ? runFilesFor(id, runs)?.[0] : undefined;
       if (path) {
         if (!parsed.has(path)) parsed.set(path, parseRun(await readFile(path, "utf8")));
         const run = parsed.get(path), r = reconcile(set, run, relative(root, path).replace(/\\/g, "/"));
@@ -131,11 +131,12 @@ async function openSets(root, holo) {
         openNow.set(id, new Set(r.live.decisions.map((d) => d.id)));
         gone.set(id, r.gone);
         const time = (x) => Date.parse(x.f.answered || x.f.ruled) || 0;
-        let answered = Math.max(0, ...run.qs.map(time));
+        const answered = Math.max(0, ...run.qs.map(time));
         if (!r.live.decisions.length) {
-          const mtime = (await stat(path)).mtimeMs;
-          if (answered && run.qs.some((x) => r.gone.has(x.id) && !time(x) && UNTIMED.some((k) => x.state === k || x.f[k]))) answered = Math.max(answered, mtime);
-          done.set(id, answered ? { answered } : { mtime });
+          const up = Date.parse(run.updated), untimed = answered && run.qs.some((x) => !time(x)); // all settled here
+          // No updated: stamp: the millisecond mtime bounds it, compared unfloored (exact). Stat only when used.
+          const mtime = !answered || (untimed && !up) ? (await stat(path)).mtimeMs : 0;
+          done.set(id, !answered ? { mtime } : untimed && !up && mtime > answered ? { exact: mtime } : { answered: untimed ? Math.max(answered, up || 0) : answered });
         }
       }
       if (set && set.decisions && (path || set.decisions.length)) sets.set(id, set);
@@ -182,17 +183,17 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
   };
   const when = (c) => Date.parse(c.ans && c.ans.finalizedAt) || 0;
   const validAt = (c) => ISO.test(c.ans.finalizedAt) && !!Date.parse(c.ans.finalizedAt);
-  // A fully settled run stays open only while a verified FINAL for it was finalized after the run's last
+  // A fully settled run stays open only while a verified FINAL with a valid finalizedAt for it was finalized after the run's last
   // answer (no answer time in the run file: while the FINAL file is newer than the run file).
   // Answer stamps carry minutes: a FINAL counts as newer only in a later minute.
-  const newer = (c, d) => (d.answered ? minute(when(c)) > minute(d.answered) : c.mtime > d.mtime);
-  for (const [id, d] of done) if (!cands.some((c) => c.id === id && isFinalized(c.ans) && newer(c, d) && verify(c))) sets.delete(id);
+  const newer = (c, d) => (d.exact ? when(c) > d.exact : d.answered ? minute(when(c)) > minute(d.answered) : c.mtime > d.mtime);
+  for (const [id, d] of done) if (!cands.some((c) => c.id === id && isFinalized(c.ans) && validAt(c) && newer(c, d) && verify(c))) sets.delete(id);
   for (const c of cands) {
     if (sets.has(c.id)) continue;
     const d = done.get(c.id);
     if (isFinalized(c.ans) && !validAt(c)) { r.refused.push({ path: c.path, why: "finalizedAt is not an ISO 8601 time" }); continue; }
     const why = !isFinalized(c.ans) ? "this file is a draft" : newer(c, d) ? "this file is unverified"
-      : d.answered ? "its run file answered after this file was finalized" : "its run file is newer than this file";
+      : d.mtime ? "its run file is newer than this file" : "its run file answered after this file was finalized";
     r.ignored.push({ path: c.path, why: `"${c.id}" is settled - ${why}` });
   }
   cands = cands.filter((c) => sets.has(c.id));
@@ -232,7 +233,7 @@ export function report(r) {
     // To apply: only answers that print a command - none from an unverified pick.
     const c = p.verified && p.openNow ? answersToCommands({ ...a, answers: kept }) : null, n = kept.length;
     L.push("", `picked: ${p.path}`, `  set ${clean(p.id)}, round ${Number(a.round) || 1}, FINAL by ${show(a.owner)} at ${clean(a.finalizedAt, 40)}, ${p.openNow ? `${c ? c.commands.length : 0} to apply, ${skipped.length} already settled` : `${n} decision${n === 1 ? "" : "s"}`}`);
-    const run = /^RUN-\d+$/i.test(p.id);
+    const run = isRunId(p.id);
     if (!p.verified) { L.push("  unverified - confirm with the owner before applying (no page nonce match); no commands printed"); continue; }
     if (run && !p.openNow) { L.push(`  run file not found for ${clean(p.id)} - nothing applied`); continue; }
     if (run) {

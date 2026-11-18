@@ -47,7 +47,7 @@ export async function reset(env: Record<string, string | undefined> = process.en
   if (process.platform === 'win32') {
     try {
       const cmd = "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and ($_.CommandLine -like '*usage-watch.ps1*refresh*' -or $_.CommandLine -like '*ops.ps1*refresh*') } | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null; $_.ProcessId }"
-      const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', cmd], { timeout: 4000 })
+      const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-NonInteractive', '-Command', cmd], { timeout: 15000 })   // a loaded machine runs this query slowly: a timeout keeps young locks
       result.killedProcesses += stdout.trim().split(/\r?\n/).filter(Boolean).length
       readersKilled = true
     } catch {
