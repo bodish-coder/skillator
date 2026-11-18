@@ -40,7 +40,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, settledIn, without, fileStem, clean, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
+import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, settledIn, without, fileStem, pageFile, clean, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 import { extractDomainGraph, understandPage } from "./understand.mjs";
 import { FORMATS, THEMES, formatPage, themeCss } from "./formats.mjs";
@@ -1139,7 +1139,7 @@ async function main(argv) {
       if (!run.id) throw new Error(`${runPath}: no '# RUN-<n> - <title>' line - not a relay run file`);
       set = setFromRun(run, relative(root, runPath).replace(/\\/g, "/")); stem = run.id;
     }
-    const out = resolve(o.out ?? join(root, ".skillator", "holo", `${stem.replace(/[^A-Za-z0-9_.-]/g, "-")}.wizard.html`));
+    const out = resolve(o.out ?? join(root, ".skillator", "holo", pageFile(stem)));
     if (o.nextWizard) {
       // The base is the page the answers came from: the page on disk when its id and round match, else the
       // --decisions set when its own round matches, else the run's set for round 1; anything else is refused.

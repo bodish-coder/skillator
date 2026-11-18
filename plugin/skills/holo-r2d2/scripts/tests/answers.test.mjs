@@ -721,3 +721,16 @@ test("A233-2: run-0001-*.md beside run-1-*.md - the canonical file wins, whateve
   }
 });
 
+test("A233-3: a leftover page copy with the same set id never displaces the set's own page; else the newest copy", async () => {
+  const s = sandbox(), A = "a".repeat(32), B = "b".repeat(32);
+  writeFileSync(join(s.holo, "review-x.wizard.html"), wizardPage(SET, A));
+  at(join(s.holo, "review-x.wizard.html"), "2026-11-17T09:00:00Z");
+  writeFileSync(join(s.holo, "zz-leftover.wizard.html"), wizardPage(SET, B));
+  put(s.dl, "review-x-decisions-FINAL.json", answers({ nonce: A }), 0);
+  assert.equal((await findAnswers(s.opts)).picked.verified, true, "own page wins");
+  rmSync(join(s.holo, "review-x.wizard.html"));
+  writeFileSync(join(s.holo, "a-copy.wizard.html"), wizardPage(SET, A));
+  at(join(s.holo, "zz-leftover.wizard.html"), "2026-11-17T09:00:00Z");
+  assert.equal((await findAnswers(s.opts)).picked.verified, true, "newest copy wins");
+});
+

@@ -14,7 +14,7 @@ import { join, resolve, dirname, relative } from "node:path";
 import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { nextWizardSet, setFromRun, answersToCommands, isFinalized, fileStem, pageSet, settledIn, without, CTRL, clean, q } from "./wizard.mjs";
+import { nextWizardSet, setFromRun, answersToCommands, isFinalized, fileStem, pageFile, pageSet, settledIn, without, CTRL, clean, q } from "./wizard.mjs";
 import { parseRun, findRoot, runFiles, runFilesFor, nonceFile } from "./holo.mjs";
 
 const MAX_FILE = 1048576;
@@ -102,11 +102,20 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
 // set's decisions still open or asked in the run file now - only those may get a command; gone: the ones settled there.
 async function openSets(root, holo) {
   const sets = new Map(), openNow = new Map(), gone = new Map();
-  const runs = await runFiles(root);
+  const runs = await runFiles(root), pages = [], seen = new Set();
   for (const n of tryDir(holo).filter((n) => n.endsWith(".wizard.html"))) {
     try {
-      let set = pageSet(await readFile(join(holo, n), "utf8"));
-      const m = /^RUN-(\d+)$/i.exec(String(set?.id ?? n.slice(0, -".wizard.html".length)));
+      const p = join(holo, n), set = pageSet(await readFile(p, "utf8")), id = String(set?.id ?? n.slice(0, -".wizard.html".length));
+      pages.push({ set, id, own: n === pageFile(id), mtime: (await stat(p)).mtimeMs });
+    } catch { /* not a readable wizard page */ }
+  }
+  // Several pages carry one set id (a leftover copy): the set's own page, else the newest.
+  pages.sort((a, b) => b.own - a.own || b.mtime - a.mtime);
+  for (let { set, id } of pages) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    try {
+      const m = /^RUN-(\d+)$/i.exec(id);
       const path = m && runFilesFor(m[1], runs)[0];
       if (path) {
         const run = parseRun(await readFile(path, "utf8"));

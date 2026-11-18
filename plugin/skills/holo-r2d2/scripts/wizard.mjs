@@ -17,6 +17,8 @@ const str = (v) => (v == null ? "" : String(v));
 export const isFinalized = (a) => !!a && a.final !== false && typeof a.finalizedAt === "string" && !!a.finalizedAt.trim() && a.reviewed === true && !!str(a.owner).trim();
 // The answers file name stem, as the page's saver builds it (answerSaver inlines the same regex).
 export const fileStem = (id) => str(id).replace(/[^A-Za-z0-9_.-]/g, "_");
+// The page holo.mjs writes for a set (its default --wizard output name).
+export const pageFile = (id) => str(id).replace(/[^A-Za-z0-9_.-]/g, "-") + ".wizard.html";
 // Text from an answers file is data: control characters out, one line, capped; anything for sh single-quoted.
 export const CTRL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 export const clean = (v, n = 200) => str(v).replace(new RegExp(CTRL.source, "g"), " ").replace(/\s+/g, " ").trim().slice(0, n);
