@@ -135,7 +135,7 @@ test('A231: every updater treats the pointer as a hint that never stops or downg
 });
 test('both installer writers preserve updater instructions in every host template', { skip: !ps || !hasSh ? 'Missing executable: ' + [!ps && 'powershell/pwsh', !hasSh && 'sh'].filter(Boolean).join(', ') : false }, () => {
   const shell = readFileSync(join(plugin, 'install.sh'), 'utf8').replaceAll('\r', '');
-  const functions = ['native', 'subst', 'put_cmd'].map(name => {
+  const functions = ['native', 'subst', 'under_link', 'put_cmd'].map(name => {
     const match = shell.match(new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?^\\}`, 'm'));
     assert.ok(match, `missing shell function ${name}`); return match[0];
   }).join('\n');
@@ -147,9 +147,11 @@ $ErrorActionPreference = 'Stop'
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($Installer, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw 'Installer parse failure' }
-$fn = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Write-Cmd' }, $true)
-if (-not $fn) { throw 'Missing Write-Cmd' }
-. ([scriptblock]::Create($fn.Extent.Text))
+foreach ($name in 'Test-UnderLink', 'Write-Cmd') {
+  $fn = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
+  if (-not $fn) { throw "Missing $name" }
+  . ([scriptblock]::Create($fn.Extent.Text))
+}
 Write-Cmd $Template $Skills $Target
 `);
   const skills = join(root, 'isolated skills').replaceAll('\\', '/');
