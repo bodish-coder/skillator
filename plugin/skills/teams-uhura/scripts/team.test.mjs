@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, statSync, rmSync, symlinkSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { spawnSync, spawn } from 'node:child_process'
 import { tmpdir, homedir } from 'node:os'
@@ -640,6 +640,21 @@ test('config show/save/clear through the CLI: the token over stdin, never printe
   assert.match(bad.stderr, /https/)
   assert.equal(run(['clear']).status, 0)
   assert.equal(existsSync(env.SKILLATOR_TEAMS_CONFIG), false)
+})
+
+// B29: a plugin cache reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins)
+// gave argv[1] the link's spelling and import.meta.url the real one: main never ran, and
+// `config save` exited 0 with nothing written - the board said saved.
+test('B29: run through a linked directory, config save still saves and says where', () => {
+  const d = mkdtempSync(join(tmpdir(), 'uhura-b29-'))
+  const link = join(d, 'linked')
+  symlinkSync(HERE, link, process.platform === 'win32' ? 'junction' : 'dir')
+  const env = { ...process.env, SKILLATOR_TEAMS_CONFIG: join(d, 'teams.json'), TEAMS_HMAC_TOKEN: '', TEAMS_WORKFLOW_URL: '', TEAMS_PORT: '', TEAMS_STATUS_POSTS: '' }
+  const s = spawnSync(process.execPath, [join(link, 'team.mjs'), 'config', 'save'],
+    { input: JSON.stringify({ token: TOKEN, workflowUrl: 'https://example.invalid/b29', port: 3978, statusPosts: false }), encoding: 'utf8', env, cwd: d })
+  assert.equal(s.status, 0, s.stderr)
+  assert.equal(s.stdout.split(/\r?\n/)[0], `saved: ${env.SKILLATOR_TEAMS_CONFIG} (this user only)`)
+  assert.equal(existsSync(env.SKILLATOR_TEAMS_CONFIG), true)
 })
 
 test('cleanRecord: preserves optional to handle; rejects invalid to', () => {

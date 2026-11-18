@@ -41,7 +41,7 @@ const KV = (o: Record<string, string> = {}) => Object.entries({ result: 'status'
   hosted: '0', listener: 'down', port: '3978', url: '', url_changed: '0', expires: '', ...o }).map(([k, v]) => `${k}=${v}`).join('\n') + '\n'
 const ARMED = { result: 'armed', hosted: '1', listener: 'up', url: U1 }
 
-type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult | Promise<ProcessRunResult>>; cfgRun?: ProcessRunResult }
+type World = { repoRoot: string; gitResult: ProcessRunResult | Error; files: Record<string, string>; runs: { argv: readonly string[]; stdin?: string; env?: Record<string, string> }[]; toasts: string[]; cfg: string; save: ProcessRunResult; auth: ProcessRunResult | Promise<ProcessRunResult>; check?: ProcessRunResult | Promise<ProcessRunResult>; focuses: string[]; arm: Record<string, ProcessRunResult | Promise<ProcessRunResult>>; cfgRun?: ProcessRunResult }
 const ran = (stdout: string, exitCode = 0, stderr = ''): ProcessRunResult =>
   ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
@@ -87,7 +87,7 @@ function world(on: On, cfg = CFG_SET, repoRoot = '/r', commonGitDir: string | nu
       return { value: w.gitResult }
     }
     if (a.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
-    w.runs.push({ argv: a, stdin: e.init?.stdin })
+    w.runs.push({ argv: a, stdin: e.init?.stdin, env: e.init?.env })
     // F177: the setup script's board modes, answered from the fixture - nothing is started
     if (a[0] === '/bin/sh' && a[1] === SETUP_SH && w.arm[a[2] ?? '']) return { value: await w.arm[a[2]!]! }
     if (a[0] === '/usr/bin/pbcopy') return { value: ran('') }
@@ -365,6 +365,45 @@ test('B29: the setup form says when the saved settings cannot be read, and why',
   const res = (await ui.find({ key: 'setup:result' }))?.text ?? ''
   expect(res).toContain('saved settings not read')
   expect(res).toContain('EPERM reading the config')
+  await ui.unmount()
+})
+
+// B29: team.mjs started through a linked plugin path exited 0 having saved nothing, and the
+// board said saved. The toast names the file team.mjs wrote; no 'saved: <path>' line, or a
+// refusal, is a ✗ toast as well as the form's line. The pane sets no env of its own: the child
+// keeps the host's home (verified the same as the board's), so it writes the file the listener reads.
+const DUMMY = 'ZHVtbXktdG9rZW4tYjI5'   // base64 of dummy-token-b29: the form asks base64
+test('B29: a save toasts the file written; no saved line or a refusal is a ✗ toast', { timeoutMs: 60_000 }, async ($, on) => {
+  const [w, clock] = world(on, CFG_SET)
+  await start($, clock)
+  const ui = await mount($)
+  await ui.press({ key: 'tab:messages' })
+  await clock.settle()
+  const save = async () => {
+    await ui.press({ key: 'key:setup' })
+    await clock.settle()
+    await ui.input({ key: 'setup:token', text: DUMMY, kind: 'change' })
+    await ui.press({ key: 'setup:save' })
+    await clock.settle()
+  }
+  await save()
+  const run = w.runs.find(r => r.argv[3] === 'save')!
+  expect(run.argv).toEqual([NODE, TEAM_JS, 'config', 'save'])
+  expect(run.env).toBeUndefined()
+  expect(w.toasts.at(-1)).toContain('✓ Teams settings saved - saved: /h/.skillator/teams.json')
+
+  w.save = ran('')                                   // exit 0, nothing said: nothing saved
+  await save()
+  expect(w.toasts.at(-1)).toContain('✗ Teams settings not saved')
+  expect(w.toasts.at(-1)).not.toContain('✓')
+  expect((await ui.find({ key: 'setup:result' }))?.text).toContain('teams-uhura did not say it saved')
+
+  w.save = ran('', 1, 'team: token: required')       // refused: a toast, not only the form's line
+  await ui.press({ key: 'setup:save' })
+  await clock.settle()
+  expect(w.toasts.at(-1)).toContain('✗ Teams settings not saved: token: required')
+  expect((await ui.find({ key: 'setup:result' }))?.text).toContain('token: required')
+  for (const t of w.toasts) expect(t).not.toContain(DUMMY)
   await ui.unmount()
 })
 
