@@ -1,7 +1,7 @@
 // B24: `ops --reset` - recover from an unresponsive or hung ops board.
 // Resets terminal modes (ANSI attributes, cursor visible, mouse tracking off, screen buffer restored),
 // clears stale locks (quota refresh locks, board locks), and terminates orphaned reader processes.
-import { existsSync, readdirSync, unlinkSync } from 'node:fs'
+import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -49,10 +49,13 @@ export async function reset(env: Record<string, string | undefined> = process.en
     `${home}/.skillator/profiles.lock`,
   ]
 
-  // Add refreshing locks from all profiles
+  // Add refreshing locks from all profiles - only past usage-watch's 90 s stale age: a younger
+  // one belongs to a read that may still be live, and freeing it lets a `p` start a second turn.
   try {
     for (const p of discover(home)) {
-      lockCandidates.push(`${p.dir}/quota-cache.json.refreshing`)
+      const lk = `${p.dir}/quota-cache.json.refreshing`
+      try { if (Date.now() - statSync(lk).mtimeMs < 90_000) continue } catch { continue }
+      lockCandidates.push(lk)
     }
   } catch {
     // Discovery failed

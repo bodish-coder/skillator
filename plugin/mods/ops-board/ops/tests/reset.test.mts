@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -18,6 +18,7 @@ test('reset cleans up stale quota refreshing locks and reports cleanly', async (
     mkdirSync(profileDir)
     const lock = `${profileDir}/quota-cache.json.refreshing`
     writeFileSync(lock, new Date().toISOString())
+    const old = new Date(Date.now() - 95 * 1000); utimesSync(lock, old, old)
     assert.ok(existsSync(lock))
 
     const report = await reset({ HOME: root, USERPROFILE: root })
@@ -25,6 +26,24 @@ test('reset cleans up stale quota refreshing locks and reports cleanly', async (
     assert.ok(report.includes('[ok] Terminal attributes'))
     assert.ok(report.includes('Cleared 1 stale lock(s)'))
     assert.ok(!existsSync(lock), 'stale lock file was removed')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+// A236 (1): a refresh lock younger than usage-watch's 90 s stale age belongs to a read that
+// may still be live - removing it would let a `p` straight after the reset start a second turn.
+test('A236: reset keeps a refresh lock younger than the 90 s stale age', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ops-reset-')).replace(/\\/g, '/')
+  try {
+    const profileDir = `${root}/.claude-live`
+    mkdirSync(profileDir)
+    const lock = `${profileDir}/quota-cache.json.refreshing`
+    writeFileSync(lock, 'x')
+    const t = new Date(Date.now() - 50 * 1000); utimesSync(lock, t, t)
+    const report = await reset({ HOME: root, USERPROFILE: root })
+    assert.ok(existsSync(lock), 'a live read keeps its lock')
+    assert.ok(report.includes('No stale lock files found'), report)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
