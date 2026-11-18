@@ -202,10 +202,9 @@ function Invoke-Arm {
     if (-not $seen) { $a['result'] = 'failed'; $a['why'] = 'the tunnel window did not start - the listener is up, the tunnel is not'; return $a }
     # a host that exits at once (signed out, port taken) is not armed
     Start-Sleep -Seconds 2
-    $up = TunnelHosted $Tunnel $port
+    if (TunnelHosted $Tunnel $port) { $a['hosted'] = '1' }
     if (Late $a) { return $a }
-    if ($up) { $a['hosted'] = '1' }
-    else { $a['result'] = 'failed'; $a['why'] = "the tunnel stopped right after it started - run devtunnel host $Tunnel in a terminal to see why; the listener is up"; return $a }
+    if ($a['hosted'] -ne '1') { $a['result'] = 'failed'; $a['why'] = "the tunnel stopped right after it started - run devtunnel host $Tunnel in a terminal to see why; the listener is up"; return $a }
   }
   if (-not $a['url']) { $u = TunnelUrl $port; if ($u) { $a['url'] = $u } }
   if (Late $a) { return $a }
@@ -473,6 +472,9 @@ if ($args -contains '--selftest' -or $args -contains '-selftest') {
   if ($r.a['result'] -ne 'failed' -or $r.a['why'] -ne 'took too long - try again' -or $r.calls -match $acts) { Fail "deadline: $($r.a['result']) / $($r.a['why'])`n$($r.calls)" }
   $r = Kv @{ noopen = $true; probe = 20 } { Invoke-Arm }
   if ($r.a['why'] -ne 'took too long - try again' -or $S.clock -gt 25 + 20 + 2) { Fail "deadline in the poll: $($r.a['why']) at $($S.clock) s" }
+  # A235 2: the host confirmed as the deadline passes - hosted=1, what was seen, as setup.sh
+  $r = Kv @{ probe = 10 } { Invoke-Arm }
+  if ($r.a['why'] -ne 'took too long - try again' -or $r.a['hosted'] -ne '1') { Fail "2: a confirmed host past the deadline: hosted=$($r.a['hosted']) / $($r.a['why'])" }
   if (@([IO.File]::ReadAllBytes($PSCommandPath) | Where-Object { $_ -gt 127 -or $_ -eq 13 }).Count) { Fail 'not pure ASCII + LF' }
   $env:Path = $savedPath; $env:LOCALAPPDATA = $savedLocal; Remove-Item -Recurse -Force $T
   'ok'; exit 0

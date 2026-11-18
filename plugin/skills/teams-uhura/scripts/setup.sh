@@ -284,11 +284,11 @@ EOF
   refresh_path() { :; }
   answer() { echo ask >> "$ST/calls"; case $1 in Press*) : > "$ST/saved" ;; esac; printf '%s' "$YES"; }
   open_tunnel() { echo host >> "$ST/calls"; [ -f "$ST/noopen" ] || : > "$ST/hosted"; }
-  tunnel_hosted() { [ -f "$ST/hosted" ] || return 1; [ -f "$ST/dies" ] && rm -f "$ST/hosted"; return 0; }
+  tunnel_hosted() { [ -z "$PROBE" ] || echo $(($(now) + PROBE)) > "$ST/clock"; [ -f "$ST/hosted" ] || return 1; [ -f "$ST/dies" ] && rm -f "$ST/hosted"; return 0; }
   stop_tunnel() { echo unhost >> "$ST/calls"; [ -f "$ST/stuck" ] || rm -f "$ST/hosted"; }
   sleep() { :; }
   now() { cat "$ST/clock" 2>/dev/null || echo 0; }
-  SKILLATOR_TEAMS_STATE="$T/state"; export SKILLATOR_TEAMS_STATE
+  SKILLATOR_TEAMS_STATE="$T/state"; export SKILLATOR_TEAMS_STATE; PROBE=
   # scen <check> <yes> <commands present> <state files>
   scen() {
     rm -rf "$BIN" "$ST"; mkdir -p "$BIN" "$ST"; : > "$ST/calls"
@@ -436,6 +436,9 @@ EOF
   args_ok --ack https://x.devtunnels.ms extra && fail '--ack with two arguments was not refused'
   args_ok --check extra && fail '--check with an argument was not refused'
   args_ok --ack "$U1" && args_ok --ack && args_ok --check && args_ok || fail 'a documented form was refused'
+  # A235 2: the host confirmed as the deadline passes - hosted=1, what was seen, as setup.ps1
+  PROBE=10; kv arm "$ALL" "$RDY"; PROBE=
+  out '^why=took too long - try again$' && out '^hosted=1$' || fail '2: a confirmed host past the deadline was not reported hosted'
   LC_ALL=C grep -q "$(printf '[^\t -~]')" "$SELF" && fail 'not pure ASCII + LF'
   echo ok
 }
