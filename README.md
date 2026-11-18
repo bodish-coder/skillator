@@ -43,6 +43,21 @@ give it, the clone the installer last ran from (`.skillator-source` beside the
 installed skills), or the updated plugin - so every other host gets the same
 version. It never pushes; restart Claude Code afterwards.
 
+**Self-update (F181).** The plugin's hooks (`plugin/hooks/hooks.json`:
+`session-owner.sh` and `self-update.sh due-run` on `SessionStart`,
+`team-hook.sh` and `self-update.sh due-run` on `UserPromptSubmit`) check for a
+new skillator at most once every 24 h (`SKILLATOR_UPDATE_HOURS`; last check in
+`~/.skillator/self-update.json`). When one is out, a detached background run
+does the `/skillator-update` steps - the Claude Code plugins, then the
+installer from the updated plugin for the other hosts - and the next prompt
+gets one line, `skillator updated <old> -> <new> - restart Claude Code to load
+it`. It skips while a relay run in the current repo has a stage in flight, in a
+skillator clone with uncommitted `plugin/` edits, and when an update asks for
+confirmation (never `-y`); offline or a failure is one quiet note, retried a
+day later. Opt out with `SKILLATOR_AUTO_UPDATE=0` in your environment;
+`sh plugin/hooks/self-update.sh check` (or `self-update.ps1 -Mode check`)
+reports without updating.
+
 **Breaking (F171): the plain command names are gone.** Each command is listed
 once, under its unique name: `/archive-tickets` -> `/archive-zordon`,
 `/engage` -> `/engage-picard`, `/list-tickets` -> `/list-ticket-zordon`,
