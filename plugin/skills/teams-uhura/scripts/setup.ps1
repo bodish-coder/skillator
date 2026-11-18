@@ -222,7 +222,8 @@ function Invoke-Disarm {
   if (Has 'node') { $c = Get-Config; if ($c -and $c.port) { $port = [int]$c.port } }
   Stop-Tunnel $port   # the tunnel first: the public side closes before the listener goes
   $a = @(Get-Arm)[-1]
-  # still hosted (elevated, another user's): the listener stays, so the tunnel never points at a dead port
+  # still hosted - a host Stop-Tunnel could not stop, or a devtunnel it cannot inspect (elevated,
+  # another user's; A226 h, never stopped): the listener stays, so a tunnel never points at a dead port
   if ($a['hosted'] -eq '1') { $a['result'] = 'failed'; $a['why'] = 'the tunnel is still hosted - close its window; the listener is left up'; return $a }
   if (Has 'node') { [void](Run node $Team stop --port $port) }
   $a = @(Get-Arm)[-1]
