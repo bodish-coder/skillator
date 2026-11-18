@@ -94,6 +94,11 @@ function Invoke-Update {
   $script:L = Get-List
   $sk = Get-Plugin $script:L "skillator@$($script:m)"
   $script:nv = "$($sk.version)"; $ip = "$($sk.installPath)"
+  $sv = ''
+  try { $sv = "$((Get-Content -LiteralPath (Join-Path $ip '.claude-plugin/plugin.json') -Raw -ErrorAction Stop | ConvertFrom-Json).version)" } catch { }
+  foreach ($v in @($script:nv, $sv)) {
+    if ($v -and (Test-Newer $v $script:old)) { return "skipped: would downgrade $($script:old) -> $v" }
+  }
   $ih = ''
   if ($ip -and (Test-Path -LiteralPath (Join-Path $ip 'install.ps1')) -and (Test-Path -LiteralPath (Join-Path $ip 'install.sh'))) {
     $p = Start-Process powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $ip 'install.ps1'), '-Force') -WindowStyle Hidden -Wait -PassThru
@@ -127,14 +132,14 @@ function Invoke-SelfTest {
   $bin = Join-Path $d 'bin'; $repo = Join-Path $d 'repo'; $inst = Join-Path $d 'inst'; $mkt = Join-Path $d 'mkt'
   foreach ($x in @($bin, (Join-Path $d 'home'), (Join-Path $repo '.git'), $inst, (Join-Path $mkt '.claude-plugin'))) { New-Item -ItemType Directory -Force $x | Out-Null }
   $env:SU_D = $d; $env:USERPROFILE = Join-Path $d 'home'; $env:HOME = $env:USERPROFILE; $env:PATH = "$bin;$env:PATH"
-  foreach ($v in 'SKILLATOR_AUTO_UPDATE', 'SKILLATOR_UPDATE_HOURS', 'SU_OFFLINE', 'SU_CONFIRM', 'SU_SLEEP', 'SU_DIRTY') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
+  foreach ($v in 'SKILLATOR_AUTO_UPDATE', 'SKILLATOR_UPDATE_HOURS', 'SU_OFFLINE', 'SU_CONFIRM', 'SU_SLEEP', 'SU_DIRTY', 'SU_OLDV', 'SU_NEWV') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
   $script:S = Join-Path $env:USERPROFILE '.skillator/self-update.json'
   $log = Join-Path $d 'log'
   Set-Content -LiteralPath (Join-Path $bin 'claude.ps1') -Encoding utf8 -Value @'
 Add-Content -LiteralPath "$env:SU_D/log" -Value ("claude " + ($args -join ' '))
 $a = $args -join ' '
 switch ($a) {
-  'plugin list --json' { $v = if (Test-Path "$env:SU_D/updated") { '4.30.0' } else { '4.29.0' }
+  'plugin list --json' { $v = if (Test-Path "$env:SU_D/updated") { if ($env:SU_NEWV) { $env:SU_NEWV } else { '4.30.0' } } elseif ($env:SU_OLDV) { $env:SU_OLDV } else { '4.29.0' }
     ConvertTo-Json -Compress @(@{ id = 'skillator@skillator'; version = $v; installPath = "$env:SU_D\inst" }, @{ id = 'ops-board@skillator'; version = '0.17.0'; installPath = 'x' }); exit 0 }
   'plugin marketplace update skillator' { if ($env:SU_SLEEP) { Start-Sleep $env:SU_SLEEP }; if ($env:SU_OFFLINE) { exit 1 }; exit 0 }
   'plugin marketplace list --json' { ConvertTo-Json -Compress @(@{ name = 'skillator'; installLocation = "$env:SU_D\mkt" }); exit 0 }
@@ -207,6 +212,11 @@ if (($args -join ' ') -match 'status') { $env:SU_DIRTY }
     $o = Su 'run'
     T 'confirmation prompt: skipped, never -y' ($o -eq 'skipped: needs confirmation' -and -not ((Lg) -match '(^| )(-y|--yes)( |$)'))
     Remove-Item Env:SU_CONFIRM
+
+    Reset-T; $env:SU_NEWV = '4.28.0'
+    $o = Su 'run'
+    T 'downgrade: refused, no installer' ($o -eq 'skipped: would downgrade 4.29.0 -> 4.28.0' -and -not ((Lg) -match '^installer'))
+    Remove-Item Env:SU_NEWV
 
     # in-process, so PowerShell's own start-up is not counted against the second
     Reset-T; $env:SU_SLEEP = '3'

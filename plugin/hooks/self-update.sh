@@ -118,6 +118,10 @@ update() {
   L=$(claude plugin list --json </dev/null 2>/dev/null | kv 'id|version|installPath')
   nv=$(pf "skillator@$m" version)
   ip=$(pf "skillator@$m" installPath)
+  sv=$(cat "$ip/.claude-plugin/plugin.json" 2>/dev/null | kv version | awk '{ print $2; exit }')
+  for v in "$nv" $sv; do
+    newer "$v" "$old" && { RES="skipped: would downgrade $old -> $v"; return; }
+  done
   ih=''
   if [ -f "$ip/install.sh" ] && [ -f "$ip/install.ps1" ]; then
     case $(uname -s 2>/dev/null) in
@@ -163,13 +167,13 @@ selftest() {
   mkdir -p "$d/bin" "$d/home" "$d/repo/.git" "$d/inst" "$d/mkt/.claude-plugin"
   lw=$(cd "$d" && { pwd -W 2>/dev/null || pwd; })
   export SU_D="$d" HOME="$d/home" USERPROFILE="$d/home" PATH="$d/bin:$PATH"
-  unset SKILLATOR_AUTO_UPDATE SKILLATOR_UPDATE_HOURS SU_OFFLINE SU_CONFIRM SU_SLEEP SU_DIRTY
+  unset SKILLATOR_AUTO_UPDATE SKILLATOR_UPDATE_HOURS SU_OFFLINE SU_CONFIRM SU_SLEEP SU_DIRTY SU_OLDV SU_NEWV
   cat_v() { printf '{"name":"skillator","plugins":[{"name":"skillator","version":"%s"}]}\n' "$1" > "$d/mkt/.claude-plugin/marketplace.json"; }
   cat > "$d/bin/claude" <<'EOF'
 #!/bin/sh
 echo "claude $*" >> "$SU_D/log"
 case "$*" in
-  'plugin list --json') v=4.29.0; [ -f "$SU_D/updated" ] && v=4.30.0
+  'plugin list --json') v=${SU_OLDV:-4.29.0}; [ -f "$SU_D/updated" ] && v=${SU_NEWV:-4.30.0}
     printf '[{"id":"skillator@skillator","version":"%s","installPath":"%s"},{"id":"ops-board@skillator","version":"0.17.0","installPath":"x"}]\n' "$v" "$SU_D/inst" ;;
   'plugin marketplace update skillator') [ -n "$SU_SLEEP" ] && sleep "$SU_SLEEP"; [ -z "$SU_OFFLINE" ] ;;
   'plugin marketplace list --json') printf '[{"name":"skillator","installLocation":"%s"}]\n' "$SU_D/mkt" ;;
@@ -243,6 +247,10 @@ claude plugin list --json'
   reset
   o=$(SU_CONFIRM=1 sh "$me" run)
   t 'confirmation prompt: skipped, never -y' '[ "$o" = "skipped: needs confirmation" ] && ! lg | grep -qE -- "(^| )(-y|--yes)( |$)"'
+
+  reset
+  o=$(SU_NEWV=4.28.0 sh "$me" run)
+  t 'downgrade: refused, no installer' '[ "$o" = "skipped: would downgrade 4.29.0 -> 4.28.0" ] && ! lg | grep -q "^installer"'
 
   reset
   s=$(date +%s)
