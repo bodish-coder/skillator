@@ -144,17 +144,15 @@ export function setFromRun(run, runPath) {
   return { schema: SET_SCHEMA, id: run.id, title: `${run.id} - ${run.title}`, source: runPath || run.id, decisions, settled };
 }
 
+// One run, however spelled: RUN-1, RUN-0001 and run-1 key as RUN-1; any other id is itself.
+export const runKey = (id) => { const m = /^RUN-(\d+)$/i.exec(str(id)); return m ? `RUN-${BigInt(m[1])}` : str(id); };
+export const sameSet = (a, b) => runKey(a) === runKey(b);
+
 // A page's set against its run file now: the page's set (the run's own when the page is another set's
 // or unreadable), less what the run has settled, which joins the settled reference as setFromRun lists it.
-// live: the run's set now; gone: the decision ids the run has settled.
-// One run, however spelled: RUN-1 and RUN-0001 are the same set.
-export const sameSet = (a, b) => {
-  const k = (id) => { const m = /^RUN-(\d+)$/i.exec(str(id)); return m ? `RUN-${BigInt(m[1])}` : str(id); };
-  return k(a) === k(b);
-};
-
-export function reconcile(pageSet, run, runPath) {
-  const live = setFromRun(run, runPath), gone = settledIn(run);
+// live: the run's set now (pass it when already built); gone: the decision ids the run has settled.
+export function reconcile(pageSet, run, runPath, live = setFromRun(run, runPath)) {
+  const gone = settledIn(run);
   const base = pageSet && sameSet(pageSet.id, live.id) ? pageSet : live;
   const have = new Set((base.settled || []).map((x) => x && x.id));
   const set = Array.isArray(base.decisions)
@@ -225,7 +223,7 @@ export function checkSet(set) {
 export function nextWizardSet(set, ans) {
   checkSet(set);
   if (!ans || ans.schema !== ANSWER_SCHEMA || !Array.isArray(ans.answers)) throw new Error(`answers: schema must be "${ANSWER_SCHEMA}"`);
-  if (str(ans.set) !== str(set.id)) throw new Error(`answers: set "${str(ans.set)}" does not match active set "${set.id}"`);
+  if (!sameSet(ans.set, set.id)) throw new Error(`answers: set "${str(ans.set)}" does not match active set "${set.id}"`);
   if (ans.setSchema && ans.setSchema !== set.schema) throw new Error(`answers: setSchema "${ans.setSchema}" does not match active set schema "${set.schema}"`);
   const activeRound = Number(set.round) || 1;
   if (ans.round != null && (!Number.isFinite(ans.round) || ans.round !== activeRound)) {
@@ -341,7 +339,7 @@ export function nextWizardSet(set, ans) {
 export function answersToCommands(ans, rm = "relay-morpheus.sh") {
   if (!ans || ans.schema !== ANSWER_SCHEMA) throw new Error(`answers: schema must be "${ANSWER_SCHEMA}"`);
   if (!isFinalized(ans)) throw new Error("answers: a draft, not finalized and reviewed by its owner - nothing is applied");
-  const m = /^RUN-(\d+)$/.exec(str(ans.set));
+  const m = /^RUN-(\d+)$/.exec(runKey(ans.set));
   if (!m) throw new Error(`answers: set "${str(ans.set).slice(0, 40)}" is not a relay run - read the answers into the work by hand`);
   const one = (s) => clean(s, MAX_TEXT);
   const out = { commands: [], review: [], open: [] };

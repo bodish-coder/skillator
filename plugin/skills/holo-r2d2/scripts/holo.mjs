@@ -40,7 +40,7 @@ import { existsSync, readFileSync, statSync, realpathSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, reconcile, without, fileStem, pageFile, clean, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
+import { setFromRun, checkSet, wizardPage, pageSet, answersToCommands, nextWizardSet, reconcile, without, runKey, sameSet, fileStem, pageFile, clean, normalizeDiagram, renderArchitecturalSvg, renderParallelLanesSvg } from "./wizard.mjs";
 import { anatomyFigure, ANATOMY_CSS, ANATOMY_SCRIPT } from "./anatomy.mjs";
 import { extractDomainGraph, understandPage } from "./understand.mjs";
 import { FORMATS, THEMES, formatPage, themeCss } from "./formats.mjs";
@@ -894,14 +894,15 @@ export async function runFiles(root) {
 
 // F44: runs are named RUN-0012 (run-0012-*.md); runs named before that are
 // run-12-*.md. Any spelling - 12, RUN-12, RUN-0012 - finds either, by number;
-// both on disk: the canonical run-0012 first, then the newest.
+// both on disk: the canonical run-0012 first, then the newest. One number rule: runKey.
 export function runFilesFor(arg, files) {
-  const m = /^(?:RUN-)?(\d+)$/i.exec(arg);
-  if (!m) return null;
-  const canon = `run-${String(BigInt(m[1])).padStart(4, "0")}-`;
+  const key = runKey(/^\d+$/.test(arg) ? `RUN-${arg}` : arg);
+  if (!/^RUN-\d+$/.test(key)) return null;
+  const canon = `run-${key.slice(4).padStart(4, "0")}-`;
   const age = (f) => { try { return statSync(f).mtimeMs; } catch { return 0; } };
-  return files.filter((f) => { const k = /^run-(\d+)-/.exec(basename(f)); return k && BigInt(k[1]) === BigInt(m[1]); })
-    .sort((a, b) => basename(b).startsWith(canon) - basename(a).startsWith(canon) || age(b) - age(a));
+  return files.filter((f) => { const k = /^run-(\d+)-/.exec(basename(f)); return k && runKey(`RUN-${k[1]}`) === key; })
+    .map((f) => ({ f, canon: basename(f).startsWith(canon), t: age(f) }))
+    .sort((a, b) => b.canon - a.canon || b.t - a.t).map((x) => x.f);
 }
 
 async function resolveRun(arg, root) {
@@ -1146,11 +1147,11 @@ async function main(argv) {
       let ans = JSON.parse(await readFile(o.nextWizard, "utf8"));
       const round = Number(ans && ans.round) || 1, roundOf = (s) => Number(s && s.round) || 1;
       const fromRun = set, drawn = existsSync(out) ? pageSet(await readFile(out, "utf8")) : null;
-      if (drawn && String(drawn.id) === String(set.id) && roundOf(drawn) === round) set = drawn;
+      if (drawn && sameSet(drawn.id, set.id) && roundOf(drawn) === round) set = drawn;
       else if (roundOf(set) !== round) throw new Error(`the page for round ${round} is not on disk - open the round-${round} page and finalize again`);
       if (run) {
         // What the run has settled leaves the questions and stays in the settled reference, as setFromRun lists it.
-        const r = reconcile(set, run, fromRun.source);
+        const r = reconcile(set, run, fromRun.source, fromRun);
         for (const a of ans && Array.isArray(ans.answers) ? ans.answers : []) if (r.gone.has(a && a.id)) console.log(`${clean(a.id, 40)}: already settled - skipped`);
         ans = without(ans, r.gone);
         set = r.set;
