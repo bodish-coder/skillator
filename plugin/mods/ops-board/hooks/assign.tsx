@@ -350,7 +350,11 @@ export async function renderForm($: EngineInterface, e: RenderInput<'Pane'>): Pr
   const radioKey = (kind: AssignDraft['kind']) => (kind === 'owner' ? 'kind:implementation' : kind === 'decide' ? 'kind:decision' : kind === 'session' ? 'kind:session' : 'kind:tester')
   const radioHotkey = (kind: AssignDraft['kind']) => (kind === 'owner' ? 'a' : kind === 'decide' ? 'd' : kind === 'session' ? 'e' : 't')
   const radio = (kind: AssignDraft['kind'], text: string) => (
-    <Button key={radioKey(kind)} hotkey={armed ? radioHotkey(kind) : undefined} plain onPress={() => set(x => ({ ...x, kind }))}>
+    <Button key={radioKey(kind)} hotkey={armed ? radioHotkey(kind) : undefined} plain onPress={() => {
+      set(x => ({ ...x, kind }))
+      // the old ring (a person or session row) may not be drawn under the new kind: keep it on a drawn control
+      void (async () => { await $.ui.focus({ requestId: PANE, key: radioKey(kind) }).catch(() => {}); await update($, actionFocusA, () => radioKey(kind)) })()
+    }}>
       <Text color={d.kind === kind ? 'success' : undefined}>{d.kind === kind ? '(•)' : '( )'}</Text>{' ' + text}
     </Button>
   )

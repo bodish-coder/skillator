@@ -775,3 +775,23 @@ for (const surface of SURFACES) {
     await pane.unmount()
   })
 }
+
+// F178 fix: switching kind moves the ring to a drawn control, so the form's letter hotkeys stay armed
+for (const surface of SURFACES) {
+  test(`${surface}: F178 switching kind keeps the form's hotkeys armed`, WITH, async ($, on) => {
+    const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM }, { SKILLATOR_SESSION: '@cc-1ir0' })
+    on('session.id', () => ({ value: 'sid-1' }))
+    await start($, clock)
+    const pane = await $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: 'ops-board', props: props('ops board') })
+    await pane.press({ key: 'head:~' })
+    await pane.press({ key: 'row:F3' })
+    await pane.press({ key: 'key:assign' })
+    await pane.press({ key: 'kind:session' })            // the who rows go; the ring must not stay on one
+    expect((await pane.find({ key: 'kind:session' }))?.text).toBe('(•) session')
+    expect((await pane.find({ key: 'kind:implementation' }))?.props.hotkey).toBe('a')
+    await pane.press({ key: 'kind:implementation' })     // and back: the session rows go
+    expect((await pane.find({ key: 'kind:tester' }))?.props.hotkey).toBe('t')
+    expect(w.runs.filter(r => r.argv.join(' ').includes(META))).toEqual([])
+    await pane.unmount()
+  })
+}
