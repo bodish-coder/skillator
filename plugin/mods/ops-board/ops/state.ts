@@ -205,6 +205,7 @@ export type State = {
   messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
   teamsCfg: TeamsCfgView | null
   teamsArm: ArmView | null; armBusy: boolean   // F177: what setup --status last said; an arm / disarm in flight
+  profiles: string | null; profilesBusy: boolean  // F176: the last `ops --status --refresh` table (p on Health); one in flight
   setup: Setup | null; setupField: SetupField
   help: HelpState | null                       // F127: Help & Skills guide viewer
   explorer: ExState                        // F75: the Explorer tab (ops/explorer.ts)
@@ -226,6 +227,7 @@ export type Effect = { kind: 'run'; call: Call; args: string[]; then: Then; stdi
   | { kind: 'mute'; text: string; then?: Then }       // F87: write the watchdog mute file ('' = unmuted); code 1 + err when it failed
   | { kind: 'skill-doc'; skillId: string; then: Then } // A198: read-only bounded SKILL.md load
   | { kind: 'copy'; text: string; label?: string; then?: Then } // A198 / F160: clipboard write
+  | { kind: 'status'; refresh: boolean; then: Then }  // F176: ops --status [--refresh] as a table
 
 // A `then`'s answer as a step: a bare state asks for nothing more.
 export const settle = (x: State | Step): Step => ('effects' in x ? x : { state: x, effects: [] })
@@ -243,7 +245,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null, startRun: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', decide: null, person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
-  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, teamsArm: null, armBusy: false, setup: null, setupField: 'token',
+  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, teamsArm: null, armBusy: false, profiles: null, profilesBusy: false, setup: null, setupField: 'token',
   help: null,
   explorer: EX0,
   ...RUN_INITIAL,
@@ -890,6 +892,15 @@ function forceResume(s: State): Step {
     return { state: x, effects: [{ kind: 'mute', text: mute, then: wrote }] }
   }
   return { state: s, effects: [run('pending-machine', [], read)] }
+}
+
+// F176: p on Health - every profile's row and model rows, blank ones read once (ops --status --refresh).
+function readProfiles(s: State): Step {
+  if (s.profilesBusy) return { state: s, effects: [] }
+  const then: Then = r => x => (r.code === 0 && r.out.trim()
+    ? toast({ ...x, profiles: r.out, profilesBusy: false }, '↻ profiles read')
+    : toast({ ...x, profilesBusy: false }, `profiles not read: ${r.err.trim() || `exit ${r.code}`}`))
+  return { state: toast({ ...s, profilesBusy: true }, '… reading every profile (blank ones get one usage read)'), effects: [{ kind: 'status', refresh: true, then }] }
 }
 
 export function refreshHealth(s: State): Step {
@@ -2723,6 +2734,7 @@ export function reduce(s: State, k: Key): Step {
     if (k.name === 'u' || k.name === 'R') return resume(s)
     if (k.name === 'c') return resumeCli(s)
     if (k.name === 'f' || k.name === 'F') return forceResume(s)
+    if (k.name === 'p') return readProfiles(s)
   }
   switch (k.name) {
     case 'q': return quit

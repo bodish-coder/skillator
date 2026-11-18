@@ -360,6 +360,7 @@ export async function renderPane($: EngineInterface, e: RenderInput<'Pane'>): Pr
           <Button key="key:resume" plain dimColor hotkey="u" onPress={() => {}}>resume</Button>
           <Button key="key:resume-cli" plain dimColor hotkey="c" onPress={() => {}}>resume CLI</Button>
           <Button key="key:force" plain dimColor hotkey="f" onPress={() => {}}>force resume</Button>
+          <Button key="key:health-profiles" plain dimColor hotkey="p" onPress={() => {}}>profiles</Button>
         </Box>
       </Box>
     )

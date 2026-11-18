@@ -8,7 +8,7 @@ export type Call = 'pending' | 'pending-kv' | 'pending-machine' | 'meta-assign' 
   | 'meta-status' | 'holo-ticket' | 'meta-reconcile' | 'meta-unblock' | 'meta-start' | 'meta-testing' | 'meta-block'
   | 'relay-list' | 'relay-resume' | 'relay-queue-add' | 'relay-push-pending' | 'relay-hold' | 'relay-release' | 'relay-hold-status' | 'relay-decide'
   | 'relay-stage-landed'
-  | 'usage-level'
+  | 'usage-level' | 'ops-status'
   | 'team-mark-read' | 'team-config-show' | 'team-config-save' | 'team-config-clear' | 'team-inbox-tail'
   | 'team-setup-check' | 'team-setup-walk' | 'team-login' | 'team-login-status' | 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack'
   | 'run-scan' | 'run-rename'
@@ -21,6 +21,7 @@ const PENDING = 'tickets-zordon/scripts/pending'
 const META = 'tickets-zordon/scripts/ticket-meta'
 const RELAY = 'relay-morpheus/hooks/relay-morpheus'
 const WATCH = 'watch-cortana/hooks/usage-watch'
+const OPS = '../mods/ops-board/ops/ops'   // F176: the standalone app, beside skills/ in the plugin
 const RUNS = 'live-friday/scripts/run-entries'   // F79: the one writer of .skillator/run.json
 const SETUP = 'teams-uhura/scripts/setup'   // F98 / F98a: first-time setup (--check and interactive walk)
 
@@ -69,6 +70,8 @@ const TABLE: Record<ScriptCall, { script: string; sh: (a: string[]) => string[];
   'relay-stage-landed': { script: RELAY, sh: a => [a[0] ?? '', 'stage', a[1] ?? '', 'x', '', a[2] ?? ''],
                           ps: a => ['-Mode', 'stage', '-Id', a[0] ?? '', '-N', a[1] ?? '', '-State', 'x', '-Landed', a[2] ?? ''] },
   'usage-level':        { script: WATCH, sh: () => ['level'], ps: () => ['-Mode', 'level'] },
+  // F176: Health's p - every profile's row and model rows, a blank one read once (owner key press only)
+  'ops-status':         { script: OPS, sh: () => ['--status', '--refresh'], ps: () => ['--status', '--refresh'] },
   'run-scan':           { script: RUNS, sh: () => ['scan'], ps: () => ['scan'] },
   'run-rename':         { script: RUNS, sh: a => ['rename', a[0] ?? '', a[1] ?? ''], ps: a => ['rename', a[0] ?? '', a[1] ?? ''] },
   'team-setup-check':   { script: SETUP, sh: () => ['--check'], ps: () => ['--check'] },

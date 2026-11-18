@@ -45,6 +45,7 @@ const teamViewA = atom({ plugin: 'ops-board', key: 'teamView' } as const, null)
 const narrowA = atom({ plugin: 'ops-board', key: 'narrow' } as const, false)
 const machineA = atom({ plugin: 'ops-board', key: 'machine' } as const, null)
 const usageA = atom({ plugin: 'ops-board', key: 'usage' } as const, null)
+const profilesA = atom({ plugin: 'ops-board', key: 'profiles' } as const, null as { text: string | null; busy: boolean; at?: number } | null)   // F176, as health.tsx
 const watchA = atom({ plugin: 'ops-board', key: 'watch' } as const, { level: 'green', reasons: [] })
 const notesA = atom({ plugin: 'ops-board', key: 'notes' } as const, [])
 const relayA = atom({ plugin: 'ops-board', key: 'relay' } as const, null)
@@ -690,6 +691,24 @@ export const register: Register = on => {
       ? `↻ Usage & health refreshed: 5h ${u?.five?.pct ?? '-'}% · 7d ${u?.seven?.pct ?? '-'}%`
       : '↻ Usage & health refreshed (usage unobservable)'
     $.ui.toast(toastMsg)
+    return { element: e.element }
+  })
+
+  // F176: p on Health - every profile and its model rows (ops --status --refresh: a blank
+  // logged-in profile read once, under usage-watch's lock and backoff). One in flight.
+  on('ui.press', { plugin: 'ops-board', element: 'key:health-profiles' }, async ($, e) => {
+    // the callback may run again on a version conflict; a busy left by a reload expires with the call
+    const now = await $.clock.now()
+    let started = false
+    await update($, profilesA, cur => {
+      started = !(cur?.busy && now - (cur.at ?? 0) < 310_000)
+      return started ? { text: cur?.text ?? null, busy: true, at: now } : cur
+    })
+    if (!started) { $.ui.toast('profiles: a read is already running'); return { element: e.element } }
+    const r = await runCall($, 'ops-status', [])
+    const ok = r.code === 0 && r.out.trim() !== ''
+    await update($, profilesA, cur => ({ text: ok ? r.out : (cur?.text ?? null), busy: false }))
+    $.ui.toast(ok ? '↻ profiles read' : `profiles not read: ${(r.err.trim() || `exit ${r.code}`).split(/\r?\n/)[0]}`)
     return { element: e.element }
   })
 
