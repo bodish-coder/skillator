@@ -723,7 +723,9 @@ function Do-AssignSession([string[]]$a) {
   if ($a.Count -ne 2) { Fail 'usage: assign-session <ID> <code>|-' }
   $id = Get-NormId $a[0]
   if ($a[1] -ceq '-') { return (Edit-Line $id @{ dropsession = $true; owncheck = $false; requireleadassign = $false; cmd = 'assign-session' }) }
-  $code = $a[1].TrimStart('@').ToLowerInvariant()
+  $code = $a[1]
+  if ($code.StartsWith('@')) { $code = $code.Substring(1) }   # one @ only, as sh's ${2#@}
+  $code = $code.ToLowerInvariant()
   if (-not (Test-OneLine $code) -or $code -cnotmatch '\A[a-z0-9_]+-[a-z0-9_-]+\z') { Fail "not a session code (cc-1ir0): $($a[1])" }
   return (Edit-Line $id @{ session = $code; samekey = 'session'; sameval = $code; owncheck = $false; requireleadassign = $false; cmd = 'assign-session' })
 }
@@ -2026,6 +2028,7 @@ function Invoke-Selftest {
     Eq 'assign-session same' (Run assign-session F70 'cc-2abc') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [session: cc-2abc] [tester: @neo] [by: @vidul] no change: F70 already has [session: cc-2abc]"
     if (-not (Refused assign-session F70 'cc 1')) { Write-Output 'FAIL: assign-session took a code with a blank'; $script:fail = 1 }
     if (-not (Refused assign-session F70 'nodash')) { Write-Output 'FAIL: assign-session took a code with no dash'; $script:fail = 1 }
+    if (-not (Refused assign-session F70 '@@cc-x')) { Write-Output 'FAIL: assign-session took a code with two @'; $script:fail = 1 }
     Eq 'assign-session clears' (Run assign-session F70 '-') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul]"
     Eq 'assign-session clear, none' (Run assign-session F70 '-') "- [ ] F70 $dash Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul] no change: F70 has no [session:]"
     Eq 'hand-over' (AsMe '@vidul' { Run team lead 'asha' }) 'lead: @asha'

@@ -1823,6 +1823,7 @@ selftest() {
   eq "assign-session same" "$(run assign-session F70 cc-2abc)" "- [ ] F70 $D Tag order [app: web] [decide: @asha] [owner: @vidul] [session: cc-2abc] [tester: @neo] [by: @vidul] no change: F70 already has [session: cc-2abc]"
   sh "$self" assign-session F70 'cc 1' > /dev/null 2>&1 && { echo "FAIL: assign-session took a code with a blank"; fail=1; }
   sh "$self" assign-session F70 nodash > /dev/null 2>&1 && { echo "FAIL: assign-session took a code with no dash"; fail=1; }
+  sh "$self" assign-session F70 @@cc-x > /dev/null 2>&1 && { echo "FAIL: assign-session took a code with two @"; fail=1; }
   eq "assign-session clears" "$(run assign-session F70 -)" "- [ ] F70 $D Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul]"
   eq "assign-session clear, none" "$(run assign-session F70 -)" "- [ ] F70 $D Tag order [app: web] [decide: @asha] [owner: @vidul] [tester: @neo] [by: @vidul] no change: F70 has no [session:]"
   eq "hand-over" "$(SKILLATOR_ME=@vidul sh "$self" team lead asha 2>&1)" "lead: @asha"
