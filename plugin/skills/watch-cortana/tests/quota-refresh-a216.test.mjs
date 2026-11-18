@@ -817,7 +817,7 @@ for (const port of ['ps1', 'sh']) {
     }
   })
 
-  // A236 fix round (1): a capped paid turn never outlives its lock - kill_tree spares a listed
+  // A236 fix round (1, 3): a capped paid turn never outlives its lock - kill_tree spares a listed
   // child only when its start is readable and strictly earlier than its parent's (provably an
   // orphan on a reused PID); no /proc (macOS) or an unreadable start kills it, as before A236.
   test(`${port}: A236 kill_tree spares only a child with a readable start earlier than its parent's`, { skip: port !== 'sh' || skip }, () => {
@@ -838,8 +838,8 @@ for (const port of ['ps1', 'sh']) {
         assert.equal(r.stdout.trim(), killed ? 'dead' : 'alive', `parent "${pt}" child "${ct}": ${r.stderr}`)
         const tk = existsSync(`${root}/tk`) ? readFileSync(`${root}/tk`, 'utf8').trim().split(/\r?\n/) : []
         if (tk.length) {
-          assert.match(tk[0], /^\/T \/F \/PID \d+$/, 'the root: its whole tree')
-          for (const l of tk.slice(1)) assert.match(l, /^\/F \/PID \d+$/, `a listed child: never /T (${l})`)
+          // (3) every killed process with a Windows PID gets taskkill /T: native node.exe under claude.cmd dies too.
+          for (const l of tk) assert.match(l, /^\/T \/F \/PID \d+$/, `taskkill /T on each killed process (${l})`)
           assert.equal(tk.length, killed ? 2 : 1)
         }
       } finally { rmSync(root, { recursive: true, force: true }) }
