@@ -1,6 +1,6 @@
 # RUN-0040 - A236 quota follow-ups
 plan: TICKETS.md
-started: 2026-11-18T11:33Z   updated: 2026-11-18T15:25Z
+started: 2026-11-18T11:33Z   updated: 2026-11-18T15:39Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-a236-quota-follow-ups
 branch: run/RUN-0040-a236-quota-follow-ups
 
@@ -10,8 +10,20 @@ branch: run/RUN-0040-a236-quota-follow-ups
 | 307 | A236 quota gate follow-ups | ~ | build:opus | 2026-11-18T13:23Z | - |
 | 308 | A240 assign tests under the ui.focus-less mock | ~ | build:opus | 2026-11-18T15:25Z | - |
 | 309 | A241 wizard answers follow-ups | ~ | build:opus | 2026-11-18T15:25Z | - |
+| 310 | B32 reproduce agy Health tab | ~ | build:opus | 2026-11-18T15:39Z | - |
 
 ## In flight
+### stage 310 (dispatched 15:39Z, own worktree RUN-0040-s310)
+prompt: |
+  grade: bounded · critical no · design - · build build=opus · verify orchestrator · ceremony full (relay run) · ui tron · mode single (ruled) · usage 7d 94%
+  
+  Load skillator:code-yoda first (restraint, full): the smallest diff that meets the ticket - no speculative abstraction, no new dependency, no refactor outside the ticket, no ceremony; run its review lens on your diff before /code-review and cut what it flags.
+  You are the REPRODUCE-ONLY agent for RUN-0040 stage 310, ticket B32, in the skillator repo (PRACTICE §7: reproduce, then root cause; NO fix this stage - another stage is editing ops/status.ts). Work ONLY in C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-s310. Do not edit product code; you may commit one failing test that pins the bug (tests only), never push, never edit TICKETS.md. Read the B32 line in TICKETS.md (main checkout C:/tools/Projects/skillator2) whole first.
+  Find out why the ops board's Health tab does not load fully when run in the Antigravity (agy) terminal: rows stay loading, it is cut off/misdrawn, and sections the Claude Code board shows (per-model quota table, ops-status rows) are missing. How agy launches it: see state.ts ~2345 (the skillator-ops plugin command), nodehost.ts ~257 (the non-node binary path for Antigravity) and the Antigravity pack (plugin/... antigravity pack.mjs). Run the standalone ops app the way agy does, with a temp HOME and a stub claude/agy first on PATH (NEVER a real claude/agy/muse call), capture the Health frame at 80 and 120 columns (the repo's tui capture method), and compare it to the Claude Code pane's Health. Tag every finding verified / inferred.
+  Low memory: one process at a time, timeout 300, stdin closed.
+  Report in under 15 lines: what each missing/loading row is waiting on and why (root cause per symptom, tagged), the frame captures' paths, the failing test's sha if any, and the files a fix would touch.
+  
+
 ### stage 309 (dispatched 15:25Z, own worktree RUN-0040-s309)
 prompt: |
   grade: bounded · critical no · design - · build build=opus · verify orchestrator review · ceremony full (relay run) · ui none · mode single (ruled) · usage 7d 93%
@@ -83,3 +95,4 @@ fix round (dispatched 13:23Z) prompt: |
 - 2026-11-18T11:34Z - Ruling: A236 item 4 (one shared gate for usage-watch.sh/.ps1/status.ts) stays on the ticket; this round fixes the bugs only - 7d at 90% - cost if wrong: the three copies stay hand-synced one more release. Ruling: mode single - every item touches the same usage-watch/status files.
 - 2026-11-18T13:23Z - stage 307 back 15a0481..7d078e2 (orchestrator re-run: status+reset 25/0). Review: spare-when-unsure kill rule lets a paid turn outlive its lock on macOS, ps1 without own StartTime, Git Bash grandchildren; reset keeps the lock but kills its reader; same-second KEEP; no-node fallback loses 95%; status unknown never ages. One fix round (critical). Ruling: unreadable start time = kill (pre-A236 behaviour) - the money rule beats the reused-PID risk - cost if wrong: a reused PID's tree killed in a rare race. selftest.ps1:186 'gate: weekly fired below 97' fails on released main too -> separate ticket.
 - 2026-11-18T15:25Z - /pending-sentinel parallel 3: skipped A227/A229/A230 (owner or machine, no code); A236 holds slot 1; slots 2-3 = A240 (308), A241 (309), file-disjoint, each in its own worktree off the run branch. Ruling: B31 and A242 wait for A236 (same watch-cortana/hook files); A238/A239/A243 fill slots as they free while 7d < 97% - cost if wrong: they wait for the weekly reset.
+- 2026-11-18T15:39Z - owner: start next. Ruling: B32 runs reproduce-only as stage 310 (4th agent) - its fix touches ops/status.ts, which A236 is editing; the fix is planned after A236 lands - cost if wrong: one extra dispatch.
