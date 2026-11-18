@@ -1,5 +1,5 @@
 {
-  "description": "skillator: F66 teams-uhura - unread Teams channel messages into the next turn as context, framed as data (a shell pre-check: node starts only when the repo has a Teams inbox); F92 - at session start, the team list and the ask who drives this session",
+  "description": "skillator: F66 teams-uhura - unread Teams channel messages into the next turn as context, framed as data (a shell pre-check: node starts only when the repo has a Teams inbox); F92 - at session start, the team list and the ask who drives this session; F181 - self-update: when the last check is 24 h old, a detached check-and-update of skillator, its result one line on the next prompt (off: SKILLATOR_AUTO_UPDATE=0)",
   "hooks": {
     "SessionStart": [
       {
@@ -11,6 +11,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/self-update.sh\" due-run",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -19,6 +28,11 @@
           {
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/team-hook.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/self-update.sh\" due-run",
             "timeout": 5
           }
         ]
