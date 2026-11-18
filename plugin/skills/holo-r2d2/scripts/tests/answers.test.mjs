@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, utimesSync, rmSync
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { answerSaver, wizardPage, pageSet, setFromRun, nextWizardSet, SET_SCHEMA, ANSWER_SCHEMA } from "../wizard.mjs";
+import { answerSaver, wizardPage, pageSet, setFromRun, nextWizardSet, reconcile, sameSet, runKey, answersToCommands, SET_SCHEMA, ANSWER_SCHEMA } from "../wizard.mjs";
 import { parseRun, nonceFile } from "../holo.mjs";
 import { findAnswers, downloadDirs, report } from "../answers.mjs";
 
@@ -800,6 +800,75 @@ test("A233-8: only a verified FINAL keeps a settled run listed", async () => {
   put(s.dl, "RUN-1-decisions-FINAL (1).json", { ...answers(), set: "RUN-1", nonce: "c".repeat(32) }, 0);
   const r = await findAnswers(s.opts);
   assert.ok(!r.sets.includes("RUN-1"), report(r));
+});
+
+// ------------------------------------------------------------ A237 ----
+test("A237-1: a settled run with answer times in its run file is judged by finalizedAt, not file times", async () => {
+  const s = sandbox();
+  settledRun(s);
+  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace("answer: -", "answer: JSON\nanswered: 2026-11-17T11:00Z"));
+  at(RUN1(s), "2026-11-17T13:00:00Z"); // relay-morpheus rewrote run.md later
+  const p = at(put(s.holo, "RUN-1-decisions-FINAL.json", { ...answers({ finalizedAt: "2026-11-17T12:00:00Z" }), set: "RUN-1" }, 0), "2026-11-17T12:00:00Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "a FINAL finalized after the last answer stays listed though the run file is newer");
+  writeFileSync(p, JSON.stringify({ ...answers(), set: "RUN-1" })); // finalized 10:00, before the 11:00 answer
+  at(p, "2026-11-17T14:00:00Z"); // a copy or sync made the file look new
+  const r = await findAnswers(s.opts);
+  assert.ok(!r.sets.includes("RUN-1"), report(r));
+  assert.ok(r.ignored.some((x) => x.path === p), report(r));
+});
+
+test("A237-5: one runKey - RUN-1, RUN-0001 and run-1 are one set everywhere", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set);
+  writeFileSync(join(s.holo, "RUN-0001.wizard.html"), readFileSync(join(s.holo, "RUN-1.wizard.html"), "utf8"));
+  put(s.dl, "RUN-0001-decisions-FINAL.json", { ...ans, set: "RUN-0001" }, 0);
+  const r = await findAnswers(s.opts), text = report(r);
+  assert.deepEqual(r.sets.filter((x) => x !== "review-x"), ["RUN-1"], text);
+  assert.match(text, / answer Q1 /);
+  const c = cli(s, "RUN-1", "--next-wizard", put(s.base, "a.json", { ...ans, set: "RUN-0001", answers: [ans.answers[0], { ...ans.answers[1], choice: { id: "defer" }, clarification: "why?" }] }));
+  assert.equal(c.status, 0, c.stderr);
+});
+
+test("A237-5: an unreadable lowercase page keys by runKey", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set);
+  rmSync(join(s.holo, "RUN-1.wizard.html"));
+  writeFileSync(join(s.holo, "run-1.wizard.html"), "<!doctype html>");
+  put(s.holo, "RUN-1-decisions-FINAL.json", { ...ans, nonce: undefined }, 0);
+  assert.match(report(await findAnswers(s.opts)), / answer Q1 /);
+});
+
+test("A237-6: an unverified or draft file on a settled run says so", async () => {
+  const s = sandbox();
+  settledRun(s);
+  const u = put(s.dl, "RUN-1-decisions-FINAL.json", { ...answers(), set: "RUN-1" }, 0);
+  const d = put(s.holo, "RUN-1-decisions-draft.json", { ...answers(DRAFT), set: "RUN-1" }, 0);
+  const r = await findAnswers(s.opts), why = (p) => r.ignored.find((x) => x.path === p)?.why;
+  assert.match(why(u), /unverified/, report(r));
+  assert.match(why(d), /draft/, report(r));
+});
+
+test("A237-7: sameSet and runKey - by number, any case; reconcile drops a foreign page set", () => {
+  assert.equal(runKey("RUN-0001"), "RUN-1");
+  assert.equal(runKey("run-5"), "RUN-5");
+  assert.equal(runKey("F 12"), "F 12");
+  assert.ok(sameSet("RUN-1", "RUN-0001") && sameSet("run-1", "RUN-1"));
+  assert.ok(!sameSet("RUN-1", "RUN-10") && !sameSet("F12", "f12"));
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8"), run = parseRun(md);
+  const r = reconcile({ ...SET, id: "RUN-10" }, run, "run-1.md");
+  assert.equal(r.set.id, "RUN-1");
+  assert.deepEqual(r.set.decisions.map((d) => d.id), ["Q1", "Q2"]);
+  assert.equal(reconcile({ ...SET, id: "RUN-0001" }, run, "run-1.md").set.title, SET.title, "the same run, spelled otherwise, keeps the page's set");
+});
+
+test("A237-10: a lowercase set id never crashes report - one case rule", async () => {
+  const s = sandbox();
+  const set = run1(s), ans = run1Answers(s, set), A = "a".repeat(32);
+  rmSync(join(s.holo, "RUN-1.wizard.html"));
+  writeFileSync(join(s.holo, "run-1.wizard.html"), wizardPage({ ...set, id: "run-1" }, A));
+  put(s.dl, "run-1-decisions-FINAL.json", { ...ans, set: "run-1", nonce: A }, 0);
+  assert.equal(answersToCommands({ ...answers(), set: "run-1" }).commands[0], "sh relay-morpheus.sh 1 answer Q1 'SQLite'");
+  assert.match(report(await findAnswers(s.opts)), / answer Q1 /);
 });
 
 // B30: the plugin cache is reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins).

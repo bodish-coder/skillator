@@ -14,7 +14,7 @@ import { join, resolve, dirname, relative } from "node:path";
 import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { nextWizardSet, reconcile, answersToCommands, isFinalized, fileStem, pageFile, pageSet, without, CTRL, clean, q } from "./wizard.mjs";
+import { nextWizardSet, reconcile, answersToCommands, isFinalized, fileStem, pageFile, pageSet, without, runKey, CTRL, clean, q } from "./wizard.mjs";
 import { parseRun, findRoot, runFiles, runFilesFor, nonceFile } from "./holo.mjs";
 
 const MAX_FILE = 1048576;
@@ -100,14 +100,15 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
 // embeds (a --next-wizard page is round 2+). A RUN set's run file is found by that set's id (by the page's
 // file name only when the page is unreadable - the set is then rebuilt from the run). openNow: a RUN
 // set's decisions still open or asked in the run file now - only those may get a command; gone: the ones settled there.
-// done: a fully settled RUN set, with its run file's time.
+// done: a fully settled RUN set - its newest answered/ruled time, else (none recorded) its run file's mtime.
+// Every map is keyed by runKey (RUN-1, RUN-0001 and run-1 are one set).
 async function openSets(root, holo) {
   const sets = new Map(), openNow = new Map(), gone = new Map(), done = new Map();
   const runs = await runFiles(root), pages = [], seen = new Set(), parsed = new Map();
   for (const n of tryDir(holo).filter((n) => n.endsWith(".wizard.html"))) {
     try {
-      const p = join(holo, n), set = pageSet(await readFile(p, "utf8")), id = String(set?.id ?? n.slice(0, -".wizard.html".length));
-      pages.push({ set, id, own: n === pageFile(id), mtime: (await stat(p)).mtimeMs });
+      const p = join(holo, n), stem = n.slice(0, -".wizard.html".length), set = pageSet(await readFile(p, "utf8")), id = runKey(set?.id ?? stem);
+      pages.push({ set, id, own: pageFile(runKey(stem)) === pageFile(id), mtime: (await stat(p)).mtimeMs });
     } catch { /* not a readable wizard page */ }
   }
   // Several pages carry one set id (a leftover copy): the set's own page, else the newest.
@@ -117,18 +118,17 @@ async function openSets(root, holo) {
     // Only a page that yields a set claims the id: an unreadable own page never blocks a readable copy.
     if (set) seen.add(id);
     try {
-      const m = /^RUN-(\d+)$/i.exec(id);
-      const path = m && runFilesFor(m[1], runs)[0];
+      const path = runFilesFor(id, runs)?.[0];
       if (path) {
         if (!parsed.has(path)) parsed.set(path, parseRun(await readFile(path, "utf8")));
-        const r = reconcile(set, parsed.get(path), relative(root, path).replace(/\\/g, "/")), live = r.live;
-        // Keyed by the page's id, never the run heading's spelling of it (RUN-1 vs RUN-0001).
-        set = { ...r.set, id };
-        openNow.set(id, new Set(live.decisions.map((d) => d.id)));
+        const run = parsed.get(path), r = reconcile(set, run, relative(root, path).replace(/\\/g, "/"));
+        set = r.set;
+        openNow.set(id, new Set(r.live.decisions.map((d) => d.id)));
         gone.set(id, r.gone);
-        if (!live.decisions.length) done.set(id, (await stat(path)).mtimeMs);
+        const answered = Math.max(0, ...run.qs.map((x) => Date.parse(x.f.answered || x.f.ruled) || 0));
+        if (!r.live.decisions.length) done.set(id, answered ? { answered } : { mtime: (await stat(path)).mtimeMs });
       }
-      if (set && set.decisions && (path || set.decisions.length)) sets.set(String(set.id), set);
+      if (set && set.decisions && (path || set.decisions.length)) sets.set(id, set);
     } catch { /* not a readable wizard page */ }
   }
   return { sets, openNow, gone, done };
@@ -150,33 +150,43 @@ export async function findAnswers({ root = findRoot(process.cwd()), ...where } =
       if (!m) continue;
       f.found++;
       const path = join(f.dir, n);
-      const ids = byStem.get(m[1]);
+      const ids = byStem.get(fileStem(runKey(m[1])));
       if (!ids) { r.ignored.push({ path, why: `"${m[1]}" is not an open wizard set` }); continue; }
       try {
         const s = await stat(path);
         if (s.size > MAX_FILE) throw new Error("larger than 1 MB");
         const ans = JSON.parse(await readFile(path, "utf8"));
         // Set ids can share a file stem ("F 12", "F_12"): the one the file names.
-        const id = ids.find((x) => x === String(ans?.set));
+        const id = ids.find((x) => x === runKey(ans?.set));
         if (id === undefined) throw new Error(`set ${show(ans?.set)} is not an open wizard set`);
         cands.push({ path, folder: i, mtime: s.mtimeMs, id, ans, openNow: openNow.get(id) });
       } catch (e) { r.refused.push({ path, why: e.message }); }
     }
   }
-  // Verified: the export carries this page's nonce (the sidecar's when the page has none), or
+  // Verified: the export carries this page's nonce (else the sidecar's, named by the set's own id), or
   // (an older export without one) it sits in the page folder, which is the owner's repo.
+  // Checked once, on demand: only files the settled check reaches or that stay are checked.
+  const verify = (c) => {
+    const pageNonce = sets.get(c.id).nonce || (tryRead(nonceFile(root, sets.get(c.id).id)) || "").trim();
+    return (c.verified ??= c.ans && c.ans.nonce ? !!pageNonce && c.ans.nonce === pageNonce : searched[c.folder].why === "page folder");
+  };
+  const when = (c) => Date.parse(c.ans && c.ans.finalizedAt) || 0;
+  // A fully settled run stays open only while a verified FINAL for it was finalized after the run's last
+  // answer (no answer time in the run file: while the FINAL file is newer than the run file).
+  const newer = (c, d) => (d.answered ? when(c) > d.answered : c.mtime > d.mtime);
+  for (const [id, d] of done) if (!cands.some((c) => c.id === id && isFinalized(c.ans) && newer(c, d) && verify(c))) sets.delete(id);
   for (const c of cands) {
-    const pageNonce = sets.get(c.id).nonce || (tryRead(nonceFile(root, c.id)) || "").trim();
-    c.verified = c.ans && c.ans.nonce ? !!pageNonce && c.ans.nonce === pageNonce : searched[c.folder].why === "page folder";
+    if (sets.has(c.id)) continue;
+    const d = done.get(c.id);
+    const why = !isFinalized(c.ans) ? "this file is a draft" : newer(c, d) ? "this file is unverified"
+      : d.answered ? "its run file answered after this file was finalized" : "its run file is newer than this file";
+    r.ignored.push({ path: c.path, why: `"${c.id}" is settled - ${why}` });
   }
-  // A fully settled run stays open only while a verified FINAL for it is newer than its run file.
-  for (const [id, t] of done) if (!cands.some((c) => c.id === id && c.verified && isFinalized(c.ans) && c.mtime > t)) sets.delete(id);
-  for (const c of cands) if (!sets.has(c.id)) r.ignored.push({ path: c.path, why: `"${c.id}" is settled - its run file is newer than this file` });
   cands = cands.filter((c) => sets.has(c.id));
+  for (const c of cands) verify(c);
   r.sets = [...sets.keys()];
   // FINAL before draft, verified before unverified (never fail open), then the
   // higher round, newest finalizedAt, newest file; folder order only breaks a tie.
-  const when = (c) => Date.parse(c.ans && c.ans.finalizedAt) || 0;
   const fresher = (a, b) => (Number(b.ans?.round) || 1) - (Number(a.ans?.round) || 1) || when(b) - when(a) || b.mtime - a.mtime;
   cands.sort((a, b) => isFinalized(b.ans) - isFinalized(a.ans) || b.verified - a.verified || fresher(a, b) || a.folder - b.folder);
   for (const c of cands) {
@@ -205,16 +215,16 @@ export function report(r) {
     const a = p.ans;
     // Only decisions still open or asked in the run file now: a FINAL checked twice never applies twice.
     const live = (x) => !p.openNow || p.openNow.has(String(x?.id));
-    const kept = (a.answers || []).filter(live), skipped = (a.answers || []).length - kept.length;
+    const kept = (a.answers || []).filter(live), skipped = (a.answers || []).filter((x) => !live(x));
     // To apply: only answers that print a command - none from an unverified pick.
-    const c = p.openNow && answersToCommands({ ...a, answers: kept }), n = c ? (p.verified ? c.commands.length : 0) : kept.length;
-    L.push("", `picked: ${p.path}`, `  set ${clean(p.id)}, round ${Number(a.round) || 1}, FINAL by ${show(a.owner)} at ${clean(a.finalizedAt, 40)}, ${c ? `${n} to apply, ${skipped} already settled` : `${n} decision${n === 1 ? "" : "s"}`}`);
+    const c = p.verified && p.openNow ? answersToCommands({ ...a, answers: kept }) : null, n = kept.length;
+    L.push("", `picked: ${p.path}`, `  set ${clean(p.id)}, round ${Number(a.round) || 1}, FINAL by ${show(a.owner)} at ${clean(a.finalizedAt, 40)}, ${p.openNow ? `${c ? c.commands.length : 0} to apply, ${skipped.length} already settled` : `${n} decision${n === 1 ? "" : "s"}`}`);
     const run = /^RUN-\d+$/i.test(p.id);
     if (!p.verified) { L.push("  unverified - confirm with the owner before applying (no page nonce match); no commands printed"); continue; }
     if (run && !p.openNow) { L.push(`  run file not found for ${clean(p.id)} - nothing applied`); continue; }
     if (run) {
       L.push("# POSIX sh lines (Git Bash on Windows) - read them, then run them yourself", ...c.commands, ...c.review.map((x) => `# review: ${x}`), ...c.open.map((x) => `# still open: ${x}`),
-        ...(a.answers || []).filter((x) => !live(x)).map((x) => `# ${clean(x?.id, 40)}: already settled - skipped`));
+        ...skipped.map((x) => `# ${clean(x?.id, 40)}: already settled - skipped`));
     } else {
       for (const x of a.answers || []) {
         const cid = String(x?.choice?.id || "");
