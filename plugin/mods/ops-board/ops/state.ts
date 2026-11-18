@@ -20,7 +20,7 @@ export { parseFollowupOut, startRunCmd }
 import type { RunsSection } from '../hooks/lib/runlines'
 import { moveSel, parseInbox, selectedOf } from '../hooks/lib/inbox'
 import { armToast, parseArm } from '../hooks/lib/teamsarm'
-import { freshSetup, parseCfgView, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
+import { CLEARED_LINE, freshSetup, parseCfgView, resultLine, SAVED_LINE, setupError, setupJson, SETUP_FIELDS, tokenShown, urlShown } from '../hooks/lib/teamsconfig'
 import type { SetupField, SetupValues } from '../hooks/lib/teamsconfig'
 import { enterRunEffect, RUN_INITIAL, runKey } from './runtab'
 import type { RunState } from './runtab'
@@ -206,6 +206,7 @@ export type State = {
   messages: Msg[]; msgRead: string | null; msgSelected: string | null; msgExpanded: string | null
   teamsCfg: TeamsCfgView | null
   teamsArm: ArmView | null; armBusy: boolean   // F177: what setup --status last said; an arm / disarm in flight
+  ackAfter: string | null                      // A235: the URL y copied while an arm was in flight
   profiles: string | null; profilesBusy: boolean  // F176: the last `ops --status --refresh` table (p on Health); one in flight
   setup: Setup | null; setupField: SetupField
   help: HelpState | null                       // F127: Help & Skills guide viewer
@@ -246,7 +247,7 @@ export const initial = (cols: number, rows: number, now: number): State => ({
   runs: [], runsSelected: null, runsExpanded: null, runsOpen: ['runs', 'workflows'], runsRead: false, runMode: 'parallel', engage: null, startRun: null,
   dialog: null, dialogIndex: 0, dialogField: 'who', decide: null, person: null, personField: 'handle', teamSelected: null, teamConfirm: null, reconcile: null, toast: null, notes: [],
   cols, rows, now, quit: false, repo: null, decidedLine: null, holdOutcome: null, lockSig: '',
-  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, teamsArm: null, armBusy: false, profiles: null, profilesBusy: false, setup: null, setupField: 'token',
+  messages: [], msgRead: null, msgSelected: null, msgExpanded: null, teamsCfg: null, teamsArm: null, armBusy: false, ackAfter: null, profiles: null, profilesBusy: false, setup: null, setupField: 'token',
   help: null,
   explorer: EX0,
   ...RUN_INITIAL,
@@ -1300,9 +1301,14 @@ function saveSetup(s: State): Step {
   const bad = setupError(v, s.teamsCfg)
   if (bad) return { state: { ...s, setup: { ...v, result: bad } }, effects: [] }
   const then: Then = r => x => {
-    if (r.code !== 0) return x.setup ? { ...x, setup: { ...x.setup, result: teamWhy(r, 'teams-uhura') } } : toast(x, teamWhy(r, 'teams-uhura'))
-    const said = r.out.trim().split(/\r?\n/)[0] ?? ''
-    return { state: { ...x, setup: null, toast: [`✓ Teams settings saved${said ? ' - ' + said : ''}`, ran(r.argv)].join('\n') }, effects: [showCfg(false)] }
+    // B29 / A235: only teams-uhura's 'saved: <path>' line is a save; a refusal is a toast and stays in the form
+    const said = resultLine(r.out, SAVED_LINE, 'saved')
+    const failed = r.code !== 0 ? teamWhy(r, 'teams-uhura') : said.bad
+    if (failed) {
+      const y = toast(x, [`✗ Teams settings not saved: ${failed}`, ran(r.argv)].join('\n'))
+      return y.setup ? { ...y, setup: { ...y.setup, result: failed } } : y
+    }
+    return { state: { ...x, setup: null, toast: [`✓ Teams settings saved - ${said.line}`, ran(r.argv)].join('\n') }, effects: [showCfg(false)] }
   }
   return { state: { ...s, setup: { ...v, result: null } }, effects: [run('team-config-save', [], then, setupJson(v))] }
 }
@@ -1476,16 +1482,21 @@ function markRead(s: State): Step {
 // --- F177: connect Teams. c runs setup --arm, d setup --disarm, y copies the URL. Only
 // these keys act; entering the tab runs --status (a read). ---
 type ArmCall = 'team-arm' | 'team-disarm' | 'team-arm-status' | 'team-url-ack'
-const armThen = (call: ArmCall): Then => r => x => {
+const armThen = (call: ArmCall, args: string[] = []): Then => r => x => {
   const quiet = call === 'team-arm-status' || call === 'team-url-ack'
   if (quiet && x.armBusy) return x                 // an arm or disarm in flight is the newer read
-  const y: State = quiet ? x : { ...x, armBusy: false }
+  // A235: the URL y copied under an arm is acked once it lands
+  const effects = !quiet && x.ackAfter ? [ackRun(x.ackAfter)] : []
+  const y: State = quiet ? x : { ...x, armBusy: false, ackAfter: null }
+  // a toast never carries the URL: the ack's argument is replaced by value
+  const said = (t: string) => args.filter(Boolean).reduce((m, a) => m.split(a).join('<url>'), [t, ran(r.argv)].join('\n'))
   const v = parseArm(r.out)
-  if (!v) return quiet ? y : toast(y, `✗ Teams: ${teamWhy(r, 'teams-uhura setup')}`)
-  const said = armToast(v)
-  return said ? toast({ ...y, teamsArm: v }, [said, ran(r.argv)].join('\n')) : { ...y, teamsArm: v }
+  if (!v) return { state: quiet ? y : toast(y, said(`✗ Teams: ${r.code === 0 ? 'unexpected output from teams-uhura' : teamWhy(r, 'teams-uhura setup')}`)), effects }
+  const t = armToast(v)
+  return { state: t ? toast({ ...y, teamsArm: v }, said(t)) : { ...y, teamsArm: v }, effects }
 }
 const armStatus = (): Effect => run('team-arm-status', [], armThen('team-arm-status'))
+const ackRun = (url: string): Effect => run('team-url-ack', [url], armThen('team-url-ack', [url]))
 
 function armRun(s: State, call: 'team-arm' | 'team-disarm'): Step {
   if (s.armBusy) return { state: toast(s, 'Teams: still working - one moment'), effects: [] }
@@ -1497,8 +1508,9 @@ function copyUrl(s: State): Step {
   if (!url) return { state: toast(s, 'no tunnel URL yet - c connects'), effects: [] }
   const then: Then = r => x => r.code !== 0
     ? toast(x, `✗ not copied: ${r.err.trim() || 'clipboard unavailable'} - read it on the Messages tab`)
-    : { state: toast(x, '✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL'),
-        effects: x.teamsArm?.urlChanged ? [run('team-url-ack', [], armThen('team-url-ack'))] : [] }
+    // A235: the ack carries the URL copied; under a connect or disconnect in flight it waits for it
+    : { state: toast(x.teamsArm?.urlChanged && x.armBusy ? { ...x, ackAfter: url } : x, '✓ tunnel URL copied - paste it as the Teams outgoing webhook callback URL'),
+        effects: x.teamsArm?.urlChanged && !x.armBusy ? [ackRun(url)] : [] }
   return { state: s, effects: [{ kind: 'copy', text: url, then }] }
 }
 

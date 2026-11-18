@@ -218,3 +218,28 @@ test('width matrix 80 / 110 / 140: the Messages tab with Teams armed and a chang
   const narrow = frame({ ...onTab.state, cols: 40, rows: 24, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }, P)
   for (const l of narrow) assert.ok(cells(l) <= 40, `40: ${l}`)
 })
+
+test('A235 1: y sends --ack with the URL copied; under c in flight it waits, then runs once the arm lands', () => {
+  const changed: State = { ...onTab.state, teamsArm: parseArm(KV({ ...ARMED, url: U2, url_changed: '1' })) }
+  const copied = (s: State) => {
+    const y = reduce(s, { name: 'y' })
+    const copy = y.effects.find((e): e is Extract<Effect, { kind: 'copy' }> => e.kind === 'copy')!
+    return afterRun({ then: copy.then! }, { code: 0, out: '', err: '', argv: [] }, y.state, NOW)
+  }
+  assert.deepEqual(runs(copied(changed).effects).map(e => [e.call, e.args]), [['team-url-ack', [U2]]])
+  const c = reduce(changed, { name: 'c' })
+  const during = copied(c.state)
+  assert.deepEqual(runs(during.effects), [])                       // not under the arm
+  const armed = afterRun(runs(c.effects)[0]!, ok(KV({ ...ARMED, url: U2, url_changed: '1' })), during.state, NOW)
+  assert.deepEqual(runs(armed.effects).map(e => [e.call, e.args]), [['team-url-ack', [U2]]])
+  // a failed ack's toast never carries the URL
+  const failed = afterRun(runs(armed.effects)[0]!, { ...ok(KV({ ...ARMED, result: 'failed', why: 'no tunnel URL to remember', url: '' })), argv: ['/bin/sh', 'setup.sh', '--ack', U2] }, armed.state, NOW).state
+  assert.match(failed.toast ?? '', /^✗ Teams: no tunnel URL to remember\nran: .* --ack <url>$/)
+})
+
+test('A235 1: a reply parseArm cannot read toasts unexpected output from teams-uhura', () => {
+  const c = reduce(onTab.state, { name: 'c' })
+  const done = afterRun(runs(c.effects)[0]!, ok('result=armed\nresult=armed\n'), c.state, NOW).state
+  assert.match(done.toast ?? '', /^✗ Teams: unexpected output from teams-uhura/)
+  assert.doesNotMatch(done.toast ?? '', /result=armed/)
+})
