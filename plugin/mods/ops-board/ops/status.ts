@@ -294,7 +294,8 @@ function loggedIn(p: Profile, darwin: boolean): boolean {
 }
 
 const FRESH_MS = 3 * 3600 * 1000
-const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? `${Math.round(v)}%` : '-')
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const num = (v: unknown) => (isNum(v) ? `${Math.round(v)}%` : '-')
 // A236: one stat and one read of the profile cache, shared by everything a row needs from it.
 type Cache = { c: Record<string, any> | null; mtime: number | undefined }
 const loadCache = (p: Profile): Cache => {
@@ -383,20 +384,23 @@ export async function profileRows(p: Profile, read: Reader, base: Env, darwin: b
   if (refresh && FORCED.has(p.cli) && loggedIn(p, darwin)) {
     cache = loadCache(p)
     const { c } = cache, now = Date.now() / 1000
-    // A reading holds for 7 days from its `at` (a top-level one: else the file's mtime); after,
-    // a reset is plausible - aged, so the forced read goes ahead (usage-watch's gate decides a turn).
-    const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+    // A reading holds for 7 days from its `at` (one that is not a number: the file's mtime);
+    // after, a reset is plausible - aged, numeric or not, so the forced read goes ahead
+    // (usage-watch's gate decides a turn).
     const bad = (v: unknown) => v !== undefined && !isNum(v)
-    const fresh = (at: unknown) => isNum(at) && now - at < 7 * 86400
+    const fresh = (at: unknown) => now - (isNum(at) ? at : (cache!.mtime ?? NaN) / 1000) < 7 * 86400
     const top = c?.['7d'] ?? c?.weekly, l = c?.last, lv = l?.['7d'] ?? l?.weekly
-    unknown = bad(top) || bad(c?.at) || bad(lv) || bad(l?.at)
-    const last = isNum(top) && fresh(c?.at ?? (cache.mtime ?? NaN) / 1000) ? top : fresh(l?.at) ? lv : undefined
-    if (unknown) { /* held */ } else if (isNum(last) && last >= 90) held = last
-    else if (Date.now() + REFRESH_MS > deadline) late = true
-    else { await read({ ...readerEnv(p, base), SKILLATOR_QUOTA_REFRESH_WAIT: '1' }, REFRESH_MS); cache = undefined }   // rewritten: reload
+    const topFresh = fresh(c?.at), lastFresh = l?.at !== undefined && fresh(l.at)   // a last with no at never holds
+    unknown = topFresh && (bad(top) || bad(c?.at)) || lastFresh && (bad(lv) || bad(l.at))
+    const last = topFresh && isNum(top) ? top : lastFresh ? lv : undefined
+    if (!unknown) {
+      if (isNum(last) && last >= 90) held = last
+      else if (Date.now() + REFRESH_MS > deadline) late = true
+      else await read({ ...readerEnv(p, base), SKILLATOR_QUOTA_REFRESH_WAIT: '1' }, REFRESH_MS)
+    }
   }
   let main = await row(p, read, base, darwin)
-  cache ??= loadCache(p)
+  cache = loadCache(p)   // after row() and any forced read: via and models as they are now
   if (unknown && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: last 7d unknown']
   else if (held !== null && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', `not refreshed: last 7d ${Math.round(held)}% >= 90%`]
   else if (late && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: out of time - press p again']

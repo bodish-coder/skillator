@@ -394,6 +394,40 @@ test('A236: a non-number 7d or at holds the forced read as unknown', async () =>
   for (const r of out) assert.equal(r[3], 'not refreshed: last 7d unknown', r[0])
 })
 
+// A236 fix round (7): a non-number 7d or at older than the 7-day age (its at, else the file
+// mtime) is aged out like a numeric one - the forced read runs.
+test('A236: a non-number 7d or at older than 7 days is aged out and the forced read runs', async () => {
+  const h = home(), old = Math.floor(Date.now() / 1000) - 8 * 86400
+  const put = (name: string, c: unknown) => {
+    const f = join(dir(h, `.claude-${name}`, '.credentials.json'), 'quota-cache.json')
+    writeFileSync(f, JSON.stringify(c)); utimesSync(f, old, old)
+  }
+  put('s7d', { src: 'claude-code', '7d': '95' })
+  put('sat', { src: 'claude-code', '7d': 95, at: 'x' })
+  put('slast', { src: 'claude-code', note: 'x', failures: 1, backoff_secs: 60, last: { '7d': '95', at: old } })
+  put('slastat', { src: 'claude-code', note: 'x', failures: 1, backoff_secs: 60, last: { '7d': 95, at: 'x' } })
+  const waits: string[] = []
+  const read: Reader = async (e, ms) => { if (e.SKILLATOR_QUOTA_REFRESH_WAIT === '1') waits.push(e.SKILLATOR_PROFILE_DIR!); return NONE(e, ms) }
+  for (const p of discover(h)) await profileRows(p, read, {}, false, true)
+  assert.deepEqual(waits.sort(), ['s7d', 'sat', 'slast', 'slastat'].map(n => `${h}/.claude-${n}`).sort())
+})
+
+// A236 fix round (7): with the forced read held, the cache is re-read after row() - a level read
+// that rewrote it shows its via and model rows, not the ones from before.
+test('A236: a held row re-reads the cache after its level read', async () => {
+  const h = home()
+  const f = join(dir(h, '.claude-heldfresh', '.credentials.json'), 'quota-cache.json')
+  writeFileSync(f, JSON.stringify({ src: 'claude-code', '7d': 95, models: [{ name: 'Opus', '7d': 3 }] }))
+  const p = discover(h)[0]!
+  const read: Reader = async (e, ms) => {
+    assert.notEqual(e.SKILLATOR_QUOTA_REFRESH_WAIT, '1', 'held: no forced read')
+    writeFileSync(f, JSON.stringify({ src: 'claude-code', '5h': 23, '7d': 95, via: 'turn', models: [{ name: 'Sonnet', '7d': 4 }] }))
+    return said('src=claude-code 5h=23.0 7d=95.0 ctx=- max=95.0\n')(e, ms)
+  }
+  const rows = await profileRows(p, read, {}, false, true)
+  assert.deepEqual(rows, [['claude-heldfresh', '23%', '95%', 'via one turn'], ['  Sonnet', '-', '4%', '']])
+})
+
 // A236 (9): one stat and one read of quota-cache.json per row (the main row's via note and
 // its model rows share them).
 test('A236: a row reads quota-cache.json once', async () => {
