@@ -32,6 +32,7 @@ export function parseArm(out: string): ArmView | null {
     port: Number.isInteger(port) && port > 0 && port < 65536 ? port : 3978,
     url, urlChanged: url !== null && kv.url_changed === '1',
     expires: kv.expires ? kv.expires.slice(0, 40) : null,
+    note: kv.note ? kv.note.slice(0, 80) : null,
   }
 }
 
@@ -74,6 +75,7 @@ export function armLines(v: ArmView | null, now: number, cols: number): Line[] {
       sep,
       v.form ? { text: 'form saved', dim: true } : { text: 'form: no token', color: 'warning' },
       ...(exp ? [sep, { text: exp, color: soon ? 'warning' as const : undefined, dim: !soon }] : []),
+      ...(v.note ? [sep, { text: v.note, dim: true }] : []),
     ],
   }]
   if (v.url) out.push({ key: 'arm:url', segs: [{ text: '  ' }, { text: v.url, color: 'suggestion' }, { text: '  y copies', dim: true }] })

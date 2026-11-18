@@ -25,7 +25,7 @@ const onTab = reduce(onInbox(initial(80, 24, NOW), '', null), { name: '4' })
 test('parseArm: the twelve keys; a URL that is not a devtunnels.ms https URL is dropped; no result = null', () => {
   const v = parseArm(KV(ARMED))!
   assert.deepEqual(v, { result: 'armed', why: '', devtunnel: true, login: true, form: true, tunnel: true, hosted: true, listener: true,
-    port: 3978, url: U1, urlChanged: false, expires: '2026-12-17T00:00:00Z' })
+    port: 3978, url: U1, urlChanged: false, expires: '2026-12-17T00:00:00Z', note: null })
   assert.equal(parseArm('listener: up on 127.0.0.1:3978\n'), null)
   assert.equal(parseArm(KV({ result: 'bogus' })), null)
   for (const bad of ['http://ab12cd34-3978.euw.devtunnels.ms', 'https://evil.example/x', 'https://ab12cd34-3978.euw.devtunnels.ms.evil.example', U1 + '/\x1b[2J'])
@@ -242,6 +242,18 @@ test('A235 1: a reply parseArm cannot read toasts unexpected output from teams-u
   const done = afterRun(runs(c.effects)[0]!, ok('result=armed\nresult=armed\n'), c.state, NOW).state
   assert.match(done.toast ?? '', /^✗ Teams: unexpected output from teams-uhura/)
   assert.doesNotMatch(done.toast ?? '', /result=armed/)
+})
+
+test('A235 5: a devtunnel the board cannot inspect - a dim note on the arm line, never a failure', () => {
+  const NOTE = 'a devtunnel this board cannot inspect is running'
+  const v = parseArm(KV({ ...ARMED, note: NOTE }))!
+  assert.equal(v.note, NOTE)
+  assert.equal(v.result, 'armed')
+  const arm = armLines(v, NOW, 140)[0]!
+  assert.deepEqual(arm.segs.at(-1), { text: NOTE, dim: true })
+  assert.equal(lines(v, 140)[0]![1], 'Teams  ● tunnel hosted · ● listener up :3978 · form saved · expires in 30d · ' + NOTE)
+  assert.equal(parseArm(KV({ note: 'x\x1b[2J' }))!.note, null)
+  assert.equal(armToast(v), '✓ Teams connected - tunnel hosted, listener up on 127.0.0.1:3978')
 })
 
 test('A235 3: no deferred ack after a disarm; an ack in flight keeps its view when c is pressed after', () => {

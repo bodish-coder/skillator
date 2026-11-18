@@ -113,7 +113,7 @@ table() {
 }
 
 # --- F177: the ops board's keys. --status reads; --arm, --disarm and --ack act, each only
-# on the owner's key press on the Messages tab. Output: twelve key=value lines.
+# on the owner's key press on the Messages tab. Output: thirteen key=value lines.
 state_dir() { printf '%s' "${SKILLATOR_TEAMS_STATE:-$HOME/.skillator/teams}"; }
 seen_url() { [ -f "$(state_dir)/tunnel-url" ] && tr -d '\r\n' < "$(state_dir)/tunnel-url"; }
 save_url() { mkdir -p "$(state_dir)" && (umask 077; printf '%s\n' "$1" > "$(state_dir)/tunnel-url"); }
@@ -128,9 +128,10 @@ now() { date +%s; }
 late() { [ "$(now)" -lt "$_dl" ] && return 1; A_RESULT=failed; A_WHY='took too long - try again'; }
 # --ack [url]: one argument at most, an https:// URL; every other mode takes none
 args_ok() { [ $# -le 1 ] || { [ $# = 2 ] && [ "$1" = --ack ] && case $2 in https://*) true ;; *) false ;; esac; }; }
+# note= (A235): setup.ps1 notes a devtunnel it cannot inspect; pgrep -f reads every command line, so here it is empty
 show_arm() {
   printf '%s\n' "result=$A_RESULT" "why=$A_WHY" "devtunnel=$A_DT" "login=$A_LOGIN" "form=$A_FORM" "tunnel=$A_TUN" \
-    "hosted=$A_HOSTED" "listener=$A_LISTEN" "port=$PORT" "url=$A_URL" "url_changed=$A_CHANGED" "expires=$A_EXP"
+    "hosted=$A_HOSTED" "listener=$A_LISTEN" "port=$PORT" "url=$A_URL" "url_changed=$A_CHANGED" "expires=$A_EXP" "note="
 }
 
 arm_view() {
@@ -352,11 +353,12 @@ EOF
   ACTS='^\(host\|unhost\)$\| \(start\|stop\) --port '
   RDY='login tunnel port saved'
   U1='https://ab12cd34-3978.euw.devtunnels.ms'; U2='https://zz99yy88-3978.euw.devtunnels.ms'
-  # --status: twelve lines, the facts, nothing changed
+  # --status: thirteen lines, the facts, nothing changed
   kv arm_view "$ALL" "$RDY"
-  [ "$(wc -l < "$T/out" | tr -d ' ')" = 12 ] || fail 'status: not twelve lines'
-  [ "$(cut -d= -f1 "$T/out" | tr '\n' ,)" = 'result,why,devtunnel,login,form,tunnel,hosted,listener,port,url,url_changed,expires,' ] || fail 'status: keys'
+  [ "$(wc -l < "$T/out" | tr -d ' ')" = 13 ] || fail 'status: not thirteen lines'
+  [ "$(cut -d= -f1 "$T/out" | tr '\n' ,)" = 'result,why,devtunnel,login,form,tunnel,hosted,listener,port,url,url_changed,expires,note,' ] || fail 'status: keys'
   out '^result=status$' && out '^form=set$' && out '^tunnel=ready$' && out '^hosted=0$' && out '^listener=down$' || fail 'status: facts'
+  out '^note=$' || fail '5: status without an empty note= line'
   out "^url=$U1\$" && out '^expires=2026-12-17T00:00:00Z$' && out '^url_changed=0$' || fail 'status: url / expires'
   called "$ACTS" && fail 'status changed something'
   # --arm refuses, and starts nothing: devtunnel missing, signed out, no token, no tunnel
