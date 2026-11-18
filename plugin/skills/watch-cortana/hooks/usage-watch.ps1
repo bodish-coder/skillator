@@ -350,8 +350,10 @@ function Invoke-Capped([int]$secs, [string]$call, $in) {
   try {
     $h = $ps.BeginInvoke($inp, $out)
     if (-not $h.AsyncWaitHandle.WaitOne($secs * 1000)) {
-      # A listed child created before this process is an orphan whose dead parent's PID was reused.
-      try { $me = (Get-Process -Id $PID).StartTime; Get-CimInstance Win32_Process -Filter "ParentProcessId=$PID" | Where-Object { $_.CreationDate -gt $me } | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null } } catch { }
+      # A listed child created before this process is an orphan whose dead parent's PID was
+      # reused; a start time that cannot be read (ours or the child's) kills it.
+      $me = try { (Get-Process -Id $PID).StartTime } catch { $null }
+      try { Get-CimInstance Win32_Process -Filter "ParentProcessId=$PID" | Where-Object { -not ($me -and $_.CreationDate -and $_.CreationDate -lt $me) } | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null } } catch { }
       $null = $ps.BeginStop($null, $null)
       return ''
     }
@@ -378,7 +380,7 @@ if ($Mode -eq 'refresh') {
         if ($p -is [pscustomobject]) { $p } else { 'corrupt' }
       } catch { 'corrupt' }
     }
-    $prev = $null; $turned = $false
+    $turned = $false
     $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     if ($Cli -eq 'agy') {
       $env:AGY_CONFIG_DIR = $Dir
@@ -464,8 +466,9 @@ if ($Mode -eq 'refresh') {
       # record that carries `"last":null` (never a reading), counts as blank. A carried
       # reading counts for 7 days from its `at` (a reset is plausible after: unknown), and
       # a turn that gave no limits (`turned_at`) holds turns 24 h.
-      $prev = & $readPrev
+      # Read only where a turn may follow; 'unread' never passes the gate.
       $gateOk = $false
+      $prev = if ($verdict -eq 'NOWINDOWS' -and $forced) { & $readPrev } else { 'unread' }
       if ($prev -is [string]) { $gateOk = $prev -eq 'missing' }
       elseif (-not $prev.PSObject.Properties['turned_at'] -or ((& $isNum $prev.turned_at) -and $now - $prev.turned_at -ge 86400)) {
         $has = { param($x) $x -is [pscustomobject] -and ($x.PSObject.Properties['7d'] -or $x.PSObject.Properties['weekly']) }
@@ -520,7 +523,8 @@ if ($Mode -eq 'refresh') {
       }
     }
     if (-not $res) {
-      if ($null -eq $prev) { $prev = & $readPrev }
+      # Re-read at write time, as sh's carry does: a reading stored during the turn is carried.
+      $prev = & $readPrev
       $srcName = if ($Cli -eq 'claude') { 'claude-code' } else { $Cli }
       $failNote = if ($raw -and $raw -match 'not logged in') { 'not logged in' }
                   elseif ($Cli -eq 'claude' -and $raw -and $raw -match 'session expired|Failed to authenticate') { 'login expired - run claude /login' }
