@@ -11,7 +11,6 @@ import { NO_SCRIPTS, decideQuestionsPrompt, holoTicketCmd, loginMessage, loginSt
 export { decideQuestionsPrompt, holoTicketCmd }
 import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, isUserHead, parseReconcile, personalGroups, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
-import type { UserSection } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME, ticketById, visible } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
 import { classify, levelLine, MUTE_FILE, MUTED_HOW, mutedWords, muteText, parseMachine, unmuteDue, usageFromLevel } from '../hooks/lib/facts'
