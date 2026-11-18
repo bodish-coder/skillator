@@ -357,37 +357,27 @@ function Get-AgyIde {
 # A231: the same string as install.sh muse_json's norm; both resolve links with
 # GetFinalPathNameByHandle (Node's realpathSync.native), then spell the result one way
 function Normalize-MusePath([string]$path) {
-  $path = $path.Replace('/', '\') -replace '^\\\\\?\\UNC\\', '\\' -replace '^\\\\\?\\', ''
+  # A234: the platform, not $env:OS, which any caller can set; off Windows / is the separator
+  $win = [Environment]::OSVersion.Platform -eq 'Win32NT'
+  if ($win) { $path = $path.Replace('/', '\') -replace '^\\\\\?\\UNC\\', '\\' -replace '^\\\\\?\\', '' }
+  # step -> failed once: a failed compile or Win32 call is never tried again, one note per step
+  if ($null -eq $script:MuseFailed) { $script:MuseFailed = @{} }
   $step = 'full path'
   try {
-    try { $path = [IO.Path]::GetFullPath($path) }
-    catch [IO.PathTooLongException] {
-      # Windows PowerShell 5.1 can stop GetFullPath at 260 characters: the same resolution, on the string
-      # shortcut: a drive-relative C:x resolves from the drive root, per-drive directories if one ever shows up
-      $cwd = [Environment]::CurrentDirectory
-      if ($path -match '^\\(?!\\)') { $path = [IO.Path]::GetPathRoot($cwd).TrimEnd('\') + $path }
-      elseif ($path -notmatch '^(\\\\|[A-Za-z]:)') { $path = $cwd.TrimEnd('\') + '\' + $path }
-      $root = [regex]::Match($path, '^(\\\\[^\\]+\\[^\\]+|[A-Za-z]:)').Value
-      if ($root) {
-        $kept = New-Object Collections.Generic.List[string]
-        foreach ($part in $path.Substring($root.Length).Split('\')) {
-          if ($part -eq '..') { if ($kept.Count) { $kept.RemoveAt($kept.Count - 1) } }
-          elseif ($part -and $part -ne '.') { $kept.Add($part) }
-        }
-        $path = $root + '\' + ($kept -join '\')
-      }
-    }
-    # one compile attempt per process: after a failure every path is compared as written
-    if (-not $script:MuseNoFinalPath) {
-      if (-not ('MuseFinalPath' -as [type])) {
-        $step = 'Add-Type'
-        try { Add-Type -TypeDefinition @'
+    $long = $false
+    try { $path = [IO.Path]::GetFullPath($path) } catch [IO.PathTooLongException] { $long = $true }
+    if ($win) {
+      $step = 'Add-Type'
+      if ($script:MuseFailed[$step]) { throw }
+      if (-not ('MuseFinalPath' -as [type])) { Add-Type -TypeDefinition @'
 using System; using System.Runtime.InteropServices; using System.Text;
 public static class MuseFinalPath {
   [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
   static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr sa, uint disposition, uint flags, IntPtr template);
   [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
   static extern uint GetFinalPathNameByHandleW(IntPtr handle, StringBuilder buffer, uint length, uint flags);
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  static extern uint GetFullPathNameW(string name, uint length, StringBuilder buffer, IntPtr filePart);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
   public static string Get(string path) {
     IntPtr h = CreateFileW(path, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
@@ -398,27 +388,40 @@ public static class MuseFinalPath {
       return n == 0 || n >= b.Capacity ? null : b.ToString();
     } finally { CloseHandle(h); }
   }
+  public static string Full(string path) {
+    StringBuilder b = new StringBuilder(32768);
+    uint n = GetFullPathNameW(path, (uint)b.Capacity, b, IntPtr.Zero);
+    if (n == 0 || n >= b.Capacity) throw new System.ComponentModel.Win32Exception();
+    return b.ToString();
+  }
 }
 '@
-        } catch { $script:MuseNoFinalPath = $true; throw }
+      }
+      if ($long) {
+        # Windows PowerShell 5.1 can stop GetFullPath at 260 characters; the Win32 call has no such limit
+        $step = 'long path'
+        if ($script:MuseFailed[$step]) { throw }
+        $path = [MuseFinalPath]::Full($path)
       }
       $step = 'final path'
+      if ($script:MuseFailed[$step]) { throw }
       # the long-path form, so a path over 260 characters still opens
       $real = [MuseFinalPath]::Get($(if ($path.StartsWith('\\')) { '\\?\UNC\' + $path.Substring(2) } else { '\\?\' + $path }))
       if ($real) { $path = $real -replace '^\\\\\?\\UNC\\', '\\' -replace '^\\\\\?\\', '' }
     }
   } catch {
-    if (-not $script:MuseLinkNoted) {
-      $script:MuseLinkNoted = $true
+    if (-not $script:MuseFailed[$step]) {
+      $script:MuseFailed[$step] = $true
       # stderr, so stdout carries only what the caller asked for
       [Console]::Error.WriteLine("note: path resolution unavailable (${step}: $($_.Exception.GetBaseException().Message)) - comparing paths as written")
     }
   }
   $path = $path.Replace('\', '/')
   # as Node does: lowercase on Windows only
-  if ($env:OS -eq 'Windows_NT') { $path = $path.ToLowerInvariant() }
+  if ($win) { $path = $path.ToLowerInvariant() }
   $path = $path.TrimEnd('/')
   if ($path -match '^[a-z]:$') { $path += '/' }
+  if ($path -eq '') { $path = '/' }
   return $path
 }
 
