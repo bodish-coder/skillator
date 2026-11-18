@@ -360,7 +360,7 @@ function Normalize-MusePath([string]$path) {
   # A234: the platform, not $env:OS, which any caller can set; off Windows / is the separator
   $win = [Environment]::OSVersion.Platform -eq 'Win32NT'
   if ($win) { $path = $path.Replace('/', '\') -replace '^\\\\\?\\UNC\\', '\\' -replace '^\\\\\?\\', '' }
-  # step -> failed once: a failed compile or Win32 call is never tried again, one note per step
+  # step -> failed once, one note per step; only a failed compile is never tried again
   if ($null -eq $script:MuseFailed) { $script:MuseFailed = @{} }
   $step = 'full path'
   try {
@@ -369,9 +369,10 @@ function Normalize-MusePath([string]$path) {
     if ($win) {
       $step = 'Add-Type'
       if ($script:MuseFailed[$step]) { throw }
-      if (-not ('MuseFinalPath' -as [type])) { Add-Type -TypeDefinition @'
+      # the name is versioned: an older type compiled earlier in this session cannot be replaced
+      if (-not ('MuseFinalPath2' -as [type])) { Add-Type -TypeDefinition @'
 using System; using System.Runtime.InteropServices; using System.Text;
-public static class MuseFinalPath {
+public static class MuseFinalPath2 {
   [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
   static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr sa, uint disposition, uint flags, IntPtr template);
   [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -400,13 +401,11 @@ public static class MuseFinalPath {
       if ($long) {
         # Windows PowerShell 5.1 can stop GetFullPath at 260 characters; the Win32 call has no such limit
         $step = 'long path'
-        if ($script:MuseFailed[$step]) { throw }
-        $path = [MuseFinalPath]::Full($path)
+        $path = [MuseFinalPath2]::Full($path)
       }
       $step = 'final path'
-      if ($script:MuseFailed[$step]) { throw }
       # the long-path form, so a path over 260 characters still opens
-      $real = [MuseFinalPath]::Get($(if ($path.StartsWith('\\')) { '\\?\UNC\' + $path.Substring(2) } else { '\\?\' + $path }))
+      $real = [MuseFinalPath2]::Get($(if ($path.StartsWith('\\')) { '\\?\UNC\' + $path.Substring(2) } else { '\\?\' + $path }))
       if ($real) { $path = $real -replace '^\\\\\?\\UNC\\', '\\' -replace '^\\\\\?\\', '' }
     }
   } catch {

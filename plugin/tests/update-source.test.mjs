@@ -213,7 +213,7 @@ console.log(`A168 local fixtures: ${root}`);
 // the A231 normalizer alone, extracted from install.ps1, fed a JSON array of paths on stdin
 const normScript = dir => {
   const script = join(dir, 'norm.ps1');
-  writeFileSync(script, `param([switch]$NoAddType, [switch]$LegacyPaths, [switch]$FakeOS, [switch]$BrokenFinalPath)
+  writeFileSync(script, `param([switch]$NoAddType, [switch]$LegacyPaths, [switch]$FakeOS, [switch]$BrokenFinalPath, [switch]$OldType)
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 if ($NoAddType) { function Add-Type { $global:a231Compiles++; throw 'a231 no Add-Type' } }
 if ($FakeOS) { $env:OS = 'a231' }
@@ -223,14 +223,17 @@ if ($LegacyPaths) { # Windows PowerShell 5.1 as an older .NET runs it: GetFullPa
   foreach ($f in '_useLegacyPathHandling', '_blockLongPaths') { $t.GetField($f, 'NonPublic,Static').SetValue($null, 0) }
   try { [void][IO.Path]::GetFullPath('C:\\' + ('l' * 300)); [Console]::Error.WriteLine('legacy: GetFullPath did not throw PathTooLongException') } catch [IO.PathTooLongException] {}
 }
+if ($OldType) { # an older normalizer's type, compiled earlier in the same session, without Full
+  Add-Type -TypeDefinition 'public static class MuseFinalPath { public static string Get(string p) { return null; } }'
+}
 if ($BrokenFinalPath) { # compiled, but every Win32 call fails at run time
-  Add-Type -TypeDefinition 'public static class MuseFinalPath { public static int Gets, Fulls; public static string Get(string p) { Gets++; throw new System.EntryPointNotFoundException("a234 get"); } public static string Full(string p) { Fulls++; throw new System.EntryPointNotFoundException("a234 full"); } }'
+  Add-Type -TypeDefinition 'public static class MuseFinalPath2 { public static int Gets, Fulls; public static string Get(string p) { Gets++; throw new System.EntryPointNotFoundException("a234 get"); } public static string Full(string p) { Fulls++; throw new System.EntryPointNotFoundException("a234 full"); } }'
 }
 $ast = [Management.Automation.Language.Parser]::ParseFile('${join(plugin, 'install.ps1').replaceAll("'", "''")}', [ref]$null, [ref]$null)
 . ([scriptblock]::Create($ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Normalize-MusePath' }, $true).Extent.Text))
 foreach ($p in ([Console]::In.ReadToEnd() | ConvertFrom-Json)) { Normalize-MusePath $p }
 if ($NoAddType) { [Console]::Error.WriteLine("compiles: $global:a231Compiles") }
-if ($BrokenFinalPath) { [Console]::Error.WriteLine("calls: $([MuseFinalPath]::Gets) $([MuseFinalPath]::Fulls)") }`);
+if ($BrokenFinalPath) { [Console]::Error.WriteLine("calls: $([MuseFinalPath2]::Gets) $([MuseFinalPath2]::Fulls)") }`);
   return script;
 };
 // [stdout lines, stderr lines]
@@ -292,14 +295,16 @@ for (const shell of ['powershell', 'pwsh']) test(`A231: both installers normaliz
     const legacy = [[`${fx}\\junction\\${L}\\x\\..\\${M.toUpperCase()}`, want], [`${L}\\.\\${M}\\..\\${M}`, want],
       [`${sys}${L}\\${M}`, want], [`${fx}\\junction\\${L}\\${M}. .`, want], [unc, nodeNorm(unc)]];
     assert.deepEqual(psRun(shell, script, legacy.map(c => c[0]), ['-LegacyPaths'], real), [legacy.map(c => c[1]), []]);
-    // A234: one note per failing step, each step tried once
+    // A234: a Win32 failure is tried again for each input (only a failed compile is cached), its note printed once
     const long = `${real}\\${L}\\${M}`, short = join(real, 'sub');
     assert.deepEqual(psRun(shell, script, [long, short, long, short], ['-LegacyPaths', '-BrokenFinalPath']),
-      [[long, short, long, short].map(asWritten), [note('long path', 'a234 full'), note('final path', 'a234 get'), 'calls: 1 1']]);
+      [[long, short, long, short].map(asWritten), [note('long path', 'a234 full'), note('final path', 'a234 get'), 'calls: 2 2']]);
+    // A234: an older MuseFinalPath without Full, compiled earlier in the session, leaves the long path working
+    assert.deepEqual(psRun(shell, script, [legacy[0][0]], ['-LegacyPaths', '-OldType'], real), [[want], []]);
   }
-  // A234: a Win32 call that fails at run time is cached like a failed compile, its note printed once
+  // A234: a Win32 call that fails at run time is tried again for the next input, its note printed once
   const short = [join(real, 'sub'), join(fx, 'a')];
-  assert.deepEqual(psRun(shell, script, short, ['-BrokenFinalPath']), [short.map(asWritten), [note('final path', 'a234 get'), 'calls: 1 0']]);
+  assert.deepEqual(psRun(shell, script, short, ['-BrokenFinalPath']), [short.map(asWritten), [note('final path', 'a234 get'), 'calls: 2 0']]);
   // no link resolution: only the string-only form on stdout; one compile attempt and one note on stderr
   const written = [join(fx, 'junction', 'sub'), `${sys.toUpperCase()}\\`, real];
   assert.deepEqual(psRun(shell, script, written, ['-NoAddType']), [written.map(p => asWritten(p).replace(/(?<!:)\/$/, '')),
