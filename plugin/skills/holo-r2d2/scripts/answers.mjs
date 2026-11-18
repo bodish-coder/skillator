@@ -131,10 +131,10 @@ async function openSets(root, holo) {
         openNow.set(id, new Set(r.live.decisions.map((d) => d.id)));
         gone.set(id, r.gone);
         const time = (x) => Date.parse(x.f.answered || x.f.ruled) || 0;
-        let answered = Math.max(0, ...run.qs.map(time));
+        const answered = Math.max(0, ...run.qs.map(time));
         if (!r.live.decisions.length) {
           const mtime = (await stat(path)).mtimeMs, up = Date.parse(run.updated);
-          const untimed = answered && run.qs.some((x) => r.gone.has(x.id) && !time(x));
+          const untimed = answered && run.qs.some((x) => !time(x)); // all settled here
           // No updated: stamp: the millisecond mtime bounds it, compared unfloored (exact).
           done.set(id, !answered ? { mtime } : untimed && !up && mtime > answered ? { exact: mtime } : { answered: untimed ? Math.max(answered, up || 0) : answered });
         }
