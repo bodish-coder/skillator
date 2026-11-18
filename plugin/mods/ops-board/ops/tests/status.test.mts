@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -339,6 +339,34 @@ test('F176 money: a carried 7d over 7 days old no longer holds the forced read (
   const read: Reader = async (e, ms) => { if (e.SKILLATOR_QUOTA_REFRESH_WAIT === '1') waits.push(e.SKILLATOR_PROFILE_DIR!); return NONE(e, ms) }
   for (const p of discover(h)) await profileRows(p, read, {}, false, true)
   assert.deepEqual(waits, [`${h}/.claude-noat`, `${h}/.claude-old`])
+})
+
+test('F176 last round: a top-level 7d over 7 days old (its at, else the file mtime) is aged - the forced read goes ahead', async () => {
+  const h = home(), now = Math.floor(Date.now() / 1000)
+  const atOld = dir(h, '.claude-atold', '.credentials.json')
+  writeFileSync(join(atOld, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', '7d': 95, at: now - 8 * 86400 }))
+  const mOld = dir(h, '.claude-mold', '.credentials.json')
+  writeFileSync(join(mOld, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', weekly: 95 }))
+  const t = new Date(Date.now() - 8 * 86400 * 1000); utimesSync(join(mOld, 'quota-cache.json'), t, t)
+  const fresh = dir(h, '.claude-new', '.credentials.json')
+  writeFileSync(join(fresh, 'quota-cache.json'), JSON.stringify({ src: 'claude-code', '7d': 95 }))
+  const waits: string[] = []
+  const read: Reader = async (e, ms) => { if (e.SKILLATOR_QUOTA_REFRESH_WAIT === '1') waits.push(e.SKILLATOR_PROFILE_DIR!); return NONE(e, ms) }
+  for (const p of discover(h)) await profileRows(p, read, {}, false, true)
+  assert.deepEqual(waits, [`${h}/.claude-atold`, `${h}/.claude-mold`])
+})
+
+test('F176 last round: a turn that gave no limits holds the forced read 24 h', async () => {
+  const h = home(), now = Math.floor(Date.now() / 1000)
+  const rec = (turned_at: number) => JSON.stringify({ src: 'claude-code', note: 'one turn gave no limits', failures: 1, backoff_secs: 60, last: null, turned_at })
+  writeFileSync(join(dir(h, '.claude-held', '.credentials.json'), 'quota-cache.json'), rec(now - 3600))
+  writeFileSync(join(dir(h, '.claude-past', '.credentials.json'), 'quota-cache.json'), rec(now - 86400 - 60))
+  const waits: string[] = []
+  const read: Reader = async (e, ms) => { if (e.SKILLATOR_QUOTA_REFRESH_WAIT === '1') waits.push(e.SKILLATOR_PROFILE_DIR!); return NONE(e, ms) }
+  const out: string[][] = []
+  for (const p of discover(h)) out.push(...await profileRows(p, read, {}, false, true))
+  assert.deepEqual(waits, [`${h}/.claude-past`])
+  assert.equal(out.find(r => r[0] === 'claude-held')![3], 'not refreshed: one turn gave no limits (held 24 h)')
 })
 
 test('F176: a reading a forced read got from one tiny turn says so on its row', async () => {

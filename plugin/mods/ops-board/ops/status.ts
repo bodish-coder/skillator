@@ -369,22 +369,27 @@ const FORCED = new Set(['claude', 'agy', 'muse'])
 // is first read by usage-watch level with SKILLATOR_QUOTA_REFRESH_WAIT - it reads the CLI
 // in the foreground only when the cache is blank or stale, under its lock and backoff (a
 // plain read first would take that lock for a background read); never at a last 7d >= 90%
-// (a failure record's carried `last` under 7 days old, or a legacy `weekly`), nor past `deadline`.
+// under 7 days old (a failure record's carried `last`, or a legacy `weekly`), nor within 24 h
+// of a turn that gave no limits (`turned_at`), nor past `deadline`.
 export async function profileRows(p: Profile, read: Reader, base: Env, darwin: boolean, refresh: boolean, deadline = Infinity): Promise<Row[]> {
-  let held: number | null = null, late = false
+  let held: number | null = null, late = false, turned = false
   if (refresh && FORCED.has(p.cli) && loggedIn(p, darwin)) {
-    const c = readCache(p)
-    // A carried reading holds for 7 days from its `at`; after, a reset is plausible and
-    // usage-watch reads it as unknown (a plain read, no turn).
-    const at = c?.last?.at
-    const carried = typeof at === 'number' && Date.now() / 1000 - at < 7 * 86400 ? c?.last?.['7d'] ?? c?.last?.weekly : undefined
-    const last = c?.['7d'] ?? c?.weekly ?? carried
+    const c = readCache(p), now = Date.now() / 1000
+    // A reading holds for 7 days from its `at` (a top-level one: else the file's mtime); after,
+    // a reset is plausible - aged, so the forced read goes ahead (usage-watch's gate decides a turn).
+    const fresh = (at: unknown) => typeof at === 'number' && now - at < 7 * 86400
+    let mtime: number | undefined
+    try { mtime = statSync(`${p.dir}/quota-cache.json`).mtimeMs / 1000 } catch { /* no cache */ }
+    const top = fresh(c?.at ?? mtime) ? c?.['7d'] ?? c?.weekly : undefined
+    const last = top ?? (fresh(c?.last?.at) ? c?.last?.['7d'] ?? c?.last?.weekly : undefined)
     if (typeof last === 'number' && last >= 90) held = last
+    else if (typeof c?.turned_at === 'number' && now - c.turned_at < 86400) turned = true
     else if (Date.now() + REFRESH_MS > deadline) late = true
     else await read({ ...readerEnv(p, base), SKILLATOR_QUOTA_REFRESH_WAIT: '1' }, REFRESH_MS)
   }
   let main = await row(p, read, base, darwin)
   if (held !== null && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', `not refreshed: last 7d ${Math.round(held)}% >= 90%`]
+  else if (turned && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: one turn gave no limits (held 24 h)']
   else if (late && main[1] === '-' && main[2] === '-') main = [main[0], '-', '-', 'not refreshed: out of time - press p again']
   else if (!main[3] && (main[1] !== '-' || main[2] !== '-') && readCache(p)?.via === 'turn') main = [main[0], main[1], main[2], 'via one turn']
   return [main, ...modelRows(p)]
