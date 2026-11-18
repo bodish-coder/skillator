@@ -4,6 +4,7 @@ export type Ticket = {
   parent: string | null; indent: number; section: string // heading it sits under
   apps: string[]; decide: string | null; owner: string | null; tester: string | null; by: string[]
   session: string | null                                 // "(@cc-4ae496)" or F109 "(@cc-k7q2:asha:run)" tag, without parens
+  assignedSession?: string | null                        // F178: [session: cc-1ir0] - the session the ticket is for
 }
 export type Board = { path: string; mtimeMs: number; size: number; tickets: Ticket[]; error: string | null }
 export type Member = { handle: string; emails: string[]; name?: string; lead?: true }   // name: the `  name:` line under it; lead: the `lead:` line names it
@@ -43,7 +44,10 @@ export type Diagnose = { id: string; verdict: 'finished' | 'still running' | 'st
 // F77: id = the form's Ticket field as typed ('' when opened with no ticket selected),
 // resolved against the board case-insensitively (ticketById); ticket-meta gets the board's ID.
 export type StatusDraft = { generation: number; id: string; target: 'pending' | 'blocked' | 'deferred' | null; reason: string; expectedRow: string | null; result: string | null; busy: boolean; helpPath: string | null; mode: 'status' | 'help' | 'decide' }
-export type AssignDraft = { id: string; kind: 'owner' | 'decide' | 'tester'; handle: string | null; result: string | null }
+// F178: kind 'session' picks one of `sessions` (the live ones, `@owner code`) into `session`, handle kept
+export type AssignDraft = { id: string; kind: 'owner' | 'decide' | 'tester' | 'session'; handle: string | null; result: string | null
+  sessions?: LiveSession[]; session?: string | null }
+export type LiveSession = { code: string; owner: string | null }
 // F47 team management (T6): the Team view in the Tickets tab, and the Add person form
 // (drawn as a form in the ops-board pane; `back` = where a finished add returns).
 export type TeamView = { selected: string | null; confirm: boolean }
@@ -181,6 +185,7 @@ declare module 'claude-code' {
       openGroups: Box[]      // F61: the open groups' boxes this session; none = all collapsed
       assignedFolded: boolean
       decideFolded: boolean
+      sessionFolded: boolean   // F178: the 'This session' section
       runsOpen: ('runs' | 'workflows' | 'agents')[]   // F76: the Workflows tab's open sections this session
       machine: Machine | null; usage: Usage | null; watch: Watch; notes: string[]
       runs: RunView[]; assign: AssignDraft | null; narrow: boolean

@@ -9,7 +9,7 @@ import type { Model, View } from '../hooks/lib/ticketsmodel'
 export type RunResult = { code: number; out: string; err: string; argv: string[] }
 import { NO_SCRIPTS, decideQuestionsPrompt, holoTicketCmd, loginMessage, loginStatus } from '../hooks/lib/calls'
 export { decideQuestionsPrompt, holoTicketCmd }
-import { appliedHead, appliedLine, applyOf, assignedTickets, buildModel, canApply, decideTickets, HEAD, headKey, isHead, isUserHead, isUserSectionOpen, parseReconcile, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
+import { appliedHead, appliedLine, applyOf, buildModel, canApply, HEAD, headKey, isHead, isUserHead, parseReconcile, personalGroups, rawTicketId, toggleGroup, toggleUserSection } from '../hooks/lib/ticketsmodel'
 import type { UserSection } from '../hooks/lib/ticketsmodel'
 import { STATE_NAME, ticketById, visible } from '../hooks/lib/board'
 import { sameHandle } from '../hooks/lib/team'
@@ -175,6 +175,7 @@ export function point(s: State, a: PointerAction): Step {
 export type State = {
   tab: Tab
   board: Board | null; team: Member[]; me: string | null
+  session: string | null                   // F178: this app's session code (SKILLATOR_SESSION / Claude Code's), none null
   filter: Filter; filterField: FilterField | null
   selected: string | null; expanded: string | null; showTeam: boolean
   open: Box[]                              // F61: the open groups' boxes this session; none = all collapsed
@@ -238,7 +239,7 @@ export const afterRun = (e: { then: Then }, r: RunResult, s: State, now: number)
 const TABS: Tab[] = ['tickets', 'runs', 'health', 'messages', 'explorer', 'run', 'help']
 
 export const initial = (cols: number, rows: number, now: number): State => ({
-  tab: 'tickets', board: null, team: [], me: null,
+  tab: 'tickets', board: null, team: [], me: null, session: null,
   filter: { app: null, who: null, mine: false, showDone: false }, filterField: null,
   selected: null, expanded: null, showTeam: false, open: [],
   machine: null, usage: null, watch: { level: 'green', reasons: [] }, profile: null, relay: null,
@@ -259,20 +260,9 @@ export const viewOf = (s: State): View => ({
 export const activeUser = (s: State): string | null => s.me ?? s.teamSelected ?? null
 
 export function ticketsItems(s: State, m: Model): string[] {
-  const user = activeUser(s)
-  if (!user || !s.board) return m.items
-  const tickets = visible(s.board, s.filter, s.me)
-  const assigned = assignedTickets(tickets, user)
-  const decide = decideTickets(tickets, user)
-  const assignedOpen = isUserSectionOpen(s.open as string[], 'assigned')
-  const decideOpen = isUserSectionOpen(s.open as string[], 'decide')
-  return [
-    'head:assigned',
-    ...(assignedOpen ? assigned.map(t => 'assigned:' + t.id) : []),
-    'head:decide',
-    ...(decideOpen ? decide.map(t => 'decide:' + t.id) : []),
-    ...m.items,
-  ]
+  if (!s.board) return m.items
+  const groups = personalGroups(visible(s.board, s.filter, s.me), activeUser(s), { open: s.open as string[], session: s.session })
+  return [...groups.flatMap(g => [headKey(g.id), ...(g.open ? g.tickets.map(t => g.id + ':' + t.id) : [])]), ...m.items]
 }
 
 export function onBoard(s: State, board: Board, team: Member[], me: string | null): State {
@@ -306,9 +296,9 @@ function addNotes(xs: string[], add: string[], drop: (n: string) => boolean = ()
 // The handle a fresh dialog starts on: the ticket's own (owner or decider) when on the
 // team, else me, else the first member - as team.md writes it (moved verbatim from assign.tsx).
 // F77: no ticket yet (its ID still to be typed) - me, else the first member.
-export function startHandle(t: Ticket | null, kind: 'owner' | 'decide' | 'tester', team: Member[], me: string | null): string | null {
+export function startHandle(t: Ticket | null, kind: AssignDraft['kind'], team: Member[], me: string | null): string | null {
   const on = (h: string | null) => team.find(m => sameHandle(m.handle, h))?.handle ?? null
-  return on(t ? (kind === 'owner' ? t.owner : kind === 'decide' ? t.decide : t.tester) : null) ?? on(me) ?? team[0]?.handle ?? null
+  return on(t && kind !== 'session' ? (kind === 'owner' ? t.owner : kind === 'decide' ? t.decide : t.tester) : null) ?? on(me) ?? team[0]?.handle ?? null
 }
 
 // The people the dialog lists: the team, plus the draft's handle when it is not on it.
@@ -319,7 +309,9 @@ function peopleOf(s: State): Member[] {
 
 // F77: the heading names the ticket the Ticket field resolves to, else "a ticket".
 const titleOf = (d: AssignDraft, t: Ticket | null) =>
-  `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : d.kind === 'tester' ? ' for testing' : ''}`
+  `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : d.kind === 'tester' ? ' for testing' : d.kind === 'session' ? ' to a session' : ''}`
+// F178: the code a session draft assigns - its pick, else this app's own session.
+const sessionOf = (s: State): string | null => s.dialog?.session ?? s.session
 // The ticket the dialog's Ticket field names (typed in any case), or null.
 const dialogTicket = (s: State): Ticket | null => (s.dialog ? ticketById(s.board?.tickets, s.dialog.id) : null)
 
@@ -351,8 +343,8 @@ export function dialogLines(s: State): string[] {
       ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${STATE_NAME[to]}; the tag stays - tell that session`
       : `  ! ${tk.id} is in progress - this moves it to ${STATE_NAME[to]}; tell whoever is working it`)
   }
-  const metaCmd = d.kind === 'decide' ? 'decide' : d.kind === 'tester' ? 'assign-tester' : 'assign'
-  out.push(`  Runs    ticket-meta ${metaCmd} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`)
+  const metaCmd = d.kind === 'decide' ? 'decide' : d.kind === 'tester' ? 'assign-tester' : d.kind === 'session' ? 'assign-session' : 'assign'
+  out.push(`  Runs    ticket-meta ${metaCmd} ${tk?.id ?? '<ID>'} ${d.kind === 'session' ? sessionOf(s) ?? '?' : d.handle ?? '@?'}`)
   if (d.result) out.push(`  ${d.result}`)
   out.push('  Enter confirm · Esc cancel')
   return out
@@ -380,9 +372,17 @@ function confirmAssign(s: State): Step {
   // F77: Assign waits for the Ticket field to name a ticket; ticket-meta gets the board's ID.
   const tk = dialogTicket(s)
   if (!tk) return { state: { ...s, dialog: { ...d, result: d.id.trim() ? 'no such ticket' : 'type a ticket ID first' } }, effects: [] }
+  const id = tk.id
+  if (d.kind === 'session') {
+    const code = sessionOf(s)
+    if (!code) return { state: { ...s, dialog: { ...d, result: 'no session known - ticket-meta iam names one' } }, effects: [] }
+    const done: Then = r => x => r.code !== 0
+      ? (x.dialog ? { ...x, dialog: { ...x.dialog, result: timedOut(r) ? 'ticket-meta did not finish in 30 s' : why(r, 'ticket-meta') } } : x)
+      : { ...x, dialog: null, toast: [`✓ ${id} assigned to session ${code}: ${tk.title}`, ...notesOf(r.out), ran(r.argv)].join('\n') }
+    return { state: s, effects: [run('meta-assign-session', [id, code], done)] }
+  }
   if (!d.handle) return { state: { ...s, dialog: { ...d, result: 'pick someone first' } }, effects: [] }
   const handle = d.handle
-  const id = tk.id
   const then: Then = r => x => {
     if (r.code !== 0) {
       const text = timedOut(r) ? 'ticket-meta did not finish in 30 s' : why(r, 'ticket-meta')
@@ -1218,11 +1218,8 @@ function ticketsKey(s: State, k: Key): Step {
     return { state: to ? { ...s, selected: to } : s, effects: [] }
   }
   const toggleHeader = (id: string): Step => {
-    if (id === 'head:assigned') {
-      return { state: { ...s, open: toggleUserSection(s.open as string[], 'assigned') as any }, effects: [] }
-    }
-    if (id === 'head:decide') {
-      return { state: { ...s, open: toggleUserSection(s.open as string[], 'decide') as any }, effects: [] }
+    if (isUserHead(id)) {
+      return { state: { ...s, open: toggleUserSection(s.open as string[], id.slice(HEAD.length) as UserSection) as any }, effects: [] }
     }
     const g = m.groups.find(x => headKey(x.box) === id)
     const keep = s.selected && !isHead(s.selected) && g?.tickets.some(t => t.id === s.selected)

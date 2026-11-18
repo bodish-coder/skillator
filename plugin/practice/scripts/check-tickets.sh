@@ -194,6 +194,11 @@ EOF
     echo "SELFTEST FAIL: a tag counted as title text" >&2; cat "$stmp/tags.out" >&2; exit 1
   fi
 
+  # F178: a [session: <code>] tag is a tag, not title text
+  printf '%s\n' '# Board' '' "- [ ] A1 - $t50 [owner: @asha] [session: cc-1ir0]" > "$stmp/sess.md"
+  sh "$0" "$stmp/sess.md" >"$stmp/sess.out" 2>&1 || { echo "SELFTEST FAIL: a [session:] tag failed the board" >&2; cat "$stmp/sess.out" >&2; exit 1; }
+  if grep -q 'WARN' "$stmp/sess.out"; then echo "SELFTEST FAIL: a [session:] tag counted as title text" >&2; cat "$stmp/sess.out" >&2; exit 1; fi
+
   echo "ok - check-tickets.sh selftest passed"
 }
 
@@ -280,7 +285,7 @@ LC_ALL=C awk '
     r = $0; sub(/^[ \t]*- \[.\][ \t]+/, "", r); match(r, /^[A-Z]+[0-9]+[a-z]*/)
     id = substr(r, 1, RLENGTH); r = substr(r, RLENGTH + 1)
     sub(/^[ \t]*(\342\200\224|\342\200\223|-)?[ \t]*/, "", r)
-    gsub(/\[(app|owner|decide|by):[^]]*\]/, "", r); gsub(/\(@[^() ]+\)/, "", r); gsub(/\(testing:[^)]*\)/, "", r)
+    gsub(/\[(app|owner|session|decide|by):[^]]*\]/, "", r); gsub(/\(@[^() ]+\)/, "", r); gsub(/\(testing:[^)]*\)/, "", r)
     a = index(r, " ("); b = index(r, ". "); if (b && (!a || b < a)) a = b
     if (a) r = substr(r, 1, a - 1)
     gsub(/[ \t]+/, " ", r); gsub(/^ +| +$/, "", r)

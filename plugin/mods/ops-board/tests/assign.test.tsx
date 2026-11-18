@@ -715,3 +715,83 @@ for (const surface of SURFACES) {
     await pane.unmount()
   })
 }
+
+// F178: the session option lists the live sessions as `@owner code`; a pick runs assign-session
+for (const surface of SURFACES) {
+  test(`${surface}: F178 the assign form's session option lists live sessions and sets the [session:] tag`, WITH, async ($, on) => {
+    const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM, '/r/.skillator/sessions/cc-2abc.owner': '@asha\nsession: s2\n' }, { SKILLATOR_SESSION: '@cc-1ir0' })
+    on('session.id', () => ({ value: 'sid-1' }))
+    on('fs.list', ($, e) => e.path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '') === '/r/.skillator/sessions'
+      ? { value: [{ name: 'cc-2abc.owner', kind: 'file' as const, size: 20, mtimeMs: 999_000, isLink: false },
+          { name: 'notes.txt', kind: 'file' as const, size: 1, mtimeMs: 999_000, isLink: false }] }
+      : { deny: 'ENOENT ' + e.path })
+    w.answer = argv => argv.includes('assign-session')
+      ? ran('- [~] F3 — cart drawer keeps items on reload [app: web] [owner: @vidul] [session: cc-2abc] (@cc-4ae496)\n')
+      : null
+    await start($, clock)
+    const pane = await $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: 'ops-board', props: props('ops board') })
+    await pane.press({ key: 'head:~' })
+    await pane.press({ key: 'row:F3' })
+    await pane.press({ key: 'key:assign' })
+    await pane.press({ key: 'kind:session' })
+    expect((await pane.find({ key: 'kind:session' }))?.text).toBe('(•) session')
+    expect(await pane.find({ key: 'warn' })).toBeUndefined()
+    expect((await pane.find({ key: 'ses:cc-1ir0' }))?.text).toContain('@vidul cc-1ir0')
+    expect((await pane.find({ key: 'ses:cc-2abc' }))?.text).toContain('@asha cc-2abc')
+    expect(await pane.find({ key: 'ses:notes' })).toBeUndefined()
+    await pane.press({ key: 'ses:cc-2abc' })
+    expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta assign-session F3 cc-2abc')
+    await pane.press({ key: 'go' })
+    expect(w.runs.map(r => r.argv).filter(a => a[0] !== 'git')).toEqual([['/bin/sh', META + '.sh', 'assign-session', 'F3', 'cc-2abc']])
+    expect(w.toasts[0]).toContain('✓ F3 assigned to session cc-2abc')
+    await pane.unmount()
+  })
+}
+
+// F178 fix: a ticket's [session:] code that is not live still shows as the current value;
+// the form offers clear (assign-session <ID> -), and Assign is gone while nothing changes
+for (const surface of SURFACES) {
+  test(`${surface}: F178 a not-live [session:] code is the current value, clear drops it, no change disables Assign`, WITH, async ($, on) => {
+    const board = BOARD.replace('[owner: @vidul] (@cc-4ae496)', '[owner: @vidul] [session: cc-dead] (@cc-4ae496)')
+    const [w, clock] = world(on, { '/r/TICKETS.md': board, '/r/.skillator/team.md': TEAM }, { SKILLATOR_SESSION: '@cc-1ir0' })
+    on('session.id', () => ({ value: 'sid-1' }))
+    w.answer = argv => argv.includes('assign-session')
+      ? ran('- [~] F3 — cart drawer keeps items on reload [app: web] [owner: @vidul] (@cc-4ae496)\n')
+      : null
+    await start($, clock)
+    const pane = await $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: 'ops-board', props: props('ops board') })
+    await pane.press({ key: 'head:~' })
+    await pane.press({ key: 'row:F3' })
+    await pane.press({ key: 'key:assign' })
+    await pane.press({ key: 'kind:session' })
+    expect((await pane.find({ key: 'ses:cc-dead' }))?.text).toContain('› @? cc-dead (not live)')
+    expect(await pane.find({ key: 'go' })).toBeUndefined()
+    await pane.press({ key: 'ses:-' })
+    expect((await pane.find({ key: 'ses:-' }))?.text).toContain('› clear')
+    expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta assign-session F3 -')
+    await pane.press({ key: 'go' })
+    expect(w.runs.map(r => r.argv).filter(a => a[0] !== 'git')).toEqual([['/bin/sh', META + '.sh', 'assign-session', 'F3', '-']])
+    expect(w.toasts[0]).toContain('✓ F3 session cleared')
+    await pane.unmount()
+  })
+}
+
+// F178 fix: switching kind moves the ring to a drawn control, so the form's letter hotkeys stay armed
+for (const surface of SURFACES) {
+  test(`${surface}: F178 switching kind keeps the form's hotkeys armed`, WITH, async ($, on) => {
+    const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM }, { SKILLATOR_SESSION: '@cc-1ir0' })
+    on('session.id', () => ({ value: 'sid-1' }))
+    await start($, clock)
+    const pane = await $.ui.mount({ plugin: 'ops-board', surface, component: 'Pane', requestId: 'ops-board', props: props('ops board') })
+    await pane.press({ key: 'head:~' })
+    await pane.press({ key: 'row:F3' })
+    await pane.press({ key: 'key:assign' })
+    await pane.press({ key: 'kind:session' })            // the who rows go; the ring must not stay on one
+    expect((await pane.find({ key: 'kind:session' }))?.text).toBe('(•) session')
+    expect((await pane.find({ key: 'kind:implementation' }))?.props.hotkey).toBe('a')
+    await pane.press({ key: 'kind:implementation' })     // and back: the session rows go
+    expect((await pane.find({ key: 'kind:tester' }))?.props.hotkey).toBe('t')
+    expect(w.runs.filter(r => r.argv.join(' ').includes(META))).toEqual([])
+    await pane.unmount()
+  })
+}

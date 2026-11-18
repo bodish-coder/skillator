@@ -32,7 +32,7 @@ const inGroups = (id) => GROUPS.some(([p]) => id.startsWith(p));
 const LINE = /^(\s*)- \[([ x~!?%>-])\]\s+([A-Za-z]+\d+[a-z]?)\s*[—-]\s*(.*)$/;
 // F43/F45: trailing `[app: ..] [decide: @x] [owner: @x] [by: @y, a@b]` tags. Lifted out of the
 // title and drawn as chips; a line without them parses exactly as before.
-const TAG = /\s*\[(app|decide|owner|by):\s*([^\]]*)\]/g;
+const TAG = /\s*\[(app|decide|owner|by|session):\s*([^\]]*)\]/g;
 
 export function parse(md) {
   const out = [];
@@ -281,6 +281,9 @@ not a ticket line
   // F109: the (@sid:owner:mode) session tag stays in the title, as the old (@cc-..) shape does
   const f109 = parse("- [ ] F34 — Split [owner: @asha] (@cc-k7q2:asha:run)")[0];
   ok(f109.title === "Split (@cc-k7q2:asha:run)" && JSON.stringify(f109.tags) === JSON.stringify([["owner", "@asha"]]), "new-shape session tag kept in the title", f109);
+  // F178: the [session: code] tag comes off the title like the others
+  const f178 = parse("- [ ] F35 — Split [owner: @asha] [session: cc-1ir0]")[0];
+  ok(f178.title === "Split", "[session:] tag lifted off the title", f178);
   // F62: [%] is "testing" - built, waiting on a test result; open, its own row and chip.
   const tmd = `## Features
 - [%] F40 — Built thing (testing: owner live check)
