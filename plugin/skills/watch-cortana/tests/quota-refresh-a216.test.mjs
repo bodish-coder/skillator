@@ -39,10 +39,11 @@ function makeFixture(port) {
   if (port === 'ps1') {
     const stub = [
       `function Start-Process { param($FilePath, $ArgumentList, $WindowStyle) [IO.File]::AppendAllText('${launchesFile}', "$ArgumentList\`n") }`,
-      `function claude { [IO.File]::AppendAllText('${argsFile}', "claude|1|$($args -join ' ')\`n"); [IO.File]::WriteAllText('${stdinFile}', (@($input) -join "\`n")); $n = @([IO.File]::ReadAllLines('${argsFile}')).Count; [IO.File]::AppendAllText('${root}/cli-wait.log', "w=$env:SKILLATOR_QUOTA_REFRESH_WAIT\`n"); if (Test-Path "${root}/cli-cache-$n.txt") { [IO.File]::WriteAllText("$env:CLAUDE_CONFIG_DIR/quota-cache.json", [IO.File]::ReadAllText("${root}/cli-cache-$n.txt")) }; if (Test-Path "${root}/cli-sleep-$n.txt") { Start-Sleep -Seconds ([int][IO.File]::ReadAllText("${root}/cli-sleep-$n.txt")) }; $f = "${root}/cli-response-$n.txt"; if (Test-Path $f) { [IO.File]::ReadAllText($f) } elseif (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
+      `function claude { [IO.File]::AppendAllText('${argsFile}', "claude|1|$($args -join ' ')\`n"); [IO.File]::WriteAllText('${stdinFile}', (@($input) -join "\`n")); $n = @([IO.File]::ReadAllLines('${argsFile}')).Count; [IO.File]::AppendAllText('${root}/cli-wait.log', "w=$env:SKILLATOR_QUOTA_REFRESH_WAIT\`n"); if (Test-Path "${root}/cli-cache-$n.txt") { [IO.File]::WriteAllText("$env:CLAUDE_CONFIG_DIR/quota-cache.json", [IO.File]::ReadAllText("${root}/cli-cache-$n.txt")) }; if (Test-Path "${root}/cli-child-$n.txt") { $si = New-Object Diagnostics.ProcessStartInfo 'ping', '-n 120 127.0.0.1'; $si.UseShellExecute = $false; $si.CreateNoWindow = $true; [IO.File]::WriteAllText('${root}/child.pid', "$([Diagnostics.Process]::Start($si).Id)") }; if (Test-Path "${root}/cli-sleep-$n.txt") { Start-Sleep -Seconds ([int][IO.File]::ReadAllText("${root}/cli-sleep-$n.txt")) }; $f = "${root}/cli-response-$n.txt"; if (Test-Path $f) { [IO.File]::ReadAllText($f) } elseif (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       `function agy { [IO.File]::AppendAllText('${argsFile}', "agy|1|$($args -join ' ')\`n"); if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
       // F176: orphan.pid - a process that started before the refresh, listed as its child (a reused parent PID).
-      `function Get-CimInstance { if (Test-Path '${root}/orphan.pid') { CimCmdlets\\Get-CimInstance Win32_Process -Filter "ProcessId=$([IO.File]::ReadAllText('${root}/orphan.pid').Trim())" } else { CimCmdlets\\Get-CimInstance @args } }`,
+      `function Get-CimInstance { if (Test-Path '${root}/orphan.pid') { CimCmdlets\\Get-CimInstance Win32_Process -Filter "ProcessId=$([IO.File]::ReadAllText('${root}/orphan.pid').Trim())" } elseif (Test-Path '${root}/no-creation') { CimCmdlets\\Get-CimInstance @args | Select-Object ProcessId, @{ n = 'CreationDate'; e = { $null } } } else { CimCmdlets\\Get-CimInstance @args } }`,
+      // A236: no-creation - a listed child's CreationDate cannot be read.
       // F176: no-starttime - this process's own start time cannot be read.
       `function Get-Process { if (Test-Path '${root}/no-starttime') { throw 'denied' } else { Microsoft.PowerShell.Management\\Get-Process @args } }`,
       `function muse { if (Test-Path '${responseFile}') { [IO.File]::ReadAllText('${responseFile}') }; $global:LASTEXITCODE = [int][IO.File]::ReadAllText('${exitCodeFile}') }`,
@@ -69,11 +70,11 @@ function makeFixture(port) {
   }
   for (const name of selectors) delete baseEnv[name]
 
-  const runLevel = (envOverrides = {}) => {
+  const runLevel = (envOverrides = {}, mode = 'level') => {
     const env = { ...baseEnv, ...envOverrides }
     const args = port === 'ps1'
-      ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Mode', 'level']
-      : [script, 'level']
+      ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Mode', mode]
+      : [script, mode]
     return execFileSync(port === 'ps1' ? 'powershell' : shExe, args, { env, encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim()
   }
 
@@ -771,40 +772,56 @@ for (const port of ['ps1', 'sh']) {
     } finally { fx.cleanup() }
   })
 
-  // F176 last round: Get-Process -Id $PID failing must not spare the whole tree.
-  test(`${port}: F176 last round - with no start time of its own, the capped call kills its children by parent pid`, { skip: port !== 'ps1' || skip }, async () => {
-    const fx = makeFixture(port)
-    try {
-      const { env } = turnSetup(fx, 'nostart')
-      fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn.jsonl')])
-      writeFileSync(`${fx.root}/cli-sleep-2.txt`, '60')
-      writeFileSync(`${fx.root}/no-starttime`, '')
-      const child = await fx.spawnOrphan()
-      await fx.spawnLevel({ ...env, ...FORCED })
-      await new Promise(r => setTimeout(r, 1500))
-      const alive = child.exitCode === null && child.signalCode === null
-      child.kill()
-      assert.equal(alive, false, 'the listed child was killed')
-    } finally { fx.cleanup() }
+  // A236 (8): ps1 kills only a listed child with a readable start not before its own; with
+  // its own start or the child's unreadable, a reused PID could be anyone's - spared.
+  test(`${port}: A236 the capped call kills a child it started, and spares one whose start (or its own) cannot be read`, { skip: port !== 'ps1' || skip }, async () => {
+    for (const [flag, killed] of [[null, true], ['no-starttime', false], ['no-creation', false]]) {
+      const fx = makeFixture(port)
+      let pid = 0
+      try {
+        const { env } = turnSetup(fx, 'kids')
+        fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn.jsonl')])
+        writeFileSync(`${fx.root}/cli-child-2.txt`, '')
+        writeFileSync(`${fx.root}/cli-sleep-2.txt`, '60')
+        if (flag) writeFileSync(`${fx.root}/${flag}`, '')
+        await fx.spawnLevel({ ...env, ...FORCED })
+        await new Promise(r => setTimeout(r, 1500))
+        pid = Number(readFileSync(`${fx.root}/child.pid`, 'utf8'))
+        let alive = true
+        try { process.kill(pid, 0) } catch { alive = false }
+        assert.equal(alive, !killed, `${flag ?? 'readable'}: child ${killed ? 'killed' : 'spared'}`)
+      } finally {
+        try { if (pid) process.kill(pid) } catch { }
+        fx.cleanup()
+      }
+    }
   })
 
-  // F176 last round: sh kill_tree spares only a child with a readable start earlier than its parent's.
-  test(`${port}: F176 last round - kill_tree kills a child whose start time cannot be read or compared`, { skip: port !== 'sh' || skip }, () => {
+  // A236 (3, 8): sh kill_tree kills only a child whose start is readable and not before its
+  // parent's (a reused PID can never take down an unrelated tree); taskkill /T only on the
+  // capped call's own process, never on a listed child.
+  test(`${port}: A236 kill_tree spares a child whose start cannot be read or is earlier; /T only on the root`, { skip: port !== 'sh' || skip }, () => {
     const src = readFileSync(`${hooksDir}/usage-watch.sh`, 'utf8')
     const fns = src.slice(src.indexOf('  started() {'), src.indexOf('  capped() {'))
-    for (const [ct, killed] of [['', true], ['abc', true], ['200', true], ['100', true], ['50', false]]) {
+    for (const [pt, ct, killed] of [['100', '', false], ['100', 'abc', false], ['100', '200', true], ['100', '100', true], ['100', '50', false], ['', '200', false]]) {
       const root = mkdtempSync(join(tmpdir(), 'kill-tree-')).replace(/\\/g, '/')
       try {
         const harness = `${fns}
-  taskkill() { :; }
+  taskkill() { echo "$*" >> '${root}/tk'; }
   ( sleep 120 & echo $! > '${root}/child'; wait ) & P=$!
   while [ ! -s '${root}/child' ]; do sleep 0.1; done; C=$(cat '${root}/child')
-  started() { if [ "$1" = "$P" ]; then echo 100; elif [ "$1" = "$C" ]; then printf '%s' '${ct}'; fi; }
+  started() { if [ "$1" = "$P" ]; then printf '%s' '${pt}'; elif [ "$1" = "$C" ]; then printf '%s' '${ct}'; fi; }
   kill_tree "$P"; sleep 1
   if kill -0 "$C" 2>/dev/null; then echo alive; kill "$C"; else echo dead; fi
 `
         const r = spawnSync(shExe, ['-c', harness], { encoding: 'utf8', windowsHide: true, timeout: 30000, env: { ...process.env, PATH: shPathPrefix + (process.env.PATH || process.env.Path || '') } })
-        assert.equal(r.stdout.trim(), killed ? 'dead' : 'alive', `child start "${ct}": ${r.stderr}`)
+        assert.equal(r.stdout.trim(), killed ? 'dead' : 'alive', `parent "${pt}" child "${ct}": ${r.stderr}`)
+        const tk = existsSync(`${root}/tk`) ? readFileSync(`${root}/tk`, 'utf8').trim().split(/\r?\n/) : []
+        if (tk.length) {
+          assert.match(tk[0], /^\/T \/F \/PID \d+$/, 'the root: its whole tree')
+          for (const l of tk.slice(1)) assert.match(l, /^\/F \/PID \d+$/, `a listed child: never /T (${l})`)
+          assert.equal(tk.length, killed ? 2 : 1)
+        }
       } finally { rmSync(root, { recursive: true, force: true }) }
     }
   })

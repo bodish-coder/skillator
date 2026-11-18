@@ -350,10 +350,11 @@ function Invoke-Capped([int]$secs, [string]$call, $in) {
   try {
     $h = $ps.BeginInvoke($inp, $out)
     if (-not $h.AsyncWaitHandle.WaitOne($secs * 1000)) {
-      # A listed child created before this process is an orphan whose dead parent's PID was
-      # reused; a start time that cannot be read (ours or the child's) kills it.
+      # A236: only a listed child created at or after this process is ours. One created before
+      # is an orphan whose dead parent's PID was reused, and a start time that cannot be read
+      # (ours or the child's) is unverified - taskkill /T would take its whole tree: spared.
       $me = try { (Get-Process -Id $PID).StartTime } catch { $null }
-      try { Get-CimInstance Win32_Process -Filter "ParentProcessId=$PID" | Where-Object { -not ($me -and $_.CreationDate -and $_.CreationDate -lt $me) } | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null } } catch { }
+      if ($me) { try { Get-CimInstance Win32_Process -Filter "ParentProcessId=$PID" | Where-Object { $_.CreationDate -and $_.CreationDate -ge $me } | ForEach-Object { & taskkill.exe /T /F /PID $_.ProcessId 2>$null | Out-Null } } catch { } }
       $null = $ps.BeginStop($null, $null)
       return ''
     }
