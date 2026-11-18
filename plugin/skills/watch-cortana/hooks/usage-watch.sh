@@ -354,7 +354,7 @@ if [ "$mode" = refresh ]; then
   lock="$target_dir/quota-cache.json.refreshing"
   cache="$target_dir/quota-cache.json"
   mkdir -p "$target_dir"
-  parsed=""; turned=""
+  parsed=""; turned=""; started_at=$(now_epoch)
   raw=""
   # F176: each claude call is capped (secs, function); on expiry its whole process
   # tree is killed, so no read outlives the lock.
@@ -606,10 +606,12 @@ except Exception:
     # so the turn gate never loses a high 7d; `"last":null` = no reading ever, while a
     # corrupt or legacy cache leaves `last` out (unknown). No node: unknown too. A turn that
     # gave no limits stamps `turned_at` (carried until a reading replaces the record).
+    # A236: a reading written since this refresh started is current - kept (a turn's
+    # `turned_at` stamped on it), never moved into last under a failure record.
     prev_failures=0; last_tag=""
     if command -v node >/dev/null 2>&1; then
       carry=$(node -e '
-        const fs = require("fs"); let s, r; const T = process.argv[2];
+        const fs = require("fs"); let s, r; const T = process.argv[2], S = Number(process.argv[3]);
         // "<failures> <tail>": the tail carries "last" (undefined: left out) and "turned_at".
         const out = (f, last) => {
           const t = T ? T : r && Object.hasOwn(r, "turned_at") ? JSON.stringify(r.turned_at) : "";
@@ -620,6 +622,10 @@ except Exception:
         if (!r || typeof r !== "object" || Array.isArray(r)) { r = null; out(0) }
         const ok = v => typeof v === "number" && Number.isFinite(v);
         const h = ok(r["5h"]) ? r["5h"] : r.five, w = ok(r["7d"]) ? r["7d"] : r.weekly;
+        if ((ok(h) || ok(w)) && Math.floor(fs.statSync(process.argv[1]).mtimeMs / 1000) >= S) {
+          if (T) fs.writeFileSync(process.argv[1], JSON.stringify({ ...r, turned_at: Number(T) }));
+          process.stdout.write("KEEP"); process.exit(0)
+        }
         if (ok(h) || ok(w)) {
           const last = {};
           if (ok(h)) last["5h"] = h;
@@ -629,7 +635,8 @@ except Exception:
         }
         const f = Number.isInteger(r.failures) && r.failures >= 1 ? r.failures : 0;
         out(f, Object.hasOwn(r, "last") ? r.last : undefined);
-      ' "$cache" "$turned" 2>/dev/null)
+      ' "$cache" "$turned" "$started_at" 2>/dev/null)
+      [ "$carry" != KEEP ] || { rm -f "$lock"; exit 0; }
       prev_failures=${carry%% *}
       case $carry in *" "*) last_tag=${carry#* } ;; esac
       case $prev_failures in ''|*[!0-9]*) prev_failures=0 ;; esac

@@ -736,10 +736,30 @@ for (const port of ['ps1', 'sh']) {
     } finally { fx.cleanup() }
   })
 
+  // A236 (5): a good reading stored while the turn ran is the current reading - kept, with the
+  // turn's 24 h hold stamped on it, never moved into last under a failure record; level and
+  // check still see its 95% weekly.
+  test(`${port}: A236 a reading written during a turn with no limits stays the current reading`, { skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'during-good')
+      fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl'), fixture('claude-turn-nolimits.jsonl')])
+      writeFileSync(`${fx.root}/cli-cache-2.txt`, JSON.stringify({ src: 'claude-code', '5h': 10, '7d': 95 }))
+      fx.runRefresh('claude', profile, { ...env, ...FORCED })
+      assert.equal(fx.cliCalls().length, 2)
+      const rec = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.equal(typeof rec.turned_at, 'number', JSON.stringify(rec))
+      delete rec.turned_at
+      assert.deepEqual(rec, { src: 'claude-code', '5h': 10, '7d': 95 })
+      assert.equal(fx.runLevel(env), 'src=claude-code 5h=10.0 7d=95.0 ctx=- max=95.0')
+      assert.match(fx.runLevel({ ...env, CLAUDE_USAGE_HANDOFF_WEEKLY_PCT: '90' }, 'check'), /HANDOFF NOW \(claude-code 7-day 95(\.0)?%\)/)
+    } finally { fx.cleanup() }
+  })
+
   // F176 last round: the failure record re-reads the cache at write time in both ports, so a
-  // reading stored while the turn ran is carried, and a corrupt one still keeps the 24 h hold.
+  // corrupt one still keeps the 24 h hold.
   test(`${port}: F176 last round - a record written after a turn with no limits carries what the cache holds then`, { skip }, () => {
-    for (const [name, during, last] of [['95', JSON.stringify({ src: 'claude-code', '5h': 10, '7d': 95 }), { '5h': 10, '7d': 95 }], ['corrupt', '{"x":', undefined], ['array', '[1]', undefined]]) {
+    for (const [name, during, last] of [['corrupt', '{"x":', undefined], ['array', '[1]', undefined]]) {
       const fx = makeFixture(port)
       try {
         const { profile, env } = turnSetup(fx, 'during')
