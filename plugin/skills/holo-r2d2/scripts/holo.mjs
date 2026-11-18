@@ -36,7 +36,7 @@
 // No npm dependencies. Inline SVG only - no CDN, so the page draws offline.
 
 import { readFile, writeFile, mkdir, readdir, cp, stat } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -893,11 +893,15 @@ export async function runFiles(root) {
 }
 
 // F44: runs are named RUN-0012 (run-0012-*.md); runs named before that are
-// run-12-*.md. Any spelling - 12, RUN-12, RUN-0012 - finds either, by number.
-function runFilesFor(arg, files) {
+// run-12-*.md. Any spelling - 12, RUN-12, RUN-0012 - finds either, by number;
+// both on disk: the canonical run-0012 first, then the newest.
+export function runFilesFor(arg, files) {
   const m = /^(?:RUN-)?(\d+)$/i.exec(arg);
   if (!m) return null;
-  return files.filter((f) => { const k = /^run-(\d+)-/.exec(basename(f)); return k && BigInt(k[1]) === BigInt(m[1]); });
+  const canon = `run-${String(BigInt(m[1])).padStart(4, "0")}-`;
+  const age = (f) => { try { return statSync(f).mtimeMs; } catch { return 0; } };
+  return files.filter((f) => { const k = /^run-(\d+)-/.exec(basename(f)); return k && BigInt(k[1]) === BigInt(m[1]); })
+    .sort((a, b) => basename(b).startsWith(canon) - basename(a).startsWith(canon) || age(b) - age(a));
 }
 
 async function resolveRun(arg, root) {

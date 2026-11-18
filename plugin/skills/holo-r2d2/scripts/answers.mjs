@@ -15,7 +15,7 @@ import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { nextWizardSet, setFromRun, answersToCommands, isFinalized, fileStem, pageSet, settledIn, without, CTRL, clean, q } from "./wizard.mjs";
-import { parseRun, findRoot, runFiles, nonceFile } from "./holo.mjs";
+import { parseRun, findRoot, runFiles, runFilesFor, nonceFile } from "./holo.mjs";
 
 const MAX_FILE = 1048576;
 const NAME = /^(.+)-decisions-(FINAL|draft)\s*(?:\(\d+\))?\.json$/i;
@@ -107,7 +107,7 @@ async function openSets(root, holo) {
     try {
       let set = pageSet(await readFile(join(holo, n), "utf8"));
       const m = /^RUN-(\d+)$/i.exec(String(set?.id ?? n.slice(0, -".wizard.html".length)));
-      const path = m && runs.find((f) => { const k = /^run-(\d+)-/.exec(f.replace(/^.*[\\/]/, "")); return k && Number(k[1]) === Number(m[1]); });
+      const path = m && runFilesFor(m[1], runs)[0];
       if (path) {
         const run = parseRun(await readFile(path, "utf8"));
         const live = setFromRun(run, relative(root, path).replace(/\\/g, "/"));

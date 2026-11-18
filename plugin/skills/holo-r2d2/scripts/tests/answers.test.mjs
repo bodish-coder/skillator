@@ -703,3 +703,21 @@ test("A233-1: no next-round hint when the only defer is already settled; --next-
   assert.equal(readFileSync(join(s.holo, "RUN-1.wizard.html"), "utf8"), before, "the page is not rewritten");
 });
 
+test("A233-2: run-0001-*.md beside run-1-*.md - the canonical file wins, whatever the order", async () => {
+  const { runFilesFor } = await import("../holo.mjs");
+  const a = join("x", ".skillator", "run-1-old.md"), b = join("x", ".skillator", "run-0001-new.md");
+  for (const files of [[a, b], [b, a]]) assert.equal(runFilesFor("RUN-1", files)[0], b);
+  for (const older of ["canonical", "old"]) {
+    const s = sandbox();
+    const set = run1(s), md = readFileSync(RUN1(s), "utf8");
+    rmSync(RUN1(s));
+    const canon = join(s.root, ".skillator", "run-0001-shelf-export.md"), old = join(s.root, ".skillator", "run-1-shelf-export.md");
+    writeFileSync(canon, md);
+    writeFileSync(old, md.replace("### Q1 open", "### Q1 answered"));
+    at(older === "canonical" ? canon : old, "2026-11-17T09:00:00Z");
+    put(s.dl, "RUN-1-decisions-FINAL.json", run1Answers(s, set), 0);
+    const text = report(await findAnswers(s.opts));
+    assert.match(text, / answer Q1 /, `${older} older: ${text}`);
+  }
+});
+
