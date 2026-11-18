@@ -1,6 +1,6 @@
 # RUN-0040 - A236 quota follow-ups
 plan: TICKETS.md
-started: 2026-11-18T11:33Z   updated: 2026-11-18T17:24Z
+started: 2026-11-18T11:33Z   updated: 2026-11-18T17:42Z
 worktree: C:/tools/Projects/skillator2/.skillator/worktrees/RUN-0040-a236-quota-follow-ups
 branch: run/RUN-0040-a236-quota-follow-ups
 
@@ -13,7 +13,7 @@ branch: run/RUN-0040-a236-quota-follow-ups
 | 310 | B32 reproduce agy Health tab | x | build:opus | 2026-11-18T17:23Z | 49fb2a9 |
 | 311 | B32 fix agy Health tab | x | build:opus | 2026-11-18T17:24Z | 49fb2a9 |
 | 312 | B31 selftest.ps1 weekly gate | x | build:opus | 2026-11-18T17:14Z | 752f779 |
-| 313 | A244 ui.focus stubs in seven mod tests | ~ | build:opus | 2026-11-18T17:00Z | - |
+| 313 | A244 ui.focus stubs in seven mod tests | x | build:opus | 2026-11-18T17:42Z | 2111d4f |
 
 ## In flight
 ### stage 313 (dispatched 17:00Z)
@@ -105,3 +105,4 @@ prompt: |
 - 2026-11-18T17:00Z - owner: do the not-started tickets in parallel. A227/A229/A230 are the owner's (Teams admin, real token, machine). Ruling: 3 at once (owner's parallel 3, ~3 GB free): B32 fix (311, in s310's worktree), B31 (312), A244 (313) - file-disjoint; the other six wait - 7d at 95%, the 97% stop halts all agents with a handoff - cost if wrong: stages stopped mid-flight, resumable from their prompts. Stub PATH must be a /c/ path (stage 310's real-agy-call lesson).
 - 2026-11-18T17:14Z - stage 312 (B31) back 1736967. Root cause (verified): the Claude probe put seven_day used_percentage into the main-flag max, so a week at 92-96% fired the 92% handoff gate. Fix: both twins drop seven_day from the max (codex path already did, A98). Orchestrator: read the diff (3 files, +8/-5 in hooks), selftest.ps1 ok end to end. Agent ran a single-pass /code-review: none. Landed as 752f779.
 - 2026-11-18T17:24Z - stage 311 (B32 fix) back 87baaac..f8c4bcb (agent: ops tests 326/326 one file at a time, frames fixed-health-80x24/120x30, 0 real calls). Orchestrator: b32+status 27/0, read the --env code (7-name allowlist, unknown exits 2). Ruling: landed without a review agent at 7d 96% - leftover review in A247 - cost if wrong: a defect ships in 4.30.2. Merged as 49fb2a9.
+- 2026-11-18T17:42Z - stage 313 (A244) back 8a10c37..dfc8ffe: alphabet 4/4, status 17/17, explorer 30/30, reconcile 10/10, runtab 23/23, pane 70/70 (was 41/70); log 0/4 (Log tab never wired -> A248); model A199 decide fails on main -> A249. Two product fixes: explorertab no longer treats the optional outgoing git log as fatal (F152); ticketsmodel KEY_LABELS gains F175's 'u ask' (the list overdrew the pane by a row). Orchestrator read the explorertab change. Merged as 2111d4f. Owner: release now.
