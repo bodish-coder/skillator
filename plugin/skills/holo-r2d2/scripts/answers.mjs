@@ -102,7 +102,7 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
 // embeds (a --next-wizard page is round 2+). A RUN set's run file is found by that set's id (by the page's
 // file name only when the page is unreadable - the set is then rebuilt from the run). openNow: a RUN
 // set's decisions still open or asked in the run file now - only those may get a command; gone: the ones settled there.
-// done: a fully settled RUN set - its newest answered/ruled time (the run file's mtime when later and a moot,
+// done: a fully settled RUN set - its newest answered/ruled time (the run's updated: stamp when later and a moot,
 // same-as or replanned decision carries no time), else (none recorded) its run file's mtime.
 // Every map is keyed by runKey (RUN-1, RUN-0001 and run-1 are one set).
 async function openSets(root, holo) {
@@ -134,7 +134,7 @@ async function openSets(root, holo) {
         let answered = Math.max(0, ...run.qs.map(time));
         if (!r.live.decisions.length) {
           const mtime = (await stat(path)).mtimeMs;
-          if (answered && run.qs.some((x) => r.gone.has(x.id) && !time(x) && UNTIMED.some((k) => x.state === k || x.f[k]))) answered = Math.max(answered, mtime);
+          if (answered && run.qs.some((x) => r.gone.has(x.id) && !time(x) && UNTIMED.some((k) => x.state === k || x.f[k]))) answered = Math.max(answered, Date.parse(run.updated) || mtime);
           done.set(id, answered ? { answered } : { mtime });
         }
       }

@@ -902,11 +902,9 @@ test("A237-r2: a FINAL is newer than the run's last answer only in a later minut
   assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "a later minute: newer");
 });
 
-test("A237-r3: a settled decision with no time (moot) - judged by the later of the answer time and the run file's mtime", async () => {
+test("A237-r3: a settled decision with no time (moot) - judged by the later of the answer time and the run's updated: stamp", async () => {
   const s = sandbox();
-  stampedRun(s, "### Q2 moot");
-  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace(/(### Q2 moot[\s\S]*?)answer: -/, "$1moot: covered by F5"));
-  at(RUN1(s), "2026-11-17T13:00:00Z");
+  mootQ2(s, "2026-11-17T13:00Z");
   finalAt(s, "2026-11-17T12:00:00Z");
   assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "finalized after the 11:00 answer but before the 13:00 run file");
   finalAt(s, "2026-11-17T13:01:00Z");
@@ -935,6 +933,24 @@ test("A237-r5: a settled-run FINAL with no valid finalizedAt is refused as such"
   const r = await findAnswers(s.opts);
   assert.equal(r.refused.find((x) => x.path === p)?.why, "finalizedAt is not an ISO 8601 time", report(r));
   assert.ok(!r.ignored.some((x) => x.path === p), report(r));
+});
+
+// ------------------------------------------------------------ A241 ----
+// Q2 settled moot with no time; updated: the run file's stamp (null drops it); mtime: the file time.
+function mootQ2(s, updated, mtime = "2026-11-17T13:00:00Z") {
+  stampedRun(s, "### Q2 moot");
+  const md = readFileSync(RUN1(s), "utf8").replace(/(### Q2 moot[\s\S]*?)answer: -/, "$1moot: covered by F5");
+  writeFileSync(RUN1(s), md.replace(/ *updated: \S+/, updated ? ` updated: ${updated}` : ""));
+  at(RUN1(s), mtime);
+}
+
+test("A241-2: an untimed settled decision is bounded by the run's updated: stamp, not a later file mtime", async () => {
+  const s = sandbox();
+  mootQ2(s, "2026-11-17T12:00Z", "2026-11-17T15:00:00Z"); // a checkout or merge bumped the file
+  finalAt(s, "2026-11-17T11:30:00Z");
+  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "before the updated: stamp");
+  finalAt(s, "2026-11-17T12:30:00Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "after the updated: stamp, though before the file mtime");
 });
 
 // B30: the plugin cache is reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins).
