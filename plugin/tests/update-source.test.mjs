@@ -22,7 +22,8 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(
   GIT_AUTHOR_EMAIL: 'fixture@example.invalid', GIT_COMMITTER_NAME: 'Fixture',
   GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 writeFileSync(env.GIT_CONFIG_GLOBAL, '');
-for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG_COUNT']) delete env[key];
+for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG_COUNT',
+  'SKILLATOR_SELFTEST_GUARDED']) delete env[key]; // A232: a guard inherited from a running selftest would skip the time limit
 function git(args, allowFailure = false) {
   const r = spawnSync('git', args, { env, encoding: 'utf8', timeout: 15000, windowsHide: true });
   if (!allowFailure) assert.equal(r.status, 0, `${args.join(' ')}: ${r.stderr || r.error}`);
@@ -135,13 +136,44 @@ test('A231: every updater treats the pointer as a hint that never stops or downg
   }
 });
 // A232: a hung or runaway sh selftest fails fast with a reason instead of blocking for hours
-test('sh selftest stops at its time limit and says so', { skip: !hasSh || !available('sh', ['-c', 'command -v timeout']) ? 'no sh or no timeout' : false }, () => {
-  const started = Date.now();
-  const r = spawnSync('sh', [join(plugin, 'install.sh').replaceAll('\\', '/'), '--selftest'],
-    { env: { ...env, SKILLATOR_SELFTEST_TIMEOUT: '2' }, encoding: 'utf8', timeout: 120000, windowsHide: true });
+const selftest = extra => spawnSync('sh', [join(plugin, 'install.sh').replaceAll('\\', '/'), '--selftest'],
+  { env: { ...env, ...extra }, encoding: 'utf8', timeout: 120000, windowsHide: true });
+const pathKey = Object.keys(env).find(k => k.toUpperCase() === 'PATH') || 'PATH';
+// a bin dir whose `timeout` prints <version> for --version and otherwise exits <rc>
+const fakeTimeout = (name, version, rc) => {
+  const bin = join(root, name); mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'timeout'), `#!/bin/sh\nif [ "$1" = --version ]; then echo '${version}'; exit 0; fi\nexit ${rc}\n`, { mode: 0o755 });
+  return { [pathKey]: bin + nodePath.delimiter + env[pathKey] };
+};
+const gnuTimeout = available('sh', ['-c', 'timeout --version </dev/null | grep -q coreutils']);
+test('sh selftest stops at its time limit, says so and leaves no temp HOME', { skip: !hasSh || !gnuTimeout ? 'no sh or no GNU timeout' : false }, () => {
+  const started = Date.now(), tmp = join(root, 'a232-tmp'); mkdirSync(tmp);
+  const r = selftest({ SKILLATOR_SELFTEST_TIMEOUT: '6', TMPDIR: tmp.replaceAll('\\', '/') });
   assert.equal(r.status, 124, r.stdout + r.stderr);
-  assert.match(r.stdout, /^FAIL: selftest still running after 2s \(SKILLATOR_SELFTEST_TIMEOUT\)$/m);
+  assert.match(r.stdout, /^FAIL: selftest still running after 6s \(SKILLATOR_SELFTEST_TIMEOUT\)$/m);
   assert.ok(Date.now() - started < 60000, 'the limit stopped it');
+  assert.deepEqual(fs.readdirSync(tmp), [], 'the killed selftest removed its temp fixture');
+});
+test('sh selftest refuses a time limit that is not a positive integer of seconds', { skip: !hasSh ? 'no sh' : false }, () => {
+  for (const v of ['abc', '0', '-5', '1.5', '2s']) {
+    const r = selftest({ SKILLATOR_SELFTEST_TIMEOUT: v });
+    assert.equal(r.status, 2, `${v}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, /^FAIL: SKILLATOR_SELFTEST_TIMEOUT must be a positive integer of seconds/m, v);
+  }
+});
+test('sh selftest says when its time limit could not run', { skip: !hasSh ? 'no sh' : false }, () => {
+  const r = selftest(fakeTimeout('a232-gnu', 'timeout (GNU coreutils) 9.9', 125));
+  assert.equal(r.status, 125, r.stdout + r.stderr);
+  assert.match(r.stdout, /^FAIL: selftest time limit could not run \(rc 125\)$/m);
+});
+test('sh selftest takes only GNU timeout, never Windows timeout.exe', { skip: !hasSh ? 'no sh' : false }, () => {
+  const shell = readFileSync(join(plugin, 'install.sh'), 'utf8').replaceAll('\r', '');
+  const fn = shell.match(/^gnu_timeout\(\) \{\n[\s\S]*?^\}/m)?.[0];
+  assert.ok(fn, 'install.sh: gnu_timeout not found');
+  const pick = extra => spawnSync('sh', ['-c', `${fn}\ngnu_timeout`], { env: { ...env, ...extra }, encoding: 'utf8', timeout: 15000, windowsHide: true }).stdout.trim();
+  assert.equal(pick(fakeTimeout('a232-win', 'ERROR: Invalid syntax. Default option is not allowed more than 1 time(s).', 1)), '');
+  assert.equal(pick(fakeTimeout('a232-gnu2', 'timeout (GNU coreutils) 9.9', 0)), 'timeout');
+  assert.match(shell, /echo 'selftest: no time limit \(no GNU timeout\)'/, 'install.sh: no note without GNU timeout');
 });
 test('both installer writers preserve updater instructions in every host template', { skip: !ps || !hasSh ? 'Missing executable: ' + [!ps && 'powershell/pwsh', !hasSh && 'sh'].filter(Boolean).join(', ') : false }, () => {
   const shell = readFileSync(join(plugin, 'install.sh'), 'utf8').replaceAll('\r', '');
