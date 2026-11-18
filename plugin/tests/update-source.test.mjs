@@ -10,7 +10,8 @@ import { spawnSync } from 'node:child_process';
 
 const plugin = fileURLToPath(new URL('../', import.meta.url));
 const available = (exe, args) => spawnSync(exe, args, { windowsHide: true, timeout: 10000 }).status === 0;
-const ps = ['powershell', 'pwsh'].find(exe => available(exe, ['-NoProfile', '-Command', 'exit 0']));
+const shells = ['powershell', 'pwsh'].filter(exe => available(exe, ['-NoProfile', '-Command', 'exit 0']));
+const ps = shells[0];
 const hasSh = available('sh', ['-c', 'exit 0']);
 const commands = ['commands/skillator-update.md', 'host-commands/antigravity/skillator-update/SKILL.md',
   ...['cursor', 'pi', 'opencode'].map(h => `host-commands/${h}/skillator-update.md`),
@@ -21,7 +22,8 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(
   GIT_AUTHOR_EMAIL: 'fixture@example.invalid', GIT_COMMITTER_NAME: 'Fixture',
   GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 writeFileSync(env.GIT_CONFIG_GLOBAL, '');
-for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG_COUNT']) delete env[key];
+for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CONFIG_COUNT',
+  'SKILLATOR_SELFTEST_GUARDED']) delete env[key]; // A232: a guard inherited from a running selftest would skip the time limit
 function git(args, allowFailure = false) {
   const r = spawnSync('git', args, { env, encoding: 'utf8', timeout: 15000, windowsHide: true });
   if (!allowFailure) assert.equal(r.status, 0, `${args.join(' ')}: ${r.stderr || r.error}`);
@@ -133,9 +135,49 @@ test('A231: every updater treats the pointer as a hint that never stops or downg
     assert.match(r, /no skillator version in step 1.*use the pointer.*say so/, `${path}: no step-1 version uses the pointer`);
   }
 });
+// A232: a hung or runaway sh selftest fails fast with a reason instead of blocking for hours
+const selftest = extra => spawnSync('sh', [join(plugin, 'install.sh').replaceAll('\\', '/'), '--selftest'],
+  { env: { ...env, ...extra }, encoding: 'utf8', timeout: 120000, windowsHide: true });
+const pathKey = Object.keys(env).find(k => k.toUpperCase() === 'PATH') || 'PATH';
+// a bin dir whose `timeout` prints <version> for --version and otherwise exits <rc>
+const fakeTimeout = (name, version, rc) => {
+  const bin = join(root, name); mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'timeout'), `#!/bin/sh\nif [ "$1" = --version ]; then echo '${version}'; exit 0; fi\nexit ${rc}\n`, { mode: 0o755 });
+  return { [pathKey]: bin + nodePath.delimiter + env[pathKey] };
+};
+const gnuTimeout = available('sh', ['-c', 'timeout --version </dev/null | grep -q coreutils']);
+test('sh selftest stops at its time limit, says so and leaves no temp HOME', { skip: !hasSh || !gnuTimeout ? 'no sh or no GNU timeout' : false }, () => {
+  const started = Date.now(), tmp = join(root, 'a232-tmp'); mkdirSync(tmp);
+  const r = selftest({ SKILLATOR_SELFTEST_TIMEOUT: '6', TMPDIR: tmp.replaceAll('\\', '/') });
+  assert.equal(r.status, 124, r.stdout + r.stderr);
+  assert.match(r.stdout, /^FAIL: selftest still running after 6s \(SKILLATOR_SELFTEST_TIMEOUT\)$/m);
+  assert.ok(Date.now() - started < 60000, 'the limit stopped it');
+  assert.deepEqual(fs.readdirSync(tmp), [], 'the killed selftest removed its temp fixture');
+});
+test('sh selftest refuses a time limit that is not a positive integer of seconds', { skip: !hasSh ? 'no sh' : false }, () => {
+  for (const v of ['abc', '0', '-5', '1.5', '2s']) {
+    const r = selftest({ SKILLATOR_SELFTEST_TIMEOUT: v });
+    assert.equal(r.status, 2, `${v}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, /^FAIL: SKILLATOR_SELFTEST_TIMEOUT must be a positive integer of seconds/m, v);
+  }
+});
+test('sh selftest says when its time limit could not run', { skip: !hasSh ? 'no sh' : false }, () => {
+  const r = selftest(fakeTimeout('a232-gnu', 'timeout (GNU coreutils) 9.9', 125));
+  assert.equal(r.status, 125, r.stdout + r.stderr);
+  assert.match(r.stdout, /^FAIL: selftest time limit could not run \(rc 125\)$/m);
+});
+test('sh selftest takes only GNU timeout, never Windows timeout.exe', { skip: !hasSh ? 'no sh' : false }, () => {
+  const shell = readFileSync(join(plugin, 'install.sh'), 'utf8').replaceAll('\r', '');
+  const fn = shell.match(/^gnu_timeout\(\) \{\n[\s\S]*?^\}/m)?.[0];
+  assert.ok(fn, 'install.sh: gnu_timeout not found');
+  const pick = extra => spawnSync('sh', ['-c', `${fn}\ngnu_timeout`], { env: { ...env, ...extra }, encoding: 'utf8', timeout: 15000, windowsHide: true }).stdout.trim();
+  assert.equal(pick(fakeTimeout('a232-win', 'ERROR: Invalid syntax. Default option is not allowed more than 1 time(s).', 1)), '');
+  assert.equal(pick(fakeTimeout('a232-gnu2', 'timeout (GNU coreutils) 9.9', 0)), 'timeout');
+  assert.match(shell, /echo 'selftest: no time limit \(no GNU timeout\)'/, 'install.sh: no note without GNU timeout');
+});
 test('both installer writers preserve updater instructions in every host template', { skip: !ps || !hasSh ? 'Missing executable: ' + [!ps && 'powershell/pwsh', !hasSh && 'sh'].filter(Boolean).join(', ') : false }, () => {
   const shell = readFileSync(join(plugin, 'install.sh'), 'utf8').replaceAll('\r', '');
-  const functions = ['native', 'subst', 'put_cmd'].map(name => {
+  const functions = ['native', 'subst', 'under_link', 'put_cmd'].map(name => {
     const match = shell.match(new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?^\\}`, 'm'));
     assert.ok(match, `missing shell function ${name}`); return match[0];
   }).join('\n');
@@ -147,9 +189,11 @@ $ErrorActionPreference = 'Stop'
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($Installer, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw 'Installer parse failure' }
-$fn = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Write-Cmd' }, $true)
-if (-not $fn) { throw 'Missing Write-Cmd' }
-. ([scriptblock]::Create($fn.Extent.Text))
+foreach ($name in 'Test-UnderLink', 'Write-Cmd') {
+  $fn = $ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
+  if (-not $fn) { throw "Missing $name" }
+  . ([scriptblock]::Create($fn.Extent.Text))
+}
 Write-Cmd $Template $Skills $Target
 `);
   const skills = join(root, 'isolated skills').replaceAll('\\', '/');
@@ -198,11 +242,47 @@ test('installers removed by a successful pull stop installation', () => {
 });
 // Retain isolated fixtures for inspection; no recursive deletion or live profile access.
 console.log(`A168 local fixtures: ${root}`);
-test('A231: both installers normalize a Muse source path to the same string', { skip: process.platform !== 'win32' || !ps ? 'Windows with PowerShell only' : false }, () => {
+// the A231 normalizer alone, extracted from install.ps1, fed a JSON array of paths on stdin
+const normScript = dir => {
+  const script = join(dir, 'norm.ps1');
+  writeFileSync(script, `param([switch]$NoAddType, [switch]$LegacyPaths, [switch]$FakeOS, [switch]$BrokenFinalPath, [switch]$OldType)
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+if ($NoAddType) { function Add-Type { $global:a231Compiles++; throw 'a231 no Add-Type' } }
+if ($FakeOS) { $env:OS = 'a231' }
+if ($LegacyPaths) { # Windows PowerShell 5.1 as an older .NET runs it: GetFullPath stops at 260 characters
+  foreach ($s in 'UseLegacyPathHandling', 'BlockLongPaths') { [AppContext]::SetSwitch("Switch.System.IO.$s", $true) }
+  $t = [object].Assembly.GetType('System.AppContextSwitches')
+  foreach ($f in '_useLegacyPathHandling', '_blockLongPaths') { $t.GetField($f, 'NonPublic,Static').SetValue($null, 0) }
+  try { [void][IO.Path]::GetFullPath('C:\\' + ('l' * 300)); [Console]::Error.WriteLine('legacy: GetFullPath did not throw PathTooLongException') } catch [IO.PathTooLongException] {}
+}
+if ($OldType) { # an older normalizer's type, compiled earlier in the same session, without Full
+  Add-Type -TypeDefinition 'public static class MuseFinalPath { public static string Get(string p) { return null; } }'
+}
+if ($BrokenFinalPath) { # compiled, but every Win32 call fails at run time
+  Add-Type -TypeDefinition 'public static class MuseFinalPath2 { public static int Gets, Fulls; public static string Get(string p) { Gets++; throw new System.EntryPointNotFoundException("a234 get"); } public static string Full(string p) { Fulls++; throw new System.EntryPointNotFoundException("a234 full"); } }'
+}
+$ast = [Management.Automation.Language.Parser]::ParseFile('${join(plugin, 'install.ps1').replaceAll("'", "''")}', [ref]$null, [ref]$null)
+. ([scriptblock]::Create($ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Normalize-MusePath' }, $true).Extent.Text))
+foreach ($p in ([Console]::In.ReadToEnd() | ConvertFrom-Json)) { Normalize-MusePath $p }
+if ($NoAddType) { [Console]::Error.WriteLine("compiles: $global:a231Compiles") }
+if ($BrokenFinalPath) { [Console]::Error.WriteLine("calls: $([MuseFinalPath2]::Gets) $([MuseFinalPath2]::Fulls)") }`);
+  return script;
+};
+// [stdout lines, stderr lines]
+const psRun = (shell, script, inputs, flags = [], cwd) => {
+  const r = spawnSync(shell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, ...flags],
+    { input: JSON.stringify(inputs), cwd, encoding: 'utf8', timeout: 120000, windowsHide: true });
+  assert.equal(r.status, 0, `${shell}: ${r.stderr || r.error}`);
+  return [r.stdout, r.stderr].map(t => t.trim().split(/\r?\n/).filter(Boolean));
+};
+const note = (step, why) => `note: path resolution unavailable (${step}: ${why}) - comparing paths as written`;
+// A234: under Windows PowerShell 5.1 and under pwsh; powershell.exe is never skipped on Windows
+for (const shell of ['powershell', 'pwsh']) test(`A231: both installers normalize a Muse source path to the same string (${shell})`,
+  { skip: process.platform !== 'win32' ? 'Windows only' : shell === 'pwsh' && !shells.includes('pwsh') ? 'no pwsh on PATH' : false }, () => {
   const normSrc = readFileSync(join(plugin, 'install.sh'), 'utf8').match(/^\s*const norm = (p => .*);\r?$/m)?.[1];
   assert.ok(normSrc, 'install.sh: muse_json norm not found');
   const nodeNorm = new Function('fs', 'path', `return ${normSrc}`)(fs, nodePath);
-  const fx = join(root, 'a231'), real = join(fx, 'real'), skips = [];
+  const fx = join(root, `a231-${shell}`), real = join(fx, 'real'), skips = [];
   mkdirSync(join(real, 'sub'), { recursive: true }); mkdirSync(join(fx, 'a'));
   fs.symlinkSync(real, join(fx, 'junction'), 'junction');
   const viaLink = fs.realpathSync.native(join(real, 'sub')).replace(/\\/g, '/').toLowerCase();
@@ -215,32 +295,12 @@ test('A231: both installers normalize a Muse source path to the same string', { 
     [share, null], [share.toUpperCase(), null]];
   try { fs.symlinkSync('..\\real', join(fx, 'a', 'rel'), 'dir'); cases.push([join(fx, 'a', 'rel', 'sub'), viaLink]); }
   catch { skips.push('relative symlink case (no symlink privilege)'); }
-  let deep;
-  try {
-    deep = join(real, 'l'.repeat(140), 'm'.repeat(140)); mkdirSync(deep, { recursive: true });
-    cases.push([join(fx, 'junction', 'l'.repeat(140), 'M'.repeat(140)), fs.realpathSync.native(deep).replace(/\\/g, '/').toLowerCase()]);
-  } catch (e) { deep = undefined; skips.push(`long path case (${e.code || e.message})`); }
-  const script = join(fx, 'norm.ps1');
-  writeFileSync(script, `param([switch]$NoAddType, [switch]$LegacyPaths, [switch]$NotWindows)
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
-if ($NoAddType) { function Add-Type { $global:a231Compiles++; throw 'a231 no Add-Type' } }
-if ($NotWindows) { $env:OS = 'a231' }
-if ($LegacyPaths) { # Windows PowerShell 5.1 as an older .NET runs it: GetFullPath stops at 260 characters
-  foreach ($s in 'UseLegacyPathHandling', 'BlockLongPaths') { [AppContext]::SetSwitch("Switch.System.IO.$s", $true) }
-  $t = [object].Assembly.GetType('System.AppContextSwitches')
-  foreach ($f in '_useLegacyPathHandling', '_blockLongPaths') { $t.GetField($f, 'NonPublic,Static').SetValue($null, 0) }
-}
-$ast = [Management.Automation.Language.Parser]::ParseFile('${join(plugin, 'install.ps1').replaceAll("'", "''")}', [ref]$null, [ref]$null)
-. ([scriptblock]::Create($ast.Find({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Normalize-MusePath' }, $true).Extent.Text))
-foreach ($p in ([Console]::In.ReadToEnd() | ConvertFrom-Json)) { Normalize-MusePath $p }
-if ($NoAddType) { [Console]::Error.WriteLine("compiles: $global:a231Compiles") }`);
-  // [stdout lines, stderr lines]
-  const psRun = (inputs, flags = [], cwd) => {
-    const r = spawnSync(ps, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, ...flags],
-      { input: JSON.stringify(inputs), cwd, encoding: 'utf8', timeout: 120000, windowsHide: true });
-    assert.equal(r.status, 0, r.stderr);
-    return [r.stdout, r.stderr].map(t => t.trim().split(/\r?\n/).filter(Boolean));
-  };
+  // A234: the long-path case is never skipped
+  const L = 'l'.repeat(140), M = 'm'.repeat(140), deep = join(real, L, M);
+  mkdirSync(deep, { recursive: true });
+  const want = fs.realpathSync.native(deep).replace(/\\/g, '/').toLowerCase();
+  cases.push([join(fx, 'junction', L, M.toUpperCase()), want]);
+  const script = normScript(fx);
   // the letters are picked just before use: one stays unmapped, one becomes a subst drive
   const free = 'ZYXWVUTSRQPONMLKJIHG'.split('').filter(l => !fs.existsSync(`${l}:\\`));
   const gone = free[0], drive = process.env.SKILLATOR_NO_SUBST === '1' ? undefined : free[1];
@@ -250,7 +310,7 @@ if ($NoAddType) { [Console]::Error.WriteLine("compiles: $global:a231Compiles") }
   try {
     if (subst) cases.push([`${drive}:\\sub`, viaLink], [`${drive}:\\`, viaLink.slice(0, -'/sub'.length)]);
     else skips.push(`subst case (${process.env.SKILLATOR_NO_SUBST === '1' ? 'SKILLATOR_NO_SUBST=1' : drive ? 'subst failed' : 'no free drive letter'})`);
-    const [psOut, psErr] = psRun(cases.map(c => c[0]));
+    const [psOut, psErr] = psRun(shell, script, cases.map(c => c[0]));
     assert.deepEqual(psErr, [], 'resolvable paths print no note');
     cases.forEach(([input, want], i) => {
       const n = nodeNorm(input);
@@ -259,17 +319,35 @@ if ($NoAddType) { [Console]::Error.WriteLine("compiles: $global:a231Compiles") }
       assert.equal(n, n.toLowerCase(), `${input}: not lowercased`);
     });
   } finally { if (subst) spawnSync('subst', [`${drive}:`, '/d'], { timeout: 15000, windowsHide: true }); }
-  // Windows PowerShell 5.1 with its 260-character limit: '..' and a relative path still resolve
-  if (deep && ps === 'powershell') {
-    const L = 'l'.repeat(140), M = 'm'.repeat(140), want = fs.realpathSync.native(deep).replace(/\\/g, '/').toLowerCase();
-    assert.deepEqual(psRun([`${fx}\\junction\\${L}\\x\\..\\${M.toUpperCase()}`, `${L}\\.\\${M}\\..\\${M}`], ['-LegacyPaths'], real), [[want, want], []]);
-  } else if (deep) skips.push('long path under Windows PowerShell 5.1 case (no powershell.exe)');
+  const asWritten = p => p.replace(/\\/g, '/').toLowerCase();
+  if (shell === 'powershell') {
+    // Windows PowerShell 5.1 with its 260-character limit (the script checks GetFullPath really throws):
+    // '..', a relative path, a drive-relative C:x, trailing dots and spaces and a \\server path resolve as Win32 does
+    const unc = `\\\\localhost\\${sys[0]}$${real.slice(2)}\\${L}\\${M}`;
+    const legacy = [[`${fx}\\junction\\${L}\\x\\..\\${M.toUpperCase()}`, want], [`${L}\\.\\${M}\\..\\${M}`, want],
+      [`${sys}${L}\\${M}`, want], [`${fx}\\junction\\${L}\\${M}. .`, want], [unc, nodeNorm(unc)]];
+    assert.deepEqual(psRun(shell, script, legacy.map(c => c[0]), ['-LegacyPaths'], real), [legacy.map(c => c[1]), []]);
+    // A234: a Win32 failure is tried again for each input (only a failed compile is cached), its note printed once
+    const long = `${real}\\${L}\\${M}`, short = join(real, 'sub');
+    assert.deepEqual(psRun(shell, script, [long, short, long, short], ['-LegacyPaths', '-BrokenFinalPath']),
+      [[long, short, long, short].map(asWritten), [note('long path', 'a234 full'), note('final path', 'a234 get'), 'calls: 2 2']]);
+    // A234: an older MuseFinalPath without Full, compiled earlier in the session, leaves the long path working
+    assert.deepEqual(psRun(shell, script, [legacy[0][0]], ['-LegacyPaths', '-OldType'], real), [[want], []]);
+  }
+  // A234: a Win32 call that fails at run time is tried again for the next input, its note printed once
+  const short = [join(real, 'sub'), join(fx, 'a')];
+  assert.deepEqual(psRun(shell, script, short, ['-BrokenFinalPath']), [short.map(asWritten), [note('final path', 'a234 get'), 'calls: 2 0']]);
   // no link resolution: only the string-only form on stdout; one compile attempt and one note on stderr
   const written = [join(fx, 'junction', 'sub'), `${sys.toUpperCase()}\\`, real];
-  assert.deepEqual(psRun(written, ['-NoAddType']), [written.map(p => p.replace(/\\/g, '/').toLowerCase().replace(/(?<!:)\/$/, '')),
-    ['note: path resolution unavailable (Add-Type: a231 no Add-Type) - comparing paths as written', 'compiles: 1']]);
-  // Node lowercases on win32 only: off Windows the case is kept
+  assert.deepEqual(psRun(shell, script, written, ['-NoAddType']), [written.map(p => asWritten(p).replace(/(?<!:)\/$/, '')),
+    [note('Add-Type', 'a231 no Add-Type'), 'compiles: 1']]);
+  // A234: Windows is the platform, not $env:OS, which any caller can set: the case still folds
   const cased = join(fx, 'NoSuch', 'CaSe');
-  assert.deepEqual(psRun([cased], ['-NotWindows'])[0], [cased.replace(/\\/g, '/')]);
+  assert.deepEqual(psRun(shell, script, [cased], ['-FakeOS'])[0], [asWritten(cased)]);
   for (const s of skips) console.log(`# skip A231 ${s}`);
+});
+// A234: off Windows a POSIX path resolves as POSIX: no \ separators, the case kept, no Win32 call
+test('A234: off Windows a Muse source path keeps its separators and case', { skip: process.platform === 'win32' ? 'off Windows only (pwsh on Linux or macOS)' : !shells.includes('pwsh') ? 'no pwsh on PATH' : false }, () => {
+  const fx = join(root, 'a234-posix'); mkdirSync(fx, { recursive: true });
+  assert.deepEqual(psRun('pwsh', normScript(fx), ['/tmp/A234-None/x/']), [['/tmp/A234-None/x'], []]);
 });

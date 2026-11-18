@@ -628,8 +628,33 @@ native() {
 # --selftest: install into a temp HOME / CODEX_HOME holding the four marker dirs, then
 # check the command files (F54), the ops-board copy and the shim (F55), pi's /ops extension (F56),
 # the Antigravity IDE extension through a fake IDE CLI (F57), opencode (F67). Never touches the real HOME or IDE. Costs one full install per host dest on disk until it exits.
+# gnu_timeout: the GNU timeout command (coreutils), or nothing - never Windows' timeout.exe
+gnu_timeout() {
+  for _t in timeout gtimeout; do
+    if command -v "$_t" >/dev/null 2>&1 && "$_t" --version </dev/null 2>/dev/null | grep -q coreutils; then echo "$_t"; return 0; fi
+  done
+}
+
+if [ -n "$selftest" ] && [ -z "${SKILLATOR_SELFTEST_GUARDED:-}" ]; then
+  # A232: a hung or runaway selftest fails fast with a reason; nothing below reads stdin
+  _limit=${SKILLATOR_SELFTEST_TIMEOUT:-1800}
+  case $_limit in ''|*[!0-9]*) _limit=0 ;; esac
+  [ "$_limit" -gt 0 ] 2>/dev/null || { echo "FAIL: SKILLATOR_SELFTEST_TIMEOUT must be a positive integer of seconds, not '${SKILLATOR_SELFTEST_TIMEOUT:-}'"; exit 2; }
+  _to=$(gnu_timeout)
+  if [ -n "$_to" ]; then
+    _rc=0; SKILLATOR_SELFTEST_GUARDED=1 "$_to" "$_limit" sh "$0" "$@" </dev/null || _rc=$?
+    case $_rc in
+      124) echo "FAIL: selftest still running after ${_limit}s (SKILLATOR_SELFTEST_TIMEOUT)" ;;
+      125|126|127) echo "FAIL: selftest time limit could not run (rc $_rc)" ;;
+    esac
+    exit "$_rc"
+  fi
+  echo 'selftest: no time limit (no GNU timeout)'
+  exec </dev/null
+fi
 if [ -n "$selftest" ]; then
-  T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+  # A232: a signal (the time limit's TERM) exits through the EXIT trap, so the fixture goes too
+  T=$(mktemp -d); trap 'rm -rf "$T"' EXIT; trap 'exit 1' HUP INT TERM
   # A166: exercise cleanup only below this fixture, never a live profile.
   (
     fixture="$T/ownership"; src="$fixture/source"; dest="$fixture/dest"
