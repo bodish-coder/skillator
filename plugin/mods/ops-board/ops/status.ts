@@ -1,5 +1,5 @@
 // F94: `ops --status` - one row per CLI profile: name, 5-hour and 7-day % used, or why it
-// cannot be read. It starts watch-cortana's `level` reader, at most 5 s each,
+// cannot be read. It starts watch-cortana's `level` reader, at most 15 s each (B32: a read takes 3-7 s),
 // one after another; missing/stale profile caches request asynchronous refresh. No
 // credential file is ever opened (its existence is the login check). Sources and rulings:
 // docs/plans/PLAN-ops-status.md.
@@ -14,7 +14,7 @@ export type Profile = { name: string; cli: string; dir: string }
 export type Row = [name: string, five: string, seven: string, note: string]
 export type Reader = (env: Env, ms: number) => Promise<{ code: number; out: string; err: string }>
 
-const MS = 5000
+const MS = 15_000
 // cli, its default dir under home (row name = the cli), the prefix of its named profiles.
 const KINDS: [cli: string, def: string, prefix: string][] = [
   ['claude', '.claude', '.claude-'], ['codex', '.codex', '.codex-'],

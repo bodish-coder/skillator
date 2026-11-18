@@ -694,7 +694,7 @@ function healthBody(s: State): Seg[][] {
   // F176: every profile with its model rows, as `ops --status` prints it
   out.push([])
   if (s.profiles) out.push([{ text: 'Profiles', bold: true }], ...s.profiles.trimEnd().split('\n').map(l => [{ text: '  ' + l }]))
-  else out.push(row('Profiles', [dim('p reads every profile')]))
+  else out.push(row('Profiles', [dim(s.profilesBusy ? 'reading every profile...' : 'p reads every profile')]))
   // F172: no in-body Actions row - the footer keys (keysOf) are the one action row.
   out.push([], [{ text: 'Machine', bold: true }], ...machineRows(s.machine, s.watch.level === 'red', s.now))
   return out

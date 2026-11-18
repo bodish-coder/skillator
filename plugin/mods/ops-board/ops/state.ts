@@ -897,12 +897,14 @@ function forceResume(s: State): Step {
 }
 
 // F176: p on Health - every profile's row and model rows, blank ones read once (ops --status --refresh).
-function readProfiles(s: State): Step {
+// B32: the board's open reads them plainly (refresh false: no usage read forced), with no toast.
+export function readProfiles(s: State, refresh = true): Step {
   if (s.profilesBusy) return { state: s, effects: [] }
   const then: Then = r => x => (r.code === 0 && r.out.trim()
-    ? toast({ ...x, profiles: r.out, profilesBusy: false }, '↻ profiles read')
+    ? (refresh ? toast({ ...x, profiles: r.out, profilesBusy: false }, '↻ profiles read') : { ...x, profiles: r.out, profilesBusy: false })
     : toast({ ...x, profilesBusy: false }, `profiles not read: ${r.err.trim() || `exit ${r.code}`}`))
-  return { state: toast({ ...s, profilesBusy: true }, '… reading every profile (blank ones get one usage read)'), effects: [{ kind: 'status', refresh: true, then }] }
+  const busy = { ...s, profilesBusy: true }
+  return { state: refresh ? toast(busy, '… reading every profile (blank ones get one usage read)') : busy, effects: [{ kind: 'status', refresh, then }] }
 }
 
 export function refreshHealth(s: State): Step {

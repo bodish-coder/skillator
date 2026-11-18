@@ -7,7 +7,7 @@ import type { Host, RunResult } from './nodehost'
 import { errorText, readSkillDoc } from './nodehost'
 import { MUTE_FILE, muteKv } from '../hooks/lib/facts'
 import type { Effect, Key, PointerAction, State, Step } from './state'
-import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun, point, openHelp, onSkillDoc } from './state'
+import { onBoard, onInbox, onMachine, onRuns, onUsage, reduce, afterRun, point, openHelp, onSkillDoc, readProfiles } from './state'
 import { INBOX_FILE, READ_FILE } from '../hooks/lib/inbox'
 import { parseBoard } from '../hooks/lib/board'
 import { meOf, parseTeam } from '../hooks/lib/team'
@@ -354,6 +354,7 @@ export function makeEngine(o: EngineOpts): Engine {
       await guarded('board', () => pollBoard())
       if (stopped) return
       void guarded('slow', pollSlow)
+      if (!once && host.status) void apply(readProfiles(state, false))   // B32: the profile table once at open, plainly
       if (state.tab === 'runs') void guarded('runs', pollRuns)
       if (state.tab === 'explorer') void apply(enterExplorer(state))
       if (state.tab === 'run') void runEffect(enterRunEffect())
