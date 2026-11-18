@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -33,7 +33,8 @@ test('reset cleans up stale quota refreshing locks and reports cleanly', async (
 
 // A236 (1): a refresh lock younger than usage-watch's 90 s stale age belongs to a read that
 // may still be live - removing it would let a `p` straight after the reset start a second turn.
-test('A236: reset keeps a refresh lock younger than the 90 s stale age', async () => {
+// Off Windows reset kills no reader, so the young lock is kept.
+test('A236: reset keeps a refresh lock younger than the 90 s stale age', { skip: process.platform === 'win32' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'ops-reset-')).replace(/\\/g, '/')
   try {
     const profileDir = `${root}/.claude-live`
@@ -45,6 +46,28 @@ test('A236: reset keeps a refresh lock younger than the 90 s stale age', async (
     assert.ok(existsSync(lock), 'a live read keeps its lock')
     assert.ok(report.includes('No stale lock files found'), report)
   } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+// A236 fix round (4): on Windows reset kills the refresh readers (with their trees), so their
+// locks go too - a young lock is never left behind a killed reader, nor a reader behind a lock.
+test('A236: on Windows reset kills a live refresh reader and removes its young lock', { skip: process.platform !== 'win32' }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ops-reset-')).replace(/\\/g, '/')
+  const reader = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', 'usage-watch.ps1', '-Mode', 'refresh'], { stdio: 'ignore', windowsHide: true })
+  try {
+    const profileDir = `${root}/.claude-live`
+    mkdirSync(profileDir)
+    const lock = `${profileDir}/quota-cache.json.refreshing`
+    writeFileSync(lock, 'x')
+    const t = new Date(Date.now() - 50 * 1000); utimesSync(lock, t, t)
+    await new Promise(r => setTimeout(r, 500))
+    await reset({ HOME: root, USERPROFILE: root })
+    await new Promise(r => setTimeout(r, 500))
+    assert.notEqual(reader.exitCode ?? reader.signalCode, null, 'the reader was killed')
+    assert.ok(!existsSync(lock), 'its lock was removed')
+  } finally {
+    reader.kill()
     rmSync(root, { recursive: true, force: true })
   }
 })
