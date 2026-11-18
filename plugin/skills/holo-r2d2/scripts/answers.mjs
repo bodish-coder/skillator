@@ -111,8 +111,8 @@ async function openSets(root, holo) {
   for (const n of tryDir(holo).filter((n) => n.endsWith(".wizard.html"))) {
     try {
       const p = join(holo, n), stem = n.slice(0, -".wizard.html".length), set = pageSet(await readFile(p, "utf8")), id = runKey(set?.id ?? stem);
-      // own: 2 the canonical page, 1 another spelling of the same run (RUN-0001 for RUN-1), 0 a copy.
-      pages.push({ set, id, own: n === pageFile(id) ? 2 : pageFile(runKey(stem)) === pageFile(id) ? 1 : 0, mtime: (await stat(p)).mtimeMs });
+      // own: 2 the canonical page (pageFile of the id it carries, as holo writes it), 1 another spelling of the same run, 0 a copy.
+      pages.push({ set, id, own: set && n === pageFile(set.id) ? 2 : pageFile(runKey(stem)) === pageFile(id) ? 1 : 0, mtime: (await stat(p)).mtimeMs });
     } catch { /* not a readable wizard page */ }
   }
   // Several pages carry one set id (a leftover copy): the set's own page, else the newest.

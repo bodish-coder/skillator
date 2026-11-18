@@ -913,16 +913,19 @@ test("A237-r3: a settled decision with no time (moot) - judged by the later of t
   assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"));
 });
 
-test("A237-r4: the canonical page is the set's own page; another RUN spelling only when it is missing or unreadable", async () => {
-  const s = sandbox();
-  const set = run1(s), ans = run1Answers(s, set), A = "a".repeat(32), B = "b".repeat(32);
-  at((writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(set, A)), join(s.holo, "RUN-1.wizard.html")), "2026-11-17T09:00:00Z");
-  writeFileSync(join(s.holo, "RUN-0001.wizard.html"), wizardPage(set, B));
+test("A237-r4/A241-1: the canonical page is pageFile(set.id) - holo's padded RUN-0001 page beats a stray RUN-1 copy", async () => {
+  const s = sandbox(), A = "a".repeat(32), B = "b".repeat(32);
+  const md = readFileSync(join(HERE, "..", "fixtures", "repo-two-qs", "_run.md"), "utf8").replaceAll("@LANDED@", "abc1234").replace("# RUN-1 ", "# RUN-0001 ");
+  writeFileSync(join(s.root, ".skillator", "run-0001-shelf-export.md"), md);
+  const set = setFromRun(parseRun(md), ".skillator/run-0001-shelf-export.md"), own = join(s.holo, "RUN-0001.wizard.html");
+  at((writeFileSync(own, wizardPage(set, A)), own), "2026-11-17T09:00:00Z");
+  writeFileSync(join(s.holo, "RUN-1.wizard.html"), wizardPage(set, B));
+  const ans = run1Answers(s, set);
   put(s.dl, "RUN-1-decisions-FINAL.json", { ...ans, nonce: A }, 0);
-  assert.equal((await findAnswers(s.opts)).picked.verified, true, "canonical RUN-1 page beats a newer RUN-0001 page");
-  writeFileSync(join(s.holo, "RUN-1.wizard.html"), "<!doctype html>");
+  assert.equal((await findAnswers(s.opts)).picked.verified, true, "canonical RUN-0001 page beats a newer RUN-1 copy");
+  writeFileSync(own, "<!doctype html>");
   put(s.dl, "RUN-1-decisions-FINAL.json", { ...ans, nonce: B }, 0);
-  assert.equal((await findAnswers(s.opts)).picked.verified, true, "canonical unreadable: the RUN-0001 page");
+  assert.equal((await findAnswers(s.opts)).picked.verified, true, "canonical unreadable: the RUN-1 page");
 });
 
 test("A237-r5: a settled-run FINAL with no valid finalizedAt is refused as such", async () => {
