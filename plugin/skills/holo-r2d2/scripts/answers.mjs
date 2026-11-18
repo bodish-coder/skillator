@@ -27,7 +27,6 @@ const CTRL_G = new RegExp(CTRL.source, "g");
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
 const show = (v) => JSON.stringify(clean(v));
 const minute = (t) => Math.floor(t / 60000);
-const UNTIMED = ["moot", "same-as", "replanned"];
 
 const tryRead =(p) => { try { return readFileSync(p, "utf8"); } catch { return null; } };
 const tryDir = (p) => { try { return readdirSync(p); } catch { return []; } };
@@ -102,8 +101,8 @@ export function downloadDirs({ home = homedir(), env = process.env, platform = p
 // embeds (a --next-wizard page is round 2+). A RUN set's run file is found by that set's id (by the page's
 // file name only when the page is unreadable - the set is then rebuilt from the run). openNow: a RUN
 // set's decisions still open or asked in the run file now - only those may get a command; gone: the ones settled there.
-// done: a fully settled RUN set - its newest answered/ruled time (the run's updated: stamp when later and a moot,
-// same-as or replanned decision carries no time; no stamp: the mtime, exact), else (none recorded) its run file's mtime.
+// done: a fully settled RUN set - its newest answered/ruled time (the run's updated: stamp when later and a settled
+// decision carries no time - moot, same-as, replanned, a legacy answer; no stamp: the mtime, exact), else (none recorded) its run file's mtime.
 // Every map is keyed by runKey (RUN-1, RUN-0001 and run-1 are one set).
 async function openSets(root, holo) {
   const sets = new Map(), openNow = new Map(), gone = new Map(), done = new Map();
@@ -134,7 +133,7 @@ async function openSets(root, holo) {
         let answered = Math.max(0, ...run.qs.map(time));
         if (!r.live.decisions.length) {
           const mtime = (await stat(path)).mtimeMs, up = Date.parse(run.updated);
-          const untimed = answered && run.qs.some((x) => r.gone.has(x.id) && !time(x) && UNTIMED.some((k) => x.state === k || x.f[k]));
+          const untimed = answered && run.qs.some((x) => r.gone.has(x.id) && !time(x));
           // No updated: stamp: the millisecond mtime bounds it, compared unfloored (exact).
           done.set(id, !answered ? { mtime } : untimed && !up && mtime > answered ? { exact: mtime } : { answered: untimed ? Math.max(answered, up || 0) : answered });
         }

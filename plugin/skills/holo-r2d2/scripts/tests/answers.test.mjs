@@ -962,6 +962,16 @@ test("A241-3: no updated: stamp - the millisecond file mtime bounds it, with no 
   assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"), "after the mtime, in the same minute");
 });
 
+test("A241-4: an answered decision with no stamp (legacy) is untimed, not time 0", async () => {
+  const s = sandbox();
+  stampedRun(s); // Q1 answered at 11:00, Q2 answered with no stamp
+  writeFileSync(RUN1(s), readFileSync(RUN1(s), "utf8").replace(/updated: \S+/, "updated: 2026-11-17T13:00Z"));
+  finalAt(s, "2026-11-17T12:00:00Z");
+  assert.ok(!(await findAnswers(s.opts)).sets.includes("RUN-1"), "before the updated: stamp that covers Q2");
+  finalAt(s, "2026-11-17T13:01:00Z");
+  assert.ok((await findAnswers(s.opts)).sets.includes("RUN-1"));
+});
+
 // B30: the plugin cache is reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins).
 // argv[1] kept the link's spelling, import.meta.url the real path: main never ran, output was empty.
 test("B30: holo.mjs --selftest and answers.mjs still run when started through a linked directory", (t) => {
