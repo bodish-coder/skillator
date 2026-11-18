@@ -177,7 +177,9 @@ arm() {
   fi
   if [ "$A_HOSTED" != 1 ]; then
     open_tunnel >/dev/null
-    _i=0; _seen=; while [ "$_i" -lt 5 ]; do tunnel_hosted "$TUNNEL" "$PORT" && { _seen=1; break; }; late && return 0; sleep 1; _i=$((_i + 1)); done
+    # by the clock for 8 s, as setup.ps1 - a probe can be slow; late() holds the 25 s
+    _end=$(($(now) + 8)); _seen=
+    while :; do tunnel_hosted "$TUNNEL" "$PORT" && { _seen=1; break; }; late && return 0; [ "$(now)" -lt "$_end" ] || break; sleep 1; done
     if [ -z "$_seen" ]; then A_RESULT=failed; A_WHY='the tunnel did not start - see ~/.skillator/teams/devtunnel.log'; return 0; fi
     # a host that exits at once (signed out, port taken) is not armed
     sleep 2; tunnel_hosted "$TUNNEL" "$PORT" && A_HOSTED=1
@@ -286,7 +288,7 @@ EOF
   open_tunnel() { echo host >> "$ST/calls"; [ -f "$ST/noopen" ] || : > "$ST/hosted"; }
   tunnel_hosted() { [ -z "$PROBE" ] || echo $(($(now) + PROBE)) > "$ST/clock"; [ -f "$ST/hosted" ] || return 1; [ -f "$ST/dies" ] && rm -f "$ST/hosted"; return 0; }
   stop_tunnel() { echo unhost >> "$ST/calls"; [ -f "$ST/stuck" ] || rm -f "$ST/hosted"; }
-  sleep() { :; }
+  sleep() { echo $(($(now) + $1)) > "$ST/clock"; }
   now() { cat "$ST/clock" 2>/dev/null || echo 0; }
   SKILLATOR_TEAMS_STATE="$T/state"; export SKILLATOR_TEAMS_STATE; PROBE=
   # scen <check> <yes> <commands present> <state files>
@@ -439,6 +441,9 @@ EOF
   # A235 2: the host confirmed as the deadline passes - hosted=1, what was seen, as setup.ps1
   PROBE=10; kv arm "$ALL" "$RDY"; PROBE=
   out '^why=took too long - try again$' && out '^hosted=1$' || fail '2: a confirmed host past the deadline was not reported hosted'
+  # A235 4: the poll for the host is by the clock, as setup.ps1 - probes of 5 s give up within 20 s, before the 25 s deadline
+  PROBE=5; kv arm "$ALL" "$RDY noopen"; PROBE=
+  out '^why=the tunnel did not start' && [ "$(now)" -le 20 ] || fail "4: a failed arm with 5 s probes took $(now) s"
   LC_ALL=C grep -q "$(printf '[^\t -~]')" "$SELF" && fail 'not pure ASCII + LF'
   echo ok
 }

@@ -195,9 +195,9 @@ function Invoke-Arm {
   }
   if ($a['hosted'] -ne '1') {
     Open-TunnelWindow
-    # A226 g: by the clock, not a count - each probe can take seconds of CIM
+    # A226 g: by the clock for 8 s, as setup.sh - each probe can take seconds of CIM; Late() holds the 25 s
     $end = (Clock) + 8
-    while (-not ($seen = TunnelHosted $Tunnel $port) -and (Clock) -lt $end -and (Clock) -lt $script:Deadline) { Start-Sleep -Milliseconds 250 }
+    while (-not ($seen = TunnelHosted $Tunnel $port) -and (Clock) -lt $end) { if (Late $a) { return $a }; Start-Sleep -Milliseconds 250 }
     if (Late $a) { return $a }
     if (-not $seen) { $a['result'] = 'failed'; $a['why'] = 'the tunnel window did not start - the listener is up, the tunnel is not'; return $a }
     # a host that exits at once (signed out, port taken) is not armed
@@ -475,6 +475,9 @@ if ($args -contains '--selftest' -or $args -contains '-selftest') {
   # A235 2: the host confirmed as the deadline passes - hosted=1, what was seen, as setup.sh
   $r = Kv @{ probe = 10 } { Invoke-Arm }
   if ($r.a['why'] -ne 'took too long - try again' -or $r.a['hosted'] -ne '1') { Fail "2: a confirmed host past the deadline: hosted=$($r.a['hosted']) / $($r.a['why'])" }
+  # A235 4: the same poll rule as setup.sh - probes of 5 s give up within 20 s, before the 25 s deadline
+  $r = Kv @{ noopen = $true; probe = 5 } { Invoke-Arm }
+  if ($r.a['why'] -notlike 'the tunnel window did not start*' -or $S.clock -gt 20) { Fail "4: a failed arm with 5 s probes took $($S.clock) s: $($r.a['why'])" }
   if (@([IO.File]::ReadAllBytes($PSCommandPath) | Where-Object { $_ -gt 127 -or $_ -eq 13 }).Count) { Fail 'not pure ASCII + LF' }
   $env:Path = $savedPath; $env:LOCALAPPDATA = $savedLocal; Remove-Item -Recurse -Force $T
   'ok'; exit 0
