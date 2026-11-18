@@ -7,36 +7,97 @@
 #                    older than SKILLATOR_UPDATE_HOURS (default 24) - starts `run`
 #                    detached and returns
 #   -Mode selftest   prints `ok`, or the failures and exits 1
-# State: ~/.skillator/self-update.json {lastCheck, lastResult, lastVersion, notice}.
-# Off: SKILLATOR_AUTO_UPDATE=0. Never passes -y.
+# State: ~/.skillator/self-update.json {lastCheck, startedAt, skipAt, lastResult,
+# lastVersion, notice}; lastCheck is written when a run finishes, startedAt when
+# due-run starts one. Off: SKILLATOR_AUTO_UPDATE=0. Never passes -y.
 param([ValidateSet('check','run','due-run','selftest')][string]$Mode = 'check')
 
 $S = Join-Path $env:USERPROFILE '.skillator/self-update.json'
-$H = if ($env:SKILLATOR_UPDATE_HOURS) { [int]$env:SKILLATOR_UPDATE_HOURS } else { 24 }
+$K = Join-Path $env:USERPROFILE '.skillator/self-update.lock'
+# a positive integer (up to 6 digits), else the default
+$H = if ("$env:SKILLATOR_UPDATE_HOURS" -match '^[1-9][0-9]{0,5}$') { [int]$env:SKILLATOR_UPDATE_HOURS } else { 24 }
 function Write-Lf([string]$s) { [Console]::Out.Write($s + "`n") }
 function Get-Now { [int64]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) }
+function ConvertTo-N($x) { if ("$x" -match '^\d+$') { [int64]"$x" } else { [int64]0 } }
 
 function Get-State {
   try { $j = Get-Content -LiteralPath $S -Raw -ErrorAction Stop | ConvertFrom-Json } catch { $j = $null }
-  if (-not $j) { $j = [pscustomobject]@{ lastCheck = $null; lastResult = ''; lastVersion = ''; notice = '' } }
+  if (-not $j) { $j = [pscustomobject]@{ lastCheck = 0; startedAt = 0; skipAt = 0; lastResult = ''; lastVersion = ''; notice = '' } }
   $j
 }
-function Set-State($lc, $res, $ver, $note) {
+function Set-State($lc, $sa, $sk, $res, $ver, $note) {
   $c = { param($x) ([string]$x) -replace '["\\\r\n]', '' }
   try {
     New-Item -ItemType Directory -Force (Split-Path $S) | Out-Null
-    $line = '{"lastCheck":' + $(if ($lc) { $lc } else { 0 }) + ',"lastResult":"' + (& $c $res) + '","lastVersion":"' + (& $c $ver) + '","notice":"' + (& $c $note) + '"}' + "`n"
-    [IO.File]::WriteAllText("$S.tmp", $line); Move-Item -Force "$S.tmp" $S
+    $line = '{"lastCheck":' + (ConvertTo-N $lc) + ',"startedAt":' + (ConvertTo-N $sa) + ',"skipAt":' + (ConvertTo-N $sk) + ',"lastResult":"' + (& $c $res) + '","lastVersion":"' + (& $c $ver) + '","notice":"' + (& $c $note) + '"}' + "`n"
+    $tmp = "$S.$PID.tmp"
+    [IO.File]::WriteAllText($tmp, $line); Move-Item -Force $tmp $S
   } catch { }
 }
-function Test-Due {
-  $lc = "$((Get-State).lastCheck)"
-  if ($lc -notmatch '^\d+$') { return $true }
-  ((Get-Now) - [int64]$lc) -ge ($H * 3600)
+# From one state read: the last check is H hours old and no run started in the last
+# 30 min (an older startedAt is a run that was killed).
+function Test-Due($st) {
+  $now = Get-Now
+  if ($now - (ConvertTo-N $st.startedAt) -lt 1800) { return $false }
+  if ("$($st.lastCheck)" -notmatch '^\d+$') { return $true }
+  ($now - [int64]$st.lastCheck) -ge ($H * 3600)
+}
+# One run at a time; a lock older than 30 min is a dead run's and is taken over.
+function Enter-Lock {
+  try { New-Item -ItemType Directory -Force (Split-Path $K) -ErrorAction Stop | Out-Null } catch { }
+  try { New-Item -ItemType Directory $K -ErrorAction Stop | Out-Null }
+  catch {
+    try {
+      $a = "$(Get-Content -LiteralPath (Join-Path $K 'at') -TotalCount 1 -ErrorAction Stop)".Trim()
+      if ($a -notmatch '^\d+$') { throw 'no stamp' }
+      $age = (Get-Now) - [int64]$a
+    } catch {
+      try { $age = ((Get-Date).ToUniversalTime() - (Get-Item -LiteralPath $K -ErrorAction Stop).LastWriteTimeUtc).TotalSeconds } catch { return $false }
+    }
+    if ($age -lt 1800) { return $false }
+    # shortcut: two runs racing for one stale lock can both win, a rename-based takeover if it bites
+    Remove-Item -Recurse -Force -LiteralPath $K -ErrorAction SilentlyContinue
+    try { New-Item -ItemType Directory $K -ErrorAction Stop | Out-Null } catch { return $false }
+  }
+  try { [IO.File]::WriteAllText((Join-Path $K 'at'), "$(Get-Now)`n") } catch { }
+  $true
 }
 # A bare x.y.z - anything else never reaches a notice or a command line.
 function Test-Plain([string]$v) { $v -cmatch '^[0-9]+\.[0-9]+\.[0-9]+\z' }
 function Test-Newer([string]$a, [string]$b) { try { [version]$b -gt [version]$a } catch { $false } }
+function Get-RealPath([string]$p) { try { [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $p -ErrorAction Stop).ProviderPath).TrimEnd('\', '/') } catch { '' } }
+
+# The git checkouts the installer's source pointers name - read, never git-run.
+function Get-Clones {
+  $h = $env:USERPROFILE
+  $cx = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $h '.codex' }
+  $xd = if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME } else { Join-Path $h '.config' }
+  foreach ($p in @("$h/.claude/skills", "$cx/skills", "$h/.cursor/skills", "$h/.pi/agent/skills", "$h/.gemini/config/skills", "$h/.gemini/skills", "$h/.gemini/antigravity-cli/skills", "$xd/opencode/skills")) {
+    $s = try { "$(Get-Content -LiteralPath (Join-Path $p '.skillator-source') -TotalCount 1 -ErrorAction Stop)".Trim().TrimEnd('\', '/') } catch { '' }
+    if (-not $s) { continue }
+    foreach ($c in @($s, (Split-Path $s -Parent))) {
+      if ($c -and (Test-Path -LiteralPath (Join-Path $c '.git'))) { Get-RealPath $c; break }
+    }
+  }
+}
+
+# A ~ row blocks while its heartbeat (else the file mtime) is under 60 min old.
+function Test-InFlight($f, [int64]$now) {
+  $hb = 0; $u = $false
+  foreach ($ln in @(Get-Content -LiteralPath $f.FullName -ErrorAction SilentlyContinue)) {
+    if ($ln -notmatch '^\|') { continue }
+    $c = $ln -split '\|'
+    for ($i = 1; $i -lt $c.Count - 1; $i++) { if ($c[$i].Trim() -eq 'heartbeat') { $hb = $i } }
+    if ($ln -notmatch '^\|[^|]*\|[^|]*\|\s*~\s*\|') { continue }
+    $t = if ($hb -and $hb -lt $c.Count) { $c[$hb].Trim() } else { '' }
+    $e = -1
+    if ($t -match '^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)') {
+      try { $e = [DateTimeOffset]::new([int]$Matches[1], [int]$Matches[2], [int]$Matches[3], [int]$Matches[4], [int]$Matches[5], 0, [TimeSpan]::Zero).ToUnixTimeSeconds() } catch { }
+    }
+    if ($e -lt 0) { $u = $true } elseif ($now - $e -lt 3600) { return $true }
+  }
+  $u -and ((Get-Date).ToUniversalTime() - $f.LastWriteTimeUtc).TotalMinutes -lt 60
+}
 
 function Get-WhySkip {
   $r = (Get-Location).Path
@@ -45,17 +106,19 @@ function Get-WhySkip {
     if (-not $n -or $n -eq $r) { return '' }
     $r = $n
   }
+  $now = Get-Now
   foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $r '.skillator') -Filter 'run-*.md' -File -ErrorAction SilentlyContinue)) {
-    if (Select-String -LiteralPath $f.FullName -Pattern '^\|[^|]*\|[^|]*\|\s*~\s*\|' -Quiet) { return "a relay run is in flight ($($f.Name))" }
+    if (Test-InFlight $f $now) { return "a relay run is in flight ($($f.Name))" }
   }
-  $pj = Join-Path $r 'plugin/.claude-plugin/plugin.json'
-  # Only a real skillator source; and a repo's own config (fsmonitor, hooks) must not run.
-  $real = (Test-Path -LiteralPath (Join-Path $r 'plugin/install.sh')) -and (Test-Path -LiteralPath (Join-Path $r 'plugin/install.ps1')) -and
-    (Test-Path -LiteralPath $pj) -and (Select-String -LiteralPath $pj -Pattern '"name"\s*:\s*"skillator"' -Quiet)
-  if ($real) {
-    $hp = if ($env:OS -eq 'Windows_NT') { 'NUL' } else { '/dev/null' }
-    if ("$(& git -c core.fsmonitor= -c core.hooksPath=$hp -c core.untrackedCache=false -C $r status --porcelain -- plugin 2>$null)") { return 'uncommitted plugin edits' }
-  }
+  # git runs only in the owner's own clone (a source pointer's checkout), never in a repo
+  # that merely looks like skillator - and even there its config (fsmonitor, hooks) does not run.
+  $rp = Get-RealPath $r
+  if (-not $rp -or -not (@(Get-Clones) -contains $rp)) { return '' }
+  $hp = if ($env:OS -eq 'Windows_NT') { 'NUL' } else { '/dev/null' }
+  $env:GIT_CONFIG_NOSYSTEM = '1'
+  try { $o = "$(& git -c core.fsmonitor= -c core.hooksPath=$hp -c core.untrackedCache=false -C $r status --porcelain -- plugin 2>$null)" }
+  finally { Remove-Item Env:GIT_CONFIG_NOSYSTEM -ErrorAction SilentlyContinue }
+  if ($o) { return 'uncommitted plugin edits' }
   ''
 }
 
@@ -82,17 +145,16 @@ function Invoke-Check {
   } catch { $script:new = '' }
   if (-not $script:new) { return "failed: no skillator version in marketplace $($script:m)" }
   if (-not (Test-Plain $script:new)) { $script:new = ''; return 'skipped: unexpected version' }
-  if (Test-Newer $script:old $script:new) { "newer $($script:old) -> $($script:new)" } else { "up to date $($script:old)" }
+  if (Test-Newer $script:old $script:new) { "newer $($script:old) -> $($script:new)" }
+  elseif (Test-Newer $script:new $script:old) { "skipped: would downgrade $($script:old) -> $($script:new)" }
+  else { "up to date $($script:old)" }
 }
 
-# Returns '' on success, else the result line (and sets NOTE for a confirmation).
+# Returns '' on success, else the result line.
 function Update-Plugin([string]$id) {
   $o = "$($null | & claude plugin update $id 2>&1 | Out-String)"
   if ($LASTEXITCODE -eq 0) { return '' }
-  if ($o -match '(?i)confirm|shownCommand|--yes') {
-    $script:NOTE = "skillator $($script:new) is out but its update needs confirmation - run /skillator-update"
-    return 'skipped: needs confirmation'
-  }
+  if ($o -match '(?i)confirm|shownCommand|--yes') { return 'skipped: needs confirmation' }
   "failed: claude plugin update $id"
 }
 
@@ -106,7 +168,16 @@ function Invoke-Update {
   try { $sv = "$((Get-Content -LiteralPath (Join-Path $ip '.claude-plugin/plugin.json') -Raw -ErrorAction Stop | ConvertFrom-Json).version)" } catch { }
   if (-not (Test-Plain $script:nv) -or ($sv -and -not (Test-Plain $sv))) { $script:nv = ''; return 'skipped: unexpected version' }
   foreach ($v in @($script:nv, $sv)) {
-    if ($v -and (Test-Newer $v $script:old)) { return "skipped: would downgrade $($script:old) -> $v" }
+    if ($v -and -not (Test-Newer $script:old $v)) {
+      $script:nv = $v
+      $script:NOTE = "skillator update did not apply ($($script:old) -> $v) - run /skillator-update"
+      return "failed: update did not apply ($($script:old) -> $v)"
+    }
+  }
+  # a pointer to a clone: /skillator-update pulls it and installs from there
+  if (@(Get-Clones).Count) {
+    $script:NOTE = "skillator $($script:old) -> $($script:nv) for Claude Code - run /skillator-update to update the other hosts"
+    return "updated $($script:old) -> $($script:nv)"
   }
   $ih = ''
   if ($ip -and (Test-Path -LiteralPath (Join-Path $ip 'install.ps1')) -and (Test-Path -LiteralPath (Join-Path $ip 'install.sh'))) {
@@ -118,22 +189,30 @@ function Invoke-Update {
 }
 
 function Invoke-Run {
-  $res = Invoke-Check
-  if ($res -like 'newer*') { $res = Invoke-Update }
-  if ($res -eq 'offline' -or $res -like 'failed*') { $script:NOTE = "skillator update check: $res - next try in $H h" }
-  if (-not $script:NOTE) { $script:NOTE = "$((Get-State).notice)" }
-  Set-State (Get-Now) $res $(if ($script:nv) { $script:nv } else { $script:old }) $script:NOTE
-  $res
+  if (-not (Enter-Lock)) { return 'skipped: another update run is in progress' }
+  try {
+    $res = Invoke-Check
+    if ($res -like 'newer*') { $res = Invoke-Update }
+    $st = Get-State; $now = Get-Now; $sk = ConvertTo-N $st.skipAt
+    if ($res -eq 'offline' -or $res -like 'failed*') {
+      if (-not $script:NOTE) { $script:NOTE = "skillator update check: $res - next try in $H h" }
+    } elseif ($res -like 'skipped: a relay run is in flight*' -or $res -eq 'skipped: needs confirmation' -or $res -like 'skipped: would downgrade*' -or $res -eq 'skipped: unexpected version') {
+      # skips that repeat every check: one notice a day, not one per check
+      if ($now - $sk -ge 86400) { $script:NOTE = "skillator update $res"; $sk = $now }
+    }
+    if (-not $script:NOTE) { $script:NOTE = "$($st.notice)" }
+    Set-State $now $st.startedAt $sk $res $(if ($script:nv) { $script:nv } else { $script:old }) $script:NOTE
+    $res
+  } finally { Remove-Item -Recurse -Force -LiteralPath $K -ErrorAction SilentlyContinue }
 }
 
 function Invoke-DueRun {
   $st = Get-State
-  if ($st.notice) { Write-Lf $st.notice; Set-State $st.lastCheck $st.lastResult $st.lastVersion '' }
-  if ($env:SKILLATOR_AUTO_UPDATE -eq '0') { return }
-  if (-not (Test-Due)) { return }
-  $st = Get-State
-  Set-State (Get-Now) $st.lastResult $st.lastVersion ''
-  Start-Process powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-Mode', 'run') -WindowStyle Hidden | Out-Null
+  $go = ($env:SKILLATOR_AUTO_UPDATE -ne '0') -and (Test-Due $st)
+  if ($st.notice) { Write-Lf $st.notice }
+  # startedAt first, so the prompts while `run` works do not start another
+  if ($st.notice -or $go) { Set-State $st.lastCheck $(if ($go) { Get-Now } else { $st.startedAt }) $st.skipAt $st.lastResult $st.lastVersion '' }
+  if ($go) { Start-Process powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-Mode', 'run') -WindowStyle Hidden | Out-Null }
 }
 
 function Invoke-SelfTest {
@@ -142,8 +221,9 @@ function Invoke-SelfTest {
   foreach ($x in @($bin, (Join-Path $d 'home'), (Join-Path $repo '.git'), $inst, (Join-Path $mkt '.claude-plugin'))) { New-Item -ItemType Directory -Force $x | Out-Null }
   $rg = "$((Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source)"
   $env:SU_D = $d; $env:USERPROFILE = Join-Path $d 'home'; $env:HOME = $env:USERPROFILE; $env:PATH = "$bin;$env:PATH"
-  foreach ($v in 'SKILLATOR_AUTO_UPDATE', 'SKILLATOR_UPDATE_HOURS', 'SU_OFFLINE', 'SU_CONFIRM', 'SU_SLEEP', 'SU_DIRTY', 'SU_OLDV', 'SU_NEWV') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
+  foreach ($v in 'SKILLATOR_AUTO_UPDATE', 'SKILLATOR_UPDATE_HOURS', 'SU_OFFLINE', 'SU_CONFIRM', 'SU_SLEEP', 'SU_DIRTY', 'SU_OLDV', 'SU_NEWV', 'SU_REALGIT', 'CODEX_HOME', 'XDG_CONFIG_HOME', 'GIT_CONFIG_NOSYSTEM') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
   $script:S = Join-Path $env:USERPROFILE '.skillator/self-update.json'
+  $script:K = Join-Path $env:USERPROFILE '.skillator/self-update.lock'
   $log = Join-Path $d 'log'
   Set-Content -LiteralPath (Join-Path $bin 'claude.ps1') -Encoding utf8 -Value @'
 Add-Content -LiteralPath "$env:SU_D/log" -Value ("claude " + ($args -join ' '))
@@ -159,7 +239,7 @@ switch ($a) {
 exit 1
 '@
   Set-Content -LiteralPath (Join-Path $bin 'git.ps1') -Encoding utf8 -Value @'
-Add-Content -LiteralPath "$env:SU_D/log" -Value ("git " + ($args -join ' '))
+Add-Content -LiteralPath "$env:SU_D/log" -Value ("git " + ($args -join ' ') + " nosys=$env:GIT_CONFIG_NOSYSTEM")
 if ($env:SU_REALGIT) { & $env:SU_REALGIT @args; exit $LASTEXITCODE }
 if (($args -join ' ') -match 'status') { $env:SU_DIRTY }
 '@
@@ -170,13 +250,17 @@ if (($args -join ' ') -match 'status') { $env:SU_DIRTY }
   function Cat-V([string]$v) { Set-Content -LiteralPath (Join-Path $mkt '.claude-plugin/marketplace.json') -Value ('{"name":"skillator","plugins":[{"name":"skillator","version":"' + $v + '"}]}') }
   function Lg { if (Test-Path -LiteralPath $log) { @(Get-Content -LiteralPath $log) } else { @() } }
   function St { if (Test-Path -LiteralPath $script:S) { Get-Content -LiteralPath $script:S -Raw } else { '' } }
-  function Reset-T { foreach ($x in @($log, (Join-Path $d 'updated'), (Split-Path $script:S), (Join-Path $repo '.skillator'), (Join-Path $repo 'plugin'))) { Remove-Item -Recurse -Force -LiteralPath $x -ErrorAction SilentlyContinue }; Cat-V '4.30.0' }
+  function Reset-T { foreach ($x in @($log, (Join-Path $d 'updated'), (Split-Path $script:S), (Join-Path $env:USERPROFILE '.codex'), (Join-Path $repo '.skillator'), (Join-Path $repo 'plugin'), (Join-Path $d 'clone'), (Join-Path $d 'plain'))) { Remove-Item -Recurse -Force -LiteralPath $x -ErrorAction SilentlyContinue }; Cat-V '4.30.0' }
+  function Ws($lc, $sa) { New-Item -ItemType Directory -Force (Split-Path $script:S) | Out-Null; Set-Content -LiteralPath $script:S -Value ('{"lastCheck":' + $lc + ',"startedAt":' + $sa + ',"skipAt":0,"lastResult":"","lastVersion":"4.29.0","notice":""}') }
+  function Ptr([string]$p) { $h = Join-Path $env:USERPROFILE '.codex/skills'; New-Item -ItemType Directory -Force $h | Out-Null; Set-Content -LiteralPath (Join-Path $h '.skillator-source') -Value $p }
+  function Iso([int64]$t) { [DateTimeOffset]::FromUnixTimeSeconds($t).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm'Z'") }
+  function Set-Mtime($p, [int64]$t) { (Get-Item -LiteralPath $p).LastWriteTimeUtc = [DateTimeOffset]::FromUnixTimeSeconds($t).UtcDateTime }
   # each mode in a child, as the hook would run it
   function Su([string]$mode) { "$(& powershell -NoProfile -ExecutionPolicy Bypass -File $PSCommandPath -Mode $mode | Out-String)".TrimEnd() }
+  $now = Get-Now
   Push-Location $repo
   try {
-    Reset-T; New-Item -ItemType Directory -Force (Split-Path $script:S) | Out-Null
-    Set-Content -LiteralPath $script:S -Value ('{"lastCheck":' + (Get-Now) + ',"lastResult":"up to date 4.29.0","lastVersion":"4.29.0","notice":""}')
+    Reset-T; Ws $now 0
     $o = Su 'due-run'
     T 'not due: no work' (-not $o -and (Lg).Count -eq 0)
 
@@ -196,34 +280,54 @@ if (($args -join ' ') -match 'status') { $env:SU_DIRTY }
 
     Reset-T; $env:SU_OFFLINE = '1'
     T 'offline: check' ((Su 'check') -eq 'offline')
-    Reset-T; $env:SU_OFFLINE = '1'
+    Reset-T
     Su 'run' | Out-Null
     Remove-Item -Force -LiteralPath $log -ErrorAction SilentlyContinue
     $o = Su 'due-run'
     T 'offline: one quiet note, stamped, not retried' ($o -eq 'skillator update check: offline - next try in 24 h' -and (Lg).Count -eq 0 -and (St) -notmatch '"lastCheck":0')
     Remove-Item Env:SU_OFFLINE
 
-    Reset-T; New-Item -ItemType Directory -Force (Join-Path $repo '.skillator') | Out-Null
-    Set-Content -LiteralPath (Join-Path $repo '.skillator/run-0001-x.md') -Value "| # | stage | state |`n|---|---|---|`n| 1 | x | ~ |"
-    T 'run in flight: skipped' ((Su 'check') -eq 'skipped: a relay run is in flight (run-0001-x.md)' -and -not ((Lg) -match '^claude'))
+    # 3: a ~ row blocks only while its heartbeat (else the file mtime) is under 60 min old
+    Reset-T; New-Item -ItemType Directory -Force (Join-Path $repo '.skillator') | Out-Null; $rf = Join-Path $repo '.skillator/run-0001-x.md'
+    Set-Content -LiteralPath $rf -Value "| # | stage | state |`n|---|---|---|`n| 1 | x | ~ |"
+    T 'run in flight (fresh mtime): skipped' ((Su 'check') -eq 'skipped: a relay run is in flight (run-0001-x.md)' -and -not ((Lg) -match '^claude'))
+    Set-Mtime $rf ($now - 7200)
+    T 'stale ~ row (old mtime, no heartbeat column): not blocking' ((Su 'check') -eq 'newer 4.29.0 -> 4.30.0')
+    Set-Content -LiteralPath $rf -Value "| # | stage | state | owner | heartbeat |`n|---|---|---|---|---|`n| 1 | x | ~ | b | $(Iso ($now - 7200)) |"
+    T 'stale ~ row (old heartbeat, fresh mtime): not blocking' ((Su 'check') -eq 'newer 4.29.0 -> 4.30.0')
+    Set-Content -LiteralPath $rf -Value "| # | stage | state | owner | heartbeat |`n|---|---|---|---|---|`n| 1 | x | ~ | b | $(Iso ($now - 300)) |"
+    Set-Mtime $rf ($now - 7200)
+    T 'live ~ row (fresh heartbeat, old mtime): skipped' ((Su 'check') -eq 'skipped: a relay run is in flight (run-0001-x.md)')
+    Su 'run' | Out-Null
+    T 'repeated skip: a notice' ((Su 'due-run') -eq 'skillator update skipped: a relay run is in flight (run-0001-x.md)')
+    Su 'run' | Out-Null
+    T 'repeated skip: the notice once per 24 h' (-not (Su 'due-run'))
 
-    Reset-T; New-Item -ItemType Directory -Force (Join-Path $repo 'plugin/.claude-plugin') | Out-Null
-    Set-Content -LiteralPath (Join-Path $repo 'plugin/.claude-plugin/plugin.json') -Value '{"name": "skillator"}'
-    Su 'check' | Out-Null
-    T 'not a skillator source (no installers): no git probe' (-not ((Lg) -match '^git'))
-    foreach ($n in 'install.sh', 'install.ps1') { Set-Content -LiteralPath (Join-Path $repo "plugin/$n") -Value '' }
-    Remove-Item -Force -LiteralPath $log -ErrorAction SilentlyContinue
+    # 1: never git in a repo that only looks like skillator; only in the pointer's own clone
+    Reset-T; $r3 = Join-Path $d 'fake'; New-Item -ItemType Directory -Force (Join-Path $r3 'plugin/.claude-plugin') | Out-Null
+    & $rg init -q $r3
+    Set-Content -LiteralPath (Join-Path $r3 'plugin/.claude-plugin/plugin.json') -Value '{"name": "skillator"}'
+    foreach ($n in 'install.sh', 'install.ps1') { Set-Content -LiteralPath (Join-Path $r3 "plugin/$n") -Value '' }
+    Set-Content -LiteralPath (Join-Path $r3 'plugin/f') -Value 'aaaa'
+    Set-Content -LiteralPath (Join-Path $r3 '.gitattributes') -Value '* filter=x'
+    & $rg -C $r3 -c core.autocrlf=false add -A; & $rg -C $r3 -c core.autocrlf=false -c user.name=t -c user.email=t@t commit -qm x
+    & $rg -C $r3 config filter.x.clean 'touch filter-marker; cat'
+    Start-Sleep 1; Set-Content -LiteralPath (Join-Path $r3 'plugin/f') -Value 'bbbb'
+    Push-Location $r3; $env:SU_REALGIT = $rg
+    try { $o = Su 'check' } finally { Remove-Item Env:SU_REALGIT; Pop-Location }
+    T 'lookalike repo with a hostile filter: no git call, no marker' (-not (Test-Path -LiteralPath (Join-Path $r3 'filter-marker')) -and -not ((Lg) -match '^git') -and $o -eq 'newer 4.29.0 -> 4.30.0')
+    Reset-T; New-Item -ItemType Directory -Force (Join-Path $repo 'plugin') | Out-Null; Ptr (Join-Path $repo 'plugin')
     $env:SU_DIRTY = ' M plugin/x'
-    T 'dirty plugin: skipped' ((Su 'check') -eq 'skipped: uncommitted plugin edits' -and -not ((Lg) -match '^claude'))
+    T 'owner clone (pointer) dirty: skipped' ((Su 'check') -eq 'skipped: uncommitted plugin edits' -and -not ((Lg) -match '^claude') -and @((Lg) -match '^git .*nosys=1$').Count -gt 0)
     Remove-Item Env:SU_DIRTY
 
-    Reset-T; $r2 = Join-Path $d 'repo2'; New-Item -ItemType Directory -Force (Join-Path $r2 'plugin/.claude-plugin') | Out-Null
+    Reset-T; $r2 = Join-Path $d 'repo2'; New-Item -ItemType Directory -Force (Join-Path $r2 'plugin') | Out-Null
     & $rg init -q $r2; & $rg -C $r2 config core.fsmonitor 'touch fsmon-marker; false'
-    Set-Content -LiteralPath (Join-Path $r2 'plugin/.claude-plugin/plugin.json') -Value '{"name": "skillator"}'
-    foreach ($n in 'install.sh', 'install.ps1') { Set-Content -LiteralPath (Join-Path $r2 "plugin/$n") -Value '' }
+    Set-Content -LiteralPath (Join-Path $r2 'plugin/x') -Value ''
+    Ptr (Join-Path $r2 'plugin')
     Push-Location $r2; $env:SU_REALGIT = $rg
     try { $o = Su 'check' } finally { Remove-Item Env:SU_REALGIT; Pop-Location }
-    T 'hostile core.fsmonitor: never runs' (-not (Test-Path -LiteralPath (Join-Path $r2 'fsmon-marker')) -and $o -eq 'skipped: uncommitted plugin edits')
+    T 'hostile core.fsmonitor in the owner clone: never runs' (-not (Test-Path -LiteralPath (Join-Path $r2 'fsmon-marker')) -and $o -eq 'skipped: uncommitted plugin edits')
 
     Reset-T; $env:SKILLATOR_AUTO_UPDATE = '0'
     T 'opt-out: check skipped' ((Su 'check') -eq 'skipped: SKILLATOR_AUTO_UPDATE=0')
@@ -235,10 +339,19 @@ if (($args -join ' ') -match 'status') { $env:SU_DIRTY }
     $o = Su 'run'
     T 'confirmation prompt: skipped, never -y' ($o -eq 'skipped: needs confirmation' -and -not ((Lg) -match '(^| )(-y|--yes)( |$)'))
     Remove-Item Env:SU_CONFIRM
+    T 'confirmation prompt: the skip notice' ((Su 'due-run') -eq 'skillator update skipped: needs confirmation')
 
+    # 2: decide before installing; an update that did not land is never "updated"
+    Reset-T; Cat-V '4.28.0'
+    $o = Su 'run'
+    T 'marketplace older: refused before any update' ($o -eq 'skipped: would downgrade 4.29.0 -> 4.28.0' -and -not ((Lg) -match 'plugin update'))
+    Reset-T; $env:SU_NEWV = '4.29.0'
+    $o = Su 'run'
+    T 'update did not apply (same version): recorded, no installer' ($o -eq 'failed: update did not apply (4.29.0 -> 4.29.0)' -and -not ((Lg) -match '^installer'))
+    T 'update did not apply: the notice' ((Su 'due-run') -eq 'skillator update did not apply (4.29.0 -> 4.29.0) - run /skillator-update')
     Reset-T; $env:SU_NEWV = '4.28.0'
     $o = Su 'run'
-    T 'downgrade: refused, no installer' ($o -eq 'skipped: would downgrade 4.29.0 -> 4.28.0' -and -not ((Lg) -match '^installer'))
+    T 'update went down: did not apply, no installer' ($o -eq 'failed: update did not apply (4.29.0 -> 4.28.0)' -and -not ((Lg) -match '^installer'))
     Remove-Item Env:SU_NEWV
 
     Reset-T; $env:SU_OLDV = '4.29.0-evil$(x)'
@@ -246,15 +359,45 @@ if (($args -join ' ') -match 'status') { $env:SU_DIRTY }
     T 'unexpected version: skipped, kept out of notice and commands' ($o -eq 'skipped: unexpected version' -and (St) -notmatch 'evil' -and -not ((Lg) -match 'evil|plugin update'))
     Remove-Item Env:SU_OLDV
 
+    # 4: a pointer to a git clone - the other hosts are /skillator-update's job
+    Reset-T; New-Item -ItemType Directory -Force (Join-Path $d 'clone/.git'), (Join-Path $d 'clone/plugin') | Out-Null; Ptr (Join-Path $d 'clone/plugin')
+    $o = Su 'run'
+    T 'pointer to a clone: no installer from the cache' ($o -eq 'updated 4.29.0 -> 4.30.0' -and -not ((Lg) -match '^installer'))
+    T 'pointer to a clone: the notice' ((Su 'due-run') -eq 'skillator 4.29.0 -> 4.30.0 for Claude Code - run /skillator-update to update the other hosts')
+    Reset-T; New-Item -ItemType Directory -Force (Join-Path $d 'plain/plugin') | Out-Null; Ptr (Join-Path $d 'plain/plugin')
+    Su 'run' | Out-Null
+    T 'pointer not a git checkout: installer from installPath' (@((Lg) -match '^installer').Count -gt 0)
+
+    # 6: one run at a time
+    Reset-T; New-Item -ItemType Directory -Force $script:K | Out-Null; Set-Content -LiteralPath (Join-Path $script:K 'at') -Value "$now"
+    $o = Su 'run'
+    T 'lock held: run skipped, no claude call' ($o -eq 'skipped: another update run is in progress' -and -not ((Lg) -match '^claude'))
+    Set-Content -LiteralPath (Join-Path $script:K 'at') -Value "$($now - 3600)"
+    $o = Su 'run'
+    T 'stale lock: taken, released' ($o -eq 'updated 4.29.0 -> 4.30.0' -and -not (Test-Path -LiteralPath $script:K))
+
+    # 8: SKILLATOR_UPDATE_HOURS must be a positive integer
+    Reset-T; Ws $now 0; $env:SKILLATOR_UPDATE_HOURS = 'abc'
+    $o = Su 'due-run'
+    T 'bad SKILLATOR_UPDATE_HOURS: default 24, not due' (-not $o -and (St) -match '"startedAt":0')
+    Reset-T; $env:SKILLATOR_UPDATE_HOURS = '0'; $env:SU_OFFLINE = '1'
+    $o = Su 'run'
+    T 'zero SKILLATOR_UPDATE_HOURS: default 24' ($o -eq 'offline' -and (St) -match 'next try in 24 h')
+    Remove-Item Env:SKILLATOR_UPDATE_HOURS; Remove-Item Env:SU_OFFLINE
+
+    # 5: due-run stamps only startedAt; a fresh startedAt stops another spawn
+    Reset-T; Ws 0 ($now - 60)
+    Su 'due-run' | Out-Null
+    T 'run started 1 min ago: no second spawn' ((St) -match ('"startedAt":' + ($now - 60) + ',') -and (Lg).Count -eq 0)
     # in-process, so PowerShell's own start-up is not counted against the second
-    Reset-T; $env:SU_SLEEP = '3'
+    Reset-T; Ws 0 ($now - 3600); $env:SU_SLEEP = '3'
     $sw = [Diagnostics.Stopwatch]::StartNew()
     Invoke-DueRun | Out-Null
     $sw.Stop()
-    T 'due-run returns in under 1 s, run detached' ($sw.Elapsed.TotalSeconds -lt 1 -and (St) -match '"lastCheck":[1-9]')
+    T 'due-run returns in under 1 s, only startedAt written' ($sw.Elapsed.TotalSeconds -lt 1 -and (St) -match '"lastCheck":0,' -and (St) -notmatch ('"startedAt":' + ($now - 3600) + ','))
     $i = 0
-    while ((St) -notmatch '"lastResult":"updated' -and $i -lt 60) { Start-Sleep 1; $i++ }
-    T 'due-run: the detached run finished the update' (@((Lg) -match '^installer').Count -gt 0)
+    while ((St) -notmatch '"lastCheck":[1-9]' -and $i -lt 60) { Start-Sleep 1; $i++ }
+    T 'due-run: the detached run finished the update and wrote lastCheck' (@((Lg) -match '^installer').Count -gt 0 -and (St) -match '"lastResult":"updated')
     Remove-Item Env:SU_SLEEP
   } finally {
     Pop-Location
