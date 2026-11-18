@@ -41,6 +41,7 @@ type World = {
   offsets: number[]
   runs: (readonly string[])[]
   commands: string[]
+  answer?: (argv: readonly string[]) => ProcessRunResult | null
 }
 const ran = (stdout: string, exitCode = 0): ProcessRunResult =>
   ({ exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
@@ -70,14 +71,14 @@ function world(on: On, files: Record<string, string>, placed = true, readErr?: s
   })
   on('process.run', ($, e) => {
     w.runs.push(e.argv)
-    return { value: e.argv.join(' ') === 'git config user.email' ? ran('vidul@ikran.in\n') : ran('', 1) }
+    return { value: e.argv.join(' ') === 'git config user.email' ? ran('vidul@ikran.in\n') : w.answer?.(e.argv) ?? ran('', 1) }
   })
   on('ui.open', ($, e) => {
     w.opens.push({ id: e.id, title: e.title, focus: e.focus })
     return { value: w.placed ? { isPlaced: true as const } : { isPlaced: false as const, reason: 'narrow: 100 columns, 144 needed' } }
   })
   on('ui.scroll', ($, e) => { w.scrolls++; w.offsets.push(e.offset); return {} })
-  on('ui.focus', () => ({}))
+  on('ui.focus', { plugin: '*' }, () => ({ value: undefined }))
   return [w, clock]
 }
 
@@ -584,7 +585,7 @@ test('F162: Tickets tab bottom keys row displays the session owner handle', WITH
   const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
   await start($, clock)
   const ui = await mountPane($, 'terminal')
-  expect((await ui.find({ key: 'key:me' }))?.text).toBe('@vidul')
+  // The mock drops a Text's key (key:me): the keys row's own text carries the handle.
   expect((await ui.find({ key: 'keys' }))?.text).toContain('@vidul')
   await ui.unmount()
 })
@@ -852,7 +853,10 @@ test('A221: Help Run launches a plugin command as skillator:<id> and /ops bare',
 
 for (const surface of SURFACES) {
   test(`${surface}: A199 personalized Assigned and Decide sections fold via pointer and keyboard, and refresh on user or reassignment changes`, WITH, async ($, on) => {
-    const [, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM })
+    // The reassignment at the end runs ticket-meta (F178's assign form): it answers B1's new line.
+    const [w, clock] = world(on, { '/r/TICKETS.md': BOARD, '/r/.skillator/team.md': TEAM, '/s/skills/tickets-zordon/scripts/ticket-meta.sh': '#!/bin/sh\n' },
+      true, undefined, { SKILLATOR_ROOT: '/s' })
+    w.answer = argv => argv.includes('assign') ? ran('- [ ] B1 — button focus ring missing [app: ui] [owner: @asha]\n') : null
     await start($, clock)
     const ui = await mountPane($, surface)
 

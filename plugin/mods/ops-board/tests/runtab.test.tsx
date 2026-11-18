@@ -96,7 +96,7 @@ function world(on: On, files: Record<string, string>): [World, MockClock] {
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.status', () => ({ value: undefined }))
   on('ui.scroll', () => ({}))
-  on('ui.focus', () => ({}))
+  on('ui.focus', { plugin: '*' }, () => ({ value: undefined }))
   return [w, clock]
 }
 
