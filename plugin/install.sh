@@ -628,6 +628,16 @@ native() {
 # --selftest: install into a temp HOME / CODEX_HOME holding the four marker dirs, then
 # check the command files (F54), the ops-board copy and the shim (F55), pi's /ops extension (F56),
 # the Antigravity IDE extension through a fake IDE CLI (F57), opencode (F67). Never touches the real HOME or IDE. Costs one full install per host dest on disk until it exits.
+if [ -n "$selftest" ] && [ -z "${SKILLATOR_SELFTEST_GUARDED:-}" ]; then
+  # A232: a hung or runaway selftest fails fast with a reason; nothing below reads stdin
+  _limit=${SKILLATOR_SELFTEST_TIMEOUT:-1800}
+  if command -v timeout >/dev/null 2>&1; then
+    _rc=0; SKILLATOR_SELFTEST_GUARDED=1 timeout "$_limit" sh "$0" "$@" </dev/null || _rc=$?
+    [ "$_rc" != 124 ] || echo "FAIL: selftest still running after ${_limit}s (SKILLATOR_SELFTEST_TIMEOUT)"
+    exit "$_rc"
+  fi
+  exec </dev/null
+fi
 if [ -n "$selftest" ]; then
   T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
   # A166: exercise cleanup only below this fixture, never a live profile.

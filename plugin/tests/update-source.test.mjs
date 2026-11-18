@@ -135,6 +135,15 @@ test('A231: every updater treats the pointer as a hint that never stops or downg
     assert.match(r, /no skillator version in step 1.*use the pointer.*say so/, `${path}: no step-1 version uses the pointer`);
   }
 });
+// A232: a hung or runaway sh selftest fails fast with a reason instead of blocking for hours
+test('sh selftest stops at its time limit and says so', { skip: !hasSh || !available('sh', ['-c', 'command -v timeout']) ? 'no sh or no timeout' : false }, () => {
+  const started = Date.now();
+  const r = spawnSync('sh', [join(plugin, 'install.sh').replaceAll('\\', '/'), '--selftest'],
+    { env: { ...env, SKILLATOR_SELFTEST_TIMEOUT: '2' }, encoding: 'utf8', timeout: 120000, windowsHide: true });
+  assert.equal(r.status, 124, r.stdout + r.stderr);
+  assert.match(r.stdout, /^FAIL: selftest still running after 2s \(SKILLATOR_SELFTEST_TIMEOUT\)$/m);
+  assert.ok(Date.now() - started < 60000, 'the limit stopped it');
+});
 test('both installer writers preserve updater instructions in every host template', { skip: !ps || !hasSh ? 'Missing executable: ' + [!ps && 'powershell/pwsh', !hasSh && 'sh'].filter(Boolean).join(', ') : false }, () => {
   const shell = readFileSync(join(plugin, 'install.sh'), 'utf8').replaceAll('\r', '');
   const functions = ['native', 'subst', 'under_link', 'put_cmd'].map(name => {

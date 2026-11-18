@@ -1226,11 +1226,12 @@ function Invoke-SelfTest([string]$T) {
   foreach ($n in $retired + @('upstream-sync')) { if (-not (Test-Path -LiteralPath (Join-Path $T "pi-prompts\$n.md"))) { return "$n.md under a linked dir touched" } }
   if (-not (Test-Path -LiteralPath (Join-Path $T '.cursor\commands\my-cmd.md')) -or -not (Test-Path -LiteralPath (Join-Path $T '.codex\prompts\my-own.md'))) { return 'a user command of another name touched' }
   # a dir above the file that Get-Item cannot return is never taken for a plain dir
+  # (the stub passes -Force -ErrorAction on: a missing file is no error, as in Test-UnderLink)
   $unr = Join-Path $T 'unreadable'
   New-Item -ItemType Directory -Force $unr | Out-Null
   $unrFile = Join-Path $unr 'x.md'
   $underLink = & {
-    function Get-Item { param($LiteralPath) if ($LiteralPath -ceq $unr) { return $null }; Microsoft.PowerShell.Management\Get-Item @PSBoundParameters }
+    function Get-Item { param($LiteralPath) if ($LiteralPath -ceq $unr) { return $null }; Microsoft.PowerShell.Management\Get-Item @PSBoundParameters @args }
     Test-UnderLink $unrFile
   }
   if (-not $underLink) { return 'an unreadable dir above a retired file not kept' }
