@@ -60,8 +60,8 @@ function world(on: On, files: Record<string, string>, env: Record<string, string
   on('fs.write', ($, e) => { w.writes.push(e.path); return { deny: 'the mod must not write files' } })
   on('process.run', ($, e) => {
     if (e.argv.join(' ') === 'git config user.email') return { value: ran('vidul@ikran.in\n') }
-    // The band's background polls (pending --machine, relay list: F48) are not the form's calls.
-    if (e.argv.some(a => /(pending|relay-morpheus)\.(sh|ps1)$/.test(a))) return { value: ran('', 1, 'not in this test') }
+    // The band's background polls (pending --machine, relay list: F48; the inbox: A175) are not the form's calls.
+    if (e.argv.some(a => /(pending|relay-morpheus)\.(sh|ps1)$/.test(a)) || e.argv.includes('--git-common-dir')) return { value: ran('', 1, 'not in this test') }
     w.runs.push({ argv: e.argv, init: e.init })
     return { value: w.answer(e.argv) ?? ran('', 1, 'unexpected call') }
   })
@@ -72,10 +72,9 @@ function world(on: On, files: Record<string, string>, env: Record<string, string
   on('ui.close', ($, e) => { w.closes.push(e.id); return { value: undefined } })
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.scroll', ($, e) => { w.scrolls.push(e.offset); return {} })
-  // The person's ring moves (select). The mod's own $.ui.focus onto a form's first
-  // element is not answered by the mock engine (no ring beneath it): it is caught,
-  // and the ring's landing is the owner's live check.
-  on('ui.focus', () => ({}))
+  // The person's ring moves (select). Nothing beneath the plugins moves a ring, so the
+  // call on $ is answered with no value; the ring's landing is the owner's live check.
+  on('ui.focus', { plugin: '*' }, () => ({ value: undefined }))
   return [w, clock]
 }
 
@@ -89,6 +88,7 @@ const PEEK: Plugin = {
       const v = e.args === 'assign' ? await $.state.get({ plugin: 'ops-board', key: 'assign' })
         : e.args === 'person' ? await $.state.get({ plugin: 'ops-board', key: 'person' })
         : e.args === 'selected' ? await $.state.get({ plugin: 'ops-board', key: 'selected' })
+        : e.args === 'board' ? await $.state.get({ plugin: 'ops-board', key: 'board' })
         : await $.state.get({ plugin: 'ops-board', key: 'teamView' })
       return { text: JSON.stringify(v.value ?? null) }
     })
@@ -96,7 +96,7 @@ const PEEK: Plugin = {
 }
 const WITH = { plugins: [PEEK] }
 const RUN = { origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 120 } }
-const state = async ($: Engine, key: 'assign' | 'person' | 'teamView' | 'selected') =>
+const state = async ($: Engine, key: 'assign' | 'person' | 'teamView' | 'selected' | 'board') =>
   JSON.parse((await $.command.run({ command: 'peek', args: key, ...RUN })).text ?? 'null') as unknown
 
 async function start($: Engine, clock: MockClock) {
@@ -153,7 +153,7 @@ for (const surface of SURFACES) {
 
     formOpen(w)
     onlyBoard(w)
-    expect(await state($, 'assign')).toEqual({ id: 'F1', kind: 'owner', handle: '@vidul', result: null })
+    expect(await state($, 'assign')).toEqual({ id: 'F1', kind: 'owner', handle: '@vidul', result: null, sessions: [], session: null })
     // the form replaces the Tickets view in the same pane
     expect(await pane.find({ key: 'row:F3' })).toBeUndefined()
     expect(await title(pane)).toBe('Assign F1  Esc cancels')
@@ -211,7 +211,7 @@ for (const surface of SURFACES) {
     await pane.press({ key: 'key:decide' })            // F3, the first row, is selected -> opens Decide chooser
     expect((await pane.find({ key: 'status:title' }))?.text).toBe('Decide F3  Esc cancels')
     await pane.press({ key: 'decide:assign' })         // (a) Assign a decider -> opens today's assign form
-    expect(await state($, 'assign')).toEqual({ id: 'F3', kind: 'decide', handle: '@vidul', result: null })
+    expect(await state($, 'assign')).toEqual({ id: 'F3', kind: 'decide', handle: '@vidul', result: null, sessions: [], session: null })
     formOpen(w)
     expect(await title(pane)).toBe('Assign F3 for a decision  Esc cancels')
     expect((await pane.find({ key: 'kind:decision' }))?.text).toBe('(•) decision')
@@ -349,8 +349,8 @@ for (const surface of SURFACES) {
     expect((await pane.find({ key: 'status:title' }))?.text).toBe('Decide F2  Esc cancels')
     await pane.press({ key: 'decide:assign' })
     expect(await title(pane)).toBe('Assign F2 for a decision  Esc cancels')
-    expect((await pane.find({ key: 'title' }))?.text).toBe('● decide  /orders endpoint returns the last…')   // cut to the 54-column body
-    expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta decide F2 @vidul')
+    expect((await pane.find({ key: 'title' }))?.text).toBe('● decide  /orders endpoint returns the last 20 orders')   // fits the 54-column body
+    expect((await pane.find({ key: 'runs' }))?.text).toBe('Runs    ticket-meta decide F2 @asha')   // F2's own decider
     await pane.press({ key: 'who:@asha' })
     await pane.press({ key: 'go' })
     expect(w.runs.map(r => r.argv)).toEqual([['/bin/sh', META + '.sh', 'decide', 'F2', '@asha']])
@@ -655,7 +655,7 @@ test('team handles as ticket-meta reads them: @Asha assignable and removable, @j
   await select($, 'F2')
   await pane.press({ key: 'key:decide' })
   await pane.press({ key: 'decide:assign' })
-  expect(await state($, 'assign')).toEqual({ id: 'F2', kind: 'decide', handle: '@Asha', result: null })
+  expect(await state($, 'assign')).toEqual({ id: 'F2', kind: 'decide', handle: '@Asha', result: null, sessions: [], session: null })
   expect(await pane.find({ key: 'who:@Asha' })).toBeDefined()
   expect(await pane.find({ key: 'who:@j.doe' })).toBeDefined()
   expect(await pane.find({ key: 'who:@vidul' })).toBeDefined()
