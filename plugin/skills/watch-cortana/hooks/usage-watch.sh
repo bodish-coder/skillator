@@ -644,6 +644,12 @@ except Exception:
       prev_failures=${carry%% *}
       case $carry in *" "*) last_tag=${carry#* } ;; esac
       case $prev_failures in ''|*[!0-9]*) prev_failures=0 ;; esac
+    # A236: no node - a reading written strictly after the start is kept, as the node branch
+    # keeps it (no turn runs without node, so no turned_at to stamp).
+    elif [ -f "$cache" ] && sed 's/"last":{[^}]*}//' "$cache" 2>/dev/null | grep -q '"5h"\|"7d"' &&
+         case $started_at in *.*) mt=$(date -r "$cache" +%s.%N 2>/dev/null) ;; *) mt=$(date -r "$cache" +%s 2>/dev/null) ;; esac &&
+         awk -v m="$mt" -v s="$started_at" 'BEGIN { exit !(m ~ /^[0-9.]+$/ && m + 0 > s + 0) }'; then
+      rm -f "$lock"; exit 0
     # A carried last is not a reading: its "7d" must not reset the counter.
     elif [ -f "$cache" ] && ! sed 's/"last":{[^}]*}//' "$cache" 2>/dev/null | grep -q '"5h"\|"7d"'; then
       pf=$(sed -n 's/.*"failures"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$cache" | head -1)

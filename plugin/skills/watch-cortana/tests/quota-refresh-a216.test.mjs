@@ -809,6 +809,24 @@ for (const port of ['ps1', 'sh']) {
     } finally { fx.cleanup() }
   })
 
+  // A236 fix round (6): without node (no turn, no parse) a reading another writer stored while the
+  // read ran is kept as the node branch keeps it - level and check still see its 95% weekly.
+  test(`${port}: A236 without node a reading written during the read stays the current reading`, { skip: port !== 'sh' || skip }, () => {
+    const fx = makeFixture(port)
+    try {
+      const { profile, env } = turnSetup(fx, 'nonode-during', { src: 'claude-code', '5h': 5, '7d': 50 })
+      age(`${profile}/quota-cache.json`, 3600)
+      fx.setCliResponses([fixture('claude-get-usage-nowindows.jsonl')])
+      writeFileSync(`${fx.root}/cli-cache-1.txt`, JSON.stringify({ src: 'claude-code', '5h': 10, '7d': 95 }))
+      fx.runRefresh('claude', profile, { ...env, ...FORCED, PATH: 'C:/Program Files/Git/usr/bin' })
+      assert.equal(fx.cliCalls().length, 1)
+      const rec = JSON.parse(readFileSync(`${profile}/quota-cache.json`, 'utf8'))
+      assert.deepEqual(rec, { src: 'claude-code', '5h': 10, '7d': 95 }, JSON.stringify(rec))
+      assert.equal(fx.runLevel(env), 'src=claude-code 5h=10.0 7d=95.0 ctx=- max=95.0')
+      assert.match(fx.runLevel({ ...env, CLAUDE_USAGE_HANDOFF_WEEKLY_PCT: '90' }, 'check'), /HANDOFF NOW \(claude-code 7-day 95(\.0)?%\)/)
+    } finally { fx.cleanup() }
+  })
+
   // A236 fix round (2), F176 last round restored: a capped paid turn never outlives its lock -
   // with its own start time or the child's unreadable, the capped call still kills its
   // children by parent PID (taskkill /T); only a readable earlier start spares one.
