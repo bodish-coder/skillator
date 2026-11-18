@@ -10,7 +10,7 @@
 // decision (a read) and nothing else, so it never sets or releases the watchdog hold.
 import { emitKeypressEvents } from 'node:readline'
 import { PassThrough } from 'node:stream'
-import { writeSync } from 'node:fs'
+import { realpathSync, writeSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import type { Host } from './nodehost'
@@ -191,8 +191,9 @@ export async function main(argv: string[]): Promise<number> {
 }
 
 // Run when started as the entry (node ... app.ts), not when a test imports it.
-// Windows paths compare without case (c:\ and C:\ are one file).
-const entryKey = (p: string) => (process.platform === 'win32' ? resolve(p).toLowerCase() : resolve(p))
+// Windows paths compare without case (c:\ and C:\ are one file). B30: argv[1] keeps a
+// link's spelling, import.meta.url is the real path - compare real paths.
+const entryKey = (p: string) => { p = resolve(p); try { p = realpathSync(p) } catch { /* as given */ } return process.platform === 'win32' ? p.toLowerCase() : p }
 if (process.argv[1] && entryKey(process.argv[1]) === entryKey(fileURLToPath(import.meta.url))) {
   main(process.argv.slice(2)).then(code => { process.exitCode = code }, e => {
     process.stderr.write(`ops: ${(e as Error)?.stack ?? e}\n`)

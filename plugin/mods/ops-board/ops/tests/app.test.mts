@@ -1,7 +1,7 @@
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmdirSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
@@ -181,6 +181,19 @@ test('--help prints the usage and the launcher line, exit 0', () => {
   assert.match(r.stdout, /--open/)
   assert.match(r.stdout, /--font-size N/)
   assert.match(r.stdout, /Ctrl\+minus/)
+})
+
+// B30: the plugin cache is reached through a link (~/.claude-<profile>/plugins -> ~/.claude/plugins);
+// argv[1] keeps the link's spelling, import.meta.url the real path, so main never ran.
+test('B30: --help still prints through a linked ops directory, the way ops.sh starts it', t => {
+  const d = mkdtempSync(join(tmpdir(), 'ops-b30-'))
+  const link = join(d, 'linked')
+  symlinkSync(ops, link, win ? 'junction' : 'dir')
+  // The link goes first: a recursive rm must never walk through it into the repo.
+  t.after(() => { (win ? rmdirSync : unlinkSync)(link); rmSync(d, { recursive: true, force: true }) })
+  const r = spawnSync(process.execPath, ['--import', pathToFileURL(join(link, 'loader.mjs')).href, join(link, 'app.ts'), '--help'], { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] })
+  assert.equal(r.status, 0, r.stderr)
+  assert.ok(r.stdout.startsWith(USAGE + '\n'), r.stdout)
 })
 
 test('sh launcher refuses an old node with exit 2', { skip: !hasSh }, () => {
