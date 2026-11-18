@@ -390,6 +390,8 @@ test('F175: decision-matrix resolves across Claude Code and host copies; fixture
     RELAY_DIR: join(repo, '.skillator').replace(/\\/g, '/'),
     SKILLATOR_ME: '@sabre',
   };
+  // a host session id would stamp the fixture board with this machine's session tag
+  for (const key of ['CLAUDE_CODE_SESSION_ID', 'SKILLATOR_SESSION', 'SKILLATOR_MODE']) delete env[key];
   const runScript = (relBase, args) => win
     ? spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(plugin, `${relBase}.ps1`), ...args], { cwd: repo, env, encoding: 'utf8', windowsHide: true })
     : spawnSync('sh', [join(plugin, `${relBase}.sh`), ...args], { cwd: repo, env, encoding: 'utf8', windowsHide: true });
