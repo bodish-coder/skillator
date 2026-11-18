@@ -297,9 +297,9 @@ function addNotes(xs: string[], add: string[], drop: (n: string) => boolean = ()
 // The handle a fresh dialog starts on: the ticket's own (owner or decider) when on the
 // team, else me, else the first member - as team.md writes it (moved verbatim from assign.tsx).
 // F77: no ticket yet (its ID still to be typed) - me, else the first member.
-export function startHandle(t: Ticket | null, kind: 'owner' | 'decide' | 'tester', team: Member[], me: string | null): string | null {
+export function startHandle(t: Ticket | null, kind: AssignDraft['kind'], team: Member[], me: string | null): string | null {
   const on = (h: string | null) => team.find(m => sameHandle(m.handle, h))?.handle ?? null
-  return on(t ? (kind === 'owner' ? t.owner : kind === 'decide' ? t.decide : t.tester) : null) ?? on(me) ?? team[0]?.handle ?? null
+  return on(t && kind !== 'session' ? (kind === 'owner' ? t.owner : kind === 'decide' ? t.decide : t.tester) : null) ?? on(me) ?? team[0]?.handle ?? null
 }
 
 // The people the dialog lists: the team, plus the draft's handle when it is not on it.
@@ -310,7 +310,9 @@ function peopleOf(s: State): Member[] {
 
 // F77: the heading names the ticket the Ticket field resolves to, else "a ticket".
 const titleOf = (d: AssignDraft, t: Ticket | null) =>
-  `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : d.kind === 'tester' ? ' for testing' : ''}`
+  `Assign ${t ? t.id : 'a ticket'}${d.kind === 'decide' ? ' for a decision' : d.kind === 'tester' ? ' for testing' : d.kind === 'session' ? ' to a session' : ''}`
+// F178: the code a session draft assigns - its pick, else this app's own session.
+const sessionOf = (s: State): string | null => s.dialog?.session ?? s.session
 // The ticket the dialog's Ticket field names (typed in any case), or null.
 const dialogTicket = (s: State): Ticket | null => (s.dialog ? ticketById(s.board?.tickets, s.dialog.id) : null)
 
@@ -342,8 +344,8 @@ export function dialogLines(s: State): string[] {
       ? `  ! ${tk.id} is in progress under ${tk.session} - this moves it to ${STATE_NAME[to]}; the tag stays - tell that session`
       : `  ! ${tk.id} is in progress - this moves it to ${STATE_NAME[to]}; tell whoever is working it`)
   }
-  const metaCmd = d.kind === 'decide' ? 'decide' : d.kind === 'tester' ? 'assign-tester' : 'assign'
-  out.push(`  Runs    ticket-meta ${metaCmd} ${tk?.id ?? '<ID>'} ${d.handle ?? '@?'}`)
+  const metaCmd = d.kind === 'decide' ? 'decide' : d.kind === 'tester' ? 'assign-tester' : d.kind === 'session' ? 'assign-session' : 'assign'
+  out.push(`  Runs    ticket-meta ${metaCmd} ${tk?.id ?? '<ID>'} ${d.kind === 'session' ? sessionOf(s) ?? '?' : d.handle ?? '@?'}`)
   if (d.result) out.push(`  ${d.result}`)
   out.push('  Enter confirm · Esc cancel')
   return out
@@ -371,9 +373,17 @@ function confirmAssign(s: State): Step {
   // F77: Assign waits for the Ticket field to name a ticket; ticket-meta gets the board's ID.
   const tk = dialogTicket(s)
   if (!tk) return { state: { ...s, dialog: { ...d, result: d.id.trim() ? 'no such ticket' : 'type a ticket ID first' } }, effects: [] }
+  const id = tk.id
+  if (d.kind === 'session') {
+    const code = sessionOf(s)
+    if (!code) return { state: { ...s, dialog: { ...d, result: 'no session known - ticket-meta iam names one' } }, effects: [] }
+    const done: Then = r => x => r.code !== 0
+      ? (x.dialog ? { ...x, dialog: { ...x.dialog, result: timedOut(r) ? 'ticket-meta did not finish in 30 s' : why(r, 'ticket-meta') } } : x)
+      : { ...x, dialog: null, toast: [`✓ ${id} assigned to session ${code}: ${tk.title}`, ...notesOf(r.out), ran(r.argv)].join('\n') }
+    return { state: s, effects: [run('meta-assign-session', [id, code], done)] }
+  }
   if (!d.handle) return { state: { ...s, dialog: { ...d, result: 'pick someone first' } }, effects: [] }
   const handle = d.handle
-  const id = tk.id
   const then: Then = r => x => {
     if (r.code !== 0) {
       const text = timedOut(r) ? 'ticket-meta did not finish in 30 s' : why(r, 'ticket-meta')

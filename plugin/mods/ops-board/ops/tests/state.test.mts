@@ -1558,3 +1558,15 @@ test('F180: fresh ops board - every personal section and status group collapsed'
   assert.deepEqual(items, ['head:assigned', 'head:decide', 'head:session', 'head:~', 'head:?', 'head: '])
   for (const sec of ['assigned', 'decide', 'session'] as const) assert.ok(!isUserSectionOpen(s.open as string[], sec))
 })
+
+// F178 fix: a session draft runs ticket-meta assign-session <ID> <code>, never assign
+test('F178: a session draft in the ops dialog runs meta-assign-session with the code', () => {
+  const opened = reduce(press({ ...s0, session: 'cc-1ir0' }, 'down', 'down'), key('a')).state
+  const s = { ...opened, dialog: { ...opened.dialog!, kind: 'session' as const, session: 'cc-1ir0' } }
+  assert.equal(dialogLines(s)[0], 'Assign F1 to a session')
+  assert.ok(dialogLines(s).includes('  Runs    ticket-meta assign-session F1 cc-1ir0'))
+  const r = reduce(s, key('return'))
+  assert.deepEqual([r.effects[0]!.call, r.effects[0]!.args], ['meta-assign-session', ['F1', 'cc-1ir0']])
+  assert.match(settle(r.effects[0]!.then(ok(''))(r.state)).state.toast ?? '', /^✓ F1 assigned to session cc-1ir0: Dark mode/)
+  assert.equal(startHandle(null, 'session', team, '@vidul'), '@vidul')
+})
