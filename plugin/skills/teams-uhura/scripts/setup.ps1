@@ -45,9 +45,9 @@ function Repair-Winget {
   } catch { Say "winget: the repair failed - $_" }
 }
 function Open-TunnelWindow { Start-Process -FilePath (Get-Command devtunnel -CommandType Application | Select-Object -First 1).Source -ArgumentList 'host', $Tunnel -WindowStyle Normal }
-# hosted only when the command line names this tunnel. One it cannot read (elevated, another
-# user's) sets $script:Blind and is never listed to stop; one that exited before CIM is ignored.
-function TunnelHosted([string]$name = '', [int]$port = 0, [switch]$Ids) { $target = if ($name) { $name } elseif ($Tunnel) { $Tunnel } else { 'skillator-teams' }; foreach ($p in @(Get-Process devtunnel -ErrorAction SilentlyContinue)) { $cmd = $p.CommandLine; if (-not $cmd -and $p.Id) { try { $ci = Get-CimInstance Win32_Process -Filter "ProcessId = $($p.Id)" -ErrorAction SilentlyContinue; if (-not $ci) { continue }; $cmd = $ci.CommandLine } catch {} }; if (-not $cmd) { $script:Blind = $true; continue }; if ($cmd -notmatch '\bhost\b' -or $cmd -notmatch ('(^|\s|[`"''\\])' + [regex]::Escape($target) + '($|\s|[`"''\\])')) { continue }; if ($port -gt 0 -and $cmd -match '(?i)(?:-p|--port)\s+(\d+)' -and [int]$Matches[1] -ne $port) { continue }; if ($Ids) { $p.Id; continue }; return $true }; if (-not $Ids) { $false } }
+# A226 h: a command line it cannot read (elevated, another user's) is hosted-unknown - taken as
+# hosted, never listed to stop; one that exited before CIM is ignored
+function TunnelHosted([string]$name = '', [int]$port = 0, [switch]$Ids) { $target = if ($name) { $name } elseif ($Tunnel) { $Tunnel } else { 'skillator-teams' }; foreach ($p in @(Get-Process devtunnel -ErrorAction SilentlyContinue)) { $cmd = $p.CommandLine; if (-not $cmd -and $p.Id) { try { $ci = Get-CimInstance Win32_Process -Filter "ProcessId = $($p.Id)" -ErrorAction SilentlyContinue; if (-not $ci) { continue }; $cmd = $ci.CommandLine } catch {} }; if (-not $cmd) { if (-not $Ids) { return $true }; continue }; if ($cmd -notmatch '\bhost\b' -or $cmd -notmatch ('(^|\s|[`"''\\])' + [regex]::Escape($target) + '($|\s|[`"''\\])')) { continue }; if ($port -gt 0 -and $cmd -match '(?i)(?:-p|--port)\s+(\d+)' -and [int]$Matches[1] -ne $port) { continue }; if ($Ids) { $p.Id; continue }; return $true }; if (-not $Ids) { $false } }
 
 function Step-Node {
   if (-not (Has 'node')) { Say 'node: missing - install Node.js 18 or later from https://nodejs.org/ , open a new terminal, run this again'; return $null }
@@ -145,7 +145,6 @@ function Stop-Tunnel([int]$port) { foreach ($id in @(TunnelHosted $Tunnel $port 
 function Show-Arm($a) { foreach ($k in $a.Keys) { Say "$k=$($a[$k])" } }
 
 function Get-Arm {
-  $script:Blind = $false
   $a = [ordered]@{ result = 'status'; why = ''; devtunnel = 'missing'; login = '-'; form = 'notset'; tunnel = '-'; hosted = '0'; listener = 'down'; port = '3978'; url = ''; url_changed = '0'; expires = '' }
   $port = 3978
   if (Has 'node') {
@@ -172,20 +171,13 @@ function Get-Arm {
   $a
 }
 
-# --status: a devtunnel it cannot inspect may be this tunnel - said, never guessed
-function Get-Status {
-  $a = @(Get-Arm)[-1]
-  if ($script:Blind) { $a['result'] = 'failed'; $a['why'] = 'a devtunnel process could not be inspected (run the board as the same user)' }
-  $a
-}
-
 # the board's call has 30 s (host.ts): every step of --arm stops at 25; what is unknown stays as is
 function Late($a) { if ((Clock) -lt $script:Deadline) { return $false }; $a['result'] = 'failed'; $a['why'] = 'took too long - try again'; $true }
 
 function Invoke-Arm {
   $script:Deadline = (Clock) + 25
-  $a = @(Get-Status)[-1]
-  if ($a['result'] -eq 'failed' -or (Late $a)) { return $a }
+  $a = @(Get-Arm)[-1]
+  if (Late $a) { return $a }
   $port = [int]$a['port']
   $no = $(if ($a['devtunnel'] -ne 'ok') { 'devtunnel is not installed - s, then First-time setup' }
     elseif ($a['login'] -ne 'in') { 'not signed in to Dev Tunnels - s, then Sign in to Dev Tunnels' }
@@ -329,20 +321,21 @@ if ($args -contains '--selftest' -or $args -contains '-selftest') {
   function Answer([string]$q) { [void]$S.calls.Add('ask'); if ($q -like 'Press Enter*') { $S.saved = $true }; $S.yes }
   function Repair-Winget { [void]$S.calls.Add('repair') }
   function Open-TunnelWindow { [void]$S.calls.Add('host'); if (-not $S.noopen) { $S.hosted = $true } }
-  # A226 review 1: hosted only when the command line names this tunnel; one that cannot be read
-  # (elevated, another user's) is not hosted, is never listed to stop, and is flagged; one that
-  # exited between Get-Process and CIM is ignored
+  # A226 h: a devtunnel whose command line cannot be read (elevated, another user's) counts as
+  # hosted, so disarm never says disarmed and c never opens a second one; it is never stopped;
+  # one that exited between Get-Process and CIM is ignored
   function Get-Process { @([pscustomobject]@{ Id = 7; CommandLine = $null }) }
   function Get-CimInstance { if ($script:Gone) { return }; [pscustomobject]@{ CommandLine = $script:CimLine } }
-  $script:CimLine = $null; $script:Gone = $false; $script:Blind = $false
-  if ((TunnelHosted $Tunnel 3978) -or @(TunnelHosted $Tunnel 3978 -Ids).Count -or -not $script:Blind) { Fail 'h: an unreadable devtunnel was taken as hosted, listed to stop, or not flagged' }
-  $script:Gone = $true; $script:Blind = $false
-  if ((TunnelHosted $Tunnel 3978) -or $script:Blind) { Fail 'h: a devtunnel that exited was not ignored' }
+  $script:CimLine = $null; $script:Gone = $false
+  if (-not (TunnelHosted $Tunnel 3978) -or @(TunnelHosted $Tunnel 3978 -Ids).Count) { Fail 'h: an unreadable devtunnel was not taken as hosted, or was listed to stop' }
+  $script:Gone = $true
+  if (TunnelHosted $Tunnel 3978) { Fail 'h: a devtunnel that exited was not ignored' }
   $script:Gone = $false
-  $script:CimLine = 'devtunnel host other'; $script:Blind = $false; if ((TunnelHosted $Tunnel 3978) -or $script:Blind) { Fail 'h: another tunnel was taken as hosted' }
+  $script:CimLine = 'devtunnel host other'; if (TunnelHosted $Tunnel 3978) { Fail 'h: another tunnel was taken as hosted' }
   $script:CimLine = "devtunnel host $Tunnel"; if (-not (TunnelHosted $Tunnel 3978) -or "$(TunnelHosted $Tunnel 3978 -Ids)" -ne '7') { Fail 'h: this tunnel was not seen' }
   Remove-Item function:Get-Process, function:Get-CimInstance
-  function TunnelHosted { $S.clock += $S.probe; if ($S.blind) { $script:Blind = $true }; $h = [bool]$S.hosted; if ($h -and $S.dies) { $S.hosted = $false }; $h }
+  $RealHosted = ${function:TunnelHosted}; $RealStop = ${function:Stop-Tunnel}
+  function TunnelHosted { $S.clock += $S.probe; $h = [bool]$S.hosted; if ($h -and $S.dies) { $S.hosted = $false }; $h }
   function Stop-Tunnel { [void]$S.calls.Add('unhost'); if (-not $S.stuck) { $S.hosted = $false } }
   function Start-Sleep([double]$Seconds = 0, [double]$Milliseconds = 0) { $S.clock += $Seconds + $Milliseconds / 1000 }
   function Clock { $S.clock }
@@ -462,12 +455,16 @@ if ($args -contains '--selftest' -or $args -contains '-selftest') {
   if ($S.clock -gt 20) { Fail "g: a failed arm took $($S.clock) s" }
   if ($null -ne (UrlOf '{"tunnel":{"ports":[{"portNumber":3978,"portUri":"https://ab12cd34-3978.euw.devtunnels.ms\nresult=armed\nhosted=1"}]}}' 3978)) { Fail 'c: a portUri with a decoded newline was kept' }
   if ((ExpiryOf "{`"tunnelExpiration`":`"2026-12-17`nresult=armed`"}") -ne '') { Fail 'c: an expiry with a newline was kept' }
-  # A226 review 1: an unreadable devtunnel - --arm and --status fail and say why; nothing started or stopped
-  $BlindWhy = 'a devtunnel process could not be inspected (run the board as the same user)'
-  foreach ($m in @({ Get-Status }, { Invoke-Arm })) {
-    $r = Kv @{ blind = $true } $m
-    if ($r.a['result'] -ne 'failed' -or $r.a['why'] -ne $BlindWhy -or $r.a['hosted'] -ne '0' -or $r.calls -match $acts) { Fail "h blind: $($r.a['result']) / $($r.a['why'])`n$($r.calls)" }
-  }
+  # A226 h: --disarm with an unreadable devtunnel says still hosted, never disarmed; it is not stopped
+  $StubHosted = ${function:TunnelHosted}; $StubStop = ${function:Stop-Tunnel}
+  Set-Item function:TunnelHosted $RealHosted; Set-Item function:Stop-Tunnel $RealStop
+  function Get-Process { @([pscustomobject]@{ Id = 7; CommandLine = $null }) }
+  function Get-CimInstance { [pscustomobject]@{ CommandLine = $null } }
+  function Stop-Process { [void]$S.calls.Add('kill') }
+  $r = Kv @{ up = $true } { Invoke-Disarm }
+  if ($r.a['result'] -ne 'failed' -or $r.a['why'] -notlike 'the tunnel is still hosted*' -or $r.a['listener'] -ne 'up' -or $r.calls -match '(?m)^kill$| stop --port') { Fail "h: disarm with a blind host`n$($r.a | Out-String)`n$($r.calls)" }
+  Remove-Item function:Get-Process, function:Get-CimInstance, function:Stop-Process
+  Set-Item function:TunnelHosted $StubHosted; Set-Item function:Stop-Tunnel $StubStop
   # A226 review 1: --ack with a URL and none readable says it cannot be read, not that it changed
   $r = Kv @{ tunnel = $false } { Invoke-Ack $U1 }
   if ($r.a['result'] -ne 'failed' -or $r.a['why'] -ne 'the tunnel URL cannot be read now - is the tunnel hosted?') { Fail "ack unreadable: $($r.a['why'])" }
@@ -482,7 +479,7 @@ if ($args -contains '--selftest' -or $args -contains '-selftest') {
 }
 
 if ($args.Count -ge 1 -and $Modes -contains $args[0]) {
-  $a = switch ($args[0]) { '--arm' { @(Invoke-Arm)[-1] } '--disarm' { @(Invoke-Disarm)[-1] } '--ack' { @(Invoke-Ack $want)[-1] } default { @(Get-Status)[-1] } }
+  $a = switch ($args[0]) { '--arm' { @(Invoke-Arm)[-1] } '--disarm' { @(Invoke-Disarm)[-1] } '--ack' { @(Invoke-Ack $want)[-1] } default { @(Get-Arm)[-1] } }
   Show-Arm $a; exit 0
 }
 exit (Invoke-Setup)
